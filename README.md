@@ -74,6 +74,36 @@ rdra-ish states src/ --format json           # JSON 出力
 | `--entity <id>` | —（全体） | 特定 entity のみ出力 |
 | `--max-patterns` | `256` | entity 単位のパターン数上限（超過時に `truncated` フラグ） |
 
+### TX境界推定（`--kind sequence` 連動）
+
+`--kind sequence` の生成時、FK 連結成分を解析してユースケースごとの**トランザクション境界を自動推定**する。
+
+#### 推定アルゴリズム
+
+1. `creates` / `updates` / `deletes` 述語から書き込みエンティティ集合 W を収集
+2. W に誘導された FK エッジ（`1:1` / `1:N` / `N:1`、両端が W に含まれるもの）で無向グラフを構築
+3. BFS で連結成分を検出
+4. 各成分をカーン法でトポロジカルソート（FK 親 → 子の順）
+
+#### シーケンス図への反映
+
+| 成分の種類 | シーケンス図の表示 |
+|---|---|
+| FK 連結（≥ 2 entity） | `rect` ブロックで囲み `Note: transaction (inferred from FK)` を付与 |
+| FK 孤立（他に TX グループあり） | `Note right: FK非連結 — 別TX？@atomicで明示を` |
+| 孤立のみ（TX グループなし） | TX 表示なし / warning なし |
+
+#### 診断 warning
+
+FK 連結グループがある UC で孤立書き込みが検出された場合、`--kind sequence` 実行時に以下の warning が stderr に出力される:
+
+```
+warning: usecase 'PlaceOrder' writes 'Cart' with no FK link to its other writes
+  hint: this is inferred as a separate transaction; if it must be atomic with the others, add `@atomic` to the usecase (phase 2)
+```
+
+> `@atomic` による明示的な TX 境界宣言はフェーズ 2 で実装予定。現時点では warning でヒントのみ提供する。
+
 ---
 
 ## DSL 文法
