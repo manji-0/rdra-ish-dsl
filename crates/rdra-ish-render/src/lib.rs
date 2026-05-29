@@ -207,8 +207,8 @@ pub mod kroki {
 
             let mut enc = ZlibEncoder::new(Vec::new(), Compression::best());
             enc.write_all(puml.as_bytes())
-                .map_err(|e| RenderError::Io(e))?;
-            let compressed = enc.finish().map_err(|e| RenderError::Io(e))?;
+                .map_err(RenderError::Io)?;
+            let compressed = enc.finish().map_err(RenderError::Io)?;
             let encoded = STANDARD.encode(&compressed);
 
             let fmt = match format {

@@ -61,8 +61,9 @@ entity Order "Order" {
 }
 ```
 
-Types: `Int` / `String` / `Money` / `DateTime` / `Date` / `Bool` / `Decimal` / `Enum(...)`  
-Annotations: `@pk` / `@unique` / `@null` / `@default(v)` / `@label("...")`
+Types: `Int` / `String` / `Money` / `DateTime` / `Date` / `Bool` / `Decimal` / `Enum(...)`
+
+Annotations: `@pk` / `@pk(a, b)` (compound PK) / `@unique` / `@null` / `@default(v)` / `@label("...")`
 
 #### Predicate signatures
 
@@ -82,8 +83,28 @@ Annotations: `@pk` / `@unique` / `@null` / `@default(v)` / `@label("...")`
 | `contains` | `(Buc, UseCase)` | BUC contains a use case |
 | `belongs` | `(Buc, Business)` | BUC belongs to a business domain |
 | `motivates` | `(Requirement, Buc)` | requirement motivates a BUC |
-| `relate` | `(Entity, Entity, "N:1"\|"1:1"\|"N:M")` | ER relationship (auto-generates FK) |
+| `relate` | `(Entity, Entity, "1:1"\|"1:N"\|"N:1"\|"N:M")` | ER relationship (auto-generates FK) |
 | `transitions` | `(Event, State, State)` | state transition: event moves from → to |
+| `sets` | `(UseCase\|Event, Entity, "col", "val")` | explicit column effect for state-pattern derivation |
+
+#### `sets` value vocabulary
+
+Use `sets` when a use case or event changes a column that has no `transitions` predicate (e.g. `Enum` without a state machine, nullable columns, `Bool` flags).
+
+| value | target column | meaning |
+|-------|---------------|---------|
+| Enum variant name | `Enum` column | set to that variant |
+| `"true"` / `"false"` | `Bool` column | set bool value |
+| `"present"` | `@null` column | make non-null (value present) |
+| `"null"` | `@null` column | set to null |
+| PostgreSQL type name (`"timestamptz"`, `"jsonb"`, `"uuid"`, `"inet"`) | `@null` column | non-null with recorded type |
+
+```
+sets(usecase::Capture,  Payment, "status", "captured")
+sets(usecase::Login,    Session, "last_login_at", "present")
+sets(usecase::Deliver,  Order,   "delivered_at", "timestamptz")
+sets(usecase::Logout,   Session, "token", "null")
+```
 
 #### Imports
 
@@ -91,6 +112,7 @@ Annotations: `@pk` / `@unique` / `@null` / `@default(v)` / `@label("...")`
 import shared.actors            // flat import — all symbols available directly
 import shared.actors as a       // namespaced — reference as a.Customer
 import shared.actors.{Staff}    // selective import
+import shared.actors.{Staff as S}  // selective import with alias
 ```
 
 ### Step-by-step
@@ -104,7 +126,8 @@ import shared.actors.{Staff}    // selective import
    - Import shared definitions with `import shared.*`
    - Declare `buc`, `usecase`, `screen`, `event`, `state`
    - Write predicates in order: `performs` → `belongs` → `contains` → per-UC CRUD + `displays`
-4. **Validate** — run `rdra check src/` and fix all errors before declaring done
+4. **Add `sets` where needed** — for every `Enum` column without state transitions and every nullable column that a use case modifies, add a `sets` predicate
+5. **Validate** — run `rdra-ish check src/` and fix all errors before declaring done
 
 ### Common mistakes
 
@@ -112,3 +135,4 @@ import shared.actors.{Staff}    // selective import
 - Writing `relate` cardinality without quotes (`N:1` instead of `"N:1"`)
 - Adding quotes inside `Enum(...)` values — they are bare identifiers, not strings
 - Forgetting the `module` declaration or using a dotted name that does not match the file path
+- Adding FK columns manually when a `relate` already auto-generates them

@@ -339,7 +339,7 @@ performs(Customer, Browse)
 "#,
         );
 
-        let (program, diags) = resolve(&[entry], &[dir.clone()]);
+        let (program, diags) = resolve(&[entry], std::slice::from_ref(&dir));
         let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
         assert!(
             errors.is_empty(),
@@ -374,7 +374,7 @@ performs(Customer, Browse)
 "#,
         );
 
-        let (program, diags) = resolve(&[dir.join("main.rdra")], &[dir.clone()]);
+        let (program, diags) = resolve(&[dir.join("main.rdra")], std::slice::from_ref(&dir));
         let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
         assert!(
             errors.is_empty(),
@@ -433,7 +433,7 @@ actor Staff "スタッフ"
 "#,
         );
 
-        let (program, diags) = resolve(&[a], &[dir.clone()]);
+        let (program, diags) = resolve(&[a], std::slice::from_ref(&dir));
         let warnings: Vec<_> = diags.iter().filter(|d| d.is_warning).collect();
         assert!(
             warnings
@@ -470,7 +470,7 @@ actor Customer "重複定義"
 "#,
         );
 
-        let (program, resolve_diags) = resolve(&[dir.join("main.rdra")], &[dir.clone()]);
+        let (program, resolve_diags) = resolve(&[dir.join("main.rdra")], std::slice::from_ref(&dir));
         let (_, model_diags) = build_merged_model(&program, &[dir]);
 
         let all_diags: Vec<_> = resolve_diags.iter().chain(model_diags.iter()).collect();
@@ -497,7 +497,7 @@ actor Customer "重複定義"
         }
 
         let entry = fixture_root.join("buc/buc_purchase.rdra");
-        let (program, diags) = resolve(&[entry], &[fixture_root.clone()]);
+        let (program, diags) = resolve(&[entry], std::slice::from_ref(&fixture_root));
 
         let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
         assert!(
@@ -522,6 +522,6 @@ actor Customer "重複定義"
         );
         assert!(model.actors.len() >= 2);
         assert!(model.entities.len() >= 4);
-        assert!(model.bucs.len() >= 1);
+        assert!(!model.bucs.is_empty());
     }
 }

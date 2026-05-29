@@ -1,3 +1,7 @@
+// chumsky の select! マクロが生成する Simple<Token> クロージャは型サイズが大きく
+// result_large_err が出るが、サードパーティ型のため制御不能。
+#![allow(clippy::result_large_err)]
+
 use chumsky::prelude::*;
 use chumsky::Stream;
 use logos::Logos;
