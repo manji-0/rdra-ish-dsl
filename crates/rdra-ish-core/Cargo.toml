@@ -1,0 +1,18 @@
+[package]
+name = "rdra-ish-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+rdra-ish-syntax = { path = "../rdra-ish-syntax" }
+miette      = { workspace = true }
+thiserror   = { workspace = true }
+slotmap     = { workspace = true }
+petgraph    = { workspace = true }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+
+[dev-dependencies]
+insta    = { workspace = true }
+tempfile = { workspace = true }
+rdra-ish-emit = { path = "../rdra-ish-emit" }

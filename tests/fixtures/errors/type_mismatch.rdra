@@ -1,0 +1,4 @@
+actor Customer "顧客"
+entity Order "注文" { id: Int @pk }
+// 誤り: reads の第1引数は UseCase でなければならない
+reads(Customer, Order)

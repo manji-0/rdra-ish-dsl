@@ -1,0 +1,29 @@
+sequenceDiagram
+  actor Customer as 購入者
+  participant System as システム
+  participant Cart as カート
+  participant Order as 注文
+  participant OrderLine as 注文明細
+  participant OrderCompleteScreen as 注文完了画面
+  participant OrderHistoryScreen as 注文履歴画面
+
+  Note over Customer,OrderHistoryScreen: 注文をキャンセルする
+  Customer->System: 注文をキャンセルする
+  activate System
+  System->>Order: update
+  System-->>Customer: 注文履歴画面
+  deactivate System
+
+  Note over Customer,OrderHistoryScreen: 注文を確定する
+  Customer->System: 注文を確定する
+  activate System
+  rect rgb(245,245,245)
+    Note right of System: transaction (inferred from FK)
+    System->>Order: create
+    System->>OrderLine: create
+  end
+  System->>Cart: update
+  Note right of System: FK非連結 — 別TX？@atomicで明示を
+  System-->>Customer: 注文完了画面
+  deactivate System
+

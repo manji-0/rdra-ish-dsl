@@ -1,0 +1,37 @@
+module shared.entities
+entity Customer_info "顧客情報" {
+  id: Int @pk
+  name: String
+  email: String @null
+}
+entity Order "注文" {
+  id: Int @pk
+  total: Money
+  ordered_at: DateTime
+}
+entity OrderLine "注文明細" {
+  id: Int @pk
+  qty: Int
+  price: Money
+}
+entity Product "商品" {
+  id: Int @pk
+  sku: String @unique
+  name: String
+  price: Decimal
+}
+entity Category "カテゴリ" {
+  id: Int @pk
+  name: String
+}
+relate(Order, Customer_info, "N:1")
+relate(OrderLine, Order, "N:1")
+relate(OrderLine, Product, "N:1")
+relate(Product, Category, "N:1")
+state OrderDraft "注文受付"
+state OrderPaid "入金済"
+state OrderShipped "出荷済"
+event PaymentReceived "入金確認"
+event ShipmentDone "出荷完了"
+transitions(PaymentReceived, OrderDraft, OrderPaid)
+transitions(ShipmentDone, OrderPaid, OrderShipped)

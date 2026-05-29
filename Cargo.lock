@@ -1123,29 +1123,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
-name = "rdra-cli"
+name = "rdra-ish-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
  "miette",
- "rdra-core",
- "rdra-emit",
- "rdra-render",
- "rdra-syntax",
+ "rdra-ish-core",
+ "rdra-ish-emit",
+ "rdra-ish-render",
+ "rdra-ish-syntax",
  "serde_json",
  "walkdir",
 ]
 
 [[package]]
-name = "rdra-core"
+name = "rdra-ish-core"
 version = "0.1.0"
 dependencies = [
  "insta",
  "miette",
  "petgraph",
- "rdra-emit",
- "rdra-syntax",
+ "rdra-ish-emit",
+ "rdra-ish-syntax",
  "serde",
  "serde_json",
  "slotmap",
@@ -1154,31 +1154,31 @@ dependencies = [
 ]
 
 [[package]]
-name = "rdra-emit"
+name = "rdra-ish-emit"
 version = "0.1.0"
 dependencies = [
  "csv",
  "insta",
- "rdra-core",
- "rdra-syntax",
+ "rdra-ish-core",
+ "rdra-ish-syntax",
  "serde_json",
  "thiserror",
 ]
 
 [[package]]
-name = "rdra-render"
+name = "rdra-ish-render"
 version = "0.1.0"
 dependencies = [
  "base64",
  "flate2",
  "insta",
- "rdra-emit",
+ "rdra-ish-emit",
  "reqwest",
  "thiserror",
 ]
 
 [[package]]
-name = "rdra-syntax"
+name = "rdra-ish-syntax"
 version = "0.1.0"
 dependencies = [
  "chumsky",

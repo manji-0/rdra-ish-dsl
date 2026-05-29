@@ -1,0 +1,19 @@
+[package]
+name = "rdra-ish-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "rdra-ish"
+path = "src/main.rs"
+
+[dependencies]
+rdra-ish-syntax = { path = "../rdra-ish-syntax" }
+rdra-ish-core   = { path = "../rdra-ish-core" }
+rdra-ish-emit   = { path = "../rdra-ish-emit" }
+rdra-ish-render = { path = "../rdra-ish-render" }
+clap        = { workspace = true }
+anyhow      = { workspace = true }
+walkdir     = { workspace = true }
+miette      = { workspace = true }
+serde_json  = { workspace = true }

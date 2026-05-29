@@ -1,17 +1,17 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/rdra-syntax",
-    "crates/rdra-core",
-    "crates/rdra-emit",
-    "crates/rdra-render",
-    "crates/rdra-cli",
+    "crates/rdra-ish-syntax",
+    "crates/rdra-ish-core",
+    "crates/rdra-ish-emit",
+    "crates/rdra-ish-render",
+    "crates/rdra-ish-cli",
 ]
 
 [workspace.package]
 edition = "2021"
 version = "0.1.0"
-authors = ["rdra-dsl contributors"]
+authors = ["rdra-ish-dsl contributors"]
 license = "MIT"
 
 [workspace.dependencies]
@@ -33,7 +33,7 @@ clap         = { version = "4", features = ["derive"] }
 anyhow       = "1"
 # file
 walkdir      = "2"
-# encoding / compression (optional, used by rdra-render kroki feature)
+# encoding / compression (optional, used by rdra-ish-render kroki feature)
 base64       = "0.22"
 flate2       = "1"
 # test

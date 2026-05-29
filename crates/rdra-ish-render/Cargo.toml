@@ -1,0 +1,18 @@
+[package]
+name = "rdra-ish-render"
+version.workspace = true
+edition.workspace = true
+
+[features]
+default = []
+kroki   = ["dep:reqwest", "dep:base64", "dep:flate2"]
+
+[dependencies]
+rdra-ish-emit = { path = "../rdra-ish-emit" }
+thiserror  = { workspace = true }
+reqwest    = { version = "0.12", features = ["blocking"], optional = true }
+base64     = { version = "0.22", optional = true }
+flate2     = { version = "1", optional = true }
+
+[dev-dependencies]
+insta = { workspace = true }
