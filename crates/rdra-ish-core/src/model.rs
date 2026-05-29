@@ -328,7 +328,10 @@ impl EffectValue {
 
     /// null/非null の軸か（EffectValue が Present/Null/TypedPresent であれば true）
     pub fn is_nullable_axis(&self) -> bool {
-        matches!(self, EffectValue::Present | EffectValue::Null | EffectValue::TypedPresent(_))
+        matches!(
+            self,
+            EffectValue::Present | EffectValue::Null | EffectValue::TypedPresent(_)
+        )
     }
 }
 

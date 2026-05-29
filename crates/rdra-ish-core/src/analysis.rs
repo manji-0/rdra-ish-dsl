@@ -370,10 +370,7 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
 
     // 型検査（_card / _col / _val はリテラル引数なのでスキップ）
     for (i, expected_kinds) in sig.iter().enumerate() {
-        if matches!(
-            expected_kinds.as_slice(),
-            ["_card"] | ["_col"] | ["_val"]
-        ) {
+        if matches!(expected_kinds.as_slice(), ["_card"] | ["_col"] | ["_val"]) {
             continue;
         }
         if let Some(Some(node)) = resolved.get(i) {
@@ -402,7 +399,7 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
     // relate 以外のリレーション登録
     if pred.name == "transitions" {
         if let (Some(Some(event)), Some(Some(state_before)), Some(Some(state_after))) =
-            (resolved.get(0), resolved.get(1), resolved.get(2))
+            (resolved.first(), resolved.get(1), resolved.get(2))
         {
             model.state_transitions.push(crate::model::StateTransition {
                 event: event.clone(),
@@ -423,7 +420,7 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
             Some(PredicateArg::Lit(col_name)),
             Some(PredicateArg::Lit(val_lit)),
         ) = (
-            resolved.get(0),
+            resolved.first(),
             resolved.get(1),
             pred.args.get(2),
             pred.args.get(3),
@@ -463,7 +460,7 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
             }
         }
     } else if pred.name != "relate" {
-        if let (Some(Some(from)), Some(Some(to))) = (resolved.get(0), resolved.get(1)) {
+        if let (Some(Some(from)), Some(Some(to))) = (resolved.first(), resolved.get(1)) {
             let kind = match pred.name.as_str() {
                 "performs" => RelKind::Performs,
                 "uses" => RelKind::Uses,
@@ -490,7 +487,7 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
     } else {
         // relate(From, To, Card)
         if let (Some(Some(from)), Some(Some(to)), Some(PredicateArg::Lit(card))) =
-            (resolved.get(0), resolved.get(1), pred.args.get(2))
+            (resolved.first(), resolved.get(1), pred.args.get(2))
         {
             let kind = match card.as_str() {
                 "1:1" => RelKind::RelateOneToOne,

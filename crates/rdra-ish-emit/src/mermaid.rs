@@ -5,7 +5,9 @@
 
 use crate::plantuml::{col_type_str, node_id, node_label};
 use crate::{EmitError, Emitter, Scope, View};
-use rdra_ish_core::model::{ActorKey, BucKey, EntityKey, NodeRef, RelKind, ScreenKey, SemanticModel, UseCaseKey};
+use rdra_ish_core::model::{
+    ActorKey, BucKey, EntityKey, NodeRef, RelKind, ScreenKey, SemanticModel, UseCaseKey,
+};
 use rdra_ish_core::tx::infer_usecase_transactions;
 use std::collections::{HashMap, HashSet};
 
@@ -500,7 +502,10 @@ impl Emitter for SequenceMermaidEmitter {
             if first_id == last_id {
                 out.push_str(&format!("  Note over {}: {}\n", first_id, uc.label));
             } else {
-                out.push_str(&format!("  Note over {},{}: {}\n", first_id, last_id, uc.label));
+                out.push_str(&format!(
+                    "  Note over {},{}: {}\n",
+                    first_id, last_id, uc.label
+                ));
             }
 
             let actor_id: Option<String> = uc_to_bucs
@@ -531,11 +536,7 @@ impl Emitter for SequenceMermaidEmitter {
                     out.push_str("    Note right of System: transaction (inferred from FK)\n");
                     for w in &group.ordered_writes {
                         if let Some(ent) = model.entities.get(w.entity) {
-                            out.push_str(&format!(
-                                "    System->>{}: {}\n",
-                                ent.id,
-                                w.kind.label()
-                            ));
+                            out.push_str(&format!("    System->>{}: {}\n", ent.id, w.kind.label()));
                         }
                     }
                     out.push_str("  end\n");

@@ -204,20 +204,10 @@ pub fn derive_state_patterns(
     let mut results = Vec::new();
     let mut entity_keys: Vec<EntityKey> = model.entities.keys().collect();
     // id 順にソートして出力を安定させる
-    entity_keys.sort_by(|a, b| {
-        model.entities[*a]
-            .id
-            .cmp(&model.entities[*b].id)
-    });
+    entity_keys.sort_by(|a, b| model.entities[*a].id.cmp(&model.entities[*b].id));
 
     for ek in entity_keys {
-        let result = derive_for_entity(
-            model,
-            ek,
-            &buc_of_usecase,
-            buc_reachable.as_ref(),
-            cap,
-        );
+        let result = derive_for_entity(model, ek, &buc_of_usecase, buc_reachable.as_ref(), cap);
         results.push(result);
     }
 
@@ -251,11 +241,8 @@ fn link_states_to_enum(
     let entity = &model.entities[ek];
 
     // 全 State ノードの id 集合（lowercase）
-    let state_ids_lower: HashSet<String> = model
-        .states
-        .values()
-        .map(|s| s.id.to_lowercase())
-        .collect();
+    let state_ids_lower: HashSet<String> =
+        model.states.values().map(|s| s.id.to_lowercase()).collect();
 
     // entity の Enum カラムで、バリアント集合が state ids と交差するものを探す
     for col in &entity.columns {
@@ -283,17 +270,16 @@ fn link_states_to_enum(
 }
 
 /// entity ごとの状態軸を特定する
-fn identify_axes(
-    entity_cols: &[ModelColumn],
-    column_effects: &[&ColumnEffect],
-) -> Vec<StateAxis> {
+fn identify_axes(entity_cols: &[ModelColumn], column_effects: &[&ColumnEffect]) -> Vec<StateAxis> {
     let mut axes = Vec::new();
 
     // TypedPresent の型名を effects から収集（カラム名 → PG 型名）
     let mut pg_type_map: HashMap<String, String> = HashMap::new();
     for eff in column_effects {
         if let EffectValue::TypedPresent(t) = &eff.value {
-            pg_type_map.entry(eff.column.clone()).or_insert_with(|| t.clone());
+            pg_type_map
+                .entry(eff.column.clone())
+                .or_insert_with(|| t.clone());
         }
     }
 
@@ -380,9 +366,7 @@ fn build_status_update_ops(
     }
 
     // effects にも同じカラムへの指定があれば DoubleModeledEnum を診断
-    let has_effect_on_status = effects_for_entity
-        .iter()
-        .any(|e| e.column == status_col);
+    let has_effect_on_status = effects_for_entity.iter().any(|e| e.column == status_col);
     if has_effect_on_status {
         diags.push(StateDiag::DoubleModeledEnum {
             column: status_col.clone(),
@@ -476,7 +460,11 @@ fn collect_operations(
         if op.op_kind == OpKind::Update && !op.guard.is_empty() {
             // ops[i] の usecase_id から UseCaseKey を引く
             if let Some(uc_key) = model.use_cases.iter().find_map(|(k, uc)| {
-                if uc.id == op.usecase_id { Some(k) } else { None }
+                if uc.id == op.usecase_id {
+                    Some(k)
+                } else {
+                    None
+                }
             }) {
                 transition_op_idx_of_uc.entry(uc_key).or_default().push(i);
             }
@@ -531,7 +519,11 @@ fn collect_operations(
     for idxs in transition_op_idx_of_uc.values() {
         for &idx in idxs {
             if let Some(uc_key) = model.use_cases.iter().find_map(|(k, uc)| {
-                if uc.id == ops[idx].usecase_id { Some(k) } else { None }
+                if uc.id == ops[idx].usecase_id {
+                    Some(k)
+                } else {
+                    None
+                }
             }) {
                 transitions_usecases.insert(uc_key);
             }
@@ -684,11 +676,11 @@ fn derive_for_entity(
     let mut worklist: VecDeque<usize> = VecDeque::new(); // reached のインデックス
 
     let add_pattern = |pattern: StatePattern,
-                           is_initial: bool,
-                           prov: Provenance,
-                           reached: &mut Vec<ReachablePattern>,
-                           reached_set: &mut HashSet<StatePattern>,
-                           worklist: &mut VecDeque<usize>|
+                       is_initial: bool,
+                       prov: Provenance,
+                       reached: &mut Vec<ReachablePattern>,
+                       reached_set: &mut HashSet<StatePattern>,
+                       worklist: &mut VecDeque<usize>|
      -> bool {
         if reached_set.contains(&pattern) {
             // 既存エントリに provenance をマージ
@@ -724,7 +716,8 @@ fn derive_for_entity(
         for cop in &create_ops {
             let seeded = base_pattern.apply_effects(&cop.effects);
             let mut prov = Provenance::default();
-            prov.via.insert((cop.buc_id.clone(), cop.usecase_id.clone()));
+            prov.via
+                .insert((cop.buc_id.clone(), cop.usecase_id.clone()));
             add_pattern(
                 seeded,
                 true,
@@ -752,7 +745,9 @@ fn derive_for_entity(
                         continue;
                     }
                     // 削除は後継を生成せず、元パターンを terminal にする
-                    let mut prov = Provenance { via: prov_base.clone() };
+                    let mut prov = Provenance {
+                        via: prov_base.clone(),
+                    };
                     prov.via.insert((op.buc_id.clone(), op.usecase_id.clone()));
                     reached[idx].is_terminal = true;
                     reached[idx].provenance.via.extend(prov.via);
@@ -781,7 +776,9 @@ fn derive_for_entity(
                         continue;
                     }
 
-                    let mut prov = Provenance { via: prov_base.clone() };
+                    let mut prov = Provenance {
+                        via: prov_base.clone(),
+                    };
                     prov.via.insert((op.buc_id.clone(), op.usecase_id.clone()));
                     add_pattern(
                         next,
@@ -802,17 +799,17 @@ fn derive_for_entity(
     }
 
     // ── is_terminal の決定（Update/Delete が enabled でないパターン） ────────
-    for i in 0..reached.len() {
-        if reached[i].is_terminal {
+    for p in reached.iter_mut() {
+        if p.is_terminal {
             continue; // delete により既に terminal
         }
         let has_outgoing = ops.iter().any(|op| {
             (op.op_kind == OpKind::Update || op.op_kind == OpKind::Delete)
-                && guard_holds(&op.guard, &reached[i].pattern)
+                && guard_holds(&op.guard, &p.pattern)
                 && (op.op_kind == OpKind::Delete || !op.effects.is_empty())
         });
         if !has_outgoing {
-            reached[i].is_terminal = true;
+            p.is_terminal = true;
         }
     }
 
@@ -821,7 +818,10 @@ fn derive_for_entity(
         if let AxisKind::Enum(variants) = &ax.kind {
             for variant in variants {
                 let reached_val = AbstractValue::Enum(variant.clone());
-                if !reached.iter().any(|r| r.pattern.values.get(&ax.column) == Some(&reached_val)) {
+                if !reached
+                    .iter()
+                    .any(|r| r.pattern.values.get(&ax.column) == Some(&reached_val))
+                {
                     diags.push(StateDiag::UnreachableEnumVariant {
                         column: ax.column.clone(),
                         variant: variant.clone(),
@@ -935,7 +935,11 @@ transitions(EvCancel, Pending,   Cancelled)
         assert!(values.contains(&AbstractValue::Enum("paid".to_string())));
         assert!(values.contains(&AbstractValue::Enum("cancelled".to_string())));
         // 到達不能バリアントは無い
-        let unreachable_diags: Vec<_> = r.diagnostics.iter().filter(|d| matches!(d, StateDiag::UnreachableEnumVariant { .. })).collect();
+        let unreachable_diags: Vec<_> = r
+            .diagnostics
+            .iter()
+            .filter(|d| matches!(d, StateDiag::UnreachableEnumVariant { .. }))
+            .collect();
         assert!(unreachable_diags.is_empty());
     }
 
@@ -968,7 +972,10 @@ sets(usecase::DeliverUc, Order, "delivered_at", "present")
         // (pending, null) はシード
         let pending_null = StatePattern {
             values: BTreeMap::from([
-                ("status".to_string(), AbstractValue::Enum("pending".to_string())),
+                (
+                    "status".to_string(),
+                    AbstractValue::Enum("pending".to_string()),
+                ),
                 ("delivered_at".to_string(), AbstractValue::Null),
             ]),
         };
@@ -980,7 +987,10 @@ sets(usecase::DeliverUc, Order, "delivered_at", "present")
         // (pending, present) は到達不能
         let pending_present = StatePattern {
             values: BTreeMap::from([
-                ("status".to_string(), AbstractValue::Enum("pending".to_string())),
+                (
+                    "status".to_string(),
+                    AbstractValue::Enum("pending".to_string()),
+                ),
                 ("delivered_at".to_string(), AbstractValue::Present),
             ]),
         };
@@ -992,7 +1002,10 @@ sets(usecase::DeliverUc, Order, "delivered_at", "present")
         // (delivered, present) は到達可能
         let delivered_present = StatePattern {
             values: BTreeMap::from([
-                ("status".to_string(), AbstractValue::Enum("delivered".to_string())),
+                (
+                    "status".to_string(),
+                    AbstractValue::Enum("delivered".to_string()),
+                ),
                 ("delivered_at".to_string(), AbstractValue::Present),
             ]),
         };
@@ -1004,7 +1017,10 @@ sets(usecase::DeliverUc, Order, "delivered_at", "present")
         // (delivered, null) は到達不能（Deliver が status と delivered_at を同時に変える）
         let delivered_null = StatePattern {
             values: BTreeMap::from([
-                ("status".to_string(), AbstractValue::Enum("delivered".to_string())),
+                (
+                    "status".to_string(),
+                    AbstractValue::Enum("delivered".to_string()),
+                ),
                 ("delivered_at".to_string(), AbstractValue::Null),
             ]),
         };
@@ -1159,7 +1175,10 @@ transitions(Deactivate, Active, Inactive)
         let r = results.iter().find(|r| r.entity_id == "Item").unwrap();
         // (active) はシード, deletes が enabled → terminal
         let active_p = StatePattern {
-            values: BTreeMap::from([("status".to_string(), AbstractValue::Enum("active".to_string()))]),
+            values: BTreeMap::from([(
+                "status".to_string(),
+                AbstractValue::Enum("active".to_string()),
+            )]),
         };
         let entry = r.patterns.iter().find(|p| p.pattern == active_p).unwrap();
         assert!(entry.is_terminal);

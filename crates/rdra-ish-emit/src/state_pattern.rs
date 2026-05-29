@@ -46,10 +46,16 @@ fn format_via(provenance: &rdra_ish_core::state_pattern::Provenance) -> String {
 fn diag_message(d: &StateDiag) -> String {
     match d {
         StateDiag::UnreachableEnumVariant { column, variant } => {
-            format!("[warn] column '{}': variant '{}' is unreachable", column, variant)
+            format!(
+                "[warn] column '{}': variant '{}' is unreachable",
+                column, variant
+            )
         }
         StateDiag::ConflictingEffects { usecase, column } => {
-            format!("[warn] usecase '{}': conflicting effects on column '{}' (last-wins)", usecase, column)
+            format!(
+                "[warn] usecase '{}': conflicting effects on column '{}' (last-wins)",
+                usecase, column
+            )
         }
         StateDiag::DoubleModeledEnum { column } => {
             format!("[warn] column '{}': driven by both transitions and sets (transitions takes precedence)", column)
@@ -58,7 +64,10 @@ fn diag_message(d: &StateDiag) -> String {
             "[info] no creates(...) found; seeded from column defaults".to_string()
         }
         StateDiag::PatternCapReached { cap, bound } => {
-            format!("[warn] pattern cap reached: {} patterns generated, theoretical bound is {}", cap, bound)
+            format!(
+                "[warn] pattern cap reached: {} patterns generated, theoretical bound is {}",
+                cap, bound
+            )
         }
     }
 }
@@ -71,7 +80,9 @@ pub struct StatePatternTableEmitter {
 
 impl Default for StatePatternTableEmitter {
     fn default() -> Self {
-        Self { cap: DEFAULT_PATTERN_CAP }
+        Self {
+            cap: DEFAULT_PATTERN_CAP,
+        }
     }
 }
 
@@ -86,17 +97,11 @@ impl Emitter for StatePatternTableEmitter {
 
         for r in &results {
             // ── エンティティヘッダ ────────────────────────────────────────
-            out.push_str(&format!(
-                "Entity: {} ({})\n",
-                r.entity_id, r.entity_label
-            ));
+            out.push_str(&format!("Entity: {} ({})\n", r.entity_id, r.entity_label));
 
             if r.axes.is_empty() {
                 out.push_str("  (no state axes)\n");
-                out.push_str(&format!(
-                    "  reachable: {} / bound: 1\n\n",
-                    r.patterns.len()
-                ));
+                out.push_str(&format!("  reachable: {} / bound: 1\n\n", r.patterns.len()));
                 continue;
             }
 
@@ -181,8 +186,16 @@ impl Emitter for StatePatternTableEmitter {
                         format!("{:<width$}", v, width = col_widths[i])
                     })
                     .chain([
-                        format!("{:<width$}", if p.is_initial { "yes" } else { "no" }, width = initial_w),
-                        format!("{:<width$}", if p.is_terminal { "yes" } else { "no" }, width = terminal_w),
+                        format!(
+                            "{:<width$}",
+                            if p.is_initial { "yes" } else { "no" },
+                            width = initial_w
+                        ),
+                        format!(
+                            "{:<width$}",
+                            if p.is_terminal { "yes" } else { "no" },
+                            width = terminal_w
+                        ),
                         format_via(&p.provenance),
                     ])
                     .collect();
@@ -221,7 +234,9 @@ pub struct StatePatternCsvEmitter {
 
 impl Default for StatePatternCsvEmitter {
     fn default() -> Self {
-        Self { cap: DEFAULT_PATTERN_CAP }
+        Self {
+            cap: DEFAULT_PATTERN_CAP,
+        }
     }
 }
 
@@ -287,7 +302,7 @@ impl Emitter for StatePatternCsvEmitter {
 
         let data = wtr
             .into_inner()
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
         Ok(String::from_utf8(data).unwrap_or_default())
     }
 }
@@ -300,7 +315,9 @@ pub struct StatePatternJsonEmitter {
 
 impl Default for StatePatternJsonEmitter {
     fn default() -> Self {
-        Self { cap: DEFAULT_PATTERN_CAP }
+        Self {
+            cap: DEFAULT_PATTERN_CAP,
+        }
     }
 }
 
@@ -313,13 +330,11 @@ impl Emitter for StatePatternJsonEmitter {
         let results = derive_state_patterns(model, &buc_filter, self.cap);
 
         // シリアライズ可能な中間表現に変換
-        let serializable: Vec<serde_json::Value> = results
-            .iter()
-            .map(|r| entity_result_to_json(r))
-            .collect();
+        let serializable: Vec<serde_json::Value> =
+            results.iter().map(entity_result_to_json).collect();
 
         let json = serde_json::to_string_pretty(&serializable)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
         Ok(json + "\n")
     }
 }
@@ -353,10 +368,12 @@ fn entity_result_to_json(r: &EntityStateResult) -> serde_json::Value {
                 .axes
                 .iter()
                 .filter_map(|ax| {
-                    p.pattern
-                        .values
-                        .get(&ax.column)
-                        .map(|v| (ax.column.clone(), serde_json::json!(display_value(&ax.column, v, r))))
+                    p.pattern.values.get(&ax.column).map(|v| {
+                        (
+                            ax.column.clone(),
+                            serde_json::json!(display_value(&ax.column, v, r)),
+                        )
+                    })
                 })
                 .collect();
             serde_json::json!({
@@ -463,7 +480,9 @@ sets(usecase::DeliverOrder, Order, "delivered_at", "timestamptz")
     fn test_order_states_table_snapshot() {
         let model = model_from(ORDER_SRC);
         let view = View::whole();
-        let result = StatePatternTableEmitter::default().emit(&model, &view).unwrap();
+        let result = StatePatternTableEmitter::default()
+            .emit(&model, &view)
+            .unwrap();
         insta::assert_snapshot!(result);
     }
 
@@ -471,7 +490,9 @@ sets(usecase::DeliverOrder, Order, "delivered_at", "timestamptz")
     fn test_order_states_csv_snapshot() {
         let model = model_from(ORDER_SRC);
         let view = View::whole();
-        let result = StatePatternCsvEmitter::default().emit(&model, &view).unwrap();
+        let result = StatePatternCsvEmitter::default()
+            .emit(&model, &view)
+            .unwrap();
         insta::assert_snapshot!(result);
     }
 
@@ -479,7 +500,9 @@ sets(usecase::DeliverOrder, Order, "delivered_at", "timestamptz")
     fn test_order_states_json_snapshot() {
         let model = model_from(ORDER_SRC);
         let view = View::whole();
-        let result = StatePatternJsonEmitter::default().emit(&model, &view).unwrap();
+        let result = StatePatternJsonEmitter::default()
+            .emit(&model, &view)
+            .unwrap();
         insta::assert_snapshot!(result);
     }
 }

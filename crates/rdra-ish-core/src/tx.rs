@@ -172,8 +172,8 @@ pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
             component_of.insert(start, cid);
             while let Some(cur) = queue.pop_front() {
                 for &nb in adj.get(&cur).into_iter().flatten() {
-                    if !component_of.contains_key(&nb) {
-                        component_of.insert(nb, cid);
+                    if let std::collections::hash_map::Entry::Vacant(e) = component_of.entry(nb) {
+                        e.insert(cid);
                         queue.push_back(nb);
                     }
                 }

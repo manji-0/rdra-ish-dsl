@@ -133,7 +133,7 @@ fn collect_rdra_files(inputs: &[PathBuf]) -> Vec<PathBuf> {
             files.push(input.clone());
         } else if input.is_dir() {
             for entry in walkdir::WalkDir::new(input).into_iter().flatten() {
-                if entry.path().extension().map_or(false, |e| e == "rdra") {
+                if entry.path().extension().is_some_and(|e| e == "rdra") {
                     files.push(entry.path().to_owned());
                 }
             }
@@ -643,7 +643,11 @@ fn filter_entity_output(output: &str, entity_id: &str, format: &ListFormat) -> S
                     filtered.push('\n');
                     continue;
                 }
-                if line.split(',').next().map_or(false, |id| id.trim_matches('"') == entity_id) {
+                if line
+                    .split(',')
+                    .next()
+                    .is_some_and(|id| id.trim_matches('"') == entity_id)
+                {
                     filtered.push_str(line);
                     filtered.push('\n');
                 }
@@ -658,7 +662,7 @@ fn filter_entity_output(output: &str, entity_id: &str, format: &ListFormat) -> S
                     .filter(|v| {
                         v.get("entity_id")
                             .and_then(|id| id.as_str())
-                            .map_or(false, |id| id == entity_id)
+                            .is_some_and(|id| id == entity_id)
                     })
                     .collect();
                 serde_json::to_string_pretty(&filtered).unwrap_or_default() + "\n"

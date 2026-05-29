@@ -95,7 +95,7 @@ fn import_decl() -> impl Parser<Token, ImportDecl, Error = Simple<Token>> + Clon
 
     // suffix: SelectItems | Alias | nothing
     let suffix = select_suffix
-        .map(|items| ImportKind::Select(items))
+        .map(ImportKind::Select)
         .or(alias_suffix.map(ImportKind::Alias))
         .or_not()
         .map(|opt| opt.unwrap_or(ImportKind::All));
@@ -288,7 +288,7 @@ fn predicate_call() -> impl Parser<Token, PredicateCall, Error = Simple<Token>> 
 fn module_decl() -> impl Parser<Token, Item, Error = Simple<Token>> + Clone {
     just(Token::Module)
         .ignore_then(dotted_name())
-        .map_with_span(|name, span| Item::Module(name, span))
+        .map_with_span(Item::Module)
 }
 
 // ── Top-level item ────────────────────────────────────────────────────────────

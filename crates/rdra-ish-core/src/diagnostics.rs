@@ -38,7 +38,6 @@ pub enum RdraError {
     SeparateTxInferred { usecase: String, entity: String },
 
     // ── sets(...) カラム効果述語の診断 ──────────────────────────────────────
-
     #[error("unknown column: entity '{entity}' has no column '{col}'\n  hint: check the column name in the entity definition")]
     UnknownColumn { entity: String, col: String },
 

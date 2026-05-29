@@ -21,7 +21,7 @@ impl Emitter for ActorListCsvEmitter {
 
         let data = wtr
             .into_inner()
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
         Ok(String::from_utf8(data).unwrap_or_default())
     }
 }
@@ -72,7 +72,7 @@ impl Emitter for EntityListCsvEmitter {
 
         let data = wtr
             .into_inner()
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
         Ok(String::from_utf8(data).unwrap_or_default())
     }
 }
@@ -170,7 +170,7 @@ impl Emitter for RelationMatrixCsvEmitter {
 
         let data = wtr
             .into_inner()
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
         Ok(String::from_utf8(data).unwrap_or_default())
     }
 }
