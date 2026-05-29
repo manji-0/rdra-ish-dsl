@@ -470,7 +470,8 @@ actor Customer "重複定義"
 "#,
         );
 
-        let (program, resolve_diags) = resolve(&[dir.join("main.rdra")], std::slice::from_ref(&dir));
+        let (program, resolve_diags) =
+            resolve(&[dir.join("main.rdra")], std::slice::from_ref(&dir));
         let (_, model_diags) = build_merged_model(&program, &[dir]);
 
         let all_diags: Vec<_> = resolve_diags.iter().chain(model_diags.iter()).collect();

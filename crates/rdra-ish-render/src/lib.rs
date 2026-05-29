@@ -206,8 +206,7 @@ pub mod kroki {
             use std::io::Write;
 
             let mut enc = ZlibEncoder::new(Vec::new(), Compression::best());
-            enc.write_all(puml.as_bytes())
-                .map_err(RenderError::Io)?;
+            enc.write_all(puml.as_bytes()).map_err(RenderError::Io)?;
             let compressed = enc.finish().map_err(RenderError::Io)?;
             let encoded = STANDARD.encode(&compressed);
 
