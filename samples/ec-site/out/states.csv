@@ -1,0 +1,41 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.27s
+     Running `target/debug/rdra states samples/ec-site --format csv`
+entity_id,entity_label,pattern_idx,column,value,is_initial,is_terminal,via
+Cart,カート,0,(no axes),,true,true,-
+CartItem,カートアイテム,0,(no axes),,true,true,-
+Category,カテゴリ,0,(no axes),,true,true,-
+CustomerAccount,顧客アカウント,0,(no axes),,true,true,-
+Order,注文,0,status,pending,true,false,"BucOrder/PlaceOrder, BucPayment/RefundPayment"
+Order,注文,0,delivered_at,null,true,false,"BucOrder/PlaceOrder, BucPayment/RefundPayment"
+Order,注文,1,status,paid,false,true,"BucOrder/PlaceOrder, BucPayment/Capture, BucPayment/RefundPayment"
+Order,注文,1,delivered_at,null,false,true,"BucOrder/PlaceOrder, BucPayment/Capture, BucPayment/RefundPayment"
+Order,注文,2,status,cancelled,false,true,"BucOrder/Cancel, BucOrder/PlaceOrder, BucPayment/RefundPayment"
+Order,注文,2,delivered_at,null,false,true,"BucOrder/Cancel, BucOrder/PlaceOrder, BucPayment/RefundPayment"
+OrderLine,注文明細,0,(no axes),,true,true,-
+Payment,決済,0,method,credit_card,true,false,BucPayment/InputPaymentInfo
+Payment,決済,0,status,pending,true,false,BucPayment/InputPaymentInfo
+Payment,決済,0,processed_at,null,true,false,BucPayment/InputPaymentInfo
+Payment,決済,0,gateway_ref,null,true,false,BucPayment/InputPaymentInfo
+Payment,決済,1,method,credit_card,false,false,"BucPayment/AuthorizePayment, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,決済,1,status,authorized,false,false,"BucPayment/AuthorizePayment, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,決済,1,processed_at,null,false,false,"BucPayment/AuthorizePayment, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,決済,1,gateway_ref,null,false,false,"BucPayment/AuthorizePayment, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,決済,2,method,credit_card,false,false,"BucPayment/AuthorizePayment, BucPayment/Capture, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,決済,2,status,captured,false,false,"BucPayment/AuthorizePayment, BucPayment/Capture, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,決済,2,processed_at,present:timestamptz,false,false,"BucPayment/AuthorizePayment, BucPayment/Capture, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,決済,2,gateway_ref,null,false,false,"BucPayment/AuthorizePayment, BucPayment/Capture, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,決済,3,method,credit_card,false,false,"BucPayment/AuthorizePayment, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,決済,3,status,refunded,false,false,"BucPayment/AuthorizePayment, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,決済,3,processed_at,null,false,false,"BucPayment/AuthorizePayment, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,決済,3,gateway_ref,null,false,false,"BucPayment/AuthorizePayment, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,決済,4,method,credit_card,false,false,"BucPayment/AuthorizePayment, BucPayment/Capture, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,決済,4,status,authorized,false,false,"BucPayment/AuthorizePayment, BucPayment/Capture, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,決済,4,processed_at,present:timestamptz,false,false,"BucPayment/AuthorizePayment, BucPayment/Capture, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,決済,4,gateway_ref,null,false,false,"BucPayment/AuthorizePayment, BucPayment/Capture, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,決済,5,method,credit_card,false,false,"BucPayment/AuthorizePayment, BucPayment/Capture, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,決済,5,status,refunded,false,false,"BucPayment/AuthorizePayment, BucPayment/Capture, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,決済,5,processed_at,present:timestamptz,false,false,"BucPayment/AuthorizePayment, BucPayment/Capture, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,決済,5,gateway_ref,null,false,false,"BucPayment/AuthorizePayment, BucPayment/Capture, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Product,商品,0,description,null,true,true,-
+Product,商品,0,is_active,false,true,true,-
+ShippingAddress,配送先住所,0,(no axes),,true,true,-

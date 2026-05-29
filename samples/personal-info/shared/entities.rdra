@@ -1,0 +1,84 @@
+module shared.entities
+
+// ── アカウント ────────────────────────────────────────────
+entity UserAccount "ユーザーアカウント" {
+  id:            Int      @pk
+  email:         String   @unique
+  status:        Enum(active, suspended, deleted) @default(active)
+  created_at:    DateTime
+  last_login_at: DateTime @null
+}
+
+// ── 個人情報 ─────────────────────────────────────────────
+entity PersonalInfo "個人情報" {
+  id:          Int    @pk
+  given_name:  String @label("名")
+  family_name: String @label("姓")
+  birth_date:  Date   @null
+  phone:       String @null
+}
+
+// ── 住所 ─────────────────────────────────────────────────
+entity PostalAddress "住所" {
+  id:          Int    @pk
+  postal_code: String
+  prefecture:  String
+  city:        String
+  street:      String
+  building:    String @null
+  is_primary:  Bool
+}
+
+// ── クレジットカード ──────────────────────────────────────
+entity CreditCard "クレジットカード" {
+  id:               Int    @pk
+  card_number_hash: String @label("カード番号ハッシュ")
+  last4:            String @label("下4桁")
+  brand:            Enum(visa, mastercard, amex, jcb) @label("ブランド")
+  expires_month:    Int
+  expires_year:     Int
+  holder_name:      String @label("名義人")
+  is_primary:       Bool
+}
+
+// ── パスワード資格情報 ────────────────────────────────────
+entity PasswordCredential "パスワード資格情報" {
+  id:            Int      @pk
+  password_hash: String
+  salt:          String
+  algorithm:     String   @default("argon2id")
+  updated_at:    DateTime
+}
+
+// ── 監査ログ ─────────────────────────────────────────────
+entity AuditLog "監査ログ" {
+  id:           Int      @pk
+  action:       String   @label("操作種別")
+  target:       String   @label("操作対象")
+  performed_at: DateTime
+  ip_address:   String   @null
+}
+
+// ── ER関係 ───────────────────────────────────────────────
+relate(PersonalInfo,       UserAccount, "1:1")
+relate(PostalAddress,      UserAccount, "N:1")
+relate(CreditCard,         UserAccount, "N:1")
+relate(PasswordCredential, UserAccount, "1:1")
+relate(AuditLog,           UserAccount, "N:1")
+
+// ── 状態遷移（アカウント） ───────────────────────────────
+// 状態機械では「遷移後の状態」と「それを起こすイベント」が同じ名前に
+// なるのは自然。Active / Suspended / Deleted はそれぞれ state と event
+// 両方に宣言し、transitions では state:: / event:: 修飾で区別する。
+
+state Active    "有効"
+state Suspended "停止中"
+state Deleted   "削除済"
+
+event Suspended "アカウント停止" // state Suspended と同名
+event Active    "アカウント復元" // state Active と同名
+event Deleted   "アカウント削除" // state Deleted と同名
+
+transitions(event::Suspended, state::Active,    state::Suspended)
+transitions(event::Active,    state::Suspended, state::Active)
+transitions(event::Deleted,   state::Active,    state::Deleted)

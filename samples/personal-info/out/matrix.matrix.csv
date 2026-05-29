@@ -1,0 +1,15 @@
+UseCase,AuditLog,CreditCard,PasswordCredential,PersonalInfo,PostalAddress,UserAccount
+ChangePassword,C,,RU,,,
+DeleteAddress,C,,,,D,
+DeleteCard,C,D,,,,
+ListCards,,R,,,,
+RegisterAddress,C,,,,C,
+RegisterCard,C,C,,,,
+RequestPasswordReset,C,,,,,R
+ResetPassword,C,,U,,,
+SetInitialPassword,C,,C,,,
+SetPrimaryAddress,C,,,,RU,
+SetPrimaryCard,C,RU,,,,
+UpdateAddress,C,,,,RU,
+UpdateProfile,C,,,RU,,
+ViewProfile,,,,R,,R

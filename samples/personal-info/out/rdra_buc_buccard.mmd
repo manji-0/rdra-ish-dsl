@@ -1,0 +1,29 @@
+graph TD
+  User(["👤 利用者"])
+  DeleteCard(["カードを削除する"])
+  ListCards(["カード一覧を見る"])
+  RegisterCard(["カードを登録する"])
+  SetPrimaryCard(["優先カードを設定する"])
+  BucCard["📦 クレジットカードを管理する"]
+  AuditLog[("🗄 監査ログ")]
+  CreditCard[("🗄 クレジットカード")]
+  CardAddScreen[["カード登録画面"]]
+  CardListScreen[["カード一覧画面"]]
+  User --> BucCard
+  BucCard --> PersonalDataMgmt
+  BucCard --> SetPrimaryCard
+  BucCard --> ListCards
+  BucCard --> RegisterCard
+  BucCard --> DeleteCard
+  SetPrimaryCard -.->|reads| CreditCard
+  SetPrimaryCard -.->|updates| CreditCard
+  SetPrimaryCard -.->|creates| AuditLog
+  SetPrimaryCard -.->|displays| CardListScreen
+  ListCards -.->|reads| CreditCard
+  ListCards -.->|displays| CardListScreen
+  RegisterCard -.->|creates| CreditCard
+  RegisterCard -.->|creates| AuditLog
+  RegisterCard -.->|displays| CardAddScreen
+  DeleteCard -.->|deletes| CreditCard
+  DeleteCard -.->|creates| AuditLog
+  DeleteCard -.->|displays| CardListScreen

@@ -1,0 +1,82 @@
+---
+source: crates/rdra-syntax/src/parser.rs
+expression: ast
+---
+Ast {
+    items: [
+        Import(
+            ImportDecl {
+                path: DottedName(
+                    [
+                        "shared",
+                        "actors",
+                    ],
+                ),
+                kind: All,
+                span: 1..21,
+            },
+        ),
+        Import(
+            ImportDecl {
+                path: DottedName(
+                    [
+                        "shared",
+                        "entities",
+                    ],
+                ),
+                kind: Alias(
+                    "e",
+                ),
+                span: 22..49,
+            },
+        ),
+        Import(
+            ImportDecl {
+                path: DottedName(
+                    [
+                        "shared",
+                        "actors",
+                    ],
+                ),
+                kind: Select(
+                    [
+                        SelectItem {
+                            name: "Customer",
+                            alias: None,
+                            span: 72..80,
+                        },
+                        SelectItem {
+                            name: "Staff",
+                            alias: None,
+                            span: 82..87,
+                        },
+                    ],
+                ),
+                span: 50..88,
+            },
+        ),
+        Import(
+            ImportDecl {
+                path: DottedName(
+                    [
+                        "shared",
+                        "actors",
+                    ],
+                ),
+                kind: Select(
+                    [
+                        SelectItem {
+                            name: "Customer",
+                            alias: Some(
+                                "C",
+                            ),
+                            span: 111..124,
+                        },
+                    ],
+                ),
+                span: 89..125,
+            },
+        ),
+    ],
+    source: "\nimport shared.actors\nimport shared.entities as e\nimport shared.actors.{Customer, Staff}\nimport shared.actors.{Customer as C}\n",
+}

@@ -1,0 +1,115 @@
+@startuml
+!theme plain
+
+actor "利用者" as User
+participant "システム" as System
+database "監査ログ" as AuditLog
+database "クレジットカード" as CreditCard
+database "パスワード資格情報" as PasswordCredential
+database "個人情報" as PersonalInfo
+database "住所" as PostalAddress
+boundary "住所編集画面" as AddressEditScreen
+boundary "住所一覧画面" as AddressListScreen
+boundary "カード登録画面" as CardAddScreen
+boundary "カード一覧画面" as CardListScreen
+boundary "パスワード変更画面" as PasswordChangeScreen
+boundary "パスワードリセット画面" as PasswordResetScreen
+boundary "パスワード設定画面" as PasswordSetScreen
+boundary "個人情報画面" as ProfileScreen
+
+== パスワードを変更する ==
+User -> System : パスワードを変更する
+activate System
+System -> AuditLog : create
+System -> PasswordCredential : update
+System --> User : パスワード変更画面
+deactivate System
+
+== 住所を削除する ==
+User -> System : 住所を削除する
+activate System
+System -> AuditLog : create
+System -> PostalAddress : delete
+System --> User : 住所一覧画面
+deactivate System
+
+== カードを削除する ==
+User -> System : カードを削除する
+activate System
+System -> AuditLog : create
+System -> CreditCard : delete
+System --> User : カード一覧画面
+deactivate System
+
+== 住所を登録する ==
+User -> System : 住所を登録する
+activate System
+System -> AuditLog : create
+System -> PostalAddress : create
+System --> User : 住所編集画面
+deactivate System
+
+== カードを登録する ==
+User -> System : カードを登録する
+activate System
+System -> AuditLog : create
+System -> CreditCard : create
+System --> User : カード登録画面
+deactivate System
+
+== パスワードリセットを申請する ==
+User -> System : パスワードリセットを申請する
+activate System
+System -> AuditLog : create
+System --> User : パスワードリセット画面
+deactivate System
+
+== パスワードをリセットする ==
+User -> System : パスワードをリセットする
+activate System
+System -> AuditLog : create
+System -> PasswordCredential : update
+System --> User : パスワードリセット画面
+deactivate System
+
+== 初期パスワードを設定する ==
+User -> System : 初期パスワードを設定する
+activate System
+System -> AuditLog : create
+System -> PasswordCredential : create
+System --> User : パスワード設定画面
+deactivate System
+
+== 住所を優先設定する ==
+User -> System : 住所を優先設定する
+activate System
+System -> AuditLog : create
+System -> PostalAddress : update
+System --> User : 住所一覧画面
+deactivate System
+
+== 優先カードを設定する ==
+User -> System : 優先カードを設定する
+activate System
+System -> AuditLog : create
+System -> CreditCard : update
+System --> User : カード一覧画面
+deactivate System
+
+== 住所を更新する ==
+User -> System : 住所を更新する
+activate System
+System -> AuditLog : create
+System -> PostalAddress : update
+System --> User : 住所編集画面
+deactivate System
+
+== 個人情報を更新する ==
+User -> System : 個人情報を更新する
+activate System
+System -> AuditLog : create
+System -> PersonalInfo : update
+System --> User : 個人情報画面
+deactivate System
+
+@enduml

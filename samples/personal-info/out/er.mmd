@@ -1,0 +1,56 @@
+erDiagram
+  AuditLog {
+    Int id PK
+    String action
+    String target
+    DateTime performed_at
+    String ip_address
+    Int useraccount_id FK
+  }
+  CreditCard {
+    Int id PK
+    String card_number_hash
+    String last4
+    Enum brand
+    Int expires_month
+    Int expires_year
+    String holder_name
+    Bool is_primary
+    Int useraccount_id FK
+  }
+  PasswordCredential {
+    Int id PK
+    String password_hash
+    String salt
+    String algorithm
+    DateTime updated_at
+  }
+  PersonalInfo {
+    Int id PK
+    String given_name
+    String family_name
+    Date birth_date
+    String phone
+  }
+  PostalAddress {
+    Int id PK
+    String postal_code
+    String prefecture
+    String city
+    String street
+    String building
+    Bool is_primary
+    Int useraccount_id FK
+  }
+  UserAccount {
+    Int id PK
+    String email
+    Enum status
+    DateTime created_at
+    DateTime last_login_at
+  }
+  PersonalInfo ||--|| UserAccount : ""
+  PostalAddress }o--|| UserAccount : ""
+  CreditCard }o--|| UserAccount : ""
+  PasswordCredential ||--|| UserAccount : ""
+  AuditLog }o--|| UserAccount : ""

@@ -1,0 +1,6 @@
+module shared.actors
+
+actor Customer       "購入者"
+actor Admin          "管理者"
+extsystem PaymentGW  "決済ゲートウェイ"
+extsystem ShippingSvc "配送サービス"

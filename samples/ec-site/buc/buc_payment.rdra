@@ -1,0 +1,50 @@
+module buc.payment
+
+import shared.actors
+import shared.entities
+import shared.biz
+
+buc BucPayment "決済を行う"
+
+usecase InputPaymentInfo "決済情報を入力する"
+usecase AuthorizePayment "決済を承認する"
+// shared.entities の event Capture と同名 — usecase:: 修飾が必要
+usecase Capture          "決済を確定する"
+usecase RefundPayment    "返金する"
+
+screen PaymentInputScreen  "決済情報入力画面"
+screen PaymentResultScreen "決済結果画面"
+
+performs(Customer, BucPayment)
+belongs(BucPayment, EcShopping)
+contains(BucPayment, InputPaymentInfo)
+contains(BucPayment, AuthorizePayment)
+contains(BucPayment, usecase::Capture)
+contains(BucPayment, RefundPayment)
+
+displays(InputPaymentInfo, PaymentInputScreen)
+reads(InputPaymentInfo, Order)
+creates(InputPaymentInfo, Payment)
+
+displays(AuthorizePayment, PaymentResultScreen)
+updates(AuthorizePayment, Payment)
+uses(Customer, PaymentGW)
+
+displays(usecase::Capture, PaymentResultScreen)
+updates(usecase::Capture, Payment)
+updates(usecase::Capture, Order)
+raises(usecase::Capture, event::Capture)
+
+displays(RefundPayment, PaymentResultScreen)
+updates(RefundPayment, Payment)
+updates(RefundPayment, Order)
+
+// ── カラム効果の宣言（sets） ─────────────────────────────────────────────────
+// Payment.status は状態機械を持たないため sets で明示する
+sets(InputPaymentInfo,          Payment, "status", "pending")
+sets(usecase::Capture,          Payment, "status", "captured")
+sets(AuthorizePayment,          Payment, "status", "authorized")
+sets(RefundPayment,             Payment, "status", "refunded")
+// Order.delivered_at は決済確定時点では変化しない（Deliver 側で変わる）
+// processed_at は nullable なので sets で明示する
+sets(usecase::Capture,          Payment, "processed_at", "timestamptz")

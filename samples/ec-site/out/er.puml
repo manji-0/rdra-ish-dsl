@@ -1,0 +1,90 @@
+@startuml
+!theme plain
+
+entity "カート" as Cart {
+  *id : Int <<PK>>
+  --
+  created_at : DateTime
+  customeraccount_id : Int <<FK>>
+}
+entity "カートアイテム" as CartItem {
+  *id : Int <<PK>>
+  --
+  qty : Int
+  cart_id : Int <<FK>>
+  product_id : Int <<FK>>
+}
+entity "カテゴリ" as Category {
+  *id : Int <<PK>>
+  --
+  name : String
+  slug : String
+}
+entity "顧客アカウント" as CustomerAccount {
+  *id : Int <<PK>>
+  --
+  email : String
+  name : String
+  created_at : DateTime
+}
+entity "注文" as Order {
+  *id : Int <<PK>>
+  --
+  total : Money
+  tax : Money
+  status : Enum
+  ordered_at : DateTime
+  delivered_at : DateTime
+  customeraccount_id : Int <<FK>>
+  shippingaddress_id : Int <<FK>>
+}
+entity "注文明細" as OrderLine {
+  *id : Int <<PK>>
+  --
+  qty : Int
+  unit_price : Decimal
+  order_id : Int <<FK>>
+  product_id : Int <<FK>>
+}
+entity "決済" as Payment {
+  *id : Int <<PK>>
+  --
+  amount : Money
+  method : Enum
+  status : Enum
+  processed_at : DateTime
+  gateway_ref : String
+}
+entity "商品" as Product {
+  *id : Int <<PK>>
+  --
+  sku : String
+  name : String
+  description : String
+  price : Decimal
+  stock : Int
+  is_active : Bool
+  category_id : Int <<FK>>
+}
+entity "配送先住所" as ShippingAddress {
+  *id : Int <<PK>>
+  --
+  postal_code : String
+  prefecture : String
+  city : String
+  street : String
+  name : String
+  customeraccount_id : Int <<FK>>
+}
+
+Product }o--|| Category : ""
+ShippingAddress }o--|| CustomerAccount : ""
+Cart }o--|| CustomerAccount : ""
+CartItem }o--|| Product : ""
+CartItem }o--|| Cart : ""
+Order }o--|| CustomerAccount : ""
+Order }o--|| ShippingAddress : ""
+OrderLine }o--|| Product : ""
+OrderLine }o--|| Order : ""
+Payment ||--|| Order : ""
+@enduml

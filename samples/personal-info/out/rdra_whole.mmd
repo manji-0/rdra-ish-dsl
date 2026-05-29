@@ -1,0 +1,111 @@
+graph TD
+  SysAdmin(["👤 システム管理者"])
+  User(["👤 利用者"])
+  ChangePassword(["パスワードを変更する"])
+  DeleteAddress(["住所を削除する"])
+  DeleteCard(["カードを削除する"])
+  ListCards(["カード一覧を見る"])
+  RegisterAddress(["住所を登録する"])
+  RegisterCard(["カードを登録する"])
+  RequestPasswordReset(["パスワードリセットを申請する"])
+  ResetPassword(["パスワードをリセットする"])
+  SetInitialPassword(["初期パスワードを設定する"])
+  SetPrimaryAddress(["住所を優先設定する"])
+  SetPrimaryCard(["優先カードを設定する"])
+  UpdateAddress(["住所を更新する"])
+  UpdateProfile(["個人情報を更新する"])
+  ViewProfile(["個人情報を参照する"])
+  BucCard["📦 クレジットカードを管理する"]
+  BucPassword["📦 パスワードを管理する"]
+  BucProfile["📦 個人情報を管理する"]
+  AuditLog[("🗄 監査ログ")]
+  CreditCard[("🗄 クレジットカード")]
+  PasswordCredential[("🗄 パスワード資格情報")]
+  PersonalInfo[("🗄 個人情報")]
+  PostalAddress[("🗄 住所")]
+  UserAccount[("🗄 ユーザーアカウント")]
+  AddressEditScreen[["住所編集画面"]]
+  AddressListScreen[["住所一覧画面"]]
+  CardAddScreen[["カード登録画面"]]
+  CardListScreen[["カード一覧画面"]]
+  PasswordChangeScreen[["パスワード変更画面"]]
+  PasswordResetScreen[["パスワードリセット画面"]]
+  PasswordSetScreen[["パスワード設定画面"]]
+  ProfileScreen[["個人情報画面"]]
+  Active{"アカウント復元"}
+  Deleted{"アカウント削除"}
+  Suspended{"アカウント停止"}
+  Active("有効")  
+  Deleted("削除済")  
+  Suspended("停止中")  
+  User --> BucProfile
+  User --> BucCard
+  User --> BucPassword
+  BucProfile --> PersonalDataMgmt
+  BucProfile --> ViewProfile
+  BucProfile --> UpdateProfile
+  BucProfile --> RegisterAddress
+  BucProfile --> UpdateAddress
+  BucProfile --> DeleteAddress
+  BucProfile --> SetPrimaryAddress
+  BucCard --> PersonalDataMgmt
+  BucCard --> SetPrimaryCard
+  BucCard --> ListCards
+  BucCard --> RegisterCard
+  BucCard --> DeleteCard
+  BucPassword --> PersonalDataMgmt
+  BucPassword --> SetInitialPassword
+  BucPassword --> ChangePassword
+  BucPassword --> RequestPasswordReset
+  BucPassword --> ResetPassword
+  PersonalInfo --- UserAccount
+  PostalAddress --- UserAccount
+  CreditCard --- UserAccount
+  PasswordCredential --- UserAccount
+  AuditLog --- UserAccount
+  SetPrimaryCard -.->|reads| CreditCard
+  SetPrimaryCard -.->|updates| CreditCard
+  SetPrimaryCard -.->|creates| AuditLog
+  SetPrimaryCard -.->|displays| CardListScreen
+  SetInitialPassword -.->|creates| PasswordCredential
+  SetInitialPassword -.->|creates| AuditLog
+  SetInitialPassword -.->|displays| PasswordSetScreen
+  ChangePassword -.->|reads| PasswordCredential
+  ChangePassword -.->|updates| PasswordCredential
+  ChangePassword -.->|creates| AuditLog
+  ChangePassword -.->|displays| PasswordChangeScreen
+  RequestPasswordReset -.->|reads| UserAccount
+  RequestPasswordReset -.->|creates| AuditLog
+  RequestPasswordReset -.->|displays| PasswordResetScreen
+  ResetPassword -.->|updates| PasswordCredential
+  ResetPassword -.->|creates| AuditLog
+  ResetPassword -.->|displays| PasswordResetScreen
+  ViewProfile -.->|reads| UserAccount
+  ViewProfile -.->|reads| PersonalInfo
+  ViewProfile -.->|displays| ProfileScreen
+  UpdateProfile -.->|reads| PersonalInfo
+  UpdateProfile -.->|updates| PersonalInfo
+  UpdateProfile -.->|creates| AuditLog
+  UpdateProfile -.->|displays| ProfileScreen
+  RegisterAddress -.->|creates| PostalAddress
+  RegisterAddress -.->|creates| AuditLog
+  RegisterAddress -.->|displays| AddressEditScreen
+  UpdateAddress -.->|reads| PostalAddress
+  UpdateAddress -.->|updates| PostalAddress
+  UpdateAddress -.->|creates| AuditLog
+  UpdateAddress -.->|displays| AddressEditScreen
+  DeleteAddress -.->|deletes| PostalAddress
+  DeleteAddress -.->|creates| AuditLog
+  DeleteAddress -.->|displays| AddressListScreen
+  SetPrimaryAddress -.->|reads| PostalAddress
+  SetPrimaryAddress -.->|updates| PostalAddress
+  SetPrimaryAddress -.->|creates| AuditLog
+  SetPrimaryAddress -.->|displays| AddressListScreen
+  ListCards -.->|reads| CreditCard
+  ListCards -.->|displays| CardListScreen
+  RegisterCard -.->|creates| CreditCard
+  RegisterCard -.->|creates| AuditLog
+  RegisterCard -.->|displays| CardAddScreen
+  DeleteCard -.->|deletes| CreditCard
+  DeleteCard -.->|creates| AuditLog
+  DeleteCard -.->|displays| CardListScreen

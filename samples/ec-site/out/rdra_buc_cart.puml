@@ -1,0 +1,55 @@
+@startuml
+!theme plain
+
+actor "購入者" as Customer
+
+usecase "カートに追加する" as AddToCart
+usecase "カートから削除する" as RemoveCartItem
+usecase "商品を検索する" as SearchProducts
+usecase "カートの数量を変更する" as UpdateCartItem
+usecase "カートを確認する" as ViewCart
+usecase "商品詳細を見る" as ViewProduct
+
+rectangle "商品を買い物籠に入れる" as BucCart
+
+
+database "カート" as Cart
+database "カートアイテム" as CartItem
+database "カテゴリ" as Category
+database "商品" as Product
+
+boundary "カート画面" as CartScreen
+boundary "商品詳細画面" as ProductDetailScreen
+boundary "商品検索画面" as ProductSearchScreen
+
+
+
+Customer --> BucCart
+BucCart ..> EcShopping : belongs
+BucCart ..> SearchProducts : contains
+BucCart ..> ViewProduct : contains
+BucCart ..> AddToCart : contains
+BucCart ..> UpdateCartItem : contains
+BucCart ..> RemoveCartItem : contains
+BucCart ..> ViewCart : contains
+Product -- Category
+CartItem -- Product
+CartItem -- Cart
+SearchProducts ..> Category : reads
+SearchProducts ..> Product : reads
+SearchProducts ..> ProductSearchScreen : displays
+ViewProduct ..> Product : reads
+ViewProduct ..> ProductDetailScreen : displays
+AddToCart ..> Product : reads
+AddToCart ..> Cart : updates
+AddToCart ..> CartItem : creates
+AddToCart ..> CartScreen : displays
+UpdateCartItem ..> CartItem : updates
+UpdateCartItem ..> CartScreen : displays
+RemoveCartItem ..> CartItem : deletes
+RemoveCartItem ..> CartScreen : displays
+ViewCart ..> Product : reads
+ViewCart ..> Cart : reads
+ViewCart ..> CartItem : reads
+ViewCart ..> CartScreen : displays
+@enduml

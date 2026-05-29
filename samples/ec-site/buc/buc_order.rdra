@@ -1,0 +1,48 @@
+module buc.order
+
+import shared.actors
+import shared.entities
+import shared.biz
+
+buc BucOrder "注文を処理する"
+
+usecase SelectAddress    "配送先を選択する"
+usecase ConfirmOrder     "注文内容を確認する"
+usecase PlaceOrder       "注文を確定する"
+usecase ViewOrderHistory "注文履歴を見る"
+// shared.entities の event Cancel と同名 — usecase:: 修飾が必要
+usecase Cancel           "注文をキャンセルする"
+
+screen AddressSelectScreen "配送先選択画面"
+screen OrderConfirmScreen  "注文確認画面"
+screen OrderCompleteScreen "注文完了画面"
+screen OrderHistoryScreen  "注文履歴画面"
+
+performs(Customer, BucOrder)
+belongs(BucOrder, EcShopping)
+contains(BucOrder, SelectAddress)
+contains(BucOrder, ConfirmOrder)
+contains(BucOrder, PlaceOrder)
+contains(BucOrder, ViewOrderHistory)
+contains(BucOrder, usecase::Cancel)
+
+displays(SelectAddress, AddressSelectScreen)
+reads(SelectAddress, ShippingAddress)
+
+displays(ConfirmOrder, OrderConfirmScreen)
+reads(ConfirmOrder, Cart)
+reads(ConfirmOrder, CartItem)
+reads(ConfirmOrder, ShippingAddress)
+
+displays(PlaceOrder, OrderCompleteScreen)
+creates(PlaceOrder, Order)
+creates(PlaceOrder, OrderLine)
+updates(PlaceOrder, Cart)
+
+displays(ViewOrderHistory, OrderHistoryScreen)
+reads(ViewOrderHistory, Order)
+reads(ViewOrderHistory, OrderLine)
+
+displays(usecase::Cancel, OrderHistoryScreen)
+updates(usecase::Cancel, Order)
+raises(usecase::Cancel, event::Cancel)

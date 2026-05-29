@@ -1,0 +1,35 @@
+---
+source: crates/rdra-syntax/src/parser.rs
+expression: ast
+---
+Ast {
+    items: [
+        Predicate(
+            PredicateCall {
+                name: "performs",
+                args: [
+                    Ref(
+                        QRef {
+                            kind_qualifier: None,
+                            parts: [
+                                "Customer",
+                            ],
+                            span: 9..17,
+                        },
+                    ),
+                    Ref(
+                        QRef {
+                            kind_qualifier: None,
+                            parts: [
+                                "Browse",
+                            ],
+                            span: 19..25,
+                        },
+                    ),
+                ],
+                span: 0..26,
+            },
+        ),
+    ],
+    source: "performs(Customer, Browse)",
+}

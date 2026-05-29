@@ -1,0 +1,18 @@
+---
+source: crates/rdra-syntax/src/parser.rs
+expression: ast
+---
+Ast {
+    items: [
+        Module(
+            DottedName(
+                [
+                    "shared",
+                    "actors",
+                ],
+            ),
+            0..20,
+        ),
+    ],
+    source: "module shared.actors",
+}

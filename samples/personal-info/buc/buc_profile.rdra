@@ -1,0 +1,54 @@
+module buc.profile
+
+import shared.actors
+import shared.entities
+import shared.biz
+
+buc BucProfile "個人情報を管理する"
+
+usecase ViewProfile       "個人情報を参照する"
+usecase UpdateProfile     "個人情報を更新する"
+usecase RegisterAddress   "住所を登録する"
+usecase UpdateAddress     "住所を更新する"
+usecase DeleteAddress     "住所を削除する"
+usecase SetPrimaryAddress "住所を優先設定する"
+
+screen ProfileScreen     "個人情報画面"
+screen AddressListScreen "住所一覧画面"
+screen AddressEditScreen "住所編集画面"
+
+performs(User, BucProfile)
+belongs(BucProfile, PersonalDataMgmt)
+contains(BucProfile, ViewProfile)
+contains(BucProfile, UpdateProfile)
+contains(BucProfile, RegisterAddress)
+contains(BucProfile, UpdateAddress)
+contains(BucProfile, DeleteAddress)
+contains(BucProfile, SetPrimaryAddress)
+
+displays(ViewProfile, ProfileScreen)
+reads(ViewProfile, PersonalInfo)
+reads(ViewProfile, UserAccount)
+
+displays(UpdateProfile, ProfileScreen)
+reads(UpdateProfile, PersonalInfo)
+updates(UpdateProfile, PersonalInfo)
+creates(UpdateProfile, AuditLog)
+
+displays(RegisterAddress, AddressEditScreen)
+creates(RegisterAddress, PostalAddress)
+creates(RegisterAddress, AuditLog)
+
+displays(UpdateAddress, AddressEditScreen)
+reads(UpdateAddress, PostalAddress)
+updates(UpdateAddress, PostalAddress)
+creates(UpdateAddress, AuditLog)
+
+displays(DeleteAddress, AddressListScreen)
+deletes(DeleteAddress, PostalAddress)
+creates(DeleteAddress, AuditLog)
+
+displays(SetPrimaryAddress, AddressListScreen)
+reads(SetPrimaryAddress, PostalAddress)
+updates(SetPrimaryAddress, PostalAddress)
+creates(SetPrimaryAddress, AuditLog)

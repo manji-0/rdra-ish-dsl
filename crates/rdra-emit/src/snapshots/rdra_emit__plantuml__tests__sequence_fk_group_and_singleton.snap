@@ -1,0 +1,28 @@
+---
+source: crates/rdra-emit/src/plantuml.rs
+assertion_line: 840
+expression: result
+---
+@startuml
+!theme plain
+
+actor "顧客" as Customer
+participant "システム" as System
+database "カート" as Cart
+database "注文" as Order
+database "注文明細" as OrderLine
+boundary "注文完了画面" as OrderCompleteScreen
+
+== 注文を確定する ==
+Customer -> System : 注文を確定する
+activate System
+group transaction (inferred from FK)
+System -> Order : create
+System -> OrderLine : create
+end
+System -> Cart : update
+note right : FK非連結 — 別TX？@atomicで明示を
+System --> Customer : 注文完了画面
+deactivate System
+
+@enduml

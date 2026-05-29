@@ -1,0 +1,41 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/rdra-syntax",
+    "crates/rdra-core",
+    "crates/rdra-emit",
+    "crates/rdra-render",
+    "crates/rdra-cli",
+]
+
+[workspace.package]
+edition = "2021"
+version = "0.1.0"
+authors = ["rdra-dsl contributors"]
+license = "MIT"
+
+[workspace.dependencies]
+# parser
+logos        = "0.14"
+chumsky      = "0.9"
+# diagnostics
+miette       = { version = "7", features = ["fancy"] }
+thiserror    = "2"
+# model
+slotmap      = "1"
+petgraph     = "0.6"
+# emit
+csv          = "1"
+serde        = { version = "1", features = ["derive"] }
+serde_json   = "1"
+# cli
+clap         = { version = "4", features = ["derive"] }
+anyhow       = "1"
+# file
+walkdir      = "2"
+# encoding / compression (optional, used by rdra-render kroki feature)
+base64       = "0.22"
+flate2       = "1"
+# test
+insta        = { version = "1", features = ["toml"] }
+tempfile     = "3"

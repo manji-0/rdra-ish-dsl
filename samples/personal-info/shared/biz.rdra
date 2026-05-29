@@ -1,0 +1,3 @@
+module shared.biz
+
+business PersonalDataMgmt "個人情報管理業務"

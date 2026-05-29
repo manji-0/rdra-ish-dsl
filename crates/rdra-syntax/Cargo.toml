@@ -1,0 +1,12 @@
+[package]
+name = "rdra-syntax"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+logos   = { workspace = true }
+chumsky = { workspace = true }
+miette  = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }

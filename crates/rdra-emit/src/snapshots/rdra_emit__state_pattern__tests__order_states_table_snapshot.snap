@@ -1,0 +1,16 @@
+---
+source: crates/rdra-emit/src/state_pattern.rs
+expression: result
+---
+Entity: Order (注文)
+  axes: status[pending|paid|shipped|delivered|cancelled], delivered_at[null|present:timestamptz]
+
+  STATUS     DELIVERED_AT         INITIAL  TERMINAL  VIA                                            
+  ─────────  ───────────────────  ───────  ────────  ───────────────────────────────────────────────
+  pending    null                 yes      no        PlaceOrder
+  paid       null                 no       no        CapturePay, PlaceOrder
+  cancelled  null                 no       yes       CancelOrder, PlaceOrder
+  shipped    null                 no       no        CapturePay, PlaceOrder, ShipOrder
+  delivered  present:timestamptz  no       yes       CapturePay, DeliverOrder, PlaceOrder, ShipOrder
+
+  reachable: 5 / bound: 10

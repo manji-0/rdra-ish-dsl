@@ -1,0 +1,38 @@
+---
+source: crates/rdra-syntax/src/parser.rs
+expression: ast
+---
+Ast {
+    items: [
+        Predicate(
+            PredicateCall {
+                name: "relate",
+                args: [
+                    Ref(
+                        QRef {
+                            kind_qualifier: None,
+                            parts: [
+                                "Order",
+                            ],
+                            span: 7..12,
+                        },
+                    ),
+                    Ref(
+                        QRef {
+                            kind_qualifier: None,
+                            parts: [
+                                "Customer",
+                            ],
+                            span: 14..22,
+                        },
+                    ),
+                    Lit(
+                        "N:1",
+                    ),
+                ],
+                span: 0..30,
+            },
+        ),
+    ],
+    source: "relate(Order, Customer, \"N:1\")",
+}

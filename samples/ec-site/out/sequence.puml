@@ -1,0 +1,94 @@
+@startuml
+!theme plain
+
+actor "購入者" as Customer
+participant "システム" as System
+database "カート" as Cart
+database "カートアイテム" as CartItem
+database "注文" as Order
+database "注文明細" as OrderLine
+database "決済" as Payment
+boundary "カート画面" as CartScreen
+boundary "注文完了画面" as OrderCompleteScreen
+boundary "注文履歴画面" as OrderHistoryScreen
+boundary "決済情報入力画面" as PaymentInputScreen
+boundary "決済結果画面" as PaymentResultScreen
+
+== カートに追加する ==
+Customer -> System : カートに追加する
+activate System
+group transaction (inferred from FK)
+System -> Cart : update
+System -> CartItem : create
+end
+System --> Customer : カート画面
+deactivate System
+
+== 決済を承認する ==
+Customer -> System : 決済を承認する
+activate System
+System -> Payment : update
+System --> Customer : 決済結果画面
+deactivate System
+
+== 注文をキャンセルする ==
+Customer -> System : 注文をキャンセルする
+activate System
+System -> Order : update
+System --> Customer : 注文履歴画面
+deactivate System
+
+== 決済を確定する ==
+Customer -> System : 決済を確定する
+activate System
+group transaction (inferred from FK)
+System -> Order : update
+System -> Payment : update
+end
+System --> Customer : 決済結果画面
+deactivate System
+
+== 決済情報を入力する ==
+Customer -> System : 決済情報を入力する
+activate System
+System -> Payment : create
+System --> Customer : 決済情報入力画面
+deactivate System
+
+== 注文を確定する ==
+Customer -> System : 注文を確定する
+activate System
+group transaction (inferred from FK)
+System -> Order : create
+System -> OrderLine : create
+end
+System -> Cart : update
+note right : FK非連結 — 別TX？@atomicで明示を
+System --> Customer : 注文完了画面
+deactivate System
+
+== 返金する ==
+Customer -> System : 返金する
+activate System
+group transaction (inferred from FK)
+System -> Order : update
+System -> Payment : update
+end
+System --> Customer : 決済結果画面
+deactivate System
+
+== カートから削除する ==
+Customer -> System : カートから削除する
+activate System
+System -> CartItem : delete
+System --> Customer : カート画面
+deactivate System
+
+== カートの数量を変更する ==
+Customer -> System : カートの数量を変更する
+activate System
+System -> CartItem : update
+System --> Customer : カート画面
+deactivate System
+
+@enduml

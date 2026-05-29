@@ -1,0 +1,74 @@
+---
+source: crates/rdra-syntax/src/parser.rs
+expression: ast
+---
+Ast {
+    items: [
+        Instance(
+            InstanceDecl {
+                kind: Entity,
+                id: "Product",
+                label: "商品",
+                columns: [
+                    Column {
+                        name: "id",
+                        col_type: Int,
+                        annotations: [
+                            Pk,
+                        ],
+                        span: 29..44,
+                    },
+                    Column {
+                        name: "sku",
+                        col_type: String,
+                        annotations: [
+                            Unique,
+                        ],
+                        span: 47..66,
+                    },
+                    Column {
+                        name: "name",
+                        col_type: String,
+                        annotations: [
+                            Label(
+                                "商品名",
+                            ),
+                        ],
+                        span: 69..101,
+                    },
+                    Column {
+                        name: "price",
+                        col_type: Decimal,
+                        annotations: [],
+                        span: 104..118,
+                    },
+                    Column {
+                        name: "status",
+                        col_type: Enum(
+                            [
+                                "active",
+                                "discontinued",
+                            ],
+                        ),
+                        annotations: [
+                            Default(
+                                "active",
+                            ),
+                        ],
+                        span: 121..172,
+                    },
+                    Column {
+                        name: "note",
+                        col_type: String,
+                        annotations: [
+                            Null,
+                        ],
+                        span: 175..193,
+                    },
+                ],
+                span: 1..195,
+            },
+        ),
+    ],
+    source: "\nentity Product \"商品\" {\n  id:  Int    @pk\n  sku: String @unique\n  name: String @label(\"商品名\")\n  price: Decimal\n  status: Enum(active, discontinued) @default(active)\n  note: String @null\n}\n",
+}

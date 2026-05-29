@@ -1,0 +1,105 @@
+module shared.entities
+
+// ── 商品・カタログ ────────────────────────────────────────
+entity Category "カテゴリ" {
+  id:   Int    @pk
+  name: String
+  slug: String @unique
+}
+
+entity Product "商品" {
+  id:          Int     @pk
+  sku:         String  @unique
+  name:        String
+  description: String  @null
+  price:       Decimal
+  stock:       Int
+  is_active:   Bool
+}
+
+// ── 顧客 ─────────────────────────────────────────────────
+entity CustomerAccount "顧客アカウント" {
+  id:         Int      @pk
+  email:      String   @unique
+  name:       String
+  created_at: DateTime
+}
+
+entity ShippingAddress "配送先住所" {
+  id:          Int    @pk
+  postal_code: String
+  prefecture:  String
+  city:        String
+  street:      String
+  name:        String @label("宛名")
+}
+
+// ── カート ────────────────────────────────────────────────
+entity Cart "カート" {
+  id:         Int      @pk
+  created_at: DateTime
+}
+
+entity CartItem "カートアイテム" {
+  id:  Int @pk
+  qty: Int
+}
+
+// ── 注文 ─────────────────────────────────────────────────
+entity Order "注文" {
+  id:           Int      @pk
+  total:        Money
+  tax:          Money
+  status:       Enum(pending, paid, shipped, delivered, cancelled) @default(pending)
+  ordered_at:   DateTime
+  delivered_at: DateTime @null
+}
+
+entity OrderLine "注文明細" {
+  id:         Int     @pk
+  qty:        Int
+  unit_price: Decimal
+}
+
+// ── 決済 ─────────────────────────────────────────────────
+entity Payment "決済" {
+  id:           Int      @pk
+  amount:       Money
+  method:       Enum(credit_card, bank_transfer, convenience) @default(credit_card)
+  status:       Enum(pending, authorized, captured, failed, refunded) @default(pending)
+  processed_at: DateTime @null
+  gateway_ref:  String   @null @label("決済GW参照番号")
+}
+
+// ── ER関係 ───────────────────────────────────────────────
+relate(Product,         Category,        "N:1")
+relate(ShippingAddress, CustomerAccount, "N:1")
+relate(Cart,            CustomerAccount, "N:1")
+relate(CartItem,        Cart,            "N:1")
+relate(CartItem,        Product,         "N:1")
+relate(Order,           CustomerAccount, "N:1")
+relate(Order,           ShippingAddress, "N:1")
+relate(OrderLine,       Order,           "N:1")
+relate(OrderLine,       Product,         "N:1")
+relate(Payment,         Order,           "1:1")
+
+// ── 状態遷移（注文） ─────────────────────────────────────
+// Capture / Cancel は buc_payment.rdra・buc_order.rdra でそれぞれ同名の
+// usecase としても宣言される。src/ 全体をマージすると event と usecase が
+// 衝突するため、transitions の第1引数には event:: 修飾が必要。
+
+state Pending   "注文受付"
+state Paid      "決済完了"
+state Shipped   "発送済"
+state Delivered "配達完了"
+state Cancelled "キャンセル"
+
+event Capture "決済確定"    // usecase Capture (buc_payment) と同名
+event Ship    "発送開始"
+event Deliver "配達確認"
+event Cancel  "注文キャンセル" // usecase Cancel (buc_order) と同名
+
+transitions(event::Capture, Pending,  Paid)
+transitions(event::Ship,    Paid,     Shipped)
+transitions(event::Deliver, Shipped,  Delivered)
+transitions(event::Cancel,  Pending,  Cancelled)

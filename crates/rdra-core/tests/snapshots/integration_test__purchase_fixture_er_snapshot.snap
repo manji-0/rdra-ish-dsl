@@ -1,0 +1,48 @@
+---
+source: crates/rdra-core/tests/integration_test.rs
+assertion_line: 227
+expression: puml
+---
+@startuml
+!theme plain
+
+entity "カテゴリ" as Category {
+  *id : Int <<PK>>
+  --
+  name : String
+}
+entity "顧客情報" as Customer_info {
+  *id : Int <<PK>>
+  --
+  name : String
+  email : String
+}
+entity "注文" as Order {
+  *id : Int <<PK>>
+  --
+  total : Money
+  ordered_at : DateTime
+  customer_info_id : Int <<FK>>
+}
+entity "注文明細" as OrderLine {
+  *id : Int <<PK>>
+  --
+  qty : Int
+  price : Money
+  order_id : Int <<FK>>
+  product_id : Int <<FK>>
+}
+entity "商品" as Product {
+  *id : Int <<PK>>
+  --
+  sku : String
+  name : String
+  price : Decimal
+  category_id : Int <<FK>>
+}
+
+Order }o--|| Customer_info : ""
+OrderLine }o--|| Order : ""
+OrderLine }o--|| Product : ""
+Product }o--|| Category : ""
+@enduml

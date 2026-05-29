@@ -1,0 +1,22 @@
+---
+source: crates/rdra-emit/src/plantuml.rs
+assertion_line: 493
+expression: result
+---
+@startuml
+!theme plain
+
+entity "顧客" as Customer {
+  *id : Int <<PK>>
+  --
+  name : String
+}
+entity "注文" as Order {
+  *id : Int <<PK>>
+  --
+  total : Money
+  customer_id : Int <<FK>>
+}
+
+Order }o--|| Customer : ""
+@enduml

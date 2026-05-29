@@ -1,0 +1,4 @@
+module shared.actors
+
+actor User      "利用者"
+actor SysAdmin  "システム管理者"

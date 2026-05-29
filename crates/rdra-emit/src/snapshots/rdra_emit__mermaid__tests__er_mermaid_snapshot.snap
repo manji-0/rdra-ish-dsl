@@ -1,0 +1,16 @@
+---
+source: crates/rdra-emit/src/mermaid.rs
+assertion_line: 412
+expression: result
+---
+erDiagram
+  Customer {
+    Int id PK
+    String name
+  }
+  Order {
+    Int id PK
+    Money total
+    Int customer_id FK
+  }
+  Order }o--|| Customer : ""

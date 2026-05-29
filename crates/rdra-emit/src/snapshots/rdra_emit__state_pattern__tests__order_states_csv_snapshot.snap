@@ -1,0 +1,15 @@
+---
+source: crates/rdra-emit/src/state_pattern.rs
+expression: result
+---
+entity_id,entity_label,pattern_idx,column,value,is_initial,is_terminal,via
+Order,注文,0,status,pending,true,false,PlaceOrder
+Order,注文,0,delivered_at,null,true,false,PlaceOrder
+Order,注文,1,status,paid,false,false,"CapturePay, PlaceOrder"
+Order,注文,1,delivered_at,null,false,false,"CapturePay, PlaceOrder"
+Order,注文,2,status,cancelled,false,true,"CancelOrder, PlaceOrder"
+Order,注文,2,delivered_at,null,false,true,"CancelOrder, PlaceOrder"
+Order,注文,3,status,shipped,false,false,"CapturePay, PlaceOrder, ShipOrder"
+Order,注文,3,delivered_at,null,false,false,"CapturePay, PlaceOrder, ShipOrder"
+Order,注文,4,status,delivered,false,true,"CapturePay, DeliverOrder, PlaceOrder, ShipOrder"
+Order,注文,4,delivered_at,present:timestamptz,false,true,"CapturePay, DeliverOrder, PlaceOrder, ShipOrder"

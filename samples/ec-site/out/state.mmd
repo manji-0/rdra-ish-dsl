@@ -1,0 +1,11 @@
+stateDiagram-v2
+  [*] --> Pending
+  state "決済完了" as Paid
+  state "発送済" as Shipped
+  state "注文受付" as Pending
+  state "キャンセル" as Cancelled
+  state "配達完了" as Delivered
+  Paid --> Shipped : 発送開始
+  Pending --> Cancelled : 注文キャンセル
+  Pending --> Paid : 決済確定
+  Shipped --> Delivered : 配達確認

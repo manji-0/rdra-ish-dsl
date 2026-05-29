@@ -1,0 +1,3 @@
+module shared.biz
+
+business EcShopping "EC購買業務"

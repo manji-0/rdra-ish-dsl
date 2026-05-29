@@ -1,0 +1,102 @@
+---
+source: crates/rdra-emit/src/state_pattern.rs
+expression: result
+---
+[
+  {
+    "axes": [
+      {
+        "column": "status",
+        "domain": [
+          "pending",
+          "paid",
+          "shipped",
+          "delivered",
+          "cancelled"
+        ]
+      },
+      {
+        "column": "delivered_at",
+        "domain": [
+          "null",
+          "present:timestamptz"
+        ]
+      }
+    ],
+    "diagnostics": [],
+    "entity_id": "Order",
+    "entity_label": "注文",
+    "no_creation_path": false,
+    "patterns": [
+      {
+        "idx": 0,
+        "is_initial": true,
+        "is_terminal": false,
+        "values": {
+          "delivered_at": "null",
+          "status": "pending"
+        },
+        "via": [
+          "PlaceOrder"
+        ]
+      },
+      {
+        "idx": 1,
+        "is_initial": false,
+        "is_terminal": false,
+        "values": {
+          "delivered_at": "null",
+          "status": "paid"
+        },
+        "via": [
+          "CapturePay",
+          "PlaceOrder"
+        ]
+      },
+      {
+        "idx": 2,
+        "is_initial": false,
+        "is_terminal": true,
+        "values": {
+          "delivered_at": "null",
+          "status": "cancelled"
+        },
+        "via": [
+          "CancelOrder",
+          "PlaceOrder"
+        ]
+      },
+      {
+        "idx": 3,
+        "is_initial": false,
+        "is_terminal": false,
+        "values": {
+          "delivered_at": "null",
+          "status": "shipped"
+        },
+        "via": [
+          "CapturePay",
+          "PlaceOrder",
+          "ShipOrder"
+        ]
+      },
+      {
+        "idx": 4,
+        "is_initial": false,
+        "is_terminal": true,
+        "values": {
+          "delivered_at": "present:timestamptz",
+          "status": "delivered"
+        },
+        "via": [
+          "CapturePay",
+          "DeliverOrder",
+          "PlaceOrder",
+          "ShipOrder"
+        ]
+      }
+    ],
+    "reachable": 5,
+    "truncated": false
+  }
+]

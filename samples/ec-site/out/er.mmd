@@ -1,0 +1,77 @@
+erDiagram
+  Cart {
+    Int id PK
+    DateTime created_at
+    Int customeraccount_id FK
+  }
+  CartItem {
+    Int id PK
+    Int qty
+    Int cart_id FK
+    Int product_id FK
+  }
+  Category {
+    Int id PK
+    String name
+    String slug
+  }
+  CustomerAccount {
+    Int id PK
+    String email
+    String name
+    DateTime created_at
+  }
+  Order {
+    Int id PK
+    Money total
+    Money tax
+    Enum status
+    DateTime ordered_at
+    DateTime delivered_at
+    Int customeraccount_id FK
+    Int shippingaddress_id FK
+  }
+  OrderLine {
+    Int id PK
+    Int qty
+    Decimal unit_price
+    Int order_id FK
+    Int product_id FK
+  }
+  Payment {
+    Int id PK
+    Money amount
+    Enum method
+    Enum status
+    DateTime processed_at
+    String gateway_ref
+  }
+  Product {
+    Int id PK
+    String sku
+    String name
+    String description
+    Decimal price
+    Int stock
+    Bool is_active
+    Int category_id FK
+  }
+  ShippingAddress {
+    Int id PK
+    String postal_code
+    String prefecture
+    String city
+    String street
+    String name
+    Int customeraccount_id FK
+  }
+  Product }o--|| Category : ""
+  ShippingAddress }o--|| CustomerAccount : ""
+  Cart }o--|| CustomerAccount : ""
+  CartItem }o--|| Product : ""
+  CartItem }o--|| Cart : ""
+  Order }o--|| CustomerAccount : ""
+  Order }o--|| ShippingAddress : ""
+  OrderLine }o--|| Product : ""
+  OrderLine }o--|| Order : ""
+  Payment ||--|| Order : ""

@@ -1,0 +1,48 @@
+graph TD
+  User(["👤 利用者"])
+  DeleteAddress(["住所を削除する"])
+  RegisterAddress(["住所を登録する"])
+  SetPrimaryAddress(["住所を優先設定する"])
+  UpdateAddress(["住所を更新する"])
+  UpdateProfile(["個人情報を更新する"])
+  ViewProfile(["個人情報を参照する"])
+  BucProfile["📦 個人情報を管理する"]
+  AuditLog[("🗄 監査ログ")]
+  PersonalInfo[("🗄 個人情報")]
+  PostalAddress[("🗄 住所")]
+  UserAccount[("🗄 ユーザーアカウント")]
+  AddressEditScreen[["住所編集画面"]]
+  AddressListScreen[["住所一覧画面"]]
+  ProfileScreen[["個人情報画面"]]
+  User --> BucProfile
+  BucProfile --> PersonalDataMgmt
+  BucProfile --> ViewProfile
+  BucProfile --> UpdateProfile
+  BucProfile --> RegisterAddress
+  BucProfile --> UpdateAddress
+  BucProfile --> DeleteAddress
+  BucProfile --> SetPrimaryAddress
+  PersonalInfo --- UserAccount
+  PostalAddress --- UserAccount
+  AuditLog --- UserAccount
+  ViewProfile -.->|reads| UserAccount
+  ViewProfile -.->|reads| PersonalInfo
+  ViewProfile -.->|displays| ProfileScreen
+  UpdateProfile -.->|reads| PersonalInfo
+  UpdateProfile -.->|updates| PersonalInfo
+  UpdateProfile -.->|creates| AuditLog
+  UpdateProfile -.->|displays| ProfileScreen
+  RegisterAddress -.->|creates| PostalAddress
+  RegisterAddress -.->|creates| AuditLog
+  RegisterAddress -.->|displays| AddressEditScreen
+  UpdateAddress -.->|reads| PostalAddress
+  UpdateAddress -.->|updates| PostalAddress
+  UpdateAddress -.->|creates| AuditLog
+  UpdateAddress -.->|displays| AddressEditScreen
+  DeleteAddress -.->|deletes| PostalAddress
+  DeleteAddress -.->|creates| AuditLog
+  DeleteAddress -.->|displays| AddressListScreen
+  SetPrimaryAddress -.->|reads| PostalAddress
+  SetPrimaryAddress -.->|updates| PostalAddress
+  SetPrimaryAddress -.->|creates| AuditLog
+  SetPrimaryAddress -.->|displays| AddressListScreen

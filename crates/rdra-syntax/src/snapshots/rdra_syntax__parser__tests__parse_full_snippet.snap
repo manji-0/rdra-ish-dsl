@@ -1,0 +1,133 @@
+---
+source: crates/rdra-syntax/src/parser.rs
+expression: ast
+---
+Ast {
+    items: [
+        Module(
+            DottedName(
+                [
+                    "shared",
+                    "actors",
+                ],
+            ),
+            17..37,
+        ),
+        Import(
+            ImportDecl {
+                path: DottedName(
+                    [
+                        "shared",
+                        "entities",
+                    ],
+                ),
+                kind: All,
+                span: 39..61,
+            },
+        ),
+        Instance(
+            InstanceDecl {
+                kind: Actor,
+                id: "Customer",
+                label: "顧客",
+                columns: [],
+                span: 63..88,
+            },
+        ),
+        Instance(
+            InstanceDecl {
+                kind: UseCase,
+                id: "Browse",
+                label: "商品を探す",
+                columns: [],
+                span: 89..123,
+            },
+        ),
+        Instance(
+            InstanceDecl {
+                kind: Entity,
+                id: "Order",
+                label: "注文",
+                columns: [
+                    Column {
+                        name: "id",
+                        col_type: Int,
+                        annotations: [
+                            Pk,
+                        ],
+                        span: 152..163,
+                    },
+                    Column {
+                        name: "total",
+                        col_type: Money,
+                        annotations: [],
+                        span: 166..178,
+                    },
+                    Column {
+                        name: "ordered_at",
+                        col_type: DateTime,
+                        annotations: [],
+                        span: 181..201,
+                    },
+                ],
+                span: 125..203,
+            },
+        ),
+        Predicate(
+            PredicateCall {
+                name: "performs",
+                args: [
+                    Ref(
+                        QRef {
+                            kind_qualifier: None,
+                            parts: [
+                                "Customer",
+                            ],
+                            span: 214..222,
+                        },
+                    ),
+                    Ref(
+                        QRef {
+                            kind_qualifier: None,
+                            parts: [
+                                "Browse",
+                            ],
+                            span: 224..230,
+                        },
+                    ),
+                ],
+                span: 205..231,
+            },
+        ),
+        Predicate(
+            PredicateCall {
+                name: "relate",
+                args: [
+                    Ref(
+                        QRef {
+                            kind_qualifier: None,
+                            parts: [
+                                "Order",
+                            ],
+                            span: 239..244,
+                        },
+                    ),
+                    Ref(
+                        QRef {
+                            kind_qualifier: None,
+                            parts: [
+                                "Customer",
+                            ],
+                            span: 246..254,
+                        },
+                    ),
+                    Lit(
+                        "N:1",
+                    ),
+                ],
+                span: 232..262,
+            },
+        ),
+    ],
+    source: "\n// コメント\nmodule shared.actors\n\nimport shared.entities\n\nactor   Customer \"顧客\"\nusecase Browse   \"商品を探す\"\n\nentity  Order \"注文\" {\n  id: Int @pk\n  total: Money\n  ordered_at: DateTime\n}\n\nperforms(Customer, Browse)\nrelate(Order, Customer, \"N:1\")\n",
+}

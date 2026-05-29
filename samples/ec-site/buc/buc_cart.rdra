@@ -1,0 +1,50 @@
+module buc.cart
+
+import shared.actors
+import shared.entities
+import shared.biz
+
+buc BucCart "商品を買い物籠に入れる"
+
+usecase SearchProducts "商品を検索する"
+usecase ViewProduct    "商品詳細を見る"
+usecase AddToCart      "カートに追加する"
+usecase UpdateCartItem "カートの数量を変更する"
+usecase RemoveCartItem "カートから削除する"
+usecase ViewCart       "カートを確認する"
+
+screen ProductSearchScreen "商品検索画面"
+screen ProductDetailScreen "商品詳細画面"
+screen CartScreen          "カート画面"
+
+performs(Customer, BucCart)
+belongs(BucCart, EcShopping)
+contains(BucCart, SearchProducts)
+contains(BucCart, ViewProduct)
+contains(BucCart, AddToCart)
+contains(BucCart, UpdateCartItem)
+contains(BucCart, RemoveCartItem)
+contains(BucCart, ViewCart)
+
+displays(SearchProducts, ProductSearchScreen)
+reads(SearchProducts, Product)
+reads(SearchProducts, Category)
+
+displays(ViewProduct, ProductDetailScreen)
+reads(ViewProduct, Product)
+
+displays(AddToCart, CartScreen)
+reads(AddToCart, Product)
+creates(AddToCart, CartItem)
+updates(AddToCart, Cart)
+
+displays(UpdateCartItem, CartScreen)
+updates(UpdateCartItem, CartItem)
+
+displays(RemoveCartItem, CartScreen)
+deletes(RemoveCartItem, CartItem)
+
+displays(ViewCart, CartScreen)
+reads(ViewCart, Cart)
+reads(ViewCart, CartItem)
+reads(ViewCart, Product)

@@ -1,0 +1,18 @@
+[package]
+name = "rdra-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+rdra-syntax = { path = "../rdra-syntax" }
+miette      = { workspace = true }
+thiserror   = { workspace = true }
+slotmap     = { workspace = true }
+petgraph    = { workspace = true }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+
+[dev-dependencies]
+insta    = { workspace = true }
+tempfile = { workspace = true }
+rdra-emit = { path = "../rdra-emit" }

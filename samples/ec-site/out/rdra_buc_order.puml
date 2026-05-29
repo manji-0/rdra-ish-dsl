@@ -1,0 +1,55 @@
+@startuml
+!theme plain
+
+actor "購入者" as Customer
+
+usecase "注文をキャンセルする" as CancelOrder
+usecase "注文内容を確認する" as ConfirmOrder
+usecase "注文を確定する" as PlaceOrder
+usecase "配送先を選択する" as SelectAddress
+usecase "注文履歴を見る" as ViewOrderHistory
+
+rectangle "注文を処理する" as BucOrder
+
+
+database "カート" as Cart
+database "カートアイテム" as CartItem
+database "注文" as Order
+database "注文明細" as OrderLine
+database "配送先住所" as ShippingAddress
+
+boundary "配送先選択画面" as AddressSelectScreen
+boundary "注文完了画面" as OrderCompleteScreen
+boundary "注文確認画面" as OrderConfirmScreen
+boundary "注文履歴画面" as OrderHistoryScreen
+
+control "キャンセル申請" as CancelRequested
+
+
+Customer --> BucOrder
+BucOrder ..> EcShopping : belongs
+BucOrder ..> SelectAddress : contains
+BucOrder ..> ConfirmOrder : contains
+BucOrder ..> PlaceOrder : contains
+BucOrder ..> ViewOrderHistory : contains
+BucOrder ..> CancelOrder : contains
+CartItem -- Cart
+Order -- ShippingAddress
+OrderLine -- Order
+SelectAddress ..> ShippingAddress : reads
+SelectAddress ..> AddressSelectScreen : displays
+ConfirmOrder ..> ShippingAddress : reads
+ConfirmOrder ..> Cart : reads
+ConfirmOrder ..> CartItem : reads
+ConfirmOrder ..> OrderConfirmScreen : displays
+PlaceOrder ..> Cart : updates
+PlaceOrder ..> Order : creates
+PlaceOrder ..> OrderLine : creates
+PlaceOrder ..> OrderCompleteScreen : displays
+ViewOrderHistory ..> Order : reads
+ViewOrderHistory ..> OrderLine : reads
+ViewOrderHistory ..> OrderHistoryScreen : displays
+CancelOrder ..> Order : updates
+CancelOrder ..> CancelRequested : raises
+CancelOrder ..> OrderHistoryScreen : displays
+@enduml

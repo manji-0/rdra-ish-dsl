@@ -1,0 +1,66 @@
+@startuml
+!theme plain
+
+entity "監査ログ" as AuditLog {
+  *id : Int <<PK>>
+  --
+  action : String
+  target : String
+  performed_at : DateTime
+  ip_address : String
+  useraccount_id : Int <<FK>>
+}
+entity "クレジットカード" as CreditCard {
+  *id : Int <<PK>>
+  --
+  card_number_hash : String
+  last4 : String
+  brand : Enum
+  expires_month : Int
+  expires_year : Int
+  holder_name : String
+  is_primary : Bool
+  useraccount_id : Int <<FK>>
+}
+entity "パスワード資格情報" as PasswordCredential {
+  *id : Int <<PK>>
+  --
+  password_hash : String
+  salt : String
+  algorithm : String
+  updated_at : DateTime
+}
+entity "個人情報" as PersonalInfo {
+  *id : Int <<PK>>
+  --
+  given_name : String
+  family_name : String
+  birth_date : Date
+  phone : String
+}
+entity "住所" as PostalAddress {
+  *id : Int <<PK>>
+  --
+  postal_code : String
+  prefecture : String
+  city : String
+  street : String
+  building : String
+  is_primary : Bool
+  useraccount_id : Int <<FK>>
+}
+entity "ユーザーアカウント" as UserAccount {
+  *id : Int <<PK>>
+  --
+  email : String
+  status : Enum
+  created_at : DateTime
+  last_login_at : DateTime
+}
+
+PersonalInfo ||--|| UserAccount : ""
+PostalAddress }o--|| UserAccount : ""
+CreditCard }o--|| UserAccount : ""
+PasswordCredential ||--|| UserAccount : ""
+AuditLog }o--|| UserAccount : ""
+@enduml
