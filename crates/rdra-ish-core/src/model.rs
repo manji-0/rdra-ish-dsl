@@ -348,24 +348,24 @@ pub struct ColumnEffect {
     pub value: EffectValue,
 }
 
-/// `forbidden(Entity, "col", "val")` で宣言された禁止状態制約。
-/// 指定のカラムがこの値に到達してはならない。
+/// `forbidden(Entity, (col, val), ...)` で宣言された禁止状態制約。
+/// `conditions` に列挙した全ての (col, val) が同時に成立する状態は禁止（AND）。
 #[derive(Debug, Clone)]
 pub struct ForbiddenConstraint {
     pub entity: EntityKey,
-    pub column: String,
-    pub value: EffectValue,
+    /// 禁止する (カラム名, 値) の組合せ（全件 AND）
+    pub conditions: Vec<(std::string::String, EffectValue)>,
 }
 
-/// `invariant(Entity, "guard_col", "guard_val", "req_col", "req_val")` で宣言された不変条件。
-/// `guard_col == guard_val` のとき、`req_col` は必ず `req_val` でなければならない。
+/// `invariant(Entity).when(col, val).then(col, val)` で宣言された不変条件。
+/// `guards` が全て成立するとき、`requireds` も全て成立しなければならない。
 #[derive(Debug, Clone)]
 pub struct EntityInvariant {
     pub entity: EntityKey,
-    pub guard_column: String,
-    pub guard_value: EffectValue,
-    pub required_column: String,
-    pub required_value: EffectValue,
+    /// ガード条件 (カラム名, 値)（全件 AND）
+    pub guards: Vec<(std::string::String, EffectValue)>,
+    /// 必要条件 (カラム名, 値)（全件 AND）
+    pub requireds: Vec<(std::string::String, EffectValue)>,
 }
 
 /// セマンティックモデル

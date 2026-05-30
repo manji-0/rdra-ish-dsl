@@ -161,16 +161,18 @@ pub enum StateDiag {
     NoCreationPath,
     /// cap に達してパターン探索を打ち切った
     PatternCapReached { cap: usize, bound: usize },
-    /// `forbidden(Entity, col, val)` で禁止されたカラム値に到達可能
+    /// `forbidden(Entity, (col, val), ...)` で禁止された状態に到達可能
     ForbiddenStateViolated {
-        column: String,
-        value: String,
+        /// 禁止条件を "col=val AND col=val" 形式に整形した文字列
+        conditions: String,
         pattern_desc: String,
     },
-    /// `invariant(Entity, ...)` の不変条件を違反する到達可能な状態
+    /// `invariant(Entity).when(...).then(...)` の不変条件を違反する到達可能な状態
     InvariantViolated {
-        guard: String,
-        required: String,
+        /// ガード条件を "col=val AND col=val" 形式に整形した文字列
+        guards: String,
+        /// 必要条件を "col=val AND col=val" 形式に整形した文字列
+        requireds: String,
         pattern_desc: String,
     },
 }
@@ -891,17 +893,31 @@ fn check_constraints(
     diags: &mut Vec<StateDiag>,
 ) {
     // ── 禁止状態チェック ─────────────────────────────────────────────────────
+    // `conditions` に列挙した全条件が同時に成立するパターンは禁止（AND）。
     for fc in model
         .forbidden_constraints
         .iter()
         .filter(|fc| fc.entity == ek)
     {
-        let forbidden_val = AbstractValue::from_effect(&fc.value);
+        // 各条件を AbstractValue に変換して保持（ループ毎の再変換を避ける）
+        let abs_conds: Vec<(String, AbstractValue)> = fc
+            .conditions
+            .iter()
+            .map(|(col, val)| (col.clone(), AbstractValue::from_effect(val)))
+            .collect();
+
         for rp in reached {
-            if rp.pattern.values.get(&fc.column) == Some(&forbidden_val) {
+            let all_match = abs_conds
+                .iter()
+                .all(|(col, av)| rp.pattern.values.get(col) == Some(av));
+            if all_match {
+                let conditions_str = abs_conds
+                    .iter()
+                    .map(|(col, av)| format!("{}={}", col, abstract_value_display(av)))
+                    .collect::<Vec<_>>()
+                    .join(" AND ");
                 diags.push(StateDiag::ForbiddenStateViolated {
-                    column: fc.column.clone(),
-                    value: abstract_value_display(&forbidden_val),
+                    conditions: conditions_str,
                     pattern_desc: describe_pattern(&rp.pattern),
                 });
             }
@@ -909,33 +925,51 @@ fn check_constraints(
     }
 
     // ── 不変条件チェック ─────────────────────────────────────────────────────
+    // guards が全て成立するパターンで requireds のいずれかが不成立なら違反。
     for inv in model
         .entity_invariants
         .iter()
         .filter(|inv| inv.entity == ek)
     {
-        let guard_val = AbstractValue::from_effect(&inv.guard_value);
-        let req_val = AbstractValue::from_effect(&inv.required_value);
+        let abs_guards: Vec<(String, AbstractValue)> = inv
+            .guards
+            .iter()
+            .map(|(col, val)| (col.clone(), AbstractValue::from_effect(val)))
+            .collect();
+        let abs_requireds: Vec<(String, AbstractValue)> = inv
+            .requireds
+            .iter()
+            .map(|(col, val)| (col.clone(), AbstractValue::from_effect(val)))
+            .collect();
+
         for rp in reached {
-            // ガード条件が成立するパターンのみ検査
-            if rp.pattern.values.get(&inv.guard_column) == Some(&guard_val) {
-                // required 条件が満たされていない場合に違反
-                let actual_req = rp.pattern.values.get(&inv.required_column);
-                if actual_req != Some(&req_val) {
-                    diags.push(StateDiag::InvariantViolated {
-                        guard: format!(
-                            "{}={}",
-                            inv.guard_column,
-                            abstract_value_display(&guard_val)
-                        ),
-                        required: format!(
-                            "{}={}",
-                            inv.required_column,
-                            abstract_value_display(&req_val)
-                        ),
-                        pattern_desc: describe_pattern(&rp.pattern),
-                    });
-                }
+            // 全ガード条件が成立するパターンのみ検査
+            let guards_hold = abs_guards
+                .iter()
+                .all(|(col, av)| rp.pattern.values.get(col) == Some(av));
+            if !guards_hold {
+                continue;
+            }
+            // required 条件のいずれかが不成立なら違反
+            let req_violated = abs_requireds
+                .iter()
+                .any(|(col, av)| rp.pattern.values.get(col) != Some(av));
+            if req_violated {
+                let guards_str = abs_guards
+                    .iter()
+                    .map(|(col, av)| format!("{}={}", col, abstract_value_display(av)))
+                    .collect::<Vec<_>>()
+                    .join(" AND ");
+                let requireds_str = abs_requireds
+                    .iter()
+                    .map(|(col, av)| format!("{}={}", col, abstract_value_display(av)))
+                    .collect::<Vec<_>>()
+                    .join(" AND ");
+                diags.push(StateDiag::InvariantViolated {
+                    guards: guards_str,
+                    requireds: requireds_str,
+                    pattern_desc: describe_pattern(&rp.pattern),
+                });
             }
         }
     }
@@ -1280,10 +1314,11 @@ transitions(Deactivate, Active, Inactive)
         assert!(entry.is_terminal);
     }
 
-    // ── 禁止状態: 到達可能な Enum バリアントを forbidden で禁止 ────────────────
+    // ── forbidden: 単一タプルで到達可能バリアントを禁止 ─────────────────────────
 
     #[test]
     fn test_forbidden_state_violated() {
+        // タプル構文: forbidden(Order, (status, cancelled))
         let model = model_from(
             r#"
 entity Order "注文" {
@@ -1299,7 +1334,7 @@ raises(Cancel, EvCancel)
 state Pending   "受付中"
 state Cancelled "キャンセル済"
 transitions(EvCancel, Pending, Cancelled)
-forbidden(Order, "status", "cancelled")
+forbidden(Order, (status, cancelled))
 "#,
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
@@ -1318,30 +1353,56 @@ forbidden(Order, "status", "cancelled")
         );
     }
 
-    // ── 禁止状態: 到達不能なバリアントを forbidden → 違反なし ─────────────────
+    // ── forbidden: 複数タプルのAND組合せ禁止 ────────────────────────────────────
 
     #[test]
-    fn test_forbidden_state_no_violation_when_unreachable() {
+    fn test_forbidden_multi_condition_and() {
+        // (status=delivered) かつ (refunded=true) の組合せのみ禁止
+        // → (delivered, false) は OK、(pending, true) も OK
         let model = model_from(
             r#"
 entity Order "注文" {
-  id:     Int @pk
-  status: Enum(pending, paid) @default(pending)
+  id:       Int @pk
+  status:   Enum(pending, delivered) @default(pending)
+  refunded: Bool
 }
-usecase Place "注文確定"
-usecase Pay   "支払い"
-event EvPaid  "支払い完了"
-creates(Place, Order)
-updates(Pay,   Order)
-raises(Pay, EvPaid)
-state Pending "受付中"
-state Paid    "支払済"
-transitions(EvPaid, Pending, Paid)
-forbidden(Order, "status", "paid")
+usecase Place   "注文確定"
+usecase Deliver "配達"
+usecase Refund  "返金"
+event EvDeliver "配達"
+creates(Place,   Order)
+updates(Deliver, Order)
+updates(Refund,  Order)
+raises(Deliver, EvDeliver)
+state Pending   "受付中"
+state Delivered "配達完了"
+transitions(EvDeliver, Pending, Delivered)
+sets(usecase::Refund, Order, "refunded", "true")
+forbidden(Order, (status, delivered), (refunded, true))
 "#,
         );
-        // paid は到達可能なので違反が発生する（このテストで動作を確認）
-        let model2 = model_from(
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results.iter().find(|r| r.entity_id == "Order").unwrap();
+
+        // (delivered, true) は到達可能なので違反
+        let violated: Vec<_> = r
+            .diagnostics
+            .iter()
+            .filter(|d| matches!(d, StateDiag::ForbiddenStateViolated { .. }))
+            .collect();
+        assert!(
+            !violated.is_empty(),
+            "ForbiddenStateViolated が発生すべき: {:?}",
+            r.diagnostics
+        );
+    }
+
+    // ── forbidden: 到達不能な状態を禁止 → 違反なし ──────────────────────────────
+
+    #[test]
+    fn test_forbidden_state_no_violation_when_unreachable() {
+        // inactive は creates のみで到達不能 → 違反なし
+        let model = model_from(
             r#"
 entity Item "アイテム" {
   id:     Int @pk
@@ -1349,11 +1410,10 @@ entity Item "アイテム" {
 }
 usecase Create "作成"
 creates(Create, Item)
-forbidden(Item, "status", "inactive")
+forbidden(Item, (status, inactive))
 "#,
         );
-        // inactive は reaches されないので違反なし
-        let results = derive_state_patterns(&model2, &[], DEFAULT_PATTERN_CAP);
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
         let r = results.iter().find(|r| r.entity_id == "Item").unwrap();
         let violated: Vec<_> = r
             .diagnostics
@@ -1365,15 +1425,14 @@ forbidden(Item, "status", "inactive")
             "到達不能バリアントで ForbiddenStateViolated は発生しないはず: {:?}",
             r.diagnostics
         );
-        let _ = model; // suppress unused warning
     }
 
-    // ── 不変条件: 違反する状態が到達可能 ────────────────────────────────────────
+    // ── invariant: チェーン構文で不変条件違反を検出 ──────────────────────────────
 
     #[test]
     fn test_invariant_violated() {
-        // "delivered" になったが delivered_at が null のパターンが到達可能
-        // → invariant 違反を検出すべき
+        // invariant(Order).when(status, delivered).then(delivered_at, present)
+        // Deliver が delivered_at を sets しないので (delivered, null) が到達可能 → 違反
         let model = model_from(
             r#"
 entity Order "注文" {
@@ -1390,10 +1449,11 @@ raises(Deliver,  EvDeliver)
 state Pending   "受付中"
 state Delivered "配達完了"
 transitions(EvDeliver, Pending, Delivered)
-invariant(Order, "status", "delivered", "delivered_at", "present")
+invariant(Order)
+  .when(status, delivered)
+  .then(delivered_at, present)
 "#,
         );
-        // Deliver は delivered_at を sets しないので (delivered, null) が到達可能 → 違反
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
         let r = results.iter().find(|r| r.entity_id == "Order").unwrap();
         let violated: Vec<_> = r
@@ -1408,7 +1468,56 @@ invariant(Order, "status", "delivered", "delivered_at", "present")
         );
     }
 
-    // ── 不変条件: 満たされている場合は違反なし ──────────────────────────────────
+    // ── invariant: 複数 when (AND guard) を持つ不変条件 ─────────────────────────
+
+    #[test]
+    fn test_invariant_multi_guard_violated() {
+        // .when(status, delivered).when(refunded, false).then(refund_id, null)
+        // (delivered, false, present) が到達可能 → 違反
+        let model = model_from(
+            r#"
+entity Order "注文" {
+  id:        Int @pk
+  status:    Enum(pending, delivered) @default(pending)
+  refunded:  Bool
+  refund_id: String @null
+}
+usecase Place   "注文確定"
+usecase Deliver "配達"
+usecase Refund  "返金"
+event EvDeliver "配達"
+creates(Place,   Order)
+updates(Deliver, Order)
+updates(Refund,  Order)
+raises(Deliver, EvDeliver)
+state Pending   "受付中"
+state Delivered "配達完了"
+transitions(EvDeliver, Pending, Delivered)
+sets(usecase::Refund, Order, "refunded",  "true")
+sets(usecase::Refund, Order, "refund_id", "present")
+invariant(Order)
+  .when(status, delivered)
+  .when(refunded, false)
+  .then(refund_id, null)
+"#,
+        );
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results.iter().find(|r| r.entity_id == "Order").unwrap();
+        // (delivered, false, present) のパターンは存在しない（refund_id はデフォルトnull）
+        // ただし (delivered, false, null) は不変条件を満たす → 違反なし
+        let violated: Vec<_> = r
+            .diagnostics
+            .iter()
+            .filter(|d| matches!(d, StateDiag::InvariantViolated { .. }))
+            .collect();
+        assert!(
+            violated.is_empty(),
+            "ガード(delivered AND false)かつ required(refund_id=null)を満たすので違反なし: {:?}",
+            r.diagnostics
+        );
+    }
+
+    // ── invariant: 不変条件を満たす場合は違反なし ──────────────────────────────
 
     #[test]
     fn test_invariant_satisfied() {
@@ -1430,7 +1539,9 @@ state Pending   "受付中"
 state Delivered "配達完了"
 transitions(EvDeliver, Pending, Delivered)
 sets(usecase::Deliver, Order, "delivered_at", "present")
-invariant(Order, "status", "delivered", "delivered_at", "present")
+invariant(Order)
+  .when(status, delivered)
+  .then(delivered_at, present)
 "#,
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);

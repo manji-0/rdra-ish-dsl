@@ -70,23 +70,22 @@ fn diag_message(d: &StateDiag) -> String {
             )
         }
         StateDiag::ForbiddenStateViolated {
-            column,
-            value,
+            conditions,
             pattern_desc,
         } => {
             format!(
-                "[error] forbidden state reached: column '{}' = '{}' in pattern ({})",
-                column, value, pattern_desc
+                "[error] forbidden state reached: ({}) in pattern ({})",
+                conditions, pattern_desc
             )
         }
         StateDiag::InvariantViolated {
-            guard,
-            required,
+            guards,
+            requireds,
             pattern_desc,
         } => {
             format!(
-                "[error] invariant violated: when {} holds, {} must also hold — but found pattern ({})",
-                guard, required, pattern_desc
+                "[error] invariant violated: when ({}) holds, ({}) must also hold — but found pattern ({})",
+                guards, requireds, pattern_desc
             )
         }
     }

@@ -268,11 +268,44 @@ fn qref() -> impl Parser<Token, QRef, Error = Simple<Token>> + Clone {
 
 // ── Predicate call ────────────────────────────────────────────────────────────
 
-/// Argument: either a string literal or a qualified ref.
-fn predicate_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + Clone {
+/// タプルを含まない基底引数: `"lit"` または `kind::Ref` / 裸ident。
+/// タプル内部でも使用するため再帰しない。
+fn predicate_atom() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + Clone {
     let lit = string_lit().map(PredicateArg::Lit);
     let r = qref().map(PredicateArg::Ref);
     lit.or(r)
+}
+
+/// 引数: `(col, val)` タプル、文字列リテラル、または修飾参照。
+///
+/// タプルは `( atom (, atom)* )` 形式。タプルのネストは不要なので atom は非再帰。
+fn predicate_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + Clone {
+    let atom = predicate_atom();
+
+    let tuple = just(Token::LParen)
+        .ignore_then(
+            predicate_atom()
+                .separated_by(just(Token::Comma))
+                .allow_trailing(),
+        )
+        .then_ignore(just(Token::RParen))
+        .map(PredicateArg::Tuple);
+
+    tuple.or(atom)
+}
+
+/// `.method(args...)` のチェーン呼び出し1件。
+fn chain_call() -> impl Parser<Token, ChainCall, Error = Simple<Token>> + Clone {
+    just(Token::Dot)
+        .ignore_then(ident())
+        .then_ignore(just(Token::LParen))
+        .then(
+            predicate_arg()
+                .separated_by(just(Token::Comma))
+                .allow_trailing(),
+        )
+        .then_ignore(just(Token::RParen))
+        .map_with_span(|(name, args), span| ChainCall { name, args, span })
 }
 
 fn predicate_call() -> impl Parser<Token, PredicateCall, Error = Simple<Token>> + Clone {
@@ -284,7 +317,13 @@ fn predicate_call() -> impl Parser<Token, PredicateCall, Error = Simple<Token>> 
                 .allow_trailing(),
         )
         .then_ignore(just(Token::RParen))
-        .map_with_span(|(name, args), span| PredicateCall { name, args, span })
+        .then(chain_call().repeated())
+        .map_with_span(|((name, args), chain), span| PredicateCall {
+            name,
+            args,
+            chain,
+            span,
+        })
 }
 
 // ── Module declaration ────────────────────────────────────────────────────────
@@ -419,6 +458,80 @@ relate(Order, Customer, "N:1")
 "#;
         let ast = parse_ok(src);
         insta::assert_debug_snapshot!(ast);
+    }
+
+    #[test]
+    fn test_parse_tuple_forbidden() {
+        // forbidden(Order, (status, cancelled)) — タプル引数のパース確認
+        let ast = parse_ok(r#"forbidden(Order, (status, cancelled))"#);
+        let pred = ast
+            .items
+            .iter()
+            .find_map(|i| {
+                if let Item::Predicate(p) = i {
+                    Some(p)
+                } else {
+                    None
+                }
+            })
+            .expect("predicate not found");
+        assert_eq!(pred.name, "forbidden");
+        assert_eq!(pred.args.len(), 2);
+        // 第2引数がタプル
+        if let PredicateArg::Tuple(elems) = &pred.args[1] {
+            assert_eq!(elems.len(), 2);
+        } else {
+            panic!("expected Tuple arg");
+        }
+        assert!(pred.chain.is_empty());
+    }
+
+    #[test]
+    fn test_parse_chained_invariant() {
+        // invariant(Order).when(status, delivered).then(delivered_at, present)
+        let ast =
+            parse_ok(r#"invariant(Order).when(status, delivered).then(delivered_at, present)"#);
+        let pred = ast
+            .items
+            .iter()
+            .find_map(|i| {
+                if let Item::Predicate(p) = i {
+                    Some(p)
+                } else {
+                    None
+                }
+            })
+            .expect("predicate not found");
+        assert_eq!(pred.name, "invariant");
+        assert_eq!(pred.args.len(), 1); // entity のみ
+        assert_eq!(pred.chain.len(), 2);
+        assert_eq!(pred.chain[0].name, "when");
+        assert_eq!(pred.chain[0].args.len(), 2);
+        assert_eq!(pred.chain[1].name, "then");
+        assert_eq!(pred.chain[1].args.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_multi_chain_invariant() {
+        // .when を複数持つチェーン
+        let ast = parse_ok(
+            r#"invariant(Order).when(status, delivered).when(refunded, false).then(refund_id, null)"#,
+        );
+        let pred = ast
+            .items
+            .iter()
+            .find_map(|i| {
+                if let Item::Predicate(p) = i {
+                    Some(p)
+                } else {
+                    None
+                }
+            })
+            .expect("predicate not found");
+        assert_eq!(pred.chain.len(), 3);
+        assert_eq!(pred.chain[0].name, "when");
+        assert_eq!(pred.chain[1].name, "when");
+        assert_eq!(pred.chain[2].name, "then");
     }
 
     #[test]

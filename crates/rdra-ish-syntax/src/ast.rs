@@ -152,6 +152,8 @@ pub struct QRef {
 pub struct PredicateCall {
     pub name: std::string::String,
     pub args: Vec<PredicateArg>,
+    /// `.when(...).then(...)` のようなチェーン呼び出しリスト。
+    pub chain: Vec<ChainCall>,
     pub span: Span,
 }
 
@@ -159,6 +161,20 @@ pub struct PredicateCall {
 pub enum PredicateArg {
     Ref(QRef),
     Lit(std::string::String),
+    /// インライン `(col, val)` タプル。`forbidden(E, (col, val), ...)` で使用。
+    Tuple(Vec<PredicateArg>),
+}
+
+// ── Chain call ────────────────────────────────────────────────────────────────
+
+/// チェーン呼び出し: `predicate(E).method(args...)` の `.method(args...)` 部分。
+/// `invariant(E).when(status, delivered).then(delivered_at, present)` のような
+/// メソッドチェーン表現で使用する。
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChainCall {
+    pub name: std::string::String,
+    pub args: Vec<PredicateArg>,
+    pub span: Span,
 }
 
 // ── Top-level item ───────────────────────────────────────────────────────────

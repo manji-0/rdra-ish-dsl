@@ -143,17 +143,10 @@ fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
             vec!["_col"],
             vec!["_val"],
         ]),
-        // forbidden(entity, "col", "val") — 指定カラム値への到達を禁止する
-        "forbidden" => Some(vec![vec!["entity"], vec!["_col"], vec!["_val"]]),
-        // invariant(entity, "guard_col", "guard_val", "req_col", "req_val")
-        // guard_col == guard_val のとき req_col は req_val でなければならない
-        "invariant" => Some(vec![
-            vec!["entity"],
-            vec!["_col"],
-            vec!["_val"],
-            vec!["_col"],
-            vec!["_val"],
-        ]),
+        // forbidden(entity, (col, val), ...) — 条件AND組合せへの到達を禁止する
+        // invariant(entity).when(col, val).then(col, val) — チェーン形式
+        // どちらも第1引数の entity のみ型検査する
+        "forbidden" | "invariant" => Some(vec![vec!["entity"]]),
         _ => None,
     }
 }
@@ -327,6 +320,7 @@ fn resolve_arg(
 ) -> Option<NodeRef> {
     match arg {
         PredicateArg::Lit(_) => None,
+        PredicateArg::Tuple(_) => None, // タプルはシンボル解決しない
         PredicateArg::Ref(qref) => {
             let id = qref.parts.last().unwrap();
 
@@ -365,6 +359,34 @@ fn resolve_arg(
     }
 }
 
+// ── 制約述語用ヘルパー ────────────────────────────────────────────────────────
+
+/// `Lit(s)` または kind修飾なし1セグメントの `Ref` から文字列を取り出す。
+/// `when(status, delivered)` の裸ident引数と `sets(...)` の引用符付きリテラル
+/// 引数の両方を許容するための統一抽出。
+fn arg_as_str(arg: &PredicateArg) -> Option<String> {
+    match arg {
+        PredicateArg::Lit(s) => Some(s.clone()),
+        PredicateArg::Ref(qref) if qref.kind_qualifier.is_none() && qref.parts.len() == 1 => {
+            Some(qref.parts[0].clone())
+        }
+        _ => None,
+    }
+}
+
+/// `Tuple([a, b])` から (col文字列, val文字列) を取り出す。
+/// 要素数が2でない場合、または atom が文字列化できない場合は `None`。
+fn tuple_pair(arg: &PredicateArg) -> Option<(String, String)> {
+    match arg {
+        PredicateArg::Tuple(elems) if elems.len() == 2 => {
+            let col = arg_as_str(&elems[0])?;
+            let val = arg_as_str(&elems[1])?;
+            Some((col, val))
+        }
+        _ => None,
+    }
+}
+
 fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mut Vec<Diagnostic>) {
     let sig = predicate_signature(&pred.name);
     let Some(sig) = sig else {
@@ -396,6 +418,7 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
                         }
                     }
                     PredicateArg::Lit(s) => s.clone(),
+                    PredicateArg::Tuple(_) => "<tuple>".to_string(),
                 };
                 diags.push(Diagnostic::error(RdraError::TypeMismatch {
                     pred: pred.name.clone(),
@@ -472,107 +495,104 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
         }
     } else if pred.name == "forbidden" {
         // forbidden(entity, "col_name", "value")
-        if let (
-            Some(Some(entity_ref)),
-            Some(PredicateArg::Lit(col_name)),
-            Some(PredicateArg::Lit(val_lit)),
-        ) = (resolved.first(), pred.args.get(1), pred.args.get(2))
-        {
-            let entity_key = match entity_ref {
-                NodeRef::Entity(k) => *k,
-                _ => return,
+        // forbidden(entity, (col, val), ...) — 可変長タプルで条件AND組合せを禁止
+        let entity_key = match resolved.first() {
+            Some(Some(NodeRef::Entity(k))) => *k,
+            _ => return,
+        };
+        let entity_id = model.entities[entity_key].id.clone();
+        let mut conditions: Vec<(String, EffectValue)> = Vec::new();
+
+        for arg in pred.args.iter().skip(1) {
+            let Some((col_str, val_str)) = tuple_pair(arg) else {
+                // タプル以外の引数は無視（将来的に診断可能）
+                continue;
             };
             let col = model.entities[entity_key]
                 .columns
                 .iter()
-                .find(|c| &c.name == col_name)
+                .find(|c| c.name == col_str)
                 .cloned();
             let Some(col) = col else {
                 diags.push(Diagnostic::error(RdraError::UnknownColumn {
-                    entity: model.entities[entity_key].id.clone(),
-                    col: col_name.clone(),
+                    entity: entity_id.clone(),
+                    col: col_str,
                 }));
                 return;
             };
-            match parse_effect_value(&col, val_lit) {
-                Ok(value) => {
-                    model.forbidden_constraints.push(ForbiddenConstraint {
-                        entity: entity_key,
-                        column: col_name.clone(),
-                        value,
-                    });
+            match parse_effect_value(&col, &val_str) {
+                Ok(value) => conditions.push((col_str, value)),
+                Err(e) => {
+                    diags.push(Diagnostic::error(e));
+                    return;
                 }
-                Err(e) => diags.push(Diagnostic::error(e)),
             }
         }
+
+        if !conditions.is_empty() {
+            model.forbidden_constraints.push(ForbiddenConstraint {
+                entity: entity_key,
+                conditions,
+            });
+        }
     } else if pred.name == "invariant" {
-        // invariant(entity, "guard_col", "guard_val", "req_col", "req_val")
-        if let (
-            Some(Some(entity_ref)),
-            Some(PredicateArg::Lit(guard_col)),
-            Some(PredicateArg::Lit(guard_val)),
-            Some(PredicateArg::Lit(req_col)),
-            Some(PredicateArg::Lit(req_val)),
-        ) = (
-            resolved.first(),
-            pred.args.get(1),
-            pred.args.get(2),
-            pred.args.get(3),
-            pred.args.get(4),
-        ) {
-            let entity_key = match entity_ref {
-                NodeRef::Entity(k) => *k,
-                _ => return,
+        // invariant(entity).when(col, val).then(col, val) — チェーン形式
+        let entity_key = match resolved.first() {
+            Some(Some(NodeRef::Entity(k))) => *k,
+            _ => return,
+        };
+        let entity_id = model.entities[entity_key].id.clone();
+        let mut guards: Vec<(String, EffectValue)> = Vec::new();
+        let mut requireds: Vec<(String, EffectValue)> = Vec::new();
+
+        for cc in &pred.chain {
+            let is_guard = cc.name == "when";
+            let is_required = cc.name == "then";
+            if !is_guard && !is_required {
+                continue; // 未知のチェーンメソッドは無視
+            }
+            if cc.args.len() != 2 {
+                continue; // 引数数が不正なら無視
+            }
+            let Some(col_str) = arg_as_str(&cc.args[0]) else {
+                continue;
             };
-            let entity_id = model.entities[entity_key].id.clone();
-
-            let guard_column = model.entities[entity_key]
+            let Some(val_str) = arg_as_str(&cc.args[1]) else {
+                continue;
+            };
+            let col = model.entities[entity_key]
                 .columns
                 .iter()
-                .find(|c| &c.name == guard_col)
+                .find(|c| c.name == col_str)
                 .cloned();
-            let req_column = model.entities[entity_key]
-                .columns
-                .iter()
-                .find(|c| &c.name == req_col)
-                .cloned();
-
-            let Some(gc) = guard_column else {
+            let Some(col) = col else {
                 diags.push(Diagnostic::error(RdraError::UnknownColumn {
-                    entity: entity_id,
-                    col: guard_col.clone(),
+                    entity: entity_id.clone(),
+                    col: col_str,
                 }));
                 return;
             };
-            let Some(rc) = req_column else {
-                diags.push(Diagnostic::error(RdraError::UnknownColumn {
-                    entity: entity_id,
-                    col: req_col.clone(),
-                }));
-                return;
-            };
-
-            let gv = match parse_effect_value(&gc, guard_val) {
-                Ok(v) => v,
+            match parse_effect_value(&col, &val_str) {
+                Ok(value) => {
+                    if is_guard {
+                        guards.push((col_str, value));
+                    } else {
+                        requireds.push((col_str, value));
+                    }
+                }
                 Err(e) => {
                     diags.push(Diagnostic::error(e));
                     return;
                 }
-            };
-            let rv = match parse_effect_value(&rc, req_val) {
-                Ok(v) => v,
-                Err(e) => {
-                    diags.push(Diagnostic::error(e));
-                    return;
-                }
-            };
+            }
+        }
 
+        // guards と requireds の両方が揃っている場合のみ登録
+        if !guards.is_empty() && !requireds.is_empty() {
             model.entity_invariants.push(EntityInvariant {
                 entity: entity_key,
-                guard_column: guard_col.clone(),
-                guard_value: gv,
-                required_column: req_col.clone(),
-                required_value: rv,
+                guards,
+                requireds,
             });
         }
     } else if pred.name != "relate" {
