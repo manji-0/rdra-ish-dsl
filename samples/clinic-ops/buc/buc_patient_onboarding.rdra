@@ -1,0 +1,108 @@
+module buc.patient_onboarding
+
+import shared.actors
+import shared.entities
+import shared.biz
+
+buc BucPatientOnboarding "Onboard and Maintain Patient"
+
+usecase SearchPatient         "Search Patient"
+usecase RegisterPatient       "Register Patient"
+usecase UpdateDemographics    "Update Demographics"
+usecase VerifyInsurance       "Verify Insurance"
+usecase CaptureConsent        "Capture Consent"
+usecase SendIntakeForms       "Send Intake Forms"
+usecase CompleteIntakeForms   "Complete Intake Forms"
+usecase ExpireIntakeForms     "Expire Intake Forms"
+usecase MergeDuplicatePatient "Merge Duplicate Patient"
+usecase ArchivePatient        "Archive Patient"
+
+screen PatientSearchScreen  "Patient Search Screen"
+screen PatientProfileScreen "Patient Profile Screen"
+screen InsuranceScreen      "Insurance Verification Screen"
+screen ConsentScreen        "Consent Capture Screen"
+screen IntakePortalScreen   "Intake Portal Screen"
+
+api PatientRegistryApi   "Patient Registry API"
+api EligibilityApi       "Eligibility API"
+api ConsentApi           "Consent API"
+api IntakeMessagingApi   "Intake Messaging API"
+
+performs(FrontDesk, BucPatientOnboarding)
+performs(Patient, BucPatientOnboarding)
+belongs(BucPatientOnboarding, PatientAccess)
+
+contains(BucPatientOnboarding, SearchPatient)
+contains(BucPatientOnboarding, RegisterPatient)
+contains(BucPatientOnboarding, UpdateDemographics)
+contains(BucPatientOnboarding, VerifyInsurance)
+contains(BucPatientOnboarding, CaptureConsent)
+contains(BucPatientOnboarding, SendIntakeForms)
+contains(BucPatientOnboarding, CompleteIntakeForms)
+contains(BucPatientOnboarding, ExpireIntakeForms)
+contains(BucPatientOnboarding, MergeDuplicatePatient)
+contains(BucPatientOnboarding, ArchivePatient)
+
+uses(FrontDesk, EligibilityService)
+uses(Patient, MessagingGateway)
+
+displays(SearchPatient, PatientSearchScreen)
+invokes(SearchPatient, PatientRegistryApi)
+reads(PatientRegistryApi, PatientAccount)
+reads(PatientRegistryApi, PatientProfile)
+shows(PatientSearchScreen, PatientAccount)
+
+displays(RegisterPatient, PatientProfileScreen)
+invokes(RegisterPatient, PatientRegistryApi)
+creates(RegisterPatient, PatientAccount)
+creates(RegisterPatient, PatientProfile)
+creates(PatientRegistryApi, PatientAccount)
+creates(PatientRegistryApi, PatientProfile)
+shows(PatientProfileScreen, PatientProfile)
+
+displays(UpdateDemographics, PatientProfileScreen)
+invokes(UpdateDemographics, PatientRegistryApi)
+updates(UpdateDemographics, PatientProfile)
+updates(PatientRegistryApi, PatientProfile)
+
+displays(VerifyInsurance, InsuranceScreen)
+invokes(VerifyInsurance, EligibilityApi)
+reads(EligibilityApi, InsurancePolicy)
+creates(VerifyInsurance, EligibilityCheck)
+updates(VerifyInsurance, InsurancePolicy)
+sets(VerifyInsurance, InsurancePolicy, "verification_status", "verified")
+sets(VerifyInsurance, InsurancePolicy, "verified_at", "timestamptz")
+sets(VerifyInsurance, EligibilityCheck, "result", "eligible")
+sets(VerifyInsurance, EligibilityCheck, "reference_no", "present")
+
+displays(CaptureConsent, ConsentScreen)
+invokes(CaptureConsent, ConsentApi)
+creates(CaptureConsent, ConsentRecord)
+creates(ConsentApi, ConsentRecord)
+sets(CaptureConsent, ConsentRecord, "signed_at", "timestamptz")
+sets(CaptureConsent, ConsentRecord, "revoked", "false")
+
+displays(SendIntakeForms, IntakePortalScreen)
+invokes(SendIntakeForms, IntakeMessagingApi)
+creates(SendIntakeForms, IntakePacket)
+creates(IntakeMessagingApi, PatientMessage)
+sets(SendIntakeForms, IntakePacket, "sent_at", "timestamptz")
+sets(SendIntakeForms, PatientMessage, "status", "msgsent")
+sets(SendIntakeForms, PatientMessage, "sent_at", "timestamptz")
+triggers(EvAppointmentScheduled, SendIntakeForms)
+
+displays(CompleteIntakeForms, IntakePortalScreen)
+updates(CompleteIntakeForms, IntakePacket)
+raises(CompleteIntakeForms, EvIntakeCompleted)
+
+displays(ExpireIntakeForms, IntakePortalScreen)
+updates(ExpireIntakeForms, IntakePacket)
+raises(ExpireIntakeForms, EvIntakeExpired)
+
+displays(MergeDuplicatePatient, PatientProfileScreen)
+updates(MergeDuplicatePatient, PatientAccount)
+raises(MergeDuplicatePatient, EvPatientMerged)
+
+displays(ArchivePatient, PatientProfileScreen)
+updates(ArchivePatient, PatientAccount)
+raises(ArchivePatient, EvPatientArchived)

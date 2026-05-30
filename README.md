@@ -53,6 +53,7 @@ cargo install --path crates/rdra-ish-cli
 
 For a slower abstract-to-concrete workflow, see
 [Incremental Modeling Flow](./docs/incremental-modeling.md).
+It also defines the recommended model directory layout and when to split shared files.
 
 ## Basic Usage
 
@@ -581,6 +582,25 @@ The `present` side of `delivered_at` carries the type info derived from
 
 ---
 
+## Larger Sample (clinic-ops)
+
+`samples/clinic-ops/` is a larger clinic operations model for trying BUC-scoped
+analysis on a more connected domain. It includes 9 BUCs, 60 use cases, 26 entities,
+28 APIs, event-triggered BUC chaining, multiple state machines, and state constraints.
+
+Useful entry points:
+
+```sh
+rdra-ish check samples/clinic-ops
+rdra-ish list samples/clinic-ops --kind buc --format table
+rdra-ish diagram samples/clinic-ops --kind event-flow --format mermaid
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucClinicalEncounter
+rdra-ish states samples/clinic-ops --entity Appointment
+rdra-ish states samples/clinic-ops --entity Claim
+```
+
+---
+
 ## Project layout
 
 ```
@@ -591,6 +611,7 @@ crates/
   rdra-ish-render/   plantuml.jar wrapper
   rdra-ish-cli/      `rdra-ish` CLI
 samples/
+  clinic-ops/    Larger clinic operations sample (9 BUCs · APIs · event flows)
   ec-site/       E-commerce site sample (BUCs · entities · state transitions)
   personal-info/ Personal data management sample
 ```

@@ -1,0 +1,85 @@
+module buc.appointment_scheduling
+
+import shared.actors
+import shared.entities
+import shared.biz
+
+buc BucAppointmentScheduling "Schedule Appointments"
+
+usecase SearchAvailability     "Search Availability"
+usecase ReserveAppointment     "Reserve Appointment"
+usecase BookAppointment        "Book Appointment"
+usecase RescheduleAppointment  "Reschedule Appointment"
+usecase CancelAppointment      "Cancel Appointment"
+usecase MarkNoShow             "Mark No Show"
+usecase SendAppointmentNotice  "Send Appointment Notice"
+
+screen ScheduleSearchScreen "Schedule Search Screen"
+screen AppointmentScreen    "Appointment Screen"
+screen AppointmentNoticeScreen "Appointment Notice Screen"
+
+api SchedulingApi   "Scheduling API"
+api NotificationApi "Notification API"
+
+performs(FrontDesk, BucAppointmentScheduling)
+performs(Patient, BucAppointmentScheduling)
+belongs(BucAppointmentScheduling, PatientAccess)
+
+contains(BucAppointmentScheduling, SearchAvailability)
+contains(BucAppointmentScheduling, ReserveAppointment)
+contains(BucAppointmentScheduling, BookAppointment)
+contains(BucAppointmentScheduling, RescheduleAppointment)
+contains(BucAppointmentScheduling, CancelAppointment)
+contains(BucAppointmentScheduling, MarkNoShow)
+contains(BucAppointmentScheduling, SendAppointmentNotice)
+
+uses(Patient, MessagingGateway)
+
+displays(SearchAvailability, ScheduleSearchScreen)
+invokes(SearchAvailability, SchedulingApi)
+reads(SchedulingApi, ProviderSchedule)
+reads(SchedulingApi, Provider)
+reads(SchedulingApi, ClinicLocation)
+shows(ScheduleSearchScreen, ProviderSchedule)
+
+displays(ReserveAppointment, AppointmentScreen)
+invokes(ReserveAppointment, SchedulingApi)
+creates(ReserveAppointment, Appointment)
+updates(ReserveAppointment, ProviderSchedule)
+updates(SchedulingApi, ProviderSchedule)
+
+displays(BookAppointment, AppointmentScreen)
+invokes(BookAppointment, SchedulingApi)
+updates(BookAppointment, Appointment)
+updates(BookAppointment, ProviderSchedule)
+updates(SchedulingApi, ProviderSchedule)
+raises(BookAppointment, EvAppointmentScheduled)
+
+displays(RescheduleAppointment, AppointmentScreen)
+invokes(RescheduleAppointment, SchedulingApi)
+updates(RescheduleAppointment, Appointment)
+updates(RescheduleAppointment, ProviderSchedule)
+updates(SchedulingApi, ProviderSchedule)
+raises(RescheduleAppointment, EvAppointmentRescheduled)
+
+displays(CancelAppointment, AppointmentScreen)
+invokes(CancelAppointment, SchedulingApi)
+updates(CancelAppointment, Appointment)
+updates(CancelAppointment, ProviderSchedule)
+raises(CancelAppointment, EvAppointmentCancelled)
+
+displays(MarkNoShow, AppointmentScreen)
+updates(MarkNoShow, Appointment)
+raises(MarkNoShow, EvAppointmentNoShow)
+
+displays(SendAppointmentNotice, AppointmentNoticeScreen)
+invokes(SendAppointmentNotice, NotificationApi)
+creates(SendAppointmentNotice, Notification)
+creates(NotificationApi, PatientMessage)
+sets(SendAppointmentNotice, Notification, "status", "notifdelivered")
+sets(SendAppointmentNotice, Notification, "delivered_at", "timestamptz")
+sets(SendAppointmentNotice, PatientMessage, "status", "msgsent")
+sets(SendAppointmentNotice, PatientMessage, "sent_at", "timestamptz")
+triggers(EvAppointmentScheduled, SendAppointmentNotice)
+triggers(EvAppointmentRescheduled, SendAppointmentNotice)
+triggers(EvAppointmentCancelled, SendAppointmentNotice)

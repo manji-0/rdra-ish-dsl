@@ -1,0 +1,121 @@
+sequenceDiagram
+  actor BillingSpecialist as Billing Specialist
+  actor CareCoordinator as Care Coordinator
+  actor Clinician as Clinician
+  actor Nurse as Nurse
+  actor Patient as Patient
+  participant CarePlanApi as Care Plan API
+  participant ChargeApi as Charge API
+  participant ClinicalDataApi as Clinical Data API
+  participant EncounterApi as Encounter API
+  participant OrderEntryApi as Order Entry API
+  participant AccountBalance as Account Balance
+  participant Appointment as Appointment
+  participant CarePlan as Care Plan
+  participant Charge as Charge
+  participant ClinicalOrder as Clinical Order
+  participant Diagnosis as Diagnosis
+  participant Encounter as Encounter
+  participant Room as Room
+  participant VitalSign as Vital Sign
+  participant CarePlanScreen as Care Plan Screen
+  participant ChargeWorklistScreen as Charge Worklist Screen
+  participant DiagnosisScreen as Diagnosis Screen
+  participant EncounterWorkspaceScreen as Encounter Workspace
+  participant OrderEntryScreen as Order Entry Screen
+  participant VitalsScreen as Vitals Screen
+
+  Note over BillingSpecialist,VitalsScreen: Amend Signed Encounter
+  Nurse->>EncounterWorkspaceScreen: Amend Signed Encounter
+  EncounterWorkspaceScreen->>EncounterApi: Amend Signed Encounter
+  activate EncounterApi
+  EncounterApi->>Encounter: update
+  EncounterApi-->>EncounterWorkspaceScreen: Encounter Workspace
+  EncounterWorkspaceScreen-->>Nurse: Encounter Workspace
+  deactivate EncounterApi
+
+  Note over BillingSpecialist,VitalsScreen: Complete Appointment
+  Nurse->>EncounterWorkspaceScreen: Complete Appointment
+  EncounterWorkspaceScreen->>EncounterApi: Complete Appointment
+  activate EncounterApi
+  rect rgb(245,245,245)
+    Note right of EncounterApi: transaction (inferred from FK)
+    EncounterApi->>Room: update
+    EncounterApi->>Appointment: update
+  end
+  EncounterApi-->>EncounterWorkspaceScreen: Encounter Workspace
+  EncounterWorkspaceScreen-->>Nurse: Encounter Workspace
+  deactivate EncounterApi
+
+  Note over BillingSpecialist,VitalsScreen: Create Care Plan
+  CareCoordinator->>CarePlanScreen: Create Care Plan
+  CarePlanScreen->>CarePlanApi: Create Care Plan
+  activate CarePlanApi
+  CarePlanApi->>CarePlan: create
+  CarePlanApi-->>CarePlanScreen: Care Plan Screen
+  CarePlanScreen-->>CareCoordinator: Care Plan Screen
+  deactivate CarePlanApi
+
+  Note over BillingSpecialist,VitalsScreen: Create Charge
+  BillingSpecialist->>ChargeWorklistScreen: Create Charge
+  ChargeWorklistScreen->>ChargeApi: Create Charge
+  activate ChargeApi
+  ChargeApi->>AccountBalance: update
+  ChargeApi->>Charge: create
+  ChargeApi-->>ChargeWorklistScreen: Charge Worklist Screen
+  ChargeWorklistScreen-->>BillingSpecialist: Charge Worklist Screen
+  deactivate ChargeApi
+
+  Note over BillingSpecialist,VitalsScreen: Document Assessment
+  Nurse->>DiagnosisScreen: Document Assessment
+  DiagnosisScreen->>ClinicalDataApi: Document Assessment
+  activate ClinicalDataApi
+  rect rgb(245,245,245)
+    Note right of ClinicalDataApi: transaction (inferred from FK)
+    ClinicalDataApi->>Encounter: update
+    ClinicalDataApi->>Diagnosis: create
+  end
+  ClinicalDataApi-->>DiagnosisScreen: Diagnosis Screen
+  DiagnosisScreen-->>Nurse: Diagnosis Screen
+  deactivate ClinicalDataApi
+
+  Note over BillingSpecialist,VitalsScreen: Open Encounter
+  Nurse->>EncounterWorkspaceScreen: Open Encounter
+  EncounterWorkspaceScreen->>EncounterApi: Open Encounter
+  activate EncounterApi
+  EncounterApi->>Encounter: create
+  EncounterApi-->>EncounterWorkspaceScreen: Encounter Workspace
+  EncounterWorkspaceScreen-->>Nurse: Encounter Workspace
+  deactivate EncounterApi
+
+  Note over BillingSpecialist,VitalsScreen: Place Lab Order
+  Clinician->>OrderEntryScreen: Place Lab Order
+  OrderEntryScreen->>OrderEntryApi: Place Lab Order
+  activate OrderEntryApi
+  OrderEntryApi->>ClinicalOrder: create
+  OrderEntryApi-->>OrderEntryScreen: Order Entry Screen
+  OrderEntryScreen-->>Clinician: Order Entry Screen
+  deactivate OrderEntryApi
+
+  Note over BillingSpecialist,VitalsScreen: Record Vitals
+  Nurse->>VitalsScreen: Record Vitals
+  VitalsScreen->>ClinicalDataApi: Record Vitals
+  activate ClinicalDataApi
+  rect rgb(245,245,245)
+    Note right of ClinicalDataApi: transaction (inferred from FK)
+    ClinicalDataApi->>Encounter: update
+    ClinicalDataApi->>VitalSign: create
+  end
+  ClinicalDataApi-->>VitalsScreen: Vitals Screen
+  VitalsScreen-->>Nurse: Vitals Screen
+  deactivate ClinicalDataApi
+
+  Note over BillingSpecialist,VitalsScreen: Sign Encounter
+  Nurse->>EncounterWorkspaceScreen: Sign Encounter
+  EncounterWorkspaceScreen->>EncounterApi: Sign Encounter
+  activate EncounterApi
+  EncounterApi->>Encounter: update
+  EncounterApi-->>EncounterWorkspaceScreen: Encounter Workspace
+  EncounterWorkspaceScreen-->>Nurse: Encounter Workspace
+  deactivate EncounterApi
+

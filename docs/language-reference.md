@@ -151,6 +151,9 @@ updates(PlaceOrder, Cart)   // direct write still allowed (mixed form)
 **Sequence diagram behaviour** (`--kind sequence`):
 - If a use case invokes at least one API, the sequence diagram renders
   `Actor → Screen → Api → Entity` lanes with the API as the source of DB writes.
+- If an API is invoked by multiple use cases, the use case's own CRUD predicates
+  scope which API CRUD operations belong to that interaction. This prevents a shared
+  API's writes from appearing in every use case that invokes it.
 - If a use case has no `invokes` (legacy), the existing `System` participant is used
   unchanged — full backward compatibility.
 - FK-grouped transaction blocks (`group transaction (inferred from FK)`) work normally;

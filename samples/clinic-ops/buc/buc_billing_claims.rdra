@@ -1,0 +1,91 @@
+module buc.billing_claims
+
+import shared.actors
+import shared.entities
+import shared.biz
+
+buc BucBillingClaims "Bill and Collect Claims"
+
+usecase CreateCharge        "Create Charge"
+usecase GenerateClaim       "Generate Claim"
+usecase SubmitClaim         "Submit Claim"
+usecase ReceiveClaimAccepted "Receive Claim Accepted"
+usecase RecordClaimDenial   "Record Claim Denial"
+usecase PostPayment         "Post Payment"
+usecase ReconcileBalance    "Reconcile Balance"
+usecase VoidCharge          "Void Charge"
+
+screen ChargeWorklistScreen "Charge Worklist Screen"
+screen ClaimScreen          "Claim Screen"
+screen PaymentPostingScreen "Payment Posting Screen"
+screen BalanceScreen        "Balance Screen"
+
+api ChargeApi      "Charge API"
+api ClaimApi       "Claim API"
+api PaymentPostApi "Payment Posting API"
+api BalanceApi     "Balance API"
+
+performs(BillingSpecialist, BucBillingClaims)
+belongs(BucBillingClaims, RevenueCycle)
+
+contains(BucBillingClaims, CreateCharge)
+contains(BucBillingClaims, GenerateClaim)
+contains(BucBillingClaims, SubmitClaim)
+contains(BucBillingClaims, ReceiveClaimAccepted)
+contains(BucBillingClaims, RecordClaimDenial)
+contains(BucBillingClaims, PostPayment)
+contains(BucBillingClaims, ReconcileBalance)
+contains(BucBillingClaims, VoidCharge)
+
+uses(BillingSpecialist, PaymentGateway)
+
+displays(CreateCharge, ChargeWorklistScreen)
+invokes(CreateCharge, ChargeApi)
+creates(CreateCharge, Charge)
+updates(CreateCharge, AccountBalance)
+creates(ChargeApi, Charge)
+reads(ChargeApi, Encounter)
+sets(CreateCharge, Charge, "status", "chargeposted")
+sets(CreateCharge, Charge, "posted_at", "timestamptz")
+triggers(EvEncounterSigned, CreateCharge)
+
+displays(GenerateClaim, ClaimScreen)
+invokes(GenerateClaim, ClaimApi)
+creates(GenerateClaim, Claim)
+updates(GenerateClaim, Charge)
+creates(ClaimApi, Claim)
+reads(ClaimApi, InsurancePolicy)
+
+displays(SubmitClaim, ClaimScreen)
+invokes(SubmitClaim, ClaimApi)
+updates(SubmitClaim, Claim)
+updates(ClaimApi, Claim)
+raises(SubmitClaim, EvClaimSubmitted)
+
+displays(ReceiveClaimAccepted, ClaimScreen)
+updates(ReceiveClaimAccepted, Claim)
+raises(ReceiveClaimAccepted, EvClaimAccepted)
+
+displays(RecordClaimDenial, ClaimScreen)
+updates(RecordClaimDenial, Claim)
+raises(RecordClaimDenial, EvClaimDenied)
+
+displays(PostPayment, PaymentPostingScreen)
+invokes(PostPayment, PaymentPostApi)
+creates(PostPayment, PaymentTransaction)
+updates(PostPayment, Claim)
+creates(PaymentPostApi, PaymentTransaction)
+raises(PostPayment, EvClaimPaid)
+sets(PostPayment, PaymentTransaction, "status", "payposted")
+sets(PostPayment, PaymentTransaction, "processed_at", "timestamptz")
+
+displays(ReconcileBalance, BalanceScreen)
+invokes(ReconcileBalance, BalanceApi)
+updates(ReconcileBalance, AccountBalance)
+reads(BalanceApi, PaymentTransaction)
+sets(ReconcileBalance, AccountBalance, "is_closed", "true")
+sets(ReconcileBalance, AccountBalance, "closed_at", "timestamptz")
+
+displays(VoidCharge, ChargeWorklistScreen)
+updates(VoidCharge, Charge)
+sets(VoidCharge, Charge, "status", "chargevoided")

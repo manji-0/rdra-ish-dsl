@@ -1,0 +1,66 @@
+module buc.prescription_fulfillment
+
+import shared.actors
+import shared.entities
+import shared.biz
+
+buc BucPrescriptionFulfillment "Fulfill Prescriptions"
+
+usecase SearchMedication     "Search Medication"
+usecase DraftPrescription    "Draft Prescription"
+usecase SendPrescription     "Send Prescription"
+usecase ConfirmDispense      "Confirm Dispense"
+usecase CancelPrescription   "Cancel Prescription"
+usecase RefillPrescription   "Refill Prescription"
+
+screen MedicationSearchScreen "Medication Search Screen"
+screen PrescriptionScreen     "Prescription Screen"
+screen PharmacyStatusScreen   "Pharmacy Status Screen"
+
+api MedicationCatalogApi "Medication Catalog API"
+api PrescriptionApi      "Prescription API"
+api PharmacyNetworkApi   "Pharmacy Network API"
+
+performs(Clinician, BucPrescriptionFulfillment)
+performs(Nurse, BucPrescriptionFulfillment)
+belongs(BucPrescriptionFulfillment, CareDelivery)
+
+contains(BucPrescriptionFulfillment, SearchMedication)
+contains(BucPrescriptionFulfillment, DraftPrescription)
+contains(BucPrescriptionFulfillment, SendPrescription)
+contains(BucPrescriptionFulfillment, ConfirmDispense)
+contains(BucPrescriptionFulfillment, CancelPrescription)
+contains(BucPrescriptionFulfillment, RefillPrescription)
+
+uses(Clinician, PharmacyNetwork)
+
+displays(SearchMedication, MedicationSearchScreen)
+invokes(SearchMedication, MedicationCatalogApi)
+reads(MedicationCatalogApi, Medication)
+shows(MedicationSearchScreen, Medication)
+
+displays(DraftPrescription, PrescriptionScreen)
+invokes(DraftPrescription, PrescriptionApi)
+creates(DraftPrescription, Prescription)
+reads(PrescriptionApi, Encounter)
+creates(PrescriptionApi, Prescription)
+
+displays(SendPrescription, PrescriptionScreen)
+invokes(SendPrescription, PharmacyNetworkApi)
+updates(SendPrescription, Prescription)
+updates(PharmacyNetworkApi, Prescription)
+raises(SendPrescription, EvPrescriptionSent)
+
+displays(ConfirmDispense, PharmacyStatusScreen)
+invokes(ConfirmDispense, PharmacyNetworkApi)
+updates(ConfirmDispense, Prescription)
+raises(ConfirmDispense, EvPrescriptionDispensed)
+
+displays(CancelPrescription, PrescriptionScreen)
+updates(CancelPrescription, Prescription)
+raises(CancelPrescription, EvPrescriptionCancelled)
+
+displays(RefillPrescription, PrescriptionScreen)
+invokes(RefillPrescription, PrescriptionApi)
+creates(RefillPrescription, Prescription)
+reads(PrescriptionApi, Medication)

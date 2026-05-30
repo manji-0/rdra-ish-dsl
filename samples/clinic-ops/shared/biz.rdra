@@ -1,0 +1,6 @@
+module shared.biz
+
+business PatientAccess        "Patient Access"
+business CareDelivery         "Care Delivery"
+business RevenueCycle         "Revenue Cycle"
+business ClinicAdministration "Clinic Administration"

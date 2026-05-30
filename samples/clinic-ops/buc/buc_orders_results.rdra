@@ -1,0 +1,81 @@
+module buc.orders_results
+
+import shared.actors
+import shared.entities
+import shared.biz
+
+buc BucOrdersResults "Manage Orders and Results"
+
+usecase PlaceLabOrder       "Place Lab Order"
+usecase CollectSpecimen     "Collect Specimen"
+usecase ReceiveLabResult    "Receive Lab Result"
+usecase ReviewLabResult     "Review Lab Result"
+usecase NotifyCriticalResult "Notify Critical Result"
+usecase CancelClinicalOrder "Cancel Clinical Order"
+
+screen OrderEntryScreen      "Order Entry Screen"
+screen SpecimenScreen        "Specimen Collection Screen"
+screen ResultReviewScreen    "Result Review Screen"
+screen CriticalNoticeScreen  "Critical Result Notice Screen"
+
+api OrderEntryApi     "Order Entry API"
+api LabInterfaceApi   "Lab Interface API"
+api ResultReviewApi   "Result Review API"
+api CriticalNoticeApi "Critical Notice API"
+
+performs(Clinician, BucOrdersResults)
+performs(Nurse, BucOrdersResults)
+belongs(BucOrdersResults, CareDelivery)
+
+contains(BucOrdersResults, PlaceLabOrder)
+contains(BucOrdersResults, CollectSpecimen)
+contains(BucOrdersResults, ReceiveLabResult)
+contains(BucOrdersResults, ReviewLabResult)
+contains(BucOrdersResults, NotifyCriticalResult)
+contains(BucOrdersResults, CancelClinicalOrder)
+
+uses(Nurse, LabSystem)
+uses(Clinician, MessagingGateway)
+
+displays(PlaceLabOrder, OrderEntryScreen)
+invokes(PlaceLabOrder, OrderEntryApi)
+creates(PlaceLabOrder, ClinicalOrder)
+creates(OrderEntryApi, ClinicalOrder)
+reads(OrderEntryApi, Encounter)
+triggers(EvEncounterSigned, PlaceLabOrder)
+
+displays(CollectSpecimen, SpecimenScreen)
+invokes(CollectSpecimen, LabInterfaceApi)
+updates(CollectSpecimen, ClinicalOrder)
+updates(LabInterfaceApi, ClinicalOrder)
+raises(CollectSpecimen, EvClinicalOrderCollected)
+
+displays(ReceiveLabResult, ResultReviewScreen)
+invokes(ReceiveLabResult, LabInterfaceApi)
+creates(ReceiveLabResult, LabResult)
+updates(ReceiveLabResult, ClinicalOrder)
+creates(LabInterfaceApi, LabResult)
+raises(ReceiveLabResult, EvClinicalOrderResulted)
+sets(ReceiveLabResult, LabResult, "received_at", "timestamptz")
+
+displays(ReviewLabResult, ResultReviewScreen)
+invokes(ReviewLabResult, ResultReviewApi)
+updates(ReviewLabResult, ClinicalOrder)
+updates(ReviewLabResult, LabResult)
+updates(ResultReviewApi, LabResult)
+raises(ReviewLabResult, EvClinicalOrderReviewed)
+sets(ReviewLabResult, LabResult, "reviewed_at", "timestamptz")
+
+displays(NotifyCriticalResult, CriticalNoticeScreen)
+invokes(NotifyCriticalResult, CriticalNoticeApi)
+creates(NotifyCriticalResult, Notification)
+creates(CriticalNoticeApi, PatientMessage)
+sets(NotifyCriticalResult, Notification, "status", "notifdelivered")
+sets(NotifyCriticalResult, Notification, "delivered_at", "timestamptz")
+sets(NotifyCriticalResult, PatientMessage, "status", "msgsent")
+sets(NotifyCriticalResult, PatientMessage, "sent_at", "timestamptz")
+triggers(EvClinicalOrderReviewed, NotifyCriticalResult)
+
+displays(CancelClinicalOrder, OrderEntryScreen)
+updates(CancelClinicalOrder, ClinicalOrder)
+raises(CancelClinicalOrder, EvClinicalOrderCancelled)

@@ -1,0 +1,68 @@
+stateDiagram-v2
+  [*] --> Apptrequested
+  [*] --> Careopen
+  [*] --> Claimdraft
+  [*] --> Clordered
+  [*] --> Encopen
+  [*] --> Intakesent
+  [*] --> Patientactive
+  [*] --> Rxdrafted
+  state "Appointment Checked In" as Apptcheckedin
+  state "Appointment Completed" as Apptcompleted
+  state "Appointment Requested" as Apptrequested
+  state "Appointment Scheduled" as Apptscheduled
+  state "Appointment Cancelled" as Apptcancelled
+  state "Appointment No Show" as Apptnoshow
+  state "Care Plan Monitoring" as Caremonitoring
+  state "Care Plan Closed" as Careclosed
+  state "Care Plan Open" as Careopen
+  state "Claim Accepted" as Claimaccepted
+  state "Claim Paid" as Claimpaid
+  state "Claim Draft" as Claimdraft
+  state "Claim Submitted" as Claimsubmitted
+  state "Claim Denied" as Claimdenied
+  state "Specimen Collected" as Clcollected
+  state "Result Received" as Clresulted
+  state "Clinical Order Placed" as Clordered
+  state "Clinical Order Cancelled" as Clcancelled
+  state "Result Reviewed" as Clreviewed
+  state "Encounter Documented" as Encdocumented
+  state "Encounter Signed" as Encsigned
+  state "Encounter Open" as Encopen
+  state "Encounter Amended" as Encamended
+  state "Intake Sent" as Intakesent
+  state "Intake Completed" as Intakecompleted
+  state "Intake Expired" as Intakeexpired
+  state "Active Patient" as Patientactive
+  state "Inactive Patient" as Patientinactive
+  state "Merged Patient" as Patientmerged
+  state "Prescription Drafted" as Rxdrafted
+  state "Prescription Cancelled" as Rxcancelled
+  state "Prescription Sent" as Rxsent
+  state "Prescription Dispensed" as Rxdispensed
+  Apptcheckedin --> Apptcompleted : Appointment Completed
+  Apptrequested --> Apptscheduled : Appointment Scheduled
+  Apptscheduled --> Apptcancelled : Appointment Cancelled
+  Apptscheduled --> Apptcheckedin : Appointment Checked In
+  Apptscheduled --> Apptnoshow : Appointment Marked No Show
+  Apptscheduled --> Apptscheduled : Appointment Rescheduled
+  Caremonitoring --> Careclosed : Care Plan Closed
+  Careopen --> Caremonitoring : Care Plan Monitoring
+  Claimaccepted --> Claimpaid : Claim Paid
+  Claimdraft --> Claimsubmitted : Claim Submitted
+  Claimsubmitted --> Claimaccepted : Claim Accepted
+  Claimsubmitted --> Claimdenied : Claim Denied
+  Clcollected --> Clresulted : Clinical Result Received
+  Clordered --> Clcancelled : Clinical Order Cancelled
+  Clordered --> Clcollected : Specimen Collected
+  Clresulted --> Clreviewed : Clinical Result Reviewed
+  Encdocumented --> Encsigned : Encounter Signed
+  Encopen --> Encdocumented : Encounter Documented
+  Encsigned --> Encamended : Encounter Amended
+  Intakesent --> Intakecompleted : Intake Completed
+  Intakesent --> Intakeexpired : Intake Expired
+  Patientactive --> Patientinactive : Patient Archived
+  Patientactive --> Patientmerged : Patient Merged
+  Rxdrafted --> Rxcancelled : Prescription Cancelled
+  Rxdrafted --> Rxsent : Prescription Sent
+  Rxsent --> Rxdispensed : Prescription Dispensed

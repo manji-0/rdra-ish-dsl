@@ -8,7 +8,7 @@ use crate::model::{ApiKey, EntityKey, NodeRef, RelKind, SemanticModel, UseCaseKe
 // ── 公開型 ────────────────────────────────────────────────────────────────────
 
 /// 書き込み操作の種別。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum WriteKind {
     Creates,
     Updates,
@@ -71,6 +71,7 @@ impl UsecaseTx {
 ///
 /// アルゴリズム（ユースケースごと）:
 /// 1. creates/updates/deletes 述語から書き込みエンティティ集合 W を収集。
+///    共有 API の書き込みは、UC 側に同じ CRUD がある場合だけ取り込む。
 /// 2. W に誘導されたFKサブグラフ（N:1 / 1:N / 1:1 エッジ、両端が W に含まれるもの）を構築。
 /// 3. 無向グラフ上でBFSにより連結成分を計算。
 /// 4. 各成分をカーン法でトポロジカルソート（FK親 → 子の順）。
@@ -78,9 +79,19 @@ impl UsecaseTx {
 pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
     let mut result = Vec::new();
 
+    let mut api_invoker_counts: HashMap<ApiKey, usize> = HashMap::new();
+    for rel in &model.relations {
+        if rel.kind == RelKind::Invokes {
+            if let NodeRef::Api(ak) = rel.to {
+                *api_invoker_counts.entry(ak).or_default() += 1;
+            }
+        }
+    }
+
     for (uc_key, _uc) in model.use_cases.iter() {
         // Step 1a: usecase が直接書き込む操作を収集
         let mut writes: Vec<UcWrite> = Vec::new();
+        let mut direct_write_keys: HashSet<(EntityKey, WriteKind)> = HashSet::new();
         for rel in &model.relations {
             if rel.from != NodeRef::UseCase(uc_key) {
                 continue;
@@ -92,6 +103,7 @@ pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
                 _ => continue,
             };
             if let NodeRef::Entity(ek) = rel.to {
+                direct_write_keys.insert((ek, wk.clone()));
                 writes.push(UcWrite {
                     entity: ek,
                     kind: wk,
@@ -100,7 +112,10 @@ pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
             }
         }
 
-        // Step 1b: invokes(uc, api) で繋がった api の書き込みも実効書き込みとして収集
+        // Step 1b: invokes(uc, api) で繋がった api の書き込みも実効書き込みとして収集。
+        // ただし複数UCで共有されるAPIは、APIの全CRUDを各UCへ投影すると
+        // Search系UCにも更新が漏れる。共有APIではUC側CRUDを操作意図として使い、
+        // 同じ (entity, kind) のAPI書き込みだけをAPI由来に昇格させる。
         let mut invoked_apis: Vec<ApiKey> = Vec::new();
         for rel in &model.relations {
             if rel.from == NodeRef::UseCase(uc_key) && rel.kind == RelKind::Invokes {
@@ -110,6 +125,7 @@ pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
             }
         }
         for ak in &invoked_apis {
+            let api_is_shared = api_invoker_counts.get(ak).copied().unwrap_or(0) > 1;
             for rel in &model.relations {
                 if rel.from != NodeRef::Api(*ak) {
                     continue;
@@ -121,6 +137,9 @@ pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
                     _ => continue,
                 };
                 if let NodeRef::Entity(ek) = rel.to {
+                    if api_is_shared && !direct_write_keys.contains(&(ek, wk.clone())) {
+                        continue;
+                    }
                     writes.push(UcWrite {
                         entity: ek,
                         kind: wk,
@@ -604,6 +623,39 @@ updates(Checkout, Cart)
         assert!(
             utx.isolated_writes[0].via_api.is_some(),
             "api-origin should be preferred over direct write"
+        );
+    }
+
+    /// 複数UCで共有されるAPIでは、APIの全CRUDを各UCへ漏らさない。
+    /// UC側のCRUDが、そのUCで使うAPI操作を選ぶための意図になる。
+    #[test]
+    fn test_shared_api_writes_are_scoped_by_usecase_crud() {
+        let src = r#"
+entity Appointment "予約" { id: Int @pk }
+entity ProviderSchedule "予定枠" { id: Int @pk }
+usecase SearchAvailability "空き枠検索"
+usecase BookAppointment "予約する"
+api SchedulingApi "予約API"
+invokes(SearchAvailability, SchedulingApi)
+invokes(BookAppointment, SchedulingApi)
+reads(SchedulingApi, Appointment)
+updates(SchedulingApi, ProviderSchedule)
+updates(BookAppointment, ProviderSchedule)
+"#;
+        let model = model_from(src);
+        let txs = infer_usecase_transactions(&model);
+        assert_eq!(
+            txs.len(),
+            1,
+            "read-only search should not inherit API writes"
+        );
+
+        let uc_id = model.use_cases.get(txs[0].usecase).unwrap().id.as_str();
+        assert_eq!(uc_id, "BookAppointment");
+        assert_eq!(txs[0].isolated_writes.len(), 1);
+        assert!(
+            txs[0].isolated_writes[0].via_api.is_some(),
+            "matching API write should still be rendered from the API lane"
         );
     }
 }

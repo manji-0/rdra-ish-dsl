@@ -1,0 +1,67 @@
+module buc.visit_checkin
+
+import shared.actors
+import shared.entities
+import shared.biz
+
+buc BucVisitCheckIn "Check In Visit"
+
+usecase VerifyArrival     "Verify Patient Arrival"
+usecase CheckInPatient    "Check In Patient"
+usecase CollectCopay      "Collect Copay"
+usecase AssignRoom        "Assign Room"
+usecase PrepareEncounter  "Prepare Encounter"
+
+screen CheckInScreen     "Check-In Screen"
+screen CopayScreen       "Copay Screen"
+screen RoomBoardScreen   "Room Board Screen"
+
+api CheckInApi "Check-In API"
+api CopayApi   "Copay API"
+api RoomApi    "Room Assignment API"
+
+performs(FrontDesk, BucVisitCheckIn)
+performs(Nurse, BucVisitCheckIn)
+belongs(BucVisitCheckIn, PatientAccess)
+
+contains(BucVisitCheckIn, VerifyArrival)
+contains(BucVisitCheckIn, CheckInPatient)
+contains(BucVisitCheckIn, CollectCopay)
+contains(BucVisitCheckIn, AssignRoom)
+contains(BucVisitCheckIn, PrepareEncounter)
+
+uses(FrontDesk, PaymentGateway)
+
+displays(VerifyArrival, CheckInScreen)
+invokes(VerifyArrival, CheckInApi)
+reads(CheckInApi, Appointment)
+reads(CheckInApi, PatientAccount)
+reads(CheckInApi, InsurancePolicy)
+shows(CheckInScreen, Appointment)
+
+displays(CheckInPatient, CheckInScreen)
+invokes(CheckInPatient, CheckInApi)
+updates(CheckInPatient, Appointment)
+updates(CheckInApi, PatientAccount)
+raises(CheckInPatient, EvAppointmentCheckedIn)
+
+displays(CollectCopay, CopayScreen)
+invokes(CollectCopay, CopayApi)
+creates(CollectCopay, PaymentTransaction)
+updates(CollectCopay, AccountBalance)
+creates(CopayApi, PaymentTransaction)
+sets(CollectCopay, PaymentTransaction, "status", "payposted")
+sets(CollectCopay, PaymentTransaction, "processed_at", "timestamptz")
+sets(CollectCopay, PaymentTransaction, "gateway_ref", "present")
+
+displays(AssignRoom, RoomBoardScreen)
+invokes(AssignRoom, RoomApi)
+updates(AssignRoom, Room)
+updates(RoomApi, Appointment)
+sets(AssignRoom, Room, "occupancy_status", "roomoccupied")
+
+displays(PrepareEncounter, CheckInScreen)
+invokes(PrepareEncounter, CheckInApi)
+reads(PrepareEncounter, Appointment)
+reads(CheckInApi, PatientProfile)
+triggers(EvAppointmentCheckedIn, PrepareEncounter)

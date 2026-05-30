@@ -1,0 +1,418 @@
+module shared.entities
+
+// Patient master data
+entity PatientAccount "Patient Account" {
+  id:                Int      @pk
+  medical_record_no: String   @unique
+  status:            Enum(patientactive, patientinactive, patientmerged) @default(patientactive)
+  created_at:        DateTime
+  archived_at:       DateTime @null
+}
+
+entity PatientProfile "Patient Profile" {
+  id:                Int    @pk
+  legal_name:        String
+  preferred_name:    String @null
+  birth_date:        Date
+  phone:             String
+  email:             String @null
+  emergency_contact: String @null
+}
+
+entity InsurancePolicy "Insurance Policy" {
+  id:                  Int    @pk
+  payer_name:          String
+  member_no:           String
+  plan_name:           String
+  verification_status: Enum(unverified, verified, rejected) @default(unverified)
+  verified_at:         DateTime @null
+  active:              Bool
+}
+
+entity EligibilityCheck "Eligibility Check" {
+  id:           Int      @pk
+  checked_at:   DateTime
+  result:       Enum(eligible, ineligible, pending) @default(pending)
+  reference_no: String   @null
+}
+
+entity ConsentRecord "Consent Record" {
+  id:           Int      @pk
+  consent_type: Enum(treatment, privacy, billing) @default(treatment)
+  signed_at:    DateTime @null
+  expires_at:   DateTime @null
+  revoked:      Bool
+}
+
+entity IntakePacket "Intake Packet" {
+  id:           Int      @pk
+  status:       Enum(intakesent, intakecompleted, intakeexpired) @default(intakesent)
+  sent_at:      DateTime @null
+  completed_at: DateTime @null
+}
+
+// Facility and schedule
+entity Provider "Provider" {
+  id:         Int    @pk
+  npi:        String @unique
+  name:       String
+  specialty:  String
+  active:     Bool
+}
+
+entity ClinicLocation "Clinic Location" {
+  id:          Int    @pk
+  name:        String
+  postal_code: String
+  phone:       String
+}
+
+entity Room "Room" {
+  id:               Int    @pk
+  name:             String
+  occupancy_status: Enum(roomavailable, roomoccupied, roomcleaning) @default(roomavailable)
+}
+
+entity ProviderSchedule "Provider Schedule" {
+  id:           Int      @pk
+  service_date: Date
+  start_at:     DateTime
+  end_at:       DateTime
+  capacity:     Int
+  blocked:      Bool
+}
+
+// Visit lifecycle
+entity Appointment "Appointment" {
+  id:             Int      @pk
+  reason:         String
+  status:         Enum(apptrequested, apptscheduled, apptcheckedin, apptcompleted, apptcancelled, apptnoshow) @default(apptrequested)
+  scheduled_at:   DateTime
+  checked_in_at:  DateTime @null
+  completed_at:   DateTime @null
+  cancel_reason:  String   @null
+}
+
+entity Encounter "Encounter" {
+  id:              Int      @pk
+  chief_complaint: String
+  status:          Enum(encopen, encdocumented, encsigned, encamended) @default(encopen)
+  opened_at:       DateTime
+  signed_at:       DateTime @null
+}
+
+entity VitalSign "Vital Sign" {
+  id:        Int      @pk
+  taken_at:  DateTime
+  height_cm: Decimal  @null
+  weight_kg: Decimal  @null
+  systolic:  Int      @null
+  diastolic: Int      @null
+}
+
+entity Diagnosis "Diagnosis" {
+  id:          Int    @pk
+  code:        String
+  description: String
+  is_primary:  Bool
+}
+
+// Orders, results, and prescriptions
+entity ClinicalOrder "Clinical Order" {
+  id:           Int      @pk
+  order_type:   Enum(lab, imaging, referral) @default(lab)
+  status:       Enum(clordered, clcollected, clresulted, clreviewed, clcancelled) @default(clordered)
+  ordered_at:   DateTime
+  collected_at: DateTime @null
+  resulted_at:  DateTime @null
+}
+
+entity LabResult "Lab Result" {
+  id:          Int      @pk
+  result_text: String
+  abnormal:    Bool
+  received_at: DateTime @null
+  reviewed_at: DateTime @null
+}
+
+entity Medication "Medication" {
+  id:       Int    @pk
+  name:     String
+  strength: String
+  route:    String
+}
+
+entity Prescription "Prescription" {
+  id:           Int      @pk
+  directions:   String
+  status:       Enum(rxdrafted, rxsent, rxdispensed, rxcancelled) @default(rxdrafted)
+  sent_at:      DateTime @null
+  dispensed_at: DateTime @null
+}
+
+// Revenue cycle
+entity Charge "Charge" {
+  id:        Int      @pk
+  code:      String
+  amount:    Money
+  posted_at: DateTime @null
+  status:    Enum(chargepending, chargeposted, chargevoided) @default(chargepending)
+}
+
+entity Claim "Claim" {
+  id:            Int      @pk
+  claim_no:      String   @unique
+  status:        Enum(claimdraft, claimsubmitted, claimaccepted, claimdenied, claimpaid) @default(claimdraft)
+  submitted_at:  DateTime @null
+  paid_at:       DateTime @null
+  denial_reason: String   @null
+}
+
+entity PaymentTransaction "Payment Transaction" {
+  id:           Int      @pk
+  amount:       Money
+  method:       Enum(cash, card, insurance, adjustment) @default(card)
+  status:       Enum(paypending, payposted, payfailed, payrefunded) @default(paypending)
+  processed_at: DateTime @null
+  gateway_ref:  String   @null
+}
+
+entity AccountBalance "Account Balance" {
+  id:        Int      @pk
+  balance:   Money
+  is_closed: Bool
+  closed_at: DateTime @null
+}
+
+// Engagement, follow-up, and audit
+entity CarePlan "Care Plan" {
+  id:        Int      @pk
+  goal:      String
+  status:    Enum(careopen, caremonitoring, careclosed) @default(careopen)
+  opened_at: DateTime
+  closed_at: DateTime @null
+}
+
+entity PatientMessage "Patient Message" {
+  id:      Int      @pk
+  channel: Enum(email, sms, portal) @default(portal)
+  status:  Enum(msgdraft, msgsent, msgread, msgfailed) @default(msgdraft)
+  sent_at: DateTime @null
+  read_at: DateTime @null
+}
+
+entity Notification "Notification" {
+  id:           Int      @pk
+  topic:        String
+  status:       Enum(notifqueued, notifdelivered, notiffailed) @default(notifqueued)
+  delivered_at: DateTime @null
+}
+
+entity AuditEvent "Audit Event" {
+  id:          Int      @pk
+  action:      String
+  actor_id:    String
+  occurred_at: DateTime
+  severity:    Enum(low, medium, high) @default(low)
+  resolved:    Bool
+}
+
+// ER relationships
+relate(PatientProfile,     PatientAccount,   "1:1")
+relate(InsurancePolicy,    PatientAccount,   "N:1")
+relate(EligibilityCheck,   InsurancePolicy,  "N:1")
+relate(ConsentRecord,      PatientAccount,   "N:1")
+relate(IntakePacket,       PatientAccount,   "N:1")
+relate(ProviderSchedule,   Provider,         "N:1")
+relate(ProviderSchedule,   ClinicLocation,   "N:1")
+relate(Room,               ClinicLocation,   "N:1")
+relate(Appointment,        PatientAccount,   "N:1")
+relate(Appointment,        Provider,         "N:1")
+relate(Appointment,        ClinicLocation,   "N:1")
+relate(Appointment,        Room,             "N:1")
+relate(Encounter,          Appointment,      "1:1")
+relate(Encounter,          PatientAccount,   "N:1")
+relate(Encounter,          Provider,         "N:1")
+relate(VitalSign,          Encounter,        "N:1")
+relate(Diagnosis,          Encounter,        "N:1")
+relate(ClinicalOrder,      Encounter,        "N:1")
+relate(LabResult,          ClinicalOrder,    "1:1")
+relate(Prescription,       Encounter,        "N:1")
+relate(Prescription,       Medication,       "N:1")
+relate(Charge,             Encounter,        "N:1")
+relate(Charge,             Claim,            "N:1")
+relate(Claim,              PatientAccount,   "N:1")
+relate(Claim,              InsurancePolicy,  "N:1")
+relate(PaymentTransaction, Claim,            "N:1")
+relate(AccountBalance,     PatientAccount,   "1:1")
+relate(CarePlan,           PatientAccount,   "N:1")
+relate(CarePlan,           Encounter,        "N:1")
+relate(PatientMessage,     PatientAccount,   "N:1")
+relate(Notification,       PatientAccount,   "N:1")
+relate(AuditEvent,         PatientAccount,   "N:1")
+
+// Patient account state
+state Patientactive   "Active Patient"
+state Patientinactive "Inactive Patient"
+state Patientmerged   "Merged Patient"
+
+event EvPatientArchived "Patient Archived"
+event EvPatientMerged   "Patient Merged"
+
+transitions(EvPatientArchived, Patientactive, Patientinactive)
+transitions(EvPatientMerged,   Patientactive, Patientmerged)
+
+sets(event::EvPatientArchived, PatientAccount, "archived_at", "timestamptz")
+
+// Appointment state
+state Apptrequested "Appointment Requested"
+state Apptscheduled "Appointment Scheduled"
+state Apptcheckedin "Appointment Checked In"
+state Apptcompleted "Appointment Completed"
+state Apptcancelled "Appointment Cancelled"
+state Apptnoshow    "Appointment No Show"
+
+event EvAppointmentScheduled   "Appointment Scheduled"
+event EvAppointmentRescheduled "Appointment Rescheduled"
+event EvAppointmentCheckedIn   "Appointment Checked In"
+event EvAppointmentCompleted   "Appointment Completed"
+event EvAppointmentCancelled   "Appointment Cancelled"
+event EvAppointmentNoShow      "Appointment Marked No Show"
+
+transitions(EvAppointmentScheduled,   Apptrequested, Apptscheduled)
+transitions(EvAppointmentRescheduled, Apptscheduled, Apptscheduled)
+transitions(EvAppointmentCheckedIn,   Apptscheduled, Apptcheckedin)
+transitions(EvAppointmentCompleted,   Apptcheckedin, Apptcompleted)
+transitions(EvAppointmentCancelled,   Apptscheduled, Apptcancelled)
+transitions(EvAppointmentNoShow,      Apptscheduled, Apptnoshow)
+
+sets(event::EvAppointmentCheckedIn, Appointment, "checked_in_at", "timestamptz")
+sets(event::EvAppointmentCompleted, Appointment, "completed_at", "timestamptz")
+sets(event::EvAppointmentCancelled, Appointment, "cancel_reason", "present")
+
+// Intake state
+state Intakesent      "Intake Sent"
+state Intakecompleted "Intake Completed"
+state Intakeexpired   "Intake Expired"
+
+event EvIntakeCompleted "Intake Completed"
+event EvIntakeExpired   "Intake Expired"
+
+transitions(EvIntakeCompleted, Intakesent, Intakecompleted)
+transitions(EvIntakeExpired,   Intakesent, Intakeexpired)
+
+sets(event::EvIntakeCompleted, IntakePacket, "completed_at", "timestamptz")
+
+// Encounter state
+state Encopen       "Encounter Open"
+state Encdocumented "Encounter Documented"
+state Encsigned     "Encounter Signed"
+state Encamended    "Encounter Amended"
+
+event EvEncounterDocumented "Encounter Documented"
+event EvEncounterSigned     "Encounter Signed"
+event EvEncounterAmended    "Encounter Amended"
+
+transitions(EvEncounterDocumented, Encopen,       Encdocumented)
+transitions(EvEncounterSigned,     Encdocumented, Encsigned)
+transitions(EvEncounterAmended,    Encsigned,     Encamended)
+
+sets(event::EvEncounterSigned, Encounter, "signed_at", "timestamptz")
+
+// Clinical order state
+state Clordered   "Clinical Order Placed"
+state Clcollected "Specimen Collected"
+state Clresulted  "Result Received"
+state Clreviewed  "Result Reviewed"
+state Clcancelled "Clinical Order Cancelled"
+
+event EvClinicalOrderCollected "Specimen Collected"
+event EvClinicalOrderResulted  "Clinical Result Received"
+event EvClinicalOrderReviewed  "Clinical Result Reviewed"
+event EvClinicalOrderCancelled "Clinical Order Cancelled"
+
+transitions(EvClinicalOrderCollected, Clordered,   Clcollected)
+transitions(EvClinicalOrderResulted,  Clcollected, Clresulted)
+transitions(EvClinicalOrderReviewed,  Clresulted,  Clreviewed)
+transitions(EvClinicalOrderCancelled, Clordered,   Clcancelled)
+
+sets(event::EvClinicalOrderCollected, ClinicalOrder, "collected_at", "timestamptz")
+sets(event::EvClinicalOrderResulted,  ClinicalOrder, "resulted_at",  "timestamptz")
+
+// Prescription state
+state Rxdrafted   "Prescription Drafted"
+state Rxsent      "Prescription Sent"
+state Rxdispensed "Prescription Dispensed"
+state Rxcancelled "Prescription Cancelled"
+
+event EvPrescriptionSent      "Prescription Sent"
+event EvPrescriptionDispensed "Prescription Dispensed"
+event EvPrescriptionCancelled "Prescription Cancelled"
+
+transitions(EvPrescriptionSent,      Rxdrafted, Rxsent)
+transitions(EvPrescriptionDispensed, Rxsent,    Rxdispensed)
+transitions(EvPrescriptionCancelled, Rxdrafted, Rxcancelled)
+
+sets(event::EvPrescriptionSent,      Prescription, "sent_at",      "timestamptz")
+sets(event::EvPrescriptionDispensed, Prescription, "dispensed_at", "timestamptz")
+
+// Claim state
+state Claimdraft     "Claim Draft"
+state Claimsubmitted "Claim Submitted"
+state Claimaccepted  "Claim Accepted"
+state Claimdenied    "Claim Denied"
+state Claimpaid      "Claim Paid"
+
+event EvClaimSubmitted "Claim Submitted"
+event EvClaimAccepted  "Claim Accepted"
+event EvClaimDenied    "Claim Denied"
+event EvClaimPaid      "Claim Paid"
+
+transitions(EvClaimSubmitted, Claimdraft,     Claimsubmitted)
+transitions(EvClaimAccepted,  Claimsubmitted, Claimaccepted)
+transitions(EvClaimDenied,    Claimsubmitted, Claimdenied)
+transitions(EvClaimPaid,      Claimaccepted,  Claimpaid)
+
+sets(event::EvClaimSubmitted, Claim, "submitted_at",  "timestamptz")
+sets(event::EvClaimDenied,    Claim, "denial_reason", "present")
+sets(event::EvClaimPaid,      Claim, "paid_at",       "timestamptz")
+
+// Care plan state
+state Careopen       "Care Plan Open"
+state Caremonitoring "Care Plan Monitoring"
+state Careclosed     "Care Plan Closed"
+
+event EvCarePlanMonitoring "Care Plan Monitoring"
+event EvCarePlanClosed     "Care Plan Closed"
+
+transitions(EvCarePlanMonitoring, Careopen,       Caremonitoring)
+transitions(EvCarePlanClosed,     Caremonitoring, Careclosed)
+
+sets(event::EvCarePlanClosed, CarePlan, "closed_at", "timestamptz")
+
+// State constraints
+invariant(Appointment)
+  .when(status, apptcheckedin)
+  .then(checked_in_at, present)
+
+invariant(Appointment)
+  .when(status, apptcompleted)
+  .then(completed_at, present)
+
+invariant(Encounter)
+  .when(status, encsigned)
+  .then(signed_at, present)
+
+invariant(ClinicalOrder)
+  .when(status, clresulted)
+  .then(resulted_at, present)
+
+invariant(Prescription)
+  .when(status, rxsent)
+  .then(sent_at, present)
+
+invariant(Claim)
+  .when(status, claimpaid)
+  .then(paid_at, present)
+
+forbidden(Claim, (status, claimpaid), (denial_reason, present))

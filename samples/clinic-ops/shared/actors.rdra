@@ -1,0 +1,15 @@
+module shared.actors
+
+actor Patient           "Patient"
+actor FrontDesk         "Front Desk Staff"
+actor CareCoordinator   "Care Coordinator"
+actor Nurse             "Nurse"
+actor Clinician         "Clinician"
+actor BillingSpecialist "Billing Specialist"
+actor ClinicAdmin       "Clinic Administrator"
+
+extsystem EligibilityService "Insurance Eligibility Service"
+extsystem PaymentGateway     "Payment Gateway"
+extsystem LabSystem          "Laboratory System"
+extsystem PharmacyNetwork    "Pharmacy Network"
+extsystem MessagingGateway   "Messaging Gateway"

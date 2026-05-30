@@ -1,0 +1,72 @@
+module buc.clinical_encounter
+
+import shared.actors
+import shared.entities
+import shared.biz
+
+buc BucClinicalEncounter "Conduct Clinical Encounter"
+
+usecase OpenEncounter       "Open Encounter"
+usecase RecordVitals        "Record Vitals"
+usecase DocumentAssessment  "Document Assessment"
+usecase SignEncounter       "Sign Encounter"
+usecase AmendEncounter      "Amend Signed Encounter"
+usecase CompleteAppointment "Complete Appointment"
+
+screen EncounterWorkspaceScreen "Encounter Workspace"
+screen VitalsScreen             "Vitals Screen"
+screen DiagnosisScreen          "Diagnosis Screen"
+
+api EncounterApi "Encounter API"
+api ClinicalDataApi "Clinical Data API"
+
+performs(Nurse, BucClinicalEncounter)
+performs(Clinician, BucClinicalEncounter)
+belongs(BucClinicalEncounter, CareDelivery)
+
+contains(BucClinicalEncounter, OpenEncounter)
+contains(BucClinicalEncounter, RecordVitals)
+contains(BucClinicalEncounter, DocumentAssessment)
+contains(BucClinicalEncounter, SignEncounter)
+contains(BucClinicalEncounter, AmendEncounter)
+contains(BucClinicalEncounter, CompleteAppointment)
+
+displays(OpenEncounter, EncounterWorkspaceScreen)
+invokes(OpenEncounter, EncounterApi)
+creates(OpenEncounter, Encounter)
+creates(EncounterApi, Encounter)
+reads(EncounterApi, Appointment)
+triggers(EvAppointmentCheckedIn, OpenEncounter)
+
+displays(RecordVitals, VitalsScreen)
+invokes(RecordVitals, ClinicalDataApi)
+creates(RecordVitals, VitalSign)
+updates(RecordVitals, Encounter)
+creates(ClinicalDataApi, VitalSign)
+updates(ClinicalDataApi, Encounter)
+
+displays(DocumentAssessment, DiagnosisScreen)
+invokes(DocumentAssessment, ClinicalDataApi)
+creates(DocumentAssessment, Diagnosis)
+updates(DocumentAssessment, Encounter)
+creates(ClinicalDataApi, Diagnosis)
+raises(DocumentAssessment, EvEncounterDocumented)
+
+displays(SignEncounter, EncounterWorkspaceScreen)
+invokes(SignEncounter, EncounterApi)
+updates(SignEncounter, Encounter)
+updates(EncounterApi, Encounter)
+raises(SignEncounter, EvEncounterSigned)
+
+displays(AmendEncounter, EncounterWorkspaceScreen)
+invokes(AmendEncounter, EncounterApi)
+updates(AmendEncounter, Encounter)
+raises(AmendEncounter, EvEncounterAmended)
+
+displays(CompleteAppointment, EncounterWorkspaceScreen)
+invokes(CompleteAppointment, EncounterApi)
+updates(CompleteAppointment, Appointment)
+updates(CompleteAppointment, Room)
+raises(CompleteAppointment, EvAppointmentCompleted)
+sets(CompleteAppointment, Room, "occupancy_status", "roomcleaning")
+triggers(EvEncounterSigned, CompleteAppointment)

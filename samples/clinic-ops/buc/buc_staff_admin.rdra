@@ -1,0 +1,66 @@
+module buc.staff_admin
+
+import shared.actors
+import shared.entities
+import shared.biz
+
+buc BucStaffAdministration "Administer Clinic Operations"
+
+usecase ManageProviderSchedule "Manage Provider Schedule"
+usecase BlockScheduleSlot      "Block Schedule Slot"
+usecase ConfigureRoom          "Configure Room"
+usecase ReleaseRoom            "Release Room"
+usecase ReviewAuditEvents      "Review Audit Events"
+usecase ResolveAuditFinding    "Resolve Audit Finding"
+
+screen ScheduleAdminScreen "Schedule Admin Screen"
+screen RoomAdminScreen     "Room Admin Screen"
+screen AuditReviewScreen   "Audit Review Screen"
+
+api ScheduleAdminApi "Schedule Admin API"
+api RoomAdminApi     "Room Admin API"
+api AuditApi         "Audit API"
+
+performs(ClinicAdmin, BucStaffAdministration)
+belongs(BucStaffAdministration, ClinicAdministration)
+
+contains(BucStaffAdministration, ManageProviderSchedule)
+contains(BucStaffAdministration, BlockScheduleSlot)
+contains(BucStaffAdministration, ConfigureRoom)
+contains(BucStaffAdministration, ReleaseRoom)
+contains(BucStaffAdministration, ReviewAuditEvents)
+contains(BucStaffAdministration, ResolveAuditFinding)
+
+displays(ManageProviderSchedule, ScheduleAdminScreen)
+invokes(ManageProviderSchedule, ScheduleAdminApi)
+creates(ManageProviderSchedule, ProviderSchedule)
+updates(ManageProviderSchedule, ProviderSchedule)
+creates(ScheduleAdminApi, ProviderSchedule)
+updates(ScheduleAdminApi, ProviderSchedule)
+updates(ScheduleAdminApi, Provider)
+
+displays(BlockScheduleSlot, ScheduleAdminScreen)
+invokes(BlockScheduleSlot, ScheduleAdminApi)
+updates(BlockScheduleSlot, ProviderSchedule)
+sets(BlockScheduleSlot, ProviderSchedule, "blocked", "true")
+
+displays(ConfigureRoom, RoomAdminScreen)
+invokes(ConfigureRoom, RoomAdminApi)
+creates(ConfigureRoom, Room)
+updates(ConfigureRoom, Room)
+creates(RoomAdminApi, Room)
+sets(ConfigureRoom, Room, "occupancy_status", "roomavailable")
+
+displays(ReleaseRoom, RoomAdminScreen)
+updates(ReleaseRoom, Room)
+sets(ReleaseRoom, Room, "occupancy_status", "roomavailable")
+
+displays(ReviewAuditEvents, AuditReviewScreen)
+invokes(ReviewAuditEvents, AuditApi)
+reads(AuditApi, AuditEvent)
+reads(AuditApi, PatientAccount)
+shows(AuditReviewScreen, AuditEvent)
+
+displays(ResolveAuditFinding, AuditReviewScreen)
+updates(ResolveAuditFinding, AuditEvent)
+sets(ResolveAuditFinding, AuditEvent, "resolved", "true")

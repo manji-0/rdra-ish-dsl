@@ -1,0 +1,14 @@
+Entity: Appointment (Appointment)
+  axes: status[apptrequested|apptscheduled|apptcheckedin|apptcompleted|apptcancelled|apptnoshow], checked_in_at[null|present:timestamptz], completed_at[null|present:timestamptz], cancel_reason[null|present]
+
+  STATUS         CHECKED_IN_AT        COMPLETED_AT         CANCEL_REASON  INITIAL  TERMINAL  VIA                                                                                                                                                                                                   
+  ─────────────  ───────────────────  ───────────────────  ─────────────  ───────  ────────  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  apptrequested  null                 null                 null           yes      no        BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  apptscheduled  null                 null                 null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  apptcheckedin  present:timestamptz  null                 null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  apptcancelled  null                 null                 present        no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/CancelAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  apptnoshow     null                 null                 null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/MarkNoShow, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  apptcompleted  present:timestamptz  present:timestamptz  null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+
+  reachable: 6 / bound: 48
+

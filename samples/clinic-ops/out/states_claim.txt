@@ -1,0 +1,13 @@
+Entity: Claim (Claim)
+  axes: status[claimdraft|claimsubmitted|claimaccepted|claimdenied|claimpaid], submitted_at[null|present:timestamptz], paid_at[null|present:timestamptz], denial_reason[null|present]
+
+  STATUS          SUBMITTED_AT         PAID_AT              DENIAL_REASON  INITIAL  TERMINAL  VIA                                                                                                                              
+  ──────────────  ───────────────────  ───────────────────  ─────────────  ───────  ────────  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  claimdraft      null                 null                 null           yes      no        BucBillingClaims/GenerateClaim
+  claimsubmitted  present:timestamptz  null                 null           no       no        BucBillingClaims/GenerateClaim, BucBillingClaims/SubmitClaim
+  claimaccepted   present:timestamptz  null                 null           no       no        BucBillingClaims/GenerateClaim, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/SubmitClaim
+  claimdenied     present:timestamptz  null                 present        no       yes       BucBillingClaims/GenerateClaim, BucBillingClaims/RecordClaimDenial, BucBillingClaims/SubmitClaim
+  claimpaid       present:timestamptz  present:timestamptz  null           no       yes       BucBillingClaims/GenerateClaim, BucBillingClaims/PostPayment, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/SubmitClaim
+
+  reachable: 5 / bound: 40
+
