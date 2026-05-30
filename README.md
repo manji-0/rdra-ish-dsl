@@ -108,7 +108,7 @@ rdra-ish diagram src/ --kind rdra --buc BucCart --buc BucOrder --format mermaid
 rdra-ish diagram src/ --kind state --format mermaid
 rdra-ish diagram src/ --kind state --buc BucOrder --format mermaid
 
-# Sequence diagram of write operations (shows API layer when invokes() is used)
+# Sequence diagram of screen/API/entity interactions
 rdra-ish diagram src/ --kind sequence --format mermaid
 rdra-ish diagram src/ --kind sequence --buc BucOrder --format mermaid
 rdra-ish diagram src/ --kind sequence --usecase PlaceOrder --format mermaid
@@ -155,30 +155,30 @@ rdra-ish states src/ --format json           # JSON output
 ### API Layer in the Sequence Diagram
 
 When a use case invokes an API via `invokes(UseCase, Api)`, the sequence diagram
-renders the full four-lane interaction:
+renders the interaction boundary explicitly:
 
 ```
 Actor → Screen → API → Entity
 ```
 
 CRUD predicates (`creates`, `updates`, etc.) are attached to the `api` element; the
-use case owns only `invokes` and `displays`. Existing models that write directly from
-a use case continue to work without change — they render the legacy `System` lane.
+use case owns only `invokes` and `displays`. Keep CRUD directly on a `usecase` only
+when the operation has no meaningful API or consistency boundary to model.
 
 ```
 api OrderApi "Order API"
 invokes(PlaceOrder, OrderApi)
 creates(OrderApi, Order)
 creates(OrderApi, OrderLine)
-updates(PlaceOrder, Cart)   // direct write still allowed
 ```
 
-### Transaction Boundary Inference (`--kind sequence`)
+### API Atomic Boundary and Direct Write Inference (`--kind sequence`)
 
-When generating `--kind sequence`, the tool analyzes FK connected components and
-**automatically infers a transaction boundary per use case**.
+When generating `--kind sequence`, API CRUD is rendered as an explicit atomic
+boundary. For direct use-case CRUD, the tool still analyzes FK connected components
+and infers transaction-like groups so intentionally direct models remain reviewable.
 
-#### Inference algorithm
+#### Direct-write inference algorithm
 
 1. Collect the set of written entities W from the `creates` / `updates` / `deletes` predicates
 2. Build an undirected graph from FK edges induced over W (`1:1` / `1:N` / `N:1`, with both endpoints in W)
@@ -189,22 +189,23 @@ When generating `--kind sequence`, the tool analyzes FK connected components and
 
 | Component kind | Sequence diagram rendering |
 |---|---|
-| FK-connected (≥ 2 entities) | Wrapped in a `rect` block with `Note: transaction (inferred from FK)` |
-| FK-isolated (a TX group exists elsewhere) | `Note right: FK-isolated — separate TX? declare with @atomic` |
+| API CRUD group | Wrapped in a `rect` block with `Note: transaction (API atomic boundary)` |
+| Direct FK-connected group (≥ 2 entities) | Wrapped in a `rect` block with `Note: transaction (inferred from FK)` |
+| FK-isolated (a direct group exists elsewhere) | `Note right: FK-isolated — separate transaction? model through an API boundary` |
 | Isolated only (no TX group) | No TX rendering / no warning |
 
 #### Diagnostic warning
 
-When an FK-connected group exists in a UC and an isolated write is detected, the following
-warning is emitted to stderr on `--kind sequence`:
+When direct use-case CRUD mixes an FK-connected group with an isolated write, the
+following warning is emitted to stderr on `--kind sequence`:
 
 ```
 warning: usecase 'PlaceOrder' writes 'Cart' with no FK link to its other writes
-  hint: this is inferred as a separate transaction; if it must be atomic with the others, add `@atomic` to the usecase (phase 2)
+  hint: this is inferred as a separate transaction; if it must be atomic with the others, model the operation through an API boundary
 ```
 
-> Explicit TX boundary declaration via `@atomic` is planned for phase 2. For now only a
-> warning hint is provided.
+Prefer modeling an `api` and attaching the related CRUD predicates to that API when
+the operation needs one consistency boundary.
 
 ---
 
@@ -486,6 +487,28 @@ sets(usecase::Capture, Payment, "processed_at", "timestamptz")
 
 ```mermaid
 erDiagram
+  Cart {
+    Int id PK
+    DateTime created_at
+    Int customeraccount_id FK
+  }
+  CartItem {
+    Int id PK
+    Int qty
+    Int cart_id FK
+    Int product_id FK
+  }
+  Category {
+    Int id PK
+    String name
+    String slug
+  }
+  CustomerAccount {
+    Int id PK
+    String email
+    String name
+    DateTime created_at
+  }
   Order {
     Int id PK
     Money total
@@ -496,6 +519,13 @@ erDiagram
     Int customeraccount_id FK
     Int shippingaddress_id FK
   }
+  OrderLine {
+    Int id PK
+    Int qty
+    Decimal unit_price
+    Int order_id FK
+    Int product_id FK
+  }
   Payment {
     Int id PK
     Money amount
@@ -504,15 +534,35 @@ erDiagram
     DateTime processed_at
     String gateway_ref
   }
-  OrderLine {
+  Product {
     Int id PK
-    Int qty
-    Decimal unit_price
-    Int order_id FK
-    Int product_id FK
+    String sku
+    String name
+    String description
+    Decimal price
+    Int stock
+    Bool is_active
+    Int category_id FK
   }
-  Payment ||--|| Order : ""
+  ShippingAddress {
+    Int id PK
+    String postal_code
+    String prefecture
+    String city
+    String street
+    String name
+    Int customeraccount_id FK
+  }
+  Product }o--|| Category : ""
+  ShippingAddress }o--|| CustomerAccount : ""
+  Cart }o--|| CustomerAccount : ""
+  CartItem }o--|| Product : ""
+  CartItem }o--|| Cart : ""
+  Order }o--|| CustomerAccount : ""
+  Order }o--|| ShippingAddress : ""
+  OrderLine }o--|| Product : ""
   OrderLine }o--|| Order : ""
+  Payment ||--|| Order : ""
 ```
 
 #### State machine diagram (Mermaid)
@@ -520,14 +570,11 @@ erDiagram
 ```mermaid
 stateDiagram-v2
   [*] --> Pending
-  state "Order Received" as Pending
   state "Payment Completed" as Paid
-  state "Shipped" as Shipped
-  state "Delivered" as Delivered
-  state "Cancelled" as Cancelled
-  Pending --> Paid      : Capture Payment
+  state "Order Received" as Pending
+  Paid --> Shipped : Start Shipping
   Pending --> Cancelled : Cancel Order
-  Paid    --> Shipped   : Start Shipping
+  Pending --> Paid : Capture Payment
   Shipped --> Delivered : Confirm Delivery
 ```
 
@@ -537,34 +584,48 @@ stateDiagram-v2
 graph TD
   Customer(["👤 Customer"])
   Cancel(["Cancel Order"])
+  ConfirmOrder(["Confirm Order Details"])
   PlaceOrder(["Place Order"])
+  SelectAddress(["Select Shipping Address"])
+  ViewOrderHistory(["View Order History"])
   BucOrder["📦 Process Order"]
+  Cart[("🗄 Cart")]
+  CartItem[("🗄 Cart Item")]
   Order[("🗄 Order")]
   OrderLine[("🗄 Order Line")]
-  Cart[("🗄 Cart")]
+  ShippingAddress[("🗄 Shipping Address")]
+  AddressSelectScreen[["Address Selection Screen"]]
   OrderCompleteScreen[["Order Complete Screen"]]
+  OrderConfirmScreen[["Order Confirmation Screen"]]
   OrderHistoryScreen[["Order History Screen"]]
   Cancel{"Cancel Order"}
   Customer --> BucOrder
+  BucOrder --> EcShopping
+  BucOrder --> SelectAddress
+  BucOrder --> ConfirmOrder
   BucOrder --> PlaceOrder
+  BucOrder --> ViewOrderHistory
   BucOrder --> Cancel
-  PlaceOrder -.->|creates| Order
-  PlaceOrder -.->|creates| OrderLine
-  PlaceOrder -.->|updates| Cart
+  CartItem --- Cart
+  Order --- ShippingAddress
+  OrderLine --- Order
+  SelectAddress -.->|displays| AddressSelectScreen
+  ConfirmOrder -.->|displays| OrderConfirmScreen
   PlaceOrder -.->|displays| OrderCompleteScreen
-  Cancel -.->|updates| Order
+  ViewOrderHistory -.->|displays| OrderHistoryScreen
   Cancel -.->|raises| Cancel
   Cancel -.->|displays| OrderHistoryScreen
 ```
 
-#### Write sequence diagram (Mermaid)
+#### API boundary sequence diagram (Mermaid)
 
 Generated with `rdra-ish diagram samples/ec-site/ --kind sequence --format mermaid --buc BucOrder`:
 
 ```mermaid
 sequenceDiagram
   actor Customer as Customer
-  participant System as System
+  participant CancelOrderApi as Cancel Order API
+  participant PlaceOrderApi as Place Order API
   participant Cart as Cart
   participant Order as Order
   participant OrderLine as Order Line
@@ -572,24 +633,27 @@ sequenceDiagram
   participant OrderHistoryScreen as Order History Screen
 
   Note over Customer,OrderHistoryScreen: Cancel Order
-  Customer->System: Cancel Order
-  activate System
-  System->>Order: update
-  System-->>Customer: Order History Screen
-  deactivate System
+  Customer->>OrderHistoryScreen: Cancel Order
+  OrderHistoryScreen->>CancelOrderApi: Cancel Order
+  activate CancelOrderApi
+  CancelOrderApi->>Order: update
+  CancelOrderApi-->>OrderHistoryScreen: Order History Screen
+  OrderHistoryScreen-->>Customer: Order History Screen
+  deactivate CancelOrderApi
 
   Note over Customer,OrderHistoryScreen: Place Order
-  Customer->System: Place Order
-  activate System
+  Customer->>OrderCompleteScreen: Place Order
+  OrderCompleteScreen->>PlaceOrderApi: Place Order
+  activate PlaceOrderApi
   rect rgb(245,245,245)
-    Note right of System: transaction (inferred from FK)
-    System->>Order: create
-    System->>OrderLine: create
+    Note right of PlaceOrderApi: transaction (API atomic boundary)
+    PlaceOrderApi->>Cart: update
+    PlaceOrderApi->>Order: create
+    PlaceOrderApi->>OrderLine: create
   end
-  System->>Cart: update
-  Note right of System: FK-isolated — separate TX? declare with @atomic
-  System-->>Customer: Order Complete Screen
-  deactivate System
+  PlaceOrderApi-->>OrderCompleteScreen: Order Complete Screen
+  OrderCompleteScreen-->>Customer: Order Complete Screen
+  deactivate PlaceOrderApi
 ```
 
 #### State pattern derivation (`rdra-ish states --entity Order`)
