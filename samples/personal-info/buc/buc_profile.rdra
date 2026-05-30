@@ -4,18 +4,18 @@ import shared.actors
 import shared.entities
 import shared.biz
 
-buc BucProfile "個人情報を管理する"
+buc BucProfile "Manage Personal Information"
 
-usecase ViewProfile       "個人情報を参照する"
-usecase UpdateProfile     "個人情報を更新する"
-usecase RegisterAddress   "住所を登録する"
-usecase UpdateAddress     "住所を更新する"
-usecase DeleteAddress     "住所を削除する"
-usecase SetPrimaryAddress "住所を優先設定する"
+usecase ViewProfile       "View Personal Information"
+usecase UpdateProfile     "Update Personal Information"
+usecase RegisterAddress   "Register Address"
+usecase UpdateAddress     "Update Address"
+usecase DeleteAddress     "Delete Address"
+usecase SetPrimaryAddress "Set Primary Address"
 
-screen ProfileScreen     "個人情報画面"
-screen AddressListScreen "住所一覧画面"
-screen AddressEditScreen "住所編集画面"
+screen ProfileScreen     "Personal Information Screen"
+screen AddressListScreen "Address List Screen"
+screen AddressEditScreen "Address Edit Screen"
 
 performs(User, BucProfile)
 belongs(BucProfile, PersonalDataMgmt)

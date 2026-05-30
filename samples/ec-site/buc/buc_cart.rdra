@@ -4,18 +4,18 @@ import shared.actors
 import shared.entities
 import shared.biz
 
-buc BucCart "商品を買い物籠に入れる"
+buc BucCart "Add Products to Cart"
 
-usecase SearchProducts "商品を検索する"
-usecase ViewProduct    "商品詳細を見る"
-usecase AddToCart      "カートに追加する"
-usecase UpdateCartItem "カートの数量を変更する"
-usecase RemoveCartItem "カートから削除する"
-usecase ViewCart       "カートを確認する"
+usecase SearchProducts "Search Products"
+usecase ViewProduct    "View Product Details"
+usecase AddToCart      "Add to Cart"
+usecase UpdateCartItem "Change Cart Item Quantity"
+usecase RemoveCartItem "Remove from Cart"
+usecase ViewCart       "View Cart"
 
-screen ProductSearchScreen "商品検索画面"
-screen ProductDetailScreen "商品詳細画面"
-screen CartScreen          "カート画面"
+screen ProductSearchScreen "Product Search Screen"
+screen ProductDetailScreen "Product Detail Screen"
+screen CartScreen          "Cart Screen"
 
 performs(Customer, BucCart)
 belongs(BucCart, EcShopping)

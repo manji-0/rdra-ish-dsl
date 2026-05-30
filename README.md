@@ -1,139 +1,144 @@
 # rdra-ish-dsl
 
-RDRA（関係駆動要件分析）記述用 DSL とコンパイラ。  
-アクター・エンティティ・ユースケース等を型付きインスタンスとして宣言し、述語関数で関係を表現する。  
-PlantUML / Mermaid（ER図・RDRA図・状態遷移図・シーケンス図）とCSV（actor一覧・entity一覧・CRUDマトリクス）を生成し、  
-**BUCパターンから各 entity の到達可能な状態パターン**を導出する。
+A DSL and compiler for describing RDRA (Relationship-Driven Requirements Analysis).
+You declare actors, entities, use cases, and so on as typed instances, and express
+relationships between them with predicate calls.
+It generates PlantUML / Mermaid diagrams (ER, RDRA, state machine, sequence) and CSV
+(actor list, entity list, CRUD matrix), and derives
+**the reachable state patterns of each entity from BUC patterns**.
 
-## インストール
+## Installation
 
 ```sh
 cargo install --path crates/rdra-ish-cli
 ```
 
-## 基本的な使い方
+## Basic Usage
 
 ```sh
-# 検証のみ
+# Check only
 rdra-ish check src/
 
-# ER図（Mermaid テキスト）
+# ER diagram (Mermaid text)
 rdra-ish diagram src/ --kind er --format mermaid
 
-# ER図（PlantUML SVG、要 plantuml.jar）
+# ER diagram (PlantUML SVG, requires plantuml.jar)
 PLANTUML_JAR=/path/to/plantuml.jar rdra-ish diagram src/ --kind er --format svg
 
-# RDRA全体図
+# Full RDRA diagram
 rdra-ish diagram src/ --kind rdra --format mermaid
 
-# BUC 別図（単一 BUC）
+# Per-BUC diagram (single BUC)
 rdra-ish diagram src/ --kind rdra --buc BucOrder --format mermaid
 
-# BUC 別図（複数 BUC — 到達ノードの和集合を1図に統合）
+# Per-BUC diagram (multiple BUCs — union of reachable nodes merged into one diagram)
 rdra-ish diagram src/ --kind rdra --buc BucCart --buc BucOrder --format mermaid
 
-# 状態遷移図（全体 / BUC 絞り込み）
+# State machine diagram (whole / filtered by BUC)
 rdra-ish diagram src/ --kind state --format mermaid
 rdra-ish diagram src/ --kind state --buc BucOrder --format mermaid
 
-# 書き込み操作のシーケンス図
+# Sequence diagram of write operations
 rdra-ish diagram src/ --kind sequence --format mermaid
 
-# CSV 出力
+# CSV output
 rdra-ish csv src/ --kind entity
 rdra-ish csv src/ --kind actor
 rdra-ish csv src/ --kind matrix
 
-# 一覧表示
+# List output
 rdra-ish list src/ --kind actor --format table
 rdra-ish list src/ --kind buc   --format json
 
-# 状態パターン導出（BUCパターンから各entityの取り得る状態組み合わせ）
+# State pattern derivation (reachable state combinations of each entity from BUC patterns)
 rdra-ish states src/
-rdra-ish states src/ --entity Order          # entity 限定
-rdra-ish states src/ --buc BucPayment        # BUC スコープ
-rdra-ish states src/ --format csv            # CSV 出力
-rdra-ish states src/ --format json           # JSON 出力
+rdra-ish states src/ --entity Order          # limit to one entity
+rdra-ish states src/ --buc BucPayment        # BUC scope
+rdra-ish states src/ --format csv            # CSV output
+rdra-ish states src/ --format json           # JSON output
 ```
 
-### `diagram` オプション一覧
+### `diagram` options
 
-| オプション | 既定値 | 説明 |
+| Option | Default | Description |
 |---|---|---|
 | `--kind` | `rdra` | `rdra` / `er` / `state` / `sequence` |
-| `--format` | `puml` | `puml` / `svg` / `png` / `mermaid`（`svg`/`png` は plantuml.jar が必要） |
-| `--buc <id>` | —（全体） | BUC id を指定して絞り込み（繰り返し可）。複数指定で和集合を1図に出力 |
-| `-o / --out` | `out` | 出力ファイルパス（拡張子は自動付与） |
+| `--format` | `puml` | `puml` / `svg` / `png` / `mermaid` (`svg`/`png` require plantuml.jar) |
+| `--buc <id>` | — (whole) | Filter by BUC id (repeatable). Multiple ids output the union as one diagram |
+| `-o / --out` | `out` | Output file path (extension added automatically) |
 
-### `states` オプション一覧
+### `states` options
 
-| オプション | 既定値 | 説明 |
+| Option | Default | Description |
 |---|---|---|
 | `--format` | `table` | `table` / `csv` / `json` |
-| `--buc <id>` | —（全体） | BUC スコープで絞り込み（繰り返し可） |
-| `--entity <id>` | —（全体） | 特定 entity のみ出力 |
-| `--max-patterns` | `256` | entity 単位のパターン数上限（超過時に `truncated` フラグ） |
+| `--buc <id>` | — (whole) | Filter by BUC scope (repeatable) |
+| `--entity <id>` | — (whole) | Output only a specific entity |
+| `--max-patterns` | `256` | Per-entity pattern cap (sets the `truncated` flag when exceeded) |
 
-### TX境界推定（`--kind sequence` 連動）
+### Transaction Boundary Inference (`--kind sequence`)
 
-`--kind sequence` の生成時、FK 連結成分を解析してユースケースごとの**トランザクション境界を自動推定**する。
+When generating `--kind sequence`, the tool analyzes FK connected components and
+**automatically infers a transaction boundary per use case**.
 
-#### 推定アルゴリズム
+#### Inference algorithm
 
-1. `creates` / `updates` / `deletes` 述語から書き込みエンティティ集合 W を収集
-2. W に誘導された FK エッジ（`1:1` / `1:N` / `N:1`、両端が W に含まれるもの）で無向グラフを構築
-3. BFS で連結成分を検出
-4. 各成分をカーン法でトポロジカルソート（FK 親 → 子の順）
+1. Collect the set of written entities W from the `creates` / `updates` / `deletes` predicates
+2. Build an undirected graph from FK edges induced over W (`1:1` / `1:N` / `N:1`, with both endpoints in W)
+3. Detect connected components with BFS
+4. Topologically sort each component with Kahn's algorithm (FK parent → child order)
 
-#### シーケンス図への反映
+#### Reflection in the sequence diagram
 
-| 成分の種類 | シーケンス図の表示 |
+| Component kind | Sequence diagram rendering |
 |---|---|
-| FK 連結（≥ 2 entity） | `rect` ブロックで囲み `Note: transaction (inferred from FK)` を付与 |
-| FK 孤立（他に TX グループあり） | `Note right: FK非連結 — 別TX？@atomicで明示を` |
-| 孤立のみ（TX グループなし） | TX 表示なし / warning なし |
+| FK-connected (≥ 2 entities) | Wrapped in a `rect` block with `Note: transaction (inferred from FK)` |
+| FK-isolated (a TX group exists elsewhere) | `Note right: FK-isolated — separate TX? declare with @atomic` |
+| Isolated only (no TX group) | No TX rendering / no warning |
 
-#### 診断 warning
+#### Diagnostic warning
 
-FK 連結グループがある UC で孤立書き込みが検出された場合、`--kind sequence` 実行時に以下の warning が stderr に出力される:
+When an FK-connected group exists in a UC and an isolated write is detected, the following
+warning is emitted to stderr on `--kind sequence`:
 
 ```
 warning: usecase 'PlaceOrder' writes 'Cart' with no FK link to its other writes
   hint: this is inferred as a separate transaction; if it must be atomic with the others, add `@atomic` to the usecase (phase 2)
 ```
 
-> `@atomic` による明示的な TX 境界宣言はフェーズ 2 で実装予定。現時点では warning でヒントのみ提供する。
+> Explicit TX boundary declaration via `@atomic` is planned for phase 2. For now only a
+> warning hint is provided.
 
 ---
 
-## DSL 文法
+## DSL Grammar
 
-### インスタンス宣言
+### Instance declarations
 
 ```
-<kind> <Id> "表示名"
+<kind> <Id> "Label"
 ```
 
-| kind | 意味 |
+| kind | Meaning |
 |---|---|
-| `actor` | 人間のアクター |
-| `extsystem` | 外部システム |
-| `requirement` | 要件 |
-| `business` | 業務 |
-| `buc` | ビジネスユースケース |
-| `usagescene` | 利用シーン |
-| `usecase` | ユースケース |
-| `screen` | 画面 |
-| `event` | ドメインイベント |
-| `entity` | エンティティ（DBテーブル） |
-| `state` | 状態（状態機械ノード） |
-| `condition` | 条件 |
-| `variation` | バリエーション |
+| `actor` | Human actor |
+| `extsystem` | External system |
+| `requirement` | Requirement |
+| `business` | Business |
+| `buc` | Business use case |
+| `usagescene` | Usage scene |
+| `usecase` | Use case |
+| `screen` | Screen |
+| `event` | Domain event |
+| `entity` | Entity (DB table) |
+| `state` | State (state machine node) |
+| `condition` | Condition |
+| `variation` | Variation |
 
-### Entity カラム定義
+### Entity column definitions
 
 ```
-entity Order "注文" {
+entity Order "Order" {
   id:           Int      @pk
   total:        Money
   ordered_at:   DateTime
@@ -143,85 +148,139 @@ entity Order "注文" {
 }
 ```
 
-| 型 | 説明 |
+| Type | Description |
 |---|---|
-| `Int` `String` `Money` `DateTime` `Date` `Bool` `Decimal` | 基本型 |
-| `Enum(a, b, c)` | 列挙型（状態機械と連動可） |
+| `Int` `String` `Money` `DateTime` `Date` `Bool` `Decimal` | Primitive types |
+| `Enum(a, b, c)` | Enumeration (can be linked to a state machine) |
 
-| アノテーション | 説明 |
+| Annotation | Description |
 |---|---|
-| `@pk` | 主キー（FK自動生成の基準） |
-| `@pk(a, b)` | 複合主キー |
-| `@unique` | ユニーク制約 |
-| `@null` | NULL 許容 |
-| `@default(v)` | デフォルト値 |
-| `@label("...")` | 表示名 |
+| `@pk` | Primary key (basis for FK auto-generation) |
+| `@pk(a, b)` | Composite primary key |
+| `@unique` | Unique constraint |
+| `@null` | Nullable |
+| `@default(v)` | Default value |
+| `@label("...")` | Display label |
 
-### 関係述語
+### Relationship predicates
 
-| 述語 | シグネチャ | 意味 |
+| Predicate | Signature | Meaning |
 |---|---|---|
-| `performs` | (Actor, UseCase\|Buc) | アクターが UC / BUC を遂行 |
-| `uses` | (Actor, ExtSystem) | アクターが外部システムを利用 |
+| `performs` | (Actor, UseCase\|Buc) | Actor performs a UC / BUC |
+| `uses` | (Actor, ExtSystem) | Actor uses an external system |
 | `reads`/`writes`/`creates`/`updates`/`deletes` | (UseCase, Entity) | CRUD |
-| `displays` | (UseCase, Screen) | UC が画面を表示 |
-| `shows` | (Screen, Entity) | 画面がエンティティ情報を表示 |
-| `raises` | (UseCase, Event) | UC がドメインイベントを発火 |
-| `triggers` | (Event, UseCase) | イベントが UC を起動 |
-| `contains` | (Buc, UseCase) | BUC の構成 UC |
-| `belongs` | (Buc, Business) | BUC が属する業務 |
-| `motivates` | (Requirement, Buc) | 要件が BUC を動機づける |
-| `relate` | (Entity, Entity, Card) | ER 関係（FK 自動生成）`"1:1"` / `"1:N"` / `"N:1"` / `"N:M"` |
-| `transitions` | (Event, State, State) | 状態遷移（イベントで from → to） |
-| `sets` | (UseCase\|Event, Entity, "col", "val") | カラム効果の明示（状態パターン導出用） |
+| `displays` | (UseCase, Screen) | UC displays a screen |
+| `shows` | (Screen, Entity) | Screen shows entity information |
+| `raises` | (UseCase, Event) | UC raises a domain event |
+| `triggers` | (Event, UseCase) | Event triggers a UC |
+| `contains` | (Buc, UseCase) | UC that composes a BUC |
+| `belongs` | (Buc, Business) | BUC belongs to a business |
+| `motivates` | (Requirement, Buc) | Requirement motivates a BUC |
+| `relate` | (Entity, Entity, Card) | ER relationship (FK auto-generated) `"1:1"` / `"1:N"` / `"N:1"` / `"N:M"` |
+| `transitions` | (Event, State, State) | State transition (from → to on an event) |
+| `sets` | (UseCase\|Event, Entity, "col", "val") | Explicit column effect (for state pattern derivation) |
 
-### `sets` 述語の値語彙
+### Value vocabulary for the `sets` predicate
 
 ```
-// Enum カラムのバリアント
+// Enum column variant
 sets(usecase::Capture, Payment, "status", "captured")
 
-// Bool カラム
+// Bool column
 sets(usecase::Enable, Switch, "enabled", "true")
 
-// Nullable カラムを非null に（型を記録しない場合）
+// Set a nullable column to non-null (without recording a type)
 sets(usecase::Login, UserAccount, "last_login_at", "present")
 
-// Nullable カラムを非null に（PostgreSQL 特殊型を記録）
+// Set a nullable column to non-null (recording a PostgreSQL-specific type)
 sets(usecase::Deliver, Order, "delivered_at", "timestamptz")
 sets(usecase::Tag,     Doc,   "metadata",     "jsonb")
 
-// Nullable カラムを null に
+// Set a nullable column to null
 sets(usecase::Logout, Session, "token", "null")
 ```
 
-| 値 | 対象カラム | 意味 |
+| Value | Target column | Meaning |
 |---|---|---|
-| Enum バリアント名 | `Enum` カラム | 指定バリアントに設定 |
-| `"true"` / `"false"` | `Bool` カラム | bool 値を設定 |
-| `"present"` | `@null` カラム | 非null（値あり）にする |
-| `"null"` | `@null` カラム | null にする |
-| PostgreSQL 型名 | `@null` カラム | 非null + 型情報を記録（`jsonb` / `uuid` / `timestamptz` / `inet` 等） |
+| Enum variant name | `Enum` column | Set to the given variant |
+| `"true"` / `"false"` | `Bool` column | Set the bool value |
+| `"present"` | `@null` column | Make non-null (has a value) |
+| `"null"` | `@null` column | Make null |
+| PostgreSQL type name | `@null` column | Make non-null + record type info (`jsonb` / `uuid` / `timestamptz` / `inet`, etc.) |
 
-### import / モジュール
+### Entity State Constraints
+
+Beyond declaring how columns change, you can assert which state combinations must
+never occur, and which combinations must always hold together. Both constraints are
+checked **after** BFS state-pattern derivation, against the set of reachable patterns.
+A violation is reported only if the offending pattern is actually reachable.
+
+#### `forbidden` — forbidden state combinations
+
+`forbidden` uses a **variadic tuple** form. Each `(column, value)` tuple is a condition,
+and the listed conditions are combined with **AND**: a pattern is forbidden only when
+**all** of the tuple conditions hold simultaneously.
+
+```
+// Forbid status=cancelled from being reachable
+forbidden(Order, (status, cancelled))
+
+// Forbid the simultaneous combination status=delivered AND refunded=true
+forbidden(Order, (status, delivered), (refunded, true))
+```
+
+The tuple form was chosen because a forbidden state is naturally a *point* in the
+state space — an AND-combination of column values. Listing tuples directly mirrors
+"this exact combination must not exist." If any reachable pattern matches all the
+tuples, a `StateDiag::ForbiddenStateViolated` diagnostic is emitted.
+
+#### `invariant` — required co-occurrence
+
+`invariant` uses a **method-chain** form. The `.when(...)` guards and the `.then(...)`
+requirements are each combined with **AND**. The semantics are an implication:
+**whenever all `.when()` guards hold, all `.then()` requirements must also hold.**
+
+```
+invariant(Order)
+  .when(status, delivered)
+  .then(delivered_at, present)
+
+invariant(Order)
+  .when(status, delivered)
+  .when(refunded, false)     // multiple .when() = AND
+  .then(refund_id, null)
+```
+
+The method-chain form was chosen because an invariant is a *rule with two sides* —
+a guard (the antecedent) and a requirement (the consequent). The chain keeps the two
+sides visually and structurally distinct, and lets each side accumulate multiple
+AND-ed conditions without ambiguity. For every reachable pattern that satisfies all
+the `.when()` guards but violates any `.then()` requirement, a
+`StateDiag::InvariantViolated` diagnostic is emitted.
+
+Column names and values inside `.when()` / `.then()` are bare identifiers (not quoted
+strings). They use the same value vocabulary as `sets` (Enum variant names, `true`/`false`,
+`present`/`null`, PostgreSQL type names).
+
+### import / modules
 
 ```
 module shared.actors
 
-import shared.actors             // フラット import
-import shared.actors as a        // 名前空間付き
-import shared.actors.{Staff}     // 選択 import
+import shared.actors             // flat import
+import shared.actors as a        // namespaced
+import shared.actors.{Staff}     // selective import
 import shared.actors.{Staff as S}
 ```
 
 ---
 
-## サンプル（ec-site）
+## Sample (ec-site)
 
-### DSL — `shared/entities.rdra`（抜粋）
+### DSL — `shared/entities.rdra` (excerpt)
 
 ```
-entity Order "注文" {
+entity Order "Order" {
   id:           Int      @pk
   total:        Money
   tax:          Money
@@ -230,27 +289,27 @@ entity Order "注文" {
   delivered_at: DateTime @null
 }
 
-entity Payment "決済" {
+entity Payment "Payment" {
   id:           Int      @pk
   amount:       Money
   method:       Enum(credit_card, bank_transfer, convenience) @default(credit_card)
   status:       Enum(pending, authorized, captured, failed, refunded) @default(pending)
   processed_at: DateTime @null
-  gateway_ref:  String   @null @label("決済GW参照番号")
+  gateway_ref:  String   @null @label("Payment Gateway Reference")
 }
 
 relate(Payment, Order, "1:1")
 
-state Pending   "注文受付"
-state Paid      "決済完了"
-state Shipped   "発送済"
-state Delivered "配達完了"
-state Cancelled "キャンセル"
+state Pending   "Order Received"
+state Paid      "Payment Completed"
+state Shipped   "Shipped"
+state Delivered "Delivered"
+state Cancelled "Cancelled"
 
-event Capture "決済確定"
-event Ship    "発送開始"
-event Deliver "配達確認"
-event Cancel  "注文キャンセル"
+event Capture "Capture Payment"
+event Ship    "Start Shipping"
+event Deliver "Confirm Delivery"
+event Cancel  "Cancel Order"
 
 transitions(event::Capture, Pending,  Paid)
 transitions(event::Ship,    Paid,     Shipped)
@@ -258,13 +317,13 @@ transitions(event::Deliver, Shipped,  Delivered)
 transitions(event::Cancel,  Pending,  Cancelled)
 ```
 
-### DSL — `buc/buc_order.rdra`（抜粋）
+### DSL — `buc/buc_order.rdra` (excerpt)
 
 ```
-buc BucOrder "注文を処理する"
+buc BucOrder "Process Order"
 
-usecase PlaceOrder "注文を確定する"
-usecase Cancel     "注文をキャンセルする"
+usecase PlaceOrder "Place Order"
+usecase Cancel     "Cancel Order"
 
 performs(Customer, BucOrder)
 belongs(BucOrder, EcShopping)
@@ -277,14 +336,14 @@ updates(usecase::Cancel, Order)
 raises(usecase::Cancel, event::Cancel)
 ```
 
-### DSL — `buc/buc_payment.rdra`（`sets` を含む）
+### DSL — `buc/buc_payment.rdra` (includes `sets`)
 
 ```
-buc BucPayment "決済を行う"
+buc BucPayment "Make Payment"
 
-usecase InputPaymentInfo "決済情報を入力する"
-usecase Capture          "決済を確定する"
-usecase RefundPayment    "返金する"
+usecase InputPaymentInfo "Enter Payment Information"
+usecase Capture          "Capture Payment"
+usecase RefundPayment    "Refund Payment"
 
 performs(Customer, BucPayment)
 contains(BucPayment, InputPaymentInfo)
@@ -296,20 +355,20 @@ updates(usecase::Capture, Payment)
 updates(usecase::Capture, Order)
 raises(usecase::Capture, event::Capture)
 
-// Payment.status は状態機械を持たないため sets で明示
+// Payment.status has no state machine, so it is declared explicitly with sets
 sets(InputPaymentInfo,   Payment, "status", "pending")
 sets(usecase::Capture,   Payment, "status", "captured")
 sets(RefundPayment,      Payment, "status", "refunded")
 
-// processed_at は nullable — 決済確定時に timestamptz として記録
+// processed_at is nullable — recorded as timestamptz at capture time
 sets(usecase::Capture, Payment, "processed_at", "timestamptz")
 ```
 
 ---
 
-### 生成例
+### Generated examples
 
-#### ER図（Mermaid）
+#### ER diagram (Mermaid)
 
 ```mermaid
 erDiagram
@@ -342,36 +401,36 @@ erDiagram
   OrderLine }o--|| Order : ""
 ```
 
-#### 状態遷移図（Mermaid）
+#### State machine diagram (Mermaid)
 
 ```mermaid
 stateDiagram-v2
   [*] --> Pending
-  state "注文受付" as Pending
-  state "決済完了" as Paid
-  state "発送済" as Shipped
-  state "配達完了" as Delivered
-  state "キャンセル" as Cancelled
-  Pending --> Paid      : 決済確定
-  Pending --> Cancelled : 注文キャンセル
-  Paid    --> Shipped   : 発送開始
-  Shipped --> Delivered : 配達確認
+  state "Order Received" as Pending
+  state "Payment Completed" as Paid
+  state "Shipped" as Shipped
+  state "Delivered" as Delivered
+  state "Cancelled" as Cancelled
+  Pending --> Paid      : Capture Payment
+  Pending --> Cancelled : Cancel Order
+  Paid    --> Shipped   : Start Shipping
+  Shipped --> Delivered : Confirm Delivery
 ```
 
-#### BUC 別 RDRA図（BucOrder、Mermaid）
+#### Per-BUC RDRA diagram (BucOrder, Mermaid)
 
 ```mermaid
 graph TD
-  Customer(["👤 購入者"])
-  Cancel(["注文をキャンセルする"])
-  PlaceOrder(["注文を確定する"])
-  BucOrder["📦 注文を処理する"]
-  Order[("🗄 注文")]
-  OrderLine[("🗄 注文明細")]
-  Cart[("🗄 カート")]
-  OrderCompleteScreen[["注文完了画面"]]
-  OrderHistoryScreen[["注文履歴画面"]]
-  Cancel{"注文キャンセル"}
+  Customer(["👤 Customer"])
+  Cancel(["Cancel Order"])
+  PlaceOrder(["Place Order"])
+  BucOrder["📦 Process Order"]
+  Order[("🗄 Order")]
+  OrderLine[("🗄 Order Line")]
+  Cart[("🗄 Cart")]
+  OrderCompleteScreen[["Order Complete Screen"]]
+  OrderHistoryScreen[["Order History Screen"]]
+  Cancel{"Cancel Order"}
   Customer --> BucOrder
   BucOrder --> PlaceOrder
   BucOrder --> Cancel
@@ -384,29 +443,29 @@ graph TD
   Cancel -.->|displays| OrderHistoryScreen
 ```
 
-#### 書き込みシーケンス図（Mermaid）
+#### Write sequence diagram (Mermaid)
 
-`rdra-ish diagram samples/ec-site/ --kind sequence --format mermaid --buc BucOrder` で生成:
+Generated with `rdra-ish diagram samples/ec-site/ --kind sequence --format mermaid --buc BucOrder`:
 
 ```mermaid
 sequenceDiagram
-  actor Customer as 購入者
-  participant System as システム
-  participant Cart as カート
-  participant Order as 注文
-  participant OrderLine as 注文明細
-  participant OrderCompleteScreen as 注文完了画面
-  participant OrderHistoryScreen as 注文履歴画面
+  actor Customer as Customer
+  participant System as System
+  participant Cart as Cart
+  participant Order as Order
+  participant OrderLine as Order Line
+  participant OrderCompleteScreen as Order Complete Screen
+  participant OrderHistoryScreen as Order History Screen
 
-  Note over Customer,OrderHistoryScreen: 注文をキャンセルする
-  Customer->System: 注文をキャンセルする
+  Note over Customer,OrderHistoryScreen: Cancel Order
+  Customer->System: Cancel Order
   activate System
   System->>Order: update
-  System-->>Customer: 注文履歴画面
+  System-->>Customer: Order History Screen
   deactivate System
 
-  Note over Customer,OrderHistoryScreen: 注文を確定する
-  Customer->System: 注文を確定する
+  Note over Customer,OrderHistoryScreen: Place Order
+  Customer->System: Place Order
   activate System
   rect rgb(245,245,245)
     Note right of System: transaction (inferred from FK)
@@ -414,15 +473,15 @@ sequenceDiagram
     System->>OrderLine: create
   end
   System->>Cart: update
-  Note right of System: FK非連結 — 別TX？@atomicで明示を
-  System-->>Customer: 注文完了画面
+  Note right of System: FK-isolated — separate TX? declare with @atomic
+  System-->>Customer: Order Complete Screen
   deactivate System
 ```
 
-#### 状態パターン導出（`rdra-ish states --entity Order`）
+#### State pattern derivation (`rdra-ish states --entity Order`)
 
 ```
-Entity: Order (注文)
+Entity: Order (Order)
   axes: status[pending|paid|shipped|delivered|cancelled], delivered_at[null|present:timestamptz]
 
   STATUS     DELIVERED_AT         INITIAL  TERMINAL  VIA
@@ -434,25 +493,26 @@ Entity: Order (注文)
   cancelled  null                 no       yes       BucOrder/Cancel, BucOrder/PlaceOrder
 ```
 
-`(status=pending, delivered_at=present)` のような到達不能な組み合わせは出力されない。  
-`delivered_at` の `present` 側には `sets(usecase::Deliver, Order, "delivered_at", "timestamptz")` 由来の型情報が付与される。
+Unreachable combinations such as `(status=pending, delivered_at=present)` are not emitted.
+The `present` side of `delivered_at` carries the type info derived from
+`sets(usecase::Deliver, Order, "delivered_at", "timestamptz")`.
 
 ---
 
-## プロジェクト構成
+## Project layout
 
 ```
 crates/
-  rdra-ish-syntax/   Lexer・Parser・AST
-  rdra-ish-core/     セマンティックモデル・型検査・状態パターン導出
-  rdra-ish-emit/     PlantUML / Mermaid / CSV / 状態パターン エミッタ
-  rdra-ish-render/   plantuml.jar 呼び出しラッパー
-  rdra-ish-cli/      `rdra` コマンド
+  rdra-ish-syntax/   Lexer · Parser · AST
+  rdra-ish-core/     Semantic model · type checking · state pattern derivation
+  rdra-ish-emit/     PlantUML / Mermaid / CSV / state-pattern emitters
+  rdra-ish-render/   plantuml.jar wrapper
+  rdra-ish-cli/      `rdra-ish` CLI
 samples/
-  ec-site/       ECサイトのサンプル（BUC・entity・状態遷移）
-  personal-info/ 個人情報管理のサンプル
+  ec-site/       E-commerce site sample (BUCs · entities · state transitions)
+  personal-info/ Personal data management sample
 ```
 
-## ライセンス
+## License
 
 MIT

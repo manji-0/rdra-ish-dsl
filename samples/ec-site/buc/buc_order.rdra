@@ -4,19 +4,19 @@ import shared.actors
 import shared.entities
 import shared.biz
 
-buc BucOrder "注文を処理する"
+buc BucOrder "Process Order"
 
-usecase SelectAddress    "配送先を選択する"
-usecase ConfirmOrder     "注文内容を確認する"
-usecase PlaceOrder       "注文を確定する"
-usecase ViewOrderHistory "注文履歴を見る"
-// shared.entities の event Cancel と同名 — usecase:: 修飾が必要
-usecase Cancel           "注文をキャンセルする"
+usecase SelectAddress    "Select Shipping Address"
+usecase ConfirmOrder     "Confirm Order Details"
+usecase PlaceOrder       "Place Order"
+usecase ViewOrderHistory "View Order History"
+// Same name as event Cancel in shared.entities — usecase:: qualifier required
+usecase Cancel           "Cancel Order"
 
-screen AddressSelectScreen "配送先選択画面"
-screen OrderConfirmScreen  "注文確認画面"
-screen OrderCompleteScreen "注文完了画面"
-screen OrderHistoryScreen  "注文履歴画面"
+screen AddressSelectScreen "Address Selection Screen"
+screen OrderConfirmScreen  "Order Confirmation Screen"
+screen OrderCompleteScreen "Order Complete Screen"
+screen OrderHistoryScreen  "Order History Screen"
 
 performs(Customer, BucOrder)
 belongs(BucOrder, EcShopping)

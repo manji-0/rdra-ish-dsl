@@ -4,16 +4,16 @@ import shared.actors
 import shared.entities
 import shared.biz
 
-buc BucPayment "決済を行う"
+buc BucPayment "Make Payment"
 
-usecase InputPaymentInfo "決済情報を入力する"
-usecase AuthorizePayment "決済を承認する"
-// shared.entities の event Capture と同名 — usecase:: 修飾が必要
-usecase Capture          "決済を確定する"
-usecase RefundPayment    "返金する"
+usecase InputPaymentInfo "Enter Payment Information"
+usecase AuthorizePayment "Authorize Payment"
+// Same name as event Capture in shared.entities — usecase:: qualifier required
+usecase Capture          "Capture Payment"
+usecase RefundPayment    "Refund Payment"
 
-screen PaymentInputScreen  "決済情報入力画面"
-screen PaymentResultScreen "決済結果画面"
+screen PaymentInputScreen  "Payment Information Screen"
+screen PaymentResultScreen "Payment Result Screen"
 
 performs(Customer, BucPayment)
 belongs(BucPayment, EcShopping)
@@ -39,12 +39,12 @@ displays(RefundPayment, PaymentResultScreen)
 updates(RefundPayment, Payment)
 updates(RefundPayment, Order)
 
-// ── カラム効果の宣言（sets） ─────────────────────────────────────────────────
-// Payment.status は状態機械を持たないため sets で明示する
+// ── Column effect declarations (sets) ────────────────────────────────────────
+// Payment.status has no state machine, so it is declared explicitly via sets
 sets(InputPaymentInfo,          Payment, "status", "pending")
 sets(usecase::Capture,          Payment, "status", "captured")
 sets(AuthorizePayment,          Payment, "status", "authorized")
 sets(RefundPayment,             Payment, "status", "refunded")
-// Order.delivered_at は決済確定時点では変化しない（Deliver 側で変わる）
-// processed_at は nullable なので sets で明示する
+// Order.delivered_at does not change at capture time (it changes on Deliver)
+// processed_at is nullable, so it is declared explicitly via sets
 sets(usecase::Capture,          Payment, "processed_at", "timestamptz")

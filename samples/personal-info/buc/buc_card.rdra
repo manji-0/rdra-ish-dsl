@@ -4,15 +4,15 @@ import shared.actors
 import shared.entities
 import shared.biz
 
-buc BucCard "クレジットカードを管理する"
+buc BucCard "Manage Credit Cards"
 
-usecase ListCards      "カード一覧を見る"
-usecase RegisterCard   "カードを登録する"
-usecase DeleteCard     "カードを削除する"
-usecase SetPrimaryCard "優先カードを設定する"
+usecase ListCards      "List Cards"
+usecase RegisterCard   "Register Card"
+usecase DeleteCard     "Delete Card"
+usecase SetPrimaryCard "Set Primary Card"
 
-screen CardListScreen "カード一覧画面"
-screen CardAddScreen  "カード登録画面"
+screen CardListScreen "Card List Screen"
+screen CardAddScreen  "Card Registration Screen"
 
 performs(User, BucCard)
 belongs(BucCard, PersonalDataMgmt)

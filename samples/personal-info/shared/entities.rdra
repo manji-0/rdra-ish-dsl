@@ -1,7 +1,7 @@
 module shared.entities
 
-// ── アカウント ────────────────────────────────────────────
-entity UserAccount "ユーザーアカウント" {
+// ── Account ──────────────────────────────────────────────
+entity UserAccount "User Account" {
   id:            Int      @pk
   email:         String   @unique
   status:        Enum(active, suspended, deleted) @default(active)
@@ -9,17 +9,17 @@ entity UserAccount "ユーザーアカウント" {
   last_login_at: DateTime @null
 }
 
-// ── 個人情報 ─────────────────────────────────────────────
-entity PersonalInfo "個人情報" {
+// ── Personal Information ─────────────────────────────────
+entity PersonalInfo "Personal Information" {
   id:          Int    @pk
-  given_name:  String @label("名")
-  family_name: String @label("姓")
+  given_name:  String @label("Given Name")
+  family_name: String @label("Family Name")
   birth_date:  Date   @null
   phone:       String @null
 }
 
-// ── 住所 ─────────────────────────────────────────────────
-entity PostalAddress "住所" {
+// ── Address ──────────────────────────────────────────────
+entity PostalAddress "Postal Address" {
   id:          Int    @pk
   postal_code: String
   prefecture:  String
@@ -29,20 +29,20 @@ entity PostalAddress "住所" {
   is_primary:  Bool
 }
 
-// ── クレジットカード ──────────────────────────────────────
-entity CreditCard "クレジットカード" {
+// ── Credit Card ──────────────────────────────────────────
+entity CreditCard "Credit Card" {
   id:               Int    @pk
-  card_number_hash: String @label("カード番号ハッシュ")
-  last4:            String @label("下4桁")
-  brand:            Enum(visa, mastercard, amex, jcb) @label("ブランド")
+  card_number_hash: String @label("Card Number Hash")
+  last4:            String @label("Last 4 Digits")
+  brand:            Enum(visa, mastercard, amex, jcb) @label("Brand")
   expires_month:    Int
   expires_year:     Int
-  holder_name:      String @label("名義人")
+  holder_name:      String @label("Cardholder Name")
   is_primary:       Bool
 }
 
-// ── パスワード資格情報 ────────────────────────────────────
-entity PasswordCredential "パスワード資格情報" {
+// ── Password Credential ──────────────────────────────────
+entity PasswordCredential "Password Credential" {
   id:            Int      @pk
   password_hash: String
   salt:          String
@@ -50,34 +50,35 @@ entity PasswordCredential "パスワード資格情報" {
   updated_at:    DateTime
 }
 
-// ── 監査ログ ─────────────────────────────────────────────
-entity AuditLog "監査ログ" {
+// ── Audit Log ────────────────────────────────────────────
+entity AuditLog "Audit Log" {
   id:           Int      @pk
-  action:       String   @label("操作種別")
-  target:       String   @label("操作対象")
+  action:       String   @label("Action Type")
+  target:       String   @label("Target")
   performed_at: DateTime
   ip_address:   String   @null
 }
 
-// ── ER関係 ───────────────────────────────────────────────
+// ── ER relationships ─────────────────────────────────────
 relate(PersonalInfo,       UserAccount, "1:1")
 relate(PostalAddress,      UserAccount, "N:1")
 relate(CreditCard,         UserAccount, "N:1")
 relate(PasswordCredential, UserAccount, "1:1")
 relate(AuditLog,           UserAccount, "N:1")
 
-// ── 状態遷移（アカウント） ───────────────────────────────
-// 状態機械では「遷移後の状態」と「それを起こすイベント」が同じ名前に
-// なるのは自然。Active / Suspended / Deleted はそれぞれ state と event
-// 両方に宣言し、transitions では state:: / event:: 修飾で区別する。
+// ── State transitions (account) ──────────────────────────
+// In a state machine it is natural for the "target state" and the "event that
+// causes it" to share the same name. Active / Suspended / Deleted are each
+// declared as both a state and an event; transitions disambiguates them with
+// state:: / event:: qualifiers.
 
-state Active    "有効"
-state Suspended "停止中"
-state Deleted   "削除済"
+state Active    "Active"
+state Suspended "Suspended"
+state Deleted   "Deleted"
 
-event Suspended "アカウント停止" // state Suspended と同名
-event Active    "アカウント復元" // state Active と同名
-event Deleted   "アカウント削除" // state Deleted と同名
+event Suspended "Suspend Account" // same name as state Suspended
+event Active    "Restore Account" // same name as state Active
+event Deleted   "Delete Account"  // same name as state Deleted
 
 transitions(event::Suspended, state::Active,    state::Suspended)
 transitions(event::Active,    state::Suspended, state::Active)
