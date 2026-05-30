@@ -1,0 +1,92 @@
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    FrontDesk(["👤 Front Desk Staff"])
+    Nurse(["👤 Nurse"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    PatientAccess["💼 Patient Access"]
+    BucVisitCheckIn["📦 Check In Visit"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    AssignRoom(["✅ Assign Room"])
+    CheckInPatient(["✅ Check In Patient"])
+    CollectCopay(["✅ Collect Copay"])
+    OpenEncounter(["✅ Open Encounter"])
+    PrepareEncounter(["✅ Prepare Encounter"])
+    VerifyArrival(["✅ Verify Patient Arrival"])
+    CheckInScreen[["🖥️ Check-In Screen"]]
+    CopayScreen[["🖥️ Copay Screen"]]
+    EncounterWorkspaceScreen[["🖥️ Encounter Workspace"]]
+    RoomBoardScreen[["🖥️ Room Board Screen"]]
+    EvAppointmentCheckedIn{"⚡ Appointment Checked In"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    AssignRoomApi["🔌 Assign Room API"]
+    CheckInPatientApi["🔌 Check-In Patient API"]
+    CollectCopayApi["🔌 Collect Copay API"]
+    OpenEncounterApi["🔌 Open Encounter API"]
+    PrepareEncounterApi["🔌 Prepare Encounter API"]
+    VerifyArrivalApi["🔌 Verify Arrival API"]
+    AccountBalance[("🗄️ Account Balance")]
+    Appointment[("🗄️ Appointment")]
+    Encounter[("🗄️ Encounter")]
+    InsurancePolicy[("🗄️ Insurance Policy")]
+    PatientAccount[("🗄️ Patient Account")]
+    PatientProfile[("🗄️ Patient Profile")]
+    PaymentTransaction[("🗄️ Payment Transaction")]
+    Room[("🗄️ Room")]
+  end
+  FrontDesk -->|performs| BucVisitCheckIn
+  FrontDesk -->|performs| VerifyArrival
+  FrontDesk -->|performs| CheckInPatient
+  FrontDesk -->|performs| CollectCopay
+  Nurse -->|performs| BucVisitCheckIn
+  Nurse -->|performs| OpenEncounter
+  Nurse -->|performs| AssignRoom
+  Nurse -->|performs| PrepareEncounter
+  OpenEncounterApi -.->|creates| Encounter
+  OpenEncounterApi -.->|reads| Appointment
+  VerifyArrivalApi -.->|reads| Appointment
+  VerifyArrivalApi -.->|reads| PatientAccount
+  VerifyArrivalApi -.->|reads| InsurancePolicy
+  CheckInPatientApi -.->|updates| Appointment
+  CheckInPatientApi -.->|updates| PatientAccount
+  CollectCopayApi -.->|creates| PaymentTransaction
+  CollectCopayApi -.->|updates| AccountBalance
+  AssignRoomApi -.->|updates| Appointment
+  AssignRoomApi -.->|updates| Room
+  PrepareEncounterApi -.->|reads| Appointment
+  PrepareEncounterApi -.->|reads| PatientProfile
+  BucVisitCheckIn -.->|belongs| PatientAccess
+  BucVisitCheckIn -->|contains| VerifyArrival
+  BucVisitCheckIn -->|contains| CheckInPatient
+  BucVisitCheckIn -->|contains| CollectCopay
+  BucVisitCheckIn -->|contains| AssignRoom
+  BucVisitCheckIn -->|contains| PrepareEncounter
+  Appointment ---|N:1| PatientAccount
+  Appointment ---|N:1| Room
+  Encounter ---|N:1| PatientAccount
+  Encounter ---|1:1| Appointment
+  AccountBalance ---|1:1| PatientAccount
+  PatientProfile ---|1:1| PatientAccount
+  InsurancePolicy ---|N:1| PatientAccount
+  EvAppointmentCheckedIn -.->|triggers| OpenEncounter
+  EvAppointmentCheckedIn -.->|triggers| PrepareEncounter
+  CheckInScreen -.->|shows| Appointment
+  OpenEncounter -.->|displays| EncounterWorkspaceScreen
+  OpenEncounter -.->|invokes| OpenEncounterApi
+  VerifyArrival -.->|displays| CheckInScreen
+  VerifyArrival -.->|invokes| VerifyArrivalApi
+  CheckInPatient -.->|displays| CheckInScreen
+  CheckInPatient -.->|invokes| CheckInPatientApi
+  CheckInPatient -.->|raises| EvAppointmentCheckedIn
+  CollectCopay -.->|displays| CopayScreen
+  CollectCopay -.->|invokes| CollectCopayApi
+  AssignRoom -.->|displays| RoomBoardScreen
+  AssignRoom -.->|invokes| AssignRoomApi
+  PrepareEncounter -.->|displays| CheckInScreen
+  PrepareEncounter -.->|invokes| PrepareEncounterApi

@@ -1,12 +1,12 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor BillingSpecialist as 👤 Billing Specialist
   end
-  box システム境界
+  box System Boundary
     participant ChargeWorklistScreen as 🖥️ Charge Worklist Screen
-    participant CreateChargeApi as 🔌 Create Charge API
   end
-  box システム
+  box System
+    participant CreateChargeApi as 🔌 Create Charge API
     participant AccountBalance as 🗄️ Account Balance
     participant Charge as 🗄️ Charge
     participant Encounter as 🗄️ Encounter

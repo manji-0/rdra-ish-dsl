@@ -1,12 +1,12 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Nurse as 👤 Nurse
   end
-  box システム境界
+  box System Boundary
     participant SpecimenScreen as 🖥️ Specimen Collection Screen
-    participant CollectSpecimenApi as 🔌 Collect Specimen API
   end
-  box システム
+  box System
+    participant CollectSpecimenApi as 🔌 Collect Specimen API
     participant ClinicalOrder as 🗄️ Clinical Order
   end
 

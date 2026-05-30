@@ -1,23 +1,23 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
     actor Patient as 👤 Patient
   end
-  box システム境界
+  box System Boundary
     participant ConsentScreen as 🖥️ Consent Capture Screen
     participant InsuranceScreen as 🖥️ Insurance Verification Screen
     participant IntakePortalScreen as 🖥️ Intake Portal Screen
     participant PatientProfileScreen as 🖥️ Patient Profile Screen
     participant PatientSearchScreen as 🖥️ Patient Search Screen
+  end
+  box System
+    participant System as 🧩 システム
     participant ConsentApi as 🔌 Consent API
     participant EligibilityApi as 🔌 Eligibility API
     participant IntakeMessagingApi as 🔌 Intake Messaging API
     participant RegisterPatientApi as 🔌 Register Patient API
     participant SearchPatientApi as 🔌 Search Patient API
     participant UpdateDemographicsApi as 🔌 Update Demographics API
-  end
-  box システム
-    participant System as 🧩 システム
     participant ConsentRecord as 🗄️ Consent Record
     participant EligibilityCheck as 🗄️ Eligibility Check
     participant InsurancePolicy as 🗄️ Insurance Policy

@@ -1,12 +1,12 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor ClinicAdmin as 👤 Clinic Administrator
   end
-  box システム境界
+  box System Boundary
     participant ScheduleAdminScreen as 🖥️ Schedule Admin Screen
-    participant BlockScheduleSlotApi as 🔌 Block Schedule Slot API
   end
-  box システム
+  box System
+    participant BlockScheduleSlotApi as 🔌 Block Schedule Slot API
     participant ProviderSchedule as 🗄️ Provider Schedule
   end
 

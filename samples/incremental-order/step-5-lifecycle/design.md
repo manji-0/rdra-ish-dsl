@@ -32,48 +32,67 @@
 
 ```sh
 rdra-ish check samples/incremental-order/step-5-lifecycle/src
-rdra-ish diagram samples/incremental-order/step-5-lifecycle/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-5-lifecycle/out/rdra_buc_store_restock
+rdra-ish diagram samples/incremental-order/step-5-lifecycle/src --kind object-graph --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-5-lifecycle/out/object_graph_buc_store_restock
 rdra-ish diagram samples/incremental-order/step-5-lifecycle/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-5-lifecycle/out/sequence_buc_store_restock
 rdra-ish csv samples/incremental-order/step-5-lifecycle/src --kind matrix --out samples/incremental-order/step-5-lifecycle/out/usecase_matrix.csv
 ```
 
-### 4.1 RDRA 図
+### 4.1 Layered Object Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/incremental-order/step-5-lifecycle/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-5-lifecycle/out/rdra_buc_store_restock
+rdra-ish diagram samples/incremental-order/step-5-lifecycle/src --kind object-graph --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-5-lifecycle/out/object_graph_buc_store_restock
 ```
 
 ```mermaid
-graph TD
-  OpsStaff(["👤 Operations Staff"])
-  BlockScheduledRestock(["✅ Block Scheduled Restock"])
-  ChangeNextRestockDate(["✅ Change Next Restock Date"])
-  ChangeStoreParentOrganization(["✅ Change Store Parent Organization"])
-  BucStoreRestock["📦 Maintain Store Restock"]
-  Organization[("🗄️ Organization")]
-  Store[("🗄️ Store")]
-  StoreMaintenanceScreen[["🖥️ Store Maintenance"]]
-  RestockBlocked{"⚡ Restock Blocked"}
-  RestockScheduled{"⚡ Restock Scheduled"}
-  OpsStaff --> BucStoreRestock
-  BucStoreRestock --> StoreOperations
-  BucStoreRestock --> ChangeNextRestockDate
-  BucStoreRestock --> ChangeStoreParentOrganization
-  BucStoreRestock --> BlockScheduledRestock
-  Store --- Organization
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    OpsStaff(["👤 Operations Staff"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    StoreOperations["💼 Store Operations"]
+    BucStoreRestock["📦 Maintain Store Restock"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    BlockScheduledRestock(["✅ Block Scheduled Restock"])
+    ChangeNextRestockDate(["✅ Change Next Restock Date"])
+    ChangeStoreParentOrganization(["✅ Change Store Parent Organization"])
+    StoreMaintenanceScreen[["🖥️ Store Maintenance"]]
+    RestockBlocked{"⚡ Restock Blocked"}
+    RestockScheduled{"⚡ Restock Scheduled"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    OrganizationLookupApi["🔌 Organization Lookup API"]
+    StoreAdminApi["🔌 Store Admin API"]
+    Organization[("🗄️ Organization")]
+    Store[("🗄️ Store")]
+  end
+  OpsStaff -->|performs| BucStoreRestock
+  StoreAdminApi -.->|updates| Store
+  OrganizationLookupApi -.->|reads| Organization
+  BucStoreRestock -.->|belongs| StoreOperations
+  BucStoreRestock -->|contains| ChangeNextRestockDate
+  BucStoreRestock -->|contains| ChangeStoreParentOrganization
+  BucStoreRestock -->|contains| BlockScheduledRestock
+  Store ---|N:1| Organization
   StoreMaintenanceScreen -.->|shows| Store
   StoreMaintenanceScreen -.->|shows| Store
   StoreMaintenanceScreen -.->|shows| Store
   StoreMaintenanceScreen -.->|shows| Organization
-  ChangeNextRestockDate -.->|updates| Store
-  ChangeNextRestockDate -.->|raises| RestockScheduled
   ChangeNextRestockDate -.->|displays| StoreMaintenanceScreen
+  ChangeNextRestockDate -.->|raises| RestockScheduled
+  ChangeNextRestockDate -.->|updates| Store
   ChangeStoreParentOrganization -.->|displays| StoreMaintenanceScreen
-  BlockScheduledRestock -.->|updates| Store
-  BlockScheduledRestock -.->|raises| RestockBlocked
+  ChangeStoreParentOrganization -.->|invokes| StoreAdminApi
+  ChangeStoreParentOrganization -.->|invokes| OrganizationLookupApi
   BlockScheduledRestock -.->|displays| StoreMaintenanceScreen
+  BlockScheduledRestock -.->|raises| RestockBlocked
+  BlockScheduledRestock -.->|updates| Store
 ```
 
 ### 4.2 Sequence 図
@@ -86,16 +105,16 @@ rdra-ish diagram samples/incremental-order/step-5-lifecycle/src --kind sequence 
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor OpsStaff as 👤 Operations Staff
   end
-  box システム境界
+  box System Boundary
     participant StoreMaintenanceScreen as 🖥️ Store Maintenance
+  end
+  box System
+    participant System as 🧩 システム
     participant OrganizationLookupApi as 🔌 Organization Lookup API
     participant StoreAdminApi as 🔌 Store Admin API
-  end
-  box システム
-    participant System as 🧩 システム
     participant Organization as 🗄️ Organization
     participant Store as 🗄️ Store
   end

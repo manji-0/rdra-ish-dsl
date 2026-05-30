@@ -1,20 +1,20 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Clinician as 👤 Clinician
     actor Nurse as 👤 Nurse
   end
-  box システム境界
+  box System Boundary
     participant MedicationSearchScreen as 🖥️ Medication Search Screen
     participant PharmacyStatusScreen as 🖥️ Pharmacy Status Screen
     participant PrescriptionScreen as 🖥️ Prescription Screen
+  end
+  box System
+    participant System as 🧩 システム
     participant ConfirmDispenseApi as 🔌 Confirm Dispense API
     participant DraftPrescriptionApi as 🔌 Draft Prescription API
     participant MedicationCatalogApi as 🔌 Medication Catalog API
     participant RefillPrescriptionApi as 🔌 Refill Prescription API
     participant SendPrescriptionApi as 🔌 Send Prescription API
-  end
-  box システム
-    participant System as 🧩 システム
     participant Encounter as 🗄️ Encounter
     participant Medication as 🗄️ Medication
     participant Prescription as 🗄️ Prescription

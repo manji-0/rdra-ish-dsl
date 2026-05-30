@@ -1,12 +1,12 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Nurse as 👤 Nurse
   end
-  box システム境界
+  box System Boundary
     participant RoomBoardScreen as 🖥️ Room Board Screen
-    participant AssignRoomApi as 🔌 Assign Room API
   end
-  box システム
+  box System
+    participant AssignRoomApi as 🔌 Assign Room API
     participant Appointment as 🗄️ Appointment
     participant Room as 🗄️ Room
   end

@@ -1,12 +1,12 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Clinician as 👤 Clinician
   end
-  box システム境界
+  box System Boundary
     participant DiagnosisScreen as 🖥️ Diagnosis Screen
-    participant DocumentAssessmentApi as 🔌 Document Assessment API
   end
-  box システム
+  box System
+    participant DocumentAssessmentApi as 🔌 Document Assessment API
     participant Diagnosis as 🗄️ Diagnosis
     participant Encounter as 🗄️ Encounter
   end

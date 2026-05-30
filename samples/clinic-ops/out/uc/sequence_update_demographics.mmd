@@ -1,12 +1,12 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
   end
-  box システム境界
+  box System Boundary
     participant PatientProfileScreen as 🖥️ Patient Profile Screen
-    participant UpdateDemographicsApi as 🔌 Update Demographics API
   end
-  box システム
+  box System
+    participant UpdateDemographicsApi as 🔌 Update Demographics API
     participant PatientProfile as 🗄️ Patient Profile
   end
 

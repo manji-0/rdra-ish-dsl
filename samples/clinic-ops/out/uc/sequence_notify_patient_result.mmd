@@ -1,12 +1,12 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor CareCoordinator as 👤 Care Coordinator
   end
-  box システム境界
+  box System Boundary
     participant PatientMessageScreen as 🖥️ Patient Message Screen
-    participant NotifyPatientResultApi as 🔌 Notify Patient Result API
   end
-  box システム
+  box System
+    participant NotifyPatientResultApi as 🔌 Notify Patient Result API
     participant Notification as 🗄️ Notification
   end
 

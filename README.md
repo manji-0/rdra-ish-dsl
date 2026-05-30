@@ -169,9 +169,9 @@ The participant lanes are grouped into RDRA-style layer boxes so the vertical
 lifelines also show the model boundary:
 
 ```
-システム価値: Actor
-システム境界: Screen / API
-システム: System / Entity
+System Value: Actor
+System Boundary: Screen / Client
+System: API / System / Entity
 ```
 
 Diagram labels include a small kind prefix such as `👤 actor`, `✅ usecase`,
@@ -598,43 +598,76 @@ stateDiagram-v2
   Shipped --> Delivered : ⚡ Confirm Delivery
 ```
 
-#### Per-BUC RDRA diagram (BucOrder, Mermaid)
+#### Per-BUC layered object graph (BucOrder, Mermaid)
 
 ```mermaid
-graph TD
-  Customer(["👤 Customer"])
-  Cancel(["✅ Cancel Order"])
-  ConfirmOrder(["✅ Confirm Order Details"])
-  PlaceOrder(["✅ Place Order"])
-  SelectAddress(["✅ Select Shipping Address"])
-  ViewOrderHistory(["✅ View Order History"])
-  BucOrder["📦 Process Order"]
-  Cart[("🗄️ Cart")]
-  CartItem[("🗄️ Cart Item")]
-  Order[("🗄️ Order")]
-  OrderLine[("🗄️ Order Line")]
-  ShippingAddress[("🗄️ Shipping Address")]
-  AddressSelectScreen[["🖥️ Address Selection Screen"]]
-  OrderCompleteScreen[["🖥️ Order Complete Screen"]]
-  OrderConfirmScreen[["🖥️ Order Confirmation Screen"]]
-  OrderHistoryScreen[["🖥️ Order History Screen"]]
-  Cancel{"⚡ Cancel Order"}
-  Customer --> BucOrder
-  BucOrder --> EcShopping
-  BucOrder --> SelectAddress
-  BucOrder --> ConfirmOrder
-  BucOrder --> PlaceOrder
-  BucOrder --> ViewOrderHistory
-  BucOrder --> Cancel
-  CartItem --- Cart
-  Order --- ShippingAddress
-  OrderLine --- Order
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    Customer(["👤 Customer"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    EcShopping["💼 EC Shopping Business"]
+    BucOrder["📦 Process Order"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    Cancel(["✅ Cancel Order"])
+    ConfirmOrder(["✅ Confirm Order Details"])
+    PlaceOrder(["✅ Place Order"])
+    SelectAddress(["✅ Select Shipping Address"])
+    ViewOrderHistory(["✅ View Order History"])
+    AddressSelectScreen[["🖥️ Address Selection Screen"]]
+    OrderCompleteScreen[["🖥️ Order Complete Screen"]]
+    OrderConfirmScreen[["🖥️ Order Confirmation Screen"]]
+    OrderHistoryScreen[["🖥️ Order History Screen"]]
+    Cancel{"⚡ Cancel Order"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    CancelOrderApi["🔌 Cancel Order API"]
+    ConfirmOrderApi["🔌 Confirm Order API"]
+    OrderHistoryApi["🔌 Order History API"]
+    PlaceOrderApi["🔌 Place Order API"]
+    SelectAddressApi["🔌 Select Address API"]
+    Cart[("🗄️ Cart")]
+    CartItem[("🗄️ Cart Item")]
+    Order[("🗄️ Order")]
+    OrderLine[("🗄️ Order Line")]
+    ShippingAddress[("🗄️ Shipping Address")]
+  end
+  Customer -->|performs| BucOrder
+  SelectAddressApi -.->|reads| ShippingAddress
+  ConfirmOrderApi -.->|reads| ShippingAddress
+  ConfirmOrderApi -.->|reads| Cart
+  ConfirmOrderApi -.->|reads| CartItem
+  PlaceOrderApi -.->|creates| Order
+  PlaceOrderApi -.->|creates| OrderLine
+  PlaceOrderApi -.->|updates| Cart
+  OrderHistoryApi -.->|reads| Order
+  OrderHistoryApi -.->|reads| OrderLine
+  CancelOrderApi -.->|updates| Order
+  BucOrder -.->|belongs| EcShopping
+  BucOrder -->|contains| SelectAddress
+  BucOrder -->|contains| ConfirmOrder
+  BucOrder -->|contains| PlaceOrder
+  BucOrder -->|contains| ViewOrderHistory
+  BucOrder -->|contains| Cancel
+  CartItem ---|N:1| Cart
+  Order ---|N:1| ShippingAddress
+  OrderLine ---|N:1| Order
   SelectAddress -.->|displays| AddressSelectScreen
+  SelectAddress -.->|invokes| SelectAddressApi
   ConfirmOrder -.->|displays| OrderConfirmScreen
+  ConfirmOrder -.->|invokes| ConfirmOrderApi
   PlaceOrder -.->|displays| OrderCompleteScreen
+  PlaceOrder -.->|invokes| PlaceOrderApi
   ViewOrderHistory -.->|displays| OrderHistoryScreen
-  Cancel -.->|raises| Cancel
+  ViewOrderHistory -.->|invokes| OrderHistoryApi
   Cancel -.->|displays| OrderHistoryScreen
+  Cancel -.->|invokes| CancelOrderApi
+  Cancel -.->|raises| Cancel
 ```
 
 #### API boundary sequence diagram (Mermaid)
@@ -643,21 +676,21 @@ Generated with `rdra-ish diagram samples/ec-site/ --kind sequence --format merma
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Customer as 👤 Customer
   end
-  box システム境界
+  box System Boundary
     participant AddressSelectScreen as 🖥️ Address Selection Screen
     participant OrderCompleteScreen as 🖥️ Order Complete Screen
     participant OrderConfirmScreen as 🖥️ Order Confirmation Screen
     participant OrderHistoryScreen as 🖥️ Order History Screen
+  end
+  box System
     participant CancelOrderApi as 🔌 Cancel Order API
     participant ConfirmOrderApi as 🔌 Confirm Order API
     participant OrderHistoryApi as 🔌 Order History API
     participant PlaceOrderApi as 🔌 Place Order API
     participant SelectAddressApi as 🔌 Select Address API
-  end
-  box システム
     participant Cart as 🗄️ Cart
     participant CartItem as 🗄️ Cart Item
     participant Order as 🗄️ Order

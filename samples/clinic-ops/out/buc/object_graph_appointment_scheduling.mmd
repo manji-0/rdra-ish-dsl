@@ -1,0 +1,114 @@
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    FrontDesk(["👤 Front Desk Staff"])
+    Patient(["👤 Patient"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    PatientAccess["💼 Patient Access"]
+    BucAppointmentScheduling["📦 Schedule Appointments"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    BookAppointment(["✅ Book Appointment"])
+    CancelAppointment(["✅ Cancel Appointment"])
+    MarkNoShow(["✅ Mark No Show"])
+    RescheduleAppointment(["✅ Reschedule Appointment"])
+    ReserveAppointment(["✅ Reserve Appointment"])
+    SearchAvailability(["✅ Search Availability"])
+    SendAppointmentNotice(["✅ Send Appointment Notice"])
+    SendIntakeForms(["✅ Send Intake Forms"])
+    AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
+    AppointmentScreen[["🖥️ Appointment Screen"]]
+    IntakePortalScreen[["🖥️ Intake Portal Screen"]]
+    ScheduleSearchScreen[["🖥️ Schedule Search Screen"]]
+    EvAppointmentCancelled{"⚡ Appointment Cancelled"}
+    EvAppointmentNoShow{"⚡ Appointment Marked No Show"}
+    EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
+    EvAppointmentScheduled{"⚡ Appointment Scheduled"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    AppointmentNoticeApi["🔌 Appointment Notice API"]
+    BookAppointmentApi["🔌 Book Appointment API"]
+    CancelAppointmentApi["🔌 Cancel Appointment API"]
+    IntakeMessagingApi["🔌 Intake Messaging API"]
+    RescheduleAppointmentApi["🔌 Reschedule Appointment API"]
+    ReserveAppointmentApi["🔌 Reserve Appointment API"]
+    SearchAvailabilityApi["🔌 Search Availability API"]
+    Appointment[("🗄️ Appointment")]
+    ClinicLocation[("🗄️ Clinic Location")]
+    IntakePacket[("🗄️ Intake Packet")]
+    Notification[("🗄️ Notification")]
+    PatientMessage[("🗄️ Patient Message")]
+    Provider[("🗄️ Provider")]
+    ProviderSchedule[("🗄️ Provider Schedule")]
+  end
+  Patient -->|performs| BucAppointmentScheduling
+  Patient -->|performs| SearchAvailability
+  Patient -->|performs| ReserveAppointment
+  Patient -->|performs| BookAppointment
+  Patient -->|performs| RescheduleAppointment
+  Patient -->|performs| CancelAppointment
+  FrontDesk -->|performs| BucAppointmentScheduling
+  FrontDesk -->|performs| SendIntakeForms
+  FrontDesk -->|performs| SearchAvailability
+  FrontDesk -->|performs| ReserveAppointment
+  FrontDesk -->|performs| BookAppointment
+  FrontDesk -->|performs| RescheduleAppointment
+  FrontDesk -->|performs| CancelAppointment
+  FrontDesk -->|performs| MarkNoShow
+  FrontDesk -->|performs| SendAppointmentNotice
+  IntakeMessagingApi -.->|creates| PatientMessage
+  IntakeMessagingApi -.->|creates| IntakePacket
+  SearchAvailabilityApi -.->|reads| ProviderSchedule
+  SearchAvailabilityApi -.->|reads| Provider
+  SearchAvailabilityApi -.->|reads| ClinicLocation
+  ReserveAppointmentApi -.->|creates| Appointment
+  ReserveAppointmentApi -.->|updates| ProviderSchedule
+  BookAppointmentApi -.->|updates| ProviderSchedule
+  BookAppointmentApi -.->|updates| Appointment
+  RescheduleAppointmentApi -.->|updates| ProviderSchedule
+  RescheduleAppointmentApi -.->|updates| Appointment
+  CancelAppointmentApi -.->|updates| ProviderSchedule
+  CancelAppointmentApi -.->|updates| Appointment
+  AppointmentNoticeApi -.->|creates| PatientMessage
+  AppointmentNoticeApi -.->|creates| Notification
+  BucAppointmentScheduling -.->|belongs| PatientAccess
+  BucAppointmentScheduling -->|contains| SearchAvailability
+  BucAppointmentScheduling -->|contains| ReserveAppointment
+  BucAppointmentScheduling -->|contains| BookAppointment
+  BucAppointmentScheduling -->|contains| RescheduleAppointment
+  BucAppointmentScheduling -->|contains| CancelAppointment
+  BucAppointmentScheduling -->|contains| MarkNoShow
+  BucAppointmentScheduling -->|contains| SendAppointmentNotice
+  ProviderSchedule ---|N:1| Provider
+  ProviderSchedule ---|N:1| ClinicLocation
+  Appointment ---|N:1| Provider
+  Appointment ---|N:1| ClinicLocation
+  EvAppointmentScheduled -.->|triggers| SendIntakeForms
+  EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
+  EvAppointmentRescheduled -.->|triggers| SendAppointmentNotice
+  EvAppointmentCancelled -.->|triggers| SendAppointmentNotice
+  ScheduleSearchScreen -.->|shows| ProviderSchedule
+  SendIntakeForms -.->|displays| IntakePortalScreen
+  SendIntakeForms -.->|invokes| IntakeMessagingApi
+  SearchAvailability -.->|displays| ScheduleSearchScreen
+  SearchAvailability -.->|invokes| SearchAvailabilityApi
+  ReserveAppointment -.->|displays| AppointmentScreen
+  ReserveAppointment -.->|invokes| ReserveAppointmentApi
+  BookAppointment -.->|displays| AppointmentScreen
+  BookAppointment -.->|invokes| BookAppointmentApi
+  BookAppointment -.->|raises| EvAppointmentScheduled
+  RescheduleAppointment -.->|displays| AppointmentScreen
+  RescheduleAppointment -.->|invokes| RescheduleAppointmentApi
+  RescheduleAppointment -.->|raises| EvAppointmentRescheduled
+  CancelAppointment -.->|displays| AppointmentScreen
+  CancelAppointment -.->|invokes| CancelAppointmentApi
+  CancelAppointment -.->|raises| EvAppointmentCancelled
+  MarkNoShow -.->|displays| AppointmentScreen
+  MarkNoShow -.->|raises| EvAppointmentNoShow
+  MarkNoShow -.->|updates| Appointment
+  SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
+  SendAppointmentNotice -.->|invokes| AppointmentNoticeApi

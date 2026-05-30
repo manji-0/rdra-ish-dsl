@@ -1,0 +1,16 @@
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    StoreOperations["💼 Store Operations"]
+    BucStoreRestock["📦 Maintain Store Restock"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+  end
+  subgraph layer_system[System]
+    direction TB
+  end
+  BucStoreRestock -.->|belongs| StoreOperations

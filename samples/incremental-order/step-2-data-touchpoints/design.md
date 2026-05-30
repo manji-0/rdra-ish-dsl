@@ -32,34 +32,47 @@
 
 ```sh
 rdra-ish check samples/incremental-order/step-2-data-touchpoints/src
-rdra-ish diagram samples/incremental-order/step-2-data-touchpoints/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-2-data-touchpoints/out/rdra_buc_store_restock
+rdra-ish diagram samples/incremental-order/step-2-data-touchpoints/src --kind object-graph --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-2-data-touchpoints/out/object_graph_buc_store_restock
 rdra-ish diagram samples/incremental-order/step-2-data-touchpoints/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-2-data-touchpoints/out/sequence_buc_store_restock
 rdra-ish csv samples/incremental-order/step-2-data-touchpoints/src --kind matrix --out samples/incremental-order/step-2-data-touchpoints/out/usecase_matrix.csv
 ```
 
-### 4.1 RDRA 図
+### 4.1 Layered Object Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/incremental-order/step-2-data-touchpoints/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-2-data-touchpoints/out/rdra_buc_store_restock
+rdra-ish diagram samples/incremental-order/step-2-data-touchpoints/src --kind object-graph --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-2-data-touchpoints/out/object_graph_buc_store_restock
 ```
 
 ```mermaid
-graph TD
-  OpsStaff(["👤 Operations Staff"])
-  ChangeNextRestockDate(["✅ Change Next Restock Date"])
-  ChangeStoreParentOrganization(["✅ Change Store Parent Organization"])
-  BucStoreRestock["📦 Maintain Store Restock"]
-  Organization[("🗄️ Organization")]
-  Store[("🗄️ Store")]
-  OpsStaff --> BucStoreRestock
-  BucStoreRestock --> StoreOperations
-  BucStoreRestock --> ChangeNextRestockDate
-  BucStoreRestock --> ChangeStoreParentOrganization
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    OpsStaff(["👤 Operations Staff"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    StoreOperations["💼 Store Operations"]
+    BucStoreRestock["📦 Maintain Store Restock"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    ChangeNextRestockDate(["✅ Change Next Restock Date"])
+    ChangeStoreParentOrganization(["✅ Change Store Parent Organization"])
+  end
+  subgraph layer_system[System]
+    direction TB
+    Organization[("🗄️ Organization")]
+    Store[("🗄️ Store")]
+  end
+  OpsStaff -->|performs| BucStoreRestock
+  BucStoreRestock -.->|belongs| StoreOperations
+  BucStoreRestock -->|contains| ChangeNextRestockDate
+  BucStoreRestock -->|contains| ChangeStoreParentOrganization
   ChangeNextRestockDate -.->|updates| Store
-  ChangeStoreParentOrganization -.->|updates| Store
   ChangeStoreParentOrganization -.->|reads| Organization
+  ChangeStoreParentOrganization -.->|updates| Store
 ```
 
 ### 4.2 Sequence 図
@@ -72,10 +85,10 @@ rdra-ish diagram samples/incremental-order/step-2-data-touchpoints/src --kind se
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor OpsStaff as 👤 Operations Staff
   end
-  box システム
+  box System
     participant System as 🧩 システム
     participant Organization as 🗄️ Organization
     participant Store as 🗄️ Store

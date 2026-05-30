@@ -31,29 +31,42 @@ actor と user-visible usecase を追加する。
 
 ```sh
 rdra-ish check samples/incremental-order/step-1-buc-skeleton/src
-rdra-ish diagram samples/incremental-order/step-1-buc-skeleton/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-1-buc-skeleton/out/rdra_buc_store_restock
+rdra-ish diagram samples/incremental-order/step-1-buc-skeleton/src --kind object-graph --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-1-buc-skeleton/out/object_graph_buc_store_restock
 rdra-ish diagram samples/incremental-order/step-1-buc-skeleton/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-1-buc-skeleton/out/sequence_buc_store_restock
 rdra-ish csv samples/incremental-order/step-1-buc-skeleton/src --kind matrix --out samples/incremental-order/step-1-buc-skeleton/out/usecase_matrix.csv
 ```
 
-### 4.1 RDRA 図
+### 4.1 Layered Object Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/incremental-order/step-1-buc-skeleton/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-1-buc-skeleton/out/rdra_buc_store_restock
+rdra-ish diagram samples/incremental-order/step-1-buc-skeleton/src --kind object-graph --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-1-buc-skeleton/out/object_graph_buc_store_restock
 ```
 
 ```mermaid
-graph TD
-  OpsStaff(["👤 Operations Staff"])
-  ChangeNextRestockDate(["✅ Change Next Restock Date"])
-  ChangeStoreParentOrganization(["✅ Change Store Parent Organization"])
-  BucStoreRestock["📦 Maintain Store Restock"]
-  OpsStaff --> BucStoreRestock
-  BucStoreRestock --> StoreOperations
-  BucStoreRestock --> ChangeNextRestockDate
-  BucStoreRestock --> ChangeStoreParentOrganization
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    OpsStaff(["👤 Operations Staff"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    StoreOperations["💼 Store Operations"]
+    BucStoreRestock["📦 Maintain Store Restock"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    ChangeNextRestockDate(["✅ Change Next Restock Date"])
+    ChangeStoreParentOrganization(["✅ Change Store Parent Organization"])
+  end
+  subgraph layer_system[System]
+    direction TB
+  end
+  OpsStaff -->|performs| BucStoreRestock
+  BucStoreRestock -.->|belongs| StoreOperations
+  BucStoreRestock -->|contains| ChangeNextRestockDate
+  BucStoreRestock -->|contains| ChangeStoreParentOrganization
 ```
 
 ## 5. レビュー観点

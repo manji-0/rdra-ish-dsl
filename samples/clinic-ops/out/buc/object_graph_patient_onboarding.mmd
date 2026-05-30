@@ -1,0 +1,115 @@
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    FrontDesk(["👤 Front Desk Staff"])
+    Patient(["👤 Patient"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    PatientAccess["💼 Patient Access"]
+    BucPatientOnboarding["📦 Onboard and Maintain Patient"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    ArchivePatient(["✅ Archive Patient"])
+    CaptureConsent(["✅ Capture Consent"])
+    CompleteIntakeForms(["✅ Complete Intake Forms"])
+    ExpireIntakeForms(["✅ Expire Intake Forms"])
+    MergeDuplicatePatient(["✅ Merge Duplicate Patient"])
+    RegisterPatient(["✅ Register Patient"])
+    SearchPatient(["✅ Search Patient"])
+    SendIntakeForms(["✅ Send Intake Forms"])
+    UpdateDemographics(["✅ Update Demographics"])
+    VerifyInsurance(["✅ Verify Insurance"])
+    ConsentScreen[["🖥️ Consent Capture Screen"]]
+    InsuranceScreen[["🖥️ Insurance Verification Screen"]]
+    IntakePortalScreen[["🖥️ Intake Portal Screen"]]
+    PatientProfileScreen[["🖥️ Patient Profile Screen"]]
+    PatientSearchScreen[["🖥️ Patient Search Screen"]]
+    EvIntakeCompleted{"⚡ Intake Completed"}
+    EvIntakeExpired{"⚡ Intake Expired"}
+    EvPatientArchived{"⚡ Patient Archived"}
+    EvPatientMerged{"⚡ Patient Merged"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    ConsentApi["🔌 Consent API"]
+    EligibilityApi["🔌 Eligibility API"]
+    IntakeMessagingApi["🔌 Intake Messaging API"]
+    RegisterPatientApi["🔌 Register Patient API"]
+    SearchPatientApi["🔌 Search Patient API"]
+    UpdateDemographicsApi["🔌 Update Demographics API"]
+    ConsentRecord[("🗄️ Consent Record")]
+    EligibilityCheck[("🗄️ Eligibility Check")]
+    InsurancePolicy[("🗄️ Insurance Policy")]
+    IntakePacket[("🗄️ Intake Packet")]
+    PatientAccount[("🗄️ Patient Account")]
+    PatientMessage[("🗄️ Patient Message")]
+    PatientProfile[("🗄️ Patient Profile")]
+  end
+  Patient -->|performs| BucPatientOnboarding
+  Patient -->|performs| CaptureConsent
+  Patient -->|performs| CompleteIntakeForms
+  FrontDesk -->|performs| BucPatientOnboarding
+  FrontDesk -->|performs| VerifyInsurance
+  FrontDesk -->|performs| SendIntakeForms
+  FrontDesk -->|performs| ExpireIntakeForms
+  FrontDesk -->|performs| MergeDuplicatePatient
+  FrontDesk -->|performs| ArchivePatient
+  FrontDesk -->|performs| SearchPatient
+  FrontDesk -->|performs| RegisterPatient
+  FrontDesk -->|performs| UpdateDemographics
+  ConsentApi -.->|creates| ConsentRecord
+  IntakeMessagingApi -.->|creates| PatientMessage
+  IntakeMessagingApi -.->|creates| IntakePacket
+  SearchPatientApi -.->|reads| PatientAccount
+  SearchPatientApi -.->|reads| PatientProfile
+  RegisterPatientApi -.->|creates| PatientAccount
+  RegisterPatientApi -.->|creates| PatientProfile
+  UpdateDemographicsApi -.->|updates| PatientProfile
+  EligibilityApi -.->|creates| EligibilityCheck
+  EligibilityApi -.->|reads| InsurancePolicy
+  EligibilityApi -.->|updates| InsurancePolicy
+  BucPatientOnboarding -.->|belongs| PatientAccess
+  BucPatientOnboarding -->|contains| VerifyInsurance
+  BucPatientOnboarding -->|contains| CaptureConsent
+  BucPatientOnboarding -->|contains| SendIntakeForms
+  BucPatientOnboarding -->|contains| CompleteIntakeForms
+  BucPatientOnboarding -->|contains| ExpireIntakeForms
+  BucPatientOnboarding -->|contains| MergeDuplicatePatient
+  BucPatientOnboarding -->|contains| ArchivePatient
+  BucPatientOnboarding -->|contains| SearchPatient
+  BucPatientOnboarding -->|contains| RegisterPatient
+  BucPatientOnboarding -->|contains| UpdateDemographics
+  PatientMessage ---|N:1| PatientAccount
+  PatientProfile ---|1:1| PatientAccount
+  InsurancePolicy ---|N:1| PatientAccount
+  EligibilityCheck ---|N:1| InsurancePolicy
+  ConsentRecord ---|N:1| PatientAccount
+  IntakePacket ---|N:1| PatientAccount
+  PatientSearchScreen -.->|shows| PatientAccount
+  PatientProfileScreen -.->|shows| PatientProfile
+  VerifyInsurance -.->|displays| InsuranceScreen
+  VerifyInsurance -.->|invokes| EligibilityApi
+  CaptureConsent -.->|displays| ConsentScreen
+  CaptureConsent -.->|invokes| ConsentApi
+  SendIntakeForms -.->|displays| IntakePortalScreen
+  SendIntakeForms -.->|invokes| IntakeMessagingApi
+  CompleteIntakeForms -.->|displays| IntakePortalScreen
+  CompleteIntakeForms -.->|raises| EvIntakeCompleted
+  CompleteIntakeForms -.->|updates| IntakePacket
+  ExpireIntakeForms -.->|displays| IntakePortalScreen
+  ExpireIntakeForms -.->|raises| EvIntakeExpired
+  ExpireIntakeForms -.->|updates| IntakePacket
+  MergeDuplicatePatient -.->|displays| PatientProfileScreen
+  MergeDuplicatePatient -.->|raises| EvPatientMerged
+  MergeDuplicatePatient -.->|updates| PatientAccount
+  ArchivePatient -.->|displays| PatientProfileScreen
+  ArchivePatient -.->|raises| EvPatientArchived
+  ArchivePatient -.->|updates| PatientAccount
+  SearchPatient -.->|displays| PatientSearchScreen
+  SearchPatient -.->|invokes| SearchPatientApi
+  RegisterPatient -.->|displays| PatientProfileScreen
+  RegisterPatient -.->|invokes| RegisterPatientApi
+  UpdateDemographics -.->|displays| PatientProfileScreen
+  UpdateDemographics -.->|invokes| UpdateDemographicsApi

@@ -1,0 +1,95 @@
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    CareCoordinator(["👤 Care Coordinator"])
+    Patient(["👤 Patient"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    PatientAccess["💼 Patient Access"]
+    BucFollowupCare["📦 Coordinate Follow-Up Care"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    CloseCarePlan(["✅ Close Care Plan"])
+    CreateCarePlan(["✅ Create Care Plan"])
+    NotifyPatientResult(["✅ Notify Patient Result"])
+    ReviewPatientResponse(["✅ Review Patient Response"])
+    ScheduleFollowUpVisit(["✅ Schedule Follow-Up Visit"])
+    SendAppointmentNotice(["✅ Send Appointment Notice"])
+    SendFollowUpMessage(["✅ Send Follow-Up Message"])
+    SendIntakeForms(["✅ Send Intake Forms"])
+    AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
+    CarePlanScreen[["🖥️ Care Plan Screen"]]
+    FollowUpScheduleScreen[["🖥️ Follow-Up Schedule Screen"]]
+    IntakePortalScreen[["🖥️ Intake Portal Screen"]]
+    PatientMessageScreen[["🖥️ Patient Message Screen"]]
+    EvAppointmentScheduled{"⚡ Appointment Scheduled"}
+    EvCarePlanClosed{"⚡ Care Plan Closed"}
+    EvCarePlanMonitoring{"⚡ Care Plan Monitoring"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    AppointmentNoticeApi["🔌 Appointment Notice API"]
+    CreateCarePlanApi["🔌 Create Care Plan API"]
+    FollowUpScheduleApi["🔌 Follow-Up Schedule API"]
+    IntakeMessagingApi["🔌 Intake Messaging API"]
+    NotifyPatientResultApi["🔌 Notify Patient Result API"]
+    SendFollowUpMessageApi["🔌 Send Follow-Up Message API"]
+    Appointment[("🗄️ Appointment")]
+    CarePlan[("🗄️ Care Plan")]
+    Encounter[("🗄️ Encounter")]
+    IntakePacket[("🗄️ Intake Packet")]
+    Notification[("🗄️ Notification")]
+    PatientMessage[("🗄️ Patient Message")]
+    ProviderSchedule[("🗄️ Provider Schedule")]
+  end
+  Patient -->|performs| BucFollowupCare
+  CareCoordinator -->|performs| BucFollowupCare
+  CareCoordinator -->|performs| CreateCarePlan
+  CareCoordinator -->|performs| SendFollowUpMessage
+  CareCoordinator -->|performs| ReviewPatientResponse
+  CareCoordinator -->|performs| ScheduleFollowUpVisit
+  CareCoordinator -->|performs| CloseCarePlan
+  CareCoordinator -->|performs| NotifyPatientResult
+  IntakeMessagingApi -.->|creates| PatientMessage
+  IntakeMessagingApi -.->|creates| IntakePacket
+  AppointmentNoticeApi -.->|creates| PatientMessage
+  AppointmentNoticeApi -.->|creates| Notification
+  CreateCarePlanApi -.->|creates| CarePlan
+  CreateCarePlanApi -.->|reads| Encounter
+  SendFollowUpMessageApi -.->|creates| PatientMessage
+  FollowUpScheduleApi -.->|creates| Appointment
+  FollowUpScheduleApi -.->|updates| ProviderSchedule
+  NotifyPatientResultApi -.->|creates| Notification
+  BucFollowupCare -.->|belongs| PatientAccess
+  BucFollowupCare -->|contains| CreateCarePlan
+  BucFollowupCare -->|contains| SendFollowUpMessage
+  BucFollowupCare -->|contains| ReviewPatientResponse
+  BucFollowupCare -->|contains| ScheduleFollowUpVisit
+  BucFollowupCare -->|contains| CloseCarePlan
+  BucFollowupCare -->|contains| NotifyPatientResult
+  Encounter ---|1:1| Appointment
+  CarePlan ---|N:1| Encounter
+  EvAppointmentScheduled -.->|triggers| SendIntakeForms
+  EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
+  SendIntakeForms -.->|displays| IntakePortalScreen
+  SendIntakeForms -.->|invokes| IntakeMessagingApi
+  SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
+  SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
+  CreateCarePlan -.->|displays| CarePlanScreen
+  CreateCarePlan -.->|invokes| CreateCarePlanApi
+  SendFollowUpMessage -.->|displays| PatientMessageScreen
+  SendFollowUpMessage -.->|invokes| SendFollowUpMessageApi
+  ReviewPatientResponse -.->|displays| CarePlanScreen
+  ReviewPatientResponse -.->|raises| EvCarePlanMonitoring
+  ReviewPatientResponse -.->|updates| CarePlan
+  ReviewPatientResponse -.->|updates| PatientMessage
+  ScheduleFollowUpVisit -.->|displays| FollowUpScheduleScreen
+  ScheduleFollowUpVisit -.->|invokes| FollowUpScheduleApi
+  ScheduleFollowUpVisit -.->|raises| EvAppointmentScheduled
+  CloseCarePlan -.->|displays| CarePlanScreen
+  CloseCarePlan -.->|raises| EvCarePlanClosed
+  CloseCarePlan -.->|updates| CarePlan
+  NotifyPatientResult -.->|displays| PatientMessageScreen
+  NotifyPatientResult -.->|invokes| NotifyPatientResultApi

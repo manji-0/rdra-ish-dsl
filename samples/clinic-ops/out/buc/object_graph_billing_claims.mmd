@@ -1,0 +1,88 @@
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    BillingSpecialist(["👤 Billing Specialist"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    RevenueCycle["💼 Revenue Cycle"]
+    BucBillingClaims["📦 Bill and Collect Claims"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    CreateCharge(["✅ Create Charge"])
+    GenerateClaim(["✅ Generate Claim"])
+    PostPayment(["✅ Post Payment"])
+    ReceiveClaimAccepted(["✅ Receive Claim Accepted"])
+    ReconcileBalance(["✅ Reconcile Balance"])
+    RecordClaimDenial(["✅ Record Claim Denial"])
+    SubmitClaim(["✅ Submit Claim"])
+    VoidCharge(["✅ Void Charge"])
+    BalanceScreen[["🖥️ Balance Screen"]]
+    ChargeWorklistScreen[["🖥️ Charge Worklist Screen"]]
+    ClaimScreen[["🖥️ Claim Screen"]]
+    PaymentPostingScreen[["🖥️ Payment Posting Screen"]]
+    EvClaimAccepted{"⚡ Claim Accepted"}
+    EvClaimDenied{"⚡ Claim Denied"}
+    EvClaimPaid{"⚡ Claim Paid"}
+    EvClaimSubmitted{"⚡ Claim Submitted"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    BalanceApi["🔌 Balance API"]
+    CreateChargeApi["🔌 Create Charge API"]
+    GenerateClaimApi["🔌 Generate Claim API"]
+    PaymentPostApi["🔌 Payment Posting API"]
+    SubmitClaimApi["🔌 Submit Claim API"]
+    AccountBalance[("🗄️ Account Balance")]
+    Charge[("🗄️ Charge")]
+    Claim[("🗄️ Claim")]
+    Encounter[("🗄️ Encounter")]
+    InsurancePolicy[("🗄️ Insurance Policy")]
+    PaymentTransaction[("🗄️ Payment Transaction")]
+  end
+  BillingSpecialist -->|performs| BucBillingClaims
+  CreateChargeApi -.->|creates| Charge
+  CreateChargeApi -.->|reads| Encounter
+  CreateChargeApi -.->|updates| AccountBalance
+  GenerateClaimApi -.->|creates| Claim
+  GenerateClaimApi -.->|reads| InsurancePolicy
+  GenerateClaimApi -.->|updates| Charge
+  SubmitClaimApi -.->|updates| Claim
+  PaymentPostApi -.->|creates| PaymentTransaction
+  PaymentPostApi -.->|updates| Claim
+  BalanceApi -.->|reads| PaymentTransaction
+  BalanceApi -.->|updates| AccountBalance
+  BucBillingClaims -.->|belongs| RevenueCycle
+  BucBillingClaims -->|contains| CreateCharge
+  BucBillingClaims -->|contains| GenerateClaim
+  BucBillingClaims -->|contains| SubmitClaim
+  BucBillingClaims -->|contains| ReceiveClaimAccepted
+  BucBillingClaims -->|contains| RecordClaimDenial
+  BucBillingClaims -->|contains| PostPayment
+  BucBillingClaims -->|contains| ReconcileBalance
+  BucBillingClaims -->|contains| VoidCharge
+  Charge ---|N:1| Encounter
+  Charge ---|N:1| Claim
+  Claim ---|N:1| InsurancePolicy
+  PaymentTransaction ---|N:1| Claim
+  CreateCharge -.->|displays| ChargeWorklistScreen
+  CreateCharge -.->|invokes| CreateChargeApi
+  GenerateClaim -.->|displays| ClaimScreen
+  GenerateClaim -.->|invokes| GenerateClaimApi
+  SubmitClaim -.->|displays| ClaimScreen
+  SubmitClaim -.->|invokes| SubmitClaimApi
+  SubmitClaim -.->|raises| EvClaimSubmitted
+  ReceiveClaimAccepted -.->|displays| ClaimScreen
+  ReceiveClaimAccepted -.->|raises| EvClaimAccepted
+  ReceiveClaimAccepted -.->|updates| Claim
+  RecordClaimDenial -.->|displays| ClaimScreen
+  RecordClaimDenial -.->|raises| EvClaimDenied
+  RecordClaimDenial -.->|updates| Claim
+  PostPayment -.->|displays| PaymentPostingScreen
+  PostPayment -.->|invokes| PaymentPostApi
+  PostPayment -.->|raises| EvClaimPaid
+  ReconcileBalance -.->|displays| BalanceScreen
+  ReconcileBalance -.->|invokes| BalanceApi
+  VoidCharge -.->|displays| ChargeWorklistScreen
+  VoidCharge -.->|updates| Charge

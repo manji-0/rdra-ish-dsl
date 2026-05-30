@@ -1,12 +1,12 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor ClinicAdmin as 👤 Clinic Administrator
   end
-  box システム境界
+  box System Boundary
     participant RoomAdminScreen as 🖥️ Room Admin Screen
-    participant RoomAdminApi as 🔌 Room Admin API
   end
-  box システム
+  box System
+    participant RoomAdminApi as 🔌 Room Admin API
     participant Room as 🗄️ Room
   end
 

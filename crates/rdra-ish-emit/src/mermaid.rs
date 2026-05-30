@@ -715,7 +715,7 @@ impl Emitter for SequenceMermaidEmitter {
             .collect();
         actors_sorted.sort_by_key(|(_, a)| a.id.as_str());
         if !actors_sorted.is_empty() {
-            out.push_str("  box システム価値\n");
+            out.push_str("  box System Value\n");
             for (_, actor) in &actors_sorted {
                 out.push_str(&format!(
                     "    actor {} as {}\n",
@@ -739,20 +739,13 @@ impl Emitter for SequenceMermaidEmitter {
             .filter(|(k, _)| api_keys.contains(k))
             .collect();
         apis_sorted.sort_by_key(|(_, a)| a.id.as_str());
-        if !scrs_sorted.is_empty() || !apis_sorted.is_empty() {
-            out.push_str("  box システム境界\n");
+        if !scrs_sorted.is_empty() {
+            out.push_str("  box System Boundary\n");
             for (_, scr) in &scrs_sorted {
                 out.push_str(&format!(
                     "    participant {} as {}\n",
                     scr.id,
                     prefixed_label("🖥️", &scr.label)
-                ));
-            }
-            for (_, api) in &apis_sorted {
-                out.push_str(&format!(
-                    "    participant {} as {}\n",
-                    api.id,
-                    prefixed_label("🔌", &api.label)
                 ));
             }
             out.push_str("  end\n");
@@ -764,10 +757,17 @@ impl Emitter for SequenceMermaidEmitter {
             .filter(|(k, _)| entity_keys.contains(k))
             .collect();
         ents_sorted.sort_by_key(|(_, e)| e.id.as_str());
-        if has_legacy_uc || !ents_sorted.is_empty() {
-            out.push_str("  box システム\n");
+        if has_legacy_uc || !apis_sorted.is_empty() || !ents_sorted.is_empty() {
+            out.push_str("  box System\n");
             if has_legacy_uc {
                 out.push_str("    participant System as 🧩 システム\n");
+            }
+            for (_, api) in &apis_sorted {
+                out.push_str(&format!(
+                    "    participant {} as {}\n",
+                    api.id,
+                    prefixed_label("🔌", &api.label)
+                ));
             }
             for (_, ent) in &ents_sorted {
                 out.push_str(&format!(
@@ -1194,15 +1194,22 @@ creates(OrderApi, Order)
             .emit(&model, &View::whole())
             .unwrap();
         assert!(result.contains("flowchart LR"));
-        assert!(result.contains("subgraph layer_value[システム価値]"));
-        assert!(result.contains("subgraph layer_environment[システム外部環境]"));
-        assert!(result.contains("subgraph layer_boundary[システム境界]"));
-        assert!(result.contains("subgraph layer_system[システム]"));
+        assert!(result.contains("subgraph layer_value[System Value]"));
+        assert!(result.contains("subgraph layer_environment[External Environment]"));
+        assert!(result.contains("subgraph layer_boundary[System Boundary]"));
+        assert!(result.contains("subgraph layer_system[System]"));
         assert!(result.contains("Customer([\"👤 顧客\"])"));
         assert!(result.contains("BucOrder[\"📦 注文業務\"]"));
         assert!(result.contains("OrderScreen[[\"🖥️ 注文画面\"]]"));
         assert!(result.contains("OrderApi[\"🔌 注文API\"]"));
         assert!(result.contains("Order[(\"🗄️ 注文\")]"));
+        let boundary_pos = result.find("subgraph layer_boundary[System Boundary]").unwrap();
+        let system_pos = result.find("subgraph layer_system[System]").unwrap();
+        let screen_pos = result.find("OrderScreen[[\"🖥️ 注文画面\"]]").unwrap();
+        let api_pos = result.find("OrderApi[\"🔌 注文API\"]").unwrap();
+        assert!(boundary_pos < screen_pos);
+        assert!(screen_pos < system_pos);
+        assert!(system_pos < api_pos);
         assert!(result.contains("Customer -->|performs| BucOrder"));
         assert!(result.contains("PlaceOrder -.->|invokes| OrderApi"));
         assert!(result.contains("OrderApi -.->|creates| Order"));
@@ -1363,16 +1370,21 @@ reads(SearchApi, Item)
         let result = SequenceMermaidEmitter
             .emit(&model, &View::usecases(vec!["Search".to_string()]))
             .unwrap();
-        assert!(result.contains("box システム価値"));
-        assert!(result.contains("box システム境界"));
-        assert!(result.contains("box システム"));
+        assert!(result.contains("box System Value"));
+        assert!(result.contains("box System Boundary"));
+        assert!(result.contains("box System"));
         assert!(result.contains("actor Customer"));
         assert!(result.contains("participant SearchApi"));
         assert!(result.contains("participant Item"));
         assert!(result.contains("SearchApi->>Item: read"));
+        let boundary_box_pos = result.find("  box System Boundary\n").unwrap();
+        let system_box_pos = result.find("  box System\n").unwrap();
         let screen_pos = result.find("participant SearchScreen").unwrap();
         let api_pos = result.find("participant SearchApi").unwrap();
         let entity_pos = result.find("participant Item").unwrap();
+        assert!(boundary_box_pos < screen_pos);
+        assert!(screen_pos < system_box_pos);
+        assert!(system_box_pos < api_pos);
         assert!(screen_pos < api_pos);
         assert!(api_pos < entity_pos);
         assert!(!result.contains("no sequenceable usecases"));

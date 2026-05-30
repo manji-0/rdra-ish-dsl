@@ -1,0 +1,77 @@
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    Clinician(["👤 Clinician"])
+    Nurse(["👤 Nurse"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    CareDelivery["💼 Care Delivery"]
+    BucPrescriptionFulfillment["📦 Fulfill Prescriptions"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    CancelPrescription(["✅ Cancel Prescription"])
+    ConfirmDispense(["✅ Confirm Dispense"])
+    DraftPrescription(["✅ Draft Prescription"])
+    RefillPrescription(["✅ Refill Prescription"])
+    SearchMedication(["✅ Search Medication"])
+    SendPrescription(["✅ Send Prescription"])
+    MedicationSearchScreen[["🖥️ Medication Search Screen"]]
+    PharmacyStatusScreen[["🖥️ Pharmacy Status Screen"]]
+    PrescriptionScreen[["🖥️ Prescription Screen"]]
+    EvPrescriptionCancelled{"⚡ Prescription Cancelled"}
+    EvPrescriptionDispensed{"⚡ Prescription Dispensed"}
+    EvPrescriptionSent{"⚡ Prescription Sent"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    ConfirmDispenseApi["🔌 Confirm Dispense API"]
+    DraftPrescriptionApi["🔌 Draft Prescription API"]
+    MedicationCatalogApi["🔌 Medication Catalog API"]
+    RefillPrescriptionApi["🔌 Refill Prescription API"]
+    SendPrescriptionApi["🔌 Send Prescription API"]
+    Encounter[("🗄️ Encounter")]
+    Medication[("🗄️ Medication")]
+    Prescription[("🗄️ Prescription")]
+  end
+  Nurse -->|performs| BucPrescriptionFulfillment
+  Nurse -->|performs| ConfirmDispense
+  Clinician -->|performs| BucPrescriptionFulfillment
+  Clinician -->|performs| SearchMedication
+  Clinician -->|performs| DraftPrescription
+  Clinician -->|performs| SendPrescription
+  Clinician -->|performs| CancelPrescription
+  Clinician -->|performs| RefillPrescription
+  MedicationCatalogApi -.->|reads| Medication
+  DraftPrescriptionApi -.->|creates| Prescription
+  DraftPrescriptionApi -.->|reads| Encounter
+  SendPrescriptionApi -.->|updates| Prescription
+  ConfirmDispenseApi -.->|updates| Prescription
+  RefillPrescriptionApi -.->|creates| Prescription
+  RefillPrescriptionApi -.->|reads| Medication
+  BucPrescriptionFulfillment -.->|belongs| CareDelivery
+  BucPrescriptionFulfillment -->|contains| SearchMedication
+  BucPrescriptionFulfillment -->|contains| DraftPrescription
+  BucPrescriptionFulfillment -->|contains| SendPrescription
+  BucPrescriptionFulfillment -->|contains| ConfirmDispense
+  BucPrescriptionFulfillment -->|contains| CancelPrescription
+  BucPrescriptionFulfillment -->|contains| RefillPrescription
+  Prescription ---|N:1| Encounter
+  Prescription ---|N:1| Medication
+  MedicationSearchScreen -.->|shows| Medication
+  SearchMedication -.->|displays| MedicationSearchScreen
+  SearchMedication -.->|invokes| MedicationCatalogApi
+  DraftPrescription -.->|displays| PrescriptionScreen
+  DraftPrescription -.->|invokes| DraftPrescriptionApi
+  SendPrescription -.->|displays| PrescriptionScreen
+  SendPrescription -.->|invokes| SendPrescriptionApi
+  SendPrescription -.->|raises| EvPrescriptionSent
+  ConfirmDispense -.->|displays| PharmacyStatusScreen
+  ConfirmDispense -.->|invokes| ConfirmDispenseApi
+  ConfirmDispense -.->|raises| EvPrescriptionDispensed
+  CancelPrescription -.->|displays| PrescriptionScreen
+  CancelPrescription -.->|raises| EvPrescriptionCancelled
+  CancelPrescription -.->|updates| Prescription
+  RefillPrescription -.->|displays| PrescriptionScreen
+  RefillPrescription -.->|invokes| RefillPrescriptionApi

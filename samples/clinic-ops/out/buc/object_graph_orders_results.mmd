@@ -1,0 +1,91 @@
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    Clinician(["👤 Clinician"])
+    Nurse(["👤 Nurse"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    CareDelivery["💼 Care Delivery"]
+    BucOrdersResults["📦 Manage Orders and Results"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    CancelClinicalOrder(["✅ Cancel Clinical Order"])
+    CollectSpecimen(["✅ Collect Specimen"])
+    NotifyCriticalResult(["✅ Notify Critical Result"])
+    NotifyPatientResult(["✅ Notify Patient Result"])
+    PlaceLabOrder(["✅ Place Lab Order"])
+    ReceiveLabResult(["✅ Receive Lab Result"])
+    ReviewLabResult(["✅ Review Lab Result"])
+    CriticalNoticeScreen[["🖥️ Critical Result Notice Screen"]]
+    OrderEntryScreen[["🖥️ Order Entry Screen"]]
+    PatientMessageScreen[["🖥️ Patient Message Screen"]]
+    ResultReviewScreen[["🖥️ Result Review Screen"]]
+    SpecimenScreen[["🖥️ Specimen Collection Screen"]]
+    EvClinicalOrderCancelled{"⚡ Clinical Order Cancelled"}
+    EvClinicalOrderCollected{"⚡ Specimen Collected"}
+    EvClinicalOrderResulted{"⚡ Clinical Result Received"}
+    EvClinicalOrderReviewed{"⚡ Clinical Result Reviewed"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    CollectSpecimenApi["🔌 Collect Specimen API"]
+    CriticalNoticeApi["🔌 Critical Notice API"]
+    NotifyPatientResultApi["🔌 Notify Patient Result API"]
+    OrderEntryApi["🔌 Order Entry API"]
+    ReceiveLabResultApi["🔌 Receive Lab Result API"]
+    ResultReviewApi["🔌 Result Review API"]
+    ClinicalOrder[("🗄️ Clinical Order")]
+    Encounter[("🗄️ Encounter")]
+    LabResult[("🗄️ Lab Result")]
+    Notification[("🗄️ Notification")]
+    PatientMessage[("🗄️ Patient Message")]
+  end
+  Nurse -->|performs| BucOrdersResults
+  Nurse -->|performs| CollectSpecimen
+  Nurse -->|performs| ReceiveLabResult
+  Clinician -->|performs| BucOrdersResults
+  Clinician -->|performs| PlaceLabOrder
+  Clinician -->|performs| ReviewLabResult
+  Clinician -->|performs| NotifyCriticalResult
+  Clinician -->|performs| CancelClinicalOrder
+  OrderEntryApi -.->|creates| ClinicalOrder
+  OrderEntryApi -.->|reads| Encounter
+  CollectSpecimenApi -.->|updates| ClinicalOrder
+  ReceiveLabResultApi -.->|creates| LabResult
+  ReceiveLabResultApi -.->|updates| ClinicalOrder
+  ResultReviewApi -.->|updates| ClinicalOrder
+  ResultReviewApi -.->|updates| LabResult
+  CriticalNoticeApi -.->|creates| PatientMessage
+  CriticalNoticeApi -.->|creates| Notification
+  NotifyPatientResultApi -.->|creates| Notification
+  BucOrdersResults -.->|belongs| CareDelivery
+  BucOrdersResults -->|contains| PlaceLabOrder
+  BucOrdersResults -->|contains| CollectSpecimen
+  BucOrdersResults -->|contains| ReceiveLabResult
+  BucOrdersResults -->|contains| ReviewLabResult
+  BucOrdersResults -->|contains| NotifyCriticalResult
+  BucOrdersResults -->|contains| CancelClinicalOrder
+  ClinicalOrder ---|N:1| Encounter
+  LabResult ---|1:1| ClinicalOrder
+  EvClinicalOrderReviewed -.->|triggers| NotifyCriticalResult
+  EvClinicalOrderReviewed -.->|triggers| NotifyPatientResult
+  PlaceLabOrder -.->|displays| OrderEntryScreen
+  PlaceLabOrder -.->|invokes| OrderEntryApi
+  CollectSpecimen -.->|displays| SpecimenScreen
+  CollectSpecimen -.->|invokes| CollectSpecimenApi
+  CollectSpecimen -.->|raises| EvClinicalOrderCollected
+  ReceiveLabResult -.->|displays| ResultReviewScreen
+  ReceiveLabResult -.->|invokes| ReceiveLabResultApi
+  ReceiveLabResult -.->|raises| EvClinicalOrderResulted
+  ReviewLabResult -.->|displays| ResultReviewScreen
+  ReviewLabResult -.->|invokes| ResultReviewApi
+  ReviewLabResult -.->|raises| EvClinicalOrderReviewed
+  NotifyCriticalResult -.->|displays| CriticalNoticeScreen
+  NotifyCriticalResult -.->|invokes| CriticalNoticeApi
+  CancelClinicalOrder -.->|displays| OrderEntryScreen
+  CancelClinicalOrder -.->|raises| EvClinicalOrderCancelled
+  CancelClinicalOrder -.->|updates| ClinicalOrder
+  NotifyPatientResult -.->|displays| PatientMessageScreen
+  NotifyPatientResult -.->|invokes| NotifyPatientResultApi

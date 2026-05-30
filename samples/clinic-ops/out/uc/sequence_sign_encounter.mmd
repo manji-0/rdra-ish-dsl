@@ -1,12 +1,12 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Clinician as 👤 Clinician
   end
-  box システム境界
+  box System Boundary
     participant EncounterWorkspaceScreen as 🖥️ Encounter Workspace
-    participant SignEncounterApi as 🔌 Sign Encounter API
   end
-  box システム
+  box System
+    participant SignEncounterApi as 🔌 Sign Encounter API
     participant Encounter as 🗄️ Encounter
   end
 

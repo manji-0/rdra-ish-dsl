@@ -1,12 +1,12 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Patient as 👤 Patient
   end
-  box システム境界
+  box System Boundary
     participant ConsentScreen as 🖥️ Consent Capture Screen
-    participant ConsentApi as 🔌 Consent API
   end
-  box システム
+  box System
+    participant ConsentApi as 🔌 Consent API
     participant ConsentRecord as 🗄️ Consent Record
   end
 

@@ -1,12 +1,12 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Nurse as 👤 Nurse
   end
-  box システム境界
+  box System Boundary
     participant EncounterWorkspaceScreen as 🖥️ Encounter Workspace
-    participant CompleteAppointmentApi as 🔌 Complete Appointment API
   end
-  box システム
+  box System
+    participant CompleteAppointmentApi as 🔌 Complete Appointment API
     participant Appointment as 🗄️ Appointment
     participant Room as 🗄️ Room
   end

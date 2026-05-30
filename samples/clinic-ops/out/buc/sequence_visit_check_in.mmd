@@ -1,19 +1,19 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
     actor Nurse as 👤 Nurse
   end
-  box システム境界
+  box System Boundary
     participant CheckInScreen as 🖥️ Check-In Screen
     participant CopayScreen as 🖥️ Copay Screen
     participant RoomBoardScreen as 🖥️ Room Board Screen
+  end
+  box System
     participant AssignRoomApi as 🔌 Assign Room API
     participant CheckInPatientApi as 🔌 Check-In Patient API
     participant CollectCopayApi as 🔌 Collect Copay API
     participant PrepareEncounterApi as 🔌 Prepare Encounter API
     participant VerifyArrivalApi as 🔌 Verify Arrival API
-  end
-  box システム
     participant AccountBalance as 🗄️ Account Balance
     participant Appointment as 🗄️ Appointment
     participant InsurancePolicy as 🗄️ Insurance Policy

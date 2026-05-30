@@ -1,0 +1,120 @@
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    Clinician(["👤 Clinician"])
+    Nurse(["👤 Nurse"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    CareDelivery["💼 Care Delivery"]
+    BucClinicalEncounter["📦 Conduct Clinical Encounter"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    AmendEncounter(["✅ Amend Signed Encounter"])
+    CompleteAppointment(["✅ Complete Appointment"])
+    CreateCarePlan(["✅ Create Care Plan"])
+    CreateCharge(["✅ Create Charge"])
+    DocumentAssessment(["✅ Document Assessment"])
+    OpenEncounter(["✅ Open Encounter"])
+    PlaceLabOrder(["✅ Place Lab Order"])
+    RecordVitals(["✅ Record Vitals"])
+    SignEncounter(["✅ Sign Encounter"])
+    CarePlanScreen[["🖥️ Care Plan Screen"]]
+    ChargeWorklistScreen[["🖥️ Charge Worklist Screen"]]
+    DiagnosisScreen[["🖥️ Diagnosis Screen"]]
+    EncounterWorkspaceScreen[["🖥️ Encounter Workspace"]]
+    OrderEntryScreen[["🖥️ Order Entry Screen"]]
+    VitalsScreen[["🖥️ Vitals Screen"]]
+    EvAppointmentCompleted{"⚡ Appointment Completed"}
+    EvEncounterAmended{"⚡ Encounter Amended"}
+    EvEncounterDocumented{"⚡ Encounter Documented"}
+    EvEncounterSigned{"⚡ Encounter Signed"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    AmendEncounterApi["🔌 Amend Encounter API"]
+    CompleteAppointmentApi["🔌 Complete Appointment API"]
+    CreateCarePlanApi["🔌 Create Care Plan API"]
+    CreateChargeApi["🔌 Create Charge API"]
+    DocumentAssessmentApi["🔌 Document Assessment API"]
+    OpenEncounterApi["🔌 Open Encounter API"]
+    OrderEntryApi["🔌 Order Entry API"]
+    RecordVitalsApi["🔌 Record Vitals API"]
+    SignEncounterApi["🔌 Sign Encounter API"]
+    AccountBalance[("🗄️ Account Balance")]
+    Appointment[("🗄️ Appointment")]
+    CarePlan[("🗄️ Care Plan")]
+    Charge[("🗄️ Charge")]
+    ClinicalOrder[("🗄️ Clinical Order")]
+    Diagnosis[("🗄️ Diagnosis")]
+    Encounter[("🗄️ Encounter")]
+    Room[("🗄️ Room")]
+    VitalSign[("🗄️ Vital Sign")]
+  end
+  Nurse -->|performs| BucClinicalEncounter
+  Nurse -->|performs| OpenEncounter
+  Nurse -->|performs| RecordVitals
+  Nurse -->|performs| CompleteAppointment
+  Clinician -->|performs| BucClinicalEncounter
+  Clinician -->|performs| PlaceLabOrder
+  Clinician -->|performs| DocumentAssessment
+  Clinician -->|performs| SignEncounter
+  Clinician -->|performs| AmendEncounter
+  OrderEntryApi -.->|creates| ClinicalOrder
+  OrderEntryApi -.->|reads| Encounter
+  OpenEncounterApi -.->|creates| Encounter
+  OpenEncounterApi -.->|reads| Appointment
+  RecordVitalsApi -.->|creates| VitalSign
+  RecordVitalsApi -.->|updates| Encounter
+  DocumentAssessmentApi -.->|creates| Diagnosis
+  DocumentAssessmentApi -.->|updates| Encounter
+  SignEncounterApi -.->|updates| Encounter
+  AmendEncounterApi -.->|updates| Encounter
+  CompleteAppointmentApi -.->|updates| Appointment
+  CompleteAppointmentApi -.->|updates| Room
+  CreateChargeApi -.->|creates| Charge
+  CreateChargeApi -.->|reads| Encounter
+  CreateChargeApi -.->|updates| AccountBalance
+  CreateCarePlanApi -.->|creates| CarePlan
+  CreateCarePlanApi -.->|reads| Encounter
+  BucClinicalEncounter -.->|belongs| CareDelivery
+  BucClinicalEncounter -->|contains| OpenEncounter
+  BucClinicalEncounter -->|contains| RecordVitals
+  BucClinicalEncounter -->|contains| DocumentAssessment
+  BucClinicalEncounter -->|contains| SignEncounter
+  BucClinicalEncounter -->|contains| AmendEncounter
+  BucClinicalEncounter -->|contains| CompleteAppointment
+  Appointment ---|N:1| Room
+  Encounter ---|1:1| Appointment
+  VitalSign ---|N:1| Encounter
+  Diagnosis ---|N:1| Encounter
+  ClinicalOrder ---|N:1| Encounter
+  Charge ---|N:1| Encounter
+  CarePlan ---|N:1| Encounter
+  EvEncounterSigned -.->|triggers| PlaceLabOrder
+  EvEncounterSigned -.->|triggers| CompleteAppointment
+  EvEncounterSigned -.->|triggers| CreateCharge
+  EvEncounterSigned -.->|triggers| CreateCarePlan
+  PlaceLabOrder -.->|displays| OrderEntryScreen
+  PlaceLabOrder -.->|invokes| OrderEntryApi
+  OpenEncounter -.->|displays| EncounterWorkspaceScreen
+  OpenEncounter -.->|invokes| OpenEncounterApi
+  RecordVitals -.->|displays| VitalsScreen
+  RecordVitals -.->|invokes| RecordVitalsApi
+  DocumentAssessment -.->|displays| DiagnosisScreen
+  DocumentAssessment -.->|invokes| DocumentAssessmentApi
+  DocumentAssessment -.->|raises| EvEncounterDocumented
+  SignEncounter -.->|displays| EncounterWorkspaceScreen
+  SignEncounter -.->|invokes| SignEncounterApi
+  SignEncounter -.->|raises| EvEncounterSigned
+  AmendEncounter -.->|displays| EncounterWorkspaceScreen
+  AmendEncounter -.->|invokes| AmendEncounterApi
+  AmendEncounter -.->|raises| EvEncounterAmended
+  CompleteAppointment -.->|displays| EncounterWorkspaceScreen
+  CompleteAppointment -.->|invokes| CompleteAppointmentApi
+  CompleteAppointment -.->|raises| EvAppointmentCompleted
+  CreateCharge -.->|displays| ChargeWorklistScreen
+  CreateCharge -.->|invokes| CreateChargeApi
+  CreateCarePlan -.->|displays| CarePlanScreen
+  CreateCarePlan -.->|invokes| CreateCarePlanApi

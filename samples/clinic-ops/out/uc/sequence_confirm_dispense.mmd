@@ -1,12 +1,12 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Nurse as 👤 Nurse
   end
-  box システム境界
+  box System Boundary
     participant PharmacyStatusScreen as 🖥️ Pharmacy Status Screen
-    participant ConfirmDispenseApi as 🔌 Confirm Dispense API
   end
-  box システム
+  box System
+    participant ConfirmDispenseApi as 🔌 Confirm Dispense API
     participant Prescription as 🗄️ Prescription
   end
 

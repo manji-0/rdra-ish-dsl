@@ -1,12 +1,12 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor BillingSpecialist as 👤 Billing Specialist
   end
-  box システム境界
+  box System Boundary
     participant BalanceScreen as 🖥️ Balance Screen
-    participant BalanceApi as 🔌 Balance API
   end
-  box システム
+  box System
+    participant BalanceApi as 🔌 Balance API
     participant AccountBalance as 🗄️ Account Balance
     participant PaymentTransaction as 🗄️ Payment Transaction
   end

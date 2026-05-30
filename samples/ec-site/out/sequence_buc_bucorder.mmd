@@ -1,19 +1,19 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Customer as 👤 Customer
   end
-  box システム境界
+  box System Boundary
     participant AddressSelectScreen as 🖥️ Address Selection Screen
     participant OrderCompleteScreen as 🖥️ Order Complete Screen
     participant OrderConfirmScreen as 🖥️ Order Confirmation Screen
     participant OrderHistoryScreen as 🖥️ Order History Screen
+  end
+  box System
     participant CancelOrderApi as 🔌 Cancel Order API
     participant ConfirmOrderApi as 🔌 Confirm Order API
     participant OrderHistoryApi as 🔌 Order History API
     participant PlaceOrderApi as 🔌 Place Order API
     participant SelectAddressApi as 🔌 Select Address API
-  end
-  box システム
     participant Cart as 🗄️ Cart
     participant CartItem as 🗄️ Cart Item
     participant Order as 🗄️ Order

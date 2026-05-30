@@ -1,12 +1,12 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Nurse as 👤 Nurse
   end
-  box システム境界
+  box System Boundary
     participant VitalsScreen as 🖥️ Vitals Screen
-    participant RecordVitalsApi as 🔌 Record Vitals API
   end
-  box システム
+  box System
+    participant RecordVitalsApi as 🔌 Record Vitals API
     participant Encounter as 🗄️ Encounter
     participant VitalSign as 🗄️ Vital Sign
   end

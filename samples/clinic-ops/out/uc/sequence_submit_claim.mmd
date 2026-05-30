@@ -1,12 +1,12 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor BillingSpecialist as 👤 Billing Specialist
   end
-  box システム境界
+  box System Boundary
     participant ClaimScreen as 🖥️ Claim Screen
-    participant SubmitClaimApi as 🔌 Submit Claim API
   end
-  box システム
+  box System
+    participant SubmitClaimApi as 🔌 Submit Claim API
     participant Claim as 🗄️ Claim
   end
 

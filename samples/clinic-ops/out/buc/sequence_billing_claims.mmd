@@ -1,20 +1,20 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor BillingSpecialist as 👤 Billing Specialist
   end
-  box システム境界
+  box System Boundary
     participant BalanceScreen as 🖥️ Balance Screen
     participant ChargeWorklistScreen as 🖥️ Charge Worklist Screen
     participant ClaimScreen as 🖥️ Claim Screen
     participant PaymentPostingScreen as 🖥️ Payment Posting Screen
+  end
+  box System
+    participant System as 🧩 システム
     participant BalanceApi as 🔌 Balance API
     participant CreateChargeApi as 🔌 Create Charge API
     participant GenerateClaimApi as 🔌 Generate Claim API
     participant PaymentPostApi as 🔌 Payment Posting API
     participant SubmitClaimApi as 🔌 Submit Claim API
-  end
-  box システム
-    participant System as 🧩 システム
     participant AccountBalance as 🗄️ Account Balance
     participant Charge as 🗄️ Charge
     participant Claim as 🗄️ Claim

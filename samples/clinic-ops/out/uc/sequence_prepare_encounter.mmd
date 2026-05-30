@@ -1,12 +1,12 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Nurse as 👤 Nurse
   end
-  box システム境界
+  box System Boundary
     participant CheckInScreen as 🖥️ Check-In Screen
-    participant PrepareEncounterApi as 🔌 Prepare Encounter API
   end
-  box システム
+  box System
+    participant PrepareEncounterApi as 🔌 Prepare Encounter API
     participant Appointment as 🗄️ Appointment
     participant PatientProfile as 🗄️ Patient Profile
   end

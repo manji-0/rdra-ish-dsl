@@ -8,7 +8,7 @@ self-contained: run commands against that step's `src/` directory.
 | Step | Focus | Try |
 |---|---|---|
 | `step-0-scope` | business area and BUC name | `rdra-ish check samples/incremental-order/step-0-scope/src` |
-| `step-1-buc-skeleton` | actors and user-visible use cases | `rdra-ish diagram ... --kind rdra --format mermaid` |
+| `step-1-buc-skeleton` | actors and user-visible use cases | `rdra-ish diagram ... --kind object-graph --format mermaid` |
 | `step-2-data-touchpoints` | coarse entities and direct use-case CRUD | `rdra-ish csv ... --kind matrix` |
 | `step-3-interaction-boundary` | screens, APIs, and system ownership | `rdra-ish diagram ... --kind sequence --format mermaid` |
 | `step-4-entity-structure` | columns and cross-system relation coordination | `rdra-ish diagram ... --kind er --format mermaid` |

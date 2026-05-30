@@ -30,23 +30,36 @@
 
 ```sh
 rdra-ish check samples/incremental-order/step-0-scope/src
-rdra-ish diagram samples/incremental-order/step-0-scope/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-0-scope/out/rdra_buc_store_restock
+rdra-ish diagram samples/incremental-order/step-0-scope/src --kind object-graph --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-0-scope/out/object_graph_buc_store_restock
 rdra-ish diagram samples/incremental-order/step-0-scope/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-0-scope/out/sequence_buc_store_restock
 rdra-ish csv samples/incremental-order/step-0-scope/src --kind matrix --out samples/incremental-order/step-0-scope/out/usecase_matrix.csv
 ```
 
-### 4.1 RDRA 図
+### 4.1 Layered Object Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/incremental-order/step-0-scope/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-0-scope/out/rdra_buc_store_restock
+rdra-ish diagram samples/incremental-order/step-0-scope/src --kind object-graph --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-0-scope/out/object_graph_buc_store_restock
 ```
 
 ```mermaid
-graph TD
-  BucStoreRestock["📦 Maintain Store Restock"]
-  BucStoreRestock --> StoreOperations
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    StoreOperations["💼 Store Operations"]
+    BucStoreRestock["📦 Maintain Store Restock"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+  end
+  subgraph layer_system[System]
+    direction TB
+  end
+  BucStoreRestock -.->|belongs| StoreOperations
 ```
 
 ## 5. レビュー観点

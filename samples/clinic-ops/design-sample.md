@@ -12,7 +12,7 @@
 
 | 種別 | 生成先 | 用途 |
 |---|---|---|
-| BUC 別 RDRA 図 | `out/buc/rdra_*.mmd` | 各 BUC の actor/usecase/entity/screen/event を確認する |
+| BUC 別 Layered Object Graph 図 | `out/buc/object_graph_*.mmd` | 各 BUC の actor/usecase/entity/screen/event を確認する |
 | BUC 別 sequence 図 | `out/buc/sequence_*.mmd` | BUC 内 UC の画面、API、Entity 操作を確認する |
 | UC 別 sequence 図 | `out/uc/sequence_*.mmd` | 1 UC だけの actor/screen/API/entity を確認する |
 | API マトリクス | `out/api_matrix.csv` | API と Entity CRUD の棚卸し |
@@ -24,7 +24,7 @@
 生成コマンド例:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucClinicalEncounter --out samples/clinic-ops/out/buc/rdra_clinical_encounter
+rdra-ish diagram samples/clinic-ops --kind object-graph --format mermaid --buc BucClinicalEncounter --out samples/clinic-ops/out/buc/object_graph_clinical_encounter
 rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucClinicalEncounter --out samples/clinic-ops/out/buc/sequence_clinical_encounter
 rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase SignEncounter --out samples/clinic-ops/out/uc/sequence_sign_encounter
 rdra-ish csv samples/clinic-ops --kind api-matrix --out samples/clinic-ops/out/api_matrix.csv
@@ -67,94 +67,130 @@ rdra-ish csv samples/clinic-ops --kind api-matrix --out samples/clinic-ops/out/a
 - EligibilityApi が保険確認結果と保険ポリシー更新を同じ整合性境界で扱ってよいか。
 - SendIntakeForms は予約イベントから起動されるため、予約 BUC 側の責務と混同しないか。
 
-#### Patient Onboarding RDRA 図
+#### Patient Onboarding Layered Object Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucPatientOnboarding --out samples/clinic-ops/out/buc/rdra_patient_onboarding
+rdra-ish diagram samples/clinic-ops --kind object-graph --format mermaid --buc BucPatientOnboarding --out samples/clinic-ops/out/buc/object_graph_patient_onboarding
 ```
 
 ```mermaid
-graph TD
-  FrontDesk(["👤 Front Desk Staff"])
-  Patient(["👤 Patient"])
-  ArchivePatient(["✅ Archive Patient"])
-  CaptureConsent(["✅ Capture Consent"])
-  CompleteIntakeForms(["✅ Complete Intake Forms"])
-  ExpireIntakeForms(["✅ Expire Intake Forms"])
-  MergeDuplicatePatient(["✅ Merge Duplicate Patient"])
-  RegisterPatient(["✅ Register Patient"])
-  SearchPatient(["✅ Search Patient"])
-  SendIntakeForms(["✅ Send Intake Forms"])
-  UpdateDemographics(["✅ Update Demographics"])
-  VerifyInsurance(["✅ Verify Insurance"])
-  BucPatientOnboarding["📦 Onboard and Maintain Patient"]
-  ConsentRecord[("🗄️ Consent Record")]
-  EligibilityCheck[("🗄️ Eligibility Check")]
-  InsurancePolicy[("🗄️ Insurance Policy")]
-  IntakePacket[("🗄️ Intake Packet")]
-  PatientAccount[("🗄️ Patient Account")]
-  PatientMessage[("🗄️ Patient Message")]
-  PatientProfile[("🗄️ Patient Profile")]
-  ConsentScreen[["🖥️ Consent Capture Screen"]]
-  InsuranceScreen[["🖥️ Insurance Verification Screen"]]
-  IntakePortalScreen[["🖥️ Intake Portal Screen"]]
-  PatientProfileScreen[["🖥️ Patient Profile Screen"]]
-  PatientSearchScreen[["🖥️ Patient Search Screen"]]
-  EvIntakeCompleted{"⚡ Intake Completed"}
-  EvIntakeExpired{"⚡ Intake Expired"}
-  EvPatientArchived{"⚡ Patient Archived"}
-  EvPatientMerged{"⚡ Patient Merged"}
-  Patient --> BucPatientOnboarding
-  Patient --> CaptureConsent
-  Patient --> CompleteIntakeForms
-  FrontDesk --> BucPatientOnboarding
-  FrontDesk --> VerifyInsurance
-  FrontDesk --> SendIntakeForms
-  FrontDesk --> ExpireIntakeForms
-  FrontDesk --> MergeDuplicatePatient
-  FrontDesk --> ArchivePatient
-  FrontDesk --> SearchPatient
-  FrontDesk --> RegisterPatient
-  FrontDesk --> UpdateDemographics
-  BucPatientOnboarding --> PatientAccess
-  BucPatientOnboarding --> VerifyInsurance
-  BucPatientOnboarding --> CaptureConsent
-  BucPatientOnboarding --> SendIntakeForms
-  BucPatientOnboarding --> CompleteIntakeForms
-  BucPatientOnboarding --> ExpireIntakeForms
-  BucPatientOnboarding --> MergeDuplicatePatient
-  BucPatientOnboarding --> ArchivePatient
-  BucPatientOnboarding --> SearchPatient
-  BucPatientOnboarding --> RegisterPatient
-  BucPatientOnboarding --> UpdateDemographics
-  PatientMessage --- PatientAccount
-  PatientProfile --- PatientAccount
-  InsurancePolicy --- PatientAccount
-  EligibilityCheck --- InsurancePolicy
-  ConsentRecord --- PatientAccount
-  IntakePacket --- PatientAccount
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    FrontDesk(["👤 Front Desk Staff"])
+    Patient(["👤 Patient"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    PatientAccess["💼 Patient Access"]
+    BucPatientOnboarding["📦 Onboard and Maintain Patient"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    ArchivePatient(["✅ Archive Patient"])
+    CaptureConsent(["✅ Capture Consent"])
+    CompleteIntakeForms(["✅ Complete Intake Forms"])
+    ExpireIntakeForms(["✅ Expire Intake Forms"])
+    MergeDuplicatePatient(["✅ Merge Duplicate Patient"])
+    RegisterPatient(["✅ Register Patient"])
+    SearchPatient(["✅ Search Patient"])
+    SendIntakeForms(["✅ Send Intake Forms"])
+    UpdateDemographics(["✅ Update Demographics"])
+    VerifyInsurance(["✅ Verify Insurance"])
+    ConsentScreen[["🖥️ Consent Capture Screen"]]
+    InsuranceScreen[["🖥️ Insurance Verification Screen"]]
+    IntakePortalScreen[["🖥️ Intake Portal Screen"]]
+    PatientProfileScreen[["🖥️ Patient Profile Screen"]]
+    PatientSearchScreen[["🖥️ Patient Search Screen"]]
+    EvIntakeCompleted{"⚡ Intake Completed"}
+    EvIntakeExpired{"⚡ Intake Expired"}
+    EvPatientArchived{"⚡ Patient Archived"}
+    EvPatientMerged{"⚡ Patient Merged"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    ConsentApi["🔌 Consent API"]
+    EligibilityApi["🔌 Eligibility API"]
+    IntakeMessagingApi["🔌 Intake Messaging API"]
+    RegisterPatientApi["🔌 Register Patient API"]
+    SearchPatientApi["🔌 Search Patient API"]
+    UpdateDemographicsApi["🔌 Update Demographics API"]
+    ConsentRecord[("🗄️ Consent Record")]
+    EligibilityCheck[("🗄️ Eligibility Check")]
+    InsurancePolicy[("🗄️ Insurance Policy")]
+    IntakePacket[("🗄️ Intake Packet")]
+    PatientAccount[("🗄️ Patient Account")]
+    PatientMessage[("🗄️ Patient Message")]
+    PatientProfile[("🗄️ Patient Profile")]
+  end
+  Patient -->|performs| BucPatientOnboarding
+  Patient -->|performs| CaptureConsent
+  Patient -->|performs| CompleteIntakeForms
+  FrontDesk -->|performs| BucPatientOnboarding
+  FrontDesk -->|performs| VerifyInsurance
+  FrontDesk -->|performs| SendIntakeForms
+  FrontDesk -->|performs| ExpireIntakeForms
+  FrontDesk -->|performs| MergeDuplicatePatient
+  FrontDesk -->|performs| ArchivePatient
+  FrontDesk -->|performs| SearchPatient
+  FrontDesk -->|performs| RegisterPatient
+  FrontDesk -->|performs| UpdateDemographics
+  ConsentApi -.->|creates| ConsentRecord
+  IntakeMessagingApi -.->|creates| PatientMessage
+  IntakeMessagingApi -.->|creates| IntakePacket
+  SearchPatientApi -.->|reads| PatientAccount
+  SearchPatientApi -.->|reads| PatientProfile
+  RegisterPatientApi -.->|creates| PatientAccount
+  RegisterPatientApi -.->|creates| PatientProfile
+  UpdateDemographicsApi -.->|updates| PatientProfile
+  EligibilityApi -.->|creates| EligibilityCheck
+  EligibilityApi -.->|reads| InsurancePolicy
+  EligibilityApi -.->|updates| InsurancePolicy
+  BucPatientOnboarding -.->|belongs| PatientAccess
+  BucPatientOnboarding -->|contains| VerifyInsurance
+  BucPatientOnboarding -->|contains| CaptureConsent
+  BucPatientOnboarding -->|contains| SendIntakeForms
+  BucPatientOnboarding -->|contains| CompleteIntakeForms
+  BucPatientOnboarding -->|contains| ExpireIntakeForms
+  BucPatientOnboarding -->|contains| MergeDuplicatePatient
+  BucPatientOnboarding -->|contains| ArchivePatient
+  BucPatientOnboarding -->|contains| SearchPatient
+  BucPatientOnboarding -->|contains| RegisterPatient
+  BucPatientOnboarding -->|contains| UpdateDemographics
+  PatientMessage ---|N:1| PatientAccount
+  PatientProfile ---|1:1| PatientAccount
+  InsurancePolicy ---|N:1| PatientAccount
+  EligibilityCheck ---|N:1| InsurancePolicy
+  ConsentRecord ---|N:1| PatientAccount
+  IntakePacket ---|N:1| PatientAccount
   PatientSearchScreen -.->|shows| PatientAccount
   PatientProfileScreen -.->|shows| PatientProfile
   VerifyInsurance -.->|displays| InsuranceScreen
+  VerifyInsurance -.->|invokes| EligibilityApi
   CaptureConsent -.->|displays| ConsentScreen
+  CaptureConsent -.->|invokes| ConsentApi
   SendIntakeForms -.->|displays| IntakePortalScreen
-  CompleteIntakeForms -.->|updates| IntakePacket
-  CompleteIntakeForms -.->|raises| EvIntakeCompleted
+  SendIntakeForms -.->|invokes| IntakeMessagingApi
   CompleteIntakeForms -.->|displays| IntakePortalScreen
-  ExpireIntakeForms -.->|updates| IntakePacket
-  ExpireIntakeForms -.->|raises| EvIntakeExpired
+  CompleteIntakeForms -.->|raises| EvIntakeCompleted
+  CompleteIntakeForms -.->|updates| IntakePacket
   ExpireIntakeForms -.->|displays| IntakePortalScreen
-  MergeDuplicatePatient -.->|updates| PatientAccount
-  MergeDuplicatePatient -.->|raises| EvPatientMerged
+  ExpireIntakeForms -.->|raises| EvIntakeExpired
+  ExpireIntakeForms -.->|updates| IntakePacket
   MergeDuplicatePatient -.->|displays| PatientProfileScreen
-  ArchivePatient -.->|updates| PatientAccount
-  ArchivePatient -.->|raises| EvPatientArchived
+  MergeDuplicatePatient -.->|raises| EvPatientMerged
+  MergeDuplicatePatient -.->|updates| PatientAccount
   ArchivePatient -.->|displays| PatientProfileScreen
+  ArchivePatient -.->|raises| EvPatientArchived
+  ArchivePatient -.->|updates| PatientAccount
   SearchPatient -.->|displays| PatientSearchScreen
+  SearchPatient -.->|invokes| SearchPatientApi
   RegisterPatient -.->|displays| PatientProfileScreen
+  RegisterPatient -.->|invokes| RegisterPatientApi
   UpdateDemographics -.->|displays| PatientProfileScreen
+  UpdateDemographics -.->|invokes| UpdateDemographicsApi
 ```
 
 #### Patient Onboarding sequence 図
@@ -167,25 +203,25 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucPa
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
     actor Patient as 👤 Patient
   end
-  box システム境界
+  box System Boundary
     participant ConsentScreen as 🖥️ Consent Capture Screen
     participant InsuranceScreen as 🖥️ Insurance Verification Screen
     participant IntakePortalScreen as 🖥️ Intake Portal Screen
     participant PatientProfileScreen as 🖥️ Patient Profile Screen
     participant PatientSearchScreen as 🖥️ Patient Search Screen
+  end
+  box System
+    participant System as 🧩 システム
     participant ConsentApi as 🔌 Consent API
     participant EligibilityApi as 🔌 Eligibility API
     participant IntakeMessagingApi as 🔌 Intake Messaging API
     participant RegisterPatientApi as 🔌 Register Patient API
     participant SearchPatientApi as 🔌 Search Patient API
     participant UpdateDemographicsApi as 🔌 Update Demographics API
-  end
-  box システム
-    participant System as 🧩 システム
     participant ConsentRecord as 🗄️ Consent Record
     participant EligibilityCheck as 🗄️ Eligibility Check
     participant InsurancePolicy as 🗄️ Insurance Policy
@@ -309,87 +345,129 @@ sequenceDiagram
 - CancelAppointment が Appointment と ProviderSchedule を同じ API 境界で更新することが妥当か。
 - MarkNoShow は direct CRUD のままでよいか。
 
-#### Appointment Scheduling RDRA 図
+#### Appointment Scheduling Layered Object Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucAppointmentScheduling --out samples/clinic-ops/out/buc/rdra_appointment_scheduling
+rdra-ish diagram samples/clinic-ops --kind object-graph --format mermaid --buc BucAppointmentScheduling --out samples/clinic-ops/out/buc/object_graph_appointment_scheduling
 ```
 
 ```mermaid
-graph TD
-  FrontDesk(["👤 Front Desk Staff"])
-  Patient(["👤 Patient"])
-  BookAppointment(["✅ Book Appointment"])
-  CancelAppointment(["✅ Cancel Appointment"])
-  MarkNoShow(["✅ Mark No Show"])
-  RescheduleAppointment(["✅ Reschedule Appointment"])
-  ReserveAppointment(["✅ Reserve Appointment"])
-  SearchAvailability(["✅ Search Availability"])
-  SendAppointmentNotice(["✅ Send Appointment Notice"])
-  SendIntakeForms(["✅ Send Intake Forms"])
-  BucAppointmentScheduling["📦 Schedule Appointments"]
-  Appointment[("🗄️ Appointment")]
-  ClinicLocation[("🗄️ Clinic Location")]
-  IntakePacket[("🗄️ Intake Packet")]
-  Notification[("🗄️ Notification")]
-  PatientMessage[("🗄️ Patient Message")]
-  Provider[("🗄️ Provider")]
-  ProviderSchedule[("🗄️ Provider Schedule")]
-  AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
-  AppointmentScreen[["🖥️ Appointment Screen"]]
-  IntakePortalScreen[["🖥️ Intake Portal Screen"]]
-  ScheduleSearchScreen[["🖥️ Schedule Search Screen"]]
-  EvAppointmentCancelled{"⚡ Appointment Cancelled"}
-  EvAppointmentNoShow{"⚡ Appointment Marked No Show"}
-  EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
-  EvAppointmentScheduled{"⚡ Appointment Scheduled"}
-  Patient --> BucAppointmentScheduling
-  Patient --> SearchAvailability
-  Patient --> ReserveAppointment
-  Patient --> BookAppointment
-  Patient --> RescheduleAppointment
-  Patient --> CancelAppointment
-  FrontDesk --> BucAppointmentScheduling
-  FrontDesk --> SendIntakeForms
-  FrontDesk --> SearchAvailability
-  FrontDesk --> ReserveAppointment
-  FrontDesk --> BookAppointment
-  FrontDesk --> RescheduleAppointment
-  FrontDesk --> CancelAppointment
-  FrontDesk --> MarkNoShow
-  FrontDesk --> SendAppointmentNotice
-  BucAppointmentScheduling --> PatientAccess
-  BucAppointmentScheduling --> SearchAvailability
-  BucAppointmentScheduling --> ReserveAppointment
-  BucAppointmentScheduling --> BookAppointment
-  BucAppointmentScheduling --> RescheduleAppointment
-  BucAppointmentScheduling --> CancelAppointment
-  BucAppointmentScheduling --> MarkNoShow
-  BucAppointmentScheduling --> SendAppointmentNotice
-  ProviderSchedule --- Provider
-  ProviderSchedule --- ClinicLocation
-  Appointment --- Provider
-  Appointment --- ClinicLocation
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    FrontDesk(["👤 Front Desk Staff"])
+    Patient(["👤 Patient"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    PatientAccess["💼 Patient Access"]
+    BucAppointmentScheduling["📦 Schedule Appointments"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    BookAppointment(["✅ Book Appointment"])
+    CancelAppointment(["✅ Cancel Appointment"])
+    MarkNoShow(["✅ Mark No Show"])
+    RescheduleAppointment(["✅ Reschedule Appointment"])
+    ReserveAppointment(["✅ Reserve Appointment"])
+    SearchAvailability(["✅ Search Availability"])
+    SendAppointmentNotice(["✅ Send Appointment Notice"])
+    SendIntakeForms(["✅ Send Intake Forms"])
+    AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
+    AppointmentScreen[["🖥️ Appointment Screen"]]
+    IntakePortalScreen[["🖥️ Intake Portal Screen"]]
+    ScheduleSearchScreen[["🖥️ Schedule Search Screen"]]
+    EvAppointmentCancelled{"⚡ Appointment Cancelled"}
+    EvAppointmentNoShow{"⚡ Appointment Marked No Show"}
+    EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
+    EvAppointmentScheduled{"⚡ Appointment Scheduled"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    AppointmentNoticeApi["🔌 Appointment Notice API"]
+    BookAppointmentApi["🔌 Book Appointment API"]
+    CancelAppointmentApi["🔌 Cancel Appointment API"]
+    IntakeMessagingApi["🔌 Intake Messaging API"]
+    RescheduleAppointmentApi["🔌 Reschedule Appointment API"]
+    ReserveAppointmentApi["🔌 Reserve Appointment API"]
+    SearchAvailabilityApi["🔌 Search Availability API"]
+    Appointment[("🗄️ Appointment")]
+    ClinicLocation[("🗄️ Clinic Location")]
+    IntakePacket[("🗄️ Intake Packet")]
+    Notification[("🗄️ Notification")]
+    PatientMessage[("🗄️ Patient Message")]
+    Provider[("🗄️ Provider")]
+    ProviderSchedule[("🗄️ Provider Schedule")]
+  end
+  Patient -->|performs| BucAppointmentScheduling
+  Patient -->|performs| SearchAvailability
+  Patient -->|performs| ReserveAppointment
+  Patient -->|performs| BookAppointment
+  Patient -->|performs| RescheduleAppointment
+  Patient -->|performs| CancelAppointment
+  FrontDesk -->|performs| BucAppointmentScheduling
+  FrontDesk -->|performs| SendIntakeForms
+  FrontDesk -->|performs| SearchAvailability
+  FrontDesk -->|performs| ReserveAppointment
+  FrontDesk -->|performs| BookAppointment
+  FrontDesk -->|performs| RescheduleAppointment
+  FrontDesk -->|performs| CancelAppointment
+  FrontDesk -->|performs| MarkNoShow
+  FrontDesk -->|performs| SendAppointmentNotice
+  IntakeMessagingApi -.->|creates| PatientMessage
+  IntakeMessagingApi -.->|creates| IntakePacket
+  SearchAvailabilityApi -.->|reads| ProviderSchedule
+  SearchAvailabilityApi -.->|reads| Provider
+  SearchAvailabilityApi -.->|reads| ClinicLocation
+  ReserveAppointmentApi -.->|creates| Appointment
+  ReserveAppointmentApi -.->|updates| ProviderSchedule
+  BookAppointmentApi -.->|updates| ProviderSchedule
+  BookAppointmentApi -.->|updates| Appointment
+  RescheduleAppointmentApi -.->|updates| ProviderSchedule
+  RescheduleAppointmentApi -.->|updates| Appointment
+  CancelAppointmentApi -.->|updates| ProviderSchedule
+  CancelAppointmentApi -.->|updates| Appointment
+  AppointmentNoticeApi -.->|creates| PatientMessage
+  AppointmentNoticeApi -.->|creates| Notification
+  BucAppointmentScheduling -.->|belongs| PatientAccess
+  BucAppointmentScheduling -->|contains| SearchAvailability
+  BucAppointmentScheduling -->|contains| ReserveAppointment
+  BucAppointmentScheduling -->|contains| BookAppointment
+  BucAppointmentScheduling -->|contains| RescheduleAppointment
+  BucAppointmentScheduling -->|contains| CancelAppointment
+  BucAppointmentScheduling -->|contains| MarkNoShow
+  BucAppointmentScheduling -->|contains| SendAppointmentNotice
+  ProviderSchedule ---|N:1| Provider
+  ProviderSchedule ---|N:1| ClinicLocation
+  Appointment ---|N:1| Provider
+  Appointment ---|N:1| ClinicLocation
   EvAppointmentScheduled -.->|triggers| SendIntakeForms
   EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
   EvAppointmentRescheduled -.->|triggers| SendAppointmentNotice
   EvAppointmentCancelled -.->|triggers| SendAppointmentNotice
   ScheduleSearchScreen -.->|shows| ProviderSchedule
   SendIntakeForms -.->|displays| IntakePortalScreen
+  SendIntakeForms -.->|invokes| IntakeMessagingApi
   SearchAvailability -.->|displays| ScheduleSearchScreen
+  SearchAvailability -.->|invokes| SearchAvailabilityApi
   ReserveAppointment -.->|displays| AppointmentScreen
-  BookAppointment -.->|raises| EvAppointmentScheduled
+  ReserveAppointment -.->|invokes| ReserveAppointmentApi
   BookAppointment -.->|displays| AppointmentScreen
-  RescheduleAppointment -.->|raises| EvAppointmentRescheduled
+  BookAppointment -.->|invokes| BookAppointmentApi
+  BookAppointment -.->|raises| EvAppointmentScheduled
   RescheduleAppointment -.->|displays| AppointmentScreen
-  CancelAppointment -.->|raises| EvAppointmentCancelled
+  RescheduleAppointment -.->|invokes| RescheduleAppointmentApi
+  RescheduleAppointment -.->|raises| EvAppointmentRescheduled
   CancelAppointment -.->|displays| AppointmentScreen
-  MarkNoShow -.->|updates| Appointment
-  MarkNoShow -.->|raises| EvAppointmentNoShow
+  CancelAppointment -.->|invokes| CancelAppointmentApi
+  CancelAppointment -.->|raises| EvAppointmentCancelled
   MarkNoShow -.->|displays| AppointmentScreen
+  MarkNoShow -.->|raises| EvAppointmentNoShow
+  MarkNoShow -.->|updates| Appointment
   SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
+  SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
 ```
 
 #### Appointment Scheduling sequence 図
@@ -402,22 +480,22 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucAp
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
   end
-  box システム境界
+  box System Boundary
     participant AppointmentNoticeScreen as 🖥️ Appointment Notice Screen
     participant AppointmentScreen as 🖥️ Appointment Screen
     participant ScheduleSearchScreen as 🖥️ Schedule Search Screen
+  end
+  box System
+    participant System as 🧩 システム
     participant AppointmentNoticeApi as 🔌 Appointment Notice API
     participant BookAppointmentApi as 🔌 Book Appointment API
     participant CancelAppointmentApi as 🔌 Cancel Appointment API
     participant RescheduleAppointmentApi as 🔌 Reschedule Appointment API
     participant ReserveAppointmentApi as 🔌 Reserve Appointment API
     participant SearchAvailabilityApi as 🔌 Search Availability API
-  end
-  box システム
-    participant System as 🧩 システム
     participant Appointment as 🗄️ Appointment
     participant ClinicLocation as 🗄️ Clinic Location
     participant Notification as 🗄️ Notification
@@ -527,69 +605,107 @@ sequenceDiagram
 - CheckInPatient は予約と患者アカウントを同時更新する必要があるか。
 - AssignRoom は Room と Appointment を同じ API 境界で更新することでよいか。
 
-#### Visit Check-In RDRA 図
+#### Visit Check-In Layered Object Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucVisitCheckIn --out samples/clinic-ops/out/buc/rdra_visit_check_in
+rdra-ish diagram samples/clinic-ops --kind object-graph --format mermaid --buc BucVisitCheckIn --out samples/clinic-ops/out/buc/object_graph_visit_check_in
 ```
 
 ```mermaid
-graph TD
-  FrontDesk(["👤 Front Desk Staff"])
-  Nurse(["👤 Nurse"])
-  AssignRoom(["✅ Assign Room"])
-  CheckInPatient(["✅ Check In Patient"])
-  CollectCopay(["✅ Collect Copay"])
-  OpenEncounter(["✅ Open Encounter"])
-  PrepareEncounter(["✅ Prepare Encounter"])
-  VerifyArrival(["✅ Verify Patient Arrival"])
-  BucVisitCheckIn["📦 Check In Visit"]
-  AccountBalance[("🗄️ Account Balance")]
-  Appointment[("🗄️ Appointment")]
-  Encounter[("🗄️ Encounter")]
-  InsurancePolicy[("🗄️ Insurance Policy")]
-  PatientAccount[("🗄️ Patient Account")]
-  PatientProfile[("🗄️ Patient Profile")]
-  PaymentTransaction[("🗄️ Payment Transaction")]
-  Room[("🗄️ Room")]
-  CheckInScreen[["🖥️ Check-In Screen"]]
-  CopayScreen[["🖥️ Copay Screen"]]
-  EncounterWorkspaceScreen[["🖥️ Encounter Workspace"]]
-  RoomBoardScreen[["🖥️ Room Board Screen"]]
-  EvAppointmentCheckedIn{"⚡ Appointment Checked In"}
-  FrontDesk --> BucVisitCheckIn
-  FrontDesk --> VerifyArrival
-  FrontDesk --> CheckInPatient
-  FrontDesk --> CollectCopay
-  Nurse --> BucVisitCheckIn
-  Nurse --> OpenEncounter
-  Nurse --> AssignRoom
-  Nurse --> PrepareEncounter
-  BucVisitCheckIn --> PatientAccess
-  BucVisitCheckIn --> VerifyArrival
-  BucVisitCheckIn --> CheckInPatient
-  BucVisitCheckIn --> CollectCopay
-  BucVisitCheckIn --> AssignRoom
-  BucVisitCheckIn --> PrepareEncounter
-  Appointment --- PatientAccount
-  Appointment --- Room
-  Encounter --- Appointment
-  Encounter --- PatientAccount
-  AccountBalance --- PatientAccount
-  PatientProfile --- PatientAccount
-  InsurancePolicy --- PatientAccount
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    FrontDesk(["👤 Front Desk Staff"])
+    Nurse(["👤 Nurse"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    PatientAccess["💼 Patient Access"]
+    BucVisitCheckIn["📦 Check In Visit"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    AssignRoom(["✅ Assign Room"])
+    CheckInPatient(["✅ Check In Patient"])
+    CollectCopay(["✅ Collect Copay"])
+    OpenEncounter(["✅ Open Encounter"])
+    PrepareEncounter(["✅ Prepare Encounter"])
+    VerifyArrival(["✅ Verify Patient Arrival"])
+    CheckInScreen[["🖥️ Check-In Screen"]]
+    CopayScreen[["🖥️ Copay Screen"]]
+    EncounterWorkspaceScreen[["🖥️ Encounter Workspace"]]
+    RoomBoardScreen[["🖥️ Room Board Screen"]]
+    EvAppointmentCheckedIn{"⚡ Appointment Checked In"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    AssignRoomApi["🔌 Assign Room API"]
+    CheckInPatientApi["🔌 Check-In Patient API"]
+    CollectCopayApi["🔌 Collect Copay API"]
+    OpenEncounterApi["🔌 Open Encounter API"]
+    PrepareEncounterApi["🔌 Prepare Encounter API"]
+    VerifyArrivalApi["🔌 Verify Arrival API"]
+    AccountBalance[("🗄️ Account Balance")]
+    Appointment[("🗄️ Appointment")]
+    Encounter[("🗄️ Encounter")]
+    InsurancePolicy[("🗄️ Insurance Policy")]
+    PatientAccount[("🗄️ Patient Account")]
+    PatientProfile[("🗄️ Patient Profile")]
+    PaymentTransaction[("🗄️ Payment Transaction")]
+    Room[("🗄️ Room")]
+  end
+  FrontDesk -->|performs| BucVisitCheckIn
+  FrontDesk -->|performs| VerifyArrival
+  FrontDesk -->|performs| CheckInPatient
+  FrontDesk -->|performs| CollectCopay
+  Nurse -->|performs| BucVisitCheckIn
+  Nurse -->|performs| OpenEncounter
+  Nurse -->|performs| AssignRoom
+  Nurse -->|performs| PrepareEncounter
+  OpenEncounterApi -.->|creates| Encounter
+  OpenEncounterApi -.->|reads| Appointment
+  VerifyArrivalApi -.->|reads| Appointment
+  VerifyArrivalApi -.->|reads| PatientAccount
+  VerifyArrivalApi -.->|reads| InsurancePolicy
+  CheckInPatientApi -.->|updates| Appointment
+  CheckInPatientApi -.->|updates| PatientAccount
+  CollectCopayApi -.->|creates| PaymentTransaction
+  CollectCopayApi -.->|updates| AccountBalance
+  AssignRoomApi -.->|updates| Appointment
+  AssignRoomApi -.->|updates| Room
+  PrepareEncounterApi -.->|reads| Appointment
+  PrepareEncounterApi -.->|reads| PatientProfile
+  BucVisitCheckIn -.->|belongs| PatientAccess
+  BucVisitCheckIn -->|contains| VerifyArrival
+  BucVisitCheckIn -->|contains| CheckInPatient
+  BucVisitCheckIn -->|contains| CollectCopay
+  BucVisitCheckIn -->|contains| AssignRoom
+  BucVisitCheckIn -->|contains| PrepareEncounter
+  Appointment ---|N:1| PatientAccount
+  Appointment ---|N:1| Room
+  Encounter ---|N:1| PatientAccount
+  Encounter ---|1:1| Appointment
+  AccountBalance ---|1:1| PatientAccount
+  PatientProfile ---|1:1| PatientAccount
+  InsurancePolicy ---|N:1| PatientAccount
   EvAppointmentCheckedIn -.->|triggers| OpenEncounter
   EvAppointmentCheckedIn -.->|triggers| PrepareEncounter
   CheckInScreen -.->|shows| Appointment
   OpenEncounter -.->|displays| EncounterWorkspaceScreen
+  OpenEncounter -.->|invokes| OpenEncounterApi
   VerifyArrival -.->|displays| CheckInScreen
-  CheckInPatient -.->|raises| EvAppointmentCheckedIn
+  VerifyArrival -.->|invokes| VerifyArrivalApi
   CheckInPatient -.->|displays| CheckInScreen
+  CheckInPatient -.->|invokes| CheckInPatientApi
+  CheckInPatient -.->|raises| EvAppointmentCheckedIn
   CollectCopay -.->|displays| CopayScreen
+  CollectCopay -.->|invokes| CollectCopayApi
   AssignRoom -.->|displays| RoomBoardScreen
+  AssignRoom -.->|invokes| AssignRoomApi
   PrepareEncounter -.->|displays| CheckInScreen
+  PrepareEncounter -.->|invokes| PrepareEncounterApi
 ```
 
 #### Visit Check-In sequence 図
@@ -602,21 +718,21 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucVi
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
     actor Nurse as 👤 Nurse
   end
-  box システム境界
+  box System Boundary
     participant CheckInScreen as 🖥️ Check-In Screen
     participant CopayScreen as 🖥️ Copay Screen
     participant RoomBoardScreen as 🖥️ Room Board Screen
+  end
+  box System
     participant AssignRoomApi as 🔌 Assign Room API
     participant CheckInPatientApi as 🔌 Check-In Patient API
     participant CollectCopayApi as 🔌 Collect Copay API
     participant PrepareEncounterApi as 🔌 Prepare Encounter API
     participant VerifyArrivalApi as 🔌 Verify Arrival API
-  end
-  box システム
     participant AccountBalance as 🗄️ Account Balance
     participant Appointment as 🗄️ Appointment
     participant InsurancePolicy as 🗄️ Insurance Policy
@@ -704,87 +820,135 @@ sequenceDiagram
 - CompleteAppointment は診療署名イベントから自動的に起動される業務か。
 - AmendEncounter が署名済み記録の修正として十分な粒度か。
 
-#### Clinical Encounter RDRA 図
+#### Clinical Encounter Layered Object Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucClinicalEncounter --out samples/clinic-ops/out/buc/rdra_clinical_encounter
+rdra-ish diagram samples/clinic-ops --kind object-graph --format mermaid --buc BucClinicalEncounter --out samples/clinic-ops/out/buc/object_graph_clinical_encounter
 ```
 
 ```mermaid
-graph TD
-  Clinician(["👤 Clinician"])
-  Nurse(["👤 Nurse"])
-  AmendEncounter(["✅ Amend Signed Encounter"])
-  CompleteAppointment(["✅ Complete Appointment"])
-  CreateCarePlan(["✅ Create Care Plan"])
-  CreateCharge(["✅ Create Charge"])
-  DocumentAssessment(["✅ Document Assessment"])
-  OpenEncounter(["✅ Open Encounter"])
-  PlaceLabOrder(["✅ Place Lab Order"])
-  RecordVitals(["✅ Record Vitals"])
-  SignEncounter(["✅ Sign Encounter"])
-  BucClinicalEncounter["📦 Conduct Clinical Encounter"]
-  AccountBalance[("🗄️ Account Balance")]
-  Appointment[("🗄️ Appointment")]
-  CarePlan[("🗄️ Care Plan")]
-  Charge[("🗄️ Charge")]
-  ClinicalOrder[("🗄️ Clinical Order")]
-  Diagnosis[("🗄️ Diagnosis")]
-  Encounter[("🗄️ Encounter")]
-  Room[("🗄️ Room")]
-  VitalSign[("🗄️ Vital Sign")]
-  CarePlanScreen[["🖥️ Care Plan Screen"]]
-  ChargeWorklistScreen[["🖥️ Charge Worklist Screen"]]
-  DiagnosisScreen[["🖥️ Diagnosis Screen"]]
-  EncounterWorkspaceScreen[["🖥️ Encounter Workspace"]]
-  OrderEntryScreen[["🖥️ Order Entry Screen"]]
-  VitalsScreen[["🖥️ Vitals Screen"]]
-  EvAppointmentCompleted{"⚡ Appointment Completed"}
-  EvEncounterAmended{"⚡ Encounter Amended"}
-  EvEncounterDocumented{"⚡ Encounter Documented"}
-  EvEncounterSigned{"⚡ Encounter Signed"}
-  Nurse --> BucClinicalEncounter
-  Nurse --> OpenEncounter
-  Nurse --> RecordVitals
-  Nurse --> CompleteAppointment
-  Clinician --> BucClinicalEncounter
-  Clinician --> PlaceLabOrder
-  Clinician --> DocumentAssessment
-  Clinician --> SignEncounter
-  Clinician --> AmendEncounter
-  BucClinicalEncounter --> CareDelivery
-  BucClinicalEncounter --> OpenEncounter
-  BucClinicalEncounter --> RecordVitals
-  BucClinicalEncounter --> DocumentAssessment
-  BucClinicalEncounter --> SignEncounter
-  BucClinicalEncounter --> AmendEncounter
-  BucClinicalEncounter --> CompleteAppointment
-  Appointment --- Room
-  Encounter --- Appointment
-  VitalSign --- Encounter
-  Diagnosis --- Encounter
-  ClinicalOrder --- Encounter
-  Charge --- Encounter
-  CarePlan --- Encounter
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    Clinician(["👤 Clinician"])
+    Nurse(["👤 Nurse"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    CareDelivery["💼 Care Delivery"]
+    BucClinicalEncounter["📦 Conduct Clinical Encounter"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    AmendEncounter(["✅ Amend Signed Encounter"])
+    CompleteAppointment(["✅ Complete Appointment"])
+    CreateCarePlan(["✅ Create Care Plan"])
+    CreateCharge(["✅ Create Charge"])
+    DocumentAssessment(["✅ Document Assessment"])
+    OpenEncounter(["✅ Open Encounter"])
+    PlaceLabOrder(["✅ Place Lab Order"])
+    RecordVitals(["✅ Record Vitals"])
+    SignEncounter(["✅ Sign Encounter"])
+    CarePlanScreen[["🖥️ Care Plan Screen"]]
+    ChargeWorklistScreen[["🖥️ Charge Worklist Screen"]]
+    DiagnosisScreen[["🖥️ Diagnosis Screen"]]
+    EncounterWorkspaceScreen[["🖥️ Encounter Workspace"]]
+    OrderEntryScreen[["🖥️ Order Entry Screen"]]
+    VitalsScreen[["🖥️ Vitals Screen"]]
+    EvAppointmentCompleted{"⚡ Appointment Completed"}
+    EvEncounterAmended{"⚡ Encounter Amended"}
+    EvEncounterDocumented{"⚡ Encounter Documented"}
+    EvEncounterSigned{"⚡ Encounter Signed"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    AmendEncounterApi["🔌 Amend Encounter API"]
+    CompleteAppointmentApi["🔌 Complete Appointment API"]
+    CreateCarePlanApi["🔌 Create Care Plan API"]
+    CreateChargeApi["🔌 Create Charge API"]
+    DocumentAssessmentApi["🔌 Document Assessment API"]
+    OpenEncounterApi["🔌 Open Encounter API"]
+    OrderEntryApi["🔌 Order Entry API"]
+    RecordVitalsApi["🔌 Record Vitals API"]
+    SignEncounterApi["🔌 Sign Encounter API"]
+    AccountBalance[("🗄️ Account Balance")]
+    Appointment[("🗄️ Appointment")]
+    CarePlan[("🗄️ Care Plan")]
+    Charge[("🗄️ Charge")]
+    ClinicalOrder[("🗄️ Clinical Order")]
+    Diagnosis[("🗄️ Diagnosis")]
+    Encounter[("🗄️ Encounter")]
+    Room[("🗄️ Room")]
+    VitalSign[("🗄️ Vital Sign")]
+  end
+  Nurse -->|performs| BucClinicalEncounter
+  Nurse -->|performs| OpenEncounter
+  Nurse -->|performs| RecordVitals
+  Nurse -->|performs| CompleteAppointment
+  Clinician -->|performs| BucClinicalEncounter
+  Clinician -->|performs| PlaceLabOrder
+  Clinician -->|performs| DocumentAssessment
+  Clinician -->|performs| SignEncounter
+  Clinician -->|performs| AmendEncounter
+  OrderEntryApi -.->|creates| ClinicalOrder
+  OrderEntryApi -.->|reads| Encounter
+  OpenEncounterApi -.->|creates| Encounter
+  OpenEncounterApi -.->|reads| Appointment
+  RecordVitalsApi -.->|creates| VitalSign
+  RecordVitalsApi -.->|updates| Encounter
+  DocumentAssessmentApi -.->|creates| Diagnosis
+  DocumentAssessmentApi -.->|updates| Encounter
+  SignEncounterApi -.->|updates| Encounter
+  AmendEncounterApi -.->|updates| Encounter
+  CompleteAppointmentApi -.->|updates| Appointment
+  CompleteAppointmentApi -.->|updates| Room
+  CreateChargeApi -.->|creates| Charge
+  CreateChargeApi -.->|reads| Encounter
+  CreateChargeApi -.->|updates| AccountBalance
+  CreateCarePlanApi -.->|creates| CarePlan
+  CreateCarePlanApi -.->|reads| Encounter
+  BucClinicalEncounter -.->|belongs| CareDelivery
+  BucClinicalEncounter -->|contains| OpenEncounter
+  BucClinicalEncounter -->|contains| RecordVitals
+  BucClinicalEncounter -->|contains| DocumentAssessment
+  BucClinicalEncounter -->|contains| SignEncounter
+  BucClinicalEncounter -->|contains| AmendEncounter
+  BucClinicalEncounter -->|contains| CompleteAppointment
+  Appointment ---|N:1| Room
+  Encounter ---|1:1| Appointment
+  VitalSign ---|N:1| Encounter
+  Diagnosis ---|N:1| Encounter
+  ClinicalOrder ---|N:1| Encounter
+  Charge ---|N:1| Encounter
+  CarePlan ---|N:1| Encounter
   EvEncounterSigned -.->|triggers| PlaceLabOrder
   EvEncounterSigned -.->|triggers| CompleteAppointment
   EvEncounterSigned -.->|triggers| CreateCharge
   EvEncounterSigned -.->|triggers| CreateCarePlan
   PlaceLabOrder -.->|displays| OrderEntryScreen
+  PlaceLabOrder -.->|invokes| OrderEntryApi
   OpenEncounter -.->|displays| EncounterWorkspaceScreen
+  OpenEncounter -.->|invokes| OpenEncounterApi
   RecordVitals -.->|displays| VitalsScreen
-  DocumentAssessment -.->|raises| EvEncounterDocumented
+  RecordVitals -.->|invokes| RecordVitalsApi
   DocumentAssessment -.->|displays| DiagnosisScreen
-  SignEncounter -.->|raises| EvEncounterSigned
+  DocumentAssessment -.->|invokes| DocumentAssessmentApi
+  DocumentAssessment -.->|raises| EvEncounterDocumented
   SignEncounter -.->|displays| EncounterWorkspaceScreen
-  AmendEncounter -.->|raises| EvEncounterAmended
+  SignEncounter -.->|invokes| SignEncounterApi
+  SignEncounter -.->|raises| EvEncounterSigned
   AmendEncounter -.->|displays| EncounterWorkspaceScreen
-  CompleteAppointment -.->|raises| EvAppointmentCompleted
+  AmendEncounter -.->|invokes| AmendEncounterApi
+  AmendEncounter -.->|raises| EvEncounterAmended
   CompleteAppointment -.->|displays| EncounterWorkspaceScreen
+  CompleteAppointment -.->|invokes| CompleteAppointmentApi
+  CompleteAppointment -.->|raises| EvAppointmentCompleted
   CreateCharge -.->|displays| ChargeWorklistScreen
+  CreateCharge -.->|invokes| CreateChargeApi
   CreateCarePlan -.->|displays| CarePlanScreen
+  CreateCarePlan -.->|invokes| CreateCarePlanApi
 ```
 
 #### Clinical Encounter sequence 図
@@ -797,22 +961,22 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucCl
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Clinician as 👤 Clinician
     actor Nurse as 👤 Nurse
   end
-  box システム境界
+  box System Boundary
     participant DiagnosisScreen as 🖥️ Diagnosis Screen
     participant EncounterWorkspaceScreen as 🖥️ Encounter Workspace
     participant VitalsScreen as 🖥️ Vitals Screen
+  end
+  box System
     participant AmendEncounterApi as 🔌 Amend Encounter API
     participant CompleteAppointmentApi as 🔌 Complete Appointment API
     participant DocumentAssessmentApi as 🔌 Document Assessment API
     participant OpenEncounterApi as 🔌 Open Encounter API
     participant RecordVitalsApi as 🔌 Record Vitals API
     participant SignEncounterApi as 🔌 Sign Encounter API
-  end
-  box システム
     participant Appointment as 🗄️ Appointment
     participant Diagnosis as 🗄️ Diagnosis
     participant Encounter as 🗄️ Encounter
@@ -905,71 +1069,106 @@ sequenceDiagram
 - NotifyCriticalResult は結果確認イベントから起動されるため、手動 UC と自動 UC の違いをレビューできるか。
 - CancelClinicalOrder は direct CRUD のままでよいか。
 
-#### Orders and Results RDRA 図
+#### Orders and Results Layered Object Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucOrdersResults --out samples/clinic-ops/out/buc/rdra_orders_results
+rdra-ish diagram samples/clinic-ops --kind object-graph --format mermaid --buc BucOrdersResults --out samples/clinic-ops/out/buc/object_graph_orders_results
 ```
 
 ```mermaid
-graph TD
-  Clinician(["👤 Clinician"])
-  Nurse(["👤 Nurse"])
-  CancelClinicalOrder(["✅ Cancel Clinical Order"])
-  CollectSpecimen(["✅ Collect Specimen"])
-  NotifyCriticalResult(["✅ Notify Critical Result"])
-  NotifyPatientResult(["✅ Notify Patient Result"])
-  PlaceLabOrder(["✅ Place Lab Order"])
-  ReceiveLabResult(["✅ Receive Lab Result"])
-  ReviewLabResult(["✅ Review Lab Result"])
-  BucOrdersResults["📦 Manage Orders and Results"]
-  ClinicalOrder[("🗄️ Clinical Order")]
-  Encounter[("🗄️ Encounter")]
-  LabResult[("🗄️ Lab Result")]
-  Notification[("🗄️ Notification")]
-  PatientMessage[("🗄️ Patient Message")]
-  CriticalNoticeScreen[["🖥️ Critical Result Notice Screen"]]
-  OrderEntryScreen[["🖥️ Order Entry Screen"]]
-  PatientMessageScreen[["🖥️ Patient Message Screen"]]
-  ResultReviewScreen[["🖥️ Result Review Screen"]]
-  SpecimenScreen[["🖥️ Specimen Collection Screen"]]
-  EvClinicalOrderCancelled{"⚡ Clinical Order Cancelled"}
-  EvClinicalOrderCollected{"⚡ Specimen Collected"}
-  EvClinicalOrderResulted{"⚡ Clinical Result Received"}
-  EvClinicalOrderReviewed{"⚡ Clinical Result Reviewed"}
-  Nurse --> BucOrdersResults
-  Nurse --> CollectSpecimen
-  Nurse --> ReceiveLabResult
-  Clinician --> BucOrdersResults
-  Clinician --> PlaceLabOrder
-  Clinician --> ReviewLabResult
-  Clinician --> NotifyCriticalResult
-  Clinician --> CancelClinicalOrder
-  BucOrdersResults --> CareDelivery
-  BucOrdersResults --> PlaceLabOrder
-  BucOrdersResults --> CollectSpecimen
-  BucOrdersResults --> ReceiveLabResult
-  BucOrdersResults --> ReviewLabResult
-  BucOrdersResults --> NotifyCriticalResult
-  BucOrdersResults --> CancelClinicalOrder
-  ClinicalOrder --- Encounter
-  LabResult --- ClinicalOrder
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    Clinician(["👤 Clinician"])
+    Nurse(["👤 Nurse"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    CareDelivery["💼 Care Delivery"]
+    BucOrdersResults["📦 Manage Orders and Results"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    CancelClinicalOrder(["✅ Cancel Clinical Order"])
+    CollectSpecimen(["✅ Collect Specimen"])
+    NotifyCriticalResult(["✅ Notify Critical Result"])
+    NotifyPatientResult(["✅ Notify Patient Result"])
+    PlaceLabOrder(["✅ Place Lab Order"])
+    ReceiveLabResult(["✅ Receive Lab Result"])
+    ReviewLabResult(["✅ Review Lab Result"])
+    CriticalNoticeScreen[["🖥️ Critical Result Notice Screen"]]
+    OrderEntryScreen[["🖥️ Order Entry Screen"]]
+    PatientMessageScreen[["🖥️ Patient Message Screen"]]
+    ResultReviewScreen[["🖥️ Result Review Screen"]]
+    SpecimenScreen[["🖥️ Specimen Collection Screen"]]
+    EvClinicalOrderCancelled{"⚡ Clinical Order Cancelled"}
+    EvClinicalOrderCollected{"⚡ Specimen Collected"}
+    EvClinicalOrderResulted{"⚡ Clinical Result Received"}
+    EvClinicalOrderReviewed{"⚡ Clinical Result Reviewed"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    CollectSpecimenApi["🔌 Collect Specimen API"]
+    CriticalNoticeApi["🔌 Critical Notice API"]
+    NotifyPatientResultApi["🔌 Notify Patient Result API"]
+    OrderEntryApi["🔌 Order Entry API"]
+    ReceiveLabResultApi["🔌 Receive Lab Result API"]
+    ResultReviewApi["🔌 Result Review API"]
+    ClinicalOrder[("🗄️ Clinical Order")]
+    Encounter[("🗄️ Encounter")]
+    LabResult[("🗄️ Lab Result")]
+    Notification[("🗄️ Notification")]
+    PatientMessage[("🗄️ Patient Message")]
+  end
+  Nurse -->|performs| BucOrdersResults
+  Nurse -->|performs| CollectSpecimen
+  Nurse -->|performs| ReceiveLabResult
+  Clinician -->|performs| BucOrdersResults
+  Clinician -->|performs| PlaceLabOrder
+  Clinician -->|performs| ReviewLabResult
+  Clinician -->|performs| NotifyCriticalResult
+  Clinician -->|performs| CancelClinicalOrder
+  OrderEntryApi -.->|creates| ClinicalOrder
+  OrderEntryApi -.->|reads| Encounter
+  CollectSpecimenApi -.->|updates| ClinicalOrder
+  ReceiveLabResultApi -.->|creates| LabResult
+  ReceiveLabResultApi -.->|updates| ClinicalOrder
+  ResultReviewApi -.->|updates| ClinicalOrder
+  ResultReviewApi -.->|updates| LabResult
+  CriticalNoticeApi -.->|creates| PatientMessage
+  CriticalNoticeApi -.->|creates| Notification
+  NotifyPatientResultApi -.->|creates| Notification
+  BucOrdersResults -.->|belongs| CareDelivery
+  BucOrdersResults -->|contains| PlaceLabOrder
+  BucOrdersResults -->|contains| CollectSpecimen
+  BucOrdersResults -->|contains| ReceiveLabResult
+  BucOrdersResults -->|contains| ReviewLabResult
+  BucOrdersResults -->|contains| NotifyCriticalResult
+  BucOrdersResults -->|contains| CancelClinicalOrder
+  ClinicalOrder ---|N:1| Encounter
+  LabResult ---|1:1| ClinicalOrder
   EvClinicalOrderReviewed -.->|triggers| NotifyCriticalResult
   EvClinicalOrderReviewed -.->|triggers| NotifyPatientResult
   PlaceLabOrder -.->|displays| OrderEntryScreen
-  CollectSpecimen -.->|raises| EvClinicalOrderCollected
+  PlaceLabOrder -.->|invokes| OrderEntryApi
   CollectSpecimen -.->|displays| SpecimenScreen
-  ReceiveLabResult -.->|raises| EvClinicalOrderResulted
+  CollectSpecimen -.->|invokes| CollectSpecimenApi
+  CollectSpecimen -.->|raises| EvClinicalOrderCollected
   ReceiveLabResult -.->|displays| ResultReviewScreen
-  ReviewLabResult -.->|raises| EvClinicalOrderReviewed
+  ReceiveLabResult -.->|invokes| ReceiveLabResultApi
+  ReceiveLabResult -.->|raises| EvClinicalOrderResulted
   ReviewLabResult -.->|displays| ResultReviewScreen
+  ReviewLabResult -.->|invokes| ResultReviewApi
+  ReviewLabResult -.->|raises| EvClinicalOrderReviewed
   NotifyCriticalResult -.->|displays| CriticalNoticeScreen
-  CancelClinicalOrder -.->|updates| ClinicalOrder
-  CancelClinicalOrder -.->|raises| EvClinicalOrderCancelled
+  NotifyCriticalResult -.->|invokes| CriticalNoticeApi
   CancelClinicalOrder -.->|displays| OrderEntryScreen
+  CancelClinicalOrder -.->|raises| EvClinicalOrderCancelled
+  CancelClinicalOrder -.->|updates| ClinicalOrder
   NotifyPatientResult -.->|displays| PatientMessageScreen
+  NotifyPatientResult -.->|invokes| NotifyPatientResultApi
 ```
 
 #### Orders and Results sequence 図
@@ -982,23 +1181,23 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucOr
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Clinician as 👤 Clinician
     actor Nurse as 👤 Nurse
   end
-  box システム境界
+  box System Boundary
     participant CriticalNoticeScreen as 🖥️ Critical Result Notice Screen
     participant OrderEntryScreen as 🖥️ Order Entry Screen
     participant ResultReviewScreen as 🖥️ Result Review Screen
     participant SpecimenScreen as 🖥️ Specimen Collection Screen
+  end
+  box System
+    participant System as 🧩 システム
     participant CollectSpecimenApi as 🔌 Collect Specimen API
     participant CriticalNoticeApi as 🔌 Critical Notice API
     participant OrderEntryApi as 🔌 Order Entry API
     participant ReceiveLabResultApi as 🔌 Receive Lab Result API
     participant ResultReviewApi as 🔌 Result Review API
-  end
-  box システム
-    participant System as 🧩 システム
     participant ClinicalOrder as 🗄️ Clinical Order
     participant Encounter as 🗄️ Encounter
     participant LabResult as 🗄️ Lab Result
@@ -1089,62 +1288,92 @@ sequenceDiagram
 - RefillPrescription が新しい Prescription を作成する設計でよいか。
 - ConfirmDispense は外部通知イベントとして扱うべきか。
 
-#### Prescription Fulfillment RDRA 図
+#### Prescription Fulfillment Layered Object Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucPrescriptionFulfillment --out samples/clinic-ops/out/buc/rdra_prescription_fulfillment
+rdra-ish diagram samples/clinic-ops --kind object-graph --format mermaid --buc BucPrescriptionFulfillment --out samples/clinic-ops/out/buc/object_graph_prescription_fulfillment
 ```
 
 ```mermaid
-graph TD
-  Clinician(["👤 Clinician"])
-  Nurse(["👤 Nurse"])
-  CancelPrescription(["✅ Cancel Prescription"])
-  ConfirmDispense(["✅ Confirm Dispense"])
-  DraftPrescription(["✅ Draft Prescription"])
-  RefillPrescription(["✅ Refill Prescription"])
-  SearchMedication(["✅ Search Medication"])
-  SendPrescription(["✅ Send Prescription"])
-  BucPrescriptionFulfillment["📦 Fulfill Prescriptions"]
-  Encounter[("🗄️ Encounter")]
-  Medication[("🗄️ Medication")]
-  Prescription[("🗄️ Prescription")]
-  MedicationSearchScreen[["🖥️ Medication Search Screen"]]
-  PharmacyStatusScreen[["🖥️ Pharmacy Status Screen"]]
-  PrescriptionScreen[["🖥️ Prescription Screen"]]
-  EvPrescriptionCancelled{"⚡ Prescription Cancelled"}
-  EvPrescriptionDispensed{"⚡ Prescription Dispensed"}
-  EvPrescriptionSent{"⚡ Prescription Sent"}
-  Nurse --> BucPrescriptionFulfillment
-  Nurse --> ConfirmDispense
-  Clinician --> BucPrescriptionFulfillment
-  Clinician --> SearchMedication
-  Clinician --> DraftPrescription
-  Clinician --> SendPrescription
-  Clinician --> CancelPrescription
-  Clinician --> RefillPrescription
-  BucPrescriptionFulfillment --> CareDelivery
-  BucPrescriptionFulfillment --> SearchMedication
-  BucPrescriptionFulfillment --> DraftPrescription
-  BucPrescriptionFulfillment --> SendPrescription
-  BucPrescriptionFulfillment --> ConfirmDispense
-  BucPrescriptionFulfillment --> CancelPrescription
-  BucPrescriptionFulfillment --> RefillPrescription
-  Prescription --- Encounter
-  Prescription --- Medication
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    Clinician(["👤 Clinician"])
+    Nurse(["👤 Nurse"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    CareDelivery["💼 Care Delivery"]
+    BucPrescriptionFulfillment["📦 Fulfill Prescriptions"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    CancelPrescription(["✅ Cancel Prescription"])
+    ConfirmDispense(["✅ Confirm Dispense"])
+    DraftPrescription(["✅ Draft Prescription"])
+    RefillPrescription(["✅ Refill Prescription"])
+    SearchMedication(["✅ Search Medication"])
+    SendPrescription(["✅ Send Prescription"])
+    MedicationSearchScreen[["🖥️ Medication Search Screen"]]
+    PharmacyStatusScreen[["🖥️ Pharmacy Status Screen"]]
+    PrescriptionScreen[["🖥️ Prescription Screen"]]
+    EvPrescriptionCancelled{"⚡ Prescription Cancelled"}
+    EvPrescriptionDispensed{"⚡ Prescription Dispensed"}
+    EvPrescriptionSent{"⚡ Prescription Sent"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    ConfirmDispenseApi["🔌 Confirm Dispense API"]
+    DraftPrescriptionApi["🔌 Draft Prescription API"]
+    MedicationCatalogApi["🔌 Medication Catalog API"]
+    RefillPrescriptionApi["🔌 Refill Prescription API"]
+    SendPrescriptionApi["🔌 Send Prescription API"]
+    Encounter[("🗄️ Encounter")]
+    Medication[("🗄️ Medication")]
+    Prescription[("🗄️ Prescription")]
+  end
+  Nurse -->|performs| BucPrescriptionFulfillment
+  Nurse -->|performs| ConfirmDispense
+  Clinician -->|performs| BucPrescriptionFulfillment
+  Clinician -->|performs| SearchMedication
+  Clinician -->|performs| DraftPrescription
+  Clinician -->|performs| SendPrescription
+  Clinician -->|performs| CancelPrescription
+  Clinician -->|performs| RefillPrescription
+  MedicationCatalogApi -.->|reads| Medication
+  DraftPrescriptionApi -.->|creates| Prescription
+  DraftPrescriptionApi -.->|reads| Encounter
+  SendPrescriptionApi -.->|updates| Prescription
+  ConfirmDispenseApi -.->|updates| Prescription
+  RefillPrescriptionApi -.->|creates| Prescription
+  RefillPrescriptionApi -.->|reads| Medication
+  BucPrescriptionFulfillment -.->|belongs| CareDelivery
+  BucPrescriptionFulfillment -->|contains| SearchMedication
+  BucPrescriptionFulfillment -->|contains| DraftPrescription
+  BucPrescriptionFulfillment -->|contains| SendPrescription
+  BucPrescriptionFulfillment -->|contains| ConfirmDispense
+  BucPrescriptionFulfillment -->|contains| CancelPrescription
+  BucPrescriptionFulfillment -->|contains| RefillPrescription
+  Prescription ---|N:1| Encounter
+  Prescription ---|N:1| Medication
   MedicationSearchScreen -.->|shows| Medication
   SearchMedication -.->|displays| MedicationSearchScreen
+  SearchMedication -.->|invokes| MedicationCatalogApi
   DraftPrescription -.->|displays| PrescriptionScreen
-  SendPrescription -.->|raises| EvPrescriptionSent
+  DraftPrescription -.->|invokes| DraftPrescriptionApi
   SendPrescription -.->|displays| PrescriptionScreen
-  ConfirmDispense -.->|raises| EvPrescriptionDispensed
+  SendPrescription -.->|invokes| SendPrescriptionApi
+  SendPrescription -.->|raises| EvPrescriptionSent
   ConfirmDispense -.->|displays| PharmacyStatusScreen
-  CancelPrescription -.->|updates| Prescription
-  CancelPrescription -.->|raises| EvPrescriptionCancelled
+  ConfirmDispense -.->|invokes| ConfirmDispenseApi
+  ConfirmDispense -.->|raises| EvPrescriptionDispensed
   CancelPrescription -.->|displays| PrescriptionScreen
+  CancelPrescription -.->|raises| EvPrescriptionCancelled
+  CancelPrescription -.->|updates| Prescription
   RefillPrescription -.->|displays| PrescriptionScreen
+  RefillPrescription -.->|invokes| RefillPrescriptionApi
 ```
 
 #### Prescription Fulfillment sequence 図
@@ -1157,22 +1386,22 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucPr
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Clinician as 👤 Clinician
     actor Nurse as 👤 Nurse
   end
-  box システム境界
+  box System Boundary
     participant MedicationSearchScreen as 🖥️ Medication Search Screen
     participant PharmacyStatusScreen as 🖥️ Pharmacy Status Screen
     participant PrescriptionScreen as 🖥️ Prescription Screen
+  end
+  box System
+    participant System as 🧩 システム
     participant ConfirmDispenseApi as 🔌 Confirm Dispense API
     participant DraftPrescriptionApi as 🔌 Draft Prescription API
     participant MedicationCatalogApi as 🔌 Medication Catalog API
     participant RefillPrescriptionApi as 🔌 Refill Prescription API
     participant SendPrescriptionApi as 🔌 Send Prescription API
-  end
-  box システム
-    participant System as 🧩 システム
     participant Encounter as 🗄️ Encounter
     participant Medication as 🗄️ Medication
     participant Prescription as 🗄️ Prescription
@@ -1250,69 +1479,103 @@ sequenceDiagram
 - GenerateClaim と SubmitClaim を分ける必要があるか。
 - PostPayment と ReconcileBalance の責務境界が明確か。
 
-#### Billing Claims RDRA 図
+#### Billing Claims Layered Object Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucBillingClaims --out samples/clinic-ops/out/buc/rdra_billing_claims
+rdra-ish diagram samples/clinic-ops --kind object-graph --format mermaid --buc BucBillingClaims --out samples/clinic-ops/out/buc/object_graph_billing_claims
 ```
 
 ```mermaid
-graph TD
-  BillingSpecialist(["👤 Billing Specialist"])
-  CreateCharge(["✅ Create Charge"])
-  GenerateClaim(["✅ Generate Claim"])
-  PostPayment(["✅ Post Payment"])
-  ReceiveClaimAccepted(["✅ Receive Claim Accepted"])
-  ReconcileBalance(["✅ Reconcile Balance"])
-  RecordClaimDenial(["✅ Record Claim Denial"])
-  SubmitClaim(["✅ Submit Claim"])
-  VoidCharge(["✅ Void Charge"])
-  BucBillingClaims["📦 Bill and Collect Claims"]
-  AccountBalance[("🗄️ Account Balance")]
-  Charge[("🗄️ Charge")]
-  Claim[("🗄️ Claim")]
-  Encounter[("🗄️ Encounter")]
-  InsurancePolicy[("🗄️ Insurance Policy")]
-  PaymentTransaction[("🗄️ Payment Transaction")]
-  BalanceScreen[["🖥️ Balance Screen"]]
-  ChargeWorklistScreen[["🖥️ Charge Worklist Screen"]]
-  ClaimScreen[["🖥️ Claim Screen"]]
-  PaymentPostingScreen[["🖥️ Payment Posting Screen"]]
-  EvClaimAccepted{"⚡ Claim Accepted"}
-  EvClaimDenied{"⚡ Claim Denied"}
-  EvClaimPaid{"⚡ Claim Paid"}
-  EvClaimSubmitted{"⚡ Claim Submitted"}
-  BillingSpecialist --> BucBillingClaims
-  BucBillingClaims --> RevenueCycle
-  BucBillingClaims --> CreateCharge
-  BucBillingClaims --> GenerateClaim
-  BucBillingClaims --> SubmitClaim
-  BucBillingClaims --> ReceiveClaimAccepted
-  BucBillingClaims --> RecordClaimDenial
-  BucBillingClaims --> PostPayment
-  BucBillingClaims --> ReconcileBalance
-  BucBillingClaims --> VoidCharge
-  Charge --- Encounter
-  Charge --- Claim
-  Claim --- InsurancePolicy
-  PaymentTransaction --- Claim
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    BillingSpecialist(["👤 Billing Specialist"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    RevenueCycle["💼 Revenue Cycle"]
+    BucBillingClaims["📦 Bill and Collect Claims"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    CreateCharge(["✅ Create Charge"])
+    GenerateClaim(["✅ Generate Claim"])
+    PostPayment(["✅ Post Payment"])
+    ReceiveClaimAccepted(["✅ Receive Claim Accepted"])
+    ReconcileBalance(["✅ Reconcile Balance"])
+    RecordClaimDenial(["✅ Record Claim Denial"])
+    SubmitClaim(["✅ Submit Claim"])
+    VoidCharge(["✅ Void Charge"])
+    BalanceScreen[["🖥️ Balance Screen"]]
+    ChargeWorklistScreen[["🖥️ Charge Worklist Screen"]]
+    ClaimScreen[["🖥️ Claim Screen"]]
+    PaymentPostingScreen[["🖥️ Payment Posting Screen"]]
+    EvClaimAccepted{"⚡ Claim Accepted"}
+    EvClaimDenied{"⚡ Claim Denied"}
+    EvClaimPaid{"⚡ Claim Paid"}
+    EvClaimSubmitted{"⚡ Claim Submitted"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    BalanceApi["🔌 Balance API"]
+    CreateChargeApi["🔌 Create Charge API"]
+    GenerateClaimApi["🔌 Generate Claim API"]
+    PaymentPostApi["🔌 Payment Posting API"]
+    SubmitClaimApi["🔌 Submit Claim API"]
+    AccountBalance[("🗄️ Account Balance")]
+    Charge[("🗄️ Charge")]
+    Claim[("🗄️ Claim")]
+    Encounter[("🗄️ Encounter")]
+    InsurancePolicy[("🗄️ Insurance Policy")]
+    PaymentTransaction[("🗄️ Payment Transaction")]
+  end
+  BillingSpecialist -->|performs| BucBillingClaims
+  CreateChargeApi -.->|creates| Charge
+  CreateChargeApi -.->|reads| Encounter
+  CreateChargeApi -.->|updates| AccountBalance
+  GenerateClaimApi -.->|creates| Claim
+  GenerateClaimApi -.->|reads| InsurancePolicy
+  GenerateClaimApi -.->|updates| Charge
+  SubmitClaimApi -.->|updates| Claim
+  PaymentPostApi -.->|creates| PaymentTransaction
+  PaymentPostApi -.->|updates| Claim
+  BalanceApi -.->|reads| PaymentTransaction
+  BalanceApi -.->|updates| AccountBalance
+  BucBillingClaims -.->|belongs| RevenueCycle
+  BucBillingClaims -->|contains| CreateCharge
+  BucBillingClaims -->|contains| GenerateClaim
+  BucBillingClaims -->|contains| SubmitClaim
+  BucBillingClaims -->|contains| ReceiveClaimAccepted
+  BucBillingClaims -->|contains| RecordClaimDenial
+  BucBillingClaims -->|contains| PostPayment
+  BucBillingClaims -->|contains| ReconcileBalance
+  BucBillingClaims -->|contains| VoidCharge
+  Charge ---|N:1| Encounter
+  Charge ---|N:1| Claim
+  Claim ---|N:1| InsurancePolicy
+  PaymentTransaction ---|N:1| Claim
   CreateCharge -.->|displays| ChargeWorklistScreen
+  CreateCharge -.->|invokes| CreateChargeApi
   GenerateClaim -.->|displays| ClaimScreen
-  SubmitClaim -.->|raises| EvClaimSubmitted
+  GenerateClaim -.->|invokes| GenerateClaimApi
   SubmitClaim -.->|displays| ClaimScreen
-  ReceiveClaimAccepted -.->|updates| Claim
-  ReceiveClaimAccepted -.->|raises| EvClaimAccepted
+  SubmitClaim -.->|invokes| SubmitClaimApi
+  SubmitClaim -.->|raises| EvClaimSubmitted
   ReceiveClaimAccepted -.->|displays| ClaimScreen
-  RecordClaimDenial -.->|updates| Claim
-  RecordClaimDenial -.->|raises| EvClaimDenied
+  ReceiveClaimAccepted -.->|raises| EvClaimAccepted
+  ReceiveClaimAccepted -.->|updates| Claim
   RecordClaimDenial -.->|displays| ClaimScreen
-  PostPayment -.->|raises| EvClaimPaid
+  RecordClaimDenial -.->|raises| EvClaimDenied
+  RecordClaimDenial -.->|updates| Claim
   PostPayment -.->|displays| PaymentPostingScreen
+  PostPayment -.->|invokes| PaymentPostApi
+  PostPayment -.->|raises| EvClaimPaid
   ReconcileBalance -.->|displays| BalanceScreen
-  VoidCharge -.->|updates| Charge
+  ReconcileBalance -.->|invokes| BalanceApi
   VoidCharge -.->|displays| ChargeWorklistScreen
+  VoidCharge -.->|updates| Charge
 ```
 
 #### Billing Claims sequence 図
@@ -1325,22 +1588,22 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucBi
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor BillingSpecialist as 👤 Billing Specialist
   end
-  box システム境界
+  box System Boundary
     participant BalanceScreen as 🖥️ Balance Screen
     participant ChargeWorklistScreen as 🖥️ Charge Worklist Screen
     participant ClaimScreen as 🖥️ Claim Screen
     participant PaymentPostingScreen as 🖥️ Payment Posting Screen
+  end
+  box System
+    participant System as 🧩 システム
     participant BalanceApi as 🔌 Balance API
     participant CreateChargeApi as 🔌 Create Charge API
     participant GenerateClaimApi as 🔌 Generate Claim API
     participant PaymentPostApi as 🔌 Payment Posting API
     participant SubmitClaimApi as 🔌 Submit Claim API
-  end
-  box システム
-    participant System as 🧩 システム
     participant AccountBalance as 🗄️ Account Balance
     participant Charge as 🗄️ Charge
     participant Claim as 🗄️ Claim
@@ -1448,75 +1711,110 @@ sequenceDiagram
 - ScheduleFollowUpVisit は予約 BUC に移すべきか、フォローアップ BUC に置くべきか。
 - 患者応答を PatientMessage の状態として扱うだけで足りるか。
 
-#### Follow-Up Care RDRA 図
+#### Follow-Up Care Layered Object Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucFollowupCare --out samples/clinic-ops/out/buc/rdra_followup_care
+rdra-ish diagram samples/clinic-ops --kind object-graph --format mermaid --buc BucFollowupCare --out samples/clinic-ops/out/buc/object_graph_followup_care
 ```
 
 ```mermaid
-graph TD
-  CareCoordinator(["👤 Care Coordinator"])
-  Patient(["👤 Patient"])
-  CloseCarePlan(["✅ Close Care Plan"])
-  CreateCarePlan(["✅ Create Care Plan"])
-  NotifyPatientResult(["✅ Notify Patient Result"])
-  ReviewPatientResponse(["✅ Review Patient Response"])
-  ScheduleFollowUpVisit(["✅ Schedule Follow-Up Visit"])
-  SendAppointmentNotice(["✅ Send Appointment Notice"])
-  SendFollowUpMessage(["✅ Send Follow-Up Message"])
-  SendIntakeForms(["✅ Send Intake Forms"])
-  BucFollowupCare["📦 Coordinate Follow-Up Care"]
-  Appointment[("🗄️ Appointment")]
-  CarePlan[("🗄️ Care Plan")]
-  Encounter[("🗄️ Encounter")]
-  IntakePacket[("🗄️ Intake Packet")]
-  Notification[("🗄️ Notification")]
-  PatientMessage[("🗄️ Patient Message")]
-  ProviderSchedule[("🗄️ Provider Schedule")]
-  AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
-  CarePlanScreen[["🖥️ Care Plan Screen"]]
-  FollowUpScheduleScreen[["🖥️ Follow-Up Schedule Screen"]]
-  IntakePortalScreen[["🖥️ Intake Portal Screen"]]
-  PatientMessageScreen[["🖥️ Patient Message Screen"]]
-  EvAppointmentScheduled{"⚡ Appointment Scheduled"}
-  EvCarePlanClosed{"⚡ Care Plan Closed"}
-  EvCarePlanMonitoring{"⚡ Care Plan Monitoring"}
-  Patient --> BucFollowupCare
-  CareCoordinator --> BucFollowupCare
-  CareCoordinator --> CreateCarePlan
-  CareCoordinator --> SendFollowUpMessage
-  CareCoordinator --> ReviewPatientResponse
-  CareCoordinator --> ScheduleFollowUpVisit
-  CareCoordinator --> CloseCarePlan
-  CareCoordinator --> NotifyPatientResult
-  BucFollowupCare --> PatientAccess
-  BucFollowupCare --> CreateCarePlan
-  BucFollowupCare --> SendFollowUpMessage
-  BucFollowupCare --> ReviewPatientResponse
-  BucFollowupCare --> ScheduleFollowUpVisit
-  BucFollowupCare --> CloseCarePlan
-  BucFollowupCare --> NotifyPatientResult
-  Encounter --- Appointment
-  CarePlan --- Encounter
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    CareCoordinator(["👤 Care Coordinator"])
+    Patient(["👤 Patient"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    PatientAccess["💼 Patient Access"]
+    BucFollowupCare["📦 Coordinate Follow-Up Care"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    CloseCarePlan(["✅ Close Care Plan"])
+    CreateCarePlan(["✅ Create Care Plan"])
+    NotifyPatientResult(["✅ Notify Patient Result"])
+    ReviewPatientResponse(["✅ Review Patient Response"])
+    ScheduleFollowUpVisit(["✅ Schedule Follow-Up Visit"])
+    SendAppointmentNotice(["✅ Send Appointment Notice"])
+    SendFollowUpMessage(["✅ Send Follow-Up Message"])
+    SendIntakeForms(["✅ Send Intake Forms"])
+    AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
+    CarePlanScreen[["🖥️ Care Plan Screen"]]
+    FollowUpScheduleScreen[["🖥️ Follow-Up Schedule Screen"]]
+    IntakePortalScreen[["🖥️ Intake Portal Screen"]]
+    PatientMessageScreen[["🖥️ Patient Message Screen"]]
+    EvAppointmentScheduled{"⚡ Appointment Scheduled"}
+    EvCarePlanClosed{"⚡ Care Plan Closed"}
+    EvCarePlanMonitoring{"⚡ Care Plan Monitoring"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    AppointmentNoticeApi["🔌 Appointment Notice API"]
+    CreateCarePlanApi["🔌 Create Care Plan API"]
+    FollowUpScheduleApi["🔌 Follow-Up Schedule API"]
+    IntakeMessagingApi["🔌 Intake Messaging API"]
+    NotifyPatientResultApi["🔌 Notify Patient Result API"]
+    SendFollowUpMessageApi["🔌 Send Follow-Up Message API"]
+    Appointment[("🗄️ Appointment")]
+    CarePlan[("🗄️ Care Plan")]
+    Encounter[("🗄️ Encounter")]
+    IntakePacket[("🗄️ Intake Packet")]
+    Notification[("🗄️ Notification")]
+    PatientMessage[("🗄️ Patient Message")]
+    ProviderSchedule[("🗄️ Provider Schedule")]
+  end
+  Patient -->|performs| BucFollowupCare
+  CareCoordinator -->|performs| BucFollowupCare
+  CareCoordinator -->|performs| CreateCarePlan
+  CareCoordinator -->|performs| SendFollowUpMessage
+  CareCoordinator -->|performs| ReviewPatientResponse
+  CareCoordinator -->|performs| ScheduleFollowUpVisit
+  CareCoordinator -->|performs| CloseCarePlan
+  CareCoordinator -->|performs| NotifyPatientResult
+  IntakeMessagingApi -.->|creates| PatientMessage
+  IntakeMessagingApi -.->|creates| IntakePacket
+  AppointmentNoticeApi -.->|creates| PatientMessage
+  AppointmentNoticeApi -.->|creates| Notification
+  CreateCarePlanApi -.->|creates| CarePlan
+  CreateCarePlanApi -.->|reads| Encounter
+  SendFollowUpMessageApi -.->|creates| PatientMessage
+  FollowUpScheduleApi -.->|creates| Appointment
+  FollowUpScheduleApi -.->|updates| ProviderSchedule
+  NotifyPatientResultApi -.->|creates| Notification
+  BucFollowupCare -.->|belongs| PatientAccess
+  BucFollowupCare -->|contains| CreateCarePlan
+  BucFollowupCare -->|contains| SendFollowUpMessage
+  BucFollowupCare -->|contains| ReviewPatientResponse
+  BucFollowupCare -->|contains| ScheduleFollowUpVisit
+  BucFollowupCare -->|contains| CloseCarePlan
+  BucFollowupCare -->|contains| NotifyPatientResult
+  Encounter ---|1:1| Appointment
+  CarePlan ---|N:1| Encounter
   EvAppointmentScheduled -.->|triggers| SendIntakeForms
   EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
   SendIntakeForms -.->|displays| IntakePortalScreen
+  SendIntakeForms -.->|invokes| IntakeMessagingApi
   SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
+  SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
   CreateCarePlan -.->|displays| CarePlanScreen
+  CreateCarePlan -.->|invokes| CreateCarePlanApi
   SendFollowUpMessage -.->|displays| PatientMessageScreen
+  SendFollowUpMessage -.->|invokes| SendFollowUpMessageApi
+  ReviewPatientResponse -.->|displays| CarePlanScreen
+  ReviewPatientResponse -.->|raises| EvCarePlanMonitoring
   ReviewPatientResponse -.->|updates| CarePlan
   ReviewPatientResponse -.->|updates| PatientMessage
-  ReviewPatientResponse -.->|raises| EvCarePlanMonitoring
-  ReviewPatientResponse -.->|displays| CarePlanScreen
-  ScheduleFollowUpVisit -.->|raises| EvAppointmentScheduled
   ScheduleFollowUpVisit -.->|displays| FollowUpScheduleScreen
-  CloseCarePlan -.->|updates| CarePlan
-  CloseCarePlan -.->|raises| EvCarePlanClosed
+  ScheduleFollowUpVisit -.->|invokes| FollowUpScheduleApi
+  ScheduleFollowUpVisit -.->|raises| EvAppointmentScheduled
   CloseCarePlan -.->|displays| CarePlanScreen
+  CloseCarePlan -.->|raises| EvCarePlanClosed
+  CloseCarePlan -.->|updates| CarePlan
   NotifyPatientResult -.->|displays| PatientMessageScreen
+  NotifyPatientResult -.->|invokes| NotifyPatientResultApi
 ```
 
 #### Follow-Up Care sequence 図
@@ -1529,20 +1827,20 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucFo
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor CareCoordinator as 👤 Care Coordinator
   end
-  box システム境界
+  box System Boundary
     participant CarePlanScreen as 🖥️ Care Plan Screen
     participant FollowUpScheduleScreen as 🖥️ Follow-Up Schedule Screen
     participant PatientMessageScreen as 🖥️ Patient Message Screen
+  end
+  box System
+    participant System as 🧩 システム
     participant CreateCarePlanApi as 🔌 Create Care Plan API
     participant FollowUpScheduleApi as 🔌 Follow-Up Schedule API
     participant NotifyPatientResultApi as 🔌 Notify Patient Result API
     participant SendFollowUpMessageApi as 🔌 Send Follow-Up Message API
-  end
-  box システム
-    participant System as 🧩 システム
     participant Appointment as 🗄️ Appointment
     participant CarePlan as 🗄️ Care Plan
     participant Encounter as 🗄️ Encounter
@@ -1625,51 +1923,80 @@ sequenceDiagram
 - ReviewAuditEvents は read-only API として十分か。
 - ResolveAuditFinding は direct CRUD のままでよいか。
 
-#### Staff Administration RDRA 図
+#### Staff Administration Layered Object Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucStaffAdministration --out samples/clinic-ops/out/buc/rdra_staff_administration
+rdra-ish diagram samples/clinic-ops --kind object-graph --format mermaid --buc BucStaffAdministration --out samples/clinic-ops/out/buc/object_graph_staff_administration
 ```
 
 ```mermaid
-graph TD
-  ClinicAdmin(["👤 Clinic Administrator"])
-  BlockScheduleSlot(["✅ Block Schedule Slot"])
-  ConfigureRoom(["✅ Configure Room"])
-  ManageProviderSchedule(["✅ Manage Provider Schedule"])
-  ReleaseRoom(["✅ Release Room"])
-  ResolveAuditFinding(["✅ Resolve Audit Finding"])
-  ReviewAuditEvents(["✅ Review Audit Events"])
-  BucStaffAdministration["📦 Administer Clinic Operations"]
-  AuditEvent[("🗄️ Audit Event")]
-  PatientAccount[("🗄️ Patient Account")]
-  Provider[("🗄️ Provider")]
-  ProviderSchedule[("🗄️ Provider Schedule")]
-  Room[("🗄️ Room")]
-  AuditReviewScreen[["🖥️ Audit Review Screen"]]
-  RoomAdminScreen[["🖥️ Room Admin Screen"]]
-  ScheduleAdminScreen[["🖥️ Schedule Admin Screen"]]
-  ClinicAdmin --> BucStaffAdministration
-  BucStaffAdministration --> ClinicAdministration
-  BucStaffAdministration --> ManageProviderSchedule
-  BucStaffAdministration --> BlockScheduleSlot
-  BucStaffAdministration --> ConfigureRoom
-  BucStaffAdministration --> ReleaseRoom
-  BucStaffAdministration --> ReviewAuditEvents
-  BucStaffAdministration --> ResolveAuditFinding
-  ProviderSchedule --- Provider
-  AuditEvent --- PatientAccount
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    ClinicAdmin(["👤 Clinic Administrator"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    ClinicAdministration["💼 Clinic Administration"]
+    BucStaffAdministration["📦 Administer Clinic Operations"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    BlockScheduleSlot(["✅ Block Schedule Slot"])
+    ConfigureRoom(["✅ Configure Room"])
+    ManageProviderSchedule(["✅ Manage Provider Schedule"])
+    ReleaseRoom(["✅ Release Room"])
+    ResolveAuditFinding(["✅ Resolve Audit Finding"])
+    ReviewAuditEvents(["✅ Review Audit Events"])
+    AuditReviewScreen[["🖥️ Audit Review Screen"]]
+    RoomAdminScreen[["🖥️ Room Admin Screen"]]
+    ScheduleAdminScreen[["🖥️ Schedule Admin Screen"]]
+  end
+  subgraph layer_system[System]
+    direction TB
+    AuditApi["🔌 Audit API"]
+    BlockScheduleSlotApi["🔌 Block Schedule Slot API"]
+    ManageProviderScheduleApi["🔌 Manage Provider Schedule API"]
+    RoomAdminApi["🔌 Room Admin API"]
+    AuditEvent[("🗄️ Audit Event")]
+    PatientAccount[("🗄️ Patient Account")]
+    Provider[("🗄️ Provider")]
+    ProviderSchedule[("🗄️ Provider Schedule")]
+    Room[("🗄️ Room")]
+  end
+  ClinicAdmin -->|performs| BucStaffAdministration
+  ManageProviderScheduleApi -.->|creates| ProviderSchedule
+  ManageProviderScheduleApi -.->|updates| ProviderSchedule
+  ManageProviderScheduleApi -.->|updates| Provider
+  BlockScheduleSlotApi -.->|updates| ProviderSchedule
+  RoomAdminApi -.->|creates| Room
+  RoomAdminApi -.->|updates| Room
+  AuditApi -.->|reads| PatientAccount
+  AuditApi -.->|reads| AuditEvent
+  BucStaffAdministration -.->|belongs| ClinicAdministration
+  BucStaffAdministration -->|contains| ManageProviderSchedule
+  BucStaffAdministration -->|contains| BlockScheduleSlot
+  BucStaffAdministration -->|contains| ConfigureRoom
+  BucStaffAdministration -->|contains| ReleaseRoom
+  BucStaffAdministration -->|contains| ReviewAuditEvents
+  BucStaffAdministration -->|contains| ResolveAuditFinding
+  ProviderSchedule ---|N:1| Provider
+  AuditEvent ---|N:1| PatientAccount
   AuditReviewScreen -.->|shows| AuditEvent
   ManageProviderSchedule -.->|displays| ScheduleAdminScreen
+  ManageProviderSchedule -.->|invokes| ManageProviderScheduleApi
   BlockScheduleSlot -.->|displays| ScheduleAdminScreen
+  BlockScheduleSlot -.->|invokes| BlockScheduleSlotApi
   ConfigureRoom -.->|displays| RoomAdminScreen
-  ReleaseRoom -.->|updates| Room
+  ConfigureRoom -.->|invokes| RoomAdminApi
   ReleaseRoom -.->|displays| RoomAdminScreen
+  ReleaseRoom -.->|updates| Room
   ReviewAuditEvents -.->|displays| AuditReviewScreen
-  ResolveAuditFinding -.->|updates| AuditEvent
+  ReviewAuditEvents -.->|invokes| AuditApi
   ResolveAuditFinding -.->|displays| AuditReviewScreen
+  ResolveAuditFinding -.->|updates| AuditEvent
 ```
 
 #### Staff Administration sequence 図
@@ -1682,20 +2009,20 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucSt
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor ClinicAdmin as 👤 Clinic Administrator
   end
-  box システム境界
+  box System Boundary
     participant AuditReviewScreen as 🖥️ Audit Review Screen
     participant RoomAdminScreen as 🖥️ Room Admin Screen
     participant ScheduleAdminScreen as 🖥️ Schedule Admin Screen
+  end
+  box System
+    participant System as 🧩 システム
     participant AuditApi as 🔌 Audit API
     participant BlockScheduleSlotApi as 🔌 Block Schedule Slot API
     participant ManageProviderScheduleApi as 🔌 Manage Provider Schedule API
     participant RoomAdminApi as 🔌 Room Admin API
-  end
-  box システム
-    participant System as 🧩 システム
     participant AuditEvent as 🗄️ Audit Event
     participant PatientAccount as 🗄️ Patient Account
     participant Provider as 🗄️ Provider
@@ -1792,14 +2119,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase S
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
   end
-  box システム境界
+  box System Boundary
     participant PatientSearchScreen as 🖥️ Patient Search Screen
-    participant SearchPatientApi as 🔌 Search Patient API
   end
-  box システム
+  box System
+    participant SearchPatientApi as 🔌 Search Patient API
     participant PatientAccount as 🗄️ Patient Account
     participant PatientProfile as 🗄️ Patient Profile
   end
@@ -1827,14 +2154,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase R
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
   end
-  box システム境界
+  box System Boundary
     participant PatientProfileScreen as 🖥️ Patient Profile Screen
-    participant RegisterPatientApi as 🔌 Register Patient API
   end
-  box システム
+  box System
+    participant RegisterPatientApi as 🔌 Register Patient API
     participant PatientAccount as 🗄️ Patient Account
     participant PatientProfile as 🗄️ Patient Profile
   end
@@ -1865,14 +2192,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase U
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
   end
-  box システム境界
+  box System Boundary
     participant PatientProfileScreen as 🖥️ Patient Profile Screen
-    participant UpdateDemographicsApi as 🔌 Update Demographics API
   end
-  box システム
+  box System
+    participant UpdateDemographicsApi as 🔌 Update Demographics API
     participant PatientProfile as 🗄️ Patient Profile
   end
 
@@ -1898,14 +2225,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase V
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
   end
-  box システム境界
+  box System Boundary
     participant InsuranceScreen as 🖥️ Insurance Verification Screen
-    participant EligibilityApi as 🔌 Eligibility API
   end
-  box システム
+  box System
+    participant EligibilityApi as 🔌 Eligibility API
     participant EligibilityCheck as 🗄️ Eligibility Check
     participant InsurancePolicy as 🗄️ Insurance Policy
   end
@@ -1937,14 +2264,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Patient as 👤 Patient
   end
-  box システム境界
+  box System Boundary
     participant ConsentScreen as 🖥️ Consent Capture Screen
-    participant ConsentApi as 🔌 Consent API
   end
-  box システム
+  box System
+    participant ConsentApi as 🔌 Consent API
     participant ConsentRecord as 🗄️ Consent Record
   end
 
@@ -1970,14 +2297,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase S
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
   end
-  box システム境界
+  box System Boundary
     participant IntakePortalScreen as 🖥️ Intake Portal Screen
-    participant IntakeMessagingApi as 🔌 Intake Messaging API
   end
-  box システム
+  box System
+    participant IntakeMessagingApi as 🔌 Intake Messaging API
     participant IntakePacket as 🗄️ Intake Packet
     participant PatientMessage as 🗄️ Patient Message
   end
@@ -2008,13 +2335,13 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Patient as 👤 Patient
   end
-  box システム境界
+  box System Boundary
     participant IntakePortalScreen as 🖥️ Intake Portal Screen
   end
-  box システム
+  box System
     participant System as 🧩 システム
     participant IntakePacket as 🗄️ Intake Packet
   end
@@ -2039,13 +2366,13 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase E
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
   end
-  box システム境界
+  box System Boundary
     participant IntakePortalScreen as 🖥️ Intake Portal Screen
   end
-  box システム
+  box System
     participant System as 🧩 システム
     participant IntakePacket as 🗄️ Intake Packet
   end
@@ -2070,13 +2397,13 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase M
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
   end
-  box システム境界
+  box System Boundary
     participant PatientProfileScreen as 🖥️ Patient Profile Screen
   end
-  box システム
+  box System
     participant System as 🧩 システム
     participant PatientAccount as 🗄️ Patient Account
   end
@@ -2101,13 +2428,13 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase A
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
   end
-  box システム境界
+  box System Boundary
     participant PatientProfileScreen as 🖥️ Patient Profile Screen
   end
-  box システム
+  box System
     participant System as 🧩 システム
     participant PatientAccount as 🗄️ Patient Account
   end
@@ -2144,14 +2471,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase S
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
   end
-  box システム境界
+  box System Boundary
     participant ScheduleSearchScreen as 🖥️ Schedule Search Screen
-    participant SearchAvailabilityApi as 🔌 Search Availability API
   end
-  box システム
+  box System
+    participant SearchAvailabilityApi as 🔌 Search Availability API
     participant ClinicLocation as 🗄️ Clinic Location
     participant Provider as 🗄️ Provider
     participant ProviderSchedule as 🗄️ Provider Schedule
@@ -2181,14 +2508,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase R
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
   end
-  box システム境界
+  box System Boundary
     participant AppointmentScreen as 🖥️ Appointment Screen
-    participant ReserveAppointmentApi as 🔌 Reserve Appointment API
   end
-  box システム
+  box System
+    participant ReserveAppointmentApi as 🔌 Reserve Appointment API
     participant Appointment as 🗄️ Appointment
     participant ProviderSchedule as 🗄️ Provider Schedule
   end
@@ -2219,14 +2546,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase B
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
   end
-  box システム境界
+  box System Boundary
     participant AppointmentScreen as 🖥️ Appointment Screen
-    participant BookAppointmentApi as 🔌 Book Appointment API
   end
-  box システム
+  box System
+    participant BookAppointmentApi as 🔌 Book Appointment API
     participant Appointment as 🗄️ Appointment
     participant ProviderSchedule as 🗄️ Provider Schedule
   end
@@ -2257,14 +2584,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase R
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
   end
-  box システム境界
+  box System Boundary
     participant AppointmentScreen as 🖥️ Appointment Screen
-    participant RescheduleAppointmentApi as 🔌 Reschedule Appointment API
   end
-  box システム
+  box System
+    participant RescheduleAppointmentApi as 🔌 Reschedule Appointment API
     participant Appointment as 🗄️ Appointment
     participant ProviderSchedule as 🗄️ Provider Schedule
   end
@@ -2295,14 +2622,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
   end
-  box システム境界
+  box System Boundary
     participant AppointmentScreen as 🖥️ Appointment Screen
-    participant CancelAppointmentApi as 🔌 Cancel Appointment API
   end
-  box システム
+  box System
+    participant CancelAppointmentApi as 🔌 Cancel Appointment API
     participant Appointment as 🗄️ Appointment
     participant ProviderSchedule as 🗄️ Provider Schedule
   end
@@ -2333,13 +2660,13 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase M
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
   end
-  box システム境界
+  box System Boundary
     participant AppointmentScreen as 🖥️ Appointment Screen
   end
-  box システム
+  box System
     participant System as 🧩 システム
     participant Appointment as 🗄️ Appointment
   end
@@ -2364,14 +2691,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase S
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
   end
-  box システム境界
+  box System Boundary
     participant AppointmentNoticeScreen as 🖥️ Appointment Notice Screen
-    participant AppointmentNoticeApi as 🔌 Appointment Notice API
   end
-  box システム
+  box System
+    participant AppointmentNoticeApi as 🔌 Appointment Notice API
     participant Notification as 🗄️ Notification
     participant PatientMessage as 🗄️ Patient Message
   end
@@ -2412,14 +2739,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase V
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
   end
-  box システム境界
+  box System Boundary
     participant CheckInScreen as 🖥️ Check-In Screen
-    participant VerifyArrivalApi as 🔌 Verify Arrival API
   end
-  box システム
+  box System
+    participant VerifyArrivalApi as 🔌 Verify Arrival API
     participant Appointment as 🗄️ Appointment
     participant InsurancePolicy as 🗄️ Insurance Policy
     participant PatientAccount as 🗄️ Patient Account
@@ -2449,14 +2776,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
   end
-  box システム境界
+  box System Boundary
     participant CheckInScreen as 🖥️ Check-In Screen
-    participant CheckInPatientApi as 🔌 Check-In Patient API
   end
-  box システム
+  box System
+    participant CheckInPatientApi as 🔌 Check-In Patient API
     participant Appointment as 🗄️ Appointment
     participant PatientAccount as 🗄️ Patient Account
   end
@@ -2487,14 +2814,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
   end
-  box システム境界
+  box System Boundary
     participant CopayScreen as 🖥️ Copay Screen
-    participant CollectCopayApi as 🔌 Collect Copay API
   end
-  box システム
+  box System
+    participant CollectCopayApi as 🔌 Collect Copay API
     participant AccountBalance as 🗄️ Account Balance
     participant PaymentTransaction as 🗄️ Payment Transaction
   end
@@ -2525,14 +2852,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase A
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Nurse as 👤 Nurse
   end
-  box システム境界
+  box System Boundary
     participant RoomBoardScreen as 🖥️ Room Board Screen
-    participant AssignRoomApi as 🔌 Assign Room API
   end
-  box システム
+  box System
+    participant AssignRoomApi as 🔌 Assign Room API
     participant Appointment as 🗄️ Appointment
     participant Room as 🗄️ Room
   end
@@ -2563,14 +2890,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase P
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Nurse as 👤 Nurse
   end
-  box システム境界
+  box System Boundary
     participant CheckInScreen as 🖥️ Check-In Screen
-    participant PrepareEncounterApi as 🔌 Prepare Encounter API
   end
-  box システム
+  box System
+    participant PrepareEncounterApi as 🔌 Prepare Encounter API
     participant Appointment as 🗄️ Appointment
     participant PatientProfile as 🗄️ Patient Profile
   end
@@ -2609,14 +2936,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase O
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Nurse as 👤 Nurse
   end
-  box システム境界
+  box System Boundary
     participant EncounterWorkspaceScreen as 🖥️ Encounter Workspace
-    participant OpenEncounterApi as 🔌 Open Encounter API
   end
-  box システム
+  box System
+    participant OpenEncounterApi as 🔌 Open Encounter API
     participant Appointment as 🗄️ Appointment
     participant Encounter as 🗄️ Encounter
   end
@@ -2644,14 +2971,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase R
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Nurse as 👤 Nurse
   end
-  box システム境界
+  box System Boundary
     participant VitalsScreen as 🖥️ Vitals Screen
-    participant RecordVitalsApi as 🔌 Record Vitals API
   end
-  box システム
+  box System
+    participant RecordVitalsApi as 🔌 Record Vitals API
     participant Encounter as 🗄️ Encounter
     participant VitalSign as 🗄️ Vital Sign
   end
@@ -2682,14 +3009,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase D
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Clinician as 👤 Clinician
   end
-  box システム境界
+  box System Boundary
     participant DiagnosisScreen as 🖥️ Diagnosis Screen
-    participant DocumentAssessmentApi as 🔌 Document Assessment API
   end
-  box システム
+  box System
+    participant DocumentAssessmentApi as 🔌 Document Assessment API
     participant Diagnosis as 🗄️ Diagnosis
     participant Encounter as 🗄️ Encounter
   end
@@ -2720,14 +3047,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase S
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Clinician as 👤 Clinician
   end
-  box システム境界
+  box System Boundary
     participant EncounterWorkspaceScreen as 🖥️ Encounter Workspace
-    participant SignEncounterApi as 🔌 Sign Encounter API
   end
-  box システム
+  box System
+    participant SignEncounterApi as 🔌 Sign Encounter API
     participant Encounter as 🗄️ Encounter
   end
 
@@ -2753,14 +3080,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase A
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Clinician as 👤 Clinician
   end
-  box システム境界
+  box System Boundary
     participant EncounterWorkspaceScreen as 🖥️ Encounter Workspace
-    participant AmendEncounterApi as 🔌 Amend Encounter API
   end
-  box システム
+  box System
+    participant AmendEncounterApi as 🔌 Amend Encounter API
     participant Encounter as 🗄️ Encounter
   end
 
@@ -2786,14 +3113,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Nurse as 👤 Nurse
   end
-  box システム境界
+  box System Boundary
     participant EncounterWorkspaceScreen as 🖥️ Encounter Workspace
-    participant CompleteAppointmentApi as 🔌 Complete Appointment API
   end
-  box システム
+  box System
+    participant CompleteAppointmentApi as 🔌 Complete Appointment API
     participant Appointment as 🗄️ Appointment
     participant Room as 🗄️ Room
   end
@@ -2835,14 +3162,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase P
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Clinician as 👤 Clinician
   end
-  box システム境界
+  box System Boundary
     participant OrderEntryScreen as 🖥️ Order Entry Screen
-    participant OrderEntryApi as 🔌 Order Entry API
   end
-  box システム
+  box System
+    participant OrderEntryApi as 🔌 Order Entry API
     participant ClinicalOrder as 🗄️ Clinical Order
     participant Encounter as 🗄️ Encounter
   end
@@ -2870,14 +3197,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Nurse as 👤 Nurse
   end
-  box システム境界
+  box System Boundary
     participant SpecimenScreen as 🖥️ Specimen Collection Screen
-    participant CollectSpecimenApi as 🔌 Collect Specimen API
   end
-  box システム
+  box System
+    participant CollectSpecimenApi as 🔌 Collect Specimen API
     participant ClinicalOrder as 🗄️ Clinical Order
   end
 
@@ -2903,14 +3230,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase R
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Nurse as 👤 Nurse
   end
-  box システム境界
+  box System Boundary
     participant ResultReviewScreen as 🖥️ Result Review Screen
-    participant ReceiveLabResultApi as 🔌 Receive Lab Result API
   end
-  box システム
+  box System
+    participant ReceiveLabResultApi as 🔌 Receive Lab Result API
     participant ClinicalOrder as 🗄️ Clinical Order
     participant LabResult as 🗄️ Lab Result
   end
@@ -2941,14 +3268,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase R
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Clinician as 👤 Clinician
   end
-  box システム境界
+  box System Boundary
     participant ResultReviewScreen as 🖥️ Result Review Screen
-    participant ResultReviewApi as 🔌 Result Review API
   end
-  box システム
+  box System
+    participant ResultReviewApi as 🔌 Result Review API
     participant ClinicalOrder as 🗄️ Clinical Order
     participant LabResult as 🗄️ Lab Result
   end
@@ -2979,14 +3306,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase N
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Clinician as 👤 Clinician
   end
-  box システム境界
+  box System Boundary
     participant CriticalNoticeScreen as 🖥️ Critical Result Notice Screen
-    participant CriticalNoticeApi as 🔌 Critical Notice API
   end
-  box システム
+  box System
+    participant CriticalNoticeApi as 🔌 Critical Notice API
     participant Notification as 🗄️ Notification
     participant PatientMessage as 🗄️ Patient Message
   end
@@ -3017,13 +3344,13 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Clinician as 👤 Clinician
   end
-  box システム境界
+  box System Boundary
     participant OrderEntryScreen as 🖥️ Order Entry Screen
   end
-  box システム
+  box System
     participant System as 🧩 システム
     participant ClinicalOrder as 🗄️ Clinical Order
   end
@@ -3059,14 +3386,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase S
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Clinician as 👤 Clinician
   end
-  box システム境界
+  box System Boundary
     participant MedicationSearchScreen as 🖥️ Medication Search Screen
-    participant MedicationCatalogApi as 🔌 Medication Catalog API
   end
-  box システム
+  box System
+    participant MedicationCatalogApi as 🔌 Medication Catalog API
     participant Medication as 🗄️ Medication
   end
 
@@ -3092,14 +3419,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase D
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Clinician as 👤 Clinician
   end
-  box システム境界
+  box System Boundary
     participant PrescriptionScreen as 🖥️ Prescription Screen
-    participant DraftPrescriptionApi as 🔌 Draft Prescription API
   end
-  box システム
+  box System
+    participant DraftPrescriptionApi as 🔌 Draft Prescription API
     participant Encounter as 🗄️ Encounter
     participant Prescription as 🗄️ Prescription
   end
@@ -3127,14 +3454,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase S
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Clinician as 👤 Clinician
   end
-  box システム境界
+  box System Boundary
     participant PrescriptionScreen as 🖥️ Prescription Screen
-    participant SendPrescriptionApi as 🔌 Send Prescription API
   end
-  box システム
+  box System
+    participant SendPrescriptionApi as 🔌 Send Prescription API
     participant Prescription as 🗄️ Prescription
   end
 
@@ -3160,14 +3487,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Nurse as 👤 Nurse
   end
-  box システム境界
+  box System Boundary
     participant PharmacyStatusScreen as 🖥️ Pharmacy Status Screen
-    participant ConfirmDispenseApi as 🔌 Confirm Dispense API
   end
-  box システム
+  box System
+    participant ConfirmDispenseApi as 🔌 Confirm Dispense API
     participant Prescription as 🗄️ Prescription
   end
 
@@ -3193,13 +3520,13 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Clinician as 👤 Clinician
   end
-  box システム境界
+  box System Boundary
     participant PrescriptionScreen as 🖥️ Prescription Screen
   end
-  box システム
+  box System
     participant System as 🧩 システム
     participant Prescription as 🗄️ Prescription
   end
@@ -3224,14 +3551,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase R
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Clinician as 👤 Clinician
   end
-  box システム境界
+  box System Boundary
     participant PrescriptionScreen as 🖥️ Prescription Screen
-    participant RefillPrescriptionApi as 🔌 Refill Prescription API
   end
-  box システム
+  box System
+    participant RefillPrescriptionApi as 🔌 Refill Prescription API
     participant Medication as 🗄️ Medication
     participant Prescription as 🗄️ Prescription
   end
@@ -3272,14 +3599,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor BillingSpecialist as 👤 Billing Specialist
   end
-  box システム境界
+  box System Boundary
     participant ChargeWorklistScreen as 🖥️ Charge Worklist Screen
-    participant CreateChargeApi as 🔌 Create Charge API
   end
-  box システム
+  box System
+    participant CreateChargeApi as 🔌 Create Charge API
     participant AccountBalance as 🗄️ Account Balance
     participant Charge as 🗄️ Charge
     participant Encounter as 🗄️ Encounter
@@ -3312,14 +3639,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase G
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor BillingSpecialist as 👤 Billing Specialist
   end
-  box システム境界
+  box System Boundary
     participant ClaimScreen as 🖥️ Claim Screen
-    participant GenerateClaimApi as 🔌 Generate Claim API
   end
-  box システム
+  box System
+    participant GenerateClaimApi as 🔌 Generate Claim API
     participant Charge as 🗄️ Charge
     participant Claim as 🗄️ Claim
     participant InsurancePolicy as 🗄️ Insurance Policy
@@ -3352,14 +3679,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase S
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor BillingSpecialist as 👤 Billing Specialist
   end
-  box システム境界
+  box System Boundary
     participant ClaimScreen as 🖥️ Claim Screen
-    participant SubmitClaimApi as 🔌 Submit Claim API
   end
-  box システム
+  box System
+    participant SubmitClaimApi as 🔌 Submit Claim API
     participant Claim as 🗄️ Claim
   end
 
@@ -3385,13 +3712,13 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase R
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor BillingSpecialist as 👤 Billing Specialist
   end
-  box システム境界
+  box System Boundary
     participant ClaimScreen as 🖥️ Claim Screen
   end
-  box システム
+  box System
     participant System as 🧩 システム
     participant Claim as 🗄️ Claim
   end
@@ -3416,13 +3743,13 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase R
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor BillingSpecialist as 👤 Billing Specialist
   end
-  box システム境界
+  box System Boundary
     participant ClaimScreen as 🖥️ Claim Screen
   end
-  box システム
+  box System
     participant System as 🧩 システム
     participant Claim as 🗄️ Claim
   end
@@ -3447,14 +3774,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase P
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor BillingSpecialist as 👤 Billing Specialist
   end
-  box システム境界
+  box System Boundary
     participant PaymentPostingScreen as 🖥️ Payment Posting Screen
-    participant PaymentPostApi as 🔌 Payment Posting API
   end
-  box システム
+  box System
+    participant PaymentPostApi as 🔌 Payment Posting API
     participant Claim as 🗄️ Claim
     participant PaymentTransaction as 🗄️ Payment Transaction
   end
@@ -3485,14 +3812,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase R
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor BillingSpecialist as 👤 Billing Specialist
   end
-  box システム境界
+  box System Boundary
     participant BalanceScreen as 🖥️ Balance Screen
-    participant BalanceApi as 🔌 Balance API
   end
-  box システム
+  box System
+    participant BalanceApi as 🔌 Balance API
     participant AccountBalance as 🗄️ Account Balance
     participant PaymentTransaction as 🗄️ Payment Transaction
   end
@@ -3520,13 +3847,13 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase V
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor BillingSpecialist as 👤 Billing Specialist
   end
-  box システム境界
+  box System Boundary
     participant ChargeWorklistScreen as 🖥️ Charge Worklist Screen
   end
-  box システム
+  box System
     participant System as 🧩 システム
     participant Charge as 🗄️ Charge
   end
@@ -3562,14 +3889,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor CareCoordinator as 👤 Care Coordinator
   end
-  box システム境界
+  box System Boundary
     participant CarePlanScreen as 🖥️ Care Plan Screen
-    participant CreateCarePlanApi as 🔌 Create Care Plan API
   end
-  box システム
+  box System
+    participant CreateCarePlanApi as 🔌 Create Care Plan API
     participant CarePlan as 🗄️ Care Plan
     participant Encounter as 🗄️ Encounter
   end
@@ -3597,14 +3924,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase S
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor CareCoordinator as 👤 Care Coordinator
   end
-  box システム境界
+  box System Boundary
     participant PatientMessageScreen as 🖥️ Patient Message Screen
-    participant SendFollowUpMessageApi as 🔌 Send Follow-Up Message API
   end
-  box システム
+  box System
+    participant SendFollowUpMessageApi as 🔌 Send Follow-Up Message API
     participant PatientMessage as 🗄️ Patient Message
   end
 
@@ -3630,13 +3957,13 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase R
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor CareCoordinator as 👤 Care Coordinator
   end
-  box システム境界
+  box System Boundary
     participant CarePlanScreen as 🖥️ Care Plan Screen
   end
-  box システム
+  box System
     participant System as 🧩 システム
     participant CarePlan as 🗄️ Care Plan
     participant PatientMessage as 🗄️ Patient Message
@@ -3663,14 +3990,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase S
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor CareCoordinator as 👤 Care Coordinator
   end
-  box システム境界
+  box System Boundary
     participant FollowUpScheduleScreen as 🖥️ Follow-Up Schedule Screen
-    participant FollowUpScheduleApi as 🔌 Follow-Up Schedule API
   end
-  box システム
+  box System
+    participant FollowUpScheduleApi as 🔌 Follow-Up Schedule API
     participant Appointment as 🗄️ Appointment
     participant ProviderSchedule as 🗄️ Provider Schedule
   end
@@ -3701,13 +4028,13 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor CareCoordinator as 👤 Care Coordinator
   end
-  box システム境界
+  box System Boundary
     participant CarePlanScreen as 🖥️ Care Plan Screen
   end
-  box システム
+  box System
     participant System as 🧩 システム
     participant CarePlan as 🗄️ Care Plan
   end
@@ -3732,14 +4059,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase N
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor CareCoordinator as 👤 Care Coordinator
   end
-  box システム境界
+  box System Boundary
     participant PatientMessageScreen as 🖥️ Patient Message Screen
-    participant NotifyPatientResultApi as 🔌 Notify Patient Result API
   end
-  box システム
+  box System
+    participant NotifyPatientResultApi as 🔌 Notify Patient Result API
     participant Notification as 🗄️ Notification
   end
 
@@ -3776,14 +4103,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase M
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor ClinicAdmin as 👤 Clinic Administrator
   end
-  box システム境界
+  box System Boundary
     participant ScheduleAdminScreen as 🖥️ Schedule Admin Screen
-    participant ManageProviderScheduleApi as 🔌 Manage Provider Schedule API
   end
-  box システム
+  box System
+    participant ManageProviderScheduleApi as 🔌 Manage Provider Schedule API
     participant Provider as 🗄️ Provider
     participant ProviderSchedule as 🗄️ Provider Schedule
   end
@@ -3814,14 +4141,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase B
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor ClinicAdmin as 👤 Clinic Administrator
   end
-  box システム境界
+  box System Boundary
     participant ScheduleAdminScreen as 🖥️ Schedule Admin Screen
-    participant BlockScheduleSlotApi as 🔌 Block Schedule Slot API
   end
-  box システム
+  box System
+    participant BlockScheduleSlotApi as 🔌 Block Schedule Slot API
     participant ProviderSchedule as 🗄️ Provider Schedule
   end
 
@@ -3847,14 +4174,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor ClinicAdmin as 👤 Clinic Administrator
   end
-  box システム境界
+  box System Boundary
     participant RoomAdminScreen as 🖥️ Room Admin Screen
-    participant RoomAdminApi as 🔌 Room Admin API
   end
-  box システム
+  box System
+    participant RoomAdminApi as 🔌 Room Admin API
     participant Room as 🗄️ Room
   end
 
@@ -3880,13 +4207,13 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase R
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor ClinicAdmin as 👤 Clinic Administrator
   end
-  box システム境界
+  box System Boundary
     participant RoomAdminScreen as 🖥️ Room Admin Screen
   end
-  box システム
+  box System
     participant System as 🧩 システム
     participant Room as 🗄️ Room
   end
@@ -3911,14 +4238,14 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase R
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor ClinicAdmin as 👤 Clinic Administrator
   end
-  box システム境界
+  box System Boundary
     participant AuditReviewScreen as 🖥️ Audit Review Screen
-    participant AuditApi as 🔌 Audit API
   end
-  box システム
+  box System
+    participant AuditApi as 🔌 Audit API
     participant AuditEvent as 🗄️ Audit Event
     participant PatientAccount as 🗄️ Patient Account
   end
@@ -3946,13 +4273,13 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase R
 
 ```mermaid
 sequenceDiagram
-  box システム価値
+  box System Value
     actor ClinicAdmin as 👤 Clinic Administrator
   end
-  box システム境界
+  box System Boundary
     participant AuditReviewScreen as 🖥️ Audit Review Screen
   end
-  box システム
+  box System
     participant System as 🧩 システム
     participant AuditEvent as 🗄️ Audit Event
   end
@@ -4431,7 +4758,7 @@ Entity: Claim (Claim)
 
 ## 7. レビュー手順
 
-1. BUC 単位の RDRA 図でスコープと actor/usecase を確認する。
+1. BUC 単位の Layered Object Graph 図でスコープと actor/usecase を確認する。
 2. BUC 単位の sequence 図で、その BUC 内の UC と API 境界を確認する。
 3. 論点のある UC は UC 単位 sequence 図で個別に確認する。
 4. Event flow で BUC 間連鎖を確認する。

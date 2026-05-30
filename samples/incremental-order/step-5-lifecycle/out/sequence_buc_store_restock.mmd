@@ -1,14 +1,14 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor OpsStaff as 👤 Operations Staff
   end
-  box システム境界
+  box System Boundary
     participant StoreMaintenanceScreen as 🖥️ Store Maintenance
+  end
+  box System
+    participant System as 🧩 システム
     participant OrganizationLookupApi as 🔌 Organization Lookup API
     participant StoreAdminApi as 🔌 Store Admin API
-  end
-  box システム
-    participant System as 🧩 システム
     participant Organization as 🗄️ Organization
     participant Store as 🗄️ Store
   end

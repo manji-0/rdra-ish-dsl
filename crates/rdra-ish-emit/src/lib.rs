@@ -108,10 +108,10 @@ impl ObjectGraphLayer {
 
     pub(crate) fn label(self) -> &'static str {
         match self {
-            ObjectGraphLayer::SystemValue => "システム価値",
-            ObjectGraphLayer::ExternalEnvironment => "システム外部環境",
-            ObjectGraphLayer::SystemBoundary => "システム境界",
-            ObjectGraphLayer::System => "システム",
+            ObjectGraphLayer::SystemValue => "System Value",
+            ObjectGraphLayer::ExternalEnvironment => "External Environment",
+            ObjectGraphLayer::SystemBoundary => "System Boundary",
+            ObjectGraphLayer::System => "System",
         }
     }
 }
@@ -132,10 +132,12 @@ pub(crate) fn object_graph_layer(node: &NodeRef) -> ObjectGraphLayer {
         | NodeRef::UsageScene(_)
         | NodeRef::Condition(_)
         | NodeRef::Variation(_) => ObjectGraphLayer::ExternalEnvironment,
-        NodeRef::UseCase(_) | NodeRef::Screen(_) | NodeRef::Event(_) | NodeRef::Api(_) => {
+        NodeRef::UseCase(_) | NodeRef::Screen(_) | NodeRef::Event(_) => {
             ObjectGraphLayer::SystemBoundary
         }
-        NodeRef::System(_) | NodeRef::Entity(_) | NodeRef::State(_) => ObjectGraphLayer::System,
+        NodeRef::System(_) | NodeRef::Api(_) | NodeRef::Entity(_) | NodeRef::State(_) => {
+            ObjectGraphLayer::System
+        }
     }
 }
 

@@ -1,12 +1,12 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Clinician as 👤 Clinician
   end
-  box システム境界
+  box System Boundary
     participant CriticalNoticeScreen as 🖥️ Critical Result Notice Screen
-    participant CriticalNoticeApi as 🔌 Critical Notice API
   end
-  box システム
+  box System
+    participant CriticalNoticeApi as 🔌 Critical Notice API
     participant Notification as 🗄️ Notification
     participant PatientMessage as 🗄️ Patient Message
   end

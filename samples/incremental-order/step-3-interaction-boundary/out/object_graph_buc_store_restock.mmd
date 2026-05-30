@@ -1,0 +1,37 @@
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    OpsStaff(["👤 Operations Staff"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    StoreOperations["💼 Store Operations"]
+    BucStoreRestock["📦 Maintain Store Restock"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    ChangeNextRestockDate(["✅ Change Next Restock Date"])
+    ChangeStoreParentOrganization(["✅ Change Store Parent Organization"])
+    StoreMaintenanceScreen[["🖥️ Store Maintenance"]]
+  end
+  subgraph layer_system[System]
+    direction TB
+    OrganizationLookupApi["🔌 Organization Lookup API"]
+    StoreAdminApi["🔌 Store Admin API"]
+    Organization[("🗄️ Organization")]
+    Store[("🗄️ Store")]
+  end
+  OpsStaff -->|performs| BucStoreRestock
+  StoreAdminApi -.->|updates| Store
+  OrganizationLookupApi -.->|reads| Organization
+  BucStoreRestock -.->|belongs| StoreOperations
+  BucStoreRestock -->|contains| ChangeNextRestockDate
+  BucStoreRestock -->|contains| ChangeStoreParentOrganization
+  StoreMaintenanceScreen -.->|shows| Store
+  StoreMaintenanceScreen -.->|shows| Store
+  StoreMaintenanceScreen -.->|shows| Organization
+  ChangeNextRestockDate -.->|displays| StoreMaintenanceScreen
+  ChangeNextRestockDate -.->|updates| Store
+  ChangeStoreParentOrganization -.->|displays| StoreMaintenanceScreen
+  ChangeStoreParentOrganization -.->|invokes| StoreAdminApi
+  ChangeStoreParentOrganization -.->|invokes| OrganizationLookupApi

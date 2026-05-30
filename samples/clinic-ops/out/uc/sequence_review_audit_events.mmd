@@ -1,12 +1,12 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor ClinicAdmin as 👤 Clinic Administrator
   end
-  box システム境界
+  box System Boundary
     participant AuditReviewScreen as 🖥️ Audit Review Screen
-    participant AuditApi as 🔌 Audit API
   end
-  box システム
+  box System
+    participant AuditApi as 🔌 Audit API
     participant AuditEvent as 🗄️ Audit Event
     participant PatientAccount as 🗄️ Patient Account
   end

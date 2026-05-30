@@ -1,12 +1,12 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Clinician as 👤 Clinician
   end
-  box システム境界
+  box System Boundary
     participant ResultReviewScreen as 🖥️ Result Review Screen
-    participant ResultReviewApi as 🔌 Result Review API
   end
-  box システム
+  box System
+    participant ResultReviewApi as 🔌 Result Review API
     participant ClinicalOrder as 🗄️ Clinical Order
     participant LabResult as 🗄️ Lab Result
   end

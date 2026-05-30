@@ -1,12 +1,12 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
   end
-  box システム境界
+  box System Boundary
     participant InsuranceScreen as 🖥️ Insurance Verification Screen
-    participant EligibilityApi as 🔌 Eligibility API
   end
-  box システム
+  box System
+    participant EligibilityApi as 🔌 Eligibility API
     participant EligibilityCheck as 🗄️ Eligibility Check
     participant InsurancePolicy as 🗄️ Insurance Policy
   end

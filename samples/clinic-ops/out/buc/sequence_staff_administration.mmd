@@ -1,18 +1,18 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor ClinicAdmin as 👤 Clinic Administrator
   end
-  box システム境界
+  box System Boundary
     participant AuditReviewScreen as 🖥️ Audit Review Screen
     participant RoomAdminScreen as 🖥️ Room Admin Screen
     participant ScheduleAdminScreen as 🖥️ Schedule Admin Screen
+  end
+  box System
+    participant System as 🧩 システム
     participant AuditApi as 🔌 Audit API
     participant BlockScheduleSlotApi as 🔌 Block Schedule Slot API
     participant ManageProviderScheduleApi as 🔌 Manage Provider Schedule API
     participant RoomAdminApi as 🔌 Room Admin API
-  end
-  box システム
-    participant System as 🧩 システム
     participant AuditEvent as 🗄️ Audit Event
     participant PatientAccount as 🗄️ Patient Account
     participant Provider as 🗄️ Provider

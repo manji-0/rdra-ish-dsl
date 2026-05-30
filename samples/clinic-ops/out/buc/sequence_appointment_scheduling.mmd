@@ -1,20 +1,20 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor FrontDesk as 👤 Front Desk Staff
   end
-  box システム境界
+  box System Boundary
     participant AppointmentNoticeScreen as 🖥️ Appointment Notice Screen
     participant AppointmentScreen as 🖥️ Appointment Screen
     participant ScheduleSearchScreen as 🖥️ Schedule Search Screen
+  end
+  box System
+    participant System as 🧩 システム
     participant AppointmentNoticeApi as 🔌 Appointment Notice API
     participant BookAppointmentApi as 🔌 Book Appointment API
     participant CancelAppointmentApi as 🔌 Cancel Appointment API
     participant RescheduleAppointmentApi as 🔌 Reschedule Appointment API
     participant ReserveAppointmentApi as 🔌 Reserve Appointment API
     participant SearchAvailabilityApi as 🔌 Search Availability API
-  end
-  box システム
-    participant System as 🧩 システム
     participant Appointment as 🗄️ Appointment
     participant ClinicLocation as 🗄️ Clinic Location
     participant Notification as 🗄️ Notification

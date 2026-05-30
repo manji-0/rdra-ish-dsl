@@ -1,12 +1,12 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor Clinician as 👤 Clinician
   end
-  box システム境界
+  box System Boundary
     participant PrescriptionScreen as 🖥️ Prescription Screen
-    participant RefillPrescriptionApi as 🔌 Refill Prescription API
   end
-  box システム
+  box System
+    participant RefillPrescriptionApi as 🔌 Refill Prescription API
     participant Medication as 🗄️ Medication
     participant Prescription as 🗄️ Prescription
   end

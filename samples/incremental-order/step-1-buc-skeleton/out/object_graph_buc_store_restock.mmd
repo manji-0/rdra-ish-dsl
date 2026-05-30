@@ -1,0 +1,22 @@
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    OpsStaff(["👤 Operations Staff"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    StoreOperations["💼 Store Operations"]
+    BucStoreRestock["📦 Maintain Store Restock"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    ChangeNextRestockDate(["✅ Change Next Restock Date"])
+    ChangeStoreParentOrganization(["✅ Change Store Parent Organization"])
+  end
+  subgraph layer_system[System]
+    direction TB
+  end
+  OpsStaff -->|performs| BucStoreRestock
+  BucStoreRestock -.->|belongs| StoreOperations
+  BucStoreRestock -->|contains| ChangeNextRestockDate
+  BucStoreRestock -->|contains| ChangeStoreParentOrganization

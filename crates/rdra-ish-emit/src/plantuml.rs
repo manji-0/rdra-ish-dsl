@@ -758,7 +758,7 @@ impl Emitter for SequenceDiagramEmitter {
             .collect();
         actors_sorted.sort_by_key(|(_, a)| a.id.as_str());
         if !actors_sorted.is_empty() {
-            out.push_str("box \"システム価値\" #E3F2FD\n");
+            out.push_str("box \"System Value\" #E3F2FD\n");
             for (_, actor) in &actors_sorted {
                 out.push_str(&format!(
                     "actor \"{}\" as {}\n",
@@ -783,20 +783,13 @@ impl Emitter for SequenceDiagramEmitter {
             .filter(|(k, _)| api_keys.contains(k))
             .collect();
         apis_sorted.sort_by_key(|(_, a)| a.id.as_str());
-        if !scrs_sorted.is_empty() || !apis_sorted.is_empty() {
-            out.push_str("box \"システム境界\" #E0F7FA\n");
+        if !scrs_sorted.is_empty() {
+            out.push_str("box \"System Boundary\" #E0F7FA\n");
             for (_, scr) in &scrs_sorted {
                 out.push_str(&format!(
                     "boundary \"{}\" as {}\n",
                     prefixed_label("🖥️", &scr.label),
                     scr.id
-                ));
-            }
-            for (_, api) in &apis_sorted {
-                out.push_str(&format!(
-                    "control \"{}\" as {}\n",
-                    prefixed_label("🔌", &api.label),
-                    api.id
                 ));
             }
             out.push_str("end box\n");
@@ -808,11 +801,18 @@ impl Emitter for SequenceDiagramEmitter {
             .filter(|(k, _)| entity_keys.contains(k))
             .collect();
         ents_sorted.sort_by_key(|(_, e)| e.id.as_str());
-        if has_legacy_uc || !ents_sorted.is_empty() {
-            out.push_str("box \"システム\" #F3E5F5\n");
+        if has_legacy_uc || !apis_sorted.is_empty() || !ents_sorted.is_empty() {
+            out.push_str("box \"System\" #F3E5F5\n");
             // System レーン: レガシー UC が1件でもあれば維持（後方互換）
             if has_legacy_uc {
                 out.push_str("participant \"🧩 システム\" as System\n");
+            }
+            for (_, api) in &apis_sorted {
+                out.push_str(&format!(
+                    "control \"{}\" as {}\n",
+                    prefixed_label("🔌", &api.label),
+                    api.id
+                ));
             }
             for (_, ent) in &ents_sorted {
                 out.push_str(&format!(
@@ -1277,15 +1277,22 @@ creates(OrderApi, Order)
             .unwrap();
         assert!(result.contains("@startuml"));
         assert!(result.contains("left to right direction"));
-        assert!(result.contains("rectangle \"システム価値\""));
-        assert!(result.contains("rectangle \"システム外部環境\""));
-        assert!(result.contains("rectangle \"システム境界\""));
-        assert!(result.contains("rectangle \"システム\""));
+        assert!(result.contains("rectangle \"System Value\""));
+        assert!(result.contains("rectangle \"External Environment\""));
+        assert!(result.contains("rectangle \"System Boundary\""));
+        assert!(result.contains("rectangle \"System\""));
         assert!(result.contains("actor \"👤 顧客\" as Customer"));
         assert!(result.contains("rectangle \"📦 注文業務\" as BucOrder"));
         assert!(result.contains("boundary \"🖥️ 注文画面\" as OrderScreen"));
         assert!(result.contains("control \"🔌 注文API\" as OrderApi"));
         assert!(result.contains("database \"🗄️ 注文\" as Order"));
+        let boundary_pos = result.find("rectangle \"System Boundary\"").unwrap();
+        let system_pos = result.find("rectangle \"System\"").unwrap();
+        let screen_pos = result.find("boundary \"🖥️ 注文画面\" as OrderScreen").unwrap();
+        let api_pos = result.find("control \"🔌 注文API\" as OrderApi").unwrap();
+        assert!(boundary_pos < screen_pos);
+        assert!(screen_pos < system_pos);
+        assert!(system_pos < api_pos);
         assert!(result.contains("Customer --> BucOrder : performs"));
         assert!(result.contains("PlaceOrder ..> OrderApi : invokes"));
         assert!(result.contains("OrderApi ..> Order : creates"));
@@ -1367,9 +1374,9 @@ displays(PlaceOrder, OrderCompleteScreen)
         let result = SequenceDiagramEmitter.emit(&model, &view).unwrap();
 
         // 参加者宣言
-        assert!(result.contains("box \"システム価値\""));
-        assert!(result.contains("box \"システム境界\""));
-        assert!(result.contains("box \"システム\""));
+        assert!(result.contains("box \"System Value\""));
+        assert!(result.contains("box \"System Boundary\""));
+        assert!(result.contains("box \"System\""));
         assert!(result.contains("actor \"👤 顧客\" as Customer"));
         assert!(result.contains("database \"🗄️ 注文\" as Order"));
         assert!(result.contains("database \"🗄️ 注文明細\" as OrderLine"));
@@ -1502,11 +1509,16 @@ reads(SearchApi, Item)
         assert!(result.contains("control \"🔌 検索API\" as SearchApi"));
         assert!(result.contains("database \"🗄️ 品目\" as Item"));
         assert!(result.contains("SearchApi -> Item : read"));
+        let boundary_box_pos = result.find("box \"System Boundary\"").unwrap();
+        let system_box_pos = result.find("box \"System\"").unwrap();
         let screen_pos = result
             .find("boundary \"🖥️ 検索画面\" as SearchScreen")
             .unwrap();
         let api_pos = result.find("control \"🔌 検索API\" as SearchApi").unwrap();
         let entity_pos = result.find("database \"🗄️ 品目\" as Item").unwrap();
+        assert!(boundary_box_pos < screen_pos);
+        assert!(screen_pos < system_box_pos);
+        assert!(system_box_pos < api_pos);
         assert!(screen_pos < api_pos);
         assert!(api_pos < entity_pos);
         assert!(!result.contains("no sequenceable usecases"));

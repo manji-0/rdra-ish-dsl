@@ -1,12 +1,12 @@
 sequenceDiagram
-  box システム価値
+  box System Value
     actor CareCoordinator as 👤 Care Coordinator
   end
-  box システム境界
+  box System Boundary
     participant FollowUpScheduleScreen as 🖥️ Follow-Up Schedule Screen
-    participant FollowUpScheduleApi as 🔌 Follow-Up Schedule API
   end
-  box システム
+  box System
+    participant FollowUpScheduleApi as 🔌 Follow-Up Schedule API
     participant Appointment as 🗄️ Appointment
     participant ProviderSchedule as 🗄️ Provider Schedule
   end
