@@ -24,12 +24,12 @@ sequenceDiagram
   deactivate System
 
   Note over Clinician,SpecimenScreen: Collect Specimen
-  Clinician->>SpecimenScreen: Collect Specimen
+  Nurse->>SpecimenScreen: Collect Specimen
   SpecimenScreen->>CollectSpecimenApi: Collect Specimen
   activate CollectSpecimenApi
   CollectSpecimenApi->>ClinicalOrder: update
   CollectSpecimenApi-->>SpecimenScreen: Specimen Collection Screen
-  SpecimenScreen-->>Clinician: Specimen Collection Screen
+  SpecimenScreen-->>Nurse: Specimen Collection Screen
   deactivate CollectSpecimenApi
 
   Note over Clinician,SpecimenScreen: Notify Critical Result
@@ -55,7 +55,7 @@ sequenceDiagram
   deactivate OrderEntryApi
 
   Note over Clinician,SpecimenScreen: Receive Lab Result
-  Clinician->>ResultReviewScreen: Receive Lab Result
+  Nurse->>ResultReviewScreen: Receive Lab Result
   ResultReviewScreen->>ReceiveLabResultApi: Receive Lab Result
   activate ReceiveLabResultApi
   rect rgb(245,245,245)
@@ -64,7 +64,7 @@ sequenceDiagram
     ReceiveLabResultApi->>LabResult: create
   end
   ReceiveLabResultApi-->>ResultReviewScreen: Result Review Screen
-  ResultReviewScreen-->>Clinician: Result Review Screen
+  ResultReviewScreen-->>Nurse: Result Review Screen
   deactivate ReceiveLabResultApi
 
   Note over Clinician,SpecimenScreen: Review Lab Result

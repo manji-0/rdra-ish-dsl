@@ -1,14 +1,13 @@
 sequenceDiagram
-  actor FrontDesk as Front Desk Staff
   actor Patient as Patient
   participant System as システム
   participant IntakePacket as Intake Packet
   participant IntakePortalScreen as Intake Portal Screen
 
-  Note over FrontDesk,IntakePortalScreen: Complete Intake Forms
-  FrontDesk->System: Complete Intake Forms
+  Note over Patient,IntakePortalScreen: Complete Intake Forms
+  Patient->System: Complete Intake Forms
   activate System
   System->>IntakePacket: update
-  System-->>FrontDesk: Intake Portal Screen
+  System-->>Patient: Intake Portal Screen
   deactivate System
 

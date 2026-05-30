@@ -208,6 +208,8 @@ rdra-ish csv samples/clinic-ops --kind api-matrix --out samples/clinic-ops/out/a
 
 UC 単位の sequence は `out/uc/sequence_<usecase>.mmd` に生成しています。BUC 図で責務境界を見たあと、論点のある UC だけを個別に開きます。
 
+actor は `performs(Actor, UseCase)` があれば UC 直結の actor を優先します。BUC には複数 actor がいても、UC sequence にはその UC の代表 actor だけを出し、主担当が未確定の UC だけ `performs(Actor, Buc)` へ fallback します。
+
 ### 4.1 Patient Onboarding UC
 
 | UC | sequence | 主な確認点 |

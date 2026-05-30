@@ -32,6 +32,16 @@ api IntakeMessagingApi   "Intake Messaging API"
 
 performs(FrontDesk, BucPatientOnboarding)
 performs(Patient, BucPatientOnboarding)
+performs(FrontDesk, SearchPatient)
+performs(FrontDesk, RegisterPatient)
+performs(FrontDesk, UpdateDemographics)
+performs(FrontDesk, VerifyInsurance)
+performs(Patient, CaptureConsent)
+performs(FrontDesk, SendIntakeForms)
+performs(Patient, CompleteIntakeForms)
+performs(FrontDesk, ExpireIntakeForms)
+performs(FrontDesk, MergeDuplicatePatient)
+performs(FrontDesk, ArchivePatient)
 belongs(BucPatientOnboarding, PatientAccess)
 
 contains(BucPatientOnboarding, SearchPatient)

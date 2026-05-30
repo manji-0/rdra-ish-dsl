@@ -1,16 +1,15 @@
 sequenceDiagram
-  actor FrontDesk as Front Desk Staff
   actor Patient as Patient
   participant ConsentApi as Consent API
   participant ConsentRecord as Consent Record
   participant ConsentScreen as Consent Capture Screen
 
-  Note over FrontDesk,ConsentScreen: Capture Consent
-  FrontDesk->>ConsentScreen: Capture Consent
+  Note over Patient,ConsentScreen: Capture Consent
+  Patient->>ConsentScreen: Capture Consent
   ConsentScreen->>ConsentApi: Capture Consent
   activate ConsentApi
   ConsentApi->>ConsentRecord: create
   ConsentApi-->>ConsentScreen: Consent Capture Screen
-  ConsentScreen-->>FrontDesk: Consent Capture Screen
+  ConsentScreen-->>Patient: Consent Capture Screen
   deactivate ConsentApi
 

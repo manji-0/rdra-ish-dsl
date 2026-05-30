@@ -134,6 +134,11 @@ is found through `raises(UseCase, Event)`. See
 
 ### `api` and the API layer
 
+For sequence diagrams, `performs(Actor, UseCase)` is more specific than
+`performs(Actor, Buc)`. If a use case has a direct actor, the sequence diagram uses
+that actor as the participant for the use-case flow. If no direct actor is declared,
+the emitter falls back to the actor on the containing BUC.
+
 The `api` element models the backend API layer that sits between a screen and the
 entities it operates. Declare an api once per API endpoint or boundary:
 

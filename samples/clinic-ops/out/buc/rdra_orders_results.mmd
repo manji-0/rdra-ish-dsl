@@ -24,7 +24,13 @@ graph TD
   EvClinicalOrderResulted{"Clinical Result Received"}
   EvClinicalOrderReviewed{"Clinical Result Reviewed"}
   Nurse --> BucOrdersResults
+  Nurse --> CollectSpecimen
+  Nurse --> ReceiveLabResult
   Clinician --> BucOrdersResults
+  Clinician --> PlaceLabOrder
+  Clinician --> ReviewLabResult
+  Clinician --> NotifyCriticalResult
+  Clinician --> CancelClinicalOrder
   BucOrdersResults --> CareDelivery
   BucOrdersResults --> PlaceLabOrder
   BucOrdersResults --> CollectSpecimen

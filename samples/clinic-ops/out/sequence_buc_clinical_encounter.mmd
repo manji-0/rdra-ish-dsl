@@ -17,12 +17,12 @@ sequenceDiagram
   participant VitalsScreen as Vitals Screen
 
   Note over Clinician,VitalsScreen: Amend Signed Encounter
-  Nurse->>EncounterWorkspaceScreen: Amend Signed Encounter
+  Clinician->>EncounterWorkspaceScreen: Amend Signed Encounter
   EncounterWorkspaceScreen->>AmendEncounterApi: Amend Signed Encounter
   activate AmendEncounterApi
   AmendEncounterApi->>Encounter: update
   AmendEncounterApi-->>EncounterWorkspaceScreen: Encounter Workspace
-  EncounterWorkspaceScreen-->>Nurse: Encounter Workspace
+  EncounterWorkspaceScreen-->>Clinician: Encounter Workspace
   deactivate AmendEncounterApi
 
   Note over Clinician,VitalsScreen: Complete Appointment
@@ -39,7 +39,7 @@ sequenceDiagram
   deactivate CompleteAppointmentApi
 
   Note over Clinician,VitalsScreen: Document Assessment
-  Nurse->>DiagnosisScreen: Document Assessment
+  Clinician->>DiagnosisScreen: Document Assessment
   DiagnosisScreen->>DocumentAssessmentApi: Document Assessment
   activate DocumentAssessmentApi
   rect rgb(245,245,245)
@@ -48,7 +48,7 @@ sequenceDiagram
     DocumentAssessmentApi->>Diagnosis: create
   end
   DocumentAssessmentApi-->>DiagnosisScreen: Diagnosis Screen
-  DiagnosisScreen-->>Nurse: Diagnosis Screen
+  DiagnosisScreen-->>Clinician: Diagnosis Screen
   deactivate DocumentAssessmentApi
 
   Note over Clinician,VitalsScreen: Open Encounter
@@ -74,11 +74,11 @@ sequenceDiagram
   deactivate RecordVitalsApi
 
   Note over Clinician,VitalsScreen: Sign Encounter
-  Nurse->>EncounterWorkspaceScreen: Sign Encounter
+  Clinician->>EncounterWorkspaceScreen: Sign Encounter
   EncounterWorkspaceScreen->>SignEncounterApi: Sign Encounter
   activate SignEncounterApi
   SignEncounterApi->>Encounter: update
   SignEncounterApi-->>EncounterWorkspaceScreen: Encounter Workspace
-  EncounterWorkspaceScreen-->>Nurse: Encounter Workspace
+  EncounterWorkspaceScreen-->>Clinician: Encounter Workspace
   deactivate SignEncounterApi
 

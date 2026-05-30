@@ -1,13 +1,12 @@
 sequenceDiagram
-  actor Clinician as Clinician
   actor Nurse as Nurse
   participant ReceiveLabResultApi as Receive Lab Result API
   participant ClinicalOrder as Clinical Order
   participant LabResult as Lab Result
   participant ResultReviewScreen as Result Review Screen
 
-  Note over Clinician,ResultReviewScreen: Receive Lab Result
-  Clinician->>ResultReviewScreen: Receive Lab Result
+  Note over Nurse,ResultReviewScreen: Receive Lab Result
+  Nurse->>ResultReviewScreen: Receive Lab Result
   ResultReviewScreen->>ReceiveLabResultApi: Receive Lab Result
   activate ReceiveLabResultApi
   rect rgb(245,245,245)
@@ -16,6 +15,6 @@ sequenceDiagram
     ReceiveLabResultApi->>LabResult: create
   end
   ReceiveLabResultApi-->>ResultReviewScreen: Result Review Screen
-  ResultReviewScreen-->>Clinician: Result Review Screen
+  ResultReviewScreen-->>Nurse: Result Review Screen
   deactivate ReceiveLabResultApi
 

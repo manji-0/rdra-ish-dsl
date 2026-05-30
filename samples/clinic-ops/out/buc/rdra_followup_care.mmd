@@ -27,6 +27,12 @@ graph TD
   EvCarePlanMonitoring{"Care Plan Monitoring"}
   Patient --> BucFollowupCare
   CareCoordinator --> BucFollowupCare
+  CareCoordinator --> CreateCarePlan
+  CareCoordinator --> SendFollowUpMessage
+  CareCoordinator --> ReviewPatientResponse
+  CareCoordinator --> ScheduleFollowUpVisit
+  CareCoordinator --> CloseCarePlan
+  CareCoordinator --> NotifyPatientResult
   BucFollowupCare --> PatientAccess
   BucFollowupCare --> CreateCarePlan
   BucFollowupCare --> SendFollowUpMessage

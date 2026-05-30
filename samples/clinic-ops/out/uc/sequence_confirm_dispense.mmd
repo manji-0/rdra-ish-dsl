@@ -1,16 +1,15 @@
 sequenceDiagram
-  actor Clinician as Clinician
   actor Nurse as Nurse
   participant ConfirmDispenseApi as Confirm Dispense API
   participant Prescription as Prescription
   participant PharmacyStatusScreen as Pharmacy Status Screen
 
-  Note over Clinician,PharmacyStatusScreen: Confirm Dispense
-  Clinician->>PharmacyStatusScreen: Confirm Dispense
+  Note over Nurse,PharmacyStatusScreen: Confirm Dispense
+  Nurse->>PharmacyStatusScreen: Confirm Dispense
   PharmacyStatusScreen->>ConfirmDispenseApi: Confirm Dispense
   activate ConfirmDispenseApi
   ConfirmDispenseApi->>Prescription: update
   ConfirmDispenseApi-->>PharmacyStatusScreen: Pharmacy Status Screen
-  PharmacyStatusScreen-->>Clinician: Pharmacy Status Screen
+  PharmacyStatusScreen-->>Nurse: Pharmacy Status Screen
   deactivate ConfirmDispenseApi
 

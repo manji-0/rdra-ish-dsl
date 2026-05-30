@@ -25,6 +25,12 @@ api RefillPrescriptionApi "Refill Prescription API"
 
 performs(Clinician, BucPrescriptionFulfillment)
 performs(Nurse, BucPrescriptionFulfillment)
+performs(Clinician, SearchMedication)
+performs(Clinician, DraftPrescription)
+performs(Clinician, SendPrescription)
+performs(Nurse, ConfirmDispense)
+performs(Clinician, CancelPrescription)
+performs(Clinician, RefillPrescription)
 belongs(BucPrescriptionFulfillment, CareDelivery)
 
 contains(BucPrescriptionFulfillment, SearchMedication)

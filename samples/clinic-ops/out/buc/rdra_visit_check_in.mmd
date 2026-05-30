@@ -22,7 +22,13 @@ graph TD
   RoomBoardScreen[["Room Board Screen"]]
   EvAppointmentCheckedIn{"Appointment Checked In"}
   FrontDesk --> BucVisitCheckIn
+  FrontDesk --> VerifyArrival
+  FrontDesk --> CheckInPatient
+  FrontDesk --> CollectCopay
   Nurse --> BucVisitCheckIn
+  Nurse --> OpenEncounter
+  Nurse --> AssignRoom
+  Nurse --> PrepareEncounter
   BucVisitCheckIn --> PatientAccess
   BucVisitCheckIn --> VerifyArrival
   BucVisitCheckIn --> CheckInPatient

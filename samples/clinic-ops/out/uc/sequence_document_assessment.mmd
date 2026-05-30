@@ -1,13 +1,12 @@
 sequenceDiagram
   actor Clinician as Clinician
-  actor Nurse as Nurse
   participant DocumentAssessmentApi as Document Assessment API
   participant Diagnosis as Diagnosis
   participant Encounter as Encounter
   participant DiagnosisScreen as Diagnosis Screen
 
   Note over Clinician,DiagnosisScreen: Document Assessment
-  Nurse->>DiagnosisScreen: Document Assessment
+  Clinician->>DiagnosisScreen: Document Assessment
   DiagnosisScreen->>DocumentAssessmentApi: Document Assessment
   activate DocumentAssessmentApi
   rect rgb(245,245,245)
@@ -16,6 +15,6 @@ sequenceDiagram
     DocumentAssessmentApi->>Diagnosis: create
   end
   DocumentAssessmentApi-->>DiagnosisScreen: Diagnosis Screen
-  DiagnosisScreen-->>Nurse: Diagnosis Screen
+  DiagnosisScreen-->>Clinician: Diagnosis Screen
   deactivate DocumentAssessmentApi
 

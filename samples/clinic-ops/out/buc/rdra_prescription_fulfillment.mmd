@@ -18,7 +18,13 @@ graph TD
   EvPrescriptionDispensed{"Prescription Dispensed"}
   EvPrescriptionSent{"Prescription Sent"}
   Nurse --> BucPrescriptionFulfillment
+  Nurse --> ConfirmDispense
   Clinician --> BucPrescriptionFulfillment
+  Clinician --> SearchMedication
+  Clinician --> DraftPrescription
+  Clinician --> SendPrescription
+  Clinician --> CancelPrescription
+  Clinician --> RefillPrescription
   BucPrescriptionFulfillment --> CareDelivery
   BucPrescriptionFulfillment --> SearchMedication
   BucPrescriptionFulfillment --> DraftPrescription

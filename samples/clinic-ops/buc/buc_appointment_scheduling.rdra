@@ -27,6 +27,18 @@ api AppointmentNoticeApi     "Appointment Notice API"
 
 performs(FrontDesk, BucAppointmentScheduling)
 performs(Patient, BucAppointmentScheduling)
+performs(FrontDesk, SearchAvailability)
+performs(Patient, SearchAvailability)
+performs(FrontDesk, ReserveAppointment)
+performs(Patient, ReserveAppointment)
+performs(FrontDesk, BookAppointment)
+performs(Patient, BookAppointment)
+performs(FrontDesk, RescheduleAppointment)
+performs(Patient, RescheduleAppointment)
+performs(FrontDesk, CancelAppointment)
+performs(Patient, CancelAppointment)
+performs(FrontDesk, MarkNoShow)
+performs(FrontDesk, SendAppointmentNotice)
 belongs(BucAppointmentScheduling, PatientAccess)
 
 contains(BucAppointmentScheduling, SearchAvailability)

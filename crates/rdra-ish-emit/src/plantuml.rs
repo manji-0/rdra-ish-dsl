@@ -524,12 +524,19 @@ impl Emitter for SequenceDiagramEmitter {
         let mut has_legacy_uc = false; // API のない usecase が1つでもあれば System レーンを出す
 
         for (uk, _) in &uc_list {
-            for &bk in uc_to_bucs.get(uk).into_iter().flatten() {
-                for &ak in buc_to_actors.get(&bk).into_iter().flatten() {
-                    actor_keys.insert(ak);
-                }
-            }
-            for &ak in direct_actor_of.get(uk).into_iter().flatten() {
+            let actor_key = direct_actor_of
+                .get(uk)
+                .and_then(|actors| actors.first())
+                .copied()
+                .or_else(|| {
+                    uc_to_bucs
+                        .get(uk)
+                        .and_then(|bucs| bucs.first())
+                        .and_then(|bk| buc_to_actors.get(bk))
+                        .and_then(|actors| actors.first())
+                        .copied()
+                });
+            if let Some(ak) = actor_key {
                 actor_keys.insert(ak);
             }
             if let Some(tx) = uc_tx_map.get(uk) {
@@ -608,16 +615,16 @@ impl Emitter for SequenceDiagramEmitter {
         for (uk, uc) in &uc_list {
             out.push_str(&format!("== {} ==\n", uc.label));
 
-            let actor_id: Option<String> = uc_to_bucs
+            let actor_id: Option<String> = direct_actor_of
                 .get(uk)
-                .and_then(|bucs| bucs.first())
-                .and_then(|bk| buc_to_actors.get(bk))
                 .and_then(|actors| actors.first())
                 .and_then(|ak| model.actors.get(*ak))
                 .map(|a| a.id.clone())
                 .or_else(|| {
-                    direct_actor_of
+                    uc_to_bucs
                         .get(uk)
+                        .and_then(|bucs| bucs.first())
+                        .and_then(|bk| buc_to_actors.get(bk))
                         .and_then(|actors| actors.first())
                         .and_then(|ak| model.actors.get(*ak))
                         .map(|a| a.id.clone())
@@ -1102,6 +1109,7 @@ displays(PlaceOrder, OrderCompleteScreen)
         // triggers で到達する別BUCのUC/APIは sequence には混ぜない。
         let src = r#"
 actor Customer "顧客"
+actor Clerk "担当者"
 buc BucA "BUC-A"
 buc BucB "BUC-B"
 usecase UcA "ユースケースA"
@@ -1112,6 +1120,7 @@ api ApiB "API-B"
 entity EntityA "エンティティA" { id: Int @pk }
 entity EntityB "エンティティB" { id: Int @pk }
 performs(Customer, BucA)
+performs(Clerk, UcB)
 contains(BucA, UcA)
 invokes(UcA, ApiA)
 creates(ApiA, EntityA)
@@ -1138,6 +1147,7 @@ triggers(EvA, UcB)
     fn test_sequence_usecase_filter() {
         let src = r#"
 actor Customer "顧客"
+actor Clerk "担当者"
 buc BucA "BUC-A"
 usecase UcA "ユースケースA"
 usecase UcB "ユースケースB"
@@ -1146,6 +1156,7 @@ api ApiB "API-B"
 entity EntityA "エンティティA" { id: Int @pk }
 entity EntityB "エンティティB" { id: Int @pk }
 performs(Customer, BucA)
+performs(Clerk, UcB)
 contains(BucA, UcA)
 contains(BucA, UcB)
 invokes(UcA, ApiA)
@@ -1158,6 +1169,8 @@ creates(ApiB, EntityB)
         let result = SequenceDiagramEmitter.emit(&model, &view).unwrap();
         assert!(!result.contains("ユースケースA"));
         assert!(!result.contains("ApiA"));
+        assert!(!result.contains("actor \"顧客\" as Customer"));
+        assert!(result.contains("actor \"担当者\" as Clerk"));
         assert!(result.contains("ユースケースB"));
         assert!(result.contains("ApiB"));
     }

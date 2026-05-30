@@ -1,12 +1,11 @@
 sequenceDiagram
-  actor Clinician as Clinician
   actor Nurse as Nurse
   participant RecordVitalsApi as Record Vitals API
   participant Encounter as Encounter
   participant VitalSign as Vital Sign
   participant VitalsScreen as Vitals Screen
 
-  Note over Clinician,VitalsScreen: Record Vitals
+  Note over Nurse,VitalsScreen: Record Vitals
   Nurse->>VitalsScreen: Record Vitals
   VitalsScreen->>RecordVitalsApi: Record Vitals
   activate RecordVitalsApi

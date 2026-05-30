@@ -14,7 +14,7 @@ sequenceDiagram
   participant RoomBoardScreen as Room Board Screen
 
   Note over FrontDesk,RoomBoardScreen: Assign Room
-  FrontDesk->>RoomBoardScreen: Assign Room
+  Nurse->>RoomBoardScreen: Assign Room
   RoomBoardScreen->>AssignRoomApi: Assign Room
   activate AssignRoomApi
   rect rgb(245,245,245)
@@ -23,7 +23,7 @@ sequenceDiagram
     AssignRoomApi->>Appointment: update
   end
   AssignRoomApi-->>RoomBoardScreen: Room Board Screen
-  RoomBoardScreen-->>FrontDesk: Room Board Screen
+  RoomBoardScreen-->>Nurse: Room Board Screen
   deactivate AssignRoomApi
 
   Note over FrontDesk,RoomBoardScreen: Check In Patient

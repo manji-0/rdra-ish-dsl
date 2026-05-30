@@ -24,6 +24,12 @@ api NotifyPatientResultApi "Notify Patient Result API"
 
 performs(CareCoordinator, BucFollowupCare)
 performs(Patient, BucFollowupCare)
+performs(CareCoordinator, CreateCarePlan)
+performs(CareCoordinator, SendFollowUpMessage)
+performs(CareCoordinator, ReviewPatientResponse)
+performs(CareCoordinator, ScheduleFollowUpVisit)
+performs(CareCoordinator, CloseCarePlan)
+performs(CareCoordinator, NotifyPatientResult)
 belongs(BucFollowupCare, PatientAccess)
 
 contains(BucFollowupCare, CreateCarePlan)

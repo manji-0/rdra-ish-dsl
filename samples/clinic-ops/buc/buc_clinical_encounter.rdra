@@ -26,6 +26,12 @@ api CompleteAppointmentApi "Complete Appointment API"
 
 performs(Nurse, BucClinicalEncounter)
 performs(Clinician, BucClinicalEncounter)
+performs(Nurse, OpenEncounter)
+performs(Nurse, RecordVitals)
+performs(Clinician, DocumentAssessment)
+performs(Clinician, SignEncounter)
+performs(Clinician, AmendEncounter)
+performs(Nurse, CompleteAppointment)
 belongs(BucClinicalEncounter, CareDelivery)
 
 contains(BucClinicalEncounter, OpenEncounter)

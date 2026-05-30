@@ -31,7 +31,14 @@ graph TD
   EvEncounterDocumented{"Encounter Documented"}
   EvEncounterSigned{"Encounter Signed"}
   Nurse --> BucClinicalEncounter
+  Nurse --> OpenEncounter
+  Nurse --> RecordVitals
+  Nurse --> CompleteAppointment
   Clinician --> BucClinicalEncounter
+  Clinician --> PlaceLabOrder
+  Clinician --> DocumentAssessment
+  Clinician --> SignEncounter
+  Clinician --> AmendEncounter
   BucClinicalEncounter --> CareDelivery
   BucClinicalEncounter --> OpenEncounter
   BucClinicalEncounter --> RecordVitals

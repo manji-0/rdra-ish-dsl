@@ -26,6 +26,12 @@ api CriticalNoticeApi "Critical Notice API"
 
 performs(Clinician, BucOrdersResults)
 performs(Nurse, BucOrdersResults)
+performs(Clinician, PlaceLabOrder)
+performs(Nurse, CollectSpecimen)
+performs(Nurse, ReceiveLabResult)
+performs(Clinician, ReviewLabResult)
+performs(Clinician, NotifyCriticalResult)
+performs(Clinician, CancelClinicalOrder)
 belongs(BucOrdersResults, CareDelivery)
 
 contains(BucOrdersResults, PlaceLabOrder)

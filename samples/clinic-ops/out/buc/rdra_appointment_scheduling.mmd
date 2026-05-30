@@ -26,7 +26,20 @@ graph TD
   EvAppointmentRescheduled{"Appointment Rescheduled"}
   EvAppointmentScheduled{"Appointment Scheduled"}
   Patient --> BucAppointmentScheduling
+  Patient --> SearchAvailability
+  Patient --> ReserveAppointment
+  Patient --> BookAppointment
+  Patient --> RescheduleAppointment
+  Patient --> CancelAppointment
   FrontDesk --> BucAppointmentScheduling
+  FrontDesk --> SendIntakeForms
+  FrontDesk --> SearchAvailability
+  FrontDesk --> ReserveAppointment
+  FrontDesk --> BookAppointment
+  FrontDesk --> RescheduleAppointment
+  FrontDesk --> CancelAppointment
+  FrontDesk --> MarkNoShow
+  FrontDesk --> SendAppointmentNotice
   BucAppointmentScheduling --> PatientAccess
   BucAppointmentScheduling --> SearchAvailability
   BucAppointmentScheduling --> ReserveAppointment

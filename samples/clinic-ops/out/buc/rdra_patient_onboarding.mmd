@@ -29,7 +29,17 @@ graph TD
   EvPatientArchived{"Patient Archived"}
   EvPatientMerged{"Patient Merged"}
   Patient --> BucPatientOnboarding
+  Patient --> CaptureConsent
+  Patient --> CompleteIntakeForms
   FrontDesk --> BucPatientOnboarding
+  FrontDesk --> VerifyInsurance
+  FrontDesk --> SendIntakeForms
+  FrontDesk --> ExpireIntakeForms
+  FrontDesk --> MergeDuplicatePatient
+  FrontDesk --> ArchivePatient
+  FrontDesk --> SearchPatient
+  FrontDesk --> RegisterPatient
+  FrontDesk --> UpdateDemographics
   BucPatientOnboarding --> PatientAccess
   BucPatientOnboarding --> VerifyInsurance
   BucPatientOnboarding --> CaptureConsent

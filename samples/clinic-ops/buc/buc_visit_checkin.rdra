@@ -24,6 +24,11 @@ api PrepareEncounterApi "Prepare Encounter API"
 
 performs(FrontDesk, BucVisitCheckIn)
 performs(Nurse, BucVisitCheckIn)
+performs(FrontDesk, VerifyArrival)
+performs(FrontDesk, CheckInPatient)
+performs(FrontDesk, CollectCopay)
+performs(Nurse, AssignRoom)
+performs(Nurse, PrepareEncounter)
 belongs(BucVisitCheckIn, PatientAccess)
 
 contains(BucVisitCheckIn, VerifyArrival)

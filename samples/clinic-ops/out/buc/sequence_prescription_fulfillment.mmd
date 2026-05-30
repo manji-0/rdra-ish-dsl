@@ -18,12 +18,12 @@ sequenceDiagram
   deactivate System
 
   Note over Clinician,PrescriptionScreen: Confirm Dispense
-  Clinician->>PharmacyStatusScreen: Confirm Dispense
+  Nurse->>PharmacyStatusScreen: Confirm Dispense
   PharmacyStatusScreen->>ConfirmDispenseApi: Confirm Dispense
   activate ConfirmDispenseApi
   ConfirmDispenseApi->>Prescription: update
   ConfirmDispenseApi-->>PharmacyStatusScreen: Pharmacy Status Screen
-  PharmacyStatusScreen-->>Clinician: Pharmacy Status Screen
+  PharmacyStatusScreen-->>Nurse: Pharmacy Status Screen
   deactivate ConfirmDispenseApi
 
   Note over Clinician,PrescriptionScreen: Draft Prescription

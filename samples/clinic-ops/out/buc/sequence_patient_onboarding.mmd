@@ -27,19 +27,19 @@ sequenceDiagram
   deactivate System
 
   Note over FrontDesk,PatientProfileScreen: Capture Consent
-  FrontDesk->>ConsentScreen: Capture Consent
+  Patient->>ConsentScreen: Capture Consent
   ConsentScreen->>ConsentApi: Capture Consent
   activate ConsentApi
   ConsentApi->>ConsentRecord: create
   ConsentApi-->>ConsentScreen: Consent Capture Screen
-  ConsentScreen-->>FrontDesk: Consent Capture Screen
+  ConsentScreen-->>Patient: Consent Capture Screen
   deactivate ConsentApi
 
   Note over FrontDesk,PatientProfileScreen: Complete Intake Forms
-  FrontDesk->System: Complete Intake Forms
+  Patient->System: Complete Intake Forms
   activate System
   System->>IntakePacket: update
-  System-->>FrontDesk: Intake Portal Screen
+  System-->>Patient: Intake Portal Screen
   deactivate System
 
   Note over FrontDesk,PatientProfileScreen: Expire Intake Forms
