@@ -688,21 +688,37 @@ fn derive_for_entity(
     // この entity に対する比較命題 Props を収集（forbidden/invariant/proposition_effects から一意化）
     let mut prop_keys_seen: HashSet<String> = HashSet::new();
     let mut proposition_props: Vec<ComparisonProp> = Vec::new();
-    for fc in model.forbidden_constraints.iter().filter(|fc| fc.entity == ek) {
+    for fc in model
+        .forbidden_constraints
+        .iter()
+        .filter(|fc| fc.entity == ek)
+    {
         for p in &fc.comparisons {
             if prop_keys_seen.insert(p.axis_key()) {
                 proposition_props.push(p.clone());
             }
         }
     }
-    for inv in model.entity_invariants.iter().filter(|inv| inv.entity == ek) {
-        for p in inv.guard_comparisons.iter().chain(inv.required_comparisons.iter()) {
+    for inv in model
+        .entity_invariants
+        .iter()
+        .filter(|inv| inv.entity == ek)
+    {
+        for p in inv
+            .guard_comparisons
+            .iter()
+            .chain(inv.required_comparisons.iter())
+        {
             if prop_keys_seen.insert(p.axis_key()) {
                 proposition_props.push(p.clone());
             }
         }
     }
-    for pe in model.proposition_effects.iter().filter(|pe| pe.entity == ek) {
+    for pe in model
+        .proposition_effects
+        .iter()
+        .filter(|pe| pe.entity == ek)
+    {
         if prop_keys_seen.insert(pe.prop.axis_key()) {
             proposition_props.push(pe.prop.clone());
         }
@@ -744,7 +760,11 @@ fn derive_for_entity(
 
     // 比較命題効果を Update 演算として ops に追加
     // sets(origin, entity, <expr>, true/false) → 対応するユースケースの Update に命題軸効果を注入
-    for pe in model.proposition_effects.iter().filter(|pe| pe.entity == ek) {
+    for pe in model
+        .proposition_effects
+        .iter()
+        .filter(|pe| pe.entity == ek)
+    {
         let axis_col = prop_col_key(&pe.prop);
         if !axes.iter().any(|ax| ax.column == axis_col) {
             continue;
@@ -1797,7 +1817,9 @@ forbidden(Order, (status, paid))
         let r = results.iter().find(|r| r.entity_id == "Order").unwrap();
         // Proposition 軸が増えていないこと
         assert!(
-            r.axes.iter().all(|ax| !matches!(ax.kind, AxisKind::Proposition { .. })),
+            r.axes
+                .iter()
+                .all(|ax| !matches!(ax.kind, AxisKind::Proposition { .. })),
             "比較命題のないモデルに Proposition 軸が現れた"
         );
         // forbidden が違反を検出すること
@@ -1806,7 +1828,10 @@ forbidden(Order, (status, paid))
             .iter()
             .filter(|d| matches!(d, StateDiag::ForbiddenStateViolated { .. }))
             .collect();
-        assert!(!forbidden_diags.is_empty(), "forbidden 違反が検出されなかった");
+        assert!(
+            !forbidden_diags.is_empty(),
+            "forbidden 違反が検出されなかった"
+        );
     }
 
     /// 比較命題軸が追加されること、および BFS 後に forbidden/invariant が正しく機能すること
@@ -1859,7 +1884,10 @@ invariant(Stock)
             .iter()
             .filter(|d| matches!(d, StateDiag::ForbiddenStateViolated { .. }))
             .collect();
-        assert!(!forbidden_diags.is_empty(), "forbidden 違反が検出されなかった");
+        assert!(
+            !forbidden_diags.is_empty(),
+            "forbidden 違反が検出されなかった"
+        );
 
         // invariant 違反が検出されること（status=on_sale で stock<selling=false の到達可能状態）
         let invariant_diags: Vec<_> = r
@@ -1867,7 +1895,10 @@ invariant(Stock)
             .iter()
             .filter(|d| matches!(d, StateDiag::InvariantViolated { .. }))
             .collect();
-        assert!(!invariant_diags.is_empty(), "invariant 違反が検出されなかった");
+        assert!(
+            !invariant_diags.is_empty(),
+            "invariant 違反が検出されなかった"
+        );
     }
 
     /// `now` 比較命題が正しく Proposition 軸として追加されること
@@ -1908,7 +1939,10 @@ forbidden(Coupon, (status, usable), expired_at < now)
             .iter()
             .filter(|d| matches!(d, StateDiag::ForbiddenStateViolated { .. }))
             .collect();
-        assert!(!forbidden_diags.is_empty(), "forbidden 違反が検出されなかった");
+        assert!(
+            !forbidden_diags.is_empty(),
+            "forbidden 違反が検出されなかった"
+        );
     }
 
     #[test]

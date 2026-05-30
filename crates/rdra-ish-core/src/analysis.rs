@@ -1235,4 +1235,30 @@ creates(PlaceOrder, Order)
             1
         );
     }
+
+    #[test]
+    fn test_sets_comparison_registers_proposition_effect() {
+        let src = r#"
+usecase Sell "販売する"
+entity Stock "在庫" {
+  id: Int @pk
+  stock: Int
+  selling: Int
+}
+updates(Sell, Stock)
+sets(Sell, Stock, stock < selling, true)
+"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {:?}", errors);
+
+        assert_eq!(model.proposition_effects.len(), 1);
+        let effect = &model.proposition_effects[0];
+        assert_eq!(effect.prop.axis_key(), "stock<selling");
+        assert!(effect.truth);
+        assert!(matches!(effect.origin, NodeRef::UseCase(_)));
+    }
 }

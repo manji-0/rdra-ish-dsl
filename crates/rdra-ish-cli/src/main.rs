@@ -456,7 +456,7 @@ fn list_elements(
                 .map(|(_, a)| (a.id.as_str(), a.label.as_str()))
                 .collect();
             items.sort_by_key(|(id, _)| *id);
-            format_id_label(&items, format)
+            format_id_label(&items, format, "actors")
         }
         ListKind::Buc => {
             let mut items: Vec<(&str, &str)> = model
@@ -465,7 +465,7 @@ fn list_elements(
                 .map(|(_, b)| (b.id.as_str(), b.label.as_str()))
                 .collect();
             items.sort_by_key(|(id, _)| *id);
-            format_id_label(&items, format)
+            format_id_label(&items, format, "BUCs")
         }
         ListKind::Usecase => {
             let mut items: Vec<(&str, &str)> = model
@@ -474,7 +474,7 @@ fn list_elements(
                 .map(|(_, u)| (u.id.as_str(), u.label.as_str()))
                 .collect();
             items.sort_by_key(|(id, _)| *id);
-            format_id_label(&items, format)
+            format_id_label(&items, format, "use cases")
         }
         ListKind::Entity => format_entities(model, format),
         ListKind::Api => {
@@ -484,16 +484,20 @@ fn list_elements(
                 .map(|(_, a)| (a.id.as_str(), a.label.as_str()))
                 .collect();
             items.sort_by_key(|(id, _)| *id);
-            format_id_label(&items, format)
+            format_id_label(&items, format, "APIs")
         }
     }
 }
 
-fn format_id_label(items: &[(&str, &str)], format: &ListFormat) -> Result<String> {
+fn format_id_label(
+    items: &[(&str, &str)],
+    format: &ListFormat,
+    empty_label: &str,
+) -> Result<String> {
     match format {
         ListFormat::Table => {
             if items.is_empty() {
-                return Ok(String::new());
+                return Ok(format!("No {} found.\n", empty_label));
             }
             let id_w = items
                 .iter()
@@ -592,7 +596,7 @@ fn format_entities(model: &rdra_ish_core::SemanticModel, format: &ListFormat) ->
     match format {
         ListFormat::Table => {
             if rows.is_empty() {
-                return Ok(String::new());
+                return Ok(String::from("No entities found.\n"));
             }
             let mut col_widths: Vec<usize> = headers.iter().map(|h| h.len()).collect();
             for row in &rows {
@@ -722,5 +726,40 @@ fn csv_field(s: &str) -> String {
         format!("\"{}\"", s.replace('"', "\"\""))
     } else {
         s.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rdra_ish_core::SemanticModel;
+
+    #[test]
+    fn table_list_reports_empty_api_result() {
+        let model = SemanticModel::default();
+
+        let output = list_elements(&model, &ListKind::Api, &ListFormat::Table).unwrap();
+
+        assert_eq!(output, "No APIs found.\n");
+    }
+
+    #[test]
+    fn structured_empty_lists_stay_machine_readable() {
+        let model = SemanticModel::default();
+
+        let csv = list_elements(&model, &ListKind::Api, &ListFormat::Csv).unwrap();
+        let json = list_elements(&model, &ListKind::Api, &ListFormat::Json).unwrap();
+
+        assert_eq!(csv, "id,label\n");
+        assert_eq!(json, "[]\n");
+    }
+
+    #[test]
+    fn table_list_reports_empty_entity_result() {
+        let model = SemanticModel::default();
+
+        let output = list_elements(&model, &ListKind::Entity, &ListFormat::Table).unwrap();
+
+        assert_eq!(output, "No entities found.\n");
     }
 }

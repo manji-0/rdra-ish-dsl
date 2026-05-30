@@ -101,6 +101,9 @@ rdra-ish list <INPUTS...> [--kind <KIND>] [--format <FORMAT>]
 
 Output is written to stdout.
 
+For `--format table`, an empty result is explicit rather than silent, for example
+`No APIs found.`. CSV still prints only the header row and JSON prints `[]`.
+
 ---
 
 ## `states`

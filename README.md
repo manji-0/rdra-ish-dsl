@@ -3,17 +3,51 @@
 A DSL and compiler for describing RDRA (Relationship-Driven Requirements Analysis).
 You declare actors, entities, use cases, and so on as typed instances, and express
 relationships between them with predicate calls.
-It generates PlantUML / Mermaid diagrams (ER, RDRA, state machine, sequence) and CSV
-(actor list, entity list, CRUD matrix), and derives
-**the reachable state patterns of each entity from BUC patterns**.
+It treats an RDRA model as source code: the compiler type-checks relationships,
+generates reviewable artifacts, and reports model gaps such as unreachable states or
+violated state constraints. It generates PlantUML / Mermaid diagrams (ER, RDRA, state
+machine, sequence, event-flow) and CSV (actor list, entity list, CRUD matrix), and
+derives **the reachable state patterns of each entity from BUC patterns**.
 An `api` element lets you express the API layer between screens and entities — the sequence
 diagram renders the full `Actor → Screen → API → Entity` lane automatically.
+
+<!-- derived-from ./docs/language-reference.md -->
+<!-- derived-from ./docs/state-derivation.md -->
+## What It Helps You Check
+
+- **Relationship consistency**: predicate arguments are type-checked, duplicate
+  definitions are reported, imports are resolved, and ambiguous references can be
+  disambiguated with `kind::Id` syntax.
+- **Use-case coverage**: BUC-scoped diagrams and CRUD matrices show which actors,
+  use cases, screens, APIs, and entities are actually connected.
+- **Entity state reachability**: `states` computes which Enum / Bool / nullable /
+  comparison-proposition combinations can be reached through declared use cases and
+  events.
+- **Model gaps**: diagnostics call out unreachable enum variants, missing creation
+  paths, forbidden reachable states, invariant violations, orphaned APIs, event-flow
+  gaps, and FK-isolated writes in inferred transaction groups.
+- **Review artifacts**: Mermaid is the lowest-friction default for text review, while
+  PlantUML/SVG/PNG are available when a rendered asset is needed.
 
 ## Installation
 
 ```sh
 cargo install --path crates/rdra-ish-cli
 ```
+
+<!-- derived-from ./docs/cli-reference.md -->
+## Recommended Modeling Loop
+
+1. Declare shared actors, businesses, and entities under a shared module.
+2. Add one BUC file at a time with its use cases, screens, CRUD predicates, and events.
+3. Run `rdra-ish check <model-root>` after each BUC to catch type and import mistakes.
+4. Generate Mermaid diagrams for quick review:
+   `rdra-ish diagram <model-root> --kind rdra --format mermaid --buc <BucId>`.
+5. Run `rdra-ish csv <model-root> --kind matrix` to review use-case/entity CRUD coverage.
+6. Run `rdra-ish states <model-root>` to find unreachable states, missing creation
+   paths, and state constraint violations.
+7. Add `forbidden` / `invariant` constraints when the model needs to assert invalid or
+   required state combinations.
 
 ## Basic Usage
 
