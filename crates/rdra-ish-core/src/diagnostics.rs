@@ -60,6 +60,36 @@ pub enum RdraError {
     #[error("unknown effect value '{value}' for column '{col}': not an enum variant, bool, null/present, or known PostgreSQL type\n  hint: see the allowed value vocabulary in the docs")]
     UnknownEffectValue { col: String, value: String },
 
+    // ── 比較式の診断 ─────────────────────────────────────────────────────────
+    #[error("comparison left-hand side must be a column reference, got a literal or `now`\n  hint: write `col < other_col` or `col < 0`")]
+    ComparisonLhsMustBeColumn,
+
+    #[error("order comparison operator '{op}' cannot be applied to column '{col}' of type {col_type}\n  hint: only Int, Money, Decimal, Date, DateTime columns support <, >, <=, >=; use == or != for other types")]
+    ComparisonOpNotOrdered {
+        col: String,
+        col_type: String,
+        op: String,
+    },
+
+    #[error("comparison type mismatch: column '{lhs}' ({lhs_type}) and '{rhs}' ({rhs_type}) are not comparable\n  hint: both sides must be in the same type category (numeric or temporal)")]
+    ComparisonTypeMismatch {
+        lhs: String,
+        lhs_type: String,
+        rhs: String,
+        rhs_type: String,
+    },
+
+    #[error("right-hand side column '{col}' not found in entity '{entity}'\n  hint: check the column name in the entity definition")]
+    ComparisonRhsColumnUnknown { entity: String, col: String },
+
+    #[error(
+        "comparison with `now` requires a Date or DateTime column, but '{col}' has type {col_type}"
+    )]
+    ComparisonNowRequiresTemporal { col: String, col_type: String },
+
+    #[error("invalid integer literal '{lit}' in comparison right-hand side")]
+    ComparisonInvalidIntLit { lit: String },
+
     // ── イベント整合性診断 ────────────────────────────────────────────────────
     #[error("event '{event}' is never raised by any use case\n  hint: add `raises(usecase::Foo, event::{event})` in the relevant BUC file")]
     EventNeverRaised { event: String },
@@ -69,6 +99,13 @@ pub enum RdraError {
 
     #[error("event '{event}' triggers use case '{usecase}' which belongs to no BUC\n  hint: add `contains(someBuc, usecase::{usecase})` to include the triggered use case in a BUC")]
     TriggeredUseCaseUnreachable { event: String, usecase: String },
+
+    // ── API 整合性診断 ────────────────────────────────────────────────────────
+    #[error("api '{api}' is declared but never invoked by any use case\n  hint: add `invokes(usecase::Foo, api::{api})` in the relevant BUC file")]
+    ApiNeverInvoked { api: String },
+
+    #[error("api '{api}' is invoked but operates no entity\n  hint: add `creates/updates/reads(api::{api}, SomeEntity)` to give the API work to do")]
+    ApiInvokedButNoEntity { api: String },
 }
 
 #[derive(Debug)]

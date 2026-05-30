@@ -5,11 +5,16 @@
 //! 有限直積空間上の BFS で到達可能なパターン集合を求める。
 
 use crate::model::{
-    ColumnEffect, ColumnType, EffectValue, EntityKey, ModelColumn, NodeRef, RelKind, SemanticModel,
-    StateKey, UseCaseKey,
+    ColumnEffect, ColumnType, ComparisonProp, EffectValue, EntityKey, ModelColumn, NodeRef,
+    RelKind, SemanticModel, StateKey, UseCaseKey,
 };
 use crate::resolver::reachable_from_bucs;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
+
+/// 比較命題軸の column キーに付けるプレフィックス。
+/// 実カラム名との衝突を防ぐために使用する。
+/// 例: `stock<selling` → `__cmp:stock<selling`
+const PROP_COL_PREFIX: &str = "__cmp:";
 
 // ── デフォルト上限値 ─────────────────────────────────────────────────────────
 
@@ -30,6 +35,15 @@ pub enum AxisKind {
     Nullable {
         /// `sets(...)` で TypedPresent が宣言された場合の PG 型名（表示用）
         pg_type: Option<String>,
+    },
+    /// 比較命題の派生 Bool 軸（例: `stock < selling`, `expired_at < now`）。
+    /// 既存 Bool 軸と同型だが、実カラムではなく比較式に由来する。
+    /// `sets(origin, entity, <expr>, true/false)` によって真偽が駆動される。
+    /// デフォルト値は `Bool(false)`。
+    Proposition {
+        /// 比較命題の正規化キー（例: `"stock<selling"`）。
+        /// 表示と軸照合に使用する。
+        axis_key: String,
     },
 }
 
@@ -283,8 +297,20 @@ fn link_states_to_enum(
     None
 }
 
-/// entity ごとの状態軸を特定する
-fn identify_axes(entity_cols: &[ModelColumn], column_effects: &[&ColumnEffect]) -> Vec<StateAxis> {
+/// 比較命題の StatePattern 内でのキー（実カラムとの衝突を避けるプレフィックス付き）。
+/// 例: `ComparisonProp { lhs="stock", op=Lt, rhs=Column("selling") }` → `"__cmp:stock<selling"`
+pub fn prop_col_key(prop: &ComparisonProp) -> String {
+    format!("{}{}", PROP_COL_PREFIX, prop.axis_key())
+}
+
+/// entity ごとの状態軸を特定する。
+/// `proposition_props` には、この entity の forbidden/invariant/sets で参照される
+/// 比較命題（重複なし）を渡す。各命題は `AxisKind::Proposition` 軸として追加される。
+fn identify_axes(
+    entity_cols: &[ModelColumn],
+    column_effects: &[&ColumnEffect],
+    proposition_props: &[ComparisonProp],
+) -> Vec<StateAxis> {
     let mut axes = Vec::new();
 
     // TypedPresent の型名を effects から収集（カラム名 → PG 型名）
@@ -321,6 +347,18 @@ fn identify_axes(entity_cols: &[ModelColumn], column_effects: &[&ColumnEffect]) 
                 }
                 // 非nullable, 非Enum, 非Bool は状態軸にしない
             }
+        }
+    }
+
+    // 比較命題軸を追加（重複 axis_key は1軸のみ）
+    let mut seen_keys: HashSet<String> = HashSet::new();
+    for prop in proposition_props {
+        let key = prop.axis_key();
+        if seen_keys.insert(key.clone()) {
+            axes.push(StateAxis {
+                column: prop_col_key(prop),
+                kind: AxisKind::Proposition { axis_key: key },
+            });
         }
     }
 
@@ -647,8 +685,31 @@ fn derive_for_entity(
         .filter(|e| e.entity == ek)
         .collect();
 
-    // 状態軸の特定
-    let axes = identify_axes(&entity.columns, &effects_for_entity);
+    // この entity に対する比較命題 Props を収集（forbidden/invariant/proposition_effects から一意化）
+    let mut prop_keys_seen: HashSet<String> = HashSet::new();
+    let mut proposition_props: Vec<ComparisonProp> = Vec::new();
+    for fc in model.forbidden_constraints.iter().filter(|fc| fc.entity == ek) {
+        for p in &fc.comparisons {
+            if prop_keys_seen.insert(p.axis_key()) {
+                proposition_props.push(p.clone());
+            }
+        }
+    }
+    for inv in model.entity_invariants.iter().filter(|inv| inv.entity == ek) {
+        for p in inv.guard_comparisons.iter().chain(inv.required_comparisons.iter()) {
+            if prop_keys_seen.insert(p.axis_key()) {
+                proposition_props.push(p.clone());
+            }
+        }
+    }
+    for pe in model.proposition_effects.iter().filter(|pe| pe.entity == ek) {
+        if prop_keys_seen.insert(pe.prop.axis_key()) {
+            proposition_props.push(pe.prop.clone());
+        }
+    }
+
+    // 状態軸の特定（比較命題軸も含む）
+    let axes = identify_axes(&entity.columns, &effects_for_entity, &proposition_props);
 
     // 軸が無ければ自明な空パターン 1 件で終了
     if axes.is_empty() {
@@ -671,7 +732,7 @@ fn derive_for_entity(
     }
 
     // 演算の収集
-    let (ops, status_col) = collect_operations(
+    let (mut ops, status_col) = collect_operations(
         model,
         ek,
         buc_of_usecase,
@@ -681,15 +742,98 @@ fn derive_for_entity(
         &effects_for_entity,
     );
 
+    // 比較命題効果を Update 演算として ops に追加
+    // sets(origin, entity, <expr>, true/false) → 対応するユースケースの Update に命題軸効果を注入
+    for pe in model.proposition_effects.iter().filter(|pe| pe.entity == ek) {
+        let axis_col = prop_col_key(&pe.prop);
+        if !axes.iter().any(|ax| ax.column == axis_col) {
+            continue;
+        }
+        let effect_val = (axis_col.clone(), AbstractValue::Bool(pe.truth));
+
+        let origin_ucs: Vec<(String, Option<String>)> = match &pe.origin {
+            NodeRef::UseCase(uk) => {
+                if let Some(reachable) = buc_reachable {
+                    if !reachable.contains(&NodeRef::UseCase(*uk)) {
+                        vec![]
+                    } else {
+                        let uid = model.use_cases[*uk].id.clone();
+                        let bid = buc_of_usecase.get(uk).cloned();
+                        vec![(uid, bid)]
+                    }
+                } else {
+                    let uid = model.use_cases[*uk].id.clone();
+                    let bid = buc_of_usecase.get(uk).cloned();
+                    vec![(uid, bid)]
+                }
+            }
+            NodeRef::Event(ek_ev) => model
+                .relations
+                .iter()
+                .filter_map(|rel| {
+                    if rel.kind == RelKind::Raises {
+                        if let (NodeRef::UseCase(uk), NodeRef::Event(raised_ek)) =
+                            (&rel.from, &rel.to)
+                        {
+                            if raised_ek == ek_ev {
+                                if let Some(reachable) = buc_reachable {
+                                    if !reachable.contains(&NodeRef::UseCase(*uk)) {
+                                        return None;
+                                    }
+                                }
+                                let uid = model.use_cases[*uk].id.clone();
+                                let bid = buc_of_usecase.get(uk).cloned();
+                                return Some((uid, bid));
+                            }
+                        }
+                    }
+                    None
+                })
+                .collect(),
+            _ => vec![],
+        };
+
+        for (usecase_id, buc_id) in origin_ucs {
+            // 既存の Update 演算に命題軸効果をマージ（同カラムが未設定の場合のみ）
+            let merged = ops.iter_mut().any(|op| {
+                if op.op_kind == OpKind::Update
+                    && op.usecase_id == usecase_id
+                    && !op.effects.iter().any(|(c, _)| c == &axis_col)
+                {
+                    op.effects.push(effect_val.clone());
+                    true
+                } else {
+                    false
+                }
+            });
+            if !merged {
+                ops.push(Operation {
+                    usecase_id,
+                    buc_id,
+                    op_kind: OpKind::Update,
+                    guard: vec![],
+                    effects: vec![effect_val.clone()],
+                });
+            }
+        }
+    }
+
     // ── シードパターンの構築 ──────────────────────────────────────────────────
     // 基底値: @default または軸種別ごとのフォールバック
-    let base: BTreeMap<String, AbstractValue> = axes
+    // 命題軸は実カラムに対応しないため filter_map で自然に除外され、後で手動追加する
+    let mut base: BTreeMap<String, AbstractValue> = axes
         .iter()
         .filter_map(|ax| {
             let col = entity.columns.iter().find(|c| c.name == ax.column)?;
             Some((ax.column.clone(), default_value_for_axis(col)))
         })
         .collect();
+    // 命題軸のデフォルト値: Bool(false)（比較が成立しない初期状態）
+    for ax in &axes {
+        if matches!(&ax.kind, AxisKind::Proposition { .. }) {
+            base.insert(ax.column.clone(), AbstractValue::Bool(false));
+        }
+    }
     let base_pattern = StatePattern { values: base };
 
     // creates 演算のシード
@@ -912,31 +1056,45 @@ fn check_constraints(
     diags: &mut Vec<StateDiag>,
 ) {
     // ── 禁止状態チェック ─────────────────────────────────────────────────────
-    // `conditions` に列挙した全条件が同時に成立するパターンは禁止（AND）。
+    // `conditions`（等値）と `comparisons`（命題=true）に列挙した全条件が
+    // 同時に成立するパターンは禁止（AND）。
     for fc in model
         .forbidden_constraints
         .iter()
         .filter(|fc| fc.entity == ek)
     {
-        // 各条件を AbstractValue に変換して保持（ループ毎の再変換を避ける）
+        // 等値条件を AbstractValue に変換
         let abs_conds: Vec<(String, AbstractValue)> = fc
             .conditions
             .iter()
             .map(|(col, val)| (col.clone(), AbstractValue::from_effect(val)))
             .collect();
+        // 比較命題条件（命題軸キー, Bool(true)）
+        let abs_props: Vec<(String, AbstractValue)> = fc
+            .comparisons
+            .iter()
+            .map(|p| (prop_col_key(p), AbstractValue::Bool(true)))
+            .collect();
 
         for rp in reached {
-            let all_match = abs_conds
+            let eq_match = abs_conds
                 .iter()
                 .all(|(col, av)| rp.pattern.values.get(col) == Some(av));
-            if all_match {
-                let conditions_str = abs_conds
+            let prop_match = abs_props
+                .iter()
+                .all(|(col, av)| rp.pattern.values.get(col) == Some(av));
+            if eq_match && prop_match {
+                let conditions_str: Vec<String> = abs_conds
                     .iter()
                     .map(|(col, av)| format!("{}={}", col, abstract_value_display(av)))
-                    .collect::<Vec<_>>()
-                    .join(" AND ");
+                    .chain(
+                        fc.comparisons
+                            .iter()
+                            .map(|p| format!("{}=true", p.display())),
+                    )
+                    .collect();
                 diags.push(StateDiag::ForbiddenStateViolated {
-                    conditions: conditions_str,
+                    conditions: conditions_str.join(" AND "),
                     pattern_desc: describe_pattern(&rp.pattern),
                 });
             }
@@ -944,7 +1102,8 @@ fn check_constraints(
     }
 
     // ── 不変条件チェック ─────────────────────────────────────────────────────
-    // guards が全て成立するパターンで requireds のいずれかが不成立なら違反。
+    // guards（等値 + 命題=true）が全て成立するパターンで
+    // requireds（等値 + 命題=true）のいずれかが不成立なら違反。
     for inv in model
         .entity_invariants
         .iter()
@@ -955,16 +1114,27 @@ fn check_constraints(
             .iter()
             .map(|(col, val)| (col.clone(), AbstractValue::from_effect(val)))
             .collect();
+        let abs_guard_props: Vec<(String, AbstractValue)> = inv
+            .guard_comparisons
+            .iter()
+            .map(|p| (prop_col_key(p), AbstractValue::Bool(true)))
+            .collect();
         let abs_requireds: Vec<(String, AbstractValue)> = inv
             .requireds
             .iter()
             .map(|(col, val)| (col.clone(), AbstractValue::from_effect(val)))
             .collect();
+        let abs_required_props: Vec<(String, AbstractValue)> = inv
+            .required_comparisons
+            .iter()
+            .map(|p| (prop_col_key(p), AbstractValue::Bool(true)))
+            .collect();
 
         for rp in reached {
-            // 全ガード条件が成立するパターンのみ検査
+            // 全ガード条件（等値 + 命題）が成立するパターンのみ検査
             let guards_hold = abs_guards
                 .iter()
+                .chain(abs_guard_props.iter())
                 .all(|(col, av)| rp.pattern.values.get(col) == Some(av));
             if !guards_hold {
                 continue;
@@ -972,21 +1142,30 @@ fn check_constraints(
             // required 条件のいずれかが不成立なら違反
             let req_violated = abs_requireds
                 .iter()
+                .chain(abs_required_props.iter())
                 .any(|(col, av)| rp.pattern.values.get(col) != Some(av));
             if req_violated {
-                let guards_str = abs_guards
+                let guards_str: Vec<String> = abs_guards
                     .iter()
                     .map(|(col, av)| format!("{}={}", col, abstract_value_display(av)))
-                    .collect::<Vec<_>>()
-                    .join(" AND ");
-                let requireds_str = abs_requireds
+                    .chain(
+                        inv.guard_comparisons
+                            .iter()
+                            .map(|p| format!("{}=true", p.display())),
+                    )
+                    .collect();
+                let requireds_str: Vec<String> = abs_requireds
                     .iter()
                     .map(|(col, av)| format!("{}={}", col, abstract_value_display(av)))
-                    .collect::<Vec<_>>()
-                    .join(" AND ");
+                    .chain(
+                        inv.required_comparisons
+                            .iter()
+                            .map(|p| format!("{}=true", p.display())),
+                    )
+                    .collect();
                 diags.push(StateDiag::InvariantViolated {
-                    guards: guards_str,
-                    requireds: requireds_str,
+                    guards: guards_str.join(" AND "),
+                    requireds: requireds_str.join(" AND "),
                     pattern_desc: describe_pattern(&rp.pattern),
                 });
             }
@@ -1008,6 +1187,7 @@ fn compute_bound(axes: &[StateAxis]) -> usize {
             AxisKind::Enum(v) => v.len(),
             AxisKind::Bool => 2,
             AxisKind::Nullable { .. } => 2,
+            AxisKind::Proposition { .. } => 2,
         };
         acc.saturating_mul(factor)
     })
@@ -1598,6 +1778,138 @@ invariant(Order)
     }
 
     // ── invariant: 不変条件を満たす場合は違反なし ──────────────────────────────
+
+    // ── 比較命題軸テスト ─────────────────────────────────────────────────────
+
+    /// 比較命題を含まないモデルで既存テストが変わらないこと
+    #[test]
+    fn test_no_comparison_props_unaffected() {
+        let model = model_from(
+            r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid) @default(pending) }
+usecase Pay "支払い"
+creates(Pay, Order)
+sets(Pay, Order, "status", "paid")
+forbidden(Order, (status, paid))
+"#,
+        );
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results.iter().find(|r| r.entity_id == "Order").unwrap();
+        // Proposition 軸が増えていないこと
+        assert!(
+            r.axes.iter().all(|ax| !matches!(ax.kind, AxisKind::Proposition { .. })),
+            "比較命題のないモデルに Proposition 軸が現れた"
+        );
+        // forbidden が違反を検出すること
+        let forbidden_diags: Vec<_> = r
+            .diagnostics
+            .iter()
+            .filter(|d| matches!(d, StateDiag::ForbiddenStateViolated { .. }))
+            .collect();
+        assert!(!forbidden_diags.is_empty(), "forbidden 違反が検出されなかった");
+    }
+
+    /// 比較命題軸が追加されること、および BFS 後に forbidden/invariant が正しく機能すること
+    #[test]
+    fn test_comparison_proposition_axis_and_violation() {
+        let model = model_from(
+            r#"
+entity Stock "在庫" {
+  id:      Int @pk
+  status:  Enum(on_sale, suspended) @default(on_sale)
+  stock:   Int
+  selling: Int
+}
+usecase Open   "販売開始"
+usecase Sell   "販売"
+usecase Refund "返品"
+buc Sales "販売業務"
+contains(Sales, Open)
+contains(Sales, Sell)
+contains(Sales, Refund)
+creates(Open,   Stock)
+updates(Sell,   Stock)
+updates(Refund, Stock)
+sets(Open,   Stock, "status", "on_sale")
+sets(Sell,   Stock, stock < selling, true)
+sets(Refund, Stock, stock < selling, false)
+forbidden(Stock, (status, on_sale), stock < selling)
+invariant(Stock)
+  .when(status, on_sale)
+  .then(stock < selling)
+"#,
+        );
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results.iter().find(|r| r.entity_id == "Stock").unwrap();
+
+        // Proposition 軸が1本追加されていること
+        let prop_axes: Vec<_> = r
+            .axes
+            .iter()
+            .filter(|ax| matches!(&ax.kind, AxisKind::Proposition { .. }))
+            .collect();
+        assert_eq!(prop_axes.len(), 1, "Proposition 軸が1本あるはず");
+        if let AxisKind::Proposition { axis_key } = &prop_axes[0].kind {
+            assert_eq!(axis_key, "stock<selling");
+        }
+
+        // forbidden 違反が検出されること（status=on_sale かつ stock<selling=true）
+        let forbidden_diags: Vec<_> = r
+            .diagnostics
+            .iter()
+            .filter(|d| matches!(d, StateDiag::ForbiddenStateViolated { .. }))
+            .collect();
+        assert!(!forbidden_diags.is_empty(), "forbidden 違反が検出されなかった");
+
+        // invariant 違反が検出されること（status=on_sale で stock<selling=false の到達可能状態）
+        let invariant_diags: Vec<_> = r
+            .diagnostics
+            .iter()
+            .filter(|d| matches!(d, StateDiag::InvariantViolated { .. }))
+            .collect();
+        assert!(!invariant_diags.is_empty(), "invariant 違反が検出されなかった");
+    }
+
+    /// `now` 比較命題が正しく Proposition 軸として追加されること
+    #[test]
+    fn test_now_comparison_proposition() {
+        let model = model_from(
+            r#"
+entity Coupon "クーポン" {
+  id:         Int @pk
+  status:     Enum(usable, expired) @default(usable)
+  expired_at: DateTime @null
+}
+usecase Expire "期限切れ"
+buc CouponMgmt "管理"
+contains(CouponMgmt, Expire)
+creates(Expire, Coupon)
+updates(Expire, Coupon)
+sets(Expire, Coupon, expired_at < now, true)
+forbidden(Coupon, (status, usable), expired_at < now)
+"#,
+        );
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results.iter().find(|r| r.entity_id == "Coupon").unwrap();
+
+        let prop_axes: Vec<_> = r
+            .axes
+            .iter()
+            .filter(|ax| matches!(&ax.kind, AxisKind::Proposition { .. }))
+            .collect();
+        assert_eq!(prop_axes.len(), 1, "Proposition 軸が1本あるはず");
+        if let AxisKind::Proposition { axis_key } = &prop_axes[0].kind {
+            assert_eq!(axis_key, "expired_at<now");
+        }
+
+        // forbidden 違反が検出されること
+        let forbidden_diags: Vec<_> = r
+            .diagnostics
+            .iter()
+            .filter(|d| matches!(d, StateDiag::ForbiddenStateViolated { .. }))
+            .collect();
+        assert!(!forbidden_diags.is_empty(), "forbidden 違反が検出されなかった");
+    }
 
     #[test]
     fn test_invariant_satisfied() {

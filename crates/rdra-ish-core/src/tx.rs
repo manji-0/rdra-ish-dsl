@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::diagnostics::{Diagnostic, RdraError};
-use crate::model::{EntityKey, NodeRef, RelKind, SemanticModel, UseCaseKey};
+use crate::model::{ApiKey, EntityKey, NodeRef, RelKind, SemanticModel, UseCaseKey};
 
 // ── 公開型 ────────────────────────────────────────────────────────────────────
 
@@ -31,6 +31,9 @@ impl WriteKind {
 pub struct UcWrite {
     pub entity: EntityKey,
     pub kind: WriteKind,
+    /// この書き込みを担う API ノード（`invokes(uc, api)` + `creates(api, entity)` 由来）。
+    /// `None` の場合は usecase が直接 entity に書き込む（レガシー形式）。
+    pub via_api: Option<ApiKey>,
 }
 
 /// FK連結成分ごとのTXグループ。
@@ -76,7 +79,7 @@ pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
     let mut result = Vec::new();
 
     for (uc_key, _uc) in model.use_cases.iter() {
-        // Step 1: 書き込み操作を収集
+        // Step 1a: usecase が直接書き込む操作を収集
         let mut writes: Vec<UcWrite> = Vec::new();
         for rel in &model.relations {
             if rel.from != NodeRef::UseCase(uc_key) {
@@ -92,9 +95,44 @@ pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
                 writes.push(UcWrite {
                     entity: ek,
                     kind: wk,
+                    via_api: None,
                 });
             }
         }
+
+        // Step 1b: invokes(uc, api) で繋がった api の書き込みも実効書き込みとして収集
+        let mut invoked_apis: Vec<ApiKey> = Vec::new();
+        for rel in &model.relations {
+            if rel.from == NodeRef::UseCase(uc_key) && rel.kind == RelKind::Invokes {
+                if let NodeRef::Api(ak) = rel.to {
+                    invoked_apis.push(ak);
+                }
+            }
+        }
+        for ak in &invoked_apis {
+            for rel in &model.relations {
+                if rel.from != NodeRef::Api(*ak) {
+                    continue;
+                }
+                let wk = match rel.kind {
+                    RelKind::Creates => WriteKind::Creates,
+                    RelKind::Updates => WriteKind::Updates,
+                    RelKind::Deletes => WriteKind::Deletes,
+                    _ => continue,
+                };
+                if let NodeRef::Entity(ek) = rel.to {
+                    writes.push(UcWrite {
+                        entity: ek,
+                        kind: wk,
+                        via_api: Some(*ak),
+                    });
+                }
+            }
+        }
+
+        // 同一 (entity, kind) が直接書き込みと api 経由で重複する場合は api-origin を優先
+        writes.sort_by_key(|w| (w.entity, w.via_api.is_none()));
+        writes.dedup_by_key(|w| w.entity);
 
         if writes.is_empty() {
             continue;
@@ -500,5 +538,72 @@ updates(PlaceOrder, Cart)
         let msg = diags[0].error.to_string();
         assert!(msg.contains("PlaceOrder"), "should mention the usecase");
         assert!(msg.contains("Cart"), "should mention the entity");
+    }
+
+    /// api 経由の書き込みが usecase の実効書き込みとして収集・グループ化される
+    #[test]
+    fn test_api_writes_collected_via_invokes() {
+        let src = r#"
+entity Order     "注文"     { id: Int @pk }
+entity OrderLine "注文明細" { id: Int @pk }
+usecase Checkout "チェックアウト"
+api OrderApi "注文API"
+invokes(Checkout, OrderApi)
+creates(OrderApi, Order)
+creates(OrderApi, OrderLine)
+relate(OrderLine, Order, "N:1")
+"#;
+        let model = model_from(src);
+        let txs = infer_usecase_transactions(&model);
+        assert_eq!(txs.len(), 1);
+        let utx = &txs[0];
+
+        // FK連結グループが1つ（Order + OrderLine）
+        assert_eq!(utx.fk_groups.len(), 1, "should have 1 FK group");
+        let group = &utx.fk_groups[0];
+        assert_eq!(group.ordered_writes.len(), 2);
+        assert!(group.inferred);
+
+        // FK親(Order) → 子(OrderLine) の順
+        let ids: Vec<&str> = group
+            .ordered_writes
+            .iter()
+            .map(|w| model.entities.get(w.entity).unwrap().id.as_str())
+            .collect();
+        assert_eq!(ids, vec!["Order", "OrderLine"]);
+
+        // 全ての書き込みが via_api = Some(_)
+        for w in &group.ordered_writes {
+            assert!(w.via_api.is_some(), "write via api should have via_api set");
+        }
+    }
+
+    /// api 経由と直接の混在: 重複 entity は api-origin が優先される
+    #[test]
+    fn test_api_and_direct_write_deduplicated() {
+        let src = r#"
+entity Cart "カート" { id: Int @pk }
+usecase Checkout "チェックアウト"
+api CartApi "カートAPI"
+invokes(Checkout, CartApi)
+updates(CartApi, Cart)
+updates(Checkout, Cart)
+"#;
+        let model = model_from(src);
+        let txs = infer_usecase_transactions(&model);
+        assert_eq!(txs.len(), 1);
+        let utx = &txs[0];
+
+        // Cart が1件のみ（重複排除）
+        assert_eq!(
+            utx.isolated_writes.len(),
+            1,
+            "Cart should appear only once after dedup"
+        );
+        // api-origin が優先される
+        assert!(
+            utx.isolated_writes[0].via_api.is_some(),
+            "api-origin should be preferred over direct write"
+        );
     }
 }

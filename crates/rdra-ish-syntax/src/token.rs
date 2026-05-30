@@ -39,6 +39,8 @@ pub enum Token {
     Condition,
     #[token("variation")]
     Variation,
+    #[token("api")]
+    Api,
 
     // ── Type keywords ────────────────────────────────────────────────
     #[token("Int")]
@@ -70,6 +72,11 @@ pub enum Token {
     #[token("@label")]
     AtLabel,
 
+    // ── Comparison / temporal ────────────────────────────────────────
+    /// Built-in temporal reference for comparison expressions (e.g. `expired_at < now`)
+    #[token("now")]
+    Now,
+
     // ── Punctuation ──────────────────────────────────────────────────
     #[token("{")]
     LBrace,
@@ -88,6 +95,20 @@ pub enum Token {
     Colon,
     #[token(".")]
     Dot,
+    // Comparison operators: longer tokens must come before shorter ones
+    // so that "<=" is lexed before "<", etc.
+    #[token("<=")]
+    Le,
+    #[token(">=")]
+    Ge,
+    #[token("==")]
+    EqEq,
+    #[token("!=")]
+    Ne,
+    #[token("<")]
+    Lt,
+    #[token(">")]
+    Gt,
 
     // ── Literals ─────────────────────────────────────────────────────
     /// Identifiers: `[A-Za-z_][A-Za-z0-9_]*`

@@ -46,6 +46,7 @@ src/
 | `state` | state (for state machines) |
 | `condition` | condition |
 | `variation` | variation |
+| `api` | API layer endpoint invoked by a use case; operates entities |
 
 Id must be UpperCamelCase (e.g. `Customer`, `BucOrder`).
 
@@ -71,11 +72,12 @@ Annotations: `@pk` / `@pk(a, b)` (compound PK) / `@unique` / `@null` / `@default
 |-----------|-----------|---------|
 | `performs` | `(Actor, UseCase\|Buc)` | actor performs a use case |
 | `uses` | `(Actor, ExtSystem)` | actor uses an external system |
-| `reads` | `(UseCase, Entity)` | use case reads entity |
-| `writes` | `(UseCase, Entity)` | use case writes entity |
-| `creates` | `(UseCase, Entity)` | use case creates entity |
-| `updates` | `(UseCase, Entity)` | use case updates entity |
-| `deletes` | `(UseCase, Entity)` | use case deletes entity |
+| `invokes` | `(UseCase, Api)` | use case invokes an API layer |
+| `reads` | `(UseCase\|Api, Entity)` | use case or API reads entity |
+| `writes` | `(UseCase\|Api, Entity)` | use case or API writes entity |
+| `creates` | `(UseCase\|Api, Entity)` | use case or API creates entity |
+| `updates` | `(UseCase\|Api, Entity)` | use case or API updates entity |
+| `deletes` | `(UseCase\|Api, Entity)` | use case or API deletes entity |
 | `displays` | `(UseCase, Screen)` | use case displays a screen |
 | `shows` | `(Screen, Entity)` | screen shows entity data |
 | `raises` | `(UseCase, Event)` | use case raises a domain event |
@@ -106,6 +108,25 @@ sets(usecase::Deliver,  Order,   "delivered_at", "timestamptz")
 sets(usecase::Logout,   Session, "token", "null")
 ```
 
+#### API layer (`api` / `invokes`)
+
+Use `api` when you need to express that a screen calls a backend API layer — the
+sequence diagram then renders `Actor → Screen → API → Entity` lanes.
+
+```
+api OrderApi "Order API"
+invokes(PlaceOrder, OrderApi)   // usecase delegates to the API
+creates(OrderApi, Order)        // the API operates the entity
+displays(PlaceOrder, OrderScreen)
+```
+
+- Declare `api` in the same BUC file as the use case that invokes it (or in `shared/`
+  if multiple BUCs share it).
+- CRUD predicates (`creates`, `updates`, etc.) are attached to the `api`, not the
+  `usecase`. You may still attach CRUD directly to a `usecase` for the same entity
+  (mixed form) — the sequence diagram handles both.
+- `api` nodes are intentionally omitted from the RDRA overview (`--kind rdra`).
+
 #### Imports
 
 ```
@@ -131,8 +152,10 @@ import shared.actors.{Staff as S}  // selective import with alias
 
 ### Common mistakes
 
-- Swapping predicate argument order (e.g. `reads(Product, Browse)` — CRUD predicates take `(UseCase, Entity)`)
+- Swapping predicate argument order (e.g. `reads(Product, Browse)` — CRUD predicates take `(UseCase|Api, Entity)`)
 - Writing `relate` cardinality without quotes (`N:1` instead of `"N:1"`)
 - Adding quotes inside `Enum(...)` values — they are bare identifiers, not strings
 - Forgetting the `module` declaration or using a dotted name that does not match the file path
 - Adding FK columns manually when a `relate` already auto-generates them
+- Attaching CRUD to a `usecase` when the intent is to go through an `api` — use `invokes` + CRUD on the `api`
+- Forgetting `invokes(UseCase, Api)` — declaring an `api` without `invokes` triggers an `ApiNeverInvoked` warning

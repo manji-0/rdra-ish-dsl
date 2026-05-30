@@ -1,0 +1,20 @@
+module api.buc.order
+
+import api.shared.actors
+import api.shared.entities
+
+buc BucOrder "Process Order"
+
+usecase PlaceOrder "Place Order"
+screen OrderScreen "Order Screen"
+api OrderApi "Order API"
+
+performs(Customer, BucOrder)
+contains(BucOrder, PlaceOrder)
+
+displays(PlaceOrder, OrderScreen)
+invokes(PlaceOrder, OrderApi)
+
+creates(OrderApi, Order)
+creates(OrderApi, OrderLine)
+updates(PlaceOrder, Cart)

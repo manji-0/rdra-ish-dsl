@@ -210,6 +210,7 @@ fn kind_token() -> impl Parser<Token, Kind, Error = Simple<Token>> + Clone {
         Token::State       => Kind::State,
         Token::Condition   => Kind::Condition,
         Token::Variation   => Kind::Variation,
+        Token::Api         => Kind::Api,
     }
 }
 
@@ -276,9 +277,42 @@ fn predicate_atom() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> +
     lit.or(r)
 }
 
-/// 引数: `(col, val)` タプル、文字列リテラル、または修飾参照。
+/// 比較式の被演算子（Operand）: 裸ident（カラム参照）、整数リテラル、または `now`。
+fn operand() -> impl Parser<Token, Operand, Error = Simple<Token>> + Clone {
+    let now = just(Token::Now).map(|_| Operand::Now);
+    let int_lit = select! { Token::IntLit(s) => Operand::IntLit(s) };
+    let col = ident().map(Operand::Column);
+    // `now` must come before generic ident because logos lexes it as Token::Now
+    now.or(int_lit).or(col)
+}
+
+/// 比較演算子トークン → `CmpOp`
+fn cmp_op() -> impl Parser<Token, CmpOp, Error = Simple<Token>> + Clone {
+    select! {
+        Token::Le  => CmpOp::Le,
+        Token::Ge  => CmpOp::Ge,
+        Token::EqEq => CmpOp::Eq,
+        Token::Ne  => CmpOp::Ne,
+        Token::Lt  => CmpOp::Lt,
+        Token::Gt  => CmpOp::Gt,
+    }
+}
+
+/// 比較式: `operand cmp_op operand`（例: `stock < selling`, `expired_at < now`）
+fn comparison() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
+    operand()
+        .then(cmp_op())
+        .then(operand())
+        .map_with_span(|((lhs, op), rhs), span| Expr::Cmp(Comparison { lhs, op, rhs, span }))
+}
+
+/// 引数: 比較式、`(col, val)` タプル、文字列リテラル、または修飾参照。
 ///
-/// タプルは `( atom (, atom)* )` 形式。タプルのネストは不要なので atom は非再帰。
+/// 比較式を **最優先** でパースし、`cmp_op` が続かなければ
+/// タプル → atom の順にフォールバックする。これにより:
+/// - `forbidden(E, stock < selling)` → `PredicateArg::Expr`
+/// - `forbidden(E, (status, x))`    → `PredicateArg::Tuple`
+/// - `performs(A, B)`               → `PredicateArg::Ref`（既存動作を維持）
 fn predicate_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + Clone {
     let atom = predicate_atom();
 
@@ -291,7 +325,11 @@ fn predicate_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + 
         .then_ignore(just(Token::RParen))
         .map(PredicateArg::Tuple);
 
-    tuple.or(atom)
+    let expr = comparison().map(PredicateArg::Expr);
+
+    // comparison must come first; if no cmp_op follows the initial operand the
+    // parser backtracks and tries tuple then atom.
+    expr.or(tuple).or(atom)
 }
 
 /// `.method(args...)` のチェーン呼び出し1件。
@@ -566,6 +604,190 @@ performs(actor::Add, usecase::Add)
             assert_eq!(qref.parts, vec!["Add"]);
         } else {
             panic!("expected Ref arg");
+        }
+    }
+
+    // ── 比較式（Expr）のパーステスト ──────────────────────────────────────────
+
+    /// 既存の呼び出し `performs(A, B)` が Expr ではなく Ref になること（後退しないことの確認）
+    #[test]
+    fn test_existing_call_unaffected_by_expr() {
+        let ast = parse_ok("performs(Customer, Browse)");
+        let pred = ast
+            .items
+            .iter()
+            .find_map(|i| {
+                if let Item::Predicate(p) = i {
+                    Some(p)
+                } else {
+                    None
+                }
+            })
+            .expect("predicate not found");
+        assert_eq!(pred.name, "performs");
+        assert!(
+            matches!(&pred.args[0], PredicateArg::Ref(_)),
+            "first arg should be Ref"
+        );
+        assert!(
+            matches!(&pred.args[1], PredicateArg::Ref(_)),
+            "second arg should be Ref"
+        );
+    }
+
+    /// `forbidden(E, (status, cancelled))` のタプルが Expr に誤解釈されないこと
+    #[test]
+    fn test_tuple_arg_unaffected_by_expr() {
+        let ast = parse_ok("forbidden(Order, (status, cancelled))");
+        let pred = ast
+            .items
+            .iter()
+            .find_map(|i| {
+                if let Item::Predicate(p) = i {
+                    Some(p)
+                } else {
+                    None
+                }
+            })
+            .expect("predicate not found");
+        assert!(
+            matches!(&pred.args[1], PredicateArg::Tuple(_)),
+            "second arg should still be Tuple"
+        );
+    }
+
+    /// 比較式 `stock < selling` が `PredicateArg::Expr(Cmp)` としてパースされること
+    #[test]
+    fn test_parse_comparison_col_col() {
+        let ast = parse_ok("forbidden(Stock, stock < selling)");
+        let pred = ast
+            .items
+            .iter()
+            .find_map(|i| {
+                if let Item::Predicate(p) = i {
+                    Some(p)
+                } else {
+                    None
+                }
+            })
+            .expect("predicate not found");
+        assert_eq!(pred.name, "forbidden");
+        assert_eq!(pred.args.len(), 2);
+        if let PredicateArg::Expr(Expr::Cmp(cmp)) = &pred.args[1] {
+            assert_eq!(cmp.lhs, Operand::Column("stock".to_string()));
+            assert_eq!(cmp.op, CmpOp::Lt);
+            assert_eq!(cmp.rhs, Operand::Column("selling".to_string()));
+        } else {
+            panic!("expected Expr(Cmp), got {:?}", &pred.args[1]);
+        }
+    }
+
+    /// 比較式 `stock >= 0` (整数リテラル右辺) がパースされること
+    #[test]
+    fn test_parse_comparison_col_intlit() {
+        let ast = parse_ok("forbidden(Stock, stock >= 0)");
+        let pred = ast
+            .items
+            .iter()
+            .find_map(|i| {
+                if let Item::Predicate(p) = i {
+                    Some(p)
+                } else {
+                    None
+                }
+            })
+            .expect("predicate not found");
+        if let PredicateArg::Expr(Expr::Cmp(cmp)) = &pred.args[1] {
+            assert_eq!(cmp.lhs, Operand::Column("stock".to_string()));
+            assert_eq!(cmp.op, CmpOp::Ge);
+            assert_eq!(cmp.rhs, Operand::IntLit("0".to_string()));
+        } else {
+            panic!("expected Expr(Cmp) with IntLit rhs");
+        }
+    }
+
+    /// 比較式 `expired_at < now` (組み込み now) がパースされること
+    #[test]
+    fn test_parse_comparison_col_now() {
+        let ast = parse_ok("forbidden(Coupon, expired_at < now)");
+        let pred = ast
+            .items
+            .iter()
+            .find_map(|i| {
+                if let Item::Predicate(p) = i {
+                    Some(p)
+                } else {
+                    None
+                }
+            })
+            .expect("predicate not found");
+        if let PredicateArg::Expr(Expr::Cmp(cmp)) = &pred.args[1] {
+            assert_eq!(cmp.lhs, Operand::Column("expired_at".to_string()));
+            assert_eq!(cmp.op, CmpOp::Lt);
+            assert_eq!(cmp.rhs, Operand::Now);
+        } else {
+            panic!("expected Expr(Cmp) with Now rhs");
+        }
+    }
+
+    /// invariant の `.when(expr).then(col, val)` 形式（比較式をチェーン引数に）
+    #[test]
+    fn test_parse_invariant_with_comparison_chain() {
+        let ast = parse_ok("invariant(Order).when(expired_at < now).then(status, expired)");
+        let pred = ast
+            .items
+            .iter()
+            .find_map(|i| {
+                if let Item::Predicate(p) = i {
+                    Some(p)
+                } else {
+                    None
+                }
+            })
+            .expect("predicate not found");
+        assert_eq!(pred.chain.len(), 2);
+        // when チェーンに比較式が入ること
+        assert_eq!(pred.chain[0].name, "when");
+        assert_eq!(pred.chain[0].args.len(), 1);
+        assert!(
+            matches!(&pred.chain[0].args[0], PredicateArg::Expr(Expr::Cmp(_))),
+            "when arg should be Expr(Cmp)"
+        );
+        // then チェーンは従来通り2引数の等値ペア
+        assert_eq!(pred.chain[1].name, "then");
+        assert_eq!(pred.chain[1].args.len(), 2);
+    }
+
+    /// 全比較演算子トークンが正しくパースされること
+    #[test]
+    fn test_parse_all_cmp_ops() {
+        let cases = [
+            ("a < b", CmpOp::Lt),
+            ("a > b", CmpOp::Gt),
+            ("a <= b", CmpOp::Le),
+            ("a >= b", CmpOp::Ge),
+            ("a == b", CmpOp::Eq),
+            ("a != b", CmpOp::Ne),
+        ];
+        for (expr_str, expected_op) in cases {
+            let src = format!("forbidden(E, {})", expr_str);
+            let ast = parse_ok(&src);
+            let pred = ast
+                .items
+                .iter()
+                .find_map(|i| {
+                    if let Item::Predicate(p) = i {
+                        Some(p)
+                    } else {
+                        None
+                    }
+                })
+                .expect("predicate not found");
+            if let PredicateArg::Expr(Expr::Cmp(cmp)) = &pred.args[1] {
+                assert_eq!(cmp.op, expected_op, "failed for: {}", expr_str);
+            } else {
+                panic!("expected Expr(Cmp) for: {}", expr_str);
+            }
         }
     }
 }

@@ -1,0 +1,15 @@
+module api.shared.entities
+
+entity Order "Order" {
+  id:    Int @pk
+  total: Int
+}
+entity OrderLine "Order Line" {
+  id:       Int @pk
+  quantity: Int
+}
+entity Cart "Cart" {
+  id: Int @pk
+}
+
+relate(OrderLine, Order, "N:1")

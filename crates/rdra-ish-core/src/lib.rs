@@ -10,8 +10,10 @@ pub mod tx;
 
 pub use analysis::build_model;
 pub use diagnostics::{Diagnostic, RdraError};
-pub use event_flow::{collect_event_flows, event_diagnostics, EventFlow};
-pub use model::{ColumnEffect, EffectValue, EntityKey, SemanticModel, StateTransition};
+pub use event_flow::{api_diagnostics, collect_event_flows, event_diagnostics, EventFlow};
+pub use model::{
+    Api, ApiKey, ColumnEffect, EffectValue, EntityKey, SemanticModel, StateTransition,
+};
 pub use resolver::{build_merged_model, reachable_from_bucs, resolve, ResolvedProgram};
 pub use state_pattern::{
     derive_state_patterns, AbstractValue, AxisKind, EntityStateResult, ReachablePattern, StateAxis,

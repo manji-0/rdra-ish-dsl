@@ -6,6 +6,8 @@ relationships between them with predicate calls.
 It generates PlantUML / Mermaid diagrams (ER, RDRA, state machine, sequence) and CSV
 (actor list, entity list, CRUD matrix), and derives
 **the reachable state patterns of each entity from BUC patterns**.
+An `api` element lets you express the API layer between screens and entities — the sequence
+diagram renders the full `Actor → Screen → API → Entity` lane automatically.
 
 ## Installation
 
@@ -38,16 +40,19 @@ rdra-ish diagram src/ --kind rdra --buc BucCart --buc BucOrder --format mermaid
 rdra-ish diagram src/ --kind state --format mermaid
 rdra-ish diagram src/ --kind state --buc BucOrder --format mermaid
 
-# Sequence diagram of write operations
+# Sequence diagram of write operations (shows API layer when invokes() is used)
 rdra-ish diagram src/ --kind sequence --format mermaid
 
 # CSV output
 rdra-ish csv src/ --kind entity
 rdra-ish csv src/ --kind actor
 rdra-ish csv src/ --kind matrix
+rdra-ish csv src/ --kind api          # API list
+rdra-ish csv src/ --kind api-matrix   # API × Entity CRUD matrix
 
 # List output
 rdra-ish list src/ --kind actor --format table
+rdra-ish list src/ --kind api   --format table
 rdra-ish list src/ --kind buc   --format json
 
 # State pattern derivation (reachable state combinations of each entity from BUC patterns)
@@ -62,7 +67,7 @@ rdra-ish states src/ --format json           # JSON output
 
 | Option | Default | Description |
 |---|---|---|
-| `--kind` | `rdra` | `rdra` / `er` / `state` / `sequence` |
+| `--kind` | `rdra` | `rdra` / `er` / `state` / `sequence` / `event-flow` |
 | `--format` | `puml` | `puml` / `svg` / `png` / `mermaid` (`svg`/`png` require plantuml.jar) |
 | `--buc <id>` | — (whole) | Filter by BUC id (repeatable). Multiple ids output the union as one diagram |
 | `-o / --out` | `out` | Output file path (extension added automatically) |
@@ -75,6 +80,27 @@ rdra-ish states src/ --format json           # JSON output
 | `--buc <id>` | — (whole) | Filter by BUC scope (repeatable) |
 | `--entity <id>` | — (whole) | Output only a specific entity |
 | `--max-patterns` | `256` | Per-entity pattern cap (sets the `truncated` flag when exceeded) |
+
+### API Layer in the Sequence Diagram
+
+When a use case invokes an API via `invokes(UseCase, Api)`, the sequence diagram
+renders the full four-lane interaction:
+
+```
+Actor → Screen → API → Entity
+```
+
+CRUD predicates (`creates`, `updates`, etc.) are attached to the `api` element; the
+use case owns only `invokes` and `displays`. Existing models that write directly from
+a use case continue to work without change — they render the legacy `System` lane.
+
+```
+api OrderApi "Order API"
+invokes(PlaceOrder, OrderApi)
+creates(OrderApi, Order)
+creates(OrderApi, OrderLine)
+updates(PlaceOrder, Cart)   // direct write still allowed
+```
 
 ### Transaction Boundary Inference (`--kind sequence`)
 
@@ -134,6 +160,7 @@ warning: usecase 'PlaceOrder' writes 'Cart' with no FK link to its other writes
 | `state` | State (state machine node) |
 | `condition` | Condition |
 | `variation` | Variation |
+| `api` | API layer endpoint invoked by a use case; operates entities. Appears in the sequence diagram lane; omitted from the RDRA overview. |
 
 ### Entity column definitions
 
@@ -168,7 +195,8 @@ entity Order "Order" {
 |---|---|---|
 | `performs` | (Actor, UseCase\|Buc) | Actor performs a UC / BUC |
 | `uses` | (Actor, ExtSystem) | Actor uses an external system |
-| `reads`/`writes`/`creates`/`updates`/`deletes` | (UseCase, Entity) | CRUD |
+| `invokes` | (UseCase, Api) | UseCase invokes an API layer |
+| `reads`/`writes`/`creates`/`updates`/`deletes` | (UseCase\|Api, Entity) | CRUD |
 | `displays` | (UseCase, Screen) | UC displays a screen |
 | `shows` | (Screen, Entity) | Screen shows entity information |
 | `raises` | (UseCase, Event) | UC raises a domain event |
@@ -178,7 +206,7 @@ entity Order "Order" {
 | `motivates` | (Requirement, Buc) | Requirement motivates a BUC |
 | `relate` | (Entity, Entity, Card) | ER relationship (FK auto-generated) `"1:1"` / `"1:N"` / `"N:1"` / `"N:M"` |
 | `transitions` | (Event, State, State) | State transition (from → to on an event) |
-| `sets` | (UseCase\|Event, Entity, "col", "val") | Explicit column effect (for state pattern derivation) |
+| `sets` | (UseCase\|Event, Entity, "col", "val") or (UseCase\|Event, Entity, \<expr\>, bool) | Explicit column effect (for state pattern derivation); second form drives a comparison-proposition truth value |
 
 ### Value vocabulary for the `sets` predicate
 
@@ -198,6 +226,10 @@ sets(usecase::Tag,     Doc,   "metadata",     "jsonb")
 
 // Set a nullable column to null
 sets(usecase::Logout, Session, "token", "null")
+
+// Drive a comparison proposition to true/false
+sets(Sell,   Stock, stock < selling, true)
+sets(Refund, Stock, stock < selling, false)
 ```
 
 | Value | Target column | Meaning |
@@ -207,6 +239,7 @@ sets(usecase::Logout, Session, "token", "null")
 | `"present"` | `@null` column | Make non-null (has a value) |
 | `"null"` | `@null` column | Make null |
 | PostgreSQL type name | `@null` column | Make non-null + record type info (`jsonb` / `uuid` / `timestamptz` / `inet`, etc.) |
+| comparison expression + `true`/`false` | comparison column | Drive the comparison proposition's truth value |
 
 ### Entity State Constraints
 
@@ -227,6 +260,10 @@ forbidden(Order, (status, cancelled))
 
 // Forbid the simultaneous combination status=delivered AND refunded=true
 forbidden(Order, (status, delivered), (refunded, true))
+
+// Comparison expressions are also valid conditions
+forbidden(Stock, (status, on_sale), stock < selling)
+forbidden(Coupon, expired_at < now)
 ```
 
 The tuple form was chosen because a forbidden state is naturally a *point* in the
@@ -249,6 +286,10 @@ invariant(Order)
   .when(status, delivered)
   .when(refunded, false)     // multiple .when() = AND
   .then(refund_id, null)
+
+// Comparison expressions work in .when() and .then() too
+invariant(Stock).when(status, on_sale).then(stock < selling)
+invariant(Coupon).when(expired_at < now).then(status, expired)
 ```
 
 The method-chain form was chosen because an invariant is a *rule with two sides* —
@@ -260,7 +301,9 @@ the `.when()` guards but violates any `.then()` requirement, a
 
 Column names and values inside `.when()` / `.then()` are bare identifiers (not quoted
 strings). They use the same value vocabulary as `sets` (Enum variant names, `true`/`false`,
-`present`/`null`, PostgreSQL type names).
+`present`/`null`, PostgreSQL type names). Comparison expressions (`stock < selling`,
+`expired_at < now`) are treated as derived boolean proposition axes and can be driven
+via `sets`. See `docs/language-reference.md` for the full list of supported operators.
 
 ### import / modules
 

@@ -55,7 +55,8 @@ Notes:
 
 - For `--kind sequence`, the tool additionally runs FK-based transaction-boundary
   inference and emits a `warning:` to stderr for any FK-isolated write within a use case
-  that also has an FK-connected write group.
+  that also has an FK-connected write group. API diagnostics (`ApiNeverInvoked`,
+  `ApiInvokedButNoEntity`) are also run and reported as warnings.
 - For `--kind event-flow`, the tool runs event-integrity diagnostics and emits `warning:`
   lines for events that are never raised, raised but consume nothing, or trigger a use
   case belonging to no BUC. Mermaid node IDs are prefixed (`ev__`, `uc__`, `st__`) to
@@ -77,7 +78,7 @@ rdra-ish csv <INPUTS...> [--kind <KIND>] [-o <OUT>]
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `actor` \| `entity` \| `matrix` | `entity` | CSV kind. `actor` = actor list; `entity` = entity/column list; `matrix` = use-case × entity CRUD matrix. |
+| `--kind` | `actor` \| `entity` \| `matrix` \| `api` \| `api-matrix` | `entity` | CSV kind. `actor` = actor list; `entity` = entity/column list; `matrix` = use-case × entity CRUD matrix; `api` = API list; `api-matrix` = API × entity CRUD matrix. |
 | `-o`, `--out` | path | `out` | Output file path. If no extension is given, a default is appended (`actor.csv` / `entity.csv` / `matrix.csv`). |
 
 The command writes the CSV to the output path and prints `wrote <path>`.
@@ -95,7 +96,7 @@ rdra-ish list <INPUTS...> [--kind <KIND>] [--format <FORMAT>]
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `actor` \| `entity` \| `buc` \| `usecase` | `actor` | The element kind to list. `actor` / `buc` / `usecase` list id+label; `entity` lists each column with its type and PK/FK flags. |
+| `--kind` | `actor` \| `entity` \| `buc` \| `usecase` \| `api` | `actor` | The element kind to list. `actor` / `buc` / `usecase` / `api` list id+label; `entity` lists each column with its type and PK/FK flags. |
 | `--format` | `table` \| `json` \| `csv` | `table` | Output format. |
 
 Output is written to stdout.

@@ -125,8 +125,9 @@ fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
         "performs" => Some(vec![vec!["actor"], vec!["usecase", "buc"]]),
         "uses" => Some(vec![vec!["actor"], vec!["extsystem"]]),
         "reads" | "writes" | "creates" | "updates" | "deletes" => {
-            Some(vec![vec!["usecase"], vec!["entity"]])
+            Some(vec![vec!["usecase", "api"], vec!["entity"]])
         }
+        "invokes" => Some(vec![vec!["usecase"], vec!["api"]]),
         "displays" => Some(vec![vec!["usecase"], vec!["screen"]]),
         "shows" => Some(vec![vec!["screen"], vec!["entity"]]),
         "raises" => Some(vec![vec!["usecase"], vec!["event"]]),
@@ -270,6 +271,13 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
             });
             NodeRef::Variation(k)
         }
+        Kind::Api => {
+            let k = model.apis.insert(Api {
+                id: inst.id.clone(),
+                label: inst.label.clone(),
+            });
+            NodeRef::Api(k)
+        }
     };
 
     if model.symbols.insert(inst.id.clone(), node) {
@@ -321,6 +329,7 @@ fn resolve_arg(
     match arg {
         PredicateArg::Lit(_) => None,
         PredicateArg::Tuple(_) => None, // タプルはシンボル解決しない
+        PredicateArg::Expr(_) => None,  // 比較式はシンボル解決しない
         PredicateArg::Ref(qref) => {
             let id = qref.parts.last().unwrap();
 
@@ -387,6 +396,151 @@ fn tuple_pair(arg: &PredicateArg) -> Option<(String, String)> {
     }
 }
 
+// ── 比較式の型整合チェック・モデル変換 ────────────────────────────────────────
+
+/// `ColumnType` が「比較に使える型カテゴリ」を返す。
+/// - `"numeric"`: Int/Money/Decimal
+/// - `"temporal"`: Date/DateTime
+/// - `"equality"`: それ以外（等値比較 == / != のみ許容）
+/// - `"none"`: 比較不可（比較を拒否）
+fn type_category(col_type: &ColumnType) -> &'static str {
+    match col_type {
+        ColumnType::Int | ColumnType::Money | ColumnType::Decimal => "numeric",
+        ColumnType::Date | ColumnType::DateTime => "temporal",
+        ColumnType::String | ColumnType::Bool | ColumnType::Enum(_) => "equality",
+    }
+}
+
+/// `CmpOp` が順序比較か（`<`, `>`, `<=`, `>=`）。
+fn is_order_op(op: &CmpOp) -> bool {
+    matches!(op, CmpOp::Lt | CmpOp::Gt | CmpOp::Le | CmpOp::Ge)
+}
+
+/// `ast::CmpOp` → `model::CmpOpModel` への変換。
+fn to_model_op(op: &CmpOp) -> CmpOpModel {
+    match op {
+        CmpOp::Lt => CmpOpModel::Lt,
+        CmpOp::Gt => CmpOpModel::Gt,
+        CmpOp::Le => CmpOpModel::Le,
+        CmpOp::Ge => CmpOpModel::Ge,
+        CmpOp::Eq => CmpOpModel::Eq,
+        CmpOp::Ne => CmpOpModel::Ne,
+    }
+}
+
+/// 比較式 `Comparison` を解析して `ComparisonProp` に変換する。
+///
+/// - 左辺はカラム参照必須。
+/// - 演算子と右辺の型整合を検査する。
+/// - 型不整合があれば `diags` にエラーを push し `None` を返す。
+fn resolve_comparison(
+    entity_cols: &[ModelColumn],
+    entity_id: &str,
+    cmp: &Comparison,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<ComparisonProp> {
+    // ── 左辺はカラム参照のみ ──────────────────────────────────────────────────
+    let lhs_col_name = match &cmp.lhs {
+        Operand::Column(name) => name.clone(),
+        _ => {
+            diags.push(Diagnostic::error(RdraError::ComparisonLhsMustBeColumn));
+            return None;
+        }
+    };
+
+    // 左辺カラムを解決
+    let lhs_col = match entity_cols.iter().find(|c| c.name == lhs_col_name) {
+        Some(c) => c,
+        None => {
+            diags.push(Diagnostic::error(RdraError::UnknownColumn {
+                entity: entity_id.to_string(),
+                col: lhs_col_name.clone(),
+            }));
+            return None;
+        }
+    };
+
+    let lhs_cat = type_category(&lhs_col.col_type);
+
+    // 順序比較演算子が使えない型か確認
+    if is_order_op(&cmp.op) && lhs_cat == "equality" {
+        diags.push(Diagnostic::error(RdraError::ComparisonOpNotOrdered {
+            col: lhs_col_name.clone(),
+            col_type: format!("{:?}", lhs_col.col_type),
+            op: cmp.op.as_str().to_string(),
+        }));
+        return None;
+    }
+
+    // ── 右辺の解決と型整合チェック ────────────────────────────────────────────
+    let rhs = match &cmp.rhs {
+        Operand::Column(rhs_name) => {
+            let rhs_col = match entity_cols.iter().find(|c| &c.name == rhs_name) {
+                Some(c) => c,
+                None => {
+                    diags.push(Diagnostic::error(RdraError::ComparisonRhsColumnUnknown {
+                        entity: entity_id.to_string(),
+                        col: rhs_name.clone(),
+                    }));
+                    return None;
+                }
+            };
+            let rhs_cat = type_category(&rhs_col.col_type);
+            // 型カテゴリが一致しなければエラー
+            if lhs_cat != rhs_cat {
+                diags.push(Diagnostic::error(RdraError::ComparisonTypeMismatch {
+                    lhs: lhs_col_name.clone(),
+                    lhs_type: format!("{:?}", lhs_col.col_type),
+                    rhs: rhs_name.clone(),
+                    rhs_type: format!("{:?}", rhs_col.col_type),
+                }));
+                return None;
+            }
+            CmpRhs::Column(rhs_name.clone())
+        }
+        Operand::IntLit(s) => {
+            // 左辺が数値カテゴリか確認
+            if lhs_cat != "numeric" {
+                diags.push(Diagnostic::error(RdraError::ComparisonTypeMismatch {
+                    lhs: lhs_col_name.clone(),
+                    lhs_type: format!("{:?}", lhs_col.col_type),
+                    rhs: s.clone(),
+                    rhs_type: "integer_literal".to_string(),
+                }));
+                return None;
+            }
+            match s.parse::<i64>() {
+                Ok(n) => CmpRhs::IntLit(n),
+                Err(_) => {
+                    diags.push(Diagnostic::error(RdraError::ComparisonInvalidIntLit {
+                        lit: s.clone(),
+                    }));
+                    return None;
+                }
+            }
+        }
+        Operand::Now => {
+            // 左辺が時間カテゴリか確認
+            if lhs_cat != "temporal" {
+                diags.push(Diagnostic::error(
+                    RdraError::ComparisonNowRequiresTemporal {
+                        col: lhs_col_name.clone(),
+                        col_type: format!("{:?}", lhs_col.col_type),
+                    },
+                ));
+                return None;
+            }
+            CmpRhs::Now
+        }
+    };
+
+    Some(ComparisonProp {
+        lhs_column: lhs_col_name,
+        op: to_model_op(&cmp.op),
+        rhs,
+    })
+}
+
 fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mut Vec<Diagnostic>) {
     let sig = predicate_signature(&pred.name);
     let Some(sig) = sig else {
@@ -394,11 +548,19 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
         return;
     };
 
-    // 引数を解決
+    // 引数を解決（_card / _col / _val はリテラル位置なのでシンボル解決しない）
     let resolved: Vec<Option<NodeRef>> = pred
         .args
         .iter()
-        .map(|arg| resolve_arg(model, arg, diags))
+        .enumerate()
+        .map(|(i, arg)| {
+            if let Some(kinds) = sig.get(i) {
+                if matches!(kinds.as_slice(), ["_card"] | ["_col"] | ["_val"]) {
+                    return None;
+                }
+            }
+            resolve_arg(model, arg, diags)
+        })
         .collect();
 
     // 型検査（_card / _col / _val はリテラル引数なのでスキップ）
@@ -419,6 +581,7 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
                     }
                     PredicateArg::Lit(s) => s.clone(),
                     PredicateArg::Tuple(_) => "<tuple>".to_string(),
+                    PredicateArg::Expr(_) => "<expr>".to_string(),
                 };
                 diags.push(Diagnostic::error(RdraError::TypeMismatch {
                     pred: pred.name.clone(),
@@ -447,103 +610,152 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
             });
         }
     } else if pred.name == "sets" {
-        // sets(usecase/event, entity, "col_name", "value")
-        if let (
-            Some(Some(origin)),
-            Some(Some(entity_ref)),
-            Some(PredicateArg::Lit(col_name)),
-            Some(PredicateArg::Lit(val_lit)),
-        ) = (
-            resolved.first(),
-            resolved.get(1),
-            pred.args.get(2),
-            pred.args.get(3),
-        ) {
-            let entity_key = match entity_ref {
-                NodeRef::Entity(k) => *k,
-                _ => return, // 型検査で既にエラーが出ているはず
-            };
+        // sets(usecase/event, entity, "col_name", "value")  — 既存の等値カラム効果
+        // sets(usecase/event, entity, <comparison_expr>, true/false) — 比較命題の真偽駆動
+        let (Some(Some(origin)), Some(Some(entity_ref))) = (resolved.first(), resolved.get(1))
+        else {
+            return;
+        };
+        let entity_key = match entity_ref {
+            NodeRef::Entity(k) => *k,
+            _ => return,
+        };
 
-            // カラムを entity の columns リストから名前で解決（SymbolTable には無い）
-            let col = model.entities[entity_key]
-                .columns
-                .iter()
-                .find(|c| &c.name == col_name)
-                .cloned();
-
-            let Some(col) = col else {
-                diags.push(Diagnostic::error(RdraError::UnknownColumn {
-                    entity: model.entities[entity_key].id.clone(),
-                    col: col_name.clone(),
-                }));
-                return;
-            };
-
-            match parse_effect_value(&col, val_lit) {
-                Ok(value) => {
-                    model.column_effects.push(ColumnEffect {
+        match pred.args.get(2) {
+            // ── 比較命題効果: 第3引数が比較式
+            Some(PredicateArg::Expr(Expr::Cmp(cmp))) => {
+                // 第4引数は真偽値 ("true" / "false")
+                let truth_str = match pred.args.get(3) {
+                    Some(PredicateArg::Ref(q))
+                        if q.kind_qualifier.is_none() && q.parts.len() == 1 =>
+                    {
+                        q.parts[0].as_str().to_string()
+                    }
+                    Some(PredicateArg::Lit(s)) => s.clone(),
+                    _ => {
+                        // 第4引数が無いか真偽値でない → スキップ
+                        return;
+                    }
+                };
+                if truth_str != "true" && truth_str != "false" {
+                    return;
+                }
+                let truth = truth_str == "true";
+                let entity_id = model.entities[entity_key].id.clone();
+                let entity_cols = model.entities[entity_key].columns.clone();
+                if let Some(prop) = resolve_comparison(&entity_cols, &entity_id, cmp, diags) {
+                    model.proposition_effects.push(PropositionEffect {
                         origin: origin.clone(),
                         entity: entity_key,
-                        column: col_name.clone(),
-                        value,
+                        prop,
+                        truth,
                     });
                 }
-                Err(e) => {
-                    diags.push(Diagnostic::error(e));
+            }
+
+            // ── 等値カラム効果: 第3引数が文字列リテラル
+            Some(PredicateArg::Lit(col_name)) => {
+                let col_name = col_name.clone();
+                let val_lit = match pred.args.get(3) {
+                    Some(PredicateArg::Lit(s)) => s.clone(),
+                    _ => return,
+                };
+                let col = model.entities[entity_key]
+                    .columns
+                    .iter()
+                    .find(|c| c.name == col_name)
+                    .cloned();
+                let Some(col) = col else {
+                    diags.push(Diagnostic::error(RdraError::UnknownColumn {
+                        entity: model.entities[entity_key].id.clone(),
+                        col: col_name,
+                    }));
+                    return;
+                };
+                match parse_effect_value(&col, &val_lit) {
+                    Ok(value) => {
+                        model.column_effects.push(ColumnEffect {
+                            origin: origin.clone(),
+                            entity: entity_key,
+                            column: col_name,
+                            value,
+                        });
+                    }
+                    Err(e) => {
+                        diags.push(Diagnostic::error(e));
+                    }
                 }
             }
+
+            _ => {} // その他は無視
         }
     } else if pred.name == "forbidden" {
-        // forbidden(entity, "col_name", "value")
-        // forbidden(entity, (col, val), ...) — 可変長タプルで条件AND組合せを禁止
+        // forbidden(entity, (col, val), ...) — 等値条件 AND 組合せで状態禁止
+        // forbidden(entity, <expr>, ...)      — 比較命題条件 AND 組合せで状態禁止
+        // 両者は混在可
         let entity_key = match resolved.first() {
             Some(Some(NodeRef::Entity(k))) => *k,
             _ => return,
         };
         let entity_id = model.entities[entity_key].id.clone();
+        let entity_cols = model.entities[entity_key].columns.clone();
         let mut conditions: Vec<(String, EffectValue)> = Vec::new();
+        let mut comparisons: Vec<ComparisonProp> = Vec::new();
 
         for arg in pred.args.iter().skip(1) {
-            let Some((col_str, val_str)) = tuple_pair(arg) else {
-                // タプル以外の引数は無視（将来的に診断可能）
-                continue;
-            };
-            let col = model.entities[entity_key]
-                .columns
-                .iter()
-                .find(|c| c.name == col_str)
-                .cloned();
-            let Some(col) = col else {
-                diags.push(Diagnostic::error(RdraError::UnknownColumn {
-                    entity: entity_id.clone(),
-                    col: col_str,
-                }));
-                return;
-            };
-            match parse_effect_value(&col, &val_str) {
-                Ok(value) => conditions.push((col_str, value)),
-                Err(e) => {
-                    diags.push(Diagnostic::error(e));
-                    return;
+            match arg {
+                PredicateArg::Expr(Expr::Cmp(cmp)) => {
+                    // 比較命題条件
+                    if let Some(prop) = resolve_comparison(&entity_cols, &entity_id, cmp, diags) {
+                        comparisons.push(prop);
+                    }
+                }
+                _ => {
+                    // 等値タプル条件
+                    let Some((col_str, val_str)) = tuple_pair(arg) else {
+                        continue; // タプル以外は無視
+                    };
+                    let col = entity_cols.iter().find(|c| c.name == col_str).cloned();
+                    let Some(col) = col else {
+                        diags.push(Diagnostic::error(RdraError::UnknownColumn {
+                            entity: entity_id.clone(),
+                            col: col_str,
+                        }));
+                        return;
+                    };
+                    match parse_effect_value(&col, &val_str) {
+                        Ok(value) => conditions.push((col_str, value)),
+                        Err(e) => {
+                            diags.push(Diagnostic::error(e));
+                            return;
+                        }
+                    }
                 }
             }
         }
 
-        if !conditions.is_empty() {
+        // 等値条件か比較命題が少なくとも1つあれば登録
+        if !conditions.is_empty() || !comparisons.is_empty() {
             model.forbidden_constraints.push(ForbiddenConstraint {
                 entity: entity_key,
                 conditions,
+                comparisons,
             });
         }
     } else if pred.name == "invariant" {
-        // invariant(entity).when(col, val).then(col, val) — チェーン形式
+        // invariant(entity).when(col, val).then(col, val) — チェーン等値形式
+        // invariant(entity).when(<expr>).then(<expr>)      — チェーン比較式形式
+        // 両者は混在可
         let entity_key = match resolved.first() {
             Some(Some(NodeRef::Entity(k))) => *k,
             _ => return,
         };
         let entity_id = model.entities[entity_key].id.clone();
+        let entity_cols = model.entities[entity_key].columns.clone();
         let mut guards: Vec<(String, EffectValue)> = Vec::new();
+        let mut guard_comparisons: Vec<ComparisonProp> = Vec::new();
         let mut requireds: Vec<(String, EffectValue)> = Vec::new();
+        let mut required_comparisons: Vec<ComparisonProp> = Vec::new();
 
         for cc in &pred.chain {
             let is_guard = cc.name == "when";
@@ -551,48 +763,72 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
             if !is_guard && !is_required {
                 continue; // 未知のチェーンメソッドは無視
             }
-            if cc.args.len() != 2 {
-                continue; // 引数数が不正なら無視
-            }
-            let Some(col_str) = arg_as_str(&cc.args[0]) else {
-                continue;
-            };
-            let Some(val_str) = arg_as_str(&cc.args[1]) else {
-                continue;
-            };
-            let col = model.entities[entity_key]
-                .columns
-                .iter()
-                .find(|c| c.name == col_str)
-                .cloned();
-            let Some(col) = col else {
-                diags.push(Diagnostic::error(RdraError::UnknownColumn {
-                    entity: entity_id.clone(),
-                    col: col_str,
-                }));
-                return;
-            };
-            match parse_effect_value(&col, &val_str) {
-                Ok(value) => {
-                    if is_guard {
-                        guards.push((col_str, value));
-                    } else {
-                        requireds.push((col_str, value));
-                    }
+
+            // チェーン引数を走査: Expr → 比較命題、その他 → 等値ペア（2引数）
+            let mut processed_eq = false;
+            for arg in &cc.args {
+                if processed_eq {
+                    break; // 等値ペアは1回のみ
                 }
-                Err(e) => {
-                    diags.push(Diagnostic::error(e));
-                    return;
+                match arg {
+                    PredicateArg::Expr(Expr::Cmp(cmp)) => {
+                        if let Some(prop) = resolve_comparison(&entity_cols, &entity_id, cmp, diags)
+                        {
+                            if is_guard {
+                                guard_comparisons.push(prop);
+                            } else {
+                                required_comparisons.push(prop);
+                            }
+                        }
+                    }
+                    _ => {
+                        // 等値ペア: チェーン全体を (args[0], args[1]) として処理
+                        if cc.args.len() < 2 {
+                            break;
+                        }
+                        let Some(col_str) = arg_as_str(&cc.args[0]) else {
+                            break;
+                        };
+                        let Some(val_str) = arg_as_str(&cc.args[1]) else {
+                            break;
+                        };
+                        let col = entity_cols.iter().find(|c| c.name == col_str).cloned();
+                        let Some(col) = col else {
+                            diags.push(Diagnostic::error(RdraError::UnknownColumn {
+                                entity: entity_id.clone(),
+                                col: col_str,
+                            }));
+                            return;
+                        };
+                        match parse_effect_value(&col, &val_str) {
+                            Ok(value) => {
+                                if is_guard {
+                                    guards.push((col_str, value));
+                                } else {
+                                    requireds.push((col_str, value));
+                                }
+                            }
+                            Err(e) => {
+                                diags.push(Diagnostic::error(e));
+                                return;
+                            }
+                        }
+                        processed_eq = true; // 等値ペアはこのチェーンで1回のみ
+                    }
                 }
             }
         }
 
-        // guards と requireds の両方が揃っている場合のみ登録
-        if !guards.is_empty() && !requireds.is_empty() {
+        // ガードと必要条件の両方が（等値か比較命題で）揃っている場合のみ登録
+        let has_guards = !guards.is_empty() || !guard_comparisons.is_empty();
+        let has_requireds = !requireds.is_empty() || !required_comparisons.is_empty();
+        if has_guards && has_requireds {
             model.entity_invariants.push(EntityInvariant {
                 entity: entity_key,
                 guards,
+                guard_comparisons,
                 requireds,
+                required_comparisons,
             });
         }
     } else if pred.name != "relate" {
@@ -612,6 +848,7 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
                 "contains" => RelKind::Contains,
                 "belongs" => RelKind::Belongs,
                 "motivates" => RelKind::Motivates,
+                "invokes" => RelKind::Invokes,
                 _ => return,
             };
             model.relations.push(Relation {
@@ -670,6 +907,7 @@ fn node_kind_tag_str(node: &NodeRef) -> &'static str {
         NodeRef::State(_) => "state",
         NodeRef::Condition(_) => "condition",
         NodeRef::Variation(_) => "variation",
+        NodeRef::Api(_) => "api",
     }
 }
 
@@ -917,5 +1155,84 @@ relate(Customer, Order, "1:N")
         let fk = order.columns.iter().find(|c| c.name == "customer_id");
         assert!(fk.is_some(), "customer_id FK not found in Order");
         assert!(fk.unwrap().is_fk);
+    }
+
+    #[test]
+    fn test_api_declaration_and_invokes() {
+        let src = r#"
+usecase PlaceOrder "注文する"
+api OrderApi "注文API"
+invokes(PlaceOrder, OrderApi)
+"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {:?}", errors);
+
+        assert_eq!(model.apis.len(), 1);
+        let api = model.apis.values().next().unwrap();
+        assert_eq!(api.id, "OrderApi");
+        assert_eq!(api.label, "注文API");
+
+        let invokes_rel = model.relations.iter().find(|r| r.kind == RelKind::Invokes);
+        assert!(invokes_rel.is_some(), "Invokes relation should exist");
+    }
+
+    #[test]
+    fn test_api_crud_type_check_ok() {
+        let src = r#"
+api OrderApi "注文API"
+entity Order "注文" { id: Int @pk }
+creates(OrderApi, Order)
+"#;
+        let (ast, _) = parse(src);
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {:?}", errors);
+
+        let creates_rel = model.relations.iter().find(|r| r.kind == RelKind::Creates);
+        assert!(creates_rel.is_some());
+    }
+
+    #[test]
+    fn test_invokes_type_mismatch() {
+        // invokes(uc, entity) は TypeMismatch になるはず
+        let src = r#"
+usecase PlaceOrder "注文する"
+entity Order "注文" { id: Int @pk }
+invokes(PlaceOrder, Order)
+"#;
+        let (ast, _) = parse(src);
+        let (_, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(!errors.is_empty(), "type mismatch expected");
+        assert!(errors[0].error.to_string().contains("type mismatch"));
+    }
+
+    #[test]
+    fn test_usecase_crud_still_allowed() {
+        // 後方互換: usecase が直接 entity を creates しても OK
+        let src = r#"
+usecase PlaceOrder "注文する"
+entity Order "注文" { id: Int @pk }
+creates(PlaceOrder, Order)
+"#;
+        let (ast, _) = parse(src);
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(
+            errors.is_empty(),
+            "legacy creates(uc, entity) should still work"
+        );
+        assert_eq!(
+            model
+                .relations
+                .iter()
+                .filter(|r| r.kind == RelKind::Creates)
+                .count(),
+            1
+        );
     }
 }

@@ -53,6 +53,7 @@ pub enum Kind {
     State,
     Condition,
     Variation,
+    Api,
 }
 
 impl Kind {
@@ -71,6 +72,7 @@ impl Kind {
             Kind::State => "state",
             Kind::Condition => "condition",
             Kind::Variation => "variation",
+            Kind::Api => "api",
         }
     }
 }
@@ -146,6 +148,64 @@ pub struct QRef {
     pub span: Span,
 }
 
+// ── Comparison expressions ───────────────────────────────────────────────────
+
+/// Comparison operator used in comparison expressions (e.g. `stock < selling`).
+#[derive(Debug, Clone, PartialEq)]
+pub enum CmpOp {
+    Lt, // <
+    Gt, // >
+    Le, // <=
+    Ge, // >=
+    Eq, // ==
+    Ne, // !=
+}
+
+impl CmpOp {
+    /// Returns the canonical operator symbol string (used for axis key generation).
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            CmpOp::Lt => "<",
+            CmpOp::Gt => ">",
+            CmpOp::Le => "<=",
+            CmpOp::Ge => ">=",
+            CmpOp::Eq => "==",
+            CmpOp::Ne => "!=",
+        }
+    }
+}
+
+/// One operand in a comparison expression.
+/// Designed to be extensible toward arithmetic expressions in the future.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Operand {
+    /// A bare identifier referencing a column (e.g. `stock`, `expired_at`).
+    Column(std::string::String),
+    /// An integer literal (stored as string to avoid lossy conversion).
+    IntLit(std::string::String),
+    /// The built-in temporal reference `now`.
+    Now,
+    // Future: Arith(Box<Operand>, ArithOp, Box<Operand>)
+}
+
+/// A single comparison expression, e.g. `stock < selling` or `expired_at < now`.
+/// Represents one boolean proposition whose truth value drives the comparison axis.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Comparison {
+    pub lhs: Operand,
+    pub op: CmpOp,
+    pub rhs: Operand,
+    pub span: Span,
+}
+
+/// Expression node. Currently only comparison; extensible to logical combinations.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Expr {
+    /// A comparison predicate, e.g. `stock < selling`.
+    Cmp(Comparison),
+    // Future: And(Box<Expr>, Box<Expr>), Or(...), Not(...)
+}
+
 // ── Predicate call ───────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq)]
@@ -163,6 +223,9 @@ pub enum PredicateArg {
     Lit(std::string::String),
     /// インライン `(col, val)` タプル。`forbidden(E, (col, val), ...)` で使用。
     Tuple(Vec<PredicateArg>),
+    /// 比較式（例: `stock < selling`, `expired_at < now`）。
+    /// forbidden/invariant の条件、および sets の比較命題引数として使用。
+    Expr(Expr),
 }
 
 // ── Chain call ────────────────────────────────────────────────────────────────

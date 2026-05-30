@@ -1,6 +1,7 @@
 //! イベントフロー集約: raises/triggers/transitions の結合ビュー。
 //!
 //! `collect_event_flows` が唯一のグラフ走査点。検証・可視化・sets 展開から再利用する。
+//! `api_diagnostics` も本モジュールで提供する（同様の 1パス集約パターン）。
 
 use crate::diagnostics::{Diagnostic, RdraError};
 use crate::model::{EventKey, NodeRef, RelKind, SemanticModel, StateKey, UseCaseKey};
@@ -66,7 +67,7 @@ pub fn collect_event_flows(model: &SemanticModel) -> Vec<EventFlow> {
         }
     }
 
-    let mut result: Vec<EventFlow> = map.into_iter().map(|(_, v)| v).collect();
+    let mut result: Vec<EventFlow> = map.into_values().collect();
     result.sort_by_key(|f| {
         model
             .events
@@ -100,9 +101,7 @@ pub fn event_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
         }
 
         // raise されているが transition も triggers もしない（行き止まり）
-        if !flow.raised_by.is_empty()
-            && flow.transitions.is_empty()
-            && flow.triggers_ucs.is_empty()
+        if !flow.raised_by.is_empty() && flow.transitions.is_empty() && flow.triggers_ucs.is_empty()
         {
             diags.push(Diagnostic::warning(RdraError::EventNeverConsumed {
                 event: event_id.clone(),
@@ -111,20 +110,67 @@ pub fn event_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
 
         // triggers 先 UC がどの BUC にも contains されていない
         for &uc_key in &flow.triggers_ucs {
-            let belongs_to_buc = model.relations.iter().any(|r| {
-                r.kind == RelKind::Contains && r.to == NodeRef::UseCase(uc_key)
-            });
+            let belongs_to_buc = model
+                .relations
+                .iter()
+                .any(|r| r.kind == RelKind::Contains && r.to == NodeRef::UseCase(uc_key));
             if !belongs_to_buc {
                 let uc_id = model
                     .use_cases
                     .get(uc_key)
                     .map(|u| u.id.clone())
                     .unwrap_or_default();
-                diags.push(Diagnostic::warning(RdraError::TriggeredUseCaseUnreachable {
-                    event: event_id.clone(),
-                    usecase: uc_id,
-                }));
+                diags.push(Diagnostic::warning(
+                    RdraError::TriggeredUseCaseUnreachable {
+                        event: event_id.clone(),
+                        usecase: uc_id,
+                    },
+                ));
             }
+        }
+    }
+
+    diags
+}
+
+/// API 整合性の診断を生成する。
+///
+/// - 宣言されたが誰にも invoke されない api → `ApiNeverInvoked` 警告。
+/// - invoke されるが entity を操作しない api → `ApiInvokedButNoEntity` 警告。
+///
+/// `event_diagnostics` と同じパターンで `model.relations` を 1 パス走査する。
+pub fn api_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
+    let mut diags = Vec::new();
+
+    for (ak, api) in model.apis.iter() {
+        let invoked = model
+            .relations
+            .iter()
+            .any(|r| r.kind == RelKind::Invokes && r.to == NodeRef::Api(ak));
+
+        if !invoked {
+            diags.push(Diagnostic::warning(RdraError::ApiNeverInvoked {
+                api: api.id.clone(),
+            }));
+            continue; // 未呼出しなら entity 操作の確認は不要
+        }
+
+        let operates_entity = model.relations.iter().any(|r| {
+            r.from == NodeRef::Api(ak)
+                && matches!(
+                    r.kind,
+                    RelKind::Reads
+                        | RelKind::Writes
+                        | RelKind::Creates
+                        | RelKind::Updates
+                        | RelKind::Deletes
+                )
+        });
+
+        if !operates_entity {
+            diags.push(Diagnostic::warning(RdraError::ApiInvokedButNoEntity {
+                api: api.id.clone(),
+            }));
         }
     }
 

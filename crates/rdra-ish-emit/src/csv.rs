@@ -1,7 +1,9 @@
-//! CSV emitters: ActorList, EntityList, RelationMatrix.
+//! CSV emitters: ActorList, EntityList, RelationMatrix, ApiList, ApiEntityMatrix.
 
 use crate::{EmitError, Emitter, View};
-use rdra_ish_core::model::{ColumnType, NodeRef, RelKind, SemanticModel, UseCaseKey};
+use rdra_ish_core::model::{
+    ApiKey, ColumnType, EntityKey, NodeRef, RelKind, SemanticModel, UseCaseKey,
+};
 
 // ── ActorListCsvEmitter ────────────────────────────────────────────────────────
 
@@ -175,6 +177,118 @@ impl Emitter for RelationMatrixCsvEmitter {
     }
 }
 
+// ── ApiListCsvEmitter ─────────────────────────────────────────────────────────
+
+/// 行=api, 列=id,label
+pub struct ApiListCsvEmitter;
+
+impl Emitter for ApiListCsvEmitter {
+    fn emit(&self, model: &SemanticModel, _view: &View) -> Result<String, EmitError> {
+        let mut wtr = csv::Writer::from_writer(vec![]);
+        wtr.write_record(["id", "label"])?;
+
+        let mut apis: Vec<_> = model.apis.iter().collect();
+        apis.sort_by_key(|(_, a)| &a.id);
+
+        for (_, api) in &apis {
+            wtr.write_record([&api.id, &api.label])?;
+        }
+
+        let data = wtr
+            .into_inner()
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
+        Ok(String::from_utf8(data).unwrap_or_default())
+    }
+}
+
+// ── ApiEntityMatrixCsvEmitter ─────────────────────────────────────────────────
+
+/// 行=Api, 列=Entity, セル値=CRUD文字
+pub struct ApiEntityMatrixCsvEmitter;
+
+impl Emitter for ApiEntityMatrixCsvEmitter {
+    fn emit(&self, model: &SemanticModel, _view: &View) -> Result<String, EmitError> {
+        use std::collections::HashMap;
+
+        let mut apis: Vec<_> = model.apis.iter().collect();
+        apis.sort_by_key(|(_, a)| &a.id);
+
+        let mut entities: Vec<_> = model.entities.iter().collect();
+        entities.sort_by_key(|(_, e)| &e.id);
+
+        let mut matrix: HashMap<ApiKey, HashMap<EntityKey, u8>> = HashMap::new();
+
+        for rel in &model.relations {
+            let (ak, ek, bit) = match &rel.kind {
+                RelKind::Reads => {
+                    if let (NodeRef::Api(ak), NodeRef::Entity(ek)) = (&rel.from, &rel.to) {
+                        (*ak, *ek, 0b00010u8)
+                    } else {
+                        continue;
+                    }
+                }
+                RelKind::Writes => {
+                    if let (NodeRef::Api(ak), NodeRef::Entity(ek)) = (&rel.from, &rel.to) {
+                        (*ak, *ek, 0b10000u8)
+                    } else {
+                        continue;
+                    }
+                }
+                RelKind::Creates => {
+                    if let (NodeRef::Api(ak), NodeRef::Entity(ek)) = (&rel.from, &rel.to) {
+                        (*ak, *ek, 0b00001u8)
+                    } else {
+                        continue;
+                    }
+                }
+                RelKind::Updates => {
+                    if let (NodeRef::Api(ak), NodeRef::Entity(ek)) = (&rel.from, &rel.to) {
+                        (*ak, *ek, 0b00100u8)
+                    } else {
+                        continue;
+                    }
+                }
+                RelKind::Deletes => {
+                    if let (NodeRef::Api(ak), NodeRef::Entity(ek)) = (&rel.from, &rel.to) {
+                        (*ak, *ek, 0b01000u8)
+                    } else {
+                        continue;
+                    }
+                }
+                _ => continue,
+            };
+
+            *matrix.entry(ak).or_default().entry(ek).or_insert(0) |= bit;
+        }
+
+        let mut wtr = csv::Writer::from_writer(vec![]);
+
+        let mut header = vec!["Api".to_string()];
+        for (_, ent) in &entities {
+            header.push(ent.id.clone());
+        }
+        wtr.write_record(&header)?;
+
+        for (api_key, api) in &apis {
+            let mut row = vec![api.id.clone()];
+            for (ent_key, _) in &entities {
+                let bits = matrix
+                    .get(api_key)
+                    .and_then(|m| m.get(ent_key))
+                    .copied()
+                    .unwrap_or(0);
+                row.push(bits_to_crud(bits));
+            }
+            wtr.write_record(&row)?;
+        }
+
+        let data = wtr
+            .into_inner()
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
+        Ok(String::from_utf8(data).unwrap_or_default())
+    }
+}
+
 // ── ヘルパー ──────────────────────────────────────────────────────────────────
 
 fn col_type_to_str(ct: &ColumnType) -> &'static str {
@@ -269,6 +383,38 @@ creates(Order, OrderEnt)
         assert!(result.contains("Order"));
         assert!(result.contains('R'));
         assert!(result.contains('C'));
+    }
+
+    #[test]
+    fn test_api_list_csv() {
+        let src = r#"
+api OrderApi "注文API"
+api AuthApi "認証API"
+"#;
+        let model = model_from(src);
+        let view = View::whole();
+        let result = ApiListCsvEmitter.emit(&model, &view).unwrap();
+        assert!(result.contains("id,label"));
+        assert!(result.contains("OrderApi,注文API"));
+        assert!(result.contains("AuthApi,認証API"));
+    }
+
+    #[test]
+    fn test_api_entity_matrix_csv() {
+        let src = r#"
+api OrderApi "注文API"
+entity Order "注文" { id: Int @pk }
+entity Cart "カート" { id: Int @pk }
+creates(OrderApi, Order)
+reads(OrderApi, Cart)
+"#;
+        let model = model_from(src);
+        let view = View::whole();
+        let result = ApiEntityMatrixCsvEmitter.emit(&model, &view).unwrap();
+        assert!(result.contains("Api"));
+        assert!(result.contains("OrderApi"));
+        assert!(result.contains('C')); // creates → C
+        assert!(result.contains('R')); // reads  → R
     }
 
     #[test]

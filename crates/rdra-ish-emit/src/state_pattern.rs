@@ -135,13 +135,24 @@ impl Emitter for StatePatternTableEmitter {
                         Some(t) => format!("{}[null|present:{}]", ax.column, t),
                         None => format!("{}[null|present]", ax.column),
                     },
+                    AxisKind::Proposition { axis_key } => {
+                        format!("{}[false|true]", axis_key)
+                    }
                 })
                 .collect();
             out.push_str(&format!("  axes: {}\n\n", axis_header.join(", ")));
 
             // ── テーブル ────────────────────────────────────────────────
             // カラム幅の計算
-            let axis_cols: Vec<String> = r.axes.iter().map(|a| a.column.clone()).collect();
+            // Proposition 軸はプレフィックス抜きの axis_key を表示名として使う
+            let axis_cols: Vec<String> = r
+                .axes
+                .iter()
+                .map(|a| match &a.kind {
+                    AxisKind::Proposition { axis_key } => axis_key.clone(),
+                    _ => a.column.clone(),
+                })
+                .collect();
             let mut col_widths: Vec<usize> = axis_cols.iter().map(|c| c.len()).collect();
             let initial_w = "INITIAL".len();
             let terminal_w = "TERMINAL".len();
@@ -370,6 +381,7 @@ fn entity_result_to_json(r: &EntityStateResult) -> serde_json::Value {
                     Some(t) => serde_json::json!(["null", format!("present:{}", t)]),
                     None => serde_json::json!(["null", "present"]),
                 },
+                AxisKind::Proposition { .. } => serde_json::json!(["false", "true"]),
             };
             serde_json::json!({
                 "column": ax.column,
@@ -436,6 +448,7 @@ fn compute_bound_str(r: &EntityStateResult) -> String {
             AxisKind::Enum(v) => v.len(),
             AxisKind::Bool => 2,
             AxisKind::Nullable { .. } => 2,
+            AxisKind::Proposition { .. } => 2,
         };
         acc.saturating_mul(f)
     });

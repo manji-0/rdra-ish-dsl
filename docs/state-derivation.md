@@ -25,6 +25,7 @@ derivation.
 | `Enum(a, b, c)` | `Enum` | one of the declared variants `{a, b, c}` |
 | `Bool` | `Bool` | `{false, true}` |
 | `@null` (any base type) | `Nullable` | `{null, present}` (the `present` value may carry a PostgreSQL type for display) |
+| comparison expression in `forbidden` / `invariant` / `sets` | `Proposition` | `{false, true}` (driven by `sets(..., <expr>, bool)`) |
 
 A non-nullable, non-Enum, non-Bool column (e.g. a plain `Int` primary key) is not a
 state axis. An entity with no axes yields exactly one trivial pattern that is both
@@ -44,6 +45,9 @@ Effects are normalized into abstract values before reachability:
   **equivalent for reachability**; the PostgreSQL type is retained only for display
   (`present:timestamptz`).
 - `null` maps to `Null`.
+- A `Proposition` axis reuses the `Bool` value representation. Its default value is
+  `Bool(false)` (comparison not yet satisfied). A `sets(..., <expr>, true/false)` effect
+  advances it to `Bool(true)` or resets it to `Bool(false)`.
 
 ---
 
@@ -59,6 +63,7 @@ and a set of effects (column → abstract value).
 | `updates(UC, E)` / `writes(UC, E)` | An `Update` operation. Expands reachable patterns by applying its effects. |
 | `deletes(UC, E)` | A `Delete` operation. Produces no successor; marks the matching pattern terminal. |
 | `sets(UC, E, "col", "val")` | A column effect attached to the originating use case's operation on `E`. |
+| `sets(UC, E, <expr>, bool)` | A **proposition effect** attached to the originating use case's operation on `E`. Advances or resets the `Proposition` axis whose key is the normalized comparison expression (e.g. `stock<selling`). |
 | `transitions(event::Ev, From, To)` + `raises(UC, Ev)` | An `Update` operation on the entity's status column, **guarded** by `status == From`, with effect `status := To`. |
 
 ### How `sets` effects attach
@@ -74,6 +79,13 @@ use case's operation on the entity:
 Effects on the entity's **status column** are ignored when a state machine exists for
 it — `transitions` is the source of truth there (see DoubleModeledEnum below).
 
+When `sets` carries a comparison expression instead of a column name (e.g.
+`sets(Sell, Stock, stock < selling, true)`), it registers a **`PropositionEffect`**
+rather than a `ColumnEffect`. The effect is merged into the same use case's `Update`
+operation on the entity, identical to how column effects are merged. The
+`Proposition` axis for that expression is created automatically if it does not yet
+exist.
+
 ### Guard constraints (`AxisConstraint`)
 
 A guard is a list of `AxisConstraint`s, each requiring `column == value`. An operation
@@ -86,10 +98,14 @@ arbitrarily.
 
 ## The BFS Algorithm
 
-1. **Identify axes** for the entity (Enum / Bool / Nullable columns).
+1. **Identify axes** for the entity (Enum / Bool / Nullable columns). In addition,
+   collect all **`Proposition` axes** by scanning `forbidden` / `invariant` constraints
+   and `sets` proposition effects for comparison expressions that reference this entity.
+   Each distinct normalized expression (e.g. `stock<selling`, `expired_at<now`) becomes
+   one `Proposition` axis with default value `Bool(false)`.
 2. **Collect operations** from `creates` / `updates` / `deletes` / `writes`, merge in
-   `sets` effects, and build transition-derived guarded `Update`s from
-   `transitions` + `raises`.
+   `sets` column effects and `sets` proposition effects, and build transition-derived
+   guarded `Update`s from `transitions` + `raises`.
 3. **Seed.** Build the base pattern from `@default` values (or per-axis fallbacks:
    first Enum variant, `Bool=false`, `Nullable=null`). For each `Create` operation,
    apply its effects to the base pattern and add the result as an **initial** pattern.
@@ -144,12 +160,24 @@ For each `forbidden(E, (col, val), ...)`, the conditions are AND-ed. If any reac
 pattern matches **all** conditions, a `ForbiddenStateViolated { conditions, pattern_desc }`
 diagnostic is emitted. Forbidding an unreachable state produces no diagnostic.
 
+Comparison expressions in `forbidden` (e.g. `forbidden(Stock, (status, on_sale), stock < selling)`)
+are matched as additional AND conditions against the `Proposition` axis for that
+expression. A pattern satisfies the condition when the axis value equals the expected
+`Bool` (always `Bool(true)` for a bare comparison in `forbidden`).
+
 ### `invariant`
 
 For each `invariant(E).when(...).then(...)`, the guards and requirements are each
 AND-ed. For every reached pattern where **all guards hold** but **any requirement
 fails**, an `InvariantViolated { guards, requireds, pattern_desc }` diagnostic is
 emitted.
+
+Comparison expressions in `.when(...)` and `.then(...)` clauses
+(e.g. `invariant(Coupon).when(expired_at < now).then(status, expired)`) are evaluated
+the same way: each comparison maps to its `Proposition` axis and is checked as a
+`Bool` equality against the current pattern value. Guards with comparison propositions
+use `Bool(true)` as the required value, enabling guards like "when the proposition
+holds".
 
 See [language-reference.md](./language-reference.md#entity-state-constraints) for the
 syntax and design rationale.

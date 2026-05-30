@@ -2,7 +2,10 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use rdra_ish_core::{build_merged_model, resolve};
 use rdra_ish_emit::{
-    csv::{ActorListCsvEmitter, EntityListCsvEmitter, RelationMatrixCsvEmitter},
+    csv::{
+        ActorListCsvEmitter, ApiEntityMatrixCsvEmitter, ApiListCsvEmitter, EntityListCsvEmitter,
+        RelationMatrixCsvEmitter,
+    },
     mermaid::{
         ErMermaidEmitter, EventFlowMermaidEmitter, RdraMermaidEmitter, SequenceMermaidEmitter,
         StateMermaidEmitter,
@@ -24,6 +27,7 @@ enum ListKind {
     Entity,
     Buc,
     Usecase,
+    Api,
 }
 
 #[derive(ValueEnum, Clone)]
@@ -129,6 +133,10 @@ enum CsvKind {
     Actor,
     Entity,
     Matrix,
+    /// API リスト (id, label)
+    Api,
+    /// API × Entity CRUD マトリクス
+    ApiMatrix,
 }
 
 /// Collect all `.rdra` files from the given paths (files and/or directories).
@@ -255,10 +263,13 @@ fn main() -> Result<()> {
                 },
             };
 
-            // TX診断: sequence 図生成時に FK孤立書き込みの warning を表示
+            // TX診断 + API診断: sequence 図生成時に warning を表示
             if matches!(kind, DiagramKind::Sequence) {
                 let txs = rdra_ish_core::infer_usecase_transactions(&model);
                 for diag in rdra_ish_core::tx_diagnostics(&model, &txs) {
+                    eprintln!("warning: {}", diag.error);
+                }
+                for diag in rdra_ish_core::api_diagnostics(&model) {
                     eprintln!("warning: {}", diag.error);
                 }
             }
@@ -339,6 +350,11 @@ fn main() -> Result<()> {
                 CsvKind::Actor => (ActorListCsvEmitter.emit(&model, &view)?, "actor.csv"),
                 CsvKind::Entity => (EntityListCsvEmitter.emit(&model, &view)?, "entity.csv"),
                 CsvKind::Matrix => (RelationMatrixCsvEmitter.emit(&model, &view)?, "matrix.csv"),
+                CsvKind::Api => (ApiListCsvEmitter.emit(&model, &view)?, "api.csv"),
+                CsvKind::ApiMatrix => (
+                    ApiEntityMatrixCsvEmitter.emit(&model, &view)?,
+                    "api-matrix.csv",
+                ),
             };
 
             let out_path = if out.extension().is_some() {
@@ -461,6 +477,15 @@ fn list_elements(
             format_id_label(&items, format)
         }
         ListKind::Entity => format_entities(model, format),
+        ListKind::Api => {
+            let mut items: Vec<(&str, &str)> = model
+                .apis
+                .iter()
+                .map(|(_, a)| (a.id.as_str(), a.label.as_str()))
+                .collect();
+            items.sort_by_key(|(id, _)| *id);
+            format_id_label(&items, format)
+        }
     }
 }
 

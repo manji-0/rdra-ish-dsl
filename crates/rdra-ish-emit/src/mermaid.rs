@@ -6,7 +6,7 @@
 use crate::plantuml::{col_type_str, node_id, node_label};
 use crate::{EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{
-    ActorKey, BucKey, EntityKey, NodeRef, RelKind, ScreenKey, SemanticModel, UseCaseKey,
+    ActorKey, ApiKey, BucKey, EntityKey, NodeRef, RelKind, ScreenKey, SemanticModel, UseCaseKey,
 };
 use rdra_ish_core::tx::infer_usecase_transactions;
 use std::collections::{HashMap, HashSet};
@@ -112,6 +112,10 @@ impl Emitter for RdraMermaidEmitter {
             if !is_visible(&rel.from) || !is_visible(&rel.to) {
                 continue;
             }
+            // API ノードは RDRA 全体図には出さない
+            if matches!(&rel.from, NodeRef::Api(_)) || matches!(&rel.to, NodeRef::Api(_)) {
+                continue;
+            }
             if let (Some(from_id), Some(to_id)) =
                 (node_id(model, &rel.from), node_id(model, &rel.to))
             {
@@ -157,6 +161,10 @@ impl Emitter for RdraMermaidEmitter {
                     }
                     RelKind::Transitions => {
                         // 状態遷移図エミッタで扱うのでスキップ
+                        continue;
+                    }
+                    RelKind::Invokes => {
+                        // API層は概要図には出さない
                         continue;
                     }
                     RelKind::RelateOneToOne
@@ -373,10 +381,10 @@ impl Emitter for SequenceMermaidEmitter {
             }
         };
 
-        // UC→BUC、BUC→Actor、UC→Screen マップ
         let mut uc_to_bucs: HashMap<UseCaseKey, Vec<BucKey>> = HashMap::new();
         let mut buc_to_actors: HashMap<BucKey, Vec<ActorKey>> = HashMap::new();
         let mut uc_to_screens: HashMap<UseCaseKey, Vec<ScreenKey>> = HashMap::new();
+        let mut uc_to_apis: HashMap<UseCaseKey, Vec<ApiKey>> = HashMap::new();
         let mut direct_actor_of: HashMap<UseCaseKey, Vec<ActorKey>> = HashMap::new();
 
         for rel in &model.relations {
@@ -398,6 +406,11 @@ impl Emitter for SequenceMermaidEmitter {
                 RelKind::Displays => {
                     if let (NodeRef::UseCase(uk), NodeRef::Screen(sk)) = (&rel.from, &rel.to) {
                         uc_to_screens.entry(*uk).or_default().push(*sk);
+                    }
+                }
+                RelKind::Invokes => {
+                    if let (NodeRef::UseCase(uk), NodeRef::Api(ak)) = (&rel.from, &rel.to) {
+                        uc_to_apis.entry(*uk).or_default().push(*ak);
                     }
                 }
                 _ => {}
@@ -422,10 +435,11 @@ impl Emitter for SequenceMermaidEmitter {
             return Ok("sequenceDiagram\n%% no write-heavy usecases found\n".to_string());
         }
 
-        // 必要な参加者を収集
         let mut actor_keys: HashSet<ActorKey> = HashSet::new();
         let mut entity_keys: HashSet<EntityKey> = HashSet::new();
         let mut screen_keys: HashSet<ScreenKey> = HashSet::new();
+        let mut api_keys: HashSet<ApiKey> = HashSet::new();
+        let mut has_legacy_uc = false;
 
         for (uk, _) in &uc_list {
             for &bk in uc_to_bucs.get(uk).into_iter().flatten() {
@@ -449,11 +463,17 @@ impl Emitter for SequenceMermaidEmitter {
             for &sk in uc_to_screens.get(uk).into_iter().flatten() {
                 screen_keys.insert(sk);
             }
+            if let Some(apis) = uc_to_apis.get(uk) {
+                for &ak in apis {
+                    api_keys.insert(ak);
+                }
+            } else {
+                has_legacy_uc = true;
+            }
         }
 
         let mut out = String::from("sequenceDiagram\n");
 
-        // 参加者宣言
         let mut actors_sorted: Vec<(ActorKey, &rdra_ish_core::model::Actor)> = model
             .actors
             .iter()
@@ -463,7 +483,20 @@ impl Emitter for SequenceMermaidEmitter {
         for (_, actor) in &actors_sorted {
             out.push_str(&format!("  actor {} as {}\n", actor.id, actor.label));
         }
-        out.push_str("  participant System as システム\n");
+
+        if has_legacy_uc {
+            out.push_str("  participant System as システム\n");
+        }
+
+        let mut apis_sorted: Vec<(ApiKey, &rdra_ish_core::model::Api)> = model
+            .apis
+            .iter()
+            .filter(|(k, _)| api_keys.contains(k))
+            .collect();
+        apis_sorted.sort_by_key(|(_, a)| a.id.as_str());
+        for (_, api) in &apis_sorted {
+            out.push_str(&format!("  participant {} as {}\n", api.id, api.label));
+        }
 
         let mut ents_sorted: Vec<(EntityKey, &rdra_ish_core::model::Entity)> = model
             .entities
@@ -486,7 +519,7 @@ impl Emitter for SequenceMermaidEmitter {
         }
         out.push('\n');
 
-        // セクション見出し用: 最初と最後の参加者ID
+        // セクション見出し用参加者ID
         let first_id = actors_sorted
             .first()
             .map(|(_, a)| a.id.as_str())
@@ -497,7 +530,6 @@ impl Emitter for SequenceMermaidEmitter {
             .or_else(|| ents_sorted.last().map(|(_, e)| e.id.as_str()))
             .unwrap_or("System");
 
-        // ユースケースごとのシーケンス
         for (uk, uc) in &uc_list {
             if first_id == last_id {
                 out.push_str(&format!("  Note over {}: {}\n", first_id, uc.label));
@@ -524,43 +556,146 @@ impl Emitter for SequenceMermaidEmitter {
                 });
             let actor_ref = actor_id.as_deref().unwrap_or("System");
 
-            out.push_str(&format!("  {}->System: {}\n", actor_ref, uc.label));
-            out.push_str("  activate System\n");
+            let screen_id: Option<String> = uc_to_screens
+                .get(uk)
+                .and_then(|s| s.first())
+                .and_then(|sk| model.screens.get(*sk))
+                .map(|s| s.id.clone());
+            let screen_label: Option<String> = uc_to_screens
+                .get(uk)
+                .and_then(|s| s.first())
+                .and_then(|sk| model.screens.get(*sk))
+                .map(|s| s.label.clone());
 
-            if let Some(tx) = uc_tx_map.get(uk) {
-                let singletons_set: HashSet<EntityKey> =
-                    tx.singletons_note.iter().cloned().collect();
+            let invoked_apis = uc_to_apis.get(uk);
 
-                for group in &tx.fk_groups {
-                    out.push_str("  rect rgb(245,245,245)\n");
-                    out.push_str("    Note right of System: transaction (inferred from FK)\n");
-                    for w in &group.ordered_writes {
+            if let Some(apis) = invoked_apis.filter(|a| !a.is_empty()) {
+                // ── API有りパス ──────────────────────────────────────────────
+                let first_api_id = model
+                    .apis
+                    .get(apis[0])
+                    .map(|a| a.id.as_str())
+                    .unwrap_or("System");
+
+                if let Some(ref sid) = screen_id {
+                    out.push_str(&format!("  {}->>{}: {}\n", actor_ref, sid, uc.label));
+                    out.push_str(&format!("  {}->>{}: {}\n", sid, first_api_id, uc.label));
+                } else {
+                    out.push_str(&format!(
+                        "  {}->>{}: {}\n",
+                        actor_ref, first_api_id, uc.label
+                    ));
+                }
+                out.push_str(&format!("  activate {}\n", first_api_id));
+
+                if let Some(tx) = uc_tx_map.get(uk) {
+                    let singletons_set: HashSet<EntityKey> =
+                        tx.singletons_note.iter().cloned().collect();
+
+                    for group in &tx.fk_groups {
+                        out.push_str("  rect rgb(245,245,245)\n");
+                        out.push_str(&format!(
+                            "    Note right of {}: transaction (inferred from FK)\n",
+                            first_api_id
+                        ));
+                        for w in &group.ordered_writes {
+                            if let Some(ent) = model.entities.get(w.entity) {
+                                let src = w
+                                    .via_api
+                                    .and_then(|ak| model.apis.get(ak))
+                                    .map(|a| a.id.as_str())
+                                    .unwrap_or(first_api_id);
+                                out.push_str(&format!(
+                                    "    {}->>{}: {}\n",
+                                    src,
+                                    ent.id,
+                                    w.kind.label()
+                                ));
+                            }
+                        }
+                        out.push_str("  end\n");
+                    }
+
+                    for w in &tx.isolated_writes {
                         if let Some(ent) = model.entities.get(w.entity) {
-                            out.push_str(&format!("    System->>{}: {}\n", ent.id, w.kind.label()));
+                            let src = w
+                                .via_api
+                                .and_then(|ak| model.apis.get(ak))
+                                .map(|a| a.id.as_str())
+                                .unwrap_or(first_api_id);
+                            out.push_str(&format!("  {}->>{}: {}\n", src, ent.id, w.kind.label()));
+                            if singletons_set.contains(&w.entity) {
+                                out.push_str(&format!(
+                                    "  Note right of {}: FK非連結 — 別TX？@atomicで明示を\n",
+                                    src
+                                ));
+                            }
                         }
                     }
-                    out.push_str("  end\n");
                 }
 
-                for w in &tx.isolated_writes {
-                    if let Some(ent) = model.entities.get(w.entity) {
-                        out.push_str(&format!("  System->>{}: {}\n", ent.id, w.kind.label()));
-                        if singletons_set.contains(&w.entity) {
-                            out.push_str(
-                                "  Note right of System: FK非連結 — 別TX？@atomicで明示を\n",
-                            );
+                if let Some(ref sid) = screen_id {
+                    out.push_str(&format!(
+                        "  {}-->>{}: {}\n",
+                        first_api_id,
+                        sid,
+                        screen_label.as_deref().unwrap_or("")
+                    ));
+                    out.push_str(&format!(
+                        "  {}-->>{}: {}\n",
+                        sid,
+                        actor_ref,
+                        screen_label.as_deref().unwrap_or("")
+                    ));
+                } else {
+                    out.push_str(&format!(
+                        "  {}-->>{}: {}\n",
+                        first_api_id, actor_ref, uc.label
+                    ));
+                }
+                out.push_str(&format!("  deactivate {}\n\n", first_api_id));
+            } else {
+                // ── レガシーパス（System ライン）─────────────────────────────
+                out.push_str(&format!("  {}->System: {}\n", actor_ref, uc.label));
+                out.push_str("  activate System\n");
+
+                if let Some(tx) = uc_tx_map.get(uk) {
+                    let singletons_set: HashSet<EntityKey> =
+                        tx.singletons_note.iter().cloned().collect();
+
+                    for group in &tx.fk_groups {
+                        out.push_str("  rect rgb(245,245,245)\n");
+                        out.push_str("    Note right of System: transaction (inferred from FK)\n");
+                        for w in &group.ordered_writes {
+                            if let Some(ent) = model.entities.get(w.entity) {
+                                out.push_str(&format!(
+                                    "    System->>{}: {}\n",
+                                    ent.id,
+                                    w.kind.label()
+                                ));
+                            }
+                        }
+                        out.push_str("  end\n");
+                    }
+
+                    for w in &tx.isolated_writes {
+                        if let Some(ent) = model.entities.get(w.entity) {
+                            out.push_str(&format!("  System->>{}: {}\n", ent.id, w.kind.label()));
+                            if singletons_set.contains(&w.entity) {
+                                out.push_str(
+                                    "  Note right of System: FK非連結 — 別TX？@atomicで明示を\n",
+                                );
+                            }
                         }
                     }
                 }
-            }
 
-            if let Some(sk) = uc_to_screens.get(uk).and_then(|s| s.first()) {
-                if let Some(scr) = model.screens.get(*sk) {
-                    out.push_str(&format!("  System-->>{}: {}\n", actor_ref, scr.label));
+                if let Some(ref slabel) = screen_label {
+                    out.push_str(&format!("  System-->>{}: {}\n", actor_ref, slabel));
                 }
-            }
 
-            out.push_str("  deactivate System\n\n");
+                out.push_str("  deactivate System\n\n");
+            }
         }
 
         Ok(out)
@@ -612,10 +747,9 @@ impl Emitter for EventFlowMermaidEmitter {
             }
 
             // raises: UC -.->|raises| Event
-            let mut raised_by: Vec<_> = flow.raised_by.iter().copied().collect();
-            raised_by.sort_by_key(|&uk| {
-                model.use_cases.get(uk).map(|u| u.id.as_str()).unwrap_or("")
-            });
+            let mut raised_by = flow.raised_by.to_vec();
+            raised_by
+                .sort_by_key(|&uk| model.use_cases.get(uk).map(|u| u.id.as_str()).unwrap_or(""));
             for uk in raised_by {
                 let uc_nr = NodeRef::UseCase(uk);
                 if !is_visible(&uc_nr) {
@@ -633,10 +767,9 @@ impl Emitter for EventFlowMermaidEmitter {
             }
 
             // triggers: Event -.->|triggers| UC
-            let mut triggers: Vec<_> = flow.triggers_ucs.iter().copied().collect();
-            triggers.sort_by_key(|&uk| {
-                model.use_cases.get(uk).map(|u| u.id.as_str()).unwrap_or("")
-            });
+            let mut triggers = flow.triggers_ucs.to_vec();
+            triggers
+                .sort_by_key(|&uk| model.use_cases.get(uk).map(|u| u.id.as_str()).unwrap_or(""));
             for uk in triggers {
                 let uc_nr = NodeRef::UseCase(uk);
                 if !is_visible(&uc_nr) {
@@ -654,9 +787,13 @@ impl Emitter for EventFlowMermaidEmitter {
             }
 
             // transitions: From -->|event_label| To
-            let mut transitions: Vec<_> = flow.transitions.iter().copied().collect();
+            let mut transitions = flow.transitions.to_vec();
             transitions.sort_by_key(|(from_sk, _)| {
-                model.states.get(*from_sk).map(|s| s.id.as_str()).unwrap_or("")
+                model
+                    .states
+                    .get(*from_sk)
+                    .map(|s| s.id.as_str())
+                    .unwrap_or("")
             });
             for (from_sk, to_sk) in transitions {
                 let from_st = match model.states.get(from_sk) {

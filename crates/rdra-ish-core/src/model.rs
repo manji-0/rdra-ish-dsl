@@ -17,6 +17,7 @@ new_key_type! {
     pub struct StateKey;
     pub struct ConditionKey;
     pub struct VariationKey;
+    pub struct ApiKey;
 }
 
 /// NodeRef: 異種ノード間関連を一様表現
@@ -35,6 +36,7 @@ pub enum NodeRef {
     State(StateKey),
     Condition(ConditionKey),
     Variation(VariationKey),
+    Api(ApiKey),
 }
 
 /// 述語の種類
@@ -55,6 +57,7 @@ pub enum RelKind {
     Belongs,
     Motivates,
     Transitions,
+    Invokes, // usecase → api
     // Entity ER
     RelateOneToOne,   // 1:1
     RelateOneToMany,  // 1:N (A側が1, B側がMany)
@@ -177,6 +180,12 @@ pub struct Variation {
     pub label: std::string::String,
 }
 
+#[derive(Debug, Clone)]
+pub struct Api {
+    pub id: std::string::String,
+    pub label: std::string::String,
+}
+
 // ── Symbol table ─────────────────────────────────────────────────────────────
 
 fn node_kind_tag(node: &NodeRef) -> &'static str {
@@ -194,6 +203,7 @@ fn node_kind_tag(node: &NodeRef) -> &'static str {
         NodeRef::State(_) => "state",
         NodeRef::Condition(_) => "condition",
         NodeRef::Variation(_) => "variation",
+        NodeRef::Api(_) => "api",
     }
 }
 
@@ -213,6 +223,7 @@ fn node_ref_matches_kind(node: &NodeRef, kind: &Kind) -> bool {
             | (NodeRef::State(_), Kind::State)
             | (NodeRef::Condition(_), Kind::Condition)
             | (NodeRef::Variation(_), Kind::Variation)
+            | (NodeRef::Api(_), Kind::Api)
     )
 }
 
@@ -348,13 +359,111 @@ pub struct ColumnEffect {
     pub value: EffectValue,
 }
 
+// ── 比較命題 ─────────────────────────────────────────────────────────────────
+
+/// 比較演算子（モデル層）。`ast::CmpOp` の写し。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum CmpOpModel {
+    Lt,
+    Gt,
+    Le,
+    Ge,
+    Eq,
+    Ne,
+}
+
+impl CmpOpModel {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            CmpOpModel::Lt => "<",
+            CmpOpModel::Gt => ">",
+            CmpOpModel::Le => "<=",
+            CmpOpModel::Ge => ">=",
+            CmpOpModel::Eq => "==",
+            CmpOpModel::Ne => "!=",
+        }
+    }
+}
+
+/// 比較式の右辺。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum CmpRhs {
+    /// 同エンティティの別カラム参照（例: `selling`）。
+    Column(std::string::String),
+    /// 整数リテラル。
+    IntLit(i64),
+    /// 組み込み時間参照 `now`。
+    Now,
+}
+
+impl CmpRhs {
+    /// 軸キー・診断メッセージ用の表示文字列。
+    pub fn display(&self) -> std::string::String {
+        match self {
+            CmpRhs::Column(c) => c.clone(),
+            CmpRhs::IntLit(n) => n.to_string(),
+            CmpRhs::Now => "now".to_string(),
+        }
+    }
+}
+
+/// `stock < selling` のような比較命題。
+/// BFS 状態空間では「デフォルト false の派生 Bool 軸」として扱われる。
+/// 真偽は `sets(origin, entity, <expr>, true/false)` によって駆動される。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ComparisonProp {
+    /// 比較左辺のカラム名（必ずカラム参照）。
+    pub lhs_column: std::string::String,
+    pub op: CmpOpModel,
+    pub rhs: CmpRhs,
+}
+
+impl ComparisonProp {
+    /// 軸キー文字列を返す（例: `"stock<selling"`, `"expired_at<now"`）。
+    /// 同一比較式を一意な軸に対応付けるためのキーとして使用。
+    pub fn axis_key(&self) -> std::string::String {
+        format!(
+            "{}{}{}",
+            self.lhs_column,
+            self.op.as_str(),
+            self.rhs.display()
+        )
+    }
+
+    /// 人が読める表示文字列（例: `"stock < selling"`）。
+    pub fn display(&self) -> std::string::String {
+        format!(
+            "{} {} {}",
+            self.lhs_column,
+            self.op.as_str(),
+            self.rhs.display()
+        )
+    }
+}
+
+/// `sets(origin, entity, <comparison_expr>, true/false)` で宣言された
+/// 比較命題の真偽効果（解析後）。
+#[derive(Debug, Clone)]
+pub struct PropositionEffect {
+    /// 効果を起こす usecase または event の NodeRef。
+    pub origin: NodeRef,
+    /// 対象 entity のキー。
+    pub entity: EntityKey,
+    /// 真偽を変化させる比較命題。
+    pub prop: ComparisonProp,
+    /// 設定する真偽値。
+    pub truth: bool,
+}
+
 /// `forbidden(Entity, (col, val), ...)` で宣言された禁止状態制約。
 /// `conditions` に列挙した全ての (col, val) が同時に成立する状態は禁止（AND）。
 #[derive(Debug, Clone)]
 pub struct ForbiddenConstraint {
     pub entity: EntityKey,
-    /// 禁止する (カラム名, 値) の組合せ（全件 AND）
+    /// 禁止する等値 (カラム名, 値) の組合せ（全件 AND）
     pub conditions: Vec<(std::string::String, EffectValue)>,
+    /// 禁止条件に含まれる比較命題（全件 AND、等値条件と合わせて評価）
+    pub comparisons: Vec<ComparisonProp>,
 }
 
 /// `invariant(Entity).when(col, val).then(col, val)` で宣言された不変条件。
@@ -362,10 +471,14 @@ pub struct ForbiddenConstraint {
 #[derive(Debug, Clone)]
 pub struct EntityInvariant {
     pub entity: EntityKey,
-    /// ガード条件 (カラム名, 値)（全件 AND）
+    /// 等値ガード条件 (カラム名, 値)（全件 AND）
     pub guards: Vec<(std::string::String, EffectValue)>,
-    /// 必要条件 (カラム名, 値)（全件 AND）
+    /// 比較命題ガード条件（全件 AND、等値 guards と合わせて評価）
+    pub guard_comparisons: Vec<ComparisonProp>,
+    /// 等値必要条件 (カラム名, 値)（全件 AND）
     pub requireds: Vec<(std::string::String, EffectValue)>,
+    /// 比較命題必要条件（全件 AND、等値 requireds と合わせて評価）
+    pub required_comparisons: Vec<ComparisonProp>,
 }
 
 /// セマンティックモデル
@@ -384,9 +497,12 @@ pub struct SemanticModel {
     pub states: SlotMap<StateKey, State>,
     pub conditions: SlotMap<ConditionKey, Condition>,
     pub variations: SlotMap<VariationKey, Variation>,
+    pub apis: SlotMap<ApiKey, Api>,
     pub relations: Vec<Relation>,
     pub state_transitions: Vec<StateTransition>,
     pub column_effects: Vec<ColumnEffect>,
+    /// `sets(origin, entity, <comparison_expr>, bool)` で宣言された比較命題の真偽効果
+    pub proposition_effects: Vec<PropositionEffect>,
     /// `forbidden(...)` 述語で宣言された禁止状態制約
     pub forbidden_constraints: Vec<ForbiddenConstraint>,
     /// `invariant(...)` 述語で宣言された不変条件制約

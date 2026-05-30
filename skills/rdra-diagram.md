@@ -11,10 +11,11 @@ Choose the diagram kind and format, apply BUC filters if needed, and generate ou
 
 | Need | Kind | What it shows |
 |------|------|---------------|
-| Overview of actors, BUCs, UCs, screens, events | `rdra` | Full RDRA relationship graph |
+| Overview of actors, BUCs, UCs, screens, events | `rdra` | Full RDRA relationship graph (API nodes omitted by design) |
 | Database table structure and relationships | `er` | Entities, columns, FK relationships |
 | Entity lifecycle | `state` | State nodes and transition events |
-| Write operations and transaction boundaries | `sequence` | Sequence of writes per use case |
+| Write operations and transaction boundaries | `sequence` | Sequence of writes per use case; shows `Actor→Screen→API→Entity` lanes when `invokes` is used |
+| Event causality chains | `event-flow` | UC→Event→UC and Event→State chains |
 
 ### Format guide
 
@@ -88,8 +89,13 @@ PLANTUML_JAR=/path/to/plantuml.jar rdra-ish diagram src/ --kind rdra --format sv
 
 **Sequence diagram (`--kind sequence`)**
 - Each use case block shows write operations in order
+- **With `invokes`**: renders `Actor → Screen → API → Entity` lanes; the API is the source of writes
+- **Without `invokes`** (legacy): renders the `System` participant lane unchanged
 - Shaded `rect` = inferred transaction (FK-connected entities)
-- `Note right of System: FK非連結` = entities written outside a common FK chain — consider `@atomic` annotation
+- `Note right of ...: FK非連結` = entities written outside a common FK chain — consider `@atomic` annotation
+
+**RDRA overview (`--kind rdra`)**
+- `api` nodes are intentionally omitted; only use-case-level relationships appear
 
 ### Tips
 
@@ -97,3 +103,4 @@ PLANTUML_JAR=/path/to/plantuml.jar rdra-ish diagram src/ --kind rdra --format sv
 - For ER diagrams, scope to a BUC to show only the entities that BUC touches
 - The sequence diagram only shows write operations (`creates` / `updates` / `deletes`) and `displays` — `reads` are omitted
 - Sequence diagram transaction warnings are also printed to stderr as `warning:` lines
+- API diagnostics (`ApiNeverInvoked`, `ApiInvokedButNoEntity`) are printed to stderr when running `--kind sequence`
