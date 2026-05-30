@@ -46,7 +46,7 @@ rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]...
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `rdra` \| `er` \| `state` \| `sequence` | `rdra` | The diagram kind. `rdra` = full RDRA relationship graph; `er` = entity-relationship diagram; `state` = state machine; `sequence` = write-focused sequence diagram with FK-inferred transaction boundaries. |
+| `--kind` | `rdra` \| `er` \| `state` \| `sequence` \| `event-flow` | `rdra` | The diagram kind. `rdra` = full RDRA relationship graph; `er` = entity-relationship diagram; `state` = state machine; `sequence` = write-focused sequence diagram with FK-inferred transaction boundaries; `event-flow` = event causality graph showing UC→Event→UC and Event→State chains. |
 | `--format` | `puml` \| `svg` \| `png` \| `mermaid` | `puml` | Output format. `puml` writes PlantUML text (`.puml`); `mermaid` writes Mermaid text (`.mmd`); `svg` / `png` render via plantuml.jar. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Filter to one or more BUCs by id. With multiple ids, the **union** of reachable nodes across the named BUCs is shown. Applies to all diagram kinds. |
 | `-o`, `--out` | path | `out` | Output file path. The extension is added automatically based on `--format` (`.puml`, `.mmd`, `.svg`, `.png`). |
@@ -56,6 +56,10 @@ Notes:
 - For `--kind sequence`, the tool additionally runs FK-based transaction-boundary
   inference and emits a `warning:` to stderr for any FK-isolated write within a use case
   that also has an FK-connected write group.
+- For `--kind event-flow`, the tool runs event-integrity diagnostics and emits `warning:`
+  lines for events that are never raised, raised but consume nothing, or trigger a use
+  case belonging to no BUC. Mermaid node IDs are prefixed (`ev__`, `uc__`, `st__`) to
+  avoid collisions when a use case and an event share the same DSL identifier.
 - `--format svg` and `--format png` require plantuml.jar to be discoverable (see
   [Environment Variables](#environment-variables)). If it cannot be found, the command
   fails with an error.

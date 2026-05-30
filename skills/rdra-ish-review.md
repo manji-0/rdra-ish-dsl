@@ -33,9 +33,16 @@ Review existing RDRA DSL files for syntax correctness, semantic consistency, and
    - Parent entities are declared before child entities in the same file
 
 6. **Check events and state transitions**
-   - Every `event` is referenced by at least one `raises` or `triggers` predicate
+   - Run `rdra-ish diagram --kind event-flow --format mermaid <src-dir>` and review the
+     warnings printed to stderr before looking at the diagram itself:
+     - `EventNeverRaised`: the event has no `raises` predicate — add one or remove the event
+     - `EventNeverConsumed`: the event is raised but drives no `transitions` and `triggers`
+       nothing — add the missing predicate or investigate a modelling gap
+     - `TriggeredUseCaseUnreachable`: the triggered UC belongs to no BUC — add a `contains`
    - Every `state` referenced in `transitions` is declared
    - No unreachable states (states never appearing as the `to` argument of any `transitions`)
+   - When `triggers(Event, UseCase)` is used, verify the triggered UC is `contains`-ed in
+     the correct downstream BUC and that the cross-BUC flow is intentional
 
 7. **Check `sets` predicate coverage**
    - Every `Enum` column that lacks a `transitions` predicate should have a `sets` for each use case that modifies it

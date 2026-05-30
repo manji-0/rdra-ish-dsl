@@ -127,6 +127,14 @@ machine. States are linked to an entity's Enum column by matching state ids
 is found through `raises(UseCase, Event)`. See
 [state-derivation.md](./state-derivation.md) for how transitions feed derivation.
 
+### `triggers` and event-driven BUC chaining
+
+`triggers(event::E, usecase::UC)` declares that an event causes a downstream use case to
+execute — capturing cross-BUC choreography. The tool validates that the triggered use
+case belongs to at least one BUC via `contains`; a warning is emitted otherwise. Use
+`diagram --kind event-flow` to visualise the full `raises → Event → triggers` chain
+alongside state transitions.
+
 ---
 
 ## Value Vocabulary for `sets`
@@ -150,6 +158,10 @@ sets(usecase::Tag,     Doc,   "metadata",     "jsonb")
 
 // Set a nullable column to null
 sets(usecase::Logout, Session, "token", "null")
+
+// Event as origin: expanded to every UC that raises the event
+// (equivalent to sets on each raising UC, but kept close to the event definition)
+sets(event::EvDeliver, Order, "delivered_at", "timestamptz")
 ```
 
 | Value | Target column | Meaning |
@@ -285,4 +297,5 @@ from the input layout.
 
 - [state-derivation.md](./state-derivation.md) — how reachable state patterns are
   derived, how predicates feed the BFS, and how `forbidden` / `invariant` are checked.
-- [cli-reference.md](./cli-reference.md) — the `rdra-ish` command-line interface.
+- [cli-reference.md](./cli-reference.md) — the `rdra-ish` command-line interface,
+  including the `diagram --kind event-flow` command for event causality visualisation.
