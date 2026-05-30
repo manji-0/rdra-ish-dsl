@@ -1,9 +1,15 @@
 # rdra-ish-dsl
 
-A DSL and compiler for describing RDRA (Relationship-Driven Requirements Analysis).
+RDRA-ISH stands for **RDRA-inspired Implementation and System Heuristics**.
+It is not a strict implementation of the original RDRA scope; it is an
+RDRA-inspired framework for carrying requirements work forward into system
+boundaries, API boundaries, domain modeling, and an implementation-oriented
+design overview.
+
+This repository provides a DSL and compiler for describing those RDRA-ISH models.
 You declare actors, entities, use cases, and so on as typed instances, and express
 relationships between them with predicate calls.
-It treats an RDRA model as source code: the compiler type-checks relationships,
+It treats a model as source code: the compiler type-checks relationships,
 generates reviewable artifacts, and reports model gaps such as unreachable states or
 violated state constraints. It generates PlantUML / Mermaid diagrams (ER, RDRA, state
 machine, sequence, event-flow) and CSV (actor list, entity list, CRUD matrix), and
