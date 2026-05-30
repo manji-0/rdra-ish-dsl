@@ -27,6 +27,7 @@ enum ListKind {
     Entity,
     Buc,
     Usecase,
+    System,
     Api,
 }
 
@@ -205,7 +206,7 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Check { inputs } => {
-            let (_, diags) = load_model(&inputs)?;
+            let (model, diags) = load_model(&inputs)?;
 
             let mut has_error = false;
             for diag in &diags {
@@ -219,6 +220,10 @@ fn main() -> Result<()> {
 
             if has_error {
                 std::process::exit(1);
+            }
+
+            for diag in rdra_ish_core::system_diagnostics(&model) {
+                eprintln!("warning: {}", diag.error);
             }
 
             println!("OK: no errors");
@@ -270,6 +275,9 @@ fn main() -> Result<()> {
                     eprintln!("warning: {}", diag.error);
                 }
                 for diag in rdra_ish_core::api_diagnostics(&model) {
+                    eprintln!("warning: {}", diag.error);
+                }
+                for diag in rdra_ish_core::system_diagnostics(&model) {
                     eprintln!("warning: {}", diag.error);
                 }
             }
@@ -477,6 +485,15 @@ fn list_elements(
             format_id_label(&items, format, "use cases")
         }
         ListKind::Entity => format_entities(model, format),
+        ListKind::System => {
+            let mut items: Vec<(&str, &str)> = model
+                .systems
+                .iter()
+                .map(|(_, s)| (s.id.as_str(), s.label.as_str()))
+                .collect();
+            items.sort_by_key(|(id, _)| *id);
+            format_id_label(&items, format, "systems")
+        }
         ListKind::Api => {
             let mut items: Vec<(&str, &str)> = model
                 .apis

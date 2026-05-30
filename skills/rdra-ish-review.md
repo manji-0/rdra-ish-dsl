@@ -17,8 +17,12 @@ reported as the next refinement question rather than silently ignored.
    Fix all reported errors before proceeding to semantic review.
 
 2. **Check file layout**
-   - `shared/actors.rdra`, `shared/biz.rdra`, `shared/entities.rdra` are separated
-   - One file per BUC under `buc/`
+   - Small models start with `shared/actors.rdra`, `shared/biz.rdra`,
+     `shared/entities.rdra`, and one file per BUC under `buc/`
+   - Split shared files only when reviewability or ownership requires it
+   - If split, shared files are grouped by responsibility, e.g.
+     `shared/entities/order.rdra`, `shared/lifecycle/order.rdra`, `shared/rules.rdra`
+   - BUC-specific predicates stay in `buc/buc_<name>.rdra`, not in shared files
    - Every file has a `module` declaration whose dotted name matches the file path
 
 3. **Classify refinement stage**

@@ -55,6 +55,16 @@ Entity: Order (注文)
 
 ### What to look for
 
+#### Directory layout
+
+| Signal | Interpretation |
+|--------|----------------|
+| Small model uses `shared/actors.rdra`, `shared/biz.rdra`, `shared/entities.rdra`, `buc/buc_<name>.rdra` | Good default |
+| Shared files are split by entity/lifecycle/rules ownership | Good for larger models |
+| A BUC-specific CRUD/`sets`/`displays` predicate appears in `shared/` | Move it to the owning BUC file |
+| A file path does not match its `module` declaration | Fix the module or path before deeper analysis |
+| Same actor/entity/event is redeclared in multiple files | Keep one shared declaration and import it |
+
 #### Refinement readiness
 
 | Current signal | Likely stage | Ask next |

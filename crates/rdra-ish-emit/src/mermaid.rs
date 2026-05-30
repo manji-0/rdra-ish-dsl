@@ -60,6 +60,15 @@ impl Emitter for RdraMermaidEmitter {
             }
         }
 
+        // systems
+        let mut systems: Vec<_> = model.systems.iter().collect();
+        systems.sort_by_key(|(_, s)| &s.id);
+        for (k, system) in &systems {
+            if is_visible(&NodeRef::System(*k)) {
+                out.push_str(&format!("  {}[\"🧩 {}\"]\n", system.id, system.label));
+            }
+        }
+
         // ext_systems
         let mut exts: Vec<_> = model.ext_systems.iter().collect();
         exts.sort_by_key(|(_, e)| &e.id);

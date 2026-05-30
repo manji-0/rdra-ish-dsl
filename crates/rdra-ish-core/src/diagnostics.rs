@@ -106,6 +106,35 @@ pub enum RdraError {
 
     #[error("api '{api}' is invoked but operates no entity\n  hint: add `creates/updates/reads(api::{api}, SomeEntity)` to give the API work to do")]
     ApiInvokedButNoEntity { api: String },
+
+    // ── System 境界診断 ─────────────────────────────────────────────────────
+    #[error("api '{api}' belongs to multiple systems ({systems})\n  hint: an API should belong to exactly one system boundary")]
+    ApiInMultipleSystems { api: String, systems: String },
+
+    #[error("entity '{entity}' is operated by APIs in multiple systems ({systems})\n  hint: split ownership or coordinate access through use cases instead of sharing the entity")]
+    EntityInMultipleSystems { entity: String, systems: String },
+
+    #[error("relation crosses system boundary without use case coordination: entity '{from}' in system '{from_system}' relates to entity '{to}' in system '{to_system}'\n  hint: add `coordinates(SomeUseCase, {from}, {to})` and invoke APIs on both system sides")]
+    CrossSystemEntityRelation {
+        from: String,
+        from_system: String,
+        to: String,
+        to_system: String,
+    },
+
+    #[error("usecase '{usecase}' coordinates '{from}' and '{to}', but this pair is not a relation crossing two derived system boundaries\n  hint: use `coordinates` only for entity relations that cross system boundaries")]
+    CoordinationNotCrossSystem {
+        usecase: String,
+        from: String,
+        to: String,
+    },
+
+    #[error("usecase '{usecase}' coordinates entity '{entity}' in system '{system}', but invokes no API in that system operating the entity\n  hint: add `invokes({usecase}, SomeApi)` where `contains({system}, SomeApi)` and the API reads or writes '{entity}'")]
+    CoordinationMissingApi {
+        usecase: String,
+        entity: String,
+        system: String,
+    },
 }
 
 #[derive(Debug)]

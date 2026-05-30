@@ -18,6 +18,8 @@ Read `buc/buc_<name>.rdra` and the shared files it imports. Identify:
 - Which entities are already referenced
 - What screens and events are already declared
 - Which predicates are already defined
+- Whether the model still uses the small layout (`shared/actors.rdra`,
+  `shared/biz.rdra`, `shared/entities.rdra`) or has split shared files
 
 ### Step 2 — Classify the change
 
@@ -30,6 +32,10 @@ Read `buc/buc_<name>.rdra` and the shared files it imports. Identify:
 | New event or state | `shared/entities.rdra` (if cross-BUC) or `buc/buc_<name>.rdra` |
 | New actor | `shared/actors.rdra` |
 | Remove a use case | Remove its `contains`, CRUD, `displays`, `raises` predicates; check no other BUC uses it |
+
+If the model still uses the small layout, keep using it unless the change makes a
+shared file hard to review. If shared files are already split, place new shared
+definitions near their owning area and mirror path/module names.
 
 Also classify the abstraction transition:
 
@@ -90,6 +96,8 @@ Then in the BUC file add CRUD predicates for the use cases that touch it.
 - No manually added FK columns for a `relate`-covered relationship
 - The diff does not jump more than one abstraction level unless the user supplied the
   missing information explicitly
+- New shared files follow path/module correspondence, e.g.
+  `shared/lifecycle/order.rdra` with `module shared.lifecycle.order`
 
 ### Step 5 — Validate
 

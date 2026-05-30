@@ -132,7 +132,8 @@ fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
         "shows" => Some(vec![vec!["screen"], vec!["entity"]]),
         "raises" => Some(vec![vec!["usecase"], vec!["event"]]),
         "triggers" => Some(vec![vec!["event"], vec!["usecase"]]),
-        "contains" => Some(vec![vec!["buc"], vec!["usecase"]]),
+        "contains" => Some(vec![vec!["buc", "system"], vec!["usecase", "api"]]),
+        "coordinates" => Some(vec![vec!["usecase"], vec!["entity"], vec!["entity"]]),
         "belongs" => Some(vec![vec!["buc"], vec!["business"]]),
         "motivates" => Some(vec![vec!["requirement"], vec!["buc"]]),
         "transitions" => Some(vec![vec!["event"], vec!["state"], vec!["state"]]),
@@ -191,6 +192,13 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
                 label: inst.label.clone(),
             });
             NodeRef::ExtSystem(k)
+        }
+        Kind::System => {
+            let k = model.systems.insert(System {
+                id: inst.id.clone(),
+                label: inst.label.clone(),
+            });
+            NodeRef::System(k)
         }
         Kind::Requirement => {
             let k = model.requirements.insert(Requirement {
@@ -592,9 +600,42 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
             }
         }
     }
+    if pred.name == "contains" {
+        if let (Some(Some(from)), Some(Some(to))) = (resolved.first(), resolved.get(1)) {
+            let valid = matches!(
+                (from, to),
+                (NodeRef::Buc(_), NodeRef::UseCase(_)) | (NodeRef::System(_), NodeRef::Api(_))
+            );
+            if !valid {
+                diags.push(Diagnostic::error(RdraError::TypeMismatch {
+                    pred: pred.name.clone(),
+                    id: "contains pair".to_string(),
+                    actual: format!("{} -> {}", node_kind_tag_str(from), node_kind_tag_str(to)),
+                    expected: "buc->usecase|system->api".to_string(),
+                }));
+                return;
+            }
+        }
+    }
 
     // relate 以外のリレーション登録
-    if pred.name == "transitions" {
+    if pred.name == "coordinates" {
+        if let (Some(Some(usecase)), Some(Some(left)), Some(Some(right))) =
+            (resolved.first(), resolved.get(1), resolved.get(2))
+        {
+            if let (NodeRef::UseCase(uk), NodeRef::Entity(left_ek), NodeRef::Entity(right_ek)) =
+                (usecase, left, right)
+            {
+                model
+                    .boundary_coordinations
+                    .push(crate::model::BoundaryCoordination {
+                        usecase: *uk,
+                        left: *left_ek,
+                        right: *right_ek,
+                    });
+            }
+        }
+    } else if pred.name == "transitions" {
         if let (Some(Some(event)), Some(Some(state_before)), Some(Some(state_after))) =
             (resolved.first(), resolved.get(1), resolved.get(2))
         {
@@ -896,6 +937,7 @@ fn node_kind_tag_str(node: &NodeRef) -> &'static str {
     match node {
         NodeRef::Actor(_) => "actor",
         NodeRef::ExtSystem(_) => "extsystem",
+        NodeRef::System(_) => "system",
         NodeRef::Requirement(_) => "requirement",
         NodeRef::Business(_) => "business",
         NodeRef::Buc(_) => "buc",

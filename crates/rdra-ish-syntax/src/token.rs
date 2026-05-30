@@ -17,6 +17,8 @@ pub enum Token {
     Actor,
     #[token("extsystem")]
     ExtSystem,
+    #[token("system")]
+    System,
     #[token("requirement")]
     Requirement,
     #[token("business")]

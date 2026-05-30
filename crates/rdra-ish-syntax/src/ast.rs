@@ -42,6 +42,7 @@ pub struct ImportDecl {
 pub enum Kind {
     Actor,
     ExtSystem,
+    System,
     Requirement,
     Business,
     Buc,
@@ -61,6 +62,7 @@ impl Kind {
         match self {
             Kind::Actor => "actor",
             Kind::ExtSystem => "extsystem",
+            Kind::System => "system",
             Kind::Requirement => "requirement",
             Kind::Business => "business",
             Kind::Buc => "buc",

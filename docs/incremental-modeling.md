@@ -22,6 +22,97 @@ The model can stay intentionally incomplete while it is being explored:
 - Mermaid output is the preferred early review format because it is text and easy to
   diff.
 
+## Model Directory Layout
+
+<!-- constrained-by ./language-reference.md#modules-and-imports -->
+
+Use a layout that keeps stable shared vocabulary separate from BUC-local flow. The
+default layout is intentionally small:
+
+```text
+src/
+  shared/
+    actors.rdra      # module shared.actors
+    biz.rdra         # module shared.biz
+    entities.rdra    # module shared.entities
+  buc/
+    buc_<name>.rdra  # module buc.<name>
+```
+
+Keep this layout until a file becomes hard to review. Split only when the split makes
+ownership clearer.
+
+### Placement Rules
+
+| Artifact | Default location | Split when |
+|---|---|---|
+| `actor`, `extsystem` | `shared/actors.rdra` | many external systems justify `shared/external.rdra` |
+| `business`, stable `requirement` | `shared/biz.rdra` | requirements need their own traceability file |
+| `entity`, `relate`, shared lifecycle states/events | `shared/entities.rdra` | entities naturally form bounded groups |
+| `buc`, `usecase`, `screen`, BUC-local `api`, BUC-local events | `buc/buc_<name>.rdra` | keep one BUC per file; do not split a single BUC early |
+| CRUD, `displays`, `invokes`, `raises`, `sets` | the BUC file that explains the use case | never put BUC-specific predicates in shared files |
+| cross-BUC `event`, `state`, `transitions` | shared file near the owning entity | multiple BUC files raise or trigger the same event |
+| `forbidden`, `invariant` | shared file near the constrained entity | constraints become numerous enough for `shared/rules.rdra` |
+
+### Growth Pattern
+
+When the model grows, prefer this progression:
+
+```text
+src/
+  shared/
+    actors.rdra
+    biz.rdra
+    entities.rdra
+  buc/
+    buc_order.rdra
+    buc_payment.rdra
+```
+
+Then split shared files by responsibility:
+
+```text
+src/
+  shared/
+    actors.rdra
+    biz.rdra
+    entities/
+      order.rdra        # module shared.entities.order
+      payment.rdra      # module shared.entities.payment
+    lifecycle/
+      order.rdra        # module shared.lifecycle.order
+    rules.rdra          # module shared.rules
+  buc/
+    buc_order.rdra      # module buc.order
+    buc_payment.rdra    # module buc.payment
+```
+
+For imports, start broad during exploration and narrow later:
+
+```rdra
+import shared.actors
+import shared.biz
+import shared.entities
+```
+
+After splitting, import the smallest stable module that keeps the BUC readable:
+
+```rdra
+import shared.actors
+import shared.biz
+import shared.entities.order
+import shared.lifecycle.order
+```
+
+### Naming Rules
+
+- The file path should mirror the module path: `shared/entities/order.rdra` uses
+  `module shared.entities.order`.
+- BUC file names should stay `buc_<name>.rdra`; the module should be `buc.<name>`.
+- Prefer stable business names over UI or implementation names for BUC and entity ids.
+- Do not declare the same shared concept in two files; import it where needed.
+- Do not manually add FK columns that `relate` will generate.
+
 ## Stage Map
 
 | Stage | Abstraction | Main question | Add | Validate |
@@ -167,6 +258,44 @@ rdra-ish csv src/ --kind api-matrix
 
 Move on when sequence output communicates the intended actor/screen/API/entity path.
 
+### API Boundary Rules
+
+Use `api` as the boundary that groups data reads and writes requiring the same
+transaction or reference-consistency guarantee. It is not automatically one API per
+use case, one API per screen action, or one API per entity.
+
+Prefer direct use-case CRUD when the operation is closed inside one entity and does not
+need a reusable consistency boundary. Introduce a separate API when the operation must
+validate or update multiple records together, preserve a cross-entity reference, or
+share the same consistency contract across multiple use cases.
+
+For example, changing a convenience store's next restock date is an update closed inside
+the store entity:
+
+```rdra
+usecase ChangeNextRestockDate "Change Next Restock Date"
+updates(ChangeNextRestockDate, Store)
+```
+
+Changing the store's parent organization is a different boundary because it must keep
+the store, organization reference, and any assignment history consistent in one
+operation:
+
+```rdra
+usecase ChangeStoreParentOrg "Change Store Parent Organization"
+api StoreParentOrgApi "Store Parent Organization API"
+
+invokes(ChangeStoreParentOrg, StoreParentOrgApi)
+reads(StoreParentOrgApi, Organization)
+updates(StoreParentOrgApi, Store)
+creates(StoreParentOrgApi, StoreOrgAssignmentHistory)
+```
+
+When multiple use cases require that same parent-organization consistency, let them
+invoke `StoreParentOrgApi` rather than duplicating the CRUD predicates on each use
+case. If another store operation updates only ordinary store attributes, keep it direct
+or give it a separate API only when it has its own transaction or reference contract.
+
 ## Stage 4: Entity Structure
 
 Refine entities with columns, primary keys, relationships, and cardinality.
@@ -283,7 +412,7 @@ Use the current abstraction level to decide what to ask next:
 | BUCs but no actors | initiating actors and external systems |
 | Actors/use cases but no CRUD | data objects touched by each use case |
 | CRUD but no screens | visible UI surfaces or external interfaces |
-| direct CRUD but known backend boundaries | API endpoints and `invokes` relationships |
+| direct CRUD but cross-usecase transaction or reference consistency is required | API endpoints and `invokes` relationships |
 | entities with only `id` | columns, keys, and relationships |
 | Enum/Bool/nullable columns but no `sets` or `transitions` | use-case effects and events |
 | states but unreachable variants | missing `raises`, `transitions`, or `sets` |
@@ -293,9 +422,10 @@ Use the current abstraction level to decide what to ask next:
 
 <!-- derived-from #principle -->
 <!-- derived-from #stage-map -->
+<!-- derived-from #api-boundary-rules -->
 <!-- derived-from #choosing-the-next-question -->
 
 Incremental modeling works best when each stage answers one question and leaves later
 detail out until it becomes useful. The model should move from BUC intent, to use-case
-coverage, to data touchpoints, to interaction boundaries, to entity structure, to
-lifecycle, and finally to business-rule constraints.
+coverage, to data touchpoints, to interaction boundaries and consistency-oriented API
+boundaries, to entity structure, to lifecycle, and finally to business-rule constraints.

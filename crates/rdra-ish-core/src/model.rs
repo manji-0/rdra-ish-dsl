@@ -6,6 +6,7 @@ use std::collections::HashMap;
 new_key_type! {
     pub struct ActorKey;
     pub struct ExtSystemKey;
+    pub struct SystemKey;
     pub struct RequirementKey;
     pub struct BusinessKey;
     pub struct BucKey;
@@ -25,6 +26,7 @@ new_key_type! {
 pub enum NodeRef {
     Actor(ActorKey),
     ExtSystem(ExtSystemKey),
+    System(SystemKey),
     Requirement(RequirementKey),
     Business(BusinessKey),
     Buc(BucKey),
@@ -73,6 +75,14 @@ pub struct Relation {
     pub kind: RelKind,
 }
 
+/// `coordinates(usecase, entity, entity)` で宣言される、system境界越えrelationの調停責務。
+#[derive(Debug, Clone)]
+pub struct BoundaryCoordination {
+    pub usecase: UseCaseKey,
+    pub left: EntityKey,
+    pub right: EntityKey,
+}
+
 /// カラム型
 #[derive(Debug, Clone, PartialEq)]
 pub enum ColumnType {
@@ -109,6 +119,12 @@ pub struct Actor {
 
 #[derive(Debug, Clone)]
 pub struct ExtSystem {
+    pub id: std::string::String,
+    pub label: std::string::String,
+}
+
+#[derive(Debug, Clone)]
+pub struct System {
     pub id: std::string::String,
     pub label: std::string::String,
 }
@@ -192,6 +208,7 @@ fn node_kind_tag(node: &NodeRef) -> &'static str {
     match node {
         NodeRef::Actor(_) => "actor",
         NodeRef::ExtSystem(_) => "extsystem",
+        NodeRef::System(_) => "system",
         NodeRef::Requirement(_) => "requirement",
         NodeRef::Business(_) => "business",
         NodeRef::Buc(_) => "buc",
@@ -212,6 +229,7 @@ fn node_ref_matches_kind(node: &NodeRef, kind: &Kind) -> bool {
         (node, kind),
         (NodeRef::Actor(_), Kind::Actor)
             | (NodeRef::ExtSystem(_), Kind::ExtSystem)
+            | (NodeRef::System(_), Kind::System)
             | (NodeRef::Requirement(_), Kind::Requirement)
             | (NodeRef::Business(_), Kind::Business)
             | (NodeRef::Buc(_), Kind::Buc)
@@ -486,6 +504,7 @@ pub struct EntityInvariant {
 pub struct SemanticModel {
     pub actors: SlotMap<ActorKey, Actor>,
     pub ext_systems: SlotMap<ExtSystemKey, ExtSystem>,
+    pub systems: SlotMap<SystemKey, System>,
     pub requirements: SlotMap<RequirementKey, Requirement>,
     pub businesses: SlotMap<BusinessKey, Business>,
     pub bucs: SlotMap<BucKey, Buc>,
@@ -499,6 +518,7 @@ pub struct SemanticModel {
     pub variations: SlotMap<VariationKey, Variation>,
     pub apis: SlotMap<ApiKey, Api>,
     pub relations: Vec<Relation>,
+    pub boundary_coordinations: Vec<BoundaryCoordination>,
     pub state_transitions: Vec<StateTransition>,
     pub column_effects: Vec<ColumnEffect>,
     /// `sets(origin, entity, <comparison_expr>, bool)` で宣言された比較命題の真偽効果

@@ -199,6 +199,7 @@ fn kind_token() -> impl Parser<Token, Kind, Error = Simple<Token>> + Clone {
     select! {
         Token::Actor       => Kind::Actor,
         Token::ExtSystem   => Kind::ExtSystem,
+        Token::System      => Kind::System,
         Token::Requirement => Kind::Requirement,
         Token::Business    => Kind::Business,
         Token::Buc         => Kind::Buc,

@@ -44,10 +44,15 @@ Read the requirement and list:
 | Goes in `shared/` | Goes in `buc/buc_<name>.rdra` |
 |-------------------|-------------------------------|
 | `actor`, `extsystem` (if reused across BUCs) | `buc`, `usecase`, `screen` |
-| `entity` column definitions, `relate` | `event`, `state` (if BUC-specific) |
-| `state`, `event`, `transitions` (if shared) | predicates scoped to this BUC |
+| `business`, stable `requirement` | BUC-local `api` |
+| reusable `entity` definitions, `relate` | CRUD, `displays`, `shows`, `invokes`, `raises`, `sets` |
+| cross-BUC `state`, `event`, `transitions` | BUC-local `event`, `state` |
+| cross-BUC `forbidden`, `invariant` | predicates scoped to this BUC |
 
 If a shared file already declares the actor or entity you need, import it — do not redeclare.
+Start with `shared/actors.rdra`, `shared/biz.rdra`, `shared/entities.rdra`, and one
+`buc/buc_<name>.rdra` file. Split `shared/entities.rdra` into
+`shared/entities/<area>.rdra` only when it becomes hard to review.
 
 ### Step 3 — Write `buc/buc_<name>.rdra`
 
@@ -100,6 +105,9 @@ See the `sets` value vocabulary in `rdra-write`.
 - New entity → add to `shared/entities.rdra` with column definitions
 - New actor → add to `shared/actors.rdra`
 - New event/state/transitions → add to `shared/entities.rdra` if cross-BUC
+- New BUC-local API/screen/event → keep it in `buc/buc_<name>.rdra`
+- If shared files are already split, mirror paths and modules, e.g.
+  `shared/entities/order.rdra` → `module shared.entities.order`
 
 ### Step 6 — Validate
 

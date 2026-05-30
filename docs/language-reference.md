@@ -28,6 +28,7 @@ An instance declaration introduces a named element:
 |---|---|
 | `actor` | A human actor who performs use cases. |
 | `extsystem` | An external system used by actors or use cases. |
+| `system` | An internal system boundary. It groups APIs; its entity set is derived from those APIs' CRUD targets. |
 | `requirement` | A requirement that motivates business use cases. |
 | `business` | A business (a coarse-grained area of activity) that BUCs belong to. |
 | `buc` | A business use case: a unit of business value composed of use cases. |
@@ -39,7 +40,7 @@ An instance declaration introduces a named element:
 | `state` | A state machine node, linked to an entity's Enum column. |
 | `condition` | A condition. |
 | `variation` | A variation. |
-| `api` | An API layer endpoint invoked by a use case; operates entities on behalf of the use case. Appears in the sequence diagram as a named API lane, but is intentionally omitted from the RDRA overview. |
+| `api` | An API layer endpoint invoked by a use case; operates entities on behalf of the use case and defines an atomic data operation boundary. Appears in the sequence diagram as a named API lane, but is intentionally omitted from the RDRA overview. |
 
 ---
 
@@ -107,7 +108,8 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `shows` | `(Screen, Entity)` | The screen shows information from the entity. |
 | `raises` | `(UseCase, Event)` | The use case raises the domain event. Links use cases to `transitions`. |
 | `triggers` | `(Event, UseCase)` | The event triggers the use case. |
-| `contains` | `(Buc, UseCase)` | The use case composes the BUC. Establishes the BUC-of-use-case mapping. |
+| `contains` | `(Buc, UseCase)` or `(System, Api)` | The use case composes the BUC, or the API belongs to the system boundary. |
+| `coordinates` | `(UseCase, Entity, Entity)` | The use case coordinates consistency for a relation crossing system boundaries. The use case must invoke APIs on both system sides that operate the corresponding entities. |
 | `belongs` | `(Buc, Business)` | The BUC belongs to the business. |
 | `motivates` | `(Requirement, Buc)` | The requirement motivates the BUC. |
 | `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `"1:1"`, `"1:N"`, `"N:1"`, `"N:M"`. |
@@ -151,13 +153,25 @@ updates(PlaceOrder, Cart)   // direct write still allowed (mixed form)
 **Sequence diagram behaviour** (`--kind sequence`):
 - If a use case invokes at least one API, the sequence diagram renders
   `Actor → Screen → Api → Entity` lanes with the API as the source of DB writes.
-- If an API is invoked by multiple use cases, the use case's own CRUD predicates
-  scope which API CRUD operations belong to that interaction. This prevents a shared
-  API's writes from appearing in every use case that invokes it.
+- If an API is invoked by multiple use cases, the API's CRUD boundary applies to each
+  invoking use case. Split read-only and write APIs when those operations have different
+  consistency contracts.
 - If a use case has no `invokes` (legacy), the existing `System` participant is used
   unchanged — full backward compatibility.
-- FK-grouped transaction blocks (`group transaction (inferred from FK)`) work normally;
-  the API is the write source within the group.
+- API write groups are rendered as `transaction (API atomic boundary)`. Direct
+  use-case writes still use FK-grouped transaction blocks
+  (`group transaction (inferred from FK)`).
+
+**System boundary behaviour**:
+- `contains(System, Api)` assigns an API to an internal system boundary.
+- A system's entity set is derived only from CRUD predicates on its APIs; there is no
+  direct `system -> entity` ownership declaration.
+- If entities derived for different systems have a `relate` edge between them, the tool
+  warns unless a use case declares `coordinates(UseCase, EntityA, EntityB)`.
+- A coordinating use case must invoke an API in each entity's system, and each invoked
+  API must operate the corresponding entity.
+- If the same API or entity is derived into multiple systems, the tool emits a warning
+  because the ownership boundary is ambiguous.
 
 **Other diagrams**:
 - `api` nodes are intentionally **omitted from the RDRA overview** (`--kind rdra`).
@@ -166,12 +180,18 @@ updates(PlaceOrder, Cart)   // direct write still allowed (mixed form)
 
 **CSV/list output**:
 - `list --kind api` — id/label table of all declared apis.
+- `list --kind system` — id/label table of all declared systems.
 - `csv --kind api` — CSV file of api id and label.
 - `csv --kind api-matrix` — api × entity CRUD matrix.
 
 **Diagnostics** (emitted as warnings when running `diagram --kind sequence`):
 - `ApiNeverInvoked` — an api is declared but no use case invokes it.
 - `ApiInvokedButNoEntity` — an api is invoked but operates no entity.
+- `ApiInMultipleSystems` — an api is assigned to multiple systems.
+- `EntityInMultipleSystems` — an entity is operated by APIs in multiple systems.
+- `CrossSystemEntityRelation` — a `relate` edge crosses derived system entity sets.
+- `CoordinationNotCrossSystem` — `coordinates` is declared for a pair that does not cross two system boundaries.
+- `CoordinationMissingApi` — the coordinating use case does not invoke an API on one side of the boundary.
 
 ### `triggers` and event-driven BUC chaining
 

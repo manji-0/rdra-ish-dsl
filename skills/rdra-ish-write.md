@@ -41,6 +41,9 @@ See `docs/incremental-modeling.md` for the full staged flow.
 
 ### File layout
 
+Start with the small layout. Split files only when reviewability or ownership demands
+it; do not create deep folders for a new or uncertain model.
+
 ```
 src/
   shared/
@@ -54,6 +57,36 @@ src/
 - Put shared definitions (actors, businesses, entities) under `shared/`
 - One `.rdra` file per BUC
 - Every file starts with a `module <dotted.name>` declaration
+- File paths should mirror modules: `shared/entities/order.rdra` uses
+  `module shared.entities.order`
+- BUC files keep the `buc_<name>.rdra` filename and `module buc.<name>`
+
+Growth pattern:
+
+```
+src/
+  shared/
+    actors.rdra
+    biz.rdra
+    entities/
+      order.rdra      # module shared.entities.order
+      payment.rdra    # module shared.entities.payment
+    lifecycle/
+      order.rdra      # module shared.lifecycle.order
+    rules.rdra        # module shared.rules
+  buc/
+    buc_order.rdra
+    buc_payment.rdra
+```
+
+Placement rules:
+- Shared vocabulary goes in `shared/`: actors, external systems, businesses,
+  reusable entities, cross-BUC lifecycle, and cross-BUC rules.
+- BUC-local flow goes in `buc/buc_<name>.rdra`: `buc`, `usecase`, `screen`,
+  BUC-local `api`, CRUD, `displays`, `invokes`, `raises`, and `sets`.
+- Do not put BUC-specific predicates in shared files.
+- Keep broad imports during exploration; narrow imports after shared files split.
+- See `docs/incremental-modeling.md#model-directory-layout` for the full layout rule.
 
 ### Syntax reference
 
@@ -67,6 +100,7 @@ src/
 |------|---------|
 | `actor` | human user |
 | `extsystem` | external system |
+| `system` | internal system boundary derived from API CRUD targets |
 | `requirement` | business requirement |
 | `business` | business domain |
 | `buc` | business use case |
@@ -78,7 +112,7 @@ src/
 | `state` | state (for state machines) |
 | `condition` | condition |
 | `variation` | variation |
-| `api` | API layer endpoint invoked by a use case; operates entities |
+| `api` | API layer endpoint invoked by a use case; operates entities atomically |
 
 Id must be UpperCamelCase (e.g. `Customer`, `BucOrder`).
 
@@ -114,7 +148,8 @@ Annotations: `@pk` / `@pk(a, b)` (compound PK) / `@unique` / `@null` / `@default
 | `shows` | `(Screen, Entity)` | screen shows entity data |
 | `raises` | `(UseCase, Event)` | use case raises a domain event |
 | `triggers` | `(Event, UseCase)` | event triggers a use case |
-| `contains` | `(Buc, UseCase)` | BUC contains a use case |
+| `contains` | `(Buc, UseCase)` / `(System, Api)` | BUC contains a use case, or system contains an API |
+| `coordinates` | `(UseCase, Entity, Entity)` | use case handles consistency for a relation crossing systems |
 | `belongs` | `(Buc, Business)` | BUC belongs to a business domain |
 | `motivates` | `(Requirement, Buc)` | requirement motivates a BUC |
 | `relate` | `(Entity, Entity, "1:1"\|"1:N"\|"N:1"\|"N:M")` | ER relationship (auto-generates FK) |
@@ -145,6 +180,12 @@ sets(usecase::Logout,   Session, "token", "null")
 Use `api` when you need to express that a screen calls a backend API layer — the
 sequence diagram then renders `Actor → Screen → API → Entity` lanes.
 
+Treat an API as a consistency boundary: it groups data reads and writes that require
+the same transaction or reference-integrity guarantee across use cases. Do not create
+one API just because there is one use case, screen action, or entity. Keep CRUD directly
+on a use case when the update is closed inside one entity; introduce a separate API
+when the operation must validate or update multiple records together.
+
 ```
 api OrderApi "Order API"
 invokes(PlaceOrder, OrderApi)   // usecase delegates to the API
@@ -157,6 +198,10 @@ displays(PlaceOrder, OrderScreen)
 - CRUD predicates (`creates`, `updates`, etc.) are attached to the `api`, not the
   `usecase`. You may still attach CRUD directly to a `usecase` for the same entity
   (mixed form) — the sequence diagram handles both.
+- Split APIs by consistency contract. For example, changing a store's next restock date
+  can be direct `updates(ChangeNextRestockDate, Store)`, while changing the store's
+  parent organization should use a separate API that reads the organization and updates
+  the store or assignment history in one transaction.
 - `api` nodes are intentionally omitted from the RDRA overview (`--kind rdra`).
 
 #### Imports

@@ -62,6 +62,16 @@ impl Emitter for RdraPlantUmlEmitter {
         }
         out.push('\n');
 
+        // systems (as packages)
+        let mut system_ids: Vec<_> = model.systems.iter().collect();
+        system_ids.sort_by_key(|(_, s)| &s.id);
+        for (k, system) in &system_ids {
+            if is_visible(&NodeRef::System(*k)) {
+                out.push_str(&format!("package \"{}\" as {}\n", system.label, system.id));
+            }
+        }
+        out.push('\n');
+
         // ext_systems (as components)
         let mut ext_ids: Vec<_> = model.ext_systems.iter().collect();
         ext_ids.sort_by_key(|(_, e)| &e.id);
@@ -860,6 +870,7 @@ pub(crate) fn node_id<'a>(model: &'a SemanticModel, node: &NodeRef) -> Option<&'
     match node {
         NodeRef::Actor(k) => model.actors.get(*k).map(|a| a.id.as_str()),
         NodeRef::ExtSystem(k) => model.ext_systems.get(*k).map(|e| e.id.as_str()),
+        NodeRef::System(k) => model.systems.get(*k).map(|s| s.id.as_str()),
         NodeRef::Requirement(k) => model.requirements.get(*k).map(|r| r.id.as_str()),
         NodeRef::Business(k) => model.businesses.get(*k).map(|b| b.id.as_str()),
         NodeRef::Buc(k) => model.bucs.get(*k).map(|b| b.id.as_str()),
@@ -879,6 +890,7 @@ pub(crate) fn node_label<'a>(model: &'a SemanticModel, node: &NodeRef) -> Option
     match node {
         NodeRef::Actor(k) => model.actors.get(*k).map(|a| a.label.as_str()),
         NodeRef::ExtSystem(k) => model.ext_systems.get(*k).map(|e| e.label.as_str()),
+        NodeRef::System(k) => model.systems.get(*k).map(|s| s.label.as_str()),
         NodeRef::Requirement(k) => model.requirements.get(*k).map(|r| r.label.as_str()),
         NodeRef::Business(k) => model.businesses.get(*k).map(|b| b.label.as_str()),
         NodeRef::Buc(k) => model.bucs.get(*k).map(|b| b.label.as_str()),
