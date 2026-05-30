@@ -1,51 +1,52 @@
-# 店舗補充管理 要求分析 Step 5
+# 店舗補充管理 要求分析 Step 5: Lifecycle
 
 <!-- constrained-by ../../../docs/incremental-modeling.md#stage-5-lifecycle -->
 <!-- derived-from ../step-4-entity-structure/requirements-analysis.md -->
 
+この文書は Step 5 時点の要求分析サンプルです。抽象度を保ったまま、次に具体化する対象だけをレビューできる粒度にしています。
+
 ## 1. 業務背景
 
-店舗と組織の構造が固まったため、店舗補充の状態変化を整理する。補充予定日の変更は単なる日付更新ではなく、店舗の補充状態を「通常」から「予定済み」へ進める操作として扱う。予定済みの補充は、店舗都合によりブロックされる場合がある。
+Store の構造が固まったため、補充状態と次回補充予定日の lifecycle を検証する。補充予定日の設定は scheduled への遷移、補充停止は blocked への遷移として扱う。
 
-## 2. ライフサイクル要求
+## 2. この step の焦点
 
-| 状態 | 説明 | 業務上の意味 |
+| 観点 | 内容 |
+|---|---|
+| Step | `5` |
+| 焦点 | 状態、イベント、sets を追加する |
+| モデルルート | `samples/incremental-order/step-5-lifecycle/src` |
+
+## 3. 要求スコープ
+
+| 分類 | 対象 | 意味 |
 |---|---|---|
-| `normal` | 通常 | 補充予定日が未設定または通常運用中 |
-| `scheduled` | 補充予定済み | 次回補充予定日が設定されている |
-| `blocked` | 補充停止 | 店舗都合などにより予定補充を止めている |
+| State axis | `restock_status` | normal, scheduled, blocked |
+| Nullable axis | `next_restock_date` | null / present |
+| Event | `RestockScheduled` | normal -> scheduled と予定日 present |
+| Event | `RestockBlocked` | scheduled -> blocked と予定日 null |
 
-## 3. イベント要求
-
-| Event | 発生元 usecase | 状態変化 | 付随効果 |
-|---|---|---|---|
-| `RestockScheduled` | `ChangeNextRestockDate` | `normal -> scheduled` | `next_restock_date` を present にする |
-| `RestockBlocked` | `BlockScheduledRestock` | `scheduled -> blocked` | `next_restock_date` を null にする |
-
-## 4. 追加 usecase
-
-| Use case | 目的 | 備考 |
-|---|---|---|
-| `BlockScheduledRestock` | 予定済み補充を停止する | 店舗休業や補充不可の判断を想定 |
-
-## 5. 要求
+## 4. 要求一覧
 
 | ID | 要求 | 優先度 |
 |---|---|---|
-| R-501 | 補充状態を `normal`, `scheduled`, `blocked` として到達検証できること | Must |
+| R-501 | 補充状態を normal, scheduled, blocked として到達検証できること | Must |
 | R-502 | 補充予定日の設定と状態変化を同じイベントで説明できること | Must |
 | R-503 | 補充停止時に予定日が残らないことを表現できること | Should |
 
-## 6. レビュー観点
+## 5. レビュー観点
 
-- `blocked` は終端状態として扱ってよいか。
-- `scheduled -> normal` の取り消し操作が必要か。
-- 補充予定日を `DateTime @null` として状態軸に含めることが分析上有効か。
+- normal -> scheduled -> blocked 以外の遷移が必要か。
+- blocked から normal へ戻す UC を今入れるべきか。
+- next_restock_date の present/null が業務状態を十分に説明しているか。
+
+## 6. 次 step への確認
+
+次 step では、ここで合意した語彙を保持したまま `forbidden と invariant で状態制約を追加する`。
 
 ## Summary
 
-<!-- derived-from #2-ライフサイクル要求 -->
-<!-- derived-from #3-イベント要求 -->
-<!-- derived-from #6-レビュー観点 -->
+<!-- derived-from #3-要求スコープ -->
+<!-- derived-from #4-要求一覧 -->
 
-Step 5 では、店舗補充の状態軸、イベント、列効果を追加して到達可能性をレビューする。
+Step 5 は、状態、イベント、sets を追加する段階として、後続の具体化で壊してはいけない要求境界を固定する。

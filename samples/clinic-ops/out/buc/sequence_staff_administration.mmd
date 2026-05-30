@@ -1,10 +1,12 @@
 sequenceDiagram
   actor ClinicAdmin as Clinic Administrator
   participant System as システム
+  participant AuditApi as Audit API
   participant BlockScheduleSlotApi as Block Schedule Slot API
   participant ManageProviderScheduleApi as Manage Provider Schedule API
   participant RoomAdminApi as Room Admin API
   participant AuditEvent as Audit Event
+  participant PatientAccount as Patient Account
   participant Provider as Provider
   participant ProviderSchedule as Provider Schedule
   participant Room as Room
@@ -57,3 +59,12 @@ sequenceDiagram
   System-->>ClinicAdmin: Audit Review Screen
   deactivate System
 
+  Note over ClinicAdmin,ScheduleAdminScreen: Review Audit Events
+  ClinicAdmin->>AuditReviewScreen: Review Audit Events
+  AuditReviewScreen->>AuditApi: Review Audit Events
+  activate AuditApi
+  AuditApi->>AuditEvent: read
+  AuditApi->>PatientAccount: read
+  AuditApi-->>AuditReviewScreen: Audit Review Screen
+  AuditReviewScreen-->>ClinicAdmin: Audit Review Screen
+  deactivate AuditApi

@@ -4,9 +4,13 @@ sequenceDiagram
   participant AssignRoomApi as Assign Room API
   participant CheckInPatientApi as Check-In Patient API
   participant CollectCopayApi as Collect Copay API
+  participant PrepareEncounterApi as Prepare Encounter API
+  participant VerifyArrivalApi as Verify Arrival API
   participant AccountBalance as Account Balance
   participant Appointment as Appointment
+  participant InsurancePolicy as Insurance Policy
   participant PatientAccount as Patient Account
+  participant PatientProfile as Patient Profile
   participant PaymentTransaction as Payment Transaction
   participant Room as Room
   participant CheckInScreen as Check-In Screen
@@ -52,3 +56,23 @@ sequenceDiagram
   CopayScreen-->>FrontDesk: Copay Screen
   deactivate CollectCopayApi
 
+  Note over FrontDesk,RoomBoardScreen: Prepare Encounter
+  Nurse->>CheckInScreen: Prepare Encounter
+  CheckInScreen->>PrepareEncounterApi: Prepare Encounter
+  activate PrepareEncounterApi
+  PrepareEncounterApi->>Appointment: read
+  PrepareEncounterApi->>PatientProfile: read
+  PrepareEncounterApi-->>CheckInScreen: Check-In Screen
+  CheckInScreen-->>Nurse: Check-In Screen
+  deactivate PrepareEncounterApi
+
+  Note over FrontDesk,RoomBoardScreen: Verify Patient Arrival
+  FrontDesk->>CheckInScreen: Verify Patient Arrival
+  CheckInScreen->>VerifyArrivalApi: Verify Patient Arrival
+  activate VerifyArrivalApi
+  VerifyArrivalApi->>Appointment: read
+  VerifyArrivalApi->>PatientAccount: read
+  VerifyArrivalApi->>InsurancePolicy: read
+  VerifyArrivalApi-->>CheckInScreen: Check-In Screen
+  CheckInScreen-->>FrontDesk: Check-In Screen
+  deactivate VerifyArrivalApi

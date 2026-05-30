@@ -1,2 +1,14 @@
 sequenceDiagram
-%% no write-heavy usecases found
+  actor Clinician as Clinician
+  participant MedicationCatalogApi as Medication Catalog API
+  participant Medication as Medication
+  participant MedicationSearchScreen as Medication Search Screen
+
+  Note over Clinician,MedicationSearchScreen: Search Medication
+  Clinician->>MedicationSearchScreen: Search Medication
+  MedicationSearchScreen->>MedicationCatalogApi: Search Medication
+  activate MedicationCatalogApi
+  MedicationCatalogApi->>Medication: read
+  MedicationCatalogApi-->>MedicationSearchScreen: Medication Search Screen
+  MedicationSearchScreen-->>Clinician: Medication Search Screen
+  deactivate MedicationCatalogApi

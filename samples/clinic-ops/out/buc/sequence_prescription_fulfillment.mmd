@@ -4,9 +4,13 @@ sequenceDiagram
   participant System as システム
   participant ConfirmDispenseApi as Confirm Dispense API
   participant DraftPrescriptionApi as Draft Prescription API
+  participant MedicationCatalogApi as Medication Catalog API
   participant RefillPrescriptionApi as Refill Prescription API
   participant SendPrescriptionApi as Send Prescription API
+  participant Encounter as Encounter
+  participant Medication as Medication
   participant Prescription as Prescription
+  participant MedicationSearchScreen as Medication Search Screen
   participant PharmacyStatusScreen as Pharmacy Status Screen
   participant PrescriptionScreen as Prescription Screen
 
@@ -30,6 +34,7 @@ sequenceDiagram
   Clinician->>PrescriptionScreen: Draft Prescription
   PrescriptionScreen->>DraftPrescriptionApi: Draft Prescription
   activate DraftPrescriptionApi
+  DraftPrescriptionApi->>Encounter: read
   DraftPrescriptionApi->>Prescription: create
   DraftPrescriptionApi-->>PrescriptionScreen: Prescription Screen
   PrescriptionScreen-->>Clinician: Prescription Screen
@@ -39,10 +44,20 @@ sequenceDiagram
   Clinician->>PrescriptionScreen: Refill Prescription
   PrescriptionScreen->>RefillPrescriptionApi: Refill Prescription
   activate RefillPrescriptionApi
+  RefillPrescriptionApi->>Medication: read
   RefillPrescriptionApi->>Prescription: create
   RefillPrescriptionApi-->>PrescriptionScreen: Prescription Screen
   PrescriptionScreen-->>Clinician: Prescription Screen
   deactivate RefillPrescriptionApi
+
+  Note over Clinician,PrescriptionScreen: Search Medication
+  Clinician->>MedicationSearchScreen: Search Medication
+  MedicationSearchScreen->>MedicationCatalogApi: Search Medication
+  activate MedicationCatalogApi
+  MedicationCatalogApi->>Medication: read
+  MedicationCatalogApi-->>MedicationSearchScreen: Medication Search Screen
+  MedicationSearchScreen-->>Clinician: Medication Search Screen
+  deactivate MedicationCatalogApi
 
   Note over Clinician,PrescriptionScreen: Send Prescription
   Clinician->>PrescriptionScreen: Send Prescription
@@ -52,4 +67,3 @@ sequenceDiagram
   SendPrescriptionApi-->>PrescriptionScreen: Prescription Screen
   PrescriptionScreen-->>Clinician: Prescription Screen
   deactivate SendPrescriptionApi
-

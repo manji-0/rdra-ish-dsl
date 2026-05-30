@@ -1,65 +1,157 @@
-# 店舗補充管理 設計 Step 4
+# 店舗補充管理 設計 Step 4: Entity Structure
 
 <!-- constrained-by ../../../docs/incremental-modeling.md#stage-4-entity-structure -->
-<!-- constrained-by ../../../docs/language-reference.md#api-and-the-api-layer -->
 <!-- derived-from ./requirements-analysis.md -->
+
+この文書は Step 4 時点の RDRA DSL 設計サンプルです。clinic-ops の設計書と同じく、レビューに必要な生成物は本文へ埋め込みます。
 
 ## 1. 設計目的
 
-粗い entity をレビュー可能な ER 構造に具体化し、System 境界をまたぐ関係を診断できる状態にする。ここで初めて `relate` と `coordinates` を追加する。
+columns、ER、境界越え coordination を追加する。
 
-## 2. エンティティ設計
+## 2. モデル構成
 
-| Entity | Column | 型 | 用途 |
-|---|---|---|---|
-| `Store` | `id` | `Int @pk` | 内部識別子 |
-| `Store` | `code` | `String @unique` | 業務識別子 |
-| `Store` | `name` | `String` | 表示名 |
-| `Organization` | `id` | `Int @pk` | 内部識別子 |
-| `Organization` | `code` | `String @unique` | 業務識別子 |
-| `Organization` | `name` | `String` | 表示名 |
+| 分類 | 対象 | 役割 |
+|---|---|---|
+| Entity | `Store` | id, code, name, organization_id |
+| Entity | `Organization` | id, code, name |
+| Relation | `Store -> Organization` | 店舗は 1 つの担当組織に属する |
+| Coordination | `ChangeStoreParentOrganization` | 境界越え関係の整合性を調整する |
 
-## 3. 関係設計
-
-```rdra
-relate(Store, Organization, "N:1")
-coordinates(ChangeStoreParentOrganization, Store, Organization)
-```
-
-`relate` により店舗から組織への FK が生成される。`Store` と `Organization` は別 System に由来するため、`coordinates` で担当組織変更 usecase の整合性責務を明示する。
-
-## 4. 設計判断
+## 3. 設計判断
 
 | 判断 | 理由 |
 |---|---|
-| `code` を `@unique` にする | 業務レビューでは ID よりコードで店舗・組織を識別するため |
-| 変更履歴 entity は追加しない | 現時点の要求では監査・履歴保持が未確定のため |
-| `coordinates` を追加する | System 境界をまたぐ ER 関係を無警告で説明するため |
+| code を @unique にする | 業務レビューでは ID よりコードで店舗・組織を識別するため |
+| 変更履歴 entity は追加しない | 監査・履歴保持が未確定のため |
+| coordinates を追加する | System 境界をまたぐ ER 関係を説明するため |
 
-## 5. 生成・検証
+## 4. 生成成果物
+
+生成コマンド例:
 
 ```sh
 rdra-ish check samples/incremental-order/step-4-entity-structure/src
-rdra-ish diagram samples/incremental-order/step-4-entity-structure/src --kind er --format mermaid
-rdra-ish diagram samples/incremental-order/step-4-entity-structure/src --kind sequence --format mermaid --buc BucStoreRestock
+rdra-ish diagram samples/incremental-order/step-4-entity-structure/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-4-entity-structure/out/rdra_buc_store_restock
+rdra-ish diagram samples/incremental-order/step-4-entity-structure/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-4-entity-structure/out/sequence_buc_store_restock
+rdra-ish csv samples/incremental-order/step-4-entity-structure/src --kind matrix --out samples/incremental-order/step-4-entity-structure/out/usecase_matrix.csv
 ```
 
-期待結果:
+### 4.1 RDRA 図
 
-- ER 図に `Store -> Organization` の関係が出る。
-- system diagnostics で cross-system relation の warning が出ない。
-- `coordinates` に必要な両側 API invocation が満たされている。
+```mermaid
+graph TD
+  OpsStaff(["👤 Operations Staff"])
+  ChangeNextRestockDate(["Change Next Restock Date"])
+  ChangeStoreParentOrganization(["Change Store Parent Organization"])
+  BucStoreRestock["📦 Maintain Store Restock"]
+  Organization[("🗄 Organization")]
+  Store[("🗄 Store")]
+  StoreMaintenanceScreen[["Store Maintenance"]]
+  OpsStaff --> BucStoreRestock
+  BucStoreRestock --> StoreOperations
+  BucStoreRestock --> ChangeNextRestockDate
+  BucStoreRestock --> ChangeStoreParentOrganization
+  Store --- Organization
+  StoreMaintenanceScreen -.->|shows| Store
+  StoreMaintenanceScreen -.->|shows| Store
+  StoreMaintenanceScreen -.->|shows| Organization
+  ChangeNextRestockDate -.->|updates| Store
+  ChangeNextRestockDate -.->|displays| StoreMaintenanceScreen
+  ChangeStoreParentOrganization -.->|displays| StoreMaintenanceScreen
+```
 
-## 6. レビュー観点
+### 4.2 Sequence 図
 
-- `OrganizationLookupApi` が read-only でも coordination の片側 API として十分か。
-- 今後、担当組織変更に承認や履歴が必要になった場合、別 API/Entity を追加する余地があるか。
-- `Store` の属性が Step 5 の lifecycle 追加を妨げないか。
+```mermaid
+sequenceDiagram
+  actor OpsStaff as Operations Staff
+  participant System as システム
+  participant OrganizationLookupApi as Organization Lookup API
+  participant StoreAdminApi as Store Admin API
+  participant Organization as Organization
+  participant Store as Store
+  participant StoreMaintenanceScreen as Store Maintenance
+
+  Note over OpsStaff,StoreMaintenanceScreen: Change Next Restock Date
+  OpsStaff->System: Change Next Restock Date
+  activate System
+  System->>Store: update
+  System-->>OpsStaff: Store Maintenance
+  deactivate System
+
+  Note over OpsStaff,StoreMaintenanceScreen: Change Store Parent Organization
+  OpsStaff->>StoreMaintenanceScreen: Change Store Parent Organization
+  StoreMaintenanceScreen->>StoreAdminApi: Change Store Parent Organization
+  activate StoreAdminApi
+  OrganizationLookupApi->>Organization: read
+  StoreAdminApi->>Store: update
+  StoreAdminApi-->>StoreMaintenanceScreen: Store Maintenance
+  StoreMaintenanceScreen-->>OpsStaff: Store Maintenance
+  deactivate StoreAdminApi
+```
+
+### 4.3 ER 図
+
+```mermaid
+erDiagram
+  Organization {
+    Int id PK
+    String code
+    String name
+  }
+  Store {
+    Int id PK
+    String code
+    String name
+    Int organization_id FK
+  }
+  Store }o--|| Organization : ""
+```
+
+### 4.5 Usecase CRUD matrix
+
+```csv
+UseCase,Organization,Store
+ChangeNextRestockDate,,U
+ChangeStoreParentOrganization,,
+```
+
+### 4.6 API CRUD matrix
+
+```csv
+Api,Organization,Store
+OrganizationLookupApi,R,
+StoreAdminApi,,U
+```
+
+### 4.7 Store 状態到達表
+
+```text
+Entity: Store (Store)
+  (no state axes)
+  reachable: 1 / bound: 1
+```
+
+## 5. レビュー観点
+
+- Store と Organization の関係が N:1 でよいか。
+- coordinates の責務を ChangeStoreParentOrganization に置くことが自然か。
+- 店舗コードと組織コードだけでレビューに十分か。
+
+## 6. 承認条件
+
+| 観点 | 承認条件 |
+|---|---|
+| 要求 | requirements-analysis.md の Must 要求を説明できる |
+| 設計 | この step で追加した DSL 要素の責務を説明できる |
+| 生成物 | 埋め込み成果物が現在の DSL から生成されている |
+| 次 step | 次に具体化する情報と、まだ具体化しない情報を区別できる |
 
 ## Summary
 
-<!-- derived-from #2-エンティティ設計 -->
-<!-- derived-from #3-関係設計 -->
-<!-- derived-from #5-生成検証 -->
+<!-- derived-from #2-モデル構成 -->
+<!-- derived-from #3-設計判断 -->
+<!-- derived-from #4-生成成果物 -->
 
-Step 4 の設計は、ER と System 境界を接続し、境界越えの整合性責務をレビュー可能にする。
+Step 4 の設計は、columns、ER、境界越え coordination を追加するための最小 DSL と生成成果物を提示する。

@@ -8,6 +8,7 @@ sequenceDiagram
   participant ReceiveLabResultApi as Receive Lab Result API
   participant ResultReviewApi as Result Review API
   participant ClinicalOrder as Clinical Order
+  participant Encounter as Encounter
   participant LabResult as Lab Result
   participant Notification as Notification
   participant PatientMessage as Patient Message
@@ -49,6 +50,7 @@ sequenceDiagram
   Clinician->>OrderEntryScreen: Place Lab Order
   OrderEntryScreen->>OrderEntryApi: Place Lab Order
   activate OrderEntryApi
+  OrderEntryApi->>Encounter: read
   OrderEntryApi->>ClinicalOrder: create
   OrderEntryApi-->>OrderEntryScreen: Order Entry Screen
   OrderEntryScreen-->>Clinician: Order Entry Screen
@@ -79,4 +81,3 @@ sequenceDiagram
   ResultReviewApi-->>ResultReviewScreen: Result Review Screen
   ResultReviewScreen-->>Clinician: Result Review Screen
   deactivate ResultReviewApi
-

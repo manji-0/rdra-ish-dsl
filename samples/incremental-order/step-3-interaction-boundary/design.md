@@ -1,61 +1,150 @@
-# 店舗補充管理 設計 Step 3
+# 店舗補充管理 設計 Step 3: Interaction Boundary
 
 <!-- constrained-by ../../../docs/incremental-modeling.md#stage-3-interaction-boundary -->
-<!-- constrained-by ../../../docs/language-reference.md#api-and-the-api-layer -->
 <!-- derived-from ./requirements-analysis.md -->
+
+この文書は Step 3 時点の RDRA DSL 設計サンプルです。clinic-ops の設計書と同じく、レビューに必要な生成物は本文へ埋め込みます。
 
 ## 1. 設計目的
 
-画面、API、System の境界を追加し、usecase がどこで UI から処理境界へ渡るかを確認できるようにする。Step 2 の direct CRUD は残しつつ、整合性境界が必要な担当組織変更だけ API 化する。
+画面、API、System 境界を追加する。
 
 ## 2. モデル構成
 
-| 分類 | ID | 役割 |
+| 分類 | 対象 | 役割 |
 |---|---|---|
-| Screen | `StoreMaintenanceScreen` | 店舗補充管理の操作画面 |
+| Screen | `StoreMaintenanceScreen` | 店舗情報、補充予定、担当組織候補を確認しながら更新する |
 | API | `StoreAdminApi` | 店舗情報の更新境界 |
 | API | `OrganizationLookupApi` | 組織マスタの参照境界 |
-| System | `StoreAdminSystem` | 店舗情報を扱う内部境界 |
-| System | `OrganizationSystem` | 組織マスタを扱う内部境界 |
+| System | `StoreAdminSystem / OrganizationSystem` | 店舗情報と組織マスタの仮の所有境界 |
 
-## 3. 関係設計
+## 3. 設計判断
 
-| Use case | Screen | API | Entity operation |
-|---|---|---|---|
-| `ChangeNextRestockDate` | `StoreMaintenanceScreen` | なし | `updates(ChangeNextRestockDate, Store)` |
-| `ChangeStoreParentOrganization` | `StoreMaintenanceScreen` | `StoreAdminApi` | `updates(StoreAdminApi, Store)` |
-| `ChangeStoreParentOrganization` | `StoreMaintenanceScreen` | `OrganizationLookupApi` | `reads(OrganizationLookupApi, Organization)` |
+| 判断 | 理由 |
+|---|---|
+| ChangeNextRestockDate は direct CRUD のまま残す | 店舗単体更新であり、独立 API を導入するほどの整合性境界がまだない |
+| ChangeStoreParentOrganization は invokes を使う | 組織参照と店舗更新が関わり、後続で system 境界診断の対象になるため |
+| read-only API を API matrix で確認する | sequence と matrix の両方で境界をレビューするため |
 
-## 4. 設計判断
+## 4. 生成成果物
 
-- `ChangeNextRestockDate` は direct CRUD のまま残す。店舗単体更新であり、独立 API を導入するほどの整合性境界がまだない。
-- `ChangeStoreParentOrganization` は `invokes` を使う。組織参照と店舗更新が関わり、後続で system 境界診断の対象になるため。
-- read-only API は sequence 図では目立ちにくいため、API matrix を正式なレビュー成果物に含める。
-
-## 5. 生成・検証
+生成コマンド例:
 
 ```sh
 rdra-ish check samples/incremental-order/step-3-interaction-boundary/src
-rdra-ish diagram samples/incremental-order/step-3-interaction-boundary/src --kind sequence --format mermaid --buc BucStoreRestock
-rdra-ish csv samples/incremental-order/step-3-interaction-boundary/src --kind api-matrix
+rdra-ish diagram samples/incremental-order/step-3-interaction-boundary/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-3-interaction-boundary/out/rdra_buc_store_restock
+rdra-ish diagram samples/incremental-order/step-3-interaction-boundary/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-3-interaction-boundary/out/sequence_buc_store_restock
+rdra-ish csv samples/incremental-order/step-3-interaction-boundary/src --kind matrix --out samples/incremental-order/step-3-interaction-boundary/out/usecase_matrix.csv
 ```
 
-期待結果:
+### 4.1 RDRA 図
 
-- sequence 図で `ChangeStoreParentOrganization` が Screen -> API -> Entity の経路を持つ。
-- `ChangeNextRestockDate` は legacy `System` lane の直接更新として残る。
-- API matrix で `OrganizationLookupApi` が `Organization` を Read する。
+```mermaid
+graph TD
+  OpsStaff(["👤 Operations Staff"])
+  ChangeNextRestockDate(["Change Next Restock Date"])
+  ChangeStoreParentOrganization(["Change Store Parent Organization"])
+  BucStoreRestock["📦 Maintain Store Restock"]
+  Organization[("🗄 Organization")]
+  Store[("🗄 Store")]
+  StoreMaintenanceScreen[["Store Maintenance"]]
+  OpsStaff --> BucStoreRestock
+  BucStoreRestock --> StoreOperations
+  BucStoreRestock --> ChangeNextRestockDate
+  BucStoreRestock --> ChangeStoreParentOrganization
+  StoreMaintenanceScreen -.->|shows| Store
+  StoreMaintenanceScreen -.->|shows| Store
+  StoreMaintenanceScreen -.->|shows| Organization
+  ChangeNextRestockDate -.->|updates| Store
+  ChangeNextRestockDate -.->|displays| StoreMaintenanceScreen
+  ChangeStoreParentOrganization -.->|displays| StoreMaintenanceScreen
+```
 
-## 6. レビュー観点
+### 4.2 Sequence 図
+
+```mermaid
+sequenceDiagram
+  actor OpsStaff as Operations Staff
+  participant System as システム
+  participant OrganizationLookupApi as Organization Lookup API
+  participant StoreAdminApi as Store Admin API
+  participant Organization as Organization
+  participant Store as Store
+  participant StoreMaintenanceScreen as Store Maintenance
+
+  Note over OpsStaff,StoreMaintenanceScreen: Change Next Restock Date
+  OpsStaff->System: Change Next Restock Date
+  activate System
+  System->>Store: update
+  System-->>OpsStaff: Store Maintenance
+  deactivate System
+
+  Note over OpsStaff,StoreMaintenanceScreen: Change Store Parent Organization
+  OpsStaff->>StoreMaintenanceScreen: Change Store Parent Organization
+  StoreMaintenanceScreen->>StoreAdminApi: Change Store Parent Organization
+  activate StoreAdminApi
+  OrganizationLookupApi->>Organization: read
+  StoreAdminApi->>Store: update
+  StoreAdminApi-->>StoreMaintenanceScreen: Store Maintenance
+  StoreMaintenanceScreen-->>OpsStaff: Store Maintenance
+  deactivate StoreAdminApi
+```
+
+### 4.3 ER 図
+
+```mermaid
+erDiagram
+  Organization {
+    Int id PK
+  }
+  Store {
+    Int id PK
+  }
+```
+
+### 4.5 Usecase CRUD matrix
+
+```csv
+UseCase,Organization,Store
+ChangeNextRestockDate,,U
+ChangeStoreParentOrganization,,
+```
+
+### 4.6 API CRUD matrix
+
+```csv
+Api,Organization,Store
+OrganizationLookupApi,R,
+StoreAdminApi,,U
+```
+
+### 4.7 Store 状態到達表
+
+```text
+Entity: Store (Store)
+  (no state axes)
+  reachable: 1 / bound: 1
+```
+
+## 5. レビュー観点
 
 - direct CRUD と API CRUD の混在が、この段階の分析として説明できるか。
-- `StoreAdminApi` と `OrganizationLookupApi` を同じ System に入れるべきではないか。
-- 次ステップで `relate(Store, Organization, "N:1")` を置いたとき、coordination が必要になるか。
+- StoreAdminApi と OrganizationLookupApi を同じ System に入れるべきではないか。
+- 次 step で relate(Store, Organization, "N:1") を置いたとき、coordination が必要になるか。
+
+## 6. 承認条件
+
+| 観点 | 承認条件 |
+|---|---|
+| 要求 | requirements-analysis.md の Must 要求を説明できる |
+| 設計 | この step で追加した DSL 要素の責務を説明できる |
+| 生成物 | 埋め込み成果物が現在の DSL から生成されている |
+| 次 step | 次に具体化する情報と、まだ具体化しない情報を区別できる |
 
 ## Summary
 
 <!-- derived-from #2-モデル構成 -->
-<!-- derived-from #3-関係設計 -->
-<!-- derived-from #6-レビュー観点 -->
+<!-- derived-from #3-設計判断 -->
+<!-- derived-from #4-生成成果物 -->
 
-Step 3 の設計は、UI/API 境界を追加しつつ、まだ単純更新は直接 CRUD として保持する。
+Step 3 の設計は、画面、API、System 境界を追加するための最小 DSL と生成成果物を提示する。

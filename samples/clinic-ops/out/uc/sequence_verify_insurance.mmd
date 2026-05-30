@@ -9,6 +9,7 @@ sequenceDiagram
   FrontDesk->>InsuranceScreen: Verify Insurance
   InsuranceScreen->>EligibilityApi: Verify Insurance
   activate EligibilityApi
+  EligibilityApi->>InsurancePolicy: read
   rect rgb(245,245,245)
     Note right of EligibilityApi: transaction (API atomic boundary)
     EligibilityApi->>InsurancePolicy: update
@@ -17,4 +18,3 @@ sequenceDiagram
   EligibilityApi-->>InsuranceScreen: Insurance Verification Screen
   InsuranceScreen-->>FrontDesk: Insurance Verification Screen
   deactivate EligibilityApi
-

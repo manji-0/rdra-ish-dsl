@@ -1,6 +1,7 @@
 sequenceDiagram
   actor Clinician as Clinician
   participant RefillPrescriptionApi as Refill Prescription API
+  participant Medication as Medication
   participant Prescription as Prescription
   participant PrescriptionScreen as Prescription Screen
 
@@ -8,8 +9,8 @@ sequenceDiagram
   Clinician->>PrescriptionScreen: Refill Prescription
   PrescriptionScreen->>RefillPrescriptionApi: Refill Prescription
   activate RefillPrescriptionApi
+  RefillPrescriptionApi->>Medication: read
   RefillPrescriptionApi->>Prescription: create
   RefillPrescriptionApi-->>PrescriptionScreen: Prescription Screen
   PrescriptionScreen-->>Clinician: Prescription Screen
   deactivate RefillPrescriptionApi
-

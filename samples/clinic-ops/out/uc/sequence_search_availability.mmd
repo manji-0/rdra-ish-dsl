@@ -1,2 +1,18 @@
 sequenceDiagram
-%% no write-heavy usecases found
+  actor FrontDesk as Front Desk Staff
+  participant SearchAvailabilityApi as Search Availability API
+  participant ClinicLocation as Clinic Location
+  participant Provider as Provider
+  participant ProviderSchedule as Provider Schedule
+  participant ScheduleSearchScreen as Schedule Search Screen
+
+  Note over FrontDesk,ScheduleSearchScreen: Search Availability
+  FrontDesk->>ScheduleSearchScreen: Search Availability
+  ScheduleSearchScreen->>SearchAvailabilityApi: Search Availability
+  activate SearchAvailabilityApi
+  SearchAvailabilityApi->>ProviderSchedule: read
+  SearchAvailabilityApi->>Provider: read
+  SearchAvailabilityApi->>ClinicLocation: read
+  SearchAvailabilityApi-->>ScheduleSearchScreen: Schedule Search Screen
+  ScheduleSearchScreen-->>FrontDesk: Schedule Search Screen
+  deactivate SearchAvailabilityApi

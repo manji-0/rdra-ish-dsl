@@ -7,6 +7,7 @@ sequenceDiagram
   participant SendFollowUpMessageApi as Send Follow-Up Message API
   participant Appointment as Appointment
   participant CarePlan as Care Plan
+  participant Encounter as Encounter
   participant Notification as Notification
   participant PatientMessage as Patient Message
   participant ProviderSchedule as Provider Schedule
@@ -25,6 +26,7 @@ sequenceDiagram
   CareCoordinator->>CarePlanScreen: Create Care Plan
   CarePlanScreen->>CreateCarePlanApi: Create Care Plan
   activate CreateCarePlanApi
+  CreateCarePlanApi->>Encounter: read
   CreateCarePlanApi->>CarePlan: create
   CreateCarePlanApi-->>CarePlanScreen: Care Plan Screen
   CarePlanScreen-->>CareCoordinator: Care Plan Screen
@@ -68,4 +70,3 @@ sequenceDiagram
   SendFollowUpMessageApi-->>PatientMessageScreen: Patient Message Screen
   PatientMessageScreen-->>CareCoordinator: Patient Message Screen
   deactivate SendFollowUpMessageApi
-

@@ -1,68 +1,194 @@
-# 店舗補充管理 設計 Step 6
+# 店舗補充管理 設計 Step 6: Business Rules
 
 <!-- constrained-by ../../../docs/incremental-modeling.md#stage-6-business-rules -->
-<!-- constrained-by ../../../docs/state-derivation.md#operations -->
 <!-- derived-from ./requirements-analysis.md -->
+
+この文書は Step 6 時点の RDRA DSL 設計サンプルです。clinic-ops の設計書と同じく、レビューに必要な生成物は本文へ埋め込みます。
 
 ## 1. 設計目的
 
-Step 5 で確認した状態到達パターンに業務ルールを重ね、モデルが不整合な状態を許さないことを検証する。ここでは `Store` の補充状態と次回補充予定日の整合性だけを扱う。
+forbidden と invariant で状態制約を追加する。
 
-## 2. ルール設計
+## 2. モデル構成
 
-```rdra
-forbidden(Store, (restock_status, blocked), (next_restock_date, present))
-
-invariant(Store)
-  .when(restock_status, scheduled)
-  .then(next_restock_date, present)
-```
-
-| DSL | 対応する業務ルール |
-|---|---|
-| `forbidden` | blocked の店舗に予定日が残る状態を禁止する |
-| `invariant` | scheduled の店舗には予定日が必ず存在する |
+| 分類 | 対象 | 役割 |
+|---|---|---|
+| Rule | `BR-001` | scheduled の店舗には next_restock_date が必要 |
+| Rule | `BR-002` | blocked の店舗に next_restock_date を残してはいけない |
+| DSL | `invariant` | scheduled -> present |
+| DSL | `forbidden` | blocked + present を禁止 |
 
 ## 3. 設計判断
 
 | 判断 | 理由 |
 |---|---|
-| blocked + present は `forbidden` で表す | 特定の組み合わせを禁止するルールだから |
-| scheduled -> present は `invariant` で表す | 条件が成立したときの必須値を表すルールだから |
-| normal + present はまだ禁止しない | 現モデルでは到達せず、将来の予定日事前入力要求を妨げないため |
+| blocked + present は forbidden で表す | 特定の組み合わせを禁止するルールだから |
+| scheduled -> present は invariant で表す | 条件が成立したときの必須値を表すルールだから |
+| normal + present はまだ禁止しない | 将来の予定日事前入力要求を妨げないため |
 
-## 4. 生成・検証
+## 4. 生成成果物
+
+生成コマンド例:
 
 ```sh
 rdra-ish check samples/incremental-order/step-6-business-rules/src
-rdra-ish states samples/incremental-order/step-6-business-rules/src --entity Store
-rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind state --format mermaid --buc BucStoreRestock
+rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-6-business-rules/out/rdra_buc_store_restock
+rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-6-business-rules/out/sequence_buc_store_restock
+rdra-ish csv samples/incremental-order/step-6-business-rules/src --kind matrix --out samples/incremental-order/step-6-business-rules/out/usecase_matrix.csv
 ```
 
-期待結果:
+### 4.1 RDRA 図
 
-- `states --entity Store` に rule violation が出ない。
-- `scheduled / present:timestamptz` が到達する。
-- `blocked / null` が到達し、terminal として確認できる。
+```mermaid
+graph TD
+  OpsStaff(["👤 Operations Staff"])
+  BlockScheduledRestock(["Block Scheduled Restock"])
+  ChangeNextRestockDate(["Change Next Restock Date"])
+  ChangeStoreParentOrganization(["Change Store Parent Organization"])
+  BucStoreRestock["📦 Maintain Store Restock"]
+  Organization[("🗄 Organization")]
+  Store[("🗄 Store")]
+  StoreMaintenanceScreen[["Store Maintenance"]]
+  RestockBlocked{"Restock Blocked"}
+  RestockScheduled{"Restock Scheduled"}
+  OpsStaff --> BucStoreRestock
+  BucStoreRestock --> StoreOperations
+  BucStoreRestock --> ChangeNextRestockDate
+  BucStoreRestock --> ChangeStoreParentOrganization
+  BucStoreRestock --> BlockScheduledRestock
+  Store --- Organization
+  StoreMaintenanceScreen -.->|shows| Store
+  StoreMaintenanceScreen -.->|shows| Store
+  StoreMaintenanceScreen -.->|shows| Store
+  StoreMaintenanceScreen -.->|shows| Organization
+  ChangeNextRestockDate -.->|updates| Store
+  ChangeNextRestockDate -.->|raises| RestockScheduled
+  ChangeNextRestockDate -.->|displays| StoreMaintenanceScreen
+  ChangeStoreParentOrganization -.->|displays| StoreMaintenanceScreen
+  BlockScheduledRestock -.->|updates| Store
+  BlockScheduledRestock -.->|raises| RestockBlocked
+  BlockScheduledRestock -.->|displays| StoreMaintenanceScreen
+```
+
+### 4.2 Sequence 図
+
+```mermaid
+sequenceDiagram
+  actor OpsStaff as Operations Staff
+  participant System as システム
+  participant OrganizationLookupApi as Organization Lookup API
+  participant StoreAdminApi as Store Admin API
+  participant Organization as Organization
+  participant Store as Store
+  participant StoreMaintenanceScreen as Store Maintenance
+
+  Note over OpsStaff,StoreMaintenanceScreen: Block Scheduled Restock
+  OpsStaff->System: Block Scheduled Restock
+  activate System
+  System->>Store: update
+  System-->>OpsStaff: Store Maintenance
+  deactivate System
+
+  Note over OpsStaff,StoreMaintenanceScreen: Change Next Restock Date
+  OpsStaff->System: Change Next Restock Date
+  activate System
+  System->>Store: update
+  System-->>OpsStaff: Store Maintenance
+  deactivate System
+
+  Note over OpsStaff,StoreMaintenanceScreen: Change Store Parent Organization
+  OpsStaff->>StoreMaintenanceScreen: Change Store Parent Organization
+  StoreMaintenanceScreen->>StoreAdminApi: Change Store Parent Organization
+  activate StoreAdminApi
+  OrganizationLookupApi->>Organization: read
+  StoreAdminApi->>Store: update
+  StoreAdminApi-->>StoreMaintenanceScreen: Store Maintenance
+  StoreMaintenanceScreen-->>OpsStaff: Store Maintenance
+  deactivate StoreAdminApi
+```
+
+### 4.3 ER 図
+
+```mermaid
+erDiagram
+  Organization {
+    Int id PK
+    String code
+    String name
+  }
+  Store {
+    Int id PK
+    String code
+    String name
+    Enum restock_status
+    DateTime next_restock_date
+    Int organization_id FK
+  }
+  Store }o--|| Organization : ""
+```
+
+### 4.4 State 図
+
+```mermaid
+stateDiagram-v2
+  [*] --> Normal
+  Normal --> Scheduled : Restock Scheduled
+  Scheduled --> Blocked : Restock Blocked
+```
+
+### 4.5 Usecase CRUD matrix
+
+```csv
+UseCase,Organization,Store
+BlockScheduledRestock,,U
+ChangeNextRestockDate,,U
+ChangeStoreParentOrganization,,
+```
+
+### 4.6 API CRUD matrix
+
+```csv
+Api,Organization,Store
+OrganizationLookupApi,R,
+StoreAdminApi,,U
+```
+
+### 4.7 Store 状態到達表
+
+```text
+Entity: Store (Store)
+  axes: restock_status[normal|scheduled|blocked], next_restock_date[null|present:timestamptz]
+
+  RESTOCK_STATUS  NEXT_RESTOCK_DATE    INITIAL  TERMINAL  VIA
+  ──────────────  ───────────────────  ───────  ────────  ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  normal          null                 yes      no        BucStoreRestock/ChangeStoreParentOrganization
+  scheduled       present:timestamptz  no       no        BucStoreRestock/ChangeNextRestockDate, BucStoreRestock/ChangeStoreParentOrganization
+  blocked         null                 no       yes       BucStoreRestock/BlockScheduledRestock, BucStoreRestock/ChangeNextRestockDate, BucStoreRestock/ChangeStoreParentOrganization
+
+  reachable: 3 / bound: 6
+  diagnostics:
+    [info] no creates(...) found; seeded from column defaults
+```
 
 ## 5. レビュー観点
 
-- ルールが実業務の運用例外を潰していないか。
-- `BlockScheduledRestock` の `sets(..., "null")` が BR-002 を満たしているか。
-- 今後の再開操作を追加した場合、`blocked -> scheduled` の transition と `next_restock_date` の復元が必要になることを合意できるか。
+- BR-001, BR-002 が DSL 上の制約として表現されているか。
+- 状態到達表で違反パターンが出ていないことを確認できるか。
+- normal + present を禁止しない判断が業務上許容できるか。
 
 ## 6. 承認条件
 
 | 観点 | 承認条件 |
 |---|---|
-| 要求 | BR-001, BR-002 が DSL 上の制約として表現されている |
-| 設計 | 状態軸、イベント、ルールの責務が分かれている |
-| 検証 | `check` と `states` が warning/error なしで確認済み |
+| 要求 | requirements-analysis.md の Must 要求を説明できる |
+| 設計 | この step で追加した DSL 要素の責務を説明できる |
+| 生成物 | 埋め込み成果物が現在の DSL から生成されている |
+| 次 step | 次に具体化する情報と、まだ具体化しない情報を区別できる |
 
 ## Summary
 
-<!-- derived-from #2-ルール設計 -->
-<!-- derived-from #4-生成検証 -->
-<!-- derived-from #6-承認条件 -->
+<!-- derived-from #2-モデル構成 -->
+<!-- derived-from #3-設計判断 -->
+<!-- derived-from #4-生成成果物 -->
 
-Step 6 の設計は、状態到達表と business rule を使って補充状態の整合性を承認可能にする。
+Step 6 の設計は、forbidden と invariant で状態制約を追加するための最小 DSL と生成成果物を提示する。

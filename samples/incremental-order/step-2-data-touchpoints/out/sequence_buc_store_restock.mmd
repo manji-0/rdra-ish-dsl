@@ -1,0 +1,18 @@
+sequenceDiagram
+  actor OpsStaff as Operations Staff
+  participant System as システム
+  participant Organization as Organization
+  participant Store as Store
+
+  Note over OpsStaff,Store: Change Next Restock Date
+  OpsStaff->System: Change Next Restock Date
+  activate System
+  System->>Store: update
+  deactivate System
+
+  Note over OpsStaff,Store: Change Store Parent Organization
+  OpsStaff->System: Change Store Parent Organization
+  activate System
+  System->>Organization: read
+  System->>Store: update
+  deactivate System

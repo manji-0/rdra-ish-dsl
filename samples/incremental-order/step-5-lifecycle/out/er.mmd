@@ -1,0 +1,15 @@
+erDiagram
+  Organization {
+    Int id PK
+    String code
+    String name
+  }
+  Store {
+    Int id PK
+    String code
+    String name
+    Enum restock_status
+    DateTime next_restock_date
+    Int organization_id FK
+  }
+  Store }o--|| Organization : ""

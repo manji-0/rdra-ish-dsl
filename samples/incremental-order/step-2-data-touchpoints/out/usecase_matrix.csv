@@ -1,0 +1,3 @@
+UseCase,Organization,Store
+ChangeNextRestockDate,,U
+ChangeStoreParentOrganization,R,U

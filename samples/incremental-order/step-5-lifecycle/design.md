@@ -1,66 +1,194 @@
-# 店舗補充管理 設計 Step 5
+# 店舗補充管理 設計 Step 5: Lifecycle
 
 <!-- constrained-by ../../../docs/incremental-modeling.md#stage-5-lifecycle -->
-<!-- constrained-by ../../../docs/state-derivation.md#operations -->
 <!-- derived-from ./requirements-analysis.md -->
+
+この文書は Step 5 時点の RDRA DSL 設計サンプルです。clinic-ops の設計書と同じく、レビューに必要な生成物は本文へ埋め込みます。
 
 ## 1. 設計目的
 
-`Store` にライフサイクル軸を追加し、usecase と event を通じて到達可能な状態パターンを検証する。Step 4 までの構造設計に、業務状態の変化を重ねる。
+状態、イベント、sets を追加する。
 
-## 2. 状態軸設計
+## 2. モデル構成
 
-| Entity | Column | 型 | 初期値 | 用途 |
-|---|---|---|---|---|
-| `Store` | `restock_status` | `Enum(normal, scheduled, blocked)` | `normal` | 補充状態 |
-| `Store` | `next_restock_date` | `DateTime @null` | `null` | 次回補充予定日 |
-
-## 3. イベント・遷移設計
-
-| Event | Transition | Effect |
+| 分類 | 対象 | 役割 |
 |---|---|---|
-| `RestockScheduled` | `Normal -> Scheduled` | `sets(event::RestockScheduled, Store, "next_restock_date", "timestamptz")` |
-| `RestockBlocked` | `Scheduled -> Blocked` | `sets(event::RestockBlocked, Store, "next_restock_date", "null")` |
+| State axis | `restock_status` | normal, scheduled, blocked |
+| Nullable axis | `next_restock_date` | null / present |
+| Event | `RestockScheduled` | normal -> scheduled と予定日 present |
+| Event | `RestockBlocked` | scheduled -> blocked と予定日 null |
 
-## 4. Usecase 変更
+## 3. 設計判断
 
-| Use case | 追加関係 | 理由 |
-|---|---|---|
-| `ChangeNextRestockDate` | `raises(..., event::RestockScheduled)` | 予定日の変更を補充予定化イベントとして扱う |
-| `BlockScheduledRestock` | `updates(..., Store)` / `raises(..., event::RestockBlocked)` | 店舗の補充状態を停止へ進める |
+| 判断 | 理由 |
+|---|---|
+| restock_status を Enum にする | 主要な業務状態を状態軸として導出するため |
+| next_restock_date を @null にする | 予定日の有無を状態パターンとして検証するため |
+| sets を event に付ける | usecase 操作ではなく状態遷移イベントの効果として説明するため |
 
-## 5. 設計判断
+## 4. 生成成果物
 
-- `RestockScheduled` は `ChangeNextRestockDate` から発生させる。日付更新と状態遷移を分けるより、業務イベントとして一体でレビューしやすいため。
-- `BlockScheduledRestock` は API 化しない。現時点では店舗単体の状態更新であり、境界越えの整合性がないため。
-- `DateTime @null` を使い、予定日の有無を状態到達表で確認する。
-
-## 6. 生成・検証
+生成コマンド例:
 
 ```sh
 rdra-ish check samples/incremental-order/step-5-lifecycle/src
-rdra-ish states samples/incremental-order/step-5-lifecycle/src --entity Store
-rdra-ish diagram samples/incremental-order/step-5-lifecycle/src --kind event-flow --format mermaid
+rdra-ish diagram samples/incremental-order/step-5-lifecycle/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-5-lifecycle/out/rdra_buc_store_restock
+rdra-ish diagram samples/incremental-order/step-5-lifecycle/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-5-lifecycle/out/sequence_buc_store_restock
+rdra-ish csv samples/incremental-order/step-5-lifecycle/src --kind matrix --out samples/incremental-order/step-5-lifecycle/out/usecase_matrix.csv
 ```
 
-期待する到達パターン:
+### 4.1 RDRA 図
 
-| restock_status | next_restock_date | 意味 |
-|---|---|---|
-| `normal` | `null` | 初期状態 |
-| `scheduled` | `present:timestamptz` | 補充予定あり |
-| `blocked` | `null` | 補充停止、予定日なし |
+```mermaid
+graph TD
+  OpsStaff(["👤 Operations Staff"])
+  BlockScheduledRestock(["Block Scheduled Restock"])
+  ChangeNextRestockDate(["Change Next Restock Date"])
+  ChangeStoreParentOrganization(["Change Store Parent Organization"])
+  BucStoreRestock["📦 Maintain Store Restock"]
+  Organization[("🗄 Organization")]
+  Store[("🗄 Store")]
+  StoreMaintenanceScreen[["Store Maintenance"]]
+  RestockBlocked{"Restock Blocked"}
+  RestockScheduled{"Restock Scheduled"}
+  OpsStaff --> BucStoreRestock
+  BucStoreRestock --> StoreOperations
+  BucStoreRestock --> ChangeNextRestockDate
+  BucStoreRestock --> ChangeStoreParentOrganization
+  BucStoreRestock --> BlockScheduledRestock
+  Store --- Organization
+  StoreMaintenanceScreen -.->|shows| Store
+  StoreMaintenanceScreen -.->|shows| Store
+  StoreMaintenanceScreen -.->|shows| Store
+  StoreMaintenanceScreen -.->|shows| Organization
+  ChangeNextRestockDate -.->|updates| Store
+  ChangeNextRestockDate -.->|raises| RestockScheduled
+  ChangeNextRestockDate -.->|displays| StoreMaintenanceScreen
+  ChangeStoreParentOrganization -.->|displays| StoreMaintenanceScreen
+  BlockScheduledRestock -.->|updates| Store
+  BlockScheduledRestock -.->|raises| RestockBlocked
+  BlockScheduledRestock -.->|displays| StoreMaintenanceScreen
+```
 
-## 7. レビュー観点
+### 4.2 Sequence 図
 
-- 到達しない組み合わせが業務上も不要か。
-- `blocked` に入った後の再開操作を後続要求として扱うか。
-- Step 6 で business rule として固定すべき組み合わせが見えているか。
+```mermaid
+sequenceDiagram
+  actor OpsStaff as Operations Staff
+  participant System as システム
+  participant OrganizationLookupApi as Organization Lookup API
+  participant StoreAdminApi as Store Admin API
+  participant Organization as Organization
+  participant Store as Store
+  participant StoreMaintenanceScreen as Store Maintenance
+
+  Note over OpsStaff,StoreMaintenanceScreen: Block Scheduled Restock
+  OpsStaff->System: Block Scheduled Restock
+  activate System
+  System->>Store: update
+  System-->>OpsStaff: Store Maintenance
+  deactivate System
+
+  Note over OpsStaff,StoreMaintenanceScreen: Change Next Restock Date
+  OpsStaff->System: Change Next Restock Date
+  activate System
+  System->>Store: update
+  System-->>OpsStaff: Store Maintenance
+  deactivate System
+
+  Note over OpsStaff,StoreMaintenanceScreen: Change Store Parent Organization
+  OpsStaff->>StoreMaintenanceScreen: Change Store Parent Organization
+  StoreMaintenanceScreen->>StoreAdminApi: Change Store Parent Organization
+  activate StoreAdminApi
+  OrganizationLookupApi->>Organization: read
+  StoreAdminApi->>Store: update
+  StoreAdminApi-->>StoreMaintenanceScreen: Store Maintenance
+  StoreMaintenanceScreen-->>OpsStaff: Store Maintenance
+  deactivate StoreAdminApi
+```
+
+### 4.3 ER 図
+
+```mermaid
+erDiagram
+  Organization {
+    Int id PK
+    String code
+    String name
+  }
+  Store {
+    Int id PK
+    String code
+    String name
+    Enum restock_status
+    DateTime next_restock_date
+    Int organization_id FK
+  }
+  Store }o--|| Organization : ""
+```
+
+### 4.4 State 図
+
+```mermaid
+stateDiagram-v2
+  [*] --> Normal
+  Normal --> Scheduled : Restock Scheduled
+  Scheduled --> Blocked : Restock Blocked
+```
+
+### 4.5 Usecase CRUD matrix
+
+```csv
+UseCase,Organization,Store
+BlockScheduledRestock,,U
+ChangeNextRestockDate,,U
+ChangeStoreParentOrganization,,
+```
+
+### 4.6 API CRUD matrix
+
+```csv
+Api,Organization,Store
+OrganizationLookupApi,R,
+StoreAdminApi,,U
+```
+
+### 4.7 Store 状態到達表
+
+```text
+Entity: Store (Store)
+  axes: restock_status[normal|scheduled|blocked], next_restock_date[null|present:timestamptz]
+
+  RESTOCK_STATUS  NEXT_RESTOCK_DATE    INITIAL  TERMINAL  VIA
+  ──────────────  ───────────────────  ───────  ────────  ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  normal          null                 yes      no        BucStoreRestock/ChangeStoreParentOrganization
+  scheduled       present:timestamptz  no       no        BucStoreRestock/ChangeNextRestockDate, BucStoreRestock/ChangeStoreParentOrganization
+  blocked         null                 no       yes       BucStoreRestock/BlockScheduledRestock, BucStoreRestock/ChangeNextRestockDate, BucStoreRestock/ChangeStoreParentOrganization
+
+  reachable: 3 / bound: 6
+  diagnostics:
+    [info] no creates(...) found; seeded from column defaults
+```
+
+## 5. レビュー観点
+
+- normal -> scheduled -> blocked 以外の遷移が必要か。
+- blocked から normal へ戻す UC を今入れるべきか。
+- next_restock_date の present/null が業務状態を十分に説明しているか。
+
+## 6. 承認条件
+
+| 観点 | 承認条件 |
+|---|---|
+| 要求 | requirements-analysis.md の Must 要求を説明できる |
+| 設計 | この step で追加した DSL 要素の責務を説明できる |
+| 生成物 | 埋め込み成果物が現在の DSL から生成されている |
+| 次 step | 次に具体化する情報と、まだ具体化しない情報を区別できる |
 
 ## Summary
 
-<!-- derived-from #2-状態軸設計 -->
-<!-- derived-from #3-イベント遷移設計 -->
-<!-- derived-from #6-生成検証 -->
+<!-- derived-from #2-モデル構成 -->
+<!-- derived-from #3-設計判断 -->
+<!-- derived-from #4-生成成果物 -->
 
-Step 5 の設計は、状態到達表を使って補充状態と予定日の関係を検証する。
+Step 5 の設計は、状態、イベント、sets を追加するための最小 DSL と生成成果物を提示する。

@@ -1,6 +1,7 @@
 sequenceDiagram
   actor Nurse as Nurse
   participant OpenEncounterApi as Open Encounter API
+  participant Appointment as Appointment
   participant Encounter as Encounter
   participant EncounterWorkspaceScreen as Encounter Workspace
 
@@ -8,8 +9,8 @@ sequenceDiagram
   Nurse->>EncounterWorkspaceScreen: Open Encounter
   EncounterWorkspaceScreen->>OpenEncounterApi: Open Encounter
   activate OpenEncounterApi
+  OpenEncounterApi->>Appointment: read
   OpenEncounterApi->>Encounter: create
   OpenEncounterApi-->>EncounterWorkspaceScreen: Encounter Workspace
   EncounterWorkspaceScreen-->>Nurse: Encounter Workspace
   deactivate OpenEncounterApi
-

@@ -9,6 +9,8 @@ sequenceDiagram
   participant AccountBalance as Account Balance
   participant Charge as Charge
   participant Claim as Claim
+  participant Encounter as Encounter
+  participant InsurancePolicy as Insurance Policy
   participant PaymentTransaction as Payment Transaction
   participant BalanceScreen as Balance Screen
   participant ChargeWorklistScreen as Charge Worklist Screen
@@ -19,6 +21,7 @@ sequenceDiagram
   BillingSpecialist->>ChargeWorklistScreen: Create Charge
   ChargeWorklistScreen->>CreateChargeApi: Create Charge
   activate CreateChargeApi
+  CreateChargeApi->>Encounter: read
   rect rgb(245,245,245)
     Note right of CreateChargeApi: transaction (API atomic boundary)
     CreateChargeApi->>AccountBalance: update
@@ -32,6 +35,7 @@ sequenceDiagram
   BillingSpecialist->>ClaimScreen: Generate Claim
   ClaimScreen->>GenerateClaimApi: Generate Claim
   activate GenerateClaimApi
+  GenerateClaimApi->>InsurancePolicy: read
   rect rgb(245,245,245)
     Note right of GenerateClaimApi: transaction (API atomic boundary)
     GenerateClaimApi->>Claim: create
@@ -65,6 +69,7 @@ sequenceDiagram
   BillingSpecialist->>BalanceScreen: Reconcile Balance
   BalanceScreen->>BalanceApi: Reconcile Balance
   activate BalanceApi
+  BalanceApi->>PaymentTransaction: read
   BalanceApi->>AccountBalance: update
   BalanceApi-->>BalanceScreen: Balance Screen
   BalanceScreen-->>BillingSpecialist: Balance Screen
@@ -92,4 +97,3 @@ sequenceDiagram
   System->>Charge: update
   System-->>BillingSpecialist: Charge Worklist Screen
   deactivate System
-

@@ -1,6 +1,7 @@
 sequenceDiagram
   actor Clinician as Clinician
   participant DraftPrescriptionApi as Draft Prescription API
+  participant Encounter as Encounter
   participant Prescription as Prescription
   participant PrescriptionScreen as Prescription Screen
 
@@ -8,8 +9,8 @@ sequenceDiagram
   Clinician->>PrescriptionScreen: Draft Prescription
   PrescriptionScreen->>DraftPrescriptionApi: Draft Prescription
   activate DraftPrescriptionApi
+  DraftPrescriptionApi->>Encounter: read
   DraftPrescriptionApi->>Prescription: create
   DraftPrescriptionApi-->>PrescriptionScreen: Prescription Screen
   PrescriptionScreen-->>Clinician: Prescription Screen
   deactivate DraftPrescriptionApi
-

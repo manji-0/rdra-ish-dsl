@@ -1,51 +1,67 @@
-# 店舗補充管理 設計 Step 0
+# 店舗補充管理 設計 Step 0: Scope Sketch
 
 <!-- constrained-by ../../../docs/incremental-modeling.md#stage-0-scope-sketch -->
 <!-- derived-from ./requirements-analysis.md -->
 
+この文書は Step 0 時点の RDRA DSL 設計サンプルです。clinic-ops の設計書と同じく、レビューに必要な生成物は本文へ埋め込みます。
+
 ## 1. 設計目的
 
-要求分析 Step 0 で合意した業務領域を RDRA DSL に落とし込み、以降の分析で参照できる最小モデルを作る。レビュー対象は BUC 名と上位業務の関係だけであり、詳細化を急がない。
+業務領域と BUC 名だけを固定する。
 
 ## 2. モデル構成
 
-| ファイル | 役割 |
-|---|---|
-| `src/shared/biz.rdra` | 業務領域 `StoreOperations` を定義する |
-| `src/buc/buc_store_restock.rdra` | BUC `BucStoreRestock` を定義し、業務領域へ関連づける |
+| 分類 | 対象 | 役割 |
+|---|---|---|
+| 業務領域 | `StoreOperations` | 店舗運営業務 |
+| BUC | `BucStoreRestock` | 店舗補充情報を維持する業務単位 |
+| 対象外 | `-` | 発注実行、在庫引当、配送計画、外部倉庫連携 |
 
 ## 3. 設計判断
 
 | 判断 | 理由 |
 |---|---|
-| `business` と `buc` のみ定義する | actor/usecase/entity を先に置くと、業務境界が固まる前に詳細化してしまうため |
-| BUC ファイルを `buc_store_restock.rdra` とする | 後続ステップでも同じ BUC を継続的に具体化するため |
-| `shared/biz.rdra` に業務領域を置く | 複数 BUC から参照される可能性がある安定語彙だから |
+| business と buc のみ定義する | actor/usecase/entity を先に置くと、業務境界が固まる前に詳細化してしまうため |
+| shared/biz.rdra に業務領域を置く | 複数 BUC から参照される可能性がある安定語彙だから |
 
-## 4. 生成・検証
+## 4. 生成成果物
+
+生成コマンド例:
 
 ```sh
 rdra-ish check samples/incremental-order/step-0-scope/src
-rdra-ish list samples/incremental-order/step-0-scope/src --kind buc --format table
-rdra-ish diagram samples/incremental-order/step-0-scope/src --kind rdra --format mermaid --buc BucStoreRestock
+rdra-ish diagram samples/incremental-order/step-0-scope/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-0-scope/out/rdra_buc_store_restock
+rdra-ish diagram samples/incremental-order/step-0-scope/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-0-scope/out/sequence_buc_store_restock
+rdra-ish csv samples/incremental-order/step-0-scope/src --kind matrix --out samples/incremental-order/step-0-scope/out/usecase_matrix.csv
 ```
 
-期待結果:
+### 4.1 RDRA 図
 
-- `check` に error がない。
-- `BucStoreRestock` が `StoreOperations` に属している。
-- actor、usecase、entity がまだ出てこない。
+```mermaid
+graph TD
+  BucStoreRestock["📦 Maintain Store Restock"]
+  BucStoreRestock --> StoreOperations
+```
 
 ## 5. レビュー観点
 
-- `StoreOperations` が他の業務領域と衝突しない名前か。
-- `BucStoreRestock` の粒度が後続の usecase を束ねる単位として自然か。
+- StoreOperations が他の業務領域と衝突しない名前か。
+- BucStoreRestock の粒度が後続の usecase を束ねる単位として自然か。
 - 現段階で追加すべき共有語彙が本当に存在しないか。
+
+## 6. 承認条件
+
+| 観点 | 承認条件 |
+|---|---|
+| 要求 | requirements-analysis.md の Must 要求を説明できる |
+| 設計 | この step で追加した DSL 要素の責務を説明できる |
+| 生成物 | 埋め込み成果物が現在の DSL から生成されている |
+| 次 step | 次に具体化する情報と、まだ具体化しない情報を区別できる |
 
 ## Summary
 
 <!-- derived-from #2-モデル構成 -->
 <!-- derived-from #3-設計判断 -->
-<!-- derived-from #4-生成検証 -->
+<!-- derived-from #4-生成成果物 -->
 
-この設計は、最小の RDRA モデルで業務境界だけを固定する。
+Step 0 の設計は、業務領域と BUC 名だけを固定するための最小 DSL と生成成果物を提示する。

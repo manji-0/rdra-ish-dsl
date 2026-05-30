@@ -2,14 +2,15 @@ sequenceDiagram
   actor CareCoordinator as Care Coordinator
   participant CreateCarePlanApi as Create Care Plan API
   participant CarePlan as Care Plan
+  participant Encounter as Encounter
   participant CarePlanScreen as Care Plan Screen
 
   Note over CareCoordinator,CarePlanScreen: Create Care Plan
   CareCoordinator->>CarePlanScreen: Create Care Plan
   CarePlanScreen->>CreateCarePlanApi: Create Care Plan
   activate CreateCarePlanApi
+  CreateCarePlanApi->>Encounter: read
   CreateCarePlanApi->>CarePlan: create
   CreateCarePlanApi-->>CarePlanScreen: Care Plan Screen
   CarePlanScreen-->>CareCoordinator: Care Plan Screen
   deactivate CreateCarePlanApi
-

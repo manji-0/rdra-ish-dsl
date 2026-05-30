@@ -1,58 +1,74 @@
-# 店舗補充管理 設計 Step 1
+# 店舗補充管理 設計 Step 1: BUC Skeleton
 
 <!-- constrained-by ../../../docs/incremental-modeling.md#stage-1-buc-skeleton -->
 <!-- derived-from ./requirements-analysis.md -->
 
+この文書は Step 1 時点の RDRA DSL 設計サンプルです。clinic-ops の設計書と同じく、レビューに必要な生成物は本文へ埋め込みます。
+
 ## 1. 設計目的
 
-Step 0 の BUC に対して actor と usecase を追加し、業務操作の骨格をレビュー可能にする。まだ entity や screen を追加しないことで、業務操作の妥当性に集中する。
+actor と user-visible usecase を追加する。
 
 ## 2. モデル構成
 
-| 要素 | ID | 配置 |
+| 分類 | 対象 | 役割 |
 |---|---|---|
-| Actor | `OpsStaff` | `src/shared/actors.rdra` |
-| BUC | `BucStoreRestock` | `src/buc/buc_store_restock.rdra` |
-| UseCase | `ChangeNextRestockDate` | `src/buc/buc_store_restock.rdra` |
-| UseCase | `ChangeStoreParentOrganization` | `src/buc/buc_store_restock.rdra` |
+| Actor | `OpsStaff` | 店舗補充予定と担当組織を維持する |
+| UseCase | `ChangeNextRestockDate` | 店舗の次回補充予定日を変更する |
+| UseCase | `ChangeStoreParentOrganization` | 店舗の担当組織を変更する |
 
-## 3. 関係設計
+## 3. 設計判断
 
-| 関係 | 意味 |
+| 判断 | 理由 |
 |---|---|
-| `performs(OpsStaff, BucStoreRestock)` | 店舗運営担当者が BUC を実行する |
-| `contains(BucStoreRestock, ChangeNextRestockDate)` | 補充予定日変更を BUC に含める |
-| `contains(BucStoreRestock, ChangeStoreParentOrganization)` | 担当組織変更を BUC に含める |
+| performs(OpsStaff, BucStoreRestock) | 担当者が BUC 全体を担うことを示す |
+| contains(...) | BUC 内の業務操作を usecase として束ねる |
+| entity をまだ置かない | データ接点の議論を次 step に分離する |
 
-## 4. 設計判断
+## 4. 生成成果物
 
-- actor は個別ロールに分けず、まず `OpsStaff` に集約する。
-- usecase は 2 つに分ける。補充予定日の変更は店舗単体の更新、担当組織変更は参照整合性を伴う可能性があり、後続の設計判断が異なるため。
-- `screen` は未定義にする。画面名を先に決めると、業務操作ではなく UI 案に引っ張られるため。
-
-## 5. 生成・検証
+生成コマンド例:
 
 ```sh
 rdra-ish check samples/incremental-order/step-1-buc-skeleton/src
-rdra-ish diagram samples/incremental-order/step-1-buc-skeleton/src --kind rdra --format mermaid --buc BucStoreRestock
+rdra-ish diagram samples/incremental-order/step-1-buc-skeleton/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-1-buc-skeleton/out/rdra_buc_store_restock
+rdra-ish diagram samples/incremental-order/step-1-buc-skeleton/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-1-buc-skeleton/out/sequence_buc_store_restock
+rdra-ish csv samples/incremental-order/step-1-buc-skeleton/src --kind matrix --out samples/incremental-order/step-1-buc-skeleton/out/usecase_matrix.csv
 ```
 
-期待結果:
+### 4.1 RDRA 図
 
-- BUC に 2 つの usecase が含まれる。
-- actor から BUC への関係が確認できる。
-- CRUD matrix はまだ作らない。
+```mermaid
+graph TD
+  OpsStaff(["👤 Operations Staff"])
+  ChangeNextRestockDate(["Change Next Restock Date"])
+  ChangeStoreParentOrganization(["Change Store Parent Organization"])
+  BucStoreRestock["📦 Maintain Store Restock"]
+  OpsStaff --> BucStoreRestock
+  BucStoreRestock --> StoreOperations
+  BucStoreRestock --> ChangeNextRestockDate
+  BucStoreRestock --> ChangeStoreParentOrganization
+```
 
-## 6. レビュー観点
+## 5. レビュー観点
 
-- `ChangeStoreParentOrganization` を補充管理 BUC に含める理由が業務上説明できるか。
-- 後続で分離すべき usecase がないか。
-- actor が増える可能性を設計上妨げていないか。
+- 2 つの usecase が業務担当者にとって別作業として認識されるか。
+- 補充停止や店舗閉鎖など、別 usecase 候補をこの段階で入れるべきか。
+- actor を店舗運営担当者だけにしてよいか。
+
+## 6. 承認条件
+
+| 観点 | 承認条件 |
+|---|---|
+| 要求 | requirements-analysis.md の Must 要求を説明できる |
+| 設計 | この step で追加した DSL 要素の責務を説明できる |
+| 生成物 | 埋め込み成果物が現在の DSL から生成されている |
+| 次 step | 次に具体化する情報と、まだ具体化しない情報を区別できる |
 
 ## Summary
 
 <!-- derived-from #2-モデル構成 -->
-<!-- derived-from #3-関係設計 -->
-<!-- derived-from #6-レビュー観点 -->
+<!-- derived-from #3-設計判断 -->
+<!-- derived-from #4-生成成果物 -->
 
-Step 1 の設計は、業務操作の輪郭だけを DSL に固定する。
+Step 1 の設計は、actor と user-visible usecase を追加するための最小 DSL と生成成果物を提示する。

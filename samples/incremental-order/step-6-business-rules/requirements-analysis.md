@@ -1,30 +1,32 @@
-# 店舗補充管理 要求分析 Step 6
+# 店舗補充管理 要求分析 Step 6: Business Rules
 
 <!-- constrained-by ../../../docs/incremental-modeling.md#stage-6-business-rules -->
 <!-- derived-from ../step-5-lifecycle/requirements-analysis.md -->
 
+この文書は Step 6 時点の要求分析サンプルです。抽象度を保ったまま、次に具体化する対象だけをレビューできる粒度にしています。
+
 ## 1. 業務背景
 
-状態到達パターンが確認できたため、到達してはいけない組み合わせと、必ず同時に成立すべき組み合わせを業務ルールとして固定する。ここでは、補充状態と次回補充予定日の整合性を対象にする。
+状態到達表が出せるようになったため、業務上許されない状態組み合わせを DSL に落とす。scheduled には予定日が必要で、blocked には予定日が残ってはいけない。
 
-## 2. 業務ルール
+## 2. この step の焦点
 
-| Rule | 内容 | 根拠 |
+| 観点 | 内容 |
+|---|---|
+| Step | `6` |
+| 焦点 | forbidden と invariant で状態制約を追加する |
+| モデルルート | `samples/incremental-order/step-6-business-rules/src` |
+
+## 3. 要求スコープ
+
+| 分類 | 対象 | 意味 |
 |---|---|---|
-| BR-001 | 補充予定済みの店舗には次回補充予定日が必要 | 担当者が予定日なしの scheduled 店舗を運用できないため |
-| BR-002 | 補充停止中の店舗に次回補充予定日を残してはいけない | 停止中に予定日が残ると発注・確認作業が誤誘導されるため |
+| Rule | `BR-001` | scheduled の店舗には next_restock_date が必要 |
+| Rule | `BR-002` | blocked の店舗に next_restock_date を残してはいけない |
+| DSL | `invariant` | scheduled -> present |
+| DSL | `forbidden` | blocked + present を禁止 |
 
-## 3. 期待する状態
-
-| restock_status | next_restock_date | 判定 |
-|---|---|---|
-| `normal` | `null` | OK |
-| `scheduled` | `present` | OK |
-| `blocked` | `null` | OK |
-| `scheduled` | `null` | NG |
-| `blocked` | `present` | NG |
-
-## 4. 要求
+## 4. 要求一覧
 
 | ID | 要求 | 優先度 |
 |---|---|---|
@@ -32,22 +34,19 @@
 | R-602 | blocked 状態で予定日が残るパターンを禁止できること | Must |
 | R-603 | 状態到達表をレビューしてルール違反の有無を判断できること | Should |
 
-## 5. 未決事項
+## 5. レビュー観点
 
-- `normal` かつ `present` を禁止すべきか。現モデルでは到達しないが、将来の操作追加時には確認が必要。
-- `blocked` から `scheduled` へ戻す再開操作を追加するか。
-- 予定日変更の承認ルールを状態制約として扱うか、別 entity として扱うか。
+- BR-001, BR-002 が DSL 上の制約として表現されているか。
+- 状態到達表で違反パターンが出ていないことを確認できるか。
+- normal + present を禁止しない判断が業務上許容できるか。
 
-## 6. レビュー観点
+## 6. 次 step への確認
 
-- `forbidden` と `invariant` の両方を使う理由が説明できるか。
-- Step 5 の `sets` が業務ルールを満たす到達パターンを作っているか。
-- ルール違反が出た場合、制約が強すぎるのか、イベント効果が不足しているのかを切り分けられるか。
+この step で、要求、設計、状態検証、業務ルールを一通りレビューできる。
 
 ## Summary
 
-<!-- derived-from #2-業務ルール -->
-<!-- derived-from #3-期待する状態 -->
-<!-- derived-from #6-レビュー観点 -->
+<!-- derived-from #3-要求スコープ -->
+<!-- derived-from #4-要求一覧 -->
 
-Step 6 では、補充状態と予定日の整合性を business rule として固定し、状態到達表で検証する。
+Step 6 は、forbidden と invariant で状態制約を追加する段階として、後続の具体化で壊してはいけない要求境界を固定する。

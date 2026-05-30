@@ -1,0 +1,4 @@
+Entity: Store (Store)
+  (no state axes)
+  reachable: 1 / bound: 1
+

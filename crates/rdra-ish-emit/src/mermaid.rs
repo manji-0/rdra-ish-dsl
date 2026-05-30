@@ -432,6 +432,8 @@ impl Emitter for SequenceMermaidEmitter {
         let mut uc_to_screens: HashMap<UseCaseKey, Vec<ScreenKey>> = HashMap::new();
         let mut uc_to_apis: HashMap<UseCaseKey, Vec<ApiKey>> = HashMap::new();
         let mut direct_actor_of: HashMap<UseCaseKey, Vec<ActorKey>> = HashMap::new();
+        let mut uc_to_reads: HashMap<UseCaseKey, Vec<EntityKey>> = HashMap::new();
+        let mut api_to_reads: HashMap<ApiKey, Vec<EntityKey>> = HashMap::new();
 
         for rel in &model.relations {
             match &rel.kind {
@@ -459,6 +461,15 @@ impl Emitter for SequenceMermaidEmitter {
                         uc_to_apis.entry(*uk).or_default().push(*ak);
                     }
                 }
+                RelKind::Reads => match (&rel.from, &rel.to) {
+                    (NodeRef::UseCase(uk), NodeRef::Entity(ek)) => {
+                        uc_to_reads.entry(*uk).or_default().push(*ek);
+                    }
+                    (NodeRef::Api(ak), NodeRef::Entity(ek)) => {
+                        api_to_reads.entry(*ak).or_default().push(*ek);
+                    }
+                    _ => {}
+                },
                 _ => {}
             }
         }
@@ -466,18 +477,26 @@ impl Emitter for SequenceMermaidEmitter {
         let uc_txs = infer_usecase_transactions(model);
         let uc_tx_map: HashMap<UseCaseKey, &rdra_ish_core::UsecaseTx> =
             uc_txs.iter().map(|t| (t.usecase, t)).collect();
+        let has_reads = |uk: UseCaseKey| -> bool {
+            uc_to_reads.get(&uk).map(|r| !r.is_empty()).unwrap_or(false)
+                || uc_to_apis.get(&uk).is_some_and(|apis| {
+                    apis.iter()
+                        .any(|ak| api_to_reads.get(ak).map(|r| !r.is_empty()).unwrap_or(false))
+                })
+        };
 
         let mut uc_list: Vec<(UseCaseKey, &rdra_ish_core::model::UseCase)> = model
             .use_cases
             .iter()
             .filter(|(k, _)| {
-                is_visible_usecase(*k) && uc_tx_map.get(k).map(|t| t.has_writes()).unwrap_or(false)
+                is_visible_usecase(*k)
+                    && (uc_tx_map.get(k).map(|t| t.has_writes()).unwrap_or(false) || has_reads(*k))
             })
             .collect();
         uc_list.sort_by_key(|(_, u)| u.id.as_str());
 
         if uc_list.is_empty() {
-            return Ok("sequenceDiagram\n%% no write-heavy usecases found\n".to_string());
+            return Ok("sequenceDiagram\n%% no sequenceable usecases found\n".to_string());
         }
 
         let mut actor_keys: HashSet<ActorKey> = HashSet::new();
@@ -512,12 +531,18 @@ impl Emitter for SequenceMermaidEmitter {
                     entity_keys.insert(w.entity);
                 }
             }
+            for &ek in uc_to_reads.get(uk).into_iter().flatten() {
+                entity_keys.insert(ek);
+            }
             for &sk in uc_to_screens.get(uk).into_iter().flatten() {
                 screen_keys.insert(sk);
             }
             if let Some(apis) = uc_to_apis.get(uk) {
                 for &ak in apis {
                     api_keys.insert(ak);
+                    for &ek in api_to_reads.get(&ak).into_iter().flatten() {
+                        entity_keys.insert(ek);
+                    }
                 }
             } else {
                 has_legacy_uc = true;
@@ -640,6 +665,26 @@ impl Emitter for SequenceMermaidEmitter {
                 }
                 out.push_str(&format!("  activate {}\n", first_api_id));
 
+                if let Some(apis) = invoked_apis {
+                    for &ak in apis {
+                        let src = model
+                            .apis
+                            .get(ak)
+                            .map(|a| a.id.as_str())
+                            .unwrap_or(first_api_id);
+                        for &ek in api_to_reads.get(&ak).into_iter().flatten() {
+                            if let Some(ent) = model.entities.get(ek) {
+                                out.push_str(&format!("  {}->>{}: read\n", src, ent.id));
+                            }
+                        }
+                    }
+                }
+                for &ek in uc_to_reads.get(uk).into_iter().flatten() {
+                    if let Some(ent) = model.entities.get(ek) {
+                        out.push_str(&format!("  {}->>{}: read\n", first_api_id, ent.id));
+                    }
+                }
+
                 if let Some(tx) = uc_tx_map.get(uk) {
                     let singletons_set: HashSet<EntityKey> =
                         tx.singletons_note.iter().cloned().collect();
@@ -712,6 +757,12 @@ impl Emitter for SequenceMermaidEmitter {
                 // ── レガシーパス（System ライン）─────────────────────────────
                 out.push_str(&format!("  {}->System: {}\n", actor_ref, uc.label));
                 out.push_str("  activate System\n");
+
+                for &ek in uc_to_reads.get(uk).into_iter().flatten() {
+                    if let Some(ent) = model.entities.get(ek) {
+                        out.push_str(&format!("  System->>{}: read\n", ent.id));
+                    }
+                }
 
                 if let Some(tx) = uc_tx_map.get(uk) {
                     let singletons_set: HashSet<EntityKey> =
@@ -1042,5 +1093,31 @@ creates(ApiB, EntityB)
         assert!(result.contains("actor Clerk"));
         assert!(result.contains("ユースケースB"));
         assert!(result.contains("ApiB"));
+    }
+
+    #[test]
+    fn test_sequence_mermaid_read_only_usecase() {
+        let src = r#"
+actor Customer "顧客"
+buc BucA "BUC-A"
+usecase Search "検索"
+api SearchApi "検索API"
+entity Item "品目" { id: Int @pk }
+screen SearchScreen "検索画面"
+performs(Customer, Search)
+contains(BucA, Search)
+displays(Search, SearchScreen)
+invokes(Search, SearchApi)
+reads(SearchApi, Item)
+"#;
+        let model = model_from(src);
+        let result = SequenceMermaidEmitter
+            .emit(&model, &View::usecases(vec!["Search".to_string()]))
+            .unwrap();
+        assert!(result.contains("actor Customer"));
+        assert!(result.contains("participant SearchApi"));
+        assert!(result.contains("participant Item"));
+        assert!(result.contains("SearchApi->>Item: read"));
+        assert!(!result.contains("no sequenceable usecases"));
     }
 }

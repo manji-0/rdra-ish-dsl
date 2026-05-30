@@ -3,12 +3,14 @@ sequenceDiagram
   participant CreateChargeApi as Create Charge API
   participant AccountBalance as Account Balance
   participant Charge as Charge
+  participant Encounter as Encounter
   participant ChargeWorklistScreen as Charge Worklist Screen
 
   Note over BillingSpecialist,ChargeWorklistScreen: Create Charge
   BillingSpecialist->>ChargeWorklistScreen: Create Charge
   ChargeWorklistScreen->>CreateChargeApi: Create Charge
   activate CreateChargeApi
+  CreateChargeApi->>Encounter: read
   rect rgb(245,245,245)
     Note right of CreateChargeApi: transaction (API atomic boundary)
     CreateChargeApi->>AccountBalance: update
@@ -17,4 +19,3 @@ sequenceDiagram
   CreateChargeApi-->>ChargeWorklistScreen: Charge Worklist Screen
   ChargeWorklistScreen-->>BillingSpecialist: Charge Worklist Screen
   deactivate CreateChargeApi
-

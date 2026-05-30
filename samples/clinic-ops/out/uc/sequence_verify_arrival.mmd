@@ -1,2 +1,18 @@
 sequenceDiagram
-%% no write-heavy usecases found
+  actor FrontDesk as Front Desk Staff
+  participant VerifyArrivalApi as Verify Arrival API
+  participant Appointment as Appointment
+  participant InsurancePolicy as Insurance Policy
+  participant PatientAccount as Patient Account
+  participant CheckInScreen as Check-In Screen
+
+  Note over FrontDesk,CheckInScreen: Verify Patient Arrival
+  FrontDesk->>CheckInScreen: Verify Patient Arrival
+  CheckInScreen->>VerifyArrivalApi: Verify Patient Arrival
+  activate VerifyArrivalApi
+  VerifyArrivalApi->>Appointment: read
+  VerifyArrivalApi->>PatientAccount: read
+  VerifyArrivalApi->>InsurancePolicy: read
+  VerifyArrivalApi-->>CheckInScreen: Check-In Screen
+  CheckInScreen-->>FrontDesk: Check-In Screen
+  deactivate VerifyArrivalApi

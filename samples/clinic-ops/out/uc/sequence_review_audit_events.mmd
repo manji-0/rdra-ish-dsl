@@ -1,2 +1,16 @@
 sequenceDiagram
-%% no write-heavy usecases found
+  actor ClinicAdmin as Clinic Administrator
+  participant AuditApi as Audit API
+  participant AuditEvent as Audit Event
+  participant PatientAccount as Patient Account
+  participant AuditReviewScreen as Audit Review Screen
+
+  Note over ClinicAdmin,AuditReviewScreen: Review Audit Events
+  ClinicAdmin->>AuditReviewScreen: Review Audit Events
+  AuditReviewScreen->>AuditApi: Review Audit Events
+  activate AuditApi
+  AuditApi->>AuditEvent: read
+  AuditApi->>PatientAccount: read
+  AuditApi-->>AuditReviewScreen: Audit Review Screen
+  AuditReviewScreen-->>ClinicAdmin: Audit Review Screen
+  deactivate AuditApi

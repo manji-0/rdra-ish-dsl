@@ -1,35 +1,32 @@
-# 店舗補充管理 要求分析 Step 4
+# 店舗補充管理 要求分析 Step 4: Entity Structure
 
 <!-- constrained-by ../../../docs/incremental-modeling.md#stage-4-entity-structure -->
 <!-- derived-from ../step-3-interaction-boundary/requirements-analysis.md -->
 
+この文書は Step 4 時点の要求分析サンプルです。抽象度を保ったまま、次に具体化する対象だけをレビューできる粒度にしています。
+
 ## 1. 業務背景
 
-API/System 境界の仮説が置けたため、店舗と組織の関係をデータ構造として明示する。担当組織変更は店舗情報と組織マスタの関係を変更する業務であり、システム境界をまたぐ整合性確認が必要になる。
+画面/API 境界が見えたため、Store と Organization の業務識別子と関係を設計する。店舗は 1 つの担当組織に属するため、ER と system 境界越えの調整責務を明示する。
 
-## 2. エンティティ要求
+## 2. この step の焦点
 
-| Entity | 必須項目 | 説明 |
+| 観点 | 内容 |
+|---|---|
+| Step | `4` |
+| 焦点 | columns、ER、境界越え coordination を追加する |
+| モデルルート | `samples/incremental-order/step-4-entity-structure/src` |
+
+## 3. 要求スコープ
+
+| 分類 | 対象 | 意味 |
 |---|---|---|
-| `Store` | `id`, `code`, `name` | 補充対象の店舗 |
-| `Organization` | `id`, `code`, `name` | 店舗を管理する組織 |
+| Entity | `Store` | id, code, name, organization_id |
+| Entity | `Organization` | id, code, name |
+| Relation | `Store -> Organization` | 店舗は 1 つの担当組織に属する |
+| Coordination | `ChangeStoreParentOrganization` | 境界越え関係の整合性を調整する |
 
-## 3. 関係要求
-
-| 関係 | 意味 | 業務上の制約 |
-|---|---|---|
-| `Store -> Organization` | 店舗は 1 つの担当組織に属する | 変更時は新しい組織が有効であることを確認する |
-
-## 4. System 境界要求
-
-| 境界 | 対象 entity | 根拠 |
-|---|---|---|
-| `StoreAdminSystem` | `Store` | `StoreAdminApi` が更新する |
-| `OrganizationSystem` | `Organization` | `OrganizationLookupApi` が参照する |
-
-`Store` と `Organization` の関連は System 境界をまたぐため、担当組織変更 usecase が coordination 責務を持つ。
-
-## 5. 要求
+## 4. 要求一覧
 
 | ID | 要求 | 優先度 |
 |---|---|---|
@@ -37,16 +34,19 @@ API/System 境界の仮説が置けたため、店舗と組織の関係をデー
 | R-402 | 店舗が担当組織に属する関係を ER としてレビューできること | Must |
 | R-403 | 境界をまたぐ関係に対して、調整する usecase を明示できること | Must |
 
-## 6. レビュー観点
+## 5. レビュー観点
 
-- `Store` と `Organization` の関係が `"N:1"` で正しいか。
-- 担当組織変更の coordination は `ChangeStoreParentOrganization` で足りるか。
-- 変更履歴 entity を Step 4 で追加すべきか、後続要求に回すべきか。
+- Store と Organization の関係が N:1 でよいか。
+- coordinates の責務を ChangeStoreParentOrganization に置くことが自然か。
+- 店舗コードと組織コードだけでレビューに十分か。
+
+## 6. 次 step への確認
+
+次 step では、ここで合意した語彙を保持したまま `状態、イベント、sets を追加する`。
 
 ## Summary
 
-<!-- derived-from #2-エンティティ要求 -->
-<!-- derived-from #3-関係要求 -->
-<!-- derived-from #4-system-境界要求 -->
+<!-- derived-from #3-要求スコープ -->
+<!-- derived-from #4-要求一覧 -->
 
-Step 4 では、店舗と組織の構造、および境界越え関係の coordination 責務を明確にする。
+Step 4 は、columns、ER、境界越え coordination を追加する段階として、後続の具体化で壊してはいけない要求境界を固定する。

@@ -55,6 +55,7 @@ sequenceDiagram
   Nurse->>EncounterWorkspaceScreen: Open Encounter
   EncounterWorkspaceScreen->>OpenEncounterApi: Open Encounter
   activate OpenEncounterApi
+  OpenEncounterApi->>Appointment: read
   OpenEncounterApi->>Encounter: create
   OpenEncounterApi-->>EncounterWorkspaceScreen: Encounter Workspace
   EncounterWorkspaceScreen-->>Nurse: Encounter Workspace
@@ -81,4 +82,3 @@ sequenceDiagram
   SignEncounterApi-->>EncounterWorkspaceScreen: Encounter Workspace
   EncounterWorkspaceScreen-->>Clinician: Encounter Workspace
   deactivate SignEncounterApi
-
