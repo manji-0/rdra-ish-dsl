@@ -34,7 +34,7 @@ pub enum RdraError {
     #[error("circular import detected among files: {}", files.join(", "))]
     CircularImport { files: Vec<String> },
 
-    #[error("usecase '{usecase}' writes '{entity}' with no FK link to its other writes\n  hint: this is inferred as a separate transaction; if it must be atomic with the others, add `@atomic` to the usecase (phase 2)")]
+    #[error("usecase '{usecase}' writes '{entity}' with no FK link to its other writes\n  hint: this is inferred as a separate transaction; if it must be atomic with the others, model the operation through an API boundary")]
     SeparateTxInferred { usecase: String, entity: String },
 
     // ── sets(...) カラム効果述語の診断 ──────────────────────────────────────

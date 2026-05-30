@@ -106,7 +106,7 @@ PLANTUML_JAR=/path/to/plantuml.jar rdra-ish diagram src/ --kind rdra --format sv
 - **With `invokes`**: renders `Actor → Screen → API → Entity` lanes; the API is the source of writes
 - **Without `invokes`** (legacy): renders the `System` participant lane unchanged
 - Shaded `rect` = inferred transaction (FK-connected entities)
-- `Note right of ...: FK非連結` = entities written outside a common FK chain — consider `@atomic` annotation
+- `Note right of ...: FK非連結` = entities written outside a common FK chain — consider modeling them through an API boundary
 
 **RDRA overview (`--kind rdra`)**
 - `api` nodes are intentionally omitted; only use-case-level relationships appear

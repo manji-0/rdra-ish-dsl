@@ -41,7 +41,7 @@ pub struct UcWrite {
 pub struct TxGroup {
     /// FK親→子順にソートされた書き込み列。
     pub ordered_writes: Vec<UcWrite>,
-    /// true = FK由来の推論、false = 明示 @atomic（フェーズ2）。
+    /// true = FK由来の推論、false = API境界で明示された原子性。
     pub inferred: bool,
 }
 
@@ -70,52 +70,20 @@ impl UsecaseTx {
 /// モデル内の全ユースケースについてTX境界を推論する。
 ///
 /// アルゴリズム（ユースケースごと）:
-/// 1. creates/updates/deletes 述語から書き込みエンティティ集合 W を収集。
-///    共有 API の書き込みは、UC 側に同じ CRUD がある場合だけ取り込む。
-/// 2. W に誘導されたFKサブグラフ（N:1 / 1:N / 1:1 エッジ、両端が W に含まれるもの）を構築。
-/// 3. 無向グラフ上でBFSにより連結成分を計算。
-/// 4. 各成分をカーン法でトポロジカルソート（FK親 → 子の順）。
-/// 5. サイズ1の成分かつFK多成分グループが存在する場合 → singletons_note に記録。
+/// 1. invokes(uc, api) で呼ばれる API ごとに creates/updates/deletes を収集する。
+///    API の書き込み集合は FK 接続の有無に関係なく 1 つの原子境界として扱う。
+/// 2. 直接 usecase に付いた creates/updates/deletes はレガシー形式として収集し、
+///    API 経由の同一 entity 書き込みがあれば API 側を優先する。
+/// 3. 直接書き込みは従来どおり FK 連結成分から transaction 境界を推論する。
 pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
     let mut result = Vec::new();
 
-    let mut api_invoker_counts: HashMap<ApiKey, usize> = HashMap::new();
-    for rel in &model.relations {
-        if rel.kind == RelKind::Invokes {
-            if let NodeRef::Api(ak) = rel.to {
-                *api_invoker_counts.entry(ak).or_default() += 1;
-            }
-        }
-    }
-
     for (uc_key, _uc) in model.use_cases.iter() {
-        // Step 1a: usecase が直接書き込む操作を収集
-        let mut writes: Vec<UcWrite> = Vec::new();
-        let mut direct_write_keys: HashSet<(EntityKey, WriteKind)> = HashSet::new();
-        for rel in &model.relations {
-            if rel.from != NodeRef::UseCase(uc_key) {
-                continue;
-            }
-            let wk = match rel.kind {
-                RelKind::Creates => WriteKind::Creates,
-                RelKind::Updates => WriteKind::Updates,
-                RelKind::Deletes => WriteKind::Deletes,
-                _ => continue,
-            };
-            if let NodeRef::Entity(ek) = rel.to {
-                direct_write_keys.insert((ek, wk.clone()));
-                writes.push(UcWrite {
-                    entity: ek,
-                    kind: wk,
-                    via_api: None,
-                });
-            }
-        }
+        let mut fk_groups: Vec<TxGroup> = Vec::new();
+        let mut isolated_writes: Vec<UcWrite> = Vec::new();
+        let mut api_written_entities: HashSet<EntityKey> = HashSet::new();
 
-        // Step 1b: invokes(uc, api) で繋がった api の書き込みも実効書き込みとして収集。
-        // ただし複数UCで共有されるAPIは、APIの全CRUDを各UCへ投影すると
-        // Search系UCにも更新が漏れる。共有APIではUC側CRUDを操作意図として使い、
-        // 同じ (entity, kind) のAPI書き込みだけをAPI由来に昇格させる。
+        // Step 1: invokes(uc, api) で繋がった API の書き込みを、API単位の原子境界として収集。
         let mut invoked_apis: Vec<ApiKey> = Vec::new();
         for rel in &model.relations {
             if rel.from == NodeRef::UseCase(uc_key) && rel.kind == RelKind::Invokes {
@@ -124,8 +92,17 @@ pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
                 }
             }
         }
+        invoked_apis.sort_by_key(|ak| {
+            model
+                .apis
+                .get(*ak)
+                .map(|a| a.id.clone())
+                .unwrap_or_default()
+        });
+        invoked_apis.dedup();
+
         for ak in &invoked_apis {
-            let api_is_shared = api_invoker_counts.get(ak).copied().unwrap_or(0) > 1;
+            let mut api_writes: Vec<UcWrite> = Vec::new();
             for rel in &model.relations {
                 if rel.from != NodeRef::Api(*ak) {
                     continue;
@@ -137,145 +114,63 @@ pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
                     _ => continue,
                 };
                 if let NodeRef::Entity(ek) = rel.to {
-                    if api_is_shared && !direct_write_keys.contains(&(ek, wk.clone())) {
-                        continue;
-                    }
-                    writes.push(UcWrite {
+                    api_written_entities.insert(ek);
+                    api_writes.push(UcWrite {
                         entity: ek,
                         kind: wk,
                         via_api: Some(*ak),
                     });
                 }
             }
+            dedup_writes(&mut api_writes, model);
+            if api_writes.len() >= 2 {
+                fk_groups.push(TxGroup {
+                    ordered_writes: topological_sort_writes(
+                        api_writes,
+                        &fk_parent_map(model),
+                        model,
+                    ),
+                    inferred: false,
+                });
+            } else {
+                isolated_writes.extend(api_writes);
+            }
         }
 
-        // 同一 (entity, kind) が直接書き込みと api 経由で重複する場合は api-origin を優先
-        writes.sort_by_key(|w| (w.entity, w.via_api.is_none()));
-        writes.dedup_by_key(|w| w.entity);
+        // Step 2: usecase が直接書き込む操作をレガシー形式として収集。
+        let mut direct_writes: Vec<UcWrite> = Vec::new();
+        for rel in &model.relations {
+            if rel.from != NodeRef::UseCase(uc_key) {
+                continue;
+            }
+            let wk = match rel.kind {
+                RelKind::Creates => WriteKind::Creates,
+                RelKind::Updates => WriteKind::Updates,
+                RelKind::Deletes => WriteKind::Deletes,
+                _ => continue,
+            };
+            if let NodeRef::Entity(ek) = rel.to {
+                if api_written_entities.contains(&ek) {
+                    continue;
+                }
+                direct_writes.push(UcWrite {
+                    entity: ek,
+                    kind: wk,
+                    via_api: None,
+                });
+            }
+        }
+        let direct_tx = infer_fk_transactions_for_writes(direct_writes, model);
+        fk_groups.extend(direct_tx.fk_groups);
+        isolated_writes.extend(direct_tx.isolated_writes);
 
-        if writes.is_empty() {
+        if fk_groups.is_empty() && isolated_writes.is_empty() {
             continue;
         }
 
-        let write_keys: HashSet<EntityKey> = writes.iter().map(|w| w.entity).collect();
-
-        // Step 2: 書き込みエンティティ間のFKエッジを構築
-        //   parents_of[child] = このユースケースの書き込み集合内でのFK親リスト
-        //   adj[k]           = 無向隣接リスト（連結成分検出用）
-        let mut parents_of: HashMap<EntityKey, Vec<EntityKey>> = HashMap::new();
-        let mut adj: HashMap<EntityKey, Vec<EntityKey>> = HashMap::new();
-        for &ek in &write_keys {
-            parents_of.entry(ek).or_default();
-            adj.entry(ek).or_default();
-        }
-
-        for rel in &model.relations {
-            // (parent, child) のペアに正規化:
-            //   N:1 → from=多(child), to=1(parent)   → parent=to, child=from
-            //   1:N → from=1(parent), to=多(child)   → parent=from, child=to
-            //   1:1 → from側がFKを持つ慣習            → parent=to, child=from
-            let maybe: Option<(EntityKey, EntityKey)> = match &rel.kind {
-                RelKind::RelateManyToOne => {
-                    if let (NodeRef::Entity(child_k), NodeRef::Entity(parent_k)) =
-                        (&rel.from, &rel.to)
-                    {
-                        Some((*parent_k, *child_k))
-                    } else {
-                        None
-                    }
-                }
-                RelKind::RelateOneToMany => {
-                    if let (NodeRef::Entity(parent_k), NodeRef::Entity(child_k)) =
-                        (&rel.from, &rel.to)
-                    {
-                        Some((*parent_k, *child_k))
-                    } else {
-                        None
-                    }
-                }
-                RelKind::RelateOneToOne => {
-                    if let (NodeRef::Entity(child_k), NodeRef::Entity(parent_k)) =
-                        (&rel.from, &rel.to)
-                    {
-                        Some((*parent_k, *child_k))
-                    } else {
-                        None
-                    }
-                }
-                _ => None,
-            };
-
-            if let Some((parent, child)) = maybe {
-                if write_keys.contains(&parent) && write_keys.contains(&child) {
-                    adj.entry(parent).or_default().push(child);
-                    adj.entry(child).or_default().push(parent);
-                    parents_of.entry(child).or_default().push(parent);
-                }
-            }
-        }
-
-        // Step 3: BFSで連結成分を検出
-        let mut component_of: HashMap<EntityKey, usize> = HashMap::new();
-        let mut next_cid = 0usize;
-
-        for &start in &write_keys {
-            if component_of.contains_key(&start) {
-                continue;
-            }
-            let cid = next_cid;
-            next_cid += 1;
-            let mut queue = VecDeque::new();
-            queue.push_back(start);
-            component_of.insert(start, cid);
-            while let Some(cur) = queue.pop_front() {
-                for &nb in adj.get(&cur).into_iter().flatten() {
-                    if let std::collections::hash_map::Entry::Vacant(e) = component_of.entry(nb) {
-                        e.insert(cid);
-                        queue.push_back(nb);
-                    }
-                }
-            }
-        }
-
-        // 連結成分ごとに書き込みをグループ化
-        let mut comp_writes: HashMap<usize, Vec<UcWrite>> = HashMap::new();
-        for w in &writes {
-            let cid = component_of[&w.entity];
-            comp_writes.entry(cid).or_default().push(w.clone());
-        }
-
-        // Step 4: 多エンティティ成分 → TxGroup（トポロジカルソート）、
-        //         1エンティティ成分 → isolated_writes
-        let mut fk_groups: Vec<TxGroup> = Vec::new();
-        let mut isolated_writes: Vec<UcWrite> = Vec::new();
-
-        let mut cids: Vec<usize> = comp_writes.keys().cloned().collect();
-        cids.sort(); // 決定的な順序
-
-        for cid in cids {
-            let comp = comp_writes.remove(&cid).unwrap();
-            if comp.len() >= 2 {
-                let ordered = topological_sort_writes(comp, &parents_of, model);
-                fk_groups.push(TxGroup {
-                    ordered_writes: ordered,
-                    inferred: true,
-                });
-            } else {
-                isolated_writes.extend(comp);
-            }
-        }
-
-        // entity id でソート（決定的出力のため）
-        isolated_writes.sort_by_key(|w| {
-            model
-                .entities
-                .get(w.entity)
-                .map(|e| e.id.clone())
-                .unwrap_or_default()
-        });
-
         // Step 5: FK多成分グループが存在するときに孤立する書き込み → singletons_note
-        let singletons_note: Vec<EntityKey> = if !fk_groups.is_empty() {
+        let has_inferred_fk_group = fk_groups.iter().any(|g| g.inferred);
+        let singletons_note: Vec<EntityKey> = if has_inferred_fk_group {
             isolated_writes.iter().map(|w| w.entity).collect()
         } else {
             Vec::new()
@@ -319,6 +214,152 @@ pub fn tx_diagnostics(model: &SemanticModel, txs: &[UsecaseTx]) -> Vec<Diagnosti
 }
 
 // ── 内部ヘルパー ──────────────────────────────────────────────────────────────
+
+struct TxParts {
+    fk_groups: Vec<TxGroup>,
+    isolated_writes: Vec<UcWrite>,
+}
+
+fn infer_fk_transactions_for_writes(writes: Vec<UcWrite>, model: &SemanticModel) -> TxParts {
+    let mut writes = writes;
+    dedup_writes(&mut writes, model);
+
+    let write_keys: HashSet<EntityKey> = writes.iter().map(|w| w.entity).collect();
+
+    let mut parents_of: HashMap<EntityKey, Vec<EntityKey>> = HashMap::new();
+    let mut adj: HashMap<EntityKey, Vec<EntityKey>> = HashMap::new();
+    for &ek in &write_keys {
+        parents_of.entry(ek).or_default();
+        adj.entry(ek).or_default();
+    }
+
+    for (parent, child) in fk_edges(model) {
+        if write_keys.contains(&parent) && write_keys.contains(&child) {
+            adj.entry(parent).or_default().push(child);
+            adj.entry(child).or_default().push(parent);
+            parents_of.entry(child).or_default().push(parent);
+        }
+    }
+
+    let mut component_of: HashMap<EntityKey, usize> = HashMap::new();
+    let mut next_cid = 0usize;
+
+    for &start in &write_keys {
+        if component_of.contains_key(&start) {
+            continue;
+        }
+        let cid = next_cid;
+        next_cid += 1;
+        let mut queue = VecDeque::new();
+        queue.push_back(start);
+        component_of.insert(start, cid);
+        while let Some(cur) = queue.pop_front() {
+            for &nb in adj.get(&cur).into_iter().flatten() {
+                if let std::collections::hash_map::Entry::Vacant(e) = component_of.entry(nb) {
+                    e.insert(cid);
+                    queue.push_back(nb);
+                }
+            }
+        }
+    }
+
+    let mut comp_writes: HashMap<usize, Vec<UcWrite>> = HashMap::new();
+    for w in &writes {
+        let cid = component_of[&w.entity];
+        comp_writes.entry(cid).or_default().push(w.clone());
+    }
+
+    let mut fk_groups: Vec<TxGroup> = Vec::new();
+    let mut isolated_writes: Vec<UcWrite> = Vec::new();
+    let mut cids: Vec<usize> = comp_writes.keys().cloned().collect();
+    cids.sort();
+
+    for cid in cids {
+        let comp = comp_writes.remove(&cid).unwrap();
+        if comp.len() >= 2 {
+            let ordered = topological_sort_writes(comp, &parents_of, model);
+            fk_groups.push(TxGroup {
+                ordered_writes: ordered,
+                inferred: true,
+            });
+        } else {
+            isolated_writes.extend(comp);
+        }
+    }
+
+    isolated_writes.sort_by_key(|w| {
+        model
+            .entities
+            .get(w.entity)
+            .map(|e| e.id.clone())
+            .unwrap_or_default()
+    });
+
+    TxParts {
+        fk_groups,
+        isolated_writes,
+    }
+}
+
+fn dedup_writes(writes: &mut Vec<UcWrite>, model: &SemanticModel) {
+    writes.sort_by_key(|w| {
+        (
+            model
+                .entities
+                .get(w.entity)
+                .map(|e| e.id.clone())
+                .unwrap_or_default(),
+            w.via_api.is_none(),
+        )
+    });
+    writes.dedup_by_key(|w| w.entity);
+}
+
+fn fk_parent_map(model: &SemanticModel) -> HashMap<EntityKey, Vec<EntityKey>> {
+    let mut parents_of: HashMap<EntityKey, Vec<EntityKey>> = HashMap::new();
+    for (parent, child) in fk_edges(model) {
+        parents_of.entry(child).or_default().push(parent);
+        parents_of.entry(parent).or_default();
+    }
+    parents_of
+}
+
+fn fk_edges(model: &SemanticModel) -> Vec<(EntityKey, EntityKey)> {
+    let mut edges = Vec::new();
+    for rel in &model.relations {
+        let maybe: Option<(EntityKey, EntityKey)> = match &rel.kind {
+            RelKind::RelateManyToOne => {
+                if let (NodeRef::Entity(child_k), NodeRef::Entity(parent_k)) = (&rel.from, &rel.to)
+                {
+                    Some((*parent_k, *child_k))
+                } else {
+                    None
+                }
+            }
+            RelKind::RelateOneToMany => {
+                if let (NodeRef::Entity(parent_k), NodeRef::Entity(child_k)) = (&rel.from, &rel.to)
+                {
+                    Some((*parent_k, *child_k))
+                } else {
+                    None
+                }
+            }
+            RelKind::RelateOneToOne => {
+                if let (NodeRef::Entity(child_k), NodeRef::Entity(parent_k)) = (&rel.from, &rel.to)
+                {
+                    Some((*parent_k, *child_k))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        };
+        if let Some(edge) = maybe {
+            edges.push(edge);
+        }
+    }
+    edges
+}
 
 /// FK親→子の順にカーン法でトポロジカルソートする。
 ///
@@ -581,7 +622,10 @@ relate(OrderLine, Order, "N:1")
         assert_eq!(utx.fk_groups.len(), 1, "should have 1 FK group");
         let group = &utx.fk_groups[0];
         assert_eq!(group.ordered_writes.len(), 2);
-        assert!(group.inferred);
+        assert!(
+            !group.inferred,
+            "API writes should be grouped by the API atomic boundary"
+        );
 
         // FK親(Order) → 子(OrderLine) の順
         let ids: Vec<&str> = group
@@ -626,10 +670,10 @@ updates(Checkout, Cart)
         );
     }
 
-    /// 複数UCで共有されるAPIでは、APIの全CRUDを各UCへ漏らさない。
-    /// UC側のCRUDが、そのUCで使うAPI操作を選ぶための意図になる。
+    /// 複数UCで共有されるAPIでは、APIのCRUD境界がそのまま各呼び出しUCに適用される。
+    /// 読み取りだけの usecase に見える場合は、書き込みAPIを分けてモデリングする。
     #[test]
-    fn test_shared_api_writes_are_scoped_by_usecase_crud() {
+    fn test_shared_api_writes_apply_to_each_invoking_usecase() {
         let src = r#"
 entity Appointment "予約" { id: Int @pk }
 entity ProviderSchedule "予定枠" { id: Int @pk }
@@ -646,16 +690,47 @@ updates(BookAppointment, ProviderSchedule)
         let txs = infer_usecase_transactions(&model);
         assert_eq!(
             txs.len(),
-            1,
-            "read-only search should not inherit API writes"
+            2,
+            "both invoking usecases inherit the API write boundary"
         );
 
-        let uc_id = model.use_cases.get(txs[0].usecase).unwrap().id.as_str();
-        assert_eq!(uc_id, "BookAppointment");
-        assert_eq!(txs[0].isolated_writes.len(), 1);
+        let mut uc_ids: Vec<&str> = txs
+            .iter()
+            .map(|tx| model.use_cases.get(tx.usecase).unwrap().id.as_str())
+            .collect();
+        uc_ids.sort();
+        assert_eq!(uc_ids, vec!["BookAppointment", "SearchAvailability"]);
+        for tx in &txs {
+            assert_eq!(tx.isolated_writes.len(), 1);
+            assert!(
+                tx.isolated_writes[0].via_api.is_some(),
+                "API-origin writes should be rendered from the API lane"
+            );
+        }
+    }
+
+    /// APIはFK非連結の複数エンティティ書き込みでも、1つの原子境界として扱う。
+    #[test]
+    fn test_api_groups_unrelated_writes_as_atomic_boundary() {
+        let src = r#"
+entity Store "店舗" { id: Int @pk }
+entity StoreOrgAssignmentHistory "店舗組織履歴" { id: Int @pk }
+usecase ChangeStoreParentOrg "親組織を変更する"
+api StoreParentOrgApi "店舗親組織API"
+invokes(ChangeStoreParentOrg, StoreParentOrgApi)
+updates(StoreParentOrgApi, Store)
+creates(StoreParentOrgApi, StoreOrgAssignmentHistory)
+"#;
+        let model = model_from(src);
+        let txs = infer_usecase_transactions(&model);
+        assert_eq!(txs.len(), 1);
+        let utx = &txs[0];
+        assert_eq!(utx.fk_groups.len(), 1);
+        assert_eq!(utx.isolated_writes.len(), 0);
         assert!(
-            txs[0].isolated_writes[0].via_api.is_some(),
-            "matching API write should still be rendered from the API lane"
+            !utx.fk_groups[0].inferred,
+            "API boundary is explicit atomicity, not FK inference"
         );
+        assert_eq!(utx.fk_groups[0].ordered_writes.len(), 2);
     }
 }

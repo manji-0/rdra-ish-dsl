@@ -594,10 +594,12 @@ impl Emitter for SequenceMermaidEmitter {
 
                     for group in &tx.fk_groups {
                         out.push_str("  rect rgb(245,245,245)\n");
-                        out.push_str(&format!(
-                            "    Note right of {}: transaction (inferred from FK)\n",
-                            first_api_id
-                        ));
+                        let note = if group.inferred {
+                            "transaction (inferred from FK)"
+                        } else {
+                            "transaction (API atomic boundary)"
+                        };
+                        out.push_str(&format!("    Note right of {}: {}\n", first_api_id, note));
                         for w in &group.ordered_writes {
                             if let Some(ent) = model.entities.get(w.entity) {
                                 let src = w
@@ -626,7 +628,7 @@ impl Emitter for SequenceMermaidEmitter {
                             out.push_str(&format!("  {}->>{}: {}\n", src, ent.id, w.kind.label()));
                             if singletons_set.contains(&w.entity) {
                                 out.push_str(&format!(
-                                    "  Note right of {}: FK非連結 — 別TX？@atomicで明示を\n",
+                                    "  Note right of {}: FK非連結 — 別TX？API境界で明示を\n",
                                     src
                                 ));
                             }
@@ -665,7 +667,12 @@ impl Emitter for SequenceMermaidEmitter {
 
                     for group in &tx.fk_groups {
                         out.push_str("  rect rgb(245,245,245)\n");
-                        out.push_str("    Note right of System: transaction (inferred from FK)\n");
+                        let note = if group.inferred {
+                            "transaction (inferred from FK)"
+                        } else {
+                            "transaction (API atomic boundary)"
+                        };
+                        out.push_str(&format!("    Note right of System: {}\n", note));
                         for w in &group.ordered_writes {
                             if let Some(ent) = model.entities.get(w.entity) {
                                 out.push_str(&format!(
@@ -683,7 +690,7 @@ impl Emitter for SequenceMermaidEmitter {
                             out.push_str(&format!("  System->>{}: {}\n", ent.id, w.kind.label()));
                             if singletons_set.contains(&w.entity) {
                                 out.push_str(
-                                    "  Note right of System: FK非連結 — 別TX？@atomicで明示を\n",
+                                    "  Note right of System: FK非連結 — 別TX？API境界で明示を\n",
                                 );
                             }
                         }

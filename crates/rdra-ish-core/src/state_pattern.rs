@@ -125,7 +125,7 @@ pub struct Provenance {
 
 // ── 内部演算型 ────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum OpKind {
     Create,
     Update,
@@ -601,17 +601,44 @@ fn collect_operations(
         }
     }
 
+    let mut effective_crud: Vec<(OpKind, UseCaseKey)> = Vec::new();
     for rel in &model.relations {
-        let (op_kind, uc_key) = match (&rel.kind, &rel.from) {
-            (RelKind::Creates, NodeRef::UseCase(uk)) => (OpKind::Create, *uk),
-            (RelKind::Updates, NodeRef::UseCase(uk)) => (OpKind::Update, *uk),
-            (RelKind::Deletes, NodeRef::UseCase(uk)) => (OpKind::Delete, *uk),
-            (RelKind::Writes, NodeRef::UseCase(uk)) => (OpKind::Update, *uk),
-            _ => continue,
-        };
         if rel.to != NodeRef::Entity(ek) {
             continue;
         }
+        let op_kind = match rel.kind {
+            RelKind::Creates => OpKind::Create,
+            RelKind::Updates | RelKind::Writes => OpKind::Update,
+            RelKind::Deletes => OpKind::Delete,
+            _ => continue,
+        };
+        match rel.from {
+            NodeRef::UseCase(uk) => effective_crud.push((op_kind, uk)),
+            NodeRef::Api(ak) => {
+                for invoke in &model.relations {
+                    if invoke.kind == RelKind::Invokes && invoke.to == NodeRef::Api(ak) {
+                        if let NodeRef::UseCase(uk) = invoke.from {
+                            effective_crud.push((op_kind, uk));
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    effective_crud.sort_by_key(|(op_kind, uc_key)| {
+        (
+            model.use_cases[*uc_key].id.clone(),
+            match op_kind {
+                OpKind::Create => 0,
+                OpKind::Update => 1,
+                OpKind::Delete => 2,
+            },
+        )
+    });
+    effective_crud.dedup();
+
+    for (op_kind, uc_key) in effective_crud {
         if let Some(reachable) = buc_reachable {
             if !reachable.contains(&NodeRef::UseCase(uc_key)) {
                 continue;
@@ -1245,6 +1272,32 @@ entity Product "商品" { id: Int @pk  name: String  price: Decimal }
         assert_eq!(r.patterns.len(), 1);
         assert!(r.patterns[0].is_initial);
         assert!(r.patterns[0].is_terminal);
+    }
+
+    #[test]
+    fn test_api_crud_carries_usecase_sets_effects() {
+        let model = model_from(
+            r#"
+entity Store "店舗" {
+  id: Int @pk
+  status: Enum(open, closed) @default(open)
+}
+usecase CloseStore "店舗を閉じる"
+api StoreAdminApi "店舗管理API"
+invokes(CloseStore, StoreAdminApi)
+updates(StoreAdminApi, Store)
+sets(CloseStore, Store, "status", "closed")
+"#,
+        );
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results.iter().find(|r| r.entity_id == "Store").unwrap();
+        let values: Vec<_> = r
+            .patterns
+            .iter()
+            .map(|p| p.pattern.values.get("status").unwrap().clone())
+            .collect();
+        assert!(values.contains(&AbstractValue::Enum("open".to_string())));
+        assert!(values.contains(&AbstractValue::Enum("closed".to_string())));
     }
 
     // ── Enum 直線連鎖 ───────────────────────────────────────────────────────

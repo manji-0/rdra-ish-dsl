@@ -21,7 +21,7 @@ System -> Order : create
 System -> OrderLine : create
 end
 System -> Cart : update
-note right : FK非連結 — 別TX？@atomicで明示を
+note right : FK非連結 — 別TX？API境界で明示を
 System --> Customer : 注文完了画面
 deactivate System
 

@@ -618,7 +618,12 @@ impl Emitter for SequenceDiagramEmitter {
                         tx.singletons_note.iter().cloned().collect();
 
                     for group in &tx.fk_groups {
-                        out.push_str("group transaction (inferred from FK)\n");
+                        let label = if group.inferred {
+                            "transaction (inferred from FK)"
+                        } else {
+                            "transaction (API atomic boundary)"
+                        };
+                        out.push_str(&format!("group {}\n", label));
                         for w in &group.ordered_writes {
                             if let Some(ent) = model.entities.get(w.entity) {
                                 // via_api に対応するAPIのID、なければ最初のAPIを使用
@@ -647,7 +652,7 @@ impl Emitter for SequenceDiagramEmitter {
                                 .unwrap_or(first_api_id);
                             out.push_str(&format!("{} -> {} : {}\n", src, ent.id, w.kind.label()));
                             if singletons_set.contains(&w.entity) {
-                                out.push_str("note right : FK非連結 — 別TX？@atomicで明示を\n");
+                                out.push_str("note right : FK非連結 — 別TX？API境界で明示を\n");
                             }
                         }
                     }
@@ -684,7 +689,12 @@ impl Emitter for SequenceDiagramEmitter {
                         tx.singletons_note.iter().cloned().collect();
 
                     for group in &tx.fk_groups {
-                        out.push_str("group transaction (inferred from FK)\n");
+                        let label = if group.inferred {
+                            "transaction (inferred from FK)"
+                        } else {
+                            "transaction (API atomic boundary)"
+                        };
+                        out.push_str(&format!("group {}\n", label));
                         for w in &group.ordered_writes {
                             if let Some(ent) = model.entities.get(w.entity) {
                                 out.push_str(&format!(
@@ -701,7 +711,7 @@ impl Emitter for SequenceDiagramEmitter {
                         if let Some(ent) = model.entities.get(w.entity) {
                             out.push_str(&format!("System -> {} : {}\n", ent.id, w.kind.label()));
                             if singletons_set.contains(&w.entity) {
-                                out.push_str("note right : FK非連結 — 別TX？@atomicで明示を\n");
+                                out.push_str("note right : FK非連結 — 別TX？API境界で明示を\n");
                             }
                         }
                     }
