@@ -624,15 +624,22 @@ Generated with `rdra-ish diagram samples/ec-site/ --kind sequence --format merma
 ```mermaid
 sequenceDiagram
   actor Customer as Customer
+  participant AddressSelectScreen as Address Selection Screen
+  participant OrderCompleteScreen as Order Complete Screen
+  participant OrderConfirmScreen as Order Confirmation Screen
+  participant OrderHistoryScreen as Order History Screen
   participant CancelOrderApi as Cancel Order API
+  participant ConfirmOrderApi as Confirm Order API
+  participant OrderHistoryApi as Order History API
   participant PlaceOrderApi as Place Order API
+  participant SelectAddressApi as Select Address API
   participant Cart as Cart
+  participant CartItem as Cart Item
   participant Order as Order
   participant OrderLine as Order Line
-  participant OrderCompleteScreen as Order Complete Screen
-  participant OrderHistoryScreen as Order History Screen
+  participant ShippingAddress as Shipping Address
 
-  Note over Customer,OrderHistoryScreen: Cancel Order
+  Note over Customer,ShippingAddress: Cancel Order
   Customer->>OrderHistoryScreen: Cancel Order
   OrderHistoryScreen->>CancelOrderApi: Cancel Order
   activate CancelOrderApi
@@ -641,7 +648,18 @@ sequenceDiagram
   OrderHistoryScreen-->>Customer: Order History Screen
   deactivate CancelOrderApi
 
-  Note over Customer,OrderHistoryScreen: Place Order
+  Note over Customer,ShippingAddress: Confirm Order Details
+  Customer->>OrderConfirmScreen: Confirm Order Details
+  OrderConfirmScreen->>ConfirmOrderApi: Confirm Order Details
+  activate ConfirmOrderApi
+  ConfirmOrderApi->>Cart: read
+  ConfirmOrderApi->>CartItem: read
+  ConfirmOrderApi->>ShippingAddress: read
+  ConfirmOrderApi-->>OrderConfirmScreen: Order Confirmation Screen
+  OrderConfirmScreen-->>Customer: Order Confirmation Screen
+  deactivate ConfirmOrderApi
+
+  Note over Customer,ShippingAddress: Place Order
   Customer->>OrderCompleteScreen: Place Order
   OrderCompleteScreen->>PlaceOrderApi: Place Order
   activate PlaceOrderApi
@@ -654,6 +672,25 @@ sequenceDiagram
   PlaceOrderApi-->>OrderCompleteScreen: Order Complete Screen
   OrderCompleteScreen-->>Customer: Order Complete Screen
   deactivate PlaceOrderApi
+
+  Note over Customer,ShippingAddress: Select Shipping Address
+  Customer->>AddressSelectScreen: Select Shipping Address
+  AddressSelectScreen->>SelectAddressApi: Select Shipping Address
+  activate SelectAddressApi
+  SelectAddressApi->>ShippingAddress: read
+  SelectAddressApi-->>AddressSelectScreen: Address Selection Screen
+  AddressSelectScreen-->>Customer: Address Selection Screen
+  deactivate SelectAddressApi
+
+  Note over Customer,ShippingAddress: View Order History
+  Customer->>OrderHistoryScreen: View Order History
+  OrderHistoryScreen->>OrderHistoryApi: View Order History
+  activate OrderHistoryApi
+  OrderHistoryApi->>Order: read
+  OrderHistoryApi->>OrderLine: read
+  OrderHistoryApi-->>OrderHistoryScreen: Order History Screen
+  OrderHistoryScreen-->>Customer: Order History Screen
+  deactivate OrderHistoryApi
 ```
 
 #### State pattern derivation (`rdra-ish states --entity Order`)
