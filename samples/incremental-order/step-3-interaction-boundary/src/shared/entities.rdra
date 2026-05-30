@@ -1,0 +1,9 @@
+module shared.entities
+
+entity Store "Store" {
+  id: Int @pk
+}
+
+entity Organization "Organization" {
+  id: Int @pk
+}

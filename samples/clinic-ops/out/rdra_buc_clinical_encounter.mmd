@@ -50,29 +50,16 @@ graph TD
   EvEncounterSigned -.->|triggers| CompleteAppointment
   EvEncounterSigned -.->|triggers| CreateCharge
   EvEncounterSigned -.->|triggers| CreateCarePlan
-  PlaceLabOrder -.->|creates| ClinicalOrder
   PlaceLabOrder -.->|displays| OrderEntryScreen
-  OpenEncounter -.->|creates| Encounter
   OpenEncounter -.->|displays| EncounterWorkspaceScreen
-  RecordVitals -.->|updates| Encounter
-  RecordVitals -.->|creates| VitalSign
   RecordVitals -.->|displays| VitalsScreen
-  DocumentAssessment -.->|updates| Encounter
-  DocumentAssessment -.->|creates| Diagnosis
   DocumentAssessment -.->|raises| EvEncounterDocumented
   DocumentAssessment -.->|displays| DiagnosisScreen
-  SignEncounter -.->|updates| Encounter
   SignEncounter -.->|raises| EvEncounterSigned
   SignEncounter -.->|displays| EncounterWorkspaceScreen
-  AmendEncounter -.->|updates| Encounter
   AmendEncounter -.->|raises| EvEncounterAmended
   AmendEncounter -.->|displays| EncounterWorkspaceScreen
-  CompleteAppointment -.->|updates| Appointment
-  CompleteAppointment -.->|updates| Room
   CompleteAppointment -.->|raises| EvAppointmentCompleted
   CompleteAppointment -.->|displays| EncounterWorkspaceScreen
-  CreateCharge -.->|creates| Charge
-  CreateCharge -.->|updates| AccountBalance
   CreateCharge -.->|displays| ChargeWorklistScreen
-  CreateCarePlan -.->|creates| CarePlan
   CreateCarePlan -.->|displays| CarePlanScreen

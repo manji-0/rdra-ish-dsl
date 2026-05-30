@@ -1,115 +1,172 @@
 @startuml
 !theme plain
 
-actor "利用者" as User
-participant "システム" as System
-database "監査ログ" as AuditLog
-database "クレジットカード" as CreditCard
-database "パスワード資格情報" as PasswordCredential
-database "個人情報" as PersonalInfo
-database "住所" as PostalAddress
-boundary "住所編集画面" as AddressEditScreen
-boundary "住所一覧画面" as AddressListScreen
-boundary "カード登録画面" as CardAddScreen
-boundary "カード一覧画面" as CardListScreen
-boundary "パスワード変更画面" as PasswordChangeScreen
-boundary "パスワードリセット画面" as PasswordResetScreen
-boundary "パスワード設定画面" as PasswordSetScreen
-boundary "個人情報画面" as ProfileScreen
+actor "User" as User
+control "Change Password API" as ChangePasswordApi
+control "Delete Address API" as DeleteAddressApi
+control "Delete Card API" as DeleteCardApi
+control "Register Address API" as RegisterAddressApi
+control "Register Card API" as RegisterCardApi
+control "Request Password Reset API" as RequestPasswordResetApi
+control "Reset Password API" as ResetPasswordApi
+control "Set Initial Password API" as SetInitialPasswordApi
+control "Set Primary Address API" as SetPrimaryAddressApi
+control "Set Primary Card API" as SetPrimaryCardApi
+control "Update Address API" as UpdateAddressApi
+control "Update Profile API" as UpdateProfileApi
+database "Audit Log" as AuditLog
+database "Credit Card" as CreditCard
+database "Password Credential" as PasswordCredential
+database "Personal Information" as PersonalInfo
+database "Postal Address" as PostalAddress
+boundary "Address Edit Screen" as AddressEditScreen
+boundary "Address List Screen" as AddressListScreen
+boundary "Card Registration Screen" as CardAddScreen
+boundary "Card List Screen" as CardListScreen
+boundary "Password Change Screen" as PasswordChangeScreen
+boundary "Password Reset Screen" as PasswordResetScreen
+boundary "Password Setup Screen" as PasswordSetScreen
+boundary "Personal Information Screen" as ProfileScreen
 
-== パスワードを変更する ==
-User -> System : パスワードを変更する
-activate System
-System -> AuditLog : create
-System -> PasswordCredential : update
-System --> User : パスワード変更画面
-deactivate System
+== Change Password ==
+User -> PasswordChangeScreen : Change Password
+PasswordChangeScreen -> ChangePasswordApi : Change Password
+activate ChangePasswordApi
+group transaction (API atomic boundary)
+ChangePasswordApi -> AuditLog : create
+ChangePasswordApi -> PasswordCredential : update
+end
+ChangePasswordApi --> PasswordChangeScreen : Password Change Screen
+PasswordChangeScreen --> User : Password Change Screen
+deactivate ChangePasswordApi
 
-== 住所を削除する ==
-User -> System : 住所を削除する
-activate System
-System -> AuditLog : create
-System -> PostalAddress : delete
-System --> User : 住所一覧画面
-deactivate System
+== Delete Address ==
+User -> AddressListScreen : Delete Address
+AddressListScreen -> DeleteAddressApi : Delete Address
+activate DeleteAddressApi
+group transaction (API atomic boundary)
+DeleteAddressApi -> AuditLog : create
+DeleteAddressApi -> PostalAddress : delete
+end
+DeleteAddressApi --> AddressListScreen : Address List Screen
+AddressListScreen --> User : Address List Screen
+deactivate DeleteAddressApi
 
-== カードを削除する ==
-User -> System : カードを削除する
-activate System
-System -> AuditLog : create
-System -> CreditCard : delete
-System --> User : カード一覧画面
-deactivate System
+== Delete Card ==
+User -> CardListScreen : Delete Card
+CardListScreen -> DeleteCardApi : Delete Card
+activate DeleteCardApi
+group transaction (API atomic boundary)
+DeleteCardApi -> AuditLog : create
+DeleteCardApi -> CreditCard : delete
+end
+DeleteCardApi --> CardListScreen : Card List Screen
+CardListScreen --> User : Card List Screen
+deactivate DeleteCardApi
 
-== 住所を登録する ==
-User -> System : 住所を登録する
-activate System
-System -> AuditLog : create
-System -> PostalAddress : create
-System --> User : 住所編集画面
-deactivate System
+== Register Address ==
+User -> AddressEditScreen : Register Address
+AddressEditScreen -> RegisterAddressApi : Register Address
+activate RegisterAddressApi
+group transaction (API atomic boundary)
+RegisterAddressApi -> AuditLog : create
+RegisterAddressApi -> PostalAddress : create
+end
+RegisterAddressApi --> AddressEditScreen : Address Edit Screen
+AddressEditScreen --> User : Address Edit Screen
+deactivate RegisterAddressApi
 
-== カードを登録する ==
-User -> System : カードを登録する
-activate System
-System -> AuditLog : create
-System -> CreditCard : create
-System --> User : カード登録画面
-deactivate System
+== Register Card ==
+User -> CardAddScreen : Register Card
+CardAddScreen -> RegisterCardApi : Register Card
+activate RegisterCardApi
+group transaction (API atomic boundary)
+RegisterCardApi -> AuditLog : create
+RegisterCardApi -> CreditCard : create
+end
+RegisterCardApi --> CardAddScreen : Card Registration Screen
+CardAddScreen --> User : Card Registration Screen
+deactivate RegisterCardApi
 
-== パスワードリセットを申請する ==
-User -> System : パスワードリセットを申請する
-activate System
-System -> AuditLog : create
-System --> User : パスワードリセット画面
-deactivate System
+== Request Password Reset ==
+User -> PasswordResetScreen : Request Password Reset
+PasswordResetScreen -> RequestPasswordResetApi : Request Password Reset
+activate RequestPasswordResetApi
+RequestPasswordResetApi -> AuditLog : create
+RequestPasswordResetApi --> PasswordResetScreen : Password Reset Screen
+PasswordResetScreen --> User : Password Reset Screen
+deactivate RequestPasswordResetApi
 
-== パスワードをリセットする ==
-User -> System : パスワードをリセットする
-activate System
-System -> AuditLog : create
-System -> PasswordCredential : update
-System --> User : パスワードリセット画面
-deactivate System
+== Reset Password ==
+User -> PasswordResetScreen : Reset Password
+PasswordResetScreen -> ResetPasswordApi : Reset Password
+activate ResetPasswordApi
+group transaction (API atomic boundary)
+ResetPasswordApi -> AuditLog : create
+ResetPasswordApi -> PasswordCredential : update
+end
+ResetPasswordApi --> PasswordResetScreen : Password Reset Screen
+PasswordResetScreen --> User : Password Reset Screen
+deactivate ResetPasswordApi
 
-== 初期パスワードを設定する ==
-User -> System : 初期パスワードを設定する
-activate System
-System -> AuditLog : create
-System -> PasswordCredential : create
-System --> User : パスワード設定画面
-deactivate System
+== Set Initial Password ==
+User -> PasswordSetScreen : Set Initial Password
+PasswordSetScreen -> SetInitialPasswordApi : Set Initial Password
+activate SetInitialPasswordApi
+group transaction (API atomic boundary)
+SetInitialPasswordApi -> AuditLog : create
+SetInitialPasswordApi -> PasswordCredential : create
+end
+SetInitialPasswordApi --> PasswordSetScreen : Password Setup Screen
+PasswordSetScreen --> User : Password Setup Screen
+deactivate SetInitialPasswordApi
 
-== 住所を優先設定する ==
-User -> System : 住所を優先設定する
-activate System
-System -> AuditLog : create
-System -> PostalAddress : update
-System --> User : 住所一覧画面
-deactivate System
+== Set Primary Address ==
+User -> AddressListScreen : Set Primary Address
+AddressListScreen -> SetPrimaryAddressApi : Set Primary Address
+activate SetPrimaryAddressApi
+group transaction (API atomic boundary)
+SetPrimaryAddressApi -> AuditLog : create
+SetPrimaryAddressApi -> PostalAddress : update
+end
+SetPrimaryAddressApi --> AddressListScreen : Address List Screen
+AddressListScreen --> User : Address List Screen
+deactivate SetPrimaryAddressApi
 
-== 優先カードを設定する ==
-User -> System : 優先カードを設定する
-activate System
-System -> AuditLog : create
-System -> CreditCard : update
-System --> User : カード一覧画面
-deactivate System
+== Set Primary Card ==
+User -> CardListScreen : Set Primary Card
+CardListScreen -> SetPrimaryCardApi : Set Primary Card
+activate SetPrimaryCardApi
+group transaction (API atomic boundary)
+SetPrimaryCardApi -> AuditLog : create
+SetPrimaryCardApi -> CreditCard : update
+end
+SetPrimaryCardApi --> CardListScreen : Card List Screen
+CardListScreen --> User : Card List Screen
+deactivate SetPrimaryCardApi
 
-== 住所を更新する ==
-User -> System : 住所を更新する
-activate System
-System -> AuditLog : create
-System -> PostalAddress : update
-System --> User : 住所編集画面
-deactivate System
+== Update Address ==
+User -> AddressEditScreen : Update Address
+AddressEditScreen -> UpdateAddressApi : Update Address
+activate UpdateAddressApi
+group transaction (API atomic boundary)
+UpdateAddressApi -> AuditLog : create
+UpdateAddressApi -> PostalAddress : update
+end
+UpdateAddressApi --> AddressEditScreen : Address Edit Screen
+AddressEditScreen --> User : Address Edit Screen
+deactivate UpdateAddressApi
 
-== 個人情報を更新する ==
-User -> System : 個人情報を更新する
-activate System
-System -> AuditLog : create
-System -> PersonalInfo : update
-System --> User : 個人情報画面
-deactivate System
+== Update Personal Information ==
+User -> ProfileScreen : Update Personal Information
+ProfileScreen -> UpdateProfileApi : Update Personal Information
+activate UpdateProfileApi
+group transaction (API atomic boundary)
+UpdateProfileApi -> AuditLog : create
+UpdateProfileApi -> PersonalInfo : update
+end
+UpdateProfileApi --> ProfileScreen : Personal Information Screen
+ProfileScreen --> User : Personal Information Screen
+deactivate UpdateProfileApi
 
 @enduml

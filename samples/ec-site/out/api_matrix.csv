@@ -1,0 +1,16 @@
+Api,Cart,CartItem,Category,CustomerAccount,Order,OrderLine,Payment,Product,ShippingAddress
+AddToCartApi,U,C,,,,,,R,
+CancelOrderApi,,,,,U,,,,
+ConfirmOrderApi,R,R,,,,,,,R
+OrderHistoryApi,,,,,R,R,,,
+PaymentAuthorizationApi,,,,,,,U,,
+PaymentCaptureApi,,,,,U,,U,,
+PaymentInputApi,,,,,R,,C,,
+PaymentRefundApi,,,,,U,,U,,
+PlaceOrderApi,U,,,,C,C,,,
+ProductDetailApi,,,,,,,,R,
+ProductSearchApi,,,R,,,,,R,
+RemoveCartItemApi,,D,,,,,,,
+SelectAddressApi,,,,,,,,,R
+UpdateCartItemApi,,U,,,,,,,
+ViewCartApi,R,R,,,,,,R,

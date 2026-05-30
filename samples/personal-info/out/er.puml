@@ -1,7 +1,7 @@
 @startuml
 !theme plain
 
-entity "監査ログ" as AuditLog {
+entity "Audit Log" as AuditLog {
   *id : Int <<PK>>
   --
   action : String
@@ -10,7 +10,7 @@ entity "監査ログ" as AuditLog {
   ip_address : String
   useraccount_id : Int <<FK>>
 }
-entity "クレジットカード" as CreditCard {
+entity "Credit Card" as CreditCard {
   *id : Int <<PK>>
   --
   card_number_hash : String
@@ -22,7 +22,7 @@ entity "クレジットカード" as CreditCard {
   is_primary : Bool
   useraccount_id : Int <<FK>>
 }
-entity "パスワード資格情報" as PasswordCredential {
+entity "Password Credential" as PasswordCredential {
   *id : Int <<PK>>
   --
   password_hash : String
@@ -30,7 +30,7 @@ entity "パスワード資格情報" as PasswordCredential {
   algorithm : String
   updated_at : DateTime
 }
-entity "個人情報" as PersonalInfo {
+entity "Personal Information" as PersonalInfo {
   *id : Int <<PK>>
   --
   given_name : String
@@ -38,7 +38,7 @@ entity "個人情報" as PersonalInfo {
   birth_date : Date
   phone : String
 }
-entity "住所" as PostalAddress {
+entity "Postal Address" as PostalAddress {
   *id : Int <<PK>>
   --
   postal_code : String
@@ -49,7 +49,7 @@ entity "住所" as PostalAddress {
   is_primary : Bool
   useraccount_id : Int <<FK>>
 }
-entity "ユーザーアカウント" as UserAccount {
+entity "User Account" as UserAccount {
   *id : Int <<PK>>
   --
   email : String

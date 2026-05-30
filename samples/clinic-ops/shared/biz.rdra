@@ -4,3 +4,5 @@ business PatientAccess        "Patient Access"
 business CareDelivery         "Care Delivery"
 business RevenueCycle         "Revenue Cycle"
 business ClinicAdministration "Clinic Administration"
+
+system ClinicOpsSystem "Clinic Operations System"

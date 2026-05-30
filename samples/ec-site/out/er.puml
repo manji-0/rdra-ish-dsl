@@ -1,33 +1,33 @@
 @startuml
 !theme plain
 
-entity "カート" as Cart {
+entity "Cart" as Cart {
   *id : Int <<PK>>
   --
   created_at : DateTime
   customeraccount_id : Int <<FK>>
 }
-entity "カートアイテム" as CartItem {
+entity "Cart Item" as CartItem {
   *id : Int <<PK>>
   --
   qty : Int
   cart_id : Int <<FK>>
   product_id : Int <<FK>>
 }
-entity "カテゴリ" as Category {
+entity "Category" as Category {
   *id : Int <<PK>>
   --
   name : String
   slug : String
 }
-entity "顧客アカウント" as CustomerAccount {
+entity "Customer Account" as CustomerAccount {
   *id : Int <<PK>>
   --
   email : String
   name : String
   created_at : DateTime
 }
-entity "注文" as Order {
+entity "Order" as Order {
   *id : Int <<PK>>
   --
   total : Money
@@ -38,7 +38,7 @@ entity "注文" as Order {
   customeraccount_id : Int <<FK>>
   shippingaddress_id : Int <<FK>>
 }
-entity "注文明細" as OrderLine {
+entity "Order Line" as OrderLine {
   *id : Int <<PK>>
   --
   qty : Int
@@ -46,7 +46,7 @@ entity "注文明細" as OrderLine {
   order_id : Int <<FK>>
   product_id : Int <<FK>>
 }
-entity "決済" as Payment {
+entity "Payment" as Payment {
   *id : Int <<PK>>
   --
   amount : Money
@@ -55,7 +55,7 @@ entity "決済" as Payment {
   processed_at : DateTime
   gateway_ref : String
 }
-entity "商品" as Product {
+entity "Product" as Product {
   *id : Int <<PK>>
   --
   sku : String
@@ -66,7 +66,7 @@ entity "商品" as Product {
   is_active : Bool
   category_id : Int <<FK>>
 }
-entity "配送先住所" as ShippingAddress {
+entity "Shipping Address" as ShippingAddress {
   *id : Int <<PK>>
   --
   postal_code : String

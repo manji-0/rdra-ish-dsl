@@ -1,7 +1,4 @@
 stateDiagram-v2
-  state "有効" as Active
-  state "削除済" as Deleted
-  state "停止中" as Suspended
-  Active --> Deleted : アカウント削除
-  Active --> Suspended : アカウント停止
-  Suspended --> Active : アカウント復元
+  Active --> Deleted : Delete Account
+  Active --> Suspended : Suspend Account
+  Suspended --> Active : Restore Account

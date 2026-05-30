@@ -1,0 +1,15 @@
+Api,AuditLog,CreditCard,PasswordCredential,PersonalInfo,PostalAddress,UserAccount
+ChangePasswordApi,C,,RU,,,
+DeleteAddressApi,C,,,,D,
+DeleteCardApi,C,D,,,,
+ListCardsApi,,R,,,,
+RegisterAddressApi,C,,,,C,
+RegisterCardApi,C,C,,,,
+RequestPasswordResetApi,C,,,,,R
+ResetPasswordApi,C,,U,,,
+SetInitialPasswordApi,C,,C,,,
+SetPrimaryAddressApi,C,,,,RU,
+SetPrimaryCardApi,C,RU,,,,
+UpdateAddressApi,C,,,,RU,
+UpdateProfileApi,C,,,RU,,
+ViewProfileApi,,,,R,,R

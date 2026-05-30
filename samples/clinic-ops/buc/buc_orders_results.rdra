@@ -19,7 +19,8 @@ screen ResultReviewScreen    "Result Review Screen"
 screen CriticalNoticeScreen  "Critical Result Notice Screen"
 
 api OrderEntryApi     "Order Entry API"
-api LabInterfaceApi   "Lab Interface API"
+api CollectSpecimenApi "Collect Specimen API"
+api ReceiveLabResultApi "Receive Lab Result API"
 api ResultReviewApi   "Result Review API"
 api CriticalNoticeApi "Critical Notice API"
 
@@ -33,42 +34,43 @@ contains(BucOrdersResults, ReceiveLabResult)
 contains(BucOrdersResults, ReviewLabResult)
 contains(BucOrdersResults, NotifyCriticalResult)
 contains(BucOrdersResults, CancelClinicalOrder)
+contains(ClinicOpsSystem, OrderEntryApi)
+contains(ClinicOpsSystem, CollectSpecimenApi)
+contains(ClinicOpsSystem, ReceiveLabResultApi)
+contains(ClinicOpsSystem, ResultReviewApi)
+contains(ClinicOpsSystem, CriticalNoticeApi)
 
 uses(Nurse, LabSystem)
 uses(Clinician, MessagingGateway)
 
 displays(PlaceLabOrder, OrderEntryScreen)
 invokes(PlaceLabOrder, OrderEntryApi)
-creates(PlaceLabOrder, ClinicalOrder)
 creates(OrderEntryApi, ClinicalOrder)
 reads(OrderEntryApi, Encounter)
 triggers(EvEncounterSigned, PlaceLabOrder)
 
 displays(CollectSpecimen, SpecimenScreen)
-invokes(CollectSpecimen, LabInterfaceApi)
-updates(CollectSpecimen, ClinicalOrder)
-updates(LabInterfaceApi, ClinicalOrder)
+invokes(CollectSpecimen, CollectSpecimenApi)
+updates(CollectSpecimenApi, ClinicalOrder)
 raises(CollectSpecimen, EvClinicalOrderCollected)
 
 displays(ReceiveLabResult, ResultReviewScreen)
-invokes(ReceiveLabResult, LabInterfaceApi)
-creates(ReceiveLabResult, LabResult)
-updates(ReceiveLabResult, ClinicalOrder)
-creates(LabInterfaceApi, LabResult)
+invokes(ReceiveLabResult, ReceiveLabResultApi)
+creates(ReceiveLabResultApi, LabResult)
+updates(ReceiveLabResultApi, ClinicalOrder)
 raises(ReceiveLabResult, EvClinicalOrderResulted)
 sets(ReceiveLabResult, LabResult, "received_at", "timestamptz")
 
 displays(ReviewLabResult, ResultReviewScreen)
 invokes(ReviewLabResult, ResultReviewApi)
-updates(ReviewLabResult, ClinicalOrder)
-updates(ReviewLabResult, LabResult)
+updates(ResultReviewApi, ClinicalOrder)
 updates(ResultReviewApi, LabResult)
 raises(ReviewLabResult, EvClinicalOrderReviewed)
 sets(ReviewLabResult, LabResult, "reviewed_at", "timestamptz")
 
 displays(NotifyCriticalResult, CriticalNoticeScreen)
 invokes(NotifyCriticalResult, CriticalNoticeApi)
-creates(NotifyCriticalResult, Notification)
+creates(CriticalNoticeApi, Notification)
 creates(CriticalNoticeApi, PatientMessage)
 sets(NotifyCriticalResult, Notification, "status", "notifdelivered")
 sets(NotifyCriticalResult, Notification, "delivered_at", "timestamptz")

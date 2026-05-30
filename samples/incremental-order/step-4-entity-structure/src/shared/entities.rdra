@@ -1,0 +1,15 @@
+module shared.entities
+
+entity Store "Store" {
+  id: Int @pk
+  code: String @unique
+  name: String
+}
+
+entity Organization "Organization" {
+  id: Int @pk
+  code: String @unique
+  name: String
+}
+
+relate(Store, Organization, "N:1")

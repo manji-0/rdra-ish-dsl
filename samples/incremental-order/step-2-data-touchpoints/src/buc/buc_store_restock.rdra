@@ -1,0 +1,18 @@
+module buc.store_restock
+
+import shared.biz
+import shared.actors
+import shared.entities
+
+buc BucStoreRestock "Maintain Store Restock"
+usecase ChangeNextRestockDate "Change Next Restock Date"
+usecase ChangeStoreParentOrganization "Change Store Parent Organization"
+
+belongs(BucStoreRestock, StoreOperations)
+performs(OpsStaff, BucStoreRestock)
+contains(BucStoreRestock, ChangeNextRestockDate)
+contains(BucStoreRestock, ChangeStoreParentOrganization)
+
+updates(ChangeNextRestockDate, Store)
+reads(ChangeStoreParentOrganization, Organization)
+updates(ChangeStoreParentOrganization, Store)

@@ -1,0 +1,28 @@
+module shared.entities
+
+entity Store "Store" {
+  id: Int @pk
+  code: String @unique
+  name: String
+  restock_status: Enum(normal, scheduled, blocked) @default(normal)
+  next_restock_date: DateTime @null
+}
+
+entity Organization "Organization" {
+  id: Int @pk
+  code: String @unique
+  name: String
+}
+
+state Normal "Normal"
+state Scheduled "Scheduled"
+state Blocked "Blocked"
+
+event RestockScheduled "Restock Scheduled"
+event RestockBlocked "Restock Blocked"
+
+relate(Store, Organization, "N:1")
+transitions(event::RestockScheduled, Normal, Scheduled)
+transitions(event::RestockBlocked, Scheduled, Blocked)
+sets(event::RestockScheduled, Store, "next_restock_date", "timestamptz")
+sets(event::RestockBlocked, Store, "next_restock_date", "null")

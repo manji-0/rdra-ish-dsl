@@ -20,10 +20,11 @@ screen ClaimScreen          "Claim Screen"
 screen PaymentPostingScreen "Payment Posting Screen"
 screen BalanceScreen        "Balance Screen"
 
-api ChargeApi      "Charge API"
-api ClaimApi       "Claim API"
-api PaymentPostApi "Payment Posting API"
-api BalanceApi     "Balance API"
+api CreateChargeApi      "Create Charge API"
+api GenerateClaimApi     "Generate Claim API"
+api SubmitClaimApi       "Submit Claim API"
+api PaymentPostApi       "Payment Posting API"
+api BalanceApi           "Balance API"
 
 performs(BillingSpecialist, BucBillingClaims)
 belongs(BucBillingClaims, RevenueCycle)
@@ -36,30 +37,32 @@ contains(BucBillingClaims, RecordClaimDenial)
 contains(BucBillingClaims, PostPayment)
 contains(BucBillingClaims, ReconcileBalance)
 contains(BucBillingClaims, VoidCharge)
+contains(ClinicOpsSystem, CreateChargeApi)
+contains(ClinicOpsSystem, GenerateClaimApi)
+contains(ClinicOpsSystem, SubmitClaimApi)
+contains(ClinicOpsSystem, PaymentPostApi)
+contains(ClinicOpsSystem, BalanceApi)
 
 uses(BillingSpecialist, PaymentGateway)
 
 displays(CreateCharge, ChargeWorklistScreen)
-invokes(CreateCharge, ChargeApi)
-creates(CreateCharge, Charge)
-updates(CreateCharge, AccountBalance)
-creates(ChargeApi, Charge)
-reads(ChargeApi, Encounter)
+invokes(CreateCharge, CreateChargeApi)
+creates(CreateChargeApi, Charge)
+updates(CreateChargeApi, AccountBalance)
+reads(CreateChargeApi, Encounter)
 sets(CreateCharge, Charge, "status", "chargeposted")
 sets(CreateCharge, Charge, "posted_at", "timestamptz")
 triggers(EvEncounterSigned, CreateCharge)
 
 displays(GenerateClaim, ClaimScreen)
-invokes(GenerateClaim, ClaimApi)
-creates(GenerateClaim, Claim)
-updates(GenerateClaim, Charge)
-creates(ClaimApi, Claim)
-reads(ClaimApi, InsurancePolicy)
+invokes(GenerateClaim, GenerateClaimApi)
+creates(GenerateClaimApi, Claim)
+updates(GenerateClaimApi, Charge)
+reads(GenerateClaimApi, InsurancePolicy)
 
 displays(SubmitClaim, ClaimScreen)
-invokes(SubmitClaim, ClaimApi)
-updates(SubmitClaim, Claim)
-updates(ClaimApi, Claim)
+invokes(SubmitClaim, SubmitClaimApi)
+updates(SubmitClaimApi, Claim)
 raises(SubmitClaim, EvClaimSubmitted)
 
 displays(ReceiveClaimAccepted, ClaimScreen)
@@ -72,16 +75,15 @@ raises(RecordClaimDenial, EvClaimDenied)
 
 displays(PostPayment, PaymentPostingScreen)
 invokes(PostPayment, PaymentPostApi)
-creates(PostPayment, PaymentTransaction)
-updates(PostPayment, Claim)
 creates(PaymentPostApi, PaymentTransaction)
+updates(PaymentPostApi, Claim)
 raises(PostPayment, EvClaimPaid)
 sets(PostPayment, PaymentTransaction, "status", "payposted")
 sets(PostPayment, PaymentTransaction, "processed_at", "timestamptz")
 
 displays(ReconcileBalance, BalanceScreen)
 invokes(ReconcileBalance, BalanceApi)
-updates(ReconcileBalance, AccountBalance)
+updates(BalanceApi, AccountBalance)
 reads(BalanceApi, PaymentTransaction)
 sets(ReconcileBalance, AccountBalance, "is_closed", "true")
 sets(ReconcileBalance, AccountBalance, "closed_at", "timestamptz")

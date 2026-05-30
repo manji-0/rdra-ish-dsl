@@ -1,53 +1,54 @@
 graph TD
-  Admin(["👤 管理者"])
-  Customer(["👤 購入者"])
-  AddToCart(["カートに追加する"])
-  AuthorizePayment(["決済を承認する"])
-  Cancel(["注文をキャンセルする"])
-  Capture(["決済を確定する"])
-  ConfirmOrder(["注文内容を確認する"])
-  InputPaymentInfo(["決済情報を入力する"])
-  PlaceOrder(["注文を確定する"])
-  RefundPayment(["返金する"])
-  RemoveCartItem(["カートから削除する"])
-  SearchProducts(["商品を検索する"])
-  SelectAddress(["配送先を選択する"])
-  UpdateCartItem(["カートの数量を変更する"])
-  ViewCart(["カートを確認する"])
-  ViewOrderHistory(["注文履歴を見る"])
-  ViewProduct(["商品詳細を見る"])
-  BucCart["📦 商品を買い物籠に入れる"]
-  BucOrder["📦 注文を処理する"]
-  BucPayment["📦 決済を行う"]
-  PaymentGW[/"決済ゲートウェイ"/]
-  ShippingSvc[/"配送サービス"/]
-  Cart[("🗄 カート")]
-  CartItem[("🗄 カートアイテム")]
-  Category[("🗄 カテゴリ")]
-  CustomerAccount[("🗄 顧客アカウント")]
-  Order[("🗄 注文")]
-  OrderLine[("🗄 注文明細")]
-  Payment[("🗄 決済")]
-  Product[("🗄 商品")]
-  ShippingAddress[("🗄 配送先住所")]
-  AddressSelectScreen[["配送先選択画面"]]
-  CartScreen[["カート画面"]]
-  OrderCompleteScreen[["注文完了画面"]]
-  OrderConfirmScreen[["注文確認画面"]]
-  OrderHistoryScreen[["注文履歴画面"]]
-  PaymentInputScreen[["決済情報入力画面"]]
-  PaymentResultScreen[["決済結果画面"]]
-  ProductDetailScreen[["商品詳細画面"]]
-  ProductSearchScreen[["商品検索画面"]]
-  Cancel{"注文キャンセル"}
-  Capture{"決済確定"}
-  Deliver{"配達確認"}
-  Ship{"発送開始"}
-  Cancelled("キャンセル")  
-  Delivered("配達完了")  
-  Paid("決済完了")  
-  Pending("注文受付")  
-  Shipped("発送済")  
+  Admin(["👤 Administrator"])
+  Customer(["👤 Customer"])
+  AddToCart(["Add to Cart"])
+  AuthorizePayment(["Authorize Payment"])
+  Cancel(["Cancel Order"])
+  Capture(["Capture Payment"])
+  ConfirmOrder(["Confirm Order Details"])
+  InputPaymentInfo(["Enter Payment Information"])
+  PlaceOrder(["Place Order"])
+  RefundPayment(["Refund Payment"])
+  RemoveCartItem(["Remove from Cart"])
+  SearchProducts(["Search Products"])
+  SelectAddress(["Select Shipping Address"])
+  UpdateCartItem(["Change Cart Item Quantity"])
+  ViewCart(["View Cart"])
+  ViewOrderHistory(["View Order History"])
+  ViewProduct(["View Product Details"])
+  BucCart["📦 Add Products to Cart"]
+  BucOrder["📦 Process Order"]
+  BucPayment["📦 Make Payment"]
+  CommerceSystem["🧩 Commerce System"]
+  PaymentGW[/"Payment Gateway"/]
+  ShippingSvc[/"Shipping Service"/]
+  Cart[("🗄 Cart")]
+  CartItem[("🗄 Cart Item")]
+  Category[("🗄 Category")]
+  CustomerAccount[("🗄 Customer Account")]
+  Order[("🗄 Order")]
+  OrderLine[("🗄 Order Line")]
+  Payment[("🗄 Payment")]
+  Product[("🗄 Product")]
+  ShippingAddress[("🗄 Shipping Address")]
+  AddressSelectScreen[["Address Selection Screen"]]
+  CartScreen[["Cart Screen"]]
+  OrderCompleteScreen[["Order Complete Screen"]]
+  OrderConfirmScreen[["Order Confirmation Screen"]]
+  OrderHistoryScreen[["Order History Screen"]]
+  PaymentInputScreen[["Payment Information Screen"]]
+  PaymentResultScreen[["Payment Result Screen"]]
+  ProductDetailScreen[["Product Detail Screen"]]
+  ProductSearchScreen[["Product Search Screen"]]
+  Cancel{"Cancel Order"}
+  Capture{"Capture Payment"}
+  Deliver{"Confirm Delivery"}
+  Ship{"Start Shipping"}
+  Cancelled("Cancelled")  
+  Delivered("Delivered")  
+  Paid("Payment Completed")  
+  Pending("Order Received")  
+  Shipped("Shipped")  
   Customer --> BucPayment
   Customer --> BucOrder
   Customer --> BucCart
@@ -80,48 +81,20 @@ graph TD
   OrderLine --- Product
   OrderLine --- Order
   Payment --- Order
-  SearchProducts -.->|reads| Category
-  SearchProducts -.->|reads| Product
   SearchProducts -.->|displays| ProductSearchScreen
-  ViewProduct -.->|reads| Product
   ViewProduct -.->|displays| ProductDetailScreen
-  AddToCart -.->|reads| Product
-  AddToCart -.->|updates| Cart
-  AddToCart -.->|creates| CartItem
   AddToCart -.->|displays| CartScreen
-  UpdateCartItem -.->|updates| CartItem
   UpdateCartItem -.->|displays| CartScreen
-  RemoveCartItem -.->|deletes| CartItem
   RemoveCartItem -.->|displays| CartScreen
-  ViewCart -.->|reads| Product
-  ViewCart -.->|reads| Cart
-  ViewCart -.->|reads| CartItem
   ViewCart -.->|displays| CartScreen
-  InputPaymentInfo -.->|reads| Order
-  InputPaymentInfo -.->|creates| Payment
   InputPaymentInfo -.->|displays| PaymentInputScreen
-  AuthorizePayment -.->|updates| Payment
   AuthorizePayment -.->|displays| PaymentResultScreen
-  Capture -.->|updates| Order
-  Capture -.->|updates| Payment
   Capture -.->|raises| Capture
   Capture -.->|displays| PaymentResultScreen
-  RefundPayment -.->|updates| Order
-  RefundPayment -.->|updates| Payment
   RefundPayment -.->|displays| PaymentResultScreen
-  SelectAddress -.->|reads| ShippingAddress
   SelectAddress -.->|displays| AddressSelectScreen
-  ConfirmOrder -.->|reads| ShippingAddress
-  ConfirmOrder -.->|reads| Cart
-  ConfirmOrder -.->|reads| CartItem
   ConfirmOrder -.->|displays| OrderConfirmScreen
-  PlaceOrder -.->|updates| Cart
-  PlaceOrder -.->|creates| Order
-  PlaceOrder -.->|creates| OrderLine
   PlaceOrder -.->|displays| OrderCompleteScreen
-  ViewOrderHistory -.->|reads| Order
-  ViewOrderHistory -.->|reads| OrderLine
   ViewOrderHistory -.->|displays| OrderHistoryScreen
-  Cancel -.->|updates| Order
   Cancel -.->|raises| Cancel
   Cancel -.->|displays| OrderHistoryScreen

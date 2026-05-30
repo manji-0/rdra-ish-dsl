@@ -17,6 +17,13 @@ screen ProfileScreen     "Personal Information Screen"
 screen AddressListScreen "Address List Screen"
 screen AddressEditScreen "Address Edit Screen"
 
+api ViewProfileApi       "View Profile API"
+api UpdateProfileApi     "Update Profile API"
+api RegisterAddressApi   "Register Address API"
+api UpdateAddressApi     "Update Address API"
+api DeleteAddressApi     "Delete Address API"
+api SetPrimaryAddressApi "Set Primary Address API"
+
 performs(User, BucProfile)
 belongs(BucProfile, PersonalDataMgmt)
 contains(BucProfile, ViewProfile)
@@ -25,30 +32,42 @@ contains(BucProfile, RegisterAddress)
 contains(BucProfile, UpdateAddress)
 contains(BucProfile, DeleteAddress)
 contains(BucProfile, SetPrimaryAddress)
+contains(PersonalDataSystem, ViewProfileApi)
+contains(PersonalDataSystem, UpdateProfileApi)
+contains(PersonalDataSystem, RegisterAddressApi)
+contains(PersonalDataSystem, UpdateAddressApi)
+contains(PersonalDataSystem, DeleteAddressApi)
+contains(PersonalDataSystem, SetPrimaryAddressApi)
 
 displays(ViewProfile, ProfileScreen)
-reads(ViewProfile, PersonalInfo)
-reads(ViewProfile, UserAccount)
+invokes(ViewProfile, ViewProfileApi)
+reads(ViewProfileApi, PersonalInfo)
+reads(ViewProfileApi, UserAccount)
 
 displays(UpdateProfile, ProfileScreen)
-reads(UpdateProfile, PersonalInfo)
-updates(UpdateProfile, PersonalInfo)
-creates(UpdateProfile, AuditLog)
+invokes(UpdateProfile, UpdateProfileApi)
+reads(UpdateProfileApi, PersonalInfo)
+updates(UpdateProfileApi, PersonalInfo)
+creates(UpdateProfileApi, AuditLog)
 
 displays(RegisterAddress, AddressEditScreen)
-creates(RegisterAddress, PostalAddress)
-creates(RegisterAddress, AuditLog)
+invokes(RegisterAddress, RegisterAddressApi)
+creates(RegisterAddressApi, PostalAddress)
+creates(RegisterAddressApi, AuditLog)
 
 displays(UpdateAddress, AddressEditScreen)
-reads(UpdateAddress, PostalAddress)
-updates(UpdateAddress, PostalAddress)
-creates(UpdateAddress, AuditLog)
+invokes(UpdateAddress, UpdateAddressApi)
+reads(UpdateAddressApi, PostalAddress)
+updates(UpdateAddressApi, PostalAddress)
+creates(UpdateAddressApi, AuditLog)
 
 displays(DeleteAddress, AddressListScreen)
-deletes(DeleteAddress, PostalAddress)
-creates(DeleteAddress, AuditLog)
+invokes(DeleteAddress, DeleteAddressApi)
+deletes(DeleteAddressApi, PostalAddress)
+creates(DeleteAddressApi, AuditLog)
 
 displays(SetPrimaryAddress, AddressListScreen)
-reads(SetPrimaryAddress, PostalAddress)
-updates(SetPrimaryAddress, PostalAddress)
-creates(SetPrimaryAddress, AuditLog)
+invokes(SetPrimaryAddress, SetPrimaryAddressApi)
+reads(SetPrimaryAddressApi, PostalAddress)
+updates(SetPrimaryAddressApi, PostalAddress)
+creates(SetPrimaryAddressApi, AuditLog)

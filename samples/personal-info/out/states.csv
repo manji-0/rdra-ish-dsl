@@ -1,13 +1,11 @@
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.27s
-     Running `target/debug/rdra states samples/personal-info --format csv`
 entity_id,entity_label,pattern_idx,column,value,is_initial,is_terminal,via
-AuditLog,監査ログ,0,ip_address,null,true,true,"BucCard/DeleteCard, BucCard/RegisterCard, BucCard/SetPrimaryCard, BucPassword/ChangePassword, BucPassword/RequestPasswordReset, BucPassword/ResetPassword, BucPassword/SetInitialPassword, BucProfile/DeleteAddress, BucProfile/RegisterAddress, BucProfile/SetPrimaryAddress, BucProfile/UpdateAddress, BucProfile/UpdateProfile"
-CreditCard,クレジットカード,0,brand,visa,true,true,"BucCard/DeleteCard, BucCard/RegisterCard, BucCard/SetPrimaryCard"
-CreditCard,クレジットカード,0,is_primary,false,true,true,"BucCard/DeleteCard, BucCard/RegisterCard, BucCard/SetPrimaryCard"
-PasswordCredential,パスワード資格情報,0,(no axes),,true,true,-
-PersonalInfo,個人情報,0,birth_date,null,true,true,BucProfile/UpdateProfile
-PersonalInfo,個人情報,0,phone,null,true,true,BucProfile/UpdateProfile
-PostalAddress,住所,0,building,null,true,true,"BucProfile/DeleteAddress, BucProfile/RegisterAddress, BucProfile/SetPrimaryAddress, BucProfile/UpdateAddress"
-PostalAddress,住所,0,is_primary,false,true,true,"BucProfile/DeleteAddress, BucProfile/RegisterAddress, BucProfile/SetPrimaryAddress, BucProfile/UpdateAddress"
-UserAccount,ユーザーアカウント,0,status,active,true,true,-
-UserAccount,ユーザーアカウント,0,last_login_at,null,true,true,-
+AuditLog,Audit Log,0,ip_address,null,true,true,"BucCard/DeleteCard, BucCard/RegisterCard, BucCard/SetPrimaryCard, BucPassword/ChangePassword, BucPassword/RequestPasswordReset, BucPassword/ResetPassword, BucPassword/SetInitialPassword, BucProfile/DeleteAddress, BucProfile/RegisterAddress, BucProfile/SetPrimaryAddress, BucProfile/UpdateAddress, BucProfile/UpdateProfile"
+CreditCard,Credit Card,0,brand,visa,true,true,"BucCard/DeleteCard, BucCard/RegisterCard, BucCard/SetPrimaryCard"
+CreditCard,Credit Card,0,is_primary,false,true,true,"BucCard/DeleteCard, BucCard/RegisterCard, BucCard/SetPrimaryCard"
+PasswordCredential,Password Credential,0,(no axes),,true,true,-
+PersonalInfo,Personal Information,0,birth_date,null,true,true,BucProfile/UpdateProfile
+PersonalInfo,Personal Information,0,phone,null,true,true,BucProfile/UpdateProfile
+PostalAddress,Postal Address,0,building,null,true,true,"BucProfile/DeleteAddress, BucProfile/RegisterAddress, BucProfile/SetPrimaryAddress, BucProfile/UpdateAddress"
+PostalAddress,Postal Address,0,is_primary,false,true,true,"BucProfile/DeleteAddress, BucProfile/RegisterAddress, BucProfile/SetPrimaryAddress, BucProfile/UpdateAddress"
+UserAccount,User Account,0,status,active,true,true,-
+UserAccount,User Account,0,last_login_at,null,true,true,-

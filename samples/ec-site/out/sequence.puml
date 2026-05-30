@@ -1,94 +1,119 @@
 @startuml
 !theme plain
 
-actor "購入者" as Customer
-participant "システム" as System
-database "カート" as Cart
-database "カートアイテム" as CartItem
-database "注文" as Order
-database "注文明細" as OrderLine
-database "決済" as Payment
-boundary "カート画面" as CartScreen
-boundary "注文完了画面" as OrderCompleteScreen
-boundary "注文履歴画面" as OrderHistoryScreen
-boundary "決済情報入力画面" as PaymentInputScreen
-boundary "決済結果画面" as PaymentResultScreen
+actor "Customer" as Customer
+control "Add To Cart API" as AddToCartApi
+control "Cancel Order API" as CancelOrderApi
+control "Payment Authorization API" as PaymentAuthorizationApi
+control "Payment Capture API" as PaymentCaptureApi
+control "Payment Input API" as PaymentInputApi
+control "Payment Refund API" as PaymentRefundApi
+control "Place Order API" as PlaceOrderApi
+control "Remove Cart Item API" as RemoveCartItemApi
+control "Update Cart Item API" as UpdateCartItemApi
+database "Cart" as Cart
+database "Cart Item" as CartItem
+database "Order" as Order
+database "Order Line" as OrderLine
+database "Payment" as Payment
+boundary "Cart Screen" as CartScreen
+boundary "Order Complete Screen" as OrderCompleteScreen
+boundary "Order History Screen" as OrderHistoryScreen
+boundary "Payment Information Screen" as PaymentInputScreen
+boundary "Payment Result Screen" as PaymentResultScreen
 
-== カートに追加する ==
-Customer -> System : カートに追加する
-activate System
-group transaction (inferred from FK)
-System -> Cart : update
-System -> CartItem : create
+== Add to Cart ==
+Customer -> CartScreen : Add to Cart
+CartScreen -> AddToCartApi : Add to Cart
+activate AddToCartApi
+group transaction (API atomic boundary)
+AddToCartApi -> Cart : update
+AddToCartApi -> CartItem : create
 end
-System --> Customer : カート画面
-deactivate System
+AddToCartApi --> CartScreen : Cart Screen
+CartScreen --> Customer : Cart Screen
+deactivate AddToCartApi
 
-== 決済を承認する ==
-Customer -> System : 決済を承認する
-activate System
-System -> Payment : update
-System --> Customer : 決済結果画面
-deactivate System
+== Authorize Payment ==
+Customer -> PaymentResultScreen : Authorize Payment
+PaymentResultScreen -> PaymentAuthorizationApi : Authorize Payment
+activate PaymentAuthorizationApi
+PaymentAuthorizationApi -> Payment : update
+PaymentAuthorizationApi --> PaymentResultScreen : Payment Result Screen
+PaymentResultScreen --> Customer : Payment Result Screen
+deactivate PaymentAuthorizationApi
 
-== 注文をキャンセルする ==
-Customer -> System : 注文をキャンセルする
-activate System
-System -> Order : update
-System --> Customer : 注文履歴画面
-deactivate System
+== Cancel Order ==
+Customer -> OrderHistoryScreen : Cancel Order
+OrderHistoryScreen -> CancelOrderApi : Cancel Order
+activate CancelOrderApi
+CancelOrderApi -> Order : update
+CancelOrderApi --> OrderHistoryScreen : Order History Screen
+OrderHistoryScreen --> Customer : Order History Screen
+deactivate CancelOrderApi
 
-== 決済を確定する ==
-Customer -> System : 決済を確定する
-activate System
-group transaction (inferred from FK)
-System -> Order : update
-System -> Payment : update
+== Capture Payment ==
+Customer -> PaymentResultScreen : Capture Payment
+PaymentResultScreen -> PaymentCaptureApi : Capture Payment
+activate PaymentCaptureApi
+group transaction (API atomic boundary)
+PaymentCaptureApi -> Order : update
+PaymentCaptureApi -> Payment : update
 end
-System --> Customer : 決済結果画面
-deactivate System
+PaymentCaptureApi --> PaymentResultScreen : Payment Result Screen
+PaymentResultScreen --> Customer : Payment Result Screen
+deactivate PaymentCaptureApi
 
-== 決済情報を入力する ==
-Customer -> System : 決済情報を入力する
-activate System
-System -> Payment : create
-System --> Customer : 決済情報入力画面
-deactivate System
+== Enter Payment Information ==
+Customer -> PaymentInputScreen : Enter Payment Information
+PaymentInputScreen -> PaymentInputApi : Enter Payment Information
+activate PaymentInputApi
+PaymentInputApi -> Payment : create
+PaymentInputApi --> PaymentInputScreen : Payment Information Screen
+PaymentInputScreen --> Customer : Payment Information Screen
+deactivate PaymentInputApi
 
-== 注文を確定する ==
-Customer -> System : 注文を確定する
-activate System
-group transaction (inferred from FK)
-System -> Order : create
-System -> OrderLine : create
+== Place Order ==
+Customer -> OrderCompleteScreen : Place Order
+OrderCompleteScreen -> PlaceOrderApi : Place Order
+activate PlaceOrderApi
+group transaction (API atomic boundary)
+PlaceOrderApi -> Cart : update
+PlaceOrderApi -> Order : create
+PlaceOrderApi -> OrderLine : create
 end
-System -> Cart : update
-note right : FK非連結 — 別TX？@atomicで明示を
-System --> Customer : 注文完了画面
-deactivate System
+PlaceOrderApi --> OrderCompleteScreen : Order Complete Screen
+OrderCompleteScreen --> Customer : Order Complete Screen
+deactivate PlaceOrderApi
 
-== 返金する ==
-Customer -> System : 返金する
-activate System
-group transaction (inferred from FK)
-System -> Order : update
-System -> Payment : update
+== Refund Payment ==
+Customer -> PaymentResultScreen : Refund Payment
+PaymentResultScreen -> PaymentRefundApi : Refund Payment
+activate PaymentRefundApi
+group transaction (API atomic boundary)
+PaymentRefundApi -> Order : update
+PaymentRefundApi -> Payment : update
 end
-System --> Customer : 決済結果画面
-deactivate System
+PaymentRefundApi --> PaymentResultScreen : Payment Result Screen
+PaymentResultScreen --> Customer : Payment Result Screen
+deactivate PaymentRefundApi
 
-== カートから削除する ==
-Customer -> System : カートから削除する
-activate System
-System -> CartItem : delete
-System --> Customer : カート画面
-deactivate System
+== Remove from Cart ==
+Customer -> CartScreen : Remove from Cart
+CartScreen -> RemoveCartItemApi : Remove from Cart
+activate RemoveCartItemApi
+RemoveCartItemApi -> CartItem : delete
+RemoveCartItemApi --> CartScreen : Cart Screen
+CartScreen --> Customer : Cart Screen
+deactivate RemoveCartItemApi
 
-== カートの数量を変更する ==
-Customer -> System : カートの数量を変更する
-activate System
-System -> CartItem : update
-System --> Customer : カート画面
-deactivate System
+== Change Cart Item Quantity ==
+Customer -> CartScreen : Change Cart Item Quantity
+CartScreen -> UpdateCartItemApi : Change Cart Item Quantity
+activate UpdateCartItemApi
+UpdateCartItemApi -> CartItem : update
+UpdateCartItemApi --> CartScreen : Cart Screen
+CartScreen --> Customer : Cart Screen
+deactivate UpdateCartItemApi
 
 @enduml

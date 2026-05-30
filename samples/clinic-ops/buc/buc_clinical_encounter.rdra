@@ -17,8 +17,12 @@ screen EncounterWorkspaceScreen "Encounter Workspace"
 screen VitalsScreen             "Vitals Screen"
 screen DiagnosisScreen          "Diagnosis Screen"
 
-api EncounterApi "Encounter API"
-api ClinicalDataApi "Clinical Data API"
+api OpenEncounterApi       "Open Encounter API"
+api RecordVitalsApi        "Record Vitals API"
+api DocumentAssessmentApi  "Document Assessment API"
+api SignEncounterApi       "Sign Encounter API"
+api AmendEncounterApi      "Amend Encounter API"
+api CompleteAppointmentApi "Complete Appointment API"
 
 performs(Nurse, BucClinicalEncounter)
 performs(Clinician, BucClinicalEncounter)
@@ -30,43 +34,44 @@ contains(BucClinicalEncounter, DocumentAssessment)
 contains(BucClinicalEncounter, SignEncounter)
 contains(BucClinicalEncounter, AmendEncounter)
 contains(BucClinicalEncounter, CompleteAppointment)
+contains(ClinicOpsSystem, OpenEncounterApi)
+contains(ClinicOpsSystem, RecordVitalsApi)
+contains(ClinicOpsSystem, DocumentAssessmentApi)
+contains(ClinicOpsSystem, SignEncounterApi)
+contains(ClinicOpsSystem, AmendEncounterApi)
+contains(ClinicOpsSystem, CompleteAppointmentApi)
 
 displays(OpenEncounter, EncounterWorkspaceScreen)
-invokes(OpenEncounter, EncounterApi)
-creates(OpenEncounter, Encounter)
-creates(EncounterApi, Encounter)
-reads(EncounterApi, Appointment)
+invokes(OpenEncounter, OpenEncounterApi)
+creates(OpenEncounterApi, Encounter)
+reads(OpenEncounterApi, Appointment)
 triggers(EvAppointmentCheckedIn, OpenEncounter)
 
 displays(RecordVitals, VitalsScreen)
-invokes(RecordVitals, ClinicalDataApi)
-creates(RecordVitals, VitalSign)
-updates(RecordVitals, Encounter)
-creates(ClinicalDataApi, VitalSign)
-updates(ClinicalDataApi, Encounter)
+invokes(RecordVitals, RecordVitalsApi)
+creates(RecordVitalsApi, VitalSign)
+updates(RecordVitalsApi, Encounter)
 
 displays(DocumentAssessment, DiagnosisScreen)
-invokes(DocumentAssessment, ClinicalDataApi)
-creates(DocumentAssessment, Diagnosis)
-updates(DocumentAssessment, Encounter)
-creates(ClinicalDataApi, Diagnosis)
+invokes(DocumentAssessment, DocumentAssessmentApi)
+creates(DocumentAssessmentApi, Diagnosis)
+updates(DocumentAssessmentApi, Encounter)
 raises(DocumentAssessment, EvEncounterDocumented)
 
 displays(SignEncounter, EncounterWorkspaceScreen)
-invokes(SignEncounter, EncounterApi)
-updates(SignEncounter, Encounter)
-updates(EncounterApi, Encounter)
+invokes(SignEncounter, SignEncounterApi)
+updates(SignEncounterApi, Encounter)
 raises(SignEncounter, EvEncounterSigned)
 
 displays(AmendEncounter, EncounterWorkspaceScreen)
-invokes(AmendEncounter, EncounterApi)
-updates(AmendEncounter, Encounter)
+invokes(AmendEncounter, AmendEncounterApi)
+updates(AmendEncounterApi, Encounter)
 raises(AmendEncounter, EvEncounterAmended)
 
 displays(CompleteAppointment, EncounterWorkspaceScreen)
-invokes(CompleteAppointment, EncounterApi)
-updates(CompleteAppointment, Appointment)
-updates(CompleteAppointment, Room)
+invokes(CompleteAppointment, CompleteAppointmentApi)
+updates(CompleteAppointmentApi, Appointment)
+updates(CompleteAppointmentApi, Room)
 raises(CompleteAppointment, EvAppointmentCompleted)
 sets(CompleteAppointment, Room, "occupancy_status", "roomcleaning")
 triggers(EvEncounterSigned, CompleteAppointment)

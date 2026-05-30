@@ -46,22 +46,6 @@ erDiagram
     Int patientaccount_id FK
     Int insurancepolicy_id FK
   }
-  ClinicalOrder {
-    Int id PK
-    Enum order_type
-    Enum status
-    DateTime ordered_at
-    DateTime collected_at
-    DateTime resulted_at
-    Int encounter_id FK
-  }
-  Diagnosis {
-    Int id PK
-    String code
-    String description
-    Bool is_primary
-    Int encounter_id FK
-  }
   Encounter {
     Int id PK
     String chief_complaint
@@ -87,13 +71,6 @@ erDiagram
     DateTime sent_at
     DateTime completed_at
     Int patientaccount_id FK
-  }
-  LabResult {
-    Int id PK
-    String result_text
-    Bool abnormal
-    DateTime received_at
-    DateTime reviewed_at
   }
   Notification {
     Int id PK
@@ -129,27 +106,7 @@ erDiagram
     Int provider_id FK
     Int cliniclocation_id FK
   }
-  Room {
-    Int id PK
-    String name
-    Enum occupancy_status
-    Int cliniclocation_id FK
-  }
-  VitalSign {
-    Int id PK
-    DateTime taken_at
-    Decimal height_cm
-    Decimal weight_kg
-    Int systolic
-    Int diastolic
-    Int encounter_id FK
-  }
-  Appointment }o--|| Room : ""
   Encounter ||--|| Appointment : ""
-  VitalSign }o--|| Encounter : ""
-  Diagnosis }o--|| Encounter : ""
-  ClinicalOrder }o--|| Encounter : ""
-  LabResult ||--|| ClinicalOrder : ""
   Charge }o--|| Encounter : ""
   Charge }o--|| Claim : ""
   Claim }o--|| InsurancePolicy : ""

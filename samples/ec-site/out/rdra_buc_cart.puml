@@ -1,26 +1,27 @@
 @startuml
 !theme plain
 
-actor "購入者" as Customer
+actor "Customer" as Customer
 
-usecase "カートに追加する" as AddToCart
-usecase "カートから削除する" as RemoveCartItem
-usecase "商品を検索する" as SearchProducts
-usecase "カートの数量を変更する" as UpdateCartItem
-usecase "カートを確認する" as ViewCart
-usecase "商品詳細を見る" as ViewProduct
+usecase "Add to Cart" as AddToCart
+usecase "Remove from Cart" as RemoveCartItem
+usecase "Search Products" as SearchProducts
+usecase "Change Cart Item Quantity" as UpdateCartItem
+usecase "View Cart" as ViewCart
+usecase "View Product Details" as ViewProduct
 
-rectangle "商品を買い物籠に入れる" as BucCart
+rectangle "Add Products to Cart" as BucCart
 
 
-database "カート" as Cart
-database "カートアイテム" as CartItem
-database "カテゴリ" as Category
-database "商品" as Product
 
-boundary "カート画面" as CartScreen
-boundary "商品詳細画面" as ProductDetailScreen
-boundary "商品検索画面" as ProductSearchScreen
+database "Cart" as Cart
+database "Cart Item" as CartItem
+database "Category" as Category
+database "Product" as Product
+
+boundary "Cart Screen" as CartScreen
+boundary "Product Detail Screen" as ProductDetailScreen
+boundary "Product Search Screen" as ProductSearchScreen
 
 
 
@@ -35,21 +36,10 @@ BucCart ..> ViewCart : contains
 Product -- Category
 CartItem -- Product
 CartItem -- Cart
-SearchProducts ..> Category : reads
-SearchProducts ..> Product : reads
 SearchProducts ..> ProductSearchScreen : displays
-ViewProduct ..> Product : reads
 ViewProduct ..> ProductDetailScreen : displays
-AddToCart ..> Product : reads
-AddToCart ..> Cart : updates
-AddToCart ..> CartItem : creates
 AddToCart ..> CartScreen : displays
-UpdateCartItem ..> CartItem : updates
 UpdateCartItem ..> CartScreen : displays
-RemoveCartItem ..> CartItem : deletes
 RemoveCartItem ..> CartScreen : displays
-ViewCart ..> Product : reads
-ViewCart ..> Cart : reads
-ViewCart ..> CartItem : reads
 ViewCart ..> CartScreen : displays
 @enduml

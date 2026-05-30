@@ -14,25 +14,38 @@ usecase SetPrimaryCard "Set Primary Card"
 screen CardListScreen "Card List Screen"
 screen CardAddScreen  "Card Registration Screen"
 
+api ListCardsApi      "List Cards API"
+api RegisterCardApi   "Register Card API"
+api DeleteCardApi     "Delete Card API"
+api SetPrimaryCardApi "Set Primary Card API"
+
 performs(User, BucCard)
 belongs(BucCard, PersonalDataMgmt)
 contains(BucCard, ListCards)
 contains(BucCard, RegisterCard)
 contains(BucCard, DeleteCard)
 contains(BucCard, SetPrimaryCard)
+contains(PersonalDataSystem, ListCardsApi)
+contains(PersonalDataSystem, RegisterCardApi)
+contains(PersonalDataSystem, DeleteCardApi)
+contains(PersonalDataSystem, SetPrimaryCardApi)
 
 displays(ListCards, CardListScreen)
-reads(ListCards, CreditCard)
+invokes(ListCards, ListCardsApi)
+reads(ListCardsApi, CreditCard)
 
 displays(RegisterCard, CardAddScreen)
-creates(RegisterCard, CreditCard)
-creates(RegisterCard, AuditLog)
+invokes(RegisterCard, RegisterCardApi)
+creates(RegisterCardApi, CreditCard)
+creates(RegisterCardApi, AuditLog)
 
 displays(DeleteCard, CardListScreen)
-deletes(DeleteCard, CreditCard)
-creates(DeleteCard, AuditLog)
+invokes(DeleteCard, DeleteCardApi)
+deletes(DeleteCardApi, CreditCard)
+creates(DeleteCardApi, AuditLog)
 
 displays(SetPrimaryCard, CardListScreen)
-reads(SetPrimaryCard, CreditCard)
-updates(SetPrimaryCard, CreditCard)
-creates(SetPrimaryCard, AuditLog)
+invokes(SetPrimaryCard, SetPrimaryCardApi)
+reads(SetPrimaryCardApi, CreditCard)
+updates(SetPrimaryCardApi, CreditCard)
+creates(SetPrimaryCardApi, AuditLog)

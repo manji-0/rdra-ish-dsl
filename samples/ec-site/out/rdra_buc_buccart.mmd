@@ -1,19 +1,19 @@
 graph TD
-  Customer(["👤 購入者"])
-  AddToCart(["カートに追加する"])
-  RemoveCartItem(["カートから削除する"])
-  SearchProducts(["商品を検索する"])
-  UpdateCartItem(["カートの数量を変更する"])
-  ViewCart(["カートを確認する"])
-  ViewProduct(["商品詳細を見る"])
-  BucCart["📦 商品を買い物籠に入れる"]
-  Cart[("🗄 カート")]
-  CartItem[("🗄 カートアイテム")]
-  Category[("🗄 カテゴリ")]
-  Product[("🗄 商品")]
-  CartScreen[["カート画面"]]
-  ProductDetailScreen[["商品詳細画面"]]
-  ProductSearchScreen[["商品検索画面"]]
+  Customer(["👤 Customer"])
+  AddToCart(["Add to Cart"])
+  RemoveCartItem(["Remove from Cart"])
+  SearchProducts(["Search Products"])
+  UpdateCartItem(["Change Cart Item Quantity"])
+  ViewCart(["View Cart"])
+  ViewProduct(["View Product Details"])
+  BucCart["📦 Add Products to Cart"]
+  Cart[("🗄 Cart")]
+  CartItem[("🗄 Cart Item")]
+  Category[("🗄 Category")]
+  Product[("🗄 Product")]
+  CartScreen[["Cart Screen"]]
+  ProductDetailScreen[["Product Detail Screen"]]
+  ProductSearchScreen[["Product Search Screen"]]
   Customer --> BucCart
   BucCart --> EcShopping
   BucCart --> SearchProducts
@@ -25,20 +25,9 @@ graph TD
   Product --- Category
   CartItem --- Product
   CartItem --- Cart
-  SearchProducts -.->|reads| Category
-  SearchProducts -.->|reads| Product
   SearchProducts -.->|displays| ProductSearchScreen
-  ViewProduct -.->|reads| Product
   ViewProduct -.->|displays| ProductDetailScreen
-  AddToCart -.->|reads| Product
-  AddToCart -.->|updates| Cart
-  AddToCart -.->|creates| CartItem
   AddToCart -.->|displays| CartScreen
-  UpdateCartItem -.->|updates| CartItem
   UpdateCartItem -.->|displays| CartScreen
-  RemoveCartItem -.->|deletes| CartItem
   RemoveCartItem -.->|displays| CartScreen
-  ViewCart -.->|reads| Product
-  ViewCart -.->|reads| Cart
-  ViewCart -.->|reads| CartItem
   ViewCart -.->|displays| CartScreen

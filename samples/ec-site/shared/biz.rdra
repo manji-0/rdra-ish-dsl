@@ -1,3 +1,5 @@
 module shared.biz
 
 business EcShopping "EC Shopping Business"
+
+system CommerceSystem "Commerce System"

@@ -15,29 +15,42 @@ usecase RefundPayment    "Refund Payment"
 screen PaymentInputScreen  "Payment Information Screen"
 screen PaymentResultScreen "Payment Result Screen"
 
+api PaymentInputApi         "Payment Input API"
+api PaymentAuthorizationApi "Payment Authorization API"
+api PaymentCaptureApi       "Payment Capture API"
+api PaymentRefundApi        "Payment Refund API"
+
 performs(Customer, BucPayment)
 belongs(BucPayment, EcShopping)
 contains(BucPayment, InputPaymentInfo)
 contains(BucPayment, AuthorizePayment)
 contains(BucPayment, usecase::Capture)
 contains(BucPayment, RefundPayment)
+contains(CommerceSystem, PaymentInputApi)
+contains(CommerceSystem, PaymentAuthorizationApi)
+contains(CommerceSystem, PaymentCaptureApi)
+contains(CommerceSystem, PaymentRefundApi)
 
 displays(InputPaymentInfo, PaymentInputScreen)
-reads(InputPaymentInfo, Order)
-creates(InputPaymentInfo, Payment)
+invokes(InputPaymentInfo, PaymentInputApi)
+reads(PaymentInputApi, Order)
+creates(PaymentInputApi, Payment)
 
 displays(AuthorizePayment, PaymentResultScreen)
-updates(AuthorizePayment, Payment)
+invokes(AuthorizePayment, PaymentAuthorizationApi)
+updates(PaymentAuthorizationApi, Payment)
 uses(Customer, PaymentGW)
 
 displays(usecase::Capture, PaymentResultScreen)
-updates(usecase::Capture, Payment)
-updates(usecase::Capture, Order)
+invokes(usecase::Capture, PaymentCaptureApi)
+updates(PaymentCaptureApi, Payment)
+updates(PaymentCaptureApi, Order)
 raises(usecase::Capture, event::Capture)
 
 displays(RefundPayment, PaymentResultScreen)
-updates(RefundPayment, Payment)
-updates(RefundPayment, Order)
+invokes(RefundPayment, PaymentRefundApi)
+updates(PaymentRefundApi, Payment)
+updates(PaymentRefundApi, Order)
 
 // ── Column effect declarations (sets) ────────────────────────────────────────
 // Payment.status has no state machine, so it is declared explicitly via sets

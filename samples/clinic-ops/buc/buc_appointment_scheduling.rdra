@@ -18,8 +18,12 @@ screen ScheduleSearchScreen "Schedule Search Screen"
 screen AppointmentScreen    "Appointment Screen"
 screen AppointmentNoticeScreen "Appointment Notice Screen"
 
-api SchedulingApi   "Scheduling API"
-api NotificationApi "Notification API"
+api SearchAvailabilityApi    "Search Availability API"
+api ReserveAppointmentApi    "Reserve Appointment API"
+api BookAppointmentApi       "Book Appointment API"
+api RescheduleAppointmentApi "Reschedule Appointment API"
+api CancelAppointmentApi     "Cancel Appointment API"
+api AppointmentNoticeApi     "Appointment Notice API"
 
 performs(FrontDesk, BucAppointmentScheduling)
 performs(Patient, BucAppointmentScheduling)
@@ -32,40 +36,43 @@ contains(BucAppointmentScheduling, RescheduleAppointment)
 contains(BucAppointmentScheduling, CancelAppointment)
 contains(BucAppointmentScheduling, MarkNoShow)
 contains(BucAppointmentScheduling, SendAppointmentNotice)
+contains(ClinicOpsSystem, SearchAvailabilityApi)
+contains(ClinicOpsSystem, ReserveAppointmentApi)
+contains(ClinicOpsSystem, BookAppointmentApi)
+contains(ClinicOpsSystem, RescheduleAppointmentApi)
+contains(ClinicOpsSystem, CancelAppointmentApi)
+contains(ClinicOpsSystem, AppointmentNoticeApi)
 
 uses(Patient, MessagingGateway)
 
 displays(SearchAvailability, ScheduleSearchScreen)
-invokes(SearchAvailability, SchedulingApi)
-reads(SchedulingApi, ProviderSchedule)
-reads(SchedulingApi, Provider)
-reads(SchedulingApi, ClinicLocation)
+invokes(SearchAvailability, SearchAvailabilityApi)
+reads(SearchAvailabilityApi, ProviderSchedule)
+reads(SearchAvailabilityApi, Provider)
+reads(SearchAvailabilityApi, ClinicLocation)
 shows(ScheduleSearchScreen, ProviderSchedule)
 
 displays(ReserveAppointment, AppointmentScreen)
-invokes(ReserveAppointment, SchedulingApi)
-creates(ReserveAppointment, Appointment)
-updates(ReserveAppointment, ProviderSchedule)
-updates(SchedulingApi, ProviderSchedule)
+invokes(ReserveAppointment, ReserveAppointmentApi)
+creates(ReserveAppointmentApi, Appointment)
+updates(ReserveAppointmentApi, ProviderSchedule)
 
 displays(BookAppointment, AppointmentScreen)
-invokes(BookAppointment, SchedulingApi)
-updates(BookAppointment, Appointment)
-updates(BookAppointment, ProviderSchedule)
-updates(SchedulingApi, ProviderSchedule)
+invokes(BookAppointment, BookAppointmentApi)
+updates(BookAppointmentApi, Appointment)
+updates(BookAppointmentApi, ProviderSchedule)
 raises(BookAppointment, EvAppointmentScheduled)
 
 displays(RescheduleAppointment, AppointmentScreen)
-invokes(RescheduleAppointment, SchedulingApi)
-updates(RescheduleAppointment, Appointment)
-updates(RescheduleAppointment, ProviderSchedule)
-updates(SchedulingApi, ProviderSchedule)
+invokes(RescheduleAppointment, RescheduleAppointmentApi)
+updates(RescheduleAppointmentApi, Appointment)
+updates(RescheduleAppointmentApi, ProviderSchedule)
 raises(RescheduleAppointment, EvAppointmentRescheduled)
 
 displays(CancelAppointment, AppointmentScreen)
-invokes(CancelAppointment, SchedulingApi)
-updates(CancelAppointment, Appointment)
-updates(CancelAppointment, ProviderSchedule)
+invokes(CancelAppointment, CancelAppointmentApi)
+updates(CancelAppointmentApi, Appointment)
+updates(CancelAppointmentApi, ProviderSchedule)
 raises(CancelAppointment, EvAppointmentCancelled)
 
 displays(MarkNoShow, AppointmentScreen)
@@ -73,9 +80,9 @@ updates(MarkNoShow, Appointment)
 raises(MarkNoShow, EvAppointmentNoShow)
 
 displays(SendAppointmentNotice, AppointmentNoticeScreen)
-invokes(SendAppointmentNotice, NotificationApi)
-creates(SendAppointmentNotice, Notification)
-creates(NotificationApi, PatientMessage)
+invokes(SendAppointmentNotice, AppointmentNoticeApi)
+creates(AppointmentNoticeApi, Notification)
+creates(AppointmentNoticeApi, PatientMessage)
 sets(SendAppointmentNotice, Notification, "status", "notifdelivered")
 sets(SendAppointmentNotice, Notification, "delivered_at", "timestamptz")
 sets(SendAppointmentNotice, PatientMessage, "status", "msgsent")

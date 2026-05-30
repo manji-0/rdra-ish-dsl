@@ -1,7 +1,7 @@
 @startuml
-[*] --> OrderPending
-OrderPaid --> OrderShipped : 発送開始
-OrderPending --> OrderCancelled : キャンセル申請
-OrderPending --> OrderPaid : 決済確定
-OrderShipped --> OrderDelivered : 配達確認
+[*] --> Pending
+Paid --> Shipped : Start Shipping
+Pending --> Cancelled : Cancel Order
+Pending --> Paid : Capture Payment
+Shipped --> Delivered : Confirm Delivery
 @enduml

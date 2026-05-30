@@ -1,49 +1,31 @@
 @startuml
 !theme plain
 
-actor "利用者" as User
+actor "User" as User
 
-usecase "パスワードを変更する" as ChangePassword
-usecase "住所を削除する" as DeleteAddress
-usecase "カードを削除する" as DeleteCard
-usecase "カード一覧を見る" as ListCards
-usecase "住所を登録する" as RegisterAddress
-usecase "カードを登録する" as RegisterCard
-usecase "パスワードリセットを申請する" as RequestPasswordReset
-usecase "パスワードをリセットする" as ResetPassword
-usecase "初期パスワードを設定する" as SetInitialPassword
-usecase "住所を優先設定する" as SetPrimaryAddress
-usecase "優先カードを設定する" as SetPrimaryCard
-usecase "住所を更新する" as UpdateAddress
-usecase "個人情報を更新する" as UpdateProfile
-usecase "個人情報を参照する" as ViewProfile
+usecase "Delete Address" as DeleteAddress
+usecase "Register Address" as RegisterAddress
+usecase "Set Primary Address" as SetPrimaryAddress
+usecase "Update Address" as UpdateAddress
+usecase "Update Personal Information" as UpdateProfile
+usecase "View Personal Information" as ViewProfile
 
-rectangle "クレジットカードを管理する" as BucCard
-rectangle "パスワードを管理する" as BucPassword
-rectangle "個人情報を管理する" as BucProfile
+rectangle "Manage Personal Information" as BucProfile
 
 
-database "監査ログ" as AuditLog
-database "クレジットカード" as CreditCard
-database "パスワード資格情報" as PasswordCredential
-database "個人情報" as PersonalInfo
-database "住所" as PostalAddress
-database "ユーザーアカウント" as UserAccount
 
-boundary "住所編集画面" as AddressEditScreen
-boundary "住所一覧画面" as AddressListScreen
-boundary "カード登録画面" as CardAddScreen
-boundary "カード一覧画面" as CardListScreen
-boundary "パスワード変更画面" as PasswordChangeScreen
-boundary "パスワードリセット画面" as PasswordResetScreen
-boundary "パスワード設定画面" as PasswordSetScreen
-boundary "個人情報画面" as ProfileScreen
+database "Audit Log" as AuditLog
+database "Personal Information" as PersonalInfo
+database "Postal Address" as PostalAddress
+database "User Account" as UserAccount
+
+boundary "Address Edit Screen" as AddressEditScreen
+boundary "Address List Screen" as AddressListScreen
+boundary "Personal Information Screen" as ProfileScreen
 
 
 
 User --> BucProfile
-User --> BucCard
-User --> BucPassword
 BucProfile ..> PersonalDataMgmt : belongs
 BucProfile ..> ViewProfile : contains
 BucProfile ..> UpdateProfile : contains
@@ -51,65 +33,13 @@ BucProfile ..> RegisterAddress : contains
 BucProfile ..> UpdateAddress : contains
 BucProfile ..> DeleteAddress : contains
 BucProfile ..> SetPrimaryAddress : contains
-BucCard ..> PersonalDataMgmt : belongs
-BucCard ..> SetPrimaryCard : contains
-BucCard ..> ListCards : contains
-BucCard ..> RegisterCard : contains
-BucCard ..> DeleteCard : contains
-BucPassword ..> PersonalDataMgmt : belongs
-BucPassword ..> SetInitialPassword : contains
-BucPassword ..> ChangePassword : contains
-BucPassword ..> RequestPasswordReset : contains
-BucPassword ..> ResetPassword : contains
 PersonalInfo -- UserAccount
 PostalAddress -- UserAccount
-CreditCard -- UserAccount
-PasswordCredential -- UserAccount
 AuditLog -- UserAccount
-SetPrimaryCard ..> CreditCard : reads
-SetPrimaryCard ..> CreditCard : updates
-SetPrimaryCard ..> AuditLog : creates
-SetPrimaryCard ..> CardListScreen : displays
-SetInitialPassword ..> PasswordCredential : creates
-SetInitialPassword ..> AuditLog : creates
-SetInitialPassword ..> PasswordSetScreen : displays
-ChangePassword ..> PasswordCredential : reads
-ChangePassword ..> PasswordCredential : updates
-ChangePassword ..> AuditLog : creates
-ChangePassword ..> PasswordChangeScreen : displays
-RequestPasswordReset ..> UserAccount : reads
-RequestPasswordReset ..> AuditLog : creates
-RequestPasswordReset ..> PasswordResetScreen : displays
-ResetPassword ..> PasswordCredential : updates
-ResetPassword ..> AuditLog : creates
-ResetPassword ..> PasswordResetScreen : displays
-ViewProfile ..> UserAccount : reads
-ViewProfile ..> PersonalInfo : reads
 ViewProfile ..> ProfileScreen : displays
-UpdateProfile ..> PersonalInfo : reads
-UpdateProfile ..> PersonalInfo : updates
-UpdateProfile ..> AuditLog : creates
 UpdateProfile ..> ProfileScreen : displays
-RegisterAddress ..> PostalAddress : creates
-RegisterAddress ..> AuditLog : creates
 RegisterAddress ..> AddressEditScreen : displays
-UpdateAddress ..> PostalAddress : reads
-UpdateAddress ..> PostalAddress : updates
-UpdateAddress ..> AuditLog : creates
 UpdateAddress ..> AddressEditScreen : displays
-DeleteAddress ..> PostalAddress : deletes
-DeleteAddress ..> AuditLog : creates
 DeleteAddress ..> AddressListScreen : displays
-SetPrimaryAddress ..> PostalAddress : reads
-SetPrimaryAddress ..> PostalAddress : updates
-SetPrimaryAddress ..> AuditLog : creates
 SetPrimaryAddress ..> AddressListScreen : displays
-ListCards ..> CreditCard : reads
-ListCards ..> CardListScreen : displays
-RegisterCard ..> CreditCard : creates
-RegisterCard ..> AuditLog : creates
-RegisterCard ..> CardAddScreen : displays
-DeleteCard ..> CreditCard : deletes
-DeleteCard ..> AuditLog : creates
-DeleteCard ..> CardListScreen : displays
 @enduml

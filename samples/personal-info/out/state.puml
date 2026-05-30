@@ -1,5 +1,5 @@
 @startuml
-AccountActive --> AccountDeleted : アカウント削除申請
-AccountActive --> AccountSuspended : アカウント停止申請
-AccountSuspended --> AccountActive : アカウント復元申請
+Active --> Deleted : Delete Account
+Active --> Suspended : Suspend Account
+Suspended --> Active : Restore Account
 @enduml

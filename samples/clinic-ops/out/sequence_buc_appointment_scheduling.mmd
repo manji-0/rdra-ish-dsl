@@ -2,9 +2,12 @@ sequenceDiagram
   actor FrontDesk as Front Desk Staff
   actor Patient as Patient
   participant System as システム
+  participant AppointmentNoticeApi as Appointment Notice API
+  participant BookAppointmentApi as Book Appointment API
+  participant CancelAppointmentApi as Cancel Appointment API
   participant IntakeMessagingApi as Intake Messaging API
-  participant NotificationApi as Notification API
-  participant SchedulingApi as Scheduling API
+  participant RescheduleAppointmentApi as Reschedule Appointment API
+  participant ReserveAppointmentApi as Reserve Appointment API
   participant Appointment as Appointment
   participant IntakePacket as Intake Packet
   participant Notification as Notification
@@ -16,23 +19,29 @@ sequenceDiagram
 
   Note over FrontDesk,IntakePortalScreen: Book Appointment
   FrontDesk->>AppointmentScreen: Book Appointment
-  AppointmentScreen->>SchedulingApi: Book Appointment
-  activate SchedulingApi
-  SchedulingApi->>Appointment: update
-  SchedulingApi->>ProviderSchedule: update
-  SchedulingApi-->>AppointmentScreen: Appointment Screen
+  AppointmentScreen->>BookAppointmentApi: Book Appointment
+  activate BookAppointmentApi
+  rect rgb(245,245,245)
+    Note right of BookAppointmentApi: transaction (API atomic boundary)
+    BookAppointmentApi->>Appointment: update
+    BookAppointmentApi->>ProviderSchedule: update
+  end
+  BookAppointmentApi-->>AppointmentScreen: Appointment Screen
   AppointmentScreen-->>FrontDesk: Appointment Screen
-  deactivate SchedulingApi
+  deactivate BookAppointmentApi
 
   Note over FrontDesk,IntakePortalScreen: Cancel Appointment
   FrontDesk->>AppointmentScreen: Cancel Appointment
-  AppointmentScreen->>SchedulingApi: Cancel Appointment
-  activate SchedulingApi
-  SchedulingApi->>Appointment: update
-  SchedulingApi->>ProviderSchedule: update
-  SchedulingApi-->>AppointmentScreen: Appointment Screen
+  AppointmentScreen->>CancelAppointmentApi: Cancel Appointment
+  activate CancelAppointmentApi
+  rect rgb(245,245,245)
+    Note right of CancelAppointmentApi: transaction (API atomic boundary)
+    CancelAppointmentApi->>Appointment: update
+    CancelAppointmentApi->>ProviderSchedule: update
+  end
+  CancelAppointmentApi-->>AppointmentScreen: Appointment Screen
   AppointmentScreen-->>FrontDesk: Appointment Screen
-  deactivate SchedulingApi
+  deactivate CancelAppointmentApi
 
   Note over FrontDesk,IntakePortalScreen: Mark No Show
   FrontDesk->System: Mark No Show
@@ -43,40 +52,52 @@ sequenceDiagram
 
   Note over FrontDesk,IntakePortalScreen: Reschedule Appointment
   FrontDesk->>AppointmentScreen: Reschedule Appointment
-  AppointmentScreen->>SchedulingApi: Reschedule Appointment
-  activate SchedulingApi
-  SchedulingApi->>Appointment: update
-  SchedulingApi->>ProviderSchedule: update
-  SchedulingApi-->>AppointmentScreen: Appointment Screen
+  AppointmentScreen->>RescheduleAppointmentApi: Reschedule Appointment
+  activate RescheduleAppointmentApi
+  rect rgb(245,245,245)
+    Note right of RescheduleAppointmentApi: transaction (API atomic boundary)
+    RescheduleAppointmentApi->>Appointment: update
+    RescheduleAppointmentApi->>ProviderSchedule: update
+  end
+  RescheduleAppointmentApi-->>AppointmentScreen: Appointment Screen
   AppointmentScreen-->>FrontDesk: Appointment Screen
-  deactivate SchedulingApi
+  deactivate RescheduleAppointmentApi
 
   Note over FrontDesk,IntakePortalScreen: Reserve Appointment
   FrontDesk->>AppointmentScreen: Reserve Appointment
-  AppointmentScreen->>SchedulingApi: Reserve Appointment
-  activate SchedulingApi
-  SchedulingApi->>Appointment: create
-  SchedulingApi->>ProviderSchedule: update
-  SchedulingApi-->>AppointmentScreen: Appointment Screen
+  AppointmentScreen->>ReserveAppointmentApi: Reserve Appointment
+  activate ReserveAppointmentApi
+  rect rgb(245,245,245)
+    Note right of ReserveAppointmentApi: transaction (API atomic boundary)
+    ReserveAppointmentApi->>Appointment: create
+    ReserveAppointmentApi->>ProviderSchedule: update
+  end
+  ReserveAppointmentApi-->>AppointmentScreen: Appointment Screen
   AppointmentScreen-->>FrontDesk: Appointment Screen
-  deactivate SchedulingApi
+  deactivate ReserveAppointmentApi
 
   Note over FrontDesk,IntakePortalScreen: Send Appointment Notice
   FrontDesk->>AppointmentNoticeScreen: Send Appointment Notice
-  AppointmentNoticeScreen->>NotificationApi: Send Appointment Notice
-  activate NotificationApi
-  NotificationApi->>Notification: create
-  NotificationApi->>PatientMessage: create
-  NotificationApi-->>AppointmentNoticeScreen: Appointment Notice Screen
+  AppointmentNoticeScreen->>AppointmentNoticeApi: Send Appointment Notice
+  activate AppointmentNoticeApi
+  rect rgb(245,245,245)
+    Note right of AppointmentNoticeApi: transaction (API atomic boundary)
+    AppointmentNoticeApi->>Notification: create
+    AppointmentNoticeApi->>PatientMessage: create
+  end
+  AppointmentNoticeApi-->>AppointmentNoticeScreen: Appointment Notice Screen
   AppointmentNoticeScreen-->>FrontDesk: Appointment Notice Screen
-  deactivate NotificationApi
+  deactivate AppointmentNoticeApi
 
   Note over FrontDesk,IntakePortalScreen: Send Intake Forms
   FrontDesk->>IntakePortalScreen: Send Intake Forms
   IntakePortalScreen->>IntakeMessagingApi: Send Intake Forms
   activate IntakeMessagingApi
-  IntakeMessagingApi->>IntakePacket: create
-  IntakeMessagingApi->>PatientMessage: create
+  rect rgb(245,245,245)
+    Note right of IntakeMessagingApi: transaction (API atomic boundary)
+    IntakeMessagingApi->>IntakePacket: create
+    IntakeMessagingApi->>PatientMessage: create
+  end
   IntakeMessagingApi-->>IntakePortalScreen: Intake Portal Screen
   IntakePortalScreen-->>FrontDesk: Intake Portal Screen
   deactivate IntakeMessagingApi

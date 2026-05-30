@@ -23,7 +23,9 @@ screen InsuranceScreen      "Insurance Verification Screen"
 screen ConsentScreen        "Consent Capture Screen"
 screen IntakePortalScreen   "Intake Portal Screen"
 
-api PatientRegistryApi   "Patient Registry API"
+api SearchPatientApi       "Search Patient API"
+api RegisterPatientApi     "Register Patient API"
+api UpdateDemographicsApi  "Update Demographics API"
 api EligibilityApi       "Eligibility API"
 api ConsentApi           "Consent API"
 api IntakeMessagingApi   "Intake Messaging API"
@@ -42,34 +44,37 @@ contains(BucPatientOnboarding, CompleteIntakeForms)
 contains(BucPatientOnboarding, ExpireIntakeForms)
 contains(BucPatientOnboarding, MergeDuplicatePatient)
 contains(BucPatientOnboarding, ArchivePatient)
+contains(ClinicOpsSystem, SearchPatientApi)
+contains(ClinicOpsSystem, RegisterPatientApi)
+contains(ClinicOpsSystem, UpdateDemographicsApi)
+contains(ClinicOpsSystem, EligibilityApi)
+contains(ClinicOpsSystem, ConsentApi)
+contains(ClinicOpsSystem, IntakeMessagingApi)
 
 uses(FrontDesk, EligibilityService)
 uses(Patient, MessagingGateway)
 
 displays(SearchPatient, PatientSearchScreen)
-invokes(SearchPatient, PatientRegistryApi)
-reads(PatientRegistryApi, PatientAccount)
-reads(PatientRegistryApi, PatientProfile)
+invokes(SearchPatient, SearchPatientApi)
+reads(SearchPatientApi, PatientAccount)
+reads(SearchPatientApi, PatientProfile)
 shows(PatientSearchScreen, PatientAccount)
 
 displays(RegisterPatient, PatientProfileScreen)
-invokes(RegisterPatient, PatientRegistryApi)
-creates(RegisterPatient, PatientAccount)
-creates(RegisterPatient, PatientProfile)
-creates(PatientRegistryApi, PatientAccount)
-creates(PatientRegistryApi, PatientProfile)
+invokes(RegisterPatient, RegisterPatientApi)
+creates(RegisterPatientApi, PatientAccount)
+creates(RegisterPatientApi, PatientProfile)
 shows(PatientProfileScreen, PatientProfile)
 
 displays(UpdateDemographics, PatientProfileScreen)
-invokes(UpdateDemographics, PatientRegistryApi)
-updates(UpdateDemographics, PatientProfile)
-updates(PatientRegistryApi, PatientProfile)
+invokes(UpdateDemographics, UpdateDemographicsApi)
+updates(UpdateDemographicsApi, PatientProfile)
 
 displays(VerifyInsurance, InsuranceScreen)
 invokes(VerifyInsurance, EligibilityApi)
 reads(EligibilityApi, InsurancePolicy)
-creates(VerifyInsurance, EligibilityCheck)
-updates(VerifyInsurance, InsurancePolicy)
+creates(EligibilityApi, EligibilityCheck)
+updates(EligibilityApi, InsurancePolicy)
 sets(VerifyInsurance, InsurancePolicy, "verification_status", "verified")
 sets(VerifyInsurance, InsurancePolicy, "verified_at", "timestamptz")
 sets(VerifyInsurance, EligibilityCheck, "result", "eligible")
@@ -77,14 +82,13 @@ sets(VerifyInsurance, EligibilityCheck, "reference_no", "present")
 
 displays(CaptureConsent, ConsentScreen)
 invokes(CaptureConsent, ConsentApi)
-creates(CaptureConsent, ConsentRecord)
 creates(ConsentApi, ConsentRecord)
 sets(CaptureConsent, ConsentRecord, "signed_at", "timestamptz")
 sets(CaptureConsent, ConsentRecord, "revoked", "false")
 
 displays(SendIntakeForms, IntakePortalScreen)
 invokes(SendIntakeForms, IntakeMessagingApi)
-creates(SendIntakeForms, IntakePacket)
+creates(IntakeMessagingApi, IntakePacket)
 creates(IntakeMessagingApi, PatientMessage)
 sets(SendIntakeForms, IntakePacket, "sent_at", "timestamptz")
 sets(SendIntakeForms, PatientMessage, "status", "msgsent")

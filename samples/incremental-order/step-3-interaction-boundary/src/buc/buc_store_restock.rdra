@@ -1,0 +1,33 @@
+module buc.store_restock
+
+import shared.biz
+import shared.actors
+import shared.entities
+
+buc BucStoreRestock "Maintain Store Restock"
+usecase ChangeNextRestockDate "Change Next Restock Date"
+usecase ChangeStoreParentOrganization "Change Store Parent Organization"
+screen StoreMaintenanceScreen "Store Maintenance"
+api StoreAdminApi "Store Admin API"
+api OrganizationLookupApi "Organization Lookup API"
+system StoreAdminSystem "Store Admin System"
+system OrganizationSystem "Organization System"
+
+belongs(BucStoreRestock, StoreOperations)
+performs(OpsStaff, BucStoreRestock)
+contains(BucStoreRestock, ChangeNextRestockDate)
+contains(BucStoreRestock, ChangeStoreParentOrganization)
+
+displays(ChangeNextRestockDate, StoreMaintenanceScreen)
+shows(StoreMaintenanceScreen, Store)
+updates(ChangeNextRestockDate, Store)
+
+displays(ChangeStoreParentOrganization, StoreMaintenanceScreen)
+shows(StoreMaintenanceScreen, Store)
+shows(StoreMaintenanceScreen, Organization)
+contains(StoreAdminSystem, StoreAdminApi)
+contains(OrganizationSystem, OrganizationLookupApi)
+invokes(ChangeStoreParentOrganization, StoreAdminApi)
+invokes(ChangeStoreParentOrganization, OrganizationLookupApi)
+updates(StoreAdminApi, Store)
+reads(OrganizationLookupApi, Organization)

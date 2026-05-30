@@ -16,9 +16,11 @@ screen CheckInScreen     "Check-In Screen"
 screen CopayScreen       "Copay Screen"
 screen RoomBoardScreen   "Room Board Screen"
 
-api CheckInApi "Check-In API"
-api CopayApi   "Copay API"
-api RoomApi    "Room Assignment API"
+api VerifyArrivalApi    "Verify Arrival API"
+api CheckInPatientApi   "Check-In Patient API"
+api CollectCopayApi     "Collect Copay API"
+api AssignRoomApi       "Assign Room API"
+api PrepareEncounterApi "Prepare Encounter API"
 
 performs(FrontDesk, BucVisitCheckIn)
 performs(Nurse, BucVisitCheckIn)
@@ -29,39 +31,43 @@ contains(BucVisitCheckIn, CheckInPatient)
 contains(BucVisitCheckIn, CollectCopay)
 contains(BucVisitCheckIn, AssignRoom)
 contains(BucVisitCheckIn, PrepareEncounter)
+contains(ClinicOpsSystem, VerifyArrivalApi)
+contains(ClinicOpsSystem, CheckInPatientApi)
+contains(ClinicOpsSystem, CollectCopayApi)
+contains(ClinicOpsSystem, AssignRoomApi)
+contains(ClinicOpsSystem, PrepareEncounterApi)
 
 uses(FrontDesk, PaymentGateway)
 
 displays(VerifyArrival, CheckInScreen)
-invokes(VerifyArrival, CheckInApi)
-reads(CheckInApi, Appointment)
-reads(CheckInApi, PatientAccount)
-reads(CheckInApi, InsurancePolicy)
+invokes(VerifyArrival, VerifyArrivalApi)
+reads(VerifyArrivalApi, Appointment)
+reads(VerifyArrivalApi, PatientAccount)
+reads(VerifyArrivalApi, InsurancePolicy)
 shows(CheckInScreen, Appointment)
 
 displays(CheckInPatient, CheckInScreen)
-invokes(CheckInPatient, CheckInApi)
-updates(CheckInPatient, Appointment)
-updates(CheckInApi, PatientAccount)
+invokes(CheckInPatient, CheckInPatientApi)
+updates(CheckInPatientApi, Appointment)
+updates(CheckInPatientApi, PatientAccount)
 raises(CheckInPatient, EvAppointmentCheckedIn)
 
 displays(CollectCopay, CopayScreen)
-invokes(CollectCopay, CopayApi)
-creates(CollectCopay, PaymentTransaction)
-updates(CollectCopay, AccountBalance)
-creates(CopayApi, PaymentTransaction)
+invokes(CollectCopay, CollectCopayApi)
+creates(CollectCopayApi, PaymentTransaction)
+updates(CollectCopayApi, AccountBalance)
 sets(CollectCopay, PaymentTransaction, "status", "payposted")
 sets(CollectCopay, PaymentTransaction, "processed_at", "timestamptz")
 sets(CollectCopay, PaymentTransaction, "gateway_ref", "present")
 
 displays(AssignRoom, RoomBoardScreen)
-invokes(AssignRoom, RoomApi)
-updates(AssignRoom, Room)
-updates(RoomApi, Appointment)
+invokes(AssignRoom, AssignRoomApi)
+updates(AssignRoomApi, Room)
+updates(AssignRoomApi, Appointment)
 sets(AssignRoom, Room, "occupancy_status", "roomoccupied")
 
 displays(PrepareEncounter, CheckInScreen)
-invokes(PrepareEncounter, CheckInApi)
-reads(PrepareEncounter, Appointment)
-reads(CheckInApi, PatientProfile)
+invokes(PrepareEncounter, PrepareEncounterApi)
+reads(PrepareEncounterApi, Appointment)
+reads(PrepareEncounterApi, PatientProfile)
 triggers(EvAppointmentCheckedIn, PrepareEncounter)

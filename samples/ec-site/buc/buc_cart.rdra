@@ -17,6 +17,13 @@ screen ProductSearchScreen "Product Search Screen"
 screen ProductDetailScreen "Product Detail Screen"
 screen CartScreen          "Cart Screen"
 
+api ProductSearchApi  "Product Search API"
+api ProductDetailApi  "Product Detail API"
+api AddToCartApi      "Add To Cart API"
+api UpdateCartItemApi "Update Cart Item API"
+api RemoveCartItemApi "Remove Cart Item API"
+api ViewCartApi       "View Cart API"
+
 performs(Customer, BucCart)
 belongs(BucCart, EcShopping)
 contains(BucCart, SearchProducts)
@@ -25,26 +32,38 @@ contains(BucCart, AddToCart)
 contains(BucCart, UpdateCartItem)
 contains(BucCart, RemoveCartItem)
 contains(BucCart, ViewCart)
+contains(CommerceSystem, ProductSearchApi)
+contains(CommerceSystem, ProductDetailApi)
+contains(CommerceSystem, AddToCartApi)
+contains(CommerceSystem, UpdateCartItemApi)
+contains(CommerceSystem, RemoveCartItemApi)
+contains(CommerceSystem, ViewCartApi)
 
 displays(SearchProducts, ProductSearchScreen)
-reads(SearchProducts, Product)
-reads(SearchProducts, Category)
+invokes(SearchProducts, ProductSearchApi)
+reads(ProductSearchApi, Product)
+reads(ProductSearchApi, Category)
 
 displays(ViewProduct, ProductDetailScreen)
-reads(ViewProduct, Product)
+invokes(ViewProduct, ProductDetailApi)
+reads(ProductDetailApi, Product)
 
 displays(AddToCart, CartScreen)
-reads(AddToCart, Product)
-creates(AddToCart, CartItem)
-updates(AddToCart, Cart)
+invokes(AddToCart, AddToCartApi)
+reads(AddToCartApi, Product)
+creates(AddToCartApi, CartItem)
+updates(AddToCartApi, Cart)
 
 displays(UpdateCartItem, CartScreen)
-updates(UpdateCartItem, CartItem)
+invokes(UpdateCartItem, UpdateCartItemApi)
+updates(UpdateCartItemApi, CartItem)
 
 displays(RemoveCartItem, CartScreen)
-deletes(RemoveCartItem, CartItem)
+invokes(RemoveCartItem, RemoveCartItemApi)
+deletes(RemoveCartItemApi, CartItem)
 
 displays(ViewCart, CartScreen)
-reads(ViewCart, Cart)
-reads(ViewCart, CartItem)
-reads(ViewCart, Product)
+invokes(ViewCart, ViewCartApi)
+reads(ViewCartApi, Cart)
+reads(ViewCartApi, CartItem)
+reads(ViewCartApi, Product)

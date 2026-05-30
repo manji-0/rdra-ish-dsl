@@ -1,21 +1,21 @@
 graph TD
-  Customer(["👤 購入者"])
-  Cancel(["注文をキャンセルする"])
-  ConfirmOrder(["注文内容を確認する"])
-  PlaceOrder(["注文を確定する"])
-  SelectAddress(["配送先を選択する"])
-  ViewOrderHistory(["注文履歴を見る"])
-  BucOrder["📦 注文を処理する"]
-  Cart[("🗄 カート")]
-  CartItem[("🗄 カートアイテム")]
-  Order[("🗄 注文")]
-  OrderLine[("🗄 注文明細")]
-  ShippingAddress[("🗄 配送先住所")]
-  AddressSelectScreen[["配送先選択画面"]]
-  OrderCompleteScreen[["注文完了画面"]]
-  OrderConfirmScreen[["注文確認画面"]]
-  OrderHistoryScreen[["注文履歴画面"]]
-  Cancel{"注文キャンセル"}
+  Customer(["👤 Customer"])
+  Cancel(["Cancel Order"])
+  ConfirmOrder(["Confirm Order Details"])
+  PlaceOrder(["Place Order"])
+  SelectAddress(["Select Shipping Address"])
+  ViewOrderHistory(["View Order History"])
+  BucOrder["📦 Process Order"]
+  Cart[("🗄 Cart")]
+  CartItem[("🗄 Cart Item")]
+  Order[("🗄 Order")]
+  OrderLine[("🗄 Order Line")]
+  ShippingAddress[("🗄 Shipping Address")]
+  AddressSelectScreen[["Address Selection Screen"]]
+  OrderCompleteScreen[["Order Complete Screen"]]
+  OrderConfirmScreen[["Order Confirmation Screen"]]
+  OrderHistoryScreen[["Order History Screen"]]
+  Cancel{"Cancel Order"}
   Customer --> BucOrder
   BucOrder --> EcShopping
   BucOrder --> SelectAddress
@@ -26,19 +26,9 @@ graph TD
   CartItem --- Cart
   Order --- ShippingAddress
   OrderLine --- Order
-  SelectAddress -.->|reads| ShippingAddress
   SelectAddress -.->|displays| AddressSelectScreen
-  ConfirmOrder -.->|reads| ShippingAddress
-  ConfirmOrder -.->|reads| Cart
-  ConfirmOrder -.->|reads| CartItem
   ConfirmOrder -.->|displays| OrderConfirmScreen
-  PlaceOrder -.->|updates| Cart
-  PlaceOrder -.->|creates| Order
-  PlaceOrder -.->|creates| OrderLine
   PlaceOrder -.->|displays| OrderCompleteScreen
-  ViewOrderHistory -.->|reads| Order
-  ViewOrderHistory -.->|reads| OrderLine
   ViewOrderHistory -.->|displays| OrderHistoryScreen
-  Cancel -.->|updates| Order
   Cancel -.->|raises| Cancel
   Cancel -.->|displays| OrderHistoryScreen

@@ -1,0 +1,7 @@
+module buc.store_restock
+
+import shared.biz
+
+buc BucStoreRestock "Maintain Store Restock"
+
+belongs(BucStoreRestock, StoreOperations)

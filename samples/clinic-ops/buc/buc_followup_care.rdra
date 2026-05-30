@@ -17,9 +17,10 @@ screen CarePlanScreen        "Care Plan Screen"
 screen PatientMessageScreen  "Patient Message Screen"
 screen FollowUpScheduleScreen "Follow-Up Schedule Screen"
 
-api CarePlanApi       "Care Plan API"
-api PatientMessageApi "Patient Message API"
+api CreateCarePlanApi      "Create Care Plan API"
+api SendFollowUpMessageApi "Send Follow-Up Message API"
 api FollowUpScheduleApi "Follow-Up Schedule API"
+api NotifyPatientResultApi "Notify Patient Result API"
 
 performs(CareCoordinator, BucFollowupCare)
 performs(Patient, BucFollowupCare)
@@ -31,21 +32,23 @@ contains(BucFollowupCare, ReviewPatientResponse)
 contains(BucFollowupCare, ScheduleFollowUpVisit)
 contains(BucFollowupCare, CloseCarePlan)
 contains(BucFollowupCare, NotifyPatientResult)
+contains(ClinicOpsSystem, CreateCarePlanApi)
+contains(ClinicOpsSystem, SendFollowUpMessageApi)
+contains(ClinicOpsSystem, FollowUpScheduleApi)
+contains(ClinicOpsSystem, NotifyPatientResultApi)
 
 uses(CareCoordinator, MessagingGateway)
 uses(Patient, MessagingGateway)
 
 displays(CreateCarePlan, CarePlanScreen)
-invokes(CreateCarePlan, CarePlanApi)
-creates(CreateCarePlan, CarePlan)
-creates(CarePlanApi, CarePlan)
-reads(CarePlanApi, Encounter)
+invokes(CreateCarePlan, CreateCarePlanApi)
+creates(CreateCarePlanApi, CarePlan)
+reads(CreateCarePlanApi, Encounter)
 triggers(EvEncounterSigned, CreateCarePlan)
 
 displays(SendFollowUpMessage, PatientMessageScreen)
-invokes(SendFollowUpMessage, PatientMessageApi)
-creates(SendFollowUpMessage, PatientMessage)
-creates(PatientMessageApi, PatientMessage)
+invokes(SendFollowUpMessage, SendFollowUpMessageApi)
+creates(SendFollowUpMessageApi, PatientMessage)
 sets(SendFollowUpMessage, PatientMessage, "status", "msgsent")
 sets(SendFollowUpMessage, PatientMessage, "sent_at", "timestamptz")
 
@@ -58,7 +61,7 @@ sets(ReviewPatientResponse, PatientMessage, "read_at", "timestamptz")
 
 displays(ScheduleFollowUpVisit, FollowUpScheduleScreen)
 invokes(ScheduleFollowUpVisit, FollowUpScheduleApi)
-creates(ScheduleFollowUpVisit, Appointment)
+creates(FollowUpScheduleApi, Appointment)
 updates(FollowUpScheduleApi, ProviderSchedule)
 raises(ScheduleFollowUpVisit, EvAppointmentScheduled)
 
@@ -67,9 +70,8 @@ updates(CloseCarePlan, CarePlan)
 raises(CloseCarePlan, EvCarePlanClosed)
 
 displays(NotifyPatientResult, PatientMessageScreen)
-invokes(NotifyPatientResult, PatientMessageApi)
-creates(NotifyPatientResult, Notification)
-creates(PatientMessageApi, Notification)
+invokes(NotifyPatientResult, NotifyPatientResultApi)
+creates(NotifyPatientResultApi, Notification)
 sets(NotifyPatientResult, Notification, "status", "notifdelivered")
 sets(NotifyPatientResult, Notification, "delivered_at", "timestamptz")
 triggers(EvClinicalOrderReviewed, NotifyPatientResult)

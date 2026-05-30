@@ -1,42 +1,36 @@
 @startuml
 !theme plain
 
-actor "購入者" as Customer
+actor "Customer" as Customer
 
-usecase "決済を承認する" as AuthorizePayment
-usecase "決済を確定する" as CapturePayment
-usecase "決済情報を入力する" as InputPaymentInfo
-usecase "返金する" as RefundPayment
+usecase "Authorize Payment" as AuthorizePayment
+usecase "Capture Payment" as Capture
+usecase "Enter Payment Information" as InputPaymentInfo
+usecase "Refund Payment" as RefundPayment
 
-rectangle "決済を行う" as BucPayment
+rectangle "Make Payment" as BucPayment
 
 
-database "注文" as Order
-database "決済" as Payment
 
-boundary "決済情報入力画面" as PaymentInputScreen
-boundary "決済結果画面" as PaymentResultScreen
+database "Order" as Order
+database "Payment" as Payment
 
-control "決済確定" as PaymentCaptured
+boundary "Payment Information Screen" as PaymentInputScreen
+boundary "Payment Result Screen" as PaymentResultScreen
+
+control "Capture Payment" as Capture
 
 
 Customer --> BucPayment
 BucPayment ..> EcShopping : belongs
 BucPayment ..> InputPaymentInfo : contains
 BucPayment ..> AuthorizePayment : contains
-BucPayment ..> CapturePayment : contains
+BucPayment ..> Capture : contains
 BucPayment ..> RefundPayment : contains
 Payment -- Order
-InputPaymentInfo ..> Order : reads
-InputPaymentInfo ..> Payment : creates
 InputPaymentInfo ..> PaymentInputScreen : displays
-AuthorizePayment ..> Payment : updates
 AuthorizePayment ..> PaymentResultScreen : displays
-CapturePayment ..> Order : updates
-CapturePayment ..> Payment : updates
-CapturePayment ..> PaymentCaptured : raises
-CapturePayment ..> PaymentResultScreen : displays
-RefundPayment ..> Order : updates
-RefundPayment ..> Payment : updates
+Capture ..> Capture : raises
+Capture ..> PaymentResultScreen : displays
 RefundPayment ..> PaymentResultScreen : displays
 @enduml

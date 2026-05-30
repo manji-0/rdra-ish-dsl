@@ -1,3 +1,5 @@
 module shared.biz
 
 business PersonalDataMgmt "Personal Data Management Business"
+
+system PersonalDataSystem "Personal Data System"

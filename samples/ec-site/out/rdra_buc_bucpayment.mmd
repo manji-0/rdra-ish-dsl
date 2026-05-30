@@ -1,15 +1,15 @@
 graph TD
-  Customer(["👤 購入者"])
-  AuthorizePayment(["決済を承認する"])
-  Capture(["決済を確定する"])
-  InputPaymentInfo(["決済情報を入力する"])
-  RefundPayment(["返金する"])
-  BucPayment["📦 決済を行う"]
-  Order[("🗄 注文")]
-  Payment[("🗄 決済")]
-  PaymentInputScreen[["決済情報入力画面"]]
-  PaymentResultScreen[["決済結果画面"]]
-  Capture{"決済確定"}
+  Customer(["👤 Customer"])
+  AuthorizePayment(["Authorize Payment"])
+  Capture(["Capture Payment"])
+  InputPaymentInfo(["Enter Payment Information"])
+  RefundPayment(["Refund Payment"])
+  BucPayment["📦 Make Payment"]
+  Order[("🗄 Order")]
+  Payment[("🗄 Payment")]
+  PaymentInputScreen[["Payment Information Screen"]]
+  PaymentResultScreen[["Payment Result Screen"]]
+  Capture{"Capture Payment"}
   Customer --> BucPayment
   BucPayment --> EcShopping
   BucPayment --> InputPaymentInfo
@@ -17,15 +17,8 @@ graph TD
   BucPayment --> Capture
   BucPayment --> RefundPayment
   Payment --- Order
-  InputPaymentInfo -.->|reads| Order
-  InputPaymentInfo -.->|creates| Payment
   InputPaymentInfo -.->|displays| PaymentInputScreen
-  AuthorizePayment -.->|updates| Payment
   AuthorizePayment -.->|displays| PaymentResultScreen
-  Capture -.->|updates| Order
-  Capture -.->|updates| Payment
   Capture -.->|raises| Capture
   Capture -.->|displays| PaymentResultScreen
-  RefundPayment -.->|updates| Order
-  RefundPayment -.->|updates| Payment
   RefundPayment -.->|displays| PaymentResultScreen

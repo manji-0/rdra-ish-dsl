@@ -17,7 +17,8 @@ screen ScheduleAdminScreen "Schedule Admin Screen"
 screen RoomAdminScreen     "Room Admin Screen"
 screen AuditReviewScreen   "Audit Review Screen"
 
-api ScheduleAdminApi "Schedule Admin API"
+api ManageProviderScheduleApi "Manage Provider Schedule API"
+api BlockScheduleSlotApi      "Block Schedule Slot API"
 api RoomAdminApi     "Room Admin API"
 api AuditApi         "Audit API"
 
@@ -30,25 +31,26 @@ contains(BucStaffAdministration, ConfigureRoom)
 contains(BucStaffAdministration, ReleaseRoom)
 contains(BucStaffAdministration, ReviewAuditEvents)
 contains(BucStaffAdministration, ResolveAuditFinding)
+contains(ClinicOpsSystem, ManageProviderScheduleApi)
+contains(ClinicOpsSystem, BlockScheduleSlotApi)
+contains(ClinicOpsSystem, RoomAdminApi)
+contains(ClinicOpsSystem, AuditApi)
 
 displays(ManageProviderSchedule, ScheduleAdminScreen)
-invokes(ManageProviderSchedule, ScheduleAdminApi)
-creates(ManageProviderSchedule, ProviderSchedule)
-updates(ManageProviderSchedule, ProviderSchedule)
-creates(ScheduleAdminApi, ProviderSchedule)
-updates(ScheduleAdminApi, ProviderSchedule)
-updates(ScheduleAdminApi, Provider)
+invokes(ManageProviderSchedule, ManageProviderScheduleApi)
+creates(ManageProviderScheduleApi, ProviderSchedule)
+updates(ManageProviderScheduleApi, ProviderSchedule)
+updates(ManageProviderScheduleApi, Provider)
 
 displays(BlockScheduleSlot, ScheduleAdminScreen)
-invokes(BlockScheduleSlot, ScheduleAdminApi)
-updates(BlockScheduleSlot, ProviderSchedule)
+invokes(BlockScheduleSlot, BlockScheduleSlotApi)
+updates(BlockScheduleSlotApi, ProviderSchedule)
 sets(BlockScheduleSlot, ProviderSchedule, "blocked", "true")
 
 displays(ConfigureRoom, RoomAdminScreen)
 invokes(ConfigureRoom, RoomAdminApi)
-creates(ConfigureRoom, Room)
-updates(ConfigureRoom, Room)
 creates(RoomAdminApi, Room)
+updates(RoomAdminApi, Room)
 sets(ConfigureRoom, Room, "occupancy_status", "roomavailable")
 
 displays(ReleaseRoom, RoomAdminScreen)

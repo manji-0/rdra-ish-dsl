@@ -18,6 +18,12 @@ screen OrderConfirmScreen  "Order Confirmation Screen"
 screen OrderCompleteScreen "Order Complete Screen"
 screen OrderHistoryScreen  "Order History Screen"
 
+api SelectAddressApi    "Select Address API"
+api ConfirmOrderApi     "Confirm Order API"
+api PlaceOrderApi       "Place Order API"
+api OrderHistoryApi     "Order History API"
+api CancelOrderApi      "Cancel Order API"
+
 performs(Customer, BucOrder)
 belongs(BucOrder, EcShopping)
 contains(BucOrder, SelectAddress)
@@ -25,24 +31,34 @@ contains(BucOrder, ConfirmOrder)
 contains(BucOrder, PlaceOrder)
 contains(BucOrder, ViewOrderHistory)
 contains(BucOrder, usecase::Cancel)
+contains(CommerceSystem, SelectAddressApi)
+contains(CommerceSystem, ConfirmOrderApi)
+contains(CommerceSystem, PlaceOrderApi)
+contains(CommerceSystem, OrderHistoryApi)
+contains(CommerceSystem, CancelOrderApi)
 
 displays(SelectAddress, AddressSelectScreen)
-reads(SelectAddress, ShippingAddress)
+invokes(SelectAddress, SelectAddressApi)
+reads(SelectAddressApi, ShippingAddress)
 
 displays(ConfirmOrder, OrderConfirmScreen)
-reads(ConfirmOrder, Cart)
-reads(ConfirmOrder, CartItem)
-reads(ConfirmOrder, ShippingAddress)
+invokes(ConfirmOrder, ConfirmOrderApi)
+reads(ConfirmOrderApi, Cart)
+reads(ConfirmOrderApi, CartItem)
+reads(ConfirmOrderApi, ShippingAddress)
 
 displays(PlaceOrder, OrderCompleteScreen)
-creates(PlaceOrder, Order)
-creates(PlaceOrder, OrderLine)
-updates(PlaceOrder, Cart)
+invokes(PlaceOrder, PlaceOrderApi)
+creates(PlaceOrderApi, Order)
+creates(PlaceOrderApi, OrderLine)
+updates(PlaceOrderApi, Cart)
 
 displays(ViewOrderHistory, OrderHistoryScreen)
-reads(ViewOrderHistory, Order)
-reads(ViewOrderHistory, OrderLine)
+invokes(ViewOrderHistory, OrderHistoryApi)
+reads(OrderHistoryApi, Order)
+reads(OrderHistoryApi, OrderLine)
 
 displays(usecase::Cancel, OrderHistoryScreen)
-updates(usecase::Cancel, Order)
+invokes(usecase::Cancel, CancelOrderApi)
+updates(CancelOrderApi, Order)
 raises(usecase::Cancel, event::Cancel)
