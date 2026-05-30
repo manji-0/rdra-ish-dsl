@@ -26,6 +26,7 @@ stage instead of generating every view.
 | Need | Kind | What it shows |
 |------|------|---------------|
 | Overview of actors, BUCs, UCs, systems, screens, events | `rdra` | Full RDRA relationship graph (API nodes omitted by design) |
+| RDRA original-style layered Object Graph | `object-graph` | Maps model nodes onto system value, external environment, boundary, and system layers |
 | Database table structure and relationships | `er` | Entities, columns, FK relationships |
 | Entity lifecycle | `state` | State nodes and transition events |
 | Write operations and transaction boundaries | `sequence` | Sequence of writes per use case; shows `Actor→Screen→API→Entity` lanes when `invokes` is used |
@@ -48,8 +49,14 @@ Default to `mermaid` unless the user asks for a rendered image.
 # RDRA overview — whole model
 rdra-ish diagram src/ --kind rdra --format mermaid
 
+# Layered Object Graph — whole model
+rdra-ish diagram src/ --kind object-graph --format mermaid
+
 # RDRA overview — scoped to one BUC
 rdra-ish diagram src/ --kind rdra --buc <BucId> --format mermaid
+
+# Layered Object Graph — scoped to one BUC
+rdra-ish diagram src/ --kind object-graph --buc <BucId> --format mermaid
 
 # RDRA overview — union of multiple BUCs
 rdra-ish diagram src/ --kind rdra --buc <BucA> --buc <BucB> --format mermaid
@@ -82,6 +89,9 @@ PLANTUML_JAR=/path/to/plantuml.jar rdra-ish diagram src/ --kind rdra --format sv
 
 ### Reading the output
 
+Object labels include kind prefixes such as `👤` actor, `📦` BUC, `✅` usecase,
+`🖥️` screen, `🔌` API, `🗄️` entity, `⚡` event, and `🔄` state. IDs stay unchanged.
+
 **RDRA graph (`--kind rdra`)**
 - Rounded box = Actor
 - Rectangle = BUC or UseCase
@@ -90,6 +100,11 @@ PLANTUML_JAR=/path/to/plantuml.jar rdra-ish diagram src/ --kind rdra --format sv
 - Diamond = Event
 - Solid arrow = `performs` / `contains`
 - Dashed arrow = CRUD / `displays` / `raises`
+
+**Layered Object Graph (`--kind object-graph`)**
+- Four vertical layers = system value, system external environment, system boundary, system
+- `api` nodes are included in the system boundary layer
+- Dashed arrows = interaction / CRUD / event / lifecycle relationships
 
 **ER diagram (`--kind er`)**
 - Each entity box lists columns with PK/FK markers
@@ -103,6 +118,7 @@ PLANTUML_JAR=/path/to/plantuml.jar rdra-ish diagram src/ --kind rdra --format sv
 
 **Sequence diagram (`--kind sequence`)**
 - Each use case block shows write operations in order
+- Participant lifelines are grouped by layer: system value, system boundary, system
 - **With `invokes`**: renders `Actor → Screen → API → Entity` lanes; the API is the source of writes
 - **Without `invokes`** (legacy): renders the `System` participant lane unchanged
 - Shaded `rect` = transaction group. The note distinguishes `inferred from FK` from `API atomic boundary`
@@ -110,6 +126,9 @@ PLANTUML_JAR=/path/to/plantuml.jar rdra-ish diagram src/ --kind rdra --format sv
 
 **RDRA overview (`--kind rdra`)**
 - `api` nodes are intentionally omitted; system nodes are shown as ownership boundaries
+
+**Layered Object Graph (`--kind object-graph`)**
+- Use this when you want the original RDRA-style layer structure rather than a flat graph
 
 ### Tips
 

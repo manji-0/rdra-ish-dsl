@@ -7,12 +7,12 @@ use rdra_ish_emit::{
         RelationMatrixCsvEmitter,
     },
     mermaid::{
-        ErMermaidEmitter, EventFlowMermaidEmitter, RdraMermaidEmitter, SequenceMermaidEmitter,
-        StateMermaidEmitter,
+        ErMermaidEmitter, EventFlowMermaidEmitter, ObjectGraphMermaidEmitter, RdraMermaidEmitter,
+        SequenceMermaidEmitter, StateMermaidEmitter,
     },
     plantuml::{
-        ErPlantUmlEmitter, EventFlowPlantUmlEmitter, RdraPlantUmlEmitter, SequenceDiagramEmitter,
-        StateDiagramEmitter,
+        ErPlantUmlEmitter, EventFlowPlantUmlEmitter, ObjectGraphPlantUmlEmitter,
+        RdraPlantUmlEmitter, SequenceDiagramEmitter, StateDiagramEmitter,
     },
     state_pattern::{StatePatternCsvEmitter, StatePatternJsonEmitter, StatePatternTableEmitter},
     Emitter, Filter, Scope, View,
@@ -56,7 +56,7 @@ enum Commands {
     Diagram {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Diagram kind: rdra, er, or state
+        /// Diagram kind: rdra, object-graph, er, state, sequence, or event-flow
         #[arg(long, default_value = "rdra")]
         kind: DiagramKind,
         /// Output format: puml, svg, png, or mermaid (mermaid outputs .mmd text only)
@@ -64,7 +64,7 @@ enum Commands {
         format: OutputFormat,
         /// Filter to one or more BUCs (by id); repeatable (e.g. --buc A --buc B).
         /// The union of scoped nodes across all specified BUCs is shown.
-        /// Applies to all diagram kinds (rdra, er, state, sequence).
+        /// Applies to all diagram kinds. For sequence, only directly contained use cases are shown.
         #[arg(long)]
         buc: Vec<String>,
         /// Filter sequence diagrams to one or more use cases (by id); repeatable.
@@ -116,6 +116,8 @@ enum Commands {
 #[derive(ValueEnum, Clone)]
 enum DiagramKind {
     Rdra,
+    /// RDRA Object Graph mapped onto the original layered structure
+    ObjectGraph,
     Er,
     State,
     /// Write-focused sequence diagram with FK-inferred transaction boundaries
@@ -272,6 +274,7 @@ fn main() -> Result<()> {
                     filter: Filter::Er,
                 },
                 DiagramKind::Rdra
+                | DiagramKind::ObjectGraph
                 | DiagramKind::State
                 | DiagramKind::Sequence
                 | DiagramKind::EventFlow => View {
@@ -305,6 +308,7 @@ fn main() -> Result<()> {
             let diagram_text = match format {
                 OutputFormat::Mermaid => match kind {
                     DiagramKind::Rdra => RdraMermaidEmitter.emit(&model, &view)?,
+                    DiagramKind::ObjectGraph => ObjectGraphMermaidEmitter.emit(&model, &view)?,
                     DiagramKind::Er => ErMermaidEmitter.emit(&model, &view)?,
                     DiagramKind::State => StateMermaidEmitter.emit(&model, &view)?,
                     DiagramKind::Sequence => SequenceMermaidEmitter.emit(&model, &view)?,
@@ -312,6 +316,7 @@ fn main() -> Result<()> {
                 },
                 _ => match kind {
                     DiagramKind::Rdra => RdraPlantUmlEmitter.emit(&model, &view)?,
+                    DiagramKind::ObjectGraph => ObjectGraphPlantUmlEmitter.emit(&model, &view)?,
                     DiagramKind::Er => ErPlantUmlEmitter.emit(&model, &view)?,
                     DiagramKind::State => StateDiagramEmitter.emit(&model, &view)?,
                     DiagramKind::Sequence => SequenceDiagramEmitter.emit(&model, &view)?,

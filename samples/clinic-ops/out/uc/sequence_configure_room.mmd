@@ -1,14 +1,20 @@
 sequenceDiagram
-  actor ClinicAdmin as Clinic Administrator
-  participant RoomAdminScreen as Room Admin Screen
-  participant RoomAdminApi as Room Admin API
-  participant Room as Room
+  box システム価値
+    actor ClinicAdmin as 👤 Clinic Administrator
+  end
+  box システム境界
+    participant RoomAdminScreen as 🖥️ Room Admin Screen
+    participant RoomAdminApi as 🔌 Room Admin API
+  end
+  box システム
+    participant Room as 🗄️ Room
+  end
 
-  Note over ClinicAdmin,Room: Configure Room
-  ClinicAdmin->>RoomAdminScreen: Configure Room
-  RoomAdminScreen->>RoomAdminApi: Configure Room
+  Note over ClinicAdmin,Room: ✅ Configure Room
+  ClinicAdmin->>RoomAdminScreen: ✅ Configure Room
+  RoomAdminScreen->>RoomAdminApi: ✅ Configure Room
   activate RoomAdminApi
   RoomAdminApi->>Room: create
-  RoomAdminApi-->>RoomAdminScreen: Room Admin Screen
-  RoomAdminScreen-->>ClinicAdmin: Room Admin Screen
+  RoomAdminApi-->>RoomAdminScreen: 🖥️ Room Admin Screen
+  RoomAdminScreen-->>ClinicAdmin: 🖥️ Room Admin Screen
   deactivate RoomAdminApi

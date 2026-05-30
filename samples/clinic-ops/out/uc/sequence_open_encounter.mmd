@@ -1,16 +1,22 @@
 sequenceDiagram
-  actor Nurse as Nurse
-  participant EncounterWorkspaceScreen as Encounter Workspace
-  participant OpenEncounterApi as Open Encounter API
-  participant Appointment as Appointment
-  participant Encounter as Encounter
+  box システム価値
+    actor Nurse as 👤 Nurse
+  end
+  box システム境界
+    participant EncounterWorkspaceScreen as 🖥️ Encounter Workspace
+    participant OpenEncounterApi as 🔌 Open Encounter API
+  end
+  box システム
+    participant Appointment as 🗄️ Appointment
+    participant Encounter as 🗄️ Encounter
+  end
 
-  Note over Nurse,Encounter: Open Encounter
-  Nurse->>EncounterWorkspaceScreen: Open Encounter
-  EncounterWorkspaceScreen->>OpenEncounterApi: Open Encounter
+  Note over Nurse,Encounter: ✅ Open Encounter
+  Nurse->>EncounterWorkspaceScreen: ✅ Open Encounter
+  EncounterWorkspaceScreen->>OpenEncounterApi: ✅ Open Encounter
   activate OpenEncounterApi
   OpenEncounterApi->>Appointment: read
   OpenEncounterApi->>Encounter: create
-  OpenEncounterApi-->>EncounterWorkspaceScreen: Encounter Workspace
-  EncounterWorkspaceScreen-->>Nurse: Encounter Workspace
+  OpenEncounterApi-->>EncounterWorkspaceScreen: 🖥️ Encounter Workspace
+  EncounterWorkspaceScreen-->>Nurse: 🖥️ Encounter Workspace
   deactivate OpenEncounterApi

@@ -1,20 +1,20 @@
 graph TD
   ClinicAdmin(["👤 Clinic Administrator"])
-  BlockScheduleSlot(["Block Schedule Slot"])
-  ConfigureRoom(["Configure Room"])
-  ManageProviderSchedule(["Manage Provider Schedule"])
-  ReleaseRoom(["Release Room"])
-  ResolveAuditFinding(["Resolve Audit Finding"])
-  ReviewAuditEvents(["Review Audit Events"])
+  BlockScheduleSlot(["✅ Block Schedule Slot"])
+  ConfigureRoom(["✅ Configure Room"])
+  ManageProviderSchedule(["✅ Manage Provider Schedule"])
+  ReleaseRoom(["✅ Release Room"])
+  ResolveAuditFinding(["✅ Resolve Audit Finding"])
+  ReviewAuditEvents(["✅ Review Audit Events"])
   BucStaffAdministration["📦 Administer Clinic Operations"]
-  AuditEvent[("🗄 Audit Event")]
-  PatientAccount[("🗄 Patient Account")]
-  Provider[("🗄 Provider")]
-  ProviderSchedule[("🗄 Provider Schedule")]
-  Room[("🗄 Room")]
-  AuditReviewScreen[["Audit Review Screen"]]
-  RoomAdminScreen[["Room Admin Screen"]]
-  ScheduleAdminScreen[["Schedule Admin Screen"]]
+  AuditEvent[("🗄️ Audit Event")]
+  PatientAccount[("🗄️ Patient Account")]
+  Provider[("🗄️ Provider")]
+  ProviderSchedule[("🗄️ Provider Schedule")]
+  Room[("🗄️ Room")]
+  AuditReviewScreen[["🖥️ Audit Review Screen"]]
+  RoomAdminScreen[["🖥️ Room Admin Screen"]]
+  ScheduleAdminScreen[["🖥️ Schedule Admin Screen"]]
   ClinicAdmin --> BucStaffAdministration
   BucStaffAdministration --> ClinicAdministration
   BucStaffAdministration --> ManageProviderSchedule

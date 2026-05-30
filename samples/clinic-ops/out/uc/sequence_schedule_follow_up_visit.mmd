@@ -1,19 +1,25 @@
 sequenceDiagram
-  actor CareCoordinator as Care Coordinator
-  participant FollowUpScheduleScreen as Follow-Up Schedule Screen
-  participant FollowUpScheduleApi as Follow-Up Schedule API
-  participant Appointment as Appointment
-  participant ProviderSchedule as Provider Schedule
+  box システム価値
+    actor CareCoordinator as 👤 Care Coordinator
+  end
+  box システム境界
+    participant FollowUpScheduleScreen as 🖥️ Follow-Up Schedule Screen
+    participant FollowUpScheduleApi as 🔌 Follow-Up Schedule API
+  end
+  box システム
+    participant Appointment as 🗄️ Appointment
+    participant ProviderSchedule as 🗄️ Provider Schedule
+  end
 
-  Note over CareCoordinator,ProviderSchedule: Schedule Follow-Up Visit
-  CareCoordinator->>FollowUpScheduleScreen: Schedule Follow-Up Visit
-  FollowUpScheduleScreen->>FollowUpScheduleApi: Schedule Follow-Up Visit
+  Note over CareCoordinator,ProviderSchedule: ✅ Schedule Follow-Up Visit
+  CareCoordinator->>FollowUpScheduleScreen: ✅ Schedule Follow-Up Visit
+  FollowUpScheduleScreen->>FollowUpScheduleApi: ✅ Schedule Follow-Up Visit
   activate FollowUpScheduleApi
   rect rgb(245,245,245)
     Note right of FollowUpScheduleApi: transaction (API atomic boundary)
     FollowUpScheduleApi->>Appointment: create
     FollowUpScheduleApi->>ProviderSchedule: update
   end
-  FollowUpScheduleApi-->>FollowUpScheduleScreen: Follow-Up Schedule Screen
-  FollowUpScheduleScreen-->>CareCoordinator: Follow-Up Schedule Screen
+  FollowUpScheduleApi-->>FollowUpScheduleScreen: 🖥️ Follow-Up Schedule Screen
+  FollowUpScheduleScreen-->>CareCoordinator: 🖥️ Follow-Up Schedule Screen
   deactivate FollowUpScheduleApi

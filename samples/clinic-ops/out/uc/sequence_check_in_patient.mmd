@@ -1,19 +1,25 @@
 sequenceDiagram
-  actor FrontDesk as Front Desk Staff
-  participant CheckInScreen as Check-In Screen
-  participant CheckInPatientApi as Check-In Patient API
-  participant Appointment as Appointment
-  participant PatientAccount as Patient Account
+  box システム価値
+    actor FrontDesk as 👤 Front Desk Staff
+  end
+  box システム境界
+    participant CheckInScreen as 🖥️ Check-In Screen
+    participant CheckInPatientApi as 🔌 Check-In Patient API
+  end
+  box システム
+    participant Appointment as 🗄️ Appointment
+    participant PatientAccount as 🗄️ Patient Account
+  end
 
-  Note over FrontDesk,PatientAccount: Check In Patient
-  FrontDesk->>CheckInScreen: Check In Patient
-  CheckInScreen->>CheckInPatientApi: Check In Patient
+  Note over FrontDesk,PatientAccount: ✅ Check In Patient
+  FrontDesk->>CheckInScreen: ✅ Check In Patient
+  CheckInScreen->>CheckInPatientApi: ✅ Check In Patient
   activate CheckInPatientApi
   rect rgb(245,245,245)
     Note right of CheckInPatientApi: transaction (API atomic boundary)
     CheckInPatientApi->>PatientAccount: update
     CheckInPatientApi->>Appointment: update
   end
-  CheckInPatientApi-->>CheckInScreen: Check-In Screen
-  CheckInScreen-->>FrontDesk: Check-In Screen
+  CheckInPatientApi-->>CheckInScreen: 🖥️ Check-In Screen
+  CheckInScreen-->>FrontDesk: 🖥️ Check-In Screen
   deactivate CheckInPatientApi

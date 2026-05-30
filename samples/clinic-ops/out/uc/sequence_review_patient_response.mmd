@@ -1,14 +1,20 @@
 sequenceDiagram
-  actor CareCoordinator as Care Coordinator
-  participant System as システム
-  participant CarePlanScreen as Care Plan Screen
-  participant CarePlan as Care Plan
-  participant PatientMessage as Patient Message
+  box システム価値
+    actor CareCoordinator as 👤 Care Coordinator
+  end
+  box システム境界
+    participant CarePlanScreen as 🖥️ Care Plan Screen
+  end
+  box システム
+    participant System as 🧩 システム
+    participant CarePlan as 🗄️ Care Plan
+    participant PatientMessage as 🗄️ Patient Message
+  end
 
-  Note over CareCoordinator,PatientMessage: Review Patient Response
-  CareCoordinator->System: Review Patient Response
+  Note over CareCoordinator,PatientMessage: ✅ Review Patient Response
+  CareCoordinator->System: ✅ Review Patient Response
   activate System
   System->>CarePlan: update
   System->>PatientMessage: update
-  System-->>CareCoordinator: Care Plan Screen
+  System-->>CareCoordinator: 🖥️ Care Plan Screen
   deactivate System

@@ -1,18 +1,24 @@
 sequenceDiagram
-  actor FrontDesk as Front Desk Staff
-  participant CheckInScreen as Check-In Screen
-  participant VerifyArrivalApi as Verify Arrival API
-  participant Appointment as Appointment
-  participant InsurancePolicy as Insurance Policy
-  participant PatientAccount as Patient Account
+  box システム価値
+    actor FrontDesk as 👤 Front Desk Staff
+  end
+  box システム境界
+    participant CheckInScreen as 🖥️ Check-In Screen
+    participant VerifyArrivalApi as 🔌 Verify Arrival API
+  end
+  box システム
+    participant Appointment as 🗄️ Appointment
+    participant InsurancePolicy as 🗄️ Insurance Policy
+    participant PatientAccount as 🗄️ Patient Account
+  end
 
-  Note over FrontDesk,PatientAccount: Verify Patient Arrival
-  FrontDesk->>CheckInScreen: Verify Patient Arrival
-  CheckInScreen->>VerifyArrivalApi: Verify Patient Arrival
+  Note over FrontDesk,PatientAccount: ✅ Verify Patient Arrival
+  FrontDesk->>CheckInScreen: ✅ Verify Patient Arrival
+  CheckInScreen->>VerifyArrivalApi: ✅ Verify Patient Arrival
   activate VerifyArrivalApi
   VerifyArrivalApi->>Appointment: read
   VerifyArrivalApi->>PatientAccount: read
   VerifyArrivalApi->>InsurancePolicy: read
-  VerifyArrivalApi-->>CheckInScreen: Check-In Screen
-  CheckInScreen-->>FrontDesk: Check-In Screen
+  VerifyArrivalApi-->>CheckInScreen: 🖥️ Check-In Screen
+  CheckInScreen-->>FrontDesk: 🖥️ Check-In Screen
   deactivate VerifyArrivalApi

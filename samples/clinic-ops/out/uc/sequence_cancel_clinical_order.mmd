@@ -1,12 +1,18 @@
 sequenceDiagram
-  actor Clinician as Clinician
-  participant System as システム
-  participant OrderEntryScreen as Order Entry Screen
-  participant ClinicalOrder as Clinical Order
+  box システム価値
+    actor Clinician as 👤 Clinician
+  end
+  box システム境界
+    participant OrderEntryScreen as 🖥️ Order Entry Screen
+  end
+  box システム
+    participant System as 🧩 システム
+    participant ClinicalOrder as 🗄️ Clinical Order
+  end
 
-  Note over Clinician,ClinicalOrder: Cancel Clinical Order
-  Clinician->System: Cancel Clinical Order
+  Note over Clinician,ClinicalOrder: ✅ Cancel Clinical Order
+  Clinician->System: ✅ Cancel Clinical Order
   activate System
   System->>ClinicalOrder: update
-  System-->>Clinician: Order Entry Screen
+  System-->>Clinician: 🖥️ Order Entry Screen
   deactivate System

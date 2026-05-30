@@ -1,28 +1,28 @@
 graph TD
   BillingSpecialist(["👤 Billing Specialist"])
-  CreateCharge(["Create Charge"])
-  GenerateClaim(["Generate Claim"])
-  PostPayment(["Post Payment"])
-  ReceiveClaimAccepted(["Receive Claim Accepted"])
-  ReconcileBalance(["Reconcile Balance"])
-  RecordClaimDenial(["Record Claim Denial"])
-  SubmitClaim(["Submit Claim"])
-  VoidCharge(["Void Charge"])
+  CreateCharge(["✅ Create Charge"])
+  GenerateClaim(["✅ Generate Claim"])
+  PostPayment(["✅ Post Payment"])
+  ReceiveClaimAccepted(["✅ Receive Claim Accepted"])
+  ReconcileBalance(["✅ Reconcile Balance"])
+  RecordClaimDenial(["✅ Record Claim Denial"])
+  SubmitClaim(["✅ Submit Claim"])
+  VoidCharge(["✅ Void Charge"])
   BucBillingClaims["📦 Bill and Collect Claims"]
-  AccountBalance[("🗄 Account Balance")]
-  Charge[("🗄 Charge")]
-  Claim[("🗄 Claim")]
-  Encounter[("🗄 Encounter")]
-  InsurancePolicy[("🗄 Insurance Policy")]
-  PaymentTransaction[("🗄 Payment Transaction")]
-  BalanceScreen[["Balance Screen"]]
-  ChargeWorklistScreen[["Charge Worklist Screen"]]
-  ClaimScreen[["Claim Screen"]]
-  PaymentPostingScreen[["Payment Posting Screen"]]
-  EvClaimAccepted{"Claim Accepted"}
-  EvClaimDenied{"Claim Denied"}
-  EvClaimPaid{"Claim Paid"}
-  EvClaimSubmitted{"Claim Submitted"}
+  AccountBalance[("🗄️ Account Balance")]
+  Charge[("🗄️ Charge")]
+  Claim[("🗄️ Claim")]
+  Encounter[("🗄️ Encounter")]
+  InsurancePolicy[("🗄️ Insurance Policy")]
+  PaymentTransaction[("🗄️ Payment Transaction")]
+  BalanceScreen[["🖥️ Balance Screen"]]
+  ChargeWorklistScreen[["🖥️ Charge Worklist Screen"]]
+  ClaimScreen[["🖥️ Claim Screen"]]
+  PaymentPostingScreen[["🖥️ Payment Posting Screen"]]
+  EvClaimAccepted{"⚡ Claim Accepted"}
+  EvClaimDenied{"⚡ Claim Denied"}
+  EvClaimPaid{"⚡ Claim Paid"}
+  EvClaimSubmitted{"⚡ Claim Submitted"}
   BillingSpecialist --> BucBillingClaims
   BucBillingClaims --> RevenueCycle
   BucBillingClaims --> CreateCharge

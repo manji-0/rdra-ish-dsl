@@ -1,12 +1,18 @@
 sequenceDiagram
-  actor Clinician as Clinician
-  participant System as システム
-  participant PrescriptionScreen as Prescription Screen
-  participant Prescription as Prescription
+  box システム価値
+    actor Clinician as 👤 Clinician
+  end
+  box システム境界
+    participant PrescriptionScreen as 🖥️ Prescription Screen
+  end
+  box システム
+    participant System as 🧩 システム
+    participant Prescription as 🗄️ Prescription
+  end
 
-  Note over Clinician,Prescription: Cancel Prescription
-  Clinician->System: Cancel Prescription
+  Note over Clinician,Prescription: ✅ Cancel Prescription
+  Clinician->System: ✅ Cancel Prescription
   activate System
   System->>Prescription: update
-  System-->>Clinician: Prescription Screen
+  System-->>Clinician: 🖥️ Prescription Screen
   deactivate System

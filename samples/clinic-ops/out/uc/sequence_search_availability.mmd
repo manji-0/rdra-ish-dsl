@@ -1,18 +1,24 @@
 sequenceDiagram
-  actor FrontDesk as Front Desk Staff
-  participant ScheduleSearchScreen as Schedule Search Screen
-  participant SearchAvailabilityApi as Search Availability API
-  participant ClinicLocation as Clinic Location
-  participant Provider as Provider
-  participant ProviderSchedule as Provider Schedule
+  box システム価値
+    actor FrontDesk as 👤 Front Desk Staff
+  end
+  box システム境界
+    participant ScheduleSearchScreen as 🖥️ Schedule Search Screen
+    participant SearchAvailabilityApi as 🔌 Search Availability API
+  end
+  box システム
+    participant ClinicLocation as 🗄️ Clinic Location
+    participant Provider as 🗄️ Provider
+    participant ProviderSchedule as 🗄️ Provider Schedule
+  end
 
-  Note over FrontDesk,ProviderSchedule: Search Availability
-  FrontDesk->>ScheduleSearchScreen: Search Availability
-  ScheduleSearchScreen->>SearchAvailabilityApi: Search Availability
+  Note over FrontDesk,ProviderSchedule: ✅ Search Availability
+  FrontDesk->>ScheduleSearchScreen: ✅ Search Availability
+  ScheduleSearchScreen->>SearchAvailabilityApi: ✅ Search Availability
   activate SearchAvailabilityApi
   SearchAvailabilityApi->>ProviderSchedule: read
   SearchAvailabilityApi->>Provider: read
   SearchAvailabilityApi->>ClinicLocation: read
-  SearchAvailabilityApi-->>ScheduleSearchScreen: Schedule Search Screen
-  ScheduleSearchScreen-->>FrontDesk: Schedule Search Screen
+  SearchAvailabilityApi-->>ScheduleSearchScreen: 🖥️ Schedule Search Screen
+  ScheduleSearchScreen-->>FrontDesk: 🖥️ Schedule Search Screen
   deactivate SearchAvailabilityApi

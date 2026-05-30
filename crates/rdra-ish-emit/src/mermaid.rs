@@ -4,7 +4,10 @@
 //! ヘルパー関数 (node_id / node_label / col_type_str) は plantuml モジュールから再利用。
 
 use crate::plantuml::{col_type_str, node_id, node_label};
-use crate::{EmitError, Emitter, Scope, View};
+use crate::{
+    collect_object_graph_nodes, object_graph_layer, object_graph_rel_label, prefixed_label,
+    prefixed_node_label, EmitError, Emitter, Scope, View, OBJECT_GRAPH_LAYERS,
+};
 use rdra_ish_core::model::{
     ActorKey, ApiKey, BucKey, EntityKey, NodeRef, RelKind, ScreenKey, SemanticModel, UseCaseKey,
 };
@@ -37,8 +40,13 @@ impl Emitter for RdraMermaidEmitter {
         let mut actors: Vec<_> = model.actors.iter().collect();
         actors.sort_by_key(|(_, a)| &a.id);
         for (k, actor) in &actors {
-            if is_visible(&NodeRef::Actor(*k)) {
-                out.push_str(&format!("  {}([\"👤 {}\"])\n", actor.id, actor.label));
+            let nr = NodeRef::Actor(*k);
+            if is_visible(&nr) {
+                out.push_str(&format!(
+                    "  {}([\"{}\"])\n",
+                    actor.id,
+                    prefixed_node_label(&nr, &actor.label)
+                ));
             }
         }
 
@@ -46,8 +54,13 @@ impl Emitter for RdraMermaidEmitter {
         let mut ucs: Vec<_> = model.use_cases.iter().collect();
         ucs.sort_by_key(|(_, u)| &u.id);
         for (k, uc) in &ucs {
-            if is_visible(&NodeRef::UseCase(*k)) {
-                out.push_str(&format!("  {}([\"{}\"])\n", uc.id, uc.label));
+            let nr = NodeRef::UseCase(*k);
+            if is_visible(&nr) {
+                out.push_str(&format!(
+                    "  {}([\"{}\"])\n",
+                    uc.id,
+                    prefixed_node_label(&nr, &uc.label)
+                ));
             }
         }
 
@@ -55,8 +68,13 @@ impl Emitter for RdraMermaidEmitter {
         let mut bucs: Vec<_> = model.bucs.iter().collect();
         bucs.sort_by_key(|(_, b)| &b.id);
         for (k, buc) in &bucs {
-            if is_visible(&NodeRef::Buc(*k)) {
-                out.push_str(&format!("  {}[\"📦 {}\"]\n", buc.id, buc.label));
+            let nr = NodeRef::Buc(*k);
+            if is_visible(&nr) {
+                out.push_str(&format!(
+                    "  {}[\"{}\"]\n",
+                    buc.id,
+                    prefixed_node_label(&nr, &buc.label)
+                ));
             }
         }
 
@@ -64,8 +82,13 @@ impl Emitter for RdraMermaidEmitter {
         let mut systems: Vec<_> = model.systems.iter().collect();
         systems.sort_by_key(|(_, s)| &s.id);
         for (k, system) in &systems {
-            if is_visible(&NodeRef::System(*k)) {
-                out.push_str(&format!("  {}[\"🧩 {}\"]\n", system.id, system.label));
+            let nr = NodeRef::System(*k);
+            if is_visible(&nr) {
+                out.push_str(&format!(
+                    "  {}[\"{}\"]\n",
+                    system.id,
+                    prefixed_node_label(&nr, &system.label)
+                ));
             }
         }
 
@@ -73,8 +96,13 @@ impl Emitter for RdraMermaidEmitter {
         let mut exts: Vec<_> = model.ext_systems.iter().collect();
         exts.sort_by_key(|(_, e)| &e.id);
         for (k, ext) in &exts {
-            if is_visible(&NodeRef::ExtSystem(*k)) {
-                out.push_str(&format!("  {}[/\"{}\"/]\n", ext.id, ext.label));
+            let nr = NodeRef::ExtSystem(*k);
+            if is_visible(&nr) {
+                out.push_str(&format!(
+                    "  {}[/\"{}\"/]\n",
+                    ext.id,
+                    prefixed_node_label(&nr, &ext.label)
+                ));
             }
         }
 
@@ -82,8 +110,13 @@ impl Emitter for RdraMermaidEmitter {
         let mut ents: Vec<_> = model.entities.iter().collect();
         ents.sort_by_key(|(_, e)| &e.id);
         for (k, ent) in &ents {
-            if is_visible(&NodeRef::Entity(*k)) {
-                out.push_str(&format!("  {}[(\"🗄 {}\")]\n", ent.id, ent.label));
+            let nr = NodeRef::Entity(*k);
+            if is_visible(&nr) {
+                out.push_str(&format!(
+                    "  {}[(\"{}\")]\n",
+                    ent.id,
+                    prefixed_node_label(&nr, &ent.label)
+                ));
             }
         }
 
@@ -91,8 +124,13 @@ impl Emitter for RdraMermaidEmitter {
         let mut scrs: Vec<_> = model.screens.iter().collect();
         scrs.sort_by_key(|(_, s)| &s.id);
         for (k, scr) in &scrs {
-            if is_visible(&NodeRef::Screen(*k)) {
-                out.push_str(&format!("  {}[[\"{}\"]]\n", scr.id, scr.label));
+            let nr = NodeRef::Screen(*k);
+            if is_visible(&nr) {
+                out.push_str(&format!(
+                    "  {}[[\"{}\"]]\n",
+                    scr.id,
+                    prefixed_node_label(&nr, &scr.label)
+                ));
             }
         }
 
@@ -100,8 +138,13 @@ impl Emitter for RdraMermaidEmitter {
         let mut evs: Vec<_> = model.events.iter().collect();
         evs.sort_by_key(|(_, e)| &e.id);
         for (k, ev) in &evs {
-            if is_visible(&NodeRef::Event(*k)) {
-                out.push_str(&format!("  {}{{\"{}\"}}\n", ev.id, ev.label));
+            let nr = NodeRef::Event(*k);
+            if is_visible(&nr) {
+                out.push_str(&format!(
+                    "  {}{{\"{}\"}}\n",
+                    ev.id,
+                    prefixed_node_label(&nr, &ev.label)
+                ));
             }
         }
 
@@ -109,8 +152,13 @@ impl Emitter for RdraMermaidEmitter {
         let mut sts: Vec<_> = model.states.iter().collect();
         sts.sort_by_key(|(_, s)| &s.id);
         for (k, st) in &sts {
-            if is_visible(&NodeRef::State(*k)) {
-                out.push_str(&format!("  {}(\"{}\")  \n", st.id, st.label));
+            let nr = NodeRef::State(*k);
+            if is_visible(&nr) {
+                out.push_str(&format!(
+                    "  {}(\"{}\")  \n",
+                    st.id,
+                    prefixed_node_label(&nr, &st.label)
+                ));
             }
         }
 
@@ -187,6 +235,106 @@ impl Emitter for RdraMermaidEmitter {
             }
         }
 
+        while out.ends_with("\n\n") {
+            out.pop();
+        }
+        Ok(out)
+    }
+}
+
+// ── RDRA Object Graph レイヤ図エミッタ (Mermaid) ─────────────────────────────
+
+pub struct ObjectGraphMermaidEmitter;
+
+fn mermaid_label(label: &str) -> String {
+    label.replace('"', "#quot;")
+}
+
+impl Emitter for ObjectGraphMermaidEmitter {
+    fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
+        let reachable: Option<HashSet<NodeRef>> = match &view.scope {
+            Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
+            Scope::Whole | Scope::UseCases(_) => None,
+        };
+
+        let is_visible = |nr: &NodeRef| -> bool {
+            match &reachable {
+                Some(set) => set.contains(nr),
+                None => true,
+            }
+        };
+
+        let visible_nodes = collect_object_graph_nodes(model, &is_visible);
+        let visible_set: HashSet<NodeRef> = visible_nodes.iter().cloned().collect();
+
+        let mut out = String::new();
+        out.push_str("flowchart LR\n");
+
+        for layer in OBJECT_GRAPH_LAYERS {
+            out.push_str(&format!(
+                "  subgraph {}[{}]\n",
+                layer.mermaid_id(),
+                layer.label()
+            ));
+            out.push_str("    direction TB\n");
+            for nr in visible_nodes
+                .iter()
+                .filter(|nr| object_graph_layer(nr) == layer)
+            {
+                if let (Some(id), Some(label)) = (node_id(model, nr), node_label(model, nr)) {
+                    let label = mermaid_label(&prefixed_node_label(nr, label));
+                    let line = match nr {
+                        NodeRef::Actor(_) => format!("    {}([\"{}\"])\n", id, label),
+                        NodeRef::Requirement(_) => format!("    {}[\"{}\"]\n", id, label),
+                        NodeRef::ExtSystem(_) => format!("    {}[/\"{}\"/]\n", id, label),
+                        NodeRef::Business(_) => format!("    {}[\"{}\"]\n", id, label),
+                        NodeRef::Buc(_) => format!("    {}[\"{}\"]\n", id, label),
+                        NodeRef::UsageScene(_) => format!("    {}([\"{}\"])\n", id, label),
+                        NodeRef::Condition(_) => format!("    {}{{\"{}\"}}\n", id, label),
+                        NodeRef::Variation(_) => format!("    {}{{\"{}\"}}\n", id, label),
+                        NodeRef::UseCase(_) => format!("    {}([\"{}\"])\n", id, label),
+                        NodeRef::Screen(_) => format!("    {}[[\"{}\"]]\n", id, label),
+                        NodeRef::Event(_) => format!("    {}{{\"{}\"}}\n", id, label),
+                        NodeRef::Api(_) => format!("    {}[\"{}\"]\n", id, label),
+                        NodeRef::System(_) => format!("    {}[\"{}\"]\n", id, label),
+                        NodeRef::Entity(_) => format!("    {}[(\"{}\")]\n", id, label),
+                        NodeRef::State(_) => format!("    {}(\"{}\")\n", id, label),
+                    };
+                    out.push_str(&line);
+                }
+            }
+            out.push_str("  end\n");
+        }
+
+        let mut relations: Vec<_> = model.relations.iter().collect();
+        relations.sort_by_key(|r| format!("{:?}{:?}{:?}", r.from, r.kind, r.to));
+        for rel in relations {
+            if !visible_set.contains(&rel.from) || !visible_set.contains(&rel.to) {
+                continue;
+            }
+            if let (Some(from_id), Some(to_id)) =
+                (node_id(model, &rel.from), node_id(model, &rel.to))
+            {
+                let label = object_graph_rel_label(&rel.kind);
+                let line = match rel.kind {
+                    RelKind::Performs | RelKind::Contains | RelKind::Uses => {
+                        format!("  {} -->|{}| {}\n", from_id, label, to_id)
+                    }
+                    RelKind::RelateOneToOne
+                    | RelKind::RelateOneToMany
+                    | RelKind::RelateManyToOne
+                    | RelKind::RelateManyToMany => {
+                        format!("  {} ---|{}| {}\n", from_id, label, to_id)
+                    }
+                    _ => format!("  {} -.->|{}| {}\n", from_id, label, to_id),
+                };
+                out.push_str(&line);
+            }
+        }
+
+        while out.ends_with("\n\n") {
+            out.pop();
+        }
         Ok(out)
     }
 }
@@ -255,8 +403,12 @@ impl Emitter for StateMermaidEmitter {
         for t in &sorted {
             for nr in [&t.from, &t.to] {
                 if let (Some(id), Some(label)) = (node_id(model, nr), node_label(model, nr)) {
-                    if defined.insert(id.to_string()) && id != label {
-                        out.push_str(&format!("  state \"{}\" as {}\n", label, id));
+                    if defined.insert(id.to_string()) {
+                        out.push_str(&format!(
+                            "  state \"{}\" as {}\n",
+                            prefixed_node_label(nr, label),
+                            id
+                        ));
                     }
                 }
             }
@@ -268,7 +420,12 @@ impl Emitter for StateMermaidEmitter {
                 node_id(model, &t.to),
                 node_label(model, &t.event),
             ) {
-                out.push_str(&format!("  {} --> {} : {}\n", from_id, to_id, ev_label));
+                out.push_str(&format!(
+                    "  {} --> {} : {}\n",
+                    from_id,
+                    to_id,
+                    prefixed_node_label(&t.event, ev_label)
+                ));
             }
         }
 
@@ -557,12 +714,16 @@ impl Emitter for SequenceMermaidEmitter {
             .filter(|(k, _)| actor_keys.contains(k))
             .collect();
         actors_sorted.sort_by_key(|(_, a)| a.id.as_str());
-        for (_, actor) in &actors_sorted {
-            out.push_str(&format!("  actor {} as {}\n", actor.id, actor.label));
-        }
-
-        if has_legacy_uc {
-            out.push_str("  participant System as システム\n");
+        if !actors_sorted.is_empty() {
+            out.push_str("  box システム価値\n");
+            for (_, actor) in &actors_sorted {
+                out.push_str(&format!(
+                    "    actor {} as {}\n",
+                    actor.id,
+                    prefixed_label("👤", &actor.label)
+                ));
+            }
+            out.push_str("  end\n");
         }
 
         let mut scrs_sorted: Vec<(ScreenKey, &rdra_ish_core::model::Screen)> = model
@@ -571,9 +732,6 @@ impl Emitter for SequenceMermaidEmitter {
             .filter(|(k, _)| screen_keys.contains(k))
             .collect();
         scrs_sorted.sort_by_key(|(_, s)| s.id.as_str());
-        for (_, scr) in &scrs_sorted {
-            out.push_str(&format!("  participant {} as {}\n", scr.id, scr.label));
-        }
 
         let mut apis_sorted: Vec<(ApiKey, &rdra_ish_core::model::Api)> = model
             .apis
@@ -581,8 +739,23 @@ impl Emitter for SequenceMermaidEmitter {
             .filter(|(k, _)| api_keys.contains(k))
             .collect();
         apis_sorted.sort_by_key(|(_, a)| a.id.as_str());
-        for (_, api) in &apis_sorted {
-            out.push_str(&format!("  participant {} as {}\n", api.id, api.label));
+        if !scrs_sorted.is_empty() || !apis_sorted.is_empty() {
+            out.push_str("  box システム境界\n");
+            for (_, scr) in &scrs_sorted {
+                out.push_str(&format!(
+                    "    participant {} as {}\n",
+                    scr.id,
+                    prefixed_label("🖥️", &scr.label)
+                ));
+            }
+            for (_, api) in &apis_sorted {
+                out.push_str(&format!(
+                    "    participant {} as {}\n",
+                    api.id,
+                    prefixed_label("🔌", &api.label)
+                ));
+            }
+            out.push_str("  end\n");
         }
 
         let mut ents_sorted: Vec<(EntityKey, &rdra_ish_core::model::Entity)> = model
@@ -591,8 +764,19 @@ impl Emitter for SequenceMermaidEmitter {
             .filter(|(k, _)| entity_keys.contains(k))
             .collect();
         ents_sorted.sort_by_key(|(_, e)| e.id.as_str());
-        for (_, ent) in &ents_sorted {
-            out.push_str(&format!("  participant {} as {}\n", ent.id, ent.label));
+        if has_legacy_uc || !ents_sorted.is_empty() {
+            out.push_str("  box システム\n");
+            if has_legacy_uc {
+                out.push_str("    participant System as 🧩 システム\n");
+            }
+            for (_, ent) in &ents_sorted {
+                out.push_str(&format!(
+                    "    participant {} as {}\n",
+                    ent.id,
+                    prefixed_label("🗄️", &ent.label)
+                ));
+            }
+            out.push_str("  end\n");
         }
         out.push('\n');
 
@@ -609,12 +793,13 @@ impl Emitter for SequenceMermaidEmitter {
             .unwrap_or("System");
 
         for (uk, uc) in &uc_list {
+            let uc_label = prefixed_label("✅", &uc.label);
             if first_id == last_id {
-                out.push_str(&format!("  Note over {}: {}\n", first_id, uc.label));
+                out.push_str(&format!("  Note over {}: {}\n", first_id, uc_label));
             } else {
                 out.push_str(&format!(
                     "  Note over {},{}: {}\n",
-                    first_id, last_id, uc.label
+                    first_id, last_id, uc_label
                 ));
             }
 
@@ -643,7 +828,7 @@ impl Emitter for SequenceMermaidEmitter {
                 .get(uk)
                 .and_then(|s| s.first())
                 .and_then(|sk| model.screens.get(*sk))
-                .map(|s| s.label.clone());
+                .map(|s| prefixed_label("🖥️", &s.label));
 
             let invoked_apis = uc_to_apis.get(uk);
 
@@ -656,12 +841,12 @@ impl Emitter for SequenceMermaidEmitter {
                     .unwrap_or("System");
 
                 if let Some(ref sid) = screen_id {
-                    out.push_str(&format!("  {}->>{}: {}\n", actor_ref, sid, uc.label));
-                    out.push_str(&format!("  {}->>{}: {}\n", sid, first_api_id, uc.label));
+                    out.push_str(&format!("  {}->>{}: {}\n", actor_ref, sid, uc_label));
+                    out.push_str(&format!("  {}->>{}: {}\n", sid, first_api_id, uc_label));
                 } else {
                     out.push_str(&format!(
                         "  {}->>{}: {}\n",
-                        actor_ref, first_api_id, uc.label
+                        actor_ref, first_api_id, uc_label
                     ));
                 }
                 out.push_str(&format!("  activate {}\n", first_api_id));
@@ -750,13 +935,13 @@ impl Emitter for SequenceMermaidEmitter {
                 } else {
                     out.push_str(&format!(
                         "  {}-->>{}: {}\n",
-                        first_api_id, actor_ref, uc.label
+                        first_api_id, actor_ref, uc_label
                     ));
                 }
                 out.push_str(&format!("  deactivate {}\n\n", first_api_id));
             } else {
                 // ── レガシーパス（System ライン）─────────────────────────────
-                out.push_str(&format!("  {}->System: {}\n", actor_ref, uc.label));
+                out.push_str(&format!("  {}->System: {}\n", actor_ref, uc_label));
                 out.push_str("  activate System\n");
 
                 for &ek in uc_to_reads.get(uk).into_iter().flatten() {
@@ -809,6 +994,9 @@ impl Emitter for SequenceMermaidEmitter {
             }
         }
 
+        while out.ends_with("\n\n") {
+            out.pop();
+        }
         Ok(out)
     }
 }
@@ -854,7 +1042,11 @@ impl Emitter for EventFlowMermaidEmitter {
             let ev_id = ev_mid(&ev.id);
 
             if declared.insert(ev_id.clone()) {
-                out.push_str(&format!("  {}{{\"{}\"}}\n", ev_id, ev.label));
+                out.push_str(&format!(
+                    "  {}{{\"{}\"}}\n",
+                    ev_id,
+                    prefixed_label("⚡", &ev.label)
+                ));
             }
 
             // raises: UC -.->|raises| Event
@@ -872,7 +1064,11 @@ impl Emitter for EventFlowMermaidEmitter {
                 };
                 let uid = uc_mid(&uc.id);
                 if declared.insert(uid.clone()) {
-                    out.push_str(&format!("  {}([\"{}\"])\n", uid, uc.label));
+                    out.push_str(&format!(
+                        "  {}([\"{}\"])\n",
+                        uid,
+                        prefixed_label("✅", &uc.label)
+                    ));
                 }
                 out.push_str(&format!("  {} -.->|raises| {}\n", uid, ev_id));
             }
@@ -892,7 +1088,11 @@ impl Emitter for EventFlowMermaidEmitter {
                 };
                 let uid = uc_mid(&uc.id);
                 if declared.insert(uid.clone()) {
-                    out.push_str(&format!("  {}([\"{}\"])\n", uid, uc.label));
+                    out.push_str(&format!(
+                        "  {}([\"{}\"])\n",
+                        uid,
+                        prefixed_label("✅", &uc.label)
+                    ));
                 }
                 out.push_str(&format!("  {} -.->|triggers| {}\n", ev_id, uid));
             }
@@ -918,12 +1118,25 @@ impl Emitter for EventFlowMermaidEmitter {
                 let fid = st_mid(&from_st.id);
                 let tid = st_mid(&to_st.id);
                 if declared.insert(fid.clone()) {
-                    out.push_str(&format!("  {}(\"{}\")\n", fid, from_st.label));
+                    out.push_str(&format!(
+                        "  {}(\"{}\")\n",
+                        fid,
+                        prefixed_label("🔄", &from_st.label)
+                    ));
                 }
                 if declared.insert(tid.clone()) {
-                    out.push_str(&format!("  {}(\"{}\")\n", tid, to_st.label));
+                    out.push_str(&format!(
+                        "  {}(\"{}\")\n",
+                        tid,
+                        prefixed_label("🔄", &to_st.label)
+                    ));
                 }
-                out.push_str(&format!("  {} -->|{}| {}\n", fid, ev.label, tid));
+                out.push_str(&format!(
+                    "  {} -->|{}| {}\n",
+                    fid,
+                    prefixed_label("⚡", &ev.label),
+                    tid
+                ));
             }
         }
 
@@ -958,6 +1171,41 @@ performs(Customer, Browse)
         assert!(result.contains("Browse"));
         assert!(result.contains("商品を探す"));
         assert!(result.contains("Customer --> Browse"));
+    }
+
+    #[test]
+    fn test_object_graph_mermaid_layers() {
+        let src = r#"
+actor Customer "顧客"
+buc BucOrder "注文業務"
+usecase PlaceOrder "注文する"
+screen OrderScreen "注文画面"
+api OrderApi "注文API"
+entity Order "注文" { id: Int @pk }
+state Draft "下書き"
+performs(Customer, BucOrder)
+contains(BucOrder, PlaceOrder)
+displays(PlaceOrder, OrderScreen)
+invokes(PlaceOrder, OrderApi)
+creates(OrderApi, Order)
+"#;
+        let model = model_from(src);
+        let result = ObjectGraphMermaidEmitter
+            .emit(&model, &View::whole())
+            .unwrap();
+        assert!(result.contains("flowchart LR"));
+        assert!(result.contains("subgraph layer_value[システム価値]"));
+        assert!(result.contains("subgraph layer_environment[システム外部環境]"));
+        assert!(result.contains("subgraph layer_boundary[システム境界]"));
+        assert!(result.contains("subgraph layer_system[システム]"));
+        assert!(result.contains("Customer([\"👤 顧客\"])"));
+        assert!(result.contains("BucOrder[\"📦 注文業務\"]"));
+        assert!(result.contains("OrderScreen[[\"🖥️ 注文画面\"]]"));
+        assert!(result.contains("OrderApi[\"🔌 注文API\"]"));
+        assert!(result.contains("Order[(\"🗄️ 注文\")]"));
+        assert!(result.contains("Customer -->|performs| BucOrder"));
+        assert!(result.contains("PlaceOrder -.->|invokes| OrderApi"));
+        assert!(result.contains("OrderApi -.->|creates| Order"));
     }
 
     #[test]
@@ -1115,6 +1363,9 @@ reads(SearchApi, Item)
         let result = SequenceMermaidEmitter
             .emit(&model, &View::usecases(vec!["Search".to_string()]))
             .unwrap();
+        assert!(result.contains("box システム価値"));
+        assert!(result.contains("box システム境界"));
+        assert!(result.contains("box システム"));
         assert!(result.contains("actor Customer"));
         assert!(result.contains("participant SearchApi"));
         assert!(result.contains("participant Item"));

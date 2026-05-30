@@ -1,19 +1,25 @@
 sequenceDiagram
-  actor Clinician as Clinician
-  participant ResultReviewScreen as Result Review Screen
-  participant ResultReviewApi as Result Review API
-  participant ClinicalOrder as Clinical Order
-  participant LabResult as Lab Result
+  box システム価値
+    actor Clinician as 👤 Clinician
+  end
+  box システム境界
+    participant ResultReviewScreen as 🖥️ Result Review Screen
+    participant ResultReviewApi as 🔌 Result Review API
+  end
+  box システム
+    participant ClinicalOrder as 🗄️ Clinical Order
+    participant LabResult as 🗄️ Lab Result
+  end
 
-  Note over Clinician,LabResult: Review Lab Result
-  Clinician->>ResultReviewScreen: Review Lab Result
-  ResultReviewScreen->>ResultReviewApi: Review Lab Result
+  Note over Clinician,LabResult: ✅ Review Lab Result
+  Clinician->>ResultReviewScreen: ✅ Review Lab Result
+  ResultReviewScreen->>ResultReviewApi: ✅ Review Lab Result
   activate ResultReviewApi
   rect rgb(245,245,245)
     Note right of ResultReviewApi: transaction (API atomic boundary)
     ResultReviewApi->>ClinicalOrder: update
     ResultReviewApi->>LabResult: update
   end
-  ResultReviewApi-->>ResultReviewScreen: Result Review Screen
-  ResultReviewScreen-->>Clinician: Result Review Screen
+  ResultReviewApi-->>ResultReviewScreen: 🖥️ Result Review Screen
+  ResultReviewScreen-->>Clinician: 🖥️ Result Review Screen
   deactivate ResultReviewApi

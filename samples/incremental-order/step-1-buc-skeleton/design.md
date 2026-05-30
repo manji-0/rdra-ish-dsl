@@ -47,8 +47,8 @@ rdra-ish diagram samples/incremental-order/step-1-buc-skeleton/src --kind rdra -
 ```mermaid
 graph TD
   OpsStaff(["👤 Operations Staff"])
-  ChangeNextRestockDate(["Change Next Restock Date"])
-  ChangeStoreParentOrganization(["Change Store Parent Organization"])
+  ChangeNextRestockDate(["✅ Change Next Restock Date"])
+  ChangeStoreParentOrganization(["✅ Change Store Parent Organization"])
   BucStoreRestock["📦 Maintain Store Restock"]
   OpsStaff --> BucStoreRestock
   BucStoreRestock --> StoreOperations

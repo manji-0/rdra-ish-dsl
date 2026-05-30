@@ -1,30 +1,30 @@
 graph TD
   CareCoordinator(["👤 Care Coordinator"])
   Patient(["👤 Patient"])
-  CloseCarePlan(["Close Care Plan"])
-  CreateCarePlan(["Create Care Plan"])
-  NotifyPatientResult(["Notify Patient Result"])
-  ReviewPatientResponse(["Review Patient Response"])
-  ScheduleFollowUpVisit(["Schedule Follow-Up Visit"])
-  SendAppointmentNotice(["Send Appointment Notice"])
-  SendFollowUpMessage(["Send Follow-Up Message"])
-  SendIntakeForms(["Send Intake Forms"])
+  CloseCarePlan(["✅ Close Care Plan"])
+  CreateCarePlan(["✅ Create Care Plan"])
+  NotifyPatientResult(["✅ Notify Patient Result"])
+  ReviewPatientResponse(["✅ Review Patient Response"])
+  ScheduleFollowUpVisit(["✅ Schedule Follow-Up Visit"])
+  SendAppointmentNotice(["✅ Send Appointment Notice"])
+  SendFollowUpMessage(["✅ Send Follow-Up Message"])
+  SendIntakeForms(["✅ Send Intake Forms"])
   BucFollowupCare["📦 Coordinate Follow-Up Care"]
-  Appointment[("🗄 Appointment")]
-  CarePlan[("🗄 Care Plan")]
-  Encounter[("🗄 Encounter")]
-  IntakePacket[("🗄 Intake Packet")]
-  Notification[("🗄 Notification")]
-  PatientMessage[("🗄 Patient Message")]
-  ProviderSchedule[("🗄 Provider Schedule")]
-  AppointmentNoticeScreen[["Appointment Notice Screen"]]
-  CarePlanScreen[["Care Plan Screen"]]
-  FollowUpScheduleScreen[["Follow-Up Schedule Screen"]]
-  IntakePortalScreen[["Intake Portal Screen"]]
-  PatientMessageScreen[["Patient Message Screen"]]
-  EvAppointmentScheduled{"Appointment Scheduled"}
-  EvCarePlanClosed{"Care Plan Closed"}
-  EvCarePlanMonitoring{"Care Plan Monitoring"}
+  Appointment[("🗄️ Appointment")]
+  CarePlan[("🗄️ Care Plan")]
+  Encounter[("🗄️ Encounter")]
+  IntakePacket[("🗄️ Intake Packet")]
+  Notification[("🗄️ Notification")]
+  PatientMessage[("🗄️ Patient Message")]
+  ProviderSchedule[("🗄️ Provider Schedule")]
+  AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
+  CarePlanScreen[["🖥️ Care Plan Screen"]]
+  FollowUpScheduleScreen[["🖥️ Follow-Up Schedule Screen"]]
+  IntakePortalScreen[["🖥️ Intake Portal Screen"]]
+  PatientMessageScreen[["🖥️ Patient Message Screen"]]
+  EvAppointmentScheduled{"⚡ Appointment Scheduled"}
+  EvCarePlanClosed{"⚡ Care Plan Closed"}
+  EvCarePlanMonitoring{"⚡ Care Plan Monitoring"}
   Patient --> BucFollowupCare
   CareCoordinator --> BucFollowupCare
   CareCoordinator --> CreateCarePlan

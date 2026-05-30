@@ -1,16 +1,22 @@
 sequenceDiagram
-  actor Clinician as Clinician
-  participant PrescriptionScreen as Prescription Screen
-  participant RefillPrescriptionApi as Refill Prescription API
-  participant Medication as Medication
-  participant Prescription as Prescription
+  box システム価値
+    actor Clinician as 👤 Clinician
+  end
+  box システム境界
+    participant PrescriptionScreen as 🖥️ Prescription Screen
+    participant RefillPrescriptionApi as 🔌 Refill Prescription API
+  end
+  box システム
+    participant Medication as 🗄️ Medication
+    participant Prescription as 🗄️ Prescription
+  end
 
-  Note over Clinician,Prescription: Refill Prescription
-  Clinician->>PrescriptionScreen: Refill Prescription
-  PrescriptionScreen->>RefillPrescriptionApi: Refill Prescription
+  Note over Clinician,Prescription: ✅ Refill Prescription
+  Clinician->>PrescriptionScreen: ✅ Refill Prescription
+  PrescriptionScreen->>RefillPrescriptionApi: ✅ Refill Prescription
   activate RefillPrescriptionApi
   RefillPrescriptionApi->>Medication: read
   RefillPrescriptionApi->>Prescription: create
-  RefillPrescriptionApi-->>PrescriptionScreen: Prescription Screen
-  PrescriptionScreen-->>Clinician: Prescription Screen
+  RefillPrescriptionApi-->>PrescriptionScreen: 🖥️ Prescription Screen
+  PrescriptionScreen-->>Clinician: 🖥️ Prescription Screen
   deactivate RefillPrescriptionApi

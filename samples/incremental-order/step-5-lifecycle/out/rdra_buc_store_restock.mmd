@@ -1,14 +1,14 @@
 graph TD
   OpsStaff(["👤 Operations Staff"])
-  BlockScheduledRestock(["Block Scheduled Restock"])
-  ChangeNextRestockDate(["Change Next Restock Date"])
-  ChangeStoreParentOrganization(["Change Store Parent Organization"])
+  BlockScheduledRestock(["✅ Block Scheduled Restock"])
+  ChangeNextRestockDate(["✅ Change Next Restock Date"])
+  ChangeStoreParentOrganization(["✅ Change Store Parent Organization"])
   BucStoreRestock["📦 Maintain Store Restock"]
-  Organization[("🗄 Organization")]
-  Store[("🗄 Store")]
-  StoreMaintenanceScreen[["Store Maintenance"]]
-  RestockBlocked{"Restock Blocked"}
-  RestockScheduled{"Restock Scheduled"}
+  Organization[("🗄️ Organization")]
+  Store[("🗄️ Store")]
+  StoreMaintenanceScreen[["🖥️ Store Maintenance"]]
+  RestockBlocked{"⚡ Restock Blocked"}
+  RestockScheduled{"⚡ Restock Scheduled"}
   OpsStaff --> BucStoreRestock
   BucStoreRestock --> StoreOperations
   BucStoreRestock --> ChangeNextRestockDate

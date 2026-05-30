@@ -1,12 +1,18 @@
 sequenceDiagram
-  actor BillingSpecialist as Billing Specialist
-  participant System as システム
-  participant ChargeWorklistScreen as Charge Worklist Screen
-  participant Charge as Charge
+  box システム価値
+    actor BillingSpecialist as 👤 Billing Specialist
+  end
+  box システム境界
+    participant ChargeWorklistScreen as 🖥️ Charge Worklist Screen
+  end
+  box システム
+    participant System as 🧩 システム
+    participant Charge as 🗄️ Charge
+  end
 
-  Note over BillingSpecialist,Charge: Void Charge
-  BillingSpecialist->System: Void Charge
+  Note over BillingSpecialist,Charge: ✅ Void Charge
+  BillingSpecialist->System: ✅ Void Charge
   activate System
   System->>Charge: update
-  System-->>BillingSpecialist: Charge Worklist Screen
+  System-->>BillingSpecialist: 🖥️ Charge Worklist Screen
   deactivate System

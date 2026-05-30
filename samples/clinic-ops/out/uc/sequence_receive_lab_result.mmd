@@ -1,19 +1,25 @@
 sequenceDiagram
-  actor Nurse as Nurse
-  participant ResultReviewScreen as Result Review Screen
-  participant ReceiveLabResultApi as Receive Lab Result API
-  participant ClinicalOrder as Clinical Order
-  participant LabResult as Lab Result
+  box システム価値
+    actor Nurse as 👤 Nurse
+  end
+  box システム境界
+    participant ResultReviewScreen as 🖥️ Result Review Screen
+    participant ReceiveLabResultApi as 🔌 Receive Lab Result API
+  end
+  box システム
+    participant ClinicalOrder as 🗄️ Clinical Order
+    participant LabResult as 🗄️ Lab Result
+  end
 
-  Note over Nurse,LabResult: Receive Lab Result
-  Nurse->>ResultReviewScreen: Receive Lab Result
-  ResultReviewScreen->>ReceiveLabResultApi: Receive Lab Result
+  Note over Nurse,LabResult: ✅ Receive Lab Result
+  Nurse->>ResultReviewScreen: ✅ Receive Lab Result
+  ResultReviewScreen->>ReceiveLabResultApi: ✅ Receive Lab Result
   activate ReceiveLabResultApi
   rect rgb(245,245,245)
     Note right of ReceiveLabResultApi: transaction (API atomic boundary)
     ReceiveLabResultApi->>ClinicalOrder: update
     ReceiveLabResultApi->>LabResult: create
   end
-  ReceiveLabResultApi-->>ResultReviewScreen: Result Review Screen
-  ResultReviewScreen-->>Nurse: Result Review Screen
+  ReceiveLabResultApi-->>ResultReviewScreen: 🖥️ Result Review Screen
+  ResultReviewScreen-->>Nurse: 🖥️ Result Review Screen
   deactivate ReceiveLabResultApi

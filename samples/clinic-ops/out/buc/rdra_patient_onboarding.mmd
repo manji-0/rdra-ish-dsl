@@ -1,33 +1,33 @@
 graph TD
   FrontDesk(["👤 Front Desk Staff"])
   Patient(["👤 Patient"])
-  ArchivePatient(["Archive Patient"])
-  CaptureConsent(["Capture Consent"])
-  CompleteIntakeForms(["Complete Intake Forms"])
-  ExpireIntakeForms(["Expire Intake Forms"])
-  MergeDuplicatePatient(["Merge Duplicate Patient"])
-  RegisterPatient(["Register Patient"])
-  SearchPatient(["Search Patient"])
-  SendIntakeForms(["Send Intake Forms"])
-  UpdateDemographics(["Update Demographics"])
-  VerifyInsurance(["Verify Insurance"])
+  ArchivePatient(["✅ Archive Patient"])
+  CaptureConsent(["✅ Capture Consent"])
+  CompleteIntakeForms(["✅ Complete Intake Forms"])
+  ExpireIntakeForms(["✅ Expire Intake Forms"])
+  MergeDuplicatePatient(["✅ Merge Duplicate Patient"])
+  RegisterPatient(["✅ Register Patient"])
+  SearchPatient(["✅ Search Patient"])
+  SendIntakeForms(["✅ Send Intake Forms"])
+  UpdateDemographics(["✅ Update Demographics"])
+  VerifyInsurance(["✅ Verify Insurance"])
   BucPatientOnboarding["📦 Onboard and Maintain Patient"]
-  ConsentRecord[("🗄 Consent Record")]
-  EligibilityCheck[("🗄 Eligibility Check")]
-  InsurancePolicy[("🗄 Insurance Policy")]
-  IntakePacket[("🗄 Intake Packet")]
-  PatientAccount[("🗄 Patient Account")]
-  PatientMessage[("🗄 Patient Message")]
-  PatientProfile[("🗄 Patient Profile")]
-  ConsentScreen[["Consent Capture Screen"]]
-  InsuranceScreen[["Insurance Verification Screen"]]
-  IntakePortalScreen[["Intake Portal Screen"]]
-  PatientProfileScreen[["Patient Profile Screen"]]
-  PatientSearchScreen[["Patient Search Screen"]]
-  EvIntakeCompleted{"Intake Completed"}
-  EvIntakeExpired{"Intake Expired"}
-  EvPatientArchived{"Patient Archived"}
-  EvPatientMerged{"Patient Merged"}
+  ConsentRecord[("🗄️ Consent Record")]
+  EligibilityCheck[("🗄️ Eligibility Check")]
+  InsurancePolicy[("🗄️ Insurance Policy")]
+  IntakePacket[("🗄️ Intake Packet")]
+  PatientAccount[("🗄️ Patient Account")]
+  PatientMessage[("🗄️ Patient Message")]
+  PatientProfile[("🗄️ Patient Profile")]
+  ConsentScreen[["🖥️ Consent Capture Screen"]]
+  InsuranceScreen[["🖥️ Insurance Verification Screen"]]
+  IntakePortalScreen[["🖥️ Intake Portal Screen"]]
+  PatientProfileScreen[["🖥️ Patient Profile Screen"]]
+  PatientSearchScreen[["🖥️ Patient Search Screen"]]
+  EvIntakeCompleted{"⚡ Intake Completed"}
+  EvIntakeExpired{"⚡ Intake Expired"}
+  EvPatientArchived{"⚡ Patient Archived"}
+  EvPatientMerged{"⚡ Patient Merged"}
   Patient --> BucPatientOnboarding
   Patient --> CaptureConsent
   Patient --> CompleteIntakeForms

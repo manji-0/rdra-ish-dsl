@@ -11,8 +11,9 @@ You declare actors, entities, use cases, and so on as typed instances, and expre
 relationships between them with predicate calls.
 It treats a model as source code: the compiler type-checks relationships,
 generates reviewable artifacts, and reports model gaps such as unreachable states or
-violated state constraints. It generates PlantUML / Mermaid diagrams (ER, RDRA, state
-machine, sequence, event-flow) and CSV (actor list, entity list, CRUD matrix), and
+violated state constraints. It generates PlantUML / Mermaid diagrams (ER, RDRA,
+layered object graph, state machine, sequence, event-flow) and CSV (actor list,
+entity list, CRUD matrix), and
 derives **the reachable state patterns of each entity from BUC patterns**.
 An `api` element lets you express the API layer between screens and entities — the sequence
 diagram renders the full `Actor → Screen → API → Entity` lane automatically.
@@ -98,6 +99,9 @@ PLANTUML_JAR=/path/to/plantuml.jar rdra-ish diagram src/ --kind er --format svg
 # Full RDRA diagram
 rdra-ish diagram src/ --kind rdra --format mermaid
 
+# RDRA Object Graph mapped onto the original RDRA-style layers
+rdra-ish diagram src/ --kind object-graph --format mermaid
+
 # Per-BUC diagram (single BUC)
 rdra-ish diagram src/ --kind rdra --buc BucOrder --format mermaid
 
@@ -137,7 +141,7 @@ rdra-ish states src/ --format json           # JSON output
 
 | Option | Default | Description |
 |---|---|---|
-| `--kind` | `rdra` | `rdra` / `er` / `state` / `sequence` / `event-flow` |
+| `--kind` | `rdra` | `rdra` / `object-graph` / `er` / `state` / `sequence` / `event-flow` |
 | `--format` | `puml` | `puml` / `svg` / `png` / `mermaid` (`svg`/`png` require plantuml.jar) |
 | `--buc <id>` | — (whole) | Filter by BUC id (repeatable). For `sequence`, only directly contained use cases are shown |
 | `--usecase <id>` | — (whole) | Filter `sequence` diagrams by use case id (repeatable, cannot be combined with `--buc`) |
@@ -160,6 +164,19 @@ renders the interaction boundary explicitly:
 ```
 Actor → Screen → API → Entity
 ```
+
+The participant lanes are grouped into RDRA-style layer boxes so the vertical
+lifelines also show the model boundary:
+
+```
+システム価値: Actor
+システム境界: Screen / API
+システム: System / Entity
+```
+
+Diagram labels include a small kind prefix such as `👤 actor`, `✅ usecase`,
+`🖥️ screen`, `🔌 api`, `🗄️ entity`, `⚡ event`, and `🔄 state`. The DSL ids stay
+unchanged, so relationships and generated file stability are preserved.
 
 CRUD predicates (`creates`, `updates`, etc.) are attached to the `api` element; the
 use case owns only `invokes` and `displays`. Keep CRUD directly on a `usecase` only
@@ -570,12 +587,15 @@ erDiagram
 ```mermaid
 stateDiagram-v2
   [*] --> Pending
-  state "Payment Completed" as Paid
-  state "Order Received" as Pending
-  Paid --> Shipped : Start Shipping
-  Pending --> Cancelled : Cancel Order
-  Pending --> Paid : Capture Payment
-  Shipped --> Delivered : Confirm Delivery
+  state "🔄 Payment Completed" as Paid
+  state "🔄 Shipped" as Shipped
+  state "🔄 Order Received" as Pending
+  state "🔄 Cancelled" as Cancelled
+  state "🔄 Delivered" as Delivered
+  Paid --> Shipped : ⚡ Start Shipping
+  Pending --> Cancelled : ⚡ Cancel Order
+  Pending --> Paid : ⚡ Capture Payment
+  Shipped --> Delivered : ⚡ Confirm Delivery
 ```
 
 #### Per-BUC RDRA diagram (BucOrder, Mermaid)
@@ -583,22 +603,22 @@ stateDiagram-v2
 ```mermaid
 graph TD
   Customer(["👤 Customer"])
-  Cancel(["Cancel Order"])
-  ConfirmOrder(["Confirm Order Details"])
-  PlaceOrder(["Place Order"])
-  SelectAddress(["Select Shipping Address"])
-  ViewOrderHistory(["View Order History"])
+  Cancel(["✅ Cancel Order"])
+  ConfirmOrder(["✅ Confirm Order Details"])
+  PlaceOrder(["✅ Place Order"])
+  SelectAddress(["✅ Select Shipping Address"])
+  ViewOrderHistory(["✅ View Order History"])
   BucOrder["📦 Process Order"]
-  Cart[("🗄 Cart")]
-  CartItem[("🗄 Cart Item")]
-  Order[("🗄 Order")]
-  OrderLine[("🗄 Order Line")]
-  ShippingAddress[("🗄 Shipping Address")]
-  AddressSelectScreen[["Address Selection Screen"]]
-  OrderCompleteScreen[["Order Complete Screen"]]
-  OrderConfirmScreen[["Order Confirmation Screen"]]
-  OrderHistoryScreen[["Order History Screen"]]
-  Cancel{"Cancel Order"}
+  Cart[("🗄️ Cart")]
+  CartItem[("🗄️ Cart Item")]
+  Order[("🗄️ Order")]
+  OrderLine[("🗄️ Order Line")]
+  ShippingAddress[("🗄️ Shipping Address")]
+  AddressSelectScreen[["🖥️ Address Selection Screen"]]
+  OrderCompleteScreen[["🖥️ Order Complete Screen"]]
+  OrderConfirmScreen[["🖥️ Order Confirmation Screen"]]
+  OrderHistoryScreen[["🖥️ Order History Screen"]]
+  Cancel{"⚡ Cancel Order"}
   Customer --> BucOrder
   BucOrder --> EcShopping
   BucOrder --> SelectAddress
@@ -623,45 +643,51 @@ Generated with `rdra-ish diagram samples/ec-site/ --kind sequence --format merma
 
 ```mermaid
 sequenceDiagram
-  actor Customer as Customer
-  participant AddressSelectScreen as Address Selection Screen
-  participant OrderCompleteScreen as Order Complete Screen
-  participant OrderConfirmScreen as Order Confirmation Screen
-  participant OrderHistoryScreen as Order History Screen
-  participant CancelOrderApi as Cancel Order API
-  participant ConfirmOrderApi as Confirm Order API
-  participant OrderHistoryApi as Order History API
-  participant PlaceOrderApi as Place Order API
-  participant SelectAddressApi as Select Address API
-  participant Cart as Cart
-  participant CartItem as Cart Item
-  participant Order as Order
-  participant OrderLine as Order Line
-  participant ShippingAddress as Shipping Address
+  box システム価値
+    actor Customer as 👤 Customer
+  end
+  box システム境界
+    participant AddressSelectScreen as 🖥️ Address Selection Screen
+    participant OrderCompleteScreen as 🖥️ Order Complete Screen
+    participant OrderConfirmScreen as 🖥️ Order Confirmation Screen
+    participant OrderHistoryScreen as 🖥️ Order History Screen
+    participant CancelOrderApi as 🔌 Cancel Order API
+    participant ConfirmOrderApi as 🔌 Confirm Order API
+    participant OrderHistoryApi as 🔌 Order History API
+    participant PlaceOrderApi as 🔌 Place Order API
+    participant SelectAddressApi as 🔌 Select Address API
+  end
+  box システム
+    participant Cart as 🗄️ Cart
+    participant CartItem as 🗄️ Cart Item
+    participant Order as 🗄️ Order
+    participant OrderLine as 🗄️ Order Line
+    participant ShippingAddress as 🗄️ Shipping Address
+  end
 
-  Note over Customer,ShippingAddress: Cancel Order
-  Customer->>OrderHistoryScreen: Cancel Order
-  OrderHistoryScreen->>CancelOrderApi: Cancel Order
+  Note over Customer,ShippingAddress: ✅ Cancel Order
+  Customer->>OrderHistoryScreen: ✅ Cancel Order
+  OrderHistoryScreen->>CancelOrderApi: ✅ Cancel Order
   activate CancelOrderApi
   CancelOrderApi->>Order: update
-  CancelOrderApi-->>OrderHistoryScreen: Order History Screen
-  OrderHistoryScreen-->>Customer: Order History Screen
+  CancelOrderApi-->>OrderHistoryScreen: 🖥️ Order History Screen
+  OrderHistoryScreen-->>Customer: 🖥️ Order History Screen
   deactivate CancelOrderApi
 
-  Note over Customer,ShippingAddress: Confirm Order Details
-  Customer->>OrderConfirmScreen: Confirm Order Details
-  OrderConfirmScreen->>ConfirmOrderApi: Confirm Order Details
+  Note over Customer,ShippingAddress: ✅ Confirm Order Details
+  Customer->>OrderConfirmScreen: ✅ Confirm Order Details
+  OrderConfirmScreen->>ConfirmOrderApi: ✅ Confirm Order Details
   activate ConfirmOrderApi
   ConfirmOrderApi->>Cart: read
   ConfirmOrderApi->>CartItem: read
   ConfirmOrderApi->>ShippingAddress: read
-  ConfirmOrderApi-->>OrderConfirmScreen: Order Confirmation Screen
-  OrderConfirmScreen-->>Customer: Order Confirmation Screen
+  ConfirmOrderApi-->>OrderConfirmScreen: 🖥️ Order Confirmation Screen
+  OrderConfirmScreen-->>Customer: 🖥️ Order Confirmation Screen
   deactivate ConfirmOrderApi
 
-  Note over Customer,ShippingAddress: Place Order
-  Customer->>OrderCompleteScreen: Place Order
-  OrderCompleteScreen->>PlaceOrderApi: Place Order
+  Note over Customer,ShippingAddress: ✅ Place Order
+  Customer->>OrderCompleteScreen: ✅ Place Order
+  OrderCompleteScreen->>PlaceOrderApi: ✅ Place Order
   activate PlaceOrderApi
   rect rgb(245,245,245)
     Note right of PlaceOrderApi: transaction (API atomic boundary)
@@ -669,27 +695,27 @@ sequenceDiagram
     PlaceOrderApi->>Order: create
     PlaceOrderApi->>OrderLine: create
   end
-  PlaceOrderApi-->>OrderCompleteScreen: Order Complete Screen
-  OrderCompleteScreen-->>Customer: Order Complete Screen
+  PlaceOrderApi-->>OrderCompleteScreen: 🖥️ Order Complete Screen
+  OrderCompleteScreen-->>Customer: 🖥️ Order Complete Screen
   deactivate PlaceOrderApi
 
-  Note over Customer,ShippingAddress: Select Shipping Address
-  Customer->>AddressSelectScreen: Select Shipping Address
-  AddressSelectScreen->>SelectAddressApi: Select Shipping Address
+  Note over Customer,ShippingAddress: ✅ Select Shipping Address
+  Customer->>AddressSelectScreen: ✅ Select Shipping Address
+  AddressSelectScreen->>SelectAddressApi: ✅ Select Shipping Address
   activate SelectAddressApi
   SelectAddressApi->>ShippingAddress: read
-  SelectAddressApi-->>AddressSelectScreen: Address Selection Screen
-  AddressSelectScreen-->>Customer: Address Selection Screen
+  SelectAddressApi-->>AddressSelectScreen: 🖥️ Address Selection Screen
+  AddressSelectScreen-->>Customer: 🖥️ Address Selection Screen
   deactivate SelectAddressApi
 
-  Note over Customer,ShippingAddress: View Order History
-  Customer->>OrderHistoryScreen: View Order History
-  OrderHistoryScreen->>OrderHistoryApi: View Order History
+  Note over Customer,ShippingAddress: ✅ View Order History
+  Customer->>OrderHistoryScreen: ✅ View Order History
+  OrderHistoryScreen->>OrderHistoryApi: ✅ View Order History
   activate OrderHistoryApi
   OrderHistoryApi->>Order: read
   OrderHistoryApi->>OrderLine: read
-  OrderHistoryApi-->>OrderHistoryScreen: Order History Screen
-  OrderHistoryScreen-->>Customer: Order History Screen
+  OrderHistoryApi-->>OrderHistoryScreen: 🖥️ Order History Screen
+  OrderHistoryScreen-->>Customer: 🖥️ Order History Screen
   deactivate OrderHistoryApi
 ```
 

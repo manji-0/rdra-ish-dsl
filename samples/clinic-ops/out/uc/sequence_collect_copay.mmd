@@ -1,19 +1,25 @@
 sequenceDiagram
-  actor FrontDesk as Front Desk Staff
-  participant CopayScreen as Copay Screen
-  participant CollectCopayApi as Collect Copay API
-  participant AccountBalance as Account Balance
-  participant PaymentTransaction as Payment Transaction
+  box システム価値
+    actor FrontDesk as 👤 Front Desk Staff
+  end
+  box システム境界
+    participant CopayScreen as 🖥️ Copay Screen
+    participant CollectCopayApi as 🔌 Collect Copay API
+  end
+  box システム
+    participant AccountBalance as 🗄️ Account Balance
+    participant PaymentTransaction as 🗄️ Payment Transaction
+  end
 
-  Note over FrontDesk,PaymentTransaction: Collect Copay
-  FrontDesk->>CopayScreen: Collect Copay
-  CopayScreen->>CollectCopayApi: Collect Copay
+  Note over FrontDesk,PaymentTransaction: ✅ Collect Copay
+  FrontDesk->>CopayScreen: ✅ Collect Copay
+  CopayScreen->>CollectCopayApi: ✅ Collect Copay
   activate CollectCopayApi
   rect rgb(245,245,245)
     Note right of CollectCopayApi: transaction (API atomic boundary)
     CollectCopayApi->>AccountBalance: update
     CollectCopayApi->>PaymentTransaction: create
   end
-  CollectCopayApi-->>CopayScreen: Copay Screen
-  CopayScreen-->>FrontDesk: Copay Screen
+  CollectCopayApi-->>CopayScreen: 🖥️ Copay Screen
+  CopayScreen-->>FrontDesk: 🖥️ Copay Screen
   deactivate CollectCopayApi

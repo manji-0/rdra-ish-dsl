@@ -5,7 +5,7 @@ pub mod mermaid;
 pub mod plantuml;
 pub mod state_pattern;
 
-use rdra_ish_core::model::SemanticModel;
+use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -86,4 +86,249 @@ impl View {
 
 pub trait Emitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError>;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum ObjectGraphLayer {
+    SystemValue,
+    ExternalEnvironment,
+    SystemBoundary,
+    System,
+}
+
+impl ObjectGraphLayer {
+    pub(crate) fn mermaid_id(self) -> &'static str {
+        match self {
+            ObjectGraphLayer::SystemValue => "layer_value",
+            ObjectGraphLayer::ExternalEnvironment => "layer_environment",
+            ObjectGraphLayer::SystemBoundary => "layer_boundary",
+            ObjectGraphLayer::System => "layer_system",
+        }
+    }
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            ObjectGraphLayer::SystemValue => "システム価値",
+            ObjectGraphLayer::ExternalEnvironment => "システム外部環境",
+            ObjectGraphLayer::SystemBoundary => "システム境界",
+            ObjectGraphLayer::System => "システム",
+        }
+    }
+}
+
+pub(crate) const OBJECT_GRAPH_LAYERS: [ObjectGraphLayer; 4] = [
+    ObjectGraphLayer::SystemValue,
+    ObjectGraphLayer::ExternalEnvironment,
+    ObjectGraphLayer::SystemBoundary,
+    ObjectGraphLayer::System,
+];
+
+pub(crate) fn object_graph_layer(node: &NodeRef) -> ObjectGraphLayer {
+    match node {
+        NodeRef::Actor(_) | NodeRef::Requirement(_) => ObjectGraphLayer::SystemValue,
+        NodeRef::ExtSystem(_)
+        | NodeRef::Business(_)
+        | NodeRef::Buc(_)
+        | NodeRef::UsageScene(_)
+        | NodeRef::Condition(_)
+        | NodeRef::Variation(_) => ObjectGraphLayer::ExternalEnvironment,
+        NodeRef::UseCase(_) | NodeRef::Screen(_) | NodeRef::Event(_) | NodeRef::Api(_) => {
+            ObjectGraphLayer::SystemBoundary
+        }
+        NodeRef::System(_) | NodeRef::Entity(_) | NodeRef::State(_) => ObjectGraphLayer::System,
+    }
+}
+
+pub(crate) fn object_graph_rel_label(kind: &RelKind) -> &'static str {
+    match kind {
+        RelKind::Performs => "performs",
+        RelKind::Uses => "uses",
+        RelKind::Reads => "reads",
+        RelKind::Writes => "writes",
+        RelKind::Creates => "creates",
+        RelKind::Updates => "updates",
+        RelKind::Deletes => "deletes",
+        RelKind::Displays => "displays",
+        RelKind::Shows => "shows",
+        RelKind::Raises => "raises",
+        RelKind::Triggers => "triggers",
+        RelKind::Contains => "contains",
+        RelKind::Belongs => "belongs",
+        RelKind::Motivates => "motivates",
+        RelKind::Transitions => "transitions",
+        RelKind::Invokes => "invokes",
+        RelKind::RelateOneToOne => "1:1",
+        RelKind::RelateOneToMany => "1:N",
+        RelKind::RelateManyToOne => "N:1",
+        RelKind::RelateManyToMany => "N:M",
+    }
+}
+
+pub(crate) fn node_emoji(node: &NodeRef) -> &'static str {
+    match node {
+        NodeRef::Actor(_) => "👤",
+        NodeRef::ExtSystem(_) => "🌐",
+        NodeRef::System(_) => "🧩",
+        NodeRef::Requirement(_) => "🎯",
+        NodeRef::Business(_) => "💼",
+        NodeRef::Buc(_) => "📦",
+        NodeRef::UsageScene(_) => "🎬",
+        NodeRef::UseCase(_) => "✅",
+        NodeRef::Screen(_) => "🖥️",
+        NodeRef::Event(_) => "⚡",
+        NodeRef::Entity(_) => "🗄️",
+        NodeRef::State(_) => "🔄",
+        NodeRef::Condition(_) => "❓",
+        NodeRef::Variation(_) => "🔀",
+        NodeRef::Api(_) => "🔌",
+    }
+}
+
+pub(crate) fn prefixed_node_label(node: &NodeRef, label: &str) -> String {
+    format!("{} {}", node_emoji(node), label)
+}
+
+pub(crate) fn prefixed_label(emoji: &str, label: &str) -> String {
+    format!("{} {}", emoji, label)
+}
+
+pub(crate) fn collect_object_graph_nodes(
+    model: &SemanticModel,
+    is_visible: &impl Fn(&NodeRef) -> bool,
+) -> Vec<NodeRef> {
+    let mut nodes = Vec::new();
+
+    let mut actors: Vec<_> = model.actors.iter().collect();
+    actors.sort_by_key(|(_, a)| &a.id);
+    nodes.extend(
+        actors
+            .into_iter()
+            .map(|(k, _)| NodeRef::Actor(k))
+            .filter(|nr| is_visible(nr)),
+    );
+
+    let mut requirements: Vec<_> = model.requirements.iter().collect();
+    requirements.sort_by_key(|(_, r)| &r.id);
+    nodes.extend(
+        requirements
+            .into_iter()
+            .map(|(k, _)| NodeRef::Requirement(k))
+            .filter(|nr| is_visible(nr)),
+    );
+
+    let mut exts: Vec<_> = model.ext_systems.iter().collect();
+    exts.sort_by_key(|(_, e)| &e.id);
+    nodes.extend(
+        exts.into_iter()
+            .map(|(k, _)| NodeRef::ExtSystem(k))
+            .filter(|nr| is_visible(nr)),
+    );
+
+    let mut businesses: Vec<_> = model.businesses.iter().collect();
+    businesses.sort_by_key(|(_, b)| &b.id);
+    nodes.extend(
+        businesses
+            .into_iter()
+            .map(|(k, _)| NodeRef::Business(k))
+            .filter(|nr| is_visible(nr)),
+    );
+
+    let mut bucs: Vec<_> = model.bucs.iter().collect();
+    bucs.sort_by_key(|(_, b)| &b.id);
+    nodes.extend(
+        bucs.into_iter()
+            .map(|(k, _)| NodeRef::Buc(k))
+            .filter(|nr| is_visible(nr)),
+    );
+
+    let mut scenes: Vec<_> = model.usage_scenes.iter().collect();
+    scenes.sort_by_key(|(_, u)| &u.id);
+    nodes.extend(
+        scenes
+            .into_iter()
+            .map(|(k, _)| NodeRef::UsageScene(k))
+            .filter(|nr| is_visible(nr)),
+    );
+
+    let mut conditions: Vec<_> = model.conditions.iter().collect();
+    conditions.sort_by_key(|(_, c)| &c.id);
+    nodes.extend(
+        conditions
+            .into_iter()
+            .map(|(k, _)| NodeRef::Condition(k))
+            .filter(|nr| is_visible(nr)),
+    );
+
+    let mut variations: Vec<_> = model.variations.iter().collect();
+    variations.sort_by_key(|(_, v)| &v.id);
+    nodes.extend(
+        variations
+            .into_iter()
+            .map(|(k, _)| NodeRef::Variation(k))
+            .filter(|nr| is_visible(nr)),
+    );
+
+    let mut usecases: Vec<_> = model.use_cases.iter().collect();
+    usecases.sort_by_key(|(_, u)| &u.id);
+    nodes.extend(
+        usecases
+            .into_iter()
+            .map(|(k, _)| NodeRef::UseCase(k))
+            .filter(|nr| is_visible(nr)),
+    );
+
+    let mut screens: Vec<_> = model.screens.iter().collect();
+    screens.sort_by_key(|(_, s)| &s.id);
+    nodes.extend(
+        screens
+            .into_iter()
+            .map(|(k, _)| NodeRef::Screen(k))
+            .filter(|nr| is_visible(nr)),
+    );
+
+    let mut events: Vec<_> = model.events.iter().collect();
+    events.sort_by_key(|(_, e)| &e.id);
+    nodes.extend(
+        events
+            .into_iter()
+            .map(|(k, _)| NodeRef::Event(k))
+            .filter(|nr| is_visible(nr)),
+    );
+
+    let mut apis: Vec<_> = model.apis.iter().collect();
+    apis.sort_by_key(|(_, a)| &a.id);
+    nodes.extend(
+        apis.into_iter()
+            .map(|(k, _)| NodeRef::Api(k))
+            .filter(|nr| is_visible(nr)),
+    );
+
+    let mut systems: Vec<_> = model.systems.iter().collect();
+    systems.sort_by_key(|(_, s)| &s.id);
+    nodes.extend(
+        systems
+            .into_iter()
+            .map(|(k, _)| NodeRef::System(k))
+            .filter(|nr| is_visible(nr)),
+    );
+
+    let mut entities: Vec<_> = model.entities.iter().collect();
+    entities.sort_by_key(|(_, e)| &e.id);
+    nodes.extend(
+        entities
+            .into_iter()
+            .map(|(k, _)| NodeRef::Entity(k))
+            .filter(|nr| is_visible(nr)),
+    );
+
+    let mut states: Vec<_> = model.states.iter().collect();
+    states.sort_by_key(|(_, s)| &s.id);
+    nodes.extend(
+        states
+            .into_iter()
+            .map(|(k, _)| NodeRef::State(k))
+            .filter(|nr| is_visible(nr)),
+    );
+
+    nodes
 }

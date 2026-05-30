@@ -48,15 +48,15 @@ rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind rdra
 ```mermaid
 graph TD
   OpsStaff(["👤 Operations Staff"])
-  BlockScheduledRestock(["Block Scheduled Restock"])
-  ChangeNextRestockDate(["Change Next Restock Date"])
-  ChangeStoreParentOrganization(["Change Store Parent Organization"])
+  BlockScheduledRestock(["✅ Block Scheduled Restock"])
+  ChangeNextRestockDate(["✅ Change Next Restock Date"])
+  ChangeStoreParentOrganization(["✅ Change Store Parent Organization"])
   BucStoreRestock["📦 Maintain Store Restock"]
-  Organization[("🗄 Organization")]
-  Store[("🗄 Store")]
-  StoreMaintenanceScreen[["Store Maintenance"]]
-  RestockBlocked{"Restock Blocked"}
-  RestockScheduled{"Restock Scheduled"}
+  Organization[("🗄️ Organization")]
+  Store[("🗄️ Store")]
+  StoreMaintenanceScreen[["🖥️ Store Maintenance"]]
+  RestockBlocked{"⚡ Restock Blocked"}
+  RestockScheduled{"⚡ Restock Scheduled"}
   OpsStaff --> BucStoreRestock
   BucStoreRestock --> StoreOperations
   BucStoreRestock --> ChangeNextRestockDate
@@ -86,36 +86,42 @@ rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind sequ
 
 ```mermaid
 sequenceDiagram
-  actor OpsStaff as Operations Staff
-  participant System as システム
-  participant StoreMaintenanceScreen as Store Maintenance
-  participant OrganizationLookupApi as Organization Lookup API
-  participant StoreAdminApi as Store Admin API
-  participant Organization as Organization
-  participant Store as Store
+  box システム価値
+    actor OpsStaff as 👤 Operations Staff
+  end
+  box システム境界
+    participant StoreMaintenanceScreen as 🖥️ Store Maintenance
+    participant OrganizationLookupApi as 🔌 Organization Lookup API
+    participant StoreAdminApi as 🔌 Store Admin API
+  end
+  box システム
+    participant System as 🧩 システム
+    participant Organization as 🗄️ Organization
+    participant Store as 🗄️ Store
+  end
 
-  Note over OpsStaff,Store: Block Scheduled Restock
-  OpsStaff->System: Block Scheduled Restock
+  Note over OpsStaff,Store: ✅ Block Scheduled Restock
+  OpsStaff->System: ✅ Block Scheduled Restock
   activate System
   System->>Store: update
-  System-->>OpsStaff: Store Maintenance
+  System-->>OpsStaff: 🖥️ Store Maintenance
   deactivate System
 
-  Note over OpsStaff,Store: Change Next Restock Date
-  OpsStaff->System: Change Next Restock Date
+  Note over OpsStaff,Store: ✅ Change Next Restock Date
+  OpsStaff->System: ✅ Change Next Restock Date
   activate System
   System->>Store: update
-  System-->>OpsStaff: Store Maintenance
+  System-->>OpsStaff: 🖥️ Store Maintenance
   deactivate System
 
-  Note over OpsStaff,Store: Change Store Parent Organization
-  OpsStaff->>StoreMaintenanceScreen: Change Store Parent Organization
-  StoreMaintenanceScreen->>StoreAdminApi: Change Store Parent Organization
+  Note over OpsStaff,Store: ✅ Change Store Parent Organization
+  OpsStaff->>StoreMaintenanceScreen: ✅ Change Store Parent Organization
+  StoreMaintenanceScreen->>StoreAdminApi: ✅ Change Store Parent Organization
   activate StoreAdminApi
   OrganizationLookupApi->>Organization: read
   StoreAdminApi->>Store: update
-  StoreAdminApi-->>StoreMaintenanceScreen: Store Maintenance
-  StoreMaintenanceScreen-->>OpsStaff: Store Maintenance
+  StoreAdminApi-->>StoreMaintenanceScreen: 🖥️ Store Maintenance
+  StoreMaintenanceScreen-->>OpsStaff: 🖥️ Store Maintenance
   deactivate StoreAdminApi
 ```
 
@@ -156,8 +162,11 @@ rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind stat
 ```mermaid
 stateDiagram-v2
   [*] --> Normal
-  Normal --> Scheduled : Restock Scheduled
-  Scheduled --> Blocked : Restock Blocked
+  state "🔄 Normal" as Normal
+  state "🔄 Scheduled" as Scheduled
+  state "🔄 Blocked" as Blocked
+  Normal --> Scheduled : ⚡ Restock Scheduled
+  Scheduled --> Blocked : ⚡ Restock Blocked
 ```
 
 ### 4.5 Usecase CRUD matrix

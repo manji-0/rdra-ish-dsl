@@ -1,19 +1,25 @@
 sequenceDiagram
-  actor Nurse as Nurse
-  participant RoomBoardScreen as Room Board Screen
-  participant AssignRoomApi as Assign Room API
-  participant Appointment as Appointment
-  participant Room as Room
+  box システム価値
+    actor Nurse as 👤 Nurse
+  end
+  box システム境界
+    participant RoomBoardScreen as 🖥️ Room Board Screen
+    participant AssignRoomApi as 🔌 Assign Room API
+  end
+  box システム
+    participant Appointment as 🗄️ Appointment
+    participant Room as 🗄️ Room
+  end
 
-  Note over Nurse,Room: Assign Room
-  Nurse->>RoomBoardScreen: Assign Room
-  RoomBoardScreen->>AssignRoomApi: Assign Room
+  Note over Nurse,Room: ✅ Assign Room
+  Nurse->>RoomBoardScreen: ✅ Assign Room
+  RoomBoardScreen->>AssignRoomApi: ✅ Assign Room
   activate AssignRoomApi
   rect rgb(245,245,245)
     Note right of AssignRoomApi: transaction (API atomic boundary)
     AssignRoomApi->>Room: update
     AssignRoomApi->>Appointment: update
   end
-  AssignRoomApi-->>RoomBoardScreen: Room Board Screen
-  RoomBoardScreen-->>Nurse: Room Board Screen
+  AssignRoomApi-->>RoomBoardScreen: 🖥️ Room Board Screen
+  RoomBoardScreen-->>Nurse: 🖥️ Room Board Screen
   deactivate AssignRoomApi

@@ -1,84 +1,90 @@
 sequenceDiagram
-  actor Clinician as Clinician
-  actor Nurse as Nurse
-  participant DiagnosisScreen as Diagnosis Screen
-  participant EncounterWorkspaceScreen as Encounter Workspace
-  participant VitalsScreen as Vitals Screen
-  participant AmendEncounterApi as Amend Encounter API
-  participant CompleteAppointmentApi as Complete Appointment API
-  participant DocumentAssessmentApi as Document Assessment API
-  participant OpenEncounterApi as Open Encounter API
-  participant RecordVitalsApi as Record Vitals API
-  participant SignEncounterApi as Sign Encounter API
-  participant Appointment as Appointment
-  participant Diagnosis as Diagnosis
-  participant Encounter as Encounter
-  participant Room as Room
-  participant VitalSign as Vital Sign
+  box システム価値
+    actor Clinician as 👤 Clinician
+    actor Nurse as 👤 Nurse
+  end
+  box システム境界
+    participant DiagnosisScreen as 🖥️ Diagnosis Screen
+    participant EncounterWorkspaceScreen as 🖥️ Encounter Workspace
+    participant VitalsScreen as 🖥️ Vitals Screen
+    participant AmendEncounterApi as 🔌 Amend Encounter API
+    participant CompleteAppointmentApi as 🔌 Complete Appointment API
+    participant DocumentAssessmentApi as 🔌 Document Assessment API
+    participant OpenEncounterApi as 🔌 Open Encounter API
+    participant RecordVitalsApi as 🔌 Record Vitals API
+    participant SignEncounterApi as 🔌 Sign Encounter API
+  end
+  box システム
+    participant Appointment as 🗄️ Appointment
+    participant Diagnosis as 🗄️ Diagnosis
+    participant Encounter as 🗄️ Encounter
+    participant Room as 🗄️ Room
+    participant VitalSign as 🗄️ Vital Sign
+  end
 
-  Note over Clinician,VitalSign: Amend Signed Encounter
-  Clinician->>EncounterWorkspaceScreen: Amend Signed Encounter
-  EncounterWorkspaceScreen->>AmendEncounterApi: Amend Signed Encounter
+  Note over Clinician,VitalSign: ✅ Amend Signed Encounter
+  Clinician->>EncounterWorkspaceScreen: ✅ Amend Signed Encounter
+  EncounterWorkspaceScreen->>AmendEncounterApi: ✅ Amend Signed Encounter
   activate AmendEncounterApi
   AmendEncounterApi->>Encounter: update
-  AmendEncounterApi-->>EncounterWorkspaceScreen: Encounter Workspace
-  EncounterWorkspaceScreen-->>Clinician: Encounter Workspace
+  AmendEncounterApi-->>EncounterWorkspaceScreen: 🖥️ Encounter Workspace
+  EncounterWorkspaceScreen-->>Clinician: 🖥️ Encounter Workspace
   deactivate AmendEncounterApi
 
-  Note over Clinician,VitalSign: Complete Appointment
-  Nurse->>EncounterWorkspaceScreen: Complete Appointment
-  EncounterWorkspaceScreen->>CompleteAppointmentApi: Complete Appointment
+  Note over Clinician,VitalSign: ✅ Complete Appointment
+  Nurse->>EncounterWorkspaceScreen: ✅ Complete Appointment
+  EncounterWorkspaceScreen->>CompleteAppointmentApi: ✅ Complete Appointment
   activate CompleteAppointmentApi
   rect rgb(245,245,245)
     Note right of CompleteAppointmentApi: transaction (API atomic boundary)
     CompleteAppointmentApi->>Room: update
     CompleteAppointmentApi->>Appointment: update
   end
-  CompleteAppointmentApi-->>EncounterWorkspaceScreen: Encounter Workspace
-  EncounterWorkspaceScreen-->>Nurse: Encounter Workspace
+  CompleteAppointmentApi-->>EncounterWorkspaceScreen: 🖥️ Encounter Workspace
+  EncounterWorkspaceScreen-->>Nurse: 🖥️ Encounter Workspace
   deactivate CompleteAppointmentApi
 
-  Note over Clinician,VitalSign: Document Assessment
-  Clinician->>DiagnosisScreen: Document Assessment
-  DiagnosisScreen->>DocumentAssessmentApi: Document Assessment
+  Note over Clinician,VitalSign: ✅ Document Assessment
+  Clinician->>DiagnosisScreen: ✅ Document Assessment
+  DiagnosisScreen->>DocumentAssessmentApi: ✅ Document Assessment
   activate DocumentAssessmentApi
   rect rgb(245,245,245)
     Note right of DocumentAssessmentApi: transaction (API atomic boundary)
     DocumentAssessmentApi->>Encounter: update
     DocumentAssessmentApi->>Diagnosis: create
   end
-  DocumentAssessmentApi-->>DiagnosisScreen: Diagnosis Screen
-  DiagnosisScreen-->>Clinician: Diagnosis Screen
+  DocumentAssessmentApi-->>DiagnosisScreen: 🖥️ Diagnosis Screen
+  DiagnosisScreen-->>Clinician: 🖥️ Diagnosis Screen
   deactivate DocumentAssessmentApi
 
-  Note over Clinician,VitalSign: Open Encounter
-  Nurse->>EncounterWorkspaceScreen: Open Encounter
-  EncounterWorkspaceScreen->>OpenEncounterApi: Open Encounter
+  Note over Clinician,VitalSign: ✅ Open Encounter
+  Nurse->>EncounterWorkspaceScreen: ✅ Open Encounter
+  EncounterWorkspaceScreen->>OpenEncounterApi: ✅ Open Encounter
   activate OpenEncounterApi
   OpenEncounterApi->>Appointment: read
   OpenEncounterApi->>Encounter: create
-  OpenEncounterApi-->>EncounterWorkspaceScreen: Encounter Workspace
-  EncounterWorkspaceScreen-->>Nurse: Encounter Workspace
+  OpenEncounterApi-->>EncounterWorkspaceScreen: 🖥️ Encounter Workspace
+  EncounterWorkspaceScreen-->>Nurse: 🖥️ Encounter Workspace
   deactivate OpenEncounterApi
 
-  Note over Clinician,VitalSign: Record Vitals
-  Nurse->>VitalsScreen: Record Vitals
-  VitalsScreen->>RecordVitalsApi: Record Vitals
+  Note over Clinician,VitalSign: ✅ Record Vitals
+  Nurse->>VitalsScreen: ✅ Record Vitals
+  VitalsScreen->>RecordVitalsApi: ✅ Record Vitals
   activate RecordVitalsApi
   rect rgb(245,245,245)
     Note right of RecordVitalsApi: transaction (API atomic boundary)
     RecordVitalsApi->>Encounter: update
     RecordVitalsApi->>VitalSign: create
   end
-  RecordVitalsApi-->>VitalsScreen: Vitals Screen
-  VitalsScreen-->>Nurse: Vitals Screen
+  RecordVitalsApi-->>VitalsScreen: 🖥️ Vitals Screen
+  VitalsScreen-->>Nurse: 🖥️ Vitals Screen
   deactivate RecordVitalsApi
 
-  Note over Clinician,VitalSign: Sign Encounter
-  Clinician->>EncounterWorkspaceScreen: Sign Encounter
-  EncounterWorkspaceScreen->>SignEncounterApi: Sign Encounter
+  Note over Clinician,VitalSign: ✅ Sign Encounter
+  Clinician->>EncounterWorkspaceScreen: ✅ Sign Encounter
+  EncounterWorkspaceScreen->>SignEncounterApi: ✅ Sign Encounter
   activate SignEncounterApi
   SignEncounterApi->>Encounter: update
-  SignEncounterApi-->>EncounterWorkspaceScreen: Encounter Workspace
-  EncounterWorkspaceScreen-->>Clinician: Encounter Workspace
+  SignEncounterApi-->>EncounterWorkspaceScreen: 🖥️ Encounter Workspace
+  EncounterWorkspaceScreen-->>Clinician: 🖥️ Encounter Workspace
   deactivate SignEncounterApi

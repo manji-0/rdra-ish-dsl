@@ -1,6 +1,9 @@
 //! PlantUML emitters: RDRA全体図、BUC別図、ER図、状態遷移図、sequence図。
 
-use crate::{EmitError, Emitter, Scope, View};
+use crate::{
+    collect_object_graph_nodes, object_graph_layer, object_graph_rel_label, prefixed_label,
+    prefixed_node_label, EmitError, Emitter, Scope, View, OBJECT_GRAPH_LAYERS,
+};
 use rdra_ish_core::model::{
     ActorKey, ApiKey, BucKey, ColumnType, EntityKey, NodeRef, RelKind, ScreenKey, SemanticModel,
     UseCaseKey,
@@ -36,8 +39,13 @@ impl Emitter for RdraPlantUmlEmitter {
         let mut actor_ids: Vec<_> = model.actors.iter().collect();
         actor_ids.sort_by_key(|(_, a)| &a.id);
         for (k, actor) in &actor_ids {
-            if is_visible(&NodeRef::Actor(*k)) {
-                out.push_str(&format!("actor \"{}\" as {}\n", actor.label, actor.id));
+            let nr = NodeRef::Actor(*k);
+            if is_visible(&nr) {
+                out.push_str(&format!(
+                    "actor \"{}\" as {}\n",
+                    prefixed_node_label(&nr, &actor.label),
+                    actor.id
+                ));
             }
         }
         out.push('\n');
@@ -46,8 +54,13 @@ impl Emitter for RdraPlantUmlEmitter {
         let mut uc_ids: Vec<_> = model.use_cases.iter().collect();
         uc_ids.sort_by_key(|(_, u)| &u.id);
         for (k, uc) in &uc_ids {
-            if is_visible(&NodeRef::UseCase(*k)) {
-                out.push_str(&format!("usecase \"{}\" as {}\n", uc.label, uc.id));
+            let nr = NodeRef::UseCase(*k);
+            if is_visible(&nr) {
+                out.push_str(&format!(
+                    "usecase \"{}\" as {}\n",
+                    prefixed_node_label(&nr, &uc.label),
+                    uc.id
+                ));
             }
         }
         out.push('\n');
@@ -56,8 +69,13 @@ impl Emitter for RdraPlantUmlEmitter {
         let mut buc_ids: Vec<_> = model.bucs.iter().collect();
         buc_ids.sort_by_key(|(_, b)| &b.id);
         for (k, buc) in &buc_ids {
-            if is_visible(&NodeRef::Buc(*k)) {
-                out.push_str(&format!("rectangle \"{}\" as {}\n", buc.label, buc.id));
+            let nr = NodeRef::Buc(*k);
+            if is_visible(&nr) {
+                out.push_str(&format!(
+                    "rectangle \"{}\" as {}\n",
+                    prefixed_node_label(&nr, &buc.label),
+                    buc.id
+                ));
             }
         }
         out.push('\n');
@@ -66,8 +84,13 @@ impl Emitter for RdraPlantUmlEmitter {
         let mut system_ids: Vec<_> = model.systems.iter().collect();
         system_ids.sort_by_key(|(_, s)| &s.id);
         for (k, system) in &system_ids {
-            if is_visible(&NodeRef::System(*k)) {
-                out.push_str(&format!("package \"{}\" as {}\n", system.label, system.id));
+            let nr = NodeRef::System(*k);
+            if is_visible(&nr) {
+                out.push_str(&format!(
+                    "package \"{}\" as {}\n",
+                    prefixed_node_label(&nr, &system.label),
+                    system.id
+                ));
             }
         }
         out.push('\n');
@@ -76,8 +99,13 @@ impl Emitter for RdraPlantUmlEmitter {
         let mut ext_ids: Vec<_> = model.ext_systems.iter().collect();
         ext_ids.sort_by_key(|(_, e)| &e.id);
         for (k, ext) in &ext_ids {
-            if is_visible(&NodeRef::ExtSystem(*k)) {
-                out.push_str(&format!("component \"{}\" as {}\n", ext.label, ext.id));
+            let nr = NodeRef::ExtSystem(*k);
+            if is_visible(&nr) {
+                out.push_str(&format!(
+                    "component \"{}\" as {}\n",
+                    prefixed_node_label(&nr, &ext.label),
+                    ext.id
+                ));
             }
         }
         out.push('\n');
@@ -86,8 +114,13 @@ impl Emitter for RdraPlantUmlEmitter {
         let mut ent_ids: Vec<_> = model.entities.iter().collect();
         ent_ids.sort_by_key(|(_, e)| &e.id);
         for (k, ent) in &ent_ids {
-            if is_visible(&NodeRef::Entity(*k)) {
-                out.push_str(&format!("database \"{}\" as {}\n", ent.label, ent.id));
+            let nr = NodeRef::Entity(*k);
+            if is_visible(&nr) {
+                out.push_str(&format!(
+                    "database \"{}\" as {}\n",
+                    prefixed_node_label(&nr, &ent.label),
+                    ent.id
+                ));
             }
         }
         out.push('\n');
@@ -96,8 +129,13 @@ impl Emitter for RdraPlantUmlEmitter {
         let mut scr_ids: Vec<_> = model.screens.iter().collect();
         scr_ids.sort_by_key(|(_, s)| &s.id);
         for (k, scr) in &scr_ids {
-            if is_visible(&NodeRef::Screen(*k)) {
-                out.push_str(&format!("boundary \"{}\" as {}\n", scr.label, scr.id));
+            let nr = NodeRef::Screen(*k);
+            if is_visible(&nr) {
+                out.push_str(&format!(
+                    "boundary \"{}\" as {}\n",
+                    prefixed_node_label(&nr, &scr.label),
+                    scr.id
+                ));
             }
         }
         out.push('\n');
@@ -106,8 +144,13 @@ impl Emitter for RdraPlantUmlEmitter {
         let mut ev_ids: Vec<_> = model.events.iter().collect();
         ev_ids.sort_by_key(|(_, e)| &e.id);
         for (k, ev) in &ev_ids {
-            if is_visible(&NodeRef::Event(*k)) {
-                out.push_str(&format!("control \"{}\" as {}\n", ev.label, ev.id));
+            let nr = NodeRef::Event(*k);
+            if is_visible(&nr) {
+                out.push_str(&format!(
+                    "control \"{}\" as {}\n",
+                    prefixed_node_label(&nr, &ev.label),
+                    ev.id
+                ));
             }
         }
         out.push('\n');
@@ -116,8 +159,13 @@ impl Emitter for RdraPlantUmlEmitter {
         let mut st_ids: Vec<_> = model.states.iter().collect();
         st_ids.sort_by_key(|(_, s)| &s.id);
         for (k, st) in &st_ids {
-            if is_visible(&NodeRef::State(*k)) {
-                out.push_str(&format!("collections \"{}\" as {}\n", st.label, st.id));
+            let nr = NodeRef::State(*k);
+            if is_visible(&nr) {
+                out.push_str(&format!(
+                    "collections \"{}\" as {}\n",
+                    prefixed_node_label(&nr, &st.label),
+                    st.id
+                ));
             }
         }
         out.push('\n');
@@ -206,6 +254,94 @@ impl Emitter for RdraPlantUmlEmitter {
     }
 }
 
+// ── RDRA Object Graph レイヤ図エミッタ ────────────────────────────────────────
+
+pub struct ObjectGraphPlantUmlEmitter;
+
+impl Emitter for ObjectGraphPlantUmlEmitter {
+    fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
+        let reachable: Option<HashSet<NodeRef>> = match &view.scope {
+            Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
+            Scope::Whole | Scope::UseCases(_) => None,
+        };
+
+        let is_visible = |nr: &NodeRef| -> bool {
+            match &reachable {
+                Some(set) => set.contains(nr),
+                None => true,
+            }
+        };
+
+        let visible_nodes = collect_object_graph_nodes(model, &is_visible);
+        let visible_set: HashSet<NodeRef> = visible_nodes.iter().cloned().collect();
+
+        let mut out = String::new();
+        out.push_str("@startuml\n");
+        out.push_str("!theme plain\n");
+        out.push_str("left to right direction\n\n");
+
+        for layer in OBJECT_GRAPH_LAYERS {
+            out.push_str(&format!("rectangle \"{}\" {{\n", layer.label()));
+            for nr in visible_nodes
+                .iter()
+                .filter(|nr| object_graph_layer(nr) == layer)
+            {
+                if let (Some(id), Some(label)) = (node_id(model, nr), node_label(model, nr)) {
+                    let label = prefixed_node_label(nr, label);
+                    let line = match nr {
+                        NodeRef::Actor(_) => format!("  actor \"{}\" as {}\n", label, id),
+                        NodeRef::Requirement(_) => format!("  rectangle \"{}\" as {}\n", label, id),
+                        NodeRef::ExtSystem(_) => format!("  component \"{}\" as {}\n", label, id),
+                        NodeRef::Business(_) => format!("  rectangle \"{}\" as {}\n", label, id),
+                        NodeRef::Buc(_) => format!("  rectangle \"{}\" as {}\n", label, id),
+                        NodeRef::UsageScene(_) => format!("  usecase \"{}\" as {}\n", label, id),
+                        NodeRef::Condition(_) => format!("  rectangle \"{}\" as {}\n", label, id),
+                        NodeRef::Variation(_) => format!("  rectangle \"{}\" as {}\n", label, id),
+                        NodeRef::UseCase(_) => format!("  usecase \"{}\" as {}\n", label, id),
+                        NodeRef::Screen(_) => format!("  boundary \"{}\" as {}\n", label, id),
+                        NodeRef::Event(_) => format!("  control \"{}\" as {}\n", label, id),
+                        NodeRef::Api(_) => format!("  control \"{}\" as {}\n", label, id),
+                        NodeRef::System(_) => format!("  package \"{}\" as {}\n", label, id),
+                        NodeRef::Entity(_) => format!("  database \"{}\" as {}\n", label, id),
+                        NodeRef::State(_) => format!("  collections \"{}\" as {}\n", label, id),
+                    };
+                    out.push_str(&line);
+                }
+            }
+            out.push_str("}\n\n");
+        }
+
+        let mut relations: Vec<_> = model.relations.iter().collect();
+        relations.sort_by_key(|r| format!("{:?}{:?}{:?}", r.from, r.kind, r.to));
+        for rel in relations {
+            if !visible_set.contains(&rel.from) || !visible_set.contains(&rel.to) {
+                continue;
+            }
+            if let (Some(from_id), Some(to_id)) =
+                (node_id(model, &rel.from), node_id(model, &rel.to))
+            {
+                let label = object_graph_rel_label(&rel.kind);
+                let line = match rel.kind {
+                    RelKind::Performs | RelKind::Contains | RelKind::Uses => {
+                        format!("{} --> {} : {}\n", from_id, to_id, label)
+                    }
+                    RelKind::RelateOneToOne
+                    | RelKind::RelateOneToMany
+                    | RelKind::RelateManyToOne
+                    | RelKind::RelateManyToMany => {
+                        format!("{} -- {} : {}\n", from_id, to_id, label)
+                    }
+                    _ => format!("{} ..> {} : {}\n", from_id, to_id, label),
+                };
+                out.push_str(&line);
+            }
+        }
+
+        out.push_str("@enduml\n");
+        Ok(out)
+    }
+}
+
 // ── 状態遷移図エミッタ ─────────────────────────────────────────────────────────
 
 pub struct StateDiagramEmitter;
@@ -267,13 +403,34 @@ impl Emitter for StateDiagramEmitter {
                 node_id(model, &t.event).unwrap_or(""),
             )
         });
+
+        let mut defined: HashSet<String> = HashSet::new();
+        for t in &sorted {
+            for nr in [&t.from, &t.to] {
+                if let (Some(id), Some(label)) = (node_id(model, nr), node_label(model, nr)) {
+                    if defined.insert(id.to_string()) {
+                        out.push_str(&format!(
+                            "state \"{}\" as {}\n",
+                            prefixed_node_label(nr, label),
+                            id
+                        ));
+                    }
+                }
+            }
+        }
+
         for t in &sorted {
             if let (Some(from_id), Some(to_id), Some(ev_label)) = (
                 node_id(model, &t.from),
                 node_id(model, &t.to),
                 node_label(model, &t.event),
             ) {
-                out.push_str(&format!("{} --> {} : {}\n", from_id, to_id, ev_label));
+                out.push_str(&format!(
+                    "{} --> {} : {}\n",
+                    from_id,
+                    to_id,
+                    prefixed_node_label(&t.event, ev_label)
+                ));
             }
         }
 
@@ -311,10 +468,15 @@ impl Emitter for ErPlantUmlEmitter {
         ents.sort_by_key(|(_, e)| &e.id);
 
         for (k, ent) in &ents {
-            if !is_visible(&NodeRef::Entity(*k)) {
+            let nr = NodeRef::Entity(*k);
+            if !is_visible(&nr) {
                 continue;
             }
-            out.push_str(&format!("entity \"{}\" as {} {{\n", ent.label, ent.id));
+            out.push_str(&format!(
+                "entity \"{}\" as {} {{\n",
+                prefixed_node_label(&nr, &ent.label),
+                ent.id
+            ));
 
             // PKs first
             let pks: Vec<_> = ent.columns.iter().filter(|c| c.is_pk).collect();
@@ -595,13 +757,16 @@ impl Emitter for SequenceDiagramEmitter {
             .filter(|(k, _)| actor_keys.contains(k))
             .collect();
         actors_sorted.sort_by_key(|(_, a)| a.id.as_str());
-        for (_, actor) in &actors_sorted {
-            out.push_str(&format!("actor \"{}\" as {}\n", actor.label, actor.id));
-        }
-
-        // System レーン: レガシー UC が1件でもあれば維持（後方互換）
-        if has_legacy_uc {
-            out.push_str("participant \"システム\" as System\n");
+        if !actors_sorted.is_empty() {
+            out.push_str("box \"システム価値\" #E3F2FD\n");
+            for (_, actor) in &actors_sorted {
+                out.push_str(&format!(
+                    "actor \"{}\" as {}\n",
+                    prefixed_label("👤", &actor.label),
+                    actor.id
+                ));
+            }
+            out.push_str("end box\n");
         }
 
         let mut scrs_sorted: Vec<(ScreenKey, &rdra_ish_core::model::Screen)> = model
@@ -610,9 +775,6 @@ impl Emitter for SequenceDiagramEmitter {
             .filter(|(k, _)| screen_keys.contains(k))
             .collect();
         scrs_sorted.sort_by_key(|(_, s)| s.id.as_str());
-        for (_, scr) in &scrs_sorted {
-            out.push_str(&format!("boundary \"{}\" as {}\n", scr.label, scr.id));
-        }
 
         // API 参加者宣言（actor → screen → api → entity の左→右順）
         let mut apis_sorted: Vec<(ApiKey, &rdra_ish_core::model::Api)> = model
@@ -621,8 +783,23 @@ impl Emitter for SequenceDiagramEmitter {
             .filter(|(k, _)| api_keys.contains(k))
             .collect();
         apis_sorted.sort_by_key(|(_, a)| a.id.as_str());
-        for (_, api) in &apis_sorted {
-            out.push_str(&format!("control \"{}\" as {}\n", api.label, api.id));
+        if !scrs_sorted.is_empty() || !apis_sorted.is_empty() {
+            out.push_str("box \"システム境界\" #E0F7FA\n");
+            for (_, scr) in &scrs_sorted {
+                out.push_str(&format!(
+                    "boundary \"{}\" as {}\n",
+                    prefixed_label("🖥️", &scr.label),
+                    scr.id
+                ));
+            }
+            for (_, api) in &apis_sorted {
+                out.push_str(&format!(
+                    "control \"{}\" as {}\n",
+                    prefixed_label("🔌", &api.label),
+                    api.id
+                ));
+            }
+            out.push_str("end box\n");
         }
 
         let mut ents_sorted: Vec<(EntityKey, &rdra_ish_core::model::Entity)> = model
@@ -631,14 +808,27 @@ impl Emitter for SequenceDiagramEmitter {
             .filter(|(k, _)| entity_keys.contains(k))
             .collect();
         ents_sorted.sort_by_key(|(_, e)| e.id.as_str());
-        for (_, ent) in &ents_sorted {
-            out.push_str(&format!("database \"{}\" as {}\n", ent.label, ent.id));
+        if has_legacy_uc || !ents_sorted.is_empty() {
+            out.push_str("box \"システム\" #F3E5F5\n");
+            // System レーン: レガシー UC が1件でもあれば維持（後方互換）
+            if has_legacy_uc {
+                out.push_str("participant \"🧩 システム\" as System\n");
+            }
+            for (_, ent) in &ents_sorted {
+                out.push_str(&format!(
+                    "database \"{}\" as {}\n",
+                    prefixed_label("🗄️", &ent.label),
+                    ent.id
+                ));
+            }
+            out.push_str("end box\n");
         }
         out.push('\n');
 
         // ── ユースケースごとのシーケンス ──────────────────────────────────
         for (uk, uc) in &uc_list {
-            out.push_str(&format!("== {} ==\n", uc.label));
+            let uc_label = prefixed_label("✅", &uc.label);
+            out.push_str(&format!("== {} ==\n", uc_label));
 
             let actor_id: Option<String> = direct_actor_of
                 .get(uk)
@@ -665,7 +855,7 @@ impl Emitter for SequenceDiagramEmitter {
                 .get(uk)
                 .and_then(|s| s.first())
                 .and_then(|sk| model.screens.get(*sk))
-                .map(|s| s.label.clone());
+                .map(|s| prefixed_label("🖥️", &s.label));
 
             let invoked_apis = uc_to_apis.get(uk);
 
@@ -680,12 +870,12 @@ impl Emitter for SequenceDiagramEmitter {
 
                 // Actor → Screen（あれば）→ API
                 if let Some(ref sid) = screen_id {
-                    out.push_str(&format!("{} -> {} : {}\n", actor_ref, sid, uc.label));
-                    out.push_str(&format!("{} -> {} : {}\n", sid, first_api_id, uc.label));
+                    out.push_str(&format!("{} -> {} : {}\n", actor_ref, sid, uc_label));
+                    out.push_str(&format!("{} -> {} : {}\n", sid, first_api_id, uc_label));
                 } else {
                     out.push_str(&format!(
                         "{} -> {} : {}\n",
-                        actor_ref, first_api_id, uc.label
+                        actor_ref, first_api_id, uc_label
                     ));
                 }
                 out.push_str(&format!("activate {}\n", first_api_id));
@@ -772,13 +962,13 @@ impl Emitter for SequenceDiagramEmitter {
                 } else {
                     out.push_str(&format!(
                         "{} --> {} : {}\n",
-                        first_api_id, actor_ref, uc.label
+                        first_api_id, actor_ref, uc_label
                     ));
                 }
                 out.push_str(&format!("deactivate {}\n", first_api_id));
             } else {
                 // ── レガシーパス（System ライン）─────────────────────────────
-                out.push_str(&format!("{} -> System : {}\n", actor_ref, uc.label));
+                out.push_str(&format!("{} -> System : {}\n", actor_ref, uc_label));
                 out.push_str("activate System\n");
 
                 for &ek in uc_to_reads.get(uk).into_iter().flatten() {
@@ -882,7 +1072,11 @@ impl Emitter for EventFlowPlantUmlEmitter {
             let ev_id = ev_mid(&ev.id);
 
             if declared.insert(ev_id.clone()) {
-                out.push_str(&format!("card \"{}\" as {}\n", ev.label, ev_id));
+                out.push_str(&format!(
+                    "card \"{}\" as {}\n",
+                    prefixed_label("⚡", &ev.label),
+                    ev_id
+                ));
             }
 
             let mut raised_by = flow.raised_by.to_vec();
@@ -899,7 +1093,11 @@ impl Emitter for EventFlowPlantUmlEmitter {
                 };
                 let uid = uc_mid(&uc.id);
                 if declared.insert(uid.clone()) {
-                    out.push_str(&format!("usecase \"{}\" as {}\n", uc.label, uid));
+                    out.push_str(&format!(
+                        "usecase \"{}\" as {}\n",
+                        prefixed_label("✅", &uc.label),
+                        uid
+                    ));
                 }
                 out.push_str(&format!("{} ..> {} : raises\n", uid, ev_id));
             }
@@ -918,7 +1116,11 @@ impl Emitter for EventFlowPlantUmlEmitter {
                 };
                 let uid = uc_mid(&uc.id);
                 if declared.insert(uid.clone()) {
-                    out.push_str(&format!("usecase \"{}\" as {}\n", uc.label, uid));
+                    out.push_str(&format!(
+                        "usecase \"{}\" as {}\n",
+                        prefixed_label("✅", &uc.label),
+                        uid
+                    ));
                 }
                 out.push_str(&format!("{} ..> {} : triggers\n", ev_id, uid));
             }
@@ -943,12 +1145,25 @@ impl Emitter for EventFlowPlantUmlEmitter {
                 let fid = st_mid(&from_st.id);
                 let tid = st_mid(&to_st.id);
                 if declared.insert(fid.clone()) {
-                    out.push_str(&format!("state \"{}\" as {}\n", from_st.label, fid));
+                    out.push_str(&format!(
+                        "state \"{}\" as {}\n",
+                        prefixed_label("🔄", &from_st.label),
+                        fid
+                    ));
                 }
                 if declared.insert(tid.clone()) {
-                    out.push_str(&format!("state \"{}\" as {}\n", to_st.label, tid));
+                    out.push_str(&format!(
+                        "state \"{}\" as {}\n",
+                        prefixed_label("🔄", &to_st.label),
+                        tid
+                    ));
                 }
-                out.push_str(&format!("{} --> {} : {}\n", fid, tid, ev.label));
+                out.push_str(&format!(
+                    "{} --> {} : {}\n",
+                    fid,
+                    tid,
+                    prefixed_label("⚡", &ev.label)
+                ));
             }
         }
 
@@ -1035,10 +1250,45 @@ performs(Customer, Browse)
         let view = View::whole();
         let result = RdraPlantUmlEmitter.emit(&model, &view).unwrap();
         assert!(result.contains("@startuml"));
-        assert!(result.contains("actor \"顧客\" as Customer"));
-        assert!(result.contains("usecase \"商品を探す\" as Browse"));
+        assert!(result.contains("actor \"👤 顧客\" as Customer"));
+        assert!(result.contains("usecase \"✅ 商品を探す\" as Browse"));
         assert!(result.contains("Customer --> Browse"));
         assert!(result.contains("@enduml"));
+    }
+
+    #[test]
+    fn test_object_graph_plantuml_layers() {
+        let src = r#"
+actor Customer "顧客"
+buc BucOrder "注文業務"
+usecase PlaceOrder "注文する"
+screen OrderScreen "注文画面"
+api OrderApi "注文API"
+entity Order "注文" { id: Int @pk }
+performs(Customer, BucOrder)
+contains(BucOrder, PlaceOrder)
+displays(PlaceOrder, OrderScreen)
+invokes(PlaceOrder, OrderApi)
+creates(OrderApi, Order)
+"#;
+        let model = model_from(src);
+        let result = ObjectGraphPlantUmlEmitter
+            .emit(&model, &View::whole())
+            .unwrap();
+        assert!(result.contains("@startuml"));
+        assert!(result.contains("left to right direction"));
+        assert!(result.contains("rectangle \"システム価値\""));
+        assert!(result.contains("rectangle \"システム外部環境\""));
+        assert!(result.contains("rectangle \"システム境界\""));
+        assert!(result.contains("rectangle \"システム\""));
+        assert!(result.contains("actor \"👤 顧客\" as Customer"));
+        assert!(result.contains("rectangle \"📦 注文業務\" as BucOrder"));
+        assert!(result.contains("boundary \"🖥️ 注文画面\" as OrderScreen"));
+        assert!(result.contains("control \"🔌 注文API\" as OrderApi"));
+        assert!(result.contains("database \"🗄️ 注文\" as Order"));
+        assert!(result.contains("Customer --> BucOrder : performs"));
+        assert!(result.contains("PlaceOrder ..> OrderApi : invokes"));
+        assert!(result.contains("OrderApi ..> Order : creates"));
     }
 
     #[test]
@@ -1052,7 +1302,7 @@ relate(Order, Customer, "N:1")
         let view = View::er();
         let result = ErPlantUmlEmitter.emit(&model, &view).unwrap();
         assert!(result.contains("@startuml"));
-        assert!(result.contains("entity \"注文\" as Order"));
+        assert!(result.contains("entity \"🗄️ 注文\" as Order"));
         assert!(result.contains("*id : Int <<PK>>"));
         assert!(result.contains("customer_id : Int <<FK>>"));
         assert!(result.contains("}o--||"));
@@ -1117,17 +1367,20 @@ displays(PlaceOrder, OrderCompleteScreen)
         let result = SequenceDiagramEmitter.emit(&model, &view).unwrap();
 
         // 参加者宣言
-        assert!(result.contains("actor \"顧客\" as Customer"));
-        assert!(result.contains("database \"注文\" as Order"));
-        assert!(result.contains("database \"注文明細\" as OrderLine"));
-        assert!(result.contains("database \"カート\" as Cart"));
-        assert!(result.contains("boundary \"注文完了画面\" as OrderCompleteScreen"));
+        assert!(result.contains("box \"システム価値\""));
+        assert!(result.contains("box \"システム境界\""));
+        assert!(result.contains("box \"システム\""));
+        assert!(result.contains("actor \"👤 顧客\" as Customer"));
+        assert!(result.contains("database \"🗄️ 注文\" as Order"));
+        assert!(result.contains("database \"🗄️ 注文明細\" as OrderLine"));
+        assert!(result.contains("database \"🗄️ カート\" as Cart"));
+        assert!(result.contains("boundary \"🖥️ 注文完了画面\" as OrderCompleteScreen"));
 
         // UCセクション見出し
-        assert!(result.contains("== 注文を確定する =="));
+        assert!(result.contains("== ✅ 注文を確定する =="));
 
         // アクター → System メッセージ
-        assert!(result.contains("Customer -> System : 注文を確定する"));
+        assert!(result.contains("Customer -> System : ✅ 注文を確定する"));
 
         // FK連結グループ（Order → OrderLine の順）
         assert!(result.contains("group transaction (inferred from FK)"));
@@ -1140,7 +1393,7 @@ displays(PlaceOrder, OrderCompleteScreen)
         assert!(result.contains("note right : FK非連結"));
 
         // 画面レスポンス
-        assert!(result.contains("System --> Customer : 注文完了画面"));
+        assert!(result.contains("System --> Customer : 🖥️ 注文完了画面"));
 
         // Order が OrderLine より前に出現する
         let order_pos = result.find("System -> Order : create").unwrap();
@@ -1220,8 +1473,8 @@ creates(ApiB, EntityB)
         let result = SequenceDiagramEmitter.emit(&model, &view).unwrap();
         assert!(!result.contains("ユースケースA"));
         assert!(!result.contains("ApiA"));
-        assert!(!result.contains("actor \"顧客\" as Customer"));
-        assert!(result.contains("actor \"担当者\" as Clerk"));
+        assert!(!result.contains("actor \"👤 顧客\" as Customer"));
+        assert!(result.contains("actor \"👤 担当者\" as Clerk"));
         assert!(result.contains("ユースケースB"));
         assert!(result.contains("ApiB"));
     }
@@ -1245,15 +1498,15 @@ reads(SearchApi, Item)
         let result = SequenceDiagramEmitter
             .emit(&model, &View::usecases(vec!["Search".to_string()]))
             .unwrap();
-        assert!(result.contains("actor \"顧客\" as Customer"));
-        assert!(result.contains("control \"検索API\" as SearchApi"));
-        assert!(result.contains("database \"品目\" as Item"));
+        assert!(result.contains("actor \"👤 顧客\" as Customer"));
+        assert!(result.contains("control \"🔌 検索API\" as SearchApi"));
+        assert!(result.contains("database \"🗄️ 品目\" as Item"));
         assert!(result.contains("SearchApi -> Item : read"));
         let screen_pos = result
-            .find("boundary \"検索画面\" as SearchScreen")
+            .find("boundary \"🖥️ 検索画面\" as SearchScreen")
             .unwrap();
-        let api_pos = result.find("control \"検索API\" as SearchApi").unwrap();
-        let entity_pos = result.find("database \"品目\" as Item").unwrap();
+        let api_pos = result.find("control \"🔌 検索API\" as SearchApi").unwrap();
+        let entity_pos = result.find("database \"🗄️ 品目\" as Item").unwrap();
         assert!(screen_pos < api_pos);
         assert!(api_pos < entity_pos);
         assert!(!result.contains("no sequenceable usecases"));

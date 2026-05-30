@@ -1,19 +1,25 @@
 sequenceDiagram
-  actor BillingSpecialist as Billing Specialist
-  participant PaymentPostingScreen as Payment Posting Screen
-  participant PaymentPostApi as Payment Posting API
-  participant Claim as Claim
-  participant PaymentTransaction as Payment Transaction
+  box システム価値
+    actor BillingSpecialist as 👤 Billing Specialist
+  end
+  box システム境界
+    participant PaymentPostingScreen as 🖥️ Payment Posting Screen
+    participant PaymentPostApi as 🔌 Payment Posting API
+  end
+  box システム
+    participant Claim as 🗄️ Claim
+    participant PaymentTransaction as 🗄️ Payment Transaction
+  end
 
-  Note over BillingSpecialist,PaymentTransaction: Post Payment
-  BillingSpecialist->>PaymentPostingScreen: Post Payment
-  PaymentPostingScreen->>PaymentPostApi: Post Payment
+  Note over BillingSpecialist,PaymentTransaction: ✅ Post Payment
+  BillingSpecialist->>PaymentPostingScreen: ✅ Post Payment
+  PaymentPostingScreen->>PaymentPostApi: ✅ Post Payment
   activate PaymentPostApi
   rect rgb(245,245,245)
     Note right of PaymentPostApi: transaction (API atomic boundary)
     PaymentPostApi->>Claim: update
     PaymentPostApi->>PaymentTransaction: create
   end
-  PaymentPostApi-->>PaymentPostingScreen: Payment Posting Screen
-  PaymentPostingScreen-->>BillingSpecialist: Payment Posting Screen
+  PaymentPostApi-->>PaymentPostingScreen: 🖥️ Payment Posting Screen
+  PaymentPostingScreen-->>BillingSpecialist: 🖥️ Payment Posting Screen
   deactivate PaymentPostApi

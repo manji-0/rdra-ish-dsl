@@ -1,19 +1,25 @@
 sequenceDiagram
-  actor FrontDesk as Front Desk Staff
-  participant PatientProfileScreen as Patient Profile Screen
-  participant RegisterPatientApi as Register Patient API
-  participant PatientAccount as Patient Account
-  participant PatientProfile as Patient Profile
+  box システム価値
+    actor FrontDesk as 👤 Front Desk Staff
+  end
+  box システム境界
+    participant PatientProfileScreen as 🖥️ Patient Profile Screen
+    participant RegisterPatientApi as 🔌 Register Patient API
+  end
+  box システム
+    participant PatientAccount as 🗄️ Patient Account
+    participant PatientProfile as 🗄️ Patient Profile
+  end
 
-  Note over FrontDesk,PatientProfile: Register Patient
-  FrontDesk->>PatientProfileScreen: Register Patient
-  PatientProfileScreen->>RegisterPatientApi: Register Patient
+  Note over FrontDesk,PatientProfile: ✅ Register Patient
+  FrontDesk->>PatientProfileScreen: ✅ Register Patient
+  PatientProfileScreen->>RegisterPatientApi: ✅ Register Patient
   activate RegisterPatientApi
   rect rgb(245,245,245)
     Note right of RegisterPatientApi: transaction (API atomic boundary)
     RegisterPatientApi->>PatientAccount: create
     RegisterPatientApi->>PatientProfile: create
   end
-  RegisterPatientApi-->>PatientProfileScreen: Patient Profile Screen
-  PatientProfileScreen-->>FrontDesk: Patient Profile Screen
+  RegisterPatientApi-->>PatientProfileScreen: 🖥️ Patient Profile Screen
+  PatientProfileScreen-->>FrontDesk: 🖥️ Patient Profile Screen
   deactivate RegisterPatientApi

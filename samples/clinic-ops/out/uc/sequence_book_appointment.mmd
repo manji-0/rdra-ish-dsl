@@ -1,19 +1,25 @@
 sequenceDiagram
-  actor FrontDesk as Front Desk Staff
-  participant AppointmentScreen as Appointment Screen
-  participant BookAppointmentApi as Book Appointment API
-  participant Appointment as Appointment
-  participant ProviderSchedule as Provider Schedule
+  box システム価値
+    actor FrontDesk as 👤 Front Desk Staff
+  end
+  box システム境界
+    participant AppointmentScreen as 🖥️ Appointment Screen
+    participant BookAppointmentApi as 🔌 Book Appointment API
+  end
+  box システム
+    participant Appointment as 🗄️ Appointment
+    participant ProviderSchedule as 🗄️ Provider Schedule
+  end
 
-  Note over FrontDesk,ProviderSchedule: Book Appointment
-  FrontDesk->>AppointmentScreen: Book Appointment
-  AppointmentScreen->>BookAppointmentApi: Book Appointment
+  Note over FrontDesk,ProviderSchedule: ✅ Book Appointment
+  FrontDesk->>AppointmentScreen: ✅ Book Appointment
+  AppointmentScreen->>BookAppointmentApi: ✅ Book Appointment
   activate BookAppointmentApi
   rect rgb(245,245,245)
     Note right of BookAppointmentApi: transaction (API atomic boundary)
     BookAppointmentApi->>Appointment: update
     BookAppointmentApi->>ProviderSchedule: update
   end
-  BookAppointmentApi-->>AppointmentScreen: Appointment Screen
-  AppointmentScreen-->>FrontDesk: Appointment Screen
+  BookAppointmentApi-->>AppointmentScreen: 🖥️ Appointment Screen
+  AppointmentScreen-->>FrontDesk: 🖥️ Appointment Screen
   deactivate BookAppointmentApi

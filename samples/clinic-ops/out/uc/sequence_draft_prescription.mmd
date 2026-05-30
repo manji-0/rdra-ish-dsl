@@ -1,16 +1,22 @@
 sequenceDiagram
-  actor Clinician as Clinician
-  participant PrescriptionScreen as Prescription Screen
-  participant DraftPrescriptionApi as Draft Prescription API
-  participant Encounter as Encounter
-  participant Prescription as Prescription
+  box システム価値
+    actor Clinician as 👤 Clinician
+  end
+  box システム境界
+    participant PrescriptionScreen as 🖥️ Prescription Screen
+    participant DraftPrescriptionApi as 🔌 Draft Prescription API
+  end
+  box システム
+    participant Encounter as 🗄️ Encounter
+    participant Prescription as 🗄️ Prescription
+  end
 
-  Note over Clinician,Prescription: Draft Prescription
-  Clinician->>PrescriptionScreen: Draft Prescription
-  PrescriptionScreen->>DraftPrescriptionApi: Draft Prescription
+  Note over Clinician,Prescription: ✅ Draft Prescription
+  Clinician->>PrescriptionScreen: ✅ Draft Prescription
+  PrescriptionScreen->>DraftPrescriptionApi: ✅ Draft Prescription
   activate DraftPrescriptionApi
   DraftPrescriptionApi->>Encounter: read
   DraftPrescriptionApi->>Prescription: create
-  DraftPrescriptionApi-->>PrescriptionScreen: Prescription Screen
-  PrescriptionScreen-->>Clinician: Prescription Screen
+  DraftPrescriptionApi-->>PrescriptionScreen: 🖥️ Prescription Screen
+  PrescriptionScreen-->>Clinician: 🖥️ Prescription Screen
   deactivate DraftPrescriptionApi

@@ -1,83 +1,89 @@
 sequenceDiagram
-  actor Clinician as Clinician
-  actor Nurse as Nurse
-  participant System as システム
-  participant CriticalNoticeScreen as Critical Result Notice Screen
-  participant OrderEntryScreen as Order Entry Screen
-  participant ResultReviewScreen as Result Review Screen
-  participant SpecimenScreen as Specimen Collection Screen
-  participant CollectSpecimenApi as Collect Specimen API
-  participant CriticalNoticeApi as Critical Notice API
-  participant OrderEntryApi as Order Entry API
-  participant ReceiveLabResultApi as Receive Lab Result API
-  participant ResultReviewApi as Result Review API
-  participant ClinicalOrder as Clinical Order
-  participant Encounter as Encounter
-  participant LabResult as Lab Result
-  participant Notification as Notification
-  participant PatientMessage as Patient Message
+  box システム価値
+    actor Clinician as 👤 Clinician
+    actor Nurse as 👤 Nurse
+  end
+  box システム境界
+    participant CriticalNoticeScreen as 🖥️ Critical Result Notice Screen
+    participant OrderEntryScreen as 🖥️ Order Entry Screen
+    participant ResultReviewScreen as 🖥️ Result Review Screen
+    participant SpecimenScreen as 🖥️ Specimen Collection Screen
+    participant CollectSpecimenApi as 🔌 Collect Specimen API
+    participant CriticalNoticeApi as 🔌 Critical Notice API
+    participant OrderEntryApi as 🔌 Order Entry API
+    participant ReceiveLabResultApi as 🔌 Receive Lab Result API
+    participant ResultReviewApi as 🔌 Result Review API
+  end
+  box システム
+    participant System as 🧩 システム
+    participant ClinicalOrder as 🗄️ Clinical Order
+    participant Encounter as 🗄️ Encounter
+    participant LabResult as 🗄️ Lab Result
+    participant Notification as 🗄️ Notification
+    participant PatientMessage as 🗄️ Patient Message
+  end
 
-  Note over Clinician,PatientMessage: Cancel Clinical Order
-  Clinician->System: Cancel Clinical Order
+  Note over Clinician,PatientMessage: ✅ Cancel Clinical Order
+  Clinician->System: ✅ Cancel Clinical Order
   activate System
   System->>ClinicalOrder: update
-  System-->>Clinician: Order Entry Screen
+  System-->>Clinician: 🖥️ Order Entry Screen
   deactivate System
 
-  Note over Clinician,PatientMessage: Collect Specimen
-  Nurse->>SpecimenScreen: Collect Specimen
-  SpecimenScreen->>CollectSpecimenApi: Collect Specimen
+  Note over Clinician,PatientMessage: ✅ Collect Specimen
+  Nurse->>SpecimenScreen: ✅ Collect Specimen
+  SpecimenScreen->>CollectSpecimenApi: ✅ Collect Specimen
   activate CollectSpecimenApi
   CollectSpecimenApi->>ClinicalOrder: update
-  CollectSpecimenApi-->>SpecimenScreen: Specimen Collection Screen
-  SpecimenScreen-->>Nurse: Specimen Collection Screen
+  CollectSpecimenApi-->>SpecimenScreen: 🖥️ Specimen Collection Screen
+  SpecimenScreen-->>Nurse: 🖥️ Specimen Collection Screen
   deactivate CollectSpecimenApi
 
-  Note over Clinician,PatientMessage: Notify Critical Result
-  Clinician->>CriticalNoticeScreen: Notify Critical Result
-  CriticalNoticeScreen->>CriticalNoticeApi: Notify Critical Result
+  Note over Clinician,PatientMessage: ✅ Notify Critical Result
+  Clinician->>CriticalNoticeScreen: ✅ Notify Critical Result
+  CriticalNoticeScreen->>CriticalNoticeApi: ✅ Notify Critical Result
   activate CriticalNoticeApi
   rect rgb(245,245,245)
     Note right of CriticalNoticeApi: transaction (API atomic boundary)
     CriticalNoticeApi->>Notification: create
     CriticalNoticeApi->>PatientMessage: create
   end
-  CriticalNoticeApi-->>CriticalNoticeScreen: Critical Result Notice Screen
-  CriticalNoticeScreen-->>Clinician: Critical Result Notice Screen
+  CriticalNoticeApi-->>CriticalNoticeScreen: 🖥️ Critical Result Notice Screen
+  CriticalNoticeScreen-->>Clinician: 🖥️ Critical Result Notice Screen
   deactivate CriticalNoticeApi
 
-  Note over Clinician,PatientMessage: Place Lab Order
-  Clinician->>OrderEntryScreen: Place Lab Order
-  OrderEntryScreen->>OrderEntryApi: Place Lab Order
+  Note over Clinician,PatientMessage: ✅ Place Lab Order
+  Clinician->>OrderEntryScreen: ✅ Place Lab Order
+  OrderEntryScreen->>OrderEntryApi: ✅ Place Lab Order
   activate OrderEntryApi
   OrderEntryApi->>Encounter: read
   OrderEntryApi->>ClinicalOrder: create
-  OrderEntryApi-->>OrderEntryScreen: Order Entry Screen
-  OrderEntryScreen-->>Clinician: Order Entry Screen
+  OrderEntryApi-->>OrderEntryScreen: 🖥️ Order Entry Screen
+  OrderEntryScreen-->>Clinician: 🖥️ Order Entry Screen
   deactivate OrderEntryApi
 
-  Note over Clinician,PatientMessage: Receive Lab Result
-  Nurse->>ResultReviewScreen: Receive Lab Result
-  ResultReviewScreen->>ReceiveLabResultApi: Receive Lab Result
+  Note over Clinician,PatientMessage: ✅ Receive Lab Result
+  Nurse->>ResultReviewScreen: ✅ Receive Lab Result
+  ResultReviewScreen->>ReceiveLabResultApi: ✅ Receive Lab Result
   activate ReceiveLabResultApi
   rect rgb(245,245,245)
     Note right of ReceiveLabResultApi: transaction (API atomic boundary)
     ReceiveLabResultApi->>ClinicalOrder: update
     ReceiveLabResultApi->>LabResult: create
   end
-  ReceiveLabResultApi-->>ResultReviewScreen: Result Review Screen
-  ResultReviewScreen-->>Nurse: Result Review Screen
+  ReceiveLabResultApi-->>ResultReviewScreen: 🖥️ Result Review Screen
+  ResultReviewScreen-->>Nurse: 🖥️ Result Review Screen
   deactivate ReceiveLabResultApi
 
-  Note over Clinician,PatientMessage: Review Lab Result
-  Clinician->>ResultReviewScreen: Review Lab Result
-  ResultReviewScreen->>ResultReviewApi: Review Lab Result
+  Note over Clinician,PatientMessage: ✅ Review Lab Result
+  Clinician->>ResultReviewScreen: ✅ Review Lab Result
+  ResultReviewScreen->>ResultReviewApi: ✅ Review Lab Result
   activate ResultReviewApi
   rect rgb(245,245,245)
     Note right of ResultReviewApi: transaction (API atomic boundary)
     ResultReviewApi->>ClinicalOrder: update
     ResultReviewApi->>LabResult: update
   end
-  ResultReviewApi-->>ResultReviewScreen: Result Review Screen
-  ResultReviewScreen-->>Clinician: Result Review Screen
+  ResultReviewApi-->>ResultReviewScreen: 🖥️ Result Review Screen
+  ResultReviewScreen-->>Clinician: 🖥️ Result Review Screen
   deactivate ResultReviewApi

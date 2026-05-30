@@ -1,14 +1,20 @@
 sequenceDiagram
-  actor BillingSpecialist as Billing Specialist
-  participant ClaimScreen as Claim Screen
-  participant SubmitClaimApi as Submit Claim API
-  participant Claim as Claim
+  box システム価値
+    actor BillingSpecialist as 👤 Billing Specialist
+  end
+  box システム境界
+    participant ClaimScreen as 🖥️ Claim Screen
+    participant SubmitClaimApi as 🔌 Submit Claim API
+  end
+  box システム
+    participant Claim as 🗄️ Claim
+  end
 
-  Note over BillingSpecialist,Claim: Submit Claim
-  BillingSpecialist->>ClaimScreen: Submit Claim
-  ClaimScreen->>SubmitClaimApi: Submit Claim
+  Note over BillingSpecialist,Claim: ✅ Submit Claim
+  BillingSpecialist->>ClaimScreen: ✅ Submit Claim
+  ClaimScreen->>SubmitClaimApi: ✅ Submit Claim
   activate SubmitClaimApi
   SubmitClaimApi->>Claim: update
-  SubmitClaimApi-->>ClaimScreen: Claim Screen
-  ClaimScreen-->>BillingSpecialist: Claim Screen
+  SubmitClaimApi-->>ClaimScreen: 🖥️ Claim Screen
+  ClaimScreen-->>BillingSpecialist: 🖥️ Claim Screen
   deactivate SubmitClaimApi

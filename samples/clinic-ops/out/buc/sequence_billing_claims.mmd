@@ -1,25 +1,31 @@
 sequenceDiagram
-  actor BillingSpecialist as Billing Specialist
-  participant System as システム
-  participant BalanceScreen as Balance Screen
-  participant ChargeWorklistScreen as Charge Worklist Screen
-  participant ClaimScreen as Claim Screen
-  participant PaymentPostingScreen as Payment Posting Screen
-  participant BalanceApi as Balance API
-  participant CreateChargeApi as Create Charge API
-  participant GenerateClaimApi as Generate Claim API
-  participant PaymentPostApi as Payment Posting API
-  participant SubmitClaimApi as Submit Claim API
-  participant AccountBalance as Account Balance
-  participant Charge as Charge
-  participant Claim as Claim
-  participant Encounter as Encounter
-  participant InsurancePolicy as Insurance Policy
-  participant PaymentTransaction as Payment Transaction
+  box システム価値
+    actor BillingSpecialist as 👤 Billing Specialist
+  end
+  box システム境界
+    participant BalanceScreen as 🖥️ Balance Screen
+    participant ChargeWorklistScreen as 🖥️ Charge Worklist Screen
+    participant ClaimScreen as 🖥️ Claim Screen
+    participant PaymentPostingScreen as 🖥️ Payment Posting Screen
+    participant BalanceApi as 🔌 Balance API
+    participant CreateChargeApi as 🔌 Create Charge API
+    participant GenerateClaimApi as 🔌 Generate Claim API
+    participant PaymentPostApi as 🔌 Payment Posting API
+    participant SubmitClaimApi as 🔌 Submit Claim API
+  end
+  box システム
+    participant System as 🧩 システム
+    participant AccountBalance as 🗄️ Account Balance
+    participant Charge as 🗄️ Charge
+    participant Claim as 🗄️ Claim
+    participant Encounter as 🗄️ Encounter
+    participant InsurancePolicy as 🗄️ Insurance Policy
+    participant PaymentTransaction as 🗄️ Payment Transaction
+  end
 
-  Note over BillingSpecialist,PaymentTransaction: Create Charge
-  BillingSpecialist->>ChargeWorklistScreen: Create Charge
-  ChargeWorklistScreen->>CreateChargeApi: Create Charge
+  Note over BillingSpecialist,PaymentTransaction: ✅ Create Charge
+  BillingSpecialist->>ChargeWorklistScreen: ✅ Create Charge
+  ChargeWorklistScreen->>CreateChargeApi: ✅ Create Charge
   activate CreateChargeApi
   CreateChargeApi->>Encounter: read
   rect rgb(245,245,245)
@@ -27,13 +33,13 @@ sequenceDiagram
     CreateChargeApi->>AccountBalance: update
     CreateChargeApi->>Charge: create
   end
-  CreateChargeApi-->>ChargeWorklistScreen: Charge Worklist Screen
-  ChargeWorklistScreen-->>BillingSpecialist: Charge Worklist Screen
+  CreateChargeApi-->>ChargeWorklistScreen: 🖥️ Charge Worklist Screen
+  ChargeWorklistScreen-->>BillingSpecialist: 🖥️ Charge Worklist Screen
   deactivate CreateChargeApi
 
-  Note over BillingSpecialist,PaymentTransaction: Generate Claim
-  BillingSpecialist->>ClaimScreen: Generate Claim
-  ClaimScreen->>GenerateClaimApi: Generate Claim
+  Note over BillingSpecialist,PaymentTransaction: ✅ Generate Claim
+  BillingSpecialist->>ClaimScreen: ✅ Generate Claim
+  ClaimScreen->>GenerateClaimApi: ✅ Generate Claim
   activate GenerateClaimApi
   GenerateClaimApi->>InsurancePolicy: read
   rect rgb(245,245,245)
@@ -41,59 +47,59 @@ sequenceDiagram
     GenerateClaimApi->>Claim: create
     GenerateClaimApi->>Charge: update
   end
-  GenerateClaimApi-->>ClaimScreen: Claim Screen
-  ClaimScreen-->>BillingSpecialist: Claim Screen
+  GenerateClaimApi-->>ClaimScreen: 🖥️ Claim Screen
+  ClaimScreen-->>BillingSpecialist: 🖥️ Claim Screen
   deactivate GenerateClaimApi
 
-  Note over BillingSpecialist,PaymentTransaction: Post Payment
-  BillingSpecialist->>PaymentPostingScreen: Post Payment
-  PaymentPostingScreen->>PaymentPostApi: Post Payment
+  Note over BillingSpecialist,PaymentTransaction: ✅ Post Payment
+  BillingSpecialist->>PaymentPostingScreen: ✅ Post Payment
+  PaymentPostingScreen->>PaymentPostApi: ✅ Post Payment
   activate PaymentPostApi
   rect rgb(245,245,245)
     Note right of PaymentPostApi: transaction (API atomic boundary)
     PaymentPostApi->>Claim: update
     PaymentPostApi->>PaymentTransaction: create
   end
-  PaymentPostApi-->>PaymentPostingScreen: Payment Posting Screen
-  PaymentPostingScreen-->>BillingSpecialist: Payment Posting Screen
+  PaymentPostApi-->>PaymentPostingScreen: 🖥️ Payment Posting Screen
+  PaymentPostingScreen-->>BillingSpecialist: 🖥️ Payment Posting Screen
   deactivate PaymentPostApi
 
-  Note over BillingSpecialist,PaymentTransaction: Receive Claim Accepted
-  BillingSpecialist->System: Receive Claim Accepted
+  Note over BillingSpecialist,PaymentTransaction: ✅ Receive Claim Accepted
+  BillingSpecialist->System: ✅ Receive Claim Accepted
   activate System
   System->>Claim: update
-  System-->>BillingSpecialist: Claim Screen
+  System-->>BillingSpecialist: 🖥️ Claim Screen
   deactivate System
 
-  Note over BillingSpecialist,PaymentTransaction: Reconcile Balance
-  BillingSpecialist->>BalanceScreen: Reconcile Balance
-  BalanceScreen->>BalanceApi: Reconcile Balance
+  Note over BillingSpecialist,PaymentTransaction: ✅ Reconcile Balance
+  BillingSpecialist->>BalanceScreen: ✅ Reconcile Balance
+  BalanceScreen->>BalanceApi: ✅ Reconcile Balance
   activate BalanceApi
   BalanceApi->>PaymentTransaction: read
   BalanceApi->>AccountBalance: update
-  BalanceApi-->>BalanceScreen: Balance Screen
-  BalanceScreen-->>BillingSpecialist: Balance Screen
+  BalanceApi-->>BalanceScreen: 🖥️ Balance Screen
+  BalanceScreen-->>BillingSpecialist: 🖥️ Balance Screen
   deactivate BalanceApi
 
-  Note over BillingSpecialist,PaymentTransaction: Record Claim Denial
-  BillingSpecialist->System: Record Claim Denial
+  Note over BillingSpecialist,PaymentTransaction: ✅ Record Claim Denial
+  BillingSpecialist->System: ✅ Record Claim Denial
   activate System
   System->>Claim: update
-  System-->>BillingSpecialist: Claim Screen
+  System-->>BillingSpecialist: 🖥️ Claim Screen
   deactivate System
 
-  Note over BillingSpecialist,PaymentTransaction: Submit Claim
-  BillingSpecialist->>ClaimScreen: Submit Claim
-  ClaimScreen->>SubmitClaimApi: Submit Claim
+  Note over BillingSpecialist,PaymentTransaction: ✅ Submit Claim
+  BillingSpecialist->>ClaimScreen: ✅ Submit Claim
+  ClaimScreen->>SubmitClaimApi: ✅ Submit Claim
   activate SubmitClaimApi
   SubmitClaimApi->>Claim: update
-  SubmitClaimApi-->>ClaimScreen: Claim Screen
-  ClaimScreen-->>BillingSpecialist: Claim Screen
+  SubmitClaimApi-->>ClaimScreen: 🖥️ Claim Screen
+  ClaimScreen-->>BillingSpecialist: 🖥️ Claim Screen
   deactivate SubmitClaimApi
 
-  Note over BillingSpecialist,PaymentTransaction: Void Charge
-  BillingSpecialist->System: Void Charge
+  Note over BillingSpecialist,PaymentTransaction: ✅ Void Charge
+  BillingSpecialist->System: ✅ Void Charge
   activate System
   System->>Charge: update
-  System-->>BillingSpecialist: Charge Worklist Screen
+  System-->>BillingSpecialist: 🖥️ Charge Worklist Screen
   deactivate System

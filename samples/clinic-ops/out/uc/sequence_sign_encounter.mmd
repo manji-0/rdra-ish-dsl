@@ -1,14 +1,20 @@
 sequenceDiagram
-  actor Clinician as Clinician
-  participant EncounterWorkspaceScreen as Encounter Workspace
-  participant SignEncounterApi as Sign Encounter API
-  participant Encounter as Encounter
+  box システム価値
+    actor Clinician as 👤 Clinician
+  end
+  box システム境界
+    participant EncounterWorkspaceScreen as 🖥️ Encounter Workspace
+    participant SignEncounterApi as 🔌 Sign Encounter API
+  end
+  box システム
+    participant Encounter as 🗄️ Encounter
+  end
 
-  Note over Clinician,Encounter: Sign Encounter
-  Clinician->>EncounterWorkspaceScreen: Sign Encounter
-  EncounterWorkspaceScreen->>SignEncounterApi: Sign Encounter
+  Note over Clinician,Encounter: ✅ Sign Encounter
+  Clinician->>EncounterWorkspaceScreen: ✅ Sign Encounter
+  EncounterWorkspaceScreen->>SignEncounterApi: ✅ Sign Encounter
   activate SignEncounterApi
   SignEncounterApi->>Encounter: update
-  SignEncounterApi-->>EncounterWorkspaceScreen: Encounter Workspace
-  EncounterWorkspaceScreen-->>Clinician: Encounter Workspace
+  SignEncounterApi-->>EncounterWorkspaceScreen: 🖥️ Encounter Workspace
+  EncounterWorkspaceScreen-->>Clinician: 🖥️ Encounter Workspace
   deactivate SignEncounterApi

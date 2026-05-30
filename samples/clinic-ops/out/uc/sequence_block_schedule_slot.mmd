@@ -1,14 +1,20 @@
 sequenceDiagram
-  actor ClinicAdmin as Clinic Administrator
-  participant ScheduleAdminScreen as Schedule Admin Screen
-  participant BlockScheduleSlotApi as Block Schedule Slot API
-  participant ProviderSchedule as Provider Schedule
+  box システム価値
+    actor ClinicAdmin as 👤 Clinic Administrator
+  end
+  box システム境界
+    participant ScheduleAdminScreen as 🖥️ Schedule Admin Screen
+    participant BlockScheduleSlotApi as 🔌 Block Schedule Slot API
+  end
+  box システム
+    participant ProviderSchedule as 🗄️ Provider Schedule
+  end
 
-  Note over ClinicAdmin,ProviderSchedule: Block Schedule Slot
-  ClinicAdmin->>ScheduleAdminScreen: Block Schedule Slot
-  ScheduleAdminScreen->>BlockScheduleSlotApi: Block Schedule Slot
+  Note over ClinicAdmin,ProviderSchedule: ✅ Block Schedule Slot
+  ClinicAdmin->>ScheduleAdminScreen: ✅ Block Schedule Slot
+  ScheduleAdminScreen->>BlockScheduleSlotApi: ✅ Block Schedule Slot
   activate BlockScheduleSlotApi
   BlockScheduleSlotApi->>ProviderSchedule: update
-  BlockScheduleSlotApi-->>ScheduleAdminScreen: Schedule Admin Screen
-  ScheduleAdminScreen-->>ClinicAdmin: Schedule Admin Screen
+  BlockScheduleSlotApi-->>ScheduleAdminScreen: 🖥️ Schedule Admin Screen
+  ScheduleAdminScreen-->>ClinicAdmin: 🖥️ Schedule Admin Screen
   deactivate BlockScheduleSlotApi

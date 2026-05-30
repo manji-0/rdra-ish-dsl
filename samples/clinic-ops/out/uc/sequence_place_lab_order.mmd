@@ -1,16 +1,22 @@
 sequenceDiagram
-  actor Clinician as Clinician
-  participant OrderEntryScreen as Order Entry Screen
-  participant OrderEntryApi as Order Entry API
-  participant ClinicalOrder as Clinical Order
-  participant Encounter as Encounter
+  box システム価値
+    actor Clinician as 👤 Clinician
+  end
+  box システム境界
+    participant OrderEntryScreen as 🖥️ Order Entry Screen
+    participant OrderEntryApi as 🔌 Order Entry API
+  end
+  box システム
+    participant ClinicalOrder as 🗄️ Clinical Order
+    participant Encounter as 🗄️ Encounter
+  end
 
-  Note over Clinician,Encounter: Place Lab Order
-  Clinician->>OrderEntryScreen: Place Lab Order
-  OrderEntryScreen->>OrderEntryApi: Place Lab Order
+  Note over Clinician,Encounter: ✅ Place Lab Order
+  Clinician->>OrderEntryScreen: ✅ Place Lab Order
+  OrderEntryScreen->>OrderEntryApi: ✅ Place Lab Order
   activate OrderEntryApi
   OrderEntryApi->>Encounter: read
   OrderEntryApi->>ClinicalOrder: create
-  OrderEntryApi-->>OrderEntryScreen: Order Entry Screen
-  OrderEntryScreen-->>Clinician: Order Entry Screen
+  OrderEntryApi-->>OrderEntryScreen: 🖥️ Order Entry Screen
+  OrderEntryScreen-->>Clinician: 🖥️ Order Entry Screen
   deactivate OrderEntryApi

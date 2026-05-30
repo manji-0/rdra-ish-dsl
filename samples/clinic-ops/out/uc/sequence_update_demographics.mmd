@@ -1,14 +1,20 @@
 sequenceDiagram
-  actor FrontDesk as Front Desk Staff
-  participant PatientProfileScreen as Patient Profile Screen
-  participant UpdateDemographicsApi as Update Demographics API
-  participant PatientProfile as Patient Profile
+  box システム価値
+    actor FrontDesk as 👤 Front Desk Staff
+  end
+  box システム境界
+    participant PatientProfileScreen as 🖥️ Patient Profile Screen
+    participant UpdateDemographicsApi as 🔌 Update Demographics API
+  end
+  box システム
+    participant PatientProfile as 🗄️ Patient Profile
+  end
 
-  Note over FrontDesk,PatientProfile: Update Demographics
-  FrontDesk->>PatientProfileScreen: Update Demographics
-  PatientProfileScreen->>UpdateDemographicsApi: Update Demographics
+  Note over FrontDesk,PatientProfile: ✅ Update Demographics
+  FrontDesk->>PatientProfileScreen: ✅ Update Demographics
+  PatientProfileScreen->>UpdateDemographicsApi: ✅ Update Demographics
   activate UpdateDemographicsApi
   UpdateDemographicsApi->>PatientProfile: update
-  UpdateDemographicsApi-->>PatientProfileScreen: Patient Profile Screen
-  PatientProfileScreen-->>FrontDesk: Patient Profile Screen
+  UpdateDemographicsApi-->>PatientProfileScreen: 🖥️ Patient Profile Screen
+  PatientProfileScreen-->>FrontDesk: 🖥️ Patient Profile Screen
   deactivate UpdateDemographicsApi

@@ -1,14 +1,20 @@
 sequenceDiagram
-  actor CareCoordinator as Care Coordinator
-  participant PatientMessageScreen as Patient Message Screen
-  participant NotifyPatientResultApi as Notify Patient Result API
-  participant Notification as Notification
+  box システム価値
+    actor CareCoordinator as 👤 Care Coordinator
+  end
+  box システム境界
+    participant PatientMessageScreen as 🖥️ Patient Message Screen
+    participant NotifyPatientResultApi as 🔌 Notify Patient Result API
+  end
+  box システム
+    participant Notification as 🗄️ Notification
+  end
 
-  Note over CareCoordinator,Notification: Notify Patient Result
-  CareCoordinator->>PatientMessageScreen: Notify Patient Result
-  PatientMessageScreen->>NotifyPatientResultApi: Notify Patient Result
+  Note over CareCoordinator,Notification: ✅ Notify Patient Result
+  CareCoordinator->>PatientMessageScreen: ✅ Notify Patient Result
+  PatientMessageScreen->>NotifyPatientResultApi: ✅ Notify Patient Result
   activate NotifyPatientResultApi
   NotifyPatientResultApi->>Notification: create
-  NotifyPatientResultApi-->>PatientMessageScreen: Patient Message Screen
-  PatientMessageScreen-->>CareCoordinator: Patient Message Screen
+  NotifyPatientResultApi-->>PatientMessageScreen: 🖥️ Patient Message Screen
+  PatientMessageScreen-->>CareCoordinator: 🖥️ Patient Message Screen
   deactivate NotifyPatientResultApi

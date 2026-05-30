@@ -1,19 +1,25 @@
 sequenceDiagram
-  actor FrontDesk as Front Desk Staff
-  participant AppointmentNoticeScreen as Appointment Notice Screen
-  participant AppointmentNoticeApi as Appointment Notice API
-  participant Notification as Notification
-  participant PatientMessage as Patient Message
+  box システム価値
+    actor FrontDesk as 👤 Front Desk Staff
+  end
+  box システム境界
+    participant AppointmentNoticeScreen as 🖥️ Appointment Notice Screen
+    participant AppointmentNoticeApi as 🔌 Appointment Notice API
+  end
+  box システム
+    participant Notification as 🗄️ Notification
+    participant PatientMessage as 🗄️ Patient Message
+  end
 
-  Note over FrontDesk,PatientMessage: Send Appointment Notice
-  FrontDesk->>AppointmentNoticeScreen: Send Appointment Notice
-  AppointmentNoticeScreen->>AppointmentNoticeApi: Send Appointment Notice
+  Note over FrontDesk,PatientMessage: ✅ Send Appointment Notice
+  FrontDesk->>AppointmentNoticeScreen: ✅ Send Appointment Notice
+  AppointmentNoticeScreen->>AppointmentNoticeApi: ✅ Send Appointment Notice
   activate AppointmentNoticeApi
   rect rgb(245,245,245)
     Note right of AppointmentNoticeApi: transaction (API atomic boundary)
     AppointmentNoticeApi->>Notification: create
     AppointmentNoticeApi->>PatientMessage: create
   end
-  AppointmentNoticeApi-->>AppointmentNoticeScreen: Appointment Notice Screen
-  AppointmentNoticeScreen-->>FrontDesk: Appointment Notice Screen
+  AppointmentNoticeApi-->>AppointmentNoticeScreen: 🖥️ Appointment Notice Screen
+  AppointmentNoticeScreen-->>FrontDesk: 🖥️ Appointment Notice Screen
   deactivate AppointmentNoticeApi

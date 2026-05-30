@@ -1,14 +1,20 @@
 sequenceDiagram
-  actor Patient as Patient
-  participant ConsentScreen as Consent Capture Screen
-  participant ConsentApi as Consent API
-  participant ConsentRecord as Consent Record
+  box システム価値
+    actor Patient as 👤 Patient
+  end
+  box システム境界
+    participant ConsentScreen as 🖥️ Consent Capture Screen
+    participant ConsentApi as 🔌 Consent API
+  end
+  box システム
+    participant ConsentRecord as 🗄️ Consent Record
+  end
 
-  Note over Patient,ConsentRecord: Capture Consent
-  Patient->>ConsentScreen: Capture Consent
-  ConsentScreen->>ConsentApi: Capture Consent
+  Note over Patient,ConsentRecord: ✅ Capture Consent
+  Patient->>ConsentScreen: ✅ Capture Consent
+  ConsentScreen->>ConsentApi: ✅ Capture Consent
   activate ConsentApi
   ConsentApi->>ConsentRecord: create
-  ConsentApi-->>ConsentScreen: Consent Capture Screen
-  ConsentScreen-->>Patient: Consent Capture Screen
+  ConsentApi-->>ConsentScreen: 🖥️ Consent Capture Screen
+  ConsentScreen-->>Patient: 🖥️ Consent Capture Screen
   deactivate ConsentApi

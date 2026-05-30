@@ -1,14 +1,20 @@
 sequenceDiagram
-  actor BillingSpecialist as Billing Specialist
-  participant ChargeWorklistScreen as Charge Worklist Screen
-  participant CreateChargeApi as Create Charge API
-  participant AccountBalance as Account Balance
-  participant Charge as Charge
-  participant Encounter as Encounter
+  box システム価値
+    actor BillingSpecialist as 👤 Billing Specialist
+  end
+  box システム境界
+    participant ChargeWorklistScreen as 🖥️ Charge Worklist Screen
+    participant CreateChargeApi as 🔌 Create Charge API
+  end
+  box システム
+    participant AccountBalance as 🗄️ Account Balance
+    participant Charge as 🗄️ Charge
+    participant Encounter as 🗄️ Encounter
+  end
 
-  Note over BillingSpecialist,Encounter: Create Charge
-  BillingSpecialist->>ChargeWorklistScreen: Create Charge
-  ChargeWorklistScreen->>CreateChargeApi: Create Charge
+  Note over BillingSpecialist,Encounter: ✅ Create Charge
+  BillingSpecialist->>ChargeWorklistScreen: ✅ Create Charge
+  ChargeWorklistScreen->>CreateChargeApi: ✅ Create Charge
   activate CreateChargeApi
   CreateChargeApi->>Encounter: read
   rect rgb(245,245,245)
@@ -16,6 +22,6 @@ sequenceDiagram
     CreateChargeApi->>AccountBalance: update
     CreateChargeApi->>Charge: create
   end
-  CreateChargeApi-->>ChargeWorklistScreen: Charge Worklist Screen
-  ChargeWorklistScreen-->>BillingSpecialist: Charge Worklist Screen
+  CreateChargeApi-->>ChargeWorklistScreen: 🖥️ Charge Worklist Screen
+  ChargeWorklistScreen-->>BillingSpecialist: 🖥️ Charge Worklist Screen
   deactivate CreateChargeApi

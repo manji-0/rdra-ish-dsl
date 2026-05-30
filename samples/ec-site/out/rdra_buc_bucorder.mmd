@@ -1,21 +1,21 @@
 graph TD
   Customer(["👤 Customer"])
-  Cancel(["Cancel Order"])
-  ConfirmOrder(["Confirm Order Details"])
-  PlaceOrder(["Place Order"])
-  SelectAddress(["Select Shipping Address"])
-  ViewOrderHistory(["View Order History"])
+  Cancel(["✅ Cancel Order"])
+  ConfirmOrder(["✅ Confirm Order Details"])
+  PlaceOrder(["✅ Place Order"])
+  SelectAddress(["✅ Select Shipping Address"])
+  ViewOrderHistory(["✅ View Order History"])
   BucOrder["📦 Process Order"]
-  Cart[("🗄 Cart")]
-  CartItem[("🗄 Cart Item")]
-  Order[("🗄 Order")]
-  OrderLine[("🗄 Order Line")]
-  ShippingAddress[("🗄 Shipping Address")]
-  AddressSelectScreen[["Address Selection Screen"]]
-  OrderCompleteScreen[["Order Complete Screen"]]
-  OrderConfirmScreen[["Order Confirmation Screen"]]
-  OrderHistoryScreen[["Order History Screen"]]
-  Cancel{"Cancel Order"}
+  Cart[("🗄️ Cart")]
+  CartItem[("🗄️ Cart Item")]
+  Order[("🗄️ Order")]
+  OrderLine[("🗄️ Order Line")]
+  ShippingAddress[("🗄️ Shipping Address")]
+  AddressSelectScreen[["🖥️ Address Selection Screen"]]
+  OrderCompleteScreen[["🖥️ Order Complete Screen"]]
+  OrderConfirmScreen[["🖥️ Order Confirmation Screen"]]
+  OrderHistoryScreen[["🖥️ Order History Screen"]]
+  Cancel{"⚡ Cancel Order"}
   Customer --> BucOrder
   BucOrder --> EcShopping
   BucOrder --> SelectAddress

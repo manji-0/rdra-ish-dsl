@@ -48,11 +48,11 @@ rdra-ish diagram samples/incremental-order/step-2-data-touchpoints/src --kind rd
 ```mermaid
 graph TD
   OpsStaff(["👤 Operations Staff"])
-  ChangeNextRestockDate(["Change Next Restock Date"])
-  ChangeStoreParentOrganization(["Change Store Parent Organization"])
+  ChangeNextRestockDate(["✅ Change Next Restock Date"])
+  ChangeStoreParentOrganization(["✅ Change Store Parent Organization"])
   BucStoreRestock["📦 Maintain Store Restock"]
-  Organization[("🗄 Organization")]
-  Store[("🗄 Store")]
+  Organization[("🗄️ Organization")]
+  Store[("🗄️ Store")]
   OpsStaff --> BucStoreRestock
   BucStoreRestock --> StoreOperations
   BucStoreRestock --> ChangeNextRestockDate
@@ -72,19 +72,23 @@ rdra-ish diagram samples/incremental-order/step-2-data-touchpoints/src --kind se
 
 ```mermaid
 sequenceDiagram
-  actor OpsStaff as Operations Staff
-  participant System as システム
-  participant Organization as Organization
-  participant Store as Store
+  box システム価値
+    actor OpsStaff as 👤 Operations Staff
+  end
+  box システム
+    participant System as 🧩 システム
+    participant Organization as 🗄️ Organization
+    participant Store as 🗄️ Store
+  end
 
-  Note over OpsStaff,Store: Change Next Restock Date
-  OpsStaff->System: Change Next Restock Date
+  Note over OpsStaff,Store: ✅ Change Next Restock Date
+  OpsStaff->System: ✅ Change Next Restock Date
   activate System
   System->>Store: update
   deactivate System
 
-  Note over OpsStaff,Store: Change Store Parent Organization
-  OpsStaff->System: Change Store Parent Organization
+  Note over OpsStaff,Store: ✅ Change Store Parent Organization
+  OpsStaff->System: ✅ Change Store Parent Organization
   activate System
   System->>Organization: read
   System->>Store: update

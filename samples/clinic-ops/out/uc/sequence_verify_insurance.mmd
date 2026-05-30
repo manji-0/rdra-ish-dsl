@@ -1,13 +1,19 @@
 sequenceDiagram
-  actor FrontDesk as Front Desk Staff
-  participant InsuranceScreen as Insurance Verification Screen
-  participant EligibilityApi as Eligibility API
-  participant EligibilityCheck as Eligibility Check
-  participant InsurancePolicy as Insurance Policy
+  box システム価値
+    actor FrontDesk as 👤 Front Desk Staff
+  end
+  box システム境界
+    participant InsuranceScreen as 🖥️ Insurance Verification Screen
+    participant EligibilityApi as 🔌 Eligibility API
+  end
+  box システム
+    participant EligibilityCheck as 🗄️ Eligibility Check
+    participant InsurancePolicy as 🗄️ Insurance Policy
+  end
 
-  Note over FrontDesk,InsurancePolicy: Verify Insurance
-  FrontDesk->>InsuranceScreen: Verify Insurance
-  InsuranceScreen->>EligibilityApi: Verify Insurance
+  Note over FrontDesk,InsurancePolicy: ✅ Verify Insurance
+  FrontDesk->>InsuranceScreen: ✅ Verify Insurance
+  InsuranceScreen->>EligibilityApi: ✅ Verify Insurance
   activate EligibilityApi
   EligibilityApi->>InsurancePolicy: read
   rect rgb(245,245,245)
@@ -15,6 +21,6 @@ sequenceDiagram
     EligibilityApi->>InsurancePolicy: update
     EligibilityApi->>EligibilityCheck: create
   end
-  EligibilityApi-->>InsuranceScreen: Insurance Verification Screen
-  InsuranceScreen-->>FrontDesk: Insurance Verification Screen
+  EligibilityApi-->>InsuranceScreen: 🖥️ Insurance Verification Screen
+  InsuranceScreen-->>FrontDesk: 🖥️ Insurance Verification Screen
   deactivate EligibilityApi

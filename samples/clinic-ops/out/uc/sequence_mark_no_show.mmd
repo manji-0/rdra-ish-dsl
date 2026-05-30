@@ -1,12 +1,18 @@
 sequenceDiagram
-  actor FrontDesk as Front Desk Staff
-  participant System as システム
-  participant AppointmentScreen as Appointment Screen
-  participant Appointment as Appointment
+  box システム価値
+    actor FrontDesk as 👤 Front Desk Staff
+  end
+  box システム境界
+    participant AppointmentScreen as 🖥️ Appointment Screen
+  end
+  box システム
+    participant System as 🧩 システム
+    participant Appointment as 🗄️ Appointment
+  end
 
-  Note over FrontDesk,Appointment: Mark No Show
-  FrontDesk->System: Mark No Show
+  Note over FrontDesk,Appointment: ✅ Mark No Show
+  FrontDesk->System: ✅ Mark No Show
   activate System
   System->>Appointment: update
-  System-->>FrontDesk: Appointment Screen
+  System-->>FrontDesk: 🖥️ Appointment Screen
   deactivate System

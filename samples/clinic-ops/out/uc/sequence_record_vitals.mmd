@@ -1,19 +1,25 @@
 sequenceDiagram
-  actor Nurse as Nurse
-  participant VitalsScreen as Vitals Screen
-  participant RecordVitalsApi as Record Vitals API
-  participant Encounter as Encounter
-  participant VitalSign as Vital Sign
+  box システム価値
+    actor Nurse as 👤 Nurse
+  end
+  box システム境界
+    participant VitalsScreen as 🖥️ Vitals Screen
+    participant RecordVitalsApi as 🔌 Record Vitals API
+  end
+  box システム
+    participant Encounter as 🗄️ Encounter
+    participant VitalSign as 🗄️ Vital Sign
+  end
 
-  Note over Nurse,VitalSign: Record Vitals
-  Nurse->>VitalsScreen: Record Vitals
-  VitalsScreen->>RecordVitalsApi: Record Vitals
+  Note over Nurse,VitalSign: ✅ Record Vitals
+  Nurse->>VitalsScreen: ✅ Record Vitals
+  VitalsScreen->>RecordVitalsApi: ✅ Record Vitals
   activate RecordVitalsApi
   rect rgb(245,245,245)
     Note right of RecordVitalsApi: transaction (API atomic boundary)
     RecordVitalsApi->>Encounter: update
     RecordVitalsApi->>VitalSign: create
   end
-  RecordVitalsApi-->>VitalsScreen: Vitals Screen
-  VitalsScreen-->>Nurse: Vitals Screen
+  RecordVitalsApi-->>VitalsScreen: 🖥️ Vitals Screen
+  VitalsScreen-->>Nurse: 🖥️ Vitals Screen
   deactivate RecordVitalsApi

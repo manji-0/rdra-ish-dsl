@@ -1,16 +1,22 @@
 sequenceDiagram
-  actor FrontDesk as Front Desk Staff
-  participant PatientSearchScreen as Patient Search Screen
-  participant SearchPatientApi as Search Patient API
-  participant PatientAccount as Patient Account
-  participant PatientProfile as Patient Profile
+  box システム価値
+    actor FrontDesk as 👤 Front Desk Staff
+  end
+  box システム境界
+    participant PatientSearchScreen as 🖥️ Patient Search Screen
+    participant SearchPatientApi as 🔌 Search Patient API
+  end
+  box システム
+    participant PatientAccount as 🗄️ Patient Account
+    participant PatientProfile as 🗄️ Patient Profile
+  end
 
-  Note over FrontDesk,PatientProfile: Search Patient
-  FrontDesk->>PatientSearchScreen: Search Patient
-  PatientSearchScreen->>SearchPatientApi: Search Patient
+  Note over FrontDesk,PatientProfile: ✅ Search Patient
+  FrontDesk->>PatientSearchScreen: ✅ Search Patient
+  PatientSearchScreen->>SearchPatientApi: ✅ Search Patient
   activate SearchPatientApi
   SearchPatientApi->>PatientAccount: read
   SearchPatientApi->>PatientProfile: read
-  SearchPatientApi-->>PatientSearchScreen: Patient Search Screen
-  PatientSearchScreen-->>FrontDesk: Patient Search Screen
+  SearchPatientApi-->>PatientSearchScreen: 🖥️ Patient Search Screen
+  PatientSearchScreen-->>FrontDesk: 🖥️ Patient Search Screen
   deactivate SearchPatientApi

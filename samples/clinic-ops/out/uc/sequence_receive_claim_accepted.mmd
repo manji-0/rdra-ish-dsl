@@ -1,12 +1,18 @@
 sequenceDiagram
-  actor BillingSpecialist as Billing Specialist
-  participant System as システム
-  participant ClaimScreen as Claim Screen
-  participant Claim as Claim
+  box システム価値
+    actor BillingSpecialist as 👤 Billing Specialist
+  end
+  box システム境界
+    participant ClaimScreen as 🖥️ Claim Screen
+  end
+  box システム
+    participant System as 🧩 システム
+    participant Claim as 🗄️ Claim
+  end
 
-  Note over BillingSpecialist,Claim: Receive Claim Accepted
-  BillingSpecialist->System: Receive Claim Accepted
+  Note over BillingSpecialist,Claim: ✅ Receive Claim Accepted
+  BillingSpecialist->System: ✅ Receive Claim Accepted
   activate System
   System->>Claim: update
-  System-->>BillingSpecialist: Claim Screen
+  System-->>BillingSpecialist: 🖥️ Claim Screen
   deactivate System

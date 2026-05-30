@@ -1,16 +1,22 @@
 sequenceDiagram
-  actor CareCoordinator as Care Coordinator
-  participant CarePlanScreen as Care Plan Screen
-  participant CreateCarePlanApi as Create Care Plan API
-  participant CarePlan as Care Plan
-  participant Encounter as Encounter
+  box システム価値
+    actor CareCoordinator as 👤 Care Coordinator
+  end
+  box システム境界
+    participant CarePlanScreen as 🖥️ Care Plan Screen
+    participant CreateCarePlanApi as 🔌 Create Care Plan API
+  end
+  box システム
+    participant CarePlan as 🗄️ Care Plan
+    participant Encounter as 🗄️ Encounter
+  end
 
-  Note over CareCoordinator,Encounter: Create Care Plan
-  CareCoordinator->>CarePlanScreen: Create Care Plan
-  CarePlanScreen->>CreateCarePlanApi: Create Care Plan
+  Note over CareCoordinator,Encounter: ✅ Create Care Plan
+  CareCoordinator->>CarePlanScreen: ✅ Create Care Plan
+  CarePlanScreen->>CreateCarePlanApi: ✅ Create Care Plan
   activate CreateCarePlanApi
   CreateCarePlanApi->>Encounter: read
   CreateCarePlanApi->>CarePlan: create
-  CreateCarePlanApi-->>CarePlanScreen: Care Plan Screen
-  CarePlanScreen-->>CareCoordinator: Care Plan Screen
+  CreateCarePlanApi-->>CarePlanScreen: 🖥️ Care Plan Screen
+  CarePlanScreen-->>CareCoordinator: 🖥️ Care Plan Screen
   deactivate CreateCarePlanApi

@@ -1,19 +1,25 @@
 sequenceDiagram
-  actor ClinicAdmin as Clinic Administrator
-  participant ScheduleAdminScreen as Schedule Admin Screen
-  participant ManageProviderScheduleApi as Manage Provider Schedule API
-  participant Provider as Provider
-  participant ProviderSchedule as Provider Schedule
+  box システム価値
+    actor ClinicAdmin as 👤 Clinic Administrator
+  end
+  box システム境界
+    participant ScheduleAdminScreen as 🖥️ Schedule Admin Screen
+    participant ManageProviderScheduleApi as 🔌 Manage Provider Schedule API
+  end
+  box システム
+    participant Provider as 🗄️ Provider
+    participant ProviderSchedule as 🗄️ Provider Schedule
+  end
 
-  Note over ClinicAdmin,ProviderSchedule: Manage Provider Schedule
-  ClinicAdmin->>ScheduleAdminScreen: Manage Provider Schedule
-  ScheduleAdminScreen->>ManageProviderScheduleApi: Manage Provider Schedule
+  Note over ClinicAdmin,ProviderSchedule: ✅ Manage Provider Schedule
+  ClinicAdmin->>ScheduleAdminScreen: ✅ Manage Provider Schedule
+  ScheduleAdminScreen->>ManageProviderScheduleApi: ✅ Manage Provider Schedule
   activate ManageProviderScheduleApi
   rect rgb(245,245,245)
     Note right of ManageProviderScheduleApi: transaction (API atomic boundary)
     ManageProviderScheduleApi->>Provider: update
     ManageProviderScheduleApi->>ProviderSchedule: create
   end
-  ManageProviderScheduleApi-->>ScheduleAdminScreen: Schedule Admin Screen
-  ScheduleAdminScreen-->>ClinicAdmin: Schedule Admin Screen
+  ManageProviderScheduleApi-->>ScheduleAdminScreen: 🖥️ Schedule Admin Screen
+  ScheduleAdminScreen-->>ClinicAdmin: 🖥️ Schedule Admin Screen
   deactivate ManageProviderScheduleApi

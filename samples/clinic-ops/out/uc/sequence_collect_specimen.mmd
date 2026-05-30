@@ -1,14 +1,20 @@
 sequenceDiagram
-  actor Nurse as Nurse
-  participant SpecimenScreen as Specimen Collection Screen
-  participant CollectSpecimenApi as Collect Specimen API
-  participant ClinicalOrder as Clinical Order
+  box システム価値
+    actor Nurse as 👤 Nurse
+  end
+  box システム境界
+    participant SpecimenScreen as 🖥️ Specimen Collection Screen
+    participant CollectSpecimenApi as 🔌 Collect Specimen API
+  end
+  box システム
+    participant ClinicalOrder as 🗄️ Clinical Order
+  end
 
-  Note over Nurse,ClinicalOrder: Collect Specimen
-  Nurse->>SpecimenScreen: Collect Specimen
-  SpecimenScreen->>CollectSpecimenApi: Collect Specimen
+  Note over Nurse,ClinicalOrder: ✅ Collect Specimen
+  Nurse->>SpecimenScreen: ✅ Collect Specimen
+  SpecimenScreen->>CollectSpecimenApi: ✅ Collect Specimen
   activate CollectSpecimenApi
   CollectSpecimenApi->>ClinicalOrder: update
-  CollectSpecimenApi-->>SpecimenScreen: Specimen Collection Screen
-  SpecimenScreen-->>Nurse: Specimen Collection Screen
+  CollectSpecimenApi-->>SpecimenScreen: 🖥️ Specimen Collection Screen
+  SpecimenScreen-->>Nurse: 🖥️ Specimen Collection Screen
   deactivate CollectSpecimenApi

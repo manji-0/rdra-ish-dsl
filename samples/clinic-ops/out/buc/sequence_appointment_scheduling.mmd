@@ -1,101 +1,107 @@
 sequenceDiagram
-  actor FrontDesk as Front Desk Staff
-  participant System as システム
-  participant AppointmentNoticeScreen as Appointment Notice Screen
-  participant AppointmentScreen as Appointment Screen
-  participant ScheduleSearchScreen as Schedule Search Screen
-  participant AppointmentNoticeApi as Appointment Notice API
-  participant BookAppointmentApi as Book Appointment API
-  participant CancelAppointmentApi as Cancel Appointment API
-  participant RescheduleAppointmentApi as Reschedule Appointment API
-  participant ReserveAppointmentApi as Reserve Appointment API
-  participant SearchAvailabilityApi as Search Availability API
-  participant Appointment as Appointment
-  participant ClinicLocation as Clinic Location
-  participant Notification as Notification
-  participant PatientMessage as Patient Message
-  participant Provider as Provider
-  participant ProviderSchedule as Provider Schedule
+  box システム価値
+    actor FrontDesk as 👤 Front Desk Staff
+  end
+  box システム境界
+    participant AppointmentNoticeScreen as 🖥️ Appointment Notice Screen
+    participant AppointmentScreen as 🖥️ Appointment Screen
+    participant ScheduleSearchScreen as 🖥️ Schedule Search Screen
+    participant AppointmentNoticeApi as 🔌 Appointment Notice API
+    participant BookAppointmentApi as 🔌 Book Appointment API
+    participant CancelAppointmentApi as 🔌 Cancel Appointment API
+    participant RescheduleAppointmentApi as 🔌 Reschedule Appointment API
+    participant ReserveAppointmentApi as 🔌 Reserve Appointment API
+    participant SearchAvailabilityApi as 🔌 Search Availability API
+  end
+  box システム
+    participant System as 🧩 システム
+    participant Appointment as 🗄️ Appointment
+    participant ClinicLocation as 🗄️ Clinic Location
+    participant Notification as 🗄️ Notification
+    participant PatientMessage as 🗄️ Patient Message
+    participant Provider as 🗄️ Provider
+    participant ProviderSchedule as 🗄️ Provider Schedule
+  end
 
-  Note over FrontDesk,ProviderSchedule: Book Appointment
-  FrontDesk->>AppointmentScreen: Book Appointment
-  AppointmentScreen->>BookAppointmentApi: Book Appointment
+  Note over FrontDesk,ProviderSchedule: ✅ Book Appointment
+  FrontDesk->>AppointmentScreen: ✅ Book Appointment
+  AppointmentScreen->>BookAppointmentApi: ✅ Book Appointment
   activate BookAppointmentApi
   rect rgb(245,245,245)
     Note right of BookAppointmentApi: transaction (API atomic boundary)
     BookAppointmentApi->>Appointment: update
     BookAppointmentApi->>ProviderSchedule: update
   end
-  BookAppointmentApi-->>AppointmentScreen: Appointment Screen
-  AppointmentScreen-->>FrontDesk: Appointment Screen
+  BookAppointmentApi-->>AppointmentScreen: 🖥️ Appointment Screen
+  AppointmentScreen-->>FrontDesk: 🖥️ Appointment Screen
   deactivate BookAppointmentApi
 
-  Note over FrontDesk,ProviderSchedule: Cancel Appointment
-  FrontDesk->>AppointmentScreen: Cancel Appointment
-  AppointmentScreen->>CancelAppointmentApi: Cancel Appointment
+  Note over FrontDesk,ProviderSchedule: ✅ Cancel Appointment
+  FrontDesk->>AppointmentScreen: ✅ Cancel Appointment
+  AppointmentScreen->>CancelAppointmentApi: ✅ Cancel Appointment
   activate CancelAppointmentApi
   rect rgb(245,245,245)
     Note right of CancelAppointmentApi: transaction (API atomic boundary)
     CancelAppointmentApi->>Appointment: update
     CancelAppointmentApi->>ProviderSchedule: update
   end
-  CancelAppointmentApi-->>AppointmentScreen: Appointment Screen
-  AppointmentScreen-->>FrontDesk: Appointment Screen
+  CancelAppointmentApi-->>AppointmentScreen: 🖥️ Appointment Screen
+  AppointmentScreen-->>FrontDesk: 🖥️ Appointment Screen
   deactivate CancelAppointmentApi
 
-  Note over FrontDesk,ProviderSchedule: Mark No Show
-  FrontDesk->System: Mark No Show
+  Note over FrontDesk,ProviderSchedule: ✅ Mark No Show
+  FrontDesk->System: ✅ Mark No Show
   activate System
   System->>Appointment: update
-  System-->>FrontDesk: Appointment Screen
+  System-->>FrontDesk: 🖥️ Appointment Screen
   deactivate System
 
-  Note over FrontDesk,ProviderSchedule: Reschedule Appointment
-  FrontDesk->>AppointmentScreen: Reschedule Appointment
-  AppointmentScreen->>RescheduleAppointmentApi: Reschedule Appointment
+  Note over FrontDesk,ProviderSchedule: ✅ Reschedule Appointment
+  FrontDesk->>AppointmentScreen: ✅ Reschedule Appointment
+  AppointmentScreen->>RescheduleAppointmentApi: ✅ Reschedule Appointment
   activate RescheduleAppointmentApi
   rect rgb(245,245,245)
     Note right of RescheduleAppointmentApi: transaction (API atomic boundary)
     RescheduleAppointmentApi->>Appointment: update
     RescheduleAppointmentApi->>ProviderSchedule: update
   end
-  RescheduleAppointmentApi-->>AppointmentScreen: Appointment Screen
-  AppointmentScreen-->>FrontDesk: Appointment Screen
+  RescheduleAppointmentApi-->>AppointmentScreen: 🖥️ Appointment Screen
+  AppointmentScreen-->>FrontDesk: 🖥️ Appointment Screen
   deactivate RescheduleAppointmentApi
 
-  Note over FrontDesk,ProviderSchedule: Reserve Appointment
-  FrontDesk->>AppointmentScreen: Reserve Appointment
-  AppointmentScreen->>ReserveAppointmentApi: Reserve Appointment
+  Note over FrontDesk,ProviderSchedule: ✅ Reserve Appointment
+  FrontDesk->>AppointmentScreen: ✅ Reserve Appointment
+  AppointmentScreen->>ReserveAppointmentApi: ✅ Reserve Appointment
   activate ReserveAppointmentApi
   rect rgb(245,245,245)
     Note right of ReserveAppointmentApi: transaction (API atomic boundary)
     ReserveAppointmentApi->>Appointment: create
     ReserveAppointmentApi->>ProviderSchedule: update
   end
-  ReserveAppointmentApi-->>AppointmentScreen: Appointment Screen
-  AppointmentScreen-->>FrontDesk: Appointment Screen
+  ReserveAppointmentApi-->>AppointmentScreen: 🖥️ Appointment Screen
+  AppointmentScreen-->>FrontDesk: 🖥️ Appointment Screen
   deactivate ReserveAppointmentApi
 
-  Note over FrontDesk,ProviderSchedule: Search Availability
-  FrontDesk->>ScheduleSearchScreen: Search Availability
-  ScheduleSearchScreen->>SearchAvailabilityApi: Search Availability
+  Note over FrontDesk,ProviderSchedule: ✅ Search Availability
+  FrontDesk->>ScheduleSearchScreen: ✅ Search Availability
+  ScheduleSearchScreen->>SearchAvailabilityApi: ✅ Search Availability
   activate SearchAvailabilityApi
   SearchAvailabilityApi->>ProviderSchedule: read
   SearchAvailabilityApi->>Provider: read
   SearchAvailabilityApi->>ClinicLocation: read
-  SearchAvailabilityApi-->>ScheduleSearchScreen: Schedule Search Screen
-  ScheduleSearchScreen-->>FrontDesk: Schedule Search Screen
+  SearchAvailabilityApi-->>ScheduleSearchScreen: 🖥️ Schedule Search Screen
+  ScheduleSearchScreen-->>FrontDesk: 🖥️ Schedule Search Screen
   deactivate SearchAvailabilityApi
 
-  Note over FrontDesk,ProviderSchedule: Send Appointment Notice
-  FrontDesk->>AppointmentNoticeScreen: Send Appointment Notice
-  AppointmentNoticeScreen->>AppointmentNoticeApi: Send Appointment Notice
+  Note over FrontDesk,ProviderSchedule: ✅ Send Appointment Notice
+  FrontDesk->>AppointmentNoticeScreen: ✅ Send Appointment Notice
+  AppointmentNoticeScreen->>AppointmentNoticeApi: ✅ Send Appointment Notice
   activate AppointmentNoticeApi
   rect rgb(245,245,245)
     Note right of AppointmentNoticeApi: transaction (API atomic boundary)
     AppointmentNoticeApi->>Notification: create
     AppointmentNoticeApi->>PatientMessage: create
   end
-  AppointmentNoticeApi-->>AppointmentNoticeScreen: Appointment Notice Screen
-  AppointmentNoticeScreen-->>FrontDesk: Appointment Notice Screen
+  AppointmentNoticeApi-->>AppointmentNoticeScreen: 🖥️ Appointment Notice Screen
+  AppointmentNoticeScreen-->>FrontDesk: 🖥️ Appointment Notice Screen
   deactivate AppointmentNoticeApi

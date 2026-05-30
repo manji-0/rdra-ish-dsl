@@ -1,4 +1,7 @@
 stateDiagram-v2
   [*] --> Normal
-  Normal --> Scheduled : Restock Scheduled
-  Scheduled --> Blocked : Restock Blocked
+  state "🔄 Normal" as Normal
+  state "🔄 Scheduled" as Scheduled
+  state "🔄 Blocked" as Blocked
+  Normal --> Scheduled : ⚡ Restock Scheduled
+  Scheduled --> Blocked : ⚡ Restock Blocked

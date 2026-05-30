@@ -1,20 +1,26 @@
 ---
 source: crates/rdra-ish-emit/src/plantuml.rs
-assertion_line: 1154
+assertion_line: 1407
 expression: result
 ---
 @startuml
 !theme plain
 
-actor "顧客" as Customer
-participant "システム" as System
-boundary "注文完了画面" as OrderCompleteScreen
-database "カート" as Cart
-database "注文" as Order
-database "注文明細" as OrderLine
+box "システム価値" #E3F2FD
+actor "👤 顧客" as Customer
+end box
+box "システム境界" #E0F7FA
+boundary "🖥️ 注文完了画面" as OrderCompleteScreen
+end box
+box "システム" #F3E5F5
+participant "🧩 システム" as System
+database "🗄️ カート" as Cart
+database "🗄️ 注文" as Order
+database "🗄️ 注文明細" as OrderLine
+end box
 
-== 注文を確定する ==
-Customer -> System : 注文を確定する
+== ✅ 注文を確定する ==
+Customer -> System : ✅ 注文を確定する
 activate System
 group transaction (inferred from FK)
 System -> Order : create
@@ -22,7 +28,7 @@ System -> OrderLine : create
 end
 System -> Cart : update
 note right : FK非連結 — 別TX？API境界で明示を
-System --> Customer : 注文完了画面
+System --> Customer : 🖥️ 注文完了画面
 deactivate System
 
 @enduml

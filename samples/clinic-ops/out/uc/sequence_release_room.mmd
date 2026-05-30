@@ -1,12 +1,18 @@
 sequenceDiagram
-  actor ClinicAdmin as Clinic Administrator
-  participant System as システム
-  participant RoomAdminScreen as Room Admin Screen
-  participant Room as Room
+  box システム価値
+    actor ClinicAdmin as 👤 Clinic Administrator
+  end
+  box システム境界
+    participant RoomAdminScreen as 🖥️ Room Admin Screen
+  end
+  box システム
+    participant System as 🧩 システム
+    participant Room as 🗄️ Room
+  end
 
-  Note over ClinicAdmin,Room: Release Room
-  ClinicAdmin->System: Release Room
+  Note over ClinicAdmin,Room: ✅ Release Room
+  ClinicAdmin->System: ✅ Release Room
   activate System
   System->>Room: update
-  System-->>ClinicAdmin: Room Admin Screen
+  System-->>ClinicAdmin: 🖥️ Room Admin Screen
   deactivate System

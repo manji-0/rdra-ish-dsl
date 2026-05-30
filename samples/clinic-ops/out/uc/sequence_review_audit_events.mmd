@@ -1,16 +1,22 @@
 sequenceDiagram
-  actor ClinicAdmin as Clinic Administrator
-  participant AuditReviewScreen as Audit Review Screen
-  participant AuditApi as Audit API
-  participant AuditEvent as Audit Event
-  participant PatientAccount as Patient Account
+  box システム価値
+    actor ClinicAdmin as 👤 Clinic Administrator
+  end
+  box システム境界
+    participant AuditReviewScreen as 🖥️ Audit Review Screen
+    participant AuditApi as 🔌 Audit API
+  end
+  box システム
+    participant AuditEvent as 🗄️ Audit Event
+    participant PatientAccount as 🗄️ Patient Account
+  end
 
-  Note over ClinicAdmin,PatientAccount: Review Audit Events
-  ClinicAdmin->>AuditReviewScreen: Review Audit Events
-  AuditReviewScreen->>AuditApi: Review Audit Events
+  Note over ClinicAdmin,PatientAccount: ✅ Review Audit Events
+  ClinicAdmin->>AuditReviewScreen: ✅ Review Audit Events
+  AuditReviewScreen->>AuditApi: ✅ Review Audit Events
   activate AuditApi
   AuditApi->>AuditEvent: read
   AuditApi->>PatientAccount: read
-  AuditApi-->>AuditReviewScreen: Audit Review Screen
-  AuditReviewScreen-->>ClinicAdmin: Audit Review Screen
+  AuditApi-->>AuditReviewScreen: 🖥️ Audit Review Screen
+  AuditReviewScreen-->>ClinicAdmin: 🖥️ Audit Review Screen
   deactivate AuditApi

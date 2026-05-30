@@ -1,161 +1,161 @@
 flowchart LR
-  ev__EvAppointmentCancelled{"Appointment Cancelled"}
-  uc__CancelAppointment(["Cancel Appointment"])
+  ev__EvAppointmentCancelled{"⚡ Appointment Cancelled"}
+  uc__CancelAppointment(["✅ Cancel Appointment"])
   uc__CancelAppointment -.->|raises| ev__EvAppointmentCancelled
-  uc__SendAppointmentNotice(["Send Appointment Notice"])
+  uc__SendAppointmentNotice(["✅ Send Appointment Notice"])
   ev__EvAppointmentCancelled -.->|triggers| uc__SendAppointmentNotice
-  st__Apptscheduled("Appointment Scheduled")
-  st__Apptcancelled("Appointment Cancelled")
-  st__Apptscheduled -->|Appointment Cancelled| st__Apptcancelled
-  ev__EvAppointmentCheckedIn{"Appointment Checked In"}
-  uc__CheckInPatient(["Check In Patient"])
+  st__Apptscheduled("🔄 Appointment Scheduled")
+  st__Apptcancelled("🔄 Appointment Cancelled")
+  st__Apptscheduled -->|⚡ Appointment Cancelled| st__Apptcancelled
+  ev__EvAppointmentCheckedIn{"⚡ Appointment Checked In"}
+  uc__CheckInPatient(["✅ Check In Patient"])
   uc__CheckInPatient -.->|raises| ev__EvAppointmentCheckedIn
-  uc__OpenEncounter(["Open Encounter"])
+  uc__OpenEncounter(["✅ Open Encounter"])
   ev__EvAppointmentCheckedIn -.->|triggers| uc__OpenEncounter
-  uc__PrepareEncounter(["Prepare Encounter"])
+  uc__PrepareEncounter(["✅ Prepare Encounter"])
   ev__EvAppointmentCheckedIn -.->|triggers| uc__PrepareEncounter
-  st__Apptcheckedin("Appointment Checked In")
-  st__Apptscheduled -->|Appointment Checked In| st__Apptcheckedin
-  ev__EvAppointmentCompleted{"Appointment Completed"}
-  uc__CompleteAppointment(["Complete Appointment"])
+  st__Apptcheckedin("🔄 Appointment Checked In")
+  st__Apptscheduled -->|⚡ Appointment Checked In| st__Apptcheckedin
+  ev__EvAppointmentCompleted{"⚡ Appointment Completed"}
+  uc__CompleteAppointment(["✅ Complete Appointment"])
   uc__CompleteAppointment -.->|raises| ev__EvAppointmentCompleted
-  st__Apptcompleted("Appointment Completed")
-  st__Apptcheckedin -->|Appointment Completed| st__Apptcompleted
-  ev__EvAppointmentNoShow{"Appointment Marked No Show"}
-  uc__MarkNoShow(["Mark No Show"])
+  st__Apptcompleted("🔄 Appointment Completed")
+  st__Apptcheckedin -->|⚡ Appointment Completed| st__Apptcompleted
+  ev__EvAppointmentNoShow{"⚡ Appointment Marked No Show"}
+  uc__MarkNoShow(["✅ Mark No Show"])
   uc__MarkNoShow -.->|raises| ev__EvAppointmentNoShow
-  st__Apptnoshow("Appointment No Show")
-  st__Apptscheduled -->|Appointment Marked No Show| st__Apptnoshow
-  ev__EvAppointmentRescheduled{"Appointment Rescheduled"}
-  uc__RescheduleAppointment(["Reschedule Appointment"])
+  st__Apptnoshow("🔄 Appointment No Show")
+  st__Apptscheduled -->|⚡ Appointment Marked No Show| st__Apptnoshow
+  ev__EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
+  uc__RescheduleAppointment(["✅ Reschedule Appointment"])
   uc__RescheduleAppointment -.->|raises| ev__EvAppointmentRescheduled
   ev__EvAppointmentRescheduled -.->|triggers| uc__SendAppointmentNotice
-  st__Apptscheduled -->|Appointment Rescheduled| st__Apptscheduled
-  ev__EvAppointmentScheduled{"Appointment Scheduled"}
-  uc__BookAppointment(["Book Appointment"])
+  st__Apptscheduled -->|⚡ Appointment Rescheduled| st__Apptscheduled
+  ev__EvAppointmentScheduled{"⚡ Appointment Scheduled"}
+  uc__BookAppointment(["✅ Book Appointment"])
   uc__BookAppointment -.->|raises| ev__EvAppointmentScheduled
-  uc__ScheduleFollowUpVisit(["Schedule Follow-Up Visit"])
+  uc__ScheduleFollowUpVisit(["✅ Schedule Follow-Up Visit"])
   uc__ScheduleFollowUpVisit -.->|raises| ev__EvAppointmentScheduled
   ev__EvAppointmentScheduled -.->|triggers| uc__SendAppointmentNotice
-  uc__SendIntakeForms(["Send Intake Forms"])
+  uc__SendIntakeForms(["✅ Send Intake Forms"])
   ev__EvAppointmentScheduled -.->|triggers| uc__SendIntakeForms
-  st__Apptrequested("Appointment Requested")
-  st__Apptrequested -->|Appointment Scheduled| st__Apptscheduled
-  ev__EvCarePlanClosed{"Care Plan Closed"}
-  uc__CloseCarePlan(["Close Care Plan"])
+  st__Apptrequested("🔄 Appointment Requested")
+  st__Apptrequested -->|⚡ Appointment Scheduled| st__Apptscheduled
+  ev__EvCarePlanClosed{"⚡ Care Plan Closed"}
+  uc__CloseCarePlan(["✅ Close Care Plan"])
   uc__CloseCarePlan -.->|raises| ev__EvCarePlanClosed
-  st__Caremonitoring("Care Plan Monitoring")
-  st__Careclosed("Care Plan Closed")
-  st__Caremonitoring -->|Care Plan Closed| st__Careclosed
-  ev__EvCarePlanMonitoring{"Care Plan Monitoring"}
-  uc__ReviewPatientResponse(["Review Patient Response"])
+  st__Caremonitoring("🔄 Care Plan Monitoring")
+  st__Careclosed("🔄 Care Plan Closed")
+  st__Caremonitoring -->|⚡ Care Plan Closed| st__Careclosed
+  ev__EvCarePlanMonitoring{"⚡ Care Plan Monitoring"}
+  uc__ReviewPatientResponse(["✅ Review Patient Response"])
   uc__ReviewPatientResponse -.->|raises| ev__EvCarePlanMonitoring
-  st__Careopen("Care Plan Open")
-  st__Careopen -->|Care Plan Monitoring| st__Caremonitoring
-  ev__EvClaimAccepted{"Claim Accepted"}
-  uc__ReceiveClaimAccepted(["Receive Claim Accepted"])
+  st__Careopen("🔄 Care Plan Open")
+  st__Careopen -->|⚡ Care Plan Monitoring| st__Caremonitoring
+  ev__EvClaimAccepted{"⚡ Claim Accepted"}
+  uc__ReceiveClaimAccepted(["✅ Receive Claim Accepted"])
   uc__ReceiveClaimAccepted -.->|raises| ev__EvClaimAccepted
-  st__Claimsubmitted("Claim Submitted")
-  st__Claimaccepted("Claim Accepted")
-  st__Claimsubmitted -->|Claim Accepted| st__Claimaccepted
-  ev__EvClaimDenied{"Claim Denied"}
-  uc__RecordClaimDenial(["Record Claim Denial"])
+  st__Claimsubmitted("🔄 Claim Submitted")
+  st__Claimaccepted("🔄 Claim Accepted")
+  st__Claimsubmitted -->|⚡ Claim Accepted| st__Claimaccepted
+  ev__EvClaimDenied{"⚡ Claim Denied"}
+  uc__RecordClaimDenial(["✅ Record Claim Denial"])
   uc__RecordClaimDenial -.->|raises| ev__EvClaimDenied
-  st__Claimdenied("Claim Denied")
-  st__Claimsubmitted -->|Claim Denied| st__Claimdenied
-  ev__EvClaimPaid{"Claim Paid"}
-  uc__PostPayment(["Post Payment"])
+  st__Claimdenied("🔄 Claim Denied")
+  st__Claimsubmitted -->|⚡ Claim Denied| st__Claimdenied
+  ev__EvClaimPaid{"⚡ Claim Paid"}
+  uc__PostPayment(["✅ Post Payment"])
   uc__PostPayment -.->|raises| ev__EvClaimPaid
-  st__Claimpaid("Claim Paid")
-  st__Claimaccepted -->|Claim Paid| st__Claimpaid
-  ev__EvClaimSubmitted{"Claim Submitted"}
-  uc__SubmitClaim(["Submit Claim"])
+  st__Claimpaid("🔄 Claim Paid")
+  st__Claimaccepted -->|⚡ Claim Paid| st__Claimpaid
+  ev__EvClaimSubmitted{"⚡ Claim Submitted"}
+  uc__SubmitClaim(["✅ Submit Claim"])
   uc__SubmitClaim -.->|raises| ev__EvClaimSubmitted
-  st__Claimdraft("Claim Draft")
-  st__Claimdraft -->|Claim Submitted| st__Claimsubmitted
-  ev__EvClinicalOrderCancelled{"Clinical Order Cancelled"}
-  uc__CancelClinicalOrder(["Cancel Clinical Order"])
+  st__Claimdraft("🔄 Claim Draft")
+  st__Claimdraft -->|⚡ Claim Submitted| st__Claimsubmitted
+  ev__EvClinicalOrderCancelled{"⚡ Clinical Order Cancelled"}
+  uc__CancelClinicalOrder(["✅ Cancel Clinical Order"])
   uc__CancelClinicalOrder -.->|raises| ev__EvClinicalOrderCancelled
-  st__Clordered("Clinical Order Placed")
-  st__Clcancelled("Clinical Order Cancelled")
-  st__Clordered -->|Clinical Order Cancelled| st__Clcancelled
-  ev__EvClinicalOrderCollected{"Specimen Collected"}
-  uc__CollectSpecimen(["Collect Specimen"])
+  st__Clordered("🔄 Clinical Order Placed")
+  st__Clcancelled("🔄 Clinical Order Cancelled")
+  st__Clordered -->|⚡ Clinical Order Cancelled| st__Clcancelled
+  ev__EvClinicalOrderCollected{"⚡ Specimen Collected"}
+  uc__CollectSpecimen(["✅ Collect Specimen"])
   uc__CollectSpecimen -.->|raises| ev__EvClinicalOrderCollected
-  st__Clcollected("Specimen Collected")
-  st__Clordered -->|Specimen Collected| st__Clcollected
-  ev__EvClinicalOrderResulted{"Clinical Result Received"}
-  uc__ReceiveLabResult(["Receive Lab Result"])
+  st__Clcollected("🔄 Specimen Collected")
+  st__Clordered -->|⚡ Specimen Collected| st__Clcollected
+  ev__EvClinicalOrderResulted{"⚡ Clinical Result Received"}
+  uc__ReceiveLabResult(["✅ Receive Lab Result"])
   uc__ReceiveLabResult -.->|raises| ev__EvClinicalOrderResulted
-  st__Clresulted("Result Received")
-  st__Clcollected -->|Clinical Result Received| st__Clresulted
-  ev__EvClinicalOrderReviewed{"Clinical Result Reviewed"}
-  uc__ReviewLabResult(["Review Lab Result"])
+  st__Clresulted("🔄 Result Received")
+  st__Clcollected -->|⚡ Clinical Result Received| st__Clresulted
+  ev__EvClinicalOrderReviewed{"⚡ Clinical Result Reviewed"}
+  uc__ReviewLabResult(["✅ Review Lab Result"])
   uc__ReviewLabResult -.->|raises| ev__EvClinicalOrderReviewed
-  uc__NotifyCriticalResult(["Notify Critical Result"])
+  uc__NotifyCriticalResult(["✅ Notify Critical Result"])
   ev__EvClinicalOrderReviewed -.->|triggers| uc__NotifyCriticalResult
-  uc__NotifyPatientResult(["Notify Patient Result"])
+  uc__NotifyPatientResult(["✅ Notify Patient Result"])
   ev__EvClinicalOrderReviewed -.->|triggers| uc__NotifyPatientResult
-  st__Clreviewed("Result Reviewed")
-  st__Clresulted -->|Clinical Result Reviewed| st__Clreviewed
-  ev__EvEncounterAmended{"Encounter Amended"}
-  uc__AmendEncounter(["Amend Signed Encounter"])
+  st__Clreviewed("🔄 Result Reviewed")
+  st__Clresulted -->|⚡ Clinical Result Reviewed| st__Clreviewed
+  ev__EvEncounterAmended{"⚡ Encounter Amended"}
+  uc__AmendEncounter(["✅ Amend Signed Encounter"])
   uc__AmendEncounter -.->|raises| ev__EvEncounterAmended
-  st__Encsigned("Encounter Signed")
-  st__Encamended("Encounter Amended")
-  st__Encsigned -->|Encounter Amended| st__Encamended
-  ev__EvEncounterDocumented{"Encounter Documented"}
-  uc__DocumentAssessment(["Document Assessment"])
+  st__Encsigned("🔄 Encounter Signed")
+  st__Encamended("🔄 Encounter Amended")
+  st__Encsigned -->|⚡ Encounter Amended| st__Encamended
+  ev__EvEncounterDocumented{"⚡ Encounter Documented"}
+  uc__DocumentAssessment(["✅ Document Assessment"])
   uc__DocumentAssessment -.->|raises| ev__EvEncounterDocumented
-  st__Encopen("Encounter Open")
-  st__Encdocumented("Encounter Documented")
-  st__Encopen -->|Encounter Documented| st__Encdocumented
-  ev__EvEncounterSigned{"Encounter Signed"}
-  uc__SignEncounter(["Sign Encounter"])
+  st__Encopen("🔄 Encounter Open")
+  st__Encdocumented("🔄 Encounter Documented")
+  st__Encopen -->|⚡ Encounter Documented| st__Encdocumented
+  ev__EvEncounterSigned{"⚡ Encounter Signed"}
+  uc__SignEncounter(["✅ Sign Encounter"])
   uc__SignEncounter -.->|raises| ev__EvEncounterSigned
   ev__EvEncounterSigned -.->|triggers| uc__CompleteAppointment
-  uc__CreateCarePlan(["Create Care Plan"])
+  uc__CreateCarePlan(["✅ Create Care Plan"])
   ev__EvEncounterSigned -.->|triggers| uc__CreateCarePlan
-  uc__CreateCharge(["Create Charge"])
+  uc__CreateCharge(["✅ Create Charge"])
   ev__EvEncounterSigned -.->|triggers| uc__CreateCharge
-  uc__PlaceLabOrder(["Place Lab Order"])
+  uc__PlaceLabOrder(["✅ Place Lab Order"])
   ev__EvEncounterSigned -.->|triggers| uc__PlaceLabOrder
-  st__Encdocumented -->|Encounter Signed| st__Encsigned
-  ev__EvIntakeCompleted{"Intake Completed"}
-  uc__CompleteIntakeForms(["Complete Intake Forms"])
+  st__Encdocumented -->|⚡ Encounter Signed| st__Encsigned
+  ev__EvIntakeCompleted{"⚡ Intake Completed"}
+  uc__CompleteIntakeForms(["✅ Complete Intake Forms"])
   uc__CompleteIntakeForms -.->|raises| ev__EvIntakeCompleted
-  st__Intakesent("Intake Sent")
-  st__Intakecompleted("Intake Completed")
-  st__Intakesent -->|Intake Completed| st__Intakecompleted
-  ev__EvIntakeExpired{"Intake Expired"}
-  uc__ExpireIntakeForms(["Expire Intake Forms"])
+  st__Intakesent("🔄 Intake Sent")
+  st__Intakecompleted("🔄 Intake Completed")
+  st__Intakesent -->|⚡ Intake Completed| st__Intakecompleted
+  ev__EvIntakeExpired{"⚡ Intake Expired"}
+  uc__ExpireIntakeForms(["✅ Expire Intake Forms"])
   uc__ExpireIntakeForms -.->|raises| ev__EvIntakeExpired
-  st__Intakeexpired("Intake Expired")
-  st__Intakesent -->|Intake Expired| st__Intakeexpired
-  ev__EvPatientArchived{"Patient Archived"}
-  uc__ArchivePatient(["Archive Patient"])
+  st__Intakeexpired("🔄 Intake Expired")
+  st__Intakesent -->|⚡ Intake Expired| st__Intakeexpired
+  ev__EvPatientArchived{"⚡ Patient Archived"}
+  uc__ArchivePatient(["✅ Archive Patient"])
   uc__ArchivePatient -.->|raises| ev__EvPatientArchived
-  st__Patientactive("Active Patient")
-  st__Patientinactive("Inactive Patient")
-  st__Patientactive -->|Patient Archived| st__Patientinactive
-  ev__EvPatientMerged{"Patient Merged"}
-  uc__MergeDuplicatePatient(["Merge Duplicate Patient"])
+  st__Patientactive("🔄 Active Patient")
+  st__Patientinactive("🔄 Inactive Patient")
+  st__Patientactive -->|⚡ Patient Archived| st__Patientinactive
+  ev__EvPatientMerged{"⚡ Patient Merged"}
+  uc__MergeDuplicatePatient(["✅ Merge Duplicate Patient"])
   uc__MergeDuplicatePatient -.->|raises| ev__EvPatientMerged
-  st__Patientmerged("Merged Patient")
-  st__Patientactive -->|Patient Merged| st__Patientmerged
-  ev__EvPrescriptionCancelled{"Prescription Cancelled"}
-  uc__CancelPrescription(["Cancel Prescription"])
+  st__Patientmerged("🔄 Merged Patient")
+  st__Patientactive -->|⚡ Patient Merged| st__Patientmerged
+  ev__EvPrescriptionCancelled{"⚡ Prescription Cancelled"}
+  uc__CancelPrescription(["✅ Cancel Prescription"])
   uc__CancelPrescription -.->|raises| ev__EvPrescriptionCancelled
-  st__Rxdrafted("Prescription Drafted")
-  st__Rxcancelled("Prescription Cancelled")
-  st__Rxdrafted -->|Prescription Cancelled| st__Rxcancelled
-  ev__EvPrescriptionDispensed{"Prescription Dispensed"}
-  uc__ConfirmDispense(["Confirm Dispense"])
+  st__Rxdrafted("🔄 Prescription Drafted")
+  st__Rxcancelled("🔄 Prescription Cancelled")
+  st__Rxdrafted -->|⚡ Prescription Cancelled| st__Rxcancelled
+  ev__EvPrescriptionDispensed{"⚡ Prescription Dispensed"}
+  uc__ConfirmDispense(["✅ Confirm Dispense"])
   uc__ConfirmDispense -.->|raises| ev__EvPrescriptionDispensed
-  st__Rxsent("Prescription Sent")
-  st__Rxdispensed("Prescription Dispensed")
-  st__Rxsent -->|Prescription Dispensed| st__Rxdispensed
-  ev__EvPrescriptionSent{"Prescription Sent"}
-  uc__SendPrescription(["Send Prescription"])
+  st__Rxsent("🔄 Prescription Sent")
+  st__Rxdispensed("🔄 Prescription Dispensed")
+  st__Rxsent -->|⚡ Prescription Dispensed| st__Rxdispensed
+  ev__EvPrescriptionSent{"⚡ Prescription Sent"}
+  uc__SendPrescription(["✅ Send Prescription"])
   uc__SendPrescription -.->|raises| ev__EvPrescriptionSent
-  st__Rxdrafted -->|Prescription Sent| st__Rxsent
+  st__Rxdrafted -->|⚡ Prescription Sent| st__Rxsent

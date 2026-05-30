@@ -1,12 +1,18 @@
 sequenceDiagram
-  actor Patient as Patient
-  participant System as システム
-  participant IntakePortalScreen as Intake Portal Screen
-  participant IntakePacket as Intake Packet
+  box システム価値
+    actor Patient as 👤 Patient
+  end
+  box システム境界
+    participant IntakePortalScreen as 🖥️ Intake Portal Screen
+  end
+  box システム
+    participant System as 🧩 システム
+    participant IntakePacket as 🗄️ Intake Packet
+  end
 
-  Note over Patient,IntakePacket: Complete Intake Forms
-  Patient->System: Complete Intake Forms
+  Note over Patient,IntakePacket: ✅ Complete Intake Forms
+  Patient->System: ✅ Complete Intake Forms
   activate System
   System->>IntakePacket: update
-  System-->>Patient: Intake Portal Screen
+  System-->>Patient: 🖥️ Intake Portal Screen
   deactivate System

@@ -1,14 +1,20 @@
 sequenceDiagram
-  actor Clinician as Clinician
-  participant PrescriptionScreen as Prescription Screen
-  participant SendPrescriptionApi as Send Prescription API
-  participant Prescription as Prescription
+  box システム価値
+    actor Clinician as 👤 Clinician
+  end
+  box システム境界
+    participant PrescriptionScreen as 🖥️ Prescription Screen
+    participant SendPrescriptionApi as 🔌 Send Prescription API
+  end
+  box システム
+    participant Prescription as 🗄️ Prescription
+  end
 
-  Note over Clinician,Prescription: Send Prescription
-  Clinician->>PrescriptionScreen: Send Prescription
-  PrescriptionScreen->>SendPrescriptionApi: Send Prescription
+  Note over Clinician,Prescription: ✅ Send Prescription
+  Clinician->>PrescriptionScreen: ✅ Send Prescription
+  PrescriptionScreen->>SendPrescriptionApi: ✅ Send Prescription
   activate SendPrescriptionApi
   SendPrescriptionApi->>Prescription: update
-  SendPrescriptionApi-->>PrescriptionScreen: Prescription Screen
-  PrescriptionScreen-->>Clinician: Prescription Screen
+  SendPrescriptionApi-->>PrescriptionScreen: 🖥️ Prescription Screen
+  PrescriptionScreen-->>Clinician: 🖥️ Prescription Screen
   deactivate SendPrescriptionApi

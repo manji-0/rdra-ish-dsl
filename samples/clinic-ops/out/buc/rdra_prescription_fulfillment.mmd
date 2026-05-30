@@ -1,22 +1,22 @@
 graph TD
   Clinician(["👤 Clinician"])
   Nurse(["👤 Nurse"])
-  CancelPrescription(["Cancel Prescription"])
-  ConfirmDispense(["Confirm Dispense"])
-  DraftPrescription(["Draft Prescription"])
-  RefillPrescription(["Refill Prescription"])
-  SearchMedication(["Search Medication"])
-  SendPrescription(["Send Prescription"])
+  CancelPrescription(["✅ Cancel Prescription"])
+  ConfirmDispense(["✅ Confirm Dispense"])
+  DraftPrescription(["✅ Draft Prescription"])
+  RefillPrescription(["✅ Refill Prescription"])
+  SearchMedication(["✅ Search Medication"])
+  SendPrescription(["✅ Send Prescription"])
   BucPrescriptionFulfillment["📦 Fulfill Prescriptions"]
-  Encounter[("🗄 Encounter")]
-  Medication[("🗄 Medication")]
-  Prescription[("🗄 Prescription")]
-  MedicationSearchScreen[["Medication Search Screen"]]
-  PharmacyStatusScreen[["Pharmacy Status Screen"]]
-  PrescriptionScreen[["Prescription Screen"]]
-  EvPrescriptionCancelled{"Prescription Cancelled"}
-  EvPrescriptionDispensed{"Prescription Dispensed"}
-  EvPrescriptionSent{"Prescription Sent"}
+  Encounter[("🗄️ Encounter")]
+  Medication[("🗄️ Medication")]
+  Prescription[("🗄️ Prescription")]
+  MedicationSearchScreen[["🖥️ Medication Search Screen"]]
+  PharmacyStatusScreen[["🖥️ Pharmacy Status Screen"]]
+  PrescriptionScreen[["🖥️ Prescription Screen"]]
+  EvPrescriptionCancelled{"⚡ Prescription Cancelled"}
+  EvPrescriptionDispensed{"⚡ Prescription Dispensed"}
+  EvPrescriptionSent{"⚡ Prescription Sent"}
   Nurse --> BucPrescriptionFulfillment
   Nurse --> ConfirmDispense
   Clinician --> BucPrescriptionFulfillment

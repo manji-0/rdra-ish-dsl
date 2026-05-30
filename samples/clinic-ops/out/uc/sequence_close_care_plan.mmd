@@ -1,12 +1,18 @@
 sequenceDiagram
-  actor CareCoordinator as Care Coordinator
-  participant System as システム
-  participant CarePlanScreen as Care Plan Screen
-  participant CarePlan as Care Plan
+  box システム価値
+    actor CareCoordinator as 👤 Care Coordinator
+  end
+  box システム境界
+    participant CarePlanScreen as 🖥️ Care Plan Screen
+  end
+  box システム
+    participant System as 🧩 システム
+    participant CarePlan as 🗄️ Care Plan
+  end
 
-  Note over CareCoordinator,CarePlan: Close Care Plan
-  CareCoordinator->System: Close Care Plan
+  Note over CareCoordinator,CarePlan: ✅ Close Care Plan
+  CareCoordinator->System: ✅ Close Care Plan
   activate System
   System->>CarePlan: update
-  System-->>CareCoordinator: Care Plan Screen
+  System-->>CareCoordinator: 🖥️ Care Plan Screen
   deactivate System

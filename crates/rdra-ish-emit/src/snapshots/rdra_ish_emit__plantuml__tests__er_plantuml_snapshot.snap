@@ -1,17 +1,17 @@
 ---
-source: crates/rdra-emit/src/plantuml.rs
-assertion_line: 493
+source: crates/rdra-ish-emit/src/plantuml.rs
+assertion_line: 1322
 expression: result
 ---
 @startuml
 !theme plain
 
-entity "顧客" as Customer {
+entity "🗄️ 顧客" as Customer {
   *id : Int <<PK>>
   --
   name : String
 }
-entity "注文" as Order {
+entity "🗄️ 注文" as Order {
   *id : Int <<PK>>
   --
   total : Money

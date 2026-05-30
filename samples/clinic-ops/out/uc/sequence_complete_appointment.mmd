@@ -1,19 +1,25 @@
 sequenceDiagram
-  actor Nurse as Nurse
-  participant EncounterWorkspaceScreen as Encounter Workspace
-  participant CompleteAppointmentApi as Complete Appointment API
-  participant Appointment as Appointment
-  participant Room as Room
+  box システム価値
+    actor Nurse as 👤 Nurse
+  end
+  box システム境界
+    participant EncounterWorkspaceScreen as 🖥️ Encounter Workspace
+    participant CompleteAppointmentApi as 🔌 Complete Appointment API
+  end
+  box システム
+    participant Appointment as 🗄️ Appointment
+    participant Room as 🗄️ Room
+  end
 
-  Note over Nurse,Room: Complete Appointment
-  Nurse->>EncounterWorkspaceScreen: Complete Appointment
-  EncounterWorkspaceScreen->>CompleteAppointmentApi: Complete Appointment
+  Note over Nurse,Room: ✅ Complete Appointment
+  Nurse->>EncounterWorkspaceScreen: ✅ Complete Appointment
+  EncounterWorkspaceScreen->>CompleteAppointmentApi: ✅ Complete Appointment
   activate CompleteAppointmentApi
   rect rgb(245,245,245)
     Note right of CompleteAppointmentApi: transaction (API atomic boundary)
     CompleteAppointmentApi->>Room: update
     CompleteAppointmentApi->>Appointment: update
   end
-  CompleteAppointmentApi-->>EncounterWorkspaceScreen: Encounter Workspace
-  EncounterWorkspaceScreen-->>Nurse: Encounter Workspace
+  CompleteAppointmentApi-->>EncounterWorkspaceScreen: 🖥️ Encounter Workspace
+  EncounterWorkspaceScreen-->>Nurse: 🖥️ Encounter Workspace
   deactivate CompleteAppointmentApi

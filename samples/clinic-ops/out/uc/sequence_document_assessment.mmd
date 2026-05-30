@@ -1,19 +1,25 @@
 sequenceDiagram
-  actor Clinician as Clinician
-  participant DiagnosisScreen as Diagnosis Screen
-  participant DocumentAssessmentApi as Document Assessment API
-  participant Diagnosis as Diagnosis
-  participant Encounter as Encounter
+  box システム価値
+    actor Clinician as 👤 Clinician
+  end
+  box システム境界
+    participant DiagnosisScreen as 🖥️ Diagnosis Screen
+    participant DocumentAssessmentApi as 🔌 Document Assessment API
+  end
+  box システム
+    participant Diagnosis as 🗄️ Diagnosis
+    participant Encounter as 🗄️ Encounter
+  end
 
-  Note over Clinician,Encounter: Document Assessment
-  Clinician->>DiagnosisScreen: Document Assessment
-  DiagnosisScreen->>DocumentAssessmentApi: Document Assessment
+  Note over Clinician,Encounter: ✅ Document Assessment
+  Clinician->>DiagnosisScreen: ✅ Document Assessment
+  DiagnosisScreen->>DocumentAssessmentApi: ✅ Document Assessment
   activate DocumentAssessmentApi
   rect rgb(245,245,245)
     Note right of DocumentAssessmentApi: transaction (API atomic boundary)
     DocumentAssessmentApi->>Encounter: update
     DocumentAssessmentApi->>Diagnosis: create
   end
-  DocumentAssessmentApi-->>DiagnosisScreen: Diagnosis Screen
-  DiagnosisScreen-->>Clinician: Diagnosis Screen
+  DocumentAssessmentApi-->>DiagnosisScreen: 🖥️ Diagnosis Screen
+  DiagnosisScreen-->>Clinician: 🖥️ Diagnosis Screen
   deactivate DocumentAssessmentApi

@@ -1,12 +1,18 @@
 sequenceDiagram
-  actor FrontDesk as Front Desk Staff
-  participant System as システム
-  participant IntakePortalScreen as Intake Portal Screen
-  participant IntakePacket as Intake Packet
+  box システム価値
+    actor FrontDesk as 👤 Front Desk Staff
+  end
+  box システム境界
+    participant IntakePortalScreen as 🖥️ Intake Portal Screen
+  end
+  box システム
+    participant System as 🧩 システム
+    participant IntakePacket as 🗄️ Intake Packet
+  end
 
-  Note over FrontDesk,IntakePacket: Expire Intake Forms
-  FrontDesk->System: Expire Intake Forms
+  Note over FrontDesk,IntakePacket: ✅ Expire Intake Forms
+  FrontDesk->System: ✅ Expire Intake Forms
   activate System
   System->>IntakePacket: update
-  System-->>FrontDesk: Intake Portal Screen
+  System-->>FrontDesk: 🖥️ Intake Portal Screen
   deactivate System

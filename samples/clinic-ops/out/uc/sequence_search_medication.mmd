@@ -1,14 +1,20 @@
 sequenceDiagram
-  actor Clinician as Clinician
-  participant MedicationSearchScreen as Medication Search Screen
-  participant MedicationCatalogApi as Medication Catalog API
-  participant Medication as Medication
+  box システム価値
+    actor Clinician as 👤 Clinician
+  end
+  box システム境界
+    participant MedicationSearchScreen as 🖥️ Medication Search Screen
+    participant MedicationCatalogApi as 🔌 Medication Catalog API
+  end
+  box システム
+    participant Medication as 🗄️ Medication
+  end
 
-  Note over Clinician,Medication: Search Medication
-  Clinician->>MedicationSearchScreen: Search Medication
-  MedicationSearchScreen->>MedicationCatalogApi: Search Medication
+  Note over Clinician,Medication: ✅ Search Medication
+  Clinician->>MedicationSearchScreen: ✅ Search Medication
+  MedicationSearchScreen->>MedicationCatalogApi: ✅ Search Medication
   activate MedicationCatalogApi
   MedicationCatalogApi->>Medication: read
-  MedicationCatalogApi-->>MedicationSearchScreen: Medication Search Screen
-  MedicationSearchScreen-->>Clinician: Medication Search Screen
+  MedicationCatalogApi-->>MedicationSearchScreen: 🖥️ Medication Search Screen
+  MedicationSearchScreen-->>Clinician: 🖥️ Medication Search Screen
   deactivate MedicationCatalogApi

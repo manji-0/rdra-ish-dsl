@@ -1,19 +1,25 @@
 sequenceDiagram
-  actor Clinician as Clinician
-  participant CriticalNoticeScreen as Critical Result Notice Screen
-  participant CriticalNoticeApi as Critical Notice API
-  participant Notification as Notification
-  participant PatientMessage as Patient Message
+  box システム価値
+    actor Clinician as 👤 Clinician
+  end
+  box システム境界
+    participant CriticalNoticeScreen as 🖥️ Critical Result Notice Screen
+    participant CriticalNoticeApi as 🔌 Critical Notice API
+  end
+  box システム
+    participant Notification as 🗄️ Notification
+    participant PatientMessage as 🗄️ Patient Message
+  end
 
-  Note over Clinician,PatientMessage: Notify Critical Result
-  Clinician->>CriticalNoticeScreen: Notify Critical Result
-  CriticalNoticeScreen->>CriticalNoticeApi: Notify Critical Result
+  Note over Clinician,PatientMessage: ✅ Notify Critical Result
+  Clinician->>CriticalNoticeScreen: ✅ Notify Critical Result
+  CriticalNoticeScreen->>CriticalNoticeApi: ✅ Notify Critical Result
   activate CriticalNoticeApi
   rect rgb(245,245,245)
     Note right of CriticalNoticeApi: transaction (API atomic boundary)
     CriticalNoticeApi->>Notification: create
     CriticalNoticeApi->>PatientMessage: create
   end
-  CriticalNoticeApi-->>CriticalNoticeScreen: Critical Result Notice Screen
-  CriticalNoticeScreen-->>Clinician: Critical Result Notice Screen
+  CriticalNoticeApi-->>CriticalNoticeScreen: 🖥️ Critical Result Notice Screen
+  CriticalNoticeScreen-->>Clinician: 🖥️ Critical Result Notice Screen
   deactivate CriticalNoticeApi

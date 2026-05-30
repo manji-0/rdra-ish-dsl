@@ -1,19 +1,25 @@
 sequenceDiagram
-  actor FrontDesk as Front Desk Staff
-  participant IntakePortalScreen as Intake Portal Screen
-  participant IntakeMessagingApi as Intake Messaging API
-  participant IntakePacket as Intake Packet
-  participant PatientMessage as Patient Message
+  box システム価値
+    actor FrontDesk as 👤 Front Desk Staff
+  end
+  box システム境界
+    participant IntakePortalScreen as 🖥️ Intake Portal Screen
+    participant IntakeMessagingApi as 🔌 Intake Messaging API
+  end
+  box システム
+    participant IntakePacket as 🗄️ Intake Packet
+    participant PatientMessage as 🗄️ Patient Message
+  end
 
-  Note over FrontDesk,PatientMessage: Send Intake Forms
-  FrontDesk->>IntakePortalScreen: Send Intake Forms
-  IntakePortalScreen->>IntakeMessagingApi: Send Intake Forms
+  Note over FrontDesk,PatientMessage: ✅ Send Intake Forms
+  FrontDesk->>IntakePortalScreen: ✅ Send Intake Forms
+  IntakePortalScreen->>IntakeMessagingApi: ✅ Send Intake Forms
   activate IntakeMessagingApi
   rect rgb(245,245,245)
     Note right of IntakeMessagingApi: transaction (API atomic boundary)
     IntakeMessagingApi->>IntakePacket: create
     IntakeMessagingApi->>PatientMessage: create
   end
-  IntakeMessagingApi-->>IntakePortalScreen: Intake Portal Screen
-  IntakePortalScreen-->>FrontDesk: Intake Portal Screen
+  IntakeMessagingApi-->>IntakePortalScreen: 🖥️ Intake Portal Screen
+  IntakePortalScreen-->>FrontDesk: 🖥️ Intake Portal Screen
   deactivate IntakeMessagingApi

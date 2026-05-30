@@ -1,14 +1,20 @@
 sequenceDiagram
-  actor BillingSpecialist as Billing Specialist
-  participant ClaimScreen as Claim Screen
-  participant GenerateClaimApi as Generate Claim API
-  participant Charge as Charge
-  participant Claim as Claim
-  participant InsurancePolicy as Insurance Policy
+  box システム価値
+    actor BillingSpecialist as 👤 Billing Specialist
+  end
+  box システム境界
+    participant ClaimScreen as 🖥️ Claim Screen
+    participant GenerateClaimApi as 🔌 Generate Claim API
+  end
+  box システム
+    participant Charge as 🗄️ Charge
+    participant Claim as 🗄️ Claim
+    participant InsurancePolicy as 🗄️ Insurance Policy
+  end
 
-  Note over BillingSpecialist,InsurancePolicy: Generate Claim
-  BillingSpecialist->>ClaimScreen: Generate Claim
-  ClaimScreen->>GenerateClaimApi: Generate Claim
+  Note over BillingSpecialist,InsurancePolicy: ✅ Generate Claim
+  BillingSpecialist->>ClaimScreen: ✅ Generate Claim
+  ClaimScreen->>GenerateClaimApi: ✅ Generate Claim
   activate GenerateClaimApi
   GenerateClaimApi->>InsurancePolicy: read
   rect rgb(245,245,245)
@@ -16,6 +22,6 @@ sequenceDiagram
     GenerateClaimApi->>Claim: create
     GenerateClaimApi->>Charge: update
   end
-  GenerateClaimApi-->>ClaimScreen: Claim Screen
-  ClaimScreen-->>BillingSpecialist: Claim Screen
+  GenerateClaimApi-->>ClaimScreen: 🖥️ Claim Screen
+  ClaimScreen-->>BillingSpecialist: 🖥️ Claim Screen
   deactivate GenerateClaimApi

@@ -1,30 +1,30 @@
 graph TD
   FrontDesk(["👤 Front Desk Staff"])
   Patient(["👤 Patient"])
-  BookAppointment(["Book Appointment"])
-  CancelAppointment(["Cancel Appointment"])
-  MarkNoShow(["Mark No Show"])
-  RescheduleAppointment(["Reschedule Appointment"])
-  ReserveAppointment(["Reserve Appointment"])
-  SearchAvailability(["Search Availability"])
-  SendAppointmentNotice(["Send Appointment Notice"])
-  SendIntakeForms(["Send Intake Forms"])
+  BookAppointment(["✅ Book Appointment"])
+  CancelAppointment(["✅ Cancel Appointment"])
+  MarkNoShow(["✅ Mark No Show"])
+  RescheduleAppointment(["✅ Reschedule Appointment"])
+  ReserveAppointment(["✅ Reserve Appointment"])
+  SearchAvailability(["✅ Search Availability"])
+  SendAppointmentNotice(["✅ Send Appointment Notice"])
+  SendIntakeForms(["✅ Send Intake Forms"])
   BucAppointmentScheduling["📦 Schedule Appointments"]
-  Appointment[("🗄 Appointment")]
-  ClinicLocation[("🗄 Clinic Location")]
-  IntakePacket[("🗄 Intake Packet")]
-  Notification[("🗄 Notification")]
-  PatientMessage[("🗄 Patient Message")]
-  Provider[("🗄 Provider")]
-  ProviderSchedule[("🗄 Provider Schedule")]
-  AppointmentNoticeScreen[["Appointment Notice Screen"]]
-  AppointmentScreen[["Appointment Screen"]]
-  IntakePortalScreen[["Intake Portal Screen"]]
-  ScheduleSearchScreen[["Schedule Search Screen"]]
-  EvAppointmentCancelled{"Appointment Cancelled"}
-  EvAppointmentNoShow{"Appointment Marked No Show"}
-  EvAppointmentRescheduled{"Appointment Rescheduled"}
-  EvAppointmentScheduled{"Appointment Scheduled"}
+  Appointment[("🗄️ Appointment")]
+  ClinicLocation[("🗄️ Clinic Location")]
+  IntakePacket[("🗄️ Intake Packet")]
+  Notification[("🗄️ Notification")]
+  PatientMessage[("🗄️ Patient Message")]
+  Provider[("🗄️ Provider")]
+  ProviderSchedule[("🗄️ Provider Schedule")]
+  AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
+  AppointmentScreen[["🖥️ Appointment Screen"]]
+  IntakePortalScreen[["🖥️ Intake Portal Screen"]]
+  ScheduleSearchScreen[["🖥️ Schedule Search Screen"]]
+  EvAppointmentCancelled{"⚡ Appointment Cancelled"}
+  EvAppointmentNoShow{"⚡ Appointment Marked No Show"}
+  EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
+  EvAppointmentScheduled{"⚡ Appointment Scheduled"}
   Patient --> BucAppointmentScheduling
   Patient --> SearchAvailability
   Patient --> ReserveAppointment
