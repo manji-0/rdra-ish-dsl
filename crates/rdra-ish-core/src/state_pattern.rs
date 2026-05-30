@@ -161,6 +161,18 @@ pub enum StateDiag {
     NoCreationPath,
     /// cap に達してパターン探索を打ち切った
     PatternCapReached { cap: usize, bound: usize },
+    /// `forbidden(Entity, col, val)` で禁止されたカラム値に到達可能
+    ForbiddenStateViolated {
+        column: String,
+        value: String,
+        pattern_desc: String,
+    },
+    /// `invariant(Entity, ...)` の不変条件を違反する到達可能な状態
+    InvariantViolated {
+        guard: String,
+        required: String,
+        pattern_desc: String,
+    },
 }
 
 /// entity 単位の状態パターン導出結果
@@ -831,6 +843,9 @@ fn derive_for_entity(
         }
     }
 
+    // ── 禁止状態・不変条件チェック ──────────────────────────────────────────
+    check_constraints(model, ek, &reached, &mut diags);
+
     // status_col の情報は現在未使用（将来の拡張用に保持）
     let _ = status_col;
 
@@ -842,6 +857,87 @@ fn derive_for_entity(
         truncated,
         no_creation_path,
         diagnostics: diags,
+    }
+}
+
+// ── 制約チェック ─────────────────────────────────────────────────────────────
+
+/// `AbstractValue` を人が読める文字列に変換する（診断メッセージ用）
+fn abstract_value_display(val: &AbstractValue) -> String {
+    match val {
+        AbstractValue::Enum(s) => s.clone(),
+        AbstractValue::Bool(b) => b.to_string(),
+        AbstractValue::Present => "present".to_string(),
+        AbstractValue::Null => "null".to_string(),
+    }
+}
+
+/// `StatePattern` を "col1=val1, col2=val2" 形式に整形する
+fn describe_pattern(pattern: &StatePattern) -> String {
+    pattern
+        .values
+        .iter()
+        .map(|(col, val)| format!("{}={}", col, abstract_value_display(val)))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// 到達可能パターン群に対して `forbidden` / `invariant` 制約を検査し、
+/// 違反を `diags` に追加する。
+fn check_constraints(
+    model: &SemanticModel,
+    ek: EntityKey,
+    reached: &[ReachablePattern],
+    diags: &mut Vec<StateDiag>,
+) {
+    // ── 禁止状態チェック ─────────────────────────────────────────────────────
+    for fc in model
+        .forbidden_constraints
+        .iter()
+        .filter(|fc| fc.entity == ek)
+    {
+        let forbidden_val = AbstractValue::from_effect(&fc.value);
+        for rp in reached {
+            if rp.pattern.values.get(&fc.column) == Some(&forbidden_val) {
+                diags.push(StateDiag::ForbiddenStateViolated {
+                    column: fc.column.clone(),
+                    value: abstract_value_display(&forbidden_val),
+                    pattern_desc: describe_pattern(&rp.pattern),
+                });
+            }
+        }
+    }
+
+    // ── 不変条件チェック ─────────────────────────────────────────────────────
+    for inv in model
+        .entity_invariants
+        .iter()
+        .filter(|inv| inv.entity == ek)
+    {
+        let guard_val = AbstractValue::from_effect(&inv.guard_value);
+        let req_val = AbstractValue::from_effect(&inv.required_value);
+        for rp in reached {
+            // ガード条件が成立するパターンのみ検査
+            if rp.pattern.values.get(&inv.guard_column) == Some(&guard_val) {
+                // required 条件が満たされていない場合に違反
+                let actual_req = rp.pattern.values.get(&inv.required_column);
+                if actual_req != Some(&req_val) {
+                    diags.push(StateDiag::InvariantViolated {
+                        guard: format!(
+                            "{}={}",
+                            inv.guard_column,
+                            abstract_value_display(&guard_val)
+                        ),
+                        required: format!(
+                            "{}={}",
+                            inv.required_column,
+                            abstract_value_display(&req_val)
+                        ),
+                        pattern_desc: describe_pattern(&rp.pattern),
+                    });
+                }
+            }
+        }
     }
 }
 
@@ -1182,5 +1278,172 @@ transitions(Deactivate, Active, Inactive)
         };
         let entry = r.patterns.iter().find(|p| p.pattern == active_p).unwrap();
         assert!(entry.is_terminal);
+    }
+
+    // ── 禁止状態: 到達可能な Enum バリアントを forbidden で禁止 ────────────────
+
+    #[test]
+    fn test_forbidden_state_violated() {
+        let model = model_from(
+            r#"
+entity Order "注文" {
+  id:     Int @pk
+  status: Enum(pending, cancelled) @default(pending)
+}
+usecase Place  "注文確定"
+usecase Cancel "キャンセル"
+event EvCancel "キャンセルイベント"
+creates(Place,  Order)
+updates(Cancel, Order)
+raises(Cancel, EvCancel)
+state Pending   "受付中"
+state Cancelled "キャンセル済"
+transitions(EvCancel, Pending, Cancelled)
+forbidden(Order, "status", "cancelled")
+"#,
+        );
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results.iter().find(|r| r.entity_id == "Order").unwrap();
+
+        // cancelled は到達可能なので ForbiddenStateViolated が発生する
+        let violated: Vec<_> = r
+            .diagnostics
+            .iter()
+            .filter(|d| matches!(d, StateDiag::ForbiddenStateViolated { .. }))
+            .collect();
+        assert!(
+            !violated.is_empty(),
+            "ForbiddenStateViolated が発生すべき: {:?}",
+            r.diagnostics
+        );
+    }
+
+    // ── 禁止状態: 到達不能なバリアントを forbidden → 違反なし ─────────────────
+
+    #[test]
+    fn test_forbidden_state_no_violation_when_unreachable() {
+        let model = model_from(
+            r#"
+entity Order "注文" {
+  id:     Int @pk
+  status: Enum(pending, paid) @default(pending)
+}
+usecase Place "注文確定"
+usecase Pay   "支払い"
+event EvPaid  "支払い完了"
+creates(Place, Order)
+updates(Pay,   Order)
+raises(Pay, EvPaid)
+state Pending "受付中"
+state Paid    "支払済"
+transitions(EvPaid, Pending, Paid)
+forbidden(Order, "status", "paid")
+"#,
+        );
+        // paid は到達可能なので違反が発生する（このテストで動作を確認）
+        let model2 = model_from(
+            r#"
+entity Item "アイテム" {
+  id:     Int @pk
+  status: Enum(active, inactive) @default(active)
+}
+usecase Create "作成"
+creates(Create, Item)
+forbidden(Item, "status", "inactive")
+"#,
+        );
+        // inactive は reaches されないので違反なし
+        let results = derive_state_patterns(&model2, &[], DEFAULT_PATTERN_CAP);
+        let r = results.iter().find(|r| r.entity_id == "Item").unwrap();
+        let violated: Vec<_> = r
+            .diagnostics
+            .iter()
+            .filter(|d| matches!(d, StateDiag::ForbiddenStateViolated { .. }))
+            .collect();
+        assert!(
+            violated.is_empty(),
+            "到達不能バリアントで ForbiddenStateViolated は発生しないはず: {:?}",
+            r.diagnostics
+        );
+        let _ = model; // suppress unused warning
+    }
+
+    // ── 不変条件: 違反する状態が到達可能 ────────────────────────────────────────
+
+    #[test]
+    fn test_invariant_violated() {
+        // "delivered" になったが delivered_at が null のパターンが到達可能
+        // → invariant 違反を検出すべき
+        let model = model_from(
+            r#"
+entity Order "注文" {
+  id:           Int @pk
+  status:       Enum(pending, delivered) @default(pending)
+  delivered_at: DateTime @null
+}
+usecase Place    "注文確定"
+usecase Deliver  "配達完了"
+event EvDeliver  "配達イベント"
+creates(Place,   Order)
+updates(Deliver, Order)
+raises(Deliver,  EvDeliver)
+state Pending   "受付中"
+state Delivered "配達完了"
+transitions(EvDeliver, Pending, Delivered)
+invariant(Order, "status", "delivered", "delivered_at", "present")
+"#,
+        );
+        // Deliver は delivered_at を sets しないので (delivered, null) が到達可能 → 違反
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results.iter().find(|r| r.entity_id == "Order").unwrap();
+        let violated: Vec<_> = r
+            .diagnostics
+            .iter()
+            .filter(|d| matches!(d, StateDiag::InvariantViolated { .. }))
+            .collect();
+        assert!(
+            !violated.is_empty(),
+            "InvariantViolated が発生すべき: {:?}",
+            r.diagnostics
+        );
+    }
+
+    // ── 不変条件: 満たされている場合は違反なし ──────────────────────────────────
+
+    #[test]
+    fn test_invariant_satisfied() {
+        // delivered になるときは必ず delivered_at も sets → 不変条件を満たす
+        let model = model_from(
+            r#"
+entity Order "注文" {
+  id:           Int @pk
+  status:       Enum(pending, delivered) @default(pending)
+  delivered_at: DateTime @null
+}
+usecase Place    "注文確定"
+usecase Deliver  "配達完了"
+event EvDeliver  "配達イベント"
+creates(Place,   Order)
+updates(Deliver, Order)
+raises(Deliver,  EvDeliver)
+state Pending   "受付中"
+state Delivered "配達完了"
+transitions(EvDeliver, Pending, Delivered)
+sets(usecase::Deliver, Order, "delivered_at", "present")
+invariant(Order, "status", "delivered", "delivered_at", "present")
+"#,
+        );
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results.iter().find(|r| r.entity_id == "Order").unwrap();
+        let violated: Vec<_> = r
+            .diagnostics
+            .iter()
+            .filter(|d| matches!(d, StateDiag::InvariantViolated { .. }))
+            .collect();
+        assert!(
+            violated.is_empty(),
+            "不変条件を満たしているので InvariantViolated は発生しないはず: {:?}",
+            r.diagnostics
+        );
     }
 }

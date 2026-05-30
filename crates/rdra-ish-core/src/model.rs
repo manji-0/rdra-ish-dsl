@@ -348,6 +348,26 @@ pub struct ColumnEffect {
     pub value: EffectValue,
 }
 
+/// `forbidden(Entity, "col", "val")` で宣言された禁止状態制約。
+/// 指定のカラムがこの値に到達してはならない。
+#[derive(Debug, Clone)]
+pub struct ForbiddenConstraint {
+    pub entity: EntityKey,
+    pub column: String,
+    pub value: EffectValue,
+}
+
+/// `invariant(Entity, "guard_col", "guard_val", "req_col", "req_val")` で宣言された不変条件。
+/// `guard_col == guard_val` のとき、`req_col` は必ず `req_val` でなければならない。
+#[derive(Debug, Clone)]
+pub struct EntityInvariant {
+    pub entity: EntityKey,
+    pub guard_column: String,
+    pub guard_value: EffectValue,
+    pub required_column: String,
+    pub required_value: EffectValue,
+}
+
 /// セマンティックモデル
 #[derive(Debug, Default)]
 pub struct SemanticModel {
@@ -367,5 +387,9 @@ pub struct SemanticModel {
     pub relations: Vec<Relation>,
     pub state_transitions: Vec<StateTransition>,
     pub column_effects: Vec<ColumnEffect>,
+    /// `forbidden(...)` 述語で宣言された禁止状態制約
+    pub forbidden_constraints: Vec<ForbiddenConstraint>,
+    /// `invariant(...)` 述語で宣言された不変条件制約
+    pub entity_invariants: Vec<EntityInvariant>,
     pub symbols: SymbolTable,
 }

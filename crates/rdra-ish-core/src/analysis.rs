@@ -143,6 +143,17 @@ fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
             vec!["_col"],
             vec!["_val"],
         ]),
+        // forbidden(entity, "col", "val") — 指定カラム値への到達を禁止する
+        "forbidden" => Some(vec![vec!["entity"], vec!["_col"], vec!["_val"]]),
+        // invariant(entity, "guard_col", "guard_val", "req_col", "req_val")
+        // guard_col == guard_val のとき req_col は req_val でなければならない
+        "invariant" => Some(vec![
+            vec!["entity"],
+            vec!["_col"],
+            vec!["_val"],
+            vec!["_col"],
+            vec!["_val"],
+        ]),
         _ => None,
     }
 }
@@ -458,6 +469,111 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
                     diags.push(Diagnostic::error(e));
                 }
             }
+        }
+    } else if pred.name == "forbidden" {
+        // forbidden(entity, "col_name", "value")
+        if let (
+            Some(Some(entity_ref)),
+            Some(PredicateArg::Lit(col_name)),
+            Some(PredicateArg::Lit(val_lit)),
+        ) = (resolved.first(), pred.args.get(1), pred.args.get(2))
+        {
+            let entity_key = match entity_ref {
+                NodeRef::Entity(k) => *k,
+                _ => return,
+            };
+            let col = model.entities[entity_key]
+                .columns
+                .iter()
+                .find(|c| &c.name == col_name)
+                .cloned();
+            let Some(col) = col else {
+                diags.push(Diagnostic::error(RdraError::UnknownColumn {
+                    entity: model.entities[entity_key].id.clone(),
+                    col: col_name.clone(),
+                }));
+                return;
+            };
+            match parse_effect_value(&col, val_lit) {
+                Ok(value) => {
+                    model.forbidden_constraints.push(ForbiddenConstraint {
+                        entity: entity_key,
+                        column: col_name.clone(),
+                        value,
+                    });
+                }
+                Err(e) => diags.push(Diagnostic::error(e)),
+            }
+        }
+    } else if pred.name == "invariant" {
+        // invariant(entity, "guard_col", "guard_val", "req_col", "req_val")
+        if let (
+            Some(Some(entity_ref)),
+            Some(PredicateArg::Lit(guard_col)),
+            Some(PredicateArg::Lit(guard_val)),
+            Some(PredicateArg::Lit(req_col)),
+            Some(PredicateArg::Lit(req_val)),
+        ) = (
+            resolved.first(),
+            pred.args.get(1),
+            pred.args.get(2),
+            pred.args.get(3),
+            pred.args.get(4),
+        ) {
+            let entity_key = match entity_ref {
+                NodeRef::Entity(k) => *k,
+                _ => return,
+            };
+            let entity_id = model.entities[entity_key].id.clone();
+
+            let guard_column = model.entities[entity_key]
+                .columns
+                .iter()
+                .find(|c| &c.name == guard_col)
+                .cloned();
+            let req_column = model.entities[entity_key]
+                .columns
+                .iter()
+                .find(|c| &c.name == req_col)
+                .cloned();
+
+            let Some(gc) = guard_column else {
+                diags.push(Diagnostic::error(RdraError::UnknownColumn {
+                    entity: entity_id,
+                    col: guard_col.clone(),
+                }));
+                return;
+            };
+            let Some(rc) = req_column else {
+                diags.push(Diagnostic::error(RdraError::UnknownColumn {
+                    entity: entity_id,
+                    col: req_col.clone(),
+                }));
+                return;
+            };
+
+            let gv = match parse_effect_value(&gc, guard_val) {
+                Ok(v) => v,
+                Err(e) => {
+                    diags.push(Diagnostic::error(e));
+                    return;
+                }
+            };
+            let rv = match parse_effect_value(&rc, req_val) {
+                Ok(v) => v,
+                Err(e) => {
+                    diags.push(Diagnostic::error(e));
+                    return;
+                }
+            };
+
+            model.entity_invariants.push(EntityInvariant {
+                entity: entity_key,
+                guard_column: guard_col.clone(),
+                guard_value: gv,
+                required_column: req_col.clone(),
+                required_value: rv,
+            });
         }
     } else if pred.name != "relate" {
         if let (Some(Some(from)), Some(Some(to))) = (resolved.first(), resolved.get(1)) {
