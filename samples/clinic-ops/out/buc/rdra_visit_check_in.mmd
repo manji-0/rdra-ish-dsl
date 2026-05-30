@@ -1,0 +1,48 @@
+graph TD
+  FrontDesk(["👤 Front Desk Staff"])
+  Nurse(["👤 Nurse"])
+  AssignRoom(["Assign Room"])
+  CheckInPatient(["Check In Patient"])
+  CollectCopay(["Collect Copay"])
+  OpenEncounter(["Open Encounter"])
+  PrepareEncounter(["Prepare Encounter"])
+  VerifyArrival(["Verify Patient Arrival"])
+  BucVisitCheckIn["📦 Check In Visit"]
+  AccountBalance[("🗄 Account Balance")]
+  Appointment[("🗄 Appointment")]
+  Encounter[("🗄 Encounter")]
+  InsurancePolicy[("🗄 Insurance Policy")]
+  PatientAccount[("🗄 Patient Account")]
+  PatientProfile[("🗄 Patient Profile")]
+  PaymentTransaction[("🗄 Payment Transaction")]
+  Room[("🗄 Room")]
+  CheckInScreen[["Check-In Screen"]]
+  CopayScreen[["Copay Screen"]]
+  EncounterWorkspaceScreen[["Encounter Workspace"]]
+  RoomBoardScreen[["Room Board Screen"]]
+  EvAppointmentCheckedIn{"Appointment Checked In"}
+  FrontDesk --> BucVisitCheckIn
+  Nurse --> BucVisitCheckIn
+  BucVisitCheckIn --> PatientAccess
+  BucVisitCheckIn --> VerifyArrival
+  BucVisitCheckIn --> CheckInPatient
+  BucVisitCheckIn --> CollectCopay
+  BucVisitCheckIn --> AssignRoom
+  BucVisitCheckIn --> PrepareEncounter
+  Appointment --- PatientAccount
+  Appointment --- Room
+  Encounter --- Appointment
+  Encounter --- PatientAccount
+  AccountBalance --- PatientAccount
+  PatientProfile --- PatientAccount
+  InsurancePolicy --- PatientAccount
+  EvAppointmentCheckedIn -.->|triggers| OpenEncounter
+  EvAppointmentCheckedIn -.->|triggers| PrepareEncounter
+  CheckInScreen -.->|shows| Appointment
+  OpenEncounter -.->|displays| EncounterWorkspaceScreen
+  VerifyArrival -.->|displays| CheckInScreen
+  CheckInPatient -.->|raises| EvAppointmentCheckedIn
+  CheckInPatient -.->|displays| CheckInScreen
+  CollectCopay -.->|displays| CopayScreen
+  AssignRoom -.->|displays| RoomBoardScreen
+  PrepareEncounter -.->|displays| CheckInScreen

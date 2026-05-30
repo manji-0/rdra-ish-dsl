@@ -109,7 +109,7 @@ impl Emitter for StatePatternTableEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         let buc_filter: Vec<String> = match &view.scope {
             Scope::Bucs(ids) => ids.clone(),
-            Scope::Whole => vec![],
+            Scope::Whole | Scope::UseCases(_) => vec![],
         };
         let results = derive_state_patterns(model, &buc_filter, self.cap);
         let mut out = String::new();
@@ -274,7 +274,7 @@ impl Emitter for StatePatternCsvEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         let buc_filter: Vec<String> = match &view.scope {
             Scope::Bucs(ids) => ids.clone(),
-            Scope::Whole => vec![],
+            Scope::Whole | Scope::UseCases(_) => vec![],
         };
         let results = derive_state_patterns(model, &buc_filter, self.cap);
         let mut wtr = csv::Writer::from_writer(vec![]);
@@ -355,7 +355,7 @@ impl Emitter for StatePatternJsonEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         let buc_filter: Vec<String> = match &view.scope {
             Scope::Bucs(ids) => ids.clone(),
-            Scope::Whole => vec![],
+            Scope::Whole | Scope::UseCases(_) => vec![],
         };
         let results = derive_state_patterns(model, &buc_filter, self.cap);
 

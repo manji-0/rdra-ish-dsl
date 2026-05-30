@@ -1,0 +1,13 @@
+sequenceDiagram
+  actor ClinicAdmin as Clinic Administrator
+  participant System as システム
+  participant Room as Room
+  participant RoomAdminScreen as Room Admin Screen
+
+  Note over ClinicAdmin,RoomAdminScreen: Release Room
+  ClinicAdmin->System: Release Room
+  activate System
+  System->>Room: update
+  System-->>ClinicAdmin: Room Admin Screen
+  deactivate System
+

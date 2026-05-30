@@ -1,0 +1,16 @@
+sequenceDiagram
+  actor CareCoordinator as Care Coordinator
+  actor Patient as Patient
+  participant NotifyPatientResultApi as Notify Patient Result API
+  participant Notification as Notification
+  participant PatientMessageScreen as Patient Message Screen
+
+  Note over CareCoordinator,PatientMessageScreen: Notify Patient Result
+  CareCoordinator->>PatientMessageScreen: Notify Patient Result
+  PatientMessageScreen->>NotifyPatientResultApi: Notify Patient Result
+  activate NotifyPatientResultApi
+  NotifyPatientResultApi->>Notification: create
+  NotifyPatientResultApi-->>PatientMessageScreen: Patient Message Screen
+  PatientMessageScreen-->>CareCoordinator: Patient Message Screen
+  deactivate NotifyPatientResultApi
+

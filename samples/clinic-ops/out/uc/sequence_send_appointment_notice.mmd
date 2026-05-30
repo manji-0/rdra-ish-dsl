@@ -1,0 +1,21 @@
+sequenceDiagram
+  actor FrontDesk as Front Desk Staff
+  actor Patient as Patient
+  participant AppointmentNoticeApi as Appointment Notice API
+  participant Notification as Notification
+  participant PatientMessage as Patient Message
+  participant AppointmentNoticeScreen as Appointment Notice Screen
+
+  Note over FrontDesk,AppointmentNoticeScreen: Send Appointment Notice
+  FrontDesk->>AppointmentNoticeScreen: Send Appointment Notice
+  AppointmentNoticeScreen->>AppointmentNoticeApi: Send Appointment Notice
+  activate AppointmentNoticeApi
+  rect rgb(245,245,245)
+    Note right of AppointmentNoticeApi: transaction (API atomic boundary)
+    AppointmentNoticeApi->>Notification: create
+    AppointmentNoticeApi->>PatientMessage: create
+  end
+  AppointmentNoticeApi-->>AppointmentNoticeScreen: Appointment Notice Screen
+  AppointmentNoticeScreen-->>FrontDesk: Appointment Notice Screen
+  deactivate AppointmentNoticeApi
+

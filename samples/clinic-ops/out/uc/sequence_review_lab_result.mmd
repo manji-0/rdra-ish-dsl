@@ -1,0 +1,21 @@
+sequenceDiagram
+  actor Clinician as Clinician
+  actor Nurse as Nurse
+  participant ResultReviewApi as Result Review API
+  participant ClinicalOrder as Clinical Order
+  participant LabResult as Lab Result
+  participant ResultReviewScreen as Result Review Screen
+
+  Note over Clinician,ResultReviewScreen: Review Lab Result
+  Clinician->>ResultReviewScreen: Review Lab Result
+  ResultReviewScreen->>ResultReviewApi: Review Lab Result
+  activate ResultReviewApi
+  rect rgb(245,245,245)
+    Note right of ResultReviewApi: transaction (API atomic boundary)
+    ResultReviewApi->>ClinicalOrder: update
+    ResultReviewApi->>LabResult: update
+  end
+  ResultReviewApi-->>ResultReviewScreen: Result Review Screen
+  ResultReviewScreen-->>Clinician: Result Review Screen
+  deactivate ResultReviewApi
+

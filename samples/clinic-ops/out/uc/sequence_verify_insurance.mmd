@@ -1,0 +1,21 @@
+sequenceDiagram
+  actor FrontDesk as Front Desk Staff
+  actor Patient as Patient
+  participant EligibilityApi as Eligibility API
+  participant EligibilityCheck as Eligibility Check
+  participant InsurancePolicy as Insurance Policy
+  participant InsuranceScreen as Insurance Verification Screen
+
+  Note over FrontDesk,InsuranceScreen: Verify Insurance
+  FrontDesk->>InsuranceScreen: Verify Insurance
+  InsuranceScreen->>EligibilityApi: Verify Insurance
+  activate EligibilityApi
+  rect rgb(245,245,245)
+    Note right of EligibilityApi: transaction (API atomic boundary)
+    EligibilityApi->>InsurancePolicy: update
+    EligibilityApi->>EligibilityCheck: create
+  end
+  EligibilityApi-->>InsuranceScreen: Insurance Verification Screen
+  InsuranceScreen-->>FrontDesk: Insurance Verification Screen
+  deactivate EligibilityApi
+

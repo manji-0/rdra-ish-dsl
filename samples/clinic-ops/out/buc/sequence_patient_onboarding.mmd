@@ -1,0 +1,106 @@
+sequenceDiagram
+  actor FrontDesk as Front Desk Staff
+  actor Patient as Patient
+  participant System as システム
+  participant ConsentApi as Consent API
+  participant EligibilityApi as Eligibility API
+  participant IntakeMessagingApi as Intake Messaging API
+  participant RegisterPatientApi as Register Patient API
+  participant UpdateDemographicsApi as Update Demographics API
+  participant ConsentRecord as Consent Record
+  participant EligibilityCheck as Eligibility Check
+  participant InsurancePolicy as Insurance Policy
+  participant IntakePacket as Intake Packet
+  participant PatientAccount as Patient Account
+  participant PatientMessage as Patient Message
+  participant PatientProfile as Patient Profile
+  participant ConsentScreen as Consent Capture Screen
+  participant InsuranceScreen as Insurance Verification Screen
+  participant IntakePortalScreen as Intake Portal Screen
+  participant PatientProfileScreen as Patient Profile Screen
+
+  Note over FrontDesk,PatientProfileScreen: Archive Patient
+  FrontDesk->System: Archive Patient
+  activate System
+  System->>PatientAccount: update
+  System-->>FrontDesk: Patient Profile Screen
+  deactivate System
+
+  Note over FrontDesk,PatientProfileScreen: Capture Consent
+  FrontDesk->>ConsentScreen: Capture Consent
+  ConsentScreen->>ConsentApi: Capture Consent
+  activate ConsentApi
+  ConsentApi->>ConsentRecord: create
+  ConsentApi-->>ConsentScreen: Consent Capture Screen
+  ConsentScreen-->>FrontDesk: Consent Capture Screen
+  deactivate ConsentApi
+
+  Note over FrontDesk,PatientProfileScreen: Complete Intake Forms
+  FrontDesk->System: Complete Intake Forms
+  activate System
+  System->>IntakePacket: update
+  System-->>FrontDesk: Intake Portal Screen
+  deactivate System
+
+  Note over FrontDesk,PatientProfileScreen: Expire Intake Forms
+  FrontDesk->System: Expire Intake Forms
+  activate System
+  System->>IntakePacket: update
+  System-->>FrontDesk: Intake Portal Screen
+  deactivate System
+
+  Note over FrontDesk,PatientProfileScreen: Merge Duplicate Patient
+  FrontDesk->System: Merge Duplicate Patient
+  activate System
+  System->>PatientAccount: update
+  System-->>FrontDesk: Patient Profile Screen
+  deactivate System
+
+  Note over FrontDesk,PatientProfileScreen: Register Patient
+  FrontDesk->>PatientProfileScreen: Register Patient
+  PatientProfileScreen->>RegisterPatientApi: Register Patient
+  activate RegisterPatientApi
+  rect rgb(245,245,245)
+    Note right of RegisterPatientApi: transaction (API atomic boundary)
+    RegisterPatientApi->>PatientAccount: create
+    RegisterPatientApi->>PatientProfile: create
+  end
+  RegisterPatientApi-->>PatientProfileScreen: Patient Profile Screen
+  PatientProfileScreen-->>FrontDesk: Patient Profile Screen
+  deactivate RegisterPatientApi
+
+  Note over FrontDesk,PatientProfileScreen: Send Intake Forms
+  FrontDesk->>IntakePortalScreen: Send Intake Forms
+  IntakePortalScreen->>IntakeMessagingApi: Send Intake Forms
+  activate IntakeMessagingApi
+  rect rgb(245,245,245)
+    Note right of IntakeMessagingApi: transaction (API atomic boundary)
+    IntakeMessagingApi->>IntakePacket: create
+    IntakeMessagingApi->>PatientMessage: create
+  end
+  IntakeMessagingApi-->>IntakePortalScreen: Intake Portal Screen
+  IntakePortalScreen-->>FrontDesk: Intake Portal Screen
+  deactivate IntakeMessagingApi
+
+  Note over FrontDesk,PatientProfileScreen: Update Demographics
+  FrontDesk->>PatientProfileScreen: Update Demographics
+  PatientProfileScreen->>UpdateDemographicsApi: Update Demographics
+  activate UpdateDemographicsApi
+  UpdateDemographicsApi->>PatientProfile: update
+  UpdateDemographicsApi-->>PatientProfileScreen: Patient Profile Screen
+  PatientProfileScreen-->>FrontDesk: Patient Profile Screen
+  deactivate UpdateDemographicsApi
+
+  Note over FrontDesk,PatientProfileScreen: Verify Insurance
+  FrontDesk->>InsuranceScreen: Verify Insurance
+  InsuranceScreen->>EligibilityApi: Verify Insurance
+  activate EligibilityApi
+  rect rgb(245,245,245)
+    Note right of EligibilityApi: transaction (API atomic boundary)
+    EligibilityApi->>InsurancePolicy: update
+    EligibilityApi->>EligibilityCheck: create
+  end
+  EligibilityApi-->>InsuranceScreen: Insurance Verification Screen
+  InsuranceScreen-->>FrontDesk: Insurance Verification Screen
+  deactivate EligibilityApi
+

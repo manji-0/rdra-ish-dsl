@@ -63,10 +63,13 @@ enum Commands {
         #[arg(long, default_value = "puml")]
         format: OutputFormat,
         /// Filter to one or more BUCs (by id); repeatable (e.g. --buc A --buc B).
-        /// The union of reachable nodes across all specified BUCs is shown.
-        /// Applies to all diagram kinds (rdra, er, state).
+        /// The union of scoped nodes across all specified BUCs is shown.
+        /// Applies to all diagram kinds (rdra, er, state, sequence).
         #[arg(long)]
         buc: Vec<String>,
+        /// Filter sequence diagrams to one or more use cases (by id); repeatable.
+        #[arg(long)]
+        usecase: Vec<String>,
         #[arg(short, long, default_value = "out")]
         out: PathBuf,
     },
@@ -234,6 +237,7 @@ fn main() -> Result<()> {
             kind,
             format,
             buc,
+            usecase,
             out,
         } => {
             let (model, diags) = load_model(&inputs)?;
@@ -246,8 +250,16 @@ fn main() -> Result<()> {
                 }
             }
 
-            // --buc が空なら全体スコープ、1つ以上あれば指定BUCの和集合スコープ
-            let scope = if buc.is_empty() {
+            if !usecase.is_empty() && !matches!(kind, DiagramKind::Sequence) {
+                anyhow::bail!("--usecase is currently supported only for --kind sequence");
+            }
+            if !usecase.is_empty() && !buc.is_empty() {
+                anyhow::bail!("--buc and --usecase cannot be combined");
+            }
+
+            let scope = if !usecase.is_empty() {
+                Scope::UseCases(usecase)
+            } else if buc.is_empty() {
                 Scope::Whole
             } else {
                 Scope::Bucs(buc)

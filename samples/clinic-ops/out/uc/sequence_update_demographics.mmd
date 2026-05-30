@@ -1,0 +1,16 @@
+sequenceDiagram
+  actor FrontDesk as Front Desk Staff
+  actor Patient as Patient
+  participant UpdateDemographicsApi as Update Demographics API
+  participant PatientProfile as Patient Profile
+  participant PatientProfileScreen as Patient Profile Screen
+
+  Note over FrontDesk,PatientProfileScreen: Update Demographics
+  FrontDesk->>PatientProfileScreen: Update Demographics
+  PatientProfileScreen->>UpdateDemographicsApi: Update Demographics
+  activate UpdateDemographicsApi
+  UpdateDemographicsApi->>PatientProfile: update
+  UpdateDemographicsApi-->>PatientProfileScreen: Patient Profile Screen
+  PatientProfileScreen-->>FrontDesk: Patient Profile Screen
+  deactivate UpdateDemographicsApi
+

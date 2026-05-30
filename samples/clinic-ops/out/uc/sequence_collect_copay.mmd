@@ -1,0 +1,21 @@
+sequenceDiagram
+  actor FrontDesk as Front Desk Staff
+  actor Nurse as Nurse
+  participant CollectCopayApi as Collect Copay API
+  participant AccountBalance as Account Balance
+  participant PaymentTransaction as Payment Transaction
+  participant CopayScreen as Copay Screen
+
+  Note over FrontDesk,CopayScreen: Collect Copay
+  FrontDesk->>CopayScreen: Collect Copay
+  CopayScreen->>CollectCopayApi: Collect Copay
+  activate CollectCopayApi
+  rect rgb(245,245,245)
+    Note right of CollectCopayApi: transaction (API atomic boundary)
+    CollectCopayApi->>AccountBalance: update
+    CollectCopayApi->>PaymentTransaction: create
+  end
+  CollectCopayApi-->>CopayScreen: Copay Screen
+  CopayScreen-->>FrontDesk: Copay Screen
+  deactivate CollectCopayApi
+

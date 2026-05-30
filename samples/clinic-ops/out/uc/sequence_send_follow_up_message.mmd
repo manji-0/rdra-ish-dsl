@@ -1,0 +1,16 @@
+sequenceDiagram
+  actor CareCoordinator as Care Coordinator
+  actor Patient as Patient
+  participant SendFollowUpMessageApi as Send Follow-Up Message API
+  participant PatientMessage as Patient Message
+  participant PatientMessageScreen as Patient Message Screen
+
+  Note over CareCoordinator,PatientMessageScreen: Send Follow-Up Message
+  CareCoordinator->>PatientMessageScreen: Send Follow-Up Message
+  PatientMessageScreen->>SendFollowUpMessageApi: Send Follow-Up Message
+  activate SendFollowUpMessageApi
+  SendFollowUpMessageApi->>PatientMessage: create
+  SendFollowUpMessageApi-->>PatientMessageScreen: Patient Message Screen
+  PatientMessageScreen-->>CareCoordinator: Patient Message Screen
+  deactivate SendFollowUpMessageApi
+

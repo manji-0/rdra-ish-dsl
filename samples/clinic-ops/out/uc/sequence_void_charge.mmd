@@ -1,0 +1,13 @@
+sequenceDiagram
+  actor BillingSpecialist as Billing Specialist
+  participant System as システム
+  participant Charge as Charge
+  participant ChargeWorklistScreen as Charge Worklist Screen
+
+  Note over BillingSpecialist,ChargeWorklistScreen: Void Charge
+  BillingSpecialist->System: Void Charge
+  activate System
+  System->>Charge: update
+  System-->>BillingSpecialist: Charge Worklist Screen
+  deactivate System
+

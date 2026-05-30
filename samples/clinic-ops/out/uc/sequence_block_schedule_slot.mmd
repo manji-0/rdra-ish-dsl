@@ -1,0 +1,15 @@
+sequenceDiagram
+  actor ClinicAdmin as Clinic Administrator
+  participant BlockScheduleSlotApi as Block Schedule Slot API
+  participant ProviderSchedule as Provider Schedule
+  participant ScheduleAdminScreen as Schedule Admin Screen
+
+  Note over ClinicAdmin,ScheduleAdminScreen: Block Schedule Slot
+  ClinicAdmin->>ScheduleAdminScreen: Block Schedule Slot
+  ScheduleAdminScreen->>BlockScheduleSlotApi: Block Schedule Slot
+  activate BlockScheduleSlotApi
+  BlockScheduleSlotApi->>ProviderSchedule: update
+  BlockScheduleSlotApi-->>ScheduleAdminScreen: Schedule Admin Screen
+  ScheduleAdminScreen-->>ClinicAdmin: Schedule Admin Screen
+  deactivate BlockScheduleSlotApi
+

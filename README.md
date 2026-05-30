@@ -17,6 +17,21 @@ derives **the reachable state patterns of each entity from BUC patterns**.
 An `api` element lets you express the API layer between screens and entities — the sequence
 diagram renders the full `Actor → Screen → API → Entity` lane automatically.
 
+<!-- derived-from ./docs/incremental-modeling.md#api-boundary-rules -->
+<!-- derived-from ./docs/language-reference.md#relationship-predicates -->
+## Layer Positioning
+
+RDRA-ISH keeps the original RDRA-style idea that the layers on the left explain
+the reason the layers on the right exist. The difference is that RDRA-ISH does not
+stop at business-oriented requirements organization: it adds implementation design
+vocabulary where it can still fit naturally inside the RDRA world.
+
+![RDRA-ISH layer positioning](docs/assets/rdra-ish-layer-positioning.png)
+
+RDRA-ISH therefore treats a model as a bridge: `check`, `diagram`, `csv`, and
+`states` let a developer refine requirements, system boundaries, API boundaries,
+entity structure, and lifecycle constraints in one source model.
+
 <!-- derived-from ./docs/language-reference.md -->
 <!-- derived-from ./docs/state-derivation.md -->
 ## What It Helps You Check
@@ -45,6 +60,13 @@ cargo install --path crates/rdra-ish-cli
 ## Recommended Modeling Loop
 
 <!-- derived-from ./docs/incremental-modeling.md -->
+<!-- derived-from ./docs/incremental-modeling.md#stage-map -->
+
+The modeling loop is intentionally staged. At each stage, ask only for the next
+missing information, validate the current abstraction, then add the next level of
+detail.
+
+![RDRA-ISH current spec and concretization steps](docs/assets/rdra-ish-spec-and-steps.png)
 
 1. Declare shared actors, businesses, and entities under a shared module.
 2. Add one BUC file at a time with its use cases, screens, CRUD predicates, and events.
@@ -88,6 +110,8 @@ rdra-ish diagram src/ --kind state --buc BucOrder --format mermaid
 
 # Sequence diagram of write operations (shows API layer when invokes() is used)
 rdra-ish diagram src/ --kind sequence --format mermaid
+rdra-ish diagram src/ --kind sequence --buc BucOrder --format mermaid
+rdra-ish diagram src/ --kind sequence --usecase PlaceOrder --format mermaid
 
 # CSV output
 rdra-ish csv src/ --kind entity
@@ -115,7 +139,8 @@ rdra-ish states src/ --format json           # JSON output
 |---|---|---|
 | `--kind` | `rdra` | `rdra` / `er` / `state` / `sequence` / `event-flow` |
 | `--format` | `puml` | `puml` / `svg` / `png` / `mermaid` (`svg`/`png` require plantuml.jar) |
-| `--buc <id>` | — (whole) | Filter by BUC id (repeatable). Multiple ids output the union as one diagram |
+| `--buc <id>` | — (whole) | Filter by BUC id (repeatable). For `sequence`, only directly contained use cases are shown |
+| `--usecase <id>` | — (whole) | Filter `sequence` diagrams by use case id (repeatable, cannot be combined with `--buc`) |
 | `-o / --out` | `out` | Output file path (extension added automatically) |
 
 ### `states` options
@@ -593,6 +618,8 @@ The `present` side of `delivered_at` carries the type info derived from
 `samples/clinic-ops/` is a larger clinic operations model for trying BUC-scoped
 analysis on a more connected domain. It includes 9 BUCs, 60 use cases, 26 entities,
 28 APIs, event-triggered BUC chaining, multiple state machines, and state constraints.
+The review-oriented design document is
+[samples/clinic-ops/design-sample.md](./samples/clinic-ops/design-sample.md).
 
 Useful entry points:
 
@@ -601,6 +628,7 @@ rdra-ish check samples/clinic-ops
 rdra-ish list samples/clinic-ops --kind buc --format table
 rdra-ish diagram samples/clinic-ops --kind event-flow --format mermaid
 rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucClinicalEncounter
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase SignEncounter
 rdra-ish states samples/clinic-ops --entity Appointment
 rdra-ish states samples/clinic-ops --entity Claim
 ```

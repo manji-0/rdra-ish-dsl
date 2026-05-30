@@ -1,0 +1,14 @@
+sequenceDiagram
+  actor FrontDesk as Front Desk Staff
+  actor Patient as Patient
+  participant System as システム
+  participant Appointment as Appointment
+  participant AppointmentScreen as Appointment Screen
+
+  Note over FrontDesk,AppointmentScreen: Mark No Show
+  FrontDesk->System: Mark No Show
+  activate System
+  System->>Appointment: update
+  System-->>FrontDesk: Appointment Screen
+  deactivate System
+

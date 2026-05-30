@@ -1,0 +1,21 @@
+sequenceDiagram
+  actor FrontDesk as Front Desk Staff
+  actor Patient as Patient
+  participant CancelAppointmentApi as Cancel Appointment API
+  participant Appointment as Appointment
+  participant ProviderSchedule as Provider Schedule
+  participant AppointmentScreen as Appointment Screen
+
+  Note over FrontDesk,AppointmentScreen: Cancel Appointment
+  FrontDesk->>AppointmentScreen: Cancel Appointment
+  AppointmentScreen->>CancelAppointmentApi: Cancel Appointment
+  activate CancelAppointmentApi
+  rect rgb(245,245,245)
+    Note right of CancelAppointmentApi: transaction (API atomic boundary)
+    CancelAppointmentApi->>Appointment: update
+    CancelAppointmentApi->>ProviderSchedule: update
+  end
+  CancelAppointmentApi-->>AppointmentScreen: Appointment Screen
+  AppointmentScreen-->>FrontDesk: Appointment Screen
+  deactivate CancelAppointmentApi
+

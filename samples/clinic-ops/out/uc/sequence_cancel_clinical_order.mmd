@@ -1,0 +1,14 @@
+sequenceDiagram
+  actor Clinician as Clinician
+  actor Nurse as Nurse
+  participant System as システム
+  participant ClinicalOrder as Clinical Order
+  participant OrderEntryScreen as Order Entry Screen
+
+  Note over Clinician,OrderEntryScreen: Cancel Clinical Order
+  Clinician->System: Cancel Clinical Order
+  activate System
+  System->>ClinicalOrder: update
+  System-->>Clinician: Order Entry Screen
+  deactivate System
+

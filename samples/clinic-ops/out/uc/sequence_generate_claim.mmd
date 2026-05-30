@@ -1,0 +1,20 @@
+sequenceDiagram
+  actor BillingSpecialist as Billing Specialist
+  participant GenerateClaimApi as Generate Claim API
+  participant Charge as Charge
+  participant Claim as Claim
+  participant ClaimScreen as Claim Screen
+
+  Note over BillingSpecialist,ClaimScreen: Generate Claim
+  BillingSpecialist->>ClaimScreen: Generate Claim
+  ClaimScreen->>GenerateClaimApi: Generate Claim
+  activate GenerateClaimApi
+  rect rgb(245,245,245)
+    Note right of GenerateClaimApi: transaction (API atomic boundary)
+    GenerateClaimApi->>Claim: create
+    GenerateClaimApi->>Charge: update
+  end
+  GenerateClaimApi-->>ClaimScreen: Claim Screen
+  ClaimScreen-->>BillingSpecialist: Claim Screen
+  deactivate GenerateClaimApi
+

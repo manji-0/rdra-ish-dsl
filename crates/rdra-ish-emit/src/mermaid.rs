@@ -20,7 +20,7 @@ impl Emitter for RdraMermaidEmitter {
         // BUCフィルタ
         let reachable: Option<HashSet<NodeRef>> = match &view.scope {
             Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
-            Scope::Whole => None,
+            Scope::Whole | Scope::UseCases(_) => None,
         };
 
         let is_visible = |nr: &NodeRef| -> bool {
@@ -200,7 +200,7 @@ impl Emitter for StateMermaidEmitter {
         // BUCフィルタ
         let reachable: Option<HashSet<NodeRef>> = match &view.scope {
             Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
-            Scope::Whole => None,
+            Scope::Whole | Scope::UseCases(_) => None,
         };
 
         let is_visible = |nr: &NodeRef| -> bool {
@@ -285,7 +285,7 @@ impl Emitter for ErMermaidEmitter {
         // BUCフィルタ
         let reachable: Option<HashSet<NodeRef>> = match &view.scope {
             Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
-            Scope::Whole => None,
+            Scope::Whole | Scope::UseCases(_) => None,
         };
 
         let is_visible = |nr: &NodeRef| -> bool {
@@ -377,15 +377,52 @@ impl Emitter for ErMermaidEmitter {
 
 pub struct SequenceMermaidEmitter;
 
+fn sequence_usecase_scope(model: &SemanticModel, scope: &Scope) -> Option<HashSet<UseCaseKey>> {
+    match scope {
+        Scope::Whole => None,
+        Scope::UseCases(usecase_ids) => {
+            let wanted: HashSet<&str> = usecase_ids.iter().map(String::as_str).collect();
+            Some(
+                model
+                    .use_cases
+                    .iter()
+                    .filter_map(|(key, uc)| wanted.contains(uc.id.as_str()).then_some(key))
+                    .collect(),
+            )
+        }
+        Scope::Bucs(buc_ids) => {
+            let wanted: HashSet<&str> = buc_ids.iter().map(String::as_str).collect();
+            let buc_keys: HashSet<BucKey> = model
+                .bucs
+                .iter()
+                .filter_map(|(key, buc)| wanted.contains(buc.id.as_str()).then_some(key))
+                .collect();
+            Some(
+                model
+                    .relations
+                    .iter()
+                    .filter_map(|rel| {
+                        if rel.kind == RelKind::Contains {
+                            if let (NodeRef::Buc(buc), NodeRef::UseCase(usecase)) =
+                                (&rel.from, &rel.to)
+                            {
+                                return buc_keys.contains(buc).then_some(*usecase);
+                            }
+                        }
+                        None
+                    })
+                    .collect(),
+            )
+        }
+    }
+}
+
 impl Emitter for SequenceMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
-        let reachable: Option<HashSet<NodeRef>> = match &view.scope {
-            Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
-            Scope::Whole => None,
-        };
-        let is_visible = |nr: &NodeRef| -> bool {
-            match &reachable {
-                Some(set) => set.contains(nr),
+        let scoped_usecases = sequence_usecase_scope(model, &view.scope);
+        let is_visible_usecase = |key: UseCaseKey| -> bool {
+            match &scoped_usecases {
+                Some(set) => set.contains(&key),
                 None => true,
             }
         };
@@ -434,8 +471,7 @@ impl Emitter for SequenceMermaidEmitter {
             .use_cases
             .iter()
             .filter(|(k, _)| {
-                is_visible(&NodeRef::UseCase(*k))
-                    && uc_tx_map.get(k).map(|t| t.has_writes()).unwrap_or(false)
+                is_visible_usecase(*k) && uc_tx_map.get(k).map(|t| t.has_writes()).unwrap_or(false)
             })
             .collect();
         uc_list.sort_by_key(|(_, u)| u.id.as_str());
@@ -726,7 +762,7 @@ impl Emitter for EventFlowMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         let reachable: Option<HashSet<NodeRef>> = match &view.scope {
             Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
-            Scope::Whole => None,
+            Scope::Whole | Scope::UseCases(_) => None,
         };
         let is_visible = |nr: &NodeRef| -> bool {
             match &reachable {
@@ -930,5 +966,68 @@ reads(UcA, EntityA)
         let result = ErMermaidEmitter.emit(&model, &view).unwrap();
         assert!(result.contains("EntityA"), "EntityA should be included");
         assert!(!result.contains("EntityB"), "EntityB should be excluded");
+    }
+
+    #[test]
+    fn test_sequence_mermaid_buc_filter_excludes_triggered_buc() {
+        let src = r#"
+actor Customer "顧客"
+buc BucA "BUC-A"
+buc BucB "BUC-B"
+usecase UcA "ユースケースA"
+usecase UcB "ユースケースB"
+event EvA "イベントA"
+api ApiA "API-A"
+api ApiB "API-B"
+entity EntityA "エンティティA" { id: Int @pk }
+entity EntityB "エンティティB" { id: Int @pk }
+performs(Customer, BucA)
+contains(BucA, UcA)
+invokes(UcA, ApiA)
+creates(ApiA, EntityA)
+raises(UcA, EvA)
+performs(Customer, BucB)
+contains(BucB, UcB)
+invokes(UcB, ApiB)
+creates(ApiB, EntityB)
+triggers(EvA, UcB)
+"#;
+        let model = model_from(src);
+        let result = SequenceMermaidEmitter
+            .emit(&model, &View::bucs(vec!["BucA".to_string()]))
+            .unwrap();
+        assert!(result.contains("ユースケースA"));
+        assert!(result.contains("ApiA"));
+        assert!(!result.contains("ユースケースB"));
+        assert!(!result.contains("ApiB"));
+    }
+
+    #[test]
+    fn test_sequence_mermaid_usecase_filter() {
+        let src = r#"
+actor Customer "顧客"
+buc BucA "BUC-A"
+usecase UcA "ユースケースA"
+usecase UcB "ユースケースB"
+api ApiA "API-A"
+api ApiB "API-B"
+entity EntityA "エンティティA" { id: Int @pk }
+entity EntityB "エンティティB" { id: Int @pk }
+performs(Customer, BucA)
+contains(BucA, UcA)
+contains(BucA, UcB)
+invokes(UcA, ApiA)
+creates(ApiA, EntityA)
+invokes(UcB, ApiB)
+creates(ApiB, EntityB)
+"#;
+        let model = model_from(src);
+        let result = SequenceMermaidEmitter
+            .emit(&model, &View::usecases(vec!["UcB".to_string()]))
+            .unwrap();
+        assert!(!result.contains("ユースケースA"));
+        assert!(!result.contains("ApiA"));
+        assert!(result.contains("ユースケースB"));
+        assert!(result.contains("ApiB"));
     }
 }

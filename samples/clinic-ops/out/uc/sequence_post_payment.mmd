@@ -1,0 +1,20 @@
+sequenceDiagram
+  actor BillingSpecialist as Billing Specialist
+  participant PaymentPostApi as Payment Posting API
+  participant Claim as Claim
+  participant PaymentTransaction as Payment Transaction
+  participant PaymentPostingScreen as Payment Posting Screen
+
+  Note over BillingSpecialist,PaymentPostingScreen: Post Payment
+  BillingSpecialist->>PaymentPostingScreen: Post Payment
+  PaymentPostingScreen->>PaymentPostApi: Post Payment
+  activate PaymentPostApi
+  rect rgb(245,245,245)
+    Note right of PaymentPostApi: transaction (API atomic boundary)
+    PaymentPostApi->>Claim: update
+    PaymentPostApi->>PaymentTransaction: create
+  end
+  PaymentPostApi-->>PaymentPostingScreen: Payment Posting Screen
+  PaymentPostingScreen-->>BillingSpecialist: Payment Posting Screen
+  deactivate PaymentPostApi
+

@@ -17,7 +17,7 @@ impl Emitter for RdraPlantUmlEmitter {
         // BUCフィルタ: Scope::Bucs の場合は到達可能ノードのみに絞る
         let reachable: Option<HashSet<NodeRef>> = match &view.scope {
             Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
-            Scope::Whole => None,
+            Scope::Whole | Scope::UseCases(_) => None,
         };
 
         let is_visible = |nr: &NodeRef| -> bool {
@@ -215,7 +215,7 @@ impl Emitter for StateDiagramEmitter {
         // BUCフィルタ: Scope::Bucs の場合は到達可能ノードのみに絞る
         let reachable: Option<HashSet<NodeRef>> = match &view.scope {
             Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
-            Scope::Whole => None,
+            Scope::Whole | Scope::UseCases(_) => None,
         };
 
         let is_visible = |nr: &NodeRef| -> bool {
@@ -291,7 +291,7 @@ impl Emitter for ErPlantUmlEmitter {
         // BUCフィルタ: Scope::Bucs の場合は到達可能ノードのみに絞る
         let reachable: Option<HashSet<NodeRef>> = match &view.scope {
             Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
-            Scope::Whole => None,
+            Scope::Whole | Scope::UseCases(_) => None,
         };
 
         let is_visible = |nr: &NodeRef| -> bool {
@@ -407,16 +407,52 @@ impl Emitter for ErPlantUmlEmitter {
 /// `--buc` による絞り込み（`Scope::Bucs`）に対応。
 pub struct SequenceDiagramEmitter;
 
+fn sequence_usecase_scope(model: &SemanticModel, scope: &Scope) -> Option<HashSet<UseCaseKey>> {
+    match scope {
+        Scope::Whole => None,
+        Scope::UseCases(usecase_ids) => {
+            let wanted: HashSet<&str> = usecase_ids.iter().map(String::as_str).collect();
+            Some(
+                model
+                    .use_cases
+                    .iter()
+                    .filter_map(|(key, uc)| wanted.contains(uc.id.as_str()).then_some(key))
+                    .collect(),
+            )
+        }
+        Scope::Bucs(buc_ids) => {
+            let wanted: HashSet<&str> = buc_ids.iter().map(String::as_str).collect();
+            let buc_keys: HashSet<BucKey> = model
+                .bucs
+                .iter()
+                .filter_map(|(key, buc)| wanted.contains(buc.id.as_str()).then_some(key))
+                .collect();
+            Some(
+                model
+                    .relations
+                    .iter()
+                    .filter_map(|rel| {
+                        if rel.kind == RelKind::Contains {
+                            if let (NodeRef::Buc(buc), NodeRef::UseCase(usecase)) =
+                                (&rel.from, &rel.to)
+                            {
+                                return buc_keys.contains(buc).then_some(*usecase);
+                            }
+                        }
+                        None
+                    })
+                    .collect(),
+            )
+        }
+    }
+}
+
 impl Emitter for SequenceDiagramEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
-        // BUCフィルタ
-        let reachable: Option<HashSet<NodeRef>> = match &view.scope {
-            Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
-            Scope::Whole => None,
-        };
-        let is_visible = |nr: &NodeRef| -> bool {
-            match &reachable {
-                Some(set) => set.contains(nr),
+        let scoped_usecases = sequence_usecase_scope(model, &view.scope);
+        let is_visible_usecase = |key: UseCaseKey| -> bool {
+            match &scoped_usecases {
+                Some(set) => set.contains(&key),
                 None => true,
             }
         };
@@ -471,8 +507,7 @@ impl Emitter for SequenceDiagramEmitter {
             .use_cases
             .iter()
             .filter(|(k, _)| {
-                is_visible(&NodeRef::UseCase(*k))
-                    && uc_tx_map.get(k).map(|t| t.has_writes()).unwrap_or(false)
+                is_visible_usecase(*k) && uc_tx_map.get(k).map(|t| t.has_writes()).unwrap_or(false)
             })
             .collect();
         uc_list.sort_by_key(|(_, u)| u.id.as_str());
@@ -754,7 +789,7 @@ impl Emitter for EventFlowPlantUmlEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         let reachable: Option<HashSet<NodeRef>> = match &view.scope {
             Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
-            Scope::Whole => None,
+            Scope::Whole | Scope::UseCases(_) => None,
         };
         let is_visible = |nr: &NodeRef| -> bool {
             match &reachable {
@@ -1063,30 +1098,68 @@ displays(PlaceOrder, OrderCompleteScreen)
 
     #[test]
     fn test_sequence_buc_filter() {
-        // BUCフィルタで絞り込んだとき、対象BUCのUCのみ出力される
+        // BUCフィルタで絞り込んだとき、対象BUCに直接含まれるUCのみ出力される。
+        // triggers で到達する別BUCのUC/APIは sequence には混ぜない。
         let src = r#"
 actor Customer "顧客"
 buc BucA "BUC-A"
 buc BucB "BUC-B"
 usecase UcA "ユースケースA"
 usecase UcB "ユースケースB"
+event EvA "イベントA"
+api ApiA "API-A"
+api ApiB "API-B"
 entity EntityA "エンティティA" { id: Int @pk }
 entity EntityB "エンティティB" { id: Int @pk }
 performs(Customer, BucA)
 contains(BucA, UcA)
-creates(UcA, EntityA)
+invokes(UcA, ApiA)
+creates(ApiA, EntityA)
+raises(UcA, EvA)
 performs(Customer, BucB)
 contains(BucB, UcB)
-creates(UcB, EntityB)
+invokes(UcB, ApiB)
+creates(ApiB, EntityB)
+triggers(EvA, UcB)
 "#;
         let model = model_from(src);
         let view = View::bucs(vec!["BucA".to_string()]);
         let result = SequenceDiagramEmitter.emit(&model, &view).unwrap();
         assert!(result.contains("ユースケースA"), "BucA's UC should appear");
+        assert!(result.contains("ApiA"), "BucA's API should appear");
         assert!(
             !result.contains("ユースケースB"),
             "BucB's UC should be excluded"
         );
+        assert!(!result.contains("ApiB"), "BucB's API should be excluded");
+    }
+
+    #[test]
+    fn test_sequence_usecase_filter() {
+        let src = r#"
+actor Customer "顧客"
+buc BucA "BUC-A"
+usecase UcA "ユースケースA"
+usecase UcB "ユースケースB"
+api ApiA "API-A"
+api ApiB "API-B"
+entity EntityA "エンティティA" { id: Int @pk }
+entity EntityB "エンティティB" { id: Int @pk }
+performs(Customer, BucA)
+contains(BucA, UcA)
+contains(BucA, UcB)
+invokes(UcA, ApiA)
+creates(ApiA, EntityA)
+invokes(UcB, ApiB)
+creates(ApiB, EntityB)
+"#;
+        let model = model_from(src);
+        let view = View::usecases(vec!["UcB".to_string()]);
+        let result = SequenceDiagramEmitter.emit(&model, &view).unwrap();
+        assert!(!result.contains("ユースケースA"));
+        assert!(!result.contains("ApiA"));
+        assert!(result.contains("ユースケースB"));
+        assert!(result.contains("ApiB"));
     }
 
     #[test]

@@ -1,0 +1,21 @@
+sequenceDiagram
+  actor FrontDesk as Front Desk Staff
+  actor Patient as Patient
+  participant RegisterPatientApi as Register Patient API
+  participant PatientAccount as Patient Account
+  participant PatientProfile as Patient Profile
+  participant PatientProfileScreen as Patient Profile Screen
+
+  Note over FrontDesk,PatientProfileScreen: Register Patient
+  FrontDesk->>PatientProfileScreen: Register Patient
+  PatientProfileScreen->>RegisterPatientApi: Register Patient
+  activate RegisterPatientApi
+  rect rgb(245,245,245)
+    Note right of RegisterPatientApi: transaction (API atomic boundary)
+    RegisterPatientApi->>PatientAccount: create
+    RegisterPatientApi->>PatientProfile: create
+  end
+  RegisterPatientApi-->>PatientProfileScreen: Patient Profile Screen
+  PatientProfileScreen-->>FrontDesk: Patient Profile Screen
+  deactivate RegisterPatientApi
+

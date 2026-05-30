@@ -1,0 +1,14 @@
+sequenceDiagram
+  actor CareCoordinator as Care Coordinator
+  actor Patient as Patient
+  participant System as システム
+  participant CarePlan as Care Plan
+  participant CarePlanScreen as Care Plan Screen
+
+  Note over CareCoordinator,CarePlanScreen: Close Care Plan
+  CareCoordinator->System: Close Care Plan
+  activate System
+  System->>CarePlan: update
+  System-->>CareCoordinator: Care Plan Screen
+  deactivate System
+

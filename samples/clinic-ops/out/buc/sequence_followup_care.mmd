@@ -1,0 +1,72 @@
+sequenceDiagram
+  actor CareCoordinator as Care Coordinator
+  actor Patient as Patient
+  participant System as システム
+  participant CreateCarePlanApi as Create Care Plan API
+  participant FollowUpScheduleApi as Follow-Up Schedule API
+  participant NotifyPatientResultApi as Notify Patient Result API
+  participant SendFollowUpMessageApi as Send Follow-Up Message API
+  participant Appointment as Appointment
+  participant CarePlan as Care Plan
+  participant Notification as Notification
+  participant PatientMessage as Patient Message
+  participant ProviderSchedule as Provider Schedule
+  participant CarePlanScreen as Care Plan Screen
+  participant FollowUpScheduleScreen as Follow-Up Schedule Screen
+  participant PatientMessageScreen as Patient Message Screen
+
+  Note over CareCoordinator,PatientMessageScreen: Close Care Plan
+  CareCoordinator->System: Close Care Plan
+  activate System
+  System->>CarePlan: update
+  System-->>CareCoordinator: Care Plan Screen
+  deactivate System
+
+  Note over CareCoordinator,PatientMessageScreen: Create Care Plan
+  CareCoordinator->>CarePlanScreen: Create Care Plan
+  CarePlanScreen->>CreateCarePlanApi: Create Care Plan
+  activate CreateCarePlanApi
+  CreateCarePlanApi->>CarePlan: create
+  CreateCarePlanApi-->>CarePlanScreen: Care Plan Screen
+  CarePlanScreen-->>CareCoordinator: Care Plan Screen
+  deactivate CreateCarePlanApi
+
+  Note over CareCoordinator,PatientMessageScreen: Notify Patient Result
+  CareCoordinator->>PatientMessageScreen: Notify Patient Result
+  PatientMessageScreen->>NotifyPatientResultApi: Notify Patient Result
+  activate NotifyPatientResultApi
+  NotifyPatientResultApi->>Notification: create
+  NotifyPatientResultApi-->>PatientMessageScreen: Patient Message Screen
+  PatientMessageScreen-->>CareCoordinator: Patient Message Screen
+  deactivate NotifyPatientResultApi
+
+  Note over CareCoordinator,PatientMessageScreen: Review Patient Response
+  CareCoordinator->System: Review Patient Response
+  activate System
+  System->>CarePlan: update
+  System->>PatientMessage: update
+  System-->>CareCoordinator: Care Plan Screen
+  deactivate System
+
+  Note over CareCoordinator,PatientMessageScreen: Schedule Follow-Up Visit
+  CareCoordinator->>FollowUpScheduleScreen: Schedule Follow-Up Visit
+  FollowUpScheduleScreen->>FollowUpScheduleApi: Schedule Follow-Up Visit
+  activate FollowUpScheduleApi
+  rect rgb(245,245,245)
+    Note right of FollowUpScheduleApi: transaction (API atomic boundary)
+    FollowUpScheduleApi->>Appointment: create
+    FollowUpScheduleApi->>ProviderSchedule: update
+  end
+  FollowUpScheduleApi-->>FollowUpScheduleScreen: Follow-Up Schedule Screen
+  FollowUpScheduleScreen-->>CareCoordinator: Follow-Up Schedule Screen
+  deactivate FollowUpScheduleApi
+
+  Note over CareCoordinator,PatientMessageScreen: Send Follow-Up Message
+  CareCoordinator->>PatientMessageScreen: Send Follow-Up Message
+  PatientMessageScreen->>SendFollowUpMessageApi: Send Follow-Up Message
+  activate SendFollowUpMessageApi
+  SendFollowUpMessageApi->>PatientMessage: create
+  SendFollowUpMessageApi-->>PatientMessageScreen: Patient Message Screen
+  PatientMessageScreen-->>CareCoordinator: Patient Message Screen
+  deactivate SendFollowUpMessageApi
+

@@ -1,0 +1,15 @@
+sequenceDiagram
+  actor BillingSpecialist as Billing Specialist
+  participant SubmitClaimApi as Submit Claim API
+  participant Claim as Claim
+  participant ClaimScreen as Claim Screen
+
+  Note over BillingSpecialist,ClaimScreen: Submit Claim
+  BillingSpecialist->>ClaimScreen: Submit Claim
+  ClaimScreen->>SubmitClaimApi: Submit Claim
+  activate SubmitClaimApi
+  SubmitClaimApi->>Claim: update
+  SubmitClaimApi-->>ClaimScreen: Claim Screen
+  ClaimScreen-->>BillingSpecialist: Claim Screen
+  deactivate SubmitClaimApi
+

@@ -1,0 +1,16 @@
+sequenceDiagram
+  actor CareCoordinator as Care Coordinator
+  actor Patient as Patient
+  participant System as システム
+  participant CarePlan as Care Plan
+  participant PatientMessage as Patient Message
+  participant CarePlanScreen as Care Plan Screen
+
+  Note over CareCoordinator,CarePlanScreen: Review Patient Response
+  CareCoordinator->System: Review Patient Response
+  activate System
+  System->>CarePlan: update
+  System->>PatientMessage: update
+  System-->>CareCoordinator: Care Plan Screen
+  deactivate System
+

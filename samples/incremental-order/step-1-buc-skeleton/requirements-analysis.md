@@ -1,27 +1,49 @@
-# Step 1 Requirements Analysis
+# 店舗補充管理 要求分析 Step 1
 
 <!-- constrained-by ../../../docs/incremental-modeling.md#stage-1-buc-skeleton -->
 <!-- derived-from ../step-0-scope/requirements-analysis.md -->
 
-## Current Question
+## 1. 業務背景
 
-Who gets value from this BUC, and which user-visible actions compose it?
+店舗補充管理では、店舗運営担当者が補充予定と店舗の担当組織を更新する。現時点の関心はデータ項目ではなく、業務担当者が認識している操作単位を BUC 内の usecase として整理することにある。
 
-## Requirement Notes
+## 2. 利用者と責務
 
-- Operations staff maintain store restock dates.
-- Staff can change the next restock date for a store.
-- Staff can change the parent organization of a store when operations ownership
-  changes.
-- Data objects and transaction boundaries are still unknown.
+| Actor | 責務 | 備考 |
+|---|---|---|
+| `OpsStaff` | 店舗補充予定と担当組織を維持する | 店舗運営部の担当者を想定 |
 
-## Open Questions
+## 3. 業務ユースケース
 
-- Which business objects are created, read, updated, or deleted by each use case?
-- Is parent organization change a local update or a coordinated boundary?
+| Use case | 業務目的 | 完了条件 |
+|---|---|---|
+| `ChangeNextRestockDate` | 店舗の次回補充予定日を変更する | 対象店舗の次回補充予定が更新候補として記録される |
+| `ChangeStoreParentOrganization` | 店舗の担当組織を変更する | 新しい担当組織を確認したうえで店舗の所属が変更される |
+
+## 4. 要求
+
+| ID | 要求 | 優先度 |
+|---|---|---|
+| R-101 | 店舗運営担当者が BUC の実行主体として表現されること | Must |
+| R-102 | 補充予定日の変更と担当組織変更を別 usecase としてレビューできること | Must |
+| R-103 | データや画面が未確定でも、業務操作の抜け漏れを確認できること | Should |
+
+## 5. 未決事項
+
+- 店舗情報をどのデータ単位で扱うか。
+- 担当組織変更で参照する組織マスタが同一システム内にあるか。
+- 変更理由、承認、履歴が必要か。
+
+## 6. レビュー観点
+
+- usecase が利用者の操作単位として細かすぎないか、粗すぎないか。
+- 担当組織変更が補充予定変更と同じ BUC に属してよいか。
+- actor が `OpsStaff` だけで足りるか。承認者や本部管理者が別 actor として必要か。
 
 ## Summary
 
-<!-- derived-from #requirement-notes -->
+<!-- derived-from #2-利用者と責務 -->
+<!-- derived-from #3-業務ユースケース -->
+<!-- derived-from #6-レビュー観点 -->
 
-The BUC has one actor and two use cases, but no entities yet.
+Step 1 では actor と usecase を確定し、データ・画面・API は次ステップ以降へ残す。

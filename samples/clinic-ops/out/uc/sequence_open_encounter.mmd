@@ -1,0 +1,16 @@
+sequenceDiagram
+  actor Clinician as Clinician
+  actor Nurse as Nurse
+  participant OpenEncounterApi as Open Encounter API
+  participant Encounter as Encounter
+  participant EncounterWorkspaceScreen as Encounter Workspace
+
+  Note over Clinician,EncounterWorkspaceScreen: Open Encounter
+  Nurse->>EncounterWorkspaceScreen: Open Encounter
+  EncounterWorkspaceScreen->>OpenEncounterApi: Open Encounter
+  activate OpenEncounterApi
+  OpenEncounterApi->>Encounter: create
+  OpenEncounterApi-->>EncounterWorkspaceScreen: Encounter Workspace
+  EncounterWorkspaceScreen-->>Nurse: Encounter Workspace
+  deactivate OpenEncounterApi
+

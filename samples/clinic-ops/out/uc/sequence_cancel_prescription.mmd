@@ -1,0 +1,14 @@
+sequenceDiagram
+  actor Clinician as Clinician
+  actor Nurse as Nurse
+  participant System as システム
+  participant Prescription as Prescription
+  participant PrescriptionScreen as Prescription Screen
+
+  Note over Clinician,PrescriptionScreen: Cancel Prescription
+  Clinician->System: Cancel Prescription
+  activate System
+  System->>Prescription: update
+  System-->>Clinician: Prescription Screen
+  deactivate System
+

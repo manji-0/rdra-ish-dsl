@@ -1,0 +1,13 @@
+sequenceDiagram
+  actor BillingSpecialist as Billing Specialist
+  participant System as システム
+  participant Claim as Claim
+  participant ClaimScreen as Claim Screen
+
+  Note over BillingSpecialist,ClaimScreen: Receive Claim Accepted
+  BillingSpecialist->System: Receive Claim Accepted
+  activate System
+  System->>Claim: update
+  System-->>BillingSpecialist: Claim Screen
+  deactivate System
+

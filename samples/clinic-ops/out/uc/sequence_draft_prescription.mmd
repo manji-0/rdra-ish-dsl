@@ -1,0 +1,16 @@
+sequenceDiagram
+  actor Clinician as Clinician
+  actor Nurse as Nurse
+  participant DraftPrescriptionApi as Draft Prescription API
+  participant Prescription as Prescription
+  participant PrescriptionScreen as Prescription Screen
+
+  Note over Clinician,PrescriptionScreen: Draft Prescription
+  Clinician->>PrescriptionScreen: Draft Prescription
+  PrescriptionScreen->>DraftPrescriptionApi: Draft Prescription
+  activate DraftPrescriptionApi
+  DraftPrescriptionApi->>Prescription: create
+  DraftPrescriptionApi-->>PrescriptionScreen: Prescription Screen
+  PrescriptionScreen-->>Clinician: Prescription Screen
+  deactivate DraftPrescriptionApi
+

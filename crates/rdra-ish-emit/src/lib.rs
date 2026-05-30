@@ -22,6 +22,8 @@ pub enum Scope {
     Whole,
     /// 特定BUC群（buc_id 文字列のリスト、和集合で絞り込む）
     Bucs(Vec<String>),
+    /// 特定UseCase群（usecase_id 文字列のリスト、和集合で絞り込む）
+    UseCases(Vec<String>),
 }
 
 /// 出力フィルタ
@@ -61,6 +63,19 @@ impl View {
             Scope::Whole
         } else {
             Scope::Bucs(buc_ids)
+        };
+        Self {
+            scope,
+            filter: Filter::None,
+        }
+    }
+
+    /// 1つ以上の UseCase id を指定して絞り込むビューを作る。
+    pub fn usecases(usecase_ids: Vec<String>) -> Self {
+        let scope = if usecase_ids.is_empty() {
+            Scope::Whole
+        } else {
+            Scope::UseCases(usecase_ids)
         };
         Self {
             scope,

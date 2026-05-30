@@ -1,0 +1,59 @@
+sequenceDiagram
+  actor ClinicAdmin as Clinic Administrator
+  participant System as システム
+  participant BlockScheduleSlotApi as Block Schedule Slot API
+  participant ManageProviderScheduleApi as Manage Provider Schedule API
+  participant RoomAdminApi as Room Admin API
+  participant AuditEvent as Audit Event
+  participant Provider as Provider
+  participant ProviderSchedule as Provider Schedule
+  participant Room as Room
+  participant AuditReviewScreen as Audit Review Screen
+  participant RoomAdminScreen as Room Admin Screen
+  participant ScheduleAdminScreen as Schedule Admin Screen
+
+  Note over ClinicAdmin,ScheduleAdminScreen: Block Schedule Slot
+  ClinicAdmin->>ScheduleAdminScreen: Block Schedule Slot
+  ScheduleAdminScreen->>BlockScheduleSlotApi: Block Schedule Slot
+  activate BlockScheduleSlotApi
+  BlockScheduleSlotApi->>ProviderSchedule: update
+  BlockScheduleSlotApi-->>ScheduleAdminScreen: Schedule Admin Screen
+  ScheduleAdminScreen-->>ClinicAdmin: Schedule Admin Screen
+  deactivate BlockScheduleSlotApi
+
+  Note over ClinicAdmin,ScheduleAdminScreen: Configure Room
+  ClinicAdmin->>RoomAdminScreen: Configure Room
+  RoomAdminScreen->>RoomAdminApi: Configure Room
+  activate RoomAdminApi
+  RoomAdminApi->>Room: create
+  RoomAdminApi-->>RoomAdminScreen: Room Admin Screen
+  RoomAdminScreen-->>ClinicAdmin: Room Admin Screen
+  deactivate RoomAdminApi
+
+  Note over ClinicAdmin,ScheduleAdminScreen: Manage Provider Schedule
+  ClinicAdmin->>ScheduleAdminScreen: Manage Provider Schedule
+  ScheduleAdminScreen->>ManageProviderScheduleApi: Manage Provider Schedule
+  activate ManageProviderScheduleApi
+  rect rgb(245,245,245)
+    Note right of ManageProviderScheduleApi: transaction (API atomic boundary)
+    ManageProviderScheduleApi->>Provider: update
+    ManageProviderScheduleApi->>ProviderSchedule: create
+  end
+  ManageProviderScheduleApi-->>ScheduleAdminScreen: Schedule Admin Screen
+  ScheduleAdminScreen-->>ClinicAdmin: Schedule Admin Screen
+  deactivate ManageProviderScheduleApi
+
+  Note over ClinicAdmin,ScheduleAdminScreen: Release Room
+  ClinicAdmin->System: Release Room
+  activate System
+  System->>Room: update
+  System-->>ClinicAdmin: Room Admin Screen
+  deactivate System
+
+  Note over ClinicAdmin,ScheduleAdminScreen: Resolve Audit Finding
+  ClinicAdmin->System: Resolve Audit Finding
+  activate System
+  System->>AuditEvent: update
+  System-->>ClinicAdmin: Audit Review Screen
+  deactivate System
+

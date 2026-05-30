@@ -40,7 +40,7 @@ status `1`. Otherwise prints `OK: no errors` and exits `0`.
 Generate a diagram in PlantUML or Mermaid.
 
 ```
-rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]... [-o <OUT>]
+rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]... [--usecase <ID>]... [-o <OUT>]
 ```
 
 | Option | Type | Default | Description |
@@ -48,7 +48,8 @@ rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]...
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--kind` | `rdra` \| `er` \| `state` \| `sequence` \| `event-flow` | `rdra` | The diagram kind. `rdra` = full RDRA relationship graph; `er` = entity-relationship diagram; `state` = state machine; `sequence` = write-focused sequence diagram with FK-inferred transaction boundaries; `event-flow` = event causality graph showing UC→Event→UC and Event→State chains. |
 | `--format` | `puml` \| `svg` \| `png` \| `mermaid` | `puml` | Output format. `puml` writes PlantUML text (`.puml`); `mermaid` writes Mermaid text (`.mmd`); `svg` / `png` render via plantuml.jar. |
-| `--buc <id>` | string (repeatable) | — (whole model) | Filter to one or more BUCs by id. With multiple ids, the **union** of reachable nodes across the named BUCs is shown. Applies to all diagram kinds. |
+| `--buc <id>` | string (repeatable) | — (whole model) | Filter to one or more BUCs by id. With multiple ids, the **union** of reachable nodes across the named BUCs is shown. Applies to all diagram kinds. For `sequence`, only use cases directly contained in the selected BUCs are shown; event-triggered use cases in other BUCs are left to `event-flow`. |
+| `--usecase <id>` | string (repeatable) | — (whole model) | Filter `sequence` diagrams to one or more use cases by id. Cannot be combined with `--buc`. |
 | `-o`, `--out` | path | `out` | Output file path. The extension is added automatically based on `--format` (`.puml`, `.mmd`, `.svg`, `.png`). |
 
 Notes:

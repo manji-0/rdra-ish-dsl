@@ -1,0 +1,15 @@
+sequenceDiagram
+  actor ClinicAdmin as Clinic Administrator
+  participant RoomAdminApi as Room Admin API
+  participant Room as Room
+  participant RoomAdminScreen as Room Admin Screen
+
+  Note over ClinicAdmin,RoomAdminScreen: Configure Room
+  ClinicAdmin->>RoomAdminScreen: Configure Room
+  RoomAdminScreen->>RoomAdminApi: Configure Room
+  activate RoomAdminApi
+  RoomAdminApi->>Room: create
+  RoomAdminApi-->>RoomAdminScreen: Room Admin Screen
+  RoomAdminScreen-->>ClinicAdmin: Room Admin Screen
+  deactivate RoomAdminApi
+

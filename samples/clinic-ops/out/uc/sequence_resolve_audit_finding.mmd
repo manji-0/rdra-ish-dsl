@@ -1,0 +1,13 @@
+sequenceDiagram
+  actor ClinicAdmin as Clinic Administrator
+  participant System as システム
+  participant AuditEvent as Audit Event
+  participant AuditReviewScreen as Audit Review Screen
+
+  Note over ClinicAdmin,AuditReviewScreen: Resolve Audit Finding
+  ClinicAdmin->System: Resolve Audit Finding
+  activate System
+  System->>AuditEvent: update
+  System-->>ClinicAdmin: Audit Review Screen
+  deactivate System
+

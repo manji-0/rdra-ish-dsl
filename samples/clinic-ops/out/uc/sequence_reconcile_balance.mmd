@@ -1,0 +1,15 @@
+sequenceDiagram
+  actor BillingSpecialist as Billing Specialist
+  participant BalanceApi as Balance API
+  participant AccountBalance as Account Balance
+  participant BalanceScreen as Balance Screen
+
+  Note over BillingSpecialist,BalanceScreen: Reconcile Balance
+  BillingSpecialist->>BalanceScreen: Reconcile Balance
+  BalanceScreen->>BalanceApi: Reconcile Balance
+  activate BalanceApi
+  BalanceApi->>AccountBalance: update
+  BalanceApi-->>BalanceScreen: Balance Screen
+  BalanceScreen-->>BillingSpecialist: Balance Screen
+  deactivate BalanceApi
+

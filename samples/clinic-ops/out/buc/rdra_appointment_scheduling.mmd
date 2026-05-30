@@ -1,0 +1,59 @@
+graph TD
+  FrontDesk(["👤 Front Desk Staff"])
+  Patient(["👤 Patient"])
+  BookAppointment(["Book Appointment"])
+  CancelAppointment(["Cancel Appointment"])
+  MarkNoShow(["Mark No Show"])
+  RescheduleAppointment(["Reschedule Appointment"])
+  ReserveAppointment(["Reserve Appointment"])
+  SearchAvailability(["Search Availability"])
+  SendAppointmentNotice(["Send Appointment Notice"])
+  SendIntakeForms(["Send Intake Forms"])
+  BucAppointmentScheduling["📦 Schedule Appointments"]
+  Appointment[("🗄 Appointment")]
+  ClinicLocation[("🗄 Clinic Location")]
+  IntakePacket[("🗄 Intake Packet")]
+  Notification[("🗄 Notification")]
+  PatientMessage[("🗄 Patient Message")]
+  Provider[("🗄 Provider")]
+  ProviderSchedule[("🗄 Provider Schedule")]
+  AppointmentNoticeScreen[["Appointment Notice Screen"]]
+  AppointmentScreen[["Appointment Screen"]]
+  IntakePortalScreen[["Intake Portal Screen"]]
+  ScheduleSearchScreen[["Schedule Search Screen"]]
+  EvAppointmentCancelled{"Appointment Cancelled"}
+  EvAppointmentNoShow{"Appointment Marked No Show"}
+  EvAppointmentRescheduled{"Appointment Rescheduled"}
+  EvAppointmentScheduled{"Appointment Scheduled"}
+  Patient --> BucAppointmentScheduling
+  FrontDesk --> BucAppointmentScheduling
+  BucAppointmentScheduling --> PatientAccess
+  BucAppointmentScheduling --> SearchAvailability
+  BucAppointmentScheduling --> ReserveAppointment
+  BucAppointmentScheduling --> BookAppointment
+  BucAppointmentScheduling --> RescheduleAppointment
+  BucAppointmentScheduling --> CancelAppointment
+  BucAppointmentScheduling --> MarkNoShow
+  BucAppointmentScheduling --> SendAppointmentNotice
+  ProviderSchedule --- Provider
+  ProviderSchedule --- ClinicLocation
+  Appointment --- Provider
+  Appointment --- ClinicLocation
+  EvAppointmentScheduled -.->|triggers| SendIntakeForms
+  EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
+  EvAppointmentRescheduled -.->|triggers| SendAppointmentNotice
+  EvAppointmentCancelled -.->|triggers| SendAppointmentNotice
+  ScheduleSearchScreen -.->|shows| ProviderSchedule
+  SendIntakeForms -.->|displays| IntakePortalScreen
+  SearchAvailability -.->|displays| ScheduleSearchScreen
+  ReserveAppointment -.->|displays| AppointmentScreen
+  BookAppointment -.->|raises| EvAppointmentScheduled
+  BookAppointment -.->|displays| AppointmentScreen
+  RescheduleAppointment -.->|raises| EvAppointmentRescheduled
+  RescheduleAppointment -.->|displays| AppointmentScreen
+  CancelAppointment -.->|raises| EvAppointmentCancelled
+  CancelAppointment -.->|displays| AppointmentScreen
+  MarkNoShow -.->|updates| Appointment
+  MarkNoShow -.->|raises| EvAppointmentNoShow
+  MarkNoShow -.->|displays| AppointmentScreen
+  SendAppointmentNotice -.->|displays| AppointmentNoticeScreen

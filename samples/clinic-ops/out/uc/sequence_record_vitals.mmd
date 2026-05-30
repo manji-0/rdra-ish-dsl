@@ -1,0 +1,21 @@
+sequenceDiagram
+  actor Clinician as Clinician
+  actor Nurse as Nurse
+  participant RecordVitalsApi as Record Vitals API
+  participant Encounter as Encounter
+  participant VitalSign as Vital Sign
+  participant VitalsScreen as Vitals Screen
+
+  Note over Clinician,VitalsScreen: Record Vitals
+  Nurse->>VitalsScreen: Record Vitals
+  VitalsScreen->>RecordVitalsApi: Record Vitals
+  activate RecordVitalsApi
+  rect rgb(245,245,245)
+    Note right of RecordVitalsApi: transaction (API atomic boundary)
+    RecordVitalsApi->>Encounter: update
+    RecordVitalsApi->>VitalSign: create
+  end
+  RecordVitalsApi-->>VitalsScreen: Vitals Screen
+  VitalsScreen-->>Nurse: Vitals Screen
+  deactivate RecordVitalsApi
+

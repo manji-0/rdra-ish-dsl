@@ -1,0 +1,14 @@
+sequenceDiagram
+  actor FrontDesk as Front Desk Staff
+  actor Patient as Patient
+  participant System as システム
+  participant PatientAccount as Patient Account
+  participant PatientProfileScreen as Patient Profile Screen
+
+  Note over FrontDesk,PatientProfileScreen: Archive Patient
+  FrontDesk->System: Archive Patient
+  activate System
+  System->>PatientAccount: update
+  System-->>FrontDesk: Patient Profile Screen
+  deactivate System
+

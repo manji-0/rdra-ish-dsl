@@ -1,0 +1,16 @@
+sequenceDiagram
+  actor Clinician as Clinician
+  actor Nurse as Nurse
+  participant RefillPrescriptionApi as Refill Prescription API
+  participant Prescription as Prescription
+  participant PrescriptionScreen as Prescription Screen
+
+  Note over Clinician,PrescriptionScreen: Refill Prescription
+  Clinician->>PrescriptionScreen: Refill Prescription
+  PrescriptionScreen->>RefillPrescriptionApi: Refill Prescription
+  activate RefillPrescriptionApi
+  RefillPrescriptionApi->>Prescription: create
+  RefillPrescriptionApi-->>PrescriptionScreen: Prescription Screen
+  PrescriptionScreen-->>Clinician: Prescription Screen
+  deactivate RefillPrescriptionApi
+

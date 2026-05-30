@@ -1,0 +1,21 @@
+sequenceDiagram
+  actor Clinician as Clinician
+  actor Nurse as Nurse
+  participant CompleteAppointmentApi as Complete Appointment API
+  participant Appointment as Appointment
+  participant Room as Room
+  participant EncounterWorkspaceScreen as Encounter Workspace
+
+  Note over Clinician,EncounterWorkspaceScreen: Complete Appointment
+  Nurse->>EncounterWorkspaceScreen: Complete Appointment
+  EncounterWorkspaceScreen->>CompleteAppointmentApi: Complete Appointment
+  activate CompleteAppointmentApi
+  rect rgb(245,245,245)
+    Note right of CompleteAppointmentApi: transaction (API atomic boundary)
+    CompleteAppointmentApi->>Room: update
+    CompleteAppointmentApi->>Appointment: update
+  end
+  CompleteAppointmentApi-->>EncounterWorkspaceScreen: Encounter Workspace
+  EncounterWorkspaceScreen-->>Nurse: Encounter Workspace
+  deactivate CompleteAppointmentApi
+

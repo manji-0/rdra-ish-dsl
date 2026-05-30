@@ -1,0 +1,21 @@
+sequenceDiagram
+  actor FrontDesk as Front Desk Staff
+  actor Patient as Patient
+  participant IntakeMessagingApi as Intake Messaging API
+  participant IntakePacket as Intake Packet
+  participant PatientMessage as Patient Message
+  participant IntakePortalScreen as Intake Portal Screen
+
+  Note over FrontDesk,IntakePortalScreen: Send Intake Forms
+  FrontDesk->>IntakePortalScreen: Send Intake Forms
+  IntakePortalScreen->>IntakeMessagingApi: Send Intake Forms
+  activate IntakeMessagingApi
+  rect rgb(245,245,245)
+    Note right of IntakeMessagingApi: transaction (API atomic boundary)
+    IntakeMessagingApi->>IntakePacket: create
+    IntakeMessagingApi->>PatientMessage: create
+  end
+  IntakeMessagingApi-->>IntakePortalScreen: Intake Portal Screen
+  IntakePortalScreen-->>FrontDesk: Intake Portal Screen
+  deactivate IntakeMessagingApi
+

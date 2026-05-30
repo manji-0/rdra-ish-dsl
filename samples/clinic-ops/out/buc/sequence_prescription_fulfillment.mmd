@@ -1,0 +1,55 @@
+sequenceDiagram
+  actor Clinician as Clinician
+  actor Nurse as Nurse
+  participant System as システム
+  participant ConfirmDispenseApi as Confirm Dispense API
+  participant DraftPrescriptionApi as Draft Prescription API
+  participant RefillPrescriptionApi as Refill Prescription API
+  participant SendPrescriptionApi as Send Prescription API
+  participant Prescription as Prescription
+  participant PharmacyStatusScreen as Pharmacy Status Screen
+  participant PrescriptionScreen as Prescription Screen
+
+  Note over Clinician,PrescriptionScreen: Cancel Prescription
+  Clinician->System: Cancel Prescription
+  activate System
+  System->>Prescription: update
+  System-->>Clinician: Prescription Screen
+  deactivate System
+
+  Note over Clinician,PrescriptionScreen: Confirm Dispense
+  Clinician->>PharmacyStatusScreen: Confirm Dispense
+  PharmacyStatusScreen->>ConfirmDispenseApi: Confirm Dispense
+  activate ConfirmDispenseApi
+  ConfirmDispenseApi->>Prescription: update
+  ConfirmDispenseApi-->>PharmacyStatusScreen: Pharmacy Status Screen
+  PharmacyStatusScreen-->>Clinician: Pharmacy Status Screen
+  deactivate ConfirmDispenseApi
+
+  Note over Clinician,PrescriptionScreen: Draft Prescription
+  Clinician->>PrescriptionScreen: Draft Prescription
+  PrescriptionScreen->>DraftPrescriptionApi: Draft Prescription
+  activate DraftPrescriptionApi
+  DraftPrescriptionApi->>Prescription: create
+  DraftPrescriptionApi-->>PrescriptionScreen: Prescription Screen
+  PrescriptionScreen-->>Clinician: Prescription Screen
+  deactivate DraftPrescriptionApi
+
+  Note over Clinician,PrescriptionScreen: Refill Prescription
+  Clinician->>PrescriptionScreen: Refill Prescription
+  PrescriptionScreen->>RefillPrescriptionApi: Refill Prescription
+  activate RefillPrescriptionApi
+  RefillPrescriptionApi->>Prescription: create
+  RefillPrescriptionApi-->>PrescriptionScreen: Prescription Screen
+  PrescriptionScreen-->>Clinician: Prescription Screen
+  deactivate RefillPrescriptionApi
+
+  Note over Clinician,PrescriptionScreen: Send Prescription
+  Clinician->>PrescriptionScreen: Send Prescription
+  PrescriptionScreen->>SendPrescriptionApi: Send Prescription
+  activate SendPrescriptionApi
+  SendPrescriptionApi->>Prescription: update
+  SendPrescriptionApi-->>PrescriptionScreen: Prescription Screen
+  PrescriptionScreen-->>Clinician: Prescription Screen
+  deactivate SendPrescriptionApi
+
