@@ -1,0 +1,301 @@
+# Incremental Modeling Flow
+
+This guide describes how to build an RDRA model from coarse intent to concrete
+behavior without forcing all details up front. Each stage has a small modeling goal,
+a validation command, and a focused set of questions that unlocks the next stage.
+
+<!-- constrained-by ./language-reference.md -->
+<!-- constrained-by ./cli-reference.md -->
+<!-- derived-from ../README.md#recommended-modeling-loop -->
+
+## Principle
+
+Start with the smallest model that can answer the current question. Move to the next
+stage only when the current abstraction is stable enough to make the added detail
+useful.
+
+The model can stay intentionally incomplete while it is being explored:
+
+- warnings are review signals, not always blockers;
+- `check` errors are blockers because the semantic model cannot be trusted;
+- BUC filters let you validate one slice without finishing the whole system;
+- Mermaid output is the preferred early review format because it is text and easy to
+  diff.
+
+## Stage Map
+
+| Stage | Abstraction | Main question | Add | Validate |
+|---|---|---|---|---|
+| 0 | Scope sketch | What business area are we modeling? | `business`, rough `buc`, candidate `actor` | `list --kind buc`, `diagram --kind rdra` |
+| 1 | BUC skeleton | Who gets value from each BUC? | `performs`, `belongs`, `contains`, rough `usecase` | `check`, BUC-scoped RDRA diagram |
+| 2 | Data touchpoints | Which data objects does each use case touch? | coarse `entity`, CRUD predicates | CRUD matrix, ER diagram |
+| 3 | Interaction boundary | What UI/API boundary mediates the work? | `screen`, `displays`, `shows`, optional `api`/`invokes` | sequence diagram |
+| 4 | Entity structure | What structure and ownership does the data need? | columns, `@pk`, `relate`, cardinality | ER diagram, sequence TX warnings |
+| 5 | Lifecycle | Which states are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `state`, `transitions`, `raises`, `sets` | `states`, state diagram, event-flow |
+| 6 | Business rules | Which states are invalid or required? | `forbidden`, `invariant`, comparison propositions | `states` diagnostics |
+
+## Stage 0: Scope Sketch
+
+Create only enough to name the business area and candidate BUCs.
+
+```rdra
+module shared.biz
+
+business Commerce "Commerce"
+```
+
+```rdra
+module buc.order
+
+import shared.biz
+
+buc BucOrder "Process Order"
+belongs(BucOrder, Commerce)
+```
+
+Ask the user:
+
+- Which business area or value stream is in scope?
+- What are the candidate BUC names?
+- Which BUC should be modeled first?
+
+Validation:
+
+```sh
+rdra-ish check src/
+rdra-ish list src/ --kind buc --format table
+rdra-ish diagram src/ --kind rdra --format mermaid --buc BucOrder
+```
+
+Move on when BUC names and business ownership look stable enough for review.
+
+## Stage 1: BUC Skeleton
+
+Add actors and use cases, but do not require entities or screens yet.
+
+```rdra
+actor Customer "Customer"
+
+usecase PlaceOrder "Place Order"
+usecase CancelOrder "Cancel Order"
+
+performs(Customer, BucOrder)
+contains(BucOrder, PlaceOrder)
+contains(BucOrder, CancelOrder)
+```
+
+Ask the user:
+
+- Who initiates or receives value from this BUC?
+- What user-visible actions compose the BUC?
+- Are any use cases triggered by a system event rather than a human actor?
+
+Validation:
+
+```sh
+rdra-ish check src/
+rdra-ish diagram src/ --kind rdra --format mermaid --buc BucOrder
+```
+
+Move on when every important action is represented as a use case and each use case
+belongs to the intended BUC.
+
+## Stage 2: Data Touchpoints
+
+Add coarse entities and CRUD predicates. At this stage, entities may have only `id`
+columns; detailed attributes can wait.
+
+```rdra
+entity Order "Order" {
+  id: Int @pk
+}
+
+entity Cart "Cart" {
+  id: Int @pk
+}
+
+creates(PlaceOrder, Order)
+updates(PlaceOrder, Cart)
+updates(CancelOrder, Order)
+```
+
+Ask the user:
+
+- Which business objects are created, read, updated, or deleted by each use case?
+- Are any entities only conceptual at this stage?
+- Which entities should be shared across multiple BUCs?
+
+Validation:
+
+```sh
+rdra-ish check src/
+rdra-ish csv src/ --kind matrix
+rdra-ish diagram src/ --kind er --format mermaid --buc BucOrder
+```
+
+Move on when the CRUD matrix tells a plausible story, even if entity columns are still
+coarse.
+
+## Stage 3: Interaction Boundary
+
+Add screens and optional APIs once the use-case/data relationship is clear.
+
+```rdra
+screen CheckoutScreen "Checkout"
+api OrderApi "Order API"
+
+displays(PlaceOrder, CheckoutScreen)
+shows(CheckoutScreen, Order)
+invokes(PlaceOrder, OrderApi)
+creates(OrderApi, Order)
+```
+
+Ask the user:
+
+- Which screen or external interface does each use case expose?
+- Does the use case write data directly, or through an API boundary?
+- Is the API a reusable boundary or local to this BUC?
+
+Validation:
+
+```sh
+rdra-ish check src/
+rdra-ish diagram src/ --kind sequence --format mermaid --buc BucOrder
+rdra-ish list src/ --kind api --format table
+rdra-ish csv src/ --kind api-matrix
+```
+
+Move on when sequence output communicates the intended actor/screen/API/entity path.
+
+## Stage 4: Entity Structure
+
+Refine entities with columns, primary keys, relationships, and cardinality.
+
+```rdra
+entity OrderLine "Order Line" {
+  id: Int @pk
+  qty: Int
+  unit_price: Decimal
+}
+
+relate(OrderLine, Order, "N:1")
+```
+
+Ask the user:
+
+- What fields identify each entity?
+- Which fields are business state, and which are ordinary data?
+- What parent/child relationships should own or group records?
+- Does a use case need one transaction across related entities?
+
+Validation:
+
+```sh
+rdra-ish check src/
+rdra-ish diagram src/ --kind er --format mermaid
+rdra-ish diagram src/ --kind sequence --format mermaid --buc BucOrder
+```
+
+Move on when FK relationships and transaction warnings match the intended persistence
+boundary.
+
+## Stage 5: Lifecycle
+
+Add lifecycle axes and events after the structural model is stable.
+
+<!-- constrained-by ./state-derivation.md#state-axes -->
+<!-- constrained-by ./state-derivation.md#operations -->
+
+```rdra
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(pending, paid, cancelled) @default(pending)
+  paid_at: DateTime @null
+}
+
+state Pending "Pending"
+state Paid "Paid"
+state Cancelled "Cancelled"
+
+event Capture "Capture Payment"
+event Cancel "Cancel Order"
+
+transitions(event::Capture, Pending, Paid)
+transitions(event::Cancel, Pending, Cancelled)
+
+raises(PlaceOrder, event::Capture)
+raises(CancelOrder, event::Cancel)
+sets(event::Capture, Order, "paid_at", "timestamptz")
+```
+
+Ask the user:
+
+- Which entity values represent lifecycle state?
+- Which use case or event causes each state change?
+- Which nullable or boolean fields change together with the lifecycle?
+- Are any declared states intentionally unreachable for now?
+
+Validation:
+
+```sh
+rdra-ish states src/ --entity Order
+rdra-ish diagram src/ --kind state --format mermaid --buc BucOrder
+rdra-ish diagram src/ --kind event-flow --format mermaid
+```
+
+Move on when reachable patterns explain the expected lifecycle and unexpected terminal
+or unreachable states have been reviewed.
+
+## Stage 6: Business Rules
+
+Add constraints only after there is enough lifecycle behavior to evaluate them.
+
+```rdra
+forbidden(Order, (status, paid), (paid_at, null))
+
+invariant(Order)
+  .when(status, paid)
+  .then(paid_at, present)
+```
+
+Ask the user:
+
+- Which combinations must never be reachable?
+- Which values must co-occur once a condition is true?
+- Which comparisons matter even though the concrete numeric or date values are not
+  tracked in the abstract state space?
+
+Validation:
+
+```sh
+rdra-ish states src/
+rdra-ish states src/ --entity Order --format json
+```
+
+Move on when diagnostics either disappear or are accepted as known modeling gaps.
+
+## Choosing the Next Question
+
+Use the current abstraction level to decide what to ask next:
+
+| If the model has... | Ask next for... |
+|---|---|
+| BUCs but no actors | initiating actors and external systems |
+| Actors/use cases but no CRUD | data objects touched by each use case |
+| CRUD but no screens | visible UI surfaces or external interfaces |
+| direct CRUD but known backend boundaries | API endpoints and `invokes` relationships |
+| entities with only `id` | columns, keys, and relationships |
+| Enum/Bool/nullable columns but no `sets` or `transitions` | use-case effects and events |
+| states but unreachable variants | missing `raises`, `transitions`, or `sets` |
+| stable reachable states | `forbidden` and `invariant` business rules |
+
+## Summary
+
+<!-- derived-from #principle -->
+<!-- derived-from #stage-map -->
+<!-- derived-from #choosing-the-next-question -->
+
+Incremental modeling works best when each stage answers one question and leaves later
+detail out until it becomes useful. The model should move from BUC intent, to use-case
+coverage, to data touchpoints, to interaction boundaries, to entity structure, to
+lifecycle, and finally to business-rule constraints.

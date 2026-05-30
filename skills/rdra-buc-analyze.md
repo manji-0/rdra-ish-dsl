@@ -1,11 +1,14 @@
 ---
 name: rdra-buc-analyze
-description: Analyze a BUC or the whole model for coverage gaps, state patterns, and consistency using rdra-ish CLI commands
+description: Analyze a BUC or the whole model for coverage gaps, state patterns, consistency, and readiness for the next refinement stage
 ---
 
 ## Analyze a BUC
 
 Run CLI commands to surface coverage gaps, state patterns, and consistency issues in a BUC or the whole model.
+
+When the user is refining a model incrementally, identify the current abstraction
+stage first and report the next information needed from the user.
 
 ### Quick analysis commands
 
@@ -52,6 +55,18 @@ Entity: Order (注文)
 
 ### What to look for
 
+#### Refinement readiness
+
+| Current signal | Likely stage | Ask next |
+|----------------|--------------|----------|
+| BUCs exist but actors/use cases are sparse | Scope or BUC skeleton | actors and user-visible actions |
+| Use cases exist but CRUD matrix is empty | BUC skeleton | entities touched by each use case |
+| CRUD exists but sequence output has only `System` lane | Data touchpoints | screens and API boundaries |
+| Entities have only `id` columns | Data touchpoints | fields, keys, and relationships |
+| Entities have Enum/Bool/nullable columns but no state output changes | Entity structure | events, transitions, and `sets` effects |
+| `states` shows unreachable variants or unexpected terminals | Lifecycle | missing use cases, events, transitions, or effects |
+| Reachable states look stable | Lifecycle complete | forbidden states and invariants |
+
 #### Coverage gaps
 
 | Signal | Likely cause |
@@ -79,6 +94,11 @@ Entity: Order (注文)
 
 ```
 ## Analysis: <BUC or "whole model">
+
+### Current refinement stage
+- Stage: <scope | BUC skeleton | data touchpoints | interaction boundary | entity structure | lifecycle | business rules>
+- Evidence: <commands or model signals>
+- Next user information needed: <focused questions>
 
 ### State pattern summary
 - Entity <Id>: <n> reachable patterns, <n> terminal, initial via <UC>

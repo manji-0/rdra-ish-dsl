@@ -1,11 +1,25 @@
 ---
 name: rdra-diagram
-description: Generate RDRA DSL diagrams (RDRA overview, ER, state, sequence) in Mermaid or PlantUML format
+description: Generate RDRA DSL diagrams (RDRA overview, ER, state, sequence) in Mermaid or PlantUML format, choosing diagrams by refinement stage
 ---
 
 ## Generate diagrams
 
 Choose the diagram kind and format, apply BUC filters if needed, and generate output.
+
+For incremental modeling, choose the diagram that matches the current abstraction
+stage instead of generating every view.
+
+### Refinement-stage diagram guide
+
+| Stage | Use first | Purpose |
+|-------|-----------|---------|
+| Scope / BUC skeleton | `rdra --buc <BucId>` | actor, BUC, and use-case coverage |
+| Data touchpoints | `rdra --buc <BucId>` plus `er --buc <BucId>` | CRUD-connected entities |
+| Interaction boundary | `sequence --buc <BucId>` | actor/screen/API/entity path |
+| Entity structure | `er` | columns, PK/FK, and cardinality |
+| Lifecycle | `state --buc <BucId>` and `event-flow` | states, events, transitions, triggers |
+| Business rules | no new diagram first; run `states` | validate constraints before visual polish |
 
 ### Diagram kind guide
 

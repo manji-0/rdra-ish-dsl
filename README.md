@@ -38,6 +38,8 @@ cargo install --path crates/rdra-ish-cli
 <!-- derived-from ./docs/cli-reference.md -->
 ## Recommended Modeling Loop
 
+<!-- derived-from ./docs/incremental-modeling.md -->
+
 1. Declare shared actors, businesses, and entities under a shared module.
 2. Add one BUC file at a time with its use cases, screens, CRUD predicates, and events.
 3. Run `rdra-ish check <model-root>` after each BUC to catch type and import mistakes.
@@ -48,6 +50,9 @@ cargo install --path crates/rdra-ish-cli
    paths, and state constraint violations.
 7. Add `forbidden` / `invariant` constraints when the model needs to assert invalid or
    required state combinations.
+
+For a slower abstract-to-concrete workflow, see
+[Incremental Modeling Flow](./docs/incremental-modeling.md).
 
 ## Basic Usage
 

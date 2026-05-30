@@ -138,4 +138,5 @@ Output is written to stdout.
 ## See Also
 
 - [language-reference.md](./language-reference.md) — the DSL syntax.
+- [incremental-modeling.md](./incremental-modeling.md) — staged abstract-to-concrete modeling flow.
 - [state-derivation.md](./state-derivation.md) — how `states` computes its output.

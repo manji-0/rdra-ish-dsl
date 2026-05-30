@@ -1,11 +1,15 @@
 ---
 name: rdra-review
-description: Review RDRA DSL files for syntax errors, semantic inconsistencies, and missing relationships
+description: Review RDRA DSL files for syntax errors, semantic inconsistencies, missing relationships, and staged refinement gaps
 ---
 
 ## Review RDRA DSL
 
 Review existing RDRA DSL files for syntax correctness, semantic consistency, and coverage completeness.
+
+Judge gaps relative to the model's current abstraction stage. A missing `screen`,
+column, API, or lifecycle may be acceptable in an early-stage BUC, but it should be
+reported as the next refinement question rather than silently ignored.
 
 ### Steps
 
@@ -17,22 +21,31 @@ Review existing RDRA DSL files for syntax correctness, semantic consistency, and
    - One file per BUC under `buc/`
    - Every file has a `module` declaration whose dotted name matches the file path
 
-3. **Check actor and BUC coverage**
+3. **Classify refinement stage**
+   - Scope: BUC/business declarations only
+   - BUC skeleton: actors/use cases/predicates, little or no CRUD
+   - Data touchpoints: CRUD exists, entity structure is still coarse
+   - Interaction boundary: screens/API are being modeled
+   - Entity structure: columns/relationships/cardinality are modeled
+   - Lifecycle: states/events/transitions/sets are modeled
+   - Business rules: forbidden/invariant constraints are modeled
+
+4. **Check actor and BUC coverage**
    - Every BUC has at least one `performs` predicate (a BUC with no actor is orphaned)
    - Every BUC has a `belongs` predicate
    - Every `extsystem` is referenced by at least one `uses` predicate
 
-4. **Check use case coverage**
+5. **Check use case coverage**
    - Every `usecase` is referenced by a `contains` predicate
    - Every `usecase` has at least one `displays` predicate (flag missing ones for intentional review)
    - Every `usecase` has at least one CRUD predicate (`reads` / `writes` / `creates` / `updates` / `deletes`)
 
-5. **Check entity consistency**
+6. **Check entity consistency**
    - `relate` is defined in the correct direction with the right cardinality
    - No manually declared FK columns that duplicate a `relate`-generated FK
    - Parent entities are declared before child entities in the same file
 
-6. **Check events and state transitions**
+7. **Check events and state transitions**
    - Run `rdra-ish diagram --kind event-flow --format mermaid <src-dir>` and review the
      warnings printed to stderr before looking at the diagram itself:
      - `EventNeverRaised`: the event has no `raises` predicate — add one or remove the event
@@ -44,12 +57,12 @@ Review existing RDRA DSL files for syntax correctness, semantic consistency, and
    - When `triggers(Event, UseCase)` is used, verify the triggered UC is `contains`-ed in
      the correct downstream BUC and that the cross-BUC flow is intentional
 
-7. **Check `sets` predicate coverage**
+8. **Check `sets` predicate coverage**
    - Every `Enum` column that lacks a `transitions` predicate should have a `sets` for each use case that modifies it
    - Every `@null` column updated by a use case should have a `sets` with `"present"` / `"null"` / a PostgreSQL type
    - Every `Bool` column toggled by a use case should have a `sets` with `"true"` or `"false"`
 
-8. **Check imports**
+9. **Check imports**
    - Every referenced symbol has a corresponding `import`
    - No imported modules that are never used
 
@@ -63,6 +76,11 @@ Review existing RDRA DSL files for syntax correctness, semantic consistency, and
 - [high] <file>:<line> — <description>
 - [medium] ...
 - [low] ...
+
+## Refinement stage
+- Current stage: <stage>
+- Appropriate omissions: <gaps acceptable at this stage>
+- Next questions: <information needed to move one stage deeper>
 
 ## Coverage gaps
 - BUC `<Id>`: no performs defined

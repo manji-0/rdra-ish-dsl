@@ -1,11 +1,15 @@
 ---
 name: rdra-buc-update
-description: Update an existing BUC by adding or modifying use cases, screens, events, entities, and predicates
+description: Update an existing BUC by adding or modifying use cases, screens, events, entities, and predicates while preserving staged refinement
 ---
 
 ## Update an existing BUC
 
 Given a description of what to add or change, modify the relevant `.rdra` files while keeping the model consistent.
+
+Preserve the model's current abstraction level. If the BUC is still a skeleton, do not
+force columns, APIs, or lifecycle rules. Ask for the next missing information required
+by `docs/incremental-modeling.md` and apply the smallest stage-appropriate diff.
 
 ### Step 1 — Read the existing BUC
 
@@ -26,6 +30,17 @@ Read `buc/buc_<name>.rdra` and the shared files it imports. Identify:
 | New event or state | `shared/entities.rdra` (if cross-BUC) or `buc/buc_<name>.rdra` |
 | New actor | `shared/actors.rdra` |
 | Remove a use case | Remove its `contains`, CRUD, `displays`, `raises` predicates; check no other BUC uses it |
+
+Also classify the abstraction transition:
+
+| Current state | Next useful update | Ask the user for |
+|---------------|--------------------|------------------|
+| BUC exists but no actors | actor coverage | who performs or receives value from the BUC |
+| Actors/use cases exist but no CRUD | data touchpoints | entities and CRUD intent per use case |
+| CRUD exists but no screens/API | interaction boundary | screens, external interfaces, API endpoints |
+| Entities have only `id` | entity structure | fields, keys, relationships, cardinality |
+| Structured entities have lifecycle fields | lifecycle | states, events, use-case effects |
+| Lifecycle reaches plausible patterns | business rules | forbidden and required state combinations |
 
 ### Step 3 — Apply the minimal diff
 
@@ -73,6 +88,8 @@ Then in the BUC file add CRUD predicates for the use cases that touch it.
 - Every new `entity` column that can change has a `sets` or participates in `transitions`
 - No dangling imports (if you removed the last use of a symbol, remove its `import`)
 - No manually added FK columns for a `relate`-covered relationship
+- The diff does not jump more than one abstraction level unless the user supplied the
+  missing information explicitly
 
 ### Step 5 — Validate
 

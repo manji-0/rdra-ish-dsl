@@ -1,23 +1,43 @@
 ---
 name: rdra-buc-create
-description: Create a new BUC file from a requirements description, including use cases, screens, events, and predicates
+description: Create a new BUC file from a requirements description, using staged refinement from BUC skeleton to data, UI/API, lifecycle, and rules
 ---
 
 ## Create a new BUC
 
 Given a requirement or feature description, produce a complete, validated BUC `.rdra` file and any shared additions needed.
 
-### Step 1 — Extract concepts
+If the requirement is abstract, create only the next useful stage instead of forcing a
+complete model. Use `docs/incremental-modeling.md` as the reference flow.
+
+### Stage gate
+
+Before writing, classify the available information:
+
+| If the user provided... | Create now | Ask before adding... |
+|-------------------------|------------|----------------------|
+| BUC name and business goal | `buc`, `belongs` | actors and use cases |
+| actors and actions | `performs`, `usecase`, `contains` | entities and CRUD |
+| touched business objects | coarse `entity`, CRUD predicates | screens and APIs |
+| screens/API boundaries | `screen`, `api`, `displays`, `shows`, `invokes` | columns and relationships |
+| fields and relationships | columns, `relate` | lifecycle states/events |
+| lifecycle states/events | `state`, `event`, `transitions`, `raises`, `sets` | constraints |
+| invalid/required combinations | `forbidden`, `invariant` | none; validate diagnostics |
+
+Ask only the questions needed to advance one row. Do not invent detailed columns,
+state machines, or API endpoints just to make the BUC look complete.
+
+### Step 1 — Extract concepts at the current abstraction
 
 Read the requirement and list:
 
 - **Actors** — who initiates actions (human users, external systems)
 - **Business domain** — which business area this BUC belongs to
 - **Use cases** — verbs the actor performs (one `usecase` per user-visible action)
-- **Screens** — UI pages shown during the flow
-- **Entities** — data objects created or modified
-- **Events** — domain events raised as side effects
-- **States** — status values if an entity has a lifecycle
+- **Screens** — UI pages shown during the flow, if the user is already at the interaction stage
+- **Entities** — data objects created or modified, if the data stage is known
+- **Events** — domain events raised as side effects, if lifecycle behavior is known
+- **States** — status values if an entity lifecycle is known
 
 ### Step 2 — Decide what is shared vs. BUC-local
 
@@ -92,3 +112,9 @@ Fix every reported error. Common errors:
 - Missing `import` for a symbol used across files
 - `relate` cardinality not quoted
 - `module` name does not match file path
+
+For staged work, also run the command that matches the current abstraction:
+- BUC skeleton: `rdra-ish diagram src/ --kind rdra --format mermaid --buc <BucId>`
+- Data touchpoints: `rdra-ish csv src/ --kind matrix`
+- Interaction boundary: `rdra-ish diagram src/ --kind sequence --format mermaid --buc <BucId>`
+- Lifecycle/rules: `rdra-ish states src/ --buc <BucId>`
