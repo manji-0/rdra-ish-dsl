@@ -37,6 +37,12 @@ rdra-ish csv samples/incremental-order/step-0-scope/src --kind matrix --out samp
 
 ### 4.1 RDRA 図
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/incremental-order/step-0-scope/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-0-scope/out/rdra_buc_store_restock
+```
+
 ```mermaid
 graph TD
   BucStoreRestock["📦 Maintain Store Restock"]

@@ -69,6 +69,12 @@ rdra-ish csv samples/clinic-ops --kind api-matrix --out samples/clinic-ops/out/a
 
 #### Patient Onboarding RDRA 図
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucPatientOnboarding --out samples/clinic-ops/out/buc/rdra_patient_onboarding
+```
+
 ```mermaid
 graph TD
   FrontDesk(["👤 Front Desk Staff"])
@@ -152,6 +158,12 @@ graph TD
 ```
 
 #### Patient Onboarding sequence 図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucPatientOnboarding --out samples/clinic-ops/out/buc/sequence_patient_onboarding
+```
 
 ```mermaid
 sequenceDiagram
@@ -293,6 +305,12 @@ sequenceDiagram
 
 #### Appointment Scheduling RDRA 図
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucAppointmentScheduling --out samples/clinic-ops/out/buc/rdra_appointment_scheduling
+```
+
 ```mermaid
 graph TD
   FrontDesk(["👤 Front Desk Staff"])
@@ -369,6 +387,12 @@ graph TD
 ```
 
 #### Appointment Scheduling sequence 図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucAppointmentScheduling --out samples/clinic-ops/out/buc/sequence_appointment_scheduling
+```
 
 ```mermaid
 sequenceDiagram
@@ -493,6 +517,12 @@ sequenceDiagram
 
 #### Visit Check-In RDRA 図
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucVisitCheckIn --out samples/clinic-ops/out/buc/rdra_visit_check_in
+```
+
 ```mermaid
 graph TD
   FrontDesk(["👤 Front Desk Staff"])
@@ -551,6 +581,12 @@ graph TD
 ```
 
 #### Visit Check-In sequence 図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucVisitCheckIn --out samples/clinic-ops/out/buc/sequence_visit_check_in
+```
 
 ```mermaid
 sequenceDiagram
@@ -652,6 +688,12 @@ sequenceDiagram
 
 #### Clinical Encounter RDRA 図
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucClinicalEncounter --out samples/clinic-ops/out/buc/rdra_clinical_encounter
+```
+
 ```mermaid
 graph TD
   Clinician(["👤 Clinician"])
@@ -728,6 +770,12 @@ graph TD
 ```
 
 #### Clinical Encounter sequence 図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucClinicalEncounter --out samples/clinic-ops/out/buc/sequence_clinical_encounter
+```
 
 ```mermaid
 sequenceDiagram
@@ -835,6 +883,12 @@ sequenceDiagram
 
 #### Orders and Results RDRA 図
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucOrdersResults --out samples/clinic-ops/out/buc/rdra_orders_results
+```
+
 ```mermaid
 graph TD
   Clinician(["👤 Clinician"])
@@ -895,6 +949,12 @@ graph TD
 ```
 
 #### Orders and Results sequence 図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucOrdersResults --out samples/clinic-ops/out/buc/sequence_orders_results
+```
 
 ```mermaid
 sequenceDiagram
@@ -1001,6 +1061,12 @@ sequenceDiagram
 
 #### Prescription Fulfillment RDRA 図
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucPrescriptionFulfillment --out samples/clinic-ops/out/buc/rdra_prescription_fulfillment
+```
+
 ```mermaid
 graph TD
   Clinician(["👤 Clinician"])
@@ -1052,6 +1118,12 @@ graph TD
 ```
 
 #### Prescription Fulfillment sequence 図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucPrescriptionFulfillment --out samples/clinic-ops/out/buc/sequence_prescription_fulfillment
+```
 
 ```mermaid
 sequenceDiagram
@@ -1144,6 +1216,12 @@ sequenceDiagram
 
 #### Billing Claims RDRA 図
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucBillingClaims --out samples/clinic-ops/out/buc/rdra_billing_claims
+```
+
 ```mermaid
 graph TD
   BillingSpecialist(["👤 Billing Specialist"])
@@ -1202,6 +1280,12 @@ graph TD
 ```
 
 #### Billing Claims sequence 図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucBillingClaims --out samples/clinic-ops/out/buc/sequence_billing_claims
+```
 
 ```mermaid
 sequenceDiagram
@@ -1324,6 +1408,12 @@ sequenceDiagram
 
 #### Follow-Up Care RDRA 図
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucFollowupCare --out samples/clinic-ops/out/buc/rdra_followup_care
+```
+
 ```mermaid
 graph TD
   CareCoordinator(["👤 Care Coordinator"])
@@ -1388,6 +1478,12 @@ graph TD
 ```
 
 #### Follow-Up Care sequence 図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucFollowupCare --out samples/clinic-ops/out/buc/sequence_followup_care
+```
 
 ```mermaid
 sequenceDiagram
@@ -1483,6 +1579,12 @@ sequenceDiagram
 
 #### Staff Administration RDRA 図
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucStaffAdministration --out samples/clinic-ops/out/buc/rdra_staff_administration
+```
+
 ```mermaid
 graph TD
   ClinicAdmin(["👤 Clinic Administrator"])
@@ -1523,6 +1625,12 @@ graph TD
 ```
 
 #### Staff Administration sequence 図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucStaffAdministration --out samples/clinic-ops/out/buc/sequence_staff_administration
+```
 
 ```mermaid
 sequenceDiagram
@@ -1622,6 +1730,12 @@ actor は `performs(Actor, UseCase)` があれば UC 直結の actor を優先�
 
 患者検索が read-only API として表現され、患者作成と混ざらないこと
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase SearchPatient --out samples/clinic-ops/out/uc/sequence_search_patient
+```
+
 ```mermaid
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
@@ -1644,6 +1758,12 @@ sequenceDiagram
 #### RegisterPatient
 
 PatientAccount と PatientProfile を同時作成する境界
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase RegisterPatient --out samples/clinic-ops/out/uc/sequence_register_patient
+```
 
 ```mermaid
 sequenceDiagram
@@ -1671,6 +1791,12 @@ sequenceDiagram
 
 患者属性更新の API 境界
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase UpdateDemographics --out samples/clinic-ops/out/uc/sequence_update_demographics
+```
+
 ```mermaid
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
@@ -1691,6 +1817,12 @@ sequenceDiagram
 #### VerifyInsurance
 
 保険参照、資格確認作成、保険状態更新
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase VerifyInsurance --out samples/clinic-ops/out/uc/sequence_verify_insurance
+```
 
 ```mermaid
 sequenceDiagram
@@ -1719,6 +1851,12 @@ sequenceDiagram
 
 同意記録作成と nullable/Bool effect
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase CaptureConsent --out samples/clinic-ops/out/uc/sequence_capture_consent
+```
+
 ```mermaid
 sequenceDiagram
   actor Patient as Patient
@@ -1739,6 +1877,12 @@ sequenceDiagram
 #### SendIntakeForms
 
 問診パケットとメッセージ作成
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase SendIntakeForms --out samples/clinic-ops/out/uc/sequence_send_intake_forms
+```
 
 ```mermaid
 sequenceDiagram
@@ -1766,6 +1910,12 @@ sequenceDiagram
 
 問診完了イベント
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase CompleteIntakeForms --out samples/clinic-ops/out/uc/sequence_complete_intake_forms
+```
+
 ```mermaid
 sequenceDiagram
   actor Patient as Patient
@@ -1784,6 +1934,12 @@ sequenceDiagram
 #### ExpireIntakeForms
 
 問診期限切れイベント
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ExpireIntakeForms --out samples/clinic-ops/out/uc/sequence_expire_intake_forms
+```
 
 ```mermaid
 sequenceDiagram
@@ -1804,6 +1960,12 @@ sequenceDiagram
 
 患者統合状態
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase MergeDuplicatePatient --out samples/clinic-ops/out/uc/sequence_merge_duplicate_patient
+```
+
 ```mermaid
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
@@ -1822,6 +1984,12 @@ sequenceDiagram
 #### ArchivePatient
 
 患者アーカイブ状態
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ArchivePatient --out samples/clinic-ops/out/uc/sequence_archive_patient
+```
 
 ```mermaid
 sequenceDiagram
@@ -1854,6 +2022,12 @@ sequenceDiagram
 
 予定枠検索の read-only 境界
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase SearchAvailability --out samples/clinic-ops/out/uc/sequence_search_availability
+```
+
 ```mermaid
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
@@ -1878,6 +2052,12 @@ sequenceDiagram
 #### ReserveAppointment
 
 予約作成と予定枠更新
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ReserveAppointment --out samples/clinic-ops/out/uc/sequence_reserve_appointment
+```
 
 ```mermaid
 sequenceDiagram
@@ -1905,6 +2085,12 @@ sequenceDiagram
 
 予約確定と予定枠更新
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase BookAppointment --out samples/clinic-ops/out/uc/sequence_book_appointment
+```
+
 ```mermaid
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
@@ -1930,6 +2116,12 @@ sequenceDiagram
 #### RescheduleAppointment
 
 予約変更と予定枠更新
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase RescheduleAppointment --out samples/clinic-ops/out/uc/sequence_reschedule_appointment
+```
 
 ```mermaid
 sequenceDiagram
@@ -1957,6 +2149,12 @@ sequenceDiagram
 
 予約取消と予定枠更新
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase CancelAppointment --out samples/clinic-ops/out/uc/sequence_cancel_appointment
+```
+
 ```mermaid
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
@@ -1983,6 +2181,12 @@ sequenceDiagram
 
 no-show 状態への直接更新
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase MarkNoShow --out samples/clinic-ops/out/uc/sequence_mark_no_show
+```
+
 ```mermaid
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
@@ -2001,6 +2205,12 @@ sequenceDiagram
 #### SendAppointmentNotice
 
 通知と患者メッセージ作成
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase SendAppointmentNotice --out samples/clinic-ops/out/uc/sequence_send_appointment_notice
+```
 
 ```mermaid
 sequenceDiagram
@@ -2038,6 +2248,12 @@ sequenceDiagram
 
 受付時の参照情報
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase VerifyArrival --out samples/clinic-ops/out/uc/sequence_verify_arrival
+```
+
 ```mermaid
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
@@ -2062,6 +2278,12 @@ sequenceDiagram
 #### CheckInPatient
 
 予約と患者アカウント更新
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase CheckInPatient --out samples/clinic-ops/out/uc/sequence_check_in_patient
+```
 
 ```mermaid
 sequenceDiagram
@@ -2089,6 +2311,12 @@ sequenceDiagram
 
 会計取引と残高更新
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase CollectCopay --out samples/clinic-ops/out/uc/sequence_collect_copay
+```
+
 ```mermaid
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
@@ -2115,6 +2343,12 @@ sequenceDiagram
 
 部屋と予約の同期更新
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase AssignRoom --out samples/clinic-ops/out/uc/sequence_assign_room
+```
+
 ```mermaid
 sequenceDiagram
   actor Nurse as Nurse
@@ -2140,6 +2374,12 @@ sequenceDiagram
 #### PrepareEncounter
 
 診療準備の参照情報
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase PrepareEncounter --out samples/clinic-ops/out/uc/sequence_prepare_encounter
+```
 
 ```mermaid
 sequenceDiagram
@@ -2175,6 +2415,12 @@ sequenceDiagram
 
 予約から診療記録を開始する
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase OpenEncounter --out samples/clinic-ops/out/uc/sequence_open_encounter
+```
+
 ```mermaid
 sequenceDiagram
   actor Nurse as Nurse
@@ -2197,6 +2443,12 @@ sequenceDiagram
 #### RecordVitals
 
 バイタル作成と診療記録更新
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase RecordVitals --out samples/clinic-ops/out/uc/sequence_record_vitals
+```
 
 ```mermaid
 sequenceDiagram
@@ -2224,6 +2476,12 @@ sequenceDiagram
 
 診断作成と診療記録更新
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase DocumentAssessment --out samples/clinic-ops/out/uc/sequence_document_assessment
+```
+
 ```mermaid
 sequenceDiagram
   actor Clinician as Clinician
@@ -2250,6 +2508,12 @@ sequenceDiagram
 
 診療署名イベント
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase SignEncounter --out samples/clinic-ops/out/uc/sequence_sign_encounter
+```
+
 ```mermaid
 sequenceDiagram
   actor Clinician as Clinician
@@ -2271,6 +2535,12 @@ sequenceDiagram
 
 署名後修正
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase AmendEncounter --out samples/clinic-ops/out/uc/sequence_amend_encounter
+```
+
 ```mermaid
 sequenceDiagram
   actor Clinician as Clinician
@@ -2291,6 +2561,12 @@ sequenceDiagram
 #### CompleteAppointment
 
 予約完了と部屋清掃状態
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase CompleteAppointment --out samples/clinic-ops/out/uc/sequence_complete_appointment
+```
 
 ```mermaid
 sequenceDiagram
@@ -2329,6 +2605,12 @@ sequenceDiagram
 
 検査オーダー作成
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase PlaceLabOrder --out samples/clinic-ops/out/uc/sequence_place_lab_order
+```
+
 ```mermaid
 sequenceDiagram
   actor Clinician as Clinician
@@ -2352,6 +2634,12 @@ sequenceDiagram
 
 検体採取状態
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase CollectSpecimen --out samples/clinic-ops/out/uc/sequence_collect_specimen
+```
+
 ```mermaid
 sequenceDiagram
   actor Nurse as Nurse
@@ -2372,6 +2660,12 @@ sequenceDiagram
 #### ReceiveLabResult
 
 検査結果受領
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ReceiveLabResult --out samples/clinic-ops/out/uc/sequence_receive_lab_result
+```
 
 ```mermaid
 sequenceDiagram
@@ -2399,6 +2693,12 @@ sequenceDiagram
 
 結果確認イベント
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ReviewLabResult --out samples/clinic-ops/out/uc/sequence_review_lab_result
+```
+
 ```mermaid
 sequenceDiagram
   actor Clinician as Clinician
@@ -2425,6 +2725,12 @@ sequenceDiagram
 
 重要結果通知
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase NotifyCriticalResult --out samples/clinic-ops/out/uc/sequence_notify_critical_result
+```
+
 ```mermaid
 sequenceDiagram
   actor Clinician as Clinician
@@ -2450,6 +2756,12 @@ sequenceDiagram
 #### CancelClinicalOrder
 
 検査オーダー取消
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase CancelClinicalOrder --out samples/clinic-ops/out/uc/sequence_cancel_clinical_order
+```
 
 ```mermaid
 sequenceDiagram
@@ -2481,6 +2793,12 @@ sequenceDiagram
 
 薬剤カタログ参照
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase SearchMedication --out samples/clinic-ops/out/uc/sequence_search_medication
+```
+
 ```mermaid
 sequenceDiagram
   actor Clinician as Clinician
@@ -2501,6 +2819,12 @@ sequenceDiagram
 #### DraftPrescription
 
 処方下書き
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase DraftPrescription --out samples/clinic-ops/out/uc/sequence_draft_prescription
+```
 
 ```mermaid
 sequenceDiagram
@@ -2525,6 +2849,12 @@ sequenceDiagram
 
 薬局ネットワーク送信
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase SendPrescription --out samples/clinic-ops/out/uc/sequence_send_prescription
+```
+
 ```mermaid
 sequenceDiagram
   actor Clinician as Clinician
@@ -2545,6 +2875,12 @@ sequenceDiagram
 #### ConfirmDispense
 
 調剤確認
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ConfirmDispense --out samples/clinic-ops/out/uc/sequence_confirm_dispense
+```
 
 ```mermaid
 sequenceDiagram
@@ -2567,6 +2903,12 @@ sequenceDiagram
 
 処方取消
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase CancelPrescription --out samples/clinic-ops/out/uc/sequence_cancel_prescription
+```
+
 ```mermaid
 sequenceDiagram
   actor Clinician as Clinician
@@ -2585,6 +2927,12 @@ sequenceDiagram
 #### RefillPrescription
 
 再処方作成
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase RefillPrescription --out samples/clinic-ops/out/uc/sequence_refill_prescription
+```
 
 ```mermaid
 sequenceDiagram
@@ -2622,6 +2970,12 @@ sequenceDiagram
 
 チャージ作成と残高更新
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase CreateCharge --out samples/clinic-ops/out/uc/sequence_create_charge
+```
+
 ```mermaid
 sequenceDiagram
   actor BillingSpecialist as Billing Specialist
@@ -2649,6 +3003,12 @@ sequenceDiagram
 #### GenerateClaim
 
 請求生成
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase GenerateClaim --out samples/clinic-ops/out/uc/sequence_generate_claim
+```
 
 ```mermaid
 sequenceDiagram
@@ -2678,6 +3038,12 @@ sequenceDiagram
 
 請求送信
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase SubmitClaim --out samples/clinic-ops/out/uc/sequence_submit_claim
+```
+
 ```mermaid
 sequenceDiagram
   actor BillingSpecialist as Billing Specialist
@@ -2699,6 +3065,12 @@ sequenceDiagram
 
 請求受理
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ReceiveClaimAccepted --out samples/clinic-ops/out/uc/sequence_receive_claim_accepted
+```
+
 ```mermaid
 sequenceDiagram
   actor BillingSpecialist as Billing Specialist
@@ -2718,6 +3090,12 @@ sequenceDiagram
 
 請求否認
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase RecordClaimDenial --out samples/clinic-ops/out/uc/sequence_record_claim_denial
+```
+
 ```mermaid
 sequenceDiagram
   actor BillingSpecialist as Billing Specialist
@@ -2736,6 +3114,12 @@ sequenceDiagram
 #### PostPayment
 
 入金登録
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase PostPayment --out samples/clinic-ops/out/uc/sequence_post_payment
+```
 
 ```mermaid
 sequenceDiagram
@@ -2763,6 +3147,12 @@ sequenceDiagram
 
 残高消込
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ReconcileBalance --out samples/clinic-ops/out/uc/sequence_reconcile_balance
+```
+
 ```mermaid
 sequenceDiagram
   actor BillingSpecialist as Billing Specialist
@@ -2785,6 +3175,12 @@ sequenceDiagram
 #### VoidCharge
 
 チャージ取消
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase VoidCharge --out samples/clinic-ops/out/uc/sequence_void_charge
+```
 
 ```mermaid
 sequenceDiagram
@@ -2816,6 +3212,12 @@ sequenceDiagram
 
 ケアプラン作成
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase CreateCarePlan --out samples/clinic-ops/out/uc/sequence_create_care_plan
+```
+
 ```mermaid
 sequenceDiagram
   actor CareCoordinator as Care Coordinator
@@ -2839,6 +3241,12 @@ sequenceDiagram
 
 患者フォロー連絡
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase SendFollowUpMessage --out samples/clinic-ops/out/uc/sequence_send_follow_up_message
+```
+
 ```mermaid
 sequenceDiagram
   actor CareCoordinator as Care Coordinator
@@ -2860,6 +3268,12 @@ sequenceDiagram
 
 患者応答確認
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ReviewPatientResponse --out samples/clinic-ops/out/uc/sequence_review_patient_response
+```
+
 ```mermaid
 sequenceDiagram
   actor CareCoordinator as Care Coordinator
@@ -2880,6 +3294,12 @@ sequenceDiagram
 #### ScheduleFollowUpVisit
 
 再診予約
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ScheduleFollowUpVisit --out samples/clinic-ops/out/uc/sequence_schedule_follow_up_visit
+```
 
 ```mermaid
 sequenceDiagram
@@ -2907,6 +3327,12 @@ sequenceDiagram
 
 ケアプラン終了
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase CloseCarePlan --out samples/clinic-ops/out/uc/sequence_close_care_plan
+```
+
 ```mermaid
 sequenceDiagram
   actor CareCoordinator as Care Coordinator
@@ -2925,6 +3351,12 @@ sequenceDiagram
 #### NotifyPatientResult
 
 患者結果通知
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase NotifyPatientResult --out samples/clinic-ops/out/uc/sequence_notify_patient_result
+```
 
 ```mermaid
 sequenceDiagram
@@ -2958,6 +3390,12 @@ sequenceDiagram
 
 医師予定管理
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ManageProviderSchedule --out samples/clinic-ops/out/uc/sequence_manage_provider_schedule
+```
+
 ```mermaid
 sequenceDiagram
   actor ClinicAdmin as Clinic Administrator
@@ -2984,6 +3422,12 @@ sequenceDiagram
 
 予定枠ブロック
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase BlockScheduleSlot --out samples/clinic-ops/out/uc/sequence_block_schedule_slot
+```
+
 ```mermaid
 sequenceDiagram
   actor ClinicAdmin as Clinic Administrator
@@ -3004,6 +3448,12 @@ sequenceDiagram
 #### ConfigureRoom
 
 部屋設定
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ConfigureRoom --out samples/clinic-ops/out/uc/sequence_configure_room
+```
 
 ```mermaid
 sequenceDiagram
@@ -3026,6 +3476,12 @@ sequenceDiagram
 
 部屋解放
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ReleaseRoom --out samples/clinic-ops/out/uc/sequence_release_room
+```
+
 ```mermaid
 sequenceDiagram
   actor ClinicAdmin as Clinic Administrator
@@ -3044,6 +3500,12 @@ sequenceDiagram
 #### ReviewAuditEvents
 
 監査イベント参照
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ReviewAuditEvents --out samples/clinic-ops/out/uc/sequence_review_audit_events
+```
 
 ```mermaid
 sequenceDiagram
@@ -3067,6 +3529,12 @@ sequenceDiagram
 #### ResolveAuditFinding
 
 監査指摘解決
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ResolveAuditFinding --out samples/clinic-ops/out/uc/sequence_resolve_audit_finding
+```
 
 ```mermaid
 sequenceDiagram
@@ -3105,6 +3573,12 @@ contains(ClinicOpsSystem, <EachApi>)
 ### 5.3 Event flow
 
 Event flow は BUC をまたぐ連鎖だけを見るための図です。sequence 図には BUC 外の triggered UC を混ぜません。
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind event-flow --format mermaid --out samples/clinic-ops/out/event_flow
+```
 
 ```mermaid
 flowchart LR
@@ -3300,6 +3774,12 @@ flowchart LR
 
 ### 6.2 ER 図
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind er --format mermaid --buc BucFollowupCare --buc BucBillingClaims --out samples/clinic-ops/out/er_care_to_billing
+```
+
 ```mermaid
 erDiagram
   AccountBalance {
@@ -3418,6 +3898,12 @@ erDiagram
 ```
 
 ### 6.3 State 図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind state --format mermaid --out samples/clinic-ops/out/state_whole
+```
 
 ```mermaid
 stateDiagram-v2

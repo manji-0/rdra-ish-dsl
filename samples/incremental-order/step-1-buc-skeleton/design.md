@@ -38,6 +38,12 @@ rdra-ish csv samples/incremental-order/step-1-buc-skeleton/src --kind matrix --o
 
 ### 4.1 RDRA 図
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/incremental-order/step-1-buc-skeleton/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-1-buc-skeleton/out/rdra_buc_store_restock
+```
+
 ```mermaid
 graph TD
   OpsStaff(["👤 Operations Staff"])

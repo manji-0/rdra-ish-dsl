@@ -39,6 +39,12 @@ rdra-ish csv samples/incremental-order/step-2-data-touchpoints/src --kind matrix
 
 ### 4.1 RDRA 図
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/incremental-order/step-2-data-touchpoints/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-2-data-touchpoints/out/rdra_buc_store_restock
+```
+
 ```mermaid
 graph TD
   OpsStaff(["👤 Operations Staff"])
@@ -57,6 +63,12 @@ graph TD
 ```
 
 ### 4.2 Sequence 図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/incremental-order/step-2-data-touchpoints/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-2-data-touchpoints/out/sequence_buc_store_restock
+```
 
 ```mermaid
 sequenceDiagram
@@ -80,6 +92,12 @@ sequenceDiagram
 ```
 
 ### 4.3 ER 図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/incremental-order/step-2-data-touchpoints/src --kind er --format mermaid --out samples/incremental-order/step-2-data-touchpoints/out/er
+```
 
 ```mermaid
 erDiagram

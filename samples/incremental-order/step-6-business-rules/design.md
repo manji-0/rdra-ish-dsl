@@ -39,6 +39,12 @@ rdra-ish csv samples/incremental-order/step-6-business-rules/src --kind matrix -
 
 ### 4.1 RDRA 図
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-6-business-rules/out/rdra_buc_store_restock
+```
+
 ```mermaid
 graph TD
   OpsStaff(["👤 Operations Staff"])
@@ -71,6 +77,12 @@ graph TD
 ```
 
 ### 4.2 Sequence 図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-6-business-rules/out/sequence_buc_store_restock
+```
 
 ```mermaid
 sequenceDiagram
@@ -109,6 +121,12 @@ sequenceDiagram
 
 ### 4.3 ER 図
 
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind er --format mermaid --out samples/incremental-order/step-6-business-rules/out/er
+```
+
 ```mermaid
 erDiagram
   Organization {
@@ -128,6 +146,12 @@ erDiagram
 ```
 
 ### 4.4 State 図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind state --format mermaid --out samples/incremental-order/step-6-business-rules/out/state
+```
 
 ```mermaid
 stateDiagram-v2
