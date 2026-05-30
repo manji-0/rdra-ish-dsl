@@ -67,20 +67,20 @@ graph TD
 sequenceDiagram
   actor OpsStaff as Operations Staff
   participant System as システム
+  participant StoreMaintenanceScreen as Store Maintenance
   participant OrganizationLookupApi as Organization Lookup API
   participant StoreAdminApi as Store Admin API
   participant Organization as Organization
   participant Store as Store
-  participant StoreMaintenanceScreen as Store Maintenance
 
-  Note over OpsStaff,StoreMaintenanceScreen: Change Next Restock Date
+  Note over OpsStaff,Store: Change Next Restock Date
   OpsStaff->System: Change Next Restock Date
   activate System
   System->>Store: update
   System-->>OpsStaff: Store Maintenance
   deactivate System
 
-  Note over OpsStaff,StoreMaintenanceScreen: Change Store Parent Organization
+  Note over OpsStaff,Store: Change Store Parent Organization
   OpsStaff->>StoreMaintenanceScreen: Change Store Parent Organization
   StoreMaintenanceScreen->>StoreAdminApi: Change Store Parent Organization
   activate StoreAdminApi

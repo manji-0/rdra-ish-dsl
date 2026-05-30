@@ -1,10 +1,10 @@
 sequenceDiagram
   actor Nurse as Nurse
+  participant SpecimenScreen as Specimen Collection Screen
   participant CollectSpecimenApi as Collect Specimen API
   participant ClinicalOrder as Clinical Order
-  participant SpecimenScreen as Specimen Collection Screen
 
-  Note over Nurse,SpecimenScreen: Collect Specimen
+  Note over Nurse,ClinicalOrder: Collect Specimen
   Nurse->>SpecimenScreen: Collect Specimen
   SpecimenScreen->>CollectSpecimenApi: Collect Specimen
   activate CollectSpecimenApi

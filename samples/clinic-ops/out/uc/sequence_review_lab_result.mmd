@@ -1,11 +1,11 @@
 sequenceDiagram
   actor Clinician as Clinician
+  participant ResultReviewScreen as Result Review Screen
   participant ResultReviewApi as Result Review API
   participant ClinicalOrder as Clinical Order
   participant LabResult as Lab Result
-  participant ResultReviewScreen as Result Review Screen
 
-  Note over Clinician,ResultReviewScreen: Review Lab Result
+  Note over Clinician,LabResult: Review Lab Result
   Clinician->>ResultReviewScreen: Review Lab Result
   ResultReviewScreen->>ResultReviewApi: Review Lab Result
   activate ResultReviewApi

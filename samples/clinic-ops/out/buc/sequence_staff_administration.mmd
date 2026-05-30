@@ -1,6 +1,9 @@
 sequenceDiagram
   actor ClinicAdmin as Clinic Administrator
   participant System as システム
+  participant AuditReviewScreen as Audit Review Screen
+  participant RoomAdminScreen as Room Admin Screen
+  participant ScheduleAdminScreen as Schedule Admin Screen
   participant AuditApi as Audit API
   participant BlockScheduleSlotApi as Block Schedule Slot API
   participant ManageProviderScheduleApi as Manage Provider Schedule API
@@ -10,11 +13,8 @@ sequenceDiagram
   participant Provider as Provider
   participant ProviderSchedule as Provider Schedule
   participant Room as Room
-  participant AuditReviewScreen as Audit Review Screen
-  participant RoomAdminScreen as Room Admin Screen
-  participant ScheduleAdminScreen as Schedule Admin Screen
 
-  Note over ClinicAdmin,ScheduleAdminScreen: Block Schedule Slot
+  Note over ClinicAdmin,Room: Block Schedule Slot
   ClinicAdmin->>ScheduleAdminScreen: Block Schedule Slot
   ScheduleAdminScreen->>BlockScheduleSlotApi: Block Schedule Slot
   activate BlockScheduleSlotApi
@@ -23,7 +23,7 @@ sequenceDiagram
   ScheduleAdminScreen-->>ClinicAdmin: Schedule Admin Screen
   deactivate BlockScheduleSlotApi
 
-  Note over ClinicAdmin,ScheduleAdminScreen: Configure Room
+  Note over ClinicAdmin,Room: Configure Room
   ClinicAdmin->>RoomAdminScreen: Configure Room
   RoomAdminScreen->>RoomAdminApi: Configure Room
   activate RoomAdminApi
@@ -32,7 +32,7 @@ sequenceDiagram
   RoomAdminScreen-->>ClinicAdmin: Room Admin Screen
   deactivate RoomAdminApi
 
-  Note over ClinicAdmin,ScheduleAdminScreen: Manage Provider Schedule
+  Note over ClinicAdmin,Room: Manage Provider Schedule
   ClinicAdmin->>ScheduleAdminScreen: Manage Provider Schedule
   ScheduleAdminScreen->>ManageProviderScheduleApi: Manage Provider Schedule
   activate ManageProviderScheduleApi
@@ -45,21 +45,21 @@ sequenceDiagram
   ScheduleAdminScreen-->>ClinicAdmin: Schedule Admin Screen
   deactivate ManageProviderScheduleApi
 
-  Note over ClinicAdmin,ScheduleAdminScreen: Release Room
+  Note over ClinicAdmin,Room: Release Room
   ClinicAdmin->System: Release Room
   activate System
   System->>Room: update
   System-->>ClinicAdmin: Room Admin Screen
   deactivate System
 
-  Note over ClinicAdmin,ScheduleAdminScreen: Resolve Audit Finding
+  Note over ClinicAdmin,Room: Resolve Audit Finding
   ClinicAdmin->System: Resolve Audit Finding
   activate System
   System->>AuditEvent: update
   System-->>ClinicAdmin: Audit Review Screen
   deactivate System
 
-  Note over ClinicAdmin,ScheduleAdminScreen: Review Audit Events
+  Note over ClinicAdmin,Room: Review Audit Events
   ClinicAdmin->>AuditReviewScreen: Review Audit Events
   AuditReviewScreen->>AuditApi: Review Audit Events
   activate AuditApi

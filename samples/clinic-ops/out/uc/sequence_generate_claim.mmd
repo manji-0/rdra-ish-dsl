@@ -1,12 +1,12 @@
 sequenceDiagram
   actor BillingSpecialist as Billing Specialist
+  participant ClaimScreen as Claim Screen
   participant GenerateClaimApi as Generate Claim API
   participant Charge as Charge
   participant Claim as Claim
   participant InsurancePolicy as Insurance Policy
-  participant ClaimScreen as Claim Screen
 
-  Note over BillingSpecialist,ClaimScreen: Generate Claim
+  Note over BillingSpecialist,InsurancePolicy: Generate Claim
   BillingSpecialist->>ClaimScreen: Generate Claim
   ClaimScreen->>GenerateClaimApi: Generate Claim
   activate GenerateClaimApi

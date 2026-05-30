@@ -1,10 +1,10 @@
 sequenceDiagram
   actor Clinician as Clinician
   participant System as システム
-  participant Prescription as Prescription
   participant PrescriptionScreen as Prescription Screen
+  participant Prescription as Prescription
 
-  Note over Clinician,PrescriptionScreen: Cancel Prescription
+  Note over Clinician,Prescription: Cancel Prescription
   Clinician->System: Cancel Prescription
   activate System
   System->>Prescription: update

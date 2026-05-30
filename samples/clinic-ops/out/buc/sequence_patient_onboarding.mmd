@@ -2,6 +2,11 @@ sequenceDiagram
   actor FrontDesk as Front Desk Staff
   actor Patient as Patient
   participant System as システム
+  participant ConsentScreen as Consent Capture Screen
+  participant InsuranceScreen as Insurance Verification Screen
+  participant IntakePortalScreen as Intake Portal Screen
+  participant PatientProfileScreen as Patient Profile Screen
+  participant PatientSearchScreen as Patient Search Screen
   participant ConsentApi as Consent API
   participant EligibilityApi as Eligibility API
   participant IntakeMessagingApi as Intake Messaging API
@@ -15,20 +20,15 @@ sequenceDiagram
   participant PatientAccount as Patient Account
   participant PatientMessage as Patient Message
   participant PatientProfile as Patient Profile
-  participant ConsentScreen as Consent Capture Screen
-  participant InsuranceScreen as Insurance Verification Screen
-  participant IntakePortalScreen as Intake Portal Screen
-  participant PatientProfileScreen as Patient Profile Screen
-  participant PatientSearchScreen as Patient Search Screen
 
-  Note over FrontDesk,PatientSearchScreen: Archive Patient
+  Note over FrontDesk,PatientProfile: Archive Patient
   FrontDesk->System: Archive Patient
   activate System
   System->>PatientAccount: update
   System-->>FrontDesk: Patient Profile Screen
   deactivate System
 
-  Note over FrontDesk,PatientSearchScreen: Capture Consent
+  Note over FrontDesk,PatientProfile: Capture Consent
   Patient->>ConsentScreen: Capture Consent
   ConsentScreen->>ConsentApi: Capture Consent
   activate ConsentApi
@@ -37,28 +37,28 @@ sequenceDiagram
   ConsentScreen-->>Patient: Consent Capture Screen
   deactivate ConsentApi
 
-  Note over FrontDesk,PatientSearchScreen: Complete Intake Forms
+  Note over FrontDesk,PatientProfile: Complete Intake Forms
   Patient->System: Complete Intake Forms
   activate System
   System->>IntakePacket: update
   System-->>Patient: Intake Portal Screen
   deactivate System
 
-  Note over FrontDesk,PatientSearchScreen: Expire Intake Forms
+  Note over FrontDesk,PatientProfile: Expire Intake Forms
   FrontDesk->System: Expire Intake Forms
   activate System
   System->>IntakePacket: update
   System-->>FrontDesk: Intake Portal Screen
   deactivate System
 
-  Note over FrontDesk,PatientSearchScreen: Merge Duplicate Patient
+  Note over FrontDesk,PatientProfile: Merge Duplicate Patient
   FrontDesk->System: Merge Duplicate Patient
   activate System
   System->>PatientAccount: update
   System-->>FrontDesk: Patient Profile Screen
   deactivate System
 
-  Note over FrontDesk,PatientSearchScreen: Register Patient
+  Note over FrontDesk,PatientProfile: Register Patient
   FrontDesk->>PatientProfileScreen: Register Patient
   PatientProfileScreen->>RegisterPatientApi: Register Patient
   activate RegisterPatientApi
@@ -71,7 +71,7 @@ sequenceDiagram
   PatientProfileScreen-->>FrontDesk: Patient Profile Screen
   deactivate RegisterPatientApi
 
-  Note over FrontDesk,PatientSearchScreen: Search Patient
+  Note over FrontDesk,PatientProfile: Search Patient
   FrontDesk->>PatientSearchScreen: Search Patient
   PatientSearchScreen->>SearchPatientApi: Search Patient
   activate SearchPatientApi
@@ -81,7 +81,7 @@ sequenceDiagram
   PatientSearchScreen-->>FrontDesk: Patient Search Screen
   deactivate SearchPatientApi
 
-  Note over FrontDesk,PatientSearchScreen: Send Intake Forms
+  Note over FrontDesk,PatientProfile: Send Intake Forms
   FrontDesk->>IntakePortalScreen: Send Intake Forms
   IntakePortalScreen->>IntakeMessagingApi: Send Intake Forms
   activate IntakeMessagingApi
@@ -94,7 +94,7 @@ sequenceDiagram
   IntakePortalScreen-->>FrontDesk: Intake Portal Screen
   deactivate IntakeMessagingApi
 
-  Note over FrontDesk,PatientSearchScreen: Update Demographics
+  Note over FrontDesk,PatientProfile: Update Demographics
   FrontDesk->>PatientProfileScreen: Update Demographics
   PatientProfileScreen->>UpdateDemographicsApi: Update Demographics
   activate UpdateDemographicsApi
@@ -103,7 +103,7 @@ sequenceDiagram
   PatientProfileScreen-->>FrontDesk: Patient Profile Screen
   deactivate UpdateDemographicsApi
 
-  Note over FrontDesk,PatientSearchScreen: Verify Insurance
+  Note over FrontDesk,PatientProfile: Verify Insurance
   FrontDesk->>InsuranceScreen: Verify Insurance
   InsuranceScreen->>EligibilityApi: Verify Insurance
   activate EligibilityApi

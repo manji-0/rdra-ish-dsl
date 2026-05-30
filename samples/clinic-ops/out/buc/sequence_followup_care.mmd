@@ -1,6 +1,9 @@
 sequenceDiagram
   actor CareCoordinator as Care Coordinator
   participant System as システム
+  participant CarePlanScreen as Care Plan Screen
+  participant FollowUpScheduleScreen as Follow-Up Schedule Screen
+  participant PatientMessageScreen as Patient Message Screen
   participant CreateCarePlanApi as Create Care Plan API
   participant FollowUpScheduleApi as Follow-Up Schedule API
   participant NotifyPatientResultApi as Notify Patient Result API
@@ -11,18 +14,15 @@ sequenceDiagram
   participant Notification as Notification
   participant PatientMessage as Patient Message
   participant ProviderSchedule as Provider Schedule
-  participant CarePlanScreen as Care Plan Screen
-  participant FollowUpScheduleScreen as Follow-Up Schedule Screen
-  participant PatientMessageScreen as Patient Message Screen
 
-  Note over CareCoordinator,PatientMessageScreen: Close Care Plan
+  Note over CareCoordinator,ProviderSchedule: Close Care Plan
   CareCoordinator->System: Close Care Plan
   activate System
   System->>CarePlan: update
   System-->>CareCoordinator: Care Plan Screen
   deactivate System
 
-  Note over CareCoordinator,PatientMessageScreen: Create Care Plan
+  Note over CareCoordinator,ProviderSchedule: Create Care Plan
   CareCoordinator->>CarePlanScreen: Create Care Plan
   CarePlanScreen->>CreateCarePlanApi: Create Care Plan
   activate CreateCarePlanApi
@@ -32,7 +32,7 @@ sequenceDiagram
   CarePlanScreen-->>CareCoordinator: Care Plan Screen
   deactivate CreateCarePlanApi
 
-  Note over CareCoordinator,PatientMessageScreen: Notify Patient Result
+  Note over CareCoordinator,ProviderSchedule: Notify Patient Result
   CareCoordinator->>PatientMessageScreen: Notify Patient Result
   PatientMessageScreen->>NotifyPatientResultApi: Notify Patient Result
   activate NotifyPatientResultApi
@@ -41,7 +41,7 @@ sequenceDiagram
   PatientMessageScreen-->>CareCoordinator: Patient Message Screen
   deactivate NotifyPatientResultApi
 
-  Note over CareCoordinator,PatientMessageScreen: Review Patient Response
+  Note over CareCoordinator,ProviderSchedule: Review Patient Response
   CareCoordinator->System: Review Patient Response
   activate System
   System->>CarePlan: update
@@ -49,7 +49,7 @@ sequenceDiagram
   System-->>CareCoordinator: Care Plan Screen
   deactivate System
 
-  Note over CareCoordinator,PatientMessageScreen: Schedule Follow-Up Visit
+  Note over CareCoordinator,ProviderSchedule: Schedule Follow-Up Visit
   CareCoordinator->>FollowUpScheduleScreen: Schedule Follow-Up Visit
   FollowUpScheduleScreen->>FollowUpScheduleApi: Schedule Follow-Up Visit
   activate FollowUpScheduleApi
@@ -62,7 +62,7 @@ sequenceDiagram
   FollowUpScheduleScreen-->>CareCoordinator: Follow-Up Schedule Screen
   deactivate FollowUpScheduleApi
 
-  Note over CareCoordinator,PatientMessageScreen: Send Follow-Up Message
+  Note over CareCoordinator,ProviderSchedule: Send Follow-Up Message
   CareCoordinator->>PatientMessageScreen: Send Follow-Up Message
   PatientMessageScreen->>SendFollowUpMessageApi: Send Follow-Up Message
   activate SendFollowUpMessageApi

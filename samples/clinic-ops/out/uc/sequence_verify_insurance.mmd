@@ -1,11 +1,11 @@
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
+  participant InsuranceScreen as Insurance Verification Screen
   participant EligibilityApi as Eligibility API
   participant EligibilityCheck as Eligibility Check
   participant InsurancePolicy as Insurance Policy
-  participant InsuranceScreen as Insurance Verification Screen
 
-  Note over FrontDesk,InsuranceScreen: Verify Insurance
+  Note over FrontDesk,InsurancePolicy: Verify Insurance
   FrontDesk->>InsuranceScreen: Verify Insurance
   InsuranceScreen->>EligibilityApi: Verify Insurance
   activate EligibilityApi

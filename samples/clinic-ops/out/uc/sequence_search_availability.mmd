@@ -1,12 +1,12 @@
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
+  participant ScheduleSearchScreen as Schedule Search Screen
   participant SearchAvailabilityApi as Search Availability API
   participant ClinicLocation as Clinic Location
   participant Provider as Provider
   participant ProviderSchedule as Provider Schedule
-  participant ScheduleSearchScreen as Schedule Search Screen
 
-  Note over FrontDesk,ScheduleSearchScreen: Search Availability
+  Note over FrontDesk,ProviderSchedule: Search Availability
   FrontDesk->>ScheduleSearchScreen: Search Availability
   ScheduleSearchScreen->>SearchAvailabilityApi: Search Availability
   activate SearchAvailabilityApi

@@ -1,11 +1,11 @@
 sequenceDiagram
   actor Clinician as Clinician
+  participant CriticalNoticeScreen as Critical Result Notice Screen
   participant CriticalNoticeApi as Critical Notice API
   participant Notification as Notification
   participant PatientMessage as Patient Message
-  participant CriticalNoticeScreen as Critical Result Notice Screen
 
-  Note over Clinician,CriticalNoticeScreen: Notify Critical Result
+  Note over Clinician,PatientMessage: Notify Critical Result
   Clinician->>CriticalNoticeScreen: Notify Critical Result
   CriticalNoticeScreen->>CriticalNoticeApi: Notify Critical Result
   activate CriticalNoticeApi

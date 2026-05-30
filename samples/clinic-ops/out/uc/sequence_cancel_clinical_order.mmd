@@ -1,10 +1,10 @@
 sequenceDiagram
   actor Clinician as Clinician
   participant System as システム
-  participant ClinicalOrder as Clinical Order
   participant OrderEntryScreen as Order Entry Screen
+  participant ClinicalOrder as Clinical Order
 
-  Note over Clinician,OrderEntryScreen: Cancel Clinical Order
+  Note over Clinician,ClinicalOrder: Cancel Clinical Order
   Clinician->System: Cancel Clinical Order
   activate System
   System->>ClinicalOrder: update

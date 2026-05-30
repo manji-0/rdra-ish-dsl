@@ -1,6 +1,6 @@
 ---
-source: crates/rdra-emit/src/plantuml.rs
-assertion_line: 840
+source: crates/rdra-ish-emit/src/plantuml.rs
+assertion_line: 1154
 expression: result
 ---
 @startuml
@@ -8,10 +8,10 @@ expression: result
 
 actor "顧客" as Customer
 participant "システム" as System
+boundary "注文完了画面" as OrderCompleteScreen
 database "カート" as Cart
 database "注文" as Order
 database "注文明細" as OrderLine
-boundary "注文完了画面" as OrderCompleteScreen
 
 == 注文を確定する ==
 Customer -> System : 注文を確定する

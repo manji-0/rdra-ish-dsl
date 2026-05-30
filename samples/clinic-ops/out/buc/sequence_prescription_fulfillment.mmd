@@ -2,6 +2,9 @@ sequenceDiagram
   actor Clinician as Clinician
   actor Nurse as Nurse
   participant System as システム
+  participant MedicationSearchScreen as Medication Search Screen
+  participant PharmacyStatusScreen as Pharmacy Status Screen
+  participant PrescriptionScreen as Prescription Screen
   participant ConfirmDispenseApi as Confirm Dispense API
   participant DraftPrescriptionApi as Draft Prescription API
   participant MedicationCatalogApi as Medication Catalog API
@@ -10,18 +13,15 @@ sequenceDiagram
   participant Encounter as Encounter
   participant Medication as Medication
   participant Prescription as Prescription
-  participant MedicationSearchScreen as Medication Search Screen
-  participant PharmacyStatusScreen as Pharmacy Status Screen
-  participant PrescriptionScreen as Prescription Screen
 
-  Note over Clinician,PrescriptionScreen: Cancel Prescription
+  Note over Clinician,Prescription: Cancel Prescription
   Clinician->System: Cancel Prescription
   activate System
   System->>Prescription: update
   System-->>Clinician: Prescription Screen
   deactivate System
 
-  Note over Clinician,PrescriptionScreen: Confirm Dispense
+  Note over Clinician,Prescription: Confirm Dispense
   Nurse->>PharmacyStatusScreen: Confirm Dispense
   PharmacyStatusScreen->>ConfirmDispenseApi: Confirm Dispense
   activate ConfirmDispenseApi
@@ -30,7 +30,7 @@ sequenceDiagram
   PharmacyStatusScreen-->>Nurse: Pharmacy Status Screen
   deactivate ConfirmDispenseApi
 
-  Note over Clinician,PrescriptionScreen: Draft Prescription
+  Note over Clinician,Prescription: Draft Prescription
   Clinician->>PrescriptionScreen: Draft Prescription
   PrescriptionScreen->>DraftPrescriptionApi: Draft Prescription
   activate DraftPrescriptionApi
@@ -40,7 +40,7 @@ sequenceDiagram
   PrescriptionScreen-->>Clinician: Prescription Screen
   deactivate DraftPrescriptionApi
 
-  Note over Clinician,PrescriptionScreen: Refill Prescription
+  Note over Clinician,Prescription: Refill Prescription
   Clinician->>PrescriptionScreen: Refill Prescription
   PrescriptionScreen->>RefillPrescriptionApi: Refill Prescription
   activate RefillPrescriptionApi
@@ -50,7 +50,7 @@ sequenceDiagram
   PrescriptionScreen-->>Clinician: Prescription Screen
   deactivate RefillPrescriptionApi
 
-  Note over Clinician,PrescriptionScreen: Search Medication
+  Note over Clinician,Prescription: Search Medication
   Clinician->>MedicationSearchScreen: Search Medication
   MedicationSearchScreen->>MedicationCatalogApi: Search Medication
   activate MedicationCatalogApi
@@ -59,7 +59,7 @@ sequenceDiagram
   MedicationSearchScreen-->>Clinician: Medication Search Screen
   deactivate MedicationCatalogApi
 
-  Note over Clinician,PrescriptionScreen: Send Prescription
+  Note over Clinician,Prescription: Send Prescription
   Clinician->>PrescriptionScreen: Send Prescription
   PrescriptionScreen->>SendPrescriptionApi: Send Prescription
   activate SendPrescriptionApi

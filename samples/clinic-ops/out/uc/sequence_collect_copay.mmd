@@ -1,11 +1,11 @@
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
+  participant CopayScreen as Copay Screen
   participant CollectCopayApi as Collect Copay API
   participant AccountBalance as Account Balance
   participant PaymentTransaction as Payment Transaction
-  participant CopayScreen as Copay Screen
 
-  Note over FrontDesk,CopayScreen: Collect Copay
+  Note over FrontDesk,PaymentTransaction: Collect Copay
   FrontDesk->>CopayScreen: Collect Copay
   CopayScreen->>CollectCopayApi: Collect Copay
   activate CollectCopayApi

@@ -1,10 +1,10 @@
 sequenceDiagram
   actor Clinician as Clinician
+  participant EncounterWorkspaceScreen as Encounter Workspace
   participant AmendEncounterApi as Amend Encounter API
   participant Encounter as Encounter
-  participant EncounterWorkspaceScreen as Encounter Workspace
 
-  Note over Clinician,EncounterWorkspaceScreen: Amend Signed Encounter
+  Note over Clinician,Encounter: Amend Signed Encounter
   Clinician->>EncounterWorkspaceScreen: Amend Signed Encounter
   EncounterWorkspaceScreen->>AmendEncounterApi: Amend Signed Encounter
   activate AmendEncounterApi

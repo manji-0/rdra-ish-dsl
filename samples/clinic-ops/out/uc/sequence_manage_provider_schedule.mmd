@@ -1,11 +1,11 @@
 sequenceDiagram
   actor ClinicAdmin as Clinic Administrator
+  participant ScheduleAdminScreen as Schedule Admin Screen
   participant ManageProviderScheduleApi as Manage Provider Schedule API
   participant Provider as Provider
   participant ProviderSchedule as Provider Schedule
-  participant ScheduleAdminScreen as Schedule Admin Screen
 
-  Note over ClinicAdmin,ScheduleAdminScreen: Manage Provider Schedule
+  Note over ClinicAdmin,ProviderSchedule: Manage Provider Schedule
   ClinicAdmin->>ScheduleAdminScreen: Manage Provider Schedule
   ScheduleAdminScreen->>ManageProviderScheduleApi: Manage Provider Schedule
   activate ManageProviderScheduleApi

@@ -1,11 +1,11 @@
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
+  participant AppointmentScreen as Appointment Screen
   participant RescheduleAppointmentApi as Reschedule Appointment API
   participant Appointment as Appointment
   participant ProviderSchedule as Provider Schedule
-  participant AppointmentScreen as Appointment Screen
 
-  Note over FrontDesk,AppointmentScreen: Reschedule Appointment
+  Note over FrontDesk,ProviderSchedule: Reschedule Appointment
   FrontDesk->>AppointmentScreen: Reschedule Appointment
   AppointmentScreen->>RescheduleAppointmentApi: Reschedule Appointment
   activate RescheduleAppointmentApi

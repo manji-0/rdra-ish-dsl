@@ -2,6 +2,10 @@ sequenceDiagram
   actor Clinician as Clinician
   actor Nurse as Nurse
   participant System as システム
+  participant CriticalNoticeScreen as Critical Result Notice Screen
+  participant OrderEntryScreen as Order Entry Screen
+  participant ResultReviewScreen as Result Review Screen
+  participant SpecimenScreen as Specimen Collection Screen
   participant CollectSpecimenApi as Collect Specimen API
   participant CriticalNoticeApi as Critical Notice API
   participant OrderEntryApi as Order Entry API
@@ -12,19 +16,15 @@ sequenceDiagram
   participant LabResult as Lab Result
   participant Notification as Notification
   participant PatientMessage as Patient Message
-  participant CriticalNoticeScreen as Critical Result Notice Screen
-  participant OrderEntryScreen as Order Entry Screen
-  participant ResultReviewScreen as Result Review Screen
-  participant SpecimenScreen as Specimen Collection Screen
 
-  Note over Clinician,SpecimenScreen: Cancel Clinical Order
+  Note over Clinician,PatientMessage: Cancel Clinical Order
   Clinician->System: Cancel Clinical Order
   activate System
   System->>ClinicalOrder: update
   System-->>Clinician: Order Entry Screen
   deactivate System
 
-  Note over Clinician,SpecimenScreen: Collect Specimen
+  Note over Clinician,PatientMessage: Collect Specimen
   Nurse->>SpecimenScreen: Collect Specimen
   SpecimenScreen->>CollectSpecimenApi: Collect Specimen
   activate CollectSpecimenApi
@@ -33,7 +33,7 @@ sequenceDiagram
   SpecimenScreen-->>Nurse: Specimen Collection Screen
   deactivate CollectSpecimenApi
 
-  Note over Clinician,SpecimenScreen: Notify Critical Result
+  Note over Clinician,PatientMessage: Notify Critical Result
   Clinician->>CriticalNoticeScreen: Notify Critical Result
   CriticalNoticeScreen->>CriticalNoticeApi: Notify Critical Result
   activate CriticalNoticeApi
@@ -46,7 +46,7 @@ sequenceDiagram
   CriticalNoticeScreen-->>Clinician: Critical Result Notice Screen
   deactivate CriticalNoticeApi
 
-  Note over Clinician,SpecimenScreen: Place Lab Order
+  Note over Clinician,PatientMessage: Place Lab Order
   Clinician->>OrderEntryScreen: Place Lab Order
   OrderEntryScreen->>OrderEntryApi: Place Lab Order
   activate OrderEntryApi
@@ -56,7 +56,7 @@ sequenceDiagram
   OrderEntryScreen-->>Clinician: Order Entry Screen
   deactivate OrderEntryApi
 
-  Note over Clinician,SpecimenScreen: Receive Lab Result
+  Note over Clinician,PatientMessage: Receive Lab Result
   Nurse->>ResultReviewScreen: Receive Lab Result
   ResultReviewScreen->>ReceiveLabResultApi: Receive Lab Result
   activate ReceiveLabResultApi
@@ -69,7 +69,7 @@ sequenceDiagram
   ResultReviewScreen-->>Nurse: Result Review Screen
   deactivate ReceiveLabResultApi
 
-  Note over Clinician,SpecimenScreen: Review Lab Result
+  Note over Clinician,PatientMessage: Review Lab Result
   Clinician->>ResultReviewScreen: Review Lab Result
   ResultReviewScreen->>ResultReviewApi: Review Lab Result
   activate ResultReviewApi

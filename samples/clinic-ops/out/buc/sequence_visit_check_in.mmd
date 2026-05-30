@@ -1,6 +1,9 @@
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
   actor Nurse as Nurse
+  participant CheckInScreen as Check-In Screen
+  participant CopayScreen as Copay Screen
+  participant RoomBoardScreen as Room Board Screen
   participant AssignRoomApi as Assign Room API
   participant CheckInPatientApi as Check-In Patient API
   participant CollectCopayApi as Collect Copay API
@@ -13,11 +16,8 @@ sequenceDiagram
   participant PatientProfile as Patient Profile
   participant PaymentTransaction as Payment Transaction
   participant Room as Room
-  participant CheckInScreen as Check-In Screen
-  participant CopayScreen as Copay Screen
-  participant RoomBoardScreen as Room Board Screen
 
-  Note over FrontDesk,RoomBoardScreen: Assign Room
+  Note over FrontDesk,Room: Assign Room
   Nurse->>RoomBoardScreen: Assign Room
   RoomBoardScreen->>AssignRoomApi: Assign Room
   activate AssignRoomApi
@@ -30,7 +30,7 @@ sequenceDiagram
   RoomBoardScreen-->>Nurse: Room Board Screen
   deactivate AssignRoomApi
 
-  Note over FrontDesk,RoomBoardScreen: Check In Patient
+  Note over FrontDesk,Room: Check In Patient
   FrontDesk->>CheckInScreen: Check In Patient
   CheckInScreen->>CheckInPatientApi: Check In Patient
   activate CheckInPatientApi
@@ -43,7 +43,7 @@ sequenceDiagram
   CheckInScreen-->>FrontDesk: Check-In Screen
   deactivate CheckInPatientApi
 
-  Note over FrontDesk,RoomBoardScreen: Collect Copay
+  Note over FrontDesk,Room: Collect Copay
   FrontDesk->>CopayScreen: Collect Copay
   CopayScreen->>CollectCopayApi: Collect Copay
   activate CollectCopayApi
@@ -56,7 +56,7 @@ sequenceDiagram
   CopayScreen-->>FrontDesk: Copay Screen
   deactivate CollectCopayApi
 
-  Note over FrontDesk,RoomBoardScreen: Prepare Encounter
+  Note over FrontDesk,Room: Prepare Encounter
   Nurse->>CheckInScreen: Prepare Encounter
   CheckInScreen->>PrepareEncounterApi: Prepare Encounter
   activate PrepareEncounterApi
@@ -66,7 +66,7 @@ sequenceDiagram
   CheckInScreen-->>Nurse: Check-In Screen
   deactivate PrepareEncounterApi
 
-  Note over FrontDesk,RoomBoardScreen: Verify Patient Arrival
+  Note over FrontDesk,Room: Verify Patient Arrival
   FrontDesk->>CheckInScreen: Verify Patient Arrival
   CheckInScreen->>VerifyArrivalApi: Verify Patient Arrival
   activate VerifyArrivalApi

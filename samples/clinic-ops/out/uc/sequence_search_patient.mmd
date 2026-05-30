@@ -1,11 +1,11 @@
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
+  participant PatientSearchScreen as Patient Search Screen
   participant SearchPatientApi as Search Patient API
   participant PatientAccount as Patient Account
   participant PatientProfile as Patient Profile
-  participant PatientSearchScreen as Patient Search Screen
 
-  Note over FrontDesk,PatientSearchScreen: Search Patient
+  Note over FrontDesk,PatientProfile: Search Patient
   FrontDesk->>PatientSearchScreen: Search Patient
   PatientSearchScreen->>SearchPatientApi: Search Patient
   activate SearchPatientApi

@@ -1,6 +1,9 @@
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
   participant System as システム
+  participant AppointmentNoticeScreen as Appointment Notice Screen
+  participant AppointmentScreen as Appointment Screen
+  participant ScheduleSearchScreen as Schedule Search Screen
   participant AppointmentNoticeApi as Appointment Notice API
   participant BookAppointmentApi as Book Appointment API
   participant CancelAppointmentApi as Cancel Appointment API
@@ -13,11 +16,8 @@ sequenceDiagram
   participant PatientMessage as Patient Message
   participant Provider as Provider
   participant ProviderSchedule as Provider Schedule
-  participant AppointmentNoticeScreen as Appointment Notice Screen
-  participant AppointmentScreen as Appointment Screen
-  participant ScheduleSearchScreen as Schedule Search Screen
 
-  Note over FrontDesk,ScheduleSearchScreen: Book Appointment
+  Note over FrontDesk,ProviderSchedule: Book Appointment
   FrontDesk->>AppointmentScreen: Book Appointment
   AppointmentScreen->>BookAppointmentApi: Book Appointment
   activate BookAppointmentApi
@@ -30,7 +30,7 @@ sequenceDiagram
   AppointmentScreen-->>FrontDesk: Appointment Screen
   deactivate BookAppointmentApi
 
-  Note over FrontDesk,ScheduleSearchScreen: Cancel Appointment
+  Note over FrontDesk,ProviderSchedule: Cancel Appointment
   FrontDesk->>AppointmentScreen: Cancel Appointment
   AppointmentScreen->>CancelAppointmentApi: Cancel Appointment
   activate CancelAppointmentApi
@@ -43,14 +43,14 @@ sequenceDiagram
   AppointmentScreen-->>FrontDesk: Appointment Screen
   deactivate CancelAppointmentApi
 
-  Note over FrontDesk,ScheduleSearchScreen: Mark No Show
+  Note over FrontDesk,ProviderSchedule: Mark No Show
   FrontDesk->System: Mark No Show
   activate System
   System->>Appointment: update
   System-->>FrontDesk: Appointment Screen
   deactivate System
 
-  Note over FrontDesk,ScheduleSearchScreen: Reschedule Appointment
+  Note over FrontDesk,ProviderSchedule: Reschedule Appointment
   FrontDesk->>AppointmentScreen: Reschedule Appointment
   AppointmentScreen->>RescheduleAppointmentApi: Reschedule Appointment
   activate RescheduleAppointmentApi
@@ -63,7 +63,7 @@ sequenceDiagram
   AppointmentScreen-->>FrontDesk: Appointment Screen
   deactivate RescheduleAppointmentApi
 
-  Note over FrontDesk,ScheduleSearchScreen: Reserve Appointment
+  Note over FrontDesk,ProviderSchedule: Reserve Appointment
   FrontDesk->>AppointmentScreen: Reserve Appointment
   AppointmentScreen->>ReserveAppointmentApi: Reserve Appointment
   activate ReserveAppointmentApi
@@ -76,7 +76,7 @@ sequenceDiagram
   AppointmentScreen-->>FrontDesk: Appointment Screen
   deactivate ReserveAppointmentApi
 
-  Note over FrontDesk,ScheduleSearchScreen: Search Availability
+  Note over FrontDesk,ProviderSchedule: Search Availability
   FrontDesk->>ScheduleSearchScreen: Search Availability
   ScheduleSearchScreen->>SearchAvailabilityApi: Search Availability
   activate SearchAvailabilityApi
@@ -87,7 +87,7 @@ sequenceDiagram
   ScheduleSearchScreen-->>FrontDesk: Schedule Search Screen
   deactivate SearchAvailabilityApi
 
-  Note over FrontDesk,ScheduleSearchScreen: Send Appointment Notice
+  Note over FrontDesk,ProviderSchedule: Send Appointment Notice
   FrontDesk->>AppointmentNoticeScreen: Send Appointment Notice
   AppointmentNoticeScreen->>AppointmentNoticeApi: Send Appointment Notice
   activate AppointmentNoticeApi

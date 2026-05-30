@@ -1,11 +1,11 @@
 sequenceDiagram
   actor Clinician as Clinician
+  participant DiagnosisScreen as Diagnosis Screen
   participant DocumentAssessmentApi as Document Assessment API
   participant Diagnosis as Diagnosis
   participant Encounter as Encounter
-  participant DiagnosisScreen as Diagnosis Screen
 
-  Note over Clinician,DiagnosisScreen: Document Assessment
+  Note over Clinician,Encounter: Document Assessment
   Clinician->>DiagnosisScreen: Document Assessment
   DiagnosisScreen->>DocumentAssessmentApi: Document Assessment
   activate DocumentAssessmentApi

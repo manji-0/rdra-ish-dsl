@@ -1,10 +1,10 @@
 sequenceDiagram
   actor CareCoordinator as Care Coordinator
   participant System as システム
-  participant CarePlan as Care Plan
   participant CarePlanScreen as Care Plan Screen
+  participant CarePlan as Care Plan
 
-  Note over CareCoordinator,CarePlanScreen: Close Care Plan
+  Note over CareCoordinator,CarePlan: Close Care Plan
   CareCoordinator->System: Close Care Plan
   activate System
   System->>CarePlan: update

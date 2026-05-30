@@ -1,10 +1,10 @@
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
   participant System as システム
-  participant PatientAccount as Patient Account
   participant PatientProfileScreen as Patient Profile Screen
+  participant PatientAccount as Patient Account
 
-  Note over FrontDesk,PatientProfileScreen: Merge Duplicate Patient
+  Note over FrontDesk,PatientAccount: Merge Duplicate Patient
   FrontDesk->System: Merge Duplicate Patient
   activate System
   System->>PatientAccount: update

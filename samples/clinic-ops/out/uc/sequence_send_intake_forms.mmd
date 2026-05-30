@@ -1,11 +1,11 @@
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
+  participant IntakePortalScreen as Intake Portal Screen
   participant IntakeMessagingApi as Intake Messaging API
   participant IntakePacket as Intake Packet
   participant PatientMessage as Patient Message
-  participant IntakePortalScreen as Intake Portal Screen
 
-  Note over FrontDesk,IntakePortalScreen: Send Intake Forms
+  Note over FrontDesk,PatientMessage: Send Intake Forms
   FrontDesk->>IntakePortalScreen: Send Intake Forms
   IntakePortalScreen->>IntakeMessagingApi: Send Intake Forms
   activate IntakeMessagingApi

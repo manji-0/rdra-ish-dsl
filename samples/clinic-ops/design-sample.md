@@ -158,6 +158,11 @@ sequenceDiagram
   actor FrontDesk as Front Desk Staff
   actor Patient as Patient
   participant System as システム
+  participant ConsentScreen as Consent Capture Screen
+  participant InsuranceScreen as Insurance Verification Screen
+  participant IntakePortalScreen as Intake Portal Screen
+  participant PatientProfileScreen as Patient Profile Screen
+  participant PatientSearchScreen as Patient Search Screen
   participant ConsentApi as Consent API
   participant EligibilityApi as Eligibility API
   participant IntakeMessagingApi as Intake Messaging API
@@ -171,20 +176,15 @@ sequenceDiagram
   participant PatientAccount as Patient Account
   participant PatientMessage as Patient Message
   participant PatientProfile as Patient Profile
-  participant ConsentScreen as Consent Capture Screen
-  participant InsuranceScreen as Insurance Verification Screen
-  participant IntakePortalScreen as Intake Portal Screen
-  participant PatientProfileScreen as Patient Profile Screen
-  participant PatientSearchScreen as Patient Search Screen
 
-  Note over FrontDesk,PatientSearchScreen: Archive Patient
+  Note over FrontDesk,PatientProfile: Archive Patient
   FrontDesk->System: Archive Patient
   activate System
   System->>PatientAccount: update
   System-->>FrontDesk: Patient Profile Screen
   deactivate System
 
-  Note over FrontDesk,PatientSearchScreen: Capture Consent
+  Note over FrontDesk,PatientProfile: Capture Consent
   Patient->>ConsentScreen: Capture Consent
   ConsentScreen->>ConsentApi: Capture Consent
   activate ConsentApi
@@ -193,28 +193,28 @@ sequenceDiagram
   ConsentScreen-->>Patient: Consent Capture Screen
   deactivate ConsentApi
 
-  Note over FrontDesk,PatientSearchScreen: Complete Intake Forms
+  Note over FrontDesk,PatientProfile: Complete Intake Forms
   Patient->System: Complete Intake Forms
   activate System
   System->>IntakePacket: update
   System-->>Patient: Intake Portal Screen
   deactivate System
 
-  Note over FrontDesk,PatientSearchScreen: Expire Intake Forms
+  Note over FrontDesk,PatientProfile: Expire Intake Forms
   FrontDesk->System: Expire Intake Forms
   activate System
   System->>IntakePacket: update
   System-->>FrontDesk: Intake Portal Screen
   deactivate System
 
-  Note over FrontDesk,PatientSearchScreen: Merge Duplicate Patient
+  Note over FrontDesk,PatientProfile: Merge Duplicate Patient
   FrontDesk->System: Merge Duplicate Patient
   activate System
   System->>PatientAccount: update
   System-->>FrontDesk: Patient Profile Screen
   deactivate System
 
-  Note over FrontDesk,PatientSearchScreen: Register Patient
+  Note over FrontDesk,PatientProfile: Register Patient
   FrontDesk->>PatientProfileScreen: Register Patient
   PatientProfileScreen->>RegisterPatientApi: Register Patient
   activate RegisterPatientApi
@@ -227,7 +227,7 @@ sequenceDiagram
   PatientProfileScreen-->>FrontDesk: Patient Profile Screen
   deactivate RegisterPatientApi
 
-  Note over FrontDesk,PatientSearchScreen: Search Patient
+  Note over FrontDesk,PatientProfile: Search Patient
   FrontDesk->>PatientSearchScreen: Search Patient
   PatientSearchScreen->>SearchPatientApi: Search Patient
   activate SearchPatientApi
@@ -237,7 +237,7 @@ sequenceDiagram
   PatientSearchScreen-->>FrontDesk: Patient Search Screen
   deactivate SearchPatientApi
 
-  Note over FrontDesk,PatientSearchScreen: Send Intake Forms
+  Note over FrontDesk,PatientProfile: Send Intake Forms
   FrontDesk->>IntakePortalScreen: Send Intake Forms
   IntakePortalScreen->>IntakeMessagingApi: Send Intake Forms
   activate IntakeMessagingApi
@@ -250,7 +250,7 @@ sequenceDiagram
   IntakePortalScreen-->>FrontDesk: Intake Portal Screen
   deactivate IntakeMessagingApi
 
-  Note over FrontDesk,PatientSearchScreen: Update Demographics
+  Note over FrontDesk,PatientProfile: Update Demographics
   FrontDesk->>PatientProfileScreen: Update Demographics
   PatientProfileScreen->>UpdateDemographicsApi: Update Demographics
   activate UpdateDemographicsApi
@@ -259,7 +259,7 @@ sequenceDiagram
   PatientProfileScreen-->>FrontDesk: Patient Profile Screen
   deactivate UpdateDemographicsApi
 
-  Note over FrontDesk,PatientSearchScreen: Verify Insurance
+  Note over FrontDesk,PatientProfile: Verify Insurance
   FrontDesk->>InsuranceScreen: Verify Insurance
   InsuranceScreen->>EligibilityApi: Verify Insurance
   activate EligibilityApi
@@ -374,6 +374,9 @@ graph TD
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
   participant System as システム
+  participant AppointmentNoticeScreen as Appointment Notice Screen
+  participant AppointmentScreen as Appointment Screen
+  participant ScheduleSearchScreen as Schedule Search Screen
   participant AppointmentNoticeApi as Appointment Notice API
   participant BookAppointmentApi as Book Appointment API
   participant CancelAppointmentApi as Cancel Appointment API
@@ -386,11 +389,8 @@ sequenceDiagram
   participant PatientMessage as Patient Message
   participant Provider as Provider
   participant ProviderSchedule as Provider Schedule
-  participant AppointmentNoticeScreen as Appointment Notice Screen
-  participant AppointmentScreen as Appointment Screen
-  participant ScheduleSearchScreen as Schedule Search Screen
 
-  Note over FrontDesk,ScheduleSearchScreen: Book Appointment
+  Note over FrontDesk,ProviderSchedule: Book Appointment
   FrontDesk->>AppointmentScreen: Book Appointment
   AppointmentScreen->>BookAppointmentApi: Book Appointment
   activate BookAppointmentApi
@@ -403,7 +403,7 @@ sequenceDiagram
   AppointmentScreen-->>FrontDesk: Appointment Screen
   deactivate BookAppointmentApi
 
-  Note over FrontDesk,ScheduleSearchScreen: Cancel Appointment
+  Note over FrontDesk,ProviderSchedule: Cancel Appointment
   FrontDesk->>AppointmentScreen: Cancel Appointment
   AppointmentScreen->>CancelAppointmentApi: Cancel Appointment
   activate CancelAppointmentApi
@@ -416,14 +416,14 @@ sequenceDiagram
   AppointmentScreen-->>FrontDesk: Appointment Screen
   deactivate CancelAppointmentApi
 
-  Note over FrontDesk,ScheduleSearchScreen: Mark No Show
+  Note over FrontDesk,ProviderSchedule: Mark No Show
   FrontDesk->System: Mark No Show
   activate System
   System->>Appointment: update
   System-->>FrontDesk: Appointment Screen
   deactivate System
 
-  Note over FrontDesk,ScheduleSearchScreen: Reschedule Appointment
+  Note over FrontDesk,ProviderSchedule: Reschedule Appointment
   FrontDesk->>AppointmentScreen: Reschedule Appointment
   AppointmentScreen->>RescheduleAppointmentApi: Reschedule Appointment
   activate RescheduleAppointmentApi
@@ -436,7 +436,7 @@ sequenceDiagram
   AppointmentScreen-->>FrontDesk: Appointment Screen
   deactivate RescheduleAppointmentApi
 
-  Note over FrontDesk,ScheduleSearchScreen: Reserve Appointment
+  Note over FrontDesk,ProviderSchedule: Reserve Appointment
   FrontDesk->>AppointmentScreen: Reserve Appointment
   AppointmentScreen->>ReserveAppointmentApi: Reserve Appointment
   activate ReserveAppointmentApi
@@ -449,7 +449,7 @@ sequenceDiagram
   AppointmentScreen-->>FrontDesk: Appointment Screen
   deactivate ReserveAppointmentApi
 
-  Note over FrontDesk,ScheduleSearchScreen: Search Availability
+  Note over FrontDesk,ProviderSchedule: Search Availability
   FrontDesk->>ScheduleSearchScreen: Search Availability
   ScheduleSearchScreen->>SearchAvailabilityApi: Search Availability
   activate SearchAvailabilityApi
@@ -460,7 +460,7 @@ sequenceDiagram
   ScheduleSearchScreen-->>FrontDesk: Schedule Search Screen
   deactivate SearchAvailabilityApi
 
-  Note over FrontDesk,ScheduleSearchScreen: Send Appointment Notice
+  Note over FrontDesk,ProviderSchedule: Send Appointment Notice
   FrontDesk->>AppointmentNoticeScreen: Send Appointment Notice
   AppointmentNoticeScreen->>AppointmentNoticeApi: Send Appointment Notice
   activate AppointmentNoticeApi
@@ -556,6 +556,9 @@ graph TD
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
   actor Nurse as Nurse
+  participant CheckInScreen as Check-In Screen
+  participant CopayScreen as Copay Screen
+  participant RoomBoardScreen as Room Board Screen
   participant AssignRoomApi as Assign Room API
   participant CheckInPatientApi as Check-In Patient API
   participant CollectCopayApi as Collect Copay API
@@ -568,11 +571,8 @@ sequenceDiagram
   participant PatientProfile as Patient Profile
   participant PaymentTransaction as Payment Transaction
   participant Room as Room
-  participant CheckInScreen as Check-In Screen
-  participant CopayScreen as Copay Screen
-  participant RoomBoardScreen as Room Board Screen
 
-  Note over FrontDesk,RoomBoardScreen: Assign Room
+  Note over FrontDesk,Room: Assign Room
   Nurse->>RoomBoardScreen: Assign Room
   RoomBoardScreen->>AssignRoomApi: Assign Room
   activate AssignRoomApi
@@ -585,7 +585,7 @@ sequenceDiagram
   RoomBoardScreen-->>Nurse: Room Board Screen
   deactivate AssignRoomApi
 
-  Note over FrontDesk,RoomBoardScreen: Check In Patient
+  Note over FrontDesk,Room: Check In Patient
   FrontDesk->>CheckInScreen: Check In Patient
   CheckInScreen->>CheckInPatientApi: Check In Patient
   activate CheckInPatientApi
@@ -598,7 +598,7 @@ sequenceDiagram
   CheckInScreen-->>FrontDesk: Check-In Screen
   deactivate CheckInPatientApi
 
-  Note over FrontDesk,RoomBoardScreen: Collect Copay
+  Note over FrontDesk,Room: Collect Copay
   FrontDesk->>CopayScreen: Collect Copay
   CopayScreen->>CollectCopayApi: Collect Copay
   activate CollectCopayApi
@@ -611,7 +611,7 @@ sequenceDiagram
   CopayScreen-->>FrontDesk: Copay Screen
   deactivate CollectCopayApi
 
-  Note over FrontDesk,RoomBoardScreen: Prepare Encounter
+  Note over FrontDesk,Room: Prepare Encounter
   Nurse->>CheckInScreen: Prepare Encounter
   CheckInScreen->>PrepareEncounterApi: Prepare Encounter
   activate PrepareEncounterApi
@@ -621,7 +621,7 @@ sequenceDiagram
   CheckInScreen-->>Nurse: Check-In Screen
   deactivate PrepareEncounterApi
 
-  Note over FrontDesk,RoomBoardScreen: Verify Patient Arrival
+  Note over FrontDesk,Room: Verify Patient Arrival
   FrontDesk->>CheckInScreen: Verify Patient Arrival
   CheckInScreen->>VerifyArrivalApi: Verify Patient Arrival
   activate VerifyArrivalApi
@@ -733,6 +733,9 @@ graph TD
 sequenceDiagram
   actor Clinician as Clinician
   actor Nurse as Nurse
+  participant DiagnosisScreen as Diagnosis Screen
+  participant EncounterWorkspaceScreen as Encounter Workspace
+  participant VitalsScreen as Vitals Screen
   participant AmendEncounterApi as Amend Encounter API
   participant CompleteAppointmentApi as Complete Appointment API
   participant DocumentAssessmentApi as Document Assessment API
@@ -744,11 +747,8 @@ sequenceDiagram
   participant Encounter as Encounter
   participant Room as Room
   participant VitalSign as Vital Sign
-  participant DiagnosisScreen as Diagnosis Screen
-  participant EncounterWorkspaceScreen as Encounter Workspace
-  participant VitalsScreen as Vitals Screen
 
-  Note over Clinician,VitalsScreen: Amend Signed Encounter
+  Note over Clinician,VitalSign: Amend Signed Encounter
   Clinician->>EncounterWorkspaceScreen: Amend Signed Encounter
   EncounterWorkspaceScreen->>AmendEncounterApi: Amend Signed Encounter
   activate AmendEncounterApi
@@ -757,7 +757,7 @@ sequenceDiagram
   EncounterWorkspaceScreen-->>Clinician: Encounter Workspace
   deactivate AmendEncounterApi
 
-  Note over Clinician,VitalsScreen: Complete Appointment
+  Note over Clinician,VitalSign: Complete Appointment
   Nurse->>EncounterWorkspaceScreen: Complete Appointment
   EncounterWorkspaceScreen->>CompleteAppointmentApi: Complete Appointment
   activate CompleteAppointmentApi
@@ -770,7 +770,7 @@ sequenceDiagram
   EncounterWorkspaceScreen-->>Nurse: Encounter Workspace
   deactivate CompleteAppointmentApi
 
-  Note over Clinician,VitalsScreen: Document Assessment
+  Note over Clinician,VitalSign: Document Assessment
   Clinician->>DiagnosisScreen: Document Assessment
   DiagnosisScreen->>DocumentAssessmentApi: Document Assessment
   activate DocumentAssessmentApi
@@ -783,7 +783,7 @@ sequenceDiagram
   DiagnosisScreen-->>Clinician: Diagnosis Screen
   deactivate DocumentAssessmentApi
 
-  Note over Clinician,VitalsScreen: Open Encounter
+  Note over Clinician,VitalSign: Open Encounter
   Nurse->>EncounterWorkspaceScreen: Open Encounter
   EncounterWorkspaceScreen->>OpenEncounterApi: Open Encounter
   activate OpenEncounterApi
@@ -793,7 +793,7 @@ sequenceDiagram
   EncounterWorkspaceScreen-->>Nurse: Encounter Workspace
   deactivate OpenEncounterApi
 
-  Note over Clinician,VitalsScreen: Record Vitals
+  Note over Clinician,VitalSign: Record Vitals
   Nurse->>VitalsScreen: Record Vitals
   VitalsScreen->>RecordVitalsApi: Record Vitals
   activate RecordVitalsApi
@@ -806,7 +806,7 @@ sequenceDiagram
   VitalsScreen-->>Nurse: Vitals Screen
   deactivate RecordVitalsApi
 
-  Note over Clinician,VitalsScreen: Sign Encounter
+  Note over Clinician,VitalSign: Sign Encounter
   Clinician->>EncounterWorkspaceScreen: Sign Encounter
   EncounterWorkspaceScreen->>SignEncounterApi: Sign Encounter
   activate SignEncounterApi
@@ -901,6 +901,10 @@ sequenceDiagram
   actor Clinician as Clinician
   actor Nurse as Nurse
   participant System as システム
+  participant CriticalNoticeScreen as Critical Result Notice Screen
+  participant OrderEntryScreen as Order Entry Screen
+  participant ResultReviewScreen as Result Review Screen
+  participant SpecimenScreen as Specimen Collection Screen
   participant CollectSpecimenApi as Collect Specimen API
   participant CriticalNoticeApi as Critical Notice API
   participant OrderEntryApi as Order Entry API
@@ -911,19 +915,15 @@ sequenceDiagram
   participant LabResult as Lab Result
   participant Notification as Notification
   participant PatientMessage as Patient Message
-  participant CriticalNoticeScreen as Critical Result Notice Screen
-  participant OrderEntryScreen as Order Entry Screen
-  participant ResultReviewScreen as Result Review Screen
-  participant SpecimenScreen as Specimen Collection Screen
 
-  Note over Clinician,SpecimenScreen: Cancel Clinical Order
+  Note over Clinician,PatientMessage: Cancel Clinical Order
   Clinician->System: Cancel Clinical Order
   activate System
   System->>ClinicalOrder: update
   System-->>Clinician: Order Entry Screen
   deactivate System
 
-  Note over Clinician,SpecimenScreen: Collect Specimen
+  Note over Clinician,PatientMessage: Collect Specimen
   Nurse->>SpecimenScreen: Collect Specimen
   SpecimenScreen->>CollectSpecimenApi: Collect Specimen
   activate CollectSpecimenApi
@@ -932,7 +932,7 @@ sequenceDiagram
   SpecimenScreen-->>Nurse: Specimen Collection Screen
   deactivate CollectSpecimenApi
 
-  Note over Clinician,SpecimenScreen: Notify Critical Result
+  Note over Clinician,PatientMessage: Notify Critical Result
   Clinician->>CriticalNoticeScreen: Notify Critical Result
   CriticalNoticeScreen->>CriticalNoticeApi: Notify Critical Result
   activate CriticalNoticeApi
@@ -945,7 +945,7 @@ sequenceDiagram
   CriticalNoticeScreen-->>Clinician: Critical Result Notice Screen
   deactivate CriticalNoticeApi
 
-  Note over Clinician,SpecimenScreen: Place Lab Order
+  Note over Clinician,PatientMessage: Place Lab Order
   Clinician->>OrderEntryScreen: Place Lab Order
   OrderEntryScreen->>OrderEntryApi: Place Lab Order
   activate OrderEntryApi
@@ -955,7 +955,7 @@ sequenceDiagram
   OrderEntryScreen-->>Clinician: Order Entry Screen
   deactivate OrderEntryApi
 
-  Note over Clinician,SpecimenScreen: Receive Lab Result
+  Note over Clinician,PatientMessage: Receive Lab Result
   Nurse->>ResultReviewScreen: Receive Lab Result
   ResultReviewScreen->>ReceiveLabResultApi: Receive Lab Result
   activate ReceiveLabResultApi
@@ -968,7 +968,7 @@ sequenceDiagram
   ResultReviewScreen-->>Nurse: Result Review Screen
   deactivate ReceiveLabResultApi
 
-  Note over Clinician,SpecimenScreen: Review Lab Result
+  Note over Clinician,PatientMessage: Review Lab Result
   Clinician->>ResultReviewScreen: Review Lab Result
   ResultReviewScreen->>ResultReviewApi: Review Lab Result
   activate ResultReviewApi
@@ -1058,6 +1058,9 @@ sequenceDiagram
   actor Clinician as Clinician
   actor Nurse as Nurse
   participant System as システム
+  participant MedicationSearchScreen as Medication Search Screen
+  participant PharmacyStatusScreen as Pharmacy Status Screen
+  participant PrescriptionScreen as Prescription Screen
   participant ConfirmDispenseApi as Confirm Dispense API
   participant DraftPrescriptionApi as Draft Prescription API
   participant MedicationCatalogApi as Medication Catalog API
@@ -1066,18 +1069,15 @@ sequenceDiagram
   participant Encounter as Encounter
   participant Medication as Medication
   participant Prescription as Prescription
-  participant MedicationSearchScreen as Medication Search Screen
-  participant PharmacyStatusScreen as Pharmacy Status Screen
-  participant PrescriptionScreen as Prescription Screen
 
-  Note over Clinician,PrescriptionScreen: Cancel Prescription
+  Note over Clinician,Prescription: Cancel Prescription
   Clinician->System: Cancel Prescription
   activate System
   System->>Prescription: update
   System-->>Clinician: Prescription Screen
   deactivate System
 
-  Note over Clinician,PrescriptionScreen: Confirm Dispense
+  Note over Clinician,Prescription: Confirm Dispense
   Nurse->>PharmacyStatusScreen: Confirm Dispense
   PharmacyStatusScreen->>ConfirmDispenseApi: Confirm Dispense
   activate ConfirmDispenseApi
@@ -1086,7 +1086,7 @@ sequenceDiagram
   PharmacyStatusScreen-->>Nurse: Pharmacy Status Screen
   deactivate ConfirmDispenseApi
 
-  Note over Clinician,PrescriptionScreen: Draft Prescription
+  Note over Clinician,Prescription: Draft Prescription
   Clinician->>PrescriptionScreen: Draft Prescription
   PrescriptionScreen->>DraftPrescriptionApi: Draft Prescription
   activate DraftPrescriptionApi
@@ -1096,7 +1096,7 @@ sequenceDiagram
   PrescriptionScreen-->>Clinician: Prescription Screen
   deactivate DraftPrescriptionApi
 
-  Note over Clinician,PrescriptionScreen: Refill Prescription
+  Note over Clinician,Prescription: Refill Prescription
   Clinician->>PrescriptionScreen: Refill Prescription
   PrescriptionScreen->>RefillPrescriptionApi: Refill Prescription
   activate RefillPrescriptionApi
@@ -1106,7 +1106,7 @@ sequenceDiagram
   PrescriptionScreen-->>Clinician: Prescription Screen
   deactivate RefillPrescriptionApi
 
-  Note over Clinician,PrescriptionScreen: Search Medication
+  Note over Clinician,Prescription: Search Medication
   Clinician->>MedicationSearchScreen: Search Medication
   MedicationSearchScreen->>MedicationCatalogApi: Search Medication
   activate MedicationCatalogApi
@@ -1115,7 +1115,7 @@ sequenceDiagram
   MedicationSearchScreen-->>Clinician: Medication Search Screen
   deactivate MedicationCatalogApi
 
-  Note over Clinician,PrescriptionScreen: Send Prescription
+  Note over Clinician,Prescription: Send Prescription
   Clinician->>PrescriptionScreen: Send Prescription
   PrescriptionScreen->>SendPrescriptionApi: Send Prescription
   activate SendPrescriptionApi
@@ -1207,6 +1207,10 @@ graph TD
 sequenceDiagram
   actor BillingSpecialist as Billing Specialist
   participant System as システム
+  participant BalanceScreen as Balance Screen
+  participant ChargeWorklistScreen as Charge Worklist Screen
+  participant ClaimScreen as Claim Screen
+  participant PaymentPostingScreen as Payment Posting Screen
   participant BalanceApi as Balance API
   participant CreateChargeApi as Create Charge API
   participant GenerateClaimApi as Generate Claim API
@@ -1218,12 +1222,8 @@ sequenceDiagram
   participant Encounter as Encounter
   participant InsurancePolicy as Insurance Policy
   participant PaymentTransaction as Payment Transaction
-  participant BalanceScreen as Balance Screen
-  participant ChargeWorklistScreen as Charge Worklist Screen
-  participant ClaimScreen as Claim Screen
-  participant PaymentPostingScreen as Payment Posting Screen
 
-  Note over BillingSpecialist,PaymentPostingScreen: Create Charge
+  Note over BillingSpecialist,PaymentTransaction: Create Charge
   BillingSpecialist->>ChargeWorklistScreen: Create Charge
   ChargeWorklistScreen->>CreateChargeApi: Create Charge
   activate CreateChargeApi
@@ -1237,7 +1237,7 @@ sequenceDiagram
   ChargeWorklistScreen-->>BillingSpecialist: Charge Worklist Screen
   deactivate CreateChargeApi
 
-  Note over BillingSpecialist,PaymentPostingScreen: Generate Claim
+  Note over BillingSpecialist,PaymentTransaction: Generate Claim
   BillingSpecialist->>ClaimScreen: Generate Claim
   ClaimScreen->>GenerateClaimApi: Generate Claim
   activate GenerateClaimApi
@@ -1251,7 +1251,7 @@ sequenceDiagram
   ClaimScreen-->>BillingSpecialist: Claim Screen
   deactivate GenerateClaimApi
 
-  Note over BillingSpecialist,PaymentPostingScreen: Post Payment
+  Note over BillingSpecialist,PaymentTransaction: Post Payment
   BillingSpecialist->>PaymentPostingScreen: Post Payment
   PaymentPostingScreen->>PaymentPostApi: Post Payment
   activate PaymentPostApi
@@ -1264,14 +1264,14 @@ sequenceDiagram
   PaymentPostingScreen-->>BillingSpecialist: Payment Posting Screen
   deactivate PaymentPostApi
 
-  Note over BillingSpecialist,PaymentPostingScreen: Receive Claim Accepted
+  Note over BillingSpecialist,PaymentTransaction: Receive Claim Accepted
   BillingSpecialist->System: Receive Claim Accepted
   activate System
   System->>Claim: update
   System-->>BillingSpecialist: Claim Screen
   deactivate System
 
-  Note over BillingSpecialist,PaymentPostingScreen: Reconcile Balance
+  Note over BillingSpecialist,PaymentTransaction: Reconcile Balance
   BillingSpecialist->>BalanceScreen: Reconcile Balance
   BalanceScreen->>BalanceApi: Reconcile Balance
   activate BalanceApi
@@ -1281,14 +1281,14 @@ sequenceDiagram
   BalanceScreen-->>BillingSpecialist: Balance Screen
   deactivate BalanceApi
 
-  Note over BillingSpecialist,PaymentPostingScreen: Record Claim Denial
+  Note over BillingSpecialist,PaymentTransaction: Record Claim Denial
   BillingSpecialist->System: Record Claim Denial
   activate System
   System->>Claim: update
   System-->>BillingSpecialist: Claim Screen
   deactivate System
 
-  Note over BillingSpecialist,PaymentPostingScreen: Submit Claim
+  Note over BillingSpecialist,PaymentTransaction: Submit Claim
   BillingSpecialist->>ClaimScreen: Submit Claim
   ClaimScreen->>SubmitClaimApi: Submit Claim
   activate SubmitClaimApi
@@ -1297,7 +1297,7 @@ sequenceDiagram
   ClaimScreen-->>BillingSpecialist: Claim Screen
   deactivate SubmitClaimApi
 
-  Note over BillingSpecialist,PaymentPostingScreen: Void Charge
+  Note over BillingSpecialist,PaymentTransaction: Void Charge
   BillingSpecialist->System: Void Charge
   activate System
   System->>Charge: update
@@ -1393,6 +1393,9 @@ graph TD
 sequenceDiagram
   actor CareCoordinator as Care Coordinator
   participant System as システム
+  participant CarePlanScreen as Care Plan Screen
+  participant FollowUpScheduleScreen as Follow-Up Schedule Screen
+  participant PatientMessageScreen as Patient Message Screen
   participant CreateCarePlanApi as Create Care Plan API
   participant FollowUpScheduleApi as Follow-Up Schedule API
   participant NotifyPatientResultApi as Notify Patient Result API
@@ -1403,18 +1406,15 @@ sequenceDiagram
   participant Notification as Notification
   participant PatientMessage as Patient Message
   participant ProviderSchedule as Provider Schedule
-  participant CarePlanScreen as Care Plan Screen
-  participant FollowUpScheduleScreen as Follow-Up Schedule Screen
-  participant PatientMessageScreen as Patient Message Screen
 
-  Note over CareCoordinator,PatientMessageScreen: Close Care Plan
+  Note over CareCoordinator,ProviderSchedule: Close Care Plan
   CareCoordinator->System: Close Care Plan
   activate System
   System->>CarePlan: update
   System-->>CareCoordinator: Care Plan Screen
   deactivate System
 
-  Note over CareCoordinator,PatientMessageScreen: Create Care Plan
+  Note over CareCoordinator,ProviderSchedule: Create Care Plan
   CareCoordinator->>CarePlanScreen: Create Care Plan
   CarePlanScreen->>CreateCarePlanApi: Create Care Plan
   activate CreateCarePlanApi
@@ -1424,7 +1424,7 @@ sequenceDiagram
   CarePlanScreen-->>CareCoordinator: Care Plan Screen
   deactivate CreateCarePlanApi
 
-  Note over CareCoordinator,PatientMessageScreen: Notify Patient Result
+  Note over CareCoordinator,ProviderSchedule: Notify Patient Result
   CareCoordinator->>PatientMessageScreen: Notify Patient Result
   PatientMessageScreen->>NotifyPatientResultApi: Notify Patient Result
   activate NotifyPatientResultApi
@@ -1433,7 +1433,7 @@ sequenceDiagram
   PatientMessageScreen-->>CareCoordinator: Patient Message Screen
   deactivate NotifyPatientResultApi
 
-  Note over CareCoordinator,PatientMessageScreen: Review Patient Response
+  Note over CareCoordinator,ProviderSchedule: Review Patient Response
   CareCoordinator->System: Review Patient Response
   activate System
   System->>CarePlan: update
@@ -1441,7 +1441,7 @@ sequenceDiagram
   System-->>CareCoordinator: Care Plan Screen
   deactivate System
 
-  Note over CareCoordinator,PatientMessageScreen: Schedule Follow-Up Visit
+  Note over CareCoordinator,ProviderSchedule: Schedule Follow-Up Visit
   CareCoordinator->>FollowUpScheduleScreen: Schedule Follow-Up Visit
   FollowUpScheduleScreen->>FollowUpScheduleApi: Schedule Follow-Up Visit
   activate FollowUpScheduleApi
@@ -1454,7 +1454,7 @@ sequenceDiagram
   FollowUpScheduleScreen-->>CareCoordinator: Follow-Up Schedule Screen
   deactivate FollowUpScheduleApi
 
-  Note over CareCoordinator,PatientMessageScreen: Send Follow-Up Message
+  Note over CareCoordinator,ProviderSchedule: Send Follow-Up Message
   CareCoordinator->>PatientMessageScreen: Send Follow-Up Message
   PatientMessageScreen->>SendFollowUpMessageApi: Send Follow-Up Message
   activate SendFollowUpMessageApi
@@ -1528,6 +1528,9 @@ graph TD
 sequenceDiagram
   actor ClinicAdmin as Clinic Administrator
   participant System as システム
+  participant AuditReviewScreen as Audit Review Screen
+  participant RoomAdminScreen as Room Admin Screen
+  participant ScheduleAdminScreen as Schedule Admin Screen
   participant AuditApi as Audit API
   participant BlockScheduleSlotApi as Block Schedule Slot API
   participant ManageProviderScheduleApi as Manage Provider Schedule API
@@ -1537,11 +1540,8 @@ sequenceDiagram
   participant Provider as Provider
   participant ProviderSchedule as Provider Schedule
   participant Room as Room
-  participant AuditReviewScreen as Audit Review Screen
-  participant RoomAdminScreen as Room Admin Screen
-  participant ScheduleAdminScreen as Schedule Admin Screen
 
-  Note over ClinicAdmin,ScheduleAdminScreen: Block Schedule Slot
+  Note over ClinicAdmin,Room: Block Schedule Slot
   ClinicAdmin->>ScheduleAdminScreen: Block Schedule Slot
   ScheduleAdminScreen->>BlockScheduleSlotApi: Block Schedule Slot
   activate BlockScheduleSlotApi
@@ -1550,7 +1550,7 @@ sequenceDiagram
   ScheduleAdminScreen-->>ClinicAdmin: Schedule Admin Screen
   deactivate BlockScheduleSlotApi
 
-  Note over ClinicAdmin,ScheduleAdminScreen: Configure Room
+  Note over ClinicAdmin,Room: Configure Room
   ClinicAdmin->>RoomAdminScreen: Configure Room
   RoomAdminScreen->>RoomAdminApi: Configure Room
   activate RoomAdminApi
@@ -1559,7 +1559,7 @@ sequenceDiagram
   RoomAdminScreen-->>ClinicAdmin: Room Admin Screen
   deactivate RoomAdminApi
 
-  Note over ClinicAdmin,ScheduleAdminScreen: Manage Provider Schedule
+  Note over ClinicAdmin,Room: Manage Provider Schedule
   ClinicAdmin->>ScheduleAdminScreen: Manage Provider Schedule
   ScheduleAdminScreen->>ManageProviderScheduleApi: Manage Provider Schedule
   activate ManageProviderScheduleApi
@@ -1572,21 +1572,21 @@ sequenceDiagram
   ScheduleAdminScreen-->>ClinicAdmin: Schedule Admin Screen
   deactivate ManageProviderScheduleApi
 
-  Note over ClinicAdmin,ScheduleAdminScreen: Release Room
+  Note over ClinicAdmin,Room: Release Room
   ClinicAdmin->System: Release Room
   activate System
   System->>Room: update
   System-->>ClinicAdmin: Room Admin Screen
   deactivate System
 
-  Note over ClinicAdmin,ScheduleAdminScreen: Resolve Audit Finding
+  Note over ClinicAdmin,Room: Resolve Audit Finding
   ClinicAdmin->System: Resolve Audit Finding
   activate System
   System->>AuditEvent: update
   System-->>ClinicAdmin: Audit Review Screen
   deactivate System
 
-  Note over ClinicAdmin,ScheduleAdminScreen: Review Audit Events
+  Note over ClinicAdmin,Room: Review Audit Events
   ClinicAdmin->>AuditReviewScreen: Review Audit Events
   AuditReviewScreen->>AuditApi: Review Audit Events
   activate AuditApi
@@ -1625,12 +1625,12 @@ actor は `performs(Actor, UseCase)` があれば UC 直結の actor を優先�
 ```mermaid
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
+  participant PatientSearchScreen as Patient Search Screen
   participant SearchPatientApi as Search Patient API
   participant PatientAccount as Patient Account
   participant PatientProfile as Patient Profile
-  participant PatientSearchScreen as Patient Search Screen
 
-  Note over FrontDesk,PatientSearchScreen: Search Patient
+  Note over FrontDesk,PatientProfile: Search Patient
   FrontDesk->>PatientSearchScreen: Search Patient
   PatientSearchScreen->>SearchPatientApi: Search Patient
   activate SearchPatientApi
@@ -1648,12 +1648,12 @@ PatientAccount と PatientProfile を同時作成する境界
 ```mermaid
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
+  participant PatientProfileScreen as Patient Profile Screen
   participant RegisterPatientApi as Register Patient API
   participant PatientAccount as Patient Account
   participant PatientProfile as Patient Profile
-  participant PatientProfileScreen as Patient Profile Screen
 
-  Note over FrontDesk,PatientProfileScreen: Register Patient
+  Note over FrontDesk,PatientProfile: Register Patient
   FrontDesk->>PatientProfileScreen: Register Patient
   PatientProfileScreen->>RegisterPatientApi: Register Patient
   activate RegisterPatientApi
@@ -1674,11 +1674,11 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
+  participant PatientProfileScreen as Patient Profile Screen
   participant UpdateDemographicsApi as Update Demographics API
   participant PatientProfile as Patient Profile
-  participant PatientProfileScreen as Patient Profile Screen
 
-  Note over FrontDesk,PatientProfileScreen: Update Demographics
+  Note over FrontDesk,PatientProfile: Update Demographics
   FrontDesk->>PatientProfileScreen: Update Demographics
   PatientProfileScreen->>UpdateDemographicsApi: Update Demographics
   activate UpdateDemographicsApi
@@ -1695,12 +1695,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
+  participant InsuranceScreen as Insurance Verification Screen
   participant EligibilityApi as Eligibility API
   participant EligibilityCheck as Eligibility Check
   participant InsurancePolicy as Insurance Policy
-  participant InsuranceScreen as Insurance Verification Screen
 
-  Note over FrontDesk,InsuranceScreen: Verify Insurance
+  Note over FrontDesk,InsurancePolicy: Verify Insurance
   FrontDesk->>InsuranceScreen: Verify Insurance
   InsuranceScreen->>EligibilityApi: Verify Insurance
   activate EligibilityApi
@@ -1722,11 +1722,11 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor Patient as Patient
+  participant ConsentScreen as Consent Capture Screen
   participant ConsentApi as Consent API
   participant ConsentRecord as Consent Record
-  participant ConsentScreen as Consent Capture Screen
 
-  Note over Patient,ConsentScreen: Capture Consent
+  Note over Patient,ConsentRecord: Capture Consent
   Patient->>ConsentScreen: Capture Consent
   ConsentScreen->>ConsentApi: Capture Consent
   activate ConsentApi
@@ -1743,12 +1743,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
+  participant IntakePortalScreen as Intake Portal Screen
   participant IntakeMessagingApi as Intake Messaging API
   participant IntakePacket as Intake Packet
   participant PatientMessage as Patient Message
-  participant IntakePortalScreen as Intake Portal Screen
 
-  Note over FrontDesk,IntakePortalScreen: Send Intake Forms
+  Note over FrontDesk,PatientMessage: Send Intake Forms
   FrontDesk->>IntakePortalScreen: Send Intake Forms
   IntakePortalScreen->>IntakeMessagingApi: Send Intake Forms
   activate IntakeMessagingApi
@@ -1770,10 +1770,10 @@ sequenceDiagram
 sequenceDiagram
   actor Patient as Patient
   participant System as システム
-  participant IntakePacket as Intake Packet
   participant IntakePortalScreen as Intake Portal Screen
+  participant IntakePacket as Intake Packet
 
-  Note over Patient,IntakePortalScreen: Complete Intake Forms
+  Note over Patient,IntakePacket: Complete Intake Forms
   Patient->System: Complete Intake Forms
   activate System
   System->>IntakePacket: update
@@ -1789,10 +1789,10 @@ sequenceDiagram
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
   participant System as システム
-  participant IntakePacket as Intake Packet
   participant IntakePortalScreen as Intake Portal Screen
+  participant IntakePacket as Intake Packet
 
-  Note over FrontDesk,IntakePortalScreen: Expire Intake Forms
+  Note over FrontDesk,IntakePacket: Expire Intake Forms
   FrontDesk->System: Expire Intake Forms
   activate System
   System->>IntakePacket: update
@@ -1808,10 +1808,10 @@ sequenceDiagram
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
   participant System as システム
-  participant PatientAccount as Patient Account
   participant PatientProfileScreen as Patient Profile Screen
+  participant PatientAccount as Patient Account
 
-  Note over FrontDesk,PatientProfileScreen: Merge Duplicate Patient
+  Note over FrontDesk,PatientAccount: Merge Duplicate Patient
   FrontDesk->System: Merge Duplicate Patient
   activate System
   System->>PatientAccount: update
@@ -1827,10 +1827,10 @@ sequenceDiagram
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
   participant System as システム
-  participant PatientAccount as Patient Account
   participant PatientProfileScreen as Patient Profile Screen
+  participant PatientAccount as Patient Account
 
-  Note over FrontDesk,PatientProfileScreen: Archive Patient
+  Note over FrontDesk,PatientAccount: Archive Patient
   FrontDesk->System: Archive Patient
   activate System
   System->>PatientAccount: update
@@ -1857,13 +1857,13 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
+  participant ScheduleSearchScreen as Schedule Search Screen
   participant SearchAvailabilityApi as Search Availability API
   participant ClinicLocation as Clinic Location
   participant Provider as Provider
   participant ProviderSchedule as Provider Schedule
-  participant ScheduleSearchScreen as Schedule Search Screen
 
-  Note over FrontDesk,ScheduleSearchScreen: Search Availability
+  Note over FrontDesk,ProviderSchedule: Search Availability
   FrontDesk->>ScheduleSearchScreen: Search Availability
   ScheduleSearchScreen->>SearchAvailabilityApi: Search Availability
   activate SearchAvailabilityApi
@@ -1882,12 +1882,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
+  participant AppointmentScreen as Appointment Screen
   participant ReserveAppointmentApi as Reserve Appointment API
   participant Appointment as Appointment
   participant ProviderSchedule as Provider Schedule
-  participant AppointmentScreen as Appointment Screen
 
-  Note over FrontDesk,AppointmentScreen: Reserve Appointment
+  Note over FrontDesk,ProviderSchedule: Reserve Appointment
   FrontDesk->>AppointmentScreen: Reserve Appointment
   AppointmentScreen->>ReserveAppointmentApi: Reserve Appointment
   activate ReserveAppointmentApi
@@ -1908,12 +1908,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
+  participant AppointmentScreen as Appointment Screen
   participant BookAppointmentApi as Book Appointment API
   participant Appointment as Appointment
   participant ProviderSchedule as Provider Schedule
-  participant AppointmentScreen as Appointment Screen
 
-  Note over FrontDesk,AppointmentScreen: Book Appointment
+  Note over FrontDesk,ProviderSchedule: Book Appointment
   FrontDesk->>AppointmentScreen: Book Appointment
   AppointmentScreen->>BookAppointmentApi: Book Appointment
   activate BookAppointmentApi
@@ -1934,12 +1934,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
+  participant AppointmentScreen as Appointment Screen
   participant RescheduleAppointmentApi as Reschedule Appointment API
   participant Appointment as Appointment
   participant ProviderSchedule as Provider Schedule
-  participant AppointmentScreen as Appointment Screen
 
-  Note over FrontDesk,AppointmentScreen: Reschedule Appointment
+  Note over FrontDesk,ProviderSchedule: Reschedule Appointment
   FrontDesk->>AppointmentScreen: Reschedule Appointment
   AppointmentScreen->>RescheduleAppointmentApi: Reschedule Appointment
   activate RescheduleAppointmentApi
@@ -1960,12 +1960,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
+  participant AppointmentScreen as Appointment Screen
   participant CancelAppointmentApi as Cancel Appointment API
   participant Appointment as Appointment
   participant ProviderSchedule as Provider Schedule
-  participant AppointmentScreen as Appointment Screen
 
-  Note over FrontDesk,AppointmentScreen: Cancel Appointment
+  Note over FrontDesk,ProviderSchedule: Cancel Appointment
   FrontDesk->>AppointmentScreen: Cancel Appointment
   AppointmentScreen->>CancelAppointmentApi: Cancel Appointment
   activate CancelAppointmentApi
@@ -1987,10 +1987,10 @@ no-show 状態への直接更新
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
   participant System as システム
-  participant Appointment as Appointment
   participant AppointmentScreen as Appointment Screen
+  participant Appointment as Appointment
 
-  Note over FrontDesk,AppointmentScreen: Mark No Show
+  Note over FrontDesk,Appointment: Mark No Show
   FrontDesk->System: Mark No Show
   activate System
   System->>Appointment: update
@@ -2005,12 +2005,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
+  participant AppointmentNoticeScreen as Appointment Notice Screen
   participant AppointmentNoticeApi as Appointment Notice API
   participant Notification as Notification
   participant PatientMessage as Patient Message
-  participant AppointmentNoticeScreen as Appointment Notice Screen
 
-  Note over FrontDesk,AppointmentNoticeScreen: Send Appointment Notice
+  Note over FrontDesk,PatientMessage: Send Appointment Notice
   FrontDesk->>AppointmentNoticeScreen: Send Appointment Notice
   AppointmentNoticeScreen->>AppointmentNoticeApi: Send Appointment Notice
   activate AppointmentNoticeApi
@@ -2041,13 +2041,13 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
+  participant CheckInScreen as Check-In Screen
   participant VerifyArrivalApi as Verify Arrival API
   participant Appointment as Appointment
   participant InsurancePolicy as Insurance Policy
   participant PatientAccount as Patient Account
-  participant CheckInScreen as Check-In Screen
 
-  Note over FrontDesk,CheckInScreen: Verify Patient Arrival
+  Note over FrontDesk,PatientAccount: Verify Patient Arrival
   FrontDesk->>CheckInScreen: Verify Patient Arrival
   CheckInScreen->>VerifyArrivalApi: Verify Patient Arrival
   activate VerifyArrivalApi
@@ -2066,12 +2066,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
+  participant CheckInScreen as Check-In Screen
   participant CheckInPatientApi as Check-In Patient API
   participant Appointment as Appointment
   participant PatientAccount as Patient Account
-  participant CheckInScreen as Check-In Screen
 
-  Note over FrontDesk,CheckInScreen: Check In Patient
+  Note over FrontDesk,PatientAccount: Check In Patient
   FrontDesk->>CheckInScreen: Check In Patient
   CheckInScreen->>CheckInPatientApi: Check In Patient
   activate CheckInPatientApi
@@ -2092,12 +2092,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
+  participant CopayScreen as Copay Screen
   participant CollectCopayApi as Collect Copay API
   participant AccountBalance as Account Balance
   participant PaymentTransaction as Payment Transaction
-  participant CopayScreen as Copay Screen
 
-  Note over FrontDesk,CopayScreen: Collect Copay
+  Note over FrontDesk,PaymentTransaction: Collect Copay
   FrontDesk->>CopayScreen: Collect Copay
   CopayScreen->>CollectCopayApi: Collect Copay
   activate CollectCopayApi
@@ -2118,12 +2118,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor Nurse as Nurse
+  participant RoomBoardScreen as Room Board Screen
   participant AssignRoomApi as Assign Room API
   participant Appointment as Appointment
   participant Room as Room
-  participant RoomBoardScreen as Room Board Screen
 
-  Note over Nurse,RoomBoardScreen: Assign Room
+  Note over Nurse,Room: Assign Room
   Nurse->>RoomBoardScreen: Assign Room
   RoomBoardScreen->>AssignRoomApi: Assign Room
   activate AssignRoomApi
@@ -2144,12 +2144,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor Nurse as Nurse
+  participant CheckInScreen as Check-In Screen
   participant PrepareEncounterApi as Prepare Encounter API
   participant Appointment as Appointment
   participant PatientProfile as Patient Profile
-  participant CheckInScreen as Check-In Screen
 
-  Note over Nurse,CheckInScreen: Prepare Encounter
+  Note over Nurse,PatientProfile: Prepare Encounter
   Nurse->>CheckInScreen: Prepare Encounter
   CheckInScreen->>PrepareEncounterApi: Prepare Encounter
   activate PrepareEncounterApi
@@ -2178,12 +2178,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor Nurse as Nurse
+  participant EncounterWorkspaceScreen as Encounter Workspace
   participant OpenEncounterApi as Open Encounter API
   participant Appointment as Appointment
   participant Encounter as Encounter
-  participant EncounterWorkspaceScreen as Encounter Workspace
 
-  Note over Nurse,EncounterWorkspaceScreen: Open Encounter
+  Note over Nurse,Encounter: Open Encounter
   Nurse->>EncounterWorkspaceScreen: Open Encounter
   EncounterWorkspaceScreen->>OpenEncounterApi: Open Encounter
   activate OpenEncounterApi
@@ -2201,12 +2201,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor Nurse as Nurse
+  participant VitalsScreen as Vitals Screen
   participant RecordVitalsApi as Record Vitals API
   participant Encounter as Encounter
   participant VitalSign as Vital Sign
-  participant VitalsScreen as Vitals Screen
 
-  Note over Nurse,VitalsScreen: Record Vitals
+  Note over Nurse,VitalSign: Record Vitals
   Nurse->>VitalsScreen: Record Vitals
   VitalsScreen->>RecordVitalsApi: Record Vitals
   activate RecordVitalsApi
@@ -2227,12 +2227,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor Clinician as Clinician
+  participant DiagnosisScreen as Diagnosis Screen
   participant DocumentAssessmentApi as Document Assessment API
   participant Diagnosis as Diagnosis
   participant Encounter as Encounter
-  participant DiagnosisScreen as Diagnosis Screen
 
-  Note over Clinician,DiagnosisScreen: Document Assessment
+  Note over Clinician,Encounter: Document Assessment
   Clinician->>DiagnosisScreen: Document Assessment
   DiagnosisScreen->>DocumentAssessmentApi: Document Assessment
   activate DocumentAssessmentApi
@@ -2253,11 +2253,11 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor Clinician as Clinician
+  participant EncounterWorkspaceScreen as Encounter Workspace
   participant SignEncounterApi as Sign Encounter API
   participant Encounter as Encounter
-  participant EncounterWorkspaceScreen as Encounter Workspace
 
-  Note over Clinician,EncounterWorkspaceScreen: Sign Encounter
+  Note over Clinician,Encounter: Sign Encounter
   Clinician->>EncounterWorkspaceScreen: Sign Encounter
   EncounterWorkspaceScreen->>SignEncounterApi: Sign Encounter
   activate SignEncounterApi
@@ -2274,11 +2274,11 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor Clinician as Clinician
+  participant EncounterWorkspaceScreen as Encounter Workspace
   participant AmendEncounterApi as Amend Encounter API
   participant Encounter as Encounter
-  participant EncounterWorkspaceScreen as Encounter Workspace
 
-  Note over Clinician,EncounterWorkspaceScreen: Amend Signed Encounter
+  Note over Clinician,Encounter: Amend Signed Encounter
   Clinician->>EncounterWorkspaceScreen: Amend Signed Encounter
   EncounterWorkspaceScreen->>AmendEncounterApi: Amend Signed Encounter
   activate AmendEncounterApi
@@ -2295,12 +2295,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor Nurse as Nurse
+  participant EncounterWorkspaceScreen as Encounter Workspace
   participant CompleteAppointmentApi as Complete Appointment API
   participant Appointment as Appointment
   participant Room as Room
-  participant EncounterWorkspaceScreen as Encounter Workspace
 
-  Note over Nurse,EncounterWorkspaceScreen: Complete Appointment
+  Note over Nurse,Room: Complete Appointment
   Nurse->>EncounterWorkspaceScreen: Complete Appointment
   EncounterWorkspaceScreen->>CompleteAppointmentApi: Complete Appointment
   activate CompleteAppointmentApi
@@ -2332,12 +2332,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor Clinician as Clinician
+  participant OrderEntryScreen as Order Entry Screen
   participant OrderEntryApi as Order Entry API
   participant ClinicalOrder as Clinical Order
   participant Encounter as Encounter
-  participant OrderEntryScreen as Order Entry Screen
 
-  Note over Clinician,OrderEntryScreen: Place Lab Order
+  Note over Clinician,Encounter: Place Lab Order
   Clinician->>OrderEntryScreen: Place Lab Order
   OrderEntryScreen->>OrderEntryApi: Place Lab Order
   activate OrderEntryApi
@@ -2355,11 +2355,11 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor Nurse as Nurse
+  participant SpecimenScreen as Specimen Collection Screen
   participant CollectSpecimenApi as Collect Specimen API
   participant ClinicalOrder as Clinical Order
-  participant SpecimenScreen as Specimen Collection Screen
 
-  Note over Nurse,SpecimenScreen: Collect Specimen
+  Note over Nurse,ClinicalOrder: Collect Specimen
   Nurse->>SpecimenScreen: Collect Specimen
   SpecimenScreen->>CollectSpecimenApi: Collect Specimen
   activate CollectSpecimenApi
@@ -2376,12 +2376,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor Nurse as Nurse
+  participant ResultReviewScreen as Result Review Screen
   participant ReceiveLabResultApi as Receive Lab Result API
   participant ClinicalOrder as Clinical Order
   participant LabResult as Lab Result
-  participant ResultReviewScreen as Result Review Screen
 
-  Note over Nurse,ResultReviewScreen: Receive Lab Result
+  Note over Nurse,LabResult: Receive Lab Result
   Nurse->>ResultReviewScreen: Receive Lab Result
   ResultReviewScreen->>ReceiveLabResultApi: Receive Lab Result
   activate ReceiveLabResultApi
@@ -2402,12 +2402,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor Clinician as Clinician
+  participant ResultReviewScreen as Result Review Screen
   participant ResultReviewApi as Result Review API
   participant ClinicalOrder as Clinical Order
   participant LabResult as Lab Result
-  participant ResultReviewScreen as Result Review Screen
 
-  Note over Clinician,ResultReviewScreen: Review Lab Result
+  Note over Clinician,LabResult: Review Lab Result
   Clinician->>ResultReviewScreen: Review Lab Result
   ResultReviewScreen->>ResultReviewApi: Review Lab Result
   activate ResultReviewApi
@@ -2428,12 +2428,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor Clinician as Clinician
+  participant CriticalNoticeScreen as Critical Result Notice Screen
   participant CriticalNoticeApi as Critical Notice API
   participant Notification as Notification
   participant PatientMessage as Patient Message
-  participant CriticalNoticeScreen as Critical Result Notice Screen
 
-  Note over Clinician,CriticalNoticeScreen: Notify Critical Result
+  Note over Clinician,PatientMessage: Notify Critical Result
   Clinician->>CriticalNoticeScreen: Notify Critical Result
   CriticalNoticeScreen->>CriticalNoticeApi: Notify Critical Result
   activate CriticalNoticeApi
@@ -2455,10 +2455,10 @@ sequenceDiagram
 sequenceDiagram
   actor Clinician as Clinician
   participant System as システム
-  participant ClinicalOrder as Clinical Order
   participant OrderEntryScreen as Order Entry Screen
+  participant ClinicalOrder as Clinical Order
 
-  Note over Clinician,OrderEntryScreen: Cancel Clinical Order
+  Note over Clinician,ClinicalOrder: Cancel Clinical Order
   Clinician->System: Cancel Clinical Order
   activate System
   System->>ClinicalOrder: update
@@ -2484,11 +2484,11 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor Clinician as Clinician
+  participant MedicationSearchScreen as Medication Search Screen
   participant MedicationCatalogApi as Medication Catalog API
   participant Medication as Medication
-  participant MedicationSearchScreen as Medication Search Screen
 
-  Note over Clinician,MedicationSearchScreen: Search Medication
+  Note over Clinician,Medication: Search Medication
   Clinician->>MedicationSearchScreen: Search Medication
   MedicationSearchScreen->>MedicationCatalogApi: Search Medication
   activate MedicationCatalogApi
@@ -2505,12 +2505,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor Clinician as Clinician
+  participant PrescriptionScreen as Prescription Screen
   participant DraftPrescriptionApi as Draft Prescription API
   participant Encounter as Encounter
   participant Prescription as Prescription
-  participant PrescriptionScreen as Prescription Screen
 
-  Note over Clinician,PrescriptionScreen: Draft Prescription
+  Note over Clinician,Prescription: Draft Prescription
   Clinician->>PrescriptionScreen: Draft Prescription
   PrescriptionScreen->>DraftPrescriptionApi: Draft Prescription
   activate DraftPrescriptionApi
@@ -2528,11 +2528,11 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor Clinician as Clinician
+  participant PrescriptionScreen as Prescription Screen
   participant SendPrescriptionApi as Send Prescription API
   participant Prescription as Prescription
-  participant PrescriptionScreen as Prescription Screen
 
-  Note over Clinician,PrescriptionScreen: Send Prescription
+  Note over Clinician,Prescription: Send Prescription
   Clinician->>PrescriptionScreen: Send Prescription
   PrescriptionScreen->>SendPrescriptionApi: Send Prescription
   activate SendPrescriptionApi
@@ -2549,11 +2549,11 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor Nurse as Nurse
+  participant PharmacyStatusScreen as Pharmacy Status Screen
   participant ConfirmDispenseApi as Confirm Dispense API
   participant Prescription as Prescription
-  participant PharmacyStatusScreen as Pharmacy Status Screen
 
-  Note over Nurse,PharmacyStatusScreen: Confirm Dispense
+  Note over Nurse,Prescription: Confirm Dispense
   Nurse->>PharmacyStatusScreen: Confirm Dispense
   PharmacyStatusScreen->>ConfirmDispenseApi: Confirm Dispense
   activate ConfirmDispenseApi
@@ -2571,10 +2571,10 @@ sequenceDiagram
 sequenceDiagram
   actor Clinician as Clinician
   participant System as システム
-  participant Prescription as Prescription
   participant PrescriptionScreen as Prescription Screen
+  participant Prescription as Prescription
 
-  Note over Clinician,PrescriptionScreen: Cancel Prescription
+  Note over Clinician,Prescription: Cancel Prescription
   Clinician->System: Cancel Prescription
   activate System
   System->>Prescription: update
@@ -2589,12 +2589,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor Clinician as Clinician
+  participant PrescriptionScreen as Prescription Screen
   participant RefillPrescriptionApi as Refill Prescription API
   participant Medication as Medication
   participant Prescription as Prescription
-  participant PrescriptionScreen as Prescription Screen
 
-  Note over Clinician,PrescriptionScreen: Refill Prescription
+  Note over Clinician,Prescription: Refill Prescription
   Clinician->>PrescriptionScreen: Refill Prescription
   PrescriptionScreen->>RefillPrescriptionApi: Refill Prescription
   activate RefillPrescriptionApi
@@ -2625,13 +2625,13 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor BillingSpecialist as Billing Specialist
+  participant ChargeWorklistScreen as Charge Worklist Screen
   participant CreateChargeApi as Create Charge API
   participant AccountBalance as Account Balance
   participant Charge as Charge
   participant Encounter as Encounter
-  participant ChargeWorklistScreen as Charge Worklist Screen
 
-  Note over BillingSpecialist,ChargeWorklistScreen: Create Charge
+  Note over BillingSpecialist,Encounter: Create Charge
   BillingSpecialist->>ChargeWorklistScreen: Create Charge
   ChargeWorklistScreen->>CreateChargeApi: Create Charge
   activate CreateChargeApi
@@ -2653,13 +2653,13 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor BillingSpecialist as Billing Specialist
+  participant ClaimScreen as Claim Screen
   participant GenerateClaimApi as Generate Claim API
   participant Charge as Charge
   participant Claim as Claim
   participant InsurancePolicy as Insurance Policy
-  participant ClaimScreen as Claim Screen
 
-  Note over BillingSpecialist,ClaimScreen: Generate Claim
+  Note over BillingSpecialist,InsurancePolicy: Generate Claim
   BillingSpecialist->>ClaimScreen: Generate Claim
   ClaimScreen->>GenerateClaimApi: Generate Claim
   activate GenerateClaimApi
@@ -2681,11 +2681,11 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor BillingSpecialist as Billing Specialist
+  participant ClaimScreen as Claim Screen
   participant SubmitClaimApi as Submit Claim API
   participant Claim as Claim
-  participant ClaimScreen as Claim Screen
 
-  Note over BillingSpecialist,ClaimScreen: Submit Claim
+  Note over BillingSpecialist,Claim: Submit Claim
   BillingSpecialist->>ClaimScreen: Submit Claim
   ClaimScreen->>SubmitClaimApi: Submit Claim
   activate SubmitClaimApi
@@ -2703,10 +2703,10 @@ sequenceDiagram
 sequenceDiagram
   actor BillingSpecialist as Billing Specialist
   participant System as システム
-  participant Claim as Claim
   participant ClaimScreen as Claim Screen
+  participant Claim as Claim
 
-  Note over BillingSpecialist,ClaimScreen: Receive Claim Accepted
+  Note over BillingSpecialist,Claim: Receive Claim Accepted
   BillingSpecialist->System: Receive Claim Accepted
   activate System
   System->>Claim: update
@@ -2722,10 +2722,10 @@ sequenceDiagram
 sequenceDiagram
   actor BillingSpecialist as Billing Specialist
   participant System as システム
-  participant Claim as Claim
   participant ClaimScreen as Claim Screen
+  participant Claim as Claim
 
-  Note over BillingSpecialist,ClaimScreen: Record Claim Denial
+  Note over BillingSpecialist,Claim: Record Claim Denial
   BillingSpecialist->System: Record Claim Denial
   activate System
   System->>Claim: update
@@ -2740,12 +2740,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor BillingSpecialist as Billing Specialist
+  participant PaymentPostingScreen as Payment Posting Screen
   participant PaymentPostApi as Payment Posting API
   participant Claim as Claim
   participant PaymentTransaction as Payment Transaction
-  participant PaymentPostingScreen as Payment Posting Screen
 
-  Note over BillingSpecialist,PaymentPostingScreen: Post Payment
+  Note over BillingSpecialist,PaymentTransaction: Post Payment
   BillingSpecialist->>PaymentPostingScreen: Post Payment
   PaymentPostingScreen->>PaymentPostApi: Post Payment
   activate PaymentPostApi
@@ -2766,12 +2766,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor BillingSpecialist as Billing Specialist
+  participant BalanceScreen as Balance Screen
   participant BalanceApi as Balance API
   participant AccountBalance as Account Balance
   participant PaymentTransaction as Payment Transaction
-  participant BalanceScreen as Balance Screen
 
-  Note over BillingSpecialist,BalanceScreen: Reconcile Balance
+  Note over BillingSpecialist,PaymentTransaction: Reconcile Balance
   BillingSpecialist->>BalanceScreen: Reconcile Balance
   BalanceScreen->>BalanceApi: Reconcile Balance
   activate BalanceApi
@@ -2790,10 +2790,10 @@ sequenceDiagram
 sequenceDiagram
   actor BillingSpecialist as Billing Specialist
   participant System as システム
-  participant Charge as Charge
   participant ChargeWorklistScreen as Charge Worklist Screen
+  participant Charge as Charge
 
-  Note over BillingSpecialist,ChargeWorklistScreen: Void Charge
+  Note over BillingSpecialist,Charge: Void Charge
   BillingSpecialist->System: Void Charge
   activate System
   System->>Charge: update
@@ -2819,12 +2819,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor CareCoordinator as Care Coordinator
+  participant CarePlanScreen as Care Plan Screen
   participant CreateCarePlanApi as Create Care Plan API
   participant CarePlan as Care Plan
   participant Encounter as Encounter
-  participant CarePlanScreen as Care Plan Screen
 
-  Note over CareCoordinator,CarePlanScreen: Create Care Plan
+  Note over CareCoordinator,Encounter: Create Care Plan
   CareCoordinator->>CarePlanScreen: Create Care Plan
   CarePlanScreen->>CreateCarePlanApi: Create Care Plan
   activate CreateCarePlanApi
@@ -2842,11 +2842,11 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor CareCoordinator as Care Coordinator
+  participant PatientMessageScreen as Patient Message Screen
   participant SendFollowUpMessageApi as Send Follow-Up Message API
   participant PatientMessage as Patient Message
-  participant PatientMessageScreen as Patient Message Screen
 
-  Note over CareCoordinator,PatientMessageScreen: Send Follow-Up Message
+  Note over CareCoordinator,PatientMessage: Send Follow-Up Message
   CareCoordinator->>PatientMessageScreen: Send Follow-Up Message
   PatientMessageScreen->>SendFollowUpMessageApi: Send Follow-Up Message
   activate SendFollowUpMessageApi
@@ -2864,11 +2864,11 @@ sequenceDiagram
 sequenceDiagram
   actor CareCoordinator as Care Coordinator
   participant System as システム
+  participant CarePlanScreen as Care Plan Screen
   participant CarePlan as Care Plan
   participant PatientMessage as Patient Message
-  participant CarePlanScreen as Care Plan Screen
 
-  Note over CareCoordinator,CarePlanScreen: Review Patient Response
+  Note over CareCoordinator,PatientMessage: Review Patient Response
   CareCoordinator->System: Review Patient Response
   activate System
   System->>CarePlan: update
@@ -2884,12 +2884,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor CareCoordinator as Care Coordinator
+  participant FollowUpScheduleScreen as Follow-Up Schedule Screen
   participant FollowUpScheduleApi as Follow-Up Schedule API
   participant Appointment as Appointment
   participant ProviderSchedule as Provider Schedule
-  participant FollowUpScheduleScreen as Follow-Up Schedule Screen
 
-  Note over CareCoordinator,FollowUpScheduleScreen: Schedule Follow-Up Visit
+  Note over CareCoordinator,ProviderSchedule: Schedule Follow-Up Visit
   CareCoordinator->>FollowUpScheduleScreen: Schedule Follow-Up Visit
   FollowUpScheduleScreen->>FollowUpScheduleApi: Schedule Follow-Up Visit
   activate FollowUpScheduleApi
@@ -2911,10 +2911,10 @@ sequenceDiagram
 sequenceDiagram
   actor CareCoordinator as Care Coordinator
   participant System as システム
-  participant CarePlan as Care Plan
   participant CarePlanScreen as Care Plan Screen
+  participant CarePlan as Care Plan
 
-  Note over CareCoordinator,CarePlanScreen: Close Care Plan
+  Note over CareCoordinator,CarePlan: Close Care Plan
   CareCoordinator->System: Close Care Plan
   activate System
   System->>CarePlan: update
@@ -2929,11 +2929,11 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor CareCoordinator as Care Coordinator
+  participant PatientMessageScreen as Patient Message Screen
   participant NotifyPatientResultApi as Notify Patient Result API
   participant Notification as Notification
-  participant PatientMessageScreen as Patient Message Screen
 
-  Note over CareCoordinator,PatientMessageScreen: Notify Patient Result
+  Note over CareCoordinator,Notification: Notify Patient Result
   CareCoordinator->>PatientMessageScreen: Notify Patient Result
   PatientMessageScreen->>NotifyPatientResultApi: Notify Patient Result
   activate NotifyPatientResultApi
@@ -2961,12 +2961,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor ClinicAdmin as Clinic Administrator
+  participant ScheduleAdminScreen as Schedule Admin Screen
   participant ManageProviderScheduleApi as Manage Provider Schedule API
   participant Provider as Provider
   participant ProviderSchedule as Provider Schedule
-  participant ScheduleAdminScreen as Schedule Admin Screen
 
-  Note over ClinicAdmin,ScheduleAdminScreen: Manage Provider Schedule
+  Note over ClinicAdmin,ProviderSchedule: Manage Provider Schedule
   ClinicAdmin->>ScheduleAdminScreen: Manage Provider Schedule
   ScheduleAdminScreen->>ManageProviderScheduleApi: Manage Provider Schedule
   activate ManageProviderScheduleApi
@@ -2987,11 +2987,11 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor ClinicAdmin as Clinic Administrator
+  participant ScheduleAdminScreen as Schedule Admin Screen
   participant BlockScheduleSlotApi as Block Schedule Slot API
   participant ProviderSchedule as Provider Schedule
-  participant ScheduleAdminScreen as Schedule Admin Screen
 
-  Note over ClinicAdmin,ScheduleAdminScreen: Block Schedule Slot
+  Note over ClinicAdmin,ProviderSchedule: Block Schedule Slot
   ClinicAdmin->>ScheduleAdminScreen: Block Schedule Slot
   ScheduleAdminScreen->>BlockScheduleSlotApi: Block Schedule Slot
   activate BlockScheduleSlotApi
@@ -3008,11 +3008,11 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor ClinicAdmin as Clinic Administrator
+  participant RoomAdminScreen as Room Admin Screen
   participant RoomAdminApi as Room Admin API
   participant Room as Room
-  participant RoomAdminScreen as Room Admin Screen
 
-  Note over ClinicAdmin,RoomAdminScreen: Configure Room
+  Note over ClinicAdmin,Room: Configure Room
   ClinicAdmin->>RoomAdminScreen: Configure Room
   RoomAdminScreen->>RoomAdminApi: Configure Room
   activate RoomAdminApi
@@ -3030,10 +3030,10 @@ sequenceDiagram
 sequenceDiagram
   actor ClinicAdmin as Clinic Administrator
   participant System as システム
-  participant Room as Room
   participant RoomAdminScreen as Room Admin Screen
+  participant Room as Room
 
-  Note over ClinicAdmin,RoomAdminScreen: Release Room
+  Note over ClinicAdmin,Room: Release Room
   ClinicAdmin->System: Release Room
   activate System
   System->>Room: update
@@ -3048,12 +3048,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor ClinicAdmin as Clinic Administrator
+  participant AuditReviewScreen as Audit Review Screen
   participant AuditApi as Audit API
   participant AuditEvent as Audit Event
   participant PatientAccount as Patient Account
-  participant AuditReviewScreen as Audit Review Screen
 
-  Note over ClinicAdmin,AuditReviewScreen: Review Audit Events
+  Note over ClinicAdmin,PatientAccount: Review Audit Events
   ClinicAdmin->>AuditReviewScreen: Review Audit Events
   AuditReviewScreen->>AuditApi: Review Audit Events
   activate AuditApi
@@ -3072,10 +3072,10 @@ sequenceDiagram
 sequenceDiagram
   actor ClinicAdmin as Clinic Administrator
   participant System as システム
-  participant AuditEvent as Audit Event
   participant AuditReviewScreen as Audit Review Screen
+  participant AuditEvent as Audit Event
 
-  Note over ClinicAdmin,AuditReviewScreen: Resolve Audit Finding
+  Note over ClinicAdmin,AuditEvent: Resolve Audit Finding
   ClinicAdmin->System: Resolve Audit Finding
   activate System
   System->>AuditEvent: update

@@ -1,11 +1,11 @@
 sequenceDiagram
   actor BillingSpecialist as Billing Specialist
+  participant PaymentPostingScreen as Payment Posting Screen
   participant PaymentPostApi as Payment Posting API
   participant Claim as Claim
   participant PaymentTransaction as Payment Transaction
-  participant PaymentPostingScreen as Payment Posting Screen
 
-  Note over BillingSpecialist,PaymentPostingScreen: Post Payment
+  Note over BillingSpecialist,PaymentTransaction: Post Payment
   BillingSpecialist->>PaymentPostingScreen: Post Payment
   PaymentPostingScreen->>PaymentPostApi: Post Payment
   activate PaymentPostApi

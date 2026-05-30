@@ -1,10 +1,10 @@
 sequenceDiagram
   actor Clinician as Clinician
+  participant PrescriptionScreen as Prescription Screen
   participant SendPrescriptionApi as Send Prescription API
   participant Prescription as Prescription
-  participant PrescriptionScreen as Prescription Screen
 
-  Note over Clinician,PrescriptionScreen: Send Prescription
+  Note over Clinician,Prescription: Send Prescription
   Clinician->>PrescriptionScreen: Send Prescription
   PrescriptionScreen->>SendPrescriptionApi: Send Prescription
   activate SendPrescriptionApi

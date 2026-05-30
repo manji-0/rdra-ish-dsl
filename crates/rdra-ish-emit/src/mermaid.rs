@@ -565,6 +565,16 @@ impl Emitter for SequenceMermaidEmitter {
             out.push_str("  participant System as システム\n");
         }
 
+        let mut scrs_sorted: Vec<(ScreenKey, &rdra_ish_core::model::Screen)> = model
+            .screens
+            .iter()
+            .filter(|(k, _)| screen_keys.contains(k))
+            .collect();
+        scrs_sorted.sort_by_key(|(_, s)| s.id.as_str());
+        for (_, scr) in &scrs_sorted {
+            out.push_str(&format!("  participant {} as {}\n", scr.id, scr.label));
+        }
+
         let mut apis_sorted: Vec<(ApiKey, &rdra_ish_core::model::Api)> = model
             .apis
             .iter()
@@ -584,16 +594,6 @@ impl Emitter for SequenceMermaidEmitter {
         for (_, ent) in &ents_sorted {
             out.push_str(&format!("  participant {} as {}\n", ent.id, ent.label));
         }
-
-        let mut scrs_sorted: Vec<(ScreenKey, &rdra_ish_core::model::Screen)> = model
-            .screens
-            .iter()
-            .filter(|(k, _)| screen_keys.contains(k))
-            .collect();
-        scrs_sorted.sort_by_key(|(_, s)| s.id.as_str());
-        for (_, scr) in &scrs_sorted {
-            out.push_str(&format!("  participant {} as {}\n", scr.id, scr.label));
-        }
         out.push('\n');
 
         // セクション見出し用参加者ID
@@ -601,10 +601,11 @@ impl Emitter for SequenceMermaidEmitter {
             .first()
             .map(|(_, a)| a.id.as_str())
             .unwrap_or("System");
-        let last_id = scrs_sorted
+        let last_id = ents_sorted
             .last()
-            .map(|(_, s)| s.id.as_str())
-            .or_else(|| ents_sorted.last().map(|(_, e)| e.id.as_str()))
+            .map(|(_, e)| e.id.as_str())
+            .or_else(|| apis_sorted.last().map(|(_, a)| a.id.as_str()))
+            .or_else(|| scrs_sorted.last().map(|(_, s)| s.id.as_str()))
             .unwrap_or("System");
 
         for (uk, uc) in &uc_list {
@@ -1118,6 +1119,11 @@ reads(SearchApi, Item)
         assert!(result.contains("participant SearchApi"));
         assert!(result.contains("participant Item"));
         assert!(result.contains("SearchApi->>Item: read"));
+        let screen_pos = result.find("participant SearchScreen").unwrap();
+        let api_pos = result.find("participant SearchApi").unwrap();
+        let entity_pos = result.find("participant Item").unwrap();
+        assert!(screen_pos < api_pos);
+        assert!(api_pos < entity_pos);
         assert!(!result.contains("no sequenceable usecases"));
     }
 }

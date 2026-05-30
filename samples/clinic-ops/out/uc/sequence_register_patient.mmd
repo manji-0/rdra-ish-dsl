@@ -1,11 +1,11 @@
 sequenceDiagram
   actor FrontDesk as Front Desk Staff
+  participant PatientProfileScreen as Patient Profile Screen
   participant RegisterPatientApi as Register Patient API
   participant PatientAccount as Patient Account
   participant PatientProfile as Patient Profile
-  participant PatientProfileScreen as Patient Profile Screen
 
-  Note over FrontDesk,PatientProfileScreen: Register Patient
+  Note over FrontDesk,PatientProfile: Register Patient
   FrontDesk->>PatientProfileScreen: Register Patient
   PatientProfileScreen->>RegisterPatientApi: Register Patient
   activate RegisterPatientApi

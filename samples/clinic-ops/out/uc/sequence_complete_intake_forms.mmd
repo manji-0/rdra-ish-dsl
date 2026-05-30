@@ -1,10 +1,10 @@
 sequenceDiagram
   actor Patient as Patient
   participant System as システム
-  participant IntakePacket as Intake Packet
   participant IntakePortalScreen as Intake Portal Screen
+  participant IntakePacket as Intake Packet
 
-  Note over Patient,IntakePortalScreen: Complete Intake Forms
+  Note over Patient,IntakePacket: Complete Intake Forms
   Patient->System: Complete Intake Forms
   activate System
   System->>IntakePacket: update

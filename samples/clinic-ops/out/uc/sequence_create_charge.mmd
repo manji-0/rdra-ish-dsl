@@ -1,12 +1,12 @@
 sequenceDiagram
   actor BillingSpecialist as Billing Specialist
+  participant ChargeWorklistScreen as Charge Worklist Screen
   participant CreateChargeApi as Create Charge API
   participant AccountBalance as Account Balance
   participant Charge as Charge
   participant Encounter as Encounter
-  participant ChargeWorklistScreen as Charge Worklist Screen
 
-  Note over BillingSpecialist,ChargeWorklistScreen: Create Charge
+  Note over BillingSpecialist,Encounter: Create Charge
   BillingSpecialist->>ChargeWorklistScreen: Create Charge
   ChargeWorklistScreen->>CreateChargeApi: Create Charge
   activate CreateChargeApi

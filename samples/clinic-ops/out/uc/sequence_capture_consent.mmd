@@ -1,10 +1,10 @@
 sequenceDiagram
   actor Patient as Patient
+  participant ConsentScreen as Consent Capture Screen
   participant ConsentApi as Consent API
   participant ConsentRecord as Consent Record
-  participant ConsentScreen as Consent Capture Screen
 
-  Note over Patient,ConsentScreen: Capture Consent
+  Note over Patient,ConsentRecord: Capture Consent
   Patient->>ConsentScreen: Capture Consent
   ConsentScreen->>ConsentApi: Capture Consent
   activate ConsentApi

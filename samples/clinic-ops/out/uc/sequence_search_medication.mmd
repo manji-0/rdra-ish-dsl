@@ -1,10 +1,10 @@
 sequenceDiagram
   actor Clinician as Clinician
+  participant MedicationSearchScreen as Medication Search Screen
   participant MedicationCatalogApi as Medication Catalog API
   participant Medication as Medication
-  participant MedicationSearchScreen as Medication Search Screen
 
-  Note over Clinician,MedicationSearchScreen: Search Medication
+  Note over Clinician,Medication: Search Medication
   Clinician->>MedicationSearchScreen: Search Medication
   MedicationSearchScreen->>MedicationCatalogApi: Search Medication
   activate MedicationCatalogApi

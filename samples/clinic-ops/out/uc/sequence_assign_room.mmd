@@ -1,11 +1,11 @@
 sequenceDiagram
   actor Nurse as Nurse
+  participant RoomBoardScreen as Room Board Screen
   participant AssignRoomApi as Assign Room API
   participant Appointment as Appointment
   participant Room as Room
-  participant RoomBoardScreen as Room Board Screen
 
-  Note over Nurse,RoomBoardScreen: Assign Room
+  Note over Nurse,Room: Assign Room
   Nurse->>RoomBoardScreen: Assign Room
   RoomBoardScreen->>AssignRoomApi: Assign Room
   activate AssignRoomApi

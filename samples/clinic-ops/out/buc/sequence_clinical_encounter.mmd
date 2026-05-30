@@ -1,6 +1,9 @@
 sequenceDiagram
   actor Clinician as Clinician
   actor Nurse as Nurse
+  participant DiagnosisScreen as Diagnosis Screen
+  participant EncounterWorkspaceScreen as Encounter Workspace
+  participant VitalsScreen as Vitals Screen
   participant AmendEncounterApi as Amend Encounter API
   participant CompleteAppointmentApi as Complete Appointment API
   participant DocumentAssessmentApi as Document Assessment API
@@ -12,11 +15,8 @@ sequenceDiagram
   participant Encounter as Encounter
   participant Room as Room
   participant VitalSign as Vital Sign
-  participant DiagnosisScreen as Diagnosis Screen
-  participant EncounterWorkspaceScreen as Encounter Workspace
-  participant VitalsScreen as Vitals Screen
 
-  Note over Clinician,VitalsScreen: Amend Signed Encounter
+  Note over Clinician,VitalSign: Amend Signed Encounter
   Clinician->>EncounterWorkspaceScreen: Amend Signed Encounter
   EncounterWorkspaceScreen->>AmendEncounterApi: Amend Signed Encounter
   activate AmendEncounterApi
@@ -25,7 +25,7 @@ sequenceDiagram
   EncounterWorkspaceScreen-->>Clinician: Encounter Workspace
   deactivate AmendEncounterApi
 
-  Note over Clinician,VitalsScreen: Complete Appointment
+  Note over Clinician,VitalSign: Complete Appointment
   Nurse->>EncounterWorkspaceScreen: Complete Appointment
   EncounterWorkspaceScreen->>CompleteAppointmentApi: Complete Appointment
   activate CompleteAppointmentApi
@@ -38,7 +38,7 @@ sequenceDiagram
   EncounterWorkspaceScreen-->>Nurse: Encounter Workspace
   deactivate CompleteAppointmentApi
 
-  Note over Clinician,VitalsScreen: Document Assessment
+  Note over Clinician,VitalSign: Document Assessment
   Clinician->>DiagnosisScreen: Document Assessment
   DiagnosisScreen->>DocumentAssessmentApi: Document Assessment
   activate DocumentAssessmentApi
@@ -51,7 +51,7 @@ sequenceDiagram
   DiagnosisScreen-->>Clinician: Diagnosis Screen
   deactivate DocumentAssessmentApi
 
-  Note over Clinician,VitalsScreen: Open Encounter
+  Note over Clinician,VitalSign: Open Encounter
   Nurse->>EncounterWorkspaceScreen: Open Encounter
   EncounterWorkspaceScreen->>OpenEncounterApi: Open Encounter
   activate OpenEncounterApi
@@ -61,7 +61,7 @@ sequenceDiagram
   EncounterWorkspaceScreen-->>Nurse: Encounter Workspace
   deactivate OpenEncounterApi
 
-  Note over Clinician,VitalsScreen: Record Vitals
+  Note over Clinician,VitalSign: Record Vitals
   Nurse->>VitalsScreen: Record Vitals
   VitalsScreen->>RecordVitalsApi: Record Vitals
   activate RecordVitalsApi
@@ -74,7 +74,7 @@ sequenceDiagram
   VitalsScreen-->>Nurse: Vitals Screen
   deactivate RecordVitalsApi
 
-  Note over Clinician,VitalsScreen: Sign Encounter
+  Note over Clinician,VitalSign: Sign Encounter
   Clinician->>EncounterWorkspaceScreen: Sign Encounter
   EncounterWorkspaceScreen->>SignEncounterApi: Sign Encounter
   activate SignEncounterApi

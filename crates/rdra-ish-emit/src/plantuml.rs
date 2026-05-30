@@ -604,7 +604,17 @@ impl Emitter for SequenceDiagramEmitter {
             out.push_str("participant \"システム\" as System\n");
         }
 
-        // API 参加者宣言（画面の前に挿入: actor → api → screen → entity の左→右順）
+        let mut scrs_sorted: Vec<(ScreenKey, &rdra_ish_core::model::Screen)> = model
+            .screens
+            .iter()
+            .filter(|(k, _)| screen_keys.contains(k))
+            .collect();
+        scrs_sorted.sort_by_key(|(_, s)| s.id.as_str());
+        for (_, scr) in &scrs_sorted {
+            out.push_str(&format!("boundary \"{}\" as {}\n", scr.label, scr.id));
+        }
+
+        // API 参加者宣言（actor → screen → api → entity の左→右順）
         let mut apis_sorted: Vec<(ApiKey, &rdra_ish_core::model::Api)> = model
             .apis
             .iter()
@@ -623,16 +633,6 @@ impl Emitter for SequenceDiagramEmitter {
         ents_sorted.sort_by_key(|(_, e)| e.id.as_str());
         for (_, ent) in &ents_sorted {
             out.push_str(&format!("database \"{}\" as {}\n", ent.label, ent.id));
-        }
-
-        let mut scrs_sorted: Vec<(ScreenKey, &rdra_ish_core::model::Screen)> = model
-            .screens
-            .iter()
-            .filter(|(k, _)| screen_keys.contains(k))
-            .collect();
-        scrs_sorted.sort_by_key(|(_, s)| s.id.as_str());
-        for (_, scr) in &scrs_sorted {
-            out.push_str(&format!("boundary \"{}\" as {}\n", scr.label, scr.id));
         }
         out.push('\n');
 
@@ -1249,6 +1249,13 @@ reads(SearchApi, Item)
         assert!(result.contains("control \"検索API\" as SearchApi"));
         assert!(result.contains("database \"品目\" as Item"));
         assert!(result.contains("SearchApi -> Item : read"));
+        let screen_pos = result
+            .find("boundary \"検索画面\" as SearchScreen")
+            .unwrap();
+        let api_pos = result.find("control \"検索API\" as SearchApi").unwrap();
+        let entity_pos = result.find("database \"品目\" as Item").unwrap();
+        assert!(screen_pos < api_pos);
+        assert!(api_pos < entity_pos);
         assert!(!result.contains("no sequenceable usecases"));
     }
 

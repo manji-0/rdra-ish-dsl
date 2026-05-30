@@ -1,11 +1,11 @@
 sequenceDiagram
   actor Nurse as Nurse
+  participant CheckInScreen as Check-In Screen
   participant PrepareEncounterApi as Prepare Encounter API
   participant Appointment as Appointment
   participant PatientProfile as Patient Profile
-  participant CheckInScreen as Check-In Screen
 
-  Note over Nurse,CheckInScreen: Prepare Encounter
+  Note over Nurse,PatientProfile: Prepare Encounter
   Nurse->>CheckInScreen: Prepare Encounter
   CheckInScreen->>PrepareEncounterApi: Prepare Encounter
   activate PrepareEncounterApi

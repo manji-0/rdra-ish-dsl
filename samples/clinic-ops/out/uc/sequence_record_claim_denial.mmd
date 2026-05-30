@@ -1,10 +1,10 @@
 sequenceDiagram
   actor BillingSpecialist as Billing Specialist
   participant System as システム
-  participant Claim as Claim
   participant ClaimScreen as Claim Screen
+  participant Claim as Claim
 
-  Note over BillingSpecialist,ClaimScreen: Record Claim Denial
+  Note over BillingSpecialist,Claim: Record Claim Denial
   BillingSpecialist->System: Record Claim Denial
   activate System
   System->>Claim: update
