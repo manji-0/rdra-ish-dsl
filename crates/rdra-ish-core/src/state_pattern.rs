@@ -492,19 +492,38 @@ fn collect_operations(
         if Some(&eff.column) == status_col.as_ref() {
             continue; // transitions が真実源なので無視
         }
-        let origin_uc_key = match &eff.origin {
-            NodeRef::UseCase(k) => *k,
-            _ => continue, // event origin は将来対応
+        // event 由来の場合はそのイベントを raise する全 UC へ展開する
+        let origin_ucs: Vec<UseCaseKey> = match &eff.origin {
+            NodeRef::UseCase(k) => vec![*k],
+            NodeRef::Event(ek) => model
+                .relations
+                .iter()
+                .filter_map(|rel| {
+                    if rel.kind == RelKind::Raises {
+                        if let (NodeRef::UseCase(uk), NodeRef::Event(raised_ek)) =
+                            (&rel.from, &rel.to)
+                        {
+                            if raised_ek == ek {
+                                return Some(*uk);
+                            }
+                        }
+                    }
+                    None
+                })
+                .collect(),
+            _ => continue,
         };
-        if let Some(reachable) = buc_reachable {
-            if !reachable.contains(&NodeRef::UseCase(origin_uc_key)) {
-                continue;
+        for origin_uc_key in origin_ucs {
+            if let Some(reachable) = buc_reachable {
+                if !reachable.contains(&NodeRef::UseCase(origin_uc_key)) {
+                    continue;
+                }
             }
+            uc_effects
+                .entry(origin_uc_key)
+                .or_default()
+                .push((eff.column.clone(), AbstractValue::from_effect(&eff.value)));
         }
-        uc_effects
-            .entry(origin_uc_key)
-            .or_default()
-            .push((eff.column.clone(), AbstractValue::from_effect(&eff.value)));
     }
 
     // transitions 由来演算への non-status 効果のマージ
@@ -1157,6 +1176,67 @@ sets(usecase::DeliverUc, Order, "delivered_at", "present")
         assert!(
             !r.patterns.iter().any(|p| p.pattern == delivered_null),
             "(delivered, null) は到達不能"
+        );
+    }
+
+    // ── event 由来 sets: UC ではなくイベントが Nullable 軸を動かす ────────────
+
+    #[test]
+    fn test_event_origin_sets_nullable_axis() {
+        // sets の第1引数がイベントの場合、そのイベントを raise する UC の
+        // operations に展開されること（Phase 2）を検証する。
+        let model = model_from(
+            r#"
+entity Order "注文" {
+  id:           Int @pk
+  status:       Enum(pending, delivered) @default(pending)
+  delivered_at: DateTime @null
+}
+usecase Place      "注文確定"
+usecase DeliverUc  "配達確認"
+event EvDeliver    "配達完了"
+creates(Place,              Order)
+updates(usecase::DeliverUc, Order)
+raises(usecase::DeliverUc, EvDeliver)
+state Pending   "受付中"
+state Delivered "配達完了"
+transitions(EvDeliver, Pending, Delivered)
+sets(event::EvDeliver, Order, "delivered_at", "present")
+"#,
+        );
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results.iter().find(|r| r.entity_id == "Order").unwrap();
+
+        // (delivered, present) に到達できるか — event 由来 sets が展開されて
+        // DeliverUc の transition 演算に delivered_at=present が乗ること
+        let delivered_present = StatePattern {
+            values: BTreeMap::from([
+                (
+                    "status".to_string(),
+                    AbstractValue::Enum("delivered".to_string()),
+                ),
+                ("delivered_at".to_string(), AbstractValue::Present),
+            ]),
+        };
+        assert!(
+            r.patterns.iter().any(|p| p.pattern == delivered_present),
+            "(delivered, present) が到達可能なはず: {:?}",
+            r.patterns.iter().map(|p| &p.pattern).collect::<Vec<_>>()
+        );
+
+        // (delivered, null) は到達不能（event が status と delivered_at を同時に変える）
+        let delivered_null = StatePattern {
+            values: BTreeMap::from([
+                (
+                    "status".to_string(),
+                    AbstractValue::Enum("delivered".to_string()),
+                ),
+                ("delivered_at".to_string(), AbstractValue::Null),
+            ]),
+        };
+        assert!(
+            !r.patterns.iter().any(|p| p.pattern == delivered_null),
+            "(delivered, null) は到達不能なはず"
         );
     }
 

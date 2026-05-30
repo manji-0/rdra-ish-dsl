@@ -606,6 +606,122 @@ impl Emitter for SequenceDiagramEmitter {
     }
 }
 
+// ── イベントフロー図エミッタ (PlantUML) ──────────────────────────────────────
+
+pub struct EventFlowPlantUmlEmitter;
+
+impl Emitter for EventFlowPlantUmlEmitter {
+    fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
+        let reachable: Option<HashSet<NodeRef>> = match &view.scope {
+            Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
+            Scope::Whole => None,
+        };
+        let is_visible = |nr: &NodeRef| -> bool {
+            match &reachable {
+                Some(set) => set.contains(nr),
+                None => true,
+            }
+        };
+
+        // UC / Event / State が同じ ID を持てるので種別ごとにプレフィックスを付ける
+        let ev_mid = |id: &str| format!("ev__{}", id);
+        let uc_mid = |id: &str| format!("uc__{}", id);
+        let st_mid = |id: &str| format!("st__{}", id);
+
+        let flows = rdra_ish_core::collect_event_flows(model);
+
+        let mut out = String::new();
+        out.push_str("@startuml\n");
+        out.push_str("!theme plain\n");
+        out.push_str("left to right direction\n\n");
+
+        let mut declared: HashSet<String> = HashSet::new();
+
+        for flow in &flows {
+            let ev_nr = NodeRef::Event(flow.event);
+            if !is_visible(&ev_nr) {
+                continue;
+            }
+            let ev = match model.events.get(flow.event) {
+                Some(e) => e,
+                None => continue,
+            };
+            let ev_id = ev_mid(&ev.id);
+
+            if declared.insert(ev_id.clone()) {
+                out.push_str(&format!("card \"{}\" as {}\n", ev.label, ev_id));
+            }
+
+            let mut raised_by: Vec<_> = flow.raised_by.iter().copied().collect();
+            raised_by.sort_by_key(|&uk| {
+                model.use_cases.get(uk).map(|u| u.id.as_str()).unwrap_or("")
+            });
+            for uk in raised_by {
+                let uc_nr = NodeRef::UseCase(uk);
+                if !is_visible(&uc_nr) {
+                    continue;
+                }
+                let uc = match model.use_cases.get(uk) {
+                    Some(u) => u,
+                    None => continue,
+                };
+                let uid = uc_mid(&uc.id);
+                if declared.insert(uid.clone()) {
+                    out.push_str(&format!("usecase \"{}\" as {}\n", uc.label, uid));
+                }
+                out.push_str(&format!("{} ..> {} : raises\n", uid, ev_id));
+            }
+
+            let mut triggers: Vec<_> = flow.triggers_ucs.iter().copied().collect();
+            triggers.sort_by_key(|&uk| {
+                model.use_cases.get(uk).map(|u| u.id.as_str()).unwrap_or("")
+            });
+            for uk in triggers {
+                let uc_nr = NodeRef::UseCase(uk);
+                if !is_visible(&uc_nr) {
+                    continue;
+                }
+                let uc = match model.use_cases.get(uk) {
+                    Some(u) => u,
+                    None => continue,
+                };
+                let uid = uc_mid(&uc.id);
+                if declared.insert(uid.clone()) {
+                    out.push_str(&format!("usecase \"{}\" as {}\n", uc.label, uid));
+                }
+                out.push_str(&format!("{} ..> {} : triggers\n", ev_id, uid));
+            }
+
+            let mut transitions: Vec<_> = flow.transitions.iter().copied().collect();
+            transitions.sort_by_key(|(from_sk, _)| {
+                model.states.get(*from_sk).map(|s| s.id.as_str()).unwrap_or("")
+            });
+            for (from_sk, to_sk) in transitions {
+                let from_st = match model.states.get(from_sk) {
+                    Some(s) => s,
+                    None => continue,
+                };
+                let to_st = match model.states.get(to_sk) {
+                    Some(s) => s,
+                    None => continue,
+                };
+                let fid = st_mid(&from_st.id);
+                let tid = st_mid(&to_st.id);
+                if declared.insert(fid.clone()) {
+                    out.push_str(&format!("state \"{}\" as {}\n", from_st.label, fid));
+                }
+                if declared.insert(tid.clone()) {
+                    out.push_str(&format!("state \"{}\" as {}\n", to_st.label, tid));
+                }
+                out.push_str(&format!("{} --> {} : {}\n", fid, tid, ev.label));
+            }
+        }
+
+        out.push_str("\n@enduml\n");
+        Ok(out)
+    }
+}
+
 // ── ヘルパー ──────────────────────────────────────────────────────────────────
 
 pub(crate) fn node_id<'a>(model: &'a SemanticModel, node: &NodeRef) -> Option<&'a str> {

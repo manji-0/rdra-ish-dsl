@@ -3,9 +3,13 @@ use clap::{Parser, Subcommand, ValueEnum};
 use rdra_ish_core::{build_merged_model, resolve};
 use rdra_ish_emit::{
     csv::{ActorListCsvEmitter, EntityListCsvEmitter, RelationMatrixCsvEmitter},
-    mermaid::{ErMermaidEmitter, RdraMermaidEmitter, SequenceMermaidEmitter, StateMermaidEmitter},
+    mermaid::{
+        ErMermaidEmitter, EventFlowMermaidEmitter, RdraMermaidEmitter, SequenceMermaidEmitter,
+        StateMermaidEmitter,
+    },
     plantuml::{
-        ErPlantUmlEmitter, RdraPlantUmlEmitter, SequenceDiagramEmitter, StateDiagramEmitter,
+        ErPlantUmlEmitter, EventFlowPlantUmlEmitter, RdraPlantUmlEmitter, SequenceDiagramEmitter,
+        StateDiagramEmitter,
     },
     state_pattern::{StatePatternCsvEmitter, StatePatternJsonEmitter, StatePatternTableEmitter},
     Emitter, Filter, Scope, View,
@@ -108,6 +112,8 @@ enum DiagramKind {
     State,
     /// Write-focused sequence diagram with FK-inferred transaction boundaries
     Sequence,
+    /// Event-flow diagram: UC --raises--> Event --triggers--> UC / --transitions--> State
+    EventFlow,
 }
 
 #[derive(ValueEnum, Clone, PartialEq)]
@@ -240,7 +246,10 @@ fn main() -> Result<()> {
                     scope,
                     filter: Filter::Er,
                 },
-                DiagramKind::Rdra | DiagramKind::State | DiagramKind::Sequence => View {
+                DiagramKind::Rdra
+                | DiagramKind::State
+                | DiagramKind::Sequence
+                | DiagramKind::EventFlow => View {
                     scope,
                     filter: Filter::None,
                 },
@@ -254,6 +263,13 @@ fn main() -> Result<()> {
                 }
             }
 
+            // イベント整合性診断: event-flow 図生成時に warning を表示
+            if matches!(kind, DiagramKind::EventFlow) {
+                for diag in rdra_ish_core::event_diagnostics(&model) {
+                    eprintln!("warning: {}", diag.error);
+                }
+            }
+
             // PlantUML/Mermaid どちらのエミッタを使うかを format で決定
             let diagram_text = match format {
                 OutputFormat::Mermaid => match kind {
@@ -261,12 +277,14 @@ fn main() -> Result<()> {
                     DiagramKind::Er => ErMermaidEmitter.emit(&model, &view)?,
                     DiagramKind::State => StateMermaidEmitter.emit(&model, &view)?,
                     DiagramKind::Sequence => SequenceMermaidEmitter.emit(&model, &view)?,
+                    DiagramKind::EventFlow => EventFlowMermaidEmitter.emit(&model, &view)?,
                 },
                 _ => match kind {
                     DiagramKind::Rdra => RdraPlantUmlEmitter.emit(&model, &view)?,
                     DiagramKind::Er => ErPlantUmlEmitter.emit(&model, &view)?,
                     DiagramKind::State => StateDiagramEmitter.emit(&model, &view)?,
                     DiagramKind::Sequence => SequenceDiagramEmitter.emit(&model, &view)?,
+                    DiagramKind::EventFlow => EventFlowPlantUmlEmitter.emit(&model, &view)?,
                 },
             };
 

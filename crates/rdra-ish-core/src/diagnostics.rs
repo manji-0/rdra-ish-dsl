@@ -59,6 +59,16 @@ pub enum RdraError {
 
     #[error("unknown effect value '{value}' for column '{col}': not an enum variant, bool, null/present, or known PostgreSQL type\n  hint: see the allowed value vocabulary in the docs")]
     UnknownEffectValue { col: String, value: String },
+
+    // ── イベント整合性診断 ────────────────────────────────────────────────────
+    #[error("event '{event}' is never raised by any use case\n  hint: add `raises(usecase::Foo, event::{event})` in the relevant BUC file")]
+    EventNeverRaised { event: String },
+
+    #[error("event '{event}' is raised but has no transitions and triggers no use case\n  hint: add `transitions(event::{event}, From, To)` or `triggers(event::{event}, someUsecase)` to connect this event")]
+    EventNeverConsumed { event: String },
+
+    #[error("event '{event}' triggers use case '{usecase}' which belongs to no BUC\n  hint: add `contains(someBuc, usecase::{usecase})` to include the triggered use case in a BUC")]
+    TriggeredUseCaseUnreachable { event: String, usecase: String },
 }
 
 #[derive(Debug)]
