@@ -42,14 +42,23 @@ reported as the next refinement question rather than silently ignored.
 5. **Check use case coverage**
    - Every `usecase` is referenced by a `contains` predicate
    - Every `usecase` has at least one `displays` predicate (flag missing ones for intentional review)
-   - Every `usecase` has at least one CRUD predicate (`reads` / `writes` / `creates` / `updates` / `deletes`)
+   - Every data-changing `usecase` either has early-stage direct CRUD or invokes an API with CRUD
+   - If the use case declares `sets`, verify it has direct CRUD or invokes an API operating that entity
 
-6. **Check entity consistency**
+6. **Check API/system boundaries**
+   - Every declared `api` is invoked by at least one use case unless it is intentionally future-facing
+   - Every stable API belongs to one system via `contains(System, Api)`
+   - System entity sets are derived from API CRUD; do not look for or add direct system→entity ownership
+   - A `relate` edge crossing two derived system entity sets needs `coordinates(UseCase, Entity, Entity)`
+   - The coordinating use case must invoke APIs on both system sides, and each API must operate the corresponding entity
+   - Treat `CrossSystemEntityRelation`, `CoordinationMissingApi`, and `CoordinationNotCrossSystem` warnings as design review findings
+
+7. **Check entity consistency**
    - `relate` is defined in the correct direction with the right cardinality
    - No manually declared FK columns that duplicate a `relate`-generated FK
    - Parent entities are declared before child entities in the same file
 
-7. **Check events and state transitions**
+8. **Check events and state transitions**
    - Run `rdra-ish diagram --kind event-flow --format mermaid <src-dir>` and review the
      warnings printed to stderr before looking at the diagram itself:
      - `EventNeverRaised`: the event has no `raises` predicate — add one or remove the event
@@ -61,12 +70,12 @@ reported as the next refinement question rather than silently ignored.
    - When `triggers(Event, UseCase)` is used, verify the triggered UC is `contains`-ed in
      the correct downstream BUC and that the cross-BUC flow is intentional
 
-8. **Check `sets` predicate coverage**
+9. **Check `sets` predicate coverage**
    - Every `Enum` column that lacks a `transitions` predicate should have a `sets` for each use case that modifies it
    - Every `@null` column updated by a use case should have a `sets` with `"present"` / `"null"` / a PostgreSQL type
    - Every `Bool` column toggled by a use case should have a `sets` with `"true"` or `"false"`
 
-9. **Check imports**
+10. **Check imports**
    - Every referenced symbol has a corresponding `import`
    - No imported modules that are never used
 
@@ -103,11 +112,14 @@ reported as the next refinement question rather than silently ignored.
 | `performs` | Actor | UseCase / Buc | — |
 | `uses` | Actor | ExtSystem | — |
 | `reads/writes/creates/updates/deletes` | UseCase | Entity | — |
+| `reads/writes/creates/updates/deletes` | Api | Entity | — |
 | `displays` | UseCase | Screen | — |
 | `shows` | Screen | Entity | — |
 | `raises` | UseCase | Event | — |
 | `triggers` | Event | UseCase | — |
 | `contains` | Buc | UseCase | — |
+| `contains` | System | Api | — |
+| `coordinates` | UseCase | Entity | Entity |
 | `belongs` | Buc | Business | — |
 | `motivates` | Requirement | Buc | — |
 | `relate` | Entity | Entity | cardinality string (`"1:1"` / `"1:N"` / `"N:1"` / `"N:M"`) |

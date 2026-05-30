@@ -33,6 +33,9 @@ rdra-ish states src/ --buc <BucId>
 
 # 7. Derive state patterns for one entity
 rdra-ish states src/ --entity <EntityId>
+
+# 8. List systems
+rdra-ish list src/ --kind system --format table
 ```
 
 ### Interpreting `rdra-ish states` output
@@ -72,6 +75,8 @@ Entity: Order (注文)
 | BUCs exist but actors/use cases are sparse | Scope or BUC skeleton | actors and user-visible actions |
 | Use cases exist but CRUD matrix is empty | BUC skeleton | entities touched by each use case |
 | CRUD exists but sequence output has only `System` lane | Data touchpoints | screens and API boundaries |
+| APIs exist but no `system`/`contains(System, Api)` | Interaction boundary | API ownership/system boundaries |
+| `relate` crosses derived systems | Entity structure | coordinating use case and API calls on both sides |
 | Entities have only `id` columns | Data touchpoints | fields, keys, and relationships |
 | Entities have Enum/Bool/nullable columns but no state output changes | Entity structure | events, transitions, and `sets` effects |
 | `states` shows unreachable variants or unexpected terminals | Lifecycle | missing use cases, events, transitions, or effects |
@@ -86,6 +91,7 @@ Entity: Order (注文)
 | Use case has no CRUD predicate | UC is declared but not connected to data |
 | Use case has no `displays` | No screen assigned — flag for intentional review |
 | Entity column never appears in `states` axes | No `sets` or `transitions` predicate covers it |
+| Cross-system relation warning | Missing `coordinates(UseCase, Entity, Entity)` or missing API invocation on one side |
 | `TERMINAL` state is unexpected | Missing use case or transition to exit that state |
 | Unreachable state combination | `sets` or `transitions` predicate may be missing or wrong |
 
@@ -99,6 +105,11 @@ Entity: Order (注文)
 
 - Run `rdra-ish list src/ --kind entity --format json` and check for FK columns that should be covered by a `relate` predicate
 - Cross-reference CRUD predicates: a use case that `creates` a child entity without `creates`-ing the parent (or an explicit FK `sets`) may indicate a missing transaction boundary
+- Run `rdra-ish check src/` and review system warnings:
+  - `CrossSystemEntityRelation`: add `coordinates` or reconsider the system/API split
+  - `CoordinationMissingApi`: make the coordinating use case invoke an API operating the missing side
+  - `CoordinationNotCrossSystem`: remove or retarget `coordinates`
+  - `EntityInMultipleSystems`: split ownership or move coordination to use cases
 
 ### Reporting findings
 

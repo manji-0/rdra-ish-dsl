@@ -18,7 +18,7 @@ information needed to advance one level, then validate before adding more detail
 | 0. Scope | `business`, rough `buc` | business area, candidate BUC names, first BUC to model |
 | 1. BUC skeleton | `actor`, `usecase`, `performs`, `contains` | actors, user-visible actions, BUC ownership |
 | 2. Data touchpoints | coarse `entity`, CRUD predicates | objects touched by each use case, create/read/update/delete intent |
-| 3. Interaction boundary | `screen`, `api`, `displays`, `shows`, `invokes` | UI/API boundary per use case |
+| 3. Interaction boundary | `screen`, `api`, `system`, `displays`, `shows`, `invokes` | UI/API boundary and system ownership |
 | 4. Entity structure | columns, `@pk`, `relate` | fields, identifiers, cardinality, ownership |
 | 5. Lifecycle | `Enum`, `Bool`, `@null`, `event`, `state`, `transitions`, `sets` | state-changing use cases/events and column effects |
 | 6. Rules | `forbidden`, `invariant` | invalid combinations and required co-occurrences |
@@ -32,7 +32,7 @@ Use these prompts:
 
 - From level 0 to 1: "Who performs this BUC, and what are the user-visible actions?"
 - From level 1 to 2: "For each use case, which business objects are created, read, updated, or deleted?"
-- From level 2 to 3: "Which screens or API endpoints mediate these use cases?"
+- From level 2 to 3: "Which screens or API endpoints mediate these use cases, and which system owns each API?"
 - From level 3 to 4: "What fields identify each entity, and how are the entities related?"
 - From level 4 to 5: "Which fields represent lifecycle state, and which use cases/events change them?"
 - From level 5 to 6: "Which reachable state combinations are invalid or require another value to be present?"
@@ -81,9 +81,9 @@ src/
 
 Placement rules:
 - Shared vocabulary goes in `shared/`: actors, external systems, businesses,
-  reusable entities, cross-BUC lifecycle, and cross-BUC rules.
+  reusable entities, systems, cross-BUC lifecycle, and cross-BUC rules.
 - BUC-local flow goes in `buc/buc_<name>.rdra`: `buc`, `usecase`, `screen`,
-  BUC-local `api`, CRUD, `displays`, `invokes`, `raises`, and `sets`.
+  BUC-local `api`, CRUD, `displays`, `invokes`, `raises`, `coordinates`, and `sets`.
 - Do not put BUC-specific predicates in shared files.
 - Keep broad imports during exploration; narrow imports after shared files split.
 - See `docs/incremental-modeling.md#model-directory-layout` for the full layout rule.
@@ -182,9 +182,10 @@ sequence diagram then renders `Actor → Screen → API → Entity` lanes.
 
 Treat an API as a consistency boundary: it groups data reads and writes that require
 the same transaction or reference-integrity guarantee across use cases. Do not create
-one API just because there is one use case, screen action, or entity. Keep CRUD directly
-on a use case when the update is closed inside one entity; introduce a separate API
-when the operation must validate or update multiple records together.
+one API just because there is one use case, screen action, or entity. Prefer API CRUD
+for backend-mediated data access; direct use-case CRUD is legacy/early-stage shorthand.
+Use `sets(UseCase, Entity, ...)` to declare how the use case changes values through
+the invoked API.
 
 ```
 api OrderApi "Order API"
@@ -195,14 +196,50 @@ displays(PlaceOrder, OrderScreen)
 
 - Declare `api` in the same BUC file as the use case that invokes it (or in `shared/`
   if multiple BUCs share it).
-- CRUD predicates (`creates`, `updates`, etc.) are attached to the `api`, not the
-  `usecase`. You may still attach CRUD directly to a `usecase` for the same entity
-  (mixed form) — the sequence diagram handles both.
+- CRUD predicates (`creates`, `updates`, etc.) on the `api` define the API's atomic
+  entity boundary. A use case that invokes the API inherits that boundary.
+- Attach value effects to the `usecase` with `sets`; this keeps "what this use case
+  changes" separate from "which API owns the data operation".
 - Split APIs by consistency contract. For example, changing a store's next restock date
   can be direct `updates(ChangeNextRestockDate, Store)`, while changing the store's
   parent organization should use a separate API that reads the organization and updates
   the store or assignment history in one transaction.
 - `api` nodes are intentionally omitted from the RDRA overview (`--kind rdra`).
+
+#### System boundaries (`system` / `contains` / `coordinates`)
+
+Use `system` to group APIs into an internal ownership boundary. A system does not own
+entities directly; its entity set is derived from the CRUD targets of its APIs.
+
+```
+system StoreSystem "Store System"
+system OrgSystem "Organization System"
+
+api StoreApi "Store API"
+api OrgApi "Organization API"
+
+contains(StoreSystem, StoreApi)
+contains(OrgSystem, OrgApi)
+
+updates(StoreApi, Store)
+reads(OrgApi, Organization)
+```
+
+If `relate(Store, Organization, "N:1")` crosses derived system boundaries, declare
+which use case coordinates the cross-system consistency and invoke APIs on both sides:
+
+```
+usecase ChangeParentOrg "Change Store Parent Organization"
+
+coordinates(ChangeParentOrg, Store, Organization)
+invokes(ChangeParentOrg, StoreApi)
+invokes(ChangeParentOrg, OrgApi)
+sets(ChangeParentOrg, Store, "parent_org_changed_at", "timestamptz")
+```
+
+The checker warns when a cross-system relation has no `coordinates`, when
+`coordinates` is used for a non-cross-system pair, or when the coordinating use case
+does not invoke an API that operates each side.
 
 #### Imports
 
@@ -222,6 +259,7 @@ import shared.actors.{Staff as S}  // selective import with alias
    - `actors.rdra`: declare `actor` and `extsystem`
    - `biz.rdra`: declare `business`
    - `entities.rdra`: write entity column definitions, `relate`, and state/event declarations
+   - declare `system` near stable shared architecture vocabulary when APIs cross BUCs
 5. **Write one BUC file per business use case**
    - Import shared definitions with `import shared.*`
    - Declare `buc`, `usecase`, `screen`, `event`, `state`
@@ -238,3 +276,6 @@ import shared.actors.{Staff as S}  // selective import with alias
 - Adding FK columns manually when a `relate` already auto-generates them
 - Attaching CRUD to a `usecase` when the intent is to go through an `api` — use `invokes` + CRUD on the `api`
 - Forgetting `invokes(UseCase, Api)` — declaring an `api` without `invokes` triggers an `ApiNeverInvoked` warning
+- Declaring `system` without `contains(System, Api)` — no entity set can be derived
+- Adding a cross-system `relate` without `coordinates(UseCase, Entity, Entity)`
+- Declaring `coordinates` but invoking only one side's API

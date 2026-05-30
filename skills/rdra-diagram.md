@@ -25,7 +25,7 @@ stage instead of generating every view.
 
 | Need | Kind | What it shows |
 |------|------|---------------|
-| Overview of actors, BUCs, UCs, screens, events | `rdra` | Full RDRA relationship graph (API nodes omitted by design) |
+| Overview of actors, BUCs, UCs, systems, screens, events | `rdra` | Full RDRA relationship graph (API nodes omitted by design) |
 | Database table structure and relationships | `er` | Entities, columns, FK relationships |
 | Entity lifecycle | `state` | State nodes and transition events |
 | Write operations and transaction boundaries | `sequence` | Sequence of writes per use case; shows `Actor→Screen→API→Entity` lanes when `invokes` is used |
@@ -105,11 +105,11 @@ PLANTUML_JAR=/path/to/plantuml.jar rdra-ish diagram src/ --kind rdra --format sv
 - Each use case block shows write operations in order
 - **With `invokes`**: renders `Actor → Screen → API → Entity` lanes; the API is the source of writes
 - **Without `invokes`** (legacy): renders the `System` participant lane unchanged
-- Shaded `rect` = inferred transaction (FK-connected entities)
+- Shaded `rect` = transaction group. The note distinguishes `inferred from FK` from `API atomic boundary`
 - `Note right of ...: FK非連結` = entities written outside a common FK chain — consider modeling them through an API boundary
 
 **RDRA overview (`--kind rdra`)**
-- `api` nodes are intentionally omitted; only use-case-level relationships appear
+- `api` nodes are intentionally omitted; system nodes are shown as ownership boundaries
 
 ### Tips
 
@@ -118,3 +118,6 @@ PLANTUML_JAR=/path/to/plantuml.jar rdra-ish diagram src/ --kind rdra --format sv
 - The sequence diagram only shows write operations (`creates` / `updates` / `deletes`) and `displays` — `reads` are omitted
 - Sequence diagram transaction warnings are also printed to stderr as `warning:` lines
 - API diagnostics (`ApiNeverInvoked`, `ApiInvokedButNoEntity`) are printed to stderr when running `--kind sequence`
+- System diagnostics (`CrossSystemEntityRelation`, `CoordinationMissingApi`,
+  `CoordinationNotCrossSystem`, `ApiInMultipleSystems`, `EntityInMultipleSystems`) are
+  printed by `check` and sequence output. Use them to verify `coordinates` and API calls.
