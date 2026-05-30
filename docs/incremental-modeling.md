@@ -10,6 +10,12 @@ a validation command, and a focused set of questions that unlocks the next stage
 
 ## Principle
 
+The stages can also be read as a shift of concern from **business intent** to
+**technical design**. Early stages keep the model close to business language: value
+streams, actors, and user-visible work. Later stages add technical commitments:
+data touchpoints, UI/API boundaries, ownership, persistence structure, lifecycle, and
+rules that the implementation must preserve.
+
 Start with the smallest model that can answer the current question. Move to the next
 stage only when the current abstraction is stable enough to make the added detail
 useful.
@@ -115,15 +121,15 @@ import shared.lifecycle.order
 
 ## Stage Map
 
-| Stage | Abstraction | Main question | Add | Validate |
-|---|---|---|---|---|
-| 0 | Scope sketch | What business area are we modeling? | `business`, rough `buc`, candidate `actor` | `list --kind buc`, `diagram --kind rdra` |
-| 1 | BUC skeleton | Who gets value from each BUC? | `performs`, `belongs`, `contains`, rough `usecase` | `check`, BUC-scoped RDRA diagram |
-| 2 | Data touchpoints | Which data objects does each use case touch? | coarse `entity`, CRUD predicates | CRUD matrix, ER diagram |
-| 3 | Interaction boundary | What UI/API boundary mediates the work? | `screen`, `displays`, `shows`, optional `api`/`invokes` | sequence diagram |
-| 4 | Entity structure | What structure and ownership does the data need? | columns, `@pk`, `relate`, cardinality | ER diagram, sequence TX warnings |
-| 5 | Lifecycle | Which states are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `state`, `transitions`, `raises`, `sets` | `states`, state diagram, event-flow |
-| 6 | Business rules | Which states are invalid or required? | `forbidden`, `invariant`, comparison propositions | `states` diagnostics |
+| Stage | Concern | Abstraction | Main question | Add | Validate |
+|---|---|---|---|---|---|
+| 0 | Biz intent | Scope sketch | What business area are we modeling? | `business`, rough `buc`, candidate `actor` | `list --kind buc`, `diagram --kind rdra` |
+| 1 | Biz value | BUC skeleton | Who gets value from each BUC? | `performs`, `belongs`, `contains`, rough `usecase` | `check`, BUC-scoped RDRA diagram |
+| 2 | Biz object touchpoints | Data touchpoints | Which data objects does each use case touch? | coarse `entity`, CRUD predicates | CRUD matrix, ER diagram |
+| 3 | Tech interaction boundary | Interaction boundary | What UI/API boundary mediates the work? | `screen`, `displays`, `shows`, optional `api`/`invokes` | sequence diagram |
+| 4 | Tech data design | Entity structure | What structure and ownership does the data need? | columns, `@pk`, `relate`, cardinality | ER diagram, sequence TX warnings |
+| 5 | Tech lifecycle design | Lifecycle | Which states are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `state`, `transitions`, `raises`, `sets` | `states`, state diagram, event-flow |
+| 6 | Tech-enforced rules | Business rules | Which states are invalid or required? | `forbidden`, `invariant`, comparison propositions | `states` diagnostics |
 
 ## Stage 0: Scope Sketch
 

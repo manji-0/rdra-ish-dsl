@@ -46,7 +46,7 @@ rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]...
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `rdra` \| `object-graph` \| `er` \| `state` \| `sequence` \| `event-flow` | `rdra` | The diagram kind. `rdra` = full RDRA relationship graph; `object-graph` = RDRA Object Graph mapped onto the original four-layer structure; `er` = entity-relationship diagram; `state` = state machine; `sequence` = write-focused sequence diagram with FK-inferred transaction boundaries; `event-flow` = event causality graph showing UC→Event→UC and Event→State chains. |
+| `--kind` | `rdra` \| `boundaryless-graph` \| `er` \| `state` \| `sequence` \| `event-flow` | `rdra` | The diagram kind. `rdra` = RDRA layered graph mapped onto the original four-layer structure; `boundaryless-graph` = dense relationship graph without RDRA layer boundaries; `er` = entity-relationship diagram; `state` = state machine; `sequence` = write-focused sequence diagram with FK-inferred transaction boundaries; `event-flow` = event causality graph showing UC→Event→UC and Event→State chains. |
 | `--format` | `puml` \| `svg` \| `png` \| `mermaid` | `puml` | Output format. `puml` writes PlantUML text (`.puml`); `mermaid` writes Mermaid text (`.mmd`); `svg` / `png` render via plantuml.jar. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Filter to one or more BUCs by id. With multiple ids, the **union** of reachable nodes across the named BUCs is shown. Applies to all diagram kinds. For `sequence`, only use cases directly contained in the selected BUCs are shown; event-triggered use cases in other BUCs are left to `event-flow`. |
 | `--usecase <id>` | string (repeatable) | — (whole model) | Filter `sequence` diagrams to one or more use cases by id. Cannot be combined with `--buc`. |
@@ -68,10 +68,13 @@ Notes:
 - For `--kind sequence`, participant lifelines are grouped into RDRA-style layer boxes:
   system value (`actor`), system boundary (`screen`, `api`), and system (`system`,
   `entity`). The use case itself remains the sequence section title.
-- For `--kind object-graph`, model objects are placed into four RDRA-style layers:
+- For `--kind rdra`, model objects are placed into four RDRA-style layers:
   system value (`actor`, `requirement`), system external environment (`business`, `buc`,
   `usagescene`, `extsystem`, `condition`, `variation`), system boundary (`usecase`,
-  `screen`, `api`, `event`), and system (`system`, `entity`, `state`).
+  `screen`, `event`), and system (`system`, `api`, `entity`, `state`).
+- For `--kind boundaryless-graph`, the same relationships are rendered as one flat graph
+  for dense link inspection. API nodes are omitted there so the graph stays focused on
+  business and data relationships.
 - `--format svg` and `--format png` require plantuml.jar to be discoverable (see
   [Environment Variables](#environment-variables)). If it cannot be found, the command
   fails with an error.

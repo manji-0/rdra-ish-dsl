@@ -10,6 +10,9 @@ Given a description of what to add or change, modify the relevant `.rdra` files 
 Preserve the model's current abstraction level. If the BUC is still a skeleton, do not
 force columns, APIs, or lifecycle rules. Ask for the next missing information required
 by `docs/incremental-modeling.md` and apply the smallest stage-appropriate diff.
+Keep the business-to-technical refinement order intact: do not introduce technical
+details until the business value, actors, use cases, and data touchpoints that justify
+them are present.
 
 ### Step 1 — Read the existing BUC
 
@@ -41,14 +44,14 @@ definitions near their owning area and mirror path/module names.
 
 Also classify the abstraction transition:
 
-| Current state | Next useful update | Ask the user for |
-|---------------|--------------------|------------------|
-| BUC exists but no actors | actor coverage | who performs or receives value from the BUC |
-| Actors/use cases exist but no CRUD | data touchpoints | entities and CRUD intent per use case |
-| CRUD exists but no screens/API | interaction boundary | screens, external interfaces, API endpoints, owning systems |
-| Entities have only `id` | entity structure | fields, keys, relationships, cardinality |
-| Structured entities have lifecycle fields | lifecycle | states, events, use-case effects |
-| Lifecycle reaches plausible patterns | business rules | forbidden and required state combinations |
+| Current state | Concern | Next useful update | Ask the user for |
+|---------------|---------|--------------------|------------------|
+| BUC exists but no actors | Biz intent/value | actor coverage | who performs or receives value from the BUC |
+| Actors/use cases exist but no CRUD | Biz object touchpoints | data touchpoints | entities and CRUD intent per use case |
+| CRUD exists but no screens/API | Tech interaction boundary | interaction boundary | screens, external interfaces, API endpoints, owning systems |
+| Entities have only `id` | Tech data design | entity structure | fields, keys, relationships, cardinality |
+| Structured entities have lifecycle fields | Tech lifecycle design | lifecycle | states, events, use-case effects |
+| Lifecycle reaches plausible patterns | Tech-enforced rules | business rules | forbidden and required state combinations |
 
 ### Step 3 — Apply the minimal diff
 

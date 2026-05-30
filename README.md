@@ -65,7 +65,9 @@ cargo install --path crates/rdra-ish-cli
 
 The modeling loop is intentionally staged. At each stage, ask only for the next
 missing information, validate the current abstraction, then add the next level of
-detail.
+detail. Read the stages as a gradual shift from business concerns to technical
+concerns: first name value, actors, and use cases; then introduce data touchpoints,
+interaction/API boundaries, entity structure, lifecycle, and enforceable rules.
 
 ![RDRA-ISH current spec and concretization steps](docs/assets/rdra-ish-spec-and-steps.png)
 
@@ -96,11 +98,11 @@ rdra-ish diagram src/ --kind er --format mermaid
 # ER diagram (PlantUML SVG, requires plantuml.jar)
 PLANTUML_JAR=/path/to/plantuml.jar rdra-ish diagram src/ --kind er --format svg
 
-# Full RDRA diagram
+# RDRA diagram mapped onto the original RDRA-style layers
 rdra-ish diagram src/ --kind rdra --format mermaid
 
-# RDRA Object Graph mapped onto the original RDRA-style layers
-rdra-ish diagram src/ --kind object-graph --format mermaid
+# Boundaryless relationship graph for dense link inspection
+rdra-ish diagram src/ --kind boundaryless-graph --format mermaid
 
 # Per-BUC diagram (single BUC)
 rdra-ish diagram src/ --kind rdra --buc BucOrder --format mermaid
@@ -141,7 +143,7 @@ rdra-ish states src/ --format json           # JSON output
 
 | Option | Default | Description |
 |---|---|---|
-| `--kind` | `rdra` | `rdra` / `object-graph` / `er` / `state` / `sequence` / `event-flow` |
+| `--kind` | `rdra` | `rdra` / `boundaryless-graph` / `er` / `state` / `sequence` / `event-flow` |
 | `--format` | `puml` | `puml` / `svg` / `png` / `mermaid` (`svg`/`png` require plantuml.jar) |
 | `--buc <id>` | — (whole) | Filter by BUC id (repeatable). For `sequence`, only directly contained use cases are shown |
 | `--usecase <id>` | — (whole) | Filter `sequence` diagrams by use case id (repeatable, cannot be combined with `--buc`) |
@@ -249,7 +251,7 @@ the operation needs one consistency boundary.
 | `state` | State (state machine node) |
 | `condition` | Condition |
 | `variation` | Variation |
-| `api` | API layer endpoint invoked by a use case; operates entities. Appears in the sequence diagram lane; omitted from the RDRA overview. |
+| `api` | API layer endpoint invoked by a use case; operates entities. Appears in the RDRA layered graph and sequence diagram lane; omitted from the boundaryless graph. |
 
 ### Entity column definitions
 

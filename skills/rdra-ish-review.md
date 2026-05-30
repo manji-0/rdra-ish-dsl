@@ -10,6 +10,9 @@ Review existing RDRA DSL files for syntax correctness, semantic consistency, and
 Judge gaps relative to the model's current abstraction stage. A missing `screen`,
 column, API, or lifecycle may be acceptable in an early-stage BUC, but it should be
 reported as the next refinement question rather than silently ignored.
+Read the stages as a progression from business concerns to technical concerns. Early
+review should protect business intent and value coverage; later review should focus on
+API/system boundaries, persistence structure, reachable lifecycle states, and rules.
 
 ### Steps
 
@@ -33,6 +36,8 @@ reported as the next refinement question rather than silently ignored.
    - Entity structure: columns/relationships/cardinality are modeled
    - Lifecycle: states/events/transitions/sets are modeled
    - Business rules: forbidden/invariant constraints are modeled
+   - Concern shift: Scope and BUC skeleton are business-facing; interaction boundary
+     and deeper stages are technical commitments derived from that business model
 
 4. **Check actor and BUC coverage**
    - Every BUC has at least one `performs` predicate (a BUC with no actor is orphaned)
@@ -125,3 +130,4 @@ reported as the next refinement question rather than silently ignored.
 | `relate` | Entity | Entity | cardinality string (`"1:1"` / `"1:N"` / `"N:1"` / `"N:M"`) |
 | `transitions` | Event | State (from) | State (to) |
 | `sets` | UseCase / Event | Entity | column name string | value string |
+| `sets` | UseCase / Event | Entity | comparison expression | boolean literal |

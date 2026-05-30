@@ -10,18 +10,21 @@ Create RDRA DSL files from requirements or specifications.
 Prefer incremental refinement unless the user explicitly asks for a fully detailed
 model in one pass. Start from the current abstraction level, ask only for the missing
 information needed to advance one level, then validate before adding more detail.
+Treat the ladder as a deliberate shift from business concerns to technical concerns:
+business value and actors first, then data touchpoints, UI/API boundaries, entity
+structure, lifecycle, and enforceable rules.
 
 ### Abstraction ladder
 
-| Level | Model focus | Required information before moving on |
-|-------|-------------|----------------------------------------|
-| 0. Scope | `business`, rough `buc` | business area, candidate BUC names, first BUC to model |
-| 1. BUC skeleton | `actor`, `usecase`, `performs`, `contains` | actors, user-visible actions, BUC ownership |
-| 2. Data touchpoints | coarse `entity`, CRUD predicates | objects touched by each use case, create/read/update/delete intent |
-| 3. Interaction boundary | `screen`, `api`, `system`, `displays`, `shows`, `invokes` | UI/API boundary and system ownership |
-| 4. Entity structure | columns, `@pk`, `relate` | fields, identifiers, cardinality, ownership |
-| 5. Lifecycle | `Enum`, `Bool`, `@null`, `event`, `state`, `transitions`, `sets` | state-changing use cases/events and column effects |
-| 6. Rules | `forbidden`, `invariant` | invalid combinations and required co-occurrences |
+| Level | Concern | Model focus | Required information before moving on |
+|-------|---------|-------------|----------------------------------------|
+| 0. Scope | Biz intent | `business`, rough `buc` | business area, candidate BUC names, first BUC to model |
+| 1. BUC skeleton | Biz value | `actor`, `usecase`, `performs`, `contains` | actors, user-visible actions, BUC ownership |
+| 2. Data touchpoints | Biz object touchpoints | coarse `entity`, CRUD predicates | objects touched by each use case, create/read/update/delete intent |
+| 3. Interaction boundary | Tech interaction boundary | `screen`, `api`, `system`, `displays`, `shows`, `invokes` | UI/API boundary and system ownership |
+| 4. Entity structure | Tech data design | columns, `@pk`, `relate` | fields, identifiers, cardinality, ownership |
+| 5. Lifecycle | Tech lifecycle design | `Enum`, `Bool`, `@null`, `event`, `state`, `transitions`, `sets` | state-changing use cases/events and column effects |
+| 6. Rules | Tech-enforced rules | `forbidden`, `invariant` | invalid combinations and required co-occurrences |
 
 ### Information-gathering rule
 
@@ -155,6 +158,7 @@ Annotations: `@pk` / `@pk(a, b)` (compound PK) / `@unique` / `@null` / `@default
 | `relate` | `(Entity, Entity, "1:1"\|"1:N"\|"N:1"\|"N:M")` | ER relationship (auto-generates FK) |
 | `transitions` | `(Event, State, State)` | state transition: event moves from → to |
 | `sets` | `(UseCase\|Event, Entity, "col", "val")` | explicit column effect for state-pattern derivation |
+| `sets` | `(UseCase\|Event, Entity, col op rhs, true\|false)` | explicit comparison-proposition effect |
 
 #### `sets` value vocabulary
 
@@ -173,6 +177,7 @@ sets(usecase::Capture,  Payment, "status", "captured")
 sets(usecase::Login,    Session, "last_login_at", "present")
 sets(usecase::Deliver,  Order,   "delivered_at", "timestamptz")
 sets(usecase::Logout,   Session, "token", "null")
+sets(usecase::Sell,     Stock,   stock < selling, true)
 ```
 
 #### API layer (`api` / `invokes`)
@@ -204,7 +209,8 @@ displays(PlaceOrder, OrderScreen)
   can be direct `updates(ChangeNextRestockDate, Store)`, while changing the store's
   parent organization should use a separate API that reads the organization and updates
   the store or assignment history in one transaction.
-- `api` nodes are intentionally omitted from the RDRA overview (`--kind rdra`).
+- `api` nodes are included in the RDRA layered graph (`--kind rdra`) and omitted from
+  the dense boundaryless graph (`--kind boundaryless-graph`).
 
 #### System boundaries (`system` / `contains` / `coordinates`)
 

@@ -32,17 +32,17 @@ columns、ER、境界越え coordination を追加する。
 
 ```sh
 rdra-ish check samples/incremental-order/step-4-entity-structure/src
-rdra-ish diagram samples/incremental-order/step-4-entity-structure/src --kind object-graph --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-4-entity-structure/out/object_graph_buc_store_restock
+rdra-ish diagram samples/incremental-order/step-4-entity-structure/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-4-entity-structure/out/object_graph_buc_store_restock
 rdra-ish diagram samples/incremental-order/step-4-entity-structure/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-4-entity-structure/out/sequence_buc_store_restock
 rdra-ish csv samples/incremental-order/step-4-entity-structure/src --kind matrix --out samples/incremental-order/step-4-entity-structure/out/usecase_matrix.csv
 ```
 
-### 4.1 Layered Object Graph 図
+### 4.1 RDRA Layered Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/incremental-order/step-4-entity-structure/src --kind object-graph --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-4-entity-structure/out/object_graph_buc_store_restock
+rdra-ish diagram samples/incremental-order/step-4-entity-structure/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-4-entity-structure/out/object_graph_buc_store_restock
 ```
 
 ```mermaid

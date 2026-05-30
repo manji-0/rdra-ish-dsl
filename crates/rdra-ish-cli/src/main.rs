@@ -56,7 +56,7 @@ enum Commands {
     Diagram {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Diagram kind: rdra, object-graph, er, state, sequence, or event-flow
+        /// Diagram kind: rdra, boundaryless-graph, er, state, sequence, or event-flow
         #[arg(long, default_value = "rdra")]
         kind: DiagramKind,
         /// Output format: puml, svg, png, or mermaid (mermaid outputs .mmd text only)
@@ -77,7 +77,7 @@ enum Commands {
     Csv {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// CSV kind: actor, entity, or matrix
+        /// CSV kind: actor, entity, matrix, api, or api-matrix
         #[arg(long, default_value = "entity")]
         kind: CsvKind,
         #[arg(short, long, default_value = "out")]
@@ -87,7 +87,7 @@ enum Commands {
     List {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Element kind to list: actor, entity, buc, usecase
+        /// Element kind to list: actor, entity, buc, usecase, system, or api
         #[arg(long, default_value = "actor")]
         kind: ListKind,
         /// Output format: table, json, csv
@@ -115,9 +115,10 @@ enum Commands {
 
 #[derive(ValueEnum, Clone)]
 enum DiagramKind {
+    /// RDRA layered graph mapped onto the original RDRA-style structure
     Rdra,
-    /// RDRA Object Graph mapped onto the original layered structure
-    ObjectGraph,
+    /// Boundaryless relationship graph kept for dense link inspection
+    BoundarylessGraph,
     Er,
     State,
     /// Write-focused sequence diagram with FK-inferred transaction boundaries
@@ -274,7 +275,7 @@ fn main() -> Result<()> {
                     filter: Filter::Er,
                 },
                 DiagramKind::Rdra
-                | DiagramKind::ObjectGraph
+                | DiagramKind::BoundarylessGraph
                 | DiagramKind::State
                 | DiagramKind::Sequence
                 | DiagramKind::EventFlow => View {
@@ -307,16 +308,16 @@ fn main() -> Result<()> {
             // PlantUML/Mermaid どちらのエミッタを使うかを format で決定
             let diagram_text = match format {
                 OutputFormat::Mermaid => match kind {
-                    DiagramKind::Rdra => RdraMermaidEmitter.emit(&model, &view)?,
-                    DiagramKind::ObjectGraph => ObjectGraphMermaidEmitter.emit(&model, &view)?,
+                    DiagramKind::Rdra => ObjectGraphMermaidEmitter.emit(&model, &view)?,
+                    DiagramKind::BoundarylessGraph => RdraMermaidEmitter.emit(&model, &view)?,
                     DiagramKind::Er => ErMermaidEmitter.emit(&model, &view)?,
                     DiagramKind::State => StateMermaidEmitter.emit(&model, &view)?,
                     DiagramKind::Sequence => SequenceMermaidEmitter.emit(&model, &view)?,
                     DiagramKind::EventFlow => EventFlowMermaidEmitter.emit(&model, &view)?,
                 },
                 _ => match kind {
-                    DiagramKind::Rdra => RdraPlantUmlEmitter.emit(&model, &view)?,
-                    DiagramKind::ObjectGraph => ObjectGraphPlantUmlEmitter.emit(&model, &view)?,
+                    DiagramKind::Rdra => ObjectGraphPlantUmlEmitter.emit(&model, &view)?,
+                    DiagramKind::BoundarylessGraph => RdraPlantUmlEmitter.emit(&model, &view)?,
                     DiagramKind::Er => ErPlantUmlEmitter.emit(&model, &view)?,
                     DiagramKind::State => StateDiagramEmitter.emit(&model, &view)?,
                     DiagramKind::Sequence => SequenceDiagramEmitter.emit(&model, &view)?,

@@ -8,7 +8,9 @@ description: Analyze a BUC or the whole model for coverage gaps, state patterns,
 Run CLI commands to surface coverage gaps, state patterns, and consistency issues in a BUC or the whole model.
 
 When the user is refining a model incrementally, identify the current abstraction
-stage first and report the next information needed from the user.
+stage first and report the next information needed from the user. Interpret that stage
+as a shift from business concern to technical concern: first validate business value,
+actors, and use cases; then validate data, API/system boundaries, lifecycle, and rules.
 
 ### Quick analysis commands
 
@@ -72,15 +74,15 @@ Entity: Order (注文)
 
 | Current signal | Likely stage | Ask next |
 |----------------|--------------|----------|
-| BUCs exist but actors/use cases are sparse | Scope or BUC skeleton | actors and user-visible actions |
-| Use cases exist but CRUD matrix is empty | BUC skeleton | entities touched by each use case |
-| CRUD exists but sequence output has only `System` lane | Data touchpoints | screens and API boundaries |
-| APIs exist but no `system`/`contains(System, Api)` | Interaction boundary | API ownership/system boundaries |
-| `relate` crosses derived systems | Entity structure | coordinating use case and API calls on both sides |
-| Entities have only `id` columns | Data touchpoints | fields, keys, and relationships |
-| Entities have Enum/Bool/nullable columns but no state output changes | Entity structure | events, transitions, and `sets` effects |
-| `states` shows unreachable variants or unexpected terminals | Lifecycle | missing use cases, events, transitions, or effects |
-| Reachable states look stable | Lifecycle complete | forbidden states and invariants |
+| BUCs exist but actors/use cases are sparse | Scope or BUC skeleton (biz) | actors and user-visible actions |
+| Use cases exist but CRUD matrix is empty | BUC skeleton (biz) | entities touched by each use case |
+| CRUD exists but sequence output has only `System` lane | Data touchpoints (biz→tech) | screens and API boundaries |
+| APIs exist but no `system`/`contains(System, Api)` | Interaction boundary (tech) | API ownership/system boundaries |
+| `relate` crosses derived systems | Entity structure (tech) | coordinating use case and API calls on both sides |
+| Entities have only `id` columns | Data touchpoints (biz→tech) | fields, keys, and relationships |
+| Entities have Enum/Bool/nullable columns but no state output changes | Entity structure (tech) | events, transitions, and `sets` effects |
+| `states` shows unreachable variants or unexpected terminals | Lifecycle (tech) | missing use cases, events, transitions, or effects |
+| Reachable states look stable | Lifecycle complete (tech) | forbidden states and invariants |
 
 #### Coverage gaps
 

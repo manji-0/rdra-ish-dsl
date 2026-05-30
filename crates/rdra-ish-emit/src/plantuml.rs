@@ -254,7 +254,7 @@ impl Emitter for RdraPlantUmlEmitter {
     }
 }
 
-// ── RDRA Object Graph レイヤ図エミッタ ────────────────────────────────────────
+// ── RDRA レイヤ図エミッタ ────────────────────────────────────────────────────
 
 pub struct ObjectGraphPlantUmlEmitter;
 
@@ -1288,7 +1288,9 @@ creates(OrderApi, Order)
         assert!(result.contains("database \"🗄️ 注文\" as Order"));
         let boundary_pos = result.find("rectangle \"System Boundary\"").unwrap();
         let system_pos = result.find("rectangle \"System\"").unwrap();
-        let screen_pos = result.find("boundary \"🖥️ 注文画面\" as OrderScreen").unwrap();
+        let screen_pos = result
+            .find("boundary \"🖥️ 注文画面\" as OrderScreen")
+            .unwrap();
         let api_pos = result.find("control \"🔌 注文API\" as OrderApi").unwrap();
         assert!(boundary_pos < screen_pos);
         assert!(screen_pos < system_pos);

@@ -12,7 +12,7 @@
 
 | 種別 | 生成先 | 用途 |
 |---|---|---|
-| BUC 別 Layered Object Graph 図 | `out/buc/object_graph_*.mmd` | 各 BUC の actor/usecase/entity/screen/event を確認する |
+| BUC 別 RDRA Layered Graph 図 | `out/buc/object_graph_*.mmd` | 各 BUC の actor/usecase/entity/screen/event を確認する |
 | BUC 別 sequence 図 | `out/buc/sequence_*.mmd` | BUC 内 UC の画面、API、Entity 操作を確認する |
 | UC 別 sequence 図 | `out/uc/sequence_*.mmd` | 1 UC だけの actor/screen/API/entity を確認する |
 | API マトリクス | `out/api_matrix.csv` | API と Entity CRUD の棚卸し |
@@ -24,7 +24,7 @@
 生成コマンド例:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind object-graph --format mermaid --buc BucClinicalEncounter --out samples/clinic-ops/out/buc/object_graph_clinical_encounter
+rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucClinicalEncounter --out samples/clinic-ops/out/buc/object_graph_clinical_encounter
 rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucClinicalEncounter --out samples/clinic-ops/out/buc/sequence_clinical_encounter
 rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase SignEncounter --out samples/clinic-ops/out/uc/sequence_sign_encounter
 rdra-ish csv samples/clinic-ops --kind api-matrix --out samples/clinic-ops/out/api_matrix.csv
@@ -67,12 +67,12 @@ rdra-ish csv samples/clinic-ops --kind api-matrix --out samples/clinic-ops/out/a
 - EligibilityApi が保険確認結果と保険ポリシー更新を同じ整合性境界で扱ってよいか。
 - SendIntakeForms は予約イベントから起動されるため、予約 BUC 側の責務と混同しないか。
 
-#### Patient Onboarding Layered Object Graph 図
+#### Patient Onboarding RDRA Layered Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind object-graph --format mermaid --buc BucPatientOnboarding --out samples/clinic-ops/out/buc/object_graph_patient_onboarding
+rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucPatientOnboarding --out samples/clinic-ops/out/buc/object_graph_patient_onboarding
 ```
 
 ```mermaid
@@ -345,12 +345,12 @@ sequenceDiagram
 - CancelAppointment が Appointment と ProviderSchedule を同じ API 境界で更新することが妥当か。
 - MarkNoShow は direct CRUD のままでよいか。
 
-#### Appointment Scheduling Layered Object Graph 図
+#### Appointment Scheduling RDRA Layered Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind object-graph --format mermaid --buc BucAppointmentScheduling --out samples/clinic-ops/out/buc/object_graph_appointment_scheduling
+rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucAppointmentScheduling --out samples/clinic-ops/out/buc/object_graph_appointment_scheduling
 ```
 
 ```mermaid
@@ -605,12 +605,12 @@ sequenceDiagram
 - CheckInPatient は予約と患者アカウントを同時更新する必要があるか。
 - AssignRoom は Room と Appointment を同じ API 境界で更新することでよいか。
 
-#### Visit Check-In Layered Object Graph 図
+#### Visit Check-In RDRA Layered Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind object-graph --format mermaid --buc BucVisitCheckIn --out samples/clinic-ops/out/buc/object_graph_visit_check_in
+rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucVisitCheckIn --out samples/clinic-ops/out/buc/object_graph_visit_check_in
 ```
 
 ```mermaid
@@ -820,12 +820,12 @@ sequenceDiagram
 - CompleteAppointment は診療署名イベントから自動的に起動される業務か。
 - AmendEncounter が署名済み記録の修正として十分な粒度か。
 
-#### Clinical Encounter Layered Object Graph 図
+#### Clinical Encounter RDRA Layered Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind object-graph --format mermaid --buc BucClinicalEncounter --out samples/clinic-ops/out/buc/object_graph_clinical_encounter
+rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucClinicalEncounter --out samples/clinic-ops/out/buc/object_graph_clinical_encounter
 ```
 
 ```mermaid
@@ -1069,12 +1069,12 @@ sequenceDiagram
 - NotifyCriticalResult は結果確認イベントから起動されるため、手動 UC と自動 UC の違いをレビューできるか。
 - CancelClinicalOrder は direct CRUD のままでよいか。
 
-#### Orders and Results Layered Object Graph 図
+#### Orders and Results RDRA Layered Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind object-graph --format mermaid --buc BucOrdersResults --out samples/clinic-ops/out/buc/object_graph_orders_results
+rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucOrdersResults --out samples/clinic-ops/out/buc/object_graph_orders_results
 ```
 
 ```mermaid
@@ -1288,12 +1288,12 @@ sequenceDiagram
 - RefillPrescription が新しい Prescription を作成する設計でよいか。
 - ConfirmDispense は外部通知イベントとして扱うべきか。
 
-#### Prescription Fulfillment Layered Object Graph 図
+#### Prescription Fulfillment RDRA Layered Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind object-graph --format mermaid --buc BucPrescriptionFulfillment --out samples/clinic-ops/out/buc/object_graph_prescription_fulfillment
+rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucPrescriptionFulfillment --out samples/clinic-ops/out/buc/object_graph_prescription_fulfillment
 ```
 
 ```mermaid
@@ -1479,12 +1479,12 @@ sequenceDiagram
 - GenerateClaim と SubmitClaim を分ける必要があるか。
 - PostPayment と ReconcileBalance の責務境界が明確か。
 
-#### Billing Claims Layered Object Graph 図
+#### Billing Claims RDRA Layered Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind object-graph --format mermaid --buc BucBillingClaims --out samples/clinic-ops/out/buc/object_graph_billing_claims
+rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucBillingClaims --out samples/clinic-ops/out/buc/object_graph_billing_claims
 ```
 
 ```mermaid
@@ -1711,12 +1711,12 @@ sequenceDiagram
 - ScheduleFollowUpVisit は予約 BUC に移すべきか、フォローアップ BUC に置くべきか。
 - 患者応答を PatientMessage の状態として扱うだけで足りるか。
 
-#### Follow-Up Care Layered Object Graph 図
+#### Follow-Up Care RDRA Layered Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind object-graph --format mermaid --buc BucFollowupCare --out samples/clinic-ops/out/buc/object_graph_followup_care
+rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucFollowupCare --out samples/clinic-ops/out/buc/object_graph_followup_care
 ```
 
 ```mermaid
@@ -1923,12 +1923,12 @@ sequenceDiagram
 - ReviewAuditEvents は read-only API として十分か。
 - ResolveAuditFinding は direct CRUD のままでよいか。
 
-#### Staff Administration Layered Object Graph 図
+#### Staff Administration RDRA Layered Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind object-graph --format mermaid --buc BucStaffAdministration --out samples/clinic-ops/out/buc/object_graph_staff_administration
+rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucStaffAdministration --out samples/clinic-ops/out/buc/object_graph_staff_administration
 ```
 
 ```mermaid
@@ -4758,7 +4758,7 @@ Entity: Claim (Claim)
 
 ## 7. レビュー手順
 
-1. BUC 単位の Layered Object Graph 図でスコープと actor/usecase を確認する。
+1. BUC 単位の RDRA Layered Graph 図でスコープと actor/usecase を確認する。
 2. BUC 単位の sequence 図で、その BUC 内の UC と API 境界を確認する。
 3. 論点のある UC は UC 単位 sequence 図で個別に確認する。
 4. Event flow で BUC 間連鎖を確認する。

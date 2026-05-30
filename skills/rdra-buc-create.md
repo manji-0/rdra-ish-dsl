@@ -9,20 +9,22 @@ Given a requirement or feature description, produce a complete, validated BUC `.
 
 If the requirement is abstract, create only the next useful stage instead of forcing a
 complete model. Use `docs/incremental-modeling.md` as the reference flow.
+Treat creation as business-to-technical refinement: model value and actors before
+adding data touchpoints, UI/API boundaries, entity structure, lifecycle, or rules.
 
 ### Stage gate
 
 Before writing, classify the available information:
 
-| If the user provided... | Create now | Ask before adding... |
-|-------------------------|------------|----------------------|
-| BUC name and business goal | `buc`, `belongs` | actors and use cases |
-| actors and actions | `performs`, `usecase`, `contains` | entities and CRUD |
-| touched business objects | coarse `entity`, CRUD predicates | screens and APIs |
-| screens/API boundaries | `screen`, `api`, `system`, `displays`, `shows`, `invokes` | columns, relationships, cross-system coordination |
-| fields and relationships | columns, `relate` | lifecycle states/events |
-| lifecycle states/events | `state`, `event`, `transitions`, `raises`, `sets` | constraints |
-| invalid/required combinations | `forbidden`, `invariant` | none; validate diagnostics |
+| If the user provided... | Concern | Create now | Ask before adding... |
+|-------------------------|---------|------------|----------------------|
+| BUC name and business goal | Biz intent | `buc`, `belongs` | actors and use cases |
+| actors and actions | Biz value | `performs`, `usecase`, `contains` | entities and CRUD |
+| touched business objects | Biz object touchpoints | coarse `entity`, CRUD predicates | screens and APIs |
+| screens/API boundaries | Tech interaction boundary | `screen`, `api`, `system`, `displays`, `shows`, `invokes` | columns, relationships, cross-system coordination |
+| fields and relationships | Tech data design | columns, `relate` | lifecycle states/events |
+| lifecycle states/events | Tech lifecycle design | `state`, `event`, `transitions`, `raises`, `sets` | constraints |
+| invalid/required combinations | Tech-enforced rules | `forbidden`, `invariant` | none; validate diagnostics |
 
 Ask only the questions needed to advance one row. Do not invent detailed columns,
 state machines, or API endpoints just to make the BUC look complete.

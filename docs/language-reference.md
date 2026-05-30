@@ -40,7 +40,7 @@ An instance declaration introduces a named element:
 | `state` | A state machine node, linked to an entity's Enum column. |
 | `condition` | A condition. |
 | `variation` | A variation. |
-| `api` | An API layer endpoint invoked by a use case; operates entities on behalf of the use case and defines an atomic data operation boundary. Appears in the sequence diagram as a named API lane, but is intentionally omitted from the RDRA overview. |
+| `api` | An API layer endpoint invoked by a use case; operates entities on behalf of the use case and defines an atomic data operation boundary. Appears in the RDRA layered graph and sequence diagram as a named API lane, but is intentionally omitted from the boundaryless graph. |
 
 ---
 
@@ -179,7 +179,10 @@ updates(PlaceOrder, Cart)   // direct write still allowed (mixed form)
   because the ownership boundary is ambiguous.
 
 **Other diagrams**:
-- `api` nodes are intentionally **omitted from the RDRA overview** (`--kind rdra`).
+- `api` nodes are included in the RDRA layered graph (`--kind rdra`), where they appear
+  in the system layer.
+- `api` nodes are intentionally omitted from the boundaryless relationship graph
+  (`--kind boundaryless-graph`) to keep that view focused on business and data links.
 - `api` nodes are also omitted from the event-flow diagram (`--kind event-flow`),
   because an API is not a participant in the raises/triggers/transitions causal chain.
 

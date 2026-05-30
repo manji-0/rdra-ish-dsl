@@ -242,7 +242,7 @@ impl Emitter for RdraMermaidEmitter {
     }
 }
 
-// ── RDRA Object Graph レイヤ図エミッタ (Mermaid) ─────────────────────────────
+// ── RDRA レイヤ図エミッタ (Mermaid) ─────────────────────────────────────────
 
 pub struct ObjectGraphMermaidEmitter;
 
@@ -1203,7 +1203,9 @@ creates(OrderApi, Order)
         assert!(result.contains("OrderScreen[[\"🖥️ 注文画面\"]]"));
         assert!(result.contains("OrderApi[\"🔌 注文API\"]"));
         assert!(result.contains("Order[(\"🗄️ 注文\")]"));
-        let boundary_pos = result.find("subgraph layer_boundary[System Boundary]").unwrap();
+        let boundary_pos = result
+            .find("subgraph layer_boundary[System Boundary]")
+            .unwrap();
         let system_pos = result.find("subgraph layer_system[System]").unwrap();
         let screen_pos = result.find("OrderScreen[[\"🖥️ 注文画面\"]]").unwrap();
         let api_pos = result.find("OrderApi[\"🔌 注文API\"]").unwrap();

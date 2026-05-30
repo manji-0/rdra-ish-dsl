@@ -32,17 +32,17 @@ forbidden と invariant で状態制約を追加する。
 
 ```sh
 rdra-ish check samples/incremental-order/step-6-business-rules/src
-rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind object-graph --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-6-business-rules/out/object_graph_buc_store_restock
+rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-6-business-rules/out/object_graph_buc_store_restock
 rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-6-business-rules/out/sequence_buc_store_restock
 rdra-ish csv samples/incremental-order/step-6-business-rules/src --kind matrix --out samples/incremental-order/step-6-business-rules/out/usecase_matrix.csv
 ```
 
-### 4.1 Layered Object Graph 図
+### 4.1 RDRA Layered Graph 図
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind object-graph --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-6-business-rules/out/object_graph_buc_store_restock
+rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-6-business-rules/out/object_graph_buc_store_restock
 ```
 
 ```mermaid

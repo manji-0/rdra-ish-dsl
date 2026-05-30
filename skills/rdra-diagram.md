@@ -1,6 +1,6 @@
 ---
 name: rdra-diagram
-description: Generate RDRA DSL diagrams (RDRA overview, ER, state, sequence) in Mermaid or PlantUML format, choosing diagrams by refinement stage
+description: Generate RDRA DSL diagrams (RDRA layered graph, boundaryless graph, ER, state, sequence) in Mermaid or PlantUML format, choosing diagrams by refinement stage
 ---
 
 ## Generate diagrams
@@ -8,25 +8,27 @@ description: Generate RDRA DSL diagrams (RDRA overview, ER, state, sequence) in 
 Choose the diagram kind and format, apply BUC filters if needed, and generate output.
 
 For incremental modeling, choose the diagram that matches the current abstraction
-stage instead of generating every view.
+stage instead of generating every view. The early views should answer business
+questions first; later views expose technical boundaries, persistence, lifecycle, and
+rules.
 
 ### Refinement-stage diagram guide
 
-| Stage | Use first | Purpose |
-|-------|-----------|---------|
-| Scope / BUC skeleton | `rdra --buc <BucId>` | actor, BUC, and use-case coverage |
-| Data touchpoints | `rdra --buc <BucId>` plus `er --buc <BucId>` | CRUD-connected entities |
-| Interaction boundary | `sequence --buc <BucId>` | actor/screen/API/entity path |
-| Entity structure | `er` | columns, PK/FK, and cardinality |
-| Lifecycle | `state --buc <BucId>` and `event-flow` | states, events, transitions, triggers |
-| Business rules | no new diagram first; run `states` | validate constraints before visual polish |
+| Stage | Concern | Use first | Purpose |
+|-------|---------|-----------|---------|
+| Scope / BUC skeleton | Biz intent/value | `rdra --buc <BucId>` | actor, BUC, and use-case coverage |
+| Data touchpoints | Biz object touchpoints | `rdra --buc <BucId>` plus `er --buc <BucId>` | CRUD-connected entities |
+| Interaction boundary | Tech interaction boundary | `sequence --buc <BucId>` | actor/screen/API/entity path |
+| Entity structure | Tech data design | `er` | columns, PK/FK, and cardinality |
+| Lifecycle | Tech lifecycle design | `state --buc <BucId>` and `event-flow` | states, events, transitions, triggers |
+| Business rules | Tech-enforced rules | no new diagram first; run `states` | validate constraints before visual polish |
 
 ### Diagram kind guide
 
 | Need | Kind | What it shows |
 |------|------|---------------|
-| Overview of actors, BUCs, UCs, systems, screens, events | `rdra` | Full RDRA relationship graph (API nodes omitted by design) |
-| RDRA original-style layered Object Graph | `object-graph` | Maps model nodes onto system value, external environment, boundary, and system layers |
+| RDRA original-style layered graph | `rdra` | Maps model nodes onto system value, external environment, boundary, and system layers |
+| Dense relationship inspection without layers | `boundaryless-graph` | Flat graph of business/data relationships; API nodes omitted by design |
 | Database table structure and relationships | `er` | Entities, columns, FK relationships |
 | Entity lifecycle | `state` | State nodes and transition events |
 | Write operations and transaction boundaries | `sequence` | Sequence of writes per use case; shows `Actor→Screen→API→Entity` lanes when `invokes` is used |
@@ -46,19 +48,19 @@ Default to `mermaid` unless the user asks for a rendered image.
 ### Commands
 
 ```sh
-# RDRA overview — whole model
+# RDRA layered graph — whole model
 rdra-ish diagram src/ --kind rdra --format mermaid
 
-# Layered Object Graph — whole model
-rdra-ish diagram src/ --kind object-graph --format mermaid
+# Boundaryless relationship graph — whole model
+rdra-ish diagram src/ --kind boundaryless-graph --format mermaid
 
-# RDRA overview — scoped to one BUC
+# RDRA layered graph — scoped to one BUC
 rdra-ish diagram src/ --kind rdra --buc <BucId> --format mermaid
 
-# Layered Object Graph — scoped to one BUC
-rdra-ish diagram src/ --kind object-graph --buc <BucId> --format mermaid
+# Boundaryless relationship graph — scoped to one BUC
+rdra-ish diagram src/ --kind boundaryless-graph --buc <BucId> --format mermaid
 
-# RDRA overview — union of multiple BUCs
+# RDRA layered graph — union of multiple BUCs
 rdra-ish diagram src/ --kind rdra --buc <BucA> --buc <BucB> --format mermaid
 
 # ER diagram — whole model
@@ -92,7 +94,12 @@ PLANTUML_JAR=/path/to/plantuml.jar rdra-ish diagram src/ --kind rdra --format sv
 Object labels include kind prefixes such as `👤` actor, `📦` BUC, `✅` usecase,
 `🖥️` screen, `🔌` API, `🗄️` entity, `⚡` event, and `🔄` state. IDs stay unchanged.
 
-**RDRA graph (`--kind rdra`)**
+**RDRA layered graph (`--kind rdra`)**
+- Four vertical layers = system value, system external environment, system boundary, system
+- `api` nodes are included in the system layer; screens and use cases stay in the system boundary layer
+- Dashed arrows = interaction / CRUD / event / lifecycle relationships
+
+**Boundaryless relationship graph (`--kind boundaryless-graph`)**
 - Rounded box = Actor
 - Rectangle = BUC or UseCase
 - Database cylinder = Entity
@@ -100,11 +107,6 @@ Object labels include kind prefixes such as `👤` actor, `📦` BUC, `✅` usec
 - Diamond = Event
 - Solid arrow = `performs` / `contains`
 - Dashed arrow = CRUD / `displays` / `raises`
-
-**Layered Object Graph (`--kind object-graph`)**
-- Four vertical layers = system value, system external environment, system boundary, system
-- `api` nodes are included in the system boundary layer
-- Dashed arrows = interaction / CRUD / event / lifecycle relationships
 
 **ER diagram (`--kind er`)**
 - Each entity box lists columns with PK/FK markers
@@ -124,11 +126,8 @@ Object labels include kind prefixes such as `👤` actor, `📦` BUC, `✅` usec
 - Shaded `rect` = transaction group. The note distinguishes `inferred from FK` from `API atomic boundary`
 - `Note right of ...: FK非連結` = entities written outside a common FK chain — consider modeling them through an API boundary
 
-**RDRA overview (`--kind rdra`)**
-- `api` nodes are intentionally omitted; system nodes are shown as ownership boundaries
-
-**Layered Object Graph (`--kind object-graph`)**
-- Use this when you want the original RDRA-style layer structure rather than a flat graph
+**Boundaryless relationship graph (`--kind boundaryless-graph`)**
+- Use this when you want a flat graph for dense link inspection rather than the RDRA-style layer structure.
 
 ### Tips
 
