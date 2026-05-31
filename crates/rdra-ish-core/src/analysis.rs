@@ -131,7 +131,7 @@ fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
         "displays" => Some(vec![vec!["usecase"], vec!["screen"]]),
         "shows" => Some(vec![vec!["screen"], vec!["entity"]]),
         "raises" => Some(vec![vec!["usecase"], vec!["event"]]),
-        "triggers" => Some(vec![vec!["event"], vec!["usecase"]]),
+        "triggers" => Some(vec![vec!["event"], vec!["usecase", "buc"]]),
         "contains" => Some(vec![vec!["buc", "system"], vec!["usecase", "api"]]),
         "coordinates" => Some(vec![vec!["usecase"], vec!["entity"], vec!["entity"]]),
         "belongs" => Some(vec![vec!["buc"], vec!["business"]]),

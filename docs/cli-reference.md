@@ -1,7 +1,8 @@
 # CLI Reference
 
-The `rdra-ish` command-line tool parses `.rdra` sources, type-checks them, and produces
-diagrams, CSV, listings, and state-pattern derivations.
+The `rdra-ish` command-line tool parses `.rdra` sources, type-checks them, runs
+model-consistency checks, and produces diagrams, CSV, listings, and state-pattern
+derivations.
 
 ```
 rdra-ish <SUBCOMMAND> <INPUTS...> [OPTIONS]
@@ -20,14 +21,27 @@ print diagnostics and still produce output; `check` exits non-zero on any error.
 
 ## `check`
 
-Parse and type-check only; produce no output.
+Parse, type-check, and run whole-model consistency checks; produce no artifact output.
 
 ```
 rdra-ish check <INPUTS...>
 ```
 
 Prints each diagnostic to stderr. If any error (non-warning) is present, exits with
-status `1`. Otherwise prints `OK: no errors` and exits `0`.
+status `1` before running secondary consistency checks. Otherwise it reports unresolved
+model warnings and prints `OK: no errors`.
+
+`check` includes the same broad review signals exposed elsewhere:
+
+- actor permission coverage for `requires_permission` on use cases and invoked APIs,
+  including missing and excess actor-side assignments inferred from performer paths;
+- API invocation and API entity-operation gaps;
+- system boundary derivation and cross-system entity coordination gaps;
+- FK/API transaction-boundary warnings;
+- event-flow gaps, including events that are never raised, raised events that trigger
+  no transition/use case/BUC, or triggered use cases with no containing BUC;
+- state-pattern warnings, including missing creation paths, unreachable enum variants,
+  forbidden reachable states, invariant violations, and pattern truncation.
 
 | Argument | Type | Description |
 |---|---|---|
@@ -46,7 +60,7 @@ rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]...
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `rdra` \| `boundaryless-graph` \| `er` \| `state` \| `sequence` \| `event-flow` | `rdra` | The diagram kind. `rdra` = RDRA layered graph mapped onto the original four-layer structure; `boundaryless-graph` = dense relationship graph without RDRA layer boundaries; `er` = entity-relationship diagram; `state` = state machine; `sequence` = write-focused sequence diagram with FK-inferred transaction boundaries; `event-flow` = event causality graph showing UC→Event→UC and Event→State chains. |
+| `--kind` | `rdra` \| `boundaryless-graph` \| `er` \| `state` \| `sequence` \| `event-flow` | `rdra` | The diagram kind. `rdra` = RDRA layered graph mapped onto the original four-layer structure; `boundaryless-graph` = dense relationship graph without RDRA layer boundaries; `er` = entity-relationship diagram; `state` = state machine; `sequence` = write-focused sequence diagram with FK-inferred transaction boundaries; `event-flow` = event causality graph showing UC->Event->UC/BUC and Event->State chains. |
 | `--format` | `puml` \| `svg` \| `png` \| `mermaid` | `puml` | Output format. `puml` writes PlantUML text (`.puml`); `mermaid` writes Mermaid text (`.mmd`); `svg` / `png` render via plantuml.jar. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Filter to one or more BUCs by id. With multiple ids, the **union** of reachable nodes across the named BUCs is shown. Applies to all diagram kinds. For `sequence`, only use cases directly contained in the selected BUCs are shown; event-triggered use cases in other BUCs are left to `event-flow`. |
 | `--usecase <id>` | string (repeatable) | — (whole model) | Filter `sequence` diagrams to one or more use cases by id. Cannot be combined with `--buc`. |
@@ -63,8 +77,9 @@ Notes:
   `ApiInvokedButNoEntity`) are also run and reported as warnings.
 - For `--kind event-flow`, the tool runs event-integrity diagnostics and emits `warning:`
   lines for events that are never raised, raised but consume nothing, or trigger a use
-  case belonging to no BUC. Mermaid node IDs are prefixed (`ev__`, `uc__`, `st__`) to
-  avoid collisions when a use case and an event share the same DSL identifier.
+  case belonging to no BUC. Event targets may be either BUCs or use cases. Mermaid node
+  IDs are prefixed (`ev__`, `uc__`, `buc__`, `st__`) to avoid collisions when model
+  elements share the same DSL identifier.
 - For `--kind sequence`, participant lifelines are grouped into RDRA-style layer boxes:
   system value (`actor`), system boundary (`screen`, `api`), and system (`system`,
   `entity`). The use case itself remains the sequence section title.
@@ -92,7 +107,7 @@ rdra-ish csv <INPUTS...> [--kind <KIND>] [-o <OUT>]
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `actor` \| `entity` \| `matrix` \| `api` \| `api-matrix` \| `screen-constraints` \| `permission-callables` | `entity` | CSV kind. `actor` = actor list; `entity` = entity/column list; `matrix` = use-case × entity CRUD matrix; `api` = API list; `api-matrix` = API × entity CRUD matrix; `screen-constraints` = screen × UC/API permission/medium paths; `permission-callables` = permission × callable UC/API list derived from `requires_permission`. |
+| `--kind` | `actor` \| `entity` \| `matrix` \| `api` \| `api-matrix` \| `screen-constraints` \| `permission-callables` \| `actor-permission-audit` | `entity` | CSV kind. `actor` = actor list; `entity` = entity/column list; `matrix` = use-case × entity CRUD matrix; `api` = API list; `api-matrix` = API × entity CRUD matrix; `screen-constraints` = screen × UC/API permission/medium paths; `permission-callables` = permission × callable UC/API list derived from `requires_permission`; `actor-permission-audit` = actor × permission assignment audit inferred from UC/API requirements. |
 | `-o`, `--out` | path | `out` | Output file path. If no extension is given, a default is appended (`actor.csv` / `entity.csv` / `matrix.csv` / etc.). |
 
 The command writes the CSV to the output path and prints `wrote <path>`.
@@ -110,7 +125,7 @@ rdra-ish list <INPUTS...> [--kind <KIND>] [--format <FORMAT>]
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `actor` \| `entity` \| `buc` \| `usecase` \| `api` \| `permission-callables` | `actor` | The element kind to list. `actor` / `buc` / `usecase` / `api` list id+label; `entity` lists each column with its type and PK/FK flags; `permission-callables` lists each permission with callable use case and API ids derived from `requires_permission`. |
+| `--kind` | `actor` \| `entity` \| `buc` \| `usecase` \| `system` \| `api` \| `permission-callables` \| `actor-permission-audit` | `actor` | The element kind to list. `actor` / `buc` / `usecase` / `system` / `api` list id+label; `entity` lists each column with its type and PK/FK flags; `permission-callables` lists each permission with callable use case and API ids derived from `requires_permission`; `actor-permission-audit` lists inferred actor-side assignment gaps. |
 | `--format` | `table` \| `json` \| `csv` | `table` | Output format. |
 
 Output is written to stdout.

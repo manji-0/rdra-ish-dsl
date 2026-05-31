@@ -7,66 +7,175 @@ flowchart LR
   subgraph layer_environment[External Environment]
     direction TB
     CareDelivery["💼 Care Delivery"]
+    PatientAccess["💼 Patient Access"]
+    RevenueCycle["💼 Revenue Cycle"]
+    BucBillingClaims["📦 Bill and Collect Claims"]
     BucClinicalEncounter["📦 Conduct Clinical Encounter"]
+    BucFollowupCare["📦 Coordinate Follow-Up Care"]
+    BucOrdersResults["📦 Manage Orders and Results"]
+    BucPatientOnboarding["📦 Onboard and Maintain Patient"]
     BillingWorkstation[/"📱 Billing Workstation"/]
     CareCoordinationConsole[/"📱 Care Coordination Console"/]
     ClinicalWorkstation[/"📱 Clinical Workstation"/]
+    FrontDeskTerminal[/"📱 Front Desk Terminal"/]
     NurseStation[/"📱 Nurse Station"/]
+    PatientMobile[/"📱 Patient Mobile"/]
     BillingClaimWrite["🔑 Billing Claim Write"]
     ClinicalDocument["🔑 Clinical Document"]
     ClinicalOrderWrite["🔑 Clinical Order Write"]
+    ConsentCapture["🔑 Consent Capture"]
     EncounterOpen["🔑 Encounter Open"]
     EncounterSign["🔑 Encounter Sign"]
     FollowUpManage["🔑 Follow-Up Manage"]
+    InsuranceVerify["🔑 Insurance Verify"]
+    IntakeManage["🔑 Intake Manage"]
+    LabResultManage["🔑 Lab Result Manage"]
+    PatientMessageSend["🔑 Patient Message Send"]
+    PatientProfileRead["🔑 Patient Profile Read"]
+    PatientProfileWrite["🔑 Patient Profile Write"]
+    PaymentPost["🔑 Payment Post"]
+    ScheduleRead["🔑 Schedule Read"]
+    ScheduleWrite["🔑 Schedule Write"]
     VitalsRecord["🔑 Vitals Record"]
   end
   subgraph layer_boundary[System Boundary]
     direction TB
     AmendEncounter(["✅ Amend Signed Encounter"])
+    ArchivePatient(["✅ Archive Patient"])
+    CancelClinicalOrder(["✅ Cancel Clinical Order"])
+    CaptureConsent(["✅ Capture Consent"])
+    CloseCarePlan(["✅ Close Care Plan"])
+    CollectSpecimen(["✅ Collect Specimen"])
     CompleteAppointment(["✅ Complete Appointment"])
+    CompleteIntakeForms(["✅ Complete Intake Forms"])
     CreateCarePlan(["✅ Create Care Plan"])
     CreateCharge(["✅ Create Charge"])
     DocumentAssessment(["✅ Document Assessment"])
+    ExpireIntakeForms(["✅ Expire Intake Forms"])
+    GenerateClaim(["✅ Generate Claim"])
+    MergeDuplicatePatient(["✅ Merge Duplicate Patient"])
+    NotifyCriticalResult(["✅ Notify Critical Result"])
+    NotifyPatientResult(["✅ Notify Patient Result"])
     OpenEncounter(["✅ Open Encounter"])
     PlaceLabOrder(["✅ Place Lab Order"])
+    PostPayment(["✅ Post Payment"])
+    ReceiveClaimAccepted(["✅ Receive Claim Accepted"])
+    ReceiveLabResult(["✅ Receive Lab Result"])
+    ReconcileBalance(["✅ Reconcile Balance"])
+    RecordClaimDenial(["✅ Record Claim Denial"])
     RecordVitals(["✅ Record Vitals"])
+    RegisterPatient(["✅ Register Patient"])
+    ReviewLabResult(["✅ Review Lab Result"])
+    ReviewPatientResponse(["✅ Review Patient Response"])
+    ScheduleFollowUpVisit(["✅ Schedule Follow-Up Visit"])
+    SearchPatient(["✅ Search Patient"])
+    SendAppointmentNotice(["✅ Send Appointment Notice"])
+    SendFollowUpMessage(["✅ Send Follow-Up Message"])
+    SendIntakeForms(["✅ Send Intake Forms"])
     SignEncounter(["✅ Sign Encounter"])
+    SubmitClaim(["✅ Submit Claim"])
+    UpdateDemographics(["✅ Update Demographics"])
+    VerifyInsurance(["✅ Verify Insurance"])
+    VoidCharge(["✅ Void Charge"])
+    AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
+    BalanceScreen[["🖥️ Balance Screen"]]
     CarePlanScreen[["🖥️ Care Plan Screen"]]
     ChargeWorklistScreen[["🖥️ Charge Worklist Screen"]]
+    ClaimScreen[["🖥️ Claim Screen"]]
+    ConsentScreen[["🖥️ Consent Capture Screen"]]
+    CriticalNoticeScreen[["🖥️ Critical Result Notice Screen"]]
     DiagnosisScreen[["🖥️ Diagnosis Screen"]]
     EncounterWorkspaceScreen[["🖥️ Encounter Workspace"]]
+    FollowUpScheduleScreen[["🖥️ Follow-Up Schedule Screen"]]
+    InsuranceScreen[["🖥️ Insurance Verification Screen"]]
+    IntakePortalScreen[["🖥️ Intake Portal Screen"]]
     OrderEntryScreen[["🖥️ Order Entry Screen"]]
+    PatientMessageScreen[["🖥️ Patient Message Screen"]]
+    PatientProfileScreen[["🖥️ Patient Profile Screen"]]
+    PatientSearchScreen[["🖥️ Patient Search Screen"]]
+    PaymentPostingScreen[["🖥️ Payment Posting Screen"]]
+    ResultReviewScreen[["🖥️ Result Review Screen"]]
+    SpecimenScreen[["🖥️ Specimen Collection Screen"]]
     VitalsScreen[["🖥️ Vitals Screen"]]
     EvAppointmentCompleted{"⚡ Appointment Completed"}
+    EvAppointmentScheduled{"⚡ Appointment Scheduled"}
+    EvCarePlanClosed{"⚡ Care Plan Closed"}
+    EvCarePlanMonitoring{"⚡ Care Plan Monitoring"}
+    EvClaimAccepted{"⚡ Claim Accepted"}
+    EvClaimDenied{"⚡ Claim Denied"}
+    EvClaimPaid{"⚡ Claim Paid"}
+    EvClaimSubmitted{"⚡ Claim Submitted"}
+    EvClinicalOrderCancelled{"⚡ Clinical Order Cancelled"}
+    EvClinicalOrderCollected{"⚡ Specimen Collected"}
+    EvClinicalOrderResulted{"⚡ Clinical Result Received"}
+    EvClinicalOrderReviewed{"⚡ Clinical Result Reviewed"}
     EvEncounterAmended{"⚡ Encounter Amended"}
     EvEncounterDocumented{"⚡ Encounter Documented"}
     EvEncounterSigned{"⚡ Encounter Signed"}
+    EvIntakeCompleted{"⚡ Intake Completed"}
+    EvIntakeExpired{"⚡ Intake Expired"}
+    EvPatientArchived{"⚡ Patient Archived"}
+    EvPatientMerged{"⚡ Patient Merged"}
   end
   subgraph layer_system[System]
     direction TB
     AmendEncounterApi["🔌 Amend Encounter API"]
+    AppointmentNoticeApi["🔌 Appointment Notice API"]
+    BalanceApi["🔌 Balance API"]
+    CollectSpecimenApi["🔌 Collect Specimen API"]
     CompleteAppointmentApi["🔌 Complete Appointment API"]
+    ConsentApi["🔌 Consent API"]
     CreateCarePlanApi["🔌 Create Care Plan API"]
     CreateChargeApi["🔌 Create Charge API"]
+    CriticalNoticeApi["🔌 Critical Notice API"]
     DocumentAssessmentApi["🔌 Document Assessment API"]
+    EligibilityApi["🔌 Eligibility API"]
+    FollowUpScheduleApi["🔌 Follow-Up Schedule API"]
+    GenerateClaimApi["🔌 Generate Claim API"]
+    IntakeMessagingApi["🔌 Intake Messaging API"]
+    NotifyPatientResultApi["🔌 Notify Patient Result API"]
     OpenEncounterApi["🔌 Open Encounter API"]
     OrderEntryApi["🔌 Order Entry API"]
+    PaymentPostApi["🔌 Payment Posting API"]
+    ReceiveLabResultApi["🔌 Receive Lab Result API"]
     RecordVitalsApi["🔌 Record Vitals API"]
+    RegisterPatientApi["🔌 Register Patient API"]
+    ResultReviewApi["🔌 Result Review API"]
+    SearchPatientApi["🔌 Search Patient API"]
+    SendFollowUpMessageApi["🔌 Send Follow-Up Message API"]
     SignEncounterApi["🔌 Sign Encounter API"]
+    SubmitClaimApi["🔌 Submit Claim API"]
+    UpdateDemographicsApi["🔌 Update Demographics API"]
     AccountBalance[("🗄️ Account Balance")]
     Appointment[("🗄️ Appointment")]
     CarePlan[("🗄️ Care Plan")]
     Charge[("🗄️ Charge")]
+    Claim[("🗄️ Claim")]
     ClinicalOrder[("🗄️ Clinical Order")]
+    ConsentRecord[("🗄️ Consent Record")]
     Diagnosis[("🗄️ Diagnosis")]
+    EligibilityCheck[("🗄️ Eligibility Check")]
     Encounter[("🗄️ Encounter")]
+    InsurancePolicy[("🗄️ Insurance Policy")]
+    IntakePacket[("🗄️ Intake Packet")]
+    LabResult[("🗄️ Lab Result")]
+    Notification[("🗄️ Notification")]
+    PatientAccount[("🗄️ Patient Account")]
+    PatientMessage[("🗄️ Patient Message")]
+    PatientProfile[("🗄️ Patient Profile")]
+    PaymentTransaction[("🗄️ Payment Transaction")]
+    ProviderSchedule[("🗄️ Provider Schedule")]
     Room[("🗄️ Room")]
     VitalSign[("🗄️ Vital Sign")]
   end
   Nurse -.->|has_permission| EncounterOpen
   Nurse -.->|has_permission| VitalsRecord
   Nurse -.->|has_permission| ClinicalOrderWrite
+  Nurse -.->|has_permission| LabResultManage
+  Nurse -->|performs| BucOrdersResults
   Nurse -->|performs| BucClinicalEncounter
+  Nurse -->|performs| CollectSpecimen
+  Nurse -->|performs| ReceiveLabResult
   Nurse -->|performs| OpenEncounter
   Nurse -->|performs| RecordVitals
   Nurse -->|performs| CompleteAppointment
@@ -74,14 +183,35 @@ flowchart LR
   Clinician -.->|has_permission| ClinicalDocument
   Clinician -.->|has_permission| EncounterSign
   Clinician -.->|has_permission| ClinicalOrderWrite
+  Clinician -.->|has_permission| LabResultManage
+  Clinician -->|performs| BucOrdersResults
   Clinician -->|performs| BucClinicalEncounter
   Clinician -->|performs| PlaceLabOrder
+  Clinician -->|performs| ReviewLabResult
+  Clinician -->|performs| NotifyCriticalResult
+  Clinician -->|performs| CancelClinicalOrder
   Clinician -->|performs| DocumentAssessment
   Clinician -->|performs| SignEncounter
   Clinician -->|performs| AmendEncounter
+  ConsentApi -.->|creates| ConsentRecord
+  ConsentApi -.->|requires_permission| ConsentCapture
+  IntakeMessagingApi -.->|creates| PatientMessage
+  IntakeMessagingApi -.->|creates| IntakePacket
+  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
   OrderEntryApi -.->|creates| ClinicalOrder
   OrderEntryApi -.->|reads| Encounter
   OrderEntryApi -.->|requires_permission| ClinicalOrderWrite
+  CollectSpecimenApi -.->|requires_permission| ClinicalOrderWrite
+  CollectSpecimenApi -.->|updates| ClinicalOrder
+  ReceiveLabResultApi -.->|creates| LabResult
+  ReceiveLabResultApi -.->|requires_permission| LabResultManage
+  ReceiveLabResultApi -.->|updates| ClinicalOrder
+  ResultReviewApi -.->|requires_permission| LabResultManage
+  ResultReviewApi -.->|updates| ClinicalOrder
+  ResultReviewApi -.->|updates| LabResult
+  CriticalNoticeApi -.->|creates| PatientMessage
+  CriticalNoticeApi -.->|creates| Notification
+  CriticalNoticeApi -.->|requires_permission| PatientMessageSend
   OpenEncounterApi -.->|creates| Encounter
   OpenEncounterApi -.->|reads| Appointment
   OpenEncounterApi -.->|requires_permission| EncounterOpen
@@ -98,13 +228,64 @@ flowchart LR
   CompleteAppointmentApi -.->|requires_permission| EncounterOpen
   CompleteAppointmentApi -.->|updates| Appointment
   CompleteAppointmentApi -.->|updates| Room
+  AppointmentNoticeApi -.->|creates| PatientMessage
+  AppointmentNoticeApi -.->|creates| Notification
   CreateChargeApi -.->|creates| Charge
   CreateChargeApi -.->|reads| Encounter
   CreateChargeApi -.->|requires_permission| BillingClaimWrite
   CreateChargeApi -.->|updates| AccountBalance
+  GenerateClaimApi -.->|creates| Claim
+  GenerateClaimApi -.->|reads| InsurancePolicy
+  GenerateClaimApi -.->|requires_permission| BillingClaimWrite
+  GenerateClaimApi -.->|updates| Charge
+  SubmitClaimApi -.->|requires_permission| BillingClaimWrite
+  SubmitClaimApi -.->|updates| Claim
+  PaymentPostApi -.->|creates| PaymentTransaction
+  PaymentPostApi -.->|requires_permission| PaymentPost
+  PaymentPostApi -.->|updates| Claim
+  BalanceApi -.->|reads| PaymentTransaction
+  BalanceApi -.->|requires_permission| PaymentPost
+  BalanceApi -.->|updates| AccountBalance
   CreateCarePlanApi -.->|creates| CarePlan
   CreateCarePlanApi -.->|reads| Encounter
   CreateCarePlanApi -.->|requires_permission| FollowUpManage
+  SendFollowUpMessageApi -.->|creates| PatientMessage
+  SendFollowUpMessageApi -.->|requires_permission| PatientMessageSend
+  FollowUpScheduleApi -.->|creates| Appointment
+  FollowUpScheduleApi -.->|requires_permission| ScheduleWrite
+  FollowUpScheduleApi -.->|updates| ProviderSchedule
+  NotifyPatientResultApi -.->|creates| Notification
+  NotifyPatientResultApi -.->|requires_permission| PatientMessageSend
+  SearchPatientApi -.->|reads| PatientAccount
+  SearchPatientApi -.->|reads| PatientProfile
+  SearchPatientApi -.->|requires_permission| PatientProfileRead
+  RegisterPatientApi -.->|creates| PatientAccount
+  RegisterPatientApi -.->|creates| PatientProfile
+  RegisterPatientApi -.->|requires_permission| PatientProfileWrite
+  UpdateDemographicsApi -.->|requires_permission| PatientProfileWrite
+  UpdateDemographicsApi -.->|updates| PatientProfile
+  EligibilityApi -.->|creates| EligibilityCheck
+  EligibilityApi -.->|reads| InsurancePolicy
+  EligibilityApi -.->|requires_permission| InsuranceVerify
+  EligibilityApi -.->|updates| InsurancePolicy
+  BucPatientOnboarding -.->|belongs| PatientAccess
+  BucPatientOnboarding -->|contains| VerifyInsurance
+  BucPatientOnboarding -->|contains| CaptureConsent
+  BucPatientOnboarding -->|contains| SendIntakeForms
+  BucPatientOnboarding -->|contains| CompleteIntakeForms
+  BucPatientOnboarding -->|contains| ExpireIntakeForms
+  BucPatientOnboarding -->|contains| MergeDuplicatePatient
+  BucPatientOnboarding -->|contains| ArchivePatient
+  BucPatientOnboarding -->|contains| SearchPatient
+  BucPatientOnboarding -->|contains| RegisterPatient
+  BucPatientOnboarding -->|contains| UpdateDemographics
+  BucOrdersResults -.->|belongs| CareDelivery
+  BucOrdersResults -->|contains| PlaceLabOrder
+  BucOrdersResults -->|contains| CollectSpecimen
+  BucOrdersResults -->|contains| ReceiveLabResult
+  BucOrdersResults -->|contains| ReviewLabResult
+  BucOrdersResults -->|contains| NotifyCriticalResult
+  BucOrdersResults -->|contains| CancelClinicalOrder
   BucClinicalEncounter -.->|belongs| CareDelivery
   BucClinicalEncounter -->|contains| OpenEncounter
   BucClinicalEncounter -->|contains| RecordVitals
@@ -112,21 +293,121 @@ flowchart LR
   BucClinicalEncounter -->|contains| SignEncounter
   BucClinicalEncounter -->|contains| AmendEncounter
   BucClinicalEncounter -->|contains| CompleteAppointment
+  BucBillingClaims -.->|belongs| RevenueCycle
+  BucBillingClaims -->|contains| CreateCharge
+  BucBillingClaims -->|contains| GenerateClaim
+  BucBillingClaims -->|contains| SubmitClaim
+  BucBillingClaims -->|contains| ReceiveClaimAccepted
+  BucBillingClaims -->|contains| RecordClaimDenial
+  BucBillingClaims -->|contains| PostPayment
+  BucBillingClaims -->|contains| ReconcileBalance
+  BucBillingClaims -->|contains| VoidCharge
+  BucFollowupCare -.->|belongs| PatientAccess
+  BucFollowupCare -->|contains| CreateCarePlan
+  BucFollowupCare -->|contains| SendFollowUpMessage
+  BucFollowupCare -->|contains| ReviewPatientResponse
+  BucFollowupCare -->|contains| ScheduleFollowUpVisit
+  BucFollowupCare -->|contains| CloseCarePlan
+  BucFollowupCare -->|contains| NotifyPatientResult
+  Appointment ---|N:1| PatientAccount
   Appointment ---|N:1| Room
+  Encounter ---|N:1| PatientAccount
   Encounter ---|1:1| Appointment
   VitalSign ---|N:1| Encounter
   Diagnosis ---|N:1| Encounter
   ClinicalOrder ---|N:1| Encounter
+  LabResult ---|1:1| ClinicalOrder
   Charge ---|N:1| Encounter
+  Charge ---|N:1| Claim
+  Claim ---|N:1| PatientAccount
+  Claim ---|N:1| InsurancePolicy
+  PaymentTransaction ---|N:1| Claim
+  AccountBalance ---|1:1| PatientAccount
   CarePlan ---|N:1| Encounter
+  CarePlan ---|N:1| PatientAccount
+  PatientMessage ---|N:1| PatientAccount
+  Notification ---|N:1| PatientAccount
+  PatientProfile ---|1:1| PatientAccount
+  InsurancePolicy ---|N:1| PatientAccount
+  EligibilityCheck ---|N:1| InsurancePolicy
+  ConsentRecord ---|N:1| PatientAccount
+  IntakePacket ---|N:1| PatientAccount
+  EvEncounterSigned -.->|triggers| BucOrdersResults
+  EvEncounterSigned -.->|triggers| BucBillingClaims
+  EvEncounterSigned -.->|triggers| BucFollowupCare
   EvEncounterSigned -.->|triggers| PlaceLabOrder
   EvEncounterSigned -.->|triggers| CompleteAppointment
   EvEncounterSigned -.->|triggers| CreateCharge
   EvEncounterSigned -.->|triggers| CreateCarePlan
+  EvClinicalOrderReviewed -.->|triggers| BucFollowupCare
+  EvClinicalOrderReviewed -.->|triggers| NotifyCriticalResult
+  EvClinicalOrderReviewed -.->|triggers| NotifyPatientResult
+  EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
+  EvAppointmentScheduled -.->|triggers| SendIntakeForms
+  EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
+  PatientSearchScreen -.->|shows| PatientAccount
+  PatientProfileScreen -.->|shows| PatientProfile
+  VerifyInsurance -.->|displays| InsuranceScreen
+  VerifyInsurance -.->|invokes| EligibilityApi
+  VerifyInsurance -.->|requires_medium| FrontDeskTerminal
+  VerifyInsurance -.->|requires_permission| InsuranceVerify
+  CaptureConsent -.->|displays| ConsentScreen
+  CaptureConsent -.->|invokes| ConsentApi
+  CaptureConsent -.->|requires_medium| PatientMobile
+  CaptureConsent -.->|requires_permission| ConsentCapture
+  SendIntakeForms -.->|displays| IntakePortalScreen
+  SendIntakeForms -.->|invokes| IntakeMessagingApi
+  SendIntakeForms -.->|requires_medium| FrontDeskTerminal
+  SendIntakeForms -.->|requires_permission| IntakeManage
+  CompleteIntakeForms -.->|displays| IntakePortalScreen
+  CompleteIntakeForms -.->|raises| EvIntakeCompleted
+  CompleteIntakeForms -.->|requires_medium| PatientMobile
+  CompleteIntakeForms -.->|requires_permission| ConsentCapture
+  CompleteIntakeForms -.->|updates| IntakePacket
+  ExpireIntakeForms -.->|displays| IntakePortalScreen
+  ExpireIntakeForms -.->|raises| EvIntakeExpired
+  ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
+  ExpireIntakeForms -.->|requires_permission| IntakeManage
+  ExpireIntakeForms -.->|updates| IntakePacket
+  MergeDuplicatePatient -.->|displays| PatientProfileScreen
+  MergeDuplicatePatient -.->|raises| EvPatientMerged
+  MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
+  MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
+  MergeDuplicatePatient -.->|updates| PatientAccount
+  ArchivePatient -.->|displays| PatientProfileScreen
+  ArchivePatient -.->|raises| EvPatientArchived
+  ArchivePatient -.->|requires_medium| FrontDeskTerminal
+  ArchivePatient -.->|requires_permission| PatientProfileWrite
+  ArchivePatient -.->|updates| PatientAccount
   PlaceLabOrder -.->|displays| OrderEntryScreen
   PlaceLabOrder -.->|invokes| OrderEntryApi
   PlaceLabOrder -.->|requires_medium| ClinicalWorkstation
   PlaceLabOrder -.->|requires_permission| ClinicalOrderWrite
+  CollectSpecimen -.->|displays| SpecimenScreen
+  CollectSpecimen -.->|invokes| CollectSpecimenApi
+  CollectSpecimen -.->|raises| EvClinicalOrderCollected
+  CollectSpecimen -.->|requires_medium| NurseStation
+  CollectSpecimen -.->|requires_permission| ClinicalOrderWrite
+  ReceiveLabResult -.->|displays| ResultReviewScreen
+  ReceiveLabResult -.->|invokes| ReceiveLabResultApi
+  ReceiveLabResult -.->|raises| EvClinicalOrderResulted
+  ReceiveLabResult -.->|requires_medium| NurseStation
+  ReceiveLabResult -.->|requires_permission| LabResultManage
+  ReviewLabResult -.->|displays| ResultReviewScreen
+  ReviewLabResult -.->|invokes| ResultReviewApi
+  ReviewLabResult -.->|raises| EvClinicalOrderReviewed
+  ReviewLabResult -.->|requires_medium| ClinicalWorkstation
+  ReviewLabResult -.->|requires_permission| LabResultManage
+  NotifyCriticalResult -.->|displays| CriticalNoticeScreen
+  NotifyCriticalResult -.->|invokes| CriticalNoticeApi
+  NotifyCriticalResult -.->|requires_medium| ClinicalWorkstation
+  NotifyCriticalResult -.->|requires_permission| LabResultManage
+  NotifyCriticalResult -.->|requires_permission| PatientMessageSend
+  CancelClinicalOrder -.->|displays| OrderEntryScreen
+  CancelClinicalOrder -.->|raises| EvClinicalOrderCancelled
+  CancelClinicalOrder -.->|requires_medium| ClinicalWorkstation
+  CancelClinicalOrder -.->|requires_permission| ClinicalOrderWrite
+  CancelClinicalOrder -.->|updates| ClinicalOrder
   OpenEncounter -.->|displays| EncounterWorkspaceScreen
   OpenEncounter -.->|invokes| OpenEncounterApi
   OpenEncounter -.->|requires_medium| NurseStation
@@ -155,11 +436,84 @@ flowchart LR
   CompleteAppointment -.->|raises| EvAppointmentCompleted
   CompleteAppointment -.->|requires_medium| NurseStation
   CompleteAppointment -.->|requires_permission| EncounterOpen
+  SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
+  SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
+  SendAppointmentNotice -.->|requires_medium| FrontDeskTerminal
+  SendAppointmentNotice -.->|requires_permission| ScheduleRead
   CreateCharge -.->|displays| ChargeWorklistScreen
   CreateCharge -.->|invokes| CreateChargeApi
   CreateCharge -.->|requires_medium| BillingWorkstation
   CreateCharge -.->|requires_permission| BillingClaimWrite
+  GenerateClaim -.->|displays| ClaimScreen
+  GenerateClaim -.->|invokes| GenerateClaimApi
+  GenerateClaim -.->|requires_medium| BillingWorkstation
+  GenerateClaim -.->|requires_permission| BillingClaimWrite
+  SubmitClaim -.->|displays| ClaimScreen
+  SubmitClaim -.->|invokes| SubmitClaimApi
+  SubmitClaim -.->|raises| EvClaimSubmitted
+  SubmitClaim -.->|requires_medium| BillingWorkstation
+  SubmitClaim -.->|requires_permission| BillingClaimWrite
+  ReceiveClaimAccepted -.->|displays| ClaimScreen
+  ReceiveClaimAccepted -.->|raises| EvClaimAccepted
+  ReceiveClaimAccepted -.->|requires_medium| BillingWorkstation
+  ReceiveClaimAccepted -.->|requires_permission| BillingClaimWrite
+  ReceiveClaimAccepted -.->|updates| Claim
+  RecordClaimDenial -.->|displays| ClaimScreen
+  RecordClaimDenial -.->|raises| EvClaimDenied
+  RecordClaimDenial -.->|requires_medium| BillingWorkstation
+  RecordClaimDenial -.->|requires_permission| BillingClaimWrite
+  RecordClaimDenial -.->|updates| Claim
+  PostPayment -.->|displays| PaymentPostingScreen
+  PostPayment -.->|invokes| PaymentPostApi
+  PostPayment -.->|raises| EvClaimPaid
+  PostPayment -.->|requires_medium| BillingWorkstation
+  PostPayment -.->|requires_permission| PaymentPost
+  ReconcileBalance -.->|displays| BalanceScreen
+  ReconcileBalance -.->|invokes| BalanceApi
+  ReconcileBalance -.->|requires_medium| BillingWorkstation
+  ReconcileBalance -.->|requires_permission| PaymentPost
+  VoidCharge -.->|displays| ChargeWorklistScreen
+  VoidCharge -.->|requires_medium| BillingWorkstation
+  VoidCharge -.->|requires_permission| BillingClaimWrite
+  VoidCharge -.->|updates| Charge
   CreateCarePlan -.->|displays| CarePlanScreen
   CreateCarePlan -.->|invokes| CreateCarePlanApi
   CreateCarePlan -.->|requires_medium| CareCoordinationConsole
   CreateCarePlan -.->|requires_permission| FollowUpManage
+  SendFollowUpMessage -.->|displays| PatientMessageScreen
+  SendFollowUpMessage -.->|invokes| SendFollowUpMessageApi
+  SendFollowUpMessage -.->|requires_medium| CareCoordinationConsole
+  SendFollowUpMessage -.->|requires_permission| PatientMessageSend
+  ReviewPatientResponse -.->|displays| CarePlanScreen
+  ReviewPatientResponse -.->|raises| EvCarePlanMonitoring
+  ReviewPatientResponse -.->|requires_medium| CareCoordinationConsole
+  ReviewPatientResponse -.->|requires_permission| FollowUpManage
+  ReviewPatientResponse -.->|updates| CarePlan
+  ReviewPatientResponse -.->|updates| PatientMessage
+  ScheduleFollowUpVisit -.->|displays| FollowUpScheduleScreen
+  ScheduleFollowUpVisit -.->|invokes| FollowUpScheduleApi
+  ScheduleFollowUpVisit -.->|raises| EvAppointmentScheduled
+  ScheduleFollowUpVisit -.->|requires_medium| CareCoordinationConsole
+  ScheduleFollowUpVisit -.->|requires_permission| FollowUpManage
+  ScheduleFollowUpVisit -.->|requires_permission| ScheduleWrite
+  CloseCarePlan -.->|displays| CarePlanScreen
+  CloseCarePlan -.->|raises| EvCarePlanClosed
+  CloseCarePlan -.->|requires_medium| CareCoordinationConsole
+  CloseCarePlan -.->|requires_permission| FollowUpManage
+  CloseCarePlan -.->|updates| CarePlan
+  NotifyPatientResult -.->|displays| PatientMessageScreen
+  NotifyPatientResult -.->|invokes| NotifyPatientResultApi
+  NotifyPatientResult -.->|requires_medium| CareCoordinationConsole
+  NotifyPatientResult -.->|requires_permission| PatientMessageSend
+  SearchPatient -.->|displays| PatientSearchScreen
+  SearchPatient -.->|invokes| SearchPatientApi
+  SearchPatient -.->|requires_medium| FrontDeskTerminal
+  SearchPatient -.->|requires_permission| PatientProfileRead
+  RegisterPatient -.->|displays| PatientProfileScreen
+  RegisterPatient -.->|invokes| RegisterPatientApi
+  RegisterPatient -.->|requires_medium| FrontDeskTerminal
+  RegisterPatient -.->|requires_permission| PatientProfileWrite
+  UpdateDemographics -.->|displays| PatientProfileScreen
+  UpdateDemographics -.->|invokes| UpdateDemographicsApi
+  UpdateDemographics -.->|requires_medium| FrontDeskTerminal
+  UpdateDemographics -.->|requires_permission| PatientProfileWrite

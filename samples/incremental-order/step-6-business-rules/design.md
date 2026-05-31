@@ -36,6 +36,7 @@ rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind rdra
 rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-6-business-rules/out/sequence_buc_store_restock
 rdra-ish csv samples/incremental-order/step-6-business-rules/src --kind matrix --out samples/incremental-order/step-6-business-rules/out/usecase_matrix.csv
 rdra-ish csv samples/incremental-order/step-6-business-rules/src --kind screen-constraints --out samples/incremental-order/step-6-business-rules/out/screen_constraints.csv
+rdra-ish csv samples/incremental-order/step-6-business-rules/src --kind actor-permission-audit --out samples/incremental-order/step-6-business-rules/out/actor_permission_audit.csv
 ```
 
 ### 4.1 RDRA Layered Graph 図

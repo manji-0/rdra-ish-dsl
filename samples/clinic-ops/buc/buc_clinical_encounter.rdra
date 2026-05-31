@@ -51,6 +51,7 @@ displays(OpenEncounter, EncounterWorkspaceScreen)
 invokes(OpenEncounter, OpenEncounterApi)
 creates(OpenEncounterApi, Encounter)
 reads(OpenEncounterApi, Appointment)
+triggers(EvAppointmentCheckedIn, BucClinicalEncounter)
 triggers(EvAppointmentCheckedIn, OpenEncounter)
 
 displays(RecordVitals, VitalsScreen)

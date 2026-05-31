@@ -90,11 +90,47 @@ pub enum RdraError {
     #[error("invalid integer literal '{lit}' in comparison right-hand side")]
     ComparisonInvalidIntLit { lit: String },
 
+    // ── 権限整合性診断 ─────────────────────────────────────────────────────────
+    #[error("usecase '{usecase}' requires permission '{permission}', but no actor performs the use case or its containing BUC\n  hint: add `performs(SomeActor, {usecase})`, add `performs(SomeActor, SomeBuc)` where `contains(SomeBuc, {usecase})`, or remove the permission requirement if this is a system-triggered step")]
+    UseCasePermissionNoActor { usecase: String, permission: String },
+
+    #[error("usecase '{usecase}' requires permission '{permission}', but none of its actors ({actors}) has that permission\n  hint: add `has_permission(SomeActor, {permission})` for an actor that performs this use case path")]
+    UseCasePermissionNotHeld {
+        usecase: String,
+        permission: String,
+        actors: String,
+    },
+
+    #[error("api '{api}' requires permission '{permission}', but invoking usecase '{usecase}' has no actor path\n  hint: add a performer for the use case or containing BUC, or remove the API permission requirement if the invocation is system-triggered")]
+    ApiPermissionNoActor {
+        api: String,
+        permission: String,
+        usecase: String,
+    },
+
+    #[error("api '{api}' requires permission '{permission}', but invoking usecase '{usecase}' is performed by actors ({actors}) without that permission\n  hint: add `has_permission(SomeActor, {permission})` for an actor on this invocation path or split the API boundary")]
+    ApiPermissionNotHeld {
+        api: String,
+        permission: String,
+        usecase: String,
+        actors: String,
+    },
+
+    #[error("actor '{actor}' is missing permission '{permission}' required by {required_by}\n  hint: add `has_permission({actor}, {permission})`, narrow the actor's `performs` path, or relax the UC/API requirement if it is too strict")]
+    ActorPermissionMissing {
+        actor: String,
+        permission: String,
+        required_by: String,
+    },
+
+    #[error("actor '{actor}' has permission '{permission}', but no performed usecase or invoked API path currently requires it\n  hint: remove `has_permission({actor}, {permission})`, add the missing `requires_permission` on the operation that needs it, or keep it as an intentional out-of-model grant")]
+    ActorPermissionExcess { actor: String, permission: String },
+
     // ── イベント整合性診断 ────────────────────────────────────────────────────
     #[error("event '{event}' is never raised by any use case\n  hint: add `raises(usecase::Foo, event::{event})` in the relevant BUC file")]
     EventNeverRaised { event: String },
 
-    #[error("event '{event}' is raised but has no transitions and triggers no use case\n  hint: add `transitions(event::{event}, From, To)` or `triggers(event::{event}, someUsecase)` to connect this event")]
+    #[error("event '{event}' is raised but has no transitions and triggers no use case or BUC\n  hint: add `transitions(event::{event}, From, To)`, `triggers(event::{event}, SomeBuc)`, or `triggers(event::{event}, SomeUseCase)` to connect this event")]
     EventNeverConsumed { event: String },
 
     #[error("event '{event}' triggers use case '{usecase}' which belongs to no BUC\n  hint: add `contains(someBuc, usecase::{usecase})` to include the triggered use case in a BUC")]

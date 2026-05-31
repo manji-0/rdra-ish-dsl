@@ -1031,9 +1031,10 @@ impl Emitter for EventFlowMermaidEmitter {
             }
         };
 
-        // UC / Event / State が同じ ID を持てるので種別ごとにプレフィックスを付ける
+        // UC / Event / BUC / State が同じ ID を持てるので種別ごとにプレフィックスを付ける
         let ev_mid = |id: &str| format!("ev__{}", id);
         let uc_mid = |id: &str| format!("uc__{}", id);
+        let buc_mid = |id: &str| format!("buc__{}", id);
         let st_mid = |id: &str| format!("st__{}", id);
 
         let flows = rdra_ish_core::collect_event_flows(model);
@@ -1108,6 +1109,30 @@ impl Emitter for EventFlowMermaidEmitter {
                     ));
                 }
                 out.push_str(&format!("  {} -.->|triggers| {}\n", ev_id, uid));
+            }
+
+            // triggers: Event -.->|triggers| BUC
+            let mut triggered_bucs = flow.triggers_bucs.to_vec();
+            triggered_bucs
+                .sort_by_key(|&bk| model.bucs.get(bk).map(|b| b.id.as_str()).unwrap_or(""));
+            for bk in triggered_bucs {
+                let buc_nr = NodeRef::Buc(bk);
+                if !is_visible(&buc_nr) {
+                    continue;
+                }
+                let buc = match model.bucs.get(bk) {
+                    Some(b) => b,
+                    None => continue,
+                };
+                let bid = buc_mid(&buc.id);
+                if declared.insert(bid.clone()) {
+                    out.push_str(&format!(
+                        "  {}[[\"{}\"]]\n",
+                        bid,
+                        prefixed_label("📦", &buc.label)
+                    ));
+                }
+                out.push_str(&format!("  {} -.->|triggers| {}\n", ev_id, bid));
             }
 
             // transitions: From -->|event_label| To
@@ -1275,6 +1300,24 @@ transitions(Publish, Draft, Published)
         assert!(result.contains("[*] --> Draft"));
         assert!(result.contains("Draft --> Published"));
         assert!(result.contains("公開する"));
+    }
+
+    #[test]
+    fn test_event_flow_mermaid_renders_triggered_buc() {
+        let src = r#"
+buc BucBillingClaims "Billing Claims"
+usecase SignEncounter "Sign Encounter"
+event EncounterSigned "Encounter Signed"
+raises(SignEncounter, EncounterSigned)
+triggers(EncounterSigned, BucBillingClaims)
+"#;
+        let model = model_from(src);
+        let result = EventFlowMermaidEmitter
+            .emit(&model, &View::whole())
+            .unwrap();
+
+        assert!(result.contains("ev__EncounterSigned -.->|triggers| buc__BucBillingClaims"));
+        assert!(result.contains("buc__BucBillingClaims[[\"📦 Billing Claims\"]]"));
     }
 
     #[test]

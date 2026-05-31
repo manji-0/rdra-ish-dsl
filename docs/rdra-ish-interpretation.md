@@ -55,6 +55,8 @@ it is probably a UC, an API boundary, or a data operation instead.
 
 ## Business Flow
 
+<!-- constrained-by ./language-reference.md#event-triggered-bucs -->
+
 RDRA-ish does not currently have a first-class `business_flow` element. Business flow
 is the concrete shape of a BUC, represented in one of two ways:
 
@@ -66,14 +68,20 @@ That means business flow is not an independent decomposition unit in the DSL. It
 the BUC-specific flow that explains how the BUC is carried out over time:
 
 - inside a BUC, sequence diagrams show actor, screen, API, and entity interactions;
-- when a BUC hands off to another BUC, event-flow diagrams show `UC -> Event -> UC`
-  and event-to-state chains;
+- when a BUC hands off to another BUC, event-flow diagrams show
+  `UC -> Event -> BUC/UC` and event-to-state chains;
 - state derivation shows which entity states are reachable through declared BUC/UC
   patterns.
 
 This is intentional. RDRA-ish keeps flow review close to generated artifacts so the
 same model can answer both business questions ("what happens next?") and design
 questions ("which API/entity/state boundary carries that step?").
+
+For BUCs that start from a domain event, the standard abstract modeling form is
+`triggers(Event, TargetBuc)`. If the concrete entry action is known, refine it with
+`contains(TargetBuc, EntryUseCase)` and `triggers(Event, EntryUseCase)`. This keeps the
+handoff reviewable at the BUC boundary first, while still allowing a concrete flow step
+when sequence/API/entity effects need review.
 
 ## Use Case
 
@@ -115,7 +123,7 @@ This leads to a deliberate asymmetry:
 | What order or causality connects actions? | Event-flow, sequence, and prose |
 | What data or lifecycle effect does an action have? | CRUD, API, `sets`, `raises`, `transitions` |
 | What technical boundary carries the action? | Screen/API/System relationships |
-| What authority or medium constrains the action? | `has_permission`, `requires_permission`, `requires_medium`, and screen-constraints CSV |
+| What authority or medium constrains the action? | `has_permission`, `requires_permission`, `requires_medium`, screen-constraints CSV, and actor-permission audit |
 
 ## Modeling Heuristics
 
@@ -129,8 +137,11 @@ This leads to a deliberate asymmetry:
   DSL stores it through UCs, events, and generated views rather than a dedicated node.
 - Create a UC when there is a user-visible or event-triggered action whose data,
   screen, API, event, or state effects should be reviewable.
-- Use `triggers(Event, UseCase)` when flow crosses from one UC to another through a
-  domain event, especially when the target UC belongs to a different BUC.
+- Use `triggers(Event, Buc)` when a domain event starts another BUC, especially while
+  the concrete entry use case is still undecided or may change from human-initiated to
+  event-initiated.
+- Use `triggers(Event, UseCase)` when the event-triggered entry action is known and its
+  screen, API, data, permission, or lifecycle effects should be reviewed directly.
 - Prefer prose for early business-flow discovery. Move flow into DSL predicates only
   when it affects reviewable artifacts or consistency checks.
 - Do not introduce an API just to mirror a UC. Introduce it when the interaction has a

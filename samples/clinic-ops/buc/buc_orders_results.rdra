@@ -53,6 +53,7 @@ displays(PlaceLabOrder, OrderEntryScreen)
 invokes(PlaceLabOrder, OrderEntryApi)
 creates(OrderEntryApi, ClinicalOrder)
 reads(OrderEntryApi, Encounter)
+triggers(EvEncounterSigned, BucOrdersResults)
 triggers(EvEncounterSigned, PlaceLabOrder)
 
 displays(CollectSpecimen, SpecimenScreen)

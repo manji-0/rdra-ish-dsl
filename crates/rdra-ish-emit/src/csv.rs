@@ -2,7 +2,7 @@
 
 use crate::{EmitError, Emitter, View};
 use rdra_ish_core::{
-    derive_permission_callables, derive_screen_constraint_patterns,
+    derive_actor_permission_audit, derive_permission_callables, derive_screen_constraint_patterns,
     model::{ApiKey, ColumnType, EntityKey, NodeRef, RelKind, SemanticModel, UseCaseKey},
 };
 
@@ -379,7 +379,94 @@ impl Emitter for PermissionCallableCsvEmitter {
     }
 }
 
+// ── ActorPermissionAuditCsvEmitter ───────────────────────────────────────────
+
+pub struct ActorPermissionAuditCsvEmitter;
+
+impl Emitter for ActorPermissionAuditCsvEmitter {
+    fn emit(&self, model: &SemanticModel, _view: &View) -> Result<String, EmitError> {
+        let mut wtr = csv::Writer::from_writer(vec![]);
+        wtr.write_record([
+            "actor_id",
+            "actor_label",
+            "permission_id",
+            "permission_label",
+            "assigned",
+            "required",
+            "status",
+            "required_usecase_ids",
+            "required_api_paths",
+        ])?;
+
+        for entry in derive_actor_permission_audit(model) {
+            let actor = &model.actors[entry.actor];
+            let permission = &model.permissions[entry.permission];
+            let required_usecase_ids = required_usecase_ids(model, &entry.sources);
+            let required_api_paths = required_api_paths(model, &entry.sources);
+
+            wtr.write_record([
+                actor.id.as_str(),
+                actor.label.as_str(),
+                permission.id.as_str(),
+                permission.label.as_str(),
+                bool_str(entry.assigned),
+                bool_str(entry.required),
+                entry.status.as_str(),
+                required_usecase_ids.as_str(),
+                required_api_paths.as_str(),
+            ])?;
+        }
+
+        let data = wtr
+            .into_inner()
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
+        Ok(String::from_utf8(data).unwrap_or_default())
+    }
+}
+
 // ── ヘルパー ──────────────────────────────────────────────────────────────────
+
+fn required_usecase_ids(
+    model: &SemanticModel,
+    sources: &[rdra_ish_core::ActorPermissionRequirementSource],
+) -> String {
+    let mut ids: Vec<&str> = sources
+        .iter()
+        .filter(|source| source.api.is_none())
+        .map(|source| model.use_cases[source.usecase].id.as_str())
+        .collect();
+    ids.sort();
+    ids.dedup();
+    ids.join("|")
+}
+
+fn required_api_paths(
+    model: &SemanticModel,
+    sources: &[rdra_ish_core::ActorPermissionRequirementSource],
+) -> String {
+    let mut paths: Vec<String> = sources
+        .iter()
+        .filter_map(|source| {
+            source.api.map(|api| {
+                format!(
+                    "{}->{}",
+                    model.use_cases[source.usecase].id, model.apis[api].id
+                )
+            })
+        })
+        .collect();
+    paths.sort();
+    paths.dedup();
+    paths.join("|")
+}
+
+fn bool_str(value: bool) -> &'static str {
+    if value {
+        "true"
+    } else {
+        "false"
+    }
+}
 
 fn col_type_to_str(ct: &ColumnType) -> &'static str {
     match ct {
@@ -555,6 +642,32 @@ requires_permission(CancelApi, ScheduleWrite)
         assert!(result
             .contains("ScheduleWrite,Schedule Write,BookAppointment|CancelAppointment,CancelApi"));
         assert!(result.contains("PatientRead,Patient Read,BookAppointment,BookingApi"));
+    }
+
+    #[test]
+    fn test_actor_permission_audit_csv() {
+        let src = r#"
+actor Staff "Staff"
+usecase BookAppointment "Book Appointment"
+api BookingApi "Booking API"
+permission ScheduleWrite "Schedule Write"
+permission LegacyAdmin "Legacy Admin"
+performs(Staff, BookAppointment)
+has_permission(Staff, LegacyAdmin)
+requires_permission(BookAppointment, ScheduleWrite)
+invokes(BookAppointment, BookingApi)
+requires_permission(BookingApi, ScheduleWrite)
+"#;
+        let model = model_from(src);
+        let view = View::whole();
+        let result = ActorPermissionAuditCsvEmitter.emit(&model, &view).unwrap();
+        assert!(result.contains(
+            "actor_id,actor_label,permission_id,permission_label,assigned,required,status,required_usecase_ids,required_api_paths"
+        ));
+        assert!(result.contains("Staff,Staff,LegacyAdmin,Legacy Admin,true,false,excess,,"));
+        assert!(result.contains(
+            "Staff,Staff,ScheduleWrite,Schedule Write,false,true,missing,BookAppointment,BookAppointment->BookingApi"
+        ));
     }
 
     #[test]

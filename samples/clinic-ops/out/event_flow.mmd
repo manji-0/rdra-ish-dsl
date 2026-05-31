@@ -14,6 +14,8 @@ flowchart LR
   ev__EvAppointmentCheckedIn -.->|triggers| uc__OpenEncounter
   uc__PrepareEncounter(["✅ Prepare Encounter"])
   ev__EvAppointmentCheckedIn -.->|triggers| uc__PrepareEncounter
+  buc__BucClinicalEncounter[["📦 Conduct Clinical Encounter"]]
+  ev__EvAppointmentCheckedIn -.->|triggers| buc__BucClinicalEncounter
   st__Apptcheckedin("🔄 Appointment Checked In")
   st__Apptscheduled -->|⚡ Appointment Checked In| st__Apptcheckedin
   ev__EvAppointmentCompleted{"⚡ Appointment Completed"}
@@ -39,6 +41,8 @@ flowchart LR
   ev__EvAppointmentScheduled -.->|triggers| uc__SendAppointmentNotice
   uc__SendIntakeForms(["✅ Send Intake Forms"])
   ev__EvAppointmentScheduled -.->|triggers| uc__SendIntakeForms
+  buc__BucPatientOnboarding[["📦 Onboard and Maintain Patient"]]
+  ev__EvAppointmentScheduled -.->|triggers| buc__BucPatientOnboarding
   st__Apptrequested("🔄 Appointment Requested")
   st__Apptrequested -->|⚡ Appointment Scheduled| st__Apptscheduled
   ev__EvCarePlanClosed{"⚡ Care Plan Closed"}
@@ -96,6 +100,8 @@ flowchart LR
   ev__EvClinicalOrderReviewed -.->|triggers| uc__NotifyCriticalResult
   uc__NotifyPatientResult(["✅ Notify Patient Result"])
   ev__EvClinicalOrderReviewed -.->|triggers| uc__NotifyPatientResult
+  buc__BucFollowupCare[["📦 Coordinate Follow-Up Care"]]
+  ev__EvClinicalOrderReviewed -.->|triggers| buc__BucFollowupCare
   st__Clreviewed("🔄 Result Reviewed")
   st__Clresulted -->|⚡ Clinical Result Reviewed| st__Clreviewed
   ev__EvEncounterAmended{"⚡ Encounter Amended"}
@@ -120,6 +126,11 @@ flowchart LR
   ev__EvEncounterSigned -.->|triggers| uc__CreateCharge
   uc__PlaceLabOrder(["✅ Place Lab Order"])
   ev__EvEncounterSigned -.->|triggers| uc__PlaceLabOrder
+  buc__BucBillingClaims[["📦 Bill and Collect Claims"]]
+  ev__EvEncounterSigned -.->|triggers| buc__BucBillingClaims
+  ev__EvEncounterSigned -.->|triggers| buc__BucFollowupCare
+  buc__BucOrdersResults[["📦 Manage Orders and Results"]]
+  ev__EvEncounterSigned -.->|triggers| buc__BucOrdersResults
   st__Encdocumented -->|⚡ Encounter Signed| st__Encsigned
   ev__EvIntakeCompleted{"⚡ Intake Completed"}
   uc__CompleteIntakeForms(["✅ Complete Intake Forms"])

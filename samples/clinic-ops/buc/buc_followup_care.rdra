@@ -50,6 +50,7 @@ displays(CreateCarePlan, CarePlanScreen)
 invokes(CreateCarePlan, CreateCarePlanApi)
 creates(CreateCarePlanApi, CarePlan)
 reads(CreateCarePlanApi, Encounter)
+triggers(EvEncounterSigned, BucFollowupCare)
 triggers(EvEncounterSigned, CreateCarePlan)
 
 displays(SendFollowUpMessage, PatientMessageScreen)
@@ -80,6 +81,7 @@ invokes(NotifyPatientResult, NotifyPatientResultApi)
 creates(NotifyPatientResultApi, Notification)
 sets(NotifyPatientResult, Notification, "status", "notifdelivered")
 sets(NotifyPatientResult, Notification, "delivered_at", "timestamptz")
+triggers(EvClinicalOrderReviewed, BucFollowupCare)
 triggers(EvClinicalOrderReviewed, NotifyPatientResult)
 
 // Access constraints

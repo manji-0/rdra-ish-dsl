@@ -1059,9 +1059,10 @@ impl Emitter for EventFlowPlantUmlEmitter {
             }
         };
 
-        // UC / Event / State が同じ ID を持てるので種別ごとにプレフィックスを付ける
+        // UC / Event / BUC / State が同じ ID を持てるので種別ごとにプレフィックスを付ける
         let ev_mid = |id: &str| format!("ev__{}", id);
         let uc_mid = |id: &str| format!("uc__{}", id);
+        let buc_mid = |id: &str| format!("buc__{}", id);
         let st_mid = |id: &str| format!("st__{}", id);
 
         let flows = rdra_ish_core::collect_event_flows(model);
@@ -1136,6 +1137,29 @@ impl Emitter for EventFlowPlantUmlEmitter {
                     ));
                 }
                 out.push_str(&format!("{} ..> {} : triggers\n", ev_id, uid));
+            }
+
+            let mut triggered_bucs = flow.triggers_bucs.to_vec();
+            triggered_bucs
+                .sort_by_key(|&bk| model.bucs.get(bk).map(|b| b.id.as_str()).unwrap_or(""));
+            for bk in triggered_bucs {
+                let buc_nr = NodeRef::Buc(bk);
+                if !is_visible(&buc_nr) {
+                    continue;
+                }
+                let buc = match model.bucs.get(bk) {
+                    Some(b) => b,
+                    None => continue,
+                };
+                let bid = buc_mid(&buc.id);
+                if declared.insert(bid.clone()) {
+                    out.push_str(&format!(
+                        "rectangle \"{}\" as {}\n",
+                        prefixed_label("📦", &buc.label),
+                        bid
+                    ));
+                }
+                out.push_str(&format!("{} ..> {} : triggers\n", ev_id, bid));
             }
 
             let mut transitions = flow.transitions.to_vec();
@@ -1435,6 +1459,24 @@ displays(PlaceOrder, OrderCompleteScreen)
 
         // スナップショット
         insta::assert_snapshot!(result);
+    }
+
+    #[test]
+    fn test_event_flow_plantuml_renders_triggered_buc() {
+        let src = r#"
+buc BucBillingClaims "Billing Claims"
+usecase SignEncounter "Sign Encounter"
+event EncounterSigned "Encounter Signed"
+raises(SignEncounter, EncounterSigned)
+triggers(EncounterSigned, BucBillingClaims)
+"#;
+        let model = model_from(src);
+        let result = EventFlowPlantUmlEmitter
+            .emit(&model, &View::whole())
+            .unwrap();
+
+        assert!(result.contains("ev__EncounterSigned ..> buc__BucBillingClaims : triggers"));
+        assert!(result.contains("rectangle \"📦 Billing Claims\" as buc__BucBillingClaims"));
     }
 
     #[test]

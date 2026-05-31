@@ -47,14 +47,16 @@ RDRA-ish deliberately differs from a stricter reading of the original RDRA artif
 - **Use-case coverage**: BUC-scoped diagrams and CRUD matrices show which actors,
   use cases, screens, APIs, and entities are actually connected.
 - **Access coverage**: screen constraints show which UC/API permission and medium
-  requirements pass through each screen, and permission-callable lists show what each
-  permission enables.
+  requirements pass through each screen, permission-callable lists show what each
+  permission enables, actor-permission audits infer missing/excess actor grants, and
+  `check` warns when those assignments do not match modeled operation paths.
 - **Entity state reachability**: `states` computes which Enum / Bool / nullable /
   comparison-proposition combinations can be reached through declared use cases and
   events.
 - **Model gaps**: diagnostics call out unreachable enum variants, missing creation
   paths, forbidden reachable states, invariant violations, orphaned APIs, event-flow
-  gaps, and FK-isolated writes in inferred transaction groups.
+  gaps, permission mismatches, cross-system coordination gaps, and FK-isolated writes
+  in inferred transaction groups.
 - **Review artifacts**: Mermaid is the lowest-friction default for text review, while
   PlantUML/SVG/PNG are available when a rendered asset is needed.
 
@@ -98,7 +100,8 @@ require. Screens do not define those constraints directly; `csv --kind
 screen-constraints` derives the screen paths from `displays(UC, Screen)` and
 `invokes(UC, Api)`. `csv --kind permission-callables` and `list --kind
 permission-callables` invert the same model so reviewers can see which use cases and
-APIs each permission enables.
+APIs each permission enables. `actor-permission-audit` projects those requirements back
+onto actors and marks each actor/permission pair as `ok`, `missing`, or `excess`.
 
 ```rdra
 actor Staff "Staff"
@@ -143,9 +146,13 @@ lifecycle, and enforceable rules.
    permission and medium paths through screens, use cases, and APIs.
 7. Run `rdra-ish csv <model-root> --kind permission-callables` to review the
    permission-to-UC/API map.
-8. Run `rdra-ish states <model-root>` to find unreachable states, missing creation
+8. Run `rdra-ish csv <model-root> --kind actor-permission-audit` to review inferred
+   missing and excess actor-side permission assignments.
+9. Run `rdra-ish check <model-root>` to list whole-model consistency warnings across
+   permissions, API/system boundaries, event-flow, transaction inference, and states.
+10. Run `rdra-ish states <model-root>` to find unreachable states, missing creation
    paths, and state constraint violations.
-9. Add `forbidden` / `invariant` constraints when the model needs to assert invalid or
+11. Add `forbidden` / `invariant` constraints when the model needs to assert invalid or
    required state combinations.
 
 For a slower abstract-to-concrete workflow, see
@@ -193,11 +200,13 @@ rdra-ish csv src/ --kind api          # API list
 rdra-ish csv src/ --kind api-matrix   # API × Entity CRUD matrix
 rdra-ish csv src/ --kind screen-constraints # Screen × UC/API access constraints
 rdra-ish csv src/ --kind permission-callables # Permission × callable UC/API list
+rdra-ish csv src/ --kind actor-permission-audit # Actor permission assignment audit
 
 # List output
 rdra-ish list src/ --kind actor --format table
 rdra-ish list src/ --kind system --format table
 rdra-ish list src/ --kind permission-callables --format table
+rdra-ish list src/ --kind actor-permission-audit --format table
 rdra-ish list src/ --kind api   --format table
 rdra-ish list src/ --kind buc   --format json
 
@@ -223,21 +232,23 @@ rdra-ish states src/ --format json           # JSON output
 
 | Option | Default | Description |
 |---|---|---|
-| `--kind` | `entity` | `actor` / `entity` / `matrix` / `api` / `api-matrix` / `screen-constraints` / `permission-callables` |
+| `--kind` | `entity` | `actor` / `entity` / `matrix` / `api` / `api-matrix` / `screen-constraints` / `permission-callables` / `actor-permission-audit` |
 | `-o / --out` | `out` | Output file path. A default extension is added when omitted |
 
 `screen-constraints` emits screen × use-case/API permission and medium paths.
 `permission-callables` emits permission × callable UC/API rows derived from
-`requires_permission`.
+`requires_permission`. `actor-permission-audit` emits actor × permission rows with
+`assigned`, `required`, and `status` columns inferred from performer paths.
 
 ### `list` options
 
 | Option | Default | Description |
 |---|---|---|
-| `--kind` | `actor` | `actor` / `entity` / `buc` / `usecase` / `system` / `api` / `permission-callables` |
+| `--kind` | `actor` | `actor` / `entity` / `buc` / `usecase` / `system` / `api` / `permission-callables` / `actor-permission-audit` |
 | `--format` | `table` | `table` / `json` / `csv` |
 
 `permission-callables` lists the same permission-to-UC/API view in stdout-friendly
+formats. `actor-permission-audit` lists inferred actor-side assignment gaps in the same
 formats.
 
 ### `states` options
@@ -396,7 +407,7 @@ entity Order "Order" {
 | `displays` | (UseCase, Screen) | UC displays a screen |
 | `shows` | (Screen, Entity) | Screen shows entity information |
 | `raises` | (UseCase, Event) | UC raises a domain event |
-| `triggers` | (Event, UseCase) | Event triggers a UC |
+| `triggers` | (Event, UseCase\|Buc) | Event triggers a concrete UC or starts a BUC boundary |
 | `contains` | (Buc, UseCase) or (System, Api) | UC that composes a BUC, or API that belongs to a system boundary |
 | `coordinates` | (UseCase, Entity, Entity) | Use case coordinates consistency for a relation crossing system boundaries |
 | `belongs` | (Buc, Business) | BUC belongs to a business |
@@ -421,7 +432,10 @@ requires_medium(BookAppointment, StaffTerminal)
 
 Use `rdra-ish csv <model-root> --kind screen-constraints` to inspect screen × UC/API
 constraint paths, and `rdra-ish csv <model-root> --kind permission-callables` to
-inspect the inverse permission × callable UC/API view.
+inspect the inverse permission × callable UC/API view. Use
+`rdra-ish csv <model-root> --kind actor-permission-audit` to inspect which
+actor/permission assignments are inferred as missing or excess. `rdra-ish check` also
+reports those gaps.
 
 `belongs(Buc, Business)` may carry optional business-context metadata:
 
@@ -934,6 +948,7 @@ rdra-ish diagram samples/clinic-ops --kind event-flow --format mermaid
 rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucClinicalEncounter
 rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase SignEncounter
 rdra-ish csv samples/clinic-ops --kind screen-constraints
+rdra-ish csv samples/clinic-ops --kind actor-permission-audit
 rdra-ish states samples/clinic-ops --entity Appointment
 rdra-ish states samples/clinic-ops --entity Claim
 ```

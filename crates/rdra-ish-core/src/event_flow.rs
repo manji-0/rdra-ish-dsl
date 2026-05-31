@@ -4,7 +4,7 @@
 //! `api_diagnostics` も本モジュールで提供する（同様の 1パス集約パターン）。
 
 use crate::diagnostics::{Diagnostic, RdraError};
-use crate::model::{EventKey, NodeRef, RelKind, SemanticModel, StateKey, UseCaseKey};
+use crate::model::{BucKey, EventKey, NodeRef, RelKind, SemanticModel, StateKey, UseCaseKey};
 use std::collections::HashMap;
 
 /// イベントを中心とした因果連鎖ファクト。
@@ -16,6 +16,8 @@ pub struct EventFlow {
     pub raised_by: Vec<UseCaseKey>,
     /// `triggers(event, UseCase)` で宣言した UseCase の一覧。
     pub triggers_ucs: Vec<UseCaseKey>,
+    /// `triggers(event, Buc)` で宣言した BUC の一覧。
+    pub triggers_bucs: Vec<BucKey>,
     /// `transitions(event, From, To)` で宣言した状態遷移の一覧。
     pub transitions: Vec<(StateKey, StateKey)>,
 }
@@ -35,6 +37,7 @@ pub fn collect_event_flows(model: &SemanticModel) -> Vec<EventFlow> {
                     event: ek,
                     raised_by: Vec::new(),
                     triggers_ucs: Vec::new(),
+                    triggers_bucs: Vec::new(),
                     transitions: Vec::new(),
                 },
             )
@@ -51,6 +54,11 @@ pub fn collect_event_flows(model: &SemanticModel) -> Vec<EventFlow> {
             (RelKind::Triggers, NodeRef::Event(ek), NodeRef::UseCase(uk)) => {
                 if let Some(flow) = map.get_mut(ek) {
                     flow.triggers_ucs.push(*uk);
+                }
+            }
+            (RelKind::Triggers, NodeRef::Event(ek), NodeRef::Buc(bk)) => {
+                if let Some(flow) = map.get_mut(ek) {
+                    flow.triggers_bucs.push(*bk);
                 }
             }
             _ => {}
@@ -101,7 +109,10 @@ pub fn event_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
         }
 
         // raise されているが transition も triggers もしない（行き止まり）
-        if !flow.raised_by.is_empty() && flow.transitions.is_empty() && flow.triggers_ucs.is_empty()
+        if !flow.raised_by.is_empty()
+            && flow.transitions.is_empty()
+            && flow.triggers_ucs.is_empty()
+            && flow.triggers_bucs.is_empty()
         {
             diags.push(Diagnostic::warning(RdraError::EventNeverConsumed {
                 event: event_id.clone(),
@@ -131,6 +142,62 @@ pub fn event_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
     }
 
     diags
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::build_model;
+    use rdra_ish_syntax::parse;
+
+    fn model_from(src: &str) -> SemanticModel {
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+        model
+    }
+
+    #[test]
+    fn collect_event_flows_includes_triggered_bucs() {
+        let model = model_from(
+            r#"
+usecase SignEncounter "Sign Encounter"
+buc BucBillingClaims "Billing Claims"
+event EncounterSigned "Encounter Signed"
+raises(SignEncounter, EncounterSigned)
+triggers(EncounterSigned, BucBillingClaims)
+"#,
+        );
+
+        let flows = collect_event_flows(&model);
+        let flow = flows
+            .iter()
+            .find(|flow| model.events[flow.event].id == "EncounterSigned")
+            .expect("EncounterSigned flow should exist");
+
+        assert_eq!(flow.triggers_bucs.len(), 1);
+        assert_eq!(model.bucs[flow.triggers_bucs[0]].id, "BucBillingClaims");
+    }
+
+    #[test]
+    fn event_triggering_buc_counts_as_consumed() {
+        let model = model_from(
+            r#"
+usecase SignEncounter "Sign Encounter"
+buc BucBillingClaims "Billing Claims"
+event EncounterSigned "Encounter Signed"
+raises(SignEncounter, EncounterSigned)
+triggers(EncounterSigned, BucBillingClaims)
+"#,
+        );
+
+        let diags = event_diagnostics(&model);
+        assert!(!diags
+            .iter()
+            .any(|diag| matches!(&diag.error, RdraError::EventNeverConsumed { .. })));
+    }
 }
 
 /// API 整合性の診断を生成する。

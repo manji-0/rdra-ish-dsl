@@ -52,6 +52,7 @@ updates(CreateChargeApi, AccountBalance)
 reads(CreateChargeApi, Encounter)
 sets(CreateCharge, Charge, "status", "chargeposted")
 sets(CreateCharge, Charge, "posted_at", "timestamptz")
+triggers(EvEncounterSigned, BucBillingClaims)
 triggers(EvEncounterSigned, CreateCharge)
 
 displays(GenerateClaim, ClaimScreen)

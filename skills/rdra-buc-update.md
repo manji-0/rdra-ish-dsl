@@ -41,6 +41,7 @@ Read `buc/buc_<name>.rdra` and the shared files it imports. Identify:
 | New system/API ownership | shared vocabulary for `system`, BUC/shared API file for `api`, then `contains(System, Api)` |
 | New Business-BUC context | shared vocabulary for `location` / `timing` / `medium`, then `belongs(...).when(...).where(...).by(...)` |
 | New permission or medium constraint | shared `permission` / `medium` vocabulary, then `has_permission`, `requires_permission`, or `requires_medium` in the owning BUC file |
+| New event-started BUC | target BUC file, then `triggers(Event, Buc)`; add `triggers(Event, EntryUC)` only after the entry UC is known |
 | Cross-system entity relation handling | BUC file that owns the coordinating use case |
 | Remove a use case | Remove its `contains`, CRUD, `displays`, `raises` predicates; check no other BUC uses it |
 
@@ -131,7 +132,19 @@ requires_permission(<Api>, <Permission>)
 Use `requires_*` on the use case for constraints that apply to the whole interaction,
 and on the API for constraints specific to that backend boundary. Screen constraint
 patterns are derived through `displays` and `invokes`; do not hand-write a separate
-screen predicate for them.
+screen predicate for them. Actor-side grant gaps are derived with
+`rdra-ish csv src/ --kind actor-permission-audit`.
+
+**Starting a BUC from an event:**
+```
+triggers(<Event>, <TargetBuc>)
+```
+
+If the entry action is already known:
+```
+contains(<TargetBuc>, <EntryUC>)
+triggers(<Event>, <EntryUC>)
+```
 
 **Handling a cross-system relation:**
 ```
@@ -159,6 +172,7 @@ derived system boundaries.
 - Every API used as a system boundary has `contains(System, Api)`
 - Every new `permission` used by an actor or operation is declared once in shared vocabulary unless intentionally local
 - Every `requires_medium` references a declared `medium`, and screen constraints are checked with `rdra-ish csv src/ --kind screen-constraints`
+- Actor grants are checked with `rdra-ish csv src/ --kind actor-permission-audit`; review both `missing` and `excess`
 - Every cross-system `relate` has a `coordinates(UseCase, Entity, Entity)` when a use case handles the consistency
 - Every `coordinates` use case invokes APIs on both system sides
 - The diff does not jump more than one abstraction level unless the user supplied the

@@ -8,51 +8,89 @@ flowchart LR
     direction TB
     PatientAccess["💼 Patient Access"]
     BucFollowupCare["📦 Coordinate Follow-Up Care"]
+    BucPatientOnboarding["📦 Onboard and Maintain Patient"]
     CareCoordinationConsole[/"📱 Care Coordination Console"/]
     FrontDeskTerminal[/"📱 Front Desk Terminal"/]
+    PatientMobile[/"📱 Patient Mobile"/]
+    ConsentCapture["🔑 Consent Capture"]
     FollowUpManage["🔑 Follow-Up Manage"]
+    InsuranceVerify["🔑 Insurance Verify"]
     IntakeManage["🔑 Intake Manage"]
     PatientMessageSend["🔑 Patient Message Send"]
+    PatientProfileRead["🔑 Patient Profile Read"]
+    PatientProfileWrite["🔑 Patient Profile Write"]
     ScheduleRead["🔑 Schedule Read"]
     ScheduleWrite["🔑 Schedule Write"]
   end
   subgraph layer_boundary[System Boundary]
     direction TB
+    ArchivePatient(["✅ Archive Patient"])
+    CaptureConsent(["✅ Capture Consent"])
     CloseCarePlan(["✅ Close Care Plan"])
+    CompleteIntakeForms(["✅ Complete Intake Forms"])
     CreateCarePlan(["✅ Create Care Plan"])
+    ExpireIntakeForms(["✅ Expire Intake Forms"])
+    MergeDuplicatePatient(["✅ Merge Duplicate Patient"])
     NotifyPatientResult(["✅ Notify Patient Result"])
+    RegisterPatient(["✅ Register Patient"])
     ReviewPatientResponse(["✅ Review Patient Response"])
     ScheduleFollowUpVisit(["✅ Schedule Follow-Up Visit"])
+    SearchPatient(["✅ Search Patient"])
     SendAppointmentNotice(["✅ Send Appointment Notice"])
     SendFollowUpMessage(["✅ Send Follow-Up Message"])
     SendIntakeForms(["✅ Send Intake Forms"])
+    UpdateDemographics(["✅ Update Demographics"])
+    VerifyInsurance(["✅ Verify Insurance"])
     AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
     CarePlanScreen[["🖥️ Care Plan Screen"]]
+    ConsentScreen[["🖥️ Consent Capture Screen"]]
     FollowUpScheduleScreen[["🖥️ Follow-Up Schedule Screen"]]
+    InsuranceScreen[["🖥️ Insurance Verification Screen"]]
     IntakePortalScreen[["🖥️ Intake Portal Screen"]]
     PatientMessageScreen[["🖥️ Patient Message Screen"]]
+    PatientProfileScreen[["🖥️ Patient Profile Screen"]]
+    PatientSearchScreen[["🖥️ Patient Search Screen"]]
     EvAppointmentScheduled{"⚡ Appointment Scheduled"}
     EvCarePlanClosed{"⚡ Care Plan Closed"}
     EvCarePlanMonitoring{"⚡ Care Plan Monitoring"}
+    EvIntakeCompleted{"⚡ Intake Completed"}
+    EvIntakeExpired{"⚡ Intake Expired"}
+    EvPatientArchived{"⚡ Patient Archived"}
+    EvPatientMerged{"⚡ Patient Merged"}
   end
   subgraph layer_system[System]
     direction TB
     AppointmentNoticeApi["🔌 Appointment Notice API"]
+    ConsentApi["🔌 Consent API"]
     CreateCarePlanApi["🔌 Create Care Plan API"]
+    EligibilityApi["🔌 Eligibility API"]
     FollowUpScheduleApi["🔌 Follow-Up Schedule API"]
     IntakeMessagingApi["🔌 Intake Messaging API"]
     NotifyPatientResultApi["🔌 Notify Patient Result API"]
+    RegisterPatientApi["🔌 Register Patient API"]
+    SearchPatientApi["🔌 Search Patient API"]
     SendFollowUpMessageApi["🔌 Send Follow-Up Message API"]
+    UpdateDemographicsApi["🔌 Update Demographics API"]
     Appointment[("🗄️ Appointment")]
     CarePlan[("🗄️ Care Plan")]
+    ConsentRecord[("🗄️ Consent Record")]
+    EligibilityCheck[("🗄️ Eligibility Check")]
     Encounter[("🗄️ Encounter")]
+    InsurancePolicy[("🗄️ Insurance Policy")]
     IntakePacket[("🗄️ Intake Packet")]
     Notification[("🗄️ Notification")]
+    PatientAccount[("🗄️ Patient Account")]
     PatientMessage[("🗄️ Patient Message")]
+    PatientProfile[("🗄️ Patient Profile")]
     ProviderSchedule[("🗄️ Provider Schedule")]
   end
+  Patient -.->|has_permission| PatientProfileRead
+  Patient -.->|has_permission| ConsentCapture
   Patient -.->|has_permission| ScheduleRead
+  Patient -->|performs| BucPatientOnboarding
   Patient -->|performs| BucFollowupCare
+  Patient -->|performs| CaptureConsent
+  Patient -->|performs| CompleteIntakeForms
   CareCoordinator -.->|has_permission| FollowUpManage
   CareCoordinator -.->|has_permission| PatientMessageSend
   CareCoordinator -.->|has_permission| ScheduleWrite
@@ -63,6 +101,8 @@ flowchart LR
   CareCoordinator -->|performs| ScheduleFollowUpVisit
   CareCoordinator -->|performs| CloseCarePlan
   CareCoordinator -->|performs| NotifyPatientResult
+  ConsentApi -.->|creates| ConsentRecord
+  ConsentApi -.->|requires_permission| ConsentCapture
   IntakeMessagingApi -.->|creates| PatientMessage
   IntakeMessagingApi -.->|creates| IntakePacket
   IntakeMessagingApi -.->|requires_permission| PatientMessageSend
@@ -78,6 +118,29 @@ flowchart LR
   FollowUpScheduleApi -.->|updates| ProviderSchedule
   NotifyPatientResultApi -.->|creates| Notification
   NotifyPatientResultApi -.->|requires_permission| PatientMessageSend
+  SearchPatientApi -.->|reads| PatientAccount
+  SearchPatientApi -.->|reads| PatientProfile
+  SearchPatientApi -.->|requires_permission| PatientProfileRead
+  RegisterPatientApi -.->|creates| PatientAccount
+  RegisterPatientApi -.->|creates| PatientProfile
+  RegisterPatientApi -.->|requires_permission| PatientProfileWrite
+  UpdateDemographicsApi -.->|requires_permission| PatientProfileWrite
+  UpdateDemographicsApi -.->|updates| PatientProfile
+  EligibilityApi -.->|creates| EligibilityCheck
+  EligibilityApi -.->|reads| InsurancePolicy
+  EligibilityApi -.->|requires_permission| InsuranceVerify
+  EligibilityApi -.->|updates| InsurancePolicy
+  BucPatientOnboarding -.->|belongs| PatientAccess
+  BucPatientOnboarding -->|contains| VerifyInsurance
+  BucPatientOnboarding -->|contains| CaptureConsent
+  BucPatientOnboarding -->|contains| SendIntakeForms
+  BucPatientOnboarding -->|contains| CompleteIntakeForms
+  BucPatientOnboarding -->|contains| ExpireIntakeForms
+  BucPatientOnboarding -->|contains| MergeDuplicatePatient
+  BucPatientOnboarding -->|contains| ArchivePatient
+  BucPatientOnboarding -->|contains| SearchPatient
+  BucPatientOnboarding -->|contains| RegisterPatient
+  BucPatientOnboarding -->|contains| UpdateDemographics
   BucFollowupCare -.->|belongs| PatientAccess
   BucFollowupCare -->|contains| CreateCarePlan
   BucFollowupCare -->|contains| SendFollowUpMessage
@@ -85,14 +148,55 @@ flowchart LR
   BucFollowupCare -->|contains| ScheduleFollowUpVisit
   BucFollowupCare -->|contains| CloseCarePlan
   BucFollowupCare -->|contains| NotifyPatientResult
+  Appointment ---|N:1| PatientAccount
+  Encounter ---|N:1| PatientAccount
   Encounter ---|1:1| Appointment
   CarePlan ---|N:1| Encounter
+  CarePlan ---|N:1| PatientAccount
+  PatientMessage ---|N:1| PatientAccount
+  Notification ---|N:1| PatientAccount
+  PatientProfile ---|1:1| PatientAccount
+  InsurancePolicy ---|N:1| PatientAccount
+  EligibilityCheck ---|N:1| InsurancePolicy
+  ConsentRecord ---|N:1| PatientAccount
+  IntakePacket ---|N:1| PatientAccount
+  EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
   EvAppointmentScheduled -.->|triggers| SendIntakeForms
   EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
+  PatientSearchScreen -.->|shows| PatientAccount
+  PatientProfileScreen -.->|shows| PatientProfile
+  VerifyInsurance -.->|displays| InsuranceScreen
+  VerifyInsurance -.->|invokes| EligibilityApi
+  VerifyInsurance -.->|requires_medium| FrontDeskTerminal
+  VerifyInsurance -.->|requires_permission| InsuranceVerify
+  CaptureConsent -.->|displays| ConsentScreen
+  CaptureConsent -.->|invokes| ConsentApi
+  CaptureConsent -.->|requires_medium| PatientMobile
+  CaptureConsent -.->|requires_permission| ConsentCapture
   SendIntakeForms -.->|displays| IntakePortalScreen
   SendIntakeForms -.->|invokes| IntakeMessagingApi
   SendIntakeForms -.->|requires_medium| FrontDeskTerminal
   SendIntakeForms -.->|requires_permission| IntakeManage
+  CompleteIntakeForms -.->|displays| IntakePortalScreen
+  CompleteIntakeForms -.->|raises| EvIntakeCompleted
+  CompleteIntakeForms -.->|requires_medium| PatientMobile
+  CompleteIntakeForms -.->|requires_permission| ConsentCapture
+  CompleteIntakeForms -.->|updates| IntakePacket
+  ExpireIntakeForms -.->|displays| IntakePortalScreen
+  ExpireIntakeForms -.->|raises| EvIntakeExpired
+  ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
+  ExpireIntakeForms -.->|requires_permission| IntakeManage
+  ExpireIntakeForms -.->|updates| IntakePacket
+  MergeDuplicatePatient -.->|displays| PatientProfileScreen
+  MergeDuplicatePatient -.->|raises| EvPatientMerged
+  MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
+  MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
+  MergeDuplicatePatient -.->|updates| PatientAccount
+  ArchivePatient -.->|displays| PatientProfileScreen
+  ArchivePatient -.->|raises| EvPatientArchived
+  ArchivePatient -.->|requires_medium| FrontDeskTerminal
+  ArchivePatient -.->|requires_permission| PatientProfileWrite
+  ArchivePatient -.->|updates| PatientAccount
   SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
   SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
   SendAppointmentNotice -.->|requires_medium| FrontDeskTerminal
@@ -126,3 +230,15 @@ flowchart LR
   NotifyPatientResult -.->|invokes| NotifyPatientResultApi
   NotifyPatientResult -.->|requires_medium| CareCoordinationConsole
   NotifyPatientResult -.->|requires_permission| PatientMessageSend
+  SearchPatient -.->|displays| PatientSearchScreen
+  SearchPatient -.->|invokes| SearchPatientApi
+  SearchPatient -.->|requires_medium| FrontDeskTerminal
+  SearchPatient -.->|requires_permission| PatientProfileRead
+  RegisterPatient -.->|displays| PatientProfileScreen
+  RegisterPatient -.->|invokes| RegisterPatientApi
+  RegisterPatient -.->|requires_medium| FrontDeskTerminal
+  RegisterPatient -.->|requires_permission| PatientProfileWrite
+  UpdateDemographics -.->|displays| PatientProfileScreen
+  UpdateDemographics -.->|invokes| UpdateDemographicsApi
+  UpdateDemographics -.->|requires_medium| FrontDeskTerminal
+  UpdateDemographics -.->|requires_permission| PatientProfileWrite

@@ -103,6 +103,7 @@ creates(IntakeMessagingApi, PatientMessage)
 sets(SendIntakeForms, IntakePacket, "sent_at", "timestamptz")
 sets(SendIntakeForms, PatientMessage, "status", "msgsent")
 sets(SendIntakeForms, PatientMessage, "sent_at", "timestamptz")
+triggers(EvAppointmentScheduled, BucPatientOnboarding)
 triggers(EvAppointmentScheduled, SendIntakeForms)
 
 displays(CompleteIntakeForms, IntakePortalScreen)

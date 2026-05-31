@@ -1,0 +1,2 @@
+actor_id,actor_label,permission_id,permission_label,assigned,required,status,required_usecase_ids,required_api_paths
+OpsStaff,Operations Staff,StoreMaintenanceWrite,Store Maintenance Write,true,true,ok,BlockScheduledRestock|ChangeNextRestockDate|ChangeStoreParentOrganization,ChangeStoreParentOrganization->StoreAdminApi

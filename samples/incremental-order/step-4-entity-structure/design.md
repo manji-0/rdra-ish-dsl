@@ -36,6 +36,7 @@ rdra-ish diagram samples/incremental-order/step-4-entity-structure/src --kind rd
 rdra-ish diagram samples/incremental-order/step-4-entity-structure/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-4-entity-structure/out/sequence_buc_store_restock
 rdra-ish csv samples/incremental-order/step-4-entity-structure/src --kind matrix --out samples/incremental-order/step-4-entity-structure/out/usecase_matrix.csv
 rdra-ish csv samples/incremental-order/step-4-entity-structure/src --kind screen-constraints --out samples/incremental-order/step-4-entity-structure/out/screen_constraints.csv
+rdra-ish csv samples/incremental-order/step-4-entity-structure/src --kind actor-permission-audit --out samples/incremental-order/step-4-entity-structure/out/actor_permission_audit.csv
 ```
 
 ### 4.1 RDRA Layered Graph 図

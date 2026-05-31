@@ -143,7 +143,22 @@ requires_permission(<Api>, <Permission>)
 
 Screen-level access patterns are derived from `displays(<UC>, <Screen>)` and
 `invokes(<UC>, <Api>)`. Validate them with
-`rdra-ish csv src/ --kind screen-constraints`.
+`rdra-ish csv src/ --kind screen-constraints`. Validate actor-side grants with
+`rdra-ish csv src/ --kind actor-permission-audit`; review `missing` and `excess` rows
+before accepting the BUC.
+
+For a BUC that starts from an event, declare the BUC-level handoff first:
+
+```
+triggers(<Event>, <TargetBuc>)
+```
+
+When the entry use case is known, add the concrete refinement:
+
+```
+contains(<TargetBuc>, <EntryUC>)
+triggers(<Event>, <EntryUC>)
+```
 
 ### Step 4 — Add `sets` for non-transition column effects
 
@@ -183,4 +198,5 @@ For staged work, also run the command that matches the current abstraction:
 - Data touchpoints: `rdra-ish csv src/ --kind matrix`
 - Interaction boundary: `rdra-ish diagram src/ --kind sequence --format mermaid --buc <BucId>`
 - Access constraints: `rdra-ish csv src/ --kind screen-constraints`
+- Actor permission assignments: `rdra-ish csv src/ --kind actor-permission-audit`
 - Lifecycle/rules: `rdra-ish states src/ --buc <BucId>`

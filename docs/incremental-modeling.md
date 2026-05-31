@@ -135,9 +135,9 @@ import shared.lifecycle.order
 | 0 | Biz intent | Scope sketch | What business area are we modeling? | `business`, rough `buc`, candidate `actor` | `list --kind buc`, `diagram --kind rdra` |
 | 1 | Biz value | BUC skeleton | Who gets value from each BUC? | `performs`, `belongs`, `contains`, rough `usecase` | `check`, BUC-scoped RDRA diagram |
 | 2 | Biz object touchpoints | Data touchpoints | Which data objects does each use case touch? | coarse `entity`, CRUD predicates | CRUD matrix, ER diagram |
-| 3 | Tech interaction boundary | Interaction boundary | What UI/API boundary mediates the work, and with which authority/media constraints? | `screen`, `displays`, `shows`, optional `api`/`invokes`, `permission`, `medium`, `requires_*` | sequence diagram, screen-constraints CSV |
+| 3 | Tech interaction boundary | Interaction boundary | What UI/API boundary mediates the work, and with which authority/media constraints? | `screen`, `displays`, `shows`, optional `api`/`invokes`, `permission`, `medium`, `has_permission`, `requires_*` | sequence diagram, screen-constraints CSV, actor-permission audit |
 | 4 | Tech data design | Entity structure | What structure and ownership does the data need? | columns, `@pk`, `relate`, cardinality | ER diagram, sequence TX warnings |
-| 5 | Tech lifecycle design | Lifecycle | Which states are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `state`, `transitions`, `raises`, `sets` | `states`, state diagram, event-flow |
+| 5 | Tech lifecycle design | Lifecycle | Which states and event-triggered BUC entries are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `state`, `transitions`, `raises`, `triggers`, `sets` | `check`, `states`, state diagram, event-flow |
 | 6 | Tech-enforced rules | Business rules | Which states are invalid or required? | `forbidden`, `invariant`, comparison propositions | `states` diagnostics |
 
 ## Stage 0: Scope Sketch
@@ -276,10 +276,12 @@ rdra-ish diagram src/ --kind sequence --format mermaid --buc BucOrder
 rdra-ish list src/ --kind api --format table
 rdra-ish csv src/ --kind api-matrix
 rdra-ish csv src/ --kind screen-constraints
+rdra-ish csv src/ --kind actor-permission-audit
 ```
 
 Move on when sequence output communicates the intended actor/screen/API/entity path
-and the screen-constraints CSV shows the expected permission/media paths.
+and the screen-constraints plus actor-permission audit CSVs show the expected
+permission/media paths and actor-side assignments.
 
 ### BUC Context and Access Rules
 
@@ -301,7 +303,11 @@ Use `has_permission(Actor, Permission)` for what an actor can do. Use
 `requires_permission` and `requires_medium` on UC/API nodes for what an operation
 requires. Screen requirements are not written directly; they are derived from
 `displays(UC, Screen)` and the constraints on the UC plus APIs reached by
-`invokes(UC, Api)`.
+`invokes(UC, Api)`. `rdra-ish check` warns when a required permission has no modeled
+actor path, when an actor on that path does not hold the permission, or when an actor
+has a permission that no modeled path currently requires. Use
+`rdra-ish csv src/ --kind actor-permission-audit` when you want the inferred assignment
+matrix instead of warning text.
 
 ### API Boundary Rules
 
@@ -406,6 +412,7 @@ Ask the user:
 
 - Which entity values represent lifecycle state?
 - Which use case or event causes each state change?
+- Does any event start another BUC, and is the concrete entry use case known yet?
 - Which nullable or boolean fields change together with the lifecycle?
 - Are any declared states intentionally unreachable for now?
 
@@ -415,10 +422,13 @@ Validation:
 rdra-ish states src/ --entity Order
 rdra-ish diagram src/ --kind state --format mermaid --buc BucOrder
 rdra-ish diagram src/ --kind event-flow --format mermaid
+rdra-ish check src/
 ```
 
 Move on when reachable patterns explain the expected lifecycle and unexpected terminal
-or unreachable states have been reviewed.
+or unreachable states have been reviewed. Model an event-triggered BUC first with
+`triggers(Event, TargetBuc)`. When the entry action is clear, add
+`contains(TargetBuc, EntryUseCase)` and optionally `triggers(Event, EntryUseCase)`.
 
 ## Stage 6: Business Rules
 

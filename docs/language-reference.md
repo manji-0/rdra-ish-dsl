@@ -122,7 +122,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `displays` | `(UseCase, Screen)` | The use case displays the screen. |
 | `shows` | `(Screen, Entity)` | The screen shows information from the entity. |
 | `raises` | `(UseCase, Event)` | The use case raises the domain event. Links use cases to `transitions`. |
-| `triggers` | `(Event, UseCase)` | The event triggers the use case. |
+| `triggers` | `(Event, UseCase \| Buc)` | The event triggers a concrete use case or starts a BUC boundary. |
 | `contains` | `(Buc, UseCase)` or `(System, Api)` | The use case composes the BUC, or the API belongs to the system boundary. |
 | `coordinates` | `(UseCase, Entity, Entity)` | The use case coordinates consistency for a relation crossing system boundaries. The use case must invoke APIs on both system sides that operate the corresponding entities. |
 | `belongs` | `(Buc, Business)` | The BUC belongs to the business. |
@@ -154,7 +154,13 @@ requires_permission(BookingApi, ScheduleWrite)
 Screen access constraints are derived rather than declared directly. A screen inherits
 the constraints of each use case that displays it, and also the constraints of each API
 that the use case invokes. Use `csv --kind screen-constraints` to inspect those
-screen × use-case/API paths.
+screen × use-case/API paths. `check` also compares `requires_permission` against
+`has_permission` on the actors that can perform the use case path. For APIs, this
+check is performed per invoking use case so a shared API must be authorized on every
+modeled invocation path. Use `csv --kind actor-permission-audit` or
+`list --kind actor-permission-audit` to inspect the full actor × permission projection:
+`missing` means a required permission is not assigned to that actor, and `excess` means
+the actor has a permission that no modeled performer path currently requires.
 
 ### `belongs` context
 
@@ -268,11 +274,47 @@ updates(PlaceOrder, Cart)   // direct write still allowed (mixed form)
 
 ### `triggers` and event-driven BUC chaining
 
-`triggers(event::E, usecase::UC)` declares that an event causes a downstream use case to
-execute — capturing cross-BUC choreography. The tool validates that the triggered use
-case belongs to at least one BUC via `contains`; a warning is emitted otherwise. Use
-`diagram --kind event-flow` to visualise the full `raises → Event → triggers` chain
-alongside state transitions.
+`triggers(event::E, buc::B)` declares that an event starts a downstream BUC. This is the
+standard abstract form when the business handoff is known but the concrete entry use
+case is not yet fixed, or when a BUC may later be changed from human-initiated to
+event-initiated without reshaping the BUC itself.
+
+`triggers(event::E, usecase::UC)` declares that an event causes a concrete downstream
+use case to execute. This is the refined form when the entry action is known. The tool
+validates that a triggered use case belongs to at least one BUC via `contains`; a warning
+is emitted otherwise. Use `diagram --kind event-flow` to visualise the full
+`raises -> Event -> triggers` chain alongside state transitions.
+
+### Event-triggered BUCs
+
+<!-- constrained-by #relationship-predicates -->
+<!-- derived-from ./rdra-ish-interpretation.md#business-flow -->
+
+The standard way to describe a BUC that starts from an event is:
+
+1. Declare the target BUC.
+2. Connect the event to that BUC with `triggers(Event, TargetBuc)`.
+3. When the entry action becomes clear, add `contains(TargetBuc, EntryUseCase)` and
+   optionally refine the flow with `triggers(Event, EntryUseCase)`.
+
+The BUC target is the reviewable boundary of the handoff. The use-case target is the
+more concrete entry point inside that boundary. Both forms may coexist: the BUC edge
+says "this event starts that business-value slice", while the use-case edge says "this
+is the current entry action".
+
+```rdra
+buc BucBillingClaims "Billing Claims"
+usecase GenerateClaim "Generate Claim"
+event EncounterSigned "Encounter Signed"
+
+triggers(event::EncounterSigned, BucBillingClaims)
+contains(BucBillingClaims, GenerateClaim)
+triggers(event::EncounterSigned, GenerateClaim)
+```
+
+If the triggered use case is a system-triggered step, `performs` may be omitted. If it
+declares `requires_permission` directly or through an invoked API, `check` reports a
+warning until an actor path with the required permission is modeled.
 
 ---
 

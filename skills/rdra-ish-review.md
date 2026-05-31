@@ -62,6 +62,10 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
      clauses, typed references should point to `timing`, `location`, and `medium`
    - Run `rdra-ish csv <src-dir>/ --kind screen-constraints` when reviewing UI access:
      screen patterns are derived from `displays` plus invoked API constraints
+   - Run `rdra-ish csv <src-dir>/ --kind actor-permission-audit` when reviewing actor
+     grants: `missing` means a required UC/API permission is not assigned to that actor,
+     and `excess` means the actor has a permission no modeled performer path currently
+     requires
    - Flag a screen as under-specified when a constrained UC/API path reaches it but the
      actor permission model or required medium is missing from the same review slice
 
@@ -87,6 +91,8 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
      - `TriggeredUseCaseUnreachable`: the triggered UC belongs to no BUC — add a `contains`
    - Every `state` referenced in `transitions` is declared
    - No unreachable states (states never appearing as the `to` argument of any `transitions`)
+   - Prefer `triggers(Event, Buc)` when the event starts a downstream BUC boundary.
+     Add `triggers(Event, UseCase)` as the concrete entry refinement when the entry UC is known
    - When `triggers(Event, UseCase)` is used, verify the triggered UC is `contains`-ed in
      the correct downstream BUC and that the cross-BUC flow is intentional
 
@@ -136,7 +142,7 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 | `displays` | UseCase | Screen | — |
 | `shows` | Screen | Entity | — |
 | `raises` | UseCase | Event | — |
-| `triggers` | Event | UseCase | — |
+| `triggers` | Event | UseCase / Buc | — |
 | `contains` | Buc | UseCase | — |
 | `contains` | System | Api | — |
 | `coordinates` | UseCase | Entity | Entity |

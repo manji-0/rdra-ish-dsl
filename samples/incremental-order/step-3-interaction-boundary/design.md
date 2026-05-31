@@ -39,6 +39,7 @@ rdra-ish diagram samples/incremental-order/step-3-interaction-boundary/src --kin
 rdra-ish diagram samples/incremental-order/step-3-interaction-boundary/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-3-interaction-boundary/out/sequence_buc_store_restock
 rdra-ish csv samples/incremental-order/step-3-interaction-boundary/src --kind matrix --out samples/incremental-order/step-3-interaction-boundary/out/usecase_matrix.csv
 rdra-ish csv samples/incremental-order/step-3-interaction-boundary/src --kind screen-constraints --out samples/incremental-order/step-3-interaction-boundary/out/screen_constraints.csv
+rdra-ish csv samples/incremental-order/step-3-interaction-boundary/src --kind actor-permission-audit --out samples/incremental-order/step-3-interaction-boundary/out/actor_permission_audit.csv
 ```
 
 ### 4.0 Screen 制約パターン
@@ -50,7 +51,14 @@ StoreMaintenanceScreen,ChangeStoreParentOrganization,OrganizationLookupApi,Store
 StoreMaintenanceScreen,ChangeStoreParentOrganization,StoreAdminApi,StoreMaintenanceWrite,OpsConsole
 ```
 
-### 4.1 RDRA Layered Graph 図
+### 4.1 Actor 権限割当監査
+
+```csv
+actor_id,actor_label,permission_id,permission_label,assigned,required,status,required_usecase_ids,required_api_paths
+OpsStaff,Operations Staff,StoreMaintenanceWrite,Store Maintenance Write,true,true,ok,ChangeNextRestockDate|ChangeStoreParentOrganization,ChangeStoreParentOrganization->StoreAdminApi
+```
+
+### 4.2 RDRA Layered Graph 図
 
 生成コマンド:
 
@@ -98,7 +106,7 @@ flowchart LR
   ChangeStoreParentOrganization -.->|invokes| OrganizationLookupApi
 ```
 
-### 4.2 Sequence 図
+### 4.3 Sequence 図
 
 生成コマンド:
 
@@ -140,7 +148,7 @@ sequenceDiagram
   deactivate StoreAdminApi
 ```
 
-### 4.3 ER 図
+### 4.4 ER 図
 
 生成コマンド:
 

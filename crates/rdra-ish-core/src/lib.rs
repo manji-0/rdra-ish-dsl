@@ -11,8 +11,9 @@ pub mod system;
 pub mod tx;
 
 pub use access::{
-    derive_permission_callables, derive_screen_constraint_patterns, PermissionCallable,
-    ScreenConstraintPattern,
+    derive_actor_permission_audit, derive_permission_callables, derive_screen_constraint_patterns,
+    permission_diagnostics, ActorPermissionAudit, ActorPermissionAuditStatus,
+    ActorPermissionRequirementSource, PermissionCallable, ScreenConstraintPattern,
 };
 pub use analysis::build_model;
 pub use diagnostics::{Diagnostic, RdraError};

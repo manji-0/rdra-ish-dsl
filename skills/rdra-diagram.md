@@ -22,7 +22,7 @@ rules.
 |-------|---------|-----------|---------|
 | Scope / BUC skeleton | Biz intent/value | `rdra --buc <BucId>` | actor, BUC, and use-case coverage |
 | Data touchpoints | Biz object touchpoints | `rdra --buc <BucId>` plus `er --buc <BucId>` | CRUD-connected entities |
-| Interaction boundary | Tech interaction boundary | `sequence --buc <BucId>` plus `csv --kind screen-constraints` | actor/screen/API/entity path and access/media constraints |
+| Interaction boundary | Tech interaction boundary | `sequence --buc <BucId>` plus `csv --kind screen-constraints` and `csv --kind actor-permission-audit` | actor/screen/API/entity path and access/media constraints |
 | Entity structure | Tech data design | `er` | columns, PK/FK, and cardinality |
 | Lifecycle | Tech lifecycle design | `state --buc <BucId>` and `event-flow` | states, events, transitions, triggers |
 | Business rules | Tech-enforced rules | no new diagram first; run `states` | validate constraints before visual polish |
@@ -36,8 +36,9 @@ rules.
 | Database table structure and relationships | `er` | Entities, columns, FK relationships |
 | Entity lifecycle | `state` | State nodes and transition events |
 | Write operations and transaction boundaries | `sequence` | Sequence of writes per use case; shows `Actor→Screen→API→Entity` lanes when `invokes` is used |
-| Event causality chains | `event-flow` | UC→Event→UC and Event→State chains |
+| Event causality chains | `event-flow` | UC→Event→UC/BUC and Event→State chains |
 | Screen access/media paths | CSV `screen-constraints` | Derived Screen × UC/API rows with permission and medium requirements |
+| Actor permission assignment | CSV `actor-permission-audit` | Inferred actor × permission rows with `ok`, `missing`, and `excess` status |
 
 ### Format guide
 
@@ -88,6 +89,9 @@ rdra-ish diagram src/ --kind sequence --buc <BucId> --format mermaid
 
 # Screen access/media constraint paths
 rdra-ish csv src/ --kind screen-constraints
+
+# Actor-side permission assignment audit
+rdra-ish csv src/ --kind actor-permission-audit
 
 # Write to a specific file (extension added automatically)
 rdra-ish diagram src/ --kind er --format mermaid --out docs/er
@@ -150,3 +154,5 @@ Object labels include kind prefixes such as `👤` actor, `📦` BUC, `✅` usec
 - Access and medium requirements are not expanded in diagrams yet. Use
   `rdra-ish csv src/ --kind screen-constraints` to inspect the derived constraints that
   pass through each screen via `displays` and `invokes`.
+- Use `rdra-ish csv src/ --kind actor-permission-audit` to inspect actor-side
+  `has_permission` assignments inferred from UC/API `requires_permission` paths.

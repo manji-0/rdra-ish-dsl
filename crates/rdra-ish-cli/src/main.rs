@@ -1,10 +1,13 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
-use rdra_ish_core::{build_merged_model, derive_permission_callables, resolve};
+use rdra_ish_core::{
+    build_merged_model, derive_actor_permission_audit, derive_permission_callables, resolve,
+};
 use rdra_ish_emit::{
     csv::{
-        ActorListCsvEmitter, ApiEntityMatrixCsvEmitter, ApiListCsvEmitter, EntityListCsvEmitter,
-        PermissionCallableCsvEmitter, RelationMatrixCsvEmitter, ScreenConstraintCsvEmitter,
+        ActorListCsvEmitter, ActorPermissionAuditCsvEmitter, ApiEntityMatrixCsvEmitter,
+        ApiListCsvEmitter, EntityListCsvEmitter, PermissionCallableCsvEmitter,
+        RelationMatrixCsvEmitter, ScreenConstraintCsvEmitter,
     },
     mermaid::{
         ErMermaidEmitter, EventFlowMermaidEmitter, ObjectGraphMermaidEmitter, RdraMermaidEmitter,
@@ -31,6 +34,8 @@ enum ListKind {
     Api,
     /// Permission × callable UC/API list
     PermissionCallables,
+    /// Actor × permission assignment audit inferred from UC/API requirements
+    ActorPermissionAudit,
 }
 
 #[derive(ValueEnum, Clone)]
@@ -79,7 +84,7 @@ enum Commands {
     Csv {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// CSV kind: actor, entity, matrix, api, or api-matrix
+        /// CSV kind: actor, entity, matrix, api, api-matrix, screen-constraints, permission-callables, or actor-permission-audit
         #[arg(long, default_value = "entity")]
         kind: CsvKind,
         #[arg(short, long, default_value = "out")]
@@ -89,7 +94,7 @@ enum Commands {
     List {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Element kind to list: actor, entity, buc, usecase, system, api, or permission-callables
+        /// Element kind to list: actor, entity, buc, usecase, system, api, permission-callables, or actor-permission-audit
         #[arg(long, default_value = "actor")]
         kind: ListKind,
         /// Output format: table, json, csv
@@ -150,6 +155,8 @@ enum CsvKind {
     ScreenConstraints,
     /// Permission × callable UC/API list
     PermissionCallables,
+    /// Actor × permission assignment audit inferred from UC/API requirements
+    ActorPermissionAudit,
 }
 
 /// Collect all `.rdra` files from the given paths (files and/or directories).
@@ -234,8 +241,8 @@ fn main() -> Result<()> {
                 std::process::exit(1);
             }
 
-            for diag in rdra_ish_core::system_diagnostics(&model) {
-                eprintln!("warning: {}", diag.error);
+            for warning in consistency_warnings(&model) {
+                eprintln!("warning: {}", warning);
             }
 
             println!("OK: no errors");
@@ -395,6 +402,10 @@ fn main() -> Result<()> {
                     PermissionCallableCsvEmitter.emit(&model, &view)?,
                     "permission-callables.csv",
                 ),
+                CsvKind::ActorPermissionAudit => (
+                    ActorPermissionAuditCsvEmitter.emit(&model, &view)?,
+                    "actor-permission-audit.csv",
+                ),
             };
 
             let out_path = if out.extension().is_some() {
@@ -474,6 +485,84 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+fn consistency_warnings(model: &rdra_ish_core::SemanticModel) -> Vec<String> {
+    let mut warnings = Vec::new();
+
+    for diag in rdra_ish_core::permission_diagnostics(model) {
+        warnings.push(diag.error.to_string());
+    }
+
+    for diag in rdra_ish_core::api_diagnostics(model) {
+        warnings.push(diag.error.to_string());
+    }
+
+    for diag in rdra_ish_core::system_diagnostics(model) {
+        warnings.push(diag.error.to_string());
+    }
+
+    let txs = rdra_ish_core::infer_usecase_transactions(model);
+    for diag in rdra_ish_core::tx_diagnostics(model, &txs) {
+        warnings.push(diag.error.to_string());
+    }
+
+    for diag in rdra_ish_core::event_diagnostics(model) {
+        warnings.push(diag.error.to_string());
+    }
+
+    for result in
+        rdra_ish_core::derive_state_patterns(model, &[], rdra_ish_core::DEFAULT_PATTERN_CAP)
+    {
+        for diag in result.diagnostics {
+            warnings.push(format!(
+                "state derivation for entity '{}': {}",
+                result.entity_id,
+                state_diag_message(&diag)
+            ));
+        }
+    }
+
+    warnings
+}
+
+fn state_diag_message(diag: &rdra_ish_core::StateDiag) -> String {
+    match diag {
+        rdra_ish_core::StateDiag::UnreachableEnumVariant { column, variant } => format!(
+            "enum variant '{}.{}' is unreachable; add a create/default/transition/sets path or remove the variant",
+            column, variant
+        ),
+        rdra_ish_core::StateDiag::ConflictingEffects { usecase, column } => format!(
+            "usecase '{}' assigns conflicting effects to column '{}'; the last effect wins",
+            usecase, column
+        ),
+        rdra_ish_core::StateDiag::DoubleModeledEnum { column } => format!(
+            "enum column '{}' is driven by both transitions and sets; transitions are treated as the source of truth",
+            column
+        ),
+        rdra_ish_core::StateDiag::NoCreationPath => {
+            "no creates path; state derivation is seeded from defaults only".to_string()
+        }
+        rdra_ish_core::StateDiag::PatternCapReached { cap, bound } => format!(
+            "pattern cap reached at {} while the theoretical state-space bound is {}",
+            cap, bound
+        ),
+        rdra_ish_core::StateDiag::ForbiddenStateViolated {
+            conditions,
+            pattern_desc,
+        } => format!(
+            "forbidden state is reachable: {} witnessed by {}",
+            conditions, pattern_desc
+        ),
+        rdra_ish_core::StateDiag::InvariantViolated {
+            guards,
+            requireds,
+            pattern_desc,
+        } => format!(
+            "invariant violated: when {} then {} is broken by {}",
+            guards, requireds, pattern_desc
+        ),
+    }
+}
+
 /// Build a table row separator line.
 fn table_separator(col_widths: &[usize]) -> String {
     col_widths
@@ -536,6 +625,7 @@ fn list_elements(
             format_id_label(&items, format, "APIs")
         }
         ListKind::PermissionCallables => format_permission_callables(model, format),
+        ListKind::ActorPermissionAudit => format_actor_permission_audit(model, format),
     }
 }
 
@@ -632,6 +722,143 @@ fn format_permission_callables(
             Ok(format!("[{}]\n", entries.join(",")))
         }
     }
+}
+
+fn format_actor_permission_audit(
+    model: &rdra_ish_core::SemanticModel,
+    format: &ListFormat,
+) -> Result<String> {
+    let headers = [
+        "actor_id",
+        "actor_label",
+        "permission_id",
+        "permission_label",
+        "assigned",
+        "required",
+        "status",
+        "required_usecase_ids",
+        "required_api_paths",
+    ];
+
+    let rows: Vec<[String; 9]> = derive_actor_permission_audit(model)
+        .into_iter()
+        .map(|entry| {
+            let actor = &model.actors[entry.actor];
+            let permission = &model.permissions[entry.permission];
+            [
+                actor.id.clone(),
+                actor.label.clone(),
+                permission.id.clone(),
+                permission.label.clone(),
+                bool_cell(entry.assigned),
+                bool_cell(entry.required),
+                entry.status.as_str().to_string(),
+                required_usecase_ids(model, &entry.sources),
+                required_api_paths(model, &entry.sources),
+            ]
+        })
+        .collect();
+
+    match format {
+        ListFormat::Table => {
+            if rows.is_empty() {
+                return Ok(String::from("No actor permission audit rows found.\n"));
+            }
+            let mut col_widths: Vec<usize> = headers.iter().map(|h| h.len()).collect();
+            for row in &rows {
+                for (i, cell) in row.iter().enumerate() {
+                    col_widths[i] = col_widths[i].max(cell.chars().count());
+                }
+            }
+            let mut out = String::new();
+            let header_line: Vec<String> = headers
+                .iter()
+                .enumerate()
+                .map(|(i, h)| format!("{:<width$}", h.to_uppercase(), width = col_widths[i]))
+                .collect();
+            out.push_str(&header_line.join("  "));
+            out.push('\n');
+            let sep_line: Vec<String> = col_widths.iter().map(|&w| "\u{2500}".repeat(w)).collect();
+            out.push_str(&sep_line.join("  "));
+            out.push('\n');
+            for row in &rows {
+                let row_line: Vec<String> = row
+                    .iter()
+                    .enumerate()
+                    .map(|(i, cell)| format!("{:<width$}", cell, width = col_widths[i]))
+                    .collect();
+                out.push_str(&row_line.join("  "));
+                out.push('\n');
+            }
+            Ok(out)
+        }
+        ListFormat::Csv => {
+            let mut out = format!("{}\n", headers.join(","));
+            for row in &rows {
+                let cells: Vec<String> = row.iter().map(|c| csv_field(c)).collect();
+                out.push_str(&format!("{}\n", cells.join(",")));
+            }
+            Ok(out)
+        }
+        ListFormat::Json => {
+            let entries: Vec<String> = rows
+                .iter()
+                .map(|row| {
+                    format!(
+                        "{{\"actor_id\":{},\"actor_label\":{},\"permission_id\":{},\"permission_label\":{},\"assigned\":{},\"required\":{},\"status\":{},\"required_usecase_ids\":{},\"required_api_paths\":{}}}",
+                        serde_json::to_string(&row[0]).unwrap(),
+                        serde_json::to_string(&row[1]).unwrap(),
+                        serde_json::to_string(&row[2]).unwrap(),
+                        serde_json::to_string(&row[3]).unwrap(),
+                        row[4],
+                        row[5],
+                        serde_json::to_string(&row[6]).unwrap(),
+                        serde_json::to_string(&row[7]).unwrap(),
+                        serde_json::to_string(&row[8]).unwrap(),
+                    )
+                })
+                .collect();
+            Ok(format!("[{}]\n", entries.join(",")))
+        }
+    }
+}
+
+fn required_usecase_ids(
+    model: &rdra_ish_core::SemanticModel,
+    sources: &[rdra_ish_core::ActorPermissionRequirementSource],
+) -> String {
+    let mut ids: Vec<&str> = sources
+        .iter()
+        .filter(|source| source.api.is_none())
+        .map(|source| model.use_cases[source.usecase].id.as_str())
+        .collect();
+    ids.sort();
+    ids.dedup();
+    ids.join("|")
+}
+
+fn required_api_paths(
+    model: &rdra_ish_core::SemanticModel,
+    sources: &[rdra_ish_core::ActorPermissionRequirementSource],
+) -> String {
+    let mut paths: Vec<String> = sources
+        .iter()
+        .filter_map(|source| {
+            source.api.map(|api| {
+                format!(
+                    "{}->{}",
+                    model.use_cases[source.usecase].id, model.apis[api].id
+                )
+            })
+        })
+        .collect();
+    paths.sort();
+    paths.dedup();
+    paths.join("|")
+}
+
+fn bool_cell(value: bool) -> String {
+    (if value { "true" } else { "false" }).to_string()
 }
 
 fn format_id_label(
@@ -940,5 +1167,85 @@ requires_permission(BookingApi, ScheduleWrite)
             list_elements(&model, &ListKind::PermissionCallables, &ListFormat::Table).unwrap();
 
         assert_eq!(output, "No permissions found.\n");
+    }
+
+    #[test]
+    fn table_list_actor_permission_audit() {
+        use rdra_ish_core::build_model;
+        use rdra_ish_syntax::parse;
+
+        let src = r#"
+actor Staff "Staff"
+usecase BookAppointment "Book Appointment"
+api BookingApi "Booking API"
+permission ScheduleWrite "Schedule Write"
+permission LegacyAdmin "Legacy Admin"
+performs(Staff, BookAppointment)
+has_permission(Staff, LegacyAdmin)
+requires_permission(BookAppointment, ScheduleWrite)
+invokes(BookAppointment, BookingApi)
+requires_permission(BookingApi, ScheduleWrite)
+"#;
+        let (ast, _) = parse(src);
+        let (model, _) = build_model(&ast);
+
+        let output =
+            list_elements(&model, &ListKind::ActorPermissionAudit, &ListFormat::Table).unwrap();
+
+        assert!(output.contains("ACTOR_ID"));
+        assert!(output.contains("LegacyAdmin"));
+        assert!(output.contains("excess"));
+        assert!(output.contains("ScheduleWrite"));
+        assert!(output.contains("missing"));
+        assert!(output.contains("BookAppointment->BookingApi"));
+    }
+
+    #[test]
+    fn consistency_warnings_include_permission_and_state_findings() {
+        use rdra_ish_core::build_model;
+        use rdra_ish_syntax::parse;
+
+        let src = r#"
+actor Staff "Staff"
+usecase BookAppointment "Book Appointment"
+permission ScheduleWrite "Schedule Write"
+entity Appointment "Appointment" {
+  id: Int @pk
+  status: Enum(draft, booked) @default(draft)
+}
+performs(Staff, BookAppointment)
+requires_permission(BookAppointment, ScheduleWrite)
+"#;
+        let (ast, _) = parse(src);
+        let (model, diags) = build_model(&ast);
+        assert!(diags.iter().all(|diag| diag.is_warning));
+
+        let warnings = consistency_warnings(&model);
+
+        assert!(
+            warnings
+                .iter()
+                .any(|warning| warning
+                    .contains("actor 'Staff' is missing permission 'ScheduleWrite'"))
+        );
+        assert!(warnings.iter().any(|warning| warning
+            .contains("state derivation for entity 'Appointment': no creates path")));
+        assert!(warnings
+            .iter()
+            .any(|warning| warning.contains("enum variant 'status.booked' is unreachable")));
+    }
+
+    #[test]
+    fn state_diag_message_formats_invariant_violation() {
+        let message = state_diag_message(&rdra_ish_core::StateDiag::InvariantViolated {
+            guards: "status=booked".to_string(),
+            requireds: "booked_at=present".to_string(),
+            pattern_desc: "status=booked, booked_at=null".to_string(),
+        });
+
+        assert_eq!(
+            message,
+            "invariant violated: when status=booked then booked_at=present is broken by status=booked, booked_at=null"
+        );
     }
 }
