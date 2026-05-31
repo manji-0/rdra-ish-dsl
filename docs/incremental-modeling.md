@@ -23,9 +23,9 @@ useful.
 
 The terms BUC, business flow, and UC are used in the RDRA-ish sense described in
 [RDRA-ish Interpretation](./rdra-ish-interpretation.md): BUCs are business-value
-review containers, UCs are concrete effect-bearing interactions, and business flow is
-usually reviewed through prose plus generated sequence, event-flow, CRUD, ER, and
-state views.
+review containers, business flow is the concrete realization of a BUC through UCs and
+events, and UCs are effect-bearing interactions. The flow is reviewed through prose
+plus generated sequence, event-flow, CRUD, ER, and state views.
 
 The model can stay intentionally incomplete while it is being explored:
 

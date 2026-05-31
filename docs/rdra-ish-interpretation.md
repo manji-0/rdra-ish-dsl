@@ -22,7 +22,7 @@ scopes rather than as a strict copy of the original RDRA artifacts:
 | Concept | RDRA-ish role |
 |---|---|
 | BUC | A business-value slice and review container. |
-| Business flow | A derived or narrative view over BUCs, UCs, and events. |
+| Business flow | The concrete flow that realizes a BUC through UCs and events. |
 | UC | A concrete interaction and effect boundary that connects actors, screens, APIs, entities, and events. |
 
 ## BUC
@@ -31,8 +31,10 @@ In RDRA-ish, a BUC is the unit that keeps business value, ownership, and review 
 together. It is declared with `buc`, assigned to a business area with `belongs`, and
 composed from UCs with `contains`.
 
-This differs from a reading where BUC is primarily a descriptive business-flow
-artifact. In RDRA-ish, the BUC is deliberately more operational:
+This differs from a reading where BUC itself is the detailed business-flow artifact.
+In RDRA-ish, the BUC is the business-value frame, and the business flow is its
+concrete realization through the UCs and events contained in or connected from that
+frame. The BUC is deliberately operational:
 
 - It is the default file and module boundary: one BUC file gathers the local UCs,
   screens, APIs, events, and predicates that explain that slice.
@@ -48,17 +50,18 @@ it is probably a UC, an API boundary, or a data operation instead.
 ## Business Flow
 
 RDRA-ish does not currently have a first-class `business_flow` element. Business flow
-is represented in one of two ways:
+is the concrete shape of a BUC, represented in one of two ways:
 
 - as prose and staging guidance outside the DSL, especially while discovering scope;
-- as derived graph structure from `contains`, `raises`, `triggers`, `transitions`, and
-  CRUD/API relationships once the model is concrete enough.
+- as model structure from `contains`, `raises`, `triggers`, `transitions`, and CRUD/API
+  relationships once the BUC is concrete enough.
 
-That means business flow is not the primary decomposition unit in the DSL. It is a view
-that explains how BUCs and UCs line up over time:
+That means business flow is not an independent decomposition unit in the DSL. It is
+the BUC-specific flow that explains how the BUC is carried out over time:
 
-- inside one BUC, sequence diagrams show actor, screen, API, and entity interactions;
-- across BUCs, event-flow diagrams show `UC -> Event -> UC` and event-to-state chains;
+- inside a BUC, sequence diagrams show actor, screen, API, and entity interactions;
+- when a BUC hands off to another BUC, event-flow diagrams show `UC -> Event -> UC`
+  and event-to-state chains;
 - state derivation shows which entity states are reachable through declared BUC/UC
   patterns.
 
@@ -89,8 +92,9 @@ split under a BUC.
 The practical reading is:
 
 1. Use BUCs to choose the business-value slice under review.
-2. Use UCs to name the concrete interactions inside that slice.
-3. Use event-flow, sequence, CRUD, ER, and state diagrams as business-flow views rather
+2. Treat business flow as the concrete realization of that BUC.
+3. Use UCs to name the concrete interactions inside that flow.
+4. Use event-flow, sequence, CRUD, ER, and state diagrams to review the flow rather
    than modeling business flow as a separate primitive.
 
 This leads to a deliberate asymmetry:
@@ -98,7 +102,8 @@ This leads to a deliberate asymmetry:
 | Question | RDRA-ish answer |
 |---|---|
 | What value or responsibility are we reviewing? | BUC |
-| What action happens inside that value slice? | UC |
+| How is that BUC concretely carried out? | Business flow through UCs and events |
+| What action happens inside that flow? | UC |
 | What order or causality connects actions? | Event-flow, sequence, and prose |
 | What data or lifecycle effect does an action have? | CRUD, API, `sets`, `raises`, `transitions` |
 | What technical boundary carries the action? | Screen/API/System relationships |
@@ -111,6 +116,8 @@ This leads to a deliberate asymmetry:
 
 - Create a BUC when the slice has independent business value and can be reviewed by a
   business stakeholder.
+- Treat the business flow as the first concrete expansion of that BUC, even though the
+  DSL stores it through UCs, events, and generated views rather than a dedicated node.
 - Create a UC when there is a user-visible or event-triggered action whose data,
   screen, API, event, or state effects should be reviewable.
 - Use `triggers(Event, UseCase)` when flow crosses from one UC to another through a
@@ -126,6 +133,6 @@ This leads to a deliberate asymmetry:
 <!-- derived-from #reading-the-three-together -->
 
 RDRA-ish is RDRA-inspired, not RDRA-equivalent. BUCs are business-value containers,
-UCs are effect-bearing interactions, and business flow is a generated or narrative
-view over those elements. This keeps the model useful both for requirements discussion
-and for implementation-oriented review.
+business flow is the concrete realization of a BUC through UCs and events, and UCs are
+effect-bearing interactions. This keeps the model useful both for requirements
+discussion and for implementation-oriented review.
