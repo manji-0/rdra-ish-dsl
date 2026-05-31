@@ -46,6 +46,9 @@ RDRA-ish deliberately differs from a stricter reading of the original RDRA artif
   disambiguated with `kind::Id` syntax.
 - **Use-case coverage**: BUC-scoped diagrams and CRUD matrices show which actors,
   use cases, screens, APIs, and entities are actually connected.
+- **Access coverage**: screen constraints show which UC/API permission and medium
+  requirements pass through each screen, and permission-callable lists show what each
+  permission enables.
 - **Entity state reachability**: `states` computes which Enum / Bool / nullable /
   comparison-proposition combinations can be reached through declared use cases and
   events.
@@ -54,6 +57,60 @@ RDRA-ish deliberately differs from a stricter reading of the original RDRA artif
   gaps, and FK-isolated writes in inferred transaction groups.
 - **Review artifacts**: Mermaid is the lowest-friction default for text review, while
   PlantUML/SVG/PNG are available when a rendered asset is needed.
+
+<!-- derived-from ./docs/language-reference.md#instance-declarations -->
+<!-- derived-from ./docs/language-reference.md#access-constraints -->
+<!-- derived-from ./docs/language-reference.md#belongs-context -->
+<!-- derived-from ./docs/incremental-modeling.md#buc-context-and-access-rules -->
+## Context and Access Modeling
+
+RDRA-ISH keeps short labels for diagrams, but every instance can also carry a
+longer `description`. Use it for review notes or domain explanation that should stay
+in the source model without overcrowding generated diagrams:
+
+```rdra
+buc BucAppointmentScheduling "Appointment Scheduling" description "Booking, rescheduling, cancellation, and no-show handling."
+api BookingApi "Booking API" description "Consistency boundary for appointment slot reservation."
+```
+
+Business-BUC mappings can describe the business context in which the BUC applies.
+Use typed context values when the vocabulary should be reused, or string literals
+when the context is still provisional:
+
+```rdra
+timing AppointmentRequested "Appointment Requested"
+location FrontDesk "Front Desk"
+medium StaffTerminal "Staff Terminal"
+
+belongs(BucAppointmentScheduling, ClinicOps)
+  .when(AppointmentRequested)
+  .where(FrontDesk)
+  .by(StaffTerminal)
+```
+
+- `.when(...)` records timing, trigger, or business situation.
+- `.where(...)` records place, channel, organization point, or usage scene.
+- `.by(...)` records the physical medium, device, terminal, or operating medium.
+
+Permissions are modeled as vocabulary too. Actors receive permissions with
+`has_permission`, and use cases or APIs declare what permission and medium they
+require. Screens do not define those constraints directly; `csv --kind
+screen-constraints` derives the screen paths from `displays(UC, Screen)` and
+`invokes(UC, Api)`. `csv --kind permission-callables` and `list --kind
+permission-callables` invert the same model so reviewers can see which use cases and
+APIs each permission enables.
+
+```rdra
+actor Staff "Staff"
+permission ScheduleWrite "Schedule Write"
+medium StaffTerminal "Staff Terminal"
+
+has_permission(Staff, ScheduleWrite)
+requires_permission(BookAppointment, ScheduleWrite)
+requires_medium(BookAppointment, StaffTerminal)
+requires_permission(BookingApi, ScheduleWrite)
+requires_medium(BookingApi, StaffTerminal)
+```
 
 ## Installation
 
@@ -70,20 +127,25 @@ cargo install --path crates/rdra-ish-cli
 The modeling loop is intentionally staged. At each stage, ask only for the next
 missing information, validate the current abstraction, then add the next level of
 detail. Read the stages as a gradual shift from business concerns to technical
-concerns: first name value, actors, and use cases; then introduce data touchpoints,
-interaction/API boundaries, entity structure, lifecycle, and enforceable rules.
+concerns: first name value, actors, use cases, BUC context, and access constraints;
+then introduce data touchpoints, interaction/API boundaries, entity structure,
+lifecycle, and enforceable rules.
 
 ![RDRA-ISH current spec and concretization steps](docs/assets/rdra-ish-spec-and-steps.png)
 
 1. Declare shared actors, businesses, and entities under a shared module.
-2. Add one BUC file at a time with its use cases, screens, CRUD predicates, and events.
+2. Add one BUC file at a time with its use cases, context, screens, CRUD predicates, and events.
 3. Run `rdra-ish check <model-root>` after each BUC to catch type and import mistakes.
 4. Generate Mermaid diagrams for quick review:
    `rdra-ish diagram <model-root> --kind rdra --format mermaid --buc <BucId>`.
 5. Run `rdra-ish csv <model-root> --kind matrix` to review use-case/entity CRUD coverage.
-6. Run `rdra-ish states <model-root>` to find unreachable states, missing creation
+6. Run `rdra-ish csv <model-root> --kind screen-constraints` to review inferred
+   permission and medium paths through screens, use cases, and APIs.
+7. Run `rdra-ish csv <model-root> --kind permission-callables` to review the
+   permission-to-UC/API map.
+8. Run `rdra-ish states <model-root>` to find unreachable states, missing creation
    paths, and state constraint violations.
-7. Add `forbidden` / `invariant` constraints when the model needs to assert invalid or
+9. Add `forbidden` / `invariant` constraints when the model needs to assert invalid or
    required state combinations.
 
 For a slower abstract-to-concrete workflow, see
@@ -130,9 +192,12 @@ rdra-ish csv src/ --kind matrix
 rdra-ish csv src/ --kind api          # API list
 rdra-ish csv src/ --kind api-matrix   # API × Entity CRUD matrix
 rdra-ish csv src/ --kind screen-constraints # Screen × UC/API access constraints
+rdra-ish csv src/ --kind permission-callables # Permission × callable UC/API list
 
 # List output
 rdra-ish list src/ --kind actor --format table
+rdra-ish list src/ --kind system --format table
+rdra-ish list src/ --kind permission-callables --format table
 rdra-ish list src/ --kind api   --format table
 rdra-ish list src/ --kind buc   --format json
 
@@ -153,6 +218,27 @@ rdra-ish states src/ --format json           # JSON output
 | `--buc <id>` | — (whole) | Filter by BUC id (repeatable). For `sequence`, only directly contained use cases are shown |
 | `--usecase <id>` | — (whole) | Filter `sequence` diagrams by use case id (repeatable, cannot be combined with `--buc`) |
 | `-o / --out` | `out` | Output file path (extension added automatically) |
+
+### `csv` options
+
+| Option | Default | Description |
+|---|---|---|
+| `--kind` | `entity` | `actor` / `entity` / `matrix` / `api` / `api-matrix` / `screen-constraints` / `permission-callables` |
+| `-o / --out` | `out` | Output file path. A default extension is added when omitted |
+
+`screen-constraints` emits screen × use-case/API permission and medium paths.
+`permission-callables` emits permission × callable UC/API rows derived from
+`requires_permission`.
+
+### `list` options
+
+| Option | Default | Description |
+|---|---|---|
+| `--kind` | `actor` | `actor` / `entity` / `buc` / `usecase` / `system` / `api` / `permission-callables` |
+| `--format` | `table` | `table` / `json` / `csv` |
+
+`permission-callables` lists the same permission-to-UC/API view in stdout-friendly
+formats.
 
 ### `states` options
 
@@ -254,6 +340,7 @@ continue to render labels only.
 |---|---|
 | `actor` | Human actor |
 | `extsystem` | External system |
+| `system` | Internal system boundary that groups APIs |
 | `requirement` | Requirement |
 | `business` | Business |
 | `buc` | Business use case |
@@ -310,7 +397,8 @@ entity Order "Order" {
 | `shows` | (Screen, Entity) | Screen shows entity information |
 | `raises` | (UseCase, Event) | UC raises a domain event |
 | `triggers` | (Event, UseCase) | Event triggers a UC |
-| `contains` | (Buc, UseCase) | UC that composes a BUC |
+| `contains` | (Buc, UseCase) or (System, Api) | UC that composes a BUC, or API that belongs to a system boundary |
+| `coordinates` | (UseCase, Entity, Entity) | Use case coordinates consistency for a relation crossing system boundaries |
 | `belongs` | (Buc, Business) | BUC belongs to a business |
 | `has_permission` | (Actor, Permission) | Actor has a permission type |
 | `requires_permission` | (UseCase\|Api, Permission) | UC/API requires a permission |
@@ -332,7 +420,8 @@ requires_medium(BookAppointment, StaffTerminal)
 ```
 
 Use `rdra-ish csv <model-root> --kind screen-constraints` to inspect screen × UC/API
-constraint paths.
+constraint paths, and `rdra-ish csv <model-root> --kind permission-callables` to
+inspect the inverse permission × callable UC/API view.
 
 `belongs(Buc, Business)` may carry optional business-context metadata:
 

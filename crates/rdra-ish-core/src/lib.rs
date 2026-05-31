@@ -10,7 +10,10 @@ pub mod state_pattern;
 pub mod system;
 pub mod tx;
 
-pub use access::{derive_screen_constraint_patterns, ScreenConstraintPattern};
+pub use access::{
+    derive_permission_callables, derive_screen_constraint_patterns, PermissionCallable,
+    ScreenConstraintPattern,
+};
 pub use analysis::build_model;
 pub use diagnostics::{Diagnostic, RdraError};
 pub use event_flow::{api_diagnostics, collect_event_flows, event_diagnostics, EventFlow};

@@ -1,10 +1,10 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
-use rdra_ish_core::{build_merged_model, resolve};
+use rdra_ish_core::{build_merged_model, derive_permission_callables, resolve};
 use rdra_ish_emit::{
     csv::{
         ActorListCsvEmitter, ApiEntityMatrixCsvEmitter, ApiListCsvEmitter, EntityListCsvEmitter,
-        RelationMatrixCsvEmitter, ScreenConstraintCsvEmitter,
+        PermissionCallableCsvEmitter, RelationMatrixCsvEmitter, ScreenConstraintCsvEmitter,
     },
     mermaid::{
         ErMermaidEmitter, EventFlowMermaidEmitter, ObjectGraphMermaidEmitter, RdraMermaidEmitter,
@@ -29,6 +29,8 @@ enum ListKind {
     Usecase,
     System,
     Api,
+    /// Permission × callable UC/API list
+    PermissionCallables,
 }
 
 #[derive(ValueEnum, Clone)]
@@ -87,7 +89,7 @@ enum Commands {
     List {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Element kind to list: actor, entity, buc, usecase, system, or api
+        /// Element kind to list: actor, entity, buc, usecase, system, api, or permission-callables
         #[arg(long, default_value = "actor")]
         kind: ListKind,
         /// Output format: table, json, csv
@@ -146,6 +148,8 @@ enum CsvKind {
     ApiMatrix,
     /// Screen × UC/API permission/medium constraints
     ScreenConstraints,
+    /// Permission × callable UC/API list
+    PermissionCallables,
 }
 
 /// Collect all `.rdra` files from the given paths (files and/or directories).
@@ -387,6 +391,10 @@ fn main() -> Result<()> {
                     ScreenConstraintCsvEmitter.emit(&model, &view)?,
                     "screen-constraints.csv",
                 ),
+                CsvKind::PermissionCallables => (
+                    PermissionCallableCsvEmitter.emit(&model, &view)?,
+                    "permission-callables.csv",
+                ),
             };
 
             let out_path = if out.extension().is_some() {
@@ -526,6 +534,102 @@ fn list_elements(
                 .collect();
             items.sort_by_key(|(id, _)| *id);
             format_id_label(&items, format, "APIs")
+        }
+        ListKind::PermissionCallables => format_permission_callables(model, format),
+    }
+}
+
+fn format_permission_callables(
+    model: &rdra_ish_core::SemanticModel,
+    format: &ListFormat,
+) -> Result<String> {
+    let headers = [
+        "permission_id",
+        "permission_label",
+        "usecase_ids",
+        "api_ids",
+    ];
+
+    let rows: Vec<[String; 4]> = derive_permission_callables(model)
+        .into_iter()
+        .map(|entry| {
+            let permission = &model.permissions[entry.permission];
+            let usecase_ids = entry
+                .usecases
+                .iter()
+                .map(|key| model.use_cases[*key].id.as_str())
+                .collect::<Vec<_>>()
+                .join("|");
+            let api_ids = entry
+                .apis
+                .iter()
+                .map(|key| model.apis[*key].id.as_str())
+                .collect::<Vec<_>>()
+                .join("|");
+            [
+                permission.id.clone(),
+                permission.label.clone(),
+                usecase_ids,
+                api_ids,
+            ]
+        })
+        .collect();
+
+    match format {
+        ListFormat::Table => {
+            if rows.is_empty() {
+                return Ok(String::from("No permissions found.\n"));
+            }
+            let mut col_widths: Vec<usize> = headers.iter().map(|h| h.len()).collect();
+            for row in &rows {
+                for (i, cell) in row.iter().enumerate() {
+                    col_widths[i] = col_widths[i].max(cell.chars().count());
+                }
+            }
+            let mut out = String::new();
+            let header_line: Vec<String> = headers
+                .iter()
+                .enumerate()
+                .map(|(i, h)| format!("{:<width$}", h.to_uppercase(), width = col_widths[i]))
+                .collect();
+            out.push_str(&header_line.join("  "));
+            out.push('\n');
+            let sep_line: Vec<String> = col_widths.iter().map(|&w| "\u{2500}".repeat(w)).collect();
+            out.push_str(&sep_line.join("  "));
+            out.push('\n');
+            for row in &rows {
+                let row_line: Vec<String> = row
+                    .iter()
+                    .enumerate()
+                    .map(|(i, cell)| format!("{:<width$}", cell, width = col_widths[i]))
+                    .collect();
+                out.push_str(&row_line.join("  "));
+                out.push('\n');
+            }
+            Ok(out)
+        }
+        ListFormat::Csv => {
+            let mut out = format!("{}\n", headers.join(","));
+            for row in &rows {
+                let cells: Vec<String> = row.iter().map(|c| csv_field(c)).collect();
+                out.push_str(&format!("{}\n", cells.join(",")));
+            }
+            Ok(out)
+        }
+        ListFormat::Json => {
+            let entries: Vec<String> = rows
+                .iter()
+                .map(|row| {
+                    format!(
+                        "{{\"permission_id\":{},\"permission_label\":{},\"usecase_ids\":{},\"api_ids\":{}}}",
+                        serde_json::to_string(&row[0]).unwrap(),
+                        serde_json::to_string(&row[1]).unwrap(),
+                        serde_json::to_string(&row[2]).unwrap(),
+                        serde_json::to_string(&row[3]).unwrap(),
+                    )
+                })
+                .collect();
+            Ok(format!("[{}]\n", entries.join(",")))
         }
     }
 }
@@ -802,5 +906,39 @@ mod tests {
         let output = list_elements(&model, &ListKind::Entity, &ListFormat::Table).unwrap();
 
         assert_eq!(output, "No entities found.\n");
+    }
+
+    #[test]
+    fn table_list_permission_callables() {
+        use rdra_ish_core::build_model;
+        use rdra_ish_syntax::parse;
+
+        let src = r#"
+usecase BookAppointment "Book Appointment"
+api BookingApi "Booking API"
+permission ScheduleWrite "Schedule Write"
+requires_permission(BookAppointment, ScheduleWrite)
+requires_permission(BookingApi, ScheduleWrite)
+"#;
+        let (ast, _) = parse(src);
+        let (model, _) = build_model(&ast);
+
+        let output =
+            list_elements(&model, &ListKind::PermissionCallables, &ListFormat::Table).unwrap();
+
+        assert!(output.contains("PERMISSION_ID"));
+        assert!(output.contains("ScheduleWrite"));
+        assert!(output.contains("BookAppointment"));
+        assert!(output.contains("BookingApi"));
+    }
+
+    #[test]
+    fn table_list_reports_empty_permission_callables() {
+        let model = SemanticModel::default();
+
+        let output =
+            list_elements(&model, &ListKind::PermissionCallables, &ListFormat::Table).unwrap();
+
+        assert_eq!(output, "No permissions found.\n");
     }
 }

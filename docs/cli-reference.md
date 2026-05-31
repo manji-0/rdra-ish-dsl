@@ -92,7 +92,7 @@ rdra-ish csv <INPUTS...> [--kind <KIND>] [-o <OUT>]
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `actor` \| `entity` \| `matrix` \| `api` \| `api-matrix` \| `screen-constraints` | `entity` | CSV kind. `actor` = actor list; `entity` = entity/column list; `matrix` = use-case × entity CRUD matrix; `api` = API list; `api-matrix` = API × entity CRUD matrix; `screen-constraints` = screen × UC/API permission/medium paths. |
+| `--kind` | `actor` \| `entity` \| `matrix` \| `api` \| `api-matrix` \| `screen-constraints` \| `permission-callables` | `entity` | CSV kind. `actor` = actor list; `entity` = entity/column list; `matrix` = use-case × entity CRUD matrix; `api` = API list; `api-matrix` = API × entity CRUD matrix; `screen-constraints` = screen × UC/API permission/medium paths; `permission-callables` = permission × callable UC/API list derived from `requires_permission`. |
 | `-o`, `--out` | path | `out` | Output file path. If no extension is given, a default is appended (`actor.csv` / `entity.csv` / `matrix.csv` / etc.). |
 
 The command writes the CSV to the output path and prints `wrote <path>`.
@@ -110,7 +110,7 @@ rdra-ish list <INPUTS...> [--kind <KIND>] [--format <FORMAT>]
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `actor` \| `entity` \| `buc` \| `usecase` \| `api` | `actor` | The element kind to list. `actor` / `buc` / `usecase` / `api` list id+label; `entity` lists each column with its type and PK/FK flags. |
+| `--kind` | `actor` \| `entity` \| `buc` \| `usecase` \| `api` \| `permission-callables` | `actor` | The element kind to list. `actor` / `buc` / `usecase` / `api` list id+label; `entity` lists each column with its type and PK/FK flags; `permission-callables` lists each permission with callable use case and API ids derived from `requires_permission`. |
 | `--format` | `table` \| `json` \| `csv` | `table` | Output format. |
 
 Output is written to stdout.

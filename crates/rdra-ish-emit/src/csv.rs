@@ -2,7 +2,7 @@
 
 use crate::{EmitError, Emitter, View};
 use rdra_ish_core::{
-    derive_screen_constraint_patterns,
+    derive_permission_callables, derive_screen_constraint_patterns,
     model::{ApiKey, ColumnType, EntityKey, NodeRef, RelKind, SemanticModel, UseCaseKey},
 };
 
@@ -335,6 +335,50 @@ impl Emitter for ScreenConstraintCsvEmitter {
     }
 }
 
+// ── PermissionCallableCsvEmitter ─────────────────────────────────────────────
+
+pub struct PermissionCallableCsvEmitter;
+
+impl Emitter for PermissionCallableCsvEmitter {
+    fn emit(&self, model: &SemanticModel, _view: &View) -> Result<String, EmitError> {
+        let mut wtr = csv::Writer::from_writer(vec![]);
+        wtr.write_record([
+            "permission_id",
+            "permission_label",
+            "usecase_ids",
+            "api_ids",
+        ])?;
+
+        for entry in derive_permission_callables(model) {
+            let permission = &model.permissions[entry.permission];
+            let usecase_ids = entry
+                .usecases
+                .iter()
+                .map(|key| model.use_cases[*key].id.as_str())
+                .collect::<Vec<_>>()
+                .join("|");
+            let api_ids = entry
+                .apis
+                .iter()
+                .map(|key| model.apis[*key].id.as_str())
+                .collect::<Vec<_>>()
+                .join("|");
+
+            wtr.write_record([
+                permission.id.as_str(),
+                permission.label.as_str(),
+                &usecase_ids,
+                &api_ids,
+            ])?;
+        }
+
+        let data = wtr
+            .into_inner()
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
+        Ok(String::from_utf8(data).unwrap_or_default())
+    }
+}
+
 // ── ヘルパー ──────────────────────────────────────────────────────────────────
 
 fn col_type_to_str(ct: &ColumnType) -> &'static str {
@@ -487,6 +531,30 @@ requires_medium(BookingApi, SecureChannel)
         assert!(result.contains(
             "BookingScreen,BookAppointment,BookingApi,ScheduleWrite|PatientRead,StaffTerminal|SecureChannel"
         ));
+    }
+
+    #[test]
+    fn test_permission_callable_csv() {
+        let src = r#"
+usecase BookAppointment "Book Appointment"
+usecase CancelAppointment "Cancel Appointment"
+api BookingApi "Booking API"
+api CancelApi "Cancel API"
+permission ScheduleWrite "Schedule Write"
+permission PatientRead "Patient Read"
+requires_permission(BookAppointment, ScheduleWrite)
+requires_permission(BookAppointment, PatientRead)
+requires_permission(CancelAppointment, ScheduleWrite)
+requires_permission(BookingApi, PatientRead)
+requires_permission(CancelApi, ScheduleWrite)
+"#;
+        let model = model_from(src);
+        let view = View::whole();
+        let result = PermissionCallableCsvEmitter.emit(&model, &view).unwrap();
+        assert!(result.contains("permission_id,permission_label,usecase_ids,api_ids"));
+        assert!(result
+            .contains("ScheduleWrite,Schedule Write,BookAppointment|CancelAppointment,CancelApi"));
+        assert!(result.contains("PatientRead,Patient Read,BookAppointment,BookingApi"));
     }
 
     #[test]
