@@ -20,7 +20,7 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 
 ### Steps
 
-1. **Run `rdra-ish check <src-dir>/`** to surface syntax and type errors first.  
+1. **Run `rdra-ish check <src-dir>/`** to surface syntax and type errors first.
    Fix all reported errors before proceeding to semantic review.
 
 2. **Check file layout**
