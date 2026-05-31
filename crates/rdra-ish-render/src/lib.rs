@@ -84,7 +84,7 @@ impl DiagramRenderer for PlantumlCliRenderer {
             .arg("-jar")
             .arg(&self.jar)
             .arg(format.flag())
-            .arg("-pipe")        // read from stdin, write to stdout
+            .arg("-pipe") // read from stdin, write to stdout
             .arg("-charset")
             .arg("UTF-8")
             .stdin(Stdio::piped())
