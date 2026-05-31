@@ -6,6 +6,7 @@ a validation command, and a focused set of questions that unlocks the next stage
 
 <!-- constrained-by ./language-reference.md -->
 <!-- constrained-by ./cli-reference.md -->
+<!-- constrained-by ./rdra-ish-interpretation.md#basic-stance -->
 <!-- derived-from ../README.md#recommended-modeling-loop -->
 
 ## Principle
@@ -19,6 +20,12 @@ rules that the implementation must preserve.
 Start with the smallest model that can answer the current question. Move to the next
 stage only when the current abstraction is stable enough to make the added detail
 useful.
+
+The terms BUC, business flow, and UC are used in the RDRA-ish sense described in
+[RDRA-ish Interpretation](./rdra-ish-interpretation.md): BUCs are business-value
+review containers, UCs are concrete effect-bearing interactions, and business flow is
+usually reviewed through prose plus generated sequence, event-flow, CRUD, ER, and
+state views.
 
 The model can stay intentionally incomplete while it is being explored:
 

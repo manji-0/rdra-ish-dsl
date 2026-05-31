@@ -33,6 +33,10 @@ RDRA-ISH therefore treats a model as a bridge: `check`, `diagram`, `csv`, and
 `states` let a developer refine requirements, system boundaries, API boundaries,
 entity structure, and lifecycle constraints in one source model.
 
+For the intended reading of BUCs, business flow, and use cases, see
+[RDRA-ish Interpretation](./docs/rdra-ish-interpretation.md). It explains where
+RDRA-ish deliberately differs from a stricter reading of the original RDRA artifacts.
+
 <!-- derived-from ./docs/language-reference.md -->
 <!-- derived-from ./docs/state-derivation.md -->
 ## What It Helps You Check
