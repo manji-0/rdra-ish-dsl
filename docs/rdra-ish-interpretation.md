@@ -7,6 +7,8 @@ making the difference explicit.
 
 <!-- constrained-by ./language-reference.md#instance-declarations -->
 <!-- constrained-by ./language-reference.md#relationship-predicates -->
+<!-- constrained-by ./language-reference.md#access-constraints -->
+<!-- constrained-by ./language-reference.md#belongs-context -->
 <!-- derived-from ./incremental-modeling.md#principle -->
 
 ## Basic Stance
@@ -21,15 +23,17 @@ scopes rather than as a strict copy of the original RDRA artifacts:
 
 | Concept | RDRA-ish role |
 |---|---|
-| BUC | A business-value slice and review container. |
+| BUC | A business-value slice and review container, optionally contextualized by timing/place/medium. |
 | Business flow | The concrete flow that realizes a BUC through UCs and events. |
-| UC | A concrete interaction and effect boundary that connects actors, screens, APIs, entities, and events. |
+| UC | A concrete interaction and effect boundary that connects actors, screens, APIs, entities, events, permissions, and operation media. |
 
 ## BUC
 
 In RDRA-ish, a BUC is the unit that keeps business value, ownership, and review scope
 together. It is declared with `buc`, assigned to a business area with `belongs`, and
 composed from UCs with `contains`.
+When the assignment is contextual, `belongs(Buc, Business).when(...).where(...).by(...)`
+records the timing, location/channel, and medium in which that business mapping applies.
 
 This differs from a reading where BUC itself is the detailed business-flow artifact.
 In RDRA-ish, the BUC is the business-value frame, and the business flow is its
@@ -40,6 +44,8 @@ frame. The BUC is deliberately operational:
   screens, APIs, events, and predicates that explain that slice.
 - It is the main filter for diagrams, CRUD matrices, and state derivation.
 - It owns the question "what business value are we reviewing right now?"
+- It can name where, when, and by what medium the value slice applies without turning
+  those context values into screens or APIs.
 - It may contain human-initiated UCs and event-triggered UCs when both belong to the
   same value slice.
 
@@ -80,6 +86,8 @@ observable effects:
 - `invokes` connects the UC to API boundaries.
 - CRUD predicates connect the UC or invoked API to entities.
 - `raises`, `triggers`, `transitions`, and `sets` connect the UC to lifecycle effects.
+- `requires_permission` and `requires_medium` state authority and medium constraints
+  on the UC itself; API-specific constraints can be attached to the invoked API.
 
 This makes a UC smaller and more effect-oriented than a whole business process. A good
 UC name should describe one actor-intelligible action such as "Place Order", "Cancel
@@ -107,6 +115,7 @@ This leads to a deliberate asymmetry:
 | What order or causality connects actions? | Event-flow, sequence, and prose |
 | What data or lifecycle effect does an action have? | CRUD, API, `sets`, `raises`, `transitions` |
 | What technical boundary carries the action? | Screen/API/System relationships |
+| What authority or medium constrains the action? | `has_permission`, `requires_permission`, `requires_medium`, and screen-constraints CSV |
 
 ## Modeling Heuristics
 
@@ -126,6 +135,8 @@ This leads to a deliberate asymmetry:
   when it affects reviewable artifacts or consistency checks.
 - Do not introduce an API just to mirror a UC. Introduce it when the interaction has a
   meaningful consistency, transaction, ownership, or integration boundary.
+- Do not attach permission or device constraints directly to a screen. Declare them on
+  the UC/API path and derive screen patterns through `displays` and `invokes`.
 
 ## Summary
 

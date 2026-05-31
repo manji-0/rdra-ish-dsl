@@ -7,6 +7,10 @@ description: Review RDRA DSL files for syntax errors, semantic inconsistencies, 
 
 Review existing RDRA DSL files for syntax correctness, semantic consistency, and coverage completeness.
 
+<!-- derived-from ../docs/language-reference.md#access-constraints -->
+<!-- derived-from ../docs/language-reference.md#belongs-context -->
+<!-- derived-from ../docs/cli-reference.md#csv -->
+
 Judge gaps relative to the model's current abstraction stage. A missing `screen`,
 column, API, or lifecycle may be acceptable in an early-stage BUC, but it should be
 reported as the next refinement question rather than silently ignored.
@@ -50,7 +54,18 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    - Every data-changing `usecase` either has early-stage direct CRUD or invokes an API with CRUD
    - If the use case declares `sets`, verify it has direct CRUD or invokes an API operating that entity
 
-6. **Check API/system boundaries**
+6. **Check access and context constraints**
+   - Actor authority is declared with `permission` and attached with `has_permission(Actor, Permission)`
+   - UC/API requirements use `requires_permission(UseCase|Api, Permission)` and
+     `requires_medium(UseCase|Api, Medium)`; do not model these as free-form notes
+   - If `belongs(Buc, Business)` has contextual `.when(...)`, `.where(...)`, or `.by(...)`
+     clauses, typed references should point to `timing`, `location`, and `medium`
+   - Run `rdra-ish csv <src-dir>/ --kind screen-constraints` when reviewing UI access:
+     screen patterns are derived from `displays` plus invoked API constraints
+   - Flag a screen as under-specified when a constrained UC/API path reaches it but the
+     actor permission model or required medium is missing from the same review slice
+
+7. **Check API/system boundaries**
    - Every declared `api` is invoked by at least one use case unless it is intentionally future-facing
    - Every stable API belongs to one system via `contains(System, Api)`
    - System entity sets are derived from API CRUD; do not look for or add direct system→entity ownership
@@ -58,12 +73,12 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    - The coordinating use case must invoke APIs on both system sides, and each API must operate the corresponding entity
    - Treat `CrossSystemEntityRelation`, `CoordinationMissingApi`, and `CoordinationNotCrossSystem` warnings as design review findings
 
-7. **Check entity consistency**
+8. **Check entity consistency**
    - `relate` is defined in the correct direction with the right cardinality
    - No manually declared FK columns that duplicate a `relate`-generated FK
    - Parent entities are declared before child entities in the same file
 
-8. **Check events and state transitions**
+9. **Check events and state transitions**
    - Run `rdra-ish diagram --kind event-flow --format mermaid <src-dir>` and review the
      warnings printed to stderr before looking at the diagram itself:
      - `EventNeverRaised`: the event has no `raises` predicate — add one or remove the event
@@ -75,12 +90,12 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    - When `triggers(Event, UseCase)` is used, verify the triggered UC is `contains`-ed in
      the correct downstream BUC and that the cross-BUC flow is intentional
 
-9. **Check `sets` predicate coverage**
+10. **Check `sets` predicate coverage**
    - Every `Enum` column that lacks a `transitions` predicate should have a `sets` for each use case that modifies it
    - Every `@null` column updated by a use case should have a `sets` with `"present"` / `"null"` / a PostgreSQL type
    - Every `Bool` column toggled by a use case should have a `sets` with `"true"` or `"false"`
 
-10. **Check imports**
+11. **Check imports**
    - Every referenced symbol has a corresponding `import`
    - No imported modules that are never used
 
@@ -127,6 +142,9 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 | `coordinates` | UseCase | Entity | Entity |
 | `belongs` | Buc | Business | — |
 | `motivates` | Requirement | Buc | — |
+| `has_permission` | Actor | Permission | — |
+| `requires_permission` | UseCase / Api | Permission | — |
+| `requires_medium` | UseCase / Api | Medium | — |
 | `relate` | Entity | Entity | cardinality string (`"1:1"` / `"1:N"` / `"N:1"` / `"N:M"`) |
 | `transitions` | Event | State (from) | State (to) |
 | `sets` | UseCase / Event | Entity | column name string | value string |

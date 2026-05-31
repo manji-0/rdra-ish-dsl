@@ -7,6 +7,10 @@ description: Create a new BUC file from a requirements description, using staged
 
 Given a requirement or feature description, produce a complete, validated BUC `.rdra` file and any shared additions needed.
 
+<!-- derived-from ../docs/language-reference.md#access-constraints -->
+<!-- derived-from ../docs/language-reference.md#belongs-context -->
+<!-- derived-from ../docs/incremental-modeling.md#stage-3-interaction-boundary -->
+
 If the requirement is abstract, create only the next useful stage instead of forcing a
 complete model. Use `docs/incremental-modeling.md` as the reference flow.
 Treat creation as business-to-technical refinement: model value and actors before
@@ -21,7 +25,7 @@ Before writing, classify the available information:
 | BUC name and business goal | Biz intent | `buc`, `belongs` | actors and use cases |
 | actors and actions | Biz value | `performs`, `usecase`, `contains` | entities and CRUD |
 | touched business objects | Biz object touchpoints | coarse `entity`, CRUD predicates | screens and APIs |
-| screens/API boundaries | Tech interaction boundary | `screen`, `api`, `system`, `displays`, `shows`, `invokes` | columns, relationships, cross-system coordination |
+| screens/API boundaries | Tech interaction boundary | `screen`, `api`, `system`, `medium`, `permission`, `displays`, `shows`, `invokes`, access constraints | columns, relationships, cross-system coordination |
 | fields and relationships | Tech data design | columns, `relate` | lifecycle states/events |
 | lifecycle states/events | Tech lifecycle design | `state`, `event`, `transitions`, `raises`, `sets` | constraints |
 | invalid/required combinations | Tech-enforced rules | `forbidden`, `invariant` | none; validate diagnostics |
@@ -39,6 +43,7 @@ Read the requirement and list:
 - **Screens** — UI pages shown during the flow, if the user is already at the interaction stage
 - **Entities** — data objects created or modified, if the data stage is known
 - **Systems/APIs** — internal systems that own API boundaries, if backend ownership is known
+- **Context/access** — when/where/by-what-medium the BUC applies, and any actor permissions or UC/API media constraints
 - **Events** — domain events raised as side effects, if lifecycle behavior is known
 - **States** — status values if an entity lifecycle is known
 
@@ -47,8 +52,8 @@ Read the requirement and list:
 | Goes in `shared/` | Goes in `buc/buc_<name>.rdra` |
 |-------------------|-------------------------------|
 | `actor`, `extsystem` (if reused across BUCs) | `buc`, `usecase`, `screen` |
-| `business`, stable `requirement`, `system` | BUC-local `api` |
-| reusable `entity` definitions, `relate` | CRUD, `displays`, `shows`, `invokes`, `coordinates`, `raises`, `sets` |
+| `business`, stable `requirement`, `system`, `location`, `timing`, `medium`, `permission` | BUC-local `api` |
+| reusable `entity` definitions, `relate` | CRUD, `displays`, `shows`, `invokes`, `coordinates`, access constraints, `raises`, `sets` |
 | cross-BUC `state`, `event`, `transitions` | BUC-local `event`, `state` |
 | cross-BUC `forbidden`, `invariant` | predicates scoped to this BUC |
 
@@ -93,6 +98,20 @@ displays(<UC2>, <Screen1>)
 
 Order predicates as: `performs` → `belongs` → `contains` → per-UC blocks.
 
+If the Business-BUC mapping depends on a timing, place, or physical medium, use a
+method chain on `belongs`:
+
+```
+timing <When> "<timing>"
+location <Where> "<place or channel>"
+medium <Medium> "<device or terminal>"
+
+belongs(Buc<Name>, <Business>)
+  .when(<When>)
+  .where(<Where>)
+  .by(<Medium>)
+```
+
 When the flow goes through APIs, attach CRUD to the API, not the use case, and let the
 use case declare value effects with `sets`:
 
@@ -110,6 +129,22 @@ If a `relate` edge crosses two derived system entity sets, add
 `coordinates(<UC>, <EntityA>, <EntityB>)` and make `<UC>` invoke APIs on both system
 sides.
 
+When the operation has authority or device constraints, declare them on the use case
+or API. Attach actor-side authority separately:
+
+```
+permission <Permission> "<permission>"
+
+has_permission(<Actor>, <Permission>)
+requires_permission(<UC>, <Permission>)
+requires_medium(<UC>, <Medium>)
+requires_permission(<Api>, <Permission>)
+```
+
+Screen-level access patterns are derived from `displays(<UC>, <Screen>)` and
+`invokes(<UC>, <Api>)`. Validate them with
+`rdra-ish csv src/ --kind screen-constraints`.
+
 ### Step 4 — Add `sets` for non-transition column effects
 
 For every use case that modifies an `Enum` column without a state machine, a nullable column, or a `Bool` flag, add a `sets` predicate:
@@ -126,6 +161,7 @@ See the `sets` value vocabulary in `rdra-write`.
 - New actor → add to `shared/actors.rdra`
 - New event/state/transitions → add to `shared/entities.rdra` if cross-BUC
 - New system → add to shared vocabulary; its entities are derived from `contains(System, Api)` + API CRUD
+- New location/timing/medium/permission → add to shared vocabulary when reused across BUCs
 - New BUC-local API/screen/event → keep it in `buc/buc_<name>.rdra`
 - If shared files are already split, mirror paths and modules, e.g.
   `shared/entities/order.rdra` → `module shared.entities.order`
@@ -146,4 +182,5 @@ For staged work, also run the command that matches the current abstraction:
 - BUC skeleton: `rdra-ish diagram src/ --kind rdra --format mermaid --buc <BucId>`
 - Data touchpoints: `rdra-ish csv src/ --kind matrix`
 - Interaction boundary: `rdra-ish diagram src/ --kind sequence --format mermaid --buc <BucId>`
+- Access constraints: `rdra-ish csv src/ --kind screen-constraints`
 - Lifecycle/rules: `rdra-ish states src/ --buc <BucId>`

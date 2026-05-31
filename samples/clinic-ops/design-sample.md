@@ -16,6 +16,7 @@
 | BUC 別 sequence 図 | `out/buc/sequence_*.mmd` | BUC 内 UC の画面、API、Entity 操作を確認する |
 | UC 別 sequence 図 | `out/uc/sequence_*.mmd` | 1 UC だけの actor/screen/API/entity を確認する |
 | API マトリクス | `out/api_matrix.csv` | API と Entity CRUD の棚卸し |
+| Screen 制約パターン | `out/screen_constraints.csv` | Screen に到達する UC/API ごとの権限・媒体制約を確認する |
 | Event flow | `out/event_flow.mmd` | BUC 間イベント連鎖を確認する |
 | ER 図 | `out/er_care_to_billing.mmd` | 診療から請求までのデータ関係を確認する |
 | State 図 | `out/state_whole.mmd` | 主要状態遷移の全体像を確認する |
@@ -28,6 +29,7 @@ rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucClinic
 rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucClinicalEncounter --out samples/clinic-ops/out/buc/sequence_clinical_encounter
 rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase SignEncounter --out samples/clinic-ops/out/uc/sequence_sign_encounter
 rdra-ish csv samples/clinic-ops --kind api-matrix --out samples/clinic-ops/out/api_matrix.csv
+rdra-ish csv samples/clinic-ops --kind screen-constraints --out samples/clinic-ops/out/screen_constraints.csv
 ```
 
 ## 2. 業務スコープ
@@ -47,6 +49,27 @@ rdra-ish csv samples/clinic-ops --kind api-matrix --out samples/clinic-ops/out/a
 | `ClinicAdministration` | `BucStaffAdministration` | ClinicAdmin | 診療所運営のマスタ・監査系業務を扱う |
 
 レビューでは、まず BUC の責務境界を確認し、次に UC 単位で API/Entity 操作を確認します。最後に System/API マトリクスと ER/状態検証で横断的な整合性を見ます。
+
+### 2.1 Context / Access 制約
+
+権限語彙と媒体語彙は `shared/biz.rdra`、actor への権限割当は
+`shared/access.rdra` に分けている。各 BUC ファイルでは、UC/API 側の要求を
+`requires_permission` / `requires_medium` として定義する。
+
+`BucAppointmentScheduling` は `belongs(...).when(...).where(...).by(...)` で、
+予約業務が患者依頼のタイミング、窓口または患者ポータル、窓口端末または患者モバイルから発生することを表す。
+
+Screen には制約を直接書かない。`displays(UC, Screen)` と `invokes(UC, Api)` から
+次のような行が `out/screen_constraints.csv` に導出される。
+
+```csv
+screen_id,usecase_id,api_id,required_permissions,required_media
+ConsentScreen,CaptureConsent,ConsentApi,ConsentCapture,PatientMobile
+AppointmentScreen,BookAppointment,BookAppointmentApi,ScheduleWrite,FrontDeskTerminal|PatientMobile
+DiagnosisScreen,DocumentAssessment,DocumentAssessmentApi,ClinicalDocument,ClinicalWorkstation
+ClaimScreen,GenerateClaim,GenerateClaimApi,BillingClaimWrite,BillingWorkstation
+ScheduleAdminScreen,ManageProviderSchedule,ManageProviderScheduleApi,ProviderScheduleAdmin,AdminConsole
+```
 
 ## 3. BUC 単位の設計レビュー
 
@@ -4756,23 +4779,113 @@ Entity: Claim (Claim)
 
 状態検証では、初期状態から想定する終端状態へ到達できるか、到達してはいけない状態組み合わせがないか、nullable column や Bool column の `sets` が不足していないかを確認します。
 
-## 7. レビュー手順
+## 7. 権限モデルレビュー
+
+この章は、`shared/access.rdra` と各 BUC の `requires_permission` /
+`requires_medium`、および `out/screen_constraints.csv` を使った権限レビューの例である。
+権限は UI 画面へ直接付けず、actor が持つ権限、UC/API が要求する権限、操作媒体を分けて確認する。
+
+### 7.1 権限語彙と actor 割当
+
+権限語彙は業務能力の単位で切っている。画面名や API 名をそのまま権限名にせず、
+「何を許可するか」が読める名前にする。
+
+| Actor | 権限 |
+|---|---|
+| `Patient` | `PatientProfileRead`, `ConsentCapture`, `ScheduleRead` |
+| `FrontDesk` | `PatientProfileRead`, `PatientProfileWrite`, `InsuranceVerify`, `IntakeManage`, `ScheduleRead`, `ScheduleWrite`, `VisitCheckIn`, `CopayCollect` |
+| `Nurse` | `VisitCheckIn`, `RoomAssign`, `EncounterOpen`, `VitalsRecord`, `ClinicalOrderWrite`, `LabResultManage`, `PrescriptionDispense` |
+| `Clinician` | `EncounterOpen`, `ClinicalDocument`, `EncounterSign`, `ClinicalOrderWrite`, `LabResultManage`, `PrescriptionWrite` |
+| `BillingSpecialist` | `BillingClaimWrite`, `PaymentPost` |
+| `CareCoordinator` | `FollowUpManage`, `PatientMessageSend`, `ScheduleWrite` |
+| `ClinicAdmin` | `ProviderScheduleAdmin`, `RoomAdmin`, `AuditRead`, `AuditResolve` |
+
+レビューでは、actor に付いた権限が BUC の責務と合っているかを先に見る。たとえば
+`FrontDesk` は患者アクセスと来院受付を広く扱うが、診療記録の署名や処方作成は持たない。
+`Clinician` は診療・処方・検査指示を持つが、請求や監査解決は持たない。
+
+### 7.2 UC/API 要求の読み方
+
+UC には「その操作を開始するのに必要な権限」と「操作媒体」を置く。API には
+「バックエンド境界が要求する権限」を置く。同じ UC が API を呼ぶ場合、screen constraint
+行では UC と API の要求が結合される。
+
+| BUC | 代表 UC/API | 要求 |
+|---|---|---|
+| Appointment Scheduling | `BookAppointment` / `BookAppointmentApi` | `ScheduleWrite`、`FrontDeskTerminal` または `PatientMobile` |
+| Clinical Encounter | `SignEncounter` / `SignEncounterApi` | `EncounterSign`、`ClinicalWorkstation` |
+| Orders and Results | `NotifyCriticalResult` / `CriticalNoticeApi` | `LabResultManage` と `PatientMessageSend`、`ClinicalWorkstation` |
+| Billing Claims | `PostPayment` / `PaymentPostApi` | `PaymentPost`、`BillingWorkstation` |
+| Staff Administration | `ResolveAuditFinding` | `AuditResolve`、`AdminConsole` |
+
+権限レビューでは、UC の要求と API の要求が同じである必要はない。たとえば
+`NotifyCriticalResult` は検査結果の判断権限に加えて、患者通知 API 側の
+`PatientMessageSend` も必要になる。これは「臨床判断」と「患者通知」の能力が
+同じとは限らないことを示している。
+
+### 7.3 Screen 制約パターン
+
+`screen_constraints.csv` は、画面を通る UC/API パスごとの権限と媒体を横断確認するための
+成果物である。生成コマンド:
+
+```sh
+rdra-ish csv samples/clinic-ops --kind screen-constraints --out samples/clinic-ops/out/screen_constraints.csv
+```
+
+代表行:
+
+```csv
+screen_id,usecase_id,api_id,required_permissions,required_media
+AppointmentScreen,BookAppointment,BookAppointmentApi,ScheduleWrite,FrontDeskTerminal|PatientMobile
+DiagnosisScreen,DocumentAssessment,DocumentAssessmentApi,ClinicalDocument,ClinicalWorkstation
+CriticalNoticeScreen,NotifyCriticalResult,CriticalNoticeApi,LabResultManage|PatientMessageSend,ClinicalWorkstation
+PaymentPostingScreen,PostPayment,PaymentPostApi,PaymentPost,BillingWorkstation
+AuditReviewScreen,ResolveAuditFinding,,AuditResolve,AdminConsole
+```
+
+読み方:
+
+- `api_id` が空の行は、UC が直接 entity を操作している。画面レビューでは UC 側の
+  `requires_*` だけが根拠になる。
+- `required_permissions` が `A|B` の場合は、UC/API パス上で複数の権限が必要である。
+- `required_media` が `A|B` の場合は、同じ操作が複数媒体から許可される。
+- 同じ screen に複数 UC が出る場合、画面単位で最も強い権限に寄せるのではなく、
+  UC/API パスごとにボタン、導線、API 呼び出し制御を分けてレビューする。
+
+### 7.4 レビュー観点と指摘例
+
+| 観点 | 確認すること | 指摘例 |
+|---|---|---|
+| Actor coverage | `performs` する actor が必要権限を持つか | `Patient` が `BookAppointment` を実行するなら `ScheduleWrite` を持つべきか、患者用の別権限へ分けるべきか確認する |
+| Least privilege | actor に不要な権限がないか | `FrontDesk` に `EncounterSign` や `PrescriptionWrite` を付けない |
+| Media constraint | 操作媒体が業務実態と合うか | `ResolveAuditFinding` は `AdminConsole` のみに制限し、患者モバイルからは通さない |
+| UC/API split | UC と API の権限が混ざっていないか | 患者通知 API には `PatientMessageSend`、検査レビュー UC には `LabResultManage` を置く |
+| Screen path | 同じ画面の操作ごとに制約を区別できるか | `AppointmentScreen` の検索、予約、取消を同じ権限として扱ってよいか確認する |
+
+このサンプルでは、権限不一致の診断はまだ自動化していない。レビューでは
+`shared/access.rdra`、各 BUC ファイルの Access constraints ブロック、
+`out/screen_constraints.csv` を突き合わせ、actor が実行する UC/API パスに必要な
+権限と媒体が説明できることを承認条件にする。
+
+## 8. レビュー手順
 
 1. BUC 単位の RDRA Layered Graph 図でスコープと actor/usecase を確認する。
 2. BUC 単位の sequence 図で、その BUC 内の UC と API 境界を確認する。
 3. 論点のある UC は UC 単位 sequence 図で個別に確認する。
 4. Event flow で BUC 間連鎖を確認する。
 5. API matrix で API/Entity CRUD の責務を横断確認する。
-6. ER 図で最終データ構造を確認する。
-7. State 図と状態到達表で lifecycle と rule の不足を確認する。
+6. Screen 制約パターンで権限と媒体を横断確認する。
+7. ER 図で最終データ構造を確認する。
+8. State 図と状態到達表で lifecycle と rule の不足を確認する。
 
-## 8. 承認条件
+## 9. 承認条件
 
 | 観点 | 承認条件 |
 |---|---|
 | BUC | 業務スコープが 9 BUC に分解され、担当 actor が説明できる |
 | UC | 各 UC の主要 CRUD、参照、イベントが説明できる |
 | API | API matrix 上で責務の広すぎる API がない |
+| Access | actor 権限、UC/API 要求、媒体制約が screen constraint 行として説明できる |
 | Sequence | BUC/UC sequence に対象外の actor/API/System が出ない |
 | Event | BUC 間イベント連鎖が Event flow で説明できる |
 | Data | ER と状態到達表で主要 lifecycle が確認できる |
@@ -4783,5 +4896,6 @@ Entity: Claim (Claim)
 <!-- derived-from #4-uc-単位のレビュー -->
 <!-- derived-from #5-systemapi-単位の設計 -->
 <!-- derived-from #6-最終データモデリング -->
+<!-- derived-from #7-権限モデルレビュー -->
 
-Clinic Ops の設計レビューは、巨大な全体図ではなく、BUC、UC、System/API、データモデルの順に分割して進める。sequence 図は BUC/UC の対象内に閉じ、BUC をまたぐ連鎖は Event flow で別に確認する。
+Clinic Ops の設計レビューは、巨大な全体図ではなく、BUC、UC、System/API、権限、データモデルの順に分割して進める。sequence 図は BUC/UC の対象内に閉じ、BUC をまたぐ連鎖は Event flow で別に確認する。権限と媒体は screen constraint CSV で UC/API パスごとに確認する。

@@ -55,6 +55,10 @@ pub enum Kind {
     Condition,
     Variation,
     Api,
+    Location,
+    Timing,
+    Medium,
+    Permission,
 }
 
 impl Kind {
@@ -75,6 +79,10 @@ impl Kind {
             Kind::Condition => "condition",
             Kind::Variation => "variation",
             Kind::Api => "api",
+            Kind::Location => "location",
+            Kind::Timing => "timing",
+            Kind::Medium => "medium",
+            Kind::Permission => "permission",
         }
     }
 }
@@ -129,6 +137,7 @@ pub struct InstanceDecl {
     pub kind: Kind,
     pub id: std::string::String,
     pub label: std::string::String,
+    pub description: Option<std::string::String>,
     /// Non-empty only for `entity` declarations.
     pub columns: Vec<Column>,
     pub span: Span,

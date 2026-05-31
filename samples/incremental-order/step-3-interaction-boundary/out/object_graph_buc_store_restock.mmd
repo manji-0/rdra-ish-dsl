@@ -7,6 +7,8 @@ flowchart LR
     direction TB
     StoreOperations["💼 Store Operations"]
     BucStoreRestock["📦 Maintain Store Restock"]
+    OpsConsole[/"📱 Operations Console"/]
+    StoreMaintenanceWrite["🔑 Store Maintenance Write"]
   end
   subgraph layer_boundary[System Boundary]
     direction TB
@@ -21,7 +23,9 @@ flowchart LR
     Organization[("🗄️ Organization")]
     Store[("🗄️ Store")]
   end
+  OpsStaff -.->|has_permission| StoreMaintenanceWrite
   OpsStaff -->|performs| BucStoreRestock
+  StoreAdminApi -.->|requires_permission| StoreMaintenanceWrite
   StoreAdminApi -.->|updates| Store
   OrganizationLookupApi -.->|reads| Organization
   BucStoreRestock -.->|belongs| StoreOperations
@@ -31,7 +35,11 @@ flowchart LR
   StoreMaintenanceScreen -.->|shows| Store
   StoreMaintenanceScreen -.->|shows| Organization
   ChangeNextRestockDate -.->|displays| StoreMaintenanceScreen
+  ChangeNextRestockDate -.->|requires_medium| OpsConsole
+  ChangeNextRestockDate -.->|requires_permission| StoreMaintenanceWrite
   ChangeNextRestockDate -.->|updates| Store
   ChangeStoreParentOrganization -.->|displays| StoreMaintenanceScreen
   ChangeStoreParentOrganization -.->|invokes| StoreAdminApi
   ChangeStoreParentOrganization -.->|invokes| OrganizationLookupApi
+  ChangeStoreParentOrganization -.->|requires_medium| OpsConsole
+  ChangeStoreParentOrganization -.->|requires_permission| StoreMaintenanceWrite

@@ -8,6 +8,10 @@ flowchart LR
     direction TB
     CareDelivery["💼 Care Delivery"]
     BucPrescriptionFulfillment["📦 Fulfill Prescriptions"]
+    ClinicalWorkstation[/"📱 Clinical Workstation"/]
+    NurseStation[/"📱 Nurse Station"/]
+    PrescriptionDispense["🔑 Prescription Dispense"]
+    PrescriptionWrite["🔑 Prescription Write"]
   end
   subgraph layer_boundary[System Boundary]
     direction TB
@@ -35,8 +39,10 @@ flowchart LR
     Medication[("🗄️ Medication")]
     Prescription[("🗄️ Prescription")]
   end
+  Nurse -.->|has_permission| PrescriptionDispense
   Nurse -->|performs| BucPrescriptionFulfillment
   Nurse -->|performs| ConfirmDispense
+  Clinician -.->|has_permission| PrescriptionWrite
   Clinician -->|performs| BucPrescriptionFulfillment
   Clinician -->|performs| SearchMedication
   Clinician -->|performs| DraftPrescription
@@ -44,12 +50,17 @@ flowchart LR
   Clinician -->|performs| CancelPrescription
   Clinician -->|performs| RefillPrescription
   MedicationCatalogApi -.->|reads| Medication
+  MedicationCatalogApi -.->|requires_permission| PrescriptionWrite
   DraftPrescriptionApi -.->|creates| Prescription
   DraftPrescriptionApi -.->|reads| Encounter
+  DraftPrescriptionApi -.->|requires_permission| PrescriptionWrite
+  SendPrescriptionApi -.->|requires_permission| PrescriptionWrite
   SendPrescriptionApi -.->|updates| Prescription
+  ConfirmDispenseApi -.->|requires_permission| PrescriptionDispense
   ConfirmDispenseApi -.->|updates| Prescription
   RefillPrescriptionApi -.->|creates| Prescription
   RefillPrescriptionApi -.->|reads| Medication
+  RefillPrescriptionApi -.->|requires_permission| PrescriptionWrite
   BucPrescriptionFulfillment -.->|belongs| CareDelivery
   BucPrescriptionFulfillment -->|contains| SearchMedication
   BucPrescriptionFulfillment -->|contains| DraftPrescription
@@ -62,16 +73,28 @@ flowchart LR
   MedicationSearchScreen -.->|shows| Medication
   SearchMedication -.->|displays| MedicationSearchScreen
   SearchMedication -.->|invokes| MedicationCatalogApi
+  SearchMedication -.->|requires_medium| ClinicalWorkstation
+  SearchMedication -.->|requires_permission| PrescriptionWrite
   DraftPrescription -.->|displays| PrescriptionScreen
   DraftPrescription -.->|invokes| DraftPrescriptionApi
+  DraftPrescription -.->|requires_medium| ClinicalWorkstation
+  DraftPrescription -.->|requires_permission| PrescriptionWrite
   SendPrescription -.->|displays| PrescriptionScreen
   SendPrescription -.->|invokes| SendPrescriptionApi
   SendPrescription -.->|raises| EvPrescriptionSent
+  SendPrescription -.->|requires_medium| ClinicalWorkstation
+  SendPrescription -.->|requires_permission| PrescriptionWrite
   ConfirmDispense -.->|displays| PharmacyStatusScreen
   ConfirmDispense -.->|invokes| ConfirmDispenseApi
   ConfirmDispense -.->|raises| EvPrescriptionDispensed
+  ConfirmDispense -.->|requires_medium| NurseStation
+  ConfirmDispense -.->|requires_permission| PrescriptionDispense
   CancelPrescription -.->|displays| PrescriptionScreen
   CancelPrescription -.->|raises| EvPrescriptionCancelled
+  CancelPrescription -.->|requires_medium| ClinicalWorkstation
+  CancelPrescription -.->|requires_permission| PrescriptionWrite
   CancelPrescription -.->|updates| Prescription
   RefillPrescription -.->|displays| PrescriptionScreen
   RefillPrescription -.->|invokes| RefillPrescriptionApi
+  RefillPrescription -.->|requires_medium| ClinicalWorkstation
+  RefillPrescription -.->|requires_permission| PrescriptionWrite

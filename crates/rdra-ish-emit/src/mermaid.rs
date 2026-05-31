@@ -213,6 +213,15 @@ impl Emitter for RdraMermaidEmitter {
                     RelKind::Belongs => {
                         format!("  {} --> {}\n", from_id, to_id)
                     }
+                    RelKind::HasPermission => {
+                        format!("  {} -.->|has_permission| {}\n", from_id, to_id)
+                    }
+                    RelKind::RequiresPermission => {
+                        format!("  {} -.->|requires_permission| {}\n", from_id, to_id)
+                    }
+                    RelKind::RequiresMedium => {
+                        format!("  {} -.->|requires_medium| {}\n", from_id, to_id)
+                    }
                     RelKind::Motivates => {
                         format!("  {} -.->|motivates| {}\n", from_id, to_id)
                     }
@@ -292,6 +301,10 @@ impl Emitter for ObjectGraphMermaidEmitter {
                         NodeRef::UsageScene(_) => format!("    {}([\"{}\"])\n", id, label),
                         NodeRef::Condition(_) => format!("    {}{{\"{}\"}}\n", id, label),
                         NodeRef::Variation(_) => format!("    {}{{\"{}\"}}\n", id, label),
+                        NodeRef::Location(_) => format!("    {}[\"{}\"]\n", id, label),
+                        NodeRef::Timing(_) => format!("    {}[\"{}\"]\n", id, label),
+                        NodeRef::Medium(_) => format!("    {}[/\"{}\"/]\n", id, label),
+                        NodeRef::Permission(_) => format!("    {}[\"{}\"]\n", id, label),
                         NodeRef::UseCase(_) => format!("    {}([\"{}\"])\n", id, label),
                         NodeRef::Screen(_) => format!("    {}[[\"{}\"]]\n", id, label),
                         NodeRef::Event(_) => format!("    {}{{\"{}\"}}\n", id, label),

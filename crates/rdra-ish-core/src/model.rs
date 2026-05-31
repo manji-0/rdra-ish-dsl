@@ -19,6 +19,10 @@ new_key_type! {
     pub struct ConditionKey;
     pub struct VariationKey;
     pub struct ApiKey;
+    pub struct LocationKey;
+    pub struct TimingKey;
+    pub struct MediumKey;
+    pub struct PermissionKey;
 }
 
 /// NodeRef: 異種ノード間関連を一様表現
@@ -39,6 +43,10 @@ pub enum NodeRef {
     Condition(ConditionKey),
     Variation(VariationKey),
     Api(ApiKey),
+    Location(LocationKey),
+    Timing(TimingKey),
+    Medium(MediumKey),
+    Permission(PermissionKey),
 }
 
 /// 述語の種類
@@ -57,6 +65,9 @@ pub enum RelKind {
     Triggers,
     Contains,
     Belongs,
+    HasPermission,
+    RequiresPermission,
+    RequiresMedium,
     Motivates,
     Transitions,
     Invokes, // usecase → api
@@ -81,6 +92,24 @@ pub struct BoundaryCoordination {
     pub usecase: UseCaseKey,
     pub left: EntityKey,
     pub right: EntityKey,
+}
+
+/// `belongs(Buc, Business).when(...).where(...).by(...)` で宣言される、
+/// Business と BUC の対応関係に付く文脈値。
+#[derive(Debug, Clone)]
+pub enum BusinessMappingContextValue {
+    Text(std::string::String),
+    Ref(NodeRef),
+}
+
+/// Business と BUC の対応関係に付く When / Where / By 文脈。
+#[derive(Debug, Clone)]
+pub struct BusinessMappingContext {
+    pub buc: BucKey,
+    pub business: BusinessKey,
+    pub whens: Vec<BusinessMappingContextValue>,
+    pub wheres: Vec<BusinessMappingContextValue>,
+    pub bys: Vec<BusinessMappingContextValue>,
 }
 
 /// カラム型
@@ -115,66 +144,77 @@ pub struct ModelColumn {
 pub struct Actor {
     pub id: std::string::String,
     pub label: std::string::String,
+    pub description: Option<std::string::String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct ExtSystem {
     pub id: std::string::String,
     pub label: std::string::String,
+    pub description: Option<std::string::String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct System {
     pub id: std::string::String,
     pub label: std::string::String,
+    pub description: Option<std::string::String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Requirement {
     pub id: std::string::String,
     pub label: std::string::String,
+    pub description: Option<std::string::String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Business {
     pub id: std::string::String,
     pub label: std::string::String,
+    pub description: Option<std::string::String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Buc {
     pub id: std::string::String,
     pub label: std::string::String,
+    pub description: Option<std::string::String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct UsageScene {
     pub id: std::string::String,
     pub label: std::string::String,
+    pub description: Option<std::string::String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct UseCase {
     pub id: std::string::String,
     pub label: std::string::String,
+    pub description: Option<std::string::String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Screen {
     pub id: std::string::String,
     pub label: std::string::String,
+    pub description: Option<std::string::String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Event {
     pub id: std::string::String,
     pub label: std::string::String,
+    pub description: Option<std::string::String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Entity {
     pub id: std::string::String,
     pub label: std::string::String,
+    pub description: Option<std::string::String>,
     pub columns: Vec<ModelColumn>,
 }
 
@@ -182,24 +222,56 @@ pub struct Entity {
 pub struct State {
     pub id: std::string::String,
     pub label: std::string::String,
+    pub description: Option<std::string::String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Condition {
     pub id: std::string::String,
     pub label: std::string::String,
+    pub description: Option<std::string::String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Variation {
     pub id: std::string::String,
     pub label: std::string::String,
+    pub description: Option<std::string::String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Api {
     pub id: std::string::String,
     pub label: std::string::String,
+    pub description: Option<std::string::String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Location {
+    pub id: std::string::String,
+    pub label: std::string::String,
+    pub description: Option<std::string::String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Timing {
+    pub id: std::string::String,
+    pub label: std::string::String,
+    pub description: Option<std::string::String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Medium {
+    pub id: std::string::String,
+    pub label: std::string::String,
+    pub description: Option<std::string::String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Permission {
+    pub id: std::string::String,
+    pub label: std::string::String,
+    pub description: Option<std::string::String>,
 }
 
 // ── Symbol table ─────────────────────────────────────────────────────────────
@@ -221,6 +293,10 @@ fn node_kind_tag(node: &NodeRef) -> &'static str {
         NodeRef::Condition(_) => "condition",
         NodeRef::Variation(_) => "variation",
         NodeRef::Api(_) => "api",
+        NodeRef::Location(_) => "location",
+        NodeRef::Timing(_) => "timing",
+        NodeRef::Medium(_) => "medium",
+        NodeRef::Permission(_) => "permission",
     }
 }
 
@@ -242,6 +318,10 @@ fn node_ref_matches_kind(node: &NodeRef, kind: &Kind) -> bool {
             | (NodeRef::Condition(_), Kind::Condition)
             | (NodeRef::Variation(_), Kind::Variation)
             | (NodeRef::Api(_), Kind::Api)
+            | (NodeRef::Location(_), Kind::Location)
+            | (NodeRef::Timing(_), Kind::Timing)
+            | (NodeRef::Medium(_), Kind::Medium)
+            | (NodeRef::Permission(_), Kind::Permission)
     )
 }
 
@@ -517,8 +597,13 @@ pub struct SemanticModel {
     pub conditions: SlotMap<ConditionKey, Condition>,
     pub variations: SlotMap<VariationKey, Variation>,
     pub apis: SlotMap<ApiKey, Api>,
+    pub locations: SlotMap<LocationKey, Location>,
+    pub timings: SlotMap<TimingKey, Timing>,
+    pub media: SlotMap<MediumKey, Medium>,
+    pub permissions: SlotMap<PermissionKey, Permission>,
     pub relations: Vec<Relation>,
     pub boundary_coordinations: Vec<BoundaryCoordination>,
+    pub business_mapping_contexts: Vec<BusinessMappingContext>,
     pub state_transitions: Vec<StateTransition>,
     pub column_effects: Vec<ColumnEffect>,
     /// `sets(origin, entity, <comparison_expr>, bool)` で宣言された比較命題の真偽効果

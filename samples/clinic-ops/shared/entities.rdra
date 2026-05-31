@@ -213,8 +213,8 @@ entity AuditEvent "Audit Event" {
   action:      String
   actor_id:    String
   occurred_at: DateTime
-  severity:    Enum(low, medium, high) @default(low)
-  resolved:    Bool
+  severity:    Enum(low, moderate, high) @default(low)
+  is_resolved: Bool
 }
 
 // ER relationships

@@ -76,3 +76,24 @@ invokes(PrepareEncounter, PrepareEncounterApi)
 reads(PrepareEncounterApi, Appointment)
 reads(PrepareEncounterApi, PatientProfile)
 triggers(EvAppointmentCheckedIn, PrepareEncounter)
+
+// Access constraints
+requires_permission(VerifyArrival, VisitCheckIn)
+requires_medium(VerifyArrival, FrontDeskTerminal)
+requires_permission(VerifyArrivalApi, VisitCheckIn)
+
+requires_permission(CheckInPatient, VisitCheckIn)
+requires_medium(CheckInPatient, FrontDeskTerminal)
+requires_permission(CheckInPatientApi, VisitCheckIn)
+
+requires_permission(CollectCopay, CopayCollect)
+requires_medium(CollectCopay, FrontDeskTerminal)
+requires_permission(CollectCopayApi, CopayCollect)
+
+requires_permission(AssignRoom, RoomAssign)
+requires_medium(AssignRoom, NurseStation)
+requires_permission(AssignRoomApi, RoomAssign)
+
+requires_permission(PrepareEncounter, EncounterOpen)
+requires_medium(PrepareEncounter, NurseStation)
+requires_permission(PrepareEncounterApi, EncounterOpen)

@@ -4,7 +4,7 @@ import shared.biz
 import shared.actors
 import shared.entities
 
-buc BucStoreRestock "Maintain Store Restock"
+buc BucStoreRestock "Maintain Store Restock" description "Keep restock dates and store organization assignments operationally correct."
 usecase ChangeNextRestockDate "Change Next Restock Date"
 usecase ChangeStoreParentOrganization "Change Store Parent Organization"
 screen StoreMaintenanceScreen "Store Maintenance"
@@ -14,13 +14,19 @@ system StoreAdminSystem "Store Admin System"
 system OrganizationSystem "Organization System"
 
 belongs(BucStoreRestock, StoreOperations)
+  .when(StoreMasterMaintenanceWindow)
+  .where(BackOffice)
+  .by(OpsConsole)
 performs(OpsStaff, BucStoreRestock)
+has_permission(OpsStaff, StoreMaintenanceWrite)
 contains(BucStoreRestock, ChangeNextRestockDate)
 contains(BucStoreRestock, ChangeStoreParentOrganization)
 
 displays(ChangeNextRestockDate, StoreMaintenanceScreen)
 shows(StoreMaintenanceScreen, Store)
 updates(ChangeNextRestockDate, Store)
+requires_permission(ChangeNextRestockDate, StoreMaintenanceWrite)
+requires_medium(ChangeNextRestockDate, OpsConsole)
 
 displays(ChangeStoreParentOrganization, StoreMaintenanceScreen)
 shows(StoreMaintenanceScreen, Store)
@@ -31,3 +37,6 @@ invokes(ChangeStoreParentOrganization, StoreAdminApi)
 invokes(ChangeStoreParentOrganization, OrganizationLookupApi)
 updates(StoreAdminApi, Store)
 reads(OrganizationLookupApi, Organization)
+requires_permission(ChangeStoreParentOrganization, StoreMaintenanceWrite)
+requires_medium(ChangeStoreParentOrganization, OpsConsole)
+requires_permission(StoreAdminApi, StoreMaintenanceWrite)

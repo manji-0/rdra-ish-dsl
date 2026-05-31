@@ -212,6 +212,10 @@ fn kind_token() -> impl Parser<Token, Kind, Error = Simple<Token>> + Clone {
         Token::Condition   => Kind::Condition,
         Token::Variation   => Kind::Variation,
         Token::Api         => Kind::Api,
+        Token::Location    => Kind::Location,
+        Token::Timing      => Kind::Timing,
+        Token::Medium      => Kind::Medium,
+        Token::Permission  => Kind::Permission,
     }
 }
 
@@ -220,17 +224,25 @@ fn instance_decl() -> impl Parser<Token, InstanceDecl, Error = Simple<Token>> + 
         .ignore_then(column().repeated())
         .then_ignore(just(Token::RBrace));
 
+    let description = just(Token::Ident("description".to_string()))
+        .ignore_then(string_lit())
+        .or_not();
+
     kind_token()
         .then(ident())
         .then(string_lit())
+        .then(description)
         .then(body.or_not())
-        .map_with_span(|(((kind, id), label), columns), span| InstanceDecl {
-            kind,
-            id,
-            label,
-            columns: columns.unwrap_or_default(),
-            span,
-        })
+        .map_with_span(
+            |((((kind, id), label), description), columns), span| InstanceDecl {
+                kind,
+                id,
+                label,
+                description,
+                columns: columns.unwrap_or_default(),
+                span,
+            },
+        )
 }
 
 // ── Qualified reference ───────────────────────────────────────────────────────
@@ -425,7 +437,7 @@ mod tests {
 
     #[test]
     fn test_parse_instance_decl() {
-        let ast = parse_ok(r#"actor Customer "顧客""#);
+        let ast = parse_ok(r#"actor Customer "顧客" description "商品を購入する顧客""#);
         insta::assert_debug_snapshot!(ast);
     }
 

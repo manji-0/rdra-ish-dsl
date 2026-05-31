@@ -7,6 +7,11 @@ flowchart LR
     direction TB
     ClinicAdministration["💼 Clinic Administration"]
     BucStaffAdministration["📦 Administer Clinic Operations"]
+    AdminConsole[/"📱 Admin Console"/]
+    AuditRead["🔑 Audit Read"]
+    AuditResolve["🔑 Audit Resolve"]
+    ProviderScheduleAdmin["🔑 Provider Schedule Admin"]
+    RoomAdmin["🔑 Room Admin"]
   end
   subgraph layer_boundary[System Boundary]
     direction TB
@@ -32,15 +37,23 @@ flowchart LR
     ProviderSchedule[("🗄️ Provider Schedule")]
     Room[("🗄️ Room")]
   end
+  ClinicAdmin -.->|has_permission| ProviderScheduleAdmin
+  ClinicAdmin -.->|has_permission| RoomAdmin
+  ClinicAdmin -.->|has_permission| AuditRead
+  ClinicAdmin -.->|has_permission| AuditResolve
   ClinicAdmin -->|performs| BucStaffAdministration
   ManageProviderScheduleApi -.->|creates| ProviderSchedule
+  ManageProviderScheduleApi -.->|requires_permission| ProviderScheduleAdmin
   ManageProviderScheduleApi -.->|updates| ProviderSchedule
   ManageProviderScheduleApi -.->|updates| Provider
+  BlockScheduleSlotApi -.->|requires_permission| ProviderScheduleAdmin
   BlockScheduleSlotApi -.->|updates| ProviderSchedule
   RoomAdminApi -.->|creates| Room
+  RoomAdminApi -.->|requires_permission| RoomAdmin
   RoomAdminApi -.->|updates| Room
   AuditApi -.->|reads| PatientAccount
   AuditApi -.->|reads| AuditEvent
+  AuditApi -.->|requires_permission| AuditRead
   BucStaffAdministration -.->|belongs| ClinicAdministration
   BucStaffAdministration -->|contains| ManageProviderSchedule
   BucStaffAdministration -->|contains| BlockScheduleSlot
@@ -53,13 +66,25 @@ flowchart LR
   AuditReviewScreen -.->|shows| AuditEvent
   ManageProviderSchedule -.->|displays| ScheduleAdminScreen
   ManageProviderSchedule -.->|invokes| ManageProviderScheduleApi
+  ManageProviderSchedule -.->|requires_medium| AdminConsole
+  ManageProviderSchedule -.->|requires_permission| ProviderScheduleAdmin
   BlockScheduleSlot -.->|displays| ScheduleAdminScreen
   BlockScheduleSlot -.->|invokes| BlockScheduleSlotApi
+  BlockScheduleSlot -.->|requires_medium| AdminConsole
+  BlockScheduleSlot -.->|requires_permission| ProviderScheduleAdmin
   ConfigureRoom -.->|displays| RoomAdminScreen
   ConfigureRoom -.->|invokes| RoomAdminApi
+  ConfigureRoom -.->|requires_medium| AdminConsole
+  ConfigureRoom -.->|requires_permission| RoomAdmin
   ReleaseRoom -.->|displays| RoomAdminScreen
+  ReleaseRoom -.->|requires_medium| AdminConsole
+  ReleaseRoom -.->|requires_permission| RoomAdmin
   ReleaseRoom -.->|updates| Room
   ReviewAuditEvents -.->|displays| AuditReviewScreen
   ReviewAuditEvents -.->|invokes| AuditApi
+  ReviewAuditEvents -.->|requires_medium| AdminConsole
+  ReviewAuditEvents -.->|requires_permission| AuditRead
   ResolveAuditFinding -.->|displays| AuditReviewScreen
+  ResolveAuditFinding -.->|requires_medium| AdminConsole
+  ResolveAuditFinding -.->|requires_permission| AuditResolve
   ResolveAuditFinding -.->|updates| AuditEvent

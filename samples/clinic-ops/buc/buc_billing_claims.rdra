@@ -91,3 +91,33 @@ sets(ReconcileBalance, AccountBalance, "closed_at", "timestamptz")
 displays(VoidCharge, ChargeWorklistScreen)
 updates(VoidCharge, Charge)
 sets(VoidCharge, Charge, "status", "chargevoided")
+
+// Access constraints
+requires_permission(CreateCharge, BillingClaimWrite)
+requires_medium(CreateCharge, BillingWorkstation)
+requires_permission(CreateChargeApi, BillingClaimWrite)
+
+requires_permission(GenerateClaim, BillingClaimWrite)
+requires_medium(GenerateClaim, BillingWorkstation)
+requires_permission(GenerateClaimApi, BillingClaimWrite)
+
+requires_permission(SubmitClaim, BillingClaimWrite)
+requires_medium(SubmitClaim, BillingWorkstation)
+requires_permission(SubmitClaimApi, BillingClaimWrite)
+
+requires_permission(ReceiveClaimAccepted, BillingClaimWrite)
+requires_medium(ReceiveClaimAccepted, BillingWorkstation)
+
+requires_permission(RecordClaimDenial, BillingClaimWrite)
+requires_medium(RecordClaimDenial, BillingWorkstation)
+
+requires_permission(PostPayment, PaymentPost)
+requires_medium(PostPayment, BillingWorkstation)
+requires_permission(PaymentPostApi, PaymentPost)
+
+requires_permission(ReconcileBalance, PaymentPost)
+requires_medium(ReconcileBalance, BillingWorkstation)
+requires_permission(BalanceApi, PaymentPost)
+
+requires_permission(VoidCharge, BillingClaimWrite)
+requires_medium(VoidCharge, BillingWorkstation)

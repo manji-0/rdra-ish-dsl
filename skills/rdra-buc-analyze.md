@@ -7,6 +7,9 @@ description: Analyze a BUC or the whole model for coverage gaps, state patterns,
 
 Run CLI commands to surface coverage gaps, state patterns, and consistency issues in a BUC or the whole model.
 
+<!-- derived-from ../docs/language-reference.md#access-constraints -->
+<!-- derived-from ../docs/cli-reference.md#csv -->
+
 When the user is refining a model incrementally, identify the current abstraction
 stage first and report the next information needed from the user. Interpret that stage
 as a shift from business concern to technical concern: first validate business value,
@@ -38,6 +41,9 @@ rdra-ish states src/ --entity <EntityId>
 
 # 8. List systems
 rdra-ish list src/ --kind system --format table
+
+# 9. Derive screen access/media constraint paths
+rdra-ish csv src/ --kind screen-constraints
 ```
 
 ### Interpreting `rdra-ish states` output
@@ -78,6 +84,7 @@ Entity: Order (注文)
 | Use cases exist but CRUD matrix is empty | BUC skeleton (biz) | entities touched by each use case |
 | CRUD exists but sequence output has only `System` lane | Data touchpoints (biz→tech) | screens and API boundaries |
 | APIs exist but no `system`/`contains(System, Api)` | Interaction boundary (tech) | API ownership/system boundaries |
+| UC/API has permission or medium requirements | Interaction boundary (tech) | screen constraint CSV and actor permission coverage |
 | `relate` crosses derived systems | Entity structure (tech) | coordinating use case and API calls on both sides |
 | Entities have only `id` columns | Data touchpoints (biz→tech) | fields, keys, and relationships |
 | Entities have Enum/Bool/nullable columns but no state output changes | Entity structure (tech) | events, transitions, and `sets` effects |
@@ -92,6 +99,8 @@ Entity: Order (注文)
 | BUC has no `belongs` | Business domain assignment is missing |
 | Use case has no CRUD predicate | UC is declared but not connected to data |
 | Use case has no `displays` | No screen assigned — flag for intentional review |
+| UC/API declares `requires_permission` but no actor has `has_permission` in the BUC slice | Authority model is incomplete |
+| UC/API declares `requires_medium` but screen-constraints output is not reviewed | UI/media path has not been validated |
 | Entity column never appears in `states` axes | No `sets` or `transitions` predicate covers it |
 | Cross-system relation warning | Missing `coordinates(UseCase, Entity, Entity)` or missing API invocation on one side |
 | `TERMINAL` state is unexpected | Missing use case or transition to exit that state |
@@ -112,6 +121,9 @@ Entity: Order (注文)
   - `CoordinationMissingApi`: make the coordinating use case invoke an API operating the missing side
   - `CoordinationNotCrossSystem`: remove or retarget `coordinates`
   - `EntityInMultipleSystems`: split ownership or move coordination to use cases
+- Run `rdra-ish csv src/ --kind screen-constraints` when reviewing screens. Each row is
+  a derived `Screen × UseCase × Api?` path with the combined `requires_permission` and
+  `requires_medium` constraints from the use case and invoked API.
 
 ### Reporting findings
 
@@ -130,6 +142,7 @@ Entity: Order (注文)
 ### Coverage gaps
 - [high] BUC `<Id>`: no performs
 - [medium] usecase `<Id>`: no displays predicate
+- [medium] screen `<Id>`: constrained path exists but actor permission coverage is unclear
 - [low] entity `<Id>` column `<col>`: not tracked by any sets or transitions
 - ...
 

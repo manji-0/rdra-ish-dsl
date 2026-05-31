@@ -43,6 +43,14 @@ pub enum Token {
     Variation,
     #[token("api")]
     Api,
+    #[token("location")]
+    Location,
+    #[token("timing")]
+    Timing,
+    #[token("medium")]
+    Medium,
+    #[token("permission")]
+    Permission,
 
     // ── Type keywords ────────────────────────────────────────────────
     #[token("Int")]

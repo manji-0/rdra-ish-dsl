@@ -81,3 +81,28 @@ updates(CompleteAppointmentApi, Room)
 raises(CompleteAppointment, EvAppointmentCompleted)
 sets(CompleteAppointment, Room, "occupancy_status", "roomcleaning")
 triggers(EvEncounterSigned, CompleteAppointment)
+
+// Access constraints
+requires_permission(OpenEncounter, EncounterOpen)
+requires_medium(OpenEncounter, NurseStation)
+requires_permission(OpenEncounterApi, EncounterOpen)
+
+requires_permission(RecordVitals, VitalsRecord)
+requires_medium(RecordVitals, NurseStation)
+requires_permission(RecordVitalsApi, VitalsRecord)
+
+requires_permission(DocumentAssessment, ClinicalDocument)
+requires_medium(DocumentAssessment, ClinicalWorkstation)
+requires_permission(DocumentAssessmentApi, ClinicalDocument)
+
+requires_permission(SignEncounter, EncounterSign)
+requires_medium(SignEncounter, ClinicalWorkstation)
+requires_permission(SignEncounterApi, EncounterSign)
+
+requires_permission(AmendEncounter, EncounterSign)
+requires_medium(AmendEncounter, ClinicalWorkstation)
+requires_permission(AmendEncounterApi, EncounterSign)
+
+requires_permission(CompleteAppointment, EncounterOpen)
+requires_medium(CompleteAppointment, NurseStation)
+requires_permission(CompleteAppointmentApi, EncounterOpen)

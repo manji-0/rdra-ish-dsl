@@ -87,3 +87,28 @@ triggers(EvClinicalOrderReviewed, NotifyCriticalResult)
 displays(CancelClinicalOrder, OrderEntryScreen)
 updates(CancelClinicalOrder, ClinicalOrder)
 raises(CancelClinicalOrder, EvClinicalOrderCancelled)
+
+// Access constraints
+requires_permission(PlaceLabOrder, ClinicalOrderWrite)
+requires_medium(PlaceLabOrder, ClinicalWorkstation)
+requires_permission(OrderEntryApi, ClinicalOrderWrite)
+
+requires_permission(CollectSpecimen, ClinicalOrderWrite)
+requires_medium(CollectSpecimen, NurseStation)
+requires_permission(CollectSpecimenApi, ClinicalOrderWrite)
+
+requires_permission(ReceiveLabResult, LabResultManage)
+requires_medium(ReceiveLabResult, NurseStation)
+requires_permission(ReceiveLabResultApi, LabResultManage)
+
+requires_permission(ReviewLabResult, LabResultManage)
+requires_medium(ReviewLabResult, ClinicalWorkstation)
+requires_permission(ResultReviewApi, LabResultManage)
+
+requires_permission(NotifyCriticalResult, LabResultManage)
+requires_permission(NotifyCriticalResult, PatientMessageSend)
+requires_medium(NotifyCriticalResult, ClinicalWorkstation)
+requires_permission(CriticalNoticeApi, PatientMessageSend)
+
+requires_permission(CancelClinicalOrder, ClinicalOrderWrite)
+requires_medium(CancelClinicalOrder, ClinicalWorkstation)

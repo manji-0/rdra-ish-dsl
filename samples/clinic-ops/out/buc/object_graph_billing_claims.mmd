@@ -7,6 +7,9 @@ flowchart LR
     direction TB
     RevenueCycle["💼 Revenue Cycle"]
     BucBillingClaims["📦 Bill and Collect Claims"]
+    BillingWorkstation[/"📱 Billing Workstation"/]
+    BillingClaimWrite["🔑 Billing Claim Write"]
+    PaymentPost["🔑 Payment Post"]
   end
   subgraph layer_boundary[System Boundary]
     direction TB
@@ -41,17 +44,24 @@ flowchart LR
     InsurancePolicy[("🗄️ Insurance Policy")]
     PaymentTransaction[("🗄️ Payment Transaction")]
   end
+  BillingSpecialist -.->|has_permission| BillingClaimWrite
+  BillingSpecialist -.->|has_permission| PaymentPost
   BillingSpecialist -->|performs| BucBillingClaims
   CreateChargeApi -.->|creates| Charge
   CreateChargeApi -.->|reads| Encounter
+  CreateChargeApi -.->|requires_permission| BillingClaimWrite
   CreateChargeApi -.->|updates| AccountBalance
   GenerateClaimApi -.->|creates| Claim
   GenerateClaimApi -.->|reads| InsurancePolicy
+  GenerateClaimApi -.->|requires_permission| BillingClaimWrite
   GenerateClaimApi -.->|updates| Charge
+  SubmitClaimApi -.->|requires_permission| BillingClaimWrite
   SubmitClaimApi -.->|updates| Claim
   PaymentPostApi -.->|creates| PaymentTransaction
+  PaymentPostApi -.->|requires_permission| PaymentPost
   PaymentPostApi -.->|updates| Claim
   BalanceApi -.->|reads| PaymentTransaction
+  BalanceApi -.->|requires_permission| PaymentPost
   BalanceApi -.->|updates| AccountBalance
   BucBillingClaims -.->|belongs| RevenueCycle
   BucBillingClaims -->|contains| CreateCharge
@@ -68,21 +78,37 @@ flowchart LR
   PaymentTransaction ---|N:1| Claim
   CreateCharge -.->|displays| ChargeWorklistScreen
   CreateCharge -.->|invokes| CreateChargeApi
+  CreateCharge -.->|requires_medium| BillingWorkstation
+  CreateCharge -.->|requires_permission| BillingClaimWrite
   GenerateClaim -.->|displays| ClaimScreen
   GenerateClaim -.->|invokes| GenerateClaimApi
+  GenerateClaim -.->|requires_medium| BillingWorkstation
+  GenerateClaim -.->|requires_permission| BillingClaimWrite
   SubmitClaim -.->|displays| ClaimScreen
   SubmitClaim -.->|invokes| SubmitClaimApi
   SubmitClaim -.->|raises| EvClaimSubmitted
+  SubmitClaim -.->|requires_medium| BillingWorkstation
+  SubmitClaim -.->|requires_permission| BillingClaimWrite
   ReceiveClaimAccepted -.->|displays| ClaimScreen
   ReceiveClaimAccepted -.->|raises| EvClaimAccepted
+  ReceiveClaimAccepted -.->|requires_medium| BillingWorkstation
+  ReceiveClaimAccepted -.->|requires_permission| BillingClaimWrite
   ReceiveClaimAccepted -.->|updates| Claim
   RecordClaimDenial -.->|displays| ClaimScreen
   RecordClaimDenial -.->|raises| EvClaimDenied
+  RecordClaimDenial -.->|requires_medium| BillingWorkstation
+  RecordClaimDenial -.->|requires_permission| BillingClaimWrite
   RecordClaimDenial -.->|updates| Claim
   PostPayment -.->|displays| PaymentPostingScreen
   PostPayment -.->|invokes| PaymentPostApi
   PostPayment -.->|raises| EvClaimPaid
+  PostPayment -.->|requires_medium| BillingWorkstation
+  PostPayment -.->|requires_permission| PaymentPost
   ReconcileBalance -.->|displays| BalanceScreen
   ReconcileBalance -.->|invokes| BalanceApi
+  ReconcileBalance -.->|requires_medium| BillingWorkstation
+  ReconcileBalance -.->|requires_permission| PaymentPost
   VoidCharge -.->|displays| ChargeWorklistScreen
+  VoidCharge -.->|requires_medium| BillingWorkstation
+  VoidCharge -.->|requires_permission| BillingClaimWrite
   VoidCharge -.->|updates| Charge

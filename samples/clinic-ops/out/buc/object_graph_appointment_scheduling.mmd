@@ -8,6 +8,12 @@ flowchart LR
     direction TB
     PatientAccess["💼 Patient Access"]
     BucAppointmentScheduling["📦 Schedule Appointments"]
+    FrontDeskTerminal[/"📱 Front Desk Terminal"/]
+    PatientMobile[/"📱 Patient Mobile"/]
+    IntakeManage["🔑 Intake Manage"]
+    PatientMessageSend["🔑 Patient Message Send"]
+    ScheduleRead["🔑 Schedule Read"]
+    ScheduleWrite["🔑 Schedule Write"]
   end
   subgraph layer_boundary[System Boundary]
     direction TB
@@ -45,12 +51,16 @@ flowchart LR
     Provider[("🗄️ Provider")]
     ProviderSchedule[("🗄️ Provider Schedule")]
   end
+  Patient -.->|has_permission| ScheduleRead
   Patient -->|performs| BucAppointmentScheduling
   Patient -->|performs| SearchAvailability
   Patient -->|performs| ReserveAppointment
   Patient -->|performs| BookAppointment
   Patient -->|performs| RescheduleAppointment
   Patient -->|performs| CancelAppointment
+  FrontDesk -.->|has_permission| IntakeManage
+  FrontDesk -.->|has_permission| ScheduleRead
+  FrontDesk -.->|has_permission| ScheduleWrite
   FrontDesk -->|performs| BucAppointmentScheduling
   FrontDesk -->|performs| SendIntakeForms
   FrontDesk -->|performs| SearchAvailability
@@ -62,15 +72,21 @@ flowchart LR
   FrontDesk -->|performs| SendAppointmentNotice
   IntakeMessagingApi -.->|creates| PatientMessage
   IntakeMessagingApi -.->|creates| IntakePacket
+  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
   SearchAvailabilityApi -.->|reads| ProviderSchedule
   SearchAvailabilityApi -.->|reads| Provider
   SearchAvailabilityApi -.->|reads| ClinicLocation
+  SearchAvailabilityApi -.->|requires_permission| ScheduleRead
   ReserveAppointmentApi -.->|creates| Appointment
+  ReserveAppointmentApi -.->|requires_permission| ScheduleWrite
   ReserveAppointmentApi -.->|updates| ProviderSchedule
+  BookAppointmentApi -.->|requires_permission| ScheduleWrite
   BookAppointmentApi -.->|updates| ProviderSchedule
   BookAppointmentApi -.->|updates| Appointment
+  RescheduleAppointmentApi -.->|requires_permission| ScheduleWrite
   RescheduleAppointmentApi -.->|updates| ProviderSchedule
   RescheduleAppointmentApi -.->|updates| Appointment
+  CancelAppointmentApi -.->|requires_permission| ScheduleWrite
   CancelAppointmentApi -.->|updates| ProviderSchedule
   CancelAppointmentApi -.->|updates| Appointment
   AppointmentNoticeApi -.->|creates| PatientMessage
@@ -94,21 +110,42 @@ flowchart LR
   ScheduleSearchScreen -.->|shows| ProviderSchedule
   SendIntakeForms -.->|displays| IntakePortalScreen
   SendIntakeForms -.->|invokes| IntakeMessagingApi
+  SendIntakeForms -.->|requires_medium| FrontDeskTerminal
+  SendIntakeForms -.->|requires_permission| IntakeManage
   SearchAvailability -.->|displays| ScheduleSearchScreen
   SearchAvailability -.->|invokes| SearchAvailabilityApi
+  SearchAvailability -.->|requires_medium| FrontDeskTerminal
+  SearchAvailability -.->|requires_medium| PatientMobile
+  SearchAvailability -.->|requires_permission| ScheduleRead
   ReserveAppointment -.->|displays| AppointmentScreen
   ReserveAppointment -.->|invokes| ReserveAppointmentApi
+  ReserveAppointment -.->|requires_medium| FrontDeskTerminal
+  ReserveAppointment -.->|requires_medium| PatientMobile
+  ReserveAppointment -.->|requires_permission| ScheduleWrite
   BookAppointment -.->|displays| AppointmentScreen
   BookAppointment -.->|invokes| BookAppointmentApi
   BookAppointment -.->|raises| EvAppointmentScheduled
+  BookAppointment -.->|requires_medium| FrontDeskTerminal
+  BookAppointment -.->|requires_medium| PatientMobile
+  BookAppointment -.->|requires_permission| ScheduleWrite
   RescheduleAppointment -.->|displays| AppointmentScreen
   RescheduleAppointment -.->|invokes| RescheduleAppointmentApi
   RescheduleAppointment -.->|raises| EvAppointmentRescheduled
+  RescheduleAppointment -.->|requires_medium| FrontDeskTerminal
+  RescheduleAppointment -.->|requires_medium| PatientMobile
+  RescheduleAppointment -.->|requires_permission| ScheduleWrite
   CancelAppointment -.->|displays| AppointmentScreen
   CancelAppointment -.->|invokes| CancelAppointmentApi
   CancelAppointment -.->|raises| EvAppointmentCancelled
+  CancelAppointment -.->|requires_medium| FrontDeskTerminal
+  CancelAppointment -.->|requires_medium| PatientMobile
+  CancelAppointment -.->|requires_permission| ScheduleWrite
   MarkNoShow -.->|displays| AppointmentScreen
   MarkNoShow -.->|raises| EvAppointmentNoShow
+  MarkNoShow -.->|requires_medium| FrontDeskTerminal
+  MarkNoShow -.->|requires_permission| ScheduleWrite
   MarkNoShow -.->|updates| Appointment
   SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
   SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
+  SendAppointmentNotice -.->|requires_medium| FrontDeskTerminal
+  SendAppointmentNotice -.->|requires_permission| ScheduleRead

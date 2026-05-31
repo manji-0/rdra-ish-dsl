@@ -120,3 +120,40 @@ raises(MergeDuplicatePatient, EvPatientMerged)
 displays(ArchivePatient, PatientProfileScreen)
 updates(ArchivePatient, PatientAccount)
 raises(ArchivePatient, EvPatientArchived)
+
+// Access constraints
+requires_permission(SearchPatient, PatientProfileRead)
+requires_medium(SearchPatient, FrontDeskTerminal)
+requires_permission(SearchPatientApi, PatientProfileRead)
+
+requires_permission(RegisterPatient, PatientProfileWrite)
+requires_medium(RegisterPatient, FrontDeskTerminal)
+requires_permission(RegisterPatientApi, PatientProfileWrite)
+
+requires_permission(UpdateDemographics, PatientProfileWrite)
+requires_medium(UpdateDemographics, FrontDeskTerminal)
+requires_permission(UpdateDemographicsApi, PatientProfileWrite)
+
+requires_permission(VerifyInsurance, InsuranceVerify)
+requires_medium(VerifyInsurance, FrontDeskTerminal)
+requires_permission(EligibilityApi, InsuranceVerify)
+
+requires_permission(CaptureConsent, ConsentCapture)
+requires_medium(CaptureConsent, PatientMobile)
+requires_permission(ConsentApi, ConsentCapture)
+
+requires_permission(SendIntakeForms, IntakeManage)
+requires_medium(SendIntakeForms, FrontDeskTerminal)
+requires_permission(IntakeMessagingApi, PatientMessageSend)
+
+requires_permission(CompleteIntakeForms, ConsentCapture)
+requires_medium(CompleteIntakeForms, PatientMobile)
+
+requires_permission(ExpireIntakeForms, IntakeManage)
+requires_medium(ExpireIntakeForms, FrontDeskTerminal)
+
+requires_permission(MergeDuplicatePatient, PatientProfileWrite)
+requires_medium(MergeDuplicatePatient, FrontDeskTerminal)
+
+requires_permission(ArchivePatient, PatientProfileWrite)
+requires_medium(ArchivePatient, FrontDeskTerminal)

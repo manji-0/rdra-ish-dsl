@@ -1,0 +1,44 @@
+module shared.access
+
+import shared.actors
+import shared.biz
+
+has_permission(Patient, PatientProfileRead)
+has_permission(Patient, ConsentCapture)
+has_permission(Patient, ScheduleRead)
+
+has_permission(FrontDesk, PatientProfileRead)
+has_permission(FrontDesk, PatientProfileWrite)
+has_permission(FrontDesk, InsuranceVerify)
+has_permission(FrontDesk, IntakeManage)
+has_permission(FrontDesk, ScheduleRead)
+has_permission(FrontDesk, ScheduleWrite)
+has_permission(FrontDesk, VisitCheckIn)
+has_permission(FrontDesk, CopayCollect)
+
+has_permission(Nurse, VisitCheckIn)
+has_permission(Nurse, RoomAssign)
+has_permission(Nurse, EncounterOpen)
+has_permission(Nurse, VitalsRecord)
+has_permission(Nurse, ClinicalOrderWrite)
+has_permission(Nurse, LabResultManage)
+has_permission(Nurse, PrescriptionDispense)
+
+has_permission(Clinician, EncounterOpen)
+has_permission(Clinician, ClinicalDocument)
+has_permission(Clinician, EncounterSign)
+has_permission(Clinician, ClinicalOrderWrite)
+has_permission(Clinician, LabResultManage)
+has_permission(Clinician, PrescriptionWrite)
+
+has_permission(BillingSpecialist, BillingClaimWrite)
+has_permission(BillingSpecialist, PaymentPost)
+
+has_permission(CareCoordinator, FollowUpManage)
+has_permission(CareCoordinator, PatientMessageSend)
+has_permission(CareCoordinator, ScheduleWrite)
+
+has_permission(ClinicAdmin, ProviderScheduleAdmin)
+has_permission(ClinicAdmin, RoomAdmin)
+has_permission(ClinicAdmin, AuditRead)
+has_permission(ClinicAdmin, AuditResolve)

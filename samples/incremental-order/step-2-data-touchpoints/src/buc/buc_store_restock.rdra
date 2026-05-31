@@ -4,7 +4,7 @@ import shared.biz
 import shared.actors
 import shared.entities
 
-buc BucStoreRestock "Maintain Store Restock"
+buc BucStoreRestock "Maintain Store Restock" description "Keep restock dates and store organization assignments operationally correct."
 usecase ChangeNextRestockDate "Change Next Restock Date"
 usecase ChangeStoreParentOrganization "Change Store Parent Organization"
 

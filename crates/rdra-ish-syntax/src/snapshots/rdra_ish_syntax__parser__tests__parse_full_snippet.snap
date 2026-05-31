@@ -1,5 +1,6 @@
 ---
 source: crates/rdra-ish-syntax/src/parser.rs
+assertion_line: 505
 expression: ast
 ---
 Ast {
@@ -30,6 +31,7 @@ Ast {
                 kind: Actor,
                 id: "Customer",
                 label: "顧客",
+                description: None,
                 columns: [],
                 span: 63..88,
             },
@@ -39,6 +41,7 @@ Ast {
                 kind: UseCase,
                 id: "Browse",
                 label: "商品を探す",
+                description: None,
                 columns: [],
                 span: 89..123,
             },
@@ -48,6 +51,7 @@ Ast {
                 kind: Entity,
                 id: "Order",
                 label: "注文",
+                description: None,
                 columns: [
                     Column {
                         name: "id",

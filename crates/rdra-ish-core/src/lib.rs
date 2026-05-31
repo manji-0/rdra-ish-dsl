@@ -1,5 +1,6 @@
 //! rdra-core: RDRA semantic model and validation.
 
+pub mod access;
 pub mod analysis;
 pub mod diagnostics;
 pub mod event_flow;
@@ -9,12 +10,14 @@ pub mod state_pattern;
 pub mod system;
 pub mod tx;
 
+pub use access::{derive_screen_constraint_patterns, ScreenConstraintPattern};
 pub use analysis::build_model;
 pub use diagnostics::{Diagnostic, RdraError};
 pub use event_flow::{api_diagnostics, collect_event_flows, event_diagnostics, EventFlow};
 pub use model::{
-    Api, ApiKey, ColumnEffect, EffectValue, EntityKey, SemanticModel, StateTransition, System,
-    SystemKey,
+    Api, ApiKey, ColumnEffect, EffectValue, EntityKey, Location, LocationKey, Medium, MediumKey,
+    Permission, PermissionKey, SemanticModel, StateTransition, System, SystemKey, Timing,
+    TimingKey,
 };
 pub use resolver::{build_merged_model, reachable_from_bucs, resolve, ResolvedProgram};
 pub use state_pattern::{

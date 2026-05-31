@@ -1,5 +1,6 @@
 ---
-source: crates/rdra-syntax/src/parser.rs
+source: crates/rdra-ish-syntax/src/parser.rs
+assertion_line: 435
 expression: ast
 ---
 Ast {
@@ -9,10 +10,13 @@ Ast {
                 kind: Actor,
                 id: "Customer",
                 label: "顧客",
+                description: Some(
+                    "商品を購入する顧客",
+                ),
                 columns: [],
-                span: 0..23,
+                span: 0..65,
             },
         ),
     ],
-    source: "actor Customer \"顧客\"",
+    source: "actor Customer \"顧客\" description \"商品を購入する顧客\"",
 }

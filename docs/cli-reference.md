@@ -92,8 +92,8 @@ rdra-ish csv <INPUTS...> [--kind <KIND>] [-o <OUT>]
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `actor` \| `entity` \| `matrix` \| `api` \| `api-matrix` | `entity` | CSV kind. `actor` = actor list; `entity` = entity/column list; `matrix` = use-case × entity CRUD matrix; `api` = API list; `api-matrix` = API × entity CRUD matrix. |
-| `-o`, `--out` | path | `out` | Output file path. If no extension is given, a default is appended (`actor.csv` / `entity.csv` / `matrix.csv`). |
+| `--kind` | `actor` \| `entity` \| `matrix` \| `api` \| `api-matrix` \| `screen-constraints` | `entity` | CSV kind. `actor` = actor list; `entity` = entity/column list; `matrix` = use-case × entity CRUD matrix; `api` = API list; `api-matrix` = API × entity CRUD matrix; `screen-constraints` = screen × UC/API permission/medium paths. |
+| `-o`, `--out` | path | `out` | Output file path. If no extension is given, a default is appended (`actor.csv` / `entity.csv` / `matrix.csv` / etc.). |
 
 The command writes the CSV to the output path and prints `wrote <path>`.
 

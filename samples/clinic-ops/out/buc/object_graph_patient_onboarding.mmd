@@ -8,6 +8,14 @@ flowchart LR
     direction TB
     PatientAccess["💼 Patient Access"]
     BucPatientOnboarding["📦 Onboard and Maintain Patient"]
+    FrontDeskTerminal[/"📱 Front Desk Terminal"/]
+    PatientMobile[/"📱 Patient Mobile"/]
+    ConsentCapture["🔑 Consent Capture"]
+    InsuranceVerify["🔑 Insurance Verify"]
+    IntakeManage["🔑 Intake Manage"]
+    PatientMessageSend["🔑 Patient Message Send"]
+    PatientProfileRead["🔑 Patient Profile Read"]
+    PatientProfileWrite["🔑 Patient Profile Write"]
   end
   subgraph layer_boundary[System Boundary]
     direction TB
@@ -47,9 +55,15 @@ flowchart LR
     PatientMessage[("🗄️ Patient Message")]
     PatientProfile[("🗄️ Patient Profile")]
   end
+  Patient -.->|has_permission| PatientProfileRead
+  Patient -.->|has_permission| ConsentCapture
   Patient -->|performs| BucPatientOnboarding
   Patient -->|performs| CaptureConsent
   Patient -->|performs| CompleteIntakeForms
+  FrontDesk -.->|has_permission| PatientProfileRead
+  FrontDesk -.->|has_permission| PatientProfileWrite
+  FrontDesk -.->|has_permission| InsuranceVerify
+  FrontDesk -.->|has_permission| IntakeManage
   FrontDesk -->|performs| BucPatientOnboarding
   FrontDesk -->|performs| VerifyInsurance
   FrontDesk -->|performs| SendIntakeForms
@@ -60,15 +74,21 @@ flowchart LR
   FrontDesk -->|performs| RegisterPatient
   FrontDesk -->|performs| UpdateDemographics
   ConsentApi -.->|creates| ConsentRecord
+  ConsentApi -.->|requires_permission| ConsentCapture
   IntakeMessagingApi -.->|creates| PatientMessage
   IntakeMessagingApi -.->|creates| IntakePacket
+  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
   SearchPatientApi -.->|reads| PatientAccount
   SearchPatientApi -.->|reads| PatientProfile
+  SearchPatientApi -.->|requires_permission| PatientProfileRead
   RegisterPatientApi -.->|creates| PatientAccount
   RegisterPatientApi -.->|creates| PatientProfile
+  RegisterPatientApi -.->|requires_permission| PatientProfileWrite
+  UpdateDemographicsApi -.->|requires_permission| PatientProfileWrite
   UpdateDemographicsApi -.->|updates| PatientProfile
   EligibilityApi -.->|creates| EligibilityCheck
   EligibilityApi -.->|reads| InsurancePolicy
+  EligibilityApi -.->|requires_permission| InsuranceVerify
   EligibilityApi -.->|updates| InsurancePolicy
   BucPatientOnboarding -.->|belongs| PatientAccess
   BucPatientOnboarding -->|contains| VerifyInsurance
@@ -91,25 +111,45 @@ flowchart LR
   PatientProfileScreen -.->|shows| PatientProfile
   VerifyInsurance -.->|displays| InsuranceScreen
   VerifyInsurance -.->|invokes| EligibilityApi
+  VerifyInsurance -.->|requires_medium| FrontDeskTerminal
+  VerifyInsurance -.->|requires_permission| InsuranceVerify
   CaptureConsent -.->|displays| ConsentScreen
   CaptureConsent -.->|invokes| ConsentApi
+  CaptureConsent -.->|requires_medium| PatientMobile
+  CaptureConsent -.->|requires_permission| ConsentCapture
   SendIntakeForms -.->|displays| IntakePortalScreen
   SendIntakeForms -.->|invokes| IntakeMessagingApi
+  SendIntakeForms -.->|requires_medium| FrontDeskTerminal
+  SendIntakeForms -.->|requires_permission| IntakeManage
   CompleteIntakeForms -.->|displays| IntakePortalScreen
   CompleteIntakeForms -.->|raises| EvIntakeCompleted
+  CompleteIntakeForms -.->|requires_medium| PatientMobile
+  CompleteIntakeForms -.->|requires_permission| ConsentCapture
   CompleteIntakeForms -.->|updates| IntakePacket
   ExpireIntakeForms -.->|displays| IntakePortalScreen
   ExpireIntakeForms -.->|raises| EvIntakeExpired
+  ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
+  ExpireIntakeForms -.->|requires_permission| IntakeManage
   ExpireIntakeForms -.->|updates| IntakePacket
   MergeDuplicatePatient -.->|displays| PatientProfileScreen
   MergeDuplicatePatient -.->|raises| EvPatientMerged
+  MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
+  MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
   MergeDuplicatePatient -.->|updates| PatientAccount
   ArchivePatient -.->|displays| PatientProfileScreen
   ArchivePatient -.->|raises| EvPatientArchived
+  ArchivePatient -.->|requires_medium| FrontDeskTerminal
+  ArchivePatient -.->|requires_permission| PatientProfileWrite
   ArchivePatient -.->|updates| PatientAccount
   SearchPatient -.->|displays| PatientSearchScreen
   SearchPatient -.->|invokes| SearchPatientApi
+  SearchPatient -.->|requires_medium| FrontDeskTerminal
+  SearchPatient -.->|requires_permission| PatientProfileRead
   RegisterPatient -.->|displays| PatientProfileScreen
   RegisterPatient -.->|invokes| RegisterPatientApi
+  RegisterPatient -.->|requires_medium| FrontDeskTerminal
+  RegisterPatient -.->|requires_permission| PatientProfileWrite
   UpdateDemographics -.->|displays| PatientProfileScreen
   UpdateDemographics -.->|invokes| UpdateDemographicsApi
+  UpdateDemographics -.->|requires_medium| FrontDeskTerminal
+  UpdateDemographics -.->|requires_permission| PatientProfileWrite

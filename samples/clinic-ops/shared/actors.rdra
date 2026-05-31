@@ -1,7 +1,7 @@
 module shared.actors
 
-actor Patient           "Patient"
-actor FrontDesk         "Front Desk Staff"
+actor Patient           "Patient" description "A person receiving care through the clinic."
+actor FrontDesk         "Front Desk Staff" description "Staff member who handles access, scheduling, and check-in workflows."
 actor CareCoordinator   "Care Coordinator"
 actor Nurse             "Nurse"
 actor Clinician         "Clinician"

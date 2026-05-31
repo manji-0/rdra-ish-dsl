@@ -75,3 +75,27 @@ displays(RefillPrescription, PrescriptionScreen)
 invokes(RefillPrescription, RefillPrescriptionApi)
 creates(RefillPrescriptionApi, Prescription)
 reads(RefillPrescriptionApi, Medication)
+
+// Access constraints
+requires_permission(SearchMedication, PrescriptionWrite)
+requires_medium(SearchMedication, ClinicalWorkstation)
+requires_permission(MedicationCatalogApi, PrescriptionWrite)
+
+requires_permission(DraftPrescription, PrescriptionWrite)
+requires_medium(DraftPrescription, ClinicalWorkstation)
+requires_permission(DraftPrescriptionApi, PrescriptionWrite)
+
+requires_permission(SendPrescription, PrescriptionWrite)
+requires_medium(SendPrescription, ClinicalWorkstation)
+requires_permission(SendPrescriptionApi, PrescriptionWrite)
+
+requires_permission(ConfirmDispense, PrescriptionDispense)
+requires_medium(ConfirmDispense, NurseStation)
+requires_permission(ConfirmDispenseApi, PrescriptionDispense)
+
+requires_permission(CancelPrescription, PrescriptionWrite)
+requires_medium(CancelPrescription, ClinicalWorkstation)
+
+requires_permission(RefillPrescription, PrescriptionWrite)
+requires_medium(RefillPrescription, ClinicalWorkstation)
+requires_permission(RefillPrescriptionApi, PrescriptionWrite)

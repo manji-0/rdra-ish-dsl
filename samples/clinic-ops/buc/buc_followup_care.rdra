@@ -81,3 +81,27 @@ creates(NotifyPatientResultApi, Notification)
 sets(NotifyPatientResult, Notification, "status", "notifdelivered")
 sets(NotifyPatientResult, Notification, "delivered_at", "timestamptz")
 triggers(EvClinicalOrderReviewed, NotifyPatientResult)
+
+// Access constraints
+requires_permission(CreateCarePlan, FollowUpManage)
+requires_medium(CreateCarePlan, CareCoordinationConsole)
+requires_permission(CreateCarePlanApi, FollowUpManage)
+
+requires_permission(SendFollowUpMessage, PatientMessageSend)
+requires_medium(SendFollowUpMessage, CareCoordinationConsole)
+requires_permission(SendFollowUpMessageApi, PatientMessageSend)
+
+requires_permission(ReviewPatientResponse, FollowUpManage)
+requires_medium(ReviewPatientResponse, CareCoordinationConsole)
+
+requires_permission(ScheduleFollowUpVisit, FollowUpManage)
+requires_permission(ScheduleFollowUpVisit, ScheduleWrite)
+requires_medium(ScheduleFollowUpVisit, CareCoordinationConsole)
+requires_permission(FollowUpScheduleApi, ScheduleWrite)
+
+requires_permission(CloseCarePlan, FollowUpManage)
+requires_medium(CloseCarePlan, CareCoordinationConsole)
+
+requires_permission(NotifyPatientResult, PatientMessageSend)
+requires_medium(NotifyPatientResult, CareCoordinationConsole)
+requires_permission(NotifyPatientResultApi, PatientMessageSend)

@@ -8,6 +8,13 @@ flowchart LR
     direction TB
     PatientAccess["💼 Patient Access"]
     BucFollowupCare["📦 Coordinate Follow-Up Care"]
+    CareCoordinationConsole[/"📱 Care Coordination Console"/]
+    FrontDeskTerminal[/"📱 Front Desk Terminal"/]
+    FollowUpManage["🔑 Follow-Up Manage"]
+    IntakeManage["🔑 Intake Manage"]
+    PatientMessageSend["🔑 Patient Message Send"]
+    ScheduleRead["🔑 Schedule Read"]
+    ScheduleWrite["🔑 Schedule Write"]
   end
   subgraph layer_boundary[System Boundary]
     direction TB
@@ -44,7 +51,11 @@ flowchart LR
     PatientMessage[("🗄️ Patient Message")]
     ProviderSchedule[("🗄️ Provider Schedule")]
   end
+  Patient -.->|has_permission| ScheduleRead
   Patient -->|performs| BucFollowupCare
+  CareCoordinator -.->|has_permission| FollowUpManage
+  CareCoordinator -.->|has_permission| PatientMessageSend
+  CareCoordinator -.->|has_permission| ScheduleWrite
   CareCoordinator -->|performs| BucFollowupCare
   CareCoordinator -->|performs| CreateCarePlan
   CareCoordinator -->|performs| SendFollowUpMessage
@@ -54,14 +65,19 @@ flowchart LR
   CareCoordinator -->|performs| NotifyPatientResult
   IntakeMessagingApi -.->|creates| PatientMessage
   IntakeMessagingApi -.->|creates| IntakePacket
+  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
   AppointmentNoticeApi -.->|creates| PatientMessage
   AppointmentNoticeApi -.->|creates| Notification
   CreateCarePlanApi -.->|creates| CarePlan
   CreateCarePlanApi -.->|reads| Encounter
+  CreateCarePlanApi -.->|requires_permission| FollowUpManage
   SendFollowUpMessageApi -.->|creates| PatientMessage
+  SendFollowUpMessageApi -.->|requires_permission| PatientMessageSend
   FollowUpScheduleApi -.->|creates| Appointment
+  FollowUpScheduleApi -.->|requires_permission| ScheduleWrite
   FollowUpScheduleApi -.->|updates| ProviderSchedule
   NotifyPatientResultApi -.->|creates| Notification
+  NotifyPatientResultApi -.->|requires_permission| PatientMessageSend
   BucFollowupCare -.->|belongs| PatientAccess
   BucFollowupCare -->|contains| CreateCarePlan
   BucFollowupCare -->|contains| SendFollowUpMessage
@@ -75,21 +91,38 @@ flowchart LR
   EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
   SendIntakeForms -.->|displays| IntakePortalScreen
   SendIntakeForms -.->|invokes| IntakeMessagingApi
+  SendIntakeForms -.->|requires_medium| FrontDeskTerminal
+  SendIntakeForms -.->|requires_permission| IntakeManage
   SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
   SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
+  SendAppointmentNotice -.->|requires_medium| FrontDeskTerminal
+  SendAppointmentNotice -.->|requires_permission| ScheduleRead
   CreateCarePlan -.->|displays| CarePlanScreen
   CreateCarePlan -.->|invokes| CreateCarePlanApi
+  CreateCarePlan -.->|requires_medium| CareCoordinationConsole
+  CreateCarePlan -.->|requires_permission| FollowUpManage
   SendFollowUpMessage -.->|displays| PatientMessageScreen
   SendFollowUpMessage -.->|invokes| SendFollowUpMessageApi
+  SendFollowUpMessage -.->|requires_medium| CareCoordinationConsole
+  SendFollowUpMessage -.->|requires_permission| PatientMessageSend
   ReviewPatientResponse -.->|displays| CarePlanScreen
   ReviewPatientResponse -.->|raises| EvCarePlanMonitoring
+  ReviewPatientResponse -.->|requires_medium| CareCoordinationConsole
+  ReviewPatientResponse -.->|requires_permission| FollowUpManage
   ReviewPatientResponse -.->|updates| CarePlan
   ReviewPatientResponse -.->|updates| PatientMessage
   ScheduleFollowUpVisit -.->|displays| FollowUpScheduleScreen
   ScheduleFollowUpVisit -.->|invokes| FollowUpScheduleApi
   ScheduleFollowUpVisit -.->|raises| EvAppointmentScheduled
+  ScheduleFollowUpVisit -.->|requires_medium| CareCoordinationConsole
+  ScheduleFollowUpVisit -.->|requires_permission| FollowUpManage
+  ScheduleFollowUpVisit -.->|requires_permission| ScheduleWrite
   CloseCarePlan -.->|displays| CarePlanScreen
   CloseCarePlan -.->|raises| EvCarePlanClosed
+  CloseCarePlan -.->|requires_medium| CareCoordinationConsole
+  CloseCarePlan -.->|requires_permission| FollowUpManage
   CloseCarePlan -.->|updates| CarePlan
   NotifyPatientResult -.->|displays| PatientMessageScreen
   NotifyPatientResult -.->|invokes| NotifyPatientResultApi
+  NotifyPatientResult -.->|requires_medium| CareCoordinationConsole
+  NotifyPatientResult -.->|requires_permission| PatientMessageSend

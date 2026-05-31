@@ -5,6 +5,8 @@ behavior without forcing all details up front. Each stage has a small modeling g
 a validation command, and a focused set of questions that unlocks the next stage.
 
 <!-- constrained-by ./language-reference.md -->
+<!-- constrained-by ./language-reference.md#access-constraints -->
+<!-- constrained-by ./language-reference.md#belongs-context -->
 <!-- constrained-by ./cli-reference.md -->
 <!-- constrained-by ./rdra-ish-interpretation.md#basic-stance -->
 <!-- derived-from ../README.md#recommended-modeling-loop -->
@@ -14,8 +16,8 @@ a validation command, and a focused set of questions that unlocks the next stage
 The stages can also be read as a shift of concern from **business intent** to
 **technical design**. Early stages keep the model close to business language: value
 streams, actors, and user-visible work. Later stages add technical commitments:
-data touchpoints, UI/API boundaries, ownership, persistence structure, lifecycle, and
-rules that the implementation must preserve.
+data touchpoints, UI/API boundaries, ownership, access/media constraints, persistence
+structure, lifecycle, and rules that the implementation must preserve.
 
 Start with the smallest model that can answer the current question. Move to the next
 stage only when the current abstraction is stable enough to make the added detail
@@ -60,10 +62,10 @@ ownership clearer.
 | Artifact | Default location | Split when |
 |---|---|---|
 | `actor`, `extsystem` | `shared/actors.rdra` | many external systems justify `shared/external.rdra` |
-| `business`, stable `requirement` | `shared/biz.rdra` | requirements need their own traceability file |
+| `business`, stable `requirement`, reusable `location` / `timing` / `medium` / `permission` | `shared/biz.rdra` or another shared vocabulary file | context and authority vocabulary grows large enough to deserve its own file |
 | `entity`, `relate`, shared lifecycle states/events | `shared/entities.rdra` | entities naturally form bounded groups |
 | `buc`, `usecase`, `screen`, BUC-local `api`, BUC-local events | `buc/buc_<name>.rdra` | keep one BUC per file; do not split a single BUC early |
-| CRUD, `displays`, `invokes`, `raises`, `sets` | the BUC file that explains the use case | never put BUC-specific predicates in shared files |
+| CRUD, `displays`, `invokes`, access constraints, `raises`, `sets` | the BUC file that explains the use case | never put BUC-specific predicates in shared files |
 | cross-BUC `event`, `state`, `transitions` | shared file near the owning entity | multiple BUC files raise or trigger the same event |
 | `forbidden`, `invariant` | shared file near the constrained entity | constraints become numerous enough for `shared/rules.rdra` |
 
@@ -133,7 +135,7 @@ import shared.lifecycle.order
 | 0 | Biz intent | Scope sketch | What business area are we modeling? | `business`, rough `buc`, candidate `actor` | `list --kind buc`, `diagram --kind rdra` |
 | 1 | Biz value | BUC skeleton | Who gets value from each BUC? | `performs`, `belongs`, `contains`, rough `usecase` | `check`, BUC-scoped RDRA diagram |
 | 2 | Biz object touchpoints | Data touchpoints | Which data objects does each use case touch? | coarse `entity`, CRUD predicates | CRUD matrix, ER diagram |
-| 3 | Tech interaction boundary | Interaction boundary | What UI/API boundary mediates the work? | `screen`, `displays`, `shows`, optional `api`/`invokes` | sequence diagram |
+| 3 | Tech interaction boundary | Interaction boundary | What UI/API boundary mediates the work, and with which authority/media constraints? | `screen`, `displays`, `shows`, optional `api`/`invokes`, `permission`, `medium`, `requires_*` | sequence diagram, screen-constraints CSV |
 | 4 | Tech data design | Entity structure | What structure and ownership does the data need? | columns, `@pk`, `relate`, cardinality | ER diagram, sequence TX warnings |
 | 5 | Tech lifecycle design | Lifecycle | Which states are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `state`, `transitions`, `raises`, `sets` | `states`, state diagram, event-flow |
 | 6 | Tech-enforced rules | Business rules | Which states are invalid or required? | `forbidden`, `invariant`, comparison propositions | `states` diagnostics |
@@ -242,16 +244,21 @@ coarse.
 
 ## Stage 3: Interaction Boundary
 
-Add screens and optional APIs once the use-case/data relationship is clear.
+Add screens, optional APIs, and access/media constraints once the use-case/data
+relationship is clear.
 
 ```rdra
 screen CheckoutScreen "Checkout"
 api OrderApi "Order API"
+permission OrderWrite "Order Write"
+medium CustomerDevice "Customer Device"
 
 displays(PlaceOrder, CheckoutScreen)
 shows(CheckoutScreen, Order)
 invokes(PlaceOrder, OrderApi)
 creates(OrderApi, Order)
+requires_permission(PlaceOrder, OrderWrite)
+requires_medium(PlaceOrder, CustomerDevice)
 ```
 
 Ask the user:
@@ -259,6 +266,7 @@ Ask the user:
 - Which screen or external interface does each use case expose?
 - Does the use case write data directly, or through an API boundary?
 - Is the API a reusable boundary or local to this BUC?
+- Which actor permission and physical/device medium are required for the use case or API?
 
 Validation:
 
@@ -267,9 +275,33 @@ rdra-ish check src/
 rdra-ish diagram src/ --kind sequence --format mermaid --buc BucOrder
 rdra-ish list src/ --kind api --format table
 rdra-ish csv src/ --kind api-matrix
+rdra-ish csv src/ --kind screen-constraints
 ```
 
-Move on when sequence output communicates the intended actor/screen/API/entity path.
+Move on when sequence output communicates the intended actor/screen/API/entity path
+and the screen-constraints CSV shows the expected permission/media paths.
+
+### BUC Context and Access Rules
+
+Use `belongs(Buc, Business).when(...).where(...).by(...)` when the BUC belongs to a
+business area only in a specific timing, place, channel, or operating medium.
+
+```rdra
+timing OrderSubmitted "Order Submitted"
+location CustomerPortal "Customer Portal"
+medium CustomerDevice "Customer Device"
+
+belongs(BucOrder, Commerce)
+  .when(OrderSubmitted)
+  .where(CustomerPortal)
+  .by(CustomerDevice)
+```
+
+Use `has_permission(Actor, Permission)` for what an actor can do. Use
+`requires_permission` and `requires_medium` on UC/API nodes for what an operation
+requires. Screen requirements are not written directly; they are derived from
+`displays(UC, Screen)` and the constraints on the UC plus APIs reached by
+`invokes(UC, Api)`.
 
 ### API Boundary Rules
 

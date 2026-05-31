@@ -24,6 +24,17 @@ An instance declaration introduces a named element:
   convention).
 - `"Label"` is a human-readable display string used in generated diagrams and lists.
 
+An instance may also carry an optional description:
+
+```
+<kind> <Id> "Label" description "Description text"
+```
+
+`description` is stored as element metadata for all instance kinds, including
+`business`, `buc`, `usecase`, `system`, and `api`. Diagram emitters currently keep
+using labels only; how descriptions should appear in diagrams is intentionally left
+for a future view/design decision.
+
 | kind | Description |
 |---|---|
 | `actor` | A human actor who performs use cases. |
@@ -41,6 +52,10 @@ An instance declaration introduces a named element:
 | `condition` | A condition. |
 | `variation` | A variation. |
 | `api` | An API layer endpoint invoked by a use case; operates entities on behalf of the use case and defines an atomic data operation boundary. Appears in the RDRA layered graph and sequence diagram as a named API lane, but is intentionally omitted from the boundaryless graph. |
+| `location` | A place, channel, organization point, or usage scene for Business-BUC context. |
+| `timing` | A timing, trigger, or business situation for Business-BUC context. |
+| `medium` | A physical medium, device, terminal, or operation medium for Business-BUC context. |
+| `permission` | A permission or role-like authority assignable to actors. |
 
 ---
 
@@ -111,11 +126,61 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `contains` | `(Buc, UseCase)` or `(System, Api)` | The use case composes the BUC, or the API belongs to the system boundary. |
 | `coordinates` | `(UseCase, Entity, Entity)` | The use case coordinates consistency for a relation crossing system boundaries. The use case must invoke APIs on both system sides that operate the corresponding entities. |
 | `belongs` | `(Buc, Business)` | The BUC belongs to the business. |
+| `has_permission` | `(Actor, Permission)` | The actor has the permission type. This provides a base vocabulary for later UC/API permission constraints. |
+| `requires_permission` | `(UseCase \| Api, Permission)` | The use case or API requires the permission type. |
+| `requires_medium` | `(UseCase \| Api, Medium)` | The use case or API requires the operation medium. |
 | `motivates` | `(Requirement, Buc)` | The requirement motivates the BUC. |
 | `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `"1:1"`, `"1:N"`, `"N:1"`, `"N:M"`. |
 | `transitions` | `(Event, State, State)` | A state machine edge: on the event, the entity moves from the first state to the second. |
 | `sets` | `(UseCase \| Event, Entity, "col", "val")` | An explicit column effect, consumed by state pattern derivation. |
 | `sets` | `(UseCase \| Event, Entity, col op rhs, true \| false)` | Drives the truth value of a comparison proposition (derived Bool axis) in state pattern derivation. |
+
+### Access constraints
+
+Actor permissions are declared with `permission` and attached to actors with
+`has_permission(Actor, Permission)`. Use cases and APIs can then declare the
+permission and medium they require:
+
+```
+permission ScheduleWrite "Schedule Write"
+medium StaffTerminal "Staff Terminal"
+
+has_permission(Staff, ScheduleWrite)
+requires_permission(BookAppointment, ScheduleWrite)
+requires_medium(BookAppointment, StaffTerminal)
+requires_permission(BookingApi, ScheduleWrite)
+```
+
+Screen access constraints are derived rather than declared directly. A screen inherits
+the constraints of each use case that displays it, and also the constraints of each API
+that the use case invokes. Use `csv --kind screen-constraints` to inspect those
+screen × use-case/API paths.
+
+### `belongs` context
+
+`belongs(Buc, Business)` declares the Business area a BUC belongs to. The mapping can
+also carry optional When / Where / By context with method-chain clauses:
+
+```
+timing AppointmentRequested "Appointment Requested"
+location FrontDesk "Front Desk"
+medium FrontDeskTerminal "Front Desk Terminal"
+
+belongs(BucAppointmentScheduling, ClinicOps)
+  .when("patient requests a booking")
+  .when(AppointmentRequested)
+  .where(FrontDesk)
+  .where("patient portal")
+  .by(FrontDeskTerminal)
+  .by("tablet")
+```
+
+- `.when(...)` records the timing, trigger, or business situation where the BUC applies.
+- `.where(...)` records the place, channel, organization point, or usage scene.
+- `.by(...)` records the physical medium, device, terminal, or other operation medium.
+- Each argument may be a string literal or a reference to the corresponding typed element:
+  `.when(timing::...)`, `.where(location::...)`, or `.by(medium::...)`.
+- Multiple `.when(...)`, `.where(...)`, or `.by(...)` clauses accumulate as alternative context values.
 
 ### `relate` and FK generation
 

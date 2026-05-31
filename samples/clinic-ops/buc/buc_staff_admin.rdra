@@ -65,4 +65,27 @@ shows(AuditReviewScreen, AuditEvent)
 
 displays(ResolveAuditFinding, AuditReviewScreen)
 updates(ResolveAuditFinding, AuditEvent)
-sets(ResolveAuditFinding, AuditEvent, "resolved", "true")
+sets(ResolveAuditFinding, AuditEvent, "is_resolved", "true")
+
+// Access constraints
+requires_permission(ManageProviderSchedule, ProviderScheduleAdmin)
+requires_medium(ManageProviderSchedule, AdminConsole)
+requires_permission(ManageProviderScheduleApi, ProviderScheduleAdmin)
+
+requires_permission(BlockScheduleSlot, ProviderScheduleAdmin)
+requires_medium(BlockScheduleSlot, AdminConsole)
+requires_permission(BlockScheduleSlotApi, ProviderScheduleAdmin)
+
+requires_permission(ConfigureRoom, RoomAdmin)
+requires_medium(ConfigureRoom, AdminConsole)
+requires_permission(RoomAdminApi, RoomAdmin)
+
+requires_permission(ReleaseRoom, RoomAdmin)
+requires_medium(ReleaseRoom, AdminConsole)
+
+requires_permission(ReviewAuditEvents, AuditRead)
+requires_medium(ReviewAuditEvents, AdminConsole)
+requires_permission(AuditApi, AuditRead)
+
+requires_permission(ResolveAuditFinding, AuditResolve)
+requires_medium(ResolveAuditFinding, AdminConsole)

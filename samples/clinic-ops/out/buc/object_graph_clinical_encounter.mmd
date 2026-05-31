@@ -8,6 +8,17 @@ flowchart LR
     direction TB
     CareDelivery["💼 Care Delivery"]
     BucClinicalEncounter["📦 Conduct Clinical Encounter"]
+    BillingWorkstation[/"📱 Billing Workstation"/]
+    CareCoordinationConsole[/"📱 Care Coordination Console"/]
+    ClinicalWorkstation[/"📱 Clinical Workstation"/]
+    NurseStation[/"📱 Nurse Station"/]
+    BillingClaimWrite["🔑 Billing Claim Write"]
+    ClinicalDocument["🔑 Clinical Document"]
+    ClinicalOrderWrite["🔑 Clinical Order Write"]
+    EncounterOpen["🔑 Encounter Open"]
+    EncounterSign["🔑 Encounter Sign"]
+    FollowUpManage["🔑 Follow-Up Manage"]
+    VitalsRecord["🔑 Vitals Record"]
   end
   subgraph layer_boundary[System Boundary]
     direction TB
@@ -52,10 +63,17 @@ flowchart LR
     Room[("🗄️ Room")]
     VitalSign[("🗄️ Vital Sign")]
   end
+  Nurse -.->|has_permission| EncounterOpen
+  Nurse -.->|has_permission| VitalsRecord
+  Nurse -.->|has_permission| ClinicalOrderWrite
   Nurse -->|performs| BucClinicalEncounter
   Nurse -->|performs| OpenEncounter
   Nurse -->|performs| RecordVitals
   Nurse -->|performs| CompleteAppointment
+  Clinician -.->|has_permission| EncounterOpen
+  Clinician -.->|has_permission| ClinicalDocument
+  Clinician -.->|has_permission| EncounterSign
+  Clinician -.->|has_permission| ClinicalOrderWrite
   Clinician -->|performs| BucClinicalEncounter
   Clinician -->|performs| PlaceLabOrder
   Clinician -->|performs| DocumentAssessment
@@ -63,21 +81,30 @@ flowchart LR
   Clinician -->|performs| AmendEncounter
   OrderEntryApi -.->|creates| ClinicalOrder
   OrderEntryApi -.->|reads| Encounter
+  OrderEntryApi -.->|requires_permission| ClinicalOrderWrite
   OpenEncounterApi -.->|creates| Encounter
   OpenEncounterApi -.->|reads| Appointment
+  OpenEncounterApi -.->|requires_permission| EncounterOpen
   RecordVitalsApi -.->|creates| VitalSign
+  RecordVitalsApi -.->|requires_permission| VitalsRecord
   RecordVitalsApi -.->|updates| Encounter
   DocumentAssessmentApi -.->|creates| Diagnosis
+  DocumentAssessmentApi -.->|requires_permission| ClinicalDocument
   DocumentAssessmentApi -.->|updates| Encounter
+  SignEncounterApi -.->|requires_permission| EncounterSign
   SignEncounterApi -.->|updates| Encounter
+  AmendEncounterApi -.->|requires_permission| EncounterSign
   AmendEncounterApi -.->|updates| Encounter
+  CompleteAppointmentApi -.->|requires_permission| EncounterOpen
   CompleteAppointmentApi -.->|updates| Appointment
   CompleteAppointmentApi -.->|updates| Room
   CreateChargeApi -.->|creates| Charge
   CreateChargeApi -.->|reads| Encounter
+  CreateChargeApi -.->|requires_permission| BillingClaimWrite
   CreateChargeApi -.->|updates| AccountBalance
   CreateCarePlanApi -.->|creates| CarePlan
   CreateCarePlanApi -.->|reads| Encounter
+  CreateCarePlanApi -.->|requires_permission| FollowUpManage
   BucClinicalEncounter -.->|belongs| CareDelivery
   BucClinicalEncounter -->|contains| OpenEncounter
   BucClinicalEncounter -->|contains| RecordVitals
@@ -98,23 +125,41 @@ flowchart LR
   EvEncounterSigned -.->|triggers| CreateCarePlan
   PlaceLabOrder -.->|displays| OrderEntryScreen
   PlaceLabOrder -.->|invokes| OrderEntryApi
+  PlaceLabOrder -.->|requires_medium| ClinicalWorkstation
+  PlaceLabOrder -.->|requires_permission| ClinicalOrderWrite
   OpenEncounter -.->|displays| EncounterWorkspaceScreen
   OpenEncounter -.->|invokes| OpenEncounterApi
+  OpenEncounter -.->|requires_medium| NurseStation
+  OpenEncounter -.->|requires_permission| EncounterOpen
   RecordVitals -.->|displays| VitalsScreen
   RecordVitals -.->|invokes| RecordVitalsApi
+  RecordVitals -.->|requires_medium| NurseStation
+  RecordVitals -.->|requires_permission| VitalsRecord
   DocumentAssessment -.->|displays| DiagnosisScreen
   DocumentAssessment -.->|invokes| DocumentAssessmentApi
   DocumentAssessment -.->|raises| EvEncounterDocumented
+  DocumentAssessment -.->|requires_medium| ClinicalWorkstation
+  DocumentAssessment -.->|requires_permission| ClinicalDocument
   SignEncounter -.->|displays| EncounterWorkspaceScreen
   SignEncounter -.->|invokes| SignEncounterApi
   SignEncounter -.->|raises| EvEncounterSigned
+  SignEncounter -.->|requires_medium| ClinicalWorkstation
+  SignEncounter -.->|requires_permission| EncounterSign
   AmendEncounter -.->|displays| EncounterWorkspaceScreen
   AmendEncounter -.->|invokes| AmendEncounterApi
   AmendEncounter -.->|raises| EvEncounterAmended
+  AmendEncounter -.->|requires_medium| ClinicalWorkstation
+  AmendEncounter -.->|requires_permission| EncounterSign
   CompleteAppointment -.->|displays| EncounterWorkspaceScreen
   CompleteAppointment -.->|invokes| CompleteAppointmentApi
   CompleteAppointment -.->|raises| EvAppointmentCompleted
+  CompleteAppointment -.->|requires_medium| NurseStation
+  CompleteAppointment -.->|requires_permission| EncounterOpen
   CreateCharge -.->|displays| ChargeWorklistScreen
   CreateCharge -.->|invokes| CreateChargeApi
+  CreateCharge -.->|requires_medium| BillingWorkstation
+  CreateCharge -.->|requires_permission| BillingClaimWrite
   CreateCarePlan -.->|displays| CarePlanScreen
   CreateCarePlan -.->|invokes| CreateCarePlanApi
+  CreateCarePlan -.->|requires_medium| CareCoordinationConsole
+  CreateCarePlan -.->|requires_permission| FollowUpManage

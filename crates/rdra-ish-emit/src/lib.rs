@@ -131,7 +131,11 @@ pub(crate) fn object_graph_layer(node: &NodeRef) -> ObjectGraphLayer {
         | NodeRef::Buc(_)
         | NodeRef::UsageScene(_)
         | NodeRef::Condition(_)
-        | NodeRef::Variation(_) => ObjectGraphLayer::ExternalEnvironment,
+        | NodeRef::Variation(_)
+        | NodeRef::Location(_)
+        | NodeRef::Timing(_)
+        | NodeRef::Medium(_)
+        | NodeRef::Permission(_) => ObjectGraphLayer::ExternalEnvironment,
         NodeRef::UseCase(_) | NodeRef::Screen(_) | NodeRef::Event(_) => {
             ObjectGraphLayer::SystemBoundary
         }
@@ -156,6 +160,9 @@ pub(crate) fn object_graph_rel_label(kind: &RelKind) -> &'static str {
         RelKind::Triggers => "triggers",
         RelKind::Contains => "contains",
         RelKind::Belongs => "belongs",
+        RelKind::HasPermission => "has_permission",
+        RelKind::RequiresPermission => "requires_permission",
+        RelKind::RequiresMedium => "requires_medium",
         RelKind::Motivates => "motivates",
         RelKind::Transitions => "transitions",
         RelKind::Invokes => "invokes",
@@ -183,6 +190,10 @@ pub(crate) fn node_emoji(node: &NodeRef) -> &'static str {
         NodeRef::Condition(_) => "❓",
         NodeRef::Variation(_) => "🔀",
         NodeRef::Api(_) => "🔌",
+        NodeRef::Location(_) => "📍",
+        NodeRef::Timing(_) => "⏱️",
+        NodeRef::Medium(_) => "📱",
+        NodeRef::Permission(_) => "🔑",
     }
 }
 
@@ -267,6 +278,42 @@ pub(crate) fn collect_object_graph_nodes(
         variations
             .into_iter()
             .map(|(k, _)| NodeRef::Variation(k))
+            .filter(|nr| is_visible(nr)),
+    );
+
+    let mut locations: Vec<_> = model.locations.iter().collect();
+    locations.sort_by_key(|(_, l)| &l.id);
+    nodes.extend(
+        locations
+            .into_iter()
+            .map(|(k, _)| NodeRef::Location(k))
+            .filter(|nr| is_visible(nr)),
+    );
+
+    let mut timings: Vec<_> = model.timings.iter().collect();
+    timings.sort_by_key(|(_, t)| &t.id);
+    nodes.extend(
+        timings
+            .into_iter()
+            .map(|(k, _)| NodeRef::Timing(k))
+            .filter(|nr| is_visible(nr)),
+    );
+
+    let mut media: Vec<_> = model.media.iter().collect();
+    media.sort_by_key(|(_, m)| &m.id);
+    nodes.extend(
+        media
+            .into_iter()
+            .map(|(k, _)| NodeRef::Medium(k))
+            .filter(|nr| is_visible(nr)),
+    );
+
+    let mut permissions: Vec<_> = model.permissions.iter().collect();
+    permissions.sort_by_key(|(_, p)| &p.id);
+    nodes.extend(
+        permissions
+            .into_iter()
+            .map(|(k, _)| NodeRef::Permission(k))
             .filter(|nr| is_visible(nr)),
     );
 

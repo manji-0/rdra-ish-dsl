@@ -129,6 +129,7 @@ rdra-ish csv src/ --kind actor
 rdra-ish csv src/ --kind matrix
 rdra-ish csv src/ --kind api          # API list
 rdra-ish csv src/ --kind api-matrix   # API × Entity CRUD matrix
+rdra-ish csv src/ --kind screen-constraints # Screen × UC/API access constraints
 
 # List output
 rdra-ish list src/ --kind actor --format table
@@ -240,6 +241,15 @@ the operation needs one consistency boundary.
 <kind> <Id> "Label"
 ```
 
+Optional metadata:
+
+```
+<kind> <Id> "Label" description "Description text"
+```
+
+Descriptions are parsed and stored on all instance kinds. Current diagram emitters
+continue to render labels only.
+
 | kind | Meaning |
 |---|---|
 | `actor` | Human actor |
@@ -256,6 +266,10 @@ the operation needs one consistency boundary.
 | `condition` | Condition |
 | `variation` | Variation |
 | `api` | API layer endpoint invoked by a use case; operates entities. Appears in the RDRA layered graph and sequence diagram lane; omitted from the boundaryless graph. |
+| `location` | Place, channel, organization point, or usage scene used by BUC context |
+| `timing` | Timing, trigger, or business situation used by BUC context |
+| `medium` | Physical medium, device, or terminal used by BUC context |
+| `permission` | Permission or role-like authority assignable to actors |
 
 ### Entity column definitions
 
@@ -298,10 +312,45 @@ entity Order "Order" {
 | `triggers` | (Event, UseCase) | Event triggers a UC |
 | `contains` | (Buc, UseCase) | UC that composes a BUC |
 | `belongs` | (Buc, Business) | BUC belongs to a business |
+| `has_permission` | (Actor, Permission) | Actor has a permission type |
+| `requires_permission` | (UseCase\|Api, Permission) | UC/API requires a permission |
+| `requires_medium` | (UseCase\|Api, Medium) | UC/API requires an operation medium |
 | `motivates` | (Requirement, Buc) | Requirement motivates a BUC |
 | `relate` | (Entity, Entity, Card) | ER relationship (FK auto-generated) `"1:1"` / `"1:N"` / `"N:1"` / `"N:M"` |
 | `transitions` | (Event, State, State) | State transition (from → to on an event) |
 | `sets` | (UseCase\|Event, Entity, "col", "val") or (UseCase\|Event, Entity, \<expr\>, bool) | Explicit column effect (for state pattern derivation); second form drives a comparison-proposition truth value |
+
+Access constraints can be declared on use cases and APIs, while screen constraints are
+derived through `displays` and `invokes`:
+
+```rdra
+permission ScheduleWrite "Schedule Write"
+medium StaffTerminal "Staff Terminal"
+
+requires_permission(BookAppointment, ScheduleWrite)
+requires_medium(BookAppointment, StaffTerminal)
+```
+
+Use `rdra-ish csv <model-root> --kind screen-constraints` to inspect screen × UC/API
+constraint paths.
+
+`belongs(Buc, Business)` may carry optional business-context metadata:
+
+```rdra
+timing PatientRequestsBooking "Patient requests a booking"
+location FrontDesk "Front desk"
+medium FrontDeskTerminal "Front desk terminal"
+
+belongs(BucAppointmentScheduling, ClinicOps)
+  .when(PatientRequestsBooking)
+  .where(FrontDesk)
+  .by(FrontDeskTerminal)
+```
+
+`.when(...)` records the timing, trigger, or business situation where the BUC applies.
+`.where(...)` records the place, channel, or usage scene. `.by(...)` records the
+physical medium or terminal used for the operation. Arguments may be string literals
+or references to `timing`, `location`, and `medium` instances respectively.
 
 ### Value vocabulary for the `sets` predicate
 
@@ -795,6 +844,7 @@ rdra-ish list samples/clinic-ops --kind buc --format table
 rdra-ish diagram samples/clinic-ops --kind event-flow --format mermaid
 rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucClinicalEncounter
 rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase SignEncounter
+rdra-ish csv samples/clinic-ops --kind screen-constraints
 rdra-ish states samples/clinic-ops --entity Appointment
 rdra-ish states samples/clinic-ops --entity Claim
 ```
@@ -811,7 +861,7 @@ crates/
   rdra-ish-render/   plantuml.jar wrapper
   rdra-ish-cli/      `rdra-ish` CLI
 samples/
-  clinic-ops/    Larger clinic operations sample (9 BUCs · APIs · event flows)
+  clinic-ops/    Larger clinic operations sample (9 BUCs · APIs · event flows · access constraints)
   ec-site/       E-commerce site sample (BUCs · entities · state transitions)
   personal-info/ Personal data management sample
 ```

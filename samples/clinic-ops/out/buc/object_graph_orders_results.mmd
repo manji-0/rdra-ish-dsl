@@ -8,6 +8,12 @@ flowchart LR
     direction TB
     CareDelivery["💼 Care Delivery"]
     BucOrdersResults["📦 Manage Orders and Results"]
+    CareCoordinationConsole[/"📱 Care Coordination Console"/]
+    ClinicalWorkstation[/"📱 Clinical Workstation"/]
+    NurseStation[/"📱 Nurse Station"/]
+    ClinicalOrderWrite["🔑 Clinical Order Write"]
+    LabResultManage["🔑 Lab Result Manage"]
+    PatientMessageSend["🔑 Patient Message Send"]
   end
   subgraph layer_boundary[System Boundary]
     direction TB
@@ -42,9 +48,13 @@ flowchart LR
     Notification[("🗄️ Notification")]
     PatientMessage[("🗄️ Patient Message")]
   end
+  Nurse -.->|has_permission| ClinicalOrderWrite
+  Nurse -.->|has_permission| LabResultManage
   Nurse -->|performs| BucOrdersResults
   Nurse -->|performs| CollectSpecimen
   Nurse -->|performs| ReceiveLabResult
+  Clinician -.->|has_permission| ClinicalOrderWrite
+  Clinician -.->|has_permission| LabResultManage
   Clinician -->|performs| BucOrdersResults
   Clinician -->|performs| PlaceLabOrder
   Clinician -->|performs| ReviewLabResult
@@ -52,14 +62,20 @@ flowchart LR
   Clinician -->|performs| CancelClinicalOrder
   OrderEntryApi -.->|creates| ClinicalOrder
   OrderEntryApi -.->|reads| Encounter
+  OrderEntryApi -.->|requires_permission| ClinicalOrderWrite
+  CollectSpecimenApi -.->|requires_permission| ClinicalOrderWrite
   CollectSpecimenApi -.->|updates| ClinicalOrder
   ReceiveLabResultApi -.->|creates| LabResult
+  ReceiveLabResultApi -.->|requires_permission| LabResultManage
   ReceiveLabResultApi -.->|updates| ClinicalOrder
+  ResultReviewApi -.->|requires_permission| LabResultManage
   ResultReviewApi -.->|updates| ClinicalOrder
   ResultReviewApi -.->|updates| LabResult
   CriticalNoticeApi -.->|creates| PatientMessage
   CriticalNoticeApi -.->|creates| Notification
+  CriticalNoticeApi -.->|requires_permission| PatientMessageSend
   NotifyPatientResultApi -.->|creates| Notification
+  NotifyPatientResultApi -.->|requires_permission| PatientMessageSend
   BucOrdersResults -.->|belongs| CareDelivery
   BucOrdersResults -->|contains| PlaceLabOrder
   BucOrdersResults -->|contains| CollectSpecimen
@@ -73,19 +89,34 @@ flowchart LR
   EvClinicalOrderReviewed -.->|triggers| NotifyPatientResult
   PlaceLabOrder -.->|displays| OrderEntryScreen
   PlaceLabOrder -.->|invokes| OrderEntryApi
+  PlaceLabOrder -.->|requires_medium| ClinicalWorkstation
+  PlaceLabOrder -.->|requires_permission| ClinicalOrderWrite
   CollectSpecimen -.->|displays| SpecimenScreen
   CollectSpecimen -.->|invokes| CollectSpecimenApi
   CollectSpecimen -.->|raises| EvClinicalOrderCollected
+  CollectSpecimen -.->|requires_medium| NurseStation
+  CollectSpecimen -.->|requires_permission| ClinicalOrderWrite
   ReceiveLabResult -.->|displays| ResultReviewScreen
   ReceiveLabResult -.->|invokes| ReceiveLabResultApi
   ReceiveLabResult -.->|raises| EvClinicalOrderResulted
+  ReceiveLabResult -.->|requires_medium| NurseStation
+  ReceiveLabResult -.->|requires_permission| LabResultManage
   ReviewLabResult -.->|displays| ResultReviewScreen
   ReviewLabResult -.->|invokes| ResultReviewApi
   ReviewLabResult -.->|raises| EvClinicalOrderReviewed
+  ReviewLabResult -.->|requires_medium| ClinicalWorkstation
+  ReviewLabResult -.->|requires_permission| LabResultManage
   NotifyCriticalResult -.->|displays| CriticalNoticeScreen
   NotifyCriticalResult -.->|invokes| CriticalNoticeApi
+  NotifyCriticalResult -.->|requires_medium| ClinicalWorkstation
+  NotifyCriticalResult -.->|requires_permission| LabResultManage
+  NotifyCriticalResult -.->|requires_permission| PatientMessageSend
   CancelClinicalOrder -.->|displays| OrderEntryScreen
   CancelClinicalOrder -.->|raises| EvClinicalOrderCancelled
+  CancelClinicalOrder -.->|requires_medium| ClinicalWorkstation
+  CancelClinicalOrder -.->|requires_permission| ClinicalOrderWrite
   CancelClinicalOrder -.->|updates| ClinicalOrder
   NotifyPatientResult -.->|displays| PatientMessageScreen
   NotifyPatientResult -.->|invokes| NotifyPatientResultApi
+  NotifyPatientResult -.->|requires_medium| CareCoordinationConsole
+  NotifyPatientResult -.->|requires_permission| PatientMessageSend

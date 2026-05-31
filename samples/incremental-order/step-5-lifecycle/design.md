@@ -35,6 +35,7 @@ rdra-ish check samples/incremental-order/step-5-lifecycle/src
 rdra-ish diagram samples/incremental-order/step-5-lifecycle/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-5-lifecycle/out/object_graph_buc_store_restock
 rdra-ish diagram samples/incremental-order/step-5-lifecycle/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-5-lifecycle/out/sequence_buc_store_restock
 rdra-ish csv samples/incremental-order/step-5-lifecycle/src --kind matrix --out samples/incremental-order/step-5-lifecycle/out/usecase_matrix.csv
+rdra-ish csv samples/incremental-order/step-5-lifecycle/src --kind screen-constraints --out samples/incremental-order/step-5-lifecycle/out/screen_constraints.csv
 ```
 
 ### 4.1 RDRA Layered Graph 図

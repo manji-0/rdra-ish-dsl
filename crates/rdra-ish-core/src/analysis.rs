@@ -135,6 +135,9 @@ fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
         "contains" => Some(vec![vec!["buc", "system"], vec!["usecase", "api"]]),
         "coordinates" => Some(vec![vec!["usecase"], vec!["entity"], vec!["entity"]]),
         "belongs" => Some(vec![vec!["buc"], vec!["business"]]),
+        "has_permission" => Some(vec![vec!["actor"], vec!["permission"]]),
+        "requires_permission" => Some(vec![vec!["usecase", "api"], vec!["permission"]]),
+        "requires_medium" => Some(vec![vec!["usecase", "api"], vec!["medium"]]),
         "motivates" => Some(vec![vec!["requirement"], vec!["buc"]]),
         "transitions" => Some(vec![vec!["event"], vec!["state"], vec!["state"]]),
         "relate" => Some(vec![vec!["entity"], vec!["entity"], vec!["_card"]]),
@@ -183,6 +186,7 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
             let k = model.actors.insert(Actor {
                 id: inst.id.clone(),
                 label: inst.label.clone(),
+                description: inst.description.clone(),
             });
             NodeRef::Actor(k)
         }
@@ -190,6 +194,7 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
             let k = model.ext_systems.insert(ExtSystem {
                 id: inst.id.clone(),
                 label: inst.label.clone(),
+                description: inst.description.clone(),
             });
             NodeRef::ExtSystem(k)
         }
@@ -197,6 +202,7 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
             let k = model.systems.insert(System {
                 id: inst.id.clone(),
                 label: inst.label.clone(),
+                description: inst.description.clone(),
             });
             NodeRef::System(k)
         }
@@ -204,6 +210,7 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
             let k = model.requirements.insert(Requirement {
                 id: inst.id.clone(),
                 label: inst.label.clone(),
+                description: inst.description.clone(),
             });
             NodeRef::Requirement(k)
         }
@@ -211,6 +218,7 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
             let k = model.businesses.insert(Business {
                 id: inst.id.clone(),
                 label: inst.label.clone(),
+                description: inst.description.clone(),
             });
             NodeRef::Business(k)
         }
@@ -218,6 +226,7 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
             let k = model.bucs.insert(Buc {
                 id: inst.id.clone(),
                 label: inst.label.clone(),
+                description: inst.description.clone(),
             });
             NodeRef::Buc(k)
         }
@@ -225,6 +234,7 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
             let k = model.usage_scenes.insert(UsageScene {
                 id: inst.id.clone(),
                 label: inst.label.clone(),
+                description: inst.description.clone(),
             });
             NodeRef::UsageScene(k)
         }
@@ -232,6 +242,7 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
             let k = model.use_cases.insert(UseCase {
                 id: inst.id.clone(),
                 label: inst.label.clone(),
+                description: inst.description.clone(),
             });
             NodeRef::UseCase(k)
         }
@@ -239,6 +250,7 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
             let k = model.screens.insert(Screen {
                 id: inst.id.clone(),
                 label: inst.label.clone(),
+                description: inst.description.clone(),
             });
             NodeRef::Screen(k)
         }
@@ -246,6 +258,7 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
             let k = model.events.insert(Event {
                 id: inst.id.clone(),
                 label: inst.label.clone(),
+                description: inst.description.clone(),
             });
             NodeRef::Event(k)
         }
@@ -254,6 +267,7 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
             let k = model.entities.insert(Entity {
                 id: inst.id.clone(),
                 label: inst.label.clone(),
+                description: inst.description.clone(),
                 columns,
             });
             NodeRef::Entity(k)
@@ -262,6 +276,7 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
             let k = model.states.insert(State {
                 id: inst.id.clone(),
                 label: inst.label.clone(),
+                description: inst.description.clone(),
             });
             NodeRef::State(k)
         }
@@ -269,6 +284,7 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
             let k = model.conditions.insert(Condition {
                 id: inst.id.clone(),
                 label: inst.label.clone(),
+                description: inst.description.clone(),
             });
             NodeRef::Condition(k)
         }
@@ -276,6 +292,7 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
             let k = model.variations.insert(Variation {
                 id: inst.id.clone(),
                 label: inst.label.clone(),
+                description: inst.description.clone(),
             });
             NodeRef::Variation(k)
         }
@@ -283,8 +300,41 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
             let k = model.apis.insert(Api {
                 id: inst.id.clone(),
                 label: inst.label.clone(),
+                description: inst.description.clone(),
             });
             NodeRef::Api(k)
+        }
+        Kind::Location => {
+            let k = model.locations.insert(Location {
+                id: inst.id.clone(),
+                label: inst.label.clone(),
+                description: inst.description.clone(),
+            });
+            NodeRef::Location(k)
+        }
+        Kind::Timing => {
+            let k = model.timings.insert(Timing {
+                id: inst.id.clone(),
+                label: inst.label.clone(),
+                description: inst.description.clone(),
+            });
+            NodeRef::Timing(k)
+        }
+        Kind::Medium => {
+            let k = model.media.insert(Medium {
+                id: inst.id.clone(),
+                label: inst.label.clone(),
+                description: inst.description.clone(),
+            });
+            NodeRef::Medium(k)
+        }
+        Kind::Permission => {
+            let k = model.permissions.insert(Permission {
+                id: inst.id.clone(),
+                label: inst.label.clone(),
+                description: inst.description.clone(),
+            });
+            NodeRef::Permission(k)
         }
     };
 
@@ -401,6 +451,47 @@ fn tuple_pair(arg: &PredicateArg) -> Option<(String, String)> {
             Some((col, val))
         }
         _ => None,
+    }
+}
+
+fn context_value_from_arg(
+    model: &SemanticModel,
+    arg: &PredicateArg,
+    expected_kind: &str,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<BusinessMappingContextValue> {
+    match arg {
+        PredicateArg::Lit(s) => Some(BusinessMappingContextValue::Text(s.clone())),
+        PredicateArg::Ref(_) => {
+            let node = resolve_arg(model, arg, diags)?;
+            let actual = node_kind_tag_str(&node);
+            if actual != expected_kind {
+                diags.push(Diagnostic::error(RdraError::TypeMismatch {
+                    pred: "belongs context".to_string(),
+                    id: context_arg_id(arg),
+                    actual: actual.to_string(),
+                    expected: expected_kind.to_string(),
+                }));
+                return None;
+            }
+            Some(BusinessMappingContextValue::Ref(node))
+        }
+        PredicateArg::Tuple(_) | PredicateArg::Expr(_) => None,
+    }
+}
+
+fn context_arg_id(arg: &PredicateArg) -> String {
+    match arg {
+        PredicateArg::Ref(q) => {
+            let id = q.parts.last().cloned().unwrap_or_default();
+            match &q.kind_qualifier {
+                Some(k) => format!("{}::{}", k.name(), id),
+                None => id,
+            }
+        }
+        PredicateArg::Lit(s) => s.clone(),
+        PredicateArg::Tuple(_) => "<tuple>".to_string(),
+        PredicateArg::Expr(_) => "<expr>".to_string(),
     }
 }
 
@@ -888,6 +979,9 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
                 "triggers" => RelKind::Triggers,
                 "contains" => RelKind::Contains,
                 "belongs" => RelKind::Belongs,
+                "has_permission" => RelKind::HasPermission,
+                "requires_permission" => RelKind::RequiresPermission,
+                "requires_medium" => RelKind::RequiresMedium,
                 "motivates" => RelKind::Motivates,
                 "invokes" => RelKind::Invokes,
                 _ => return,
@@ -897,6 +991,43 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
                 to: to.clone(),
                 kind,
             });
+
+            if pred.name == "belongs" {
+                let (NodeRef::Buc(buc), NodeRef::Business(business)) = (from, to) else {
+                    return;
+                };
+                let mut whens = Vec::new();
+                let mut wheres = Vec::new();
+                let mut bys = Vec::new();
+
+                for cc in &pred.chain {
+                    let (target, expected_kind) = match cc.name.as_str() {
+                        "when" => (&mut whens, "timing"),
+                        "where" => (&mut wheres, "location"),
+                        "by" => (&mut bys, "medium"),
+                        _ => continue,
+                    };
+                    for arg in &cc.args {
+                        if let Some(value) =
+                            context_value_from_arg(model, arg, expected_kind, diags)
+                        {
+                            target.push(value);
+                        }
+                    }
+                }
+
+                if !whens.is_empty() || !wheres.is_empty() || !bys.is_empty() {
+                    model
+                        .business_mapping_contexts
+                        .push(BusinessMappingContext {
+                            buc: *buc,
+                            business: *business,
+                            whens,
+                            wheres,
+                            bys,
+                        });
+                }
+            }
         }
     } else {
         // relate(From, To, Card)
@@ -950,6 +1081,10 @@ fn node_kind_tag_str(node: &NodeRef) -> &'static str {
         NodeRef::Condition(_) => "condition",
         NodeRef::Variation(_) => "variation",
         NodeRef::Api(_) => "api",
+        NodeRef::Location(_) => "location",
+        NodeRef::Timing(_) => "timing",
+        NodeRef::Medium(_) => "medium",
+        NodeRef::Permission(_) => "permission",
     }
 }
 
@@ -1032,10 +1167,10 @@ mod tests {
     #[test]
     fn test_build_model_basic() {
         let src = r#"
-actor Customer "顧客"
-entity Order "注文" { id: Int @pk }
+actor Customer "顧客" description "商品を購入する顧客"
+entity Order "注文" description "受注情報" { id: Int @pk }
 entity Customer_profile "顧客情報" { id: Int @pk  name: String }
-usecase Browse "商品を探す"
+usecase Browse "商品を探す" description "商品一覧を参照する"
 performs(Customer, Browse)
 relate(Order, Customer_profile, "N:1")
 "#;
@@ -1058,12 +1193,16 @@ relate(Order, Customer_profile, "N:1")
         let actor = model.actors.values().next().unwrap();
         assert_eq!(actor.id, "Customer");
         assert_eq!(actor.label, "顧客");
+        assert_eq!(actor.description.as_deref(), Some("商品を購入する顧客"));
+        let use_case = model.use_cases.values().next().unwrap();
+        assert_eq!(use_case.description.as_deref(), Some("商品一覧を参照する"));
 
         let order = model
             .entities
             .values()
             .find(|e| e.id == "Order")
             .expect("Order entity not found");
+        assert_eq!(order.description.as_deref(), Some("受注情報"));
 
         let fk_col = order
             .columns
@@ -1203,7 +1342,7 @@ relate(Customer, Order, "1:N")
     fn test_api_declaration_and_invokes() {
         let src = r#"
 usecase PlaceOrder "注文する"
-api OrderApi "注文API"
+api OrderApi "注文API" description "注文を永続化するAPI"
 invokes(PlaceOrder, OrderApi)
 "#;
         let (ast, parse_errors) = parse(src);
@@ -1217,9 +1356,148 @@ invokes(PlaceOrder, OrderApi)
         let api = model.apis.values().next().unwrap();
         assert_eq!(api.id, "OrderApi");
         assert_eq!(api.label, "注文API");
+        assert_eq!(api.description.as_deref(), Some("注文を永続化するAPI"));
 
         let invokes_rel = model.relations.iter().find(|r| r.kind == RelKind::Invokes);
         assert!(invokes_rel.is_some(), "Invokes relation should exist");
+    }
+
+    #[test]
+    fn test_belongs_when_where_context() {
+        let src = r#"
+business ClinicOps "Clinic Operations"
+buc BucAppointmentScheduling "Appointment Scheduling"
+location FrontDesk "Front Desk"
+timing AppointmentRequested "Appointment Requested"
+medium FrontDeskTerminal "Front Desk Terminal"
+belongs(BucAppointmentScheduling, ClinicOps)
+  .when("patient requests a booking")
+  .when(AppointmentRequested)
+  .where(FrontDesk)
+  .where("patient portal")
+  .by(FrontDeskTerminal)
+  .by("tablet")
+"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {:?}", errors);
+
+        let rel = model.relations.iter().find(|r| r.kind == RelKind::Belongs);
+        assert!(rel.is_some(), "Belongs relation should still exist");
+
+        assert_eq!(model.business_mapping_contexts.len(), 1);
+        let ctx = &model.business_mapping_contexts[0];
+        assert_eq!(model.bucs[ctx.buc].id, "BucAppointmentScheduling");
+        assert_eq!(model.businesses[ctx.business].id, "ClinicOps");
+        assert_eq!(ctx.whens.len(), 2);
+        assert_eq!(ctx.wheres.len(), 2);
+        assert_eq!(ctx.bys.len(), 2);
+
+        assert!(matches!(
+            &ctx.whens[0],
+            BusinessMappingContextValue::Text(s) if s == "patient requests a booking"
+        ));
+        assert!(matches!(
+            &ctx.whens[1],
+            BusinessMappingContextValue::Ref(NodeRef::Timing(_))
+        ));
+        assert!(matches!(
+            &ctx.wheres[0],
+            BusinessMappingContextValue::Ref(NodeRef::Location(_))
+        ));
+        assert!(matches!(
+            &ctx.wheres[1],
+            BusinessMappingContextValue::Text(s) if s == "patient portal"
+        ));
+        assert!(matches!(
+            &ctx.bys[0],
+            BusinessMappingContextValue::Ref(NodeRef::Medium(_))
+        ));
+        assert!(matches!(
+            &ctx.bys[1],
+            BusinessMappingContextValue::Text(s) if s == "tablet"
+        ));
+    }
+
+    #[test]
+    fn test_actor_permission_attachment() {
+        let src = r#"
+actor Staff "Staff"
+permission ManageSchedule "Manage Schedule"
+has_permission(Staff, ManageSchedule)
+"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {:?}", errors);
+
+        assert_eq!(model.permissions.len(), 1);
+        let permission = model.permissions.values().next().unwrap();
+        assert_eq!(permission.id, "ManageSchedule");
+        assert_eq!(permission.label, "Manage Schedule");
+
+        let rel = model
+            .relations
+            .iter()
+            .find(|r| r.kind == RelKind::HasPermission)
+            .expect("HasPermission relation should exist");
+        assert!(matches!(rel.from, NodeRef::Actor(_)));
+        assert!(matches!(rel.to, NodeRef::Permission(_)));
+    }
+
+    #[test]
+    fn test_screen_constraint_patterns_derive_from_usecase_and_api() {
+        let src = r#"
+usecase BookAppointment "Book Appointment"
+screen BookingScreen "Booking Screen"
+api BookingApi "Booking API"
+permission ScheduleWrite "Schedule Write"
+permission PatientRead "Patient Read"
+medium StaffTerminal "Staff Terminal"
+medium SecureChannel "Secure Channel"
+displays(BookAppointment, BookingScreen)
+invokes(BookAppointment, BookingApi)
+requires_permission(BookAppointment, ScheduleWrite)
+requires_medium(BookAppointment, StaffTerminal)
+requires_permission(BookingApi, PatientRead)
+requires_medium(BookingApi, SecureChannel)
+"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {:?}", errors);
+
+        let patterns = crate::derive_screen_constraint_patterns(&model);
+        assert_eq!(patterns.len(), 1);
+
+        let pattern = &patterns[0];
+        assert_eq!(model.screens[pattern.screen].id, "BookingScreen");
+        assert_eq!(model.use_cases[pattern.usecase].id, "BookAppointment");
+        assert_eq!(
+            model.apis[pattern.api.expect("api should be part of the path")].id,
+            "BookingApi"
+        );
+
+        let permission_ids: Vec<_> = pattern
+            .permissions
+            .iter()
+            .map(|key| model.permissions[*key].id.as_str())
+            .collect();
+        assert_eq!(permission_ids, vec!["ScheduleWrite", "PatientRead"]);
+
+        let medium_ids: Vec<_> = pattern
+            .media
+            .iter()
+            .map(|key| model.media[*key].id.as_str())
+            .collect();
+        assert_eq!(medium_ids, vec!["StaffTerminal", "SecureChannel"]);
     }
 
     #[test]

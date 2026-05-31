@@ -7,6 +7,10 @@ description: Generate RDRA DSL diagrams (RDRA layered graph, boundaryless graph,
 
 Choose the diagram kind and format, apply BUC filters if needed, and generate output.
 
+<!-- derived-from ../docs/cli-reference.md#diagram -->
+<!-- derived-from ../docs/cli-reference.md#csv -->
+<!-- derived-from ../docs/language-reference.md#access-constraints -->
+
 For incremental modeling, choose the diagram that matches the current abstraction
 stage instead of generating every view. The early views should answer business
 questions first; later views expose technical boundaries, persistence, lifecycle, and
@@ -18,7 +22,7 @@ rules.
 |-------|---------|-----------|---------|
 | Scope / BUC skeleton | Biz intent/value | `rdra --buc <BucId>` | actor, BUC, and use-case coverage |
 | Data touchpoints | Biz object touchpoints | `rdra --buc <BucId>` plus `er --buc <BucId>` | CRUD-connected entities |
-| Interaction boundary | Tech interaction boundary | `sequence --buc <BucId>` | actor/screen/API/entity path |
+| Interaction boundary | Tech interaction boundary | `sequence --buc <BucId>` plus `csv --kind screen-constraints` | actor/screen/API/entity path and access/media constraints |
 | Entity structure | Tech data design | `er` | columns, PK/FK, and cardinality |
 | Lifecycle | Tech lifecycle design | `state --buc <BucId>` and `event-flow` | states, events, transitions, triggers |
 | Business rules | Tech-enforced rules | no new diagram first; run `states` | validate constraints before visual polish |
@@ -33,6 +37,7 @@ rules.
 | Entity lifecycle | `state` | State nodes and transition events |
 | Write operations and transaction boundaries | `sequence` | Sequence of writes per use case; shows `Actor→Screen→API→Entity` lanes when `invokes` is used |
 | Event causality chains | `event-flow` | UC→Event→UC and Event→State chains |
+| Screen access/media paths | CSV `screen-constraints` | Derived Screen × UC/API rows with permission and medium requirements |
 
 ### Format guide
 
@@ -80,6 +85,9 @@ rdra-ish diagram src/ --kind sequence --format mermaid
 
 # Sequence diagram — scoped to a BUC
 rdra-ish diagram src/ --kind sequence --buc <BucId> --format mermaid
+
+# Screen access/media constraint paths
+rdra-ish csv src/ --kind screen-constraints
 
 # Write to a specific file (extension added automatically)
 rdra-ish diagram src/ --kind er --format mermaid --out docs/er
@@ -139,3 +147,6 @@ Object labels include kind prefixes such as `👤` actor, `📦` BUC, `✅` usec
 - System diagnostics (`CrossSystemEntityRelation`, `CoordinationMissingApi`,
   `CoordinationNotCrossSystem`, `ApiInMultipleSystems`, `EntityInMultipleSystems`) are
   printed by `check` and sequence output. Use them to verify `coordinates` and API calls.
+- Access and medium requirements are not expanded in diagrams yet. Use
+  `rdra-ish csv src/ --kind screen-constraints` to inspect the derived constraints that
+  pass through each screen via `displays` and `invokes`.

@@ -1,8 +1,9 @@
 //! CSV emitters: ActorList, EntityList, RelationMatrix, ApiList, ApiEntityMatrix.
 
 use crate::{EmitError, Emitter, View};
-use rdra_ish_core::model::{
-    ApiKey, ColumnType, EntityKey, NodeRef, RelKind, SemanticModel, UseCaseKey,
+use rdra_ish_core::{
+    derive_screen_constraint_patterns,
+    model::{ApiKey, ColumnType, EntityKey, NodeRef, RelKind, SemanticModel, UseCaseKey},
 };
 
 // ── ActorListCsvEmitter ────────────────────────────────────────────────────────
@@ -289,6 +290,51 @@ impl Emitter for ApiEntityMatrixCsvEmitter {
     }
 }
 
+// ── ScreenConstraintCsvEmitter ───────────────────────────────────────────────
+
+pub struct ScreenConstraintCsvEmitter;
+
+impl Emitter for ScreenConstraintCsvEmitter {
+    fn emit(&self, model: &SemanticModel, _view: &View) -> Result<String, EmitError> {
+        let mut wtr = csv::Writer::from_writer(vec![]);
+        wtr.write_record([
+            "screen_id",
+            "usecase_id",
+            "api_id",
+            "required_permissions",
+            "required_media",
+        ])?;
+
+        for pattern in derive_screen_constraint_patterns(model) {
+            let screen_id = model.screens[pattern.screen].id.as_str();
+            let usecase_id = model.use_cases[pattern.usecase].id.as_str();
+            let api_id = pattern
+                .api
+                .map(|key| model.apis[key].id.as_str())
+                .unwrap_or("");
+            let permissions = pattern
+                .permissions
+                .iter()
+                .map(|key| model.permissions[*key].id.as_str())
+                .collect::<Vec<_>>()
+                .join("|");
+            let media = pattern
+                .media
+                .iter()
+                .map(|key| model.media[*key].id.as_str())
+                .collect::<Vec<_>>()
+                .join("|");
+
+            wtr.write_record([screen_id, usecase_id, api_id, &permissions, &media])?;
+        }
+
+        let data = wtr
+            .into_inner()
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
+        Ok(String::from_utf8(data).unwrap_or_default())
+    }
+}
+
 // ── ヘルパー ──────────────────────────────────────────────────────────────────
 
 fn col_type_to_str(ct: &ColumnType) -> &'static str {
@@ -415,6 +461,32 @@ reads(OrderApi, Cart)
         assert!(result.contains("OrderApi"));
         assert!(result.contains('C')); // creates → C
         assert!(result.contains('R')); // reads  → R
+    }
+
+    #[test]
+    fn test_screen_constraint_csv() {
+        let src = r#"
+usecase BookAppointment "Book Appointment"
+screen BookingScreen "Booking Screen"
+api BookingApi "Booking API"
+permission ScheduleWrite "Schedule Write"
+permission PatientRead "Patient Read"
+medium StaffTerminal "Staff Terminal"
+medium SecureChannel "Secure Channel"
+displays(BookAppointment, BookingScreen)
+invokes(BookAppointment, BookingApi)
+requires_permission(BookAppointment, ScheduleWrite)
+requires_medium(BookAppointment, StaffTerminal)
+requires_permission(BookingApi, PatientRead)
+requires_medium(BookingApi, SecureChannel)
+"#;
+        let model = model_from(src);
+        let view = View::whole();
+        let result = ScreenConstraintCsvEmitter.emit(&model, &view).unwrap();
+        assert!(result.contains("screen_id,usecase_id,api_id,required_permissions,required_media"));
+        assert!(result.contains(
+            "BookingScreen,BookAppointment,BookingApi,ScheduleWrite|PatientRead,StaffTerminal|SecureChannel"
+        ));
     }
 
     #[test]

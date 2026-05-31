@@ -7,7 +7,7 @@
 
 ## 1. 設計目的
 
-画面、API、System 境界を追加する。
+画面、API、System 境界に加えて、Business-BUC context と UC/API の権限・媒体制約を追加する。
 
 ## 2. モデル構成
 
@@ -17,6 +17,8 @@
 | API | `StoreAdminApi` | 店舗情報の更新境界 |
 | API | `OrganizationLookupApi` | 組織マスタの参照境界 |
 | System | `StoreAdminSystem / OrganizationSystem` | 店舗情報と組織マスタの仮の所有境界 |
+| Context | `StoreMasterMaintenanceWindow / BackOffice / OpsConsole` | BUC が適用されるタイミング、場所、操作媒体 |
+| Access | `StoreMaintenanceWrite` | 店舗保守操作に必要な権限 |
 
 ## 3. 設計判断
 
@@ -25,6 +27,7 @@
 | ChangeNextRestockDate は direct CRUD のまま残す | 店舗単体更新であり、独立 API を導入するほどの整合性境界がまだない |
 | ChangeStoreParentOrganization は invokes を使う | 組織参照と店舗更新が関わり、後続で system 境界診断の対象になるため |
 | read-only API を API matrix で確認する | sequence と matrix の両方で境界をレビューするため |
+| Screen 制約は直接書かない | `displays` と `invokes` から UC/API の `requires_*` を導出できるため |
 
 ## 4. 生成成果物
 
@@ -35,6 +38,16 @@ rdra-ish check samples/incremental-order/step-3-interaction-boundary/src
 rdra-ish diagram samples/incremental-order/step-3-interaction-boundary/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-3-interaction-boundary/out/object_graph_buc_store_restock
 rdra-ish diagram samples/incremental-order/step-3-interaction-boundary/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-3-interaction-boundary/out/sequence_buc_store_restock
 rdra-ish csv samples/incremental-order/step-3-interaction-boundary/src --kind matrix --out samples/incremental-order/step-3-interaction-boundary/out/usecase_matrix.csv
+rdra-ish csv samples/incremental-order/step-3-interaction-boundary/src --kind screen-constraints --out samples/incremental-order/step-3-interaction-boundary/out/screen_constraints.csv
+```
+
+### 4.0 Screen 制約パターン
+
+```csv
+screen_id,usecase_id,api_id,required_permissions,required_media
+StoreMaintenanceScreen,ChangeNextRestockDate,,StoreMaintenanceWrite,OpsConsole
+StoreMaintenanceScreen,ChangeStoreParentOrganization,OrganizationLookupApi,StoreMaintenanceWrite,OpsConsole
+StoreMaintenanceScreen,ChangeStoreParentOrganization,StoreAdminApi,StoreMaintenanceWrite,OpsConsole
 ```
 
 ### 4.1 RDRA Layered Graph 図

@@ -8,6 +8,12 @@ flowchart LR
     direction TB
     PatientAccess["💼 Patient Access"]
     BucVisitCheckIn["📦 Check In Visit"]
+    FrontDeskTerminal[/"📱 Front Desk Terminal"/]
+    NurseStation[/"📱 Nurse Station"/]
+    CopayCollect["🔑 Copay Collect"]
+    EncounterOpen["🔑 Encounter Open"]
+    RoomAssign["🔑 Room Assign"]
+    VisitCheckIn["🔑 Visit Check-In"]
   end
   subgraph layer_boundary[System Boundary]
     direction TB
@@ -40,27 +46,38 @@ flowchart LR
     PaymentTransaction[("🗄️ Payment Transaction")]
     Room[("🗄️ Room")]
   end
+  FrontDesk -.->|has_permission| VisitCheckIn
+  FrontDesk -.->|has_permission| CopayCollect
   FrontDesk -->|performs| BucVisitCheckIn
   FrontDesk -->|performs| VerifyArrival
   FrontDesk -->|performs| CheckInPatient
   FrontDesk -->|performs| CollectCopay
+  Nurse -.->|has_permission| RoomAssign
+  Nurse -.->|has_permission| EncounterOpen
+  Nurse -.->|has_permission| VisitCheckIn
   Nurse -->|performs| BucVisitCheckIn
   Nurse -->|performs| OpenEncounter
   Nurse -->|performs| AssignRoom
   Nurse -->|performs| PrepareEncounter
   OpenEncounterApi -.->|creates| Encounter
   OpenEncounterApi -.->|reads| Appointment
+  OpenEncounterApi -.->|requires_permission| EncounterOpen
   VerifyArrivalApi -.->|reads| Appointment
   VerifyArrivalApi -.->|reads| PatientAccount
   VerifyArrivalApi -.->|reads| InsurancePolicy
+  VerifyArrivalApi -.->|requires_permission| VisitCheckIn
+  CheckInPatientApi -.->|requires_permission| VisitCheckIn
   CheckInPatientApi -.->|updates| Appointment
   CheckInPatientApi -.->|updates| PatientAccount
   CollectCopayApi -.->|creates| PaymentTransaction
+  CollectCopayApi -.->|requires_permission| CopayCollect
   CollectCopayApi -.->|updates| AccountBalance
+  AssignRoomApi -.->|requires_permission| RoomAssign
   AssignRoomApi -.->|updates| Appointment
   AssignRoomApi -.->|updates| Room
   PrepareEncounterApi -.->|reads| Appointment
   PrepareEncounterApi -.->|reads| PatientProfile
+  PrepareEncounterApi -.->|requires_permission| EncounterOpen
   BucVisitCheckIn -.->|belongs| PatientAccess
   BucVisitCheckIn -->|contains| VerifyArrival
   BucVisitCheckIn -->|contains| CheckInPatient
@@ -79,14 +96,26 @@ flowchart LR
   CheckInScreen -.->|shows| Appointment
   OpenEncounter -.->|displays| EncounterWorkspaceScreen
   OpenEncounter -.->|invokes| OpenEncounterApi
+  OpenEncounter -.->|requires_medium| NurseStation
+  OpenEncounter -.->|requires_permission| EncounterOpen
   VerifyArrival -.->|displays| CheckInScreen
   VerifyArrival -.->|invokes| VerifyArrivalApi
+  VerifyArrival -.->|requires_medium| FrontDeskTerminal
+  VerifyArrival -.->|requires_permission| VisitCheckIn
   CheckInPatient -.->|displays| CheckInScreen
   CheckInPatient -.->|invokes| CheckInPatientApi
   CheckInPatient -.->|raises| EvAppointmentCheckedIn
+  CheckInPatient -.->|requires_medium| FrontDeskTerminal
+  CheckInPatient -.->|requires_permission| VisitCheckIn
   CollectCopay -.->|displays| CopayScreen
   CollectCopay -.->|invokes| CollectCopayApi
+  CollectCopay -.->|requires_medium| FrontDeskTerminal
+  CollectCopay -.->|requires_permission| CopayCollect
   AssignRoom -.->|displays| RoomBoardScreen
   AssignRoom -.->|invokes| AssignRoomApi
+  AssignRoom -.->|requires_medium| NurseStation
+  AssignRoom -.->|requires_permission| RoomAssign
   PrepareEncounter -.->|displays| CheckInScreen
   PrepareEncounter -.->|invokes| PrepareEncounterApi
+  PrepareEncounter -.->|requires_medium| NurseStation
+  PrepareEncounter -.->|requires_permission| EncounterOpen

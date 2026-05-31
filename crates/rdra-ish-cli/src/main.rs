@@ -4,7 +4,7 @@ use rdra_ish_core::{build_merged_model, resolve};
 use rdra_ish_emit::{
     csv::{
         ActorListCsvEmitter, ApiEntityMatrixCsvEmitter, ApiListCsvEmitter, EntityListCsvEmitter,
-        RelationMatrixCsvEmitter,
+        RelationMatrixCsvEmitter, ScreenConstraintCsvEmitter,
     },
     mermaid::{
         ErMermaidEmitter, EventFlowMermaidEmitter, ObjectGraphMermaidEmitter, RdraMermaidEmitter,
@@ -144,6 +144,8 @@ enum CsvKind {
     Api,
     /// API × Entity CRUD マトリクス
     ApiMatrix,
+    /// Screen × UC/API permission/medium constraints
+    ScreenConstraints,
 }
 
 /// Collect all `.rdra` files from the given paths (files and/or directories).
@@ -380,6 +382,10 @@ fn main() -> Result<()> {
                 CsvKind::ApiMatrix => (
                     ApiEntityMatrixCsvEmitter.emit(&model, &view)?,
                     "api-matrix.csv",
+                ),
+                CsvKind::ScreenConstraints => (
+                    ScreenConstraintCsvEmitter.emit(&model, &view)?,
+                    "screen-constraints.csv",
                 ),
             };
 

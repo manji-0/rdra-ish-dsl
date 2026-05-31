@@ -220,6 +220,15 @@ impl Emitter for RdraPlantUmlEmitter {
                     RelKind::Belongs => {
                         format!("{} ..> {} : belongs", from_id, to_id)
                     }
+                    RelKind::HasPermission => {
+                        format!("{} ..> {} : has_permission", from_id, to_id)
+                    }
+                    RelKind::RequiresPermission => {
+                        format!("{} ..> {} : requires_permission", from_id, to_id)
+                    }
+                    RelKind::RequiresMedium => {
+                        format!("{} ..> {} : requires_medium", from_id, to_id)
+                    }
                     RelKind::Motivates => {
                         format!("{} ..> {} : motivates", from_id, to_id)
                     }
@@ -297,6 +306,10 @@ impl Emitter for ObjectGraphPlantUmlEmitter {
                         NodeRef::UsageScene(_) => format!("  usecase \"{}\" as {}\n", label, id),
                         NodeRef::Condition(_) => format!("  rectangle \"{}\" as {}\n", label, id),
                         NodeRef::Variation(_) => format!("  rectangle \"{}\" as {}\n", label, id),
+                        NodeRef::Location(_) => format!("  rectangle \"{}\" as {}\n", label, id),
+                        NodeRef::Timing(_) => format!("  rectangle \"{}\" as {}\n", label, id),
+                        NodeRef::Medium(_) => format!("  component \"{}\" as {}\n", label, id),
+                        NodeRef::Permission(_) => format!("  rectangle \"{}\" as {}\n", label, id),
                         NodeRef::UseCase(_) => format!("  usecase \"{}\" as {}\n", label, id),
                         NodeRef::Screen(_) => format!("  boundary \"{}\" as {}\n", label, id),
                         NodeRef::Event(_) => format!("  control \"{}\" as {}\n", label, id),
@@ -1191,6 +1204,10 @@ pub(crate) fn node_id<'a>(model: &'a SemanticModel, node: &NodeRef) -> Option<&'
         NodeRef::Condition(k) => model.conditions.get(*k).map(|c| c.id.as_str()),
         NodeRef::Variation(k) => model.variations.get(*k).map(|v| v.id.as_str()),
         NodeRef::Api(k) => model.apis.get(*k).map(|a| a.id.as_str()),
+        NodeRef::Location(k) => model.locations.get(*k).map(|l| l.id.as_str()),
+        NodeRef::Timing(k) => model.timings.get(*k).map(|t| t.id.as_str()),
+        NodeRef::Medium(k) => model.media.get(*k).map(|m| m.id.as_str()),
+        NodeRef::Permission(k) => model.permissions.get(*k).map(|p| p.id.as_str()),
     }
 }
 
@@ -1211,6 +1228,10 @@ pub(crate) fn node_label<'a>(model: &'a SemanticModel, node: &NodeRef) -> Option
         NodeRef::Condition(k) => model.conditions.get(*k).map(|c| c.label.as_str()),
         NodeRef::Variation(k) => model.variations.get(*k).map(|v| v.label.as_str()),
         NodeRef::Api(k) => model.apis.get(*k).map(|a| a.label.as_str()),
+        NodeRef::Location(k) => model.locations.get(*k).map(|l| l.label.as_str()),
+        NodeRef::Timing(k) => model.timings.get(*k).map(|t| t.label.as_str()),
+        NodeRef::Medium(k) => model.media.get(*k).map(|m| m.label.as_str()),
+        NodeRef::Permission(k) => model.permissions.get(*k).map(|p| p.label.as_str()),
     }
 }
 
