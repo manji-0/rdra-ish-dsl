@@ -144,6 +144,50 @@ pub fn event_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
     diags
 }
 
+/// API 整合性の診断を生成する。
+///
+/// - 宣言されたが誰にも invoke されない api → `ApiNeverInvoked` 警告。
+/// - invoke されるが entity を操作しない api → `ApiInvokedButNoEntity` 警告。
+///
+/// `event_diagnostics` と同じパターンで `model.relations` を 1 パス走査する。
+pub fn api_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
+    let mut diags = Vec::new();
+
+    for (ak, api) in model.apis.iter() {
+        let invoked = model
+            .relations
+            .iter()
+            .any(|r| r.kind == RelKind::Invokes && r.to == NodeRef::Api(ak));
+
+        if !invoked {
+            diags.push(Diagnostic::warning(RdraError::ApiNeverInvoked {
+                api: api.id.clone(),
+            }));
+            continue; // 未呼出しなら entity 操作の確認は不要
+        }
+
+        let operates_entity = model.relations.iter().any(|r| {
+            r.from == NodeRef::Api(ak)
+                && matches!(
+                    r.kind,
+                    RelKind::Reads
+                        | RelKind::Writes
+                        | RelKind::Creates
+                        | RelKind::Updates
+                        | RelKind::Deletes
+                )
+        });
+
+        if !operates_entity {
+            diags.push(Diagnostic::warning(RdraError::ApiInvokedButNoEntity {
+                api: api.id.clone(),
+            }));
+        }
+    }
+
+    diags
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -198,48 +242,4 @@ triggers(EncounterSigned, BucBillingClaims)
             .iter()
             .any(|diag| matches!(&diag.error, RdraError::EventNeverConsumed { .. })));
     }
-}
-
-/// API 整合性の診断を生成する。
-///
-/// - 宣言されたが誰にも invoke されない api → `ApiNeverInvoked` 警告。
-/// - invoke されるが entity を操作しない api → `ApiInvokedButNoEntity` 警告。
-///
-/// `event_diagnostics` と同じパターンで `model.relations` を 1 パス走査する。
-pub fn api_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
-    let mut diags = Vec::new();
-
-    for (ak, api) in model.apis.iter() {
-        let invoked = model
-            .relations
-            .iter()
-            .any(|r| r.kind == RelKind::Invokes && r.to == NodeRef::Api(ak));
-
-        if !invoked {
-            diags.push(Diagnostic::warning(RdraError::ApiNeverInvoked {
-                api: api.id.clone(),
-            }));
-            continue; // 未呼出しなら entity 操作の確認は不要
-        }
-
-        let operates_entity = model.relations.iter().any(|r| {
-            r.from == NodeRef::Api(ak)
-                && matches!(
-                    r.kind,
-                    RelKind::Reads
-                        | RelKind::Writes
-                        | RelKind::Creates
-                        | RelKind::Updates
-                        | RelKind::Deletes
-                )
-        });
-
-        if !operates_entity {
-            diags.push(Diagnostic::warning(RdraError::ApiInvokedButNoEntity {
-                api: api.id.clone(),
-            }));
-        }
-    }
-
-    diags
 }
