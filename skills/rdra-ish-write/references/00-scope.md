@@ -1,7 +1,5 @@
 # Step 0: Scope Sketch
 
-<!-- derived-from ../../../docs/incremental-modeling.md#stage-0-scope-sketch -->
-
 Use this context when the request names a business area or problem but does not yet
 identify stable BUCs, actors, use cases, or data.
 
@@ -60,5 +58,5 @@ rdra-ish diagram src/ --kind rdra --format mermaid --buc BucOrder
 
 ## Next Step
 
-Load `steps/01-buc-skeleton.md` when at least one BUC is stable enough
+Load `references/01-buc-skeleton.md` when at least one BUC is stable enough
 to ask who performs it and which visible actions compose it.

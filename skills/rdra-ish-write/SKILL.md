@@ -1,14 +1,11 @@
 ---
-name: rdra-write
+name: rdra-ish-write
 description: Write RDRA DSL files from requirements using correct syntax and file structure, including staged abstract-to-concrete refinement
 ---
 
 ## Write RDRA DSL
 
 Create RDRA DSL files from requirements or specifications.
-
-<!-- derived-from ../docs/incremental-modeling.md#stage-map -->
-<!-- derived-from ../docs/language-reference.md#relationship-predicates -->
 
 ### Context Loading Rule
 
@@ -19,13 +16,13 @@ continue with the single most relevant step.
 
 | Step | Concern | Load | Main output |
 |---|---|---|---|
-| 0 | Scope sketch | `steps/00-scope.md` | `business`, candidate `buc` |
-| 1 | BUC skeleton | `steps/01-buc-skeleton.md` | actors, BUC ownership, contained use cases |
-| 2 | Data touchpoints | `steps/02-data-touchpoints.md` | coarse entities and UC CRUD |
-| 3 | Interaction boundary | `steps/03-interaction-boundary.md` | screens, APIs, systems, media, permissions |
-| 4 | Entity structure | `steps/04-entity-structure.md` | columns, keys, relations, coordination |
-| 5 | Lifecycle | `steps/05-lifecycle.md` | events, states, transitions, event-started BUCs, effects |
-| 6 | Rules | `steps/06-rules.md` | forbidden and invariant constraints |
+| 0 | Scope sketch | `references/00-scope.md` | `business`, candidate `buc` |
+| 1 | BUC skeleton | `references/01-buc-skeleton.md` | actors, BUC ownership, contained use cases |
+| 2 | Data touchpoints | `references/02-data-touchpoints.md` | coarse entities and UC CRUD |
+| 3 | Interaction boundary | `references/03-interaction-boundary.md` | screens, APIs, systems, media, permissions |
+| 4 | Entity structure | `references/04-entity-structure.md` | columns, keys, relations, coordination |
+| 5 | Lifecycle | `references/05-lifecycle.md` | events, states, transitions, event-started BUCs, effects |
+| 6 | Rules | `references/06-rules.md` | forbidden and invariant constraints |
 
 Do not skip ahead because a downstream detail is tempting. Model the smallest useful
 increment, run validation, then advance one level.
@@ -33,7 +30,7 @@ increment, run validation, then advance one level.
 ### Core Workflow
 
 1. Locate the existing model root and current abstraction level.
-2. Load the matching step file from `steps/`.
+2. Load the matching step file from `references/`.
 3. Ask only for information required by that step, unless the codebase already answers it.
 4. Edit the smallest set of `.rdra` files needed for the step.
 5. Run the validation commands from the step file.
@@ -152,7 +149,8 @@ import shared.actors.{Staff as S}
   not create direct system-to-entity ownership predicates.
 - Model screen constraints indirectly through `displays`, `invokes`,
   `requires_permission`, and `requires_medium`.
-- Use `has_permission` for actor-side assignment and verify it with
+- Use `rdra-ish csv src/ --kind permission-callables` to review which operations each
+  permission enables; use `has_permission` for actor-side assignment and verify it with
   `rdra-ish csv src/ --kind actor-permission-audit`.
 - Prefer `triggers(Event, Buc)` when an event starts a downstream BUC. Add
   `triggers(Event, UseCase)` later when the concrete entry action is known.
@@ -170,6 +168,6 @@ import shared.actors.{Staff as S}
 - Declaring `system` without `contains(System, Api)`.
 - Adding a cross-system `relate` without `coordinates(UseCase, Entity, Entity)`.
 - Checking only `screen-constraints` for access review; also run
-  `actor-permission-audit`.
+  `permission-callables` and `actor-permission-audit`.
 - Modeling event-started BUCs only as `triggers(Event, UseCase)` when the BUC
   boundary itself should remain swappable between human and event initiation.

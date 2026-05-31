@@ -1,8 +1,5 @@
 # Step 3: Interaction Boundary
 
-<!-- derived-from ../../../docs/incremental-modeling.md#stage-3-interaction-boundary -->
-<!-- derived-from ../../../docs/language-reference.md#access-constraints -->
-
 Use this context when data touchpoints exist and the next task is to express how users
 or systems reach those actions through screens, APIs, systems, media, and authority.
 
@@ -63,6 +60,7 @@ rdra-ish diagram src/ --kind sequence --format mermaid --buc BucOrder
 rdra-ish list src/ --kind api --format table
 rdra-ish csv src/ --kind api-matrix
 rdra-ish csv src/ --kind screen-constraints
+rdra-ish csv src/ --kind permission-callables
 rdra-ish csv src/ --kind actor-permission-audit
 ```
 
@@ -80,5 +78,5 @@ rdra-ish csv src/ --kind actor-permission-audit
 
 ## Next Step
 
-Load `steps/04-entity-structure.md` when entity fields, identifiers,
+Load `references/04-entity-structure.md` when entity fields, identifiers,
 relations, and ownership constraints are ready to become design commitments.

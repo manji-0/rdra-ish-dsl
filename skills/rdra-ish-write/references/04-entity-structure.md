@@ -1,7 +1,5 @@
 # Step 4: Entity Structure
 
-<!-- derived-from ../../../docs/incremental-modeling.md#stage-4-entity-structure -->
-
 Use this context when coarse entities and interaction boundaries exist, and the next
 task is to commit to fields, identifiers, relationships, and cross-system consistency.
 
@@ -78,5 +76,5 @@ rdra-ish csv src/ --kind actor-permission-audit
 
 ## Next Step
 
-Load `steps/05-lifecycle.md` when fields representing state, events, or
+Load `references/05-lifecycle.md` when fields representing state, events, or
 state-changing effects need to be modeled.

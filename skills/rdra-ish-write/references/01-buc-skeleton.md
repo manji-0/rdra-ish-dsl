@@ -1,7 +1,5 @@
 # Step 1: BUC Skeleton
 
-<!-- derived-from ../../../docs/incremental-modeling.md#stage-1-buc-skeleton -->
-
 Use this context when BUC names exist and the next task is to express business value:
 who participates, which actions are visible, and which BUC owns each action.
 
@@ -58,5 +56,5 @@ rdra-ish diagram src/ --kind rdra --format mermaid --buc BucOrder
 
 ## Next Step
 
-Load `steps/02-data-touchpoints.md` when reviewers can name the
+Load `references/02-data-touchpoints.md` when reviewers can name the
 business objects each use case creates, reads, updates, or deletes.

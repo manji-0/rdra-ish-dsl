@@ -1,5 +1,5 @@
 ---
-name: rdra-buc-create
+name: rdra-ish-buc-create
 description: Create a new BUC file from a requirements description, using staged refinement from BUC skeleton to data, UI/API, lifecycle, and rules
 ---
 
@@ -7,12 +7,8 @@ description: Create a new BUC file from a requirements description, using staged
 
 Given a requirement or feature description, produce a complete, validated BUC `.rdra` file and any shared additions needed.
 
-<!-- derived-from ../docs/language-reference.md#access-constraints -->
-<!-- derived-from ../docs/language-reference.md#belongs-context -->
-<!-- derived-from ../docs/incremental-modeling.md#stage-3-interaction-boundary -->
-
 If the requirement is abstract, create only the next useful stage instead of forcing a
-complete model. Use `docs/incremental-modeling.md` as the reference flow.
+complete model. Use `../../docs/incremental-modeling.md` as the reference flow.
 Treat creation as business-to-technical refinement: model value and actors before
 adding data touchpoints, UI/API boundaries, entity structure, lifecycle, or rules.
 
@@ -143,9 +139,10 @@ requires_permission(<Api>, <Permission>)
 
 Screen-level access patterns are derived from `displays(<UC>, <Screen>)` and
 `invokes(<UC>, <Api>)`. Validate them with
-`rdra-ish csv src/ --kind screen-constraints`. Validate actor-side grants with
-`rdra-ish csv src/ --kind actor-permission-audit`; review `missing` and `excess` rows
-before accepting the BUC.
+`rdra-ish csv src/ --kind screen-constraints`. Inspect which use cases and APIs each
+permission enables with `rdra-ish csv src/ --kind permission-callables`. Validate
+actor-side grants with `rdra-ish csv src/ --kind actor-permission-audit`; review
+`missing` and `excess` rows before accepting the BUC.
 
 For a BUC that starts from an event, declare the BUC-level handoff first:
 
@@ -168,7 +165,7 @@ For every use case that modifies an `Enum` column without a state machine, a nul
 sets(<UC>, <Entity>, "column_name", "value")
 ```
 
-See the `sets` value vocabulary in `rdra-write`.
+See the `sets` value vocabulary in `rdra-ish-write`.
 
 ### Step 5 — Update shared files if needed
 
@@ -198,5 +195,6 @@ For staged work, also run the command that matches the current abstraction:
 - Data touchpoints: `rdra-ish csv src/ --kind matrix`
 - Interaction boundary: `rdra-ish diagram src/ --kind sequence --format mermaid --buc <BucId>`
 - Access constraints: `rdra-ish csv src/ --kind screen-constraints`
+- Permission callables: `rdra-ish csv src/ --kind permission-callables`
 - Actor permission assignments: `rdra-ish csv src/ --kind actor-permission-audit`
 - Lifecycle/rules: `rdra-ish states src/ --buc <BucId>`

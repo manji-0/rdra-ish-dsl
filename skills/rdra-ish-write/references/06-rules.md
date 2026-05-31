@@ -1,7 +1,5 @@
 # Step 6: Rules
 
-<!-- derived-from ../../../docs/incremental-modeling.md#stage-6-business-rules -->
-
 Use this context when lifecycle paths are modeled and the next task is to express
 invalid or required state combinations as executable checks.
 

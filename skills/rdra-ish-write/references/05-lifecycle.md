@@ -1,8 +1,5 @@
 # Step 5: Lifecycle
 
-<!-- derived-from ../../../docs/incremental-modeling.md#stage-5-lifecycle -->
-<!-- derived-from ../../../docs/language-reference.md#event-triggered-bucs -->
-
 Use this context when entity structure exists and the next task is to describe state,
 events, event-started BUCs, and explicit column effects.
 
@@ -84,5 +81,5 @@ rdra-ish diagram src/ --kind event-flow --format mermaid
 
 ## Next Step
 
-Load `steps/06-rules.md` when reachable state combinations need
+Load `references/06-rules.md` when reachable state combinations need
 forbidden or invariant constraints.

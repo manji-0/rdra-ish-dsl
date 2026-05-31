@@ -1,5 +1,5 @@
 ---
-name: rdra-buc-update
+name: rdra-ish-buc-update
 description: Update an existing BUC by adding or modifying use cases, screens, events, entities, and predicates while preserving staged refinement
 ---
 
@@ -7,13 +7,9 @@ description: Update an existing BUC by adding or modifying use cases, screens, e
 
 Given a description of what to add or change, modify the relevant `.rdra` files while keeping the model consistent.
 
-<!-- derived-from ../docs/language-reference.md#access-constraints -->
-<!-- derived-from ../docs/language-reference.md#belongs-context -->
-<!-- derived-from ../docs/incremental-modeling.md#stage-3-interaction-boundary -->
-
 Preserve the model's current abstraction level. If the BUC is still a skeleton, do not
 force columns, APIs, or lifecycle rules. Ask for the next missing information required
-by `docs/incremental-modeling.md` and apply the smallest stage-appropriate diff.
+by `../../docs/incremental-modeling.md` and apply the smallest stage-appropriate diff.
 Keep the business-to-technical refinement order intact: do not introduce technical
 details until the business value, actors, use cases, and data touchpoints that justify
 them are present.
@@ -133,7 +129,9 @@ Use `requires_*` on the use case for constraints that apply to the whole interac
 and on the API for constraints specific to that backend boundary. Screen constraint
 patterns are derived through `displays` and `invokes`; do not hand-write a separate
 screen predicate for them. Actor-side grant gaps are derived with
-`rdra-ish csv src/ --kind actor-permission-audit`.
+`rdra-ish csv src/ --kind actor-permission-audit`; use
+`rdra-ish csv src/ --kind permission-callables` to confirm the permission maps to the
+intended use cases and APIs.
 
 **Starting a BUC from an event:**
 ```
@@ -172,6 +170,7 @@ derived system boundaries.
 - Every API used as a system boundary has `contains(System, Api)`
 - Every new `permission` used by an actor or operation is declared once in shared vocabulary unless intentionally local
 - Every `requires_medium` references a declared `medium`, and screen constraints are checked with `rdra-ish csv src/ --kind screen-constraints`
+- Permission-to-callable mappings are checked with `rdra-ish csv src/ --kind permission-callables`
 - Actor grants are checked with `rdra-ish csv src/ --kind actor-permission-audit`; review both `missing` and `excess`
 - Every cross-system `relate` has a `coordinates(UseCase, Entity, Entity)` when a use case handles the consistency
 - Every `coordinates` use case invokes APIs on both system sides

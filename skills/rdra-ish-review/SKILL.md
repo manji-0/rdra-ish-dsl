@@ -1,15 +1,11 @@
 ---
-name: rdra-review
+name: rdra-ish-review
 description: Review RDRA DSL files for syntax errors, semantic inconsistencies, missing relationships, and staged refinement gaps
 ---
 
 ## Review RDRA DSL
 
 Review existing RDRA DSL files for syntax correctness, semantic consistency, and coverage completeness.
-
-<!-- derived-from ../docs/language-reference.md#access-constraints -->
-<!-- derived-from ../docs/language-reference.md#belongs-context -->
-<!-- derived-from ../docs/cli-reference.md#csv -->
 
 Judge gaps relative to the model's current abstraction stage. A missing `screen`,
 column, API, or lifecycle may be acceptable in an early-stage BUC, but it should be
@@ -83,14 +79,16 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    - Parent entities are declared before child entities in the same file
 
 9. **Check events and state transitions**
-   - Run `rdra-ish diagram --kind event-flow --format mermaid <src-dir>` and review the
+   - Run `rdra-ish diagram <src-dir> --kind event-flow --format mermaid` and review the
      warnings printed to stderr before looking at the diagram itself:
      - `EventNeverRaised`: the event has no `raises` predicate — add one or remove the event
      - `EventNeverConsumed`: the event is raised but drives no `transitions` and `triggers`
        nothing — add the missing predicate or investigate a modelling gap
      - `TriggeredUseCaseUnreachable`: the triggered UC belongs to no BUC — add a `contains`
    - Every `state` referenced in `transitions` is declared
-   - No unreachable states (states never appearing as the `to` argument of any `transitions`)
+   - Review unreachable enum variants or state-pattern warnings from `rdra-ish check`
+     and `rdra-ish states`; a state can still be valid as an initial state even if it
+     never appears as a transition target
    - Prefer `triggers(Event, Buc)` when the event starts a downstream BUC boundary.
      Add `triggers(Event, UseCase)` as the concrete entry refinement when the entry UC is known
    - When `triggers(Event, UseCase)` is used, verify the triggered UC is `contains`-ed in

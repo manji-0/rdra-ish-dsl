@@ -1,7 +1,5 @@
 # Step 2: Data Touchpoints
 
-<!-- derived-from ../../../docs/incremental-modeling.md#stage-2-data-touchpoints -->
-
 Use this context when actors and use cases are stable enough to ask which business
 objects each action touches.
 
@@ -61,5 +59,5 @@ rdra-ish diagram src/ --kind er --format mermaid --buc BucOrder
 
 ## Next Step
 
-Load `steps/03-interaction-boundary.md` when the team needs UI/API
+Load `references/03-interaction-boundary.md` when the team needs UI/API
 paths, permission/media constraints, or implementation boundary discussion.
