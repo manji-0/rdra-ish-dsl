@@ -1,7 +1,7 @@
 # Sequence and Access Views
 
-Use this reference when reviewing screen/API/system boundaries, operation paths,
-transaction boundaries, permissions, media, or actor grant coverage.
+Use this reference when reviewing actor-entered inputs, screen/API/system boundaries,
+operation paths, transaction boundaries, permissions, media, or actor grant coverage.
 
 ## Commands
 
@@ -14,6 +14,14 @@ rdra-ish diagram src/ --kind sequence --buc <BucId> --format mermaid
 
 # Sequence diagram — scoped to one or more use cases
 rdra-ish diagram src/ --kind sequence --usecase <UseCaseId> --format mermaid
+
+# Business area — actor-entered fields to use cases
+rdra-ish diagram src/ --kind business-area --buc <BucId> --format mermaid
+rdra-ish diagram src/ --kind business-area --usecase <UseCaseId> --format mermaid
+rdra-ish csv src/ --kind business-inputs
+
+# Technical area — systems containing APIs and operated entities
+rdra-ish diagram src/ --kind technical-area --buc <BucId> --format mermaid
 
 # API list and API × Entity CRUD matrix
 rdra-ish list src/ --kind api --format table
@@ -37,6 +45,14 @@ rdra-ish csv src/ --kind actor-permission-audit
   from `API atomic boundary`.
 - `Note right of ...: FK非連結` means entities are written outside a common FK chain;
   consider modeling the consistency boundary through an API.
+
+## Reading Business/Technical Area Output
+
+- `business-area` shows only Actor -> inferred input field -> UseCase. Input nodes come
+  from `business-inputs`, so missing rows usually mean no actor path, no C/U/W operation,
+  or fields are modeled as derived.
+- `technical-area` shows each System as a container with only its APIs and the entities
+  those APIs operate. Pair it with `api-matrix` when checking CRUD coverage.
 
 ## Reading Access CSVs
 

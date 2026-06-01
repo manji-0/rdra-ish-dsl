@@ -77,10 +77,10 @@ enum Commands {
         format: OutputFormat,
         /// Filter to one or more BUCs (by id); repeatable (e.g. --buc A --buc B).
         /// The union of scoped nodes across all specified BUCs is shown.
-        /// Applies to all diagram kinds. For sequence, only directly contained use cases are shown.
+        /// Applies to all diagram kinds. For sequence and business-area, only directly contained use cases are shown.
         #[arg(long)]
         buc: Vec<String>,
-        /// Filter sequence diagrams to one or more use cases (by id); repeatable.
+        /// Filter sequence and business-area diagrams to one or more use cases (by id); repeatable.
         #[arg(long)]
         usecase: Vec<String>,
         #[arg(short, long, default_value = "out")]

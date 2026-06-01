@@ -377,6 +377,8 @@ impl Emitter for BusinessAreaPlantUmlEmitter {
             let actor = &model.actors[entry.actor];
             let usecase = &model.use_cases[entry.usecase];
             let entity = &model.entities[entry.entity];
+            let actor_id = business_actor_node_id(model, &entry);
+            let usecase_id = business_usecase_node_id(model, &entry);
             let input_id = business_input_node_id(model, &entry);
             let input_label = plantuml_label(&format!(
                 "{}.{}, {}",
@@ -385,32 +387,32 @@ impl Emitter for BusinessAreaPlantUmlEmitter {
                 entry.operation.as_str()
             ));
 
-            if nodes.insert(actor.id.clone()) {
+            if nodes.insert(actor_id.clone()) {
                 out.push_str(&format!(
                     "actor \"{}\" as {}\n",
                     plantuml_label(&prefixed_label("Business Actor", &actor.label)),
-                    actor.id
+                    actor_id
                 ));
             }
             if nodes.insert(input_id.clone()) {
                 out.push_str(&format!("rectangle \"{}\" as {}\n", input_label, input_id));
             }
-            if nodes.insert(usecase.id.clone()) {
+            if nodes.insert(usecase_id.clone()) {
                 out.push_str(&format!(
                     "usecase \"{}\" as {}\n",
                     plantuml_label(&prefixed_label("UseCase", &usecase.label)),
-                    usecase.id
+                    usecase_id
                 ));
             }
 
-            let actor_edge = format!("{} --> {}\n", actor.id, input_id);
+            let actor_edge = format!("{} --> {}\n", actor_id, input_id);
             if edges.insert(actor_edge.clone()) {
                 out.push_str(&actor_edge);
             }
             let uc_edge = format!(
                 "{} --> {} : {}\n",
                 input_id,
-                usecase.id,
+                usecase_id,
                 entry.operation.as_str()
             );
             if edges.insert(uc_edge.clone()) {
@@ -1381,6 +1383,14 @@ fn business_input_node_id(model: &SemanticModel, entry: &ActorInputInference) ->
     )
 }
 
+fn business_actor_node_id(model: &SemanticModel, entry: &ActorInputInference) -> String {
+    scoped_plantuml_id("actor", &model.actors[entry.actor].id)
+}
+
+fn business_usecase_node_id(model: &SemanticModel, entry: &ActorInputInference) -> String {
+    scoped_plantuml_id("usecase", &model.use_cases[entry.usecase].id)
+}
+
 fn reachable_for_scope(model: &SemanticModel, scope: &Scope) -> Option<HashSet<NodeRef>> {
     match scope {
         Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
@@ -1547,10 +1557,31 @@ creates(BookAppointment, Appointment)
         let result = BusinessAreaPlantUmlEmitter
             .emit(&model, &View::whole())
             .unwrap();
-        assert!(result.contains("actor \"Business Actor Staff\" as Staff"));
+        assert!(result.contains("actor \"Business Actor Staff\" as actor__Staff"));
         assert!(result.contains("rectangle \"Appointment.patient_name, create\""));
         assert!(result.contains(": create"));
         assert!(!result.contains("BucScheduling"));
+    }
+
+    #[test]
+    fn test_business_area_plantuml_disambiguates_actor_and_usecase_ids() {
+        let src = r#"
+actor Same "Actor Same"
+buc BucA "BUC A"
+usecase Same "UseCase Same"
+entity Thing "Thing" { id: Int @pk  name: String }
+performs(actor::Same, BucA)
+contains(BucA, usecase::Same)
+creates(usecase::Same, Thing)
+"#;
+        let model = model_from(src);
+        let result = BusinessAreaPlantUmlEmitter
+            .emit(&model, &View::whole())
+            .unwrap();
+        assert!(result.contains("actor \"Business Actor Actor Same\" as actor__Same"));
+        assert!(result.contains("usecase \"UseCase UseCase Same\" as usecase__Same"));
+        assert!(result.contains("actor__Same --> input__Same_Same_Thing_name"));
+        assert!(result.contains("input__Same_Same_Thing_name --> usecase__Same : create"));
     }
 
     #[test]

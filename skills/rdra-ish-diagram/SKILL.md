@@ -19,6 +19,8 @@ the selected view.
 | Dense relationship inspection | `boundaryless-graph` | `references/layered-and-boundaryless.md` |
 | Business object/data touchpoint review | `rdra --buc <BucId>` plus CRUD matrix | `references/layered-and-boundaryless.md` |
 | Entity structure and relationships | `er`, optionally `--buc <BucId>` | `references/er.md` |
+| Actor-entered field review | `business-area --buc <BucId>` plus `business-inputs` | `references/sequence-and-access.md` |
+| System API/entity ownership review | `technical-area --buc <BucId>` plus API matrix | `references/sequence-and-access.md` |
 | Screen/API/system boundary review | `sequence --buc <BucId>` plus access CSVs | `references/sequence-and-access.md` |
 | One concrete use case flow | `sequence --usecase <UseCaseId>` | `references/sequence-and-access.md` |
 | Lifecycle and event causality | `state --buc <BucId>` plus `event-flow` | `references/lifecycle-and-events.md` |
@@ -39,6 +41,8 @@ the selected view.
 - Use `rdra` when the question is "what business value/use cases are covered?"
 - Use `boundaryless-graph` when layered placement hides dense relationships.
 - Use `er` when the question is "what entities, columns, and relationships exist?"
+- Use `business-area` when the question is "which actor inputs which fields for which use cases?"
+- Use `technical-area` when the question is "which APIs and entities sit inside each system?"
 - Use `sequence` when the question is "what actor/screen/API/entity path happens?"
 - Use `state` when the question is "what lifecycle states and transitions exist?"
 - Use `event-flow` when the question is "what events cause other work or transitions?"
