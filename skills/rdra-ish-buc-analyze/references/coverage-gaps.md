@@ -11,7 +11,8 @@ BUCs, and use cases touch the business objects they are responsible for. Missing
 coverage is often a modeling gap, but the severity depends on the current stage.
 
 Good coverage does not mean the model is complete. It means the reviewer can follow
-who does what, in which business area, and against which data objects.
+who does what, in which business area, against which data objects, and which fields
+each actor is expected to supply once entities have reviewable columns.
 
 ## Commands
 
@@ -22,6 +23,7 @@ rdra-ish list src/ --kind usecase --format table
 rdra-ish list src/ --kind actor --format table
 rdra-ish list src/ --kind entity --format json
 rdra-ish csv src/ --kind matrix
+rdra-ish csv src/ --kind actor-inputs
 rdra-ish diagram src/ --kind rdra --format mermaid --buc <BucId>
 ```
 
@@ -36,6 +38,8 @@ rdra-ish diagram src/ --kind rdra --format mermaid --buc <BucId>
 | CRUD matrix has a row with all blanks | UC is declared but not connected to data | Add CRUD or defer with an explicit open question |
 | CRUD matrix has overloaded rows | UC may combine multiple user-visible actions | Split UC or explain the transaction boundary |
 | Entity appears in no CRUD matrix column | Entity may be premature or missing use cases | Add use-case touchpoints or remove the entity |
+| `actor-inputs` has no rows after entity columns are modeled | No actor path, no C/U/W operation, or all fields are derived | Check `performs`, CRUD/API CRUD, defaults, FK generation, and `sets` |
+| `actor-inputs` lists too many columns for one use case | CRUD is too coarse for field-level review | Add more precise use cases/API boundaries or model derived values with defaults/`sets` |
 | BUC-local predicate appears in `shared/` | Ownership is blurred | Move the predicate to `buc/buc_<name>.rdra` |
 | Module name does not match path | File layout drift | Fix `module` or move file |
 | Same actor/entity/event is redeclared | Shared vocabulary duplication | Keep one declaration and import it |
@@ -64,6 +68,8 @@ The important invariant is path/module correspondence and clear ownership.
   mismatch blocking all analysis.
 - Medium: missing `belongs`, missing actor assignment, empty CRUD row after the model has
   reached data touchpoints.
+- Medium: unexpected or missing `actor-inputs` rows after the model has reached entity
+  structure and the team is reviewing actor-entered information.
 - Low: intentionally deferred screens, APIs, lifecycle, or rules in an early-stage BUC.
 
 ## Next Actions
@@ -71,5 +77,7 @@ The important invariant is path/module correspondence and clear ownership.
 - For missing actor/BUC links, ask who performs the business capability.
 - For empty CRUD, ask which business object the use case creates, reads, updates, or
   deletes.
+- For surprising actor inputs, ask which listed fields are entered by the actor versus
+  supplied by defaults, APIs, relations, events, or `sets`.
 - For layout issues, propose the smallest file move or import change.
 - For premature detail, recommend deferring it rather than inventing a deeper model.

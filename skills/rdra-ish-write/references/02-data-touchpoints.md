@@ -24,6 +24,8 @@ without forcing final columns, APIs, or persistence design.
 4. Keep column details, FK relations, `system`, and `coordinates` out unless already
    stable and necessary for review.
 5. Use the CRUD matrix to spot overloaded or empty use cases.
+6. Do not rely on `actor-inputs` yet unless entity columns already exist; at this
+   stage it is usually enough to confirm actor/use-case/entity responsibility.
 
 ## Minimal Pattern
 

@@ -2,8 +2,10 @@
 
 use crate::{EmitError, Emitter, View};
 use rdra_ish_core::{
-    derive_actor_permission_audit, derive_permission_callables, derive_screen_constraint_patterns,
+    derive_actor_input_inferences, derive_actor_permission_audit, derive_permission_callables,
+    derive_screen_constraint_patterns,
     model::{ApiKey, ColumnType, EntityKey, NodeRef, RelKind, SemanticModel, UseCaseKey},
+    ActorInputSource,
 };
 
 // ── ActorListCsvEmitter ────────────────────────────────────────────────────────
@@ -424,6 +426,68 @@ impl Emitter for ActorPermissionAuditCsvEmitter {
     }
 }
 
+// ── ActorInputInferenceCsvEmitter ────────────────────────────────────────────
+
+pub struct ActorInputInferenceCsvEmitter;
+
+impl Emitter for ActorInputInferenceCsvEmitter {
+    fn emit(&self, model: &SemanticModel, _view: &View) -> Result<String, EmitError> {
+        let mut wtr = csv::Writer::from_writer(vec![]);
+        wtr.write_record([
+            "actor_id",
+            "actor_label",
+            "buc_id",
+            "usecase_id",
+            "source_type",
+            "source_id",
+            "entity_id",
+            "column_name",
+            "column_type",
+            "operation",
+            "reason",
+        ])?;
+
+        for entry in derive_actor_input_inferences(model) {
+            let actor = &model.actors[entry.actor];
+            let buc_id = entry
+                .buc
+                .map(|key| model.bucs[key].id.as_str())
+                .unwrap_or("");
+            let usecase = &model.use_cases[entry.usecase];
+            let entity = &model.entities[entry.entity];
+            let column_type = entity
+                .columns
+                .iter()
+                .find(|column| column.name == entry.column)
+                .map(|column| col_type_to_str(&column.col_type))
+                .unwrap_or("");
+            let (source_type, source_id) = match entry.source {
+                ActorInputSource::UseCase => ("usecase", usecase.id.as_str()),
+                ActorInputSource::Api(api) => ("api", model.apis[api].id.as_str()),
+            };
+
+            wtr.write_record([
+                actor.id.as_str(),
+                actor.label.as_str(),
+                buc_id,
+                usecase.id.as_str(),
+                source_type,
+                source_id,
+                entity.id.as_str(),
+                entry.column.as_str(),
+                column_type,
+                entry.operation.as_str(),
+                entry.reason.as_str(),
+            ])?;
+        }
+
+        let data = wtr
+            .into_inner()
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
+        Ok(String::from_utf8(data).unwrap_or_default())
+    }
+}
+
 // ── ヘルパー ──────────────────────────────────────────────────────────────────
 
 fn required_usecase_ids(
@@ -668,6 +732,34 @@ requires_permission(BookingApi, ScheduleWrite)
         assert!(result.contains(
             "Staff,Staff,ScheduleWrite,Schedule Write,false,true,missing,BookAppointment,BookAppointment->BookingApi"
         ));
+    }
+
+    #[test]
+    fn test_actor_input_inference_csv() {
+        let src = r#"
+actor Staff "Staff"
+buc BucScheduling "Scheduling"
+usecase BookAppointment "Book Appointment"
+api BookingApi "Booking API"
+entity Appointment "Appointment" { id: Int @pk  patient_name: String  scheduled_at: DateTime }
+performs(Staff, BookAppointment)
+contains(BucScheduling, BookAppointment)
+invokes(BookAppointment, BookingApi)
+creates(BookingApi, Appointment)
+"#;
+        let model = model_from(src);
+        let view = View::whole();
+        let result = ActorInputInferenceCsvEmitter.emit(&model, &view).unwrap();
+        assert!(result.contains(
+            "actor_id,actor_label,buc_id,usecase_id,source_type,source_id,entity_id,column_name,column_type,operation,reason"
+        ));
+        assert!(result.contains(
+            "Staff,Staff,BucScheduling,BookAppointment,api,BookingApi,Appointment,patient_name,String,create"
+        ));
+        assert!(result.contains(
+            "Staff,Staff,BucScheduling,BookAppointment,api,BookingApi,Appointment,scheduled_at,DateTime,create"
+        ));
+        assert!(!result.contains(",id,"));
     }
 
     #[test]

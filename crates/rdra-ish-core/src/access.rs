@@ -1,7 +1,7 @@
 use crate::diagnostics::{Diagnostic, RdraError};
 use crate::model::{
-    ActorKey, ApiKey, BucKey, MediumKey, NodeRef, PermissionKey, RelKind, ScreenKey, SemanticModel,
-    UseCaseKey,
+    ActorKey, ApiKey, BucKey, EntityKey, MediumKey, NodeRef, PermissionKey, RelKind, ScreenKey,
+    SemanticModel, UseCaseKey,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -52,6 +52,107 @@ pub struct ScreenConstraintPattern {
     pub api: Option<ApiKey>,
     pub permissions: Vec<PermissionKey>,
     pub media: Vec<MediumKey>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActorInputOperation {
+    Create,
+    Update,
+    Write,
+}
+
+impl ActorInputOperation {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Create => "create",
+            Self::Update => "update",
+            Self::Write => "write",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActorInputSource {
+    UseCase,
+    Api(ApiKey),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActorInputInference {
+    pub actor: ActorKey,
+    pub buc: Option<BucKey>,
+    pub usecase: UseCaseKey,
+    pub source: ActorInputSource,
+    pub entity: EntityKey,
+    pub column: String,
+    pub operation: ActorInputOperation,
+    pub reason: String,
+}
+
+/// Infer candidate input fields per actor from the modeled BUC/use-case path.
+///
+/// Actor resolution follows the same rule as sequence and permission analysis:
+/// direct `performs(Actor, UseCase)` wins; otherwise actors on containing BUCs are used.
+/// Candidate fields are derived from `creates` / `updates` / `writes` on the use case or
+/// on APIs invoked by the use case. Primary keys, foreign keys, defaults, and columns
+/// explicitly driven by `sets(...)` are treated as system/model supplied values and skipped.
+pub fn derive_actor_input_inferences(model: &SemanticModel) -> Vec<ActorInputInference> {
+    let mut rows = Vec::new();
+
+    let mut usecases: Vec<_> = model.use_cases.keys().collect();
+    usecases.sort_by_key(|usecase| model.use_cases[*usecase].id.as_str());
+
+    for usecase in usecases {
+        let actors = actors_for_usecase(model, usecase);
+        if actors.is_empty() {
+            continue;
+        }
+
+        let bucs = bucs_containing_usecase(model, usecase);
+        let buc_options: Vec<Option<BucKey>> = if bucs.is_empty() {
+            vec![None]
+        } else {
+            bucs.into_iter().map(Some).collect()
+        };
+
+        let operations = collect_usecase_input_operations(model, usecase);
+        for actor in actors {
+            for buc in &buc_options {
+                for op in &operations {
+                    add_input_rows_for_operation(model, &mut rows, actor, *buc, usecase, op);
+                }
+            }
+        }
+    }
+
+    rows.sort_by(|a, b| {
+        model.actors[a.actor]
+            .id
+            .cmp(&model.actors[b.actor].id)
+            .then_with(|| option_buc_id(model, a.buc).cmp(option_buc_id(model, b.buc)))
+            .then_with(|| {
+                model.use_cases[a.usecase]
+                    .id
+                    .cmp(&model.use_cases[b.usecase].id)
+            })
+            .then_with(|| {
+                model.entities[a.entity]
+                    .id
+                    .cmp(&model.entities[b.entity].id)
+            })
+            .then_with(|| a.column.cmp(&b.column))
+            .then_with(|| source_sort_id(model, a.source).cmp(source_sort_id(model, b.source)))
+    });
+    rows.dedup_by(|a, b| {
+        a.actor == b.actor
+            && a.buc == b.buc
+            && a.usecase == b.usecase
+            && a.source == b.source
+            && a.entity == b.entity
+            && a.column == b.column
+            && a.operation == b.operation
+    });
+    rows
 }
 
 pub fn derive_screen_constraint_patterns(model: &SemanticModel) -> Vec<ScreenConstraintPattern> {
@@ -395,6 +496,124 @@ fn collect_actor_permission_requirements(
     by_actor_permission
 }
 
+#[derive(Debug, Clone, Copy)]
+struct InputOperation {
+    source: ActorInputSource,
+    entity: EntityKey,
+    operation: ActorInputOperation,
+}
+
+fn collect_usecase_input_operations(
+    model: &SemanticModel,
+    usecase: UseCaseKey,
+) -> Vec<InputOperation> {
+    let mut operations = Vec::new();
+
+    for rel in &model.relations {
+        if rel.from == NodeRef::UseCase(usecase) {
+            if let Some((entity, operation)) = input_operation_from_relation(rel) {
+                operations.push(InputOperation {
+                    source: ActorInputSource::UseCase,
+                    entity,
+                    operation,
+                });
+            }
+        }
+    }
+
+    for api in apis_invoked_by_usecase(model, usecase) {
+        for rel in &model.relations {
+            if rel.from == NodeRef::Api(api) {
+                if let Some((entity, operation)) = input_operation_from_relation(rel) {
+                    operations.push(InputOperation {
+                        source: ActorInputSource::Api(api),
+                        entity,
+                        operation,
+                    });
+                }
+            }
+        }
+    }
+
+    operations.sort_by(|a, b| {
+        model.entities[a.entity]
+            .id
+            .cmp(&model.entities[b.entity].id)
+            .then_with(|| a.operation.as_str().cmp(b.operation.as_str()))
+            .then_with(|| source_sort_id(model, a.source).cmp(source_sort_id(model, b.source)))
+    });
+    operations.dedup_by(|a, b| {
+        a.source == b.source && a.entity == b.entity && a.operation == b.operation
+    });
+    operations
+}
+
+fn input_operation_from_relation(
+    rel: &crate::model::Relation,
+) -> Option<(EntityKey, ActorInputOperation)> {
+    let entity = match rel.to {
+        NodeRef::Entity(entity) => entity,
+        _ => return None,
+    };
+    let operation = match rel.kind {
+        RelKind::Creates => ActorInputOperation::Create,
+        RelKind::Updates => ActorInputOperation::Update,
+        RelKind::Writes => ActorInputOperation::Write,
+        _ => return None,
+    };
+    Some((entity, operation))
+}
+
+fn add_input_rows_for_operation(
+    model: &SemanticModel,
+    rows: &mut Vec<ActorInputInference>,
+    actor: ActorKey,
+    buc: Option<BucKey>,
+    usecase: UseCaseKey,
+    op: &InputOperation,
+) {
+    let entity = &model.entities[op.entity];
+    for column in &entity.columns {
+        if column.is_pk || column.is_fk || column.default_val.is_some() {
+            continue;
+        }
+        if is_column_set_by_path(model, usecase, op.source, op.entity, &column.name) {
+            continue;
+        }
+        rows.push(ActorInputInference {
+            actor,
+            buc,
+            usecase,
+            source: op.source,
+            entity: op.entity,
+            column: column.name.clone(),
+            operation: op.operation,
+            reason: format!(
+                "{}({}) requires non-derived column",
+                op.operation.as_str(),
+                entity.id
+            ),
+        });
+    }
+}
+
+fn is_column_set_by_path(
+    model: &SemanticModel,
+    usecase: UseCaseKey,
+    source: ActorInputSource,
+    entity: EntityKey,
+    column: &str,
+) -> bool {
+    let origin = match source {
+        ActorInputSource::UseCase => NodeRef::UseCase(usecase),
+        ActorInputSource::Api(api) => NodeRef::Api(api),
+    };
+    model
+        .column_effects
+        .iter()
+        .any(|effect| effect.origin == origin && effect.entity == entity && effect.column == column)
+}
+
 fn actors_for_usecase(model: &SemanticModel, usecase: UseCaseKey) -> Vec<ActorKey> {
     let mut direct: Vec<ActorKey> = model
         .relations
@@ -432,6 +651,24 @@ fn actors_for_usecase(model: &SemanticModel, usecase: UseCaseKey) -> Vec<ActorKe
     actors
 }
 
+fn apis_invoked_by_usecase(model: &SemanticModel, usecase: UseCaseKey) -> Vec<ApiKey> {
+    let mut apis: Vec<ApiKey> = model
+        .relations
+        .iter()
+        .filter_map(|rel| {
+            if rel.kind == RelKind::Invokes && rel.from == NodeRef::UseCase(usecase) {
+                if let NodeRef::Api(api) = &rel.to {
+                    return Some(*api);
+                }
+            }
+            None
+        })
+        .collect();
+    apis.sort_by_key(|api| model.apis[*api].id.as_str());
+    apis.dedup();
+    apis
+}
+
 fn bucs_containing_usecase(model: &SemanticModel, usecase: UseCaseKey) -> Vec<BucKey> {
     let mut bucs: Vec<BucKey> = model
         .relations
@@ -448,6 +685,17 @@ fn bucs_containing_usecase(model: &SemanticModel, usecase: UseCaseKey) -> Vec<Bu
     bucs.sort_by_key(|buc| model.bucs[*buc].id.as_str());
     bucs.dedup();
     bucs
+}
+
+fn option_buc_id(model: &SemanticModel, buc: Option<BucKey>) -> &str {
+    buc.map(|key| model.bucs[key].id.as_str()).unwrap_or("")
+}
+
+fn source_sort_id(model: &SemanticModel, source: ActorInputSource) -> &str {
+    match source {
+        ActorInputSource::UseCase => "",
+        ActorInputSource::Api(api) => model.apis[api].id.as_str(),
+    }
 }
 
 fn usecases_invoking_api(model: &SemanticModel, api: ApiKey) -> Vec<UseCaseKey> {

@@ -1,13 +1,14 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use rdra_ish_core::{
-    build_merged_model, derive_actor_permission_audit, derive_permission_callables, resolve,
+    build_merged_model, derive_actor_input_inferences, derive_actor_permission_audit,
+    derive_permission_callables, resolve, ActorInputSource,
 };
 use rdra_ish_emit::{
     csv::{
-        ActorListCsvEmitter, ActorPermissionAuditCsvEmitter, ApiEntityMatrixCsvEmitter,
-        ApiListCsvEmitter, EntityListCsvEmitter, PermissionCallableCsvEmitter,
-        RelationMatrixCsvEmitter, ScreenConstraintCsvEmitter,
+        ActorInputInferenceCsvEmitter, ActorListCsvEmitter, ActorPermissionAuditCsvEmitter,
+        ApiEntityMatrixCsvEmitter, ApiListCsvEmitter, EntityListCsvEmitter,
+        PermissionCallableCsvEmitter, RelationMatrixCsvEmitter, ScreenConstraintCsvEmitter,
     },
     mermaid::{
         ErMermaidEmitter, EventFlowMermaidEmitter, ObjectGraphMermaidEmitter, RdraMermaidEmitter,
@@ -36,6 +37,8 @@ enum ListKind {
     PermissionCallables,
     /// Actor × permission assignment audit inferred from UC/API requirements
     ActorPermissionAudit,
+    /// Actor input candidates inferred from BUC/use-case CRUD and API paths
+    ActorInputs,
 }
 
 #[derive(ValueEnum, Clone)]
@@ -84,7 +87,7 @@ enum Commands {
     Csv {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// CSV kind: actor, entity, matrix, api, api-matrix, screen-constraints, permission-callables, or actor-permission-audit
+        /// CSV kind: actor, entity, matrix, api, api-matrix, screen-constraints, permission-callables, actor-permission-audit, or actor-inputs
         #[arg(long, default_value = "entity")]
         kind: CsvKind,
         #[arg(short, long, default_value = "out")]
@@ -157,6 +160,8 @@ enum CsvKind {
     PermissionCallables,
     /// Actor × permission assignment audit inferred from UC/API requirements
     ActorPermissionAudit,
+    /// Actor input candidates inferred from BUC/use-case CRUD and API paths
+    ActorInputs,
 }
 
 /// Collect all `.rdra` files from the given paths (files and/or directories).
@@ -406,6 +411,10 @@ fn main() -> Result<()> {
                     ActorPermissionAuditCsvEmitter.emit(&model, &view)?,
                     "actor-permission-audit.csv",
                 ),
+                CsvKind::ActorInputs => (
+                    ActorInputInferenceCsvEmitter.emit(&model, &view)?,
+                    "actor-inputs.csv",
+                ),
             };
 
             let out_path = if out.extension().is_some() {
@@ -651,7 +660,45 @@ fn list_elements(
         }
         ListKind::PermissionCallables => format_permission_callables(model, format),
         ListKind::ActorPermissionAudit => format_actor_permission_audit(model, format),
+        ListKind::ActorInputs => format_actor_inputs(model, format),
     }
+}
+
+fn format_actor_inputs(
+    model: &rdra_ish_core::SemanticModel,
+    format: &ListFormat,
+) -> Result<String> {
+    let headers = [
+        "actor_id",
+        "buc_id",
+        "usecase_id",
+        "source",
+        "entity_id",
+        "column_name",
+        "operation",
+    ];
+    let rows: Vec<[String; 7]> = derive_actor_input_inferences(model)
+        .into_iter()
+        .map(|entry| {
+            let source = match entry.source {
+                ActorInputSource::UseCase => model.use_cases[entry.usecase].id.clone(),
+                ActorInputSource::Api(api) => model.apis[api].id.clone(),
+            };
+            [
+                model.actors[entry.actor].id.clone(),
+                entry
+                    .buc
+                    .map(|buc| model.bucs[buc].id.clone())
+                    .unwrap_or_default(),
+                model.use_cases[entry.usecase].id.clone(),
+                source,
+                model.entities[entry.entity].id.clone(),
+                entry.column,
+                entry.operation.as_str().to_string(),
+            ]
+        })
+        .collect();
+    format_rows(&headers, &rows, format, "actor input candidates")
 }
 
 fn format_permission_callables(
@@ -884,6 +931,76 @@ fn required_api_paths(
 
 fn bool_cell(value: bool) -> String {
     (if value { "true" } else { "false" }).to_string()
+}
+
+fn format_rows<const N: usize>(
+    headers: &[&str; N],
+    rows: &[[String; N]],
+    format: &ListFormat,
+    empty_label: &str,
+) -> Result<String> {
+    match format {
+        ListFormat::Table => {
+            if rows.is_empty() {
+                return Ok(format!("No {} found.\n", empty_label));
+            }
+            let mut col_widths: Vec<usize> = headers.iter().map(|h| h.len()).collect();
+            for row in rows {
+                for (i, cell) in row.iter().enumerate() {
+                    col_widths[i] = col_widths[i].max(cell.chars().count());
+                }
+            }
+            let mut out = String::new();
+            let header_line: Vec<String> = headers
+                .iter()
+                .enumerate()
+                .map(|(i, h)| format!("{:<width$}", h.to_uppercase(), width = col_widths[i]))
+                .collect();
+            out.push_str(&header_line.join("  "));
+            out.push('\n');
+            let sep_line: Vec<String> = col_widths.iter().map(|&w| "\u{2500}".repeat(w)).collect();
+            out.push_str(&sep_line.join("  "));
+            out.push('\n');
+            for row in rows {
+                let row_line: Vec<String> = row
+                    .iter()
+                    .enumerate()
+                    .map(|(i, cell)| format!("{:<width$}", cell, width = col_widths[i]))
+                    .collect();
+                out.push_str(&row_line.join("  "));
+                out.push('\n');
+            }
+            Ok(out)
+        }
+        ListFormat::Csv => {
+            let mut out = format!("{}\n", headers.join(","));
+            for row in rows {
+                let cells: Vec<String> = row.iter().map(|c| csv_field(c)).collect();
+                out.push_str(&format!("{}\n", cells.join(",")));
+            }
+            Ok(out)
+        }
+        ListFormat::Json => {
+            let entries: Vec<String> = rows
+                .iter()
+                .map(|row| {
+                    let fields: Vec<String> = headers
+                        .iter()
+                        .enumerate()
+                        .map(|(i, header)| {
+                            format!(
+                                "{}:{}",
+                                serde_json::to_string(header).unwrap(),
+                                serde_json::to_string(&row[i]).unwrap()
+                            )
+                        })
+                        .collect();
+                    format!("{{{}}}", fields.join(","))
+                })
+                .collect();
+            Ok(format!("[{}]\n", entries.join(",")))
+        }
+    }
 }
 
 fn format_id_label(

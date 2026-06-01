@@ -29,7 +29,9 @@ boundaries established in Step 3.
 5. If a relation crosses two derived system entity sets, add or review
    `coordinates(UseCase, Entity, Entity)` and ensure that use case invokes APIs on
    both sides.
-6. Keep lifecycle states and business rules out unless needed to define a field.
+6. Run `actor-inputs` to review which non-derived columns are inferred as actor-entered
+   fields for each performed use case/API path.
+7. Keep lifecycle states and business rules out unless needed to define a field.
 
 ## Minimal Pattern
 
@@ -63,6 +65,7 @@ rdra-ish check src/
 rdra-ish diagram src/ --kind er --format mermaid --buc BucOrder
 rdra-ish diagram src/ --kind sequence --format mermaid --buc BucOrder
 rdra-ish csv src/ --kind api-matrix
+rdra-ish csv src/ --kind actor-inputs
 rdra-ish csv src/ --kind actor-permission-audit
 ```
 
@@ -73,6 +76,8 @@ rdra-ish csv src/ --kind actor-permission-audit
 - No duplicate manual FK conflicts with generated FK columns.
 - Cross-system relations are coordinated or explicitly marked as unresolved.
 - Sequence and API matrix still agree with the entity design.
+- `actor-inputs` rows are plausible, or surprising fields are explained as derived by
+  defaults, FK relations, APIs, events, or `sets`.
 
 ## Next Step
 

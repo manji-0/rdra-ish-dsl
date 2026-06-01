@@ -158,6 +158,9 @@ import shared.actors.{Staff as S}
 - Use `rdra-ish csv src/ --kind permission-callables` to review which operations each
   permission enables; use `has_permission` for actor-side assignment and verify it with
   `rdra-ish csv src/ --kind actor-permission-audit`.
+- Use `rdra-ish csv src/ --kind actor-inputs` after entity columns are modeled to review
+  which non-derived fields each actor is expected to input through performed use cases
+  and invoked APIs.
 - Prefer `triggers(Event, Buc)` when an event starts a downstream BUC. Add
   `triggers(Event, UseCase)` later when the concrete entry action is known.
 - Use `sets` to make lifecycle effects explicit for `Enum`, `Bool`, nullable columns,
