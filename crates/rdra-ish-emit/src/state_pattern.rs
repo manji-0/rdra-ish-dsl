@@ -88,6 +88,37 @@ fn diag_message(d: &StateDiag) -> String {
                 guards, requireds, pattern_desc
             )
         }
+        StateDiag::CrossForbiddenViolated {
+            entities,
+            conditions,
+            pattern_desc,
+        } => {
+            format!(
+                "[error] cross-entity forbidden state reached across [{}]: ({}) in patterns ({})",
+                entities, conditions, pattern_desc
+            )
+        }
+        StateDiag::CrossInvariantViolated {
+            entities,
+            guards,
+            requireds,
+            pattern_desc,
+        } => {
+            format!(
+                "[error] cross-entity invariant violated across [{}]: when ({}) holds, ({}) must also hold — but found patterns ({})",
+                entities, guards, requireds, pattern_desc
+            )
+        }
+        StateDiag::CrossConstraintNotEvaluated {
+            entities,
+            constraint,
+            reason,
+        } => {
+            format!(
+                "[warn] cross-entity constraint not evaluated across [{}]: {} ({})",
+                entities, constraint, reason
+            )
+        }
     }
 }
 

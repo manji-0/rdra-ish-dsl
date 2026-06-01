@@ -192,11 +192,24 @@ impl CmpOp {
 pub enum Operand {
     /// A bare identifier referencing a column (e.g. `stock`, `expired_at`).
     Column(std::string::String),
+    /// An entity-qualified column reference (e.g. `Order.status`).
+    QualifiedColumn(QualifiedColumnRef),
     /// An integer literal (stored as string to avoid lossy conversion).
     IntLit(std::string::String),
     /// The built-in temporal reference `now`.
     Now,
     // Future: Arith(Box<Operand>, ArithOp, Box<Operand>)
+}
+
+/// A column reference qualified by an entity id.
+///
+/// This is intentionally separate from `QRef`: the entity portion resolves to a
+/// declared entity, while `column` resolves inside that entity's column list.
+#[derive(Debug, Clone, PartialEq)]
+pub struct QualifiedColumnRef {
+    pub entity: QRef,
+    pub column: std::string::String,
+    pub span: Span,
 }
 
 /// A single comparison expression, e.g. `stock < selling` or `expired_at < now`.

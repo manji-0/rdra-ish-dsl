@@ -320,13 +320,34 @@ fn predicate_atom() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> +
     lit.or(r)
 }
 
-/// 比較式の被演算子（Operand）: 裸ident（カラム参照）、整数リテラル、または `now`。
+/// 比較式の被演算子（Operand）:
+/// 裸ident（カラム参照）、`Entity.column`、整数リテラル、または `now`。
 fn operand() -> impl Parser<Token, Operand, Error = Simple<Token>> + Clone {
     let now = just(Token::Now).map(|_| Operand::Now);
     let int_lit = select! { Token::IntLit(s) => Operand::IntLit(s) };
+    let qualified_col = ident()
+        .map_with_span(|entity, span| {
+            (
+                entity.clone(),
+                QRef {
+                    kind_qualifier: None,
+                    parts: vec![entity],
+                    span,
+                },
+            )
+        })
+        .then_ignore(just(Token::Dot))
+        .then(ident())
+        .map_with_span(|((_entity_name, entity), column), span| {
+            Operand::QualifiedColumn(QualifiedColumnRef {
+                entity,
+                column,
+                span,
+            })
+        });
     let col = ident().map(Operand::Column);
     // `now` must come before generic ident because logos lexes it as Token::Now
-    now.or(int_lit).or(col)
+    now.or(int_lit).or(qualified_col).or(col)
 }
 
 /// 比較演算子トークン → `CmpOp`
@@ -750,6 +771,40 @@ performs(actor::Add, usecase::Add)
             assert_eq!(cmp.rhs, Operand::Column("selling".to_string()));
         } else {
             panic!("expected Expr(Cmp), got {:?}", &pred.args[1]);
+        }
+    }
+
+    /// クロスエンティティ比較式 `Order.total > Payment.amount` がパースされること
+    #[test]
+    fn test_parse_comparison_qualified_columns() {
+        let ast = parse_ok("cross_forbidden(Order, Payment, Order.total > Payment.amount)");
+        let pred = ast
+            .items
+            .iter()
+            .find_map(|i| {
+                if let Item::Predicate(p) = i {
+                    Some(p)
+                } else {
+                    None
+                }
+            })
+            .expect("predicate not found");
+        if let PredicateArg::Expr(Expr::Cmp(cmp)) = &pred.args[2] {
+            if let Operand::QualifiedColumn(lhs) = &cmp.lhs {
+                assert_eq!(lhs.entity.parts, vec!["Order"]);
+                assert_eq!(lhs.column, "total");
+            } else {
+                panic!("expected qualified lhs");
+            }
+            assert_eq!(cmp.op, CmpOp::Gt);
+            if let Operand::QualifiedColumn(rhs) = &cmp.rhs {
+                assert_eq!(rhs.entity.parts, vec!["Payment"]);
+                assert_eq!(rhs.column, "amount");
+            } else {
+                panic!("expected qualified rhs");
+            }
+        } else {
+            panic!("expected Expr(Cmp), got {:?}", &pred.args[2]);
         }
     }
 

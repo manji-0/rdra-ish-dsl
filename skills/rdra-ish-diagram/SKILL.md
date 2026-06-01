@@ -9,6 +9,8 @@ Choose the smallest view that answers the current review question. Keep this
 top-level skill as the routing layer, then load only the reference file needed for
 the selected view.
 
+<!-- derived-from ../../docs/state-derivation.md#constraint-checking-after-bfs -->
+
 ### Routing Guide
 
 | Situation | Use first | Load |
@@ -20,7 +22,7 @@ the selected view.
 | Screen/API/system boundary review | `sequence --buc <BucId>` plus access CSVs | `references/sequence-and-access.md` |
 | One concrete use case flow | `sequence --usecase <UseCaseId>` | `references/sequence-and-access.md` |
 | Lifecycle and event causality | `state --buc <BucId>` plus `event-flow` | `references/lifecycle-and-events.md` |
-| Business rules or state constraints | `states`; add diagrams only after violations are understood | `references/lifecycle-and-events.md` |
+| Business rules or state constraints | `states`, including cross-entity rule diagnostics when state axes are involved | `references/lifecycle-and-events.md` |
 | Output format/rendering choice | Mermaid by default; PlantUML/SVG/PNG only when requested | `references/formats-and-output.md` |
 
 ### Default Workflow

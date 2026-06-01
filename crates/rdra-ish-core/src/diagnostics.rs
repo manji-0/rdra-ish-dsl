@@ -93,6 +93,9 @@ pub enum RdraError {
     #[error("invalid integer literal '{lit}' in comparison right-hand side")]
     ComparisonInvalidIntLit { lit: String },
 
+    #[error("cross-entity constraint column '{column}' needs an entity qualifier\n  hint: write `{example}` so the target entity is explicit")]
+    CrossConstraintColumnNeedsEntity { column: String, example: String },
+
     // ── 権限整合性診断 ─────────────────────────────────────────────────────────
     #[error("usecase '{usecase}' requires permission '{permission}', but no actor performs the use case or its containing BUC\n  hint: add `performs(SomeActor, {usecase})`, add `performs(SomeActor, SomeBuc)` where `contains(SomeBuc, {usecase})`, or remove the permission requirement if this is a system-triggered step")]
     UseCasePermissionNoActor { usecase: String, permission: String },

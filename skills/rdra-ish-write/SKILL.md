@@ -7,6 +7,8 @@ description: Write RDRA DSL files from requirements using correct syntax and fil
 
 Create RDRA DSL files from requirements or specifications.
 
+<!-- derived-from ../../docs/language-reference.md#cross-entity-constraints -->
+
 ### Context Loading Rule
 
 Use hierarchical context. Keep this top-level skill as the routing layer, then load
@@ -22,7 +24,7 @@ continue with the single most relevant step.
 | 3 | Interaction boundary | `references/03-interaction-boundary.md` | screens, APIs, systems, media, permissions |
 | 4 | Entity structure | `references/04-entity-structure.md` | columns, keys, relations, coordination |
 | 5 | Lifecycle | `references/05-lifecycle.md` | events, states, transitions, event-started BUCs, effects |
-| 6 | Rules | `references/06-rules.md` | forbidden and invariant constraints |
+| 6 | Rules | `references/06-rules.md` | forbidden, invariant, and cross-entity constraints |
 
 Do not skip ahead because a downstream detail is tempting. Model the smallest useful
 increment, run validation, then advance one level.
@@ -72,7 +74,7 @@ Placement rules:
 
 - Shared vocabulary goes in `shared/`: actors, external systems, businesses,
   reusable entities, systems, locations, timings, media, permissions, cross-BUC
-  lifecycle, and cross-BUC rules.
+  lifecycle, and cross-BUC / cross-entity rules.
 - BUC-local flow goes in `buc/buc_<name>.rdra`: `buc`, `usecase`, `screen`,
   BUC-local `api`, CRUD, `displays`, `invokes`, `raises`, `triggers`,
   `coordinates`, access constraints, and `sets`.
@@ -125,6 +127,10 @@ Kinds commonly used by this skill:
 | `transitions` | `(Event, State, State)` | event moves state from -> to |
 | `sets` | `(UseCase\|Event, Entity, "col", "val")` | explicit column effect |
 | `sets` | `(UseCase\|Event, Entity, col op rhs, true\|false)` | comparison proposition effect |
+| `forbidden` | `(Entity, (col, val)\|col op rhs, ...)` | forbidden reachable state combination |
+| `invariant` | `(Entity).when(...).then(...)` | required co-occurrence inside one entity |
+| `cross_forbidden` | `(Entity..., (Entity.col, val)\|Entity.col op rhs, ...)` | forbidden combination across entities |
+| `cross_invariant` | `(Entity...).when(...).then(...)` | required co-occurrence across entities |
 | `relate` | `(Entity, Entity, "1:1"\|"1:N"\|"N:1"\|"N:M")` | ER relation, auto-generates FK |
 | `has_permission` | `(Actor, Permission)` | actor-side grant |
 | `requires_permission` | `(UseCase\|Api, Permission)` | UC/API required authority |
@@ -156,6 +162,8 @@ import shared.actors.{Staff as S}
   `triggers(Event, UseCase)` later when the concrete entry action is known.
 - Use `sets` to make lifecycle effects explicit for `Enum`, `Bool`, nullable columns,
   and comparison propositions.
+- Use `cross_forbidden` / `cross_invariant` when a rule mentions columns from more
+  than one entity; qualify multi-entity columns as `Entity.column`.
 
 ### Common Mistakes
 
@@ -171,3 +179,4 @@ import shared.actors.{Staff as S}
   `permission-callables` and `actor-permission-audit`.
 - Modeling event-started BUCs only as `triggers(Event, UseCase)` when the BUC
   boundary itself should remain swappable between human and event initiation.
+- Writing bare column names in multi-entity cross constraints; use `Entity.column`.

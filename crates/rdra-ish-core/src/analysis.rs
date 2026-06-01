@@ -152,6 +152,9 @@ fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
         // invariant(entity).when(col, val).then(col, val) — チェーン形式
         // どちらも第1引数の entity のみ型検査する
         "forbidden" | "invariant" => Some(vec![vec!["entity"]]),
+        // cross_forbidden / cross_invariant は可変長の entity scope と
+        // entity-qualified column 条件を専用処理で検査する。
+        "cross_forbidden" | "cross_invariant" => Some(vec![]),
         _ => None,
     }
 }
@@ -495,6 +498,505 @@ fn context_arg_id(arg: &PredicateArg) -> String {
     }
 }
 
+// ── クロスエンティティ制約ヘルパー ───────────────────────────────────────────
+
+fn qref_id(qref: &QRef) -> Option<String> {
+    if qref.parts.len() == 1 {
+        Some(qref.parts[0].clone())
+    } else {
+        None
+    }
+}
+
+fn qref_display(qref: &QRef) -> String {
+    let id = qref.parts.join(".");
+    match &qref.kind_qualifier {
+        Some(kind) => format!("{}::{}", kind.name(), id),
+        None => id,
+    }
+}
+
+fn qualified_column_display(qcol: &QualifiedColumnRef) -> String {
+    format!("{}.{}", qref_display(&qcol.entity), qcol.column)
+}
+
+fn push_unique_entity(scope: &mut Vec<EntityKey>, entity: EntityKey) {
+    if !scope.contains(&entity) {
+        scope.push(entity);
+    }
+}
+
+fn condition_entities(cond: &CrossEntityCondition, out: &mut Vec<EntityKey>) {
+    match cond {
+        CrossEntityCondition::Equals { column, .. } => push_unique_entity(out, column.entity),
+        CrossEntityCondition::Comparison(prop) => {
+            push_unique_entity(out, prop.lhs.entity);
+            if let CrossCmpRhs::Column(col) = &prop.rhs {
+                push_unique_entity(out, col.entity);
+            }
+        }
+    }
+}
+
+fn resolve_entity_qref(
+    model: &SemanticModel,
+    pred: &str,
+    qref: &QRef,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<EntityKey> {
+    let id = qref.parts.last()?.clone();
+    if let Some(kind) = &qref.kind_qualifier {
+        if kind != &Kind::Entity {
+            diags.push(Diagnostic::error(RdraError::TypeMismatch {
+                pred: pred.to_string(),
+                id: qref_display(qref),
+                actual: kind.name().to_string(),
+                expected: "entity".to_string(),
+            }));
+            return None;
+        }
+        return match model.symbols.lookup_qualified(kind, &id).cloned() {
+            Some(NodeRef::Entity(k)) => Some(k),
+            _ => {
+                diags.push(Diagnostic::error(RdraError::UndefinedSymbol {
+                    id: format!("entity::{}", id),
+                }));
+                None
+            }
+        };
+    }
+
+    if let Some(NodeRef::Entity(k)) = model.symbols.lookup_qualified(&Kind::Entity, &id).cloned() {
+        return Some(k);
+    }
+
+    match model.symbols.lookup(&id) {
+        LookupResult::Found(node) => {
+            diags.push(Diagnostic::error(RdraError::TypeMismatch {
+                pred: pred.to_string(),
+                id,
+                actual: node_kind_tag_str(node).to_string(),
+                expected: "entity".to_string(),
+            }));
+            None
+        }
+        LookupResult::NotFound => {
+            diags.push(Diagnostic::error(RdraError::UndefinedSymbol { id }));
+            None
+        }
+        LookupResult::Ambiguous(kinds) => {
+            diags.push(Diagnostic::error(RdraError::AmbiguousReference {
+                id,
+                kinds: kinds.join(", "),
+            }));
+            None
+        }
+    }
+}
+
+fn resolve_entity_scope_arg(
+    model: &SemanticModel,
+    pred: &str,
+    arg: &PredicateArg,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<EntityKey> {
+    match arg {
+        PredicateArg::Ref(qref) => resolve_entity_qref(model, pred, qref, diags),
+        PredicateArg::Lit(s) => {
+            diags.push(Diagnostic::error(RdraError::TypeMismatch {
+                pred: pred.to_string(),
+                id: s.clone(),
+                actual: "literal".to_string(),
+                expected: "entity".to_string(),
+            }));
+            None
+        }
+        PredicateArg::Tuple(_) => {
+            diags.push(Diagnostic::error(RdraError::TypeMismatch {
+                pred: pred.to_string(),
+                id: "<tuple>".to_string(),
+                actual: "tuple".to_string(),
+                expected: "entity".to_string(),
+            }));
+            None
+        }
+        PredicateArg::Expr(_) => {
+            diags.push(Diagnostic::error(RdraError::TypeMismatch {
+                pred: pred.to_string(),
+                id: "<expr>".to_string(),
+                actual: "expression".to_string(),
+                expected: "entity".to_string(),
+            }));
+            None
+        }
+    }
+}
+
+fn split_cross_column_ref(arg: &PredicateArg) -> Option<(Option<QRef>, String)> {
+    match arg {
+        PredicateArg::Ref(qref) if qref.kind_qualifier.is_none() && qref.parts.len() == 1 => {
+            Some((None, qref.parts[0].clone()))
+        }
+        PredicateArg::Ref(qref) if qref.kind_qualifier.is_none() && qref.parts.len() == 2 => {
+            let entity = QRef {
+                kind_qualifier: None,
+                parts: vec![qref.parts[0].clone()],
+                span: qref.span.clone(),
+            };
+            Some((Some(entity), qref.parts[1].clone()))
+        }
+        _ => None,
+    }
+}
+
+fn find_entity_column(
+    model: &SemanticModel,
+    entity: EntityKey,
+    column: &str,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<ModelColumn> {
+    let entity_id = model.entities[entity].id.clone();
+    match model.entities[entity]
+        .columns
+        .iter()
+        .find(|c| c.name == column)
+        .cloned()
+    {
+        Some(col) => Some(col),
+        None => {
+            diags.push(Diagnostic::error(RdraError::UnknownColumn {
+                entity: entity_id,
+                col: column.to_string(),
+            }));
+            None
+        }
+    }
+}
+
+fn resolve_cross_column_arg(
+    model: &SemanticModel,
+    scope: &[EntityKey],
+    pred: &str,
+    arg: &PredicateArg,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<(QualifiedModelColumnRef, ModelColumn)> {
+    let (entity_ref, column) = split_cross_column_ref(arg)?;
+    let entity = match entity_ref {
+        Some(qref) => resolve_entity_qref(model, pred, &qref, diags)?,
+        None if scope.len() == 1 => scope[0],
+        None => {
+            diags.push(Diagnostic::error(
+                RdraError::CrossConstraintColumnNeedsEntity {
+                    column: column.clone(),
+                    example: format!("Entity.{}", column),
+                },
+            ));
+            return None;
+        }
+    };
+    let model_col = find_entity_column(model, entity, &column, diags)?;
+    Some((QualifiedModelColumnRef { entity, column }, model_col))
+}
+
+fn resolve_cross_operand_column(
+    model: &SemanticModel,
+    scope: &[EntityKey],
+    pred: &str,
+    operand: &Operand,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<(QualifiedModelColumnRef, ModelColumn)> {
+    match operand {
+        Operand::Column(column) if scope.len() == 1 => {
+            let entity = scope[0];
+            let model_col = find_entity_column(model, entity, column, diags)?;
+            Some((
+                QualifiedModelColumnRef {
+                    entity,
+                    column: column.clone(),
+                },
+                model_col,
+            ))
+        }
+        Operand::Column(column) => {
+            diags.push(Diagnostic::error(
+                RdraError::CrossConstraintColumnNeedsEntity {
+                    column: column.clone(),
+                    example: format!("Entity.{}", column),
+                },
+            ));
+            None
+        }
+        Operand::QualifiedColumn(qcol) => {
+            let entity = resolve_entity_qref(model, pred, &qcol.entity, diags)?;
+            let model_col = find_entity_column(model, entity, &qcol.column, diags)?;
+            Some((
+                QualifiedModelColumnRef {
+                    entity,
+                    column: qcol.column.clone(),
+                },
+                model_col,
+            ))
+        }
+        Operand::IntLit(_) | Operand::Now => None,
+    }
+}
+
+fn resolve_cross_comparison(
+    model: &SemanticModel,
+    scope: &[EntityKey],
+    pred: &str,
+    cmp: &Comparison,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<CrossComparisonProp> {
+    let (lhs, lhs_col) = match resolve_cross_operand_column(model, scope, pred, &cmp.lhs, diags) {
+        Some(v) => v,
+        None => {
+            diags.push(Diagnostic::error(RdraError::ComparisonLhsMustBeColumn));
+            return None;
+        }
+    };
+    let lhs_cat = type_category(&lhs_col.col_type);
+
+    if is_order_op(&cmp.op) && lhs_cat == "equality" {
+        diags.push(Diagnostic::error(RdraError::ComparisonOpNotOrdered {
+            col: lhs.column.clone(),
+            col_type: format!("{:?}", lhs_col.col_type),
+            op: cmp.op.as_str().to_string(),
+        }));
+        return None;
+    }
+
+    let rhs = match &cmp.rhs {
+        Operand::Column(_) | Operand::QualifiedColumn(_) => {
+            let (rhs_ref, rhs_col) =
+                resolve_cross_operand_column(model, scope, pred, &cmp.rhs, diags)?;
+            let rhs_cat = type_category(&rhs_col.col_type);
+            if lhs_cat != rhs_cat {
+                diags.push(Diagnostic::error(RdraError::ComparisonTypeMismatch {
+                    lhs: lhs.column.clone(),
+                    lhs_type: format!("{:?}", lhs_col.col_type),
+                    rhs: rhs_ref.column.clone(),
+                    rhs_type: format!("{:?}", rhs_col.col_type),
+                }));
+                return None;
+            }
+            CrossCmpRhs::Column(rhs_ref)
+        }
+        Operand::IntLit(s) => {
+            if lhs_cat != "numeric" {
+                diags.push(Diagnostic::error(RdraError::ComparisonTypeMismatch {
+                    lhs: lhs.column.clone(),
+                    lhs_type: format!("{:?}", lhs_col.col_type),
+                    rhs: s.clone(),
+                    rhs_type: "integer_literal".to_string(),
+                }));
+                return None;
+            }
+            match s.parse::<i64>() {
+                Ok(n) => CrossCmpRhs::IntLit(n),
+                Err(_) => {
+                    diags.push(Diagnostic::error(RdraError::ComparisonInvalidIntLit {
+                        lit: s.clone(),
+                    }));
+                    return None;
+                }
+            }
+        }
+        Operand::Now => {
+            if lhs_cat != "temporal" {
+                diags.push(Diagnostic::error(
+                    RdraError::ComparisonNowRequiresTemporal {
+                        col: lhs.column.clone(),
+                        col_type: format!("{:?}", lhs_col.col_type),
+                    },
+                ));
+                return None;
+            }
+            CrossCmpRhs::Now
+        }
+    };
+
+    Some(CrossComparisonProp {
+        lhs,
+        op: to_model_op(&cmp.op),
+        rhs,
+    })
+}
+
+fn resolve_cross_equals_condition(
+    model: &SemanticModel,
+    scope: &[EntityKey],
+    pred: &str,
+    column_arg: &PredicateArg,
+    value_arg: &PredicateArg,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<CrossEntityCondition> {
+    let (column, model_col) = resolve_cross_column_arg(model, scope, pred, column_arg, diags)?;
+    let value_lit = arg_as_str(value_arg)?;
+    match parse_effect_value(&model_col, &value_lit) {
+        Ok(value) => Some(CrossEntityCondition::Equals { column, value }),
+        Err(e) => {
+            diags.push(Diagnostic::error(e));
+            None
+        }
+    }
+}
+
+fn resolve_cross_condition(
+    model: &SemanticModel,
+    scope: &[EntityKey],
+    pred: &str,
+    arg: &PredicateArg,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<CrossEntityCondition> {
+    match arg {
+        PredicateArg::Expr(Expr::Cmp(cmp)) => {
+            resolve_cross_comparison(model, scope, pred, cmp, diags)
+                .map(CrossEntityCondition::Comparison)
+        }
+        PredicateArg::Tuple(elems) if elems.len() == 2 => {
+            resolve_cross_equals_condition(model, scope, pred, &elems[0], &elems[1], diags)
+        }
+        _ => None,
+    }
+}
+
+fn collect_cross_scope_prefix(
+    model: &SemanticModel,
+    pred: &PredicateCall,
+    diags: &mut Vec<Diagnostic>,
+) -> (Vec<EntityKey>, usize) {
+    let mut scope = Vec::new();
+    let mut first_condition = pred.args.len();
+    for (idx, arg) in pred.args.iter().enumerate() {
+        if matches!(arg, PredicateArg::Tuple(_) | PredicateArg::Expr(_)) {
+            first_condition = idx;
+            break;
+        }
+        match arg {
+            PredicateArg::Ref(_) => {
+                if let Some(entity) = resolve_entity_scope_arg(model, &pred.name, arg, diags) {
+                    push_unique_entity(&mut scope, entity);
+                }
+            }
+            _ => {
+                first_condition = idx;
+                break;
+            }
+        }
+    }
+    (scope, first_condition)
+}
+
+fn collect_cross_chain_conditions(
+    model: &SemanticModel,
+    scope: &[EntityKey],
+    pred: &str,
+    args: &[PredicateArg],
+    diags: &mut Vec<Diagnostic>,
+) -> Vec<CrossEntityCondition> {
+    let mut conditions = Vec::new();
+    let mut idx = 0;
+    while idx < args.len() {
+        match &args[idx] {
+            PredicateArg::Expr(_) | PredicateArg::Tuple(_) => {
+                if let Some(cond) = resolve_cross_condition(model, scope, pred, &args[idx], diags) {
+                    conditions.push(cond);
+                }
+                idx += 1;
+            }
+            _ if idx + 1 < args.len() => {
+                if let Some(cond) = resolve_cross_equals_condition(
+                    model,
+                    scope,
+                    pred,
+                    &args[idx],
+                    &args[idx + 1],
+                    diags,
+                ) {
+                    conditions.push(cond);
+                }
+                idx += 2;
+            }
+            _ => {
+                idx += 1;
+            }
+        }
+    }
+    conditions
+}
+
+fn add_condition_entities_to_scope(
+    scope: &mut Vec<EntityKey>,
+    conditions: &[CrossEntityCondition],
+) {
+    for cond in conditions {
+        condition_entities(cond, scope);
+    }
+}
+
+fn process_cross_forbidden(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    diags: &mut Vec<Diagnostic>,
+) {
+    let (mut scope, first_condition) = collect_cross_scope_prefix(model, pred, diags);
+    let mut conditions = Vec::new();
+    for arg in pred.args.iter().skip(first_condition) {
+        if let Some(cond) = resolve_cross_condition(model, &scope, &pred.name, arg, diags) {
+            conditions.push(cond);
+        }
+    }
+
+    if conditions.is_empty() {
+        return;
+    }
+
+    add_condition_entities_to_scope(&mut scope, &conditions);
+    model
+        .cross_forbidden_constraints
+        .push(CrossForbiddenConstraint { scope, conditions });
+}
+
+fn process_cross_invariant(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    diags: &mut Vec<Diagnostic>,
+) {
+    let mut scope = Vec::new();
+    for arg in &pred.args {
+        if let Some(entity) = resolve_entity_scope_arg(model, &pred.name, arg, diags) {
+            push_unique_entity(&mut scope, entity);
+        }
+    }
+
+    let mut guards = Vec::new();
+    let mut requireds = Vec::new();
+    for cc in &pred.chain {
+        match cc.name.as_str() {
+            "when" => guards.extend(collect_cross_chain_conditions(
+                model, &scope, &pred.name, &cc.args, diags,
+            )),
+            "then" => requireds.extend(collect_cross_chain_conditions(
+                model, &scope, &pred.name, &cc.args, diags,
+            )),
+            _ => {}
+        }
+    }
+
+    if guards.is_empty() || requireds.is_empty() {
+        return;
+    }
+
+    add_condition_entities_to_scope(&mut scope, &guards);
+    add_condition_entities_to_scope(&mut scope, &requireds);
+    model.cross_entity_invariants.push(CrossEntityInvariant {
+        scope,
+        guards,
+        requireds,
+    });
+}
+
 // ── 比較式の型整合チェック・モデル変換 ────────────────────────────────────────
 
 /// `ColumnType` が「比較に使える型カテゴリ」を返す。
@@ -541,6 +1043,22 @@ fn resolve_comparison(
     // ── 左辺はカラム参照のみ ──────────────────────────────────────────────────
     let lhs_col_name = match &cmp.lhs {
         Operand::Column(name) => name.clone(),
+        Operand::QualifiedColumn(qcol) => {
+            let Some(q_entity) = qref_id(&qcol.entity) else {
+                diags.push(Diagnostic::error(RdraError::ComparisonLhsMustBeColumn));
+                return None;
+            };
+            if q_entity != entity_id {
+                diags.push(Diagnostic::error(RdraError::TypeMismatch {
+                    pred: "comparison".to_string(),
+                    id: qualified_column_display(qcol),
+                    actual: format!("column of entity {}", q_entity),
+                    expected: format!("column of entity {}", entity_id),
+                }));
+                return None;
+            }
+            qcol.column.clone()
+        }
         _ => {
             diags.push(Diagnostic::error(RdraError::ComparisonLhsMustBeColumn));
             return None;
@@ -597,6 +1115,46 @@ fn resolve_comparison(
             }
             CmpRhs::Column(rhs_name.clone())
         }
+        Operand::QualifiedColumn(qcol) => {
+            let Some(q_entity) = qref_id(&qcol.entity) else {
+                diags.push(Diagnostic::error(RdraError::ComparisonRhsColumnUnknown {
+                    entity: entity_id.to_string(),
+                    col: qualified_column_display(qcol),
+                }));
+                return None;
+            };
+            if q_entity != entity_id {
+                diags.push(Diagnostic::error(RdraError::TypeMismatch {
+                    pred: "comparison".to_string(),
+                    id: qualified_column_display(qcol),
+                    actual: format!("column of entity {}", q_entity),
+                    expected: format!("column of entity {}", entity_id),
+                }));
+                return None;
+            }
+            let rhs_name = qcol.column.clone();
+            let rhs_col = match entity_cols.iter().find(|c| c.name == rhs_name) {
+                Some(c) => c,
+                None => {
+                    diags.push(Diagnostic::error(RdraError::ComparisonRhsColumnUnknown {
+                        entity: entity_id.to_string(),
+                        col: rhs_name.clone(),
+                    }));
+                    return None;
+                }
+            };
+            let rhs_cat = type_category(&rhs_col.col_type);
+            if lhs_cat != rhs_cat {
+                diags.push(Diagnostic::error(RdraError::ComparisonTypeMismatch {
+                    lhs: lhs_col_name.clone(),
+                    lhs_type: format!("{:?}", lhs_col.col_type),
+                    rhs: rhs_name.clone(),
+                    rhs_type: format!("{:?}", rhs_col.col_type),
+                }));
+                return None;
+            }
+            CmpRhs::Column(rhs_name)
+        }
         Operand::IntLit(s) => {
             // 左辺が数値カテゴリか確認
             if lhs_cat != "numeric" {
@@ -646,6 +1204,15 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
         // 未知述語はスキップ
         return;
     };
+
+    if pred.name == "cross_forbidden" {
+        process_cross_forbidden(model, pred, diags);
+        return;
+    }
+    if pred.name == "cross_invariant" {
+        process_cross_invariant(model, pred, diags);
+        return;
+    }
 
     // 引数を解決（_card / _col / _val はリテラル位置なのでシンボル解決しない）
     let resolved: Vec<Option<NodeRef>> = pred
@@ -1580,5 +2147,152 @@ sets(Sell, Stock, stock < selling, true)
         assert_eq!(effect.prop.axis_key(), "stock<selling");
         assert!(effect.truth);
         assert!(matches!(effect.origin, NodeRef::UseCase(_)));
+    }
+
+    #[test]
+    fn test_cross_forbidden_registers_qualified_conditions() {
+        let src = r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(open, cancelled)
+  total: Decimal
+}
+entity Payment "支払い" {
+  id: Int @pk
+  status: Enum(pending, captured)
+  amount: Decimal
+}
+cross_forbidden(Order, Payment, (Order.status, cancelled), Payment.amount > Order.total)
+"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {:?}", errors);
+
+        assert_eq!(model.cross_forbidden_constraints.len(), 1);
+        let constraint = &model.cross_forbidden_constraints[0];
+        assert_eq!(constraint.scope.len(), 2);
+        assert_eq!(constraint.conditions.len(), 2);
+
+        let order_key = model
+            .entities
+            .iter()
+            .find_map(|(key, entity)| (entity.id == "Order").then_some(key))
+            .unwrap();
+        let payment_key = model
+            .entities
+            .iter()
+            .find_map(|(key, entity)| (entity.id == "Payment").then_some(key))
+            .unwrap();
+
+        assert!(matches!(
+            &constraint.conditions[0],
+            CrossEntityCondition::Equals { column, value }
+                if column.entity == order_key
+                    && column.column == "status"
+                    && value == &EffectValue::EnumVariant("cancelled".to_string())
+        ));
+        assert!(matches!(
+            &constraint.conditions[1],
+            CrossEntityCondition::Comparison(CrossComparisonProp {
+                lhs,
+                op: CmpOpModel::Gt,
+                rhs: CrossCmpRhs::Column(rhs),
+            }) if lhs.entity == payment_key
+                && lhs.column == "amount"
+                && rhs.entity == order_key
+                && rhs.column == "total"
+        ));
+    }
+
+    #[test]
+    fn test_cross_invariant_registers_when_then_conditions() {
+        let src = r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(open, paid)
+}
+entity Payment "支払い" {
+  id: Int @pk
+  status: Enum(pending, captured)
+}
+cross_invariant(Order, Payment)
+  .when(Order.status, paid)
+  .then(Payment.status, captured)
+"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {:?}", errors);
+
+        assert_eq!(model.cross_entity_invariants.len(), 1);
+        let invariant = &model.cross_entity_invariants[0];
+        assert_eq!(invariant.scope.len(), 2);
+        assert_eq!(invariant.guards.len(), 1);
+        assert_eq!(invariant.requireds.len(), 1);
+    }
+
+    #[test]
+    fn test_cross_invariant_can_infer_scope_from_qualified_columns() {
+        let src = r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(open, paid)
+}
+entity Payment "支払い" {
+  id: Int @pk
+  status: Enum(pending, captured)
+}
+cross_invariant()
+  .when(Order.status, paid)
+  .then(Payment.status, captured)
+"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {:?}", errors);
+
+        let invariant = &model.cross_entity_invariants[0];
+        let scope_ids: Vec<_> = invariant
+            .scope
+            .iter()
+            .map(|key| model.entities[*key].id.as_str())
+            .collect();
+        assert_eq!(scope_ids, vec!["Order", "Payment"]);
+    }
+
+    #[test]
+    fn test_cross_invariant_requires_column_qualifier_for_multi_entity_scope() {
+        let src = r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(open, paid)
+}
+entity Payment "支払い" {
+  id: Int @pk
+  status: Enum(pending, captured)
+}
+cross_invariant(Order, Payment)
+  .when(status, paid)
+  .then(Payment.status, captured)
+"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (_, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(
+            errors
+                .iter()
+                .any(|d| d.error.to_string().contains("needs an entity qualifier")),
+            "expected qualifier diagnostic, got: {:?}",
+            errors
+        );
     }
 }

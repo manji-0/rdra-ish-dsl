@@ -153,6 +153,10 @@ reachable set when the deliver use case sets both.
 ## Constraint Checking After BFS
 
 After the reachable set is computed, declared constraints are checked against it.
+Per-entity `forbidden` and `invariant` constraints are checked directly against the
+entity's reached patterns. `cross_forbidden` and `cross_invariant` are checked after
+all entity results are derived by combining the reached patterns for the participating
+entities; any violation is attached to each involved entity's diagnostics.
 
 ### `forbidden`
 
@@ -179,6 +183,16 @@ the same way: each comparison maps to its `Proposition` axis and is checked as a
 use `Bool(true)` as the required value, enabling guards like "when the proposition
 holds".
 
+### Cross-Entity Constraints
+
+For `cross_forbidden` / `cross_invariant`, the derivation checks the cross-product of
+the participating entities' reached patterns, up to an internal safety cap. Conditions
+that reference state axes, such as `(Order.status, paid)` or `Order.status == Payment.status`,
+are evaluated from the abstract pattern values. If a condition needs data that is not
+present in state patterns (for example `Payment.amount > Order.total` on ordinary
+numeric columns), the result receives a `CrossConstraintNotEvaluated` warning rather
+than silently treating the rule as satisfied.
+
 See [language-reference.md](./language-reference.md#entity-state-constraints) for the
 syntax and design rationale.
 
@@ -195,6 +209,9 @@ syntax and design rationale.
 | `PatternCapReached { cap, bound }` | The per-entity cap was hit; output is truncated. `bound` is the product-space size. |
 | `ForbiddenStateViolated { conditions, pattern_desc }` | A reachable pattern matches all conditions of a `forbidden` declaration. |
 | `InvariantViolated { guards, requireds, pattern_desc }` | A reachable pattern satisfies an invariant's guards but breaks a requirement. |
+| `CrossForbiddenViolated { entities, conditions, pattern_desc }` | A reached cross-entity pattern combination matches all conditions of a `cross_forbidden` declaration. |
+| `CrossInvariantViolated { entities, guards, requireds, pattern_desc }` | A reached cross-entity pattern combination satisfies cross-invariant guards but breaks a requirement. |
+| `CrossConstraintNotEvaluated { entities, constraint, reason }` | A cross-entity rule cannot be fully evaluated from per-entity abstract state patterns or exceeds the cross-product safety cap. |
 
 ---
 

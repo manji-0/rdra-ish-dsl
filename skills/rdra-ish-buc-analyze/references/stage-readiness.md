@@ -4,6 +4,8 @@ Use this reference when the user asks whether a BUC or model is ready for the ne
 refinement step, or when the request is broad enough that you need to classify the
 current stage before analyzing details.
 
+<!-- derived-from ../../../docs/language-reference.md#cross-entity-constraints -->
+
 ## Concept
 
 RDRA-ish refinement intentionally moves from business concern to technical concern.
@@ -44,7 +46,7 @@ stage.
 | Entities have columns, keys, and `relate` | Entity structure | Which fields represent lifecycle state or cross-system coordination? |
 | Enum/Bool/nullable columns exist without lifecycle effects | Entity structure | Which events, transitions, or `sets` effects change them? |
 | `states` has reviewed reachable patterns | Lifecycle | Which reachable states are forbidden or required by rules? |
-| `forbidden` or `invariant` exists | Business rules | Are violations fixed, intentional, or still unresolved requirements? |
+| `forbidden`, `invariant`, `cross_forbidden`, or `cross_invariant` exists | Business rules | Are violations fixed, intentionally accepted, not evaluable from state axes, or still unresolved requirements? |
 
 ## How To Analyze
 

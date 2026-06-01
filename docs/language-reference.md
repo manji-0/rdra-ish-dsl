@@ -459,11 +459,49 @@ conditions are the trigger and which are the obligation. The method-chain form k
 the two sides syntactically separate (`.when` vs `.then`) and lets each side accumulate
 any number of AND-ed conditions unambiguously, while reading naturally left to right.
 
+### Cross-Entity Constraints
+
+Cross-entity constraints describe rules that mention columns from more than one entity.
+They are parsed, type-checked, and checked by `states` after each participating
+entity's reachable patterns have been derived.
+
+Use `Entity.column` when a condition points at a column. The optional leading entity
+arguments declare the intended scope; when omitted, the scope is inferred from qualified
+column references.
+
+```
+cross_forbidden(Order, Payment,
+  (Order.status, cancelled),
+  Payment.amount > Order.total)
+
+cross_invariant(Order, Payment)
+  .when(Order.status, paid)
+  .then(Payment.status, captured)
+```
+
+`cross_forbidden(...)` accepts a flat AND-list of conditions. `cross_invariant(...)`
+uses the same implication shape as `invariant`: `.when(...)` clauses are guards and
+`.then(...)` clauses are required conditions. A condition is either:
+
+- `(Entity.column, value)` for state-like equality, using the same value vocabulary as
+  `sets`.
+- A comparison expression such as `Order.total > Payment.amount` or
+  `Coupon.expires_at < now`.
+
+When more than one entity is in scope, bare column names are rejected so the rule stays
+unambiguous. With a single-entity scope, bare columns are still accepted as a shorthand.
+
+`states` evaluates cross-entity rules by taking the cross-product of each participating
+entity's reached state patterns. Conditions that reference actual state axes can
+produce `CrossForbiddenViolated` or `CrossInvariantViolated` diagnostics. Conditions
+that require values absent from the abstract state space, such as ordinary numeric
+amount comparisons, produce `CrossConstraintNotEvaluated` instead.
+
 ### Comparison Expressions in Constraints
 
-Both `forbidden` and the `.when()` / `.then()` clauses of `invariant` accept bare
-**comparison expressions** as conditions, in addition to the `(column, value)` tuple
-form.
+`forbidden`, `cross_forbidden`, and the `.when()` / `.then()` clauses of `invariant` or
+`cross_invariant` accept bare **comparison expressions** as conditions, in addition to
+the `(column, value)` tuple form.
 
 #### Syntax
 
@@ -473,10 +511,12 @@ col op rhs
 
 Where:
 
-- `col` is a bare column name on the left-hand side.
+- `col` is a bare column name on the left-hand side, or `Entity.column` in a
+  cross-entity constraint.
 - `op` is one of: `<`, `>`, `<=`, `>=`, `==`, `!=`.
 - `rhs` is one of:
-  - A bare column name (column reference): `stock >= selling`
+  - A bare column name or `Entity.column` reference: `stock >= selling`,
+    `Payment.amount >= Order.total`
   - An integer literal: `quantity >= 0`
   - The built-in keyword `now`: `expired_at < now`
 

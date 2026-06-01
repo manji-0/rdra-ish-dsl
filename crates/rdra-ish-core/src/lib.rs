@@ -19,9 +19,10 @@ pub use analysis::build_model;
 pub use diagnostics::{Diagnostic, RdraError};
 pub use event_flow::{api_diagnostics, collect_event_flows, event_diagnostics, EventFlow};
 pub use model::{
-    Api, ApiKey, ColumnEffect, EffectValue, EntityKey, Location, LocationKey, Medium, MediumKey,
-    Permission, PermissionKey, SemanticModel, StateTransition, System, SystemKey, Timing,
-    TimingKey,
+    Api, ApiKey, ColumnEffect, CrossCmpRhs, CrossComparisonProp, CrossEntityCondition,
+    CrossEntityInvariant, CrossForbiddenConstraint, EffectValue, EntityKey, Location, LocationKey,
+    Medium, MediumKey, Permission, PermissionKey, QualifiedModelColumnRef, SemanticModel,
+    StateTransition, System, SystemKey, Timing, TimingKey,
 };
 pub use resolver::{build_merged_model, reachable_from_bucs, resolve, ResolvedProgram};
 pub use state_pattern::{

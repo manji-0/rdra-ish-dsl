@@ -1,7 +1,11 @@
 # State Pattern Analysis
 
 Use this reference when reviewing lifecycle completeness, reachable state patterns,
-terminal states, forbidden states, invariants, or state-pattern truncation.
+terminal states, forbidden states, invariants, cross-entity rules, or state-pattern
+truncation.
+
+<!-- derived-from ../../../docs/state-derivation.md#constraint-checking-after-bfs -->
+<!-- derived-from ../../../docs/language-reference.md#cross-entity-constraints -->
 
 ## Concept
 
@@ -9,6 +13,9 @@ terminal states, forbidden states, invariants, or state-pattern truncation.
 State axes come from Enum, Bool, nullable columns, state-machine transitions, and
 explicit `sets` effects. The output is not just a diagram; it is executable feedback
 about which combinations the modeled use cases and events can actually reach.
+It evaluates per-entity `forbidden` and `invariant` rules directly. Cross-entity rules
+are checked by combining reached patterns for the participating entities when their
+conditions reference state axes; otherwise they surface as `CrossConstraintNotEvaluated`.
 
 Use state analysis after entity structure is stable enough to know which fields can
 change. Do not invent lifecycle detail during early BUC skeleton work.
@@ -56,6 +63,8 @@ Entity: Order (注文)
 | `truncated: true` in JSON | State space exceeded cap | Raise `--max-patterns`, narrow with `--buc`, or inspect one entity |
 | Forbidden reachable state | Rule violation | Fix lifecycle/effects or update the rule |
 | Invariant violation | Required condition not always satisfied | Add missing `sets`/transition or narrow the invariant |
+| Cross-entity violation | Rule violation across entity patterns | Fix lifecycle/effects or update the cross rule |
+| `CrossConstraintNotEvaluated` | Rule depends on values outside abstract state patterns or exceeds the cross-product cap | Report the unevaluated condition and decide whether it needs a state axis/proposition |
 | `present` lacks type suffix where type matters | Nullable effect is vague | Use a PostgreSQL-type value such as `"timestamptz"` when useful |
 
 ## How To Fix

@@ -9,6 +9,9 @@ Choose the analysis path that matches the user's question and the model's curren
 refinement stage. Keep this top-level skill as the routing layer, then load the
 reference file for the concrete analysis task.
 
+<!-- derived-from ../../docs/language-reference.md#cross-entity-constraints -->
+<!-- derived-from ../../docs/state-derivation.md#constraint-checking-after-bfs -->
+
 ### Routing Guide
 
 | User intent | Analyze first | Load |
@@ -17,7 +20,7 @@ reference file for the concrete analysis task.
 | "What is incomplete in this BUC/model?" | BUC, actor, use-case, CRUD, and layout gaps | `references/coverage-gaps.md` |
 | "Are permissions/media correct?" | screen/access paths, permission callables, actor grants | `references/access-permissions.md` |
 | "Are API/system boundaries sound?" | API ownership, API CRUD, cross-system relations, coordination | `references/api-system-boundaries.md` |
-| "Are lifecycle states/rules valid?" | reachable state patterns, terminals, truncation, forbidden/invariant signals | `references/state-patterns.md` |
+| "Are lifecycle states/rules valid?" | reachable state patterns, terminals, truncation, per-entity rule diagnostics, and cross-entity rule inventory | `references/state-patterns.md` |
 | "Summarize findings for review" | severity, evidence, next questions, and concrete recommendations | `references/reporting.md` |
 
 ### Default Workflow

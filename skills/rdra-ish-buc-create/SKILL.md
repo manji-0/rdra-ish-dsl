@@ -12,6 +12,8 @@ complete model. Use `../../docs/incremental-modeling.md` as the reference flow.
 Treat creation as business-to-technical refinement: model value and actors before
 adding data touchpoints, UI/API boundaries, entity structure, lifecycle, or rules.
 
+<!-- derived-from ../../docs/language-reference.md#cross-entity-constraints -->
+
 ### Stage gate
 
 Before writing, classify the available information:
@@ -24,7 +26,7 @@ Before writing, classify the available information:
 | screens/API boundaries | Tech interaction boundary | `screen`, `api`, `system`, `medium`, `permission`, `displays`, `shows`, `invokes`, access constraints | columns, relationships, cross-system coordination |
 | fields and relationships | Tech data design | columns, `relate` | lifecycle states/events |
 | lifecycle states/events | Tech lifecycle design | `state`, `event`, `transitions`, `raises`, `sets` | constraints |
-| invalid/required combinations | Tech-enforced rules | `forbidden`, `invariant` | none; validate diagnostics |
+| invalid/required combinations | Tech-enforced rules | `forbidden`, `invariant`, `cross_forbidden`, `cross_invariant` | none; validate diagnostics |
 
 Ask only the questions needed to advance one row. Do not invent detailed columns,
 state machines, or API endpoints just to make the BUC look complete.
@@ -51,7 +53,7 @@ Read the requirement and list:
 | `business`, stable `requirement`, `system`, `location`, `timing`, `medium`, `permission` | BUC-local `api` |
 | reusable `entity` definitions, `relate` | CRUD, `displays`, `shows`, `invokes`, `coordinates`, access constraints, `raises`, `sets` |
 | cross-BUC `state`, `event`, `transitions` | BUC-local `event`, `state` |
-| cross-BUC `forbidden`, `invariant` | predicates scoped to this BUC |
+| cross-BUC or cross-entity `forbidden` / `invariant` rules | predicates scoped to this BUC |
 
 If a shared file already declares the actor or entity you need, import it — do not redeclare.
 Start with `shared/actors.rdra`, `shared/biz.rdra`, `shared/entities.rdra`, and one
@@ -174,6 +176,8 @@ See the `sets` value vocabulary in `rdra-ish-write`.
 - New event/state/transitions → add to `shared/entities.rdra` if cross-BUC
 - New system → add to shared vocabulary; its entities are derived from `contains(System, Api)` + API CRUD
 - New location/timing/medium/permission → add to shared vocabulary when reused across BUCs
+- New cross-entity rule → add to `shared/rules.rdra` or the shared file nearest the
+  involved entities, and qualify columns as `Entity.column`
 - New BUC-local API/screen/event → keep it in `buc/buc_<name>.rdra`
 - If shared files are already split, mirror paths and modules, e.g.
   `shared/entities/order.rdra` → `module shared.entities.order`

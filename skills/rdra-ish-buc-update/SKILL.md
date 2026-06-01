@@ -14,6 +14,8 @@ Keep the business-to-technical refinement order intact: do not introduce technic
 details until the business value, actors, use cases, and data touchpoints that justify
 them are present.
 
+<!-- derived-from ../../docs/language-reference.md#cross-entity-constraints -->
+
 ### Step 1 — Read the existing BUC
 
 Read `buc/buc_<name>.rdra` and the shared files it imports. Identify:
@@ -38,6 +40,7 @@ Read `buc/buc_<name>.rdra` and the shared files it imports. Identify:
 | New Business-BUC context | shared vocabulary for `location` / `timing` / `medium`, then `belongs(...).when(...).where(...).by(...)` |
 | New permission or medium constraint | shared `permission` / `medium` vocabulary, then `has_permission`, `requires_permission`, or `requires_medium` in the owning BUC file |
 | New event-started BUC | target BUC file, then `triggers(Event, Buc)`; add `triggers(Event, EntryUC)` only after the entry UC is known |
+| New cross-entity rule | shared rules file or shared entity area; use `cross_forbidden` / `cross_invariant` with `Entity.column` conditions |
 | Cross-system entity relation handling | BUC file that owns the coordinating use case |
 | Remove a use case | Remove its `contains`, CRUD, `displays`, `raises` predicates; check no other BUC uses it |
 
@@ -54,7 +57,7 @@ Also classify the abstraction transition:
 | CRUD exists but no screens/API | Tech interaction boundary | interaction boundary | screens, external interfaces, API endpoints, owning systems, access/media constraints |
 | Entities have only `id` | Tech data design | entity structure | fields, keys, relationships, cardinality |
 | Structured entities have lifecycle fields | Tech lifecycle design | lifecycle | states, events, use-case effects |
-| Lifecycle reaches plausible patterns | Tech-enforced rules | business rules | forbidden and required state combinations |
+| Lifecycle reaches plausible patterns | Tech-enforced rules | business rules | forbidden and required state combinations, including cross-entity rules when needed |
 
 ### Step 3 — Apply the minimal diff
 
@@ -154,6 +157,20 @@ invokes(<UC>, <ApiForEntityB>)
 Use this only when `<EntityA>` and `<EntityB>` are related and belong to different
 derived system boundaries.
 
+**Adding cross-entity rules:**
+```
+cross_forbidden(<EntityA>, <EntityB>,
+  (<EntityA>.<column>, <value>),
+  <EntityB>.<column> > <EntityA>.<column>)
+
+cross_invariant(<EntityA>, <EntityB>)
+  .when(<EntityA>.<column>, <value>)
+  .then(<EntityB>.<column>, <value>)
+```
+
+Use bare column names only when the rule has a single-entity scope. Multi-entity rules
+must qualify columns as `Entity.column`.
+
 **Removing a use case:**
 1. Delete the `usecase` declaration
 2. Delete `contains(Buc, <UC>)`
@@ -174,6 +191,8 @@ derived system boundaries.
 - Actor grants are checked with `rdra-ish csv src/ --kind actor-permission-audit`; review both `missing` and `excess`
 - Every cross-system `relate` has a `coordinates(UseCase, Entity, Entity)` when a use case handles the consistency
 - Every `coordinates` use case invokes APIs on both system sides
+- Every cross-entity rule qualifies columns as `Entity.column` and names or implies
+  the participating entities
 - The diff does not jump more than one abstraction level unless the user supplied the
   missing information explicitly
 - New shared files follow path/module correspondence, e.g.

@@ -5,8 +5,9 @@
 //! 有限直積空間上の BFS で到達可能なパターン集合を求める。
 
 use crate::model::{
-    ColumnEffect, ColumnType, ComparisonProp, EffectValue, EntityKey, ModelColumn, NodeRef,
-    RelKind, SemanticModel, StateKey, UseCaseKey,
+    ColumnEffect, ColumnType, ComparisonProp, CrossCmpRhs, CrossComparisonProp,
+    CrossEntityCondition, CrossEntityInvariant, CrossForbiddenConstraint, EffectValue, EntityKey,
+    ModelColumn, NodeRef, QualifiedModelColumnRef, RelKind, SemanticModel, StateKey, UseCaseKey,
 };
 use crate::resolver::reachable_from_bucs;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
@@ -21,6 +22,8 @@ const PROP_COL_PREFIX: &str = "__cmp:";
 /// entity ごとのパターン数の上限（デフォルト）。
 /// 上限を超えた場合は `EntityStateResult.truncated = true` となる。
 pub const DEFAULT_PATTERN_CAP: usize = 256;
+const CROSS_PATTERN_COMBO_CAP: usize = 4096;
+const CROSS_VIOLATION_DIAG_CAP: usize = 16;
 
 // ── 状態軸 ───────────────────────────────────────────────────────────────────
 
@@ -189,6 +192,25 @@ pub enum StateDiag {
         requireds: String,
         pattern_desc: String,
     },
+    /// `cross_forbidden(...)` で禁止された複数 entity の状態組合せに到達可能
+    CrossForbiddenViolated {
+        entities: String,
+        conditions: String,
+        pattern_desc: String,
+    },
+    /// `cross_invariant(...).when(...).then(...)` が複数 entity の状態組合せで違反
+    CrossInvariantViolated {
+        entities: String,
+        guards: String,
+        requireds: String,
+        pattern_desc: String,
+    },
+    /// クロスエンティティ制約が per-entity state-pattern では完全評価できない
+    CrossConstraintNotEvaluated {
+        entities: String,
+        constraint: String,
+        reason: String,
+    },
 }
 
 /// entity 単位の状態パターン導出結果
@@ -234,10 +256,17 @@ pub fn derive_state_patterns(
     // id 順にソートして出力を安定させる
     entity_keys.sort_by(|a, b| model.entities[*a].id.cmp(&model.entities[*b].id));
 
-    for ek in entity_keys {
+    for &ek in &entity_keys {
         let result = derive_for_entity(model, ek, &buc_of_usecase, buc_reachable.as_ref(), cap);
         results.push(result);
     }
+
+    let result_index: HashMap<EntityKey, usize> = entity_keys
+        .iter()
+        .enumerate()
+        .map(|(idx, ek)| (*ek, idx))
+        .collect();
+    check_cross_entity_constraints(model, &mut results, &result_index);
 
     results
 }
@@ -1220,6 +1249,386 @@ fn check_constraints(
     }
 }
 
+// ── クロスエンティティ制約チェック ───────────────────────────────────────────
+
+fn check_cross_entity_constraints(
+    model: &SemanticModel,
+    results: &mut [EntityStateResult],
+    result_index: &HashMap<EntityKey, usize>,
+) {
+    for constraint in &model.cross_forbidden_constraints {
+        let diags = evaluate_cross_forbidden(model, results, result_index, constraint);
+        for diag in diags {
+            push_cross_diag(&constraint.scope, result_index, results, diag);
+        }
+    }
+
+    for invariant in &model.cross_entity_invariants {
+        let diags = evaluate_cross_invariant(model, results, result_index, invariant);
+        for diag in diags {
+            push_cross_diag(&invariant.scope, result_index, results, diag);
+        }
+    }
+}
+
+fn evaluate_cross_forbidden(
+    model: &SemanticModel,
+    results: &[EntityStateResult],
+    result_index: &HashMap<EntityKey, usize>,
+    constraint: &CrossForbiddenConstraint,
+) -> Vec<StateDiag> {
+    let entities = entity_list_display(model, &constraint.scope);
+    let constraint_desc = cross_conditions_display(model, &constraint.conditions);
+    let Some(scoped_results) = scoped_results(results, result_index, &constraint.scope) else {
+        return vec![];
+    };
+
+    let combo_count = cross_combo_count(&scoped_results);
+    if combo_count > CROSS_PATTERN_COMBO_CAP {
+        return vec![StateDiag::CrossConstraintNotEvaluated {
+            entities,
+            constraint: format!("cross_forbidden({})", constraint_desc),
+            reason: format!(
+                "cross-product has {} combinations, above cap {}",
+                combo_count, CROSS_PATTERN_COMBO_CAP
+            ),
+        }];
+    }
+
+    let mut diags = Vec::new();
+    let mut unknown_reason = None;
+    let mut current = Vec::new();
+    visit_pattern_combinations(&scoped_results, 0, &mut current, &mut |combo| {
+        if diags.len() >= CROSS_VIOLATION_DIAG_CAP {
+            return;
+        }
+        match cross_conditions_hold(model, &constraint.conditions, combo) {
+            Ok(true) => diags.push(StateDiag::CrossForbiddenViolated {
+                entities: entities.clone(),
+                conditions: constraint_desc.clone(),
+                pattern_desc: describe_cross_pattern_combo(model, combo),
+            }),
+            Ok(false) => {}
+            Err(reason) => {
+                unknown_reason.get_or_insert(reason);
+            }
+        }
+    });
+
+    if diags.len() >= CROSS_VIOLATION_DIAG_CAP {
+        diags.push(StateDiag::CrossConstraintNotEvaluated {
+            entities,
+            constraint: format!("cross_forbidden({})", constraint_desc),
+            reason: format!(
+                "additional witness combinations omitted after {} diagnostics",
+                CROSS_VIOLATION_DIAG_CAP
+            ),
+        });
+    } else if diags.is_empty() {
+        if let Some(reason) = unknown_reason {
+            diags.push(StateDiag::CrossConstraintNotEvaluated {
+                entities,
+                constraint: format!("cross_forbidden({})", constraint_desc),
+                reason,
+            });
+        }
+    }
+
+    diags
+}
+
+fn evaluate_cross_invariant(
+    model: &SemanticModel,
+    results: &[EntityStateResult],
+    result_index: &HashMap<EntityKey, usize>,
+    invariant: &CrossEntityInvariant,
+) -> Vec<StateDiag> {
+    let entities = entity_list_display(model, &invariant.scope);
+    let guards_desc = cross_conditions_display(model, &invariant.guards);
+    let requireds_desc = cross_conditions_display(model, &invariant.requireds);
+    let Some(scoped_results) = scoped_results(results, result_index, &invariant.scope) else {
+        return vec![];
+    };
+
+    let combo_count = cross_combo_count(&scoped_results);
+    if combo_count > CROSS_PATTERN_COMBO_CAP {
+        return vec![StateDiag::CrossConstraintNotEvaluated {
+            entities,
+            constraint: format!(
+                "cross_invariant when ({}) then ({})",
+                guards_desc, requireds_desc
+            ),
+            reason: format!(
+                "cross-product has {} combinations, above cap {}",
+                combo_count, CROSS_PATTERN_COMBO_CAP
+            ),
+        }];
+    }
+
+    let mut diags = Vec::new();
+    let mut unknown_reason = None;
+    let mut current = Vec::new();
+    visit_pattern_combinations(&scoped_results, 0, &mut current, &mut |combo| {
+        if diags.len() >= CROSS_VIOLATION_DIAG_CAP {
+            return;
+        }
+
+        match cross_conditions_hold(model, &invariant.guards, combo) {
+            Ok(false) => return,
+            Ok(true) => {}
+            Err(reason) => {
+                unknown_reason.get_or_insert(reason);
+                return;
+            }
+        }
+
+        match cross_conditions_hold(model, &invariant.requireds, combo) {
+            Ok(true) => {}
+            Ok(false) => diags.push(StateDiag::CrossInvariantViolated {
+                entities: entities.clone(),
+                guards: guards_desc.clone(),
+                requireds: requireds_desc.clone(),
+                pattern_desc: describe_cross_pattern_combo(model, combo),
+            }),
+            Err(reason) => {
+                unknown_reason.get_or_insert(reason);
+            }
+        }
+    });
+
+    if diags.len() >= CROSS_VIOLATION_DIAG_CAP {
+        diags.push(StateDiag::CrossConstraintNotEvaluated {
+            entities,
+            constraint: format!(
+                "cross_invariant when ({}) then ({})",
+                guards_desc, requireds_desc
+            ),
+            reason: format!(
+                "additional witness combinations omitted after {} diagnostics",
+                CROSS_VIOLATION_DIAG_CAP
+            ),
+        });
+    } else if diags.is_empty() {
+        if let Some(reason) = unknown_reason {
+            diags.push(StateDiag::CrossConstraintNotEvaluated {
+                entities,
+                constraint: format!(
+                    "cross_invariant when ({}) then ({})",
+                    guards_desc, requireds_desc
+                ),
+                reason,
+            });
+        }
+    }
+
+    diags
+}
+
+fn scoped_results<'a>(
+    results: &'a [EntityStateResult],
+    result_index: &HashMap<EntityKey, usize>,
+    scope: &[EntityKey],
+) -> Option<Vec<(EntityKey, &'a EntityStateResult)>> {
+    let mut scoped = Vec::new();
+    for entity in scope {
+        let idx = *result_index.get(entity)?;
+        scoped.push((*entity, &results[idx]));
+    }
+    Some(scoped)
+}
+
+fn cross_combo_count(scoped_results: &[(EntityKey, &EntityStateResult)]) -> usize {
+    scoped_results.iter().fold(1usize, |acc, (_, result)| {
+        acc.saturating_mul(result.patterns.len().max(1))
+    })
+}
+
+fn visit_pattern_combinations<'a, F>(
+    scoped_results: &[(EntityKey, &'a EntityStateResult)],
+    idx: usize,
+    current: &mut Vec<(EntityKey, &'a ReachablePattern)>,
+    visit: &mut F,
+) where
+    F: FnMut(&[(EntityKey, &'a ReachablePattern)]),
+{
+    if idx == scoped_results.len() {
+        visit(current);
+        return;
+    }
+
+    let (entity, result) = scoped_results[idx];
+    for pattern in &result.patterns {
+        current.push((entity, pattern));
+        visit_pattern_combinations(scoped_results, idx + 1, current, visit);
+        current.pop();
+    }
+}
+
+fn push_cross_diag(
+    scope: &[EntityKey],
+    result_index: &HashMap<EntityKey, usize>,
+    results: &mut [EntityStateResult],
+    diag: StateDiag,
+) {
+    for entity in scope {
+        if let Some(idx) = result_index.get(entity) {
+            results[*idx].diagnostics.push(diag.clone());
+        }
+    }
+}
+
+fn cross_conditions_hold(
+    model: &SemanticModel,
+    conditions: &[CrossEntityCondition],
+    combo: &[(EntityKey, &ReachablePattern)],
+) -> Result<bool, String> {
+    let mut unknown_reason = None;
+    for condition in conditions {
+        match eval_cross_condition(model, condition, combo) {
+            Ok(true) => {}
+            Ok(false) => return Ok(false),
+            Err(reason) => {
+                unknown_reason.get_or_insert(reason);
+            }
+        }
+    }
+    if let Some(reason) = unknown_reason {
+        Err(reason)
+    } else {
+        Ok(true)
+    }
+}
+
+fn eval_cross_condition(
+    model: &SemanticModel,
+    condition: &CrossEntityCondition,
+    combo: &[(EntityKey, &ReachablePattern)],
+) -> Result<bool, String> {
+    match condition {
+        CrossEntityCondition::Equals { column, value } => {
+            let actual = cross_column_value(model, column, combo)?;
+            Ok(actual == AbstractValue::from_effect(value))
+        }
+        CrossEntityCondition::Comparison(prop) => eval_cross_comparison(model, prop, combo),
+    }
+}
+
+fn eval_cross_comparison(
+    model: &SemanticModel,
+    prop: &CrossComparisonProp,
+    combo: &[(EntityKey, &ReachablePattern)],
+) -> Result<bool, String> {
+    let lhs = cross_column_value(model, &prop.lhs, combo)?;
+    match &prop.rhs {
+        CrossCmpRhs::Column(rhs_col) => {
+            let rhs = cross_column_value(model, rhs_col, combo)?;
+            match prop.op {
+                crate::model::CmpOpModel::Eq => Ok(lhs == rhs),
+                crate::model::CmpOpModel::Ne => Ok(lhs != rhs),
+                _ => Err(format!(
+                    "{} uses an order operator, but state patterns only contain abstract values",
+                    cross_comparison_display(model, prop)
+                )),
+            }
+        }
+        CrossCmpRhs::IntLit(_) | CrossCmpRhs::Now => Err(format!(
+            "{} compares against a non-state value that is not present in state patterns",
+            cross_comparison_display(model, prop)
+        )),
+    }
+}
+
+fn cross_column_value(
+    model: &SemanticModel,
+    column: &QualifiedModelColumnRef,
+    combo: &[(EntityKey, &ReachablePattern)],
+) -> Result<AbstractValue, String> {
+    let Some((_, pattern)) = combo.iter().find(|(entity, _)| *entity == column.entity) else {
+        return Err(format!(
+            "{} is outside the evaluated entity combination",
+            qualified_column_display(model, column)
+        ));
+    };
+    pattern
+        .pattern
+        .values
+        .get(&column.column)
+        .cloned()
+        .ok_or_else(|| {
+            format!(
+                "{} is not a state axis in the derived patterns",
+                qualified_column_display(model, column)
+            )
+        })
+}
+
+fn entity_list_display(model: &SemanticModel, scope: &[EntityKey]) -> String {
+    scope
+        .iter()
+        .map(|entity| model.entities[*entity].id.clone())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn qualified_column_display(model: &SemanticModel, column: &QualifiedModelColumnRef) -> String {
+    format!("{}.{}", model.entities[column.entity].id, column.column)
+}
+
+fn cross_rhs_display(model: &SemanticModel, rhs: &CrossCmpRhs) -> String {
+    match rhs {
+        CrossCmpRhs::Column(column) => qualified_column_display(model, column),
+        CrossCmpRhs::IntLit(value) => value.to_string(),
+        CrossCmpRhs::Now => "now".to_string(),
+    }
+}
+
+fn cross_comparison_display(model: &SemanticModel, prop: &CrossComparisonProp) -> String {
+    format!(
+        "{} {} {}",
+        qualified_column_display(model, &prop.lhs),
+        prop.op.as_str(),
+        cross_rhs_display(model, &prop.rhs)
+    )
+}
+
+fn cross_condition_display(model: &SemanticModel, condition: &CrossEntityCondition) -> String {
+    match condition {
+        CrossEntityCondition::Equals { column, value } => format!(
+            "{}={}",
+            qualified_column_display(model, column),
+            abstract_value_display(&AbstractValue::from_effect(value))
+        ),
+        CrossEntityCondition::Comparison(prop) => {
+            format!("{}=true", cross_comparison_display(model, prop))
+        }
+    }
+}
+
+fn cross_conditions_display(model: &SemanticModel, conditions: &[CrossEntityCondition]) -> String {
+    conditions
+        .iter()
+        .map(|condition| cross_condition_display(model, condition))
+        .collect::<Vec<_>>()
+        .join(" AND ")
+}
+
+fn describe_cross_pattern_combo(
+    model: &SemanticModel,
+    combo: &[(EntityKey, &ReachablePattern)],
+) -> String {
+    combo
+        .iter()
+        .map(|(entity, pattern)| {
+            format!(
+                "{}({})",
+                model.entities[*entity].id,
+                describe_pattern(&pattern.pattern)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
 // ── ヘルパー ─────────────────────────────────────────────────────────────────
 
 fn guard_holds(guard: &[AxisConstraint], pattern: &StatePattern) -> bool {
@@ -2035,5 +2444,130 @@ invariant(Order)
             "不変条件を満たしているので InvariantViolated は発生しないはず: {:?}",
             r.diagnostics
         );
+    }
+
+    #[test]
+    fn test_cross_forbidden_is_reported_on_each_entity_result() {
+        let model = model_from(
+            r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(paid, cancelled) @default(cancelled)
+}
+entity Payment "支払い" {
+  id: Int @pk
+  status: Enum(pending, captured) @default(pending)
+}
+cross_forbidden(Order, Payment,
+  (Order.status, cancelled),
+  (Payment.status, pending))
+"#,
+        );
+
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        for entity_id in ["Order", "Payment"] {
+            let r = results.iter().find(|r| r.entity_id == entity_id).unwrap();
+            assert!(
+                r.diagnostics
+                    .iter()
+                    .any(|d| matches!(d, StateDiag::CrossForbiddenViolated { .. })),
+                "cross forbidden violation should be reported on {entity_id}: {:?}",
+                r.diagnostics
+            );
+        }
+    }
+
+    #[test]
+    fn test_cross_invariant_is_reported_on_each_entity_result() {
+        let model = model_from(
+            r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(open, paid) @default(paid)
+}
+entity Payment "支払い" {
+  id: Int @pk
+  status: Enum(pending, captured) @default(pending)
+}
+cross_invariant(Order, Payment)
+  .when(Order.status, paid)
+  .then(Payment.status, captured)
+"#,
+        );
+
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        for entity_id in ["Order", "Payment"] {
+            let r = results.iter().find(|r| r.entity_id == entity_id).unwrap();
+            assert!(
+                r.diagnostics
+                    .iter()
+                    .any(|d| matches!(d, StateDiag::CrossInvariantViolated { .. })),
+                "cross invariant violation should be reported on {entity_id}: {:?}",
+                r.diagnostics
+            );
+        }
+    }
+
+    #[test]
+    fn test_cross_constraint_with_non_state_comparison_is_reported_as_not_evaluated() {
+        let model = model_from(
+            r#"
+entity Order "注文" {
+  id: Int @pk
+  total: Decimal
+}
+entity Payment "支払い" {
+  id: Int @pk
+  amount: Decimal
+}
+cross_forbidden(Order, Payment, Payment.amount > Order.total)
+"#,
+        );
+
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        for entity_id in ["Order", "Payment"] {
+            let r = results.iter().find(|r| r.entity_id == entity_id).unwrap();
+            assert!(
+                r.diagnostics
+                    .iter()
+                    .any(|d| matches!(d, StateDiag::CrossConstraintNotEvaluated { .. })),
+                "non-state cross comparison should be reported on {entity_id}: {:?}",
+                r.diagnostics
+            );
+        }
+    }
+
+    #[test]
+    fn test_cross_unknown_condition_does_not_mask_false_state_condition() {
+        let model = model_from(
+            r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(open, paid) @default(open)
+  total: Decimal
+}
+entity Payment "支払い" {
+  id: Int @pk
+  amount: Decimal
+}
+cross_forbidden(Order, Payment,
+  Payment.amount > Order.total,
+  (Order.status, paid))
+"#,
+        );
+
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        for entity_id in ["Order", "Payment"] {
+            let r = results.iter().find(|r| r.entity_id == entity_id).unwrap();
+            assert!(
+                !r.diagnostics.iter().any(|d| matches!(
+                    d,
+                    StateDiag::CrossForbiddenViolated { .. }
+                        | StateDiag::CrossConstraintNotEvaluated { .. }
+                )),
+                "false state-axis condition should make the cross constraint known-false for {entity_id}: {:?}",
+                r.diagnostics
+            );
+        }
     }
 }

@@ -560,6 +560,31 @@ fn state_diag_message(diag: &rdra_ish_core::StateDiag) -> String {
             "invariant violated: when {} then {} is broken by {}",
             guards, requireds, pattern_desc
         ),
+        rdra_ish_core::StateDiag::CrossForbiddenViolated {
+            entities,
+            conditions,
+            pattern_desc,
+        } => format!(
+            "cross-entity forbidden state is reachable across [{}]: {} witnessed by {}",
+            entities, conditions, pattern_desc
+        ),
+        rdra_ish_core::StateDiag::CrossInvariantViolated {
+            entities,
+            guards,
+            requireds,
+            pattern_desc,
+        } => format!(
+            "cross-entity invariant violated across [{}]: when {} then {} is broken by {}",
+            entities, guards, requireds, pattern_desc
+        ),
+        rdra_ish_core::StateDiag::CrossConstraintNotEvaluated {
+            entities,
+            constraint,
+            reason,
+        } => format!(
+            "cross-entity constraint was not fully evaluated across [{}]: {} ({})",
+            entities, constraint, reason
+        ),
     }
 }
 

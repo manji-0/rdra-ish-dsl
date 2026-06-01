@@ -14,6 +14,9 @@ Read the stages as a progression from business concerns to technical concerns. E
 review should protect business intent and value coverage; later review should focus on
 API/system boundaries, persistence structure, reachable lifecycle states, and rules.
 
+<!-- derived-from ../../docs/language-reference.md#cross-entity-constraints -->
+<!-- derived-from ../../docs/state-derivation.md#constraint-checking-after-bfs -->
+
 ### Steps
 
 1. **Run `rdra-ish check <src-dir>/`** to surface syntax and type errors first.
@@ -35,7 +38,7 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    - Interaction boundary: screens/API are being modeled
    - Entity structure: columns/relationships/cardinality are modeled
    - Lifecycle: states/events/transitions/sets are modeled
-   - Business rules: forbidden/invariant constraints are modeled
+   - Business rules: forbidden/invariant and cross-entity constraints are modeled
    - Concern shift: Scope and BUC skeleton are business-facing; interaction boundary
      and deeper stages are technical commitments derived from that business model
 
@@ -99,7 +102,16 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    - Every `@null` column updated by a use case should have a `sets` with `"present"` / `"null"` / a PostgreSQL type
    - Every `Bool` column toggled by a use case should have a `sets` with `"true"` or `"false"`
 
-11. **Check imports**
+11. **Check business rules**
+   - Single-entity invalid combinations use `forbidden(Entity, ...)`
+   - Single-entity required co-occurrences use `invariant(Entity).when(...).then(...)`
+   - Rules that mention multiple entities use `cross_forbidden` or `cross_invariant`
+   - Multi-entity conditions qualify columns as `Entity.column`
+   - Review `CrossForbiddenViolated`, `CrossInvariantViolated`, and
+     `CrossConstraintNotEvaluated` diagnostics from `states`; the last one means a
+     rule condition is outside the abstract state space or exceeded the cross-product cap
+
+12. **Check imports**
    - Every referenced symbol has a corresponding `import`
    - No imported modules that are never used
 
@@ -153,3 +165,7 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 | `transitions` | Event | State (from) | State (to) |
 | `sets` | UseCase / Event | Entity | column name string | value string |
 | `sets` | UseCase / Event | Entity | comparison expression | boolean literal |
+| `forbidden` | Entity | condition(s) | — |
+| `invariant` | Entity | `.when(...)` / `.then(...)` chains | — |
+| `cross_forbidden` | Entity... | cross-entity condition(s) | — |
+| `cross_invariant` | Entity... | `.when(...)` / `.then(...)` chains | — |

@@ -552,6 +552,28 @@ strings). They use the same value vocabulary as `sets` (Enum variant names, `tru
 `expired_at < now`) are treated as derived boolean proposition axes and can be driven
 via `sets`. See `docs/language-reference.md` for the full list of supported operators.
 
+<!-- derived-from ./docs/language-reference.md#cross-entity-constraints -->
+#### Cross-Entity Constraints
+
+Use `cross_forbidden` and `cross_invariant` when a business rule needs to mention
+columns from more than one entity. Conditions use `Entity.column` so the referenced
+entity is explicit.
+
+```
+cross_forbidden(Order, Payment,
+  (Order.status, cancelled),
+  Payment.amount > Order.total)
+
+cross_invariant(Order, Payment)
+  .when(Order.status, paid)
+  .then(Payment.status, captured)
+```
+
+`states` checks these after per-entity pattern derivation by combining the reached
+patterns for the participating entities. Conditions on actual state axes can report
+cross-rule violations; conditions that depend on ordinary untracked values are reported
+as not fully evaluated.
+
 ### import / modules
 
 ```

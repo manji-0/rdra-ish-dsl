@@ -579,6 +579,61 @@ pub struct EntityInvariant {
     pub required_comparisons: Vec<ComparisonProp>,
 }
 
+// ── クロスエンティティ制約 ───────────────────────────────────────────────────
+
+/// A column reference resolved to a concrete entity and one of its columns.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct QualifiedModelColumnRef {
+    pub entity: EntityKey,
+    pub column: std::string::String,
+}
+
+/// Right-hand side of a cross-entity comparison.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum CrossCmpRhs {
+    /// Column reference on the same or another entity.
+    Column(QualifiedModelColumnRef),
+    /// Integer literal.
+    IntLit(i64),
+    /// Built-in temporal reference `now`.
+    Now,
+}
+
+/// A comparison proposition that may reference columns on multiple entities.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CrossComparisonProp {
+    pub lhs: QualifiedModelColumnRef,
+    pub op: CmpOpModel,
+    pub rhs: CrossCmpRhs,
+}
+
+/// One condition inside a cross-entity constraint.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum CrossEntityCondition {
+    /// `Entity.column == value`, written as `(Entity.column, value)`.
+    Equals {
+        column: QualifiedModelColumnRef,
+        value: EffectValue,
+    },
+    /// A typed comparison expression such as `Order.total > Payment.amount`.
+    Comparison(CrossComparisonProp),
+}
+
+/// `cross_forbidden(EntityA, EntityB, ...)`.
+#[derive(Debug, Clone)]
+pub struct CrossForbiddenConstraint {
+    pub scope: Vec<EntityKey>,
+    pub conditions: Vec<CrossEntityCondition>,
+}
+
+/// `cross_invariant(EntityA, EntityB).when(...).then(...)`.
+#[derive(Debug, Clone)]
+pub struct CrossEntityInvariant {
+    pub scope: Vec<EntityKey>,
+    pub guards: Vec<CrossEntityCondition>,
+    pub requireds: Vec<CrossEntityCondition>,
+}
+
 /// セマンティックモデル
 #[derive(Debug, Default)]
 pub struct SemanticModel {
@@ -612,5 +667,9 @@ pub struct SemanticModel {
     pub forbidden_constraints: Vec<ForbiddenConstraint>,
     /// `invariant(...)` 述語で宣言された不変条件制約
     pub entity_invariants: Vec<EntityInvariant>,
+    /// `cross_forbidden(...)` 述語で宣言されたクロスエンティティ禁止制約
+    pub cross_forbidden_constraints: Vec<CrossForbiddenConstraint>,
+    /// `cross_invariant(...)` 述語で宣言されたクロスエンティティ不変条件
+    pub cross_entity_invariants: Vec<CrossEntityInvariant>,
     pub symbols: SymbolTable,
 }
