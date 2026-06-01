@@ -1271,6 +1271,69 @@ mod tests {
     use rdra_ish_core::SemanticModel;
 
     #[test]
+    fn cli_parses_changed_subcommands_and_options() {
+        let cli = Cli::try_parse_from([
+            "rdra-ish",
+            "diagram",
+            "sample.rdra",
+            "--kind",
+            "business-area",
+            "--format",
+            "mermaid",
+            "--buc",
+            "BucScheduling",
+            "--usecase",
+            "BookAppointment",
+            "--out",
+            "out.mmd",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Commands::Diagram {
+                inputs,
+                kind,
+                format,
+                buc,
+                usecase,
+                out,
+            } => {
+                assert_eq!(inputs, vec![PathBuf::from("sample.rdra")]);
+                assert!(matches!(kind, DiagramKind::BusinessArea));
+                assert!(matches!(format, OutputFormat::Mermaid));
+                assert_eq!(buc, vec!["BucScheduling"]);
+                assert_eq!(usecase, vec!["BookAppointment"]);
+                assert_eq!(out, PathBuf::from("out.mmd"));
+            }
+            _ => panic!("expected diagram command"),
+        }
+
+        let cli = Cli::try_parse_from([
+            "rdra-ish",
+            "list",
+            "sample.rdra",
+            "--kind",
+            "actor-inputs",
+            "--format",
+            "json",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Commands::List {
+                inputs,
+                kind,
+                format,
+            } => {
+                assert_eq!(inputs, vec![PathBuf::from("sample.rdra")]);
+                assert!(matches!(kind, ListKind::BusinessInputs));
+                assert!(matches!(format, ListFormat::Json));
+            }
+            _ => panic!("expected list command"),
+        }
+    }
+
+    #[test]
     fn table_list_reports_empty_api_result() {
         let model = SemanticModel::default();
 

@@ -1476,6 +1476,11 @@ contains(BucA, usecase::Same)
 creates(usecase::Same, Thing)
 "#;
         let model = model_from(src);
+        let entries = derive_actor_input_inferences(&model);
+        let entry = entries.first().unwrap();
+        assert_eq!(business_actor_node_id(&model, entry), "actor__Same");
+        assert_eq!(business_usecase_node_id(&model, entry), "usecase__Same");
+
         let result = BusinessAreaMermaidEmitter
             .emit(&model, &View::whole())
             .unwrap();
