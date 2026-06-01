@@ -9,6 +9,7 @@ use rdra_ish_core::model::{
     UseCaseKey,
 };
 use rdra_ish_core::tx::infer_usecase_transactions;
+use rdra_ish_core::{derive_actor_input_inferences, derive_system_boundaries, ActorInputInference};
 use std::collections::{HashMap, HashSet};
 
 // ── RDRA全体図エミッタ ────────────────────────────────────────────────────────
@@ -347,6 +348,150 @@ impl Emitter for ObjectGraphPlantUmlEmitter {
                     _ => format!("{} ..> {} : {}\n", from_id, to_id, label),
                 };
                 out.push_str(&line);
+            }
+        }
+
+        out.push_str("@enduml\n");
+        Ok(out)
+    }
+}
+
+// ── Business area diagram ────────────────────────────────────────────────────
+
+pub struct BusinessAreaPlantUmlEmitter;
+
+impl Emitter for BusinessAreaPlantUmlEmitter {
+    fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
+        let mut out = String::new();
+        out.push_str("@startuml\n");
+        out.push_str("!theme plain\n");
+        out.push_str("left to right direction\n\n");
+
+        let mut nodes = HashSet::new();
+        let mut edges = HashSet::new();
+
+        for entry in derive_actor_input_inferences(model)
+            .into_iter()
+            .filter(|entry| business_input_visible(model, view, entry))
+        {
+            let actor = &model.actors[entry.actor];
+            let usecase = &model.use_cases[entry.usecase];
+            let entity = &model.entities[entry.entity];
+            let input_id = business_input_node_id(model, &entry);
+            let input_label = plantuml_label(&format!(
+                "{}.{}, {}",
+                entity.id,
+                entry.column,
+                entry.operation.as_str()
+            ));
+
+            if nodes.insert(actor.id.clone()) {
+                out.push_str(&format!(
+                    "actor \"{}\" as {}\n",
+                    plantuml_label(&prefixed_label("Business Actor", &actor.label)),
+                    actor.id
+                ));
+            }
+            if nodes.insert(input_id.clone()) {
+                out.push_str(&format!("rectangle \"{}\" as {}\n", input_label, input_id));
+            }
+            if nodes.insert(usecase.id.clone()) {
+                out.push_str(&format!(
+                    "usecase \"{}\" as {}\n",
+                    plantuml_label(&prefixed_label("UseCase", &usecase.label)),
+                    usecase.id
+                ));
+            }
+
+            let actor_edge = format!("{} --> {}\n", actor.id, input_id);
+            if edges.insert(actor_edge.clone()) {
+                out.push_str(&actor_edge);
+            }
+            let uc_edge = format!(
+                "{} --> {} : {}\n",
+                input_id,
+                usecase.id,
+                entry.operation.as_str()
+            );
+            if edges.insert(uc_edge.clone()) {
+                out.push_str(&uc_edge);
+            }
+        }
+
+        out.push_str("@enduml\n");
+        Ok(out)
+    }
+}
+
+// ── Technical area diagram ───────────────────────────────────────────────────
+
+pub struct TechnicalAreaPlantUmlEmitter;
+
+impl Emitter for TechnicalAreaPlantUmlEmitter {
+    fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
+        let reachable = reachable_for_scope(model, &view.scope);
+        let mut out = String::new();
+        out.push_str("@startuml\n");
+        out.push_str("!theme plain\n");
+        out.push_str("left to right direction\n\n");
+
+        for boundary in derive_system_boundaries(model) {
+            let system = &model.systems[boundary.system];
+            let apis: Vec<_> = boundary
+                .apis
+                .iter()
+                .copied()
+                .filter(|api| scoped_node_visible(&reachable, &NodeRef::Api(*api)))
+                .collect();
+            let entities: Vec<_> = boundary
+                .entities
+                .iter()
+                .copied()
+                .filter(|entity| scoped_node_visible(&reachable, &NodeRef::Entity(*entity)))
+                .collect();
+            if apis.is_empty() && entities.is_empty() {
+                continue;
+            }
+
+            out.push_str(&format!(
+                "package \"{}\" {{\n",
+                plantuml_label(&system.label)
+            ));
+            for api in &apis {
+                let api_model = &model.apis[*api];
+                out.push_str(&format!(
+                    "  control \"{}\" as {}\n",
+                    plantuml_label(&prefixed_label("API", &api_model.label)),
+                    technical_api_node_id(model, boundary.system, *api)
+                ));
+            }
+            for entity in &entities {
+                let entity_model = &model.entities[*entity];
+                out.push_str(&format!(
+                    "  database \"{}\" as {}\n",
+                    plantuml_label(&prefixed_label("Entity", &entity_model.label)),
+                    technical_entity_node_id(model, boundary.system, *entity)
+                ));
+            }
+            out.push_str("}\n\n");
+
+            let entity_set: HashSet<_> = entities.iter().copied().collect();
+            for rel in &model.relations {
+                let (NodeRef::Api(api), NodeRef::Entity(entity)) = (&rel.from, &rel.to) else {
+                    continue;
+                };
+                if !apis.contains(api)
+                    || !entity_set.contains(entity)
+                    || !is_entity_operation(&rel.kind)
+                {
+                    continue;
+                }
+                out.push_str(&format!(
+                    "{} ..> {} : {}\n",
+                    technical_api_node_id(model, boundary.system, *api),
+                    technical_entity_node_id(model, boundary.system, *entity),
+                    object_graph_rel_label(&rel.kind)
+                ));
             }
         }
 
@@ -1211,6 +1356,92 @@ impl Emitter for EventFlowPlantUmlEmitter {
 
 // ── ヘルパー ──────────────────────────────────────────────────────────────────
 
+fn business_input_visible(model: &SemanticModel, view: &View, entry: &ActorInputInference) -> bool {
+    match &view.scope {
+        Scope::Whole => true,
+        Scope::UseCases(usecase_ids) => usecase_ids
+            .iter()
+            .any(|id| id == &model.use_cases[entry.usecase].id),
+        Scope::Bucs(buc_ids) => entry
+            .buc
+            .is_some_and(|buc| buc_ids.iter().any(|id| id == &model.bucs[buc].id)),
+    }
+}
+
+fn business_input_node_id(model: &SemanticModel, entry: &ActorInputInference) -> String {
+    scoped_plantuml_id(
+        "input",
+        &format!(
+            "{}_{}_{}_{}",
+            model.actors[entry.actor].id,
+            model.use_cases[entry.usecase].id,
+            model.entities[entry.entity].id,
+            entry.column
+        ),
+    )
+}
+
+fn reachable_for_scope(model: &SemanticModel, scope: &Scope) -> Option<HashSet<NodeRef>> {
+    match scope {
+        Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
+        Scope::Whole | Scope::UseCases(_) => None,
+    }
+}
+
+fn scoped_node_visible(reachable: &Option<HashSet<NodeRef>>, node: &NodeRef) -> bool {
+    match reachable {
+        Some(set) => set.contains(node),
+        None => true,
+    }
+}
+
+fn technical_api_node_id(
+    model: &SemanticModel,
+    system: rdra_ish_core::SystemKey,
+    api: ApiKey,
+) -> String {
+    scoped_plantuml_id(
+        "api",
+        &format!("{}_{}", model.systems[system].id, model.apis[api].id),
+    )
+}
+
+fn technical_entity_node_id(
+    model: &SemanticModel,
+    system: rdra_ish_core::SystemKey,
+    entity: EntityKey,
+) -> String {
+    scoped_plantuml_id(
+        "entity",
+        &format!("{}_{}", model.systems[system].id, model.entities[entity].id),
+    )
+}
+
+fn scoped_plantuml_id(prefix: &str, raw: &str) -> String {
+    let safe: String = raw
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    format!("{}__{}", prefix, safe)
+}
+
+fn plantuml_label(label: &str) -> String {
+    label.replace('"', "\\\"")
+}
+
+fn is_entity_operation(kind: &RelKind) -> bool {
+    matches!(
+        kind,
+        RelKind::Reads | RelKind::Writes | RelKind::Creates | RelKind::Updates | RelKind::Deletes
+    )
+}
+
 pub(crate) fn node_id<'a>(model: &'a SemanticModel, node: &NodeRef) -> Option<&'a str> {
     match node {
         NodeRef::Actor(k) => model.actors.get(*k).map(|a| a.id.as_str()),
@@ -1299,6 +1530,46 @@ performs(Customer, Browse)
         assert!(result.contains("usecase \"✅ 商品を探す\" as Browse"));
         assert!(result.contains("Customer --> Browse"));
         assert!(result.contains("@enduml"));
+    }
+
+    #[test]
+    fn test_business_area_plantuml_emit() {
+        let src = r#"
+actor Staff "Staff"
+buc BucScheduling "Scheduling"
+usecase BookAppointment "Book Appointment"
+entity Appointment "Appointment" { id: Int @pk  patient_name: String }
+performs(Staff, BucScheduling)
+contains(BucScheduling, BookAppointment)
+creates(BookAppointment, Appointment)
+"#;
+        let model = model_from(src);
+        let result = BusinessAreaPlantUmlEmitter
+            .emit(&model, &View::whole())
+            .unwrap();
+        assert!(result.contains("actor \"Business Actor Staff\" as Staff"));
+        assert!(result.contains("rectangle \"Appointment.patient_name, create\""));
+        assert!(result.contains(": create"));
+        assert!(!result.contains("BucScheduling"));
+    }
+
+    #[test]
+    fn test_technical_area_plantuml_emit() {
+        let src = r#"
+system SchedulingSystem "Scheduling System"
+api BookingApi "Booking API"
+entity Appointment "Appointment" { id: Int @pk }
+contains(SchedulingSystem, BookingApi)
+creates(BookingApi, Appointment)
+"#;
+        let model = model_from(src);
+        let result = TechnicalAreaPlantUmlEmitter
+            .emit(&model, &View::whole())
+            .unwrap();
+        assert!(result.contains("package \"Scheduling System\""));
+        assert!(result.contains("control \"API Booking API\""));
+        assert!(result.contains("database \"Entity Appointment\""));
+        assert!(result.contains(": creates"));
     }
 
     #[test]

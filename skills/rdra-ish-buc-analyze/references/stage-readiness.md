@@ -25,7 +25,7 @@ rdra-ish list src/ --kind buc --format table
 rdra-ish list src/ --kind usecase --format table
 rdra-ish list src/ --kind actor --format table
 rdra-ish csv src/ --kind matrix
-rdra-ish csv src/ --kind actor-inputs
+rdra-ish csv src/ --kind business-inputs
 rdra-ish list src/ --kind api --format table
 rdra-ish csv src/ --kind api-matrix
 rdra-ish states src/
@@ -45,7 +45,7 @@ stage.
 | CRUD exists but sequence output uses only the legacy `System` lane | Data touchpoints | What screens and APIs mediate the work? |
 | APIs/screens/permissions appear | Interaction boundary | Which system owns each API and which constraints apply to UC/API paths? |
 | Entities have columns, keys, and `relate` | Entity structure | Which fields represent lifecycle state or cross-system coordination? |
-| `actor-inputs` has surprising or missing field rows | Entity structure | Which fields are actor-entered versus derived by defaults, FK relations, APIs, events, or `sets`? |
+| `business-inputs` has surprising or missing field rows | Entity structure | Which fields are actor-entered versus derived by defaults, FK relations, APIs, events, or `sets`? |
 | Enum/Bool/nullable columns exist without lifecycle effects | Entity structure | Which events, transitions, or `sets` effects change them? |
 | `states` has reviewed reachable patterns | Lifecycle | Which reachable states are forbidden or required by rules? |
 | `forbidden`, `invariant`, `cross_forbidden`, or `cross_invariant` exists | Business rules | Are violations fixed, intentionally accepted, not evaluable from state axes, or still unresolved requirements? |

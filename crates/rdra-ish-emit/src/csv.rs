@@ -426,11 +426,11 @@ impl Emitter for ActorPermissionAuditCsvEmitter {
     }
 }
 
-// ── ActorInputInferenceCsvEmitter ────────────────────────────────────────────
+// ── BusinessInputCsvEmitter ──────────────────────────────────────────────────
 
-pub struct ActorInputInferenceCsvEmitter;
+pub struct BusinessInputCsvEmitter;
 
-impl Emitter for ActorInputInferenceCsvEmitter {
+impl Emitter for BusinessInputCsvEmitter {
     fn emit(&self, model: &SemanticModel, _view: &View) -> Result<String, EmitError> {
         let mut wtr = csv::Writer::from_writer(vec![]);
         wtr.write_record([
@@ -749,7 +749,7 @@ creates(BookingApi, Appointment)
 "#;
         let model = model_from(src);
         let view = View::whole();
-        let result = ActorInputInferenceCsvEmitter.emit(&model, &view).unwrap();
+        let result = BusinessInputCsvEmitter.emit(&model, &view).unwrap();
         assert!(result.contains(
             "actor_id,actor_label,buc_id,usecase_id,source_type,source_id,entity_id,column_name,column_type,operation,reason"
         ));

@@ -12,6 +12,7 @@ use rdra_ish_core::model::{
     ActorKey, ApiKey, BucKey, EntityKey, NodeRef, RelKind, ScreenKey, SemanticModel, UseCaseKey,
 };
 use rdra_ish_core::tx::infer_usecase_transactions;
+use rdra_ish_core::{derive_actor_input_inferences, derive_system_boundaries, ActorInputInference};
 use std::collections::{HashMap, HashSet};
 
 // ── RDRA全体図エミッタ (Mermaid) ──────────────────────────────────────────────
@@ -348,6 +349,144 @@ impl Emitter for ObjectGraphMermaidEmitter {
         while out.ends_with("\n\n") {
             out.pop();
         }
+        Ok(out)
+    }
+}
+
+// ── Business area diagram (Mermaid) ──────────────────────────────────────────
+
+pub struct BusinessAreaMermaidEmitter;
+
+impl Emitter for BusinessAreaMermaidEmitter {
+    fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
+        let mut out = String::from("flowchart LR\n");
+        let mut nodes = HashSet::new();
+        let mut edges = HashSet::new();
+
+        for entry in derive_actor_input_inferences(model)
+            .into_iter()
+            .filter(|entry| business_input_visible(model, view, entry))
+        {
+            let actor = &model.actors[entry.actor];
+            let usecase = &model.use_cases[entry.usecase];
+            let entity = &model.entities[entry.entity];
+            let input_id = business_input_node_id(model, &entry);
+            let input_label = mermaid_label(&format!(
+                "{}.{}, {}",
+                entity.id,
+                entry.column,
+                entry.operation.as_str()
+            ));
+
+            if nodes.insert(actor.id.clone()) {
+                out.push_str(&format!(
+                    "  {}([\"{}\"])\n",
+                    actor.id,
+                    mermaid_label(&prefixed_label("Business Actor", &actor.label))
+                ));
+            }
+            if nodes.insert(input_id.clone()) {
+                out.push_str(&format!("  {}[\"{}\"]\n", input_id, input_label));
+            }
+            if nodes.insert(usecase.id.clone()) {
+                out.push_str(&format!(
+                    "  {}([\"{}\"])\n",
+                    usecase.id,
+                    mermaid_label(&prefixed_label("UseCase", &usecase.label))
+                ));
+            }
+
+            let actor_edge = format!("  {} --> {}\n", actor.id, input_id);
+            if edges.insert(actor_edge.clone()) {
+                out.push_str(&actor_edge);
+            }
+            let uc_edge = format!(
+                "  {} -->|{}| {}\n",
+                input_id,
+                entry.operation.as_str(),
+                usecase.id
+            );
+            if edges.insert(uc_edge.clone()) {
+                out.push_str(&uc_edge);
+            }
+        }
+
+        Ok(out)
+    }
+}
+
+// ── Technical area diagram (Mermaid) ─────────────────────────────────────────
+
+pub struct TechnicalAreaMermaidEmitter;
+
+impl Emitter for TechnicalAreaMermaidEmitter {
+    fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
+        let reachable = reachable_for_scope(model, &view.scope);
+        let mut out = String::from("flowchart LR\n");
+
+        for boundary in derive_system_boundaries(model) {
+            let system = &model.systems[boundary.system];
+            let apis: Vec<_> = boundary
+                .apis
+                .iter()
+                .copied()
+                .filter(|api| scoped_node_visible(&reachable, &NodeRef::Api(*api)))
+                .collect();
+            let entities: Vec<_> = boundary
+                .entities
+                .iter()
+                .copied()
+                .filter(|entity| scoped_node_visible(&reachable, &NodeRef::Entity(*entity)))
+                .collect();
+            if apis.is_empty() && entities.is_empty() {
+                continue;
+            }
+
+            let system_id = scoped_mermaid_id("system", &system.id);
+            out.push_str(&format!(
+                "  subgraph {}[{}]\n",
+                system_id,
+                mermaid_label(&system.label)
+            ));
+            out.push_str("    direction TB\n");
+            for api in &apis {
+                let api_model = &model.apis[*api];
+                out.push_str(&format!(
+                    "    {}[\"{}\"]\n",
+                    technical_api_node_id(model, boundary.system, *api),
+                    mermaid_label(&prefixed_label("API", &api_model.label))
+                ));
+            }
+            for entity in &entities {
+                let entity_model = &model.entities[*entity];
+                out.push_str(&format!(
+                    "    {}[(\"{}\")]\n",
+                    technical_entity_node_id(model, boundary.system, *entity),
+                    mermaid_label(&prefixed_label("Entity", &entity_model.label))
+                ));
+            }
+            out.push_str("  end\n");
+
+            let entity_set: HashSet<_> = entities.iter().copied().collect();
+            for rel in &model.relations {
+                let (NodeRef::Api(api), NodeRef::Entity(entity)) = (&rel.from, &rel.to) else {
+                    continue;
+                };
+                if !apis.contains(api)
+                    || !entity_set.contains(entity)
+                    || !is_entity_operation(&rel.kind)
+                {
+                    continue;
+                }
+                out.push_str(&format!(
+                    "  {} -.->|{}| {}\n",
+                    technical_api_node_id(model, boundary.system, *api),
+                    object_graph_rel_label(&rel.kind),
+                    technical_entity_node_id(model, boundary.system, *entity)
+                ));
+            }
+        }
+
         Ok(out)
     }
 }
@@ -1182,6 +1321,88 @@ impl Emitter for EventFlowMermaidEmitter {
     }
 }
 
+fn business_input_visible(model: &SemanticModel, view: &View, entry: &ActorInputInference) -> bool {
+    match &view.scope {
+        Scope::Whole => true,
+        Scope::UseCases(usecase_ids) => usecase_ids
+            .iter()
+            .any(|id| id == &model.use_cases[entry.usecase].id),
+        Scope::Bucs(buc_ids) => entry
+            .buc
+            .is_some_and(|buc| buc_ids.iter().any(|id| id == &model.bucs[buc].id)),
+    }
+}
+
+fn business_input_node_id(model: &SemanticModel, entry: &ActorInputInference) -> String {
+    scoped_mermaid_id(
+        "input",
+        &format!(
+            "{}_{}_{}_{}",
+            model.actors[entry.actor].id,
+            model.use_cases[entry.usecase].id,
+            model.entities[entry.entity].id,
+            entry.column
+        ),
+    )
+}
+
+fn reachable_for_scope(model: &SemanticModel, scope: &Scope) -> Option<HashSet<NodeRef>> {
+    match scope {
+        Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
+        Scope::Whole | Scope::UseCases(_) => None,
+    }
+}
+
+fn scoped_node_visible(reachable: &Option<HashSet<NodeRef>>, node: &NodeRef) -> bool {
+    match reachable {
+        Some(set) => set.contains(node),
+        None => true,
+    }
+}
+
+fn technical_api_node_id(
+    model: &SemanticModel,
+    system: rdra_ish_core::SystemKey,
+    api: ApiKey,
+) -> String {
+    scoped_mermaid_id(
+        "api",
+        &format!("{}_{}", model.systems[system].id, model.apis[api].id),
+    )
+}
+
+fn technical_entity_node_id(
+    model: &SemanticModel,
+    system: rdra_ish_core::SystemKey,
+    entity: EntityKey,
+) -> String {
+    scoped_mermaid_id(
+        "entity",
+        &format!("{}_{}", model.systems[system].id, model.entities[entity].id),
+    )
+}
+
+fn scoped_mermaid_id(prefix: &str, raw: &str) -> String {
+    let safe: String = raw
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    format!("{}__{}", prefix, safe)
+}
+
+fn is_entity_operation(kind: &RelKind) -> bool {
+    matches!(
+        kind,
+        RelKind::Reads | RelKind::Writes | RelKind::Creates | RelKind::Updates | RelKind::Deletes
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1209,6 +1430,47 @@ performs(Customer, Browse)
         assert!(result.contains("Browse"));
         assert!(result.contains("商品を探す"));
         assert!(result.contains("Customer --> Browse"));
+    }
+
+    #[test]
+    fn test_business_area_mermaid_emit() {
+        let src = r#"
+actor Staff "Staff"
+buc BucScheduling "Scheduling"
+usecase BookAppointment "Book Appointment"
+entity Appointment "Appointment" { id: Int @pk  patient_name: String }
+performs(Staff, BucScheduling)
+contains(BucScheduling, BookAppointment)
+creates(BookAppointment, Appointment)
+"#;
+        let model = model_from(src);
+        let result = BusinessAreaMermaidEmitter
+            .emit(&model, &View::whole())
+            .unwrap();
+        assert!(result.contains("flowchart LR"));
+        assert!(result.contains("Business Actor Staff"));
+        assert!(result.contains("Appointment.patient_name, create"));
+        assert!(result.contains("-->|create| BookAppointment"));
+        assert!(!result.contains("BucScheduling["));
+    }
+
+    #[test]
+    fn test_technical_area_mermaid_emit() {
+        let src = r#"
+system SchedulingSystem "Scheduling System"
+api BookingApi "Booking API"
+entity Appointment "Appointment" { id: Int @pk }
+contains(SchedulingSystem, BookingApi)
+creates(BookingApi, Appointment)
+"#;
+        let model = model_from(src);
+        let result = TechnicalAreaMermaidEmitter
+            .emit(&model, &View::whole())
+            .unwrap();
+        assert!(result.contains("subgraph system__SchedulingSystem[Scheduling System]"));
+        assert!(result.contains("API Booking API"));
+        assert!(result.contains("Entity Appointment"));
+        assert!(result.contains("-.->|creates|"));
     }
 
     #[test]

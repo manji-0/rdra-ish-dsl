@@ -60,7 +60,7 @@ rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]...
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `rdra` \| `boundaryless-graph` \| `er` \| `state` \| `sequence` \| `event-flow` | `rdra` | The diagram kind. `rdra` = RDRA layered graph mapped onto the original four-layer structure; `boundaryless-graph` = dense relationship graph without RDRA layer boundaries; `er` = entity-relationship diagram; `state` = state machine; `sequence` = write-focused sequence diagram with FK-inferred transaction boundaries; `event-flow` = event causality graph showing UC->Event->UC/BUC and Event->State chains. |
+| `--kind` | `rdra` \| `boundaryless-graph` \| `er` \| `state` \| `sequence` \| `event-flow` \| `business-area` \| `technical-area` | `rdra` | The diagram kind. `rdra` = RDRA layered graph mapped onto the original four-layer structure; `boundaryless-graph` = dense relationship graph without RDRA layer boundaries; `er` = entity-relationship diagram; `state` = state machine; `sequence` = write-focused sequence diagram with FK-inferred transaction boundaries; `event-flow` = event causality graph showing UC->Event->UC/BUC and Event->State chains; `business-area` = Actor -> input field -> UseCase; `technical-area` = System boxes containing only APIs and Entities. |
 | `--format` | `puml` \| `svg` \| `png` \| `mermaid` | `puml` | Output format. `puml` writes PlantUML text (`.puml`); `mermaid` writes Mermaid text (`.mmd`); `svg` / `png` render via plantuml.jar. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Filter to one or more BUCs by id. With multiple ids, the **union** of reachable nodes across the named BUCs is shown. Applies to all diagram kinds. For `sequence`, only use cases directly contained in the selected BUCs are shown; event-triggered use cases in other BUCs are left to `event-flow`. |
 | `--usecase <id>` | string (repeatable) | — (whole model) | Filter `sequence` diagrams to one or more use cases by id. Cannot be combined with `--buc`. |
@@ -87,6 +87,10 @@ Notes:
   system value (`actor`, `requirement`), system external environment (`business`, `buc`,
   `usagescene`, `extsystem`, `condition`, `variation`), system boundary (`usecase`,
   `screen`, `event`), and system (`system`, `api`, `entity`, `state`).
+- For `--kind business-area`, the diagram shows only business actors, inferred input
+  fields, and use cases. The input nodes are derived from `business-inputs`.
+- For `--kind technical-area`, each system is rendered as a container holding only its
+  APIs and the entities those APIs operate through CRUD predicates.
 - For `--kind boundaryless-graph`, the same relationships are rendered as one flat graph
   for dense link inspection. API nodes are omitted there so the graph stays focused on
   business and data relationships.
@@ -107,7 +111,7 @@ rdra-ish csv <INPUTS...> [--kind <KIND>] [-o <OUT>]
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `actor` \| `entity` \| `matrix` \| `api` \| `api-matrix` \| `screen-constraints` \| `permission-callables` \| `actor-permission-audit` | `entity` | CSV kind. `actor` = actor list; `entity` = entity/column list; `matrix` = use-case × entity CRUD matrix; `api` = API list; `api-matrix` = API × entity CRUD matrix; `screen-constraints` = screen × UC/API permission/medium paths; `permission-callables` = permission × callable UC/API list derived from `requires_permission`; `actor-permission-audit` = actor × permission assignment audit inferred from UC/API requirements. |
+| `--kind` | `actor` \| `entity` \| `matrix` \| `api` \| `api-matrix` \| `screen-constraints` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` | `entity` | CSV kind. `actor` = actor list; `entity` = entity/column list; `matrix` = use-case × entity CRUD matrix; `api` = API list; `api-matrix` = API × entity CRUD matrix; `screen-constraints` = screen × UC/API permission/medium paths; `permission-callables` = permission × callable UC/API list derived from `requires_permission`; `actor-permission-audit` = actor × permission assignment audit inferred from UC/API requirements; `business-inputs` = Actor x inferred input field x UseCase rows derived from C/U/W paths. |
 | `-o`, `--out` | path | `out` | Output file path. If no extension is given, a default is appended (`actor.csv` / `entity.csv` / `matrix.csv` / etc.). |
 
 The command writes the CSV to the output path and prints `wrote <path>`.
@@ -125,7 +129,7 @@ rdra-ish list <INPUTS...> [--kind <KIND>] [--format <FORMAT>]
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `actor` \| `entity` \| `buc` \| `usecase` \| `system` \| `api` \| `permission-callables` \| `actor-permission-audit` | `actor` | The element kind to list. `actor` / `buc` / `usecase` / `system` / `api` list id+label; `entity` lists each column with its type and PK/FK flags; `permission-callables` lists each permission with callable use case and API ids derived from `requires_permission`; `actor-permission-audit` lists inferred actor-side assignment gaps. |
+| `--kind` | `actor` \| `entity` \| `buc` \| `usecase` \| `system` \| `api` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` | `actor` | The element kind to list. `actor` / `buc` / `usecase` / `system` / `api` list id+label; `entity` lists each column with its type and PK/FK flags; `permission-callables` lists each permission with callable use case and API ids derived from `requires_permission`; `actor-permission-audit` lists inferred actor-side assignment gaps; `business-inputs` lists inferred actor-entered fields. |
 | `--format` | `table` \| `json` \| `csv` | `table` | Output format. |
 
 Output is written to stdout.

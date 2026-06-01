@@ -6,17 +6,19 @@ use rdra_ish_core::{
 };
 use rdra_ish_emit::{
     csv::{
-        ActorInputInferenceCsvEmitter, ActorListCsvEmitter, ActorPermissionAuditCsvEmitter,
-        ApiEntityMatrixCsvEmitter, ApiListCsvEmitter, EntityListCsvEmitter,
+        ActorListCsvEmitter, ActorPermissionAuditCsvEmitter, ApiEntityMatrixCsvEmitter,
+        ApiListCsvEmitter, BusinessInputCsvEmitter, EntityListCsvEmitter,
         PermissionCallableCsvEmitter, RelationMatrixCsvEmitter, ScreenConstraintCsvEmitter,
     },
     mermaid::{
-        ErMermaidEmitter, EventFlowMermaidEmitter, ObjectGraphMermaidEmitter, RdraMermaidEmitter,
-        SequenceMermaidEmitter, StateMermaidEmitter,
+        BusinessAreaMermaidEmitter, ErMermaidEmitter, EventFlowMermaidEmitter,
+        ObjectGraphMermaidEmitter, RdraMermaidEmitter, SequenceMermaidEmitter, StateMermaidEmitter,
+        TechnicalAreaMermaidEmitter,
     },
     plantuml::{
-        ErPlantUmlEmitter, EventFlowPlantUmlEmitter, ObjectGraphPlantUmlEmitter,
-        RdraPlantUmlEmitter, SequenceDiagramEmitter, StateDiagramEmitter,
+        BusinessAreaPlantUmlEmitter, ErPlantUmlEmitter, EventFlowPlantUmlEmitter,
+        ObjectGraphPlantUmlEmitter, RdraPlantUmlEmitter, SequenceDiagramEmitter,
+        StateDiagramEmitter, TechnicalAreaPlantUmlEmitter,
     },
     state_pattern::{StatePatternCsvEmitter, StatePatternJsonEmitter, StatePatternTableEmitter},
     Emitter, Filter, Scope, View,
@@ -37,8 +39,9 @@ enum ListKind {
     PermissionCallables,
     /// Actor × permission assignment audit inferred from UC/API requirements
     ActorPermissionAudit,
-    /// Actor input candidates inferred from BUC/use-case CRUD and API paths
-    ActorInputs,
+    /// Business-side input candidates inferred from BUC/use-case CRUD and API paths
+    #[value(alias = "actor-inputs")]
+    BusinessInputs,
 }
 
 #[derive(ValueEnum, Clone)]
@@ -66,7 +69,7 @@ enum Commands {
     Diagram {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Diagram kind: rdra, boundaryless-graph, er, state, sequence, or event-flow
+        /// Diagram kind: rdra, boundaryless-graph, er, state, sequence, event-flow, business-area, or technical-area
         #[arg(long, default_value = "rdra")]
         kind: DiagramKind,
         /// Output format: puml, svg, png, or mermaid (mermaid outputs .mmd text only)
@@ -87,7 +90,7 @@ enum Commands {
     Csv {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// CSV kind: actor, entity, matrix, api, api-matrix, screen-constraints, permission-callables, actor-permission-audit, or actor-inputs
+        /// CSV kind: actor, entity, matrix, api, api-matrix, screen-constraints, permission-callables, actor-permission-audit, or business-inputs
         #[arg(long, default_value = "entity")]
         kind: CsvKind,
         #[arg(short, long, default_value = "out")]
@@ -97,7 +100,7 @@ enum Commands {
     List {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Element kind to list: actor, entity, buc, usecase, system, api, permission-callables, or actor-permission-audit
+        /// Element kind to list: actor, entity, buc, usecase, system, api, permission-callables, actor-permission-audit, or business-inputs
         #[arg(long, default_value = "actor")]
         kind: ListKind,
         /// Output format: table, json, csv
@@ -135,6 +138,10 @@ enum DiagramKind {
     Sequence,
     /// Event-flow diagram: UC --raises--> Event --triggers--> UC / --transitions--> State
     EventFlow,
+    /// Business area diagram: Actor -> input field -> UseCase
+    BusinessArea,
+    /// Technical area diagram: System boxes containing only APIs and Entities
+    TechnicalArea,
 }
 
 #[derive(ValueEnum, Clone, PartialEq)]
@@ -160,8 +167,9 @@ enum CsvKind {
     PermissionCallables,
     /// Actor × permission assignment audit inferred from UC/API requirements
     ActorPermissionAudit,
-    /// Actor input candidates inferred from BUC/use-case CRUD and API paths
-    ActorInputs,
+    /// Business-side input candidates inferred from BUC/use-case CRUD and API paths
+    #[value(alias = "actor-inputs")]
+    BusinessInputs,
 }
 
 /// Collect all `.rdra` files from the given paths (files and/or directories).
@@ -271,8 +279,12 @@ fn main() -> Result<()> {
                 }
             }
 
-            if !usecase.is_empty() && !matches!(kind, DiagramKind::Sequence) {
-                anyhow::bail!("--usecase is currently supported only for --kind sequence");
+            if !usecase.is_empty()
+                && !matches!(kind, DiagramKind::Sequence | DiagramKind::BusinessArea)
+            {
+                anyhow::bail!(
+                    "--usecase is currently supported only for --kind sequence and --kind business-area"
+                );
             }
             if !usecase.is_empty() && !buc.is_empty() {
                 anyhow::bail!("--buc and --usecase cannot be combined");
@@ -296,7 +308,9 @@ fn main() -> Result<()> {
                 | DiagramKind::BoundarylessGraph
                 | DiagramKind::State
                 | DiagramKind::Sequence
-                | DiagramKind::EventFlow => View {
+                | DiagramKind::EventFlow
+                | DiagramKind::BusinessArea
+                | DiagramKind::TechnicalArea => View {
                     scope,
                     filter: Filter::None,
                 },
@@ -332,6 +346,10 @@ fn main() -> Result<()> {
                     DiagramKind::State => StateMermaidEmitter.emit(&model, &view)?,
                     DiagramKind::Sequence => SequenceMermaidEmitter.emit(&model, &view)?,
                     DiagramKind::EventFlow => EventFlowMermaidEmitter.emit(&model, &view)?,
+                    DiagramKind::BusinessArea => BusinessAreaMermaidEmitter.emit(&model, &view)?,
+                    DiagramKind::TechnicalArea => {
+                        TechnicalAreaMermaidEmitter.emit(&model, &view)?
+                    }
                 },
                 _ => match kind {
                     DiagramKind::Rdra => ObjectGraphPlantUmlEmitter.emit(&model, &view)?,
@@ -340,6 +358,10 @@ fn main() -> Result<()> {
                     DiagramKind::State => StateDiagramEmitter.emit(&model, &view)?,
                     DiagramKind::Sequence => SequenceDiagramEmitter.emit(&model, &view)?,
                     DiagramKind::EventFlow => EventFlowPlantUmlEmitter.emit(&model, &view)?,
+                    DiagramKind::BusinessArea => BusinessAreaPlantUmlEmitter.emit(&model, &view)?,
+                    DiagramKind::TechnicalArea => {
+                        TechnicalAreaPlantUmlEmitter.emit(&model, &view)?
+                    }
                 },
             };
 
@@ -411,9 +433,9 @@ fn main() -> Result<()> {
                     ActorPermissionAuditCsvEmitter.emit(&model, &view)?,
                     "actor-permission-audit.csv",
                 ),
-                CsvKind::ActorInputs => (
-                    ActorInputInferenceCsvEmitter.emit(&model, &view)?,
-                    "actor-inputs.csv",
+                CsvKind::BusinessInputs => (
+                    BusinessInputCsvEmitter.emit(&model, &view)?,
+                    "business-inputs.csv",
                 ),
             };
 
@@ -660,11 +682,11 @@ fn list_elements(
         }
         ListKind::PermissionCallables => format_permission_callables(model, format),
         ListKind::ActorPermissionAudit => format_actor_permission_audit(model, format),
-        ListKind::ActorInputs => format_actor_inputs(model, format),
+        ListKind::BusinessInputs => format_business_inputs(model, format),
     }
 }
 
-fn format_actor_inputs(
+fn format_business_inputs(
     model: &rdra_ish_core::SemanticModel,
     format: &ListFormat,
 ) -> Result<String> {
