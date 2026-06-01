@@ -31,6 +31,9 @@ pub enum RdraError {
     #[error("IO error reading '{path}': {msg}")]
     IoError { path: String, msg: String },
 
+    #[error("syntax error in '{path}': {msg}")]
+    SyntaxError { path: String, msg: String },
+
     #[error("circular import detected among files: {}", files.join(", "))]
     CircularImport { files: Vec<String> },
 

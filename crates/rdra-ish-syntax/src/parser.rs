@@ -32,12 +32,42 @@ fn string_lit() -> impl Parser<Token, String, Error = Simple<Token>> + Clone {
     select! { Token::StringLit(s) => s }
 }
 
+/// Match a token that can be used as a module/import path segment.
+///
+/// Path segments are namespace labels, so keyword-like names such as
+/// `buc.purchase` must remain valid even though `buc` is a declaration keyword
+/// elsewhere in the grammar.
+fn path_ident() -> impl Parser<Token, String, Error = Simple<Token>> + Clone {
+    select! {
+        Token::Ident(s) => s,
+        Token::Actor => "actor".to_string(),
+        Token::ExtSystem => "extsystem".to_string(),
+        Token::System => "system".to_string(),
+        Token::Requirement => "requirement".to_string(),
+        Token::Business => "business".to_string(),
+        Token::Buc => "buc".to_string(),
+        Token::UsageScene => "usagescene".to_string(),
+        Token::UseCase => "usecase".to_string(),
+        Token::Screen => "screen".to_string(),
+        Token::Event => "event".to_string(),
+        Token::Entity => "entity".to_string(),
+        Token::State => "state".to_string(),
+        Token::Condition => "condition".to_string(),
+        Token::Variation => "variation".to_string(),
+        Token::Api => "api".to_string(),
+        Token::Location => "location".to_string(),
+        Token::Timing => "timing".to_string(),
+        Token::Medium => "medium".to_string(),
+        Token::Permission => "permission".to_string(),
+    }
+}
+
 // ── Dotted name ───────────────────────────────────────────────────────────────
 
 /// `foo.bar.baz`
 fn dotted_name() -> impl Parser<Token, DottedName, Error = Simple<Token>> + Clone {
-    ident()
-        .then(just(Token::Dot).ignore_then(ident()).repeated())
+    path_ident()
+        .then(just(Token::Dot).ignore_then(path_ident()).repeated())
         .map(|(head, tail)| {
             let mut parts = vec![head];
             parts.extend(tail);
@@ -68,7 +98,7 @@ fn select_item() -> impl Parser<Token, SelectItem, Error = Simple<Token>> + Clon
 /// path directly as ident segments and then dispatching on the suffix.
 fn import_decl() -> impl Parser<Token, ImportDecl, Error = Simple<Token>> + Clone {
     // One ident segment (not inside braces).
-    let path_segment = ident();
+    let path_segment = path_ident();
 
     // dotted sequence: head (. segment)*
     let path = path_segment
@@ -488,6 +518,16 @@ import shared.actors.{Customer as C}
     }
 
     #[test]
+    fn test_parse_module_path_with_keyword_segment() {
+        let ast = parse_ok("module buc.purchase");
+        assert_eq!(ast.items.len(), 1);
+        let Item::Module(name, _) = &ast.items[0] else {
+            panic!("expected module declaration");
+        };
+        assert_eq!(name.0, vec!["buc", "purchase"]);
+    }
+
+    #[test]
     fn test_parse_full_snippet() {
         let src = r#"
 // コメント
@@ -509,6 +549,24 @@ relate(Order, Customer, "N:1")
 "#;
         let ast = parse_ok(src);
         insta::assert_debug_snapshot!(ast);
+    }
+
+    #[test]
+    fn test_parse_inline_comments() {
+        let src = r#"
+module shop // module comment
+actor Customer "顧客" /* actor comment */
+usecase Browse "商品を探す" // usecase comment
+entity Product "商品" { // columns
+  id: Int @pk // primary key
+  name: String /* display name */
+  // status column
+  status: Enum(active, discontinued) @default(active) // default status
+}
+performs(Customer, Browse) /* predicate comment */
+"#;
+        let ast = parse_ok(src);
+        assert_eq!(ast.items.len(), 5);
     }
 
     #[test]

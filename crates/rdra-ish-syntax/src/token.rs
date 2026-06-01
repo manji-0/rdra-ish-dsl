@@ -4,6 +4,7 @@ use logos::Logos;
 #[derive(Logos, Debug, Clone, PartialEq, Eq, Hash)]
 #[logos(skip r"[ \t\r\n]+")] // whitespace
 #[logos(skip r"//[^\n]*")] // line comments
+#[logos(skip r"/\*([^*]|\*[^/])*\*/")] // block comments
 pub enum Token {
     // ── Keywords ────────────────────────────────────────────────────
     #[token("module")]

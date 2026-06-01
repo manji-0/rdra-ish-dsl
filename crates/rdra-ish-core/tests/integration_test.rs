@@ -376,6 +376,39 @@ fn test_error_duplicate() {
 }
 
 #[test]
+fn test_parse_errors_are_reported_by_resolver() {
+    use std::fs;
+
+    let dir = std::env::temp_dir().join(format!(
+        "rdra_integ_parse_error_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .subsec_nanos()
+    ));
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(
+        dir.join("main.rdra"),
+        "entity Product \"商品\" {\n  id: Int @pk\n  broken\n}\n",
+    )
+    .unwrap();
+
+    let (_, diags) = resolve(&[dir.join("main.rdra")], std::slice::from_ref(&dir));
+    assert!(
+        diags
+            .iter()
+            .any(|d| matches!(&d.error, RdraError::SyntaxError { .. })),
+        "expected SyntaxError diagnostic, got: {:?}",
+        diags
+            .iter()
+            .map(|d| d.error.to_string())
+            .collect::<Vec<_>>()
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn test_duplicate_definition_across_files() {
     use std::fs;
 

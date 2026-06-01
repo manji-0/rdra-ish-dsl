@@ -68,7 +68,13 @@ pub fn resolve(
             }
         };
 
-        let (ast, _parse_errs) = parse(&src);
+        let (ast, parse_errs) = parse(&src);
+        for err in parse_errs {
+            diags.push(Diagnostic::error(RdraError::SyntaxError {
+                path: canon.display().to_string(),
+                msg: format!("{err:?}"),
+            }));
+        }
         let id: SourceId = sources.len();
         let ni = graph.add_node(id);
         path_to_id.insert(canon.clone(), id);
