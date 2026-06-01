@@ -9,256 +9,211 @@ use rdra_ish_core::model::{
     UseCaseKey,
 };
 use rdra_ish_core::tx::infer_usecase_transactions;
-use rdra_ish_core::{derive_actor_input_inferences, derive_system_boundaries, ActorInputInference};
+use rdra_ish_core::{
+    derive_actor_input_inferences, derive_system_boundaries, ActorInputInference, EventFlow,
+};
 use std::collections::{HashMap, HashSet};
 
 // ── RDRA全体図エミッタ ────────────────────────────────────────────────────────
 
 pub struct RdraPlantUmlEmitter;
 
-impl Emitter for RdraPlantUmlEmitter {
-    fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
-        // BUCフィルタ: Scope::Bucs の場合は到達可能ノードのみに絞る
-        let reachable: Option<HashSet<NodeRef>> = match &view.scope {
-            Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
-            Scope::Whole | Scope::UseCases(_) => None,
-        };
-
-        let is_visible = |nr: &NodeRef| -> bool {
-            match &reachable {
-                Some(set) => set.contains(nr),
-                None => true,
-            }
-        };
-
-        let mut out = String::new();
-        out.push_str("@startuml\n");
-        out.push_str("!theme plain\n");
-        out.push('\n');
-
-        // actors
-        let mut actor_ids: Vec<_> = model.actors.iter().collect();
-        actor_ids.sort_by_key(|(_, a)| &a.id);
-        for (k, actor) in &actor_ids {
-            let nr = NodeRef::Actor(*k);
-            if is_visible(&nr) {
-                out.push_str(&format!(
-                    "actor \"{}\" as {}\n",
-                    prefixed_node_label(&nr, &actor.label),
-                    actor.id
-                ));
-            }
+fn render_rdra_node_declarations(
+    out: &mut String,
+    model: &SemanticModel,
+    reachable: &Option<HashSet<NodeRef>>,
+) {
+    let mut actor_ids: Vec<_> = model.actors.iter().collect();
+    actor_ids.sort_by_key(|(_, actor)| &actor.id);
+    for (key, actor) in &actor_ids {
+        let node = NodeRef::Actor(*key);
+        if scoped_node_visible(reachable, &node) {
+            out.push_str(&format!(
+                "actor \"{}\" as {}\n",
+                prefixed_node_label(&node, &actor.label),
+                actor.id
+            ));
         }
-        out.push('\n');
+    }
+    out.push('\n');
 
-        // usecases
-        let mut uc_ids: Vec<_> = model.use_cases.iter().collect();
-        uc_ids.sort_by_key(|(_, u)| &u.id);
-        for (k, uc) in &uc_ids {
-            let nr = NodeRef::UseCase(*k);
-            if is_visible(&nr) {
-                out.push_str(&format!(
-                    "usecase \"{}\" as {}\n",
-                    prefixed_node_label(&nr, &uc.label),
-                    uc.id
-                ));
-            }
+    let mut usecase_ids: Vec<_> = model.use_cases.iter().collect();
+    usecase_ids.sort_by_key(|(_, usecase)| &usecase.id);
+    for (key, usecase) in &usecase_ids {
+        let node = NodeRef::UseCase(*key);
+        if scoped_node_visible(reachable, &node) {
+            out.push_str(&format!(
+                "usecase \"{}\" as {}\n",
+                prefixed_node_label(&node, &usecase.label),
+                usecase.id
+            ));
         }
-        out.push('\n');
+    }
+    out.push('\n');
 
-        // bucs (as rectangles)
-        let mut buc_ids: Vec<_> = model.bucs.iter().collect();
-        buc_ids.sort_by_key(|(_, b)| &b.id);
-        for (k, buc) in &buc_ids {
-            let nr = NodeRef::Buc(*k);
-            if is_visible(&nr) {
-                out.push_str(&format!(
-                    "rectangle \"{}\" as {}\n",
-                    prefixed_node_label(&nr, &buc.label),
-                    buc.id
-                ));
-            }
+    let mut buc_ids: Vec<_> = model.bucs.iter().collect();
+    buc_ids.sort_by_key(|(_, buc)| &buc.id);
+    for (key, buc) in &buc_ids {
+        let node = NodeRef::Buc(*key);
+        if scoped_node_visible(reachable, &node) {
+            out.push_str(&format!(
+                "rectangle \"{}\" as {}\n",
+                prefixed_node_label(&node, &buc.label),
+                buc.id
+            ));
         }
-        out.push('\n');
+    }
+    out.push('\n');
 
-        // systems (as packages)
-        let mut system_ids: Vec<_> = model.systems.iter().collect();
-        system_ids.sort_by_key(|(_, s)| &s.id);
-        for (k, system) in &system_ids {
-            let nr = NodeRef::System(*k);
-            if is_visible(&nr) {
-                out.push_str(&format!(
-                    "package \"{}\" as {}\n",
-                    prefixed_node_label(&nr, &system.label),
-                    system.id
-                ));
-            }
+    let mut system_ids: Vec<_> = model.systems.iter().collect();
+    system_ids.sort_by_key(|(_, system)| &system.id);
+    for (key, system) in &system_ids {
+        let node = NodeRef::System(*key);
+        if scoped_node_visible(reachable, &node) {
+            out.push_str(&format!(
+                "package \"{}\" as {}\n",
+                prefixed_node_label(&node, &system.label),
+                system.id
+            ));
         }
-        out.push('\n');
+    }
+    out.push('\n');
 
-        // ext_systems (as components)
-        let mut ext_ids: Vec<_> = model.ext_systems.iter().collect();
-        ext_ids.sort_by_key(|(_, e)| &e.id);
-        for (k, ext) in &ext_ids {
-            let nr = NodeRef::ExtSystem(*k);
-            if is_visible(&nr) {
-                out.push_str(&format!(
-                    "component \"{}\" as {}\n",
-                    prefixed_node_label(&nr, &ext.label),
-                    ext.id
-                ));
-            }
+    let mut ext_ids: Vec<_> = model.ext_systems.iter().collect();
+    ext_ids.sort_by_key(|(_, ext_system)| &ext_system.id);
+    for (key, ext_system) in &ext_ids {
+        let node = NodeRef::ExtSystem(*key);
+        if scoped_node_visible(reachable, &node) {
+            out.push_str(&format!(
+                "component \"{}\" as {}\n",
+                prefixed_node_label(&node, &ext_system.label),
+                ext_system.id
+            ));
         }
-        out.push('\n');
+    }
+    out.push('\n');
 
-        // entities (as databases)
-        let mut ent_ids: Vec<_> = model.entities.iter().collect();
-        ent_ids.sort_by_key(|(_, e)| &e.id);
-        for (k, ent) in &ent_ids {
-            let nr = NodeRef::Entity(*k);
-            if is_visible(&nr) {
-                out.push_str(&format!(
-                    "database \"{}\" as {}\n",
-                    prefixed_node_label(&nr, &ent.label),
-                    ent.id
-                ));
-            }
+    let mut entity_ids: Vec<_> = model.entities.iter().collect();
+    entity_ids.sort_by_key(|(_, entity)| &entity.id);
+    for (key, entity) in &entity_ids {
+        let node = NodeRef::Entity(*key);
+        if scoped_node_visible(reachable, &node) {
+            out.push_str(&format!(
+                "database \"{}\" as {}\n",
+                prefixed_node_label(&node, &entity.label),
+                entity.id
+            ));
         }
-        out.push('\n');
+    }
+    out.push('\n');
 
-        // screens (as boundary)
-        let mut scr_ids: Vec<_> = model.screens.iter().collect();
-        scr_ids.sort_by_key(|(_, s)| &s.id);
-        for (k, scr) in &scr_ids {
-            let nr = NodeRef::Screen(*k);
-            if is_visible(&nr) {
-                out.push_str(&format!(
-                    "boundary \"{}\" as {}\n",
-                    prefixed_node_label(&nr, &scr.label),
-                    scr.id
-                ));
-            }
+    let mut screen_ids: Vec<_> = model.screens.iter().collect();
+    screen_ids.sort_by_key(|(_, screen)| &screen.id);
+    for (key, screen) in &screen_ids {
+        let node = NodeRef::Screen(*key);
+        if scoped_node_visible(reachable, &node) {
+            out.push_str(&format!(
+                "boundary \"{}\" as {}\n",
+                prefixed_node_label(&node, &screen.label),
+                screen.id
+            ));
         }
-        out.push('\n');
+    }
+    out.push('\n');
 
-        // events (as control)
-        let mut ev_ids: Vec<_> = model.events.iter().collect();
-        ev_ids.sort_by_key(|(_, e)| &e.id);
-        for (k, ev) in &ev_ids {
-            let nr = NodeRef::Event(*k);
-            if is_visible(&nr) {
-                out.push_str(&format!(
-                    "control \"{}\" as {}\n",
-                    prefixed_node_label(&nr, &ev.label),
-                    ev.id
-                ));
-            }
+    let mut event_ids: Vec<_> = model.events.iter().collect();
+    event_ids.sort_by_key(|(_, event)| &event.id);
+    for (key, event) in &event_ids {
+        let node = NodeRef::Event(*key);
+        if scoped_node_visible(reachable, &node) {
+            out.push_str(&format!(
+                "control \"{}\" as {}\n",
+                prefixed_node_label(&node, &event.label),
+                event.id
+            ));
         }
-        out.push('\n');
+    }
+    out.push('\n');
 
-        // states (as collections)
-        let mut st_ids: Vec<_> = model.states.iter().collect();
-        st_ids.sort_by_key(|(_, s)| &s.id);
-        for (k, st) in &st_ids {
-            let nr = NodeRef::State(*k);
-            if is_visible(&nr) {
-                out.push_str(&format!(
-                    "collections \"{}\" as {}\n",
-                    prefixed_node_label(&nr, &st.label),
-                    st.id
-                ));
-            }
+    let mut state_ids: Vec<_> = model.states.iter().collect();
+    state_ids.sort_by_key(|(_, state)| &state.id);
+    for (key, state) in &state_ids {
+        let node = NodeRef::State(*key);
+        if scoped_node_visible(reachable, &node) {
+            out.push_str(&format!(
+                "collections \"{}\" as {}\n",
+                prefixed_node_label(&node, &state.label),
+                state.id
+            ));
         }
-        out.push('\n');
+    }
+    out.push('\n');
+}
 
-        // relations (両端のノードが visible なもののみ出力)
-        let mut relations: Vec<_> = model.relations.iter().collect();
-        relations.sort_by_key(|r| format!("{:?}{:?}", r.from, r.to));
-        for rel in &relations {
-            if !is_visible(&rel.from) || !is_visible(&rel.to) {
-                continue;
-            }
-            // API ノードは RDRA 全体図には出さない
-            if matches!(&rel.from, NodeRef::Api(_)) || matches!(&rel.to, NodeRef::Api(_)) {
-                continue;
-            }
-            if let (Some(from_id), Some(to_id)) =
-                (node_id(model, &rel.from), node_id(model, &rel.to))
-            {
-                let arrow = match &rel.kind {
-                    RelKind::Performs => format!("{} --> {}", from_id, to_id),
-                    RelKind::Uses => format!("{} --> {}", from_id, to_id),
-                    RelKind::Reads => {
-                        format!("{} ..> {} : reads", from_id, to_id)
-                    }
-                    RelKind::Writes => {
-                        format!("{} ..> {} : writes", from_id, to_id)
-                    }
-                    RelKind::Creates => {
-                        format!("{} ..> {} : creates", from_id, to_id)
-                    }
-                    RelKind::Updates => {
-                        format!("{} ..> {} : updates", from_id, to_id)
-                    }
-                    RelKind::Deletes => {
-                        format!("{} ..> {} : deletes", from_id, to_id)
-                    }
-                    RelKind::Displays => {
-                        format!("{} ..> {} : displays", from_id, to_id)
-                    }
-                    RelKind::Shows => {
-                        format!("{} ..> {} : shows", from_id, to_id)
-                    }
-                    RelKind::Raises => {
-                        format!("{} ..> {} : raises", from_id, to_id)
-                    }
-                    RelKind::Triggers => {
-                        format!("{} ..> {} : triggers", from_id, to_id)
-                    }
-                    RelKind::Contains => {
-                        format!("{} ..> {} : contains", from_id, to_id)
-                    }
-                    RelKind::Belongs => {
-                        format!("{} ..> {} : belongs", from_id, to_id)
-                    }
-                    RelKind::HasPermission => {
-                        format!("{} ..> {} : has_permission", from_id, to_id)
-                    }
-                    RelKind::RequiresPermission => {
-                        format!("{} ..> {} : requires_permission", from_id, to_id)
-                    }
-                    RelKind::RequiresMedium => {
-                        format!("{} ..> {} : requires_medium", from_id, to_id)
-                    }
-                    RelKind::Motivates => {
-                        format!("{} ..> {} : motivates", from_id, to_id)
-                    }
-                    RelKind::Transitions => {
-                        // 状態遷移図エミッタで扱うのでここではスキップ
-                        continue;
-                    }
-                    RelKind::Invokes => {
-                        // API層は概要図には出さない
-                        continue;
-                    }
-                    RelKind::RelateOneToOne => {
-                        format!("{} -- {}", from_id, to_id)
-                    }
-                    RelKind::RelateOneToMany => {
-                        format!("{} -- {}", from_id, to_id)
-                    }
-                    RelKind::RelateManyToOne => {
-                        format!("{} -- {}", from_id, to_id)
-                    }
-                    RelKind::RelateManyToMany => {
-                        format!("{} -- {}", from_id, to_id)
-                    }
-                };
+fn rdra_relation_arrow(kind: &RelKind, from_id: &str, to_id: &str) -> Option<String> {
+    let arrow = match kind {
+        RelKind::Performs => format!("{} --> {}", from_id, to_id),
+        RelKind::Uses => format!("{} --> {}", from_id, to_id),
+        RelKind::Reads => format!("{} ..> {} : reads", from_id, to_id),
+        RelKind::Writes => format!("{} ..> {} : writes", from_id, to_id),
+        RelKind::Creates => format!("{} ..> {} : creates", from_id, to_id),
+        RelKind::Updates => format!("{} ..> {} : updates", from_id, to_id),
+        RelKind::Deletes => format!("{} ..> {} : deletes", from_id, to_id),
+        RelKind::Displays => format!("{} ..> {} : displays", from_id, to_id),
+        RelKind::Shows => format!("{} ..> {} : shows", from_id, to_id),
+        RelKind::Raises => format!("{} ..> {} : raises", from_id, to_id),
+        RelKind::Triggers => format!("{} ..> {} : triggers", from_id, to_id),
+        RelKind::Contains => format!("{} ..> {} : contains", from_id, to_id),
+        RelKind::Belongs => format!("{} ..> {} : belongs", from_id, to_id),
+        RelKind::HasPermission => format!("{} ..> {} : has_permission", from_id, to_id),
+        RelKind::RequiresPermission => format!("{} ..> {} : requires_permission", from_id, to_id),
+        RelKind::RequiresMedium => format!("{} ..> {} : requires_medium", from_id, to_id),
+        RelKind::Motivates => format!("{} ..> {} : motivates", from_id, to_id),
+        RelKind::Transitions | RelKind::Invokes => return None,
+        RelKind::RelateOneToOne
+        | RelKind::RelateOneToMany
+        | RelKind::RelateManyToOne
+        | RelKind::RelateManyToMany => format!("{} -- {}", from_id, to_id),
+    };
+    Some(arrow)
+}
+
+fn render_rdra_relations(
+    out: &mut String,
+    model: &SemanticModel,
+    reachable: &Option<HashSet<NodeRef>>,
+) {
+    let mut relations: Vec<_> = model.relations.iter().collect();
+    relations.sort_by_key(|relation| format!("{:?}{:?}", relation.from, relation.to));
+    for relation in &relations {
+        if !scoped_node_visible(reachable, &relation.from)
+            || !scoped_node_visible(reachable, &relation.to)
+        {
+            continue;
+        }
+        if matches!(&relation.from, NodeRef::Api(_)) || matches!(&relation.to, NodeRef::Api(_)) {
+            continue;
+        }
+        if let (Some(from_id), Some(to_id)) =
+            (node_id(model, &relation.from), node_id(model, &relation.to))
+        {
+            if let Some(arrow) = rdra_relation_arrow(&relation.kind, from_id, to_id) {
                 out.push_str(&arrow);
                 out.push('\n');
             }
         }
+    }
+}
 
+impl Emitter for RdraPlantUmlEmitter {
+    fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
+        let reachable = reachable_for_scope(model, &view.scope);
+        let mut out = String::new();
+        out.push_str("@startuml\n");
+        out.push_str("!theme plain\n");
+        out.push('\n');
+        render_rdra_node_declarations(&mut out, model, &reachable);
+        render_rdra_relations(&mut out, model, &reachable);
         out.push_str("@enduml\n");
         Ok(out)
     }
@@ -1193,25 +1148,194 @@ impl Emitter for SequenceDiagramEmitter {
 
 pub struct EventFlowPlantUmlEmitter;
 
+fn event_flow_node_visible(reachable: &Option<HashSet<NodeRef>>, node: &NodeRef) -> bool {
+    match reachable {
+        Some(set) => set.contains(node),
+        None => true,
+    }
+}
+
+fn event_flow_event_id(id: &str) -> String {
+    format!("ev__{}", id)
+}
+
+fn event_flow_usecase_id(id: &str) -> String {
+    format!("uc__{}", id)
+}
+
+fn event_flow_buc_id(id: &str) -> String {
+    format!("buc__{}", id)
+}
+
+fn event_flow_state_id(id: &str) -> String {
+    format!("st__{}", id)
+}
+
+fn declare_event_flow_event(
+    out: &mut String,
+    declared: &mut HashSet<String>,
+    model: &SemanticModel,
+    flow: &EventFlow,
+) -> Option<String> {
+    let event = model.events.get(flow.event)?;
+    let event_id = event_flow_event_id(&event.id);
+    if declared.insert(event_id.clone()) {
+        out.push_str(&format!(
+            "card \"{}\" as {}\n",
+            prefixed_label("⚡", &event.label),
+            event_id
+        ));
+    }
+    Some(event_id)
+}
+
+fn declare_event_flow_usecase(
+    out: &mut String,
+    declared: &mut HashSet<String>,
+    model: &SemanticModel,
+    usecase: UseCaseKey,
+) -> Option<String> {
+    let uc = model.use_cases.get(usecase)?;
+    let usecase_id = event_flow_usecase_id(&uc.id);
+    if declared.insert(usecase_id.clone()) {
+        out.push_str(&format!(
+            "usecase \"{}\" as {}\n",
+            prefixed_label("✅", &uc.label),
+            usecase_id
+        ));
+    }
+    Some(usecase_id)
+}
+
+fn declare_event_flow_buc(
+    out: &mut String,
+    declared: &mut HashSet<String>,
+    model: &SemanticModel,
+    buc: BucKey,
+) -> Option<String> {
+    let buc_model = model.bucs.get(buc)?;
+    let buc_id = event_flow_buc_id(&buc_model.id);
+    if declared.insert(buc_id.clone()) {
+        out.push_str(&format!(
+            "rectangle \"{}\" as {}\n",
+            prefixed_label("📦", &buc_model.label),
+            buc_id
+        ));
+    }
+    Some(buc_id)
+}
+
+fn declare_event_flow_state(
+    out: &mut String,
+    declared: &mut HashSet<String>,
+    model: &SemanticModel,
+    state: rdra_ish_core::model::StateKey,
+) -> Option<String> {
+    let state_model = model.states.get(state)?;
+    let state_id = event_flow_state_id(&state_model.id);
+    if declared.insert(state_id.clone()) {
+        out.push_str(&format!(
+            "state \"{}\" as {}\n",
+            prefixed_label("🔄", &state_model.label),
+            state_id
+        ));
+    }
+    Some(state_id)
+}
+
+fn render_event_flow(
+    out: &mut String,
+    declared: &mut HashSet<String>,
+    model: &SemanticModel,
+    reachable: &Option<HashSet<NodeRef>>,
+    flow: &EventFlow,
+) {
+    let event_node = NodeRef::Event(flow.event);
+    if !event_flow_node_visible(reachable, &event_node) {
+        return;
+    }
+    let Some(event_id) = declare_event_flow_event(out, declared, model, flow) else {
+        return;
+    };
+
+    let mut raised_by = flow.raised_by.to_vec();
+    raised_by.sort_by_key(|&uk| {
+        model
+            .use_cases
+            .get(uk)
+            .map(|uc| uc.id.as_str())
+            .unwrap_or("")
+    });
+    for usecase in raised_by {
+        let node = NodeRef::UseCase(usecase);
+        if !event_flow_node_visible(reachable, &node) {
+            continue;
+        }
+        if let Some(usecase_id) = declare_event_flow_usecase(out, declared, model, usecase) {
+            out.push_str(&format!("{} ..> {} : raises\n", usecase_id, event_id));
+        }
+    }
+
+    let mut triggers = flow.triggers_ucs.to_vec();
+    triggers.sort_by_key(|&uk| {
+        model
+            .use_cases
+            .get(uk)
+            .map(|uc| uc.id.as_str())
+            .unwrap_or("")
+    });
+    for usecase in triggers {
+        let node = NodeRef::UseCase(usecase);
+        if !event_flow_node_visible(reachable, &node) {
+            continue;
+        }
+        if let Some(usecase_id) = declare_event_flow_usecase(out, declared, model, usecase) {
+            out.push_str(&format!("{} ..> {} : triggers\n", event_id, usecase_id));
+        }
+    }
+
+    let mut triggered_bucs = flow.triggers_bucs.to_vec();
+    triggered_bucs.sort_by_key(|&bk| model.bucs.get(bk).map(|buc| buc.id.as_str()).unwrap_or(""));
+    for buc in triggered_bucs {
+        let node = NodeRef::Buc(buc);
+        if !event_flow_node_visible(reachable, &node) {
+            continue;
+        }
+        if let Some(buc_id) = declare_event_flow_buc(out, declared, model, buc) {
+            out.push_str(&format!("{} ..> {} : triggers\n", event_id, buc_id));
+        }
+    }
+
+    let mut transitions = flow.transitions.to_vec();
+    transitions.sort_by_key(|(from, _)| {
+        model
+            .states
+            .get(*from)
+            .map(|state| state.id.as_str())
+            .unwrap_or("")
+    });
+    let event_label = model
+        .events
+        .get(flow.event)
+        .map(|event| prefixed_label("⚡", &event.label))
+        .unwrap_or_default();
+    for (from, to) in transitions {
+        let Some(from_id) = declare_event_flow_state(out, declared, model, from) else {
+            continue;
+        };
+        let Some(to_id) = declare_event_flow_state(out, declared, model, to) else {
+            continue;
+        };
+        out.push_str(&format!("{} --> {} : {}\n", from_id, to_id, event_label));
+    }
+}
+
 impl Emitter for EventFlowPlantUmlEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         let reachable: Option<HashSet<NodeRef>> = match &view.scope {
             Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
             Scope::Whole | Scope::UseCases(_) => None,
         };
-        let is_visible = |nr: &NodeRef| -> bool {
-            match &reachable {
-                Some(set) => set.contains(nr),
-                None => true,
-            }
-        };
-
-        // UC / Event / BUC / State が同じ ID を持てるので種別ごとにプレフィックスを付ける
-        let ev_mid = |id: &str| format!("ev__{}", id);
-        let uc_mid = |id: &str| format!("uc__{}", id);
-        let buc_mid = |id: &str| format!("buc__{}", id);
-        let st_mid = |id: &str| format!("st__{}", id);
-
         let flows = rdra_ish_core::collect_event_flows(model);
 
         let mut out = String::new();
@@ -1222,133 +1346,7 @@ impl Emitter for EventFlowPlantUmlEmitter {
         let mut declared: HashSet<String> = HashSet::new();
 
         for flow in &flows {
-            let ev_nr = NodeRef::Event(flow.event);
-            if !is_visible(&ev_nr) {
-                continue;
-            }
-            let ev = match model.events.get(flow.event) {
-                Some(e) => e,
-                None => continue,
-            };
-            let ev_id = ev_mid(&ev.id);
-
-            if declared.insert(ev_id.clone()) {
-                out.push_str(&format!(
-                    "card \"{}\" as {}\n",
-                    prefixed_label("⚡", &ev.label),
-                    ev_id
-                ));
-            }
-
-            let mut raised_by = flow.raised_by.to_vec();
-            raised_by
-                .sort_by_key(|&uk| model.use_cases.get(uk).map(|u| u.id.as_str()).unwrap_or(""));
-            for uk in raised_by {
-                let uc_nr = NodeRef::UseCase(uk);
-                if !is_visible(&uc_nr) {
-                    continue;
-                }
-                let uc = match model.use_cases.get(uk) {
-                    Some(u) => u,
-                    None => continue,
-                };
-                let uid = uc_mid(&uc.id);
-                if declared.insert(uid.clone()) {
-                    out.push_str(&format!(
-                        "usecase \"{}\" as {}\n",
-                        prefixed_label("✅", &uc.label),
-                        uid
-                    ));
-                }
-                out.push_str(&format!("{} ..> {} : raises\n", uid, ev_id));
-            }
-
-            let mut triggers = flow.triggers_ucs.to_vec();
-            triggers
-                .sort_by_key(|&uk| model.use_cases.get(uk).map(|u| u.id.as_str()).unwrap_or(""));
-            for uk in triggers {
-                let uc_nr = NodeRef::UseCase(uk);
-                if !is_visible(&uc_nr) {
-                    continue;
-                }
-                let uc = match model.use_cases.get(uk) {
-                    Some(u) => u,
-                    None => continue,
-                };
-                let uid = uc_mid(&uc.id);
-                if declared.insert(uid.clone()) {
-                    out.push_str(&format!(
-                        "usecase \"{}\" as {}\n",
-                        prefixed_label("✅", &uc.label),
-                        uid
-                    ));
-                }
-                out.push_str(&format!("{} ..> {} : triggers\n", ev_id, uid));
-            }
-
-            let mut triggered_bucs = flow.triggers_bucs.to_vec();
-            triggered_bucs
-                .sort_by_key(|&bk| model.bucs.get(bk).map(|b| b.id.as_str()).unwrap_or(""));
-            for bk in triggered_bucs {
-                let buc_nr = NodeRef::Buc(bk);
-                if !is_visible(&buc_nr) {
-                    continue;
-                }
-                let buc = match model.bucs.get(bk) {
-                    Some(b) => b,
-                    None => continue,
-                };
-                let bid = buc_mid(&buc.id);
-                if declared.insert(bid.clone()) {
-                    out.push_str(&format!(
-                        "rectangle \"{}\" as {}\n",
-                        prefixed_label("📦", &buc.label),
-                        bid
-                    ));
-                }
-                out.push_str(&format!("{} ..> {} : triggers\n", ev_id, bid));
-            }
-
-            let mut transitions = flow.transitions.to_vec();
-            transitions.sort_by_key(|(from_sk, _)| {
-                model
-                    .states
-                    .get(*from_sk)
-                    .map(|s| s.id.as_str())
-                    .unwrap_or("")
-            });
-            for (from_sk, to_sk) in transitions {
-                let from_st = match model.states.get(from_sk) {
-                    Some(s) => s,
-                    None => continue,
-                };
-                let to_st = match model.states.get(to_sk) {
-                    Some(s) => s,
-                    None => continue,
-                };
-                let fid = st_mid(&from_st.id);
-                let tid = st_mid(&to_st.id);
-                if declared.insert(fid.clone()) {
-                    out.push_str(&format!(
-                        "state \"{}\" as {}\n",
-                        prefixed_label("🔄", &from_st.label),
-                        fid
-                    ));
-                }
-                if declared.insert(tid.clone()) {
-                    out.push_str(&format!(
-                        "state \"{}\" as {}\n",
-                        prefixed_label("🔄", &to_st.label),
-                        tid
-                    ));
-                }
-                out.push_str(&format!(
-                    "{} --> {} : {}\n",
-                    fid,
-                    tid,
-                    prefixed_label("⚡", &ev.label)
-                ));
-            }
+            render_event_flow(&mut out, &mut declared, model, &reachable, flow);
         }
 
         out.push_str("\n@enduml\n");
@@ -1540,6 +1538,47 @@ performs(Customer, Browse)
         assert!(result.contains("usecase \"✅ 商品を探す\" as Browse"));
         assert!(result.contains("Customer --> Browse"));
         assert!(result.contains("@enduml"));
+    }
+
+    #[test]
+    fn test_rdra_relation_arrow_labels_and_overview_skips() {
+        assert_eq!(
+            rdra_relation_arrow(&RelKind::Reads, "Browse", "Catalog").as_deref(),
+            Some("Browse ..> Catalog : reads")
+        );
+        assert_eq!(
+            rdra_relation_arrow(&RelKind::RelateManyToOne, "Order", "Customer").as_deref(),
+            Some("Order -- Customer")
+        );
+        assert!(rdra_relation_arrow(&RelKind::Transitions, "Draft", "Published").is_none());
+        assert!(rdra_relation_arrow(&RelKind::Invokes, "Browse", "BrowseApi").is_none());
+    }
+
+    #[test]
+    fn test_rdra_render_helpers_keep_nodes_relations_and_api_out_of_overview() {
+        let src = r#"
+actor Customer "顧客"
+usecase Browse "商品を探す"
+api BrowseApi "商品API"
+entity Catalog "商品台帳" { id: Int @pk }
+performs(Customer, Browse)
+reads(Browse, Catalog)
+invokes(Browse, BrowseApi)
+"#;
+        let model = model_from(src);
+        let reachable = None;
+        let mut declarations = String::new();
+        render_rdra_node_declarations(&mut declarations, &model, &reachable);
+        assert!(declarations.contains("actor \"👤 顧客\" as Customer"));
+        assert!(declarations.contains("usecase \"✅ 商品を探す\" as Browse"));
+        assert!(declarations.contains("database \"🗄️ 商品台帳\" as Catalog"));
+        assert!(!declarations.contains("BrowseApi"));
+
+        let mut relations = String::new();
+        render_rdra_relations(&mut relations, &model, &reachable);
+        assert!(relations.contains("Customer --> Browse"));
+        assert!(relations.contains("Browse ..> Catalog : reads"));
+        assert!(!relations.contains("BrowseApi"));
     }
 
     #[test]
@@ -1784,6 +1823,69 @@ triggers(EncounterSigned, BucBillingClaims)
 
         assert!(result.contains("ev__EncounterSigned ..> buc__BucBillingClaims : triggers"));
         assert!(result.contains("rectangle \"📦 Billing Claims\" as buc__BucBillingClaims"));
+    }
+
+    #[test]
+    fn test_event_flow_helpers_deduplicate_declarations_and_render_transitions() {
+        let src = r#"
+usecase SignEncounter "Sign Encounter"
+usecase ReviewClaim "Review Claim"
+buc BucBillingClaims "Billing Claims"
+state Pending "Pending"
+state Signed "Signed"
+event EncounterSigned "Encounter Signed"
+raises(SignEncounter, EncounterSigned)
+triggers(EncounterSigned, ReviewClaim)
+triggers(EncounterSigned, BucBillingClaims)
+transitions(EncounterSigned, Pending, Signed)
+"#;
+        let model = model_from(src);
+        let flows = rdra_ish_core::collect_event_flows(&model);
+        let flow = flows
+            .iter()
+            .find(|flow| {
+                model
+                    .events
+                    .get(flow.event)
+                    .map(|event| event.id == "EncounterSigned")
+                    .unwrap_or(false)
+            })
+            .unwrap();
+        let mut out = String::new();
+        let mut declared = HashSet::new();
+
+        render_event_flow(&mut out, &mut declared, &model, &None, flow);
+        render_event_flow(&mut out, &mut declared, &model, &None, flow);
+
+        assert_eq!(out.matches("card \"⚡ Encounter Signed\"").count(), 1);
+        assert!(out.contains("uc__SignEncounter ..> ev__EncounterSigned : raises"));
+        assert!(out.contains("ev__EncounterSigned ..> uc__ReviewClaim : triggers"));
+        assert!(out.contains("ev__EncounterSigned ..> buc__BucBillingClaims : triggers"));
+        assert!(out.contains("st__Pending --> st__Signed : ⚡ Encounter Signed"));
+    }
+
+    #[test]
+    fn test_event_flow_visibility_skips_hidden_event_scope() {
+        let src = r#"
+usecase SignEncounter "Sign Encounter"
+event EncounterSigned "Encounter Signed"
+raises(SignEncounter, EncounterSigned)
+"#;
+        let model = model_from(src);
+        let flow = rdra_ish_core::collect_event_flows(&model).pop().unwrap();
+        let mut out = String::new();
+        let mut declared = HashSet::new();
+        let reachable = Some(HashSet::new());
+
+        assert_eq!(
+            event_flow_event_id("EncounterSigned"),
+            "ev__EncounterSigned"
+        );
+        assert_eq!(event_flow_usecase_id("SignEncounter"), "uc__SignEncounter");
+        render_event_flow(&mut out, &mut declared, &model, &reachable, &flow);
+
+        assert!(out.is_empty());
+        assert!(declared.is_empty());
     }
 
     #[test]
