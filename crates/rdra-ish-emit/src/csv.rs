@@ -349,6 +349,7 @@ impl Emitter for PermissionCallableCsvEmitter {
             "permission_label",
             "usecase_ids",
             "api_ids",
+            "usecase_api_paths",
         ])?;
 
         for entry in derive_permission_callables(model) {
@@ -365,12 +366,14 @@ impl Emitter for PermissionCallableCsvEmitter {
                 .map(|key| model.apis[*key].id.as_str())
                 .collect::<Vec<_>>()
                 .join("|");
+            let usecase_api_paths = permission_api_paths(model, &entry.api_paths);
 
             wtr.write_record([
                 permission.id.as_str(),
                 permission.label.as_str(),
                 &usecase_ids,
                 &api_ids,
+                &usecase_api_paths,
             ])?;
         }
 
@@ -502,6 +505,24 @@ fn required_usecase_ids(
     ids.sort();
     ids.dedup();
     ids.join("|")
+}
+
+fn permission_api_paths(
+    model: &SemanticModel,
+    paths: &[rdra_ish_core::PermissionApiPath],
+) -> String {
+    let mut paths: Vec<String> = paths
+        .iter()
+        .map(|path| {
+            format!(
+                "{}->{}",
+                model.use_cases[path.usecase].id, model.apis[path.api].id
+            )
+        })
+        .collect();
+    paths.sort();
+    paths.dedup();
+    paths.join("|")
 }
 
 fn required_api_paths(
@@ -696,16 +717,23 @@ permission PatientRead "Patient Read"
 requires_permission(BookAppointment, ScheduleWrite)
 requires_permission(BookAppointment, PatientRead)
 requires_permission(CancelAppointment, ScheduleWrite)
+invokes(BookAppointment, BookingApi)
+invokes(CancelAppointment, CancelApi)
 requires_permission(BookingApi, PatientRead)
 requires_permission(CancelApi, ScheduleWrite)
 "#;
         let model = model_from(src);
         let view = View::whole();
         let result = PermissionCallableCsvEmitter.emit(&model, &view).unwrap();
-        assert!(result.contains("permission_id,permission_label,usecase_ids,api_ids"));
-        assert!(result
-            .contains("ScheduleWrite,Schedule Write,BookAppointment|CancelAppointment,CancelApi"));
-        assert!(result.contains("PatientRead,Patient Read,BookAppointment,BookingApi"));
+        assert!(
+            result.contains("permission_id,permission_label,usecase_ids,api_ids,usecase_api_paths")
+        );
+        assert!(result.contains(
+            "ScheduleWrite,Schedule Write,BookAppointment|CancelAppointment,CancelApi,CancelAppointment->CancelApi"
+        ));
+        assert!(result.contains(
+            "PatientRead,Patient Read,BookAppointment,BookingApi,BookAppointment->BookingApi"
+        ));
     }
 
     #[test]

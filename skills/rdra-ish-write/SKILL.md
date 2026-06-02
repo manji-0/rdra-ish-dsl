@@ -25,7 +25,7 @@ continue with the single most relevant step.
 | 3 | Interaction boundary | `references/03-interaction-boundary.md` | screens, APIs, systems, media, permissions |
 | 4 | Entity structure | `references/04-entity-structure.md` | columns, keys, relations, coordination |
 | 5 | Lifecycle | `references/05-lifecycle.md` | events, states, transitions, event-started BUCs, effects |
-| 6 | Rules | `references/06-rules.md` | forbidden, invariant, required, exclusive, and cross-entity constraints |
+| 6 | Rules | `references/06-rules.md` | local guardrails, local obligations, then comparison/cross-entity constraints |
 
 Do not skip ahead because a downstream detail is tempting. Model the smallest useful
 increment, run validation, then advance one level.
@@ -168,6 +168,8 @@ import shared.actors.{Staff as S}
   `triggers(Event, UseCase)` later when the concrete entry action is known.
 - Use `sets` to make lifecycle effects explicit for `Enum`, `Bool`, nullable columns,
   and comparison propositions.
+- Add local rules in this order: `forbidden` / `exclusive` first, `invariant` /
+  narrow `required` next, comparison and cross-entity constraints last.
 - Use `cross_forbidden` / `cross_invariant` when a rule mentions columns from more
   than one entity; qualify multi-entity columns as `Entity.column`.
 - Add `.along(EntityA, EntityB, ...)` only when the rule is about instances linked by

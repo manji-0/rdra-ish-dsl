@@ -48,8 +48,9 @@ stage.
 | Entities have columns, keys, and `relate` | Entity structure | Which fields represent lifecycle state or cross-system coordination? |
 | `business-inputs` has surprising or missing field rows | Entity structure | Which fields are actor-entered versus derived by defaults, FK relations, APIs, events, or `sets`? |
 | Enum/Bool/nullable columns exist without lifecycle effects | Entity structure | Which events, transitions, or `sets` effects change them? |
-| `states` has reviewed reachable patterns | Lifecycle | Which reachable states are invalid, conditional, mandatory, or mutually exclusive? |
-| `forbidden`, `invariant`, `required`, `exclusive`, `cross_forbidden`, or `cross_invariant` exists | Business rules | Are violations fixed, intentionally accepted, not evaluable from state axes/caps, relation-scoped via `.along(...)`, or still unresolved requirements? |
+| `states` has reviewed reachable patterns | Lifecycle | Which local guardrails (`forbidden`, `exclusive`) should be checked first? |
+| local guardrails exist and are stable | Business rules | Which local obligations need `invariant`, and are any `required` facts truly global? |
+| `invariant`, `required`, comparison propositions, `cross_forbidden`, or `cross_invariant` exists | Business rules | Are violations fixed, intentionally accepted, not evaluable from state axes/caps, relation-scoped via `.along(...)`, or still unresolved requirements? |
 
 ## How To Analyze
 

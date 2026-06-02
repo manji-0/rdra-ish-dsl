@@ -105,9 +105,9 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 
 11. **Check business rules**
    - Single-entity invalid combinations use `forbidden(Entity, ...)`
-   - Single-entity required co-occurrences use `invariant(Entity).when(...).then(...)`
-   - Always-required facts use `required(Entity, ...)`
    - Mutually exclusive facts use `exclusive(Entity, ...)`
+   - Single-entity required co-occurrences use `invariant(Entity).when(...).then(...)`
+   - Always-required facts use `required(Entity, ...)` only when the fact is truly global
    - Rules that mention multiple entities use `cross_forbidden` or `cross_invariant`
    - Multi-entity conditions qualify columns as `Entity.column`
    - Relation-scoped rules use `.along(EntityA, EntityB, ...)` only when the listed

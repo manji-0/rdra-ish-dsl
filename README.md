@@ -153,8 +153,12 @@ lifecycle, and enforceable rules.
    permissions, API/system boundaries, event-flow, transaction inference, and states.
 10. Run `rdra-ish states <model-root>` to find unreachable states, missing creation
    paths, and state constraint violations.
-11. Add `forbidden` / `invariant` / `required` / `exclusive` constraints when the model
-   needs to assert invalid, conditional, mandatory, or mutually exclusive state facts.
+11. Add local guardrails first with `forbidden` and `exclusive` for impossible or
+   mutually exclusive state facts.
+12. Add local obligations with `invariant`, and use `required` only for facts that must
+   hold in every reachable pattern.
+13. Add comparison propositions and cross-entity constraints only after the local rules
+   are stable enough to justify the extra modeling burden.
 
 For a slower abstract-to-concrete workflow, see
 [Incremental Modeling Flow](./docs/incremental-modeling.md).

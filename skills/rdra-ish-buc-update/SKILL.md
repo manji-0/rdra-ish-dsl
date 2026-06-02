@@ -58,7 +58,8 @@ Also classify the abstraction transition:
 | CRUD exists but no screens/API | Tech interaction boundary | interaction boundary | screens, external interfaces, API endpoints, owning systems, access/media constraints |
 | Entities have only `id` | Tech data design | entity structure | fields, keys, relationships, cardinality |
 | Structured entities have lifecycle fields | Tech lifecycle design | lifecycle | states, events, use-case effects |
-| Lifecycle reaches plausible patterns | Tech-enforced rules | business rules | invalid, conditional, mandatory, or mutually exclusive state facts, including cross-entity rules when needed |
+| Lifecycle reaches plausible patterns | Tech-enforced rules | local guardrails | invalid or mutually exclusive state facts via `forbidden` / `exclusive` |
+| Local guardrails are stable | Tech-enforced rules | obligations and advanced rules | `invariant`, narrow `required`, comparison propositions, or cross-entity rules when needed |
 
 ### Step 3 — Apply the minimal diff
 

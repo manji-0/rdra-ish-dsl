@@ -8,10 +8,11 @@ invalid, conditional, mandatory, or mutually exclusive state facts as executable
 
 ## Goal
 
-Add business rules that can be type-checked as model predicates. Per-entity rules are
-validated against derived state patterns; cross-entity rules are checked by combining
-the reached patterns of the participating entities when their conditions reference
-state axes.
+Add business rules that can be type-checked as model predicates. Move in three passes:
+local guardrails, local obligations, then advanced comparison or cross-entity rules.
+Per-entity rules are validated against derived state patterns; cross-entity rules are
+checked by combining the reached patterns of the participating entities when their
+conditions reference state axes.
 Use `.along(EntityA, EntityB, ...)` only for rules that should quantify over instances
 linked by a declared `relate` path; current `states` validates the path shape but
 reports the rule as `CrossConstraintNotEvaluated` because linked-instance reachability
@@ -20,9 +21,9 @@ is not tracked yet.
 ## Ask For
 
 - Which reachable state combinations are invalid?
+- Which facts must not co-occur?
 - Which value must be present when another state or comparison holds?
 - Which value must be present in every reachable state?
-- Which facts must not co-occur?
 - Does the rule mention one entity or multiple entities?
 - Are the rules hard invariants or review warnings for future refinement?
 - Does an apparent violation mean the rule is wrong, or a missing `sets`/transition
@@ -31,16 +32,16 @@ is not tracked yet.
 ## Procedure
 
 1. Add `forbidden(Entity, ...)` for invalid combinations inside one entity.
-2. Add `invariant(Entity).when(...).then(...)` for single-entity required
+2. Add `exclusive(Entity, ...)` for mutually exclusive state facts.
+3. Add `invariant(Entity).when(...).then(...)` for single-entity required
    co-occurrences.
-3. Add `required(Entity, ...)` for always-required facts.
-4. Add `exclusive(Entity, ...)` for mutually exclusive state facts.
-5. Add `cross_forbidden(...)` or `cross_invariant(...)` when a rule mentions columns
+4. Add `required(Entity, ...)` only for facts that truly apply to every reachable state.
+5. Use comparison propositions when rules depend on expressions such as
+   `stock < selling`, and add matching `sets(..., expr, true/false)` effects.
+6. Add `cross_forbidden(...)` or `cross_invariant(...)` when a rule mentions columns
    from more than one entity; qualify columns as `Entity.column`.
-6. Add `.along(...)` when the intended semantics is relation-scoped rather than global
+7. Add `.along(...)` when the intended semantics is relation-scoped rather than global
    cross-product; keep it off rules that truly forbid global co-existence.
-7. Use comparison propositions when rules depend on expressions such as
-   `stock < selling`.
 8. If a per-entity rule fails unexpectedly, inspect lifecycle inputs before weakening it:
    missing `sets`, missing transitions, or missing create/default paths are common.
 9. Keep implementation policy notes outside the DSL unless they can be expressed as
@@ -51,13 +52,13 @@ is not tracked yet.
 ```rdra
 forbidden(Order, (status, cancelled), (paid_at, present))
 
+exclusive(Document, (approved, true), (rejected, true))
+
 invariant(Order)
   .when(status, submitted)
   .then(submitted_at, present)
 
 required(Account, (active, true))
-
-exclusive(Document, (approved, true), (rejected, true))
 
 sets(ReserveStock, Inventory, stock < selling, true)
 forbidden(Inventory, stock < selling)

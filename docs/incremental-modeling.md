@@ -140,7 +140,9 @@ import shared.lifecycle.order
 | 3 | Tech interaction boundary | Interaction boundary | What UI/API boundary mediates the work, and with which authority/media constraints? | `screen`, `displays`, `shows`, optional `api`/`invokes`, `permission`, `medium`, `has_permission`, `requires_*` | sequence diagram, screen-constraints CSV, actor-permission audit |
 | 4 | Tech data design | Entity structure | What structure and ownership does the data need? | columns, `@pk`, `relate`, cardinality | ER diagram, sequence TX warnings |
 | 5 | Tech lifecycle design | Lifecycle | Which states and event-triggered BUC entries are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `state`, `transitions`, `raises`, `triggers`, `sets` | `check`, `states`, state diagram, event-flow |
-| 6 | Tech-enforced rules | Business rules | Which states are invalid, conditional, mandatory, or mutually exclusive? | `forbidden`, `invariant`, `required`, `exclusive`, comparison propositions | `states` diagnostics |
+| 6A | Tech-enforced rules | Local guardrails | Which simple states or facts must never co-occur? | `forbidden`, `exclusive` over Enum / Bool / nullable axes | `states` diagnostics |
+| 6B | Tech-enforced rules | Local obligations | Which reachable states imply or require other facts? | `invariant`, narrow `required` | `states` diagnostics |
+| 6C | Tech-enforced rules | Advanced rules | Which comparison or cross-entity facts are reviewable from the abstract state space? | comparison propositions, `cross_forbidden`, `cross_invariant` | `states` diagnostics |
 
 ## Stage 0: Scope Sketch
 
@@ -432,18 +434,14 @@ or unreachable states have been reviewed. Model an event-triggered BUC first wit
 `triggers(Event, TargetBuc)`. When the entry action is clear, add
 `contains(TargetBuc, EntryUseCase)` and optionally `triggers(Event, EntryUseCase)`.
 
-## Stage 6: Business Rules
+## Stage 6A: Local Guardrails
 
-Add constraints only after there is enough lifecycle behavior to evaluate them.
+Add low-risk constraints only after there is enough lifecycle behavior to evaluate them.
+Start with rules that are easy to read as invalid local states: forbidden combinations
+and mutually exclusive facts on one entity.
 
 ```rdra
 forbidden(Order, (status, paid), (paid_at, null))
-
-invariant(Order)
-  .when(status, paid)
-  .then(paid_at, present)
-
-required(Account, (active, true))
 
 exclusive(Document, (approved, true), (rejected, true))
 ```
@@ -451,11 +449,8 @@ exclusive(Document, (approved, true), (rejected, true))
 Ask the user:
 
 - Which combinations must never be reachable?
-- Which values must co-occur once a condition is true?
-- Which facts must be true in every reachable state?
 - Which facts must be mutually exclusive?
-- Which comparisons matter even though the concrete numeric or date values are not
-  tracked in the abstract state space?
+- Are these facts already represented as Enum, Bool, or nullable state axes?
 
 Validation:
 
@@ -464,7 +459,77 @@ rdra-ish states src/
 rdra-ish states src/ --entity Order --format json
 ```
 
-Move on when diagnostics either disappear or are accepted as known modeling gaps.
+Move on when diagnostics either disappear or are accepted as known modeling gaps. Keep
+the first guardrail pass small; it should catch obviously impossible states without
+requiring a complete business rule catalogue.
+
+## Stage 6B: Local Obligations
+
+Add implication-style rules after local guardrails are stable. Use `invariant` for
+conditional co-occurrence, and use `required` only for facts that truly must hold in
+every reachable pattern.
+
+```rdra
+invariant(Order)
+  .when(status, paid)
+  .then(paid_at, present)
+
+required(Account, (active, true))
+```
+
+Ask the user:
+
+- Which values must co-occur once a condition is true?
+- Which facts must be true in every reachable state?
+- Is the rule too broad, or should it be an `invariant` with a guard instead of
+  `required`?
+
+Validation:
+
+```sh
+rdra-ish states src/
+rdra-ish states src/ --entity Order --format json
+```
+
+Move on when obligation diagnostics match the intended lifecycle. If `required` reports
+too many violations, prefer narrowing it into an `invariant` before adding more rules.
+
+## Stage 6C: Comparison and Cross-Entity Rules
+
+Add comparison propositions and cross-entity constraints last. These rules are powerful
+but carry more modeling obligations: comparison propositions need explicit `sets`, and
+cross-entity rules are evaluated from the participating entities' reached patterns.
+
+```rdra
+sets(SellItem, Inventory, stock < selling, true)
+forbidden(Inventory, stock < selling)
+
+cross_forbidden(Order, Payment,
+  (Order.status, cancelled),
+  (Payment.status, captured))
+
+cross_invariant(Order, Payment)
+  .when(Order.status, paid)
+  .then(Payment.status, captured)
+```
+
+Ask the user:
+
+- Which comparisons matter even though the concrete numeric or date values are not
+  tracked in the abstract state space?
+- Which rules really mention more than one entity?
+- Is a cross-entity rule a global cross-product rule, or only intended along a declared
+  relation path?
+
+Validation:
+
+```sh
+rdra-ish states src/
+rdra-ish states src/ --entity Order --format json
+```
+
+Move on when advanced diagnostics either disappear, are accepted as known modeling gaps,
+or are intentionally reported as not evaluable from the current abstract state axes.
 
 ## Choosing the Next Question
 
@@ -479,7 +544,9 @@ Use the current abstraction level to decide what to ask next:
 | entities with only `id` | columns, keys, and relationships |
 | Enum/Bool/nullable columns but no `sets` or `transitions` | use-case effects and events |
 | states but unreachable variants | missing `raises`, `transitions`, or `sets` |
-| stable reachable states | entity constraint predicates (`forbidden`, `invariant`, `required`, `exclusive`) |
+| stable reachable states | local guardrails (`forbidden`, `exclusive`) |
+| local guardrails are stable | local obligations (`invariant`, narrow `required`) |
+| local obligations are stable | comparison propositions or cross-entity constraints |
 
 ## Summary
 

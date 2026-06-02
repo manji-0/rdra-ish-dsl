@@ -603,9 +603,10 @@ fn format_permission_callables(
         "permission_label",
         "usecase_ids",
         "api_ids",
+        "usecase_api_paths",
     ];
 
-    let rows: Vec<[String; 4]> = derive_permission_callables(model)
+    let rows: Vec<[String; 5]> = derive_permission_callables(model)
         .into_iter()
         .map(|entry| {
             let permission = &model.permissions[entry.permission];
@@ -621,11 +622,13 @@ fn format_permission_callables(
                 .map(|key| model.apis[*key].id.as_str())
                 .collect::<Vec<_>>()
                 .join("|");
+            let usecase_api_paths = permission_api_paths(model, &entry.api_paths);
             [
                 permission.id.clone(),
                 permission.label.clone(),
                 usecase_ids,
                 api_ids,
+                usecase_api_paths,
             ]
         })
         .collect();
@@ -676,11 +679,12 @@ fn format_permission_callables(
                 .iter()
                 .map(|row| {
                     format!(
-                        "{{\"permission_id\":{},\"permission_label\":{},\"usecase_ids\":{},\"api_ids\":{}}}",
+                        "{{\"permission_id\":{},\"permission_label\":{},\"usecase_ids\":{},\"api_ids\":{},\"usecase_api_paths\":{}}}",
                         serde_json::to_string(&row[0]).unwrap(),
                         serde_json::to_string(&row[1]).unwrap(),
                         serde_json::to_string(&row[2]).unwrap(),
                         serde_json::to_string(&row[3]).unwrap(),
+                        serde_json::to_string(&row[4]).unwrap(),
                     )
                 })
                 .collect();
@@ -800,6 +804,24 @@ fn required_usecase_ids(
     ids.sort();
     ids.dedup();
     ids.join("|")
+}
+
+fn permission_api_paths(
+    model: &rdra_ish_core::SemanticModel,
+    paths: &[rdra_ish_core::PermissionApiPath],
+) -> String {
+    let mut paths: Vec<String> = paths
+        .iter()
+        .map(|path| {
+            format!(
+                "{}->{}",
+                model.use_cases[path.usecase].id, model.apis[path.api].id
+            )
+        })
+        .collect();
+    paths.sort();
+    paths.dedup();
+    paths.join("|")
 }
 
 fn required_api_paths(
@@ -1187,6 +1209,7 @@ usecase BookAppointment "Book Appointment"
 api BookingApi "Booking API"
 permission ScheduleWrite "Schedule Write"
 requires_permission(BookAppointment, ScheduleWrite)
+invokes(BookAppointment, BookingApi)
 requires_permission(BookingApi, ScheduleWrite)
 "#;
         let (ast, _) = parse(src);
@@ -1199,6 +1222,12 @@ requires_permission(BookingApi, ScheduleWrite)
         assert!(output.contains("ScheduleWrite"));
         assert!(output.contains("BookAppointment"));
         assert!(output.contains("BookingApi"));
+        assert!(output.contains("BookAppointment->BookingApi"));
+
+        let json =
+            list_elements(&model, &ListKind::PermissionCallables, &ListFormat::Json).unwrap();
+        assert!(json.contains("\"usecase_api_paths\""));
+        assert!(json.contains("BookAppointment->BookingApi"));
     }
 
     #[test]

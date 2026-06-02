@@ -14,7 +14,8 @@ pub use access::{
     derive_actor_input_inferences, derive_actor_permission_audit, derive_permission_callables,
     derive_screen_constraint_patterns, permission_diagnostics, ActorInputInference,
     ActorInputOperation, ActorInputSource, ActorPermissionAudit, ActorPermissionAuditStatus,
-    ActorPermissionRequirementSource, PermissionCallable, ScreenConstraintPattern,
+    ActorPermissionRequirementSource, PermissionApiPath, PermissionCallable,
+    ScreenConstraintPattern,
 };
 pub use analysis::build_model;
 pub use diagnostics::{Diagnostic, RdraError};

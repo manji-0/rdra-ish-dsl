@@ -26,8 +26,9 @@ Before writing, classify the available information:
 | touched business objects | Biz object touchpoints | coarse `entity`, CRUD predicates | screens and APIs |
 | screens/API boundaries | Tech interaction boundary | `screen`, `api`, `system`, `medium`, `permission`, `displays`, `shows`, `invokes`, access constraints | columns, relationships, cross-system coordination |
 | fields and relationships | Tech data design | columns, `relate` | lifecycle states/events |
-| lifecycle states/events | Tech lifecycle design | `state`, `event`, `transitions`, `raises`, `sets` | constraints |
-| invalid/required combinations | Tech-enforced rules | `forbidden`, `invariant`, `required`, `exclusive`, `cross_forbidden`, `cross_invariant` | none; validate diagnostics |
+| lifecycle states/events | Tech lifecycle design | `state`, `event`, `transitions`, `raises`, `sets` | local guardrails first |
+| invalid or mutually exclusive states | Tech-enforced rules | `forbidden`, `exclusive` | obligations and cross-entity rules |
+| conditional/global/cross-entity rules | Tech-enforced rules | `invariant`, narrow `required`, `cross_forbidden`, `cross_invariant` | none; validate diagnostics |
 
 Ask only the questions needed to advance one row. Do not invent detailed columns,
 state machines, or API endpoints just to make the BUC look complete.

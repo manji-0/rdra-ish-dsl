@@ -34,9 +34,10 @@ through the UC/API path?" Each row is a derived Screen x UseCase x Api? path. If
 screen appears with no constraints after the model is at interaction-boundary stage,
 verify whether the action is truly unconstrained.
 
-`permission-callables` answers: "what does this permission enable?" Unexpected UC/API
-rows usually mean `requires_permission` is attached too broadly or to the wrong
-boundary.
+`permission-callables` answers: "what does this permission enable?" The
+`usecase_api_paths` column shows which `UseCase->Api` invocations carry API-level
+requirements. Unexpected UC/API rows usually mean `requires_permission` is attached too
+broadly or to the wrong boundary.
 
 `actor-permission-audit` answers: "do actor grants match performed operations?" Status
 meanings:

@@ -10,6 +10,13 @@ pub struct PermissionCallable {
     pub permission: PermissionKey,
     pub usecases: Vec<UseCaseKey>,
     pub apis: Vec<ApiKey>,
+    pub api_paths: Vec<PermissionApiPath>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PermissionApiPath {
+    pub usecase: UseCaseKey,
+    pub api: ApiKey,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -237,7 +244,7 @@ pub fn derive_screen_constraint_patterns(model: &SemanticModel) -> Vec<ScreenCon
     patterns
 }
 
-/// For each permission, collect use cases and APIs that declare `requires_permission`.
+/// For each permission, collect direct use cases, APIs, and UC->API paths that require it.
 pub fn derive_permission_callables(model: &SemanticModel) -> Vec<PermissionCallable> {
     let mut uc_by_permission: HashMap<PermissionKey, Vec<UseCaseKey>> = HashMap::new();
     let mut api_by_permission: HashMap<PermissionKey, Vec<ApiKey>> = HashMap::new();
@@ -276,10 +283,19 @@ pub fn derive_permission_callables(model: &SemanticModel) -> Vec<PermissionCalla
                 .unwrap_or_default();
             apis.sort_by_key(|api| model.apis[*api].id.as_str());
 
+            let mut api_paths = Vec::new();
+            for &api in &apis {
+                for usecase in usecases_invoking_api(model, api) {
+                    push_permission_api_path(&mut api_paths, PermissionApiPath { usecase, api });
+                }
+            }
+            sort_permission_api_paths(model, &mut api_paths);
+
             PermissionCallable {
                 permission,
                 usecases,
                 apis,
+                api_paths,
             }
         })
         .collect()
@@ -739,6 +755,22 @@ fn sort_requirement_sources(
     sources.dedup();
 }
 
+fn sort_permission_api_paths(model: &SemanticModel, paths: &mut Vec<PermissionApiPath>) {
+    paths.sort_by(|a, b| {
+        model.use_cases[a.usecase]
+            .id
+            .cmp(&model.use_cases[b.usecase].id)
+            .then_with(|| model.apis[a.api].id.cmp(&model.apis[b.api].id))
+    });
+    paths.dedup();
+}
+
+fn push_permission_api_path(paths: &mut Vec<PermissionApiPath>, path: PermissionApiPath) {
+    if !paths.contains(&path) {
+        paths.push(path);
+    }
+}
+
 fn push_requirement_source(
     sources: &mut Vec<ActorPermissionRequirementSource>,
     source: ActorPermissionRequirementSource,
@@ -807,6 +839,8 @@ permission PatientRead "Patient Read"
 requires_permission(BookAppointment, ScheduleWrite)
 requires_permission(BookAppointment, PatientRead)
 requires_permission(CancelAppointment, ScheduleWrite)
+invokes(BookAppointment, BookingApi)
+invokes(CancelAppointment, CancelApi)
 requires_permission(BookingApi, PatientRead)
 requires_permission(CancelApi, ScheduleWrite)
 "#,
@@ -835,6 +869,17 @@ requires_permission(CancelApi, ScheduleWrite)
                 .collect::<Vec<_>>(),
             vec!["CancelApi"]
         );
+        assert_eq!(
+            schedule
+                .api_paths
+                .iter()
+                .map(|path| format!(
+                    "{}->{}",
+                    model.use_cases[path.usecase].id, model.apis[path.api].id
+                ))
+                .collect::<Vec<_>>(),
+            vec!["CancelAppointment->CancelApi"]
+        );
 
         let patient = callables
             .iter()
@@ -855,6 +900,17 @@ requires_permission(CancelApi, ScheduleWrite)
                 .map(|key| model.apis[*key].id.as_str())
                 .collect::<Vec<_>>(),
             vec!["BookingApi"]
+        );
+        assert_eq!(
+            patient
+                .api_paths
+                .iter()
+                .map(|path| format!(
+                    "{}->{}",
+                    model.use_cases[path.usecase].id, model.apis[path.api].id
+                ))
+                .collect::<Vec<_>>(),
+            vec!["BookAppointment->BookingApi"]
         );
     }
 
@@ -878,6 +934,7 @@ permission ScheduleWrite "Schedule Write"
             .expect("unused permission should be listed");
         assert!(unused.usecases.is_empty());
         assert!(unused.apis.is_empty());
+        assert!(unused.api_paths.is_empty());
     }
 
     #[test]
