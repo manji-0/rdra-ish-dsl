@@ -2,6 +2,22 @@
 
 `rdra-ish-dsl` is a CLI tool and DSL compiler for reviewing requirements models as code.
 
+## What is RDRA?
+
+**RDRA** (Relationship-Driven Requirements Analysis) is a requirements modeling approach
+that treats a system as a graph of typed elements (actors, businesses, BUCs, use cases,
+screens, entities, and so on) linked by explicit predicates such as `performs`, `contains`,
+and `creates`. The idea is to move from business-facing intent toward design review in one
+model: each layer on the left explains why the layer on the right exists.
+
+This tool implements **RDRA-ISH** (RDRA-inspired Implementation and System Heuristics).
+It follows RDRA’s relationship-first style but is not a strict copy of the original method.
+It adds vocabulary for system boundaries, APIs, access constraints, and entity lifecycle
+so the same model can support `check`, diagrams, CSV reviews, and state derivation.
+
+For how RDRA-ISH reads BUC, business flow, and use case, see
+[RDRA-ish Interpretation](./docs/rdra-ish-interpretation.md).
+
 It lets you model actors, use cases, APIs, screens, entities, and relationships, then:
 - type-check the model (`check`)
 - generate diagrams (`diagram`)
