@@ -24,6 +24,17 @@ It lets you model actors, use cases, APIs, screens, entities, and relationships,
 - export review CSVs (`csv`)
 - derive reachable entity states (`states`)
 
+## Recommended Modeling Loop
+
+Refine the model in small stages instead of filling every layer at once. After each
+stage, run `rdra-ish check` on the current `src/` tree and use diagrams or CSV output
+to review only the concern you just added (scope, data touchpoints, boundaries,
+structure, lifecycle, rules).
+
+See [Incremental Modeling Flow](./docs/incremental-modeling.md) for stage goals,
+placement rules, and validation commands. For a worked example across seven steps, use
+[samples/incremental-order](./samples/incremental-order/).
+
 ## Installation
 
 ```sh
