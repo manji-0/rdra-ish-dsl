@@ -1198,25 +1198,13 @@ fn resolve_comparison(
     })
 }
 
-fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mut Vec<Diagnostic>) {
-    let sig = predicate_signature(&pred.name);
-    let Some(sig) = sig else {
-        // 未知述語はスキップ
-        return;
-    };
-
-    if pred.name == "cross_forbidden" {
-        process_cross_forbidden(model, pred, diags);
-        return;
-    }
-    if pred.name == "cross_invariant" {
-        process_cross_invariant(model, pred, diags);
-        return;
-    }
-
-    // 引数を解決（_card / _col / _val はリテラル位置なのでシンボル解決しない）
-    let resolved: Vec<Option<NodeRef>> = pred
-        .args
+fn resolve_predicate_args(
+    model: &SemanticModel,
+    pred: &PredicateCall,
+    sig: &[Vec<&'static str>],
+    diags: &mut Vec<Diagnostic>,
+) -> Vec<Option<NodeRef>> {
+    pred.args
         .iter()
         .enumerate()
         .map(|(i, arg)| {
@@ -1227,9 +1215,30 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
             }
             resolve_arg(model, arg, diags)
         })
-        .collect();
+        .collect()
+}
 
-    // 型検査（_card / _col / _val はリテラル引数なのでスキップ）
+fn predicate_arg_display(arg: &PredicateArg) -> String {
+    match arg {
+        PredicateArg::Ref(q) => {
+            let id = q.parts.last().cloned().unwrap_or_default();
+            match &q.kind_qualifier {
+                Some(k) => format!("{}::{}", k.name(), id),
+                None => id,
+            }
+        }
+        PredicateArg::Lit(s) => s.clone(),
+        PredicateArg::Tuple(_) => "<tuple>".to_string(),
+        PredicateArg::Expr(_) => "<expr>".to_string(),
+    }
+}
+
+fn validate_predicate_arg_types(
+    pred: &PredicateCall,
+    sig: &[Vec<&'static str>],
+    resolved: &[Option<NodeRef>],
+    diags: &mut Vec<Diagnostic>,
+) {
     for (i, expected_kinds) in sig.iter().enumerate() {
         if matches!(expected_kinds.as_slice(), ["_card"] | ["_col"] | ["_val"]) {
             continue;
@@ -1237,182 +1246,251 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
         if let Some(Some(node)) = resolved.get(i) {
             let actual = node_kind_tag_str(node);
             if !expected_kinds.contains(&actual) {
-                let arg_id = match &pred.args[i] {
-                    PredicateArg::Ref(q) => {
-                        let id = q.parts.last().cloned().unwrap_or_default();
-                        match &q.kind_qualifier {
-                            Some(k) => format!("{}::{}", k.name(), id),
-                            None => id,
-                        }
-                    }
-                    PredicateArg::Lit(s) => s.clone(),
-                    PredicateArg::Tuple(_) => "<tuple>".to_string(),
-                    PredicateArg::Expr(_) => "<expr>".to_string(),
-                };
                 diags.push(Diagnostic::error(RdraError::TypeMismatch {
                     pred: pred.name.clone(),
-                    id: arg_id,
+                    id: predicate_arg_display(&pred.args[i]),
                     actual: actual.to_string(),
                     expected: expected_kinds.join("|"),
                 }));
             }
         }
     }
-    if pred.name == "contains" {
-        if let (Some(Some(from)), Some(Some(to))) = (resolved.first(), resolved.get(1)) {
-            let valid = matches!(
-                (from, to),
-                (NodeRef::Buc(_), NodeRef::UseCase(_)) | (NodeRef::System(_), NodeRef::Api(_))
-            );
-            if !valid {
-                diags.push(Diagnostic::error(RdraError::TypeMismatch {
-                    pred: pred.name.clone(),
-                    id: "contains pair".to_string(),
-                    actual: format!("{} -> {}", node_kind_tag_str(from), node_kind_tag_str(to)),
-                    expected: "buc->usecase|system->api".to_string(),
+}
+
+fn validate_contains_pair(
+    pred: &PredicateCall,
+    resolved: &[Option<NodeRef>],
+    diags: &mut Vec<Diagnostic>,
+) -> bool {
+    if pred.name != "contains" {
+        return true;
+    }
+    if let (Some(Some(from)), Some(Some(to))) = (resolved.first(), resolved.get(1)) {
+        let valid = matches!(
+            (from, to),
+            (NodeRef::Buc(_), NodeRef::UseCase(_)) | (NodeRef::System(_), NodeRef::Api(_))
+        );
+        if !valid {
+            diags.push(Diagnostic::error(RdraError::TypeMismatch {
+                pred: pred.name.clone(),
+                id: "contains pair".to_string(),
+                actual: format!("{} -> {}", node_kind_tag_str(from), node_kind_tag_str(to)),
+                expected: "buc->usecase|system->api".to_string(),
+            }));
+            return false;
+        }
+    }
+    true
+}
+
+fn process_coordinates_predicate(model: &mut SemanticModel, resolved: &[Option<NodeRef>]) {
+    if let (Some(Some(usecase)), Some(Some(left)), Some(Some(right))) =
+        (resolved.first(), resolved.get(1), resolved.get(2))
+    {
+        if let (NodeRef::UseCase(uk), NodeRef::Entity(left_ek), NodeRef::Entity(right_ek)) =
+            (usecase, left, right)
+        {
+            model
+                .boundary_coordinations
+                .push(crate::model::BoundaryCoordination {
+                    usecase: *uk,
+                    left: *left_ek,
+                    right: *right_ek,
+                });
+        }
+    }
+}
+
+fn process_transitions_predicate(model: &mut SemanticModel, resolved: &[Option<NodeRef>]) {
+    if let (Some(Some(event)), Some(Some(state_before)), Some(Some(state_after))) =
+        (resolved.first(), resolved.get(1), resolved.get(2))
+    {
+        model.state_transitions.push(crate::model::StateTransition {
+            event: event.clone(),
+            from: state_before.clone(),
+            to: state_after.clone(),
+        });
+        model.relations.push(Relation {
+            from: state_before.clone(),
+            to: state_after.clone(),
+            kind: RelKind::Transitions,
+        });
+    }
+}
+
+fn process_sets_predicate(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    resolved: &[Option<NodeRef>],
+    diags: &mut Vec<Diagnostic>,
+) {
+    let (Some(Some(origin)), Some(Some(entity_ref))) = (resolved.first(), resolved.get(1)) else {
+        return;
+    };
+    let entity_key = match entity_ref {
+        NodeRef::Entity(k) => *k,
+        _ => return,
+    };
+
+    match pred.args.get(2) {
+        Some(PredicateArg::Expr(Expr::Cmp(cmp))) => {
+            let truth_str = match pred.args.get(3) {
+                Some(PredicateArg::Ref(q)) if q.kind_qualifier.is_none() && q.parts.len() == 1 => {
+                    q.parts[0].as_str().to_string()
+                }
+                Some(PredicateArg::Lit(s)) => s.clone(),
+                _ => return,
+            };
+            if truth_str != "true" && truth_str != "false" {
+                return;
+            }
+            let entity_id = model.entities[entity_key].id.clone();
+            let entity_cols = model.entities[entity_key].columns.clone();
+            if let Some(prop) = resolve_comparison(&entity_cols, &entity_id, cmp, diags) {
+                model.proposition_effects.push(PropositionEffect {
+                    origin: origin.clone(),
+                    entity: entity_key,
+                    prop,
+                    truth: truth_str == "true",
+                });
+            }
+        }
+        Some(PredicateArg::Lit(col_name)) => {
+            let col_name = col_name.clone();
+            let val_lit = match pred.args.get(3) {
+                Some(PredicateArg::Lit(s)) => s.clone(),
+                _ => return,
+            };
+            let col = model.entities[entity_key]
+                .columns
+                .iter()
+                .find(|c| c.name == col_name)
+                .cloned();
+            let Some(col) = col else {
+                diags.push(Diagnostic::error(RdraError::UnknownColumn {
+                    entity: model.entities[entity_key].id.clone(),
+                    col: col_name,
                 }));
                 return;
+            };
+            match parse_effect_value(&col, &val_lit) {
+                Ok(value) => {
+                    model.column_effects.push(ColumnEffect {
+                        origin: origin.clone(),
+                        entity: entity_key,
+                        column: col_name,
+                        value,
+                    });
+                }
+                Err(e) => diags.push(Diagnostic::error(e)),
+            }
+        }
+        _ => {}
+    }
+}
+
+fn process_forbidden_predicate(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    resolved: &[Option<NodeRef>],
+    diags: &mut Vec<Diagnostic>,
+) {
+    let entity_key = match resolved.first() {
+        Some(Some(NodeRef::Entity(k))) => *k,
+        _ => return,
+    };
+    let entity_id = model.entities[entity_key].id.clone();
+    let entity_cols = model.entities[entity_key].columns.clone();
+    let mut conditions: Vec<(String, EffectValue)> = Vec::new();
+    let mut comparisons: Vec<ComparisonProp> = Vec::new();
+
+    for arg in pred.args.iter().skip(1) {
+        match arg {
+            PredicateArg::Expr(Expr::Cmp(cmp)) => {
+                if let Some(prop) = resolve_comparison(&entity_cols, &entity_id, cmp, diags) {
+                    comparisons.push(prop);
+                }
+            }
+            _ => {
+                let Some((col_str, val_str)) = tuple_pair(arg) else {
+                    continue;
+                };
+                let col = entity_cols.iter().find(|c| c.name == col_str).cloned();
+                let Some(col) = col else {
+                    diags.push(Diagnostic::error(RdraError::UnknownColumn {
+                        entity: entity_id.clone(),
+                        col: col_str,
+                    }));
+                    return;
+                };
+                match parse_effect_value(&col, &val_str) {
+                    Ok(value) => conditions.push((col_str, value)),
+                    Err(e) => {
+                        diags.push(Diagnostic::error(e));
+                        return;
+                    }
+                }
             }
         }
     }
 
-    // relate 以外のリレーション登録
-    if pred.name == "coordinates" {
-        if let (Some(Some(usecase)), Some(Some(left)), Some(Some(right))) =
-            (resolved.first(), resolved.get(1), resolved.get(2))
-        {
-            if let (NodeRef::UseCase(uk), NodeRef::Entity(left_ek), NodeRef::Entity(right_ek)) =
-                (usecase, left, right)
-            {
-                model
-                    .boundary_coordinations
-                    .push(crate::model::BoundaryCoordination {
-                        usecase: *uk,
-                        left: *left_ek,
-                        right: *right_ek,
-                    });
-            }
+    if !conditions.is_empty() || !comparisons.is_empty() {
+        model.forbidden_constraints.push(ForbiddenConstraint {
+            entity: entity_key,
+            conditions,
+            comparisons,
+        });
+    }
+}
+
+fn process_invariant_predicate(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    resolved: &[Option<NodeRef>],
+    diags: &mut Vec<Diagnostic>,
+) {
+    let entity_key = match resolved.first() {
+        Some(Some(NodeRef::Entity(k))) => *k,
+        _ => return,
+    };
+    let entity_id = model.entities[entity_key].id.clone();
+    let entity_cols = model.entities[entity_key].columns.clone();
+    let mut guards: Vec<(String, EffectValue)> = Vec::new();
+    let mut guard_comparisons: Vec<ComparisonProp> = Vec::new();
+    let mut requireds: Vec<(String, EffectValue)> = Vec::new();
+    let mut required_comparisons: Vec<ComparisonProp> = Vec::new();
+
+    for cc in &pred.chain {
+        let is_guard = cc.name == "when";
+        let is_required = cc.name == "then";
+        if !is_guard && !is_required {
+            continue;
         }
-    } else if pred.name == "transitions" {
-        if let (Some(Some(event)), Some(Some(state_before)), Some(Some(state_after))) =
-            (resolved.first(), resolved.get(1), resolved.get(2))
-        {
-            model.state_transitions.push(crate::model::StateTransition {
-                event: event.clone(),
-                from: state_before.clone(),
-                to: state_after.clone(),
-            });
-            model.relations.push(Relation {
-                from: state_before.clone(),
-                to: state_after.clone(),
-                kind: RelKind::Transitions,
-            });
-        }
-    } else if pred.name == "sets" {
-        // sets(usecase/event, entity, "col_name", "value")  — 既存の等値カラム効果
-        // sets(usecase/event, entity, <comparison_expr>, true/false) — 比較命題の真偽駆動
-        let (Some(Some(origin)), Some(Some(entity_ref))) = (resolved.first(), resolved.get(1))
-        else {
-            return;
-        };
-        let entity_key = match entity_ref {
-            NodeRef::Entity(k) => *k,
-            _ => return,
-        };
 
-        match pred.args.get(2) {
-            // ── 比較命題効果: 第3引数が比較式
-            Some(PredicateArg::Expr(Expr::Cmp(cmp))) => {
-                // 第4引数は真偽値 ("true" / "false")
-                let truth_str = match pred.args.get(3) {
-                    Some(PredicateArg::Ref(q))
-                        if q.kind_qualifier.is_none() && q.parts.len() == 1 =>
-                    {
-                        q.parts[0].as_str().to_string()
-                    }
-                    Some(PredicateArg::Lit(s)) => s.clone(),
-                    _ => {
-                        // 第4引数が無いか真偽値でない → スキップ
-                        return;
-                    }
-                };
-                if truth_str != "true" && truth_str != "false" {
-                    return;
-                }
-                let truth = truth_str == "true";
-                let entity_id = model.entities[entity_key].id.clone();
-                let entity_cols = model.entities[entity_key].columns.clone();
-                if let Some(prop) = resolve_comparison(&entity_cols, &entity_id, cmp, diags) {
-                    model.proposition_effects.push(PropositionEffect {
-                        origin: origin.clone(),
-                        entity: entity_key,
-                        prop,
-                        truth,
-                    });
-                }
+        let mut processed_eq = false;
+        for arg in &cc.args {
+            if processed_eq {
+                break;
             }
-
-            // ── 等値カラム効果: 第3引数が文字列リテラル
-            Some(PredicateArg::Lit(col_name)) => {
-                let col_name = col_name.clone();
-                let val_lit = match pred.args.get(3) {
-                    Some(PredicateArg::Lit(s)) => s.clone(),
-                    _ => return,
-                };
-                let col = model.entities[entity_key]
-                    .columns
-                    .iter()
-                    .find(|c| c.name == col_name)
-                    .cloned();
-                let Some(col) = col else {
-                    diags.push(Diagnostic::error(RdraError::UnknownColumn {
-                        entity: model.entities[entity_key].id.clone(),
-                        col: col_name,
-                    }));
-                    return;
-                };
-                match parse_effect_value(&col, &val_lit) {
-                    Ok(value) => {
-                        model.column_effects.push(ColumnEffect {
-                            origin: origin.clone(),
-                            entity: entity_key,
-                            column: col_name,
-                            value,
-                        });
-                    }
-                    Err(e) => {
-                        diags.push(Diagnostic::error(e));
-                    }
-                }
-            }
-
-            _ => {} // その他は無視
-        }
-    } else if pred.name == "forbidden" {
-        // forbidden(entity, (col, val), ...) — 等値条件 AND 組合せで状態禁止
-        // forbidden(entity, <expr>, ...)      — 比較命題条件 AND 組合せで状態禁止
-        // 両者は混在可
-        let entity_key = match resolved.first() {
-            Some(Some(NodeRef::Entity(k))) => *k,
-            _ => return,
-        };
-        let entity_id = model.entities[entity_key].id.clone();
-        let entity_cols = model.entities[entity_key].columns.clone();
-        let mut conditions: Vec<(String, EffectValue)> = Vec::new();
-        let mut comparisons: Vec<ComparisonProp> = Vec::new();
-
-        for arg in pred.args.iter().skip(1) {
             match arg {
                 PredicateArg::Expr(Expr::Cmp(cmp)) => {
-                    // 比較命題条件
                     if let Some(prop) = resolve_comparison(&entity_cols, &entity_id, cmp, diags) {
-                        comparisons.push(prop);
+                        if is_guard {
+                            guard_comparisons.push(prop);
+                        } else {
+                            required_comparisons.push(prop);
+                        }
                     }
                 }
                 _ => {
-                    // 等値タプル条件
-                    let Some((col_str, val_str)) = tuple_pair(arg) else {
-                        continue; // タプル以外は無視
+                    if cc.args.len() < 2 {
+                        break;
+                    }
+                    let Some(col_str) = arg_as_str(&cc.args[0]) else {
+                        break;
+                    };
+                    let Some(val_str) = arg_as_str(&cc.args[1]) else {
+                        break;
                     };
                     let col = entity_cols.iter().find(|c| c.name == col_str).cloned();
                     let Some(col) = col else {
@@ -1423,211 +1501,193 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
                         return;
                     };
                     match parse_effect_value(&col, &val_str) {
-                        Ok(value) => conditions.push((col_str, value)),
+                        Ok(value) => {
+                            if is_guard {
+                                guards.push((col_str, value));
+                            } else {
+                                requireds.push((col_str, value));
+                            }
+                        }
                         Err(e) => {
                             diags.push(Diagnostic::error(e));
                             return;
                         }
                     }
+                    processed_eq = true;
                 }
             }
         }
+    }
 
-        // 等値条件か比較命題が少なくとも1つあれば登録
-        if !conditions.is_empty() || !comparisons.is_empty() {
-            model.forbidden_constraints.push(ForbiddenConstraint {
-                entity: entity_key,
-                conditions,
-                comparisons,
-            });
+    let has_guards = !guards.is_empty() || !guard_comparisons.is_empty();
+    let has_requireds = !requireds.is_empty() || !required_comparisons.is_empty();
+    if has_guards && has_requireds {
+        model.entity_invariants.push(EntityInvariant {
+            entity: entity_key,
+            guards,
+            guard_comparisons,
+            requireds,
+            required_comparisons,
+        });
+    }
+}
+
+fn relation_kind_for_predicate(pred_name: &str) -> Option<RelKind> {
+    let kind = match pred_name {
+        "performs" => RelKind::Performs,
+        "uses" => RelKind::Uses,
+        "reads" => RelKind::Reads,
+        "writes" => RelKind::Writes,
+        "creates" => RelKind::Creates,
+        "updates" => RelKind::Updates,
+        "deletes" => RelKind::Deletes,
+        "displays" => RelKind::Displays,
+        "shows" => RelKind::Shows,
+        "raises" => RelKind::Raises,
+        "triggers" => RelKind::Triggers,
+        "contains" => RelKind::Contains,
+        "belongs" => RelKind::Belongs,
+        "has_permission" => RelKind::HasPermission,
+        "requires_permission" => RelKind::RequiresPermission,
+        "requires_medium" => RelKind::RequiresMedium,
+        "motivates" => RelKind::Motivates,
+        "invokes" => RelKind::Invokes,
+        _ => return None,
+    };
+    Some(kind)
+}
+
+fn process_belongs_context(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    from: &NodeRef,
+    to: &NodeRef,
+    diags: &mut Vec<Diagnostic>,
+) {
+    let (NodeRef::Buc(buc), NodeRef::Business(business)) = (from, to) else {
+        return;
+    };
+    let mut whens = Vec::new();
+    let mut wheres = Vec::new();
+    let mut bys = Vec::new();
+
+    for cc in &pred.chain {
+        let (target, expected_kind) = match cc.name.as_str() {
+            "when" => (&mut whens, "timing"),
+            "where" => (&mut wheres, "location"),
+            "by" => (&mut bys, "medium"),
+            _ => continue,
+        };
+        for arg in &cc.args {
+            if let Some(value) = context_value_from_arg(model, arg, expected_kind, diags) {
+                target.push(value);
+            }
         }
-    } else if pred.name == "invariant" {
-        // invariant(entity).when(col, val).then(col, val) — チェーン等値形式
-        // invariant(entity).when(<expr>).then(<expr>)      — チェーン比較式形式
-        // 両者は混在可
-        let entity_key = match resolved.first() {
-            Some(Some(NodeRef::Entity(k))) => *k,
+    }
+
+    if !whens.is_empty() || !wheres.is_empty() || !bys.is_empty() {
+        model
+            .business_mapping_contexts
+            .push(BusinessMappingContext {
+                buc: *buc,
+                business: *business,
+                whens,
+                wheres,
+                bys,
+            });
+    }
+}
+
+fn process_relation_predicate(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    resolved: &[Option<NodeRef>],
+    diags: &mut Vec<Diagnostic>,
+) {
+    let Some(kind) = relation_kind_for_predicate(&pred.name) else {
+        return;
+    };
+    if let (Some(Some(from)), Some(Some(to))) = (resolved.first(), resolved.get(1)) {
+        model.relations.push(Relation {
+            from: from.clone(),
+            to: to.clone(),
+            kind,
+        });
+        if pred.name == "belongs" {
+            process_belongs_context(model, pred, from, to, diags);
+        }
+    }
+}
+
+fn process_relate_predicate(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    resolved: &[Option<NodeRef>],
+    diags: &mut Vec<Diagnostic>,
+) {
+    if let (Some(Some(from)), Some(Some(to)), Some(PredicateArg::Lit(card))) =
+        (resolved.first(), resolved.get(1), pred.args.get(2))
+    {
+        let kind = match card.as_str() {
+            "1:1" => RelKind::RelateOneToOne,
+            "1:N" => RelKind::RelateOneToMany,
+            "N:1" => RelKind::RelateManyToOne,
+            "N:M" => {
+                let from_id = match from {
+                    NodeRef::Entity(k) => model.entities[*k].id.clone(),
+                    _ => "?".into(),
+                };
+                let to_id = match to {
+                    NodeRef::Entity(k) => model.entities[*k].id.clone(),
+                    _ => "?".into(),
+                };
+                diags.push(Diagnostic::warning(RdraError::NMRelation {
+                    from: from_id,
+                    to: to_id,
+                }));
+                RelKind::RelateManyToMany
+            }
             _ => return,
         };
-        let entity_id = model.entities[entity_key].id.clone();
-        let entity_cols = model.entities[entity_key].columns.clone();
-        let mut guards: Vec<(String, EffectValue)> = Vec::new();
-        let mut guard_comparisons: Vec<ComparisonProp> = Vec::new();
-        let mut requireds: Vec<(String, EffectValue)> = Vec::new();
-        let mut required_comparisons: Vec<ComparisonProp> = Vec::new();
+        model.relations.push(Relation {
+            from: from.clone(),
+            to: to.clone(),
+            kind,
+        });
+    }
+}
 
-        for cc in &pred.chain {
-            let is_guard = cc.name == "when";
-            let is_required = cc.name == "then";
-            if !is_guard && !is_required {
-                continue; // 未知のチェーンメソッドは無視
-            }
+fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mut Vec<Diagnostic>) {
+    let Some(sig) = predicate_signature(&pred.name) else {
+        return;
+    };
 
-            // チェーン引数を走査: Expr → 比較命題、その他 → 等値ペア（2引数）
-            let mut processed_eq = false;
-            for arg in &cc.args {
-                if processed_eq {
-                    break; // 等値ペアは1回のみ
-                }
-                match arg {
-                    PredicateArg::Expr(Expr::Cmp(cmp)) => {
-                        if let Some(prop) = resolve_comparison(&entity_cols, &entity_id, cmp, diags)
-                        {
-                            if is_guard {
-                                guard_comparisons.push(prop);
-                            } else {
-                                required_comparisons.push(prop);
-                            }
-                        }
-                    }
-                    _ => {
-                        // 等値ペア: チェーン全体を (args[0], args[1]) として処理
-                        if cc.args.len() < 2 {
-                            break;
-                        }
-                        let Some(col_str) = arg_as_str(&cc.args[0]) else {
-                            break;
-                        };
-                        let Some(val_str) = arg_as_str(&cc.args[1]) else {
-                            break;
-                        };
-                        let col = entity_cols.iter().find(|c| c.name == col_str).cloned();
-                        let Some(col) = col else {
-                            diags.push(Diagnostic::error(RdraError::UnknownColumn {
-                                entity: entity_id.clone(),
-                                col: col_str,
-                            }));
-                            return;
-                        };
-                        match parse_effect_value(&col, &val_str) {
-                            Ok(value) => {
-                                if is_guard {
-                                    guards.push((col_str, value));
-                                } else {
-                                    requireds.push((col_str, value));
-                                }
-                            }
-                            Err(e) => {
-                                diags.push(Diagnostic::error(e));
-                                return;
-                            }
-                        }
-                        processed_eq = true; // 等値ペアはこのチェーンで1回のみ
-                    }
-                }
-            }
+    match pred.name.as_str() {
+        "cross_forbidden" => {
+            process_cross_forbidden(model, pred, diags);
+            return;
         }
-
-        // ガードと必要条件の両方が（等値か比較命題で）揃っている場合のみ登録
-        let has_guards = !guards.is_empty() || !guard_comparisons.is_empty();
-        let has_requireds = !requireds.is_empty() || !required_comparisons.is_empty();
-        if has_guards && has_requireds {
-            model.entity_invariants.push(EntityInvariant {
-                entity: entity_key,
-                guards,
-                guard_comparisons,
-                requireds,
-                required_comparisons,
-            });
+        "cross_invariant" => {
+            process_cross_invariant(model, pred, diags);
+            return;
         }
-    } else if pred.name != "relate" {
-        if let (Some(Some(from)), Some(Some(to))) = (resolved.first(), resolved.get(1)) {
-            let kind = match pred.name.as_str() {
-                "performs" => RelKind::Performs,
-                "uses" => RelKind::Uses,
-                "reads" => RelKind::Reads,
-                "writes" => RelKind::Writes,
-                "creates" => RelKind::Creates,
-                "updates" => RelKind::Updates,
-                "deletes" => RelKind::Deletes,
-                "displays" => RelKind::Displays,
-                "shows" => RelKind::Shows,
-                "raises" => RelKind::Raises,
-                "triggers" => RelKind::Triggers,
-                "contains" => RelKind::Contains,
-                "belongs" => RelKind::Belongs,
-                "has_permission" => RelKind::HasPermission,
-                "requires_permission" => RelKind::RequiresPermission,
-                "requires_medium" => RelKind::RequiresMedium,
-                "motivates" => RelKind::Motivates,
-                "invokes" => RelKind::Invokes,
-                _ => return,
-            };
-            model.relations.push(Relation {
-                from: from.clone(),
-                to: to.clone(),
-                kind,
-            });
+        _ => {}
+    }
 
-            if pred.name == "belongs" {
-                let (NodeRef::Buc(buc), NodeRef::Business(business)) = (from, to) else {
-                    return;
-                };
-                let mut whens = Vec::new();
-                let mut wheres = Vec::new();
-                let mut bys = Vec::new();
+    let resolved = resolve_predicate_args(model, pred, &sig, diags);
+    validate_predicate_arg_types(pred, &sig, &resolved, diags);
+    if !validate_contains_pair(pred, &resolved, diags) {
+        return;
+    }
 
-                for cc in &pred.chain {
-                    let (target, expected_kind) = match cc.name.as_str() {
-                        "when" => (&mut whens, "timing"),
-                        "where" => (&mut wheres, "location"),
-                        "by" => (&mut bys, "medium"),
-                        _ => continue,
-                    };
-                    for arg in &cc.args {
-                        if let Some(value) =
-                            context_value_from_arg(model, arg, expected_kind, diags)
-                        {
-                            target.push(value);
-                        }
-                    }
-                }
-
-                if !whens.is_empty() || !wheres.is_empty() || !bys.is_empty() {
-                    model
-                        .business_mapping_contexts
-                        .push(BusinessMappingContext {
-                            buc: *buc,
-                            business: *business,
-                            whens,
-                            wheres,
-                            bys,
-                        });
-                }
-            }
-        }
-    } else {
-        // relate(From, To, Card)
-        if let (Some(Some(from)), Some(Some(to)), Some(PredicateArg::Lit(card))) =
-            (resolved.first(), resolved.get(1), pred.args.get(2))
-        {
-            let kind = match card.as_str() {
-                "1:1" => RelKind::RelateOneToOne,
-                "1:N" => RelKind::RelateOneToMany,
-                "N:1" => RelKind::RelateManyToOne,
-                "N:M" => {
-                    let from_id = match from {
-                        NodeRef::Entity(k) => model.entities[*k].id.clone(),
-                        _ => "?".into(),
-                    };
-                    let to_id = match to {
-                        NodeRef::Entity(k) => model.entities[*k].id.clone(),
-                        _ => "?".into(),
-                    };
-                    diags.push(Diagnostic::warning(RdraError::NMRelation {
-                        from: from_id,
-                        to: to_id,
-                    }));
-                    RelKind::RelateManyToMany
-                }
-                _ => return,
-            };
-            model.relations.push(Relation {
-                from: from.clone(),
-                to: to.clone(),
-                kind,
-            });
-        }
+    match pred.name.as_str() {
+        "coordinates" => process_coordinates_predicate(model, &resolved),
+        "transitions" => process_transitions_predicate(model, &resolved),
+        "sets" => process_sets_predicate(model, pred, &resolved, diags),
+        "forbidden" => process_forbidden_predicate(model, pred, &resolved, diags),
+        "invariant" => process_invariant_predicate(model, pred, &resolved, diags),
+        "relate" => process_relate_predicate(model, pred, &resolved, diags),
+        _ => process_relation_predicate(model, pred, &resolved, diags),
     }
 }
 
