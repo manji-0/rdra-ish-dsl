@@ -7,9 +7,6 @@ description: Write RDRA DSL files from requirements using correct syntax and fil
 
 Create RDRA DSL files from requirements or specifications.
 
-<!-- derived-from ../../docs/language-reference.md#entity-state-constraints -->
-<!-- derived-from ../../docs/language-reference.md#cross-entity-constraints -->
-
 ### Context Loading Rule
 
 Use hierarchical context. Keep this top-level skill as the routing layer, then load

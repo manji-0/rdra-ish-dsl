@@ -12,9 +12,6 @@ complete model. Use `../../docs/incremental-modeling.md` as the reference flow.
 Treat creation as business-to-technical refinement: model value and actors before
 adding data touchpoints, UI/API boundaries, entity structure, lifecycle, or rules.
 
-<!-- derived-from ../../docs/language-reference.md#entity-state-constraints -->
-<!-- derived-from ../../docs/language-reference.md#cross-entity-constraints -->
-
 ### Stage gate
 
 Before writing, classify the available information:

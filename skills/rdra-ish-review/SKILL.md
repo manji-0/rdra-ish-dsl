@@ -14,10 +14,6 @@ Read the stages as a progression from business concerns to technical concerns. E
 review should protect business intent and value coverage; later review should focus on
 API/system boundaries, persistence structure, reachable lifecycle states, and rules.
 
-<!-- derived-from ../../docs/language-reference.md#entity-state-constraints -->
-<!-- derived-from ../../docs/language-reference.md#cross-entity-constraints -->
-<!-- derived-from ../../docs/state-derivation.md#constraint-checking-after-bfs -->
-
 ### Steps
 
 1. **Run `rdra-ish check <src-dir>/`** to surface syntax and type errors first.

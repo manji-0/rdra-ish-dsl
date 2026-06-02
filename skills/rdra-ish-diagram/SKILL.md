@@ -9,8 +9,6 @@ Choose the smallest view that answers the current review question. Keep this
 top-level skill as the routing layer, then load only the reference file needed for
 the selected view.
 
-<!-- derived-from ../../docs/state-derivation.md#constraint-checking-after-bfs -->
-
 ### Routing Guide
 
 | Situation | Use first | Load |

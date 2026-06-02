@@ -10,7 +10,7 @@ members = [
 
 [workspace.package]
 edition = "2021"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["rdra-ish-dsl contributors"]
 license = "MIT"
 

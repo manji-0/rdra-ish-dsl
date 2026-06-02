@@ -14,9 +14,6 @@ Keep the business-to-technical refinement order intact: do not introduce technic
 details until the business value, actors, use cases, and data touchpoints that justify
 them are present.
 
-<!-- derived-from ../../docs/language-reference.md#entity-state-constraints -->
-<!-- derived-from ../../docs/language-reference.md#cross-entity-constraints -->
-
 ### Step 1 — Read the existing BUC
 
 Read `buc/buc_<name>.rdra` and the shared files it imports. Identify:

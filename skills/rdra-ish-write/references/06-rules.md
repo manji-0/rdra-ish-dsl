@@ -3,9 +3,6 @@
 Use this context when lifecycle paths are modeled and the next task is to express
 invalid, conditional, mandatory, or mutually exclusive state facts as executable checks.
 
-<!-- derived-from ../../../docs/language-reference.md#entity-state-constraints -->
-<!-- derived-from ../../../docs/language-reference.md#cross-entity-constraints -->
-
 ## Goal
 
 Add business rules that can be type-checked as model predicates. Move in three passes:

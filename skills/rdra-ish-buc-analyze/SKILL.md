@@ -9,10 +9,6 @@ Choose the analysis path that matches the user's question and the model's curren
 refinement stage. Keep this top-level skill as the routing layer, then load the
 reference file for the concrete analysis task.
 
-<!-- derived-from ../../docs/language-reference.md#entity-state-constraints -->
-<!-- derived-from ../../docs/language-reference.md#cross-entity-constraints -->
-<!-- derived-from ../../docs/state-derivation.md#constraint-checking-after-bfs -->
-
 ### Routing Guide
 
 | User intent | Analyze first | Load |

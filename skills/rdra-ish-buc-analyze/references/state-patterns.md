@@ -3,10 +3,6 @@
 Use this reference when reviewing lifecycle completeness, reachable state patterns,
 terminal states, entity constraints, cross-entity rules, or state-pattern truncation.
 
-<!-- derived-from ../../../docs/language-reference.md#entity-state-constraints -->
-<!-- derived-from ../../../docs/state-derivation.md#constraint-checking-after-bfs -->
-<!-- derived-from ../../../docs/language-reference.md#cross-entity-constraints -->
-
 ## Concept
 
 `rdra-ish states` derives reachable combinations of state-axis values per entity.

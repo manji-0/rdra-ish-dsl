@@ -4,9 +4,6 @@ Use this reference when the user asks whether a BUC or model is ready for the ne
 refinement step, or when the request is broad enough that you need to classify the
 current stage before analyzing details.
 
-<!-- derived-from ../../../docs/language-reference.md#entity-state-constraints -->
-<!-- derived-from ../../../docs/language-reference.md#cross-entity-constraints -->
-
 ## Concept
 
 RDRA-ish refinement intentionally moves from business concern to technical concern.
