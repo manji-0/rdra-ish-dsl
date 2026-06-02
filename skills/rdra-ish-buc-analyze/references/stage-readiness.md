@@ -48,7 +48,7 @@ stage.
 | `business-inputs` has surprising or missing field rows | Entity structure | Which fields are actor-entered versus derived by defaults, FK relations, APIs, events, or `sets`? |
 | Enum/Bool/nullable columns exist without lifecycle effects | Entity structure | Which events, transitions, or `sets` effects change them? |
 | `states` has reviewed reachable patterns | Lifecycle | Which reachable states are forbidden or required by rules? |
-| `forbidden`, `invariant`, `cross_forbidden`, or `cross_invariant` exists | Business rules | Are violations fixed, intentionally accepted, not evaluable from state axes, or still unresolved requirements? |
+| `forbidden`, `invariant`, `cross_forbidden`, or `cross_invariant` exists | Business rules | Are violations fixed, intentionally accepted, not evaluable from state axes/caps, relation-scoped via `.along(...)`, or still unresolved requirements? |
 
 ## How To Analyze
 

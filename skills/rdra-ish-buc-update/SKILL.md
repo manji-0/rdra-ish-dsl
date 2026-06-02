@@ -40,7 +40,7 @@ Read `buc/buc_<name>.rdra` and the shared files it imports. Identify:
 | New Business-BUC context | shared vocabulary for `location` / `timing` / `medium`, then `belongs(...).when(...).where(...).by(...)` |
 | New permission or medium constraint | shared `permission` / `medium` vocabulary, then `has_permission`, `requires_permission`, or `requires_medium` in the owning BUC file |
 | New event-started BUC | target BUC file, then `triggers(Event, Buc)`; add `triggers(Event, EntryUC)` only after the entry UC is known |
-| New cross-entity rule | shared rules file or shared entity area; use `cross_forbidden` / `cross_invariant` with `Entity.column` conditions |
+| New cross-entity rule | shared rules file or shared entity area; use `cross_forbidden` / `cross_invariant` with `Entity.column` conditions, and add `.along(...)` only for relation-scoped linked-instance intent |
 | Cross-system entity relation handling | BUC file that owns the coordinating use case |
 | Remove a use case | Remove its `contains`, CRUD, `displays`, `raises` predicates; check no other BUC uses it |
 
@@ -164,12 +164,16 @@ cross_forbidden(<EntityA>, <EntityB>,
   <EntityB>.<column> > <EntityA>.<column>)
 
 cross_invariant(<EntityA>, <EntityB>)
+  .along(<EntityA>, <EntityB>)
   .when(<EntityA>.<column>, <value>)
   .then(<EntityB>.<column>, <value>)
 ```
 
 Use bare column names only when the rule has a single-entity scope. Multi-entity rules
 must qualify columns as `Entity.column`.
+Use `.along(...)` only when the rule is about instances linked by a declared `relate`
+path; current `states` reports such relation-scoped rules as `CrossConstraintNotEvaluated`
+instead of checking the global cross-product.
 
 **Removing a use case:**
 1. Delete the `usecase` declaration
@@ -193,6 +197,8 @@ must qualify columns as `Entity.column`.
 - Every `coordinates` use case invokes APIs on both system sides
 - Every cross-entity rule qualifies columns as `Entity.column` and names or implies
   the participating entities
+- Every `.along(...)` cross-entity rule names a declared `relate` path and is treated
+  as `CrossConstraintNotEvaluated` until linked-instance reachability is implemented
 - The diff does not jump more than one abstraction level unless the user supplied the
   missing information explicitly
 - New shared files follow path/module correspondence, e.g.

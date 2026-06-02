@@ -6,8 +6,9 @@
 
 use crate::model::{
     ColumnEffect, ColumnType, ComparisonProp, CrossCmpRhs, CrossComparisonProp,
-    CrossEntityCondition, CrossEntityInvariant, CrossForbiddenConstraint, EffectValue, EntityKey,
-    ModelColumn, NodeRef, QualifiedModelColumnRef, RelKind, SemanticModel, StateKey, UseCaseKey,
+    CrossConstraintScope, CrossEntityCondition, CrossEntityInvariant, CrossForbiddenConstraint,
+    EffectValue, EntityKey, ModelColumn, NodeRef, QualifiedModelColumnRef, RelKind, SemanticModel,
+    StateKey, UseCaseKey,
 };
 use crate::resolver::reachable_from_bucs;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
@@ -1283,6 +1284,16 @@ fn evaluate_cross_forbidden(
         return vec![];
     };
 
+    if let Some(reason) =
+        relation_scope_not_evaluated_reason(model, &constraint.scope, &constraint.scope_semantics)
+    {
+        return vec![StateDiag::CrossConstraintNotEvaluated {
+            entities,
+            constraint: format!("cross_forbidden({})", constraint_desc),
+            reason,
+        }];
+    }
+
     let combo_count = cross_combo_count(&scoped_results);
     if combo_count > CROSS_PATTERN_COMBO_CAP {
         return vec![StateDiag::CrossConstraintNotEvaluated {
@@ -1349,6 +1360,19 @@ fn evaluate_cross_invariant(
     let Some(scoped_results) = scoped_results(results, result_index, &invariant.scope) else {
         return vec![];
     };
+
+    if let Some(reason) =
+        relation_scope_not_evaluated_reason(model, &invariant.scope, &invariant.scope_semantics)
+    {
+        return vec![StateDiag::CrossConstraintNotEvaluated {
+            entities,
+            constraint: format!(
+                "cross_invariant when ({}) then ({})",
+                guards_desc, requireds_desc
+            ),
+            reason,
+        }];
+    }
 
     let combo_count = cross_combo_count(&scoped_results);
     if combo_count > CROSS_PATTERN_COMBO_CAP {
@@ -1440,6 +1464,67 @@ fn scoped_results<'a>(
 fn cross_combo_count(scoped_results: &[(EntityKey, &EntityStateResult)]) -> usize {
     scoped_results.iter().fold(1usize, |acc, (_, result)| {
         acc.saturating_mul(result.patterns.len().max(1))
+    })
+}
+
+fn relation_scope_not_evaluated_reason(
+    model: &SemanticModel,
+    scope: &[EntityKey],
+    scope_semantics: &CrossConstraintScope,
+) -> Option<String> {
+    let CrossConstraintScope::RelationPath(path) = scope_semantics else {
+        return None;
+    };
+
+    if path.len() < 2 {
+        return Some("along(...) requires at least two entities in a relation path".to_string());
+    }
+
+    let outside_path: Vec<String> = scope
+        .iter()
+        .filter(|entity| !path.contains(entity))
+        .map(|entity| model.entities[*entity].id.clone())
+        .collect();
+    if !outside_path.is_empty() {
+        return Some(format!(
+            "along({}) does not cover scoped entity {}",
+            entity_list_display(model, path),
+            outside_path.join(", ")
+        ));
+    }
+
+    for pair in path.windows(2) {
+        let from = pair[0];
+        let to = pair[1];
+        if !has_relate_edge(model, from, to) {
+            return Some(format!(
+                "along({}) references no relate path between {} and {}",
+                entity_list_display(model, path),
+                model.entities[from].id,
+                model.entities[to].id
+            ));
+        }
+    }
+
+    Some(format!(
+        "along({}) is relation-scoped, but states currently tracks per-entity patterns only; linked instance reachability is not yet evaluated",
+        entity_list_display(model, path)
+    ))
+}
+
+fn has_relate_edge(model: &SemanticModel, left: EntityKey, right: EntityKey) -> bool {
+    model.relations.iter().any(|rel| {
+        matches!(
+            rel.kind,
+            RelKind::RelateOneToOne
+                | RelKind::RelateOneToMany
+                | RelKind::RelateManyToOne
+                | RelKind::RelateManyToMany
+        ) && matches!(
+            (&rel.from, &rel.to),
+            (NodeRef::Entity(from), NodeRef::Entity(to))
+                if (*from == left && *to == right) || (*from == right && *to == left)
+        )
     })
 }
 
@@ -2532,6 +2617,82 @@ cross_forbidden(Order, Payment, Payment.amount > Order.total)
                     .iter()
                     .any(|d| matches!(d, StateDiag::CrossConstraintNotEvaluated { .. })),
                 "non-state cross comparison should be reported on {entity_id}: {:?}",
+                r.diagnostics
+            );
+        }
+    }
+
+    #[test]
+    fn test_relation_scoped_cross_invariant_is_reported_as_not_evaluated() {
+        let model = model_from(
+            r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(open, paid) @default(paid)
+}
+entity Payment "支払い" {
+  id: Int @pk
+  status: Enum(pending, captured) @default(pending)
+}
+relate(Payment, Order, "1:1")
+cross_invariant(Order, Payment)
+  .along(Order, Payment)
+  .when(Order.status, paid)
+  .then(Payment.status, captured)
+"#,
+        );
+
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        for entity_id in ["Order", "Payment"] {
+            let r = results.iter().find(|r| r.entity_id == entity_id).unwrap();
+            assert!(
+                r.diagnostics.iter().any(|d| matches!(
+                    d,
+                    StateDiag::CrossConstraintNotEvaluated { reason, .. }
+                        if reason.contains("linked instance reachability is not yet evaluated")
+                )),
+                "relation-scoped cross invariant should avoid global-product violation on {entity_id}: {:?}",
+                r.diagnostics
+            );
+            assert!(
+                !r.diagnostics
+                    .iter()
+                    .any(|d| matches!(d, StateDiag::CrossInvariantViolated { .. })),
+                "relation-scoped cross invariant must not fall back to global-product evaluation on {entity_id}: {:?}",
+                r.diagnostics
+            );
+        }
+    }
+
+    #[test]
+    fn test_relation_scoped_cross_invariant_requires_declared_relate_path() {
+        let model = model_from(
+            r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(open, paid) @default(paid)
+}
+entity Payment "支払い" {
+  id: Int @pk
+  status: Enum(pending, captured) @default(pending)
+}
+cross_invariant(Order, Payment)
+  .along(Order, Payment)
+  .when(Order.status, paid)
+  .then(Payment.status, captured)
+"#,
+        );
+
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        for entity_id in ["Order", "Payment"] {
+            let r = results.iter().find(|r| r.entity_id == entity_id).unwrap();
+            assert!(
+                r.diagnostics.iter().any(|d| matches!(
+                    d,
+                    StateDiag::CrossConstraintNotEvaluated { reason, .. }
+                        if reason.contains("references no relate path")
+                )),
+                "missing relation path should be reported on {entity_id}: {:?}",
                 r.diagnostics
             );
         }

@@ -107,9 +107,12 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    - Single-entity required co-occurrences use `invariant(Entity).when(...).then(...)`
    - Rules that mention multiple entities use `cross_forbidden` or `cross_invariant`
    - Multi-entity conditions qualify columns as `Entity.column`
+   - Relation-scoped rules use `.along(EntityA, EntityB, ...)` only when the listed
+     entities are connected by a declared `relate` path
    - Review `CrossForbiddenViolated`, `CrossInvariantViolated`, and
      `CrossConstraintNotEvaluated` diagnostics from `states`; the last one means a
-     rule condition is outside the abstract state space or exceeded the cross-product cap
+     rule condition is outside the abstract state space, exceeded the cross-product cap,
+     or uses relation-scoped `.along(...)` linked-instance semantics
 
 12. **Check imports**
    - Every referenced symbol has a corresponding `import`
@@ -167,5 +170,5 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 | `sets` | UseCase / Event | Entity | comparison expression | boolean literal |
 | `forbidden` | Entity | condition(s) | — |
 | `invariant` | Entity | `.when(...)` / `.then(...)` chains | — |
-| `cross_forbidden` | Entity... | cross-entity condition(s) | — |
-| `cross_invariant` | Entity... | `.when(...)` / `.then(...)` chains | — |
+| `cross_forbidden` | Entity... | cross-entity condition(s) | optional `.along(...)` |
+| `cross_invariant` | Entity... | `.when(...)` / `.then(...)` chains | optional `.along(...)` |

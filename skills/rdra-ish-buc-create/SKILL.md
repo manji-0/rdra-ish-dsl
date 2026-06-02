@@ -177,7 +177,8 @@ See the `sets` value vocabulary in `rdra-ish-write`.
 - New system → add to shared vocabulary; its entities are derived from `contains(System, Api)` + API CRUD
 - New location/timing/medium/permission → add to shared vocabulary when reused across BUCs
 - New cross-entity rule → add to `shared/rules.rdra` or the shared file nearest the
-  involved entities, and qualify columns as `Entity.column`
+  involved entities, qualify columns as `Entity.column`, and add `.along(...)` only
+  when the rule is intentionally scoped to linked instances on a declared `relate` path
 - New BUC-local API/screen/event → keep it in `buc/buc_<name>.rdra`
 - If shared files are already split, mirror paths and modules, e.g.
   `shared/entities/order.rdra` → `module shared.entities.order`

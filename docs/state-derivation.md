@@ -193,6 +193,13 @@ present in state patterns (for example `Payment.amount > Order.total` on ordinar
 numeric columns), the result receives a `CrossConstraintNotEvaluated` warning rather
 than silently treating the rule as satisfied.
 
+When a cross constraint has `.along(EntityA, EntityB, ...)`, the rule is relation-scoped:
+it is intended to quantify only over instances connected through the declared `relate`
+path. The current derivation can verify the declared path shape, but it does not track
+which concrete instances are linked at each reached pattern. Relation-scoped constraints
+therefore receive `CrossConstraintNotEvaluated` instead of being evaluated as a global
+cross-product.
+
 See [language-reference.md](./language-reference.md#entity-state-constraints) for the
 syntax and design rationale.
 

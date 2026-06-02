@@ -619,10 +619,20 @@ pub enum CrossEntityCondition {
     Comparison(CrossComparisonProp),
 }
 
+/// How a cross-entity constraint should choose entity combinations to evaluate.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum CrossConstraintScope {
+    /// Evaluate the cross-product of each participating entity's reached patterns.
+    GlobalProduct,
+    /// Intended to evaluate only instances connected by the declared relation path.
+    RelationPath(Vec<EntityKey>),
+}
+
 /// `cross_forbidden(EntityA, EntityB, ...)`.
 #[derive(Debug, Clone)]
 pub struct CrossForbiddenConstraint {
     pub scope: Vec<EntityKey>,
+    pub scope_semantics: CrossConstraintScope,
     pub conditions: Vec<CrossEntityCondition>,
 }
 
@@ -630,6 +640,7 @@ pub struct CrossForbiddenConstraint {
 #[derive(Debug, Clone)]
 pub struct CrossEntityInvariant {
     pub scope: Vec<EntityKey>,
+    pub scope_semantics: CrossConstraintScope,
     pub guards: Vec<CrossEntityCondition>,
     pub requireds: Vec<CrossEntityCondition>,
 }

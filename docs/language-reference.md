@@ -477,6 +477,11 @@ cross_forbidden(Order, Payment,
 cross_invariant(Order, Payment)
   .when(Order.status, paid)
   .then(Payment.status, captured)
+
+cross_invariant(Order, Payment)
+  .along(Order, Payment)
+  .when(Order.status, paid)
+  .then(Payment.status, captured)
 ```
 
 `cross_forbidden(...)` accepts a flat AND-list of conditions. `cross_invariant(...)`
@@ -496,6 +501,12 @@ entity's reached state patterns. Conditions that reference actual state axes can
 produce `CrossForbiddenViolated` or `CrossInvariantViolated` diagnostics. Conditions
 that require values absent from the abstract state space, such as ordinary numeric
 amount comparisons, produce `CrossConstraintNotEvaluated` instead.
+
+Adding `.along(EntityA, EntityB, ...)` declares that the rule is intended to apply only
+to instances connected through the listed `relate` path, not to the global cross-product.
+The current `states` engine validates that the path is declared, but it does not yet
+track linked instance reachability. Such relation-scoped rules therefore produce
+`CrossConstraintNotEvaluated` rather than falling back to global-product evaluation.
 
 ### Comparison Expressions in Constraints
 

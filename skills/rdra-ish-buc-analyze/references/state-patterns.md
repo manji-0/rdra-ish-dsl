@@ -16,6 +16,9 @@ about which combinations the modeled use cases and events can actually reach.
 It evaluates per-entity `forbidden` and `invariant` rules directly. Cross-entity rules
 are checked by combining reached patterns for the participating entities when their
 conditions reference state axes; otherwise they surface as `CrossConstraintNotEvaluated`.
+Rules with `.along(EntityA, EntityB, ...)` are relation-scoped: `states` verifies the
+declared `relate` path shape, then reports `CrossConstraintNotEvaluated` because it
+does not yet track linked instance reachability.
 
 Use state analysis after entity structure is stable enough to know which fields can
 change. Do not invent lifecycle detail during early BUC skeleton work.
@@ -64,7 +67,7 @@ Entity: Order (注文)
 | Forbidden reachable state | Rule violation | Fix lifecycle/effects or update the rule |
 | Invariant violation | Required condition not always satisfied | Add missing `sets`/transition or narrow the invariant |
 | Cross-entity violation | Rule violation across entity patterns | Fix lifecycle/effects or update the cross rule |
-| `CrossConstraintNotEvaluated` | Rule depends on values outside abstract state patterns or exceeds the cross-product cap | Report the unevaluated condition and decide whether it needs a state axis/proposition |
+| `CrossConstraintNotEvaluated` | Rule depends on values outside abstract state patterns, exceeds the cross-product cap, or uses `.along(...)` linked-instance semantics | Report the unevaluated condition/reason and decide whether it needs a state axis/proposition or future relation-scoped evaluation |
 | `present` lacks type suffix where type matters | Nullable effect is vague | Use a PostgreSQL-type value such as `"timestamptz"` when useful |
 
 ## How To Fix

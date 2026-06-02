@@ -43,6 +43,7 @@ rdra-ish states src/ --format json --entity <EntityId>
 - Use `states` before diagram polish when reviewing forbidden or invariant rules.
 - Treat `cross_forbidden` / `cross_invariant` diagnostics as cross-product checks over
   participating entities; `CrossConstraintNotEvaluated` means the rule references
-  values that are not present in abstract state patterns.
+  values that are not present in abstract state patterns, exceeds the cross-product
+  cap, or uses relation-scoped `.along(...)` linked-instance semantics.
 - Use `states --entity <EntityId>` when a whole-model state table is too broad.
 - Use `states --format json` when checking truncation or exact reachable combinations.

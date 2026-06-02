@@ -935,6 +935,32 @@ fn add_condition_entities_to_scope(
     }
 }
 
+fn collect_cross_along_path(
+    model: &SemanticModel,
+    pred: &PredicateCall,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<Vec<EntityKey>> {
+    let along = pred.chain.iter().find(|cc| cc.name == "along")?;
+    let mut path = Vec::new();
+    for arg in &along.args {
+        if let Some(entity) = resolve_entity_scope_arg(model, &pred.name, arg, diags) {
+            path.push(entity);
+        }
+    }
+    Some(path)
+}
+
+fn cross_scope_semantics_from_chain(
+    model: &SemanticModel,
+    pred: &PredicateCall,
+    diags: &mut Vec<Diagnostic>,
+) -> CrossConstraintScope {
+    match collect_cross_along_path(model, pred, diags) {
+        Some(path) => CrossConstraintScope::RelationPath(path),
+        None => CrossConstraintScope::GlobalProduct,
+    }
+}
+
 fn process_cross_forbidden(
     model: &mut SemanticModel,
     pred: &PredicateCall,
@@ -953,9 +979,14 @@ fn process_cross_forbidden(
     }
 
     add_condition_entities_to_scope(&mut scope, &conditions);
+    let scope_semantics = cross_scope_semantics_from_chain(model, pred, diags);
     model
         .cross_forbidden_constraints
-        .push(CrossForbiddenConstraint { scope, conditions });
+        .push(CrossForbiddenConstraint {
+            scope,
+            scope_semantics,
+            conditions,
+        });
 }
 
 fn process_cross_invariant(
@@ -990,8 +1021,10 @@ fn process_cross_invariant(
 
     add_condition_entities_to_scope(&mut scope, &guards);
     add_condition_entities_to_scope(&mut scope, &requireds);
+    let scope_semantics = cross_scope_semantics_from_chain(model, pred, diags);
     model.cross_entity_invariants.push(CrossEntityInvariant {
         scope,
+        scope_semantics,
         guards,
         requireds,
     });
@@ -2294,6 +2327,44 @@ cross_invariant(Order, Payment)
         assert_eq!(invariant.scope.len(), 2);
         assert_eq!(invariant.guards.len(), 1);
         assert_eq!(invariant.requireds.len(), 1);
+    }
+
+    #[test]
+    fn test_cross_invariant_registers_along_scope() {
+        let src = r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(open, paid)
+}
+entity Payment "支払い" {
+  id: Int @pk
+  status: Enum(pending, captured)
+}
+relate(Payment, Order, "1:1")
+cross_invariant(Order, Payment)
+  .along(Order, Payment)
+  .when(Order.status, paid)
+  .then(Payment.status, captured)
+"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {:?}", errors);
+
+        let invariant = &model.cross_entity_invariants[0];
+        let CrossConstraintScope::RelationPath(path) = &invariant.scope_semantics else {
+            panic!(
+                "expected relation-path scope, got {:?}",
+                invariant.scope_semantics
+            );
+        };
+        let path_ids: Vec<_> = path
+            .iter()
+            .map(|key| model.entities[*key].id.as_str())
+            .collect();
+        assert_eq!(path_ids, vec!["Order", "Payment"]);
     }
 
     #[test]

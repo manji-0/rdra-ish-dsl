@@ -12,6 +12,10 @@ Add business rules that can be type-checked as model predicates. Per-entity rule
 validated against derived state patterns; cross-entity rules are checked by combining
 the reached patterns of the participating entities when their conditions reference
 state axes.
+Use `.along(EntityA, EntityB, ...)` only for rules that should quantify over instances
+linked by a declared `relate` path; current `states` validates the path shape but
+reports the rule as `CrossConstraintNotEvaluated` because linked-instance reachability
+is not tracked yet.
 
 ## Ask For
 
@@ -29,11 +33,13 @@ state axes.
    co-occurrences.
 3. Add `cross_forbidden(...)` or `cross_invariant(...)` when a rule mentions columns
    from more than one entity; qualify columns as `Entity.column`.
-4. Use comparison propositions when rules depend on expressions such as
+4. Add `.along(...)` when the intended semantics is relation-scoped rather than global
+   cross-product; keep it off rules that truly forbid global co-existence.
+5. Use comparison propositions when rules depend on expressions such as
    `stock < selling`.
-5. If a per-entity rule fails unexpectedly, inspect lifecycle inputs before weakening it:
+6. If a per-entity rule fails unexpectedly, inspect lifecycle inputs before weakening it:
    missing `sets`, missing transitions, or missing create/default paths are common.
-6. Keep implementation policy notes outside the DSL unless they can be expressed as
+7. Keep implementation policy notes outside the DSL unless they can be expressed as
    state, effect, forbidden, invariant, or cross-entity predicates.
 
 ## Minimal Pattern
@@ -53,6 +59,7 @@ cross_forbidden(Order, Payment,
   Payment.amount > Order.total)
 
 cross_invariant(Order, Payment)
+  .along(Order, Payment)
   .when(Order.status, paid)
   .then(Payment.status, captured)
 ```
@@ -71,7 +78,8 @@ rdra-ish states src/ --format json --entity Order
 - Per-entity violations from `states` are either fixed or intentionally listed as
   open design items.
 - Cross-entity rules use `Entity.column`; if `states` reports them as not evaluated,
-  explain which condition is outside the abstract state space.
+  explain whether the reason is an ordinary non-state condition, cap overflow, or
+  relation-scoped `.along(...)` linked-instance semantics.
 - Required lifecycle effects have corresponding `sets` or transitions.
 - Terminal, unreachable, and no-create warnings are reviewed instead of ignored.
 - The final model can explain BUC scope, actor authority, API/system boundaries,

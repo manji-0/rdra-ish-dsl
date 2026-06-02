@@ -129,8 +129,8 @@ Kinds commonly used by this skill:
 | `sets` | `(UseCase\|Event, Entity, col op rhs, true\|false)` | comparison proposition effect |
 | `forbidden` | `(Entity, (col, val)\|col op rhs, ...)` | forbidden reachable state combination |
 | `invariant` | `(Entity).when(...).then(...)` | required co-occurrence inside one entity |
-| `cross_forbidden` | `(Entity..., (Entity.col, val)\|Entity.col op rhs, ...)` | forbidden combination across entities |
-| `cross_invariant` | `(Entity...).when(...).then(...)` | required co-occurrence across entities |
+| `cross_forbidden` | `(Entity..., (Entity.col, val)\|Entity.col op rhs, ...)[.along(...)]` | forbidden combination across entities |
+| `cross_invariant` | `(Entity...).when(...).then(...)[.along(...)]` | required co-occurrence across entities |
 | `relate` | `(Entity, Entity, "1:1"\|"1:N"\|"N:1"\|"N:M")` | ER relation, auto-generates FK |
 | `has_permission` | `(Actor, Permission)` | actor-side grant |
 | `requires_permission` | `(UseCase\|Api, Permission)` | UC/API required authority |
@@ -167,6 +167,9 @@ import shared.actors.{Staff as S}
   and comparison propositions.
 - Use `cross_forbidden` / `cross_invariant` when a rule mentions columns from more
   than one entity; qualify multi-entity columns as `Entity.column`.
+- Add `.along(EntityA, EntityB, ...)` only when the rule is about instances linked by
+  a declared `relate` path. Current `states` reports these relation-scoped rules as
+  `CrossConstraintNotEvaluated` instead of evaluating the global cross-product.
 
 ### Common Mistakes
 
@@ -183,3 +186,5 @@ import shared.actors.{Staff as S}
 - Modeling event-started BUCs only as `triggers(Event, UseCase)` when the BUC
   boundary itself should remain swappable between human and event initiation.
 - Writing bare column names in multi-entity cross constraints; use `Entity.column`.
+- Using `.along(...)` as an implementation shortcut for a global rule; it marks a
+  relation-scoped rule whose linked-instance reachability is not evaluated yet.

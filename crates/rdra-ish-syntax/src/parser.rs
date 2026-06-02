@@ -642,6 +642,30 @@ performs(Customer, Browse) /* predicate comment */
     }
 
     #[test]
+    fn test_parse_cross_invariant_with_along_chain() {
+        let ast = parse_ok(
+            r#"cross_invariant(Order, Payment).along(Order, Payment).when(Order.status, paid).then(Payment.status, captured)"#,
+        );
+        let pred = ast
+            .items
+            .iter()
+            .find_map(|i| {
+                if let Item::Predicate(p) = i {
+                    Some(p)
+                } else {
+                    None
+                }
+            })
+            .expect("predicate not found");
+        assert_eq!(pred.name, "cross_invariant");
+        assert_eq!(pred.chain.len(), 3);
+        assert_eq!(pred.chain[0].name, "along");
+        assert_eq!(pred.chain[0].args.len(), 2);
+        assert_eq!(pred.chain[1].name, "when");
+        assert_eq!(pred.chain[2].name, "then");
+    }
+
+    #[test]
     fn test_parse_multi_chain_invariant() {
         // .when を複数持つチェーン
         let ast = parse_ok(

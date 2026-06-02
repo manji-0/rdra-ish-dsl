@@ -567,12 +567,20 @@ cross_forbidden(Order, Payment,
 cross_invariant(Order, Payment)
   .when(Order.status, paid)
   .then(Payment.status, captured)
+
+cross_invariant(Order, Payment)
+  .along(Order, Payment)
+  .when(Order.status, paid)
+  .then(Payment.status, captured)
 ```
 
 `states` checks these after per-entity pattern derivation by combining the reached
 patterns for the participating entities. Conditions on actual state axes can report
 cross-rule violations; conditions that depend on ordinary untracked values are reported
-as not fully evaluated.
+as not fully evaluated. Add `.along(EntityA, EntityB, ...)` when the rule is intended
+to apply only to instances linked by a declared `relate` path; current `states` reports
+these relation-scoped rules as not fully evaluated rather than treating them as global
+cross-products.
 
 ### import / modules
 
