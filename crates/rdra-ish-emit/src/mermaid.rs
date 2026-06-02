@@ -12,238 +12,199 @@ use rdra_ish_core::model::{
     ActorKey, ApiKey, BucKey, EntityKey, NodeRef, RelKind, ScreenKey, SemanticModel, UseCaseKey,
 };
 use rdra_ish_core::tx::infer_usecase_transactions;
-use rdra_ish_core::{derive_actor_input_inferences, derive_system_boundaries, ActorInputInference};
+use rdra_ish_core::{
+    derive_actor_input_inferences, derive_system_boundaries, ActorInputInference, EventFlow,
+};
 use std::collections::{HashMap, HashSet};
 
 // ── RDRA全体図エミッタ (Mermaid) ──────────────────────────────────────────────
 
 pub struct RdraMermaidEmitter;
 
-impl Emitter for RdraMermaidEmitter {
-    fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
-        // BUCフィルタ
-        let reachable: Option<HashSet<NodeRef>> = match &view.scope {
-            Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
-            Scope::Whole | Scope::UseCases(_) => None,
-        };
-
-        let is_visible = |nr: &NodeRef| -> bool {
-            match &reachable {
-                Some(set) => set.contains(nr),
-                None => true,
-            }
-        };
-
-        let mut out = String::new();
-        out.push_str("graph TD\n");
-
-        // actors
-        let mut actors: Vec<_> = model.actors.iter().collect();
-        actors.sort_by_key(|(_, a)| &a.id);
-        for (k, actor) in &actors {
-            let nr = NodeRef::Actor(*k);
-            if is_visible(&nr) {
-                out.push_str(&format!(
-                    "  {}([\"{}\"])\n",
-                    actor.id,
-                    prefixed_node_label(&nr, &actor.label)
-                ));
-            }
+fn render_mermaid_rdra_node_declarations(
+    out: &mut String,
+    model: &SemanticModel,
+    reachable: &Option<HashSet<NodeRef>>,
+) {
+    let mut actors: Vec<_> = model.actors.iter().collect();
+    actors.sort_by_key(|(_, actor)| &actor.id);
+    for (key, actor) in &actors {
+        let node = NodeRef::Actor(*key);
+        if scoped_node_visible(reachable, &node) {
+            out.push_str(&format!(
+                "  {}([\"{}\"])\n",
+                actor.id,
+                prefixed_node_label(&node, &actor.label)
+            ));
         }
+    }
 
-        // usecases
-        let mut ucs: Vec<_> = model.use_cases.iter().collect();
-        ucs.sort_by_key(|(_, u)| &u.id);
-        for (k, uc) in &ucs {
-            let nr = NodeRef::UseCase(*k);
-            if is_visible(&nr) {
-                out.push_str(&format!(
-                    "  {}([\"{}\"])\n",
-                    uc.id,
-                    prefixed_node_label(&nr, &uc.label)
-                ));
-            }
+    let mut usecases: Vec<_> = model.use_cases.iter().collect();
+    usecases.sort_by_key(|(_, usecase)| &usecase.id);
+    for (key, usecase) in &usecases {
+        let node = NodeRef::UseCase(*key);
+        if scoped_node_visible(reachable, &node) {
+            out.push_str(&format!(
+                "  {}([\"{}\"])\n",
+                usecase.id,
+                prefixed_node_label(&node, &usecase.label)
+            ));
         }
+    }
 
-        // bucs
-        let mut bucs: Vec<_> = model.bucs.iter().collect();
-        bucs.sort_by_key(|(_, b)| &b.id);
-        for (k, buc) in &bucs {
-            let nr = NodeRef::Buc(*k);
-            if is_visible(&nr) {
-                out.push_str(&format!(
-                    "  {}[\"{}\"]\n",
-                    buc.id,
-                    prefixed_node_label(&nr, &buc.label)
-                ));
-            }
+    let mut bucs: Vec<_> = model.bucs.iter().collect();
+    bucs.sort_by_key(|(_, buc)| &buc.id);
+    for (key, buc) in &bucs {
+        let node = NodeRef::Buc(*key);
+        if scoped_node_visible(reachable, &node) {
+            out.push_str(&format!(
+                "  {}[\"{}\"]\n",
+                buc.id,
+                prefixed_node_label(&node, &buc.label)
+            ));
         }
+    }
 
-        // systems
-        let mut systems: Vec<_> = model.systems.iter().collect();
-        systems.sort_by_key(|(_, s)| &s.id);
-        for (k, system) in &systems {
-            let nr = NodeRef::System(*k);
-            if is_visible(&nr) {
-                out.push_str(&format!(
-                    "  {}[\"{}\"]\n",
-                    system.id,
-                    prefixed_node_label(&nr, &system.label)
-                ));
-            }
+    let mut systems: Vec<_> = model.systems.iter().collect();
+    systems.sort_by_key(|(_, system)| &system.id);
+    for (key, system) in &systems {
+        let node = NodeRef::System(*key);
+        if scoped_node_visible(reachable, &node) {
+            out.push_str(&format!(
+                "  {}[\"{}\"]\n",
+                system.id,
+                prefixed_node_label(&node, &system.label)
+            ));
         }
+    }
 
-        // ext_systems
-        let mut exts: Vec<_> = model.ext_systems.iter().collect();
-        exts.sort_by_key(|(_, e)| &e.id);
-        for (k, ext) in &exts {
-            let nr = NodeRef::ExtSystem(*k);
-            if is_visible(&nr) {
-                out.push_str(&format!(
-                    "  {}[/\"{}\"/]\n",
-                    ext.id,
-                    prefixed_node_label(&nr, &ext.label)
-                ));
-            }
+    let mut ext_systems: Vec<_> = model.ext_systems.iter().collect();
+    ext_systems.sort_by_key(|(_, ext_system)| &ext_system.id);
+    for (key, ext_system) in &ext_systems {
+        let node = NodeRef::ExtSystem(*key);
+        if scoped_node_visible(reachable, &node) {
+            out.push_str(&format!(
+                "  {}[/\"{}\"/]\n",
+                ext_system.id,
+                prefixed_node_label(&node, &ext_system.label)
+            ));
         }
+    }
 
-        // entities
-        let mut ents: Vec<_> = model.entities.iter().collect();
-        ents.sort_by_key(|(_, e)| &e.id);
-        for (k, ent) in &ents {
-            let nr = NodeRef::Entity(*k);
-            if is_visible(&nr) {
-                out.push_str(&format!(
-                    "  {}[(\"{}\")]\n",
-                    ent.id,
-                    prefixed_node_label(&nr, &ent.label)
-                ));
-            }
+    let mut entities: Vec<_> = model.entities.iter().collect();
+    entities.sort_by_key(|(_, entity)| &entity.id);
+    for (key, entity) in &entities {
+        let node = NodeRef::Entity(*key);
+        if scoped_node_visible(reachable, &node) {
+            out.push_str(&format!(
+                "  {}[(\"{}\")]\n",
+                entity.id,
+                prefixed_node_label(&node, &entity.label)
+            ));
         }
+    }
 
-        // screens
-        let mut scrs: Vec<_> = model.screens.iter().collect();
-        scrs.sort_by_key(|(_, s)| &s.id);
-        for (k, scr) in &scrs {
-            let nr = NodeRef::Screen(*k);
-            if is_visible(&nr) {
-                out.push_str(&format!(
-                    "  {}[[\"{}\"]]\n",
-                    scr.id,
-                    prefixed_node_label(&nr, &scr.label)
-                ));
-            }
+    let mut screens: Vec<_> = model.screens.iter().collect();
+    screens.sort_by_key(|(_, screen)| &screen.id);
+    for (key, screen) in &screens {
+        let node = NodeRef::Screen(*key);
+        if scoped_node_visible(reachable, &node) {
+            out.push_str(&format!(
+                "  {}[[\"{}\"]]\n",
+                screen.id,
+                prefixed_node_label(&node, &screen.label)
+            ));
         }
+    }
 
-        // events
-        let mut evs: Vec<_> = model.events.iter().collect();
-        evs.sort_by_key(|(_, e)| &e.id);
-        for (k, ev) in &evs {
-            let nr = NodeRef::Event(*k);
-            if is_visible(&nr) {
-                out.push_str(&format!(
-                    "  {}{{\"{}\"}}\n",
-                    ev.id,
-                    prefixed_node_label(&nr, &ev.label)
-                ));
-            }
+    let mut events: Vec<_> = model.events.iter().collect();
+    events.sort_by_key(|(_, event)| &event.id);
+    for (key, event) in &events {
+        let node = NodeRef::Event(*key);
+        if scoped_node_visible(reachable, &node) {
+            out.push_str(&format!(
+                "  {}{{\"{}\"}}\n",
+                event.id,
+                prefixed_node_label(&node, &event.label)
+            ));
         }
+    }
 
-        // states
-        let mut sts: Vec<_> = model.states.iter().collect();
-        sts.sort_by_key(|(_, s)| &s.id);
-        for (k, st) in &sts {
-            let nr = NodeRef::State(*k);
-            if is_visible(&nr) {
-                out.push_str(&format!(
-                    "  {}(\"{}\")  \n",
-                    st.id,
-                    prefixed_node_label(&nr, &st.label)
-                ));
-            }
+    let mut states: Vec<_> = model.states.iter().collect();
+    states.sort_by_key(|(_, state)| &state.id);
+    for (key, state) in &states {
+        let node = NodeRef::State(*key);
+        if scoped_node_visible(reachable, &node) {
+            out.push_str(&format!(
+                "  {}(\"{}\")  \n",
+                state.id,
+                prefixed_node_label(&node, &state.label)
+            ));
         }
+    }
+}
 
-        // relations
-        let mut relations: Vec<_> = model.relations.iter().collect();
-        relations.sort_by_key(|r| format!("{:?}{:?}", r.from, r.to));
-        for rel in &relations {
-            if !is_visible(&rel.from) || !is_visible(&rel.to) {
-                continue;
-            }
-            // API ノードは RDRA 全体図には出さない
-            if matches!(&rel.from, NodeRef::Api(_)) || matches!(&rel.to, NodeRef::Api(_)) {
-                continue;
-            }
-            if let (Some(from_id), Some(to_id)) =
-                (node_id(model, &rel.from), node_id(model, &rel.to))
-            {
-                let arrow = match &rel.kind {
-                    RelKind::Performs | RelKind::Uses => {
-                        format!("  {} --> {}\n", from_id, to_id)
-                    }
-                    RelKind::Reads => {
-                        format!("  {} -.->|reads| {}\n", from_id, to_id)
-                    }
-                    RelKind::Writes => {
-                        format!("  {} -.->|writes| {}\n", from_id, to_id)
-                    }
-                    RelKind::Creates => {
-                        format!("  {} -.->|creates| {}\n", from_id, to_id)
-                    }
-                    RelKind::Updates => {
-                        format!("  {} -.->|updates| {}\n", from_id, to_id)
-                    }
-                    RelKind::Deletes => {
-                        format!("  {} -.->|deletes| {}\n", from_id, to_id)
-                    }
-                    RelKind::Displays => {
-                        format!("  {} -.->|displays| {}\n", from_id, to_id)
-                    }
-                    RelKind::Shows => {
-                        format!("  {} -.->|shows| {}\n", from_id, to_id)
-                    }
-                    RelKind::Raises => {
-                        format!("  {} -.->|raises| {}\n", from_id, to_id)
-                    }
-                    RelKind::Triggers => {
-                        format!("  {} -.->|triggers| {}\n", from_id, to_id)
-                    }
-                    RelKind::Contains => {
-                        format!("  {} --> {}\n", from_id, to_id)
-                    }
-                    RelKind::Belongs => {
-                        format!("  {} --> {}\n", from_id, to_id)
-                    }
-                    RelKind::HasPermission => {
-                        format!("  {} -.->|has_permission| {}\n", from_id, to_id)
-                    }
-                    RelKind::RequiresPermission => {
-                        format!("  {} -.->|requires_permission| {}\n", from_id, to_id)
-                    }
-                    RelKind::RequiresMedium => {
-                        format!("  {} -.->|requires_medium| {}\n", from_id, to_id)
-                    }
-                    RelKind::Motivates => {
-                        format!("  {} -.->|motivates| {}\n", from_id, to_id)
-                    }
-                    RelKind::Transitions => {
-                        // 状態遷移図エミッタで扱うのでスキップ
-                        continue;
-                    }
-                    RelKind::Invokes => {
-                        // API層は概要図には出さない
-                        continue;
-                    }
-                    RelKind::RelateOneToOne
-                    | RelKind::RelateOneToMany
-                    | RelKind::RelateManyToOne
-                    | RelKind::RelateManyToMany => {
-                        format!("  {} --- {}\n", from_id, to_id)
-                    }
-                };
+fn mermaid_rdra_relation_arrow(kind: &RelKind, from_id: &str, to_id: &str) -> Option<String> {
+    let arrow = match kind {
+        RelKind::Performs | RelKind::Uses => format!("  {} --> {}\n", from_id, to_id),
+        RelKind::Reads => format!("  {} -.->|reads| {}\n", from_id, to_id),
+        RelKind::Writes => format!("  {} -.->|writes| {}\n", from_id, to_id),
+        RelKind::Creates => format!("  {} -.->|creates| {}\n", from_id, to_id),
+        RelKind::Updates => format!("  {} -.->|updates| {}\n", from_id, to_id),
+        RelKind::Deletes => format!("  {} -.->|deletes| {}\n", from_id, to_id),
+        RelKind::Displays => format!("  {} -.->|displays| {}\n", from_id, to_id),
+        RelKind::Shows => format!("  {} -.->|shows| {}\n", from_id, to_id),
+        RelKind::Raises => format!("  {} -.->|raises| {}\n", from_id, to_id),
+        RelKind::Triggers => format!("  {} -.->|triggers| {}\n", from_id, to_id),
+        RelKind::Contains | RelKind::Belongs => format!("  {} --> {}\n", from_id, to_id),
+        RelKind::HasPermission => format!("  {} -.->|has_permission| {}\n", from_id, to_id),
+        RelKind::RequiresPermission => {
+            format!("  {} -.->|requires_permission| {}\n", from_id, to_id)
+        }
+        RelKind::RequiresMedium => format!("  {} -.->|requires_medium| {}\n", from_id, to_id),
+        RelKind::Motivates => format!("  {} -.->|motivates| {}\n", from_id, to_id),
+        RelKind::Transitions | RelKind::Invokes => return None,
+        RelKind::RelateOneToOne
+        | RelKind::RelateOneToMany
+        | RelKind::RelateManyToOne
+        | RelKind::RelateManyToMany => format!("  {} --- {}\n", from_id, to_id),
+    };
+    Some(arrow)
+}
+
+fn render_mermaid_rdra_relations(
+    out: &mut String,
+    model: &SemanticModel,
+    reachable: &Option<HashSet<NodeRef>>,
+) {
+    let mut relations: Vec<_> = model.relations.iter().collect();
+    relations.sort_by_key(|relation| format!("{:?}{:?}", relation.from, relation.to));
+    for relation in &relations {
+        if !scoped_node_visible(reachable, &relation.from)
+            || !scoped_node_visible(reachable, &relation.to)
+        {
+            continue;
+        }
+        if matches!(&relation.from, NodeRef::Api(_)) || matches!(&relation.to, NodeRef::Api(_)) {
+            continue;
+        }
+        if let (Some(from_id), Some(to_id)) =
+            (node_id(model, &relation.from), node_id(model, &relation.to))
+        {
+            if let Some(arrow) = mermaid_rdra_relation_arrow(&relation.kind, from_id, to_id) {
                 out.push_str(&arrow);
             }
         }
+    }
+}
+
+impl Emitter for RdraMermaidEmitter {
+    fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
+        let reachable = reachable_for_scope(model, &view.scope);
+        let mut out = String::new();
+        out.push_str("graph TD\n");
+        render_mermaid_rdra_node_declarations(&mut out, model, &reachable);
+        render_mermaid_rdra_relations(&mut out, model, &reachable);
 
         while out.ends_with("\n\n") {
             out.pop();
@@ -1159,25 +1120,186 @@ impl Emitter for SequenceMermaidEmitter {
 
 pub struct EventFlowMermaidEmitter;
 
+fn mermaid_event_flow_event_id(id: &str) -> String {
+    format!("ev__{}", id)
+}
+
+fn mermaid_event_flow_usecase_id(id: &str) -> String {
+    format!("uc__{}", id)
+}
+
+fn mermaid_event_flow_buc_id(id: &str) -> String {
+    format!("buc__{}", id)
+}
+
+fn mermaid_event_flow_state_id(id: &str) -> String {
+    format!("st__{}", id)
+}
+
+fn declare_mermaid_event_flow_event(
+    out: &mut String,
+    declared: &mut HashSet<String>,
+    model: &SemanticModel,
+    flow: &EventFlow,
+) -> Option<String> {
+    let event = model.events.get(flow.event)?;
+    let event_id = mermaid_event_flow_event_id(&event.id);
+    if declared.insert(event_id.clone()) {
+        out.push_str(&format!(
+            "  {}{{\"{}\"}}\n",
+            event_id,
+            prefixed_label("⚡", &event.label)
+        ));
+    }
+    Some(event_id)
+}
+
+fn declare_mermaid_event_flow_usecase(
+    out: &mut String,
+    declared: &mut HashSet<String>,
+    model: &SemanticModel,
+    usecase: UseCaseKey,
+) -> Option<String> {
+    let usecase_model = model.use_cases.get(usecase)?;
+    let usecase_id = mermaid_event_flow_usecase_id(&usecase_model.id);
+    if declared.insert(usecase_id.clone()) {
+        out.push_str(&format!(
+            "  {}([\"{}\"])\n",
+            usecase_id,
+            prefixed_label("✅", &usecase_model.label)
+        ));
+    }
+    Some(usecase_id)
+}
+
+fn declare_mermaid_event_flow_buc(
+    out: &mut String,
+    declared: &mut HashSet<String>,
+    model: &SemanticModel,
+    buc: BucKey,
+) -> Option<String> {
+    let buc_model = model.bucs.get(buc)?;
+    let buc_id = mermaid_event_flow_buc_id(&buc_model.id);
+    if declared.insert(buc_id.clone()) {
+        out.push_str(&format!(
+            "  {}[[\"{}\"]]\n",
+            buc_id,
+            prefixed_label("📦", &buc_model.label)
+        ));
+    }
+    Some(buc_id)
+}
+
+fn declare_mermaid_event_flow_state(
+    out: &mut String,
+    declared: &mut HashSet<String>,
+    model: &SemanticModel,
+    state: rdra_ish_core::model::StateKey,
+) -> Option<String> {
+    let state_model = model.states.get(state)?;
+    let state_id = mermaid_event_flow_state_id(&state_model.id);
+    if declared.insert(state_id.clone()) {
+        out.push_str(&format!(
+            "  {}(\"{}\")\n",
+            state_id,
+            prefixed_label("🔄", &state_model.label)
+        ));
+    }
+    Some(state_id)
+}
+
+fn render_mermaid_event_flow(
+    out: &mut String,
+    declared: &mut HashSet<String>,
+    model: &SemanticModel,
+    reachable: &Option<HashSet<NodeRef>>,
+    flow: &EventFlow,
+) {
+    let event_node = NodeRef::Event(flow.event);
+    if !scoped_node_visible(reachable, &event_node) {
+        return;
+    }
+    let Some(event_id) = declare_mermaid_event_flow_event(out, declared, model, flow) else {
+        return;
+    };
+
+    let mut raised_by = flow.raised_by.to_vec();
+    raised_by.sort_by_key(|&usecase| {
+        model
+            .use_cases
+            .get(usecase)
+            .map(|uc| uc.id.as_str())
+            .unwrap_or("")
+    });
+    for usecase in raised_by {
+        let node = NodeRef::UseCase(usecase);
+        if !scoped_node_visible(reachable, &node) {
+            continue;
+        }
+        if let Some(usecase_id) = declare_mermaid_event_flow_usecase(out, declared, model, usecase)
+        {
+            out.push_str(&format!("  {} -.->|raises| {}\n", usecase_id, event_id));
+        }
+    }
+
+    let mut triggers = flow.triggers_ucs.to_vec();
+    triggers.sort_by_key(|&usecase| {
+        model
+            .use_cases
+            .get(usecase)
+            .map(|uc| uc.id.as_str())
+            .unwrap_or("")
+    });
+    for usecase in triggers {
+        let node = NodeRef::UseCase(usecase);
+        if !scoped_node_visible(reachable, &node) {
+            continue;
+        }
+        if let Some(usecase_id) = declare_mermaid_event_flow_usecase(out, declared, model, usecase)
+        {
+            out.push_str(&format!("  {} -.->|triggers| {}\n", event_id, usecase_id));
+        }
+    }
+
+    let mut triggered_bucs = flow.triggers_bucs.to_vec();
+    triggered_bucs.sort_by_key(|&buc| model.bucs.get(buc).map(|b| b.id.as_str()).unwrap_or(""));
+    for buc in triggered_bucs {
+        let node = NodeRef::Buc(buc);
+        if !scoped_node_visible(reachable, &node) {
+            continue;
+        }
+        if let Some(buc_id) = declare_mermaid_event_flow_buc(out, declared, model, buc) {
+            out.push_str(&format!("  {} -.->|triggers| {}\n", event_id, buc_id));
+        }
+    }
+
+    let mut transitions = flow.transitions.to_vec();
+    transitions.sort_by_key(|(from, _)| {
+        model
+            .states
+            .get(*from)
+            .map(|state| state.id.as_str())
+            .unwrap_or("")
+    });
+    let event_label = model
+        .events
+        .get(flow.event)
+        .map(|event| prefixed_label("⚡", &event.label))
+        .unwrap_or_default();
+    for (from, to) in transitions {
+        let Some(from_id) = declare_mermaid_event_flow_state(out, declared, model, from) else {
+            continue;
+        };
+        let Some(to_id) = declare_mermaid_event_flow_state(out, declared, model, to) else {
+            continue;
+        };
+        out.push_str(&format!("  {} -->|{}| {}\n", from_id, event_label, to_id));
+    }
+}
+
 impl Emitter for EventFlowMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
-        let reachable: Option<HashSet<NodeRef>> = match &view.scope {
-            Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
-            Scope::Whole | Scope::UseCases(_) => None,
-        };
-        let is_visible = |nr: &NodeRef| -> bool {
-            match &reachable {
-                Some(set) => set.contains(nr),
-                None => true,
-            }
-        };
-
-        // UC / Event / BUC / State が同じ ID を持てるので種別ごとにプレフィックスを付ける
-        let ev_mid = |id: &str| format!("ev__{}", id);
-        let uc_mid = |id: &str| format!("uc__{}", id);
-        let buc_mid = |id: &str| format!("buc__{}", id);
-        let st_mid = |id: &str| format!("st__{}", id);
-
+        let reachable = reachable_for_scope(model, &view.scope);
         let flows = rdra_ish_core::collect_event_flows(model);
 
         let mut out = String::new();
@@ -1186,137 +1308,7 @@ impl Emitter for EventFlowMermaidEmitter {
         let mut declared: HashSet<String> = HashSet::new();
 
         for flow in &flows {
-            let ev_nr = NodeRef::Event(flow.event);
-            if !is_visible(&ev_nr) {
-                continue;
-            }
-            let ev = match model.events.get(flow.event) {
-                Some(e) => e,
-                None => continue,
-            };
-            let ev_id = ev_mid(&ev.id);
-
-            if declared.insert(ev_id.clone()) {
-                out.push_str(&format!(
-                    "  {}{{\"{}\"}}\n",
-                    ev_id,
-                    prefixed_label("⚡", &ev.label)
-                ));
-            }
-
-            // raises: UC -.->|raises| Event
-            let mut raised_by = flow.raised_by.to_vec();
-            raised_by
-                .sort_by_key(|&uk| model.use_cases.get(uk).map(|u| u.id.as_str()).unwrap_or(""));
-            for uk in raised_by {
-                let uc_nr = NodeRef::UseCase(uk);
-                if !is_visible(&uc_nr) {
-                    continue;
-                }
-                let uc = match model.use_cases.get(uk) {
-                    Some(u) => u,
-                    None => continue,
-                };
-                let uid = uc_mid(&uc.id);
-                if declared.insert(uid.clone()) {
-                    out.push_str(&format!(
-                        "  {}([\"{}\"])\n",
-                        uid,
-                        prefixed_label("✅", &uc.label)
-                    ));
-                }
-                out.push_str(&format!("  {} -.->|raises| {}\n", uid, ev_id));
-            }
-
-            // triggers: Event -.->|triggers| UC
-            let mut triggers = flow.triggers_ucs.to_vec();
-            triggers
-                .sort_by_key(|&uk| model.use_cases.get(uk).map(|u| u.id.as_str()).unwrap_or(""));
-            for uk in triggers {
-                let uc_nr = NodeRef::UseCase(uk);
-                if !is_visible(&uc_nr) {
-                    continue;
-                }
-                let uc = match model.use_cases.get(uk) {
-                    Some(u) => u,
-                    None => continue,
-                };
-                let uid = uc_mid(&uc.id);
-                if declared.insert(uid.clone()) {
-                    out.push_str(&format!(
-                        "  {}([\"{}\"])\n",
-                        uid,
-                        prefixed_label("✅", &uc.label)
-                    ));
-                }
-                out.push_str(&format!("  {} -.->|triggers| {}\n", ev_id, uid));
-            }
-
-            // triggers: Event -.->|triggers| BUC
-            let mut triggered_bucs = flow.triggers_bucs.to_vec();
-            triggered_bucs
-                .sort_by_key(|&bk| model.bucs.get(bk).map(|b| b.id.as_str()).unwrap_or(""));
-            for bk in triggered_bucs {
-                let buc_nr = NodeRef::Buc(bk);
-                if !is_visible(&buc_nr) {
-                    continue;
-                }
-                let buc = match model.bucs.get(bk) {
-                    Some(b) => b,
-                    None => continue,
-                };
-                let bid = buc_mid(&buc.id);
-                if declared.insert(bid.clone()) {
-                    out.push_str(&format!(
-                        "  {}[[\"{}\"]]\n",
-                        bid,
-                        prefixed_label("📦", &buc.label)
-                    ));
-                }
-                out.push_str(&format!("  {} -.->|triggers| {}\n", ev_id, bid));
-            }
-
-            // transitions: From -->|event_label| To
-            let mut transitions = flow.transitions.to_vec();
-            transitions.sort_by_key(|(from_sk, _)| {
-                model
-                    .states
-                    .get(*from_sk)
-                    .map(|s| s.id.as_str())
-                    .unwrap_or("")
-            });
-            for (from_sk, to_sk) in transitions {
-                let from_st = match model.states.get(from_sk) {
-                    Some(s) => s,
-                    None => continue,
-                };
-                let to_st = match model.states.get(to_sk) {
-                    Some(s) => s,
-                    None => continue,
-                };
-                let fid = st_mid(&from_st.id);
-                let tid = st_mid(&to_st.id);
-                if declared.insert(fid.clone()) {
-                    out.push_str(&format!(
-                        "  {}(\"{}\")\n",
-                        fid,
-                        prefixed_label("🔄", &from_st.label)
-                    ));
-                }
-                if declared.insert(tid.clone()) {
-                    out.push_str(&format!(
-                        "  {}(\"{}\")\n",
-                        tid,
-                        prefixed_label("🔄", &to_st.label)
-                    ));
-                }
-                out.push_str(&format!(
-                    "  {} -->|{}| {}\n",
-                    fid,
-                    prefixed_label("⚡", &ev.label),
-                    tid
-                ));
-            }
+            render_mermaid_event_flow(&mut out, &mut declared, model, &reachable, flow);
         }
 
         Ok(out)
@@ -1440,6 +1432,47 @@ performs(Customer, Browse)
         assert!(result.contains("Browse"));
         assert!(result.contains("商品を探す"));
         assert!(result.contains("Customer --> Browse"));
+    }
+
+    #[test]
+    fn test_mermaid_rdra_relation_arrow_labels_and_overview_skips() {
+        assert_eq!(
+            mermaid_rdra_relation_arrow(&RelKind::Reads, "Browse", "Catalog").as_deref(),
+            Some("  Browse -.->|reads| Catalog\n")
+        );
+        assert_eq!(
+            mermaid_rdra_relation_arrow(&RelKind::RelateManyToOne, "Order", "Customer").as_deref(),
+            Some("  Order --- Customer\n")
+        );
+        assert!(mermaid_rdra_relation_arrow(&RelKind::Transitions, "Draft", "Published").is_none());
+        assert!(mermaid_rdra_relation_arrow(&RelKind::Invokes, "Browse", "BrowseApi").is_none());
+    }
+
+    #[test]
+    fn test_mermaid_rdra_render_helpers_keep_nodes_relations_and_api_out_of_overview() {
+        let src = r#"
+actor Customer "顧客"
+usecase Browse "商品を探す"
+api BrowseApi "商品API"
+entity Catalog "商品台帳" { id: Int @pk }
+performs(Customer, Browse)
+reads(Browse, Catalog)
+invokes(Browse, BrowseApi)
+"#;
+        let model = model_from(src);
+        let reachable = None;
+        let mut declarations = String::new();
+        render_mermaid_rdra_node_declarations(&mut declarations, &model, &reachable);
+        assert!(declarations.contains("Customer([\"👤 顧客\"])"));
+        assert!(declarations.contains("Browse([\"✅ 商品を探す\"])"));
+        assert!(declarations.contains("Catalog[(\"🗄️ 商品台帳\")]"));
+        assert!(!declarations.contains("BrowseApi"));
+
+        let mut relations = String::new();
+        render_mermaid_rdra_relations(&mut relations, &model, &reachable);
+        assert!(relations.contains("Customer --> Browse"));
+        assert!(relations.contains("Browse -.->|reads| Catalog"));
+        assert!(!relations.contains("BrowseApi"));
     }
 
     #[test]
@@ -1616,6 +1649,132 @@ triggers(EncounterSigned, BucBillingClaims)
 
         assert!(result.contains("ev__EncounterSigned -.->|triggers| buc__BucBillingClaims"));
         assert!(result.contains("buc__BucBillingClaims[[\"📦 Billing Claims\"]]"));
+    }
+
+    #[test]
+    fn test_mermaid_event_flow_helpers_deduplicate_declarations_and_render_transitions() {
+        let src = r#"
+usecase SignEncounter "Sign Encounter"
+usecase ReviewClaim "Review Claim"
+buc BucBillingClaims "Billing Claims"
+state Pending "Pending"
+state Signed "Signed"
+event EncounterSigned "Encounter Signed"
+raises(SignEncounter, EncounterSigned)
+triggers(EncounterSigned, ReviewClaim)
+triggers(EncounterSigned, BucBillingClaims)
+transitions(EncounterSigned, Pending, Signed)
+"#;
+        let model = model_from(src);
+        let flows = rdra_ish_core::collect_event_flows(&model);
+        let flow = flows
+            .iter()
+            .find(|flow| {
+                model
+                    .events
+                    .get(flow.event)
+                    .map(|event| event.id == "EncounterSigned")
+                    .unwrap_or(false)
+            })
+            .unwrap();
+        let mut out = String::new();
+        let mut declared = HashSet::new();
+
+        render_mermaid_event_flow(&mut out, &mut declared, &model, &None, flow);
+        render_mermaid_event_flow(&mut out, &mut declared, &model, &None, flow);
+
+        assert_eq!(
+            out.matches("ev__EncounterSigned{\"⚡ Encounter Signed\"}")
+                .count(),
+            1
+        );
+        assert!(out.contains("uc__SignEncounter -.->|raises| ev__EncounterSigned"));
+        assert!(out.contains("ev__EncounterSigned -.->|triggers| uc__ReviewClaim"));
+        assert!(out.contains("ev__EncounterSigned -.->|triggers| buc__BucBillingClaims"));
+        assert!(out.contains("st__Pending -->|⚡ Encounter Signed| st__Signed"));
+    }
+
+    #[test]
+    fn test_mermaid_event_flow_declare_helpers_emit_prefixed_nodes_once() {
+        let src = r#"
+usecase SignEncounter "Sign Encounter"
+buc BucBillingClaims "Billing Claims"
+state Pending "Pending"
+event EncounterSigned "Encounter Signed"
+raises(SignEncounter, EncounterSigned)
+"#;
+        let model = model_from(src);
+        let flow = rdra_ish_core::collect_event_flows(&model).pop().unwrap();
+        let usecase = model
+            .use_cases
+            .iter()
+            .find(|(_, usecase)| usecase.id == "SignEncounter")
+            .map(|(key, _)| key)
+            .unwrap();
+        let buc = model
+            .bucs
+            .iter()
+            .find(|(_, buc)| buc.id == "BucBillingClaims")
+            .map(|(key, _)| key)
+            .unwrap();
+        let state = model
+            .states
+            .iter()
+            .find(|(_, state)| state.id == "Pending")
+            .map(|(key, _)| key)
+            .unwrap();
+        let mut out = String::new();
+        let mut declared = HashSet::new();
+
+        assert_eq!(
+            declare_mermaid_event_flow_event(&mut out, &mut declared, &model, &flow).as_deref(),
+            Some("ev__EncounterSigned")
+        );
+        assert_eq!(
+            declare_mermaid_event_flow_usecase(&mut out, &mut declared, &model, usecase).as_deref(),
+            Some("uc__SignEncounter")
+        );
+        assert_eq!(
+            declare_mermaid_event_flow_buc(&mut out, &mut declared, &model, buc).as_deref(),
+            Some("buc__BucBillingClaims")
+        );
+        assert_eq!(mermaid_event_flow_state_id("Pending"), "st__Pending");
+        assert_eq!(
+            declare_mermaid_event_flow_state(&mut out, &mut declared, &model, state).as_deref(),
+            Some("st__Pending")
+        );
+
+        assert!(out.contains("ev__EncounterSigned{\"⚡ Encounter Signed\"}"));
+        assert!(out.contains("uc__SignEncounter([\"✅ Sign Encounter\"])"));
+        assert!(out.contains("buc__BucBillingClaims[[\"📦 Billing Claims\"]]"));
+        assert!(out.contains("st__Pending(\"🔄 Pending\")"));
+    }
+
+    #[test]
+    fn test_mermaid_event_flow_visibility_skips_hidden_event_scope() {
+        let src = r#"
+usecase SignEncounter "Sign Encounter"
+event EncounterSigned "Encounter Signed"
+raises(SignEncounter, EncounterSigned)
+"#;
+        let model = model_from(src);
+        let flow = rdra_ish_core::collect_event_flows(&model).pop().unwrap();
+        let mut out = String::new();
+        let mut declared = HashSet::new();
+        let reachable = Some(HashSet::new());
+
+        assert_eq!(
+            mermaid_event_flow_event_id("EncounterSigned"),
+            "ev__EncounterSigned"
+        );
+        assert_eq!(
+            mermaid_event_flow_usecase_id("SignEncounter"),
+            "uc__SignEncounter"
+        );
+        render_mermaid_event_flow(&mut out, &mut declared, &model, &reachable, &flow);
+
+        assert!(out.is_empty());
+        assert!(declared.is_empty());
     }
 
     #[test]
