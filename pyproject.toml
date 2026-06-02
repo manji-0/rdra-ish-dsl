@@ -31,9 +31,9 @@ manifest-path = "crates/rdra-ish-cli/Cargo.toml"
 profile = "release"
 strip = true
 include = [
-    { path = "Cargo.toml", format = "sdist" },
+    { path = "Cargo.toml", format = ["sdist", "wheel"] },
     { path = "Cargo.lock", format = "sdist" },
     { path = "crates/**/*", format = "sdist" },
-    { path = "README.md", format = "sdist" },
-    { path = "LICENSE", format = "sdist" },
+    { path = "README.md", format = ["sdist", "wheel"] },
+    { path = "LICENSE", format = ["sdist", "wheel"] },
 ]
