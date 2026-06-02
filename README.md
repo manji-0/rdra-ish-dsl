@@ -119,8 +119,27 @@ requires_medium(BookingApi, StaffTerminal)
 ## Installation
 
 ```sh
-cargo install --path crates/rdra-ish-cli
+uv tool install rdra-ish-dsl
+rdra-ish --help
 ```
+
+For local development before publishing to PyPI:
+
+```sh
+uv tool install maturin
+uvx maturin develop --release
+uvx maturin build --sdist
+```
+
+To publish manually, configure a PyPI token and run:
+
+```sh
+uvx maturin publish
+```
+
+The repository also includes a GitHub Actions workflow that builds wheels for
+Linux, macOS, and Windows and publishes them through PyPI trusted publishing when
+a GitHub release is published or the workflow is dispatched manually.
 
 <!-- derived-from ./docs/cli-reference.md -->
 ## Recommended Modeling Loop
