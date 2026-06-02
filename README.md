@@ -1,6 +1,6 @@
-# rdra-ish-dsl
+# rdra-ish
 
-`rdra-ish-dsl` is a CLI tool and DSL compiler for reviewing requirements models as code.
+`rdra-ish` is a CLI tool and DSL compiler for reviewing requirements models as code.
 
 ## What is RDRA?
 
@@ -38,7 +38,7 @@ placement rules, and validation commands. For a worked example across seven step
 ## Installation
 
 ```sh
-uv tool install rdra-ish-dsl
+uv tool install rdra-ish
 rdra-ish --help
 ```
 
