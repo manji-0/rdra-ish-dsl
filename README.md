@@ -54,9 +54,9 @@ RDRA-ish deliberately differs from a stricter reading of the original RDRA artif
   comparison-proposition combinations can be reached through declared use cases and
   events.
 - **Model gaps**: diagnostics call out unreachable enum variants, missing creation
-  paths, forbidden reachable states, invariant violations, orphaned APIs, event-flow
-  gaps, permission mismatches, cross-system coordination gaps, and FK-isolated writes
-  in inferred transaction groups.
+  paths, entity constraint violations, orphaned APIs, event-flow gaps, permission
+  mismatches, cross-system coordination gaps, and FK-isolated writes in inferred
+  transaction groups.
 - **Review artifacts**: Mermaid is the lowest-friction default for text review, while
   PlantUML/SVG/PNG are available when a rendered asset is needed.
 
@@ -152,8 +152,8 @@ lifecycle, and enforceable rules.
    permissions, API/system boundaries, event-flow, transaction inference, and states.
 10. Run `rdra-ish states <model-root>` to find unreachable states, missing creation
    paths, and state constraint violations.
-11. Add `forbidden` / `invariant` constraints when the model needs to assert invalid or
-   required state combinations.
+11. Add `forbidden` / `invariant` / `required` / `exclusive` constraints when the model
+   needs to assert invalid, conditional, mandatory, or mutually exclusive state facts.
 
 For a slower abstract-to-concrete workflow, see
 [Incremental Modeling Flow](./docs/incremental-modeling.md).
@@ -488,10 +488,12 @@ sets(Refund, Stock, stock < selling, false)
 | PostgreSQL type name | `@null` column | Make non-null + record type info (`jsonb` / `uuid` / `timestamptz` / `inet`, etc.) |
 | comparison expression + `true`/`false` | comparison column | Drive the comparison proposition's truth value |
 
+<!-- derived-from ./docs/language-reference.md#entity-state-constraints -->
 ### Entity State Constraints
 
 Beyond declaring how columns change, you can assert which state combinations must
-never occur, and which combinations must always hold together. Both constraints are
+never occur, which combinations must always hold together, which facts must always be
+true, and which facts are mutually exclusive. Entity state constraints are
 checked **after** BFS state-pattern derivation, against the set of reachable patterns.
 A violation is reported only if the offending pattern is actually reachable.
 
@@ -546,11 +548,39 @@ AND-ed conditions without ambiguity. For every reachable pattern that satisfies 
 the `.when()` guards but violates any `.then()` requirement, a
 `StateDiag::InvariantViolated` diagnostic is emitted.
 
-Column names and values inside `.when()` / `.then()` are bare identifiers (not quoted
-strings). They use the same value vocabulary as `sets` (Enum variant names, `true`/`false`,
-`present`/`null`, PostgreSQL type names). Comparison expressions (`stock < selling`,
-`expired_at < now`) are treated as derived boolean proposition axes and can be driven
-via `sets`. See `docs/language-reference.md` for the full list of supported operators.
+#### `required` — always-required facts
+
+Use `required` when every reachable pattern must satisfy the listed conditions.
+
+```
+required(Account, (active, true))
+required(Order, (status, paid), (paid_at, present))
+required(Coupon, expired_at < now)
+```
+
+The condition vocabulary is the same as `forbidden`: `(column, value)` tuples and bare
+comparison expressions. All conditions are combined with **AND**. A reachable pattern
+that misses any listed condition emits `StateDiag::RequiredStateViolated`.
+
+#### `exclusive` — mutually exclusive facts
+
+Use `exclusive` when two or more listed conditions must never hold together.
+
+```
+exclusive(Document, (approved, true), (rejected, true))
+exclusive(Order, (cancelled_at, present), (delivered_at, present))
+exclusive(Stock, stock < reorder_threshold, stock > overstock_threshold)
+```
+
+The condition vocabulary is the same as `forbidden`. A reachable pattern that satisfies
+two or more listed conditions emits `StateDiag::ExclusiveStateViolated`.
+
+Column names and values inside constraint tuples and `.when()` / `.then()` are bare
+identifiers (not quoted strings). They use the same value vocabulary as `sets` (Enum
+variant names, `true`/`false`, `present`/`null`, PostgreSQL type names). Comparison
+expressions (`stock < selling`, `expired_at < now`) are treated as derived boolean
+proposition axes and can be driven via `sets`. See `docs/language-reference.md` for
+the full list of supported operators.
 
 <!-- derived-from ./docs/language-reference.md#cross-entity-constraints -->
 #### Cross-Entity Constraints

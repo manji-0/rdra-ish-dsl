@@ -579,6 +579,28 @@ pub struct EntityInvariant {
     pub required_comparisons: Vec<ComparisonProp>,
 }
 
+/// `required(Entity, (col, val), ...)` で宣言された常時成立制約。
+/// `conditions` と `comparisons` が全て成立しない到達状態は違反。
+#[derive(Debug, Clone)]
+pub struct RequiredConstraint {
+    pub entity: EntityKey,
+    /// 常に成立すべき等値条件（全件 AND）
+    pub conditions: Vec<(std::string::String, EffectValue)>,
+    /// 常に true であるべき比較命題（全件 AND）
+    pub comparisons: Vec<ComparisonProp>,
+}
+
+/// `exclusive(Entity, (col, val), ...)` で宣言された相互排他制約。
+/// 列挙した条件のうち 2 件以上が同時に成立する到達状態は違反。
+#[derive(Debug, Clone)]
+pub struct ExclusiveConstraint {
+    pub entity: EntityKey,
+    /// 相互排他にしたい等値条件
+    pub conditions: Vec<(std::string::String, EffectValue)>,
+    /// 相互排他にしたい比較命題
+    pub comparisons: Vec<ComparisonProp>,
+}
+
 // ── クロスエンティティ制約 ───────────────────────────────────────────────────
 
 /// A column reference resolved to a concrete entity and one of its columns.
@@ -678,6 +700,10 @@ pub struct SemanticModel {
     pub forbidden_constraints: Vec<ForbiddenConstraint>,
     /// `invariant(...)` 述語で宣言された不変条件制約
     pub entity_invariants: Vec<EntityInvariant>,
+    /// `required(...)` 述語で宣言された常時成立制約
+    pub required_constraints: Vec<RequiredConstraint>,
+    /// `exclusive(...)` 述語で宣言された相互排他制約
+    pub exclusive_constraints: Vec<ExclusiveConstraint>,
     /// `cross_forbidden(...)` 述語で宣言されたクロスエンティティ禁止制約
     pub cross_forbidden_constraints: Vec<CrossForbiddenConstraint>,
     /// `cross_invariant(...)` 述語で宣言されたクロスエンティティ不変条件

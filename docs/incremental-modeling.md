@@ -67,7 +67,7 @@ ownership clearer.
 | `buc`, `usecase`, `screen`, BUC-local `api`, BUC-local events | `buc/buc_<name>.rdra` | keep one BUC per file; do not split a single BUC early |
 | CRUD, `displays`, `invokes`, access constraints, `raises`, `sets` | the BUC file that explains the use case | never put BUC-specific predicates in shared files |
 | cross-BUC `event`, `state`, `transitions` | shared file near the owning entity | multiple BUC files raise or trigger the same event |
-| `forbidden`, `invariant` | shared file near the constrained entity | constraints become numerous enough for `shared/rules.rdra` |
+| entity constraint predicates (`forbidden`, `invariant`, `required`, `exclusive`) | shared file near the constrained entity | constraints become numerous enough for `shared/rules.rdra` |
 
 ### Growth Pattern
 
@@ -130,6 +130,8 @@ import shared.lifecycle.order
 
 ## Stage Map
 
+<!-- derived-from ./language-reference.md#entity-state-constraints -->
+
 | Stage | Concern | Abstraction | Main question | Add | Validate |
 |---|---|---|---|---|---|
 | 0 | Biz intent | Scope sketch | What business area are we modeling? | `business`, rough `buc`, candidate `actor` | `list --kind buc`, `diagram --kind rdra` |
@@ -138,7 +140,7 @@ import shared.lifecycle.order
 | 3 | Tech interaction boundary | Interaction boundary | What UI/API boundary mediates the work, and with which authority/media constraints? | `screen`, `displays`, `shows`, optional `api`/`invokes`, `permission`, `medium`, `has_permission`, `requires_*` | sequence diagram, screen-constraints CSV, actor-permission audit |
 | 4 | Tech data design | Entity structure | What structure and ownership does the data need? | columns, `@pk`, `relate`, cardinality | ER diagram, sequence TX warnings |
 | 5 | Tech lifecycle design | Lifecycle | Which states and event-triggered BUC entries are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `state`, `transitions`, `raises`, `triggers`, `sets` | `check`, `states`, state diagram, event-flow |
-| 6 | Tech-enforced rules | Business rules | Which states are invalid or required? | `forbidden`, `invariant`, comparison propositions | `states` diagnostics |
+| 6 | Tech-enforced rules | Business rules | Which states are invalid, conditional, mandatory, or mutually exclusive? | `forbidden`, `invariant`, `required`, `exclusive`, comparison propositions | `states` diagnostics |
 
 ## Stage 0: Scope Sketch
 
@@ -440,12 +442,18 @@ forbidden(Order, (status, paid), (paid_at, null))
 invariant(Order)
   .when(status, paid)
   .then(paid_at, present)
+
+required(Account, (active, true))
+
+exclusive(Document, (approved, true), (rejected, true))
 ```
 
 Ask the user:
 
 - Which combinations must never be reachable?
 - Which values must co-occur once a condition is true?
+- Which facts must be true in every reachable state?
+- Which facts must be mutually exclusive?
 - Which comparisons matter even though the concrete numeric or date values are not
   tracked in the abstract state space?
 
@@ -471,7 +479,7 @@ Use the current abstraction level to decide what to ask next:
 | entities with only `id` | columns, keys, and relationships |
 | Enum/Bool/nullable columns but no `sets` or `transitions` | use-case effects and events |
 | states but unreachable variants | missing `raises`, `transitions`, or `sets` |
-| stable reachable states | `forbidden` and `invariant` business rules |
+| stable reachable states | entity constraint predicates (`forbidden`, `invariant`, `required`, `exclusive`) |
 
 ## Summary
 

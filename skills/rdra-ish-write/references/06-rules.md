@@ -1,7 +1,7 @@
 # Step 6: Rules
 
 Use this context when lifecycle paths are modeled and the next task is to express
-invalid or required state combinations as executable checks.
+invalid, conditional, mandatory, or mutually exclusive state facts as executable checks.
 
 <!-- derived-from ../../../docs/language-reference.md#entity-state-constraints -->
 <!-- derived-from ../../../docs/language-reference.md#cross-entity-constraints -->
@@ -21,6 +21,8 @@ is not tracked yet.
 
 - Which reachable state combinations are invalid?
 - Which value must be present when another state or comparison holds?
+- Which value must be present in every reachable state?
+- Which facts must not co-occur?
 - Does the rule mention one entity or multiple entities?
 - Are the rules hard invariants or review warnings for future refinement?
 - Does an apparent violation mean the rule is wrong, or a missing `sets`/transition
@@ -31,16 +33,18 @@ is not tracked yet.
 1. Add `forbidden(Entity, ...)` for invalid combinations inside one entity.
 2. Add `invariant(Entity).when(...).then(...)` for single-entity required
    co-occurrences.
-3. Add `cross_forbidden(...)` or `cross_invariant(...)` when a rule mentions columns
+3. Add `required(Entity, ...)` for always-required facts.
+4. Add `exclusive(Entity, ...)` for mutually exclusive state facts.
+5. Add `cross_forbidden(...)` or `cross_invariant(...)` when a rule mentions columns
    from more than one entity; qualify columns as `Entity.column`.
-4. Add `.along(...)` when the intended semantics is relation-scoped rather than global
+6. Add `.along(...)` when the intended semantics is relation-scoped rather than global
    cross-product; keep it off rules that truly forbid global co-existence.
-5. Use comparison propositions when rules depend on expressions such as
+7. Use comparison propositions when rules depend on expressions such as
    `stock < selling`.
-6. If a per-entity rule fails unexpectedly, inspect lifecycle inputs before weakening it:
+8. If a per-entity rule fails unexpectedly, inspect lifecycle inputs before weakening it:
    missing `sets`, missing transitions, or missing create/default paths are common.
-7. Keep implementation policy notes outside the DSL unless they can be expressed as
-   state, effect, forbidden, invariant, or cross-entity predicates.
+9. Keep implementation policy notes outside the DSL unless they can be expressed as
+   state, effect, forbidden, invariant, required, exclusive, or cross-entity predicates.
 
 ## Minimal Pattern
 
@@ -50,6 +54,10 @@ forbidden(Order, (status, cancelled), (paid_at, present))
 invariant(Order)
   .when(status, submitted)
   .then(submitted_at, present)
+
+required(Account, (active, true))
+
+exclusive(Document, (approved, true), (rejected, true))
 
 sets(ReserveStock, Inventory, stock < selling, true)
 forbidden(Inventory, stock < selling)

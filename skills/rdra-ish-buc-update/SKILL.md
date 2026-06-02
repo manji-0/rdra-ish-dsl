@@ -14,6 +14,7 @@ Keep the business-to-technical refinement order intact: do not introduce technic
 details until the business value, actors, use cases, and data touchpoints that justify
 them are present.
 
+<!-- derived-from ../../docs/language-reference.md#entity-state-constraints -->
 <!-- derived-from ../../docs/language-reference.md#cross-entity-constraints -->
 
 ### Step 1 — Read the existing BUC
@@ -40,7 +41,7 @@ Read `buc/buc_<name>.rdra` and the shared files it imports. Identify:
 | New Business-BUC context | shared vocabulary for `location` / `timing` / `medium`, then `belongs(...).when(...).where(...).by(...)` |
 | New permission or medium constraint | shared `permission` / `medium` vocabulary, then `has_permission`, `requires_permission`, or `requires_medium` in the owning BUC file |
 | New event-started BUC | target BUC file, then `triggers(Event, Buc)`; add `triggers(Event, EntryUC)` only after the entry UC is known |
-| New cross-entity rule | shared rules file or shared entity area; use `cross_forbidden` / `cross_invariant` with `Entity.column` conditions, and add `.along(...)` only for relation-scoped linked-instance intent |
+| New entity rule | shared rules file or shared entity area; use `forbidden`, `invariant`, `required`, or `exclusive` for single-entity state facts; use `cross_forbidden` / `cross_invariant` with `Entity.column` conditions for multi-entity rules, and add `.along(...)` only for relation-scoped linked-instance intent |
 | Cross-system entity relation handling | BUC file that owns the coordinating use case |
 | Remove a use case | Remove its `contains`, CRUD, `displays`, `raises` predicates; check no other BUC uses it |
 
@@ -57,7 +58,7 @@ Also classify the abstraction transition:
 | CRUD exists but no screens/API | Tech interaction boundary | interaction boundary | screens, external interfaces, API endpoints, owning systems, access/media constraints |
 | Entities have only `id` | Tech data design | entity structure | fields, keys, relationships, cardinality |
 | Structured entities have lifecycle fields | Tech lifecycle design | lifecycle | states, events, use-case effects |
-| Lifecycle reaches plausible patterns | Tech-enforced rules | business rules | forbidden and required state combinations, including cross-entity rules when needed |
+| Lifecycle reaches plausible patterns | Tech-enforced rules | business rules | invalid, conditional, mandatory, or mutually exclusive state facts, including cross-entity rules when needed |
 
 ### Step 3 — Apply the minimal diff
 

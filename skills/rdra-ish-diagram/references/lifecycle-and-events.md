@@ -1,7 +1,7 @@
 # Lifecycle and Event Views
 
 Use this reference when reviewing state machines, event causality, event-triggered
-BUCs, reachable state patterns, forbidden states, or invariants.
+BUCs, reachable state patterns, or entity constraints.
 
 ## Commands
 
@@ -40,7 +40,7 @@ rdra-ish states src/ --format json --entity <EntityId>
 
 <!-- derived-from ../../../docs/state-derivation.md#constraint-checking-after-bfs -->
 
-- Use `states` before diagram polish when reviewing forbidden or invariant rules.
+- Use `states` before diagram polish when reviewing entity constraints.
 - Treat `cross_forbidden` / `cross_invariant` diagnostics as cross-product checks over
   participating entities; `CrossConstraintNotEvaluated` means the rule references
   values that are not present in abstract state patterns, exceeds the cross-product

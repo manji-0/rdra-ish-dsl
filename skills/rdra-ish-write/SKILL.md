@@ -7,6 +7,7 @@ description: Write RDRA DSL files from requirements using correct syntax and fil
 
 Create RDRA DSL files from requirements or specifications.
 
+<!-- derived-from ../../docs/language-reference.md#entity-state-constraints -->
 <!-- derived-from ../../docs/language-reference.md#cross-entity-constraints -->
 
 ### Context Loading Rule
@@ -24,7 +25,7 @@ continue with the single most relevant step.
 | 3 | Interaction boundary | `references/03-interaction-boundary.md` | screens, APIs, systems, media, permissions |
 | 4 | Entity structure | `references/04-entity-structure.md` | columns, keys, relations, coordination |
 | 5 | Lifecycle | `references/05-lifecycle.md` | events, states, transitions, event-started BUCs, effects |
-| 6 | Rules | `references/06-rules.md` | forbidden, invariant, and cross-entity constraints |
+| 6 | Rules | `references/06-rules.md` | forbidden, invariant, required, exclusive, and cross-entity constraints |
 
 Do not skip ahead because a downstream detail is tempting. Model the smallest useful
 increment, run validation, then advance one level.
@@ -129,6 +130,8 @@ Kinds commonly used by this skill:
 | `sets` | `(UseCase\|Event, Entity, col op rhs, true\|false)` | comparison proposition effect |
 | `forbidden` | `(Entity, (col, val)\|col op rhs, ...)` | forbidden reachable state combination |
 | `invariant` | `(Entity).when(...).then(...)` | required co-occurrence inside one entity |
+| `required` | `(Entity, (col, val)\|col op rhs, ...)` | always-required state facts |
+| `exclusive` | `(Entity, (col, val)\|col op rhs, ...)` | mutually exclusive state facts |
 | `cross_forbidden` | `(Entity..., (Entity.col, val)\|Entity.col op rhs, ...)[.along(...)]` | forbidden combination across entities |
 | `cross_invariant` | `(Entity...).when(...).then(...)[.along(...)]` | required co-occurrence across entities |
 | `relate` | `(Entity, Entity, "1:1"\|"1:N"\|"N:1"\|"N:M")` | ER relation, auto-generates FK |

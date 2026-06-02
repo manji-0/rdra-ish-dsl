@@ -31,6 +31,7 @@ Prints each diagnostic to stderr. If any error (non-warning) is present, exits w
 status `1` before running secondary consistency checks. Otherwise it reports unresolved
 model warnings and prints `OK: no errors`.
 
+<!-- derived-from ./state-derivation.md#diagnostics -->
 `check` includes the same broad review signals exposed elsewhere:
 
 - actor permission coverage for `requires_permission` on use cases and invoked APIs,
@@ -41,7 +42,8 @@ model warnings and prints `OK: no errors`.
 - event-flow gaps, including events that are never raised, raised events that trigger
   no transition/use case/BUC, or triggered use cases with no containing BUC;
 - state-pattern warnings, including missing creation paths, unreachable enum variants,
-  forbidden reachable states, invariant violations, and pattern truncation.
+  forbidden reachable states, invariant / required / exclusive violations, and pattern
+  truncation.
 
 | Argument | Type | Description |
 |---|---|---|

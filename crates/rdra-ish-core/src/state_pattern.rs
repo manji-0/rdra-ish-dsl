@@ -193,6 +193,16 @@ pub enum StateDiag {
         requireds: String,
         pattern_desc: String,
     },
+    /// `required(Entity, ...)` の常時成立条件を満たさない到達可能な状態
+    RequiredStateViolated {
+        conditions: String,
+        pattern_desc: String,
+    },
+    /// `exclusive(Entity, ...)` の相互排他条件が同時成立した到達可能な状態
+    ExclusiveStateViolated {
+        conditions: String,
+        pattern_desc: String,
+    },
     /// `cross_forbidden(...)` で禁止された複数 entity の状態組合せに到達可能
     CrossForbiddenViolated {
         entities: String,
@@ -334,8 +344,8 @@ pub fn prop_col_key(prop: &ComparisonProp) -> String {
 }
 
 /// entity ごとの状態軸を特定する。
-/// `proposition_props` には、この entity の forbidden/invariant/sets で参照される
-/// 比較命題（重複なし）を渡す。各命題は `AxisKind::Proposition` 軸として追加される。
+/// `proposition_props` には、この entity の制約述語と `sets` で参照される比較命題
+/// （重複なし）を渡す。各命題は `AxisKind::Proposition` 軸として追加される。
 fn identify_axes(
     entity_cols: &[ModelColumn],
     column_effects: &[&ColumnEffect],
@@ -742,7 +752,7 @@ fn derive_for_entity(
         .filter(|e| e.entity == ek)
         .collect();
 
-    // この entity に対する比較命題 Props を収集（forbidden/invariant/proposition_effects から一意化）
+    // この entity に対する比較命題 Props を収集（制約述語と proposition_effects から一意化）
     let mut prop_keys_seen: HashSet<String> = HashSet::new();
     let mut proposition_props: Vec<ComparisonProp> = Vec::new();
     for fc in model
@@ -766,6 +776,28 @@ fn derive_for_entity(
             .iter()
             .chain(inv.required_comparisons.iter())
         {
+            if prop_keys_seen.insert(p.axis_key()) {
+                proposition_props.push(p.clone());
+            }
+        }
+    }
+    for required in model
+        .required_constraints
+        .iter()
+        .filter(|required| required.entity == ek)
+    {
+        for p in &required.comparisons {
+            if prop_keys_seen.insert(p.axis_key()) {
+                proposition_props.push(p.clone());
+            }
+        }
+    }
+    for exclusive in model
+        .exclusive_constraints
+        .iter()
+        .filter(|exclusive| exclusive.entity == ek)
+    {
+        for p in &exclusive.comparisons {
             if prop_keys_seen.insert(p.axis_key()) {
                 proposition_props.push(p.clone());
             }
@@ -1124,8 +1156,63 @@ fn describe_pattern(pattern: &StatePattern) -> String {
         .join(", ")
 }
 
-/// 到達可能パターン群に対して `forbidden` / `invariant` 制約を検査し、
-/// 違反を `diags` に追加する。
+fn abstract_eq_conditions(conditions: &[(String, EffectValue)]) -> Vec<(String, AbstractValue)> {
+    conditions
+        .iter()
+        .map(|(col, val)| (col.clone(), AbstractValue::from_effect(val)))
+        .collect()
+}
+
+fn abstract_comparison_conditions(comparisons: &[ComparisonProp]) -> Vec<(String, AbstractValue)> {
+    comparisons
+        .iter()
+        .map(|p| (prop_col_key(p), AbstractValue::Bool(true)))
+        .collect()
+}
+
+fn condition_display_parts(
+    equals: &[(String, AbstractValue)],
+    comparisons: &[ComparisonProp],
+) -> Vec<String> {
+    equals
+        .iter()
+        .map(|(col, av)| format!("{}={}", col, abstract_value_display(av)))
+        .chain(comparisons.iter().map(|p| format!("{}=true", p.display())))
+        .collect()
+}
+
+fn all_conditions_hold(
+    pattern: &StatePattern,
+    equals: &[(String, AbstractValue)],
+    props: &[(String, AbstractValue)],
+) -> bool {
+    equals
+        .iter()
+        .chain(props.iter())
+        .all(|(col, av)| pattern.values.get(col) == Some(av))
+}
+
+fn matched_condition_display_parts(
+    pattern: &StatePattern,
+    equals: &[(String, AbstractValue)],
+    comparisons: &[ComparisonProp],
+    props: &[(String, AbstractValue)],
+) -> Vec<String> {
+    let mut matched = Vec::new();
+    for (col, av) in equals {
+        if pattern.values.get(col) == Some(av) {
+            matched.push(format!("{}={}", col, abstract_value_display(av)));
+        }
+    }
+    for (idx, (col, av)) in props.iter().enumerate() {
+        if pattern.values.get(col) == Some(av) {
+            matched.push(format!("{}=true", comparisons[idx].display()));
+        }
+    }
+    matched
+}
+
+/// 到達可能パターン群に対して entity 制約を検査し、違反を `diags` に追加する。
 fn check_constraints(
     model: &SemanticModel,
     ek: EntityKey,
@@ -1140,38 +1227,13 @@ fn check_constraints(
         .iter()
         .filter(|fc| fc.entity == ek)
     {
-        // 等値条件を AbstractValue に変換
-        let abs_conds: Vec<(String, AbstractValue)> = fc
-            .conditions
-            .iter()
-            .map(|(col, val)| (col.clone(), AbstractValue::from_effect(val)))
-            .collect();
-        // 比較命題条件（命題軸キー, Bool(true)）
-        let abs_props: Vec<(String, AbstractValue)> = fc
-            .comparisons
-            .iter()
-            .map(|p| (prop_col_key(p), AbstractValue::Bool(true)))
-            .collect();
+        let abs_conds = abstract_eq_conditions(&fc.conditions);
+        let abs_props = abstract_comparison_conditions(&fc.comparisons);
 
         for rp in reached {
-            let eq_match = abs_conds
-                .iter()
-                .all(|(col, av)| rp.pattern.values.get(col) == Some(av));
-            let prop_match = abs_props
-                .iter()
-                .all(|(col, av)| rp.pattern.values.get(col) == Some(av));
-            if eq_match && prop_match {
-                let conditions_str: Vec<String> = abs_conds
-                    .iter()
-                    .map(|(col, av)| format!("{}={}", col, abstract_value_display(av)))
-                    .chain(
-                        fc.comparisons
-                            .iter()
-                            .map(|p| format!("{}=true", p.display())),
-                    )
-                    .collect();
+            if all_conditions_hold(&rp.pattern, &abs_conds, &abs_props) {
                 diags.push(StateDiag::ForbiddenStateViolated {
-                    conditions: conditions_str.join(" AND "),
+                    conditions: condition_display_parts(&abs_conds, &fc.comparisons).join(" AND "),
                     pattern_desc: describe_pattern(&rp.pattern),
                 });
             }
@@ -1186,34 +1248,14 @@ fn check_constraints(
         .iter()
         .filter(|inv| inv.entity == ek)
     {
-        let abs_guards: Vec<(String, AbstractValue)> = inv
-            .guards
-            .iter()
-            .map(|(col, val)| (col.clone(), AbstractValue::from_effect(val)))
-            .collect();
-        let abs_guard_props: Vec<(String, AbstractValue)> = inv
-            .guard_comparisons
-            .iter()
-            .map(|p| (prop_col_key(p), AbstractValue::Bool(true)))
-            .collect();
-        let abs_requireds: Vec<(String, AbstractValue)> = inv
-            .requireds
-            .iter()
-            .map(|(col, val)| (col.clone(), AbstractValue::from_effect(val)))
-            .collect();
-        let abs_required_props: Vec<(String, AbstractValue)> = inv
-            .required_comparisons
-            .iter()
-            .map(|p| (prop_col_key(p), AbstractValue::Bool(true)))
-            .collect();
+        let abs_guards = abstract_eq_conditions(&inv.guards);
+        let abs_guard_props = abstract_comparison_conditions(&inv.guard_comparisons);
+        let abs_requireds = abstract_eq_conditions(&inv.requireds);
+        let abs_required_props = abstract_comparison_conditions(&inv.required_comparisons);
 
         for rp in reached {
             // 全ガード条件（等値 + 命題）が成立するパターンのみ検査
-            let guards_hold = abs_guards
-                .iter()
-                .chain(abs_guard_props.iter())
-                .all(|(col, av)| rp.pattern.values.get(col) == Some(av));
-            if !guards_hold {
+            if !all_conditions_hold(&rp.pattern, &abs_guards, &abs_guard_props) {
                 continue;
             }
             // required 条件のいずれかが不成立なら違反
@@ -1222,27 +1264,56 @@ fn check_constraints(
                 .chain(abs_required_props.iter())
                 .any(|(col, av)| rp.pattern.values.get(col) != Some(av));
             if req_violated {
-                let guards_str: Vec<String> = abs_guards
-                    .iter()
-                    .map(|(col, av)| format!("{}={}", col, abstract_value_display(av)))
-                    .chain(
-                        inv.guard_comparisons
-                            .iter()
-                            .map(|p| format!("{}=true", p.display())),
-                    )
-                    .collect();
-                let requireds_str: Vec<String> = abs_requireds
-                    .iter()
-                    .map(|(col, av)| format!("{}={}", col, abstract_value_display(av)))
-                    .chain(
-                        inv.required_comparisons
-                            .iter()
-                            .map(|p| format!("{}=true", p.display())),
-                    )
-                    .collect();
                 diags.push(StateDiag::InvariantViolated {
-                    guards: guards_str.join(" AND "),
-                    requireds: requireds_str.join(" AND "),
+                    guards: condition_display_parts(&abs_guards, &inv.guard_comparisons)
+                        .join(" AND "),
+                    requireds: condition_display_parts(&abs_requireds, &inv.required_comparisons)
+                        .join(" AND "),
+                    pattern_desc: describe_pattern(&rp.pattern),
+                });
+            }
+        }
+    }
+
+    // ── 常時成立チェック ─────────────────────────────────────────────────────
+    // `required` はガードのない invariant: 全ての到達状態で条件が成立する必要がある。
+    for required in model
+        .required_constraints
+        .iter()
+        .filter(|required| required.entity == ek)
+    {
+        let abs_conds = abstract_eq_conditions(&required.conditions);
+        let abs_props = abstract_comparison_conditions(&required.comparisons);
+        for rp in reached {
+            if !all_conditions_hold(&rp.pattern, &abs_conds, &abs_props) {
+                diags.push(StateDiag::RequiredStateViolated {
+                    conditions: condition_display_parts(&abs_conds, &required.comparisons)
+                        .join(" AND "),
+                    pattern_desc: describe_pattern(&rp.pattern),
+                });
+            }
+        }
+    }
+
+    // ── 相互排他チェック ─────────────────────────────────────────────────────
+    // `exclusive` は列挙された条件のうち 2 件以上が同時成立する状態を禁止する。
+    for exclusive in model
+        .exclusive_constraints
+        .iter()
+        .filter(|exclusive| exclusive.entity == ek)
+    {
+        let abs_conds = abstract_eq_conditions(&exclusive.conditions);
+        let abs_props = abstract_comparison_conditions(&exclusive.comparisons);
+        for rp in reached {
+            let matched = matched_condition_display_parts(
+                &rp.pattern,
+                &abs_conds,
+                &exclusive.comparisons,
+                &abs_props,
+            );
+            if matched.len() >= 2 {
+                diags.push(StateDiag::ExclusiveStateViolated {
+                    conditions: matched.join(" AND "),
                     pattern_desc: describe_pattern(&rp.pattern),
                 });
             }
@@ -2344,7 +2415,70 @@ invariant(Order)
         );
     }
 
-    // ── invariant: 不変条件を満たす場合は違反なし ──────────────────────────────
+    // ── required: 全到達状態で成立すべき条件 ─────────────────────────────────
+
+    #[test]
+    fn test_required_state_violated() {
+        let model = model_from(
+            r#"
+entity Order "注文" {
+  id:     Int @pk
+  status: Enum(pending, paid) @default(pending)
+}
+usecase Place "注文確定"
+creates(Place, Order)
+required(Order, (status, paid))
+"#,
+        );
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results.iter().find(|r| r.entity_id == "Order").unwrap();
+        let violated: Vec<_> = r
+            .diagnostics
+            .iter()
+            .filter(|d| matches!(d, StateDiag::RequiredStateViolated { .. }))
+            .collect();
+        assert!(
+            !violated.is_empty(),
+            "RequiredStateViolated が発生すべき: {:?}",
+            r.diagnostics
+        );
+    }
+
+    // ── exclusive: 条件どうしの同時成立禁止 ──────────────────────────────────
+
+    #[test]
+    fn test_exclusive_state_violated() {
+        let model = model_from(
+            r#"
+entity Document "文書" {
+  id:       Int @pk
+  approved: Bool
+  rejected: Bool
+}
+usecase Create  "作成"
+usecase Approve "承認"
+usecase Reject  "却下"
+creates(Create, Document)
+updates(Approve, Document)
+updates(Reject,  Document)
+sets(Approve, Document, "approved", "true")
+sets(Reject,  Document, "rejected", "true")
+exclusive(Document, (approved, true), (rejected, true))
+"#,
+        );
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results.iter().find(|r| r.entity_id == "Document").unwrap();
+        let violated: Vec<_> = r
+            .diagnostics
+            .iter()
+            .filter(|d| matches!(d, StateDiag::ExclusiveStateViolated { .. }))
+            .collect();
+        assert!(
+            !violated.is_empty(),
+            "ExclusiveStateViolated が発生すべき: {:?}",
+            r.diagnostics
+        );
+    }
 
     // ── 比較命題軸テスト ─────────────────────────────────────────────────────
 
@@ -2381,7 +2515,7 @@ forbidden(Order, (status, paid))
         );
     }
 
-    /// 比較命題軸が追加されること、および BFS 後に forbidden/invariant が正しく機能すること
+    /// 比較命題軸が追加されること、および BFS 後に制約チェックが正しく機能すること
     #[test]
     fn test_comparison_proposition_axis_and_violation() {
         let model = model_from(

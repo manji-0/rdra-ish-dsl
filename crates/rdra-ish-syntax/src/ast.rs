@@ -245,10 +245,10 @@ pub struct PredicateCall {
 pub enum PredicateArg {
     Ref(QRef),
     Lit(std::string::String),
-    /// インライン `(col, val)` タプル。`forbidden(E, (col, val), ...)` で使用。
+    /// インライン `(col, val)` タプル。entity 制約述語で使用。
     Tuple(Vec<PredicateArg>),
     /// 比較式（例: `stock < selling`, `expired_at < now`）。
-    /// forbidden/invariant の条件、および sets の比較命題引数として使用。
+    /// entity 制約述語の条件、および sets の比較命題引数として使用。
     Expr(Expr),
 }
 

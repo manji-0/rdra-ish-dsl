@@ -150,8 +150,10 @@ fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
         ]),
         // forbidden(entity, (col, val), ...) — 条件AND組合せへの到達を禁止する
         // invariant(entity).when(col, val).then(col, val) — チェーン形式
-        // どちらも第1引数の entity のみ型検査する
-        "forbidden" | "invariant" => Some(vec![vec!["entity"]]),
+        // required(entity, (col, val), ...) — 条件AND組合せの常時成立を要求する
+        // exclusive(entity, (col, val), ...) — 条件どうしの同時成立を禁止する
+        // いずれも第1引数の entity のみ型検査する
+        "forbidden" | "invariant" | "required" | "exclusive" => Some(vec![vec!["entity"]]),
         // cross_forbidden / cross_invariant は可変長の entity scope と
         // entity-qualified column 条件を専用処理で検査する。
         "cross_forbidden" | "cross_invariant" => Some(vec![]),
@@ -444,17 +446,91 @@ fn arg_as_str(arg: &PredicateArg) -> Option<String> {
     }
 }
 
-/// `Tuple([a, b])` から (col文字列, val文字列) を取り出す。
-/// 要素数が2でない場合、または atom が文字列化できない場合は `None`。
-fn tuple_pair(arg: &PredicateArg) -> Option<(String, String)> {
-    match arg {
-        PredicateArg::Tuple(elems) if elems.len() == 2 => {
-            let col = arg_as_str(&elems[0])?;
-            let val = arg_as_str(&elems[1])?;
-            Some((col, val))
+#[derive(Default)]
+struct EntityConditions {
+    equals: Vec<(String, EffectValue)>,
+    comparisons: Vec<ComparisonProp>,
+}
+
+fn resolve_entity_equals_condition(
+    entity_cols: &[ModelColumn],
+    entity_id: &str,
+    column_arg: &PredicateArg,
+    value_arg: &PredicateArg,
+    diags: &mut Vec<Diagnostic>,
+) -> Result<Option<(String, EffectValue)>, ()> {
+    let Some(col_str) = arg_as_str(column_arg) else {
+        return Ok(None);
+    };
+    let Some(val_str) = arg_as_str(value_arg) else {
+        return Ok(None);
+    };
+    let Some(col) = entity_cols.iter().find(|c| c.name == col_str).cloned() else {
+        diags.push(Diagnostic::error(RdraError::UnknownColumn {
+            entity: entity_id.to_string(),
+            col: col_str,
+        }));
+        return Err(());
+    };
+    match parse_effect_value(&col, &val_str) {
+        Ok(value) => Ok(Some((col_str, value))),
+        Err(e) => {
+            diags.push(Diagnostic::error(e));
+            Err(())
         }
-        _ => None,
     }
+}
+
+fn collect_entity_conditions(
+    entity_cols: &[ModelColumn],
+    entity_id: &str,
+    args: &[PredicateArg],
+    diags: &mut Vec<Diagnostic>,
+) -> Option<EntityConditions> {
+    let mut conditions = EntityConditions::default();
+    let mut idx = 0;
+    while idx < args.len() {
+        match &args[idx] {
+            PredicateArg::Expr(Expr::Cmp(cmp)) => {
+                if let Some(prop) = resolve_comparison(entity_cols, entity_id, cmp, diags) {
+                    conditions.comparisons.push(prop);
+                }
+                idx += 1;
+            }
+            PredicateArg::Tuple(elems) if elems.len() == 2 => {
+                match resolve_entity_equals_condition(
+                    entity_cols,
+                    entity_id,
+                    &elems[0],
+                    &elems[1],
+                    diags,
+                ) {
+                    Ok(Some(condition)) => conditions.equals.push(condition),
+                    Ok(None) => {}
+                    Err(()) => return None,
+                }
+                idx += 1;
+            }
+            _ if idx + 1 < args.len() => {
+                match resolve_entity_equals_condition(
+                    entity_cols,
+                    entity_id,
+                    &args[idx],
+                    &args[idx + 1],
+                    diags,
+                ) {
+                    Ok(Some(condition)) => {
+                        conditions.equals.push(condition);
+                        idx += 2;
+                    }
+                    Ok(None) => idx += 1,
+                    Err(()) => return None,
+                }
+            }
+            _ => idx += 1,
+        }
+    }
+    Some(conditions)
 }
 
 fn context_value_from_arg(
@@ -1241,10 +1317,15 @@ fn resolve_predicate_args(
         .iter()
         .enumerate()
         .map(|(i, arg)| {
-            if let Some(kinds) = sig.get(i) {
-                if matches!(kinds.as_slice(), ["_card"] | ["_col"] | ["_val"]) {
-                    return None;
-                }
+            let Some(kinds) = sig.get(i) else {
+                return if matches!(pred.name.as_str(), "forbidden" | "required" | "exclusive") {
+                    None
+                } else {
+                    resolve_arg(model, arg, diags)
+                };
+            };
+            if matches!(kinds.as_slice(), ["_card"] | ["_col"] | ["_val"]) {
+                return None;
             }
             resolve_arg(model, arg, diags)
         })
@@ -1434,44 +1515,71 @@ fn process_forbidden_predicate(
     };
     let entity_id = model.entities[entity_key].id.clone();
     let entity_cols = model.entities[entity_key].columns.clone();
-    let mut conditions: Vec<(String, EffectValue)> = Vec::new();
-    let mut comparisons: Vec<ComparisonProp> = Vec::new();
+    let Some(conditions) =
+        collect_entity_conditions(&entity_cols, &entity_id, &pred.args[1..], diags)
+    else {
+        return;
+    };
 
-    for arg in pred.args.iter().skip(1) {
-        match arg {
-            PredicateArg::Expr(Expr::Cmp(cmp)) => {
-                if let Some(prop) = resolve_comparison(&entity_cols, &entity_id, cmp, diags) {
-                    comparisons.push(prop);
-                }
-            }
-            _ => {
-                let Some((col_str, val_str)) = tuple_pair(arg) else {
-                    continue;
-                };
-                let col = entity_cols.iter().find(|c| c.name == col_str).cloned();
-                let Some(col) = col else {
-                    diags.push(Diagnostic::error(RdraError::UnknownColumn {
-                        entity: entity_id.clone(),
-                        col: col_str,
-                    }));
-                    return;
-                };
-                match parse_effect_value(&col, &val_str) {
-                    Ok(value) => conditions.push((col_str, value)),
-                    Err(e) => {
-                        diags.push(Diagnostic::error(e));
-                        return;
-                    }
-                }
-            }
-        }
-    }
-
-    if !conditions.is_empty() || !comparisons.is_empty() {
+    if !conditions.equals.is_empty() || !conditions.comparisons.is_empty() {
         model.forbidden_constraints.push(ForbiddenConstraint {
             entity: entity_key,
-            conditions,
-            comparisons,
+            conditions: conditions.equals,
+            comparisons: conditions.comparisons,
+        });
+    }
+}
+
+fn process_required_predicate(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    resolved: &[Option<NodeRef>],
+    diags: &mut Vec<Diagnostic>,
+) {
+    let entity_key = match resolved.first() {
+        Some(Some(NodeRef::Entity(k))) => *k,
+        _ => return,
+    };
+    let entity_id = model.entities[entity_key].id.clone();
+    let entity_cols = model.entities[entity_key].columns.clone();
+    let Some(conditions) =
+        collect_entity_conditions(&entity_cols, &entity_id, &pred.args[1..], diags)
+    else {
+        return;
+    };
+
+    if !conditions.equals.is_empty() || !conditions.comparisons.is_empty() {
+        model.required_constraints.push(RequiredConstraint {
+            entity: entity_key,
+            conditions: conditions.equals,
+            comparisons: conditions.comparisons,
+        });
+    }
+}
+
+fn process_exclusive_predicate(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    resolved: &[Option<NodeRef>],
+    diags: &mut Vec<Diagnostic>,
+) {
+    let entity_key = match resolved.first() {
+        Some(Some(NodeRef::Entity(k))) => *k,
+        _ => return,
+    };
+    let entity_id = model.entities[entity_key].id.clone();
+    let entity_cols = model.entities[entity_key].columns.clone();
+    let Some(conditions) =
+        collect_entity_conditions(&entity_cols, &entity_id, &pred.args[1..], diags)
+    else {
+        return;
+    };
+
+    if conditions.equals.len() + conditions.comparisons.len() >= 2 {
+        model.exclusive_constraints.push(ExclusiveConstraint {
+            entity: entity_key,
+            conditions: conditions.equals,
+            comparisons: conditions.comparisons,
         });
     }
 }
@@ -1719,6 +1827,8 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
         "sets" => process_sets_predicate(model, pred, &resolved, diags),
         "forbidden" => process_forbidden_predicate(model, pred, &resolved, diags),
         "invariant" => process_invariant_predicate(model, pred, &resolved, diags),
+        "required" => process_required_predicate(model, pred, &resolved, diags),
+        "exclusive" => process_exclusive_predicate(model, pred, &resolved, diags),
         "relate" => process_relate_predicate(model, pred, &resolved, diags),
         _ => process_relation_predicate(model, pred, &resolved, diags),
     }
@@ -2240,6 +2350,53 @@ sets(Sell, Stock, stock < selling, true)
         assert_eq!(effect.prop.axis_key(), "stock<selling");
         assert!(effect.truth);
         assert!(matches!(effect.origin, NodeRef::UseCase(_)));
+    }
+
+    #[test]
+    fn test_required_registers_conditions_and_comparison() {
+        let src = r#"
+entity Coupon "クーポン" {
+  id: Int @pk
+  status: Enum(usable, expired)
+  expired_at: DateTime @null
+}
+required(Coupon, (status, usable), expired_at < now)
+"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {:?}", errors);
+
+        assert_eq!(model.required_constraints.len(), 1);
+        let constraint = &model.required_constraints[0];
+        assert_eq!(constraint.conditions.len(), 1);
+        assert_eq!(constraint.comparisons.len(), 1);
+        assert_eq!(constraint.comparisons[0].axis_key(), "expired_at<now");
+    }
+
+    #[test]
+    fn test_exclusive_registers_flat_pair_conditions() {
+        let src = r#"
+entity Document "文書" {
+  id: Int @pk
+  approved: Bool
+  rejected: Bool
+}
+exclusive(Document, approved, true, rejected, true)
+"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {:?}", errors);
+
+        assert_eq!(model.exclusive_constraints.len(), 1);
+        let constraint = &model.exclusive_constraints[0];
+        assert_eq!(constraint.conditions.len(), 2);
+        assert_eq!(constraint.comparisons.len(), 0);
     }
 
     #[test]

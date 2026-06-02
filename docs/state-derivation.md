@@ -1,5 +1,7 @@
 # State Pattern Derivation
 
+<!-- derived-from ./language-reference.md#entity-state-constraints -->
+
 State pattern derivation answers the question: *for each entity, which combinations of
 its state-defining column values are actually reachable, given the use cases, events,
 and state transitions declared in the model?*
@@ -25,7 +27,7 @@ derivation.
 | `Enum(a, b, c)` | `Enum` | one of the declared variants `{a, b, c}` |
 | `Bool` | `Bool` | `{false, true}` |
 | `@null` (any base type) | `Nullable` | `{null, present}` (the `present` value may carry a PostgreSQL type for display) |
-| comparison expression in `forbidden` / `invariant` / `sets` | `Proposition` | `{false, true}` (driven by `sets(..., <expr>, bool)`) |
+| comparison expression in `forbidden` / `invariant` / `required` / `exclusive` / `sets` | `Proposition` | `{false, true}` (driven by `sets(..., <expr>, bool)`) |
 
 A non-nullable, non-Enum, non-Bool column (e.g. a plain `Int` primary key) is not a
 state axis. An entity with no axes yields exactly one trivial pattern that is both
@@ -99,10 +101,11 @@ arbitrarily.
 ## The BFS Algorithm
 
 1. **Identify axes** for the entity (Enum / Bool / Nullable columns). In addition,
-   collect all **`Proposition` axes** by scanning `forbidden` / `invariant` constraints
-   and `sets` proposition effects for comparison expressions that reference this entity.
-   Each distinct normalized expression (e.g. `stock<selling`, `expired_at<now`) becomes
-   one `Proposition` axis with default value `Bool(false)`.
+   collect all **`Proposition` axes** by scanning `forbidden` / `invariant` /
+   `required` / `exclusive` constraints and `sets` proposition effects for comparison
+   expressions that reference this entity. Each distinct normalized expression (e.g.
+   `stock<selling`, `expired_at<now`) becomes one `Proposition` axis with default value
+   `Bool(false)`.
 2. **Collect operations** from `creates` / `updates` / `deletes` / `writes`, merge in
    `sets` column effects and `sets` proposition effects, and build transition-derived
    guarded `Update`s from `transitions` + `raises`.
@@ -125,8 +128,8 @@ arbitrarily.
    enabled `Update`/`Delete` would leave it.
 7. **Detect unreachable variants.** For each Enum axis, any declared variant not present
    in any reached pattern yields `UnreachableEnumVariant`.
-8. **Check constraints.** Evaluate `forbidden` and `invariant` against the reached set
-   (below).
+8. **Check constraints.** Evaluate `forbidden`, `invariant`, `required`, and
+   `exclusive` against the reached set (below).
 
 Each reached pattern carries **provenance**: the set of `(BUC id, use case id)` pairs
 that contributed to reaching it. This is what the `VIA` column shows.
@@ -153,10 +156,11 @@ reachable set when the deliver use case sets both.
 ## Constraint Checking After BFS
 
 After the reachable set is computed, declared constraints are checked against it.
-Per-entity `forbidden` and `invariant` constraints are checked directly against the
-entity's reached patterns. `cross_forbidden` and `cross_invariant` are checked after
-all entity results are derived by combining the reached patterns for the participating
-entities; any violation is attached to each involved entity's diagnostics.
+Per-entity `forbidden`, `invariant`, `required`, and `exclusive` constraints are
+checked directly against the entity's reached patterns. `cross_forbidden` and
+`cross_invariant` are checked after all entity results are derived by combining the
+reached patterns for the participating entities; any violation is attached to each
+involved entity's diagnostics.
 
 ### `forbidden`
 
@@ -182,6 +186,25 @@ the same way: each comparison maps to its `Proposition` axis and is checked as a
 `Bool` equality against the current pattern value. Guards with comparison propositions
 use `Bool(true)` as the required value, enabling guards like "when the proposition
 holds".
+
+### `required`
+
+For each `required(E, (col, val), ...)`, the conditions are AND-ed. Every reached pattern
+must match **all** conditions. If a reached pattern misses any condition, a
+`RequiredStateViolated { conditions, pattern_desc }` diagnostic is emitted.
+
+Comparison expressions in `required` are matched against their `Proposition` axes with
+`Bool(true)` as the required value.
+
+### `exclusive`
+
+For each `exclusive(E, (col, val), ...)`, the listed conditions are treated as
+alternatives. If a reached pattern satisfies **two or more** listed conditions, an
+`ExclusiveStateViolated { conditions, pattern_desc }` diagnostic is emitted with the
+co-occurring conditions.
+
+Comparison expressions in `exclusive` are matched against their `Proposition` axes with
+`Bool(true)` as the matched value.
 
 ### Cross-Entity Constraints
 
@@ -216,6 +239,8 @@ syntax and design rationale.
 | `PatternCapReached { cap, bound }` | The per-entity cap was hit; output is truncated. `bound` is the product-space size. |
 | `ForbiddenStateViolated { conditions, pattern_desc }` | A reachable pattern matches all conditions of a `forbidden` declaration. |
 | `InvariantViolated { guards, requireds, pattern_desc }` | A reachable pattern satisfies an invariant's guards but breaks a requirement. |
+| `RequiredStateViolated { conditions, pattern_desc }` | A reachable pattern misses at least one condition of a `required` declaration. |
+| `ExclusiveStateViolated { conditions, pattern_desc }` | A reachable pattern satisfies two or more conditions of an `exclusive` declaration. |
 | `CrossForbiddenViolated { entities, conditions, pattern_desc }` | A reached cross-entity pattern combination matches all conditions of a `cross_forbidden` declaration. |
 | `CrossInvariantViolated { entities, guards, requireds, pattern_desc }` | A reached cross-entity pattern combination satisfies cross-invariant guards but breaks a requirement. |
 | `CrossConstraintNotEvaluated { entities, constraint, reason }` | A cross-entity rule cannot be fully evaluated from per-entity abstract state patterns or exceeds the cross-product safety cap. |

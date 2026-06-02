@@ -14,6 +14,7 @@ Read the stages as a progression from business concerns to technical concerns. E
 review should protect business intent and value coverage; later review should focus on
 API/system boundaries, persistence structure, reachable lifecycle states, and rules.
 
+<!-- derived-from ../../docs/language-reference.md#entity-state-constraints -->
 <!-- derived-from ../../docs/language-reference.md#cross-entity-constraints -->
 <!-- derived-from ../../docs/state-derivation.md#constraint-checking-after-bfs -->
 
@@ -38,7 +39,7 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    - Interaction boundary: screens/API are being modeled
    - Entity structure: columns/relationships/cardinality are modeled
    - Lifecycle: states/events/transitions/sets are modeled
-   - Business rules: forbidden/invariant and cross-entity constraints are modeled
+   - Business rules: entity and cross-entity constraints are modeled
    - Concern shift: Scope and BUC skeleton are business-facing; interaction boundary
      and deeper stages are technical commitments derived from that business model
 
@@ -105,6 +106,8 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 11. **Check business rules**
    - Single-entity invalid combinations use `forbidden(Entity, ...)`
    - Single-entity required co-occurrences use `invariant(Entity).when(...).then(...)`
+   - Always-required facts use `required(Entity, ...)`
+   - Mutually exclusive facts use `exclusive(Entity, ...)`
    - Rules that mention multiple entities use `cross_forbidden` or `cross_invariant`
    - Multi-entity conditions qualify columns as `Entity.column`
    - Relation-scoped rules use `.along(EntityA, EntityB, ...)` only when the listed
@@ -170,5 +173,7 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 | `sets` | UseCase / Event | Entity | comparison expression | boolean literal |
 | `forbidden` | Entity | condition(s) | — |
 | `invariant` | Entity | `.when(...)` / `.then(...)` chains | — |
+| `required` | Entity | condition(s) | — |
+| `exclusive` | Entity | condition(s) | — |
 | `cross_forbidden` | Entity... | cross-entity condition(s) | optional `.along(...)` |
 | `cross_invariant` | Entity... | `.when(...)` / `.then(...)` chains | optional `.along(...)` |

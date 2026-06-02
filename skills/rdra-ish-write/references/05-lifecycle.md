@@ -82,4 +82,4 @@ rdra-ish diagram src/ --kind event-flow --format mermaid
 ## Next Step
 
 Load `references/06-rules.md` when reachable state combinations need
-forbidden or invariant constraints.
+entity constraints.

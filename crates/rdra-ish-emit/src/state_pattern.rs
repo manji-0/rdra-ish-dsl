@@ -88,6 +88,24 @@ fn diag_message(d: &StateDiag) -> String {
                 guards, requireds, pattern_desc
             )
         }
+        StateDiag::RequiredStateViolated {
+            conditions,
+            pattern_desc,
+        } => {
+            format!(
+                "[error] required state missing: ({}) is not satisfied in pattern ({})",
+                conditions, pattern_desc
+            )
+        }
+        StateDiag::ExclusiveStateViolated {
+            conditions,
+            pattern_desc,
+        } => {
+            format!(
+                "[error] exclusive state conditions co-occur: ({}) in pattern ({})",
+                conditions, pattern_desc
+            )
+        }
         StateDiag::CrossForbiddenViolated {
             entities,
             conditions,

@@ -386,8 +386,19 @@ are evaluated after BFS state-pattern derivation: a constraint is only reported 
 violated if a reachable pattern actually witnesses the violation. Unreachable bad
 states never trigger a diagnostic.
 
-There are two constraint forms, deliberately given different syntaxes that match their
-semantics.
+There are four entity-local constraint forms. Each one names a common shape in the
+reachable state space:
+
+| Predicate | Constraint shape | Use when |
+|---|---|---|
+| `forbidden` | no reachable pattern may satisfy all listed conditions | Invalid combinations |
+| `invariant` | when guards hold, required conditions must also hold | Conditional co-occurrence |
+| `required` | every reachable pattern must satisfy all listed conditions | Always-required facts |
+| `exclusive` | no reachable pattern may satisfy two or more listed conditions | Mutual exclusion |
+
+Entity-local equality conditions are shown in tuple form, `(column, value)`, because it
+stays clear in variadic lists. The parser also accepts flat `column, value` pairs for
+single equality conditions when there is no ambiguity.
 
 ### `forbidden` — tuple-variadic forbidden states
 
@@ -459,6 +470,47 @@ conditions are the trigger and which are the obligation. The method-chain form k
 the two sides syntactically separate (`.when` vs `.then`) and lets each side accumulate
 any number of AND-ed conditions unambiguously, while reading naturally left to right.
 
+### `required` — always-required state facts
+
+```
+required(Account, (active, true))
+required(Order, (status, paid), (paid_at, present))
+required(Coupon, expired_at < now)
+```
+
+`required(...)` accepts the same condition vocabulary as `forbidden`: each condition is
+either a `(column, value)` tuple or a comparison expression. All listed conditions are
+combined with **AND**. The rule reads: **every reachable pattern of this entity must
+satisfy all listed conditions**.
+
+If a reachable pattern is missing any required condition, a `RequiredStateViolated`
+diagnostic is emitted.
+
+**Design rationale.** `required` is the no-guard form of an invariant. It is possible to
+think of it as "true implies these conditions", but naming it directly keeps global
+state facts readable and avoids empty `.when()` chains.
+
+### `exclusive` — mutual exclusion between state facts
+
+```
+exclusive(Document, (approved, true), (rejected, true))
+exclusive(Order, (cancelled_at, present), (delivered_at, present))
+exclusive(Stock, stock < reorder_threshold, stock > overstock_threshold)
+```
+
+`exclusive(...)` accepts the same condition vocabulary as `forbidden`: each condition is
+either a `(column, value)` tuple or a comparison expression. The listed conditions are
+treated as alternatives. A reachable pattern violates the rule when **two or more** of
+the listed conditions hold at the same time.
+
+If a reachable pattern satisfies multiple exclusive conditions, an
+`ExclusiveStateViolated` diagnostic is emitted.
+
+**Design rationale.** Mutual exclusion can be expanded into pairwise `forbidden`
+constraints, but the predicate names the business intent directly. This is useful for
+nullable lifecycle timestamps, boolean flags, and comparison propositions that should
+not co-occur.
+
 ### Cross-Entity Constraints
 
 Cross-entity constraints describe rules that mention columns from more than one entity.
@@ -510,9 +562,9 @@ track linked instance reachability. Such relation-scoped rules therefore produce
 
 ### Comparison Expressions in Constraints
 
-`forbidden`, `cross_forbidden`, and the `.when()` / `.then()` clauses of `invariant` or
-`cross_invariant` accept bare **comparison expressions** as conditions, in addition to
-the `(column, value)` tuple form.
+`forbidden`, `required`, `exclusive`, `cross_forbidden`, and the `.when()` / `.then()`
+clauses of `invariant` or `cross_invariant` accept bare **comparison expressions** as
+conditions, in addition to the `(column, value)` tuple form.
 
 #### Syntax
 
@@ -563,21 +615,26 @@ derivation and constraint checking. In practice this means:
 
 - A `forbidden` condition containing an undriven comparison is never triggered (the
   comparison is never true, so the conjunction is never satisfied).
+- A `required` condition containing an undriven comparison is violated in every
+  reachable pattern, because the required proposition is always false.
+- An `exclusive` condition containing an undriven comparison never contributes to an
+  exclusivity violation.
 - A `.when()` guard containing an undriven comparison is never satisfied, so the
   invariant never fires.
 - A `.then()` requirement containing an undriven comparison is always violated whenever
   its guard is satisfied.
 
 Always add matching `sets` calls whenever you use a comparison expression in a
-constraint, or the constraint will silently have no effect (for `forbidden` / `.when`)
-or will always fire (for `.then`).
+constraint, or the constraint will silently have no effect (for `forbidden`,
+`exclusive`, or `.when`) or will always fire (for `required` or `.then`).
 
 ### Bare identifiers
 
-Column names and values inside `forbidden(...)` tuples and `.when()` / `.then()` clauses
-are **bare identifiers**, not quoted strings (contrast with `sets`, whose column and
-value are quoted strings). They use the same value vocabulary as `sets`: Enum variant
-names, `true` / `false`, `present` / `null`, and PostgreSQL type names.
+Column names and values inside `forbidden(...)`, `required(...)`, and `exclusive(...)`
+tuples, plus `.when()` / `.then()` clauses, are **bare identifiers**, not quoted strings
+(contrast with `sets`, whose column and value are quoted strings). They use the same
+value vocabulary as `sets`: Enum variant names, `true` / `false`, `present` / `null`,
+and PostgreSQL type names.
 
 In **comparison expressions** (e.g. `stock < selling`, `expired_at < now`), column names
 on both sides are also bare identifiers. The right-hand side may additionally be an
@@ -642,6 +699,6 @@ from the input layout.
 ## See Also
 
 - [state-derivation.md](./state-derivation.md) — how reachable state patterns are
-  derived, how predicates feed the BFS, and how `forbidden` / `invariant` are checked.
+  derived, how predicates feed the BFS, and how entity constraints are checked.
 - [cli-reference.md](./cli-reference.md) — the `rdra-ish` command-line interface,
   including the `diagram --kind event-flow` command for event causality visualisation.

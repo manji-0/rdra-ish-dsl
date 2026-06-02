@@ -448,6 +448,20 @@ fn state_diag_message(diag: &rdra_ish_core::StateDiag) -> String {
             "invariant violated: when {} then {} is broken by {}",
             guards, requireds, pattern_desc
         ),
+        rdra_ish_core::StateDiag::RequiredStateViolated {
+            conditions,
+            pattern_desc,
+        } => format!(
+            "required state is missing: {} is not satisfied by {}",
+            conditions, pattern_desc
+        ),
+        rdra_ish_core::StateDiag::ExclusiveStateViolated {
+            conditions,
+            pattern_desc,
+        } => format!(
+            "exclusive state conditions co-occur: {} witnessed by {}",
+            conditions, pattern_desc
+        ),
         rdra_ish_core::StateDiag::CrossForbiddenViolated {
             entities,
             conditions,
