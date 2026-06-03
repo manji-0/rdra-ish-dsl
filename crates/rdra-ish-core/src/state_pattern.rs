@@ -2058,6 +2058,102 @@ sets(event::EvDeliver, Order, "delivered_at", "present")
         );
     }
 
+    #[test]
+    fn derive_for_entity_merges_transition_and_event_effects_directly() {
+        let model = model_from(
+            r#"
+entity Order "注文" {
+  id:           Int @pk
+  status:       Enum(pending, delivered) @default(pending)
+  delivered_at: DateTime @null
+}
+usecase Place      "注文確定"
+usecase DeliverUc  "配達確認"
+event EvDeliver    "配達完了"
+creates(Place,              Order)
+updates(usecase::DeliverUc, Order)
+raises(usecase::DeliverUc, EvDeliver)
+state Pending   "受付中"
+state Delivered "配達完了"
+transitions(EvDeliver, Pending, Delivered)
+sets(event::EvDeliver, Order, "delivered_at", "present")
+"#,
+        );
+        let entity = model
+            .entities
+            .iter()
+            .find_map(|(key, entity)| (entity.id == "Order").then_some(key))
+            .unwrap();
+        let buc_of_usecase = build_buc_of_usecase(&model);
+
+        let r = derive_for_entity(&model, entity, &buc_of_usecase, None, DEFAULT_PATTERN_CAP);
+
+        let delivered_present = StatePattern {
+            values: BTreeMap::from([
+                (
+                    "status".to_string(),
+                    AbstractValue::Enum("delivered".to_string()),
+                ),
+                ("delivered_at".to_string(), AbstractValue::Present),
+            ]),
+        };
+        let delivered_null = StatePattern {
+            values: BTreeMap::from([
+                (
+                    "status".to_string(),
+                    AbstractValue::Enum("delivered".to_string()),
+                ),
+                ("delivered_at".to_string(), AbstractValue::Null),
+            ]),
+        };
+        assert!(r.patterns.iter().any(|p| p.pattern == delivered_present));
+        assert!(!r.patterns.iter().any(|p| p.pattern == delivered_null));
+    }
+
+    #[test]
+    fn derive_for_entity_honors_buc_reachability_filter_directly() {
+        let model = model_from(
+            r#"
+entity Ticket "チケット" {
+  id:     Int @pk
+  status: Enum(open, closed) @default(open)
+}
+buc Included "対象BUC"
+buc Excluded "対象外BUC"
+usecase OpenTicket  "作成"
+usecase CloseTicket "終了"
+creates(OpenTicket, Ticket)
+updates(CloseTicket, Ticket)
+sets(CloseTicket, Ticket, "status", "closed")
+contains(Included, OpenTicket)
+contains(Excluded, CloseTicket)
+"#,
+        );
+        let entity = model
+            .entities
+            .iter()
+            .find_map(|(key, entity)| (entity.id == "Ticket").then_some(key))
+            .unwrap();
+        let buc_of_usecase = build_buc_of_usecase(&model);
+        let reachable = crate::resolver::reachable_from_bucs(&model, &["Included".to_string()]);
+
+        let r = derive_for_entity(
+            &model,
+            entity,
+            &buc_of_usecase,
+            Some(&reachable),
+            DEFAULT_PATTERN_CAP,
+        );
+
+        let values: Vec<_> = r
+            .patterns
+            .iter()
+            .map(|p| p.pattern.values.get("status").unwrap().clone())
+            .collect();
+        assert!(values.contains(&AbstractValue::Enum("open".to_string())));
+        assert!(!values.contains(&AbstractValue::Enum("closed".to_string())));
+    }
+
     // ── creates なし → defaults シード ─────────────────────────────────────
 
     #[test]

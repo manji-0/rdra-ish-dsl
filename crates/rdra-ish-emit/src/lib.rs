@@ -381,3 +381,107 @@ pub(crate) fn collect_object_graph_nodes(
 
     nodes
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rdra_ish_core::build_model;
+    use rdra_ish_syntax::parse;
+
+    fn model_from(src: &str) -> SemanticModel {
+        let (ast, errors) = parse(src);
+        assert!(errors.is_empty(), "parse errors: {:?}", errors);
+        let (model, diags) = build_model(&ast);
+        let errs: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errs.is_empty(), "model errors: {:?}", errs);
+        model
+    }
+
+    fn node_id(model: &SemanticModel, node: &NodeRef) -> String {
+        match node {
+            NodeRef::Actor(k) => model.actors[*k].id.clone(),
+            NodeRef::Requirement(k) => model.requirements[*k].id.clone(),
+            NodeRef::ExtSystem(k) => model.ext_systems[*k].id.clone(),
+            NodeRef::Business(k) => model.businesses[*k].id.clone(),
+            NodeRef::Buc(k) => model.bucs[*k].id.clone(),
+            NodeRef::UsageScene(k) => model.usage_scenes[*k].id.clone(),
+            NodeRef::Condition(k) => model.conditions[*k].id.clone(),
+            NodeRef::Variation(k) => model.variations[*k].id.clone(),
+            NodeRef::Location(k) => model.locations[*k].id.clone(),
+            NodeRef::Timing(k) => model.timings[*k].id.clone(),
+            NodeRef::Medium(k) => model.media[*k].id.clone(),
+            NodeRef::Permission(k) => model.permissions[*k].id.clone(),
+            NodeRef::UseCase(k) => model.use_cases[*k].id.clone(),
+            NodeRef::Screen(k) => model.screens[*k].id.clone(),
+            NodeRef::Event(k) => model.events[*k].id.clone(),
+            NodeRef::Api(k) => model.apis[*k].id.clone(),
+            NodeRef::System(k) => model.systems[*k].id.clone(),
+            NodeRef::Entity(k) => model.entities[*k].id.clone(),
+            NodeRef::State(k) => model.states[*k].id.clone(),
+        }
+    }
+
+    #[test]
+    fn collect_object_graph_nodes_uses_layer_order_and_id_sorting() {
+        let model = model_from(
+            r#"
+actor Beta "Beta"
+actor Alpha "Alpha"
+requirement Req "Requirement"
+extsystem Ext "External"
+business Biz "Business"
+buc Buc "BUC"
+usagescene Scene "Scene"
+condition Cond "Condition"
+variation Var "Variation"
+location Loc "Location"
+timing Time "Timing"
+medium Med "Medium"
+permission Perm "Permission"
+usecase Uc "UseCase"
+screen Screen "Screen"
+event Event "Event"
+api Api "API"
+system Sys "System"
+entity Entity "Entity" { id: Int @pk }
+state State "State"
+"#,
+        );
+
+        let ids: Vec<_> = collect_object_graph_nodes(&model, &|_| true)
+            .iter()
+            .map(|node| node_id(&model, node))
+            .collect();
+
+        assert_eq!(
+            ids,
+            vec![
+                "Alpha", "Beta", "Req", "Ext", "Biz", "Buc", "Scene", "Cond", "Var", "Loc", "Time",
+                "Med", "Perm", "Uc", "Screen", "Event", "Api", "Sys", "Entity", "State",
+            ]
+        );
+    }
+
+    #[test]
+    fn collect_object_graph_nodes_applies_visibility_filter_after_collection() {
+        let model = model_from(
+            r#"
+actor Customer "Customer"
+permission Admin "Admin"
+usecase Manage "Manage"
+entity Account "Account" { id: Int @pk }
+state Active "Active"
+"#,
+        );
+
+        let nodes = collect_object_graph_nodes(&model, &|node| {
+            !matches!(node, NodeRef::Permission(_) | NodeRef::Entity(_))
+        });
+        let ids: Vec<_> = nodes.iter().map(|node| node_id(&model, node)).collect();
+
+        assert_eq!(ids, vec!["Customer", "Manage", "Active"]);
+        assert!(nodes
+            .iter()
+            .all(|node| !matches!(node, NodeRef::Permission(_) | NodeRef::Entity(_))));
+    }
+}

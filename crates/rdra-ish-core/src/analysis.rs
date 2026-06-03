@@ -1934,6 +1934,557 @@ mod tests {
     use super::*;
     use rdra_ish_syntax::parse;
 
+    fn instance(kind: Kind, id: &str) -> InstanceDecl {
+        InstanceDecl {
+            kind,
+            id: id.to_string(),
+            label: format!("{id} label"),
+            description: Some(format!("{id} description")),
+            columns: Vec::new(),
+            span: 0..0,
+        }
+    }
+
+    fn model_column(name: &str, col_type: ColumnType) -> ModelColumn {
+        ModelColumn {
+            name: name.to_string(),
+            col_type,
+            is_pk: false,
+            is_unique: false,
+            is_nullable: false,
+            default_val: None,
+            label: None,
+            is_fk: false,
+            fk_target: None,
+        }
+    }
+
+    fn qref(id: &str) -> QRef {
+        QRef {
+            kind_qualifier: None,
+            parts: vec![id.to_string()],
+            span: 0..0,
+        }
+    }
+
+    fn qcol(entity: &str, column: &str) -> Operand {
+        Operand::QualifiedColumn(QualifiedColumnRef {
+            entity: qref(entity),
+            column: column.to_string(),
+            span: 0..0,
+        })
+    }
+
+    fn entity_key(model: &SemanticModel, id: &str) -> EntityKey {
+        model
+            .entities
+            .iter()
+            .find_map(|(key, entity)| (entity.id == id).then_some(key))
+            .unwrap()
+    }
+
+    fn simple_entity_model(ids: &[&str]) -> SemanticModel {
+        let mut model = SemanticModel::default();
+        let mut diags = Vec::new();
+        for id in ids {
+            let inst = InstanceDecl {
+                kind: Kind::Entity,
+                id: (*id).to_string(),
+                label: format!("{id} label"),
+                description: None,
+                columns: vec![
+                    Column {
+                        name: "id".to_string(),
+                        col_type: ColType::Int,
+                        annotations: vec![Annotation::Pk],
+                        span: 0..0,
+                    },
+                    Column {
+                        name: "status".to_string(),
+                        col_type: ColType::Enum(vec!["open".to_string(), "closed".to_string()]),
+                        annotations: Vec::new(),
+                        span: 0..0,
+                    },
+                    Column {
+                        name: "amount".to_string(),
+                        col_type: ColType::Decimal,
+                        annotations: Vec::new(),
+                        span: 0..0,
+                    },
+                ],
+                span: 0..0,
+            };
+            register_instance(&mut model, &inst, &mut diags);
+        }
+        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+        model
+    }
+
+    #[test]
+    fn parse_effect_value_maps_nullable_enum_and_bool_values() {
+        let mut nullable = model_column("metadata", ColumnType::String);
+        nullable.is_nullable = true;
+        let enum_col = model_column(
+            "status",
+            ColumnType::Enum(vec!["open".to_string(), "closed".to_string()]),
+        );
+        let bool_col = model_column("active", ColumnType::Bool);
+
+        assert_eq!(
+            parse_effect_value(&nullable, "null").unwrap(),
+            EffectValue::Null
+        );
+        assert_eq!(
+            parse_effect_value(&nullable, "present").unwrap(),
+            EffectValue::Present
+        );
+        assert_eq!(
+            parse_effect_value(&nullable, "jsonb").unwrap(),
+            EffectValue::TypedPresent("jsonb".to_string())
+        );
+        assert_eq!(
+            parse_effect_value(&enum_col, "closed").unwrap(),
+            EffectValue::EnumVariant("closed".to_string())
+        );
+        assert_eq!(
+            parse_effect_value(&bool_col, "true").unwrap(),
+            EffectValue::Bool(true)
+        );
+        assert_eq!(
+            parse_effect_value(&bool_col, "false").unwrap(),
+            EffectValue::Bool(false)
+        );
+    }
+
+    #[test]
+    fn parse_effect_value_rejects_invalid_state_effects() {
+        let string_col = model_column("name", ColumnType::String);
+        let enum_col = model_column("status", ColumnType::Enum(vec!["open".to_string()]));
+        let bool_col = model_column("active", ColumnType::Bool);
+        let int_col = model_column("count", ColumnType::Int);
+
+        assert!(matches!(
+            parse_effect_value(&string_col, "null"),
+            Err(RdraError::NullOnNonNullable { .. })
+        ));
+        assert!(matches!(
+            parse_effect_value(&enum_col, "closed"),
+            Err(RdraError::InvalidEnumVariant { .. })
+        ));
+        assert!(matches!(
+            parse_effect_value(&bool_col, "yes"),
+            Err(RdraError::InvalidBoolValue { .. })
+        ));
+        assert!(matches!(
+            parse_effect_value(&int_col, "42"),
+            Err(RdraError::EffectOnNonStateColumn { .. })
+        ));
+    }
+
+    #[test]
+    fn type_category_groups_comparison_compatible_column_types() {
+        assert_eq!(type_category(&ColumnType::Int), "numeric");
+        assert_eq!(type_category(&ColumnType::Money), "numeric");
+        assert_eq!(type_category(&ColumnType::Decimal), "numeric");
+        assert_eq!(type_category(&ColumnType::Date), "temporal");
+        assert_eq!(type_category(&ColumnType::DateTime), "temporal");
+        assert_eq!(type_category(&ColumnType::String), "equality");
+        assert_eq!(type_category(&ColumnType::Bool), "equality");
+        assert_eq!(
+            type_category(&ColumnType::Enum(vec!["open".to_string()])),
+            "equality"
+        );
+    }
+
+    #[test]
+    fn to_model_op_maps_every_ast_comparison_operator() {
+        assert_eq!(to_model_op(&CmpOp::Lt), CmpOpModel::Lt);
+        assert_eq!(to_model_op(&CmpOp::Gt), CmpOpModel::Gt);
+        assert_eq!(to_model_op(&CmpOp::Le), CmpOpModel::Le);
+        assert_eq!(to_model_op(&CmpOp::Ge), CmpOpModel::Ge);
+        assert_eq!(to_model_op(&CmpOp::Eq), CmpOpModel::Eq);
+        assert_eq!(to_model_op(&CmpOp::Ne), CmpOpModel::Ne);
+    }
+
+    #[test]
+    fn node_kind_tag_str_labels_each_node_ref_kind() {
+        let mut model = SemanticModel::default();
+        let mut diags = Vec::new();
+        let cases = [
+            (Kind::Actor, "ActorA", "actor"),
+            (Kind::ExtSystem, "ExtA", "extsystem"),
+            (Kind::System, "SystemA", "system"),
+            (Kind::Requirement, "ReqA", "requirement"),
+            (Kind::Business, "BusinessA", "business"),
+            (Kind::Buc, "BucA", "buc"),
+            (Kind::UsageScene, "SceneA", "usagescene"),
+            (Kind::UseCase, "UsecaseA", "usecase"),
+            (Kind::Screen, "ScreenA", "screen"),
+            (Kind::Event, "EventA", "event"),
+            (Kind::State, "StateA", "state"),
+            (Kind::Condition, "ConditionA", "condition"),
+            (Kind::Variation, "VariationA", "variation"),
+            (Kind::Api, "ApiA", "api"),
+            (Kind::Location, "LocationA", "location"),
+            (Kind::Timing, "TimingA", "timing"),
+            (Kind::Medium, "MediumA", "medium"),
+            (Kind::Permission, "PermissionA", "permission"),
+        ];
+
+        for (kind, id, _) in &cases {
+            register_instance(&mut model, &instance(kind.clone(), id), &mut diags);
+        }
+        let entity_inst = InstanceDecl {
+            kind: Kind::Entity,
+            id: "EntityA".to_string(),
+            label: "EntityA label".to_string(),
+            description: None,
+            columns: vec![Column {
+                name: "id".to_string(),
+                col_type: ColType::Int,
+                annotations: vec![Annotation::Pk],
+                span: 0..0,
+            }],
+            span: 0..0,
+        };
+        register_instance(&mut model, &entity_inst, &mut diags);
+
+        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+        for (kind, id, expected) in &cases {
+            let node = model.symbols.lookup_qualified(kind, id).unwrap();
+            assert_eq!(node_kind_tag_str(node), *expected);
+        }
+        let entity = model
+            .symbols
+            .lookup_qualified(&Kind::Entity, "EntityA")
+            .unwrap();
+        assert_eq!(node_kind_tag_str(entity), "entity");
+    }
+
+    #[test]
+    fn push_unique_entity_preserves_first_seen_scope_order() {
+        let model = simple_entity_model(&["Order", "Payment"]);
+        let order = entity_key(&model, "Order");
+        let payment = entity_key(&model, "Payment");
+        let mut scope = Vec::new();
+
+        push_unique_entity(&mut scope, order);
+        push_unique_entity(&mut scope, payment);
+        push_unique_entity(&mut scope, order);
+
+        assert_eq!(scope, vec![order, payment]);
+    }
+
+    #[test]
+    fn add_condition_entities_to_scope_adds_equals_and_comparison_entities_once() {
+        let model = simple_entity_model(&["Order", "Payment", "Invoice"]);
+        let order = entity_key(&model, "Order");
+        let payment = entity_key(&model, "Payment");
+        let invoice = entity_key(&model, "Invoice");
+        let conditions = vec![
+            CrossEntityCondition::Equals {
+                column: QualifiedModelColumnRef {
+                    entity: order,
+                    column: "status".to_string(),
+                },
+                value: EffectValue::EnumVariant("closed".to_string()),
+            },
+            CrossEntityCondition::Comparison(CrossComparisonProp {
+                lhs: QualifiedModelColumnRef {
+                    entity: payment,
+                    column: "amount".to_string(),
+                },
+                op: CmpOpModel::Gt,
+                rhs: CrossCmpRhs::Column(QualifiedModelColumnRef {
+                    entity: invoice,
+                    column: "amount".to_string(),
+                }),
+            }),
+            CrossEntityCondition::Comparison(CrossComparisonProp {
+                lhs: QualifiedModelColumnRef {
+                    entity: order,
+                    column: "amount".to_string(),
+                },
+                op: CmpOpModel::Ge,
+                rhs: CrossCmpRhs::IntLit(1),
+            }),
+        ];
+        let mut scope = vec![order];
+
+        add_condition_entities_to_scope(&mut scope, &conditions);
+
+        assert_eq!(scope, vec![order, payment, invoice]);
+    }
+
+    #[test]
+    fn cross_scope_semantics_from_chain_returns_relation_path_for_along_chain() {
+        let model = simple_entity_model(&["Order", "Payment"]);
+        let mut diags = Vec::new();
+        let pred = PredicateCall {
+            name: "cross_invariant".to_string(),
+            args: Vec::new(),
+            chain: vec![ChainCall {
+                name: "along".to_string(),
+                args: vec![
+                    PredicateArg::Ref(qref("Order")),
+                    PredicateArg::Ref(qref("Payment")),
+                ],
+                span: 0..0,
+            }],
+            span: 0..0,
+        };
+
+        let semantics = cross_scope_semantics_from_chain(&model, &pred, &mut diags);
+
+        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+        let CrossConstraintScope::RelationPath(path) = semantics else {
+            panic!("expected relation path scope");
+        };
+        assert_eq!(
+            path,
+            vec![entity_key(&model, "Order"), entity_key(&model, "Payment")]
+        );
+    }
+
+    #[test]
+    fn cross_scope_semantics_from_chain_defaults_to_global_product_without_along() {
+        let model = simple_entity_model(&["Order"]);
+        let mut diags = Vec::new();
+        let pred = PredicateCall {
+            name: "cross_forbidden".to_string(),
+            args: Vec::new(),
+            chain: Vec::new(),
+            span: 0..0,
+        };
+
+        let semantics = cross_scope_semantics_from_chain(&model, &pred, &mut diags);
+
+        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+        assert!(matches!(semantics, CrossConstraintScope::GlobalProduct));
+    }
+
+    #[test]
+    fn register_instance_populates_each_node_store_and_symbol_table() {
+        let mut model = SemanticModel::default();
+        let mut diags = Vec::new();
+
+        let cases = [
+            (Kind::Actor, "ActorA"),
+            (Kind::ExtSystem, "ExtA"),
+            (Kind::System, "SystemA"),
+            (Kind::Requirement, "ReqA"),
+            (Kind::Business, "BusinessA"),
+            (Kind::Buc, "BucA"),
+            (Kind::UsageScene, "SceneA"),
+            (Kind::UseCase, "UsecaseA"),
+            (Kind::Screen, "ScreenA"),
+            (Kind::Event, "EventA"),
+            (Kind::State, "StateA"),
+            (Kind::Condition, "ConditionA"),
+            (Kind::Variation, "VariationA"),
+            (Kind::Api, "ApiA"),
+            (Kind::Location, "LocationA"),
+            (Kind::Timing, "TimingA"),
+            (Kind::Medium, "MediumA"),
+            (Kind::Permission, "PermissionA"),
+        ];
+
+        for (kind, id) in &cases {
+            register_instance(&mut model, &instance(kind.clone(), id), &mut diags);
+        }
+
+        let entity_inst = InstanceDecl {
+            kind: Kind::Entity,
+            id: "EntityA".to_string(),
+            label: "EntityA label".to_string(),
+            description: Some("EntityA description".to_string()),
+            columns: vec![Column {
+                name: "id".to_string(),
+                col_type: ColType::Int,
+                annotations: vec![Annotation::Pk],
+                span: 0..0,
+            }],
+            span: 0..0,
+        };
+        register_instance(&mut model, &entity_inst, &mut diags);
+
+        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+        assert_eq!(model.actors.len(), 1);
+        assert_eq!(model.ext_systems.len(), 1);
+        assert_eq!(model.systems.len(), 1);
+        assert_eq!(model.requirements.len(), 1);
+        assert_eq!(model.businesses.len(), 1);
+        assert_eq!(model.bucs.len(), 1);
+        assert_eq!(model.usage_scenes.len(), 1);
+        assert_eq!(model.use_cases.len(), 1);
+        assert_eq!(model.screens.len(), 1);
+        assert_eq!(model.events.len(), 1);
+        assert_eq!(model.entities.len(), 1);
+        assert_eq!(model.states.len(), 1);
+        assert_eq!(model.conditions.len(), 1);
+        assert_eq!(model.variations.len(), 1);
+        assert_eq!(model.apis.len(), 1);
+        assert_eq!(model.locations.len(), 1);
+        assert_eq!(model.timings.len(), 1);
+        assert_eq!(model.media.len(), 1);
+        assert_eq!(model.permissions.len(), 1);
+
+        let entity = model.entities.values().next().unwrap();
+        assert_eq!(entity.columns.len(), 1);
+        assert!(entity.columns[0].is_pk);
+
+        for (kind, id) in &cases {
+            assert!(
+                model.symbols.lookup_qualified(kind, id).is_some(),
+                "{id} should be present in symbol table"
+            );
+        }
+        assert!(model
+            .symbols
+            .lookup_qualified(&Kind::Entity, "EntityA")
+            .is_some());
+    }
+
+    #[test]
+    fn register_instance_reports_duplicate_same_kind_but_keeps_cross_kind_names() {
+        let mut model = SemanticModel::default();
+        let mut diags = Vec::new();
+
+        register_instance(&mut model, &instance(Kind::Actor, "Same"), &mut diags);
+        register_instance(&mut model, &instance(Kind::UseCase, "Same"), &mut diags);
+        register_instance(&mut model, &instance(Kind::Actor, "Same"), &mut diags);
+
+        assert_eq!(model.actors.len(), 2);
+        assert_eq!(model.use_cases.len(), 1);
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0].error.to_string().contains("duplicate definition"));
+        assert!(model
+            .symbols
+            .lookup_qualified(&Kind::Actor, "Same")
+            .is_some());
+        assert!(model
+            .symbols
+            .lookup_qualified(&Kind::UseCase, "Same")
+            .is_some());
+    }
+
+    #[test]
+    fn resolve_comparison_accepts_same_entity_qualified_columns_and_literals() {
+        let cols = vec![
+            model_column("stock", ColumnType::Int),
+            model_column("selling", ColumnType::Int),
+            model_column("expired_at", ColumnType::DateTime),
+        ];
+        let mut diags = Vec::new();
+
+        let col_prop = resolve_comparison(
+            &cols,
+            "Stock",
+            &Comparison {
+                lhs: qcol("Stock", "stock"),
+                op: CmpOp::Lt,
+                rhs: qcol("Stock", "selling"),
+                span: 0..0,
+            },
+            &mut diags,
+        )
+        .unwrap();
+        let int_prop = resolve_comparison(
+            &cols,
+            "Stock",
+            &Comparison {
+                lhs: Operand::Column("stock".to_string()),
+                op: CmpOp::Ge,
+                rhs: Operand::IntLit("10".to_string()),
+                span: 0..0,
+            },
+            &mut diags,
+        )
+        .unwrap();
+        let now_prop = resolve_comparison(
+            &cols,
+            "Stock",
+            &Comparison {
+                lhs: Operand::Column("expired_at".to_string()),
+                op: CmpOp::Lt,
+                rhs: Operand::Now,
+                span: 0..0,
+            },
+            &mut diags,
+        )
+        .unwrap();
+
+        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+        assert_eq!(col_prop.axis_key(), "stock<selling");
+        assert_eq!(int_prop.rhs, CmpRhs::IntLit(10));
+        assert_eq!(now_prop.rhs, CmpRhs::Now);
+    }
+
+    #[test]
+    fn resolve_comparison_rejects_cross_entity_and_invalid_type_comparisons() {
+        let cols = vec![
+            model_column("stock", ColumnType::Int),
+            model_column("active", ColumnType::Bool),
+            model_column("name", ColumnType::String),
+        ];
+        let mut diags = Vec::new();
+
+        assert!(resolve_comparison(
+            &cols,
+            "Stock",
+            &Comparison {
+                lhs: qcol("Other", "stock"),
+                op: CmpOp::Lt,
+                rhs: Operand::Column("stock".to_string()),
+                span: 0..0,
+            },
+            &mut diags,
+        )
+        .is_none());
+        assert!(resolve_comparison(
+            &cols,
+            "Stock",
+            &Comparison {
+                lhs: Operand::Column("active".to_string()),
+                op: CmpOp::Lt,
+                rhs: Operand::Column("stock".to_string()),
+                span: 0..0,
+            },
+            &mut diags,
+        )
+        .is_none());
+        assert!(resolve_comparison(
+            &cols,
+            "Stock",
+            &Comparison {
+                lhs: Operand::Column("name".to_string()),
+                op: CmpOp::Eq,
+                rhs: Operand::IntLit("1".to_string()),
+                span: 0..0,
+            },
+            &mut diags,
+        )
+        .is_none());
+
+        let messages: Vec<_> = diags.iter().map(|d| d.error.to_string()).collect();
+        assert!(
+            messages.iter().any(|msg| msg.contains("type mismatch")),
+            "expected cross-entity type mismatch, got {messages:?}"
+        );
+        assert!(
+            messages
+                .iter()
+                .any(|msg| msg.contains("order comparison operator")),
+            "expected ordered comparison diagnostic, got {messages:?}"
+        );
+        assert!(
+            messages
+                .iter()
+                .any(|msg| msg.contains("comparison type mismatch")),
+            "expected rhs type mismatch diagnostic, got {messages:?}"
+        );
+    }
+
     #[test]
     fn test_build_model_basic() {
         let src = r#"
