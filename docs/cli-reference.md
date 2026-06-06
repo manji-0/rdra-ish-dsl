@@ -44,8 +44,8 @@ model warnings and prints `OK: no errors`.
   intentional external publications with `outbox(Event)` to suppress only the
   raised-but-unconsumed warning;
 - state-pattern warnings, including missing creation paths, unreachable enum variants,
-  forbidden reachable states, invariant / required / exclusive violations, and pattern
-  truncation.
+  forbidden reachable states, invariant / required / exclusive violations, temporal
+  anchor assertion diagnostics, and pattern truncation.
 
 | Argument | Type | Description |
 |---|---|---|

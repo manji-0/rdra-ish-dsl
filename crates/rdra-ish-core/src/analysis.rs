@@ -141,6 +141,7 @@ fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
         "requires_medium" => Some(vec![vec!["usecase", "api"], vec!["medium"]]),
         "motivates" => Some(vec![vec!["requirement"], vec!["buc"]]),
         "transitions" => Some(vec![vec!["event"], vec!["state"], vec!["state"]]),
+        "after" => Some(vec![vec!["usecase"]]),
         "relate" => Some(vec![vec!["entity"], vec!["entity"], vec!["_card"]]),
         // sets(usecase/event, entity, "col_name", "value") — 第3・第4引数はリテラル
         "sets" => Some(vec![
@@ -1107,6 +1108,137 @@ fn process_cross_invariant(
     });
 }
 
+fn temporal_equals_from_comparison(
+    model: &SemanticModel,
+    scope: &[EntityKey],
+    pred: &str,
+    cmp: &Comparison,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<CrossEntityCondition> {
+    if cmp.op != CmpOp::Eq {
+        return None;
+    }
+
+    let (column, model_col) = match &cmp.lhs {
+        Operand::Column(column) if scope.len() == 1 => {
+            let entity = scope[0];
+            let model_col = find_entity_column(model, entity, column, diags)?;
+            (
+                QualifiedModelColumnRef {
+                    entity,
+                    column: column.clone(),
+                },
+                model_col,
+            )
+        }
+        Operand::QualifiedColumn(qcol) => {
+            let entity = resolve_entity_qref(model, pred, &qcol.entity, diags)?;
+            let model_col = find_entity_column(model, entity, &qcol.column, diags)?;
+            (
+                QualifiedModelColumnRef {
+                    entity,
+                    column: qcol.column.clone(),
+                },
+                model_col,
+            )
+        }
+        _ => return None,
+    };
+
+    let value_lit = match &cmp.rhs {
+        Operand::Column(value) | Operand::IntLit(value) => value.clone(),
+        Operand::Now => "now".to_string(),
+        Operand::QualifiedColumn(_) => return None,
+    };
+    match parse_effect_value(&model_col, &value_lit) {
+        Ok(value) => Some(CrossEntityCondition::Equals { column, value }),
+        Err(e) => {
+            diags.push(Diagnostic::error(e));
+            None
+        }
+    }
+}
+
+fn collect_temporal_assert_conditions(
+    model: &SemanticModel,
+    scope: &[EntityKey],
+    pred: &str,
+    args: &[PredicateArg],
+    diags: &mut Vec<Diagnostic>,
+) -> Vec<CrossEntityCondition> {
+    let mut conditions = Vec::new();
+    let mut idx = 0;
+    while idx < args.len() {
+        match &args[idx] {
+            PredicateArg::Expr(Expr::Cmp(cmp)) => {
+                if let Some(cond) = temporal_equals_from_comparison(model, scope, pred, cmp, diags)
+                {
+                    conditions.push(cond);
+                } else if let Some(cond) =
+                    resolve_cross_condition(model, scope, pred, &args[idx], diags)
+                {
+                    conditions.push(cond);
+                }
+                idx += 1;
+            }
+            PredicateArg::Tuple(_) => {
+                if let Some(cond) = resolve_cross_condition(model, scope, pred, &args[idx], diags) {
+                    conditions.push(cond);
+                }
+                idx += 1;
+            }
+            _ if idx + 1 < args.len() => {
+                if let Some(cond) = resolve_cross_equals_condition(
+                    model,
+                    scope,
+                    pred,
+                    &args[idx],
+                    &args[idx + 1],
+                    diags,
+                ) {
+                    conditions.push(cond);
+                }
+                idx += 2;
+            }
+            _ => idx += 1,
+        }
+    }
+    conditions
+}
+
+fn process_after_predicate(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    resolved: &[Option<NodeRef>],
+    diags: &mut Vec<Diagnostic>,
+) {
+    let Some(Some(NodeRef::UseCase(anchor))) = resolved.first() else {
+        return;
+    };
+
+    let mut scope = Vec::new();
+    let mut requireds = Vec::new();
+    for cc in &pred.chain {
+        if cc.name == "assert" {
+            requireds.extend(collect_temporal_assert_conditions(
+                model, &scope, &pred.name, &cc.args, diags,
+            ));
+        }
+    }
+    if requireds.is_empty() {
+        return;
+    }
+
+    add_condition_entities_to_scope(&mut scope, &requireds);
+    model
+        .temporal_assertions
+        .push(crate::model::TemporalAssertion {
+            anchor: *anchor,
+            scope,
+            requireds,
+        });
+}
+
 // ── 比較式の型整合チェック・モデル変換 ────────────────────────────────────────
 
 /// `ColumnType` が「比較に使える型カテゴリ」を返す。
@@ -1832,6 +1964,7 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
         "coordinates" => process_coordinates_predicate(model, &resolved),
         "transitions" => process_transitions_predicate(model, &resolved),
         "outbox" => process_outbox_predicate(model, &resolved),
+        "after" => process_after_predicate(model, pred, &resolved, diags),
         "sets" => process_sets_predicate(model, pred, &resolved, diags),
         "forbidden" => process_forbidden_predicate(model, pred, &resolved, diags),
         "invariant" => process_invariant_predicate(model, pred, &resolved, diags),
@@ -2812,6 +2945,29 @@ has_permission(Staff, ManageSchedule)
             .expect("HasPermission relation should exist");
         assert!(matches!(rel.from, NodeRef::Actor(_)));
         assert!(matches!(rel.to, NodeRef::Permission(_)));
+    }
+
+    #[test]
+    fn after_assert_registers_temporal_assertion_from_equality_expr() {
+        let (ast, parse_errors) = parse(
+            r#"
+usecase ExecuteCertIssue "Execute Cert Issue"
+entity CertificateOrder "Certificate Order" {
+  id: Int @pk
+  status: Enum(requested, executed) @default(requested)
+}
+after(ExecuteCertIssue).assert(CertificateOrder.status == executed)
+"#,
+        );
+        assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+
+        assert_eq!(model.temporal_assertions.len(), 1);
+        let assertion = &model.temporal_assertions[0];
+        assert_eq!(model.use_cases[assertion.anchor].id, "ExecuteCertIssue");
+        assert_eq!(assertion.requireds.len(), 1);
     }
 
     #[test]

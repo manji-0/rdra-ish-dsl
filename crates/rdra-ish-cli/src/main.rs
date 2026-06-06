@@ -515,6 +515,22 @@ fn state_diag_message(diag: &rdra_ish_core::StateDiag) -> String {
             "cross-entity constraint was not fully evaluated across [{}]: {} ({})",
             entities, constraint, reason
         ),
+        rdra_ish_core::StateDiag::TemporalAssertionViolated {
+            anchor,
+            requireds,
+            actual,
+        } => format!(
+            "temporal assertion violated after '{}': expected {}, but {}",
+            anchor, requireds, actual
+        ),
+        rdra_ish_core::StateDiag::TemporalAssertionNotEvaluated {
+            anchor,
+            requireds,
+            reason,
+        } => format!(
+            "temporal assertion after '{}' was not evaluated: {} ({})",
+            anchor, requireds, reason
+        ),
     }
 }
 
@@ -1366,5 +1382,19 @@ requires_permission(BookAppointment, ScheduleWrite)
         assert!(message.contains(
             "hint: use .along(Order, Payment) if this rule is intended to apply only to linked instances"
         ));
+    }
+
+    #[test]
+    fn state_diag_message_formats_temporal_assertion_violation() {
+        let message = state_diag_message(&rdra_ish_core::StateDiag::TemporalAssertionViolated {
+            anchor: "ExecuteCertIssue".to_string(),
+            requireds: "CertificateOrder.status=executed".to_string(),
+            actual: "CertificateOrder.status has no immediate effect".to_string(),
+        });
+
+        assert_eq!(
+            message,
+            "temporal assertion violated after 'ExecuteCertIssue': expected CertificateOrder.status=executed, but CertificateOrder.status has no immediate effect"
+        );
     }
 }

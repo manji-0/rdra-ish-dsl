@@ -139,6 +139,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `motivates` | `(Requirement, Buc)` | The requirement motivates the BUC. |
 | `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `"1:1"`, `"1:N"`, `"N:1"`, `"N:M"`. |
 | `transitions` | `(Event, State, State)` | A state machine edge: on the event, the entity moves from the first state to the second. |
+| `after` | `(UseCase).assert(...)` | A temporal anchor assertion checked against the use case's immediate `sets` and `raises`/`transitions` effects. |
 | `sets` | `(UseCase \| Event, Entity, "col", "val")` | An explicit column effect, consumed by state pattern derivation. |
 | `sets` | `(UseCase \| Event, Entity, col op rhs, true \| false)` | Drives the truth value of a comparison proposition (derived Bool axis) in state pattern derivation. |
 
@@ -397,6 +398,8 @@ it is treated as **always false** (the comparison never holds) throughout state 
 
 ## Entity State Constraints
 
+<!-- derived-from ./state-derivation.md#temporal-anchor-assertions -->
+
 State constraints assert facts about the **reachable state space** of an entity. They
 are evaluated after BFS state-pattern derivation: a constraint is only reported as
 violated if a reachable pattern actually witnesses the violation. Unreachable bad
@@ -569,6 +572,12 @@ uses the same implication shape as `invariant`: `.when(...)` clauses are guards 
 
 When more than one entity is in scope, bare column names are rejected so the rule stays
 unambiguous. With a single-entity scope, bare columns are still accepted as a shorthand.
+
+`after(UseCase).assert(Entity.column == value, ...)` checks an assertion at a specific
+use-case boundary instead of against the full cross-product of reachable state patterns.
+The assertion is evaluated from the use case's immediate `sets` effects and any
+`transitions` reached through events raised by that use case. Tuple form is also valid,
+for example `after(ExecuteCertIssue).assert((CertificateOrder.status, executed))`.
 
 `states` evaluates cross-entity rules by taking the cross-product of each participating
 entity's reached state patterns. Conditions that reference actual state axes can

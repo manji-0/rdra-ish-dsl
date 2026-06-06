@@ -667,6 +667,14 @@ pub struct CrossEntityInvariant {
     pub requireds: Vec<CrossEntityCondition>,
 }
 
+/// `after(UseCase).assert(...)` で宣言される時相アンカー制約。
+#[derive(Debug, Clone)]
+pub struct TemporalAssertion {
+    pub anchor: UseCaseKey,
+    pub scope: Vec<EntityKey>,
+    pub requireds: Vec<CrossEntityCondition>,
+}
+
 /// セマンティックモデル
 #[derive(Debug, Default)]
 pub struct SemanticModel {
@@ -710,5 +718,7 @@ pub struct SemanticModel {
     pub cross_forbidden_constraints: Vec<CrossForbiddenConstraint>,
     /// `cross_invariant(...)` 述語で宣言されたクロスエンティティ不変条件
     pub cross_entity_invariants: Vec<CrossEntityInvariant>,
+    /// `after(UseCase).assert(...)` 述語で宣言された時相アンカー制約
+    pub temporal_assertions: Vec<TemporalAssertion>,
     pub symbols: SymbolTable,
 }

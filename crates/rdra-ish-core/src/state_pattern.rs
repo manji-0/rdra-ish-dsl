@@ -8,7 +8,7 @@ use crate::model::{
     ColumnEffect, ColumnType, ComparisonProp, CrossCmpRhs, CrossComparisonProp,
     CrossConstraintScope, CrossEntityCondition, CrossEntityInvariant, CrossForbiddenConstraint,
     EffectValue, EntityKey, ModelColumn, NodeRef, QualifiedModelColumnRef, RelKind, SemanticModel,
-    StateKey, UseCaseKey,
+    StateKey, TemporalAssertion, UseCaseKey,
 };
 use crate::resolver::reachable_from_bucs;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
@@ -226,6 +226,18 @@ pub enum StateDiag {
         constraint: String,
         reason: String,
     },
+    /// `after(UseCase).assert(...)` がアンカー usecase の即時効果で満たされない
+    TemporalAssertionViolated {
+        anchor: String,
+        requireds: String,
+        actual: String,
+    },
+    /// 時相アンカー制約が現在の即時効果モデルでは評価できない
+    TemporalAssertionNotEvaluated {
+        anchor: String,
+        requireds: String,
+        reason: String,
+    },
 }
 
 /// entity 単位の状態パターン導出結果
@@ -282,6 +294,7 @@ pub fn derive_state_patterns(
         .map(|(idx, ek)| (*ek, idx))
         .collect();
     check_cross_entity_constraints(model, &mut results, &result_index);
+    check_temporal_assertions(model, &mut results, &result_index);
 
     results
 }
@@ -1401,6 +1414,126 @@ fn check_cross_entity_constraints(
     }
 }
 
+fn check_temporal_assertions(
+    model: &SemanticModel,
+    results: &mut [EntityStateResult],
+    result_index: &HashMap<EntityKey, usize>,
+) {
+    for assertion in &model.temporal_assertions {
+        if let Some(diag) = evaluate_temporal_assertion(model, assertion) {
+            push_cross_diag(&assertion.scope, result_index, results, diag);
+        }
+    }
+}
+
+fn evaluate_temporal_assertion(
+    model: &SemanticModel,
+    assertion: &TemporalAssertion,
+) -> Option<StateDiag> {
+    let anchor = model.use_cases[assertion.anchor].id.clone();
+    let requireds = cross_conditions_display(model, &assertion.requireds);
+    let effects = immediate_effects_after_usecase(model, assertion.anchor);
+
+    for condition in &assertion.requireds {
+        match condition {
+            CrossEntityCondition::Equals { column, value } => {
+                let expected = AbstractValue::from_effect(value);
+                match effects.get(&(column.entity, column.column.clone())) {
+                    Some(actual) if actual == &expected => {}
+                    Some(actual) => {
+                        return Some(StateDiag::TemporalAssertionViolated {
+                            anchor,
+                            requireds,
+                            actual: format!(
+                                "{}={}",
+                                qualified_column_display(model, column),
+                                abstract_value_display(actual)
+                            ),
+                        });
+                    }
+                    None => {
+                        return Some(StateDiag::TemporalAssertionViolated {
+                            anchor,
+                            requireds,
+                            actual: format!(
+                                "{} has no immediate effect",
+                                qualified_column_display(model, column)
+                            ),
+                        });
+                    }
+                }
+            }
+            CrossEntityCondition::Comparison(prop) => {
+                return Some(StateDiag::TemporalAssertionNotEvaluated {
+                    anchor,
+                    requireds,
+                    reason: format!(
+                        "{} requires comparison evaluation; after(...) currently checks immediate equality effects only",
+                        cross_comparison_display(model, prop)
+                    ),
+                });
+            }
+        }
+    }
+
+    None
+}
+
+fn immediate_effects_after_usecase(
+    model: &SemanticModel,
+    anchor: UseCaseKey,
+) -> HashMap<(EntityKey, String), AbstractValue> {
+    let mut effects = HashMap::new();
+    let raised_events: HashSet<_> = model
+        .relations
+        .iter()
+        .filter_map(|rel| match (&rel.kind, &rel.from, &rel.to) {
+            (RelKind::Raises, NodeRef::UseCase(uk), NodeRef::Event(ek)) if *uk == anchor => {
+                Some(*ek)
+            }
+            _ => None,
+        })
+        .collect();
+
+    for effect in &model.column_effects {
+        let applies = match effect.origin {
+            NodeRef::UseCase(uk) => uk == anchor,
+            NodeRef::Event(ek) => raised_events.contains(&ek),
+            _ => false,
+        };
+        if applies {
+            effects.insert(
+                (effect.entity, effect.column.clone()),
+                AbstractValue::from_effect(&effect.value),
+            );
+        }
+    }
+
+    for st in &model.state_transitions {
+        let NodeRef::Event(event) = &st.event else {
+            continue;
+        };
+        if !raised_events.contains(event) {
+            continue;
+        }
+        let NodeRef::State(to_state) = &st.to else {
+            continue;
+        };
+        for entity in model.entities.keys() {
+            if let Some((status_col, state_variant_map)) = link_states_to_enum(model, entity) {
+                if let Some(to_variant) = state_variant_map.get(to_state) {
+                    effects.insert(
+                        (entity, status_col),
+                        AbstractValue::Enum(to_variant.clone()),
+                    );
+                }
+            }
+        }
+    }
+
+    effects
+}
+
 fn evaluate_cross_forbidden(
     model: &SemanticModel,
     results: &[EntityStateResult],
@@ -1995,6 +2128,61 @@ sets(CloseStore, Store, "status", "closed")
             .collect();
         assert!(values.contains(&AbstractValue::Enum("open".to_string())));
         assert!(values.contains(&AbstractValue::Enum("closed".to_string())));
+    }
+
+    #[test]
+    fn temporal_assertion_passes_on_transition_immediate_effect() {
+        let model = model_from(
+            r#"
+usecase ExecuteCertIssue "Execute Cert Issue"
+event CertIssued "Cert Issued"
+entity CertificateOrder "Certificate Order" {
+  id: Int @pk
+  status: Enum(requested, executed) @default(requested)
+}
+state Requested "Requested"
+state Executed "Executed"
+creates(ExecuteCertIssue, CertificateOrder)
+raises(ExecuteCertIssue, CertIssued)
+transitions(CertIssued, Requested, Executed)
+after(ExecuteCertIssue).assert(CertificateOrder.status == executed)
+"#,
+        );
+
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results
+            .iter()
+            .find(|result| result.entity_id == "CertificateOrder")
+            .unwrap();
+        assert!(!r
+            .diagnostics
+            .iter()
+            .any(|diag| matches!(diag, StateDiag::TemporalAssertionViolated { .. })));
+    }
+
+    #[test]
+    fn temporal_assertion_reports_missing_immediate_effect() {
+        let model = model_from(
+            r#"
+usecase ExecuteCertIssue "Execute Cert Issue"
+entity CertificateOrder "Certificate Order" {
+  id: Int @pk
+  status: Enum(requested, executed) @default(requested)
+}
+creates(ExecuteCertIssue, CertificateOrder)
+after(ExecuteCertIssue).assert(CertificateOrder.status == executed)
+"#,
+        );
+
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results
+            .iter()
+            .find(|result| result.entity_id == "CertificateOrder")
+            .unwrap();
+        assert!(r
+            .diagnostics
+            .iter()
+            .any(|diag| matches!(diag, StateDiag::TemporalAssertionViolated { .. })));
     }
 
     // ── Enum 直線連鎖 ───────────────────────────────────────────────────────

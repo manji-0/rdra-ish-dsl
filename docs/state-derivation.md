@@ -202,6 +202,29 @@ triggered use case, diagnostics include a flow-order hint. When an upstream even
 guarantees evidence columns in practice, either set those evidence columns in the
 triggered use case as well, or model an explicit state guard around the transition.
 
+### Temporal anchor assertions
+
+`after(UseCase).assert(...)` checks a constraint at one use-case boundary rather than
+against the global product of all reachable entity patterns. It is intended for rules
+that are only true at a particular phase, such as "immediately after certificate issue,
+the order is executed and the certificate is active."
+
+```rdra
+after(ExecuteCertIssue)
+  .assert(CertificateOrder.status == executed, ClientCertificate.status == active)
+```
+
+The current evaluator checks immediate equality effects only:
+
+- `sets(UseCase, Entity, "col", "val")` on the anchor use case;
+- `sets(Event, Entity, "col", "val")` on events raised by the anchor use case;
+- `transitions(Event, From, To)` for events raised by the anchor use case, mapped to the
+  entity Enum status column.
+
+Comparison assertions and longer event-triggered flows are reported as
+`TemporalAssertionNotEvaluated` rather than being approximated through the global
+state-pattern product.
+
 ### `required`
 
 For each `required(E, (col, val), ...)`, the conditions are AND-ed. Every reached pattern
@@ -263,6 +286,8 @@ syntax and design rationale.
 | `CrossForbiddenViolated { entities, conditions, pattern_desc }` | A reached cross-entity pattern combination matches all conditions of a `cross_forbidden` declaration. |
 | `CrossInvariantViolated { entities, guards, requireds, pattern_desc }` | A reached cross-entity pattern combination satisfies cross-invariant guards but breaks a requirement. |
 | `CrossConstraintNotEvaluated { entities, constraint, reason }` | A cross-entity rule cannot be fully evaluated from per-entity abstract state patterns or exceeds the cross-product safety cap. |
+| `TemporalAssertionViolated { anchor, requireds, actual }` | An `after(UseCase).assert(...)` equality is not produced by the anchor use case's immediate effects. |
+| `TemporalAssertionNotEvaluated { anchor, requireds, reason }` | A temporal assertion uses a form that is outside the immediate equality evaluator, such as a comparison expression. |
 
 ---
 

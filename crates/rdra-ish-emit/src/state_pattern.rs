@@ -157,6 +157,26 @@ fn diag_message(d: &StateDiag) -> String {
                 entities, constraint, reason
             )
         }
+        StateDiag::TemporalAssertionViolated {
+            anchor,
+            requireds,
+            actual,
+        } => {
+            format!(
+                "[error] temporal assertion violated after '{}': expected ({}) but {}",
+                anchor, requireds, actual
+            )
+        }
+        StateDiag::TemporalAssertionNotEvaluated {
+            anchor,
+            requireds,
+            reason,
+        } => {
+            format!(
+                "[warn] temporal assertion after '{}' not evaluated: ({}) ({})",
+                anchor, requireds, reason
+            )
+        }
     }
 }
 
