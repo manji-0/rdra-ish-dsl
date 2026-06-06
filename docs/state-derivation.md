@@ -173,6 +173,12 @@ are matched as additional AND conditions against the `Proposition` axis for that
 expression. A pattern satisfies the condition when the axis value equals the expected
 `Bool` (always `Bool(true)` for a bare comparison in `forbidden`).
 
+When a `forbidden` rule spans multiple state axes, the witness may be a product-space
+combination assembled from independent use cases rather than a real business transition.
+Diagnostics include a correlation hint for these multi-axis witnesses. To make the
+state space precise, model the correlated transition as one use case that sets all
+affected axes together, or add explicit guards in the surrounding lifecycle model.
+
 ### `invariant`
 
 For each `invariant(E).when(...).then(...)`, the guards and requirements are each
@@ -241,7 +247,7 @@ syntax and design rationale.
 | `DoubleModeledEnum { column }` | Both `transitions` and `sets` drive the same Enum column; `transitions` wins. |
 | `NoCreationPath` | The entity has no `creates`; the pattern set is seeded from defaults only. |
 | `PatternCapReached { cap, bound }` | The per-entity cap was hit; output is truncated. `bound` is the product-space size. |
-| `ForbiddenStateViolated { conditions, pattern_desc }` | A reachable pattern matches all conditions of a `forbidden` declaration. |
+| `ForbiddenStateViolated { conditions, pattern_desc, correlation_hint }` | A reachable pattern matches all conditions of a `forbidden` declaration. Multi-axis witnesses include a correlation hint because they may reflect independent-axis product expansion. |
 | `InvariantViolated { guards, requireds, pattern_desc }` | A reachable pattern satisfies an invariant's guards but breaks a requirement. |
 | `RequiredStateViolated { conditions, pattern_desc }` | A reachable pattern misses at least one condition of a `required` declaration. |
 | `ExclusiveStateViolated { conditions, pattern_desc }` | A reachable pattern satisfies two or more conditions of an `exclusive` declaration. |

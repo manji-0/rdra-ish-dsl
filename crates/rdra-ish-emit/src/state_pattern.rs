@@ -72,11 +72,16 @@ fn diag_message(d: &StateDiag) -> String {
         StateDiag::ForbiddenStateViolated {
             conditions,
             pattern_desc,
+            correlation_hint,
         } => {
-            format!(
+            let mut message = format!(
                 "[error] forbidden state reached: ({}) in pattern ({})",
                 conditions, pattern_desc
-            )
+            );
+            if let Some(hint) = correlation_hint {
+                message.push_str(&format!("; hint: {}", hint));
+            }
+            message
         }
         StateDiag::InvariantViolated {
             guards,

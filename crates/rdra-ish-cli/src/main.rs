@@ -436,10 +436,17 @@ fn state_diag_message(diag: &rdra_ish_core::StateDiag) -> String {
         rdra_ish_core::StateDiag::ForbiddenStateViolated {
             conditions,
             pattern_desc,
-        } => format!(
-            "forbidden state is reachable: {} witnessed by {}",
-            conditions, pattern_desc
-        ),
+            correlation_hint,
+        } => {
+            let mut message = format!(
+                "forbidden state is reachable: {} witnessed by {}",
+                conditions, pattern_desc
+            );
+            if let Some(hint) = correlation_hint {
+                message.push_str(&format!("; hint: {}", hint));
+            }
+            message
+        }
         rdra_ish_core::StateDiag::InvariantViolated {
             guards,
             requireds,

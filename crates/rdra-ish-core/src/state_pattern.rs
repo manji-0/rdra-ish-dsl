@@ -184,6 +184,7 @@ pub enum StateDiag {
         /// 禁止条件を "col=val AND col=val" 形式に整形した文字列
         conditions: String,
         pattern_desc: String,
+        correlation_hint: Option<String>,
     },
     /// `invariant(Entity).when(...).then(...)` の不変条件を違反する到達可能な状態
     InvariantViolated {
@@ -1214,6 +1215,21 @@ fn matched_condition_display_parts(
     matched
 }
 
+fn correlated_axis_hint(
+    equals: &[(String, AbstractValue)],
+    props: &[(String, AbstractValue)],
+) -> Option<String> {
+    let condition_count = equals.len() + props.len();
+    if condition_count < 2 {
+        return None;
+    }
+
+    Some(
+        "multi-axis forbidden witnesses can be global-product artifacts; if these axes are correlated, model the transition with one usecase setting all correlated axes or add explicit guards"
+            .to_string(),
+    )
+}
+
 /// 到達可能パターン群に対して entity 制約を検査し、違反を `diags` に追加する。
 fn check_constraints(
     model: &SemanticModel,
@@ -1237,6 +1253,7 @@ fn check_constraints(
                 diags.push(StateDiag::ForbiddenStateViolated {
                     conditions: condition_display_parts(&abs_conds, &fc.comparisons).join(" AND "),
                     pattern_desc: describe_pattern(&rp.pattern),
+                    correlation_hint: correlated_axis_hint(&abs_conds, &abs_props),
                 });
             }
         }
@@ -2463,6 +2480,18 @@ forbidden(Order, (status, delivered), (refunded, true))
         assert!(
             !violated.is_empty(),
             "ForbiddenStateViolated が発生すべき: {:?}",
+            r.diagnostics
+        );
+        let hint = violated.iter().find_map(|d| match d {
+            StateDiag::ForbiddenStateViolated {
+                correlation_hint: Some(hint),
+                ..
+            } => Some(hint),
+            _ => None,
+        });
+        assert!(
+            hint.is_some_and(|hint| hint.contains("multi-axis forbidden witnesses")),
+            "multi-axis forbidden should include a correlation hint: {:?}",
             r.diagnostics
         );
     }
