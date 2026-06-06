@@ -159,6 +159,7 @@ fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
         // cross_forbidden / cross_invariant は可変長の entity scope と
         // entity-qualified column 条件を専用処理で検査する。
         "cross_forbidden" | "cross_invariant" => Some(vec![]),
+        "forbidden_when" => Some(vec![vec!["entity"]]),
         _ => None,
     }
 }
@@ -1089,6 +1090,7 @@ fn process_cross_invariant(
             "then" => requireds.extend(collect_cross_chain_conditions(
                 model, &scope, &pred.name, &cc.args, diags,
             )),
+            "has" | "none" => process_quantifier_chain(model, &scope, &guards, cc, diags),
             _ => {}
         }
     }
@@ -1106,6 +1108,67 @@ fn process_cross_invariant(
         guards,
         requireds,
     });
+}
+
+fn process_forbidden_when_predicate(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    resolved: &[Option<NodeRef>],
+    diags: &mut Vec<Diagnostic>,
+) {
+    let Some(Some(NodeRef::Entity(anchor))) = resolved.first() else {
+        return;
+    };
+    let scope = vec![*anchor];
+    let guards = collect_cross_chain_conditions(model, &scope, &pred.name, &pred.args[1..], diags);
+    if guards.is_empty() {
+        return;
+    }
+
+    for cc in &pred.chain {
+        if matches!(cc.name.as_str(), "has" | "none") {
+            process_quantifier_chain(model, &scope, &guards, cc, diags);
+        }
+    }
+}
+
+fn process_quantifier_chain(
+    model: &mut SemanticModel,
+    anchor_scope: &[EntityKey],
+    guards: &[CrossEntityCondition],
+    cc: &ChainCall,
+    diags: &mut Vec<Diagnostic>,
+) {
+    let Some(anchor) = anchor_scope.first().copied() else {
+        return;
+    };
+    let Some(related_arg) = cc.args.first() else {
+        return;
+    };
+    let Some(related) = resolve_entity_scope_arg(model, &cc.name, related_arg, diags) else {
+        return;
+    };
+    let related_scope = vec![related];
+    let related_conditions =
+        collect_cross_chain_conditions(model, &related_scope, &cc.name, &cc.args[1..], diags);
+    if related_conditions.is_empty() {
+        return;
+    }
+
+    let kind = match cc.name.as_str() {
+        "has" => crate::model::QuantifierKind::Has,
+        "none" => crate::model::QuantifierKind::None,
+        _ => return,
+    };
+    model
+        .quantifier_constraints
+        .push(crate::model::QuantifierConstraint {
+            anchor,
+            guards: guards.to_vec(),
+            kind,
+            related,
+            related_conditions,
+        });
 }
 
 fn temporal_equals_from_comparison(
@@ -1970,6 +2033,7 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
         "invariant" => process_invariant_predicate(model, pred, &resolved, diags),
         "required" => process_required_predicate(model, pred, &resolved, diags),
         "exclusive" => process_exclusive_predicate(model, pred, &resolved, diags),
+        "forbidden_when" => process_forbidden_when_predicate(model, pred, &resolved, diags),
         "relate" => process_relate_predicate(model, pred, &resolved, diags),
         _ => process_relation_predicate(model, pred, &resolved, diags),
     }
@@ -2968,6 +3032,38 @@ after(ExecuteCertIssue).assert(CertificateOrder.status == executed)
         let assertion = &model.temporal_assertions[0];
         assert_eq!(model.use_cases[assertion.anchor].id, "ExecuteCertIssue");
         assert_eq!(assertion.requireds.len(), 1);
+    }
+
+    #[test]
+    fn forbidden_when_none_registers_quantifier_constraint() {
+        let (ast, parse_errors) = parse(
+            r#"
+entity ClientCertificate "Client Certificate" {
+  id: Int @pk
+  status: Enum(active, revoked) @default(active)
+}
+entity TerminalCertAssignment "Terminal Cert Assignment" {
+  id: Int @pk
+  status: Enum(active, inactive) @default(active)
+}
+forbidden_when(ClientCertificate, (status, revoked))
+  .none(TerminalCertAssignment, (status, active))
+"#,
+        );
+        assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+
+        assert_eq!(model.quantifier_constraints.len(), 1);
+        let constraint = &model.quantifier_constraints[0];
+        assert_eq!(model.entities[constraint.anchor].id, "ClientCertificate");
+        assert_eq!(
+            model.entities[constraint.related].id,
+            "TerminalCertAssignment"
+        );
+        assert_eq!(constraint.guards.len(), 1);
+        assert_eq!(constraint.related_conditions.len(), 1);
     }
 
     #[test]

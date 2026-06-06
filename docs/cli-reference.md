@@ -45,7 +45,8 @@ model warnings and prints `OK: no errors`.
   raised-but-unconsumed warning;
 - state-pattern warnings, including missing creation paths, unreachable enum variants,
   forbidden reachable states, invariant / required / exclusive violations, temporal
-  anchor assertion diagnostics, and pattern truncation.
+  anchor assertion diagnostics, to-many quantifier evaluation gaps, and pattern
+  truncation.
 
 | Argument | Type | Description |
 |---|---|---|

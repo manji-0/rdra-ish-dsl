@@ -531,6 +531,15 @@ fn state_diag_message(diag: &rdra_ish_core::StateDiag) -> String {
             "temporal assertion after '{}' was not evaluated: {} ({})",
             anchor, requireds, reason
         ),
+        rdra_ish_core::StateDiag::QuantifierConstraintNotEvaluated {
+            anchor,
+            related,
+            constraint,
+            reason,
+        } => format!(
+            "to-many quantifier constraint was not evaluated from '{}' to '{}': {} ({})",
+            anchor, related, constraint, reason
+        ),
     }
 }
 
@@ -1396,5 +1405,21 @@ requires_permission(BookAppointment, ScheduleWrite)
             message,
             "temporal assertion violated after 'ExecuteCertIssue': expected CertificateOrder.status=executed, but CertificateOrder.status has no immediate effect"
         );
+    }
+
+    #[test]
+    fn state_diag_message_formats_quantifier_not_evaluated() {
+        let message =
+            state_diag_message(&rdra_ish_core::StateDiag::QuantifierConstraintNotEvaluated {
+                anchor: "ClientCertificate".to_string(),
+                related: "TerminalCertAssignment".to_string(),
+                constraint: "ClientCertificate when (status=revoked) none TerminalCertAssignment where (status=active)".to_string(),
+                reason: "linked-instance cardinality is not represented in states".to_string(),
+            });
+
+        assert!(message.contains(
+            "to-many quantifier constraint was not evaluated from 'ClientCertificate' to 'TerminalCertAssignment'"
+        ));
+        assert!(message.contains("linked-instance cardinality is not represented in states"));
     }
 }

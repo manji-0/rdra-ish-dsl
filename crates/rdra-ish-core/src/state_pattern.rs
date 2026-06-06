@@ -7,8 +7,8 @@
 use crate::model::{
     ColumnEffect, ColumnType, ComparisonProp, CrossCmpRhs, CrossComparisonProp,
     CrossConstraintScope, CrossEntityCondition, CrossEntityInvariant, CrossForbiddenConstraint,
-    EffectValue, EntityKey, ModelColumn, NodeRef, QualifiedModelColumnRef, RelKind, SemanticModel,
-    StateKey, TemporalAssertion, UseCaseKey,
+    EffectValue, EntityKey, ModelColumn, NodeRef, QualifiedModelColumnRef, QuantifierConstraint,
+    QuantifierKind, RelKind, SemanticModel, StateKey, TemporalAssertion, UseCaseKey,
 };
 use crate::resolver::reachable_from_bucs;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
@@ -238,6 +238,13 @@ pub enum StateDiag {
         requireds: String,
         reason: String,
     },
+    /// to-many 量化制約が現在の抽象状態パターンでは評価できない
+    QuantifierConstraintNotEvaluated {
+        anchor: String,
+        related: String,
+        constraint: String,
+        reason: String,
+    },
 }
 
 /// entity 単位の状態パターン導出結果
@@ -295,6 +302,7 @@ pub fn derive_state_patterns(
         .collect();
     check_cross_entity_constraints(model, &mut results, &result_index);
     check_temporal_assertions(model, &mut results, &result_index);
+    check_quantifier_constraints(model, &mut results, &result_index);
 
     results
 }
@@ -1426,6 +1434,92 @@ fn check_temporal_assertions(
     }
 }
 
+fn check_quantifier_constraints(
+    model: &SemanticModel,
+    results: &mut [EntityStateResult],
+    result_index: &HashMap<EntityKey, usize>,
+) {
+    for constraint in &model.quantifier_constraints {
+        if let Some(diag) = evaluate_quantifier_constraint(model, results, result_index, constraint)
+        {
+            push_cross_diag(
+                &[constraint.anchor, constraint.related],
+                result_index,
+                results,
+                diag,
+            );
+        }
+    }
+}
+
+fn evaluate_quantifier_constraint(
+    model: &SemanticModel,
+    results: &[EntityStateResult],
+    result_index: &HashMap<EntityKey, usize>,
+    constraint: &QuantifierConstraint,
+) -> Option<StateDiag> {
+    let anchor_result = results.get(*result_index.get(&constraint.anchor)?)?;
+    let related_result = results.get(*result_index.get(&constraint.related)?)?;
+
+    let anchor_witness =
+        patterns_satisfy_conditions(model, constraint.anchor, anchor_result, &constraint.guards);
+    if !anchor_witness.unwrap_or(false) {
+        return None;
+    }
+
+    let related_witness = patterns_satisfy_conditions(
+        model,
+        constraint.related,
+        related_result,
+        &constraint.related_conditions,
+    );
+    if matches!(constraint.kind, QuantifierKind::None) && related_witness == Ok(false) {
+        return None;
+    }
+
+    let kind = match constraint.kind {
+        QuantifierKind::Has => "has",
+        QuantifierKind::None => "none",
+    };
+    let constraint_desc = format!(
+        "{} when ({}) {} {} where ({})",
+        model.entities[constraint.anchor].id,
+        cross_conditions_display(model, &constraint.guards),
+        kind,
+        model.entities[constraint.related].id,
+        cross_conditions_display(model, &constraint.related_conditions)
+    );
+    let reason = match related_witness {
+        Err(reason) => reason,
+        Ok(true) => "related condition has reachable patterns, but linked-instance cardinality is not represented in states".to_string(),
+        Ok(false) => "has/none depends on related row cardinality, which is not represented in states".to_string(),
+    };
+
+    Some(StateDiag::QuantifierConstraintNotEvaluated {
+        anchor: model.entities[constraint.anchor].id.clone(),
+        related: model.entities[constraint.related].id.clone(),
+        constraint: constraint_desc,
+        reason,
+    })
+}
+
+fn patterns_satisfy_conditions(
+    model: &SemanticModel,
+    entity: EntityKey,
+    result: &EntityStateResult,
+    conditions: &[CrossEntityCondition],
+) -> Result<bool, String> {
+    for pattern in &result.patterns {
+        let combo = [(entity, pattern)];
+        match cross_conditions_hold(model, conditions, &combo) {
+            Ok(true) => return Ok(true),
+            Ok(false) => {}
+            Err(reason) => return Err(reason),
+        }
+    }
+    Ok(false)
+}
+
 fn evaluate_temporal_assertion(
     model: &SemanticModel,
     assertion: &TemporalAssertion,
@@ -2183,6 +2277,73 @@ after(ExecuteCertIssue).assert(CertificateOrder.status == executed)
             .diagnostics
             .iter()
             .any(|diag| matches!(diag, StateDiag::TemporalAssertionViolated { .. })));
+    }
+
+    #[test]
+    fn quantifier_none_reports_not_evaluated_when_related_condition_reachable() {
+        let model = model_from(
+            r#"
+usecase RevokeCert "Revoke Cert"
+usecase AssignTerminal "Assign Terminal"
+entity ClientCertificate "Client Certificate" {
+  id: Int @pk
+  status: Enum(active, revoked) @default(active)
+}
+entity TerminalCertAssignment "Terminal Cert Assignment" {
+  id: Int @pk
+  status: Enum(active, inactive) @default(active)
+}
+creates(RevokeCert, ClientCertificate)
+creates(AssignTerminal, TerminalCertAssignment)
+sets(RevokeCert, ClientCertificate, "status", "revoked")
+sets(AssignTerminal, TerminalCertAssignment, "status", "active")
+forbidden_when(ClientCertificate, (status, revoked))
+  .none(TerminalCertAssignment, (status, active))
+"#,
+        );
+
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results
+            .iter()
+            .find(|result| result.entity_id == "ClientCertificate")
+            .unwrap();
+        assert!(r
+            .diagnostics
+            .iter()
+            .any(|diag| matches!(diag, StateDiag::QuantifierConstraintNotEvaluated { .. })));
+    }
+
+    #[test]
+    fn quantifier_none_passes_when_related_condition_unreachable() {
+        let model = model_from(
+            r#"
+usecase RevokeCert "Revoke Cert"
+usecase AssignTerminal "Assign Terminal"
+entity ClientCertificate "Client Certificate" {
+  id: Int @pk
+  status: Enum(active, revoked) @default(active)
+}
+entity TerminalCertAssignment "Terminal Cert Assignment" {
+  id: Int @pk
+  status: Enum(active, inactive) @default(inactive)
+}
+creates(RevokeCert, ClientCertificate)
+creates(AssignTerminal, TerminalCertAssignment)
+sets(RevokeCert, ClientCertificate, "status", "revoked")
+forbidden_when(ClientCertificate, (status, revoked))
+  .none(TerminalCertAssignment, (status, active))
+"#,
+        );
+
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results
+            .iter()
+            .find(|result| result.entity_id == "ClientCertificate")
+            .unwrap();
+        assert!(!r
+            .diagnostics
+            .iter()
+            .any(|diag| matches!(diag, StateDiag::QuantifierConstraintNotEvaluated { .. })));
     }
 
     // ── Enum 直線連鎖 ───────────────────────────────────────────────────────

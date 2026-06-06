@@ -140,6 +140,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `"1:1"`, `"1:N"`, `"N:1"`, `"N:M"`. |
 | `transitions` | `(Event, State, State)` | A state machine edge: on the event, the entity moves from the first state to the second. |
 | `after` | `(UseCase).assert(...)` | A temporal anchor assertion checked against the use case's immediate `sets` and `raises`/`transitions` effects. |
+| `forbidden_when` | `(Entity, conditions...).has/none(RelatedEntity, conditions...)` | A to-many quantifier constraint. `states` reports it as not fully evaluated unless it can prove a `none` condition unreachable. |
 | `sets` | `(UseCase \| Event, Entity, "col", "val")` | An explicit column effect, consumed by state pattern derivation. |
 | `sets` | `(UseCase \| Event, Entity, col op rhs, true \| false)` | Drives the truth value of a comparison proposition (derived Bool axis) in state pattern derivation. |
 
@@ -578,6 +579,12 @@ use-case boundary instead of against the full cross-product of reachable state p
 The assertion is evaluated from the use case's immediate `sets` effects and any
 `transitions` reached through events raised by that use case. Tuple form is also valid,
 for example `after(ExecuteCertIssue).assert((CertificateOrder.status, executed))`.
+
+`forbidden_when(Entity, conditions...).has/none(RelatedEntity, conditions...)` declares a
+to-many quantifier rule. The syntax is accepted and type-checked, but `states` does not
+track linked related-row counts. It emits `QuantifierConstraintNotEvaluated` when the
+related condition has reachable patterns. For `none(...)`, if the related condition is
+globally unreachable, the rule is treated as satisfied.
 
 `states` evaluates cross-entity rules by taking the cross-product of each participating
 entity's reached state patterns. Conditions that reference actual state axes can

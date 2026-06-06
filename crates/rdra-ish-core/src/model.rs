@@ -675,6 +675,24 @@ pub struct TemporalAssertion {
     pub requireds: Vec<CrossEntityCondition>,
 }
 
+/// to-many 関連先に対する量化制約。
+#[derive(Debug, Clone)]
+pub enum QuantifierKind {
+    Has,
+    None,
+}
+
+/// `forbidden_when(...).has/none(...)` または
+/// `cross_invariant(...).when(...).has/none(...)` で宣言される集計制約。
+#[derive(Debug, Clone)]
+pub struct QuantifierConstraint {
+    pub anchor: EntityKey,
+    pub guards: Vec<CrossEntityCondition>,
+    pub kind: QuantifierKind,
+    pub related: EntityKey,
+    pub related_conditions: Vec<CrossEntityCondition>,
+}
+
 /// セマンティックモデル
 #[derive(Debug, Default)]
 pub struct SemanticModel {
@@ -720,5 +738,7 @@ pub struct SemanticModel {
     pub cross_entity_invariants: Vec<CrossEntityInvariant>,
     /// `after(UseCase).assert(...)` 述語で宣言された時相アンカー制約
     pub temporal_assertions: Vec<TemporalAssertion>,
+    /// `has` / `none` チェーンで宣言された to-many 量化制約
+    pub quantifier_constraints: Vec<QuantifierConstraint>,
     pub symbols: SymbolTable,
 }

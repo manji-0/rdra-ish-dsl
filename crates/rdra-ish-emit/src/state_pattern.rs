@@ -177,6 +177,17 @@ fn diag_message(d: &StateDiag) -> String {
                 anchor, requireds, reason
             )
         }
+        StateDiag::QuantifierConstraintNotEvaluated {
+            anchor,
+            related,
+            constraint,
+            reason,
+        } => {
+            format!(
+                "[warn] to-many quantifier constraint not evaluated from '{}' to '{}': {} ({})",
+                anchor, related, constraint, reason
+            )
+        }
     }
 }
 

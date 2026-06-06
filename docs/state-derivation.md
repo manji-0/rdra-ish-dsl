@@ -225,6 +225,24 @@ Comparison assertions and longer event-triggered flows are reported as
 `TemporalAssertionNotEvaluated` rather than being approximated through the global
 state-pattern product.
 
+### To-many quantifier constraints
+
+`forbidden_when(Entity, conditions...).has/none(RelatedEntity, conditions...)` and
+`cross_invariant(Entity).when(...).has/none(RelatedEntity, conditions...)` declare rules
+over related collections. These forms are parsed and type-checked, but the current
+state-pattern engine does not represent linked related-row cardinality.
+
+```rdra
+forbidden_when(ClientCertificate, (status, revoked))
+  .none(TerminalCertAssignment, (status, active))
+```
+
+If the anchor condition is reachable and the related condition also has reachable
+patterns, the result receives `QuantifierConstraintNotEvaluated`. For `.none(...)`, when
+the related condition is globally unreachable, the rule is treated as satisfied because
+there is no possible related state matching the predicate. This is a conservative
+partial evaluation; it does not prove per-instance counts.
+
 ### `required`
 
 For each `required(E, (col, val), ...)`, the conditions are AND-ed. Every reached pattern
@@ -288,6 +306,7 @@ syntax and design rationale.
 | `CrossConstraintNotEvaluated { entities, constraint, reason }` | A cross-entity rule cannot be fully evaluated from per-entity abstract state patterns or exceeds the cross-product safety cap. |
 | `TemporalAssertionViolated { anchor, requireds, actual }` | An `after(UseCase).assert(...)` equality is not produced by the anchor use case's immediate effects. |
 | `TemporalAssertionNotEvaluated { anchor, requireds, reason }` | A temporal assertion uses a form that is outside the immediate equality evaluator, such as a comparison expression. |
+| `QuantifierConstraintNotEvaluated { anchor, related, constraint, reason }` | A `has` / `none` related-collection rule needs linked related-row cardinality that the state-pattern engine does not track. |
 
 ---
 
