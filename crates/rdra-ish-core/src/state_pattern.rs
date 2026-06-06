@@ -754,7 +754,115 @@ fn collect_operations(
         });
     }
 
+    apply_trigger_order_guards(model, ek, axes, &status_col, &mut ops, effects_for_entity);
+
     (ops, status_col)
+}
+
+fn apply_trigger_order_guards(
+    model: &SemanticModel,
+    ek: EntityKey,
+    axes: &[StateAxis],
+    status_col: &Option<String>,
+    ops: &mut [Operation],
+    effects_for_entity: &[&ColumnEffect],
+) {
+    let axis_cols: HashSet<&str> = axes.iter().map(|axis| axis.column.as_str()).collect();
+    let event_status_effects = event_status_effects_for_entity(model, ek, status_col);
+
+    for rel in &model.relations {
+        let (event, triggered_uc) = match (&rel.kind, &rel.from, &rel.to) {
+            (RelKind::Triggers, NodeRef::Event(event), NodeRef::UseCase(triggered_uc)) => {
+                (*event, *triggered_uc)
+            }
+            _ => continue,
+        };
+
+        let mut guards = Vec::new();
+        for upstream_uc in usecases_raising_event(model, event) {
+            for effect in effects_for_entity {
+                let applies = match effect.origin {
+                    NodeRef::UseCase(uc) => uc == upstream_uc,
+                    NodeRef::Event(e) => e == event,
+                    _ => false,
+                };
+                if applies {
+                    guards.push(AxisConstraint {
+                        column: effect.column.clone(),
+                        value: AbstractValue::from_effect(&effect.value),
+                    });
+                }
+            }
+        }
+
+        if let Some((column, value)) = event_status_effects.get(&event) {
+            guards.push(AxisConstraint {
+                column: column.clone(),
+                value: value.clone(),
+            });
+        }
+
+        let triggered_id = model.use_cases[triggered_uc].id.as_str();
+        for op in ops.iter_mut().filter(|op| op.usecase_id == triggered_id) {
+            for guard in &guards {
+                if !axis_cols.contains(guard.column.as_str()) {
+                    continue;
+                }
+                if op.effects.iter().any(|(column, _)| column == &guard.column) {
+                    continue;
+                }
+                if op
+                    .guard
+                    .iter()
+                    .any(|existing| existing.column == guard.column)
+                {
+                    continue;
+                }
+                op.guard.push(guard.clone());
+            }
+        }
+    }
+}
+
+fn event_status_effects_for_entity(
+    model: &SemanticModel,
+    ek: EntityKey,
+    status_col: &Option<String>,
+) -> HashMap<crate::model::EventKey, (String, AbstractValue)> {
+    let mut effects = HashMap::new();
+    let Some(status_col) = status_col else {
+        return effects;
+    };
+    let Some((_, state_variant_map)) = link_states_to_enum(model, ek) else {
+        return effects;
+    };
+
+    for st in &model.state_transitions {
+        let (NodeRef::Event(event), NodeRef::State(to_state)) = (&st.event, &st.to) else {
+            continue;
+        };
+        if let Some(to_variant) = state_variant_map.get(to_state) {
+            effects.insert(
+                *event,
+                (status_col.clone(), AbstractValue::Enum(to_variant.clone())),
+            );
+        }
+    }
+
+    effects
+}
+
+fn usecases_raising_event(model: &SemanticModel, event: crate::model::EventKey) -> Vec<UseCaseKey> {
+    model
+        .relations
+        .iter()
+        .filter_map(|rel| match (&rel.kind, &rel.from, &rel.to) {
+            (RelKind::Raises, NodeRef::UseCase(uc), NodeRef::Event(raised)) if *raised == event => {
+                Some(*uc)
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 /// entity 単位の状態パターン導出
@@ -1282,7 +1390,7 @@ fn triggered_flow_order_hint(model: &SemanticModel, provenance: &Provenance) -> 
     }
 
     Some(format!(
-        "states does not use triggers order as a guard; if {} is only valid after an upstream event, also set the required evidence columns in that use case or model an explicit state guard",
+        "triggered flow has no modeled upstream evidence for this invariant; if {} is only valid after an upstream event, set the evidence columns in the raising use case/event or model an explicit state guard",
         witnessed_triggered.join(", ")
     ))
 }
@@ -2954,7 +3062,7 @@ invariant(Order)
     }
 
     #[test]
-    fn test_invariant_violation_from_triggered_usecase_gets_flow_order_hint() {
+    fn triggered_usecase_requires_upstream_event_effect_guard() {
         let model = model_from(
             r#"
 entity Terminal "端末" {
@@ -2982,19 +3090,48 @@ invariant(Terminal)
 
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
         let r = results.iter().find(|r| r.entity_id == "Terminal").unwrap();
-        let hint = r.diagnostics.iter().find_map(|d| match d {
-            StateDiag::InvariantViolated {
-                flow_order_hint: Some(hint),
-                ..
-            } => Some(hint),
-            _ => None,
-        });
         assert!(
-            hint.is_some_and(|hint| {
-                hint.contains("states does not use triggers order as a guard")
-                    && hint.contains("DeregisterTerminal")
-            }),
-            "triggered invariant violation should include a flow-order hint: {:?}",
+            !r.diagnostics
+                .iter()
+                .any(|d| matches!(d, StateDiag::InvariantViolated { .. })),
+            "triggered use case should inherit upstream evidence as a guard: {:?}",
+            r.diagnostics
+        );
+    }
+
+    #[test]
+    fn triggered_usecase_without_upstream_event_effect_still_violates_invariant() {
+        let model = model_from(
+            r#"
+entity Terminal "端末" {
+  id: Int @pk
+  status: Enum(active, retired, deregistered) @default(active)
+  retired_at: DateTime @null
+}
+usecase RegisterTerminal "登録する"
+usecase RetireTerminal "退役する"
+usecase DeregisterTerminal "登録解除する"
+event TerminalRetired "退役済み"
+creates(RegisterTerminal, Terminal)
+updates(RetireTerminal, Terminal)
+updates(DeregisterTerminal, Terminal)
+sets(RetireTerminal, Terminal, "status", "retired")
+sets(DeregisterTerminal, Terminal, "status", "deregistered")
+raises(RetireTerminal, TerminalRetired)
+triggers(TerminalRetired, DeregisterTerminal)
+invariant(Terminal)
+  .when(status, deregistered)
+  .then(retired_at, present)
+"#,
+        );
+
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results.iter().find(|r| r.entity_id == "Terminal").unwrap();
+        assert!(
+            r.diagnostics
+                .iter()
+                .any(|d| matches!(d, StateDiag::InvariantViolated { .. })),
+            "missing upstream evidence should still violate the invariant: {:?}",
             r.diagnostics
         );
     }

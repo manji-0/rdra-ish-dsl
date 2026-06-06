@@ -196,11 +196,13 @@ the same way: each comparison maps to its `Proposition` axis and is checked as a
 use `Bool(true)` as the required value, enabling guards like "when the proposition
 holds".
 
-`triggers(event, UseCase)` documents event flow, but the current state derivation does
-not use that flow order as an execution guard. If an invariant witness includes a
-triggered use case, diagnostics include a flow-order hint. When an upstream event
-guarantees evidence columns in practice, either set those evidence columns in the
-triggered use case as well, or model an explicit state guard around the transition.
+`triggers(event, UseCase)` documents event flow. For a directly triggered use case,
+state derivation uses immediate same-entity effects from the upstream use case or
+event as execution guards when those effects target known state axes. This suppresses
+false positives where the event handoff guarantees evidence columns such as timestamps.
+Diagnostics can still include a flow-order hint when a triggered witness has no
+modeled upstream evidence for the required axis, because full symbolic flow ordering is
+not inferred.
 
 ### Temporal anchor assertions
 
@@ -298,7 +300,7 @@ syntax and design rationale.
 | `NoCreationPath` | The entity has no `creates`; the pattern set is seeded from defaults only. |
 | `PatternCapReached { cap, bound }` | The per-entity cap was hit; output is truncated. `bound` is the product-space size. |
 | `ForbiddenStateViolated { conditions, pattern_desc, correlation_hint }` | A reachable pattern matches all conditions of a `forbidden` declaration. Multi-axis witnesses include a correlation hint because they may reflect independent-axis product expansion. |
-| `InvariantViolated { guards, requireds, pattern_desc, flow_order_hint }` | A reachable pattern satisfies an invariant's guards but breaks a requirement. Triggered-usecase witnesses include a flow-order hint because `triggers` order is not used as a guard. |
+| `InvariantViolated { guards, requireds, pattern_desc, flow_order_hint }` | A reachable pattern satisfies an invariant's guards but breaks a requirement. Triggered-usecase witnesses can include a flow-order hint when the immediate upstream event/use-case effects do not prove the required guard coverage. |
 | `RequiredStateViolated { conditions, pattern_desc }` | A reachable pattern misses at least one condition of a `required` declaration. |
 | `ExclusiveStateViolated { conditions, pattern_desc }` | A reachable pattern satisfies two or more conditions of an `exclusive` declaration. |
 | `CrossForbiddenViolated { entities, conditions, pattern_desc }` | A reached cross-entity pattern combination matches all conditions of a `cross_forbidden` declaration. |

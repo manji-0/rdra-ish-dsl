@@ -295,7 +295,9 @@ event-initiated without reshaping the BUC itself.
 use case to execute. This is the refined form when the entry action is known. The tool
 validates that a triggered use case belongs to at least one BUC via `contains`; a warning
 is emitted otherwise. Use `diagram --kind event-flow` to visualise the full
-`raises -> Event -> triggers` chain alongside state transitions.
+`raises -> Event -> triggers` chain alongside state transitions. State derivation uses
+immediate same-entity effects from the upstream use case or event as guards for the
+triggered use case when those effects target known state axes.
 
 `outbox(event::E)` declares that a raised event is intentionally published outside the
 local model boundary, such as a domain event sent to an outbox, external subscriber, or
@@ -487,8 +489,8 @@ combined with **AND**. The rule reads: **whenever all `.when()` guards hold, all
 For every reachable pattern that satisfies all the guards but violates any requirement,
 an `InvariantViolated` diagnostic is emitted, naming the guards, the requirements, and
 the offending pattern. If the witness comes from a use case reached through
-`triggers(...)`, the diagnostic includes a flow-order hint because `states` does not
-currently treat trigger order as an execution guard.
+`triggers(...)`, the diagnostic can include a flow-order hint when immediate upstream
+effects do not prove the required guard coverage.
 
 **Design rationale.** Unlike `forbidden`, an invariant has *two distinct sides* — a
 guard and a requirement — joined by implication. A flat tuple list cannot express which
