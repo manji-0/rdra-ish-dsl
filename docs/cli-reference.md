@@ -40,7 +40,9 @@ model warnings and prints `OK: no errors`.
 - system boundary derivation and cross-system entity coordination gaps;
 - FK/API transaction-boundary warnings;
 - event-flow gaps, including events that are never raised, raised events that trigger
-  no transition/use case/BUC, or triggered use cases with no containing BUC;
+  no transition/use case/BUC, or triggered use cases with no containing BUC. Mark
+  intentional external publications with `outbox(Event)` to suppress only the
+  raised-but-unconsumed warning;
 - state-pattern warnings, including missing creation paths, unreachable enum variants,
   forbidden reachable states, invariant / required / exclusive violations, and pattern
   truncation.
@@ -82,9 +84,10 @@ Notes:
   group rather than separate isolated writes.
 - For `--kind event-flow`, the tool runs event-integrity diagnostics and emits `warning:`
   lines for events that are never raised, raised but consume nothing, or trigger a use
-  case belonging to no BUC. Event targets may be either BUCs or use cases. Mermaid node
-  IDs are prefixed (`ev__`, `uc__`, `buc__`, `st__`) to avoid collisions when model
-  elements share the same DSL identifier.
+  case belonging to no BUC. `outbox(Event)` suppresses the raised-but-unconsumed warning
+  for events intentionally published outside the local model. Event targets may be either
+  BUCs or use cases. Mermaid node IDs are prefixed (`ev__`, `uc__`, `buc__`, `st__`) to
+  avoid collisions when model elements share the same DSL identifier.
 - For `--kind sequence`, participant lifelines are grouped into RDRA-style layer boxes:
   system value (`actor`), system boundary (`screen`, `api`), and system (`system`,
   `entity`). The use case itself remains the sequence section title.

@@ -136,7 +136,7 @@ pub enum RdraError {
     #[error("event '{event}' is never raised by any use case\n  hint: add `raises(usecase::Foo, event::{event})` in the relevant BUC file")]
     EventNeverRaised { event: String },
 
-    #[error("event '{event}' is raised but has no transitions and triggers no use case or BUC\n  hint: add `transitions(event::{event}, From, To)`, `triggers(event::{event}, SomeBuc)`, or `triggers(event::{event}, SomeUseCase)` to connect this event")]
+    #[error("event '{event}' is raised but has no transitions and triggers no use case or BUC\n  hint: add `transitions(event::{event}, From, To)`, `triggers(event::{event}, SomeBuc)`, or `triggers(event::{event}, SomeUseCase)` to connect this event; use `outbox(event::{event})` if it is intentionally published outside this model")]
     EventNeverConsumed { event: String },
 
     #[error("event '{event}' triggers use case '{usecase}' which belongs to no BUC\n  hint: add `contains(someBuc, usecase::{usecase})` to include the triggered use case in a BUC")]

@@ -132,6 +132,7 @@ fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
         "shows" => Some(vec![vec!["screen"], vec!["entity"]]),
         "raises" => Some(vec![vec!["usecase"], vec!["event"]]),
         "triggers" => Some(vec![vec!["event"], vec!["usecase", "buc"]]),
+        "outbox" => Some(vec![vec!["event"]]),
         "contains" => Some(vec![vec!["buc", "system"], vec!["usecase", "api"]]),
         "coordinates" => Some(vec![vec!["usecase"], vec!["entity"], vec!["entity"]]),
         "belongs" => Some(vec![vec!["buc"], vec!["business"]]),
@@ -1432,6 +1433,12 @@ fn process_transitions_predicate(model: &mut SemanticModel, resolved: &[Option<N
     }
 }
 
+fn process_outbox_predicate(model: &mut SemanticModel, resolved: &[Option<NodeRef>]) {
+    if let Some(Some(NodeRef::Event(event))) = resolved.first() {
+        model.outbox_events.insert(*event);
+    }
+}
+
 fn process_sets_predicate(
     model: &mut SemanticModel,
     pred: &PredicateCall,
@@ -1824,6 +1831,7 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
     match pred.name.as_str() {
         "coordinates" => process_coordinates_predicate(model, &resolved),
         "transitions" => process_transitions_predicate(model, &resolved),
+        "outbox" => process_outbox_predicate(model, &resolved),
         "sets" => process_sets_predicate(model, pred, &resolved, diags),
         "forbidden" => process_forbidden_predicate(model, pred, &resolved, diags),
         "invariant" => process_invariant_predicate(model, pred, &resolved, diags),

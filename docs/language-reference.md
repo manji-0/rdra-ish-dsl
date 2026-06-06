@@ -129,6 +129,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `shows` | `(Screen, Entity)` | The screen shows information from the entity. |
 | `raises` | `(UseCase, Event)` | The use case raises the domain event. Links use cases to `transitions`. |
 | `triggers` | `(Event, UseCase \| Buc)` | The event triggers a concrete use case or starts a BUC boundary. |
+| `outbox` | `(Event)` | Marks a raised event as intentionally published outside the local model, suppressing the raised-but-unconsumed warning. |
 | `contains` | `(Buc, UseCase)` or `(System, Api)` | The use case composes the BUC, or the API belongs to the system boundary. |
 | `coordinates` | `(UseCase, Entity, Entity)` | The use case coordinates consistency for a relation crossing system boundaries. The use case must invoke APIs on both system sides that operate the corresponding entities. |
 | `belongs` | `(Buc, Business)` | The BUC belongs to the business. |
@@ -293,6 +294,12 @@ use case to execute. This is the refined form when the entry action is known. Th
 validates that a triggered use case belongs to at least one BUC via `contains`; a warning
 is emitted otherwise. Use `diagram --kind event-flow` to visualise the full
 `raises -> Event -> triggers` chain alongside state transitions.
+
+`outbox(event::E)` declares that a raised event is intentionally published outside the
+local model boundary, such as a domain event sent to an outbox, external subscriber, or
+manual downstream process. It suppresses only the warning for a raised event that has no
+local `transitions` or `triggers` consumer; it does not make an unraised event count as
+raised.
 
 ### Event-triggered BUCs
 

@@ -113,6 +113,7 @@ pub fn event_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
             && flow.transitions.is_empty()
             && flow.triggers_ucs.is_empty()
             && flow.triggers_bucs.is_empty()
+            && !model.outbox_events.contains(&flow.event)
         {
             diags.push(Diagnostic::warning(RdraError::EventNeverConsumed {
                 event: event_id.clone(),
@@ -234,6 +235,23 @@ buc BucBillingClaims "Billing Claims"
 event EncounterSigned "Encounter Signed"
 raises(SignEncounter, EncounterSigned)
 triggers(EncounterSigned, BucBillingClaims)
+"#,
+        );
+
+        let diags = event_diagnostics(&model);
+        assert!(!diags
+            .iter()
+            .any(|diag| matches!(&diag.error, RdraError::EventNeverConsumed { .. })));
+    }
+
+    #[test]
+    fn outbox_event_suppresses_never_consumed_warning() {
+        let model = model_from(
+            r#"
+usecase PublishCustomerChanged "Publish Customer Changed"
+event CustomerChanged "Customer Changed"
+raises(PublishCustomerChanged, CustomerChanged)
+outbox(CustomerChanged)
 "#,
         );
 

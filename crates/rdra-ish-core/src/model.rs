@@ -1,6 +1,6 @@
 use rdra_ish_syntax::ast::Kind;
 use slotmap::{new_key_type, SlotMap};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 // --- Key types ---
 new_key_type! {
@@ -692,6 +692,8 @@ pub struct SemanticModel {
     pub relations: Vec<Relation>,
     pub boundary_coordinations: Vec<BoundaryCoordination>,
     pub business_mapping_contexts: Vec<BusinessMappingContext>,
+    /// Events intentionally published outside the local model boundary.
+    pub outbox_events: HashSet<EventKey>,
     pub state_transitions: Vec<StateTransition>,
     pub column_effects: Vec<ColumnEffect>,
     /// `sets(origin, entity, <comparison_expr>, bool)` で宣言された比較命題の真偽効果
