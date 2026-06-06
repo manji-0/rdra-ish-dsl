@@ -1781,7 +1781,20 @@ fn evaluate_cross_forbidden(
         }
         match cross_conditions_hold(model, &constraint.conditions, combo) {
             Ok(true) => {
-                if relation_scoped || linked_scope_reason.is_some() {
+                if relation_scoped
+                    && relation_scoped_combo_has_linked_evidence(
+                        model,
+                        &constraint.scope_semantics,
+                        combo,
+                    )
+                {
+                    diags.push(StateDiag::CrossForbiddenViolated {
+                        entities: entities.clone(),
+                        conditions: constraint_desc.clone(),
+                        pattern_desc: describe_cross_pattern_combo(model, combo),
+                        scope_hint: None,
+                    });
+                } else if relation_scoped || linked_scope_reason.is_some() {
                     has_unresolved_linked_witness = true;
                 } else {
                     diags.push(StateDiag::CrossForbiddenViolated {
@@ -1894,7 +1907,21 @@ fn evaluate_cross_invariant(
         match cross_conditions_hold(model, &invariant.requireds, combo) {
             Ok(true) => {}
             Ok(false) => {
-                if relation_scoped || linked_scope_reason.is_some() {
+                if relation_scoped
+                    && relation_scoped_combo_has_linked_evidence(
+                        model,
+                        &invariant.scope_semantics,
+                        combo,
+                    )
+                {
+                    diags.push(StateDiag::CrossInvariantViolated {
+                        entities: entities.clone(),
+                        guards: guards_desc.clone(),
+                        requireds: requireds_desc.clone(),
+                        pattern_desc: describe_cross_pattern_combo(model, combo),
+                        scope_hint: None,
+                    });
+                } else if relation_scoped || linked_scope_reason.is_some() {
                     has_unresolved_linked_witness = true;
                 } else {
                     diags.push(StateDiag::CrossInvariantViolated {
@@ -2058,6 +2085,51 @@ fn relation_scoped_witness_reason_for_path(model: &SemanticModel, path: &[Entity
         "along({}) has a global-product witness, but states currently tracks per-entity patterns only; linked instance reachability is not yet evaluated",
         entity_list_display(model, path)
     )
+}
+
+fn relation_scoped_combo_has_linked_evidence(
+    model: &SemanticModel,
+    scope_semantics: &CrossConstraintScope,
+    combo: &[(EntityKey, &ReachablePattern)],
+) -> bool {
+    let CrossConstraintScope::RelationPath(path) = scope_semantics else {
+        return false;
+    };
+    if path.len() < 2 {
+        return false;
+    }
+
+    path.windows(2).all(|pair| {
+        has_relate_edge(model, pair[0], pair[1])
+            && linked_pair_shares_usecase_provenance(pair[0], pair[1], combo)
+    })
+}
+
+fn linked_pair_shares_usecase_provenance(
+    left: EntityKey,
+    right: EntityKey,
+    combo: &[(EntityKey, &ReachablePattern)],
+) -> bool {
+    let Some(left_pattern) = combo
+        .iter()
+        .find_map(|(entity, pattern)| (*entity == left).then_some(*pattern))
+    else {
+        return false;
+    };
+    let Some(right_pattern) = combo
+        .iter()
+        .find_map(|(entity, pattern)| (*entity == right).then_some(*pattern))
+    else {
+        return false;
+    };
+
+    left_pattern.provenance.via.iter().any(|(_, usecase_id)| {
+        right_pattern
+            .provenance
+            .via
+            .iter()
+            .any(|(_, other_usecase_id)| other_usecase_id == usecase_id)
+    })
 }
 
 fn has_relate_edge(model: &SemanticModel, left: EntityKey, right: EntityKey) -> bool {
@@ -3744,6 +3816,78 @@ cross_invariant(Order, Payment)
                     .iter()
                     .any(|d| matches!(d, StateDiag::CrossInvariantViolated { .. })),
                 "relation-scoped cross invariant must not fall back to global-product evaluation on {entity_id}: {:?}",
+                r.diagnostics
+            );
+        }
+    }
+
+    #[test]
+    fn test_relation_scoped_cross_invariant_reports_operation_linked_violation() {
+        let model = model_from(
+            r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(open, paid) @default(paid)
+}
+entity Payment "支払い" {
+  id: Int @pk
+  status: Enum(pending, captured) @default(pending)
+}
+usecase RegisterPayment "登録"
+creates(RegisterPayment, Order)
+creates(RegisterPayment, Payment)
+relate(Payment, Order, "1:1")
+cross_invariant(Order, Payment)
+  .along(Order, Payment)
+  .when(Order.status, paid)
+  .then(Payment.status, captured)
+"#,
+        );
+
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        for entity_id in ["Order", "Payment"] {
+            let r = results.iter().find(|r| r.entity_id == entity_id).unwrap();
+            assert!(
+                r.diagnostics
+                    .iter()
+                    .any(|d| matches!(d, StateDiag::CrossInvariantViolated { .. })),
+                "operation-linked relation-scoped invariant should report violation on {entity_id}: {:?}",
+                r.diagnostics
+            );
+        }
+    }
+
+    #[test]
+    fn test_relation_scoped_cross_forbidden_reports_operation_linked_violation() {
+        let model = model_from(
+            r#"
+entity Terminal "端末" {
+  id: Int @pk
+  status: Enum(active, deregistered) @default(deregistered)
+}
+entity ClientCertificate "証明書" {
+  id: Int @pk
+  status: Enum(active, suspended) @default(active)
+}
+usecase RegisterTerminalCertificate "登録"
+creates(RegisterTerminalCertificate, Terminal)
+creates(RegisterTerminalCertificate, ClientCertificate)
+relate(Terminal, ClientCertificate, "1:N")
+cross_forbidden(Terminal, ClientCertificate,
+  (Terminal.status, deregistered),
+  (ClientCertificate.status, active))
+  .along(Terminal, ClientCertificate)
+"#,
+        );
+
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        for entity_id in ["Terminal", "ClientCertificate"] {
+            let r = results.iter().find(|r| r.entity_id == entity_id).unwrap();
+            assert!(
+                r.diagnostics
+                    .iter()
+                    .any(|d| matches!(d, StateDiag::CrossForbiddenViolated { .. })),
+                "operation-linked relation-scoped forbidden should report violation on {entity_id}: {:?}",
                 r.diagnostics
             );
         }

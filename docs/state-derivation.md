@@ -285,12 +285,15 @@ intent or remove the relation from the model for a true global-product rule.
 
 When a cross constraint has `.along(EntityA, EntityB, ...)`, the rule is relation-scoped:
 it is intended to quantify only over instances connected through the declared `relate`
-path. The current derivation can verify the declared path shape, but it does not track
-which concrete instances are linked at each reached pattern. If the broader global
-cross-product has no violating witness, the relation-scoped rule is known satisfied
-because every linked-instance combination is a subset of that product. If the global
-product does have a witness, the relation-scoped rule receives `CrossConstraintNotEvaluated`
-instead of being reported as a violation.
+path. The current derivation validates the declared path shape and can evaluate a
+relation-scoped witness when each adjacent pair in the path shares a use-case provenance
+entry, meaning the same modeled operation reached both side patterns. If such an
+operation-linked witness violates the rule, `CrossForbiddenViolated` or
+`CrossInvariantViolated` is emitted. If the broader global cross-product has no
+violating witness, the relation-scoped rule is known satisfied because every linked
+instance combination is a subset of that product. If a witness exists but has no shared
+operation provenance, the rule receives `CrossConstraintNotEvaluated` because concrete
+row identity and FK reachability are not represented in state patterns.
 
 See [language-reference.md](./language-reference.md#entity-state-constraints) for the
 syntax and design rationale.

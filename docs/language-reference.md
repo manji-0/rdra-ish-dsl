@@ -602,11 +602,13 @@ may be a false positive for linked-instance rules.
 
 Adding `.along(EntityA, EntityB, ...)` declares that the rule is intended to apply only
 to instances connected through the listed `relate` path, not to the global cross-product.
-The current `states` engine validates that the path is declared, and can prove the
-rule satisfied when even the broader global cross-product has no witness. If the
-global cross-product has a witness, `states` reports `CrossConstraintNotEvaluated`
-rather than treating that witness as a linked-instance violation, because linked
-instance reachability is not yet tracked.
+The current `states` engine validates that the path is declared, can prove the rule
+satisfied when even the broader global cross-product has no witness, and can report a
+violation when each adjacent pair in the path shares use-case provenance for the
+witness patterns. If a witness exists without shared operation provenance, `states`
+reports `CrossConstraintNotEvaluated` rather than treating it as a linked-instance
+violation, because concrete row identity and FK reachability are not represented in
+state patterns.
 
 ### Comparison Expressions in Constraints
 
