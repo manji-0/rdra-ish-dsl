@@ -70,6 +70,7 @@ rdra-ish states samples/clinic-ops --entity Appointment
 
 ## Main Documents
 
+- [Changelog](./CHANGELOG.md)
 - [CLI Reference](./docs/cli-reference.md)
 - [Language Reference](./docs/language-reference.md)
 - [Incremental Modeling Flow](./docs/incremental-modeling.md)

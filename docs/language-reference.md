@@ -6,8 +6,14 @@ as typed instances and connect them with predicate calls.
 
 A source file (`.rdra`) consists of an optional `module` declaration, zero or more
 `import` declarations, and a sequence of instance declarations, entity bodies,
-predicate calls, and constraint declarations, in any order. Comments use `//` and run
-to the end of the line.
+predicate calls, and constraint declarations, in any order.
+
+## File Structure and Comments
+
+Comments use `//` and run to the end of the line. Block comments use `/* ... */`.
+Legacy `#` line comments are not accepted. If an older model uses `#` for comments,
+replace those line-comment prefixes with `//`; see the repository
+[changelog](../CHANGELOG.md) for the migration note.
 
 ---
 
