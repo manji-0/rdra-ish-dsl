@@ -464,7 +464,9 @@ combined with **AND**. The rule reads: **whenever all `.when()` guards hold, all
 
 For every reachable pattern that satisfies all the guards but violates any requirement,
 an `InvariantViolated` diagnostic is emitted, naming the guards, the requirements, and
-the offending pattern.
+the offending pattern. If the witness comes from a use case reached through
+`triggers(...)`, the diagnostic includes a flow-order hint because `states` does not
+currently treat trigger order as an execution guard.
 
 **Design rationale.** Unlike `forbidden`, an invariant has *two distinct sides* — a
 guard and a requirement — joined by implication. A flat tuple list cannot express which

@@ -451,10 +451,17 @@ fn state_diag_message(diag: &rdra_ish_core::StateDiag) -> String {
             guards,
             requireds,
             pattern_desc,
-        } => format!(
-            "invariant violated: when {} then {} is broken by {}",
-            guards, requireds, pattern_desc
-        ),
+            flow_order_hint,
+        } => {
+            let mut message = format!(
+                "invariant violated: when {} then {} is broken by {}",
+                guards, requireds, pattern_desc
+            );
+            if let Some(hint) = flow_order_hint {
+                message.push_str(&format!("; hint: {}", hint));
+            }
+            message
+        }
         rdra_ish_core::StateDiag::RequiredStateViolated {
             conditions,
             pattern_desc,
@@ -1333,6 +1340,7 @@ requires_permission(BookAppointment, ScheduleWrite)
             guards: "status=booked".to_string(),
             requireds: "booked_at=present".to_string(),
             pattern_desc: "status=booked, booked_at=null".to_string(),
+            flow_order_hint: None,
         });
 
         assert_eq!(

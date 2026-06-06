@@ -87,11 +87,16 @@ fn diag_message(d: &StateDiag) -> String {
             guards,
             requireds,
             pattern_desc,
+            flow_order_hint,
         } => {
-            format!(
+            let mut message = format!(
                 "[error] invariant violated: when ({}) holds, ({}) must also hold — but found pattern ({})",
                 guards, requireds, pattern_desc
-            )
+            );
+            if let Some(hint) = flow_order_hint {
+                message.push_str(&format!("; hint: {}", hint));
+            }
+            message
         }
         StateDiag::RequiredStateViolated {
             conditions,

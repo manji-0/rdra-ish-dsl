@@ -193,6 +193,7 @@ pub enum StateDiag {
         /// 必要条件を "col=val AND col=val" 形式に整形した文字列
         requireds: String,
         pattern_desc: String,
+        flow_order_hint: Option<String>,
     },
     /// `required(Entity, ...)` の常時成立条件を満たさない到達可能な状態
     RequiredStateViolated {
@@ -1230,6 +1231,36 @@ fn correlated_axis_hint(
     )
 }
 
+fn triggered_flow_order_hint(model: &SemanticModel, provenance: &Provenance) -> Option<String> {
+    let triggered_usecases: HashSet<String> = model
+        .relations
+        .iter()
+        .filter_map(|rel| match (&rel.kind, &rel.to) {
+            (RelKind::Triggers, NodeRef::UseCase(uk)) => Some(model.use_cases[*uk].id.clone()),
+            _ => None,
+        })
+        .collect();
+
+    let witnessed_triggered: Vec<_> = provenance
+        .via
+        .iter()
+        .filter_map(|(_, usecase_id)| {
+            triggered_usecases
+                .contains(usecase_id)
+                .then_some(usecase_id.as_str())
+        })
+        .collect();
+
+    if witnessed_triggered.is_empty() {
+        return None;
+    }
+
+    Some(format!(
+        "states does not use triggers order as a guard; if {} is only valid after an upstream event, also set the required evidence columns in that use case or model an explicit state guard",
+        witnessed_triggered.join(", ")
+    ))
+}
+
 /// 到達可能パターン群に対して entity 制約を検査し、違反を `diags` に追加する。
 fn check_constraints(
     model: &SemanticModel,
@@ -1289,6 +1320,7 @@ fn check_constraints(
                     requireds: condition_display_parts(&abs_requireds, &inv.required_comparisons)
                         .join(" AND "),
                     pattern_desc: describe_pattern(&rp.pattern),
+                    flow_order_hint: triggered_flow_order_hint(model, &rp.provenance),
                 });
             }
         }
@@ -2563,6 +2595,52 @@ invariant(Order)
         assert!(
             !violated.is_empty(),
             "InvariantViolated が発生すべき: {:?}",
+            r.diagnostics
+        );
+    }
+
+    #[test]
+    fn test_invariant_violation_from_triggered_usecase_gets_flow_order_hint() {
+        let model = model_from(
+            r#"
+entity Terminal "端末" {
+  id: Int @pk
+  status: Enum(active, retired, deregistered) @default(active)
+  retired_at: DateTime @null
+}
+usecase RegisterTerminal "登録する"
+usecase RetireTerminal "退役する"
+usecase DeregisterTerminal "登録解除する"
+event TerminalRetired "退役済み"
+creates(RegisterTerminal, Terminal)
+updates(RetireTerminal, Terminal)
+updates(DeregisterTerminal, Terminal)
+sets(RetireTerminal, Terminal, "retired_at", "timestamptz")
+sets(RetireTerminal, Terminal, "status", "retired")
+sets(DeregisterTerminal, Terminal, "status", "deregistered")
+raises(RetireTerminal, TerminalRetired)
+triggers(TerminalRetired, DeregisterTerminal)
+invariant(Terminal)
+  .when(status, deregistered)
+  .then(retired_at, present)
+"#,
+        );
+
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results.iter().find(|r| r.entity_id == "Terminal").unwrap();
+        let hint = r.diagnostics.iter().find_map(|d| match d {
+            StateDiag::InvariantViolated {
+                flow_order_hint: Some(hint),
+                ..
+            } => Some(hint),
+            _ => None,
+        });
+        assert!(
+            hint.is_some_and(|hint| {
+                hint.contains("states does not use triggers order as a guard")
+                    && hint.contains("DeregisterTerminal")
+            }),
+            "triggered invariant violation should include a flow-order hint: {:?}",
             r.diagnostics
         );
     }
