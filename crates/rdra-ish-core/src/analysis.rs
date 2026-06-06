@@ -2021,6 +2021,41 @@ mod tests {
     }
 
     #[test]
+    fn entity_block_comment_does_not_drop_following_columns() {
+        let src = r#"
+usecase ActivateExample "Activate example"
+
+entity Example "Example" {
+  id: Int @pk
+  // Comment between columns should not end the entity body.
+  status: Enum(active, inactive)
+}
+
+sets(ActivateExample, Example, "status", "active")
+"#;
+
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
+
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "model errors: {errors:?}");
+
+        let example = model
+            .entities
+            .iter()
+            .find_map(|(_, entity)| (entity.id == "Example").then_some(entity))
+            .expect("Example entity should be registered");
+
+        let column_names: Vec<_> = example
+            .columns
+            .iter()
+            .map(|col| col.name.as_str())
+            .collect();
+        assert_eq!(column_names, vec!["id", "status"]);
+    }
+
+    #[test]
     fn parse_effect_value_maps_nullable_enum_and_bool_values() {
         let mut nullable = model_column("metadata", ColumnType::String);
         nullable.is_nullable = true;
