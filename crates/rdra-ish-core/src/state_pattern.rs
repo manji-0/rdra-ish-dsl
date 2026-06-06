@@ -1356,7 +1356,7 @@ fn evaluate_cross_forbidden(
     };
 
     if let Some(reason) =
-        relation_scope_not_evaluated_reason(model, &constraint.scope, &constraint.scope_semantics)
+        invalid_relation_scope_reason(model, &constraint.scope, &constraint.scope_semantics)
     {
         return vec![StateDiag::CrossConstraintNotEvaluated {
             entities,
@@ -1364,6 +1364,7 @@ fn evaluate_cross_forbidden(
             reason,
         }];
     }
+    let relation_scoped = is_relation_scoped(&constraint.scope_semantics);
 
     let combo_count = cross_combo_count(&scoped_results);
     if combo_count > CROSS_PATTERN_COMBO_CAP {
@@ -1379,17 +1380,24 @@ fn evaluate_cross_forbidden(
 
     let mut diags = Vec::new();
     let mut unknown_reason = None;
+    let mut has_relation_scoped_witness = false;
     let mut current = Vec::new();
     visit_pattern_combinations(&scoped_results, 0, &mut current, &mut |combo| {
         if diags.len() >= CROSS_VIOLATION_DIAG_CAP {
             return;
         }
         match cross_conditions_hold(model, &constraint.conditions, combo) {
-            Ok(true) => diags.push(StateDiag::CrossForbiddenViolated {
-                entities: entities.clone(),
-                conditions: constraint_desc.clone(),
-                pattern_desc: describe_cross_pattern_combo(model, combo),
-            }),
+            Ok(true) => {
+                if relation_scoped {
+                    has_relation_scoped_witness = true;
+                } else {
+                    diags.push(StateDiag::CrossForbiddenViolated {
+                        entities: entities.clone(),
+                        conditions: constraint_desc.clone(),
+                        pattern_desc: describe_cross_pattern_combo(model, combo),
+                    });
+                }
+            }
             Ok(false) => {}
             Err(reason) => {
                 unknown_reason.get_or_insert(reason);
@@ -1397,7 +1405,13 @@ fn evaluate_cross_forbidden(
         }
     });
 
-    if diags.len() >= CROSS_VIOLATION_DIAG_CAP {
+    if relation_scoped && has_relation_scoped_witness {
+        diags.push(StateDiag::CrossConstraintNotEvaluated {
+            entities,
+            constraint: format!("cross_forbidden({})", constraint_desc),
+            reason: relation_scoped_witness_reason(model, &constraint.scope_semantics),
+        });
+    } else if diags.len() >= CROSS_VIOLATION_DIAG_CAP {
         diags.push(StateDiag::CrossConstraintNotEvaluated {
             entities,
             constraint: format!("cross_forbidden({})", constraint_desc),
@@ -1433,7 +1447,7 @@ fn evaluate_cross_invariant(
     };
 
     if let Some(reason) =
-        relation_scope_not_evaluated_reason(model, &invariant.scope, &invariant.scope_semantics)
+        invalid_relation_scope_reason(model, &invariant.scope, &invariant.scope_semantics)
     {
         return vec![StateDiag::CrossConstraintNotEvaluated {
             entities,
@@ -1444,6 +1458,7 @@ fn evaluate_cross_invariant(
             reason,
         }];
     }
+    let relation_scoped = is_relation_scoped(&invariant.scope_semantics);
 
     let combo_count = cross_combo_count(&scoped_results);
     if combo_count > CROSS_PATTERN_COMBO_CAP {
@@ -1462,6 +1477,7 @@ fn evaluate_cross_invariant(
 
     let mut diags = Vec::new();
     let mut unknown_reason = None;
+    let mut has_relation_scoped_witness = false;
     let mut current = Vec::new();
     visit_pattern_combinations(&scoped_results, 0, &mut current, &mut |combo| {
         if diags.len() >= CROSS_VIOLATION_DIAG_CAP {
@@ -1479,19 +1495,34 @@ fn evaluate_cross_invariant(
 
         match cross_conditions_hold(model, &invariant.requireds, combo) {
             Ok(true) => {}
-            Ok(false) => diags.push(StateDiag::CrossInvariantViolated {
-                entities: entities.clone(),
-                guards: guards_desc.clone(),
-                requireds: requireds_desc.clone(),
-                pattern_desc: describe_cross_pattern_combo(model, combo),
-            }),
+            Ok(false) => {
+                if relation_scoped {
+                    has_relation_scoped_witness = true;
+                } else {
+                    diags.push(StateDiag::CrossInvariantViolated {
+                        entities: entities.clone(),
+                        guards: guards_desc.clone(),
+                        requireds: requireds_desc.clone(),
+                        pattern_desc: describe_cross_pattern_combo(model, combo),
+                    });
+                }
+            }
             Err(reason) => {
                 unknown_reason.get_or_insert(reason);
             }
         }
     });
 
-    if diags.len() >= CROSS_VIOLATION_DIAG_CAP {
+    if relation_scoped && has_relation_scoped_witness {
+        diags.push(StateDiag::CrossConstraintNotEvaluated {
+            entities,
+            constraint: format!(
+                "cross_invariant when ({}) then ({})",
+                guards_desc, requireds_desc
+            ),
+            reason: relation_scoped_witness_reason(model, &invariant.scope_semantics),
+        });
+    } else if diags.len() >= CROSS_VIOLATION_DIAG_CAP {
         diags.push(StateDiag::CrossConstraintNotEvaluated {
             entities,
             constraint: format!(
@@ -1538,7 +1569,11 @@ fn cross_combo_count(scoped_results: &[(EntityKey, &EntityStateResult)]) -> usiz
     })
 }
 
-fn relation_scope_not_evaluated_reason(
+fn is_relation_scoped(scope_semantics: &CrossConstraintScope) -> bool {
+    matches!(scope_semantics, CrossConstraintScope::RelationPath(_))
+}
+
+fn invalid_relation_scope_reason(
     model: &SemanticModel,
     scope: &[EntityKey],
     scope_semantics: &CrossConstraintScope,
@@ -1577,10 +1612,21 @@ fn relation_scope_not_evaluated_reason(
         }
     }
 
-    Some(format!(
-        "along({}) is relation-scoped, but states currently tracks per-entity patterns only; linked instance reachability is not yet evaluated",
+    None
+}
+
+fn relation_scoped_witness_reason(
+    model: &SemanticModel,
+    scope_semantics: &CrossConstraintScope,
+) -> String {
+    let CrossConstraintScope::RelationPath(path) = scope_semantics else {
+        return "constraint is not relation-scoped".to_string();
+    };
+
+    format!(
+        "along({}) has a global-product witness, but states currently tracks per-entity patterns only; linked instance reachability is not yet evaluated",
         entity_list_display(model, path)
-    ))
+    )
 }
 
 fn has_relate_edge(model: &SemanticModel, left: EntityKey, right: EntityKey) -> bool {
@@ -2923,6 +2969,76 @@ cross_invariant(Order, Payment)
                         if reason.contains("references no relate path")
                 )),
                 "missing relation path should be reported on {entity_id}: {:?}",
+                r.diagnostics
+            );
+        }
+    }
+
+    #[test]
+    fn test_relation_scoped_cross_invariant_passes_when_global_product_has_no_violation() {
+        let model = model_from(
+            r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(open, paid) @default(paid)
+}
+entity Payment "支払い" {
+  id: Int @pk
+  status: Enum(pending, captured) @default(captured)
+}
+relate(Payment, Order, "1:1")
+cross_invariant(Order, Payment)
+  .along(Order, Payment)
+  .when(Order.status, paid)
+  .then(Payment.status, captured)
+"#,
+        );
+
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        for entity_id in ["Order", "Payment"] {
+            let r = results.iter().find(|r| r.entity_id == entity_id).unwrap();
+            assert!(
+                !r.diagnostics.iter().any(|d| matches!(
+                    d,
+                    StateDiag::CrossInvariantViolated { .. }
+                        | StateDiag::CrossConstraintNotEvaluated { .. }
+                )),
+                "relation-scoped invariant should be known satisfied on {entity_id}: {:?}",
+                r.diagnostics
+            );
+        }
+    }
+
+    #[test]
+    fn test_relation_scoped_cross_forbidden_passes_when_global_product_has_no_witness() {
+        let model = model_from(
+            r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(open, paid) @default(open)
+}
+entity Payment "支払い" {
+  id: Int @pk
+  status: Enum(pending, captured) @default(pending)
+}
+relate(Payment, Order, "1:1")
+cross_forbidden(Order, Payment,
+  (Order.status, paid),
+  (Payment.status, pending))
+  .along(Order, Payment)
+"#,
+        );
+
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        for entity_id in ["Order", "Payment"] {
+            let r = results.iter().find(|r| r.entity_id == entity_id).unwrap();
+            assert!(
+                !r.diagnostics.iter().any(|d| matches!(
+                    d,
+                    StateDiag::CrossForbiddenViolated { .. }
+                        | StateDiag::CrossConstraintNotEvaluated { .. }
+                )),
+                "relation-scoped forbidden should be known satisfied on {entity_id}: {:?}",
                 r.diagnostics
             );
         }
