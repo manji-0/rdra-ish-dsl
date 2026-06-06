@@ -226,25 +226,28 @@ fn infer_fk_transactions_for_writes(writes: Vec<UcWrite>, model: &SemanticModel)
 
     let write_keys: HashSet<EntityKey> = writes.iter().map(|w| w.entity).collect();
 
-    let mut parents_of: HashMap<EntityKey, Vec<EntityKey>> = HashMap::new();
     let mut adj: HashMap<EntityKey, Vec<EntityKey>> = HashMap::new();
     for &ek in &write_keys {
-        parents_of.entry(ek).or_default();
         adj.entry(ek).or_default();
     }
 
     for (parent, child) in fk_edges(model) {
-        if write_keys.contains(&parent) && write_keys.contains(&child) {
-            adj.entry(parent).or_default().push(child);
-            adj.entry(child).or_default().push(parent);
-            parents_of.entry(child).or_default().push(parent);
-        }
+        adj.entry(parent).or_default().push(child);
+        adj.entry(child).or_default().push(parent);
     }
 
     let mut component_of: HashMap<EntityKey, usize> = HashMap::new();
     let mut next_cid = 0usize;
+    let mut start_keys: Vec<EntityKey> = write_keys.iter().copied().collect();
+    start_keys.sort_by_key(|ek| {
+        model
+            .entities
+            .get(*ek)
+            .map(|e| e.id.clone())
+            .unwrap_or_default()
+    });
 
-    for &start in &write_keys {
+    for start in start_keys {
         if component_of.contains_key(&start) {
             continue;
         }
@@ -277,7 +280,7 @@ fn infer_fk_transactions_for_writes(writes: Vec<UcWrite>, model: &SemanticModel)
     for cid in cids {
         let comp = comp_writes.remove(&cid).unwrap();
         if comp.len() >= 2 {
-            let ordered = topological_sort_writes(comp, &parents_of, model);
+            let ordered = topological_sort_writes(comp, &fk_parent_map(model), model);
             fk_groups.push(TxGroup {
                 ordered_writes: ordered,
                 inferred: true,
@@ -550,6 +553,37 @@ updates(Capture, Order)
             .map(|w| model.entities.get(w.entity).unwrap().id.as_str())
             .collect();
         assert_eq!(ids, vec!["Order", "Payment"]);
+    }
+
+    /// 共通親を経由する sibling writes は、親自身を書かなくても1つのFK連結成分。
+    #[test]
+    fn test_sibling_writes_connected_through_unwritten_common_parent() {
+        let src = r#"
+entity Terminal "端末" { id: Int @pk }
+entity CertificateOrder "証明書発注" { id: Int @pk }
+entity ClientCertificate "クライアント証明書" { id: Int @pk }
+usecase IssueCertificate "証明書を発行する"
+relate(CertificateOrder, Terminal, "N:1")
+relate(ClientCertificate, Terminal, "N:1")
+creates(IssueCertificate, CertificateOrder)
+creates(IssueCertificate, ClientCertificate)
+"#;
+        let model = model_from(src);
+        let txs = infer_usecase_transactions(&model);
+        assert_eq!(txs.len(), 1);
+        let utx = &txs[0];
+
+        assert_eq!(utx.fk_groups.len(), 1);
+        assert_eq!(utx.isolated_writes.len(), 0);
+        assert_eq!(utx.singletons_note.len(), 0);
+
+        let mut ids: Vec<&str> = utx.fk_groups[0]
+            .ordered_writes
+            .iter()
+            .map(|w| model.entities.get(w.entity).unwrap().id.as_str())
+            .collect();
+        ids.sort();
+        assert_eq!(ids, vec!["CertificateOrder", "ClientCertificate"]);
     }
 
     /// 全書き込みがFKなし → singletons_note は空（全部 isolated_writes）

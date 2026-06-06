@@ -77,6 +77,9 @@ Notes:
   inference and emits a `warning:` to stderr for any FK-isolated write within a use case
   that also has an FK-connected write group. API diagnostics (`ApiNeverInvoked`,
   `ApiInvokedButNoEntity`) are also run and reported as warnings.
+  FK connectivity is evaluated across the model's full `relate` graph, so sibling
+  writes that share an unwritten parent entity are treated as one inferred transaction
+  group rather than separate isolated writes.
 - For `--kind event-flow`, the tool runs event-integrity diagnostics and emits `warning:`
   lines for events that are never raised, raised but consume nothing, or trigger a use
   case belonging to no BUC. Event targets may be either BUCs or use cases. Mermaid node

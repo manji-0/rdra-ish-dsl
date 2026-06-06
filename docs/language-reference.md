@@ -237,6 +237,9 @@ updates(PlaceOrder, Cart)   // direct write still allowed (mixed form)
 - API write groups are rendered as `transaction (API atomic boundary)`. Direct
   use-case writes still use FK-grouped transaction blocks
   (`group transaction (inferred from FK)`).
+- FK-grouped direct writes use the full `relate` graph for connectivity. Two written
+  sibling entities that share an unwritten parent entity are still grouped as one
+  inferred transaction.
 
 **System boundary behaviour**:
 - `contains(System, Api)` assigns an API to an internal system boundary.
