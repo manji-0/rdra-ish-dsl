@@ -556,9 +556,11 @@ amount comparisons, produce `CrossConstraintNotEvaluated` instead.
 
 Adding `.along(EntityA, EntityB, ...)` declares that the rule is intended to apply only
 to instances connected through the listed `relate` path, not to the global cross-product.
-The current `states` engine validates that the path is declared, but it does not yet
-track linked instance reachability. Such relation-scoped rules therefore produce
-`CrossConstraintNotEvaluated` rather than falling back to global-product evaluation.
+The current `states` engine validates that the path is declared, and can prove the
+rule satisfied when even the broader global cross-product has no witness. If the
+global cross-product has a witness, `states` reports `CrossConstraintNotEvaluated`
+rather than treating that witness as a linked-instance violation, because linked
+instance reachability is not yet tracked.
 
 ### Comparison Expressions in Constraints
 

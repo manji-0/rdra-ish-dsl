@@ -466,19 +466,33 @@ fn state_diag_message(diag: &rdra_ish_core::StateDiag) -> String {
             entities,
             conditions,
             pattern_desc,
-        } => format!(
-            "cross-entity forbidden state is reachable across [{}]: {} witnessed by {}",
-            entities, conditions, pattern_desc
-        ),
+            scope_hint,
+        } => {
+            let mut message = format!(
+                "cross-entity forbidden state is reachable across [{}]: {} witnessed by {}",
+                entities, conditions, pattern_desc
+            );
+            if let Some(hint) = scope_hint {
+                message.push_str(&format!("; hint: {}", hint));
+            }
+            message
+        }
         rdra_ish_core::StateDiag::CrossInvariantViolated {
             entities,
             guards,
             requireds,
             pattern_desc,
-        } => format!(
-            "cross-entity invariant violated across [{}]: when {} then {} is broken by {}",
-            entities, guards, requireds, pattern_desc
-        ),
+            scope_hint,
+        } => {
+            let mut message = format!(
+                "cross-entity invariant violated across [{}]: when {} then {} is broken by {}",
+                entities, guards, requireds, pattern_desc
+            );
+            if let Some(hint) = scope_hint {
+                message.push_str(&format!("; hint: {}", hint));
+            }
+            message
+        }
         rdra_ish_core::StateDiag::CrossConstraintNotEvaluated {
             entities,
             constraint,
@@ -1318,5 +1332,24 @@ requires_permission(BookAppointment, ScheduleWrite)
             message,
             "invariant violated: when status=booked then booked_at=present is broken by status=booked, booked_at=null"
         );
+    }
+
+    #[test]
+    fn state_diag_message_includes_cross_scope_hint() {
+        let message = state_diag_message(&rdra_ish_core::StateDiag::CrossInvariantViolated {
+            entities: "Order, Payment".to_string(),
+            guards: "Order.status=paid".to_string(),
+            requireds: "Payment.status=captured".to_string(),
+            pattern_desc: "Order(status=paid); Payment(status=pending)".to_string(),
+            scope_hint: Some(
+                "use .along(Order, Payment) if this rule is intended to apply only to linked instances"
+                    .to_string(),
+            ),
+        });
+
+        assert!(message.contains("cross-entity invariant violated across [Order, Payment]"));
+        assert!(message.contains(
+            "hint: use .along(Order, Payment) if this rule is intended to apply only to linked instances"
+        ));
     }
 }

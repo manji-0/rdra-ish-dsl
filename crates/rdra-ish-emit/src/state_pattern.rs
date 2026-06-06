@@ -110,22 +110,32 @@ fn diag_message(d: &StateDiag) -> String {
             entities,
             conditions,
             pattern_desc,
+            scope_hint,
         } => {
-            format!(
+            let mut message = format!(
                 "[error] cross-entity forbidden state reached across [{}]: ({}) in patterns ({})",
                 entities, conditions, pattern_desc
-            )
+            );
+            if let Some(hint) = scope_hint {
+                message.push_str(&format!("; hint: {}", hint));
+            }
+            message
         }
         StateDiag::CrossInvariantViolated {
             entities,
             guards,
             requireds,
             pattern_desc,
+            scope_hint,
         } => {
-            format!(
+            let mut message = format!(
                 "[error] cross-entity invariant violated across [{}]: when ({}) holds, ({}) must also hold — but found patterns ({})",
                 entities, guards, requireds, pattern_desc
-            )
+            );
+            if let Some(hint) = scope_hint {
+                message.push_str(&format!("; hint: {}", hint));
+            }
+            message
         }
         StateDiag::CrossConstraintNotEvaluated {
             entities,
