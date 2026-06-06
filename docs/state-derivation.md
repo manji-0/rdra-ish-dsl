@@ -178,6 +178,9 @@ combination assembled from independent use cases rather than a real business tra
 Diagnostics include a correlation hint for these multi-axis witnesses. To make the
 state space precise, model the correlated transition as one use case that sets all
 affected axes together, or add explicit guards in the surrounding lifecycle model.
+When one of those axes is a comparison `Proposition`, drive the proposition `true` or
+`false` in the same use case that changes the correlated status axis so the abstract
+Bool does not drift independently.
 
 ### `invariant`
 

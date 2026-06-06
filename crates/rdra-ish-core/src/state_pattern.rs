@@ -1225,10 +1225,17 @@ fn correlated_axis_hint(
         return None;
     }
 
-    Some(
-        "multi-axis forbidden witnesses can be global-product artifacts; if these axes are correlated, model the transition with one usecase setting all correlated axes or add explicit guards"
-            .to_string(),
-    )
+    if !props.is_empty() {
+        Some(
+            "multi-axis forbidden witnesses with comparison propositions can be product-space artifacts; drive the comparison true/false in the same usecase that changes the correlated state, or add explicit guards"
+                .to_string(),
+        )
+    } else {
+        Some(
+            "multi-axis forbidden witnesses can be global-product artifacts; if these axes are correlated, model the transition with one usecase setting all correlated axes or add explicit guards"
+                .to_string(),
+        )
+    }
 }
 
 fn triggered_flow_order_hint(model: &SemanticModel, provenance: &Provenance) -> Option<String> {
@@ -2847,6 +2854,21 @@ invariant(Stock)
         assert!(
             !forbidden_diags.is_empty(),
             "forbidden 違反が検出されなかった"
+        );
+        let hint = forbidden_diags.iter().find_map(|d| match d {
+            StateDiag::ForbiddenStateViolated {
+                correlation_hint: Some(hint),
+                ..
+            } => Some(hint),
+            _ => None,
+        });
+        assert!(
+            hint.is_some_and(|hint| {
+                hint.contains("comparison propositions")
+                    && hint.contains("drive the comparison true/false in the same usecase")
+            }),
+            "comparison-proposition forbidden violation should include a specific hint: {:?}",
+            r.diagnostics
         );
 
         // invariant 違反が検出されること（status=on_sale で stock<selling=false の到達可能状態）

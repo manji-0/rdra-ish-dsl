@@ -425,7 +425,9 @@ holds at once. If any reachable pattern satisfies all conditions, a
 `ForbiddenStateViolated` diagnostic is emitted, naming the conditions and the offending
 pattern. Multi-axis witnesses include a correlation hint, because independently modeled
 state axes can combine in the abstract product space even when a business flow would
-normally move those axes together.
+normally move those axes together. If one axis is a comparison proposition, set that
+proposition to `true` or `false` in the same use case that moves the correlated status
+axis.
 
 **Design rationale.** A forbidden state is a *point* (or a sub-cube) in the finite
 product state space — fundamentally a conjunction of column assignments. The
