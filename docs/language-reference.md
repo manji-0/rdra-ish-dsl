@@ -589,10 +589,16 @@ related condition has reachable patterns. For `none(...)`, if the related condit
 globally unreachable, the rule is treated as satisfied.
 
 `states` evaluates cross-entity rules by taking the cross-product of each participating
-entity's reached state patterns. Conditions that reference actual state axes can
-produce `CrossForbiddenViolated` or `CrossInvariantViolated` diagnostics. Conditions
-that require values absent from the abstract state space, such as ordinary numeric
-amount comparisons, produce `CrossConstraintNotEvaluated` instead.
+entity's reached state patterns when those entities are not connected by a declared
+`relate` path. Conditions that reference actual state axes can produce
+`CrossForbiddenViolated` or `CrossInvariantViolated` diagnostics in that global-product
+case. Conditions that require values absent from the abstract state space, such as
+ordinary numeric amount comparisons, produce `CrossConstraintNotEvaluated` instead.
+
+When the participating entities are connected by `relate(...)`, a global-product
+witness is reported as `CrossConstraintNotEvaluated` rather than as a violation. The
+state pattern engine does not yet track which concrete rows are linked, so the witness
+may be a false positive for linked-instance rules.
 
 Adding `.along(EntityA, EntityB, ...)` declares that the rule is intended to apply only
 to instances connected through the listed `relate` path, not to the global cross-product.

@@ -269,12 +269,19 @@ Comparison expressions in `exclusive` are matched against their `Proposition` ax
 <!-- derived-from ./language-reference.md#entity-state-constraints -->
 
 For `cross_forbidden` / `cross_invariant`, the derivation checks the cross-product of
-the participating entities' reached patterns, up to an internal safety cap. Conditions
-that reference state axes, such as `(Order.status, paid)` or `Order.status == Payment.status`,
+the participating entities' reached patterns, up to an internal safety cap, only when
+the scoped entities are not connected by a declared `relate` path. Conditions that
+reference state axes, such as `(Order.status, paid)` or `Order.status == Payment.status`,
 are evaluated from the abstract pattern values. If a condition needs data that is not
 present in state patterns (for example `Payment.amount > Order.total` on ordinary
 numeric columns), the result receives a `CrossConstraintNotEvaluated` warning rather
 than silently treating the rule as satisfied.
+
+When the scoped entities are connected by `relate(...)`, a global cross-product witness
+is not reported as a violation. The state-pattern engine tracks per-entity reachable
+patterns, not row-level linked instance reachability, so such a witness becomes
+`CrossConstraintNotEvaluated` with guidance to use `.along(...)` for linked-instance
+intent or remove the relation from the model for a true global-product rule.
 
 When a cross constraint has `.along(EntityA, EntityB, ...)`, the rule is relation-scoped:
 it is intended to quantify only over instances connected through the declared `relate`
@@ -303,8 +310,8 @@ syntax and design rationale.
 | `InvariantViolated { guards, requireds, pattern_desc, flow_order_hint }` | A reachable pattern satisfies an invariant's guards but breaks a requirement. Triggered-usecase witnesses can include a flow-order hint when the immediate upstream event/use-case effects do not prove the required guard coverage. |
 | `RequiredStateViolated { conditions, pattern_desc }` | A reachable pattern misses at least one condition of a `required` declaration. |
 | `ExclusiveStateViolated { conditions, pattern_desc }` | A reachable pattern satisfies two or more conditions of an `exclusive` declaration. |
-| `CrossForbiddenViolated { entities, conditions, pattern_desc }` | A reached cross-entity pattern combination matches all conditions of a `cross_forbidden` declaration. |
-| `CrossInvariantViolated { entities, guards, requireds, pattern_desc }` | A reached cross-entity pattern combination satisfies cross-invariant guards but breaks a requirement. |
+| `CrossForbiddenViolated { entities, conditions, pattern_desc }` | A reached cross-entity pattern combination matches all conditions of a `cross_forbidden` declaration, and the participating entities are not connected by a `relate` path. |
+| `CrossInvariantViolated { entities, guards, requireds, pattern_desc }` | A reached cross-entity pattern combination satisfies cross-invariant guards but breaks a requirement, and the participating entities are not connected by a `relate` path. |
 | `CrossConstraintNotEvaluated { entities, constraint, reason }` | A cross-entity rule cannot be fully evaluated from per-entity abstract state patterns or exceeds the cross-product safety cap. |
 | `TemporalAssertionViolated { anchor, requireds, actual }` | An `after(UseCase).assert(...)` equality is not produced by the anchor use case's immediate effects. |
 | `TemporalAssertionNotEvaluated { anchor, requireds, reason }` | A temporal assertion uses a form that is outside the immediate equality evaluator, such as a comparison expression. |

@@ -1771,9 +1771,9 @@ fn evaluate_cross_forbidden(
 
     let mut diags = Vec::new();
     let mut unknown_reason = None;
-    let mut has_relation_scoped_witness = false;
-    let scope_hint =
-        global_scope_relation_hint(model, &constraint.scope, &constraint.scope_semantics);
+    let mut has_unresolved_linked_witness = false;
+    let linked_scope_reason =
+        unresolved_linked_witness_reason(model, &constraint.scope, &constraint.scope_semantics);
     let mut current = Vec::new();
     visit_pattern_combinations(&scoped_results, 0, &mut current, &mut |combo| {
         if diags.len() >= CROSS_VIOLATION_DIAG_CAP {
@@ -1781,14 +1781,14 @@ fn evaluate_cross_forbidden(
         }
         match cross_conditions_hold(model, &constraint.conditions, combo) {
             Ok(true) => {
-                if relation_scoped {
-                    has_relation_scoped_witness = true;
+                if relation_scoped || linked_scope_reason.is_some() {
+                    has_unresolved_linked_witness = true;
                 } else {
                     diags.push(StateDiag::CrossForbiddenViolated {
                         entities: entities.clone(),
                         conditions: constraint_desc.clone(),
                         pattern_desc: describe_cross_pattern_combo(model, combo),
-                        scope_hint: scope_hint.clone(),
+                        scope_hint: None,
                     });
                 }
             }
@@ -1799,11 +1799,13 @@ fn evaluate_cross_forbidden(
         }
     });
 
-    if relation_scoped && has_relation_scoped_witness {
+    if has_unresolved_linked_witness {
         diags.push(StateDiag::CrossConstraintNotEvaluated {
             entities,
             constraint: format!("cross_forbidden({})", constraint_desc),
-            reason: relation_scoped_witness_reason(model, &constraint.scope_semantics),
+            reason: linked_scope_reason.unwrap_or_else(|| {
+                relation_scoped_witness_reason(model, &constraint.scope_semantics)
+            }),
         });
     } else if diags.len() >= CROSS_VIOLATION_DIAG_CAP {
         diags.push(StateDiag::CrossConstraintNotEvaluated {
@@ -1871,9 +1873,9 @@ fn evaluate_cross_invariant(
 
     let mut diags = Vec::new();
     let mut unknown_reason = None;
-    let mut has_relation_scoped_witness = false;
-    let scope_hint =
-        global_scope_relation_hint(model, &invariant.scope, &invariant.scope_semantics);
+    let mut has_unresolved_linked_witness = false;
+    let linked_scope_reason =
+        unresolved_linked_witness_reason(model, &invariant.scope, &invariant.scope_semantics);
     let mut current = Vec::new();
     visit_pattern_combinations(&scoped_results, 0, &mut current, &mut |combo| {
         if diags.len() >= CROSS_VIOLATION_DIAG_CAP {
@@ -1892,15 +1894,15 @@ fn evaluate_cross_invariant(
         match cross_conditions_hold(model, &invariant.requireds, combo) {
             Ok(true) => {}
             Ok(false) => {
-                if relation_scoped {
-                    has_relation_scoped_witness = true;
+                if relation_scoped || linked_scope_reason.is_some() {
+                    has_unresolved_linked_witness = true;
                 } else {
                     diags.push(StateDiag::CrossInvariantViolated {
                         entities: entities.clone(),
                         guards: guards_desc.clone(),
                         requireds: requireds_desc.clone(),
                         pattern_desc: describe_cross_pattern_combo(model, combo),
-                        scope_hint: scope_hint.clone(),
+                        scope_hint: None,
                     });
                 }
             }
@@ -1910,14 +1912,16 @@ fn evaluate_cross_invariant(
         }
     });
 
-    if relation_scoped && has_relation_scoped_witness {
+    if has_unresolved_linked_witness {
         diags.push(StateDiag::CrossConstraintNotEvaluated {
             entities,
             constraint: format!(
                 "cross_invariant when ({}) then ({})",
                 guards_desc, requireds_desc
             ),
-            reason: relation_scoped_witness_reason(model, &invariant.scope_semantics),
+            reason: linked_scope_reason.unwrap_or_else(|| {
+                relation_scoped_witness_reason(model, &invariant.scope_semantics)
+            }),
         });
     } else if diags.len() >= CROSS_VIOLATION_DIAG_CAP {
         diags.push(StateDiag::CrossConstraintNotEvaluated {
@@ -1970,25 +1974,29 @@ fn is_relation_scoped(scope_semantics: &CrossConstraintScope) -> bool {
     matches!(scope_semantics, CrossConstraintScope::RelationPath(_))
 }
 
-fn global_scope_relation_hint(
+fn unresolved_linked_witness_reason(
     model: &SemanticModel,
     scope: &[EntityKey],
     scope_semantics: &CrossConstraintScope,
 ) -> Option<String> {
-    if is_relation_scoped(scope_semantics) || scope.len() < 2 {
-        return None;
-    }
+    match scope_semantics {
+        CrossConstraintScope::RelationPath(path) => {
+            Some(relation_scoped_witness_reason_for_path(model, path))
+        }
+        CrossConstraintScope::GlobalProduct => {
+            if scope.len() < 2
+                || !scope
+                    .windows(2)
+                    .all(|pair| has_relate_edge(model, pair[0], pair[1]))
+            {
+                return None;
+            }
 
-    if scope
-        .windows(2)
-        .all(|pair| has_relate_edge(model, pair[0], pair[1]))
-    {
-        Some(format!(
-            "use .along({}) if this rule is intended to apply only to linked instances",
-            entity_list_display(model, scope)
-        ))
-    } else {
-        None
+            Some(format!(
+                "global cross-product has a witness across related entities, but states tracks per-entity patterns only; use .along({}) for linked-instance intent or remove the relate path for a true global-product rule",
+                entity_list_display(model, scope)
+            ))
+        }
     }
 }
 
@@ -2042,6 +2050,10 @@ fn relation_scoped_witness_reason(
         return "constraint is not relation-scoped".to_string();
     };
 
+    relation_scoped_witness_reason_for_path(model, path)
+}
+
+fn relation_scoped_witness_reason_for_path(model: &SemanticModel, path: &[EntityKey]) -> String {
     format!(
         "along({}) has a global-product witness, but states currently tracks per-entity patterns only; linked instance reachability is not yet evaluated",
         entity_list_display(model, path)
@@ -3593,7 +3605,7 @@ cross_invariant(Order, Payment)
     }
 
     #[test]
-    fn test_global_cross_violation_on_related_entities_suggests_along_scope() {
+    fn test_global_cross_invariant_on_related_entities_is_not_evaluated() {
         let model = model_from(
             r#"
 entity Order "注文" {
@@ -3614,24 +3626,23 @@ cross_invariant(Order, Payment)
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
         for entity_id in ["Order", "Payment"] {
             let r = results.iter().find(|r| r.entity_id == entity_id).unwrap();
-            let hint = r.diagnostics.iter().find_map(|d| match d {
-                StateDiag::CrossInvariantViolated {
-                    scope_hint: Some(hint),
-                    ..
-                } => Some(hint),
+            let reason = r.diagnostics.iter().find_map(|d| match d {
+                StateDiag::CrossConstraintNotEvaluated { reason, .. } => Some(reason),
                 _ => None,
             });
-            assert_eq!(
-                hint.map(String::as_str),
-                Some("use .along(Order, Payment) if this rule is intended to apply only to linked instances"),
-                "related global-product violation should suggest .along on {entity_id}: {:?}",
+            assert!(
+                reason.is_some_and(|reason| {
+                    reason.contains("global cross-product has a witness across related entities")
+                        && reason.contains("use .along(Order, Payment)")
+                }),
+                "related global-product witness should be not evaluated on {entity_id}: {:?}",
                 r.diagnostics
             );
         }
     }
 
     #[test]
-    fn test_global_cross_forbidden_on_related_entities_suggests_along_scope() {
+    fn test_global_cross_forbidden_on_related_entities_is_not_evaluated() {
         let model = model_from(
             r#"
 entity Terminal "端末" {
@@ -3652,17 +3663,16 @@ cross_forbidden(Terminal, ClientCertificate,
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
         for entity_id in ["Terminal", "ClientCertificate"] {
             let r = results.iter().find(|r| r.entity_id == entity_id).unwrap();
-            let hint = r.diagnostics.iter().find_map(|d| match d {
-                StateDiag::CrossForbiddenViolated {
-                    scope_hint: Some(hint),
-                    ..
-                } => Some(hint),
+            let reason = r.diagnostics.iter().find_map(|d| match d {
+                StateDiag::CrossConstraintNotEvaluated { reason, .. } => Some(reason),
                 _ => None,
             });
-            assert_eq!(
-                hint.map(String::as_str),
-                Some("use .along(Terminal, ClientCertificate) if this rule is intended to apply only to linked instances"),
-                "related global-product violation should suggest .along on {entity_id}: {:?}",
+            assert!(
+                reason.is_some_and(|reason| {
+                    reason.contains("global cross-product has a witness across related entities")
+                        && reason.contains("use .along(Terminal, ClientCertificate)")
+                }),
+                "related global-product witness should be not evaluated on {entity_id}: {:?}",
                 r.diagnostics
             );
         }
