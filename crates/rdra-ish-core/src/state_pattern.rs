@@ -2990,6 +2990,58 @@ forbidden(Order, (status, delivered), (refunded, true))
         );
     }
 
+    #[test]
+    fn correlated_multi_axis_usecase_effects_do_not_expand_to_forbidden_product() {
+        let model = model_from(
+            r#"
+entity DispenseReception "調剤受付" {
+  id: Int @pk
+  validity: Enum(active, cancelled) @default(active)
+  progress: Enum(open, completed) @default(open)
+  correction: Enum(none, correcting) @default(none)
+  recalc: Bool
+}
+usecase ReceiveDispense "受付"
+usecase CompleteAccounting "会計確定"
+usecase CancelReception "取消"
+usecase StartCorrection "訂正開始"
+creates(ReceiveDispense, DispenseReception)
+updates(CompleteAccounting, DispenseReception)
+updates(CancelReception, DispenseReception)
+updates(StartCorrection, DispenseReception)
+sets(CompleteAccounting, DispenseReception, "validity", "active")
+sets(CompleteAccounting, DispenseReception, "progress", "completed")
+sets(CompleteAccounting, DispenseReception, "correction", "none")
+sets(CompleteAccounting, DispenseReception, "recalc", "false")
+sets(CancelReception, DispenseReception, "validity", "cancelled")
+sets(CancelReception, DispenseReception, "progress", "open")
+sets(CancelReception, DispenseReception, "correction", "none")
+sets(CancelReception, DispenseReception, "recalc", "false")
+sets(StartCorrection, DispenseReception, "validity", "active")
+sets(StartCorrection, DispenseReception, "progress", "open")
+sets(StartCorrection, DispenseReception, "correction", "correcting")
+sets(StartCorrection, DispenseReception, "recalc", "true")
+forbidden(DispenseReception, (validity, cancelled), (progress, completed))
+forbidden(DispenseReception, (validity, cancelled), (correction, correcting))
+forbidden(DispenseReception, (progress, completed), (correction, correcting))
+"#,
+        );
+
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results
+            .iter()
+            .find(|r| r.entity_id == "DispenseReception")
+            .unwrap();
+
+        assert!(
+            !r.diagnostics
+                .iter()
+                .any(|d| matches!(d, StateDiag::ForbiddenStateViolated { .. })),
+            "correlated multi-axis effects should stay tuple-correlated: {:?}",
+            r.diagnostics
+        );
+    }
+
     // ── forbidden: 到達不能な状態を禁止 → 違反なし ──────────────────────────────
 
     #[test]
