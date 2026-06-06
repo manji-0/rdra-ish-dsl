@@ -928,18 +928,16 @@ fn derive_for_entity(
         };
 
         for (usecase_id, buc_id) in origin_ucs {
-            // 既存の Update 演算に命題軸効果をマージ（同カラムが未設定の場合のみ）
-            let merged = ops.iter_mut().any(|op| {
-                if op.op_kind == OpKind::Update
-                    && op.usecase_id == usecase_id
-                    && !op.effects.iter().any(|(c, _)| c == &axis_col)
-                {
+            // 既存の同一 usecase 演算に命題軸効果をマージ（同カラムが未設定の場合のみ）。
+            // Create と分離すると、同一 UC の status/effect と comparison effect の間に
+            // default false の中間パターンが生まれてしまう。
+            let mut merged = false;
+            for op in ops.iter_mut().filter(|op| op.usecase_id == usecase_id) {
+                merged = true;
+                if !op.effects.iter().any(|(c, _)| c == &axis_col) {
                     op.effects.push(effect_val.clone());
-                    true
-                } else {
-                    false
                 }
-            });
+            }
             if !merged {
                 ops.push(Operation {
                     usecase_id,
@@ -3230,6 +3228,34 @@ invariant(Stock)
             !invariant_diags.is_empty(),
             "invariant 違反が検出されなかった"
         );
+    }
+
+    #[test]
+    fn comparison_proposition_effect_merges_with_create_operation() {
+        let model = model_from(
+            r#"
+entity Stock "在庫" {
+  id: Int @pk
+  stock: Int
+  selling: Int
+  status: Enum(draft, on_sale) @default(draft)
+}
+usecase ListItem "出品"
+creates(ListItem, Stock)
+sets(ListItem, Stock, "status", "on_sale")
+sets(ListItem, Stock, stock < selling, true)
+invariant(Stock)
+  .when(status, on_sale)
+  .then(stock < selling)
+"#,
+        );
+
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results.iter().find(|r| r.entity_id == "Stock").unwrap();
+        assert!(!r
+            .diagnostics
+            .iter()
+            .any(|diag| matches!(diag, StateDiag::InvariantViolated { .. })));
     }
 
     /// `now` 比較命題が正しく Proposition 軸として追加されること
