@@ -22,6 +22,8 @@ is not tracked yet.
 - Which value must be present when another state or comparison holds?
 - Which value must be present in every reachable state?
 - Does the rule mention one entity or multiple entities?
+- For cross-entity rules, is the intended scope global or linked through a declared
+  relation path?
 - Are the rules hard invariants or review warnings for future refinement?
 - Does an apparent violation mean the rule is wrong, or a missing `sets`/transition
   effect exists upstream?
@@ -74,6 +76,7 @@ cross_invariant(Order, Payment)
 
 ```sh
 rdra-ish check src/
+rdra-ish lint src/ --format table
 rdra-ish states src/ --entity Order
 rdra-ish states src/ --format json --entity Order
 ```
@@ -88,6 +91,8 @@ rdra-ish states src/ --format json --entity Order
   relation-scoped `.along(...)` linked-instance semantics.
 - Required lifecycle effects have corresponding `sets` or transitions.
 - Terminal, unreachable, and no-create warnings are reviewed instead of ignored.
+- `UndrivenComparisonProp` warnings are resolved by driving comparison propositions
+  with `sets(..., expr, true/false)` or by removing unreachable comparisons.
 - The final model can explain BUC scope, actor authority, API/system boundaries,
   entity structure, lifecycle, and rules as a single refinement chain.
 

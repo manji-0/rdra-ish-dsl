@@ -68,6 +68,7 @@ rdra-ish check src/
 rdra-ish states src/ --entity Order
 rdra-ish diagram src/ --kind state --format mermaid --buc BucOrder
 rdra-ish diagram src/ --kind event-flow --format mermaid
+rdra-ish export src/ --kind asyncapi --out out/asyncapi.json
 ```
 
 ## Achievement Conditions
@@ -78,6 +79,8 @@ rdra-ish diagram src/ --kind event-flow --format mermaid
 - Concrete triggered use cases are contained by the downstream BUC.
 - State derivation explains expected reachable states and reviewed warnings.
 - `sets` captures relevant enum, nullable, boolean, and comparison effects.
+- AsyncAPI export is meaningful when events, raises/triggers/transitions, and
+  outbox-like handoffs are part of the review.
 
 ## Next Step
 

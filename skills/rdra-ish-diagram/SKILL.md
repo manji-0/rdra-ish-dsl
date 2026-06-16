@@ -1,6 +1,6 @@
 ---
 name: rdra-ish-diagram
-description: Choose the right RDRA-ish diagram or CSV view for the modeling situation, then load focused references for commands and interpretation
+description: Choose the right RDRA-ish diagram, CSV review, diff, or export view for the modeling situation, then load focused references for commands and interpretation
 ---
 
 ## Choose RDRA-ish Views
@@ -20,6 +20,10 @@ the selected view.
 | Actor-entered field review | `business-area --buc <BucId>` plus `business-inputs` | `references/sequence-and-access.md` |
 | System API/entity ownership review | `technical-area --buc <BucId>` plus API matrix | `references/sequence-and-access.md` |
 | Screen/API/system boundary review | `sequence --buc <BucId>` plus access CSVs | `references/sequence-and-access.md` |
+| API contract or payload handoff | `export --kind openapi` plus API/DTO graph filter | `references/formats-and-output.md` |
+| Data contract handoff | `export --kind dbml` or `json-schema` plus ER | `references/formats-and-output.md` |
+| Event contract handoff | `export --kind asyncapi` plus `event-flow` | `references/lifecycle-and-events.md` |
+| Diagram size or review focus | view presets, node/edge filters, or diff diagram | `references/formats-and-output.md` |
 | One concrete use case flow | `sequence --usecase <UseCaseId>` | `references/sequence-and-access.md` |
 | Lifecycle and event causality | `state --buc <BucId>` plus `event-flow` | `references/lifecycle-and-events.md` |
 | Business rules or state constraints | `states`, including cross-entity rule diagnostics when state axes are involved | `references/lifecycle-and-events.md` |
@@ -44,6 +48,7 @@ the selected view.
 - Use `sequence` when the question is "what actor/screen/API/entity path happens?"
 - Use `state` when the question is "what lifecycle states and transitions exist?"
 - Use `event-flow` when the question is "what events cause other work or transitions?"
+- Use exports when the question is "what contract artifact can reviewers consume?"
 - Use `screen-constraints`, `permission-callables`, and `actor-permission-audit` when
   the question is about authority, medium, or actor grant coverage.
 

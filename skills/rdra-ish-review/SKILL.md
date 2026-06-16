@@ -1,6 +1,6 @@
 ---
 name: rdra-ish-review
-description: Review RDRA DSL files for syntax errors, semantic inconsistencies, missing relationships, and staged refinement gaps
+description: Review RDRA DSL files for syntax errors, semantic inconsistencies, missing relationships, staged refinement gaps, business flow coverage, requirement/NFR traceability, screen field mappings, API contracts, exports, ADR links, and lint readiness
 ---
 
 ## Review RDRA DSL
@@ -19,6 +19,11 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 1. **Run `rdra-ish check <src-dir>/`** to surface syntax and type errors first.
    Fix all reported errors before proceeding to semantic review.
 
+1.5. **Run `rdra-ish lint <src-dir>/ --format table`** for review readiness.
+   Treat orphan nodes, unused elements, ownership drift, flow coverage gaps,
+   incomplete API method/path contracts, unmapped screen fields, and naming findings
+   as staged review signals.
+
 2. **Check file layout**
    - Small models start with `shared/actors.rdra`, `shared/biz.rdra`,
      `shared/entities.rdra`, and one file per BUC under `buc/`
@@ -30,7 +35,7 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 
 3. **Classify refinement stage**
    - Scope: BUC/business declarations only
-   - BUC skeleton: actors/use cases/predicates, little or no CRUD
+   - BUC skeleton: actors/use cases/business flow predicates, little or no CRUD
    - Data touchpoints: CRUD exists, entity structure is still coarse
    - Interaction boundary: screens/API are being modeled
    - Entity structure: columns/relationships/cardinality are modeled
@@ -43,6 +48,15 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    - Every BUC has at least one `performs` predicate (a BUC with no actor is orphaned)
    - Every BUC has a `belongs` predicate
    - Every `extsystem` is referenced by at least one `uses` predicate
+
+4.5. **Check requirements, flow, and decision traceability**
+   - Stable requirement metadata should include priority/source/stakeholder/owner
+     when the source material provides it
+   - BUCs motivated by explicit requirements should use `motivates(Requirement, Buc)`
+   - Ordered, branching, exceptional, or repeated business behavior should use
+     `flow`, `step`, `precedes`, `branches`, `excepts`, `repeats`, and `covers`
+   - ADRs should be linked with `decides(Adr, Target)` only when a real design
+     decision affects the target
 
 5. **Check use case coverage**
    - Every `usecase` is referenced by a `contains` predicate
@@ -68,7 +82,11 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 7. **Check API/system boundaries**
    - Every declared `api` is invoked by at least one use case unless it is intentionally future-facing
    - Every stable API belongs to one system via `contains(System, Api)`
-   - System entity sets are derived from API CRUD; do not look for or add direct system→entity ownership
+   - System entity sets are derived from API CRUD. Explicit `owns(System, Entity)` is
+     allowed for intended future ownership; review `OwnedEntityWithoutApiOperation`,
+     `EntityOwnedByMultipleSystems`, and `ApiOperatesEntityOutsideOwner`
+   - APIs with method/path metadata should have `request`, `response`, or
+     `error_response` DTOs when payload review or OpenAPI export is in scope
    - A `relate` edge crossing two derived system entity sets needs `coordinates(UseCase, Entity, Entity)`
    - The coordinating use case must invoke APIs on both system sides, and each API must operate the corresponding entity
    - Treat `CrossSystemEntityRelation`, `CoordinationMissingApi`, and `CoordinationNotCrossSystem` warnings as design review findings
@@ -77,6 +95,19 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    - `relate` is defined in the correct direction with the right cardinality
    - No manually declared FK columns that duplicate a `relate`-generated FK
    - Parent entities are declared before child entities in the same file
+   - Index/unique/check/FK optionality/on-delete/on-update/soft-delete/history/tenant
+     annotations reflect real reviewable constraints
+   - Conceptual/domain objects use `maps_to` only when the logical data mapping is
+     intentional
+
+8.5. **Check screen fields and non-functional constraints**
+   - Every `field` is contained by a `screen`; actor-entered fields should use
+     `source actor`, system-derived fields should use `source system`
+   - `maps_field(Field, Entity, "column")` should reference a real column unless the
+     unmapped field is intentionally external or derived
+   - `nfr`, `quality`, and `constraint` elements should be scoped with `applies_to`,
+     `qualifies`, or `constrains`, especially for performance, availability, SLO,
+     audit/logging, retention, and privacy
 
 9. **Check events and state transitions**
    - Run `rdra-ish diagram <src-dir> --kind event-flow --format mermaid` and review the
@@ -117,6 +148,14 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    - Every referenced symbol has a corresponding `import`
    - No imported modules that are never used
 
+13. **Check generated artifacts when the model claims a contract**
+   - OpenAPI: `rdra-ish export <src-dir>/ --kind openapi --out /tmp/openapi.json`
+     when API method/path and DTOs changed
+   - AsyncAPI: export when events or event-started BUCs changed
+   - DBML/JSON Schema: run the corresponding export when data model or DTO shape changed
+   - Diagram snapshots: run the sample artifact script when docs/golden outputs are
+     part of the change
+
 ### Output format
 
 ```
@@ -137,6 +176,9 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 - BUC `<Id>`: no performs defined
 - usecase `<Id>`: not contained in any BUC
 - entity `<Id>` column `<col>`: modified by `<UC>` but no sets predicate
+- api `<Id>`: method/path exists but request/response DTOs are missing
+- field `<Id>`: actor-entered but not mapped to data or justified
+- nfr `<Id>`: no target scope
 - ...
 
 ## Suggestions
@@ -157,9 +199,19 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 | `triggers` | Event | UseCase / Buc | — |
 | `contains` | Buc | UseCase | — |
 | `contains` | System | Api | — |
+| `contains` | Buc / Flow / Screen | Flow / Step / Field | — |
 | `coordinates` | UseCase | Entity | Entity |
+| `owns` | System | Entity | — |
 | `belongs` | Buc | Business | — |
 | `motivates` | Requirement | Buc | — |
+| `request` / `response` / `error_response` | Api | Dto | — |
+| `maps_field` | Field | Entity | column string |
+| `precedes` / `branches` / `excepts` / `repeats` | Step | Step | — |
+| `covers` | Step | UseCase / Api / Event | — |
+| `compensates` | UseCase | UseCase / Event | — |
+| `applies_to` / `qualifies` / `constrains` | Nfr / Quality / Constraint | target | — |
+| `maps_to` | Concept / DomainObject / Aggregate / ValueObject | Entity | — |
+| `decides` | Adr | target | — |
 | `has_permission` | Actor | Permission | — |
 | `requires_permission` | UseCase / Api | Permission | — |
 | `requires_medium` | UseCase / Api | Medium | — |

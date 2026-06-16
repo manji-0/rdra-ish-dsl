@@ -22,6 +22,11 @@ rdra-ish check src/
 rdra-ish list src/ --kind buc --format table
 rdra-ish list src/ --kind usecase --format table
 rdra-ish list src/ --kind actor --format table
+rdra-ish list src/ --kind flow --format table
+rdra-ish list src/ --kind step --format table
+rdra-ish list src/ --kind field --format table
+rdra-ish list src/ --kind requirement --format table
+rdra-ish list src/ --kind nfr --format table
 rdra-ish csv src/ --kind matrix
 rdra-ish csv src/ --kind business-inputs
 rdra-ish list src/ --kind api --format table
@@ -38,16 +43,19 @@ stage.
 |---|---|---|
 | Business names exist but BUCs are tentative | Scope sketch | Which business area and candidate BUCs matter first? |
 | BUCs exist but actors/use cases are sparse | BUC skeleton | Which actors perform which user-visible actions? |
+| BUC has multiple ordered actions but no `flow`/`step` | BUC skeleton / business flow | Does the business sequence, branch, exception, or loop need review? |
 | Use cases exist but CRUD matrix is empty | BUC skeleton | Which business objects does each use case create/read/update/delete? |
-| CRUD exists but entities are coarse | Data touchpoints | Which objects are real domain data versus temporary interaction detail? |
+| CRUD exists but entities are coarse | Data touchpoints | Which objects are conceptual/domain terms versus logical data structures? |
 | CRUD exists but sequence output uses only the legacy `System` lane | Data touchpoints | What screens and APIs mediate the work? |
-| APIs/screens/permissions appear | Interaction boundary | Which system owns each API and which constraints apply to UC/API paths? |
+| APIs/screens/permissions/fields appear | Interaction boundary | Which system owns each API, which fields map to data, and which constraints apply to UC/API paths? |
+| APIs have method/path metadata | Contract boundary | Which request/response/error DTOs are part of the contract? |
 | Entities have columns, keys, and `relate` | Entity structure | Which fields represent lifecycle state or cross-system coordination? |
 | `business-inputs` has surprising or missing field rows | Entity structure | Which fields are actor-entered versus derived by defaults, FK relations, APIs, events, or `sets`? |
 | Enum/Bool/nullable columns exist without lifecycle effects | Entity structure | Which events, transitions, or `sets` effects change them? |
 | `states` has reviewed reachable patterns | Lifecycle | Which local guardrails (`forbidden`, `exclusive`) should be checked first? |
 | local guardrails exist and are stable | Business rules | Which local obligations need `invariant`, and are any `required` facts truly global? |
 | `invariant`, `required`, comparison propositions, `cross_forbidden`, or `cross_invariant` exists | Business rules | Are violations fixed, intentionally accepted, not evaluable from state axes/caps, relation-scoped via `.along(...)`, or still unresolved requirements? |
+| NFR/quality/constraint or ADR nodes exist | Traceability overlay | Which model elements do they apply to or decide? |
 
 ## How To Analyze
 

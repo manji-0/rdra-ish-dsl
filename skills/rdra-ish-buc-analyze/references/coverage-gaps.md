@@ -6,8 +6,9 @@ whole model before getting into access, API boundaries, or lifecycle details.
 ## Concept
 
 Coverage analysis asks whether the business story is connected enough to review:
-actors perform BUCs or use cases, BUCs belong to a business domain, use cases belong to
-BUCs, and use cases touch the business objects they are responsible for. Missing
+actors perform BUCs or use cases, BUCs belong to a business domain, requirements
+motivate BUCs, flow steps cover behavior, use cases belong to BUCs, fields belong to
+screens, and use cases touch the business objects they are responsible for. Missing
 coverage is often a modeling gap, but the severity depends on the current stage.
 
 Good coverage does not mean the model is complete. It means the reviewer can follow
@@ -21,6 +22,12 @@ rdra-ish check src/
 rdra-ish list src/ --kind buc --format table
 rdra-ish list src/ --kind usecase --format table
 rdra-ish list src/ --kind actor --format table
+rdra-ish list src/ --kind requirement --format table
+rdra-ish list src/ --kind nfr --format table
+rdra-ish list src/ --kind flow --format table
+rdra-ish list src/ --kind step --format table
+rdra-ish list src/ --kind field --format table
+rdra-ish list src/ --kind api --format table
 rdra-ish list src/ --kind entity --format json
 rdra-ish csv src/ --kind matrix
 rdra-ish csv src/ --kind business-inputs
@@ -34,6 +41,12 @@ rdra-ish diagram src/ --kind rdra --format mermaid --buc <BucId>
 | BUC has no `performs` path | Actor assignment is missing | Add `performs(Actor, Buc)` or `performs(Actor, UseCase)` when known |
 | BUC has no `belongs` | Business domain is unclear | Add `business` and `belongs(Buc, Business)` |
 | Use case has no `contains` | UC is orphaned | Attach it to the owning BUC or remove it |
+| Flow step has no `covers` | Business flow is not connected to model behavior | Link the step to a UC/API/event or remove it |
+| Field has no containing screen | UI field is orphaned | Add `contains(Screen, Field)` or remove the field |
+| Actor-entered field has no `maps_field` | Input/output mapping is missing or external | Add `maps_field` or justify the external field |
+| Requirement has no `motivates` target | Traceability is disconnected | Link it to a BUC or keep it out of the model until scoped |
+| NFR/quality/constraint has no target | Non-functional scope is unclear | Add `applies_to`, `qualifies`, or `constrains` |
+| API has method/path but no DTO links | Contract is incomplete | Add request/response/error DTOs or defer export |
 | Use case has no CRUD predicate | Data touchpoint is missing or stage is still skeleton | Ask which entity the action touches |
 | CRUD matrix has a row with all blanks | UC is declared but not connected to data | Add CRUD or defer with an explicit open question |
 | CRUD matrix has overloaded rows | UC may combine multiple user-visible actions | Split UC or explain the transaction boundary |
@@ -68,8 +81,10 @@ The important invariant is path/module correspondence and clear ownership.
   mismatch blocking all analysis.
 - Medium: missing `belongs`, missing actor assignment, empty CRUD row after the model has
   reached data touchpoints.
-- Medium: unexpected or missing `business-inputs` rows after the model has reached entity
-  structure and the team is reviewing actor-entered information.
+- Medium: unexpected or missing `business-inputs`/`maps_field` rows after the model
+  has reached interaction/entity structure and the team is reviewing actor-entered information.
+- Medium: unscoped requirement/NFR/ADR or API method/path without DTOs after the
+  model claims traceability or contract readiness.
 - Low: intentionally deferred screens, APIs, lifecycle, or rules in an early-stage BUC.
 
 ## Next Actions
@@ -79,5 +94,9 @@ The important invariant is path/module correspondence and clear ownership.
   deletes.
 - For surprising actor inputs, ask which listed fields are entered by the actor versus
   supplied by defaults, APIs, relations, events, or `sets`.
+- For unmapped fields, ask whether the field is actor-entered, system-derived, or an
+  external-only display value.
+- For unscoped NFRs or requirements, ask what BUC/use case/API/system/entity they
+  constrain.
 - For layout issues, propose the smallest file move or import change.
 - For premature detail, recommend deferring it rather than inventing a deeper model.

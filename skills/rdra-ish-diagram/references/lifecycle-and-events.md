@@ -15,6 +15,9 @@ rdra-ish diagram src/ --kind state --buc <BucId> --format mermaid
 # Event-flow diagram — event causality across BUCs/use cases/states
 rdra-ish diagram src/ --kind event-flow --format mermaid
 
+# Event contract export
+rdra-ish export src/ --kind asyncapi --out out/asyncapi.json
+
 # Reachable state patterns
 rdra-ish states src/
 rdra-ish states src/ --entity <EntityId>
@@ -33,6 +36,8 @@ rdra-ish states src/ --format json --entity <EntityId>
 - Use-case-to-event edges come from `raises`.
 - Event-to-use-case or event-to-BUC edges come from `triggers`.
 - Event-to-state edges come from `transitions`.
+- AsyncAPI export is useful when event payload/contract review is needed alongside
+  event causality.
 - Warnings such as an event never being raised or consumed are part of the review
   signal; inspect stderr before trusting the diagram as complete.
 

@@ -67,6 +67,7 @@ Entity: Order (注文)
 | Exclusive violation | Mutually exclusive facts co-occur in a reachable pattern | Add missing transition/effect guards or revise the exclusivity rule |
 | Cross-entity violation | Rule violation across entity patterns | Fix lifecycle/effects or update the cross rule |
 | `CrossConstraintNotEvaluated` | Rule depends on values outside abstract state patterns, exceeds the cross-product cap, or uses `.along(...)` linked-instance semantics | Report the unevaluated condition/reason and decide whether it needs a state axis/proposition or future relation-scoped evaluation |
+| `UndrivenComparisonProp` | Comparison proposition is never driven or is made unreachable/always violated by rules | Add `sets(..., expr, true/false)` or revise the `forbidden`/`required`/`invariant` rule |
 | `present` lacks type suffix where type matters | Nullable effect is vague | Use a PostgreSQL-type value such as `"timestamptz"` when useful |
 
 ## How To Fix

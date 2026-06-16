@@ -1,6 +1,6 @@
 ---
 name: rdra-ish-buc-analyze
-description: Choose the right RDRA-ish BUC or whole-model analysis path for refinement readiness, coverage gaps, access, system boundaries, and state patterns
+description: Choose the right RDRA-ish BUC or whole-model analysis path for refinement readiness, coverage gaps, business flow, requirement/NFR traceability, screen field mappings, API contracts, access, system boundaries, exports, and state patterns
 ---
 
 ## Choose BUC Analysis
@@ -14,7 +14,7 @@ reference file for the concrete analysis task.
 | User intent | Analyze first | Load |
 |---|---|---|
 | "Where are we in refinement?" | Stage signals and next missing information | `references/stage-readiness.md` |
-| "What is incomplete in this BUC/model?" | BUC, actor, use-case, CRUD, inferred actor inputs, and layout gaps | `references/coverage-gaps.md` |
+| "What is incomplete in this BUC/model?" | BUC, actor, use-case, flow, field, CRUD, inferred actor inputs, requirement/NFR scope, and layout gaps | `references/coverage-gaps.md` |
 | "Are permissions/media correct?" | screen/access paths, permission callables, actor grants | `references/access-permissions.md` |
 | "Are API/system boundaries sound?" | API ownership, API CRUD, cross-system relations, coordination | `references/api-system-boundaries.md` |
 | "Are lifecycle states/rules valid?" | reachable state patterns, terminals, truncation, per-entity rule diagnostics, and cross-entity rule inventory | `references/state-patterns.md` |
@@ -36,9 +36,15 @@ reference file for the concrete analysis task.
 
 ```sh
 rdra-ish check src/
+rdra-ish lint src/ --format table
 rdra-ish list src/ --kind buc --format table
 rdra-ish list src/ --kind usecase --format table
 rdra-ish list src/ --kind actor --format table
+rdra-ish list src/ --kind requirement --format table
+rdra-ish list src/ --kind nfr --format table
+rdra-ish list src/ --kind field --format table
+rdra-ish list src/ --kind api --format table
+rdra-ish list src/ --kind adr --format table
 rdra-ish csv src/ --kind matrix
 rdra-ish csv src/ --kind business-inputs
 rdra-ish csv src/ --kind api-matrix
@@ -50,6 +56,8 @@ rdra-ish csv src/ --kind actor-permission-audit
 rdra-ish states src/
 rdra-ish states src/ --buc <BucId>
 rdra-ish states src/ --entity <EntityId>
+rdra-ish export src/ --kind openapi --out out/openapi.json
+rdra-ish export src/ --kind dbml --out out/schema.dbml
 ```
 
 ### Reference Files

@@ -1,6 +1,6 @@
 ---
 name: rdra-ish-buc-update
-description: Update an existing BUC by adding or modifying use cases, screens, events, entities, and predicates while preserving staged refinement
+description: Update an existing BUC by adding or modifying use cases, business flows, requirements, screens, fields, API contracts, concepts, NFRs, events, entities, ADR links, and predicates while preserving staged refinement
 ---
 
 ## Update an existing BUC
@@ -20,6 +20,7 @@ Read `buc/buc_<name>.rdra` and the shared files it imports. Identify:
 - Which use cases already exist
 - Which entities are already referenced
 - What screens and events are already declared
+- Which flow/step, field, DTO, requirement/NFR, concept, and ADR elements already exist
 - Which predicates are already defined
 - Whether the model still uses the small layout (`shared/actors.rdra`,
   `shared/biz.rdra`, `shared/entities.rdra`) or has split shared files
@@ -29,7 +30,14 @@ Read `buc/buc_<name>.rdra` and the shared files it imports. Identify:
 | Change type | Where to edit |
 |-------------|---------------|
 | New use case in existing BUC | `buc/buc_<name>.rdra` |
+| New business flow order, branch, exception, or loop | `buc/buc_<name>.rdra` with `flow`, `step`, `precedes`, `branches`, `excepts`, `repeats`, `covers` |
+| New requirement metadata | stable shared requirement file, then `motivates(Requirement, Buc)` |
 | New screen for an existing UC | `buc/buc_<name>.rdra` |
+| New screen field or input/output mapping | owning BUC/screen file; add `field`, `contains(Screen, Field)`, `maps_field` |
+| New API method/path or payload | owning API file; add API metadata, `dto`, `request`, `response`, `error_response` |
+| New concept/domain term | shared conceptual file; add `maps_to` only when logical data mapping is known |
+| New NFR/quality/constraint | stable shared file; scope with `applies_to`, `qualifies`, or `constrains` |
+| New ADR impact | stable shared ADR file; connect with `decides(Adr, Target)` |
 | New entity column | `shared/entities.rdra` |
 | New entity entirely | `shared/entities.rdra` + add `relate` if needed |
 | New event or state | `shared/entities.rdra` (if cross-BUC) or `buc/buc_<name>.rdra` |
@@ -61,6 +69,22 @@ Also classify the abstraction transition:
 ### Step 3 — Apply the minimal diff
 
 Add only what is needed. Do not remove or rename existing predicates unless the requirement explicitly says to delete functionality.
+
+**Adding business flow order:**
+```
+flow <Flow> "<flow label>"
+step <StepA> "<business step>"
+step <StepB> "<business step>"
+
+contains(Buc<Name>, <Flow>)
+contains(<Flow>, <StepA>)
+contains(<Flow>, <StepB>)
+precedes(<StepA>, <StepB>)
+covers(<StepB>, <ExistingUC>)
+```
+
+Use `branches`, `excepts`, and `repeats` only when the requirement explicitly
+introduces an alternative, exception, or loop.
 
 **Adding a use case:**
 ```
@@ -94,16 +118,32 @@ Then in the BUC file add CRUD predicates for the use cases that touch it.
 **Adding or changing API/system boundaries:**
 ```
 system <System> "<system label>"
-api <Api> "<API label>"
+api <Api> "<API label>" method PATCH path "/orders/{id}" idempotency idempotent mode sync auth bearer
+dto <RequestDto> "<request label>" {
+  id: Int
+}
 
 contains(<System>, <Api>)
 invokes(<UC>, <Api>)
+request(<Api>, <RequestDto>)
 updates(<Api>, <Entity>)
 sets(<UC>, <Entity>, "column", "value")
 ```
 
-System entity sets are derived from API CRUD. Do not invent direct system-entity
-ownership predicates.
+System entity sets are derived from API CRUD. Add `owns(System, Entity)` only when
+intentional ownership must be visible before complete API operations exist, and
+review the warning if explicit ownership disagrees with derived ownership.
+
+**Adding a screen field:**
+```
+field <Field> "<field label>"
+  access editable
+  required true
+  source actor
+
+contains(<Screen>, <Field>)
+maps_field(<Field>, <Entity>, "column_name")
+```
 
 **Adding Business-BUC context:**
 ```
@@ -134,6 +174,21 @@ screen predicate for them. Actor-side grant gaps are derived with
 `rdra-ish csv src/ --kind actor-permission-audit`; use
 `rdra-ish csv src/ --kind permission-callables` to confirm the permission maps to the
 intended use cases and APIs.
+
+**Adding non-functional or decision traceability:**
+```
+nfr <Nfr> "<label>"
+  metric "latency"
+  target "p95 <= 300ms"
+  slo "99.9%"
+
+quality <Quality> "<quality label>"
+qualifies(<Quality>, <System>)
+applies_to(<Nfr>, <Api>)
+
+adr <Adr> "<decision label>"
+decides(<Adr>, <Api>)
+```
 
 **Starting a BUC from an event:**
 ```
@@ -183,11 +238,18 @@ instead of checking the global cross-product.
 ### Step 4 — Consistency checks after the change
 
 - Every new `usecase` has a `contains` predicate
+- Every new `flow` belongs to a BUC, every `step` belongs to a flow, and covered
+  behavior exists.
 - Every new `usecase` has at least one CRUD predicate
+- Every new `field` belongs to a screen; actor-entered fields are mapped or have an
+  explicit reason to remain external.
+- API method/path metadata has request/response DTOs when contract review is in scope.
 - Every new `entity` column that can change has a `sets` or participates in `transitions`
 - No dangling imports (if you removed the last use of a symbol, remove its `import`)
 - No manually added FK columns for a `relate`-covered relationship
 - Every API used as a system boundary has `contains(System, Api)`
+- Every explicit `owns(System, Entity)` is either satisfied by API CRUD or accepted
+  as future ownership with diagnostics reviewed.
 - Every new `permission` used by an actor or operation is declared once in shared vocabulary unless intentionally local
 - Every `requires_medium` references a declared `medium`, and screen constraints are checked with `rdra-ish csv src/ --kind screen-constraints`
 - Permission-to-callable mappings are checked with `rdra-ish csv src/ --kind permission-callables`
@@ -207,6 +269,7 @@ instead of checking the global cross-product.
 
 ```
 rdra-ish check src/
+rdra-ish lint src/ --format table
 ```
 
 Fix every reported error before declaring the update done.

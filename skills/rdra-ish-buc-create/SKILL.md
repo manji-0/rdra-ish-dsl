@@ -1,6 +1,6 @@
 ---
 name: rdra-ish-buc-create
-description: Create a new BUC file from a requirements description, using staged refinement from BUC skeleton to data, UI/API, lifecycle, and rules
+description: Create a new BUC file from a requirements description, using staged refinement from BUC skeleton and business flow to conceptual/data, UI/API contracts, lifecycle, rules, NFRs, and traceability
 ---
 
 ## Create a new BUC
@@ -18,14 +18,14 @@ Before writing, classify the available information:
 
 | If the user provided... | Concern | Create now | Ask before adding... |
 |-------------------------|---------|------------|----------------------|
-| BUC name and business goal | Biz intent | `buc`, `belongs` | actors and use cases |
-| actors and actions | Biz value | `performs`, `usecase`, `contains` | entities and CRUD |
-| touched business objects | Biz object touchpoints | coarse `entity`, CRUD predicates | screens and APIs |
-| screens/API boundaries | Tech interaction boundary | `screen`, `api`, `system`, `medium`, `permission`, `displays`, `shows`, `invokes`, access constraints | columns, relationships, cross-system coordination |
-| fields and relationships | Tech data design | columns, `relate` | lifecycle states/events |
+| BUC name, business goal, source requirement | Biz intent | `buc`, `belongs`, optional `requirement` metadata and `motivates` | actors and use cases |
+| actors, actions, and order | Biz value | `performs`, `usecase`, `contains`; add `flow`/`step` when order matters | entities and CRUD |
+| touched business/conceptual objects | Biz object touchpoints | `concept`/`domain_object`/`aggregate`/`valueobject`, coarse `entity`, CRUD predicates, optional `maps_to` | screens and APIs |
+| screens/API boundaries | Tech interaction boundary | `screen`, `field`, `api`, `dto`, `system`, `medium`, `permission`, `displays`, `shows`, `maps_field`, `invokes`, API contracts, access constraints | columns, relationships, cross-system coordination |
+| fields and relationships | Tech data design | columns, indexes/checks, `relate`, optional `owns`, `maps_to` | lifecycle states/events |
 | lifecycle states/events | Tech lifecycle design | `state`, `event`, `transitions`, `raises`, `sets` | local guardrails first |
 | invalid or mutually exclusive states | Tech-enforced rules | `forbidden`, `exclusive` | obligations and cross-entity rules |
-| conditional/global/cross-entity rules | Tech-enforced rules | `invariant`, narrow `required`, `cross_forbidden`, `cross_invariant` | none; validate diagnostics |
+| conditional/global/cross-entity rules, NFRs, decisions | Tech-enforced rules | `invariant`, narrow `required`, `cross_forbidden`, `cross_invariant`, `nfr`, `constraint`, `adr` links | none; validate diagnostics |
 
 Ask only the questions needed to advance one row. Do not invent detailed columns,
 state machines, or API endpoints just to make the BUC look complete.
@@ -36,11 +36,15 @@ Read the requirement and list:
 
 - **Actors** — who initiates actions (human users, external systems)
 - **Business domain** — which business area this BUC belongs to
+- **Requirements/decisions** — stable source, stakeholder, owner, priority, acceptance criteria, ADRs
 - **Use cases** — verbs the actor performs (one `usecase` per user-visible action)
+- **Business flow** — ordered steps, branches, exceptions, loops, and which UCs/events each step covers
 - **Screens** — UI pages shown during the flow, if the user is already at the interaction stage
-- **Entities** — data objects created or modified, if the data stage is known
-- **Systems/APIs** — internal systems that own API boundaries, if backend ownership is known
+- **Fields** — screen input/output fields, actor-entered vs system-derived, readonly/editable/required
+- **Concepts/entities** — conceptual objects, aggregates/value objects, and logical data objects created or modified
+- **Systems/APIs** — method/path, DTOs, errors, idempotency, sync/async mode, auth, and internal systems
 - **Context/access** — when/where/by-what-medium the BUC applies, and any actor permissions or UC/API media constraints
+- **NFRs/constraints** — performance, availability, SLO, audit/logging/retention/privacy requirements
 - **Events** — domain events raised as side effects, if lifecycle behavior is known
 - **States** — status values if an entity lifecycle is known
 
@@ -49,8 +53,8 @@ Read the requirement and list:
 | Goes in `shared/` | Goes in `buc/buc_<name>.rdra` |
 |-------------------|-------------------------------|
 | `actor`, `extsystem` (if reused across BUCs) | `buc`, `usecase`, `screen` |
-| `business`, stable `requirement`, `system`, `location`, `timing`, `medium`, `permission` | BUC-local `api` |
-| reusable `entity` definitions, `relate` | CRUD, `displays`, `shows`, `invokes`, `coordinates`, access constraints, `raises`, `sets` |
+| `business`, stable `requirement`, `nfr`, `quality`, `constraint`, `adr`, `system`, `location`, `timing`, `medium`, `permission` | BUC-local `flow`, `step`, `api`, `dto`, `field` |
+| reusable `concept` / `domain_object` / `aggregate` / `valueobject`, reusable `entity` definitions, `relate` | CRUD, `displays`, `shows`, `maps_field`, `invokes`, API contracts, `coordinates`, access constraints, UC conditions, `raises`, `sets` |
 | cross-BUC `state`, `event`, `transitions` | BUC-local `event`, `state` |
 | cross-BUC or cross-entity `forbidden` / `invariant` / `required` / `exclusive` rules | predicates scoped to this BUC |
 
@@ -95,6 +99,21 @@ displays(<UC2>, <Screen1>)
 
 Order predicates as: `performs` → `belongs` → `contains` → per-UC blocks.
 
+When the order, branch, exception, or loop is part of the requirement, add business
+flow elements without turning them into implementation steps:
+
+```rdra
+flow <Flow> "<flow label>"
+step <Step1> "<business step>"
+step <Step2> "<business step>"
+
+contains(Buc<Name>, <Flow>)
+contains(<Flow>, <Step1>)
+contains(<Flow>, <Step2>)
+precedes(<Step1>, <Step2>)
+covers(<Step2>, <UC1>)
+```
+
 If the Business-BUC mapping depends on a timing, place, or physical medium, use a
 method chain on `belongs`:
 
@@ -114,10 +133,14 @@ use case declare value effects with `sets`:
 
 ```
 system <System> "<system label>"
-api <Api> "<API label>"
+api <Api> "<API label>" method POST path "/orders" idempotency idempotent mode sync auth bearer
+dto <RequestDto> "<request label>" {
+  id: Int
+}
 
 contains(<System>, <Api>)
 invokes(<UC>, <Api>)
+request(<Api>, <RequestDto>)
 updates(<Api>, <Entity>)
 sets(<UC>, <Entity>, "status", "updated")
 ```
@@ -170,10 +193,18 @@ See the `sets` value vocabulary in `rdra-ish-write`.
 
 ### Step 5 — Update shared files if needed
 
+- New concept/domain object/aggregate/value object → add to a shared conceptual file,
+  then use `maps_to` only when the logical entity mapping is known
 - New entity → add to `shared/entities.rdra` with column definitions
 - New actor → add to `shared/actors.rdra`
 - New event/state/transitions → add to `shared/entities.rdra` if cross-BUC
-- New system → add to shared vocabulary; its entities are derived from `contains(System, Api)` + API CRUD
+- New system → add to shared vocabulary; its entities are derived from
+  `contains(System, Api)` + API CRUD, or add `owns(System, Entity)` only for
+  intentional future ownership before API operations are complete
+- New API contract/DTO → add method/path metadata plus `request`, `response`, and
+  `error_response` relations
+- New NFR/constraint/quality/ADR → add stable shared declaration and scope it with
+  `applies_to`, `qualifies`, `constrains`, or `decides`
 - New location/timing/medium/permission → add to shared vocabulary when reused across BUCs
 - New cross-entity rule → add to `shared/rules.rdra` or the shared file nearest the
   involved entities, qualify columns as `Entity.column`, and add `.along(...)` only
@@ -195,6 +226,7 @@ Fix every reported error. Common errors:
 - `module` name does not match file path
 
 For staged work, also run the command that matches the current abstraction:
+- Any stage: `rdra-ish lint src/ --format table`
 - BUC skeleton: `rdra-ish diagram src/ --kind rdra --format mermaid --buc <BucId>`
 - Data touchpoints: `rdra-ish csv src/ --kind matrix`
 - Interaction boundary: `rdra-ish diagram src/ --kind sequence --format mermaid --buc <BucId>`
@@ -202,3 +234,8 @@ For staged work, also run the command that matches the current abstraction:
 - Permission callables: `rdra-ish csv src/ --kind permission-callables`
 - Actor permission assignments: `rdra-ish csv src/ --kind actor-permission-audit`
 - Lifecycle/rules: `rdra-ish states src/ --buc <BucId>`
+- Contract/data exports: run the relevant form, for example
+  `rdra-ish export src/ --kind openapi --out out/openapi.json`,
+  `rdra-ish export src/ --kind asyncapi --out out/asyncapi.json`,
+  `rdra-ish export src/ --kind dbml --out out/schema.dbml`, or
+  `rdra-ish export src/ --kind json-schema --out out/json-schema.json`.

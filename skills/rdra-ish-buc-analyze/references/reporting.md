@@ -18,7 +18,7 @@ A good RDRA-ish analysis report does three things:
 ## Analysis: <BUC or whole model>
 
 ### Current refinement stage
-- Stage: <scope | BUC skeleton | data touchpoints | interaction boundary | entity structure | lifecycle | business rules>
+- Stage: <scope | BUC skeleton | business flow | data touchpoints | interaction boundary | entity structure | lifecycle | business rules>
 - Evidence: <commands, rows, warnings, or model signals>
 - Appropriate omissions: <not required yet at this stage>
 - Next information needed: <focused questions>
@@ -32,6 +32,7 @@ A good RDRA-ish analysis report does three things:
 - State patterns: <entity summaries or "not analyzed at this stage">
 - Access: <screen-constraints / permission-callables / actor-permission-audit summary>
 - API/system boundaries: <api-matrix / diagnostics summary>
+- Traceability/contracts: <requirements/NFRs/fields/API DTO/export summary>
 
 ### Recommendations
 - <smallest concrete model change>
@@ -69,5 +70,11 @@ A good RDRA-ish analysis report does three things:
   performs the use case.
 - Cross-system relation: add `coordinates(<UseCase>, <EntityA>, <EntityB>)` plus API
   invocations on both sides, or revise system ownership.
+- Explicit ownership drift: add missing API CRUD for `owns(System, Entity)` or revise
+  the owner.
+- Missing field mapping: add `contains(Screen, Field)` / `maps_field(Field, Entity, "column")`
+  or mark the field as external/derived.
+- Missing API contract: add method/path DTO links and run OpenAPI export.
+- Missing NFR scope: add `applies_to`, `qualifies`, or `constrains`.
 - Missing lifecycle effect: add `raises`, `transitions`, or `sets` depending on whether
   the change is event-driven or direct.

@@ -1,6 +1,6 @@
 ---
 name: rdra-ish-write
-description: Write RDRA DSL files from requirements using correct syntax and file structure, including staged abstract-to-concrete refinement
+description: Write RDRA DSL files from requirements using correct syntax and file structure, including staged abstract-to-concrete refinement, business flows, requirements/NFRs, conceptual models, screen fields, API contracts, data modeling annotations, ADR links, lint/format checks, and exports
 ---
 
 ## Write RDRA DSL
@@ -16,11 +16,11 @@ continue with the single most relevant step.
 
 | Step | Concern | Load | Main output |
 |---|---|---|---|
-| 0 | Scope sketch | `references/00-scope.md` | `business`, candidate `buc` |
-| 1 | BUC skeleton | `references/01-buc-skeleton.md` | actors, BUC ownership, contained use cases |
-| 2 | Data touchpoints | `references/02-data-touchpoints.md` | coarse entities and UC CRUD |
-| 3 | Interaction boundary | `references/03-interaction-boundary.md` | screens, APIs, systems, media, permissions |
-| 4 | Entity structure | `references/04-entity-structure.md` | columns, keys, relations, coordination |
+| 0 | Scope sketch | `references/00-scope.md` | `business`, candidate `buc`, early `requirement` metadata |
+| 1 | BUC skeleton | `references/01-buc-skeleton.md` | actors, BUC ownership, contained use cases, optional `flow`/`step` order |
+| 2 | Data touchpoints | `references/02-data-touchpoints.md` | concepts/domain objects, coarse entities, UC CRUD |
+| 3 | Interaction boundary | `references/03-interaction-boundary.md` | screens, fields, APIs/DTO contracts, systems, media, permissions |
+| 4 | Entity structure | `references/04-entity-structure.md` | columns, indexes, constraints, relations, ownership, coordination |
 | 5 | Lifecycle | `references/05-lifecycle.md` | events, states, transitions, event-started BUCs, effects |
 | 6 | Rules | `references/06-rules.md` | local guardrails, local obligations, then comparison/cross-entity constraints |
 
@@ -71,11 +71,13 @@ src/
 Placement rules:
 
 - Shared vocabulary goes in `shared/`: actors, external systems, businesses,
-  reusable entities, systems, locations, timings, media, permissions, cross-BUC
-  lifecycle, and cross-BUC / cross-entity rules.
-- BUC-local flow goes in `buc/buc_<name>.rdra`: `buc`, `usecase`, `screen`,
-  BUC-local `api`, CRUD, `displays`, `invokes`, `raises`, `triggers`,
-  `coordinates`, access constraints, and `sets`.
+  stable requirements/NFRs/qualities/constraints, reusable concepts/domain
+  objects/aggregates/value objects/entities, ADRs, systems, locations, timings,
+  media, permissions, cross-BUC lifecycle, and cross-BUC / cross-entity rules.
+- BUC-local flow goes in `buc/buc_<name>.rdra`: `buc`, `flow`, `step`,
+  `usecase`, `screen`, `field`, BUC-local `api`/`dto`, CRUD, `displays`,
+  `invokes`, API contract links, `raises`, `triggers`, `coordinates`, access
+  constraints, UC conditions, compensations, and `sets`.
 - Do not put BUC-specific predicates in shared files.
 - Every file starts with `module <dotted.name>`, and the dotted module should mirror
   the file path.
@@ -88,8 +90,15 @@ Placement rules:
 ```rdra
 actor Customer "Customer"
 business Commerce "Commerce"
+requirement ReqOrder "Order processing must be reliable"
 buc BucOrder "Process Order"
+flow CheckoutFlow "Checkout Flow"
+step ReviewCart "Review Cart"
 usecase PlaceOrder "Place Order"
+screen CheckoutScreen "Checkout"
+field OrderIdField "Order ID"
+api PlaceOrderApi "Place Order API" method POST path "/orders"
+dto PlaceOrderRequest "Place Order Request"
 entity Order "Order" {
   id: Int @pk
   status: Enum(draft, submitted) @default(draft)
@@ -102,9 +111,11 @@ Kinds commonly used by this skill:
 | Kind | Use |
 |---|---|
 | `actor` / `extsystem` | people and outside systems |
-| `business` / `buc` / `usecase` | business value and action boundaries |
-| `screen` / `api` / `system` | interaction and implementation boundaries |
-| `entity` / `state` / `event` | data, lifecycle, and causality |
+| `requirement` / `adr` / `nfr` / `quality` / `constraint` | traceability, decisions, and non-functional intent |
+| `business` / `buc` / `flow` / `step` / `usecase` | business value, flow order, and action boundaries |
+| `screen` / `field` / `api` / `dto` / `system` | UI items, payloads, interaction, and implementation boundaries |
+| `concept` / `domain_object` / `aggregate` / `valueobject` / `entity` | conceptual and logical data modeling |
+| `state` / `event` | lifecycle and causality |
 | `location` / `timing` / `medium` / `permission` | context and access vocabulary |
 
 #### Predicate Signatures
@@ -112,14 +123,20 @@ Kinds commonly used by this skill:
 | Predicate | Signature | Meaning |
 |---|---|---|
 | `performs` | `(Actor, UseCase\|Buc)` | actor performs a use case or BUC |
-| `contains` | `(Buc, UseCase)` / `(System, Api)` | composition |
+| `contains` | `(Buc, UseCase)` / `(Buc, Flow)` / `(Flow, Step)` / `(System, Api)` / `(Screen, Field)` | composition |
+| `precedes/branches/excepts/repeats` | `(Step, Step)` | business flow order, alternatives, exceptions, loops |
+| `covers` | `(Step, UseCase\|Api\|Event)` | business step covers model behavior |
 | `belongs` | `(Buc, Business)` | BUC ownership, optionally chained with `.when/.where/.by` |
 | `uses` | `(Actor, ExtSystem)` | actor uses an external system |
 | `reads/writes/creates/updates/deletes` | `(UseCase\|Api, Entity)` | data touchpoint or API operation |
 | `displays` | `(UseCase, Screen)` | UI path |
 | `shows` | `(Screen, Entity)` | screen data exposure |
 | `invokes` | `(UseCase, Api)` | UC delegates to an API boundary |
+| `maps_field` | `(Field, Entity, "column")` | screen field to logical data mapping |
+| `request/response/error_response` | `(Api, Dto)` | API payload contract |
 | `coordinates` | `(UseCase, Entity, Entity)` | UC coordinates cross-system consistency |
+| `compensates` | `(UseCase, UseCase\|Event)` | compensation behavior |
+| `owns` | `(System, Entity)` | explicit intended ownership before CRUD is complete |
 | `raises` | `(UseCase, Event)` | UC emits a domain event |
 | `triggers` | `(Event, UseCase\|Buc)` | event starts a UC or a BUC boundary |
 | `transitions` | `(Event, State, State)` | event moves state from -> to |
@@ -135,6 +152,9 @@ Kinds commonly used by this skill:
 | `has_permission` | `(Actor, Permission)` | actor-side grant |
 | `requires_permission` | `(UseCase\|Api, Permission)` | UC/API required authority |
 | `requires_medium` | `(UseCase\|Api, Medium)` | UC/API required operation medium |
+| `applies_to/qualifies/constrains` | `(Nfr\|Quality\|Constraint, target)` | non-functional and quality scope |
+| `maps_to` | `(Concept\|DomainObject\|Aggregate\|ValueObject, Entity)` | conceptual-to-logical mapping |
+| `motivates` / `decides` | `(Requirement, Buc)` / `(Adr, target)` | requirement and decision traceability |
 
 #### Imports
 
@@ -151,10 +171,24 @@ import shared.actors.{Staff as S}
   `api` plus `invokes` once an implementation boundary matters.
 - Treat API CRUD as an atomic entity-operation boundary. Split APIs by consistency
   contract, not by screen button count.
-- Treat system ownership as derived from `contains(System, Api)` plus API CRUD; do
-  not create direct system-to-entity ownership predicates.
+- Treat system ownership as derived from `contains(System, Api)` plus API CRUD by
+  default. Add `owns(System, Entity)` only to record intentional ownership before
+  CRUD APIs are complete, and review any difference from derived ownership.
 - Model screen constraints indirectly through `displays`, `invokes`,
   `requires_permission`, and `requires_medium`.
+- Use `field` + `maps_field` when screen input/output mapping matters; do not
+  overload `entity` columns as UI fields.
+- Keep conceptual vocabulary separate from persistence. Use
+  `concept`/`domain_object`/`aggregate`/`valueobject` for business terms, `entity`
+  for logical data structures, and `maps_to` when the mapping is intentional.
+- Put API method/path/idempotency/mode/auth metadata on `api`, and use `dto`
+  declarations plus `request`/`response`/`error_response` relations when OpenAPI or
+  payload review is needed.
+- Use `nfr`/`quality`/`constraint` plus `applies_to`, `qualifies`, and `constrains`
+  for performance, availability, SLO, audit/logging, retention, privacy, and other
+  non-functional requirements.
+- Link ADRs with `decides` only when a real design decision affects a BUC, use case,
+  API, system, entity, requirement, NFR, or conceptual model element.
 - Use `rdra-ish csv src/ --kind permission-callables` to review which operations each
   permission enables; use `has_permission` for actor-side assignment and verify it with
   `rdra-ish csv src/ --kind actor-permission-audit`.
@@ -182,7 +216,16 @@ import shared.actors.{Staff as S}
 - Adding FK columns manually when `relate` already generates them.
 - Declaring `api` without `invokes(UseCase, Api)`.
 - Declaring `system` without `contains(System, Api)`.
+- Adding `owns(System, Entity)` that contradicts API CRUD ownership without
+  reviewing the warning.
 - Adding a cross-system `relate` without `coordinates(UseCase, Entity, Entity)`.
+- Using `entity` for every business noun when a `concept` or `domain_object` would
+  keep the model intentionally conceptual.
+- Adding `field` without `contains(Screen, Field)` or mapping actor-entered values
+  when the entity column exists.
+- Adding API method/path metadata without DTO request/response links when payload
+  review or OpenAPI export is expected.
+- Forgetting `rdra-ish lint` and `rdra-ish fmt --check` before final handoff.
 - Checking only `screen-constraints` for access review; also run
   `permission-callables` and `actor-permission-audit`.
 - Modeling event-started BUCs only as `triggers(Event, UseCase)` when the BUC

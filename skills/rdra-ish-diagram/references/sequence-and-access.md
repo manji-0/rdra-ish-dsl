@@ -1,7 +1,8 @@
 # Sequence and Access Views
 
-Use this reference when reviewing actor-entered inputs, screen/API/system boundaries,
-operation paths, transaction boundaries, permissions, media, or actor grant coverage.
+Use this reference when reviewing actor-entered fields, screen/API/system boundaries,
+operation paths, transaction boundaries, API contracts, permissions, media, or actor
+grant coverage.
 
 ## Commands
 
@@ -25,7 +26,9 @@ rdra-ish diagram src/ --kind technical-area --buc <BucId> --format mermaid
 
 # API list and API × Entity CRUD matrix
 rdra-ish list src/ --kind api --format table
+rdra-ish list src/ --kind field --format table
 rdra-ish csv src/ --kind api-matrix
+rdra-ish export src/ --kind openapi --out out/openapi.json
 
 # Access/media review
 rdra-ish csv src/ --kind screen-constraints
@@ -35,8 +38,8 @@ rdra-ish csv src/ --kind actor-permission-audit
 
 ## Reading Sequence Output
 
-- Each use case block shows operations in order, including reads, writes, and screen
-  returns.
+- Each use case block shows operations in order, including writes and screen returns;
+  use CSV/list output for full field and contract audits.
 - Participant lifelines are grouped by layer: system value, system boundary, and system.
 - With `invokes`, the path renders as actor -> screen -> API -> entity; the API is the
   source of CRUD operations.
@@ -48,11 +51,12 @@ rdra-ish csv src/ --kind actor-permission-audit
 
 ## Reading Business/Technical Area Output
 
-- `business-area` shows only Actor -> inferred input field -> UseCase. Input nodes come
-  from `business-inputs`, so missing rows usually mean no actor path, no C/U/W operation,
-  or fields are modeled as derived.
+- `business-area` shows Actor -> input field -> UseCase paths. Input nodes come from
+  modeled `field`/`maps_field` and inferred `business-inputs`, so missing rows usually
+  mean no actor path, no C/U/W operation, no mapping, or fields are modeled as derived.
 - `technical-area` shows each System as a container with only its APIs and the entities
-  those APIs operate. Pair it with `api-matrix` when checking CRUD coverage.
+  those APIs operate. Pair it with `api-matrix` and explicit `owns` diagnostics when
+  checking CRUD coverage and intended ownership.
 
 ## Reading Access CSVs
 
@@ -68,6 +72,8 @@ rdra-ish csv src/ --kind actor-permission-audit
   combine them.
 - Access and medium requirements may appear as graph relationships, but sequence
   diagrams do not expand the full screen x UC/API constraint matrix.
+- OpenAPI export requires API method/path plus DTO request/response/error links; do
+  not treat a sequence diagram as the payload contract.
 - API diagnostics such as `ApiNeverInvoked` and `ApiInvokedButNoEntity` are printed to
   stderr when running `--kind sequence`.
 - System diagnostics such as `CrossSystemEntityRelation`, `CoordinationMissingApi`,
