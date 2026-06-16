@@ -1,5 +1,6 @@
 ---
 source: crates/rdra-ish-syntax/src/parser.rs
+assertion_line: 1096
 expression: ast
 ---
 Ast {
@@ -30,10 +31,46 @@ Ast {
                         "N:1",
                     ),
                 ],
-                chain: [],
-                span: 0..30,
+                chain: [
+                    ChainCall {
+                        name: "optional",
+                        args: [],
+                        span: 30..41,
+                    },
+                    ChainCall {
+                        name: "on_delete",
+                        args: [
+                            Ref(
+                                QRef {
+                                    kind_qualifier: None,
+                                    parts: [
+                                        "set_null",
+                                    ],
+                                    span: 52..60,
+                                },
+                            ),
+                        ],
+                        span: 41..61,
+                    },
+                    ChainCall {
+                        name: "on_update",
+                        args: [
+                            Ref(
+                                QRef {
+                                    kind_qualifier: None,
+                                    parts: [
+                                        "cascade",
+                                    ],
+                                    span: 72..79,
+                                },
+                            ),
+                        ],
+                        span: 61..80,
+                    },
+                ],
+                span: 0..80,
             },
         ),
     ],
-    source: "relate(Order, Customer, \"N:1\")",
+    source: "relate(Order, Customer, \"N:1\").optional().on_delete(set_null).on_update(cascade)",
 }

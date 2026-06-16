@@ -1,6 +1,6 @@
 ---
 source: crates/rdra-ish-syntax/src/parser.rs
-assertion_line: 435
+assertion_line: 998
 expression: ast
 ---
 Ast {
@@ -13,6 +13,56 @@ Ast {
                 description: Some(
                     "商品を購入する顧客",
                 ),
+                requirement: RequirementMetadata {
+                    priority: None,
+                    sources: [],
+                    stakeholders: [],
+                    owner: None,
+                    acceptance_criteria: [],
+                    status: None,
+                    risk: None,
+                    rationale: None,
+                },
+                adr: AdrMetadata {
+                    status: None,
+                    context: [],
+                    decision: None,
+                    consequences: [],
+                    accepted_options: [],
+                    rejected_options: [],
+                    reasons: [],
+                },
+                api: ApiMetadata {
+                    method: None,
+                    path: None,
+                    idempotency: None,
+                    mode: None,
+                    auth_scheme: None,
+                },
+                nfr: NfrMetadata {
+                    metric: None,
+                    target: None,
+                    window: None,
+                    slo: None,
+                    availability: None,
+                    resilience: None,
+                    audit: None,
+                    logging: None,
+                    retention: None,
+                    privacy: None,
+                },
+                field: FieldMetadata {
+                    access: None,
+                    required: None,
+                    source: None,
+                },
+                usecase: UseCaseMetadata {
+                    preconditions: [],
+                    postconditions: [],
+                    guards: [],
+                    alternatives: [],
+                    errors: [],
+                },
                 columns: [],
                 span: 0..65,
             },

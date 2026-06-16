@@ -1,8 +1,9 @@
 //! PlantUML emitters: RDRA全体図、BUC別図、ER図、状態遷移図、sequence図。
 
 use crate::{
-    collect_object_graph_nodes, object_graph_layer, object_graph_rel_label, prefixed_label,
-    prefixed_node_label, EmitError, Emitter, Scope, View, OBJECT_GRAPH_LAYERS,
+    collect_object_graph_nodes, node_description, object_graph_layer, object_graph_rel_label,
+    prefixed_label, prefixed_node_label, view_node_visible, view_relation_visible, EmitError,
+    Emitter, Scope, View, OBJECT_GRAPH_LAYERS,
 };
 use rdra_ish_core::model::{
     ActorKey, ApiKey, BucKey, ColumnType, EntityKey, NodeRef, RelKind, ScreenKey, SemanticModel,
@@ -18,16 +19,21 @@ use std::collections::{HashMap, HashSet};
 
 pub struct RdraPlantUmlEmitter;
 
+fn graph_node_visible(reachable: &Option<HashSet<NodeRef>>, view: &View, node: &NodeRef) -> bool {
+    scoped_node_visible(reachable, node) && view_node_visible(view, node)
+}
+
 fn render_rdra_node_declarations(
     out: &mut String,
     model: &SemanticModel,
     reachable: &Option<HashSet<NodeRef>>,
+    view: &View,
 ) {
     let mut actor_ids: Vec<_> = model.actors.iter().collect();
     actor_ids.sort_by_key(|(_, actor)| &actor.id);
     for (key, actor) in &actor_ids {
         let node = NodeRef::Actor(*key);
-        if scoped_node_visible(reachable, &node) {
+        if graph_node_visible(reachable, view, &node) {
             out.push_str(&format!(
                 "actor \"{}\" as {}\n",
                 prefixed_node_label(&node, &actor.label),
@@ -41,7 +47,7 @@ fn render_rdra_node_declarations(
     usecase_ids.sort_by_key(|(_, usecase)| &usecase.id);
     for (key, usecase) in &usecase_ids {
         let node = NodeRef::UseCase(*key);
-        if scoped_node_visible(reachable, &node) {
+        if graph_node_visible(reachable, view, &node) {
             out.push_str(&format!(
                 "usecase \"{}\" as {}\n",
                 prefixed_node_label(&node, &usecase.label),
@@ -55,7 +61,7 @@ fn render_rdra_node_declarations(
     buc_ids.sort_by_key(|(_, buc)| &buc.id);
     for (key, buc) in &buc_ids {
         let node = NodeRef::Buc(*key);
-        if scoped_node_visible(reachable, &node) {
+        if graph_node_visible(reachable, view, &node) {
             out.push_str(&format!(
                 "rectangle \"{}\" as {}\n",
                 prefixed_node_label(&node, &buc.label),
@@ -65,11 +71,39 @@ fn render_rdra_node_declarations(
     }
     out.push('\n');
 
+    let mut flow_ids: Vec<_> = model.flows.iter().collect();
+    flow_ids.sort_by_key(|(_, flow)| &flow.id);
+    for (key, flow) in &flow_ids {
+        let node = NodeRef::Flow(*key);
+        if graph_node_visible(reachable, view, &node) {
+            out.push_str(&format!(
+                "rectangle \"{}\" as {}\n",
+                prefixed_node_label(&node, &flow.label),
+                flow.id
+            ));
+        }
+    }
+    out.push('\n');
+
+    let mut step_ids: Vec<_> = model.steps.iter().collect();
+    step_ids.sort_by_key(|(_, step)| &step.id);
+    for (key, step) in &step_ids {
+        let node = NodeRef::Step(*key);
+        if graph_node_visible(reachable, view, &node) {
+            out.push_str(&format!(
+                "usecase \"{}\" as {}\n",
+                prefixed_node_label(&node, &step.label),
+                step.id
+            ));
+        }
+    }
+    out.push('\n');
+
     let mut system_ids: Vec<_> = model.systems.iter().collect();
     system_ids.sort_by_key(|(_, system)| &system.id);
     for (key, system) in &system_ids {
         let node = NodeRef::System(*key);
-        if scoped_node_visible(reachable, &node) {
+        if graph_node_visible(reachable, view, &node) {
             out.push_str(&format!(
                 "package \"{}\" as {}\n",
                 prefixed_node_label(&node, &system.label),
@@ -83,7 +117,7 @@ fn render_rdra_node_declarations(
     ext_ids.sort_by_key(|(_, ext_system)| &ext_system.id);
     for (key, ext_system) in &ext_ids {
         let node = NodeRef::ExtSystem(*key);
-        if scoped_node_visible(reachable, &node) {
+        if graph_node_visible(reachable, view, &node) {
             out.push_str(&format!(
                 "component \"{}\" as {}\n",
                 prefixed_node_label(&node, &ext_system.label),
@@ -97,7 +131,7 @@ fn render_rdra_node_declarations(
     entity_ids.sort_by_key(|(_, entity)| &entity.id);
     for (key, entity) in &entity_ids {
         let node = NodeRef::Entity(*key);
-        if scoped_node_visible(reachable, &node) {
+        if graph_node_visible(reachable, view, &node) {
             out.push_str(&format!(
                 "database \"{}\" as {}\n",
                 prefixed_node_label(&node, &entity.label),
@@ -111,7 +145,7 @@ fn render_rdra_node_declarations(
     screen_ids.sort_by_key(|(_, screen)| &screen.id);
     for (key, screen) in &screen_ids {
         let node = NodeRef::Screen(*key);
-        if scoped_node_visible(reachable, &node) {
+        if graph_node_visible(reachable, view, &node) {
             out.push_str(&format!(
                 "boundary \"{}\" as {}\n",
                 prefixed_node_label(&node, &screen.label),
@@ -121,11 +155,25 @@ fn render_rdra_node_declarations(
     }
     out.push('\n');
 
+    let mut field_ids: Vec<_> = model.fields.iter().collect();
+    field_ids.sort_by_key(|(_, field)| &field.id);
+    for (key, field) in &field_ids {
+        let node = NodeRef::Field(*key);
+        if graph_node_visible(reachable, view, &node) {
+            out.push_str(&format!(
+                "boundary \"{}\" as {}\n",
+                prefixed_node_label(&node, &field.label),
+                field.id
+            ));
+        }
+    }
+    out.push('\n');
+
     let mut event_ids: Vec<_> = model.events.iter().collect();
     event_ids.sort_by_key(|(_, event)| &event.id);
     for (key, event) in &event_ids {
         let node = NodeRef::Event(*key);
-        if scoped_node_visible(reachable, &node) {
+        if graph_node_visible(reachable, view, &node) {
             out.push_str(&format!(
                 "control \"{}\" as {}\n",
                 prefixed_node_label(&node, &event.label),
@@ -139,7 +187,7 @@ fn render_rdra_node_declarations(
     state_ids.sort_by_key(|(_, state)| &state.id);
     for (key, state) in &state_ids {
         let node = NodeRef::State(*key);
-        if scoped_node_visible(reachable, &node) {
+        if graph_node_visible(reachable, view, &node) {
             out.push_str(&format!(
                 "collections \"{}\" as {}\n",
                 prefixed_node_label(&node, &state.label),
@@ -169,6 +217,22 @@ fn rdra_relation_arrow(kind: &RelKind, from_id: &str, to_id: &str) -> Option<Str
         RelKind::RequiresPermission => format!("{} ..> {} : requires_permission", from_id, to_id),
         RelKind::RequiresMedium => format!("{} ..> {} : requires_medium", from_id, to_id),
         RelKind::Motivates => format!("{} ..> {} : motivates", from_id, to_id),
+        RelKind::Decides => format!("{} ..> {} : decides", from_id, to_id),
+        RelKind::Precedes => format!("{} --> {} : precedes", from_id, to_id),
+        RelKind::Branches => format!("{} ..> {} : branches", from_id, to_id),
+        RelKind::Excepts => format!("{} ..> {} : excepts", from_id, to_id),
+        RelKind::Repeats => format!("{} ..> {} : repeats", from_id, to_id),
+        RelKind::Covers => format!("{} ..> {} : covers", from_id, to_id),
+        RelKind::Compensates => format!("{} ..> {} : compensates", from_id, to_id),
+        RelKind::Request => format!("{} ..> {} : request", from_id, to_id),
+        RelKind::Response => format!("{} ..> {} : response", from_id, to_id),
+        RelKind::ErrorResponse => format!("{} ..> {} : error_response", from_id, to_id),
+        RelKind::AppliesTo => format!("{} ..> {} : applies_to", from_id, to_id),
+        RelKind::Qualifies => format!("{} ..> {} : qualifies", from_id, to_id),
+        RelKind::Constrains => format!("{} ..> {} : constrains", from_id, to_id),
+        RelKind::MapsTo => format!("{} ..> {} : maps_to", from_id, to_id),
+        RelKind::MapsField => format!("{} ..> {} : maps_field", from_id, to_id),
+        RelKind::Owns => format!("{} --> {} : owns", from_id, to_id),
         RelKind::Transitions | RelKind::Invokes => return None,
         RelKind::RelateOneToOne
         | RelKind::RelateOneToMany
@@ -182,12 +246,14 @@ fn render_rdra_relations(
     out: &mut String,
     model: &SemanticModel,
     reachable: &Option<HashSet<NodeRef>>,
+    view: &View,
 ) {
     let mut relations: Vec<_> = model.relations.iter().collect();
     relations.sort_by_key(|relation| format!("{:?}{:?}", relation.from, relation.to));
     for relation in &relations {
-        if !scoped_node_visible(reachable, &relation.from)
-            || !scoped_node_visible(reachable, &relation.to)
+        if !graph_node_visible(reachable, view, &relation.from)
+            || !graph_node_visible(reachable, view, &relation.to)
+            || !view_relation_visible(view, &relation.kind)
         {
             continue;
         }
@@ -205,6 +271,124 @@ fn render_rdra_relations(
     }
 }
 
+fn rdra_description_nodes(
+    model: &SemanticModel,
+    reachable: &Option<HashSet<NodeRef>>,
+) -> Vec<NodeRef> {
+    let mut nodes = Vec::new();
+    nodes.extend(
+        model
+            .actors
+            .iter()
+            .map(|(key, _)| NodeRef::Actor(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .adrs
+            .iter()
+            .map(|(key, _)| NodeRef::Adr(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .use_cases
+            .iter()
+            .map(|(key, _)| NodeRef::UseCase(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .bucs
+            .iter()
+            .map(|(key, _)| NodeRef::Buc(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .flows
+            .iter()
+            .map(|(key, _)| NodeRef::Flow(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .steps
+            .iter()
+            .map(|(key, _)| NodeRef::Step(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .systems
+            .iter()
+            .map(|(key, _)| NodeRef::System(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .ext_systems
+            .iter()
+            .map(|(key, _)| NodeRef::ExtSystem(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .entities
+            .iter()
+            .map(|(key, _)| NodeRef::Entity(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .screens
+            .iter()
+            .map(|(key, _)| NodeRef::Screen(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .fields
+            .iter()
+            .map(|(key, _)| NodeRef::Field(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .events
+            .iter()
+            .map(|(key, _)| NodeRef::Event(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .states
+            .iter()
+            .map(|(key, _)| NodeRef::State(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.sort_by_key(|node| node_id(model, node).unwrap_or_default().to_string());
+    nodes
+}
+
+fn render_plantuml_description_notes(out: &mut String, model: &SemanticModel, nodes: &[NodeRef]) {
+    for node in nodes {
+        let (Some(id), Some(description)) = (node_id(model, node), node_description(model, node))
+        else {
+            continue;
+        };
+        let description = description.trim();
+        if description.is_empty() {
+            continue;
+        }
+        out.push_str(&format!(
+            "note right of {}\n{}\nend note\n",
+            id,
+            plantuml_label(description)
+        ));
+    }
+}
+
 impl Emitter for RdraPlantUmlEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         let reachable = reachable_for_scope(model, &view.scope);
@@ -212,8 +396,15 @@ impl Emitter for RdraPlantUmlEmitter {
         out.push_str("@startuml\n");
         out.push_str("!theme plain\n");
         out.push('\n');
-        render_rdra_node_declarations(&mut out, model, &reachable);
-        render_rdra_relations(&mut out, model, &reachable);
+        render_rdra_node_declarations(&mut out, model, &reachable, view);
+        render_rdra_relations(&mut out, model, &reachable, view);
+        if view.show_descriptions {
+            let nodes: Vec<_> = rdra_description_nodes(model, &reachable)
+                .into_iter()
+                .filter(|node| view_node_visible(view, node))
+                .collect();
+            render_plantuml_description_notes(&mut out, model, &nodes);
+        }
         out.push_str("@enduml\n");
         Ok(out)
     }
@@ -231,10 +422,11 @@ impl Emitter for ObjectGraphPlantUmlEmitter {
         };
 
         let is_visible = |nr: &NodeRef| -> bool {
-            match &reachable {
+            let scoped = match &reachable {
                 Some(set) => set.contains(nr),
                 None => true,
-            }
+            };
+            scoped && view_node_visible(view, nr)
         };
 
         let visible_nodes = collect_object_graph_nodes(model, &is_visible);
@@ -256,9 +448,23 @@ impl Emitter for ObjectGraphPlantUmlEmitter {
                     let line = match nr {
                         NodeRef::Actor(_) => format!("  actor \"{}\" as {}\n", label, id),
                         NodeRef::Requirement(_) => format!("  rectangle \"{}\" as {}\n", label, id),
+                        NodeRef::Adr(_) => format!("  rectangle \"{}\" as {}\n", label, id),
+                        NodeRef::Nfr(_) => format!("  rectangle \"{}\" as {}\n", label, id),
                         NodeRef::ExtSystem(_) => format!("  component \"{}\" as {}\n", label, id),
+                        NodeRef::Quality(_) => format!("  rectangle \"{}\" as {}\n", label, id),
+                        NodeRef::Constraint(_) => format!("  rectangle \"{}\" as {}\n", label, id),
+                        NodeRef::Concept(_) => format!("  rectangle \"{}\" as {}\n", label, id),
+                        NodeRef::DomainObject(_) => {
+                            format!("  rectangle \"{}\" as {}\n", label, id)
+                        }
+                        NodeRef::Aggregate(_) => format!("  rectangle \"{}\" as {}\n", label, id),
+                        NodeRef::ValueObject(_) => {
+                            format!("  rectangle \"{}\" as {}\n", label, id)
+                        }
                         NodeRef::Business(_) => format!("  rectangle \"{}\" as {}\n", label, id),
                         NodeRef::Buc(_) => format!("  rectangle \"{}\" as {}\n", label, id),
+                        NodeRef::Flow(_) => format!("  rectangle \"{}\" as {}\n", label, id),
+                        NodeRef::Step(_) => format!("  usecase \"{}\" as {}\n", label, id),
                         NodeRef::UsageScene(_) => format!("  usecase \"{}\" as {}\n", label, id),
                         NodeRef::Condition(_) => format!("  rectangle \"{}\" as {}\n", label, id),
                         NodeRef::Variation(_) => format!("  rectangle \"{}\" as {}\n", label, id),
@@ -268,8 +474,10 @@ impl Emitter for ObjectGraphPlantUmlEmitter {
                         NodeRef::Permission(_) => format!("  rectangle \"{}\" as {}\n", label, id),
                         NodeRef::UseCase(_) => format!("  usecase \"{}\" as {}\n", label, id),
                         NodeRef::Screen(_) => format!("  boundary \"{}\" as {}\n", label, id),
+                        NodeRef::Field(_) => format!("  boundary \"{}\" as {}\n", label, id),
                         NodeRef::Event(_) => format!("  control \"{}\" as {}\n", label, id),
                         NodeRef::Api(_) => format!("  control \"{}\" as {}\n", label, id),
+                        NodeRef::Dto(_) => format!("  artifact \"{}\" as {}\n", label, id),
                         NodeRef::System(_) => format!("  package \"{}\" as {}\n", label, id),
                         NodeRef::Entity(_) => format!("  database \"{}\" as {}\n", label, id),
                         NodeRef::State(_) => format!("  collections \"{}\" as {}\n", label, id),
@@ -286,12 +494,15 @@ impl Emitter for ObjectGraphPlantUmlEmitter {
             if !visible_set.contains(&rel.from) || !visible_set.contains(&rel.to) {
                 continue;
             }
+            if !view_relation_visible(view, &rel.kind) {
+                continue;
+            }
             if let (Some(from_id), Some(to_id)) =
                 (node_id(model, &rel.from), node_id(model, &rel.to))
             {
                 let label = object_graph_rel_label(&rel.kind);
                 let line = match rel.kind {
-                    RelKind::Performs | RelKind::Contains | RelKind::Uses => {
+                    RelKind::Performs | RelKind::Contains | RelKind::Uses | RelKind::Owns => {
                         format!("{} --> {} : {}\n", from_id, to_id, label)
                     }
                     RelKind::RelateOneToOne
@@ -304,6 +515,10 @@ impl Emitter for ObjectGraphPlantUmlEmitter {
                 };
                 out.push_str(&line);
             }
+        }
+
+        if view.show_descriptions {
+            render_plantuml_description_notes(&mut out, model, &visible_nodes);
         }
 
         out.push_str("@enduml\n");
@@ -1456,17 +1671,29 @@ pub(crate) fn node_id<'a>(model: &'a SemanticModel, node: &NodeRef) -> Option<&'
         NodeRef::ExtSystem(k) => model.ext_systems.get(*k).map(|e| e.id.as_str()),
         NodeRef::System(k) => model.systems.get(*k).map(|s| s.id.as_str()),
         NodeRef::Requirement(k) => model.requirements.get(*k).map(|r| r.id.as_str()),
+        NodeRef::Adr(k) => model.adrs.get(*k).map(|a| a.id.as_str()),
+        NodeRef::Nfr(k) => model.nfrs.get(*k).map(|n| n.id.as_str()),
+        NodeRef::Quality(k) => model.qualities.get(*k).map(|q| q.id.as_str()),
+        NodeRef::Constraint(k) => model.constraints.get(*k).map(|c| c.id.as_str()),
+        NodeRef::Concept(k) => model.concepts.get(*k).map(|c| c.id.as_str()),
+        NodeRef::DomainObject(k) => model.domain_objects.get(*k).map(|d| d.id.as_str()),
+        NodeRef::Aggregate(k) => model.aggregates.get(*k).map(|a| a.id.as_str()),
+        NodeRef::ValueObject(k) => model.value_objects.get(*k).map(|v| v.id.as_str()),
         NodeRef::Business(k) => model.businesses.get(*k).map(|b| b.id.as_str()),
         NodeRef::Buc(k) => model.bucs.get(*k).map(|b| b.id.as_str()),
+        NodeRef::Flow(k) => model.flows.get(*k).map(|f| f.id.as_str()),
+        NodeRef::Step(k) => model.steps.get(*k).map(|s| s.id.as_str()),
         NodeRef::UsageScene(k) => model.usage_scenes.get(*k).map(|u| u.id.as_str()),
         NodeRef::UseCase(k) => model.use_cases.get(*k).map(|u| u.id.as_str()),
         NodeRef::Screen(k) => model.screens.get(*k).map(|s| s.id.as_str()),
+        NodeRef::Field(k) => model.fields.get(*k).map(|f| f.id.as_str()),
         NodeRef::Event(k) => model.events.get(*k).map(|e| e.id.as_str()),
         NodeRef::Entity(k) => model.entities.get(*k).map(|e| e.id.as_str()),
         NodeRef::State(k) => model.states.get(*k).map(|s| s.id.as_str()),
         NodeRef::Condition(k) => model.conditions.get(*k).map(|c| c.id.as_str()),
         NodeRef::Variation(k) => model.variations.get(*k).map(|v| v.id.as_str()),
         NodeRef::Api(k) => model.apis.get(*k).map(|a| a.id.as_str()),
+        NodeRef::Dto(k) => model.dtos.get(*k).map(|d| d.id.as_str()),
         NodeRef::Location(k) => model.locations.get(*k).map(|l| l.id.as_str()),
         NodeRef::Timing(k) => model.timings.get(*k).map(|t| t.id.as_str()),
         NodeRef::Medium(k) => model.media.get(*k).map(|m| m.id.as_str()),
@@ -1480,17 +1707,29 @@ pub(crate) fn node_label<'a>(model: &'a SemanticModel, node: &NodeRef) -> Option
         NodeRef::ExtSystem(k) => model.ext_systems.get(*k).map(|e| e.label.as_str()),
         NodeRef::System(k) => model.systems.get(*k).map(|s| s.label.as_str()),
         NodeRef::Requirement(k) => model.requirements.get(*k).map(|r| r.label.as_str()),
+        NodeRef::Adr(k) => model.adrs.get(*k).map(|a| a.label.as_str()),
+        NodeRef::Nfr(k) => model.nfrs.get(*k).map(|n| n.label.as_str()),
+        NodeRef::Quality(k) => model.qualities.get(*k).map(|q| q.label.as_str()),
+        NodeRef::Constraint(k) => model.constraints.get(*k).map(|c| c.label.as_str()),
+        NodeRef::Concept(k) => model.concepts.get(*k).map(|c| c.label.as_str()),
+        NodeRef::DomainObject(k) => model.domain_objects.get(*k).map(|d| d.label.as_str()),
+        NodeRef::Aggregate(k) => model.aggregates.get(*k).map(|a| a.label.as_str()),
+        NodeRef::ValueObject(k) => model.value_objects.get(*k).map(|v| v.label.as_str()),
         NodeRef::Business(k) => model.businesses.get(*k).map(|b| b.label.as_str()),
         NodeRef::Buc(k) => model.bucs.get(*k).map(|b| b.label.as_str()),
+        NodeRef::Flow(k) => model.flows.get(*k).map(|f| f.label.as_str()),
+        NodeRef::Step(k) => model.steps.get(*k).map(|s| s.label.as_str()),
         NodeRef::UsageScene(k) => model.usage_scenes.get(*k).map(|u| u.label.as_str()),
         NodeRef::UseCase(k) => model.use_cases.get(*k).map(|u| u.label.as_str()),
         NodeRef::Screen(k) => model.screens.get(*k).map(|s| s.label.as_str()),
+        NodeRef::Field(k) => model.fields.get(*k).map(|f| f.label.as_str()),
         NodeRef::Event(k) => model.events.get(*k).map(|e| e.label.as_str()),
         NodeRef::Entity(k) => model.entities.get(*k).map(|e| e.label.as_str()),
         NodeRef::State(k) => model.states.get(*k).map(|s| s.label.as_str()),
         NodeRef::Condition(k) => model.conditions.get(*k).map(|c| c.label.as_str()),
         NodeRef::Variation(k) => model.variations.get(*k).map(|v| v.label.as_str()),
         NodeRef::Api(k) => model.apis.get(*k).map(|a| a.label.as_str()),
+        NodeRef::Dto(k) => model.dtos.get(*k).map(|d| d.label.as_str()),
         NodeRef::Location(k) => model.locations.get(*k).map(|l| l.label.as_str()),
         NodeRef::Timing(k) => model.timings.get(*k).map(|t| t.label.as_str()),
         NodeRef::Medium(k) => model.media.get(*k).map(|m| m.label.as_str()),
@@ -1550,6 +1789,31 @@ performs(Customer, Browse)
             rdra_relation_arrow(&RelKind::RelateManyToOne, "Order", "Customer").as_deref(),
             Some("Order -- Customer")
         );
+        assert_eq!(
+            rdra_relation_arrow(&RelKind::Precedes, "ReviewCart", "AuthorizePayment").as_deref(),
+            Some("ReviewCart --> AuthorizePayment : precedes")
+        );
+        assert_eq!(
+            rdra_relation_arrow(&RelKind::Branches, "ReviewCart", "PaymentFailed").as_deref(),
+            Some("ReviewCart ..> PaymentFailed : branches")
+        );
+        assert_eq!(
+            rdra_relation_arrow(&RelKind::Excepts, "AuthorizePayment", "PaymentFailed").as_deref(),
+            Some("AuthorizePayment ..> PaymentFailed : excepts")
+        );
+        assert_eq!(
+            rdra_relation_arrow(&RelKind::Repeats, "PaymentFailed", "ReviewCart").as_deref(),
+            Some("PaymentFailed ..> ReviewCart : repeats")
+        );
+        assert_eq!(
+            rdra_relation_arrow(&RelKind::Covers, "AuthorizePayment", "CapturePayment").as_deref(),
+            Some("AuthorizePayment ..> CapturePayment : covers")
+        );
+        assert_eq!(
+            rdra_relation_arrow(&RelKind::Compensates, "RefundPayment", "CapturePayment")
+                .as_deref(),
+            Some("RefundPayment ..> CapturePayment : compensates")
+        );
         assert!(rdra_relation_arrow(&RelKind::Transitions, "Draft", "Published").is_none());
         assert!(rdra_relation_arrow(&RelKind::Invokes, "Browse", "BrowseApi").is_none());
     }
@@ -1568,14 +1832,14 @@ invokes(Browse, BrowseApi)
         let model = model_from(src);
         let reachable = None;
         let mut declarations = String::new();
-        render_rdra_node_declarations(&mut declarations, &model, &reachable);
+        render_rdra_node_declarations(&mut declarations, &model, &reachable, &View::whole());
         assert!(declarations.contains("actor \"👤 顧客\" as Customer"));
         assert!(declarations.contains("usecase \"✅ 商品を探す\" as Browse"));
         assert!(declarations.contains("database \"🗄️ 商品台帳\" as Catalog"));
         assert!(!declarations.contains("BrowseApi"));
 
         let mut relations = String::new();
-        render_rdra_relations(&mut relations, &model, &reachable);
+        render_rdra_relations(&mut relations, &model, &reachable, &View::whole());
         assert!(relations.contains("Customer --> Browse"));
         assert!(relations.contains("Browse ..> Catalog : reads"));
         assert!(!relations.contains("BrowseApi"));
@@ -1692,6 +1956,34 @@ creates(OrderApi, Order)
     }
 
     #[test]
+    fn test_object_graph_plantuml_applies_node_and_edge_filters() {
+        let src = r#"
+actor Customer "Customer"
+usecase PlaceOrder "Place order"
+api OrderApi "Order API"
+entity Order "Order" { id: Int @pk }
+performs(Customer, PlaceOrder)
+invokes(PlaceOrder, OrderApi)
+creates(OrderApi, Order)
+"#;
+        let model = model_from(src);
+        let view = View::whole().with_graph_filters(
+            vec!["usecase".to_string(), "api".to_string()],
+            vec!["invokes".to_string()],
+        );
+
+        let result = ObjectGraphPlantUmlEmitter.emit(&model, &view).unwrap();
+
+        assert!(result.contains("usecase \"✅ Place order\" as PlaceOrder"));
+        assert!(result.contains("control \"🔌 Order API\" as OrderApi"));
+        assert!(result.contains("PlaceOrder ..> OrderApi : invokes"));
+        assert!(!result.contains("actor \"👤 Customer\""));
+        assert!(!result.contains("database \"🗄️ Order\""));
+        assert!(!result.contains("performs"));
+        assert!(!result.contains("creates"));
+    }
+
+    #[test]
     fn test_er_plantuml_emit() {
         let src = r#"
 entity Order "注文" { id: Int @pk  total: Money }
@@ -1738,10 +2030,29 @@ reads(UcA, EntityA)
         let view = View {
             scope: crate::Scope::Bucs(vec!["BucA".to_string()]),
             filter: crate::Filter::Er,
+            show_descriptions: false,
+            node_kinds: Vec::new(),
+            edge_kinds: Vec::new(),
         };
         let result = ErPlantUmlEmitter.emit(&model, &view).unwrap();
         assert!(result.contains("EntityA"), "EntityA should be included");
         assert!(!result.contains("EntityB"), "EntityB should be excluded");
+    }
+
+    #[test]
+    fn test_plantuml_show_description_renders_notes() {
+        let src = r#"
+actor Customer "Customer" description "Places orders"
+usecase Browse "Browse" description "Finds products"
+performs(Customer, Browse)
+"#;
+        let model = model_from(src);
+        let view = View::whole().with_descriptions(true);
+
+        let result = RdraPlantUmlEmitter.emit(&model, &view).unwrap();
+
+        assert!(result.contains("note right of Customer\nPlaces orders\nend note"));
+        assert!(result.contains("note right of Browse\nFinds products\nend note"));
     }
 
     #[test]

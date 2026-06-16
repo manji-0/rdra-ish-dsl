@@ -1,6 +1,6 @@
 ---
 source: crates/rdra-ish-syntax/src/parser.rs
-assertion_line: 451
+assertion_line: 1294
 expression: ast
 ---
 Ast {
@@ -11,6 +11,56 @@ Ast {
                 id: "Product",
                 label: "商品",
                 description: None,
+                requirement: RequirementMetadata {
+                    priority: None,
+                    sources: [],
+                    stakeholders: [],
+                    owner: None,
+                    acceptance_criteria: [],
+                    status: None,
+                    risk: None,
+                    rationale: None,
+                },
+                adr: AdrMetadata {
+                    status: None,
+                    context: [],
+                    decision: None,
+                    consequences: [],
+                    accepted_options: [],
+                    rejected_options: [],
+                    reasons: [],
+                },
+                api: ApiMetadata {
+                    method: None,
+                    path: None,
+                    idempotency: None,
+                    mode: None,
+                    auth_scheme: None,
+                },
+                nfr: NfrMetadata {
+                    metric: None,
+                    target: None,
+                    window: None,
+                    slo: None,
+                    availability: None,
+                    resilience: None,
+                    audit: None,
+                    logging: None,
+                    retention: None,
+                    privacy: None,
+                },
+                field: FieldMetadata {
+                    access: None,
+                    required: None,
+                    source: None,
+                },
+                usecase: UseCaseMetadata {
+                    preconditions: [],
+                    postconditions: [],
+                    guards: [],
+                    alternatives: [],
+                    errors: [],
+                },
                 columns: [
                     Column {
                         name: "id",
@@ -25,8 +75,9 @@ Ast {
                         col_type: String,
                         annotations: [
                             Unique,
+                            Index,
                         ],
-                        span: 47..66,
+                        span: 47..73,
                     },
                     Column {
                         name: "name",
@@ -36,13 +87,36 @@ Ast {
                                 "商品名",
                             ),
                         ],
-                        span: 69..101,
+                        span: 76..108,
                     },
                     Column {
                         name: "price",
                         col_type: Decimal,
-                        annotations: [],
-                        span: 104..118,
+                        annotations: [
+                            Check(
+                                "price >= 0",
+                            ),
+                        ],
+                        span: 111..146,
+                    },
+                    Column {
+                        name: "store_id",
+                        col_type: Int,
+                        annotations: [
+                            IndexComposite(
+                                [
+                                    "status",
+                                    "store_id",
+                                ],
+                            ),
+                            UniqueComposite(
+                                [
+                                    "sku",
+                                    "store_id",
+                                ],
+                            ),
+                        ],
+                        span: 149..210,
                     },
                     Column {
                         name: "status",
@@ -57,7 +131,7 @@ Ast {
                                 "active",
                             ),
                         ],
-                        span: 121..172,
+                        span: 213..264,
                     },
                     Column {
                         name: "note",
@@ -65,12 +139,47 @@ Ast {
                         annotations: [
                             Null,
                         ],
-                        span: 175..193,
+                        span: 267..285,
+                    },
+                    Column {
+                        name: "tenant_id",
+                        col_type: Int,
+                        annotations: [
+                            Tenant,
+                        ],
+                        span: 288..310,
+                    },
+                    Column {
+                        name: "deleted_at",
+                        col_type: DateTime,
+                        annotations: [
+                            Null,
+                            SoftDelete,
+                        ],
+                        span: 313..352,
+                    },
+                    Column {
+                        name: "valid_from",
+                        col_type: DateTime,
+                        annotations: [
+                            History,
+                        ],
+                        span: 355..384,
+                    },
+                    Column {
+                        name: "display_price",
+                        col_type: Money,
+                        annotations: [
+                            Derived(
+                                "price * tax_rate",
+                            ),
+                        ],
+                        span: 387..436,
                     },
                 ],
-                span: 1..195,
+                span: 1..438,
             },
         ),
     ],
-    source: "\nentity Product \"商品\" {\n  id:  Int    @pk\n  sku: String @unique\n  name: String @label(\"商品名\")\n  price: Decimal\n  status: Enum(active, discontinued) @default(active)\n  note: String @null\n}\n",
+    source: "\nentity Product \"商品\" {\n  id:  Int    @pk\n  sku: String @unique @index\n  name: String @label(\"商品名\")\n  price: Decimal @check(\"price >= 0\")\n  store_id: Int @index(status, store_id) @unique(sku, store_id)\n  status: Enum(active, discontinued) @default(active)\n  note: String @null\n  tenant_id: Int @tenant\n  deleted_at: DateTime @null @soft_delete\n  valid_from: DateTime @history\n  display_price: Money @derived(\"price * tax_rate\")\n}\n",
 }

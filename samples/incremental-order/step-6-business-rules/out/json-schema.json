@@ -1,0 +1,90 @@
+{
+  "$defs": {
+    "Entity.Organization": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "x-rdra-ish-unique": true
+        },
+        "id": {
+          "type": "integer",
+          "x-rdra-ish-primary-key": true
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "code",
+        "name"
+      ],
+      "title": "Organization",
+      "type": "object",
+      "x-rdra-ish-id": "Organization",
+      "x-rdra-ish-kind": "entity",
+      "x-rdra-ish-unique-constraints": [
+        [
+          "code"
+        ]
+      ]
+    },
+    "Entity.Store": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "x-rdra-ish-unique": true
+        },
+        "id": {
+          "type": "integer",
+          "x-rdra-ish-primary-key": true
+        },
+        "name": {
+          "type": "string"
+        },
+        "next_restock_date": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "organization_id": {
+          "type": "integer",
+          "x-rdra-ish-fk-target": "Organization",
+          "x-rdra-ish-foreign-key": true
+        },
+        "restock_status": {
+          "default": "normal",
+          "enum": [
+            "normal",
+            "scheduled",
+            "blocked"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "code",
+        "name",
+        "restock_status",
+        "organization_id"
+      ],
+      "title": "Store",
+      "type": "object",
+      "x-rdra-ish-id": "Store",
+      "x-rdra-ish-kind": "entity",
+      "x-rdra-ish-unique-constraints": [
+        [
+          "code"
+        ]
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RDRA-ish model schemas",
+  "type": "object"
+}

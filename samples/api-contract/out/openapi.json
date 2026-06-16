@@ -1,0 +1,113 @@
+{
+  "components": {
+    "schemas": {
+      "ApiErrorResponse": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "type": "object"
+      },
+      "ChangeStoreParentOrganizationRequest": {
+        "properties": {
+          "organization_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "store_id": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "store_id",
+          "organization_id"
+        ],
+        "type": "object"
+      },
+      "StoreParentOrganizationResponse": {
+        "properties": {
+          "organization_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "store_id": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "store_id",
+          "organization_id"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "title": "RDRA-ish API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.0.3",
+  "paths": {
+    "/stores/{store_id}/organization": {
+      "patch": {
+        "operationId": "StoreOrganizationApi",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeStoreParentOrganizationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreParentOrganizationResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Store Organization API",
+        "x-rdra-ish-idempotency": "idempotent",
+        "x-rdra-ish-mode": "sync"
+      }
+    }
+  }
+}

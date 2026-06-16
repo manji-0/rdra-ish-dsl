@@ -128,18 +128,64 @@ fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
             Some(vec![vec!["usecase", "api"], vec!["entity"]])
         }
         "invokes" => Some(vec![vec!["usecase"], vec!["api"]]),
+        "request" | "response" | "error_response" => Some(vec![vec!["api"], vec!["dto"]]),
+        "applies_to" => Some(vec![vec!["nfr"], vec!["usecase", "api", "system"]]),
+        "qualifies" => Some(vec![vec!["nfr", "constraint"], vec!["quality"]]),
+        "constrains" => Some(vec![
+            vec!["constraint"],
+            vec!["usecase", "api", "system", "entity", "dto"],
+        ]),
+        "owns" => Some(vec![vec!["system"], vec!["entity"]]),
         "displays" => Some(vec![vec!["usecase"], vec!["screen"]]),
         "shows" => Some(vec![vec!["screen"], vec!["entity"]]),
+        "maps_field" => Some(vec![vec!["field"], vec!["entity"], vec!["_col"]]),
         "raises" => Some(vec![vec!["usecase"], vec!["event"]]),
         "triggers" => Some(vec![vec!["event"], vec!["usecase", "buc"]]),
         "outbox" => Some(vec![vec!["event"]]),
-        "contains" => Some(vec![vec!["buc", "system"], vec!["usecase", "api"]]),
+        "contains" => Some(vec![
+            vec!["buc", "system", "flow", "aggregate", "screen"],
+            vec![
+                "usecase",
+                "api",
+                "flow",
+                "step",
+                "domain_object",
+                "valueobject",
+                "concept",
+                "field",
+            ],
+        ]),
+        "precedes" | "branches" | "excepts" | "repeats" => Some(vec![vec!["step"], vec!["step"]]),
+        "covers" => Some(vec![vec!["step"], vec!["usecase", "api", "event"]]),
+        "compensates" => Some(vec![vec!["usecase"], vec!["usecase"]]),
+        "maps_to" => Some(vec![
+            vec!["concept", "domain_object", "aggregate", "valueobject"],
+            vec!["entity"],
+        ]),
         "coordinates" => Some(vec![vec!["usecase"], vec!["entity"], vec!["entity"]]),
         "belongs" => Some(vec![vec!["buc"], vec!["business"]]),
         "has_permission" => Some(vec![vec!["actor"], vec!["permission"]]),
         "requires_permission" => Some(vec![vec!["usecase", "api"], vec!["permission"]]),
         "requires_medium" => Some(vec![vec!["usecase", "api"], vec!["medium"]]),
         "motivates" => Some(vec![vec!["requirement"], vec!["buc"]]),
+        "decides" => Some(vec![
+            vec!["adr"],
+            vec![
+                "buc",
+                "usecase",
+                "api",
+                "system",
+                "entity",
+                "requirement",
+                "nfr",
+                "constraint",
+                "concept",
+                "domain_object",
+                "aggregate",
+                "valueobject",
+                "dto",
+            ],
+        ]),
         "transitions" => Some(vec![vec!["event"], vec!["state"], vec!["state"]]),
         "after" => Some(vec![vec!["usecase"]]),
         "relate" => Some(vec![vec!["entity"], vec!["entity"], vec!["_card"]]),
@@ -162,6 +208,60 @@ fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
         "forbidden_when" => Some(vec![vec!["entity"]]),
         _ => None,
     }
+}
+
+fn requirement_metadata_is_empty(metadata: &RequirementMetadata) -> bool {
+    metadata.priority.is_none()
+        && metadata.sources.is_empty()
+        && metadata.stakeholders.is_empty()
+        && metadata.owner.is_none()
+        && metadata.acceptance_criteria.is_empty()
+        && metadata.status.is_none()
+        && metadata.risk.is_none()
+        && metadata.rationale.is_none()
+}
+
+fn adr_metadata_is_empty(metadata: &AdrMetadata) -> bool {
+    metadata.status.is_none()
+        && metadata.context.is_empty()
+        && metadata.decision.is_none()
+        && metadata.consequences.is_empty()
+        && metadata.accepted_options.is_empty()
+        && metadata.rejected_options.is_empty()
+        && metadata.reasons.is_empty()
+}
+
+fn api_metadata_is_empty(metadata: &ApiMetadata) -> bool {
+    metadata.method.is_none()
+        && metadata.path.is_none()
+        && metadata.idempotency.is_none()
+        && metadata.mode.is_none()
+        && metadata.auth_scheme.is_none()
+}
+
+fn nfr_metadata_is_empty(metadata: &NfrMetadata) -> bool {
+    metadata.metric.is_none()
+        && metadata.target.is_none()
+        && metadata.window.is_none()
+        && metadata.slo.is_none()
+        && metadata.availability.is_none()
+        && metadata.resilience.is_none()
+        && metadata.audit.is_none()
+        && metadata.logging.is_none()
+        && metadata.retention.is_none()
+        && metadata.privacy.is_none()
+}
+
+fn field_metadata_is_empty(metadata: &FieldMetadata) -> bool {
+    metadata.access.is_none() && metadata.required.is_none() && metadata.source.is_none()
+}
+
+fn usecase_metadata_is_empty(metadata: &UseCaseMetadata) -> bool {
+    metadata.preconditions.is_empty()
+        && metadata.postconditions.is_empty()
+        && metadata.guards.is_empty()
+        && metadata.alternatives.is_empty()
+        && metadata.errors.is_empty()
 }
 
 pub fn build_model(ast: &Ast) -> (SemanticModel, Vec<Diagnostic>) {
@@ -189,6 +289,39 @@ pub fn build_model(ast: &Ast) -> (SemanticModel, Vec<Diagnostic>) {
 }
 
 fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut Vec<Diagnostic>) {
+    if inst.kind != Kind::Requirement && !requirement_metadata_is_empty(&inst.requirement) {
+        diags.push(Diagnostic::error(
+            RdraError::RequirementMetadataOnNonRequirement {
+                id: inst.id.clone(),
+            },
+        ));
+    }
+    if inst.kind != Kind::Adr && !adr_metadata_is_empty(&inst.adr) {
+        diags.push(Diagnostic::error(RdraError::AdrMetadataOnNonAdr {
+            id: inst.id.clone(),
+        }));
+    }
+    if inst.kind != Kind::Api && !api_metadata_is_empty(&inst.api) {
+        diags.push(Diagnostic::error(RdraError::ApiMetadataOnNonApi {
+            id: inst.id.clone(),
+        }));
+    }
+    if !matches!(inst.kind, Kind::Nfr | Kind::Constraint) && !nfr_metadata_is_empty(&inst.nfr) {
+        diags.push(Diagnostic::error(RdraError::NfrMetadataOnInvalidKind {
+            id: inst.id.clone(),
+        }));
+    }
+    if inst.kind != Kind::Field && !field_metadata_is_empty(&inst.field) {
+        diags.push(Diagnostic::error(RdraError::FieldMetadataOnNonField {
+            id: inst.id.clone(),
+        }));
+    }
+    if inst.kind != Kind::UseCase && !usecase_metadata_is_empty(&inst.usecase) {
+        diags.push(Diagnostic::error(RdraError::UseCaseMetadataOnNonUseCase {
+            id: inst.id.clone(),
+        }));
+    }
+
     let node = match inst.kind {
         Kind::Actor => {
             let k = model.actors.insert(Actor {
@@ -219,8 +352,107 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
                 id: inst.id.clone(),
                 label: inst.label.clone(),
                 description: inst.description.clone(),
+                priority: inst.requirement.priority.clone(),
+                sources: inst.requirement.sources.clone(),
+                stakeholders: inst.requirement.stakeholders.clone(),
+                owner: inst.requirement.owner.clone(),
+                acceptance_criteria: inst.requirement.acceptance_criteria.clone(),
+                status: inst.requirement.status.clone(),
+                risk: inst.requirement.risk.clone(),
+                rationale: inst.requirement.rationale.clone(),
             });
             NodeRef::Requirement(k)
+        }
+        Kind::Adr => {
+            let k = model.adrs.insert(Adr {
+                id: inst.id.clone(),
+                label: inst.label.clone(),
+                description: inst.description.clone(),
+                status: inst.adr.status.clone(),
+                context: inst.adr.context.clone(),
+                decision: inst.adr.decision.clone(),
+                consequences: inst.adr.consequences.clone(),
+                accepted_options: inst.adr.accepted_options.clone(),
+                rejected_options: inst.adr.rejected_options.clone(),
+                reasons: inst.adr.reasons.clone(),
+            });
+            NodeRef::Adr(k)
+        }
+        Kind::Nfr => {
+            let k = model.nfrs.insert(Nfr {
+                id: inst.id.clone(),
+                label: inst.label.clone(),
+                description: inst.description.clone(),
+                metric: inst.nfr.metric.clone(),
+                target: inst.nfr.target.clone(),
+                window: inst.nfr.window.clone(),
+                slo: inst.nfr.slo.clone(),
+                availability: inst.nfr.availability.clone(),
+                resilience: inst.nfr.resilience.clone(),
+                audit: inst.nfr.audit.clone(),
+                logging: inst.nfr.logging.clone(),
+                retention: inst.nfr.retention.clone(),
+                privacy: inst.nfr.privacy.clone(),
+            });
+            NodeRef::Nfr(k)
+        }
+        Kind::Quality => {
+            let k = model.qualities.insert(Quality {
+                id: inst.id.clone(),
+                label: inst.label.clone(),
+                description: inst.description.clone(),
+            });
+            NodeRef::Quality(k)
+        }
+        Kind::Constraint => {
+            let k = model.constraints.insert(Constraint {
+                id: inst.id.clone(),
+                label: inst.label.clone(),
+                description: inst.description.clone(),
+                metric: inst.nfr.metric.clone(),
+                target: inst.nfr.target.clone(),
+                window: inst.nfr.window.clone(),
+                slo: inst.nfr.slo.clone(),
+                availability: inst.nfr.availability.clone(),
+                resilience: inst.nfr.resilience.clone(),
+                audit: inst.nfr.audit.clone(),
+                logging: inst.nfr.logging.clone(),
+                retention: inst.nfr.retention.clone(),
+                privacy: inst.nfr.privacy.clone(),
+            });
+            NodeRef::Constraint(k)
+        }
+        Kind::Concept => {
+            let k = model.concepts.insert(Concept {
+                id: inst.id.clone(),
+                label: inst.label.clone(),
+                description: inst.description.clone(),
+            });
+            NodeRef::Concept(k)
+        }
+        Kind::DomainObject => {
+            let k = model.domain_objects.insert(DomainObject {
+                id: inst.id.clone(),
+                label: inst.label.clone(),
+                description: inst.description.clone(),
+            });
+            NodeRef::DomainObject(k)
+        }
+        Kind::Aggregate => {
+            let k = model.aggregates.insert(Aggregate {
+                id: inst.id.clone(),
+                label: inst.label.clone(),
+                description: inst.description.clone(),
+            });
+            NodeRef::Aggregate(k)
+        }
+        Kind::ValueObject => {
+            let k = model.value_objects.insert(ValueObject {
+                id: inst.id.clone(),
+                label: inst.label.clone(),
+                description: inst.description.clone(),
+            });
+            NodeRef::ValueObject(k)
         }
         Kind::Business => {
             let k = model.businesses.insert(Business {
@@ -238,6 +470,22 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
             });
             NodeRef::Buc(k)
         }
+        Kind::Flow => {
+            let k = model.flows.insert(Flow {
+                id: inst.id.clone(),
+                label: inst.label.clone(),
+                description: inst.description.clone(),
+            });
+            NodeRef::Flow(k)
+        }
+        Kind::Step => {
+            let k = model.steps.insert(Step {
+                id: inst.id.clone(),
+                label: inst.label.clone(),
+                description: inst.description.clone(),
+            });
+            NodeRef::Step(k)
+        }
         Kind::UsageScene => {
             let k = model.usage_scenes.insert(UsageScene {
                 id: inst.id.clone(),
@@ -251,6 +499,11 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
                 id: inst.id.clone(),
                 label: inst.label.clone(),
                 description: inst.description.clone(),
+                preconditions: inst.usecase.preconditions.clone(),
+                postconditions: inst.usecase.postconditions.clone(),
+                guards: inst.usecase.guards.clone(),
+                alternatives: inst.usecase.alternatives.clone(),
+                errors: inst.usecase.errors.clone(),
             });
             NodeRef::UseCase(k)
         }
@@ -262,6 +515,17 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
             });
             NodeRef::Screen(k)
         }
+        Kind::Field => {
+            let k = model.fields.insert(Field {
+                id: inst.id.clone(),
+                label: inst.label.clone(),
+                description: inst.description.clone(),
+                access: inst.field.access.clone(),
+                required: inst.field.required,
+                source: inst.field.source.clone(),
+            });
+            NodeRef::Field(k)
+        }
         Kind::Event => {
             let k = model.events.insert(Event {
                 id: inst.id.clone(),
@@ -272,11 +536,15 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
         }
         Kind::Entity => {
             let columns = inst.columns.iter().map(ast_column_to_model).collect();
+            let unique_constraints = collect_unique_constraints(&inst.columns);
+            let indexes = collect_indexes(&inst.columns);
             let k = model.entities.insert(Entity {
                 id: inst.id.clone(),
                 label: inst.label.clone(),
                 description: inst.description.clone(),
                 columns,
+                unique_constraints,
+                indexes,
             });
             NodeRef::Entity(k)
         }
@@ -309,8 +577,23 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
                 id: inst.id.clone(),
                 label: inst.label.clone(),
                 description: inst.description.clone(),
+                method: inst.api.method.clone(),
+                path: inst.api.path.clone(),
+                idempotency: inst.api.idempotency.clone(),
+                mode: inst.api.mode.clone(),
+                auth_scheme: inst.api.auth_scheme.clone(),
             });
             NodeRef::Api(k)
+        }
+        Kind::Dto => {
+            let fields = inst.columns.iter().map(ast_column_to_model).collect();
+            let k = model.dtos.insert(Dto {
+                id: inst.id.clone(),
+                label: inst.label.clone(),
+                description: inst.description.clone(),
+                fields,
+            });
+            NodeRef::Dto(k)
         }
         Kind::Location => {
             let k = model.locations.insert(Location {
@@ -369,22 +652,67 @@ fn ast_column_to_model(col: &Column) -> ModelColumn {
         col_type,
         is_pk: false,
         is_unique: false,
+        is_indexed: false,
         is_nullable: false,
         default_val: None,
         label: None,
         is_fk: false,
         fk_target: None,
+        fk_optional: false,
+        fk_on_delete: None,
+        fk_on_update: None,
+        check_constraints: Vec::new(),
+        is_soft_delete: false,
+        is_history: false,
+        is_tenant_scope: false,
+        derived_expr: None,
     };
     for ann in &col.annotations {
         match ann {
             Annotation::Pk | Annotation::PkComposite(_) => mc.is_pk = true,
             Annotation::Unique => mc.is_unique = true,
+            Annotation::UniqueComposite(_) => {}
+            Annotation::Index => mc.is_indexed = true,
+            Annotation::IndexComposite(_) => {}
+            Annotation::Check(expr) => mc.check_constraints.push(expr.clone()),
             Annotation::Null => mc.is_nullable = true,
             Annotation::Default(v) => mc.default_val = Some(v.clone()),
             Annotation::Label(l) => mc.label = Some(l.clone()),
+            Annotation::SoftDelete => mc.is_soft_delete = true,
+            Annotation::History => mc.is_history = true,
+            Annotation::Tenant => mc.is_tenant_scope = true,
+            Annotation::Derived(expr) => mc.derived_expr = Some(expr.clone()),
         }
     }
     mc
+}
+
+fn collect_unique_constraints(columns: &[Column]) -> Vec<Vec<String>> {
+    let mut constraints = Vec::new();
+    for col in columns {
+        for ann in &col.annotations {
+            match ann {
+                Annotation::Unique => constraints.push(vec![col.name.clone()]),
+                Annotation::UniqueComposite(cols) => constraints.push(cols.clone()),
+                _ => {}
+            }
+        }
+    }
+    constraints
+}
+
+fn collect_indexes(columns: &[Column]) -> Vec<Vec<String>> {
+    let mut indexes = Vec::new();
+    for col in columns {
+        for ann in &col.annotations {
+            match ann {
+                Annotation::Index => indexes.push(vec![col.name.clone()]),
+                Annotation::IndexComposite(cols) => indexes.push(cols.clone()),
+                _ => {}
+            }
+        }
+    }
+    indexes
 }
 
 fn resolve_arg(
@@ -1578,19 +1906,67 @@ fn validate_contains_pair(
     if let (Some(Some(from)), Some(Some(to))) = (resolved.first(), resolved.get(1)) {
         let valid = matches!(
             (from, to),
-            (NodeRef::Buc(_), NodeRef::UseCase(_)) | (NodeRef::System(_), NodeRef::Api(_))
+            (NodeRef::Buc(_), NodeRef::UseCase(_))
+                | (NodeRef::Buc(_), NodeRef::Flow(_))
+                | (NodeRef::Flow(_), NodeRef::Step(_))
+                | (NodeRef::Screen(_), NodeRef::Field(_))
+                | (NodeRef::System(_), NodeRef::Api(_))
+                | (NodeRef::Aggregate(_), NodeRef::DomainObject(_))
+                | (NodeRef::Aggregate(_), NodeRef::ValueObject(_))
+                | (NodeRef::Aggregate(_), NodeRef::Concept(_))
         );
         if !valid {
             diags.push(Diagnostic::error(RdraError::TypeMismatch {
                 pred: pred.name.clone(),
                 id: "contains pair".to_string(),
                 actual: format!("{} -> {}", node_kind_tag_str(from), node_kind_tag_str(to)),
-                expected: "buc->usecase|system->api".to_string(),
+                expected: "buc->usecase|buc->flow|flow->step|screen->field|system->api|aggregate->domain_object|aggregate->valueobject|aggregate->concept".to_string(),
             }));
             return false;
         }
     }
     true
+}
+
+fn process_maps_field_predicate(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    resolved: &[Option<NodeRef>],
+    diags: &mut Vec<Diagnostic>,
+) {
+    let (Some(Some(NodeRef::Field(field))), Some(Some(NodeRef::Entity(entity)))) =
+        (resolved.first(), resolved.get(1))
+    else {
+        return;
+    };
+    let Some(column) = pred.args.get(2).and_then(arg_as_str) else {
+        return;
+    };
+
+    let entity_id = model.entities[*entity].id.clone();
+    if !model.entities[*entity]
+        .columns
+        .iter()
+        .any(|col| col.name == column)
+    {
+        diags.push(Diagnostic::error(RdraError::UnknownColumn {
+            entity: entity_id,
+            col: column,
+        }));
+        return;
+    }
+
+    model.field_mappings.push(FieldMapping {
+        field: *field,
+        entity: *entity,
+        column,
+    });
+    model.relations.push(Relation {
+        from: NodeRef::Field(*field),
+        to: NodeRef::Entity(*entity),
+        kind: RelKind::MapsField,
+        options: RelationOptions::default(),
+    });
 }
 
 fn process_coordinates_predicate(model: &mut SemanticModel, resolved: &[Option<NodeRef>]) {
@@ -1624,6 +2000,7 @@ fn process_transitions_predicate(model: &mut SemanticModel, resolved: &[Option<N
             from: state_before.clone(),
             to: state_after.clone(),
             kind: RelKind::Transitions,
+            options: RelationOptions::default(),
         });
     }
 }
@@ -1894,7 +2271,23 @@ fn relation_kind_for_predicate(pred_name: &str) -> Option<RelKind> {
         "requires_permission" => RelKind::RequiresPermission,
         "requires_medium" => RelKind::RequiresMedium,
         "motivates" => RelKind::Motivates,
+        "decides" => RelKind::Decides,
         "invokes" => RelKind::Invokes,
+        "precedes" => RelKind::Precedes,
+        "branches" => RelKind::Branches,
+        "excepts" => RelKind::Excepts,
+        "repeats" => RelKind::Repeats,
+        "covers" => RelKind::Covers,
+        "compensates" => RelKind::Compensates,
+        "request" => RelKind::Request,
+        "response" => RelKind::Response,
+        "error_response" => RelKind::ErrorResponse,
+        "applies_to" => RelKind::AppliesTo,
+        "qualifies" => RelKind::Qualifies,
+        "constrains" => RelKind::Constrains,
+        "maps_to" => RelKind::MapsTo,
+        "maps_field" => RelKind::MapsField,
+        "owns" => RelKind::Owns,
         _ => return None,
     };
     Some(kind)
@@ -1955,11 +2348,33 @@ fn process_relation_predicate(
             from: from.clone(),
             to: to.clone(),
             kind,
+            options: RelationOptions::default(),
         });
         if pred.name == "belongs" {
             process_belongs_context(model, pred, from, to, diags);
         }
     }
+}
+
+fn relation_options_from_chain(pred: &PredicateCall) -> RelationOptions {
+    let mut options = RelationOptions::default();
+    for cc in &pred.chain {
+        match cc.name.as_str() {
+            "optional" => options.optional = true,
+            "on_delete" => {
+                if let Some(value) = cc.args.first().and_then(arg_as_str) {
+                    options.on_delete = Some(value);
+                }
+            }
+            "on_update" => {
+                if let Some(value) = cc.args.first().and_then(arg_as_str) {
+                    options.on_update = Some(value);
+                }
+            }
+            _ => {}
+        }
+    }
+    options
 }
 
 fn process_relate_predicate(
@@ -1996,6 +2411,7 @@ fn process_relate_predicate(
             from: from.clone(),
             to: to.clone(),
             kind,
+            options: relation_options_from_chain(pred),
         });
     }
 }
@@ -2034,6 +2450,7 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
         "required" => process_required_predicate(model, pred, &resolved, diags),
         "exclusive" => process_exclusive_predicate(model, pred, &resolved, diags),
         "forbidden_when" => process_forbidden_when_predicate(model, pred, &resolved, diags),
+        "maps_field" => process_maps_field_predicate(model, pred, &resolved, diags),
         "relate" => process_relate_predicate(model, pred, &resolved, diags),
         _ => process_relation_predicate(model, pred, &resolved, diags),
     }
@@ -2045,17 +2462,29 @@ fn node_kind_tag_str(node: &NodeRef) -> &'static str {
         NodeRef::ExtSystem(_) => "extsystem",
         NodeRef::System(_) => "system",
         NodeRef::Requirement(_) => "requirement",
+        NodeRef::Adr(_) => "adr",
+        NodeRef::Nfr(_) => "nfr",
+        NodeRef::Quality(_) => "quality",
+        NodeRef::Constraint(_) => "constraint",
+        NodeRef::Concept(_) => "concept",
+        NodeRef::DomainObject(_) => "domain_object",
+        NodeRef::Aggregate(_) => "aggregate",
+        NodeRef::ValueObject(_) => "valueobject",
         NodeRef::Business(_) => "business",
         NodeRef::Buc(_) => "buc",
+        NodeRef::Flow(_) => "flow",
+        NodeRef::Step(_) => "step",
         NodeRef::UsageScene(_) => "usagescene",
         NodeRef::UseCase(_) => "usecase",
         NodeRef::Screen(_) => "screen",
+        NodeRef::Field(_) => "field",
         NodeRef::Event(_) => "event",
         NodeRef::Entity(_) => "entity",
         NodeRef::State(_) => "state",
         NodeRef::Condition(_) => "condition",
         NodeRef::Variation(_) => "variation",
         NodeRef::Api(_) => "api",
+        NodeRef::Dto(_) => "dto",
         NodeRef::Location(_) => "location",
         NodeRef::Timing(_) => "timing",
         NodeRef::Medium(_) => "medium",
@@ -2068,10 +2497,17 @@ fn generate_fks(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>) {
         .relations
         .iter()
         .filter(|r| matches!(r.kind, RelKind::RelateManyToOne | RelKind::RelateOneToMany))
-        .map(|r| (r.from.clone(), r.to.clone(), r.kind.clone()))
+        .map(|r| {
+            (
+                r.from.clone(),
+                r.to.clone(),
+                r.kind.clone(),
+                r.options.clone(),
+            )
+        })
         .collect();
 
-    for (from, to, kind) in rels {
+    for (from, to, kind, options) in rels {
         let (many_key, one_key) = match kind {
             RelKind::RelateManyToOne => {
                 if let (NodeRef::Entity(fk), NodeRef::Entity(tk)) = (&from, &to) {
@@ -2124,11 +2560,20 @@ fn generate_fks(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>) {
             col_type: pk_type,
             is_pk: false,
             is_unique: false,
-            is_nullable: false,
+            is_indexed: false,
+            is_nullable: options.optional,
             default_val: None,
             label: None,
             is_fk: true,
             fk_target: Some(one_id),
+            fk_optional: options.optional,
+            fk_on_delete: options.on_delete,
+            fk_on_update: options.on_update,
+            check_constraints: Vec::new(),
+            is_soft_delete: false,
+            is_history: false,
+            is_tenant_scope: false,
+            derived_expr: None,
         };
         model.entities[many_key].columns.push(fk_col);
     }
@@ -2145,6 +2590,12 @@ mod tests {
             id: id.to_string(),
             label: format!("{id} label"),
             description: Some(format!("{id} description")),
+            requirement: RequirementMetadata::default(),
+            adr: AdrMetadata::default(),
+            api: ApiMetadata::default(),
+            nfr: NfrMetadata::default(),
+            field: FieldMetadata::default(),
+            usecase: UseCaseMetadata::default(),
             columns: Vec::new(),
             span: 0..0,
         }
@@ -2156,11 +2607,20 @@ mod tests {
             col_type,
             is_pk: false,
             is_unique: false,
+            is_indexed: false,
             is_nullable: false,
             default_val: None,
             label: None,
             is_fk: false,
             fk_target: None,
+            fk_optional: false,
+            fk_on_delete: None,
+            fk_on_update: None,
+            check_constraints: Vec::new(),
+            is_soft_delete: false,
+            is_history: false,
+            is_tenant_scope: false,
+            derived_expr: None,
         }
     }
 
@@ -2197,6 +2657,12 @@ mod tests {
                 id: (*id).to_string(),
                 label: format!("{id} label"),
                 description: None,
+                requirement: RequirementMetadata::default(),
+                adr: AdrMetadata::default(),
+                api: ApiMetadata::default(),
+                nfr: NfrMetadata::default(),
+                field: FieldMetadata::default(),
+                usecase: UseCaseMetadata::default(),
                 columns: vec![
                     Column {
                         name: "id".to_string(),
@@ -2355,16 +2821,28 @@ sets(ActivateExample, Example, "status", "active")
             (Kind::ExtSystem, "ExtA", "extsystem"),
             (Kind::System, "SystemA", "system"),
             (Kind::Requirement, "ReqA", "requirement"),
+            (Kind::Adr, "AdrA", "adr"),
+            (Kind::Nfr, "NfrA", "nfr"),
+            (Kind::Quality, "QualityA", "quality"),
+            (Kind::Constraint, "ConstraintA", "constraint"),
+            (Kind::Concept, "ConceptA", "concept"),
+            (Kind::DomainObject, "DomainObjectA", "domain_object"),
+            (Kind::Aggregate, "AggregateA", "aggregate"),
+            (Kind::ValueObject, "ValueObjectA", "valueobject"),
             (Kind::Business, "BusinessA", "business"),
             (Kind::Buc, "BucA", "buc"),
+            (Kind::Flow, "FlowA", "flow"),
+            (Kind::Step, "StepA", "step"),
             (Kind::UsageScene, "SceneA", "usagescene"),
             (Kind::UseCase, "UsecaseA", "usecase"),
             (Kind::Screen, "ScreenA", "screen"),
+            (Kind::Field, "FieldA", "field"),
             (Kind::Event, "EventA", "event"),
             (Kind::State, "StateA", "state"),
             (Kind::Condition, "ConditionA", "condition"),
             (Kind::Variation, "VariationA", "variation"),
             (Kind::Api, "ApiA", "api"),
+            (Kind::Dto, "DtoA", "dto"),
             (Kind::Location, "LocationA", "location"),
             (Kind::Timing, "TimingA", "timing"),
             (Kind::Medium, "MediumA", "medium"),
@@ -2379,6 +2857,12 @@ sets(ActivateExample, Example, "status", "active")
             id: "EntityA".to_string(),
             label: "EntityA label".to_string(),
             description: None,
+            requirement: RequirementMetadata::default(),
+            adr: AdrMetadata::default(),
+            api: ApiMetadata::default(),
+            nfr: NfrMetadata::default(),
+            field: FieldMetadata::default(),
+            usecase: UseCaseMetadata::default(),
             columns: vec![Column {
                 name: "id".to_string(),
                 col_type: ColType::Int,
@@ -2513,16 +2997,28 @@ sets(ActivateExample, Example, "status", "active")
             (Kind::ExtSystem, "ExtA"),
             (Kind::System, "SystemA"),
             (Kind::Requirement, "ReqA"),
+            (Kind::Adr, "AdrA"),
+            (Kind::Nfr, "NfrA"),
+            (Kind::Quality, "QualityA"),
+            (Kind::Constraint, "ConstraintA"),
+            (Kind::Concept, "ConceptA"),
+            (Kind::DomainObject, "DomainObjectA"),
+            (Kind::Aggregate, "AggregateA"),
+            (Kind::ValueObject, "ValueObjectA"),
             (Kind::Business, "BusinessA"),
             (Kind::Buc, "BucA"),
+            (Kind::Flow, "FlowA"),
+            (Kind::Step, "StepA"),
             (Kind::UsageScene, "SceneA"),
             (Kind::UseCase, "UsecaseA"),
             (Kind::Screen, "ScreenA"),
+            (Kind::Field, "FieldA"),
             (Kind::Event, "EventA"),
             (Kind::State, "StateA"),
             (Kind::Condition, "ConditionA"),
             (Kind::Variation, "VariationA"),
             (Kind::Api, "ApiA"),
+            (Kind::Dto, "DtoA"),
             (Kind::Location, "LocationA"),
             (Kind::Timing, "TimingA"),
             (Kind::Medium, "MediumA"),
@@ -2538,6 +3034,12 @@ sets(ActivateExample, Example, "status", "active")
             id: "EntityA".to_string(),
             label: "EntityA label".to_string(),
             description: Some("EntityA description".to_string()),
+            requirement: RequirementMetadata::default(),
+            adr: AdrMetadata::default(),
+            api: ApiMetadata::default(),
+            nfr: NfrMetadata::default(),
+            field: FieldMetadata::default(),
+            usecase: UseCaseMetadata::default(),
             columns: vec![Column {
                 name: "id".to_string(),
                 col_type: ColType::Int,
@@ -2553,17 +3055,26 @@ sets(ActivateExample, Example, "status", "active")
         assert_eq!(model.ext_systems.len(), 1);
         assert_eq!(model.systems.len(), 1);
         assert_eq!(model.requirements.len(), 1);
+        assert_eq!(model.nfrs.len(), 1);
+        assert_eq!(model.qualities.len(), 1);
+        assert_eq!(model.constraints.len(), 1);
+        assert_eq!(model.concepts.len(), 1);
+        assert_eq!(model.domain_objects.len(), 1);
+        assert_eq!(model.aggregates.len(), 1);
+        assert_eq!(model.value_objects.len(), 1);
         assert_eq!(model.businesses.len(), 1);
         assert_eq!(model.bucs.len(), 1);
         assert_eq!(model.usage_scenes.len(), 1);
         assert_eq!(model.use_cases.len(), 1);
         assert_eq!(model.screens.len(), 1);
+        assert_eq!(model.fields.len(), 1);
         assert_eq!(model.events.len(), 1);
         assert_eq!(model.entities.len(), 1);
         assert_eq!(model.states.len(), 1);
         assert_eq!(model.conditions.len(), 1);
         assert_eq!(model.variations.len(), 1);
         assert_eq!(model.apis.len(), 1);
+        assert_eq!(model.dtos.len(), 1);
         assert_eq!(model.locations.len(), 1);
         assert_eq!(model.timings.len(), 1);
         assert_eq!(model.media.len(), 1);
@@ -2583,6 +3094,44 @@ sets(ActivateExample, Example, "status", "active")
             .symbols
             .lookup_qualified(&Kind::Entity, "EntityA")
             .is_some());
+    }
+
+    #[test]
+    fn build_model_registers_screen_fields_and_column_mappings() {
+        let src = r#"
+screen CheckoutScreen "Checkout screen"
+field ShippingAddress "Shipping address" access editable required true source actor
+field OrderTotal "Order total" access readonly required true source system
+entity Order "Order" {
+  id: Int @pk
+  shipping_address: String
+  total: Money
+}
+contains(CheckoutScreen, ShippingAddress)
+contains(CheckoutScreen, OrderTotal)
+maps_field(ShippingAddress, Order, "shipping_address")
+maps_field(OrderTotal, Order, "total")
+"#;
+
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
+        let (model, diags) = build_model(&ast);
+        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+        assert_eq!(model.fields.len(), 2);
+        let shipping = model
+            .fields
+            .iter()
+            .find_map(|(_, field)| (field.id == "ShippingAddress").then_some(field))
+            .expect("ShippingAddress field should be registered");
+        assert_eq!(shipping.access.as_deref(), Some("editable"));
+        assert_eq!(shipping.required, Some(true));
+        assert_eq!(shipping.source.as_deref(), Some("actor"));
+        assert_eq!(model.field_mappings.len(), 2);
+        assert!(model
+            .relations
+            .iter()
+            .any(|rel| matches!(rel.kind, RelKind::MapsField)));
     }
 
     #[test]
@@ -2774,6 +3323,519 @@ relate(Order, Customer_profile, "N:1")
         assert!(fk_col.is_fk);
         assert_eq!(fk_col.fk_target.as_deref(), Some("Customer_profile"));
         assert_eq!(fk_col.col_type, ColumnType::Int);
+    }
+
+    #[test]
+    fn test_build_model_requirement_metadata() {
+        let src = r#"
+requirement ReqCheckout "Checkout must be reliable"
+  description "The checkout flow must preserve customer intent."
+  priority "must"
+  source "Customer interview"
+  source "Incident review"
+  stakeholder "Store Operations"
+  owner "Product Owner"
+  acceptance criteria "A payment timeout leaves the cart recoverable."
+  status "proposed"
+  risk "high"
+  rationale "Checkout failures directly block revenue."
+"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+
+        let requirement = model.requirements.values().next().unwrap();
+        assert_eq!(requirement.priority.as_deref(), Some("must"));
+        assert_eq!(
+            requirement.sources,
+            vec![
+                "Customer interview".to_string(),
+                "Incident review".to_string()
+            ]
+        );
+        assert_eq!(
+            requirement.stakeholders,
+            vec!["Store Operations".to_string()]
+        );
+        assert_eq!(requirement.owner.as_deref(), Some("Product Owner"));
+        assert_eq!(
+            requirement.acceptance_criteria,
+            vec!["A payment timeout leaves the cart recoverable.".to_string()]
+        );
+        assert_eq!(requirement.status.as_deref(), Some("proposed"));
+        assert_eq!(requirement.risk.as_deref(), Some("high"));
+        assert_eq!(
+            requirement.rationale.as_deref(),
+            Some("Checkout failures directly block revenue.")
+        );
+    }
+
+    #[test]
+    fn test_build_model_adr_metadata_and_decision_links() {
+        let src = r#"
+adr AdrOutbox "Use transactional outbox"
+  adr_status accepted
+  context "External subscribers need customer changes."
+  decision "Publish customer changes through a transactional outbox."
+  consequence "Delivery becomes eventually consistent."
+  accepted "Transactional outbox"
+  rejected "Synchronous callback"
+  reason "Avoid coupling write latency to external subscribers."
+system CustomerSystem "Customer System"
+entity Customer "Customer" { id: Int @pk }
+api PublishCustomerChanged "Publish customer changed"
+decides(AdrOutbox, CustomerSystem)
+decides(AdrOutbox, Customer)
+decides(AdrOutbox, PublishCustomerChanged)
+"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+
+        let (adr_key, adr) = model.adrs.iter().next().unwrap();
+        assert_eq!(adr.status.as_deref(), Some("accepted"));
+        assert_eq!(
+            adr.decision.as_deref(),
+            Some("Publish customer changes through a transactional outbox.")
+        );
+        assert_eq!(adr.accepted_options, vec!["Transactional outbox"]);
+        assert_eq!(adr.rejected_options, vec!["Synchronous callback"]);
+        assert_eq!(adr.reasons.len(), 1);
+
+        let target_kinds: Vec<_> = model
+            .relations
+            .iter()
+            .filter(|relation| {
+                relation.kind == RelKind::Decides && relation.from == NodeRef::Adr(adr_key)
+            })
+            .map(|relation| node_kind_tag_str(&relation.to))
+            .collect();
+        assert_eq!(target_kinds, vec!["system", "entity", "api"]);
+    }
+
+    #[test]
+    fn test_build_model_business_flow_relations() {
+        let src = r#"
+buc BucCheckout "Checkout"
+flow CheckoutFlow "Checkout flow"
+step ReviewCart "Review cart"
+step AuthorizePayment "Authorize payment"
+step PaymentFailed "Payment failed"
+usecase CapturePayment "Capture payment"
+api PaymentApi "Payment API"
+event PaymentRejected "Payment rejected"
+contains(BucCheckout, CheckoutFlow)
+contains(CheckoutFlow, ReviewCart)
+contains(CheckoutFlow, AuthorizePayment)
+precedes(ReviewCart, AuthorizePayment)
+branches(ReviewCart, PaymentFailed)
+excepts(AuthorizePayment, PaymentFailed)
+repeats(PaymentFailed, ReviewCart)
+covers(AuthorizePayment, CapturePayment)
+covers(AuthorizePayment, PaymentApi)
+covers(PaymentFailed, PaymentRejected)
+"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+
+        assert_eq!(model.flows.len(), 1);
+        assert_eq!(model.steps.len(), 3);
+        for kind in [
+            RelKind::Precedes,
+            RelKind::Branches,
+            RelKind::Excepts,
+            RelKind::Repeats,
+            RelKind::Covers,
+        ] {
+            assert!(
+                model.relations.iter().any(|rel| rel.kind == kind),
+                "missing {kind:?} relation"
+            );
+        }
+    }
+
+    #[test]
+    fn test_build_model_usecase_metadata_and_compensation() {
+        let src = r#"
+usecase CapturePayment "Capture payment"
+  precondition "Order is authorized."
+  guard "Provider is available."
+  postcondition "Payment is captured."
+  alternative "Customer changes payment method."
+  error "Authorization expires."
+usecase RefundPayment "Refund payment"
+compensates(RefundPayment, CapturePayment)
+"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+
+        let capture = model
+            .use_cases
+            .values()
+            .find(|usecase| usecase.id == "CapturePayment")
+            .unwrap();
+        assert_eq!(capture.preconditions, vec!["Order is authorized."]);
+        assert_eq!(capture.guards, vec!["Provider is available."]);
+        assert_eq!(capture.postconditions, vec!["Payment is captured."]);
+        assert_eq!(
+            capture.alternatives,
+            vec!["Customer changes payment method."]
+        );
+        assert_eq!(capture.errors, vec!["Authorization expires."]);
+        assert!(
+            model
+                .relations
+                .iter()
+                .any(|relation| relation.kind == RelKind::Compensates),
+            "compensates should become a relation"
+        );
+    }
+
+    #[test]
+    fn test_build_model_api_contract_metadata_and_dto_relations() {
+        let src = r#"
+api CreateOrder "Create order"
+  method POST
+  path "/orders"
+  idempotency "idempotent"
+  mode sync
+  auth bearer
+dto CreateOrderRequest "Create order request" {
+  customer_id: Int
+  note: String @null
+}
+dto OrderResponse "Order response" { order_id: Int }
+dto ErrorResponse "Error response" { code: String  message: String }
+request(CreateOrder, CreateOrderRequest)
+response(CreateOrder, OrderResponse)
+error_response(CreateOrder, ErrorResponse)
+"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+
+        let api = model.apis.values().next().unwrap();
+        assert_eq!(api.method.as_deref(), Some("POST"));
+        assert_eq!(api.path.as_deref(), Some("/orders"));
+        assert_eq!(api.idempotency.as_deref(), Some("idempotent"));
+        assert_eq!(api.mode.as_deref(), Some("sync"));
+        assert_eq!(api.auth_scheme.as_deref(), Some("bearer"));
+
+        let request_dto = model
+            .dtos
+            .values()
+            .find(|dto| dto.id == "CreateOrderRequest")
+            .unwrap();
+        assert_eq!(request_dto.fields.len(), 2);
+        assert!(request_dto
+            .fields
+            .iter()
+            .any(|field| field.name == "note" && field.is_nullable));
+
+        for kind in [RelKind::Request, RelKind::Response, RelKind::ErrorResponse] {
+            assert!(
+                model.relations.iter().any(|rel| rel.kind == kind),
+                "missing {kind:?} relation"
+            );
+        }
+    }
+
+    #[test]
+    fn test_build_model_non_functional_elements_and_relations() {
+        let src = r#"
+system CoreSystem "Core system"
+usecase Checkout "Checkout"
+api CheckoutApi "Checkout API"
+nfr CheckoutLatency "Checkout latency"
+  metric p95_latency_ms
+  target "<=300"
+  window "5m"
+  slo "99.9%"
+  availability multi_az
+  resilience retryable
+quality Performance "Performance"
+quality Availability "Availability"
+constraint AuditRetention "Audit retention"
+  audit enabled
+  logging structured
+  retention "7y"
+  privacy restricted
+applies_to(CheckoutLatency, Checkout)
+applies_to(CheckoutLatency, CheckoutApi)
+applies_to(CheckoutLatency, CoreSystem)
+qualifies(CheckoutLatency, Performance)
+qualifies(AuditRetention, Availability)
+constrains(AuditRetention, CoreSystem)
+"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+
+        let nfr = model.nfrs.values().next().unwrap();
+        assert_eq!(nfr.metric.as_deref(), Some("p95_latency_ms"));
+        assert_eq!(nfr.target.as_deref(), Some("<=300"));
+        assert_eq!(nfr.window.as_deref(), Some("5m"));
+        assert_eq!(nfr.slo.as_deref(), Some("99.9%"));
+        assert_eq!(nfr.availability.as_deref(), Some("multi_az"));
+        assert_eq!(nfr.resilience.as_deref(), Some("retryable"));
+
+        let constraint = model.constraints.values().next().unwrap();
+        assert_eq!(constraint.audit.as_deref(), Some("enabled"));
+        assert_eq!(constraint.logging.as_deref(), Some("structured"));
+        assert_eq!(constraint.retention.as_deref(), Some("7y"));
+        assert_eq!(constraint.privacy.as_deref(), Some("restricted"));
+
+        for kind in [RelKind::AppliesTo, RelKind::Qualifies, RelKind::Constrains] {
+            assert!(
+                model.relations.iter().any(|rel| rel.kind == kind),
+                "missing {kind:?} relation"
+            );
+        }
+    }
+
+    #[test]
+    fn test_build_model_system_ownership_relation() {
+        let src = r#"
+system StoreSystem "Store system"
+entity Store "Store" { id: Int @pk }
+owns(StoreSystem, Store)
+"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+        assert!(
+            model.relations.iter().any(|rel| rel.kind == RelKind::Owns),
+            "owns(System, Entity) should become an Owns relation"
+        );
+    }
+
+    #[test]
+    fn test_build_model_conceptual_elements_and_entity_mapping() {
+        let src = r#"
+concept PatientIdentity "Patient identity"
+concept CarePlan "Care plan"
+domain_object Appointment "Appointment"
+aggregate SchedulingAggregate "Scheduling aggregate"
+valueobject TimeSlot "Time slot"
+entity AppointmentTable "appointment table" { id: Int @pk  starts_at: DateTime }
+contains(SchedulingAggregate, Appointment)
+contains(SchedulingAggregate, TimeSlot)
+contains(SchedulingAggregate, PatientIdentity)
+maps_to(Appointment, AppointmentTable)
+maps_to(TimeSlot, AppointmentTable)
+"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+
+        assert_eq!(model.concepts.len(), 2);
+        assert_eq!(model.domain_objects.len(), 1);
+        assert_eq!(model.aggregates.len(), 1);
+        assert_eq!(model.value_objects.len(), 1);
+
+        assert!(model
+            .concepts
+            .values()
+            .any(|concept| concept.id == "CarePlan"));
+        assert_eq!(model.entities.len(), 1);
+
+        let contains_count = model
+            .relations
+            .iter()
+            .filter(|rel| rel.kind == RelKind::Contains)
+            .count();
+        let maps_to_count = model
+            .relations
+            .iter()
+            .filter(|rel| rel.kind == RelKind::MapsTo)
+            .count();
+        assert_eq!(contains_count, 3);
+        assert_eq!(maps_to_count, 2);
+    }
+
+    #[test]
+    fn test_build_model_index_and_composite_unique_annotations() {
+        let src = r#"
+entity Product "Product" {
+  id: Int @pk
+  sku: String @unique @index
+  store_id: Int @index(status, store_id) @unique(sku, store_id)
+  status: Enum(active, discontinued) @default(active)
+}
+"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+
+        let product = model.entities.values().next().unwrap();
+        let sku = product
+            .columns
+            .iter()
+            .find(|column| column.name == "sku")
+            .unwrap();
+        assert!(sku.is_unique);
+        assert!(sku.is_indexed);
+        assert_eq!(
+            product.unique_constraints,
+            vec![
+                vec!["sku".to_string()],
+                vec!["sku".to_string(), "store_id".to_string()]
+            ]
+        );
+        assert_eq!(
+            product.indexes,
+            vec![
+                vec!["sku".to_string()],
+                vec!["status".to_string(), "store_id".to_string()]
+            ]
+        );
+    }
+
+    #[test]
+    fn test_build_model_data_modeling_annotations_and_fk_options() {
+        let src = r#"
+entity Customer "Customer" {
+  id: Int @pk
+}
+entity Order "Order" {
+  id: Int @pk
+  tenant_id: Int @tenant
+  total: Money @check("total >= 0")
+  deleted_at: DateTime @null @soft_delete
+  valid_from: DateTime @history
+  net_total: Money @derived("total - discount")
+}
+relate(Order, Customer, "N:1").optional().on_delete(set_null).on_update(cascade)
+"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+
+        let order = model
+            .entities
+            .iter()
+            .find_map(|(_, entity)| (entity.id == "Order").then_some(entity))
+            .unwrap();
+        let tenant_id = order
+            .columns
+            .iter()
+            .find(|column| column.name == "tenant_id")
+            .unwrap();
+        assert!(tenant_id.is_tenant_scope);
+        let total = order
+            .columns
+            .iter()
+            .find(|column| column.name == "total")
+            .unwrap();
+        assert_eq!(total.check_constraints, vec!["total >= 0"]);
+        let deleted_at = order
+            .columns
+            .iter()
+            .find(|column| column.name == "deleted_at")
+            .unwrap();
+        assert!(deleted_at.is_soft_delete);
+        let valid_from = order
+            .columns
+            .iter()
+            .find(|column| column.name == "valid_from")
+            .unwrap();
+        assert!(valid_from.is_history);
+        let net_total = order
+            .columns
+            .iter()
+            .find(|column| column.name == "net_total")
+            .unwrap();
+        assert_eq!(net_total.derived_expr.as_deref(), Some("total - discount"));
+        let customer_id = order
+            .columns
+            .iter()
+            .find(|column| column.name == "customer_id")
+            .unwrap();
+        assert!(customer_id.is_fk);
+        assert!(customer_id.fk_optional);
+        assert!(customer_id.is_nullable);
+        assert_eq!(customer_id.fk_on_delete.as_deref(), Some("set_null"));
+        assert_eq!(customer_id.fk_on_update.as_deref(), Some("cascade"));
+    }
+
+    #[test]
+    fn test_build_model_rejects_requirement_metadata_on_other_kinds() {
+        let src = r#"actor Customer "Customer" priority "must""#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (_, diags) = build_model(&ast);
+        let messages: Vec<_> = diags.iter().map(|d| d.error.to_string()).collect();
+        assert!(
+            messages
+                .iter()
+                .any(|msg| msg.contains("requirement metadata is only valid")),
+            "expected requirement metadata target diagnostic, got {messages:?}"
+        );
+    }
+
+    #[test]
+    fn test_build_model_rejects_api_metadata_on_other_kinds() {
+        let src = r#"usecase PlaceOrder "Place order" method POST"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (_, diags) = build_model(&ast);
+        let messages: Vec<_> = diags.iter().map(|d| d.error.to_string()).collect();
+        assert!(
+            messages
+                .iter()
+                .any(|msg| msg.contains("api metadata is only valid")),
+            "expected api metadata target diagnostic, got {messages:?}"
+        );
+    }
+
+    #[test]
+    fn test_build_model_rejects_nfr_metadata_on_invalid_kinds() {
+        let src = r#"quality Performance "Performance" metric p95_latency_ms"#;
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+
+        let (_, diags) = build_model(&ast);
+        let messages: Vec<_> = diags.iter().map(|d| d.error.to_string()).collect();
+        assert!(
+            messages
+                .iter()
+                .any(|msg| msg.contains("non-functional metadata is only valid")),
+            "expected nfr metadata target diagnostic, got {messages:?}"
+        );
     }
 
     #[test]

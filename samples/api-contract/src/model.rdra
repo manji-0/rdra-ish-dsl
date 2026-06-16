@@ -1,0 +1,45 @@
+module api_contract
+
+business StoreOperations "Store Operations"
+buc BucStoreOrganizationMaintenance "Maintain Store Organization"
+actor OpsStaff "Operations Staff"
+permission StoreMaintenanceWrite "Store Maintenance Write"
+usecase ChangeStoreParentOrganization "Change Store Parent Organization"
+api StoreOrganizationApi "Store Organization API"
+  method PATCH
+  path "/stores/{store_id}/organization"
+  idempotency "idempotent"
+  mode sync
+  auth bearer
+dto ChangeStoreParentOrganizationRequest "Change Store Parent Organization Request" {
+  store_id: Int
+  organization_id: Int
+}
+dto StoreParentOrganizationResponse "Store Parent Organization Response" {
+  store_id: Int
+  organization_id: Int
+}
+dto ApiErrorResponse "API Error Response" {
+  code: String
+  message: String
+}
+system StoreAdminSystem "Store Admin System"
+
+entity Store "Store" {
+  id: Int @pk
+  code: String @unique
+  organization_id: Int
+}
+
+belongs(BucStoreOrganizationMaintenance, StoreOperations)
+contains(BucStoreOrganizationMaintenance, ChangeStoreParentOrganization)
+performs(OpsStaff, BucStoreOrganizationMaintenance)
+has_permission(OpsStaff, StoreMaintenanceWrite)
+contains(StoreAdminSystem, StoreOrganizationApi)
+invokes(ChangeStoreParentOrganization, StoreOrganizationApi)
+updates(StoreOrganizationApi, Store)
+request(StoreOrganizationApi, ChangeStoreParentOrganizationRequest)
+response(StoreOrganizationApi, StoreParentOrganizationResponse)
+error_response(StoreOrganizationApi, ApiErrorResponse)
+requires_permission(ChangeStoreParentOrganization, StoreMaintenanceWrite)
+requires_permission(StoreOrganizationApi, StoreMaintenanceWrite)

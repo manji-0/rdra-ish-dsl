@@ -1,0 +1,21 @@
+@startuml
+!theme plain
+
+entity "🗄️ Organization" as Organization {
+  *id : Int <<PK>>
+  --
+  code : String
+  name : String
+}
+entity "🗄️ Store" as Store {
+  *id : Int <<PK>>
+  --
+  code : String
+  name : String
+  restock_status : Enum
+  next_restock_date : DateTime
+  organization_id : Int <<FK>>
+}
+
+Store }o--|| Organization : ""
+@enduml

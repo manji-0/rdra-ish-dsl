@@ -44,10 +44,20 @@ impl Emitter for EntityListCsvEmitter {
             "column_name",
             "column_type",
             "is_pk",
+            "is_unique",
+            "is_indexed",
             "is_fk",
             "fk_target",
+            "fk_optional",
+            "fk_on_delete",
+            "fk_on_update",
             "is_nullable",
             "default_val",
+            "check_constraints",
+            "is_soft_delete",
+            "is_history",
+            "is_tenant_scope",
+            "derived_expr",
         ])?;
 
         let mut entities: Vec<_> = model.entities.iter().collect();
@@ -59,18 +69,38 @@ impl Emitter for EntityListCsvEmitter {
                 let fk_target = col.fk_target.as_deref().unwrap_or("").to_string();
                 let default_val = col.default_val.as_deref().unwrap_or("").to_string();
                 let is_pk = if col.is_pk { "true" } else { "false" };
+                let is_unique = if col.is_unique { "true" } else { "false" };
+                let is_indexed = if col.is_indexed { "true" } else { "false" };
                 let is_fk = if col.is_fk { "true" } else { "false" };
+                let fk_optional = if col.fk_optional { "true" } else { "false" };
+                let fk_on_delete = col.fk_on_delete.as_deref().unwrap_or("").to_string();
+                let fk_on_update = col.fk_on_update.as_deref().unwrap_or("").to_string();
                 let is_nullable = if col.is_nullable { "true" } else { "false" };
+                let check_constraints = col.check_constraints.join("|");
+                let is_soft_delete = if col.is_soft_delete { "true" } else { "false" };
+                let is_history = if col.is_history { "true" } else { "false" };
+                let is_tenant_scope = if col.is_tenant_scope { "true" } else { "false" };
+                let derived_expr = col.derived_expr.as_deref().unwrap_or("").to_string();
                 wtr.write_record([
                     ent.id.as_str(),
                     ent.label.as_str(),
                     col.name.as_str(),
                     col_type,
                     is_pk,
+                    is_unique,
+                    is_indexed,
                     is_fk,
                     fk_target.as_str(),
+                    fk_optional,
+                    fk_on_delete.as_str(),
+                    fk_on_update.as_str(),
                     is_nullable,
                     default_val.as_str(),
+                    check_constraints.as_str(),
+                    is_soft_delete,
+                    is_history,
+                    is_tenant_scope,
+                    derived_expr.as_str(),
                 ])?;
             }
         }
@@ -182,19 +212,35 @@ impl Emitter for RelationMatrixCsvEmitter {
 
 // ── ApiListCsvEmitter ─────────────────────────────────────────────────────────
 
-/// 行=api, 列=id,label
+/// 行=api, 列=contract summary
 pub struct ApiListCsvEmitter;
 
 impl Emitter for ApiListCsvEmitter {
     fn emit(&self, model: &SemanticModel, _view: &View) -> Result<String, EmitError> {
         let mut wtr = csv::Writer::from_writer(vec![]);
-        wtr.write_record(["id", "label"])?;
+        wtr.write_record([
+            "id",
+            "label",
+            "method",
+            "path",
+            "idempotency",
+            "mode",
+            "auth_scheme",
+        ])?;
 
         let mut apis: Vec<_> = model.apis.iter().collect();
         apis.sort_by_key(|(_, a)| &a.id);
 
         for (_, api) in &apis {
-            wtr.write_record([&api.id, &api.label])?;
+            wtr.write_record([
+                api.id.as_str(),
+                api.label.as_str(),
+                api.method.as_deref().unwrap_or(""),
+                api.path.as_deref().unwrap_or(""),
+                api.idempotency.as_deref().unwrap_or(""),
+                api.mode.as_deref().unwrap_or(""),
+                api.auth_scheme.as_deref().unwrap_or(""),
+            ])?;
         }
 
         let data = wtr
@@ -617,7 +663,7 @@ actor Staff "スタッフ"
         let src = r#"
 entity Order "注文" { id: Int @pk  total: Money }
 entity Customer "顧客" { id: Int @pk  name: String }
-relate(Order, Customer, "N:1")
+relate(Order, Customer, "N:1").optional().on_delete(set_null).on_update(cascade)
 "#;
         let model = model_from(src);
         let view = View::whole();
@@ -625,6 +671,8 @@ relate(Order, Customer, "N:1")
         assert!(result.contains("entity_id"));
         assert!(result.contains("customer_id"));
         assert!(result.contains("true")); // is_fk
+        assert!(result.contains("set_null"));
+        assert!(result.contains("cascade"));
     }
 
     #[test]
@@ -656,9 +704,9 @@ api AuthApi "認証API"
         let model = model_from(src);
         let view = View::whole();
         let result = ApiListCsvEmitter.emit(&model, &view).unwrap();
-        assert!(result.contains("id,label"));
-        assert!(result.contains("OrderApi,注文API"));
-        assert!(result.contains("AuthApi,認証API"));
+        assert!(result.contains("id,label,method,path,idempotency,mode,auth_scheme"));
+        assert!(result.contains("OrderApi,注文API,,,,,"));
+        assert!(result.contains("AuthApi,認証API,,,,,"));
     }
 
     #[test]

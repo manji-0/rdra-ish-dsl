@@ -56,25 +56,37 @@ it is probably a UC, an API boundary, or a data operation instead.
 ## Business Flow
 
 <!-- constrained-by ./language-reference.md#event-triggered-bucs -->
+<!-- constrained-by ./language-reference.md#business-flow -->
 
-RDRA-ish does not currently have a first-class `business_flow` element. Business flow
-is the concrete shape of a BUC, represented in one of two ways:
+RDRA-ish has first-class `flow` and `step` elements for business flow. A flow is the
+concrete business-language narrative inside a BUC; a step is a business action that can
+cover a UC, API, or event without becoming that implementation boundary.
 
-- as prose and staging guidance outside the DSL, especially while discovering scope;
-- as model structure from `contains`, `raises`, `triggers`, `transitions`, and CRUD/API
-  relationships once the BUC is concrete enough.
+Business flow can still start as prose while scope is being discovered. Once order,
+branching, exception routing, or event causality matters for review, move it into the
+DSL with:
 
-That means business flow is not an independent decomposition unit in the DSL. It is
-the BUC-specific flow that explains how the BUC is carried out over time:
+- `contains(Buc, Flow)` and `contains(Flow, Step)` for decomposition;
+- `precedes`, `branches`, `excepts`, and `repeats` for temporal shape;
+- `covers(Step, UseCase | Api | Event)` for the concrete model element carried by the
+  business step;
+- `raises`, `triggers`, `transitions`, and CRUD/API relationships for lifecycle and
+  design effects.
+
+That means business flow is an independent review unit in the DSL, but it stays
+business-facing. It explains how the BUC is carried out over time while leaving UCs,
+APIs, events, and entities to describe concrete interaction and implementation effects:
 
 - inside a BUC, sequence diagrams show actor, screen, API, and entity interactions;
+- flow predicates make UC order, alternatives, exceptions, and loops explicit in the
+  model rather than only in diagram layout;
 - when a BUC hands off to another BUC, event-flow diagrams show
   `UC -> Event -> BUC/UC` and event-to-state chains;
 - state derivation shows which entity states are reachable through declared BUC/UC
   patterns.
 
-This is intentional. RDRA-ish keeps flow review close to generated artifacts so the
-same model can answer both business questions ("what happens next?") and design
+This is intentional. RDRA-ish keeps flow review close to generated artifacts while
+allowing the DSL itself to answer business questions ("what happens next?") and design
 questions ("which API/entity/state boundary carries that step?").
 
 For BUCs that start from a domain event, the standard abstract modeling form is
@@ -110,8 +122,8 @@ The practical reading is:
 1. Use BUCs to choose the business-value slice under review.
 2. Treat business flow as the concrete realization of that BUC.
 3. Use UCs to name the concrete interactions inside that flow.
-4. Use event-flow, sequence, CRUD, ER, and state diagrams to review the flow rather
-   than modeling business flow as a separate primitive.
+4. Use `flow`/`step` predicates, event-flow, sequence, CRUD, ER, and state diagrams to
+   review the flow from both business and design angles.
 
 This leads to a deliberate asymmetry:
 
@@ -120,7 +132,7 @@ This leads to a deliberate asymmetry:
 | What value or responsibility are we reviewing? | BUC |
 | How is that BUC concretely carried out? | Business flow through UCs and events |
 | What action happens inside that flow? | UC |
-| What order or causality connects actions? | Event-flow, sequence, and prose |
+| What order or causality connects actions? | `flow`/`step`, `precedes`, `branches`, `excepts`, `repeats`, event-flow, sequence, and prose |
 | What data or lifecycle effect does an action have? | CRUD, API, `sets`, `raises`, `transitions` |
 | What technical boundary carries the action? | Screen/API/System relationships |
 | What authority or medium constrains the action? | `has_permission`, `requires_permission`, `requires_medium`, screen-constraints CSV, and actor-permission audit |
@@ -133,8 +145,9 @@ This leads to a deliberate asymmetry:
 
 - Create a BUC when the slice has independent business value and can be reviewed by a
   business stakeholder.
-- Treat the business flow as the first concrete expansion of that BUC, even though the
-  DSL stores it through UCs, events, and generated views rather than a dedicated node.
+- Treat the business flow as the first concrete expansion of that BUC. Use prose while
+  discovering it, then use `flow` and `step` when order, alternatives, exceptions, or
+  loops need to become reviewable model facts.
 - Create a UC when there is a user-visible or event-triggered action whose data,
   screen, API, event, or state effects should be reviewable.
 - Use `triggers(Event, Buc)` when a domain event starts another BUC, especially while
@@ -142,8 +155,8 @@ This leads to a deliberate asymmetry:
   event-initiated.
 - Use `triggers(Event, UseCase)` when the event-triggered entry action is known and its
   screen, API, data, permission, or lifecycle effects should be reviewed directly.
-- Prefer prose for early business-flow discovery. Move flow into DSL predicates only
-  when it affects reviewable artifacts or consistency checks.
+- Prefer prose for early business-flow discovery. Move flow into DSL predicates when it
+  affects reviewable artifacts, consistency checks, or handoff discussions.
 - Do not introduce an API just to mirror a UC. Introduce it when the interaction has a
   meaningful consistency, transaction, ownership, or integration boundary.
 - Do not attach permission or device constraints directly to a screen. Declare them on
@@ -155,6 +168,6 @@ This leads to a deliberate asymmetry:
 <!-- derived-from #reading-the-three-together -->
 
 RDRA-ish is RDRA-inspired, not RDRA-equivalent. BUCs are business-value containers,
-business flow is the concrete realization of a BUC through UCs and events, and UCs are
-effect-bearing interactions. This keeps the model useful both for requirements
-discussion and for implementation-oriented review.
+business flow is the concrete realization of a BUC through first-class flows, steps,
+UCs, and events, and UCs are effect-bearing interactions. This keeps the model useful
+both for requirements discussion and for implementation-oriented review.

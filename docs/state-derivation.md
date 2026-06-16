@@ -287,8 +287,9 @@ When a cross constraint has `.along(EntityA, EntityB, ...)`, the rule is relatio
 it is intended to quantify only over instances connected through the declared `relate`
 path. The current derivation validates the declared path shape and can evaluate a
 relation-scoped witness when each adjacent pair in the path shares a use-case provenance
-entry, meaning the same modeled operation reached both side patterns. If such an
-operation-linked witness violates the rule, `CrossForbiddenViolated` or
+entry, meaning the same modeled operation reached both side patterns. This covers
+representative 1:1, N:1, and 1:N cases where the linked rows are created or changed by
+the same use case. If such an operation-linked witness violates the rule, `CrossForbiddenViolated` or
 `CrossInvariantViolated` is emitted. If the broader global cross-product has no
 violating witness, the relation-scoped rule is known satisfied because every linked
 instance combination is a subset of that product. If a witness exists but has no shared
@@ -319,6 +320,7 @@ syntax and design rationale.
 | `TemporalAssertionViolated { anchor, requireds, actual }` | An `after(UseCase).assert(...)` equality is not produced by the anchor use case's immediate effects. |
 | `TemporalAssertionNotEvaluated { anchor, requireds, reason }` | A temporal assertion uses a form that is outside the immediate equality evaluator, such as a comparison expression. |
 | `QuantifierConstraintNotEvaluated { anchor, related, constraint, reason }` | A `has` / `none` related-collection rule needs linked related-row cardinality that the state-pattern engine does not track. |
+| `UndrivenComparisonProp { proposition, usage, effect }` | A comparison proposition is used in `forbidden`, `required`, `exclusive`, `.when`, or `.then` without a matching `sets(..., comparison, true/false)`. The diagnostic explains whether the rule is effectively disabled or always violated. |
 
 ---
 

@@ -1,0 +1,22 @@
+Enum Store_restock_status {
+  normal
+  scheduled
+  blocked
+}
+
+Table Organization [note: 'Organization'] {
+  id int [pk, not null]
+  code varchar [unique, not null]
+  name varchar [not null]
+}
+
+Table Store [note: 'Store'] {
+  id int [pk, not null]
+  code varchar [unique, not null]
+  name varchar [not null]
+  restock_status Store_restock_status [not null, default: `normal`]
+  next_restock_date datetime
+  organization_id int [not null]
+}
+
+Ref: Store.organization_id > Organization.id

@@ -1,12 +1,12 @@
 ---
-source: crates/rdra-emit/src/csv.rs
-assertion_line: 284
+source: crates/rdra-ish-emit/src/csv.rs
+assertion_line: 851
 expression: result
 ---
-entity_id,entity_label,column_name,column_type,is_pk,is_fk,fk_target,is_nullable,default_val
-Customer,顧客,id,Int,true,false,,false,
-Customer,顧客,name,String,false,false,,false,
-Customer,顧客,email,String,false,false,,true,
-Order,注文,id,Int,true,false,,false,
-Order,注文,total,Money,false,false,,false,
-Order,注文,customer_id,Int,false,true,Customer,false,
+entity_id,entity_label,column_name,column_type,is_pk,is_unique,is_indexed,is_fk,fk_target,fk_optional,fk_on_delete,fk_on_update,is_nullable,default_val,check_constraints,is_soft_delete,is_history,is_tenant_scope,derived_expr
+Customer,顧客,id,Int,true,false,false,false,,false,,,false,,,false,false,false,
+Customer,顧客,name,String,false,false,false,false,,false,,,false,,,false,false,false,
+Customer,顧客,email,String,false,false,false,false,,false,,,true,,,false,false,false,
+Order,注文,id,Int,true,false,false,false,,false,,,false,,,false,false,false,
+Order,注文,total,Money,false,false,false,false,,false,,,false,,,false,false,false,
+Order,注文,customer_id,Int,false,false,false,true,Customer,false,,,false,,,false,false,false,

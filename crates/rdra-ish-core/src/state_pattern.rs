@@ -245,6 +245,12 @@ pub enum StateDiag {
         constraint: String,
         reason: String,
     },
+    /// 比較命題が制約で使われているが、sets(..., comparison, bool) で駆動されていない
+    UndrivenComparisonProp {
+        proposition: String,
+        usage: String,
+        effect: String,
+    },
 }
 
 /// entity 単位の状態パターン導出結果
@@ -945,6 +951,7 @@ fn derive_for_entity(
             proposition_props.push(pe.prop.clone());
         }
     }
+    collect_undriven_comparison_diagnostics(model, ek, &mut diags);
 
     // 状態軸の特定（比較命題軸も含む）
     let axes = identify_axes(&entity.columns, &effects_for_entity, &proposition_props);
@@ -1299,6 +1306,95 @@ fn abstract_comparison_conditions(comparisons: &[ComparisonProp]) -> Vec<(String
         .iter()
         .map(|p| (prop_col_key(p), AbstractValue::Bool(true)))
         .collect()
+}
+
+fn collect_undriven_comparison_diagnostics(
+    model: &SemanticModel,
+    ek: EntityKey,
+    diags: &mut Vec<StateDiag>,
+) {
+    let driven: HashSet<String> = model
+        .proposition_effects
+        .iter()
+        .filter(|effect| effect.entity == ek)
+        .map(|effect| effect.prop.axis_key())
+        .collect();
+    let mut seen: HashSet<(String, &'static str)> = HashSet::new();
+
+    let mut push_diag = |prop: &ComparisonProp, usage: &'static str, effect: &'static str| {
+        let key = prop.axis_key();
+        if driven.contains(&key) || !seen.insert((key, usage)) {
+            return;
+        }
+        diags.push(StateDiag::UndrivenComparisonProp {
+            proposition: prop.display(),
+            usage: usage.to_string(),
+            effect: effect.to_string(),
+        });
+    };
+
+    for forbidden in model
+        .forbidden_constraints
+        .iter()
+        .filter(|forbidden| forbidden.entity == ek)
+    {
+        for prop in &forbidden.comparisons {
+            push_diag(
+                prop,
+                "forbidden",
+                "the forbidden condition is never triggered because the comparison remains false",
+            );
+        }
+    }
+
+    for invariant in model
+        .entity_invariants
+        .iter()
+        .filter(|invariant| invariant.entity == ek)
+    {
+        for prop in &invariant.guard_comparisons {
+            push_diag(
+                prop,
+                "invariant.when",
+                "the invariant guard never holds because the comparison remains false",
+            );
+        }
+        for prop in &invariant.required_comparisons {
+            push_diag(
+                prop,
+                "invariant.then",
+                "the invariant requirement is always violated whenever its guard holds",
+            );
+        }
+    }
+
+    for required in model
+        .required_constraints
+        .iter()
+        .filter(|required| required.entity == ek)
+    {
+        for prop in &required.comparisons {
+            push_diag(
+                prop,
+                "required",
+                "the required condition is violated in every reachable pattern",
+            );
+        }
+    }
+
+    for exclusive in model
+        .exclusive_constraints
+        .iter()
+        .filter(|exclusive| exclusive.entity == ek)
+    {
+        for prop in &exclusive.comparisons {
+            push_diag(
+                prop,
+                "exclusive",
+                "the comparison never contributes to an exclusivity violation because it remains false",
+            );
+        }
+    }
 }
 
 fn condition_display_parts(
@@ -3531,6 +3627,89 @@ invariant(Stock)
             .any(|diag| matches!(diag, StateDiag::InvariantViolated { .. })));
     }
 
+    #[test]
+    fn undriven_comparison_propositions_are_reported_by_usage() {
+        let model = model_from(
+            r#"
+entity Stock "在庫" {
+  id: Int @pk
+  stock: Int
+  selling: Int
+  status: Enum(open, closed) @default(open)
+}
+usecase Open "開始"
+creates(Open, Stock)
+forbidden(Stock, stock < selling)
+required(Stock, stock < selling)
+invariant(Stock)
+  .when(stock < selling)
+  .then(status, open)
+invariant(Stock)
+  .when(status, open)
+  .then(stock < selling)
+"#,
+        );
+
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results.iter().find(|r| r.entity_id == "Stock").unwrap();
+        let usages: HashSet<&str> = r
+            .diagnostics
+            .iter()
+            .filter_map(|diag| match diag {
+                StateDiag::UndrivenComparisonProp { usage, .. } => Some(usage.as_str()),
+                _ => None,
+            })
+            .collect();
+
+        assert!(
+            usages.contains("forbidden"),
+            "forbidden comparison should warn: {:?}",
+            r.diagnostics
+        );
+        assert!(
+            usages.contains("required"),
+            "required comparison should warn: {:?}",
+            r.diagnostics
+        );
+        assert!(
+            usages.contains("invariant.when"),
+            "invariant guard comparison should warn: {:?}",
+            r.diagnostics
+        );
+        assert!(
+            usages.contains("invariant.then"),
+            "invariant requirement comparison should warn: {:?}",
+            r.diagnostics
+        );
+    }
+
+    #[test]
+    fn driven_comparison_proposition_suppresses_undriven_warning() {
+        let model = model_from(
+            r#"
+entity Stock "在庫" {
+  id: Int @pk
+  stock: Int
+  selling: Int
+}
+usecase Open "開始"
+creates(Open, Stock)
+sets(Open, Stock, stock < selling, true)
+required(Stock, stock < selling)
+"#,
+        );
+
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results.iter().find(|r| r.entity_id == "Stock").unwrap();
+        assert!(
+            !r.diagnostics
+                .iter()
+                .any(|diag| matches!(diag, StateDiag::UndrivenComparisonProp { .. })),
+            "driven comparison should not warn: {:?}",
+            r.diagnostics
+        );
+    }
+
     /// `now` 比較命題が正しく Proposition 軸として追加されること
     #[test]
     fn test_now_comparison_proposition() {
@@ -3888,6 +4067,42 @@ cross_forbidden(Terminal, ClientCertificate,
                     .iter()
                     .any(|d| matches!(d, StateDiag::CrossForbiddenViolated { .. })),
                 "operation-linked relation-scoped forbidden should report violation on {entity_id}: {:?}",
+                r.diagnostics
+            );
+        }
+    }
+
+    #[test]
+    fn test_relation_scoped_cross_invariant_reports_n_to_one_operation_linked_violation() {
+        let model = model_from(
+            r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(draft, submitted) @default(submitted)
+}
+entity LineItem "明細" {
+  id: Int @pk
+  status: Enum(pending, allocated) @default(pending)
+}
+usecase SubmitOrder "注文確定"
+creates(SubmitOrder, Order)
+creates(SubmitOrder, LineItem)
+relate(LineItem, Order, "N:1")
+cross_invariant(Order, LineItem)
+  .along(Order, LineItem)
+  .when(Order.status, submitted)
+  .then(LineItem.status, allocated)
+"#,
+        );
+
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        for entity_id in ["Order", "LineItem"] {
+            let r = results.iter().find(|r| r.entity_id == entity_id).unwrap();
+            assert!(
+                r.diagnostics
+                    .iter()
+                    .any(|d| matches!(d, StateDiag::CrossInvariantViolated { .. })),
+                "N:1 relation-scoped invariant should report shared-operation violation on {entity_id}: {:?}",
                 r.diagnostics
             );
         }

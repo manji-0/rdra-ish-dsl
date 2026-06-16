@@ -74,6 +74,7 @@ rdra-ish states samples/clinic-ops --entity Appointment
 - [CLI Reference](./docs/cli-reference.md)
 - [Language Reference](./docs/language-reference.md)
 - [Incremental Modeling Flow](./docs/incremental-modeling.md)
+- [Diagram Sample Review Guide](./docs/diagram-sample-review.md)
 - [State Pattern Derivation](./docs/state-derivation.md)
 - [RDRA-ish Interpretation](./docs/rdra-ish-interpretation.md)
 

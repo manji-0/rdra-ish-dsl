@@ -22,16 +22,38 @@ pub enum Token {
     System,
     #[token("requirement")]
     Requirement,
+    #[token("adr")]
+    Adr,
+    #[token("nfr")]
+    Nfr,
+    #[token("quality")]
+    Quality,
+    #[token("constraint")]
+    Constraint,
+    #[token("concept")]
+    Concept,
+    #[token("domain_object")]
+    DomainObject,
+    #[token("aggregate")]
+    Aggregate,
+    #[token("valueobject")]
+    ValueObject,
     #[token("business")]
     Business,
     #[token("buc")]
     Buc,
+    #[token("flow")]
+    Flow,
+    #[token("step")]
+    Step,
     #[token("usagescene")]
     UsageScene,
     #[token("usecase")]
     UseCase,
     #[token("screen")]
     Screen,
+    #[token("field")]
+    Field,
     #[token("event")]
     Event,
     #[token("entity")]
@@ -44,6 +66,8 @@ pub enum Token {
     Variation,
     #[token("api")]
     Api,
+    #[token("dto")]
+    Dto,
     #[token("location")]
     Location,
     #[token("timing")]
@@ -76,12 +100,24 @@ pub enum Token {
     AtPk,
     #[token("@unique")]
     AtUnique,
+    #[token("@index")]
+    AtIndex,
+    #[token("@check")]
+    AtCheck,
     #[token("@null")]
     AtNull,
     #[token("@default")]
     AtDefault,
     #[token("@label")]
     AtLabel,
+    #[token("@soft_delete")]
+    AtSoftDelete,
+    #[token("@history")]
+    AtHistory,
+    #[token("@tenant")]
+    AtTenant,
+    #[token("@derived")]
+    AtDerived,
 
     // ── Comparison / temporal ────────────────────────────────────────
     /// Built-in temporal reference for comparison expressions (e.g. `expired_at < now`)

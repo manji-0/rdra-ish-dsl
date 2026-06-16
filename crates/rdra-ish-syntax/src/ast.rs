@@ -44,17 +44,29 @@ pub enum Kind {
     ExtSystem,
     System,
     Requirement,
+    Adr,
+    Nfr,
+    Quality,
+    Constraint,
+    Concept,
+    DomainObject,
+    Aggregate,
+    ValueObject,
     Business,
     Buc,
+    Flow,
+    Step,
     UsageScene,
     UseCase,
     Screen,
+    Field,
     Event,
     Entity,
     State,
     Condition,
     Variation,
     Api,
+    Dto,
     Location,
     Timing,
     Medium,
@@ -68,17 +80,29 @@ impl Kind {
             Kind::ExtSystem => "extsystem",
             Kind::System => "system",
             Kind::Requirement => "requirement",
+            Kind::Adr => "adr",
+            Kind::Nfr => "nfr",
+            Kind::Quality => "quality",
+            Kind::Constraint => "constraint",
+            Kind::Concept => "concept",
+            Kind::DomainObject => "domain_object",
+            Kind::Aggregate => "aggregate",
+            Kind::ValueObject => "valueobject",
             Kind::Business => "business",
             Kind::Buc => "buc",
+            Kind::Flow => "flow",
+            Kind::Step => "step",
             Kind::UsageScene => "usagescene",
             Kind::UseCase => "usecase",
             Kind::Screen => "screen",
+            Kind::Field => "field",
             Kind::Event => "event",
             Kind::Entity => "entity",
             Kind::State => "state",
             Kind::Condition => "condition",
             Kind::Variation => "variation",
             Kind::Api => "api",
+            Kind::Dto => "dto",
             Kind::Location => "location",
             Kind::Timing => "timing",
             Kind::Medium => "medium",
@@ -112,12 +136,28 @@ pub enum Annotation {
     PkComposite(Vec<std::string::String>),
     /// `@unique`
     Unique,
+    /// `@unique(a, b)`
+    UniqueComposite(Vec<std::string::String>),
+    /// `@index`
+    Index,
+    /// `@index(a, b)`
+    IndexComposite(Vec<std::string::String>),
+    /// `@check("...")`
+    Check(std::string::String),
     /// `@null`
     Null,
     /// `@default(value)`
     Default(std::string::String),
     /// `@label("...")`
     Label(std::string::String),
+    /// `@soft_delete`
+    SoftDelete,
+    /// `@history`
+    History,
+    /// `@tenant`
+    Tenant,
+    /// `@derived("...")`
+    Derived(std::string::String),
 }
 
 // ── Column definition ────────────────────────────────────────────────────────
@@ -132,13 +172,88 @@ pub struct Column {
 
 // ── Instance declaration ─────────────────────────────────────────────────────
 
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct RequirementMetadata {
+    pub priority: Option<std::string::String>,
+    pub sources: Vec<std::string::String>,
+    pub stakeholders: Vec<std::string::String>,
+    pub owner: Option<std::string::String>,
+    pub acceptance_criteria: Vec<std::string::String>,
+    pub status: Option<std::string::String>,
+    pub risk: Option<std::string::String>,
+    pub rationale: Option<std::string::String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct AdrMetadata {
+    pub status: Option<std::string::String>,
+    pub context: Vec<std::string::String>,
+    pub decision: Option<std::string::String>,
+    pub consequences: Vec<std::string::String>,
+    pub accepted_options: Vec<std::string::String>,
+    pub rejected_options: Vec<std::string::String>,
+    pub reasons: Vec<std::string::String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ApiMetadata {
+    pub method: Option<std::string::String>,
+    pub path: Option<std::string::String>,
+    pub idempotency: Option<std::string::String>,
+    pub mode: Option<std::string::String>,
+    pub auth_scheme: Option<std::string::String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct NfrMetadata {
+    pub metric: Option<std::string::String>,
+    pub target: Option<std::string::String>,
+    pub window: Option<std::string::String>,
+    pub slo: Option<std::string::String>,
+    pub availability: Option<std::string::String>,
+    pub resilience: Option<std::string::String>,
+    pub audit: Option<std::string::String>,
+    pub logging: Option<std::string::String>,
+    pub retention: Option<std::string::String>,
+    pub privacy: Option<std::string::String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct FieldMetadata {
+    pub access: Option<std::string::String>,
+    pub required: Option<bool>,
+    pub source: Option<std::string::String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct UseCaseMetadata {
+    pub preconditions: Vec<std::string::String>,
+    pub postconditions: Vec<std::string::String>,
+    pub guards: Vec<std::string::String>,
+    pub alternatives: Vec<std::string::String>,
+    pub errors: Vec<std::string::String>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct InstanceDecl {
     pub kind: Kind,
     pub id: std::string::String,
     pub label: std::string::String,
     pub description: Option<std::string::String>,
+    /// Non-empty only for `requirement` declarations.
+    pub requirement: RequirementMetadata,
+    /// Non-empty only for `adr` declarations.
+    pub adr: AdrMetadata,
+    /// Non-empty only for `api` declarations.
+    pub api: ApiMetadata,
+    /// Non-empty only for `nfr` and `constraint` declarations.
+    pub nfr: NfrMetadata,
+    /// Non-empty only for `field` declarations.
+    pub field: FieldMetadata,
+    /// Non-empty only for `usecase` declarations.
+    pub usecase: UseCaseMetadata,
     /// Non-empty only for `entity` declarations.
+    /// DTO declarations also reuse this column shape for contract fields.
     pub columns: Vec<Column>,
     pub span: Span,
 }
@@ -267,6 +382,7 @@ pub struct ChainCall {
 // ── Top-level item ───────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum Item {
     Module(DottedName, Span),
     Import(ImportDecl),

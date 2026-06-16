@@ -1,0 +1,139 @@
+{
+  "asyncapi": "3.1.0",
+  "channels": {
+    "RestockBlocked": {
+      "address": "RestockBlocked",
+      "messages": {
+        "RestockBlocked": {
+          "$ref": "#/components/messages/RestockBlocked"
+        }
+      }
+    },
+    "RestockScheduled": {
+      "address": "RestockScheduled",
+      "messages": {
+        "RestockScheduled": {
+          "$ref": "#/components/messages/RestockScheduled"
+        }
+      }
+    }
+  },
+  "components": {
+    "messages": {
+      "RestockBlocked": {
+        "name": "RestockBlocked",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "RestockBlocked",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "Restock Blocked",
+        "x-rdra-ish-raised-by-usecases": [
+          "BlockScheduledRestock"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "Scheduled",
+            "to": "Blocked"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "RestockScheduled": {
+        "name": "RestockScheduled",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "RestockScheduled",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "Restock Scheduled",
+        "x-rdra-ish-raised-by-usecases": [
+          "ChangeNextRestockDate"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "Normal",
+            "to": "Scheduled"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      }
+    }
+  },
+  "info": {
+    "title": "RDRA-ish event catalog",
+    "version": "0.1.0"
+  },
+  "operations": {
+    "consumeRestockBlocked": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/RestockBlocked"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/RestockBlocked/messages/RestockBlocked"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "Scheduled",
+          "to": "Blocked"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": []
+    },
+    "consumeRestockScheduled": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/RestockScheduled"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/RestockScheduled/messages/RestockScheduled"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "Normal",
+          "to": "Scheduled"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": []
+    },
+    "publishRestockBlocked": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/RestockBlocked"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/RestockBlocked/messages/RestockBlocked"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "BlockScheduledRestock"
+      ]
+    },
+    "publishRestockScheduled": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/RestockScheduled"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/RestockScheduled/messages/RestockScheduled"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "ChangeNextRestockDate"
+      ]
+    }
+  }
+}

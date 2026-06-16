@@ -1,25 +1,25 @@
 ---
-source: crates/rdra-core/tests/integration_test.rs
-assertion_line: 247
+source: crates/rdra-ish-core/tests/integration_test.rs
+assertion_line: 309
 expression: csv
 ---
-entity_id,entity_label,column_name,column_type,is_pk,is_fk,fk_target,is_nullable,default_val
-Category,カテゴリ,id,Int,true,false,,false,
-Category,カテゴリ,name,String,false,false,,false,
-Customer_info,顧客情報,id,Int,true,false,,false,
-Customer_info,顧客情報,name,String,false,false,,false,
-Customer_info,顧客情報,email,String,false,false,,true,
-Order,注文,id,Int,true,false,,false,
-Order,注文,total,Money,false,false,,false,
-Order,注文,ordered_at,DateTime,false,false,,false,
-Order,注文,customer_info_id,Int,false,true,Customer_info,false,
-OrderLine,注文明細,id,Int,true,false,,false,
-OrderLine,注文明細,qty,Int,false,false,,false,
-OrderLine,注文明細,price,Money,false,false,,false,
-OrderLine,注文明細,order_id,Int,false,true,Order,false,
-OrderLine,注文明細,product_id,Int,false,true,Product,false,
-Product,商品,id,Int,true,false,,false,
-Product,商品,sku,String,false,false,,false,
-Product,商品,name,String,false,false,,false,
-Product,商品,price,Decimal,false,false,,false,
-Product,商品,category_id,Int,false,true,Category,false,
+entity_id,entity_label,column_name,column_type,is_pk,is_unique,is_indexed,is_fk,fk_target,fk_optional,fk_on_delete,fk_on_update,is_nullable,default_val,check_constraints,is_soft_delete,is_history,is_tenant_scope,derived_expr
+Category,カテゴリ,id,Int,true,false,false,false,,false,,,false,,,false,false,false,
+Category,カテゴリ,name,String,false,false,false,false,,false,,,false,,,false,false,false,
+Customer_info,顧客情報,id,Int,true,false,false,false,,false,,,false,,,false,false,false,
+Customer_info,顧客情報,name,String,false,false,false,false,,false,,,false,,,false,false,false,
+Customer_info,顧客情報,email,String,false,false,false,false,,false,,,true,,,false,false,false,
+Order,注文,id,Int,true,false,false,false,,false,,,false,,,false,false,false,
+Order,注文,total,Money,false,false,false,false,,false,,,false,,,false,false,false,
+Order,注文,ordered_at,DateTime,false,false,false,false,,false,,,false,,,false,false,false,
+Order,注文,customer_info_id,Int,false,false,false,true,Customer_info,false,,,false,,,false,false,false,
+OrderLine,注文明細,id,Int,true,false,false,false,,false,,,false,,,false,false,false,
+OrderLine,注文明細,qty,Int,false,false,false,false,,false,,,false,,,false,false,false,
+OrderLine,注文明細,price,Money,false,false,false,false,,false,,,false,,,false,false,false,
+OrderLine,注文明細,order_id,Int,false,false,false,true,Order,false,,,false,,,false,false,false,
+OrderLine,注文明細,product_id,Int,false,false,false,true,Product,false,,,false,,,false,false,false,
+Product,商品,id,Int,true,false,false,false,,false,,,false,,,false,false,false,
+Product,商品,sku,String,false,true,false,false,,false,,,false,,,false,false,false,
+Product,商品,name,String,false,false,false,false,,false,,,false,,,false,false,false,
+Product,商品,price,Decimal,false,false,false,false,,false,,,false,,,false,false,false,
+Product,商品,category_id,Int,false,false,false,true,Category,false,,,false,,,false,false,false,

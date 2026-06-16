@@ -188,6 +188,16 @@ fn diag_message(d: &StateDiag) -> String {
                 anchor, related, constraint, reason
             )
         }
+        StateDiag::UndrivenComparisonProp {
+            proposition,
+            usage,
+            effect,
+        } => {
+            format!(
+                "[warn] comparison proposition '{}' used in {} is not driven by sets(..., <comparison>, true/false): {}",
+                proposition, usage, effect
+            )
+        }
     }
 }
 

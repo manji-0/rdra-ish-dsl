@@ -8,17 +8,29 @@ new_key_type! {
     pub struct ExtSystemKey;
     pub struct SystemKey;
     pub struct RequirementKey;
+    pub struct AdrKey;
+    pub struct NfrKey;
+    pub struct QualityKey;
+    pub struct ConstraintKey;
+    pub struct ConceptKey;
+    pub struct DomainObjectKey;
+    pub struct AggregateKey;
+    pub struct ValueObjectKey;
     pub struct BusinessKey;
     pub struct BucKey;
+    pub struct FlowKey;
+    pub struct StepKey;
     pub struct UsageSceneKey;
     pub struct UseCaseKey;
     pub struct ScreenKey;
+    pub struct FieldKey;
     pub struct EventKey;
     pub struct EntityKey;
     pub struct StateKey;
     pub struct ConditionKey;
     pub struct VariationKey;
     pub struct ApiKey;
+    pub struct DtoKey;
     pub struct LocationKey;
     pub struct TimingKey;
     pub struct MediumKey;
@@ -32,17 +44,29 @@ pub enum NodeRef {
     ExtSystem(ExtSystemKey),
     System(SystemKey),
     Requirement(RequirementKey),
+    Adr(AdrKey),
+    Nfr(NfrKey),
+    Quality(QualityKey),
+    Constraint(ConstraintKey),
+    Concept(ConceptKey),
+    DomainObject(DomainObjectKey),
+    Aggregate(AggregateKey),
+    ValueObject(ValueObjectKey),
     Business(BusinessKey),
     Buc(BucKey),
+    Flow(FlowKey),
+    Step(StepKey),
     UsageScene(UsageSceneKey),
     UseCase(UseCaseKey),
     Screen(ScreenKey),
+    Field(FieldKey),
     Event(EventKey),
     Entity(EntityKey),
     State(StateKey),
     Condition(ConditionKey),
     Variation(VariationKey),
     Api(ApiKey),
+    Dto(DtoKey),
     Location(LocationKey),
     Timing(TimingKey),
     Medium(MediumKey),
@@ -69,8 +93,24 @@ pub enum RelKind {
     RequiresPermission,
     RequiresMedium,
     Motivates,
+    Decides,
     Transitions,
     Invokes, // usecase → api
+    Precedes,
+    Branches,
+    Excepts,
+    Repeats,
+    Covers,
+    Compensates,
+    Request,
+    Response,
+    ErrorResponse,
+    AppliesTo,
+    Qualifies,
+    Constrains,
+    MapsTo,
+    MapsField,
+    Owns,
     // Entity ER
     RelateOneToOne,   // 1:1
     RelateOneToMany,  // 1:N (A側が1, B側がMany)
@@ -84,6 +124,15 @@ pub struct Relation {
     pub from: NodeRef,
     pub to: NodeRef,
     pub kind: RelKind,
+    pub options: RelationOptions,
+}
+
+/// Relation-level options, currently used by `relate` to shape generated FKs.
+#[derive(Debug, Clone, Default)]
+pub struct RelationOptions {
+    pub optional: bool,
+    pub on_delete: Option<std::string::String>,
+    pub on_update: Option<std::string::String>,
 }
 
 /// `coordinates(usecase, entity, entity)` で宣言される、system境界越えrelationの調停責務。
@@ -112,6 +161,14 @@ pub struct BusinessMappingContext {
     pub bys: Vec<BusinessMappingContextValue>,
 }
 
+/// Mapping between a screen field and a logical data model column.
+#[derive(Debug, Clone)]
+pub struct FieldMapping {
+    pub field: FieldKey,
+    pub entity: EntityKey,
+    pub column: std::string::String,
+}
+
 /// カラム型
 #[derive(Debug, Clone, PartialEq)]
 pub enum ColumnType {
@@ -132,11 +189,20 @@ pub struct ModelColumn {
     pub col_type: ColumnType,
     pub is_pk: bool,
     pub is_unique: bool,
+    pub is_indexed: bool,
     pub is_nullable: bool,
     pub default_val: Option<std::string::String>,
     pub label: Option<std::string::String>,
     pub is_fk: bool,
     pub fk_target: Option<std::string::String>,
+    pub fk_optional: bool,
+    pub fk_on_delete: Option<std::string::String>,
+    pub fk_on_update: Option<std::string::String>,
+    pub check_constraints: Vec<std::string::String>,
+    pub is_soft_delete: bool,
+    pub is_history: bool,
+    pub is_tenant_scope: bool,
+    pub derived_expr: Option<std::string::String>,
 }
 
 /// 各要素（全て id: String, label: String を持つ最小構造）
@@ -166,6 +232,97 @@ pub struct Requirement {
     pub id: std::string::String,
     pub label: std::string::String,
     pub description: Option<std::string::String>,
+    pub priority: Option<std::string::String>,
+    pub sources: Vec<std::string::String>,
+    pub stakeholders: Vec<std::string::String>,
+    pub owner: Option<std::string::String>,
+    pub acceptance_criteria: Vec<std::string::String>,
+    pub status: Option<std::string::String>,
+    pub risk: Option<std::string::String>,
+    pub rationale: Option<std::string::String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Adr {
+    pub id: std::string::String,
+    pub label: std::string::String,
+    pub description: Option<std::string::String>,
+    pub status: Option<std::string::String>,
+    pub context: Vec<std::string::String>,
+    pub decision: Option<std::string::String>,
+    pub consequences: Vec<std::string::String>,
+    pub accepted_options: Vec<std::string::String>,
+    pub rejected_options: Vec<std::string::String>,
+    pub reasons: Vec<std::string::String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Nfr {
+    pub id: std::string::String,
+    pub label: std::string::String,
+    pub description: Option<std::string::String>,
+    pub metric: Option<std::string::String>,
+    pub target: Option<std::string::String>,
+    pub window: Option<std::string::String>,
+    pub slo: Option<std::string::String>,
+    pub availability: Option<std::string::String>,
+    pub resilience: Option<std::string::String>,
+    pub audit: Option<std::string::String>,
+    pub logging: Option<std::string::String>,
+    pub retention: Option<std::string::String>,
+    pub privacy: Option<std::string::String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Quality {
+    pub id: std::string::String,
+    pub label: std::string::String,
+    pub description: Option<std::string::String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Constraint {
+    pub id: std::string::String,
+    pub label: std::string::String,
+    pub description: Option<std::string::String>,
+    pub metric: Option<std::string::String>,
+    pub target: Option<std::string::String>,
+    pub window: Option<std::string::String>,
+    pub slo: Option<std::string::String>,
+    pub availability: Option<std::string::String>,
+    pub resilience: Option<std::string::String>,
+    pub audit: Option<std::string::String>,
+    pub logging: Option<std::string::String>,
+    pub retention: Option<std::string::String>,
+    pub privacy: Option<std::string::String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Concept {
+    pub id: std::string::String,
+    pub label: std::string::String,
+    pub description: Option<std::string::String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DomainObject {
+    pub id: std::string::String,
+    pub label: std::string::String,
+    pub description: Option<std::string::String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Aggregate {
+    pub id: std::string::String,
+    pub label: std::string::String,
+    pub description: Option<std::string::String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ValueObject {
+    pub id: std::string::String,
+    pub label: std::string::String,
+    pub description: Option<std::string::String>,
 }
 
 #[derive(Debug, Clone)]
@@ -183,6 +340,20 @@ pub struct Buc {
 }
 
 #[derive(Debug, Clone)]
+pub struct Flow {
+    pub id: std::string::String,
+    pub label: std::string::String,
+    pub description: Option<std::string::String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Step {
+    pub id: std::string::String,
+    pub label: std::string::String,
+    pub description: Option<std::string::String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct UsageScene {
     pub id: std::string::String,
     pub label: std::string::String,
@@ -194,6 +365,11 @@ pub struct UseCase {
     pub id: std::string::String,
     pub label: std::string::String,
     pub description: Option<std::string::String>,
+    pub preconditions: Vec<std::string::String>,
+    pub postconditions: Vec<std::string::String>,
+    pub guards: Vec<std::string::String>,
+    pub alternatives: Vec<std::string::String>,
+    pub errors: Vec<std::string::String>,
 }
 
 #[derive(Debug, Clone)]
@@ -201,6 +377,16 @@ pub struct Screen {
     pub id: std::string::String,
     pub label: std::string::String,
     pub description: Option<std::string::String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Field {
+    pub id: std::string::String,
+    pub label: std::string::String,
+    pub description: Option<std::string::String>,
+    pub access: Option<std::string::String>,
+    pub required: Option<bool>,
+    pub source: Option<std::string::String>,
 }
 
 #[derive(Debug, Clone)]
@@ -216,6 +402,8 @@ pub struct Entity {
     pub label: std::string::String,
     pub description: Option<std::string::String>,
     pub columns: Vec<ModelColumn>,
+    pub unique_constraints: Vec<Vec<std::string::String>>,
+    pub indexes: Vec<Vec<std::string::String>>,
 }
 
 #[derive(Debug, Clone)]
@@ -244,6 +432,19 @@ pub struct Api {
     pub id: std::string::String,
     pub label: std::string::String,
     pub description: Option<std::string::String>,
+    pub method: Option<std::string::String>,
+    pub path: Option<std::string::String>,
+    pub idempotency: Option<std::string::String>,
+    pub mode: Option<std::string::String>,
+    pub auth_scheme: Option<std::string::String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Dto {
+    pub id: std::string::String,
+    pub label: std::string::String,
+    pub description: Option<std::string::String>,
+    pub fields: Vec<ModelColumn>,
 }
 
 #[derive(Debug, Clone)]
@@ -282,17 +483,29 @@ fn node_kind_tag(node: &NodeRef) -> &'static str {
         NodeRef::ExtSystem(_) => "extsystem",
         NodeRef::System(_) => "system",
         NodeRef::Requirement(_) => "requirement",
+        NodeRef::Adr(_) => "adr",
+        NodeRef::Nfr(_) => "nfr",
+        NodeRef::Quality(_) => "quality",
+        NodeRef::Constraint(_) => "constraint",
+        NodeRef::Concept(_) => "concept",
+        NodeRef::DomainObject(_) => "domain_object",
+        NodeRef::Aggregate(_) => "aggregate",
+        NodeRef::ValueObject(_) => "valueobject",
         NodeRef::Business(_) => "business",
         NodeRef::Buc(_) => "buc",
+        NodeRef::Flow(_) => "flow",
+        NodeRef::Step(_) => "step",
         NodeRef::UsageScene(_) => "usagescene",
         NodeRef::UseCase(_) => "usecase",
         NodeRef::Screen(_) => "screen",
+        NodeRef::Field(_) => "field",
         NodeRef::Event(_) => "event",
         NodeRef::Entity(_) => "entity",
         NodeRef::State(_) => "state",
         NodeRef::Condition(_) => "condition",
         NodeRef::Variation(_) => "variation",
         NodeRef::Api(_) => "api",
+        NodeRef::Dto(_) => "dto",
         NodeRef::Location(_) => "location",
         NodeRef::Timing(_) => "timing",
         NodeRef::Medium(_) => "medium",
@@ -307,17 +520,29 @@ fn node_ref_matches_kind(node: &NodeRef, kind: &Kind) -> bool {
             | (NodeRef::ExtSystem(_), Kind::ExtSystem)
             | (NodeRef::System(_), Kind::System)
             | (NodeRef::Requirement(_), Kind::Requirement)
+            | (NodeRef::Adr(_), Kind::Adr)
+            | (NodeRef::Nfr(_), Kind::Nfr)
+            | (NodeRef::Quality(_), Kind::Quality)
+            | (NodeRef::Constraint(_), Kind::Constraint)
+            | (NodeRef::Concept(_), Kind::Concept)
+            | (NodeRef::DomainObject(_), Kind::DomainObject)
+            | (NodeRef::Aggregate(_), Kind::Aggregate)
+            | (NodeRef::ValueObject(_), Kind::ValueObject)
             | (NodeRef::Business(_), Kind::Business)
             | (NodeRef::Buc(_), Kind::Buc)
+            | (NodeRef::Flow(_), Kind::Flow)
+            | (NodeRef::Step(_), Kind::Step)
             | (NodeRef::UsageScene(_), Kind::UsageScene)
             | (NodeRef::UseCase(_), Kind::UseCase)
             | (NodeRef::Screen(_), Kind::Screen)
+            | (NodeRef::Field(_), Kind::Field)
             | (NodeRef::Event(_), Kind::Event)
             | (NodeRef::Entity(_), Kind::Entity)
             | (NodeRef::State(_), Kind::State)
             | (NodeRef::Condition(_), Kind::Condition)
             | (NodeRef::Variation(_), Kind::Variation)
             | (NodeRef::Api(_), Kind::Api)
+            | (NodeRef::Dto(_), Kind::Dto)
             | (NodeRef::Location(_), Kind::Location)
             | (NodeRef::Timing(_), Kind::Timing)
             | (NodeRef::Medium(_), Kind::Medium)
@@ -700,17 +925,29 @@ pub struct SemanticModel {
     pub ext_systems: SlotMap<ExtSystemKey, ExtSystem>,
     pub systems: SlotMap<SystemKey, System>,
     pub requirements: SlotMap<RequirementKey, Requirement>,
+    pub adrs: SlotMap<AdrKey, Adr>,
+    pub nfrs: SlotMap<NfrKey, Nfr>,
+    pub qualities: SlotMap<QualityKey, Quality>,
+    pub constraints: SlotMap<ConstraintKey, Constraint>,
+    pub concepts: SlotMap<ConceptKey, Concept>,
+    pub domain_objects: SlotMap<DomainObjectKey, DomainObject>,
+    pub aggregates: SlotMap<AggregateKey, Aggregate>,
+    pub value_objects: SlotMap<ValueObjectKey, ValueObject>,
     pub businesses: SlotMap<BusinessKey, Business>,
     pub bucs: SlotMap<BucKey, Buc>,
+    pub flows: SlotMap<FlowKey, Flow>,
+    pub steps: SlotMap<StepKey, Step>,
     pub usage_scenes: SlotMap<UsageSceneKey, UsageScene>,
     pub use_cases: SlotMap<UseCaseKey, UseCase>,
     pub screens: SlotMap<ScreenKey, Screen>,
+    pub fields: SlotMap<FieldKey, Field>,
     pub events: SlotMap<EventKey, Event>,
     pub entities: SlotMap<EntityKey, Entity>,
     pub states: SlotMap<StateKey, State>,
     pub conditions: SlotMap<ConditionKey, Condition>,
     pub variations: SlotMap<VariationKey, Variation>,
     pub apis: SlotMap<ApiKey, Api>,
+    pub dtos: SlotMap<DtoKey, Dto>,
     pub locations: SlotMap<LocationKey, Location>,
     pub timings: SlotMap<TimingKey, Timing>,
     pub media: SlotMap<MediumKey, Medium>,
@@ -718,6 +955,7 @@ pub struct SemanticModel {
     pub relations: Vec<Relation>,
     pub boundary_coordinations: Vec<BoundaryCoordination>,
     pub business_mapping_contexts: Vec<BusinessMappingContext>,
+    pub field_mappings: Vec<FieldMapping>,
     /// Events intentionally published outside the local model boundary.
     pub outbox_events: HashSet<EventKey>,
     pub state_transitions: Vec<StateTransition>,

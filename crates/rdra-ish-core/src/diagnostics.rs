@@ -19,6 +19,24 @@ pub enum RdraError {
     #[error("duplicate definition: '{id}' is already defined with the same kind\n  hint: each element id must be unique per kind across all imported files")]
     DuplicateDefinition { id: String },
 
+    #[error("requirement metadata is only valid on requirement '{id}' declarations\n  hint: move priority/source/stakeholder/owner/acceptance/status/risk/rationale clauses to a `requirement` declaration")]
+    RequirementMetadataOnNonRequirement { id: String },
+
+    #[error("ADR metadata is only valid on adr '{id}' declarations\n  hint: move adr_status/context/decision/consequence/accepted/rejected/reason clauses to an `adr` declaration")]
+    AdrMetadataOnNonAdr { id: String },
+
+    #[error("api metadata is only valid on api '{id}' declarations\n  hint: move method/path/idempotency/mode/auth clauses to an `api` declaration")]
+    ApiMetadataOnNonApi { id: String },
+
+    #[error("non-functional metadata is only valid on nfr or constraint '{id}' declarations\n  hint: move metric/target/window/slo/availability/resilience/audit/logging/retention/privacy clauses to an `nfr` or `constraint` declaration")]
+    NfrMetadataOnInvalidKind { id: String },
+
+    #[error("field metadata is only valid on field '{id}' declarations\n  hint: move access/required/source/input/derived clauses to a `field` declaration")]
+    FieldMetadataOnNonField { id: String },
+
+    #[error("usecase metadata is only valid on usecase '{id}' declarations\n  hint: move precondition/postcondition/guard/alternative/error clauses to a `usecase` declaration")]
+    UseCaseMetadataOnNonUseCase { id: String },
+
     #[error("N:M relation between '{from}' and '{to}': direct N:M relations are not supported\n  hint: create an intermediate entity, e.g.:\n    entity {from}{to} \"..\" {{ id: Int @pk }}\n    relate({from}{to}, {from}, \"N:1\")\n    relate({from}{to}, {to}, \"N:1\")")]
     NMRelation { from: String, to: String },
 
@@ -155,6 +173,20 @@ pub enum RdraError {
 
     #[error("entity '{entity}' is operated by APIs in multiple systems ({systems})\n  hint: split ownership or coordinate access through use cases instead of sharing the entity")]
     EntityInMultipleSystems { entity: String, systems: String },
+
+    #[error("entity '{entity}' is explicitly owned by multiple systems ({systems})\n  hint: keep `owns(System, Entity)` singular, or split the entity into separate owned concepts")]
+    EntityOwnedByMultipleSystems { entity: String, systems: String },
+
+    #[error("system '{system}' owns entity '{entity}', but no API in that system operates it\n  hint: add an API operation such as `reads(SomeApi, {entity})`, or keep the ownership as a deliberate future boundary")]
+    OwnedEntityWithoutApiOperation { system: String, entity: String },
+
+    #[error("api '{api}' in system '{api_system}' operates entity '{entity}' owned by system(s) {owner_systems}\n  hint: move the API under the owning system, add coordination, or revise `owns` if the declared ownership is wrong")]
+    ApiOperatesEntityOutsideOwner {
+        api: String,
+        api_system: String,
+        entity: String,
+        owner_systems: String,
+    },
 
     #[error("relation crosses system boundary without use case coordination: entity '{from}' in system '{from_system}' relates to entity '{to}' in system '{to_system}'\n  hint: add `coordinates(SomeUseCase, {from}, {to})` and invoke APIs on both system sides")]
     CrossSystemEntityRelation {

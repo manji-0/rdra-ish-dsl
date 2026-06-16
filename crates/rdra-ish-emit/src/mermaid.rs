@@ -5,8 +5,9 @@
 
 use crate::plantuml::{col_type_str, node_id, node_label};
 use crate::{
-    collect_object_graph_nodes, object_graph_layer, object_graph_rel_label, prefixed_label,
-    prefixed_node_label, EmitError, Emitter, Scope, View, OBJECT_GRAPH_LAYERS,
+    collect_object_graph_nodes, node_description, object_graph_layer, object_graph_rel_label,
+    prefixed_label, prefixed_node_label, view_node_visible, view_relation_visible, EmitError,
+    Emitter, Scope, View, OBJECT_GRAPH_LAYERS,
 };
 use rdra_ish_core::model::{
     ActorKey, ApiKey, BucKey, EntityKey, NodeRef, RelKind, ScreenKey, SemanticModel, UseCaseKey,
@@ -21,16 +22,21 @@ use std::collections::{HashMap, HashSet};
 
 pub struct RdraMermaidEmitter;
 
+fn graph_node_visible(reachable: &Option<HashSet<NodeRef>>, view: &View, node: &NodeRef) -> bool {
+    scoped_node_visible(reachable, node) && view_node_visible(view, node)
+}
+
 fn render_mermaid_rdra_node_declarations(
     out: &mut String,
     model: &SemanticModel,
     reachable: &Option<HashSet<NodeRef>>,
+    view: &View,
 ) {
     let mut actors: Vec<_> = model.actors.iter().collect();
     actors.sort_by_key(|(_, actor)| &actor.id);
     for (key, actor) in &actors {
         let node = NodeRef::Actor(*key);
-        if scoped_node_visible(reachable, &node) {
+        if graph_node_visible(reachable, view, &node) {
             out.push_str(&format!(
                 "  {}([\"{}\"])\n",
                 actor.id,
@@ -43,7 +49,7 @@ fn render_mermaid_rdra_node_declarations(
     usecases.sort_by_key(|(_, usecase)| &usecase.id);
     for (key, usecase) in &usecases {
         let node = NodeRef::UseCase(*key);
-        if scoped_node_visible(reachable, &node) {
+        if graph_node_visible(reachable, view, &node) {
             out.push_str(&format!(
                 "  {}([\"{}\"])\n",
                 usecase.id,
@@ -56,7 +62,7 @@ fn render_mermaid_rdra_node_declarations(
     bucs.sort_by_key(|(_, buc)| &buc.id);
     for (key, buc) in &bucs {
         let node = NodeRef::Buc(*key);
-        if scoped_node_visible(reachable, &node) {
+        if graph_node_visible(reachable, view, &node) {
             out.push_str(&format!(
                 "  {}[\"{}\"]\n",
                 buc.id,
@@ -65,11 +71,37 @@ fn render_mermaid_rdra_node_declarations(
         }
     }
 
+    let mut flows: Vec<_> = model.flows.iter().collect();
+    flows.sort_by_key(|(_, flow)| &flow.id);
+    for (key, flow) in &flows {
+        let node = NodeRef::Flow(*key);
+        if graph_node_visible(reachable, view, &node) {
+            out.push_str(&format!(
+                "  {}[\"{}\"]\n",
+                flow.id,
+                prefixed_node_label(&node, &flow.label)
+            ));
+        }
+    }
+
+    let mut steps: Vec<_> = model.steps.iter().collect();
+    steps.sort_by_key(|(_, step)| &step.id);
+    for (key, step) in &steps {
+        let node = NodeRef::Step(*key);
+        if graph_node_visible(reachable, view, &node) {
+            out.push_str(&format!(
+                "  {}([\"{}\"])\n",
+                step.id,
+                prefixed_node_label(&node, &step.label)
+            ));
+        }
+    }
+
     let mut systems: Vec<_> = model.systems.iter().collect();
     systems.sort_by_key(|(_, system)| &system.id);
     for (key, system) in &systems {
         let node = NodeRef::System(*key);
-        if scoped_node_visible(reachable, &node) {
+        if graph_node_visible(reachable, view, &node) {
             out.push_str(&format!(
                 "  {}[\"{}\"]\n",
                 system.id,
@@ -82,7 +114,7 @@ fn render_mermaid_rdra_node_declarations(
     ext_systems.sort_by_key(|(_, ext_system)| &ext_system.id);
     for (key, ext_system) in &ext_systems {
         let node = NodeRef::ExtSystem(*key);
-        if scoped_node_visible(reachable, &node) {
+        if graph_node_visible(reachable, view, &node) {
             out.push_str(&format!(
                 "  {}[/\"{}\"/]\n",
                 ext_system.id,
@@ -95,7 +127,7 @@ fn render_mermaid_rdra_node_declarations(
     entities.sort_by_key(|(_, entity)| &entity.id);
     for (key, entity) in &entities {
         let node = NodeRef::Entity(*key);
-        if scoped_node_visible(reachable, &node) {
+        if graph_node_visible(reachable, view, &node) {
             out.push_str(&format!(
                 "  {}[(\"{}\")]\n",
                 entity.id,
@@ -108,7 +140,7 @@ fn render_mermaid_rdra_node_declarations(
     screens.sort_by_key(|(_, screen)| &screen.id);
     for (key, screen) in &screens {
         let node = NodeRef::Screen(*key);
-        if scoped_node_visible(reachable, &node) {
+        if graph_node_visible(reachable, view, &node) {
             out.push_str(&format!(
                 "  {}[[\"{}\"]]\n",
                 screen.id,
@@ -117,11 +149,24 @@ fn render_mermaid_rdra_node_declarations(
         }
     }
 
+    let mut fields: Vec<_> = model.fields.iter().collect();
+    fields.sort_by_key(|(_, field)| &field.id);
+    for (key, field) in &fields {
+        let node = NodeRef::Field(*key);
+        if graph_node_visible(reachable, view, &node) {
+            out.push_str(&format!(
+                "  {}[[\"{}\"]]\n",
+                field.id,
+                prefixed_node_label(&node, &field.label)
+            ));
+        }
+    }
+
     let mut events: Vec<_> = model.events.iter().collect();
     events.sort_by_key(|(_, event)| &event.id);
     for (key, event) in &events {
         let node = NodeRef::Event(*key);
-        if scoped_node_visible(reachable, &node) {
+        if graph_node_visible(reachable, view, &node) {
             out.push_str(&format!(
                 "  {}{{\"{}\"}}\n",
                 event.id,
@@ -134,7 +179,7 @@ fn render_mermaid_rdra_node_declarations(
     states.sort_by_key(|(_, state)| &state.id);
     for (key, state) in &states {
         let node = NodeRef::State(*key);
-        if scoped_node_visible(reachable, &node) {
+        if graph_node_visible(reachable, view, &node) {
             out.push_str(&format!(
                 "  {}(\"{}\")  \n",
                 state.id,
@@ -163,6 +208,22 @@ fn mermaid_rdra_relation_arrow(kind: &RelKind, from_id: &str, to_id: &str) -> Op
         }
         RelKind::RequiresMedium => format!("  {} -.->|requires_medium| {}\n", from_id, to_id),
         RelKind::Motivates => format!("  {} -.->|motivates| {}\n", from_id, to_id),
+        RelKind::Decides => format!("  {} -.->|decides| {}\n", from_id, to_id),
+        RelKind::Precedes => format!("  {} -->|precedes| {}\n", from_id, to_id),
+        RelKind::Branches => format!("  {} -.->|branches| {}\n", from_id, to_id),
+        RelKind::Excepts => format!("  {} -.->|excepts| {}\n", from_id, to_id),
+        RelKind::Repeats => format!("  {} -.->|repeats| {}\n", from_id, to_id),
+        RelKind::Covers => format!("  {} -.->|covers| {}\n", from_id, to_id),
+        RelKind::Compensates => format!("  {} -.->|compensates| {}\n", from_id, to_id),
+        RelKind::Request => format!("  {} -.->|request| {}\n", from_id, to_id),
+        RelKind::Response => format!("  {} -.->|response| {}\n", from_id, to_id),
+        RelKind::ErrorResponse => format!("  {} -.->|error_response| {}\n", from_id, to_id),
+        RelKind::AppliesTo => format!("  {} -.->|applies_to| {}\n", from_id, to_id),
+        RelKind::Qualifies => format!("  {} -.->|qualifies| {}\n", from_id, to_id),
+        RelKind::Constrains => format!("  {} -.->|constrains| {}\n", from_id, to_id),
+        RelKind::MapsTo => format!("  {} -.->|maps_to| {}\n", from_id, to_id),
+        RelKind::MapsField => format!("  {} -.->|maps_field| {}\n", from_id, to_id),
+        RelKind::Owns => format!("  {} -->|owns| {}\n", from_id, to_id),
         RelKind::Transitions | RelKind::Invokes => return None,
         RelKind::RelateOneToOne
         | RelKind::RelateOneToMany
@@ -172,16 +233,139 @@ fn mermaid_rdra_relation_arrow(kind: &RelKind, from_id: &str, to_id: &str) -> Op
     Some(arrow)
 }
 
+fn rdra_description_nodes(
+    model: &SemanticModel,
+    reachable: &Option<HashSet<NodeRef>>,
+) -> Vec<NodeRef> {
+    let mut nodes = Vec::new();
+    nodes.extend(
+        model
+            .actors
+            .iter()
+            .map(|(key, _)| NodeRef::Actor(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .adrs
+            .iter()
+            .map(|(key, _)| NodeRef::Adr(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .use_cases
+            .iter()
+            .map(|(key, _)| NodeRef::UseCase(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .bucs
+            .iter()
+            .map(|(key, _)| NodeRef::Buc(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .flows
+            .iter()
+            .map(|(key, _)| NodeRef::Flow(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .steps
+            .iter()
+            .map(|(key, _)| NodeRef::Step(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .systems
+            .iter()
+            .map(|(key, _)| NodeRef::System(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .ext_systems
+            .iter()
+            .map(|(key, _)| NodeRef::ExtSystem(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .entities
+            .iter()
+            .map(|(key, _)| NodeRef::Entity(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .screens
+            .iter()
+            .map(|(key, _)| NodeRef::Screen(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .fields
+            .iter()
+            .map(|(key, _)| NodeRef::Field(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .events
+            .iter()
+            .map(|(key, _)| NodeRef::Event(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .states
+            .iter()
+            .map(|(key, _)| NodeRef::State(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.sort_by_key(|node| node_id(model, node).unwrap_or_default().to_string());
+    nodes
+}
+
+fn render_mermaid_description_annotations(
+    out: &mut String,
+    model: &SemanticModel,
+    nodes: &[NodeRef],
+) {
+    for node in nodes {
+        let (Some(id), Some(description)) = (node_id(model, node), node_description(model, node))
+        else {
+            continue;
+        };
+        let description = description.trim();
+        if description.is_empty() {
+            continue;
+        }
+        let note_id = format!("{}_description", id);
+        let description = mermaid_label(description).replace('\n', "<br/>");
+        out.push_str(&format!("  {}[\"{}\"]\n", note_id, description));
+        out.push_str(&format!("  {} -. description .- {}\n", note_id, id));
+    }
+}
+
 fn render_mermaid_rdra_relations(
     out: &mut String,
     model: &SemanticModel,
     reachable: &Option<HashSet<NodeRef>>,
+    view: &View,
 ) {
     let mut relations: Vec<_> = model.relations.iter().collect();
     relations.sort_by_key(|relation| format!("{:?}{:?}", relation.from, relation.to));
     for relation in &relations {
-        if !scoped_node_visible(reachable, &relation.from)
-            || !scoped_node_visible(reachable, &relation.to)
+        if !graph_node_visible(reachable, view, &relation.from)
+            || !graph_node_visible(reachable, view, &relation.to)
+            || !view_relation_visible(view, &relation.kind)
         {
             continue;
         }
@@ -203,8 +387,15 @@ impl Emitter for RdraMermaidEmitter {
         let reachable = reachable_for_scope(model, &view.scope);
         let mut out = String::new();
         out.push_str("graph TD\n");
-        render_mermaid_rdra_node_declarations(&mut out, model, &reachable);
-        render_mermaid_rdra_relations(&mut out, model, &reachable);
+        render_mermaid_rdra_node_declarations(&mut out, model, &reachable, view);
+        render_mermaid_rdra_relations(&mut out, model, &reachable, view);
+        if view.show_descriptions {
+            let nodes: Vec<_> = rdra_description_nodes(model, &reachable)
+                .into_iter()
+                .filter(|node| view_node_visible(view, node))
+                .collect();
+            render_mermaid_description_annotations(&mut out, model, &nodes);
+        }
 
         while out.ends_with("\n\n") {
             out.pop();
@@ -229,10 +420,11 @@ impl Emitter for ObjectGraphMermaidEmitter {
         };
 
         let is_visible = |nr: &NodeRef| -> bool {
-            match &reachable {
+            let scoped = match &reachable {
                 Some(set) => set.contains(nr),
                 None => true,
-            }
+            };
+            scoped && view_node_visible(view, nr)
         };
 
         let visible_nodes = collect_object_graph_nodes(model, &is_visible);
@@ -257,9 +449,19 @@ impl Emitter for ObjectGraphMermaidEmitter {
                     let line = match nr {
                         NodeRef::Actor(_) => format!("    {}([\"{}\"])\n", id, label),
                         NodeRef::Requirement(_) => format!("    {}[\"{}\"]\n", id, label),
+                        NodeRef::Adr(_) => format!("    {}[\"{}\"]\n", id, label),
+                        NodeRef::Nfr(_) => format!("    {}[\"{}\"]\n", id, label),
                         NodeRef::ExtSystem(_) => format!("    {}[/\"{}\"/]\n", id, label),
+                        NodeRef::Quality(_) => format!("    {}[\"{}\"]\n", id, label),
+                        NodeRef::Constraint(_) => format!("    {}[\"{}\"]\n", id, label),
+                        NodeRef::Concept(_) => format!("    {}[\"{}\"]\n", id, label),
+                        NodeRef::DomainObject(_) => format!("    {}[\"{}\"]\n", id, label),
+                        NodeRef::Aggregate(_) => format!("    {}[\"{}\"]\n", id, label),
+                        NodeRef::ValueObject(_) => format!("    {}[\"{}\"]\n", id, label),
                         NodeRef::Business(_) => format!("    {}[\"{}\"]\n", id, label),
                         NodeRef::Buc(_) => format!("    {}[\"{}\"]\n", id, label),
+                        NodeRef::Flow(_) => format!("    {}[\"{}\"]\n", id, label),
+                        NodeRef::Step(_) => format!("    {}([\"{}\"])\n", id, label),
                         NodeRef::UsageScene(_) => format!("    {}([\"{}\"])\n", id, label),
                         NodeRef::Condition(_) => format!("    {}{{\"{}\"}}\n", id, label),
                         NodeRef::Variation(_) => format!("    {}{{\"{}\"}}\n", id, label),
@@ -269,8 +471,10 @@ impl Emitter for ObjectGraphMermaidEmitter {
                         NodeRef::Permission(_) => format!("    {}[\"{}\"]\n", id, label),
                         NodeRef::UseCase(_) => format!("    {}([\"{}\"])\n", id, label),
                         NodeRef::Screen(_) => format!("    {}[[\"{}\"]]\n", id, label),
+                        NodeRef::Field(_) => format!("    {}[[\"{}\"]]\n", id, label),
                         NodeRef::Event(_) => format!("    {}{{\"{}\"}}\n", id, label),
                         NodeRef::Api(_) => format!("    {}[\"{}\"]\n", id, label),
+                        NodeRef::Dto(_) => format!("    {}[[\"{}\"]]\n", id, label),
                         NodeRef::System(_) => format!("    {}[\"{}\"]\n", id, label),
                         NodeRef::Entity(_) => format!("    {}[(\"{}\")]\n", id, label),
                         NodeRef::State(_) => format!("    {}(\"{}\")\n", id, label),
@@ -287,12 +491,15 @@ impl Emitter for ObjectGraphMermaidEmitter {
             if !visible_set.contains(&rel.from) || !visible_set.contains(&rel.to) {
                 continue;
             }
+            if !view_relation_visible(view, &rel.kind) {
+                continue;
+            }
             if let (Some(from_id), Some(to_id)) =
                 (node_id(model, &rel.from), node_id(model, &rel.to))
             {
                 let label = object_graph_rel_label(&rel.kind);
                 let line = match rel.kind {
-                    RelKind::Performs | RelKind::Contains | RelKind::Uses => {
+                    RelKind::Performs | RelKind::Contains | RelKind::Uses | RelKind::Owns => {
                         format!("  {} -->|{}| {}\n", from_id, label, to_id)
                     }
                     RelKind::RelateOneToOne
@@ -305,6 +512,10 @@ impl Emitter for ObjectGraphMermaidEmitter {
                 };
                 out.push_str(&line);
             }
+        }
+
+        if view.show_descriptions {
+            render_mermaid_description_annotations(&mut out, model, &visible_nodes);
         }
 
         while out.ends_with("\n\n") {
@@ -1444,6 +1655,36 @@ performs(Customer, Browse)
             mermaid_rdra_relation_arrow(&RelKind::RelateManyToOne, "Order", "Customer").as_deref(),
             Some("  Order --- Customer\n")
         );
+        assert_eq!(
+            mermaid_rdra_relation_arrow(&RelKind::Precedes, "ReviewCart", "AuthorizePayment")
+                .as_deref(),
+            Some("  ReviewCart -->|precedes| AuthorizePayment\n")
+        );
+        assert_eq!(
+            mermaid_rdra_relation_arrow(&RelKind::Branches, "ReviewCart", "PaymentFailed")
+                .as_deref(),
+            Some("  ReviewCart -.->|branches| PaymentFailed\n")
+        );
+        assert_eq!(
+            mermaid_rdra_relation_arrow(&RelKind::Excepts, "AuthorizePayment", "PaymentFailed")
+                .as_deref(),
+            Some("  AuthorizePayment -.->|excepts| PaymentFailed\n")
+        );
+        assert_eq!(
+            mermaid_rdra_relation_arrow(&RelKind::Repeats, "PaymentFailed", "ReviewCart")
+                .as_deref(),
+            Some("  PaymentFailed -.->|repeats| ReviewCart\n")
+        );
+        assert_eq!(
+            mermaid_rdra_relation_arrow(&RelKind::Covers, "AuthorizePayment", "CapturePayment")
+                .as_deref(),
+            Some("  AuthorizePayment -.->|covers| CapturePayment\n")
+        );
+        assert_eq!(
+            mermaid_rdra_relation_arrow(&RelKind::Compensates, "RefundPayment", "CapturePayment")
+                .as_deref(),
+            Some("  RefundPayment -.->|compensates| CapturePayment\n")
+        );
         assert!(mermaid_rdra_relation_arrow(&RelKind::Transitions, "Draft", "Published").is_none());
         assert!(mermaid_rdra_relation_arrow(&RelKind::Invokes, "Browse", "BrowseApi").is_none());
     }
@@ -1462,14 +1703,19 @@ invokes(Browse, BrowseApi)
         let model = model_from(src);
         let reachable = None;
         let mut declarations = String::new();
-        render_mermaid_rdra_node_declarations(&mut declarations, &model, &reachable);
+        render_mermaid_rdra_node_declarations(
+            &mut declarations,
+            &model,
+            &reachable,
+            &View::whole(),
+        );
         assert!(declarations.contains("Customer([\"👤 顧客\"])"));
         assert!(declarations.contains("Browse([\"✅ 商品を探す\"])"));
         assert!(declarations.contains("Catalog[(\"🗄️ 商品台帳\")]"));
         assert!(!declarations.contains("BrowseApi"));
 
         let mut relations = String::new();
-        render_mermaid_rdra_relations(&mut relations, &model, &reachable);
+        render_mermaid_rdra_relations(&mut relations, &model, &reachable, &View::whole());
         assert!(relations.contains("Customer --> Browse"));
         assert!(relations.contains("Browse -.->|reads| Catalog"));
         assert!(!relations.contains("BrowseApi"));
@@ -1584,6 +1830,34 @@ creates(OrderApi, Order)
         assert!(result.contains("Customer -->|performs| BucOrder"));
         assert!(result.contains("PlaceOrder -.->|invokes| OrderApi"));
         assert!(result.contains("OrderApi -.->|creates| Order"));
+    }
+
+    #[test]
+    fn test_object_graph_mermaid_applies_node_and_edge_filters() {
+        let src = r#"
+actor Customer "Customer"
+usecase PlaceOrder "Place order"
+api OrderApi "Order API"
+entity Order "Order" { id: Int @pk }
+performs(Customer, PlaceOrder)
+invokes(PlaceOrder, OrderApi)
+creates(OrderApi, Order)
+"#;
+        let model = model_from(src);
+        let view = View::whole().with_graph_filters(
+            vec!["usecase".to_string(), "api".to_string()],
+            vec!["invokes".to_string()],
+        );
+
+        let result = ObjectGraphMermaidEmitter.emit(&model, &view).unwrap();
+
+        assert!(result.contains("PlaceOrder([\"✅ Place order\"])"));
+        assert!(result.contains("OrderApi[\"🔌 Order API\"]"));
+        assert!(result.contains("PlaceOrder -.->|invokes| OrderApi"));
+        assert!(!result.contains("Customer(["));
+        assert!(!result.contains("Order[(\""));
+        assert!(!result.contains("performs"));
+        assert!(!result.contains("creates"));
     }
 
     #[test]
@@ -1791,10 +2065,31 @@ reads(UcA, EntityA)
         let view = View {
             scope: crate::Scope::Bucs(vec!["BucA".to_string()]),
             filter: crate::Filter::Er,
+            show_descriptions: false,
+            node_kinds: Vec::new(),
+            edge_kinds: Vec::new(),
         };
         let result = ErMermaidEmitter.emit(&model, &view).unwrap();
         assert!(result.contains("EntityA"), "EntityA should be included");
         assert!(!result.contains("EntityB"), "EntityB should be excluded");
+    }
+
+    #[test]
+    fn test_mermaid_show_description_renders_annotations() {
+        let src = r#"
+actor Customer "Customer" description "Places orders"
+usecase Browse "Browse" description "Finds products"
+performs(Customer, Browse)
+"#;
+        let model = model_from(src);
+        let view = View::whole().with_descriptions(true);
+
+        let result = RdraMermaidEmitter.emit(&model, &view).unwrap();
+
+        assert!(result.contains("Customer_description[\"Places orders\"]"));
+        assert!(result.contains("Customer_description -. description .- Customer"));
+        assert!(result.contains("Browse_description[\"Finds products\"]"));
+        assert!(result.contains("Browse_description -. description .- Browse"));
     }
 
     #[test]
