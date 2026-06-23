@@ -9,6 +9,7 @@ pub mod mermaid;
 pub mod openapi;
 pub mod plantuml;
 pub mod state_pattern;
+pub mod typescript;
 
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
 use thiserror::Error;

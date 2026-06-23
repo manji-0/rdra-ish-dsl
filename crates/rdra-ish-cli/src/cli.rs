@@ -137,7 +137,7 @@ pub(crate) enum Commands {
     Export {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Export kind: openapi, asyncapi, dbml, json-schema, mermaid-er, or plantuml-er
+        /// Export kind: openapi, asyncapi, dbml, json-schema, typescript-states, mermaid-er, or plantuml-er
         #[arg(long, default_value = "openapi")]
         kind: ExportKind,
         #[arg(short, long, default_value = "out")]
@@ -147,9 +147,9 @@ pub(crate) enum Commands {
     States {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Output format: table, csv, json
+        /// Output format: table, csv, json, or typescript
         #[arg(long, default_value = "table")]
-        format: ListFormat,
+        format: StatesFormat,
         /// Filter to one or more BUCs (by id); repeatable. Union of reachable nodes.
         #[arg(long)]
         buc: Vec<String>,
@@ -200,11 +200,21 @@ pub(crate) enum OutputFormat {
 }
 
 #[derive(ValueEnum, Clone)]
+pub(crate) enum StatesFormat {
+    Table,
+    Csv,
+    Json,
+    TypeScript,
+}
+
+#[derive(ValueEnum, Clone)]
 pub(crate) enum ExportKind {
     Openapi,
     Asyncapi,
     Dbml,
     JsonSchema,
+    #[value(alias = "typescript-states")]
+    TypeScriptStates,
     MermaidEr,
     PlantumlEr,
 }
