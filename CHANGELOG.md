@@ -4,6 +4,16 @@
 
 ## v0.1.7 - 2026-06-23
 
+### Added
+
+- Added typed semantic-model representations for state transitions, concept-to-entity
+  mappings, and parsed predicates (`StateTransition`, `EntityLifecycle`,
+  `ConceptualRef` / `ConceptMapping`, `TypedPredicate`).
+- Added `EntityStateVariant` derivation for reachable lifecycle states as
+  discriminated unions.
+- Added TypeScript state-union export via `rdra-ish states --format typescript`
+  and `rdra-ish export --kind typescript-states`.
+
 ### Changed
 
 - Updated GitHub Actions workflows to Node.js 24.
