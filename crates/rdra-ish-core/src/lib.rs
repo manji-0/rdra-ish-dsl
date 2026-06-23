@@ -5,6 +5,7 @@ pub mod analysis;
 pub mod concept_mapping;
 pub mod diagnostics;
 pub mod entity_lifecycle;
+pub mod entity_state_variant;
 pub mod event_flow;
 pub mod model;
 pub mod resolver;
@@ -26,6 +27,9 @@ pub use concept_mapping::{
 };
 pub use diagnostics::{Diagnostic, RdraError};
 pub use entity_lifecycle::{collect_entity_lifecycles, link_entity_status_states, EntityLifecycle};
+pub use entity_state_variant::{
+    collect_entity_state_variants, EntityStateVariant, EntityStateVariants, StateFieldValue,
+};
 pub use event_flow::{api_diagnostics, collect_event_flows, event_diagnostics, EventFlow};
 pub use model::{
     Adr, AdrKey, Api, ApiKey, AppliesToTarget, Cardinality, ColumnEffect, ConceptMapping,
