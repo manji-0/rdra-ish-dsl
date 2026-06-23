@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## v0.1.7 - 2026-06-23
+
+### Changed
+
+- Updated GitHub Actions workflows to Node.js 24.
+- Added manual `workflow_dispatch` trigger for PyPI publishing.
+
 ## v0.1.6 - 2026-06-16
 
 <!-- derived-from ./docs/language-reference.md#relationship-predicates -->
