@@ -1561,9 +1561,9 @@ fn relation_degree(model: &rdra_ish_core::SemanticModel) -> HashMap<NodeRef, usi
         touch(NodeRef::Entity(mapping.entity));
     }
     for transition in &model.state_transitions {
-        touch(transition.event.clone());
-        touch(transition.from.clone());
-        touch(transition.to.clone());
+        touch(NodeRef::Event(transition.event));
+        touch(NodeRef::State(transition.from));
+        touch(NodeRef::State(transition.to));
     }
     for coordination in &model.boundary_coordinations {
         touch(NodeRef::UseCase(coordination.usecase));

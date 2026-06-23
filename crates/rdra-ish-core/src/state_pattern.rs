@@ -4,6 +4,7 @@
 //! （Enum カラム・Bool カラム・Nullable カラム）の抽象値の組み合わせ。
 //! 有限直積空間上の BFS で到達可能なパターン集合を求める。
 
+use crate::entity_lifecycle::link_entity_status_states;
 use crate::model::{
     ColumnEffect, ColumnType, ComparisonProp, CrossCmpRhs, CrossComparisonProp,
     CrossConstraintScope, CrossEntityCondition, CrossEntityInvariant, CrossForbiddenConstraint,
@@ -329,43 +330,12 @@ fn build_buc_of_usecase(model: &SemanticModel) -> HashMap<UseCaseKey, String> {
     map
 }
 
-/// entity の Enum カラムと state 集合のマッピングを構築する。
-/// State id を小文字化して Enum バリアントと照合し、
-/// `status` カラムに対応する State キーの集合を返す。
-/// 戻り値: (状態を表すカラム名, StateKey → バリアント文字列 のマップ)
+/// entity の Enum カラムと state 集合のマッピングを構築する（`entity_lifecycle` に委譲）。
 fn link_states_to_enum(
     model: &SemanticModel,
     ek: EntityKey,
 ) -> Option<(String, HashMap<StateKey, String>)> {
-    let entity = &model.entities[ek];
-
-    // 全 State ノードの id 集合（lowercase）
-    let state_ids_lower: HashSet<String> =
-        model.states.values().map(|s| s.id.to_lowercase()).collect();
-
-    // entity の Enum カラムで、バリアント集合が state ids と交差するものを探す
-    for col in &entity.columns {
-        if let ColumnType::Enum(variants) = &col.col_type {
-            let variants_lower: Vec<String> = variants.iter().map(|v| v.to_lowercase()).collect();
-            let matching = variants_lower
-                .iter()
-                .filter(|v| state_ids_lower.contains(*v))
-                .count();
-            // バリアントの半数以上が state と一致 → このカラムが status 軸
-            if matching * 2 >= variants.len() && matching > 0 {
-                // StateKey → variant (lowercase) マップを構築
-                let mut map: HashMap<StateKey, String> = HashMap::new();
-                for (sk, state) in model.states.iter() {
-                    let lower = state.id.to_lowercase();
-                    if variants_lower.contains(&lower) {
-                        map.insert(sk, lower);
-                    }
-                }
-                return Some((col.name.clone(), map));
-            }
-        }
-    }
-    None
+    link_entity_status_states(model, ek)
 }
 
 /// 比較命題の StatePattern 内でのキー（実カラムとの衝突を避けるプレフィックス付き）。
@@ -499,22 +469,15 @@ fn build_status_update_ops(
     let mut ops: Vec<Operation> = Vec::new();
 
     for st in &model.state_transitions {
-        let (from_sk, to_sk) = match (&st.from, &st.to) {
-            (NodeRef::State(f), NodeRef::State(t)) => (*f, *t),
-            _ => continue,
-        };
-        let event_key = match &st.event {
-            NodeRef::Event(ek) => *ek,
-            _ => continue,
-        };
-        let from_variant = match state_variant_map.get(&from_sk) {
+        let from_variant = match state_variant_map.get(&st.from) {
             Some(v) => v.clone(),
             None => continue,
         };
-        let to_variant = match state_variant_map.get(&to_sk) {
+        let to_variant = match state_variant_map.get(&st.to) {
             Some(v) => v.clone(),
             None => continue,
         };
+        let event_key = st.event;
 
         // このイベントを raise する usecase を取得
         for rel in &model.relations {
@@ -844,12 +807,9 @@ fn event_status_effects_for_entity(
     };
 
     for st in &model.state_transitions {
-        let (NodeRef::Event(event), NodeRef::State(to_state)) = (&st.event, &st.to) else {
-            continue;
-        };
-        if let Some(to_variant) = state_variant_map.get(to_state) {
+        if let Some(to_variant) = state_variant_map.get(&st.to) {
             effects.insert(
-                *event,
+                st.event,
                 (status_col.clone(), AbstractValue::Enum(to_variant.clone())),
             );
         }
@@ -1806,18 +1766,12 @@ fn immediate_effects_after_usecase(
     }
 
     for st in &model.state_transitions {
-        let NodeRef::Event(event) = &st.event else {
-            continue;
-        };
-        if !raised_events.contains(event) {
+        if !raised_events.contains(&st.event) {
             continue;
         }
-        let NodeRef::State(to_state) = &st.to else {
-            continue;
-        };
         for entity in model.entities.keys() {
             if let Some((status_col, state_variant_map)) = link_states_to_enum(model, entity) {
-                if let Some(to_variant) = state_variant_map.get(to_state) {
+                if let Some(to_variant) = state_variant_map.get(&st.to) {
                     effects.insert(
                         (entity, status_col),
                         AbstractValue::Enum(to_variant.clone()),

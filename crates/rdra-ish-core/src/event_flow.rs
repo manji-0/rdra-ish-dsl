@@ -66,12 +66,8 @@ pub fn collect_event_flows(model: &SemanticModel) -> Vec<EventFlow> {
     }
 
     for st in &model.state_transitions {
-        if let (NodeRef::Event(ek), NodeRef::State(from_sk), NodeRef::State(to_sk)) =
-            (&st.event, &st.from, &st.to)
-        {
-            if let Some(flow) = map.get_mut(ek) {
-                flow.transitions.push((*from_sk, *to_sk));
-            }
+        if let Some(flow) = map.get_mut(&st.event) {
+            flow.transitions.push((st.from, st.to));
         }
     }
 

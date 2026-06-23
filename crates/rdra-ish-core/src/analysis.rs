@@ -1390,10 +1390,13 @@ fn process_cross_forbidden(
     model
         .cross_forbidden_constraints
         .push(CrossForbiddenConstraint {
-            scope,
+            scope: scope.clone(),
             scope_semantics,
             conditions,
         });
+    model
+        .typed_predicates
+        .push(TypedPredicate::CrossForbidden { scope });
 }
 
 fn process_cross_invariant(
@@ -1431,11 +1434,14 @@ fn process_cross_invariant(
     add_condition_entities_to_scope(&mut scope, &requireds);
     let scope_semantics = cross_scope_semantics_from_chain(model, pred, diags);
     model.cross_entity_invariants.push(CrossEntityInvariant {
-        scope,
+        scope: scope.clone(),
         scope_semantics,
         guards,
         requireds,
     });
+    model
+        .typed_predicates
+        .push(TypedPredicate::CrossInvariant { scope });
 }
 
 fn process_forbidden_when_predicate(
@@ -1458,6 +1464,9 @@ fn process_forbidden_when_predicate(
             process_quantifier_chain(model, &scope, &guards, cc, diags);
         }
     }
+    model
+        .typed_predicates
+        .push(TypedPredicate::ForbiddenWhen { entity: *anchor });
 }
 
 fn process_quantifier_chain(
@@ -1628,6 +1637,9 @@ fn process_after_predicate(
             scope,
             requireds,
         });
+    model
+        .typed_predicates
+        .push(TypedPredicate::After { anchor: *anchor });
 }
 
 // ── 比較式の型整合チェック・モデル変換 ────────────────────────────────────────
@@ -1987,18 +1999,41 @@ fn process_coordinates_predicate(model: &mut SemanticModel, resolved: &[Option<N
     }
 }
 
-fn process_transitions_predicate(model: &mut SemanticModel, resolved: &[Option<NodeRef>]) {
-    if let (Some(Some(event)), Some(Some(state_before)), Some(Some(state_after))) =
-        (resolved.first(), resolved.get(1), resolved.get(2))
+fn process_maps_to_predicate(model: &mut SemanticModel, resolved: &[Option<NodeRef>]) {
+    if let (Some(Some(from)), Some(Some(NodeRef::Entity(entity)))) =
+        (resolved.first(), resolved.get(1))
     {
-        model.state_transitions.push(crate::model::StateTransition {
-            event: event.clone(),
-            from: state_before.clone(),
-            to: state_after.clone(),
+        let Some(source) = ConceptualRef::from_node_ref(from) else {
+            return;
+        };
+        model.concept_mappings.push(ConceptMapping {
+            source: source.clone(),
+            entity: *entity,
         });
         model.relations.push(Relation {
-            from: state_before.clone(),
-            to: state_after.clone(),
+            from: from.clone(),
+            to: NodeRef::Entity(*entity),
+            kind: RelKind::MapsTo,
+            options: RelationOptions::default(),
+        });
+    }
+}
+
+fn process_transitions_predicate(model: &mut SemanticModel, resolved: &[Option<NodeRef>]) {
+    if let (
+        Some(Some(NodeRef::Event(event))),
+        Some(Some(NodeRef::State(state_before))),
+        Some(Some(NodeRef::State(state_after))),
+    ) = (resolved.first(), resolved.get(1), resolved.get(2))
+    {
+        model.state_transitions.push(crate::model::StateTransition {
+            event: *event,
+            from: *state_before,
+            to: *state_after,
+        });
+        model.relations.push(Relation {
+            from: NodeRef::State(*state_before),
+            to: NodeRef::State(*state_after),
             kind: RelKind::Transitions,
             options: RelationOptions::default(),
         });
@@ -2043,9 +2078,19 @@ fn process_sets_predicate(
                 model.proposition_effects.push(PropositionEffect {
                     origin: origin.clone(),
                     entity: entity_key,
-                    prop,
+                    prop: prop.clone(),
                     truth: truth_str == "true",
                 });
+                if let Some(origin) = DataOrigin::from_node_ref(origin) {
+                    model
+                        .typed_predicates
+                        .push(TypedPredicate::SetsProposition {
+                            origin,
+                            entity: entity_key,
+                            prop,
+                            truth: truth_str == "true",
+                        });
+                }
             }
         }
         Some(PredicateArg::Lit(col_name)) => {
@@ -2071,9 +2116,16 @@ fn process_sets_predicate(
                     model.column_effects.push(ColumnEffect {
                         origin: origin.clone(),
                         entity: entity_key,
-                        column: col_name,
+                        column: col_name.clone(),
                         value,
                     });
+                    if let Some(origin) = DataOrigin::from_node_ref(origin) {
+                        model.typed_predicates.push(TypedPredicate::SetsColumn {
+                            origin,
+                            entity: entity_key,
+                            column: col_name,
+                        });
+                    }
                 }
                 Err(e) => diags.push(Diagnostic::error(e)),
             }
@@ -2106,6 +2158,9 @@ fn process_forbidden_predicate(
             conditions: conditions.equals,
             comparisons: conditions.comparisons,
         });
+        model
+            .typed_predicates
+            .push(TypedPredicate::Forbidden { entity: entity_key });
     }
 }
 
@@ -2133,6 +2188,9 @@ fn process_required_predicate(
             conditions: conditions.equals,
             comparisons: conditions.comparisons,
         });
+        model
+            .typed_predicates
+            .push(TypedPredicate::Required { entity: entity_key });
     }
 }
 
@@ -2160,6 +2218,9 @@ fn process_exclusive_predicate(
             conditions: conditions.equals,
             comparisons: conditions.comparisons,
         });
+        model
+            .typed_predicates
+            .push(TypedPredicate::Exclusive { entity: entity_key });
     }
 }
 
@@ -2249,6 +2310,9 @@ fn process_invariant_predicate(
             requireds,
             required_comparisons,
         });
+        model
+            .typed_predicates
+            .push(TypedPredicate::Invariant { entity: entity_key });
     }
 }
 
@@ -2441,6 +2505,7 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
 
     match pred.name.as_str() {
         "coordinates" => process_coordinates_predicate(model, &resolved),
+        "maps_to" => process_maps_to_predicate(model, &resolved),
         "transitions" => process_transitions_predicate(model, &resolved),
         "outbox" => process_outbox_predicate(model, &resolved),
         "after" => process_after_predicate(model, pred, &resolved, diags),
@@ -2453,6 +2518,11 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
         "maps_field" => process_maps_field_predicate(model, pred, &resolved, diags),
         "relate" => process_relate_predicate(model, pred, &resolved, diags),
         _ => process_relation_predicate(model, pred, &resolved, diags),
+    }
+
+    if let Some(typed) = crate::typed_predicate::build_typed_predicate(&pred.name, &resolved, pred)
+    {
+        model.typed_predicates.push(typed);
     }
 }
 
@@ -3677,6 +3747,19 @@ maps_to(TimeSlot, AppointmentTable)
             .count();
         assert_eq!(contains_count, 3);
         assert_eq!(maps_to_count, 2);
+        assert_eq!(model.concept_mappings.len(), 2);
+        assert!(model.concept_mappings.iter().any(|mapping| {
+            matches!(
+                (&mapping.source, model.entities[mapping.entity].id.as_str()),
+                (ConceptualRef::DomainObject(_), "AppointmentTable")
+            ) && model.domain_objects.values().any(|d| d.id == "Appointment")
+        }));
+        assert!(model.concept_mappings.iter().any(|mapping| {
+            matches!(
+                (&mapping.source, model.entities[mapping.entity].id.as_str()),
+                (ConceptualRef::ValueObject(_), "AppointmentTable")
+            ) && model.value_objects.values().any(|v| v.id == "TimeSlot")
+        }));
     }
 
     #[test]

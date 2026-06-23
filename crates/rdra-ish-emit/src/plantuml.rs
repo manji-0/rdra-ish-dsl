@@ -7,7 +7,7 @@ use crate::{
 };
 use rdra_ish_core::model::{
     ActorKey, ApiKey, BucKey, ColumnType, EntityKey, NodeRef, RelKind, ScreenKey, SemanticModel,
-    UseCaseKey,
+    StateKey, UseCaseKey,
 };
 use rdra_ish_core::tx::infer_usecase_transactions;
 use rdra_ish_core::{
@@ -691,12 +691,14 @@ impl Emitter for StateDiagramEmitter {
             }
         };
 
+        let is_state_visible = |sk: StateKey| -> bool { is_visible(&NodeRef::State(sk)) };
+
         // state_transitions は完全な (event, from, to) 三つ組
         // BUCフィルタ適用: from/to が両方 visible な遷移のみ
         let transitions: Vec<_> = model
             .state_transitions
             .iter()
-            .filter(|t| is_visible(&t.from) && is_visible(&t.to))
+            .filter(|t| is_state_visible(t.from) && is_state_visible(t.to))
             .collect();
 
         if transitions.is_empty() {
@@ -704,21 +706,21 @@ impl Emitter for StateDiagramEmitter {
         }
 
         // 初期状態 = いずれの to にも登場しない from
-        let to_set: HashSet<&NodeRef> = transitions.iter().map(|t| &t.to).collect();
-        let mut initial_states: Vec<&NodeRef> = transitions
+        let to_set: HashSet<StateKey> = transitions.iter().map(|t| t.to).collect();
+        let mut initial_states: Vec<StateKey> = transitions
             .iter()
-            .map(|t| &t.from)
-            .filter(|nr| !to_set.contains(nr))
+            .map(|t| t.from)
+            .filter(|sk| !to_set.contains(sk))
             .collect::<HashSet<_>>()
             .into_iter()
             .collect();
-        initial_states.sort_by_key(|nr| node_id(model, nr).unwrap_or(""));
+        initial_states.sort_by_key(|sk| node_id(model, &NodeRef::State(*sk)).unwrap_or(""));
 
         let mut out = String::new();
         out.push_str("@startuml\n");
 
         for initial in &initial_states {
-            if let Some(id) = node_id(model, initial) {
+            if let Some(id) = node_id(model, &NodeRef::State(*initial)) {
                 out.push_str(&format!("[*] --> {}\n", id));
             }
         }
@@ -728,20 +730,21 @@ impl Emitter for StateDiagramEmitter {
         sorted.sort_by_key(|t| {
             format!(
                 "{}{}{}",
-                node_id(model, &t.from).unwrap_or(""),
-                node_id(model, &t.to).unwrap_or(""),
-                node_id(model, &t.event).unwrap_or(""),
+                node_id(model, &NodeRef::State(t.from)).unwrap_or(""),
+                node_id(model, &NodeRef::State(t.to)).unwrap_or(""),
+                node_id(model, &NodeRef::Event(t.event)).unwrap_or(""),
             )
         });
 
         let mut defined: HashSet<String> = HashSet::new();
         for t in &sorted {
-            for nr in [&t.from, &t.to] {
-                if let (Some(id), Some(label)) = (node_id(model, nr), node_label(model, nr)) {
+            for sk in [t.from, t.to] {
+                let nr = NodeRef::State(sk);
+                if let (Some(id), Some(label)) = (node_id(model, &nr), node_label(model, &nr)) {
                     if defined.insert(id.to_string()) {
                         out.push_str(&format!(
                             "state \"{}\" as {}\n",
-                            prefixed_node_label(nr, label),
+                            prefixed_node_label(&nr, label),
                             id
                         ));
                     }
@@ -750,16 +753,19 @@ impl Emitter for StateDiagramEmitter {
         }
 
         for t in &sorted {
+            let from_nr = NodeRef::State(t.from);
+            let to_nr = NodeRef::State(t.to);
+            let event_nr = NodeRef::Event(t.event);
             if let (Some(from_id), Some(to_id), Some(ev_label)) = (
-                node_id(model, &t.from),
-                node_id(model, &t.to),
-                node_label(model, &t.event),
+                node_id(model, &from_nr),
+                node_id(model, &to_nr),
+                node_label(model, &event_nr),
             ) {
                 out.push_str(&format!(
                     "{} --> {} : {}\n",
                     from_id,
                     to_id,
-                    prefixed_node_label(&t.event, ev_label)
+                    prefixed_node_label(&event_nr, ev_label)
                 ));
             }
         }

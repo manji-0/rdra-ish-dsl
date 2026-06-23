@@ -169,6 +169,289 @@ pub struct FieldMapping {
     pub column: std::string::String,
 }
 
+/// 概念モデル要素への参照（`maps_to` の source 側）。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ConceptualRef {
+    Concept(ConceptKey),
+    DomainObject(DomainObjectKey),
+    Aggregate(AggregateKey),
+    ValueObject(ValueObjectKey),
+}
+
+impl ConceptualRef {
+    pub fn as_node_ref(&self) -> NodeRef {
+        match self {
+            ConceptualRef::Concept(k) => NodeRef::Concept(*k),
+            ConceptualRef::DomainObject(k) => NodeRef::DomainObject(*k),
+            ConceptualRef::Aggregate(k) => NodeRef::Aggregate(*k),
+            ConceptualRef::ValueObject(k) => NodeRef::ValueObject(*k),
+        }
+    }
+
+    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
+        match node {
+            NodeRef::Concept(k) => Some(ConceptualRef::Concept(*k)),
+            NodeRef::DomainObject(k) => Some(ConceptualRef::DomainObject(*k)),
+            NodeRef::Aggregate(k) => Some(ConceptualRef::Aggregate(*k)),
+            NodeRef::ValueObject(k) => Some(ConceptualRef::ValueObject(*k)),
+            _ => None,
+        }
+    }
+}
+
+/// `maps_to(Conceptual, Entity)` で宣言される概念→論理データモデル対応。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConceptMapping {
+    pub source: ConceptualRef,
+    pub entity: EntityKey,
+}
+
+/// usecase / api が entity を操作する際の起点。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum EntityTouchpoint {
+    UseCase(UseCaseKey),
+    Api(ApiKey),
+}
+
+impl EntityTouchpoint {
+    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
+        match node {
+            NodeRef::UseCase(k) => Some(EntityTouchpoint::UseCase(*k)),
+            NodeRef::Api(k) => Some(EntityTouchpoint::Api(*k)),
+            _ => None,
+        }
+    }
+}
+
+/// `sets(usecase/event, entity, ...)` の起点。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum DataOrigin {
+    UseCase(UseCaseKey),
+    Event(EventKey),
+}
+
+impl DataOrigin {
+    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
+        match node {
+            NodeRef::UseCase(k) => Some(DataOrigin::UseCase(*k)),
+            NodeRef::Event(k) => Some(DataOrigin::Event(*k)),
+            _ => None,
+        }
+    }
+}
+
+/// `performs(actor, ...)` の第2引数。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum PerformTarget {
+    UseCase(UseCaseKey),
+    Buc(BucKey),
+}
+
+impl PerformTarget {
+    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
+        match node {
+            NodeRef::UseCase(k) => Some(PerformTarget::UseCase(*k)),
+            NodeRef::Buc(k) => Some(PerformTarget::Buc(*k)),
+            _ => None,
+        }
+    }
+}
+
+/// `triggers(event, ...)` の第2引数。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TriggerTarget {
+    UseCase(UseCaseKey),
+    Buc(BucKey),
+}
+
+impl TriggerTarget {
+    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
+        match node {
+            NodeRef::UseCase(k) => Some(TriggerTarget::UseCase(*k)),
+            NodeRef::Buc(k) => Some(TriggerTarget::Buc(*k)),
+            _ => None,
+        }
+    }
+}
+
+/// `contains(container, ...)` の container 側。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ContainerRef {
+    Buc(BucKey),
+    System(SystemKey),
+    Flow(FlowKey),
+    Aggregate(AggregateKey),
+    Screen(ScreenKey),
+}
+
+impl ContainerRef {
+    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
+        match node {
+            NodeRef::Buc(k) => Some(ContainerRef::Buc(*k)),
+            NodeRef::System(k) => Some(ContainerRef::System(*k)),
+            NodeRef::Flow(k) => Some(ContainerRef::Flow(*k)),
+            NodeRef::Aggregate(k) => Some(ContainerRef::Aggregate(*k)),
+            NodeRef::Screen(k) => Some(ContainerRef::Screen(*k)),
+            _ => None,
+        }
+    }
+}
+
+/// `contains(..., contained)` の contained 側。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ContainedRef {
+    UseCase(UseCaseKey),
+    Api(ApiKey),
+    Flow(FlowKey),
+    Step(StepKey),
+    Conceptual(ConceptualRef),
+    Field(FieldKey),
+}
+
+impl ContainedRef {
+    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
+        match node {
+            NodeRef::UseCase(k) => Some(ContainedRef::UseCase(*k)),
+            NodeRef::Api(k) => Some(ContainedRef::Api(*k)),
+            NodeRef::Flow(k) => Some(ContainedRef::Flow(*k)),
+            NodeRef::Step(k) => Some(ContainedRef::Step(*k)),
+            NodeRef::Field(k) => Some(ContainedRef::Field(*k)),
+            other => ConceptualRef::from_node_ref(other).map(ContainedRef::Conceptual),
+        }
+    }
+}
+
+/// `applies_to(nfr, ...)` の target 側。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum AppliesToTarget {
+    UseCase(UseCaseKey),
+    Api(ApiKey),
+    System(SystemKey),
+}
+
+impl AppliesToTarget {
+    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
+        match node {
+            NodeRef::UseCase(k) => Some(AppliesToTarget::UseCase(*k)),
+            NodeRef::Api(k) => Some(AppliesToTarget::Api(*k)),
+            NodeRef::System(k) => Some(AppliesToTarget::System(*k)),
+            _ => None,
+        }
+    }
+}
+
+/// `qualifies(...)` の source 側。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum NfrOrConstraint {
+    Nfr(NfrKey),
+    Constraint(ConstraintKey),
+}
+
+impl NfrOrConstraint {
+    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
+        match node {
+            NodeRef::Nfr(k) => Some(NfrOrConstraint::Nfr(*k)),
+            NodeRef::Constraint(k) => Some(NfrOrConstraint::Constraint(*k)),
+            _ => None,
+        }
+    }
+}
+
+/// `constrains(constraint, ...)` の target 側。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ConstrainsTarget {
+    UseCase(UseCaseKey),
+    Api(ApiKey),
+    System(SystemKey),
+    Entity(EntityKey),
+    Dto(DtoKey),
+}
+
+impl ConstrainsTarget {
+    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
+        match node {
+            NodeRef::UseCase(k) => Some(ConstrainsTarget::UseCase(*k)),
+            NodeRef::Api(k) => Some(ConstrainsTarget::Api(*k)),
+            NodeRef::System(k) => Some(ConstrainsTarget::System(*k)),
+            NodeRef::Entity(k) => Some(ConstrainsTarget::Entity(*k)),
+            NodeRef::Dto(k) => Some(ConstrainsTarget::Dto(*k)),
+            _ => None,
+        }
+    }
+}
+
+/// `covers(step, ...)` の target 側。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum CoversTarget {
+    UseCase(UseCaseKey),
+    Api(ApiKey),
+    Event(EventKey),
+}
+
+impl CoversTarget {
+    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
+        match node {
+            NodeRef::UseCase(k) => Some(CoversTarget::UseCase(*k)),
+            NodeRef::Api(k) => Some(CoversTarget::Api(*k)),
+            NodeRef::Event(k) => Some(CoversTarget::Event(*k)),
+            _ => None,
+        }
+    }
+}
+
+/// `decides(adr, ...)` の target 側。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum DecidesTarget {
+    Buc(BucKey),
+    UseCase(UseCaseKey),
+    Api(ApiKey),
+    System(SystemKey),
+    Entity(EntityKey),
+    Requirement(RequirementKey),
+    Nfr(NfrKey),
+    Constraint(ConstraintKey),
+    Conceptual(ConceptualRef),
+    Dto(DtoKey),
+}
+
+impl DecidesTarget {
+    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
+        match node {
+            NodeRef::Buc(k) => Some(DecidesTarget::Buc(*k)),
+            NodeRef::UseCase(k) => Some(DecidesTarget::UseCase(*k)),
+            NodeRef::Api(k) => Some(DecidesTarget::Api(*k)),
+            NodeRef::System(k) => Some(DecidesTarget::System(*k)),
+            NodeRef::Entity(k) => Some(DecidesTarget::Entity(*k)),
+            NodeRef::Requirement(k) => Some(DecidesTarget::Requirement(*k)),
+            NodeRef::Nfr(k) => Some(DecidesTarget::Nfr(*k)),
+            NodeRef::Constraint(k) => Some(DecidesTarget::Constraint(*k)),
+            NodeRef::Dto(k) => Some(DecidesTarget::Dto(*k)),
+            other => ConceptualRef::from_node_ref(other).map(DecidesTarget::Conceptual),
+        }
+    }
+}
+
+/// `relate(..., "N:1")` のカーディナリティ。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Cardinality {
+    OneToOne,
+    OneToMany,
+    ManyToOne,
+    ManyToMany,
+}
+
+impl Cardinality {
+    pub fn from_literal(card: &str) -> Option<Self> {
+        match card {
+            "1:1" => Some(Cardinality::OneToOne),
+            "1:N" => Some(Cardinality::OneToMany),
+            "N:1" => Some(Cardinality::ManyToOne),
+            "N:M" => Some(Cardinality::ManyToMany),
+            _ => None,
+        }
+    }
+}
+
 /// カラム型
 #[derive(Debug, Clone, PartialEq)]
 pub enum ColumnType {
@@ -625,11 +908,11 @@ impl SymbolTable {
 }
 
 /// 状態遷移の三つ組（状態遷移図用）
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StateTransition {
-    pub event: NodeRef, // Event
-    pub from: NodeRef,  // State before
-    pub to: NodeRef,    // State after
+    pub event: EventKey,
+    pub from: StateKey,
+    pub to: StateKey,
 }
 
 /// `sets(...)` 述語で宣言されるカラム効果の抽象値
@@ -918,6 +1201,201 @@ pub struct QuantifierConstraint {
     pub related_conditions: Vec<CrossEntityCondition>,
 }
 
+/// 解析済み述語の型付き表現（discriminated union）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TypedPredicate {
+    Performs {
+        actor: ActorKey,
+        target: PerformTarget,
+    },
+    Uses {
+        actor: ActorKey,
+        ext_system: ExtSystemKey,
+    },
+    Reads {
+        origin: EntityTouchpoint,
+        entity: EntityKey,
+    },
+    Writes {
+        origin: EntityTouchpoint,
+        entity: EntityKey,
+    },
+    Creates {
+        origin: EntityTouchpoint,
+        entity: EntityKey,
+    },
+    Updates {
+        origin: EntityTouchpoint,
+        entity: EntityKey,
+    },
+    Deletes {
+        origin: EntityTouchpoint,
+        entity: EntityKey,
+    },
+    Invokes {
+        usecase: UseCaseKey,
+        api: ApiKey,
+    },
+    Request {
+        api: ApiKey,
+        dto: DtoKey,
+    },
+    Response {
+        api: ApiKey,
+        dto: DtoKey,
+    },
+    ErrorResponse {
+        api: ApiKey,
+        dto: DtoKey,
+    },
+    AppliesTo {
+        nfr: NfrKey,
+        target: AppliesToTarget,
+    },
+    Qualifies {
+        source: NfrOrConstraint,
+        quality: QualityKey,
+    },
+    Constrains {
+        constraint: ConstraintKey,
+        target: ConstrainsTarget,
+    },
+    Owns {
+        system: SystemKey,
+        entity: EntityKey,
+    },
+    Displays {
+        usecase: UseCaseKey,
+        screen: ScreenKey,
+    },
+    Shows {
+        screen: ScreenKey,
+        entity: EntityKey,
+    },
+    Raises {
+        usecase: UseCaseKey,
+        event: EventKey,
+    },
+    Triggers {
+        event: EventKey,
+        target: TriggerTarget,
+    },
+    Contains {
+        container: ContainerRef,
+        contained: ContainedRef,
+    },
+    Precedes {
+        from: StepKey,
+        to: StepKey,
+    },
+    Branches {
+        from: StepKey,
+        to: StepKey,
+    },
+    Excepts {
+        from: StepKey,
+        to: StepKey,
+    },
+    Repeats {
+        from: StepKey,
+        to: StepKey,
+    },
+    Covers {
+        step: StepKey,
+        target: CoversTarget,
+    },
+    Compensates {
+        from: UseCaseKey,
+        to: UseCaseKey,
+    },
+    MapsTo {
+        source: ConceptualRef,
+        entity: EntityKey,
+    },
+    Coordinates {
+        usecase: UseCaseKey,
+        left: EntityKey,
+        right: EntityKey,
+    },
+    Belongs {
+        buc: BucKey,
+        business: BusinessKey,
+    },
+    HasPermission {
+        actor: ActorKey,
+        permission: PermissionKey,
+    },
+    RequiresPermission {
+        origin: EntityTouchpoint,
+        permission: PermissionKey,
+    },
+    RequiresMedium {
+        origin: EntityTouchpoint,
+        medium: MediumKey,
+    },
+    Motivates {
+        requirement: RequirementKey,
+        buc: BucKey,
+    },
+    Decides {
+        adr: AdrKey,
+        target: DecidesTarget,
+    },
+    Transitions {
+        event: EventKey,
+        from: StateKey,
+        to: StateKey,
+    },
+    Outbox {
+        event: EventKey,
+    },
+    MapsField {
+        field: FieldKey,
+        entity: EntityKey,
+        column: std::string::String,
+    },
+    Relate {
+        from: EntityKey,
+        to: EntityKey,
+        cardinality: Cardinality,
+    },
+    SetsColumn {
+        origin: DataOrigin,
+        entity: EntityKey,
+        column: std::string::String,
+    },
+    SetsProposition {
+        origin: DataOrigin,
+        entity: EntityKey,
+        prop: ComparisonProp,
+        truth: bool,
+    },
+    After {
+        anchor: UseCaseKey,
+    },
+    Forbidden {
+        entity: EntityKey,
+    },
+    Required {
+        entity: EntityKey,
+    },
+    Exclusive {
+        entity: EntityKey,
+    },
+    Invariant {
+        entity: EntityKey,
+    },
+    ForbiddenWhen {
+        entity: EntityKey,
+    },
+    CrossForbidden {
+        scope: Vec<EntityKey>,
+    },
+    CrossInvariant {
+        scope: Vec<EntityKey>,
+    },
+}
+
 /// セマンティックモデル
 #[derive(Debug, Default)]
 pub struct SemanticModel {
@@ -956,6 +1434,10 @@ pub struct SemanticModel {
     pub boundary_coordinations: Vec<BoundaryCoordination>,
     pub business_mapping_contexts: Vec<BusinessMappingContext>,
     pub field_mappings: Vec<FieldMapping>,
+    /// `maps_to(Conceptual, Entity)` で宣言される概念→論理データモデル対応。
+    pub concept_mappings: Vec<ConceptMapping>,
+    /// 解析済み述語の型付き表現。
+    pub typed_predicates: Vec<TypedPredicate>,
     /// Events intentionally published outside the local model boundary.
     pub outbox_events: HashSet<EventKey>,
     pub state_transitions: Vec<StateTransition>,
