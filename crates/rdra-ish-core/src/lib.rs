@@ -2,6 +2,7 @@
 
 pub mod access;
 pub mod analysis;
+pub(crate) mod analysis_diag;
 pub mod concept_mapping;
 pub mod diagnostics;
 pub mod entity_lifecycle;
@@ -10,6 +11,7 @@ pub mod event_flow;
 pub mod lint;
 pub mod location;
 pub mod model;
+pub mod predicate;
 pub mod resolver;
 pub mod state_pattern;
 pub mod system;
@@ -24,7 +26,7 @@ pub use access::{
     ActorPermissionRequirementSource, PermissionApiPath, PermissionCallable,
     ScreenConstraintPattern,
 };
-pub use analysis::{build_model, build_model_items, predicate_signature, KNOWN_PREDICATES};
+pub use analysis::{build_model, build_model_items};
 pub use concept_mapping::{
     collect_concept_mappings, conceptual_id, mappings_for_conceptual, mappings_for_entity,
 };
@@ -49,6 +51,7 @@ pub use model::{
     SemanticModel, StateTransition, System, SystemKey, Timing, TimingKey, TriggerTarget,
     TypedPredicate,
 };
+pub use predicate::{predicate_signature, KNOWN_PREDICATES};
 pub use resolver::{
     build_merged_model, reachable_from_bucs, resolve, resolve_overlaid, ResolvedProgram,
 };

@@ -5,10 +5,10 @@ use std::path::Path;
 use rdra_ish_core::WorkspaceAnalysis;
 use rdra_ish_syntax::ast::{Ast, Item};
 use tower_lsp::lsp_types::{CodeLens, Command, Location};
-use url::Url;
 
 use crate::convert::{byte_offset_to_position, span_to_range};
 use crate::refs::{find_symbol_references, instance_id_span, SymbolTarget};
+use crate::uri::path_to_uri;
 
 pub fn code_lenses(
     analysis: &WorkspaceAnalysis,
@@ -108,12 +108,6 @@ fn declaration_lens_range(
         .map(|index| id_span.start + index)
         .unwrap_or(text.len());
     span_to_range(text, line_start..line_end)
-}
-
-fn path_to_uri(path: &Path) -> std::io::Result<Url> {
-    let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    Url::from_file_path(&path)
-        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "invalid path for uri"))
 }
 
 #[cfg(test)]

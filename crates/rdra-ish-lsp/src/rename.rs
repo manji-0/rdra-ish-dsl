@@ -3,15 +3,14 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use rdra_ish_core::WorkspaceAnalysis;
-use rdra_ish_syntax::ast::{Ast, ChainCall, Expr, Item, Operand, PredicateArg, PredicateCall};
-use tower_lsp::lsp_types::{Range, TextEdit, Url, WorkspaceEdit};
-use url::Url as UrlParser;
-
 use crate::convert::span_to_range;
 use crate::refs::{
     id_span_in_qref, instance_id_span, reference_at_offset, symbol_target, SymbolTarget,
 };
+use crate::uri::{path_to_uri, paths_equal};
+use rdra_ish_core::WorkspaceAnalysis;
+use rdra_ish_syntax::ast::{Ast, ChainCall, Expr, Item, Operand, PredicateArg, PredicateCall};
+use tower_lsp::lsp_types::{Range, TextEdit, Url, WorkspaceEdit};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RenameError {
@@ -202,20 +201,6 @@ fn rename_span_at_offset(
         }
         crate::refs::ReferenceAt::Symbol(qref) => id_span_in_qref(qref, text, target),
     }
-}
-
-fn path_to_uri(path: &Path) -> std::io::Result<Url> {
-    let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    let url = UrlParser::from_file_path(&path).map_err(|_| {
-        std::io::Error::new(std::io::ErrorKind::InvalidInput, "invalid path for uri")
-    })?;
-    Ok(url)
-}
-
-fn paths_equal(a: &Path, b: &Path) -> bool {
-    let ca = std::fs::canonicalize(a).unwrap_or_else(|_| a.to_path_buf());
-    let cb = std::fs::canonicalize(b).unwrap_or_else(|_| b.to_path_buf());
-    ca == cb
 }
 
 #[cfg(test)]

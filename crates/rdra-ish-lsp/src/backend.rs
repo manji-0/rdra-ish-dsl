@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use rdra_ish_core::{analyze_workspace, Diagnostic, WorkspaceAnalysis};
@@ -22,6 +22,7 @@ use crate::refs::{find_symbol_references, reference_at_offset, resolve_decl_site
 use crate::rename::{prepare_rename_range, workspace_rename, RenameError};
 use crate::semantic_tokens::{semantic_tokens, TOKEN_MODIFIERS, TOKEN_TYPES};
 use crate::symbols::{document_symbols, workspace_symbols};
+use crate::uri::{path_to_uri, paths_equal, watched_path_is_rdra};
 
 #[derive(Default)]
 struct ServerState {
@@ -809,22 +810,4 @@ fn include_paths_for(documents: &HashMap<PathBuf, String>, roots: &[PathBuf]) ->
 fn uri_to_path(uri: &Url) -> std::io::Result<PathBuf> {
     uri.to_file_path()
         .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "invalid file uri"))
-}
-
-fn path_to_uri(path: &Path) -> std::io::Result<Url> {
-    Url::from_file_path(path)
-        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "invalid path for uri"))
-}
-
-fn paths_equal(a: &Path, b: &Path) -> bool {
-    let ca = std::fs::canonicalize(a).unwrap_or_else(|_| a.to_path_buf());
-    let cb = std::fs::canonicalize(b).unwrap_or_else(|_| b.to_path_buf());
-    ca == cb
-}
-
-fn watched_path_is_rdra(uri: &Url) -> bool {
-    uri_to_path(uri)
-        .ok()
-        .and_then(|path| path.extension().map(|ext| ext == "rdra"))
-        .unwrap_or(false)
 }

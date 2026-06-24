@@ -14,6 +14,7 @@ pub mod refs;
 pub mod rename;
 pub mod semantic_tokens;
 pub mod symbols;
+pub mod uri;
 
 #[cfg(test)]
 mod workspace_test;
