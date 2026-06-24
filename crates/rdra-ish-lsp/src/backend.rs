@@ -14,6 +14,7 @@ use crate::code_actions::code_actions;
 use crate::code_lens::code_lenses;
 use crate::completion::completion_items;
 use crate::convert::{full_document_range, position_to_byte_offset, span_to_range};
+use crate::folding::folding_ranges;
 use crate::hover::{hover_content, signature_help};
 use crate::inlay_hints::inlay_hints;
 use crate::linked_editing::linked_editing_ranges;
@@ -168,6 +169,7 @@ impl LanguageServer for Backend {
                 linked_editing_range_provider: Some(LinkedEditingRangeServerCapabilities::Simple(
                     true,
                 )),
+                folding_range_provider: Some(true.into()),
                 ..ServerCapabilities::default()
             },
         })
@@ -222,6 +224,16 @@ impl LanguageServer for Backend {
                 .await;
         }
         self.refresh_analysis().await;
+    }
+
+    async fn did_change_watched_files(&self, params: DidChangeWatchedFilesParams) {
+        if params
+            .changes
+            .iter()
+            .any(|change| watched_path_is_rdra(&change.uri))
+        {
+            self.refresh_analysis().await;
+        }
     }
 
     async fn goto_definition(
@@ -612,7 +624,29 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        Ok(Some(code_lenses(analysis, ast, text)))
+        Ok(Some(code_lenses(analysis, ast, text, &path)))
+    }
+
+    async fn folding_range(&self, params: FoldingRangeParams) -> Result<Option<Vec<FoldingRange>>> {
+        let path = match uri_to_path(&params.text_document.uri) {
+            Ok(path) => path,
+            Err(_) => return Ok(None),
+        };
+
+        let state = self.state.read().await;
+        let Some(analysis) = state.analysis.as_ref() else {
+            return Ok(None);
+        };
+        let Some((_, text, ast)) = analysis
+            .program
+            .sources
+            .iter()
+            .find(|(source_path, _, _)| paths_equal(source_path, &path))
+        else {
+            return Ok(None);
+        };
+
+        Ok(Some(folding_ranges(ast, text)))
     }
 
     async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
@@ -786,4 +820,11 @@ fn paths_equal(a: &Path, b: &Path) -> bool {
     let ca = std::fs::canonicalize(a).unwrap_or_else(|_| a.to_path_buf());
     let cb = std::fs::canonicalize(b).unwrap_or_else(|_| b.to_path_buf());
     ca == cb
+}
+
+fn watched_path_is_rdra(uri: &Url) -> bool {
+    uri_to_path(uri)
+        .ok()
+        .and_then(|path| path.extension().map(|ext| ext == "rdra"))
+        .unwrap_or(false)
 }

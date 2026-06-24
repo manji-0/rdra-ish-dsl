@@ -1,14 +1,26 @@
 //! Reference-count code lenses on declarations.
 
+use std::path::Path;
+
 use rdra_ish_core::WorkspaceAnalysis;
 use rdra_ish_syntax::ast::{Ast, Item};
-use tower_lsp::lsp_types::{CodeLens, Command, Range};
+use tower_lsp::lsp_types::{CodeLens, Command, Location};
+use url::Url;
 
-use crate::convert::span_to_range;
+use crate::convert::{byte_offset_to_position, span_to_range};
 use crate::refs::{find_symbol_references, instance_id_span, SymbolTarget};
 
-pub fn code_lenses(analysis: &WorkspaceAnalysis, ast: &Ast, text: &str) -> Vec<CodeLens> {
+pub fn code_lenses(
+    analysis: &WorkspaceAnalysis,
+    ast: &Ast,
+    text: &str,
+    file_path: &Path,
+) -> Vec<CodeLens> {
     let mut lenses = Vec::new();
+    let file_uri = match path_to_uri(file_path) {
+        Ok(uri) => uri,
+        Err(_) => return lenses,
+    };
 
     for item in &ast.items {
         let Item::Instance(inst) = item else {
@@ -18,20 +30,34 @@ pub fn code_lenses(analysis: &WorkspaceAnalysis, ast: &Ast, text: &str) -> Vec<C
             kind: inst.kind.name().to_string(),
             id: inst.id.clone(),
         };
-        let mut count = 0usize;
-        for (_, _, file_ast) in &analysis.program.sources {
-            count += find_symbol_references(file_ast, &target).len();
-        }
+        let locations = reference_locations(analysis, &target);
+        let count = locations.len();
 
         let id_span = instance_id_span(inst, text);
         let range = declaration_lens_range(text, &id_span);
-        lenses.push(CodeLens {
-            range,
-            command: Some(Command {
-                title: format!("{count} references"),
+        let position = byte_offset_to_position(text, id_span.start);
+
+        let command = if count == 0 {
+            Command {
+                title: "0 references".to_string(),
                 command: String::new(),
                 arguments: None,
-            }),
+            }
+        } else {
+            Command {
+                title: format!("{count} references"),
+                command: "editor.action.showReferences".to_string(),
+                arguments: Some(vec![
+                    serde_json::to_value(&file_uri).expect("uri"),
+                    serde_json::to_value(position).expect("position"),
+                    serde_json::to_value(&locations).expect("locations"),
+                ]),
+            }
+        };
+
+        lenses.push(CodeLens {
+            range,
+            command: Some(command),
             data: None,
         });
     }
@@ -39,7 +65,40 @@ pub fn code_lenses(analysis: &WorkspaceAnalysis, ast: &Ast, text: &str) -> Vec<C
     lenses
 }
 
-fn declaration_lens_range(text: &str, id_span: &std::ops::Range<usize>) -> Range {
+pub fn reference_locations(analysis: &WorkspaceAnalysis, target: &SymbolTarget) -> Vec<Location> {
+    let mut locations = Vec::new();
+
+    for (path, source_text, source_ast) in &analysis.program.sources {
+        let Ok(uri) = path_to_uri(path) else {
+            continue;
+        };
+
+        for item in &source_ast.items {
+            if let Item::Instance(inst) = item {
+                if inst.kind.name() == target.kind && inst.id == target.id {
+                    locations.push(Location {
+                        uri: uri.clone(),
+                        range: span_to_range(source_text, instance_id_span(inst, source_text)),
+                    });
+                }
+            }
+        }
+
+        for span in find_symbol_references(source_ast, target) {
+            locations.push(Location {
+                uri: uri.clone(),
+                range: span_to_range(source_text, span),
+            });
+        }
+    }
+
+    locations
+}
+
+fn declaration_lens_range(
+    text: &str,
+    id_span: &std::ops::Range<usize>,
+) -> tower_lsp::lsp_types::Range {
     let line_start = text[..id_span.start]
         .rfind('\n')
         .map(|index| index + 1)
@@ -49,6 +108,12 @@ fn declaration_lens_range(text: &str, id_span: &std::ops::Range<usize>) -> Range
         .map(|index| id_span.start + index)
         .unwrap_or(text.len());
     span_to_range(text, line_start..line_end)
+}
+
+fn path_to_uri(path: &Path) -> std::io::Result<Url> {
+    let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    Url::from_file_path(&path)
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "invalid path for uri"))
 }
 
 #[cfg(test)]
@@ -76,7 +141,7 @@ api BookingApi "API"
             &Default::default(),
         );
         let (_, _, ast) = &analysis.program.sources[0];
-        let lenses = code_lenses(&analysis, ast, src);
+        let lenses = code_lenses(&analysis, ast, src, &file);
         let book = lenses
             .iter()
             .find(|lens| {
@@ -86,7 +151,9 @@ api BookingApi "API"
             })
             .and_then(|lens| lens.command.as_ref())
             .expect("book lens");
-        assert!(book.title.starts_with('2'));
+        assert!(book.title.starts_with('3'));
+        assert_eq!(book.command, "editor.action.showReferences".to_string());
+        assert!(book.arguments.as_ref().is_some_and(|args| args.len() == 3));
 
         std::fs::remove_file(&file).ok();
         std::fs::remove_dir(root).ok();

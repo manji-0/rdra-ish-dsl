@@ -1252,6 +1252,7 @@ version = "0.1.7"
 dependencies = [
  "rdra-ish-core",
  "rdra-ish-syntax",
+ "serde_json",
  "tokio",
  "tower-lsp",
  "url",
