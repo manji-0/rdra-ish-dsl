@@ -13,7 +13,8 @@ use walkdir::WalkDir;
 use crate::code_actions::code_actions;
 use crate::code_lens::code_lenses;
 use crate::completion::completion_items;
-use crate::convert::{full_document_range, position_to_byte_offset, span_to_range};
+use crate::convert::{full_document_range, span_to_range};
+use crate::document::{byte_offset_at, open_document};
 use crate::folding::folding_ranges;
 use crate::hover::{hover_content, signature_help};
 use crate::inlay_hints::inlay_hints;
@@ -22,7 +23,7 @@ use crate::refs::{find_symbol_references, reference_at_offset, resolve_decl_site
 use crate::rename::{prepare_rename_range, workspace_rename, RenameError};
 use crate::semantic_tokens::{semantic_tokens, TOKEN_MODIFIERS, TOKEN_TYPES};
 use crate::symbols::{document_symbols, workspace_symbols};
-use crate::uri::{path_to_uri, paths_equal, watched_path_is_rdra};
+use crate::uri::{path_to_uri, watched_path_is_rdra};
 
 #[derive(Default)]
 struct ServerState {
@@ -251,20 +252,10 @@ impl LanguageServer for Backend {
         let Some(analysis) = state.analysis.as_ref() else {
             return Ok(None);
         };
-        let Some(source_id) = analysis
-            .program
-            .sources
-            .iter()
-            .position(|(source_path, _, _)| paths_equal(source_path, &path))
-        else {
+        let Some((doc, offset)) = byte_offset_at(analysis, &path, position) else {
             return Ok(None);
         };
-        let (_, text, ast) = &analysis.program.sources[source_id];
-        let offset = match position_to_byte_offset(text, position) {
-            Some(offset) => offset,
-            None => return Ok(None),
-        };
-        let reference = match reference_at_offset(ast, offset) {
+        let reference = match reference_at_offset(doc.ast, offset) {
             Some(reference) => reference,
             None => return Ok(None),
         };
@@ -295,20 +286,10 @@ impl LanguageServer for Backend {
         let Some(analysis) = state.analysis.as_ref() else {
             return Ok(None);
         };
-        let Some(source_id) = analysis
-            .program
-            .sources
-            .iter()
-            .position(|(source_path, _, _)| paths_equal(source_path, &path))
-        else {
+        let Some((doc, offset)) = byte_offset_at(analysis, &path, position) else {
             return Ok(None);
         };
-        let (_, text, ast) = &analysis.program.sources[source_id];
-        let offset = match position_to_byte_offset(text, position) {
-            Some(offset) => offset,
-            None => return Ok(None),
-        };
-        let reference = match reference_at_offset(ast, offset) {
+        let reference = match reference_at_offset(doc.ast, offset) {
             Some(reference) => reference,
             None => return Ok(None),
         };
@@ -348,20 +329,11 @@ impl LanguageServer for Backend {
         let Some(analysis) = state.analysis.as_ref() else {
             return Ok(None);
         };
-        let Some((_, text, ast)) = analysis
-            .program
-            .sources
-            .iter()
-            .find(|(source_path, _, _)| paths_equal(source_path, &path))
-        else {
+        let Some((doc, offset)) = byte_offset_at(analysis, &path, position) else {
             return Ok(None);
         };
-        let offset = match position_to_byte_offset(text, position) {
-            Some(offset) => offset,
-            None => return Ok(None),
-        };
-        let items = completion_items(&analysis.model, text, offset);
-        let _ = ast;
+        let items = completion_items(&analysis.model, doc.text, offset);
+        let _ = doc.ast;
         Ok(Some(CompletionResponse::Array(items)))
     }
 
@@ -378,16 +350,13 @@ impl LanguageServer for Backend {
         let Some(analysis) = state.analysis.as_ref() else {
             return Ok(None);
         };
-        let Some((_, _, ast)) = analysis
-            .program
-            .sources
-            .iter()
-            .find(|(source_path, _, _)| paths_equal(source_path, &path))
-        else {
+        let Some(doc) = open_document(analysis, &path) else {
             return Ok(None);
         };
 
-        Ok(Some(DocumentSymbolResponse::Nested(document_symbols(ast))))
+        Ok(Some(DocumentSymbolResponse::Nested(document_symbols(
+            doc.ast,
+        ))))
     }
 
     async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
@@ -398,14 +367,10 @@ impl LanguageServer for Backend {
 
         let state = self.state.read().await;
         let text = state.documents.get(&path).cloned().or_else(|| {
-            state.analysis.as_ref().and_then(|analysis| {
-                analysis
-                    .program
-                    .sources
-                    .iter()
-                    .find(|(source_path, _, _)| paths_equal(source_path, &path))
-                    .map(|(_, source_text, _)| source_text.clone())
-            })
+            state
+                .analysis
+                .as_ref()
+                .and_then(|analysis| open_document(analysis, &path).map(|doc| doc.text.to_string()))
         });
 
         let Some(text) = text else {
@@ -449,19 +414,10 @@ impl LanguageServer for Backend {
         let Some(analysis) = state.analysis.as_ref() else {
             return Ok(None);
         };
-        let Some((_, text, ast)) = analysis
-            .program
-            .sources
-            .iter()
-            .find(|(source_path, _, _)| paths_equal(source_path, &path))
-        else {
+        let Some((doc, offset)) = byte_offset_at(analysis, &path, position) else {
             return Ok(None);
         };
-        let offset = match position_to_byte_offset(text, position) {
-            Some(offset) => offset,
-            None => return Ok(None),
-        };
-        Ok(hover_content(&analysis.model, ast, offset))
+        Ok(hover_content(&analysis.model, doc.ast, offset))
     }
 
     async fn signature_help(&self, params: SignatureHelpParams) -> Result<Option<SignatureHelp>> {
@@ -475,19 +431,10 @@ impl LanguageServer for Backend {
         let Some(analysis) = state.analysis.as_ref() else {
             return Ok(None);
         };
-        let Some((_, text, _)) = analysis
-            .program
-            .sources
-            .iter()
-            .find(|(source_path, _, _)| paths_equal(source_path, &path))
-        else {
+        let Some((doc, offset)) = byte_offset_at(analysis, &path, position) else {
             return Ok(None);
         };
-        let offset = match position_to_byte_offset(text, position) {
-            Some(offset) => offset,
-            None => return Ok(None),
-        };
-        Ok(signature_help(text, offset))
+        Ok(signature_help(doc.text, offset))
     }
 
     async fn prepare_rename(
@@ -504,15 +451,8 @@ impl LanguageServer for Backend {
         let Some(analysis) = state.analysis.as_ref() else {
             return Ok(None);
         };
-        let offset = match analysis
-            .program
-            .sources
-            .iter()
-            .find(|(source_path, _, _)| paths_equal(source_path, &path))
-            .and_then(|(_, text, _)| position_to_byte_offset(text, position))
-        {
-            Some(offset) => offset,
-            None => return Ok(None),
+        let Some((_, offset)) = byte_offset_at(analysis, &path, position) else {
+            return Ok(None);
         };
 
         Ok(prepare_rename_range(analysis, &path, offset).map(PrepareRenameResponse::Range))
@@ -530,15 +470,8 @@ impl LanguageServer for Backend {
         let Some(analysis) = state.analysis.as_ref() else {
             return Ok(None);
         };
-        let offset = match analysis
-            .program
-            .sources
-            .iter()
-            .find(|(source_path, _, _)| paths_equal(source_path, &path))
-            .and_then(|(_, text, _)| position_to_byte_offset(text, position))
-        {
-            Some(offset) => offset,
-            None => return Ok(None),
+        let Some((_, offset)) = byte_offset_at(analysis, &path, position) else {
+            return Ok(None);
         };
 
         match workspace_rename(analysis, &path, offset, &new_name) {
@@ -566,16 +499,11 @@ impl LanguageServer for Backend {
         let Some(analysis) = state.analysis.as_ref() else {
             return Ok(None);
         };
-        let Some((_, _, ast)) = analysis
-            .program
-            .sources
-            .iter()
-            .find(|(source_path, _, _)| paths_equal(source_path, &path))
-        else {
+        let Some(doc) = open_document(analysis, &path) else {
             return Ok(None);
         };
 
-        Ok(Some(SemanticTokensResult::Tokens(semantic_tokens(ast))))
+        Ok(Some(SemanticTokensResult::Tokens(semantic_tokens(doc.ast))))
     }
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
@@ -589,17 +517,11 @@ impl LanguageServer for Backend {
         let Some(analysis) = state.analysis.as_ref() else {
             return Ok(None);
         };
-        let Some((source_id, (_, text, _))) = analysis
-            .program
-            .sources
-            .iter()
-            .enumerate()
-            .find(|(_, (source_path, _, _))| paths_equal(source_path, &path))
-        else {
+        let Some(doc) = open_document(analysis, &path) else {
             return Ok(None);
         };
 
-        let actions = code_actions(analysis, source_id, text, uri, params.range);
+        let actions = code_actions(analysis, doc.source_id, doc.text, uri, params.range);
         if actions.is_empty() {
             return Ok(None);
         }
@@ -616,16 +538,11 @@ impl LanguageServer for Backend {
         let Some(analysis) = state.analysis.as_ref() else {
             return Ok(None);
         };
-        let Some((_, text, ast)) = analysis
-            .program
-            .sources
-            .iter()
-            .find(|(source_path, _, _)| paths_equal(source_path, &path))
-        else {
+        let Some(doc) = open_document(analysis, &path) else {
             return Ok(None);
         };
 
-        Ok(Some(code_lenses(analysis, ast, text, &path)))
+        Ok(Some(code_lenses(analysis, doc.ast, doc.text, &path)))
     }
 
     async fn folding_range(&self, params: FoldingRangeParams) -> Result<Option<Vec<FoldingRange>>> {
@@ -638,16 +555,11 @@ impl LanguageServer for Backend {
         let Some(analysis) = state.analysis.as_ref() else {
             return Ok(None);
         };
-        let Some((_, text, ast)) = analysis
-            .program
-            .sources
-            .iter()
-            .find(|(source_path, _, _)| paths_equal(source_path, &path))
-        else {
+        let Some(doc) = open_document(analysis, &path) else {
             return Ok(None);
         };
 
-        Ok(Some(folding_ranges(ast, text)))
+        Ok(Some(folding_ranges(doc.ast, doc.text)))
     }
 
     async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
@@ -660,19 +572,14 @@ impl LanguageServer for Backend {
         let Some(analysis) = state.analysis.as_ref() else {
             return Ok(None);
         };
-        let Some((_, text, ast)) = analysis
-            .program
-            .sources
-            .iter()
-            .find(|(source_path, _, _)| paths_equal(source_path, &path))
-        else {
+        let Some(doc) = open_document(analysis, &path) else {
             return Ok(None);
         };
 
         Ok(Some(inlay_hints(
             &analysis.model,
-            ast,
-            text,
+            doc.ast,
+            doc.text,
             Some(params.range),
         )))
     }
@@ -691,20 +598,16 @@ impl LanguageServer for Backend {
         let Some(analysis) = state.analysis.as_ref() else {
             return Ok(None);
         };
-        let Some((_, text, ast)) = analysis
-            .program
-            .sources
-            .iter()
-            .find(|(source_path, _, _)| paths_equal(source_path, &path))
-        else {
+        let Some((doc, offset)) = byte_offset_at(analysis, &path, position) else {
             return Ok(None);
         };
-        let offset = match position_to_byte_offset(text, position) {
-            Some(offset) => offset,
-            None => return Ok(None),
-        };
 
-        Ok(linked_editing_ranges(&analysis.model, ast, text, offset))
+        Ok(linked_editing_ranges(
+            &analysis.model,
+            doc.ast,
+            doc.text,
+            offset,
+        ))
     }
 }
 

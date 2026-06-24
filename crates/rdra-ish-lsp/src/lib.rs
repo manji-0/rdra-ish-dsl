@@ -5,6 +5,7 @@ pub mod code_actions;
 pub mod code_lens;
 pub mod completion;
 pub mod convert;
+pub mod document;
 pub mod folding;
 pub mod hover;
 pub mod inlay_hints;

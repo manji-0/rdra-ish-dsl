@@ -1,28 +1,26 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 mod cli;
+mod export;
 mod list_output;
 mod load;
-use cli::{Cli, Commands, CsvKind, DiagramKind, ExportKind, OutputFormat, StatesFormat};
+use cli::{Cli, Commands, CsvKind, DiagramKind, OutputFormat, StatesFormat};
+use export::export_artifact;
 use list_output::{consistency_warnings, filter_entity_output, format_lint_issues, list_elements};
 use load::{collect_rdra_files, diagram_preset_filters, eprint_diagnostic, load_model};
 use rdra_ish_core::{lint_issues, LintSeverity};
 use rdra_ish_emit::{
-    asyncapi::AsyncApiJsonEmitter,
     csv::{
         ActorListCsvEmitter, ActorPermissionAuditCsvEmitter, ApiEntityMatrixCsvEmitter,
         ApiListCsvEmitter, BusinessInputCsvEmitter, EntityListCsvEmitter,
         PermissionCallableCsvEmitter, RelationMatrixCsvEmitter, ScreenConstraintCsvEmitter,
     },
-    dbml::DbmlEmitter,
     diff::{DiffMermaidEmitter, DiffPlantUmlEmitter},
-    json_schema::JsonSchemaEmitter,
     mermaid::{
         BusinessAreaMermaidEmitter, ErMermaidEmitter, EventFlowMermaidEmitter,
         ObjectGraphMermaidEmitter, RdraMermaidEmitter, SequenceMermaidEmitter, StateMermaidEmitter,
         TechnicalAreaMermaidEmitter,
     },
-    openapi::OpenApiJsonEmitter,
     plantuml::{
         BusinessAreaPlantUmlEmitter, ErPlantUmlEmitter, EventFlowPlantUmlEmitter,
         ObjectGraphPlantUmlEmitter, RdraPlantUmlEmitter, SequenceDiagramEmitter,
@@ -445,29 +443,10 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn export_artifact(
-    model: &rdra_ish_core::SemanticModel,
-    kind: &ExportKind,
-    view: &View,
-) -> Result<(String, &'static str)> {
-    match kind {
-        ExportKind::Openapi => Ok((OpenApiJsonEmitter.emit(model, view)?, "openapi.json")),
-        ExportKind::Asyncapi => Ok((AsyncApiJsonEmitter.emit(model, view)?, "asyncapi.json")),
-        ExportKind::Dbml => Ok((DbmlEmitter.emit(model, view)?, "schema.dbml")),
-        ExportKind::JsonSchema => Ok((JsonSchemaEmitter.emit(model, view)?, "json-schema.json")),
-        ExportKind::TypeScriptStates => Ok((
-            TypeScriptStateUnionEmitter::default().emit(model, view)?,
-            "entity-states.ts",
-        )),
-        ExportKind::MermaidEr => Ok((ErMermaidEmitter.emit(model, view)?, "er.mmd")),
-        ExportKind::PlantumlEr => Ok((ErPlantUmlEmitter.emit(model, view)?, "er.puml")),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli::{ListFormat, ListKind};
+    use crate::cli::{ExportKind, ListFormat, ListKind};
     use crate::list_output::state_diag_message;
     use rdra_ish_core::{format_diagnostic_message, SemanticModel};
     use std::path::PathBuf;
