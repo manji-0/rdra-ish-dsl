@@ -1,36 +1,23 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 mod cli;
+mod csv_cmd;
+mod diagram;
 mod export;
+mod fmt_cmd;
 mod list_output;
 mod load;
-use cli::{Cli, Commands, CsvKind, DiagramKind, OutputFormat, StatesFormat};
+mod states;
+use cli::{Cli, Commands};
+use csv_cmd::run_csv;
+use diagram::{run_diagram, DiagramRequest};
 use export::export_artifact;
-use list_output::{consistency_warnings, filter_entity_output, format_lint_issues, list_elements};
-use load::{collect_rdra_files, diagram_preset_filters, eprint_diagnostic, load_model};
+use fmt_cmd::run_fmt;
+use list_output::{consistency_warnings, format_lint_issues, list_elements};
+use load::{eprint_diagnostic, load_model};
 use rdra_ish_core::{lint_issues, LintSeverity};
-use rdra_ish_emit::{
-    csv::{
-        ActorListCsvEmitter, ActorPermissionAuditCsvEmitter, ApiEntityMatrixCsvEmitter,
-        ApiListCsvEmitter, BusinessInputCsvEmitter, EntityListCsvEmitter,
-        PermissionCallableCsvEmitter, RelationMatrixCsvEmitter, ScreenConstraintCsvEmitter,
-    },
-    diff::{DiffMermaidEmitter, DiffPlantUmlEmitter},
-    mermaid::{
-        BusinessAreaMermaidEmitter, ErMermaidEmitter, EventFlowMermaidEmitter,
-        ObjectGraphMermaidEmitter, RdraMermaidEmitter, SequenceMermaidEmitter, StateMermaidEmitter,
-        TechnicalAreaMermaidEmitter,
-    },
-    plantuml::{
-        BusinessAreaPlantUmlEmitter, ErPlantUmlEmitter, EventFlowPlantUmlEmitter,
-        ObjectGraphPlantUmlEmitter, RdraPlantUmlEmitter, SequenceDiagramEmitter,
-        StateDiagramEmitter, TechnicalAreaPlantUmlEmitter,
-    },
-    state_pattern::{StatePatternCsvEmitter, StatePatternJsonEmitter, StatePatternTableEmitter},
-    typescript::TypeScriptStateUnionEmitter,
-    Emitter, Filter, Scope, View,
-};
-use rdra_ish_syntax::format_source;
+use rdra_ish_emit::View;
+use states::run_states;
 use std::fs;
 
 fn main() -> Result<()> {
@@ -71,223 +58,21 @@ fn main() -> Result<()> {
             edge_kind,
             view_preset,
             out,
-        } => {
-            let (program, model, diags) = load_model(&inputs)?;
+        } => run_diagram(DiagramRequest {
+            inputs,
+            kind,
+            format,
+            buc,
+            usecase,
+            diff_base,
+            show_description,
+            node_kind,
+            edge_kind,
+            view_preset,
+            out,
+        })?,
 
-            for diag in &diags {
-                eprint_diagnostic(&program, diag);
-            }
-
-            if !usecase.is_empty()
-                && !matches!(kind, DiagramKind::Sequence | DiagramKind::BusinessArea)
-            {
-                anyhow::bail!(
-                    "--usecase is currently supported only for --kind sequence and --kind business-area"
-                );
-            }
-            if !usecase.is_empty() && !buc.is_empty() {
-                anyhow::bail!("--buc and --usecase cannot be combined");
-            }
-            if (!node_kind.is_empty() || !edge_kind.is_empty() || view_preset.is_some())
-                && !matches!(
-                    kind,
-                    DiagramKind::Rdra | DiagramKind::BoundarylessGraph | DiagramKind::Diff
-                )
-            {
-                anyhow::bail!(
-                    "--node-kind, --edge-kind, and --view-preset are currently supported only for --kind rdra, --kind boundaryless-graph, or --kind diff"
-                );
-            }
-            if matches!(kind, DiagramKind::Diff) && diff_base.is_empty() {
-                anyhow::bail!("--kind diff requires at least one --diff-base path");
-            }
-            if !matches!(kind, DiagramKind::Diff) && !diff_base.is_empty() {
-                anyhow::bail!("--diff-base is supported only with --kind diff");
-            }
-
-            let scope = if !usecase.is_empty() {
-                Scope::UseCases(usecase)
-            } else if buc.is_empty() {
-                Scope::Whole
-            } else {
-                Scope::Bucs(buc)
-            };
-            let (preset_node_kinds, preset_edge_kinds) = diagram_preset_filters(&view_preset);
-            let node_kinds = if node_kind.is_empty() {
-                preset_node_kinds
-            } else {
-                node_kind
-            };
-            let edge_kinds = if edge_kind.is_empty() {
-                preset_edge_kinds
-            } else {
-                edge_kind
-            };
-
-            // 図種に応じて filter を決定し、View を組み立てる
-            let view = match &kind {
-                DiagramKind::Er => View {
-                    scope,
-                    filter: Filter::Er,
-                    show_descriptions: show_description,
-                    node_kinds: Vec::new(),
-                    edge_kinds: Vec::new(),
-                }
-                .with_graph_filters(node_kinds, edge_kinds),
-                DiagramKind::Rdra
-                | DiagramKind::BoundarylessGraph
-                | DiagramKind::State
-                | DiagramKind::Sequence
-                | DiagramKind::EventFlow
-                | DiagramKind::Diff
-                | DiagramKind::BusinessArea
-                | DiagramKind::TechnicalArea => View {
-                    scope,
-                    filter: Filter::None,
-                    show_descriptions: show_description,
-                    node_kinds: Vec::new(),
-                    edge_kinds: Vec::new(),
-                }
-                .with_graph_filters(node_kinds, edge_kinds),
-            };
-
-            // TX診断 + API診断: sequence 図生成時に warning を表示
-            if matches!(kind, DiagramKind::Sequence) {
-                let txs = rdra_ish_core::infer_usecase_transactions(&model);
-                for diag in rdra_ish_core::tx_diagnostics(&model, &txs) {
-                    eprintln!("warning: {}", diag.error);
-                }
-                for diag in rdra_ish_core::api_diagnostics(&model) {
-                    eprintln!("warning: {}", diag.error);
-                }
-                for diag in rdra_ish_core::system_diagnostics(&model) {
-                    eprintln!("warning: {}", diag.error);
-                }
-            }
-
-            // イベント整合性診断: event-flow 図生成時に warning を表示
-            if matches!(kind, DiagramKind::EventFlow) {
-                for diag in rdra_ish_core::event_diagnostics(&model) {
-                    eprintln!("warning: {}", diag.error);
-                }
-            }
-
-            // PlantUML/Mermaid どちらのエミッタを使うかを format で決定
-            let diagram_text = match format {
-                OutputFormat::Mermaid => match kind {
-                    DiagramKind::Rdra => ObjectGraphMermaidEmitter.emit(&model, &view)?,
-                    DiagramKind::BoundarylessGraph => RdraMermaidEmitter.emit(&model, &view)?,
-                    DiagramKind::Er => ErMermaidEmitter.emit(&model, &view)?,
-                    DiagramKind::State => StateMermaidEmitter.emit(&model, &view)?,
-                    DiagramKind::Sequence => SequenceMermaidEmitter.emit(&model, &view)?,
-                    DiagramKind::EventFlow => EventFlowMermaidEmitter.emit(&model, &view)?,
-                    DiagramKind::Diff => {
-                        let (_program, base_model, _) = load_model(&diff_base)?;
-                        DiffMermaidEmitter { base: &base_model }.emit_diff(&model, &view)?
-                    }
-                    DiagramKind::BusinessArea => BusinessAreaMermaidEmitter.emit(&model, &view)?,
-                    DiagramKind::TechnicalArea => {
-                        TechnicalAreaMermaidEmitter.emit(&model, &view)?
-                    }
-                },
-                _ => match kind {
-                    DiagramKind::Rdra => ObjectGraphPlantUmlEmitter.emit(&model, &view)?,
-                    DiagramKind::BoundarylessGraph => RdraPlantUmlEmitter.emit(&model, &view)?,
-                    DiagramKind::Er => ErPlantUmlEmitter.emit(&model, &view)?,
-                    DiagramKind::State => StateDiagramEmitter.emit(&model, &view)?,
-                    DiagramKind::Sequence => SequenceDiagramEmitter.emit(&model, &view)?,
-                    DiagramKind::EventFlow => EventFlowPlantUmlEmitter.emit(&model, &view)?,
-                    DiagramKind::Diff => {
-                        let (_program, base_model, _) = load_model(&diff_base)?;
-                        DiffPlantUmlEmitter { base: &base_model }.emit_diff(&model, &view)?
-                    }
-                    DiagramKind::BusinessArea => BusinessAreaPlantUmlEmitter.emit(&model, &view)?,
-                    DiagramKind::TechnicalArea => {
-                        TechnicalAreaPlantUmlEmitter.emit(&model, &view)?
-                    }
-                },
-            };
-
-            match format {
-                OutputFormat::Puml => {
-                    let out_path = out.with_extension("puml");
-                    fs::write(&out_path, &diagram_text)
-                        .with_context(|| format!("failed to write {}", out_path.display()))?;
-                    println!("wrote {}", out_path.display());
-                }
-                OutputFormat::Mermaid => {
-                    let out_path = out.with_extension("mmd");
-                    fs::write(&out_path, &diagram_text)
-                        .with_context(|| format!("failed to write {}", out_path.display()))?;
-                    println!("wrote {}", out_path.display());
-                }
-                OutputFormat::Svg => {
-                    use rdra_ish_render::{render_to_file, PlantumlCliRenderer, RenderFormat};
-                    let renderer =
-                        PlantumlCliRenderer::discover().context("failed to find plantuml.jar")?;
-                    let out_path = out.with_extension("svg");
-                    render_to_file(&renderer, &diagram_text, &out_path, RenderFormat::Svg)
-                        .context("plantuml rendering failed")?;
-                    println!("wrote {}", out_path.display());
-                }
-                OutputFormat::Png => {
-                    use rdra_ish_render::{render_to_file, PlantumlCliRenderer, RenderFormat};
-                    let renderer =
-                        PlantumlCliRenderer::discover().context("failed to find plantuml.jar")?;
-                    let out_path = out.with_extension("png");
-                    render_to_file(&renderer, &diagram_text, &out_path, RenderFormat::Png)
-                        .context("plantuml rendering failed")?;
-                    println!("wrote {}", out_path.display());
-                }
-            }
-        }
-
-        Commands::Csv { inputs, kind, out } => {
-            let (program, model, diags) = load_model(&inputs)?;
-
-            for diag in &diags {
-                eprint_diagnostic(&program, diag);
-            }
-
-            let view = View::whole();
-
-            let (csv_content, ext) = match kind {
-                CsvKind::Actor => (ActorListCsvEmitter.emit(&model, &view)?, "actor.csv"),
-                CsvKind::Entity => (EntityListCsvEmitter.emit(&model, &view)?, "entity.csv"),
-                CsvKind::Matrix => (RelationMatrixCsvEmitter.emit(&model, &view)?, "matrix.csv"),
-                CsvKind::Api => (ApiListCsvEmitter.emit(&model, &view)?, "api.csv"),
-                CsvKind::ApiMatrix => (
-                    ApiEntityMatrixCsvEmitter.emit(&model, &view)?,
-                    "api-matrix.csv",
-                ),
-                CsvKind::ScreenConstraints => (
-                    ScreenConstraintCsvEmitter.emit(&model, &view)?,
-                    "screen-constraints.csv",
-                ),
-                CsvKind::PermissionCallables => (
-                    PermissionCallableCsvEmitter.emit(&model, &view)?,
-                    "permission-callables.csv",
-                ),
-                CsvKind::ActorPermissionAudit => (
-                    ActorPermissionAuditCsvEmitter.emit(&model, &view)?,
-                    "actor-permission-audit.csv",
-                ),
-                CsvKind::BusinessInputs => (
-                    BusinessInputCsvEmitter.emit(&model, &view)?,
-                    "business-inputs.csv",
-                ),
-            };
-
-            let out_path = if out.extension().is_some() {
-                out.clone()
-            } else {
-                out.with_extension(ext.trim_start_matches("*."))
-            };
-
-            fs::write(&out_path, &csv_content)
-                .with_context(|| format!("failed to write {}", out_path.display()))?;
-            println!("wrote {}", out_path.display());
-        }
+        Commands::Csv { inputs, kind, out } => run_csv(&inputs, kind, out)?,
 
         Commands::List {
             inputs,
@@ -323,57 +108,7 @@ fn main() -> Result<()> {
             inputs,
             write,
             check,
-        } => {
-            if write && check {
-                anyhow::bail!("--write and --check cannot be combined");
-            }
-
-            let mut files = collect_rdra_files(&inputs);
-            files.sort();
-            if files.is_empty() {
-                anyhow::bail!("no .rdra files found in the given inputs");
-            }
-
-            let multiple_files = files.len() > 1;
-            let mut changed = Vec::new();
-            for (index, file) in files.into_iter().enumerate() {
-                let src = fs::read_to_string(&file)
-                    .with_context(|| format!("failed to read {}", file.display()))?;
-                let formatted = format_source(&src)
-                    .map_err(|err| anyhow::anyhow!("parse errors: {:?}", err.parse_errors))
-                    .with_context(|| format!("failed to format {}", file.display()))?;
-                if formatted != src {
-                    changed.push(file.clone());
-                    if write {
-                        fs::write(&file, &formatted)
-                            .with_context(|| format!("failed to write {}", file.display()))?;
-                    }
-                }
-
-                if !write && !check {
-                    if multiple_files {
-                        if index > 0 {
-                            println!();
-                        }
-                        println!("// {}", file.display());
-                    }
-                    print!("{}", formatted);
-                }
-            }
-
-            if check && !changed.is_empty() {
-                for file in &changed {
-                    eprintln!("needs formatting: {}", file.display());
-                }
-                std::process::exit(1);
-            }
-
-            if write {
-                println!("formatted {} file(s)", changed.len());
-            } else if check {
-                println!("OK: all files formatted");
-            }
-        }
+        } => run_fmt(&inputs, write, check)?,
 
         Commands::Export { inputs, kind, out } => {
             let (program, model, diags) = load_model(&inputs)?;
@@ -402,47 +137,11 @@ fn main() -> Result<()> {
             buc,
             max_patterns,
             entity,
-        } => {
-            let (program, model, diags) = load_model(&inputs)?;
-
-            for diag in &diags {
-                eprint_diagnostic(&program, diag);
-            }
-
-            let view = View::bucs(buc);
-
-            let output = match format {
-                StatesFormat::Table => {
-                    let emitter = StatePatternTableEmitter { cap: max_patterns };
-                    emitter.emit(&model, &view)?
-                }
-                StatesFormat::Csv => {
-                    let emitter = StatePatternCsvEmitter { cap: max_patterns };
-                    emitter.emit(&model, &view)?
-                }
-                StatesFormat::Json => {
-                    let emitter = StatePatternJsonEmitter { cap: max_patterns };
-                    emitter.emit(&model, &view)?
-                }
-                StatesFormat::TypeScript => {
-                    let emitter = TypeScriptStateUnionEmitter { cap: max_patterns };
-                    emitter.emit(&model, &view)?
-                }
-            };
-
-            // --entity フィルタ: 特定 entity のみ出力
-            if let Some(ref entity_id) = entity {
-                let filtered = filter_entity_output(&output, entity_id, &format);
-                print!("{}", filtered);
-            } else {
-                print!("{}", output);
-            }
-        }
+        } => run_states(&inputs, format, buc, max_patterns, entity)?,
     }
 
     Ok(())
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
