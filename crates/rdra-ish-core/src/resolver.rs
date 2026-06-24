@@ -1,16 +1,15 @@
-use crate::analysis::build_model;
+use crate::analysis::build_model_items;
 use crate::diagnostics::{Diagnostic, RdraError};
+use crate::location::{LocatedSpan, SourceId};
 use crate::model::SemanticModel;
 use petgraph::algo::tarjan_scc;
 use petgraph::graph::{DiGraph, NodeIndex};
-use rdra_ish_syntax::{ast::*, parse};
+use rdra_ish_syntax::{ast::*, format_parse_error, parse};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-/// SourceId identifies a single source file by its index in `sources`.
-pub type SourceId = usize;
-
 /// A fully-resolved multi-file program.
+#[derive(Debug)]
 pub struct ResolvedProgram {
     /// SourceId → (canonical path, source text, AST)
     pub sources: Vec<(PathBuf, String, Ast)>,
@@ -25,6 +24,18 @@ pub struct ResolvedProgram {
 pub fn resolve(
     entry_paths: &[PathBuf],
     include_paths: &[PathBuf],
+) -> (ResolvedProgram, Vec<Diagnostic>) {
+    resolve_overlaid(entry_paths, include_paths, None)
+}
+
+/// Like [`resolve`], but uses in-memory source text for open editor buffers.
+///
+/// Keys in `overlays` should be canonical paths when possible; non-canonical
+/// paths are also checked as a fallback.
+pub fn resolve_overlaid(
+    entry_paths: &[PathBuf],
+    include_paths: &[PathBuf],
+    overlays: Option<&HashMap<PathBuf, String>>,
 ) -> (ResolvedProgram, Vec<Diagnostic>) {
     let mut diags: Vec<Diagnostic> = vec![];
     let mut sources: Vec<(PathBuf, String, Ast)> = vec![];
@@ -42,23 +53,14 @@ pub fn resolve(
     }
 
     while let Some(path) = queue.pop_front() {
-        let canon = match std::fs::canonicalize(&path) {
-            Ok(p) => p,
-            Err(e) => {
-                diags.push(Diagnostic::error(RdraError::IoError {
-                    path: path.display().to_string(),
-                    msg: e.to_string(),
-                }));
-                continue;
-            }
-        };
+        let canon = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
 
         if path_to_id.contains_key(&canon) {
             continue;
         }
 
-        let src = match std::fs::read_to_string(&canon) {
-            Ok(s) => s,
+        let src = match read_source(&canon, overlays) {
+            Ok(text) => text,
             Err(e) => {
                 diags.push(Diagnostic::error(RdraError::IoError {
                     path: canon.display().to_string(),
@@ -68,25 +70,30 @@ pub fn resolve(
             }
         };
 
+        let id: SourceId = sources.len();
+
         let (ast, parse_errs) = parse(&src);
         for err in parse_errs {
-            diags.push(Diagnostic::error(RdraError::SyntaxError {
-                path: canon.display().to_string(),
-                msg: format!("{err:?}"),
-            }));
+            let span = err.span().clone();
+            diags.push(Diagnostic::error_at(
+                RdraError::SyntaxError {
+                    path: canon.display().to_string(),
+                    msg: format_parse_error(&err),
+                },
+                LocatedSpan::new(id, span),
+            ));
         }
-        let id: SourceId = sources.len();
         let ni = graph.add_node(id);
         path_to_id.insert(canon.clone(), id);
         node_indices.push(ni);
 
         // Collect imports before moving ast into sources.
-        let imports: Vec<(DottedName, ImportKind)> = ast
+        let imports: Vec<ImportDecl> = ast
             .items
             .iter()
             .filter_map(|item| {
                 if let Item::Import(imp) = item {
-                    Some((imp.path.clone(), imp.kind.clone()))
+                    Some(imp.clone())
                 } else {
                     None
                 }
@@ -96,18 +103,21 @@ pub fn resolve(
         sources.push((canon.clone(), src, ast));
 
         // Enqueue unvisited dependencies.
-        for (dotted, _kind) in imports {
-            if let Some(dep_path) = resolve_import_path(&dotted, include_paths) {
+        for imp in &imports {
+            if let Some(dep_path) = resolve_import_path(&imp.path, include_paths) {
                 let dep_canon = std::fs::canonicalize(&dep_path).unwrap_or(dep_path.clone());
                 if !queued.contains(&dep_canon) {
                     queued.insert(dep_canon);
                     queue.push_back(dep_path);
                 }
             } else {
-                diags.push(Diagnostic::error(RdraError::IoError {
-                    path: dotted.0.join("/") + ".rdra",
-                    msg: "module file not found in include paths".to_string(),
-                }));
+                diags.push(Diagnostic::error_at(
+                    RdraError::IoError {
+                        path: imp.path.0.join("/") + ".rdra",
+                        msg: "module file not found in include paths".to_string(),
+                    },
+                    LocatedSpan::new(id, imp.span.clone()),
+                ));
             }
         }
     }
@@ -154,7 +164,23 @@ pub fn resolve(
                 .iter()
                 .map(|ni| sources[graph[*ni]].0.display().to_string())
                 .collect();
-            diags.push(Diagnostic::warning(RdraError::CircularImport { files }));
+            let source_id = graph[scc[0]];
+            let span = sources[source_id]
+                .2
+                .items
+                .iter()
+                .find_map(|item| {
+                    if let Item::Import(imp) = item {
+                        Some(imp.span.clone())
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or(0..0);
+            diags.push(Diagnostic::warning_at(
+                RdraError::CircularImport { files },
+                LocatedSpan::new(source_id, span),
+            ));
         }
     }
 
@@ -187,48 +213,66 @@ fn resolve_import_path(dotted: &DottedName, include_paths: &[PathBuf]) -> Option
     None
 }
 
-/// Merge all ASTs from `program` into a single flat AST and build a `SemanticModel`.
-///
-/// Duplicate instance IDs across files are reported as errors.
-/// `Module` and `Import` items are skipped (already handled during discovery).
+fn read_source(
+    path: &std::path::Path,
+    overlays: Option<&HashMap<PathBuf, String>>,
+) -> std::io::Result<String> {
+    if let Some(overlays) = overlays {
+        if let Some(text) = overlays.get(path) {
+            return Ok(text.clone());
+        }
+        if let Ok(canon) = std::fs::canonicalize(path) {
+            if let Some(text) = overlays.get(&canon) {
+                return Ok(text.clone());
+            }
+        }
+        for (key, text) in overlays {
+            let same = std::fs::canonicalize(key)
+                .ok()
+                .zip(std::fs::canonicalize(path).ok())
+                .is_some_and(|(a, b)| a == b)
+                || key == path;
+            if same {
+                return Ok(text.clone());
+            }
+        }
+    }
+    std::fs::read_to_string(path)
+}
+
+/// Build a semantic model from located items collected across source files.
 pub fn build_merged_model(
     program: &ResolvedProgram,
     _include_paths: &[PathBuf],
 ) -> (SemanticModel, Vec<Diagnostic>) {
     let mut all_diags: Vec<Diagnostic> = vec![];
-    let mut merged_items: Vec<Item> = vec![];
-    // Key is (kind_name, id) — same id across different kinds is allowed.
+    let mut located_items: Vec<(SourceId, Item)> = Vec::new();
     let mut seen_ids: HashSet<(String, String)> = HashSet::new();
 
-    for (_path, _src, ast) in &program.sources {
+    for (source_id, (_path, _src, ast)) in program.sources.iter().enumerate() {
         for item in &ast.items {
             match item {
                 Item::Instance(inst) => {
                     let key = (inst.kind.name().to_string(), inst.id.clone());
                     if seen_ids.contains(&key) {
-                        all_diags.push(Diagnostic::error(RdraError::DuplicateDefinition {
-                            id: inst.id.clone(),
-                        }));
+                        all_diags.push(Diagnostic::error_at(
+                            RdraError::DuplicateDefinition {
+                                id: inst.id.clone(),
+                            },
+                            LocatedSpan::new(source_id, inst.span.clone()),
+                        ));
                     } else {
                         seen_ids.insert(key);
-                        merged_items.push(item.clone());
+                        located_items.push((source_id, item.clone()));
                     }
                 }
-                Item::Predicate(_) => {
-                    merged_items.push(item.clone());
-                }
-                // Already processed during discovery.
+                Item::Predicate(_) => located_items.push((source_id, item.clone())),
                 Item::Module(_, _) | Item::Import(_) => {}
             }
         }
     }
 
-    let merged_ast = Ast {
-        items: merged_items,
-        source: String::new(),
-    };
-
-    let (model, model_diags) = build_model(&merged_ast);
+    let (model, model_diags) = build_model_items(&located_items);
     all_diags.extend(model_diags);
 
     (model, all_diags)
@@ -486,6 +530,48 @@ actor Customer "重複定義"
             .filter(|d| matches!(&d.error, RdraError::DuplicateDefinition { .. }))
             .collect();
         assert!(!dup_errors.is_empty(), "expected DuplicateDefinition error");
+    }
+
+    #[test]
+    fn test_duplicate_definition_has_location() {
+        let dir = make_temp_dir("dup_loc");
+        let shared_dir = dir.join("shared");
+        fs::create_dir_all(&shared_dir).unwrap();
+
+        write_file(
+            &shared_dir.join("actors.rdra"),
+            r#"
+module shared.actors
+actor Customer "顧客"
+"#,
+        );
+        write_file(
+            &dir.join("main.rdra"),
+            r#"
+import shared.actors
+actor Customer "重複定義"
+"#,
+        );
+
+        let (program, resolve_diags) =
+            resolve(&[dir.join("main.rdra")], std::slice::from_ref(&dir));
+        let (_, model_diags) = build_merged_model(&program, &[dir]);
+
+        let dup = resolve_diags
+            .iter()
+            .chain(model_diags.iter())
+            .find(|d| matches!(&d.error, RdraError::DuplicateDefinition { .. }))
+            .expect("expected DuplicateDefinition");
+
+        let loc = dup
+            .location
+            .as_ref()
+            .expect("duplicate definition should carry a source location");
+        assert_eq!(loc.source_id, 1, "duplicate should be in main.rdra");
+        let pos = loc
+            .start_position(&program)
+            .expect("position should resolve against program sources");
+        assert_eq!(pos.line, 3, "duplicate actor line in main.rdra");
     }
 
     #[test]

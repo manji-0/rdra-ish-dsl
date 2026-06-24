@@ -7,8 +7,10 @@ use cli::{
 };
 use rdra_ish_core::model::{NodeRef, RelKind};
 use rdra_ish_core::{
-    build_merged_model, derive_actor_input_inferences, derive_actor_permission_audit,
-    derive_permission_callables, resolve, ActorInputSource,
+    build_merged_model, consistency_diagnostics, derive_actor_input_inferences,
+    derive_actor_permission_audit, derive_permission_callables, format_diagnostic_message,
+    lint_issues, resolve, ActorInputSource, Diagnostic, LintIssue, LintSeverity, ResolvedProgram,
+    SemanticModel,
 };
 use rdra_ish_emit::{
     asyncapi::AsyncApiJsonEmitter,
@@ -35,11 +37,8 @@ use rdra_ish_emit::{
     typescript::TypeScriptStateUnionEmitter,
     Emitter, Filter, Scope, View,
 };
-use rdra_ish_syntax::{
-    Annotation, Ast, ChainCall, CmpOp, ColType, Column, DottedName, Expr, ImportDecl, ImportKind,
-    InstanceDecl, Item, Operand, PredicateArg, PredicateCall, QRef,
-};
-use std::collections::{HashMap, HashSet};
+use rdra_ish_syntax::format_source;
+use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 
@@ -84,9 +83,17 @@ fn root_include_paths(files: &[PathBuf]) -> Vec<PathBuf> {
     paths
 }
 
-fn load_model(
-    inputs: &[PathBuf],
-) -> Result<(rdra_ish_core::SemanticModel, Vec<rdra_ish_core::Diagnostic>)> {
+fn eprint_diagnostic(program: &ResolvedProgram, diag: &Diagnostic) {
+    let message = format_diagnostic_message(
+        Some(program),
+        diag.is_warning,
+        diag.location.as_ref(),
+        &diag.error.to_string(),
+    );
+    eprintln!("{message}");
+}
+
+fn load_model(inputs: &[PathBuf]) -> Result<(ResolvedProgram, SemanticModel, Vec<Diagnostic>)> {
     let entry_files = collect_rdra_files(inputs);
     if entry_files.is_empty() {
         anyhow::bail!("no .rdra files found in the given inputs");
@@ -101,7 +108,7 @@ fn load_model(
     let mut all_diags = resolve_diags;
     all_diags.extend(model_diags);
 
-    Ok((model, all_diags))
+    Ok((program, model, all_diags))
 }
 
 fn diagram_preset_filters(preset: &Option<DiagramViewPreset>) -> (Vec<String>, Vec<String>) {
@@ -212,14 +219,12 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Check { inputs } => {
-            let (model, diags) = load_model(&inputs)?;
+            let (program, model, diags) = load_model(&inputs)?;
 
             let mut has_error = false;
             for diag in &diags {
-                if diag.is_warning {
-                    eprintln!("warning: {}", diag.error);
-                } else {
-                    eprintln!("error: {}", diag.error);
+                eprint_diagnostic(&program, diag);
+                if !diag.is_warning {
                     has_error = true;
                 }
             }
@@ -248,14 +253,10 @@ fn main() -> Result<()> {
             view_preset,
             out,
         } => {
-            let (model, diags) = load_model(&inputs)?;
+            let (program, model, diags) = load_model(&inputs)?;
 
             for diag in &diags {
-                if diag.is_warning {
-                    eprintln!("warning: {}", diag.error);
-                } else {
-                    eprintln!("error: {}", diag.error);
-                }
+                eprint_diagnostic(&program, diag);
             }
 
             if !usecase.is_empty()
@@ -362,7 +363,7 @@ fn main() -> Result<()> {
                     DiagramKind::Sequence => SequenceMermaidEmitter.emit(&model, &view)?,
                     DiagramKind::EventFlow => EventFlowMermaidEmitter.emit(&model, &view)?,
                     DiagramKind::Diff => {
-                        let (base_model, _) = load_model(&diff_base)?;
+                        let (_program, base_model, _) = load_model(&diff_base)?;
                         DiffMermaidEmitter { base: &base_model }.emit_diff(&model, &view)?
                     }
                     DiagramKind::BusinessArea => BusinessAreaMermaidEmitter.emit(&model, &view)?,
@@ -378,7 +379,7 @@ fn main() -> Result<()> {
                     DiagramKind::Sequence => SequenceDiagramEmitter.emit(&model, &view)?,
                     DiagramKind::EventFlow => EventFlowPlantUmlEmitter.emit(&model, &view)?,
                     DiagramKind::Diff => {
-                        let (base_model, _) = load_model(&diff_base)?;
+                        let (_program, base_model, _) = load_model(&diff_base)?;
                         DiffPlantUmlEmitter { base: &base_model }.emit_diff(&model, &view)?
                     }
                     DiagramKind::BusinessArea => BusinessAreaPlantUmlEmitter.emit(&model, &view)?,
@@ -423,14 +424,10 @@ fn main() -> Result<()> {
         }
 
         Commands::Csv { inputs, kind, out } => {
-            let (model, diags) = load_model(&inputs)?;
+            let (program, model, diags) = load_model(&inputs)?;
 
             for diag in &diags {
-                if diag.is_warning {
-                    eprintln!("warning: {}", diag.error);
-                } else {
-                    eprintln!("error: {}", diag.error);
-                }
+                eprint_diagnostic(&program, diag);
             }
 
             let view = View::whole();
@@ -478,14 +475,10 @@ fn main() -> Result<()> {
             kind,
             format,
         } => {
-            let (model, diags) = load_model(&inputs)?;
+            let (program, model, diags) = load_model(&inputs)?;
 
             for diag in &diags {
-                if diag.is_warning {
-                    eprintln!("warning: {}", diag.error);
-                } else {
-                    eprintln!("error: {}", diag.error);
-                }
+                eprint_diagnostic(&program, diag);
             }
 
             let output = list_elements(&model, &kind, &format)?;
@@ -493,10 +486,12 @@ fn main() -> Result<()> {
         }
 
         Commands::Lint { inputs, format } => {
-            let (model, diags) = load_model(&inputs)?;
+            let (_program, model, diags) = load_model(&inputs)?;
 
             let issues = lint_issues(&model, &diags);
-            let has_error = issues.iter().any(|issue| issue.severity == "error");
+            let has_error = issues
+                .iter()
+                .any(|issue| issue.severity == LintSeverity::Error);
             let output = format_lint_issues(&issues, &format)?;
             print!("{}", output);
 
@@ -526,6 +521,7 @@ fn main() -> Result<()> {
                 let src = fs::read_to_string(&file)
                     .with_context(|| format!("failed to read {}", file.display()))?;
                 let formatted = format_source(&src)
+                    .map_err(|err| anyhow::anyhow!("parse errors: {:?}", err.parse_errors))
                     .with_context(|| format!("failed to format {}", file.display()))?;
                 if formatted != src {
                     changed.push(file.clone());
@@ -561,14 +557,10 @@ fn main() -> Result<()> {
         }
 
         Commands::Export { inputs, kind, out } => {
-            let (model, diags) = load_model(&inputs)?;
+            let (program, model, diags) = load_model(&inputs)?;
 
             for diag in &diags {
-                if diag.is_warning {
-                    eprintln!("warning: {}", diag.error);
-                } else {
-                    eprintln!("error: {}", diag.error);
-                }
+                eprint_diagnostic(&program, diag);
             }
 
             let view = View::whole();
@@ -592,14 +584,10 @@ fn main() -> Result<()> {
             max_patterns,
             entity,
         } => {
-            let (model, diags) = load_model(&inputs)?;
+            let (program, model, diags) = load_model(&inputs)?;
 
             for diag in &diags {
-                if diag.is_warning {
-                    eprintln!("warning: {}", diag.error);
-                } else {
-                    eprintln!("error: {}", diag.error);
-                }
+                eprint_diagnostic(&program, diag);
             }
 
             let view = View::bucs(buc);
@@ -655,397 +643,11 @@ fn export_artifact(
     }
 }
 
-fn format_source(src: &str) -> Result<String> {
-    let (ast, errors) = rdra_ish_syntax::parse(src);
-    if !errors.is_empty() {
-        anyhow::bail!("parse errors: {:?}", errors);
-    }
-    Ok(format_ast(&ast))
-}
-
-fn format_ast(ast: &Ast) -> String {
-    let mut out = String::new();
-    for (index, item) in ast.items.iter().enumerate() {
-        if index > 0 {
-            out.push('\n');
-        }
-        out.push_str(&format_item(item));
-        out.push('\n');
-    }
-    out
-}
-
-fn format_item(item: &Item) -> String {
-    match item {
-        Item::Module(name, _) => format!("module {}", format_dotted_name(name)),
-        Item::Import(import) => format_import(import),
-        Item::Instance(instance) => format_instance(instance),
-        Item::Predicate(predicate) => format_predicate(predicate),
-    }
-}
-
-fn format_dotted_name(name: &DottedName) -> String {
-    name.0.join(".")
-}
-
-fn format_import(import: &ImportDecl) -> String {
-    let path = format_dotted_name(&import.path);
-    match &import.kind {
-        ImportKind::All => format!("import {}", path),
-        ImportKind::Alias(alias) => format!("import {} as {}", path, alias),
-        ImportKind::Select(items) => {
-            let items = items
-                .iter()
-                .map(|item| match &item.alias {
-                    Some(alias) => format!("{} as {}", item.name, alias),
-                    None => item.name.clone(),
-                })
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("import {}.{{{}}}", path, items)
-        }
-    }
-}
-
-fn format_instance(instance: &InstanceDecl) -> String {
-    let mut lines = vec![format!(
-        "{} {} {}",
-        instance.kind.name(),
-        instance.id,
-        quote_string(&instance.label)
-    )];
-
-    if let Some(description) = &instance.description {
-        lines.push(format!("  description {}", quote_string(description)));
-    }
-
-    lines.extend(format_requirement_metadata(instance));
-    lines.extend(format_adr_metadata(instance));
-    lines.extend(format_api_metadata(instance));
-    lines.extend(format_nfr_metadata(instance));
-    lines.extend(format_field_metadata(instance));
-    lines.extend(format_usecase_metadata(instance));
-
-    if !instance.columns.is_empty() {
-        lines[0].push_str(" {");
-        for column in &instance.columns {
-            lines.push(format!("  {}", format_column(column)));
-        }
-        lines.push("}".to_string());
-    }
-
-    lines.join("\n")
-}
-
-fn format_requirement_metadata(instance: &InstanceDecl) -> Vec<String> {
-    let mut lines = Vec::new();
-    if let Some(value) = &instance.requirement.priority {
-        lines.push(format!("  priority {}", quote_string(value)));
-    }
-    for value in &instance.requirement.sources {
-        lines.push(format!("  source {}", quote_string(value)));
-    }
-    for value in &instance.requirement.stakeholders {
-        lines.push(format!("  stakeholder {}", quote_string(value)));
-    }
-    if let Some(value) = &instance.requirement.owner {
-        lines.push(format!("  owner {}", quote_string(value)));
-    }
-    for value in &instance.requirement.acceptance_criteria {
-        lines.push(format!("  acceptance criteria {}", quote_string(value)));
-    }
-    if let Some(value) = &instance.requirement.status {
-        lines.push(format!("  status {}", quote_string(value)));
-    }
-    if let Some(value) = &instance.requirement.risk {
-        lines.push(format!("  risk {}", quote_string(value)));
-    }
-    if let Some(value) = &instance.requirement.rationale {
-        lines.push(format!("  rationale {}", quote_string(value)));
-    }
-    lines
-}
-
-fn format_adr_metadata(instance: &InstanceDecl) -> Vec<String> {
-    let mut lines = Vec::new();
-    if let Some(value) = &instance.adr.status {
-        lines.push(format!("  adr_status {}", format_metadata_value(value)));
-    }
-    for value in &instance.adr.context {
-        lines.push(format!("  context {}", quote_string(value)));
-    }
-    if let Some(value) = &instance.adr.decision {
-        lines.push(format!("  decision {}", quote_string(value)));
-    }
-    for value in &instance.adr.consequences {
-        lines.push(format!("  consequence {}", quote_string(value)));
-    }
-    for value in &instance.adr.accepted_options {
-        lines.push(format!("  accepted {}", quote_string(value)));
-    }
-    for value in &instance.adr.rejected_options {
-        lines.push(format!("  rejected {}", quote_string(value)));
-    }
-    for value in &instance.adr.reasons {
-        lines.push(format!("  reason {}", quote_string(value)));
-    }
-    lines
-}
-
-fn format_api_metadata(instance: &InstanceDecl) -> Vec<String> {
-    let mut lines = Vec::new();
-    if let Some(value) = &instance.api.method {
-        lines.push(format!("  method {}", format_metadata_value(value)));
-    }
-    if let Some(value) = &instance.api.path {
-        lines.push(format!("  path {}", quote_string(value)));
-    }
-    if let Some(value) = &instance.api.idempotency {
-        lines.push(format!("  idempotency {}", format_metadata_value(value)));
-    }
-    if let Some(value) = &instance.api.mode {
-        lines.push(format!("  mode {}", format_metadata_value(value)));
-    }
-    if let Some(value) = &instance.api.auth_scheme {
-        lines.push(format!("  auth {}", format_metadata_value(value)));
-    }
-    lines
-}
-
-fn format_nfr_metadata(instance: &InstanceDecl) -> Vec<String> {
-    let mut lines = Vec::new();
-    if let Some(value) = &instance.nfr.metric {
-        lines.push(format!("  metric {}", format_metadata_value(value)));
-    }
-    if let Some(value) = &instance.nfr.target {
-        lines.push(format!("  target {}", quote_string(value)));
-    }
-    if let Some(value) = &instance.nfr.window {
-        lines.push(format!("  window {}", format_metadata_value(value)));
-    }
-    if let Some(value) = &instance.nfr.slo {
-        lines.push(format!("  slo {}", format_metadata_value(value)));
-    }
-    if let Some(value) = &instance.nfr.availability {
-        lines.push(format!("  availability {}", format_metadata_value(value)));
-    }
-    if let Some(value) = &instance.nfr.resilience {
-        lines.push(format!("  resilience {}", format_metadata_value(value)));
-    }
-    if let Some(value) = &instance.nfr.audit {
-        lines.push(format!("  audit {}", format_metadata_value(value)));
-    }
-    if let Some(value) = &instance.nfr.logging {
-        lines.push(format!("  logging {}", format_metadata_value(value)));
-    }
-    if let Some(value) = &instance.nfr.retention {
-        lines.push(format!("  retention {}", format_metadata_value(value)));
-    }
-    if let Some(value) = &instance.nfr.privacy {
-        lines.push(format!("  privacy {}", format_metadata_value(value)));
-    }
-    lines
-}
-
-fn format_field_metadata(instance: &InstanceDecl) -> Vec<String> {
-    let mut lines = Vec::new();
-    if let Some(value) = &instance.field.access {
-        lines.push(format!("  access {}", format_metadata_value(value)));
-    }
-    if let Some(value) = instance.field.required {
-        lines.push(format!("  required {}", bool_cell(value)));
-    }
-    if let Some(value) = &instance.field.source {
-        lines.push(format!("  source {}", format_metadata_value(value)));
-    }
-    lines
-}
-
-fn format_usecase_metadata(instance: &InstanceDecl) -> Vec<String> {
-    let mut lines = Vec::new();
-    for value in &instance.usecase.preconditions {
-        lines.push(format!("  precondition {}", quote_string(value)));
-    }
-    for value in &instance.usecase.guards {
-        lines.push(format!("  guard {}", quote_string(value)));
-    }
-    for value in &instance.usecase.postconditions {
-        lines.push(format!("  postcondition {}", quote_string(value)));
-    }
-    for value in &instance.usecase.alternatives {
-        lines.push(format!("  alternative {}", quote_string(value)));
-    }
-    for value in &instance.usecase.errors {
-        lines.push(format!("  error {}", quote_string(value)));
-    }
-    lines
-}
-
-fn format_column(column: &Column) -> String {
-    let mut out = format!("{}: {}", column.name, format_col_type(&column.col_type));
-    for annotation in &column.annotations {
-        out.push(' ');
-        out.push_str(&format_annotation(annotation));
-    }
-    out
-}
-
-fn format_col_type(col_type: &ColType) -> String {
-    match col_type {
-        ColType::Int => "Int".to_string(),
-        ColType::String => "String".to_string(),
-        ColType::Money => "Money".to_string(),
-        ColType::DateTime => "DateTime".to_string(),
-        ColType::Date => "Date".to_string(),
-        ColType::Bool => "Bool".to_string(),
-        ColType::Decimal => "Decimal".to_string(),
-        ColType::Enum(values) => format!("Enum({})", values.join(", ")),
-    }
-}
-
-fn format_annotation(annotation: &Annotation) -> String {
-    match annotation {
-        Annotation::Pk => "@pk".to_string(),
-        Annotation::PkComposite(columns) => format!("@pk({})", columns.join(", ")),
-        Annotation::Unique => "@unique".to_string(),
-        Annotation::UniqueComposite(columns) => format!("@unique({})", columns.join(", ")),
-        Annotation::Index => "@index".to_string(),
-        Annotation::IndexComposite(columns) => format!("@index({})", columns.join(", ")),
-        Annotation::Check(expr) => format!("@check({})", quote_string(expr)),
-        Annotation::Null => "@null".to_string(),
-        Annotation::Default(value) => format!("@default({})", format_metadata_value(value)),
-        Annotation::Label(value) => format!("@label({})", quote_string(value)),
-        Annotation::SoftDelete => "@soft_delete".to_string(),
-        Annotation::History => "@history".to_string(),
-        Annotation::Tenant => "@tenant".to_string(),
-        Annotation::Derived(expr) => format!("@derived({})", quote_string(expr)),
-    }
-}
-
-fn format_predicate(predicate: &PredicateCall) -> String {
-    let args = predicate
-        .args
-        .iter()
-        .map(format_predicate_arg)
-        .collect::<Vec<_>>()
-        .join(", ");
-    let mut out = format!("{}({})", predicate.name, args);
-    for chain in &predicate.chain {
-        out.push_str(&format_chain_call(chain));
-    }
-    out
-}
-
-fn format_chain_call(chain: &ChainCall) -> String {
-    let args = chain
-        .args
-        .iter()
-        .map(format_predicate_arg)
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!(".{}({})", chain.name, args)
-}
-
-fn format_predicate_arg(arg: &PredicateArg) -> String {
-    match arg {
-        PredicateArg::Ref(qref) => format_qref(qref),
-        PredicateArg::Lit(value) => quote_string(value),
-        PredicateArg::Tuple(args) => format!(
-            "({})",
-            args.iter()
-                .map(format_predicate_arg)
-                .collect::<Vec<_>>()
-                .join(", ")
-        ),
-        PredicateArg::Expr(expr) => format_expr(expr),
-    }
-}
-
-fn format_expr(expr: &Expr) -> String {
-    match expr {
-        Expr::Cmp(cmp) => format!(
-            "{} {} {}",
-            format_operand(&cmp.lhs),
-            format_cmp_op(&cmp.op),
-            format_operand(&cmp.rhs)
-        ),
-    }
-}
-
-fn format_operand(operand: &Operand) -> String {
-    match operand {
-        Operand::Column(value) => value.clone(),
-        Operand::QualifiedColumn(column) => {
-            format!("{}.{}", format_qref(&column.entity), column.column)
-        }
-        Operand::IntLit(value) => value.clone(),
-        Operand::Now => "now".to_string(),
-    }
-}
-
-fn format_cmp_op(op: &CmpOp) -> &'static str {
-    match op {
-        CmpOp::Lt => "<",
-        CmpOp::Gt => ">",
-        CmpOp::Le => "<=",
-        CmpOp::Ge => ">=",
-        CmpOp::Eq => "==",
-        CmpOp::Ne => "!=",
-    }
-}
-
-fn format_qref(qref: &QRef) -> String {
-    if let Some(kind) = &qref.kind_qualifier {
-        format!("{}::{}", kind.name(), qref.parts.join("."))
-    } else {
-        qref.parts.join(".")
-    }
-}
-
-fn format_metadata_value(value: &str) -> String {
-    if is_identish(value) {
-        value.to_string()
-    } else {
-        quote_string(value)
-    }
-}
-
-fn quote_string(value: &str) -> String {
-    format!("\"{}\"", value.replace('"', "'"))
-}
-
-fn is_identish(value: &str) -> bool {
-    let mut chars = value.chars();
-    let Some(first) = chars.next() else {
-        return false;
-    };
-    (first.is_ascii_alphabetic() || first == '_')
-        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
-}
-
 fn consistency_warnings(model: &rdra_ish_core::SemanticModel) -> Vec<String> {
-    let mut warnings = Vec::new();
-
-    for diag in rdra_ish_core::permission_diagnostics(model) {
-        warnings.push(diag.error.to_string());
-    }
-
-    for diag in rdra_ish_core::api_diagnostics(model) {
-        warnings.push(diag.error.to_string());
-    }
-
-    for diag in rdra_ish_core::system_diagnostics(model) {
-        warnings.push(diag.error.to_string());
-    }
-
-    let txs = rdra_ish_core::infer_usecase_transactions(model);
-    for diag in rdra_ish_core::tx_diagnostics(model, &txs) {
-        warnings.push(diag.error.to_string());
-    }
-
-    for diag in rdra_ish_core::event_diagnostics(model) {
-        warnings.push(diag.error.to_string());
-    }
+    let mut warnings: Vec<String> = consistency_diagnostics(model)
+        .into_iter()
+        .map(|diag| diag.error.to_string())
+        .collect();
 
     for result in
         rdra_ish_core::derive_state_patterns(model, &[], rdra_ish_core::DEFAULT_PATTERN_CAP)
@@ -1062,36 +664,6 @@ fn consistency_warnings(model: &rdra_ish_core::SemanticModel) -> Vec<String> {
     warnings
 }
 
-#[derive(Debug, Clone)]
-struct LintIssue {
-    severity: &'static str,
-    rule: &'static str,
-    subject_kind: String,
-    subject_id: String,
-    message: String,
-    hint: String,
-}
-
-impl LintIssue {
-    fn new(
-        severity: &'static str,
-        rule: &'static str,
-        subject_kind: impl Into<String>,
-        subject_id: impl Into<String>,
-        message: impl Into<String>,
-        hint: impl Into<String>,
-    ) -> Self {
-        Self {
-            severity,
-            rule,
-            subject_kind: subject_kind.into(),
-            subject_id: subject_id.into(),
-            message: message.into(),
-            hint: hint.into(),
-        }
-    }
-}
-
 fn format_lint_issues(issues: &[LintIssue], format: &ListFormat) -> Result<String> {
     let headers = [
         "severity",
@@ -1105,7 +677,7 @@ fn format_lint_issues(issues: &[LintIssue], format: &ListFormat) -> Result<Strin
         .iter()
         .map(|issue| {
             [
-                issue.severity.to_string(),
+                issue.severity.as_str().to_string(),
                 issue.rule.to_string(),
                 issue.subject_kind.clone(),
                 issue.subject_id.clone(),
@@ -1116,610 +688,6 @@ fn format_lint_issues(issues: &[LintIssue], format: &ListFormat) -> Result<Strin
         .collect();
 
     format_rows(&headers, &rows, format, "lint issues")
-}
-
-fn lint_issues(
-    model: &rdra_ish_core::SemanticModel,
-    diags: &[rdra_ish_core::Diagnostic],
-) -> Vec<LintIssue> {
-    let mut findings = Vec::new();
-
-    for diag in diags {
-        findings.push(LintIssue::new(
-            if diag.is_warning { "warning" } else { "error" },
-            if diag.is_warning {
-                "semantic-warning"
-            } else {
-                "semantic-error"
-            },
-            "model",
-            "",
-            diag.error.to_string(),
-            "fix the DSL diagnostic before relying on derived review output",
-        ));
-    }
-
-    for warning in consistency_warnings(model) {
-        findings.push(LintIssue::new(
-            "warning",
-            "consistency-warning",
-            "model",
-            "",
-            warning,
-            "review the consistency diagnostic and add the missing relation or metadata",
-        ));
-    }
-
-    let degree = relation_degree(model);
-    for node in lint_node_refs(model) {
-        let Some(id) = node_id(model, &node) else {
-            continue;
-        };
-        let kind = node_kind_name(&node).to_string();
-
-        if degree.get(&node).copied().unwrap_or(0) == 0 {
-            findings.push(LintIssue::new(
-                "warning",
-                "orphan-node",
-                kind.clone(),
-                id.clone(),
-                "model element is declared but not connected to another element",
-                "connect it with a predicate, map it, or remove it if it is not part of the model",
-            ));
-        }
-
-        if !is_upper_camelish_id(&id) {
-            findings.push(LintIssue::new(
-                "warning",
-                "naming-id",
-                kind,
-                id,
-                "element id does not follow UpperCamelCase project convention",
-                "rename the id to UpperCamelCase; keep labels for human-readable text",
-            ));
-        }
-    }
-
-    lint_structural_coverage(model, &mut findings);
-    lint_column_names(model, &mut findings);
-
-    let mut issues = vec![
-        coverage_score_issue(model, &findings),
-        stage_readiness_issue(model),
-    ];
-    issues.extend(findings);
-    issues
-}
-
-fn lint_structural_coverage(model: &rdra_ish_core::SemanticModel, issues: &mut Vec<LintIssue>) {
-    for (buc_key, buc) in &model.bucs {
-        let has_child = model.relations.iter().any(|rel| {
-            rel.kind == RelKind::Contains
-                && rel.from == NodeRef::Buc(buc_key)
-                && matches!(rel.to, NodeRef::UseCase(_) | NodeRef::Flow(_))
-        });
-        if !has_child {
-            issues.push(LintIssue::new(
-                "warning",
-                "buc-empty",
-                "buc",
-                buc.id.clone(),
-                "BUC contains no use case or business flow",
-                "add contains(Buc, UseCase) or contains(Buc, Flow)",
-            ));
-        }
-    }
-
-    for (flow_key, flow) in &model.flows {
-        let has_step = model.relations.iter().any(|rel| {
-            rel.kind == RelKind::Contains
-                && rel.from == NodeRef::Flow(flow_key)
-                && matches!(rel.to, NodeRef::Step(_))
-        });
-        if !has_step {
-            issues.push(LintIssue::new(
-                "warning",
-                "flow-empty",
-                "flow",
-                flow.id.clone(),
-                "business flow has no steps",
-                "add contains(Flow, Step) for each business step",
-            ));
-        }
-    }
-
-    for (step_key, step) in &model.steps {
-        let covers_model_element = model.relations.iter().any(|rel| {
-            rel.kind == RelKind::Covers
-                && rel.from == NodeRef::Step(step_key)
-                && matches!(
-                    rel.to,
-                    NodeRef::UseCase(_) | NodeRef::Api(_) | NodeRef::Event(_)
-                )
-        });
-        if !covers_model_element {
-            issues.push(LintIssue::new(
-                "warning",
-                "step-no-cover",
-                "step",
-                step.id.clone(),
-                "business step is not anchored to a use case, API, or event",
-                "add covers(Step, UseCase), covers(Step, Api), or covers(Step, Event)",
-            ));
-        }
-    }
-
-    for (api_key, api) in &model.apis {
-        let invoked = model
-            .relations
-            .iter()
-            .any(|rel| rel.kind == RelKind::Invokes && rel.to == NodeRef::Api(api_key));
-        if !invoked {
-            issues.push(LintIssue::new(
-                "warning",
-                "api-unused",
-                "api",
-                api.id.clone(),
-                "API is not invoked by any use case",
-                "add invokes(UseCase, Api) or remove the API from this model slice",
-            ));
-        }
-
-        if api.method.is_some() ^ api.path.is_some() {
-            issues.push(LintIssue::new(
-                "warning",
-                "api-contract-incomplete",
-                "api",
-                api.id.clone(),
-                "API contract declares only one of method/path",
-                "declare both method and path before exporting OpenAPI",
-            ));
-        }
-    }
-
-    for (dto_key, dto) in &model.dtos {
-        let used = model.relations.iter().any(|rel| {
-            matches!(
-                rel.kind,
-                RelKind::Request | RelKind::Response | RelKind::ErrorResponse
-            ) && rel.to == NodeRef::Dto(dto_key)
-        });
-        if !used {
-            issues.push(LintIssue::new(
-                "warning",
-                "dto-unused",
-                "dto",
-                dto.id.clone(),
-                "DTO is not referenced by any API request or response",
-                "add request(Api, Dto), response(Api, Dto), or error_response(Api, Dto)",
-            ));
-        }
-    }
-
-    for (field_key, field) in &model.fields {
-        let contained = model.relations.iter().any(|rel| {
-            rel.kind == RelKind::Contains
-                && rel.to == NodeRef::Field(field_key)
-                && matches!(rel.from, NodeRef::Screen(_))
-        });
-        if !contained {
-            issues.push(LintIssue::new(
-                "warning",
-                "field-unplaced",
-                "field",
-                field.id.clone(),
-                "screen field is not contained by any screen",
-                "add contains(Screen, Field)",
-            ));
-        }
-
-        let mapped = model
-            .field_mappings
-            .iter()
-            .any(|mapping| mapping.field == field_key);
-        if !mapped {
-            issues.push(LintIssue::new(
-                "warning",
-                "field-unmapped",
-                "field",
-                field.id.clone(),
-                "screen field is not mapped to an Entity column",
-                "add maps_field(Field, Entity, \"column\") when the field has data lineage",
-            ));
-        }
-    }
-
-    for (screen_key, screen) in &model.screens {
-        let has_field = model.relations.iter().any(|rel| {
-            rel.kind == RelKind::Contains
-                && rel.from == NodeRef::Screen(screen_key)
-                && matches!(rel.to, NodeRef::Field(_))
-        });
-        if !has_field {
-            issues.push(LintIssue::new(
-                "warning",
-                "screen-no-fields",
-                "screen",
-                screen.id.clone(),
-                "screen has no first-class fields",
-                "add field declarations and contains(Screen, Field) for input/output review",
-            ));
-        }
-    }
-
-    for (requirement_key, requirement) in &model.requirements {
-        let motivates = model.relations.iter().any(|rel| {
-            rel.kind == RelKind::Motivates && rel.from == NodeRef::Requirement(requirement_key)
-        });
-        if !motivates {
-            issues.push(LintIssue::new(
-                "warning",
-                "requirement-untraced",
-                "requirement",
-                requirement.id.clone(),
-                "requirement does not motivate a BUC",
-                "add motivates(Requirement, Buc) to preserve requirement traceability",
-            ));
-        }
-    }
-
-    for (nfr_key, nfr) in &model.nfrs {
-        let applies = model
-            .relations
-            .iter()
-            .any(|rel| rel.kind == RelKind::AppliesTo && rel.from == NodeRef::Nfr(nfr_key));
-        if !applies {
-            issues.push(LintIssue::new(
-                "warning",
-                "nfr-unscoped",
-                "nfr",
-                nfr.id.clone(),
-                "NFR is not applied to a use case, API, or system",
-                "add applies_to(Nfr, UseCase|Api|System)",
-            ));
-        }
-    }
-
-    for (constraint_key, constraint) in &model.constraints {
-        let constrains = model.relations.iter().any(|rel| {
-            rel.kind == RelKind::Constrains && rel.from == NodeRef::Constraint(constraint_key)
-        });
-        if !constrains {
-            issues.push(LintIssue::new(
-                "warning",
-                "constraint-unscoped",
-                "constraint",
-                constraint.id.clone(),
-                "constraint is not attached to a target model element",
-                "add constrains(Constraint, UseCase|Api|System|Entity|Dto)",
-            ));
-        }
-    }
-}
-
-fn lint_column_names(model: &rdra_ish_core::SemanticModel, issues: &mut Vec<LintIssue>) {
-    for (_, entity) in &model.entities {
-        for column in &entity.columns {
-            if !is_snake_caseish(&column.name) {
-                issues.push(LintIssue::new(
-                    "warning",
-                    "naming-column",
-                    "entity-column",
-                    format!("{}.{}", entity.id, column.name),
-                    "entity column name does not follow snake_case project convention",
-                    "rename the column to snake_case or document the external naming constraint",
-                ));
-            }
-        }
-    }
-
-    for (_, dto) in &model.dtos {
-        for field in &dto.fields {
-            if !is_snake_caseish(&field.name) {
-                issues.push(LintIssue::new(
-                    "warning",
-                    "naming-dto-field",
-                    "dto-field",
-                    format!("{}.{}", dto.id, field.name),
-                    "DTO field name does not follow snake_case project convention",
-                    "rename the DTO field to snake_case or document the external contract constraint",
-                ));
-            }
-        }
-    }
-}
-
-fn coverage_score_issue(model: &rdra_ish_core::SemanticModel, findings: &[LintIssue]) -> LintIssue {
-    let penalty: i32 = findings
-        .iter()
-        .map(|issue| match issue.severity {
-            "error" => 15,
-            "warning" => {
-                if issue.rule == "semantic-warning" || issue.rule == "consistency-warning" {
-                    4
-                } else {
-                    2
-                }
-            }
-            _ => 0,
-        })
-        .sum();
-    let score = (100 - penalty).max(0);
-    LintIssue::new(
-        "info",
-        "coverage-score",
-        "model",
-        "",
-        format!(
-            "coverage score: {}/100 across {} model elements and {} findings",
-            score,
-            model_element_count(model),
-            findings.len()
-        ),
-        "use warning rows as the review backlog; the score is a lightweight readiness signal",
-    )
-}
-
-fn stage_readiness_issue(model: &rdra_ish_core::SemanticModel) -> LintIssue {
-    let stages = [
-        (
-            "scope",
-            !model.actors.is_empty() && !model.bucs.is_empty() && !model.use_cases.is_empty(),
-        ),
-        (
-            "business-flow",
-            !model.bucs.is_empty() && (!model.flows.is_empty() || !model.use_cases.is_empty()),
-        ),
-        ("data", !model.entities.is_empty()),
-        (
-            "interaction",
-            !model.screens.is_empty() || !model.apis.is_empty(),
-        ),
-        (
-            "system-boundary",
-            !model.systems.is_empty() && !model.apis.is_empty(),
-        ),
-        (
-            "rules",
-            !model.requirements.is_empty()
-                || !model.nfrs.is_empty()
-                || !model.constraints.is_empty()
-                || !model.forbidden_constraints.is_empty()
-                || !model.entity_invariants.is_empty()
-                || !model.required_constraints.is_empty()
-                || !model.exclusive_constraints.is_empty()
-                || !model.cross_forbidden_constraints.is_empty()
-                || !model.cross_entity_invariants.is_empty(),
-        ),
-    ];
-    let ready: Vec<_> = stages
-        .iter()
-        .filter_map(|(stage, ok)| ok.then_some(*stage))
-        .collect();
-    let missing: Vec<_> = stages
-        .iter()
-        .filter_map(|(stage, ok)| (!ok).then_some(*stage))
-        .collect();
-    LintIssue::new(
-        "info",
-        "stage-readiness",
-        "model",
-        "",
-        format!(
-            "ready stages: {}; missing stages: {}",
-            if ready.is_empty() {
-                "none".to_string()
-            } else {
-                ready.join("|")
-            },
-            if missing.is_empty() {
-                "none".to_string()
-            } else {
-                missing.join("|")
-            }
-        ),
-        "use missing stages to decide the next modeling refinement pass",
-    )
-}
-
-fn model_element_count(model: &rdra_ish_core::SemanticModel) -> usize {
-    model.actors.len()
-        + model.ext_systems.len()
-        + model.systems.len()
-        + model.requirements.len()
-        + model.nfrs.len()
-        + model.qualities.len()
-        + model.constraints.len()
-        + model.concepts.len()
-        + model.domain_objects.len()
-        + model.aggregates.len()
-        + model.value_objects.len()
-        + model.businesses.len()
-        + model.bucs.len()
-        + model.flows.len()
-        + model.steps.len()
-        + model.usage_scenes.len()
-        + model.use_cases.len()
-        + model.screens.len()
-        + model.fields.len()
-        + model.events.len()
-        + model.entities.len()
-        + model.states.len()
-        + model.conditions.len()
-        + model.variations.len()
-        + model.apis.len()
-        + model.dtos.len()
-        + model.locations.len()
-        + model.timings.len()
-        + model.media.len()
-        + model.permissions.len()
-}
-
-fn relation_degree(model: &rdra_ish_core::SemanticModel) -> HashMap<NodeRef, usize> {
-    let mut degree = HashMap::new();
-    let mut touch = |node: NodeRef| {
-        *degree.entry(node).or_insert(0) += 1;
-    };
-
-    for rel in &model.relations {
-        touch(rel.from.clone());
-        touch(rel.to.clone());
-    }
-    for mapping in &model.field_mappings {
-        touch(NodeRef::Field(mapping.field));
-        touch(NodeRef::Entity(mapping.entity));
-    }
-    for transition in &model.state_transitions {
-        touch(NodeRef::Event(transition.event));
-        touch(NodeRef::State(transition.from));
-        touch(NodeRef::State(transition.to));
-    }
-    for coordination in &model.boundary_coordinations {
-        touch(NodeRef::UseCase(coordination.usecase));
-        touch(NodeRef::Entity(coordination.left));
-        touch(NodeRef::Entity(coordination.right));
-    }
-    for effect in &model.column_effects {
-        touch(effect.origin.clone());
-        touch(NodeRef::Entity(effect.entity));
-    }
-    for effect in &model.proposition_effects {
-        touch(effect.origin.clone());
-        touch(NodeRef::Entity(effect.entity));
-    }
-    for constraint in &model.forbidden_constraints {
-        touch(NodeRef::Entity(constraint.entity));
-    }
-    for invariant in &model.entity_invariants {
-        touch(NodeRef::Entity(invariant.entity));
-    }
-    for constraint in &model.required_constraints {
-        touch(NodeRef::Entity(constraint.entity));
-    }
-    for constraint in &model.exclusive_constraints {
-        touch(NodeRef::Entity(constraint.entity));
-    }
-    for constraint in &model.cross_forbidden_constraints {
-        for entity in &constraint.scope {
-            touch(NodeRef::Entity(*entity));
-        }
-    }
-    for invariant in &model.cross_entity_invariants {
-        for entity in &invariant.scope {
-            touch(NodeRef::Entity(*entity));
-        }
-    }
-    for assertion in &model.temporal_assertions {
-        touch(NodeRef::UseCase(assertion.anchor));
-        for entity in &assertion.scope {
-            touch(NodeRef::Entity(*entity));
-        }
-    }
-    for constraint in &model.quantifier_constraints {
-        touch(NodeRef::Entity(constraint.anchor));
-        touch(NodeRef::Entity(constraint.related));
-    }
-    for event in &model.outbox_events {
-        touch(NodeRef::Event(*event));
-    }
-
-    degree
-}
-
-fn lint_node_refs(model: &rdra_ish_core::SemanticModel) -> Vec<NodeRef> {
-    let mut nodes = Vec::new();
-    nodes.extend(model.actors.iter().map(|(key, _)| NodeRef::Actor(key)));
-    nodes.extend(
-        model
-            .ext_systems
-            .iter()
-            .map(|(key, _)| NodeRef::ExtSystem(key)),
-    );
-    nodes.extend(model.systems.iter().map(|(key, _)| NodeRef::System(key)));
-    nodes.extend(
-        model
-            .requirements
-            .iter()
-            .map(|(key, _)| NodeRef::Requirement(key)),
-    );
-    nodes.extend(model.adrs.iter().map(|(key, _)| NodeRef::Adr(key)));
-    nodes.extend(model.nfrs.iter().map(|(key, _)| NodeRef::Nfr(key)));
-    nodes.extend(model.qualities.iter().map(|(key, _)| NodeRef::Quality(key)));
-    nodes.extend(
-        model
-            .constraints
-            .iter()
-            .map(|(key, _)| NodeRef::Constraint(key)),
-    );
-    nodes.extend(model.concepts.iter().map(|(key, _)| NodeRef::Concept(key)));
-    nodes.extend(
-        model
-            .domain_objects
-            .iter()
-            .map(|(key, _)| NodeRef::DomainObject(key)),
-    );
-    nodes.extend(
-        model
-            .aggregates
-            .iter()
-            .map(|(key, _)| NodeRef::Aggregate(key)),
-    );
-    nodes.extend(
-        model
-            .value_objects
-            .iter()
-            .map(|(key, _)| NodeRef::ValueObject(key)),
-    );
-    nodes.extend(
-        model
-            .businesses
-            .iter()
-            .map(|(key, _)| NodeRef::Business(key)),
-    );
-    nodes.extend(model.bucs.iter().map(|(key, _)| NodeRef::Buc(key)));
-    nodes.extend(model.flows.iter().map(|(key, _)| NodeRef::Flow(key)));
-    nodes.extend(model.steps.iter().map(|(key, _)| NodeRef::Step(key)));
-    nodes.extend(
-        model
-            .usage_scenes
-            .iter()
-            .map(|(key, _)| NodeRef::UsageScene(key)),
-    );
-    nodes.extend(model.use_cases.iter().map(|(key, _)| NodeRef::UseCase(key)));
-    nodes.extend(model.screens.iter().map(|(key, _)| NodeRef::Screen(key)));
-    nodes.extend(model.fields.iter().map(|(key, _)| NodeRef::Field(key)));
-    nodes.extend(model.events.iter().map(|(key, _)| NodeRef::Event(key)));
-    nodes.extend(model.entities.iter().map(|(key, _)| NodeRef::Entity(key)));
-    nodes.extend(model.states.iter().map(|(key, _)| NodeRef::State(key)));
-    nodes.extend(
-        model
-            .conditions
-            .iter()
-            .map(|(key, _)| NodeRef::Condition(key)),
-    );
-    nodes.extend(
-        model
-            .variations
-            .iter()
-            .map(|(key, _)| NodeRef::Variation(key)),
-    );
-    nodes.extend(model.apis.iter().map(|(key, _)| NodeRef::Api(key)));
-    nodes.extend(model.dtos.iter().map(|(key, _)| NodeRef::Dto(key)));
-    nodes.extend(
-        model
-            .locations
-            .iter()
-            .map(|(key, _)| NodeRef::Location(key)),
-    );
-    nodes.extend(model.timings.iter().map(|(key, _)| NodeRef::Timing(key)));
-    nodes.extend(model.media.iter().map(|(key, _)| NodeRef::Medium(key)));
-    nodes.extend(
-        model
-            .permissions
-            .iter()
-            .map(|(key, _)| NodeRef::Permission(key)),
-    );
-    nodes
 }
 
 fn node_kind_name(node: &NodeRef) -> &'static str {
@@ -1792,27 +760,6 @@ fn node_id(model: &rdra_ish_core::SemanticModel, node: &NodeRef) -> Option<Strin
         NodeRef::Medium(key) => model.media.get(*key)?.id.clone(),
         NodeRef::Permission(key) => model.permissions.get(*key)?.id.clone(),
     })
-}
-
-fn is_upper_camelish_id(id: &str) -> bool {
-    let mut chars = id.chars();
-    let Some(first) = chars.next() else {
-        return false;
-    };
-    first.is_ascii_uppercase()
-        && id.chars().all(|c| c.is_ascii_alphanumeric())
-        && id.chars().any(|c| c.is_ascii_lowercase())
-}
-
-fn is_snake_caseish(id: &str) -> bool {
-    let mut chars = id.chars();
-    let Some(first) = chars.next() else {
-        return false;
-    };
-    (first.is_ascii_lowercase() || first == '_')
-        && id
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
 }
 
 fn state_diag_message(diag: &rdra_ish_core::StateDiag) -> String {
@@ -3105,6 +2052,40 @@ mod tests {
         assert_eq!(err.to_string(), "no .rdra files found in the given inputs");
     }
 
+    fn errors_fixture(path: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join(path)
+    }
+
+    #[test]
+    fn check_command_includes_source_location() {
+        let inputs = vec![errors_fixture("tests/fixtures/errors/type_mismatch.rdra")];
+        let (program, _, diags) = load_model(&inputs).expect("load model");
+        let mismatch = diags
+            .iter()
+            .find(|d| matches!(&d.error, rdra_ish_core::RdraError::TypeMismatch { .. }))
+            .expect("type mismatch diagnostic");
+        assert!(
+            mismatch.location.is_some(),
+            "expected location on diagnostic: {:?}",
+            diags
+        );
+        let message = format_diagnostic_message(
+            Some(&program),
+            mismatch.is_warning,
+            mismatch.location.as_ref(),
+            &mismatch.error.to_string(),
+        );
+        assert!(
+            message.contains("type_mismatch.rdra"),
+            "cli diagnostic should include file path: {message}"
+        );
+    }
+
     #[test]
     fn table_list_reports_empty_api_result() {
         let model = SemanticModel::default();
@@ -3191,7 +2172,7 @@ dto CreateOrderRequest "Create order request" {customer_id:Int note:String @null
 invariant(Order).when(status, paid).then(total > 0)
 "#;
 
-        let formatted = format_source(src).unwrap();
+        let formatted = rdra_ish_syntax::format_source(src).unwrap();
 
         assert_eq!(
             formatted,

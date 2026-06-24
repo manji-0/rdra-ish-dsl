@@ -335,6 +335,31 @@ fn test_error_type_mismatch() {
             .map(|d| d.error.to_string())
             .collect::<Vec<_>>()
     );
+
+    let mismatch = diags
+        .iter()
+        .find(|d| matches!(&d.error, RdraError::TypeMismatch { .. }))
+        .expect("type mismatch diag");
+    assert!(
+        mismatch.location.is_some(),
+        "TypeMismatch should include a source location"
+    );
+    let loc = mismatch.location.as_ref().unwrap();
+    let formatted = rdra_ish_core::format_location(&program, loc).expect("formatted location");
+    assert!(
+        formatted.contains("type_mismatch.rdra"),
+        "formatted location should include file path: {formatted}"
+    );
+    let message = rdra_ish_core::format_diagnostic_message(
+        Some(&program),
+        false,
+        mismatch.location.as_ref(),
+        &mismatch.error.to_string(),
+    );
+    assert!(
+        message.starts_with("error: ") && message.contains("type_mismatch.rdra"),
+        "cli-style diagnostic should include file path: {message}"
+    );
 }
 
 #[test]

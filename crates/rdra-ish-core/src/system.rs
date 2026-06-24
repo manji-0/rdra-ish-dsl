@@ -3,6 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::diagnostics::{Diagnostic, RdraError};
+use crate::location::push_model_decl_diagnostic;
 use crate::model::{ApiKey, EntityKey, NodeRef, RelKind, SemanticModel, SystemKey};
 
 #[derive(Debug, Clone)]
@@ -106,42 +107,66 @@ pub fn system_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
 
     for (api, systems) in &systems_by_api {
         if systems.len() > 1 {
-            diags.push(Diagnostic::warning(RdraError::ApiInMultipleSystems {
-                api: api_id(model, *api),
-                systems: system_ids(model, systems),
-            }));
+            push_model_decl_diagnostic(
+                model,
+                &mut diags,
+                "api",
+                &api_id(model, *api),
+                RdraError::ApiInMultipleSystems {
+                    api: api_id(model, *api),
+                    systems: system_ids(model, systems),
+                },
+                true,
+            );
         }
     }
 
     for (entity, systems) in &api_systems_by_entity {
         if systems.len() > 1 {
-            diags.push(Diagnostic::warning(RdraError::EntityInMultipleSystems {
-                entity: entity_id(model, *entity),
-                systems: system_ids(model, systems),
-            }));
+            push_model_decl_diagnostic(
+                model,
+                &mut diags,
+                "entity",
+                &entity_id(model, *entity),
+                RdraError::EntityInMultipleSystems {
+                    entity: entity_id(model, *entity),
+                    systems: system_ids(model, systems),
+                },
+                true,
+            );
         }
     }
 
     for (entity, owners) in &owners_by_entity {
         if owners.len() > 1 {
-            diags.push(Diagnostic::warning(
+            push_model_decl_diagnostic(
+                model,
+                &mut diags,
+                "entity",
+                &entity_id(model, *entity),
                 RdraError::EntityOwnedByMultipleSystems {
                     entity: entity_id(model, *entity),
                     systems: system_ids(model, owners),
                 },
-            ));
+                true,
+            );
         }
         for owner in owners {
             if !api_systems_by_entity
                 .get(entity)
                 .is_some_and(|systems| systems.contains(owner))
             {
-                diags.push(Diagnostic::warning(
+                push_model_decl_diagnostic(
+                    model,
+                    &mut diags,
+                    "entity",
+                    &entity_id(model, *entity),
                     RdraError::OwnedEntityWithoutApiOperation {
                         system: system_id(model, *owner),
                         entity: entity_id(model, *entity),
                     },
-                ));
+                    true,
+                );
             }
         }
     }
@@ -161,14 +186,19 @@ pub fn system_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
         };
         for api_system in api_systems {
             if !owner_systems.contains(api_system) {
-                diags.push(Diagnostic::warning(
+                push_model_decl_diagnostic(
+                    model,
+                    &mut diags,
+                    "api",
+                    &api_id(model, *api),
                     RdraError::ApiOperatesEntityOutsideOwner {
                         api: api_id(model, *api),
                         api_system: system_id(model, *api_system),
                         entity: entity_id(model, *entity),
                         owner_systems: system_ids(model, owner_systems),
                     },
-                ));
+                    true,
+                );
             }
         }
     }
@@ -192,41 +222,70 @@ pub fn system_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
         let from_system = from_systems[0];
         let to_system = to_systems[0];
         if from_system != to_system && !has_coordination(model, *from, *to) {
-            diags.push(Diagnostic::warning(RdraError::CrossSystemEntityRelation {
-                from: entity_id(model, *from),
-                from_system: system_id(model, from_system),
-                to: entity_id(model, *to),
-                to_system: system_id(model, to_system),
-            }));
+            push_model_decl_diagnostic(
+                model,
+                &mut diags,
+                "entity",
+                &entity_id(model, *from),
+                RdraError::CrossSystemEntityRelation {
+                    from: entity_id(model, *from),
+                    from_system: system_id(model, from_system),
+                    to: entity_id(model, *to),
+                    to_system: system_id(model, to_system),
+                },
+                true,
+            );
         }
     }
 
     for coordination in &model.boundary_coordinations {
+        let uc_id = usecase_id(model, coordination.usecase);
         let Some(left_systems) = boundary_systems_by_entity.get(&coordination.left) else {
-            diags.push(Diagnostic::warning(RdraError::CoordinationNotCrossSystem {
-                usecase: usecase_id(model, coordination.usecase),
-                from: entity_id(model, coordination.left),
-                to: entity_id(model, coordination.right),
-            }));
+            push_model_decl_diagnostic(
+                model,
+                &mut diags,
+                "usecase",
+                &uc_id,
+                RdraError::CoordinationNotCrossSystem {
+                    usecase: uc_id.clone(),
+                    from: entity_id(model, coordination.left),
+                    to: entity_id(model, coordination.right),
+                },
+                true,
+            );
             continue;
         };
         let Some(right_systems) = boundary_systems_by_entity.get(&coordination.right) else {
-            diags.push(Diagnostic::warning(RdraError::CoordinationNotCrossSystem {
-                usecase: usecase_id(model, coordination.usecase),
-                from: entity_id(model, coordination.left),
-                to: entity_id(model, coordination.right),
-            }));
+            push_model_decl_diagnostic(
+                model,
+                &mut diags,
+                "usecase",
+                &uc_id,
+                RdraError::CoordinationNotCrossSystem {
+                    usecase: uc_id.clone(),
+                    from: entity_id(model, coordination.left),
+                    to: entity_id(model, coordination.right),
+                },
+                true,
+            );
             continue;
         };
         if left_systems.len() != 1
             || right_systems.len() != 1
             || left_systems[0] == right_systems[0]
         {
-            diags.push(Diagnostic::warning(RdraError::CoordinationNotCrossSystem {
-                usecase: usecase_id(model, coordination.usecase),
-                from: entity_id(model, coordination.left),
-                to: entity_id(model, coordination.right),
-            }));
+            push_model_decl_diagnostic(
+                model,
+                &mut diags,
+                "usecase",
+                &uc_id,
+                RdraError::CoordinationNotCrossSystem {
+                    usecase: uc_id.clone(),
+                    from: entity_id(model, coordination.left),
+                    to: entity_id(model, coordination.right),
+                },
+                true,
+            );
             continue;
         }
 
@@ -238,11 +297,18 @@ pub fn system_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
             coordination.left,
             left_system,
         ) {
-            diags.push(Diagnostic::warning(RdraError::CoordinationMissingApi {
-                usecase: usecase_id(model, coordination.usecase),
-                entity: entity_id(model, coordination.left),
-                system: system_id(model, left_system),
-            }));
+            push_model_decl_diagnostic(
+                model,
+                &mut diags,
+                "usecase",
+                &uc_id,
+                RdraError::CoordinationMissingApi {
+                    usecase: uc_id.clone(),
+                    entity: entity_id(model, coordination.left),
+                    system: system_id(model, left_system),
+                },
+                true,
+            );
         }
         if !usecase_invokes_api_for_entity_in_system(
             model,
@@ -250,11 +316,18 @@ pub fn system_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
             coordination.right,
             right_system,
         ) {
-            diags.push(Diagnostic::warning(RdraError::CoordinationMissingApi {
-                usecase: usecase_id(model, coordination.usecase),
-                entity: entity_id(model, coordination.right),
-                system: system_id(model, right_system),
-            }));
+            push_model_decl_diagnostic(
+                model,
+                &mut diags,
+                "usecase",
+                &uc_id,
+                RdraError::CoordinationMissingApi {
+                    usecase: uc_id.clone(),
+                    entity: entity_id(model, coordination.right),
+                    system: system_id(model, right_system),
+                },
+                true,
+            );
         }
     }
 

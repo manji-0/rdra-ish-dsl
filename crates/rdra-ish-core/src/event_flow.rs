@@ -4,6 +4,7 @@
 //! `api_diagnostics` も本モジュールで提供する（同様の 1パス集約パターン）。
 
 use crate::diagnostics::{Diagnostic, RdraError};
+use crate::location::push_model_decl_diagnostic;
 use crate::model::{BucKey, EventKey, NodeRef, RelKind, SemanticModel, StateKey, UseCaseKey};
 use std::collections::HashMap;
 
@@ -99,9 +100,16 @@ pub fn event_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
 
         // どの UC からも raises されていない
         if flow.raised_by.is_empty() {
-            diags.push(Diagnostic::warning(RdraError::EventNeverRaised {
-                event: event_id.clone(),
-            }));
+            push_model_decl_diagnostic(
+                model,
+                &mut diags,
+                "event",
+                &event_id,
+                RdraError::EventNeverRaised {
+                    event: event_id.clone(),
+                },
+                true,
+            );
         }
 
         // raise されているが transition も triggers もしない（行き止まり）
@@ -111,9 +119,16 @@ pub fn event_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
             && flow.triggers_bucs.is_empty()
             && !model.outbox_events.contains(&flow.event)
         {
-            diags.push(Diagnostic::warning(RdraError::EventNeverConsumed {
-                event: event_id.clone(),
-            }));
+            push_model_decl_diagnostic(
+                model,
+                &mut diags,
+                "event",
+                &event_id,
+                RdraError::EventNeverConsumed {
+                    event: event_id.clone(),
+                },
+                true,
+            );
         }
 
         // triggers 先 UC がどの BUC にも contains されていない
@@ -128,12 +143,17 @@ pub fn event_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
                     .get(uc_key)
                     .map(|u| u.id.clone())
                     .unwrap_or_default();
-                diags.push(Diagnostic::warning(
+                push_model_decl_diagnostic(
+                    model,
+                    &mut diags,
+                    "usecase",
+                    &uc_id,
                     RdraError::TriggeredUseCaseUnreachable {
                         event: event_id.clone(),
-                        usecase: uc_id,
+                        usecase: uc_id.clone(),
                     },
-                ));
+                    true,
+                );
             }
         }
     }
@@ -157,9 +177,16 @@ pub fn api_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
             .any(|r| r.kind == RelKind::Invokes && r.to == NodeRef::Api(ak));
 
         if !invoked {
-            diags.push(Diagnostic::warning(RdraError::ApiNeverInvoked {
-                api: api.id.clone(),
-            }));
+            push_model_decl_diagnostic(
+                model,
+                &mut diags,
+                "api",
+                &api.id,
+                RdraError::ApiNeverInvoked {
+                    api: api.id.clone(),
+                },
+                true,
+            );
             continue; // 未呼出しなら entity 操作の確認は不要
         }
 
@@ -176,9 +203,16 @@ pub fn api_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
         });
 
         if !operates_entity {
-            diags.push(Diagnostic::warning(RdraError::ApiInvokedButNoEntity {
-                api: api.id.clone(),
-            }));
+            push_model_decl_diagnostic(
+                model,
+                &mut diags,
+                "api",
+                &api.id,
+                RdraError::ApiInvokedButNoEntity {
+                    api: api.id.clone(),
+                },
+                true,
+            );
         }
     }
 

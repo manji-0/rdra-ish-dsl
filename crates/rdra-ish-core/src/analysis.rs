@@ -1,6 +1,64 @@
 use crate::diagnostics::*;
+use crate::location::{DeclSite, DiagCtxt, SourceId};
 use crate::model::*;
 use rdra_ish_syntax::ast::*;
+
+fn push_error(ctx: DiagCtxt, diags: &mut Vec<Diagnostic>, span: Span, err: RdraError) {
+    diags.push(Diagnostic::error_at(err, ctx.locate(span)));
+}
+
+fn push_warning(ctx: DiagCtxt, diags: &mut Vec<Diagnostic>, span: Span, err: RdraError) {
+    diags.push(Diagnostic::warning_at(err, ctx.locate(span)));
+}
+
+fn push_error_cmp(ctx: DiagCtxt, diags: &mut Vec<Diagnostic>, cmp: &Comparison, err: RdraError) {
+    push_error(ctx, diags, cmp.span.clone(), err);
+}
+
+fn push_error_qref(ctx: DiagCtxt, diags: &mut Vec<Diagnostic>, qref: &QRef, err: RdraError) {
+    push_error(ctx, diags, qref.span.clone(), err);
+}
+
+fn push_error_parse_effect(
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+    value_arg: &PredicateArg,
+    err: RdraError,
+) {
+    push_error(ctx, diags, arg_span(value_arg), err);
+}
+
+fn arg_span(arg: &PredicateArg) -> Span {
+    match arg {
+        PredicateArg::Ref(qref) => qref.span.clone(),
+        PredicateArg::Expr(Expr::Cmp(cmp)) => cmp.span.clone(),
+        PredicateArg::Lit(_) | PredicateArg::Tuple(_) => 0..0,
+    }
+}
+
+fn push_error_arg(
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+    args: &[PredicateArg],
+    index: usize,
+    err: RdraError,
+) {
+    let span = args.get(index).map(arg_span).unwrap_or(0..0);
+    push_error(ctx, diags, span, err);
+}
+
+fn push_entity_error(
+    model: &SemanticModel,
+    diags: &mut Vec<Diagnostic>,
+    entity_id: &str,
+    err: RdraError,
+) {
+    if let Some(loc) = model.decl_sites.located("entity", entity_id) {
+        diags.push(Diagnostic::error_at(err, loc));
+    } else {
+        diags.push(Diagnostic::error(err));
+    }
+}
 
 // ── PostgreSQL 特殊型の語彙 ────────────────────────────────────────────────────
 
@@ -120,7 +178,7 @@ fn parse_effect_value(col: &ModelColumn, lit: &str) -> Result<EffectValue, RdraE
 }
 
 /// 各述語が期待する引数の「kind文字列」
-fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
+pub fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
     match pred {
         "performs" => Some(vec![vec!["actor"], vec!["usecase", "buc"]]),
         "uses" => Some(vec![vec!["actor"], vec!["extsystem"]]),
@@ -210,6 +268,57 @@ fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
     }
 }
 
+/// Built-in predicate names accepted by the semantic model.
+pub const KNOWN_PREDICATES: &[&str] = &[
+    "performs",
+    "uses",
+    "reads",
+    "writes",
+    "creates",
+    "updates",
+    "deletes",
+    "invokes",
+    "request",
+    "response",
+    "error_response",
+    "applies_to",
+    "qualifies",
+    "constrains",
+    "owns",
+    "displays",
+    "shows",
+    "maps_field",
+    "raises",
+    "triggers",
+    "outbox",
+    "contains",
+    "precedes",
+    "branches",
+    "excepts",
+    "repeats",
+    "covers",
+    "compensates",
+    "maps_to",
+    "coordinates",
+    "belongs",
+    "has_permission",
+    "requires_permission",
+    "requires_medium",
+    "motivates",
+    "decides",
+    "transitions",
+    "after",
+    "relate",
+    "sets",
+    "forbidden",
+    "invariant",
+    "required",
+    "exclusive",
+    "cross_forbidden",
+    "cross_invariant",
+    "forbidden_when",
+];
+
 fn requirement_metadata_is_empty(metadata: &RequirementMetadata) -> bool {
     metadata.priority.is_none()
         && metadata.sources.is_empty()
@@ -265,61 +374,96 @@ fn usecase_metadata_is_empty(metadata: &UseCaseMetadata) -> bool {
 }
 
 pub fn build_model(ast: &Ast) -> (SemanticModel, Vec<Diagnostic>) {
+    let items: Vec<(SourceId, Item)> = ast.items.iter().cloned().map(|item| (0, item)).collect();
+    build_model_items(&items)
+}
+
+pub fn build_model_items(items: &[(SourceId, Item)]) -> (SemanticModel, Vec<Diagnostic>) {
     let mut model = SemanticModel::default();
     let mut diags: Vec<Diagnostic> = vec![];
 
-    // Pass 1: インスタンス宣言 → モデルへ登録
-    for item in &ast.items {
+    for (source_id, item) in items {
         if let Item::Instance(inst) = item {
-            register_instance(&mut model, inst, &mut diags);
+            register_instance(&mut model, inst, DiagCtxt::new(*source_id), &mut diags);
         }
     }
 
-    // Pass 2: 述語呼び出し → 型検査 + リレーション登録
-    for item in &ast.items {
+    for (source_id, item) in items {
         if let Item::Predicate(pred) = item {
-            process_predicate(&mut model, pred, &mut diags);
+            process_predicate(&mut model, pred, DiagCtxt::new(*source_id), &mut diags);
         }
     }
 
-    // Pass 3: FK生成（relate N:1 / 1:N）
     generate_fks(&mut model, &mut diags);
 
     (model, diags)
 }
 
-fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut Vec<Diagnostic>) {
+fn register_instance(
+    model: &mut SemanticModel,
+    inst: &InstanceDecl,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) {
     if inst.kind != Kind::Requirement && !requirement_metadata_is_empty(&inst.requirement) {
-        diags.push(Diagnostic::error(
+        push_error(
+            ctx,
+            diags,
+            inst.span.clone(),
             RdraError::RequirementMetadataOnNonRequirement {
                 id: inst.id.clone(),
             },
-        ));
+        );
     }
     if inst.kind != Kind::Adr && !adr_metadata_is_empty(&inst.adr) {
-        diags.push(Diagnostic::error(RdraError::AdrMetadataOnNonAdr {
-            id: inst.id.clone(),
-        }));
+        push_error(
+            ctx,
+            diags,
+            inst.span.clone(),
+            RdraError::AdrMetadataOnNonAdr {
+                id: inst.id.clone(),
+            },
+        );
     }
     if inst.kind != Kind::Api && !api_metadata_is_empty(&inst.api) {
-        diags.push(Diagnostic::error(RdraError::ApiMetadataOnNonApi {
-            id: inst.id.clone(),
-        }));
+        push_error(
+            ctx,
+            diags,
+            inst.span.clone(),
+            RdraError::ApiMetadataOnNonApi {
+                id: inst.id.clone(),
+            },
+        );
     }
     if !matches!(inst.kind, Kind::Nfr | Kind::Constraint) && !nfr_metadata_is_empty(&inst.nfr) {
-        diags.push(Diagnostic::error(RdraError::NfrMetadataOnInvalidKind {
-            id: inst.id.clone(),
-        }));
+        push_error(
+            ctx,
+            diags,
+            inst.span.clone(),
+            RdraError::NfrMetadataOnInvalidKind {
+                id: inst.id.clone(),
+            },
+        );
     }
     if inst.kind != Kind::Field && !field_metadata_is_empty(&inst.field) {
-        diags.push(Diagnostic::error(RdraError::FieldMetadataOnNonField {
-            id: inst.id.clone(),
-        }));
+        push_error(
+            ctx,
+            diags,
+            inst.span.clone(),
+            RdraError::FieldMetadataOnNonField {
+                id: inst.id.clone(),
+            },
+        );
     }
     if inst.kind != Kind::UseCase && !usecase_metadata_is_empty(&inst.usecase) {
-        diags.push(Diagnostic::error(RdraError::UseCaseMetadataOnNonUseCase {
-            id: inst.id.clone(),
-        }));
+        push_error(
+            ctx,
+            diags,
+            inst.span.clone(),
+            RdraError::UseCaseMetadataOnNonUseCase {
+                id: inst.id.clone(),
+            },
+        );
     }
 
     let node = match inst.kind {
@@ -630,9 +774,23 @@ fn register_instance(model: &mut SemanticModel, inst: &InstanceDecl, diags: &mut
     };
 
     if model.symbols.insert(inst.id.clone(), node) {
-        diags.push(Diagnostic::error(RdraError::DuplicateDefinition {
-            id: inst.id.clone(),
-        }));
+        push_error(
+            ctx,
+            diags,
+            inst.span.clone(),
+            RdraError::DuplicateDefinition {
+                id: inst.id.clone(),
+            },
+        );
+    } else {
+        model.decl_sites.insert(
+            inst.kind.name(),
+            &inst.id,
+            DeclSite {
+                source_id: ctx.source_id,
+                span: inst.span.clone(),
+            },
+        );
     }
 }
 
@@ -718,6 +876,7 @@ fn collect_indexes(columns: &[Column]) -> Vec<Vec<String>> {
 fn resolve_arg(
     model: &SemanticModel,
     arg: &PredicateArg,
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<NodeRef> {
     match arg {
@@ -734,9 +893,14 @@ fn resolve_arg(
                     .lookup_qualified(kind, id)
                     .cloned()
                     .or_else(|| {
-                        diags.push(Diagnostic::error(RdraError::UndefinedSymbol {
-                            id: format!("{}::{}", kind.name(), id),
-                        }));
+                        push_error(
+                            ctx,
+                            diags,
+                            qref.span.clone(),
+                            RdraError::UndefinedSymbol {
+                                id: format!("{}::{}", kind.name(), id),
+                            },
+                        );
                         None
                     })
             } else {
@@ -744,16 +908,24 @@ fn resolve_arg(
                 match model.symbols.lookup(id) {
                     LookupResult::Found(n) => Some(n.clone()),
                     LookupResult::NotFound => {
-                        diags.push(Diagnostic::error(RdraError::UndefinedSymbol {
-                            id: id.clone(),
-                        }));
+                        push_error(
+                            ctx,
+                            diags,
+                            qref.span.clone(),
+                            RdraError::UndefinedSymbol { id: id.clone() },
+                        );
                         None
                     }
                     LookupResult::Ambiguous(kinds) => {
-                        diags.push(Diagnostic::error(RdraError::AmbiguousReference {
-                            id: id.clone(),
-                            kinds: kinds.join(", "),
-                        }));
+                        push_error(
+                            ctx,
+                            diags,
+                            qref.span.clone(),
+                            RdraError::AmbiguousReference {
+                                id: id.clone(),
+                                kinds: kinds.join(", "),
+                            },
+                        );
                         None
                     }
                 }
@@ -788,6 +960,7 @@ fn resolve_entity_equals_condition(
     entity_id: &str,
     column_arg: &PredicateArg,
     value_arg: &PredicateArg,
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Result<Option<(String, EffectValue)>, ()> {
     let Some(col_str) = arg_as_str(column_arg) else {
@@ -797,16 +970,21 @@ fn resolve_entity_equals_condition(
         return Ok(None);
     };
     let Some(col) = entity_cols.iter().find(|c| c.name == col_str).cloned() else {
-        diags.push(Diagnostic::error(RdraError::UnknownColumn {
-            entity: entity_id.to_string(),
-            col: col_str,
-        }));
+        push_error(
+            ctx,
+            diags,
+            arg_span(column_arg),
+            RdraError::UnknownColumn {
+                entity: entity_id.to_string(),
+                col: col_str,
+            },
+        );
         return Err(());
     };
     match parse_effect_value(&col, &val_str) {
         Ok(value) => Ok(Some((col_str, value))),
         Err(e) => {
-            diags.push(Diagnostic::error(e));
+            push_error_parse_effect(ctx, diags, value_arg, e);
             Err(())
         }
     }
@@ -816,6 +994,7 @@ fn collect_entity_conditions(
     entity_cols: &[ModelColumn],
     entity_id: &str,
     args: &[PredicateArg],
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<EntityConditions> {
     let mut conditions = EntityConditions::default();
@@ -823,7 +1002,7 @@ fn collect_entity_conditions(
     while idx < args.len() {
         match &args[idx] {
             PredicateArg::Expr(Expr::Cmp(cmp)) => {
-                if let Some(prop) = resolve_comparison(entity_cols, entity_id, cmp, diags) {
+                if let Some(prop) = resolve_comparison(entity_cols, entity_id, cmp, ctx, diags) {
                     conditions.comparisons.push(prop);
                 }
                 idx += 1;
@@ -834,6 +1013,7 @@ fn collect_entity_conditions(
                     entity_id,
                     &elems[0],
                     &elems[1],
+                    ctx,
                     diags,
                 ) {
                     Ok(Some(condition)) => conditions.equals.push(condition),
@@ -848,6 +1028,7 @@ fn collect_entity_conditions(
                     entity_id,
                     &args[idx],
                     &args[idx + 1],
+                    ctx,
                     diags,
                 ) {
                     Ok(Some(condition)) => {
@@ -868,20 +1049,26 @@ fn context_value_from_arg(
     model: &SemanticModel,
     arg: &PredicateArg,
     expected_kind: &str,
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<BusinessMappingContextValue> {
     match arg {
         PredicateArg::Lit(s) => Some(BusinessMappingContextValue::Text(s.clone())),
         PredicateArg::Ref(_) => {
-            let node = resolve_arg(model, arg, diags)?;
+            let node = resolve_arg(model, arg, ctx, diags)?;
             let actual = node_kind_tag_str(&node);
             if actual != expected_kind {
-                diags.push(Diagnostic::error(RdraError::TypeMismatch {
-                    pred: "belongs context".to_string(),
-                    id: context_arg_id(arg),
-                    actual: actual.to_string(),
-                    expected: expected_kind.to_string(),
-                }));
+                push_error(
+                    ctx,
+                    diags,
+                    arg_span(arg),
+                    RdraError::TypeMismatch {
+                        pred: "belongs context".to_string(),
+                        id: context_arg_id(arg),
+                        actual: actual.to_string(),
+                        expected: expected_kind.to_string(),
+                    },
+                );
                 return None;
             }
             Some(BusinessMappingContextValue::Ref(node))
@@ -949,25 +1136,36 @@ fn resolve_entity_qref(
     model: &SemanticModel,
     pred: &str,
     qref: &QRef,
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<EntityKey> {
     let id = qref.parts.last()?.clone();
     if let Some(kind) = &qref.kind_qualifier {
         if kind != &Kind::Entity {
-            diags.push(Diagnostic::error(RdraError::TypeMismatch {
-                pred: pred.to_string(),
-                id: qref_display(qref),
-                actual: kind.name().to_string(),
-                expected: "entity".to_string(),
-            }));
+            push_error_qref(
+                ctx,
+                diags,
+                qref,
+                RdraError::TypeMismatch {
+                    pred: pred.to_string(),
+                    id: qref_display(qref),
+                    actual: kind.name().to_string(),
+                    expected: "entity".to_string(),
+                },
+            );
             return None;
         }
         return match model.symbols.lookup_qualified(kind, &id).cloned() {
             Some(NodeRef::Entity(k)) => Some(k),
             _ => {
-                diags.push(Diagnostic::error(RdraError::UndefinedSymbol {
-                    id: format!("entity::{}", id),
-                }));
+                push_error_qref(
+                    ctx,
+                    diags,
+                    qref,
+                    RdraError::UndefinedSymbol {
+                        id: format!("entity::{}", id),
+                    },
+                );
                 None
             }
         };
@@ -979,23 +1177,33 @@ fn resolve_entity_qref(
 
     match model.symbols.lookup(&id) {
         LookupResult::Found(node) => {
-            diags.push(Diagnostic::error(RdraError::TypeMismatch {
-                pred: pred.to_string(),
-                id,
-                actual: node_kind_tag_str(node).to_string(),
-                expected: "entity".to_string(),
-            }));
+            push_error_qref(
+                ctx,
+                diags,
+                qref,
+                RdraError::TypeMismatch {
+                    pred: pred.to_string(),
+                    id,
+                    actual: node_kind_tag_str(node).to_string(),
+                    expected: "entity".to_string(),
+                },
+            );
             None
         }
         LookupResult::NotFound => {
-            diags.push(Diagnostic::error(RdraError::UndefinedSymbol { id }));
+            push_error_qref(ctx, diags, qref, RdraError::UndefinedSymbol { id });
             None
         }
         LookupResult::Ambiguous(kinds) => {
-            diags.push(Diagnostic::error(RdraError::AmbiguousReference {
-                id,
-                kinds: kinds.join(", "),
-            }));
+            push_error_qref(
+                ctx,
+                diags,
+                qref,
+                RdraError::AmbiguousReference {
+                    id,
+                    kinds: kinds.join(", "),
+                },
+            );
             None
         }
     }
@@ -1005,35 +1213,51 @@ fn resolve_entity_scope_arg(
     model: &SemanticModel,
     pred: &str,
     arg: &PredicateArg,
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<EntityKey> {
     match arg {
-        PredicateArg::Ref(qref) => resolve_entity_qref(model, pred, qref, diags),
+        PredicateArg::Ref(qref) => resolve_entity_qref(model, pred, qref, ctx, diags),
         PredicateArg::Lit(s) => {
-            diags.push(Diagnostic::error(RdraError::TypeMismatch {
-                pred: pred.to_string(),
-                id: s.clone(),
-                actual: "literal".to_string(),
-                expected: "entity".to_string(),
-            }));
+            push_error(
+                ctx,
+                diags,
+                arg_span(arg),
+                RdraError::TypeMismatch {
+                    pred: pred.to_string(),
+                    id: s.clone(),
+                    actual: "literal".to_string(),
+                    expected: "entity".to_string(),
+                },
+            );
             None
         }
         PredicateArg::Tuple(_) => {
-            diags.push(Diagnostic::error(RdraError::TypeMismatch {
-                pred: pred.to_string(),
-                id: "<tuple>".to_string(),
-                actual: "tuple".to_string(),
-                expected: "entity".to_string(),
-            }));
+            push_error(
+                ctx,
+                diags,
+                arg_span(arg),
+                RdraError::TypeMismatch {
+                    pred: pred.to_string(),
+                    id: "<tuple>".to_string(),
+                    actual: "tuple".to_string(),
+                    expected: "entity".to_string(),
+                },
+            );
             None
         }
-        PredicateArg::Expr(_) => {
-            diags.push(Diagnostic::error(RdraError::TypeMismatch {
-                pred: pred.to_string(),
-                id: "<expr>".to_string(),
-                actual: "expression".to_string(),
-                expected: "entity".to_string(),
-            }));
+        PredicateArg::Expr(Expr::Cmp(cmp)) => {
+            push_error_cmp(
+                ctx,
+                diags,
+                cmp,
+                RdraError::TypeMismatch {
+                    pred: pred.to_string(),
+                    id: "<expr>".to_string(),
+                    actual: "expression".to_string(),
+                    expected: "entity".to_string(),
+                },
+            );
             None
         }
     }
@@ -1060,6 +1284,8 @@ fn find_entity_column(
     model: &SemanticModel,
     entity: EntityKey,
     column: &str,
+    span: Span,
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<ModelColumn> {
     let entity_id = model.entities[entity].id.clone();
@@ -1071,10 +1297,15 @@ fn find_entity_column(
     {
         Some(col) => Some(col),
         None => {
-            diags.push(Diagnostic::error(RdraError::UnknownColumn {
-                entity: entity_id,
-                col: column.to_string(),
-            }));
+            push_error(
+                ctx,
+                diags,
+                span,
+                RdraError::UnknownColumn {
+                    entity: entity_id,
+                    col: column.to_string(),
+                },
+            );
             None
         }
     }
@@ -1085,23 +1316,27 @@ fn resolve_cross_column_arg(
     scope: &[EntityKey],
     pred: &str,
     arg: &PredicateArg,
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<(QualifiedModelColumnRef, ModelColumn)> {
     let (entity_ref, column) = split_cross_column_ref(arg)?;
     let entity = match entity_ref {
-        Some(qref) => resolve_entity_qref(model, pred, &qref, diags)?,
+        Some(qref) => resolve_entity_qref(model, pred, &qref, ctx, diags)?,
         None if scope.len() == 1 => scope[0],
         None => {
-            diags.push(Diagnostic::error(
+            push_error(
+                ctx,
+                diags,
+                arg_span(arg),
                 RdraError::CrossConstraintColumnNeedsEntity {
                     column: column.clone(),
                     example: format!("Entity.{}", column),
                 },
-            ));
+            );
             return None;
         }
     };
-    let model_col = find_entity_column(model, entity, &column, diags)?;
+    let model_col = find_entity_column(model, entity, &column, arg_span(arg), ctx, diags)?;
     Some((QualifiedModelColumnRef { entity, column }, model_col))
 }
 
@@ -1110,12 +1345,14 @@ fn resolve_cross_operand_column(
     scope: &[EntityKey],
     pred: &str,
     operand: &Operand,
+    span: Span,
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<(QualifiedModelColumnRef, ModelColumn)> {
     match operand {
         Operand::Column(column) if scope.len() == 1 => {
             let entity = scope[0];
-            let model_col = find_entity_column(model, entity, column, diags)?;
+            let model_col = find_entity_column(model, entity, column, span.clone(), ctx, diags)?;
             Some((
                 QualifiedModelColumnRef {
                     entity,
@@ -1125,17 +1362,21 @@ fn resolve_cross_operand_column(
             ))
         }
         Operand::Column(column) => {
-            diags.push(Diagnostic::error(
+            push_error(
+                ctx,
+                diags,
+                span,
                 RdraError::CrossConstraintColumnNeedsEntity {
                     column: column.clone(),
                     example: format!("Entity.{}", column),
                 },
-            ));
+            );
             None
         }
         Operand::QualifiedColumn(qcol) => {
-            let entity = resolve_entity_qref(model, pred, &qcol.entity, diags)?;
-            let model_col = find_entity_column(model, entity, &qcol.column, diags)?;
+            let entity = resolve_entity_qref(model, pred, &qcol.entity, ctx, diags)?;
+            let model_col =
+                find_entity_column(model, entity, &qcol.column, qcol.span.clone(), ctx, diags)?;
             Some((
                 QualifiedModelColumnRef {
                     entity,
@@ -1153,70 +1394,107 @@ fn resolve_cross_comparison(
     scope: &[EntityKey],
     pred: &str,
     cmp: &Comparison,
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<CrossComparisonProp> {
-    let (lhs, lhs_col) = match resolve_cross_operand_column(model, scope, pred, &cmp.lhs, diags) {
+    let (lhs, lhs_col) = match resolve_cross_operand_column(
+        model,
+        scope,
+        pred,
+        &cmp.lhs,
+        cmp.span.clone(),
+        ctx,
+        diags,
+    ) {
         Some(v) => v,
         None => {
-            diags.push(Diagnostic::error(RdraError::ComparisonLhsMustBeColumn));
+            push_error_cmp(ctx, diags, cmp, RdraError::ComparisonLhsMustBeColumn);
             return None;
         }
     };
     let lhs_cat = type_category(&lhs_col.col_type);
 
     if is_order_op(&cmp.op) && lhs_cat == "equality" {
-        diags.push(Diagnostic::error(RdraError::ComparisonOpNotOrdered {
-            col: lhs.column.clone(),
-            col_type: format!("{:?}", lhs_col.col_type),
-            op: cmp.op.as_str().to_string(),
-        }));
+        push_error_cmp(
+            ctx,
+            diags,
+            cmp,
+            RdraError::ComparisonOpNotOrdered {
+                col: lhs.column.clone(),
+                col_type: format!("{:?}", lhs_col.col_type),
+                op: cmp.op.as_str().to_string(),
+            },
+        );
         return None;
     }
 
     let rhs = match &cmp.rhs {
         Operand::Column(_) | Operand::QualifiedColumn(_) => {
-            let (rhs_ref, rhs_col) =
-                resolve_cross_operand_column(model, scope, pred, &cmp.rhs, diags)?;
+            let (rhs_ref, rhs_col) = resolve_cross_operand_column(
+                model,
+                scope,
+                pred,
+                &cmp.rhs,
+                cmp.span.clone(),
+                ctx,
+                diags,
+            )?;
             let rhs_cat = type_category(&rhs_col.col_type);
             if lhs_cat != rhs_cat {
-                diags.push(Diagnostic::error(RdraError::ComparisonTypeMismatch {
-                    lhs: lhs.column.clone(),
-                    lhs_type: format!("{:?}", lhs_col.col_type),
-                    rhs: rhs_ref.column.clone(),
-                    rhs_type: format!("{:?}", rhs_col.col_type),
-                }));
+                push_error_cmp(
+                    ctx,
+                    diags,
+                    cmp,
+                    RdraError::ComparisonTypeMismatch {
+                        lhs: lhs.column.clone(),
+                        lhs_type: format!("{:?}", lhs_col.col_type),
+                        rhs: rhs_ref.column.clone(),
+                        rhs_type: format!("{:?}", rhs_col.col_type),
+                    },
+                );
                 return None;
             }
             CrossCmpRhs::Column(rhs_ref)
         }
         Operand::IntLit(s) => {
             if lhs_cat != "numeric" {
-                diags.push(Diagnostic::error(RdraError::ComparisonTypeMismatch {
-                    lhs: lhs.column.clone(),
-                    lhs_type: format!("{:?}", lhs_col.col_type),
-                    rhs: s.clone(),
-                    rhs_type: "integer_literal".to_string(),
-                }));
+                push_error_cmp(
+                    ctx,
+                    diags,
+                    cmp,
+                    RdraError::ComparisonTypeMismatch {
+                        lhs: lhs.column.clone(),
+                        lhs_type: format!("{:?}", lhs_col.col_type),
+                        rhs: s.clone(),
+                        rhs_type: "integer_literal".to_string(),
+                    },
+                );
                 return None;
             }
             match s.parse::<i64>() {
                 Ok(n) => CrossCmpRhs::IntLit(n),
                 Err(_) => {
-                    diags.push(Diagnostic::error(RdraError::ComparisonInvalidIntLit {
-                        lit: s.clone(),
-                    }));
+                    push_error_cmp(
+                        ctx,
+                        diags,
+                        cmp,
+                        RdraError::ComparisonInvalidIntLit { lit: s.clone() },
+                    );
                     return None;
                 }
             }
         }
         Operand::Now => {
             if lhs_cat != "temporal" {
-                diags.push(Diagnostic::error(
+                push_error_cmp(
+                    ctx,
+                    diags,
+                    cmp,
                     RdraError::ComparisonNowRequiresTemporal {
                         col: lhs.column.clone(),
                         col_type: format!("{:?}", lhs_col.col_type),
                     },
-                ));
+                );
                 return None;
             }
             CrossCmpRhs::Now
@@ -1236,14 +1514,15 @@ fn resolve_cross_equals_condition(
     pred: &str,
     column_arg: &PredicateArg,
     value_arg: &PredicateArg,
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<CrossEntityCondition> {
-    let (column, model_col) = resolve_cross_column_arg(model, scope, pred, column_arg, diags)?;
+    let (column, model_col) = resolve_cross_column_arg(model, scope, pred, column_arg, ctx, diags)?;
     let value_lit = arg_as_str(value_arg)?;
     match parse_effect_value(&model_col, &value_lit) {
         Ok(value) => Some(CrossEntityCondition::Equals { column, value }),
         Err(e) => {
-            diags.push(Diagnostic::error(e));
+            push_error_parse_effect(ctx, diags, value_arg, e);
             None
         }
     }
@@ -1254,15 +1533,16 @@ fn resolve_cross_condition(
     scope: &[EntityKey],
     pred: &str,
     arg: &PredicateArg,
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<CrossEntityCondition> {
     match arg {
         PredicateArg::Expr(Expr::Cmp(cmp)) => {
-            resolve_cross_comparison(model, scope, pred, cmp, diags)
+            resolve_cross_comparison(model, scope, pred, cmp, ctx, diags)
                 .map(CrossEntityCondition::Comparison)
         }
         PredicateArg::Tuple(elems) if elems.len() == 2 => {
-            resolve_cross_equals_condition(model, scope, pred, &elems[0], &elems[1], diags)
+            resolve_cross_equals_condition(model, scope, pred, &elems[0], &elems[1], ctx, diags)
         }
         _ => None,
     }
@@ -1271,6 +1551,7 @@ fn resolve_cross_condition(
 fn collect_cross_scope_prefix(
     model: &SemanticModel,
     pred: &PredicateCall,
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> (Vec<EntityKey>, usize) {
     let mut scope = Vec::new();
@@ -1282,7 +1563,7 @@ fn collect_cross_scope_prefix(
         }
         match arg {
             PredicateArg::Ref(_) => {
-                if let Some(entity) = resolve_entity_scope_arg(model, &pred.name, arg, diags) {
+                if let Some(entity) = resolve_entity_scope_arg(model, &pred.name, arg, ctx, diags) {
                     push_unique_entity(&mut scope, entity);
                 }
             }
@@ -1300,6 +1581,7 @@ fn collect_cross_chain_conditions(
     scope: &[EntityKey],
     pred: &str,
     args: &[PredicateArg],
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Vec<CrossEntityCondition> {
     let mut conditions = Vec::new();
@@ -1307,7 +1589,9 @@ fn collect_cross_chain_conditions(
     while idx < args.len() {
         match &args[idx] {
             PredicateArg::Expr(_) | PredicateArg::Tuple(_) => {
-                if let Some(cond) = resolve_cross_condition(model, scope, pred, &args[idx], diags) {
+                if let Some(cond) =
+                    resolve_cross_condition(model, scope, pred, &args[idx], ctx, diags)
+                {
                     conditions.push(cond);
                 }
                 idx += 1;
@@ -1319,6 +1603,7 @@ fn collect_cross_chain_conditions(
                     pred,
                     &args[idx],
                     &args[idx + 1],
+                    ctx,
                     diags,
                 ) {
                     conditions.push(cond);
@@ -1345,12 +1630,13 @@ fn add_condition_entities_to_scope(
 fn collect_cross_along_path(
     model: &SemanticModel,
     pred: &PredicateCall,
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<Vec<EntityKey>> {
     let along = pred.chain.iter().find(|cc| cc.name == "along")?;
     let mut path = Vec::new();
     for arg in &along.args {
-        if let Some(entity) = resolve_entity_scope_arg(model, &pred.name, arg, diags) {
+        if let Some(entity) = resolve_entity_scope_arg(model, &pred.name, arg, ctx, diags) {
             path.push(entity);
         }
     }
@@ -1360,9 +1646,10 @@ fn collect_cross_along_path(
 fn cross_scope_semantics_from_chain(
     model: &SemanticModel,
     pred: &PredicateCall,
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> CrossConstraintScope {
-    match collect_cross_along_path(model, pred, diags) {
+    match collect_cross_along_path(model, pred, ctx, diags) {
         Some(path) => CrossConstraintScope::RelationPath(path),
         None => CrossConstraintScope::GlobalProduct,
     }
@@ -1371,12 +1658,13 @@ fn cross_scope_semantics_from_chain(
 fn process_cross_forbidden(
     model: &mut SemanticModel,
     pred: &PredicateCall,
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
-    let (mut scope, first_condition) = collect_cross_scope_prefix(model, pred, diags);
+    let (mut scope, first_condition) = collect_cross_scope_prefix(model, pred, ctx, diags);
     let mut conditions = Vec::new();
     for arg in pred.args.iter().skip(first_condition) {
-        if let Some(cond) = resolve_cross_condition(model, &scope, &pred.name, arg, diags) {
+        if let Some(cond) = resolve_cross_condition(model, &scope, &pred.name, arg, ctx, diags) {
             conditions.push(cond);
         }
     }
@@ -1386,7 +1674,7 @@ fn process_cross_forbidden(
     }
 
     add_condition_entities_to_scope(&mut scope, &conditions);
-    let scope_semantics = cross_scope_semantics_from_chain(model, pred, diags);
+    let scope_semantics = cross_scope_semantics_from_chain(model, pred, ctx, diags);
     model
         .cross_forbidden_constraints
         .push(CrossForbiddenConstraint {
@@ -1402,11 +1690,12 @@ fn process_cross_forbidden(
 fn process_cross_invariant(
     model: &mut SemanticModel,
     pred: &PredicateCall,
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
     let mut scope = Vec::new();
     for arg in &pred.args {
-        if let Some(entity) = resolve_entity_scope_arg(model, &pred.name, arg, diags) {
+        if let Some(entity) = resolve_entity_scope_arg(model, &pred.name, arg, ctx, diags) {
             push_unique_entity(&mut scope, entity);
         }
     }
@@ -1416,12 +1705,12 @@ fn process_cross_invariant(
     for cc in &pred.chain {
         match cc.name.as_str() {
             "when" => guards.extend(collect_cross_chain_conditions(
-                model, &scope, &pred.name, &cc.args, diags,
+                model, &scope, &pred.name, &cc.args, ctx, diags,
             )),
             "then" => requireds.extend(collect_cross_chain_conditions(
-                model, &scope, &pred.name, &cc.args, diags,
+                model, &scope, &pred.name, &cc.args, ctx, diags,
             )),
-            "has" | "none" => process_quantifier_chain(model, &scope, &guards, cc, diags),
+            "has" | "none" => process_quantifier_chain(model, &scope, &guards, cc, ctx, diags),
             _ => {}
         }
     }
@@ -1432,7 +1721,7 @@ fn process_cross_invariant(
 
     add_condition_entities_to_scope(&mut scope, &guards);
     add_condition_entities_to_scope(&mut scope, &requireds);
-    let scope_semantics = cross_scope_semantics_from_chain(model, pred, diags);
+    let scope_semantics = cross_scope_semantics_from_chain(model, pred, ctx, diags);
     model.cross_entity_invariants.push(CrossEntityInvariant {
         scope: scope.clone(),
         scope_semantics,
@@ -1448,20 +1737,22 @@ fn process_forbidden_when_predicate(
     model: &mut SemanticModel,
     pred: &PredicateCall,
     resolved: &[Option<NodeRef>],
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
     let Some(Some(NodeRef::Entity(anchor))) = resolved.first() else {
         return;
     };
     let scope = vec![*anchor];
-    let guards = collect_cross_chain_conditions(model, &scope, &pred.name, &pred.args[1..], diags);
+    let guards =
+        collect_cross_chain_conditions(model, &scope, &pred.name, &pred.args[1..], ctx, diags);
     if guards.is_empty() {
         return;
     }
 
     for cc in &pred.chain {
         if matches!(cc.name.as_str(), "has" | "none") {
-            process_quantifier_chain(model, &scope, &guards, cc, diags);
+            process_quantifier_chain(model, &scope, &guards, cc, ctx, diags);
         }
     }
     model
@@ -1474,6 +1765,7 @@ fn process_quantifier_chain(
     anchor_scope: &[EntityKey],
     guards: &[CrossEntityCondition],
     cc: &ChainCall,
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
     let Some(anchor) = anchor_scope.first().copied() else {
@@ -1482,12 +1774,12 @@ fn process_quantifier_chain(
     let Some(related_arg) = cc.args.first() else {
         return;
     };
-    let Some(related) = resolve_entity_scope_arg(model, &cc.name, related_arg, diags) else {
+    let Some(related) = resolve_entity_scope_arg(model, &cc.name, related_arg, ctx, diags) else {
         return;
     };
     let related_scope = vec![related];
     let related_conditions =
-        collect_cross_chain_conditions(model, &related_scope, &cc.name, &cc.args[1..], diags);
+        collect_cross_chain_conditions(model, &related_scope, &cc.name, &cc.args[1..], ctx, diags);
     if related_conditions.is_empty() {
         return;
     }
@@ -1513,6 +1805,7 @@ fn temporal_equals_from_comparison(
     scope: &[EntityKey],
     pred: &str,
     cmp: &Comparison,
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<CrossEntityCondition> {
     if cmp.op != CmpOp::Eq {
@@ -1522,7 +1815,8 @@ fn temporal_equals_from_comparison(
     let (column, model_col) = match &cmp.lhs {
         Operand::Column(column) if scope.len() == 1 => {
             let entity = scope[0];
-            let model_col = find_entity_column(model, entity, column, diags)?;
+            let model_col =
+                find_entity_column(model, entity, column, cmp.span.clone(), ctx, diags)?;
             (
                 QualifiedModelColumnRef {
                     entity,
@@ -1532,8 +1826,9 @@ fn temporal_equals_from_comparison(
             )
         }
         Operand::QualifiedColumn(qcol) => {
-            let entity = resolve_entity_qref(model, pred, &qcol.entity, diags)?;
-            let model_col = find_entity_column(model, entity, &qcol.column, diags)?;
+            let entity = resolve_entity_qref(model, pred, &qcol.entity, ctx, diags)?;
+            let model_col =
+                find_entity_column(model, entity, &qcol.column, qcol.span.clone(), ctx, diags)?;
             (
                 QualifiedModelColumnRef {
                     entity,
@@ -1553,7 +1848,7 @@ fn temporal_equals_from_comparison(
     match parse_effect_value(&model_col, &value_lit) {
         Ok(value) => Some(CrossEntityCondition::Equals { column, value }),
         Err(e) => {
-            diags.push(Diagnostic::error(e));
+            push_error_cmp(ctx, diags, cmp, e);
             None
         }
     }
@@ -1564,6 +1859,7 @@ fn collect_temporal_assert_conditions(
     scope: &[EntityKey],
     pred: &str,
     args: &[PredicateArg],
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Vec<CrossEntityCondition> {
     let mut conditions = Vec::new();
@@ -1571,18 +1867,21 @@ fn collect_temporal_assert_conditions(
     while idx < args.len() {
         match &args[idx] {
             PredicateArg::Expr(Expr::Cmp(cmp)) => {
-                if let Some(cond) = temporal_equals_from_comparison(model, scope, pred, cmp, diags)
+                if let Some(cond) =
+                    temporal_equals_from_comparison(model, scope, pred, cmp, ctx, diags)
                 {
                     conditions.push(cond);
                 } else if let Some(cond) =
-                    resolve_cross_condition(model, scope, pred, &args[idx], diags)
+                    resolve_cross_condition(model, scope, pred, &args[idx], ctx, diags)
                 {
                     conditions.push(cond);
                 }
                 idx += 1;
             }
             PredicateArg::Tuple(_) => {
-                if let Some(cond) = resolve_cross_condition(model, scope, pred, &args[idx], diags) {
+                if let Some(cond) =
+                    resolve_cross_condition(model, scope, pred, &args[idx], ctx, diags)
+                {
                     conditions.push(cond);
                 }
                 idx += 1;
@@ -1594,6 +1893,7 @@ fn collect_temporal_assert_conditions(
                     pred,
                     &args[idx],
                     &args[idx + 1],
+                    ctx,
                     diags,
                 ) {
                     conditions.push(cond);
@@ -1610,6 +1910,7 @@ fn process_after_predicate(
     model: &mut SemanticModel,
     pred: &PredicateCall,
     resolved: &[Option<NodeRef>],
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
     let Some(Some(NodeRef::UseCase(anchor))) = resolved.first() else {
@@ -1621,7 +1922,7 @@ fn process_after_predicate(
     for cc in &pred.chain {
         if cc.name == "assert" {
             requireds.extend(collect_temporal_assert_conditions(
-                model, &scope, &pred.name, &cc.args, diags,
+                model, &scope, &pred.name, &cc.args, ctx, diags,
             ));
         }
     }
@@ -1683,6 +1984,7 @@ fn resolve_comparison(
     entity_cols: &[ModelColumn],
     entity_id: &str,
     cmp: &Comparison,
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<ComparisonProp> {
     // ── 左辺はカラム参照のみ ──────────────────────────────────────────────────
@@ -1690,22 +1992,27 @@ fn resolve_comparison(
         Operand::Column(name) => name.clone(),
         Operand::QualifiedColumn(qcol) => {
             let Some(q_entity) = qref_id(&qcol.entity) else {
-                diags.push(Diagnostic::error(RdraError::ComparisonLhsMustBeColumn));
+                push_error_cmp(ctx, diags, cmp, RdraError::ComparisonLhsMustBeColumn);
                 return None;
             };
             if q_entity != entity_id {
-                diags.push(Diagnostic::error(RdraError::TypeMismatch {
-                    pred: "comparison".to_string(),
-                    id: qualified_column_display(qcol),
-                    actual: format!("column of entity {}", q_entity),
-                    expected: format!("column of entity {}", entity_id),
-                }));
+                push_error_cmp(
+                    ctx,
+                    diags,
+                    cmp,
+                    RdraError::TypeMismatch {
+                        pred: "comparison".to_string(),
+                        id: qualified_column_display(qcol),
+                        actual: format!("column of entity {}", q_entity),
+                        expected: format!("column of entity {}", entity_id),
+                    },
+                );
                 return None;
             }
             qcol.column.clone()
         }
         _ => {
-            diags.push(Diagnostic::error(RdraError::ComparisonLhsMustBeColumn));
+            push_error_cmp(ctx, diags, cmp, RdraError::ComparisonLhsMustBeColumn);
             return None;
         }
     };
@@ -1714,10 +2021,15 @@ fn resolve_comparison(
     let lhs_col = match entity_cols.iter().find(|c| c.name == lhs_col_name) {
         Some(c) => c,
         None => {
-            diags.push(Diagnostic::error(RdraError::UnknownColumn {
-                entity: entity_id.to_string(),
-                col: lhs_col_name.clone(),
-            }));
+            push_error_cmp(
+                ctx,
+                diags,
+                cmp,
+                RdraError::UnknownColumn {
+                    entity: entity_id.to_string(),
+                    col: lhs_col_name.clone(),
+                },
+            );
             return None;
         }
     };
@@ -1726,11 +2038,16 @@ fn resolve_comparison(
 
     // 順序比較演算子が使えない型か確認
     if is_order_op(&cmp.op) && lhs_cat == "equality" {
-        diags.push(Diagnostic::error(RdraError::ComparisonOpNotOrdered {
-            col: lhs_col_name.clone(),
-            col_type: format!("{:?}", lhs_col.col_type),
-            op: cmp.op.as_str().to_string(),
-        }));
+        push_error_cmp(
+            ctx,
+            diags,
+            cmp,
+            RdraError::ComparisonOpNotOrdered {
+                col: lhs_col_name.clone(),
+                col_type: format!("{:?}", lhs_col.col_type),
+                op: cmp.op.as_str().to_string(),
+            },
+        );
         return None;
     }
 
@@ -1740,96 +2057,134 @@ fn resolve_comparison(
             let rhs_col = match entity_cols.iter().find(|c| &c.name == rhs_name) {
                 Some(c) => c,
                 None => {
-                    diags.push(Diagnostic::error(RdraError::ComparisonRhsColumnUnknown {
-                        entity: entity_id.to_string(),
-                        col: rhs_name.clone(),
-                    }));
+                    push_error_cmp(
+                        ctx,
+                        diags,
+                        cmp,
+                        RdraError::ComparisonRhsColumnUnknown {
+                            entity: entity_id.to_string(),
+                            col: rhs_name.clone(),
+                        },
+                    );
                     return None;
                 }
             };
             let rhs_cat = type_category(&rhs_col.col_type);
-            // 型カテゴリが一致しなければエラー
             if lhs_cat != rhs_cat {
-                diags.push(Diagnostic::error(RdraError::ComparisonTypeMismatch {
-                    lhs: lhs_col_name.clone(),
-                    lhs_type: format!("{:?}", lhs_col.col_type),
-                    rhs: rhs_name.clone(),
-                    rhs_type: format!("{:?}", rhs_col.col_type),
-                }));
+                push_error_cmp(
+                    ctx,
+                    diags,
+                    cmp,
+                    RdraError::ComparisonTypeMismatch {
+                        lhs: lhs_col_name.clone(),
+                        lhs_type: format!("{:?}", lhs_col.col_type),
+                        rhs: rhs_name.clone(),
+                        rhs_type: format!("{:?}", rhs_col.col_type),
+                    },
+                );
                 return None;
             }
             CmpRhs::Column(rhs_name.clone())
         }
         Operand::QualifiedColumn(qcol) => {
             let Some(q_entity) = qref_id(&qcol.entity) else {
-                diags.push(Diagnostic::error(RdraError::ComparisonRhsColumnUnknown {
-                    entity: entity_id.to_string(),
-                    col: qualified_column_display(qcol),
-                }));
+                push_error_cmp(
+                    ctx,
+                    diags,
+                    cmp,
+                    RdraError::ComparisonRhsColumnUnknown {
+                        entity: entity_id.to_string(),
+                        col: qualified_column_display(qcol),
+                    },
+                );
                 return None;
             };
             if q_entity != entity_id {
-                diags.push(Diagnostic::error(RdraError::TypeMismatch {
-                    pred: "comparison".to_string(),
-                    id: qualified_column_display(qcol),
-                    actual: format!("column of entity {}", q_entity),
-                    expected: format!("column of entity {}", entity_id),
-                }));
+                push_error_cmp(
+                    ctx,
+                    diags,
+                    cmp,
+                    RdraError::TypeMismatch {
+                        pred: "comparison".to_string(),
+                        id: qualified_column_display(qcol),
+                        actual: format!("column of entity {}", q_entity),
+                        expected: format!("column of entity {}", entity_id),
+                    },
+                );
                 return None;
             }
             let rhs_name = qcol.column.clone();
             let rhs_col = match entity_cols.iter().find(|c| c.name == rhs_name) {
                 Some(c) => c,
                 None => {
-                    diags.push(Diagnostic::error(RdraError::ComparisonRhsColumnUnknown {
-                        entity: entity_id.to_string(),
-                        col: rhs_name.clone(),
-                    }));
+                    push_error_cmp(
+                        ctx,
+                        diags,
+                        cmp,
+                        RdraError::ComparisonRhsColumnUnknown {
+                            entity: entity_id.to_string(),
+                            col: rhs_name.clone(),
+                        },
+                    );
                     return None;
                 }
             };
             let rhs_cat = type_category(&rhs_col.col_type);
             if lhs_cat != rhs_cat {
-                diags.push(Diagnostic::error(RdraError::ComparisonTypeMismatch {
-                    lhs: lhs_col_name.clone(),
-                    lhs_type: format!("{:?}", lhs_col.col_type),
-                    rhs: rhs_name.clone(),
-                    rhs_type: format!("{:?}", rhs_col.col_type),
-                }));
+                push_error_cmp(
+                    ctx,
+                    diags,
+                    cmp,
+                    RdraError::ComparisonTypeMismatch {
+                        lhs: lhs_col_name.clone(),
+                        lhs_type: format!("{:?}", lhs_col.col_type),
+                        rhs: rhs_name.clone(),
+                        rhs_type: format!("{:?}", rhs_col.col_type),
+                    },
+                );
                 return None;
             }
             CmpRhs::Column(rhs_name)
         }
         Operand::IntLit(s) => {
-            // 左辺が数値カテゴリか確認
             if lhs_cat != "numeric" {
-                diags.push(Diagnostic::error(RdraError::ComparisonTypeMismatch {
-                    lhs: lhs_col_name.clone(),
-                    lhs_type: format!("{:?}", lhs_col.col_type),
-                    rhs: s.clone(),
-                    rhs_type: "integer_literal".to_string(),
-                }));
+                push_error_cmp(
+                    ctx,
+                    diags,
+                    cmp,
+                    RdraError::ComparisonTypeMismatch {
+                        lhs: lhs_col_name.clone(),
+                        lhs_type: format!("{:?}", lhs_col.col_type),
+                        rhs: s.clone(),
+                        rhs_type: "integer_literal".to_string(),
+                    },
+                );
                 return None;
             }
             match s.parse::<i64>() {
                 Ok(n) => CmpRhs::IntLit(n),
                 Err(_) => {
-                    diags.push(Diagnostic::error(RdraError::ComparisonInvalidIntLit {
-                        lit: s.clone(),
-                    }));
+                    push_error_cmp(
+                        ctx,
+                        diags,
+                        cmp,
+                        RdraError::ComparisonInvalidIntLit { lit: s.clone() },
+                    );
                     return None;
                 }
             }
         }
         Operand::Now => {
-            // 左辺が時間カテゴリか確認
             if lhs_cat != "temporal" {
-                diags.push(Diagnostic::error(
+                push_error_cmp(
+                    ctx,
+                    diags,
+                    cmp,
                     RdraError::ComparisonNowRequiresTemporal {
                         col: lhs_col_name.clone(),
                         col_type: format!("{:?}", lhs_col.col_type),
                     },
-                ));
+                );
                 return None;
             }
             CmpRhs::Now
@@ -1847,6 +2202,7 @@ fn resolve_predicate_args(
     model: &SemanticModel,
     pred: &PredicateCall,
     sig: &[Vec<&'static str>],
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Vec<Option<NodeRef>> {
     pred.args
@@ -1857,13 +2213,13 @@ fn resolve_predicate_args(
                 return if matches!(pred.name.as_str(), "forbidden" | "required" | "exclusive") {
                     None
                 } else {
-                    resolve_arg(model, arg, diags)
+                    resolve_arg(model, arg, ctx, diags)
                 };
             };
             if matches!(kinds.as_slice(), ["_card"] | ["_col"] | ["_val"]) {
                 return None;
             }
-            resolve_arg(model, arg, diags)
+            resolve_arg(model, arg, ctx, diags)
         })
         .collect()
 }
@@ -1887,6 +2243,7 @@ fn validate_predicate_arg_types(
     pred: &PredicateCall,
     sig: &[Vec<&'static str>],
     resolved: &[Option<NodeRef>],
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
     for (i, expected_kinds) in sig.iter().enumerate() {
@@ -1896,12 +2253,18 @@ fn validate_predicate_arg_types(
         if let Some(Some(node)) = resolved.get(i) {
             let actual = node_kind_tag_str(node);
             if !expected_kinds.contains(&actual) {
-                diags.push(Diagnostic::error(RdraError::TypeMismatch {
-                    pred: pred.name.clone(),
-                    id: predicate_arg_display(&pred.args[i]),
-                    actual: actual.to_string(),
-                    expected: expected_kinds.join("|"),
-                }));
+                push_error_arg(
+                    ctx,
+                    diags,
+                    &pred.args,
+                    i,
+                    RdraError::TypeMismatch {
+                        pred: pred.name.clone(),
+                        id: predicate_arg_display(&pred.args[i]),
+                        actual: actual.to_string(),
+                        expected: expected_kinds.join("|"),
+                    },
+                );
             }
         }
     }
@@ -1910,6 +2273,7 @@ fn validate_predicate_arg_types(
 fn validate_contains_pair(
     pred: &PredicateCall,
     resolved: &[Option<NodeRef>],
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> bool {
     if pred.name != "contains" {
@@ -1928,12 +2292,17 @@ fn validate_contains_pair(
                 | (NodeRef::Aggregate(_), NodeRef::Concept(_))
         );
         if !valid {
-            diags.push(Diagnostic::error(RdraError::TypeMismatch {
-                pred: pred.name.clone(),
-                id: "contains pair".to_string(),
-                actual: format!("{} -> {}", node_kind_tag_str(from), node_kind_tag_str(to)),
-                expected: "buc->usecase|buc->flow|flow->step|screen->field|system->api|aggregate->domain_object|aggregate->valueobject|aggregate->concept".to_string(),
-            }));
+            push_error(
+                ctx,
+                diags,
+                pred.span.clone(),
+                RdraError::TypeMismatch {
+                    pred: pred.name.clone(),
+                    id: "contains pair".to_string(),
+                    actual: format!("{} -> {}", node_kind_tag_str(from), node_kind_tag_str(to)),
+                    expected: "buc->usecase|buc->flow|flow->step|screen->field|system->api|aggregate->domain_object|aggregate->valueobject|aggregate->concept".to_string(),
+                },
+            );
             return false;
         }
     }
@@ -1944,6 +2313,7 @@ fn process_maps_field_predicate(
     model: &mut SemanticModel,
     pred: &PredicateCall,
     resolved: &[Option<NodeRef>],
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
     let (Some(Some(NodeRef::Field(field))), Some(Some(NodeRef::Entity(entity)))) =
@@ -1961,10 +2331,21 @@ fn process_maps_field_predicate(
         .iter()
         .any(|col| col.name == column)
     {
-        diags.push(Diagnostic::error(RdraError::UnknownColumn {
-            entity: entity_id,
-            col: column,
-        }));
+        let span = pred
+            .args
+            .get(2)
+            .map(arg_span)
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| pred.span.clone());
+        push_error(
+            ctx,
+            diags,
+            span,
+            RdraError::UnknownColumn {
+                entity: entity_id,
+                col: column,
+            },
+        );
         return;
     }
 
@@ -2050,6 +2431,7 @@ fn process_sets_predicate(
     model: &mut SemanticModel,
     pred: &PredicateCall,
     resolved: &[Option<NodeRef>],
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
     let (Some(Some(origin)), Some(Some(entity_ref))) = (resolved.first(), resolved.get(1)) else {
@@ -2074,7 +2456,7 @@ fn process_sets_predicate(
             }
             let entity_id = model.entities[entity_key].id.clone();
             let entity_cols = model.entities[entity_key].columns.clone();
-            if let Some(prop) = resolve_comparison(&entity_cols, &entity_id, cmp, diags) {
+            if let Some(prop) = resolve_comparison(&entity_cols, &entity_id, cmp, ctx, diags) {
                 model.proposition_effects.push(PropositionEffect {
                     origin: origin.clone(),
                     entity: entity_key,
@@ -2105,10 +2487,15 @@ fn process_sets_predicate(
                 .find(|c| c.name == col_name)
                 .cloned();
             let Some(col) = col else {
-                diags.push(Diagnostic::error(RdraError::UnknownColumn {
-                    entity: model.entities[entity_key].id.clone(),
-                    col: col_name,
-                }));
+                push_error(
+                    ctx,
+                    diags,
+                    pred.span.clone(),
+                    RdraError::UnknownColumn {
+                        entity: model.entities[entity_key].id.clone(),
+                        col: col_name,
+                    },
+                );
                 return;
             };
             match parse_effect_value(&col, &val_lit) {
@@ -2127,7 +2514,15 @@ fn process_sets_predicate(
                         });
                     }
                 }
-                Err(e) => diags.push(Diagnostic::error(e)),
+                Err(e) => {
+                    let span = pred
+                        .args
+                        .get(3)
+                        .map(arg_span)
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or_else(|| pred.span.clone());
+                    push_error(ctx, diags, span, e);
+                }
             }
         }
         _ => {}
@@ -2138,6 +2533,7 @@ fn process_forbidden_predicate(
     model: &mut SemanticModel,
     pred: &PredicateCall,
     resolved: &[Option<NodeRef>],
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
     let entity_key = match resolved.first() {
@@ -2147,7 +2543,7 @@ fn process_forbidden_predicate(
     let entity_id = model.entities[entity_key].id.clone();
     let entity_cols = model.entities[entity_key].columns.clone();
     let Some(conditions) =
-        collect_entity_conditions(&entity_cols, &entity_id, &pred.args[1..], diags)
+        collect_entity_conditions(&entity_cols, &entity_id, &pred.args[1..], ctx, diags)
     else {
         return;
     };
@@ -2168,6 +2564,7 @@ fn process_required_predicate(
     model: &mut SemanticModel,
     pred: &PredicateCall,
     resolved: &[Option<NodeRef>],
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
     let entity_key = match resolved.first() {
@@ -2177,7 +2574,7 @@ fn process_required_predicate(
     let entity_id = model.entities[entity_key].id.clone();
     let entity_cols = model.entities[entity_key].columns.clone();
     let Some(conditions) =
-        collect_entity_conditions(&entity_cols, &entity_id, &pred.args[1..], diags)
+        collect_entity_conditions(&entity_cols, &entity_id, &pred.args[1..], ctx, diags)
     else {
         return;
     };
@@ -2198,6 +2595,7 @@ fn process_exclusive_predicate(
     model: &mut SemanticModel,
     pred: &PredicateCall,
     resolved: &[Option<NodeRef>],
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
     let entity_key = match resolved.first() {
@@ -2207,7 +2605,7 @@ fn process_exclusive_predicate(
     let entity_id = model.entities[entity_key].id.clone();
     let entity_cols = model.entities[entity_key].columns.clone();
     let Some(conditions) =
-        collect_entity_conditions(&entity_cols, &entity_id, &pred.args[1..], diags)
+        collect_entity_conditions(&entity_cols, &entity_id, &pred.args[1..], ctx, diags)
     else {
         return;
     };
@@ -2228,6 +2626,7 @@ fn process_invariant_predicate(
     model: &mut SemanticModel,
     pred: &PredicateCall,
     resolved: &[Option<NodeRef>],
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
     let entity_key = match resolved.first() {
@@ -2255,7 +2654,9 @@ fn process_invariant_predicate(
             }
             match arg {
                 PredicateArg::Expr(Expr::Cmp(cmp)) => {
-                    if let Some(prop) = resolve_comparison(&entity_cols, &entity_id, cmp, diags) {
+                    if let Some(prop) =
+                        resolve_comparison(&entity_cols, &entity_id, cmp, ctx, diags)
+                    {
                         if is_guard {
                             guard_comparisons.push(prop);
                         } else {
@@ -2275,10 +2676,15 @@ fn process_invariant_predicate(
                     };
                     let col = entity_cols.iter().find(|c| c.name == col_str).cloned();
                     let Some(col) = col else {
-                        diags.push(Diagnostic::error(RdraError::UnknownColumn {
-                            entity: entity_id.clone(),
-                            col: col_str,
-                        }));
+                        push_error(
+                            ctx,
+                            diags,
+                            arg_span(&cc.args[0]),
+                            RdraError::UnknownColumn {
+                                entity: entity_id.clone(),
+                                col: col_str,
+                            },
+                        );
                         return;
                     };
                     match parse_effect_value(&col, &val_str) {
@@ -2290,7 +2696,7 @@ fn process_invariant_predicate(
                             }
                         }
                         Err(e) => {
-                            diags.push(Diagnostic::error(e));
+                            push_error_parse_effect(ctx, diags, &cc.args[1], e);
                             return;
                         }
                     }
@@ -2362,6 +2768,7 @@ fn process_belongs_context(
     pred: &PredicateCall,
     from: &NodeRef,
     to: &NodeRef,
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
     let (NodeRef::Buc(buc), NodeRef::Business(business)) = (from, to) else {
@@ -2379,7 +2786,7 @@ fn process_belongs_context(
             _ => continue,
         };
         for arg in &cc.args {
-            if let Some(value) = context_value_from_arg(model, arg, expected_kind, diags) {
+            if let Some(value) = context_value_from_arg(model, arg, expected_kind, ctx, diags) {
                 target.push(value);
             }
         }
@@ -2402,6 +2809,7 @@ fn process_relation_predicate(
     model: &mut SemanticModel,
     pred: &PredicateCall,
     resolved: &[Option<NodeRef>],
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
     let Some(kind) = relation_kind_for_predicate(&pred.name) else {
@@ -2415,7 +2823,7 @@ fn process_relation_predicate(
             options: RelationOptions::default(),
         });
         if pred.name == "belongs" {
-            process_belongs_context(model, pred, from, to, diags);
+            process_belongs_context(model, pred, from, to, ctx, diags);
         }
     }
 }
@@ -2445,6 +2853,7 @@ fn process_relate_predicate(
     model: &mut SemanticModel,
     pred: &PredicateCall,
     resolved: &[Option<NodeRef>],
+    ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
     if let (Some(Some(from)), Some(Some(to)), Some(PredicateArg::Lit(card))) =
@@ -2463,10 +2872,19 @@ fn process_relate_predicate(
                     NodeRef::Entity(k) => model.entities[*k].id.clone(),
                     _ => "?".into(),
                 };
-                diags.push(Diagnostic::warning(RdraError::NMRelation {
-                    from: from_id,
-                    to: to_id,
-                }));
+                push_warning(
+                    ctx,
+                    diags,
+                    pred.args
+                        .get(2)
+                        .map(arg_span)
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or_else(|| pred.span.clone()),
+                    RdraError::NMRelation {
+                        from: from_id,
+                        to: to_id,
+                    },
+                );
                 RelKind::RelateManyToMany
             }
             _ => return,
@@ -2480,26 +2898,31 @@ fn process_relate_predicate(
     }
 }
 
-fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mut Vec<Diagnostic>) {
+fn process_predicate(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) {
     let Some(sig) = predicate_signature(&pred.name) else {
         return;
     };
 
     match pred.name.as_str() {
         "cross_forbidden" => {
-            process_cross_forbidden(model, pred, diags);
+            process_cross_forbidden(model, pred, ctx, diags);
             return;
         }
         "cross_invariant" => {
-            process_cross_invariant(model, pred, diags);
+            process_cross_invariant(model, pred, ctx, diags);
             return;
         }
         _ => {}
     }
 
-    let resolved = resolve_predicate_args(model, pred, &sig, diags);
-    validate_predicate_arg_types(pred, &sig, &resolved, diags);
-    if !validate_contains_pair(pred, &resolved, diags) {
+    let resolved = resolve_predicate_args(model, pred, &sig, ctx, diags);
+    validate_predicate_arg_types(pred, &sig, &resolved, ctx, diags);
+    if !validate_contains_pair(pred, &resolved, ctx, diags) {
         return;
     }
 
@@ -2508,16 +2931,16 @@ fn process_predicate(model: &mut SemanticModel, pred: &PredicateCall, diags: &mu
         "maps_to" => process_maps_to_predicate(model, &resolved),
         "transitions" => process_transitions_predicate(model, &resolved),
         "outbox" => process_outbox_predicate(model, &resolved),
-        "after" => process_after_predicate(model, pred, &resolved, diags),
-        "sets" => process_sets_predicate(model, pred, &resolved, diags),
-        "forbidden" => process_forbidden_predicate(model, pred, &resolved, diags),
-        "invariant" => process_invariant_predicate(model, pred, &resolved, diags),
-        "required" => process_required_predicate(model, pred, &resolved, diags),
-        "exclusive" => process_exclusive_predicate(model, pred, &resolved, diags),
-        "forbidden_when" => process_forbidden_when_predicate(model, pred, &resolved, diags),
-        "maps_field" => process_maps_field_predicate(model, pred, &resolved, diags),
-        "relate" => process_relate_predicate(model, pred, &resolved, diags),
-        _ => process_relation_predicate(model, pred, &resolved, diags),
+        "after" => process_after_predicate(model, pred, &resolved, ctx, diags),
+        "sets" => process_sets_predicate(model, pred, &resolved, ctx, diags),
+        "forbidden" => process_forbidden_predicate(model, pred, &resolved, ctx, diags),
+        "invariant" => process_invariant_predicate(model, pred, &resolved, ctx, diags),
+        "required" => process_required_predicate(model, pred, &resolved, ctx, diags),
+        "exclusive" => process_exclusive_predicate(model, pred, &resolved, ctx, diags),
+        "forbidden_when" => process_forbidden_when_predicate(model, pred, &resolved, ctx, diags),
+        "maps_field" => process_maps_field_predicate(model, pred, &resolved, ctx, diags),
+        "relate" => process_relate_predicate(model, pred, &resolved, ctx, diags),
+        _ => process_relation_predicate(model, pred, &resolved, ctx, diags),
     }
 
     if let Some(typed) = crate::typed_predicate::build_typed_predicate(&pred.name, &resolved, pred)
@@ -2602,9 +3025,14 @@ fn generate_fks(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>) {
             match pk {
                 Some(col) => (one.id.clone(), col.col_type.clone()),
                 None => {
-                    diags.push(Diagnostic::error(RdraError::MissingPk {
-                        entity: one.id.clone(),
-                    }));
+                    push_entity_error(
+                        model,
+                        diags,
+                        &one.id,
+                        RdraError::MissingPk {
+                            entity: one.id.clone(),
+                        },
+                    );
                     continue;
                 }
             }
@@ -2618,10 +3046,15 @@ fn generate_fks(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>) {
             .iter()
             .any(|c| c.name == fk_col_name)
         {
-            diags.push(Diagnostic::error(RdraError::FkConflict {
-                entity: many_entity_id,
-                col: fk_col_name.clone(),
-            }));
+            push_entity_error(
+                model,
+                diags,
+                &many_entity_id,
+                RdraError::FkConflict {
+                    entity: many_entity_id.clone(),
+                    col: fk_col_name.clone(),
+                },
+            );
             continue;
         }
 
@@ -2755,7 +3188,7 @@ mod tests {
                 ],
                 span: 0..0,
             };
-            register_instance(&mut model, &inst, &mut diags);
+            register_instance(&mut model, &inst, DiagCtxt::new(0), &mut diags);
         }
         assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
         model
@@ -2920,7 +3353,12 @@ sets(ActivateExample, Example, "status", "active")
         ];
 
         for (kind, id, _) in &cases {
-            register_instance(&mut model, &instance(kind.clone(), id), &mut diags);
+            register_instance(
+                &mut model,
+                &instance(kind.clone(), id),
+                DiagCtxt::new(0),
+                &mut diags,
+            );
         }
         let entity_inst = InstanceDecl {
             kind: Kind::Entity,
@@ -2941,7 +3379,7 @@ sets(ActivateExample, Example, "status", "active")
             }],
             span: 0..0,
         };
-        register_instance(&mut model, &entity_inst, &mut diags);
+        register_instance(&mut model, &entity_inst, DiagCtxt::new(0), &mut diags);
 
         assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
         for (kind, id, expected) in &cases {
@@ -3028,7 +3466,8 @@ sets(ActivateExample, Example, "status", "active")
             span: 0..0,
         };
 
-        let semantics = cross_scope_semantics_from_chain(&model, &pred, &mut diags);
+        let semantics =
+            cross_scope_semantics_from_chain(&model, &pred, DiagCtxt::new(0), &mut diags);
 
         assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
         let CrossConstraintScope::RelationPath(path) = semantics else {
@@ -3051,7 +3490,8 @@ sets(ActivateExample, Example, "status", "active")
             span: 0..0,
         };
 
-        let semantics = cross_scope_semantics_from_chain(&model, &pred, &mut diags);
+        let semantics =
+            cross_scope_semantics_from_chain(&model, &pred, DiagCtxt::new(0), &mut diags);
 
         assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
         assert!(matches!(semantics, CrossConstraintScope::GlobalProduct));
@@ -3096,7 +3536,12 @@ sets(ActivateExample, Example, "status", "active")
         ];
 
         for (kind, id) in &cases {
-            register_instance(&mut model, &instance(kind.clone(), id), &mut diags);
+            register_instance(
+                &mut model,
+                &instance(kind.clone(), id),
+                DiagCtxt::new(0),
+                &mut diags,
+            );
         }
 
         let entity_inst = InstanceDecl {
@@ -3118,7 +3563,7 @@ sets(ActivateExample, Example, "status", "active")
             }],
             span: 0..0,
         };
-        register_instance(&mut model, &entity_inst, &mut diags);
+        register_instance(&mut model, &entity_inst, DiagCtxt::new(0), &mut diags);
 
         assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
         assert_eq!(model.actors.len(), 1);
@@ -3209,9 +3654,24 @@ maps_field(OrderTotal, Order, "total")
         let mut model = SemanticModel::default();
         let mut diags = Vec::new();
 
-        register_instance(&mut model, &instance(Kind::Actor, "Same"), &mut diags);
-        register_instance(&mut model, &instance(Kind::UseCase, "Same"), &mut diags);
-        register_instance(&mut model, &instance(Kind::Actor, "Same"), &mut diags);
+        register_instance(
+            &mut model,
+            &instance(Kind::Actor, "Same"),
+            DiagCtxt::new(0),
+            &mut diags,
+        );
+        register_instance(
+            &mut model,
+            &instance(Kind::UseCase, "Same"),
+            DiagCtxt::new(0),
+            &mut diags,
+        );
+        register_instance(
+            &mut model,
+            &instance(Kind::Actor, "Same"),
+            DiagCtxt::new(0),
+            &mut diags,
+        );
 
         assert_eq!(model.actors.len(), 2);
         assert_eq!(model.use_cases.len(), 1);
@@ -3245,6 +3705,7 @@ maps_field(OrderTotal, Order, "total")
                 rhs: qcol("Stock", "selling"),
                 span: 0..0,
             },
+            DiagCtxt::new(0),
             &mut diags,
         )
         .unwrap();
@@ -3257,6 +3718,7 @@ maps_field(OrderTotal, Order, "total")
                 rhs: Operand::IntLit("10".to_string()),
                 span: 0..0,
             },
+            DiagCtxt::new(0),
             &mut diags,
         )
         .unwrap();
@@ -3269,6 +3731,7 @@ maps_field(OrderTotal, Order, "total")
                 rhs: Operand::Now,
                 span: 0..0,
             },
+            DiagCtxt::new(0),
             &mut diags,
         )
         .unwrap();
@@ -3297,6 +3760,7 @@ maps_field(OrderTotal, Order, "total")
                 rhs: Operand::Column("stock".to_string()),
                 span: 0..0,
             },
+            DiagCtxt::new(0),
             &mut diags,
         )
         .is_none());
@@ -3309,6 +3773,7 @@ maps_field(OrderTotal, Order, "total")
                 rhs: Operand::Column("stock".to_string()),
                 span: 0..0,
             },
+            DiagCtxt::new(0),
             &mut diags,
         )
         .is_none());
@@ -3321,6 +3786,7 @@ maps_field(OrderTotal, Order, "total")
                 rhs: Operand::IntLit("1".to_string()),
                 span: 0..0,
             },
+            DiagCtxt::new(0),
             &mut diags,
         )
         .is_none());

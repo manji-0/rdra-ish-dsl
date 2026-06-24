@@ -209,12 +209,20 @@ pub enum RdraError {
         entity: String,
         system: String,
     },
+
+    #[error("{message}\n  hint: {hint}")]
+    LintFinding {
+        rule: &'static str,
+        message: String,
+        hint: String,
+    },
 }
 
 #[derive(Debug)]
 pub struct Diagnostic {
     pub error: RdraError,
     pub is_warning: bool,
+    pub location: Option<crate::location::LocatedSpan>,
 }
 
 impl Diagnostic {
@@ -222,6 +230,7 @@ impl Diagnostic {
         Self {
             error: e,
             is_warning: false,
+            location: None,
         }
     }
 
@@ -229,6 +238,23 @@ impl Diagnostic {
         Self {
             error: e,
             is_warning: true,
+            location: None,
+        }
+    }
+
+    pub fn error_at(e: RdraError, location: crate::location::LocatedSpan) -> Self {
+        Self {
+            error: e,
+            is_warning: false,
+            location: Some(location),
+        }
+    }
+
+    pub fn warning_at(e: RdraError, location: crate::location::LocatedSpan) -> Self {
+        Self {
+            error: e,
+            is_warning: true,
+            location: Some(location),
         }
     }
 }

@@ -3,6 +3,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::diagnostics::{Diagnostic, RdraError};
+use crate::location::push_model_decl_diagnostic;
 use crate::model::{ApiKey, EntityKey, NodeRef, RelKind, SemanticModel, UseCaseKey};
 
 // ── 公開型 ────────────────────────────────────────────────────────────────────
@@ -200,14 +201,25 @@ pub fn tx_diagnostics(model: &SemanticModel, txs: &[UsecaseTx]) -> Vec<Diagnosti
         let uc_id = model
             .use_cases
             .get(utx.usecase)
-            .map(|u| u.id.as_str())
-            .unwrap_or("?");
+            .map(|u| u.id.clone())
+            .unwrap_or_else(|| "?".to_string());
         for &ek in &utx.singletons_note {
-            let entity_id = model.entities.get(ek).map(|e| e.id.as_str()).unwrap_or("?");
-            diags.push(Diagnostic::warning(RdraError::SeparateTxInferred {
-                usecase: uc_id.to_string(),
-                entity: entity_id.to_string(),
-            }));
+            let entity_id = model
+                .entities
+                .get(ek)
+                .map(|e| e.id.clone())
+                .unwrap_or_else(|| "?".to_string());
+            push_model_decl_diagnostic(
+                model,
+                &mut diags,
+                "usecase",
+                &uc_id,
+                RdraError::SeparateTxInferred {
+                    usecase: uc_id.clone(),
+                    entity: entity_id,
+                },
+                true,
+            );
         }
     }
     diags

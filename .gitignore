@@ -1,2 +1,7 @@
 /target
 /dist
+
+# VS Code extension build artifacts
+*.vsix
+editors/vscode/node_modules/
+editors/vscode/out/

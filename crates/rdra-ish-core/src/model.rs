@@ -760,6 +760,11 @@ pub struct Permission {
 
 // ── Symbol table ─────────────────────────────────────────────────────────────
 
+/// Kind name string for a [`NodeRef`] (`"actor"`, `"usecase"`, …).
+pub fn node_ref_kind(node: &NodeRef) -> &'static str {
+    node_kind_tag(node)
+}
+
 fn node_kind_tag(node: &NodeRef) -> &'static str {
     match node {
         NodeRef::Actor(_) => "actor",
@@ -1461,4 +1466,6 @@ pub struct SemanticModel {
     /// `has` / `none` チェーンで宣言された to-many 量化制約
     pub quantifier_constraints: Vec<QuantifierConstraint>,
     pub symbols: SymbolTable,
+    /// Declaration sites for `kind:id` lookups (LSP go-to-definition).
+    pub decl_sites: crate::location::DeclIndex,
 }

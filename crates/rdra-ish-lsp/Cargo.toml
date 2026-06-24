@@ -1,0 +1,20 @@
+[package]
+name = "rdra-ish-lsp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Language Server Protocol implementation for rdra-ish DSL"
+
+[[bin]]
+name = "rdra-ish-lsp"
+path = "src/main.rs"
+
+[dependencies]
+rdra-ish-core   = { path = "../rdra-ish-core" }
+rdra-ish-syntax = { path = "../rdra-ish-syntax" }
+tower-lsp       = { workspace = true }
+tokio           = { workspace = true }
+url             = { workspace = true }
+walkdir         = { workspace = true }

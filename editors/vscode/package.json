@@ -1,0 +1,82 @@
+{
+  "name": "rdra-ish",
+  "displayName": "RDRA-ish",
+  "description": "Language support for RDRA-ish DSL (.rdra)",
+  "version": "0.1.10",
+  "publisher": "rdra-ish",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:rdra"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "rdra",
+        "aliases": [
+          "RDRA-ish",
+          "rdra"
+        ],
+        "extensions": [
+          ".rdra"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "rdra",
+        "scopeName": "source.rdra",
+        "path": "./syntaxes/rdra.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "RDRA-ish",
+      "properties": {
+        "rdra-ish.languageServerPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the rdra-ish-lsp binary. When empty, the extension looks for rdra-ish-lsp on PATH."
+        },
+        "rdra-ish.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Traces LSP communication between VS Code and rdra-ish-lsp."
+        }
+      }
+    },
+    "configurationDefaults": {
+      "[rdra]": {
+        "editor.formatOnSave": true,
+        "editor.semanticHighlighting.enabled": true,
+        "editor.inlayHints.enabled": "onUnlessCompressed"
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run compile",
+    "package": "npm run compile && vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.1",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}

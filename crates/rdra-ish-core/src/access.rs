@@ -1,4 +1,5 @@
 use crate::diagnostics::{Diagnostic, RdraError};
+use crate::location::push_model_decl_diagnostic;
 use crate::model::{
     ActorKey, ApiKey, BucKey, EntityKey, MediumKey, NodeRef, PermissionKey, RelKind, ScreenKey,
     SemanticModel, UseCaseKey,
@@ -383,11 +384,19 @@ pub fn permission_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
         let usecase = *usecase;
         let actors = actors_for_usecase(model, usecase);
         if actors.is_empty() {
+            let uc_id = model.use_cases[usecase].id.clone();
             for &permission in permissions {
-                diags.push(Diagnostic::warning(RdraError::UseCasePermissionNoActor {
-                    usecase: model.use_cases[usecase].id.clone(),
-                    permission: model.permissions[permission].id.clone(),
-                }));
+                push_model_decl_diagnostic(
+                    model,
+                    &mut diags,
+                    "usecase",
+                    &uc_id,
+                    RdraError::UseCasePermissionNoActor {
+                        usecase: uc_id.clone(),
+                        permission: model.permissions[permission].id.clone(),
+                    },
+                    true,
+                );
             }
         }
     }
@@ -399,12 +408,21 @@ pub fn permission_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
         for usecase in invoking_usecases {
             let actors = actors_for_usecase(model, usecase);
             if actors.is_empty() {
+                let api_id = model.apis[api].id.clone();
+                let uc_id = model.use_cases[usecase].id.clone();
                 for &permission in permissions {
-                    diags.push(Diagnostic::warning(RdraError::ApiPermissionNoActor {
-                        api: model.apis[api].id.clone(),
-                        permission: model.permissions[permission].id.clone(),
-                        usecase: model.use_cases[usecase].id.clone(),
-                    }));
+                    push_model_decl_diagnostic(
+                        model,
+                        &mut diags,
+                        "api",
+                        &api_id,
+                        RdraError::ApiPermissionNoActor {
+                            api: api_id.clone(),
+                            permission: model.permissions[permission].id.clone(),
+                            usecase: uc_id.clone(),
+                        },
+                        true,
+                    );
                 }
             }
         }
@@ -413,17 +431,31 @@ pub fn permission_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
     for entry in derive_actor_permission_audit(model) {
         match entry.status {
             ActorPermissionAuditStatus::Missing => {
-                diags.push(Diagnostic::warning(RdraError::ActorPermissionMissing {
-                    actor: model.actors[entry.actor].id.clone(),
-                    permission: model.permissions[entry.permission].id.clone(),
-                    required_by: describe_requirement_sources(model, &entry.sources),
-                }));
+                push_model_decl_diagnostic(
+                    model,
+                    &mut diags,
+                    "actor",
+                    &model.actors[entry.actor].id,
+                    RdraError::ActorPermissionMissing {
+                        actor: model.actors[entry.actor].id.clone(),
+                        permission: model.permissions[entry.permission].id.clone(),
+                        required_by: describe_requirement_sources(model, &entry.sources),
+                    },
+                    true,
+                );
             }
             ActorPermissionAuditStatus::Excess => {
-                diags.push(Diagnostic::warning(RdraError::ActorPermissionExcess {
-                    actor: model.actors[entry.actor].id.clone(),
-                    permission: model.permissions[entry.permission].id.clone(),
-                }));
+                push_model_decl_diagnostic(
+                    model,
+                    &mut diags,
+                    "actor",
+                    &model.actors[entry.actor].id,
+                    RdraError::ActorPermissionExcess {
+                        actor: model.actors[entry.actor].id.clone(),
+                        permission: model.permissions[entry.permission].id.clone(),
+                    },
+                    true,
+                );
             }
             ActorPermissionAuditStatus::Ok => {}
         }
