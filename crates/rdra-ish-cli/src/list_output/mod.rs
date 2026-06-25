@@ -14,7 +14,15 @@ use elements::{
     format_adr_impacts, format_adrs, format_apis, format_constraints, format_dtos, format_entities,
     format_fields, format_nfrs, format_requirements, format_usecases,
 };
-use render::{format_id_label, format_rows};
+use render::{format_rows, format_sorted_id_labels};
+
+macro_rules! list_id_label {
+    ($model:expr, $field:ident, $format:expr, $label:expr) => {
+        format_sorted_id_labels($model.$field.values(), $format, $label, |item| {
+            (item.id.as_str(), item.label.as_str())
+        })
+    };
+}
 
 pub(crate) fn consistency_warnings(model: &rdra_ish_core::SemanticModel) -> Vec<String> {
     let mut warnings: Vec<String> = consistency_diagnostics(model)
@@ -207,42 +215,10 @@ pub(crate) fn list_elements(
     format: &ListFormat,
 ) -> Result<String> {
     match kind {
-        ListKind::Actor => {
-            let mut items: Vec<(&str, &str)> = model
-                .actors
-                .iter()
-                .map(|(_, a)| (a.id.as_str(), a.label.as_str()))
-                .collect();
-            items.sort_by_key(|(id, _)| *id);
-            format_id_label(&items, format, "actors")
-        }
-        ListKind::Buc => {
-            let mut items: Vec<(&str, &str)> = model
-                .bucs
-                .iter()
-                .map(|(_, b)| (b.id.as_str(), b.label.as_str()))
-                .collect();
-            items.sort_by_key(|(id, _)| *id);
-            format_id_label(&items, format, "BUCs")
-        }
-        ListKind::Flow => {
-            let mut items: Vec<(&str, &str)> = model
-                .flows
-                .iter()
-                .map(|(_, f)| (f.id.as_str(), f.label.as_str()))
-                .collect();
-            items.sort_by_key(|(id, _)| *id);
-            format_id_label(&items, format, "flows")
-        }
-        ListKind::Step => {
-            let mut items: Vec<(&str, &str)> = model
-                .steps
-                .iter()
-                .map(|(_, s)| (s.id.as_str(), s.label.as_str()))
-                .collect();
-            items.sort_by_key(|(id, _)| *id);
-            format_id_label(&items, format, "steps")
-        }
+        ListKind::Actor => list_id_label!(model, actors, format, "actors"),
+        ListKind::Buc => list_id_label!(model, bucs, format, "BUCs"),
+        ListKind::Flow => list_id_label!(model, flows, format, "flows"),
+        ListKind::Step => list_id_label!(model, steps, format, "steps"),
         ListKind::Usecase => format_usecases(model, format),
         ListKind::Field => format_fields(model, format),
         ListKind::Entity => format_entities(model, format),
@@ -250,61 +226,13 @@ pub(crate) fn list_elements(
         ListKind::Adr => format_adrs(model, format),
         ListKind::AdrImpact => format_adr_impacts(model, format),
         ListKind::Nfr => format_nfrs(model, format),
-        ListKind::Quality => {
-            let mut items: Vec<(&str, &str)> = model
-                .qualities
-                .iter()
-                .map(|(_, q)| (q.id.as_str(), q.label.as_str()))
-                .collect();
-            items.sort_by_key(|(id, _)| *id);
-            format_id_label(&items, format, "qualities")
-        }
+        ListKind::Quality => list_id_label!(model, qualities, format, "qualities"),
         ListKind::Constraint => format_constraints(model, format),
-        ListKind::Concept => {
-            let mut items: Vec<(&str, &str)> = model
-                .concepts
-                .iter()
-                .map(|(_, c)| (c.id.as_str(), c.label.as_str()))
-                .collect();
-            items.sort_by_key(|(id, _)| *id);
-            format_id_label(&items, format, "concepts")
-        }
-        ListKind::DomainObject => {
-            let mut items: Vec<(&str, &str)> = model
-                .domain_objects
-                .iter()
-                .map(|(_, d)| (d.id.as_str(), d.label.as_str()))
-                .collect();
-            items.sort_by_key(|(id, _)| *id);
-            format_id_label(&items, format, "domain objects")
-        }
-        ListKind::Aggregate => {
-            let mut items: Vec<(&str, &str)> = model
-                .aggregates
-                .iter()
-                .map(|(_, a)| (a.id.as_str(), a.label.as_str()))
-                .collect();
-            items.sort_by_key(|(id, _)| *id);
-            format_id_label(&items, format, "aggregates")
-        }
-        ListKind::ValueObject => {
-            let mut items: Vec<(&str, &str)> = model
-                .value_objects
-                .iter()
-                .map(|(_, v)| (v.id.as_str(), v.label.as_str()))
-                .collect();
-            items.sort_by_key(|(id, _)| *id);
-            format_id_label(&items, format, "value objects")
-        }
-        ListKind::System => {
-            let mut items: Vec<(&str, &str)> = model
-                .systems
-                .iter()
-                .map(|(_, s)| (s.id.as_str(), s.label.as_str()))
-                .collect();
-            items.sort_by_key(|(id, _)| *id);
-            format_id_label(&items, format, "systems")
-        }
+        ListKind::Concept => list_id_label!(model, concepts, format, "concepts"),
+        ListKind::DomainObject => list_id_label!(model, domain_objects, format, "domain objects"),
+        ListKind::Aggregate => list_id_label!(model, aggregates, format, "aggregates"),
+        ListKind::ValueObject => list_id_label!(model, value_objects, format, "value objects"),
+        ListKind::System => list_id_label!(model, systems, format, "systems"),
         ListKind::Api => format_apis(model, format),
         ListKind::Dto => format_dtos(model, format),
         ListKind::PermissionCallables => format_permission_callables(model, format),

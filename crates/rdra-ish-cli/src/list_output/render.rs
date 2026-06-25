@@ -85,6 +85,17 @@ pub(crate) fn format_rows<const N: usize>(
     }
 }
 
+pub(crate) fn format_sorted_id_labels<'a, T: 'a>(
+    values: impl Iterator<Item = &'a T>,
+    format: &ListFormat,
+    empty_label: &str,
+    id_label: impl Fn(&'a T) -> (&str, &str),
+) -> Result<String> {
+    let mut items: Vec<(&str, &str)> = values.map(id_label).collect();
+    items.sort_by_key(|(id, _)| *id);
+    format_id_label(&items, format, empty_label)
+}
+
 pub(crate) fn format_id_label(
     items: &[(&str, &str)],
     format: &ListFormat,
