@@ -57,8 +57,9 @@ rdra-ish verify src/ --backend tlc -o out/
 
 ## When To Prefer TLA+
 
-- Use `export --kind tla` when rules involve Int / Money / Decimal, `now`, temporal
-  `property`, `after.assert`, quantifiers, or multi-instance `.along` that BFS does
-  not evaluate. Export writes both `.tla` and `.cfg`.
-- Prefer one FV sample/module at a time; standalone FV samples can collide on ids if
-  checked as a whole directory.
+Prefer skill **`rdra-ish-verify`** for the full workflow. Short rule: use
+`export --kind tla` when rules involve Int / Money / Decimal, `now`, temporal
+`property`, `after.assert`, quantifiers, or multi-instance `.along` that BFS does
+not evaluate. Export writes both `.tla` and `.cfg`.
+Prefer one FV sample/module at a time; standalone FV samples can collide on ids if
+checked as a whole directory.

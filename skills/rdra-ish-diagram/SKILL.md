@@ -1,6 +1,7 @@
 ---
 name: rdra-ish-diagram
 description: Choose the right RDRA-ish diagram, CSV review, diff, or export view for the modeling situation, then load focused references for commands and interpretation
+license: MIT
 ---
 
 ## Choose RDRA-ish Views
@@ -27,7 +28,7 @@ the selected view.
 | One concrete use case flow | `sequence --usecase <UseCaseId>` | `references/sequence-and-access.md` |
 | Lifecycle and event causality | `state --buc <BucId>` plus `event-flow` | `references/lifecycle-and-events.md` |
 | Business rules or state constraints | `states`, including cross-entity rule diagnostics when state axes are involved | `references/lifecycle-and-events.md` |
-| Int / now / temporal / multi-instance rules | `export --kind tla` (+ `verify --backend tlc`) | `references/lifecycle-and-events.md` |
+| Int / now / temporal / multi-instance rules | Prefer skill `rdra-ish-verify`; else `export --kind tla` | `references/lifecycle-and-events.md` |
 | Output format/rendering choice | Mermaid by default; PlantUML/SVG/PNG only when requested | `references/formats-and-output.md` |
 
 ### Default Workflow

@@ -1,0 +1,19 @@
+// Intentionally unsafe: delivered without delivered_at present.
+entity Order "注文" {
+  id:     Int @pk
+  status: Enum(pending, delivered) @default(pending)
+  delivered_at: DateTime @null
+}
+
+usecase PlaceOrder "注文確定"
+usecase DeliverOrder "配達確認"
+event EvDeliver "配達確認"
+creates(PlaceOrder, Order)
+updates(DeliverOrder, Order)
+raises(DeliverOrder, EvDeliver)
+transitions(Order.status, EvDeliver, pending -> delivered)
+// Missing: sets(..., delivered_at, present)
+
+invariant(Order)
+  .when(status == delivered)
+  .then(delivered_at == present)

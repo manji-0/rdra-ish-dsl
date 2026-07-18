@@ -45,7 +45,8 @@ is not tracked yet.
    missing `sets`, missing transitions, or missing create/default paths are common.
 9. Add `when(...).none/has(...)` for to-many quantifiers (not `forbidden_when`).
 10. Add `property` / `after(...).assert(...)` when temporal or postcondition checks
-    matter; validate with `export --kind tla` (BFS `states` ignores Int/`now` axes).
+    matter; validate with skill `rdra-ish-verify` / `export --kind tla`
+    (BFS `states` ignores Int/`now` axes).
 11. Keep implementation policy notes outside the DSL unless they can be expressed as
     state, effect, forbidden, invariant, required, exclusive, quantifier, property,
     or cross-entity predicates.

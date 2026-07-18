@@ -84,7 +84,9 @@ rdra-ish states samples/clinic-ops --entity Appointment
 - `samples/ec-site`: compact end-to-end sample
 - `samples/clinic-ops`: larger model with APIs, events, and access constraints
 - `samples/personal-info`: personal data management sample
-- `samples/formal-verification`: TLA+/TLC-oriented models (check files individually)
+- `skills/rdra-ish-verify/samples`: TLA+/TLC examples (also linked from
+  `samples/formal-verification/`; check files individually)
+- Agent skills: [`skills/README.md`](./skills/README.md) (`npx skills` / `gh skill`)
 
 ## Publish (maintainers)
 

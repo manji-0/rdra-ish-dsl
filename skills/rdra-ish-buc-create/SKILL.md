@@ -1,6 +1,7 @@
 ---
 name: rdra-ish-buc-create
 description: Create a new BUC file from a requirements description, using staged refinement from BUC skeleton and business flow to conceptual/data, UI/API contracts, lifecycle, rules, NFRs, and traceability
+license: MIT
 ---
 
 ## Create a new BUC

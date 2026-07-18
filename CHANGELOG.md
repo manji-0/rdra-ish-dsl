@@ -24,13 +24,19 @@
   postconditions, and multi-instance temporal quantifiers
   (`[](\A…)`, `\A i: <>…`, `\A i: (p ~> q)`).
 - `property` label string is optional (`property StockOk always(...)`).
+- Skill `rdra-ish-verify` for TLA+/TLC formal verification workflow (when to use
+  TLA vs `states`, DSL surface, export/verify, bundled `samples/*.rdra`).
+  Install via `npx skills` / `gh skill`; see `skills/README.md`.
+- All skills declare `license: MIT` for Agent Skills / `gh skill publish` validation.
 
 ### Changed
 
 - Formal-verification docs and skills use multi-entity `forbidden`/`invariant` surface
   names (diagnostic ids may still say `Cross*`). Int/`now` are documented as a separate
   TLC layer from BFS comparison propositions. Docs/skills point to `export --kind tla`
-  for quantifiers, temporal `property`, and relation-scoped `.along`.
+  for quantifiers, temporal `property`, and relation-scoped `.along`. Sibling skills
+  route deep FV work to `rdra-ish-verify`. FV sample `.rdra` files are canonical under
+  `skills/rdra-ish-verify/samples/` with repo path symlinks for tests.
 
 ## v0.1.7 - 2026-06-23
 

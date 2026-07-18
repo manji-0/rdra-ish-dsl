@@ -1,6 +1,7 @@
 ---
 name: rdra-ish-write
 description: Write RDRA DSL files from requirements using correct syntax and file structure, including staged abstract-to-concrete refinement, business flows, requirements/NFRs, conceptual models, screen fields, API contracts, data modeling annotations, ADR links, lint/format checks, and exports
+license: MIT
 ---
 
 ## Write RDRA DSL

@@ -1,0 +1,32 @@
+// Int axes driven by sets + arithmetic Safety / temporal property.
+entity Item "商品" {
+  id: Int @pk
+  status: Enum(active, archived) @default(active)
+  stock: Int @default(0)
+  selling: Int @default(1)
+}
+
+usecase CreateItem "商品登録"
+usecase Restock "補充"
+usecase ArchiveItem "廃番"
+
+event EvRestock "補充"
+event EvArchive "廃番"
+
+creates(CreateItem, Item)
+updates(Restock, Item)
+updates(ArchiveItem, Item)
+raises(Restock, EvRestock)
+raises(ArchiveItem, EvArchive)
+
+
+transitions(Item.status, EvRestock, active -> active)
+transitions(Item.status, EvArchive, active -> archived)
+
+sets(Restock, Item, stock == 3)
+sets(Restock, Item, selling == 1)
+
+forbidden(Item, stock < selling)
+
+property StockCoversSelling "stock never below selling"
+  always(Item.stock >= Item.selling)

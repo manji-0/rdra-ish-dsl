@@ -1,6 +1,7 @@
 ---
 name: rdra-ish-buc-update
 description: Update an existing BUC by adding or modifying use cases, business flows, requirements, screens, fields, API contracts, concepts, NFRs, events, entities, ADR links, and predicates while preserving staged refinement
+license: MIT
 ---
 
 ## Update an existing BUC

@@ -1,6 +1,7 @@
 ---
 name: rdra-ish-buc-analyze
 description: Choose the right RDRA-ish BUC or whole-model analysis path for refinement readiness, coverage gaps, business flow, requirement/NFR traceability, screen field mappings, API contracts, access, system boundaries, exports, and state patterns
+license: MIT
 ---
 
 ## Choose BUC Analysis
@@ -18,7 +19,7 @@ reference file for the concrete analysis task.
 | "Are permissions/media correct?" | screen/access paths, permission callables, actor grants | `references/access-permissions.md` |
 | "Are API/system boundaries sound?" | API ownership, API CRUD, cross-system relations, coordination | `references/api-system-boundaries.md` |
 | "Are lifecycle states/rules valid?" | reachable state patterns, terminals, truncation, per-entity rule diagnostics, and cross-entity rule inventory | `references/state-patterns.md` |
-| "Do Int/now/temporal/multi-entity rules hold?" | TLA+ export / TLC (complements BFS `states`) | `references/state-patterns.md` |
+| "Do Int/now/temporal/multi-entity rules hold?" | Prefer skill `rdra-ish-verify` (TLA+/TLC); else TLA export notes here | `references/state-patterns.md` |
 | "Summarize findings for review" | severity, evidence, next questions, and concrete recommendations | `references/reporting.md` |
 
 ### Default Workflow
@@ -73,6 +74,7 @@ rdra-ish export src/ --kind dbml --out out/schema.dbml
 - `references/api-system-boundaries.md` — review API invocation, system ownership,
   API/entity matrices, and cross-system coordination.
 - `references/state-patterns.md` — interpret `states`, lifecycle warnings,
-  terminal/unreachable patterns, truncation, rule diagnostics, and when to use TLA+.
+  terminal/unreachable patterns, truncation, and rule diagnostics. For full
+  TLA+/TLC workflow, load skill `rdra-ish-verify` instead.
 - `references/reporting.md` — structure analysis output with severity, evidence, and
   recommendations.

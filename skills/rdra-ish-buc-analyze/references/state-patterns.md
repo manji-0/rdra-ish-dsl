@@ -72,6 +72,9 @@ Entity: Order (注文)
 
 ## Formal verification (TLA+)
 
+For the dedicated workflow (when to use TLA, DSL surface, export/verify,
+samples), load skill **`rdra-ish-verify`**.
+
 BFS `states` ignores Int / Money / Decimal axes and only evaluates comparison
 propositions as Bool axes. Use TLA+ when the model has:
 

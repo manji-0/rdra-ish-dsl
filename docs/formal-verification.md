@@ -129,10 +129,15 @@ arithmetic Safety when Int axes exist.
 4. Install [TLA+ tools](https://github.com/tlaplus/tlaplus) so `tlc` is on `PATH`.
 5. `rdra-ish verify --backend tlc -o /tmp/rdra-tla` to run TLC.
 
+Agent skill: `skills/rdra-ish-verify/` (routing + references + bundled samples).
+Install: see [`skills/README.md`](../skills/README.md) (`npx skills add` / `gh skill install`).
+
 ## Samples
 
-Under `samples/formal-verification/` (each file is **standalone** — do not
-`check` the whole directory at once; ids such as `Order` collide across files):
+Canonical files: `skills/rdra-ish-verify/samples/` (each file is **standalone** —
+do not `check` the whole directory; ids such as `Order` collide). In this repo,
+`samples/formal-verification/` and `samples/formal-verification-fail/` are
+symlinks to those skill-bundled files (CLI tests keep working after skill install).
 
 | Sample | Focus |
 |---|---|
@@ -142,5 +147,6 @@ Under `samples/formal-verification/` (each file is **standalone** — do not
 | `cross_order_payment.rdra` | Multi-instance + `.along` + `Payment_owner` |
 | `quantifier_none.rdra` | `when(...).none` + `Assign_owner` |
 
-`samples/formal-verification-fail/order.rdra` is an intentionally unsafe model for
+`skills/rdra-ish-verify/samples/fail/order.rdra` (mirrored as
+`samples/formal-verification-fail/order.rdra`) is intentionally unsafe for
 negative TLC checks.

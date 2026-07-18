@@ -1,6 +1,7 @@
 ---
 name: rdra-ish-review
 description: Review RDRA DSL files for syntax errors, semantic inconsistencies, missing relationships, staged refinement gaps, business flow coverage, requirement/NFR traceability, screen field mappings, API contracts, exports, ADR links, and lint readiness
+license: MIT
 ---
 
 ## Review RDRA DSL
@@ -157,7 +158,8 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
      when API method/path and DTOs changed
    - AsyncAPI: export when events or event-started BUCs changed
    - DBML/JSON Schema: run the corresponding export when data model or DTO shape changed
-   - TLA+: `rdra-ish export <src-dir>/ --kind tla -o /tmp/` when Int/`now`, multi-entity
+   - TLA+: load skill `rdra-ish-verify`, or
+     `rdra-ish export <src-dir>/ --kind tla -o /tmp/` when Int/`now`, multi-entity
      rules, quantifiers, `property`, or `after.assert` are part of the change (writes
      both `.tla` and `.cfg`)
    - Diagram snapshots: run the sample artifact script when docs/golden outputs are
