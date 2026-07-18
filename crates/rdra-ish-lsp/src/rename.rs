@@ -106,7 +106,7 @@ fn rename_edits_in_ast(
                 }
             }
             Item::Predicate(pred) => collect_rename_spans(pred, text, target, &mut spans),
-            Item::Import(_) | Item::Module(_, _) => {}
+            Item::Import(_) | Item::Module(_, _) | Item::Property(_) => {}
         }
     }
 
@@ -159,8 +159,19 @@ fn collect_rename_spans_in_arg(
                 spans.push(span);
             }
         }
-        PredicateArg::Expr(expr) => {
-            let Expr::Cmp(cmp) = expr;
+        PredicateArg::Expr(expr) => collect_expr_rename_spans(expr, text, target, spans),
+        PredicateArg::Transition { .. } | PredicateArg::Card(_) | PredicateArg::Lit(_) => {}
+    }
+}
+
+fn collect_expr_rename_spans(
+    expr: &Expr,
+    text: &str,
+    target: &SymbolTarget,
+    spans: &mut Vec<std::ops::Range<usize>>,
+) {
+    match expr {
+        Expr::Cmp(cmp) => {
             if let Operand::QualifiedColumn(col) = &cmp.lhs {
                 if let Some(span) = id_span_in_qref(&col.entity, text, target) {
                     spans.push(span);
@@ -172,12 +183,11 @@ fn collect_rename_spans_in_arg(
                 }
             }
         }
-        PredicateArg::Tuple(args) => {
-            for inner in args {
-                collect_rename_spans_in_arg(inner, text, target, spans);
-            }
+        Expr::Not(inner) => collect_expr_rename_spans(inner, text, target, spans),
+        Expr::And(a, b) | Expr::Or(a, b) => {
+            collect_expr_rename_spans(a, text, target, spans);
+            collect_expr_rename_spans(b, text, target, spans);
         }
-        PredicateArg::Lit(_) => {}
     }
 }
 

@@ -1,3 +1,3 @@
 entity A "A" { id: Int @pk }
 entity B "B" { id: Int @pk }
-relate(A, B, "N:M")
+relate(A, B, N:M)

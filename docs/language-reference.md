@@ -138,7 +138,7 @@ is optional/nullable in the payload.
 | Annotation | Description |
 |---|---|
 | `@pk` | Marks the column as the primary key. FK columns are auto-generated against this key by `relate`. |
-| `@pk(a, b)` | Declares a composite primary key over the named columns. |
+| `@pka == b` | Declares a composite primary key over the named columns. |
 | `@unique` | Adds a unique constraint. |
 | `@unique(a, b)` | Declares a composite unique constraint over the named columns. |
 | `@index` | Adds an index for the column. |
@@ -212,11 +212,11 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | Predicate | Signature | Semantics |
 |---|---|---|
 | `performs` | `(Actor, UseCase \| Buc)` | The actor performs the given use case or BUC. |
-| `uses` | `(Actor, ExtSystem)` | The actor uses the external system. |
-| `invokes` | `(UseCase, Api)` | The use case invokes the API layer. Drives the `Screen → Api → Entity` lane in the sequence diagram. |
-| `request` | `(Api, Dto)` | The API accepts the DTO as a request payload. |
-| `response` | `(Api, Dto)` | The API returns the DTO as a successful response payload. |
-| `error_response` | `(Api, Dto)` | The API may return the DTO as an error payload. |
+| `uses` | `Actor == ExtSystem` | The actor uses the external system. |
+| `invokes` | `UseCase == Api` | The use case invokes the API layer. Drives the `Screen → Api → Entity` lane in the sequence diagram. |
+| `request` | `Api == Dto` | The API accepts the DTO as a request payload. |
+| `response` | `Api == Dto` | The API returns the DTO as a successful response payload. |
+| `error_response` | `Api == Dto` | The API may return the DTO as an error payload. |
 | `applies_to` | `(Nfr, UseCase \| Api \| System)` | The non-functional requirement applies to the use case, API, or system boundary. Use this for performance, availability, or SLO requirements tied to an operation or system. |
 | `qualifies` | `(Nfr \| Constraint, Quality)` | The non-functional requirement or constraint belongs to the given quality category. |
 | `constrains` | `(Constraint, UseCase \| Api \| System \| Entity \| Dto)` | The constraint applies to the target model element. Use this for audit/logging/retention/privacy rules that constrain system behavior or data handling. |
@@ -226,38 +226,38 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `creates` | `(UseCase \| Api, Entity)` | The use case or API creates the entity. Seeds the initial state pattern. |
 | `updates` | `(UseCase \| Api, Entity)` | The use case or API updates the entity. Produces a transition operation in state derivation. |
 | `deletes` | `(UseCase \| Api, Entity)` | The use case or API deletes the entity. Marks the source pattern terminal. |
-| `displays` | `(UseCase, Screen)` | The use case displays the screen. |
-| `shows` | `(Screen, Entity)` | The screen shows information from the entity. |
+| `displays` | `UseCase == Screen` | The use case displays the screen. |
+| `shows` | `Screen == Entity` | The screen shows information from the entity. |
 | `maps_field` | `(Field, Entity, "column")` | Maps a screen field to a specific Entity column. Use with `contains(Screen, Field)` when screen-item level input/output mapping matters. |
-| `raises` | `(UseCase, Event)` | The use case raises the domain event. Links use cases to `transitions`. |
+| `raises` | `UseCase == Event` | The use case raises the domain event. Links use cases to `transitions`. |
 | `triggers` | `(Event, UseCase \| Buc)` | The event triggers a concrete use case or starts a BUC boundary. |
 | `outbox` | `(Event)` | Marks a raised event as intentionally published outside the local model, suppressing the raised-but-unconsumed warning. |
-| `contains` | `(Buc, UseCase \| Flow)`, `(Flow, Step)`, `(Screen, Field)`, `(System, Api)`, or `(Aggregate, DomainObject \| ValueObject \| Concept)` | The use case or flow composes the BUC, the step composes the flow, the field belongs to the screen, the API belongs to the system boundary, or the aggregate owns conceptual/domain parts. |
-| `owns` | `(System, Entity)` | Optionally declares that a system is responsible for an entity even before API operations are fully modeled. API CRUD still records concrete access; `owns` records intended ownership. |
-| `precedes` | `(Step, Step)` | The first business step normally occurs before the second. |
-| `branches` | `(Step, Step)` | The first step may branch to the second as an alternate path. |
-| `excepts` | `(Step, Step)` | The first step may route to the second as an exception path. |
-| `repeats` | `(Step, Step)` | The first step may loop back to the second. |
+| `contains` | `(Buc, UseCase \| Flow)`, `Flow == Step`, `Screen == Field`, `System == Api`, or `(Aggregate, DomainObject \| ValueObject \| Concept)` | The use case or flow composes the BUC, the step composes the flow, the field belongs to the screen, the API belongs to the system boundary, or the aggregate owns conceptual/domain parts. |
+| `owns` | `System == Entity` | Optionally declares that a system is responsible for an entity even before API operations are fully modeled. API CRUD still records concrete access; `owns` records intended ownership. |
+| `precedes` | `Step == Step` | The first business step normally occurs before the second. |
+| `branches` | `Step == Step` | The first step may branch to the second as an alternate path. |
+| `excepts` | `Step == Step` | The first step may route to the second as an exception path. |
+| `repeats` | `Step == Step` | The first step may loop back to the second. |
 | `covers` | `(Step, UseCase \| Api \| Event)` | The business step covers the referenced use case, API, or event. Use this to make UC ordering and event chains explicit in the DSL while keeping the step vocabulary business-facing. |
-| `compensates` | `(UseCase, UseCase)` | The first use case compensates for or rolls back the business effect of the second. Use this for alternative or exception flow review without forcing compensation into CRUD/state derivation. |
+| `compensates` | `UseCase == UseCase` | The first use case compensates for or rolls back the business effect of the second. Use this for alternative or exception flow review without forcing compensation into CRUD/state derivation. |
 | `coordinates` | `(UseCase, Entity, Entity)` | The use case coordinates consistency for a relation crossing system boundaries. The use case must invoke APIs on both system sides that operate the corresponding entities. |
-| `belongs` | `(Buc, Business)` | The BUC belongs to the business. |
-| `has_permission` | `(Actor, Permission)` | The actor has the permission type. This provides a base vocabulary for later UC/API permission constraints. |
+| `belongs` | `Buc == Business` | The BUC belongs to the business. |
+| `has_permission` | `Actor == Permission` | The actor has the permission type. This provides a base vocabulary for later UC/API permission constraints. |
 | `requires_permission` | `(UseCase \| Api, Permission)` | The use case or API requires the permission type. |
 | `requires_medium` | `(UseCase \| Api, Medium)` | The use case or API requires the operation medium. |
-| `motivates` | `(Requirement, Buc)` | The requirement motivates the BUC. |
+| `motivates` | `Requirement == Buc` | The requirement motivates the BUC. |
 | `decides` | `(Adr, Buc \| UseCase \| Api \| System \| Entity \| Requirement \| Nfr \| Constraint \| Concept \| DomainObject \| Aggregate \| ValueObject \| Dto)` | The ADR records a design decision that affects the target element. Use this for impact review and design traceability without making the target depend on a document file path. |
-| `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `"1:1"`, `"1:N"`, `"N:1"`, `"N:M"`. FK options can be chained with `.optional()`, `.on_delete(action)`, and `.on_update(action)`. |
-| `transitions` | `(Event, State, State)` | A state machine edge: on the event, the entity moves from the first state to the second. |
+| `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `1:1`, `1:N`, `N:1`, `N:M` (unquoted). FK options can be chained with `.optional()`, `.on_delete(action)`, and `.on_update(action)`. |
+| `transitions` | `(Entity.column, Event, from -> to)` | A lifecycle edge on an Enum column: on the event, the entity moves from the first variant to the second. |
 | `after` | `(UseCase).assert(...)` | A temporal anchor assertion checked against the use case's immediate `sets` and `raises`/`transitions` effects. |
-| `forbidden_when` | `(Entity, conditions...).has/none(RelatedEntity, conditions...)` | A to-many quantifier constraint. `states` reports it as not fully evaluated unless it can prove a `none` condition unreachable. |
-| `sets` | `(UseCase \| Event, Entity, "col", "val")` | An explicit column effect, consumed by state pattern derivation. |
+| `when` | `(conditions...).none/has(conditions...)` | A to-many quantifier constraint (replaces `forbidden_when`). Prefer qualified columns such as `Cert.status == revoked`. |
+| `sets` | `(UseCase \| Event, Entity, col == val)` | An explicit column effect, consumed by state pattern derivation. Use `present` (not PostgreSQL type names) for nullable non-null. |
 | `sets` | `(UseCase \| Event, Entity, col op rhs, true \| false)` | Drives the truth value of a comparison proposition (derived Bool axis) in state pattern derivation. |
 
-`relate(A, B, "N:1")` generates a `b_id` FK on `A`. With
+`relate(A, B, N:1)` generates a `b_id` FK on `A`. With
 `.optional().on_delete(set_null).on_update(cascade)`, the generated FK column is
 nullable, marked `fk_optional`, and carries the delete/update actions for CSV/list
-review. `relate(A, B, "1:N")` applies the same options to the FK generated on `B`.
+review. `relate(A, B, 1:N)` applies the same options to the FK generated on `B`.
 
 ### Use case conditions
 
@@ -544,14 +544,14 @@ belongs(BucAppointmentScheduling, ClinicOps)
 
 ### `relate` and FK generation
 
-`relate(Child, Parent, "N:1")` generates a foreign-key column on the child entity
+`relate(Child, Parent, N:1)` generates a foreign-key column on the child entity
 referencing the parent's primary key (for example `parent_id`). The cardinality drives
 the crow's-foot notation in the ER diagram and the FK-induced graph used for
 [transaction boundary inference](#see-also).
 
 ### `transitions` and the state machine
 
-`transitions(event::E, state::From, state::To)` declares one edge of an entity's state
+`transitions(bodies.status, event::E, from -> to)` declares one edge of an entity's state
 machine. States are linked to an entity's Enum column by matching state ids
 (case-insensitively) against the Enum variants. The use case that drives a transition
 is found through `raises(UseCase, Event)`. See
@@ -697,24 +697,24 @@ column's type:
 
 ```
 // Enum column variant
-sets(usecase::Capture, Payment, "status", "captured")
+sets(usecase::Capture, Payment, status == captured)
 
 // Bool column
-sets(usecase::Enable, Switch, "enabled", "true")
+sets(usecase::Enable, Switch, enabled == true)
 
 // Set a nullable column to non-null without recording a type
-sets(usecase::Login, UserAccount, "last_login_at", "present")
+sets(usecase::Login, UserAccount, last_login_at == present)
 
 // Set a nullable column to non-null, recording a PostgreSQL-specific type
-sets(usecase::Deliver, Order, "delivered_at", "timestamptz")
-sets(usecase::Tag,     Doc,   "metadata",     "jsonb")
+sets(usecase::Deliver, Order, delivered_at == present)
+sets(usecase::Tag, Doc, metadata == present)
 
 // Set a nullable column to null
-sets(usecase::Logout, Session, "token", "null")
+sets(usecase::Logout, Session, token == null)
 
 // Event as origin: expanded to every UC that raises the event
 // (equivalent to sets on each raising UC, but kept close to the event definition)
-sets(event::EvDeliver, Order, "delivered_at", "timestamptz")
+sets(event::EvDeliver, Order, delivered_at == present)
 ```
 
 | Value | Target column | Meaning |
@@ -741,10 +741,11 @@ sets(Refund, Stock, stock < selling, false)
 ```
 
 The third argument is the bare comparison expression (no quotes); the fourth argument is
-the bare boolean literal `true` or `false`. If no `sets` drives a comparison proposition,
-it is treated as **always false** (the comparison never holds) throughout state derivation,
-and the state-pattern diagnostics report `UndrivenComparisonProp` for constraints that
-depend on it.
+the bare boolean literal `true` or `false`. Value equality (`col == variant`) must not use
+`, false` — that form is rejected (`SetsFalseOnEquals`); omit the fourth argument and set
+a different value instead. If no `sets` drives a comparison proposition, it is treated as
+**always false** (the comparison never holds) throughout state derivation, and the
+state-pattern diagnostics report `UndrivenComparisonProp` for constraints that depend on it.
 
 | Fourth argument | Meaning |
 |---|---|
@@ -772,7 +773,7 @@ reachable state space:
 | `required` | every reachable pattern must satisfy all listed conditions | Always-required facts |
 | `exclusive` | no reachable pattern may satisfy two or more listed conditions | Mutual exclusion |
 
-Entity-local equality conditions are shown in tuple form, `(column, value)`, because it
+Entity-local equality conditions are shown in tuple form, `column == value`, because it
 stays clear in variadic lists. The parser also accepts flat `column, value` pairs for
 single equality conditions when there is no ambiguity.
 
@@ -780,22 +781,22 @@ single equality conditions when there is no ambiguity.
 
 ```
 // A single forbidden value
-forbidden(Order, (status, cancelled))
+forbidden(Order, status == cancelled)
 
 // An AND-combination: forbidden only when both hold simultaneously
-forbidden(Order, (status, delivered), (refunded, true))
+forbidden(Order, status == delivered, refunded == true)
 
 // A comparison expression as a condition
 forbidden(Stock, stock < selling)
 
 // Mixing tuples and a comparison expression
-forbidden(Stock, (status, on_sale), stock < selling)
+forbidden(Stock, status == on_sale, stock < selling)
 
 // Comparison against the built-in `now` keyword
 forbidden(Coupon, expired_at < now)
 ```
 
-Each condition is either a `(column, value)` tuple or a comparison expression. All
+Each condition is either a `column == value` tuple or a comparison expression. All
 conditions are combined with **AND**: the state is forbidden only when **every** condition
 holds at once. If any reachable pattern satisfies all conditions, a
 `ForbiddenStateViolated` diagnostic is emitted, naming the conditions and the offending
@@ -807,7 +808,7 @@ axis.
 
 **Design rationale.** A forbidden state is a *point* (or a sub-cube) in the finite
 product state space — fundamentally a conjunction of column assignments. The
-tuple-variadic form expresses exactly that: a flat list of `(column, value)` points,
+tuple-variadic form expresses exactly that: a flat list of `column == value` points,
 read as "this exact combination must not exist." There is no antecedent/consequent
 asymmetry to model, so a single flat list is the most direct encoding.
 
@@ -815,28 +816,28 @@ asymmetry to model, so a single flat list is the most direct encoding.
 
 ```
 invariant(Order)
-  .when(status, delivered)
-  .then(delivered_at, present)
+  .when(status == delivered)
+  .then(delivered_at == present)
 
 invariant(Order)
-  .when(status, delivered)
-  .when(refunded, false)     // multiple .when() = AND
-  .then(refund_id, null)
+  .when(status == delivered)
+  .when(refunded == false)     // multiple .when() = AND
+  .then(refund_id == null)
 
 // Comparison expression in the guard
 invariant(Coupon)
   .when(expired_at < now)
-  .then(status, expired)
+  .then(status == expired)
 
 // Comparison expression as the requirement
 invariant(Stock)
-  .when(status, on_sale)
+  .when(status == on_sale)
   .then(stock < selling)
 ```
 
 An invariant is an implication. The `.when(...)` clauses are guards (the antecedent)
 and the `.then(...)` clauses are requirements (the consequent). Each clause is either a
-`(column, value)` pair or a bare comparison expression. Within each side the clauses are
+`column == value` pair or a bare comparison expression. Within each side the clauses are
 combined with **AND**. The rule reads: **whenever all `.when()` guards hold, all
 `.then()` requirements must also hold.**
 
@@ -855,13 +856,13 @@ any number of AND-ed conditions unambiguously, while reading naturally left to r
 ### `required` — always-required state facts
 
 ```
-required(Account, (active, true))
-required(Order, (status, paid), (paid_at, present))
+required(Account, active == true)
+required(Order, status == paid, paid_at == present)
 required(Coupon, expired_at < now)
 ```
 
 `required(...)` accepts the same condition vocabulary as `forbidden`: each condition is
-either a `(column, value)` tuple or a comparison expression. All listed conditions are
+either a `column == value` tuple or a comparison expression. All listed conditions are
 combined with **AND**. The rule reads: **every reachable pattern of this entity must
 satisfy all listed conditions**.
 
@@ -875,13 +876,13 @@ state facts readable and avoids empty `.when()` chains.
 ### `exclusive` — mutual exclusion between state facts
 
 ```
-exclusive(Document, (approved, true), (rejected, true))
-exclusive(Order, (cancelled_at, present), (delivered_at, present))
+exclusive(Document, approved == true, rejected == true)
+exclusive(Order, cancelled_at == present, delivered_at == present)
 exclusive(Stock, stock < reorder_threshold, stock > overstock_threshold)
 ```
 
 `exclusive(...)` accepts the same condition vocabulary as `forbidden`: each condition is
-either a `(column, value)` tuple or a comparison expression. The listed conditions are
+either a `column == value` tuple or a comparison expression. The listed conditions are
 treated as alternatives. A reachable pattern violates the rule when **two or more** of
 the listed conditions hold at the same time.
 
@@ -904,25 +905,25 @@ arguments declare the intended scope; when omitted, the scope is inferred from q
 column references.
 
 ```
-cross_forbidden(Order, Payment,
-  (Order.status, cancelled),
+forbidden(Order, Payment,
+  Order.status == cancelled,
   Payment.amount > Order.total)
 
-cross_invariant(Order, Payment)
-  .when(Order.status, paid)
-  .then(Payment.status, captured)
+invariant(Order, Payment)
+  .when(Order.status == paid)
+  .then(Payment.status == captured
 
-cross_invariant(Order, Payment)
+invariant(Order, Payment)
   .along(Order, Payment)
-  .when(Order.status, paid)
-  .then(Payment.status, captured)
+  .when(Order.status == paid)
+  .then(Payment.status == captured
 ```
 
-`cross_forbidden(...)` accepts a flat AND-list of conditions. `cross_invariant(...)`
+`forbidden(...)` accepts a flat AND-list of conditions. `invariant(...)`
 uses the same implication shape as `invariant`: `.when(...)` clauses are guards and
 `.then(...)` clauses are required conditions. A condition is either:
 
-- `(Entity.column, value)` for state-like equality, using the same value vocabulary as
+- `Entity.column == value` for state-like equality, using the same value vocabulary as
   `sets`.
 - A comparison expression such as `Order.total > Payment.amount` or
   `Coupon.expires_at < now`.
@@ -934,9 +935,47 @@ unambiguous. With a single-entity scope, bare columns are still accepted as a sh
 use-case boundary instead of against the full cross-product of reachable state patterns.
 The assertion is evaluated from the use case's immediate `sets` effects and any
 `transitions` reached through events raised by that use case. Tuple form is also valid,
-for example `after(ExecuteCertIssue).assert((CertificateOrder.status, executed))`.
+for example `after(ExecuteCertIssue).assert(CertificateOrder.status == executed)`.
 
-`forbidden_when(Entity, conditions...).has/none(RelatedEntity, conditions...)` declares a
+### Temporal path properties
+
+Named path properties are checked by TLA+/TLC export (`export --kind tla` /
+`verify --backend tlc`), not by `rdra-ish states`:
+
+```
+property PaidLeadsToShipped "paid eventually reaches shipped"
+  leads_to(Order.status == paid, Order.status == shipped)
+
+property EventuallyTerminal "order finishes"
+  eventually(Order.status == delivered \/ Order.status == cancelled)
+
+property NeverBoth "mutex"
+  always ~(Order.status == paid /\ Order.status == cancelled)
+```
+
+| Form | TLA+ |
+|---|---|
+| `always(expr)` | `[]expr` |
+| `eventually(expr)` | `<>expr` |
+| `leads_top == q` | `p ~> q` |
+
+Atoms use `Entity.column == value` / `!=`, or Int comparisons (`<`, `>`, `<=`, `>=`)
+over Int columns and literals. Logical connectives inside formulas are
+`~`, `/\`, and `\/`. See [formal-verification.md](./formal-verification.md).
+
+When any `eventually` / `leads_to` property is exported, the Spec includes
+`WF_vars(Next)`. Equality forms of `after(UseCase).assert(...)` become primed
+postconditions on SpecActions for events raised by that use case. Comparison
+forms prefer Int arithmetic when those columns are axes; otherwise they set a
+proposition axis to `TRUE` when that axis exists.
+`forbidden(EntityA, EntityB, ...)` / `invariant(EntityA, EntityB)` (including `.along`) become Safety
+conjuncts. Quantifiers and `.along` use finite `Entity_Ids` instance sets when
+exported; see [formal-verification.md](./formal-verification.md).
+
+`sets(UC, Entity, intCol == 3)` assigns an Int effect used by TLA+ export.
+`@default(0)` is valid on Int columns. BFS `states` still ignores Int axes.
+
+`when(Entity, conditions...).has/none(RelatedEntity, conditions...)` declares a
 to-many quantifier rule. The syntax is accepted and type-checked, but `states` does not
 track linked related-row counts. It emits `QuantifierConstraintNotEvaluated` when the
 related condition has reachable patterns. For `none(...)`, if the related condition is
@@ -966,9 +1005,9 @@ state patterns.
 
 ### Comparison Expressions in Constraints
 
-`forbidden`, `required`, `exclusive`, `cross_forbidden`, and the `.when()` / `.then()`
-clauses of `invariant` or `cross_invariant` accept bare **comparison expressions** as
-conditions, in addition to the `(column, value)` tuple form.
+`forbidden`, `required`, `exclusive`, multi-entity `forbidden`/`invariant`, and the `.when()` / `.then()`
+clauses of `invariant` accept bare **comparison expressions** as
+conditions (`col == val`, `col op rhs`).
 
 #### Syntax
 
@@ -1066,7 +1105,7 @@ state::Active      // the state named Active
 
 Typical cases:
 
-- In `transitions(event::Capture, state::Pending, state::Paid)`, the event and states
+- In `transitions(bodies.status, event::Capture, pending -> paid)`, the event and states
   may collide with use cases of the same name once modules are merged, so qualifiers are
   used.
 - In `contains(BucOrder, usecase::Cancel)` and `raises(usecase::Cancel, event::Cancel)`,

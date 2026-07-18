@@ -80,7 +80,7 @@ invokes(CompleteAppointment, CompleteAppointmentApi)
 updates(CompleteAppointmentApi, Appointment)
 updates(CompleteAppointmentApi, Room)
 raises(CompleteAppointment, EvAppointmentCompleted)
-sets(CompleteAppointment, Room, "occupancy_status", "roomcleaning")
+sets(CompleteAppointment, Room, occupancy_status == roomcleaning)
 triggers(EvEncounterSigned, CompleteAppointment)
 
 // Access constraints

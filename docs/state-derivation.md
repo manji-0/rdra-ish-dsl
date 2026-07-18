@@ -64,7 +64,7 @@ and a set of effects (column → abstract value).
 | `creates(UC, E)` | A `Create` operation. Seeds the initial pattern by applying its effects to the base (default) pattern. |
 | `updates(UC, E)` / `writes(UC, E)` | An `Update` operation. Expands reachable patterns by applying its effects. |
 | `deletes(UC, E)` | A `Delete` operation. Produces no successor; marks the matching pattern terminal. |
-| `sets(UC, E, "col", "val")` | A column effect attached to the originating use case's operation on `E`. |
+| `sets(UC, E, col == val)` | A column effect attached to the originating use case's operation on `E`. |
 | `sets(UC, E, <expr>, bool)` | A **proposition effect** attached to the originating use case's operation on `E`. Advances or resets the `Proposition` axis whose key is the normalized comparison expression (e.g. `stock<selling`). |
 | `transitions(event::Ev, From, To)` + `raises(UC, Ev)` | An `Update` operation on the entity's status column, **guarded** by `status == From`, with effect `status := To`. |
 
@@ -164,11 +164,11 @@ involved entity's diagnostics.
 
 ### `forbidden`
 
-For each `forbidden(E, (col, val), ...)`, the conditions are AND-ed. If any reached
+For each `forbidden(E, col == val, ...)`, the conditions are AND-ed. If any reached
 pattern matches **all** conditions, a `ForbiddenStateViolated { conditions, pattern_desc }`
 diagnostic is emitted. Forbidding an unreachable state produces no diagnostic.
 
-Comparison expressions in `forbidden` (e.g. `forbidden(Stock, (status, on_sale), stock < selling)`)
+Comparison expressions in `forbidden` (e.g. `forbidden(Stock, status == on_sale, stock < selling)`)
 are matched as additional AND conditions against the `Proposition` axis for that
 expression. A pattern satisfies the condition when the axis value equals the expected
 `Bool` (always `Bool(true)` for a bare comparison in `forbidden`).
@@ -190,13 +190,13 @@ fails**, an `InvariantViolated { guards, requireds, pattern_desc, flow_order_hin
 diagnostic is emitted.
 
 Comparison expressions in `.when(...)` and `.then(...)` clauses
-(e.g. `invariant(Coupon).when(expired_at < now).then(status, expired)`) are evaluated
+(e.g. `invariant(Coupon).when(expired_at < now).then(status == expired)`) are evaluated
 the same way: each comparison maps to its `Proposition` axis and is checked as a
 `Bool` equality against the current pattern value. Guards with comparison propositions
 use `Bool(true)` as the required value, enabling guards like "when the proposition
 holds".
 
-`triggers(event, UseCase)` documents event flow. For a directly triggered use case,
+`triggersevent == UseCase` documents event flow. For a directly triggered use case,
 state derivation uses immediate same-entity effects from the upstream use case or
 event as execution guards when those effects target known state axes. This suppresses
 false positives where the event handoff guarantees evidence columns such as timestamps.
@@ -218,9 +218,9 @@ after(ExecuteCertIssue)
 
 The current evaluator checks immediate equality effects only:
 
-- `sets(UseCase, Entity, "col", "val")` on the anchor use case;
-- `sets(Event, Entity, "col", "val")` on events raised by the anchor use case;
-- `transitions(Event, From, To)` for events raised by the anchor use case, mapped to the
+- `sets(UseCase, Entity, col == val)` on the anchor use case;
+- `sets(Event, Entity, col == val)` on events raised by the anchor use case;
+- `transitions(Entity.col, Event, from -> to)` for events raised by the anchor use case, mapped to the
   entity Enum status column.
 
 Comparison assertions and longer event-triggered flows are reported as
@@ -229,14 +229,14 @@ state-pattern product.
 
 ### To-many quantifier constraints
 
-`forbidden_when(Entity, conditions...).has/none(RelatedEntity, conditions...)` and
-`cross_invariant(Entity).when(...).has/none(RelatedEntity, conditions...)` declare rules
+`when(Entity, conditions...).has/none(RelatedEntity, conditions...)` and
+`invariant(Entity).when(...).has/none(RelatedEntity, conditions...)` declare rules
 over related collections. These forms are parsed and type-checked, but the current
 state-pattern engine does not represent linked related-row cardinality.
 
 ```rdra
-forbidden_when(ClientCertificate, (status, revoked))
-  .none(TerminalCertAssignment, (status, active))
+when(ClientCertificate, status == revoked)
+  .none(TerminalCertAssignment.status == active)
 ```
 
 If the anchor condition is reachable and the related condition also has reachable
@@ -247,7 +247,7 @@ partial evaluation; it does not prove per-instance counts.
 
 ### `required`
 
-For each `required(E, (col, val), ...)`, the conditions are AND-ed. Every reached pattern
+For each `required(E, col == val, ...)`, the conditions are AND-ed. Every reached pattern
 must match **all** conditions. If a reached pattern misses any condition, a
 `RequiredStateViolated { conditions, pattern_desc }` diagnostic is emitted.
 
@@ -256,7 +256,7 @@ Comparison expressions in `required` are matched against their `Proposition` axe
 
 ### `exclusive`
 
-For each `exclusive(E, (col, val), ...)`, the listed conditions are treated as
+For each `exclusive(E, col == val, ...)`, the listed conditions are treated as
 alternatives. If a reached pattern satisfies **two or more** listed conditions, an
 `ExclusiveStateViolated { conditions, pattern_desc }` diagnostic is emitted with the
 co-occurring conditions.
@@ -271,7 +271,7 @@ Comparison expressions in `exclusive` are matched against their `Proposition` ax
 For `cross_forbidden` / `cross_invariant`, the derivation checks the cross-product of
 the participating entities' reached patterns, up to an internal safety cap, only when
 the scoped entities are not connected by a declared `relate` path. Conditions that
-reference state axes, such as `(Order.status, paid)` or `Order.status == Payment.status`,
+reference state axes, such as `Order.status == paid` or `Order.status == Payment.status`,
 are evaluated from the abstract pattern values. If a condition needs data that is not
 present in state patterns (for example `Payment.amount > Order.total` on ordinary
 numeric columns), the result receives a `CrossConstraintNotEvaluated` warning rather

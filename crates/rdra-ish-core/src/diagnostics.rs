@@ -69,16 +69,35 @@ pub enum RdraError {
         allowed: String,
     },
 
+    #[error("transitions first argument must be `Entity.column`, got '{got}'\n  hint: write `transitions(Order.status, EvCapture, pending -> paid)`")]
+    InvalidTransitionsColumnRef { got: String },
+
+    #[error("transitions column '{col}' on entity '{entity}' must be an Enum column\n  hint: lifecycle transitions bind an Enum status/lifecycle column")]
+    TransitionsColumnNotEnum { entity: String, col: String },
+
     #[error("invalid bool value: column '{col}' set to '{value}'; expected `true` or `false`")]
     InvalidBoolValue { col: String, value: String },
 
-    #[error("null/present effect on non-nullable column '{col}'\n  hint: only @null columns accept `null`/`present` or PostgreSQL type tokens")]
+    #[error("null/present effect on non-nullable column '{col}'\n  hint: only @null columns accept `null`/`present`")]
     NullOnNonNullable { col: String },
 
-    #[error("effect on non-state column '{col}' (type {col_type}): only Enum, Bool, @null, or PostgreSQL-typed columns define state\n  hint: use `null`, `present`, an enum variant, `true`/`false`, or a known PostgreSQL type name (e.g. `jsonb`, `timestamptz`)")]
+    #[error("effect on non-state column '{col}' (type {col_type}): only Enum, Bool, or @null columns define state\n  hint: use `null`, `present`, an enum variant, `true`/`false`, or an integer literal for Int/Money/Decimal")]
     EffectOnNonStateColumn { col: String, col_type: String },
 
-    #[error("unknown effect value '{value}' for column '{col}': not an enum variant, bool, null/present, or known PostgreSQL type\n  hint: see the allowed value vocabulary in the docs")]
+    #[error("PostgreSQL type name '{name}' is not valid in sets(...); use `present` for a non-null nullable value\n  hint: declare display/storage types with entity annotations or DBML export inference")]
+    PgTypeNameInSets { name: String },
+
+    #[error("sets(..., {col} == {value}, false) is invalid: the fourth argument drives comparison propositions (e.g. `stock < selling`), not value equality\n  hint: omit `, false` and set a different value with `sets(..., {col} == other)`, or use a comparison proposition")]
+    SetsFalseOnEquals { col: String, value: String },
+
+    #[error("entity '{entity}' already has transitions on column '{existing}', ignoring additional column '{column}'\n  hint: one Enum lifecycle column per entity is supported; move the other lifecycle to a separate entity or drop the extra `transitions`")]
+    MultipleLifecycleColumns {
+        entity: String,
+        existing: String,
+        column: String,
+    },
+
+    #[error("unknown effect value '{value}' for column '{col}': not an enum variant, bool, null/present, or integer\n  hint: see the allowed value vocabulary in the docs")]
     UnknownEffectValue { col: String, value: String },
 
     // ── 比較式の診断 ─────────────────────────────────────────────────────────
@@ -154,7 +173,7 @@ pub enum RdraError {
     #[error("event '{event}' is never raised by any use case\n  hint: add `raises(usecase::Foo, event::{event})` in the relevant BUC file")]
     EventNeverRaised { event: String },
 
-    #[error("event '{event}' is raised but has no transitions and triggers no use case or BUC\n  hint: add `transitions(event::{event}, From, To)`, `triggers(event::{event}, SomeBuc)`, or `triggers(event::{event}, SomeUseCase)` to connect this event; use `outbox(event::{event})` if it is intentionally published outside this model")]
+    #[error("event '{event}' is raised but has no transitions and triggers no use case or BUC\n  hint: add `transitions(Entity.column, event::{event}, from -> to)`, `triggers(event::{event}, SomeBuc)`, or `triggers(event::{event}, SomeUseCase)` to connect this event; use `outbox(event::{event})` if it is intentionally published outside this model")]
     EventNeverConsumed { event: String },
 
     #[error("event '{event}' triggers use case '{usecase}' which belongs to no BUC\n  hint: add `contains(someBuc, usecase::{usecase})` to include the triggered use case in a BUC")]
@@ -209,6 +228,9 @@ pub enum RdraError {
         entity: String,
         system: String,
     },
+
+    #[error("invalid temporal property '{id}': {message}\n  hint: use always/eventually/leads_to with ==/!= or Int comparisons (<,>,<=,>=) over entity columns, combining with ~ /\\ \\/")]
+    InvalidTemporalProperty { id: String, message: String },
 
     #[error("{message}\n  hint: {hint}")]
     LintFinding {

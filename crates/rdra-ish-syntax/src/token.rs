@@ -76,6 +76,16 @@ pub enum Token {
     Medium,
     #[token("permission")]
     Permission,
+    #[token("property")]
+    Property,
+
+    // English logical connectives (temporal properties); also accepted as TLA glyphs below.
+    #[token("and")]
+    And,
+    #[token("or")]
+    Or,
+    #[token("not")]
+    Not,
 
     // ── Type keywords ────────────────────────────────────────────────
     #[token("Int")]
@@ -142,6 +152,9 @@ pub enum Token {
     Colon,
     #[token(".")]
     Dot,
+    // "->" must come before bare "-" if it is ever added
+    #[token("->")]
+    Arrow,
     // Comparison operators: longer tokens must come before shorter ones
     // so that "<=" is lexed before "<", etc.
     #[token("<=")]
@@ -156,6 +169,13 @@ pub enum Token {
     Lt,
     #[token(">")]
     Gt,
+    // TLA-style logical connectives (aliases for and/or/not).
+    #[token("\\/")]
+    TlaOr,
+    #[token("/\\")]
+    TlaAnd,
+    #[token("~")]
+    TlaNot,
 
     // ── Literals ─────────────────────────────────────────────────────
     /// Identifiers: `[A-Za-z_][A-Za-z0-9_]*`

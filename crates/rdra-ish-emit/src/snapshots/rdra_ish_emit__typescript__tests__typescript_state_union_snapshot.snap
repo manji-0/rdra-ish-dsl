@@ -24,6 +24,6 @@ export type Order =
   }
   | {
     status: "delivered";
-    delivered_at: Date;
+    delivered_at: unknown;
   }
 ;

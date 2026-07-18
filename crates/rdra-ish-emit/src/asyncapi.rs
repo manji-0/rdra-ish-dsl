@@ -159,20 +159,14 @@ fn buc_ids(model: &SemanticModel, keys: &[rdra_ish_core::model::BucKey]) -> Vec<
     ids
 }
 
-fn transition_ids(
-    model: &SemanticModel,
-    transitions: &[(
-        rdra_ish_core::model::StateKey,
-        rdra_ish_core::model::StateKey,
-    )],
-) -> Vec<Value> {
+fn transition_ids(_model: &SemanticModel, transitions: &[(String, String)]) -> Vec<Value> {
     let mut ids: Vec<_> = transitions
         .iter()
-        .filter_map(|(from, to)| {
-            Some(json!({
-                "from": model.states.get(*from)?.id,
-                "to": model.states.get(*to)?.id
-            }))
+        .map(|(from, to)| {
+            json!({
+                "from": from,
+                "to": to
+            })
         })
         .collect();
     ids.sort_by_key(|value| value.to_string());
@@ -216,13 +210,15 @@ mod tests {
             r#"
 usecase SignEncounter "Sign encounter"
 buc ClaimSubmission "Claim submission"
+entity Encounter "Encounter" {
+  id: Int @pk
+  status: Enum(draft, signed) @default(draft)
+}
 event EncounterSigned "Encounter signed"
   description "Published when an encounter is signed."
-state Draft "Draft"
-state Signed "Signed"
 raises(SignEncounter, EncounterSigned)
 triggers(EncounterSigned, ClaimSubmission)
-transitions(EncounterSigned, Draft, Signed)
+transitions(Encounter.status, EncounterSigned, draft -> signed)
 outbox(EncounterSigned)
 "#,
         );
@@ -245,7 +241,7 @@ outbox(EncounterSigned)
         );
         assert_eq!(
             doc["operations"]["consumeEncounterSigned"]["x-rdra-ish-transitions"][0]["to"],
-            "Signed"
+            "signed"
         );
     }
 }

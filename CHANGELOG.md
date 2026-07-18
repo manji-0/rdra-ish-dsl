@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Breaking
+
+- Conditions use comparison expressions only: `col == val`, `stock < selling`
+  (no tuples or flat `col, val` pairs).
+- Transitions require an enum column: `transitions(Entity.col, Event, from -> to)`.
+  Global `state` labels are no longer used as transition endpoints.
+- Cross-entity rules use multi-entity `forbidden(...)` / `invariant(...)` (with
+  optional `.along(...)`); `cross_*` and `forbidden_when` surface forms are removed.
+  Quantifiers are `when(...).none/has(...)`.
+- `relate(..., N:1)` cardinality is unquoted. Temporal connectives prefer
+  `and` / `or` / `not` (`/\` `\/` `~` remain as aliases).
+- PostgreSQL type names are rejected in `sets`; use `present` for nullable non-null.
+
+### Added
+
+- `rdra-ish export --kind tla` and `rdra-ish verify --backend tlc` for TLA+/TLC.
+
 ## v0.1.7 - 2026-06-23
 
 ### Added

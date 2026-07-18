@@ -142,7 +142,7 @@ contains(<System>, <Api>)
 invokes(<UC>, <Api>)
 request(<Api>, <RequestDto>)
 updates(<Api>, <Entity>)
-sets(<UC>, <Entity>, "status", "updated")
+sets(<UC>, <Entity>, status == updated)
 ```
 
 If a `relate` edge crosses two derived system entity sets, add
@@ -186,7 +186,7 @@ triggers(<Event>, <EntryUC>)
 For every use case that modifies an `Enum` column without a state machine, a nullable column, or a `Bool` flag, add a `sets` predicate:
 
 ```
-sets(<UC>, <Entity>, "column_name", "value")
+sets(<UC>, <Entity>, column_name == value)
 ```
 
 See the `sets` value vocabulary in `rdra-ish-write`.

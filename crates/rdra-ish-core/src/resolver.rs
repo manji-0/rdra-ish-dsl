@@ -266,7 +266,9 @@ pub fn build_merged_model(
                         located_items.push((source_id, item.clone()));
                     }
                 }
-                Item::Predicate(_) => located_items.push((source_id, item.clone())),
+                Item::Predicate(_) | Item::Property(_) => {
+                    located_items.push((source_id, item.clone()));
+                }
                 Item::Module(_, _) | Item::Import(_) => {}
             }
         }

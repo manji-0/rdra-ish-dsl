@@ -66,13 +66,9 @@ pub(crate) fn parse_effect_value(col: &ModelColumn, lit: &str) -> Result<EffectV
     }
 
     if is_pg_special_type(lit) {
-        return if col.is_nullable {
-            Ok(EffectValue::TypedPresent(lit.to_string()))
-        } else {
-            Err(RdraError::NullOnNonNullable {
-                col: col.name.clone(),
-            })
-        };
+        return Err(RdraError::PgTypeNameInSets {
+            name: lit.to_string(),
+        });
     }
 
     match &col.col_type {
@@ -95,6 +91,13 @@ pub(crate) fn parse_effect_value(col: &ModelColumn, lit: &str) -> Result<EffectV
                 value: lit.to_string(),
             }),
         },
+        ColumnType::Int | ColumnType::Money | ColumnType::Decimal => lit
+            .parse::<i64>()
+            .map(EffectValue::Int)
+            .map_err(|_| RdraError::EffectOnNonStateColumn {
+                col: col.name.clone(),
+                col_type: format!("{:?} (expected integer literal)", col.col_type),
+            }),
         _ => Err(RdraError::EffectOnNonStateColumn {
             col: col.name.clone(),
             col_type: format!("{:?}", col.col_type),
@@ -150,10 +153,10 @@ mod tests {
             parse_effect_value(&nullable, "present").unwrap(),
             EffectValue::Present
         );
-        assert_eq!(
-            parse_effect_value(&nullable, "jsonb").unwrap(),
-            EffectValue::TypedPresent("jsonb".to_string())
-        );
+        assert!(matches!(
+            parse_effect_value(&nullable, "jsonb"),
+            Err(RdraError::PgTypeNameInSets { .. })
+        ));
         assert_eq!(
             parse_effect_value(&enum_col, "closed").unwrap(),
             EffectValue::EnumVariant("closed".to_string())
@@ -187,8 +190,12 @@ mod tests {
             parse_effect_value(&bool_col, "yes"),
             Err(RdraError::InvalidBoolValue { .. })
         ));
+        assert_eq!(
+            parse_effect_value(&int_col, "42").unwrap(),
+            EffectValue::Int(42)
+        );
         assert!(matches!(
-            parse_effect_value(&int_col, "42"),
+            parse_effect_value(&int_col, "nope"),
             Err(RdraError::EffectOnNonStateColumn { .. })
         ));
     }

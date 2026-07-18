@@ -123,38 +123,38 @@ Kinds commonly used by this skill:
 | Predicate | Signature | Meaning |
 |---|---|---|
 | `performs` | `(Actor, UseCase\|Buc)` | actor performs a use case or BUC |
-| `contains` | `(Buc, UseCase)` / `(Buc, Flow)` / `(Flow, Step)` / `(System, Api)` / `(Screen, Field)` | composition |
-| `precedes/branches/excepts/repeats` | `(Step, Step)` | business flow order, alternatives, exceptions, loops |
+| `contains` | `Buc == UseCase` / `Buc == Flow` / `Flow == Step` / `System == Api` / `Screen == Field` | composition |
+| `precedes/branches/excepts/repeats` | `Step == Step` | business flow order, alternatives, exceptions, loops |
 | `covers` | `(Step, UseCase\|Api\|Event)` | business step covers model behavior |
-| `belongs` | `(Buc, Business)` | BUC ownership, optionally chained with `.when/.where/.by` |
-| `uses` | `(Actor, ExtSystem)` | actor uses an external system |
+| `belongs` | `Buc == Business` | BUC ownership, optionally chained with `.when/.where/.by` |
+| `uses` | `Actor == ExtSystem` | actor uses an external system |
 | `reads/writes/creates/updates/deletes` | `(UseCase\|Api, Entity)` | data touchpoint or API operation |
-| `displays` | `(UseCase, Screen)` | UI path |
-| `shows` | `(Screen, Entity)` | screen data exposure |
-| `invokes` | `(UseCase, Api)` | UC delegates to an API boundary |
+| `displays` | `UseCase == Screen` | UI path |
+| `shows` | `Screen == Entity` | screen data exposure |
+| `invokes` | `UseCase == Api` | UC delegates to an API boundary |
 | `maps_field` | `(Field, Entity, "column")` | screen field to logical data mapping |
-| `request/response/error_response` | `(Api, Dto)` | API payload contract |
+| `request/response/error_response` | `Api == Dto` | API payload contract |
 | `coordinates` | `(UseCase, Entity, Entity)` | UC coordinates cross-system consistency |
 | `compensates` | `(UseCase, UseCase\|Event)` | compensation behavior |
-| `owns` | `(System, Entity)` | explicit intended ownership before CRUD is complete |
-| `raises` | `(UseCase, Event)` | UC emits a domain event |
+| `owns` | `System == Entity` | explicit intended ownership before CRUD is complete |
+| `raises` | `UseCase == Event` | UC emits a domain event |
 | `triggers` | `(Event, UseCase\|Buc)` | event starts a UC or a BUC boundary |
 | `transitions` | `(Event, State, State)` | event moves state from -> to |
 | `sets` | `(UseCase\|Event, Entity, "col", "val")` | explicit column effect |
 | `sets` | `(UseCase\|Event, Entity, col op rhs, true\|false)` | comparison proposition effect |
-| `forbidden` | `(Entity, (col, val)\|col op rhs, ...)` | forbidden reachable state combination |
+| `forbidden` | `(Entity, col == val\|col op rhs, ...)` | forbidden reachable state combination |
 | `invariant` | `(Entity).when(...).then(...)` | required co-occurrence inside one entity |
-| `required` | `(Entity, (col, val)\|col op rhs, ...)` | always-required state facts |
-| `exclusive` | `(Entity, (col, val)\|col op rhs, ...)` | mutually exclusive state facts |
-| `cross_forbidden` | `(Entity..., (Entity.col, val)\|Entity.col op rhs, ...)[.along(...)]` | forbidden combination across entities |
+| `required` | `(Entity, col == val\|col op rhs, ...)` | always-required state facts |
+| `exclusive` | `(Entity, col == val\|col op rhs, ...)` | mutually exclusive state facts |
+| `cross_forbidden` | `(Entity..., Entity.col == val\|Entity.col op rhs, ...)[.along(...)]` | forbidden combination across entities |
 | `cross_invariant` | `(Entity...).when(...).then(...)[.along(...)]` | required co-occurrence across entities |
 | `relate` | `(Entity, Entity, "1:1"\|"1:N"\|"N:1"\|"N:M")` | ER relation, auto-generates FK |
-| `has_permission` | `(Actor, Permission)` | actor-side grant |
+| `has_permission` | `Actor == Permission` | actor-side grant |
 | `requires_permission` | `(UseCase\|Api, Permission)` | UC/API required authority |
 | `requires_medium` | `(UseCase\|Api, Medium)` | UC/API required operation medium |
 | `applies_to/qualifies/constrains` | `(Nfr\|Quality\|Constraint, target)` | non-functional and quality scope |
 | `maps_to` | `(Concept\|DomainObject\|Aggregate\|ValueObject, Entity)` | conceptual-to-logical mapping |
-| `motivates` / `decides` | `(Requirement, Buc)` / `(Adr, target)` | requirement and decision traceability |
+| `motivates` / `decides` | `Requirement == Buc` / `Adr == target` | requirement and decision traceability |
 
 #### Imports
 

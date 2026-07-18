@@ -1,6 +1,5 @@
 ---
 source: crates/rdra-ish-core/tests/integration_test.rs
-assertion_line: 309
 expression: csv
 ---
 entity_id,entity_label,column_name,column_type,is_pk,is_unique,is_indexed,is_fk,fk_target,fk_optional,fk_on_delete,fk_on_update,is_nullable,default_val,check_constraints,is_soft_delete,is_history,is_tenant_scope,derived_expr
@@ -12,6 +11,7 @@ Customer_info,顧客情報,email,String,false,false,false,false,,false,,,true,,,
 Order,注文,id,Int,true,false,false,false,,false,,,false,,,false,false,false,
 Order,注文,total,Money,false,false,false,false,,false,,,false,,,false,false,false,
 Order,注文,ordered_at,DateTime,false,false,false,false,,false,,,false,,,false,false,false,
+Order,注文,status,Enum,false,false,false,false,,false,,,false,draft,,false,false,false,
 Order,注文,customer_info_id,Int,false,false,false,true,Customer_info,false,,,false,,,false,false,false,
 OrderLine,注文明細,id,Int,true,false,false,false,,false,,,false,,,false,false,false,
 OrderLine,注文明細,qty,Int,false,false,false,false,,false,,,false,,,false,false,false,

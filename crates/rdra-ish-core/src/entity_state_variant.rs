@@ -168,24 +168,24 @@ event EvShip     "発送開始"
 event EvDeliver  "配達確認"
 event EvCancel   "注文キャンセル"
 creates(PlaceOrder, Order)
-updates(CapturePay,   Order)
-updates(ShipOrder,    Order)
+updates(CapturePay, Order)
+updates(ShipOrder, Order)
 updates(DeliverOrder, Order)
-updates(CancelOrder,  Order)
-raises(CapturePay,   EvCapture)
-raises(ShipOrder,    EvShip)
+updates(CancelOrder, Order)
+raises(CapturePay, EvCapture)
+raises(ShipOrder, EvShip)
 raises(DeliverOrder, EvDeliver)
-raises(CancelOrder,  EvCancel)
+raises(CancelOrder, EvCancel)
 state Pending   "注文受付"
 state Paid      "決済完了"
 state Shipped   "発送済"
 state Delivered "配達完了"
 state Cancelled "キャンセル"
-transitions(EvCapture, Pending,  Paid)
-transitions(EvShip,    Paid,     Shipped)
-transitions(EvDeliver, Shipped,  Delivered)
-transitions(EvCancel,  Pending,  Cancelled)
-sets(usecase::DeliverOrder, Order, "delivered_at", "timestamptz")
+transitions(Order.status, EvCapture, pending -> paid)
+transitions(Order.status, EvShip, paid -> shipped)
+transitions(Order.status, EvDeliver, shipped -> delivered)
+transitions(Order.status, EvCancel, pending -> cancelled)
+sets(usecase::DeliverOrder, Order, delivered_at == present)
 "#;
 
     #[test]
@@ -219,9 +219,7 @@ sets(usecase::DeliverOrder, Order, "delivered_at", "timestamptz")
         assert!(delivered.is_terminal);
         assert_eq!(
             delivered.fields.get("delivered_at"),
-            Some(&StateFieldValue::Present {
-                pg_type: Some("timestamptz".to_string())
-            })
+            Some(&StateFieldValue::Present { pg_type: None })
         );
     }
 }

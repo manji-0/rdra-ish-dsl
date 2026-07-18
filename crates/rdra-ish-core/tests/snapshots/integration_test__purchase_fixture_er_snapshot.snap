@@ -1,6 +1,5 @@
 ---
 source: crates/rdra-ish-core/tests/integration_test.rs
-assertion_line: 286
 expression: puml
 ---
 @startuml
@@ -22,6 +21,7 @@ entity "🗄️ 注文" as Order {
   --
   total : Money
   ordered_at : DateTime
+  status : Enum
   customer_info_id : Int <<FK>>
 }
 entity "🗄️ 注文明細" as OrderLine {

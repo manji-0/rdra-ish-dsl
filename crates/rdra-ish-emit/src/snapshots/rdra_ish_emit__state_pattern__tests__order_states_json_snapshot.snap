@@ -1,5 +1,5 @@
 ---
-source: crates/rdra-emit/src/state_pattern.rs
+source: crates/rdra-ish-emit/src/state_pattern.rs
 expression: result
 ---
 [
@@ -19,7 +19,7 @@ expression: result
         "column": "delivered_at",
         "domain": [
           "null",
-          "present:timestamptz"
+          "present"
         ]
       }
     ],
@@ -85,7 +85,7 @@ expression: result
         "is_initial": false,
         "is_terminal": true,
         "values": {
-          "delivered_at": "present:timestamptz",
+          "delivered_at": "present",
           "status": "delivered"
         },
         "via": [

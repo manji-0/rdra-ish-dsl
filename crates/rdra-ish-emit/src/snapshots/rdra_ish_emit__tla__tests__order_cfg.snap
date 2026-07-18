@@ -1,0 +1,7 @@
+---
+source: crates/rdra-ish-emit/src/tla.rs
+assertion_line: 981
+expression: bundle.cfg
+---
+SPECIFICATION Spec
+INVARIANT Safety

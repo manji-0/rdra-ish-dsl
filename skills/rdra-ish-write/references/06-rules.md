@@ -37,7 +37,7 @@ is not tracked yet.
 4. Add `required(Entity, ...)` only for facts that truly apply to every reachable state.
 5. Use comparison propositions when rules depend on expressions such as
    `stock < selling`, and add matching `sets(..., expr, true/false)` effects.
-6. Add `cross_forbidden(...)` or `cross_invariant(...)` when a rule mentions columns
+6. Add `forbidden(...)` or `invariant(...)` when a rule mentions columns
    from more than one entity; qualify columns as `Entity.column`.
 7. Add `.along(...)` when the intended semantics is relation-scoped rather than global
    cross-product; keep it off rules that truly forbid global co-existence.
@@ -49,27 +49,27 @@ is not tracked yet.
 ## Minimal Pattern
 
 ```rdra
-forbidden(Order, (status, cancelled), (paid_at, present))
+forbidden(Order, status == cancelled, paid_at == present)
 
-exclusive(Document, (approved, true), (rejected, true))
+exclusive(Document, approved == true, rejected == true)
 
 invariant(Order)
-  .when(status, submitted)
-  .then(submitted_at, present)
+  .when(status == submitted)
+  .then(submitted_at == present)
 
-required(Account, (active, true))
+required(Account, active == true)
 
 sets(ReserveStock, Inventory, stock < selling, true)
 forbidden(Inventory, stock < selling)
 
-cross_forbidden(Order, Payment,
-  (Order.status, cancelled),
+forbidden(Order, Payment,
+  Order.status == cancelled,
   Payment.amount > Order.total)
 
-cross_invariant(Order, Payment)
+invariant(Order, Payment)
   .along(Order, Payment)
-  .when(Order.status, paid)
-  .then(Payment.status, captured)
+  .whenOrder.status == paid
+  .thenPayment.status == captured
 ```
 
 ## Validation

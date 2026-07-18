@@ -72,9 +72,9 @@ Entity: Order (注文)
 
 ## How To Fix
 
-- Use `transitions(Event, FromState, ToState)` when a real lifecycle state machine
+- Use `transitions(Entity.col, Event, from -> to)` when a real lifecycle state machine
   exists.
-- Use `sets(UseCase|Event, Entity, "column", "value")` for Enum values without a
+- Use `sets(UseCase|Event, Entity, column == value)` for Enum values without a
   state machine, Bool flags, nullable columns, and derived lifecycle effects.
 - Use `raises(UseCase, Event)` before expecting an event transition to occur.
 - Use `triggers(Event, Buc)` for downstream BUC handoff, then refine to

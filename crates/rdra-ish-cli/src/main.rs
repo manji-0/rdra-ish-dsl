@@ -8,6 +8,7 @@ mod fmt_cmd;
 mod list_output;
 mod load;
 mod states;
+mod verify;
 use cli::{Cli, Commands};
 use csv_cmd::run_csv;
 use diagram::{run_diagram, DiagramRequest};
@@ -19,6 +20,7 @@ use rdra_ish_core::{lint_issues, LintSeverity};
 use rdra_ish_emit::View;
 use states::run_states;
 use std::fs;
+use verify::run_verify;
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -138,6 +140,21 @@ fn main() -> Result<()> {
             max_patterns,
             entity,
         } => run_states(&inputs, format, buc, max_patterns, entity)?,
+
+        Commands::Verify {
+            inputs,
+            backend,
+            out,
+        } => {
+            let (program, model, diags) = load_model(&inputs)?;
+            for diag in &diags {
+                eprint_diagnostic(&program, diag);
+                if !diag.is_warning {
+                    std::process::exit(1);
+                }
+            }
+            run_verify(&model, backend, out)?;
+        }
     }
 
     Ok(())

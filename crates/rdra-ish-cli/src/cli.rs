@@ -160,6 +160,23 @@ pub(crate) enum Commands {
         #[arg(long)]
         entity: Option<String>,
     },
+    /// Formally verify temporal/safety properties via an external checker
+    Verify {
+        #[arg(required = true)]
+        inputs: Vec<PathBuf>,
+        /// Verification backend
+        #[arg(long, default_value = "tlc")]
+        backend: VerifyBackend,
+        /// Directory to write generated TLA+/CFG (defaults to a temp dir)
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+    },
+}
+
+#[derive(ValueEnum, Clone)]
+pub(crate) enum VerifyBackend {
+    /// TLA+ model checker (TLC)
+    Tlc,
 }
 
 #[derive(ValueEnum, Clone)]
@@ -217,6 +234,8 @@ pub(crate) enum ExportKind {
     TypeScriptStates,
     MermaidEr,
     PlantumlEr,
+    /// TLA+ / TLC specification (+ companion .cfg via verify)
+    Tla,
 }
 
 #[derive(ValueEnum, Clone)]

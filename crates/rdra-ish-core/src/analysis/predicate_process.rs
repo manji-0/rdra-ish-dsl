@@ -11,7 +11,8 @@ use super::arg_resolve::resolve_arg;
 use super::comparison::resolve_comparison;
 use super::constraint::{
     arg_as_str, collect_entity_conditions, context_value_from_arg, process_after_predicate,
-    process_cross_forbidden, process_cross_invariant, process_forbidden_when_predicate,
+    process_forbidden as process_cross_forbidden, process_invariant as process_cross_invariant,
+    process_when_quantifier_predicate, resolve_entity_equals_from_comparison,
 };
 use super::effect::parse_effect_value;
 use super::nodes::node_kind_tag_str;
@@ -28,7 +29,16 @@ fn resolve_predicate_args(
         .enumerate()
         .map(|(i, arg)| {
             let Some(kinds) = sig.get(i) else {
-                return if matches!(pred.name.as_str(), "forbidden" | "required" | "exclusive") {
+                return if matches!(
+                    pred.name.as_str(),
+                    "forbidden"
+                        | "required"
+                        | "exclusive"
+                        | "sets"
+                        | "invariant"
+                        | "when"
+                        | "after"
+                ) {
                     None
                 } else {
                     resolve_arg(model, arg, ctx, diags)
@@ -52,8 +62,9 @@ fn predicate_arg_display(arg: &PredicateArg) -> String {
             }
         }
         PredicateArg::Lit(s) => s.clone(),
-        PredicateArg::Tuple(_) => "<tuple>".to_string(),
         PredicateArg::Expr(_) => "<expr>".to_string(),
+        PredicateArg::Transition { from, to } => format!("{from} -> {to}"),
+        PredicateArg::Card(c) => c.clone(),
     }
 }
 
@@ -218,25 +229,207 @@ fn process_maps_to_predicate(model: &mut SemanticModel, resolved: &[Option<NodeR
     }
 }
 
-fn process_transitions_predicate(model: &mut SemanticModel, resolved: &[Option<NodeRef>]) {
-    if let (
-        Some(Some(NodeRef::Event(event))),
-        Some(Some(NodeRef::State(state_before))),
-        Some(Some(NodeRef::State(state_after))),
-    ) = (resolved.first(), resolved.get(1), resolved.get(2))
-    {
-        model.state_transitions.push(crate::model::StateTransition {
-            event: *event,
-            from: *state_before,
-            to: *state_after,
-        });
-        model.relations.push(Relation {
-            from: NodeRef::State(*state_before),
-            to: NodeRef::State(*state_after),
-            kind: RelKind::Transitions,
-            options: RelationOptions::default(),
-        });
+fn process_transitions_predicate(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    resolved: &[Option<NodeRef>],
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) {
+    let Some(Some(NodeRef::Event(event))) = resolved.get(1) else {
+        return;
+    };
+
+    let (entity_id, column) = match pred.args.first() {
+        Some(PredicateArg::Ref(qref)) if qref.parts.len() == 2 => {
+            (qref.parts[0].clone(), qref.parts[1].clone())
+        }
+        Some(arg) => {
+            push_error(
+                ctx,
+                diags,
+                arg_span(arg),
+                RdraError::InvalidTransitionsColumnRef {
+                    got: predicate_arg_display(arg),
+                },
+            );
+            return;
+        }
+        None => {
+            push_error(
+                ctx,
+                diags,
+                pred.span.clone(),
+                RdraError::InvalidTransitionsColumnRef {
+                    got: "<missing>".into(),
+                },
+            );
+            return;
+        }
+    };
+
+    let (from, to) = match pred.args.get(2) {
+        Some(PredicateArg::Transition { from, to }) => (from.clone(), to.clone()),
+        Some(arg) => {
+            push_error(
+                ctx,
+                diags,
+                arg_span(arg),
+                RdraError::TypeMismatch {
+                    pred: "transitions".into(),
+                    id: predicate_arg_display(arg),
+                    actual: "value".into(),
+                    expected: "from -> to".into(),
+                },
+            );
+            return;
+        }
+        None => {
+            push_error(
+                ctx,
+                diags,
+                pred.span.clone(),
+                RdraError::TypeMismatch {
+                    pred: "transitions".into(),
+                    id: "<missing>".into(),
+                    actual: "missing".into(),
+                    expected: "from -> to".into(),
+                },
+            );
+            return;
+        }
+    };
+
+    let entity_key = model
+        .entities
+        .iter()
+        .find(|(_, e)| e.id == entity_id)
+        .map(|(k, _)| k);
+    let Some(entity_key) = entity_key else {
+        push_error(
+            ctx,
+            diags,
+            arg_span(&pred.args[0]),
+            RdraError::UndefinedSymbol {
+                id: entity_id.clone(),
+            },
+        );
+        return;
+    };
+
+    let col = model.entities[entity_key]
+        .columns
+        .iter()
+        .find(|c| c.name == column)
+        .cloned();
+    let Some(col) = col else {
+        push_error(
+            ctx,
+            diags,
+            arg_span(&pred.args[0]),
+            RdraError::UnknownColumn {
+                entity: entity_id.clone(),
+                col: column.clone(),
+            },
+        );
+        return;
+    };
+    let ColumnType::Enum(variants) = &col.col_type else {
+        push_error(
+            ctx,
+            diags,
+            arg_span(&pred.args[0]),
+            RdraError::TransitionsColumnNotEnum {
+                entity: entity_id.clone(),
+                col: column.clone(),
+            },
+        );
+        return;
+    };
+
+    for variant in [&from, &to] {
+        if !variants
+            .iter()
+            .any(|v| v == variant || v.eq_ignore_ascii_case(variant))
+        {
+            push_error(
+                ctx,
+                diags,
+                arg_span(&pred.args[2]),
+                RdraError::InvalidEnumVariant {
+                    col: column.clone(),
+                    value: variant.clone(),
+                    allowed: variants.join(", "),
+                },
+            );
+            return;
+        }
     }
+
+    // Normalize to declared enum casing.
+    let from = variants
+        .iter()
+        .find(|v| *v == &from || v.eq_ignore_ascii_case(&from))
+        .cloned()
+        .unwrap_or(from);
+    let to = variants
+        .iter()
+        .find(|v| *v == &to || v.eq_ignore_ascii_case(&to))
+        .cloned()
+        .unwrap_or(to);
+
+    ensure_entity_variant_state(model, &entity_id, &from);
+    ensure_entity_variant_state(model, &entity_id, &to);
+
+    if let Some(existing) = model
+        .state_transitions
+        .iter()
+        .find(|st| st.entity == entity_key && st.column != column)
+    {
+        push_warning(
+            ctx,
+            diags,
+            arg_span(&pred.args[0]),
+            RdraError::MultipleLifecycleColumns {
+                entity: entity_id.clone(),
+                existing: existing.column.clone(),
+                column: column.clone(),
+            },
+        );
+    }
+
+    model.state_transitions.push(crate::model::StateTransition {
+        event: *event,
+        entity: entity_key,
+        column: column.clone(),
+        from: from.clone(),
+        to: to.clone(),
+    });
+    model.typed_predicates.push(TypedPredicate::Transitions {
+        entity: entity_key,
+        column,
+        event: *event,
+        from,
+        to,
+    });
+}
+
+fn ensure_entity_variant_state(
+    model: &mut SemanticModel,
+    entity_id: &str,
+    variant: &str,
+) -> crate::model::StateKey {
+    let id = format!("{entity_id}_{variant}");
+    if let Some(NodeRef::State(k)) = model.symbols.lookup_qualified(&Kind::State, &id).cloned() {
+        return k;
+    }
+    let k = model.states.insert(crate::model::State {
+        id: id.clone(),
+        label: variant.to_string(),
+        description: None,
+    });
+    model.symbols.insert(id, NodeRef::State(k));
+    k
 }
 
 fn process_outbox_predicate(model: &mut SemanticModel, resolved: &[Option<NodeRef>]) {
@@ -260,90 +453,111 @@ fn process_sets_predicate(
         _ => return,
     };
 
-    match pred.args.get(2) {
-        Some(PredicateArg::Expr(Expr::Cmp(cmp))) => {
-            let truth_str = match pred.args.get(3) {
-                Some(PredicateArg::Ref(q)) if q.kind_qualifier.is_none() && q.parts.len() == 1 => {
-                    q.parts[0].as_str().to_string()
-                }
-                Some(PredicateArg::Lit(s)) => s.clone(),
-                _ => return,
-            };
-            if truth_str != "true" && truth_str != "false" {
-                return;
+    if let Some(PredicateArg::Expr(Expr::Cmp(cmp))) = pred.args.get(2) {
+        let entity_id = model.entities[entity_key].id.clone();
+        let entity_cols = model.entities[entity_key].columns.clone();
+
+        // Fourth arg true/false drives comparison propositions (stock < selling, …).
+        // Value equality (status == paid) with `, true` falls through to a column effect;
+        // `, false` is invalid for value equality (would silently set the value).
+        let truth_str = match pred.args.get(3) {
+            Some(PredicateArg::Ref(q)) if q.kind_qualifier.is_none() && q.parts.len() == 1 => {
+                Some(q.parts[0].as_str().to_string())
             }
-            let entity_id = model.entities[entity_key].id.clone();
-            let entity_cols = model.entities[entity_key].columns.clone();
-            if let Some(prop) = resolve_comparison(&entity_cols, &entity_id, cmp, ctx, diags) {
-                model.proposition_effects.push(PropositionEffect {
-                    origin: origin.clone(),
-                    entity: entity_key,
-                    prop: prop.clone(),
-                    truth: truth_str == "true",
-                });
-                if let Some(origin) = DataOrigin::from_node_ref(origin) {
-                    model
-                        .typed_predicates
-                        .push(TypedPredicate::SetsProposition {
-                            origin,
+            Some(PredicateArg::Lit(s)) => Some(s.clone()),
+            _ => None,
+        };
+        if let Some(truth_str) = truth_str.filter(|s| s == "true" || s == "false") {
+            match super::constraint::resolve_entity_equals_from_comparison(
+                &entity_cols,
+                &entity_id,
+                cmp,
+                ctx,
+                diags,
+            ) {
+                Ok(Some((col_name, value))) => {
+                    if truth_str == "true" {
+                        model.column_effects.push(ColumnEffect {
+                            origin: origin.clone(),
                             entity: entity_key,
-                            prop,
+                            column: col_name.clone(),
+                            value,
+                        });
+                        if let Some(origin) = DataOrigin::from_node_ref(origin) {
+                            model.typed_predicates.push(TypedPredicate::SetsColumn {
+                                origin,
+                                entity: entity_key,
+                                column: col_name,
+                            });
+                        }
+                    } else {
+                        push_error(
+                            ctx,
+                            diags,
+                            cmp.span.clone(),
+                            RdraError::SetsFalseOnEquals {
+                                col: col_name,
+                                value: match &cmp.rhs {
+                                    Operand::Column(v) | Operand::IntLit(v) => v.clone(),
+                                    Operand::Now => "now".into(),
+                                    Operand::QualifiedColumn(q) => q.column.clone(),
+                                },
+                            },
+                        );
+                    }
+                    return;
+                }
+                Ok(None) => {
+                    if let Some(prop) =
+                        resolve_comparison(&entity_cols, &entity_id, cmp, ctx, diags)
+                    {
+                        model.proposition_effects.push(PropositionEffect {
+                            origin: origin.clone(),
+                            entity: entity_key,
+                            prop: prop.clone(),
                             truth: truth_str == "true",
                         });
-                }
-            }
-        }
-        Some(PredicateArg::Lit(col_name)) => {
-            let col_name = col_name.clone();
-            let val_lit = match pred.args.get(3) {
-                Some(PredicateArg::Lit(s)) => s.clone(),
-                _ => return,
-            };
-            let col = model.entities[entity_key]
-                .columns
-                .iter()
-                .find(|c| c.name == col_name)
-                .cloned();
-            let Some(col) = col else {
-                push_error(
-                    ctx,
-                    diags,
-                    pred.span.clone(),
-                    RdraError::UnknownColumn {
-                        entity: model.entities[entity_key].id.clone(),
-                        col: col_name,
-                    },
-                );
-                return;
-            };
-            match parse_effect_value(&col, &val_lit) {
-                Ok(value) => {
-                    model.column_effects.push(ColumnEffect {
-                        origin: origin.clone(),
-                        entity: entity_key,
-                        column: col_name.clone(),
-                        value,
-                    });
-                    if let Some(origin) = DataOrigin::from_node_ref(origin) {
-                        model.typed_predicates.push(TypedPredicate::SetsColumn {
-                            origin,
-                            entity: entity_key,
-                            column: col_name,
-                        });
+                        if let Some(origin) = DataOrigin::from_node_ref(origin) {
+                            model
+                                .typed_predicates
+                                .push(TypedPredicate::SetsProposition {
+                                    origin,
+                                    entity: entity_key,
+                                    prop,
+                                    truth: truth_str == "true",
+                                });
+                        }
                     }
+                    return;
                 }
-                Err(e) => {
-                    let span = pred
-                        .args
-                        .get(3)
-                        .map(arg_span)
-                        .filter(|s| !s.is_empty())
-                        .unwrap_or_else(|| pred.span.clone());
-                    push_error(ctx, diags, span, e);
-                }
+                Err(()) => return,
             }
         }
-        _ => {}
+
+        // Column effect form: sets(UC, E, status == captured)
+        if let Ok(Some((col_name, value))) =
+            super::constraint::resolve_entity_equals_from_comparison(
+                &entity_cols,
+                &entity_id,
+                cmp,
+                ctx,
+                diags,
+            )
+        {
+            model.column_effects.push(ColumnEffect {
+                origin: origin.clone(),
+                entity: entity_key,
+                column: col_name.clone(),
+                value,
+            });
+            if let Some(origin) = DataOrigin::from_node_ref(origin) {
+                model.typed_predicates.push(TypedPredicate::SetsColumn {
+                    origin,
+                    entity: entity_key,
+                    column: col_name,
+                });
+            }
+        }
     }
 }
 
@@ -472,14 +686,32 @@ fn process_invariant_predicate(
             }
             match arg {
                 PredicateArg::Expr(Expr::Cmp(cmp)) => {
-                    if let Some(prop) =
-                        resolve_comparison(&entity_cols, &entity_id, cmp, ctx, diags)
-                    {
-                        if is_guard {
-                            guard_comparisons.push(prop);
-                        } else {
-                            required_comparisons.push(prop);
+                    match resolve_entity_equals_from_comparison(
+                        &entity_cols,
+                        &entity_id,
+                        cmp,
+                        ctx,
+                        diags,
+                    ) {
+                        Ok(Some((col_str, value))) => {
+                            if is_guard {
+                                guards.push((col_str, value));
+                            } else {
+                                requireds.push((col_str, value));
+                            }
                         }
+                        Ok(None) => {
+                            if let Some(prop) =
+                                resolve_comparison(&entity_cols, &entity_id, cmp, ctx, diags)
+                            {
+                                if is_guard {
+                                    guard_comparisons.push(prop);
+                                } else {
+                                    required_comparisons.push(prop);
+                                }
+                            }
+                        }
+                        Err(()) => return,
                     }
                 }
                 _ => {
@@ -674,10 +906,13 @@ fn process_relate_predicate(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
-    if let (Some(Some(from)), Some(Some(to)), Some(PredicateArg::Lit(card))) =
-        (resolved.first(), resolved.get(1), pred.args.get(2))
-    {
-        let kind = match card.as_str() {
+    let card_str = match pred.args.get(2) {
+        Some(PredicateArg::Card(c)) => c.as_str(),
+        Some(PredicateArg::Lit(c)) => c.as_str(),
+        _ => return,
+    };
+    if let (Some(Some(from)), Some(Some(to))) = (resolved.first(), resolved.get(1)) {
+        let kind = match card_str {
             "1:1" => RelKind::RelateOneToOne,
             "1:N" => RelKind::RelateOneToMany,
             "N:1" => RelKind::RelateManyToOne,
@@ -726,16 +961,37 @@ pub(crate) fn process_predicate(
         return;
     };
 
-    match pred.name.as_str() {
-        "cross_forbidden" => {
-            process_cross_forbidden(model, pred, ctx, diags);
+    // Top-level `when(...)` quantifier predicate uses cross-entity path.
+    if pred.name == "when" {
+        process_when_quantifier_predicate(model, pred, ctx, diags);
+        return;
+    }
+
+    // Unified forbidden/invariant: detect cross-entity vs single-entity form.
+    // Cross-entity: first arg is Expr, `.along(...)`, or two+ leading entity refs
+    // (e.g. `forbidden(Order, Payment, Order.status == x, ...)`).
+    // Single-entity: `forbidden(Order, status == x)`.
+    if pred.name == "forbidden" || pred.name == "invariant" {
+        let leading_entities = pred
+            .args
+            .iter()
+            .take_while(|a| matches!(a, PredicateArg::Ref(_)))
+            .count();
+        let is_cross = pred
+            .args
+            .first()
+            .is_some_and(|a| matches!(a, PredicateArg::Expr(_)))
+            || pred.chain.iter().any(|cc| cc.name == "along")
+            || leading_entities >= 2
+            || (pred.name == "invariant" && pred.args.is_empty());
+        if is_cross {
+            match pred.name.as_str() {
+                "forbidden" => process_cross_forbidden(model, pred, ctx, diags),
+                "invariant" => process_cross_invariant(model, pred, ctx, diags),
+                _ => {}
+            }
             return;
         }
-        "cross_invariant" => {
-            process_cross_invariant(model, pred, ctx, diags);
-            return;
-        }
-        _ => {}
     }
 
     let resolved = resolve_predicate_args(model, pred, &sig, ctx, diags);
@@ -747,7 +1003,7 @@ pub(crate) fn process_predicate(
     match pred.name.as_str() {
         "coordinates" => process_coordinates_predicate(model, &resolved),
         "maps_to" => process_maps_to_predicate(model, &resolved),
-        "transitions" => process_transitions_predicate(model, &resolved),
+        "transitions" => process_transitions_predicate(model, pred, &resolved, ctx, diags),
         "outbox" => process_outbox_predicate(model, &resolved),
         "after" => process_after_predicate(model, pred, &resolved, ctx, diags),
         "sets" => process_sets_predicate(model, pred, &resolved, ctx, diags),
@@ -755,7 +1011,6 @@ pub(crate) fn process_predicate(
         "invariant" => process_invariant_predicate(model, pred, &resolved, ctx, diags),
         "required" => process_required_predicate(model, pred, &resolved, ctx, diags),
         "exclusive" => process_exclusive_predicate(model, pred, &resolved, ctx, diags),
-        "forbidden_when" => process_forbidden_when_predicate(model, pred, &resolved, ctx, diags),
         "maps_field" => process_maps_field_predicate(model, pred, &resolved, ctx, diags),
         "relate" => process_relate_predicate(model, pred, &resolved, ctx, diags),
         _ => process_relation_predicate(model, pred, &resolved, ctx, diags),

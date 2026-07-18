@@ -218,38 +218,38 @@ entity AuditEvent "Audit Event" {
 }
 
 // ER relationships
-relate(PatientProfile,     PatientAccount,   "1:1")
-relate(InsurancePolicy,    PatientAccount,   "N:1")
-relate(EligibilityCheck,   InsurancePolicy,  "N:1")
-relate(ConsentRecord,      PatientAccount,   "N:1")
-relate(IntakePacket,       PatientAccount,   "N:1")
-relate(ProviderSchedule,   Provider,         "N:1")
-relate(ProviderSchedule,   ClinicLocation,   "N:1")
-relate(Room,               ClinicLocation,   "N:1")
-relate(Appointment,        PatientAccount,   "N:1")
-relate(Appointment,        Provider,         "N:1")
-relate(Appointment,        ClinicLocation,   "N:1")
-relate(Appointment,        Room,             "N:1")
-relate(Encounter,          Appointment,      "1:1")
-relate(Encounter,          PatientAccount,   "N:1")
-relate(Encounter,          Provider,         "N:1")
-relate(VitalSign,          Encounter,        "N:1")
-relate(Diagnosis,          Encounter,        "N:1")
-relate(ClinicalOrder,      Encounter,        "N:1")
-relate(LabResult,          ClinicalOrder,    "1:1")
-relate(Prescription,       Encounter,        "N:1")
-relate(Prescription,       Medication,       "N:1")
-relate(Charge,             Encounter,        "N:1")
-relate(Charge,             Claim,            "N:1")
-relate(Claim,              PatientAccount,   "N:1")
-relate(Claim,              InsurancePolicy,  "N:1")
-relate(PaymentTransaction, Claim,            "N:1")
-relate(AccountBalance,     PatientAccount,   "1:1")
-relate(CarePlan,           PatientAccount,   "N:1")
-relate(CarePlan,           Encounter,        "N:1")
-relate(PatientMessage,     PatientAccount,   "N:1")
-relate(Notification,       PatientAccount,   "N:1")
-relate(AuditEvent,         PatientAccount,   "N:1")
+relate(PatientProfile, PatientAccount, 1:1)
+relate(InsurancePolicy, PatientAccount, N:1)
+relate(EligibilityCheck, InsurancePolicy, N:1)
+relate(ConsentRecord, PatientAccount, N:1)
+relate(IntakePacket, PatientAccount, N:1)
+relate(ProviderSchedule, Provider, N:1)
+relate(ProviderSchedule, ClinicLocation, N:1)
+relate(Room, ClinicLocation, N:1)
+relate(Appointment, PatientAccount, N:1)
+relate(Appointment, Provider, N:1)
+relate(Appointment, ClinicLocation, N:1)
+relate(Appointment, Room, N:1)
+relate(Encounter, Appointment, 1:1)
+relate(Encounter, PatientAccount, N:1)
+relate(Encounter, Provider, N:1)
+relate(VitalSign, Encounter, N:1)
+relate(Diagnosis, Encounter, N:1)
+relate(ClinicalOrder, Encounter, N:1)
+relate(LabResult, ClinicalOrder, 1:1)
+relate(Prescription, Encounter, N:1)
+relate(Prescription, Medication, N:1)
+relate(Charge, Encounter, N:1)
+relate(Charge, Claim, N:1)
+relate(Claim, PatientAccount, N:1)
+relate(Claim, InsurancePolicy, N:1)
+relate(PaymentTransaction, Claim, N:1)
+relate(AccountBalance, PatientAccount, 1:1)
+relate(CarePlan, PatientAccount, N:1)
+relate(CarePlan, Encounter, N:1)
+relate(PatientMessage, PatientAccount, N:1)
+relate(Notification, PatientAccount, N:1)
+relate(AuditEvent, PatientAccount, N:1)
 
 // Patient account state
 state Patientactive   "Active Patient"
@@ -259,10 +259,10 @@ state Patientmerged   "Merged Patient"
 event EvPatientArchived "Patient Archived"
 event EvPatientMerged   "Patient Merged"
 
-transitions(EvPatientArchived, Patientactive, Patientinactive)
-transitions(EvPatientMerged,   Patientactive, Patientmerged)
+transitions(PatientAccount.status, EvPatientArchived, patientactive -> patientinactive)
+transitions(PatientAccount.status, EvPatientMerged, patientactive -> patientmerged)
 
-sets(event::EvPatientArchived, PatientAccount, "archived_at", "timestamptz")
+sets(event::EvPatientArchived, PatientAccount, archived_at == present)
 
 // Appointment state
 state Apptrequested "Appointment Requested"
@@ -279,16 +279,16 @@ event EvAppointmentCompleted   "Appointment Completed"
 event EvAppointmentCancelled   "Appointment Cancelled"
 event EvAppointmentNoShow      "Appointment Marked No Show"
 
-transitions(EvAppointmentScheduled,   Apptrequested, Apptscheduled)
-transitions(EvAppointmentRescheduled, Apptscheduled, Apptscheduled)
-transitions(EvAppointmentCheckedIn,   Apptscheduled, Apptcheckedin)
-transitions(EvAppointmentCompleted,   Apptcheckedin, Apptcompleted)
-transitions(EvAppointmentCancelled,   Apptscheduled, Apptcancelled)
-transitions(EvAppointmentNoShow,      Apptscheduled, Apptnoshow)
+transitions(Appointment.status, EvAppointmentScheduled, apptrequested -> apptscheduled)
+transitions(Appointment.status, EvAppointmentRescheduled, apptscheduled -> apptscheduled)
+transitions(Appointment.status, EvAppointmentCheckedIn, apptscheduled -> apptcheckedin)
+transitions(Appointment.status, EvAppointmentCompleted, apptcheckedin -> apptcompleted)
+transitions(Appointment.status, EvAppointmentCancelled, apptscheduled -> apptcancelled)
+transitions(Appointment.status, EvAppointmentNoShow, apptscheduled -> apptnoshow)
 
-sets(event::EvAppointmentCheckedIn, Appointment, "checked_in_at", "timestamptz")
-sets(event::EvAppointmentCompleted, Appointment, "completed_at", "timestamptz")
-sets(event::EvAppointmentCancelled, Appointment, "cancel_reason", "present")
+sets(event::EvAppointmentCheckedIn, Appointment, checked_in_at == present)
+sets(event::EvAppointmentCompleted, Appointment, completed_at == present)
+sets(event::EvAppointmentCancelled, Appointment, cancel_reason == present)
 
 // Intake state
 state Intakesent      "Intake Sent"
@@ -298,10 +298,10 @@ state Intakeexpired   "Intake Expired"
 event EvIntakeCompleted "Intake Completed"
 event EvIntakeExpired   "Intake Expired"
 
-transitions(EvIntakeCompleted, Intakesent, Intakecompleted)
-transitions(EvIntakeExpired,   Intakesent, Intakeexpired)
+transitions(IntakePacket.status, EvIntakeCompleted, intakesent -> intakecompleted)
+transitions(IntakePacket.status, EvIntakeExpired, intakesent -> intakeexpired)
 
-sets(event::EvIntakeCompleted, IntakePacket, "completed_at", "timestamptz")
+sets(event::EvIntakeCompleted, IntakePacket, completed_at == present)
 
 // Encounter state
 state Encopen       "Encounter Open"
@@ -313,11 +313,11 @@ event EvEncounterDocumented "Encounter Documented"
 event EvEncounterSigned     "Encounter Signed"
 event EvEncounterAmended    "Encounter Amended"
 
-transitions(EvEncounterDocumented, Encopen,       Encdocumented)
-transitions(EvEncounterSigned,     Encdocumented, Encsigned)
-transitions(EvEncounterAmended,    Encsigned,     Encamended)
+transitions(Encounter.status, EvEncounterDocumented, encopen -> encdocumented)
+transitions(Encounter.status, EvEncounterSigned, encdocumented -> encsigned)
+transitions(Encounter.status, EvEncounterAmended, encsigned -> encamended)
 
-sets(event::EvEncounterSigned, Encounter, "signed_at", "timestamptz")
+sets(event::EvEncounterSigned, Encounter, signed_at == present)
 
 // Clinical order state
 state Clordered   "Clinical Order Placed"
@@ -331,13 +331,13 @@ event EvClinicalOrderResulted  "Clinical Result Received"
 event EvClinicalOrderReviewed  "Clinical Result Reviewed"
 event EvClinicalOrderCancelled "Clinical Order Cancelled"
 
-transitions(EvClinicalOrderCollected, Clordered,   Clcollected)
-transitions(EvClinicalOrderResulted,  Clcollected, Clresulted)
-transitions(EvClinicalOrderReviewed,  Clresulted,  Clreviewed)
-transitions(EvClinicalOrderCancelled, Clordered,   Clcancelled)
+transitions(ClinicalOrder.status, EvClinicalOrderCollected, clordered -> clcollected)
+transitions(ClinicalOrder.status, EvClinicalOrderResulted, clcollected -> clresulted)
+transitions(ClinicalOrder.status, EvClinicalOrderReviewed, clresulted -> clreviewed)
+transitions(ClinicalOrder.status, EvClinicalOrderCancelled, clordered -> clcancelled)
 
-sets(event::EvClinicalOrderCollected, ClinicalOrder, "collected_at", "timestamptz")
-sets(event::EvClinicalOrderResulted,  ClinicalOrder, "resulted_at",  "timestamptz")
+sets(event::EvClinicalOrderCollected, ClinicalOrder, collected_at == present)
+sets(event::EvClinicalOrderResulted, ClinicalOrder, resulted_at == present)
 
 // Prescription state
 state Rxdrafted   "Prescription Drafted"
@@ -349,12 +349,12 @@ event EvPrescriptionSent      "Prescription Sent"
 event EvPrescriptionDispensed "Prescription Dispensed"
 event EvPrescriptionCancelled "Prescription Cancelled"
 
-transitions(EvPrescriptionSent,      Rxdrafted, Rxsent)
-transitions(EvPrescriptionDispensed, Rxsent,    Rxdispensed)
-transitions(EvPrescriptionCancelled, Rxdrafted, Rxcancelled)
+transitions(Prescription.status, EvPrescriptionSent, rxdrafted -> rxsent)
+transitions(Prescription.status, EvPrescriptionDispensed, rxsent -> rxdispensed)
+transitions(Prescription.status, EvPrescriptionCancelled, rxdrafted -> rxcancelled)
 
-sets(event::EvPrescriptionSent,      Prescription, "sent_at",      "timestamptz")
-sets(event::EvPrescriptionDispensed, Prescription, "dispensed_at", "timestamptz")
+sets(event::EvPrescriptionSent, Prescription, sent_at == present)
+sets(event::EvPrescriptionDispensed, Prescription, dispensed_at == present)
 
 // Claim state
 state Claimdraft     "Claim Draft"
@@ -368,14 +368,14 @@ event EvClaimAccepted  "Claim Accepted"
 event EvClaimDenied    "Claim Denied"
 event EvClaimPaid      "Claim Paid"
 
-transitions(EvClaimSubmitted, Claimdraft,     Claimsubmitted)
-transitions(EvClaimAccepted,  Claimsubmitted, Claimaccepted)
-transitions(EvClaimDenied,    Claimsubmitted, Claimdenied)
-transitions(EvClaimPaid,      Claimaccepted,  Claimpaid)
+transitions(Claim.status, EvClaimSubmitted, claimdraft -> claimsubmitted)
+transitions(Claim.status, EvClaimAccepted, claimsubmitted -> claimaccepted)
+transitions(Claim.status, EvClaimDenied, claimsubmitted -> claimdenied)
+transitions(Claim.status, EvClaimPaid, claimaccepted -> claimpaid)
 
-sets(event::EvClaimSubmitted, Claim, "submitted_at",  "timestamptz")
-sets(event::EvClaimDenied,    Claim, "denial_reason", "present")
-sets(event::EvClaimPaid,      Claim, "paid_at",       "timestamptz")
+sets(event::EvClaimSubmitted, Claim, submitted_at == present)
+sets(event::EvClaimDenied, Claim, denial_reason == present)
+sets(event::EvClaimPaid, Claim, paid_at == present)
 
 // Care plan state
 state Careopen       "Care Plan Open"
@@ -385,34 +385,34 @@ state Careclosed     "Care Plan Closed"
 event EvCarePlanMonitoring "Care Plan Monitoring"
 event EvCarePlanClosed     "Care Plan Closed"
 
-transitions(EvCarePlanMonitoring, Careopen,       Caremonitoring)
-transitions(EvCarePlanClosed,     Caremonitoring, Careclosed)
+transitions(CarePlan.status, EvCarePlanMonitoring, careopen -> caremonitoring)
+transitions(CarePlan.status, EvCarePlanClosed, caremonitoring -> careclosed)
 
-sets(event::EvCarePlanClosed, CarePlan, "closed_at", "timestamptz")
+sets(event::EvCarePlanClosed, CarePlan, closed_at == present)
 
 // State constraints
 invariant(Appointment)
-  .when(status, apptcheckedin)
-  .then(checked_in_at, present)
+  .when(status == apptcheckedin)
+  .then(checked_in_at == present)
 
 invariant(Appointment)
-  .when(status, apptcompleted)
-  .then(completed_at, present)
+  .when(status == apptcompleted)
+  .then(completed_at == present)
 
 invariant(Encounter)
-  .when(status, encsigned)
-  .then(signed_at, present)
+  .when(status == encsigned)
+  .then(signed_at == present)
 
 invariant(ClinicalOrder)
-  .when(status, clresulted)
-  .then(resulted_at, present)
+  .when(status == clresulted)
+  .then(resulted_at == present)
 
 invariant(Prescription)
-  .when(status, rxsent)
-  .then(sent_at, present)
+  .when(status == rxsent)
+  .then(sent_at == present)
 
 invariant(Claim)
-  .when(status, claimpaid)
-  .then(paid_at, present)
+  .when(status == claimpaid)
+  .then(paid_at == present)
 
-forbidden(Claim, (status, claimpaid), (denial_reason, present))
+forbidden(Claim, status == claimpaid, denial_reason == present)

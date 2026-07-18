@@ -691,14 +691,33 @@ impl Emitter for StateDiagramEmitter {
             }
         };
 
-        let is_state_visible = |sk: StateKey| -> bool { is_visible(&NodeRef::State(sk)) };
+        let state_id_to_key: HashMap<String, StateKey> = model
+            .states
+            .iter()
+            .map(|(sk, s)| (s.id.clone(), sk))
+            .collect();
 
-        // state_transitions は完全な (event, from, to) 三つ組
-        // BUCフィルタ適用: from/to が両方 visible な遷移のみ
+        let resolve_sk = |entity: EntityKey, variant: &str| -> Option<StateKey> {
+            let entity_id = &model.entities.get(entity)?.id;
+            let state_id = format!("{entity_id}_{variant}");
+            state_id_to_key
+                .get(&state_id)
+                .copied()
+                .or_else(|| state_id_to_key.get(variant).copied())
+        };
+
+        // state_transitions: resolve Enum variant strings to StateKeys
         let transitions: Vec<_> = model
             .state_transitions
             .iter()
-            .filter(|t| is_state_visible(t.from) && is_state_visible(t.to))
+            .filter_map(|t| {
+                let from_sk = resolve_sk(t.entity, &t.from)?;
+                let to_sk = resolve_sk(t.entity, &t.to)?;
+                Some((from_sk, to_sk, t))
+            })
+            .filter(|(from_sk, to_sk, _)| {
+                is_visible(&NodeRef::State(*from_sk)) && is_visible(&NodeRef::State(*to_sk))
+            })
             .collect();
 
         if transitions.is_empty() {
@@ -706,10 +725,10 @@ impl Emitter for StateDiagramEmitter {
         }
 
         // 初期状態 = いずれの to にも登場しない from
-        let to_set: HashSet<StateKey> = transitions.iter().map(|t| t.to).collect();
+        let to_set: HashSet<StateKey> = transitions.iter().map(|(_, to_sk, _)| *to_sk).collect();
         let mut initial_states: Vec<StateKey> = transitions
             .iter()
-            .map(|t| t.from)
+            .map(|(from_sk, _, _)| *from_sk)
             .filter(|sk| !to_set.contains(sk))
             .collect::<HashSet<_>>()
             .into_iter()
@@ -727,18 +746,18 @@ impl Emitter for StateDiagramEmitter {
 
         // 遷移（event, from, to の三つ組をそのまま出力）
         let mut sorted: Vec<_> = transitions.iter().collect();
-        sorted.sort_by_key(|t| {
+        sorted.sort_by_key(|(from_sk, to_sk, t)| {
             format!(
                 "{}{}{}",
-                node_id(model, &NodeRef::State(t.from)).unwrap_or(""),
-                node_id(model, &NodeRef::State(t.to)).unwrap_or(""),
+                node_id(model, &NodeRef::State(*from_sk)).unwrap_or(""),
+                node_id(model, &NodeRef::State(*to_sk)).unwrap_or(""),
                 node_id(model, &NodeRef::Event(t.event)).unwrap_or(""),
             )
         });
 
         let mut defined: HashSet<String> = HashSet::new();
-        for t in &sorted {
-            for sk in [t.from, t.to] {
+        for (from_sk, to_sk, _) in &sorted {
+            for sk in [*from_sk, *to_sk] {
                 let nr = NodeRef::State(sk);
                 if let (Some(id), Some(label)) = (node_id(model, &nr), node_label(model, &nr)) {
                     if defined.insert(id.to_string()) {
@@ -752,9 +771,9 @@ impl Emitter for StateDiagramEmitter {
             }
         }
 
-        for t in &sorted {
-            let from_nr = NodeRef::State(t.from);
-            let to_nr = NodeRef::State(t.to);
+        for (from_sk, to_sk, t) in &sorted {
+            let from_nr = NodeRef::State(*from_sk);
+            let to_nr = NodeRef::State(*to_sk);
             let event_nr = NodeRef::Event(t.event);
             if let (Some(from_id), Some(to_id), Some(ev_label)) = (
                 node_id(model, &from_nr),
@@ -1527,24 +1546,46 @@ fn render_event_flow(
         }
     }
 
-    let mut transitions = flow.transitions.to_vec();
+    let state_id_to_key: HashMap<String, StateKey> = model
+        .states
+        .iter()
+        .map(|(sk, s)| (s.id.clone(), sk))
+        .collect();
+    let resolved_transitions: Vec<(StateKey, StateKey)> =
+        flow.transitions
+            .iter()
+            .filter_map(|(from_var, to_var)| {
+                let st = model.state_transitions.iter().find(|st| {
+                    st.event == flow.event && st.from == *from_var && st.to == *to_var
+                })?;
+                let entity_id = &model.entities.get(st.entity)?.id;
+                let from_sk = state_id_to_key
+                    .get(&format!("{entity_id}_{from_var}"))
+                    .copied()?;
+                let to_sk = state_id_to_key
+                    .get(&format!("{entity_id}_{to_var}"))
+                    .copied()?;
+                Some((from_sk, to_sk))
+            })
+            .collect();
+    let mut transitions = resolved_transitions;
     transitions.sort_by_key(|(from, _)| {
         model
             .states
             .get(*from)
-            .map(|state| state.id.as_str())
-            .unwrap_or("")
+            .map(|state| state.id.clone())
+            .unwrap_or_default()
     });
     let event_label = model
         .events
         .get(flow.event)
         .map(|event| prefixed_label("⚡", &event.label))
         .unwrap_or_default();
-    for (from, to) in transitions {
-        let Some(from_id) = declare_event_flow_state(out, declared, model, from) else {
+    for (from, to) in &transitions {
+        let Some(from_id) = declare_event_flow_state(out, declared, model, *from) else {
             continue;
         };
-        let Some(to_id) = declare_event_flow_state(out, declared, model, to) else {
+        let Some(to_id) = declare_event_flow_state(out, declared, model, *to) else {
             continue;
         };
         out.push_str(&format!("{} --> {} : {}\n", from_id, to_id, event_label));
@@ -1994,7 +2035,7 @@ creates(OrderApi, Order)
         let src = r#"
 entity Order "注文" { id: Int @pk  total: Money }
 entity Customer "顧客" { id: Int @pk  name: String }
-relate(Order, Customer, "N:1")
+relate(Order, Customer, N:1)
 "#;
         let model = model_from(src);
         let view = View::er();
@@ -2012,7 +2053,7 @@ relate(Order, Customer, "N:1")
         let src = r#"
 entity Customer "顧客" { id: Int @pk  name: String }
 entity Order "注文" { id: Int @pk  total: Money }
-relate(Order, Customer, "N:1")
+relate(Order, Customer, N:1)
 "#;
         let (ast, _) = parse(src);
         let (model, _) = build_model(&ast);
@@ -2071,7 +2112,7 @@ screen OrderCompleteScreen "注文完了画面"
 entity Order     "注文"     { id: Int @pk }
 entity OrderLine "注文明細" { id: Int @pk }
 entity Cart      "カート"   { id: Int @pk }
-relate(OrderLine, Order, "N:1")
+relate(OrderLine, Order, N:1)
 performs(Customer, BucOrder)
 contains(BucOrder, PlaceOrder)
 creates(PlaceOrder, Order)
@@ -2148,13 +2189,15 @@ triggers(EncounterSigned, BucBillingClaims)
 usecase SignEncounter "Sign Encounter"
 usecase ReviewClaim "Review Claim"
 buc BucBillingClaims "Billing Claims"
-state Pending "Pending"
-state Signed "Signed"
+entity Encounter "Encounter" {
+  id: Int @pk
+  status: Enum(pending, signed) @default(pending)
+}
 event EncounterSigned "Encounter Signed"
 raises(SignEncounter, EncounterSigned)
 triggers(EncounterSigned, ReviewClaim)
 triggers(EncounterSigned, BucBillingClaims)
-transitions(EncounterSigned, Pending, Signed)
+transitions(Encounter.status, EncounterSigned, pending -> signed)
 "#;
         let model = model_from(src);
         let flows = rdra_ish_core::collect_event_flows(&model);
@@ -2178,7 +2221,9 @@ transitions(EncounterSigned, Pending, Signed)
         assert!(out.contains("uc__SignEncounter ..> ev__EncounterSigned : raises"));
         assert!(out.contains("ev__EncounterSigned ..> uc__ReviewClaim : triggers"));
         assert!(out.contains("ev__EncounterSigned ..> buc__BucBillingClaims : triggers"));
-        assert!(out.contains("st__Pending --> st__Signed : ⚡ Encounter Signed"));
+        assert!(
+            out.contains("st__Encounter_pending --> st__Encounter_signed : ⚡ Encounter Signed")
+        );
     }
 
     #[test]

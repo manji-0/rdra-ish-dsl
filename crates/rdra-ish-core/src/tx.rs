@@ -492,7 +492,7 @@ entity Order     "注文"     { id: Int @pk }
 entity OrderLine "注文明細" { id: Int @pk }
 entity Cart      "カート"   { id: Int @pk }
 usecase PlaceOrder "注文を確定する"
-relate(OrderLine, Order, "N:1")
+relate(OrderLine, Order, N:1)
 creates(PlaceOrder, Order)
 creates(PlaceOrder, OrderLine)
 updates(PlaceOrder, Cart)
@@ -544,7 +544,7 @@ updates(PlaceOrder, Cart)
 entity Order   "注文" { id: Int @pk }
 entity Payment "決済" { id: Int @pk }
 usecase Capture "決済を確定する"
-relate(Payment, Order, "1:1")
+relate(Payment, Order, 1:1)
 updates(Capture, Payment)
 updates(Capture, Order)
 "#;
@@ -575,8 +575,8 @@ entity Terminal "端末" { id: Int @pk }
 entity CertificateOrder "証明書発注" { id: Int @pk }
 entity ClientCertificate "クライアント証明書" { id: Int @pk }
 usecase IssueCertificate "証明書を発行する"
-relate(CertificateOrder, Terminal, "N:1")
-relate(ClientCertificate, Terminal, "N:1")
+relate(CertificateOrder, Terminal, N:1)
+relate(ClientCertificate, Terminal, N:1)
 creates(IssueCertificate, CertificateOrder)
 creates(IssueCertificate, ClientCertificate)
 "#;
@@ -630,7 +630,7 @@ entity Order     "注文"     { id: Int @pk }
 entity OrderLine "注文明細" { id: Int @pk }
 entity Cart      "カート"   { id: Int @pk }
 usecase PlaceOrder "注文を確定する"
-relate(OrderLine, Order, "N:1")
+relate(OrderLine, Order, N:1)
 creates(PlaceOrder, Order)
 creates(PlaceOrder, OrderLine)
 updates(PlaceOrder, Cart)
@@ -657,7 +657,7 @@ api OrderApi "注文API"
 invokes(Checkout, OrderApi)
 creates(OrderApi, Order)
 creates(OrderApi, OrderLine)
-relate(OrderLine, Order, "N:1")
+relate(OrderLine, Order, N:1)
 "#;
         let model = model_from(src);
         let txs = infer_usecase_transactions(&model);

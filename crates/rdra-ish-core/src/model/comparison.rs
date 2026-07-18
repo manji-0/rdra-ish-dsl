@@ -4,7 +4,7 @@ use super::refs::NodeRef;
 // ── 比較命題 ─────────────────────────────────────────────────────────────────
 
 /// 比較演算子（モデル層）。`ast::CmpOp` の写し。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CmpOpModel {
     Lt,
     Gt,

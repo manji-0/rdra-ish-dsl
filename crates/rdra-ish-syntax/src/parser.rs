@@ -71,6 +71,7 @@ fn path_ident() -> impl Parser<Token, String, Error = Simple<Token>> + Clone {
         Token::Timing => "timing".to_string(),
         Token::Medium => "medium".to_string(),
         Token::Permission => "permission".to_string(),
+        Token::Property => "property".to_string(),
     }
 }
 
@@ -153,9 +154,10 @@ fn import_decl() -> impl Parser<Token, ImportDecl, Error = Simple<Token>> + Clon
 
 // ── Column annotations ────────────────────────────────────────────────────────
 
-/// An ident or string-lit used as an annotation argument value.
+/// An ident, string-lit, or int-lit used as an annotation argument value.
 fn ann_value() -> impl Parser<Token, String, Error = Simple<Token>> + Clone {
-    ident().or(string_lit())
+    let int_lit = select! { Token::IntLit(s) => s };
+    ident().or(string_lit()).or(int_lit)
 }
 
 fn annotation() -> impl Parser<Token, Annotation, Error = Simple<Token>> + Clone {
@@ -818,12 +820,30 @@ fn qref() -> impl Parser<Token, QRef, Error = Simple<Token>> + Clone {
 
 // ── Predicate call ────────────────────────────────────────────────────────────
 
-/// タプルを含まない基底引数: `"lit"` または `kind::Ref` / 裸ident。
-/// タプル内部でも使用するため再帰しない。
+/// リテラルまたは修飾参照。
 fn predicate_atom() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + Clone {
     let lit = string_lit().map(PredicateArg::Lit);
     let r = qref().map(PredicateArg::Ref);
     lit.or(r)
+}
+
+/// `N:1` / `1:N` / `1:1` / `N:M` カーディナリティ（非クォート）。
+fn card_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + Clone {
+    let side = select! {
+        Token::Ident(s) if s == "N" || s == "M" => s,
+        Token::IntLit(s) if s == "1" => s,
+    };
+    side.then_ignore(just(Token::Colon))
+        .then(side)
+        .map(|(left, right)| PredicateArg::Card(format!("{left}:{right}")))
+}
+
+/// `pending -> paid` 遷移端点。
+fn transition_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + Clone {
+    ident()
+        .then_ignore(just(Token::Arrow))
+        .then(ident())
+        .map(|(from, to)| PredicateArg::Transition { from, to })
 }
 
 /// 比較式の被演算子（Operand）:
@@ -876,30 +896,89 @@ fn comparison() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
         .map_with_span(|((lhs, op), rhs), span| Expr::Cmp(Comparison { lhs, op, rhs, span }))
 }
 
-/// 引数: 比較式、`(col, val)` タプル、文字列リテラル、または修飾参照。
-///
-/// 比較式を **最優先** でパースし、`cmp_op` が続かなければ
-/// タプル → atom の順にフォールバックする。これにより:
-/// - `forbidden(E, stock < selling)` → `PredicateArg::Expr`
-/// - `forbidden(E, (status, x))`    → `PredicateArg::Tuple`
-/// - `performs(A, B)`               → `PredicateArg::Ref`（既存動作を維持）
-fn predicate_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + Clone {
-    let atom = predicate_atom();
+/// Logical expression for temporal properties: `and`/`or`/`not` (TLA `/\` `\/` `~` are aliases).
+fn logical_expr() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
+    recursive(|expr| {
+        let atom = comparison().or(just(Token::LParen)
+            .ignore_then(expr.clone())
+            .then_ignore(just(Token::RParen)));
 
-    let tuple = just(Token::LParen)
-        .ignore_then(
-            predicate_atom()
-                .separated_by(just(Token::Comma))
-                .allow_trailing(),
-        )
+        let not_op = just(Token::Not).or(just(Token::TlaNot));
+        let not_expr = not_op
+            .ignore_then(atom.clone())
+            .map(|inner| Expr::Not(Box::new(inner)))
+            .or(atom);
+
+        let and_op = just(Token::And).or(just(Token::TlaAnd));
+        let and_expr = not_expr
+            .clone()
+            .then(and_op.ignore_then(not_expr.clone()).repeated())
+            .map(|(first, rest)| {
+                rest.into_iter()
+                    .fold(first, |acc, next| Expr::And(Box::new(acc), Box::new(next)))
+            });
+
+        let or_op = just(Token::Or).or(just(Token::TlaOr));
+        and_expr
+            .clone()
+            .then(or_op.ignore_then(and_expr.clone()).repeated())
+            .map(|(first, rest)| {
+                rest.into_iter()
+                    .fold(first, |acc, next| Expr::Or(Box::new(acc), Box::new(next)))
+            })
+    })
+}
+
+fn property_decl() -> impl Parser<Token, PropertyDecl, Error = Simple<Token>> + Clone {
+    let always = just(Token::Ident("always".to_string()))
+        .ignore_then(just(Token::LParen))
+        .ignore_then(logical_expr())
         .then_ignore(just(Token::RParen))
-        .map(PredicateArg::Tuple);
+        .map(AstTemporalFormula::Always);
 
+    let eventually = just(Token::Ident("eventually".to_string()))
+        .ignore_then(just(Token::LParen))
+        .ignore_then(logical_expr())
+        .then_ignore(just(Token::RParen))
+        .map(AstTemporalFormula::Eventually);
+
+    let leads_to = just(Token::Ident("leads_to".to_string()))
+        .ignore_then(just(Token::LParen))
+        .ignore_then(logical_expr())
+        .then_ignore(just(Token::Comma))
+        .then(logical_expr())
+        .then_ignore(just(Token::RParen))
+        .map(|(antecedent, consequent)| AstTemporalFormula::LeadsTo {
+            antecedent,
+            consequent,
+        });
+
+    let formula = choice((leads_to, always, eventually));
+
+    just(Token::Property)
+        .ignore_then(ident())
+        .then(string_lit())
+        .then(formula)
+        .map_with_span(|((id, label), formula), span| PropertyDecl {
+            id,
+            label,
+            formula,
+            span,
+        })
+}
+
+/// 引数: 比較式、遷移端点、カーディナリティ、文字列リテラル、または修飾参照。
+///
+/// 比較式を **最優先** でパースし、続けて遷移 / カード / atom にフォールバックする。
+/// - `forbidden(E, status == cancelled)` → `PredicateArg::Expr`
+/// - `transitions(E.col, Ev, a -> b)` の第3引数 → `PredicateArg::Transition`
+/// - `relate(A, B, N:1)` の第3引数 → `PredicateArg::Card`
+/// - `performs(A, B)` → `PredicateArg::Ref`
+fn predicate_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + Clone {
     let expr = comparison().map(PredicateArg::Expr);
-
-    // comparison must come first; if no cmp_op follows the initial operand the
-    // parser backtracks and tries tuple then atom.
-    expr.or(tuple).or(atom)
+    expr.or(transition_arg())
+        .or(card_arg())
+        .or(predicate_atom())
 }
 
 /// `.method(args...)` のチェーン呼び出し1件。
@@ -947,9 +1026,11 @@ fn module_decl() -> impl Parser<Token, Item, Error = Simple<Token>> + Clone {
 fn item() -> impl Parser<Token, Item, Error = Simple<Token>> + Clone {
     let import = import_decl().map(Item::Import);
     let instance = instance_decl().map(Item::Instance);
+    let property = property_decl().map(Item::Property);
     let predicate = predicate_call().map(Item::Predicate);
 
-    choice((module_decl(), import, instance, predicate))
+    // property before instance so `property` keyword is not consumed as Ident.
+    choice((module_decl(), import, property, instance, predicate))
 }
 
 // ── Root parser ───────────────────────────────────────────────────────────────
@@ -1303,7 +1384,7 @@ entity Product "商品" {
     #[test]
     fn test_parse_relate() {
         let ast = parse_ok(
-            r#"relate(Order, Customer, "N:1").optional().on_delete(set_null).on_update(cascade)"#,
+            r#"relate(Order, Customer, N:1).optional().on_delete(set_null).on_update(cascade)"#,
         );
         insta::assert_debug_snapshot!(ast);
     }
@@ -1354,7 +1435,7 @@ entity  Order "注文" {
 }
 
 performs(Customer, Browse)
-relate(Order, Customer, "N:1")
+relate(Order, Customer, N:1)
 "#;
         let ast = parse_ok(src);
         insta::assert_debug_snapshot!(ast);
@@ -1379,9 +1460,8 @@ performs(Customer, Browse) /* predicate comment */
     }
 
     #[test]
-    fn test_parse_tuple_forbidden() {
-        // forbidden(Order, (status, cancelled)) — タプル引数のパース確認
-        let ast = parse_ok(r#"forbidden(Order, (status, cancelled))"#);
+    fn test_parse_equals_forbidden() {
+        let ast = parse_ok(r#"forbidden(Order, status == cancelled)"#);
         let pred = ast
             .items
             .iter()
@@ -1395,20 +1475,14 @@ performs(Customer, Browse) /* predicate comment */
             .expect("predicate not found");
         assert_eq!(pred.name, "forbidden");
         assert_eq!(pred.args.len(), 2);
-        // 第2引数がタプル
-        if let PredicateArg::Tuple(elems) = &pred.args[1] {
-            assert_eq!(elems.len(), 2);
-        } else {
-            panic!("expected Tuple arg");
-        }
+        assert!(matches!(&pred.args[1], PredicateArg::Expr(Expr::Cmp(_))));
         assert!(pred.chain.is_empty());
     }
 
     #[test]
     fn test_parse_chained_invariant() {
-        // invariant(Order).when(status, delivered).then(delivered_at, present)
         let ast =
-            parse_ok(r#"invariant(Order).when(status, delivered).then(delivered_at, present)"#);
+            parse_ok(r#"invariant(Order).when(status == delivered).then(delivered_at == present)"#);
         let pred = ast
             .items
             .iter()
@@ -1421,18 +1495,22 @@ performs(Customer, Browse) /* predicate comment */
             })
             .expect("predicate not found");
         assert_eq!(pred.name, "invariant");
-        assert_eq!(pred.args.len(), 1); // entity のみ
+        assert_eq!(pred.args.len(), 1);
         assert_eq!(pred.chain.len(), 2);
         assert_eq!(pred.chain[0].name, "when");
-        assert_eq!(pred.chain[0].args.len(), 2);
+        assert_eq!(pred.chain[0].args.len(), 1);
+        assert!(matches!(
+            &pred.chain[0].args[0],
+            PredicateArg::Expr(Expr::Cmp(_))
+        ));
         assert_eq!(pred.chain[1].name, "then");
-        assert_eq!(pred.chain[1].args.len(), 2);
+        assert_eq!(pred.chain[1].args.len(), 1);
     }
 
     #[test]
-    fn test_parse_cross_invariant_with_along_chain() {
+    fn test_parse_cross_forbidden_with_along_chain() {
         let ast = parse_ok(
-            r#"cross_invariant(Order, Payment).along(Order, Payment).when(Order.status, paid).then(Payment.status, captured)"#,
+            r#"forbidden(Order.status == cancelled, Payment.status == captured).along(Order, Payment)"#,
         );
         let pred = ast
             .items
@@ -1445,19 +1523,17 @@ performs(Customer, Browse) /* predicate comment */
                 }
             })
             .expect("predicate not found");
-        assert_eq!(pred.name, "cross_invariant");
-        assert_eq!(pred.chain.len(), 3);
+        assert_eq!(pred.name, "forbidden");
+        assert_eq!(pred.args.len(), 2);
+        assert_eq!(pred.chain.len(), 1);
         assert_eq!(pred.chain[0].name, "along");
         assert_eq!(pred.chain[0].args.len(), 2);
-        assert_eq!(pred.chain[1].name, "when");
-        assert_eq!(pred.chain[2].name, "then");
     }
 
     #[test]
     fn test_parse_multi_chain_invariant() {
-        // .when を複数持つチェーン
         let ast = parse_ok(
-            r#"invariant(Order).when(status, delivered).when(refunded, false).then(refund_id, null)"#,
+            r#"invariant(Order).when(status == delivered).when(refunded == false).then(refund_id == null)"#,
         );
         let pred = ast
             .items
@@ -1484,7 +1560,6 @@ usecase  Add "追加する"
 performs(actor::Add, usecase::Add)
 "#;
         let ast = parse_ok(src);
-        // Verify the predicate args carry kind qualifiers.
         let pred = ast
             .items
             .iter()
@@ -1539,10 +1614,43 @@ performs(actor::Add, usecase::Add)
         );
     }
 
-    /// `forbidden(E, (status, cancelled))` のタプルが Expr に誤解釈されないこと
     #[test]
-    fn test_tuple_arg_unaffected_by_expr() {
-        let ast = parse_ok("forbidden(Order, (status, cancelled))");
+    fn test_parse_relate_card_and_transition() {
+        let relate = parse_ok("relate(Payment, Order, N:1)");
+        let pred = relate
+            .items
+            .iter()
+            .find_map(|i| {
+                if let Item::Predicate(p) = i {
+                    Some(p)
+                } else {
+                    None
+                }
+            })
+            .expect("predicate not found");
+        assert!(matches!(&pred.args[2], PredicateArg::Card(c) if c == "N:1"));
+
+        let trans = parse_ok("transitions(Order.status, EvCapture, pending -> paid)");
+        let pred = trans
+            .items
+            .iter()
+            .find_map(|i| {
+                if let Item::Predicate(p) = i {
+                    Some(p)
+                } else {
+                    None
+                }
+            })
+            .expect("predicate not found");
+        assert!(matches!(
+            &pred.args[2],
+            PredicateArg::Transition { from, to } if from == "pending" && to == "paid"
+        ));
+    }
+
+    #[test]
+    fn test_parse_when_none_quantifier() {
+        let ast = parse_ok("when(Cert.status == revoked).none(Assign.status == active)");
         let pred = ast
             .items
             .iter()
@@ -1554,10 +1662,9 @@ performs(actor::Add, usecase::Add)
                 }
             })
             .expect("predicate not found");
-        assert!(
-            matches!(&pred.args[1], PredicateArg::Tuple(_)),
-            "second arg should still be Tuple"
-        );
+        assert_eq!(pred.name, "when");
+        assert_eq!(pred.chain.len(), 1);
+        assert_eq!(pred.chain[0].name, "none");
     }
 
     /// 比較式 `stock < selling` が `PredicateArg::Expr(Cmp)` としてパースされること
@@ -1589,7 +1696,7 @@ performs(actor::Add, usecase::Add)
     /// クロスエンティティ比較式 `Order.total > Payment.amount` がパースされること
     #[test]
     fn test_parse_comparison_qualified_columns() {
-        let ast = parse_ok("cross_forbidden(Order, Payment, Order.total > Payment.amount)");
+        let ast = parse_ok("forbidden(Order.total > Payment.amount)");
         let pred = ast
             .items
             .iter()
@@ -1601,7 +1708,7 @@ performs(actor::Add, usecase::Add)
                 }
             })
             .expect("predicate not found");
-        if let PredicateArg::Expr(Expr::Cmp(cmp)) = &pred.args[2] {
+        if let PredicateArg::Expr(Expr::Cmp(cmp)) = &pred.args[0] {
             if let Operand::QualifiedColumn(lhs) = &cmp.lhs {
                 assert_eq!(lhs.entity.parts, vec!["Order"]);
                 assert_eq!(lhs.column, "total");
@@ -1616,7 +1723,7 @@ performs(actor::Add, usecase::Add)
                 panic!("expected qualified rhs");
             }
         } else {
-            panic!("expected Expr(Cmp), got {:?}", &pred.args[2]);
+            panic!("expected Expr(Cmp), got {:?}", &pred.args[0]);
         }
     }
 
@@ -1668,10 +1775,10 @@ performs(actor::Add, usecase::Add)
         }
     }
 
-    /// invariant の `.when(expr).then(col, val)` 形式（比較式をチェーン引数に）
+    /// invariant の `.when(expr).then(expr)` 形式
     #[test]
     fn test_parse_invariant_with_comparison_chain() {
-        let ast = parse_ok("invariant(Order).when(expired_at < now).then(status, expired)");
+        let ast = parse_ok("invariant(Order).when(expired_at < now).then(status == expired)");
         let pred = ast
             .items
             .iter()
@@ -1684,16 +1791,18 @@ performs(actor::Add, usecase::Add)
             })
             .expect("predicate not found");
         assert_eq!(pred.chain.len(), 2);
-        // when チェーンに比較式が入ること
         assert_eq!(pred.chain[0].name, "when");
         assert_eq!(pred.chain[0].args.len(), 1);
         assert!(
             matches!(&pred.chain[0].args[0], PredicateArg::Expr(Expr::Cmp(_))),
             "when arg should be Expr(Cmp)"
         );
-        // then チェーンは従来通り2引数の等値ペア
         assert_eq!(pred.chain[1].name, "then");
-        assert_eq!(pred.chain[1].args.len(), 2);
+        assert_eq!(pred.chain[1].args.len(), 1);
+        assert!(matches!(
+            &pred.chain[1].args[0],
+            PredicateArg::Expr(Expr::Cmp(_))
+        ));
     }
 
     /// 全比較演算子トークンが正しくパースされること
@@ -1727,5 +1836,51 @@ performs(actor::Add, usecase::Add)
                 panic!("expected Expr(Cmp) for: {}", expr_str);
             }
         }
+    }
+
+    #[test]
+    fn test_parse_property_leads_to() {
+        let ast = parse_ok(
+            r#"property PaidLeadsToShipped "paid eventually ships"
+  leads_to(Order.status == paid, Order.status == shipped)
+"#,
+        );
+        let Item::Property(prop) = &ast.items[0] else {
+            panic!("expected Property");
+        };
+        assert_eq!(prop.id, "PaidLeadsToShipped");
+        assert!(matches!(&prop.formula, AstTemporalFormula::LeadsTo { .. }));
+    }
+
+    #[test]
+    fn test_parse_property_always_with_or() {
+        let ast = parse_ok(
+            r#"property EventuallyTerminal "terminal"
+  eventually(Order.status == delivered or Order.status == cancelled)
+"#,
+        );
+        let Item::Property(prop) = &ast.items[0] else {
+            panic!("expected Property");
+        };
+        assert!(matches!(
+            &prop.formula,
+            AstTemporalFormula::Eventually(Expr::Or(_, _))
+        ));
+    }
+
+    #[test]
+    fn test_parse_property_tla_or_alias() {
+        let ast = parse_ok(
+            r#"property EventuallyTerminal "terminal"
+  eventually(Order.status == delivered \/ Order.status == cancelled)
+"#,
+        );
+        let Item::Property(prop) = &ast.items[0] else {
+            panic!("expected Property");
+        };
+        assert!(matches!(
+            &prop.formula,
+            AstTemporalFormula::Eventually(Expr::Or(_, _))
+        ));
     }
 }

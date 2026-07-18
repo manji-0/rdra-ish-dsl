@@ -60,11 +60,11 @@ entity AuditLog "Audit Log" {
 }
 
 // ── ER relationships ─────────────────────────────────────
-relate(PersonalInfo,       UserAccount, "1:1")
-relate(PostalAddress,      UserAccount, "N:1")
-relate(CreditCard,         UserAccount, "N:1")
-relate(PasswordCredential, UserAccount, "1:1")
-relate(AuditLog,           UserAccount, "N:1")
+relate(PersonalInfo, UserAccount, 1:1)
+relate(PostalAddress, UserAccount, N:1)
+relate(CreditCard, UserAccount, N:1)
+relate(PasswordCredential, UserAccount, 1:1)
+relate(AuditLog, UserAccount, N:1)
 
 // ── State transitions (account) ──────────────────────────
 // In a state machine it is natural for the "target state" and the "event that
@@ -80,6 +80,6 @@ event Suspended "Suspend Account" // same name as state Suspended
 event Active    "Restore Account" // same name as state Active
 event Deleted   "Delete Account"  // same name as state Deleted
 
-transitions(event::Suspended, state::Active,    state::Suspended)
-transitions(event::Active,    state::Suspended, state::Active)
-transitions(event::Deleted,   state::Active,    state::Deleted)
+transitions(UserAccount.status, event::Suspended, active -> suspended)
+transitions(UserAccount.status, event::Active, suspended -> active)
+transitions(UserAccount.status, event::Deleted, active -> deleted)

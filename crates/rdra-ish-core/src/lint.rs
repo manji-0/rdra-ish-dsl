@@ -635,8 +635,7 @@ fn relation_degree(model: &SemanticModel) -> HashMap<NodeRef, usize> {
     }
     for transition in &model.state_transitions {
         touch(NodeRef::Event(transition.event));
-        touch(NodeRef::State(transition.from));
-        touch(NodeRef::State(transition.to));
+        touch(NodeRef::Entity(transition.entity));
     }
     for coordination in &model.boundary_coordinations {
         touch(NodeRef::UseCase(coordination.usecase));

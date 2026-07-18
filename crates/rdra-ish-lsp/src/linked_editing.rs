@@ -32,7 +32,7 @@ pub fn linked_editing_ranges(
             Item::Predicate(pred) => {
                 collect_linked_ranges(pred, text, &target, &mut ranges);
             }
-            Item::Import(_) | Item::Module(_, _) => {}
+            Item::Import(_) | Item::Module(_, _) | Item::Property(_) => {}
         }
     }
 
@@ -93,8 +93,19 @@ fn collect_linked_ranges_in_arg(
                 push_unique_range(ranges, span_to_range(text, span));
             }
         }
-        PredicateArg::Expr(expr) => {
-            let Expr::Cmp(cmp) = expr;
+        PredicateArg::Expr(expr) => collect_expr_linked_spans(expr, text, target, ranges),
+        PredicateArg::Transition { .. } | PredicateArg::Card(_) | PredicateArg::Lit(_) => {}
+    }
+}
+
+fn collect_expr_linked_spans(
+    expr: &Expr,
+    text: &str,
+    target: &SymbolTarget,
+    ranges: &mut Vec<Range>,
+) {
+    match expr {
+        Expr::Cmp(cmp) => {
             if let Operand::QualifiedColumn(col) = &cmp.lhs {
                 if let Some(span) = id_span_in_qref(&col.entity, text, target) {
                     push_unique_range(ranges, span_to_range(text, span));
@@ -106,12 +117,11 @@ fn collect_linked_ranges_in_arg(
                 }
             }
         }
-        PredicateArg::Tuple(args) => {
-            for inner in args {
-                collect_linked_ranges_in_arg(inner, text, target, ranges);
-            }
+        Expr::Not(inner) => collect_expr_linked_spans(inner, text, target, ranges),
+        Expr::And(a, b) | Expr::Or(a, b) => {
+            collect_expr_linked_spans(a, text, target, ranges);
+            collect_expr_linked_spans(b, text, target, ranges);
         }
-        PredicateArg::Lit(_) => {}
     }
 }
 

@@ -67,18 +67,12 @@ pub fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
                 "dto",
             ],
         ]),
-        "transitions" => Some(vec![vec!["event"], vec!["state"], vec!["state"]]),
+        "transitions" => Some(vec![vec!["_col"], vec!["event"], vec!["_val"]]),
         "after" => Some(vec![vec!["usecase"]]),
         "relate" => Some(vec![vec!["entity"], vec!["entity"], vec!["_card"]]),
-        "sets" => Some(vec![
-            vec!["usecase", "event"],
-            vec!["entity"],
-            vec!["_col"],
-            vec!["_val"],
-        ]),
+        "sets" => Some(vec![vec!["usecase", "event"], vec!["entity"]]),
         "forbidden" | "invariant" | "required" | "exclusive" => Some(vec![vec!["entity"]]),
-        "cross_forbidden" | "cross_invariant" => Some(vec![]),
-        "forbidden_when" => Some(vec![vec!["entity"]]),
+        "when" => Some(vec![]),
         _ => None,
     }
 }
@@ -129,7 +123,5 @@ pub const KNOWN_PREDICATES: &[&str] = &[
     "invariant",
     "required",
     "exclusive",
-    "cross_forbidden",
-    "cross_invariant",
-    "forbidden_when",
+    "when",
 ];

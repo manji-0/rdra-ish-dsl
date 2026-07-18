@@ -132,7 +132,7 @@ requirement ReqCheckout "Checkout reliable" priority "must" source "Interview"
 adr AdrOutbox "Use outbox" adr_status accepted decision "Use transactional outbox." reason "Avoid synchronous callbacks."
 api CreateOrder "Create order" method POST path "/orders" auth bearer
 dto CreateOrderRequest "Create order request" {customer_id:Int note:String @null}
-invariant(Order).when(status, paid).then(total > 0)
+invariant(Order).when(status == paid).then(total > 0)
 "#;
 
     let formatted = rdra_ish_syntax::format_source(src).unwrap();
@@ -162,7 +162,7 @@ dto CreateOrderRequest "Create order request" {
   note: String @null
 }
 
-invariant(Order).when(status, paid).then(total > 0)
+invariant(Order).when(status == paid).then(total > 0)
 "#
     );
 
@@ -323,7 +323,7 @@ fn export_dbml_projects_logical_data_model() {
     let src = r#"
 entity Customer "Customer" { id: Int @pk }
 entity Order "Order" { id: Int @pk  status: Enum(pending, paid) }
-relate(Order, Customer, "N:1").on_delete(cascade)
+relate(Order, Customer, N:1).on_delete(cascade)
 "#;
     let (ast, parse_errors) = parse(src);
     assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
@@ -408,7 +408,7 @@ fn export_er_text_formats_project_logical_data_model() {
     let src = r#"
 entity Customer "Customer" { id: Int @pk }
 entity Order "Order" { id: Int @pk }
-relate(Order, Customer, "N:1")
+relate(Order, Customer, N:1)
 "#;
     let (ast, parse_errors) = parse(src);
     assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
@@ -492,7 +492,7 @@ entity Order "Order" {
   valid_from: DateTime @history
   net_total: Money @derived("total - discount")
 }
-relate(Order, Customer, "N:1").optional().on_delete(set_null).on_update(cascade)
+relate(Order, Customer, N:1).optional().on_delete(set_null).on_update(cascade)
 "#;
     let (ast, parse_errors) = parse(src);
     assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);

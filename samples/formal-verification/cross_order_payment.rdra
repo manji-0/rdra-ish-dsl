@@ -1,0 +1,38 @@
+// .along with relate → quantified Safety over Order_Ids × Payment_Ids linked by Payment_owner.
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, cancelled) @default(pending)
+}
+entity Payment "決済" {
+  id: Int @pk
+  status: Enum(pending, captured) @default(pending)
+}
+
+usecase Place "注文確定"
+usecase Pay "決済確定"
+usecase Cancel "キャンセル"
+
+event EvPay "決済"
+event EvCancel "キャンセル"
+
+creates(Place, Order)
+creates(Place, Payment)
+updates(Pay, Order)
+updates(Pay, Payment)
+updates(Cancel, Order)
+
+raises(Pay, EvPay)
+raises(Cancel, EvCancel)
+
+
+transitions(Order.status, EvPay, pending -> paid)
+transitions(Order.status, EvCancel, pending -> cancelled)
+transitions(Payment.status, EvPay, pending -> captured)
+
+relate(Payment, Order, N:1)
+
+// Cancelled order must not coexist with a captured payment on the same link.
+forbidden(Order, Payment,
+  Order.status == cancelled,
+  Payment.status == captured)
+  .along(Order, Payment)

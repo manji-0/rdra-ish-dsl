@@ -48,8 +48,8 @@ pub use model::{
     CrossForbiddenConstraint, DataOrigin, DecidesTarget, EffectValue, EntityKey, EntityTouchpoint,
     ExclusiveConstraint, Location, LocationKey, LookupResult, Medium, MediumKey, NfrOrConstraint,
     PerformTarget, Permission, PermissionKey, QualifiedModelColumnRef, RequiredConstraint,
-    SemanticModel, StateTransition, System, SystemKey, Timing, TimingKey, TriggerTarget,
-    TypedPredicate,
+    SemanticModel, StateTransition, System, SystemKey, TemporalAtom, TemporalExpr, TemporalFormula,
+    TemporalProperty, TemporalRhs, Timing, TimingKey, TriggerTarget, TypedPredicate,
 };
 pub use predicate::{predicate_signature, KNOWN_PREDICATES};
 pub use resolver::{

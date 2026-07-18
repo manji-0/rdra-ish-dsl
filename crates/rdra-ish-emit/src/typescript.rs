@@ -171,11 +171,11 @@ state Paid      "決済完了"
 state Shipped   "発送済"
 state Delivered "配達完了"
 state Cancelled "キャンセル"
-transitions(EvCapture, Pending,  Paid)
-transitions(EvShip,    Paid,     Shipped)
-transitions(EvDeliver, Shipped,  Delivered)
-transitions(EvCancel,  Pending,  Cancelled)
-sets(usecase::DeliverOrder, Order, "delivered_at", "timestamptz")
+transitions(Order.status, EvCapture, pending -> paid)
+transitions(Order.status, EvShip, paid -> shipped)
+transitions(Order.status, EvDeliver, shipped -> delivered)
+transitions(Order.status, EvCancel, pending -> cancelled)
+sets(usecase::DeliverOrder, Order, delivered_at == present)
 "#;
 
     #[test]

@@ -337,12 +337,17 @@ pub struct Comparison {
     pub span: Span,
 }
 
-/// Expression node. Currently only comparison; extensible to logical combinations.
+/// Expression node for comparisons and logical combinations.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     /// A comparison predicate, e.g. `stock < selling`.
     Cmp(Comparison),
-    // Future: And(Box<Expr>, Box<Expr>), Or(...), Not(...)
+    /// Logical AND: `a and b` or `/\ a b` (TLA alias).
+    And(Box<Expr>, Box<Expr>),
+    /// Logical OR: `a or b` or `\/ a b` (TLA alias).
+    Or(Box<Expr>, Box<Expr>),
+    /// Logical NOT: `not a` or `~ a` (TLA alias).
+    Not(Box<Expr>),
 }
 
 // ── Predicate call ───────────────────────────────────────────────────────────
@@ -360,22 +365,45 @@ pub struct PredicateCall {
 pub enum PredicateArg {
     Ref(QRef),
     Lit(std::string::String),
-    /// インライン `(col, val)` タプル。entity 制約述語で使用。
-    Tuple(Vec<PredicateArg>),
-    /// 比較式（例: `stock < selling`, `expired_at < now`）。
-    /// entity 制約述語の条件、および sets の比較命題引数として使用。
+    /// Comparison or logical expression (e.g. `stock < selling`, `status == cancelled`).
     Expr(Expr),
+    /// State transition endpoint: `pending -> paid`.
+    Transition {
+        from: std::string::String,
+        to: std::string::String,
+    },
+    /// Cardinality literal: `N:1`, `1:N`, `1:1`, `N:M`.
+    Card(std::string::String),
 }
 
 // ── Chain call ────────────────────────────────────────────────────────────────
 
 /// チェーン呼び出し: `predicate(E).method(args...)` の `.method(args...)` 部分。
-/// `invariant(E).when(status, delivered).then(delivered_at, present)` のような
+/// `invariant(E).when(status == delivered).then(delivered_at == present)` のような
 /// メソッドチェーン表現で使用する。
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChainCall {
     pub name: std::string::String,
     pub args: Vec<PredicateArg>,
+    pub span: Span,
+}
+
+// ── Temporal property declarations ───────────────────────────────────────────
+
+/// A temporal formula used in `property` declarations.
+#[derive(Debug, Clone, PartialEq)]
+pub enum AstTemporalFormula {
+    Always(Expr),
+    Eventually(Expr),
+    LeadsTo { antecedent: Expr, consequent: Expr },
+}
+
+/// A `property` declaration binding a temporal formula to an id/label.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PropertyDecl {
+    pub id: std::string::String,
+    pub label: std::string::String,
+    pub formula: AstTemporalFormula,
     pub span: Span,
 }
 
@@ -388,6 +416,7 @@ pub enum Item {
     Import(ImportDecl),
     Instance(InstanceDecl),
     Predicate(PredicateCall),
+    Property(PropertyDecl),
 }
 
 // ── Full AST ─────────────────────────────────────────────────────────────────

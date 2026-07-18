@@ -3,9 +3,15 @@
 use anyhow::Result;
 use rdra_ish_core::SemanticModel;
 use rdra_ish_emit::{
-    asyncapi::AsyncApiJsonEmitter, dbml::DbmlEmitter, json_schema::JsonSchemaEmitter,
-    mermaid::ErMermaidEmitter, openapi::OpenApiJsonEmitter, plantuml::ErPlantUmlEmitter,
-    typescript::TypeScriptStateUnionEmitter, Emitter, View,
+    asyncapi::AsyncApiJsonEmitter,
+    dbml::DbmlEmitter,
+    json_schema::JsonSchemaEmitter,
+    mermaid::ErMermaidEmitter,
+    openapi::OpenApiJsonEmitter,
+    plantuml::ErPlantUmlEmitter,
+    tla::{TlaBundle, TlaPlusEmitter},
+    typescript::TypeScriptStateUnionEmitter,
+    Emitter, View,
 };
 
 use crate::cli::ExportKind;
@@ -26,5 +32,10 @@ pub fn export_artifact(
         )),
         ExportKind::MermaidEr => Ok((ErMermaidEmitter.emit(model, view)?, "er.mmd")),
         ExportKind::PlantumlEr => Ok((ErPlantUmlEmitter.emit(model, view)?, "er.puml")),
+        ExportKind::Tla => Ok((TlaPlusEmitter::default().emit(model, view)?, "RdraSpec.tla")),
     }
+}
+
+pub fn export_tla_bundle(model: &SemanticModel, view: &View) -> Result<TlaBundle> {
+    Ok(TlaPlusEmitter::default().emit_bundle(model, view)?)
 }

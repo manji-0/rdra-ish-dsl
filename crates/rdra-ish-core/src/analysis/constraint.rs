@@ -15,7 +15,7 @@ use super::qref_util::qref_display;
 // ── 制約述語用ヘルパー ────────────────────────────────────────────────────────
 
 /// `Lit(s)` または kind修飾なし1セグメントの `Ref` から文字列を取り出す。
-/// `when(status, delivered)` の裸ident引数と `sets(...)` の引用符付きリテラル
+/// `whenstatus == delivered` の裸ident引数と `sets(...)` の引用符付きリテラル
 /// 引数の両方を許容するための統一抽出。
 pub(crate) fn arg_as_str(arg: &PredicateArg) -> Option<String> {
     match arg {
@@ -33,25 +33,46 @@ pub(crate) struct EntityConditions {
     pub(crate) comparisons: Vec<ComparisonProp>,
 }
 
-fn resolve_entity_equals_condition(
+pub(crate) fn resolve_entity_equals_from_comparison(
     entity_cols: &[ModelColumn],
     entity_id: &str,
-    column_arg: &PredicateArg,
-    value_arg: &PredicateArg,
+    cmp: &Comparison,
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Result<Option<(String, EffectValue)>, ()> {
-    let Some(col_str) = arg_as_str(column_arg) else {
+    if cmp.op != CmpOp::Eq {
         return Ok(None);
+    }
+    let col_str = match &cmp.lhs {
+        Operand::Column(name) => name.clone(),
+        Operand::QualifiedColumn(qcol) => {
+            let Some(q_entity) = super::qref_util::qref_id(&qcol.entity) else {
+                return Ok(None);
+            };
+            if q_entity != entity_id {
+                return Ok(None);
+            }
+            qcol.column.clone()
+        }
+        _ => return Ok(None),
     };
-    let Some(val_str) = arg_as_str(value_arg) else {
-        return Ok(None);
+    let value_lit = match &cmp.rhs {
+        Operand::Column(value) => {
+            // Prefer column-column comparison when the RHS names an existing column.
+            if entity_cols.iter().any(|c| c.name == *value) {
+                return Ok(None);
+            }
+            value.clone()
+        }
+        Operand::IntLit(value) => value.clone(),
+        Operand::Now => "now".to_string(),
+        Operand::QualifiedColumn(_) => return Ok(None),
     };
     let Some(col) = entity_cols.iter().find(|c| c.name == col_str).cloned() else {
         push_error(
             ctx,
             diags,
-            arg_span(column_arg),
+            cmp.span.clone(),
             RdraError::UnknownColumn {
                 entity: entity_id.to_string(),
                 col: col_str,
@@ -59,10 +80,10 @@ fn resolve_entity_equals_condition(
         );
         return Err(());
     };
-    match parse_effect_value(&col, &val_str) {
+    match parse_effect_value(&col, &value_lit) {
         Ok(value) => Ok(Some((col_str, value))),
         Err(e) => {
-            push_error_parse_effect(ctx, diags, value_arg, e);
+            push_error_cmp(ctx, diags, cmp, e);
             Err(())
         }
     }
@@ -76,48 +97,18 @@ pub(crate) fn collect_entity_conditions(
     diags: &mut Vec<Diagnostic>,
 ) -> Option<EntityConditions> {
     let mut conditions = EntityConditions::default();
-    let mut idx = 0;
-    while idx < args.len() {
-        match &args[idx] {
-            PredicateArg::Expr(Expr::Cmp(cmp)) => {
-                if let Some(prop) = resolve_comparison(entity_cols, entity_id, cmp, ctx, diags) {
-                    conditions.comparisons.push(prop);
-                }
-                idx += 1;
-            }
-            PredicateArg::Tuple(elems) if elems.len() == 2 => {
-                match resolve_entity_equals_condition(
-                    entity_cols,
-                    entity_id,
-                    &elems[0],
-                    &elems[1],
-                    ctx,
-                    diags,
-                ) {
-                    Ok(Some(condition)) => conditions.equals.push(condition),
-                    Ok(None) => {}
-                    Err(()) => return None,
-                }
-                idx += 1;
-            }
-            _ if idx + 1 < args.len() => {
-                match resolve_entity_equals_condition(
-                    entity_cols,
-                    entity_id,
-                    &args[idx],
-                    &args[idx + 1],
-                    ctx,
-                    diags,
-                ) {
-                    Ok(Some(condition)) => {
-                        conditions.equals.push(condition);
-                        idx += 2;
+    for arg in args {
+        if let PredicateArg::Expr(Expr::Cmp(cmp)) = arg {
+            match resolve_entity_equals_from_comparison(entity_cols, entity_id, cmp, ctx, diags) {
+                Ok(Some(condition)) => conditions.equals.push(condition),
+                Ok(None) => {
+                    if let Some(prop) = resolve_comparison(entity_cols, entity_id, cmp, ctx, diags)
+                    {
+                        conditions.comparisons.push(prop);
                     }
-                    Ok(None) => idx += 1,
-                    Err(()) => return None,
                 }
+                Err(()) => return None,
             }
-            _ => idx += 1,
         }
     }
     Some(conditions)
@@ -151,7 +142,7 @@ pub(crate) fn context_value_from_arg(
             }
             Some(BusinessMappingContextValue::Ref(node))
         }
-        PredicateArg::Tuple(_) | PredicateArg::Expr(_) => None,
+        PredicateArg::Transition { .. } | PredicateArg::Card(_) | PredicateArg::Expr(_) => None,
     }
 }
 
@@ -165,7 +156,8 @@ fn context_arg_id(arg: &PredicateArg) -> String {
             }
         }
         PredicateArg::Lit(s) => s.clone(),
-        PredicateArg::Tuple(_) => "<tuple>".to_string(),
+        PredicateArg::Transition { .. } => "<transition>".to_string(),
+        PredicateArg::Card(c) => c.clone(),
         PredicateArg::Expr(_) => "<expr>".to_string(),
     }
 }
@@ -290,15 +282,15 @@ fn resolve_entity_scope_arg(
             );
             None
         }
-        PredicateArg::Tuple(_) => {
+        PredicateArg::Transition { .. } | PredicateArg::Card(_) => {
             push_error(
                 ctx,
                 diags,
                 arg_span(arg),
                 RdraError::TypeMismatch {
                     pred: pred.to_string(),
-                    id: "<tuple>".to_string(),
-                    actual: "tuple".to_string(),
+                    id: "<arg>".to_string(),
+                    actual: "argument".to_string(),
                     expected: "entity".to_string(),
                 },
             );
@@ -318,23 +310,20 @@ fn resolve_entity_scope_arg(
             );
             None
         }
-    }
-}
-
-fn split_cross_column_ref(arg: &PredicateArg) -> Option<(Option<QRef>, String)> {
-    match arg {
-        PredicateArg::Ref(qref) if qref.kind_qualifier.is_none() && qref.parts.len() == 1 => {
-            Some((None, qref.parts[0].clone()))
+        PredicateArg::Expr(_) => {
+            push_error(
+                ctx,
+                diags,
+                arg_span(arg),
+                RdraError::TypeMismatch {
+                    pred: pred.to_string(),
+                    id: "<expr>".to_string(),
+                    actual: "expression".to_string(),
+                    expected: "entity".to_string(),
+                },
+            );
+            None
         }
-        PredicateArg::Ref(qref) if qref.kind_qualifier.is_none() && qref.parts.len() == 2 => {
-            let entity = QRef {
-                kind_qualifier: None,
-                parts: vec![qref.parts[0].clone()],
-                span: qref.span.clone(),
-            };
-            Some((Some(entity), qref.parts[1].clone()))
-        }
-        _ => None,
     }
 }
 
@@ -367,35 +356,6 @@ fn find_entity_column(
             None
         }
     }
-}
-
-fn resolve_cross_column_arg(
-    model: &SemanticModel,
-    scope: &[EntityKey],
-    pred: &str,
-    arg: &PredicateArg,
-    ctx: DiagCtxt,
-    diags: &mut Vec<Diagnostic>,
-) -> Option<(QualifiedModelColumnRef, ModelColumn)> {
-    let (entity_ref, column) = split_cross_column_ref(arg)?;
-    let entity = match entity_ref {
-        Some(qref) => resolve_entity_qref(model, pred, &qref, ctx, diags)?,
-        None if scope.len() == 1 => scope[0],
-        None => {
-            push_error(
-                ctx,
-                diags,
-                arg_span(arg),
-                RdraError::CrossConstraintColumnNeedsEntity {
-                    column: column.clone(),
-                    example: format!("Entity.{}", column),
-                },
-            );
-            return None;
-        }
-    };
-    let model_col = find_entity_column(model, entity, &column, arg_span(arg), ctx, diags)?;
-    Some((QualifiedModelColumnRef { entity, column }, model_col))
 }
 
 fn resolve_cross_operand_column(
@@ -566,26 +526,6 @@ fn resolve_cross_comparison(
     })
 }
 
-fn resolve_cross_equals_condition(
-    model: &SemanticModel,
-    scope: &[EntityKey],
-    pred: &str,
-    column_arg: &PredicateArg,
-    value_arg: &PredicateArg,
-    ctx: DiagCtxt,
-    diags: &mut Vec<Diagnostic>,
-) -> Option<CrossEntityCondition> {
-    let (column, model_col) = resolve_cross_column_arg(model, scope, pred, column_arg, ctx, diags)?;
-    let value_lit = arg_as_str(value_arg)?;
-    match parse_effect_value(&model_col, &value_lit) {
-        Ok(value) => Some(CrossEntityCondition::Equals { column, value }),
-        Err(e) => {
-            push_error_parse_effect(ctx, diags, value_arg, e);
-            None
-        }
-    }
-}
-
 fn resolve_cross_condition(
     model: &SemanticModel,
     scope: &[EntityKey],
@@ -596,11 +536,13 @@ fn resolve_cross_condition(
 ) -> Option<CrossEntityCondition> {
     match arg {
         PredicateArg::Expr(Expr::Cmp(cmp)) => {
-            resolve_cross_comparison(model, scope, pred, cmp, ctx, diags)
-                .map(CrossEntityCondition::Comparison)
-        }
-        PredicateArg::Tuple(elems) if elems.len() == 2 => {
-            resolve_cross_equals_condition(model, scope, pred, &elems[0], &elems[1], ctx, diags)
+            if let Some(cond) = temporal_equals_from_comparison(model, scope, pred, cmp, ctx, diags)
+            {
+                Some(cond)
+            } else {
+                resolve_cross_comparison(model, scope, pred, cmp, ctx, diags)
+                    .map(CrossEntityCondition::Comparison)
+            }
         }
         _ => None,
     }
@@ -615,7 +557,7 @@ fn collect_cross_scope_prefix(
     let mut scope = Vec::new();
     let mut first_condition = pred.args.len();
     for (idx, arg) in pred.args.iter().enumerate() {
-        if matches!(arg, PredicateArg::Tuple(_) | PredicateArg::Expr(_)) {
+        if matches!(arg, PredicateArg::Expr(_)) {
             first_condition = idx;
             break;
         }
@@ -643,34 +585,9 @@ fn collect_cross_chain_conditions(
     diags: &mut Vec<Diagnostic>,
 ) -> Vec<CrossEntityCondition> {
     let mut conditions = Vec::new();
-    let mut idx = 0;
-    while idx < args.len() {
-        match &args[idx] {
-            PredicateArg::Expr(_) | PredicateArg::Tuple(_) => {
-                if let Some(cond) =
-                    resolve_cross_condition(model, scope, pred, &args[idx], ctx, diags)
-                {
-                    conditions.push(cond);
-                }
-                idx += 1;
-            }
-            _ if idx + 1 < args.len() => {
-                if let Some(cond) = resolve_cross_equals_condition(
-                    model,
-                    scope,
-                    pred,
-                    &args[idx],
-                    &args[idx + 1],
-                    ctx,
-                    diags,
-                ) {
-                    conditions.push(cond);
-                }
-                idx += 2;
-            }
-            _ => {
-                idx += 1;
-            }
+    for arg in args {
+        if let Some(cond) = resolve_cross_condition(model, scope, pred, arg, ctx, diags) {
+            conditions.push(cond);
         }
     }
     conditions
@@ -713,7 +630,7 @@ pub(crate) fn cross_scope_semantics_from_chain(
     }
 }
 
-pub(crate) fn process_cross_forbidden(
+pub(crate) fn process_forbidden(
     model: &mut SemanticModel,
     pred: &PredicateCall,
     ctx: DiagCtxt,
@@ -745,7 +662,7 @@ pub(crate) fn process_cross_forbidden(
         .push(TypedPredicate::CrossForbidden { scope });
 }
 
-pub(crate) fn process_cross_invariant(
+pub(crate) fn process_invariant(
     model: &mut SemanticModel,
     pred: &PredicateCall,
     ctx: DiagCtxt,
@@ -791,31 +708,31 @@ pub(crate) fn process_cross_invariant(
         .push(TypedPredicate::CrossInvariant { scope });
 }
 
-pub(crate) fn process_forbidden_when_predicate(
+/// Top-level `when(...).none/has(...)` quantifier (replaces `forbidden_when`).
+pub(crate) fn process_when_quantifier_predicate(
     model: &mut SemanticModel,
     pred: &PredicateCall,
-    resolved: &[Option<NodeRef>],
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
-    let Some(Some(NodeRef::Entity(anchor))) = resolved.first() else {
-        return;
-    };
-    let scope = vec![*anchor];
-    let guards =
-        collect_cross_chain_conditions(model, &scope, &pred.name, &pred.args[1..], ctx, diags);
+    let mut scope = Vec::new();
+    let guards = collect_cross_chain_conditions(model, &scope, &pred.name, &pred.args, ctx, diags);
     if guards.is_empty() {
         return;
     }
+    add_condition_entities_to_scope(&mut scope, &guards);
+    let Some(anchor) = scope.first().copied() else {
+        return;
+    };
 
     for cc in &pred.chain {
         if matches!(cc.name.as_str(), "has" | "none") {
-            process_quantifier_chain(model, &scope, &guards, cc, ctx, diags);
+            process_quantifier_chain(model, &[anchor], &guards, cc, ctx, diags);
         }
     }
     model
         .typed_predicates
-        .push(TypedPredicate::ForbiddenWhen { entity: *anchor });
+        .push(TypedPredicate::ForbiddenWhen { entity: anchor });
 }
 
 fn process_quantifier_chain(
@@ -829,15 +746,43 @@ fn process_quantifier_chain(
     let Some(anchor) = anchor_scope.first().copied() else {
         return;
     };
-    let Some(related_arg) = cc.args.first() else {
-        return;
+
+    // New form: `.none(Assign.status == active)` — infer related entity from conditions.
+    // Legacy-compatible: `.none(Assign.status == active)` if first arg is an entity Ref.
+    let (related, related_args) = match cc.args.first() {
+        Some(PredicateArg::Ref(_)) => {
+            let Some(related) = resolve_entity_scope_arg(model, &cc.name, &cc.args[0], ctx, diags)
+            else {
+                return;
+            };
+            (related, &cc.args[1..])
+        }
+        _ => {
+            let mut related_scope = Vec::new();
+            let preview = collect_cross_chain_conditions(
+                model,
+                &related_scope,
+                &cc.name,
+                &cc.args,
+                ctx,
+                diags,
+            );
+            add_condition_entities_to_scope(&mut related_scope, &preview);
+            let Some(related) = related_scope
+                .iter()
+                .copied()
+                .find(|e| *e != anchor)
+                .or_else(|| related_scope.first().copied())
+            else {
+                return;
+            };
+            (related, cc.args.as_slice())
+        }
     };
-    let Some(related) = resolve_entity_scope_arg(model, &cc.name, related_arg, ctx, diags) else {
-        return;
-    };
+
     let related_scope = vec![related];
     let related_conditions =
-        collect_cross_chain_conditions(model, &related_scope, &cc.name, &cc.args[1..], ctx, diags);
+        collect_cross_chain_conditions(model, &related_scope, &cc.name, related_args, ctx, diags);
     if related_conditions.is_empty() {
         return;
     }
@@ -899,7 +844,27 @@ fn temporal_equals_from_comparison(
     };
 
     let value_lit = match &cmp.rhs {
-        Operand::Column(value) | Operand::IntLit(value) => value.clone(),
+        Operand::Column(value) => {
+            // Prefer column-column comparison when RHS names a column in scope.
+            if scope.len() == 1 {
+                let entity = scope[0];
+                if model.entities[entity]
+                    .columns
+                    .iter()
+                    .any(|c| c.name == *value)
+                {
+                    return None;
+                }
+            } else if scope
+                .iter()
+                .any(|ek| model.entities[*ek].columns.iter().any(|c| c.name == *value))
+            {
+                // Multi-entity bare column RHS is ambiguous for equals; leave to comparison.
+                return None;
+            }
+            value.clone()
+        }
+        Operand::IntLit(value) => value.clone(),
         Operand::Now => "now".to_string(),
         Operand::QualifiedColumn(_) => return None,
     };
@@ -921,44 +886,15 @@ fn collect_temporal_assert_conditions(
     diags: &mut Vec<Diagnostic>,
 ) -> Vec<CrossEntityCondition> {
     let mut conditions = Vec::new();
-    let mut idx = 0;
-    while idx < args.len() {
-        match &args[idx] {
-            PredicateArg::Expr(Expr::Cmp(cmp)) => {
-                if let Some(cond) =
-                    temporal_equals_from_comparison(model, scope, pred, cmp, ctx, diags)
-                {
-                    conditions.push(cond);
-                } else if let Some(cond) =
-                    resolve_cross_condition(model, scope, pred, &args[idx], ctx, diags)
-                {
-                    conditions.push(cond);
-                }
-                idx += 1;
+    for arg in args {
+        if let PredicateArg::Expr(Expr::Cmp(cmp)) = arg {
+            if let Some(cond) = temporal_equals_from_comparison(model, scope, pred, cmp, ctx, diags)
+            {
+                conditions.push(cond);
+            } else if let Some(cond) = resolve_cross_condition(model, scope, pred, arg, ctx, diags)
+            {
+                conditions.push(cond);
             }
-            PredicateArg::Tuple(_) => {
-                if let Some(cond) =
-                    resolve_cross_condition(model, scope, pred, &args[idx], ctx, diags)
-                {
-                    conditions.push(cond);
-                }
-                idx += 1;
-            }
-            _ if idx + 1 < args.len() => {
-                if let Some(cond) = resolve_cross_equals_condition(
-                    model,
-                    scope,
-                    pred,
-                    &args[idx],
-                    &args[idx + 1],
-                    ctx,
-                    diags,
-                ) {
-                    conditions.push(cond);
-                }
-                idx += 2;
-            }
-            _ => idx += 1,
         }
     }
     conditions

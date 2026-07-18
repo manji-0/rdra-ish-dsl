@@ -14,7 +14,7 @@ pub(crate) fn resolve_arg(
 ) -> Option<NodeRef> {
     match arg {
         PredicateArg::Lit(_) => None,
-        PredicateArg::Tuple(_) => None,
+        PredicateArg::Transition { .. } | PredicateArg::Card(_) => None,
         PredicateArg::Expr(_) => None,
         PredicateArg::Ref(qref) => {
             let id = qref.parts.last().unwrap();

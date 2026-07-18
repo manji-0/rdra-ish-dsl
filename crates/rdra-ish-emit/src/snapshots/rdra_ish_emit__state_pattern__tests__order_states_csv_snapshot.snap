@@ -1,5 +1,5 @@
 ---
-source: crates/rdra-emit/src/state_pattern.rs
+source: crates/rdra-ish-emit/src/state_pattern.rs
 expression: result
 ---
 entity_id,entity_label,pattern_idx,column,value,is_initial,is_terminal,via
@@ -12,4 +12,4 @@ Order,注文,2,delivered_at,null,false,true,"CancelOrder, PlaceOrder"
 Order,注文,3,status,shipped,false,false,"CapturePay, PlaceOrder, ShipOrder"
 Order,注文,3,delivered_at,null,false,false,"CapturePay, PlaceOrder, ShipOrder"
 Order,注文,4,status,delivered,false,true,"CapturePay, DeliverOrder, PlaceOrder, ShipOrder"
-Order,注文,4,delivered_at,present:timestamptz,false,true,"CapturePay, DeliverOrder, PlaceOrder, ShipOrder"
+Order,注文,4,delivered_at,present,false,true,"CapturePay, DeliverOrder, PlaceOrder, ShipOrder"

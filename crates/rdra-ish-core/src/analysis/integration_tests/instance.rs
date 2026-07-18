@@ -17,7 +17,7 @@ entity Example "Example" {
   status: Enum(active, inactive)
 }
 
-sets(ActivateExample, Example, "status", "active")
+sets(ActivateExample, Example, status == active)
 "#;
 
     let (ast, parse_errors) = parse(src);

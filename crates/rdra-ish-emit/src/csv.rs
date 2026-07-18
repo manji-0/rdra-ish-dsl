@@ -663,7 +663,7 @@ actor Staff "スタッフ"
         let src = r#"
 entity Order "注文" { id: Int @pk  total: Money }
 entity Customer "顧客" { id: Int @pk  name: String }
-relate(Order, Customer, "N:1").optional().on_delete(set_null).on_update(cascade)
+relate(Order, Customer, N:1).optional().on_delete(set_null).on_update(cascade)
 "#;
         let model = model_from(src);
         let view = View::whole();
@@ -843,7 +843,7 @@ creates(BookingApi, Appointment)
         let src = r#"
 entity Customer "顧客" { id: Int @pk  name: String  email: String @null }
 entity Order "注文" { id: Int @pk  total: Money }
-relate(Order, Customer, "N:1")
+relate(Order, Customer, N:1)
 "#;
         let (ast, _) = parse(src);
         let (model, _) = build_model(&ast);

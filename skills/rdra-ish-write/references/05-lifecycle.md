@@ -24,13 +24,13 @@ by use cases or events.
    columns.
 2. Declare `event` and `state` nodes where a state machine is useful.
 3. Add `raises(UseCase, Event)` for event origins.
-4. Add `transitions(Event, FromState, ToState)` for lifecycle movement.
+4. Add `transitions(Entity.col, Event, from -> to)` for lifecycle movement.
 5. For downstream automation, model BUC-level causality first:
    `triggers(Event, TargetBuc)`.
 6. When the concrete entry action is known, refine with
    `contains(TargetBuc, EntryUseCase)` and `triggers(Event, EntryUseCase)` without
    removing the BUC-level trigger.
-7. Add `sets(UseCase|Event, Entity, "col", "val")` for enum, nullable, and boolean
+7. Add `sets(UseCase|Event, Entity, col == val)` for enum, nullable, and boolean
    effects not fully explained by transitions.
 8. Add comparison-proposition `sets` when rules depend on derived comparisons.
 
@@ -44,12 +44,10 @@ entity Order "Order" {
 }
 
 event OrderSubmitted "Order Submitted"
-state OrderDraft "Order Draft"
-state OrderSubmittedState "Order Submitted"
 
 raises(SubmitOrder, OrderSubmitted)
-transitions(OrderSubmitted, OrderDraft, OrderSubmittedState)
-sets(SubmitOrder, Order, "submitted_at", "timestamptz")
+transitions(Order.status, OrderSubmitted, draft -> submitted)
+sets(SubmitOrder, Order, submitted_at == present)
 ```
 
 Event-started BUC:

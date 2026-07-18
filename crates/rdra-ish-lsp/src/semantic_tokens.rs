@@ -69,6 +69,7 @@ pub fn semantic_tokens(ast: &Ast) -> tower_lsp::lsp_types::SemanticTokens {
             Item::Predicate(pred) => {
                 tokenize_predicate(source, &mut raw, pred);
             }
+            Item::Property(_) => {}
         }
     }
 
@@ -107,15 +108,21 @@ fn tokenize_predicate_arg(source: &str, raw: &mut Vec<RawToken>, arg: &Predicate
     match arg {
         PredicateArg::Ref(qref) => tokenize_qref(source, raw, qref),
         PredicateArg::Lit(_) => {}
-        PredicateArg::Tuple(args) => {
-            for inner in args {
-                tokenize_predicate_arg(source, raw, inner);
-            }
-        }
-        PredicateArg::Expr(expr) => {
-            let Expr::Cmp(cmp) = expr;
+        PredicateArg::Transition { .. } | PredicateArg::Card(_) => {}
+        PredicateArg::Expr(expr) => tokenize_expr(source, raw, expr),
+    }
+}
+
+fn tokenize_expr(source: &str, raw: &mut Vec<RawToken>, expr: &Expr) {
+    match expr {
+        Expr::Cmp(cmp) => {
             visit_operand(source, raw, &cmp.lhs);
             visit_operand(source, raw, &cmp.rhs);
+        }
+        Expr::Not(inner) => tokenize_expr(source, raw, inner),
+        Expr::And(a, b) | Expr::Or(a, b) => {
+            tokenize_expr(source, raw, a);
+            tokenize_expr(source, raw, b);
         }
     }
 }

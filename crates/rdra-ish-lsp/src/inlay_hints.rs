@@ -23,7 +23,7 @@ pub fn inlay_hints(
                 hints.extend(predicate_parameter_hints(text, pred));
                 collect_reference_hints(model, text, pred, &mut hints);
             }
-            Item::Instance(_) | Item::Import(_) | Item::Module(_, _) => {}
+            Item::Instance(_) | Item::Import(_) | Item::Module(_, _) | Item::Property(_) => {}
         }
     }
 
@@ -117,7 +117,20 @@ fn collect_reference_hints_in_arg(
             }
         }
         PredicateArg::Expr(expr) => {
-            let Expr::Cmp(cmp) = expr;
+            collect_reference_hints_in_expr(model, text, expr, hints);
+        }
+        PredicateArg::Transition { .. } | PredicateArg::Card(_) | PredicateArg::Lit(_) => {}
+    }
+}
+
+fn collect_reference_hints_in_expr(
+    model: &SemanticModel,
+    text: &str,
+    expr: &Expr,
+    hints: &mut Vec<InlayHint>,
+) {
+    match expr {
+        Expr::Cmp(cmp) => {
             if let Operand::QualifiedColumn(col) = &cmp.lhs {
                 if let Some(hint) = reference_kind_hint(model, text, &col.entity) {
                     hints.push(hint);
@@ -129,12 +142,11 @@ fn collect_reference_hints_in_arg(
                 }
             }
         }
-        PredicateArg::Tuple(args) => {
-            for inner in args {
-                collect_reference_hints_in_arg(model, text, inner, hints);
-            }
+        Expr::Not(inner) => collect_reference_hints_in_expr(model, text, inner, hints),
+        Expr::And(a, b) | Expr::Or(a, b) => {
+            collect_reference_hints_in_expr(model, text, a, hints);
+            collect_reference_hints_in_expr(model, text, b, hints);
         }
-        PredicateArg::Lit(_) => {}
     }
 }
 

@@ -144,8 +144,8 @@ entity TerminalCertAssignment "Terminal Cert Assignment" {
   id: Int @pk
   status: Enum(active, inactive) @default(active)
 }
-forbidden_when(ClientCertificate, (status, revoked))
-  .none(TerminalCertAssignment, (status, active))
+when(ClientCertificate.status == revoked)
+  .none(TerminalCertAssignment.status == active)
 "#,
     );
     assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
@@ -198,7 +198,7 @@ entity Coupon "クーポン" {
   status: Enum(usable, expired)
   expired_at: DateTime @null
 }
-required(Coupon, (status, usable), expired_at < now)
+required(Coupon, status == usable, expired_at < now)
 "#;
     let (ast, parse_errors) = parse(src);
     assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
@@ -222,7 +222,7 @@ entity Document "文書" {
   approved: Bool
   rejected: Bool
 }
-exclusive(Document, approved, true, rejected, true)
+exclusive(Document, approved == true, rejected == true)
 "#;
     let (ast, parse_errors) = parse(src);
     assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
@@ -250,7 +250,7 @@ entity Payment "支払い" {
   status: Enum(pending, captured)
   amount: Decimal
 }
-cross_forbidden(Order, Payment, (Order.status, cancelled), Payment.amount > Order.total)
+forbidden(Order, Payment, Order.status == cancelled, Payment.amount > Order.total)
 "#;
     let (ast, parse_errors) = parse(src);
     assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
@@ -306,9 +306,9 @@ entity Payment "支払い" {
   id: Int @pk
   status: Enum(pending, captured)
 }
-cross_invariant(Order, Payment)
-  .when(Order.status, paid)
-  .then(Payment.status, captured)
+invariant(Order, Payment)
+  .when(Order.status == paid)
+  .then(Payment.status == captured)
 "#;
     let (ast, parse_errors) = parse(src);
     assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
@@ -335,11 +335,11 @@ entity Payment "支払い" {
   id: Int @pk
   status: Enum(pending, captured)
 }
-relate(Payment, Order, "1:1")
-cross_invariant(Order, Payment)
+relate(Payment, Order, 1:1)
+invariant(Order, Payment)
   .along(Order, Payment)
-  .when(Order.status, paid)
-  .then(Payment.status, captured)
+  .when(Order.status == paid)
+  .then(Payment.status == captured)
 "#;
     let (ast, parse_errors) = parse(src);
     assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
@@ -373,9 +373,9 @@ entity Payment "支払い" {
   id: Int @pk
   status: Enum(pending, captured)
 }
-cross_invariant()
-  .when(Order.status, paid)
-  .then(Payment.status, captured)
+invariant()
+  .when(Order.status == paid)
+  .then(Payment.status == captured)
 "#;
     let (ast, parse_errors) = parse(src);
     assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
@@ -404,9 +404,9 @@ entity Payment "支払い" {
   id: Int @pk
   status: Enum(pending, captured)
 }
-cross_invariant(Order, Payment)
-  .when(status, paid)
-  .then(Payment.status, captured)
+invariant(Order, Payment)
+  .when(status == paid)
+  .then(Payment.status == captured)
 "#;
     let (ast, parse_errors) = parse(src);
     assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);

@@ -12,11 +12,13 @@ mod instance;
 mod metadata;
 mod nodes;
 mod predicate_process;
+mod property;
 mod qref_util;
 
 use fk::generate_fks;
 use instance::register_instance;
 use predicate_process::process_predicate;
+use property::register_property;
 
 pub fn build_model(ast: &Ast) -> (SemanticModel, Vec<Diagnostic>) {
     let items: Vec<(SourceId, Item)> = ast.items.iter().cloned().map(|item| (0, item)).collect();
@@ -34,8 +36,14 @@ pub fn build_model_items(items: &[(SourceId, Item)]) -> (SemanticModel, Vec<Diag
     }
 
     for (source_id, item) in items {
-        if let Item::Predicate(pred) = item {
-            process_predicate(&mut model, pred, DiagCtxt::new(*source_id), &mut diags);
+        match item {
+            Item::Predicate(pred) => {
+                process_predicate(&mut model, pred, DiagCtxt::new(*source_id), &mut diags);
+            }
+            Item::Property(prop) => {
+                register_property(&mut model, prop, DiagCtxt::new(*source_id), &mut diags);
+            }
+            _ => {}
         }
     }
 

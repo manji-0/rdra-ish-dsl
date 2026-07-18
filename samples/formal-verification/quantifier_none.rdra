@@ -1,0 +1,34 @@
+// Quantifier none over finite Cert_Ids / Assign_Ids (InstanceCount == 2).
+// relate(Assign, Cert, N:1) adds Assign_owner linking related instances.
+entity Cert "証明書" {
+  id: Int @pk
+  status: Enum(active, revoked) @default(active)
+}
+entity Assign "割当" {
+  id: Int @pk
+  status: Enum(active, ended) @default(active)
+}
+
+usecase Issue "発行"
+usecase Revoke "失効"
+usecase EndAssign "割当終了"
+
+event EvRevoke "失効"
+event EvEnd "終了"
+
+creates(Issue, Cert)
+creates(Issue, Assign)
+updates(Revoke, Cert)
+updates(EndAssign, Assign)
+
+raises(Revoke, EvRevoke)
+raises(EndAssign, EvEnd)
+
+
+transitions(Cert.status, EvRevoke, active -> revoked)
+transitions(Assign.status, EvEnd, active -> ended)
+
+relate(Assign, Cert, N:1)
+
+// When a cert is revoked, no assignment may stay active.
+when(Cert, status == revoked).none(Assign.status == active)

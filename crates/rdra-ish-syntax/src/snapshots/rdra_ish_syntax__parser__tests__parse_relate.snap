@@ -1,6 +1,6 @@
 ---
 source: crates/rdra-ish-syntax/src/parser.rs
-assertion_line: 1096
+assertion_line: 1391
 expression: ast
 ---
 Ast {
@@ -27,7 +27,7 @@ Ast {
                             span: 14..22,
                         },
                     ),
-                    Lit(
+                    Card(
                         "N:1",
                     ),
                 ],
@@ -35,7 +35,7 @@ Ast {
                     ChainCall {
                         name: "optional",
                         args: [],
-                        span: 30..41,
+                        span: 28..39,
                     },
                     ChainCall {
                         name: "on_delete",
@@ -46,11 +46,11 @@ Ast {
                                     parts: [
                                         "set_null",
                                     ],
-                                    span: 52..60,
+                                    span: 50..58,
                                 },
                             ),
                         ],
-                        span: 41..61,
+                        span: 39..59,
                     },
                     ChainCall {
                         name: "on_update",
@@ -61,16 +61,16 @@ Ast {
                                     parts: [
                                         "cascade",
                                     ],
-                                    span: 72..79,
+                                    span: 70..77,
                                 },
                             ),
                         ],
-                        span: 61..80,
+                        span: 59..78,
                     },
                 ],
-                span: 0..80,
+                span: 0..78,
             },
         ),
     ],
-    source: "relate(Order, Customer, \"N:1\").optional().on_delete(set_null).on_update(cascade)",
+    source: "relate(Order, Customer, N:1).optional().on_delete(set_null).on_update(cascade)",
 }

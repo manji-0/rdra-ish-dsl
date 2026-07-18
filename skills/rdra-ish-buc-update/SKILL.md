@@ -110,7 +110,7 @@ entity <NewEntity> "<label>" {
   id:   Int @pk
   ...
 }
-relate(<Parent>, <NewEntity>, "1:N")
+relate(<Parent>, <NewEntity>, 1:N)
 ```
 
 Then in the BUC file add CRUD predicates for the use cases that touch it.
@@ -127,7 +127,7 @@ contains(<System>, <Api>)
 invokes(<UC>, <Api>)
 request(<Api>, <RequestDto>)
 updates(<Api>, <Entity>)
-sets(<UC>, <Entity>, "column", "value")
+sets(<UC>, <Entity>, column == value)
 ```
 
 System entity sets are derived from API CRUD. Add `owns(System, Entity)` only when
@@ -213,11 +213,11 @@ derived system boundaries.
 
 **Adding cross-entity rules:**
 ```
-cross_forbidden(<EntityA>, <EntityB>,
+forbidden(<EntityA>, <EntityB>,
   (<EntityA>.<column>, <value>),
   <EntityB>.<column> > <EntityA>.<column>)
 
-cross_invariant(<EntityA>, <EntityB>)
+invariant(<EntityA>, <EntityB>)
   .along(<EntityA>, <EntityB>)
   .when(<EntityA>.<column>, <value>)
   .then(<EntityB>.<column>, <value>)

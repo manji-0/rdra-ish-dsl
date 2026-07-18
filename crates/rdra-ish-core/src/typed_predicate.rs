@@ -5,7 +5,7 @@ use crate::model::{
     ConstrainsTarget, ConstraintKey, ContainedRef, ContainerRef, CoversTarget, DecidesTarget,
     DtoKey, EntityKey, EntityTouchpoint, EventKey, ExtSystemKey, FieldKey, MediumKey, NfrKey,
     NfrOrConstraint, NodeRef, PerformTarget, PermissionKey, QualityKey, RequirementKey, ScreenKey,
-    SemanticModel, StateKey, StepKey, SystemKey, TriggerTarget, TypedPredicate, UseCaseKey,
+    SemanticModel, StepKey, SystemKey, TriggerTarget, TypedPredicate, UseCaseKey,
 };
 use rdra_ish_syntax::ast::{PredicateArg, PredicateCall};
 
@@ -26,11 +26,6 @@ pub fn build_typed_predicate(
             left: as_entity(resolved.get(1)?.as_ref()?)?,
             right: as_entity(resolved.get(2)?.as_ref()?)?,
         }),
-        "transitions" => Some(TypedPredicate::Transitions {
-            event: as_event(resolved.first()?.as_ref()?)?,
-            from: as_state(resolved.get(1)?.as_ref()?)?,
-            to: as_state(resolved.get(2)?.as_ref()?)?,
-        }),
         "maps_field" => {
             let (from, to) = pair(resolved)?;
             let column = pred.args.get(2).and_then(arg_as_str)?.to_string();
@@ -42,7 +37,11 @@ pub fn build_typed_predicate(
         }
         "relate" => {
             let (from, to) = pair(resolved)?;
-            let card = pred.args.get(2).and_then(arg_as_str)?;
+            let card = match pred.args.get(2) {
+                Some(PredicateArg::Card(c)) => c.as_str(),
+                Some(PredicateArg::Lit(c)) => c.as_str(),
+                _ => return None,
+            };
             Some(TypedPredicate::Relate {
                 from: as_entity(from)?,
                 to: as_entity(to)?,
@@ -244,9 +243,9 @@ pub fn typed_predicate_name(pred: &TypedPredicate) -> &'static str {
         TypedPredicate::Required { .. } => "required",
         TypedPredicate::Exclusive { .. } => "exclusive",
         TypedPredicate::Invariant { .. } => "invariant",
-        TypedPredicate::ForbiddenWhen { .. } => "forbidden_when",
-        TypedPredicate::CrossForbidden { .. } => "cross_forbidden",
-        TypedPredicate::CrossInvariant { .. } => "cross_invariant",
+        TypedPredicate::ForbiddenWhen { .. } => "when",
+        TypedPredicate::CrossForbidden { .. } => "forbidden",
+        TypedPredicate::CrossInvariant { .. } => "invariant",
     }
 }
 
@@ -299,7 +298,6 @@ node_extractor!(as_constraint, Constraint, ConstraintKey);
 node_extractor!(as_system, System, SystemKey);
 node_extractor!(as_field, Field, FieldKey);
 node_extractor!(as_dto, Dto, DtoKey);
-node_extractor!(as_state, State, StateKey);
 
 #[cfg(test)]
 mod tests {
@@ -321,16 +319,17 @@ mod tests {
             r#"
 actor Staff "Staff"
 usecase Book "Book"
-entity Appointment "Appointment" { id: Int @pk }
+entity Appointment "Appointment" {
+  id: Int @pk
+  status: Enum(draft, booked) @default(draft)
+}
 domain_object Appt "Appointment"
 event EvBook "Booked"
-state Draft "Draft"
-state Booked "Booked"
 performs(Staff, Book)
 creates(Book, Appointment)
 raises(Book, EvBook)
 maps_to(Appt, Appointment)
-transitions(EvBook, Draft, Booked)
+transitions(Appointment.status, EvBook, draft -> booked)
 "#,
         );
 

@@ -5,7 +5,7 @@
 
 use crate::diagnostics::{Diagnostic, RdraError};
 use crate::location::push_model_decl_diagnostic;
-use crate::model::{BucKey, EventKey, NodeRef, RelKind, SemanticModel, StateKey, UseCaseKey};
+use crate::model::{BucKey, EventKey, NodeRef, RelKind, SemanticModel, UseCaseKey};
 use std::collections::HashMap;
 
 /// イベントを中心とした因果連鎖ファクト。
@@ -19,8 +19,8 @@ pub struct EventFlow {
     pub triggers_ucs: Vec<UseCaseKey>,
     /// `triggers(event, Buc)` で宣言した BUC の一覧。
     pub triggers_bucs: Vec<BucKey>,
-    /// `transitions(event, From, To)` で宣言した状態遷移の一覧。
-    pub transitions: Vec<(StateKey, StateKey)>,
+    /// `transitions(Entity.col, event, from -> to)` で宣言した状態遷移の一覧。
+    pub transitions: Vec<(String, String)>,
 }
 
 /// モデル内の全イベントについて `EventFlow` を収集する。
@@ -68,7 +68,7 @@ pub fn collect_event_flows(model: &SemanticModel) -> Vec<EventFlow> {
 
     for st in &model.state_transitions {
         if let Some(flow) = map.get_mut(&st.event) {
-            flow.transitions.push((st.from, st.to));
+            flow.transitions.push((st.from.clone(), st.to.clone()));
         }
     }
 

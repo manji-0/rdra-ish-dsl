@@ -38,7 +38,7 @@
 
 - direct CRUD と API CRUD の混在が、この段階の分析として説明できるか。
 - StoreAdminApi と OrganizationLookupApi を同じ System に入れるべきではないか。
-- 次 step で relate(Store, Organization, "N:1") を置いたとき、coordination が必要になるか。
+- 次 step で relate(Store, Organization, N:1) を置いたとき、coordination が必要になるか。
 
 ## 6. 次 step への確認
 

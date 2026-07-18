@@ -54,10 +54,10 @@ updates(PaymentRefundApi, Order)
 
 // ── Column effect declarations (sets) ────────────────────────────────────────
 // Payment.status has no state machine, so it is declared explicitly via sets
-sets(InputPaymentInfo,          Payment, "status", "pending")
-sets(usecase::Capture,          Payment, "status", "captured")
-sets(AuthorizePayment,          Payment, "status", "authorized")
-sets(RefundPayment,             Payment, "status", "refunded")
+sets(InputPaymentInfo, Payment, status == pending)
+sets(usecase::Capture, Payment, status == captured)
+sets(AuthorizePayment, Payment, status == authorized)
+sets(RefundPayment, Payment, status == refunded)
 // Order.delivered_at does not change at capture time (it changes on Deliver)
 // processed_at is nullable, so it is declared explicitly via sets
-sets(usecase::Capture,          Payment, "processed_at", "timestamptz")
+sets(usecase::Capture, Payment, processed_at == present)

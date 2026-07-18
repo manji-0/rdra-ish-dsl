@@ -202,16 +202,16 @@ fn test_state_diagram() {
         "should have initial state:\n{puml}"
     );
     assert!(
-        puml.contains("OrderDraft"),
-        "OrderDraft state should appear:\n{puml}"
+        puml.contains("Order_draft"),
+        "Order_draft state should appear:\n{puml}"
     );
     assert!(
-        puml.contains("OrderPaid"),
-        "OrderPaid state should appear:\n{puml}"
+        puml.contains("Order_paid"),
+        "Order_paid state should appear:\n{puml}"
     );
     assert!(
-        puml.contains("OrderShipped"),
-        "OrderShipped state should appear:\n{puml}"
+        puml.contains("Order_shipped"),
+        "Order_shipped state should appear:\n{puml}"
     );
     assert!(puml.contains("@enduml"), "should end with @enduml:\n{puml}");
 }

@@ -2,8 +2,8 @@ use super::comparison::{CmpOpModel, ComparisonProp};
 use super::effects::EffectValue;
 use super::keys::{EntityKey, UseCaseKey};
 
-/// `forbidden(Entity, (col, val), ...)` で宣言された禁止状態制約。
-/// `conditions` に列挙した全ての (col, val) が同時に成立する状態は禁止（AND）。
+/// `forbidden(Entity, col == val, ...)` で宣言された禁止状態制約。
+/// `conditions` に列挙した全ての col == val が同時に成立する状態は禁止（AND）。
 #[derive(Debug, Clone)]
 pub struct ForbiddenConstraint {
     pub entity: EntityKey,
@@ -13,7 +13,7 @@ pub struct ForbiddenConstraint {
     pub comparisons: Vec<ComparisonProp>,
 }
 
-/// `invariant(Entity).when(col, val).then(col, val)` で宣言された不変条件。
+/// `invariant(Entity).when(col == val).then(col == val)` で宣言された不変条件。
 /// `guards` が全て成立するとき、`requireds` も全て成立しなければならない。
 #[derive(Debug, Clone)]
 pub struct EntityInvariant {
@@ -28,7 +28,7 @@ pub struct EntityInvariant {
     pub required_comparisons: Vec<ComparisonProp>,
 }
 
-/// `required(Entity, (col, val), ...)` で宣言された常時成立制約。
+/// `required(Entity, col == val, ...)` で宣言された常時成立制約。
 /// `conditions` と `comparisons` が全て成立しない到達状態は違反。
 #[derive(Debug, Clone)]
 pub struct RequiredConstraint {
@@ -39,7 +39,7 @@ pub struct RequiredConstraint {
     pub comparisons: Vec<ComparisonProp>,
 }
 
-/// `exclusive(Entity, (col, val), ...)` で宣言された相互排他制約。
+/// `exclusive(Entity, col == val, ...)` で宣言された相互排他制約。
 /// 列挙した条件のうち 2 件以上が同時に成立する到達状態は違反。
 #[derive(Debug, Clone)]
 pub struct ExclusiveConstraint {
@@ -81,7 +81,7 @@ pub struct CrossComparisonProp {
 /// One condition inside a cross-entity constraint.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CrossEntityCondition {
-    /// `Entity.column == value`, written as `(Entity.column, value)`.
+    /// `Entity.column == value`, written as `Entity.column == value`.
     Equals {
         column: QualifiedModelColumnRef,
         value: EffectValue,
@@ -99,7 +99,7 @@ pub enum CrossConstraintScope {
     RelationPath(Vec<EntityKey>),
 }
 
-/// `cross_forbidden(EntityA, EntityB, ...)`.
+/// `forbidden(EntityA, EntityB, ...)`.
 #[derive(Debug, Clone)]
 pub struct CrossForbiddenConstraint {
     pub scope: Vec<EntityKey>,
@@ -107,7 +107,7 @@ pub struct CrossForbiddenConstraint {
     pub conditions: Vec<CrossEntityCondition>,
 }
 
-/// `cross_invariant(EntityA, EntityB).when(...).then(...)`.
+/// `invariant(EntityA, EntityB).when(...).then(...)`.
 #[derive(Debug, Clone)]
 pub struct CrossEntityInvariant {
     pub scope: Vec<EntityKey>,
@@ -131,8 +131,8 @@ pub enum QuantifierKind {
     None,
 }
 
-/// `forbidden_when(...).has/none(...)` または
-/// `cross_invariant(...).when(...).has/none(...)` で宣言される集計制約。
+/// `when(...).has/none(...)` または
+/// `invariant(...).when(...).has/none(...)` で宣言される集計制約。
 #[derive(Debug, Clone)]
 pub struct QuantifierConstraint {
     pub anchor: EntityKey,
@@ -140,4 +140,61 @@ pub struct QuantifierConstraint {
     pub kind: QuantifierKind,
     pub related: EntityKey,
     pub related_conditions: Vec<CrossEntityCondition>,
+}
+
+// ── Temporal properties (TLA+ / TLC) ──────────────────────────────────────────
+
+/// Atomic comparison over an entity column (equality or arithmetic).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TemporalAtom {
+    /// Entity id when written as `Order.status`; `None` for bare columns.
+    pub entity: Option<std::string::String>,
+    pub column: std::string::String,
+    pub op: super::comparison::CmpOpModel,
+    pub rhs: TemporalRhs,
+}
+
+/// Right-hand side of a temporal atom.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TemporalRhs {
+    /// Enum / Bool / null / present (and Int via EffectValue::Int).
+    Value(EffectValue),
+    /// Integer literal (`stock < 5`).
+    IntLit(i64),
+    /// Column reference (`stock < selling` or `Item.stock < Item.selling`).
+    Column {
+        entity: Option<std::string::String>,
+        column: std::string::String,
+    },
+}
+
+/// Boolean expression inside a temporal property.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TemporalExpr {
+    Atom(TemporalAtom),
+    Not(Box<TemporalExpr>),
+    And(Box<TemporalExpr>, Box<TemporalExpr>),
+    Or(Box<TemporalExpr>, Box<TemporalExpr>),
+}
+
+/// Path property mapped to TLA+ temporal operators.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TemporalFormula {
+    /// `always(expr)` → `[]expr`
+    Always(TemporalExpr),
+    /// `eventually(expr)` → `<>expr`
+    Eventually(TemporalExpr),
+    /// `leads_top == q` → `p ~> q`
+    LeadsTo {
+        antecedent: TemporalExpr,
+        consequent: TemporalExpr,
+    },
+}
+
+/// `property Id "label"` with a temporal formula body.
+#[derive(Debug, Clone)]
+pub struct TemporalProperty {
+    pub id: std::string::String,
+    pub label: std::string::String,
+    pub formula: TemporalFormula,
 }

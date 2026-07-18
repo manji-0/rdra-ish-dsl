@@ -12,4 +12,4 @@ entity Cart "Cart" {
   id: Int @pk
 }
 
-relate(OrderLine, Order, "N:1")
+relate(OrderLine, Order, N:1)

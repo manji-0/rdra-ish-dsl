@@ -100,16 +100,22 @@ fn collect_references_in_arg(arg: &PredicateArg, target: &SymbolTarget, spans: &
                 spans.push(qref.span.clone());
             }
         }
-        PredicateArg::Expr(Expr::Cmp(cmp)) => {
+        PredicateArg::Expr(expr) => collect_references_in_expr(expr, target, spans),
+        PredicateArg::Transition { .. } | PredicateArg::Card(_) | PredicateArg::Lit(_) => {}
+    }
+}
+
+fn collect_references_in_expr(expr: &Expr, target: &SymbolTarget, spans: &mut Vec<Span>) {
+    match expr {
+        Expr::Cmp(cmp) => {
             collect_references_in_operand(&cmp.lhs, target, spans);
             collect_references_in_operand(&cmp.rhs, target, spans);
         }
-        PredicateArg::Tuple(args) => {
-            for inner in args {
-                collect_references_in_arg(inner, target, spans);
-            }
+        Expr::Not(inner) => collect_references_in_expr(inner, target, spans),
+        Expr::And(a, b) | Expr::Or(a, b) => {
+            collect_references_in_expr(a, target, spans);
+            collect_references_in_expr(b, target, spans);
         }
-        PredicateArg::Lit(_) => {}
     }
 }
 
@@ -154,7 +160,7 @@ fn visit_item<'a>(
             );
         }
         Item::Predicate(pred) => visit_predicate(pred, offset, best),
-        Item::Import(_) | Item::Module(_, _) => {}
+        Item::Import(_) | Item::Module(_, _) | Item::Property(_) => {}
     }
 }
 
@@ -177,16 +183,22 @@ fn visit_predicate_arg<'a>(
         PredicateArg::Ref(qref) => {
             consider(best, offset, qref.span.clone(), ReferenceAt::Symbol(qref))
         }
-        PredicateArg::Expr(Expr::Cmp(cmp)) => {
+        PredicateArg::Expr(expr) => visit_expr(expr, offset, best),
+        PredicateArg::Transition { .. } | PredicateArg::Card(_) | PredicateArg::Lit(_) => {}
+    }
+}
+
+fn visit_expr<'a>(expr: &'a Expr, offset: usize, best: &mut Option<(usize, ReferenceAt<'a>)>) {
+    match expr {
+        Expr::Cmp(cmp) => {
             visit_operand(&cmp.lhs, offset, best);
             visit_operand(&cmp.rhs, offset, best);
         }
-        PredicateArg::Tuple(args) => {
-            for inner in args {
-                visit_predicate_arg(inner, offset, best);
-            }
+        Expr::Not(inner) => visit_expr(inner, offset, best),
+        Expr::And(a, b) | Expr::Or(a, b) => {
+            visit_expr(a, offset, best);
+            visit_expr(b, offset, best);
         }
-        PredicateArg::Lit(_) => {}
     }
 }
 

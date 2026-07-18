@@ -75,14 +75,16 @@ pub struct SemanticModel {
     pub required_constraints: Vec<RequiredConstraint>,
     /// `exclusive(...)` 述語で宣言された相互排他制約
     pub exclusive_constraints: Vec<ExclusiveConstraint>,
-    /// `cross_forbidden(...)` 述語で宣言されたクロスエンティティ禁止制約
+    /// `forbidden(...)` 述語で宣言されたクロスエンティティ禁止制約
     pub cross_forbidden_constraints: Vec<CrossForbiddenConstraint>,
-    /// `cross_invariant(...)` 述語で宣言されたクロスエンティティ不変条件
+    /// `invariant(...)` 述語で宣言されたクロスエンティティ不変条件
     pub cross_entity_invariants: Vec<CrossEntityInvariant>,
     /// `after(UseCase).assert(...)` 述語で宣言された時相アンカー制約
     pub temporal_assertions: Vec<TemporalAssertion>,
     /// `has` / `none` チェーンで宣言された to-many 量化制約
     pub quantifier_constraints: Vec<QuantifierConstraint>,
+    /// `property Id "..." leads_to/always/eventually(...)` 時相プロパティ
+    pub temporal_properties: Vec<TemporalProperty>,
     pub symbols: SymbolTable,
     /// Declaration sites for `kind:id` lookups (LSP go-to-definition).
     pub decl_sites: crate::location::DeclIndex,

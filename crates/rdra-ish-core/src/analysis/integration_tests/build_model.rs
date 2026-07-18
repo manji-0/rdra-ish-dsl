@@ -11,7 +11,7 @@ entity Order "注文" description "受注情報" { id: Int @pk }
 entity Customer_profile "顧客情報" { id: Int @pk  name: String }
 usecase Browse "商品を探す" description "商品一覧を参照する"
 performs(Customer, Browse)
-relate(Order, Customer_profile, "N:1")
+relate(Order, Customer_profile, N:1)
 "#;
     let (ast, parse_errors) = parse(src);
     assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
@@ -476,7 +476,7 @@ entity Order "Order" {
   valid_from: DateTime @history
   net_total: Money @derived("total - discount")
 }
-relate(Order, Customer, "N:1").optional().on_delete(set_null).on_update(cascade)
+relate(Order, Customer, N:1).optional().on_delete(set_null).on_update(cascade)
 "#;
     let (ast, parse_errors) = parse(src);
     assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);

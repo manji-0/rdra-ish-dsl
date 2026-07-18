@@ -76,6 +76,7 @@ impl AbstractValue {
         match v {
             EffectValue::EnumVariant(s) => AbstractValue::Enum(s.clone()),
             EffectValue::Bool(b) => AbstractValue::Bool(*b),
+            EffectValue::Int(_) => AbstractValue::Present,
             EffectValue::Present | EffectValue::TypedPresent(_) => AbstractValue::Present,
             EffectValue::Null => AbstractValue::Null,
         }
@@ -180,7 +181,7 @@ pub enum StateDiag {
     NoCreationPath,
     /// cap に達してパターン探索を打ち切った
     PatternCapReached { cap: usize, bound: usize },
-    /// `forbidden(Entity, (col, val), ...)` で禁止された状態に到達可能
+    /// `forbidden(Entity, col == val, ...)` で禁止された状態に到達可能
     ForbiddenStateViolated {
         /// 禁止条件を "col=val AND col=val" 形式に整形した文字列
         conditions: String,
@@ -206,14 +207,14 @@ pub enum StateDiag {
         conditions: String,
         pattern_desc: String,
     },
-    /// `cross_forbidden(...)` で禁止された複数 entity の状態組合せに到達可能
+    /// `forbidden(...)` で禁止された複数 entity の状態組合せに到達可能
     CrossForbiddenViolated {
         entities: String,
         conditions: String,
         pattern_desc: String,
         scope_hint: Option<String>,
     },
-    /// `cross_invariant(...).when(...).then(...)` が複数 entity の状態組合せで違反
+    /// `invariant(...).when(...).then(...)` が複数 entity の状態組合せで違反
     CrossInvariantViolated {
         entities: String,
         guards: String,
@@ -336,6 +337,32 @@ fn link_states_to_enum(
     ek: EntityKey,
 ) -> Option<(String, HashMap<StateKey, String>)> {
     link_entity_status_states(model, ek)
+}
+
+/// Resolve a transition variant string against the entity Enum column.
+/// Exact match preferred; case-insensitive fallback uses the declared casing.
+fn resolve_transition_variant(
+    model: &SemanticModel,
+    ek: EntityKey,
+    column: &str,
+    variant: &str,
+) -> Option<String> {
+    let col = model
+        .entities
+        .get(ek)?
+        .columns
+        .iter()
+        .find(|c| c.name == column)?;
+    let ColumnType::Enum(variants) = &col.col_type else {
+        return None;
+    };
+    if let Some(v) = variants.iter().find(|v| *v == variant) {
+        return Some(v.clone());
+    }
+    variants
+        .iter()
+        .find(|v| v.eq_ignore_ascii_case(variant))
+        .cloned()
 }
 
 /// 比較命題の StatePattern 内でのキー（実カラムとの衝突を避けるプレフィックス付き）。
@@ -468,14 +495,17 @@ fn build_status_update_ops(
 
     let mut ops: Vec<Operation> = Vec::new();
 
-    for st in &model.state_transitions {
-        let from_variant = match state_variant_map.get(&st.from) {
-            Some(v) => v.clone(),
-            None => continue,
+    for st in model
+        .state_transitions
+        .iter()
+        .filter(|st| st.entity == ek && st.column == status_col)
+    {
+        let Some(from_variant) = resolve_transition_variant(model, ek, &status_col, &st.from)
+        else {
+            continue;
         };
-        let to_variant = match state_variant_map.get(&st.to) {
-            Some(v) => v.clone(),
-            None => continue,
+        let Some(to_variant) = resolve_transition_variant(model, ek, &status_col, &st.to) else {
+            continue;
         };
         let event_key = st.event;
 
@@ -513,6 +543,8 @@ fn build_status_update_ops(
         }
     }
 
+    // state_variant_map is retained for parity with link_states_to_enum callers.
+    let _ = state_variant_map;
     (Some(status_col), ops)
 }
 
@@ -802,17 +834,18 @@ fn event_status_effects_for_entity(
     let Some(status_col) = status_col else {
         return effects;
     };
-    let Some((_, state_variant_map)) = link_states_to_enum(model, ek) else {
-        return effects;
-    };
-
-    for st in &model.state_transitions {
-        if let Some(to_variant) = state_variant_map.get(&st.to) {
-            effects.insert(
-                st.event,
-                (status_col.clone(), AbstractValue::Enum(to_variant.clone())),
-            );
-        }
+    for st in model
+        .state_transitions
+        .iter()
+        .filter(|st| st.entity == ek && st.column == *status_col)
+    {
+        let Some(to_variant) = resolve_transition_variant(model, ek, status_col, &st.to) else {
+            continue;
+        };
+        effects.insert(
+            st.event,
+            (status_col.clone(), AbstractValue::Enum(to_variant)),
+        );
     }
 
     effects
@@ -1570,14 +1603,14 @@ fn check_cross_entity_constraints(
     result_index: &HashMap<EntityKey, usize>,
 ) {
     for constraint in &model.cross_forbidden_constraints {
-        let diags = evaluate_cross_forbidden(model, results, result_index, constraint);
+        let diags = evaluate_forbidden(model, results, result_index, constraint);
         for diag in diags {
             push_cross_diag(&constraint.scope, result_index, results, diag);
         }
     }
 
     for invariant in &model.cross_entity_invariants {
-        let diags = evaluate_cross_invariant(model, results, result_index, invariant);
+        let diags = evaluate_invariant(model, results, result_index, invariant);
         for diag in diags {
             push_cross_diag(&invariant.scope, result_index, results, diag);
         }
@@ -1769,22 +1802,23 @@ fn immediate_effects_after_usecase(
         if !raised_events.contains(&st.event) {
             continue;
         }
-        for entity in model.entities.keys() {
-            if let Some((status_col, state_variant_map)) = link_states_to_enum(model, entity) {
-                if let Some(to_variant) = state_variant_map.get(&st.to) {
-                    effects.insert(
-                        (entity, status_col),
-                        AbstractValue::Enum(to_variant.clone()),
-                    );
-                }
-            }
+        let Some((status_col, _)) = link_states_to_enum(model, st.entity) else {
+            continue;
+        };
+        if st.column != status_col {
+            continue;
         }
+        let Some(to_variant) = resolve_transition_variant(model, st.entity, &status_col, &st.to)
+        else {
+            continue;
+        };
+        effects.insert((st.entity, status_col), AbstractValue::Enum(to_variant));
     }
 
     effects
 }
 
-fn evaluate_cross_forbidden(
+fn evaluate_forbidden(
     model: &SemanticModel,
     results: &[EntityStateResult],
     result_index: &HashMap<EntityKey, usize>,
@@ -1801,7 +1835,7 @@ fn evaluate_cross_forbidden(
     {
         return vec![StateDiag::CrossConstraintNotEvaluated {
             entities,
-            constraint: format!("cross_forbidden({})", constraint_desc),
+            constraint: format!("forbidden({})", constraint_desc),
             reason,
         }];
     }
@@ -1811,7 +1845,7 @@ fn evaluate_cross_forbidden(
     if combo_count > CROSS_PATTERN_COMBO_CAP {
         return vec![StateDiag::CrossConstraintNotEvaluated {
             entities,
-            constraint: format!("cross_forbidden({})", constraint_desc),
+            constraint: format!("forbidden({})", constraint_desc),
             reason: format!(
                 "cross-product has {} combinations, above cap {}",
                 combo_count, CROSS_PATTERN_COMBO_CAP
@@ -1865,7 +1899,7 @@ fn evaluate_cross_forbidden(
     if has_unresolved_linked_witness {
         diags.push(StateDiag::CrossConstraintNotEvaluated {
             entities,
-            constraint: format!("cross_forbidden({})", constraint_desc),
+            constraint: format!("forbidden({})", constraint_desc),
             reason: linked_scope_reason.unwrap_or_else(|| {
                 relation_scoped_witness_reason(model, &constraint.scope_semantics)
             }),
@@ -1873,7 +1907,7 @@ fn evaluate_cross_forbidden(
     } else if diags.len() >= CROSS_VIOLATION_DIAG_CAP {
         diags.push(StateDiag::CrossConstraintNotEvaluated {
             entities,
-            constraint: format!("cross_forbidden({})", constraint_desc),
+            constraint: format!("forbidden({})", constraint_desc),
             reason: format!(
                 "additional witness combinations omitted after {} diagnostics",
                 CROSS_VIOLATION_DIAG_CAP
@@ -1883,7 +1917,7 @@ fn evaluate_cross_forbidden(
         if let Some(reason) = unknown_reason {
             diags.push(StateDiag::CrossConstraintNotEvaluated {
                 entities,
-                constraint: format!("cross_forbidden({})", constraint_desc),
+                constraint: format!("forbidden({})", constraint_desc),
                 reason,
             });
         }
@@ -1892,7 +1926,7 @@ fn evaluate_cross_forbidden(
     diags
 }
 
-fn evaluate_cross_invariant(
+fn evaluate_invariant(
     model: &SemanticModel,
     results: &[EntityStateResult],
     result_index: &HashMap<EntityKey, usize>,
@@ -2450,7 +2484,7 @@ usecase CloseStore "店舗を閉じる"
 api StoreAdminApi "店舗管理API"
 invokes(CloseStore, StoreAdminApi)
 updates(StoreAdminApi, Store)
-sets(CloseStore, Store, "status", "closed")
+sets(CloseStore, Store, status == closed)
 "#,
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
@@ -2478,7 +2512,7 @@ state Requested "Requested"
 state Executed "Executed"
 creates(ExecuteCertIssue, CertificateOrder)
 raises(ExecuteCertIssue, CertIssued)
-transitions(CertIssued, Requested, Executed)
+transitions(CertificateOrder.status, CertIssued, requested -> executed)
 after(ExecuteCertIssue).assert(CertificateOrder.status == executed)
 "#,
         );
@@ -2535,10 +2569,10 @@ entity TerminalCertAssignment "Terminal Cert Assignment" {
 }
 creates(RevokeCert, ClientCertificate)
 creates(AssignTerminal, TerminalCertAssignment)
-sets(RevokeCert, ClientCertificate, "status", "revoked")
-sets(AssignTerminal, TerminalCertAssignment, "status", "active")
-forbidden_when(ClientCertificate, (status, revoked))
-  .none(TerminalCertAssignment, (status, active))
+sets(RevokeCert, ClientCertificate, status == revoked)
+sets(AssignTerminal, TerminalCertAssignment, status == active)
+when(ClientCertificate.status == revoked)
+  .none(TerminalCertAssignment.status == active)
 "#,
         );
 
@@ -2569,9 +2603,9 @@ entity TerminalCertAssignment "Terminal Cert Assignment" {
 }
 creates(RevokeCert, ClientCertificate)
 creates(AssignTerminal, TerminalCertAssignment)
-sets(RevokeCert, ClientCertificate, "status", "revoked")
-forbidden_when(ClientCertificate, (status, revoked))
-  .none(TerminalCertAssignment, (status, active))
+sets(RevokeCert, ClientCertificate, status == revoked)
+when(ClientCertificate.status == revoked)
+  .none(TerminalCertAssignment.status == active)
 "#,
         );
 
@@ -2606,8 +2640,8 @@ raises(usecase::Cancel, EvCancel)
 state Pending   "注文受付"
 state Paid      "支払済"
 state Cancelled "キャンセル済"
-transitions(EvPaid,   Pending,   Paid)
-transitions(EvCancel, Pending,   Cancelled)
+transitions(Order.status, EvPaid, pending -> paid)
+transitions(Order.status, EvCancel, pending -> cancelled)
 "#,
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
@@ -2650,8 +2684,8 @@ updates(usecase::DeliverUc, Order)
 raises(usecase::DeliverUc, EvDeliver)
 state Pending   "受付中"
 state Delivered "配達完了"
-transitions(EvDeliver, Pending, Delivered)
-sets(usecase::DeliverUc, Order, "delivered_at", "present")
+transitions(Order.status, EvDeliver, pending -> delivered)
+sets(usecase::DeliverUc, Order, delivered_at == present)
 "#,
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
@@ -2669,7 +2703,7 @@ sets(usecase::DeliverUc, Order, "delivered_at", "present")
         };
         assert!(
             r.patterns.iter().any(|p| p.pattern == pending_null),
-            "(pending, null) が存在すべき"
+            "pending == null が存在すべき"
         );
 
         // (pending, present) は到達不能
@@ -2684,7 +2718,7 @@ sets(usecase::DeliverUc, Order, "delivered_at", "present")
         };
         assert!(
             !r.patterns.iter().any(|p| p.pattern == pending_present),
-            "(pending, present) は到達不能"
+            "pending == present は到達不能"
         );
 
         // (delivered, present) は到達可能
@@ -2699,7 +2733,7 @@ sets(usecase::DeliverUc, Order, "delivered_at", "present")
         };
         assert!(
             r.patterns.iter().any(|p| p.pattern == delivered_present),
-            "(delivered, present) が存在すべき"
+            "delivered == present が存在すべき"
         );
 
         // (delivered, null) は到達不能（Deliver が status と delivered_at を同時に変える）
@@ -2714,7 +2748,7 @@ sets(usecase::DeliverUc, Order, "delivered_at", "present")
         };
         assert!(
             !r.patterns.iter().any(|p| p.pattern == delivered_null),
-            "(delivered, null) は到達不能"
+            "delivered == null は到達不能"
         );
     }
 
@@ -2739,8 +2773,8 @@ updates(usecase::DeliverUc, Order)
 raises(usecase::DeliverUc, EvDeliver)
 state Pending   "受付中"
 state Delivered "配達完了"
-transitions(EvDeliver, Pending, Delivered)
-sets(event::EvDeliver, Order, "delivered_at", "present")
+transitions(Order.status, EvDeliver, pending -> delivered)
+sets(event::EvDeliver, Order, delivered_at == present)
 "#,
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
@@ -2759,7 +2793,7 @@ sets(event::EvDeliver, Order, "delivered_at", "present")
         };
         assert!(
             r.patterns.iter().any(|p| p.pattern == delivered_present),
-            "(delivered, present) が到達可能なはず: {:?}",
+            "delivered == present が到達可能なはず: {:?}",
             r.patterns.iter().map(|p| &p.pattern).collect::<Vec<_>>()
         );
 
@@ -2775,7 +2809,7 @@ sets(event::EvDeliver, Order, "delivered_at", "present")
         };
         assert!(
             !r.patterns.iter().any(|p| p.pattern == delivered_null),
-            "(delivered, null) は到達不能なはず"
+            "delivered == null は到達不能なはず"
         );
     }
 
@@ -2796,8 +2830,8 @@ updates(usecase::DeliverUc, Order)
 raises(usecase::DeliverUc, EvDeliver)
 state Pending   "受付中"
 state Delivered "配達完了"
-transitions(EvDeliver, Pending, Delivered)
-sets(event::EvDeliver, Order, "delivered_at", "present")
+transitions(Order.status, EvDeliver, pending -> delivered)
+sets(event::EvDeliver, Order, delivered_at == present)
 "#,
         );
         let entity = model
@@ -2845,7 +2879,7 @@ usecase OpenTicket  "作成"
 usecase CloseTicket "終了"
 creates(OpenTicket, Ticket)
 updates(CloseTicket, Ticket)
-sets(CloseTicket, Ticket, "status", "closed")
+sets(CloseTicket, Ticket, status == closed)
 contains(Included, OpenTicket)
 contains(Excluded, CloseTicket)
 "#,
@@ -2919,10 +2953,10 @@ updates(SetA, Multi)
 updates(SetB, Multi)
 updates(SetC, Multi)
 updates(SetD, Multi)
-sets(usecase::SetA, Multi, "a", "present")
-sets(usecase::SetB, Multi, "b", "present")
-sets(usecase::SetC, Multi, "c", "present")
-sets(usecase::SetD, Multi, "d", "present")
+sets(usecase::SetA, Multi, a == present)
+sets(usecase::SetB, Multi, b == present)
+sets(usecase::SetC, Multi, c == present)
+sets(usecase::SetD, Multi, d == present)
 "#;
         let model = model_from(src);
         let results = derive_state_patterns(&model, &[], 5);
@@ -2945,7 +2979,7 @@ usecase Create  "作成"
 usecase Publish "公開"
 creates(Create,  Doc)
 updates(Publish, Doc)
-sets(usecase::Publish, Doc, "metadata", "jsonb")
+sets(usecase::Publish, Doc, metadata == present)
 "#,
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
@@ -2976,7 +3010,7 @@ usecase Create "作成"
 usecase Enable "有効化"
 creates(Create, Switch)
 updates(Enable, Switch)
-sets(usecase::Enable, Switch, "enabled", "true")
+sets(usecase::Enable, Switch, enabled == true)
 "#,
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
@@ -3013,7 +3047,7 @@ deletes(Remove,   Item)
 raises(Deactive, Deactivate)
 state Active   "有効"
 state Inactive "無効"
-transitions(Deactivate, Active, Inactive)
+transitions(Item.status, Deactivate, active -> inactive)
 "#,
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
@@ -3033,7 +3067,7 @@ transitions(Deactivate, Active, Inactive)
 
     #[test]
     fn test_forbidden_state_violated() {
-        // タプル構文: forbidden(Order, (status, cancelled))
+        // タプル構文: forbidden(Order, status == cancelled)
         let model = model_from(
             r#"
 entity Order "注文" {
@@ -3048,8 +3082,8 @@ updates(Cancel, Order)
 raises(Cancel, EvCancel)
 state Pending   "受付中"
 state Cancelled "キャンセル済"
-transitions(EvCancel, Pending, Cancelled)
-forbidden(Order, (status, cancelled))
+transitions(Order.status, EvCancel, pending -> cancelled)
+forbidden(Order, status == cancelled)
 "#,
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
@@ -3091,9 +3125,9 @@ updates(Refund,  Order)
 raises(Deliver, EvDeliver)
 state Pending   "受付中"
 state Delivered "配達完了"
-transitions(EvDeliver, Pending, Delivered)
-sets(usecase::Refund, Order, "refunded", "true")
-forbidden(Order, (status, delivered), (refunded, true))
+transitions(Order.status, EvDeliver, pending -> delivered)
+sets(usecase::Refund, Order, refunded == true)
+forbidden(Order, status == delivered, refunded == true)
 "#,
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
@@ -3143,21 +3177,21 @@ creates(ReceiveDispense, DispenseReception)
 updates(CompleteAccounting, DispenseReception)
 updates(CancelReception, DispenseReception)
 updates(StartCorrection, DispenseReception)
-sets(CompleteAccounting, DispenseReception, "validity", "active")
-sets(CompleteAccounting, DispenseReception, "progress", "completed")
-sets(CompleteAccounting, DispenseReception, "correction", "none")
-sets(CompleteAccounting, DispenseReception, "recalc", "false")
-sets(CancelReception, DispenseReception, "validity", "cancelled")
-sets(CancelReception, DispenseReception, "progress", "open")
-sets(CancelReception, DispenseReception, "correction", "none")
-sets(CancelReception, DispenseReception, "recalc", "false")
-sets(StartCorrection, DispenseReception, "validity", "active")
-sets(StartCorrection, DispenseReception, "progress", "open")
-sets(StartCorrection, DispenseReception, "correction", "correcting")
-sets(StartCorrection, DispenseReception, "recalc", "true")
-forbidden(DispenseReception, (validity, cancelled), (progress, completed))
-forbidden(DispenseReception, (validity, cancelled), (correction, correcting))
-forbidden(DispenseReception, (progress, completed), (correction, correcting))
+sets(CompleteAccounting, DispenseReception, validity == active)
+sets(CompleteAccounting, DispenseReception, progress == completed)
+sets(CompleteAccounting, DispenseReception, correction == none)
+sets(CompleteAccounting, DispenseReception, recalc == false)
+sets(CancelReception, DispenseReception, validity == cancelled)
+sets(CancelReception, DispenseReception, progress == open)
+sets(CancelReception, DispenseReception, correction == none)
+sets(CancelReception, DispenseReception, recalc == false)
+sets(StartCorrection, DispenseReception, validity == active)
+sets(StartCorrection, DispenseReception, progress == open)
+sets(StartCorrection, DispenseReception, correction == correcting)
+sets(StartCorrection, DispenseReception, recalc == true)
+forbidden(DispenseReception, validity == cancelled, progress == completed)
+forbidden(DispenseReception, validity == cancelled, correction == correcting)
+forbidden(DispenseReception, progress == completed, correction == correcting)
 "#,
         );
 
@@ -3189,7 +3223,7 @@ entity Item "アイテム" {
 }
 usecase Create "作成"
 creates(Create, Item)
-forbidden(Item, (status, inactive))
+forbidden(Item, status == inactive)
 "#,
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
@@ -3210,8 +3244,8 @@ forbidden(Item, (status, inactive))
 
     #[test]
     fn test_invariant_violated() {
-        // invariant(Order).when(status, delivered).then(delivered_at, present)
-        // Deliver が delivered_at を sets しないので (delivered, null) が到達可能 → 違反
+        // invariant(Order).when(status == delivered).then(delivered_at == present)
+        // Deliver が delivered_at を sets しないので delivered == null が到達可能 → 違反
         let model = model_from(
             r#"
 entity Order "注文" {
@@ -3227,10 +3261,10 @@ updates(Deliver, Order)
 raises(Deliver,  EvDeliver)
 state Pending   "受付中"
 state Delivered "配達完了"
-transitions(EvDeliver, Pending, Delivered)
+transitions(Order.status, EvDeliver, pending -> delivered)
 invariant(Order)
-  .when(status, delivered)
-  .then(delivered_at, present)
+  .when(status == delivered)
+  .then(delivered_at == present)
 "#,
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
@@ -3263,14 +3297,14 @@ event TerminalRetired "退役済み"
 creates(RegisterTerminal, Terminal)
 updates(RetireTerminal, Terminal)
 updates(DeregisterTerminal, Terminal)
-sets(RetireTerminal, Terminal, "retired_at", "timestamptz")
-sets(RetireTerminal, Terminal, "status", "retired")
-sets(DeregisterTerminal, Terminal, "status", "deregistered")
+sets(RetireTerminal, Terminal, retired_at == present)
+sets(RetireTerminal, Terminal, status == retired)
+sets(DeregisterTerminal, Terminal, status == deregistered)
 raises(RetireTerminal, TerminalRetired)
 triggers(TerminalRetired, DeregisterTerminal)
 invariant(Terminal)
-  .when(status, deregistered)
-  .then(retired_at, present)
+  .when(status == deregistered)
+  .then(retired_at == present)
 "#,
         );
 
@@ -3301,13 +3335,13 @@ event TerminalRetired "退役済み"
 creates(RegisterTerminal, Terminal)
 updates(RetireTerminal, Terminal)
 updates(DeregisterTerminal, Terminal)
-sets(RetireTerminal, Terminal, "status", "retired")
-sets(DeregisterTerminal, Terminal, "status", "deregistered")
+sets(RetireTerminal, Terminal, status == retired)
+sets(DeregisterTerminal, Terminal, status == deregistered)
 raises(RetireTerminal, TerminalRetired)
 triggers(TerminalRetired, DeregisterTerminal)
 invariant(Terminal)
-  .when(status, deregistered)
-  .then(retired_at, present)
+  .when(status == deregistered)
+  .then(retired_at == present)
 "#,
         );
 
@@ -3326,7 +3360,7 @@ invariant(Terminal)
 
     #[test]
     fn test_invariant_multi_guard_violated() {
-        // .when(status, delivered).when(refunded, false).then(refund_id, null)
+        // .when(status == delivered).when(refunded == false).then(refund_id == null)
         // (delivered, false, present) が到達可能 → 違反
         let model = model_from(
             r#"
@@ -3346,13 +3380,13 @@ updates(Refund,  Order)
 raises(Deliver, EvDeliver)
 state Pending   "受付中"
 state Delivered "配達完了"
-transitions(EvDeliver, Pending, Delivered)
-sets(usecase::Refund, Order, "refunded",  "true")
-sets(usecase::Refund, Order, "refund_id", "present")
+transitions(Order.status, EvDeliver, pending -> delivered)
+sets(usecase::Refund, Order, refunded == true)
+sets(usecase::Refund, Order, refund_id == present)
 invariant(Order)
-  .when(status, delivered)
-  .when(refunded, false)
-  .then(refund_id, null)
+  .when(status == delivered)
+  .when(refunded == false)
+  .then(refund_id == null)
 "#,
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
@@ -3383,7 +3417,7 @@ entity Order "注文" {
 }
 usecase Place "注文確定"
 creates(Place, Order)
-required(Order, (status, paid))
+required(Order, status == paid)
 "#,
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
@@ -3417,9 +3451,9 @@ usecase Reject  "却下"
 creates(Create, Document)
 updates(Approve, Document)
 updates(Reject,  Document)
-sets(Approve, Document, "approved", "true")
-sets(Reject,  Document, "rejected", "true")
-exclusive(Document, (approved, true), (rejected, true))
+sets(Approve, Document, approved == true)
+sets(Reject, Document, rejected == true)
+exclusive(Document, approved == true, rejected == true)
 "#,
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
@@ -3446,8 +3480,8 @@ exclusive(Document, (approved, true), (rejected, true))
 entity Order "注文" { id: Int @pk  status: Enum(pending, paid) @default(pending) }
 usecase Pay "支払い"
 creates(Pay, Order)
-sets(Pay, Order, "status", "paid")
-forbidden(Order, (status, paid))
+sets(Pay, Order, status == paid)
+forbidden(Order, status == paid)
 "#,
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
@@ -3492,12 +3526,12 @@ contains(Sales, Refund)
 creates(Open,   Stock)
 updates(Sell,   Stock)
 updates(Refund, Stock)
-sets(Open,   Stock, "status", "on_sale")
+sets(Open, Stock, status == on_sale)
 sets(Sell,   Stock, stock < selling, true)
 sets(Refund, Stock, stock < selling, false)
-forbidden(Stock, (status, on_sale), stock < selling)
+forbidden(Stock, status == on_sale, stock < selling)
 invariant(Stock)
-  .when(status, on_sale)
+  .when(status == on_sale)
   .then(stock < selling)
 "#,
         );
@@ -3565,10 +3599,10 @@ entity Stock "在庫" {
 }
 usecase ListItem "出品"
 creates(ListItem, Stock)
-sets(ListItem, Stock, "status", "on_sale")
+sets(ListItem, Stock, status == on_sale)
 sets(ListItem, Stock, stock < selling, true)
 invariant(Stock)
-  .when(status, on_sale)
+  .when(status == on_sale)
   .then(stock < selling)
 "#,
         );
@@ -3597,9 +3631,9 @@ forbidden(Stock, stock < selling)
 required(Stock, stock < selling)
 invariant(Stock)
   .when(stock < selling)
-  .then(status, open)
+  .then(status == open)
 invariant(Stock)
-  .when(status, open)
+  .when(status == open)
   .then(stock < selling)
 "#,
         );
@@ -3680,7 +3714,7 @@ contains(CouponMgmt, Expire)
 creates(Expire, Coupon)
 updates(Expire, Coupon)
 sets(Expire, Coupon, expired_at < now, true)
-forbidden(Coupon, (status, usable), expired_at < now)
+forbidden(Coupon, status == usable, expired_at < now)
 "#,
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
@@ -3726,11 +3760,11 @@ updates(Deliver, Order)
 raises(Deliver,  EvDeliver)
 state Pending   "受付中"
 state Delivered "配達完了"
-transitions(EvDeliver, Pending, Delivered)
-sets(usecase::Deliver, Order, "delivered_at", "present")
+transitions(Order.status, EvDeliver, pending -> delivered)
+sets(usecase::Deliver, Order, delivered_at == present)
 invariant(Order)
-  .when(status, delivered)
-  .then(delivered_at, present)
+  .when(status == delivered)
+  .then(delivered_at == present)
 "#,
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
@@ -3759,9 +3793,9 @@ entity Payment "支払い" {
   id: Int @pk
   status: Enum(pending, captured) @default(pending)
 }
-cross_forbidden(Order, Payment,
-  (Order.status, cancelled),
-  (Payment.status, pending))
+forbidden(Order, Payment,
+  Order.status == cancelled,
+  Payment.status == pending)
 "#,
         );
 
@@ -3790,9 +3824,9 @@ entity Payment "支払い" {
   id: Int @pk
   status: Enum(pending, captured) @default(pending)
 }
-cross_invariant(Order, Payment)
-  .when(Order.status, paid)
-  .then(Payment.status, captured)
+invariant(Order, Payment)
+  .when(Order.status == paid)
+  .then(Payment.status == captured)
 "#,
         );
 
@@ -3821,10 +3855,10 @@ entity Payment "支払い" {
   id: Int @pk
   status: Enum(pending, captured) @default(pending)
 }
-relate(Payment, Order, "1:1")
-cross_invariant(Order, Payment)
-  .when(Order.status, paid)
-  .then(Payment.status, captured)
+relate(Payment, Order, 1:1)
+invariant(Order, Payment)
+  .when(Order.status == paid)
+  .then(Payment.status == captured)
 "#,
         );
 
@@ -3858,10 +3892,10 @@ entity ClientCertificate "証明書" {
   id: Int @pk
   status: Enum(active, revoked) @default(active)
 }
-relate(Terminal, ClientCertificate, "1:N")
-cross_forbidden(Terminal, ClientCertificate,
-  (Terminal.status, deregistered),
-  (ClientCertificate.status, active))
+relate(Terminal, ClientCertificate, 1:N)
+forbidden(Terminal, ClientCertificate,
+  Terminal.status == deregistered,
+  ClientCertificate.status == active)
 "#,
         );
 
@@ -3895,7 +3929,7 @@ entity Payment "支払い" {
   id: Int @pk
   amount: Decimal
 }
-cross_forbidden(Order, Payment, Payment.amount > Order.total)
+forbidden(Order, Payment, Payment.amount > Order.total)
 "#,
         );
 
@@ -3924,11 +3958,11 @@ entity Payment "支払い" {
   id: Int @pk
   status: Enum(pending, captured) @default(pending)
 }
-relate(Payment, Order, "1:1")
-cross_invariant(Order, Payment)
+relate(Payment, Order, 1:1)
+invariant(Order, Payment)
   .along(Order, Payment)
-  .when(Order.status, paid)
-  .then(Payment.status, captured)
+  .when(Order.status == paid)
+  .then(Payment.status == captured)
 "#,
         );
 
@@ -3969,11 +4003,11 @@ entity Payment "支払い" {
 usecase RegisterPayment "登録"
 creates(RegisterPayment, Order)
 creates(RegisterPayment, Payment)
-relate(Payment, Order, "1:1")
-cross_invariant(Order, Payment)
+relate(Payment, Order, 1:1)
+invariant(Order, Payment)
   .along(Order, Payment)
-  .when(Order.status, paid)
-  .then(Payment.status, captured)
+  .when(Order.status == paid)
+  .then(Payment.status == captured)
 "#,
         );
 
@@ -4005,10 +4039,10 @@ entity ClientCertificate "証明書" {
 usecase RegisterTerminalCertificate "登録"
 creates(RegisterTerminalCertificate, Terminal)
 creates(RegisterTerminalCertificate, ClientCertificate)
-relate(Terminal, ClientCertificate, "1:N")
-cross_forbidden(Terminal, ClientCertificate,
-  (Terminal.status, deregistered),
-  (ClientCertificate.status, active))
+relate(Terminal, ClientCertificate, 1:N)
+forbidden(Terminal, ClientCertificate,
+  Terminal.status == deregistered,
+  ClientCertificate.status == active)
   .along(Terminal, ClientCertificate)
 "#,
         );
@@ -4041,11 +4075,11 @@ entity LineItem "明細" {
 usecase SubmitOrder "注文確定"
 creates(SubmitOrder, Order)
 creates(SubmitOrder, LineItem)
-relate(LineItem, Order, "N:1")
-cross_invariant(Order, LineItem)
+relate(LineItem, Order, N:1)
+invariant(Order, LineItem)
   .along(Order, LineItem)
-  .when(Order.status, submitted)
-  .then(LineItem.status, allocated)
+  .when(Order.status == submitted)
+  .then(LineItem.status == allocated)
 "#,
         );
 
@@ -4074,10 +4108,10 @@ entity Payment "支払い" {
   id: Int @pk
   status: Enum(pending, captured) @default(pending)
 }
-cross_invariant(Order, Payment)
+invariant(Order, Payment)
   .along(Order, Payment)
-  .when(Order.status, paid)
-  .then(Payment.status, captured)
+  .when(Order.status == paid)
+  .then(Payment.status == captured)
 "#,
         );
 
@@ -4108,11 +4142,11 @@ entity Payment "支払い" {
   id: Int @pk
   status: Enum(pending, captured) @default(captured)
 }
-relate(Payment, Order, "1:1")
-cross_invariant(Order, Payment)
+relate(Payment, Order, 1:1)
+invariant(Order, Payment)
   .along(Order, Payment)
-  .when(Order.status, paid)
-  .then(Payment.status, captured)
+  .when(Order.status == paid)
+  .then(Payment.status == captured)
 "#,
         );
 
@@ -4143,10 +4177,10 @@ entity Payment "支払い" {
   id: Int @pk
   status: Enum(pending, captured) @default(pending)
 }
-relate(Payment, Order, "1:1")
-cross_forbidden(Order, Payment,
-  (Order.status, paid),
-  (Payment.status, pending))
+relate(Payment, Order, 1:1)
+forbidden(Order, Payment,
+  Order.status == paid,
+  Payment.status == pending)
   .along(Order, Payment)
 "#,
         );
@@ -4167,6 +4201,60 @@ cross_forbidden(Order, Payment,
     }
 
     #[test]
+    fn shared_event_transitions_do_not_leak_across_entities() {
+        // Same event drives distinct transitions on Order and Payment.
+        // Without entity filtering, Payment would inherit Order's pending->paid.
+        let model = model_from(
+            r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid) @default(pending)
+}
+entity Payment "決済" {
+  id: Int @pk
+  status: Enum(pending, paid) @default(pending)
+}
+usecase Init "初期化"
+usecase Flip "更新"
+event EvFlip "共有イベント"
+creates(Init, Order)
+creates(Init, Payment)
+updates(Flip, Order)
+updates(Flip, Payment)
+raises(Flip, EvFlip)
+transitions(Order.status, EvFlip, pending -> paid)
+transitions(Payment.status, EvFlip, paid -> pending)
+"#,
+        );
+
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let payment = results.iter().find(|r| r.entity_id == "Payment").unwrap();
+        let order = results.iter().find(|r| r.entity_id == "Order").unwrap();
+
+        let payment_has_paid = payment.patterns.iter().any(|p| {
+            p.pattern.values.iter().any(|(col, val)| {
+                col == "status" && matches!(val, AbstractValue::Enum(v) if v == "paid")
+            })
+        });
+        assert!(
+            !payment_has_paid,
+            "Payment must not inherit Order's pending->paid via shared event: {:?}",
+            payment.patterns
+        );
+
+        let order_has_paid = order.patterns.iter().any(|p| {
+            p.pattern.values.iter().any(|(col, val)| {
+                col == "status" && matches!(val, AbstractValue::Enum(v) if v == "paid")
+            })
+        });
+        assert!(
+            order_has_paid,
+            "Order should still reach paid via its own transition: {:?}",
+            order.patterns
+        );
+    }
+
+    #[test]
     fn test_cross_unknown_condition_does_not_mask_false_state_condition() {
         let model = model_from(
             r#"
@@ -4179,9 +4267,9 @@ entity Payment "支払い" {
   id: Int @pk
   amount: Decimal
 }
-cross_forbidden(Order, Payment,
+forbidden(Order, Payment,
   Payment.amount > Order.total,
-  (Order.status, paid))
+  Order.status == paid)
 "#,
         );
 

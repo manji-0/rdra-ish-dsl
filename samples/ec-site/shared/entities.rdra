@@ -72,16 +72,16 @@ entity Payment "Payment" {
 }
 
 // ── ER relationships ─────────────────────────────────────
-relate(Product,         Category,        "N:1")
-relate(ShippingAddress, CustomerAccount, "N:1")
-relate(Cart,            CustomerAccount, "N:1")
-relate(CartItem,        Cart,            "N:1")
-relate(CartItem,        Product,         "N:1")
-relate(Order,           CustomerAccount, "N:1")
-relate(Order,           ShippingAddress, "N:1")
-relate(OrderLine,       Order,           "N:1")
-relate(OrderLine,       Product,         "N:1")
-relate(Payment,         Order,           "1:1")
+relate(Product, Category, N:1)
+relate(ShippingAddress, CustomerAccount, N:1)
+relate(Cart, CustomerAccount, N:1)
+relate(CartItem, Cart, N:1)
+relate(CartItem, Product, N:1)
+relate(Order, CustomerAccount, N:1)
+relate(Order, ShippingAddress, N:1)
+relate(OrderLine, Order, N:1)
+relate(OrderLine, Product, N:1)
+relate(Payment, Order, 1:1)
 
 // ── State transitions (order) ───────────────────────────
 // Capture / Cancel are also declared as use cases with the same names in
@@ -100,7 +100,7 @@ event Ship    "Start Shipping"
 event Deliver "Confirm Delivery"
 event Cancel  "Cancel Order"     // same name as use case Cancel (buc_order)
 
-transitions(event::Capture, Pending,  Paid)
-transitions(event::Ship,    Paid,     Shipped)
-transitions(event::Deliver, Shipped,  Delivered)
-transitions(event::Cancel,  Pending,  Cancelled)
+transitions(Order.status, event::Capture, pending -> paid)
+transitions(Order.status, event::Ship, paid -> shipped)
+transitions(Order.status, event::Deliver, shipped -> delivered)
+transitions(Order.status, event::Cancel, pending -> cancelled)

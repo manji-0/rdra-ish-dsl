@@ -41,7 +41,29 @@ fn format_item(item: &Item) -> String {
         Item::Import(import) => format_import(import),
         Item::Instance(instance) => format_instance(instance),
         Item::Predicate(predicate) => format_predicate(predicate),
+        Item::Property(prop) => format_property(prop),
     }
+}
+
+fn format_property(prop: &PropertyDecl) -> String {
+    let formula = match &prop.formula {
+        AstTemporalFormula::Always(expr) => format!("always({})", format_expr(expr)),
+        AstTemporalFormula::Eventually(expr) => format!("eventually({})", format_expr(expr)),
+        AstTemporalFormula::LeadsTo {
+            antecedent,
+            consequent,
+        } => format!(
+            "leads_to({}, {})",
+            format_expr(antecedent),
+            format_expr(consequent)
+        ),
+    };
+    format!(
+        "property {} {}\n  {}",
+        prop.id,
+        quote_string(&prop.label),
+        formula
+    )
 }
 
 fn format_dotted_name(name: &DottedName) -> String {
@@ -310,14 +332,9 @@ fn format_predicate_arg(arg: &PredicateArg) -> String {
     match arg {
         PredicateArg::Ref(qref) => format_qref(qref),
         PredicateArg::Lit(value) => quote_string(value),
-        PredicateArg::Tuple(args) => format!(
-            "({})",
-            args.iter()
-                .map(format_predicate_arg)
-                .collect::<Vec<_>>()
-                .join(", ")
-        ),
         PredicateArg::Expr(expr) => format_expr(expr),
+        PredicateArg::Transition { from, to } => format!("{from} -> {to}"),
+        PredicateArg::Card(card) => card.clone(),
     }
 }
 
@@ -329,6 +346,9 @@ fn format_expr(expr: &Expr) -> String {
             format_cmp_op(&cmp.op),
             format_operand(&cmp.rhs)
         ),
+        Expr::Not(inner) => format!("not ({})", format_expr(inner)),
+        Expr::And(a, b) => format!("({}) and ({})", format_expr(a), format_expr(b)),
+        Expr::Or(a, b) => format!("({}) or ({})", format_expr(a), format_expr(b)),
     }
 }
 
@@ -399,7 +419,7 @@ requirement ReqCheckout "Checkout reliable" priority "must" source "Interview"
 adr AdrOutbox "Use outbox" adr_status accepted decision "Use transactional outbox." reason "Avoid synchronous callbacks."
 api CreateOrder "Create order" method POST path "/orders" auth bearer
 dto CreateOrderRequest "Create order request" {customer_id:Int note:String @null}
-invariant(Order).when(status, paid).then(total > 0)
+invariant(Order).when(status == paid).then(total > 0)
 "#;
 
         let formatted = format_source(src).unwrap();
@@ -429,7 +449,7 @@ dto CreateOrderRequest "Create order request" {
   note: String @null
 }
 
-invariant(Order).when(status, paid).then(total > 0)
+invariant(Order).when(status == paid).then(total > 0)
 "#
         );
 

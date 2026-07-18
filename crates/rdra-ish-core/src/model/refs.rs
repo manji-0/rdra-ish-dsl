@@ -76,8 +76,8 @@ pub enum RelKind {
     Owns,
     // Entity ER
     RelateOneToOne,   // 1:1
-    RelateOneToMany,  // 1:N (A側が1, B側がMany)
-    RelateManyToOne,  // N:1 (A側がMany, B側が1) → A に FK
+    RelateOneToMany,  // 1:N A側が1 == B側がMany
+    RelateManyToOne,  // N:1 A側がMany == B側が1 → A に FK
     RelateManyToMany, // N:M (警告のみ)
 }
 
@@ -394,7 +394,7 @@ impl DecidesTarget {
     }
 }
 
-/// `relate(..., "N:1")` のカーディナリティ。
+/// `relate(..., N:1)` のカーディナリティ。
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Cardinality {
     OneToOne,

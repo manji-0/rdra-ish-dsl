@@ -147,9 +147,11 @@ pub enum TypedPredicate {
         target: DecidesTarget,
     },
     Transitions {
+        entity: EntityKey,
+        column: std::string::String,
         event: EventKey,
-        from: StateKey,
-        to: StateKey,
+        from: std::string::String,
+        to: std::string::String,
     },
     Outbox {
         event: EventKey,

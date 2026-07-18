@@ -1,6 +1,6 @@
 ---
 source: crates/rdra-ish-syntax/src/parser.rs
-assertion_line: 1360
+assertion_line: 1443
 expression: ast
 ---
 Ast {
@@ -276,14 +276,14 @@ Ast {
                             span: 246..254,
                         },
                     ),
-                    Lit(
+                    Card(
                         "N:1",
                     ),
                 ],
                 chain: [],
-                span: 232..262,
+                span: 232..260,
             },
         ),
     ],
-    source: "\n// コメント\nmodule shared.actors\n\nimport shared.entities\n\nactor   Customer \"顧客\"\nusecase Browse   \"商品を探す\"\n\nentity  Order \"注文\" {\n  id: Int @pk\n  total: Money\n  ordered_at: DateTime\n}\n\nperforms(Customer, Browse)\nrelate(Order, Customer, \"N:1\")\n",
+    source: "\n// コメント\nmodule shared.actors\n\nimport shared.entities\n\nactor   Customer \"顧客\"\nusecase Browse   \"商品を探す\"\n\nentity  Order \"注文\" {\n  id: Int @pk\n  total: Money\n  ordered_at: DateTime\n}\n\nperforms(Customer, Browse)\nrelate(Order, Customer, N:1)\n",
 }

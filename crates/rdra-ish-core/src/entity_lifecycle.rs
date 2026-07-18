@@ -4,18 +4,83 @@
 //! entity の status Enum と state ノードの対応、およびその entity に属する遷移を返す。
 
 use crate::model::{ColumnType, EntityKey, SemanticModel, StateKey, StateTransition};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
+
+/// Pick the lifecycle status column for an entity from its transitions.
+/// Prefers `status` / `*_status`, then lexicographically first column.
+fn preferred_lifecycle_column(model: &SemanticModel, ek: EntityKey) -> Option<String> {
+    let cols: BTreeSet<String> = model
+        .state_transitions
+        .iter()
+        .filter(|st| st.entity == ek)
+        .map(|st| st.column.clone())
+        .collect();
+    if cols.is_empty() {
+        return None;
+    }
+    cols.iter()
+        .find(|c| *c == "status" || c.ends_with("_status"))
+        .cloned()
+        .or_else(|| cols.iter().next().cloned())
+}
+
+/// Resolve a transition/state variant string to the declared Enum casing.
+fn declared_variant_casing(
+    model: &SemanticModel,
+    ek: EntityKey,
+    column: &str,
+    variant: &str,
+) -> String {
+    model
+        .entities
+        .get(ek)
+        .and_then(|e| e.columns.iter().find(|c| c.name == column))
+        .and_then(|c| match &c.col_type {
+            ColumnType::Enum(variants) => variants
+                .iter()
+                .find(|v| *v == variant || v.eq_ignore_ascii_case(variant))
+                .cloned(),
+            _ => None,
+        })
+        .unwrap_or_else(|| variant.to_string())
+}
 
 /// entity の Enum カラムと state 集合のマッピングを構築する。
-/// State id を小文字化して Enum バリアントと照合し、
-/// `status` カラムに対応する State キーの集合を返す。
 ///
-/// 戻り値: (状態を表すカラム名, StateKey → バリアント文字列 のマップ)
+/// `transitions(Entity.col, ...)` 由来の遷移があれば、その列と entity-scoped state
+/// (`{Entity}_{variant}`) を優先する。なければ旧来のグローバル state id 照合にフォールバック。
+/// Map values use the **declared Enum casing** (not lowercased).
 pub fn link_entity_status_states(
     model: &SemanticModel,
     ek: EntityKey,
 ) -> Option<(String, HashMap<StateKey, String>)> {
     let entity = &model.entities[ek];
+    let entity_id = &entity.id;
+
+    if let Some(column) = preferred_lifecycle_column(model, ek) {
+        let prefix = format!("{entity_id}_");
+        let mut map: HashMap<StateKey, String> = HashMap::new();
+        for st in model
+            .state_transitions
+            .iter()
+            .filter(|st| st.entity == ek && st.column == column)
+        {
+            for variant_name in [&st.from, &st.to] {
+                let declared = declared_variant_casing(model, ek, &column, variant_name);
+                let prefixed_id = format!("{prefix}{declared}");
+                if let Some((sk, _)) = model.states.iter().find(|(_, s)| {
+                    s.id == prefixed_id
+                        || s.id.eq_ignore_ascii_case(variant_name)
+                        || s.id == format!("{prefix}{variant_name}")
+                }) {
+                    map.insert(sk, declared);
+                }
+            }
+        }
+        if !map.is_empty() {
+            return Some((column, map));
+        }
+    }
 
     let state_ids_lower: HashSet<String> =
         model.states.values().map(|s| s.id.to_lowercase()).collect();
@@ -31,8 +96,8 @@ pub fn link_entity_status_states(
                 let mut map: HashMap<StateKey, String> = HashMap::new();
                 for (sk, state) in model.states.iter() {
                     let lower = state.id.to_lowercase();
-                    if variants_lower.contains(&lower) {
-                        map.insert(sk, lower);
+                    if let Some(declared) = variants.iter().find(|v| v.to_lowercase() == lower) {
+                        map.insert(sk, declared.clone());
                     }
                 }
                 return Some((col.name.clone(), map));
@@ -75,24 +140,36 @@ pub fn collect_entity_lifecycles(model: &SemanticModel) -> Vec<EntityLifecycle> 
 
 fn lifecycle_for_entity(model: &SemanticModel, ek: EntityKey) -> Option<EntityLifecycle> {
     let (status_column, state_map) = link_entity_status_states(model, ek)?;
-    let entity_states: HashSet<StateKey> = state_map.keys().copied().collect();
 
-    let states = ordered_states(model, ek, &state_map);
+    let states = ordered_states(model, ek, &status_column, &state_map);
 
     let transitions: Vec<StateTransition> = model
         .state_transitions
         .iter()
-        .filter(|st| entity_states.contains(&st.from) && entity_states.contains(&st.to))
+        .filter(|st| st.entity == ek && st.column == status_column)
         .cloned()
         .collect();
 
-    let to_set: HashSet<StateKey> = transitions.iter().map(|t| t.to).collect();
-    let from_set: HashSet<StateKey> = transitions.iter().map(|t| t.from).collect();
+    // Keys are declared casing; look up case-insensitively.
+    let variant_to_sk: HashMap<String, StateKey> = state_map
+        .iter()
+        .map(|(sk, v)| (v.to_lowercase(), *sk))
+        .collect();
 
-    let mut initial: Vec<StateKey> = from_set.difference(&to_set).copied().collect();
+    let to_variants: HashSet<String> = transitions.iter().map(|t| t.to.to_lowercase()).collect();
+    let from_variants: HashSet<String> =
+        transitions.iter().map(|t| t.from.to_lowercase()).collect();
+
+    let mut initial: Vec<StateKey> = from_variants
+        .difference(&to_variants)
+        .filter_map(|v| variant_to_sk.get(v).copied())
+        .collect();
     initial.sort_by_key(|sk| model.states[*sk].id.clone());
 
-    let mut terminal: Vec<StateKey> = to_set.difference(&from_set).copied().collect();
+    let mut terminal: Vec<StateKey> = to_variants
+        .difference(&from_variants)
+        .filter_map(|v| variant_to_sk.get(v).copied())
+        .collect();
     terminal.sort_by_key(|sk| model.states[*sk].id.clone());
 
     Some(EntityLifecycle {
@@ -109,20 +186,31 @@ fn lifecycle_for_entity(model: &SemanticModel, ek: EntityKey) -> Option<EntityLi
 fn ordered_states(
     model: &SemanticModel,
     ek: EntityKey,
+    status_column: &str,
     state_map: &HashMap<StateKey, String>,
 ) -> Vec<StateKey> {
     let entity = &model.entities[ek];
-    let variant_to_key: HashMap<&str, StateKey> = state_map
+    let variant_to_key: HashMap<String, StateKey> = state_map
         .iter()
-        .map(|(sk, variant)| (variant.as_str(), *sk))
+        .map(|(sk, variant)| (variant.to_lowercase(), *sk))
         .collect();
 
     let mut ordered = Vec::new();
+    if let Some(col) = entity.columns.iter().find(|c| c.name == status_column) {
+        if let ColumnType::Enum(variants) = &col.col_type {
+            for variant in variants {
+                if let Some(sk) = variant_to_key.get(&variant.to_lowercase()) {
+                    ordered.push(*sk);
+                }
+            }
+            return ordered;
+        }
+    }
+    // Fallback: any Enum column order (legacy global-state path).
     for col in &entity.columns {
         if let ColumnType::Enum(variants) = &col.col_type {
             for variant in variants {
-                let lower = variant.to_lowercase();
-                if let Some(sk) = variant_to_key.get(lower.as_str()) {
+                if let Some(sk) = variant_to_key.get(&variant.to_lowercase()) {
                     ordered.push(*sk);
                 }
             }
@@ -142,7 +230,10 @@ mod tests {
         let (ast, parse_errors) = parse(src);
         assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
         let (model, diags) = build_model(&ast);
-        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+        assert!(
+            diags.iter().all(|d| d.is_warning),
+            "unexpected errors: {diags:?}"
+        );
         model
     }
 
@@ -156,15 +247,10 @@ event EvCapture  "決済確定"
 event EvShip     "発送開始"
 event EvDeliver  "配達確認"
 event EvCancel   "注文キャンセル"
-state Pending   "注文受付"
-state Paid      "決済完了"
-state Shipped   "発送済"
-state Delivered "配達完了"
-state Cancelled "キャンセル"
-transitions(EvCapture, Pending,  Paid)
-transitions(EvShip,    Paid,     Shipped)
-transitions(EvDeliver, Shipped,  Delivered)
-transitions(EvCancel,  Pending,  Cancelled)
+transitions(Order.status, EvCapture, pending -> paid)
+transitions(Order.status, EvShip,    paid -> shipped)
+transitions(Order.status, EvDeliver, shipped -> delivered)
+transitions(Order.status, EvCancel,  pending -> cancelled)
 "#;
 
     #[test]
@@ -186,7 +272,13 @@ transitions(EvCancel,  Pending,  Cancelled)
             .collect();
         assert_eq!(
             state_ids,
-            vec!["Pending", "Paid", "Shipped", "Delivered", "Cancelled"]
+            vec![
+                "Order_pending",
+                "Order_paid",
+                "Order_shipped",
+                "Order_delivered",
+                "Order_cancelled"
+            ]
         );
 
         let initial_ids: Vec<_> = lc
@@ -194,14 +286,68 @@ transitions(EvCancel,  Pending,  Cancelled)
             .iter()
             .map(|sk| model.states[*sk].id.as_str())
             .collect();
-        assert_eq!(initial_ids, vec!["Pending"]);
+        assert_eq!(initial_ids, vec!["Order_pending"]);
 
         let terminal_ids: Vec<_> = lc
             .terminal
             .iter()
             .map(|sk| model.states[*sk].id.as_str())
             .collect();
-        assert_eq!(terminal_ids, vec!["Cancelled", "Delivered"]);
+        assert_eq!(terminal_ids, vec!["Order_cancelled", "Order_delivered"]);
+    }
+
+    #[test]
+    fn pascal_case_enum_variants_still_compute_initial_terminal() {
+        let model = model_from(
+            r#"
+entity Doc "文書" {
+  id: Int @pk
+  status: Enum(Draft, Published) @default(Draft)
+}
+event Publish "公開"
+transitions(Doc.status, Publish, Draft -> Published)
+"#,
+        );
+        let lifecycles = collect_entity_lifecycles(&model);
+        assert_eq!(lifecycles.len(), 1);
+        let lc = &lifecycles[0];
+        let initial_ids: Vec<_> = lc
+            .initial
+            .iter()
+            .map(|sk| model.states[*sk].id.as_str())
+            .collect();
+        let terminal_ids: Vec<_> = lc
+            .terminal
+            .iter()
+            .map(|sk| model.states[*sk].id.as_str())
+            .collect();
+        assert_eq!(initial_ids, vec!["Doc_Draft"]);
+        assert_eq!(terminal_ids, vec!["Doc_Published"]);
+    }
+
+    #[test]
+    fn prefers_status_column_when_multiple_transition_columns_exist() {
+        let model = model_from(
+            r#"
+entity Ticket "チケット" {
+  id: Int @pk
+  status: Enum(open, closed) @default(open)
+  phase: Enum(intake, work) @default(intake)
+}
+event Close "閉じる"
+event StartWork "作業開始"
+transitions(Ticket.phase, StartWork, intake -> work)
+transitions(Ticket.status, Close, open -> closed)
+"#,
+        );
+        let lc = &collect_entity_lifecycles(&model)[0];
+        assert_eq!(lc.status_column, "status");
+        assert!(model
+            .state_transitions
+            .iter()
+            .any(|st| st.column == "phase"));
+        assert_eq!(lc.transitions.len(), 1);
+        assert_eq!(lc.transitions[0].column, "status");
     }
 
     #[test]
@@ -209,8 +355,6 @@ transitions(EvCancel,  Pending,  Cancelled)
         let model = model_from(
             r#"
 entity Item "Item" { id: Int @pk }
-state Orphan "Orphan"
-transitions(EvX, Orphan, Orphan)
 event EvX "X"
 "#,
         );

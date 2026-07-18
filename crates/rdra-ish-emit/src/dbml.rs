@@ -313,7 +313,7 @@ entity Order "Order" description "Logical order table" {
   net_total: Money @derived("total - discount")
   store_id: Int @index(status, store_id) @unique(status, store_id)
 }
-relate(Order, Customer, "N:1").optional().on_delete(set_null).on_update(cascade)
+relate(Order, Customer, N:1).optional().on_delete(set_null).on_update(cascade)
 "#,
         );
 

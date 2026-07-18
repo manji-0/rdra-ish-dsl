@@ -21,14 +21,14 @@ state Blocked "Blocked"
 event RestockScheduled "Restock Scheduled"
 event RestockBlocked "Restock Blocked"
 
-relate(Store, Organization, "N:1")
-transitions(event::RestockScheduled, Normal, Scheduled)
-transitions(event::RestockBlocked, Scheduled, Blocked)
-sets(event::RestockScheduled, Store, "next_restock_date", "timestamptz")
-sets(event::RestockBlocked, Store, "next_restock_date", "null")
+relate(Store, Organization, N:1)
+transitions(Store.restock_status, event::RestockScheduled, normal -> scheduled)
+transitions(Store.restock_status, event::RestockBlocked, scheduled -> blocked)
+sets(event::RestockScheduled, Store, next_restock_date == present)
+sets(event::RestockBlocked, Store, next_restock_date == null)
 
-forbidden(Store, (restock_status, blocked), (next_restock_date, present))
+forbidden(Store, restock_status == blocked, next_restock_date == present)
 
 invariant(Store)
-  .when(restock_status, scheduled)
-  .then(next_restock_date, present)
+  .when(restock_status == scheduled)
+  .then(next_restock_date == present)

@@ -685,12 +685,29 @@ impl Emitter for StateMermaidEmitter {
             }
         };
 
-        let is_state_visible = |sk: StateKey| -> bool { is_visible(&NodeRef::State(sk)) };
+        let state_id_to_key: HashMap<String, StateKey> = model
+            .states
+            .iter()
+            .map(|(sk, s)| (s.id.clone(), sk))
+            .collect();
+
+        let resolve_sk = |entity: EntityKey, variant: &str| -> Option<StateKey> {
+            let entity_id = &model.entities.get(entity)?.id;
+            let state_id = format!("{entity_id}_{variant}");
+            state_id_to_key.get(&state_id).copied()
+        };
 
         let transitions: Vec<_> = model
             .state_transitions
             .iter()
-            .filter(|t| is_state_visible(t.from) && is_state_visible(t.to))
+            .filter_map(|t| {
+                let from_sk = resolve_sk(t.entity, &t.from)?;
+                let to_sk = resolve_sk(t.entity, &t.to)?;
+                Some((from_sk, to_sk, t))
+            })
+            .filter(|(from_sk, to_sk, _)| {
+                is_visible(&NodeRef::State(*from_sk)) && is_visible(&NodeRef::State(*to_sk))
+            })
             .collect();
 
         if transitions.is_empty() {
@@ -698,10 +715,10 @@ impl Emitter for StateMermaidEmitter {
         }
 
         // 初期状態 = いずれの to にも登場しない from
-        let to_set: HashSet<StateKey> = transitions.iter().map(|t| t.to).collect();
+        let to_set: HashSet<StateKey> = transitions.iter().map(|(_, to_sk, _)| *to_sk).collect();
         let mut initial_states: Vec<StateKey> = transitions
             .iter()
-            .map(|t| t.from)
+            .map(|(from_sk, _, _)| *from_sk)
             .filter(|sk| !to_set.contains(sk))
             .collect::<HashSet<_>>()
             .into_iter()
@@ -718,19 +735,19 @@ impl Emitter for StateMermaidEmitter {
         }
 
         let mut sorted: Vec<_> = transitions.iter().collect();
-        sorted.sort_by_key(|t| {
+        sorted.sort_by_key(|&&(from_sk, to_sk, t)| {
             format!(
                 "{}{}{}",
-                node_id(model, &NodeRef::State(t.from)).unwrap_or(""),
-                node_id(model, &NodeRef::State(t.to)).unwrap_or(""),
+                node_id(model, &NodeRef::State(from_sk)).unwrap_or(""),
+                node_id(model, &NodeRef::State(to_sk)).unwrap_or(""),
                 node_id(model, &NodeRef::Event(t.event)).unwrap_or(""),
             )
         });
 
         // ノード名ラベル（state "label" as id）を出力してから遷移を出力
         let mut defined: HashSet<String> = HashSet::new();
-        for t in &sorted {
-            for sk in [t.from, t.to] {
+        for &&(from_sk, to_sk, _) in &sorted {
+            for sk in [from_sk, to_sk] {
                 let nr = NodeRef::State(sk);
                 if let (Some(id), Some(label)) = (node_id(model, &nr), node_label(model, &nr)) {
                     if defined.insert(id.to_string()) {
@@ -744,9 +761,9 @@ impl Emitter for StateMermaidEmitter {
             }
         }
 
-        for t in &sorted {
-            let from_nr = NodeRef::State(t.from);
-            let to_nr = NodeRef::State(t.to);
+        for &&(from_sk, to_sk, t) in &sorted {
+            let from_nr = NodeRef::State(from_sk);
+            let to_nr = NodeRef::State(to_sk);
             let event_nr = NodeRef::Event(t.event);
             if let (Some(from_id), Some(to_id), Some(ev_label)) = (
                 node_id(model, &from_nr),
@@ -1491,24 +1508,46 @@ fn render_mermaid_event_flow(
         }
     }
 
-    let mut transitions = flow.transitions.to_vec();
+    let state_id_to_key: HashMap<String, StateKey> = model
+        .states
+        .iter()
+        .map(|(sk, s)| (s.id.clone(), sk))
+        .collect();
+    let resolved_transitions: Vec<(StateKey, StateKey)> =
+        flow.transitions
+            .iter()
+            .filter_map(|(from_var, to_var)| {
+                let st = model.state_transitions.iter().find(|st| {
+                    st.event == flow.event && st.from == *from_var && st.to == *to_var
+                })?;
+                let entity_id = &model.entities.get(st.entity)?.id;
+                let from_sk = state_id_to_key
+                    .get(&format!("{entity_id}_{from_var}"))
+                    .copied()?;
+                let to_sk = state_id_to_key
+                    .get(&format!("{entity_id}_{to_var}"))
+                    .copied()?;
+                Some((from_sk, to_sk))
+            })
+            .collect();
+    let mut transitions = resolved_transitions;
     transitions.sort_by_key(|(from, _)| {
         model
             .states
             .get(*from)
-            .map(|state| state.id.as_str())
-            .unwrap_or("")
+            .map(|state| state.id.clone())
+            .unwrap_or_default()
     });
     let event_label = model
         .events
         .get(flow.event)
         .map(|event| prefixed_label("⚡", &event.label))
         .unwrap_or_default();
-    for (from, to) in transitions {
-        let Some(from_id) = declare_mermaid_event_flow_state(out, declared, model, from) else {
+    for (from, to) in &transitions {
+        let Some(from_id) = declare_mermaid_event_flow_state(out, declared, model, *from) else {
             continue;
         };
-        let Some(to_id) = declare_mermaid_event_flow_state(out, declared, model, to) else {
+        let Some(to_id) = declare_mermaid_event_flow_state(out, declared, model, *to) else {
             continue;
         };
         out.push_str(&format!("  {} -->|{}| {}\n", from_id, event_label, to_id));
@@ -1872,7 +1911,7 @@ creates(OrderApi, Order)
         let src = r#"
 entity Order "注文" { id: Int @pk  total: Money }
 entity Customer "顧客" { id: Int @pk  name: String }
-relate(Order, Customer, "N:1")
+relate(Order, Customer, N:1)
 "#;
         let model = model_from(src);
         let result = ErMermaidEmitter.emit(&model, &View::er()).unwrap();
@@ -1889,7 +1928,7 @@ relate(Order, Customer, "N:1")
         let src = r#"
 entity Customer "顧客" { id: Int @pk  name: String }
 entity Order "注文" { id: Int @pk  total: Money }
-relate(Order, Customer, "N:1")
+relate(Order, Customer, N:1)
 "#;
         let (ast, _) = parse(src);
         let (model, _) = build_model(&ast);
@@ -1899,18 +1938,19 @@ relate(Order, Customer, "N:1")
 
     #[test]
     fn test_state_mermaid_emit() {
-        // transitions の引数順は (event, from, to)
         let src = r#"
-state Draft "下書き"
-state Published "公開"
+entity Doc "文書" {
+  id: Int @pk
+  status: Enum(draft, published) @default(draft)
+}
 event Publish "公開する"
-transitions(Publish, Draft, Published)
+transitions(Doc.status, Publish, draft -> published)
 "#;
         let model = model_from(src);
         let result = StateMermaidEmitter.emit(&model, &View::whole()).unwrap();
         assert!(result.contains("stateDiagram-v2"));
-        assert!(result.contains("[*] --> Draft"));
-        assert!(result.contains("Draft --> Published"));
+        assert!(result.contains("[*] --> Doc_draft"));
+        assert!(result.contains("Doc_draft --> Doc_published"));
         assert!(result.contains("公開する"));
     }
 
@@ -1938,13 +1978,15 @@ triggers(EncounterSigned, BucBillingClaims)
 usecase SignEncounter "Sign Encounter"
 usecase ReviewClaim "Review Claim"
 buc BucBillingClaims "Billing Claims"
-state Pending "Pending"
-state Signed "Signed"
+entity Encounter "Encounter" {
+  id: Int @pk
+  status: Enum(pending, signed) @default(pending)
+}
 event EncounterSigned "Encounter Signed"
 raises(SignEncounter, EncounterSigned)
 triggers(EncounterSigned, ReviewClaim)
 triggers(EncounterSigned, BucBillingClaims)
-transitions(EncounterSigned, Pending, Signed)
+transitions(Encounter.status, EncounterSigned, pending -> signed)
 "#;
         let model = model_from(src);
         let flows = rdra_ish_core::collect_event_flows(&model);
@@ -1972,7 +2014,7 @@ transitions(EncounterSigned, Pending, Signed)
         assert!(out.contains("uc__SignEncounter -.->|raises| ev__EncounterSigned"));
         assert!(out.contains("ev__EncounterSigned -.->|triggers| uc__ReviewClaim"));
         assert!(out.contains("ev__EncounterSigned -.->|triggers| buc__BucBillingClaims"));
-        assert!(out.contains("st__Pending -->|⚡ Encounter Signed| st__Signed"));
+        assert!(out.contains("st__Encounter_pending -->|⚡ Encounter Signed| st__Encounter_signed"));
     }
 
     #[test]

@@ -362,7 +362,7 @@ entity OrderLine "Order Line" {
   unit_price: Decimal
 }
 
-relate(OrderLine, Order, "N:1")
+relate(OrderLine, Order, N:1)
 ```
 
 Ask the user:
@@ -404,12 +404,12 @@ state Cancelled "Cancelled"
 event Capture "Capture Payment"
 event Cancel "Cancel Order"
 
-transitions(event::Capture, Pending, Paid)
-transitions(event::Cancel, Pending, Cancelled)
+transitions(Order.status, event::Capture, pending -> paid)
+transitions(Order.status, event::Cancel, pending -> cancelled)
 
 raises(PlaceOrder, event::Capture)
 raises(CancelOrder, event::Cancel)
-sets(event::Capture, Order, "paid_at", "timestamptz")
+sets(event::Capture, Order, paid_at == present)
 ```
 
 Ask the user:
@@ -441,9 +441,9 @@ Start with rules that are easy to read as invalid local states: forbidden combin
 and mutually exclusive facts on one entity.
 
 ```rdra
-forbidden(Order, (status, paid), (paid_at, null))
+forbidden(Order, status == paid, paid_at == null)
 
-exclusive(Document, (approved, true), (rejected, true))
+exclusive(Document, approved == true, rejected == true)
 ```
 
 Ask the user:
@@ -471,10 +471,10 @@ every reachable pattern.
 
 ```rdra
 invariant(Order)
-  .when(status, paid)
-  .then(paid_at, present)
+  .when(status == paid)
+  .then(paid_at == present)
 
-required(Account, (active, true))
+required(Account, active == true)
 ```
 
 Ask the user:
@@ -504,13 +504,13 @@ cross-entity rules are evaluated from the participating entities' reached patter
 sets(SellItem, Inventory, stock < selling, true)
 forbidden(Inventory, stock < selling)
 
-cross_forbidden(Order, Payment,
-  (Order.status, cancelled),
-  (Payment.status, captured))
+forbidden(Order, Payment,
+  Order.status == cancelled,
+  Payment.status == captured)
 
-cross_invariant(Order, Payment)
-  .when(Order.status, paid)
-  .then(Payment.status, captured)
+invariant(Order, Payment)
+  .when(Order.status == paid)
+  .then(Payment.status == captured
 ```
 
 Ask the user:
