@@ -1689,7 +1689,7 @@ performs(actor::Add, usecase::Add)
             assert_eq!(cmp.op, CmpOp::Lt);
             assert_eq!(cmp.rhs, Operand::Column("selling".to_string()));
         } else {
-            panic!("expected Expr(Cmp), got {:?}", &pred.args[1]);
+            panic!("expected Expr(Cmp), got {:?}", pred.args[1]);
         }
     }
 
@@ -1723,7 +1723,7 @@ performs(actor::Add, usecase::Add)
                 panic!("expected qualified rhs");
             }
         } else {
-            panic!("expected Expr(Cmp), got {:?}", &pred.args[0]);
+            panic!("expected Expr(Cmp), got {:?}", pred.args[0]);
         }
     }
 
