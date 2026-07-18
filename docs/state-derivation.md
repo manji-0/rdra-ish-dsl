@@ -19,14 +19,15 @@ The implementation lives in `crates/rdra-ish-core/src/state_pattern.rs`.
 ## State Axes
 
 A **state axis** is one column of an entity whose value contributes to its abstract
-state. Only three kinds of column become axes; every other column is ignored for state
-derivation.
+state. Only the kinds below become axes for BFS; Int / Money / Decimal / DateTime
+(except as Nullable or via Proposition) are ignored here and checked via TLA+ instead
+(see [formal-verification.md](./formal-verification.md)).
 
 | Column | Axis kind | Abstract values |
 |---|---|---|
 | `Enum(a, b, c)` | `Enum` | one of the declared variants `{a, b, c}` |
 | `Bool` | `Bool` | `{false, true}` |
-| `@null` (any base type) | `Nullable` | `{null, present}` (the `present` value may carry a PostgreSQL type for display) |
+| `@null` (any base type) | `Nullable` | `{null, present}` (display-only typed present is equivalent for reachability) |
 | comparison expression in `forbidden` / `invariant` / `required` / `exclusive` / `sets` | `Proposition` | `{false, true}` (driven by `sets(..., <expr>, bool)`) |
 
 A non-nullable, non-Enum, non-Bool column (e.g. a plain `Int` primary key) is not a
@@ -66,7 +67,7 @@ and a set of effects (column → abstract value).
 | `deletes(UC, E)` | A `Delete` operation. Produces no successor; marks the matching pattern terminal. |
 | `sets(UC, E, col == val)` | A column effect attached to the originating use case's operation on `E`. |
 | `sets(UC, E, <expr>, bool)` | A **proposition effect** attached to the originating use case's operation on `E`. Advances or resets the `Proposition` axis whose key is the normalized comparison expression (e.g. `stock<selling`). |
-| `transitions(event::Ev, From, To)` + `raises(UC, Ev)` | An `Update` operation on the entity's status column, **guarded** by `status == From`, with effect `status := To`. |
+| `transitions(Entity.col, Ev, From -> To)` + `raises(UC, Ev)` | An `Update` operation on the entity's status column, **guarded** by `status == From`, with effect `status := To`. |
 
 ### How `sets` effects attach
 
@@ -157,8 +158,8 @@ reachable set when the deliver use case sets both.
 
 After the reachable set is computed, declared constraints are checked against it.
 Per-entity `forbidden`, `invariant`, `required`, and `exclusive` constraints are
-checked directly against the entity's reached patterns. `cross_forbidden` and
-`cross_invariant` are checked after all entity results are derived by combining the
+checked directly against the entity's reached patterns. Multi-entity `forbidden` and
+`invariant` are checked after all entity results are derived by combining the
 reached patterns for the participating entities; any violation is attached to each
 involved entity's diagnostics.
 
@@ -268,7 +269,7 @@ Comparison expressions in `exclusive` are matched against their `Proposition` ax
 
 <!-- derived-from ./language-reference.md#entity-state-constraints -->
 
-For `cross_forbidden` / `cross_invariant`, the derivation checks the cross-product of
+For multi-entity `forbidden` / `invariant`, the derivation checks the cross-product of
 the participating entities' reached patterns, up to an internal safety cap, only when
 the scoped entities are not connected by a declared `relate` path. Conditions that
 reference state axes, such as `Order.status == paid` or `Order.status == Payment.status`,
@@ -314,7 +315,7 @@ syntax and design rationale.
 | `InvariantViolated { guards, requireds, pattern_desc, flow_order_hint }` | A reachable pattern satisfies an invariant's guards but breaks a requirement. Triggered-usecase witnesses can include a flow-order hint when the immediate upstream event/use-case effects do not prove the required guard coverage. |
 | `RequiredStateViolated { conditions, pattern_desc }` | A reachable pattern misses at least one condition of a `required` declaration. |
 | `ExclusiveStateViolated { conditions, pattern_desc }` | A reachable pattern satisfies two or more conditions of an `exclusive` declaration. |
-| `CrossForbiddenViolated { entities, conditions, pattern_desc }` | A reached cross-entity pattern combination matches all conditions of a `cross_forbidden` declaration, and the participating entities are not connected by a `relate` path. |
+| `CrossForbiddenViolated { entities, conditions, pattern_desc }` | A reached cross-entity pattern combination matches all conditions of a multi-entity `forbidden` declaration, and the participating entities are not connected by a `relate` path. (Diagnostic id retains the historical `Cross*` prefix.) |
 | `CrossInvariantViolated { entities, guards, requireds, pattern_desc }` | A reached cross-entity pattern combination satisfies cross-invariant guards but breaks a requirement, and the participating entities are not connected by a `relate` path. |
 | `CrossConstraintNotEvaluated { entities, constraint, reason }` | A cross-entity rule cannot be fully evaluated from per-entity abstract state patterns or exceeds the cross-product safety cap. |
 | `TemporalAssertionViolated { anchor, requireds, actual }` | An `after(UseCase).assert(...)` equality is not produced by the anchor use case's immediate effects. |
@@ -368,3 +369,5 @@ the reachable scope to the union of the named BUCs), and `--max-patterns <n>` (t
 - [language-reference.md](./language-reference.md) — DSL syntax for entities, predicates,
   and state constraints.
 - [cli-reference.md](./cli-reference.md) — the `states` subcommand and its options.
+- [formal-verification.md](./formal-verification.md) — TLA+/TLC export for Int/`now`,
+  multi-entity rules, and temporal `property` formulas (not covered by BFS axes).

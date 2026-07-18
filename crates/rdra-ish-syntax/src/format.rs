@@ -58,12 +58,15 @@ fn format_property(prop: &PropertyDecl) -> String {
             format_expr(consequent)
         ),
     };
-    format!(
-        "property {} {}\n  {}",
-        prop.id,
-        quote_string(&prop.label),
-        formula
-    )
+    match &prop.label {
+        Some(label) => format!(
+            "property {} {}\n  {}",
+            prop.id,
+            quote_string(label),
+            formula
+        ),
+        None => format!("property {}\n  {}", prop.id, formula),
+    }
 }
 
 fn format_dotted_name(name: &DottedName) -> String {

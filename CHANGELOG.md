@@ -18,6 +18,19 @@
 ### Added
 
 - `rdra-ish export --kind tla` and `rdra-ish verify --backend tlc` for TLA+/TLC.
+  Export writes both `.tla` and `.cfg`. Coverage includes Int / Money / Decimal /
+  `now` arithmetic axes, multi-entity `forbidden`/`invariant` (with `.along` /
+  `*_owner`), `when(...).none/has`, `after(...).assert` equality and comparison
+  postconditions, and multi-instance temporal quantifiers
+  (`[](\A…)`, `\A i: <>…`, `\A i: (p ~> q)`).
+- `property` label string is optional (`property StockOk always(...)`).
+
+### Changed
+
+- Formal-verification docs and skills use multi-entity `forbidden`/`invariant` surface
+  names (diagnostic ids may still say `Cross*`). Int/`now` are documented as a separate
+  TLC layer from BFS comparison propositions. Docs/skills point to `export --kind tla`
+  for quantifiers, temporal `property`, and relation-scoped `.along`.
 
 ## v0.1.7 - 2026-06-23
 

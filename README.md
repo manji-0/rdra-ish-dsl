@@ -76,6 +76,7 @@ rdra-ish states samples/clinic-ops --entity Appointment
 - [Incremental Modeling Flow](./docs/incremental-modeling.md)
 - [Diagram Sample Review Guide](./docs/diagram-sample-review.md)
 - [State Pattern Derivation](./docs/state-derivation.md)
+- [Formal Verification (TLA+/TLC)](./docs/formal-verification.md)
 - [RDRA-ish Interpretation](./docs/rdra-ish-interpretation.md)
 
 ## Samples
@@ -83,6 +84,7 @@ rdra-ish states samples/clinic-ops --entity Appointment
 - `samples/ec-site`: compact end-to-end sample
 - `samples/clinic-ops`: larger model with APIs, events, and access constraints
 - `samples/personal-info`: personal data management sample
+- `samples/formal-verification`: TLA+/TLC-oriented models (check files individually)
 
 ## Publish (maintainers)
 

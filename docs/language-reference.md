@@ -551,9 +551,9 @@ the crow's-foot notation in the ER diagram and the FK-induced graph used for
 
 ### `transitions` and the state machine
 
-`transitions(bodies.status, event::E, from -> to)` declares one edge of an entity's state
-machine. States are linked to an entity's Enum column by matching state ids
-(case-insensitively) against the Enum variants. The use case that drives a transition
+`transitions(Order.status, event::E, from -> to)` declares one edge of an entity's state
+machine. The Enum column is required; state labels are the Enum variants
+(case-insensitively). The use case that drives a transition
 is found through `raises(UseCase, Event)`. See
 [state-derivation.md](./state-derivation.md) for how transitions feed derivation.
 
@@ -720,10 +720,12 @@ sets(event::EvDeliver, Order, delivered_at == present)
 | Value | Target column | Meaning |
 |---|---|---|
 | Enum variant name | `Enum` column | Set the column to that variant. |
-| `"true"` / `"false"` | `Bool` column | Set the boolean value. |
-| `"present"` | `@null` column | Make the column non-null (value present), no type recorded. |
-| `"null"` | `@null` column | Make the column null. |
-| PostgreSQL type name | `@null` column | Make the column non-null **and** record the type for display (`jsonb`, `uuid`, `timestamptz`, `inet`, etc.). In reachability the typed-present value is equivalent to `present`; the type is only carried for output. |
+| `true` / `false` | `Bool` column | Set the boolean value. |
+| `present` | `@null` column | Make the column non-null (value present). |
+| `null` | `@null` column | Make the column null. |
+
+PostgreSQL type names are **not** valid in `sets`; use `present` for a nullable non-null
+value. Display/storage types belong on entity annotations or DBML export inference.
 
 ### Driving comparison propositions with `sets`
 
@@ -773,9 +775,7 @@ reachable state space:
 | `required` | every reachable pattern must satisfy all listed conditions | Always-required facts |
 | `exclusive` | no reachable pattern may satisfy two or more listed conditions | Mutual exclusion |
 
-Entity-local equality conditions are shown in tuple form, `column == value`, because it
-stays clear in variadic lists. The parser also accepts flat `column, value` pairs for
-single equality conditions when there is no ambiguity.
+Entity-local equality conditions are written as `column == value` comparison expressions.
 
 ### `forbidden` — tuple-variadic forbidden states
 
@@ -934,8 +934,8 @@ unambiguous. With a single-entity scope, bare columns are still accepted as a sh
 `after(UseCase).assert(Entity.column == value, ...)` checks an assertion at a specific
 use-case boundary instead of against the full cross-product of reachable state patterns.
 The assertion is evaluated from the use case's immediate `sets` effects and any
-`transitions` reached through events raised by that use case. Tuple form is also valid,
-for example `after(ExecuteCertIssue).assert(CertificateOrder.status == executed)`.
+`transitions` reached through events raised by that use case. Comparison forms are also
+valid, for example `after(ExecuteCertIssue).assert(CertificateOrder.status == executed)`.
 
 ### Temporal path properties
 
@@ -957,25 +957,33 @@ property NeverBoth "mutex"
 |---|---|
 | `always(expr)` | `[]expr` |
 | `eventually(expr)` | `<>expr` |
-| `leads_top == q` | `p ~> q` |
+| `leads_to(p, q)` | `p ~> q` |
 
-Atoms use `Entity.column == value` / `!=`, or Int comparisons (`<`, `>`, `<=`, `>=`)
-over Int columns and literals. Logical connectives inside formulas are
-`~`, `/\`, and `\/`. See [formal-verification.md](./formal-verification.md).
+Atoms use `Entity.column == value` / `!=`, or numeric comparisons (`<`, `>`, `<=`, `>=`)
+over Int / Money / Decimal columns and literals. Prefer connectives `and` / `or` / `not`
+(`/\` `\/` `~` remain aliases). See [formal-verification.md](./formal-verification.md).
+
+The property label string is optional: `property StockOk always(Item.stock >= Item.selling)`.
 
 When any `eventually` / `leads_to` property is exported, the Spec includes
-`WF_vars(Next)`. Equality forms of `after(UseCase).assert(...)` become primed
+`WF_vars(Next)`. In multi-instance export (triggered by multi-entity rules or
+quantifiers), temporal formulas are quantified per instance binder
+(`\A i \in Entity_Ids: …`). Equality forms of `after(UseCase).assert(...)` become primed
 postconditions on SpecActions for events raised by that use case. Comparison
-forms prefer Int arithmetic when those columns are axes; otherwise they set a
-proposition axis to `TRUE` when that axis exists.
+forms prefer Int arithmetic when those columns are axes (including cross-entity RHS);
+otherwise they set a proposition axis to `TRUE` when that axis exists.
 `forbidden(EntityA, EntityB, ...)` / `invariant(EntityA, EntityB)` (including `.along`) become Safety
 conjuncts. Quantifiers and `.along` use finite `Entity_Ids` instance sets when
 exported; see [formal-verification.md](./formal-verification.md).
 
 `sets(UC, Entity, intCol == 3)` assigns an Int effect used by TLA+ export.
-`@default(0)` is valid on Int columns. BFS `states` still ignores Int axes.
+Money / Decimal columns used in arithmetic also become `IntRange` axes (nullable
+numeric columns promote to Int rather than staying as Nullable).
+`@default(0)` is valid on Int columns. BFS `states` still ignores Int axes and treats
+comparison propositions as Bool axes driven by `sets(..., cmp, true/false)`.
 
-`when(Entity, conditions...).has/none(RelatedEntity, conditions...)` declares a
+`when(Entity, conditions...).has/none(...)` or
+`when(Entity.col == val).has/none(Related.col == val)` declares a
 to-many quantifier rule. The syntax is accepted and type-checked, but `states` does not
 track linked related-row counts. It emits `QuantifierConstraintNotEvaluated` when the
 related condition has reachable patterns. For `none(...)`, if the related condition is
@@ -1076,10 +1084,9 @@ the constraint will have no practical effect (for `forbidden`, `exclusive`, or
 ### Bare identifiers
 
 Column names and values inside `forbidden(...)`, `required(...)`, and `exclusive(...)`
-tuples, plus `.when()` / `.then()` clauses, are **bare identifiers**, not quoted strings
-(contrast with `sets`, whose column and value are quoted strings). They use the same
-value vocabulary as `sets`: Enum variant names, `true` / `false`, `present` / `null`,
-and PostgreSQL type names.
+arguments, plus `.when()` / `.then()` clauses, are **bare identifiers** (or comparison
+expressions). They use the same value vocabulary as `sets`: Enum variant names,
+`true` / `false`, and `present` / `null`.
 
 In **comparison expressions** (e.g. `stock < selling`, `expired_at < now`), column names
 on both sides are also bare identifiers. The right-hand side may additionally be an
@@ -1105,7 +1112,7 @@ state::Active      // the state named Active
 
 Typical cases:
 
-- In `transitions(bodies.status, event::Capture, pending -> paid)`, the event and states
+- In `transitions(Order.status, event::Capture, pending -> paid)`, the event and states
   may collide with use cases of the same name once modules are merged, so qualifiers are
   used.
 - In `contains(BucOrder, usecase::Cancel)` and `raises(usecase::Cancel, event::Cancel)`,

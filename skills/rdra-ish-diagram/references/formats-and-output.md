@@ -15,6 +15,7 @@ filtered/diff views, or machine-readable exports.
 | `asyncapi` | AsyncAPI JSON/YAML | events and event causality |
 | `dbml` | DBML schema text | logical entities and relationships |
 | `json-schema` | JSON Schema | DTOs or logical structures, depending on export scope |
+| `tla` | TLA+ `.tla` + `.cfg` | Int/`now`, multi-entity rules, quantifiers, temporal `property` |
 
 Default to `mermaid` unless the user asks for PlantUML or a rendered image.
 
@@ -42,6 +43,7 @@ rdra-ish export src/ --kind openapi --out out/openapi.json
 rdra-ish export src/ --kind asyncapi --out out/asyncapi.json
 rdra-ish export src/ --kind dbml --out out/schema.dbml
 rdra-ish export src/ --kind json-schema --out out/json-schema.json
+rdra-ish export src/ --kind tla -o out/
 
 # Golden/sample artifact regeneration
 bash scripts/check-sample-artifacts.sh

@@ -25,7 +25,7 @@ Before writing, classify the available information:
 | fields and relationships | Tech data design | columns, indexes/checks, `relate`, optional `owns`, `maps_to` | lifecycle states/events |
 | lifecycle states/events | Tech lifecycle design | `state`, `event`, `transitions`, `raises`, `sets` | local guardrails first |
 | invalid or mutually exclusive states | Tech-enforced rules | `forbidden`, `exclusive` | obligations and cross-entity rules |
-| conditional/global/cross-entity rules, NFRs, decisions | Tech-enforced rules | `invariant`, narrow `required`, `cross_forbidden`, `cross_invariant`, `nfr`, `constraint`, `adr` links | none; validate diagnostics |
+| conditional/global/cross-entity rules, NFRs, decisions | Tech-enforced rules | `invariant`, narrow `required`, multi-entity `forbidden` / `invariant`, optional `when`/`property`/`after.assert`, `nfr`, `constraint`, `adr` links | none; validate with `states` and TLA+ when needed |
 
 Ask only the questions needed to advance one row. Do not invent detailed columns,
 state machines, or API endpoints just to make the BUC look complete.
@@ -234,6 +234,7 @@ For staged work, also run the command that matches the current abstraction:
 - Permission callables: `rdra-ish csv src/ --kind permission-callables`
 - Actor permission assignments: `rdra-ish csv src/ --kind actor-permission-audit`
 - Lifecycle/rules: `rdra-ish states src/ --buc <BucId>`
+- Int/temporal/multi-entity: `rdra-ish export src/ --kind tla -o out/`
 - Contract/data exports: run the relevant form, for example
   `rdra-ish export src/ --kind openapi --out out/openapi.json`,
   `rdra-ish export src/ --kind asyncapi --out out/asyncapi.json`,

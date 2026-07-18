@@ -46,7 +46,7 @@ Read `buc/buc_<name>.rdra` and the shared files it imports. Identify:
 | New Business-BUC context | shared vocabulary for `location` / `timing` / `medium`, then `belongs(...).when(...).where(...).by(...)` |
 | New permission or medium constraint | shared `permission` / `medium` vocabulary, then `has_permission`, `requires_permission`, or `requires_medium` in the owning BUC file |
 | New event-started BUC | target BUC file, then `triggers(Event, Buc)`; add `triggers(Event, EntryUC)` only after the entry UC is known |
-| New entity rule | shared rules file or shared entity area; use `forbidden`, `invariant`, `required`, or `exclusive` for single-entity state facts; use `cross_forbidden` / `cross_invariant` with `Entity.column` conditions for multi-entity rules, and add `.along(...)` only for relation-scoped linked-instance intent |
+| New entity rule | shared rules file or shared entity area; use `forbidden`, `invariant`, `required`, or `exclusive` for single-entity state facts; use multi-entity `forbidden` / `invariant` with `Entity.column` conditions for multi-entity rules, and add `.along(...)` only for relation-scoped linked-instance intent; use `when(...).none/has`, `property`, and `after.assert` when quantifiers or temporal/postcondition checks matter |
 | Cross-system entity relation handling | BUC file that owns the coordinating use case |
 | Remove a use case | Remove its `contains`, CRUD, `displays`, `raises` predicates; check no other BUC uses it |
 
@@ -219,15 +219,16 @@ forbidden(<EntityA>, <EntityB>,
 
 invariant(<EntityA>, <EntityB>)
   .along(<EntityA>, <EntityB>)
-  .when(<EntityA>.<column>, <value>)
-  .then(<EntityB>.<column>, <value>)
+  .when(<EntityA>.<column> == <value>)
+  .then(<EntityB>.<column> == <value>)
 ```
 
 Use bare column names only when the rule has a single-entity scope. Multi-entity rules
 must qualify columns as `Entity.column`.
 Use `.along(...)` only when the rule is about instances linked by a declared `relate`
 path; current `states` reports such relation-scoped rules as `CrossConstraintNotEvaluated`
-instead of checking the global cross-product.
+instead of checking the global cross-product. TLC evaluates `.along` via `*_owner` when
+`relate` exists — use `rdra-ish export --kind tla` for that check.
 
 **Removing a use case:**
 1. Delete the `usecase` declaration

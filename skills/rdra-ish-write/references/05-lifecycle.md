@@ -32,7 +32,12 @@ by use cases or events.
    removing the BUC-level trigger.
 7. Add `sets(UseCase|Event, Entity, col == val)` for enum, nullable, and boolean
    effects not fully explained by transitions.
-8. Add comparison-proposition `sets` when rules depend on derived comparisons.
+8. Add comparison-proposition `sets` when rules depend on derived comparisons
+   (BFS layer). Prefer Int / Money / Decimal columns plus arithmetic rules when the
+   quantity itself must be checked; validate those with TLA+ export.
+9. Add `after(UseCase).assert(...)` for postconditions on events raised by that UC.
+10. Add `property Name [label] always|eventually|leads_to(...)` for temporal path
+    properties (label string optional).
 
 ## Minimal Pattern
 
@@ -67,6 +72,7 @@ rdra-ish states src/ --entity Order
 rdra-ish diagram src/ --kind state --format mermaid --buc BucOrder
 rdra-ish diagram src/ --kind event-flow --format mermaid
 rdra-ish export src/ --kind asyncapi --out out/asyncapi.json
+rdra-ish export src/ --kind tla -o out/   # Int/now/temporal/after.assert
 ```
 
 ## Achievement Conditions
@@ -77,6 +83,7 @@ rdra-ish export src/ --kind asyncapi --out out/asyncapi.json
 - Concrete triggered use cases are contained by the downstream BUC.
 - State derivation explains expected reachable states and reviewed warnings.
 - `sets` captures relevant enum, nullable, boolean, and comparison effects.
+- Int/`now`/temporal/`after.assert` obligations are reviewed via TLA+ when present.
 - AsyncAPI export is meaningful when events, raises/triggers/transitions, and
   outbox-like handoffs are part of the review.
 

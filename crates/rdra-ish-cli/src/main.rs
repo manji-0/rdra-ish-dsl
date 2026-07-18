@@ -9,7 +9,7 @@ mod list_output;
 mod load;
 mod states;
 mod verify;
-use cli::{Cli, Commands};
+use cli::{Cli, Commands, ExportKind};
 use csv_cmd::run_csv;
 use diagram::{run_diagram, DiagramRequest};
 use export::export_artifact;
@@ -20,6 +20,7 @@ use rdra_ish_core::{lint_issues, LintSeverity};
 use rdra_ish_emit::View;
 use states::run_states;
 use std::fs;
+use std::path::Path;
 use verify::run_verify;
 
 fn main() -> Result<()> {
@@ -120,17 +121,53 @@ fn main() -> Result<()> {
             }
 
             let view = View::whole();
-            let (content, ext) = export_artifact(&model, &kind, &view)?;
-
-            let out_path = if out.extension().is_some() {
-                out.clone()
+            if matches!(kind, ExportKind::Tla) {
+                let bundle = export::export_tla_bundle(&model, &view)?;
+                let (tla_path, cfg_path) = if out.extension().is_some_and(|e| e == "tla") {
+                    let cfg = out.with_extension("cfg");
+                    (out.clone(), cfg)
+                } else if out.extension().is_none()
+                    || out.extension().is_some_and(|e| e != "tla" && e != "cfg")
+                {
+                    // Directory or stem without .tla → write RdraSpec.tla/.cfg under/out.
+                    let dir = if out.exists() && out.is_dir() {
+                        out.clone()
+                    } else if out.extension().is_none() {
+                        // Treat as directory path (create parent).
+                        out.clone()
+                    } else {
+                        out.parent().unwrap_or(Path::new(".")).to_path_buf()
+                    };
+                    if !dir.exists() {
+                        fs::create_dir_all(&dir)
+                            .with_context(|| format!("failed to create {}", dir.display()))?;
+                    }
+                    (
+                        dir.join(format!("{}.tla", bundle.module_name)),
+                        dir.join(format!("{}.cfg", bundle.module_name)),
+                    )
+                } else {
+                    (out.with_extension("tla"), out.with_extension("cfg"))
+                };
+                fs::write(&tla_path, &bundle.tla)
+                    .with_context(|| format!("failed to write {}", tla_path.display()))?;
+                fs::write(&cfg_path, &bundle.cfg)
+                    .with_context(|| format!("failed to write {}", cfg_path.display()))?;
+                println!("wrote {}", tla_path.display());
+                println!("wrote {}", cfg_path.display());
             } else {
-                out.with_extension(ext.trim_start_matches("*."))
-            };
+                let (content, ext) = export_artifact(&model, &kind, &view)?;
 
-            fs::write(&out_path, &content)
-                .with_context(|| format!("failed to write {}", out_path.display()))?;
-            println!("wrote {}", out_path.display());
+                let out_path = if out.extension().is_some() {
+                    out.clone()
+                } else {
+                    out.with_extension(ext.trim_start_matches("*."))
+                };
+
+                fs::write(&out_path, &content)
+                    .with_context(|| format!("failed to write {}", out_path.display()))?;
+                println!("wrote {}", out_path.display());
+            }
         }
 
         Commands::States {

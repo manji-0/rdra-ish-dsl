@@ -43,8 +43,12 @@ is not tracked yet.
    cross-product; keep it off rules that truly forbid global co-existence.
 8. If a per-entity rule fails unexpectedly, inspect lifecycle inputs before weakening it:
    missing `sets`, missing transitions, or missing create/default paths are common.
-9. Keep implementation policy notes outside the DSL unless they can be expressed as
-   state, effect, forbidden, invariant, required, exclusive, or cross-entity predicates.
+9. Add `when(...).none/has(...)` for to-many quantifiers (not `forbidden_when`).
+10. Add `property` / `after(...).assert(...)` when temporal or postcondition checks
+    matter; validate with `export --kind tla` (BFS `states` ignores Int/`now` axes).
+11. Keep implementation policy notes outside the DSL unless they can be expressed as
+    state, effect, forbidden, invariant, required, exclusive, quantifier, property,
+    or cross-entity predicates.
 
 ## Minimal Pattern
 
@@ -68,8 +72,15 @@ forbidden(Order, Payment,
 
 invariant(Order, Payment)
   .along(Order, Payment)
-  .whenOrder.status == paid
-  .thenPayment.status == captured
+  .when(Order.status == paid)
+  .then(Payment.status == captured)
+
+when(Cert, status == revoked).none(Assign.status == active)
+
+property PaidLeadsToShipped
+  leads_to(Order.status == paid, Order.status == shipped)
+
+after(DeliverOrder).assert(Order.status == delivered)
 ```
 
 ## Validation
@@ -79,6 +90,10 @@ rdra-ish check src/
 rdra-ish lint src/ --format table
 rdra-ish states src/ --entity Order
 rdra-ish states src/ --format json --entity Order
+# Int / now / multi-entity / temporal: use TLA+ (BFS does not cover these axes)
+rdra-ish export src/ --kind tla -o out/
+# optional if tlc is on PATH:
+# rdra-ish verify src/ --backend tlc -o out/
 ```
 
 ## Achievement Conditions
@@ -88,16 +103,20 @@ rdra-ish states src/ --format json --entity Order
   open design items.
 - Cross-entity rules use `Entity.column`; if `states` reports them as not evaluated,
   explain whether the reason is an ordinary non-state condition, cap overflow, or
-  relation-scoped `.along(...)` linked-instance semantics.
+  relation-scoped `.along(...)` linked-instance semantics (TLC evaluates `.along`
+  via `*_owner` when `relate` exists).
+- Int / Money / Decimal / `now` and temporal `property` rules are checked with
+  `export --kind tla` / `verify --backend tlc`, not only `states`.
 - Required lifecycle effects have corresponding `sets` or transitions.
 - Terminal, unreachable, and no-create warnings are reviewed instead of ignored.
 - `UndrivenComparisonProp` warnings are resolved by driving comparison propositions
-  with `sets(..., expr, true/false)` or by removing unreachable comparisons.
+  with `sets(..., expr, true/false)`, by Int arithmetic export, or by removing
+  unreachable comparisons.
 - The final model can explain BUC scope, actor authority, API/system boundaries,
   entity structure, lifecycle, and rules as a single refinement chain.
 
 ## Completion
 
 When this step passes review, summarize remaining unresolved warnings from `check`,
-`actor-permission-audit`, and `states` rather than claiming the model is universally
-complete.
+`actor-permission-audit`, `states`, and (when used) TLC rather than claiming the
+model is universally complete.

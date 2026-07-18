@@ -957,7 +957,7 @@ fn property_decl() -> impl Parser<Token, PropertyDecl, Error = Simple<Token>> + 
 
     just(Token::Property)
         .ignore_then(ident())
-        .then(string_lit())
+        .then(string_lit().or_not())
         .then(formula)
         .map_with_span(|((id, label), formula), span| PropertyDecl {
             id,
@@ -1836,6 +1836,20 @@ performs(actor::Add, usecase::Add)
                 panic!("expected Expr(Cmp) for: {}", expr_str);
             }
         }
+    }
+
+    #[test]
+    fn test_parse_property_label_optional() {
+        let ast = parse_ok(
+            r#"property StockOk
+  always(Item.stock >= Item.selling)"#,
+        );
+        let Item::Property(prop) = &ast.items[0] else {
+            panic!("expected Property");
+        };
+        assert_eq!(prop.id, "StockOk");
+        assert!(prop.label.is_none());
+        assert!(matches!(&prop.formula, AstTemporalFormula::Always(_)));
     }
 
     #[test]

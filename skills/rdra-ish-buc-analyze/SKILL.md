@@ -18,6 +18,7 @@ reference file for the concrete analysis task.
 | "Are permissions/media correct?" | screen/access paths, permission callables, actor grants | `references/access-permissions.md` |
 | "Are API/system boundaries sound?" | API ownership, API CRUD, cross-system relations, coordination | `references/api-system-boundaries.md` |
 | "Are lifecycle states/rules valid?" | reachable state patterns, terminals, truncation, per-entity rule diagnostics, and cross-entity rule inventory | `references/state-patterns.md` |
+| "Do Int/now/temporal/multi-entity rules hold?" | TLA+ export / TLC (complements BFS `states`) | `references/state-patterns.md` |
 | "Summarize findings for review" | severity, evidence, next questions, and concrete recommendations | `references/reporting.md` |
 
 ### Default Workflow
@@ -56,6 +57,7 @@ rdra-ish csv src/ --kind actor-permission-audit
 rdra-ish states src/
 rdra-ish states src/ --buc <BucId>
 rdra-ish states src/ --entity <EntityId>
+rdra-ish export src/ --kind tla -o out/
 rdra-ish export src/ --kind openapi --out out/openapi.json
 rdra-ish export src/ --kind dbml --out out/schema.dbml
 ```
@@ -71,6 +73,6 @@ rdra-ish export src/ --kind dbml --out out/schema.dbml
 - `references/api-system-boundaries.md` — review API invocation, system ownership,
   API/entity matrices, and cross-system coordination.
 - `references/state-patterns.md` — interpret `states`, lifecycle warnings,
-  terminal/unreachable patterns, truncation, and rule diagnostics.
+  terminal/unreachable patterns, truncation, rule diagnostics, and when to use TLA+.
 - `references/reporting.md` — structure analysis output with severity, evidence, and
   recommendations.

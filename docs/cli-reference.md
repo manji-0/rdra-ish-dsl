@@ -335,3 +335,4 @@ Output is written to stdout.
 - [language-reference.md](./language-reference.md) — the DSL syntax.
 - [incremental-modeling.md](./incremental-modeling.md) — staged abstract-to-concrete modeling flow.
 - [state-derivation.md](./state-derivation.md) — how `states` computes its output.
+- [formal-verification.md](./formal-verification.md) — `export --kind tla` / `verify --backend tlc`.

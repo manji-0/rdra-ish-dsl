@@ -19,7 +19,7 @@ pub(crate) fn register_property(
         Ok(formula) => {
             model.temporal_properties.push(TemporalProperty {
                 id: decl.id.clone(),
-                label: decl.label.clone(),
+                label: decl.label.clone().unwrap_or_else(|| decl.id.clone()),
                 formula,
             });
         }

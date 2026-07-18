@@ -67,8 +67,25 @@ Entity: Order (注文)
 | Exclusive violation | Mutually exclusive facts co-occur in a reachable pattern | Add missing transition/effect guards or revise the exclusivity rule |
 | Cross-entity violation | Rule violation across entity patterns | Fix lifecycle/effects or update the cross rule |
 | `CrossConstraintNotEvaluated` | Rule depends on values outside abstract state patterns, exceeds the cross-product cap, or uses `.along(...)` linked-instance semantics | Report the unevaluated condition/reason and decide whether it needs a state axis/proposition or future relation-scoped evaluation |
-| `UndrivenComparisonProp` | Comparison proposition is never driven or is made unreachable/always violated by rules | Add `sets(..., expr, true/false)` or revise the `forbidden`/`required`/`invariant` rule |
-| `present` lacks type suffix where type matters | Nullable effect is vague | Use a PostgreSQL-type value such as `"timestamptz"` when useful |
+| `UndrivenComparisonProp` | Comparison proposition is never driven or is made unreachable/always violated by rules | Add `sets(..., expr, true/false)`, switch to Int arithmetic + TLA+, or revise the rule |
+| `present` lacks type suffix where type matters | Nullable effect is vague | Prefer `present` (PG type names in `sets` are rejected) |
+
+## Formal verification (TLA+)
+
+BFS `states` ignores Int / Money / Decimal axes and only evaluates comparison
+propositions as Bool axes. Use TLA+ when the model has:
+
+- Int / Money / Decimal arithmetic or `now`
+- multi-entity `forbidden` / `invariant` with `.along`
+- `when(...).none/has(...)`
+- `property` / `after(...).assert(...)`
+
+```sh
+rdra-ish export src/ --kind tla -o out/
+rdra-ish verify src/ --backend tlc -o out/   # requires tlc on PATH
+```
+
+Export writes both `RdraSpec.tla` and `RdraSpec.cfg`. See `docs/formal-verification.md`.
 
 ## How To Fix
 
@@ -84,4 +101,5 @@ Entity: Order (注文)
 
 Report state findings as patterns and paths, not just columns. Include the entity,
 axis values, whether the pattern is initial/terminal, and the BUC/use case/event path
-that reached it.
+that reached it. For Int/temporal findings, cite TLC property names or Safety
+conjuncts from the exported `.cfg`.

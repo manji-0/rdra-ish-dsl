@@ -234,7 +234,7 @@ pub(crate) enum ExportKind {
     TypeScriptStates,
     MermaidEr,
     PlantumlEr,
-    /// TLA+ / TLC specification (+ companion .cfg via verify)
+    /// TLA+ / TLC specification (writes companion `.cfg` next to `.tla`)
     Tla,
 }
 

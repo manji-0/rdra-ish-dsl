@@ -135,14 +135,18 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    - Mutually exclusive facts use `exclusive(Entity, ...)`
    - Single-entity required co-occurrences use `invariant(Entity).when(...).then(...)`
    - Always-required facts use `required(Entity, ...)` only when the fact is truly global
-   - Rules that mention multiple entities use `cross_forbidden` or `cross_invariant`
+   - Rules that mention multiple entities use multi-entity `forbidden` or `invariant`
    - Multi-entity conditions qualify columns as `Entity.column`
    - Relation-scoped rules use `.along(EntityA, EntityB, ...)` only when the listed
      entities are connected by a declared `relate` path
    - Review `CrossForbiddenViolated`, `CrossInvariantViolated`, and
      `CrossConstraintNotEvaluated` diagnostics from `states`; the last one means a
      rule condition is outside the abstract state space, exceeded the cross-product cap,
-     or uses relation-scoped `.along(...)` linked-instance semantics
+     or uses relation-scoped `.along(...)` linked-instance semantics. For Int/`now`,
+     temporal `property`, `after.assert`, and multi-instance `.along` that TLC can
+     check, also run `rdra-ish export --kind tla` (and `verify --backend tlc` when TLC
+     is available). Diagnostic ids may still say `Cross*` even though surface syntax is
+     multi-entity `forbidden` / `invariant`.
 
 12. **Check imports**
    - Every referenced symbol has a corresponding `import`
@@ -153,6 +157,9 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
      when API method/path and DTOs changed
    - AsyncAPI: export when events or event-started BUCs changed
    - DBML/JSON Schema: run the corresponding export when data model or DTO shape changed
+   - TLA+: `rdra-ish export <src-dir>/ --kind tla -o /tmp/` when Int/`now`, multi-entity
+     rules, quantifiers, `property`, or `after.assert` are part of the change (writes
+     both `.tla` and `.cfg`)
    - Diagram snapshots: run the sample artifact script when docs/golden outputs are
      part of the change
 
@@ -215,13 +222,15 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 | `has_permission` | Actor | Permission | — |
 | `requires_permission` | UseCase / Api | Permission | — |
 | `requires_medium` | UseCase / Api | Medium | — |
-| `relate` | Entity | Entity | cardinality string (`"1:1"` / `"1:N"` / `"N:1"` / `"N:M"`) |
-| `transitions` | Event | State (from) | State (to) |
-| `sets` | UseCase / Event | Entity | column name string | value string |
-| `sets` | UseCase / Event | Entity | comparison expression | boolean literal |
+| `relate` | Entity | Entity | cardinality (`1:1` / `1:N` / `N:1` / `N:M`, unquoted preferred) |
+| `transitions` | Entity.col | Event | from -> to |
+| `sets` | UseCase / Event | Entity | `col == val` or comparison + bool |
 | `forbidden` | Entity | condition(s) | — |
 | `invariant` | Entity | `.when(...)` / `.then(...)` chains | — |
 | `required` | Entity | condition(s) | — |
 | `exclusive` | Entity | condition(s) | — |
-| `cross_forbidden` | Entity... | cross-entity condition(s) | optional `.along(...)` |
-| `cross_invariant` | Entity... | `.when(...)` / `.then(...)` chains | optional `.along(...)` |
+| `forbidden` (multi-entity) | Entity... | cross-entity condition(s) | optional `.along(...)` |
+| `invariant` (multi-entity) | Entity... | `.when(...)` / `.then(...)` chains | optional `.along(...)` |
+| `when` | conditions... | `.none` / `.has` conditions | — |
+| `property` | Name | optional label | `always` / `eventually` / `leads_to` |
+| `after` | UseCase | `.assert(...)` | — |

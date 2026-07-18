@@ -139,16 +139,19 @@ Kinds commonly used by this skill:
 | `owns` | `System == Entity` | explicit intended ownership before CRUD is complete |
 | `raises` | `UseCase == Event` | UC emits a domain event |
 | `triggers` | `(Event, UseCase\|Buc)` | event starts a UC or a BUC boundary |
-| `transitions` | `(Event, State, State)` | event moves state from -> to |
-| `sets` | `(UseCase\|Event, Entity, "col", "val")` | explicit column effect |
+| `transitions` | `(Entity.col, Event, from -> to)` | event moves enum column from -> to |
+| `sets` | `(UseCase\|Event, Entity, col == val)` | explicit column effect |
 | `sets` | `(UseCase\|Event, Entity, col op rhs, true\|false)` | comparison proposition effect |
 | `forbidden` | `(Entity, col == val\|col op rhs, ...)` | forbidden reachable state combination |
 | `invariant` | `(Entity).when(...).then(...)` | required co-occurrence inside one entity |
 | `required` | `(Entity, col == val\|col op rhs, ...)` | always-required state facts |
 | `exclusive` | `(Entity, col == val\|col op rhs, ...)` | mutually exclusive state facts |
-| `cross_forbidden` | `(Entity..., Entity.col == val\|Entity.col op rhs, ...)[.along(...)]` | forbidden combination across entities |
-| `cross_invariant` | `(Entity...).when(...).then(...)[.along(...)]` | required co-occurrence across entities |
-| `relate` | `(Entity, Entity, "1:1"\|"1:N"\|"N:1"\|"N:M")` | ER relation, auto-generates FK |
+| `forbidden` (multi-entity) | `(Entity..., Entity.col == val\|Entity.col op rhs, ...)[.along(...)]` | forbidden combination across entities |
+| `invariant` (multi-entity) | `(Entity...).when(...).then(...)[.along(...)]` | required co-occurrence across entities |
+| `when` | `(...).none/has(...)` | to-many quantifier (prefer `Entity.col`) |
+| `property` | `Name [label] always\|eventually\|leads_to(...)` | temporal path property (label optional) |
+| `after` | `(UseCase).assert(...)` | postcondition on events raised by UC |
+| `relate` | `(Entity, Entity, 1:1\|1:N\|N:1\|N:M)` | ER relation, auto-generates FK |
 | `has_permission` | `Actor == Permission` | actor-side grant |
 | `requires_permission` | `(UseCase\|Api, Permission)` | UC/API required authority |
 | `requires_medium` | `(UseCase\|Api, Medium)` | UC/API required operation medium |
@@ -201,16 +204,20 @@ import shared.actors.{Staff as S}
   and comparison propositions.
 - Add local rules in this order: `forbidden` / `exclusive` first, `invariant` /
   narrow `required` next, comparison and cross-entity constraints last.
-- Use `cross_forbidden` / `cross_invariant` when a rule mentions columns from more
+- Use multi-entity `forbidden` / `invariant` when a rule mentions columns from more
   than one entity; qualify multi-entity columns as `Entity.column`.
 - Add `.along(EntityA, EntityB, ...)` only when the rule is about instances linked by
   a declared `relate` path. Current `states` reports these relation-scoped rules as
-  `CrossConstraintNotEvaluated` instead of evaluating the global cross-product.
+  `CrossConstraintNotEvaluated` instead of evaluating the global cross-product; TLC
+  evaluates them via `*_owner` when exporting TLA+.
+- Use `when(...).none/has(...)` for quantifiers; use `property` / `after.assert` for
+  temporal and postcondition checks; validate Int/`now`/temporal with
+  `export --kind tla`.
 
 ### Common Mistakes
 
 - Swapping predicate argument order: CRUD predicates take `(UseCase|Api, Entity)`.
-- Writing `relate` cardinality without quotes.
+- Quoting `relate` cardinality when unquoted forms like `N:1` are preferred.
 - Adding quotes inside `Enum(...)` values.
 - Forgetting `module`, or using a module name that does not match the file path.
 - Adding FK columns manually when `relate` already generates them.

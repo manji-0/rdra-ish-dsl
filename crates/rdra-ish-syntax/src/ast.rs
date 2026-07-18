@@ -402,7 +402,8 @@ pub enum AstTemporalFormula {
 #[derive(Debug, Clone, PartialEq)]
 pub struct PropertyDecl {
     pub id: std::string::String,
-    pub label: std::string::String,
+    /// Optional display label; omitted in `property Id <formula>`.
+    pub label: Option<std::string::String>,
     pub formula: AstTemporalFormula,
     pub span: Span,
 }

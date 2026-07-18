@@ -133,6 +133,31 @@ after(ExecuteCertIssue).assert(CertificateOrder.status == executed)
 }
 
 #[test]
+fn when_entity_prefix_bare_column_registers_quantifier() {
+    let (ast, parse_errors) = parse(
+        r#"
+entity Cert "証明書" {
+  id: Int @pk
+  status: Enum(active, revoked) @default(active)
+}
+entity Assign "割当" {
+  id: Int @pk
+  status: Enum(active, ended) @default(active)
+}
+when(Cert, status == revoked).none(Assign.status == active)
+"#,
+    );
+    assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
+    let (model, diags) = build_model(&ast);
+    let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+    assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+    assert_eq!(model.quantifier_constraints.len(), 1);
+    let constraint = &model.quantifier_constraints[0];
+    assert_eq!(model.entities[constraint.anchor].id, "Cert");
+    assert_eq!(model.entities[constraint.related].id, "Assign");
+}
+
+#[test]
 fn forbidden_when_none_registers_quantifier_constraint() {
     let (ast, parse_errors) = parse(
         r#"

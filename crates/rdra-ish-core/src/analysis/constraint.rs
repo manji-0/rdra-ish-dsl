@@ -715,8 +715,18 @@ pub(crate) fn process_when_quantifier_predicate(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
-    let mut scope = Vec::new();
-    let guards = collect_cross_chain_conditions(model, &scope, &pred.name, &pred.args, ctx, diags);
+    // Support both:
+    //   when(Cert, status == revoked).none(...)
+    //   when(Cert.status == revoked).none(...)
+    let (mut scope, first_condition) = collect_cross_scope_prefix(model, pred, ctx, diags);
+    let guards = collect_cross_chain_conditions(
+        model,
+        &scope,
+        &pred.name,
+        &pred.args[first_condition..],
+        ctx,
+        diags,
+    );
     if guards.is_empty() {
         return;
     }
