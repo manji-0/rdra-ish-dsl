@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "rdra-ish"
-version = "0.1.7"
+version = "0.2.0"
 description = "RDRA-inspired DSL compiler and diagram generator"
 readme = "README.md"
 requires-python = ">=3.8"

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.2.0 - 2026-07-20
+
 ### Breaking
 
 - Conditions use comparison expressions only: `col == val`, `stock < selling`
@@ -45,6 +47,7 @@
   README learning path leads with incremental modeling.
 - TLA `.cfg` sets `CHECK_DEADLOCK FALSE` so terminal lifecycle states are not
   reported as TLC deadlocks; CI TLC smoke-check accepts `-help` non-zero exit.
+  Multi-instance exports always `EXTENDS Integers` for `1..InstanceCount`.
 - Import scopes honor `as` aliases, selective imports, and namespaced refs;
   same id may exist in different modules when referenced via aliases.
   Closed scope is per-file (siblings without `import` stay open-world);
