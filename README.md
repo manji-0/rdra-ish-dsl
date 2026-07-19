@@ -73,25 +73,32 @@ rdra-ish verify samples/formal-verification/order.rdra --backend tlc -o /tmp/rdr
 - **State design**: unreachable variants, missing creation paths, state rule violations.
 - **Boundary design**: API/system/event-flow inconsistencies and orphaned nodes.
 
+## Learning Path
+
+1. [Incremental Modeling Flow](./docs/incremental-modeling.md) + [samples/incremental-order](./samples/incremental-order/)
+2. Look up syntax in [Language Reference](./docs/language-reference.md) only as needed
+3. Install agent skills from [`skills/README.md`](./skills/README.md) (`rdra-ish-write`, `rdra-ish-review`)
+
 ## Main Documents
 
-- [Changelog](./CHANGELOG.md)
-- [CLI Reference](./docs/cli-reference.md)
+- [Incremental Modeling Flow](./docs/incremental-modeling.md) — start here
 - [Language Reference](./docs/language-reference.md)
-- [Incremental Modeling Flow](./docs/incremental-modeling.md)
-- [Diagram Sample Review Guide](./docs/diagram-sample-review.md)
+- [CLI Reference](./docs/cli-reference.md)
+- [RDRA-ish Interpretation](./docs/rdra-ish-interpretation.md)
 - [State Pattern Derivation](./docs/state-derivation.md)
 - [Formal Verification (TLA+/TLC)](./docs/formal-verification.md)
-- [RDRA-ish Interpretation](./docs/rdra-ish-interpretation.md)
+- [Diagram Sample Review Guide](./docs/diagram-sample-review.md)
+- [Changelog](./CHANGELOG.md)
+- Agent skills: [`skills/README.md`](./skills/README.md)
 
 ## Samples
 
+- `samples/incremental-order`: seven-step refinement walkthrough
 - `samples/ec-site`: compact end-to-end sample
 - `samples/clinic-ops`: larger model with APIs, events, and access constraints
 - `samples/personal-info`: personal data management sample
 - `skills/rdra-ish-verify/samples`: TLA+/TLC examples (also linked from
   `samples/formal-verification/`; check files individually)
-- Agent skills: [`skills/README.md`](./skills/README.md) (`npx skills` / `gh skill`)
 
 ## Publish (maintainers)
 

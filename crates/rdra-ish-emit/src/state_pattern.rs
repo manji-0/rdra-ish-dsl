@@ -123,7 +123,7 @@ fn diag_message(d: &StateDiag) -> String {
             scope_hint,
         } => {
             let mut message = format!(
-                "[error] cross-entity forbidden state reached across [{}]: ({}) in patterns ({})",
+                "[error] multi-entity forbidden state reached across [{}]: ({}) in patterns ({})",
                 entities, conditions, pattern_desc
             );
             if let Some(hint) = scope_hint {
@@ -139,7 +139,7 @@ fn diag_message(d: &StateDiag) -> String {
             scope_hint,
         } => {
             let mut message = format!(
-                "[error] cross-entity invariant violated across [{}]: when ({}) holds, ({}) must also hold — but found patterns ({})",
+                "[error] multi-entity invariant violated across [{}]: when ({}) holds, ({}) must also hold — but found patterns ({})",
                 entities, guards, requireds, pattern_desc
             );
             if let Some(hint) = scope_hint {
@@ -153,7 +153,7 @@ fn diag_message(d: &StateDiag) -> String {
             reason,
         } => {
             format!(
-                "[warn] cross-entity constraint not evaluated across [{}]: {} ({})",
+                "[warn] multi-entity constraint not evaluated across [{}]: {} ({})",
                 entities, constraint, reason
             )
         }

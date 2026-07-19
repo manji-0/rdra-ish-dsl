@@ -141,7 +141,7 @@ pub(crate) fn state_diag_message(diag: &rdra_ish_core::StateDiag) -> String {
             scope_hint,
         } => {
             let mut message = format!(
-                "cross-entity forbidden state is reachable across [{}]: {} witnessed by {}",
+                "multi-entity forbidden state is reachable across [{}]: {} witnessed by {}",
                 entities, conditions, pattern_desc
             );
             if let Some(hint) = scope_hint {
@@ -157,7 +157,7 @@ pub(crate) fn state_diag_message(diag: &rdra_ish_core::StateDiag) -> String {
             scope_hint,
         } => {
             let mut message = format!(
-                "cross-entity invariant violated across [{}]: when {} then {} is broken by {}",
+                "multi-entity invariant violated across [{}]: when {} then {} is broken by {}",
                 entities, guards, requireds, pattern_desc
             );
             if let Some(hint) = scope_hint {
@@ -170,7 +170,7 @@ pub(crate) fn state_diag_message(diag: &rdra_ish_core::StateDiag) -> String {
             constraint,
             reason,
         } => format!(
-            "cross-entity constraint was not fully evaluated across [{}]: {} ({})",
+            "multi-entity constraint was not fully evaluated across [{}]: {} ({})",
             entities, constraint, reason
         ),
         rdra_ish_core::StateDiag::TemporalAssertionViolated {

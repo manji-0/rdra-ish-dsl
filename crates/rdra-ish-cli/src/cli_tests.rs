@@ -730,7 +730,7 @@ fn state_diag_message_includes_cross_scope_hint() {
         ),
     });
 
-    assert!(message.contains("cross-entity invariant violated across [Order, Payment]"));
+    assert!(message.contains("multi-entity invariant violated across [Order, Payment]"));
     assert!(message.contains(
         "hint: use .along(Order, Payment) if this rule is intended to apply only to linked instances"
     ));

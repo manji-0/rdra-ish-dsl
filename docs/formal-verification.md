@@ -135,8 +135,9 @@ arithmetic Safety when Int axes exist.
 - `after(UC).assert(...)` becomes an independent TLA `PROPERTY`
   `[][actions => primed posts]_vars` — it does **not** inject assignments into
   SpecActions (so asserts check outcomes rather than enabling assumptions).
-- Diagnostic ids may still use a historical `Cross*` prefix even though the DSL
-  surface is multi-entity `forbidden` / `invariant`.
+- User-facing state diagnostics for multi-entity rules say **multi-entity**
+  (enum / table ids may still use a historical `Cross*` prefix). The DSL
+  surface remains multi-entity `forbidden` / `invariant`.
 
 ## Workflow
 

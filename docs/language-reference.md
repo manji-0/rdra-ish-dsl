@@ -77,7 +77,7 @@ CSV, or JSON form.
 | `concept` | A business concept that may or may not become a persisted data structure. |
 | `domain_object` | A domain model object that represents behavior or business identity before database design. |
 | `aggregate` | A domain consistency boundary that groups domain objects, value objects, or concepts. |
-| `valueobject` | A value object without independent identity, modeled separately from database columns or tables. |
+| `valueobject` / `value_object` | A value object without independent identity, modeled separately from database columns or tables. Prefer `value_object`; `valueobject` remains accepted. |
 | `business` | A business (a coarse-grained area of activity) that BUCs belong to. |
 | `buc` | A business use case: a unit of business value composed of use cases. |
 | `flow` | A business flow: an ordered business narrative inside a BUC. A flow is composed of steps and can make UC/event ordering explicit without turning the diagram into the only source of truth. |
@@ -88,9 +88,9 @@ CSV, or JSON form.
 | `field` | A screen field: a first-class UI input/output item. It can carry editability, requiredness, and actor/system source metadata, and can map to an Entity column without becoming one. |
 | `event` | A domain event, used as the trigger of state transitions and as a `raises`/`triggers` endpoint. |
 | `entity` | A logical data model/table-like persistent structure. Use conceptual model elements for domain concepts that are not yet, or should not be, tables. |
-| `state` | A state machine node, linked to an entity's Enum column. |
-| `condition` | A condition. |
-| `variation` | A variation. |
+| `state` | Optional diagram/label sugar for an Enum lifecycle variant. Prefer `transitions(Entity.col, Event, from -> to)` with Enum variant names; the compiler also synthesizes `{Entity}_{variant}` state nodes for diagrams when needed. |
+| `condition` | Reserved kind (not wired to predicates yet). Do not use in new models. |
+| `variation` | Reserved kind (not wired to predicates yet). Do not use in new models. |
 | `api` | An API layer endpoint invoked by a use case; operates entities on behalf of the use case and defines an atomic data operation boundary. API declarations may also carry HTTP contract metadata. Appears in the RDRA layered graph and sequence diagram as a named API lane, but is intentionally omitted from the boundaryless graph. |
 | `dto` | A request, response, or error payload shape used by API contracts. DTOs may carry a column-like field body but are kept separate from database entities. |
 | `location` | A place, channel, organization point, or usage scene for Business-BUC context. |
@@ -247,7 +247,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `requires_medium` | `(UseCase \| Api, Medium)` | The use case or API requires the operation medium. |
 | `motivates` | `Requirement == Buc` | The requirement motivates the BUC. |
 | `decides` | `(Adr, Buc \| UseCase \| Api \| System \| Entity \| Requirement \| Nfr \| Constraint \| Concept \| DomainObject \| Aggregate \| ValueObject \| Dto)` | The ADR records a design decision that affects the target element. Use this for impact review and design traceability without making the target depend on a document file path. |
-| `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `1:1`, `1:N`, `N:1`, `N:M` (unquoted). FK options can be chained with `.optional()`, `.on_delete(action)`, and `.on_update(action)`. |
+| `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `1:1`, `1:N`, `N:1` (unquoted). Direct `N:M` is **not** supported — introduce an intermediate entity and two `N:1` relates. FK options can be chained with `.optional()`, `.on_delete(action)`, and `.on_update(action)`. |
 | `transitions` | `(Entity.column, Event, from -> to)` | A lifecycle edge on an Enum column: on the event, the entity moves from the first variant to the second. |
 | `after` | `(UseCase).assert(...)` | A temporal anchor assertion checked against the use case's immediate `sets` and `raises`/`transitions` effects. |
 | `when` | `(conditions...).none/has(conditions...)` | A to-many quantifier constraint (replaces `forbidden_when`). Prefer qualified columns such as `Cert.status == revoked`. |
@@ -915,16 +915,16 @@ forbidden(Order, Payment,
 
 invariant(Order, Payment)
   .when(Order.status == paid)
-  .then(Payment.status == captured
+  .then(Payment.status == captured)
 
 invariant(Order, Payment)
   .along(Order, Payment)
   .when(Order.status == paid)
-  .then(Payment.status == captured
+  .then(Payment.status == captured)
 ```
 
-`forbidden(...)` accepts a flat AND-list of conditions. `invariant(...)`
-uses the same implication shape as `invariant`: `.when(...)` clauses are guards and
+`forbidden(...)` accepts a flat AND-list of conditions. Multi-entity `invariant(...)`
+uses the same implication shape as single-entity `invariant`: `.when(...)` clauses are guards and
 `.then(...)` clauses are required conditions. A condition is either:
 
 - `Entity.column == value` for state-like equality, using the same value vocabulary as
@@ -970,7 +970,8 @@ over Int / Money / Decimal columns and literals. Prefer connectives `and` / `or`
 The property label string is optional: `property StockOk always(Item.stock >= Item.selling)`.
 
 When any `eventually` / `leads_to` property is exported, the Spec includes
-`WF_vars(Next)`. In multi-instance export (triggered by multi-entity rules or
+`WF_vars(Next)` (fairness is on the whole `Next` disjunction — not configurable
+from the CLI). In multi-instance export (triggered by multi-entity rules or
 quantifiers), temporal formulas are quantified per instance binder
 (`\A i \in Entity_Ids: …`). Equality and comparison forms of
 `after(UseCase).assert(...)` become independent TLA `PROPERTY` formulas
@@ -984,7 +985,8 @@ exported; see [formal-verification.md](./formal-verification.md).
 
 `sets(UC, Entity, intCol == 3)` assigns an Int effect used by TLA+ export.
 Money / Decimal columns used in arithmetic also become `IntRange` axes (nullable
-numeric columns promote to Int rather than staying as Nullable).
+numeric columns promote to Int rather than staying as Nullable). The exported
+Int domain is a fixed approximation (`0..5`) unless you edit the `.tla` by hand.
 `@default(0)` is valid on Int columns. BFS `states` still ignores Int axes and treats
 comparison propositions as Bool axes driven by `sets(..., cmp, true/false)`.
 
@@ -999,7 +1001,7 @@ globally unreachable, the rule is treated as satisfied.
 entity's reached state patterns when those entities are not connected by a declared
 `relate` path. Conditions that reference actual state axes can produce
 `CrossForbiddenViolated` or `CrossInvariantViolated` diagnostics in that global-product
-case. Conditions that require values absent from the abstract state space, such as
+case (messages say **multi-entity**; the `Cross*` id is historical). Conditions that require values absent from the abstract state space, such as
 ordinary numeric amount comparisons, produce `CrossConstraintNotEvaluated` instead.
 
 When the participating entities are connected by `relate(...)`, a global-product

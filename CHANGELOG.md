@@ -34,6 +34,15 @@
 - Fail-closed validation: empty `Enum()`, lexer junk, unknown predicates / wrong
   arity, duplicate columns, missing input paths, and generator commands that
   previously succeeded on invalid models.
+- Parse errors print human-readable “unexpected …; expected …” messages (no
+  chumsky Debug dumps); `N:M` / temporal hints match the current surface;
+  `value_object` is accepted alongside `valueobject`.
+- Language-ref multi-entity `invariant` examples are valid; `N:M` is documented
+  as unsupported (use an intermediate entity); Stage 5 no longer requires
+  standalone `state` declarations; `condition`/`variation` marked reserved.
+- User-facing multi-entity state diagnostics say “multi-entity” (ids may still
+  be `Cross*`); OpenAPI lint warns when APIs lack both method and path;
+  README learning path leads with incremental modeling.
 - Import scopes honor `as` aliases, selective imports, and namespaced refs;
   same id may exist in different modules when referenced via aliases.
   Closed scope is per-file (siblings without `import` stay open-world);

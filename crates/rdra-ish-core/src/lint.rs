@@ -314,6 +314,17 @@ fn lint_structural_coverage(model: &SemanticModel, issues: &mut Vec<LintIssue>) 
                 "API contract declares only one of method/path",
                 "declare both method and path before exporting OpenAPI",
             );
+        } else if api.method.is_none() && api.path.is_none() {
+            push_element_lint(
+                model,
+                issues,
+                "api",
+                "api",
+                &api.id,
+                "api-contract-missing",
+                "API has no method/path; OpenAPI export will omit it",
+                "declare method and path when OpenAPI projection is in scope",
+            );
         }
     }
 

@@ -37,6 +37,7 @@ pub enum Token {
     #[token("aggregate")]
     Aggregate,
     #[token("valueobject")]
+    #[token("value_object")]
     ValueObject,
     #[token("business")]
     Business,

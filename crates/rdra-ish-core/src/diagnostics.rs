@@ -57,7 +57,7 @@ pub enum RdraError {
     #[error("usecase metadata is only valid on usecase '{id}' declarations\n  hint: move precondition/postcondition/guard/alternative/error clauses to a `usecase` declaration")]
     UseCaseMetadataOnNonUseCase { id: String },
 
-    #[error("N:M relation between '{from}' and '{to}': direct N:M relations are not supported\n  hint: create an intermediate entity, e.g.:\n    entity {from}{to} \"..\" {{ id: Int @pk }}\n    relate({from}{to}, {from}, \"N:1\")\n    relate({from}{to}, {to}, \"N:1\")")]
+    #[error("N:M relation between '{from}' and '{to}': direct N:M relations are not supported\n  hint: create an intermediate entity, e.g.:\n    entity {from}{to} \"..\" {{ id: Int @pk }}\n    relate({from}{to}, {from}, N:1)\n    relate({from}{to}, {to}, N:1)")]
     NMRelation { from: String, to: String },
 
     #[error("FK conflict: entity '{entity}' already has a column '{col}' that conflicts with auto-generated FK")]
@@ -252,7 +252,7 @@ pub enum RdraError {
         system: String,
     },
 
-    #[error("invalid temporal property '{id}': {message}\n  hint: use always/eventually/leads_to with ==/!= or Int comparisons (<,>,<=,>=) over entity columns, combining with ~ /\\ \\/")]
+    #[error("invalid temporal property '{id}': {message}\n  hint: use always/eventually/leads_to with ==/!= or Int comparisons (<,>,<=,>=) over entity columns, combining with and / or / not (`/\\` `\\/` `~` remain aliases)")]
     InvalidTemporalProperty { id: String, message: String },
 
     #[error("unknown predicate '{name}'\n  hint: check spelling; known predicates include performs, reads, sets, transitions, forbidden, …")]

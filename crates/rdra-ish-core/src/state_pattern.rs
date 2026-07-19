@@ -1949,7 +1949,7 @@ fn evaluate_invariant(
         return vec![StateDiag::CrossConstraintNotEvaluated {
             entities,
             constraint: format!(
-                "cross_invariant when ({}) then ({})",
+                "multi_entity invariant when ({}) then ({})",
                 guards_desc, requireds_desc
             ),
             reason,
@@ -1962,7 +1962,7 @@ fn evaluate_invariant(
         return vec![StateDiag::CrossConstraintNotEvaluated {
             entities,
             constraint: format!(
-                "cross_invariant when ({}) then ({})",
+                "multi_entity invariant when ({}) then ({})",
                 guards_desc, requireds_desc
             ),
             reason: format!(
@@ -2031,7 +2031,7 @@ fn evaluate_invariant(
         diags.push(StateDiag::CrossConstraintNotEvaluated {
             entities,
             constraint: format!(
-                "cross_invariant when ({}) then ({})",
+                "multi_entity invariant when ({}) then ({})",
                 guards_desc, requireds_desc
             ),
             reason: linked_scope_reason.unwrap_or_else(|| {
@@ -2042,7 +2042,7 @@ fn evaluate_invariant(
         diags.push(StateDiag::CrossConstraintNotEvaluated {
             entities,
             constraint: format!(
-                "cross_invariant when ({}) then ({})",
+                "multi_entity invariant when ({}) then ({})",
                 guards_desc, requireds_desc
             ),
             reason: format!(
@@ -2055,7 +2055,7 @@ fn evaluate_invariant(
             diags.push(StateDiag::CrossConstraintNotEvaluated {
                 entities,
                 constraint: format!(
-                    "cross_invariant when ({}) then ({})",
+                    "multi_entity invariant when ({}) then ({})",
                     guards_desc, requireds_desc
                 ),
                 reason,

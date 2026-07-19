@@ -397,10 +397,6 @@ entity Order "Order" {
   paid_at: DateTime @null
 }
 
-state Pending "Pending"
-state Paid "Paid"
-state Cancelled "Cancelled"
-
 event Capture "Capture Payment"
 event Cancel "Cancel Order"
 
@@ -414,11 +410,11 @@ sets(event::Capture, Order, paid_at == present)
 
 Ask the user:
 
-- Which entity values represent lifecycle state?
+- Which Enum column and variants represent lifecycle state?
 - Which use case or event causes each state change?
 - Does any event start another BUC, and is the concrete entry use case known yet?
 - Which nullable or boolean fields change together with the lifecycle?
-- Are any declared states intentionally unreachable for now?
+- Do you need optional `state` labels for diagrams, or are Enum variants enough?
 
 Validation:
 
