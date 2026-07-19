@@ -117,12 +117,12 @@ arithmetic Safety when Int axes exist.
 - **Int arithmetic**: comparisons and `sets(..., col == N)` on Int / Money / Decimal
   use TLC Integers on `IntRange` (currently fixed at `0..5` in the emitter).
   Undriven Int axes get nondet `Assign_*` actions so TLC can explore values.
-  For columns used as the lhs of `col < now` / `col <= now`, `Assign_*` is
-  constrained (`v >= now`) rather than omitted. `@default(0)` is accepted for
-  Int columns.
+  `@default(0)` is accepted for Int columns. Boundedness is an approximation —
+  `verify` OK does not prove behaviour outside `IntRange`.
 - **`now`**: exported as a global Int clock with `TickNow`. Columns compared to
-  `now` (including DateTime) become Int axes. For `col < now` / `col <= now`,
-  `TickNow` also requires `t <= col` so Safety stays non-vacuous without Init=max.
+  `now` (including DateTime) become Int axes. **Safety is not baked into Next**:
+  `Assign_*` and `TickNow` may choose values that violate `forbidden(col < now)`;
+  TLC is expected to find those counterexamples (see `now_coupon.rdra`).
 - **`WF_vars(Next)`**: fairness is on the whole `Next` disjunction, not per action.
   Sufficient for simple `eventually` / `leads_to` on small models; not a substitute
   for per-action weak fairness.
@@ -156,7 +156,7 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 |---|---|---|
 | `order.rdra` | expected pass | Lifecycle Safety + `after.assert` + `leads_to` / `eventually` + `WF_vars` |
 | `int_stock.rdra` | expected pass | Int axes, arithmetic `forbidden`, Int temporal property |
-| `now_coupon.rdra` | expected pass | `now` / `TickNow`; Assign keeps `expired_at >= now`; TickNow cannot pass it |
+| `now_coupon.rdra` | expected fail | `now` / unconstrained Assign + TickNow; Safety finds `expired_at < now` |
 | `cross_order_payment.rdra` | expected fail | Multi-instance + `.along` (independent SpecActions allow Cancel then Capture) |
 | `quantifier_none.rdra` | expected fail | `when(...).none` (Revoke while Assign stays active) |
 | `fail/order.rdra` | expected fail | Intentionally unsafe (`check` may warn with exit 0; TLC should fail Safety) |

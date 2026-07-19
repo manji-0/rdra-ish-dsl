@@ -14,8 +14,12 @@ merges all reachable `.rdra` files into a single semantic model and resolves imp
 against include paths derived from the input layout (it walks up from each input so that,
 e.g., `shared/actors.rdra` resolves from a root containing both `shared/` and `buc/`).
 
-Diagnostics are written to stderr as `error: ...` or `warning: ...`. Most subcommands
-print diagnostics and still produce output; `check` exits non-zero on any error.
+Diagnostics are written to stderr as `error: ...` or `warning: ...`.
+
+- `check` and `lint` exit non-zero when semantic errors (or lint errors) are present.
+- Generator subcommands (`diagram`, `csv`, `list`, `export`, `states`, `verify`) are
+  **fail-closed**: they refuse to emit artifacts when the model has errors.
+- `fmt` only requires a parseable source; it does not run semantic analysis.
 
 ---
 

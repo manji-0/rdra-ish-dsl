@@ -40,8 +40,13 @@
   unknown modules, duplicate module paths, and conflicting `import` All
   bindings are errors; module-scoped resolution no longer falls back to
   another module's unique match.
-- Formal-verify CI exports `PATH` in the TLC install step and requires a
-  `TLC verification failed` fingerprint for expected-fail samples.
+- Formal-verify CI exports `PATH` in the TLC install step and requires
+  TLC-native fingerprints (`tlc_result: ok` / `tlc_result: counterexample`).
+- Duplicate `import … as` aliases are errors; Init prefers the first Enum
+  variant when no `states`/`@default` seed exists.
+- FV docs/skills align with unconstrained Assign/TickNow and `now_coupon`
+  as an expected TLC fail; cli-reference documents fail-closed generators;
+  language-reference documents composite `@pk` FK limits.
 - `diagram --kind diff` fail-closes on semantic errors in `--diff-base`.
 - TLA+: unique action names for multi-edge events; unresolved/dropped properties
   and contradictory `after.assert` fail export/verify; `now` Safety is not baked

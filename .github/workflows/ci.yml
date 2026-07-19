@@ -54,9 +54,21 @@ jobs:
             echo "==> check/export/verify $sample"
             "$BIN" check "$sample"
             "$BIN" export "$sample" --kind tla -o /tmp/rdra-ci-tla
-            "$BIN" verify "$sample" --backend tlc -o /tmp/rdra-ci-tla
+            set +e
+            out=$("$BIN" verify "$sample" --backend tlc -o /tmp/rdra-ci-tla 2>&1)
+            status=$?
+            set -e
+            echo "$out"
+            if [[ $status -ne 0 ]]; then
+              echo "expected TLC pass for $sample" >&2
+              exit 1
+            fi
+            if ! grep -q "tlc_result: ok" <<<"$out"; then
+              echo "expected tlc_result: ok for $sample" >&2
+              exit 1
+            fi
           done
-      - name: Verify fail samples report TLC failure
+      - name: Verify fail samples report TLC counterexample
         run: |
           BIN=./target/release/rdra-ish
           for sample in \
@@ -64,19 +76,23 @@ jobs:
             samples/formal-verification/quantifier_none.rdra \
             samples/formal-verification/now_coupon.rdra
           do
-            echo "==> expect TLC fail: $sample"
+            echo "==> expect TLC counterexample: $sample"
             set +e
             out=$("$BIN" verify "$sample" --backend tlc -o /tmp/rdra-ci-tla-fail 2>&1)
             status=$?
             set -e
+            echo "$out"
             if [[ $status -eq 0 ]]; then
               echo "expected TLC failure for $sample" >&2
+              exit 1
+            fi
+            if ! grep -q "tlc_result: counterexample" <<<"$out"; then
+              echo "expected tlc_result: counterexample for $sample (not tool_error); got:" >&2
               echo "$out" >&2
               exit 1
             fi
-            if ! grep -q "TLC verification failed" <<<"$out"; then
-              echo "expected 'TLC verification failed' fingerprint for $sample; got:" >&2
-              echo "$out" >&2
+            if ! grep -qiE "invariant.*violated|property.*violated|Error:.*violated" <<<"$out"; then
+              echo "expected TLC-native violation fingerprint for $sample" >&2
               exit 1
             fi
           done

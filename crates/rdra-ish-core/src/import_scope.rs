@@ -143,6 +143,9 @@ pub enum ImportScopeDiagKind {
     DuplicateModule {
         module: String,
     },
+    DuplicateAlias {
+        alias: String,
+    },
     /// Local def or prior import already binds this flat name.
     DuplicateVisible {
         name: String,
@@ -299,6 +302,18 @@ pub fn build_import_scopes(
                     }
                 }
                 ImportKind::Alias(alias) => {
+                    if let Some(existing) = scope.namespaces.get(alias) {
+                        if existing != &module_path {
+                            diags.push(ImportScopeDiagnostic {
+                                source_id,
+                                span: imp.span.clone(),
+                                message_id: alias.clone(),
+                                kind: ImportScopeDiagKind::DuplicateAlias {
+                                    alias: alias.clone(),
+                                },
+                            });
+                        }
+                    }
                     scope.namespaces.insert(alias.clone(), module_path.clone());
                 }
                 ImportKind::Select(items) => {

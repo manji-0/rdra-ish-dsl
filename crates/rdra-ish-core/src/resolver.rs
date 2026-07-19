@@ -270,6 +270,12 @@ pub fn build_merged_model(
                     LocatedSpan::new(d.source_id, d.span),
                 ));
             }
+            crate::import_scope::ImportScopeDiagKind::DuplicateAlias { alias } => {
+                all_diags.push(Diagnostic::error_at(
+                    RdraError::DuplicateAlias { alias },
+                    LocatedSpan::new(d.source_id, d.span),
+                ));
+            }
             crate::import_scope::ImportScopeDiagKind::DuplicateVisible { name, .. } => {
                 all_diags.push(Diagnostic::error_at(
                     RdraError::DuplicateDefinition { id: name },
@@ -725,6 +731,48 @@ performs(Staff, Work)
                 RdraError::DuplicateDefinition { id } if id == "Staff"
             )),
             "All×All Staff collision expected: {model_diags:?}"
+        );
+    }
+
+    #[test]
+    fn duplicate_import_alias_is_error() {
+        let dir = make_temp_dir("dup_import_alias");
+        let a_dir = dir.join("mod_a");
+        let b_dir = dir.join("mod_b");
+        fs::create_dir_all(&a_dir).unwrap();
+        fs::create_dir_all(&b_dir).unwrap();
+        write_file(
+            &a_dir.join("actors.rdra"),
+            r#"
+module mod_a.actors
+actor Staff "A"
+"#,
+        );
+        write_file(
+            &b_dir.join("actors.rdra"),
+            r#"
+module mod_b.actors
+actor Staff "B"
+"#,
+        );
+        write_file(
+            &dir.join("main.rdra"),
+            r#"
+import mod_a.actors as x
+import mod_b.actors as x
+usecase W "w"
+performs(x.Staff, W)
+"#,
+        );
+
+        let (program, _) = resolve(&[dir.join("main.rdra")], std::slice::from_ref(&dir));
+        let (_, model_diags) = build_merged_model(&program, &[dir]);
+        assert!(
+            model_diags.iter().any(|d| matches!(
+                &d.error,
+                RdraError::DuplicateAlias { alias } if alias == "x"
+            )),
+            "expected DuplicateAlias: {model_diags:?}"
         );
     }
 

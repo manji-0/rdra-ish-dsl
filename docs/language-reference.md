@@ -137,8 +137,8 @@ is optional/nullable in the payload.
 
 | Annotation | Description |
 |---|---|
-| `@pk` | Marks the column as the primary key. FK columns are auto-generated against this key by `relate`. |
-| `@pka == b` | Declares a composite primary key over the named columns. |
+| `@pk` | Marks the column as the primary key. FK columns are auto-generated against this key by `relate` (single-column `@pk` only). |
+| `@pk(a, b)` | Declares a composite primary key over the named columns. Auto-FK generation is **not** supported for composite keys — declare FK columns explicitly on the many side. |
 | `@unique` | Adds a unique constraint. |
 | `@unique(a, b)` | Declares a composite unique constraint over the named columns. |
 | `@index` | Adds an index for the column. |
@@ -548,6 +548,10 @@ belongs(BucAppointmentScheduling, ClinicOps)
 referencing the parent's primary key (for example `parent_id`). The cardinality drives
 the crow's-foot notation in the ER diagram and the FK-induced graph used for
 [transaction boundary inference](#see-also).
+
+Auto-FK requires a **single-column** `@pk` on the parent. If the parent uses
+`@pk(a, b)` (composite), the model reports `CompositePkFkUnsupported` — declare the
+foreign-key column(s) explicitly on the child instead.
 
 ### `transitions` and the state machine
 
@@ -1150,6 +1154,7 @@ import shared.actors.{Staff as S} // selective import with a local alias
   same file without a module) remains an error.
 - Import visibility is **per file**: only files that contain `import` become closed
   scope. Sibling files without imports keep open-world (legacy) resolution of bare names.
+- Reusing the same `as` alias for two modules is an error (`DuplicateAlias`).
 
 When the CLI loads a directory, it merges all `.rdra` files reachable from the entry
 files into a single semantic model, resolving imports against the include paths derived

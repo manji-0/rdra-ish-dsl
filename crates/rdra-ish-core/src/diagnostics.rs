@@ -22,8 +22,11 @@ pub enum RdraError {
     #[error("undefined symbol: {id}")]
     UndefinedSymbol { id: String },
 
-    #[error("ambiguous reference: '{id}' matches multiple kinds ({kinds})\n  hint: use a kind-qualified reference, e.g. `usecase::{id}`")]
+    #[error("ambiguous reference: '{id}' matches multiple declarations ({kinds})\n  hint: if kinds differ, qualify with `kind::{id}`; if the same kind appears in multiple modules, use `import M as a` then `a.{id}`")]
     AmbiguousReference { id: String, kinds: String },
+
+    #[error("duplicate import alias '{alias}'\n  hint: each `import … as alias` name must be unique in the file; rename one alias")]
+    DuplicateAlias { alias: String },
 
     #[error("type mismatch in predicate '{pred}': argument '{id}' has kind {actual}, expected {expected}\n  hint: check that you are passing the right element type")]
     TypeMismatch {

@@ -116,9 +116,29 @@ fn run_tlc(model: &SemanticModel, out: Option<PathBuf>) -> Result<()> {
         if !keep {
             let _ = fs::remove_dir_all(&work_dir);
         }
+        if tlc_reports_violation(&combined) {
+            eprintln!("tlc_result: counterexample");
+            bail!(
+                "TLC verification failed (spec: {})\n{summary}",
+                tla_path.display()
+            );
+        }
+        eprintln!("tlc_result: tool_error");
         bail!(
-            "TLC verification failed (spec: {})\n{summary}",
+            "TLC tool failed without a model violation (spec: {})\n{summary}",
             tla_path.display()
+        );
+    }
+
+    if !tlc_reports_success(&combined) {
+        if !keep {
+            let _ = fs::remove_dir_all(&work_dir);
+        }
+        eprintln!("tlc_result: tool_error");
+        bail!(
+            "TLC exited 0 but success fingerprint missing (spec: {})\n{}",
+            tla_path.display(),
+            summarize_tlc_failure(&combined)
         );
     }
 
@@ -126,8 +146,32 @@ fn run_tlc(model: &SemanticModel, out: Option<PathBuf>) -> Result<()> {
         let _ = fs::remove_dir_all(&work_dir);
     }
 
+    println!("tlc_result: ok");
     println!("TLC: OK");
     Ok(())
+}
+
+/// True when TLC reported an invariant/property/temporal violation (not a tool crash).
+fn tlc_reports_violation(output: &str) -> bool {
+    let lower = output.to_ascii_lowercase();
+    (lower.contains("invariant") && lower.contains("violated"))
+        || (lower.contains("property") && lower.contains("violated"))
+        || lower.contains("temporal properties were violated")
+        || lower.lines().any(|line| {
+            let t = line.trim();
+            t.starts_with("Error:")
+                && (t.contains("violated")
+                    || t.contains("Temporal")
+                    || t.contains("Invariant")
+                    || t.contains("Property"))
+        })
+}
+
+/// True when TLC reported a completed successful model-checking run.
+fn tlc_reports_success(output: &str) -> bool {
+    output.contains("Model checking completed")
+        || output.contains("No error has been found")
+        || output.contains("No errors found")
 }
 
 /// Extract a short RDRA-oriented summary from TLC stdout/stderr.
@@ -239,5 +283,14 @@ State 2: <Order_EvDeliver line 29>
         assert!(summary.contains("Safety"));
         assert!(summary.contains("counterexample"));
         assert!(summary.contains("Order_status"));
+        assert!(tlc_reports_violation(output));
+        assert!(!tlc_reports_success(output));
+    }
+
+    #[test]
+    fn tlc_success_fingerprint() {
+        let output = "Model checking completed. No error has been found.\n";
+        assert!(tlc_reports_success(output));
+        assert!(!tlc_reports_violation(output));
     }
 }

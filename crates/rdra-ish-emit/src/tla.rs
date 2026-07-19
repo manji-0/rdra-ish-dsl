@@ -739,6 +739,16 @@ fn build_init(
                 .find(|c| c.name == lc.status_column)
                 .and_then(|c| c.default_val.as_ref().map(|d| d.to_lowercase()))
         })
+        .or_else(|| {
+            entity
+                .columns
+                .iter()
+                .find(|c| c.name == lc.status_column)
+                .and_then(|c| match &c.col_type {
+                    ColumnType::Enum(variants) => variants.first().map(|v| v.to_lowercase()),
+                    _ => None,
+                })
+        })
         .unwrap_or_else(|| "pending".into());
 
     let ids = format!("{}_Ids", sanitize_ident(&entity_name));
