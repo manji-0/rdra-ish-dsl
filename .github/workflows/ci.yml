@@ -41,7 +41,10 @@ jobs:
           echo "$TLC_DIR" >> "$GITHUB_PATH"
           # GITHUB_PATH applies to subsequent steps; export for this step too.
           export PATH="$TLC_DIR:$PATH"
-          tlc -help >/dev/null
+          # TLC exits non-zero for -help; smoke-check the wrapper is runnable.
+          help_out=$(tlc -help 2>&1 || true)
+          echo "$help_out" | head -n 5
+          echo "$help_out" | grep -qiE 'tlc|NAME|Usage|options'
       - name: Build CLI
         run: cargo build -p rdra-ish-cli --release
       - name: Export + verify pass samples

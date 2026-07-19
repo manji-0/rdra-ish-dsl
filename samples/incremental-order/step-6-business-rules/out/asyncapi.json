@@ -34,8 +34,8 @@
         ],
         "x-rdra-ish-transitions": [
           {
-            "from": "Scheduled",
-            "to": "Blocked"
+            "from": "scheduled",
+            "to": "blocked"
           }
         ],
         "x-rdra-ish-triggers-bucs": [],
@@ -55,8 +55,8 @@
         ],
         "x-rdra-ish-transitions": [
           {
-            "from": "Normal",
-            "to": "Scheduled"
+            "from": "normal",
+            "to": "scheduled"
           }
         ],
         "x-rdra-ish-triggers-bucs": [],
@@ -81,8 +81,8 @@
       ],
       "x-rdra-ish-transitions": [
         {
-          "from": "Scheduled",
-          "to": "Blocked"
+          "from": "scheduled",
+          "to": "blocked"
         }
       ],
       "x-rdra-ish-triggers-bucs": [],
@@ -100,8 +100,8 @@
       ],
       "x-rdra-ish-transitions": [
         {
-          "from": "Normal",
-          "to": "Scheduled"
+          "from": "normal",
+          "to": "scheduled"
         }
       ],
       "x-rdra-ish-triggers-bucs": [],
