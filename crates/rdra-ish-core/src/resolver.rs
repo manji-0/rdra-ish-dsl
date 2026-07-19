@@ -258,6 +258,18 @@ pub fn build_merged_model(
                     LocatedSpan::new(d.source_id, d.span),
                 ));
             }
+            crate::import_scope::ImportScopeDiagKind::UnknownModule { module } => {
+                all_diags.push(Diagnostic::error_at(
+                    RdraError::UnknownImportModule { module },
+                    LocatedSpan::new(d.source_id, d.span),
+                ));
+            }
+            crate::import_scope::ImportScopeDiagKind::DuplicateModule { module } => {
+                all_diags.push(Diagnostic::error_at(
+                    RdraError::DuplicateModule { module },
+                    LocatedSpan::new(d.source_id, d.span),
+                ));
+            }
             crate::import_scope::ImportScopeDiagKind::DuplicateVisible { name, .. } => {
                 all_diags.push(Diagnostic::error_at(
                     RdraError::DuplicateDefinition { id: name },
@@ -629,6 +641,160 @@ performs(b.Staff, Work)
             "cross-module same id should be allowed: {errors:?}"
         );
         assert_eq!(model.actors.len(), 2);
+    }
+
+    #[test]
+    fn sibling_without_import_keeps_open_world() {
+        let dir = make_temp_dir("sibling_open_world");
+        let shared = dir.join("shared");
+        fs::create_dir_all(&shared).unwrap();
+        write_file(
+            &shared.join("actors.rdra"),
+            r#"
+module shared.actors
+actor Staff "職員"
+"#,
+        );
+        write_file(
+            &dir.join("main.rdra"),
+            r#"
+import shared.actors as a
+usecase Work "作業"
+performs(a.Staff, Work)
+"#,
+        );
+        write_file(
+            &dir.join("sibling.rdra"),
+            r#"
+usecase Other "他"
+actor Local "ローカル"
+performs(Staff, Other)
+"#,
+        );
+
+        let entries = [
+            dir.join("main.rdra"),
+            dir.join("sibling.rdra"),
+            shared.join("actors.rdra"),
+        ];
+        let (program, _) = resolve(&entries, std::slice::from_ref(&dir));
+        let (_, model_diags) = build_merged_model(&program, &[dir]);
+        let errors: Vec<_> = model_diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(
+            errors.is_empty(),
+            "sibling without import should keep open-world Staff: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn import_all_collision_is_duplicate() {
+        let dir = make_temp_dir("import_all_collision");
+        let a_dir = dir.join("mod_a");
+        let b_dir = dir.join("mod_b");
+        fs::create_dir_all(&a_dir).unwrap();
+        fs::create_dir_all(&b_dir).unwrap();
+        write_file(
+            &a_dir.join("actors.rdra"),
+            r#"
+module mod_a.actors
+actor Staff "A"
+"#,
+        );
+        write_file(
+            &b_dir.join("actors.rdra"),
+            r#"
+module mod_b.actors
+actor Staff "B"
+"#,
+        );
+        write_file(
+            &dir.join("main.rdra"),
+            r#"
+import mod_a.actors
+import mod_b.actors
+usecase Work "作業"
+performs(Staff, Work)
+"#,
+        );
+
+        let (program, _) = resolve(&[dir.join("main.rdra")], std::slice::from_ref(&dir));
+        let (_, model_diags) = build_merged_model(&program, &[dir]);
+        assert!(
+            model_diags.iter().any(|d| matches!(
+                &d.error,
+                RdraError::DuplicateDefinition { id } if id == "Staff"
+            )),
+            "All×All Staff collision expected: {model_diags:?}"
+        );
+    }
+
+    #[test]
+    fn unknown_import_module_is_error() {
+        let dir = make_temp_dir("unknown_import_module");
+        write_file(
+            &dir.join("main.rdra"),
+            r#"
+import missing.actors as a
+usecase Work "作業"
+"#,
+        );
+        let (program, _) = resolve(&[dir.join("main.rdra")], std::slice::from_ref(&dir));
+        let (_, model_diags) = build_merged_model(&program, &[dir]);
+        assert!(
+            model_diags.iter().any(|d| matches!(
+                &d.error,
+                RdraError::UnknownImportModule { module } if module == "missing.actors"
+            )),
+            "expected UnknownImportModule: {model_diags:?}"
+        );
+    }
+
+    #[test]
+    fn duplicate_module_path_is_error() {
+        let dir = make_temp_dir("dup_module_path");
+        let a = dir.join("a");
+        let b = dir.join("b");
+        fs::create_dir_all(&a).unwrap();
+        fs::create_dir_all(&b).unwrap();
+        write_file(
+            &a.join("actors.rdra"),
+            r#"
+module shared.actors
+actor StaffA "A"
+"#,
+        );
+        write_file(
+            &b.join("actors.rdra"),
+            r#"
+module shared.actors
+actor StaffB "B"
+"#,
+        );
+        write_file(
+            &dir.join("main.rdra"),
+            r#"
+import shared.actors as s
+usecase Work "作業"
+performs(s.StaffA, Work)
+"#,
+        );
+
+        // Both module files must be entry sources so DuplicateModule is visible
+        // even when import path resolution would only load one of them.
+        let entries = [
+            dir.join("main.rdra"),
+            a.join("actors.rdra"),
+            b.join("actors.rdra"),
+        ];
+        let (program, _) = resolve(&entries, std::slice::from_ref(&dir));
+        let (_, model_diags) = build_merged_model(&program, &[dir]);
+        assert!(
+            model_diags.iter().any(|d| matches!(
+                &d.error,
+                RdraError::DuplicateModule { module } if module == "shared.actors"
+            )),
+            "expected DuplicateModule: {model_diags:?}"
+        );
     }
 
     #[test]

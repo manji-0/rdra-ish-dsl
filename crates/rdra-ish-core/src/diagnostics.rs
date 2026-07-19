@@ -13,6 +13,12 @@ pub enum RdraError {
     #[error("unknown import '{name}' from module '{module}'\n  hint: check the name is declared in that module")]
     UnknownImportName { name: String, module: String },
 
+    #[error("unknown module '{module}'\n  hint: declare `module {module}` in an included .rdra file, or fix the import path")]
+    UnknownImportModule { module: String },
+
+    #[error("duplicate module '{module}'\n  hint: each module path must be declared in exactly one file")]
+    DuplicateModule { module: String },
+
     #[error("undefined symbol: {id}")]
     UndefinedSymbol { id: String },
 

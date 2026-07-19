@@ -39,6 +39,8 @@ jobs:
         run: |
           TLC_DIR=$(bash scripts/install-tlc.sh)
           echo "$TLC_DIR" >> "$GITHUB_PATH"
+          # GITHUB_PATH applies to subsequent steps; export for this step too.
+          export PATH="$TLC_DIR:$PATH"
           tlc -help >/dev/null
       - name: Build CLI
         run: cargo build -p rdra-ish-cli --release
@@ -63,8 +65,18 @@ jobs:
             samples/formal-verification/now_coupon.rdra
           do
             echo "==> expect TLC fail: $sample"
-            if "$BIN" verify "$sample" --backend tlc -o /tmp/rdra-ci-tla-fail; then
+            set +e
+            out=$("$BIN" verify "$sample" --backend tlc -o /tmp/rdra-ci-tla-fail 2>&1)
+            status=$?
+            set -e
+            if [[ $status -eq 0 ]]; then
               echo "expected TLC failure for $sample" >&2
+              echo "$out" >&2
+              exit 1
+            fi
+            if ! grep -q "TLC verification failed" <<<"$out"; then
+              echo "expected 'TLC verification failed' fingerprint for $sample; got:" >&2
+              echo "$out" >&2
               exit 1
             fi
           done

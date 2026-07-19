@@ -36,6 +36,13 @@
   previously succeeded on invalid models.
 - Import scopes honor `as` aliases, selective imports, and namespaced refs;
   same id may exist in different modules when referenced via aliases.
+  Closed scope is per-file (siblings without `import` stay open-world);
+  unknown modules, duplicate module paths, and conflicting `import` All
+  bindings are errors; module-scoped resolution no longer falls back to
+  another module's unique match.
+- Formal-verify CI exports `PATH` in the TLC install step and requires a
+  `TLC verification failed` fingerprint for expected-fail samples.
+- `diagram --kind diff` fail-closes on semantic errors in `--diff-base`.
 - TLA+: unique action names for multi-edge events; unresolved/dropped properties
   and contradictory `after.assert` fail export/verify; `now` Safety is not baked
   into `Assign`/`TickNow`; sets-only entities emit actions.

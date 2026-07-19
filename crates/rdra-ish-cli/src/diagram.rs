@@ -209,7 +209,8 @@ fn emit_diagram(
             DiagramKind::Sequence => Ok(SequenceMermaidEmitter.emit(model, view)?),
             DiagramKind::EventFlow => Ok(EventFlowMermaidEmitter.emit(model, view)?),
             DiagramKind::Diff => {
-                let (_program, base_model, _) = load_model(diff_base)?;
+                let (program, base_model, diags) = load_model(diff_base)?;
+                reject_model_errors(&program, &diags)?;
                 Ok(DiffMermaidEmitter { base: &base_model }.emit_diff(model, view)?)
             }
             DiagramKind::BusinessArea => Ok(BusinessAreaMermaidEmitter.emit(model, view)?),
@@ -223,7 +224,8 @@ fn emit_diagram(
             DiagramKind::Sequence => Ok(SequenceDiagramEmitter.emit(model, view)?),
             DiagramKind::EventFlow => Ok(EventFlowPlantUmlEmitter.emit(model, view)?),
             DiagramKind::Diff => {
-                let (_program, base_model, _) = load_model(diff_base)?;
+                let (program, base_model, diags) = load_model(diff_base)?;
+                reject_model_errors(&program, &diags)?;
                 Ok(DiffPlantUmlEmitter { base: &base_model }.emit_diff(model, view)?)
             }
             DiagramKind::BusinessArea => Ok(BusinessAreaPlantUmlEmitter.emit(model, view)?),

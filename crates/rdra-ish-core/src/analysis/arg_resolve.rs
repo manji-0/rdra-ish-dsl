@@ -26,12 +26,13 @@ fn resolve_binding(
     binding: &FlatBinding,
     kind: Option<&Kind>,
 ) -> Option<NodeRef> {
+    // When a module is bound (namespaced / selective / All import), do not fall
+    // back to a different module's declaration.
     if let Some(kind) = kind {
         if let Some(module) = &binding.module {
             return model
                 .symbols
                 .lookup_qualified_in_module(kind, &binding.canonical_id, module)
-                .or_else(|| model.symbols.lookup_qualified(kind, &binding.canonical_id))
                 .cloned();
         }
         return model
@@ -41,12 +42,10 @@ fn resolve_binding(
     }
 
     if let Some(module) = &binding.module {
-        if let Some(n) = model
+        return model
             .symbols
             .lookup_in_module(&binding.canonical_id, module)
-        {
-            return Some(n.clone());
-        }
+            .cloned();
     }
 
     match model.symbols.lookup(&binding.canonical_id) {

@@ -1,7 +1,7 @@
 //! Per-file import visibility for module / alias / selective imports.
 
 use crate::location::SourceId;
-use rdra_ish_syntax::ast::{ImportDecl, ImportKind, Item};
+use rdra_ish_syntax::ast::{ImportDecl, ImportKind, Item, Span};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
@@ -67,9 +67,10 @@ impl ImportScopes {
     pub fn resolve_flat(&self, source_id: SourceId, name: &str) -> Option<FlatBinding> {
         let scope = self.scope_for(source_id);
         if scope.unrestricted {
+            // Open world: do not constrain lookup to this file's module.
             return Some(FlatBinding {
                 canonical_id: name.to_string(),
-                module: self.module_for_source(source_id).map(str::to_string),
+                module: None,
             });
         }
         scope.flat.get(name).cloned()
@@ -125,7 +126,7 @@ pub enum NamespacedResolveError {
 #[derive(Debug, Clone)]
 pub struct ImportScopeDiagnostic {
     pub source_id: SourceId,
-    pub span: rdra_ish_syntax::ast::Span,
+    pub span: Span,
     pub message_id: String,
     pub kind: ImportScopeDiagKind,
 }
@@ -136,11 +137,52 @@ pub enum ImportScopeDiagKind {
         name: String,
         module: String,
     },
+    UnknownModule {
+        module: String,
+    },
+    DuplicateModule {
+        module: String,
+    },
     /// Local def or prior import already binds this flat name.
     DuplicateVisible {
         name: String,
         module: String,
     },
+}
+
+fn insert_flat(
+    scope: &mut FileScope,
+    diags: &mut Vec<ImportScopeDiagnostic>,
+    source_id: SourceId,
+    span: Span,
+    local: String,
+    binding: FlatBinding,
+) {
+    if let Some(existing) = scope.flat.get(&local) {
+        if existing.module != binding.module || existing.canonical_id != binding.canonical_id {
+            diags.push(ImportScopeDiagnostic {
+                source_id,
+                span: span.clone(),
+                message_id: local.clone(),
+                kind: ImportScopeDiagKind::DuplicateVisible {
+                    name: local.clone(),
+                    module: binding.module.clone().unwrap_or_else(|| "<import>".into()),
+                },
+            });
+        }
+    }
+    scope.flat.insert(local, binding);
+}
+
+fn span_for_local_id(ast: &rdra_ish_syntax::ast::Ast, id: &str) -> Span {
+    ast.items
+        .iter()
+        .find_map(|item| match item {
+            Item::Instance(inst) if inst.id == id => Some(inst.span.clone()),
+            Item::Property(prop) if prop.id == id => Some(prop.span.clone()),
+            _ => None,
+        })
+        .unwrap_or(0..0)
 }
 
 /// Build import scopes from a resolved program's ASTs.
@@ -152,11 +194,11 @@ pub fn build_import_scopes(
 
     for (source_id, (_path, _src, ast)) in sources.iter().enumerate() {
         let mut exports = HashSet::new();
-        let mut module_path: Option<String> = None;
+        let mut module_path: Option<(String, Span)> = None;
         for item in &ast.items {
             match item {
-                Item::Module(path, _) => {
-                    module_path = Some(path.0.join("."));
+                Item::Module(path, span) => {
+                    module_path = Some((path.0.join("."), span.clone()));
                 }
                 Item::Instance(inst) => {
                     exports.insert(inst.id.clone());
@@ -164,16 +206,23 @@ pub fn build_import_scopes(
                 _ => {}
             }
         }
-        if let Some(mp) = &module_path {
-            scopes.module_sources.insert(mp.clone(), source_id);
+        if let Some((mp, span)) = &module_path {
+            if let Some(&prev) = scopes.module_sources.get(mp) {
+                if prev != source_id {
+                    diags.push(ImportScopeDiagnostic {
+                        source_id,
+                        span: span.clone(),
+                        message_id: mp.clone(),
+                        kind: ImportScopeDiagKind::DuplicateModule { module: mp.clone() },
+                    });
+                }
+            } else {
+                scopes.module_sources.insert(mp.clone(), source_id);
+            }
             scopes.source_modules.insert(source_id, mp.clone());
         }
         scopes.source_exports.insert(source_id, exports);
     }
-
-    let any_imports = sources
-        .iter()
-        .any(|(_, _, ast)| ast.items.iter().any(|item| matches!(item, Item::Import(_))));
 
     for (source_id, (_path, _src, ast)) in sources.iter().enumerate() {
         let imports: Vec<&ImportDecl> = ast
@@ -196,7 +245,9 @@ pub fn build_import_scopes(
             .cloned()
             .unwrap_or_default();
 
-        if !any_imports {
+        // Per-file latch: only files that import become closed scope.
+        // Sibling files without imports keep legacy open-world resolution.
+        if imports.is_empty() {
             for id in &local_exports {
                 scope.flat.insert(
                     id.clone(),
@@ -215,6 +266,14 @@ pub fn build_import_scopes(
         for imp in imports {
             let module_path = imp.path.0.join(".");
             let Some(&mod_source) = scopes.module_sources.get(&module_path) else {
+                diags.push(ImportScopeDiagnostic {
+                    source_id,
+                    span: imp.span.clone(),
+                    message_id: module_path.clone(),
+                    kind: ImportScopeDiagKind::UnknownModule {
+                        module: module_path,
+                    },
+                });
                 continue;
             };
             let exports = scopes
@@ -226,7 +285,11 @@ pub fn build_import_scopes(
             match &imp.kind {
                 ImportKind::All => {
                     for id in &exports {
-                        scope.flat.insert(
+                        insert_flat(
+                            &mut scope,
+                            &mut diags,
+                            source_id,
+                            imp.span.clone(),
                             id.clone(),
                             FlatBinding {
                                 canonical_id: id.clone(),
@@ -242,22 +305,11 @@ pub fn build_import_scopes(
                     for item in items {
                         if exports.contains(&item.name) {
                             let local = item.alias.clone().unwrap_or_else(|| item.name.clone());
-                            if let Some(existing) = scope.flat.get(&local) {
-                                if existing.module.as_ref() != Some(&module_path)
-                                    || existing.canonical_id != item.name
-                                {
-                                    diags.push(ImportScopeDiagnostic {
-                                        source_id,
-                                        span: item.span.clone(),
-                                        message_id: local.clone(),
-                                        kind: ImportScopeDiagKind::DuplicateVisible {
-                                            name: local.clone(),
-                                            module: module_path.clone(),
-                                        },
-                                    });
-                                }
-                            }
-                            scope.flat.insert(
+                            insert_flat(
+                                &mut scope,
+                                &mut diags,
+                                source_id,
+                                item.span.clone(),
                                 local,
                                 FlatBinding {
                                     canonical_id: item.name.clone(),
@@ -281,28 +333,12 @@ pub fn build_import_scopes(
         }
 
         for id in &local_exports {
-            if let Some(existing) = scope.flat.get(id) {
-                if existing.module.as_ref() != local_module.as_ref() {
-                    let span = ast
-                        .items
-                        .iter()
-                        .find_map(|item| match item {
-                            Item::Instance(inst) if inst.id == *id => Some(inst.span.clone()),
-                            _ => None,
-                        })
-                        .unwrap_or(0..0);
-                    diags.push(ImportScopeDiagnostic {
-                        source_id,
-                        span,
-                        message_id: id.clone(),
-                        kind: ImportScopeDiagKind::DuplicateVisible {
-                            name: id.clone(),
-                            module: existing.module.clone().unwrap_or_else(|| "<import>".into()),
-                        },
-                    });
-                }
-            }
-            scope.flat.insert(
+            let span = span_for_local_id(ast, id);
+            insert_flat(
+                &mut scope,
+                &mut diags,
+                source_id,
+                span,
                 id.clone(),
                 FlatBinding {
                     canonical_id: id.clone(),

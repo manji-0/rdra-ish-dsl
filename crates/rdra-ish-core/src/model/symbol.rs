@@ -157,14 +157,6 @@ impl SymbolTable {
             .collect();
         match matches.as_slice() {
             [only] => Some(&only.node),
-            [] => {
-                // Fall back to unique global match (e.g. synthetic states).
-                if entries.len() == 1 {
-                    Some(&entries[0].node)
-                } else {
-                    None
-                }
-            }
             _ => None,
         }
     }
