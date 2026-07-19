@@ -47,6 +47,9 @@
 - FV docs/skills align with unconstrained Assign/TickNow and `now_coupon`
   as an expected TLC fail; cli-reference documents fail-closed generators;
   language-reference documents composite `@pk` FK limits.
+- `after.assert` exports as independent `[][action => post]_vars` properties
+  (no primed injection into SpecActions); stuttering-only Next is fatal;
+  TLA obligation failures use `[TLA_FATAL:…]` tags.
 - `diagram --kind diff` fail-closes on semantic errors in `--diff-base`.
 - TLA+: unique action names for multi-edge events; unresolved/dropped properties
   and contradictory `after.assert` fail export/verify; `now` Safety is not baked

@@ -13,7 +13,7 @@
 | Int / Money / Decimal arithmetic | `export --kind tla` | `IntRange` + TLC Integers |
 | `col < now` / DateTime vs `now` | TLA | Global `now` + Assign/TickNow; Safety finds violations (not baked into Next) |
 | `property` `always` / `eventually` / `leads_to` | TLA | Path properties; not evaluated by `states` |
-| `after(UC).assert(...)` | TLA (and local after-check) | Primed postconditions on SpecActions |
+| `after(UC).assert(...)` | TLA | Independent `[][action => primed post]_vars` PROPERTY (not baked into Next) |
 | `when(...).none/has(...)` | TLA | Finite `Entity_Ids` quantifiers |
 | Multi-entity `forbidden` / `invariant` + `.along` | TLA for linked instances; `states` may emit `CrossConstraintNotEvaluated` | TLC uses `*_owner` when `relate` exists |
 

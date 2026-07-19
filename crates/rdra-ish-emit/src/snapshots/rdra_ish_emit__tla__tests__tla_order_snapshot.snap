@@ -59,6 +59,7 @@ Safety ==
 
 PaidLeadsToShipped == (Order_status = "paid") ~> (Order_status = "shipped")
 EventuallyTerminal == <>((Order_status = "delivered") \/ (Order_status = "cancelled"))
+AfterAssert_DeliverOrder_0 == [][(Order_EvDeliver_shipped_to_delivered) => (Order_status' = "delivered") /\ (Order_EvDeliver_shipped_to_delivered) => (Order_delivered_at' = "present")]_vars
 
 THEOREM Spec => []Safety
 ====

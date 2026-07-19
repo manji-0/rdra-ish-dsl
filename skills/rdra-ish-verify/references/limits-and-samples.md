@@ -16,7 +16,11 @@
   expected fail).
 - **`sets(Event, …)`**: effects on the transition event apply in SpecActions.
 - **Temporal `property`**: one lowering path; all names are listed in `.cfg` `PROPERTY`.
+- **`after.assert`**: independent `[][action => primed post]_vars` PROPERTY (not
+  injected into SpecAction effects).
 - **`WF_vars(Next)`**: fairness on whole `Next`, not per action.
+- Lifecycles with no transitions and no `sets`-driven actions fail export
+  (`stuttering_only`).
 - Nullable Money/Decimal used in arithmetic promote to Int axes (not Nullable).
 - BFS `states` still ignores Int / `now` as axes.
 - Export warnings go to stderr (`warning: tla export: …`) and `.tla` comments.

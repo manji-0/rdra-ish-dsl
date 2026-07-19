@@ -130,7 +130,11 @@ arithmetic Safety when Int axes exist.
   TLA/TLC for those checks.
 - Export warnings (skipped mappings, `.along` without `relate`, unmapped
   `after.assert`, …) are printed on stderr by `export --kind tla` / `verify` and
-  also embedded as `\\* WARNING:` comments in the `.tla`.
+  also embedded as `\\* WARNING:` comments in the `.tla`. Fatal obligation drops
+  are tagged `[TLA_FATAL:…]` and fail export/verify.
+- `after(UC).assert(...)` becomes an independent TLA `PROPERTY`
+  `[][actions => primed posts]_vars` — it does **not** inject assignments into
+  SpecActions (so asserts check outcomes rather than enabling assumptions).
 - Diagnostic ids may still use a historical `Cross*` prefix even though the DSL
   surface is multi-entity `forbidden` / `invariant`.
 

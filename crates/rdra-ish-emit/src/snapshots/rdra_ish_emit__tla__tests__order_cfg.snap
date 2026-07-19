@@ -6,3 +6,4 @@ SPECIFICATION Spec
 INVARIANT Safety
 PROPERTY PaidLeadsToShipped
 PROPERTY EventuallyTerminal
+PROPERTY AfterAssert_DeliverOrder_0

@@ -181,7 +181,7 @@ fn build_export(model: &SemanticModel, multi_axis: bool, warnings: &mut Vec<Stri
         Vec::new()
     };
 
-    apply_temporal_assertions(model, &mut specs, multi_instance, warnings);
+    let assertion_props = apply_temporal_assertions(model, &specs, multi_instance, warnings);
 
     let mut global_safety = Vec::new();
     if multi_instance {
@@ -197,7 +197,8 @@ fn build_export(model: &SemanticModel, multi_axis: bool, warnings: &mut Vec<Stri
             .any(|a| a.kind == AxisKind::Int);
     let needs_now = int_now.needs_now;
 
-    let properties = build_all_temporal_properties(model, &specs, multi_instance, warnings);
+    let mut properties = build_all_temporal_properties(model, &specs, multi_instance, warnings);
+    properties.extend(assertion_props);
 
     TlaExport {
         multi_instance,
@@ -1012,10 +1013,14 @@ fn build_actions(
     }
 
     if actions.is_empty() {
-        warnings.push(format!(
-            "{}: lifecycle has no transitions; Next is stuttering only",
-            entity_id(model, lc.entity)
-        ));
+        push_tla_fatal(
+            warnings,
+            "stuttering_only",
+            format!(
+                "{}: lifecycle has no transitions; Next is stuttering only",
+                entity_id(model, lc.entity)
+            ),
+        );
     }
 
     actions
@@ -1245,7 +1250,11 @@ fn build_invariants(
                 let name = format!("Inv_{eid}_{i}");
                 out.push((sanitize_ident(&name), wrap(formula)));
             }
-            Err(reason) => warnings.push(format!("{eid}: invariant not exported: {reason}")),
+            Err(reason) => push_tla_fatal(
+                warnings,
+                "constraint_unexported",
+                format!("{eid}: invariant not exported: {reason}"),
+            ),
         }
     }
 
@@ -1260,7 +1269,11 @@ fn build_invariants(
                 let name = format!("Forbidden_{eid}_{i}");
                 out.push((sanitize_ident(&name), wrap(formula)));
             }
-            Err(reason) => warnings.push(format!("{eid}: forbidden not exported: {reason}")),
+            Err(reason) => push_tla_fatal(
+                warnings,
+                "constraint_unexported",
+                format!("{eid}: forbidden not exported: {reason}"),
+            ),
         }
     }
 
@@ -1275,7 +1288,11 @@ fn build_invariants(
                 let name = format!("Required_{eid}_{i}");
                 out.push((sanitize_ident(&name), wrap(formula)));
             }
-            Err(reason) => warnings.push(format!("{eid}: required not exported: {reason}")),
+            Err(reason) => push_tla_fatal(
+                warnings,
+                "constraint_unexported",
+                format!("{eid}: required not exported: {reason}"),
+            ),
         }
     }
 
@@ -1290,7 +1307,11 @@ fn build_invariants(
                 let name = format!("Exclusive_{eid}_{i}");
                 out.push((sanitize_ident(&name), wrap(formula)));
             }
-            Err(reason) => warnings.push(format!("{eid}: exclusive not exported: {reason}")),
+            Err(reason) => push_tla_fatal(
+                warnings,
+                "constraint_unexported",
+                format!("{eid}: exclusive not exported: {reason}"),
+            ),
         }
     }
 
@@ -1338,10 +1359,14 @@ fn build_all_temporal_properties(
     for prop in &model.temporal_properties {
         let name = sanitize_ident(&prop.id);
         if !seen.insert(name.clone()) {
-            warnings.push(format!(
-                "duplicate property id `{}` in TLA export; keeping first only",
-                prop.id
-            ));
+            push_tla_fatal(
+                warnings,
+                "duplicate_property",
+                format!(
+                    "duplicate property id `{}` in TLA export; keeping first only",
+                    prop.id
+                ),
+            );
             continue;
         }
         match temporal_property_to_tla(prop, &lookup) {
@@ -1359,7 +1384,11 @@ fn build_all_temporal_properties(
                 }
                 out.push((name, formula));
             }
-            Err(reason) => warnings.push(format!("property {}: not exported: {reason}", prop.id)),
+            Err(reason) => push_tla_fatal(
+                warnings,
+                "property_unexported",
+                format!("property {}: not exported: {reason}", prop.id),
+            ),
         }
     }
     out
@@ -1470,19 +1499,31 @@ fn emit_cross_and_quantifier_safety(
     for (i, c) in model.cross_forbidden_constraints.iter().enumerate() {
         match cross_forbidden_to_tla(model, c, &spec_by_key, owners, warnings) {
             Ok(formula) => global_safety.push((format!("CrossForbidden_{i}"), formula)),
-            Err(reason) => warnings.push(format!("cross_forbidden not exported: {reason}")),
+            Err(reason) => push_tla_fatal(
+                warnings,
+                "cross_unexported",
+                format!("cross_forbidden not exported: {reason}"),
+            ),
         }
     }
     for (i, inv) in model.cross_entity_invariants.iter().enumerate() {
         match cross_invariant_to_tla(model, inv, &spec_by_key, owners, warnings) {
             Ok(formula) => global_safety.push((format!("CrossInvariant_{i}"), formula)),
-            Err(reason) => warnings.push(format!("cross_invariant not exported: {reason}")),
+            Err(reason) => push_tla_fatal(
+                warnings,
+                "cross_unexported",
+                format!("cross_invariant not exported: {reason}"),
+            ),
         }
     }
     for (i, q) in model.quantifier_constraints.iter().enumerate() {
         match quantifier_to_tla(model, q, &spec_by_key, owners, warnings) {
             Ok(formula) => global_safety.push((format!("Quantifier_{i}"), formula)),
-            Err(reason) => warnings.push(format!("quantifier not exported: {reason}")),
+            Err(reason) => push_tla_fatal(
+                warnings,
+                "cross_unexported",
+                format!("quantifier not exported: {reason}"),
+            ),
         }
     }
 }
@@ -1720,18 +1761,28 @@ fn cross_condition_atom(
     }
 }
 
+/// Lower `after(UC).assert(...)` to independent TLA properties
+/// `[][ (actions) => (primed posts) ]_vars` — never inject into action effects.
 fn apply_temporal_assertions(
     model: &SemanticModel,
-    specs: &mut [EntitySpec],
+    specs: &[EntitySpec],
     multi_instance: bool,
     warnings: &mut Vec<String>,
-) {
+) -> Vec<(String, String)> {
+    let mut props = Vec::new();
     if model.temporal_assertions.is_empty() {
-        return;
+        return props;
     }
 
     let mut unmapped = 0usize;
-    for assertion in &model.temporal_assertions {
+    for (ai, assertion) in model.temporal_assertions.iter().enumerate() {
+        let uc_id = match model.use_cases.get(assertion.anchor) {
+            Some(uc) => uc.id.clone(),
+            None => {
+                unmapped += 1;
+                continue;
+            }
+        };
         let raising_events: Vec<_> = model
             .relations
             .iter()
@@ -1746,12 +1797,14 @@ fn apply_temporal_assertions(
             })
             .collect();
 
+        // Per-required implications: (matching action names, primed postconditions).
+        let mut implications: Vec<(Vec<String>, Vec<String>)> = Vec::new();
         let mut assertion_ok = true;
+
         for req in &assertion.requireds {
             match req {
                 CrossEntityCondition::Equals { column, value } => {
-                    let Some(spec) = specs.iter_mut().find(|s| s.entity_key == column.entity)
-                    else {
+                    let Some(spec) = specs.iter().find(|s| s.entity_key == column.entity) else {
                         assertion_ok = false;
                         continue;
                     };
@@ -1773,11 +1826,22 @@ fn apply_temporal_assertions(
                         })
                         .collect();
 
-                    let mut applied = false;
-                    for action in spec.actions.iter_mut() {
-                        if !action_matches_raising_event(&action.name, &event_names) {
-                            continue;
-                        }
+                    let matching: Vec<String> = spec
+                        .actions
+                        .iter()
+                        .filter(|a| action_matches_raising_event(&a.name, &event_names))
+                        .map(|a| a.name.clone())
+                        .collect();
+                    if matching.is_empty() {
+                        assertion_ok = false;
+                        continue;
+                    }
+
+                    for action in spec
+                        .actions
+                        .iter()
+                        .filter(|a| action_matches_raising_event(&a.name, &event_names))
+                    {
                         if effect_conflicts_assignment(
                             &action.effects,
                             &var,
@@ -1785,34 +1849,26 @@ fn apply_temporal_assertions(
                             multi_instance,
                             &binder,
                         ) {
-                            warnings.push(format!(
-                                "contradictory after.assert on `{var}` for action `{}` (wanted {val})",
-                                action.name
-                            ));
+                            push_tla_fatal(
+                                warnings,
+                                "contradictory_assert",
+                                format!(
+                                    "contradictory after.assert on `{var}` for action `{}` (wanted {val})",
+                                    action.name
+                                ),
+                            );
                             assertion_ok = false;
-                            continue;
                         }
-                        let effect_line = if multi_instance {
-                            format!("{var}' = [{var} EXCEPT ![{binder}] = {val}]")
-                        } else {
-                            format!("{var}' = {val}")
-                        };
-                        if !action.effects.iter().any(|e| {
-                            e == &effect_line
-                                || effect_already_sets(e, &var, &val, multi_instance, &binder)
-                        }) {
-                            action.effects.push(effect_line);
-                            action.unchanged.retain(|u| u != &var);
-                        }
-                        applied = true;
                     }
-                    if !applied {
-                        assertion_ok = false;
-                    }
+
+                    let post = if multi_instance {
+                        format!("{var}'[{binder}] = {val}")
+                    } else {
+                        format!("{var}' = {val}")
+                    };
+                    implications.push((matching, vec![post]));
                 }
                 CrossEntityCondition::Comparison(cmp) => {
-                    // Prefer arithmetic postcondition when Int axes exist; else prop' = TRUE.
-                    // Resolve axes from an immutable snapshot of specs to allow cross-entity RHS.
                     let axis_lookup: Vec<(EntityKey, String, String, AxisKind, String)> = specs
                         .iter()
                         .flat_map(|s| {
@@ -1841,8 +1897,7 @@ fn apply_temporal_assertions(
                         continue;
                     };
 
-                    let Some(spec) = specs.iter_mut().find(|s| s.entity_key == cmp.lhs.entity)
-                    else {
+                    let Some(spec) = specs.iter().find(|s| s.entity_key == cmp.lhs.entity) else {
                         assertion_ok = false;
                         continue;
                     };
@@ -1856,6 +1911,16 @@ fn apply_temporal_assertions(
                             )
                         })
                         .collect();
+                    let matching: Vec<String> = spec
+                        .actions
+                        .iter()
+                        .filter(|a| action_matches_raising_event(&a.name, &event_names))
+                        .map(|a| a.name.clone())
+                        .collect();
+                    if matching.is_empty() {
+                        assertion_ok = false;
+                        continue;
+                    }
 
                     let post = if lhs_kind == AxisKind::Int {
                         let rhs = match &cmp.rhs {
@@ -1880,9 +1945,8 @@ fn apply_temporal_assertions(
                         } else {
                             format!("{lhs_var}'")
                         };
-                        Some(format!("{lhs_prime} {} {rhs}", cmp_op_tla(cmp.op)))
+                        format!("{lhs_prime} {} {rhs}", cmp_op_tla(cmp.op))
                     } else {
-                        // Proposition axis fallback on the lhs entity.
                         let prop_key = format!(
                             "__cmp:{}{}{}",
                             cmp.lhs.column,
@@ -1893,45 +1957,60 @@ fn apply_temporal_assertions(
                                 CrossCmpRhs::Now => "now".into(),
                             }
                         );
-                        find_axis(cmp.lhs.entity, &prop_key).map(|(var, _kind, binder)| {
-                            if multi_instance {
-                                format!("{var}' = [{var} EXCEPT ![{binder}] = TRUE]")
-                            } else {
-                                format!("{var}' = TRUE")
-                            }
-                        })
-                    };
-
-                    let Some(post) = post else {
-                        assertion_ok = false;
-                        continue;
-                    };
-                    let mut applied = false;
-                    for action in spec.actions.iter_mut() {
-                        if !action_matches_raising_event(&action.name, &event_names) {
+                        let Some((var, _kind, binder)) = find_axis(cmp.lhs.entity, &prop_key)
+                        else {
+                            assertion_ok = false;
                             continue;
+                        };
+                        if multi_instance {
+                            format!("{var}'[{binder}] = TRUE")
+                        } else {
+                            format!("{var}' = TRUE")
                         }
-                        if !action.effects.iter().any(|e| e == &post) {
-                            action.effects.push(post.clone());
-                        }
-                        applied = true;
-                    }
-                    if !applied {
-                        assertion_ok = false;
-                    }
+                    };
+                    implications.push((matching, vec![post]));
                 }
             }
         }
-        if !assertion_ok {
+
+        if !assertion_ok || implications.is_empty() {
             unmapped += 1;
+            continue;
         }
+
+        let inner = implications
+            .iter()
+            .map(|(acts, posts)| {
+                let ant = if acts.len() == 1 {
+                    acts[0].clone()
+                } else {
+                    format!("({})", acts.join(" \\/ "))
+                };
+                let cons = if posts.len() == 1 {
+                    posts[0].clone()
+                } else {
+                    format!("({})", posts.join(" /\\ "))
+                };
+                format!("({ant}) => ({cons})")
+            })
+            .collect::<Vec<_>>()
+            .join(" /\\ ");
+        let name = format!("AfterAssert_{}_{}", sanitize_ident(&uc_id), ai);
+        props.push((name, format!("[][{inner}]_vars")));
     }
 
     if unmapped > 0 {
-        warnings.push(format!(
-            "{unmapped} after(...).assert constraint(s) not yet mapped to TLA action postconditions"
-        ));
+        push_tla_fatal(
+            warnings,
+            "assert_unmapped",
+            format!("{unmapped} after(...).assert constraint(s) not yet mapped to TLA properties"),
+        );
     }
+    props
+}
+
+fn push_tla_fatal(warnings: &mut Vec<String>, code: &str, message: String) {
+    warnings.push(format!("[TLA_FATAL:{code}] {message}"));
 }
 
 fn effect_already_sets(
@@ -1989,22 +2068,34 @@ fn note_skipped_constraints(
     // Cross / quantifier are exported when multi_instance; otherwise still Phase-3 skip.
     if !multi_instance {
         if !model.cross_forbidden_constraints.is_empty() {
-            warnings.push(format!(
-                "{} cross_forbidden constraint(s) not exported (Phase 3)",
-                model.cross_forbidden_constraints.len()
-            ));
+            push_tla_fatal(
+                warnings,
+                "cross_unexported",
+                format!(
+                    "{} cross_forbidden constraint(s) not exported (need multi-instance export)",
+                    model.cross_forbidden_constraints.len()
+                ),
+            );
         }
         if !model.cross_entity_invariants.is_empty() {
-            warnings.push(format!(
-                "{} cross_invariant constraint(s) not exported (Phase 3)",
-                model.cross_entity_invariants.len()
-            ));
+            push_tla_fatal(
+                warnings,
+                "cross_unexported",
+                format!(
+                    "{} cross_invariant constraint(s) not exported (need multi-instance export)",
+                    model.cross_entity_invariants.len()
+                ),
+            );
         }
         if !model.quantifier_constraints.is_empty() {
-            warnings.push(format!(
-                "{} quantifier constraint(s) not exported (Phase 3)",
-                model.quantifier_constraints.len()
-            ));
+            push_tla_fatal(
+                warnings,
+                "cross_unexported",
+                format!(
+                    "{} quantifier constraint(s) not exported (need multi-instance export)",
+                    model.quantifier_constraints.len()
+                ),
+            );
         }
     }
     for inv in &model.entity_invariants {
@@ -2743,9 +2834,59 @@ after(Pay).assert(Order.status == cancelled)
             bundle
                 .warnings
                 .iter()
-                .any(|w| w.contains("contradictory after.assert")),
+                .any(|w| w.contains("contradictory after.assert")
+                    || w.contains("[TLA_FATAL:contradictory_assert]")),
             "expected contradictory warning, got: {:?}",
             bundle.warnings
+        );
+    }
+
+    #[test]
+    fn tla_after_assert_emits_property_not_action_effect() {
+        let src = r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid) @default(pending)
+}
+usecase Pay "pay"
+event EvPay "pay"
+updates(Pay, Order)
+raises(Pay, EvPay)
+transitions(Order.status, EvPay, pending -> paid)
+after(Pay).assert(Order.status == paid)
+"#;
+        let model = model_from(src);
+        let bundle = TlaPlusEmitter::default()
+            .emit_bundle(&model, &View::whole())
+            .unwrap();
+        assert!(
+            bundle.tla.contains("AfterAssert_Pay_"),
+            "expected AfterAssert property:\n{}",
+            bundle.tla
+        );
+        assert!(
+            bundle.tla.contains("=> (Order_status' = \"paid\")"),
+            "expected action => primed post:\n{}",
+            bundle.tla
+        );
+        assert!(
+            bundle.cfg.contains("PROPERTY AfterAssert_Pay_"),
+            "expected cfg PROPERTY:\n{}",
+            bundle.cfg
+        );
+        // Transition already sets paid; assert must not add a second assignment line.
+        let pay_block = bundle
+            .tla
+            .split("Order_EvPay_pending_to_paid ==")
+            .nth(1)
+            .unwrap_or("")
+            .split("Next ==")
+            .next()
+            .unwrap_or("");
+        assert_eq!(
+            pay_block.matches("Order_status' = \"paid\"").count(),
+            1,
+            "assert must not inject into action:\n{pay_block}"
         );
     }
 
