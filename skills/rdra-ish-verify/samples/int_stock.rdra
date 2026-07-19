@@ -1,8 +1,9 @@
 // Int axes driven by sets + arithmetic Safety / temporal property.
+// Init stock/selling must satisfy forbidden/property (TLC-pass).
 entity Item "商品" {
   id: Int @pk
   status: Enum(active, archived) @default(active)
-  stock: Int @default(0)
+  stock: Int @default(1)
   selling: Int @default(1)
 }
 

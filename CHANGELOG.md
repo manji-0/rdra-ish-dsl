@@ -29,6 +29,17 @@
   Install via `npx skills` / `gh skill`; see `skills/README.md`.
 - All skills declare `license: MIT` for Agent Skills / `gh skill publish` validation.
 
+### Fixed
+
+- FV samples: `int_stock` Init satisfies Safety; `now` lhs uses constrained
+  `Assign_*` (`v >= now`) and `TickNow` (`t <= col`) so Safety is non-vacuous.
+- Temporal `property` names share one lowering path and all appear in `.cfg` `PROPERTY`.
+- Transition-event `sets(Event, …)` apply in SpecActions.
+- `export`/`verify` module name follows `-o` file stem; TLC gets bare filenames.
+- `export --kind tla` / `verify` print TLA export warnings on stderr.
+- Sample TLC intent: `cross_order_payment` / `quantifier_none` expected fail
+  (independent SpecActions interleave).
+
 ### Changed
 
 - Formal-verification docs and skills use multi-entity `forbidden`/`invariant` surface
@@ -36,7 +47,8 @@
   TLC layer from BFS comparison propositions. Docs/skills point to `export --kind tla`
   for quantifiers, temporal `property`, and relation-scoped `.along`. Sibling skills
   route deep FV work to `rdra-ish-verify`. FV sample `.rdra` files are canonical under
-  `skills/rdra-ish-verify/samples/` with repo path symlinks for tests.
+  `skills/rdra-ish-verify/samples/` with repo path symlinks for tests. Samples table
+  records TLC pass/fail intent; order snapshot tracks the skill sample.
 
 ## v0.1.7 - 2026-06-23
 

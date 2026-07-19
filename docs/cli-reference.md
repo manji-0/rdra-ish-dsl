@@ -229,7 +229,7 @@ rdra-ish export <INPUTS...> [--kind <KIND>] [-o <OUT>]
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--kind` | `openapi` \| `asyncapi` \| `dbml` \| `json-schema` \| `typescript-states` \| `mermaid-er` \| `plantuml-er` \| `tla` | `openapi` | Export kind. `openapi` emits an OpenAPI 3.0 JSON document from API `method`/`path` metadata and DTO `request` / `response` / `error_response` relations. `asyncapi` emits an AsyncAPI 3.1 event catalog from `event`, `raises`, `triggers`, `transitions`, and `outbox`. `dbml` emits a DBML schema from logical `entity` declarations, indexes, unique constraints, generated FK columns, and `relate` options. `json-schema` emits JSON Schema Draft 2020-12 definitions for DTO and Entity structures. `mermaid-er` and `plantuml-er` emit textual ER review artifacts from the same logical data model projection used by `diagram --kind er`. `tla` emits a TLA+ module plus TLC config from entity lifecycles and state constraints (see [formal-verification.md](./formal-verification.md)). |
-| `-o`, `--out` | path | `out` | Output file path. If no extension is given, `openapi.json`, `asyncapi.json`, `schema.dbml`, `json-schema.json`, `er.mmd`, `er.puml`, or `RdraSpec.tla` (with sibling `.cfg`) is used. |
+| `-o`, `--out` | path | `out` | Output file path. If no extension is given, `openapi.json`, `asyncapi.json`, `schema.dbml`, `json-schema.json`, `er.mmd`, `er.puml`, or `RdraSpec.tla` (with sibling `.cfg`) is used. For `--kind tla`, a path ending in `.tla` uses that file stem as the TLA+ module name (sibling `.cfg`). |
 
 For OpenAPI export, only APIs that declare both `method` and `path` become
 `paths` operations. DTOs are emitted under `components.schemas`.
@@ -274,9 +274,10 @@ rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>]
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--backend` | `tlc` | `tlc` | Verification backend. Requires `tlc` or `tlc2` on `PATH`. |
-| `-o`, `--out` | path | temp dir | Directory (or basename) for generated `.tla` / `.cfg`. |
+| `-o`, `--out` | path | temp dir | If the path ends with `.tla`, write that file (module name = stem) and a sibling `.cfg`. Otherwise treat as a directory and write `RdraSpec.tla` / `RdraSpec.cfg` under it. TLC is invoked on bare filenames copied into a work directory. |
 
-Exits non-zero when TLC is missing or reports a violation.
+Export warnings from the TLA emitter are printed on stderr. Exits non-zero when TLC
+is missing or reports a violation.
 
 ---
 

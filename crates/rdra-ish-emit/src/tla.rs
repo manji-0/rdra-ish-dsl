@@ -20,6 +20,8 @@ pub struct TlaBundle {
     pub module_name: String,
     pub tla: String,
     pub cfg: String,
+    /// Export approximations / skipped mappings (also embedded as `\\* WARNING:` in `.tla`).
+    pub warnings: Vec<String>,
 }
 
 pub struct TlaPlusEmitter {
@@ -40,16 +42,26 @@ impl Emitter for TlaPlusEmitter {
 }
 
 impl TlaPlusEmitter {
-    pub fn emit_bundle(&self, model: &SemanticModel, _view: &View) -> Result<TlaBundle, EmitError> {
-        let module_name = "RdraSpec".to_string();
+    pub fn emit_bundle(&self, model: &SemanticModel, view: &View) -> Result<TlaBundle, EmitError> {
+        self.emit_bundle_named(model, view, "RdraSpec")
+    }
+
+    pub fn emit_bundle_named(
+        &self,
+        model: &SemanticModel,
+        _view: &View,
+        module_name: &str,
+    ) -> Result<TlaBundle, EmitError> {
+        let module_name = sanitize_module_name(module_name);
         let mut warnings = Vec::new();
         let export = build_export(model, self.multi_axis, &mut warnings);
-        let tla = render_tla(&module_name, model, &export, &warnings);
+        let tla = render_tla(&module_name, &export, &warnings);
         let cfg = render_cfg(&module_name, &export);
         Ok(TlaBundle {
             module_name,
             tla,
             cfg,
+            warnings,
         })
     }
 }
@@ -97,7 +109,6 @@ struct EntitySpec {
     init: Vec<(String, String)>,
     actions: Vec<SpecAction>,
     invariants: Vec<(String, String)>,
-    properties: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone)]
@@ -117,6 +128,10 @@ struct TlaExport {
     owners: Vec<OwnerLink>,
     /// Cross / quantifier Safety conjuncts (name, formula).
     global_safety: Vec<(String, String)>,
+    /// Temporal properties (name, formula) — single source for `.tla` and `.cfg`.
+    properties: Vec<(String, String)>,
+    /// Int axis var names constrained by `col < now` / `col <= now` (TickNow must not pass them).
+    now_le_vars: Vec<String>,
 }
 
 fn needs_multi_instance(model: &SemanticModel) -> bool {
@@ -184,6 +199,23 @@ fn build_export(model: &SemanticModel, multi_axis: bool, warnings: &mut Vec<Stri
             .any(|a| a.kind == AxisKind::Int);
     let needs_now = int_now.needs_now;
 
+    let properties = build_all_temporal_properties(model, &specs, multi_instance, warnings);
+
+    let mut now_le_vars = Vec::new();
+    for spec in &specs {
+        for ax in &spec.axes {
+            if int_now
+                .now_le_lhs_columns
+                .get(&spec.entity_id)
+                .is_some_and(|cols| cols.contains(&ax.column))
+            {
+                now_le_vars.push(ax.var_name.clone());
+            }
+        }
+    }
+    now_le_vars.sort();
+    now_le_vars.dedup();
+
     TlaExport {
         multi_instance,
         needs_integers: needs_integers || needs_now,
@@ -192,6 +224,8 @@ fn build_export(model: &SemanticModel, multi_axis: bool, warnings: &mut Vec<Stri
         specs,
         owners,
         global_safety,
+        properties,
+        now_le_vars,
     }
 }
 
@@ -201,6 +235,10 @@ struct IntNowUsage {
     int_columns: BTreeMap<String, BTreeSet<String>>,
     /// Comparison axis keys that are expressed as Int arithmetic (skip prop axes).
     arithmetic_cmp_keys: HashSet<String>,
+    /// Entity id → columns used as lhs against `now` (skip nondet Assign — would break Safety).
+    now_lhs_columns: BTreeMap<String, BTreeSet<String>>,
+    /// Entity id → columns in `col < now` / `col <= now` (Init to IntRange max).
+    now_le_lhs_columns: BTreeMap<String, BTreeSet<String>>,
     needs_integers: bool,
     needs_now: bool,
 }
@@ -235,6 +273,18 @@ fn consider_entity_cmp(
         CmpRhs::Now => {
             usage.needs_now = true;
             usage.needs_integers = true;
+            usage
+                .now_lhs_columns
+                .entry(eid.clone())
+                .or_default()
+                .insert(c.lhs_column.clone());
+            if matches!(c.op, CmpOpModel::Lt | CmpOpModel::Le) {
+                usage
+                    .now_le_lhs_columns
+                    .entry(eid)
+                    .or_default()
+                    .insert(c.lhs_column.clone());
+            }
         }
     }
 }
@@ -483,10 +533,18 @@ fn build_one_entity(
         return None;
     }
 
-    let init = build_init(model, lc, &axes, multi_instance, &binder);
+    let init = build_init(model, lc, &axes, multi_instance, &binder, int_now);
     let actions = build_actions(model, lc, &axes, multi_instance, &binder, warnings);
     let mut actions = actions;
-    append_undriven_int_assigns(model, lc, &axes, multi_instance, &binder, &mut actions);
+    append_undriven_int_assigns(
+        model,
+        lc,
+        &axes,
+        multi_instance,
+        &binder,
+        int_now,
+        &mut actions,
+    );
 
     let invariants = build_invariants(
         model,
@@ -497,8 +555,6 @@ fn build_one_entity(
         &binder,
         warnings,
     );
-    let properties =
-        build_properties_for_entity(model, &entity_id, &axes, multi_instance, &binder, warnings);
 
     Some(EntitySpec {
         entity_key: lc.entity,
@@ -508,7 +564,6 @@ fn build_one_entity(
         init,
         actions,
         invariants,
-        properties,
     })
 }
 
@@ -697,6 +752,7 @@ fn build_init(
     axes: &[SpecAxis],
     multi_instance: bool,
     binder: &str,
+    int_now: &IntNowUsage,
 ) -> Vec<(String, String)> {
     let entity = &model.entities[lc.entity];
     let mut init = Vec::new();
@@ -722,7 +778,7 @@ fn build_init(
     let ids = format!("{}_Ids", sanitize_ident(&entity_name));
 
     for ax in axes {
-        let scalar = init_scalar_value(entity, lc, ax, &initial_status);
+        let scalar = init_scalar_value(entity, lc, ax, &initial_status, int_now);
         let value = if multi_instance {
             format!("[{binder} \\in {ids} |-> {scalar}]")
         } else {
@@ -738,6 +794,7 @@ fn init_scalar_value(
     lc: &EntityLifecycle,
     ax: &SpecAxis,
     initial_status: &str,
+    _int_now: &IntNowUsage,
 ) -> String {
     if ax.column == lc.status_column {
         return format!("\"{}\"", escape_tla_string(initial_status));
@@ -759,14 +816,16 @@ fn init_scalar_value(
                 }
             })
             .unwrap_or_else(|| "FALSE".into()),
-        AxisKind::Int => entity
-            .columns
-            .iter()
-            .find(|c| c.name == ax.column)
-            .and_then(|c| c.default_val.as_ref())
-            .and_then(|d| d.parse::<i64>().ok())
-            .map(|n| n.to_string())
-            .unwrap_or_else(|| "0".into()),
+        AxisKind::Int => {
+            let from_default = entity
+                .columns
+                .iter()
+                .find(|c| c.name == ax.column)
+                .and_then(|c| c.default_val.as_ref())
+                .and_then(|d| d.parse::<i64>().ok())
+                .map(|n| n.to_string());
+            from_default.unwrap_or_else(|| "0".into())
+        }
         AxisKind::Nullable | AxisKind::Status | AxisKind::Prop => entity
             .columns
             .iter()
@@ -866,6 +925,38 @@ fn build_actions(
             }
         }
 
+        // sets(Event, ...) on the transition event itself.
+        for effect in model.column_effects.iter().filter(|e| {
+            e.entity == lc.entity
+                && matches!(&e.origin, NodeRef::Event(ev) if *ev == st.event)
+                && e.column != lc.status_column
+        }) {
+            if let Some(var) = col_to_var.get(effect.column.as_str()) {
+                extra_effects.push(((*var).to_string(), effect_value_to_tla(&effect.value)));
+            } else {
+                warnings.push(format!(
+                    "{}: sets effect on non-axis column {} not exported",
+                    entity_id(model, lc.entity),
+                    effect.column
+                ));
+            }
+        }
+        for pe in model.proposition_effects.iter().filter(|e| {
+            e.entity == lc.entity && matches!(&e.origin, NodeRef::Event(ev) if *ev == st.event)
+        }) {
+            let key = format!("__cmp:{}", pe.prop.axis_key());
+            if let Some(var) = col_to_var.get(key.as_str()) {
+                extra_effects.push((
+                    (*var).to_string(),
+                    if pe.truth {
+                        "TRUE".into()
+                    } else {
+                        "FALSE".into()
+                    },
+                ));
+            }
+        }
+
         let mut effects = Vec::new();
         let mut changed: BTreeSet<String> = BTreeSet::new();
 
@@ -932,6 +1023,7 @@ fn append_undriven_int_assigns(
     axes: &[SpecAxis],
     multi_instance: bool,
     binder: &str,
+    int_now: &IntNowUsage,
     actions: &mut Vec<SpecAction>,
 ) {
     let driven: HashSet<&str> = model
@@ -955,19 +1047,31 @@ fn append_undriven_int_assigns(
             .cloned()
             .collect();
         let name = format!("Assign_{}", sanitize_ident(&ax.var_name));
+        // For `col < now` / `col <= now` Safety, nondet assigns must keep col >= now.
+        let preserve_ge_now = int_now
+            .now_le_lhs_columns
+            .get(&entity_name)
+            .is_some_and(|cols| cols.contains(&ax.column));
         let (exists_binder, effects) = if multi_instance {
-            (
-                Some((binder.to_string(), ids.clone())),
-                vec![format!(
+            let assign = if preserve_ge_now {
+                format!(
+                    "\\E v \\in IntRange: v >= now /\\ {var}' = [{var} EXCEPT ![{binder}] = v]",
+                    var = ax.var_name
+                )
+            } else {
+                format!(
                     "\\E v \\in IntRange: {var}' = [{var} EXCEPT ![{binder}] = v]",
                     var = ax.var_name
-                )],
-            )
+                )
+            };
+            (Some((binder.to_string(), ids.clone())), vec![assign])
         } else {
-            (
-                None,
-                vec![format!("\\E v \\in IntRange: {}' = v", ax.var_name)],
-            )
+            let assign = if preserve_ge_now {
+                format!("\\E v \\in IntRange: v >= now /\\ {}' = v", ax.var_name)
+            } else {
+                format!("\\E v \\in IntRange: {}' = v", ax.var_name)
+            };
+            (None, vec![assign])
         };
         actions.push(SpecAction {
             name,
@@ -1084,48 +1188,60 @@ fn build_invariants(
     out
 }
 
-fn build_properties_for_entity(
+/// Lower every temporal property once against a global axis map (for `.tla` + `.cfg`).
+fn build_all_temporal_properties(
     model: &SemanticModel,
-    entity_id: &str,
-    axes: &[SpecAxis],
+    specs: &[EntitySpec],
     multi_instance: bool,
-    binder: &str,
     warnings: &mut Vec<String>,
 ) -> Vec<(String, String)> {
-    let mut out = Vec::new();
     let mut lookup: HashMap<String, String> = HashMap::new();
-    for ax in axes {
-        let access = if multi_instance {
-            format!("{}[{binder}]", ax.var_name)
-        } else {
-            ax.var_name.clone()
-        };
-        lookup.insert(ax.column.clone(), access.clone());
-        lookup.insert(
-            format!("{entity_id}.{}", ax.column.trim_start_matches("__cmp:")),
-            access.clone(),
-        );
-        if let Some(rest) = ax.column.strip_prefix("__cmp:") {
-            lookup.insert(format!("{entity_id}.{rest}"), access);
+    let mut mentioned: Vec<(String, String, String)> = Vec::new(); // entity_id, binder, ids
+    for spec in specs {
+        let ids = format!("{}_Ids", sanitize_ident(&spec.entity_id));
+        mentioned.push((spec.entity_id.clone(), spec.binder.clone(), ids));
+        for ax in &spec.axes {
+            let access = if multi_instance {
+                format!("{}[{}]", ax.var_name, spec.binder)
+            } else {
+                ax.var_name.clone()
+            };
+            lookup.insert(ax.column.clone(), access.clone());
+            lookup.insert(
+                format!(
+                    "{}.{}",
+                    spec.entity_id,
+                    ax.column.trim_start_matches("__cmp:")
+                ),
+                access.clone(),
+            );
+            if let Some(rest) = ax.column.strip_prefix("__cmp:") {
+                lookup.insert(format!("{}.{}", spec.entity_id, rest), access);
+            }
         }
     }
 
+    let mut out = Vec::new();
+    let mut seen = BTreeSet::new();
     for prop in &model.temporal_properties {
-        if !property_mentions_entity(prop, entity_id) {
+        let name = sanitize_ident(&prop.id);
+        if !seen.insert(name.clone()) {
             continue;
         }
         match temporal_property_to_tla(prop, &lookup) {
             Ok(mut formula) => {
                 if multi_instance {
-                    let ids = format!("{}_Ids", sanitize_ident(entity_id));
-                    formula = wrap_temporal_with_instance_quantifier(
-                        &prop.formula,
-                        formula,
-                        binder,
-                        &ids,
-                    );
+                    let binders: Vec<(String, String)> = mentioned
+                        .iter()
+                        .filter(|(eid, _, _)| property_mentions_entity(prop, eid))
+                        .map(|(_, binder, ids)| (binder.clone(), ids.clone()))
+                        .collect();
+                    if !binders.is_empty() {
+                        formula =
+                            wrap_temporal_with_multi_binders(&prop.formula, formula, &binders);
+                    }
                 }
-                out.push((sanitize_ident(&prop.id), formula));
+                out.push((name, formula));
             }
             Err(reason) => warnings.push(format!("property {}: not exported: {reason}", prop.id)),
         }
@@ -1133,22 +1249,29 @@ fn build_properties_for_entity(
     out
 }
 
-/// Quantify multi-instance temporal formulas over each entity instance.
+/// Quantify multi-instance temporal formulas over one or more entity binders.
 ///
-/// - `always(body)` → `[](\A b \in Ids: body)`
-/// - `eventually(body)` → `\A b \in Ids: <>(body)`
-/// - `leads_to(a, b)` → `\A b \in Ids: ((a) ~> (b))`
-fn wrap_temporal_with_instance_quantifier(
+/// - `always(body)` → `[](\A b \in Ids, …: body)`
+/// - `eventually(body)` → `\A b \in Ids, …: <>(body)`
+/// - `leads_to(a, b)` → `\A b \in Ids, …: ((a) ~> (b))`
+fn wrap_temporal_with_multi_binders(
     kind: &TemporalFormula,
     formula: String,
-    binder: &str,
-    ids: &str,
+    binders: &[(String, String)],
 ) -> String {
+    if binders.is_empty() {
+        return formula;
+    }
+    let quant = binders
+        .iter()
+        .map(|(b, ids)| format!("{b} \\in {ids}"))
+        .collect::<Vec<_>>()
+        .join(", ");
     match kind {
         TemporalFormula::Always(_) => {
             if let Some(rest) = formula.strip_prefix("[](") {
                 if let Some(body) = rest.strip_suffix(')') {
-                    return format!("[](\\A {binder} \\in {ids}: {body})");
+                    return format!("[](\\A {quant}: {body})");
                 }
             }
             formula
@@ -1156,13 +1279,13 @@ fn wrap_temporal_with_instance_quantifier(
         TemporalFormula::Eventually(_) => {
             if let Some(rest) = formula.strip_prefix("<>(") {
                 if let Some(body) = rest.strip_suffix(')') {
-                    return format!("\\A {binder} \\in {ids}: <>({body})");
+                    return format!("\\A {quant}: <>({body})");
                 }
             }
             formula
         }
         TemporalFormula::LeadsTo { .. } => {
-            format!("\\A {binder} \\in {ids}: ({formula})")
+            format!("\\A {quant}: ({formula})")
         }
     }
 }
@@ -2003,12 +2126,7 @@ fn all_export_vars(export: &TlaExport) -> Vec<String> {
     vars
 }
 
-fn render_tla(
-    module_name: &str,
-    model: &SemanticModel,
-    export: &TlaExport,
-    warnings: &[String],
-) -> String {
+fn render_tla(module_name: &str, export: &TlaExport, warnings: &[String]) -> String {
     let mut out = String::new();
     out.push_str(&format!(
         "---- MODULE {module_name} ----\n\
@@ -2168,9 +2286,29 @@ fn render_tla(
             .collect();
         unchanged.sort();
         unchanged.dedup();
-        out.push_str("\\* advance global clock\n");
+        out.push_str("\\* advance global clock (must not pass col for col < now / col <= now)\n");
         out.push_str("TickNow ==\n");
-        out.push_str("  /\\ \\E t \\in IntRange: t > now /\\ now' = t\n");
+        out.push_str("  /\\ \\E t \\in IntRange:\n");
+        out.push_str("       /\\ t > now\n");
+        for var in &export.now_le_vars {
+            if export.multi_instance {
+                if let Some(spec) = export
+                    .specs
+                    .iter()
+                    .find(|s| s.axes.iter().any(|a| a.var_name == *var))
+                {
+                    out.push_str(&format!(
+                        "       /\\ \\A {b} \\in {id}_Ids: t <= {var}[{b}]\n",
+                        b = spec.binder,
+                        id = sanitize_ident(&spec.entity_id),
+                        var = var
+                    ));
+                }
+            } else {
+                out.push_str(&format!("       /\\ t <= {var}\n"));
+            }
+        }
+        out.push_str("       /\\ now' = t\n");
         push_unchanged(&mut out, &unchanged, "  ");
         out.push('\n');
     }
@@ -2224,61 +2362,11 @@ fn render_tla(
         out.push_str("Safety == TypeOK\n\n");
     }
 
-    // Temporal properties
-    let mut emitted_props: BTreeSet<String> = BTreeSet::new();
+    // Temporal properties (single authoritative list)
     let mut prop_names = Vec::new();
-    for spec in &export.specs {
-        for (name, formula) in &spec.properties {
-            if emitted_props.insert(name.clone()) {
-                out.push_str(&format!("{name} == {formula}\n"));
-                prop_names.push(name.clone());
-            }
-        }
-    }
-    for prop in &model.temporal_properties {
-        let name = sanitize_ident(&prop.id);
-        if emitted_props.contains(&name) {
-            continue;
-        }
-        let mut lookup: HashMap<String, String> = HashMap::new();
-        for spec in &export.specs {
-            for ax in &spec.axes {
-                let access = if export.multi_instance {
-                    format!("{}[{}]", ax.var_name, spec.binder)
-                } else {
-                    ax.var_name.clone()
-                };
-                lookup.insert(ax.column.clone(), access.clone());
-                lookup.insert(
-                    format!(
-                        "{}.{}",
-                        spec.entity_id,
-                        ax.column.trim_start_matches("__cmp:")
-                    ),
-                    access,
-                );
-            }
-        }
-        if let Ok(mut formula) = temporal_property_to_tla(prop, &lookup) {
-            if export.multi_instance {
-                // Prefer the first lifecycle entity mentioned by the property.
-                if let Some(spec) = export
-                    .specs
-                    .iter()
-                    .find(|s| property_mentions_entity(prop, &s.entity_id))
-                {
-                    let ids = format!("{}_Ids", sanitize_ident(&spec.entity_id));
-                    formula = wrap_temporal_with_instance_quantifier(
-                        &prop.formula,
-                        formula,
-                        &spec.binder,
-                        &ids,
-                    );
-                }
-            }
-            out.push_str(&format!("{name} == {formula}\n"));
-            prop_names.push(name);
-        }
+    for (name, formula) in &export.properties {
+        out.push_str(&format!("{name} == {formula}\n"));
+        prop_names.push(name.clone());
     }
     if !prop_names.is_empty() {
         out.push('\n');
@@ -2308,13 +2396,7 @@ fn render_cfg(module_name: &str, export: &TlaExport) -> String {
     out.push_str("SPECIFICATION Spec\n");
     out.push_str("INVARIANT Safety\n");
 
-    let mut prop_names: BTreeSet<String> = BTreeSet::new();
-    for spec in &export.specs {
-        for (name, _) in &spec.properties {
-            prop_names.insert(name.clone());
-        }
-    }
-    for name in prop_names {
+    for (name, _) in &export.properties {
         out.push_str(&format!("PROPERTY {name}\n"));
     }
 
@@ -2344,6 +2426,20 @@ fn sanitize_ident(s: &str) -> String {
     out
 }
 
+fn sanitize_module_name(s: &str) -> String {
+    let stem = s.trim();
+    let stem = stem
+        .strip_suffix(".tla")
+        .or_else(|| stem.strip_suffix(".cfg"))
+        .unwrap_or(stem);
+    let name = sanitize_ident(stem);
+    if name == "X" && stem.is_empty() {
+        "RdraSpec".into()
+    } else {
+        name
+    }
+}
+
 fn escape_tla_string(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }
@@ -2365,49 +2461,17 @@ mod tests {
         model
     }
 
-    const ORDER_SRC: &str = r#"
-entity Order "注文" {
-  id:           Int @pk
-  status:       Enum(pending, paid, shipped, delivered, cancelled) @default(pending)
-  delivered_at: DateTime @null
-}
-usecase PlaceOrder  "注文確定"
-usecase CapturePay  "決済確定"
-usecase ShipOrder   "発送"
-usecase DeliverOrder "配達確認"
-usecase CancelOrder "注文キャンセル"
-event EvCapture  "決済確定"
-event EvShip     "発送開始"
-event EvDeliver  "配達確認"
-event EvCancel   "注文キャンセル"
-creates(PlaceOrder, Order)
-updates(CapturePay,   Order)
-updates(ShipOrder,    Order)
-updates(DeliverOrder, Order)
-updates(CancelOrder,  Order)
-raises(CapturePay,   EvCapture)
-raises(ShipOrder,    EvShip)
-raises(DeliverOrder, EvDeliver)
-raises(CancelOrder,  EvCancel)
-state Pending   "注文受付"
-state Paid      "決済完了"
-state Shipped   "発送済"
-state Delivered "配達完了"
-state Cancelled "キャンセル"
-transitions(Order.status, EvCapture, pending -> paid)
-transitions(Order.status, EvShip, paid -> shipped)
-transitions(Order.status, EvDeliver, shipped -> delivered)
-transitions(Order.status, EvCancel, pending -> cancelled)
-sets(usecase::DeliverOrder, Order, delivered_at == present)
-forbidden(Order, status == cancelled, delivered_at == present)
-invariant(Order)
-  .when(status == delivered)
-  .then(delivered_at == present)
-"#;
+    fn order_sample_src() -> String {
+        std::fs::read_to_string("samples/formal-verification/order.rdra")
+            .or_else(|_| std::fs::read_to_string("../../samples/formal-verification/order.rdra"))
+            .or_else(|_| std::fs::read_to_string("skills/rdra-ish-verify/samples/order.rdra"))
+            .or_else(|_| std::fs::read_to_string("../../skills/rdra-ish-verify/samples/order.rdra"))
+            .expect("order.rdra sample")
+    }
 
     #[test]
     fn tla_order_snapshot() {
-        let model = model_from(ORDER_SRC);
+        let model = model_from(&order_sample_src());
         let bundle = TlaPlusEmitter::default()
             .emit_bundle(&model, &View::whole())
             .unwrap();
@@ -2432,6 +2496,11 @@ invariant(Order)
         assert!(bundle.tla.contains("Item_selling"));
         assert!(bundle.tla.contains("~(Item_stock < Item_selling)"));
         assert!(bundle.tla.contains("Item_stock >= Item_selling"));
+        assert!(
+            bundle.tla.contains("Item_stock = 1") && bundle.tla.contains("Item_selling = 1"),
+            "Init must satisfy Safety; got:\n{}",
+            bundle.tla
+        );
         assert!(!bundle.tla.contains("prop_stock"));
     }
 
@@ -2450,7 +2519,22 @@ invariant(Order)
         assert!(bundle.tla.contains("TickNow"));
         assert!(bundle.tla.contains("Coupon_expired_at"));
         assert!(bundle.tla.contains("~(Coupon_expired_at < now)"));
-        assert!(bundle.tla.contains("Assign_Coupon_expired_at"));
+        // Constrained Assign + TickNow keep Safety non-vacuous.
+        assert!(
+            bundle.tla.contains("Assign_Coupon_expired_at"),
+            "missing Assign on now-lhs:\n{}",
+            bundle.tla
+        );
+        assert!(
+            bundle.tla.contains("v >= now"),
+            "Assign must preserve col >= now; got:\n{}",
+            bundle.tla
+        );
+        assert!(
+            bundle.tla.contains("t <= Coupon_expired_at"),
+            "TickNow must not pass expired_at; got:\n{}",
+            bundle.tla
+        );
     }
 
     #[test]

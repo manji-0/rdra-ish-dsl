@@ -1,4 +1,5 @@
 // .along with relate → quantified Safety over Order_Ids × Payment_Ids linked by Payment_owner.
+// TLC intent: expected FAIL under independent SpecActions (Cancel then Capture on same link).
 entity Order "注文" {
   id: Int @pk
   status: Enum(pending, paid, cancelled) @default(pending)

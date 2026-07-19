@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::cli::VerifyBackend;
-use crate::export::export_tla_bundle;
+use crate::export::{export_tla_bundle, export_tla_bundle_named};
 
 pub fn run_verify(
     model: &SemanticModel,
@@ -20,32 +20,72 @@ pub fn run_verify(
     }
 }
 
-fn run_tlc(model: &SemanticModel, out: Option<PathBuf>) -> Result<()> {
-    let bundle = export_tla_bundle(model, &View::whole())?;
-
-    let (work_dir, keep) = match out {
-        Some(path) => {
-            if path.extension().is_some() {
-                let parent = path.parent().unwrap_or_else(|| Path::new("."));
+/// Returns (tla_path, cfg_path, work_dir, tla_filename_for_tlc, cfg_filename_for_tlc, keep).
+fn resolve_tla_out_paths(
+    out: Option<PathBuf>,
+    module_name: &str,
+) -> Result<(PathBuf, PathBuf, PathBuf, PathBuf, PathBuf, bool)> {
+    match out {
+        Some(path) if path.extension().is_some_and(|e| e == "tla") => {
+            let parent = path.parent().unwrap_or_else(|| Path::new("."));
+            let work_dir = if parent.as_os_str().is_empty() {
+                PathBuf::from(".")
+            } else {
                 fs::create_dir_all(parent)
                     .with_context(|| format!("failed to create {}", parent.display()))?;
-                (parent.to_path_buf(), true)
+                parent.to_path_buf()
+            };
+            let cfg = path.with_extension("cfg");
+            let tla_name = PathBuf::from(path.file_name().unwrap_or_default());
+            let cfg_name = PathBuf::from(cfg.file_name().unwrap_or_default());
+            Ok((path, cfg, work_dir, tla_name, cfg_name, true))
+        }
+        Some(path) => {
+            let dir = if (path.exists() && path.is_dir()) || path.extension().is_none() {
+                path
             } else {
-                fs::create_dir_all(&path)
-                    .with_context(|| format!("failed to create {}", path.display()))?;
-                (path, true)
-            }
+                path.parent().unwrap_or(Path::new(".")).to_path_buf()
+            };
+            fs::create_dir_all(&dir)
+                .with_context(|| format!("failed to create {}", dir.display()))?;
+            let tla_name = PathBuf::from(format!("{module_name}.tla"));
+            let cfg_name = PathBuf::from(format!("{module_name}.cfg"));
+            let tla = dir.join(&tla_name);
+            let cfg = dir.join(&cfg_name);
+            Ok((tla, cfg, dir, tla_name, cfg_name, true))
         }
         None => {
             let dir = std::env::temp_dir().join(format!("rdra-ish-tlc-{}", std::process::id()));
             fs::create_dir_all(&dir)
                 .with_context(|| format!("failed to create {}", dir.display()))?;
-            (dir, false)
+            let tla_name = PathBuf::from(format!("{module_name}.tla"));
+            let cfg_name = PathBuf::from(format!("{module_name}.cfg"));
+            let tla = dir.join(&tla_name);
+            let cfg = dir.join(&cfg_name);
+            Ok((tla, cfg, dir, tla_name, cfg_name, false))
         }
+    }
+}
+
+fn run_tlc(model: &SemanticModel, out: Option<PathBuf>) -> Result<()> {
+    let module_hint = out
+        .as_ref()
+        .filter(|p| p.extension().is_some_and(|e| e == "tla"))
+        .and_then(|p| p.file_stem()?.to_str().map(str::to_string));
+
+    let bundle = if let Some(name) = module_hint.as_deref() {
+        export_tla_bundle_named(model, &View::whole(), name)?
+    } else {
+        export_tla_bundle(model, &View::whole())?
     };
 
-    let tla_path = work_dir.join(format!("{}.tla", bundle.module_name));
-    let cfg_path = work_dir.join(format!("{}.cfg", bundle.module_name));
+    for w in &bundle.warnings {
+        eprintln!("warning: tla export: {w}");
+    }
+
+    let (tla_path, cfg_path, work_dir, tla_arg, cfg_arg, keep) =
+        resolve_tla_out_paths(out, &bundle.module_name)?;
+
     fs::write(&tla_path, &bundle.tla)
         .with_context(|| format!("failed to write {}", tla_path.display()))?;
     fs::write(&cfg_path, &bundle.cfg)
@@ -55,10 +95,11 @@ fn run_tlc(model: &SemanticModel, out: Option<PathBuf>) -> Result<()> {
     println!("wrote {}", cfg_path.display());
 
     let tlc = find_tlc()?;
+    // Pass bare filenames so TLC resolves them relative to work_dir (module name == file stem).
     let output = Command::new(&tlc)
         .arg("-config")
-        .arg(&cfg_path)
-        .arg(&tla_path)
+        .arg(&cfg_arg)
+        .arg(&tla_arg)
         .current_dir(&work_dir)
         .output()
         .with_context(|| format!("failed to execute {}", tlc.display()))?;
@@ -115,7 +156,6 @@ fn summarize_tlc_failure(output: &str) -> String {
             lines.push(format!("  {}", s.trim()));
         }
     } else {
-        // Fall back to a short tail of TLC output.
         let tail: Vec<&str> = output
             .lines()
             .map(str::trim)
@@ -149,13 +189,13 @@ fn find_line_containing<'a>(output: &'a str, needle: &str) -> Option<&'a str> {
 }
 
 fn find_tlc() -> Result<PathBuf> {
-    for candidate in ["tlc", "tlc2", "tla2tools"] {
+    for candidate in ["tlc", "tlc2"] {
         if let Ok(path) = which(candidate) {
             return Ok(path);
         }
     }
     bail!(
-        "TLC not found on PATH (tried `tlc`, `tlc2`, `tla2tools`)\n\
+        "TLC not found on PATH (tried `tlc`, `tlc2`)\n\
          Install the TLA+ tools and ensure `tlc` is available, or use \
          `rdra-ish export --kind tla` to generate the spec without running TLC."
     );

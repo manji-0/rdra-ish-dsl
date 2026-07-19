@@ -39,3 +39,11 @@ pub fn export_artifact(
 pub fn export_tla_bundle(model: &SemanticModel, view: &View) -> Result<TlaBundle> {
     Ok(TlaPlusEmitter::default().emit_bundle(model, view)?)
 }
+
+pub fn export_tla_bundle_named(
+    model: &SemanticModel,
+    view: &View,
+    module_name: &str,
+) -> Result<TlaBundle> {
+    Ok(TlaPlusEmitter::default().emit_bundle_named(model, view, module_name)?)
+}

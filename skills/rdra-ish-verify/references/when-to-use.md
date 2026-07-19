@@ -11,7 +11,7 @@
 | Terminal / unreachable enum variants | `states` | Built-in diagnostics |
 | Comparison as Bool proposition (`sets(..., cmp, true/false)`) | `states` | Proposition axes |
 | Int / Money / Decimal arithmetic | `export --kind tla` | `IntRange` + TLC Integers |
-| `col < now` / DateTime vs `now` | TLA | Global `now` + `TickNow` |
+| `col < now` / DateTime vs `now` | TLA | Global `now` + constrained Assign / TickNow |
 | `property` `always` / `eventually` / `leads_to` | TLA | Path properties; not evaluated by `states` |
 | `after(UC).assert(...)` | TLA (and local after-check) | Primed postconditions on SpecActions |
 | `when(...).none/has(...)` | TLA | Finite `Entity_Ids` quantifiers |

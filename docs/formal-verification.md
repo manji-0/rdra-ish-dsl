@@ -110,14 +110,27 @@ arithmetic Safety when Int axes exist.
   (`InstanceCount`, currently fixed at 2 in the emitter). When `relate`
   declares N:1 / 1:N, a `Child_owner` function links related instances; otherwise
   the related side is quantified independently.
+- **Shared events across entities**: each entity still gets its own SpecAction for
+  the same event (e.g. `Order_EvPay` and `Payment_EvPay`). Steps can interleave;
+  they are not one atomic multi-entity action — `cross_order_payment` /
+  `quantifier_none` are expected TLC fails under that semantics.
 - **Int arithmetic**: comparisons and `sets(..., col == N)` on Int / Money / Decimal
   use TLC Integers on `IntRange` (currently fixed at `0..5` in the emitter).
-  Undriven Int axes also get nondet `Assign_*` actions so TLC can explore values.
-  `@default(0)` is accepted for Int columns.
-- **`now`**: exported as a global Int clock with `TickNow` (`\E t \in IntRange: t > now /\ now' = t`).
-  Columns compared to `now` (including DateTime) become Int axes.
+  Undriven Int axes get nondet `Assign_*` actions so TLC can explore values.
+  For columns used as the lhs of `col < now` / `col <= now`, `Assign_*` is
+  constrained (`v >= now`) rather than omitted. `@default(0)` is accepted for
+  Int columns.
+- **`now`**: exported as a global Int clock with `TickNow`. Columns compared to
+  `now` (including DateTime) become Int axes. For `col < now` / `col <= now`,
+  `TickNow` also requires `t <= col` so Safety stays non-vacuous without Init=max.
+- **`WF_vars(Next)`**: fairness is on the whole `Next` disjunction, not per action.
+  Sufficient for simple `eventually` / `leads_to` on small models; not a substitute
+  for per-action weak fairness.
 - BFS `rdra-ish states` still does not treat Int / `now` as state axes; use
   TLA/TLC for those checks.
+- Export warnings (skipped mappings, `.along` without `relate`, unmapped
+  `after.assert`, …) are printed on stderr by `export --kind tla` / `verify` and
+  also embedded as `\\* WARNING:` comments in the `.tla`.
 - Diagnostic ids may still use a historical `Cross*` prefix even though the DSL
   surface is multi-entity `forbidden` / `invariant`.
 
@@ -139,14 +152,14 @@ do not `check` the whole directory; ids such as `Order` collide). In this repo,
 `samples/formal-verification/` and `samples/formal-verification-fail/` are
 symlinks to those skill-bundled files (CLI tests keep working after skill install).
 
-| Sample | Focus |
-|---|---|
-| `order.rdra` | Lifecycle Safety + `after.assert` + `leads_to` / `eventually` + `WF_vars` |
-| `int_stock.rdra` | Int axes, arithmetic `forbidden`, Int temporal property |
-| `now_coupon.rdra` | `now` / `TickNow`, DateTime promoted to Int |
-| `cross_order_payment.rdra` | Multi-instance + `.along` + `Payment_owner` |
-| `quantifier_none.rdra` | `when(...).none` + `Assign_owner` |
+| Sample | TLC intent | Focus |
+|---|---|---|
+| `order.rdra` | expected pass | Lifecycle Safety + `after.assert` + `leads_to` / `eventually` + `WF_vars` |
+| `int_stock.rdra` | expected pass | Int axes, arithmetic `forbidden`, Int temporal property |
+| `now_coupon.rdra` | expected pass | `now` / `TickNow`; Assign keeps `expired_at >= now`; TickNow cannot pass it |
+| `cross_order_payment.rdra` | expected fail | Multi-instance + `.along` (independent SpecActions allow Cancel then Capture) |
+| `quantifier_none.rdra` | expected fail | `when(...).none` (Revoke while Assign stays active) |
+| `fail/order.rdra` | expected fail | Intentionally unsafe (`check` may warn with exit 0; TLC should fail Safety) |
 
-`skills/rdra-ish-verify/samples/fail/order.rdra` (mirrored as
-`samples/formal-verification-fail/order.rdra`) is intentionally unsafe for
-negative TLC checks.
+`rdra-ish check` on fail samples can exit 0 with warnings only — use TLC for the
+negative verdict.

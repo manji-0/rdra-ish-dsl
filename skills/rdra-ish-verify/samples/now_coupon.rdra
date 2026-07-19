@@ -1,4 +1,5 @@
 // Global `now` clock + arithmetic comparison (expired_at < now).
+// Assign keeps expired_at >= now; TickNow cannot pass expired_at — Safety is non-vacuous.
 entity Coupon "クーポン" {
   id: Int @pk
   status: Enum(active, expired) @default(active)

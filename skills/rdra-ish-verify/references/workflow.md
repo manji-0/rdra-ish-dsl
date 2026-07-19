@@ -19,15 +19,16 @@ rdra-ish verify "$FILE" --backend tlc -o <OUT>
 
 | Command | Role |
 |---|---|
-| `export --kind tla` | Write `RdraSpec.tla` **and** sibling `RdraSpec.cfg` |
+| `export --kind tla` | Write `.tla` **and** sibling `.cfg` (module = file stem) |
 | `verify --backend tlc` | Export, then run `tlc` / `tlc2` from `PATH` |
 | `states` | Local BFS (no TLC dependency) |
 
 ### Output Path Rules
 
-- `-o` ends with `.tla` → sibling `.cfg` next to it
+- `-o` ends with `.tla` → that basename is the module; sibling `.cfg` next to it
 - `-o` is a directory or has no extension → `<dir>/RdraSpec.tla` and
   `<dir>/RdraSpec.cfg`
+- `verify` copies bare `Module.tla` / `Module.cfg` into its work dir for TLC
 
 ## Suggested Order
 

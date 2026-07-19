@@ -122,7 +122,17 @@ fn main() -> Result<()> {
 
             let view = View::whole();
             if matches!(kind, ExportKind::Tla) {
-                let bundle = export::export_tla_bundle(&model, &view)?;
+                let module_name = if out.extension().is_some_and(|e| e == "tla") {
+                    out.file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("RdraSpec")
+                } else {
+                    "RdraSpec"
+                };
+                let bundle = export::export_tla_bundle_named(&model, &view, module_name)?;
+                for w in &bundle.warnings {
+                    eprintln!("warning: tla export: {w}");
+                }
                 let (tla_path, cfg_path) = if out.extension().is_some_and(|e| e == "tla") {
                     let cfg = out.with_extension("cfg");
                     (out.clone(), cfg)

@@ -38,7 +38,10 @@ symlink mirror of the same files.
    `property`, `after.assert`, quantifiers, and multi-instance `.along`.
 3. Export: `rdra-ish export <file> --kind tla -o <OUT>` (writes `.tla` and `.cfg`).
 4. If `tlc` / `tlc2` is on `PATH`: `rdra-ish verify <file> --backend tlc -o <OUT>`.
+   Prefer **expected-pass** samples from `references/limits-and-samples.md`; use
+   `samples/fail/` only for negative TLC checks (`check` may exit 0 with warnings).
 5. Report evidence from TLC property names / Safety failures, not only intuition.
+   Heed stderr `warning: tla export: …` lines (skipped mappings / approximations).
 6. For full mapping tables in the monorepo, see `docs/formal-verification.md`.
 
 ### Quick Command Palette
