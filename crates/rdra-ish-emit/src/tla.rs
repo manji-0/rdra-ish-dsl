@@ -2445,7 +2445,9 @@ fn render_tla(module_name: &str, export: &TlaExport, warnings: &[String]) -> Str
         return out;
     }
 
-    if export.needs_integers {
+    // Multi-instance uses `1..InstanceCount`; Int/now axes use IntRange — both need Integers.
+    let extends_integers = export.needs_integers || export.multi_instance;
+    if extends_integers {
         out.push_str("EXTENDS Integers\n\n");
     }
 
@@ -2977,6 +2979,11 @@ forbidden(Item, stock < 0)
             .unwrap();
         assert!(!bundle.tla.contains("Phase 3"), "warnings: {}", bundle.tla);
         assert!(bundle.tla.contains("InstanceCount == 2"));
+        assert!(
+            bundle.tla.contains("EXTENDS Integers"),
+            "multi-instance 1..N needs Integers:\n{}",
+            bundle.tla
+        );
         assert!(bundle.tla.contains("Payment_owner"));
         assert!(bundle.tla.contains("CrossForbidden_0"));
         assert!(bundle.tla.contains("Payment_owner["));
