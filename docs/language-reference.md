@@ -972,10 +972,12 @@ The property label string is optional: `property StockOk always(Item.stock >= It
 When any `eventually` / `leads_to` property is exported, the Spec includes
 `WF_vars(Next)`. In multi-instance export (triggered by multi-entity rules or
 quantifiers), temporal formulas are quantified per instance binder
-(`\A i \in Entity_Ids: …`). Equality forms of `after(UseCase).assert(...)` become primed
-postconditions on SpecActions for events raised by that use case. Comparison
-forms prefer Int arithmetic when those columns are axes (including cross-entity RHS);
-otherwise they set a proposition axis to `TRUE` when that axis exists.
+(`\A i \in Entity_Ids: …`). Equality and comparison forms of
+`after(UseCase).assert(...)` become independent TLA `PROPERTY` formulas
+`[][raised SpecActions => primed posts]_vars` — they check outcomes and are **not**
+injected into SpecAction effects. Comparison forms prefer Int arithmetic when those
+columns are axes (including cross-entity RHS); otherwise they require a proposition
+axis to be `TRUE` after the action when that axis exists.
 `forbidden(EntityA, EntityB, ...)` / `invariant(EntityA, EntityB)` (including `.along`) become Safety
 conjuncts. Quantifiers and `.along` use finite `Entity_Ids` instance sets when
 exported; see [formal-verification.md](./formal-verification.md).

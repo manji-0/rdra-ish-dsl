@@ -49,7 +49,11 @@
   language-reference documents composite `@pk` FK limits.
 - `after.assert` exports as independent `[][action => post]_vars` properties
   (no primed injection into SpecActions); stuttering-only Next is fatal;
-  TLA obligation failures use `[TLA_FATAL:…]` tags.
+  TLA obligation failures use `[TLA_FATAL:…]` tags only (legacy substring
+  matching removed); multi-post asserts fold to `Act => (p1 /\ p2)`.
+- Init `"pending"` last-resort is `[TLA_FATAL:init_pending_fallback]` unless
+  `pending` is a declared Enum variant; `diagram --node-kind`/`--edge-kind`
+  reject unknown kinds; `scripts/install-tlc.sh` verifies tla2tools.jar SHA256.
 - `diagram --kind diff` fail-closes on semantic errors in `--diff-base`.
 - TLA+: unique action names for multi-edge events; unresolved/dropped properties
   and contradictory `after.assert` fail export/verify; `now` Safety is not baked

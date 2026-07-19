@@ -16,7 +16,7 @@ use rdra_ish_emit::{
         ObjectGraphPlantUmlEmitter, RdraPlantUmlEmitter, SequenceDiagramEmitter,
         StateDiagramEmitter, TechnicalAreaPlantUmlEmitter,
     },
-    Emitter, Filter, Scope, View,
+    unknown_diagram_filter_kinds, Emitter, Filter, Scope, View,
 };
 use std::fs;
 
@@ -83,6 +83,20 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
         anyhow::bail!(
             "--node-kind, --edge-kind, and --view-preset are currently supported only for --kind rdra, --kind boundaryless-graph, or --kind diff"
         );
+    }
+    // Validate user-supplied kinds only (presets are authored from the known set).
+    if !node_kind.is_empty() || !edge_kind.is_empty() {
+        let (unknown_nodes, unknown_edges) = unknown_diagram_filter_kinds(&node_kind, &edge_kind);
+        if !unknown_nodes.is_empty() || !unknown_edges.is_empty() {
+            let mut parts = Vec::new();
+            if !unknown_nodes.is_empty() {
+                parts.push(format!("unknown --node-kind: {}", unknown_nodes.join(", ")));
+            }
+            if !unknown_edges.is_empty() {
+                parts.push(format!("unknown --edge-kind: {}", unknown_edges.join(", ")));
+            }
+            anyhow::bail!("{}", parts.join("; "));
+        }
     }
     if matches!(kind, DiagramKind::Diff) && diff_base.is_empty() {
         anyhow::bail!("--kind diff requires at least one --diff-base path");

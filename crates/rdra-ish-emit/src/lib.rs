@@ -244,6 +244,104 @@ pub(crate) fn normalize_filter_token(value: &str) -> String {
     value.trim().to_ascii_lowercase().replace('_', "-")
 }
 
+/// Canonical `--node-kind` tokens (after underscore→hyphen normalization).
+pub const KNOWN_DIAGRAM_NODE_KINDS: &[&str] = &[
+    "actor",
+    "extsystem",
+    "system",
+    "requirement",
+    "adr",
+    "nfr",
+    "quality",
+    "constraint",
+    "concept",
+    "domain-object",
+    "aggregate",
+    "value-object",
+    "business",
+    "buc",
+    "flow",
+    "step",
+    "usagescene",
+    "usecase",
+    "screen",
+    "field",
+    "event",
+    "entity",
+    "state",
+    "condition",
+    "variation",
+    "api",
+    "dto",
+    "location",
+    "timing",
+    "medium",
+    "permission",
+];
+
+/// Canonical `--edge-kind` tokens (after underscore→hyphen normalization).
+/// `relate` matches all cardinality relate edges; `1:1` / `1:n` / `n:1` / `n:m` are also accepted.
+pub const KNOWN_DIAGRAM_EDGE_KINDS: &[&str] = &[
+    "performs",
+    "uses",
+    "reads",
+    "writes",
+    "creates",
+    "updates",
+    "deletes",
+    "displays",
+    "shows",
+    "raises",
+    "triggers",
+    "contains",
+    "belongs",
+    "has-permission",
+    "requires-permission",
+    "requires-medium",
+    "motivates",
+    "decides",
+    "transitions",
+    "invokes",
+    "precedes",
+    "branches",
+    "excepts",
+    "repeats",
+    "covers",
+    "compensates",
+    "request",
+    "response",
+    "error-response",
+    "applies-to",
+    "qualifies",
+    "constrains",
+    "maps-to",
+    "maps-field",
+    "owns",
+    "relate",
+    "1:1",
+    "1:n",
+    "n:1",
+    "n:m",
+];
+
+/// Return unknown filter tokens after normalization (empty = all recognized).
+pub fn unknown_diagram_filter_kinds(
+    node_kinds: &[String],
+    edge_kinds: &[String],
+) -> (Vec<String>, Vec<String>) {
+    let unknown_nodes = node_kinds
+        .iter()
+        .map(|k| normalize_filter_token(k))
+        .filter(|k| !KNOWN_DIAGRAM_NODE_KINDS.contains(&k.as_str()))
+        .collect::<Vec<_>>();
+    let unknown_edges = edge_kinds
+        .iter()
+        .map(|k| normalize_filter_token(k))
+        .filter(|k| !KNOWN_DIAGRAM_EDGE_KINDS.contains(&k.as_str()))
+        .collect::<Vec<_>>();
+    (unknown_nodes, unknown_edges)
+}
+
 pub(crate) fn node_kind_filter_name(node: &NodeRef) -> &'static str {
     match node {
         NodeRef::Actor(_) => "actor",
@@ -819,5 +917,15 @@ state Active "Active"
         assert!(nodes
             .iter()
             .all(|node| !matches!(node, NodeRef::Permission(_) | NodeRef::Entity(_))));
+    }
+
+    #[test]
+    fn unknown_diagram_filter_kinds_detects_typos() {
+        let (nodes, edges) = unknown_diagram_filter_kinds(
+            &["usecase".into(), "useecas".into()],
+            &["invokes".into(), "invokez".into(), "relate".into()],
+        );
+        assert_eq!(nodes, vec!["useecas"]);
+        assert_eq!(edges, vec!["invokez"]);
     }
 }

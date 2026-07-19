@@ -35,10 +35,10 @@ after(DeliverOrder).assert(Order.status == delivered, Order.delivered_at == pres
 after(Sell).assert(Item.sold >= 1)
 ```
 
-- Equality forms become primed postconditions on SpecActions for events raised
-  by that use case.
-- Comparison forms prefer Int arithmetic when axes exist (cross-entity RHS ok);
-  otherwise set a proposition axis to `TRUE` when present.
+- Equality and comparison forms become an independent TLA `PROPERTY`
+  `[][raised SpecActions => primed posts]_vars` (not injected into SpecAction
+  effects). Comparison forms prefer Int arithmetic when axes exist (cross-entity
+  RHS ok); otherwise require a proposition axis `TRUE` after the action.
 
 ## Quantifiers
 

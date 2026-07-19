@@ -39,8 +39,8 @@ directory (or has no extension), files are written as `<dir>/RdraSpec.tla` and
 | Multi-entity `forbidden` / `invariant` | Safety over the multi-entity variable product |
 | `.along(...)` (RelationPath) | Quantified over `Entity_Ids`; with `relate` uses `Child_owner` link filter |
 | `when(...).none/has(...)` | Finite `Entity_Ids == 1..InstanceCount` with `\A`/`\E`; `relate` adds `*_owner` FK |
-| `after(UC).assert` equality | Primed postconditions on SpecActions for events raised by `UC` |
-| `after(UC).assert` comparison | Arithmetic when Int axes exist (cross-entity RHS allowed); else `prop' = TRUE` |
+| `after(UC).assert` equality | Independent `PROPERTY`: `[][raised actions => primed posts]_vars` (not injected into SpecActions) |
+| `after(UC).assert` comparison | Same PROPERTY shape; Int arithmetic when axes exist (cross-entity RHS allowed); else `prop' = TRUE` |
 | `property` + `always` / `eventually` / `leads_to` | Named formulas listed as `PROPERTY` in the `.cfg` |
 | Multi-instance temporal formulas | Per-instance quantifiers: `[](\A i: …)`, `\A i: <>(…)`, `\A i: (p ~> q)` |
 | Temporal atoms with Int compares | `stock < selling`, `stock >= 1`, etc. map to TLC arithmetic |

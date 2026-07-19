@@ -49,18 +49,11 @@ pub fn export_tla_bundle_named(
 }
 
 /// Warnings that mean the TLA+ artifact does not preserve source obligations.
-/// Prefer stable `[TLA_FATAL:code]` tags; keep legacy substrings for older messages.
+/// Only stable `[TLA_FATAL:code]` tags are treated as fatal.
 pub fn tla_obligation_errors(warnings: &[String]) -> Option<String> {
     let fatal: Vec<&str> = warnings
         .iter()
-        .filter(|w| {
-            w.contains("[TLA_FATAL:")
-                || w.contains("not exported")
-                || w.contains("not yet mapped")
-                || w.contains("contradictory after.assert")
-                || w.contains("duplicate property")
-                || w.contains("stuttering only")
-        })
+        .filter(|w| w.contains("[TLA_FATAL:"))
         .map(String::as_str)
         .collect();
     if fatal.is_empty() {

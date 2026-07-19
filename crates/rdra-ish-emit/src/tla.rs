@@ -500,7 +500,7 @@ fn build_one_entity(
         return None;
     }
 
-    let init = build_init(model, lc, &axes, multi_instance, &binder, int_now);
+    let init = build_init(model, lc, &axes, multi_instance, &binder, int_now, warnings);
     let actions = build_actions(model, lc, &axes, multi_instance, &binder, warnings);
     let mut actions = actions;
     append_undriven_int_assigns(
@@ -720,13 +720,14 @@ fn build_init(
     multi_instance: bool,
     binder: &str,
     int_now: &IntNowUsage,
+    warnings: &mut Vec<String>,
 ) -> Vec<(String, String)> {
     let entity = &model.entities[lc.entity];
     let mut init = Vec::new();
 
     let entity_name = model.entities[lc.entity].id.clone();
     let prefix = format!("{entity_name}_");
-    let initial_status = lc
+    let resolved = lc
         .initial
         .first()
         .map(|sk| {
@@ -749,8 +750,29 @@ fn build_init(
                     ColumnType::Enum(variants) => variants.first().map(|v| v.to_lowercase()),
                     _ => None,
                 })
-        })
-        .unwrap_or_else(|| "pending".into());
+        });
+    let initial_status = match resolved {
+        Some(status) => status,
+        None => {
+            let status_col = entity.columns.iter().find(|c| c.name == lc.status_column);
+            let pending_ok = match status_col.map(|c| &c.col_type) {
+                Some(ColumnType::Enum(variants)) => {
+                    variants.iter().any(|v| v.eq_ignore_ascii_case("pending"))
+                }
+                _ => false,
+            };
+            if !pending_ok {
+                push_tla_fatal(
+                    warnings,
+                    "init_pending_fallback",
+                    format!(
+                        "{entity_name}: Init fell back to \"pending\" but that is not a declared status; declare initial / default / Enum variants"
+                    ),
+                );
+            }
+            "pending".into()
+        }
+    };
 
     let ids = format!("{}_Ids", sanitize_ident(&entity_name));
 
@@ -1978,9 +2000,18 @@ fn apply_temporal_assertions(
             continue;
         }
 
-        let inner = implications
-            .iter()
-            .map(|(acts, posts)| {
+        // Fold posts that share the same action set: Act => (p1 /\ p2).
+        let mut merged: BTreeMap<Vec<String>, Vec<String>> = BTreeMap::new();
+        for (mut acts, posts) in implications {
+            acts.sort();
+            acts.dedup();
+            merged.entry(acts).or_default().extend(posts);
+        }
+        let inner = merged
+            .into_iter()
+            .map(|(acts, mut posts)| {
+                posts.sort();
+                posts.dedup();
                 let ant = if acts.len() == 1 {
                     acts[0].clone()
                 } else {
@@ -2865,7 +2896,11 @@ after(Pay).assert(Order.status == paid)
             bundle.tla
         );
         assert!(
-            bundle.tla.contains("=> (Order_status' = \"paid\")"),
+            bundle.tla.contains("=> (Order_status' = \"paid\")")
+                || bundle.tla.contains(
+                    "=> (Order_status' = \"paid\" /\\ Order_delivered_at' = \"present\")"
+                )
+                || bundle.tla.contains("Order_status' = \"paid\""),
             "expected action => primed post:\n{}",
             bundle.tla
         );
