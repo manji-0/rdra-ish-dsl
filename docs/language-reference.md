@@ -1138,9 +1138,13 @@ import shared.actors.{Staff as S} // selective import with a local alias
 
 - `module <path>` declares the dotted module path of the current file.
 - `import <path>` brings the module's declarations into scope.
-- `import <path> as <alias>` makes the imported names available under the alias namespace.
-- `import <path>.{Name}` imports only the named declarations.
-- `import <path>.{Name as Local}` imports a name under a local alias.
+- `import <path> as <alias>` makes the imported names available under the alias namespace
+  (`alias.Name`). Bare names from that module are **not** in flat scope.
+- `import <path>.{Name}` imports only the named declarations into flat scope.
+- `import <path>.{Name as Local}` imports a name under a local alias (original name hidden).
+- The same id may be declared in **different modules**; disambiguate with aliases /
+  namespaces when both are imported. Redeclaring the same kind+id in one module (or the
+  same file without a module) remains an error.
 
 When the CLI loads a directory, it merges all `.rdra` files reachable from the entry
 files into a single semantic model, resolving imports against the include paths derived

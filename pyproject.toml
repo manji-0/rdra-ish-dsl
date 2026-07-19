@@ -34,6 +34,10 @@ include = [
     { path = "Cargo.toml", format = ["sdist", "wheel"] },
     { path = "Cargo.lock", format = "sdist" },
     { path = "crates/**/*", format = "sdist" },
+    { path = "docs/**/*", format = "sdist" },
+    { path = "samples/**/*", format = "sdist" },
+    { path = "skills/**/*", format = "sdist" },
     { path = "README.md", format = ["sdist", "wheel"] },
+    { path = "CHANGELOG.md", format = "sdist" },
     { path = "LICENSE", format = ["sdist", "wheel"] },
 ]

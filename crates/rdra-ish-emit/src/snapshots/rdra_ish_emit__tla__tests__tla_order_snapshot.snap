@@ -1,6 +1,5 @@
 ---
 source: crates/rdra-ish-emit/src/tla.rs
-assertion_line: 2428
 expression: bundle.tla
 ---
 ---- MODULE RdraSpec ----
@@ -19,34 +18,34 @@ Init ==
   /\ Order_delivered_at = "null"
 
 \* EvCapture: pending -> paid
-Order_EvCapture ==
+Order_EvCapture_pending_to_paid ==
   /\ Order_status = "pending"
   /\ Order_status' = "paid"
   /\ UNCHANGED Order_delivered_at
 
 \* EvShip: paid -> shipped
-Order_EvShip ==
+Order_EvShip_paid_to_shipped ==
   /\ Order_status = "paid"
   /\ Order_status' = "shipped"
   /\ UNCHANGED Order_delivered_at
 
 \* EvDeliver: shipped -> delivered
-Order_EvDeliver ==
+Order_EvDeliver_shipped_to_delivered ==
   /\ Order_status = "shipped"
   /\ Order_status' = "delivered"
   /\ Order_delivered_at' = "present"
 
 \* EvCancel: pending -> cancelled
-Order_EvCancel ==
+Order_EvCancel_pending_to_cancelled ==
   /\ Order_status = "pending"
   /\ Order_status' = "cancelled"
   /\ UNCHANGED Order_delivered_at
 
 Next ==
-  \/ Order_EvCapture
-  \/ Order_EvShip
-  \/ Order_EvDeliver
-  \/ Order_EvCancel
+  \/ Order_EvCapture_pending_to_paid
+  \/ Order_EvShip_paid_to_shipped
+  \/ Order_EvDeliver_shipped_to_delivered
+  \/ Order_EvCancel_pending_to_cancelled
 
 Spec == Init /\ [][Next]_vars /\ WF_vars(Next)
 

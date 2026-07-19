@@ -14,14 +14,11 @@ use rdra_ish_emit::{
 use std::fs;
 
 use crate::cli::CsvKind;
-use crate::load::{eprint_diagnostic, load_model};
+use crate::load::{load_model, reject_model_errors};
 
 pub fn run_csv(inputs: &[PathBuf], kind: CsvKind, out: PathBuf) -> Result<()> {
     let (program, model, diags) = load_model(inputs)?;
-
-    for diag in &diags {
-        eprint_diagnostic(&program, diag);
-    }
+    reject_model_errors(&program, &diags)?;
 
     let view = View::whole();
 

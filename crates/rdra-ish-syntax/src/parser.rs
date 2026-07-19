@@ -11,13 +11,20 @@ use crate::token::Token;
 
 // ── Lexer bridge ─────────────────────────────────────────────────────────────
 
-/// Run the logos lexer and return a `Vec<(Token, Span)>`.
-/// Tokens that fail to lex are silently dropped.
-pub fn lex(src: &str) -> Vec<Spanned<Token>> {
-    Token::lexer(src)
-        .spanned()
-        .filter_map(|(tok, span)| tok.ok().map(|t| (t, span)))
-        .collect()
+/// Run the logos lexer.
+///
+/// Returns successfully lexed tokens and the source spans of any characters
+/// that did not match a token (fail-closed: callers must treat these as errors).
+pub fn lex(src: &str) -> (Vec<Spanned<Token>>, Vec<std::ops::Range<usize>>) {
+    let mut tokens = Vec::new();
+    let mut errors = Vec::new();
+    for (tok, span) in Token::lexer(src).spanned() {
+        match tok {
+            Ok(t) => tokens.push((t, span)),
+            Err(()) => errors.push(span),
+        }
+    }
+    (tokens, errors)
 }
 
 // ── Parser helpers ────────────────────────────────────────────────────────────
@@ -256,12 +263,18 @@ fn col_type() -> impl Parser<Token, ColType, Error = Simple<Token>> + Clone {
         Token::TDecimal  => ColType::Decimal,
     };
 
-    // Enum(active, discontinued)
+    // Enum(active, discontinued) — at least one variant required
     let enum_ty = just(Token::TEnum)
         .ignore_then(just(Token::LParen))
         .ignore_then(ident().separated_by(just(Token::Comma)).allow_trailing())
         .then_ignore(just(Token::RParen))
-        .map(ColType::Enum);
+        .try_map(|variants: Vec<String>, span| {
+            if variants.is_empty() {
+                Err(Simple::custom(span, "Enum() requires at least one variant"))
+            } else {
+                Ok(ColType::Enum(variants))
+            }
+        });
 
     enum_ty.or(simple)
 }
@@ -1044,13 +1057,21 @@ fn root_parser() -> impl Parser<Token, Vec<Item>, Error = Simple<Token>> {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-/// Lex and parse `src`. Returns the best-effort AST and any parse errors.
+/// Lex and parse `src`. Returns the best-effort AST and any lex/parse errors.
 pub fn parse(src: &str) -> (Ast, Vec<Simple<Token>>) {
-    let tokens = lex(src);
+    let (tokens, lex_errors) = lex(src);
     let len = src.len();
 
     let stream = Stream::from_iter(len..len + 1, tokens.into_iter());
-    let (items, errors) = root_parser().parse_recovery(stream);
+    let (items, mut errors) = root_parser().parse_recovery(stream);
+
+    for span in lex_errors {
+        let snippet = src.get(span.clone()).unwrap_or("");
+        errors.push(Simple::custom(
+            span,
+            format!("unexpected character(s) `{snippet}`"),
+        ));
+    }
 
     let ast = Ast {
         items: items.unwrap_or_default(),
@@ -1896,5 +1917,25 @@ performs(actor::Add, usecase::Add)
             &prop.formula,
             AstTemporalFormula::Eventually(Expr::Or(_, _))
         ));
+    }
+
+    #[test]
+    fn empty_enum_is_parse_error() {
+        let (_ast, errors) = parse("entity E \"e\" { status: Enum() }");
+        assert!(!errors.is_empty(), "Enum() must be rejected at parse time");
+        let msg = format!("{:?}", errors);
+        assert!(
+            msg.contains("Enum()") || msg.contains("variant"),
+            "unexpected errors: {msg}"
+        );
+    }
+
+    #[test]
+    fn lex_errors_are_reported() {
+        let (_ast, errors) = parse("actor Customer \"ok\" #broken");
+        assert!(
+            !errors.is_empty(),
+            "unknown characters must not be silently dropped"
+        );
     }
 }

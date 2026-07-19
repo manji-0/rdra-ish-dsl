@@ -101,7 +101,7 @@ fn table_settings(entity: &Entity) -> Vec<String> {
 }
 
 fn dbml_column(entity: &Entity, column: &ModelColumn) -> String {
-    let settings = column_settings(column);
+    let settings = column_settings(entity, column);
     let settings = if settings.is_empty() {
         String::new()
     } else {
@@ -115,9 +115,10 @@ fn dbml_column(entity: &Entity, column: &ModelColumn) -> String {
     )
 }
 
-fn column_settings(column: &ModelColumn) -> Vec<String> {
+fn column_settings(entity: &Entity, column: &ModelColumn) -> Vec<String> {
     let mut settings = Vec::new();
-    if column.is_pk {
+    // Single-column PK stays on the column; composite PKs use Indexes { (a, b) [pk] }.
+    if column.is_pk && entity.primary_key.len() <= 1 {
         settings.push("pk".to_string());
     }
     if column.is_unique {
@@ -175,6 +176,9 @@ fn dbml_type(entity: &Entity, column: &ModelColumn) -> String {
 
 fn dbml_indexes(entity: &Entity) -> Vec<String> {
     let mut indexes = Vec::new();
+    if entity.primary_key.len() > 1 {
+        indexes.push(format_index(&entity.primary_key, &["pk"]));
+    }
     for columns in &entity.indexes {
         indexes.push(format_index(columns, &[]));
     }

@@ -958,8 +958,21 @@ pub(crate) fn process_predicate(
     diags: &mut Vec<Diagnostic>,
 ) {
     let Some(sig) = predicate_signature(&pred.name) else {
+        push_error(
+            ctx,
+            diags,
+            pred.span.clone(),
+            RdraError::UnknownPredicate {
+                name: pred.name.clone(),
+            },
+        );
         return;
     };
+
+    if let Some(err) = arity_error(pred, &sig) {
+        push_error(ctx, diags, pred.span.clone(), err);
+        return;
+    }
 
     // Top-level `when(...)` quantifier predicate uses cross-entity path.
     if pred.name == "when" {
@@ -1019,5 +1032,35 @@ pub(crate) fn process_predicate(
     if let Some(typed) = crate::typed_predicate::build_typed_predicate(&pred.name, &resolved, pred)
     {
         model.typed_predicates.push(typed);
+    }
+}
+
+/// Fixed-arity predicates must match the signature length exactly.
+/// Variadic / trailing-condition predicates only enforce a minimum.
+fn arity_error(pred: &PredicateCall, sig: &[Vec<&'static str>]) -> Option<RdraError> {
+    let got = pred.args.len();
+    let (expected, ok) = match pred.name.as_str() {
+        "when" => return None,
+        "sets" => ("at least 2".into(), got >= 2),
+        "after" => ("at least 1".into(), got >= 1),
+        // Cross-entity `invariant` may be empty before `.when(...).none/has(...)`.
+        "invariant" => ("0 or more".into(), true),
+        "forbidden" | "required" | "exclusive" => ("at least 1".into(), got >= 1),
+        "transitions" => ("3".into(), got == 3),
+        "maps_field" => ("3".into(), got == 3),
+        "relate" => ("3".into(), got == 3),
+        _ => {
+            let n = sig.len();
+            (n.to_string(), got == n)
+        }
+    };
+    if ok {
+        None
+    } else {
+        Some(RdraError::WrongArity {
+            name: pred.name.clone(),
+            expected,
+            got,
+        })
     }
 }

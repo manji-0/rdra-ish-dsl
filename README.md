@@ -23,6 +23,7 @@ It lets you model actors, use cases, APIs, screens, entities, and relationships,
 - generate diagrams (`diagram`)
 - export review CSVs (`csv`)
 - derive reachable entity states (`states`)
+- export / run TLA+ formal checks (`export --kind tla`, `verify --backend tlc`)
 
 ## Recommended Modeling Loop
 
@@ -58,6 +59,10 @@ rdra-ish csv samples/clinic-ops --kind actor-permission-audit
 
 # 4) Derive reachable states
 rdra-ish states samples/clinic-ops --entity Appointment
+
+# 5) Formal verification (requires `tlc` on PATH)
+rdra-ish export samples/formal-verification/order.rdra --kind tla -o /tmp/rdra-tla
+rdra-ish verify samples/formal-verification/order.rdra --backend tlc -o /tmp/rdra-tla
 ```
 
 ## What You Can Review

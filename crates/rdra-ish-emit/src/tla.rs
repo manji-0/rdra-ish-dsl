@@ -130,8 +130,6 @@ struct TlaExport {
     global_safety: Vec<(String, String)>,
     /// Temporal properties (name, formula) — single source for `.tla` and `.cfg`.
     properties: Vec<(String, String)>,
-    /// Int axis var names constrained by `col < now` / `col <= now` (TickNow must not pass them).
-    now_le_vars: Vec<String>,
 }
 
 fn needs_multi_instance(model: &SemanticModel) -> bool {
@@ -201,21 +199,6 @@ fn build_export(model: &SemanticModel, multi_axis: bool, warnings: &mut Vec<Stri
 
     let properties = build_all_temporal_properties(model, &specs, multi_instance, warnings);
 
-    let mut now_le_vars = Vec::new();
-    for spec in &specs {
-        for ax in &spec.axes {
-            if int_now
-                .now_le_lhs_columns
-                .get(&spec.entity_id)
-                .is_some_and(|cols| cols.contains(&ax.column))
-            {
-                now_le_vars.push(ax.var_name.clone());
-            }
-        }
-    }
-    now_le_vars.sort();
-    now_le_vars.dedup();
-
     TlaExport {
         multi_instance,
         needs_integers: needs_integers || needs_now,
@@ -225,7 +208,6 @@ fn build_export(model: &SemanticModel, multi_axis: bool, warnings: &mut Vec<Stri
         owners,
         global_safety,
         properties,
-        now_le_vars,
     }
 }
 
@@ -235,10 +217,6 @@ struct IntNowUsage {
     int_columns: BTreeMap<String, BTreeSet<String>>,
     /// Comparison axis keys that are expressed as Int arithmetic (skip prop axes).
     arithmetic_cmp_keys: HashSet<String>,
-    /// Entity id → columns used as lhs against `now` (skip nondet Assign — would break Safety).
-    now_lhs_columns: BTreeMap<String, BTreeSet<String>>,
-    /// Entity id → columns in `col < now` / `col <= now` (Init to IntRange max).
-    now_le_lhs_columns: BTreeMap<String, BTreeSet<String>>,
     needs_integers: bool,
     needs_now: bool,
 }
@@ -273,18 +251,6 @@ fn consider_entity_cmp(
         CmpRhs::Now => {
             usage.needs_now = true;
             usage.needs_integers = true;
-            usage
-                .now_lhs_columns
-                .entry(eid.clone())
-                .or_default()
-                .insert(c.lhs_column.clone());
-            if matches!(c.op, CmpOpModel::Lt | CmpOpModel::Le) {
-                usage
-                    .now_le_lhs_columns
-                    .entry(eid)
-                    .or_default()
-                    .insert(c.lhs_column.clone());
-            }
         }
     }
 }
@@ -858,7 +824,7 @@ fn build_actions(
     binder: &str,
     warnings: &mut Vec<String>,
 ) -> Vec<SpecAction> {
-    let mut actions = Vec::new();
+    let mut actions: Vec<SpecAction> = Vec::new();
     let col_to_var: HashMap<&str, &str> = axes
         .iter()
         .map(|a| (a.column.as_str(), a.var_name.as_str()))
@@ -985,11 +951,25 @@ fn build_actions(
             .cloned()
             .collect();
 
-        let action_name = format!(
-            "{}_{}",
-            sanitize_ident(&entity_id(model, lc.entity)),
-            sanitize_ident(&event_id)
-        );
+        let action_name = {
+            let base = format!(
+                "{}_{}",
+                sanitize_ident(&entity_id(model, lc.entity)),
+                sanitize_ident(&event_id)
+            );
+            // Same event can drive multiple from→to edges; disambiguate operator names.
+            let candidate = format!(
+                "{}_{}_to_{}",
+                base,
+                sanitize_ident(&from),
+                sanitize_ident(&to)
+            );
+            if actions.iter().any(|a| a.name == candidate) {
+                format!("{}_{}", candidate, actions.len())
+            } else {
+                candidate
+            }
+        };
 
         let status_guard = if multi_instance {
             format!("{status_var}[{binder}] = \"{}\"", escape_tla_string(&from))
@@ -1008,6 +988,20 @@ fn build_actions(
     }
 
     if actions.is_empty() {
+        append_sets_driven_actions(
+            model,
+            lc,
+            &col_to_var,
+            &all_vars,
+            multi_instance,
+            binder,
+            &ids,
+            warnings,
+            &mut actions,
+        );
+    }
+
+    if actions.is_empty() {
         warnings.push(format!(
             "{}: lifecycle has no transitions; Next is stuttering only",
             entity_id(model, lc.entity)
@@ -1017,13 +1011,132 @@ fn build_actions(
     actions
 }
 
+/// When there are no status transitions, still emit actions for usecase/event `sets`.
+#[allow(clippy::too_many_arguments)]
+fn append_sets_driven_actions(
+    model: &SemanticModel,
+    lc: &EntityLifecycle,
+    col_to_var: &HashMap<&str, &str>,
+    all_vars: &[String],
+    multi_instance: bool,
+    binder: &str,
+    ids: &str,
+    warnings: &mut Vec<String>,
+    actions: &mut Vec<SpecAction>,
+) {
+    type OriginEffects = BTreeMap<String, (String, Vec<(String, String)>)>;
+    let mut by_origin: OriginEffects = BTreeMap::new();
+
+    let push_effect =
+        |origin_key: String, comment: String, var: String, val: String, map: &mut OriginEffects| {
+            map.entry(origin_key)
+                .or_insert_with(|| (comment, Vec::new()))
+                .1
+                .push((var, val));
+        };
+
+    for effect in model
+        .column_effects
+        .iter()
+        .filter(|e| e.entity == lc.entity)
+    {
+        let Some(var) = col_to_var.get(effect.column.as_str()) else {
+            warnings.push(format!(
+                "{}: sets effect on non-axis column {} not exported",
+                entity_id(model, lc.entity),
+                effect.column
+            ));
+            continue;
+        };
+        let (key, comment) = match &effect.origin {
+            NodeRef::UseCase(u) => {
+                let id = model.use_cases[*u].id.clone();
+                (format!("uc:{id}"), format!("sets via usecase {id}"))
+            }
+            NodeRef::Event(e) => {
+                let id = model.events[*e].id.clone();
+                (format!("ev:{id}"), format!("sets via event {id}"))
+            }
+            _ => continue,
+        };
+        push_effect(
+            key,
+            comment,
+            (*var).to_string(),
+            effect_value_to_tla(&effect.value),
+            &mut by_origin,
+        );
+    }
+
+    for pe in model
+        .proposition_effects
+        .iter()
+        .filter(|e| e.entity == lc.entity)
+    {
+        let key_axis = format!("__cmp:{}", pe.prop.axis_key());
+        let Some(var) = col_to_var.get(key_axis.as_str()) else {
+            continue;
+        };
+        let (key, comment) = match &pe.origin {
+            NodeRef::UseCase(u) => {
+                let id = model.use_cases[*u].id.clone();
+                (format!("uc:{id}"), format!("sets via usecase {id}"))
+            }
+            NodeRef::Event(e) => {
+                let id = model.events[*e].id.clone();
+                (format!("ev:{id}"), format!("sets via event {id}"))
+            }
+            _ => continue,
+        };
+        let val = if pe.truth {
+            "TRUE".into()
+        } else {
+            "FALSE".into()
+        };
+        push_effect(key, comment, (*var).to_string(), val, &mut by_origin);
+    }
+
+    let entity_name = entity_id(model, lc.entity);
+    for (origin_key, (comment, effects_src)) in by_origin {
+        let mut effects = Vec::new();
+        let mut changed: BTreeSet<String> = BTreeSet::new();
+        for (var, val) in &effects_src {
+            if multi_instance {
+                effects.push(format!("{var}' = [{var} EXCEPT ![{binder}] = {val}]"));
+            } else {
+                effects.push(format!("{var}' = {val}"));
+            }
+            changed.insert(var.clone());
+        }
+        let unchanged: Vec<String> = all_vars
+            .iter()
+            .filter(|v| !changed.contains(*v))
+            .cloned()
+            .collect();
+        let suffix = origin_key.replace(':', "_");
+        let name = format!(
+            "{}_{}",
+            sanitize_ident(&entity_name),
+            sanitize_ident(&suffix)
+        );
+        actions.push(SpecAction {
+            name,
+            comment,
+            exists_binder: multi_instance.then(|| (binder.to_string(), ids.to_string())),
+            guards: Vec::new(),
+            effects,
+            unchanged,
+        });
+    }
+}
+
 fn append_undriven_int_assigns(
     model: &SemanticModel,
     lc: &EntityLifecycle,
     axes: &[SpecAxis],
     multi_instance: bool,
     binder: &str,
-    int_now: &IntNowUsage,
+    _int_now: &IntNowUsage,
     actions: &mut Vec<SpecAction>,
 ) {
     let driven: HashSet<&str> = model
@@ -1047,30 +1160,16 @@ fn append_undriven_int_assigns(
             .cloned()
             .collect();
         let name = format!("Assign_{}", sanitize_ident(&ax.var_name));
-        // For `col < now` / `col <= now` Safety, nondet assigns must keep col >= now.
-        let preserve_ge_now = int_now
-            .now_le_lhs_columns
-            .get(&entity_name)
-            .is_some_and(|cols| cols.contains(&ax.column));
+        // Allow Assign to choose any IntRange value so `forbidden(col < now)` Safety
+        // can actually observe violations (do not bake the safety into Next).
         let (exists_binder, effects) = if multi_instance {
-            let assign = if preserve_ge_now {
-                format!(
-                    "\\E v \\in IntRange: v >= now /\\ {var}' = [{var} EXCEPT ![{binder}] = v]",
-                    var = ax.var_name
-                )
-            } else {
-                format!(
-                    "\\E v \\in IntRange: {var}' = [{var} EXCEPT ![{binder}] = v]",
-                    var = ax.var_name
-                )
-            };
+            let assign = format!(
+                "\\E v \\in IntRange: {var}' = [{var} EXCEPT ![{binder}] = v]",
+                var = ax.var_name
+            );
             (Some((binder.to_string(), ids.clone())), vec![assign])
         } else {
-            let assign = if preserve_ge_now {
-                format!("\\E v \\in IntRange: v >= now /\\ {}' = v", ax.var_name)
-            } else {
-                format!("\\E v \\in IntRange: {}' = v", ax.var_name)
-            };
+            let assign = format!("\\E v \\in IntRange: {}' = v", ax.var_name);
             (None, vec![assign])
         };
         actions.push(SpecAction {
@@ -1196,6 +1295,7 @@ fn build_all_temporal_properties(
     warnings: &mut Vec<String>,
 ) -> Vec<(String, String)> {
     let mut lookup: HashMap<String, String> = HashMap::new();
+    let mut bare_column_owners: HashMap<String, Vec<String>> = HashMap::new();
     let mut mentioned: Vec<(String, String, String)> = Vec::new(); // entity_id, binder, ids
     for spec in specs {
         let ids = format!("{}_Ids", sanitize_ident(&spec.entity_id));
@@ -1206,17 +1306,19 @@ fn build_all_temporal_properties(
             } else {
                 ax.var_name.clone()
             };
-            lookup.insert(ax.column.clone(), access.clone());
-            lookup.insert(
-                format!(
-                    "{}.{}",
-                    spec.entity_id,
-                    ax.column.trim_start_matches("__cmp:")
-                ),
-                access.clone(),
-            );
-            if let Some(rest) = ax.column.strip_prefix("__cmp:") {
-                lookup.insert(format!("{}.{}", spec.entity_id, rest), access);
+            let col_key = ax.column.trim_start_matches("__cmp:").to_string();
+            lookup.insert(format!("{}.{}", spec.entity_id, col_key), access);
+            bare_column_owners
+                .entry(col_key)
+                .or_default()
+                .push(spec.entity_id.clone());
+        }
+    }
+    // Unqualified column keys only when unique across exported entities.
+    for (col, owners) in &bare_column_owners {
+        if let [only] = owners.as_slice() {
+            if let Some(access) = lookup.get(&format!("{only}.{col}")).cloned() {
+                lookup.insert(col.clone(), access);
             }
         }
     }
@@ -1226,6 +1328,10 @@ fn build_all_temporal_properties(
     for prop in &model.temporal_properties {
         let name = sanitize_ident(&prop.id);
         if !seen.insert(name.clone()) {
+            warnings.push(format!(
+                "duplicate property id `{}` in TLA export; keeping first only",
+                prop.id
+            ));
             continue;
         }
         match temporal_property_to_tla(prop, &lookup) {
@@ -1659,7 +1765,21 @@ fn apply_temporal_assertions(
 
                     let mut applied = false;
                     for action in spec.actions.iter_mut() {
-                        if !event_names.contains(&action.name) {
+                        if !action_matches_raising_event(&action.name, &event_names) {
+                            continue;
+                        }
+                        if effect_conflicts_assignment(
+                            &action.effects,
+                            &var,
+                            &val,
+                            multi_instance,
+                            &binder,
+                        ) {
+                            warnings.push(format!(
+                                "contradictory after.assert on `{var}` for action `{}` (wanted {val})",
+                                action.name
+                            ));
+                            assertion_ok = false;
                             continue;
                         }
                         let effect_line = if multi_instance {
@@ -1778,7 +1898,7 @@ fn apply_temporal_assertions(
                     };
                     let mut applied = false;
                     for action in spec.actions.iter_mut() {
-                        if !event_names.contains(&action.name) {
+                        if !action_matches_raising_event(&action.name, &event_names) {
                             continue;
                         }
                         if !action.effects.iter().any(|e| e == &post) {
@@ -1819,6 +1939,34 @@ fn effect_already_sets(
         effect_line == format!("{var}' = {val}")
             || effect_line.starts_with(&format!("{var}' = ")) && effect_line.ends_with(val)
     }
+}
+
+/// True when `action_name` is `Entity_Event` or `Entity_Event_from_to_to` for a raising event.
+fn action_matches_raising_event(action_name: &str, event_names: &HashSet<String>) -> bool {
+    event_names
+        .iter()
+        .any(|en| action_name == en || action_name.starts_with(&format!("{en}_")))
+}
+
+/// Detect an existing primed assignment to `var` with a different value.
+fn effect_conflicts_assignment(
+    effects: &[String],
+    var: &str,
+    val: &str,
+    multi_instance: bool,
+    binder: &str,
+) -> bool {
+    let prefix = if multi_instance {
+        format!("{var}' = [{var} EXCEPT ![{binder}] = ")
+    } else {
+        format!("{var}' = ")
+    };
+    effects.iter().any(|e| {
+        if !e.starts_with(&prefix) {
+            return false;
+        }
+        !effect_already_sets(e, var, val, multi_instance, binder)
+    })
 }
 
 fn note_skipped_constraints(
@@ -2071,10 +2219,20 @@ fn temporal_expr_to_tla(
                 Some(e) => format!("{e}.{column}"),
                 None => column.clone(),
             };
-            let var = lookup
-                .get(&key)
-                .or_else(|| lookup.get(column))
-                .ok_or_else(|| format!("unresolved column `{key}` in temporal property"))?;
+            let var = match entity {
+                Some(_) => lookup.get(&key).ok_or_else(|| {
+                    format!("unresolved column `{key}` in temporal property")
+                })?,
+                None => lookup.get(&key).ok_or_else(|| {
+                    if lookup.keys().any(|k| k.ends_with(&format!(".{column}"))) {
+                        format!(
+                            "ambiguous column `{column}` in temporal property; qualify with Entity.column"
+                        )
+                    } else {
+                        format!("unresolved column `{key}` in temporal property")
+                    }
+                })?,
+            };
             let rhs_s = match rhs {
                 TemporalRhs::Value(v) => effect_value_to_tla(v),
                 TemporalRhs::IntLit(n) => n.to_string(),
@@ -2086,13 +2244,20 @@ fn temporal_expr_to_tla(
                         Some(e) => format!("{e}.{rhs_col}"),
                         None => rhs_col.clone(),
                     };
-                    lookup
-                        .get(&rhs_key)
-                        .or_else(|| lookup.get(rhs_col))
-                        .cloned()
-                        .ok_or_else(|| {
+                    match rhs_ent {
+                        Some(_) => lookup.get(&rhs_key).cloned().ok_or_else(|| {
                             format!("unresolved column `{rhs_key}` in temporal property")
-                        })?
+                        })?,
+                        None => lookup.get(&rhs_key).cloned().ok_or_else(|| {
+                            if lookup.keys().any(|k| k.ends_with(&format!(".{rhs_col}"))) {
+                                format!(
+                                    "ambiguous column `{rhs_col}` in temporal property; qualify with Entity.column"
+                                )
+                            } else {
+                                format!("unresolved column `{rhs_key}` in temporal property")
+                            }
+                        })?,
+                    }
                 }
             };
             Ok(format!("{var} {} {rhs_s}", cmp_op_tla(*op)))
@@ -2286,28 +2451,12 @@ fn render_tla(module_name: &str, export: &TlaExport, warnings: &[String]) -> Str
             .collect();
         unchanged.sort();
         unchanged.dedup();
-        out.push_str("\\* advance global clock (must not pass col for col < now / col <= now)\n");
+        out.push_str(
+            "\\* advance global clock (Safety checks col vs now; do not constrain TickNow)\n",
+        );
         out.push_str("TickNow ==\n");
         out.push_str("  /\\ \\E t \\in IntRange:\n");
         out.push_str("       /\\ t > now\n");
-        for var in &export.now_le_vars {
-            if export.multi_instance {
-                if let Some(spec) = export
-                    .specs
-                    .iter()
-                    .find(|s| s.axes.iter().any(|a| a.var_name == *var))
-                {
-                    out.push_str(&format!(
-                        "       /\\ \\A {b} \\in {id}_Ids: t <= {var}[{b}]\n",
-                        b = spec.binder,
-                        id = sanitize_ident(&spec.entity_id),
-                        var = var
-                    ));
-                }
-            } else {
-                out.push_str(&format!("       /\\ t <= {var}\n"));
-            }
-        }
         out.push_str("       /\\ now' = t\n");
         push_unchanged(&mut out, &unchanged, "  ");
         out.push('\n');
@@ -2519,21 +2668,107 @@ mod tests {
         assert!(bundle.tla.contains("TickNow"));
         assert!(bundle.tla.contains("Coupon_expired_at"));
         assert!(bundle.tla.contains("~(Coupon_expired_at < now)"));
-        // Constrained Assign + TickNow keep Safety non-vacuous.
+        // Next must be able to violate Safety so TLC can find counterexamples.
         assert!(
             bundle.tla.contains("Assign_Coupon_expired_at"),
             "missing Assign on now-lhs:\n{}",
             bundle.tla
         );
         assert!(
-            bundle.tla.contains("v >= now"),
-            "Assign must preserve col >= now; got:\n{}",
+            !bundle.tla.contains("v >= now"),
+            "Assign must not bake Safety into Next; got:\n{}",
             bundle.tla
         );
         assert!(
-            bundle.tla.contains("t <= Coupon_expired_at"),
-            "TickNow must not pass expired_at; got:\n{}",
+            !bundle.tla.contains("t <= Coupon_expired_at"),
+            "TickNow must not bake Safety into Next; got:\n{}",
             bundle.tla
+        );
+    }
+
+    #[test]
+    fn tla_duplicate_event_transitions_get_unique_action_names() {
+        let src = r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, cancelled) @default(pending)
+}
+usecase Pay "pay"
+event EvPay "pay"
+updates(Pay, Order)
+raises(Pay, EvPay)
+transitions(Order.status, EvPay, pending -> paid)
+transitions(Order.status, EvPay, pending -> cancelled)
+"#;
+        let model = model_from(src);
+        let bundle = TlaPlusEmitter::default()
+            .emit_bundle(&model, &View::whole())
+            .unwrap();
+        assert!(bundle.tla.contains("Order_EvPay_pending_to_paid"));
+        assert!(bundle.tla.contains("Order_EvPay_pending_to_cancelled"));
+        let paid_defs = bundle.tla.matches("Order_EvPay_pending_to_paid ==").count();
+        assert_eq!(paid_defs, 1, "duplicate TLA operators:\n{}", bundle.tla);
+    }
+
+    #[test]
+    fn tla_contradictory_after_assert_is_warned() {
+        let src = r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, cancelled) @default(pending)
+}
+usecase Pay "pay"
+event EvPay "pay"
+updates(Pay, Order)
+raises(Pay, EvPay)
+transitions(Order.status, EvPay, pending -> paid)
+sets(Pay, Order, status == paid)
+after(Pay).assert(Order.status == cancelled)
+"#;
+        let model = model_from(src);
+        let bundle = TlaPlusEmitter::default()
+            .emit_bundle(&model, &View::whole())
+            .unwrap();
+        assert!(
+            bundle
+                .warnings
+                .iter()
+                .any(|w| w.contains("contradictory after.assert")),
+            "expected contradictory warning, got: {:?}",
+            bundle.warnings
+        );
+    }
+
+    #[test]
+    fn tla_sets_without_transitions_still_exports_actions() {
+        let src = r#"
+entity Item "商品" {
+  id: Int @pk
+  status: Enum(active, inactive) @default(active)
+  stock: Int @default(1)
+}
+usecase Restock "補充"
+updates(Restock, Item)
+sets(Restock, Item, stock == 5)
+sets(Restock, Item, status == active)
+forbidden(Item, stock < 0)
+"#;
+        let model = model_from(src);
+        let bundle = TlaPlusEmitter::default()
+            .emit_bundle(&model, &View::whole())
+            .unwrap();
+        assert!(
+            bundle.tla.contains("Item_uc_Restock") || bundle.tla.contains("Item_stock"),
+            "expected sets-driven export, got:\n{}",
+            bundle.tla
+        );
+        assert!(
+            !bundle
+                .warnings
+                .iter()
+                .any(|w| w.contains("skipped (no status lifecycle)")),
+            "sets-only entity should not be skipped: {:?}",
+            bundle.warnings
         );
     }
 

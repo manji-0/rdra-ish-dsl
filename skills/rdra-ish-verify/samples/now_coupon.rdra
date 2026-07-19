@@ -1,5 +1,6 @@
 // Global `now` clock + arithmetic comparison (expired_at < now).
-// Assign keeps expired_at >= now; TickNow cannot pass expired_at — Safety is non-vacuous.
+// Next does not bake Safety into Assign/TickNow: TLC should find that
+// `forbidden(expired_at < now)` is reachable (expected TLC fail / counterexample).
 entity Coupon "クーポン" {
   id: Int @pk
   status: Enum(active, expired) @default(active)

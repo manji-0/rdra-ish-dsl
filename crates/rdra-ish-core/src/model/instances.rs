@@ -197,6 +197,8 @@ pub struct Entity {
     pub label: std::string::String,
     pub description: Option<std::string::String>,
     pub columns: Vec<ModelColumn>,
+    /// Primary key column names (single `@pk` or composite `@pk(a, b)`).
+    pub primary_key: Vec<std::string::String>,
     pub unique_constraints: Vec<Vec<std::string::String>>,
     pub indexes: Vec<Vec<std::string::String>>,
 }

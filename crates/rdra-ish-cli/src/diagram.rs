@@ -21,7 +21,7 @@ use rdra_ish_emit::{
 use std::fs;
 
 use crate::cli::{DiagramKind, DiagramViewPreset, OutputFormat};
-use crate::load::{diagram_preset_filters, eprint_diagnostic, load_model};
+use crate::load::{diagram_preset_filters, load_model, reject_model_errors};
 
 pub struct DiagramRequest {
     pub inputs: Vec<PathBuf>,
@@ -53,9 +53,17 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
     } = request;
     let inputs = inputs.as_slice();
     let (program, model, diags) = load_model(inputs)?;
+    reject_model_errors(&program, &diags)?;
 
-    for diag in &diags {
-        eprint_diagnostic(&program, diag);
+    for buc_id in &buc {
+        if !model.bucs.values().any(|b| b.id == *buc_id) {
+            anyhow::bail!("unknown buc `{buc_id}`");
+        }
+    }
+    for uc_id in &usecase {
+        if !model.use_cases.values().any(|u| u.id == *uc_id) {
+            anyhow::bail!("unknown usecase `{uc_id}`");
+        }
     }
 
     if !usecase.is_empty() && !matches!(kind, DiagramKind::Sequence | DiagramKind::BusinessArea) {

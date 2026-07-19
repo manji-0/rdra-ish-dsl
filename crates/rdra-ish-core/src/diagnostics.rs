@@ -2,6 +2,17 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum RdraError {
+    #[error("api '{api}' reuses route {method} {path} already used by api '{other}'\n  hint: give each API a unique method+path pair")]
+    DuplicateApiRoute {
+        api: String,
+        other: String,
+        method: String,
+        path: String,
+    },
+
+    #[error("unknown import '{name}' from module '{module}'\n  hint: check the name is declared in that module")]
+    UnknownImportName { name: String, module: String },
+
     #[error("undefined symbol: {id}")]
     UndefinedSymbol { id: String },
 
@@ -45,6 +56,9 @@ pub enum RdraError {
 
     #[error("missing @pk: entity '{entity}' used as FK target has no @pk column\n  hint: add `id: Int @pk` (or another @pk column) to entity '{entity}'")]
     MissingPk { entity: String },
+
+    #[error("composite @pk on entity '{entity}' cannot auto-generate a single FK column\n  hint: declare the foreign key column(s) explicitly on the many-side entity")]
+    CompositePkFkUnsupported { entity: String },
 
     #[error("IO error reading '{path}': {msg}")]
     IoError { path: String, msg: String },
@@ -231,6 +245,29 @@ pub enum RdraError {
 
     #[error("invalid temporal property '{id}': {message}\n  hint: use always/eventually/leads_to with ==/!= or Int comparisons (<,>,<=,>=) over entity columns, combining with ~ /\\ \\/")]
     InvalidTemporalProperty { id: String, message: String },
+
+    #[error("unknown predicate '{name}'\n  hint: check spelling; known predicates include performs, reads, sets, transitions, forbidden, …")]
+    UnknownPredicate { name: String },
+
+    #[error("predicate '{name}' expects {expected} argument(s), got {got}\n  hint: check the predicate signature in the language reference")]
+    WrongArity {
+        name: String,
+        expected: String,
+        got: usize,
+    },
+
+    #[error("duplicate column '{col}' on {kind} '{id}'\n  hint: each column/field name must be unique within the declaration")]
+    DuplicateColumn {
+        kind: String,
+        id: String,
+        col: String,
+    },
+
+    #[error("duplicate temporal property id '{id}'\n  hint: each `property` declaration must have a unique id")]
+    DuplicateProperty { id: String },
+
+    #[error("unknown chain method '.{name}' on predicate '{pred}'\n  hint: check the allowed chain methods for this predicate")]
+    UnknownChainMethod { pred: String, name: String },
 
     #[error("{message}\n  hint: {hint}")]
     LintFinding {

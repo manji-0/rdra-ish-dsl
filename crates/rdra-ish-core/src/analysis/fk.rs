@@ -40,7 +40,22 @@ pub(crate) fn generate_fks(model: &mut SemanticModel, diags: &mut Vec<Diagnostic
 
         let (one_id, pk_type) = {
             let one = &model.entities[one_key];
-            let pk = one.columns.iter().find(|c| c.is_pk);
+            if one.primary_key.len() > 1 {
+                push_entity_error(
+                    model,
+                    diags,
+                    &one.id,
+                    RdraError::CompositePkFkUnsupported {
+                        entity: one.id.clone(),
+                    },
+                );
+                continue;
+            }
+            let pk = one.columns.iter().find(|c| c.is_pk).or_else(|| {
+                one.primary_key
+                    .first()
+                    .and_then(|name| one.columns.iter().find(|c| c.name == *name))
+            });
             match pk {
                 Some(col) => (one.id.clone(), col.col_type.clone()),
                 None => {

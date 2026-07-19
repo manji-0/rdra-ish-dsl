@@ -1,6 +1,6 @@
 //! Model loading and diagram preset helpers for the CLI.
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use rdra_ish_core::{
     build_merged_model, format_diagnostic_message, resolve, Diagnostic, ResolvedProgram,
     SemanticModel,
@@ -11,8 +11,9 @@ use std::path::PathBuf;
 
 use crate::cli::DiagramViewPreset;
 
-pub(crate) fn collect_rdra_files(inputs: &[PathBuf]) -> Vec<PathBuf> {
+pub(crate) fn collect_rdra_files(inputs: &[PathBuf]) -> Result<Vec<PathBuf>> {
     let mut files = vec![];
+    let mut missing = Vec::new();
     for input in inputs {
         if input.is_file() {
             files.push(input.clone());
@@ -22,9 +23,14 @@ pub(crate) fn collect_rdra_files(inputs: &[PathBuf]) -> Vec<PathBuf> {
                     files.push(entry.path().to_owned());
                 }
             }
+        } else {
+            missing.push(input.display().to_string());
         }
     }
-    files
+    if !missing.is_empty() {
+        bail!("input path(s) not found: {}", missing.join(", "));
+    }
+    Ok(files)
 }
 
 /// Compute the set of include paths by going up one level from any directories
@@ -61,10 +67,25 @@ pub(crate) fn eprint_diagnostic(program: &ResolvedProgram, diag: &Diagnostic) {
     eprintln!("{message}");
 }
 
+/// Print diagnostics and fail if any are errors (fail-closed for generators).
+pub(crate) fn reject_model_errors(program: &ResolvedProgram, diags: &[Diagnostic]) -> Result<()> {
+    let mut has_error = false;
+    for diag in diags {
+        eprint_diagnostic(program, diag);
+        if !diag.is_warning {
+            has_error = true;
+        }
+    }
+    if has_error {
+        bail!("model has errors; refusing to continue");
+    }
+    Ok(())
+}
+
 pub(crate) fn load_model(
     inputs: &[PathBuf],
 ) -> Result<(ResolvedProgram, SemanticModel, Vec<Diagnostic>)> {
-    let entry_files = collect_rdra_files(inputs);
+    let entry_files = collect_rdra_files(inputs)?;
     if entry_files.is_empty() {
         anyhow::bail!("no .rdra files found in the given inputs");
     }

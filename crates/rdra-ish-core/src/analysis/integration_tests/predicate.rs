@@ -1,4 +1,5 @@
 use crate::analysis::build_model;
+use crate::diagnostics::RdraError;
 use crate::model::*;
 use rdra_ish_syntax::parse;
 
@@ -216,5 +217,42 @@ creates(PlaceOrder, Order)
             .filter(|r| r.kind == RelKind::Creates)
             .count(),
         1
+    );
+}
+
+#[test]
+fn unknown_predicate_is_error() {
+    let src = r#"
+actor A "a"
+usecase U "u"
+totally_bogus(A, U)
+"#;
+    let (ast, _) = parse(src);
+    let (_model, diags) = build_model(&ast);
+    assert!(
+        diags.iter().any(|d| matches!(
+            &d.error,
+            RdraError::UnknownPredicate { name } if name == "totally_bogus"
+        )),
+        "expected UnknownPredicate, got: {:?}",
+        diags.iter().map(|d| &d.error).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn wrong_arity_is_error() {
+    let src = r#"
+actor A "a"
+performs(A)
+"#;
+    let (ast, _) = parse(src);
+    let (_model, diags) = build_model(&ast);
+    assert!(
+        diags.iter().any(|d| matches!(
+            &d.error,
+            RdraError::WrongArity { name, .. } if name == "performs"
+        )),
+        "expected WrongArity, got: {:?}",
+        diags.iter().map(|d| &d.error).collect::<Vec<_>>()
     );
 }

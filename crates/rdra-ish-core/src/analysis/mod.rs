@@ -22,11 +22,21 @@ use property::register_property;
 
 pub fn build_model(ast: &Ast) -> (SemanticModel, Vec<Diagnostic>) {
     let items: Vec<(SourceId, Item)> = ast.items.iter().cloned().map(|item| (0, item)).collect();
-    build_model_items(&items)
+    build_model_items_with_scopes(&items, crate::import_scope::ImportScopes::unrestricted(0))
 }
 
 pub fn build_model_items(items: &[(SourceId, Item)]) -> (SemanticModel, Vec<Diagnostic>) {
-    let mut model = SemanticModel::default();
+    build_model_items_with_scopes(items, crate::import_scope::ImportScopes::unrestricted(0))
+}
+
+pub fn build_model_items_with_scopes(
+    items: &[(SourceId, Item)],
+    import_scopes: crate::import_scope::ImportScopes,
+) -> (SemanticModel, Vec<Diagnostic>) {
+    let mut model = SemanticModel {
+        import_scopes,
+        ..SemanticModel::default()
+    };
     let mut diags: Vec<Diagnostic> = vec![];
 
     for (source_id, item) in items {
@@ -48,6 +58,7 @@ pub fn build_model_items(items: &[(SourceId, Item)]) -> (SemanticModel, Vec<Diag
     }
 
     generate_fks(&mut model, &mut diags);
+    diags.extend(crate::event_flow::api_route_diagnostics(&model));
 
     (model, diags)
 }

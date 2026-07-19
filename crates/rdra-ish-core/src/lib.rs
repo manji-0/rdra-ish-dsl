@@ -8,6 +8,7 @@ pub mod diagnostics;
 pub mod entity_lifecycle;
 pub mod entity_state_variant;
 pub mod event_flow;
+pub mod import_scope;
 pub mod lint;
 pub mod location;
 pub mod model;
@@ -26,7 +27,7 @@ pub use access::{
     ActorPermissionRequirementSource, PermissionApiPath, PermissionCallable,
     ScreenConstraintPattern,
 };
-pub use analysis::{build_model, build_model_items};
+pub use analysis::{build_model, build_model_items, build_model_items_with_scopes};
 pub use concept_mapping::{
     collect_concept_mappings, conceptual_id, mappings_for_conceptual, mappings_for_entity,
 };
@@ -35,7 +36,10 @@ pub use entity_lifecycle::{collect_entity_lifecycles, link_entity_status_states,
 pub use entity_state_variant::{
     collect_entity_state_variants, EntityStateVariant, EntityStateVariants, StateFieldValue,
 };
-pub use event_flow::{api_diagnostics, collect_event_flows, event_diagnostics, EventFlow};
+pub use event_flow::{
+    api_diagnostics, api_route_diagnostics, collect_event_flows, event_diagnostics, EventFlow,
+};
+pub use import_scope::{build_import_scopes, FileScope, FlatBinding, ImportScopes};
 pub use lint::{lint_issues, lint_review_diagnostics, LintIssue, LintSeverity};
 pub use location::{
     byte_offset_to_position, format_diagnostic_message, format_location, push_decl_diagnostic,

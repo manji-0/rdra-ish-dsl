@@ -86,6 +86,8 @@ pub struct SemanticModel {
     /// `property Id "..." leads_to/always/eventually(...)` 時相プロパティ
     pub temporal_properties: Vec<TemporalProperty>,
     pub symbols: SymbolTable,
+    /// Per-file import / module visibility used when resolving references.
+    pub import_scopes: crate::import_scope::ImportScopes,
     /// Declaration sites for `kind:id` lookups (LSP go-to-definition).
     pub decl_sites: crate::location::DeclIndex,
 }

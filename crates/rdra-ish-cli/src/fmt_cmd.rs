@@ -13,7 +13,7 @@ pub fn run_fmt(inputs: &[PathBuf], write: bool, check: bool) -> Result<()> {
         anyhow::bail!("--write and --check cannot be combined");
     }
 
-    let mut files = collect_rdra_files(inputs);
+    let mut files = collect_rdra_files(inputs)?;
     files.sort();
     if files.is_empty() {
         anyhow::bail!("no .rdra files found in the given inputs");

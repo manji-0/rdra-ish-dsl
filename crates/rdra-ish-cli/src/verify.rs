@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::cli::VerifyBackend;
-use crate::export::{export_tla_bundle, export_tla_bundle_named};
+use crate::export::{export_tla_bundle, export_tla_bundle_named, tla_obligation_errors};
 
 pub fn run_verify(
     model: &SemanticModel,
@@ -81,6 +81,9 @@ fn run_tlc(model: &SemanticModel, out: Option<PathBuf>) -> Result<()> {
 
     for w in &bundle.warnings {
         eprintln!("warning: tla export: {w}");
+    }
+    if let Some(fatal) = tla_obligation_errors(&bundle.warnings) {
+        bail!("{fatal}");
     }
 
     let (tla_path, cfg_path, work_dir, tla_arg, cfg_arg, keep) =

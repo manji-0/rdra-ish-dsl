@@ -15,6 +15,18 @@ pub(crate) fn register_property(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
+    if model.temporal_properties.iter().any(|p| p.id == decl.id) {
+        push_error(
+            ctx,
+            diags,
+            decl.span.clone(),
+            RdraError::DuplicateProperty {
+                id: decl.id.clone(),
+            },
+        );
+        return;
+    }
+
     match lower_formula(&decl.formula) {
         Ok(formula) => {
             model.temporal_properties.push(TemporalProperty {

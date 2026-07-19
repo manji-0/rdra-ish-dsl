@@ -125,7 +125,8 @@ pub struct EntityLifecycle {
 
 /// モデル内の全 entity についてライフサイクルを収集する。
 ///
-/// status Enum と state ノードがリンクできる entity のみ返す。
+/// status Enum と state ノードがリンクできる entity、および
+/// `sets` / 制約のみで駆動される entity（遷移なし）を返す。
 /// 結果は entity id の辞書順。
 pub fn collect_entity_lifecycles(model: &SemanticModel) -> Vec<EntityLifecycle> {
     let mut lifecycles: Vec<EntityLifecycle> = model
@@ -134,8 +135,78 @@ pub fn collect_entity_lifecycles(model: &SemanticModel) -> Vec<EntityLifecycle> 
         .filter_map(|ek| lifecycle_for_entity(model, ek))
         .collect();
 
+    let covered: HashSet<EntityKey> = lifecycles.iter().map(|l| l.entity).collect();
+    for ek in model.entities.keys() {
+        if covered.contains(&ek) {
+            continue;
+        }
+        if let Some(lc) = lifecycle_from_effects_only(model, ek) {
+            lifecycles.push(lc);
+        }
+    }
+
     lifecycles.sort_by_key(|lc| model.entities[lc.entity].id.clone());
     lifecycles
+}
+
+/// Entities that have sets/constraints but no `transitions` still need a TLA
+/// lifecycle so effects and Safety are not silently dropped.
+fn lifecycle_from_effects_only(model: &SemanticModel, ek: EntityKey) -> Option<EntityLifecycle> {
+    let has_effects = model.column_effects.iter().any(|e| e.entity == ek)
+        || model.proposition_effects.iter().any(|e| e.entity == ek)
+        || model.entity_invariants.iter().any(|i| i.entity == ek)
+        || model.forbidden_constraints.iter().any(|f| f.entity == ek)
+        || model.required_constraints.iter().any(|r| r.entity == ek)
+        || model.exclusive_constraints.iter().any(|x| x.entity == ek);
+    if !has_effects {
+        return None;
+    }
+
+    let entity = model.entities.get(ek)?;
+    let status_column = preferred_effect_status_column(model, ek, entity)?;
+
+    Some(EntityLifecycle {
+        entity: ek,
+        status_column,
+        states: Vec::new(),
+        transitions: Vec::new(),
+        initial: Vec::new(),
+        terminal: Vec::new(),
+    })
+}
+
+fn preferred_effect_status_column(
+    model: &SemanticModel,
+    ek: EntityKey,
+    entity: &crate::model::Entity,
+) -> Option<String> {
+    // Prefer Enum columns touched by sets.
+    let effect_cols: HashSet<&str> = model
+        .column_effects
+        .iter()
+        .filter(|e| e.entity == ek)
+        .map(|e| e.column.as_str())
+        .collect();
+    if let Some(col) = entity.columns.iter().find(|c| {
+        effect_cols.contains(c.name.as_str()) && matches!(c.col_type, ColumnType::Enum(_))
+    }) {
+        return Some(col.name.clone());
+    }
+    entity
+        .columns
+        .iter()
+        .find(|c| {
+            (c.name == "status" || c.name.ends_with("_status"))
+                && matches!(c.col_type, ColumnType::Enum(_))
+        })
+        .or_else(|| {
+            entity
+                .columns
+                .iter()
+                .find(|c| matches!(c.col_type, ColumnType::Enum(_)))
+        })
+        .map(|c| c.name.clone())
+        .or_else(|| effect_cols.iter().next().map(|s| (*s).to_string()))
 }
 
 fn lifecycle_for_entity(model: &SemanticModel, ek: EntityKey) -> Option<EntityLifecycle> {

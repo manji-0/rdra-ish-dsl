@@ -1,5 +1,7 @@
 //! Instance declaration registration into the semantic model.
 
+use std::collections::HashSet;
+
 use crate::analysis_diag::*;
 use crate::diagnostics::*;
 use crate::location::{DeclSite, DiagCtxt};
@@ -291,7 +293,9 @@ pub(crate) fn register_instance(
             NodeRef::Event(k)
         }
         Kind::Entity => {
+            report_duplicate_columns(inst, "entity", ctx, diags);
             let columns = inst.columns.iter().map(ast_column_to_model).collect();
+            let primary_key = collect_primary_key(&inst.columns);
             let unique_constraints = collect_unique_constraints(&inst.columns);
             let indexes = collect_indexes(&inst.columns);
             let k = model.entities.insert(Entity {
@@ -299,9 +303,11 @@ pub(crate) fn register_instance(
                 label: inst.label.clone(),
                 description: inst.description.clone(),
                 columns,
+                primary_key,
                 unique_constraints,
                 indexes,
             });
+            apply_primary_key_flags(&mut model.entities[k]);
             NodeRef::Entity(k)
         }
         Kind::State => {
@@ -342,6 +348,7 @@ pub(crate) fn register_instance(
             NodeRef::Api(k)
         }
         Kind::Dto => {
+            report_duplicate_columns(inst, "dto", ctx, diags);
             let fields = inst.columns.iter().map(ast_column_to_model).collect();
             let k = model.dtos.insert(Dto {
                 id: inst.id.clone(),
@@ -385,7 +392,14 @@ pub(crate) fn register_instance(
         }
     };
 
-    if model.symbols.insert(inst.id.clone(), node) {
+    if model.symbols.insert_in_module(
+        inst.id.clone(),
+        node,
+        model
+            .import_scopes
+            .module_for_source(ctx.source_id)
+            .map(str::to_string),
+    ) {
         push_error(
             ctx,
             diags,
@@ -439,7 +453,8 @@ fn ast_column_to_model(col: &Column) -> ModelColumn {
     };
     for ann in &col.annotations {
         match ann {
-            Annotation::Pk | Annotation::PkComposite(_) => mc.is_pk = true,
+            Annotation::Pk => mc.is_pk = true,
+            Annotation::PkComposite(_) => {}
             Annotation::Unique => mc.is_unique = true,
             Annotation::UniqueComposite(_) => {}
             Annotation::Index => mc.is_indexed = true,
@@ -455,6 +470,32 @@ fn ast_column_to_model(col: &Column) -> ModelColumn {
         }
     }
     mc
+}
+
+/// Apply composite PK membership onto column flags after entity assembly.
+pub(crate) fn apply_primary_key_flags(entity: &mut Entity) {
+    if entity.primary_key.is_empty() {
+        return;
+    }
+    for col in &mut entity.columns {
+        col.is_pk = entity.primary_key.iter().any(|pk| pk == &col.name);
+    }
+}
+
+fn collect_primary_key(columns: &[Column]) -> Vec<String> {
+    // Prefer an explicit composite `@pk(a, b)` if present.
+    for col in columns {
+        for ann in &col.annotations {
+            if let Annotation::PkComposite(cols) = ann {
+                return cols.clone();
+            }
+        }
+    }
+    columns
+        .iter()
+        .filter(|c| c.annotations.iter().any(|a| matches!(a, Annotation::Pk)))
+        .map(|c| c.name.clone())
+        .collect()
 }
 
 fn collect_unique_constraints(columns: &[Column]) -> Vec<Vec<String>> {
@@ -483,4 +524,27 @@ fn collect_indexes(columns: &[Column]) -> Vec<Vec<String>> {
         }
     }
     indexes
+}
+
+fn report_duplicate_columns(
+    inst: &InstanceDecl,
+    kind: &str,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) {
+    let mut seen = HashSet::new();
+    for col in &inst.columns {
+        if !seen.insert(col.name.as_str()) {
+            push_error(
+                ctx,
+                diags,
+                col.span.clone(),
+                RdraError::DuplicateColumn {
+                    kind: kind.to_string(),
+                    id: inst.id.clone(),
+                    col: col.name.clone(),
+                },
+            );
+        }
+    }
 }

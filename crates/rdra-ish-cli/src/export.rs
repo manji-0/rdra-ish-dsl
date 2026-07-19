@@ -47,3 +47,26 @@ pub fn export_tla_bundle_named(
 ) -> Result<TlaBundle> {
     Ok(TlaPlusEmitter::default().emit_bundle_named(model, view, module_name)?)
 }
+
+/// Warnings that mean the TLA+ artifact does not preserve source obligations.
+pub fn tla_obligation_errors(warnings: &[String]) -> Option<String> {
+    let fatal: Vec<&str> = warnings
+        .iter()
+        .filter(|w| {
+            w.contains("not exported")
+                || w.contains("not yet mapped")
+                || w.contains("contradictory after.assert")
+                || w.contains("duplicate property")
+                || w.contains("duplicate action")
+        })
+        .map(String::as_str)
+        .collect();
+    if fatal.is_empty() {
+        None
+    } else {
+        Some(format!(
+            "TLA+ export dropped or corrupted proof obligations:\n  - {}",
+            fatal.join("\n  - ")
+        ))
+    }
+}

@@ -24,3 +24,47 @@ jobs:
         run: cargo test --all
       - name: sample artifact snapshots
         run: bash scripts/check-sample-artifacts.sh
+
+  formal-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install TLC wrapper
+        run: |
+          TLC_DIR=$(bash scripts/install-tlc.sh)
+          echo "$TLC_DIR" >> "$GITHUB_PATH"
+          tlc -help >/dev/null
+      - name: Build CLI
+        run: cargo build -p rdra-ish-cli --release
+      - name: Export + verify pass samples
+        run: |
+          BIN=./target/release/rdra-ish
+          for sample in \
+            samples/formal-verification/order.rdra \
+            samples/formal-verification/int_stock.rdra
+          do
+            echo "==> check/export/verify $sample"
+            "$BIN" check "$sample"
+            "$BIN" export "$sample" --kind tla -o /tmp/rdra-ci-tla
+            "$BIN" verify "$sample" --backend tlc -o /tmp/rdra-ci-tla
+          done
+      - name: Verify fail samples report TLC failure
+        run: |
+          BIN=./target/release/rdra-ish
+          for sample in \
+            samples/formal-verification/cross_order_payment.rdra \
+            samples/formal-verification/quantifier_none.rdra \
+            samples/formal-verification/now_coupon.rdra
+          do
+            echo "==> expect TLC fail: $sample"
+            if "$BIN" verify "$sample" --backend tlc -o /tmp/rdra-ci-tla-fail; then
+              echo "expected TLC failure for $sample" >&2
+              exit 1
+            fi
+          done

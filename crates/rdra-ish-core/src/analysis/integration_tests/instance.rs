@@ -230,3 +230,51 @@ fn register_instance_reports_duplicate_same_kind_but_keeps_cross_kind_names() {
         .lookup_qualified(&Kind::UseCase, "Same")
         .is_some());
 }
+
+#[test]
+fn duplicate_entity_columns_are_errors() {
+    let src = r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid)
+  status: Bool
+}
+"#;
+    let (ast, parse_errors) = parse(src);
+    assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
+    let (_model, diags) = build_model(&ast);
+    assert!(
+        diags.iter().any(|d| matches!(
+            &d.error,
+            crate::diagnostics::RdraError::DuplicateColumn { col, .. } if col == "status"
+        )),
+        "expected DuplicateColumn, got: {:?}",
+        diags.iter().map(|d| &d.error).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn composite_pk_marks_all_key_columns() {
+    let src = r#"
+entity Line "明細" {
+  order_id: Int @pk(order_id, line_no)
+  line_no: Int
+  qty: Int
+}
+"#;
+    let (ast, parse_errors) = parse(src);
+    assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
+    let (model, diags) = build_model(&ast);
+    assert!(diags.iter().all(|d| d.is_warning), "{diags:?}");
+    let entity = model.entities.values().next().unwrap();
+    assert_eq!(entity.primary_key, vec!["order_id", "line_no"]);
+    assert!(entity
+        .columns
+        .iter()
+        .any(|c| c.name == "order_id" && c.is_pk));
+    assert!(entity
+        .columns
+        .iter()
+        .any(|c| c.name == "line_no" && c.is_pk));
+    assert!(entity.columns.iter().any(|c| c.name == "qty" && !c.is_pk));
+}

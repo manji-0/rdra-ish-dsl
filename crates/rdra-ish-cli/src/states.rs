@@ -11,7 +11,7 @@ use rdra_ish_emit::{
 
 use crate::cli::StatesFormat;
 use crate::list_output::filter_entity_output;
-use crate::load::{eprint_diagnostic, load_model};
+use crate::load::{load_model, reject_model_errors};
 
 pub fn run_states(
     inputs: &[PathBuf],
@@ -21,9 +21,17 @@ pub fn run_states(
     entity: Option<String>,
 ) -> Result<()> {
     let (program, model, diags) = load_model(inputs)?;
+    reject_model_errors(&program, &diags)?;
 
-    for diag in &diags {
-        eprint_diagnostic(&program, diag);
+    if let Some(ref entity_id) = entity {
+        if !model.entities.values().any(|e| e.id == *entity_id) {
+            anyhow::bail!("unknown entity `{entity_id}`");
+        }
+    }
+    for buc_id in &buc {
+        if !model.bucs.values().any(|b| b.id == *buc_id) {
+            anyhow::bail!("unknown buc `{buc_id}`");
+        }
     }
 
     let view = View::bucs(buc);
@@ -47,11 +55,16 @@ pub fn run_states(
         }
     };
 
-    if let Some(ref entity_id) = entity {
-        let filtered = filter_entity_output(&output, entity_id, &format);
-        print!("{}", filtered);
+    let rendered = if let Some(ref entity_id) = entity {
+        filter_entity_output(&output, entity_id, &format)
     } else {
-        print!("{}", output);
+        output
+    };
+
+    print!("{}", rendered);
+
+    if rendered.contains("[error]") {
+        std::process::exit(1);
     }
 
     Ok(())

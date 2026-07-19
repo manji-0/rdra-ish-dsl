@@ -1,4 +1,3 @@
-use crate::analysis::build_model_items;
 use crate::diagnostics::{Diagnostic, RdraError};
 use crate::location::{LocatedSpan, SourceId};
 use crate::model::SemanticModel;
@@ -247,13 +246,39 @@ pub fn build_merged_model(
 ) -> (SemanticModel, Vec<Diagnostic>) {
     let mut all_diags: Vec<Diagnostic> = vec![];
     let mut located_items: Vec<(SourceId, Item)> = Vec::new();
-    let mut seen_ids: HashSet<(String, String)> = HashSet::new();
+    // (kind, id, module_path) — same id is allowed across different modules.
+    let mut seen_ids: HashSet<(String, String, Option<String>)> = HashSet::new();
+
+    let (import_scopes, scope_diags) = crate::import_scope::build_import_scopes(&program.sources);
+    for d in scope_diags {
+        match d.kind {
+            crate::import_scope::ImportScopeDiagKind::UnknownSelect { name, module } => {
+                all_diags.push(Diagnostic::error_at(
+                    RdraError::UnknownImportName { name, module },
+                    LocatedSpan::new(d.source_id, d.span),
+                ));
+            }
+            crate::import_scope::ImportScopeDiagKind::DuplicateVisible { name, .. } => {
+                all_diags.push(Diagnostic::error_at(
+                    RdraError::DuplicateDefinition { id: name },
+                    LocatedSpan::new(d.source_id, d.span),
+                ));
+            }
+        }
+    }
 
     for (source_id, (_path, _src, ast)) in program.sources.iter().enumerate() {
+        let module = import_scopes
+            .module_for_source(source_id)
+            .map(str::to_string);
         for item in &ast.items {
             match item {
                 Item::Instance(inst) => {
-                    let key = (inst.kind.name().to_string(), inst.id.clone());
+                    let key = (
+                        inst.kind.name().to_string(),
+                        inst.id.clone(),
+                        module.clone(),
+                    );
                     if seen_ids.contains(&key) {
                         all_diags.push(Diagnostic::error_at(
                             RdraError::DuplicateDefinition {
@@ -274,7 +299,8 @@ pub fn build_merged_model(
         }
     }
 
-    let (model, model_diags) = build_model_items(&located_items);
+    let (model, model_diags) =
+        crate::analysis::build_model_items_with_scopes(&located_items, import_scopes);
     all_diags.extend(model_diags);
 
     (model, all_diags)
@@ -457,6 +483,155 @@ performs(Customer, Browse)
     }
 
     #[test]
+    fn selective_import_alias_resolves_and_hides_original() {
+        let dir = make_temp_dir("import_select_alias");
+        let shared_dir = dir.join("shared");
+        fs::create_dir_all(&shared_dir).unwrap();
+
+        write_file(
+            &shared_dir.join("actors.rdra"),
+            r#"
+module shared.actors
+actor Staff "職員"
+actor Customer "顧客"
+"#,
+        );
+        write_file(
+            &dir.join("main.rdra"),
+            r#"
+import shared.actors.{Staff as S}
+usecase Work "作業"
+performs(S, Work)
+performs(Staff, Work)
+performs(Customer, Work)
+"#,
+        );
+
+        let (program, _) = resolve(&[dir.join("main.rdra")], std::slice::from_ref(&dir));
+        let (_, model_diags) = build_merged_model(&program, &[dir]);
+        let errors: Vec<_> = model_diags.iter().filter(|d| !d.is_warning).collect();
+
+        assert!(
+            !errors.iter().any(|d| matches!(
+                &d.error,
+                RdraError::UndefinedSymbol { id } if id == "S"
+            )),
+            "S should resolve: {errors:?}"
+        );
+        assert!(
+            errors.iter().any(|d| matches!(
+                &d.error,
+                RdraError::UndefinedSymbol { id } if id == "Staff"
+            )),
+            "Staff should be hidden: {errors:?}"
+        );
+        assert!(
+            errors.iter().any(|d| matches!(
+                &d.error,
+                RdraError::UndefinedSymbol { id } if id == "Customer"
+            )),
+            "Customer should be hidden: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn namespaced_import_requires_alias_prefix() {
+        let dir = make_temp_dir("import_ns");
+        let shared_dir = dir.join("shared");
+        fs::create_dir_all(&shared_dir).unwrap();
+
+        write_file(
+            &shared_dir.join("actors.rdra"),
+            r#"
+module shared.actors
+actor Staff "職員"
+"#,
+        );
+        write_file(
+            &dir.join("main.rdra"),
+            r#"
+import shared.actors as a
+usecase Work "作業"
+performs(a.Staff, Work)
+performs(x.Staff, Work)
+performs(Staff, Work)
+"#,
+        );
+
+        let (program, _) = resolve(&[dir.join("main.rdra")], std::slice::from_ref(&dir));
+        let (_, model_diags) = build_merged_model(&program, &[dir]);
+        let errors: Vec<_> = model_diags.iter().filter(|d| !d.is_warning).collect();
+
+        assert!(
+            errors.iter().any(|d| matches!(
+                &d.error,
+                RdraError::UndefinedSymbol { id } if id.contains("x.")
+            )),
+            "x.Staff should fail: {errors:?}"
+        );
+        assert!(
+            errors.iter().any(|d| matches!(
+                &d.error,
+                RdraError::UndefinedSymbol { id } if id == "Staff"
+            )),
+            "bare Staff should fail under alias import: {errors:?}"
+        );
+        // a.Staff + Work should leave at most the two expected undefined errors.
+        assert!(
+            errors.len() >= 2,
+            "expected undefined for x.Staff and Staff; got {errors:?}"
+        );
+    }
+
+    #[test]
+    fn same_id_allowed_in_different_modules() {
+        let dir = make_temp_dir("cross_module_same_id");
+        let a_dir = dir.join("mod_a");
+        let b_dir = dir.join("mod_b");
+        fs::create_dir_all(&a_dir).unwrap();
+        fs::create_dir_all(&b_dir).unwrap();
+
+        write_file(
+            &a_dir.join("actors.rdra"),
+            r#"
+module mod_a.actors
+actor Staff "A側職員"
+"#,
+        );
+        write_file(
+            &b_dir.join("actors.rdra"),
+            r#"
+module mod_b.actors
+actor Staff "B側職員"
+"#,
+        );
+        write_file(
+            &dir.join("main.rdra"),
+            r#"
+import mod_a.actors as a
+import mod_b.actors as b
+usecase Work "作業"
+performs(a.Staff, Work)
+performs(b.Staff, Work)
+"#,
+        );
+
+        let (program, resolve_diags) =
+            resolve(&[dir.join("main.rdra")], std::slice::from_ref(&dir));
+        assert!(
+            resolve_diags.iter().all(|d| d.is_warning),
+            "{resolve_diags:?}"
+        );
+        let (model, model_diags) = build_merged_model(&program, &[dir]);
+        let errors: Vec<_> = model_diags.iter().filter(|d| !d.is_warning).collect();
+        assert!(
+            errors.is_empty(),
+            "cross-module same id should be allowed: {errors:?}"
+        );
+        assert_eq!(model.actors.len(), 2);
+    }
+
+    #[test]
     fn test_circular_import_warning() {
         let dir = make_temp_dir("circular");
         let a = dir.join("a.rdra");
@@ -569,7 +744,10 @@ actor Customer "重複定義"
             .location
             .as_ref()
             .expect("duplicate definition should carry a source location");
-        assert_eq!(loc.source_id, 1, "duplicate should be in main.rdra");
+        assert_eq!(
+            loc.source_id, 0,
+            "duplicate should be attributed to main.rdra (entry source)"
+        );
         let pos = loc
             .start_position(&program)
             .expect("position should resolve against program sources");

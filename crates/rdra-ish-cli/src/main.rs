@@ -15,7 +15,7 @@ use diagram::{run_diagram, DiagramRequest};
 use export::export_artifact;
 use fmt_cmd::run_fmt;
 use list_output::{consistency_warnings, format_lint_issues, list_elements};
-use load::{eprint_diagnostic, load_model};
+use load::{eprint_diagnostic, load_model, reject_model_errors};
 use rdra_ish_core::{lint_issues, LintSeverity};
 use rdra_ish_emit::View;
 use states::run_states;
@@ -83,10 +83,7 @@ fn main() -> Result<()> {
             format,
         } => {
             let (program, model, diags) = load_model(&inputs)?;
-
-            for diag in &diags {
-                eprint_diagnostic(&program, diag);
-            }
+            reject_model_errors(&program, &diags)?;
 
             let output = list_elements(&model, &kind, &format)?;
             print!("{}", output);
@@ -115,10 +112,7 @@ fn main() -> Result<()> {
 
         Commands::Export { inputs, kind, out } => {
             let (program, model, diags) = load_model(&inputs)?;
-
-            for diag in &diags {
-                eprint_diagnostic(&program, diag);
-            }
+            reject_model_errors(&program, &diags)?;
 
             let view = View::whole();
             if matches!(kind, ExportKind::Tla) {
@@ -130,6 +124,12 @@ fn main() -> Result<()> {
                     "RdraSpec"
                 };
                 let bundle = export::export_tla_bundle_named(&model, &view, module_name)?;
+                if let Some(fatal) = export::tla_obligation_errors(&bundle.warnings) {
+                    for w in &bundle.warnings {
+                        eprintln!("warning: tla export: {w}");
+                    }
+                    anyhow::bail!("{fatal}");
+                }
                 for w in &bundle.warnings {
                     eprintln!("warning: tla export: {w}");
                 }
@@ -194,12 +194,7 @@ fn main() -> Result<()> {
             out,
         } => {
             let (program, model, diags) = load_model(&inputs)?;
-            for diag in &diags {
-                eprint_diagnostic(&program, diag);
-                if !diag.is_warning {
-                    std::process::exit(1);
-                }
-            }
+            reject_model_errors(&program, &diags)?;
             run_verify(&model, backend, out)?;
         }
     }

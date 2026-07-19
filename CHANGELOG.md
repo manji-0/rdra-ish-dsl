@@ -31,14 +31,18 @@
 
 ### Fixed
 
-- FV samples: `int_stock` Init satisfies Safety; `now` lhs uses constrained
-  `Assign_*` (`v >= now`) and `TickNow` (`t <= col`) so Safety is non-vacuous.
-- Temporal `property` names share one lowering path and all appear in `.cfg` `PROPERTY`.
-- Transition-event `sets(Event, …)` apply in SpecActions.
-- `export`/`verify` module name follows `-o` file stem; TLC gets bare filenames.
-- `export --kind tla` / `verify` print TLA export warnings on stderr.
-- Sample TLC intent: `cross_order_payment` / `quantifier_none` expected fail
-  (independent SpecActions interleave).
+- Fail-closed validation: empty `Enum()`, lexer junk, unknown predicates / wrong
+  arity, duplicate columns, missing input paths, and generator commands that
+  previously succeeded on invalid models.
+- Import scopes honor `as` aliases, selective imports, and namespaced refs;
+  same id may exist in different modules when referenced via aliases.
+- TLA+: unique action names for multi-edge events; unresolved/dropped properties
+  and contradictory `after.assert` fail export/verify; `now` Safety is not baked
+  into `Assign`/`TickNow`; sets-only entities emit actions.
+- `states` exits non-zero when output contains `[error]`.
+- Composite `@pk(a,b)` recorded on the entity; duplicate API method+path rejected.
+- FV samples: `now_coupon` is an expected TLC counterexample (Safety is checked,
+  not enforced by Next).
 
 ### Changed
 
@@ -49,6 +53,7 @@
   route deep FV work to `rdra-ish-verify`. FV sample `.rdra` files are canonical under
   `skills/rdra-ish-verify/samples/` with repo path symlinks for tests. Samples table
   records TLC pass/fail intent; order snapshot tracks the skill sample.
+- CI runs TLC (`formal-verify` job) against pass/fail FV samples.
 
 ## v0.1.7 - 2026-06-23
 

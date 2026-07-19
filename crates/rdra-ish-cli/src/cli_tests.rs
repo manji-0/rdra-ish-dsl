@@ -9,10 +9,13 @@ use rdra_ish_emit::View;
 use std::path::PathBuf;
 
 #[test]
-fn load_model_rejects_inputs_without_rdra_files() {
+fn load_model_rejects_missing_input_paths() {
     let err = load_model(&[PathBuf::from("missing-input")]).unwrap_err();
 
-    assert_eq!(err.to_string(), "no .rdra files found in the given inputs");
+    assert!(
+        err.to_string().contains("not found"),
+        "expected missing-path error, got: {err}"
+    );
 }
 
 fn errors_fixture(path: &str) -> PathBuf {

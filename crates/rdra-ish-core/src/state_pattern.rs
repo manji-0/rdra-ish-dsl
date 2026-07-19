@@ -443,7 +443,11 @@ fn default_value_for_axis(col: &ModelColumn) -> AbstractValue {
                     return AbstractValue::Enum(d.clone());
                 }
             }
-            AbstractValue::Enum(variants[0].clone())
+            match variants.first() {
+                Some(v) => AbstractValue::Enum(v.clone()),
+                // Empty Enum is a parse/semantic error; avoid panicking in check/states.
+                None => AbstractValue::Present,
+            }
         }
         ColumnType::Bool => {
             if let Some(d) = &col.default_val {

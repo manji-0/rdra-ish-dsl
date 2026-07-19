@@ -167,6 +167,36 @@ pub fn event_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
 /// - invoke されるが entity を操作しない api → `ApiInvokedButNoEntity` 警告。
 ///
 /// `event_diagnostics` と同じパターンで `model.relations` を 1 パス走査する。
+/// Duplicate method+path pairs are hard errors (also run from model build).
+pub fn api_route_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
+    let mut diags = Vec::new();
+    let mut routes: HashMap<(String, String), String> = HashMap::new();
+    for (_, api) in model.apis.iter() {
+        let (Some(method), Some(path)) = (&api.method, &api.path) else {
+            continue;
+        };
+        let key = (method.to_ascii_uppercase(), path.clone());
+        if let Some(other) = routes.get(&key) {
+            push_model_decl_diagnostic(
+                model,
+                &mut diags,
+                "api",
+                &api.id,
+                RdraError::DuplicateApiRoute {
+                    api: api.id.clone(),
+                    other: other.clone(),
+                    method: method.clone(),
+                    path: path.clone(),
+                },
+                false,
+            );
+        } else {
+            routes.insert(key, api.id.clone());
+        }
+    }
+    diags
+}
+
 pub fn api_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
 
@@ -232,6 +262,26 @@ mod tests {
         let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
         assert!(errors.is_empty(), "unexpected errors: {errors:?}");
         model
+    }
+
+    #[test]
+    fn duplicate_api_routes_are_errors() {
+        let model_src = r#"
+api A "a" method POST path "/x"
+api B "b" method POST path "/x"
+"#;
+        let (ast, errs) = parse(model_src);
+        assert!(errs.is_empty());
+        let (_model, diags) = build_model(&ast);
+        assert!(
+            diags.iter().any(|d| matches!(
+                &d.error,
+                RdraError::DuplicateApiRoute { api, other, .. }
+                    if (api == "B" && other == "A") || (api == "A" && other == "B")
+            )),
+            "expected DuplicateApiRoute, got: {:?}",
+            diags.iter().map(|d| &d.error).collect::<Vec<_>>()
+        );
     }
 
     #[test]
