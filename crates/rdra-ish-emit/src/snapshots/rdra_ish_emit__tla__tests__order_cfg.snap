@@ -4,6 +4,7 @@ expression: bundle.cfg
 ---
 SPECIFICATION Spec
 INVARIANT Safety
+CHECK_DEADLOCK FALSE
 PROPERTY PaidLeadsToShipped
 PROPERTY EventuallyTerminal
 PROPERTY AfterAssert_DeliverOrder_0

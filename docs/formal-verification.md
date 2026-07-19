@@ -25,7 +25,9 @@ rdra-ish verify <INPUTS...> --backend tlc [-o <OUT_DIR>]
 
 If `-o` ends with `.tla`, the sibling `.cfg` is written next to it. If `-o` is a
 directory (or has no extension), files are written as `<dir>/RdraSpec.tla` and
-`<dir>/RdraSpec.cfg`.
+`<dir>/RdraSpec.cfg`. The `.cfg` sets `CHECK_DEADLOCK FALSE` because lifecycle
+models often have terminal states with no enabled `Next` action (Spec still
+allows stuttering via `[][Next]_vars`).
 
 ## Mapping
 

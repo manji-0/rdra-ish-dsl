@@ -43,6 +43,8 @@
 - User-facing multi-entity state diagnostics say “multi-entity” (ids may still
   be `Cross*`); OpenAPI lint warns when APIs lack both method and path;
   README learning path leads with incremental modeling.
+- TLA `.cfg` sets `CHECK_DEADLOCK FALSE` so terminal lifecycle states are not
+  reported as TLC deadlocks; CI TLC smoke-check accepts `-help` non-zero exit.
 - Import scopes honor `as` aliases, selective imports, and namespaced refs;
   same id may exist in different modules when referenced via aliases.
   Closed scope is per-file (siblings without `import` stay open-world);

@@ -2676,6 +2676,10 @@ fn render_cfg(module_name: &str, export: &TlaExport) -> String {
     let mut out = String::new();
     out.push_str("SPECIFICATION Spec\n");
     out.push_str("INVARIANT Safety\n");
+    // Lifecycle models have terminal states with no enabled Next action.
+    // TLC's default deadlock check treats those as errors; Spec already allows
+    // stuttering via [][Next]_vars, so disable the Next-only deadlock check.
+    out.push_str("CHECK_DEADLOCK FALSE\n");
 
     for (name, _) in &export.properties {
         out.push_str(&format!("PROPERTY {name}\n"));
