@@ -153,7 +153,7 @@ fn diag_message(d: &StateDiag) -> String {
             reason,
         } => {
             format!(
-                "[warn] multi-entity constraint not evaluated across [{}]: {} ({})",
+                "[error] multi-entity constraint not evaluated across [{}]: {} ({}); hint: linked-instance / non-state values are not in states — use export --kind tla / verify --backend tlc when the rule needs related rows or arithmetic",
                 entities, constraint, reason
             )
         }
@@ -173,7 +173,7 @@ fn diag_message(d: &StateDiag) -> String {
             reason,
         } => {
             format!(
-                "[warn] temporal assertion after '{}' not evaluated: ({}) ({})",
+                "[error] temporal assertion after '{}' not evaluated: ({}) ({}); hint: after.assert comparisons need TLA; states checks immediate equality sets/transitions only",
                 anchor, requireds, reason
             )
         }
@@ -184,7 +184,7 @@ fn diag_message(d: &StateDiag) -> String {
             reason,
         } => {
             format!(
-                "[warn] to-many quantifier constraint not evaluated from '{}' to '{}': {} ({})",
+                "[error] to-many quantifier constraint not evaluated from '{}' to '{}': {} ({}); hint: linked-instance cardinality is not in states — use export --kind tla / verify --backend tlc",
                 anchor, related, constraint, reason
             )
         }
@@ -192,10 +192,11 @@ fn diag_message(d: &StateDiag) -> String {
             proposition,
             usage,
             effect,
+            hint,
         } => {
             format!(
-                "[warn] comparison proposition '{}' used in {} is not driven by sets(..., <comparison>, true/false): {}",
-                proposition, usage, effect
+                "[error] comparison proposition '{}' used in {} is not driven by sets(..., <comparison>, true/false): {}; hint: {}",
+                proposition, usage, effect, hint
             )
         }
     }
@@ -646,5 +647,41 @@ sets(usecase::DeliverOrder, Order, delivered_at == present)
             .emit(&model, &view)
             .unwrap();
         insta::assert_snapshot!(result);
+    }
+
+    #[test]
+    fn unevaluated_and_undriven_diags_are_errors_with_hints() {
+        let undriven = diag_message(&StateDiag::UndrivenComparisonProp {
+            proposition: "stock < selling".into(),
+            usage: "forbidden".into(),
+            effect: "never triggered".into(),
+            hint: "states treats undriven comparisons as always-false".into(),
+        });
+        assert!(undriven.starts_with("[error]"));
+        assert!(undriven.contains("hint:"));
+
+        let quant = diag_message(&StateDiag::QuantifierConstraintNotEvaluated {
+            anchor: "Cert".into(),
+            related: "Assign".into(),
+            constraint: "none".into(),
+            reason: "cardinality".into(),
+        });
+        assert!(quant.starts_with("[error]"));
+        assert!(quant.contains("verify --backend tlc"));
+
+        let cross = diag_message(&StateDiag::CrossConstraintNotEvaluated {
+            entities: "Order, Payment".into(),
+            constraint: "forbidden".into(),
+            reason: "non-state".into(),
+        });
+        assert!(cross.starts_with("[error]"));
+
+        let temporal = diag_message(&StateDiag::TemporalAssertionNotEvaluated {
+            anchor: "Sell".into(),
+            requireds: "stock < selling".into(),
+            reason: "comparison".into(),
+        });
+        assert!(temporal.starts_with("[error]"));
+        assert!(temporal.contains("after.assert comparisons need TLA"));
     }
 }

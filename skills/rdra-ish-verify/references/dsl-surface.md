@@ -40,6 +40,10 @@ after(Sell).assert(Item.sold >= 1)
   effects). Comparison forms prefer Int arithmetic when axes exist (cross-entity
   RHS ok); otherwise require a proposition axis `TRUE` after the action.
 
+UC `precondition` / `postcondition` / `guard` strings are **review metadata only**
+(`list --kind usecase`); they are not checked by `states` or TLA. Use
+`after(UC).assert(...)` for machine-checked postconditions.
+
 ## Quantifiers
 
 ```rdra

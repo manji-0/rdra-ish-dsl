@@ -317,11 +317,13 @@ syntax and design rationale.
 | `ExclusiveStateViolated { conditions, pattern_desc }` | A reachable pattern satisfies two or more conditions of an `exclusive` declaration. |
 | `CrossForbiddenViolated { entities, conditions, pattern_desc }` | A reached multi-entity pattern combination matches all conditions of a multi-entity `forbidden` declaration, and the participating entities are not connected by a `relate` path. (Id retains historical `Cross*`; messages say multi-entity.) |
 | `CrossInvariantViolated { entities, guards, requireds, pattern_desc }` | A reached multi-entity pattern combination satisfies invariant guards but breaks a requirement, and the participating entities are not connected by a `relate` path. |
-| `CrossConstraintNotEvaluated { entities, constraint, reason }` | A multi-entity rule cannot be fully evaluated from per-entity abstract state patterns or exceeds the cross-product safety cap. |
+| `CrossConstraintNotEvaluated { entities, constraint, reason }` | A multi-entity rule cannot be fully evaluated from per-entity abstract state patterns or exceeds the cross-product safety cap. Emitted as **`[error]`** by `rdra-ish states` (non-zero exit); use TLA for linked-instance / arithmetic evaluation. |
 | `TemporalAssertionViolated { anchor, requireds, actual }` | An `after(UseCase).assert(...)` equality is not produced by the anchor use case's immediate effects. |
-| `TemporalAssertionNotEvaluated { anchor, requireds, reason }` | A temporal assertion uses a form that is outside the immediate equality evaluator, such as a comparison expression. |
-| `QuantifierConstraintNotEvaluated { anchor, related, constraint, reason }` | A `has` / `none` related-collection rule needs linked related-row cardinality that the state-pattern engine does not track. |
-| `UndrivenComparisonProp { proposition, usage, effect }` | A comparison proposition is used in `forbidden`, `required`, `exclusive`, `.when`, or `.then` without a matching `sets(..., comparison, true/false)`. The diagnostic explains whether the rule is effectively disabled or always violated. |
+| `TemporalAssertionNotEvaluated { anchor, requireds, reason }` | A temporal assertion uses a form that is outside the immediate equality evaluator, such as a comparison expression. Emitted as **`[error]`**; comparison forms need `verify --backend tlc`. |
+| `QuantifierConstraintNotEvaluated { anchor, related, constraint, reason }` | A `has` / `none` related-collection rule needs linked related-row cardinality that the state-pattern engine does not track. Emitted as **`[error]`**; use TLA for linked cardinality. |
+| `UndrivenComparisonProp { proposition, usage, effect, hint }` | A comparison proposition is used in `forbidden`, `required`, `exclusive`, `.when`, or `.then` without a matching `sets(..., comparison, true/false)`. Emitted as **`[error]`** with an evaluator hint (states treats undriven props as always-false; Int/`now` arithmetic is TLA-only). |
+
+`rdra-ish states` exits non-zero when the rendered output contains `[error]` (table/json formats). Unevaluated obligations and undriven comparisons are fail-closed under `states` so a green exit is not mistaken for a checked rule.
 
 ---
 

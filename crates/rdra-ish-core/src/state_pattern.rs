@@ -6,7 +6,7 @@
 
 use crate::entity_lifecycle::link_entity_status_states;
 use crate::model::{
-    ColumnEffect, ColumnType, ComparisonProp, CrossCmpRhs, CrossComparisonProp,
+    CmpRhs, ColumnEffect, ColumnType, ComparisonProp, CrossCmpRhs, CrossComparisonProp,
     CrossConstraintScope, CrossEntityCondition, CrossEntityInvariant, CrossForbiddenConstraint,
     EffectValue, EntityKey, ModelColumn, NodeRef, QualifiedModelColumnRef, QuantifierConstraint,
     QuantifierKind, RelKind, SemanticModel, StateKey, TemporalAssertion, UseCaseKey,
@@ -252,6 +252,8 @@ pub enum StateDiag {
         proposition: String,
         usage: String,
         effect: String,
+        /// Evaluator guidance (states proposition vs TLA arithmetic).
+        hint: String,
     },
 }
 
@@ -1305,6 +1307,45 @@ fn abstract_comparison_conditions(comparisons: &[ComparisonProp]) -> Vec<(String
         .collect()
 }
 
+fn comparison_is_tla_arithmetic(
+    model: &SemanticModel,
+    ek: EntityKey,
+    prop: &ComparisonProp,
+) -> bool {
+    let Some(entity) = model.entities.get(ek) else {
+        return false;
+    };
+    let is_arith = |name: &str| {
+        entity
+            .columns
+            .iter()
+            .find(|c| c.name == name)
+            .is_some_and(|c| {
+                matches!(
+                    c.col_type,
+                    ColumnType::Int
+                        | ColumnType::Money
+                        | ColumnType::Decimal
+                        | ColumnType::Date
+                        | ColumnType::DateTime
+                )
+            })
+    };
+    match &prop.rhs {
+        CmpRhs::Now => is_arith(&prop.lhs_column),
+        CmpRhs::IntLit(_) => is_arith(&prop.lhs_column),
+        CmpRhs::Column(rhs) => is_arith(&prop.lhs_column) && is_arith(rhs),
+    }
+}
+
+fn undriven_comparison_hint(model: &SemanticModel, ek: EntityKey, prop: &ComparisonProp) -> String {
+    if comparison_is_tla_arithmetic(model, ek, prop) {
+        "states treats undriven comparisons as always-false; Int/Money/Decimal/Date/DateTime/now arithmetic is checked by verify --backend tlc, not states — drive with sets(..., cmp, true/false) for proposition checking".to_string()
+    } else {
+        "states treats undriven comparisons as always-false unless sets(..., cmp, true/false) drives the proposition".to_string()
+    }
+}
+
 fn collect_undriven_comparison_diagnostics(
     model: &SemanticModel,
     ek: EntityKey,
@@ -1327,6 +1368,7 @@ fn collect_undriven_comparison_diagnostics(
             proposition: prop.display(),
             usage: usage.to_string(),
             effect: effect.to_string(),
+            hint: undriven_comparison_hint(model, ek, prop),
         });
     };
 

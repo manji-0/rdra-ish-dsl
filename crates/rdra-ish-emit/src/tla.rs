@@ -11,8 +11,8 @@ use rdra_ish_core::model::{
 use rdra_ish_core::{collect_entity_lifecycles, EntityLifecycle};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-const INSTANCE_COUNT: i64 = 2;
-const INT_RANGE_MAX: i64 = 5;
+const DEFAULT_INSTANCE_COUNT: i64 = 2;
+const DEFAULT_INT_RANGE_MAX: i64 = 5;
 
 /// Bundle written by `export --kind tla` / `verify --backend tlc`.
 #[derive(Debug, Clone)]
@@ -27,11 +27,19 @@ pub struct TlaBundle {
 pub struct TlaPlusEmitter {
     /// When true, emit Bool / Nullable / Proposition axes alongside status (Phase 1.5).
     pub multi_axis: bool,
+    /// Finite instance set size for multi-entity / quantifier export (`InstanceCount`).
+    pub instance_count: i64,
+    /// Upper bound for `IntRange == 0..N` (Int / Money / Decimal / `now` axes).
+    pub int_range_max: i64,
 }
 
 impl Default for TlaPlusEmitter {
     fn default() -> Self {
-        Self { multi_axis: true }
+        Self {
+            multi_axis: true,
+            instance_count: DEFAULT_INSTANCE_COUNT,
+            int_range_max: DEFAULT_INT_RANGE_MAX,
+        }
     }
 }
 
@@ -54,7 +62,19 @@ impl TlaPlusEmitter {
     ) -> Result<TlaBundle, EmitError> {
         let module_name = sanitize_module_name(module_name);
         let mut warnings = Vec::new();
-        let export = build_export(model, self.multi_axis, &mut warnings);
+        let export = build_export(
+            model,
+            self.multi_axis,
+            self.instance_count,
+            self.int_range_max,
+            &mut warnings,
+        );
+        if export.multi_instance || export.needs_integers {
+            warnings.push(format!(
+                "tla approximation: InstanceCount={} IntRange=0..{}; verify OK does not prove outside this window",
+                export.instance_count, export.int_range_max
+            ));
+        }
         let tla = render_tla(&module_name, &export, &warnings);
         let cfg = render_cfg(&module_name, &export);
         Ok(TlaBundle {
@@ -124,6 +144,8 @@ struct TlaExport {
     needs_integers: bool,
     needs_now: bool,
     needs_wf: bool,
+    instance_count: i64,
+    int_range_max: i64,
     specs: Vec<EntitySpec>,
     owners: Vec<OwnerLink>,
     /// Cross / quantifier Safety conjuncts (name, formula).
@@ -147,7 +169,13 @@ fn needs_wf(model: &SemanticModel) -> bool {
     })
 }
 
-fn build_export(model: &SemanticModel, multi_axis: bool, warnings: &mut Vec<String>) -> TlaExport {
+fn build_export(
+    model: &SemanticModel,
+    multi_axis: bool,
+    instance_count: i64,
+    int_range_max: i64,
+    warnings: &mut Vec<String>,
+) -> TlaExport {
     let lifecycles = collect_entity_lifecycles(model);
     let multi_instance = needs_multi_instance(model);
     let int_now = collect_int_now_usage(model, &lifecycles);
@@ -205,6 +233,8 @@ fn build_export(model: &SemanticModel, multi_axis: bool, warnings: &mut Vec<Stri
         needs_integers: needs_integers || needs_now,
         needs_now,
         needs_wf: needs_wf(model),
+        instance_count,
+        int_range_max,
         specs,
         owners,
         global_safety,
@@ -2452,10 +2482,10 @@ fn render_tla(module_name: &str, export: &TlaExport, warnings: &[String]) -> Str
     }
 
     if export.multi_instance {
-        out.push_str(&format!("InstanceCount == {INSTANCE_COUNT}\n"));
+        out.push_str(&format!("InstanceCount == {}\n", export.instance_count));
     }
     if export.needs_integers {
-        out.push_str(&format!("IntRange == 0..{INT_RANGE_MAX}\n"));
+        out.push_str(&format!("IntRange == 0..{}\n", export.int_range_max));
     }
     if export.multi_instance {
         for spec in &export.specs {
@@ -2789,6 +2819,33 @@ mod tests {
             bundle.tla
         );
         assert!(!bundle.tla.contains("prop_stock"));
+        assert!(
+            bundle
+                .warnings
+                .iter()
+                .any(|w| w.contains("tla approximation: InstanceCount=2 IntRange=0..5")),
+            "expected approximation banner; got {:?}",
+            bundle.warnings
+        );
+    }
+
+    #[test]
+    fn tla_custom_int_range_max_is_emitted() {
+        let src = std::fs::read_to_string("samples/formal-verification/int_stock.rdra")
+            .or_else(|_| {
+                std::fs::read_to_string("../../samples/formal-verification/int_stock.rdra")
+            })
+            .expect("int_stock.rdra");
+        let model = model_from(&src);
+        let bundle = TlaPlusEmitter {
+            multi_axis: true,
+            instance_count: 2,
+            int_range_max: 9,
+        }
+        .emit_bundle(&model, &View::whole())
+        .unwrap();
+        assert!(bundle.tla.contains("IntRange == 0..9"));
+        assert!(bundle.warnings.iter().any(|w| w.contains("IntRange=0..9")));
     }
 
     #[test]

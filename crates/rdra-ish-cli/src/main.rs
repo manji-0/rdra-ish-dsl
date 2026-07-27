@@ -110,7 +110,13 @@ fn main() -> Result<()> {
             check,
         } => run_fmt(&inputs, write, check)?,
 
-        Commands::Export { inputs, kind, out } => {
+        Commands::Export {
+            inputs,
+            kind,
+            out,
+            instance_count,
+            int_range_max,
+        } => {
             let (program, model, diags) = load_model(&inputs)?;
             reject_model_errors(&program, &diags)?;
 
@@ -123,7 +129,13 @@ fn main() -> Result<()> {
                 } else {
                     "RdraSpec"
                 };
-                let bundle = export::export_tla_bundle_named(&model, &view, module_name)?;
+                let bundle = export::export_tla_bundle_named(
+                    &model,
+                    &view,
+                    module_name,
+                    instance_count,
+                    int_range_max,
+                )?;
                 if let Some(fatal) = export::tla_obligation_errors(&bundle.warnings) {
                     for w in &bundle.warnings {
                         eprintln!("warning: tla export: {w}");
@@ -192,10 +204,12 @@ fn main() -> Result<()> {
             inputs,
             backend,
             out,
+            instance_count,
+            int_range_max,
         } => {
             let (program, model, diags) = load_model(&inputs)?;
             reject_model_errors(&program, &diags)?;
-            run_verify(&model, backend, out)?;
+            run_verify(&model, backend, out, instance_count, int_range_max)?;
         }
     }
 

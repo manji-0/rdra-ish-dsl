@@ -170,7 +170,7 @@ pub(crate) fn state_diag_message(diag: &rdra_ish_core::StateDiag) -> String {
             constraint,
             reason,
         } => format!(
-            "multi-entity constraint was not fully evaluated across [{}]: {} ({})",
+            "multi-entity constraint was not fully evaluated across [{}]: {} ({}); hint: linked-instance / non-state values are not in states — use export --kind tla / verify --backend tlc when the rule needs related rows or arithmetic",
             entities, constraint, reason
         ),
         rdra_ish_core::StateDiag::TemporalAssertionViolated {
@@ -186,7 +186,7 @@ pub(crate) fn state_diag_message(diag: &rdra_ish_core::StateDiag) -> String {
             requireds,
             reason,
         } => format!(
-            "temporal assertion after '{}' was not evaluated: {} ({})",
+            "temporal assertion after '{}' was not evaluated: {} ({}); hint: after.assert comparisons need TLA; states checks immediate equality sets/transitions only",
             anchor, requireds, reason
         ),
         rdra_ish_core::StateDiag::QuantifierConstraintNotEvaluated {
@@ -195,16 +195,17 @@ pub(crate) fn state_diag_message(diag: &rdra_ish_core::StateDiag) -> String {
             constraint,
             reason,
         } => format!(
-            "to-many quantifier constraint was not evaluated from '{}' to '{}': {} ({})",
+            "to-many quantifier constraint was not evaluated from '{}' to '{}': {} ({}); hint: linked-instance cardinality is not in states — use export --kind tla / verify --backend tlc",
             anchor, related, constraint, reason
         ),
         rdra_ish_core::StateDiag::UndrivenComparisonProp {
             proposition,
             usage,
             effect,
+            hint,
         } => format!(
-            "comparison proposition '{}' used in {} is not driven by sets(..., <comparison>, true/false): {}",
-            proposition, usage, effect
+            "comparison proposition '{}' used in {} is not driven by sets(..., <comparison>, true/false): {}; hint: {}",
+            proposition, usage, effect, hint
         ),
     }
 }

@@ -36,16 +36,34 @@ pub fn export_artifact(
     }
 }
 
-pub fn export_tla_bundle(model: &SemanticModel, view: &View) -> Result<TlaBundle> {
-    Ok(TlaPlusEmitter::default().emit_bundle(model, view)?)
+fn tla_emitter(instance_count: u32, int_range_max: u32) -> Result<TlaPlusEmitter> {
+    if instance_count == 0 {
+        anyhow::bail!("--instance-count must be >= 1");
+    }
+    Ok(TlaPlusEmitter {
+        multi_axis: true,
+        instance_count: i64::from(instance_count),
+        int_range_max: i64::from(int_range_max),
+    })
+}
+
+pub fn export_tla_bundle(
+    model: &SemanticModel,
+    view: &View,
+    instance_count: u32,
+    int_range_max: u32,
+) -> Result<TlaBundle> {
+    Ok(tla_emitter(instance_count, int_range_max)?.emit_bundle(model, view)?)
 }
 
 pub fn export_tla_bundle_named(
     model: &SemanticModel,
     view: &View,
     module_name: &str,
+    instance_count: u32,
+    int_range_max: u32,
 ) -> Result<TlaBundle> {
-    Ok(TlaPlusEmitter::default().emit_bundle_named(model, view, module_name)?)
+    Ok(tla_emitter(instance_count, int_range_max)?.emit_bundle_named(model, view, module_name)?)
 }
 
 /// Warnings that mean the TLA+ artifact does not preserve source obligations.

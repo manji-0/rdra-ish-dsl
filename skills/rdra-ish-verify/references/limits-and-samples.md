@@ -6,11 +6,14 @@
 
 - **`.along`**: with usable `relate` N:1 / 1:N, Safety filters by `Child_owner`;
   without a link, quantifies over the instance product (stronger than linked-only).
-- **Quantifiers**: finite `Entity_Ids` with `InstanceCount` (currently fixed at 2).
+- **Quantifiers**: finite `Entity_Ids` with `InstanceCount` (default 2;
+  `--instance-count`).
 - **Shared events**: per-entity SpecActions can interleave (not one atomic
   multi-entity step) — `cross_order_payment` / `quantifier_none` expected fail.
-- **Int arithmetic**: `IntRange` currently fixed at `0..5`. Undriven Int axes get
-  nondet `Assign_*` over the full range (Safety is checked, not baked into Next).
+- **Int arithmetic**: `IntRange` default `0..5` (`--int-range-max`). Undriven Int
+  axes get nondet `Assign_*` over the full range (Safety is checked, not baked
+  into Next).
+- **Approximation banner**: always emitted when multi-instance or Int axes are used.
 - **`now`**: global Int clock with `TickNow`. Assign/TickNow are **not** constrained
   to preserve `forbidden(col < now)`; TLC should find violations (`now_coupon`
   expected fail).
@@ -22,7 +25,8 @@
 - Lifecycles with no transitions and no `sets`-driven actions fail export
   (`stuttering_only`).
 - Nullable Money/Decimal used in arithmetic promote to Int axes (not Nullable).
-- BFS `states` still ignores Int / `now` as axes.
+- BFS `states` still ignores Int / `now` as axes; undriven / NotEvaluated diags are
+  `[error]` under `states` (fail-closed). Prefer `verify` for Int/`now` samples.
 - Export warnings go to stderr (`warning: tla export: …`) and `.tla` comments.
 
 ## Bundled Samples

@@ -137,11 +137,17 @@ pub(crate) enum Commands {
     Export {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Export kind: openapi, asyncapi, dbml, json-schema, typescript-states, mermaid-er, or plantuml-er
+        /// Export kind: openapi, asyncapi, dbml, json-schema, typescript-states, mermaid-er, plantuml-er, or tla
         #[arg(long, default_value = "openapi")]
         kind: ExportKind,
         #[arg(short, long, default_value = "out")]
         out: PathBuf,
+        /// TLA+ multi-instance `InstanceCount` (export --kind tla / verify only)
+        #[arg(long, default_value_t = 2)]
+        instance_count: u32,
+        /// TLA+ `IntRange == 0..N` upper bound (export --kind tla / verify only)
+        #[arg(long, default_value_t = 5)]
+        int_range_max: u32,
     },
     /// Derive reachable state patterns per entity (aggregated across BUCs)
     States {
@@ -170,6 +176,12 @@ pub(crate) enum Commands {
         /// Directory to write generated TLA+/CFG (defaults to a temp dir)
         #[arg(short, long)]
         out: Option<PathBuf>,
+        /// TLA+ multi-instance `InstanceCount`
+        #[arg(long, default_value_t = 2)]
+        instance_count: u32,
+        /// TLA+ `IntRange == 0..N` upper bound
+        #[arg(long, default_value_t = 5)]
+        int_range_max: u32,
     },
 }
 
@@ -477,7 +489,9 @@ mod tests {
         .unwrap();
 
         match cli.command {
-            Commands::Export { inputs, kind, out } => {
+            Commands::Export {
+                inputs, kind, out, ..
+            } => {
                 assert_eq!(inputs, vec![PathBuf::from("sample.rdra")]);
                 assert!(matches!(kind, ExportKind::Dbml));
                 assert_eq!(out, PathBuf::from("schema.dbml"));
@@ -497,7 +511,9 @@ mod tests {
         .unwrap();
 
         match cli.command {
-            Commands::Export { inputs, kind, out } => {
+            Commands::Export {
+                inputs, kind, out, ..
+            } => {
                 assert_eq!(inputs, vec![PathBuf::from("sample.rdra")]);
                 assert!(matches!(kind, ExportKind::Asyncapi));
                 assert_eq!(out, PathBuf::from("events.json"));
@@ -517,10 +533,18 @@ mod tests {
         .unwrap();
 
         match cli.command {
-            Commands::Export { inputs, kind, out } => {
+            Commands::Export {
+                inputs,
+                kind,
+                out,
+                instance_count,
+                int_range_max,
+            } => {
                 assert_eq!(inputs, vec![PathBuf::from("sample.rdra")]);
                 assert!(matches!(kind, ExportKind::JsonSchema));
                 assert_eq!(out, PathBuf::from("schemas.json"));
+                assert_eq!(instance_count, 2);
+                assert_eq!(int_range_max, 5);
             }
             _ => panic!("expected export command"),
         }
@@ -537,8 +561,7 @@ mod tests {
         .unwrap();
 
         match cli.command {
-            Commands::Export { inputs, kind, out } => {
-                assert_eq!(inputs, vec![PathBuf::from("sample.rdra")]);
+            Commands::Export { kind, out, .. } => {
                 assert!(matches!(kind, ExportKind::MermaidEr));
                 assert_eq!(out, PathBuf::from("er.mmd"));
             }
@@ -557,12 +580,65 @@ mod tests {
         .unwrap();
 
         match cli.command {
-            Commands::Export { inputs, kind, out } => {
-                assert_eq!(inputs, vec![PathBuf::from("sample.rdra")]);
+            Commands::Export { kind, out, .. } => {
                 assert!(matches!(kind, ExportKind::PlantumlEr));
                 assert_eq!(out, PathBuf::from("er.puml"));
             }
             _ => panic!("expected export command"),
+        }
+
+        let cli = Cli::try_parse_from([
+            "rdra-ish",
+            "export",
+            "sample.rdra",
+            "--kind",
+            "tla",
+            "--out",
+            "/tmp/rdra-tla",
+            "--instance-count",
+            "3",
+            "--int-range-max",
+            "9",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Commands::Export {
+                kind,
+                instance_count,
+                int_range_max,
+                ..
+            } => {
+                assert!(matches!(kind, ExportKind::Tla));
+                assert_eq!(instance_count, 3);
+                assert_eq!(int_range_max, 9);
+            }
+            _ => panic!("expected export command"),
+        }
+
+        let cli = Cli::try_parse_from([
+            "rdra-ish",
+            "verify",
+            "sample.rdra",
+            "--backend",
+            "tlc",
+            "--instance-count",
+            "4",
+            "--int-range-max",
+            "7",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Commands::Verify {
+                instance_count,
+                int_range_max,
+                ..
+            } => {
+                assert_eq!(instance_count, 4);
+                assert_eq!(int_range_max, 7);
+            }
+            _ => panic!("expected verify command"),
         }
     }
 }

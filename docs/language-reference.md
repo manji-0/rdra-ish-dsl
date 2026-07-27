@@ -89,14 +89,27 @@ CSV, or JSON form.
 | `event` | A domain event, used as the trigger of state transitions and as a `raises`/`triggers` endpoint. |
 | `entity` | A logical data model/table-like persistent structure. Use conceptual model elements for domain concepts that are not yet, or should not be, tables. |
 | `state` | Optional diagram/label sugar for an Enum lifecycle variant. Prefer `transitions(Entity.col, Event, from -> to)` with Enum variant names; the compiler also synthesizes `{Entity}_{variant}` state nodes for diagrams when needed. |
-| `condition` | Reserved kind (not wired to predicates yet). Do not use in new models. |
-| `variation` | Reserved kind (not wired to predicates yet). Do not use in new models. |
 | `api` | An API layer endpoint invoked by a use case; operates entities on behalf of the use case and defines an atomic data operation boundary. API declarations may also carry HTTP contract metadata. Appears in the RDRA layered graph and sequence diagram as a named API lane, but is intentionally omitted from the boundaryless graph. |
 | `dto` | A request, response, or error payload shape used by API contracts. DTOs may carry a column-like field body but are kept separate from database entities. |
 | `location` | A place, channel, organization point, or usage scene for Business-BUC context. |
 | `timing` | A timing, trigger, or business situation for Business-BUC context. |
 | `medium` | A physical medium, device, terminal, or operation medium for Business-BUC context. |
 | `permission` | A permission or role-like authority assignable to actors. |
+
+### Reserved (do not use)
+
+| kind | Status |
+|---|---|
+| `condition` | Reserved kind (not wired to predicates). Do not use in new models. |
+| `variation` | Reserved kind (not wired to predicates). Do not use in new models. |
+
+### Unsupported / limited
+
+| Topic | Limitation |
+|---|---|
+| Direct `relate(..., N:M)` | Not supported. Introduce an intermediate entity and two `N:1` (or `1:N`) relates. |
+| Composite `@pk(a, b)` auto-FK | `relate` does not auto-generate FKs against composite primary keys — declare FK columns explicitly on the many side. |
+| AsyncAPI protocol / server / payload schemas | `export --kind asyncapi` projects event causality only; broker protocol, servers, and exact payload schemas are not inferred. |
 
 ---
 
@@ -261,7 +274,7 @@ review. `relate(A, B, 1:N)` applies the same options to the FK generated on `B`.
 
 ### Use case conditions
 
-Use cases can carry review-facing execution contracts:
+Use cases can carry **review-facing metadata** (not machine-checked contracts):
 
 ```rdra
 usecase CapturePayment "Capture payment"
@@ -274,9 +287,10 @@ usecase CapturePayment "Capture payment"
 
 `precondition`, `postcondition`, `guard`, `alternative` / `alternative_flow`, and
 `error` / `error_condition` / `business_error` may be repeated. These clauses are
-stored on the use case and shown by `rdra-ish list --kind usecase`; they are not yet
-evaluated by the state-pattern engine. Use `compensates(RefundPayment, CapturePayment)`
-to make a compensation relationship explicit between use cases.
+stored on the use case and shown by `rdra-ish list --kind usecase`. They are **not**
+evaluated by `check`, `states`, or TLA+/TLC. For machine-checked postconditions use
+`after(UseCase).assert(...)`. Use `compensates(RefundPayment, CapturePayment)` to make
+a compensation relationship explicit between use cases.
 
 ### Business flows
 
@@ -986,15 +1000,17 @@ exported; see [formal-verification.md](./formal-verification.md).
 `sets(UC, Entity, intCol == 3)` assigns an Int effect used by TLA+ export.
 Money / Decimal columns used in arithmetic also become `IntRange` axes (nullable
 numeric columns promote to Int rather than staying as Nullable). The exported
-Int domain is a fixed approximation (`0..5`) unless you edit the `.tla` by hand.
+Int domain is a fixed approximation (default `0..5`, override with
+`--int-range-max`) unless you edit the `.tla` by hand.
 `@default(0)` is valid on Int columns. BFS `states` still ignores Int axes and treats
 comparison propositions as Bool axes driven by `sets(..., cmp, true/false)`.
 
 `when(Entity, conditions...).has/none(...)` or
 `when(Entity.col == val).has/none(Related.col == val)` declares a
 to-many quantifier rule. The syntax is accepted and type-checked, but `states` does not
-track linked related-row counts. It emits `QuantifierConstraintNotEvaluated` when the
-related condition has reachable patterns. For `none(...)`, if the related condition is
+track linked related-row counts. It emits `QuantifierConstraintNotEvaluated` as an
+`[error]` under `states` when the related condition has reachable patterns (fail-closed;
+use TLA for linked cardinality). For `none(...)`, if the related condition is
 globally unreachable, the rule is treated as satisfied.
 
 `states` evaluates cross-entity rules by taking the cross-product of each participating

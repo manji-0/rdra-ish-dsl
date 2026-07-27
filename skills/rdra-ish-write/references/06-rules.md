@@ -110,9 +110,10 @@ rdra-ish export src/ --kind tla -o out/
   `export --kind tla` / `verify --backend tlc`, not only `states`.
 - Required lifecycle effects have corresponding `sets` or transitions.
 - Terminal, unreachable, and no-create warnings are reviewed instead of ignored.
-- `UndrivenComparisonProp` warnings are resolved by driving comparison propositions
-  with `sets(..., expr, true/false)`, by Int arithmetic export, or by removing
-  unreachable comparisons.
+- `UndrivenComparisonProp` and NotEvaluated multi-entity / quantifier / temporal
+  diagnostics are **`[error]`** under `states` (fail-closed). Resolve by driving
+  comparison propositions with `sets(..., expr, true/false)`, by Int arithmetic
+  export (`verify`), or by revising the rule.
 - The final model can explain BUC scope, actor authority, API/system boundaries,
   entity structure, lifecycle, and rules as a single refinement chain.
 

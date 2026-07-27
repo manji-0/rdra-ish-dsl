@@ -13,8 +13,8 @@ reachability) with classical model checking for invariants and temporal properti
 ## Commands
 
 ```
-rdra-ish export <INPUTS...> --kind tla [-o <OUT>]
-rdra-ish verify <INPUTS...> --backend tlc [-o <OUT_DIR>]
+rdra-ish export <INPUTS...> --kind tla [-o <OUT>] [--instance-count N] [--int-range-max N]
+rdra-ish verify <INPUTS...> --backend tlc [-o <OUT_DIR>] [--instance-count N] [--int-range-max N]
 ```
 
 | Command | Role |
@@ -22,6 +22,10 @@ rdra-ish verify <INPUTS...> --backend tlc [-o <OUT_DIR>]
 | `export --kind tla` | Write `RdraSpec.tla` **and** sibling `RdraSpec.cfg` |
 | `verify --backend tlc` | Export, then run `tlc` / `tlc2` from `PATH` |
 | `states` | Local BFS checks (no TLC dependency) |
+
+`--instance-count` (default `2`) sets multi-instance `InstanceCount`.
+`--int-range-max` (default `5`) sets `IntRange == 0..N`.
+When either approximation is used, export/verify always warn with the active bounds.
 
 If `-o` ends with `.tla`, the sibling `.cfg` is written next to it. If `-o` is a
 directory (or has no extension), files are written as `<dir>/RdraSpec.tla` and
@@ -109,7 +113,7 @@ arithmetic Safety when Int axes exist.
   warning is recorded and the formula quantifies over the instance product
   (stronger than linked-only intent).
 - **Quantifiers (`has` / `none`)**: exported over finite instance sets
-  (`InstanceCount`, currently fixed at 2 in the emitter). When `relate`
+  (`InstanceCount`, default **2**, override with `--instance-count`). When `relate`
   declares N:1 / 1:N, a `Child_owner` function links related instances; otherwise
   the related side is quantified independently.
 - **Shared events across entities**: each entity still gets its own SpecAction for
@@ -117,10 +121,14 @@ arithmetic Safety when Int axes exist.
   they are not one atomic multi-entity action — `cross_order_payment` /
   `quantifier_none` are expected TLC fails under that semantics.
 - **Int arithmetic**: comparisons and `sets(..., col == N)` on Int / Money / Decimal
-  use TLC Integers on `IntRange` (currently fixed at `0..5` in the emitter).
+  use TLC Integers on `IntRange` (default **`0..5`**, override with `--int-range-max`).
   Undriven Int axes get nondet `Assign_*` actions so TLC can explore values.
   `@default(0)` is accepted for Int columns. Boundedness is an approximation —
   `verify` OK does not prove behaviour outside `IntRange`.
+- **Approximation banner**: whenever multi-instance or integer axes are used,
+  export/verify always emit
+  `tla approximation: InstanceCount=… IntRange=0..…; verify OK does not prove outside this window`
+  on stderr and as a `\\* WARNING:` comment in the `.tla`.
 - **`now`**: exported as a global Int clock with `TickNow`. Columns compared to
   `now` (including DateTime) become Int axes. **Safety is not baked into Next**:
   `Assign_*` and `TickNow` may choose values that violate `forbidden(col < now)`;
@@ -129,7 +137,10 @@ arithmetic Safety when Int axes exist.
   Sufficient for simple `eventually` / `leads_to` on small models; not a substitute
   for per-action weak fairness.
 - BFS `rdra-ish states` still does not treat Int / `now` as state axes; use
-  TLA/TLC for those checks.
+  TLA/TLC for those checks. Undriven comparison props and NotEvaluated multi-entity /
+  quantifier / temporal-comparison diagnostics are **`[error]`** under `states`
+  (fail-closed). Int comparison samples such as `int_stock.rdra` are for `verify`,
+  not for a green `states` exit.
 - Export warnings (skipped mappings, `.along` without `relate`, unmapped
   `after.assert`, …) are printed on stderr by `export --kind tla` / `verify` and
   also embedded as `\\* WARNING:` comments in the `.tla`. Fatal obligation drops

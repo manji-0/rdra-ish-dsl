@@ -14,9 +14,11 @@ pub fn run_verify(
     model: &SemanticModel,
     backend: VerifyBackend,
     out: Option<PathBuf>,
+    instance_count: u32,
+    int_range_max: u32,
 ) -> Result<()> {
     match backend {
-        VerifyBackend::Tlc => run_tlc(model, out),
+        VerifyBackend::Tlc => run_tlc(model, out, instance_count, int_range_max),
     }
 }
 
@@ -67,16 +69,21 @@ fn resolve_tla_out_paths(
     }
 }
 
-fn run_tlc(model: &SemanticModel, out: Option<PathBuf>) -> Result<()> {
+fn run_tlc(
+    model: &SemanticModel,
+    out: Option<PathBuf>,
+    instance_count: u32,
+    int_range_max: u32,
+) -> Result<()> {
     let module_hint = out
         .as_ref()
         .filter(|p| p.extension().is_some_and(|e| e == "tla"))
         .and_then(|p| p.file_stem()?.to_str().map(str::to_string));
 
     let bundle = if let Some(name) = module_hint.as_deref() {
-        export_tla_bundle_named(model, &View::whole(), name)?
+        export_tla_bundle_named(model, &View::whole(), name, instance_count, int_range_max)?
     } else {
-        export_tla_bundle(model, &View::whole())?
+        export_tla_bundle(model, &View::whole(), instance_count, int_range_max)?
     };
 
     for w in &bundle.warnings {

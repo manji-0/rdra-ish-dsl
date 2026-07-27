@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Breaking
+
+- `rdra-ish states` treats undriven comparison propositions and unevaluated
+  multi-entity / quantifier / temporal-comparison constraints as `[error]`
+  (non-zero exit on table/json). Previously these were `[warn]` and could leave
+  a green exit while rules were inert or TLA-only.
+
+### Added
+
+- `export --kind tla` / `verify --backend tlc` accept `--instance-count` (default
+  2) and `--int-range-max` (default 5). An approximation banner is always emitted
+  when multi-instance or Int axes are used.
+- State diagnostics for undriven / NotEvaluated cases include evaluator hints
+  (states vs TLA).
+
+### Changed
+
+- Language reference separates reserved kinds and unsupported/limited topics;
+  UC `precondition`/`postcondition`/`guard` are documented as review metadata
+  only (use `after.assert` for machine-checked posts).
+
 ## v0.2.0 - 2026-07-20
 
 ### Breaking
