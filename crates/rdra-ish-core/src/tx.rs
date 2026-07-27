@@ -367,10 +367,22 @@ fn fk_edges(model: &SemanticModel) -> Vec<(EntityKey, EntityKey)> {
                     None
                 }
             }
+            RelKind::RelateManyToMany => {
+                // Edges are emitted below for both ends through the junction.
+                None
+            }
             _ => None,
         };
         if let Some(edge) = maybe {
             edges.push(edge);
+        }
+        if matches!(rel.kind, RelKind::RelateManyToMany) {
+            if let (NodeRef::Entity(from), NodeRef::Entity(to), Some(NodeRef::Entity(via))) =
+                (&rel.from, &rel.to, rel.via.as_ref())
+            {
+                edges.push((*from, *via));
+                edges.push((*to, *via));
+            }
         }
     }
     edges

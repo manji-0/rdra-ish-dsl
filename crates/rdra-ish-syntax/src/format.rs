@@ -415,6 +415,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn formats_nm_via_chain() {
+        let src = "relate(Order, Product, N:M).via(OrderProduct)\n";
+        let formatted = format_source(src).unwrap();
+        assert!(
+            formatted.contains("relate(Order, Product, N:M).via(OrderProduct)"),
+            "{formatted}"
+        );
+        let (_ast, errors) = parse(&formatted);
+        assert!(
+            errors.is_empty(),
+            "formatted output should parse: {errors:?}"
+        );
+    }
+
+    #[test]
     fn canonicalizes_source_and_preserves_parseability() {
         let src = r#"module shop.checkout
 import shared.actors.{Customer as Buyer, Staff}

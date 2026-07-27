@@ -1,4 +1,6 @@
 use crate::analysis::build_model;
+use crate::diagnostics::RdraError;
+use crate::model::{NodeRef, RelKind};
 use rdra_ish_syntax::parse;
 
 #[test]
@@ -71,7 +73,7 @@ performs(Browse, Customer)
 }
 
 #[test]
-fn test_nm_relation_warning() {
+fn test_nm_relation_requires_via() {
     let src = r#"
 entity A "A" { id: Int @pk }
 entity B "B" { id: Int @pk }
@@ -79,9 +81,112 @@ relate(A, B, N:M)
 "#;
     let (ast, _) = parse(src);
     let (_, diags) = build_model(&ast);
-    let warnings: Vec<_> = diags.iter().filter(|d| d.is_warning).collect();
-    assert!(!warnings.is_empty());
-    assert!(warnings[0].error.to_string().contains("N:M relation"));
+    let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+    assert!(!errors.is_empty());
+    assert!(errors[0].error.to_string().contains("N:M relation"));
+    assert!(errors[0].error.to_string().contains(".via"));
+}
+
+#[test]
+fn test_nm_relation_via_generates_fks() {
+    let src = r#"
+entity A "A" { id: Int @pk }
+entity B "B" { id: Int @pk }
+entity AB "AB" { id: Int @pk }
+relate(A, B, N:M).via(AB)
+"#;
+    let (ast, _) = parse(src);
+    let (model, diags) = build_model(&ast);
+    let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+    assert!(errors.is_empty(), "{errors:?}");
+
+    let ab = model.entities.values().find(|e| e.id == "AB").unwrap();
+    let fk_names: Vec<_> = ab
+        .columns
+        .iter()
+        .filter(|c| c.is_fk)
+        .map(|c| c.name.as_str())
+        .collect();
+    assert!(fk_names.contains(&"a_id"), "{fk_names:?}");
+    assert!(fk_names.contains(&"b_id"), "{fk_names:?}");
+
+    let nm = model
+        .relations
+        .iter()
+        .find(|r| matches!(r.kind, RelKind::RelateManyToMany))
+        .expect("N:M relation");
+    assert!(matches!(nm.via, Some(NodeRef::Entity(_))));
+}
+
+#[test]
+fn test_via_only_for_nm() {
+    let src = r#"
+entity A "A" { id: Int @pk }
+entity B "B" { id: Int @pk }
+entity J "J" { id: Int @pk }
+relate(A, B, N:1).via(J)
+"#;
+    let (ast, _) = parse(src);
+    let (_, diags) = build_model(&ast);
+    let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+    assert!(
+        errors
+            .iter()
+            .any(|d| matches!(d.error, RdraError::ViaOnlyForNM)),
+        "{:?}",
+        errors
+            .iter()
+            .map(|d| d.error.to_string())
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_via_requires_entity() {
+    let src = r#"
+entity A "A" { id: Int @pk }
+entity B "B" { id: Int @pk }
+relate(A, B, N:M).via("not-an-entity")
+"#;
+    let (ast, _) = parse(src);
+    let (_, diags) = build_model(&ast);
+    let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+    assert!(
+        errors
+            .iter()
+            .any(|d| matches!(d.error, RdraError::ViaRequiresEntity)),
+        "{:?}",
+        errors
+            .iter()
+            .map(|d| d.error.to_string())
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_nm_via_fk_conflict() {
+    let src = r#"
+entity A "A" { id: Int @pk }
+entity B "B" { id: Int @pk }
+entity AB "AB" {
+  id: Int @pk
+  a_id: Int
+}
+relate(A, B, N:M).via(AB)
+"#;
+    let (ast, _) = parse(src);
+    let (_, diags) = build_model(&ast);
+    let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+    assert!(
+        errors
+            .iter()
+            .any(|d| matches!(d.error, RdraError::FkConflict { .. })),
+        "{:?}",
+        errors
+            .iter()
+            .map(|d| d.error.to_string())
+            .collect::<Vec<_>>()
+    );
 }
 
 #[test]

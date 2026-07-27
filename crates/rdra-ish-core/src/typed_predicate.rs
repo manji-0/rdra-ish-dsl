@@ -13,6 +13,7 @@ use rdra_ish_syntax::ast::{PredicateArg, PredicateCall};
 /// 引数の型が期待と一致しない場合は `None`。
 /// `sets` / 制約述語 / `cross_*` / `after` は専用ハンドラで登録する。
 pub fn build_typed_predicate(
+    model: &SemanticModel,
     name: &str,
     resolved: &[Option<NodeRef>],
     pred: &PredicateCall,
@@ -42,10 +43,24 @@ pub fn build_typed_predicate(
                 Some(PredicateArg::Lit(c)) => c.as_str(),
                 _ => return None,
             };
+            let via = pred
+                .chain
+                .iter()
+                .find(|cc| cc.name == "via")
+                .and_then(|cc| cc.args.first())
+                .and_then(arg_as_str)
+                .and_then(|id| {
+                    model
+                        .entities
+                        .iter()
+                        .find(|(_, e)| e.id == id)
+                        .map(|(k, _)| k)
+                });
             Some(TypedPredicate::Relate {
                 from: as_entity(from)?,
                 to: as_entity(to)?,
                 cardinality: Cardinality::from_literal(card)?,
+                via,
             })
         }
         _ => {
@@ -360,6 +375,6 @@ transitions(Appointment.status, EvBook, draft -> booked)
             chain: vec![],
             span: 0..0,
         };
-        assert!(build_typed_predicate("performs", &[], &pred).is_none());
+        assert!(build_typed_predicate(&SemanticModel::default(), "performs", &[], &pred).is_none());
     }
 }

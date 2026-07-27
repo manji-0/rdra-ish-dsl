@@ -78,7 +78,7 @@ pub enum RelKind {
     RelateOneToOne,   // 1:1
     RelateOneToMany,  // 1:N A側が1 == B側がMany
     RelateManyToOne,  // N:1 A側がMany == B側が1 → A に FK
-    RelateManyToMany, // N:M (警告のみ)
+    RelateManyToMany, // N:M — requires `.via(Junction)` for FK generation
 }
 
 /// リレーション（from, to, kind）
@@ -88,6 +88,8 @@ pub struct Relation {
     pub to: NodeRef,
     pub kind: RelKind,
     pub options: RelationOptions,
+    /// Junction entity for `relate(A, B, N:M).via(Junction)`.
+    pub via: Option<NodeRef>,
 }
 
 /// Relation-level options, currently used by `relate` to shape generated FKs.

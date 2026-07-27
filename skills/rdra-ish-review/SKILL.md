@@ -224,7 +224,7 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 | `has_permission` | Actor | Permission | — |
 | `requires_permission` | UseCase / Api | Permission | — |
 | `requires_medium` | UseCase / Api | Medium | — |
-| `relate` | Entity | Entity | cardinality (`1:1` / `1:N` / `N:1` / `N:M`, unquoted preferred) |
+| `relate` | Entity | Entity | cardinality (`1:1` / `1:N` / `N:1` / `N:M`, unquoted preferred); `N:M` requires `.via(Junction)` |
 | `transitions` | Entity.col | Event | from -> to |
 | `sets` | UseCase / Event | Entity | `col == val` or comparison + bool |
 | `forbidden` | Entity | condition(s) | — |

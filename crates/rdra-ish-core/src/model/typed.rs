@@ -165,6 +165,7 @@ pub enum TypedPredicate {
         from: EntityKey,
         to: EntityKey,
         cardinality: Cardinality,
+        via: Option<EntityKey>,
     },
     SetsColumn {
         origin: DataOrigin,

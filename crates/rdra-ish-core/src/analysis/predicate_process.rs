@@ -188,6 +188,7 @@ fn process_maps_field_predicate(
         to: NodeRef::Entity(*entity),
         kind: RelKind::MapsField,
         options: RelationOptions::default(),
+        via: None,
     });
 }
 
@@ -225,6 +226,7 @@ fn process_maps_to_predicate(model: &mut SemanticModel, resolved: &[Option<NodeR
             to: NodeRef::Entity(*entity),
             kind: RelKind::MapsTo,
             options: RelationOptions::default(),
+            via: None,
         });
     }
 }
@@ -871,6 +873,7 @@ fn process_relation_predicate(
             to: to.clone(),
             kind,
             options: RelationOptions::default(),
+            via: None,
         });
         if pred.name == "belongs" {
             process_belongs_context(model, pred, from, to, ctx, diags);
@@ -899,6 +902,43 @@ fn relation_options_from_chain(pred: &PredicateCall) -> RelationOptions {
     options
 }
 
+/// Resolve `.via(Entity)` from the relate chain. Returns `(via, had_via_call)`.
+fn resolve_relate_via(
+    model: &SemanticModel,
+    pred: &PredicateCall,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> (Option<NodeRef>, bool) {
+    let mut via = None;
+    let mut had_via = false;
+    for cc in &pred.chain {
+        if cc.name != "via" {
+            continue;
+        }
+        had_via = true;
+        let span = cc.span.clone();
+        if cc.args.len() != 1 {
+            push_error(ctx, diags, span, RdraError::ViaRequiresEntity);
+            continue;
+        }
+        match resolve_arg(model, &cc.args[0], ctx, diags) {
+            Some(node @ NodeRef::Entity(_)) => {
+                via = Some(node);
+            }
+            Some(_) => {
+                push_error(ctx, diags, span, RdraError::ViaRequiresEntity);
+            }
+            None => {
+                // resolve_arg already reported undefined / ambiguity when Ref.
+                if !matches!(cc.args.first(), Some(PredicateArg::Ref(_))) {
+                    push_error(ctx, diags, span, RdraError::ViaRequiresEntity);
+                }
+            }
+        }
+    }
+    (via, had_via)
+}
+
 fn process_relate_predicate(
     model: &mut SemanticModel,
     pred: &PredicateCall,
@@ -911,44 +951,64 @@ fn process_relate_predicate(
         Some(PredicateArg::Lit(c)) => c.as_str(),
         _ => return,
     };
-    if let (Some(Some(from)), Some(Some(to))) = (resolved.first(), resolved.get(1)) {
-        let kind = match card_str {
-            "1:1" => RelKind::RelateOneToOne,
-            "1:N" => RelKind::RelateOneToMany,
-            "N:1" => RelKind::RelateManyToOne,
-            "N:M" => {
-                let from_id = match from {
-                    NodeRef::Entity(k) => model.entities[*k].id.clone(),
-                    _ => "?".into(),
-                };
-                let to_id = match to {
-                    NodeRef::Entity(k) => model.entities[*k].id.clone(),
-                    _ => "?".into(),
-                };
-                push_warning(
-                    ctx,
-                    diags,
-                    pred.args
-                        .get(2)
-                        .map(arg_span)
-                        .filter(|s| !s.is_empty())
-                        .unwrap_or_else(|| pred.span.clone()),
-                    RdraError::NMRelation {
-                        from: from_id,
-                        to: to_id,
-                    },
-                );
-                RelKind::RelateManyToMany
-            }
-            _ => return,
-        };
-        model.relations.push(Relation {
-            from: from.clone(),
-            to: to.clone(),
-            kind,
-            options: relation_options_from_chain(pred),
-        });
+    let (Some(Some(from)), Some(Some(to))) = (resolved.first(), resolved.get(1)) else {
+        return;
+    };
+
+    let (via, had_via) = resolve_relate_via(model, pred, ctx, diags);
+    let options = relation_options_from_chain(pred);
+
+    let kind = match card_str {
+        "1:1" => RelKind::RelateOneToOne,
+        "1:N" => RelKind::RelateOneToMany,
+        "N:1" => RelKind::RelateManyToOne,
+        "N:M" => RelKind::RelateManyToMany,
+        _ => return,
+    };
+
+    if had_via && kind != RelKind::RelateManyToMany {
+        let span = pred
+            .chain
+            .iter()
+            .find(|cc| cc.name == "via")
+            .map(|cc| cc.span.clone())
+            .unwrap_or_else(|| pred.span.clone());
+        push_error(ctx, diags, span, RdraError::ViaOnlyForNM);
+        return;
     }
+
+    if kind == RelKind::RelateManyToMany && via.is_none() {
+        let from_id = match from {
+            NodeRef::Entity(k) => model.entities[*k].id.clone(),
+            _ => "?".into(),
+        };
+        let to_id = match to {
+            NodeRef::Entity(k) => model.entities[*k].id.clone(),
+            _ => "?".into(),
+        };
+        push_error(
+            ctx,
+            diags,
+            pred.args
+                .get(2)
+                .map(arg_span)
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| pred.span.clone()),
+            RdraError::NMRelation {
+                from: from_id,
+                to: to_id,
+            },
+        );
+        return;
+    }
+
+    model.relations.push(Relation {
+        from: from.clone(),
+        to: to.clone(),
+        kind,
+        options,
+        via,
+    });
 }
 
 pub(crate) fn process_predicate(
@@ -1029,7 +1089,8 @@ pub(crate) fn process_predicate(
         _ => process_relation_predicate(model, pred, &resolved, ctx, diags),
     }
 
-    if let Some(typed) = crate::typed_predicate::build_typed_predicate(&pred.name, &resolved, pred)
+    if let Some(typed) =
+        crate::typed_predicate::build_typed_predicate(model, &pred.name, &resolved, pred)
     {
         model.typed_predicates.push(typed);
     }

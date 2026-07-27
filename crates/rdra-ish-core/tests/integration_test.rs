@@ -370,13 +370,17 @@ fn test_error_nm_relation() {
 
     let has_nm = diags
         .iter()
-        .any(|d| matches!(&d.error, RdraError::NMRelation { .. }));
+        .any(|d| matches!(&d.error, RdraError::NMRelation { .. }) && !d.is_warning);
     assert!(
         has_nm,
-        "expected NMRelation diagnostic, got: {:?}",
+        "expected NMRelation error, got: {:?}",
         diags
             .iter()
-            .map(|d| d.error.to_string())
+            .map(|d| format!(
+                "{}:{}",
+                if d.is_warning { "warn" } else { "error" },
+                d.error
+            ))
             .collect::<Vec<_>>()
     );
 }

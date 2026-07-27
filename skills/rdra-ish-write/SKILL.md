@@ -152,7 +152,7 @@ Kinds commonly used by this skill:
 | `when` | `(...).none/has(...)` | to-many quantifier (prefer `Entity.col`) |
 | `property` | `Name [label] always\|eventually\|leads_to(...)` | temporal path property (label optional) |
 | `after` | `(UseCase).assert(...)` | postcondition on events raised by UC |
-| `relate` | `(Entity, Entity, 1:1\|1:N\|N:1\|N:M)` | ER relation, auto-generates FK |
+| `relate` | `(Entity, Entity, 1:1\|1:N\|N:1\|N:M)` | ER relation; `N:M` requires `.via(Junction)` for auto FK |
 | `has_permission` | `Actor == Permission` | actor-side grant |
 | `requires_permission` | `(UseCase\|Api, Permission)` | UC/API required authority |
 | `requires_medium` | `(UseCase\|Api, Medium)` | UC/API required operation medium |

@@ -1411,6 +1411,22 @@ entity Product "商品" {
     }
 
     #[test]
+    fn test_parse_relate_nm_via() {
+        let ast = parse_ok(r#"relate(Order, Product, N:M).via(OrderProduct)"#);
+        let Item::Predicate(pred) = &ast.items[0] else {
+            panic!("expected predicate");
+        };
+        assert_eq!(pred.name, "relate");
+        assert!(matches!(pred.args.get(2), Some(PredicateArg::Card(c)) if c == "N:M"));
+        assert_eq!(pred.chain.len(), 1);
+        assert_eq!(pred.chain[0].name, "via");
+        assert!(matches!(
+            pred.chain[0].args.first(),
+            Some(PredicateArg::Ref(q)) if q.parts == ["OrderProduct"]
+        ));
+    }
+
+    #[test]
     fn test_parse_import() {
         let src = r#"
 import shared.actors

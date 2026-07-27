@@ -107,7 +107,7 @@ CSV, or JSON form.
 
 | Topic | Limitation |
 |---|---|
-| Direct `relate(..., N:M)` | Not supported. Introduce an intermediate entity and two `N:1` (or `1:N`) relates. |
+| Bare `relate(..., N:M)` without `.via` | Error. Use `relate(A, B, N:M).via(Junction)` or two explicit `N:1` relates through a junction entity. |
 | Composite `@pk(a, b)` auto-FK | `relate` does not auto-generate FKs against composite primary keys — declare FK columns explicitly on the many side. |
 | AsyncAPI protocol / server / payload schemas | `export --kind asyncapi` projects event causality only; broker protocol, servers, and exact payload schemas are not inferred. |
 
@@ -260,7 +260,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `requires_medium` | `(UseCase \| Api, Medium)` | The use case or API requires the operation medium. |
 | `motivates` | `Requirement == Buc` | The requirement motivates the BUC. |
 | `decides` | `(Adr, Buc \| UseCase \| Api \| System \| Entity \| Requirement \| Nfr \| Constraint \| Concept \| DomainObject \| Aggregate \| ValueObject \| Dto)` | The ADR records a design decision that affects the target element. Use this for impact review and design traceability without making the target depend on a document file path. |
-| `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `1:1`, `1:N`, `N:1` (unquoted). Direct `N:M` is **not** supported — introduce an intermediate entity and two `N:1` relates. FK options can be chained with `.optional()`, `.on_delete(action)`, and `.on_update(action)`. |
+| `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `1:1`, `1:N`, `N:1`, `N:M` (unquoted). For `N:M`, require `.via(JunctionEntity)` so FK columns are generated on the junction (`junction → A` and `junction → B`, same as two `N:1` relates). Equivalent manual form: two `N:1` relates from the junction. FK options can be chained with `.optional()`, `.on_delete(action)`, and `.on_update(action)` (for `N:M`, options apply to both generated FKs). |
 | `transitions` | `(Entity.column, Event, from -> to)` | A lifecycle edge on an Enum column: on the event, the entity moves from the first variant to the second. |
 | `after` | `(UseCase).assert(...)` | A temporal anchor assertion checked against the use case's immediate `sets` and `raises`/`transitions` effects. |
 | `when` | `(conditions...).none/has(conditions...)` | A to-many quantifier constraint (replaces `forbidden_when`). Prefer qualified columns such as `Cert.status == revoked`. |
@@ -562,6 +562,20 @@ belongs(BucAppointmentScheduling, ClinicOps)
 referencing the parent's primary key (for example `parent_id`). The cardinality drives
 the crow's-foot notation in the ER diagram and the FK-induced graph used for
 [transaction boundary inference](#see-also).
+
+Many-to-many requires an explicit junction entity:
+
+```rdra
+entity Order "Order" { id: Int @pk }
+entity Product "Product" { id: Int @pk }
+entity OrderProduct "Order product" { id: Int @pk }
+
+relate(Order, Product, N:M).via(OrderProduct)
+// generates OrderProduct.order_id and OrderProduct.product_id
+```
+
+Bare `relate(A, B, N:M)` without `.via` is an error. The equivalent manual form is
+still valid: `relate(Junction, A, N:1)` plus `relate(Junction, B, N:1)`.
 
 Auto-FK requires a **single-column** `@pk` on the parent. If the parent uses
 `@pk(a, b)` (composite), the model reports `CompositePkFkUnsupported` — declare the

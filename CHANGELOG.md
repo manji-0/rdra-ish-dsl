@@ -16,13 +16,15 @@
   when multi-instance or Int axes are used.
 - State diagnostics for undriven / NotEvaluated cases include evaluator hints
   (states vs TLA).
+- `relate(A, B, N:M).via(Junction)` — many-to-many with an explicit junction
+  entity; auto-generates both FK columns on the junction. Bare `N:M` is an error.
 
 ### Changed
 
 - Language reference separates reserved kinds and unsupported/limited topics;
   UC `precondition`/`postcondition`/`guard` are documented as review metadata
   only (use `after.assert` for machine-checked posts).
-
+- Bare `relate(..., N:M)` without `.via` is an error (was a warning).
 ## v0.2.0 - 2026-07-20
 
 ### Breaking

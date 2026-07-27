@@ -57,8 +57,14 @@ pub enum RdraError {
     #[error("usecase metadata is only valid on usecase '{id}' declarations\n  hint: move precondition/postcondition/guard/alternative/error clauses to a `usecase` declaration")]
     UseCaseMetadataOnNonUseCase { id: String },
 
-    #[error("N:M relation between '{from}' and '{to}': direct N:M relations are not supported\n  hint: create an intermediate entity, e.g.:\n    entity {from}{to} \"..\" {{ id: Int @pk }}\n    relate({from}{to}, {from}, N:1)\n    relate({from}{to}, {to}, N:1)")]
+    #[error("N:M relation between '{from}' and '{to}' requires .via(Junction)\n  hint: declare a junction entity and attach it, e.g.:\n    entity {from}{to} \"..\" {{ id: Int @pk }}\n    relate({from}, {to}, N:M).via({from}{to})\n  equivalently:\n    relate({from}{to}, {from}, N:1)\n    relate({from}{to}, {to}, N:1)")]
     NMRelation { from: String, to: String },
+
+    #[error(".via(...) is only valid on relate(..., N:M)\n  hint: use `relate(A, B, N:M).via(Junction)` or drop `.via` for 1:1 / 1:N / N:1")]
+    ViaOnlyForNM,
+
+    #[error(".via(...) must name a single entity junction\n  hint: write `relate(A, B, N:M).via(JunctionEntity)`")]
+    ViaRequiresEntity,
 
     #[error("FK conflict: entity '{entity}' already has a column '{col}' that conflicts with auto-generated FK")]
     FkConflict { entity: String, col: String },

@@ -5,113 +5,119 @@ use crate::diagnostics::{Diagnostic, RdraError};
 use crate::model::*;
 
 pub(crate) fn generate_fks(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>) {
-    let rels: Vec<_> = model
-        .relations
-        .iter()
-        .filter(|r| matches!(r.kind, RelKind::RelateManyToOne | RelKind::RelateOneToMany))
-        .map(|r| {
-            (
-                r.from.clone(),
-                r.to.clone(),
-                r.kind.clone(),
-                r.options.clone(),
-            )
-        })
-        .collect();
+    let mut jobs: Vec<(EntityKey, EntityKey, RelationOptions)> = Vec::new();
 
-    for (from, to, kind, options) in rels {
-        let (many_key, one_key) = match kind {
+    for rel in &model.relations {
+        match &rel.kind {
             RelKind::RelateManyToOne => {
-                if let (NodeRef::Entity(fk), NodeRef::Entity(tk)) = (&from, &to) {
-                    (*fk, *tk)
-                } else {
-                    continue;
+                if let (NodeRef::Entity(fk), NodeRef::Entity(tk)) = (&rel.from, &rel.to) {
+                    jobs.push((*fk, *tk, rel.options.clone()));
                 }
             }
             RelKind::RelateOneToMany => {
-                if let (NodeRef::Entity(ok), NodeRef::Entity(mk)) = (&from, &to) {
-                    (*mk, *ok)
-                } else {
-                    continue;
+                if let (NodeRef::Entity(ok), NodeRef::Entity(mk)) = (&rel.from, &rel.to) {
+                    jobs.push((*mk, *ok, rel.options.clone()));
                 }
             }
-            _ => continue,
-        };
+            RelKind::RelateManyToMany => {
+                let Some(NodeRef::Entity(junction)) = rel.via.as_ref() else {
+                    continue;
+                };
+                if let (NodeRef::Entity(from), NodeRef::Entity(to)) = (&rel.from, &rel.to) {
+                    // Junction is the many side toward each end (same as two N:1 relates).
+                    jobs.push((*junction, *from, rel.options.clone()));
+                    jobs.push((*junction, *to, rel.options.clone()));
+                }
+            }
+            _ => {}
+        }
+    }
 
-        let (one_id, pk_type) = {
-            let one = &model.entities[one_key];
-            if one.primary_key.len() > 1 {
+    for (many_key, one_key, options) in jobs {
+        generate_fk_column(model, diags, many_key, one_key, options);
+    }
+}
+
+fn generate_fk_column(
+    model: &mut SemanticModel,
+    diags: &mut Vec<Diagnostic>,
+    many_key: EntityKey,
+    one_key: EntityKey,
+    options: RelationOptions,
+) {
+    let (one_id, pk_type) = {
+        let one = &model.entities[one_key];
+        if one.primary_key.len() > 1 {
+            push_entity_error(
+                model,
+                diags,
+                &one.id,
+                RdraError::CompositePkFkUnsupported {
+                    entity: one.id.clone(),
+                },
+            );
+            return;
+        }
+        let pk = one.columns.iter().find(|c| c.is_pk).or_else(|| {
+            one.primary_key
+                .first()
+                .and_then(|name| one.columns.iter().find(|c| c.name == *name))
+        });
+        match pk {
+            Some(col) => (one.id.clone(), col.col_type.clone()),
+            None => {
                 push_entity_error(
                     model,
                     diags,
                     &one.id,
-                    RdraError::CompositePkFkUnsupported {
+                    RdraError::MissingPk {
                         entity: one.id.clone(),
                     },
                 );
-                continue;
+                return;
             }
-            let pk = one.columns.iter().find(|c| c.is_pk).or_else(|| {
-                one.primary_key
-                    .first()
-                    .and_then(|name| one.columns.iter().find(|c| c.name == *name))
-            });
-            match pk {
-                Some(col) => (one.id.clone(), col.col_type.clone()),
-                None => {
-                    push_entity_error(
-                        model,
-                        diags,
-                        &one.id,
-                        RdraError::MissingPk {
-                            entity: one.id.clone(),
-                        },
-                    );
-                    continue;
-                }
-            }
-        };
-
-        let fk_col_name = format!("{}_id", one_id.to_lowercase());
-
-        let many_entity_id = model.entities[many_key].id.clone();
-        if model.entities[many_key]
-            .columns
-            .iter()
-            .any(|c| c.name == fk_col_name)
-        {
-            push_entity_error(
-                model,
-                diags,
-                &many_entity_id,
-                RdraError::FkConflict {
-                    entity: many_entity_id.clone(),
-                    col: fk_col_name.clone(),
-                },
-            );
-            continue;
         }
+    };
 
-        let fk_col = ModelColumn {
-            name: fk_col_name,
-            col_type: pk_type,
-            is_pk: false,
-            is_unique: false,
-            is_indexed: false,
-            is_nullable: options.optional,
-            default_val: None,
-            label: None,
-            is_fk: true,
-            fk_target: Some(one_id),
-            fk_optional: options.optional,
-            fk_on_delete: options.on_delete,
-            fk_on_update: options.on_update,
-            check_constraints: Vec::new(),
-            is_soft_delete: false,
-            is_history: false,
-            is_tenant_scope: false,
-            derived_expr: None,
-        };
-        model.entities[many_key].columns.push(fk_col);
+    let fk_col_name = format!("{}_id", one_id.to_lowercase());
+
+    let many_entity_id = model.entities[many_key].id.clone();
+    if model.entities[many_key]
+        .columns
+        .iter()
+        .any(|c| c.name == fk_col_name)
+    {
+        push_entity_error(
+            model,
+            diags,
+            &many_entity_id,
+            RdraError::FkConflict {
+                entity: many_entity_id.clone(),
+                col: fk_col_name.clone(),
+            },
+        );
+        return;
     }
+
+    let fk_col = ModelColumn {
+        name: fk_col_name,
+        col_type: pk_type,
+        is_pk: false,
+        is_unique: false,
+        is_indexed: false,
+        is_nullable: options.optional,
+        default_val: None,
+        label: None,
+        is_fk: true,
+        fk_target: Some(one_id),
+        fk_optional: options.optional,
+        fk_on_delete: options.on_delete,
+        fk_on_update: options.on_update,
+        check_constraints: Vec::new(),
+        is_soft_delete: false,
+        is_history: false,
+        is_tenant_scope: false,
+        derived_expr: None,
+    };
+    model.entities[many_key].columns.push(fk_col);
 }
