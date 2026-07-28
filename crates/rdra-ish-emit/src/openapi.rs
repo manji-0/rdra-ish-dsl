@@ -82,6 +82,22 @@ fn openapi_operation(model: &SemanticModel, api: rdra_ish_core::model::ApiKey) -
             Value::Array(vec![Value::Object(requirement)]),
         );
     }
+
+    let permissions = required_permissions(model, api);
+    if !permissions.is_empty() {
+        operation.insert(
+            "x-rdra-ish-requires-permission".to_string(),
+            json!(permissions),
+        );
+    }
+
+    if let Some(path) = &api_model.path {
+        let params = path_parameters(path);
+        if !params.is_empty() {
+            operation.insert("parameters".to_string(), Value::Array(params));
+        }
+    }
+
     if let Some(dto) = request {
         operation.insert(
             "requestBody".to_string(),
@@ -131,6 +147,50 @@ fn openapi_operation(model: &SemanticModel, api: rdra_ish_core::model::ApiKey) -
     operation.insert("responses".to_string(), Value::Object(responses));
 
     Value::Object(operation)
+}
+
+/// Extract `{param}` segments from an OpenAPI-style path template.
+fn path_parameters(path: &str) -> Vec<Value> {
+    let mut params: Vec<Value> = Vec::new();
+    let mut rest = path;
+    while let Some(start) = rest.find('{') {
+        let after = &rest[start + 1..];
+        let Some(end) = after.find('}') else {
+            break;
+        };
+        let name = &after[..end];
+        if !name.is_empty() && !params.iter().any(|p: &Value| p["name"] == name) {
+            params.push(json!({
+                "name": name,
+                "in": "path",
+                "required": true,
+                "schema": { "type": "string" }
+            }));
+        }
+        rest = &after[end + 1..];
+    }
+    params
+}
+
+fn required_permissions(model: &SemanticModel, api: rdra_ish_core::model::ApiKey) -> Vec<String> {
+    let mut ids: Vec<String> = model
+        .relations
+        .iter()
+        .filter(|rel| {
+            rel.kind == RelKind::RequiresPermission
+                && matches!(
+                    (&rel.from, &rel.to),
+                    (NodeRef::Api(a), NodeRef::Permission(_)) if *a == api
+                )
+        })
+        .filter_map(|rel| match rel.to {
+            NodeRef::Permission(p) => Some(model.permissions[p].id.clone()),
+            _ => None,
+        })
+        .collect();
+    ids.sort();
+    ids.dedup();
+    ids
 }
 
 fn related_dto(model: &SemanticModel, api: NodeRef, kind: RelKind) -> Option<DtoKey> {
@@ -200,7 +260,12 @@ fn security_schemes(model: &SemanticModel) -> Map<String, Value> {
             .or_insert_with(|| match auth.as_str() {
                 "bearer" => json!({ "type": "http", "scheme": "bearer" }),
                 "api_key" => json!({ "type": "apiKey", "in": "header", "name": "X-API-Key" }),
-                other => json!({ "type": "http", "scheme": other }),
+                other => json!({
+                    "type": "apiKey",
+                    "in": "header",
+                    "name": "X-Auth",
+                    "x-rdra-ish-auth-scheme": other
+                }),
             });
     }
     schemes
@@ -276,5 +341,49 @@ error_response(CreateOrder, ErrorResponse)
             doc["components"]["securitySchemes"]["bearer"],
             json!({ "type": "http", "scheme": "bearer" })
         );
+    }
+
+    #[test]
+    fn emits_path_parameters_permissions_and_unknown_auth_extension() {
+        let model = model_from(
+            r#"
+permission OrderRead "Order read"
+api GetOrder "Get order" method GET path "/orders/{id}" auth oauth2
+requires_permission(GetOrder, OrderRead)
+"#,
+        );
+
+        let json = OpenApiJsonEmitter.emit(&model, &View::whole()).unwrap();
+        let doc: Value = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(
+            doc["paths"]["/orders/{id}"]["get"]["parameters"],
+            json!([{
+                "name": "id",
+                "in": "path",
+                "required": true,
+                "schema": { "type": "string" }
+            }])
+        );
+        assert_eq!(
+            doc["paths"]["/orders/{id}"]["get"]["x-rdra-ish-requires-permission"],
+            json!(["OrderRead"])
+        );
+        assert_eq!(
+            doc["components"]["securitySchemes"]["oauth2"]["type"],
+            "apiKey"
+        );
+        assert_eq!(
+            doc["components"]["securitySchemes"]["oauth2"]["x-rdra-ish-auth-scheme"],
+            "oauth2"
+        );
+    }
+
+    #[test]
+    fn path_parameters_extracts_multiple_segments() {
+        let params = path_parameters("/tenants/{tenant_id}/orders/{id}");
+        assert_eq!(params.len(), 2);
+        assert_eq!(params[0]["name"], "tenant_id");
+        assert_eq!(params[1]["name"], "id");
     }
 }

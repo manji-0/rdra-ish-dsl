@@ -23,8 +23,10 @@ rdra-ish verify <INPUTS...> --backend tlc [-o <OUT_DIR>] [--instance-count N] [-
 | `verify --backend tlc` | Export, then run `tlc` / `tlc2` from `PATH` |
 | `states` | Local BFS checks (no TLC dependency) |
 
-`--instance-count` (default `2`) sets multi-instance `InstanceCount`.
-`--int-range-max` (default `5`) sets `IntRange == 0..N`.
+`--instance-count` (default `2`) sets multi-instance `InstanceCount` (`>= 1`;
+`0` is rejected, `1` warns that singleton ids cannot distinguish multi-entity
+instances).
+`--int-range-max` (default `5`) sets `IntRange == 0..N` (`>= 1`; `0` is rejected).
 When either approximation is used, export/verify always warn with the active bounds.
 
 If `-o` ends with `.tla`, the sibling `.cfg` is written next to it. If `-o` is a

@@ -239,6 +239,7 @@ pub(crate) enum StatesFormat {
     Table,
     Csv,
     Json,
+    #[value(name = "typescript", alias = "type-script")]
     TypeScript,
 }
 
@@ -645,6 +646,36 @@ mod tests {
                 assert_eq!(int_range_max, 7);
             }
             _ => panic!("expected verify command"),
+        }
+
+        let cli = Cli::try_parse_from([
+            "rdra-ish",
+            "states",
+            "sample.rdra",
+            "--format",
+            "type-script",
+        ])
+        .unwrap();
+        match cli.command {
+            Commands::States { format, .. } => {
+                assert!(matches!(format, StatesFormat::TypeScript));
+            }
+            _ => panic!("expected states command"),
+        }
+
+        let cli = Cli::try_parse_from([
+            "rdra-ish",
+            "states",
+            "sample.rdra",
+            "--format",
+            "typescript",
+        ])
+        .unwrap();
+        match cli.command {
+            Commands::States { format, .. } => {
+                assert!(matches!(format, StatesFormat::TypeScript));
+            }
+            _ => panic!("expected states command"),
         }
     }
 }

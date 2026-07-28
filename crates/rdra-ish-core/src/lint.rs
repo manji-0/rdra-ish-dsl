@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::diagnostics::{Diagnostic, RdraError};
 use crate::location::LocatedSpan;
-use crate::model::{node_ref_kind, NodeRef, RelKind, SemanticModel};
+use crate::model::{node_ref_kind, NodeRef, RelKind, SemanticModel, StepKey};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LintSeverity {
@@ -199,6 +199,7 @@ fn collect_findings(model: &SemanticModel) -> Vec<LintIssue> {
     }
 
     lint_structural_coverage(model, &mut findings);
+    lint_flow_cycles(model, &mut findings);
     lint_column_names(model, &mut findings);
     findings
 }
@@ -219,6 +220,89 @@ fn push_element_lint(
         issue = issue.with_location(loc);
     }
     issues.push(issue);
+}
+
+fn lint_flow_cycles(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
+    use std::collections::{HashMap, HashSet};
+
+    let mut adj: HashMap<StepKey, Vec<StepKey>> = HashMap::new();
+    for rel in &model.relations {
+        if !matches!(rel.kind, RelKind::Precedes | RelKind::Branches) {
+            continue;
+        }
+        if let (NodeRef::Step(from), NodeRef::Step(to)) = (&rel.from, &rel.to) {
+            adj.entry(*from).or_default().push(*to);
+            adj.entry(*to).or_default();
+        }
+    }
+    if adj.is_empty() {
+        return;
+    }
+
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum Color {
+        White,
+        Gray,
+        Black,
+    }
+    let mut color: HashMap<StepKey, Color> = adj.keys().map(|k| (*k, Color::White)).collect();
+    let mut reported = HashSet::new();
+
+    fn dfs(
+        model: &SemanticModel,
+        node: StepKey,
+        adj: &HashMap<StepKey, Vec<StepKey>>,
+        color: &mut HashMap<StepKey, Color>,
+        stack: &mut Vec<StepKey>,
+        reported: &mut HashSet<StepKey>,
+        issues: &mut Vec<LintIssue>,
+    ) {
+        color.insert(node, Color::Gray);
+        stack.push(node);
+        for &next in adj.get(&node).into_iter().flatten() {
+            match color.get(&next).copied().unwrap_or(Color::White) {
+                Color::Gray => {
+                    // Cycle: report each step once.
+                    let cycle_start = stack.iter().position(|s| *s == next).unwrap_or(0);
+                    for &step in &stack[cycle_start..] {
+                        if reported.insert(step) {
+                            push_element_lint(
+                                model,
+                                issues,
+                                "step",
+                                "step",
+                                &model.steps[step].id,
+                                "flow-cycle",
+                                "business step participates in a precedes/branches cycle",
+                                "remove or redirect precedes/branches edges so the flow graph is acyclic",
+                            );
+                        }
+                    }
+                }
+                Color::White => dfs(model, next, adj, color, stack, reported, issues),
+                Color::Black => {}
+            }
+        }
+        stack.pop();
+        color.insert(node, Color::Black);
+    }
+
+    let mut keys: Vec<_> = adj.keys().copied().collect();
+    keys.sort_by_key(|k| model.steps[*k].id.as_str());
+    let mut stack = Vec::new();
+    for key in keys {
+        if color.get(&key).copied() == Some(Color::White) {
+            dfs(
+                model,
+                key,
+                &adj,
+                &mut color,
+                &mut stack,
+                &mut reported,
+                issues,
+            );
+        }
+    }
 }
 
 fn lint_structural_coverage(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
@@ -504,39 +588,8 @@ fn lint_column_names(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
     }
 }
 
-fn coverage_score_issue(model: &SemanticModel, findings: &[LintIssue]) -> LintIssue {
-    let penalty: i32 = findings
-        .iter()
-        .map(|issue| match issue.severity {
-            LintSeverity::Error => 15,
-            LintSeverity::Warning => {
-                if issue.rule == "semantic-warning" || issue.rule == "consistency-warning" {
-                    4
-                } else {
-                    2
-                }
-            }
-            LintSeverity::Info => 0,
-        })
-        .sum();
-    let score = (100 - penalty).max(0);
-    LintIssue::new(
-        LintSeverity::Info,
-        "coverage-score",
-        "model",
-        "",
-        format!(
-            "coverage score: {}/100 across {} model elements and {} findings",
-            score,
-            model_element_count(model),
-            findings.len()
-        ),
-        "use warning rows as the review backlog; the score is a lightweight readiness signal",
-    )
-}
-
-fn stage_readiness_issue(model: &SemanticModel) -> LintIssue {
-    let stages = [
+fn refinement_stages(model: &SemanticModel) -> [(&'static str, bool); 6] {
+    [
         (
             "scope",
             !model.actors.is_empty() && !model.bucs.is_empty() && !model.use_cases.is_empty(),
@@ -566,7 +619,60 @@ fn stage_readiness_issue(model: &SemanticModel) -> LintIssue {
                 || !model.cross_forbidden_constraints.is_empty()
                 || !model.cross_entity_invariants.is_empty(),
         ),
-    ];
+    ]
+}
+
+fn coverage_score_issue(model: &SemanticModel, findings: &[LintIssue]) -> LintIssue {
+    let elements = model_element_count(model);
+    if elements == 0 {
+        return LintIssue::new(
+            LintSeverity::Info,
+            "coverage-score",
+            "model",
+            "",
+            "coverage score: 0/100 across 0 model elements and 0 findings (empty model)",
+            "add actors/BUCs/entities before treating the score as a readiness signal; see stage-readiness",
+        );
+    }
+
+    let finding_penalty: i32 = findings
+        .iter()
+        .map(|issue| match issue.severity {
+            LintSeverity::Error => 15,
+            LintSeverity::Warning => {
+                if issue.rule == "semantic-warning" || issue.rule == "consistency-warning" {
+                    4
+                } else {
+                    2
+                }
+            }
+            LintSeverity::Info => 0,
+        })
+        .sum();
+    let missing_stages = refinement_stages(model)
+        .iter()
+        .filter(|(_, ok)| !*ok)
+        .count() as i32;
+    let stage_penalty = missing_stages.saturating_mul(8);
+    let score = (100 - finding_penalty - stage_penalty).max(0);
+    LintIssue::new(
+        LintSeverity::Info,
+        "coverage-score",
+        "model",
+        "",
+        format!(
+            "coverage score: {}/100 across {} model elements and {} findings ({} missing stages × -8)",
+            score,
+            elements,
+            findings.len(),
+            missing_stages
+        ),
+        "use warning rows and stage-readiness missing stages as the review backlog; the score is a lightweight readiness signal",
+    )
+}
+
+fn stage_readiness_issue(model: &SemanticModel) -> LintIssue {
+    let stages = refinement_stages(model);
     let ready: Vec<_> = stages
         .iter()
         .filter_map(|(stage, ok)| ok.then_some(*stage))
@@ -958,5 +1064,69 @@ entity Order "Order" {
         assert!(rules.contains(&"api-contract-incomplete"));
         assert!(rules.contains(&"field-unmapped"));
         assert!(rules.contains(&"naming-column"));
+    }
+
+    #[test]
+    fn coverage_score_is_zero_for_empty_model() {
+        let model = model_from("");
+        let issues = lint_issues(&model, &[]);
+        let score = issues
+            .iter()
+            .find(|i| i.rule == "coverage-score")
+            .expect("coverage-score");
+        assert!(
+            score.message.starts_with("coverage score: 0/100"),
+            "empty model must not score high: {}",
+            score.message
+        );
+        assert!(score.message.contains("empty model"));
+    }
+
+    #[test]
+    fn coverage_score_penalizes_missing_stages_for_tiny_models() {
+        let model = model_from(r#"actor Solo "Solo""#);
+        let issues = lint_issues(&model, &[]);
+        let score = issues
+            .iter()
+            .find(|i| i.rule == "coverage-score")
+            .expect("coverage-score");
+        // orphan warning (-2) + 6 missing stages × -8 = large penalty; must not look "ready"
+        let numeric: i32 = score
+            .message
+            .strip_prefix("coverage score: ")
+            .and_then(|s| s.split('/').next())
+            .and_then(|n| n.parse().ok())
+            .expect("parse score");
+        assert!(
+            numeric <= 50,
+            "tiny model score should stay low, got {} from {}",
+            numeric,
+            score.message
+        );
+        assert!(score.message.contains("missing stages"));
+    }
+
+    #[test]
+    fn flow_cycle_detects_precedes_loop() {
+        let model = model_from(
+            r#"
+step A "A"
+step B "B"
+precedes(A, B)
+precedes(B, A)
+"#,
+        );
+        let issues = lint_issues(&model, &[]);
+        let cycles: Vec<_> = issues.iter().filter(|i| i.rule == "flow-cycle").collect();
+        assert!(
+            cycles.len() >= 2,
+            "expected flow-cycle on both steps, got: {:?}",
+            issues
+                .iter()
+                .map(|i| (i.rule, i.subject_id.as_str()))
+                .collect::<Vec<_>>()
+        );
+        assert!(cycles.iter().any(|i| i.subject_id == "A"));
+        assert!(cycles.iter().any(|i| i.subject_id == "B"));
     }
 }

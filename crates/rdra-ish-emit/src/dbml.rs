@@ -335,4 +335,22 @@ relate(Order, Customer, N:1).optional().on_delete(set_null).on_update(cascade)
         assert!(dbml
             .contains("Ref: Order.customer_id > Customer.id [delete: set null, update: cascade]"));
     }
+
+    #[test]
+    fn nm_via_emits_junction_composite_unique() {
+        let model = model_from(
+            r#"
+entity Order "Order" { id: Int @pk }
+entity Product "Product" { id: Int @pk }
+entity OrderProduct "Order product" { id: Int @pk }
+relate(Order, Product, N:M).via(OrderProduct)
+"#,
+        );
+        let dbml = DbmlEmitter.emit(&model, &View::whole()).unwrap();
+        assert!(
+            dbml.contains("(order_id, product_id) [unique]")
+                || dbml.contains("(product_id, order_id) [unique]"),
+            "expected composite unique on junction FKs in DBML:\n{dbml}"
+        );
+    }
 }

@@ -71,7 +71,16 @@ fn node_kind_tag_str_labels_each_node_ref_kind() {
     };
     register_instance(&mut model, &entity_inst, DiagCtxt::new(0), &mut diags);
 
-    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+    let unexpected: Vec<_> = diags
+        .iter()
+        .filter(|d| {
+            !d.is_warning || !matches!(&d.error, crate::diagnostics::RdraError::ReservedKind { .. })
+        })
+        .collect();
+    assert!(
+        unexpected.is_empty(),
+        "unexpected diagnostics: {unexpected:?}"
+    );
     for (kind, id, expected) in &cases {
         let node = model.symbols.lookup_qualified(kind, id).unwrap();
         assert_eq!(node_kind_tag_str(node), *expected);

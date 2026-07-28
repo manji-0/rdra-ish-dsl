@@ -4,7 +4,8 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use rdra_ish_core::{
-    derive_state_patterns, state_results_have_errors_with_policy, StateDiagPolicy,
+    derive_state_patterns, state_diag_severity_with_policy, state_results_have_errors_with_policy,
+    StateDiagPolicy,
 };
 use rdra_ish_emit::{
     state_pattern::{StatePatternCsvEmitter, StatePatternJsonEmitter, StatePatternTableEmitter},
@@ -45,9 +46,23 @@ pub fn run_states(
     };
 
     let view = View::bucs(buc.clone());
-    // Exit on structured severity (not string scan) so csv / type-script also fail-closed.
+    // Exit on structured severity (not string scan) so csv / typescript also fail-closed.
     let results = derive_state_patterns(&model, &buc, max_patterns);
     let has_error = state_results_have_errors_with_policy(&results, policy);
+
+    if let Some(ref entity_id) = entity {
+        let other_errors: usize = results
+            .iter()
+            .filter(|r| r.entity_id != *entity_id)
+            .flat_map(|r| r.diagnostics.iter())
+            .filter(|d| state_diag_severity_with_policy(d, policy).is_error())
+            .count();
+        if other_errors > 0 {
+            eprintln!(
+                "note: --entity `{entity_id}` filters stdout, but {other_errors} Error-severity state diagnostic(s) remain on other entities (exit still fail-closed)"
+            );
+        }
+    }
 
     let output = match format {
         StatesFormat::Table => {

@@ -40,6 +40,16 @@ fn tla_emitter(instance_count: u32, int_range_max: u32) -> Result<TlaPlusEmitter
     if instance_count == 0 {
         anyhow::bail!("--instance-count must be >= 1");
     }
+    if int_range_max == 0 {
+        anyhow::bail!(
+            "--int-range-max must be >= 1 (IntRange 0..0 is not a useful verification domain)"
+        );
+    }
+    if instance_count == 1 {
+        eprintln!(
+            "warning: --instance-count 1 yields singleton Entity_Ids; multi-entity .along / quantifiers cannot distinguish instances"
+        );
+    }
     Ok(TlaPlusEmitter {
         multi_axis: true,
         instance_count: i64::from(instance_count),

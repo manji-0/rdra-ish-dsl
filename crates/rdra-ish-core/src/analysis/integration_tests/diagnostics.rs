@@ -109,6 +109,17 @@ relate(A, B, N:M).via(AB)
         .collect();
     assert!(fk_names.contains(&"a_id"), "{fk_names:?}");
     assert!(fk_names.contains(&"b_id"), "{fk_names:?}");
+    let mut expected_unique = vec!["a_id".to_string(), "b_id".to_string()];
+    expected_unique.sort();
+    assert!(
+        ab.unique_constraints.iter().any(|u| {
+            let mut sorted = u.clone();
+            sorted.sort();
+            sorted == expected_unique
+        }),
+        "expected composite unique on junction FKs, got {:?}",
+        ab.unique_constraints
+    );
 
     let nm = model
         .relations
@@ -151,6 +162,120 @@ relate(A, B, N:M).via(AB)
     assert!(synth_n1
         .iter()
         .any(|r| r.from == NodeRef::Entity(ab_ek) && r.to == NodeRef::Entity(b_ek)));
+}
+
+#[test]
+fn test_self_nm_relation_rejected() {
+    let src = r#"
+entity A "A" { id: Int @pk }
+entity AA "AA" { id: Int @pk }
+relate(A, A, N:M).via(AA)
+"#;
+    let (ast, _) = parse(src);
+    let (_, diags) = build_model(&ast);
+    let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+    assert!(
+        errors
+            .iter()
+            .any(|d| matches!(d.error, RdraError::SelfNMRelation { .. })),
+        "{:?}",
+        errors
+            .iter()
+            .map(|d| d.error.to_string())
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_via_must_be_distinct_from_ends() {
+    let src = r#"
+entity A "A" { id: Int @pk }
+entity B "B" { id: Int @pk }
+relate(A, B, N:M).via(A)
+"#;
+    let (ast, _) = parse(src);
+    let (_, diags) = build_model(&ast);
+    let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+    assert!(
+        errors
+            .iter()
+            .any(|d| matches!(d.error, RdraError::ViaMustBeDistinct { .. })),
+        "{:?}",
+        errors
+            .iter()
+            .map(|d| d.error.to_string())
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_unresolved_via_does_not_also_emit_nm_relation() {
+    let src = r#"
+entity A "A" { id: Int @pk }
+entity B "B" { id: Int @pk }
+relate(A, B, N:M).via(MissingJunction)
+"#;
+    let (ast, _) = parse(src);
+    let (_, diags) = build_model(&ast);
+    let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+    assert!(
+        errors
+            .iter()
+            .any(|d| matches!(d.error, RdraError::UndefinedSymbol { .. })),
+        "expected UndefinedSymbol, got: {:?}",
+        errors
+            .iter()
+            .map(|d| d.error.to_string())
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        !errors
+            .iter()
+            .any(|d| matches!(d.error, RdraError::NMRelation { .. })),
+        "L4: unresolved .via must not also emit NMRelation: {:?}",
+        errors
+            .iter()
+            .map(|d| d.error.to_string())
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_reserved_kind_condition_warns() {
+    let src = r#"
+condition SomeCondition "reserved"
+variation SomeVariation "reserved"
+"#;
+    let (ast, _) = parse(src);
+    let (_, diags) = build_model(&ast);
+    let warnings: Vec<_> = diags.iter().filter(|d| d.is_warning).collect();
+    assert!(
+        warnings.iter().any(|d| matches!(
+            &d.error,
+            RdraError::ReservedKind { kind } if kind == "condition"
+        )),
+        "{:?}",
+        warnings
+            .iter()
+            .map(|d| d.error.to_string())
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        warnings.iter().any(|d| matches!(
+            &d.error,
+            RdraError::ReservedKind { kind } if kind == "variation"
+        )),
+        "{:?}",
+        warnings
+            .iter()
+            .map(|d| d.error.to_string())
+            .collect::<Vec<_>>()
+    );
+    let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+    assert!(
+        errors.is_empty(),
+        "reserved kinds must not be hard errors: {errors:?}"
+    );
 }
 
 #[test]

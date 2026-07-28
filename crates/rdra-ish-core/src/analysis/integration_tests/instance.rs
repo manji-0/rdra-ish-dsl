@@ -109,7 +109,16 @@ fn register_instance_populates_each_node_store_and_symbol_table() {
     };
     register_instance(&mut model, &entity_inst, DiagCtxt::new(0), &mut diags);
 
-    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+    let unexpected: Vec<_> = diags
+        .iter()
+        .filter(|d| {
+            !d.is_warning || !matches!(&d.error, crate::diagnostics::RdraError::ReservedKind { .. })
+        })
+        .collect();
+    assert!(
+        unexpected.is_empty(),
+        "unexpected diagnostics: {unexpected:?}"
+    );
     assert_eq!(model.actors.len(), 1);
     assert_eq!(model.ext_systems.len(), 1);
     assert_eq!(model.systems.len(), 1);

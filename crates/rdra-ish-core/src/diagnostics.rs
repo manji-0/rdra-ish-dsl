@@ -66,6 +66,19 @@ pub enum RdraError {
     #[error(".via(...) must name a single entity junction\n  hint: write `relate(A, B, N:M).via(JunctionEntity)`")]
     ViaRequiresEntity,
 
+    #[error(".via(...) junction '{via}' must be distinct from relate endpoints '{from}' and '{to}'\n  hint: declare a separate junction entity, e.g. `entity {from}{to} \"..\" {{ id: Int @pk }}` then `.via({from}{to})`")]
+    ViaMustBeDistinct {
+        from: String,
+        to: String,
+        via: String,
+    },
+
+    #[error("self N:M relate('{entity}', '{entity}', N:M) is not supported\n  hint: use an explicit junction entity that is not '{entity}'")]
+    SelfNMRelation { entity: String },
+
+    #[error("reserved kind '{kind}' is accepted for forward compatibility but is not modeled by check/states/export\n  hint: prefer documented kinds; see language-reference reserved table")]
+    ReservedKind { kind: String },
+
     #[error("FK conflict: entity '{entity}' already has a column '{col}' that conflicts with auto-generated FK")]
     FkConflict { entity: String, col: String },
 

@@ -978,6 +978,10 @@ fn process_relate_predicate(
     }
 
     if kind == RelKind::RelateManyToMany && via.is_none() {
+        // L4: if `.via` was present but failed to resolve, keep that diagnostic only.
+        if had_via {
+            return;
+        }
         let from_id = match from {
             NodeRef::Entity(k) => model.entities[*k].id.clone(),
             _ => "?".into(),
@@ -1000,6 +1004,45 @@ fn process_relate_predicate(
             },
         );
         return;
+    }
+
+    if kind == RelKind::RelateManyToMany {
+        if let (NodeRef::Entity(fk), NodeRef::Entity(tk)) = (from, to) {
+            if fk == tk {
+                push_error(
+                    ctx,
+                    diags,
+                    pred.span.clone(),
+                    RdraError::SelfNMRelation {
+                        entity: model.entities[*fk].id.clone(),
+                    },
+                );
+                return;
+            }
+        }
+        if let (NodeRef::Entity(fk), NodeRef::Entity(tk), Some(NodeRef::Entity(jk))) =
+            (from, to, via.as_ref())
+        {
+            if jk == fk || jk == tk {
+                let via_span = pred
+                    .chain
+                    .iter()
+                    .find(|cc| cc.name == "via")
+                    .map(|cc| cc.span.clone())
+                    .unwrap_or_else(|| pred.span.clone());
+                push_error(
+                    ctx,
+                    diags,
+                    via_span,
+                    RdraError::ViaMustBeDistinct {
+                        from: model.entities[*fk].id.clone(),
+                        to: model.entities[*tk].id.clone(),
+                        via: model.entities[*jk].id.clone(),
+                    },
+                );
+                return;
+            }
+        }
     }
 
     let synthesize_via_n1 = kind == RelKind::RelateManyToMany && via.is_some();

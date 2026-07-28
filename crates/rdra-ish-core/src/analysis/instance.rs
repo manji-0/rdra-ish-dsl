@@ -319,6 +319,14 @@ pub(crate) fn register_instance(
             NodeRef::State(k)
         }
         Kind::Condition => {
+            push_warning(
+                ctx,
+                diags,
+                inst.span.clone(),
+                RdraError::ReservedKind {
+                    kind: "condition".into(),
+                },
+            );
             let k = model.conditions.insert(Condition {
                 id: inst.id.clone(),
                 label: inst.label.clone(),
@@ -327,6 +335,14 @@ pub(crate) fn register_instance(
             NodeRef::Condition(k)
         }
         Kind::Variation => {
+            push_warning(
+                ctx,
+                diags,
+                inst.span.clone(),
+                RdraError::ReservedKind {
+                    kind: "variation".into(),
+                },
+            );
             let k = model.variations.insert(Variation {
                 id: inst.id.clone(),
                 label: inst.label.clone(),

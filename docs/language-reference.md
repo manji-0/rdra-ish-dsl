@@ -100,16 +100,18 @@ CSV, or JSON form.
 
 | kind | Status |
 |---|---|
-| `condition` | Reserved kind (not wired to predicates). Do not use in new models. |
-| `variation` | Reserved kind (not wired to predicates). Do not use in new models. |
+| `condition` | Reserved kind (not wired to predicates). Accepted with a **warning**; do not use in new models. |
+| `variation` | Reserved kind (not wired to predicates). Accepted with a **warning**; do not use in new models. |
 
 ### Unsupported / limited
 
 | Topic | Limitation |
 |---|---|
 | Bare `relate(..., N:M)` without `.via` | Error. Use `relate(A, B, N:M).via(Junction)` or two explicit `N:1` relates through a junction entity. |
+| `relate(A, A, N:M)` or `.via` equal to an endpoint | Error (`SelfNMRelation` / `ViaMustBeDistinct`). Junction must be a distinct entity. |
 | Composite `@pk(a, b)` auto-FK | `relate` does not auto-generate FKs against composite primary keys — declare FK columns explicitly on the many side. |
 | AsyncAPI protocol / server / payload schemas | `export --kind asyncapi` projects event causality only; broker protocol, servers, and exact payload schemas are not inferred. |
+| OpenAPI auth / permissions | Unknown `auth` schemes become `apiKey` + `x-rdra-ish-auth-scheme`; `requires_permission` is an extension, not OpenAPI `security`. |
 
 ---
 
@@ -260,7 +262,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `requires_medium` | `(UseCase \| Api, Medium)` | The use case or API requires the operation medium. |
 | `motivates` | `Requirement == Buc` | The requirement motivates the BUC. |
 | `decides` | `(Adr, Buc \| UseCase \| Api \| System \| Entity \| Requirement \| Nfr \| Constraint \| Concept \| DomainObject \| Aggregate \| ValueObject \| Dto)` | The ADR records a design decision that affects the target element. Use this for impact review and design traceability without making the target depend on a document file path. |
-| `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `1:1`, `1:N`, `N:1`, `N:M` (unquoted). For `N:M`, require `.via(JunctionEntity)`: the model keeps the logical N:M edge **and synthesizes** two `N:1` edges `Junction→A` / `Junction→B` (FK columns, TLA `*_owner`, ER crowfoot, `.along` paths). Equivalent manual form: two explicit `N:1` relates from the junction. FK options can be chained with `.optional()`, `.on_delete(action)`, and `.on_update(action)` (for `N:M`, options apply to both generated FKs). |
+| `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `1:1`, `1:N`, `N:1`, `N:M` (unquoted). For `N:M`, require `.via(JunctionEntity)` where the junction is distinct from both ends: the model keeps the logical N:M edge **and synthesizes** two `N:1` edges `Junction→A` / `Junction→B` (FK columns, composite unique on the FK pair when missing, TLA `*_owner`, ER crowfoot, `.along` paths). Equivalent manual form: two explicit `N:1` relates from the junction. FK options can be chained with `.optional()`, `.on_delete(action)`, and `.on_update(action)` (for `N:M`, options apply to both generated FKs). |
 | `transitions` | `(Entity.column, Event, from -> to)` | A lifecycle edge on an Enum column: on the event, the entity moves from the first variant to the second. |
 | `after` | `(UseCase).assert(...)` | A temporal anchor assertion checked against the use case's immediate `sets` and `raises`/`transitions` effects. |
 | `when` | `(conditions...).none/has(conditions...)` | A to-many quantifier constraint (replaces `forbidden_when`). Prefer qualified columns such as `Cert.status == revoked`. |
@@ -405,7 +407,9 @@ error_response(CreateOrder, ErrorResponse)
 This remains a contract model first: the DSL stores API intent and payload shapes
 without requiring every OpenAPI detail to be authored by hand. `rdra-ish export
 --kind openapi` projects APIs that have both `method` and `path` into OpenAPI
-operations, with DTOs emitted as `components.schemas`.
+operations, with `{path}` parameters, auth scheme mapping (unknown schemes via
+`x-rdra-ish-auth-scheme`), `requires_permission` as
+`x-rdra-ish-requires-permission`, and DTOs as `components.schemas`.
 Use `rdra-ish export --kind json-schema` when the payload shapes themselves need
 to be handed to tooling independently of an OpenAPI operation document; DTOs are
 emitted under `$defs` using `Dto.<id>` names.
@@ -572,12 +576,14 @@ entity OrderProduct "Order product" { id: Int @pk }
 
 relate(Order, Product, N:M).via(OrderProduct)
 // generates OrderProduct.order_id and OrderProduct.product_id
+// adds composite unique (order_id, product_id) when missing
 // and synthesizes relate(OrderProduct, Order, N:1) + relate(OrderProduct, Product, N:1)
 ```
 
 Bare `relate(A, B, N:M)` without `.via` is an error. The equivalent manual form is
 still valid: `relate(Junction, A, N:1)` plus `relate(Junction, B, N:1)` (synthesis
-skips edges that already exist).
+skips edges that already exist). Self N:M (`relate(A, A, N:M)`) and `.via` equal to
+either endpoint are errors.
 
 Auto-FK requires a **single-column** `@pk` on the parent. If the parent uses
 `@pk(a, b)` (composite), the model reports `CompositePkFkUnsupported` — declare the

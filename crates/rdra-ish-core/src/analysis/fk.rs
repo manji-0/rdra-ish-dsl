@@ -3,9 +3,11 @@
 use crate::analysis_diag::push_entity_error;
 use crate::diagnostics::{Diagnostic, RdraError};
 use crate::model::*;
+use std::collections::BTreeSet;
 
 pub(crate) fn generate_fks(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>) {
     let mut jobs: Vec<(EntityKey, EntityKey, RelationOptions)> = Vec::new();
+    let mut junctions: BTreeSet<EntityKey> = BTreeSet::new();
 
     for rel in &model.relations {
         match &rel.kind {
@@ -20,13 +22,46 @@ pub(crate) fn generate_fks(model: &mut SemanticModel, diags: &mut Vec<Diagnostic
                 }
             }
             // N:M.via FKs come from synthesized N:1 edges (see process_relate_predicate).
-            RelKind::RelateManyToMany => {}
+            RelKind::RelateManyToMany => {
+                if let Some(NodeRef::Entity(junction)) = rel.via.as_ref() {
+                    junctions.insert(*junction);
+                }
+            }
             _ => {}
         }
     }
 
     for (many_key, one_key, options) in jobs {
         generate_fk_column(model, diags, many_key, one_key, options);
+    }
+
+    for junction in junctions {
+        ensure_junction_composite_unique(model, junction);
+    }
+}
+
+fn ensure_junction_composite_unique(model: &mut SemanticModel, junction: EntityKey) {
+    let fk_cols: Vec<String> = model.entities[junction]
+        .columns
+        .iter()
+        .filter(|c| c.is_fk)
+        .map(|c| c.name.clone())
+        .collect();
+    if fk_cols.len() < 2 {
+        return;
+    }
+    // Prefer the two FKs toward the N:M ends (stable order by name).
+    let mut pair = fk_cols;
+    pair.sort();
+    pair.truncate(2);
+
+    let already = model.entities[junction].unique_constraints.iter().any(|u| {
+        let mut sorted = u.clone();
+        sorted.sort();
+        sorted == pair
+    });
+    if !already {
+        model.entities[junction].unique_constraints.push(pair);
     }
 }
 

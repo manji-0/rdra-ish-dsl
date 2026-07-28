@@ -20,13 +20,24 @@
 
 - `export --kind tla` / `verify --backend tlc` accept `--instance-count` (default
   2) and `--int-range-max` (default 5). An approximation banner is always emitted
-  when multi-instance or Int axes are used.
+  when multi-instance or Int axes are used. `--int-range-max 0` is rejected;
+  `--instance-count 1` warns that singleton ids cannot distinguish instances.
 - State diagnostics for undriven / NotEvaluated cases include evaluator hints
   (states vs TLA).
 - `relate(A, B, N:M).via(Junction)` — many-to-many with an explicit junction
-  entity; auto-generates both FK columns on the junction. Bare `N:M` is an error.
-  Also synthesizes `N:1` edges `Junction→A` / `Junction→B` so TLA owner links,
-  ER, and `.along(A, Junction, B)` see the path.
+  entity; auto-generates both FK columns on the junction and a composite unique
+  on the FK pair when missing. Bare `N:M` is an error. Also synthesizes `N:1`
+  edges `Junction→A` / `Junction→B` so TLA owner links, ER, and `.along(A,
+  Junction, B)` see the path. Self N:M and `.via` equal to an endpoint are
+  errors; unresolved `.via` does not also emit bare-`N:M` `NMRelation`.
+- OpenAPI export: `{path}` parameters, unknown `auth` as `apiKey` +
+  `x-rdra-ish-auth-scheme`, and `x-rdra-ish-requires-permission` from
+  `requires_permission(Api, Permission)`.
+- Lint `flow-cycle` for `precedes`/`branches` cycles; empty models score
+  `coverage-score` 0 with missing-stage penalties (−8 each).
+- `states --format typescript` accepts alias `type-script`; `--entity` prints a
+  stderr note when other entities still have Error-severity diagnostics.
+- `condition` / `variation` kinds emit `ReservedKind` warnings (still accepted).
 - TLA owner links keep every `(child, parent)` pair (junction with two parents
   uses `{Child}_{Parent}_owner`); owner-only entities still get `*_Ids`.
 - Multi-hop `.along` adds binders for intermediate entities and warns instead of
@@ -44,6 +55,8 @@
   UC `precondition`/`postcondition`/`guard` are documented as review metadata
   only (use `after.assert` for machine-checked posts).
 - Bare `relate(..., N:M)` without `.via` is an error (was a warning).
+- `coverage-score` no longer rates empty models as 100; stage-readiness gaps
+  reduce the score.
 ## v0.2.0 - 2026-07-20
 
 ### Breaking
