@@ -179,7 +179,7 @@ pub enum StateDiag {
     DoubleModeledEnum { column: String },
     /// entity に creates がなく defaults からシードした
     NoCreationPath,
-    /// cap に達してパターン探索を打ち切った
+    /// cap に達してパターン探索を打ち切った（制約結果は健全でない）
     PatternCapReached { cap: usize, bound: usize },
     /// `forbidden(Entity, col == val, ...)` で禁止された状態に到達可能
     ForbiddenStateViolated {
@@ -255,6 +255,105 @@ pub enum StateDiag {
         /// Evaluator guidance (states proposition vs TLA arithmetic).
         hint: String,
     },
+}
+
+/// Shared severity for `states` / `check` / emitters (single source of truth).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum StateDiagSeverity {
+    Info,
+    Warning,
+    Error,
+}
+
+impl StateDiagSeverity {
+    pub fn is_error(self) -> bool {
+        self == StateDiagSeverity::Error
+    }
+
+    pub fn as_label(self) -> &'static str {
+        match self {
+            StateDiagSeverity::Info => "info",
+            StateDiagSeverity::Warning => "warn",
+            StateDiagSeverity::Error => "error",
+        }
+    }
+}
+
+/// Policy for demoting TLA-only obligations when checking mixed models.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct StateDiagPolicy {
+    /// When true, undriven comparisons and NotEvaluated diagnostics become Warning
+    /// for exit / check severity (messages still describe the gap).
+    pub allow_tla_only: bool,
+}
+
+impl StateDiagPolicy {
+    pub fn allow_tla_only() -> Self {
+        Self {
+            allow_tla_only: true,
+        }
+    }
+}
+
+fn is_tla_only_diag(diag: &StateDiag) -> bool {
+    matches!(
+        diag,
+        StateDiag::UndrivenComparisonProp { .. }
+            | StateDiag::CrossConstraintNotEvaluated { .. }
+            | StateDiag::TemporalAssertionNotEvaluated { .. }
+            | StateDiag::QuantifierConstraintNotEvaluated { .. }
+    )
+}
+
+/// Base severity (fail-closed defaults) used by emitters' `[error]` / `[warn]` labels.
+pub fn state_diag_severity(diag: &StateDiag) -> StateDiagSeverity {
+    state_diag_severity_with_policy(diag, StateDiagPolicy::default())
+}
+
+/// Severity used by CLI exit codes, optionally demoting TLA-only gaps.
+pub fn state_diag_severity_with_policy(
+    diag: &StateDiag,
+    policy: StateDiagPolicy,
+) -> StateDiagSeverity {
+    let base = match diag {
+        StateDiag::NoCreationPath => StateDiagSeverity::Info,
+        StateDiag::UnreachableEnumVariant { .. }
+        | StateDiag::ConflictingEffects { .. }
+        | StateDiag::DoubleModeledEnum { .. } => StateDiagSeverity::Warning,
+        StateDiag::PatternCapReached { .. }
+        | StateDiag::ForbiddenStateViolated { .. }
+        | StateDiag::InvariantViolated { .. }
+        | StateDiag::RequiredStateViolated { .. }
+        | StateDiag::ExclusiveStateViolated { .. }
+        | StateDiag::CrossForbiddenViolated { .. }
+        | StateDiag::CrossInvariantViolated { .. }
+        | StateDiag::CrossConstraintNotEvaluated { .. }
+        | StateDiag::TemporalAssertionViolated { .. }
+        | StateDiag::TemporalAssertionNotEvaluated { .. }
+        | StateDiag::QuantifierConstraintNotEvaluated { .. }
+        | StateDiag::UndrivenComparisonProp { .. } => StateDiagSeverity::Error,
+    };
+    if policy.allow_tla_only && is_tla_only_diag(diag) && base == StateDiagSeverity::Error {
+        StateDiagSeverity::Warning
+    } else {
+        base
+    }
+}
+
+/// True when any diagnostic in the derived results is Error severity under `policy`.
+pub fn state_results_have_errors_with_policy(
+    results: &[EntityStateResult],
+    policy: StateDiagPolicy,
+) -> bool {
+    results
+        .iter()
+        .flat_map(|r| r.diagnostics.iter())
+        .any(|d| state_diag_severity_with_policy(d, policy).is_error())
+}
+
+/// True when any diagnostic in the derived results is Error severity.
+pub fn state_results_have_errors(results: &[EntityStateResult]) -> bool {
+    state_results_have_errors_with_policy(results, StateDiagPolicy::default())
 }
 
 /// entity 単位の状態パターン導出結果
@@ -2499,6 +2598,35 @@ mod tests {
         let errs: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
         assert!(errs.is_empty(), "model errors: {:?}", errs);
         model
+    }
+
+    #[test]
+    fn pattern_cap_reached_severity_is_error() {
+        assert_eq!(
+            state_diag_severity(&StateDiag::PatternCapReached { cap: 1, bound: 10 }),
+            StateDiagSeverity::Error
+        );
+    }
+
+    #[test]
+    fn allow_tla_only_demotes_undriven_but_not_pattern_cap() {
+        let undriven = StateDiag::UndrivenComparisonProp {
+            proposition: "stock < selling".into(),
+            usage: "forbidden".into(),
+            effect: "never".into(),
+            hint: "tla".into(),
+        };
+        assert_eq!(
+            state_diag_severity_with_policy(&undriven, StateDiagPolicy::allow_tla_only()),
+            StateDiagSeverity::Warning
+        );
+        assert_eq!(
+            state_diag_severity_with_policy(
+                &StateDiag::PatternCapReached { cap: 1, bound: 10 },
+                StateDiagPolicy::allow_tla_only()
+            ),
+            StateDiagSeverity::Error
+        );
     }
 
     // ── 軸なし: 自明なパターン1件 ───────────────────────────────────────────

@@ -1,7 +1,8 @@
 use crate::cli::{ExportKind, ListFormat, ListKind};
 use crate::export::export_artifact;
 use crate::list_output::{
-    consistency_warnings, format_lint_issues, list_elements, state_diag_message,
+    consistency_warnings, format_lint_issues, list_elements,
+    state_consistency_findings_with_policy, state_diag_message,
 };
 use crate::load::load_model;
 use rdra_ish_core::{format_diagnostic_message, lint_issues, SemanticModel};
@@ -689,17 +690,20 @@ requires_permission(BookAppointment, ScheduleWrite)
     assert!(diags.iter().all(|diag| diag.is_warning));
 
     let warnings = consistency_warnings(&model);
+    let state_findings =
+        state_consistency_findings_with_policy(&model, rdra_ish_core::StateDiagPolicy::default());
 
     assert!(warnings
         .iter()
         .any(|warning| warning.contains("actor 'Staff' is missing permission 'ScheduleWrite'")));
-    assert!(warnings
-        .iter()
-        .any(|warning| warning
-            .contains("state derivation for entity 'Appointment': no creates path")));
-    assert!(warnings
-        .iter()
-        .any(|warning| warning.contains("enum variant 'status.booked' is unreachable")));
+    assert!(state_findings.iter().any(|(severity, message)| {
+        *severity == rdra_ish_core::StateDiagSeverity::Info
+            && message.contains("state derivation for entity 'Appointment': no creates path")
+    }));
+    assert!(state_findings.iter().any(|(severity, message)| {
+        *severity == rdra_ish_core::StateDiagSeverity::Warning
+            && message.contains("enum variant 'status.booked' is unreachable")
+    }));
 }
 
 #[test]

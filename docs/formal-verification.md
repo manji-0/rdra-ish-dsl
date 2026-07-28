@@ -43,7 +43,7 @@ allows stuttering via `[][Next]_vars`).
 | Comparison propositions driven by `sets(..., cmp, bool)` only | Boolean `prop_*` variables (BFS layer; skipped when the same cmp is arithmetic) |
 | Entity-local `invariant` / `forbidden` / `required` / `exclusive` | Safety conjuncts (`\A i \in Entity_Ids: …` when multi-instance) |
 | Multi-entity `forbidden` / `invariant` | Safety over the multi-entity variable product |
-| `.along(...)` (RelationPath) | Quantified over `Entity_Ids`; with `relate` uses `Child_owner` link filter |
+| `.along(...)` (RelationPath) | Quantified over `Entity_Ids` (including intermediate junction binders); with `relate` / `.via` uses pairwise `*_owner` filters (`Child_owner`, or `Child_Parent_owner` when a child has multiple parents) |
 | `when(...).none/has(...)` | Finite `Entity_Ids == 1..InstanceCount` with `\A`/`\E`; `relate` adds `*_owner` FK |
 | `after(UC).assert` equality | Independent `PROPERTY`: `[][raised actions => primed posts]_vars` (not injected into SpecActions) |
 | `after(UC).assert` comparison | Same PROPERTY shape; Int arithmetic when axes exist (cross-entity RHS allowed); else `prop' = TRUE` |
@@ -108,14 +108,16 @@ arithmetic Safety when Int axes exist.
 
 ## Approximations and limitations
 
-- **`.along`**: multi-instance export quantifies over `Entity_Ids`. With a usable
-  `relate` N:1 / 1:N, Safety is filtered by `Child_owner`. Without a link, a
-  warning is recorded and the formula quantifies over the instance product
-  (stronger than linked-only intent).
+- **`.along`**: multi-instance export quantifies over `Entity_Ids`, including
+  intermediate binders for multi-hop paths such as `.along(A, Junction, B)`
+  (from `relate(A, B, N:M).via(Junction)`). Pairwise `*_owner` filters are applied;
+  a child with multiple parents uses `{Child}_{Parent}_owner`. Missing binders or
+  missing relate links emit a warning and drop the filter (global product) —
+  never silently. Junction entities without state axes still get `Junction_Ids`.
 - **Quantifiers (`has` / `none`)**: exported over finite instance sets
   (`InstanceCount`, default **2**, override with `--instance-count`). When `relate`
-  declares N:1 / 1:N, a `Child_owner` function links related instances; otherwise
-  the related side is quantified independently.
+  declares N:1 / 1:N (including via-synthesized edges), a `*_owner` function links
+  related instances; otherwise the related side is quantified independently.
 - **Shared events across entities**: each entity still gets its own SpecAction for
   the same event (e.g. `Order_EvPay` and `Payment_EvPay`). Steps can interleave;
   they are not one atomic multi-entity action — `cross_order_payment` /
@@ -139,8 +141,10 @@ arithmetic Safety when Int axes exist.
 - BFS `rdra-ish states` still does not treat Int / `now` as state axes; use
   TLA/TLC for those checks. Undriven comparison props and NotEvaluated multi-entity /
   quantifier / temporal-comparison diagnostics are **`[error]`** under `states`
-  (fail-closed). Int comparison samples such as `int_stock.rdra` are for `verify`,
-  not for a green `states` exit.
+  (fail-closed). For mixed Enum+Int models, `check` / `states --allow-tla-only`
+  demotes those TLA-only gaps for exit while keeping PatternCap / forbidden
+  fail-closed. Int comparison samples such as `int_stock.rdra` are for `verify`
+  (or `check --allow-tla-only`), not a green default `states` exit.
 - Export warnings (skipped mappings, `.along` without `relate`, unmapped
   `after.assert`, …) are printed on stderr by `export --kind tla` / `verify` and
   also embedded as `\\* WARNING:` comments in the `.tla`. Fatal obligation drops

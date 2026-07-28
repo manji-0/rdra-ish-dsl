@@ -14,7 +14,9 @@ use csv_cmd::run_csv;
 use diagram::{run_diagram, DiagramRequest};
 use export::export_artifact;
 use fmt_cmd::run_fmt;
-use list_output::{consistency_warnings, format_lint_issues, list_elements};
+use list_output::{
+    consistency_warnings, format_lint_issues, list_elements, state_consistency_findings_with_policy,
+};
 use load::{eprint_diagnostic, load_model, reject_model_errors};
 use rdra_ish_core::{lint_issues, LintSeverity};
 use rdra_ish_emit::View;
@@ -27,8 +29,16 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Check { inputs } => {
+        Commands::Check {
+            inputs,
+            allow_tla_only,
+        } => {
             let (program, model, diags) = load_model(&inputs)?;
+            let policy = if allow_tla_only {
+                rdra_ish_core::StateDiagPolicy::allow_tla_only()
+            } else {
+                rdra_ish_core::StateDiagPolicy::default()
+            };
 
             let mut has_error = false;
             for diag in &diags {
@@ -44,6 +54,26 @@ fn main() -> Result<()> {
 
             for warning in consistency_warnings(&model) {
                 eprintln!("warning: {}", warning);
+            }
+
+            // Same severity as `states` (fail-closed on PatternCap / forbidden / NotEvaluated).
+            for (severity, message) in state_consistency_findings_with_policy(&model, policy) {
+                match severity {
+                    rdra_ish_core::StateDiagSeverity::Error => {
+                        eprintln!("error: {}", message);
+                        has_error = true;
+                    }
+                    rdra_ish_core::StateDiagSeverity::Warning => {
+                        eprintln!("warning: {}", message);
+                    }
+                    rdra_ish_core::StateDiagSeverity::Info => {
+                        eprintln!("info: {}", message);
+                    }
+                }
+            }
+
+            if has_error {
+                std::process::exit(1);
             }
 
             println!("OK: no errors");
@@ -198,7 +228,8 @@ fn main() -> Result<()> {
             buc,
             max_patterns,
             entity,
-        } => run_states(&inputs, format, buc, max_patterns, entity)?,
+            allow_tla_only,
+        } => run_states(&inputs, format, buc, max_patterns, entity, allow_tla_only)?,
 
         Commands::Verify {
             inputs,

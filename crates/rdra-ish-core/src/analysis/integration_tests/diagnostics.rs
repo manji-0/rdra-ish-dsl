@@ -116,6 +116,41 @@ relate(A, B, N:M).via(AB)
         .find(|r| matches!(r.kind, RelKind::RelateManyToMany))
         .expect("N:M relation");
     assert!(matches!(nm.via, Some(NodeRef::Entity(_))));
+
+    let a_ek = model
+        .entities
+        .iter()
+        .find(|(_, e)| e.id == "A")
+        .map(|(k, _)| k)
+        .unwrap();
+    let b_ek = model
+        .entities
+        .iter()
+        .find(|(_, e)| e.id == "B")
+        .map(|(k, _)| k)
+        .unwrap();
+    let ab_ek = model
+        .entities
+        .iter()
+        .find(|(_, e)| e.id == "AB")
+        .map(|(k, _)| k)
+        .unwrap();
+    let synth_n1: Vec<_> = model
+        .relations
+        .iter()
+        .filter(|r| matches!(r.kind, RelKind::RelateManyToOne))
+        .collect();
+    assert_eq!(
+        synth_n1.len(),
+        2,
+        "expected synthesized J→A and J→B: {synth_n1:?}"
+    );
+    assert!(synth_n1
+        .iter()
+        .any(|r| r.from == NodeRef::Entity(ab_ek) && r.to == NodeRef::Entity(a_ek)));
+    assert!(synth_n1
+        .iter()
+        .any(|r| r.from == NodeRef::Entity(ab_ek) && r.to == NodeRef::Entity(b_ek)));
 }
 
 #[test]

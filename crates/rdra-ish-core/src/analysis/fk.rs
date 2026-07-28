@@ -19,16 +19,8 @@ pub(crate) fn generate_fks(model: &mut SemanticModel, diags: &mut Vec<Diagnostic
                     jobs.push((*mk, *ok, rel.options.clone()));
                 }
             }
-            RelKind::RelateManyToMany => {
-                let Some(NodeRef::Entity(junction)) = rel.via.as_ref() else {
-                    continue;
-                };
-                if let (NodeRef::Entity(from), NodeRef::Entity(to)) = (&rel.from, &rel.to) {
-                    // Junction is the many side toward each end (same as two N:1 relates).
-                    jobs.push((*junction, *from, rel.options.clone()));
-                    jobs.push((*junction, *to, rel.options.clone()));
-                }
-            }
+            // N:M.via FKs come from synthesized N:1 edges (see process_relate_predicate).
+            RelKind::RelateManyToMany => {}
             _ => {}
         }
     }

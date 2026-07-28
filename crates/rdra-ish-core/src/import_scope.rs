@@ -2,26 +2,32 @@
 
 use crate::location::SourceId;
 use rdra_ish_syntax::ast::{ImportDecl, ImportKind, Item, Span};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
-/// Binding of a flat local name to a canonical id + declaring module.
+/// Binding of a flat local name to a canonical id + declaring module (+ kind).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FlatBinding {
     pub canonical_id: String,
     pub module: Option<String>,
+    /// Declared kind (`usecase`, `event`, …). `None` only for unrestricted open-world.
+    pub kind: Option<String>,
 }
 
 /// Import visibility for one source file.
 #[derive(Debug, Clone, Default)]
 pub struct FileScope {
-    /// Flat local name → canonical declaration (+ module for disambiguation).
-    pub flat: HashMap<String, FlatBinding>,
+    /// Flat local name → zero or more kind-qualified bindings.
+    /// Same id with different kinds (e.g. `event Capture` + `usecase Capture`) may coexist.
+    pub flat: HashMap<String, Vec<FlatBinding>>,
     /// `import M as alias` → module path string (`shared.actors`).
     pub namespaces: HashMap<String, String>,
     /// When true, skip visibility checks (single-file / legacy open scope).
     pub unrestricted: bool,
 }
+
+/// id → kinds declared in a source file.
+type SourceExports = HashMap<String, Vec<String>>;
 
 /// Workspace-wide import scopes keyed by source id.
 #[derive(Debug, Clone, Default)]
@@ -29,8 +35,8 @@ pub struct ImportScopes {
     by_source: HashMap<SourceId, FileScope>,
     /// module path → source that declared `module <path>`
     module_sources: HashMap<String, SourceId>,
-    /// source → ids declared in that file
-    source_exports: HashMap<SourceId, HashSet<String>>,
+    /// source → id → kinds declared in that file
+    source_exports: HashMap<SourceId, SourceExports>,
     /// source → module path (if declared)
     source_modules: HashMap<SourceId, String>,
 }
@@ -63,32 +69,43 @@ impl ImportScopes {
         self.source_modules.get(&source_id).map(String::as_str)
     }
 
-    /// Resolve a flat name under the file scope.
-    pub fn resolve_flat(&self, source_id: SourceId, name: &str) -> Option<FlatBinding> {
+    /// Resolve all flat bindings for a local name under the file scope.
+    pub fn resolve_flat_bindings(&self, source_id: SourceId, name: &str) -> Vec<FlatBinding> {
         let scope = self.scope_for(source_id);
         if scope.unrestricted {
-            // Open world: do not constrain lookup to this file's module.
-            return Some(FlatBinding {
+            return vec![FlatBinding {
                 canonical_id: name.to_string(),
                 module: None,
-            });
+                kind: None,
+            }];
         }
-        scope.flat.get(name).cloned()
+        scope.flat.get(name).cloned().unwrap_or_default()
     }
 
-    /// Resolve `alias.Name` under a namespaced import.
+    /// Resolve a flat name when exactly one binding is visible.
+    /// Prefer [`Self::resolve_flat_bindings`] when kind-qualified refs are involved.
+    pub fn resolve_flat(&self, source_id: SourceId, name: &str) -> Option<FlatBinding> {
+        let bindings = self.resolve_flat_bindings(source_id, name);
+        match bindings.as_slice() {
+            [only] => Some(only.clone()),
+            _ => None,
+        }
+    }
+
+    /// Resolve `alias.Name` under a namespaced import (all kinds exported under `Name`).
     pub fn resolve_namespaced(
         &self,
         source_id: SourceId,
         alias: &str,
         name: &str,
-    ) -> Result<FlatBinding, NamespacedResolveError> {
+    ) -> Result<Vec<FlatBinding>, NamespacedResolveError> {
         let scope = self.scope_for(source_id);
         if scope.unrestricted {
-            return Ok(FlatBinding {
+            return Ok(vec![FlatBinding {
                 canonical_id: name.to_string(),
                 module: None,
-            });
+                kind: None,
+            }]);
         }
         let Some(module_path) = scope.namespaces.get(alias) else {
             return Err(NamespacedResolveError::UnknownAlias {
@@ -100,18 +117,26 @@ impl ImportScopes {
                 module: module_path.clone(),
             });
         };
-        let exports = self.source_exports.get(&mod_source);
-        if exports.is_some_and(|e| e.contains(name)) {
-            Ok(FlatBinding {
-                canonical_id: name.to_string(),
-                module: Some(module_path.clone()),
-            })
-        } else {
-            Err(NamespacedResolveError::NotExported {
+        let Some(exports) = self.source_exports.get(&mod_source) else {
+            return Err(NamespacedResolveError::NotExported {
                 module: module_path.clone(),
                 name: name.to_string(),
+            });
+        };
+        let Some(kinds) = exports.get(name) else {
+            return Err(NamespacedResolveError::NotExported {
+                module: module_path.clone(),
+                name: name.to_string(),
+            });
+        };
+        Ok(kinds
+            .iter()
+            .map(|kind| FlatBinding {
+                canonical_id: name.to_string(),
+                module: Some(module_path.clone()),
+                kind: Some(kind.clone()),
             })
-        }
+            .collect())
     }
 }
 
@@ -146,9 +171,10 @@ pub enum ImportScopeDiagKind {
     DuplicateAlias {
         alias: String,
     },
-    /// Local def or prior import already binds this flat name.
+    /// Local def or prior import already binds this flat name for the same kind.
     DuplicateVisible {
         name: String,
+        kind: String,
         module: String,
     },
 }
@@ -161,20 +187,30 @@ fn insert_flat(
     local: String,
     binding: FlatBinding,
 ) {
-    if let Some(existing) = scope.flat.get(&local) {
+    let entries = scope.flat.entry(local.clone()).or_default();
+    if let Some(existing) = entries
+        .iter()
+        .find(|e| e.kind == binding.kind && e.kind.is_some())
+    {
         if existing.module != binding.module || existing.canonical_id != binding.canonical_id {
             diags.push(ImportScopeDiagnostic {
                 source_id,
                 span: span.clone(),
                 message_id: local.clone(),
                 kind: ImportScopeDiagKind::DuplicateVisible {
-                    name: local.clone(),
+                    name: local,
+                    kind: binding.kind.clone().unwrap_or_default(),
                     module: binding.module.clone().unwrap_or_else(|| "<import>".into()),
                 },
             });
         }
+        return;
     }
-    scope.flat.insert(local, binding);
+    // Identical re-insert (same kind/module/id) is a no-op.
+    if entries.iter().any(|e| e == &binding) {
+        return;
+    }
+    entries.push(binding);
 }
 
 fn span_for_local_id(ast: &rdra_ish_syntax::ast::Ast, id: &str) -> Span {
@@ -188,6 +224,13 @@ fn span_for_local_id(ast: &rdra_ish_syntax::ast::Ast, id: &str) -> Span {
         .unwrap_or(0..0)
 }
 
+fn push_export(exports: &mut SourceExports, id: String, kind: String) {
+    let kinds = exports.entry(id).or_default();
+    if !kinds.contains(&kind) {
+        kinds.push(kind);
+    }
+}
+
 /// Build import scopes from a resolved program's ASTs.
 pub fn build_import_scopes(
     sources: &[(PathBuf, String, rdra_ish_syntax::ast::Ast)],
@@ -196,7 +239,7 @@ pub fn build_import_scopes(
     let mut diags = Vec::new();
 
     for (source_id, (_path, _src, ast)) in sources.iter().enumerate() {
-        let mut exports = HashSet::new();
+        let mut exports = SourceExports::new();
         let mut module_path: Option<(String, Span)> = None;
         for item in &ast.items {
             match item {
@@ -204,7 +247,7 @@ pub fn build_import_scopes(
                     module_path = Some((path.0.join("."), span.clone()));
                 }
                 Item::Instance(inst) => {
-                    exports.insert(inst.id.clone());
+                    push_export(&mut exports, inst.id.clone(), inst.kind.name().to_string());
                 }
                 _ => {}
             }
@@ -251,14 +294,14 @@ pub fn build_import_scopes(
         // Per-file latch: only files that import become closed scope.
         // Sibling files without imports keep legacy open-world resolution.
         if imports.is_empty() {
-            for id in &local_exports {
-                scope.flat.insert(
-                    id.clone(),
-                    FlatBinding {
+            for (id, kinds) in &local_exports {
+                for kind in kinds {
+                    scope.flat.entry(id.clone()).or_default().push(FlatBinding {
                         canonical_id: id.clone(),
                         module: local_module.clone(),
-                    },
-                );
+                        kind: Some(kind.clone()),
+                    });
+                }
             }
             scope.unrestricted = true;
             scopes.by_source.insert(source_id, scope);
@@ -287,18 +330,21 @@ pub fn build_import_scopes(
 
             match &imp.kind {
                 ImportKind::All => {
-                    for id in &exports {
-                        insert_flat(
-                            &mut scope,
-                            &mut diags,
-                            source_id,
-                            imp.span.clone(),
-                            id.clone(),
-                            FlatBinding {
-                                canonical_id: id.clone(),
-                                module: Some(module_path.clone()),
-                            },
-                        );
+                    for (id, kinds) in &exports {
+                        for kind in kinds {
+                            insert_flat(
+                                &mut scope,
+                                &mut diags,
+                                source_id,
+                                imp.span.clone(),
+                                id.clone(),
+                                FlatBinding {
+                                    canonical_id: id.clone(),
+                                    module: Some(module_path.clone()),
+                                    kind: Some(kind.clone()),
+                                },
+                            );
+                        }
                     }
                 }
                 ImportKind::Alias(alias) => {
@@ -318,19 +364,22 @@ pub fn build_import_scopes(
                 }
                 ImportKind::Select(items) => {
                     for item in items {
-                        if exports.contains(&item.name) {
+                        if let Some(kinds) = exports.get(&item.name) {
                             let local = item.alias.clone().unwrap_or_else(|| item.name.clone());
-                            insert_flat(
-                                &mut scope,
-                                &mut diags,
-                                source_id,
-                                item.span.clone(),
-                                local,
-                                FlatBinding {
-                                    canonical_id: item.name.clone(),
-                                    module: Some(module_path.clone()),
-                                },
-                            );
+                            for kind in kinds {
+                                insert_flat(
+                                    &mut scope,
+                                    &mut diags,
+                                    source_id,
+                                    item.span.clone(),
+                                    local.clone(),
+                                    FlatBinding {
+                                        canonical_id: item.name.clone(),
+                                        module: Some(module_path.clone()),
+                                        kind: Some(kind.clone()),
+                                    },
+                                );
+                            }
                         } else {
                             diags.push(ImportScopeDiagnostic {
                                 source_id,
@@ -347,19 +396,22 @@ pub fn build_import_scopes(
             }
         }
 
-        for id in &local_exports {
+        for (id, kinds) in &local_exports {
             let span = span_for_local_id(ast, id);
-            insert_flat(
-                &mut scope,
-                &mut diags,
-                source_id,
-                span,
-                id.clone(),
-                FlatBinding {
-                    canonical_id: id.clone(),
-                    module: local_module.clone(),
-                },
-            );
+            for kind in kinds {
+                insert_flat(
+                    &mut scope,
+                    &mut diags,
+                    source_id,
+                    span.clone(),
+                    id.clone(),
+                    FlatBinding {
+                        canonical_id: id.clone(),
+                        module: local_module.clone(),
+                        kind: Some(kind.clone()),
+                    },
+                );
+            }
         }
 
         scopes.by_source.insert(source_id, scope);

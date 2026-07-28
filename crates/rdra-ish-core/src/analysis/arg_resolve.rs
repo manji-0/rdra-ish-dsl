@@ -29,6 +29,11 @@ fn resolve_binding(
     // When a module is bound (namespaced / selective / All import), do not fall
     // back to a different module's declaration.
     if let Some(kind) = kind {
+        if let Some(bound_kind) = &binding.kind {
+            if bound_kind != kind.name() {
+                return None;
+            }
+        }
         if let Some(module) = &binding.module {
             return model
                 .symbols
@@ -54,62 +59,177 @@ fn resolve_binding(
     }
 }
 
+fn push_undefined(ctx: DiagCtxt, diags: &mut Vec<Diagnostic>, span: Span, id: String) {
+    push_error(ctx, diags, span, RdraError::UndefinedSymbol { id });
+}
+
+fn resolve_from_bindings(
+    model: &SemanticModel,
+    bindings: &[FlatBinding],
+    qref: &QRef,
+    display: &str,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<NodeRef> {
+    let kind = qref.kind_qualifier.as_ref();
+
+    if let Some(kind) = kind {
+        let mut found = None;
+        for binding in bindings {
+            if let Some(n) = resolve_binding(model, binding, Some(kind)) {
+                if found.is_some() {
+                    // Same kind+id in multiple modules visible under this name.
+                    push_error(
+                        ctx,
+                        diags,
+                        qref.span.clone(),
+                        RdraError::AmbiguousReference {
+                            id: binding.canonical_id.clone(),
+                            kinds: kind.name().to_string(),
+                        },
+                    );
+                    return None;
+                }
+                found = Some(n);
+            }
+        }
+        if found.is_some() {
+            return found;
+        }
+
+        let id = format!("{}::{}", kind.name(), display);
+        // Distinguish ambiguous vs missing when possible.
+        match model.symbols.lookup(
+            bindings
+                .first()
+                .map(|b| b.canonical_id.as_str())
+                .unwrap_or(display),
+        ) {
+            LookupResult::Ambiguous(kinds) => {
+                push_error(
+                    ctx,
+                    diags,
+                    qref.span.clone(),
+                    RdraError::AmbiguousReference {
+                        id: bindings
+                            .first()
+                            .map(|b| b.canonical_id.clone())
+                            .unwrap_or_else(|| display.to_string()),
+                        kinds: kinds.join(", "),
+                    },
+                );
+            }
+            _ => {
+                push_undefined(ctx, diags, qref.span.clone(), id);
+            }
+        }
+        return None;
+    }
+
+    match bindings {
+        [] => {
+            push_undefined(ctx, diags, qref.span.clone(), display.to_string());
+            None
+        }
+        [only] => match resolve_binding(model, only, None) {
+            Some(n) => Some(n),
+            None => {
+                match model.symbols.lookup(&only.canonical_id) {
+                    LookupResult::Ambiguous(kinds) => {
+                        push_error(
+                            ctx,
+                            diags,
+                            qref.span.clone(),
+                            RdraError::AmbiguousReference {
+                                id: only.canonical_id.clone(),
+                                kinds: kinds.join(", "),
+                            },
+                        );
+                    }
+                    _ => {
+                        push_undefined(ctx, diags, qref.span.clone(), display.to_string());
+                    }
+                }
+                None
+            }
+        },
+        many => {
+            // Multiple visible kinds/modules: require kind:: or alias disambiguation.
+            let mut kinds: Vec<String> = many
+                .iter()
+                .filter_map(|b| b.kind.clone())
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect();
+            if kinds.is_empty() {
+                match model.symbols.lookup(&many[0].canonical_id) {
+                    LookupResult::Ambiguous(k) => {
+                        kinds = k.into_iter().map(str::to_string).collect();
+                    }
+                    LookupResult::Found(_) => {
+                        // Unique symbol despite multiple bindings — try first that resolves.
+                        for binding in many {
+                            if let Some(n) = resolve_binding(model, binding, None) {
+                                return Some(n);
+                            }
+                        }
+                    }
+                    LookupResult::NotFound => {}
+                }
+            }
+            push_error(
+                ctx,
+                diags,
+                qref.span.clone(),
+                RdraError::AmbiguousReference {
+                    id: many[0].canonical_id.clone(),
+                    kinds: kinds.join(", "),
+                },
+            );
+            None
+        }
+    }
+}
+
 fn resolve_qref(
     model: &SemanticModel,
     qref: &QRef,
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<NodeRef> {
-    let binding = match qref.parts.as_slice() {
+    let bindings = match qref.parts.as_slice() {
         [] => {
-            push_error(
-                ctx,
-                diags,
-                qref.span.clone(),
-                RdraError::UndefinedSymbol {
-                    id: "<empty>".into(),
-                },
-            );
+            push_undefined(ctx, diags, qref.span.clone(), "<empty>".into());
             return None;
         }
-        [name] => match model.import_scopes.resolve_flat(ctx.source_id, name) {
-            Some(b) => b,
-            None => {
-                push_error(
-                    ctx,
-                    diags,
-                    qref.span.clone(),
-                    RdraError::UndefinedSymbol { id: name.clone() },
-                );
+        [name] => {
+            let bindings = model
+                .import_scopes
+                .resolve_flat_bindings(ctx.source_id, name);
+            if bindings.is_empty() {
+                push_undefined(ctx, diags, qref.span.clone(), name.clone());
                 return None;
             }
-        },
+            bindings
+        }
         [alias, name] => match model
             .import_scopes
             .resolve_namespaced(ctx.source_id, alias, name)
         {
-            Ok(b) => b,
+            Ok(b) => {
+                if b.is_empty() {
+                    push_undefined(ctx, diags, qref.span.clone(), format!("{alias}.{name}"));
+                    return None;
+                }
+                b
+            }
             Err(NamespacedResolveError::UnknownAlias { alias }) => {
-                push_error(
-                    ctx,
-                    diags,
-                    qref.span.clone(),
-                    RdraError::UndefinedSymbol {
-                        id: format!("{alias}.{name}"),
-                    },
-                );
+                push_undefined(ctx, diags, qref.span.clone(), format!("{alias}.{name}"));
                 return None;
             }
             Err(NamespacedResolveError::UnknownModule { module })
             | Err(NamespacedResolveError::NotExported { module, .. }) => {
-                push_error(
-                    ctx,
-                    diags,
-                    qref.span.clone(),
-                    RdraError::UndefinedSymbol {
-                        id: format!("{module}.{name}"),
-                    },
-                );
+                push_undefined(ctx, diags, qref.span.clone(), format!("{module}.{name}"));
                 return None;
             }
         },
@@ -117,19 +237,13 @@ fn resolve_qref(
             let name = parts.last().unwrap();
             let scope = model.import_scopes.scope_for(ctx.source_id);
             if scope.unrestricted {
-                FlatBinding {
+                vec![FlatBinding {
                     canonical_id: name.clone(),
                     module: None,
-                }
+                    kind: None,
+                }]
             } else {
-                push_error(
-                    ctx,
-                    diags,
-                    qref.span.clone(),
-                    RdraError::UndefinedSymbol {
-                        id: parts.join("."),
-                    },
-                );
+                push_undefined(ctx, diags, qref.span.clone(), parts.join("."));
                 return None;
             }
         }
@@ -138,40 +252,11 @@ fn resolve_qref(
     let display = if qref.parts.len() > 1 {
         qref.parts.join(".")
     } else {
-        binding.canonical_id.clone()
+        bindings
+            .first()
+            .map(|b| b.canonical_id.clone())
+            .unwrap_or_else(|| qref.parts.join("."))
     };
 
-    match resolve_binding(model, &binding, qref.kind_qualifier.as_ref()) {
-        Some(n) => Some(n),
-        None => {
-            let id = if let Some(kind) = &qref.kind_qualifier {
-                format!("{}::{}", kind.name(), display)
-            } else {
-                display
-            };
-            // Distinguish ambiguous vs missing when possible.
-            match model.symbols.lookup(&binding.canonical_id) {
-                LookupResult::Ambiguous(kinds) => {
-                    push_error(
-                        ctx,
-                        diags,
-                        qref.span.clone(),
-                        RdraError::AmbiguousReference {
-                            id: binding.canonical_id,
-                            kinds: kinds.join(", "),
-                        },
-                    );
-                }
-                _ => {
-                    push_error(
-                        ctx,
-                        diags,
-                        qref.span.clone(),
-                        RdraError::UndefinedSymbol { id },
-                    );
-                }
-            }
-            None
-        }
-    }
+    resolve_from_bindings(model, &bindings, qref, &display, ctx, diags)
 }

@@ -260,7 +260,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `requires_medium` | `(UseCase \| Api, Medium)` | The use case or API requires the operation medium. |
 | `motivates` | `Requirement == Buc` | The requirement motivates the BUC. |
 | `decides` | `(Adr, Buc \| UseCase \| Api \| System \| Entity \| Requirement \| Nfr \| Constraint \| Concept \| DomainObject \| Aggregate \| ValueObject \| Dto)` | The ADR records a design decision that affects the target element. Use this for impact review and design traceability without making the target depend on a document file path. |
-| `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `1:1`, `1:N`, `N:1`, `N:M` (unquoted). For `N:M`, require `.via(JunctionEntity)` so FK columns are generated on the junction (`junction → A` and `junction → B`, same as two `N:1` relates). Equivalent manual form: two `N:1` relates from the junction. FK options can be chained with `.optional()`, `.on_delete(action)`, and `.on_update(action)` (for `N:M`, options apply to both generated FKs). |
+| `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `1:1`, `1:N`, `N:1`, `N:M` (unquoted). For `N:M`, require `.via(JunctionEntity)`: the model keeps the logical N:M edge **and synthesizes** two `N:1` edges `Junction→A` / `Junction→B` (FK columns, TLA `*_owner`, ER crowfoot, `.along` paths). Equivalent manual form: two explicit `N:1` relates from the junction. FK options can be chained with `.optional()`, `.on_delete(action)`, and `.on_update(action)` (for `N:M`, options apply to both generated FKs). |
 | `transitions` | `(Entity.column, Event, from -> to)` | A lifecycle edge on an Enum column: on the event, the entity moves from the first variant to the second. |
 | `after` | `(UseCase).assert(...)` | A temporal anchor assertion checked against the use case's immediate `sets` and `raises`/`transitions` effects. |
 | `when` | `(conditions...).none/has(conditions...)` | A to-many quantifier constraint (replaces `forbidden_when`). Prefer qualified columns such as `Cert.status == revoked`. |
@@ -572,10 +572,12 @@ entity OrderProduct "Order product" { id: Int @pk }
 
 relate(Order, Product, N:M).via(OrderProduct)
 // generates OrderProduct.order_id and OrderProduct.product_id
+// and synthesizes relate(OrderProduct, Order, N:1) + relate(OrderProduct, Product, N:1)
 ```
 
 Bare `relate(A, B, N:M)` without `.via` is an error. The equivalent manual form is
-still valid: `relate(Junction, A, N:1)` plus `relate(Junction, B, N:1)`.
+still valid: `relate(Junction, A, N:1)` plus `relate(Junction, B, N:1)` (synthesis
+skips edges that already exist).
 
 Auto-FK requires a **single-column** `@pk` on the parent. If the parent uses
 `@pk(a, b)` (composite), the model reports `CompositePkFkUnsupported` — declare the
@@ -1041,6 +1043,10 @@ may be a false positive for linked-instance rules.
 
 Adding `.along(EntityA, EntityB, ...)` declares that the rule is intended to apply only
 to instances connected through the listed `relate` path, not to the global cross-product.
+Paths may include junction entities from `relate(A, B, N:M).via(J)` —
+e.g. `.along(A, J, B)` — because via synthesizes the `J→A` / `J→B` edges. TLA export
+quantifies intermediate binders and applies pairwise owner filters; dropping a filter
+always emits a warning.
 The current `states` engine validates that the path is declared, can prove the rule
 satisfied when even the broader global cross-product has no witness, and can report a
 violation when each adjacent pair in the path shares use-case provenance for the
@@ -1177,8 +1183,9 @@ import shared.actors.{Staff as S} // selective import with a local alias
 - `module <path>` declares the dotted module path of the current file. Each path must be
   unique across the loaded sources.
 - `import <path>` brings the module's declarations into flat scope. Unknown module paths
-  are errors. Two flat imports that bind the same local name to different modules are
-  errors.
+  are errors. Two flat imports that bind the same local name **and same kind** to
+  different modules are errors. Same id with different kinds (e.g. imported
+  `event Capture` plus local `usecase Capture`) may coexist; use `kind::Id`.
 - `import <path> as <alias>` makes the imported names available under the alias namespace
   (`alias.Name`). Bare names from that module are **not** in flat scope.
 - `import <path>.{Name}` imports only the named declarations into flat scope.

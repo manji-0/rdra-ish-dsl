@@ -8,6 +8,13 @@
   multi-entity / quantifier / temporal-comparison constraints as `[error]`
   (non-zero exit on table/json). Previously these were `[warn]` and could leave
   a green exit while rules were inert or TLA-only.
+- `PatternCapReached` (pattern truncation via `--max-patterns`) is `[error]` /
+  fail-closed: constraints checked on a truncated set are not sound.
+- `rdra-ish check` uses the same state-diagnostic severity as `states` (reachable
+  forbidden / NotEvaluated / undriven comparisons / truncation → `error:` and
+  exit 1). Previously those were printed as `warning:` before `OK: no errors`.
+- `states --format csv` / `type-script` exit non-zero on Error-severity state
+  diagnostics (exit no longer depends on scanning `[error]` in rendered text).
 
 ### Added
 
@@ -18,6 +25,18 @@
   (states vs TLA).
 - `relate(A, B, N:M).via(Junction)` — many-to-many with an explicit junction
   entity; auto-generates both FK columns on the junction. Bare `N:M` is an error.
+  Also synthesizes `N:1` edges `Junction→A` / `Junction→B` so TLA owner links,
+  ER, and `.along(A, Junction, B)` see the path.
+- TLA owner links keep every `(child, parent)` pair (junction with two parents
+  uses `{Child}_{Parent}_owner`); owner-only entities still get `*_Ids`.
+- Multi-hop `.along` adds binders for intermediate entities and warns instead of
+  silently dropping the link filter.
+- `check` / `states --allow-tla-only` demotes undriven comparisons and
+  NotEvaluated diagnostics to warnings for exit (PatternCap / forbidden stay
+  fail-closed).
+- Import scopes keep same-id bindings of different kinds (e.g. `event Capture` +
+  `usecase Capture`); `kind::Id` resolves across modules. CI runs `check` on
+  sample models including `samples/ec-site`.
 
 ### Changed
 

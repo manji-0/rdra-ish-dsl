@@ -24,6 +24,38 @@ jobs:
         run: cargo test --all
       - name: sample artifact snapshots
         run: bash scripts/check-sample-artifacts.sh
+      - name: sample model check
+        run: |
+          cargo build -p rdra-ish-cli --release
+          BIN=./target/release/rdra-ish
+          for sample in \
+            samples/ec-site \
+            samples/clinic-ops \
+            samples/personal-info \
+            samples/api-contract \
+            samples/incremental-order/step-6-business-rules/src \
+            samples/formal-verification/order.rdra
+          do
+            echo "==> check $sample"
+            "$BIN" check "$sample"
+          done
+          # int_stock intentionally uses TLA-only Int comparison (UndrivenComparisonProp).
+          echo "==> expect state error on int_stock (TLA-only comparison)"
+          set +e
+          out=$("$BIN" check samples/formal-verification/int_stock.rdra 2>&1)
+          rc=$?
+          set -e
+          echo "$out"
+          if [[ $rc -eq 0 ]]; then
+            echo "expected non-zero check for int_stock (undriven Int comparison)" >&2
+            exit 1
+          fi
+          if ! grep -q "comparison proposition" <<<"$out"; then
+            echo "expected undriven comparison fingerprint for int_stock" >&2
+            exit 1
+          fi
+          echo "==> check --allow-tla-only int_stock (mixed-model escape hatch)"
+          "$BIN" check samples/formal-verification/int_stock.rdra --allow-tla-only
 
   formal-verify:
     runs-on: ubuntu-latest
@@ -50,27 +82,39 @@ jobs:
       - name: Export + verify pass samples
         run: |
           BIN=./target/release/rdra-ish
-          for sample in \
-            samples/formal-verification/order.rdra \
-            samples/formal-verification/int_stock.rdra
-          do
-            echo "==> check/export/verify $sample"
-            "$BIN" check "$sample"
-            "$BIN" export "$sample" --kind tla -o /tmp/rdra-ci-tla
-            set +e
-            out=$("$BIN" verify "$sample" --backend tlc -o /tmp/rdra-ci-tla 2>&1)
-            status=$?
-            set -e
-            echo "$out"
-            if [[ $status -ne 0 ]]; then
-              echo "expected TLC pass for $sample" >&2
-              exit 1
-            fi
-            if ! grep -q "tlc_result: ok" <<<"$out"; then
-              echo "expected tlc_result: ok for $sample" >&2
-              exit 1
-            fi
-          done
+          # order.rdra: states + TLA both green
+          echo "==> check/export/verify samples/formal-verification/order.rdra"
+          "$BIN" check samples/formal-verification/order.rdra
+          "$BIN" export samples/formal-verification/order.rdra --kind tla -o /tmp/rdra-ci-tla
+          set +e
+          out=$("$BIN" verify samples/formal-verification/order.rdra --backend tlc -o /tmp/rdra-ci-tla 2>&1)
+          status=$?
+          set -e
+          echo "$out"
+          if [[ $status -ne 0 ]]; then
+            echo "expected TLC pass for order.rdra" >&2
+            exit 1
+          fi
+          if ! grep -q "tlc_result: ok" <<<"$out"; then
+            echo "expected tlc_result: ok for order.rdra" >&2
+            exit 1
+          fi
+          # int_stock: Int comparison is TLA-only; skip check, require TLC pass
+          echo "==> export/verify samples/formal-verification/int_stock.rdra (TLA-only comparison)"
+          "$BIN" export samples/formal-verification/int_stock.rdra --kind tla -o /tmp/rdra-ci-tla
+          set +e
+          out=$("$BIN" verify samples/formal-verification/int_stock.rdra --backend tlc -o /tmp/rdra-ci-tla 2>&1)
+          status=$?
+          set -e
+          echo "$out"
+          if [[ $status -ne 0 ]]; then
+            echo "expected TLC pass for int_stock.rdra" >&2
+            exit 1
+          fi
+          if ! grep -q "tlc_result: ok" <<<"$out"; then
+            echo "expected tlc_result: ok for int_stock.rdra" >&2
+            exit 1
+          fi
       - name: Verify fail samples report TLC counterexample
         run: |
           BIN=./target/release/rdra-ish

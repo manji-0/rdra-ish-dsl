@@ -54,6 +54,9 @@ pub(crate) enum Commands {
     Check {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
+        /// Demote TLA-only state gaps (undriven comparisons / NotEvaluated) to warnings
+        #[arg(long)]
+        allow_tla_only: bool,
     },
     /// Generate diagram (PlantUML or Mermaid)
     Diagram {
@@ -165,6 +168,9 @@ pub(crate) enum Commands {
         /// Restrict output to a single entity id
         #[arg(long)]
         entity: Option<String>,
+        /// Demote TLA-only state gaps (undriven comparisons / NotEvaluated) for exit code
+        #[arg(long)]
+        allow_tla_only: bool,
     },
     /// Formally verify temporal/safety properties via an external checker
     Verify {

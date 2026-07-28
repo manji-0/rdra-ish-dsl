@@ -969,6 +969,58 @@ actor Customer "重複定義"
     }
 
     #[test]
+    fn cross_kind_same_id_import_allows_kind_qualifiers() {
+        // event Capture in shared + usecase Capture locally must coexist;
+        // kind::Capture must resolve each side (samples/ec-site pattern).
+        let dir = make_temp_dir("cross_kind_capture");
+        let shared_dir = dir.join("shared");
+        fs::create_dir_all(&shared_dir).unwrap();
+        write_file(
+            &shared_dir.join("entities.rdra"),
+            r#"
+module shared.entities
+entity Payment "Payment" {
+  id: Int @pk
+  status: Enum(pending, captured) @default(pending)
+}
+event Capture "Capture Payment"
+"#,
+        );
+        write_file(
+            &dir.join("main.rdra"),
+            r#"
+module buc.payment
+import shared.entities
+usecase Capture "Capture Payment"
+raises(usecase::Capture, event::Capture)
+sets(usecase::Capture, Payment, status == captured)
+"#,
+        );
+
+        let (program, resolve_diags) =
+            resolve(&[dir.join("main.rdra")], std::slice::from_ref(&dir));
+        let (model, model_diags) = build_merged_model(&program, &[dir]);
+        let errors: Vec<_> = resolve_diags
+            .iter()
+            .chain(model_diags.iter())
+            .filter(|d| !d.is_warning)
+            .map(|d| d.error.to_string())
+            .collect();
+        assert!(
+            errors.is_empty(),
+            "expected cross-kind Capture to resolve, got: {errors:?}"
+        );
+        assert!(
+            model.use_cases.values().any(|u| u.id == "Capture"),
+            "usecase Capture missing"
+        );
+        assert!(
+            model.events.values().any(|e| e.id == "Capture"),
+            "event Capture missing"
+        );
+    }
+
+    #[test]
     fn test_resolve_fixture_purchase() {
         // Tests the full purchase fixture under tests/fixtures/purchase/.
         let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))

@@ -24,25 +24,36 @@ macro_rules! list_id_label {
     };
 }
 
+/// Non-state model consistency findings (always reported as warnings today).
 pub(crate) fn consistency_warnings(model: &rdra_ish_core::SemanticModel) -> Vec<String> {
-    let mut warnings: Vec<String> = consistency_diagnostics(model)
+    consistency_diagnostics(model)
         .into_iter()
         .map(|diag| diag.error.to_string())
-        .collect();
+        .collect()
+}
 
+/// State-pattern diagnostics with the same severity as `states` / emitters.
+pub(crate) fn state_consistency_findings_with_policy(
+    model: &rdra_ish_core::SemanticModel,
+    policy: rdra_ish_core::StateDiagPolicy,
+) -> Vec<(rdra_ish_core::StateDiagSeverity, String)> {
+    let mut findings = Vec::new();
     for result in
         rdra_ish_core::derive_state_patterns(model, &[], rdra_ish_core::DEFAULT_PATTERN_CAP)
     {
         for diag in result.diagnostics {
-            warnings.push(format!(
-                "state derivation for entity '{}': {}",
-                result.entity_id,
-                state_diag_message(&diag)
+            let severity = rdra_ish_core::state_diag_severity_with_policy(&diag, policy);
+            findings.push((
+                severity,
+                format!(
+                    "state derivation for entity '{}': {}",
+                    result.entity_id,
+                    state_diag_message(&diag)
+                ),
             ));
         }
     }
-
-    warnings
+    findings
 }
 
 pub(crate) fn format_lint_issues(issues: &[LintIssue], format: &ListFormat) -> Result<String> {
@@ -88,7 +99,7 @@ pub(crate) fn state_diag_message(diag: &rdra_ish_core::StateDiag) -> String {
             "no creates path; state derivation is seeded from defaults only".to_string()
         }
         rdra_ish_core::StateDiag::PatternCapReached { cap, bound } => format!(
-            "pattern cap reached at {} while the theoretical state-space bound is {}",
+            "pattern cap reached at {} while the theoretical state-space bound is {} (constraints on truncated set are not sound; raise --max-patterns or narrow --buc)",
             cap, bound
         ),
         rdra_ish_core::StateDiag::ForbiddenStateViolated {

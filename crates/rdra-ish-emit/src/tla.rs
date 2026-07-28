@@ -1510,8 +1510,8 @@ fn property_mentions_entity(prop: &TemporalProperty, entity_id: &str) -> bool {
 }
 
 fn collect_owner_links(model: &SemanticModel) -> Vec<OwnerLink> {
-    let mut out = Vec::new();
-    let mut seen = HashSet::new();
+    let mut pairs: Vec<(String, String)> = Vec::new();
+    let mut seen_pairs = HashSet::new();
     for rel in &model.relations {
         let (child, parent) = match rel.kind {
             RelKind::RelateManyToOne => match (&rel.from, &rel.to) {
@@ -1526,16 +1526,45 @@ fn collect_owner_links(model: &SemanticModel) -> Vec<OwnerLink> {
         };
         let child_id = model.entities[child].id.clone();
         let parent_id = model.entities[parent].id.clone();
-        let var_name = format!("{}_owner", sanitize_ident(&child_id));
-        if seen.insert(var_name.clone()) {
-            out.push(OwnerLink {
+        if seen_pairs.insert((child_id.clone(), parent_id.clone())) {
+            pairs.push((child_id, parent_id));
+        }
+    }
+
+    let mut parent_count: HashMap<String, usize> = HashMap::new();
+    for (child, _) in &pairs {
+        *parent_count.entry(child.clone()).or_default() += 1;
+    }
+
+    pairs
+        .into_iter()
+        .map(|(child_id, parent_id)| {
+            let var_name = if parent_count.get(&child_id).copied().unwrap_or(0) > 1 {
+                format!(
+                    "{}_{}_owner",
+                    sanitize_ident(&child_id),
+                    sanitize_ident(&parent_id)
+                )
+            } else {
+                format!("{}_owner", sanitize_ident(&child_id))
+            };
+            OwnerLink {
                 child_id,
                 parent_id,
                 var_name,
-            });
-        }
+            }
+        })
+        .collect()
+}
+
+/// Entity ids that need `E_Ids == 1..InstanceCount` (specs + owner endpoints).
+fn multi_instance_id_entities(export: &TlaExport) -> Vec<String> {
+    let mut ids: BTreeSet<String> = export.specs.iter().map(|s| s.entity_id.clone()).collect();
+    for o in &export.owners {
+        ids.insert(o.child_id.clone());
+        ids.insert(o.parent_id.clone());
     }
-    out
+    ids.into_iter().collect()
 }
 
 fn emit_cross_and_quantifier_safety(
@@ -1593,7 +1622,10 @@ fn cross_forbidden_to_tla(
     owners: &[OwnerLink],
     warnings: &mut Vec<String>,
 ) -> Result<String, String> {
-    let binders = binders_for_scope(model, &c.scope, specs)?;
+    let mut binders = binders_for_scope(model, &c.scope, specs)?;
+    if let CrossConstraintScope::RelationPath(path) = &c.scope_semantics {
+        ensure_along_path_binders(model, path, &mut binders);
+    }
     let body = cross_conditions_to_tla(model, &c.conditions, specs, &binders)?;
     let link = along_link_filter(model, &c.scope_semantics, &binders, owners, warnings);
     let quant = quantifiers_for_binders(&binders);
@@ -1611,7 +1643,10 @@ fn cross_invariant_to_tla(
     owners: &[OwnerLink],
     warnings: &mut Vec<String>,
 ) -> Result<String, String> {
-    let binders = binders_for_scope(model, &inv.scope, specs)?;
+    let mut binders = binders_for_scope(model, &inv.scope, specs)?;
+    if let CrossConstraintScope::RelationPath(path) = &inv.scope_semantics {
+        ensure_along_path_binders(model, path, &mut binders);
+    }
     let guards = cross_conditions_to_tla(model, &inv.guards, specs, &binders)?;
     let reqs = cross_conditions_to_tla(model, &inv.requireds, specs, &binders)?;
     let link = along_link_filter(model, &inv.scope_semantics, &binders, owners, warnings);
@@ -1700,6 +1735,37 @@ fn quantifiers_for_binders(binders: &BTreeMap<EntityKey, (String, String)>) -> S
     format!("\\A {}", parts.join(", "))
 }
 
+/// Add binders for `.along` path entities missing from the constraint scope
+/// (e.g. junction in `.along(A, J, B)` when the rule only scopes A and B).
+fn ensure_along_path_binders(
+    model: &SemanticModel,
+    path: &[EntityKey],
+    binders: &mut BTreeMap<EntityKey, (String, String)>,
+) {
+    let mut used: HashSet<String> = binders.values().map(|(b, _)| b.clone()).collect();
+    for &ek in path {
+        if binders.contains_key(&ek) {
+            continue;
+        }
+        let id = model.entities[ek].id.clone();
+        let mut candidate = id
+            .chars()
+            .next()
+            .map(|c| c.to_ascii_lowercase().to_string())
+            .unwrap_or_else(|| "e".into());
+        if !used.insert(candidate.clone()) {
+            candidate = sanitize_ident(&id.to_ascii_lowercase());
+            let base = candidate.clone();
+            let mut n = 2;
+            while !used.insert(candidate.clone()) {
+                candidate = format!("{base}{n}");
+                n += 1;
+            }
+        }
+        binders.insert(ek, (candidate, id));
+    }
+}
+
 fn along_link_filter(
     model: &SemanticModel,
     scope: &CrossConstraintScope,
@@ -1718,8 +1784,18 @@ fn along_link_filter(
     for w in path.windows(2) {
         let a_id = &model.entities[w[0]].id;
         let b_id = &model.entities[w[1]].id;
-        let (ab, _) = binders.get(&w[0])?;
-        let (bb, _) = binders.get(&w[1])?;
+        let Some((ab, _)) = binders.get(&w[0]) else {
+            warnings.push(format!(
+                ".along(...): missing binder for {a_id}; link filter dropped (global product)"
+            ));
+            return None;
+        };
+        let Some((bb, _)) = binders.get(&w[1]) else {
+            warnings.push(format!(
+                ".along(...): missing binder for {b_id}; link filter dropped (global product)"
+            ));
+            return None;
+        };
         if let Some(o) = owner_for_pair(owners, a_id, b_id) {
             if o.child_id == *a_id {
                 filters.push(format!("{}[{ab}] = {bb}", o.var_name));
@@ -2488,10 +2564,10 @@ fn render_tla(module_name: &str, export: &TlaExport, warnings: &[String]) -> Str
         out.push_str(&format!("IntRange == 0..{}\n", export.int_range_max));
     }
     if export.multi_instance {
-        for spec in &export.specs {
+        for eid in multi_instance_id_entities(export) {
             out.push_str(&format!(
                 "{}_Ids == 1..InstanceCount\n",
-                sanitize_ident(&spec.entity_id)
+                sanitize_ident(&eid)
             ));
         }
         out.push('\n');
@@ -3017,6 +3093,67 @@ forbidden(Item, stock < 0)
                 .iter()
                 .any(|w| w.contains("skipped (no status lifecycle)")),
             "sets-only entity should not be skipped: {:?}",
+            bundle.warnings
+        );
+    }
+
+    #[test]
+    fn tla_nm_via_exposes_both_owner_links_and_along_path() {
+        let src = r#"
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(pending, paid) @default(pending)
+}
+entity Product "Product" {
+  id: Int @pk
+  status: Enum(active, archived) @default(active)
+}
+entity OrderProduct "Order product" { id: Int @pk }
+relate(Order, Product, N:M).via(OrderProduct)
+usecase Place "Place"
+usecase Pay "Pay"
+usecase Archive "Archive"
+event EvPay "Pay"
+event EvArchive "Archive"
+creates(Place, Order)
+creates(Place, Product)
+creates(Place, OrderProduct)
+updates(Pay, Order)
+updates(Archive, Product)
+raises(Pay, EvPay)
+raises(Archive, EvArchive)
+transitions(Order.status, EvPay, pending -> paid)
+transitions(Product.status, EvArchive, active -> archived)
+forbidden(Order, Product, Order.status == paid, Product.status == archived)
+  .along(Order, OrderProduct, Product)
+"#;
+        let model = model_from(src);
+        let bundle = TlaPlusEmitter::default()
+            .emit_bundle(&model, &View::whole())
+            .unwrap();
+        assert!(
+            bundle.tla.contains("OrderProduct_Order_owner")
+                && bundle.tla.contains("OrderProduct_Product_owner"),
+            "expected both junction owners, got:\n{}",
+            bundle.tla
+        );
+        assert!(
+            bundle.tla.contains("OrderProduct_Ids"),
+            "junction without state axes still needs Ids:\n{}",
+            bundle.tla
+        );
+        assert!(
+            bundle.tla.contains("OrderProduct_Order_owner[")
+                && bundle.tla.contains("OrderProduct_Product_owner["),
+            "along path should keep link filters:\n{}",
+            bundle.tla
+        );
+        assert!(
+            !bundle
+                .warnings
+                .iter()
+                .any(|w| w.contains("link filter dropped") || w.contains("no relate N:1")),
+            "unexpected along warnings: {:?}",
             bundle.warnings
         );
     }

@@ -3,6 +3,9 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
+use rdra_ish_core::{
+    derive_state_patterns, state_results_have_errors_with_policy, StateDiagPolicy,
+};
 use rdra_ish_emit::{
     state_pattern::{StatePatternCsvEmitter, StatePatternJsonEmitter, StatePatternTableEmitter},
     typescript::TypeScriptStateUnionEmitter,
@@ -19,6 +22,7 @@ pub fn run_states(
     buc: Vec<String>,
     max_patterns: usize,
     entity: Option<String>,
+    allow_tla_only: bool,
 ) -> Result<()> {
     let (program, model, diags) = load_model(inputs)?;
     reject_model_errors(&program, &diags)?;
@@ -34,7 +38,16 @@ pub fn run_states(
         }
     }
 
-    let view = View::bucs(buc);
+    let policy = if allow_tla_only {
+        StateDiagPolicy::allow_tla_only()
+    } else {
+        StateDiagPolicy::default()
+    };
+
+    let view = View::bucs(buc.clone());
+    // Exit on structured severity (not string scan) so csv / type-script also fail-closed.
+    let results = derive_state_patterns(&model, &buc, max_patterns);
+    let has_error = state_results_have_errors_with_policy(&results, policy);
 
     let output = match format {
         StatesFormat::Table => {
@@ -63,7 +76,7 @@ pub fn run_states(
 
     print!("{}", rendered);
 
-    if rendered.contains("[error]") {
+    if has_error {
         std::process::exit(1);
     }
 

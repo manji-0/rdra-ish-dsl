@@ -2,7 +2,7 @@
 
 use crate::{EmitError, Emitter, Scope, View};
 use rdra_ish_core::{
-    derive_state_patterns,
+    derive_state_patterns, state_diag_severity,
     state_pattern::{AbstractValue, AxisKind, EntityStateResult, StateDiag, DEFAULT_PATTERN_CAP},
     SemanticModel,
 };
@@ -42,30 +42,31 @@ fn format_via(provenance: &rdra_ish_core::state_pattern::Provenance) -> String {
         .join(", ")
 }
 
-/// 診断メッセージを文字列化する
+/// 診断メッセージを文字列化する（severity は `state_diag_severity` と共有）
 fn diag_message(d: &StateDiag) -> String {
-    match d {
+    let label = state_diag_severity(d).as_label();
+    let body = match d {
         StateDiag::UnreachableEnumVariant { column, variant } => {
-            format!(
-                "[warn] column '{}': variant '{}' is unreachable",
-                column, variant
-            )
+            format!("column '{}': variant '{}' is unreachable", column, variant)
         }
         StateDiag::ConflictingEffects { usecase, column } => {
             format!(
-                "[warn] usecase '{}': conflicting effects on column '{}' (last-wins)",
+                "usecase '{}': conflicting effects on column '{}' (last-wins)",
                 usecase, column
             )
         }
         StateDiag::DoubleModeledEnum { column } => {
-            format!("[warn] column '{}': driven by both transitions and sets (transitions takes precedence)", column)
+            format!(
+                "column '{}': driven by both transitions and sets (transitions takes precedence)",
+                column
+            )
         }
         StateDiag::NoCreationPath => {
-            "[info] no creates(...) found; seeded from column defaults".to_string()
+            "no creates(...) found; seeded from column defaults".to_string()
         }
         StateDiag::PatternCapReached { cap, bound } => {
             format!(
-                "[warn] pattern cap reached: {} patterns generated, theoretical bound is {}",
+                "pattern cap reached: {} patterns generated, theoretical bound is {} (constraints on truncated set are not sound)",
                 cap, bound
             )
         }
@@ -75,7 +76,7 @@ fn diag_message(d: &StateDiag) -> String {
             correlation_hint,
         } => {
             let mut message = format!(
-                "[error] forbidden state reached: ({}) in pattern ({})",
+                "forbidden state reached: ({}) in pattern ({})",
                 conditions, pattern_desc
             );
             if let Some(hint) = correlation_hint {
@@ -90,7 +91,7 @@ fn diag_message(d: &StateDiag) -> String {
             flow_order_hint,
         } => {
             let mut message = format!(
-                "[error] invariant violated: when ({}) holds, ({}) must also hold — but found pattern ({})",
+                "invariant violated: when ({}) holds, ({}) must also hold — but found pattern ({})",
                 guards, requireds, pattern_desc
             );
             if let Some(hint) = flow_order_hint {
@@ -103,7 +104,7 @@ fn diag_message(d: &StateDiag) -> String {
             pattern_desc,
         } => {
             format!(
-                "[error] required state missing: ({}) is not satisfied in pattern ({})",
+                "required state missing: ({}) is not satisfied in pattern ({})",
                 conditions, pattern_desc
             )
         }
@@ -112,7 +113,7 @@ fn diag_message(d: &StateDiag) -> String {
             pattern_desc,
         } => {
             format!(
-                "[error] exclusive state conditions co-occur: ({}) in pattern ({})",
+                "exclusive state conditions co-occur: ({}) in pattern ({})",
                 conditions, pattern_desc
             )
         }
@@ -123,7 +124,7 @@ fn diag_message(d: &StateDiag) -> String {
             scope_hint,
         } => {
             let mut message = format!(
-                "[error] multi-entity forbidden state reached across [{}]: ({}) in patterns ({})",
+                "multi-entity forbidden state reached across [{}]: ({}) in patterns ({})",
                 entities, conditions, pattern_desc
             );
             if let Some(hint) = scope_hint {
@@ -139,7 +140,7 @@ fn diag_message(d: &StateDiag) -> String {
             scope_hint,
         } => {
             let mut message = format!(
-                "[error] multi-entity invariant violated across [{}]: when ({}) holds, ({}) must also hold — but found patterns ({})",
+                "multi-entity invariant violated across [{}]: when ({}) holds, ({}) must also hold — but found patterns ({})",
                 entities, guards, requireds, pattern_desc
             );
             if let Some(hint) = scope_hint {
@@ -153,7 +154,7 @@ fn diag_message(d: &StateDiag) -> String {
             reason,
         } => {
             format!(
-                "[error] multi-entity constraint not evaluated across [{}]: {} ({}); hint: linked-instance / non-state values are not in states — use export --kind tla / verify --backend tlc when the rule needs related rows or arithmetic",
+                "multi-entity constraint not evaluated across [{}]: {} ({}); hint: linked-instance / non-state values are not in states — use export --kind tla / verify --backend tlc when the rule needs related rows or arithmetic",
                 entities, constraint, reason
             )
         }
@@ -163,7 +164,7 @@ fn diag_message(d: &StateDiag) -> String {
             actual,
         } => {
             format!(
-                "[error] temporal assertion violated after '{}': expected ({}) but {}",
+                "temporal assertion violated after '{}': expected ({}) but {}",
                 anchor, requireds, actual
             )
         }
@@ -173,7 +174,7 @@ fn diag_message(d: &StateDiag) -> String {
             reason,
         } => {
             format!(
-                "[error] temporal assertion after '{}' not evaluated: ({}) ({}); hint: after.assert comparisons need TLA; states checks immediate equality sets/transitions only",
+                "temporal assertion after '{}' not evaluated: ({}) ({}); hint: after.assert comparisons need TLA; states checks immediate equality sets/transitions only",
                 anchor, requireds, reason
             )
         }
@@ -184,7 +185,7 @@ fn diag_message(d: &StateDiag) -> String {
             reason,
         } => {
             format!(
-                "[error] to-many quantifier constraint not evaluated from '{}' to '{}': {} ({}); hint: linked-instance cardinality is not in states — use export --kind tla / verify --backend tlc",
+                "to-many quantifier constraint not evaluated from '{}' to '{}': {} ({}); hint: linked-instance cardinality is not in states — use export --kind tla / verify --backend tlc",
                 anchor, related, constraint, reason
             )
         }
@@ -195,11 +196,12 @@ fn diag_message(d: &StateDiag) -> String {
             hint,
         } => {
             format!(
-                "[error] comparison proposition '{}' used in {} is not driven by sets(..., <comparison>, true/false): {}; hint: {}",
+                "comparison proposition '{}' used in {} is not driven by sets(..., <comparison>, true/false): {}; hint: {}",
                 proposition, usage, effect, hint
             )
         }
-    }
+    };
+    format!("[{label}] {body}")
 }
 
 // ── Table エミッタ ────────────────────────────────────────────────────────────
@@ -647,6 +649,16 @@ sets(usecase::DeliverOrder, Order, delivered_at == present)
             .emit(&model, &view)
             .unwrap();
         insta::assert_snapshot!(result);
+    }
+
+    #[test]
+    fn pattern_cap_reached_is_error() {
+        let msg = diag_message(&StateDiag::PatternCapReached { cap: 1, bound: 48 });
+        assert!(
+            msg.starts_with("[error]"),
+            "truncation must be fail-closed, got: {msg}"
+        );
+        assert!(msg.contains("not sound"));
     }
 
     #[test]

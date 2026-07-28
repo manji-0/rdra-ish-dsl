@@ -123,7 +123,8 @@ arbitrarily.
      and the worklist. An update with no effects only records provenance. An update that
      does not change the pattern is skipped (no self-loop).
 5. **Cap.** If the reached count hits the cap before a new pattern would be added, the
-   result is marked `truncated` and `PatternCapReached { cap, bound }` is emitted, where
+   result is marked `truncated` and `PatternCapReached { cap, bound }` is emitted as an
+   **error** (fail-closed: constraints on a truncated set are not sound), where
    `bound` is the theoretical product-space size.
 6. **Mark terminals.** A pattern is terminal if it was the source of a `Delete`, or if no
    enabled `Update`/`Delete` would leave it.
@@ -310,7 +311,7 @@ syntax and design rationale.
 | `ConflictingEffects { usecase, column }` | One operation assigns two different values to the same column; resolved last-wins. |
 | `DoubleModeledEnum { column }` | Both `transitions` and `sets` drive the same Enum column; `transitions` wins. |
 | `NoCreationPath` | The entity has no `creates`; the pattern set is seeded from defaults only. |
-| `PatternCapReached { cap, bound }` | The per-entity cap was hit; output is truncated. `bound` is the product-space size. |
+| `PatternCapReached { cap, bound }` | The per-entity cap was hit; output is truncated. `bound` is the product-space size. Emitted as **`[error]`** (fail-closed). Raise `--max-patterns` or narrow `--buc`. |
 | `ForbiddenStateViolated { conditions, pattern_desc, correlation_hint }` | A reachable pattern matches all conditions of a `forbidden` declaration. Multi-axis witnesses include a correlation hint because they may reflect independent-axis product expansion. |
 | `InvariantViolated { guards, requireds, pattern_desc, flow_order_hint }` | A reachable pattern satisfies an invariant's guards but breaks a requirement. Triggered-usecase witnesses can include a flow-order hint when the immediate upstream event/use-case effects do not prove the required guard coverage. |
 | `RequiredStateViolated { conditions, pattern_desc }` | A reachable pattern misses at least one condition of a `required` declaration. |
@@ -323,7 +324,10 @@ syntax and design rationale.
 | `QuantifierConstraintNotEvaluated { anchor, related, constraint, reason }` | A `has` / `none` related-collection rule needs linked related-row cardinality that the state-pattern engine does not track. Emitted as **`[error]`**; use TLA for linked cardinality. |
 | `UndrivenComparisonProp { proposition, usage, effect, hint }` | A comparison proposition is used in `forbidden`, `required`, `exclusive`, `.when`, or `.then` without a matching `sets(..., comparison, true/false)`. Emitted as **`[error]`** with an evaluator hint (states treats undriven props as always-false; Int/`now` arithmetic is TLA-only). |
 
-`rdra-ish states` exits non-zero when the rendered output contains `[error]` (table/json formats). Unevaluated obligations and undriven comparisons are fail-closed under `states` so a green exit is not mistaken for a checked rule.
+`rdra-ish states` and `rdra-ish check` share `state_diag_severity`: Error-severity
+diagnostics (including truncation, forbidden, NotEvaluated, undriven comparisons)
+yield a non-zero exit for **all** `states` formats (table / csv / json / type-script),
+not only when the rendered text contains `[error]`.
 
 ---
 

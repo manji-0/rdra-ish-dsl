@@ -28,12 +28,18 @@ Diagnostics are written to stderr as `error: ...` or `warning: ...`.
 Parse, type-check, and run whole-model consistency checks; produce no artifact output.
 
 ```
-rdra-ish check <INPUTS...>
+rdra-ish check <INPUTS...> [--allow-tla-only]
 ```
 
 Prints each diagnostic to stderr. If any error (non-warning) is present, exits with
 status `1` before running secondary consistency checks. Otherwise it reports unresolved
-model warnings and prints `OK: no errors`.
+model warnings and state-pattern findings. State diagnostics share severity with
+`states`: Error-severity findings print as `error:` and cause exit `1`; only a clean
+run prints `OK: no errors`.
+
+| Option | Description |
+|---|---|
+| `--allow-tla-only` | Demote undriven comparisons and NotEvaluated state gaps to warnings for exit (still printed). Does not demote pattern truncation or reachable forbidden / invariant violations. Use for mixed Enum+Int models whose Int rules are verified with TLC. |
 
 <!-- derived-from ./state-derivation.md#diagnostics -->
 `check` includes the same broad review signals exposed elsewhere:
@@ -47,7 +53,7 @@ model warnings and prints `OK: no errors`.
   no transition/use case/BUC, or triggered use cases with no containing BUC. Mark
   intentional external publications with `outbox(Event)` to suppress only the
   raised-but-unconsumed warning;
-- state-pattern warnings, including missing creation paths, unreachable enum variants,
+- state-pattern diagnostics (same severity as `states`), including missing creation paths, unreachable enum variants,
   forbidden reachable states, invariant / required / exclusive violations, temporal
   anchor assertion diagnostics, to-many quantifier evaluation gaps, and pattern
   truncation.
@@ -317,7 +323,7 @@ Derive the reachable state patterns per entity, aggregated across BUCs. See
 [state-derivation.md](./state-derivation.md) for the algorithm.
 
 ```
-rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns <N>] [--entity <ID>]
+rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns <N>] [--entity <ID>] [--allow-tla-only]
 ```
 
 | Option | Type | Default | Description |
@@ -325,12 +331,13 @@ rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns 
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--format` | `table` \| `csv` \| `json` | `table` | Output format. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Restrict the reachable scope to the union of the named BUCs. |
-| `--max-patterns` | unsigned integer | `256` | Per-entity cap on the number of patterns before truncation. When exceeded, the entity result is marked `truncated` and a `PatternCapReached` diagnostic is recorded. |
+| `--max-patterns` | unsigned integer | `256` | Per-entity cap on the number of patterns before truncation. When exceeded, the entity result is marked `truncated` and a fail-closed `PatternCapReached` **error** is recorded (exit non-zero for all formats). |
 | `--entity <id>` | string | — (all entities) | Restrict output to a single entity id. Filtering is applied to whichever output format is selected. |
+| `--allow-tla-only` | flag | off | Demote undriven comparisons / NotEvaluated for **exit code** only (table still shows `[error]` labels). Pattern truncation and reachable forbidden stay fail-closed. |
 
-Output is written to stdout. Table/json formats include diagnostics; any `[error]`
-line (including undriven comparisons and NotEvaluated multi-entity / quantifier /
-temporal-comparison obligations) causes a non-zero exit.
+Output is written to stdout. Exit is based on structured severity (all formats), not
+string-scanning `[error]`. By default undriven comparisons and NotEvaluated multi-entity /
+quantifier / temporal-comparison obligations are Error severity.
 
 ---
 

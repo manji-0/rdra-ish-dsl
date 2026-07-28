@@ -1002,13 +1002,44 @@ fn process_relate_predicate(
         return;
     }
 
+    let synthesize_via_n1 = kind == RelKind::RelateManyToMany && via.is_some();
+    let via_for_synth = via.clone();
     model.relations.push(Relation {
         from: from.clone(),
         to: to.clone(),
         kind,
-        options,
+        options: options.clone(),
         via,
     });
+
+    // N:M.via(J) ≡ two N:1 edges J→A, J→B so TLA/ER/.along/has_relate_edge see the junction path.
+    if synthesize_via_n1 {
+        if let (NodeRef::Entity(_), NodeRef::Entity(_), Some(NodeRef::Entity(junction))) =
+            (from, to, via_for_synth.as_ref())
+        {
+            let junction_ref = NodeRef::Entity(*junction);
+            for end in [from.clone(), to.clone()] {
+                if !relation_exists(model, &junction_ref, &end, RelKind::RelateManyToOne)
+                    && !relation_exists(model, &end, &junction_ref, RelKind::RelateOneToMany)
+                {
+                    model.relations.push(Relation {
+                        from: junction_ref.clone(),
+                        to: end,
+                        kind: RelKind::RelateManyToOne,
+                        options: options.clone(),
+                        via: None,
+                    });
+                }
+            }
+        }
+    }
+}
+
+fn relation_exists(model: &SemanticModel, from: &NodeRef, to: &NodeRef, kind: RelKind) -> bool {
+    model
+        .relations
+        .iter()
+        .any(|r| r.from == *from && r.to == *to && r.kind == kind)
 }
 
 pub(crate) fn process_predicate(
