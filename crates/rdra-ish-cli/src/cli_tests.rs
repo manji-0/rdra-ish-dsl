@@ -1,8 +1,7 @@
 use crate::cli::{ExportKind, ListFormat, ListKind};
 use crate::export::export_artifact;
 use crate::list_output::{
-    consistency_warnings, format_lint_issues, list_elements,
-    state_consistency_findings_with_policy, state_diag_message,
+    format_lint_issues, list_elements, state_consistency_findings_with_policy, state_diag_message,
 };
 use crate::load::load_model;
 use rdra_ish_core::{format_diagnostic_message, lint_issues, SemanticModel};
@@ -671,7 +670,7 @@ requires_permission(BookingApi, ScheduleWrite)
 
 #[test]
 fn consistency_warnings_include_permission_and_state_findings() {
-    use rdra_ish_core::build_model;
+    use rdra_ish_core::{build_model, consistency_diagnostics};
     use rdra_ish_syntax::parse;
 
     let src = r#"
@@ -689,7 +688,10 @@ requires_permission(BookAppointment, ScheduleWrite)
     let (model, diags) = build_model(&ast);
     assert!(diags.iter().all(|diag| diag.is_warning));
 
-    let warnings = consistency_warnings(&model);
+    let warnings: Vec<_> = consistency_diagnostics(&model)
+        .into_iter()
+        .map(|d| d.error.to_string())
+        .collect();
     let state_findings =
         state_consistency_findings_with_policy(&model, rdra_ish_core::StateDiagPolicy::default());
 

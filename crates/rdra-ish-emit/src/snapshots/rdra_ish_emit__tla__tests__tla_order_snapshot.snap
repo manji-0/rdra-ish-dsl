@@ -1,5 +1,6 @@
 ---
 source: crates/rdra-ish-emit/src/tla.rs
+assertion_line: 2908
 expression: bundle.tla
 ---
 ---- MODULE RdraSpec ----
@@ -53,7 +54,6 @@ Inv_Order_0 == (Order_status = "delivered") => (Order_delivered_at = "present")
 Forbidden_Order_0 == ~(Order_status = "cancelled" /\ Order_delivered_at = "present")
 
 Safety ==
-  /\ TypeOK
   /\ Inv_Order_0
   /\ Forbidden_Order_0
 
@@ -61,5 +61,5 @@ PaidLeadsToShipped == (Order_status = "paid") ~> (Order_status = "shipped")
 EventuallyTerminal == <>((Order_status = "delivered") \/ (Order_status = "cancelled"))
 AfterAssert_DeliverOrder_0 == [][(Order_EvDeliver_shipped_to_delivered) => ((Order_delivered_at' = "present" /\ Order_status' = "delivered"))]_vars
 
-THEOREM Spec => []Safety
+THEOREM Spec => [](TypeOK /\ Safety)
 ====

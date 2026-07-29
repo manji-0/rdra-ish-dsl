@@ -21,6 +21,7 @@ use rdra_ish_emit::{
 use std::fs;
 
 use crate::cli::{DiagramKind, DiagramViewPreset, OutputFormat};
+use crate::list_output::reject_state_errors;
 use crate::load::{diagram_preset_filters, load_model, reject_model_errors};
 
 pub struct DiagramRequest {
@@ -54,6 +55,7 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
     let inputs = inputs.as_slice();
     let (program, model, diags) = load_model(inputs)?;
     reject_model_errors(&program, &diags)?;
+    reject_state_errors(&model)?;
 
     for buc_id in &buc {
         if !model.bucs.values().any(|b| b.id == *buc_id) {
@@ -225,6 +227,7 @@ fn emit_diagram(
             DiagramKind::Diff => {
                 let (program, base_model, diags) = load_model(diff_base)?;
                 reject_model_errors(&program, &diags)?;
+                reject_state_errors(&base_model)?;
                 Ok(DiffMermaidEmitter { base: &base_model }.emit_diff(model, view)?)
             }
             DiagramKind::BusinessArea => Ok(BusinessAreaMermaidEmitter.emit(model, view)?),
@@ -240,6 +243,7 @@ fn emit_diagram(
             DiagramKind::Diff => {
                 let (program, base_model, diags) = load_model(diff_base)?;
                 reject_model_errors(&program, &diags)?;
+                reject_state_errors(&base_model)?;
                 Ok(DiffPlantUmlEmitter { base: &base_model }.emit_diff(model, view)?)
             }
             DiagramKind::BusinessArea => Ok(BusinessAreaPlantUmlEmitter.emit(model, view)?),

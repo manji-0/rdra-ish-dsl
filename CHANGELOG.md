@@ -15,6 +15,13 @@
   exit 1). Previously those were printed as `warning:` before `OK: no errors`.
 - `states --format csv` / `type-script` exit non-zero on Error-severity state
   diagnostics (exit no longer depends on scanning `[error]` in rendered text).
+- `diagram` / `csv` / `list` / non-TLA `export` refuse to emit when state
+  diagnostics are Error severity (aligned with fail-closed docs). TLA export is
+  unchanged except for new `[TLA_FATAL:int_literal_out_of_range]`.
+- TLA `.cfg` emits separate `INVARIANT TypeOK` and `INVARIANT Safety` (Safety no
+  longer folds TypeOK).
+- `actors_for_usecase` unions BUC-level and direct `performs` (direct no longer
+  hides BUC performers in permission analysis).
 
 ### Added
 
@@ -48,6 +55,16 @@
 - Import scopes keep same-id bindings of different kinds (e.g. `event Capture` +
   `usecase Capture`); `kind::Id` resolves across modules. CI runs `check` on
   sample models including `samples/ec-site`.
+- `DrivenComparisonContradictsEffects`: `sets(..., cmp, bool)` that disagree with
+  same-origin Int `sets` are Error (closes check-green / TLC-red dual-drive gap).
+- TLA export rejects `sets` Int literals outside `0..int_range_max` with
+  `[TLA_FATAL:int_literal_out_of_range]`.
+- `Assign_*` actions are labeled as synthetic nondet; `verify` notes when a
+  counterexample mentions `Assign_`.
+- `check --strict` promotes permission/access gaps to errors; `check` always
+  notes outstanding temporal properties / TLA-only obligations.
+- OpenAPI emits `oneOf` (+ `x-rdra-ish-ambiguous-status`) for multiple
+  `response` / `error_response` DTOs.
 
 ### Changed
 
@@ -56,7 +73,7 @@
   only (use `after.assert` for machine-checked posts).
 - Bare `relate(..., N:M)` without `.via` is an error (was a warning).
 - `coverage-score` no longer rates empty models as 100; stage-readiness gaps
-  reduce the score.
+  reduce the score; finding penalties are size-normalized (`×25/elements`).
 ## v0.2.0 - 2026-07-20
 
 ### Breaking

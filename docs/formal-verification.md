@@ -53,7 +53,9 @@ allows stuttering via `[][Next]_vars`).
 | Multi-instance temporal formulas | Per-instance quantifiers: `[](\A i: …)`, `\A i: <>(…)`, `\A i: (p ~> q)` |
 | Temporal atoms with Int compares | `stock < selling`, `stock >= 1`, etc. map to TLC arithmetic |
 | `col < now` / DateTime vs `now` | Global `now \in IntRange`, `TickNow`, lhs promoted to Int axis |
-| Undriven Int axes | Nondet `Assign_*` actions (`\E v \in IntRange: col' = v`) |
+| Undriven Int axes | Synthetic nondet `Assign_*` actions (`\E v \in IntRange: col' = v`) — not modeled use cases |
+| `sets` Int literal outside `0..int_range_max` | `[TLA_FATAL:int_literal_out_of_range]` (export/verify refuse) |
+| TypeOK vs Safety | `.cfg` has separate `INVARIANT TypeOK` and `INVARIANT Safety` (domain vs business rules) |
 | Any `eventually` / `leads_to` property | `Spec` includes `WF_vars(Next)` |
 
 Example temporal / Int syntax:
@@ -126,9 +128,12 @@ arithmetic Safety when Int axes exist.
   `quantifier_none` are expected TLC fails under that semantics.
 - **Int arithmetic**: comparisons and `sets(..., col == N)` on Int / Money / Decimal
   use TLC Integers on `IntRange` (default **`0..5`**, override with `--int-range-max`).
-  Undriven Int axes get nondet `Assign_*` actions so TLC can explore values.
-  `@default(0)` is accepted for Int columns. Boundedness is an approximation —
-  `verify` OK does not prove behaviour outside `IntRange`.
+  Literals outside that window are `[TLA_FATAL:int_literal_out_of_range]` (raise
+  `--int-range-max` or lower the literal). Undriven Int axes get synthetic nondet
+  `Assign_*` actions so TLC can explore values; `verify` notes when a counterexample
+  mentions `Assign_*`. `@default(0)` is accepted for Int columns. Boundedness is an
+  approximation — `verify` OK does not prove behaviour outside `IntRange`.
+  Domain violations report as `TypeOK`; business rules as `Safety`.
 - **Approximation banner**: whenever multi-instance or integer axes are used,
   export/verify always emit
   `tla approximation: InstanceCount=… IntRange=0..…; verify OK does not prove outside this window`
@@ -183,7 +188,7 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `now_coupon.rdra` | expected fail | `now` / unconstrained Assign + TickNow; Safety finds `expired_at < now` |
 | `cross_order_payment.rdra` | expected fail | Multi-instance + `.along` (independent SpecActions allow Cancel then Capture) |
 | `quantifier_none.rdra` | expected fail | `when(...).none` (Revoke while Assign stays active) |
-| `fail/order.rdra` | expected fail | Intentionally unsafe (`check` may warn with exit 0; TLC should fail Safety) |
+| `fail/order.rdra` | expected fail | Intentionally unsafe (reachable forbidden → `check`/`states` exit 1; TLC fails Safety) |
 
-`rdra-ish check` on fail samples can exit 0 with warnings only — use TLC for the
-negative verdict.
+`rdra-ish check` fails closed on reachable forbidden / undriven comparisons; use TLC
+for temporal properties and Int arithmetic that `check` only notes as TLA-only.

@@ -1,7 +1,7 @@
 //! List/table/CSV/JSON formatters for the `list` CLI command.
 
 use anyhow::Result;
-use rdra_ish_core::{consistency_diagnostics, LintIssue};
+use rdra_ish_core::LintIssue;
 
 use crate::cli::{ListFormat, ListKind, StatesFormat};
 mod access;
@@ -22,14 +22,6 @@ macro_rules! list_id_label {
             (item.id.as_str(), item.label.as_str())
         })
     };
-}
-
-/// Non-state model consistency findings (always reported as warnings today).
-pub(crate) fn consistency_warnings(model: &rdra_ish_core::SemanticModel) -> Vec<String> {
-    consistency_diagnostics(model)
-        .into_iter()
-        .map(|diag| diag.error.to_string())
-        .collect()
 }
 
 /// State-pattern diagnostics with the same severity as `states` / emitters.
@@ -54,6 +46,23 @@ pub(crate) fn state_consistency_findings_with_policy(
         }
     }
     findings
+}
+
+/// Fail closed when state derivation has Error-severity diagnostics (generators).
+pub(crate) fn reject_state_errors(model: &rdra_ish_core::SemanticModel) -> anyhow::Result<()> {
+    let findings =
+        state_consistency_findings_with_policy(model, rdra_ish_core::StateDiagPolicy::default());
+    let mut has_error = false;
+    for (severity, message) in &findings {
+        if severity.is_error() {
+            eprintln!("error: {message}");
+            has_error = true;
+        }
+    }
+    if has_error {
+        anyhow::bail!("model has state errors; refusing to emit artifacts");
+    }
+    Ok(())
 }
 
 pub(crate) fn format_lint_issues(issues: &[LintIssue], format: &ListFormat) -> Result<String> {
@@ -217,6 +226,16 @@ pub(crate) fn state_diag_message(diag: &rdra_ish_core::StateDiag) -> String {
         } => format!(
             "comparison proposition '{}' used in {} is not driven by sets(..., <comparison>, true/false): {}; hint: {}",
             proposition, usage, effect, hint
+        ),
+        rdra_ish_core::StateDiag::DrivenComparisonContradictsEffects {
+            usecase,
+            entity,
+            prop,
+            driven_truth,
+            evaluated,
+        } => format!(
+            "driven comparison '{}' on entity '{}' from '{}' sets truth={} but Int assignments evaluate to {}; hint: align sets(..., cmp, bool) with sets(..., col == N) in the same operation, or remove the contradictory drive",
+            prop, entity, usecase, driven_truth, evaluated
         ),
     }
 }

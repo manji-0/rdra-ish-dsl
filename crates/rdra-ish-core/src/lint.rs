@@ -654,20 +654,23 @@ fn coverage_score_issue(model: &SemanticModel, findings: &[LintIssue]) -> LintIs
         .filter(|(_, ok)| !*ok)
         .count() as i32;
     let stage_penalty = missing_stages.saturating_mul(8);
-    let score = (100 - finding_penalty - stage_penalty).max(0);
+    // Scale absolute finding penalties by model size so large models are not
+    // pinned at 0 while tiny stubs score near 100 for the same density.
+    let scaled_finding = (finding_penalty * 25) / elements.max(1) as i32;
+    let score = (100 - scaled_finding - stage_penalty).max(0);
     LintIssue::new(
         LintSeverity::Info,
         "coverage-score",
         "model",
         "",
         format!(
-            "coverage score: {}/100 across {} model elements and {} findings ({} missing stages × -8)",
+            "coverage score: {}/100 across {} model elements and {} findings (finding penalty scaled ×25/elements; {} missing stages × -8)",
             score,
             elements,
             findings.len(),
             missing_stages
         ),
-        "use warning rows and stage-readiness missing stages as the review backlog; the score is a lightweight readiness signal",
+        "use warning rows and stage-readiness missing stages as the review backlog; the score is a size-normalized readiness signal",
     )
 }
 
@@ -1090,7 +1093,7 @@ entity Order "Order" {
             .iter()
             .find(|i| i.rule == "coverage-score")
             .expect("coverage-score");
-        // orphan warning (-2) + 6 missing stages × -8 = large penalty; must not look "ready"
+        // orphan warning scaled by elements + 6 missing stages × -8 = large penalty
         let numeric: i32 = score
             .message
             .strip_prefix("coverage score: ")
@@ -1104,6 +1107,7 @@ entity Order "Order" {
             score.message
         );
         assert!(score.message.contains("missing stages"));
+        assert!(score.message.contains("scaled"));
     }
 
     #[test]

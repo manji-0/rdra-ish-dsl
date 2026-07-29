@@ -15,15 +15,27 @@ use diagram::{run_diagram, DiagramRequest};
 use export::export_artifact;
 use fmt_cmd::run_fmt;
 use list_output::{
-    consistency_warnings, format_lint_issues, list_elements, state_consistency_findings_with_policy,
+    format_lint_issues, list_elements, reject_state_errors, state_consistency_findings_with_policy,
 };
 use load::{eprint_diagnostic, load_model, reject_model_errors};
-use rdra_ish_core::{lint_issues, LintSeverity};
+use rdra_ish_core::{lint_issues, LintSeverity, RdraError};
 use rdra_ish_emit::View;
 use states::run_states;
 use std::fs;
 use std::path::Path;
 use verify::run_verify;
+
+fn is_strict_access_gap(error: &RdraError) -> bool {
+    matches!(
+        error,
+        RdraError::ActorPermissionMissing { .. }
+            | RdraError::ActorPermissionExcess { .. }
+            | RdraError::UseCasePermissionNoActor { .. }
+            | RdraError::ApiPermissionNoActor { .. }
+            | RdraError::ApiPermissionNotHeld { .. }
+            | RdraError::UseCasePermissionNotHeld { .. }
+    )
+}
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -32,6 +44,7 @@ fn main() -> Result<()> {
         Commands::Check {
             inputs,
             allow_tla_only,
+            strict,
         } => {
             let (program, model, diags) = load_model(&inputs)?;
             let policy = if allow_tla_only {
@@ -52,8 +65,14 @@ fn main() -> Result<()> {
                 std::process::exit(1);
             }
 
-            for warning in consistency_warnings(&model) {
-                eprintln!("warning: {}", warning);
+            for diag in rdra_ish_core::consistency_diagnostics(&model) {
+                let as_error = strict && is_strict_access_gap(&diag.error);
+                if as_error {
+                    eprintln!("error: {}", diag.error);
+                    has_error = true;
+                } else {
+                    eprintln!("warning: {}", diag.error);
+                }
             }
 
             // Same severity as `states` (fail-closed on PatternCap / forbidden / NotEvaluated).
@@ -70,6 +89,23 @@ fn main() -> Result<()> {
                         eprintln!("info: {}", message);
                     }
                 }
+            }
+
+            let state_results = rdra_ish_core::derive_state_patterns(
+                &model,
+                &[],
+                rdra_ish_core::DEFAULT_PATTERN_CAP,
+            );
+            let tla_only = state_results
+                .iter()
+                .flat_map(|r| r.diagnostics.iter())
+                .filter(|d| rdra_ish_core::is_tla_only_state_diag(d))
+                .count();
+            let property_count = model.temporal_properties.len();
+            if property_count > 0 || tla_only > 0 {
+                eprintln!(
+                    "note: {property_count} temporal properties and {tla_only} TLA-only obligation(s) were not model-checked by check; use verify --backend tlc"
+                );
             }
 
             if has_error {
@@ -114,6 +150,7 @@ fn main() -> Result<()> {
         } => {
             let (program, model, diags) = load_model(&inputs)?;
             reject_model_errors(&program, &diags)?;
+            reject_state_errors(&model)?;
 
             let output = list_elements(&model, &kind, &format)?;
             print!("{}", output);
@@ -149,6 +186,9 @@ fn main() -> Result<()> {
         } => {
             let (program, model, diags) = load_model(&inputs)?;
             reject_model_errors(&program, &diags)?;
+            if !matches!(kind, ExportKind::Tla) {
+                reject_state_errors(&model)?;
+            }
 
             let view = View::whole();
             if matches!(kind, ExportKind::Tla) {

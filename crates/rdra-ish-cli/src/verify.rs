@@ -125,6 +125,11 @@ fn run_tlc(
         }
         if tlc_reports_violation(&combined) {
             eprintln!("tlc_result: counterexample");
+            if combined.contains("Assign_") {
+                eprintln!(
+                    "note: counterexample mentions Assign_* — that step is a synthetic nondeterministic assignment for an undriven Int/Money/DateTime column, not a modeled use case"
+                );
+            }
             bail!(
                 "TLC verification failed (spec: {})\n{summary}",
                 tla_path.display()

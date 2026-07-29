@@ -3,6 +3,7 @@ source: crates/rdra-ish-emit/src/tla.rs
 expression: bundle.cfg
 ---
 SPECIFICATION Spec
+INVARIANT TypeOK
 INVARIANT Safety
 CHECK_DEADLOCK FALSE
 PROPERTY PaidLeadsToShipped

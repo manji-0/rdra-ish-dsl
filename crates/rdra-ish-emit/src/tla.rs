@@ -179,6 +179,7 @@ fn build_export(
     let lifecycles = collect_entity_lifecycles(model);
     let multi_instance = needs_multi_instance(model);
     let int_now = collect_int_now_usage(model, &lifecycles);
+    check_int_literals_in_range(model, int_range_max, warnings);
 
     let binders = assign_binders(&lifecycles, model);
     let mut specs = Vec::new();
@@ -283,6 +284,35 @@ fn consider_entity_cmp(
             usage.needs_now = true;
             usage.needs_integers = true;
         }
+    }
+}
+
+fn check_int_literals_in_range(
+    model: &SemanticModel,
+    int_range_max: i64,
+    warnings: &mut Vec<String>,
+) {
+    for effect in &model.column_effects {
+        let EffectValue::Int(n) = effect.value else {
+            continue;
+        };
+        if n >= 0 && n <= int_range_max {
+            continue;
+        }
+        let eid = model.entities[effect.entity].id.clone();
+        let origin = match &effect.origin {
+            NodeRef::UseCase(k) => model.use_cases[*k].id.clone(),
+            NodeRef::Event(k) => model.events[*k].id.clone(),
+            _ => "?".into(),
+        };
+        push_tla_fatal(
+            warnings,
+            "int_literal_out_of_range",
+            format!(
+                "sets({origin}, {eid}, {} == {n}) is outside IntRange 0..{int_range_max}; raise --int-range-max or lower the literal (TypeOK would otherwise fail and look like a business-rule violation)",
+                effect.column
+            ),
+        );
     }
 }
 
@@ -1241,7 +1271,10 @@ fn append_undriven_int_assigns(
         };
         actions.push(SpecAction {
             name,
-            comment: format!("nondet assign {}", ax.column),
+            comment: format!(
+                "synthetic nondet assign {entity_name}.{} (no modeled usecase)",
+                ax.column
+            ),
             exists_binder,
             guards: Vec::new(),
             effects,
@@ -2741,14 +2774,15 @@ fn render_tla(module_name: &str, export: &TlaExport, warnings: &[String]) -> Str
         inv_names.push(name.clone());
     }
 
+    // Safety is semantic only — TypeOK is a separate invariant (see .cfg).
     if !inv_names.is_empty() {
-        out.push_str("\nSafety ==\n  /\\ TypeOK\n");
+        out.push_str("\nSafety ==\n");
         for name in &inv_names {
             out.push_str(&format!("  /\\ {name}\n"));
         }
         out.push('\n');
     } else {
-        out.push_str("Safety == TypeOK\n\n");
+        out.push_str("Safety == TRUE\n\n");
     }
 
     // Temporal properties (single authoritative list)
@@ -2761,7 +2795,7 @@ fn render_tla(module_name: &str, export: &TlaExport, warnings: &[String]) -> Str
         out.push('\n');
     }
 
-    out.push_str("THEOREM Spec => []Safety\n");
+    out.push_str("THEOREM Spec => [](TypeOK /\\ Safety)\n");
     out.push_str("====\n");
     out
 }
@@ -2783,6 +2817,9 @@ fn push_unchanged(out: &mut String, unchanged: &[String], indent: &str) {
 fn render_cfg(module_name: &str, export: &TlaExport) -> String {
     let mut out = String::new();
     out.push_str("SPECIFICATION Spec\n");
+    // Keep TypeOK separate from Safety so domain violations are not misread as
+    // business-rule failures.
+    out.push_str("INVARIANT TypeOK\n");
     out.push_str("INVARIANT Safety\n");
     // Lifecycle models have terminal states with no enabled Next action.
     // TLC's default deadlock check treats those as errors; Spec already allows
@@ -2922,6 +2959,56 @@ mod tests {
         .unwrap();
         assert!(bundle.tla.contains("IntRange == 0..9"));
         assert!(bundle.warnings.iter().any(|w| w.contains("IntRange=0..9")));
+    }
+
+    #[test]
+    fn tla_int_literal_out_of_range_is_fatal() {
+        let model = model_from(
+            r#"
+entity Item "Item" {
+  id: Int @pk
+  stock: Int
+  status: Enum(active, archived) @default(active)
+}
+usecase Restock "Restock"
+creates(Restock, Item)
+updates(Restock, Item)
+sets(Restock, Item, stock == 100)
+forbidden(Item, stock < 0)
+"#,
+        );
+        let bundle = TlaPlusEmitter::default()
+            .emit_bundle(&model, &View::whole())
+            .unwrap();
+        assert!(
+            bundle
+                .warnings
+                .iter()
+                .any(|w| w.contains("[TLA_FATAL:int_literal_out_of_range]") && w.contains("100")),
+            "expected int_literal_out_of_range fatal; got {:?}",
+            bundle.warnings
+        );
+    }
+
+    #[test]
+    fn tla_typeok_is_separate_from_safety_in_cfg() {
+        let src = std::fs::read_to_string("samples/formal-verification/int_stock.rdra")
+            .or_else(|_| {
+                std::fs::read_to_string("../../samples/formal-verification/int_stock.rdra")
+            })
+            .expect("int_stock.rdra");
+        let model = model_from(&src);
+        let bundle = TlaPlusEmitter::default()
+            .emit_bundle(&model, &View::whole())
+            .unwrap();
+        assert!(
+            !bundle.tla.contains("Safety ==\n  /\\ TypeOK"),
+            "Safety must not fold TypeOK:\n{}",
+            bundle.tla
+        );
+        assert!(bundle.cfg.contains("INVARIANT TypeOK"));
+        assert!(bundle.cfg.contains("INVARIANT Safety"));
+        assert!(bundle.tla.contains("THEOREM Spec => [](TypeOK /\\ Safety)"));
     }
 
     #[test]

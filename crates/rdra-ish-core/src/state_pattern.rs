@@ -6,7 +6,7 @@
 
 use crate::entity_lifecycle::link_entity_status_states;
 use crate::model::{
-    CmpRhs, ColumnEffect, ColumnType, ComparisonProp, CrossCmpRhs, CrossComparisonProp,
+    CmpOpModel, CmpRhs, ColumnEffect, ColumnType, ComparisonProp, CrossCmpRhs, CrossComparisonProp,
     CrossConstraintScope, CrossEntityCondition, CrossEntityInvariant, CrossForbiddenConstraint,
     EffectValue, EntityKey, ModelColumn, NodeRef, QualifiedModelColumnRef, QuantifierConstraint,
     QuantifierKind, RelKind, SemanticModel, StateKey, TemporalAssertion, UseCaseKey,
@@ -255,6 +255,14 @@ pub enum StateDiag {
         /// Evaluator guidance (states proposition vs TLA arithmetic).
         hint: String,
     },
+    /// `sets(..., cmp, bool)` の真偽が、同一操作の Int `sets` 代入と矛盾する
+    DrivenComparisonContradictsEffects {
+        usecase: String,
+        entity: String,
+        prop: String,
+        driven_truth: bool,
+        evaluated: bool,
+    },
 }
 
 /// Shared severity for `states` / `check` / emitters (single source of truth).
@@ -305,6 +313,11 @@ fn is_tla_only_diag(diag: &StateDiag) -> bool {
     )
 }
 
+/// True when the diagnostic is a TLA-backed gap that `check`/`states` do not fully evaluate.
+pub fn is_tla_only_state_diag(diag: &StateDiag) -> bool {
+    is_tla_only_diag(diag)
+}
+
 /// Base severity (fail-closed defaults) used by emitters' `[error]` / `[warn]` labels.
 pub fn state_diag_severity(diag: &StateDiag) -> StateDiagSeverity {
     state_diag_severity_with_policy(diag, StateDiagPolicy::default())
@@ -331,7 +344,8 @@ pub fn state_diag_severity_with_policy(
         | StateDiag::TemporalAssertionViolated { .. }
         | StateDiag::TemporalAssertionNotEvaluated { .. }
         | StateDiag::QuantifierConstraintNotEvaluated { .. }
-        | StateDiag::UndrivenComparisonProp { .. } => StateDiagSeverity::Error,
+        | StateDiag::UndrivenComparisonProp { .. }
+        | StateDiag::DrivenComparisonContradictsEffects { .. } => StateDiagSeverity::Error,
     };
     if policy.allow_tla_only && is_tla_only_diag(diag) && base == StateDiagSeverity::Error {
         StateDiagSeverity::Warning
@@ -1050,6 +1064,7 @@ fn derive_for_entity(
         }
     }
     collect_undriven_comparison_diagnostics(model, ek, &mut diags);
+    collect_driven_comparison_contradiction_diagnostics(model, ek, &mut diags);
 
     // 状態軸の特定（比較命題軸も含む）
     let axes = identify_axes(&entity.columns, &effects_for_entity, &proposition_props);
@@ -1442,6 +1457,79 @@ fn undriven_comparison_hint(model: &SemanticModel, ek: EntityKey, prop: &Compari
         "states treats undriven comparisons as always-false; Int/Money/Decimal/Date/DateTime/now arithmetic is checked by verify --backend tlc, not states — drive with sets(..., cmp, true/false) for proposition checking".to_string()
     } else {
         "states treats undriven comparisons as always-false unless sets(..., cmp, true/false) drives the proposition".to_string()
+    }
+}
+
+fn eval_cmp_i64(lhs: i64, op: CmpOpModel, rhs: i64) -> bool {
+    match op {
+        CmpOpModel::Lt => lhs < rhs,
+        CmpOpModel::Gt => lhs > rhs,
+        CmpOpModel::Le => lhs <= rhs,
+        CmpOpModel::Ge => lhs >= rhs,
+        CmpOpModel::Eq => lhs == rhs,
+        CmpOpModel::Ne => lhs != rhs,
+    }
+}
+
+fn origin_display_id(model: &SemanticModel, origin: &NodeRef) -> String {
+    match origin {
+        NodeRef::UseCase(k) => model.use_cases[*k].id.clone(),
+        NodeRef::Event(k) => model.events[*k].id.clone(),
+        other => format!("{other:?}"),
+    }
+}
+
+/// Detect `sets(..., cmp, bool)` that disagree with same-origin Int column assignments.
+fn collect_driven_comparison_contradiction_diagnostics(
+    model: &SemanticModel,
+    ek: EntityKey,
+    diags: &mut Vec<StateDiag>,
+) {
+    let entity_id = model.entities[ek].id.clone();
+    let mut seen: HashSet<(String, String, bool)> = HashSet::new();
+
+    for pe in model
+        .proposition_effects
+        .iter()
+        .filter(|pe| pe.entity == ek)
+    {
+        // Last-wins Int assignments from the same origin on this entity.
+        let mut vals: HashMap<String, i64> = HashMap::new();
+        for ce in model.column_effects.iter().filter(|ce| {
+            ce.entity == ek && ce.origin == pe.origin && matches!(ce.value, EffectValue::Int(_))
+        }) {
+            if let EffectValue::Int(n) = ce.value {
+                vals.insert(ce.column.clone(), n);
+            }
+        }
+
+        let Some(lhs) = vals.get(&pe.prop.lhs_column).copied() else {
+            continue;
+        };
+        let rhs = match &pe.prop.rhs {
+            CmpRhs::IntLit(n) => *n,
+            CmpRhs::Column(col) => match vals.get(col).copied() {
+                Some(n) => n,
+                None => continue,
+            },
+            CmpRhs::Now => continue,
+        };
+        let evaluated = eval_cmp_i64(lhs, pe.prop.op, rhs);
+        if evaluated == pe.truth {
+            continue;
+        }
+        let usecase = origin_display_id(model, &pe.origin);
+        let prop = pe.prop.display();
+        if !seen.insert((usecase.clone(), prop.clone(), pe.truth)) {
+            continue;
+        }
+        diags.push(StateDiag::DrivenComparisonContradictsEffects {
+            usecase,
+            entity: entity_id.clone(),
+            prop,
+            driven_truth: pe.truth,
+            evaluated,
+        });
     }
 }
 
@@ -3869,6 +3957,45 @@ required(Stock, stock < selling)
                 .any(|diag| matches!(diag, StateDiag::UndrivenComparisonProp { .. })),
             "driven comparison should not warn: {:?}",
             r.diagnostics
+        );
+    }
+
+    #[test]
+    fn driven_comparison_contradicts_same_origin_int_sets() {
+        let model = model_from(
+            r#"
+entity Item "Item" {
+  id: Int @pk
+  stock: Int
+  selling: Int
+  status: Enum(active, archived) @default(active)
+}
+usecase Sell "Sell"
+creates(Sell, Item)
+updates(Sell, Item)
+sets(Sell, Item, stock == 0)
+sets(Sell, Item, selling == 1)
+sets(Sell, Item, stock < selling, false)
+forbidden(Item, stock < selling)
+"#,
+        );
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results.iter().find(|r| r.entity_id == "Item").unwrap();
+        assert!(
+            r.diagnostics.iter().any(|d| matches!(
+                d,
+                StateDiag::DrivenComparisonContradictsEffects {
+                    driven_truth: false,
+                    evaluated: true,
+                    ..
+                }
+            )),
+            "expected DrivenComparisonContradictsEffects, got {:?}",
+            r.diagnostics
+        );
+        assert!(
+            state_results_have_errors(&results),
+            "contradiction must be fail-closed"
         );
     }
 

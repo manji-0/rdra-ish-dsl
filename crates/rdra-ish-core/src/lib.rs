@@ -60,10 +60,11 @@ pub use resolver::{
     build_merged_model, reachable_from_bucs, resolve, resolve_overlaid, ResolvedProgram,
 };
 pub use state_pattern::{
-    derive_state_patterns, state_diag_severity, state_diag_severity_with_policy,
-    state_results_have_errors, state_results_have_errors_with_policy, AbstractValue, AxisKind,
-    EntityStateResult, ReachablePattern, StateAxis, StateDiag, StateDiagPolicy, StateDiagSeverity,
-    StatePattern, DEFAULT_PATTERN_CAP,
+    derive_state_patterns, is_tla_only_state_diag, state_diag_severity,
+    state_diag_severity_with_policy, state_results_have_errors,
+    state_results_have_errors_with_policy, AbstractValue, AxisKind, EntityStateResult,
+    ReachablePattern, StateAxis, StateDiag, StateDiagPolicy, StateDiagSeverity, StatePattern,
+    DEFAULT_PATTERN_CAP,
 };
 pub use system::{derive_system_boundaries, system_diagnostics, SystemBoundary};
 pub use tx::{infer_usecase_transactions, tx_diagnostics, TxGroup, UcWrite, UsecaseTx, WriteKind};

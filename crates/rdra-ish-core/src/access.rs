@@ -370,10 +370,10 @@ pub fn derive_actor_permission_audit(model: &SemanticModel) -> Vec<ActorPermissi
 
 /// Report permission requirements that are not backed by the actor permission model.
 ///
-/// Use-case actor resolution follows the sequence diagram rule: direct
-/// `performs(Actor, UseCase)` wins; otherwise actors on containing BUCs are used.
-/// API requirements are checked per invoking use case so a shared API cannot be
-/// made valid by one authorized path while another invocation path lacks authority.
+/// Use-case actor resolution unions direct `performs(Actor, UseCase)` with actors on
+/// containing BUCs (sort/dedup). API requirements are checked per invoking use case so
+/// a shared API cannot be made valid by one authorized path while another invocation
+/// path lacks authority.
 pub fn permission_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
     let uc_requirements = collect_usecase_requirements(model);
     let api_requirements = collect_api_requirements(model);
@@ -663,7 +663,7 @@ fn is_column_set_by_path(
 }
 
 fn actors_for_usecase(model: &SemanticModel, usecase: UseCaseKey) -> Vec<ActorKey> {
-    let mut direct: Vec<ActorKey> = model
+    let mut actors: Vec<ActorKey> = model
         .relations
         .iter()
         .filter_map(|rel| {
@@ -675,26 +675,17 @@ fn actors_for_usecase(model: &SemanticModel, usecase: UseCaseKey) -> Vec<ActorKe
             None
         })
         .collect();
-    sort_dedup_actors(model, &mut direct);
-    if !direct.is_empty() {
-        return direct;
-    }
 
     let bucs = bucs_containing_usecase(model, usecase);
-    let mut actors: Vec<ActorKey> = model
-        .relations
-        .iter()
-        .filter_map(|rel| {
-            if rel.kind == RelKind::Performs {
-                if let (NodeRef::Actor(actor), NodeRef::Buc(buc)) = (&rel.from, &rel.to) {
-                    if bucs.contains(buc) {
-                        return Some(*actor);
-                    }
+    for rel in &model.relations {
+        if rel.kind == RelKind::Performs {
+            if let (NodeRef::Actor(actor), NodeRef::Buc(buc)) = (&rel.from, &rel.to) {
+                if bucs.contains(buc) {
+                    actors.push(*actor);
                 }
             }
-            None
-        })
-        .collect();
+        }
+    }
     sort_dedup_actors(model, &mut actors);
     actors
 }
@@ -1088,6 +1079,41 @@ requires_permission(BookAppointment, ScheduleWrite)
         );
 
         assert!(permission_diagnostics(&model).is_empty());
+    }
+
+    #[test]
+    fn permission_diagnostics_unions_buc_and_direct_performers() {
+        let model = model_from(
+            r#"
+actor Customer "Customer"
+actor Admin "Admin"
+buc BucOrder "Order"
+usecase RefundOrder "Refund"
+permission AdminOnly "Admin Only"
+performs(Customer, BucOrder)
+performs(Admin, RefundOrder)
+has_permission(Admin, AdminOnly)
+contains(BucOrder, RefundOrder)
+requires_permission(RefundOrder, AdminOnly)
+"#,
+        );
+
+        let diags = permission_diagnostics(&model);
+        assert!(
+            diags.iter().any(|diag| matches!(
+                &diag.error,
+                RdraError::ActorPermissionMissing {
+                    actor,
+                    permission,
+                    ..
+                } if actor == "Customer" && permission == "AdminOnly"
+            )),
+            "BUC performer must remain visible when a direct performer is also declared: {:?}",
+            diags
+                .iter()
+                .map(|d| d.error.to_string())
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]

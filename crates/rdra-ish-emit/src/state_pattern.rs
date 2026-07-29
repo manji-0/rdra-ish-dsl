@@ -200,6 +200,18 @@ fn diag_message(d: &StateDiag) -> String {
                 proposition, usage, effect, hint
             )
         }
+        StateDiag::DrivenComparisonContradictsEffects {
+            usecase,
+            entity,
+            prop,
+            driven_truth,
+            evaluated,
+        } => {
+            format!(
+                "driven comparison '{}' on entity '{}' from '{}' sets truth={} but Int assignments evaluate to {}; hint: align sets(..., cmp, bool) with sets(..., col == N) in the same operation, or remove the contradictory drive",
+                prop, entity, usecase, driven_truth, evaluated
+            )
+        }
     };
     format!("[{label}] {body}")
 }

@@ -58,9 +58,9 @@ fn openapi_document(model: &SemanticModel) -> Value {
 
 fn openapi_operation(model: &SemanticModel, api: rdra_ish_core::model::ApiKey) -> Value {
     let api_model = &model.apis[api];
-    let request = related_dto(model, NodeRef::Api(api), RelKind::Request);
-    let response = related_dto(model, NodeRef::Api(api), RelKind::Response);
-    let error_response = related_dto(model, NodeRef::Api(api), RelKind::ErrorResponse);
+    let request = related_dtos(model, NodeRef::Api(api), RelKind::Request);
+    let response = related_dtos(model, NodeRef::Api(api), RelKind::Response);
+    let error_response = related_dtos(model, NodeRef::Api(api), RelKind::ErrorResponse);
 
     let mut operation = Map::new();
     operation.insert("operationId".to_string(), json!(api_model.id));
@@ -98,14 +98,14 @@ fn openapi_operation(model: &SemanticModel, api: rdra_ish_core::model::ApiKey) -
         }
     }
 
-    if let Some(dto) = request {
+    if let Some(schema) = dto_content_schema(model, &request) {
         operation.insert(
             "requestBody".to_string(),
             json!({
                 "required": true,
                 "content": {
                     "application/json": {
-                        "schema": schema_ref(model.dtos[dto].id.as_str())
+                        "schema": schema
                     }
                 }
             }),
@@ -113,40 +113,61 @@ fn openapi_operation(model: &SemanticModel, api: rdra_ish_core::model::ApiKey) -
     }
 
     let mut responses = Map::new();
-    match response {
-        Some(dto) => {
-            responses.insert(
-                "200".to_string(),
-                json!({
-                    "description": "OK",
-                    "content": {
-                        "application/json": {
-                            "schema": schema_ref(model.dtos[dto].id.as_str())
-                        }
-                    }
-                }),
+    if response.is_empty() {
+        responses.insert("204".to_string(), json!({ "description": "No Content" }));
+    } else if let Some(schema) = dto_content_schema(model, &response) {
+        let mut body = json!({
+            "description": "OK",
+            "content": {
+                "application/json": {
+                    "schema": schema
+                }
+            }
+        });
+        if response.len() > 1 {
+            body.as_object_mut().unwrap().insert(
+                "x-rdra-ish-ambiguous-status".to_string(),
+                json!("multiple response DTOs; status codes are not modeled — emitted as oneOf under 200"),
             );
         }
-        None => {
-            responses.insert("204".to_string(), json!({ "description": "No Content" }));
-        }
+        responses.insert("200".to_string(), body);
     }
-    if let Some(dto) = error_response {
-        responses.insert(
-            "default".to_string(),
-            json!({
+    if !error_response.is_empty() {
+        if let Some(schema) = dto_content_schema(model, &error_response) {
+            let mut body = json!({
                 "description": "Error",
                 "content": {
                     "application/json": {
-                        "schema": schema_ref(model.dtos[dto].id.as_str())
+                        "schema": schema
                     }
                 }
-            }),
-        );
+            });
+            if error_response.len() > 1 {
+                body.as_object_mut().unwrap().insert(
+                    "x-rdra-ish-ambiguous-status".to_string(),
+                    json!("multiple error_response DTOs; status codes are not modeled — emitted as oneOf under default"),
+                );
+            }
+            responses.insert("default".to_string(), body);
+        }
     }
     operation.insert("responses".to_string(), Value::Object(responses));
 
     Value::Object(operation)
+}
+
+fn dto_content_schema(model: &SemanticModel, dtos: &[DtoKey]) -> Option<Value> {
+    match dtos {
+        [] => None,
+        [dto] => Some(schema_ref(model.dtos[*dto].id.as_str())),
+        many => {
+            let one_of: Vec<Value> = many
+                .iter()
+                .map(|dto| schema_ref(model.dtos[*dto].id.as_str()))
+                .collect();
+            Some(json!({ "oneOf": one_of }))
+        }
+    }
 }
 
 /// Extract `{param}` segments from an OpenAPI-style path template.
@@ -193,8 +214,8 @@ fn required_permissions(model: &SemanticModel, api: rdra_ish_core::model::ApiKey
     ids
 }
 
-fn related_dto(model: &SemanticModel, api: NodeRef, kind: RelKind) -> Option<DtoKey> {
-    model
+fn related_dtos(model: &SemanticModel, api: NodeRef, kind: RelKind) -> Vec<DtoKey> {
+    let mut dtos: Vec<DtoKey> = model
         .relations
         .iter()
         .filter(|rel| rel.kind == kind && rel.from == api)
@@ -202,7 +223,10 @@ fn related_dto(model: &SemanticModel, api: NodeRef, kind: RelKind) -> Option<Dto
             NodeRef::Dto(dto) => Some(dto),
             _ => None,
         })
-        .min_by_key(|dto| model.dtos[*dto].id.as_str())
+        .collect();
+    dtos.sort_by_key(|dto| model.dtos[*dto].id.as_str());
+    dtos.dedup();
+    dtos
 }
 
 fn dto_schema(dto: &rdra_ish_core::model::Dto) -> Value {
@@ -385,5 +409,34 @@ requires_permission(GetOrder, OrderRead)
         assert_eq!(params.len(), 2);
         assert_eq!(params[0]["name"], "tenant_id");
         assert_eq!(params[1]["name"], "id");
+    }
+
+    #[test]
+    fn emits_oneof_for_multiple_response_dtos() {
+        let model = model_from(
+            r#"
+api CreateOrder "Create order" method POST path "/orders"
+dto AcceptedResponse "Accepted"
+dto OrderResponse "Order"
+response(CreateOrder, OrderResponse)
+response(CreateOrder, AcceptedResponse)
+"#,
+        );
+        let json = OpenApiJsonEmitter.emit(&model, &View::whole()).unwrap();
+        let doc: Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            doc["paths"]["/orders"]["post"]["responses"]["200"]["content"]["application/json"]
+                ["schema"]["oneOf"],
+            json!([
+                { "$ref": "#/components/schemas/AcceptedResponse" },
+                { "$ref": "#/components/schemas/OrderResponse" }
+            ])
+        );
+        assert!(
+            doc["paths"]["/orders"]["post"]["responses"]["200"]["x-rdra-ish-ambiguous-status"]
+                .as_str()
+                .unwrap_or("")
+                .contains("oneOf")
+        );
     }
 }

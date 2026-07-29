@@ -57,6 +57,9 @@ pub(crate) enum Commands {
         /// Demote TLA-only state gaps (undriven comparisons / NotEvaluated) to warnings
         #[arg(long)]
         allow_tla_only: bool,
+        /// Treat permission / access consistency gaps as errors (exit 1)
+        #[arg(long)]
+        strict: bool,
     },
     /// Generate diagram (PlantUML or Mermaid)
     Diagram {

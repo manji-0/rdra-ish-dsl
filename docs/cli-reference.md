@@ -17,8 +17,11 @@ e.g., `shared/actors.rdra` resolves from a root containing both `shared/` and `b
 Diagnostics are written to stderr as `error: ...` or `warning: ...`.
 
 - `check` and `lint` exit non-zero when semantic errors (or lint errors) are present.
-- Generator subcommands (`diagram`, `csv`, `list`, `export`, `states`, `verify`) are
-  **fail-closed**: they refuse to emit artifacts when the model has errors.
+- Generator subcommands (`diagram`, `csv`, `list`, non-TLA `export`, `states`, `verify`)
+  are **fail-closed**: they refuse to emit artifacts when the model has parse/resolve
+  errors **or** Error-severity state diagnostics. `export --kind tla` gates on parse
+  errors plus `[TLA_FATAL:…]` export obligations (state undriven/NotEvaluated alone
+  does not block TLA export — use `verify` / `--allow-tla-only` for mixed models).
 - `fmt` only requires a parseable source; it does not run semantic analysis.
 
 ---
@@ -28,18 +31,21 @@ Diagnostics are written to stderr as `error: ...` or `warning: ...`.
 Parse, type-check, and run whole-model consistency checks; produce no artifact output.
 
 ```
-rdra-ish check <INPUTS...> [--allow-tla-only]
+rdra-ish check <INPUTS...> [--allow-tla-only] [--strict]
 ```
 
 Prints each diagnostic to stderr. If any error (non-warning) is present, exits with
 status `1` before running secondary consistency checks. Otherwise it reports unresolved
 model warnings and state-pattern findings. State diagnostics share severity with
 `states`: Error-severity findings print as `error:` and cause exit `1`; only a clean
-run prints `OK: no errors`.
+run prints `OK: no errors`. When the model has temporal `property` declarations or
+TLA-only state gaps, `check` prints a trailing `note:` that those were not
+model-checked (use `verify --backend tlc`).
 
 | Option | Description |
 |---|---|
 | `--allow-tla-only` | Demote undriven comparisons and NotEvaluated state gaps to warnings for exit (still printed). Does not demote pattern truncation or reachable forbidden / invariant violations. Use for mixed Enum+Int models whose Int rules are verified with TLC. |
+| `--strict` | Promote permission / access consistency gaps (`ActorPermissionMissing`, no-actor paths, etc.) from warnings to errors for exit. |
 
 <!-- derived-from ./state-derivation.md#diagnostics -->
 `check` includes the same broad review signals exposed elsewhere:
@@ -80,9 +86,9 @@ API method/path contracts, and naming convention warnings.
 
 It also emits two `info` rows:
 
-- `coverage-score` is a lightweight 0-100 readiness signal derived from the current
-  finding set. Empty models score `0`. Missing refinement stages subtract 8 each
-  (floor 0). Use together with `stage-readiness`.
+- `coverage-score` is a lightweight 0-100 readiness signal. Empty models score `0`.
+  Finding penalties are scaled by model size (`×25/elements`); missing refinement
+  stages subtract 8 each (floor 0). Use together with `stage-readiness`.
 - `stage-readiness` reports which refinement stages are present: `scope`,
   `business-flow`, `data`, `interaction`, `system-boundary`, and `rules`.
 - `flow-cycle` warns when `precedes` / `branches` edges form a cycle among steps.
