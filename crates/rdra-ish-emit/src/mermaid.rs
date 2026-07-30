@@ -934,30 +934,13 @@ impl Emitter for SequenceMermaidEmitter {
             }
         };
 
-        let mut uc_to_bucs: HashMap<UseCaseKey, Vec<BucKey>> = HashMap::new();
-        let mut buc_to_actors: HashMap<BucKey, Vec<ActorKey>> = HashMap::new();
         let mut uc_to_screens: HashMap<UseCaseKey, Vec<ScreenKey>> = HashMap::new();
         let mut uc_to_apis: HashMap<UseCaseKey, Vec<ApiKey>> = HashMap::new();
-        let mut direct_actor_of: HashMap<UseCaseKey, Vec<ActorKey>> = HashMap::new();
         let mut uc_to_reads: HashMap<UseCaseKey, Vec<EntityKey>> = HashMap::new();
         let mut api_to_reads: HashMap<ApiKey, Vec<EntityKey>> = HashMap::new();
 
         for rel in &model.relations {
             match &rel.kind {
-                RelKind::Contains => {
-                    if let (NodeRef::Buc(bk), NodeRef::UseCase(uk)) = (&rel.from, &rel.to) {
-                        uc_to_bucs.entry(*uk).or_default().push(*bk);
-                    }
-                }
-                RelKind::Performs => match (&rel.from, &rel.to) {
-                    (NodeRef::Actor(ak), NodeRef::Buc(bk)) => {
-                        buc_to_actors.entry(*bk).or_default().push(*ak);
-                    }
-                    (NodeRef::Actor(ak), NodeRef::UseCase(uk)) => {
-                        direct_actor_of.entry(*uk).or_default().push(*ak);
-                    }
-                    _ => {}
-                },
                 RelKind::Displays => {
                     if let (NodeRef::UseCase(uk), NodeRef::Screen(sk)) = (&rel.from, &rel.to) {
                         uc_to_screens.entry(*uk).or_default().push(*sk);
@@ -1013,19 +996,7 @@ impl Emitter for SequenceMermaidEmitter {
         let mut has_legacy_uc = false;
 
         for (uk, _) in &uc_list {
-            let actor_key = direct_actor_of
-                .get(uk)
-                .and_then(|actors| actors.first())
-                .copied()
-                .or_else(|| {
-                    uc_to_bucs
-                        .get(uk)
-                        .and_then(|bucs| bucs.first())
-                        .and_then(|bk| buc_to_actors.get(bk))
-                        .and_then(|actors| actors.first())
-                        .copied()
-                });
-            if let Some(ak) = actor_key {
+            for ak in rdra_ish_core::actors_for_usecase(model, *uk) {
                 actor_keys.insert(ak);
             }
             if let Some(tx) = uc_tx_map.get(uk) {
@@ -1153,20 +1124,11 @@ impl Emitter for SequenceMermaidEmitter {
                 ));
             }
 
-            let actor_id: Option<String> = direct_actor_of
-                .get(uk)
-                .and_then(|actors| actors.first())
+            let performers = rdra_ish_core::actors_for_usecase(model, *uk);
+            let actor_id: Option<String> = performers
+                .first()
                 .and_then(|ak| model.actors.get(*ak))
-                .map(|a| a.id.clone())
-                .or_else(|| {
-                    uc_to_bucs
-                        .get(uk)
-                        .and_then(|bucs| bucs.first())
-                        .and_then(|bk| buc_to_actors.get(bk))
-                        .and_then(|actors| actors.first())
-                        .and_then(|ak| model.actors.get(*ak))
-                        .map(|a| a.id.clone())
-                });
+                .map(|a| a.id.clone());
             let actor_ref = actor_id.as_deref().unwrap_or("System");
 
             let screen_id: Option<String> = uc_to_screens
@@ -2204,7 +2166,8 @@ creates(ApiB, EntityB)
             .unwrap();
         assert!(!result.contains("ユースケースA"));
         assert!(!result.contains("ApiA"));
-        assert!(!result.contains("actor Customer"));
+        // UcB: direct Clerk ∪ BUC-level Customer.
+        assert!(result.contains("actor Customer"));
         assert!(result.contains("actor Clerk"));
         assert!(result.contains("ユースケースB"));
         assert!(result.contains("ApiB"));

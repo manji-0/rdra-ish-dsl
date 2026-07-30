@@ -100,7 +100,7 @@ pub struct ActorInputInference {
 /// Infer candidate input fields per actor from the modeled BUC/use-case path.
 ///
 /// Actor resolution follows the same rule as sequence and permission analysis:
-/// direct `performs(Actor, UseCase)` wins; otherwise actors on containing BUCs are used.
+/// union of direct `performs(Actor, UseCase)` and actors on containing BUCs.
 /// Candidate fields are derived from `creates` / `updates` / `writes` on the use case or
 /// on APIs invoked by the use case. Primary keys, foreign keys, defaults, and columns
 /// explicitly driven by `sets(...)` are treated as system/model supplied values and skipped.
@@ -662,7 +662,9 @@ fn is_column_set_by_path(
         .any(|effect| effect.origin == origin && effect.entity == entity && effect.column == column)
 }
 
-fn actors_for_usecase(model: &SemanticModel, usecase: UseCaseKey) -> Vec<ActorKey> {
+/// Actors that perform a use case: direct `performs(Actor, UC)` unioned with
+/// `performs(Actor, BUC)` for every BUC that contains the use case.
+pub fn actors_for_usecase(model: &SemanticModel, usecase: UseCaseKey) -> Vec<ActorKey> {
     let mut actors: Vec<ActorKey> = model
         .relations
         .iter()

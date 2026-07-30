@@ -70,6 +70,8 @@
   frozen BOOLEAN props); never-assigned prop axes are
   `[TLA_FATAL:frozen_proposition_axis]`.
 - `--allow-tla-only` on `diagram` / `csv` / `list` / non-TLA `export`.
+- Sequence emitters (PlantUML / Mermaid) use `actors_for_usecase` (BUC ∪ direct
+  performers) so a direct `performs` no longer hides BUC-level actors.
 - `Assign_*` actions are labeled as synthetic nondet; `verify` notes when a
   counterexample mentions `Assign_`.
 - `check --strict` promotes permission/access gaps to errors; `check` always
