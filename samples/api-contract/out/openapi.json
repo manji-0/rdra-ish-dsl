@@ -67,6 +67,16 @@
     "/stores/{store_id}/organization": {
       "patch": {
         "operationId": "StoreOrganizationApi",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "store_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -106,7 +116,10 @@
         ],
         "summary": "Store Organization API",
         "x-rdra-ish-idempotency": "idempotent",
-        "x-rdra-ish-mode": "sync"
+        "x-rdra-ish-mode": "sync",
+        "x-rdra-ish-requires-permission": [
+          "StoreMaintenanceWrite"
+        ]
       }
     }
   }
