@@ -165,6 +165,79 @@ relate(A, B, N:M).via(AB)
 }
 
 #[test]
+fn test_junction_unique_uses_nm_ends_not_all_fks() {
+    let src = r#"
+entity Student "Student" { id: Int @pk }
+entity Course "Course" { id: Int @pk }
+entity Campus "Campus" { id: Int @pk }
+entity Enrollment "Enrollment" { id: Int @pk }
+relate(Student, Course, N:M).via(Enrollment)
+relate(Enrollment, Campus, N:1)
+"#;
+    let (ast, _) = parse(src);
+    let (model, diags) = build_model(&ast);
+    let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+    assert!(errors.is_empty(), "{errors:?}");
+
+    let enrollment = model
+        .entities
+        .values()
+        .find(|e| e.id == "Enrollment")
+        .unwrap();
+    let fk_names: Vec<_> = enrollment
+        .columns
+        .iter()
+        .filter(|c| c.is_fk)
+        .map(|c| c.name.as_str())
+        .collect();
+    assert!(fk_names.contains(&"student_id"), "{fk_names:?}");
+    assert!(fk_names.contains(&"course_id"), "{fk_names:?}");
+    assert!(fk_names.contains(&"campus_id"), "{fk_names:?}");
+
+    let mut expected_unique = vec!["course_id".to_string(), "student_id".to_string()];
+    expected_unique.sort();
+    assert!(
+        enrollment.unique_constraints.iter().any(|u| {
+            let mut sorted = u.clone();
+            sorted.sort();
+            sorted == expected_unique
+        }),
+        "unique must be N:M ends only, got {:?}",
+        enrollment.unique_constraints
+    );
+    assert!(
+        !enrollment
+            .unique_constraints
+            .iter()
+            .any(|u| u.contains(&"campus_id".to_string())),
+        "campus_id must not join the N:M composite unique: {:?}",
+        enrollment.unique_constraints
+    );
+}
+
+#[test]
+fn test_shared_junction_via_rejected() {
+    let src = r#"
+entity A "A" { id: Int @pk }
+entity B "B" { id: Int @pk }
+entity C "C" { id: Int @pk }
+entity D "D" { id: Int @pk }
+entity J "J" { id: Int @pk }
+relate(A, B, N:M).via(J)
+relate(C, D, N:M).via(J)
+"#;
+    let (ast, _) = parse(src);
+    let (_, diags) = build_model(&ast);
+    let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+    assert!(
+        errors
+            .iter()
+            .any(|d| matches!(d.error, RdraError::SharedJunctionVia { .. })),
+        "expected SharedJunctionVia, got {errors:?}"
+    );
+}
+
+#[test]
 fn test_self_nm_relation_rejected() {
     let src = r#"
 entity A "A" { id: Int @pk }

@@ -3,11 +3,12 @@
 use crate::analysis_diag::push_entity_error;
 use crate::diagnostics::{Diagnostic, RdraError};
 use crate::model::*;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) fn generate_fks(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>) {
     let mut jobs: Vec<(EntityKey, EntityKey, RelationOptions)> = Vec::new();
-    let mut junctions: BTreeSet<EntityKey> = BTreeSet::new();
+    // Junction → N:M endpoint pairs (for composite unique + shared-via detection).
+    let mut junction_nms: BTreeMap<EntityKey, Vec<(EntityKey, EntityKey)>> = BTreeMap::new();
 
     for rel in &model.relations {
         match &rel.kind {
@@ -23,8 +24,10 @@ pub(crate) fn generate_fks(model: &mut SemanticModel, diags: &mut Vec<Diagnostic
             }
             // N:M.via FKs come from synthesized N:1 edges (see process_relate_predicate).
             RelKind::RelateManyToMany => {
-                if let Some(NodeRef::Entity(junction)) = rel.via.as_ref() {
-                    junctions.insert(*junction);
+                if let (NodeRef::Entity(a), NodeRef::Entity(b), Some(NodeRef::Entity(junction))) =
+                    (&rel.from, &rel.to, rel.via.as_ref())
+                {
+                    junction_nms.entry(*junction).or_default().push((*a, *b));
                 }
             }
             _ => {}
@@ -35,25 +38,65 @@ pub(crate) fn generate_fks(model: &mut SemanticModel, diags: &mut Vec<Diagnostic
         generate_fk_column(model, diags, many_key, one_key, options);
     }
 
-    for junction in junctions {
-        ensure_junction_composite_unique(model, junction);
+    for (junction, ends) in &junction_nms {
+        let mut unique_pairs: BTreeSet<(EntityKey, EntityKey)> = BTreeSet::new();
+        for &(a, b) in ends {
+            let pair = if model.entities[a].id <= model.entities[b].id {
+                (a, b)
+            } else {
+                (b, a)
+            };
+            unique_pairs.insert(pair);
+        }
+        if unique_pairs.len() > 1 {
+            let junction_id = model.entities[*junction].id.clone();
+            let pairs_desc = unique_pairs
+                .iter()
+                .map(|(a, b)| format!("{}×{}", model.entities[*a].id, model.entities[*b].id))
+                .collect::<Vec<_>>()
+                .join(", ");
+            push_entity_error(
+                model,
+                diags,
+                &junction_id,
+                RdraError::SharedJunctionVia {
+                    junction: junction_id.clone(),
+                    pairs: pairs_desc,
+                },
+            );
+            continue;
+        }
+        if let Some(&(a, b)) = ends.first() {
+            ensure_junction_composite_unique(model, *junction, a, b);
+        }
     }
 }
 
-fn ensure_junction_composite_unique(model: &mut SemanticModel, junction: EntityKey) {
-    let fk_cols: Vec<String> = model.entities[junction]
+fn fk_col_name_for(model: &SemanticModel, target: EntityKey) -> String {
+    format!("{}_id", model.entities[target].id.to_lowercase())
+}
+
+fn ensure_junction_composite_unique(
+    model: &mut SemanticModel,
+    junction: EntityKey,
+    end_a: EntityKey,
+    end_b: EntityKey,
+) {
+    let name_a = fk_col_name_for(model, end_a);
+    let name_b = fk_col_name_for(model, end_b);
+    let has_a = model.entities[junction]
         .columns
         .iter()
-        .filter(|c| c.is_fk)
-        .map(|c| c.name.clone())
-        .collect();
-    if fk_cols.len() < 2 {
+        .any(|c| c.is_fk && c.name == name_a);
+    let has_b = model.entities[junction]
+        .columns
+        .iter()
+        .any(|c| c.is_fk && c.name == name_b);
+    if !has_a || !has_b {
         return;
     }
-    // Prefer the two FKs toward the N:M ends (stable order by name).
-    let mut pair = fk_cols;
+    let mut pair = vec![name_a, name_b];
     pair.sort();
-    pair.truncate(2);
 
     let already = model.entities[junction].unique_constraints.iter().any(|u| {
         let mut sorted = u.clone();

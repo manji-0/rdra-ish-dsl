@@ -41,8 +41,9 @@ allows stuttering via `[][Next]_vars`).
 |---|---|
 | Entity status Enum + `transitions(Entity.col, Ev, a -> b)` | `VARIABLES`, `Init`, action disjuncts in `Next` |
 | Bool / `@null` columns (multi-axis) | Additional variables with `BOOLEAN` or `{"null","present"}` |
-| Int / Money / Decimal used in comparisons or `sets` Int assigns | `EXTENDS Integers`, `IntRange == 0..N`, arithmetic Safety / primed effects (nullable numeric columns promote to Int, not Nullable) |
+| Int / Money / Decimal / Date / DateTime used in comparisons or `sets` Int assigns | `EXTENDS Integers`, `IntRange == 0..N`, arithmetic Safety / primed effects (nullable numeric columns promote to Int, not Nullable; Date/DateTime column-vs-column cmps are arithmetic, not frozen BOOL props) |
 | Comparison propositions driven by `sets(..., cmp, bool)` only | Boolean `prop_*` variables (BFS layer; skipped when the same cmp is arithmetic) |
+| Prop axis never primed by any action | `[TLA_FATAL:frozen_proposition_axis]` (export/verify refuse; vacuous Safety) |
 | Entity-local `invariant` / `forbidden` / `required` / `exclusive` | Safety conjuncts (`\A i \in Entity_Ids: …` when multi-instance) |
 | Multi-entity `forbidden` / `invariant` | Safety over the multi-entity variable product |
 | `.along(...)` (RelationPath) | Quantified over `Entity_Ids` (including intermediate junction binders); with `relate` / `.via` uses pairwise `*_owner` filters (`Child_owner`, or `Child_Parent_owner` when a child has multiple parents) |
@@ -54,7 +55,7 @@ allows stuttering via `[][Next]_vars`).
 | Temporal atoms with Int compares | `stock < selling`, `stock >= 1`, etc. map to TLC arithmetic |
 | `col < now` / DateTime vs `now` | Global `now \in IntRange`, `TickNow`, lhs promoted to Int axis |
 | Undriven Int axes | Synthetic nondet `Assign_*` actions (`\E v \in IntRange: col' = v`) — not modeled use cases |
-| `sets` Int literal outside `0..int_range_max` | `[TLA_FATAL:int_literal_out_of_range]` (export/verify refuse) |
+| `sets` Int literal or comparison RHS IntLit outside `0..int_range_max` | `[TLA_FATAL:int_literal_out_of_range]` (export/verify refuse) |
 | TypeOK vs Safety | `.cfg` has separate `INVARIANT TypeOK` and `INVARIANT Safety` (domain vs business rules) |
 | Any `eventually` / `leads_to` property | `Spec` includes `WF_vars(Next)` |
 
@@ -148,10 +149,11 @@ arithmetic Safety when Int axes exist.
 - BFS `rdra-ish states` still does not treat Int / `now` as state axes; use
   TLA/TLC for those checks. Undriven comparison props and NotEvaluated multi-entity /
   quantifier / temporal-comparison diagnostics are **`[error]`** under `states`
-  (fail-closed). For mixed Enum+Int models, `check` / `states --allow-tla-only`
-  demotes those TLA-only gaps for exit while keeping PatternCap / forbidden
-  fail-closed. Int comparison samples such as `int_stock.rdra` are for `verify`
-  (or `check --allow-tla-only`), not a green default `states` exit.
+  (fail-closed). For mixed Enum+Int models, `check` / `states` /
+  `diagram` / `csv` / `list` / non-TLA `export --allow-tla-only` demote those
+  TLA-only gaps for exit while keeping PatternCap / forbidden fail-closed.
+  Int comparison samples such as `int_stock.rdra` are for `verify`
+  (or `--allow-tla-only`), not a green default `states` exit.
 - Export warnings (skipped mappings, `.along` without `relate`, unmapped
   `after.assert`, …) are printed on stderr by `export --kind tla` / `verify` and
   also embedded as `\\* WARNING:` comments in the `.tla`. Fatal obligation drops

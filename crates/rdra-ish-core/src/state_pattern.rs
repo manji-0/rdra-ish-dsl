@@ -330,9 +330,11 @@ pub fn state_diag_severity_with_policy(
 ) -> StateDiagSeverity {
     let base = match diag {
         StateDiag::NoCreationPath => StateDiagSeverity::Info,
-        StateDiag::UnreachableEnumVariant { .. }
-        | StateDiag::ConflictingEffects { .. }
-        | StateDiag::DoubleModeledEnum { .. } => StateDiagSeverity::Warning,
+        StateDiag::UnreachableEnumVariant { .. } | StateDiag::DoubleModeledEnum { .. } => {
+            StateDiagSeverity::Warning
+        }
+        // Int literal conflicts make TLA actions unsatisfiable → fail-closed.
+        StateDiag::ConflictingEffects { .. } => StateDiagSeverity::Error,
         StateDiag::PatternCapReached { .. }
         | StateDiag::ForbiddenStateViolated { .. }
         | StateDiag::InvariantViolated { .. }
@@ -1065,6 +1067,7 @@ fn derive_for_entity(
     }
     collect_undriven_comparison_diagnostics(model, ek, &mut diags);
     collect_driven_comparison_contradiction_diagnostics(model, ek, &mut diags);
+    collect_conflicting_int_effect_diagnostics(model, ek, &mut diags);
 
     // 状態軸の特定（比較命題軸も含む）
     let axes = identify_axes(&entity.columns, &effects_for_entity, &proposition_props);
@@ -1476,6 +1479,41 @@ fn origin_display_id(model: &SemanticModel, origin: &NodeRef) -> String {
         NodeRef::UseCase(k) => model.use_cases[*k].id.clone(),
         NodeRef::Event(k) => model.events[*k].id.clone(),
         other => format!("{other:?}"),
+    }
+}
+
+/// Same-origin Int `sets` that assign distinct literals to one column.
+fn collect_conflicting_int_effect_diagnostics(
+    model: &SemanticModel,
+    ek: EntityKey,
+    diags: &mut Vec<StateDiag>,
+) {
+    let mut by_origin_col: HashMap<(NodeRef, String), Vec<i64>> = HashMap::new();
+    for ce in model
+        .column_effects
+        .iter()
+        .filter(|ce| ce.entity == ek && matches!(ce.value, EffectValue::Int(_)))
+    {
+        if let EffectValue::Int(n) = ce.value {
+            by_origin_col
+                .entry((ce.origin.clone(), ce.column.clone()))
+                .or_default()
+                .push(n);
+        }
+    }
+    let mut seen: HashSet<(String, String)> = HashSet::new();
+    for ((origin, column), values) in by_origin_col {
+        let mut uniq = values;
+        uniq.sort_unstable();
+        uniq.dedup();
+        if uniq.len() < 2 {
+            continue;
+        }
+        let usecase = origin_display_id(model, &origin);
+        if !seen.insert((usecase.clone(), column.clone())) {
+            continue;
+        }
+        diags.push(StateDiag::ConflictingEffects { usecase, column });
     }
 }
 
@@ -2713,6 +2751,40 @@ mod tests {
                 &StateDiag::PatternCapReached { cap: 1, bound: 10 },
                 StateDiagPolicy::allow_tla_only()
             ),
+            StateDiagSeverity::Error
+        );
+    }
+
+    #[test]
+    fn conflicting_int_sets_is_error() {
+        let model = model_from(
+            r#"
+entity Item "商品" {
+  id: Int @pk
+  status: Enum(active, archived) @default(active)
+  stock: Int @default(0)
+}
+usecase Restock "補充"
+creates(Restock, Item)
+updates(Restock, Item)
+sets(Restock, Item, stock == 1)
+sets(Restock, Item, stock == 2)
+"#,
+        );
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results.iter().find(|r| r.entity_id == "Item").unwrap();
+        assert!(
+            r.diagnostics.iter().any(
+                |d| matches!(d, StateDiag::ConflictingEffects { column, .. } if column == "stock")
+            ),
+            "expected ConflictingEffects on stock: {:?}",
+            r.diagnostics
+        );
+        assert_eq!(
+            state_diag_severity(&StateDiag::ConflictingEffects {
+                usecase: "Restock".into(),
+                column: "stock".into(),
+            }),
             StateDiagSeverity::Error
         );
     }

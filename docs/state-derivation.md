@@ -308,7 +308,7 @@ syntax and design rationale.
 | Diagnostic | When |
 |---|---|
 | `UnreachableEnumVariant { column, variant }` | A declared (or transition-target) Enum variant is never reached by any pattern. |
-| `ConflictingEffects { usecase, column }` | One operation assigns two different values to the same column; resolved last-wins. |
+| `ConflictingEffects { usecase, column }` | One operation assigns two different values to the same column (Enum abstract effects or Int `sets` literals). Emitted as **`[error]`** (fail-closed; TLA would otherwise get an unsatisfiable action). |
 | `DoubleModeledEnum { column }` | Both `transitions` and `sets` drive the same Enum column; `transitions` wins. |
 | `NoCreationPath` | The entity has no `creates`; the pattern set is seeded from defaults only. |
 | `PatternCapReached { cap, bound }` | The per-entity cap was hit; output is truncated. `bound` is the product-space size. Emitted as **`[error]`** (fail-closed). Raise `--max-patterns` or narrow `--buc`. |

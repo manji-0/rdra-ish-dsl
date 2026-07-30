@@ -76,6 +76,9 @@ pub enum RdraError {
     #[error("self N:M relate('{entity}', '{entity}', N:M) is not supported\n  hint: use an explicit junction entity that is not '{entity}'")]
     SelfNMRelation { entity: String },
 
+    #[error("junction '{junction}' is used as .via for multiple N:M pairs ({pairs})\n  hint: give each N:M relation its own junction entity so composite unique and FK meaning stay unambiguous")]
+    SharedJunctionVia { junction: String, pairs: String },
+
     #[error("reserved kind '{kind}' is accepted for forward compatibility but is not modeled by check/states/export\n  hint: prefer documented kinds; see language-reference reserved table")]
     ReservedKind { kind: String },
 

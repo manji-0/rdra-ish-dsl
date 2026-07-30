@@ -49,9 +49,16 @@ pub(crate) fn state_consistency_findings_with_policy(
 }
 
 /// Fail closed when state derivation has Error-severity diagnostics (generators).
-pub(crate) fn reject_state_errors(model: &rdra_ish_core::SemanticModel) -> anyhow::Result<()> {
-    let findings =
-        state_consistency_findings_with_policy(model, rdra_ish_core::StateDiagPolicy::default());
+pub(crate) fn reject_state_errors(
+    model: &rdra_ish_core::SemanticModel,
+    allow_tla_only: bool,
+) -> anyhow::Result<()> {
+    let policy = if allow_tla_only {
+        rdra_ish_core::StateDiagPolicy::allow_tla_only()
+    } else {
+        rdra_ish_core::StateDiagPolicy::default()
+    };
+    let findings = state_consistency_findings_with_policy(model, policy);
     let mut has_error = false;
     for (severity, message) in &findings {
         if severity.is_error() {

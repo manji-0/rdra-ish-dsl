@@ -21,7 +21,8 @@ Diagnostics are written to stderr as `error: ...` or `warning: ...`.
   are **fail-closed**: they refuse to emit artifacts when the model has parse/resolve
   errors **or** Error-severity state diagnostics. `export --kind tla` gates on parse
   errors plus `[TLA_FATAL:…]` export obligations (state undriven/NotEvaluated alone
-  does not block TLA export — use `verify` / `--allow-tla-only` for mixed models).
+  does not block TLA export — use `verify`, or pass `--allow-tla-only` on
+  generators / `check` / `states` for mixed Enum+Int models).
 - `fmt` only requires a parseable source; it does not run semantic analysis.
 
 ---
@@ -137,7 +138,7 @@ input files, each output block is prefixed by a `// <path>` marker.
 Generate a diagram in PlantUML or Mermaid.
 
 ```
-rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]... [--usecase <ID>]... [--diff-base <PATH>]... [--show-description] [--node-kind <KIND>]... [--edge-kind <KIND>]... [--view-preset <PRESET>] [-o <OUT>]
+rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]... [--usecase <ID>]... [--diff-base <PATH>]... [--show-description] [--node-kind <KIND>]... [--edge-kind <KIND>]... [--view-preset <PRESET>] [-o <OUT>] [--allow-tla-only]
 ```
 
 | Option | Type | Default | Description |
@@ -153,6 +154,7 @@ rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]...
 | `--edge-kind <kind>` | string (repeatable) | — (all edges) | Filter graph diagrams to specific relation kinds. Applies to `rdra`, `boundaryless-graph`, and `diff`. Examples: `contains`, `invokes`, `reads`, `writes`, `creates`, `maps-field`, `maps-to`, `owns`, `relate`. Alias: `--edge-filter`. |
 | `--view-preset <preset>` | `business` \| `system` \| `data` \| `api` \| `ui` | — | Apply a graph filter preset. Explicit `--node-kind` or `--edge-kind` values override the preset for that dimension. |
 | `-o`, `--out` | path | `out` | Output file path. The extension is added automatically based on `--format` (`.puml`, `.mmd`, `.svg`, `.png`). |
+| `--allow-tla-only` | flag | off | Demote undriven comparisons / NotEvaluated so the generator can emit despite TLA-only state gaps (same policy as `check` / `states`). |
 
 Notes:
 
@@ -222,7 +224,7 @@ OpenAPI, AsyncAPI, DBML, and JSON Schema.
 Generate CSV output.
 
 ```
-rdra-ish csv <INPUTS...> [--kind <KIND>] [-o <OUT>]
+rdra-ish csv <INPUTS...> [--kind <KIND>] [-o <OUT>] [--allow-tla-only]
 ```
 
 | Option | Type | Default | Description |
@@ -230,6 +232,7 @@ rdra-ish csv <INPUTS...> [--kind <KIND>] [-o <OUT>]
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--kind` | `actor` \| `entity` \| `matrix` \| `api` \| `api-matrix` \| `screen-constraints` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` | `entity` | CSV kind. `actor` = actor list; `entity` = entity/column list; `matrix` = use-case × entity CRUD matrix; `api` = API contract list including method/path/idempotency/mode/auth; `api-matrix` = API × entity CRUD matrix; `screen-constraints` = screen × UC/API permission/medium paths; `permission-callables` = permission × callable UC/API list derived from `requires_permission`, including `UseCase->Api` paths for API-level requirements; `actor-permission-audit` = actor × permission assignment audit inferred from UC/API requirements; `business-inputs` = Actor x inferred input field x UseCase rows derived from C/U/W paths. |
 | `-o`, `--out` | path | `out` | Output file path. If no extension is given, a default is appended (`actor.csv` / `entity.csv` / `matrix.csv` / etc.). |
+| `--allow-tla-only` | flag | off | Demote undriven comparisons / NotEvaluated so the generator can emit despite TLA-only state gaps. |
 
 The command writes the CSV to the output path and prints `wrote <path>`.
 
@@ -240,7 +243,7 @@ The command writes the CSV to the output path and prints `wrote <path>`.
 Export machine-readable or review artifacts from the model.
 
 ```
-rdra-ish export <INPUTS...> [--kind <KIND>] [-o <OUT>] [--instance-count <N>] [--int-range-max <N>]
+rdra-ish export <INPUTS...> [--kind <KIND>] [-o <OUT>] [--instance-count <N>] [--int-range-max <N>] [--allow-tla-only]
 ```
 
 | Option | Type | Default | Description |
@@ -250,6 +253,7 @@ rdra-ish export <INPUTS...> [--kind <KIND>] [-o <OUT>] [--instance-count <N>] [-
 | `-o`, `--out` | path | `out` | Output file path. If no extension is given, `openapi.json`, `asyncapi.json`, `schema.dbml`, `json-schema.json`, `er.mmd`, `er.puml`, or `RdraSpec.tla` (with sibling `.cfg`) is used. For `--kind tla`, a path ending in `.tla` uses that file stem as the TLA+ module name (sibling `.cfg`). |
 | `--instance-count` | unsigned integer | `2` | TLA+ only: multi-instance `InstanceCount` (`>= 1`). Value `1` is accepted with a warning (singleton ids cannot distinguish multi-entity instances). |
 | `--int-range-max` | unsigned integer | `5` | TLA+ only: upper bound for `IntRange == 0..N` (`>= 1`; `0` is rejected). |
+| `--allow-tla-only` | flag | off | For non-TLA kinds: demote undriven comparisons / NotEvaluated so export can proceed (TLA export ignores this flag and gates on `[TLA_FATAL:…]` instead). |
 
 For OpenAPI export, only APIs that declare both `method` and `path` become
 `paths` operations. Path segments `{name}` become required `parameters` (`in: path`,
@@ -315,7 +319,7 @@ is missing or reports a violation.
 List model elements in a human-readable form.
 
 ```
-rdra-ish list <INPUTS...> [--kind <KIND>] [--format <FORMAT>]
+rdra-ish list <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--allow-tla-only]
 ```
 
 | Option | Type | Default | Description |
@@ -323,6 +327,7 @@ rdra-ish list <INPUTS...> [--kind <KIND>] [--format <FORMAT>]
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--kind` | `actor` \| `entity` \| `requirement` \| `adr` \| `adr-impact` \| `nfr` \| `quality` \| `constraint` \| `concept` \| `domain-object` \| `aggregate` \| `value-object` \| `buc` \| `flow` \| `step` \| `usecase` \| `field` \| `system` \| `api` \| `dto` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` | `actor` | The element kind to list. `actor` / `quality` / `concept` / `domain-object` / `aggregate` / `value-object` / `buc` / `flow` / `step` / `system` list id+label; `usecase` lists UC preconditions, guards, postconditions, alternatives, errors, and description; `requirement` lists requirement metadata; `adr` lists decision metadata plus impacted targets from `decides`; `adr-impact` lists one row per ADR-target pair; `nfr` and `constraint` list non-functional metadata; `field` lists screen-field metadata plus Entity.column mappings; `api` lists API contract metadata; `dto` lists DTO fields; `entity` lists each column with type, PK/unique/index/FK flags, FK optionality/actions, check constraints, soft-delete/history/tenant markers, and derived expressions; `permission-callables` lists each permission with callable use case/API ids and API-level `UseCase->Api` paths derived from `requires_permission`; `actor-permission-audit` lists inferred actor-side assignment gaps; `business-inputs` lists inferred actor-entered fields. |
 | `--format` | `table` \| `json` \| `csv` | `table` | Output format. |
+| `--allow-tla-only` | flag | off | Demote undriven comparisons / NotEvaluated so listing can proceed despite TLA-only state gaps. |
 
 Output is written to stdout.
 

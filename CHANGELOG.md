@@ -16,8 +16,15 @@
 - `states --format csv` / `type-script` exit non-zero on Error-severity state
   diagnostics (exit no longer depends on scanning `[error]` in rendered text).
 - `diagram` / `csv` / `list` / non-TLA `export` refuse to emit when state
-  diagnostics are Error severity (aligned with fail-closed docs). TLA export is
-  unchanged except for new `[TLA_FATAL:int_literal_out_of_range]`.
+  diagnostics are Error severity (aligned with fail-closed docs). Pass
+  `--allow-tla-only` on those generators to demote undriven / NotEvaluated gaps.
+  TLA export gates on `[TLA_FATAL:…]` (including out-of-range IntLits and frozen
+  proposition axes).
+- `ConflictingEffects` (same-origin dual assigns, including Int `sets`) is
+  `[error]` / fail-closed (was warning with last-wins).
+- Junction composite unique uses the N:M endpoint FK pair only (extra FKs on the
+  junction are excluded). Sharing one `.via` across multiple N:M pairs is an error
+  (`SharedJunctionVia`).
 - TLA `.cfg` emits separate `INVARIANT TypeOK` and `INVARIANT Safety` (Safety no
   longer folds TypeOK).
 - `actors_for_usecase` unions BUC-level and direct `performs` (direct no longer
@@ -57,8 +64,12 @@
   sample models including `samples/ec-site`.
 - `DrivenComparisonContradictsEffects`: `sets(..., cmp, bool)` that disagree with
   same-origin Int `sets` are Error (closes check-green / TLC-red dual-drive gap).
-- TLA export rejects `sets` Int literals outside `0..int_range_max` with
-  `[TLA_FATAL:int_literal_out_of_range]`.
+- TLA export rejects `sets` Int literals and comparison RHS IntLits outside
+  `0..int_range_max` with `[TLA_FATAL:int_literal_out_of_range]`.
+- Date / DateTime column-vs-column comparisons export as Int arithmetic (not
+  frozen BOOLEAN props); never-assigned prop axes are
+  `[TLA_FATAL:frozen_proposition_axis]`.
+- `--allow-tla-only` on `diagram` / `csv` / `list` / non-TLA `export`.
 - `Assign_*` actions are labeled as synthetic nondet; `verify` notes when a
   counterexample mentions `Assign_`.
 - `check --strict` promotes permission/access gaps to errors; `check` always

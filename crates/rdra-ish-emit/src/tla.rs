@@ -229,6 +229,9 @@ fn build_export(
     let mut properties = build_all_temporal_properties(model, &specs, multi_instance, warnings);
     properties.extend(assertion_props);
 
+    check_frozen_proposition_axes(&specs, warnings);
+    check_comparison_literals_in_range(model, int_range_max, warnings);
+
     TlaExport {
         multi_instance,
         needs_integers: needs_integers || needs_now,
@@ -240,6 +243,78 @@ fn build_export(
         owners,
         global_safety,
         properties,
+    }
+}
+
+/// Proposition axes that no action ever primes stay FALSE forever — Safety over them is vacuous.
+fn check_frozen_proposition_axes(specs: &[EntitySpec], warnings: &mut Vec<String>) {
+    for spec in specs {
+        for ax in spec.axes.iter().filter(|a| a.kind == AxisKind::Prop) {
+            let primed = format!("{}'", ax.var_name);
+            let assigned = spec
+                .actions
+                .iter()
+                .any(|action| action.effects.iter().any(|effect| effect.contains(&primed)));
+            if !assigned {
+                push_tla_fatal(
+                    warnings,
+                    "frozen_proposition_axis",
+                    format!(
+                        "{}.{} is a BOOLEAN proposition that no action assigns; comparisons over it cannot be model-checked — drive with sets(..., cmp, true/false) or use Int/Date/DateTime arithmetic",
+                        spec.entity_id, ax.column
+                    ),
+                );
+            }
+        }
+    }
+}
+
+fn check_comparison_literals_in_range(
+    model: &SemanticModel,
+    int_range_max: i64,
+    warnings: &mut Vec<String>,
+) {
+    let mut check_prop = |entity: EntityKey, prop: &ComparisonProp, where_: &str| {
+        let CmpRhs::IntLit(n) = prop.rhs else {
+            return;
+        };
+        if n >= 0 && n <= int_range_max {
+            return;
+        }
+        let eid = model.entities[entity].id.clone();
+        push_tla_fatal(
+            warnings,
+            "int_literal_out_of_range",
+            format!(
+                "{where_} on {eid}: comparison '{}' uses literal {n} outside IntRange 0..{int_range_max}; raise --int-range-max or lower the threshold (otherwise Safety is vacuous inside the window)",
+                prop.display()
+            ),
+        );
+    };
+
+    for f in &model.forbidden_constraints {
+        for c in &f.comparisons {
+            check_prop(f.entity, c, "forbidden");
+        }
+    }
+    for r in &model.required_constraints {
+        for c in &r.comparisons {
+            check_prop(r.entity, c, "required");
+        }
+    }
+    for inv in &model.entity_invariants {
+        for c in inv
+            .guard_comparisons
+            .iter()
+            .chain(inv.required_comparisons.iter())
+        {
+            check_prop(inv.entity, c, "invariant");
+        }
+    }
+    for ex in &model.exclusive_constraints {
+        for c in &ex.comparisons {
+            check_prop(ex.entity, c, "exclusive");
+        }
     }
 }
 
@@ -472,21 +547,17 @@ fn walk_temporal_for_int(
     }
 }
 
+fn column_is_arithmetic(entity: &rdra_ish_core::model::Entity, col: &str) -> bool {
+    column_is_int_like(entity, col) || column_promotable_to_int(entity, col)
+}
+
 fn comparison_is_arithmetic(entity: &rdra_ish_core::model::Entity, c: &ComparisonProp) -> bool {
-    if matches!(c.rhs, CmpRhs::Now) {
-        return true;
+    let lhs = column_is_arithmetic(entity, &c.lhs_column);
+    match &c.rhs {
+        CmpRhs::Now => lhs,
+        CmpRhs::IntLit(_) => lhs,
+        CmpRhs::Column(other) => lhs && column_is_arithmetic(entity, other),
     }
-    if matches!(c.rhs, CmpRhs::IntLit(_)) {
-        return column_is_int_like(entity, &c.lhs_column)
-            || column_promotable_to_int(entity, &c.lhs_column);
-    }
-    if column_is_int_like(entity, &c.lhs_column) {
-        return true;
-    }
-    if let CmpRhs::Column(other) = &c.rhs {
-        return column_is_int_like(entity, other);
-    }
-    false
 }
 
 fn column_is_int_like(entity: &rdra_ish_core::model::Entity, col: &str) -> bool {
@@ -3481,6 +3552,106 @@ after(Sell).assert(Item.sold >= 1)
             bundle.tla.contains("Item_sold' >= 1") || bundle.tla.contains("Item_sold'"),
             "expected comparison postcondition: {}",
             bundle.tla
+        );
+    }
+
+    #[test]
+    fn tla_datetime_column_cmp_is_arithmetic_not_prop() {
+        let model = model_from(
+            r#"
+entity Booking "予約" {
+  id: Int @pk
+  status: Enum(open, closed) @default(open)
+  start_at: DateTime
+  end_at: DateTime
+}
+usecase Open "開く"
+creates(Open, Booking)
+forbidden(Booking, end_at < start_at)
+"#,
+        );
+        let bundle = TlaPlusEmitter::default()
+            .emit_bundle(&model, &View::whole())
+            .unwrap();
+        assert!(
+            bundle.tla.contains("Booking_end_at") && bundle.tla.contains("Booking_start_at"),
+            "expected DateTime axes as Int vars: {}",
+            bundle.tla
+        );
+        assert!(
+            bundle.tla.contains("~(Booking_end_at < Booking_start_at)")
+                || bundle.tla.contains("Booking_end_at >= Booking_start_at"),
+            "expected arithmetic Safety: {}",
+            bundle.tla
+        );
+        assert!(
+            !bundle.tla.contains("_prop_"),
+            "DateTime column cmp must not freeze as BOOLEAN prop: {}",
+            bundle.tla
+        );
+        assert!(
+            !bundle
+                .warnings
+                .iter()
+                .any(|w| w.contains("frozen_proposition_axis")),
+            "unexpected frozen prop: {:?}",
+            bundle.warnings
+        );
+    }
+
+    #[test]
+    fn tla_frozen_proposition_axis_is_fatal() {
+        let model = model_from(
+            r#"
+entity Item "商品" {
+  id: Int @pk
+  status: Enum(active, archived) @default(active)
+  code: String
+  alias: String
+}
+usecase Make "作成"
+creates(Make, Item)
+forbidden(Item, code == alias)
+"#,
+        );
+        let bundle = TlaPlusEmitter::default()
+            .emit_bundle(&model, &View::whole())
+            .unwrap();
+        assert!(
+            bundle
+                .warnings
+                .iter()
+                .any(|w| w.contains("[TLA_FATAL:frozen_proposition_axis]")),
+            "expected frozen_proposition_axis; got {:?}",
+            bundle.warnings
+        );
+    }
+
+    #[test]
+    fn tla_comparison_rhs_literal_out_of_range_is_fatal() {
+        let model = model_from(
+            r#"
+entity Item "商品" {
+  id: Int @pk
+  status: Enum(active, archived) @default(active)
+  stock: Int @default(0)
+}
+usecase Make "作成"
+creates(Make, Item)
+forbidden(Item, stock < 100)
+"#,
+        );
+        let bundle = TlaPlusEmitter::default()
+            .emit_bundle(&model, &View::whole())
+            .unwrap();
+        assert!(
+            bundle.warnings.iter().any(|w| {
+                w.contains("[TLA_FATAL:int_literal_out_of_range]")
+                    && w.contains("comparison")
+                    && w.contains("100")
+            }),
+            "expected comparison RHS int_literal_out_of_range; got {:?}",
+            bundle.warnings
         );
     }
 }

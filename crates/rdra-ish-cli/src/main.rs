@@ -127,6 +127,7 @@ fn main() -> Result<()> {
             edge_kind,
             view_preset,
             out,
+            allow_tla_only,
         } => run_diagram(DiagramRequest {
             inputs,
             kind,
@@ -139,18 +140,25 @@ fn main() -> Result<()> {
             edge_kind,
             view_preset,
             out,
+            allow_tla_only,
         })?,
 
-        Commands::Csv { inputs, kind, out } => run_csv(&inputs, kind, out)?,
+        Commands::Csv {
+            inputs,
+            kind,
+            out,
+            allow_tla_only,
+        } => run_csv(&inputs, kind, out, allow_tla_only)?,
 
         Commands::List {
             inputs,
             kind,
             format,
+            allow_tla_only,
         } => {
             let (program, model, diags) = load_model(&inputs)?;
             reject_model_errors(&program, &diags)?;
-            reject_state_errors(&model)?;
+            reject_state_errors(&model, allow_tla_only)?;
 
             let output = list_elements(&model, &kind, &format)?;
             print!("{}", output);
@@ -183,11 +191,12 @@ fn main() -> Result<()> {
             out,
             instance_count,
             int_range_max,
+            allow_tla_only,
         } => {
             let (program, model, diags) = load_model(&inputs)?;
             reject_model_errors(&program, &diags)?;
             if !matches!(kind, ExportKind::Tla) {
-                reject_state_errors(&model)?;
+                reject_state_errors(&model, allow_tla_only)?;
             }
 
             let view = View::whole();
