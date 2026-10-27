@@ -395,6 +395,10 @@ entity Order "Order" {
   paid_at: DateTime @null
 }
 
+usecase CapturePayment "Capture Payment"
+contains(BucOrder, CapturePayment)
+updates(CapturePayment, Order)
+
 transitions(Order.status, CapturePayment, pending -> paid)
 transitions(Order.status, CancelOrder, pending -> cancelled)
 sets(CapturePayment, Order, paid_at == present)

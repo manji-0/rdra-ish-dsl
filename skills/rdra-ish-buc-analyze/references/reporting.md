@@ -76,5 +76,6 @@ A good RDRA-ish analysis report does three things:
   or mark the field as external/derived.
 - Missing API contract: add method/path DTO links and run OpenAPI export.
 - Missing NFR scope: add `applies_to`, `qualifies`, or `constrains`.
-- Missing lifecycle effect: add `raises`, `transitions`, or `sets` depending on whether
-  the change is event-driven or direct.
+- Missing lifecycle effect: add `transitions` (an Enum state edge) or `sets` (any other
+  column) on the use case that makes the change; when another use case starts it, add
+  `raises` and `triggers` for the event between them.

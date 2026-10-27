@@ -179,7 +179,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `displays` | `UseCase == Screen` | The use case displays the screen. |
 | `shows` | `Screen == Entity` | The screen shows information from the entity. |
 | `maps_field` | `(Field, Entity, "column")` | Maps a screen field to a specific Entity column. Use with `contains(Screen, Field)` when screen-item level input/output mapping matters. |
-| `raises` | `UseCase == Event` | The use case raises the domain event. Links use cases to `transitions`. |
+| `raises` | `UseCase == Event` | The use case raises the domain event, which `triggers` hands to downstream use cases or BUCs. |
 | `triggers` | `(Event, UseCase \| Buc)` | The event triggers a concrete use case or starts a BUC boundary. |
 | `outbox` | `(Event)` | Marks a raised event as intentionally published outside the local model, suppressing the raised-but-unconsumed warning. |
 | `contains` | `(Buc, UseCase \| Flow)`, `Flow == Step`, `Screen == Field`, or `System == Api` | The use case or flow composes the BUC, the step composes the flow, the field belongs to the screen, or the API belongs to the system boundary. |
@@ -198,11 +198,11 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `motivates` | `Requirement == Buc` | The requirement motivates the BUC. |
 | `decides` | `(Adr, Buc \| UseCase \| Api \| System \| Entity \| Requirement \| Nfr \| Constraint \| Dto)` | The ADR records a design decision that affects the target element. Use this for impact review and design traceability without making the target depend on a document file path. |
 | `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `1:1`, `1:N`, `N:1`, `N:M` (unquoted). For `N:M`, require `.via(JunctionEntity)` where the junction is distinct from both ends: the model keeps the logical N:M edge **and synthesizes** two `N:1` edges `Junction→A` / `Junction→B` (FK columns, composite unique on the FK pair when missing, TLA `*_owner`, ER crowfoot, `.along` paths). Equivalent manual form: two explicit `N:1` relates from the junction. FK options can be chained with `.optional()`, `.on_delete(action)`, and `.on_update(action)` (for `N:M`, options apply to both generated FKs). |
-| `transitions` | `(Entity.column, Event, from -> to)` | A lifecycle edge on an Enum column: on the event, the entity moves from the first variant to the second. |
+| `transitions` | `(Entity.column, UseCase, from -> to)` | A lifecycle edge on an Enum column: the use case moves the entity from the first variant to the second. |
 | `after` | `(UseCase).assert(...)` | A temporal anchor assertion checked against the use case's immediate `sets` and `raises`/`transitions` effects. |
 | `when` | `(conditions...).none/has(conditions...)` | A to-many quantifier constraint (replaces `forbidden_when`). Prefer qualified columns such as `Cert.status == revoked`. |
-| `sets` | `(UseCase \| Event, Entity, col == val)` | An explicit column effect, consumed by state pattern derivation. Use `present` (not PostgreSQL type names) for nullable non-null. |
-| `sets` | `(UseCase \| Event, Entity, col op rhs, true \| false)` | Drives the truth value of a comparison proposition (derived Bool axis) in state pattern derivation. |
+| `sets` | `(UseCase, Entity, col == val)` | An explicit column effect, consumed by state pattern derivation. Use `present` (not PostgreSQL type names) for nullable non-null. |
+| `sets` | `(UseCase, Entity, col op rhs, true \| false)` | Drives the truth value of a comparison proposition (derived Bool axis) in state pattern derivation. |
 
 `relate(A, B, N:1)` generates a `b_id` FK on `A`. With
 `.optional().on_delete(set_null).on_update(cascade)`, the generated FK column is
@@ -516,8 +516,8 @@ use case to execute. This is the refined form when the entry action is known. Th
 validates that a triggered use case belongs to at least one BUC via `contains`; a warning
 is emitted otherwise. Use `diagram --kind event-flow` to visualise the full
 `raises -> Event -> triggers` chain alongside state transitions. State derivation uses
-immediate same-entity effects from the upstream use case or event as guards for the
-triggered use case when those effects target known state axes.
+the immediate same-entity effects of the use cases that raise the event as guards for
+the triggered use case when those effects target known state axes.
 
 `outbox(event::E)` declares that a raised event is intentionally published outside the
 local model boundary, such as a domain event sent to an outbox, external subscriber, or

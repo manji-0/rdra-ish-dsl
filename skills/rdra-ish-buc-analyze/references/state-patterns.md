@@ -48,8 +48,8 @@ Entity: Order (注文)
 ```
 
 - `INITIAL`: reachable from a creation path.
-- `TERMINAL`: no modeled use case/event transition exits that combination.
-- `VIA`: which BUC/use case/event reached the pattern.
+- `TERMINAL`: no modeled use case exits that combination.
+- `VIA`: which BUC/use case reached the pattern.
 - Missing combinations may be good or bad. Treat them as design questions, not
   automatic defects.
 
