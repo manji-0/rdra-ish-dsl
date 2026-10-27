@@ -4,7 +4,6 @@ import shared.biz
 import shared.entities
 
 quality Auditability "Auditability"
-quality Availability "Availability"
 quality Performance  "Performance"
 quality Privacy      "Privacy"
 
