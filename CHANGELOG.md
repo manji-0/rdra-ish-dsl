@@ -93,6 +93,15 @@
 
 ### Added
 
+- The 15 不整合 columns of the RDRA definition sheet are lint rules, held as one table
+  (`RDRA_RULES` in `rdra_rules.rs`) with a witness model per row. The four "unconnected"
+  columns are new `lint` warnings: `rdra-actor-no-buc`, `rdra-extsystem-no-buc`,
+  `rdra-entity-no-buc`, `rdra-condition-no-buc`. rdra-ish adds `rdra-variation-no-buc`,
+  `rdra-timer-no-buc`, and `rdra-transition-uc-no-buc` (a use case that `transitions` names
+  must be in a BUC). The 11 "undefined" columns stay `check` errors and the table names the
+  diagnostic for each. `orphan-node` no longer reports the kinds a rule owns, so one
+  element draws one finding. `docs/rdra-ish-interpretation.md` maps each column to its rule
+  id. The `ec-site` sample connects `ShippingSvc` through a new `EvOrderShipped` event, and every sample passes every rule.
 - `condition Id "Label"` is an RDRA 条件, the combination of variations and a state
   model. `combines(Condition, Variation | Entity.column)` links it for traceability (the
   column must be a lifecycle column some `transitions` moves). `holds(Condition, cmp,
