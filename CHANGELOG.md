@@ -4,6 +4,11 @@
 
 ### Breaking
 
+- Unknown chain methods on predicates are an error (`unknown chain method '.x' on
+  predicate 'p'`). Previously they were silently ignored, so a typo such as
+  `belongs(U, B).wehn(T)` or the removed `belongs(...).where(...)` loaded with
+  `OK: no errors`. The accepted methods per predicate are listed in the language
+  reference under Chain methods.
 - `rdra-ish states` treats undriven comparison propositions and unevaluated
   multi-entity / quantifier / temporal-comparison constraints as `[error]`
   (non-zero exit on table/json). Previously these were `[warn]` and could leave

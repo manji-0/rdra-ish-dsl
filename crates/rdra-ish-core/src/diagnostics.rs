@@ -294,8 +294,12 @@ pub enum RdraError {
     #[error("duplicate temporal property id '{id}'\n  hint: each `property` declaration must have a unique id")]
     DuplicateProperty { id: String },
 
-    #[error("unknown chain method '.{name}' on predicate '{pred}'\n  hint: check the allowed chain methods for this predicate")]
-    UnknownChainMethod { pred: String, name: String },
+    #[error("unknown chain method '.{name}' on predicate '{pred}'\n  hint: {hint}")]
+    UnknownChainMethod {
+        pred: String,
+        name: String,
+        hint: String,
+    },
 
     #[error("{message}\n  hint: {hint}")]
     LintFinding {

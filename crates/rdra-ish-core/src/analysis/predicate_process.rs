@@ -4,7 +4,7 @@ use crate::analysis_diag::*;
 use crate::diagnostics::*;
 use crate::location::DiagCtxt;
 use crate::model::*;
-use crate::predicate::predicate_signature;
+use crate::predicate::{predicate_chain_methods, predicate_signature, unknown_chain_method_hint};
 use rdra_ish_syntax::ast::*;
 
 use super::arg_resolve::resolve_arg;
@@ -1073,6 +1073,22 @@ pub(crate) fn process_predicate(
         );
         return;
     };
+
+    let allowed = predicate_chain_methods(&pred.name);
+    for cc in &pred.chain {
+        if !allowed.contains(&cc.name.as_str()) {
+            push_error(
+                ctx,
+                diags,
+                pred.span.clone(),
+                RdraError::UnknownChainMethod {
+                    pred: pred.name.clone(),
+                    name: cc.name.clone(),
+                    hint: unknown_chain_method_hint(&pred.name, &cc.name),
+                },
+            );
+        }
+    }
 
     if let Some(err) = arity_error(pred, &sig) {
         push_error(ctx, diags, pred.span.clone(), err);

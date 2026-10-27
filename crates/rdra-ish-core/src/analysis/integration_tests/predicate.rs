@@ -244,3 +244,54 @@ performs(A)
         diags.iter().map(|d| &d.error).collect::<Vec<_>>()
     );
 }
+
+fn unknown_chain_errors(src: &str) -> Vec<(String, String, String)> {
+    let (ast, parse_errors) = parse(src);
+    assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+    let (_, diags) = build_model(&ast);
+    diags
+        .iter()
+        .filter(|d| !d.is_warning)
+        .filter_map(|d| match &d.error {
+            RdraError::UnknownChainMethod { pred, name, hint } => {
+                Some((pred.clone(), name.clone(), hint.clone()))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+const BELONGS_BASE: &str = "business B \"b\"\nbuc U \"u\"\n";
+
+#[test]
+fn removed_where_on_belongs_is_unknown_chain_method() {
+    let errs = unknown_chain_errors(&format!("{BELONGS_BASE}belongs(U, B).where(A)\n"));
+    assert_eq!(errs.len(), 1, "{errs:?}");
+    assert_eq!(
+        (errs[0].0.as_str(), errs[0].1.as_str()),
+        ("belongs", "where")
+    );
+    assert!(errs[0].2.contains("location"), "{}", errs[0].2);
+}
+
+#[test]
+fn typo_chain_method_is_unknown_chain_method() {
+    let errs = unknown_chain_errors(&format!("{BELONGS_BASE}belongs(U, B).wehn(T)\n"));
+    assert_eq!(errs.len(), 1, "{errs:?}");
+    assert_eq!(errs[0].1, "wehn");
+    assert!(errs[0].2.contains(".when"), "{}", errs[0].2);
+}
+
+#[test]
+fn predicate_without_chain_methods_rejects_any_chain() {
+    let errs = unknown_chain_errors("actor A \"a\"\nusecase X \"x\"\nperforms(A, X).when(\"a\")\n");
+    assert_eq!(errs.len(), 1, "{errs:?}");
+}
+
+#[test]
+fn known_chain_methods_are_accepted() {
+    let errs = unknown_chain_errors(&format!(
+        "{BELONGS_BASE}belongs(U, B).when(\"x\").by(\"y\")\n"
+    ));
+    assert!(errs.is_empty(), "{errs:?}");
+}

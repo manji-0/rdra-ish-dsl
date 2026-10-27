@@ -60,6 +60,35 @@ pub fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
     }
 }
 
+/// Chain methods (`.name(...)`) each predicate's processor reads. Any other
+/// chain name is rejected as `UnknownChainMethod`.
+pub fn predicate_chain_methods(pred: &str) -> &'static [&'static str] {
+    match pred {
+        "belongs" => &["when", "by"],
+        "relate" => &["via", "optional", "on_delete", "on_update"],
+        "forbidden" => &["along"],
+        "invariant" => &["when", "then", "has", "none", "along"],
+        "when" => &["has", "none"],
+        "after" => &["assert"],
+        _ => &[],
+    }
+}
+
+/// Hint text for an unknown chain method `name` on `pred`.
+pub fn unknown_chain_method_hint(pred: &str, name: &str) -> String {
+    let allowed = predicate_chain_methods(pred);
+    let mut hint = if allowed.is_empty() {
+        format!("`{pred}` takes no chain methods")
+    } else {
+        let list: Vec<String> = allowed.iter().map(|m| format!("`.{m}(...)`")).collect();
+        format!("`{pred}` accepts {}", list.join(", "))
+    };
+    if pred == "belongs" && name == "where" {
+        hint.push_str("; `.where(...)` was removed together with `location`, so delete it");
+    }
+    hint
+}
+
 /// Built-in predicate names accepted by the semantic model.
 pub const KNOWN_PREDICATES: &[&str] = &[
     "performs",

@@ -211,6 +211,22 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 nullable, marked `fk_optional`, and carries the delete/update actions for CSV/list
 review. `relate(A, B, 1:N)` applies the same options to the FK generated on `B`.
 
+### Chain methods
+
+A chain method is a `.name(...)` call after a predicate. Each predicate accepts
+only the methods below, and any other name is an `unknown chain method` error
+(this includes the removed `.where(...)` on `belongs`).
+
+| Predicate | Chain methods |
+|---|---|
+| `belongs` | `.when(...)`, `.by(...)` |
+| `relate` | `.via(...)`, `.optional()`, `.on_delete(...)`, `.on_update(...)` |
+| `forbidden` | `.along(...)` |
+| `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)` |
+| `when` | `.has(...)`, `.none(...)` |
+| `after` | `.assert(...)` |
+| every other predicate | none |
+
 ---
 
 ## Requirements and Traceability
