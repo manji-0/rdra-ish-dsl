@@ -15,6 +15,13 @@ usecase ShipOrder    "発送"
 usecase DeliverOrder "配達確認"
 usecase CancelOrder  "注文キャンセル"
 
+buc BucOrderLifecycle "Order lifecycle"
+contains(BucOrderLifecycle, PlaceOrder)
+contains(BucOrderLifecycle, CapturePay)
+contains(BucOrderLifecycle, ShipOrder)
+contains(BucOrderLifecycle, DeliverOrder)
+contains(BucOrderLifecycle, CancelOrder)
+
 creates(PlaceOrder, Order)
 updates(CapturePay, Order)
 updates(ShipOrder, Order)

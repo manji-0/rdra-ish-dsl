@@ -14,6 +14,11 @@ usecase CreateItem "商品登録"
 usecase Restock "補充"
 usecase ArchiveItem "廃番"
 
+buc BucItemStock "Item stock"
+contains(BucItemStock, CreateItem)
+contains(BucItemStock, Restock)
+contains(BucItemStock, ArchiveItem)
+
 creates(CreateItem, Item)
 updates(Restock, Item)
 updates(ArchiveItem, Item)

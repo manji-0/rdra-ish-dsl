@@ -10,6 +10,10 @@ entity Coupon "クーポン" {
 usecase Issue "発行"
 usecase Expire "失効"
 
+buc BucCouponLifecycle "Coupon lifecycle"
+contains(BucCouponLifecycle, Issue)
+contains(BucCouponLifecycle, Expire)
+
 creates(Issue, Coupon)
 updates(Expire, Coupon)
 

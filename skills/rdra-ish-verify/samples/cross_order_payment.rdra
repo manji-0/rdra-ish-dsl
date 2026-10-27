@@ -13,6 +13,11 @@ usecase Place "注文確定"
 usecase Pay "決済確定"
 usecase Cancel "キャンセル"
 
+buc BucOrderPayment "Order and payment"
+contains(BucOrderPayment, Place)
+contains(BucOrderPayment, Pay)
+contains(BucOrderPayment, Cancel)
+
 creates(Place, Order)
 creates(Place, Payment)
 updates(Pay, Order)

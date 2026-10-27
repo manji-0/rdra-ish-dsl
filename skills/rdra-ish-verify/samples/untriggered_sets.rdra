@@ -12,6 +12,11 @@ usecase Place "注文"
 usecase Ship "発送"
 usecase Flag "要確認"
 
+buc BucOrderFlagging "Order flagging"
+contains(BucOrderFlagging, Place)
+contains(BucOrderFlagging, Ship)
+contains(BucOrderFlagging, Flag)
+
 creates(Place, Order)
 sets(Place, Order, status == placed)
 updates(Ship, Order)

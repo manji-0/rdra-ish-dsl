@@ -25,6 +25,8 @@ api PlaceOrderApi       "Place Order API"
 api OrderHistoryApi     "Order History API"
 api CancelOrderApi      "Cancel Order API"
 
+event EvOrderShipped "Order Shipped"
+
 performs(Customer, BucOrder)
 belongs(BucOrder, EcShopping)
 contains(BucOrder, SelectAddress)
@@ -52,6 +54,7 @@ reads(ConfirmOrderApi, ShippingAddress)
 
 displays(PlaceOrder, OrderCompleteScreen)
 invokes(PlaceOrder, PlaceOrderApi)
+reads(PlaceOrderApi, CustomerAccount)
 creates(PlaceOrderApi, Order)
 creates(PlaceOrderApi, OrderLine)
 updates(PlaceOrderApi, Cart)
@@ -70,6 +73,8 @@ transitions(Order.status, Cancel, pending -> cancelled)
 performs(Admin, ShipOrder)
 updates(ShipOrder, Order)
 transitions(Order.status, ShipOrder, paid -> shipped)
+raises(ShipOrder, EvOrderShipped)
+triggers(EvOrderShipped, ShippingSvc)
 
 performs(Admin, DeliverOrder)
 updates(DeliverOrder, Order)
