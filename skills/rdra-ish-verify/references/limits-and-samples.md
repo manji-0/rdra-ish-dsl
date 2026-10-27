@@ -45,6 +45,7 @@ In the `rdra-ish-dsl` repository, `samples/formal-verification/` and
 | `samples/now_coupon.rdra` | expected fail | `now` / unconstrained Assign + TickNow |
 | `samples/cross_order_payment.rdra` | expected fail | Multi-instance + `.along` (interleaving) |
 | `samples/quantifier_none.rdra` | expected fail | `when(...).none` (interleaving) |
+| `samples/untriggered_sets.rdra` | expected fail | `sets` from a use case that raises no transition event, next to `transitions` |
 | `samples/fail/order.rdra` | expected fail | Negative TLC (`check` may exit 0 with warnings) |
 
 ## Canonical Doc

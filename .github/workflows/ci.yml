@@ -110,7 +110,8 @@ jobs:
           for sample in \
             samples/formal-verification/cross_order_payment.rdra \
             samples/formal-verification/quantifier_none.rdra \
-            samples/formal-verification/now_coupon.rdra
+            samples/formal-verification/now_coupon.rdra \
+            samples/formal-verification/untriggered_sets.rdra
           do
             echo "==> expect TLC counterexample: $sample"
             set +e

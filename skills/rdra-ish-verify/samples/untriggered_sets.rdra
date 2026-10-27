@@ -1,0 +1,26 @@
+// `sets` from a use case that raises no transition event (Flag), next to a
+// lifecycle with transitions. Place creates the Order at `placed`, so
+// Flag then Ship reaches the forbidden state
+// (expected TLC fail / counterexample; `check`/`states` also report it).
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(draft, placed, shipped) @default(draft)
+  flagged: Bool @default(false)
+}
+
+usecase Place "注文"
+usecase Ship "発送"
+usecase Flag "要確認"
+
+event EvShip "発送"
+
+creates(Place, Order)
+sets(Place, Order, status == placed)
+updates(Ship, Order)
+raises(Ship, EvShip)
+updates(Flag, Order)
+sets(Flag, Order, flagged == true)
+
+transitions(Order.status, EvShip, placed -> shipped)
+
+forbidden(Order, status == shipped, flagged == true)

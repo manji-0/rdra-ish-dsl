@@ -3654,4 +3654,22 @@ forbidden(Item, stock < 100)
             bundle.warnings
         );
     }
+
+    #[test]
+    fn tla_exports_sets_of_use_case_outside_transitions() {
+        let src = std::fs::read_to_string("samples/formal-verification/untriggered_sets.rdra")
+            .or_else(|_| {
+                std::fs::read_to_string("../../samples/formal-verification/untriggered_sets.rdra")
+            })
+            .expect("untriggered_sets.rdra");
+        let model = model_from(&src);
+        let bundle = TlaPlusEmitter::default()
+            .emit_bundle(&model, &View::whole())
+            .unwrap();
+        assert!(
+            bundle.tla.contains("Order_flagged' = TRUE"),
+            "expected an action that sets Order_flagged; got:\n{}",
+            bundle.tla
+        );
+    }
 }

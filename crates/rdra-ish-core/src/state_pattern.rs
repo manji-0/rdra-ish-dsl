@@ -4660,4 +4660,23 @@ forbidden(Order, Payment,
             );
         }
     }
+
+    #[test]
+    fn creation_status_seeds_and_untriggered_sets_reach_forbidden() {
+        let src = std::fs::read_to_string("samples/formal-verification/untriggered_sets.rdra")
+            .or_else(|_| {
+                std::fs::read_to_string("../../samples/formal-verification/untriggered_sets.rdra")
+            })
+            .expect("untriggered_sets.rdra");
+        let model = model_from(&src);
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results.iter().find(|r| r.entity_id == "Order").unwrap();
+        assert!(
+            r.diagnostics
+                .iter()
+                .any(|d| matches!(d, StateDiag::ForbiddenStateViolated { .. })),
+            "expected Flag then Ship to reach the forbidden state: {:?}",
+            r.diagnostics
+        );
+    }
 }

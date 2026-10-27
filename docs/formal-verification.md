@@ -190,6 +190,7 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `now_coupon.rdra` | expected fail | `now` / unconstrained Assign + TickNow; Safety finds `expired_at < now` |
 | `cross_order_payment.rdra` | expected fail | Multi-instance + `.along` (independent SpecActions allow Cancel then Capture) |
 | `quantifier_none.rdra` | expected fail | `when(...).none` (Revoke while Assign stays active) |
+| `untriggered_sets.rdra` | expected fail | `sets` from a use case that raises no transition event (Flag then Ship reaches the forbidden state) |
 | `fail/order.rdra` | expected fail | Intentionally unsafe (reachable forbidden → `check`/`states` exit 1; TLC fails Safety) |
 
 `rdra-ish check` fails closed on reachable forbidden / undriven comparisons; use TLC
