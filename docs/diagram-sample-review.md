@@ -225,8 +225,7 @@ Review points:
 
 - Is `Store -> Organization` optionality correct for business operations?
 - Are state columns explicit enough for state derivation and rule review?
-- Do logical entities still match the conceptual vocabulary, or is a `concept` /
-  `domain_object` mapping missing?
+- Do entity names still match the business vocabulary used in BUCs and use cases?
 - Are indexes, uniqueness, tenant scope, history, or soft-delete annotations needed
   before this becomes a migration design?
 

@@ -1,12 +1,36 @@
 # Language Reference
 
-This document is the complete reference for the `rdra-ish` DSL. The DSL describes
-RDRA (Relationship-Driven Requirements Analysis) models: you declare model elements
-as typed instances and connect them with predicate calls.
+This document is the complete reference for the `rdra-ish` DSL. The DSL describes one
+requirements model that runs from why a system exists to how its data changes. You
+declare each element once as a typed instance and connect elements with predicate
+calls. `check` and `lint` then find gaps across layers, and every diagram, CSV, list,
+and export is a projection of the same model.
 
 A source file (`.rdra`) consists of an optional `module` declaration, zero or more
 `import` declarations, and a sequence of instance declarations, entity bodies,
 predicate calls, and constraint declarations, in any order.
+
+## The Review Spine
+
+<!-- derived-from ./rdra-ish-interpretation.md#basic-stance -->
+
+The language follows the RDRA habit of explaining each layer by the layer before it.
+Each layer answers one review question, and the sections of this reference follow the
+same order:
+
+| Layer | Kinds | Review question | Section |
+|---|---|---|---|
+| Requirements and traceability | `requirement`, `adr`, `nfr`, `quality`, `constraint` | Why does this exist, and which quality bar applies? | [Requirements and Traceability](#requirements-and-traceability) |
+| Business | `business`, `buc`, `flow`, `step`, `timing`, `location`, `medium` | Which business value does it serve, in what order? | [Business Layer](#business-layer) |
+| Interaction | `actor`, `usecase`, `screen`, `field`, `event` | Who does what, on which screen, and what does it cause? | [Interaction Layer](#interaction-layer) |
+| System boundary | `system`, `extsystem`, `api`, `dto`, `permission` | Which boundary owns the operation, and who may call it? | [System Boundary](#system-boundary) |
+| Data | `entity` | What is stored, and how is it related? | [Data Layer](#data-layer) |
+| Lifecycle and rules | `state`, plus `transitions`, `sets`, and constraint declarations | Which states are reachable, and which are forbidden? | [Lifecycle](#lifecycle), [Entity State Constraints](#entity-state-constraints) |
+
+A kind is part of the language only when some review output consumes it. The
+[kind index](#kind-index) lists that output for every kind.
+
+---
 
 ## File Structure and Comments
 
@@ -14,6 +38,68 @@ Comments use `//` and run to the end of the line. Block comments use `/* ... */`
 Legacy `#` line comments are not accepted. If an older model uses `#` for comments,
 replace those line-comment prefixes with `//`; see the repository
 [changelog](../CHANGELOG.md) for the migration note.
+
+---
+
+## Modules and Imports
+
+A file may declare the module it belongs to and import other modules:
+
+```
+module shared.actors
+
+import shared.actors             // flat import: brings all names into scope
+import shared.actors as a        // namespaced import under alias `a`
+import shared.actors.{Staff}     // selective import of a single name
+import shared.actors.{Staff as S} // selective import with a local alias
+```
+
+- `module <path>` declares the dotted module path of the current file. Each path must be
+  unique across the loaded sources.
+- `import <path>` brings the module's declarations into flat scope. Unknown module paths
+  are errors. Two flat imports that bind the same local name **and same kind** to
+  different modules are errors. Same id with different kinds (e.g. imported
+  `event Capture` plus local `usecase Capture`) may coexist; use `kind::Id`.
+- `import <path> as <alias>` makes the imported names available under the alias namespace
+  (`alias.Name`). Bare names from that module are **not** in flat scope.
+- `import <path>.{Name}` imports only the named declarations into flat scope.
+- `import <path>.{Name as Local}` imports a name under a local alias (original name hidden).
+- The same id may be declared in **different modules**; disambiguate with aliases /
+  namespaces when both are imported. Redeclaring the same kind+id in one module (or the
+  same file without a module) remains an error.
+- Import visibility is **per file**: only files that contain `import` become closed
+  scope. Sibling files without imports keep open-world (legacy) resolution of bare names.
+- Reusing the same `as` alias for two modules is an error (`DuplicateAlias`).
+
+When the CLI loads a directory, it merges all `.rdra` files reachable from the entry
+files into a single semantic model, resolving imports against the include paths derived
+from the input layout.
+
+---
+
+## Kind-Qualified References
+
+When an id is unambiguous, you reference an instance by its bare id. When the same id is
+declared for more than one kind — a common and natural situation, e.g. a `state Active`
+and an `event Active`, or an `event Cancel` and a `usecase Cancel` — you must
+disambiguate the reference with a kind prefix:
+
+```
+usecase::Foo      // the use case named Foo
+event::Cancel     // the event named Cancel
+state::Active      // the state named Active
+```
+
+Typical cases:
+
+- In `transitions(Order.status, event::Capture, pending -> paid)`, the event and states
+  may collide with use cases of the same name once modules are merged, so qualifiers are
+  used.
+- In `contains(BucOrder, usecase::Cancel)` and `raises(usecase::Cancel, event::Cancel)`,
+  the `Cancel` use case and the `Cancel` event coexist.
+
+Use the qualifier whenever the bare id would be ambiguous after all imported modules are
+merged; the compiler reports an ambiguity error otherwise.
 
 ---
 
@@ -25,7 +111,7 @@ An instance declaration introduces a named element:
 <kind> <Id> "Label"
 ```
 
-- `<kind>` is one of the kinds in the table below.
+- `<kind>` is one of the kinds in the [kind index](#kind-index).
 - `<Id>` is a unique identifier within its kind (an upper-camel-case identifier by
   convention).
 - `"Label"` is a human-readable display string used in generated diagrams and lists.
@@ -41,180 +127,34 @@ An instance may also carry an optional description:
 default so diagrams stay compact. Use `rdra-ish diagram --show-description` to render
 descriptions as review annotations where supported.
 
-`requirement` declarations may also carry requirement-specific metadata after the
-label or description:
+### Kind index
 
-```
-requirement ReqCheckout "Checkout must be reliable"
-  description "The checkout flow must preserve customer intent."
-  priority "must"
-  source "Customer interview"
-  stakeholder "Store Operations"
-  owner "Product Owner"
-  acceptance criteria "A payment timeout leaves the cart recoverable."
-  status "proposed"
-  risk "high"
-  rationale "Checkout failures directly block revenue."
-```
-
-`source`, `stakeholder`, and `acceptance criteria` may be repeated. Single-value
-fields use the last value when repeated. `acceptance_criteria "..."` is accepted as
-an identifier-friendly spelling of `acceptance criteria "..."`.
-
-Use `rdra-ish list --kind requirement` to review requirement metadata in table,
-CSV, or JSON form.
-
-| kind | Description |
-|---|---|
-| `actor` | A human actor who performs use cases. |
-| `extsystem` | An external system used by actors or use cases. |
-| `system` | An internal system boundary. It groups APIs; its entity set is derived from those APIs' CRUD targets. |
-| `requirement` | A requirement that motivates business use cases. |
-| `adr` | An architecture decision record. It captures context, selected/rejected options, reasons, and consequences, then links the decision to impacted model elements with `decides`. |
-| `nfr` | A non-functional requirement with measurable or reviewable quality metadata such as latency, SLO, availability, resilience, audit, retention, or privacy classification. |
-| `quality` | A quality attribute category such as performance, availability, resilience, auditability, observability, or privacy. |
-| `constraint` | A non-functional guardrail or compliance constraint, commonly used for audit, logging, retention, privacy, or operational restrictions. |
-| `concept` | A business concept that may or may not become a persisted data structure. |
-| `domain_object` | A domain model object that represents behavior or business identity before database design. |
-| `aggregate` | A domain consistency boundary that groups domain objects, value objects, or concepts. |
-| `valueobject` / `value_object` | A value object without independent identity, modeled separately from database columns or tables. Prefer `value_object`; `valueobject` remains accepted. |
-| `business` | A business (a coarse-grained area of activity) that BUCs belong to. |
-| `buc` | A business use case: a unit of business value composed of use cases. |
-| `flow` | A business flow: an ordered business narrative inside a BUC. A flow is composed of steps and can make UC/event ordering explicit without turning the diagram into the only source of truth. |
-| `step` | A business flow step. A step is a business-language action that can cover a use case, API, or event while remaining distinct from implementation boundaries. |
-| `usagescene` | A usage scene describing a context of use. |
-| `usecase` | A use case: a concrete interaction that reads/writes entities and displays screens. |
-| `screen` | A screen (UI surface) displayed by use cases. |
-| `field` | A screen field: a first-class UI input/output item. It can carry editability, requiredness, and actor/system source metadata, and can map to an Entity column without becoming one. |
-| `event` | A domain event, used as the trigger of state transitions and as a `raises`/`triggers` endpoint. |
-| `entity` | A logical data model/table-like persistent structure. Use conceptual model elements for domain concepts that are not yet, or should not be, tables. |
-| `state` | Optional diagram/label sugar for an Enum lifecycle variant. Prefer `transitions(Entity.col, Event, from -> to)` with Enum variant names; the compiler also synthesizes `{Entity}_{variant}` state nodes for diagrams when needed. |
-| `api` | An API layer endpoint invoked by a use case; operates entities on behalf of the use case and defines an atomic data operation boundary. API declarations may also carry HTTP contract metadata. Appears in the RDRA layered graph and sequence diagram as a named API lane, but is intentionally omitted from the boundaryless graph. |
-| `dto` | A request, response, or error payload shape used by API contracts. DTOs may carry a column-like field body but are kept separate from database entities. |
-| `location` | A place, channel, organization point, or usage scene for Business-BUC context. |
-| `timing` | A timing, trigger, or business situation for Business-BUC context. |
-| `medium` | A physical medium, device, terminal, or operation medium for Business-BUC context. |
-| `permission` | A permission or role-like authority assignable to actors. |
-
-### Reserved (do not use)
-
-| kind | Status |
-|---|---|
-| `condition` | Reserved kind (not wired to predicates). Accepted with a **warning**; do not use in new models. |
-| `variation` | Reserved kind (not wired to predicates). Accepted with a **warning**; do not use in new models. |
-
-### Unsupported / limited
-
-| Topic | Limitation |
-|---|---|
-| Bare `relate(..., N:M)` without `.via` | Error. Use `relate(A, B, N:M).via(Junction)` or two explicit `N:1` relates through a junction entity. |
-| `relate(A, A, N:M)` or `.via` equal to an endpoint | Error (`SelfNMRelation` / `ViaMustBeDistinct`). Junction must be a distinct entity. |
-| Composite `@pk(a, b)` auto-FK | `relate` does not auto-generate FKs against composite primary keys — declare FK columns explicitly on the many side. |
-| AsyncAPI protocol / server / payload schemas | `export --kind asyncapi` projects event causality only; broker protocol, servers, and exact payload schemas are not inferred. |
-| OpenAPI auth / permissions | Unknown `auth` schemes become `apiKey` + `x-rdra-ish-auth-scheme`; `requires_permission` is an extension, not OpenAPI `security`. |
-
----
-
-## Entity Bodies
-
-An `entity` or `dto` declaration may be followed by a brace-delimited body of
-field definitions:
-
-```
-entity Order "Order" {
-  id:           Int      @pk
-  total:        Money
-  ordered_at:   DateTime
-  delivered_at: DateTime @null
-  status:       Enum(pending, paid, shipped, delivered, cancelled) @default(pending)
-  note:         String   @null
-}
-```
-
-Each field has the form `name: Type [annotations...]`. For entities these fields
-are database columns. For DTOs they are contract fields; `@null` means the field
-is optional/nullable in the payload.
-
-### Column types
-
-| Type | Description |
-|---|---|
-| `Int` | Integer. |
-| `String` | Text. |
-| `Money` | Monetary amount. |
-| `DateTime` | Date and time. |
-| `Date` | Date. |
-| `Bool` | Boolean. A boolean column is a **state axis** (see [state-derivation.md](./state-derivation.md)). |
-| `Decimal` | Decimal number. |
-| `Enum(a, b, c)` | Enumeration over the listed variants. An Enum column is a **state axis** and can be linked to a state machine. |
-
-### Column annotations
-
-| Annotation | Description |
-|---|---|
-| `@pk` | Marks the column as the primary key. FK columns are auto-generated against this key by `relate` (single-column `@pk` only). |
-| `@pk(a, b)` | Declares a composite primary key over the named columns. Auto-FK generation is **not** supported for composite keys — declare FK columns explicitly on the many side. |
-| `@unique` | Adds a unique constraint. |
-| `@unique(a, b)` | Declares a composite unique constraint over the named columns. |
-| `@index` | Adds an index for the column. |
-| `@index(a, b)` | Declares a composite index over the named columns. |
-| `@check("expr")` | Declares a check constraint expression for review/export. The expression is stored verbatim. |
-| `@null` | Makes the column nullable. A nullable column is a **state axis** with values `{null, present}`. |
-| `@default(v)` | Declares a default value `v`. Used as the seed value in state derivation. |
-| `@label("...")` | Overrides the column's display label. |
-| `@soft_delete` | Marks the column as the soft-delete marker, such as `deleted_at` or `is_deleted`. |
-| `@history` | Marks the column as part of history/versioning, such as `valid_from`, `valid_to`, or `version`. |
-| `@tenant` | Marks the column as the tenant-scope discriminator. |
-| `@derived("expr")` | Marks the column as derived and stores the derivation expression verbatim. |
-
-Composite `@pk(...)`, `@unique(...)`, and `@index(...)` annotations are written on
-one column line for locality, but semantically they belong to the entity as a whole.
-`@check(...)` and `@derived(...)` are expression-carrying metadata; the current model
-stores them for review/export and does not parse them into executable SQL.
-`rdra-ish export --kind dbml` projects logical `entity` declarations to DBML tables,
-including indexes, composite unique constraints, generated FK columns, and `relate`
-delete/update options. Metadata without a native DBML equivalent is preserved as
-notes so the review signal is not lost.
-`rdra-ish export --kind json-schema` also emits Entity schemas under `$defs` using
-`Entity.<id>` names, with RDRA-specific data-modeling metadata preserved as
-`x-rdra-ish-*` extensions.
-
----
-
-## Conceptual Model
-
-Use conceptual model elements when the business language has important nouns that
-should not be collapsed into database tables too early:
-
-```
-concept PatientIdentity "Patient identity"
-concept CarePlan "Care plan"
-domain_object Appointment "Appointment"
-aggregate SchedulingAggregate "Scheduling aggregate"
-valueobject TimeSlot "Time slot"
-
-contains(SchedulingAggregate, Appointment)
-contains(SchedulingAggregate, TimeSlot)
-contains(SchedulingAggregate, PatientIdentity)
-```
-
-Conceptual elements can stand alone. This is useful for terms that matter during
-requirements and domain analysis but are not persisted directly. When a
-conceptual/domain element does have a logical data model representation, declare
-the mapping explicitly:
-
-```
-entity AppointmentTable "appointment table" {
-  id: Int @pk
-  starts_at: DateTime
-}
-
-maps_to(Appointment, AppointmentTable)
-maps_to(TimeSlot, AppointmentTable)
-```
-
-This keeps the conceptual model and logical data model connected without making
-`entity` mean every business concept.
+| kind | Description | Reviewed by |
+|---|---|---|
+| `requirement` | A requirement that motivates business use cases. | `lint` `requirement-untraced`; RDRA diagram; `list --kind requirement` |
+| `adr` | An architecture decision record. It captures context, selected and rejected options, reasons, and consequences, then links the decision to impacted model elements with `decides`. | RDRA diagram; `list --kind adr`, `list --kind adr-impact` |
+| `nfr` | A non-functional requirement with measurable or reviewable quality metadata such as latency, SLO, availability, resilience, audit, retention, or privacy classification. | `lint` `nfr-unscoped`; RDRA diagram |
+| `quality` | A quality attribute category such as performance, availability, resilience, auditability, observability, or privacy. | RDRA diagram (`qualifies`) |
+| `constraint` | A non-functional guardrail or compliance constraint, commonly used for audit, logging, retention, privacy, or operational restrictions. | `lint` `constraint-unscoped`; RDRA diagram |
+| `business` | A business (a coarse-grained area of activity) that BUCs belong to. | RDRA diagram |
+| `buc` | A business use case: a unit of business value composed of use cases. | `lint` `buc-empty`; RDRA, sequence, and event-flow diagrams (`--buc` filter) |
+| `flow` | A business flow: an ordered business narrative inside a BUC. A flow is composed of steps and can make UC and event ordering explicit without turning the diagram into the only source of truth. | `lint` `flow-empty`, `flow-cycle`; RDRA diagram |
+| `step` | A business flow step. A step is a business-language action that can cover a use case, API, or event while remaining distinct from implementation boundaries. | `lint` `step-no-cover`; RDRA diagram |
+| `timing` | A timing, trigger, or business situation for Business-BUC context. | `belongs(...).when(...)` context |
+| `location` | A place, channel, organization point, or usage scene for Business-BUC context. | `belongs(...).where(...)` context |
+| `medium` | A physical medium, device, terminal, or operation medium for Business-BUC context. | `belongs(...).by(...)` context; `requires_medium` in `csv --kind screen-constraints` |
+| `actor` | A human actor who performs use cases. | `check` permission paths; sequence diagram participant; `csv --kind actor-permission-audit` |
+| `usecase` | A use case: a concrete interaction that reads and writes entities and displays screens. | `check`; `states`; all diagrams; `csv --kind matrix` |
+| `screen` | A screen (UI surface) displayed by use cases. | `lint` `screen-no-fields`; sequence diagram; `csv --kind screen-constraints` |
+| `field` | A screen field: a first-class UI input or output item. It can carry editability, requiredness, and actor or system source metadata, and can map to an entity column without becoming one. | `lint` `field-unmapped`, `field-unplaced`; business-area diagram |
+| `event` | A domain event, used as the trigger of state transitions and as a `raises` and `triggers` endpoint. | `check` raised-but-unconsumed; `states`; event-flow diagram; `export --kind asyncapi`, `tla` |
+| `system` | An internal system boundary. It groups APIs; its entity set is derived from those APIs' CRUD targets. | `lint` `system-boundary`; boundary diagnostics; technical-area diagram |
+| `extsystem` | An external system used by actors or use cases. | RDRA diagram |
+| `api` | An API layer endpoint invoked by a use case. It operates entities on behalf of the use case, defines an atomic data operation boundary, and may carry HTTP contract metadata. | `lint` `api-unused`, `api-contract-missing`, `api-contract-incomplete`; sequence diagram; `csv --kind api-matrix`; `export --kind openapi` |
+| `dto` | A request, response, or error payload shape used by API contracts. DTOs may carry a column-like field body but are kept separate from database entities. | `lint` `dto-unused`, `dto-field`; `export --kind openapi`, `json-schema` |
+| `permission` | A permission or role-like authority assignable to actors. | `check` `requires_permission` against `has_permission`; `csv --kind actor-permission-audit` |
+| `entity` | A logical data model: a table-like persistent structure. | `check`; `states`; ER diagram; `csv --kind matrix`; `export --kind dbml`, `json-schema`, `tla` |
+| `state` | Optional diagram and label sugar for an Enum lifecycle variant. Prefer `transitions(Entity.col, Event, from -> to)` with Enum variant names; the compiler also synthesizes `{Entity}_{variant}` state nodes for diagrams when needed. | state diagram |
 
 ---
 
@@ -235,7 +175,6 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `applies_to` | `(Nfr, UseCase \| Api \| System)` | The non-functional requirement applies to the use case, API, or system boundary. Use this for performance, availability, or SLO requirements tied to an operation or system. |
 | `qualifies` | `(Nfr \| Constraint, Quality)` | The non-functional requirement or constraint belongs to the given quality category. |
 | `constrains` | `(Constraint, UseCase \| Api \| System \| Entity \| Dto)` | The constraint applies to the target model element. Use this for audit/logging/retention/privacy rules that constrain system behavior or data handling. |
-| `maps_to` | `(Concept \| DomainObject \| Aggregate \| ValueObject, Entity)` | Maps a conceptual/domain model element to its logical data model representation. The source can exist without a mapping when it is not table-backed. |
 | `reads` | `(UseCase \| Api, Entity)` | The use case or API reads the entity. |
 | `writes` | `(UseCase \| Api, Entity)` | The use case or API writes the entity (treated as an update for state derivation). |
 | `creates` | `(UseCase \| Api, Entity)` | The use case or API creates the entity. Seeds the initial state pattern. |
@@ -247,7 +186,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `raises` | `UseCase == Event` | The use case raises the domain event. Links use cases to `transitions`. |
 | `triggers` | `(Event, UseCase \| Buc)` | The event triggers a concrete use case or starts a BUC boundary. |
 | `outbox` | `(Event)` | Marks a raised event as intentionally published outside the local model, suppressing the raised-but-unconsumed warning. |
-| `contains` | `(Buc, UseCase \| Flow)`, `Flow == Step`, `Screen == Field`, `System == Api`, or `(Aggregate, DomainObject \| ValueObject \| Concept)` | The use case or flow composes the BUC, the step composes the flow, the field belongs to the screen, the API belongs to the system boundary, or the aggregate owns conceptual/domain parts. |
+| `contains` | `(Buc, UseCase \| Flow)`, `Flow == Step`, `Screen == Field`, or `System == Api` | The use case or flow composes the BUC, the step composes the flow, the field belongs to the screen, or the API belongs to the system boundary. |
 | `owns` | `System == Entity` | Optionally declares that a system is responsible for an entity even before API operations are fully modeled. API CRUD still records concrete access; `owns` records intended ownership. |
 | `precedes` | `Step == Step` | The first business step normally occurs before the second. |
 | `branches` | `Step == Step` | The first step may branch to the second as an alternate path. |
@@ -261,7 +200,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `requires_permission` | `(UseCase \| Api, Permission)` | The use case or API requires the permission type. |
 | `requires_medium` | `(UseCase \| Api, Medium)` | The use case or API requires the operation medium. |
 | `motivates` | `Requirement == Buc` | The requirement motivates the BUC. |
-| `decides` | `(Adr, Buc \| UseCase \| Api \| System \| Entity \| Requirement \| Nfr \| Constraint \| Concept \| DomainObject \| Aggregate \| ValueObject \| Dto)` | The ADR records a design decision that affects the target element. Use this for impact review and design traceability without making the target depend on a document file path. |
+| `decides` | `(Adr, Buc \| UseCase \| Api \| System \| Entity \| Requirement \| Nfr \| Constraint \| Dto)` | The ADR records a design decision that affects the target element. Use this for impact review and design traceability without making the target depend on a document file path. |
 | `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `1:1`, `1:N`, `N:1`, `N:M` (unquoted). For `N:M`, require `.via(JunctionEntity)` where the junction is distinct from both ends: the model keeps the logical N:M edge **and synthesizes** two `N:1` edges `Junction→A` / `Junction→B` (FK columns, composite unique on the FK pair when missing, TLA `*_owner`, ER crowfoot, `.along` paths). Equivalent manual form: two explicit `N:1` relates from the junction. FK options can be chained with `.optional()`, `.on_delete(action)`, and `.on_update(action)` (for `N:M`, options apply to both generated FKs). |
 | `transitions` | `(Entity.column, Event, from -> to)` | A lifecycle edge on an Enum column: on the event, the entity moves from the first variant to the second. |
 | `after` | `(UseCase).assert(...)` | A temporal anchor assertion checked against the use case's immediate `sets` and `raises`/`transitions` effects. |
@@ -274,150 +213,41 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 nullable, marked `fk_optional`, and carries the delete/update actions for CSV/list
 review. `relate(A, B, 1:N)` applies the same options to the FK generated on `B`.
 
-### Use case conditions
+---
 
-Use cases can carry **review-facing metadata** (not machine-checked contracts):
+## Requirements and Traceability
 
-```rdra
-usecase CapturePayment "Capture payment"
-  precondition "The order is authorized."
-  guard "Payment provider is available."
-  postcondition "Payment is captured or a business error is raised."
-  alternative "Customer chooses another payment method."
-  error "Authorization expires before capture."
-```
+These kinds record why the rest of the model exists. `motivates(Requirement, Buc)`
+ties a requirement to business value, `decides(Adr, ...)` ties a design decision to the
+elements it shapes, and `applies_to` / `constrains` scope quality objectives and
+guardrails to use cases, APIs, systems, and data.
 
-`precondition`, `postcondition`, `guard`, `alternative` / `alternative_flow`, and
-`error` / `error_condition` / `business_error` may be repeated. These clauses are
-stored on the use case and shown by `rdra-ish list --kind usecase`. They are **not**
-evaluated by `check`, `states`, or TLA+/TLC. For machine-checked postconditions use
-`after(UseCase).assert(...)`. Use `compensates(RefundPayment, CapturePayment)` to make
-a compensation relationship explicit between use cases.
-
-### Business flows
-
-Business flows are optional, first-class narrative structure for cases where BUC
-membership alone is too flat:
-
-```
-buc BucCheckout "Checkout"
-flow CheckoutFlow "Checkout flow"
-step ReviewCart "Review cart"
-step AuthorizePayment "Authorize payment"
-step PaymentFailed "Payment failed"
-usecase CapturePayment "Capture payment"
-event PaymentRejected "Payment rejected"
-
-contains(BucCheckout, CheckoutFlow)
-contains(CheckoutFlow, ReviewCart)
-contains(CheckoutFlow, AuthorizePayment)
-precedes(ReviewCart, AuthorizePayment)
-excepts(AuthorizePayment, PaymentFailed)
-repeats(PaymentFailed, ReviewCart)
-covers(AuthorizePayment, CapturePayment)
-covers(PaymentFailed, PaymentRejected)
-```
-
-Use `precedes` for the main path, `branches` for alternatives, `excepts` for error
-or exception routes, and `repeats` for loops. `covers` is intentionally separate
-from `contains`: a step is not the use case or event itself; it is the business
-meaning that anchors one or more model elements.
-
-### Screen fields and input/output mapping
-
-Use `field` when a screen item needs to be reviewed as a model element rather
-than only inferred from CRUD:
-
-```
-screen CheckoutScreen "Checkout screen"
-field ShippingAddress "Shipping address" access editable required true source actor
-field OrderTotal "Order total" access readonly required true source system
-
-entity Order "Order" {
-  id: Int @pk
-  shipping_address: String
-  total: Money
-}
-
-contains(CheckoutScreen, ShippingAddress)
-contains(CheckoutScreen, OrderTotal)
-maps_field(ShippingAddress, Order, "shipping_address")
-maps_field(OrderTotal, Order, "total")
-```
-
-Supported field clauses are:
-
-| Clause | Description |
-|---|---|
-| `access` | `editable` or `readonly` by convention. Project-specific tokens are accepted. |
-| `required` | `true` or `false`, representing whether the field is required on the screen. |
-| `source` / `input` / `derived` | `actor` for actor-entered fields or `system` for system-derived fields by convention. Project-specific tokens are accepted. |
-
-`shows(Screen, Entity)` remains a coarse screen-to-entity information link.
-`maps_field(Field, Entity, "column")` is the fine-grained mapping when a concrete
-screen item corresponds to a logical data column.
-
-### API contracts
+### Requirements
 
 <!-- derived-from #relationship-predicates -->
 
-API declarations can carry transport-facing contract metadata:
+`requirement` declarations may carry requirement-specific metadata after the label or
+description:
 
 ```
-api CreateOrder "Create order"
-  method POST
-  path "/orders"
-  idempotency "idempotent"
-  mode sync
-  auth bearer
+requirement ReqCheckout "Checkout must be reliable"
+  description "The checkout flow must preserve customer intent."
+  priority "must"
+  source "Customer interview"
+  stakeholder "Store Operations"
+  owner "Product Owner"
+  acceptance criteria "A payment timeout leaves the cart recoverable."
+  status "proposed"
+  risk "high"
+  rationale "Checkout failures directly block revenue."
 ```
 
-Supported API clauses are:
+`source`, `stakeholder`, and `acceptance criteria` may be repeated. Single-value
+fields use the last value when repeated. `acceptance_criteria "..."` is accepted as
+an identifier-friendly spelling of `acceptance criteria "..."`.
 
-| Clause | Description |
-|---|---|
-| `method` | HTTP method, for example `GET`, `POST`, `PUT`, or `DELETE`. |
-| `path` | HTTP path as a string literal. |
-| `idempotency` | Idempotency policy such as `idempotent`, `non_idempotent`, or a project-specific token. |
-| `mode` | Interaction mode such as `sync` or `async`. |
-| `auth` / `auth_scheme` | Authentication scheme such as `bearer`, `oauth2`, `api_key`, or a project-specific token. |
-
-DTOs model payload shapes separately from database entities:
-
-```
-dto CreateOrderRequest "Create order request" {
-  customer_id: Int
-  note: String @null
-}
-
-dto OrderResponse "Order response" {
-  order_id: Int
-}
-
-dto ErrorResponse "Error response" {
-  code: String
-  message: String
-}
-
-request(CreateOrder, CreateOrderRequest)
-response(CreateOrder, OrderResponse)
-error_response(CreateOrder, ErrorResponse)
-```
-
-This remains a contract model first: the DSL stores API intent and payload shapes
-without requiring every OpenAPI detail to be authored by hand. `rdra-ish export
---kind openapi` projects APIs that have both `method` and `path` into OpenAPI
-operations, with `{path}` parameters, auth scheme mapping (unknown schemes via
-`x-rdra-ish-auth-scheme`), `requires_permission` as
-`x-rdra-ish-requires-permission`, and DTOs as `components.schemas`.
-Use `rdra-ish export --kind json-schema` when the payload shapes themselves need
-to be handed to tooling independently of an OpenAPI operation document; DTOs are
-emitted under `$defs` using `Dto.<id>` names.
-Use `rdra-ish export --kind asyncapi` when event causality needs a machine-readable
-catalog: events become AsyncAPI channels/messages, `raises` and `outbox` become
-`send` operations, and `triggers` / `transitions` become `receive` operations.
-Protocol, server, and exact event payload schemas are intentionally not inferred
-until the DSL has explicit vocabulary for them.
+Use `rdra-ish list --kind requirement` to review requirement metadata in table,
+CSV, or JSON form.
 
 ### Architecture decision records
 
@@ -507,32 +337,16 @@ qualifies(AuditRetention, Availability)
 This keeps non-functional vocabulary first-class without forcing every quality
 concern into a database entity, API endpoint, or state transition.
 
-### Access constraints
+---
 
-Actor permissions are declared with `permission` and attached to actors with
-`has_permission(Actor, Permission)`. Use cases and APIs can then declare the
-permission and medium they require:
+## Business Layer
 
-```
-permission ScheduleWrite "Schedule Write"
-medium StaffTerminal "Staff Terminal"
-
-has_permission(Staff, ScheduleWrite)
-requires_permission(BookAppointment, ScheduleWrite)
-requires_medium(BookAppointment, StaffTerminal)
-requires_permission(BookingApi, ScheduleWrite)
-```
-
-Screen access constraints are derived rather than declared directly. A screen inherits
-the constraints of each use case that displays it, and also the constraints of each API
-that the use case invokes. Use `csv --kind screen-constraints` to inspect those
-screen × use-case/API paths. `check` also compares `requires_permission` against
-`has_permission` on the actors that can perform the use case path. For APIs, this
-check is performed per invoking use case so a shared API must be authorized on every
-modeled invocation path. Use `csv --kind actor-permission-audit` or
-`list --kind actor-permission-audit` to inspect the full actor × permission projection:
-`missing` means a required permission is not assigned to that actor, and `excess` means
-the actor has a permission that no modeled performer path currently requires.
+A `business` is a coarse area of activity. A `buc` is one slice of business value
+inside it, placed with `belongs(Buc, Business)` and composed with
+`contains(Buc, UseCase)`. Flows and steps make the order inside a BUC reviewable, and
+`triggers(Event, Buc)` hands work from one BUC to the next. See
+[RDRA-ish Interpretation](./rdra-ish-interpretation.md) for how BUC, business flow, and
+use case divide the review.
 
 ### `belongs` context
 
@@ -560,42 +374,156 @@ belongs(BucAppointmentScheduling, ClinicOps)
   `.when(timing::...)`, `.where(location::...)`, or `.by(medium::...)`.
 - Multiple `.when(...)`, `.where(...)`, or `.by(...)` clauses accumulate as alternative context values.
 
-### `relate` and FK generation
+### Business flows
 
-`relate(Child, Parent, N:1)` generates a foreign-key column on the child entity
-referencing the parent's primary key (for example `parent_id`). The cardinality drives
-the crow's-foot notation in the ER diagram and the FK-induced graph used for
-[transaction boundary inference](#see-also).
+Business flows are optional, first-class narrative structure for cases where BUC
+membership alone is too flat:
 
-Many-to-many requires an explicit junction entity:
+```
+buc BucCheckout "Checkout"
+flow CheckoutFlow "Checkout flow"
+step ReviewCart "Review cart"
+step AuthorizePayment "Authorize payment"
+step PaymentFailed "Payment failed"
+usecase CapturePayment "Capture payment"
+event PaymentRejected "Payment rejected"
 
-```rdra
-entity Order "Order" { id: Int @pk }
-entity Product "Product" { id: Int @pk }
-entity OrderProduct "Order product" { id: Int @pk }
-
-relate(Order, Product, N:M).via(OrderProduct)
-// generates OrderProduct.order_id and OrderProduct.product_id
-// adds composite unique (order_id, product_id) when missing
-// and synthesizes relate(OrderProduct, Order, N:1) + relate(OrderProduct, Product, N:1)
+contains(BucCheckout, CheckoutFlow)
+contains(CheckoutFlow, ReviewCart)
+contains(CheckoutFlow, AuthorizePayment)
+precedes(ReviewCart, AuthorizePayment)
+excepts(AuthorizePayment, PaymentFailed)
+repeats(PaymentFailed, ReviewCart)
+covers(AuthorizePayment, CapturePayment)
+covers(PaymentFailed, PaymentRejected)
 ```
 
-Bare `relate(A, B, N:M)` without `.via` is an error. The equivalent manual form is
-still valid: `relate(Junction, A, N:1)` plus `relate(Junction, B, N:1)` (synthesis
-skips edges that already exist). Self N:M (`relate(A, A, N:M)`) and `.via` equal to
-either endpoint are errors.
+Use `precedes` for the main path, `branches` for alternatives, `excepts` for error
+or exception routes, and `repeats` for loops. `covers` is intentionally separate
+from `contains`: a step is not the use case or event itself; it is the business
+meaning that anchors one or more model elements.
 
-Auto-FK requires a **single-column** `@pk` on the parent. If the parent uses
-`@pk(a, b)` (composite), the model reports `CompositePkFkUnsupported` — declare the
-foreign-key column(s) explicitly on the child instead.
+### Event-triggered BUCs
 
-### `transitions` and the state machine
+<!-- constrained-by #relationship-predicates -->
+<!-- derived-from ./rdra-ish-interpretation.md#business-flow -->
 
-`transitions(Order.status, event::E, from -> to)` declares one edge of an entity's state
-machine. The Enum column is required; state labels are the Enum variants
-(case-insensitively). The use case that drives a transition
-is found through `raises(UseCase, Event)`. See
-[state-derivation.md](./state-derivation.md) for how transitions feed derivation.
+The standard way to describe a BUC that starts from an event is:
+
+1. Declare the target BUC.
+2. Connect the event to that BUC with `triggers(Event, TargetBuc)`.
+3. When the entry action becomes clear, add `contains(TargetBuc, EntryUseCase)` and
+   optionally refine the flow with `triggers(Event, EntryUseCase)`.
+
+The BUC target is the reviewable boundary of the handoff. The use-case target is the
+more concrete entry point inside that boundary. Both forms may coexist: the BUC edge
+says "this event starts that business-value slice", while the use-case edge says "this
+is the current entry action".
+
+```rdra
+buc BucBillingClaims "Billing Claims"
+usecase GenerateClaim "Generate Claim"
+event EncounterSigned "Encounter Signed"
+
+triggers(event::EncounterSigned, BucBillingClaims)
+contains(BucBillingClaims, GenerateClaim)
+triggers(event::EncounterSigned, GenerateClaim)
+```
+
+If the triggered use case is a system-triggered step, `performs` may be omitted. If it
+declares `requires_permission` directly or through an invoked API, `check` reports a
+warning until an actor path with the required permission is modeled.
+
+---
+
+## Interaction Layer
+
+A use case is the concrete interaction an actor performs. It displays screens,
+invokes APIs, touches entities, and raises events. This is the layer most checks
+anchor on, because it connects business intent to system effects.
+
+### Use case conditions
+
+Use cases can carry **review-facing metadata** (not machine-checked contracts):
+
+```rdra
+usecase CapturePayment "Capture payment"
+  precondition "The order is authorized."
+  guard "Payment provider is available."
+  postcondition "Payment is captured or a business error is raised."
+  alternative "Customer chooses another payment method."
+  error "Authorization expires before capture."
+```
+
+`precondition`, `postcondition`, `guard`, `alternative` / `alternative_flow`, and
+`error` / `error_condition` / `business_error` may be repeated. These clauses are
+stored on the use case and shown by `rdra-ish list --kind usecase`. They are **not**
+evaluated by `check`, `states`, or TLA+/TLC. For machine-checked postconditions use
+`after(UseCase).assert(...)`. Use `compensates(RefundPayment, CapturePayment)` to make
+a compensation relationship explicit between use cases.
+
+### Screen fields and input/output mapping
+
+Use `field` when a screen item needs to be reviewed as a model element rather
+than only inferred from CRUD:
+
+```
+screen CheckoutScreen "Checkout screen"
+field ShippingAddress "Shipping address" access editable required true source actor
+field OrderTotal "Order total" access readonly required true source system
+
+entity Order "Order" {
+  id: Int @pk
+  shipping_address: String
+  total: Money
+}
+
+contains(CheckoutScreen, ShippingAddress)
+contains(CheckoutScreen, OrderTotal)
+maps_field(ShippingAddress, Order, "shipping_address")
+maps_field(OrderTotal, Order, "total")
+```
+
+Supported field clauses are:
+
+| Clause | Description |
+|---|---|
+| `access` | `editable` or `readonly` by convention. Project-specific tokens are accepted. |
+| `required` | `true` or `false`, representing whether the field is required on the screen. |
+| `source` / `input` / `derived` | `actor` for actor-entered fields or `system` for system-derived fields by convention. Project-specific tokens are accepted. |
+
+`shows(Screen, Entity)` remains a coarse screen-to-entity information link.
+`maps_field(Field, Entity, "column")` is the fine-grained mapping when a concrete
+screen item corresponds to a logical data column.
+
+### `triggers` and event-driven BUC chaining
+
+`triggers(event::E, buc::B)` declares that an event starts a downstream BUC. This is the
+standard abstract form when the business handoff is known but the concrete entry use
+case is not yet fixed, or when a BUC may later be changed from human-initiated to
+event-initiated without reshaping the BUC itself.
+
+`triggers(event::E, usecase::UC)` declares that an event causes a concrete downstream
+use case to execute. This is the refined form when the entry action is known. The tool
+validates that a triggered use case belongs to at least one BUC via `contains`; a warning
+is emitted otherwise. Use `diagram --kind event-flow` to visualise the full
+`raises -> Event -> triggers` chain alongside state transitions. State derivation uses
+immediate same-entity effects from the upstream use case or event as guards for the
+triggered use case when those effects target known state axes.
+
+`outbox(event::E)` declares that a raised event is intentionally published outside the
+local model boundary, such as a domain event sent to an outbox, external subscriber, or
+manual downstream process. It suppresses only the warning for a raised event that has no
+local `transitions` or `triggers` consumer; it does not make an unraised event count as
+raised.
+
+---
+
+## System Boundary
+
+APIs are the operation boundary between a use case and the data it changes. Systems
+group APIs, DTOs give them payload contracts, and permissions and media say who may
+reach them from where.
 
 ### `api` and the API layer
 
@@ -676,57 +604,213 @@ updates(PlaceOrder, Cart)   // direct write still allowed (mixed form)
 - `CoordinationNotCrossSystem` — `coordinates` is declared for a pair that does not cross two system boundaries.
 - `CoordinationMissingApi` — the coordinating use case does not invoke an API on one side of the boundary.
 
-### `triggers` and event-driven BUC chaining
+### API contracts
 
-`triggers(event::E, buc::B)` declares that an event starts a downstream BUC. This is the
-standard abstract form when the business handoff is known but the concrete entry use
-case is not yet fixed, or when a BUC may later be changed from human-initiated to
-event-initiated without reshaping the BUC itself.
+<!-- derived-from #relationship-predicates -->
 
-`triggers(event::E, usecase::UC)` declares that an event causes a concrete downstream
-use case to execute. This is the refined form when the entry action is known. The tool
-validates that a triggered use case belongs to at least one BUC via `contains`; a warning
-is emitted otherwise. Use `diagram --kind event-flow` to visualise the full
-`raises -> Event -> triggers` chain alongside state transitions. State derivation uses
-immediate same-entity effects from the upstream use case or event as guards for the
-triggered use case when those effects target known state axes.
+API declarations can carry transport-facing contract metadata:
 
-`outbox(event::E)` declares that a raised event is intentionally published outside the
-local model boundary, such as a domain event sent to an outbox, external subscriber, or
-manual downstream process. It suppresses only the warning for a raised event that has no
-local `transitions` or `triggers` consumer; it does not make an unraised event count as
-raised.
-
-### Event-triggered BUCs
-
-<!-- constrained-by #relationship-predicates -->
-<!-- derived-from ./rdra-ish-interpretation.md#business-flow -->
-
-The standard way to describe a BUC that starts from an event is:
-
-1. Declare the target BUC.
-2. Connect the event to that BUC with `triggers(Event, TargetBuc)`.
-3. When the entry action becomes clear, add `contains(TargetBuc, EntryUseCase)` and
-   optionally refine the flow with `triggers(Event, EntryUseCase)`.
-
-The BUC target is the reviewable boundary of the handoff. The use-case target is the
-more concrete entry point inside that boundary. Both forms may coexist: the BUC edge
-says "this event starts that business-value slice", while the use-case edge says "this
-is the current entry action".
-
-```rdra
-buc BucBillingClaims "Billing Claims"
-usecase GenerateClaim "Generate Claim"
-event EncounterSigned "Encounter Signed"
-
-triggers(event::EncounterSigned, BucBillingClaims)
-contains(BucBillingClaims, GenerateClaim)
-triggers(event::EncounterSigned, GenerateClaim)
+```
+api CreateOrder "Create order"
+  method POST
+  path "/orders"
+  idempotency "idempotent"
+  mode sync
+  auth bearer
 ```
 
-If the triggered use case is a system-triggered step, `performs` may be omitted. If it
-declares `requires_permission` directly or through an invoked API, `check` reports a
-warning until an actor path with the required permission is modeled.
+Supported API clauses are:
+
+| Clause | Description |
+|---|---|
+| `method` | HTTP method, for example `GET`, `POST`, `PUT`, or `DELETE`. |
+| `path` | HTTP path as a string literal. |
+| `idempotency` | Idempotency policy such as `idempotent`, `non_idempotent`, or a project-specific token. |
+| `mode` | Interaction mode such as `sync` or `async`. |
+| `auth` / `auth_scheme` | Authentication scheme such as `bearer`, `oauth2`, `api_key`, or a project-specific token. |
+
+DTOs model payload shapes separately from database entities:
+
+```
+dto CreateOrderRequest "Create order request" {
+  customer_id: Int
+  note: String @null
+}
+
+dto OrderResponse "Order response" {
+  order_id: Int
+}
+
+dto ErrorResponse "Error response" {
+  code: String
+  message: String
+}
+
+request(CreateOrder, CreateOrderRequest)
+response(CreateOrder, OrderResponse)
+error_response(CreateOrder, ErrorResponse)
+```
+
+This remains a contract model first: the DSL stores API intent and payload shapes
+without requiring every OpenAPI detail to be authored by hand. `rdra-ish export
+--kind openapi` projects APIs that have both `method` and `path` into OpenAPI
+operations, with `{path}` parameters, auth scheme mapping (unknown schemes via
+`x-rdra-ish-auth-scheme`), `requires_permission` as
+`x-rdra-ish-requires-permission`, and DTOs as `components.schemas`.
+Use `rdra-ish export --kind json-schema` when the payload shapes themselves need
+to be handed to tooling independently of an OpenAPI operation document; DTOs are
+emitted under `$defs` using `Dto.<id>` names.
+Use `rdra-ish export --kind asyncapi` when event causality needs a machine-readable
+catalog: events become AsyncAPI channels/messages, `raises` and `outbox` become
+`send` operations, and `triggers` / `transitions` become `receive` operations.
+Protocol, server, and exact event payload schemas are intentionally not inferred
+until the DSL has explicit vocabulary for them.
+
+### Access constraints
+
+Actor permissions are declared with `permission` and attached to actors with
+`has_permission(Actor, Permission)`. Use cases and APIs can then declare the
+permission and medium they require:
+
+```
+permission ScheduleWrite "Schedule Write"
+medium StaffTerminal "Staff Terminal"
+
+has_permission(Staff, ScheduleWrite)
+requires_permission(BookAppointment, ScheduleWrite)
+requires_medium(BookAppointment, StaffTerminal)
+requires_permission(BookingApi, ScheduleWrite)
+```
+
+Screen access constraints are derived rather than declared directly. A screen inherits
+the constraints of each use case that displays it, and also the constraints of each API
+that the use case invokes. Use `csv --kind screen-constraints` to inspect those
+screen × use-case/API paths. `check` also compares `requires_permission` against
+`has_permission` on the actors that can perform the use case path. For APIs, this
+check is performed per invoking use case so a shared API must be authorized on every
+modeled invocation path. Use `csv --kind actor-permission-audit` or
+`list --kind actor-permission-audit` to inspect the full actor × permission projection:
+`missing` means a required permission is not assigned to that actor, and `excess` means
+the actor has a permission that no modeled performer path currently requires.
+
+---
+
+## Data Layer
+
+`entity` is the logical data model. Its body declares columns, and `relate` declares
+relationships and generates foreign keys. Enum, Bool, and nullable columns are the
+state axes that the lifecycle layer reasons about.
+
+### Entity Bodies
+
+An `entity` or `dto` declaration may be followed by a brace-delimited body of
+field definitions:
+
+```
+entity Order "Order" {
+  id:           Int      @pk
+  total:        Money
+  ordered_at:   DateTime
+  delivered_at: DateTime @null
+  status:       Enum(pending, paid, shipped, delivered, cancelled) @default(pending)
+  note:         String   @null
+}
+```
+
+Each field has the form `name: Type [annotations...]`. For entities these fields
+are database columns. For DTOs they are contract fields; `@null` means the field
+is optional/nullable in the payload.
+
+#### Column types
+
+| Type | Description |
+|---|---|
+| `Int` | Integer. |
+| `String` | Text. |
+| `Money` | Monetary amount. |
+| `DateTime` | Date and time. |
+| `Date` | Date. |
+| `Bool` | Boolean. A boolean column is a **state axis** (see [state-derivation.md](./state-derivation.md)). |
+| `Decimal` | Decimal number. |
+| `Enum(a, b, c)` | Enumeration over the listed variants. An Enum column is a **state axis** and can be linked to a state machine. |
+
+#### Column annotations
+
+| Annotation | Description |
+|---|---|
+| `@pk` | Marks the column as the primary key. FK columns are auto-generated against this key by `relate` (single-column `@pk` only). |
+| `@pk(a, b)` | Declares a composite primary key over the named columns. Auto-FK generation is **not** supported for composite keys — declare FK columns explicitly on the many side. |
+| `@unique` | Adds a unique constraint. |
+| `@unique(a, b)` | Declares a composite unique constraint over the named columns. |
+| `@index` | Adds an index for the column. |
+| `@index(a, b)` | Declares a composite index over the named columns. |
+| `@check("expr")` | Declares a check constraint expression for review/export. The expression is stored verbatim. |
+| `@null` | Makes the column nullable. A nullable column is a **state axis** with values `{null, present}`. |
+| `@default(v)` | Declares a default value `v`. Used as the seed value in state derivation. |
+| `@label("...")` | Overrides the column's display label. |
+| `@soft_delete` | Marks the column as the soft-delete marker, such as `deleted_at` or `is_deleted`. |
+| `@history` | Marks the column as part of history/versioning, such as `valid_from`, `valid_to`, or `version`. |
+| `@tenant` | Marks the column as the tenant-scope discriminator. |
+| `@derived("expr")` | Marks the column as derived and stores the derivation expression verbatim. |
+
+Composite `@pk(...)`, `@unique(...)`, and `@index(...)` annotations are written on
+one column line for locality, but semantically they belong to the entity as a whole.
+`@check(...)` and `@derived(...)` are expression-carrying metadata; the current model
+stores them for review/export and does not parse them into executable SQL.
+`rdra-ish export --kind dbml` projects logical `entity` declarations to DBML tables,
+including indexes, composite unique constraints, generated FK columns, and `relate`
+delete/update options. Metadata without a native DBML equivalent is preserved as
+notes so the review signal is not lost.
+`rdra-ish export --kind json-schema` also emits Entity schemas under `$defs` using
+`Entity.<id>` names, with RDRA-specific data-modeling metadata preserved as
+`x-rdra-ish-*` extensions.
+
+### `relate` and FK generation
+
+`relate(Child, Parent, N:1)` generates a foreign-key column on the child entity
+referencing the parent's primary key (for example `parent_id`). The cardinality drives
+the crow's-foot notation in the ER diagram and the FK-induced graph used for
+[transaction boundary inference](#see-also).
+
+Many-to-many requires an explicit junction entity:
+
+```rdra
+entity Order "Order" { id: Int @pk }
+entity Product "Product" { id: Int @pk }
+entity OrderProduct "Order product" { id: Int @pk }
+
+relate(Order, Product, N:M).via(OrderProduct)
+// generates OrderProduct.order_id and OrderProduct.product_id
+// adds composite unique (order_id, product_id) when missing
+// and synthesizes relate(OrderProduct, Order, N:1) + relate(OrderProduct, Product, N:1)
+```
+
+Bare `relate(A, B, N:M)` without `.via` is an error. The equivalent manual form is
+still valid: `relate(Junction, A, N:1)` plus `relate(Junction, B, N:1)` (synthesis
+skips edges that already exist). Self N:M (`relate(A, A, N:M)`) and `.via` equal to
+either endpoint are errors.
+
+Auto-FK requires a **single-column** `@pk` on the parent. If the parent uses
+`@pk(a, b)` (composite), the model reports `CompositePkFkUnsupported` — declare the
+foreign-key column(s) explicitly on the child instead.
+
+---
+
+## Lifecycle
+
+Lifecycle predicates turn interaction effects into entity states. `transitions`
+declares state machine edges, `sets` declares column effects, and the constraint
+declarations in [Entity State Constraints](#entity-state-constraints) say which
+combinations must never or must always hold. `rdra-ish states` derives the reachable
+patterns, and `export --kind tla` / `verify --backend tlc` check temporal properties.
+
+### `transitions` and the state machine
+
+`transitions(Order.status, event::E, from -> to)` declares one edge of an entity's state
+machine. The Enum column is required; state labels are the Enum variants
+(case-insensitively). The use case that drives a transition
+is found through `raises(UseCase, Event)`. See
+[state-derivation.md](./state-derivation.md) for how transitions feed derivation.
 
 ---
 
@@ -1147,65 +1231,28 @@ column is of type `Date` or `DateTime`.
 
 ---
 
-## Kind-Qualified References
+## Limitations
 
-When an id is unambiguous, you reference an instance by its bare id. When the same id is
-declared for more than one kind — a common and natural situation, e.g. a `state Active`
-and an `event Active`, or an `event Cancel` and a `usecase Cancel` — you must
-disambiguate the reference with a kind prefix:
+### Unsupported or limited
 
-```
-usecase::Foo      // the use case named Foo
-event::Cancel     // the event named Cancel
-state::Active      // the state named Active
-```
+| Topic | Limitation |
+|---|---|
+| Bare `relate(..., N:M)` without `.via` | Error. Use `relate(A, B, N:M).via(Junction)` or two explicit `N:1` relates through a junction entity. |
+| `relate(A, A, N:M)` or `.via` equal to an endpoint | Error (`SelfNMRelation` / `ViaMustBeDistinct`). Junction must be a distinct entity. |
+| Composite `@pk(a, b)` auto-FK | `relate` does not auto-generate FKs against composite primary keys — declare FK columns explicitly on the many side. |
+| AsyncAPI protocol / server / payload schemas | `export --kind asyncapi` projects event causality only; broker protocol, servers, and exact payload schemas are not inferred. |
+| OpenAPI auth / permissions | Unknown `auth` schemes become `apiKey` + `x-rdra-ish-auth-scheme`; `requires_permission` is an extension, not OpenAPI `security`. |
 
-Typical cases:
+### Removed kinds
 
-- In `transitions(Order.status, event::Capture, pending -> paid)`, the event and states
-  may collide with use cases of the same name once modules are merged, so qualifiers are
-  used.
-- In `contains(BucOrder, usecase::Cancel)` and `raises(usecase::Cancel, event::Cancel)`,
-  the `Cancel` use case and the `Cancel` event coexist.
+These kinds had no review output and were removed. A model that still uses one fails
+to load with a message naming the replacement:
 
-Use the qualifier whenever the bare id would be ambiguous after all imported modules are
-merged; the compiler reports an ambiguity error otherwise.
-
----
-
-## Imports and Modules
-
-A file may declare the module it belongs to and import other modules:
-
-```
-module shared.actors
-
-import shared.actors             // flat import: brings all names into scope
-import shared.actors as a        // namespaced import under alias `a`
-import shared.actors.{Staff}     // selective import of a single name
-import shared.actors.{Staff as S} // selective import with a local alias
-```
-
-- `module <path>` declares the dotted module path of the current file. Each path must be
-  unique across the loaded sources.
-- `import <path>` brings the module's declarations into flat scope. Unknown module paths
-  are errors. Two flat imports that bind the same local name **and same kind** to
-  different modules are errors. Same id with different kinds (e.g. imported
-  `event Capture` plus local `usecase Capture`) may coexist; use `kind::Id`.
-- `import <path> as <alias>` makes the imported names available under the alias namespace
-  (`alias.Name`). Bare names from that module are **not** in flat scope.
-- `import <path>.{Name}` imports only the named declarations into flat scope.
-- `import <path>.{Name as Local}` imports a name under a local alias (original name hidden).
-- The same id may be declared in **different modules**; disambiguate with aliases /
-  namespaces when both are imported. Redeclaring the same kind+id in one module (or the
-  same file without a module) remains an error.
-- Import visibility is **per file**: only files that contain `import` become closed
-  scope. Sibling files without imports keep open-world (legacy) resolution of bare names.
-- Reusing the same `as` alias for two modules is an error (`DuplicateAlias`).
-
-When the CLI loads a directory, it merges all `.rdra` files reachable from the entry
-files into a single semantic model, resolving imports against the include paths derived
-from the input layout.
+| Removed | Use instead |
+|---|---|
+| `usagescene` | `location` or `timing` in `belongs(...)` context. |
+| `condition`, `variation` | Use case clauses such as `precondition` and `guard`, or [Entity State Constraints](#entity-state-constraints). |
+| `concept`, `domain_object`, `aggregate`, `value_object` / `valueobject`, and `maps_to` | `entity` for persistent structure, `dto` for payload shapes. |
 
 ---
 

@@ -56,7 +56,7 @@ it is probably a UC, an API boundary, or a data operation instead.
 ## Business Flow
 
 <!-- constrained-by ./language-reference.md#event-triggered-bucs -->
-<!-- constrained-by ./language-reference.md#business-flow -->
+<!-- constrained-by ./language-reference.md#business-flows -->
 
 RDRA-ish has first-class `flow` and `step` elements for business flow. A flow is the
 concrete business-language narrative inside a BUC; a step is a business action that can

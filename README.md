@@ -1,6 +1,12 @@
 # rdra-ish
 
-`rdra-ish` is a CLI tool and DSL compiler for reviewing requirements models as code.
+`rdra-ish` keeps requirements and design in one typed model, from the business value a
+system serves down to its APIs, data, and state transitions, so you can check that each
+layer is consistent with the layer that motivates it.
+
+You write the model as code in a small DSL. The CLI type-checks it, finds gaps between
+layers, and projects the same model into diagrams, review CSVs, state tables, and
+exports such as OpenAPI, DBML, and TLA+.
 
 ## What is RDRA?
 
@@ -18,12 +24,18 @@ so the same model can support `check`, diagrams, CSV reviews, and state derivati
 For how RDRA-ISH reads BUC, business flow, and use case, see
 [RDRA-ish Interpretation](./docs/rdra-ish-interpretation.md).
 
-It lets you model actors, use cases, APIs, screens, entities, and relationships, then:
-- type-check the model (`check`)
-- generate diagrams (`diagram`)
-- export review CSVs (`csv`)
-- derive reachable entity states (`states`)
-- export / run TLA+ formal checks (`export --kind tla`, `verify --backend tlc`)
+The model follows a review spine: requirements, business, interaction, system
+boundary, data, then lifecycle and rules. The
+[Language Reference](./docs/language-reference.md#the-review-spine) is organized the
+same way, and every kind in the language names the check or output that reviews it.
+
+| Command | Reviews |
+|---|---|
+| `check`, `lint` | Type errors, unresolved references, and gaps between layers |
+| `diagram` | RDRA layers, sequence, ER, state, and event-flow views |
+| `csv`, `list` | CRUD matrix, permission audit, and element metadata |
+| `states` | Reachable entity states and state rule violations |
+| `export`, `verify` | OpenAPI, DBML, JSON Schema, AsyncAPI, and TLA+ with TLC |
 
 ## Recommended Modeling Loop
 
