@@ -562,8 +562,8 @@ triggers(EvAppointmentScheduled, MessagingGateway)   // outbound: the event is d
 An event delivered to an external system counts as consumed, so the raised-but-unconsumed
 warning stays quiet. `export --kind asyncapi` lists the raising systems as the channel's
 `x-publisher` and the receiving ones as `x-subscriber`. The event-flow diagram draws the
-systems and a `delivers` edge. `lint` `orphan-node` names an external system that no
-event reaches.
+systems and a `delivers` edge. `lint` `rdra-extsystem-no-buc` names an external system that no
+event in a BUC reaches.
 
 APIs are the operation boundary between a use case and the data it changes. Systems
 group APIs, DTOs give them payload contracts, and permissions and media say who may
@@ -894,6 +894,47 @@ A body is stored and validated, and nothing checks it yet: `states` and the TLA+
 it, and `verify` prints `condition InsuredVisit: body stored, not yet checked (phase 4)` for
 each one so a passing run does not imply otherwise. A body may name columns of two entities;
 this version does not check that a relation path joins them.
+
+### RDRA lint rules
+
+<!-- derived-from #conditions -->
+<!-- constrained-by ./rdra-ish-interpretation.md#the-rdra-sheets-不整合-columns -->
+
+The RDRA definition sheet has 15 不整合 columns. Each is a check that something is either
+referenced but undefined, or defined but connected to no BUC. `crates/rdra-ish-core/src/rdra_rules.rs`
+holds them as one table, `RDRA_RULES`, with the sheet column, the mechanism that enforces
+the row, a hint, and a witness model that a unit test loads to prove the row fires. Adding a rule is
+adding a row.
+
+| Mechanism | What it checks | Where it shows |
+|---|---|---|
+| `Resolver` | The name is referenced but undefined. A language with symbols already refuses it, so the row names the diagnostic that covers the column. | `check` and `lint` error |
+| `BucReach` | Every element of the row's kind is in the forward closure of some BUC, or is the `from` of a relation into that closure (an actor that performs a use case, a condition that applies to one, a timer that triggers one). A variation also counts when it types a column of such an entity. | `lint` warning |
+| `TransitionUseCaseInBuc` | Every use case that a `transitions` names is in a BUC's closure. | `lint` warning |
+
+The closure is `reachable_from_buc`, computed once per lint run over every BUC. A kind that a
+`BucReach` row owns is no longer reported by `orphan-node`, so one element draws one finding.
+
+| Rule id | Sheet | Column | Mechanism | Fix |
+|---|---|---|---|---|
+| `rdra-buc-actor-undefined` | BUC | アクター | Resolver `UndefinedSymbol` | declare the actor or fix the name |
+| `rdra-buc-extsystem-undefined` | BUC | 外部システム | Resolver `UndefinedSymbol` | declare the extsystem or fix the name |
+| `rdra-buc-information-undefined` | BUC | 情報 | Resolver `UndefinedSymbol` | declare the entity or fix the name |
+| `rdra-buc-condition-undefined` | BUC | 条件 | Resolver `UndefinedSymbol` | declare the condition or fix the name |
+| `rdra-info-related-undefined` | 情報 | 関連情報 | Resolver `UndefinedSymbol` | declare the related entity |
+| `rdra-info-statemodel-undefined` | 情報 | 状態モデル | Resolver `UnknownColumn` | name an existing Enum column |
+| `rdra-info-variation-undefined` | 情報 | バリエーション | Resolver `UnknownColumnType` | declare the variation or use an inline Enum |
+| `rdra-state-uc-undefined` | 状態 | 遷移UC | Resolver `UndefinedSymbol` | declare the use case |
+| `rdra-state-target-undefined` | 状態 | 遷移先状態 | Resolver `InvalidEnumVariant` | use a declared Enum variant |
+| `rdra-cond-variation-undefined` | 条件 | バリエーション | Resolver `UndefinedSymbol` | declare the variation |
+| `rdra-cond-statemodel-undefined` | 条件 | 状態モデル | Resolver `ConditionCombinesAttribute` | combine a lifecycle column |
+| `rdra-actor-no-buc` | BUC | アクター 未接続 | `BucReach` actor | `performs(Actor, UseCase | Buc)`, or delete the actor |
+| `rdra-extsystem-no-buc` | BUC | 外部システム 未接続 | `BucReach` extsystem | `raises` or `triggers` through an event a BUC uses, or delete it |
+| `rdra-entity-no-buc` | BUC | 情報 未接続 | `BucReach` entity | reach it from a use case through an API, or delete it |
+| `rdra-condition-no-buc` | BUC | 条件 未接続 | `BucReach` condition | `applies_to(Condition, UseCase)`, or delete it |
+| `rdra-variation-no-buc` | rdra-ish | (none) | `BucReach` variation | type a column of a reached entity with it, or delete it |
+| `rdra-timer-no-buc` | rdra-ish | (none) | `BucReach` timer | `triggers(Timer, UseCase | Buc)`, or delete it |
+| `rdra-transition-uc-no-buc` | rdra-ish | 遷移UC は BUC シートで定義 | `TransitionUseCaseInBuc` | `contains(Buc, UseCase)` for the transitioning use case |
 
 ### `relate` and FK generation
 

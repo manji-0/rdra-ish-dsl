@@ -125,6 +125,11 @@ entity Order "Order" {
     assert!(csv.contains("api-contract-incomplete"));
     assert!(csv.contains("field-unmapped"));
     assert!(csv.contains("naming-column"));
+    assert!(csv.contains("rdra-actor-no-buc"));
+    assert!(csv.contains("rdra-entity-no-buc"));
+    assert!(!csv.contains("orphan-node,actor"));
+    let json = format_lint_issues(&issues, &ListFormat::Json).unwrap();
+    assert!(json.contains("\"rdra-actor-no-buc\""));
 }
 
 #[test]

@@ -166,6 +166,42 @@ columns it names rather than declared a second time, so the two cannot drift. In
 version the body is stored and validated but no engine reads it; a later phase compiles it
 to a guard on the use cases the condition applies to, and the syntax does not change.
 
+## The RDRA Sheet's 不整合 Columns
+
+<!-- constrained-by ./vision.md#decisions -->
+<!-- derived-from ./language-reference.md#rdra-lint-rules -->
+
+The RDRA definition sheet closes each sheet with 不整合 columns. Each flags a name that is
+used but not defined, or an element that is defined but connected to no BUC. rdra-ish keeps
+all 15 and turns them into rules. The 11 "undefined" columns are already errors, because a
+language with symbols refuses an unresolved name. The 4 "unconnected" columns are lint
+warnings that walk the closure of every BUC.
+
+| Sheet | Column | Rule id |
+|---|---|---|
+| BUC | アクター 未定義 | `rdra-buc-actor-undefined` |
+| BUC | 外部システム 未定義 | `rdra-buc-extsystem-undefined` |
+| BUC | 情報 未定義 | `rdra-buc-information-undefined` |
+| BUC | 条件 未定義 | `rdra-buc-condition-undefined` |
+| 情報 | 関連情報 未定義 | `rdra-info-related-undefined` |
+| 情報 | 状態モデル 未定義 | `rdra-info-statemodel-undefined` |
+| 情報 | バリエーション 未定義 | `rdra-info-variation-undefined` |
+| 状態 | 遷移UC 未定義 | `rdra-state-uc-undefined` |
+| 状態 | 遷移先状態 未定義 | `rdra-state-target-undefined` |
+| 条件 | バリエーション 未定義 | `rdra-cond-variation-undefined` |
+| 条件 | 状態モデル 未定義 | `rdra-cond-statemodel-undefined` |
+| BUC | アクター 未接続 | `rdra-actor-no-buc` |
+| BUC | 外部システム 未接続 | `rdra-extsystem-no-buc` |
+| BUC | 情報 未接続 | `rdra-entity-no-buc` |
+| BUC | 条件 未接続 | `rdra-condition-no-buc` |
+
+rdra-ish adds three rows of its own. `rdra-variation-no-buc` and `rdra-timer-no-buc` extend
+the same check to the two kinds RDRA has no unconnected column for, and
+`rdra-transition-uc-no-buc` says a transition's use case must be one a BUC defines, as the
+sheet's 遷移UC column does. An element that a rule owns is no longer reported by
+`orphan-node`. Phase 3 of [vision.md](./vision.md) requires the clinic-ops sample to pass
+every rule.
+
 ## Reading The Three Together
 
 The practical reading is:

@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use crate::diagnostics::{Diagnostic, RdraError};
 use crate::location::LocatedSpan;
 use crate::model::{node_ref_kind, ColumnType, NodeRef, RelKind, SemanticModel, StateKey, StepKey};
+use crate::rdra_rules::{owned_by_registry, rdra_findings};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LintSeverity {
@@ -172,7 +173,7 @@ fn collect_findings(model: &SemanticModel) -> Vec<LintIssue> {
         let decl_kind = node_ref_kind(&node);
         let subject_kind = node_kind_display(&node);
 
-        if degree.get(&node).copied().unwrap_or(0) == 0 {
+        if degree.get(&node).copied().unwrap_or(0) == 0 && !owned_by_registry(&node) {
             push_element_lint(
                 model,
                 &mut findings,
@@ -205,11 +206,12 @@ fn collect_findings(model: &SemanticModel) -> Vec<LintIssue> {
     lint_column_names(model, &mut findings);
     lint_enum_attributes(model, &mut findings);
     lint_condition_anchors(model, &mut findings);
+    findings.extend(rdra_findings(model));
     findings
 }
 
 #[allow(clippy::too_many_arguments)]
-fn push_element_lint(
+pub(crate) fn push_element_lint(
     model: &SemanticModel,
     issues: &mut Vec<LintIssue>,
     decl_kind: &str,
@@ -945,7 +947,7 @@ fn lint_node_refs(model: &SemanticModel) -> Vec<NodeRef> {
     nodes
 }
 
-fn node_kind_display(node: &NodeRef) -> String {
+pub(crate) fn node_kind_display(node: &NodeRef) -> String {
     match node {
         NodeRef::Actor(_) => "actor".to_string(),
         NodeRef::ExtSystem(_) => "extsystem".to_string(),
@@ -975,7 +977,7 @@ fn node_kind_display(node: &NodeRef) -> String {
     }
 }
 
-fn node_id(model: &SemanticModel, node: &NodeRef) -> Option<String> {
+pub(crate) fn node_id(model: &SemanticModel, node: &NodeRef) -> Option<String> {
     Some(match node {
         NodeRef::Actor(key) => model.actors.get(*key)?.id.clone(),
         NodeRef::ExtSystem(key) => model.ext_systems.get(*key)?.id.clone(),
@@ -1196,9 +1198,14 @@ sets(Place, Order, priority == high)
     }
 
     #[test]
-    fn variation_typing_a_column_is_not_an_orphan() {
+    fn variation_typing_a_column_of_a_reached_entity_is_anchored() {
         let model = model_from(
             r#"
+buc B "B"
+usecase U "U"
+contains(B, U)
+api Ap "Ap"
+invokes(U, Ap)
 variation Used "Used" {
   a
 }
@@ -1209,14 +1216,19 @@ entity E "E" {
   Id: Int @pk
   kind: Used
 }
+reads(Ap, E)
 "#,
         );
-        let orphans: Vec<_> = collect_findings(&model)
+        let findings = collect_findings(&model);
+        assert!(!findings
+            .iter()
+            .any(|i| i.rule == "orphan-node" && i.subject_kind == "variation"));
+        let unconnected: Vec<_> = findings
             .into_iter()
-            .filter(|i| i.rule == "orphan-node" && i.subject_kind == "variation")
+            .filter(|i| i.rule == "rdra-variation-no-buc")
             .map(|i| i.subject_id)
             .collect();
-        assert_eq!(orphans, vec!["Unused".to_string()]);
+        assert_eq!(unconnected, vec!["Unused".to_string()]);
     }
 
     #[test]

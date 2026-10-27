@@ -12,6 +12,7 @@ pub mod lint;
 pub mod location;
 pub mod model;
 pub mod predicate;
+pub mod rdra_rules;
 pub mod resolver;
 pub mod state_pattern;
 pub mod system;

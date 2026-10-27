@@ -96,6 +96,13 @@ It also emits two `info` rows:
 - `enum-attribute` warns on an inline `Enum` column that no `transitions` and no `sets`
   moves. Its value is chosen by an actor, so the hint is to type the column by a
   [`variation`](./language-reference.md#variations).
+- `rdra-*` rules are the RDRA definition sheet's 不整合 columns that lint enforces: an actor,
+  external system, entity, condition, variation, or timer that no BUC reaches
+  (`rdra-actor-no-buc`, `rdra-extsystem-no-buc`, `rdra-entity-no-buc`,
+  `rdra-condition-no-buc`, `rdra-variation-no-buc`, `rdra-timer-no-buc`), and a use case
+  named by `transitions` that no BUC contains (`rdra-transition-uc-no-buc`). They replace
+  `orphan-node` for those kinds. The "undefined" columns are `check` errors. See
+  [RDRA lint rules](./language-reference.md#rdra-lint-rules).
 - `condition-no-rdra-anchor` warns on a [condition](./language-reference.md#conditions) whose
   `holds` body names neither a variation-typed column nor a lifecycle column.
 
