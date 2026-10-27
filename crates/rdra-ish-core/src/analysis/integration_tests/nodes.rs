@@ -18,22 +18,15 @@ fn node_kind_tag_str_labels_each_node_ref_kind() {
         (Kind::Nfr, "NfrA", "nfr"),
         (Kind::Quality, "QualityA", "quality"),
         (Kind::Constraint, "ConstraintA", "constraint"),
-        (Kind::Concept, "ConceptA", "concept"),
-        (Kind::DomainObject, "DomainObjectA", "domain_object"),
-        (Kind::Aggregate, "AggregateA", "aggregate"),
-        (Kind::ValueObject, "ValueObjectA", "valueobject"),
         (Kind::Business, "BusinessA", "business"),
         (Kind::Buc, "BucA", "buc"),
         (Kind::Flow, "FlowA", "flow"),
         (Kind::Step, "StepA", "step"),
-        (Kind::UsageScene, "SceneA", "usagescene"),
         (Kind::UseCase, "UsecaseA", "usecase"),
         (Kind::Screen, "ScreenA", "screen"),
         (Kind::Field, "FieldA", "field"),
         (Kind::Event, "EventA", "event"),
         (Kind::State, "StateA", "state"),
-        (Kind::Condition, "ConditionA", "condition"),
-        (Kind::Variation, "VariationA", "variation"),
         (Kind::Api, "ApiA", "api"),
         (Kind::Dto, "DtoA", "dto"),
         (Kind::Location, "LocationA", "location"),
@@ -71,12 +64,7 @@ fn node_kind_tag_str_labels_each_node_ref_kind() {
     };
     register_instance(&mut model, &entity_inst, DiagCtxt::new(0), &mut diags);
 
-    let unexpected: Vec<_> = diags
-        .iter()
-        .filter(|d| {
-            !d.is_warning || !matches!(&d.error, crate::diagnostics::RdraError::ReservedKind { .. })
-        })
-        .collect();
+    let unexpected = &diags;
     assert!(
         unexpected.is_empty(),
         "unexpected diagnostics: {unexpected:?}"

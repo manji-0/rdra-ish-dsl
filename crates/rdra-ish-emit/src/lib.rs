@@ -170,17 +170,10 @@ pub(crate) fn object_graph_layer(node: &NodeRef) -> ObjectGraphLayer {
         NodeRef::ExtSystem(_)
         | NodeRef::Quality(_)
         | NodeRef::Constraint(_)
-        | NodeRef::Concept(_)
-        | NodeRef::DomainObject(_)
-        | NodeRef::Aggregate(_)
-        | NodeRef::ValueObject(_)
         | NodeRef::Business(_)
         | NodeRef::Buc(_)
         | NodeRef::Flow(_)
         | NodeRef::Step(_)
-        | NodeRef::UsageScene(_)
-        | NodeRef::Condition(_)
-        | NodeRef::Variation(_)
         | NodeRef::Location(_)
         | NodeRef::Timing(_)
         | NodeRef::Medium(_)
@@ -230,7 +223,6 @@ pub(crate) fn object_graph_rel_label(kind: &RelKind) -> &'static str {
         RelKind::AppliesTo => "applies_to",
         RelKind::Qualifies => "qualifies",
         RelKind::Constrains => "constrains",
-        RelKind::MapsTo => "maps_to",
         RelKind::MapsField => "maps_field",
         RelKind::Owns => "owns",
         RelKind::RelateOneToOne => "1:1",
@@ -254,23 +246,16 @@ pub const KNOWN_DIAGRAM_NODE_KINDS: &[&str] = &[
     "nfr",
     "quality",
     "constraint",
-    "concept",
-    "domain-object",
-    "aggregate",
-    "value-object",
     "business",
     "buc",
     "flow",
     "step",
-    "usagescene",
     "usecase",
     "screen",
     "field",
     "event",
     "entity",
     "state",
-    "condition",
-    "variation",
     "api",
     "dto",
     "location",
@@ -314,7 +299,6 @@ pub const KNOWN_DIAGRAM_EDGE_KINDS: &[&str] = &[
     "applies-to",
     "qualifies",
     "constrains",
-    "maps-to",
     "maps-field",
     "owns",
     "relate",
@@ -352,23 +336,16 @@ pub(crate) fn node_kind_filter_name(node: &NodeRef) -> &'static str {
         NodeRef::Nfr(_) => "nfr",
         NodeRef::Quality(_) => "quality",
         NodeRef::Constraint(_) => "constraint",
-        NodeRef::Concept(_) => "concept",
-        NodeRef::DomainObject(_) => "domain-object",
-        NodeRef::Aggregate(_) => "aggregate",
-        NodeRef::ValueObject(_) => "value-object",
         NodeRef::Business(_) => "business",
         NodeRef::Buc(_) => "buc",
         NodeRef::Flow(_) => "flow",
         NodeRef::Step(_) => "step",
-        NodeRef::UsageScene(_) => "usagescene",
         NodeRef::UseCase(_) => "usecase",
         NodeRef::Screen(_) => "screen",
         NodeRef::Field(_) => "field",
         NodeRef::Event(_) => "event",
         NodeRef::Entity(_) => "entity",
         NodeRef::State(_) => "state",
-        NodeRef::Condition(_) => "condition",
-        NodeRef::Variation(_) => "variation",
         NodeRef::Api(_) => "api",
         NodeRef::Dto(_) => "dto",
         NodeRef::Location(_) => "location",
@@ -420,17 +397,10 @@ pub(crate) fn node_description<'a>(model: &'a SemanticModel, node: &NodeRef) -> 
         NodeRef::Nfr(key) => model.nfrs.get(*key)?.description.as_deref(),
         NodeRef::Quality(key) => model.qualities.get(*key)?.description.as_deref(),
         NodeRef::Constraint(key) => model.constraints.get(*key)?.description.as_deref(),
-        NodeRef::Concept(key) => model.concepts.get(*key)?.description.as_deref(),
-        NodeRef::DomainObject(key) => model.domain_objects.get(*key)?.description.as_deref(),
-        NodeRef::Aggregate(key) => model.aggregates.get(*key)?.description.as_deref(),
-        NodeRef::ValueObject(key) => model.value_objects.get(*key)?.description.as_deref(),
         NodeRef::Business(key) => model.businesses.get(*key)?.description.as_deref(),
         NodeRef::Buc(key) => model.bucs.get(*key)?.description.as_deref(),
         NodeRef::Flow(key) => model.flows.get(*key)?.description.as_deref(),
         NodeRef::Step(key) => model.steps.get(*key)?.description.as_deref(),
-        NodeRef::UsageScene(key) => model.usage_scenes.get(*key)?.description.as_deref(),
-        NodeRef::Condition(key) => model.conditions.get(*key)?.description.as_deref(),
-        NodeRef::Variation(key) => model.variations.get(*key)?.description.as_deref(),
         NodeRef::Location(key) => model.locations.get(*key)?.description.as_deref(),
         NodeRef::Timing(key) => model.timings.get(*key)?.description.as_deref(),
         NodeRef::Medium(key) => model.media.get(*key)?.description.as_deref(),
@@ -456,23 +426,16 @@ pub(crate) fn node_emoji(node: &NodeRef) -> &'static str {
         NodeRef::Nfr(_) => "📈",
         NodeRef::Quality(_) => "✨",
         NodeRef::Constraint(_) => "⚖️",
-        NodeRef::Concept(_) => "💡",
-        NodeRef::DomainObject(_) => "🧠",
-        NodeRef::Aggregate(_) => "🧱",
-        NodeRef::ValueObject(_) => "🔹",
         NodeRef::Business(_) => "💼",
         NodeRef::Buc(_) => "📦",
         NodeRef::Flow(_) => "🧭",
         NodeRef::Step(_) => "➡️",
-        NodeRef::UsageScene(_) => "🎬",
         NodeRef::UseCase(_) => "✅",
         NodeRef::Screen(_) => "🖥️",
         NodeRef::Field(_) => "🔤",
         NodeRef::Event(_) => "⚡",
         NodeRef::Entity(_) => "🗄️",
         NodeRef::State(_) => "🔄",
-        NodeRef::Condition(_) => "❓",
-        NodeRef::Variation(_) => "🔀",
         NodeRef::Api(_) => "🔌",
         NodeRef::Dto(_) => "📄",
         NodeRef::Location(_) => "📍",
@@ -548,42 +511,6 @@ pub(crate) fn collect_object_graph_nodes(
             .filter(|nr| is_visible(nr)),
     );
 
-    let mut concepts: Vec<_> = model.concepts.iter().collect();
-    concepts.sort_by_key(|(_, c)| &c.id);
-    nodes.extend(
-        concepts
-            .into_iter()
-            .map(|(k, _)| NodeRef::Concept(k))
-            .filter(|nr| is_visible(nr)),
-    );
-
-    let mut domain_objects: Vec<_> = model.domain_objects.iter().collect();
-    domain_objects.sort_by_key(|(_, d)| &d.id);
-    nodes.extend(
-        domain_objects
-            .into_iter()
-            .map(|(k, _)| NodeRef::DomainObject(k))
-            .filter(|nr| is_visible(nr)),
-    );
-
-    let mut aggregates: Vec<_> = model.aggregates.iter().collect();
-    aggregates.sort_by_key(|(_, a)| &a.id);
-    nodes.extend(
-        aggregates
-            .into_iter()
-            .map(|(k, _)| NodeRef::Aggregate(k))
-            .filter(|nr| is_visible(nr)),
-    );
-
-    let mut value_objects: Vec<_> = model.value_objects.iter().collect();
-    value_objects.sort_by_key(|(_, v)| &v.id);
-    nodes.extend(
-        value_objects
-            .into_iter()
-            .map(|(k, _)| NodeRef::ValueObject(k))
-            .filter(|nr| is_visible(nr)),
-    );
-
     let mut businesses: Vec<_> = model.businesses.iter().collect();
     businesses.sort_by_key(|(_, b)| &b.id);
     nodes.extend(
@@ -616,33 +543,6 @@ pub(crate) fn collect_object_graph_nodes(
         steps
             .into_iter()
             .map(|(k, _)| NodeRef::Step(k))
-            .filter(|nr| is_visible(nr)),
-    );
-
-    let mut scenes: Vec<_> = model.usage_scenes.iter().collect();
-    scenes.sort_by_key(|(_, u)| &u.id);
-    nodes.extend(
-        scenes
-            .into_iter()
-            .map(|(k, _)| NodeRef::UsageScene(k))
-            .filter(|nr| is_visible(nr)),
-    );
-
-    let mut conditions: Vec<_> = model.conditions.iter().collect();
-    conditions.sort_by_key(|(_, c)| &c.id);
-    nodes.extend(
-        conditions
-            .into_iter()
-            .map(|(k, _)| NodeRef::Condition(k))
-            .filter(|nr| is_visible(nr)),
-    );
-
-    let mut variations: Vec<_> = model.variations.iter().collect();
-    variations.sort_by_key(|(_, v)| &v.id);
-    nodes.extend(
-        variations
-            .into_iter()
-            .map(|(k, _)| NodeRef::Variation(k))
             .filter(|nr| is_visible(nr)),
     );
 
@@ -787,18 +687,11 @@ mod tests {
             NodeRef::Nfr(k) => model.nfrs[*k].id.clone(),
             NodeRef::Quality(k) => model.qualities[*k].id.clone(),
             NodeRef::Constraint(k) => model.constraints[*k].id.clone(),
-            NodeRef::Concept(k) => model.concepts[*k].id.clone(),
-            NodeRef::DomainObject(k) => model.domain_objects[*k].id.clone(),
-            NodeRef::Aggregate(k) => model.aggregates[*k].id.clone(),
-            NodeRef::ValueObject(k) => model.value_objects[*k].id.clone(),
             NodeRef::ExtSystem(k) => model.ext_systems[*k].id.clone(),
             NodeRef::Business(k) => model.businesses[*k].id.clone(),
             NodeRef::Buc(k) => model.bucs[*k].id.clone(),
             NodeRef::Flow(k) => model.flows[*k].id.clone(),
             NodeRef::Step(k) => model.steps[*k].id.clone(),
-            NodeRef::UsageScene(k) => model.usage_scenes[*k].id.clone(),
-            NodeRef::Condition(k) => model.conditions[*k].id.clone(),
-            NodeRef::Variation(k) => model.variations[*k].id.clone(),
             NodeRef::Location(k) => model.locations[*k].id.clone(),
             NodeRef::Timing(k) => model.timings[*k].id.clone(),
             NodeRef::Medium(k) => model.media[*k].id.clone(),
@@ -826,17 +719,10 @@ nfr Latency "Latency"
 extsystem Ext "External"
 quality Performance "Performance"
 constraint Retention "Retention"
-concept PatientIdentity "Patient identity"
-domain_object Appointment "Appointment"
-aggregate SchedulingAggregate "Scheduling aggregate"
-valueobject TimeSlot "Time slot"
 business Biz "Business"
 buc Buc "BUC"
 flow Flow "Flow"
 step Step "Step"
-usagescene Scene "Scene"
-condition Cond "Condition"
-variation Var "Variation"
 location Loc "Location"
 timing Time "Timing"
 medium Med "Medium"
@@ -868,17 +754,10 @@ state State "State"
                 "Ext",
                 "Performance",
                 "Retention",
-                "PatientIdentity",
-                "Appointment",
-                "SchedulingAggregate",
-                "TimeSlot",
                 "Biz",
                 "Buc",
                 "Flow",
                 "Step",
-                "Scene",
-                "Cond",
-                "Var",
                 "Loc",
                 "Time",
                 "Med",

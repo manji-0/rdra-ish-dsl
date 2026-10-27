@@ -1,11 +1,11 @@
 //! 述語呼び出しの型付き discriminated union 構築・集約 API。
 
 use crate::model::{
-    ActorKey, AdrKey, ApiKey, AppliesToTarget, BucKey, BusinessKey, Cardinality, ConceptualRef,
-    ConstrainsTarget, ConstraintKey, ContainedRef, ContainerRef, CoversTarget, DecidesTarget,
-    DtoKey, EntityKey, EntityTouchpoint, EventKey, ExtSystemKey, FieldKey, MediumKey, NfrKey,
-    NfrOrConstraint, NodeRef, PerformTarget, PermissionKey, QualityKey, RequirementKey, ScreenKey,
-    SemanticModel, StepKey, SystemKey, TriggerTarget, TypedPredicate, UseCaseKey,
+    ActorKey, AdrKey, ApiKey, AppliesToTarget, BucKey, BusinessKey, Cardinality, ConstrainsTarget,
+    ConstraintKey, ContainedRef, ContainerRef, CoversTarget, DecidesTarget, DtoKey, EntityKey,
+    EntityTouchpoint, EventKey, ExtSystemKey, FieldKey, MediumKey, NfrKey, NfrOrConstraint,
+    NodeRef, PerformTarget, PermissionKey, QualityKey, RequirementKey, ScreenKey, SemanticModel,
+    StepKey, SystemKey, TriggerTarget, TypedPredicate, UseCaseKey,
 };
 use rdra_ish_syntax::ast::{PredicateArg, PredicateCall};
 
@@ -170,10 +170,6 @@ pub fn build_typed_predicate(
                     from: as_usecase(from)?,
                     to: as_usecase(to)?,
                 }),
-                "maps_to" => Some(TypedPredicate::MapsTo {
-                    source: ConceptualRef::from_node_ref(from)?,
-                    entity: as_entity(to)?,
-                }),
                 "belongs" => Some(TypedPredicate::Belongs {
                     buc: as_buc(from)?,
                     business: as_business(to)?,
@@ -239,7 +235,6 @@ pub fn typed_predicate_name(pred: &TypedPredicate) -> &'static str {
         TypedPredicate::Repeats { .. } => "repeats",
         TypedPredicate::Covers { .. } => "covers",
         TypedPredicate::Compensates { .. } => "compensates",
-        TypedPredicate::MapsTo { .. } => "maps_to",
         TypedPredicate::Coordinates { .. } => "coordinates",
         TypedPredicate::Belongs { .. } => "belongs",
         TypedPredicate::HasPermission { .. } => "has_permission",
@@ -338,12 +333,10 @@ entity Appointment "Appointment" {
   id: Int @pk
   status: Enum(draft, booked) @default(draft)
 }
-domain_object Appt "Appointment"
 event EvBook "Booked"
 performs(Staff, Book)
 creates(Book, Appointment)
 raises(Book, EvBook)
-maps_to(Appt, Appointment)
 transitions(Appointment.status, EvBook, draft -> booked)
 "#,
         );
@@ -358,9 +351,6 @@ transitions(Appointment.status, EvBook, draft -> booked)
         assert!(predicates
             .iter()
             .any(|p| matches!(p, TypedPredicate::Raises { .. })));
-        assert!(predicates
-            .iter()
-            .any(|p| matches!(p, TypedPredicate::MapsTo { .. })));
         assert!(predicates
             .iter()
             .any(|p| matches!(p, TypedPredicate::Transitions { .. })));

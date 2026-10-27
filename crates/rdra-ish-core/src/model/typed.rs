@@ -1,9 +1,8 @@
 use super::comparison::ComparisonProp;
 use super::keys::*;
 use super::refs::{
-    AppliesToTarget, Cardinality, ConceptualRef, ConstrainsTarget, ContainedRef, ContainerRef,
-    CoversTarget, DataOrigin, DecidesTarget, EntityTouchpoint, NfrOrConstraint, PerformTarget,
-    TriggerTarget,
+    AppliesToTarget, Cardinality, ConstrainsTarget, ContainedRef, ContainerRef, CoversTarget,
+    DataOrigin, DecidesTarget, EntityTouchpoint, NfrOrConstraint, PerformTarget, TriggerTarget,
 };
 
 /// 解析済み述語の型付き表現（discriminated union）。
@@ -112,10 +111,6 @@ pub enum TypedPredicate {
     Compensates {
         from: UseCaseKey,
         to: UseCaseKey,
-    },
-    MapsTo {
-        source: ConceptualRef,
-        entity: EntityKey,
     },
     Coordinates {
         usecase: UseCaseKey,

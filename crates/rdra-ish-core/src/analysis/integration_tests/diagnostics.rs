@@ -314,44 +314,6 @@ relate(A, B, N:M).via(MissingJunction)
 }
 
 #[test]
-fn test_reserved_kind_condition_warns() {
-    let src = r#"
-condition SomeCondition "reserved"
-variation SomeVariation "reserved"
-"#;
-    let (ast, _) = parse(src);
-    let (_, diags) = build_model(&ast);
-    let warnings: Vec<_> = diags.iter().filter(|d| d.is_warning).collect();
-    assert!(
-        warnings.iter().any(|d| matches!(
-            &d.error,
-            RdraError::ReservedKind { kind } if kind == "condition"
-        )),
-        "{:?}",
-        warnings
-            .iter()
-            .map(|d| d.error.to_string())
-            .collect::<Vec<_>>()
-    );
-    assert!(
-        warnings.iter().any(|d| matches!(
-            &d.error,
-            RdraError::ReservedKind { kind } if kind == "variation"
-        )),
-        "{:?}",
-        warnings
-            .iter()
-            .map(|d| d.error.to_string())
-            .collect::<Vec<_>>()
-    );
-    let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
-    assert!(
-        errors.is_empty(),
-        "reserved kinds must not be hard errors: {errors:?}"
-    );
-}
-
-#[test]
 fn test_via_only_for_nm() {
     let src = r#"
 entity A "A" { id: Int @pk }

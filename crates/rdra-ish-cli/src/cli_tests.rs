@@ -563,34 +563,6 @@ constraint AuditRetention "Audit retention"
 }
 
 #[test]
-fn list_conceptual_model_elements_separately_from_entities() {
-    use rdra_ish_core::build_model;
-    use rdra_ish_syntax::parse;
-
-    let src = r#"
-concept CarePlan "Care plan"
-domain_object Appointment "Appointment"
-aggregate SchedulingAggregate "Scheduling aggregate"
-valueobject TimeSlot "Time slot"
-entity AppointmentTable "appointment table" { id: Int @pk }
-maps_to(Appointment, AppointmentTable)
-"#;
-    let (ast, parse_errors) = parse(src);
-    assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
-    let (model, diags) = build_model(&ast);
-    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
-
-    let concept_csv = list_elements(&model, &ListKind::Concept, &ListFormat::Csv).unwrap();
-    let domain_csv = list_elements(&model, &ListKind::DomainObject, &ListFormat::Csv).unwrap();
-    let entity_csv = list_elements(&model, &ListKind::Entity, &ListFormat::Csv).unwrap();
-
-    assert!(concept_csv.contains("CarePlan,Care plan"));
-    assert!(domain_csv.contains("Appointment,Appointment"));
-    assert!(entity_csv.contains("AppointmentTable,appointment table"));
-    assert!(!entity_csv.contains("CarePlan"));
-}
-
-#[test]
 fn table_list_reports_empty_entity_result() {
     let model = SemanticModel::default();
 

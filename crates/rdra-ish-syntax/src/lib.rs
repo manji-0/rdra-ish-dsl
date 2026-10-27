@@ -4,6 +4,7 @@ pub mod ast;
 pub mod format;
 pub mod parse_error;
 pub mod parser;
+pub mod removed;
 pub mod token;
 
 pub use ast::*;

@@ -11,23 +11,16 @@ pub enum NodeRef {
     Nfr(NfrKey),
     Quality(QualityKey),
     Constraint(ConstraintKey),
-    Concept(ConceptKey),
-    DomainObject(DomainObjectKey),
-    Aggregate(AggregateKey),
-    ValueObject(ValueObjectKey),
     Business(BusinessKey),
     Buc(BucKey),
     Flow(FlowKey),
     Step(StepKey),
-    UsageScene(UsageSceneKey),
     UseCase(UseCaseKey),
     Screen(ScreenKey),
     Field(FieldKey),
     Event(EventKey),
     Entity(EntityKey),
     State(StateKey),
-    Condition(ConditionKey),
-    Variation(VariationKey),
     Api(ApiKey),
     Dto(DtoKey),
     Location(LocationKey),
@@ -71,7 +64,6 @@ pub enum RelKind {
     AppliesTo,
     Qualifies,
     Constrains,
-    MapsTo,
     MapsField,
     Owns,
     // Entity ER
@@ -132,43 +124,6 @@ pub struct FieldMapping {
     pub field: FieldKey,
     pub entity: EntityKey,
     pub column: std::string::String,
-}
-
-/// 概念モデル要素への参照（`maps_to` の source 側）。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ConceptualRef {
-    Concept(ConceptKey),
-    DomainObject(DomainObjectKey),
-    Aggregate(AggregateKey),
-    ValueObject(ValueObjectKey),
-}
-
-impl ConceptualRef {
-    pub fn as_node_ref(&self) -> NodeRef {
-        match self {
-            ConceptualRef::Concept(k) => NodeRef::Concept(*k),
-            ConceptualRef::DomainObject(k) => NodeRef::DomainObject(*k),
-            ConceptualRef::Aggregate(k) => NodeRef::Aggregate(*k),
-            ConceptualRef::ValueObject(k) => NodeRef::ValueObject(*k),
-        }
-    }
-
-    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
-        match node {
-            NodeRef::Concept(k) => Some(ConceptualRef::Concept(*k)),
-            NodeRef::DomainObject(k) => Some(ConceptualRef::DomainObject(*k)),
-            NodeRef::Aggregate(k) => Some(ConceptualRef::Aggregate(*k)),
-            NodeRef::ValueObject(k) => Some(ConceptualRef::ValueObject(*k)),
-            _ => None,
-        }
-    }
-}
-
-/// `maps_to(Conceptual, Entity)` で宣言される概念→論理データモデル対応。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ConceptMapping {
-    pub source: ConceptualRef,
-    pub entity: EntityKey,
 }
 
 /// usecase / api が entity を操作する際の起点。
@@ -245,7 +200,6 @@ pub enum ContainerRef {
     Buc(BucKey),
     System(SystemKey),
     Flow(FlowKey),
-    Aggregate(AggregateKey),
     Screen(ScreenKey),
 }
 
@@ -255,7 +209,6 @@ impl ContainerRef {
             NodeRef::Buc(k) => Some(ContainerRef::Buc(*k)),
             NodeRef::System(k) => Some(ContainerRef::System(*k)),
             NodeRef::Flow(k) => Some(ContainerRef::Flow(*k)),
-            NodeRef::Aggregate(k) => Some(ContainerRef::Aggregate(*k)),
             NodeRef::Screen(k) => Some(ContainerRef::Screen(*k)),
             _ => None,
         }
@@ -269,7 +222,6 @@ pub enum ContainedRef {
     Api(ApiKey),
     Flow(FlowKey),
     Step(StepKey),
-    Conceptual(ConceptualRef),
     Field(FieldKey),
 }
 
@@ -281,7 +233,7 @@ impl ContainedRef {
             NodeRef::Flow(k) => Some(ContainedRef::Flow(*k)),
             NodeRef::Step(k) => Some(ContainedRef::Step(*k)),
             NodeRef::Field(k) => Some(ContainedRef::Field(*k)),
-            other => ConceptualRef::from_node_ref(other).map(ContainedRef::Conceptual),
+            _ => None,
         }
     }
 }
@@ -375,7 +327,6 @@ pub enum DecidesTarget {
     Requirement(RequirementKey),
     Nfr(NfrKey),
     Constraint(ConstraintKey),
-    Conceptual(ConceptualRef),
     Dto(DtoKey),
 }
 
@@ -391,7 +342,7 @@ impl DecidesTarget {
             NodeRef::Nfr(k) => Some(DecidesTarget::Nfr(*k)),
             NodeRef::Constraint(k) => Some(DecidesTarget::Constraint(*k)),
             NodeRef::Dto(k) => Some(DecidesTarget::Dto(*k)),
-            other => ConceptualRef::from_node_ref(other).map(DecidesTarget::Conceptual),
+            _ => None,
         }
     }
 }

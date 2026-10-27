@@ -11,12 +11,6 @@ pub(crate) enum ListKind {
     Nfr,
     Quality,
     Constraint,
-    Concept,
-    #[value(alias = "domain_object")]
-    DomainObject,
-    Aggregate,
-    #[value(alias = "valueobject")]
-    ValueObject,
     Buc,
     Flow,
     Step,
@@ -119,7 +113,7 @@ pub(crate) enum Commands {
     List {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Element kind to list: actor, entity, requirement, adr, adr-impact, nfr, quality, constraint, concept, domain-object, aggregate, value-object, buc, flow, step, usecase, field, system, api, dto, permission-callables, actor-permission-audit, or business-inputs
+        /// Element kind to list: actor, entity, requirement, adr, adr-impact, nfr, quality, constraint, buc, flow, step, usecase, field, system, api, dto, permission-callables, actor-permission-audit, or business-inputs
         #[arg(long, default_value = "actor")]
         kind: ListKind,
         /// Output format: table, json, csv

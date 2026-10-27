@@ -116,9 +116,6 @@ fn validate_contains_pair(
                 | (NodeRef::Flow(_), NodeRef::Step(_))
                 | (NodeRef::Screen(_), NodeRef::Field(_))
                 | (NodeRef::System(_), NodeRef::Api(_))
-                | (NodeRef::Aggregate(_), NodeRef::DomainObject(_))
-                | (NodeRef::Aggregate(_), NodeRef::ValueObject(_))
-                | (NodeRef::Aggregate(_), NodeRef::Concept(_))
         );
         if !valid {
             push_error(
@@ -129,7 +126,8 @@ fn validate_contains_pair(
                     pred: pred.name.clone(),
                     id: "contains pair".to_string(),
                     actual: format!("{} -> {}", node_kind_tag_str(from), node_kind_tag_str(to)),
-                    expected: "buc->usecase|buc->flow|flow->step|screen->field|system->api|aggregate->domain_object|aggregate->valueobject|aggregate->concept".to_string(),
+                    expected: "buc->usecase|buc->flow|flow->step|screen->field|system->api"
+                        .to_string(),
                 },
             );
             return false;
@@ -207,27 +205,6 @@ fn process_coordinates_predicate(model: &mut SemanticModel, resolved: &[Option<N
                     right: *right_ek,
                 });
         }
-    }
-}
-
-fn process_maps_to_predicate(model: &mut SemanticModel, resolved: &[Option<NodeRef>]) {
-    if let (Some(Some(from)), Some(Some(NodeRef::Entity(entity)))) =
-        (resolved.first(), resolved.get(1))
-    {
-        let Some(source) = ConceptualRef::from_node_ref(from) else {
-            return;
-        };
-        model.concept_mappings.push(ConceptMapping {
-            source: source.clone(),
-            entity: *entity,
-        });
-        model.relations.push(Relation {
-            from: from.clone(),
-            to: NodeRef::Entity(*entity),
-            kind: RelKind::MapsTo,
-            options: RelationOptions::default(),
-            via: None,
-        });
     }
 }
 
@@ -807,7 +784,6 @@ fn relation_kind_for_predicate(pred_name: &str) -> Option<RelKind> {
         "applies_to" => RelKind::AppliesTo,
         "qualifies" => RelKind::Qualifies,
         "constrains" => RelKind::Constrains,
-        "maps_to" => RelKind::MapsTo,
         "maps_field" => RelKind::MapsField,
         "owns" => RelKind::Owns,
         _ => return None,
@@ -1149,7 +1125,6 @@ pub(crate) fn process_predicate(
 
     match pred.name.as_str() {
         "coordinates" => process_coordinates_predicate(model, &resolved),
-        "maps_to" => process_maps_to_predicate(model, &resolved),
         "transitions" => process_transitions_predicate(model, pred, &resolved, ctx, diags),
         "outbox" => process_outbox_predicate(model, &resolved),
         "after" => process_after_predicate(model, pred, &resolved, ctx, diags),

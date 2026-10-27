@@ -1,0 +1,101 @@
+//! Migration hints for keywords and predicates removed from the DSL.
+
+const CONCEPTUAL: &str = "conceptual-model kinds were removed; model persistent structure with `entity` (and `dto` for payloads)";
+
+const HINTS: &[(&str, &str)] = &[
+    (
+        "usagescene",
+        "use `location` / `timing` for Business-BUC context",
+    ),
+    (
+        "condition",
+        "removed reserved kind; model rules with use case conditions or entity state constraints",
+    ),
+    (
+        "variation",
+        "removed reserved kind; model rules with use case conditions or entity state constraints",
+    ),
+    ("concept", CONCEPTUAL),
+    ("domain_object", CONCEPTUAL),
+    ("aggregate", CONCEPTUAL),
+    ("value_object", CONCEPTUAL),
+    ("valueobject", CONCEPTUAL),
+    (
+        "maps_to",
+        "removed with the conceptual-model kinds; model persistent structure with `entity`",
+    ),
+];
+
+/// What to do instead of a removed keyword or predicate, if `word` is one.
+pub fn migration_hint(word: &str) -> Option<String> {
+    HINTS
+        .iter()
+        .find(|(removed, _)| *removed == word)
+        .map(|(removed, hint)| format!("`{removed}` is no longer supported; {hint}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::format_parse_error;
+    use crate::parser::parse;
+
+    fn messages(src: &str) -> Vec<String> {
+        parse(src).1.iter().map(format_parse_error).collect()
+    }
+
+    #[test]
+    fn usagescene_points_to_location_and_timing() {
+        let msgs = messages("usagescene Counter \"Counter\"\n");
+        assert!(
+            msgs.iter()
+                .any(|m| m.contains("`usagescene`") && m.contains("`location` / `timing`")),
+            "{msgs:?}"
+        );
+    }
+
+    #[test]
+    fn reserved_kinds_point_to_use_case_conditions() {
+        for kw in ["condition", "variation"] {
+            let msgs = messages(&format!("{kw} X \"X\"\n"));
+            assert!(
+                msgs.iter()
+                    .any(|m| m.contains(&format!("`{kw}`")) && m.contains("use case conditions")),
+                "{kw}: {msgs:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn conceptual_kinds_point_to_entity() {
+        for kw in [
+            "concept",
+            "domain_object",
+            "aggregate",
+            "value_object",
+            "valueobject",
+        ] {
+            let msgs = messages(&format!("{kw} X \"X\"\n"));
+            assert!(
+                msgs.iter()
+                    .any(|m| m.contains(&format!("`{kw}`")) && m.contains("`entity`")),
+                "{kw}: {msgs:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn maps_to_points_to_removal_with_conceptual_kinds() {
+        let msgs = messages("maps_to(A, B)\n");
+        assert!(
+            msgs.iter()
+                .any(|m| m.contains("`maps_to`") && m.contains("conceptual-model kinds")),
+            "{msgs:?}"
+        );
+    }
+
+    #[test]
+    fn removed_words_stay_usable_as_column_names() {
+        let (_, errs) = parse("entity E \"E\" { condition: String }\n");
+        assert!(errs.is_empty(), "{errs:?}");
+    }
+}

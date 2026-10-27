@@ -55,22 +55,15 @@ fn register_instance_populates_each_node_store_and_symbol_table() {
         (Kind::Nfr, "NfrA"),
         (Kind::Quality, "QualityA"),
         (Kind::Constraint, "ConstraintA"),
-        (Kind::Concept, "ConceptA"),
-        (Kind::DomainObject, "DomainObjectA"),
-        (Kind::Aggregate, "AggregateA"),
-        (Kind::ValueObject, "ValueObjectA"),
         (Kind::Business, "BusinessA"),
         (Kind::Buc, "BucA"),
         (Kind::Flow, "FlowA"),
         (Kind::Step, "StepA"),
-        (Kind::UsageScene, "SceneA"),
         (Kind::UseCase, "UsecaseA"),
         (Kind::Screen, "ScreenA"),
         (Kind::Field, "FieldA"),
         (Kind::Event, "EventA"),
         (Kind::State, "StateA"),
-        (Kind::Condition, "ConditionA"),
-        (Kind::Variation, "VariationA"),
         (Kind::Api, "ApiA"),
         (Kind::Dto, "DtoA"),
         (Kind::Location, "LocationA"),
@@ -109,12 +102,7 @@ fn register_instance_populates_each_node_store_and_symbol_table() {
     };
     register_instance(&mut model, &entity_inst, DiagCtxt::new(0), &mut diags);
 
-    let unexpected: Vec<_> = diags
-        .iter()
-        .filter(|d| {
-            !d.is_warning || !matches!(&d.error, crate::diagnostics::RdraError::ReservedKind { .. })
-        })
-        .collect();
+    let unexpected = &diags;
     assert!(
         unexpected.is_empty(),
         "unexpected diagnostics: {unexpected:?}"
@@ -126,21 +114,14 @@ fn register_instance_populates_each_node_store_and_symbol_table() {
     assert_eq!(model.nfrs.len(), 1);
     assert_eq!(model.qualities.len(), 1);
     assert_eq!(model.constraints.len(), 1);
-    assert_eq!(model.concepts.len(), 1);
-    assert_eq!(model.domain_objects.len(), 1);
-    assert_eq!(model.aggregates.len(), 1);
-    assert_eq!(model.value_objects.len(), 1);
     assert_eq!(model.businesses.len(), 1);
     assert_eq!(model.bucs.len(), 1);
-    assert_eq!(model.usage_scenes.len(), 1);
     assert_eq!(model.use_cases.len(), 1);
     assert_eq!(model.screens.len(), 1);
     assert_eq!(model.fields.len(), 1);
     assert_eq!(model.events.len(), 1);
     assert_eq!(model.entities.len(), 1);
     assert_eq!(model.states.len(), 1);
-    assert_eq!(model.conditions.len(), 1);
-    assert_eq!(model.variations.len(), 1);
     assert_eq!(model.apis.len(), 1);
     assert_eq!(model.dtos.len(), 1);
     assert_eq!(model.locations.len(), 1);

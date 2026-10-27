@@ -160,15 +160,8 @@ pub(crate) fn diagram_preset_filters(
             ],
         ),
         DiagramViewPreset::Data => (
-            &[
-                "concept",
-                "domain-object",
-                "aggregate",
-                "value-object",
-                "entity",
-                "state",
-            ],
-            &["contains", "maps-to", "relate", "transitions", "owns"],
+            &["entity", "state"],
+            &["contains", "relate", "transitions", "owns"],
         ),
         DiagramViewPreset::Api => (
             &[

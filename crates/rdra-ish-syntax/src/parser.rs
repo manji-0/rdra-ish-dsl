@@ -7,6 +7,7 @@ use chumsky::Stream;
 use logos::Logos;
 
 use crate::ast::*;
+use crate::removed::migration_hint;
 use crate::token::Token;
 
 // ── Lexer bridge ─────────────────────────────────────────────────────────────
@@ -55,23 +56,16 @@ fn path_ident() -> impl Parser<Token, String, Error = Simple<Token>> + Clone {
         Token::Nfr => "nfr".to_string(),
         Token::Quality => "quality".to_string(),
         Token::Constraint => "constraint".to_string(),
-        Token::Concept => "concept".to_string(),
-        Token::DomainObject => "domain_object".to_string(),
-        Token::Aggregate => "aggregate".to_string(),
-        Token::ValueObject => "valueobject".to_string(),
         Token::Business => "business".to_string(),
         Token::Buc => "buc".to_string(),
         Token::Flow => "flow".to_string(),
         Token::Step => "step".to_string(),
-        Token::UsageScene => "usagescene".to_string(),
         Token::UseCase => "usecase".to_string(),
         Token::Screen => "screen".to_string(),
         Token::Field => "field".to_string(),
         Token::Event => "event".to_string(),
         Token::Entity => "entity".to_string(),
         Token::State => "state".to_string(),
-        Token::Condition => "condition".to_string(),
-        Token::Variation => "variation".to_string(),
         Token::Api => "api".to_string(),
         Token::Dto => "dto".to_string(),
         Token::Location => "location".to_string(),
@@ -307,23 +301,16 @@ fn kind_token() -> impl Parser<Token, Kind, Error = Simple<Token>> + Clone {
         Token::Nfr         => Kind::Nfr,
         Token::Quality     => Kind::Quality,
         Token::Constraint  => Kind::Constraint,
-        Token::Concept     => Kind::Concept,
-        Token::DomainObject => Kind::DomainObject,
-        Token::Aggregate   => Kind::Aggregate,
-        Token::ValueObject => Kind::ValueObject,
         Token::Business    => Kind::Business,
         Token::Buc         => Kind::Buc,
         Token::Flow        => Kind::Flow,
         Token::Step        => Kind::Step,
-        Token::UsageScene  => Kind::UsageScene,
         Token::UseCase     => Kind::UseCase,
         Token::Screen      => Kind::Screen,
         Token::Field       => Kind::Field,
         Token::Event       => Kind::Event,
         Token::Entity      => Kind::Entity,
         Token::State       => Kind::State,
-        Token::Condition   => Kind::Condition,
-        Token::Variation   => Kind::Variation,
         Token::Api         => Kind::Api,
         Token::Dto         => Kind::Dto,
         Token::Location    => Kind::Location,
@@ -1009,7 +996,7 @@ fn chain_call() -> impl Parser<Token, ChainCall, Error = Simple<Token>> + Clone 
 }
 
 fn predicate_call() -> impl Parser<Token, PredicateCall, Error = Simple<Token>> + Clone {
-    ident()
+    select! { Token::Ident(s) if migration_hint(&s).is_none() => s }
         .then_ignore(just(Token::LParen))
         .then(
             predicate_arg()
@@ -1041,9 +1028,23 @@ fn item() -> impl Parser<Token, Item, Error = Simple<Token>> + Clone {
     let instance = instance_decl().map(Item::Instance);
     let property = property_decl().map(Item::Property);
     let predicate = predicate_call().map(Item::Predicate);
+    let removed =
+        select! { Token::Ident(s) if migration_hint(&s).is_some() => s }.try_map(|word, span| {
+            Err::<Item, _>(Simple::custom(
+                span,
+                migration_hint(&word).unwrap_or_default(),
+            ))
+        });
 
     // property before instance so `property` keyword is not consumed as Ident.
-    choice((module_decl(), import, property, instance, predicate))
+    choice((
+        module_decl(),
+        import,
+        property,
+        instance,
+        removed,
+        predicate,
+    ))
 }
 
 // ── Root parser ───────────────────────────────────────────────────────────────
@@ -1310,39 +1311,6 @@ constrains(AuditRetention, system::CoreSystem)
         assert_eq!(constraint.kind, Kind::Constraint);
         assert_eq!(constraint.nfr.retention.as_deref(), Some("7y"));
         assert_eq!(constraint.nfr.privacy.as_deref(), Some("restricted"));
-    }
-
-    #[test]
-    fn test_parse_conceptual_model_elements() {
-        let ast = parse_ok(
-            r#"
-concept PatientIdentity "Patient identity"
-domain_object Appointment "Appointment"
-aggregate SchedulingAggregate "Scheduling aggregate"
-valueobject TimeSlot "Time slot"
-entity AppointmentTable "appointment table" { id: Int @pk }
-contains(SchedulingAggregate, Appointment)
-contains(SchedulingAggregate, TimeSlot)
-maps_to(Appointment, AppointmentTable)
-"#,
-        );
-
-        let Item::Instance(concept) = &ast.items[0] else {
-            panic!("expected concept instance");
-        };
-        assert_eq!(concept.kind, Kind::Concept);
-        let Item::Instance(domain_object) = &ast.items[1] else {
-            panic!("expected domain object instance");
-        };
-        assert_eq!(domain_object.kind, Kind::DomainObject);
-        let Item::Instance(aggregate) = &ast.items[2] else {
-            panic!("expected aggregate instance");
-        };
-        assert_eq!(aggregate.kind, Kind::Aggregate);
-        let Item::Instance(value_object) = &ast.items[3] else {
-            panic!("expected value object instance");
-        };
-        assert_eq!(value_object.kind, Kind::ValueObject);
     }
 
     #[test]

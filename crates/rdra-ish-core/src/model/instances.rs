@@ -93,34 +93,6 @@ pub struct Constraint {
 }
 
 #[derive(Debug, Clone)]
-pub struct Concept {
-    pub id: std::string::String,
-    pub label: std::string::String,
-    pub description: Option<std::string::String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct DomainObject {
-    pub id: std::string::String,
-    pub label: std::string::String,
-    pub description: Option<std::string::String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Aggregate {
-    pub id: std::string::String,
-    pub label: std::string::String,
-    pub description: Option<std::string::String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ValueObject {
-    pub id: std::string::String,
-    pub label: std::string::String,
-    pub description: Option<std::string::String>,
-}
-
-#[derive(Debug, Clone)]
 pub struct Business {
     pub id: std::string::String,
     pub label: std::string::String,
@@ -143,13 +115,6 @@ pub struct Flow {
 
 #[derive(Debug, Clone)]
 pub struct Step {
-    pub id: std::string::String,
-    pub label: std::string::String,
-    pub description: Option<std::string::String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct UsageScene {
     pub id: std::string::String,
     pub label: std::string::String,
     pub description: Option<std::string::String>,
@@ -205,20 +170,6 @@ pub struct Entity {
 
 #[derive(Debug, Clone)]
 pub struct State {
-    pub id: std::string::String,
-    pub label: std::string::String,
-    pub description: Option<std::string::String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Condition {
-    pub id: std::string::String,
-    pub label: std::string::String,
-    pub description: Option<std::string::String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Variation {
     pub id: std::string::String,
     pub label: std::string::String,
     pub description: Option<std::string::String>,

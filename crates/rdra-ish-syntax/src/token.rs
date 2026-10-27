@@ -30,15 +30,6 @@ pub enum Token {
     Quality,
     #[token("constraint")]
     Constraint,
-    #[token("concept")]
-    Concept,
-    #[token("domain_object")]
-    DomainObject,
-    #[token("aggregate")]
-    Aggregate,
-    #[token("valueobject")]
-    #[token("value_object")]
-    ValueObject,
     #[token("business")]
     Business,
     #[token("buc")]
@@ -47,8 +38,6 @@ pub enum Token {
     Flow,
     #[token("step")]
     Step,
-    #[token("usagescene")]
-    UsageScene,
     #[token("usecase")]
     UseCase,
     #[token("screen")]
@@ -61,10 +50,6 @@ pub enum Token {
     Entity,
     #[token("state")]
     State,
-    #[token("condition")]
-    Condition,
-    #[token("variation")]
-    Variation,
     #[token("api")]
     Api,
     #[token("dto")]

@@ -3,7 +3,6 @@
 pub mod access;
 pub mod analysis;
 pub(crate) mod analysis_diag;
-pub mod concept_mapping;
 pub mod diagnostics;
 pub mod entity_lifecycle;
 pub mod entity_state_variant;
@@ -28,9 +27,6 @@ pub use access::{
     PermissionCallable, ScreenConstraintPattern,
 };
 pub use analysis::{build_model, build_model_items, build_model_items_with_scopes};
-pub use concept_mapping::{
-    collect_concept_mappings, conceptual_id, mappings_for_conceptual, mappings_for_entity,
-};
 pub use diagnostics::{Diagnostic, RdraError};
 pub use entity_lifecycle::{collect_entity_lifecycles, link_entity_status_states, EntityLifecycle};
 pub use entity_state_variant::{
@@ -47,13 +43,13 @@ pub use location::{
 };
 pub use model::{
     node_ref_kind, Adr, AdrKey, Api, ApiKey, AppliesToTarget, Cardinality, ColumnEffect,
-    ConceptMapping, ConceptualRef, ConstrainsTarget, ContainedRef, ContainerRef, CoversTarget,
-    CrossCmpRhs, CrossComparisonProp, CrossEntityCondition, CrossEntityInvariant,
-    CrossForbiddenConstraint, DataOrigin, DecidesTarget, EffectValue, EntityKey, EntityTouchpoint,
-    ExclusiveConstraint, Location, LocationKey, LookupResult, Medium, MediumKey, NfrOrConstraint,
-    PerformTarget, Permission, PermissionKey, QualifiedModelColumnRef, RequiredConstraint,
-    SemanticModel, StateTransition, System, SystemKey, TemporalAtom, TemporalExpr, TemporalFormula,
-    TemporalProperty, TemporalRhs, Timing, TimingKey, TriggerTarget, TypedPredicate,
+    ConstrainsTarget, ContainedRef, ContainerRef, CoversTarget, CrossCmpRhs, CrossComparisonProp,
+    CrossEntityCondition, CrossEntityInvariant, CrossForbiddenConstraint, DataOrigin,
+    DecidesTarget, EffectValue, EntityKey, EntityTouchpoint, ExclusiveConstraint, Location,
+    LocationKey, LookupResult, Medium, MediumKey, NfrOrConstraint, PerformTarget, Permission,
+    PermissionKey, QualifiedModelColumnRef, RequiredConstraint, SemanticModel, StateTransition,
+    System, SystemKey, TemporalAtom, TemporalExpr, TemporalFormula, TemporalProperty, TemporalRhs,
+    Timing, TimingKey, TriggerTarget, TypedPredicate,
 };
 pub use predicate::{predicate_signature, KNOWN_PREDICATES};
 pub use resolver::{

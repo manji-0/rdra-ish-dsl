@@ -180,38 +180,6 @@ pub(crate) fn register_instance(
             });
             NodeRef::Constraint(k)
         }
-        Kind::Concept => {
-            let k = model.concepts.insert(Concept {
-                id: inst.id.clone(),
-                label: inst.label.clone(),
-                description: inst.description.clone(),
-            });
-            NodeRef::Concept(k)
-        }
-        Kind::DomainObject => {
-            let k = model.domain_objects.insert(DomainObject {
-                id: inst.id.clone(),
-                label: inst.label.clone(),
-                description: inst.description.clone(),
-            });
-            NodeRef::DomainObject(k)
-        }
-        Kind::Aggregate => {
-            let k = model.aggregates.insert(Aggregate {
-                id: inst.id.clone(),
-                label: inst.label.clone(),
-                description: inst.description.clone(),
-            });
-            NodeRef::Aggregate(k)
-        }
-        Kind::ValueObject => {
-            let k = model.value_objects.insert(ValueObject {
-                id: inst.id.clone(),
-                label: inst.label.clone(),
-                description: inst.description.clone(),
-            });
-            NodeRef::ValueObject(k)
-        }
         Kind::Business => {
             let k = model.businesses.insert(Business {
                 id: inst.id.clone(),
@@ -243,14 +211,6 @@ pub(crate) fn register_instance(
                 description: inst.description.clone(),
             });
             NodeRef::Step(k)
-        }
-        Kind::UsageScene => {
-            let k = model.usage_scenes.insert(UsageScene {
-                id: inst.id.clone(),
-                label: inst.label.clone(),
-                description: inst.description.clone(),
-            });
-            NodeRef::UsageScene(k)
         }
         Kind::UseCase => {
             let k = model.use_cases.insert(UseCase {
@@ -317,38 +277,6 @@ pub(crate) fn register_instance(
                 description: inst.description.clone(),
             });
             NodeRef::State(k)
-        }
-        Kind::Condition => {
-            push_warning(
-                ctx,
-                diags,
-                inst.span.clone(),
-                RdraError::ReservedKind {
-                    kind: "condition".into(),
-                },
-            );
-            let k = model.conditions.insert(Condition {
-                id: inst.id.clone(),
-                label: inst.label.clone(),
-                description: inst.description.clone(),
-            });
-            NodeRef::Condition(k)
-        }
-        Kind::Variation => {
-            push_warning(
-                ctx,
-                diags,
-                inst.span.clone(),
-                RdraError::ReservedKind {
-                    kind: "variation".into(),
-                },
-            );
-            let k = model.variations.insert(Variation {
-                id: inst.id.clone(),
-                label: inst.label.clone(),
-                description: inst.description.clone(),
-            });
-            NodeRef::Variation(k)
         }
         Kind::Api => {
             let k = model.apis.insert(Api {

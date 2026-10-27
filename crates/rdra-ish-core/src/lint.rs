@@ -714,23 +714,16 @@ fn model_element_count(model: &SemanticModel) -> usize {
         + model.nfrs.len()
         + model.qualities.len()
         + model.constraints.len()
-        + model.concepts.len()
-        + model.domain_objects.len()
-        + model.aggregates.len()
-        + model.value_objects.len()
         + model.businesses.len()
         + model.bucs.len()
         + model.flows.len()
         + model.steps.len()
-        + model.usage_scenes.len()
         + model.use_cases.len()
         + model.screens.len()
         + model.fields.len()
         + model.events.len()
         + model.entities.len()
         + model.states.len()
-        + model.conditions.len()
-        + model.variations.len()
         + model.apis.len()
         + model.dtos.len()
         + model.locations.len()
@@ -792,10 +785,6 @@ fn relation_degree(model: &SemanticModel) -> HashMap<NodeRef, usize> {
             touch(NodeRef::Entity(*entity));
         }
     }
-    for mapping in &model.concept_mappings {
-        touch(NodeRef::Entity(mapping.entity));
-        touch(mapping.source.as_node_ref());
-    }
     for assertion in &model.temporal_assertions {
         touch(NodeRef::UseCase(assertion.anchor));
         for entity in &assertion.scope {
@@ -838,25 +827,6 @@ fn lint_node_refs(model: &SemanticModel) -> Vec<NodeRef> {
             .iter()
             .map(|(key, _)| NodeRef::Constraint(key)),
     );
-    nodes.extend(model.concepts.iter().map(|(key, _)| NodeRef::Concept(key)));
-    nodes.extend(
-        model
-            .domain_objects
-            .iter()
-            .map(|(key, _)| NodeRef::DomainObject(key)),
-    );
-    nodes.extend(
-        model
-            .aggregates
-            .iter()
-            .map(|(key, _)| NodeRef::Aggregate(key)),
-    );
-    nodes.extend(
-        model
-            .value_objects
-            .iter()
-            .map(|(key, _)| NodeRef::ValueObject(key)),
-    );
     nodes.extend(
         model
             .businesses
@@ -866,30 +836,12 @@ fn lint_node_refs(model: &SemanticModel) -> Vec<NodeRef> {
     nodes.extend(model.bucs.iter().map(|(key, _)| NodeRef::Buc(key)));
     nodes.extend(model.flows.iter().map(|(key, _)| NodeRef::Flow(key)));
     nodes.extend(model.steps.iter().map(|(key, _)| NodeRef::Step(key)));
-    nodes.extend(
-        model
-            .usage_scenes
-            .iter()
-            .map(|(key, _)| NodeRef::UsageScene(key)),
-    );
     nodes.extend(model.use_cases.iter().map(|(key, _)| NodeRef::UseCase(key)));
     nodes.extend(model.screens.iter().map(|(key, _)| NodeRef::Screen(key)));
     nodes.extend(model.fields.iter().map(|(key, _)| NodeRef::Field(key)));
     nodes.extend(model.events.iter().map(|(key, _)| NodeRef::Event(key)));
     nodes.extend(model.entities.iter().map(|(key, _)| NodeRef::Entity(key)));
     nodes.extend(model.states.iter().map(|(key, _)| NodeRef::State(key)));
-    nodes.extend(
-        model
-            .conditions
-            .iter()
-            .map(|(key, _)| NodeRef::Condition(key)),
-    );
-    nodes.extend(
-        model
-            .variations
-            .iter()
-            .map(|(key, _)| NodeRef::Variation(key)),
-    );
     nodes.extend(model.apis.iter().map(|(key, _)| NodeRef::Api(key)));
     nodes.extend(model.dtos.iter().map(|(key, _)| NodeRef::Dto(key)));
     nodes.extend(
@@ -919,23 +871,16 @@ fn node_kind_display(node: &NodeRef) -> String {
         NodeRef::Nfr(_) => "nfr".to_string(),
         NodeRef::Quality(_) => "quality".to_string(),
         NodeRef::Constraint(_) => "constraint".to_string(),
-        NodeRef::Concept(_) => "concept".to_string(),
-        NodeRef::DomainObject(_) => "domain-object".to_string(),
-        NodeRef::Aggregate(_) => "aggregate".to_string(),
-        NodeRef::ValueObject(_) => "value-object".to_string(),
         NodeRef::Business(_) => "business".to_string(),
         NodeRef::Buc(_) => "buc".to_string(),
         NodeRef::Flow(_) => "flow".to_string(),
         NodeRef::Step(_) => "step".to_string(),
-        NodeRef::UsageScene(_) => "usagescene".to_string(),
         NodeRef::UseCase(_) => "usecase".to_string(),
         NodeRef::Screen(_) => "screen".to_string(),
         NodeRef::Field(_) => "field".to_string(),
         NodeRef::Event(_) => "event".to_string(),
         NodeRef::Entity(_) => "entity".to_string(),
         NodeRef::State(_) => "state".to_string(),
-        NodeRef::Condition(_) => "condition".to_string(),
-        NodeRef::Variation(_) => "variation".to_string(),
         NodeRef::Api(_) => "api".to_string(),
         NodeRef::Dto(_) => "dto".to_string(),
         NodeRef::Location(_) => "location".to_string(),
@@ -955,23 +900,16 @@ fn node_id(model: &SemanticModel, node: &NodeRef) -> Option<String> {
         NodeRef::Nfr(key) => model.nfrs.get(*key)?.id.clone(),
         NodeRef::Quality(key) => model.qualities.get(*key)?.id.clone(),
         NodeRef::Constraint(key) => model.constraints.get(*key)?.id.clone(),
-        NodeRef::Concept(key) => model.concepts.get(*key)?.id.clone(),
-        NodeRef::DomainObject(key) => model.domain_objects.get(*key)?.id.clone(),
-        NodeRef::Aggregate(key) => model.aggregates.get(*key)?.id.clone(),
-        NodeRef::ValueObject(key) => model.value_objects.get(*key)?.id.clone(),
         NodeRef::Business(key) => model.businesses.get(*key)?.id.clone(),
         NodeRef::Buc(key) => model.bucs.get(*key)?.id.clone(),
         NodeRef::Flow(key) => model.flows.get(*key)?.id.clone(),
         NodeRef::Step(key) => model.steps.get(*key)?.id.clone(),
-        NodeRef::UsageScene(key) => model.usage_scenes.get(*key)?.id.clone(),
         NodeRef::UseCase(key) => model.use_cases.get(*key)?.id.clone(),
         NodeRef::Screen(key) => model.screens.get(*key)?.id.clone(),
         NodeRef::Field(key) => model.fields.get(*key)?.id.clone(),
         NodeRef::Event(key) => model.events.get(*key)?.id.clone(),
         NodeRef::Entity(key) => model.entities.get(*key)?.id.clone(),
         NodeRef::State(key) => model.states.get(*key)?.id.clone(),
-        NodeRef::Condition(key) => model.conditions.get(*key)?.id.clone(),
-        NodeRef::Variation(key) => model.variations.get(*key)?.id.clone(),
         NodeRef::Api(key) => model.apis.get(*key)?.id.clone(),
         NodeRef::Dto(key) => model.dtos.get(*key)?.id.clone(),
         NodeRef::Location(key) => model.locations.get(*key)?.id.clone(),

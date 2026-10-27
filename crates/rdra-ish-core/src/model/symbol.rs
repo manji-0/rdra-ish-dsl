@@ -20,23 +20,16 @@ fn node_kind_tag(node: &NodeRef) -> &'static str {
         NodeRef::Nfr(_) => "nfr",
         NodeRef::Quality(_) => "quality",
         NodeRef::Constraint(_) => "constraint",
-        NodeRef::Concept(_) => "concept",
-        NodeRef::DomainObject(_) => "domain_object",
-        NodeRef::Aggregate(_) => "aggregate",
-        NodeRef::ValueObject(_) => "valueobject",
         NodeRef::Business(_) => "business",
         NodeRef::Buc(_) => "buc",
         NodeRef::Flow(_) => "flow",
         NodeRef::Step(_) => "step",
-        NodeRef::UsageScene(_) => "usagescene",
         NodeRef::UseCase(_) => "usecase",
         NodeRef::Screen(_) => "screen",
         NodeRef::Field(_) => "field",
         NodeRef::Event(_) => "event",
         NodeRef::Entity(_) => "entity",
         NodeRef::State(_) => "state",
-        NodeRef::Condition(_) => "condition",
-        NodeRef::Variation(_) => "variation",
         NodeRef::Api(_) => "api",
         NodeRef::Dto(_) => "dto",
         NodeRef::Location(_) => "location",
@@ -57,23 +50,16 @@ fn node_ref_matches_kind(node: &NodeRef, kind: &Kind) -> bool {
             | (NodeRef::Nfr(_), Kind::Nfr)
             | (NodeRef::Quality(_), Kind::Quality)
             | (NodeRef::Constraint(_), Kind::Constraint)
-            | (NodeRef::Concept(_), Kind::Concept)
-            | (NodeRef::DomainObject(_), Kind::DomainObject)
-            | (NodeRef::Aggregate(_), Kind::Aggregate)
-            | (NodeRef::ValueObject(_), Kind::ValueObject)
             | (NodeRef::Business(_), Kind::Business)
             | (NodeRef::Buc(_), Kind::Buc)
             | (NodeRef::Flow(_), Kind::Flow)
             | (NodeRef::Step(_), Kind::Step)
-            | (NodeRef::UsageScene(_), Kind::UsageScene)
             | (NodeRef::UseCase(_), Kind::UseCase)
             | (NodeRef::Screen(_), Kind::Screen)
             | (NodeRef::Field(_), Kind::Field)
             | (NodeRef::Event(_), Kind::Event)
             | (NodeRef::Entity(_), Kind::Entity)
             | (NodeRef::State(_), Kind::State)
-            | (NodeRef::Condition(_), Kind::Condition)
-            | (NodeRef::Variation(_), Kind::Variation)
             | (NodeRef::Api(_), Kind::Api)
             | (NodeRef::Dto(_), Kind::Dto)
             | (NodeRef::Location(_), Kind::Location)

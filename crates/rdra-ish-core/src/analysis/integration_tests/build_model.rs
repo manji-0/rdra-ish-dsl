@@ -362,66 +362,6 @@ owns(StoreSystem, Store)
 }
 
 #[test]
-fn test_build_model_conceptual_elements_and_entity_mapping() {
-    let src = r#"
-concept PatientIdentity "Patient identity"
-concept CarePlan "Care plan"
-domain_object Appointment "Appointment"
-aggregate SchedulingAggregate "Scheduling aggregate"
-valueobject TimeSlot "Time slot"
-entity AppointmentTable "appointment table" { id: Int @pk  starts_at: DateTime }
-contains(SchedulingAggregate, Appointment)
-contains(SchedulingAggregate, TimeSlot)
-contains(SchedulingAggregate, PatientIdentity)
-maps_to(Appointment, AppointmentTable)
-maps_to(TimeSlot, AppointmentTable)
-"#;
-    let (ast, parse_errors) = parse(src);
-    assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
-
-    let (model, diags) = build_model(&ast);
-    let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
-    assert!(errors.is_empty(), "unexpected errors: {errors:?}");
-
-    assert_eq!(model.concepts.len(), 2);
-    assert_eq!(model.domain_objects.len(), 1);
-    assert_eq!(model.aggregates.len(), 1);
-    assert_eq!(model.value_objects.len(), 1);
-
-    assert!(model
-        .concepts
-        .values()
-        .any(|concept| concept.id == "CarePlan"));
-    assert_eq!(model.entities.len(), 1);
-
-    let contains_count = model
-        .relations
-        .iter()
-        .filter(|rel| rel.kind == RelKind::Contains)
-        .count();
-    let maps_to_count = model
-        .relations
-        .iter()
-        .filter(|rel| rel.kind == RelKind::MapsTo)
-        .count();
-    assert_eq!(contains_count, 3);
-    assert_eq!(maps_to_count, 2);
-    assert_eq!(model.concept_mappings.len(), 2);
-    assert!(model.concept_mappings.iter().any(|mapping| {
-        matches!(
-            (&mapping.source, model.entities[mapping.entity].id.as_str()),
-            (ConceptualRef::DomainObject(_), "AppointmentTable")
-        ) && model.domain_objects.values().any(|d| d.id == "Appointment")
-    }));
-    assert!(model.concept_mappings.iter().any(|mapping| {
-        matches!(
-            (&mapping.source, model.entities[mapping.entity].id.as_str()),
-            (ConceptualRef::ValueObject(_), "AppointmentTable")
-        ) && model.value_objects.values().any(|v| v.id == "TimeSlot")
-    }));
-}
-
-#[test]
 fn test_build_model_index_and_composite_unique_annotations() {
     let src = r#"
 entity Product "Product" {

@@ -79,9 +79,6 @@ pub enum RdraError {
     #[error("junction '{junction}' is used as .via for multiple N:M pairs ({pairs})\n  hint: give each N:M relation its own junction entity so composite unique and FK meaning stay unambiguous")]
     SharedJunctionVia { junction: String, pairs: String },
 
-    #[error("reserved kind '{kind}' is accepted for forward compatibility but is not modeled by check/states/export\n  hint: prefer documented kinds; see language-reference reserved table")]
-    ReservedKind { kind: String },
-
     #[error("FK conflict: entity '{entity}' already has a column '{col}' that conflicts with auto-generated FK")]
     FkConflict { entity: String, col: String },
 
