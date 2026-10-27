@@ -620,10 +620,9 @@ fn build_status_update_ops(
             .map(|(uk, v)| (uk, AbstractValue::Enum(v)))
             .collect();
     // effects にも同じカラムへの指定があれば DoubleModeledEnum を診断
-    let has_effect_on_status = effects_for_entity.iter().any(|e| {
-        e.column == status_col
-            && !matches!(&e.origin, NodeRef::UseCase(uk) if creation_status.contains_key(uk))
-    });
+    let has_effect_on_status = effects_for_entity
+        .iter()
+        .any(|e| e.column == status_col && !creation_status.contains_key(&e.origin));
     if has_effect_on_status {
         diags.push(StateDiag::DoubleModeledEnum {
             column: status_col.clone(),
@@ -644,40 +643,22 @@ fn build_status_update_ops(
         let Some(to_variant) = resolve_transition_variant(model, ek, &status_col, &st.to) else {
             continue;
         };
-        let event_key = st.event;
-
-        // このイベントを raise する usecase を取得
-        for rel in &model.relations {
-            if rel.kind != RelKind::Raises {
+        // BUC フィルタ: reachable に含まれない usecase はスキップ
+        if let Some(reachable) = buc_reachable {
+            if !reachable.contains(&NodeRef::UseCase(st.usecase)) {
                 continue;
             }
-            let (uc_key, ev_key) = match (&rel.from, &rel.to) {
-                (NodeRef::UseCase(u), NodeRef::Event(e)) => (*u, *e),
-                _ => continue,
-            };
-            if ev_key != event_key {
-                continue;
-            }
-            // BUC フィルタ: reachable に含まれない usecase はスキップ
-            if let Some(reachable) = buc_reachable {
-                if !reachable.contains(&NodeRef::UseCase(uc_key)) {
-                    continue;
-                }
-            }
-            let usecase_id = model.use_cases[uc_key].id.clone();
-            let buc_id = buc_of_usecase.get(&uc_key).cloned();
-
-            ops.push(Operation {
-                usecase_id,
-                buc_id,
-                op_kind: OpKind::Update,
-                guard: vec![AxisConstraint {
-                    column: status_col.clone(),
-                    value: AbstractValue::Enum(from_variant.clone()),
-                }],
-                effects: vec![(status_col.clone(), AbstractValue::Enum(to_variant.clone()))],
-            });
         }
+        ops.push(Operation {
+            usecase_id: model.use_cases[st.usecase].id.clone(),
+            buc_id: buc_of_usecase.get(&st.usecase).cloned(),
+            op_kind: OpKind::Update,
+            guard: vec![AxisConstraint {
+                column: status_col.clone(),
+                value: AbstractValue::Enum(from_variant),
+            }],
+            effects: vec![(status_col.clone(), AbstractValue::Enum(to_variant))],
+        });
     }
 
     // state_variant_map is retained for parity with link_states_to_enum callers.
@@ -733,38 +714,15 @@ fn collect_operations(
         if Some(&eff.column) == status_col.as_ref() {
             continue; // transitions が真実源なので無視
         }
-        // event 由来の場合はそのイベントを raise する全 UC へ展開する
-        let origin_ucs: Vec<UseCaseKey> = match &eff.origin {
-            NodeRef::UseCase(k) => vec![*k],
-            NodeRef::Event(ek) => model
-                .relations
-                .iter()
-                .filter_map(|rel| {
-                    if rel.kind == RelKind::Raises {
-                        if let (NodeRef::UseCase(uk), NodeRef::Event(raised_ek)) =
-                            (&rel.from, &rel.to)
-                        {
-                            if raised_ek == ek {
-                                return Some(*uk);
-                            }
-                        }
-                    }
-                    None
-                })
-                .collect(),
-            _ => continue,
-        };
-        for origin_uc_key in origin_ucs {
-            if let Some(reachable) = buc_reachable {
-                if !reachable.contains(&NodeRef::UseCase(origin_uc_key)) {
-                    continue;
-                }
+        if let Some(reachable) = buc_reachable {
+            if !reachable.contains(&NodeRef::UseCase(eff.origin)) {
+                continue;
             }
-            uc_effects
-                .entry(origin_uc_key)
-                .or_default()
-                .push((eff.column.clone(), AbstractValue::from_effect(&eff.value)));
         }
+        uc_effects
+            .entry(eff.origin)
+            .or_default()
+            .push((eff.column.clone(), AbstractValue::from_effect(&eff.value)));
     }
 
     // transitions 由来演算への non-status 効果のマージ
@@ -911,7 +869,7 @@ fn apply_trigger_order_guards(
     effects_for_entity: &[&ColumnEffect],
 ) {
     let axis_cols: HashSet<&str> = axes.iter().map(|axis| axis.column.as_str()).collect();
-    let event_status_effects = event_status_effects_for_entity(model, ek, status_col);
+    let usecase_status_effects = usecase_status_effects_for_entity(model, ek, status_col);
 
     for rel in &model.relations {
         let (event, triggered_uc) = match (&rel.kind, &rel.from, &rel.to) {
@@ -921,28 +879,25 @@ fn apply_trigger_order_guards(
             _ => continue,
         };
 
+        // The triggered use case runs after an upstream use case raised the event,
+        // so it sees what the upstream use case wrote: its `sets` and its transitions.
         let mut guards = Vec::new();
         for upstream_uc in usecases_raising_event(model, event) {
-            for effect in effects_for_entity {
-                let applies = match effect.origin {
-                    NodeRef::UseCase(uc) => uc == upstream_uc,
-                    NodeRef::Event(e) => e == event,
-                    _ => false,
-                };
-                if applies {
-                    guards.push(AxisConstraint {
-                        column: effect.column.clone(),
-                        value: AbstractValue::from_effect(&effect.value),
-                    });
-                }
+            for effect in effects_for_entity
+                .iter()
+                .filter(|effect| effect.origin == upstream_uc)
+            {
+                guards.push(AxisConstraint {
+                    column: effect.column.clone(),
+                    value: AbstractValue::from_effect(&effect.value),
+                });
             }
-        }
-
-        if let Some((column, value)) = event_status_effects.get(&event) {
-            guards.push(AxisConstraint {
-                column: column.clone(),
-                value: value.clone(),
-            });
+            if let Some(status_effects) = usecase_status_effects.get(&upstream_uc) {
+                guards.extend(status_effects.iter().map(|(column, value)| AxisConstraint {
+                    column: column.clone(),
+                    value: value.clone(),
+                }));
+            }
         }
 
         let triggered_id = model.use_cases[triggered_uc].id.as_str();
@@ -967,12 +922,12 @@ fn apply_trigger_order_guards(
     }
 }
 
-fn event_status_effects_for_entity(
+fn usecase_status_effects_for_entity(
     model: &SemanticModel,
     ek: EntityKey,
     status_col: &Option<String>,
-) -> HashMap<crate::model::EventKey, (String, AbstractValue)> {
-    let mut effects = HashMap::new();
+) -> HashMap<UseCaseKey, Vec<(String, AbstractValue)>> {
+    let mut effects: HashMap<UseCaseKey, Vec<(String, AbstractValue)>> = HashMap::new();
     let Some(status_col) = status_col else {
         return effects;
     };
@@ -984,10 +939,10 @@ fn event_status_effects_for_entity(
         let Some(to_variant) = resolve_transition_variant(model, ek, status_col, &st.to) else {
             continue;
         };
-        effects.insert(
-            st.event,
-            (status_col.clone(), AbstractValue::Enum(to_variant)),
-        );
+        effects
+            .entry(st.usecase)
+            .or_default()
+            .push((status_col.clone(), AbstractValue::Enum(to_variant)));
     }
 
     effects
@@ -1137,68 +1092,31 @@ fn derive_for_entity(
         }
         let effect_val = (axis_col.clone(), AbstractValue::Bool(pe.truth));
 
-        let origin_ucs: Vec<(String, Option<String>)> = match &pe.origin {
-            NodeRef::UseCase(uk) => {
-                if let Some(reachable) = buc_reachable {
-                    if !reachable.contains(&NodeRef::UseCase(*uk)) {
-                        vec![]
-                    } else {
-                        let uid = model.use_cases[*uk].id.clone();
-                        let bid = buc_of_usecase.get(uk).cloned();
-                        vec![(uid, bid)]
-                    }
-                } else {
-                    let uid = model.use_cases[*uk].id.clone();
-                    let bid = buc_of_usecase.get(uk).cloned();
-                    vec![(uid, bid)]
-                }
+        if let Some(reachable) = buc_reachable {
+            if !reachable.contains(&NodeRef::UseCase(pe.origin)) {
+                continue;
             }
-            NodeRef::Event(ek_ev) => model
-                .relations
-                .iter()
-                .filter_map(|rel| {
-                    if rel.kind == RelKind::Raises {
-                        if let (NodeRef::UseCase(uk), NodeRef::Event(raised_ek)) =
-                            (&rel.from, &rel.to)
-                        {
-                            if raised_ek == ek_ev {
-                                if let Some(reachable) = buc_reachable {
-                                    if !reachable.contains(&NodeRef::UseCase(*uk)) {
-                                        return None;
-                                    }
-                                }
-                                let uid = model.use_cases[*uk].id.clone();
-                                let bid = buc_of_usecase.get(uk).cloned();
-                                return Some((uid, bid));
-                            }
-                        }
-                    }
-                    None
-                })
-                .collect(),
-            _ => vec![],
-        };
-
-        for (usecase_id, buc_id) in origin_ucs {
-            // 既存の同一 usecase 演算に命題軸効果をマージ（同カラムが未設定の場合のみ）。
-            // Create と分離すると、同一 UC の status/effect と comparison effect の間に
-            // default false の中間パターンが生まれてしまう。
-            let mut merged = false;
-            for op in ops.iter_mut().filter(|op| op.usecase_id == usecase_id) {
-                merged = true;
-                if !op.effects.iter().any(|(c, _)| c == &axis_col) {
-                    op.effects.push(effect_val.clone());
-                }
+        }
+        let usecase_id = model.use_cases[pe.origin].id.clone();
+        let buc_id = buc_of_usecase.get(&pe.origin).cloned();
+        // 既存の同一 usecase 演算に命題軸効果をマージ（同カラムが未設定の場合のみ）。
+        // Create と分離すると、同一 UC の status/effect と comparison effect の間に
+        // default false の中間パターンが生まれてしまう。
+        let mut merged = false;
+        for op in ops.iter_mut().filter(|op| op.usecase_id == usecase_id) {
+            merged = true;
+            if !op.effects.iter().any(|(c, _)| c == &axis_col) {
+                op.effects.push(effect_val.clone());
             }
-            if !merged {
-                ops.push(Operation {
-                    usecase_id,
-                    buc_id,
-                    op_kind: OpKind::Update,
-                    guard: vec![],
-                    effects: vec![effect_val.clone()],
-                });
-            }
+        }
+        if !merged {
+            ops.push(Operation {
+                usecase_id,
+                buc_id,
+                op_kind: OpKind::Update,
+                guard: vec![],
+                effects: vec![effect_val],
+            });
         }
     }
 
@@ -1495,21 +1413,13 @@ fn eval_cmp_i64(lhs: i64, op: CmpOpModel, rhs: i64) -> bool {
     }
 }
 
-fn origin_display_id(model: &SemanticModel, origin: &NodeRef) -> String {
-    match origin {
-        NodeRef::UseCase(k) => model.use_cases[*k].id.clone(),
-        NodeRef::Event(k) => model.events[*k].id.clone(),
-        other => format!("{other:?}"),
-    }
-}
-
 /// Same-origin Int `sets` that assign distinct literals to one column.
 fn collect_conflicting_int_effect_diagnostics(
     model: &SemanticModel,
     ek: EntityKey,
     diags: &mut Vec<StateDiag>,
 ) {
-    let mut by_origin_col: HashMap<(NodeRef, String), Vec<i64>> = HashMap::new();
+    let mut by_origin_col: HashMap<(UseCaseKey, String), Vec<i64>> = HashMap::new();
     for ce in model
         .column_effects
         .iter()
@@ -1517,7 +1427,7 @@ fn collect_conflicting_int_effect_diagnostics(
     {
         if let EffectValue::Int(n) = ce.value {
             by_origin_col
-                .entry((ce.origin.clone(), ce.column.clone()))
+                .entry((ce.origin, ce.column.clone()))
                 .or_default()
                 .push(n);
         }
@@ -1530,7 +1440,7 @@ fn collect_conflicting_int_effect_diagnostics(
         if uniq.len() < 2 {
             continue;
         }
-        let usecase = origin_display_id(model, &origin);
+        let usecase = model.use_cases[origin].id.clone();
         if !seen.insert((usecase.clone(), column.clone())) {
             continue;
         }
@@ -1577,7 +1487,7 @@ fn collect_driven_comparison_contradiction_diagnostics(
         if evaluated == pe.truth {
             continue;
         }
-        let usecase = origin_display_id(model, &pe.origin);
+        let usecase = model.use_cases[pe.origin].id.clone();
         let prop = pe.prop.display();
         if !seen.insert((usecase.clone(), prop.clone(), pe.truth)) {
             continue;
@@ -2065,35 +1975,18 @@ fn immediate_effects_after_usecase(
     anchor: UseCaseKey,
 ) -> HashMap<(EntityKey, String), AbstractValue> {
     let mut effects = HashMap::new();
-    let raised_events: HashSet<_> = model
-        .relations
-        .iter()
-        .filter_map(|rel| match (&rel.kind, &rel.from, &rel.to) {
-            (RelKind::Raises, NodeRef::UseCase(uk), NodeRef::Event(ek)) if *uk == anchor => {
-                Some(*ek)
-            }
-            _ => None,
-        })
-        .collect();
-
-    for effect in &model.column_effects {
-        let applies = match effect.origin {
-            NodeRef::UseCase(uk) => uk == anchor,
-            NodeRef::Event(ek) => raised_events.contains(&ek),
-            _ => false,
-        };
-        if applies {
-            effects.insert(
-                (effect.entity, effect.column.clone()),
-                AbstractValue::from_effect(&effect.value),
-            );
-        }
+    for effect in model.column_effects.iter().filter(|e| e.origin == anchor) {
+        effects.insert(
+            (effect.entity, effect.column.clone()),
+            AbstractValue::from_effect(&effect.value),
+        );
     }
 
-    for st in &model.state_transitions {
-        if !raised_events.contains(&st.event) {
-            continue;
-        }
+    for st in model
+        .state_transitions
+        .iter()
+        .filter(|st| st.usecase == anchor)
+    {
         let Some((status_col, _)) = link_states_to_enum(model, st.entity) else {
             continue;
         };
@@ -2858,14 +2751,12 @@ sets(CloseStore, Store, status == closed)
         let model = model_from(
             r#"
 usecase ExecuteCertIssue "Execute Cert Issue"
-event CertIssued "Cert Issued"
 entity CertificateOrder "Certificate Order" {
   id: Int @pk
   status: Enum(requested, executed) @default(requested)
 }
 creates(ExecuteCertIssue, CertificateOrder)
-raises(ExecuteCertIssue, CertIssued)
-transitions(CertificateOrder.status, CertIssued, requested -> executed)
+transitions(CertificateOrder.status, ExecuteCertIssue, requested -> executed)
 after(ExecuteCertIssue).assert(CertificateOrder.status == executed)
 "#,
         );
@@ -2983,15 +2874,11 @@ entity Order "注文" { id: Int @pk  status: Enum(pending, paid, cancelled) @def
 usecase Place  "注文確定"
 usecase Pay    "支払い"
 usecase Cancel "キャンセル"
-event EvPaid   "支払い完了"
-event EvCancel "キャンセル"
 creates(Place, Order)
 updates(usecase::Pay,    Order)
 updates(usecase::Cancel, Order)
-raises(usecase::Pay,    EvPaid)
-raises(usecase::Cancel, EvCancel)
-transitions(Order.status, EvPaid, pending -> paid)
-transitions(Order.status, EvCancel, pending -> cancelled)
+transitions(Order.status, usecase::Pay, pending -> paid)
+transitions(Order.status, usecase::Cancel, pending -> cancelled)
 "#,
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
@@ -3028,11 +2915,9 @@ entity Order "注文" {
 }
 usecase Place      "注文確定"
 usecase DeliverUc  "配達確認"
-event EvDeliver    "配達完了"
 creates(Place,         Order)
 updates(usecase::DeliverUc, Order)
-raises(usecase::DeliverUc, EvDeliver)
-transitions(Order.status, EvDeliver, pending -> delivered)
+transitions(Order.status, usecase::DeliverUc, pending -> delivered)
 sets(usecase::DeliverUc, Order, delivered_at == present)
 "#,
         );
@@ -3100,12 +2985,11 @@ sets(usecase::DeliverUc, Order, delivered_at == present)
         );
     }
 
-    // ── event 由来 sets: UC ではなくイベントが Nullable 軸を動かす ────────────
+    // ── 遷移 UC の sets: transitions と同じ演算で Nullable 軸を動かす ─────────
 
     #[test]
-    fn test_event_origin_sets_nullable_axis() {
-        // sets の第1引数がイベントの場合、そのイベントを raise する UC の
-        // operations に展開されること（Phase 2）を検証する。
+    fn test_transition_usecase_sets_nullable_axis() {
+        // 遷移を駆動する UC の sets が、その UC の transition 演算に乗ることを検証する。
         let model = model_from(
             r#"
 entity Order "注文" {
@@ -3115,19 +2999,17 @@ entity Order "注文" {
 }
 usecase Place      "注文確定"
 usecase DeliverUc  "配達確認"
-event EvDeliver    "配達完了"
 creates(Place,              Order)
 updates(usecase::DeliverUc, Order)
-raises(usecase::DeliverUc, EvDeliver)
-transitions(Order.status, EvDeliver, pending -> delivered)
-sets(event::EvDeliver, Order, delivered_at == present)
+transitions(Order.status, usecase::DeliverUc, pending -> delivered)
+sets(usecase::DeliverUc, Order, delivered_at == present)
 "#,
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
         let r = results.iter().find(|r| r.entity_id == "Order").unwrap();
 
-        // (delivered, present) に到達できるか — event 由来 sets が展開されて
-        // DeliverUc の transition 演算に delivered_at=present が乗ること
+        // (delivered, present) に到達できるか — DeliverUc の transition 演算に
+        // delivered_at=present が乗ること
         let delivered_present = StatePattern {
             values: BTreeMap::from([
                 (
@@ -3143,7 +3025,7 @@ sets(event::EvDeliver, Order, delivered_at == present)
             r.patterns.iter().map(|p| &p.pattern).collect::<Vec<_>>()
         );
 
-        // (delivered, null) は到達不能（event が status と delivered_at を同時に変える）
+        // (delivered, null) は到達不能（DeliverUc が status と delivered_at を同時に変える）
         let delivered_null = StatePattern {
             values: BTreeMap::from([
                 (
@@ -3160,7 +3042,7 @@ sets(event::EvDeliver, Order, delivered_at == present)
     }
 
     #[test]
-    fn derive_for_entity_merges_transition_and_event_effects_directly() {
+    fn derive_for_entity_merges_transition_and_sets_effects_directly() {
         let model = model_from(
             r#"
 entity Order "注文" {
@@ -3170,12 +3052,10 @@ entity Order "注文" {
 }
 usecase Place      "注文確定"
 usecase DeliverUc  "配達確認"
-event EvDeliver    "配達完了"
 creates(Place,              Order)
 updates(usecase::DeliverUc, Order)
-raises(usecase::DeliverUc, EvDeliver)
-transitions(Order.status, EvDeliver, pending -> delivered)
-sets(event::EvDeliver, Order, delivered_at == present)
+transitions(Order.status, usecase::DeliverUc, pending -> delivered)
+sets(usecase::DeliverUc, Order, delivered_at == present)
 "#,
         );
         let entity = model
@@ -3384,12 +3264,10 @@ entity Item "アイテム" {
 usecase Create   "作成"
 usecase Deactive "非アクティブ化"
 usecase Remove   "削除"
-event Deactivate "非アクティブ化イベント"
 creates(Create, Item)
 updates(Deactive, Item)
 deletes(Remove,   Item)
-raises(Deactive, Deactivate)
-transitions(Item.status, Deactivate, active -> inactive)
+transitions(Item.status, Deactive, active -> inactive)
 "#,
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
@@ -3418,11 +3296,9 @@ entity Order "注文" {
 }
 usecase Place  "注文確定"
 usecase Cancel "キャンセル"
-event EvCancel "キャンセルイベント"
 creates(Place,  Order)
 updates(Cancel, Order)
-raises(Cancel, EvCancel)
-transitions(Order.status, EvCancel, pending -> cancelled)
+transitions(Order.status, Cancel, pending -> cancelled)
 forbidden(Order, status == cancelled)
 "#,
         );
@@ -3458,12 +3334,10 @@ entity Order "注文" {
 usecase Place   "注文確定"
 usecase Deliver "配達"
 usecase Refund  "返金"
-event EvDeliver "配達"
 creates(Place,   Order)
 updates(Deliver, Order)
 updates(Refund,  Order)
-raises(Deliver, EvDeliver)
-transitions(Order.status, EvDeliver, pending -> delivered)
+transitions(Order.status, Deliver, pending -> delivered)
 sets(usecase::Refund, Order, refunded == true)
 forbidden(Order, status == delivered, refunded == true)
 "#,
@@ -3593,11 +3467,9 @@ entity Order "注文" {
 }
 usecase Place    "注文確定"
 usecase Deliver  "配達完了"
-event EvDeliver  "配達イベント"
 creates(Place,   Order)
 updates(Deliver, Order)
-raises(Deliver,  EvDeliver)
-transitions(Order.status, EvDeliver, pending -> delivered)
+transitions(Order.status, Deliver, pending -> delivered)
 invariant(Order)
   .when(status == delivered)
   .then(delivered_at == present)
@@ -3651,6 +3523,58 @@ invariant(Terminal)
                 .iter()
                 .any(|d| matches!(d, StateDiag::InvariantViolated { .. })),
             "triggered use case should inherit upstream evidence as a guard: {:?}",
+            r.diagnostics
+        );
+    }
+
+    const TERMINAL_RETIRE_TRANSITION: &str = r#"
+entity Terminal "端末" {
+  id: Int @pk
+  status: Enum(active, retired) @default(active)
+  deregistered_at: DateTime @null
+}
+usecase RegisterTerminal "登録する"
+usecase RetireTerminal "退役する"
+usecase DeregisterTerminal "登録解除する"
+creates(RegisterTerminal, Terminal)
+updates(RetireTerminal, Terminal)
+updates(DeregisterTerminal, Terminal)
+transitions(Terminal.status, RetireTerminal, active -> retired)
+sets(DeregisterTerminal, Terminal, deregistered_at == present)
+invariant(Terminal)
+  .when(deregistered_at == present)
+  .then(status == retired)
+"#;
+
+    #[test]
+    fn triggered_usecase_is_guarded_by_upstream_usecase_transition() {
+        let src = format!(
+            "{TERMINAL_RETIRE_TRANSITION}event TerminalRetired \"退役済み\"\nraises(RetireTerminal, TerminalRetired)\ntriggers(TerminalRetired, DeregisterTerminal)\n"
+        );
+        let results = derive_state_patterns(&model_from(&src), &[], DEFAULT_PATTERN_CAP);
+        let r = results.iter().find(|r| r.entity_id == "Terminal").unwrap();
+        assert!(
+            !r.diagnostics
+                .iter()
+                .any(|d| matches!(d, StateDiag::InvariantViolated { .. })),
+            "DeregisterTerminal runs after RetireTerminal moved status to retired: {:?}",
+            r.diagnostics
+        );
+    }
+
+    #[test]
+    fn untriggered_usecase_gets_no_upstream_transition_guard() {
+        let results = derive_state_patterns(
+            &model_from(TERMINAL_RETIRE_TRANSITION),
+            &[],
+            DEFAULT_PATTERN_CAP,
+        );
+        let r = results.iter().find(|r| r.entity_id == "Terminal").unwrap();
+        assert!(
+            r.diagnostics
+                .iter()
+                .any(|d| matches!(d, StateDiag::InvariantViolated { .. })),
+            "without triggers DeregisterTerminal may run while active: {:?}",
             r.diagnostics
         );
     }
@@ -3709,12 +3633,10 @@ entity Order "注文" {
 usecase Place   "注文確定"
 usecase Deliver "配達"
 usecase Refund  "返金"
-event EvDeliver "配達"
 creates(Place,   Order)
 updates(Deliver, Order)
 updates(Refund,  Order)
-raises(Deliver, EvDeliver)
-transitions(Order.status, EvDeliver, pending -> delivered)
+transitions(Order.status, Deliver, pending -> delivered)
 sets(usecase::Refund, Order, refunded == true)
 sets(usecase::Refund, Order, refund_id == present)
 invariant(Order)
@@ -4127,11 +4049,9 @@ entity Order "注文" {
 }
 usecase Place    "注文確定"
 usecase Deliver  "配達完了"
-event EvDeliver  "配達イベント"
 creates(Place,   Order)
 updates(Deliver, Order)
-raises(Deliver,  EvDeliver)
-transitions(Order.status, EvDeliver, pending -> delivered)
+transitions(Order.status, Deliver, pending -> delivered)
 sets(usecase::Deliver, Order, delivered_at == present)
 invariant(Order)
   .when(status == delivered)
@@ -4572,8 +4492,8 @@ forbidden(Order, Payment,
     }
 
     #[test]
-    fn shared_event_transitions_do_not_leak_across_entities() {
-        // Same event drives distinct transitions on Order and Payment.
+    fn shared_usecase_transitions_do_not_leak_across_entities() {
+        // Same use case drives distinct transitions on Order and Payment.
         // Without entity filtering, Payment would inherit Order's pending->paid.
         let model = model_from(
             r#"
@@ -4587,14 +4507,12 @@ entity Payment "決済" {
 }
 usecase Init "初期化"
 usecase Flip "更新"
-event EvFlip "共有イベント"
 creates(Init, Order)
 creates(Init, Payment)
 updates(Flip, Order)
 updates(Flip, Payment)
-raises(Flip, EvFlip)
-transitions(Order.status, EvFlip, pending -> paid)
-transitions(Payment.status, EvFlip, paid -> pending)
+transitions(Order.status, Flip, pending -> paid)
+transitions(Payment.status, Flip, paid -> pending)
 "#,
         );
 
@@ -4609,7 +4527,7 @@ transitions(Payment.status, EvFlip, paid -> pending)
         });
         assert!(
             !payment_has_paid,
-            "Payment must not inherit Order's pending->paid via shared event: {:?}",
+            "Payment must not inherit Order's pending->paid via shared use case: {:?}",
             payment.patterns
         );
 
@@ -4688,12 +4606,10 @@ entity Order "O" {
 }
 usecase Place "place"
 usecase Ship "ship"
-event EvShip "ship"
 creates(Place, Order)
 sets(Place, Order, status == shipped)
 updates(Ship, Order)
-raises(Ship, EvShip)
-transitions(Order.status, EvShip, placed -> shipped)
+transitions(Order.status, Ship, placed -> shipped)
 "#,
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);

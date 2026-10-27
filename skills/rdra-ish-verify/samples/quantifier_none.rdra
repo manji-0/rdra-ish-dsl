@@ -14,20 +14,13 @@ usecase Issue "発行"
 usecase Revoke "失効"
 usecase EndAssign "割当終了"
 
-event EvRevoke "失効"
-event EvEnd "終了"
-
 creates(Issue, Cert)
 creates(Issue, Assign)
 updates(Revoke, Cert)
 updates(EndAssign, Assign)
 
-raises(Revoke, EvRevoke)
-raises(EndAssign, EvEnd)
-
-
-transitions(Cert.status, EvRevoke, active -> revoked)
-transitions(Assign.status, EvEnd, active -> ended)
+transitions(Cert.status, Revoke, active -> revoked)
+transitions(Assign.status, EndAssign, active -> ended)
 
 relate(Assign, Cert, N:1)
 

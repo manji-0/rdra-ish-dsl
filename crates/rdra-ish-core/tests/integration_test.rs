@@ -66,8 +66,8 @@ fn test_purchase_fixture_builds_model() {
     // BUCs: Purchase
     assert_eq!(model.bucs.len(), 1);
 
-    // UseCases: Browse, AddToCart, Checkout
-    assert_eq!(model.use_cases.len(), 3);
+    // UseCases: Browse, AddToCart, Checkout, ConfirmPayment, ShipOrder
+    assert_eq!(model.use_cases.len(), 5);
 
     // Screens: ProductList, CartView, CheckoutForm
     assert_eq!(model.screens.len(), 3);

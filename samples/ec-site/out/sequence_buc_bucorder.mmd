@@ -1,5 +1,6 @@
 sequenceDiagram
   box System Value
+    actor Admin as 👤 Administrator
     actor Customer as 👤 Customer
   end
   box System Boundary
@@ -9,6 +10,7 @@ sequenceDiagram
     participant OrderHistoryScreen as 🖥️ Order History Screen
   end
   box System
+    participant System as 🧩 システム
     participant CancelOrderApi as 🔌 Cancel Order API
     participant ConfirmOrderApi as 🔌 Confirm Order API
     participant OrderHistoryApi as 🔌 Order History API
@@ -21,7 +23,7 @@ sequenceDiagram
     participant ShippingAddress as 🗄️ Shipping Address
   end
 
-  Note over Customer,ShippingAddress: ✅ Cancel Order
+  Note over Admin,ShippingAddress: ✅ Cancel Order
   Customer->>OrderHistoryScreen: ✅ Cancel Order
   OrderHistoryScreen->>CancelOrderApi: ✅ Cancel Order
   activate CancelOrderApi
@@ -30,7 +32,7 @@ sequenceDiagram
   OrderHistoryScreen-->>Customer: 🖥️ Order History Screen
   deactivate CancelOrderApi
 
-  Note over Customer,ShippingAddress: ✅ Confirm Order Details
+  Note over Admin,ShippingAddress: ✅ Confirm Order Details
   Customer->>OrderConfirmScreen: ✅ Confirm Order Details
   OrderConfirmScreen->>ConfirmOrderApi: ✅ Confirm Order Details
   activate ConfirmOrderApi
@@ -41,7 +43,13 @@ sequenceDiagram
   OrderConfirmScreen-->>Customer: 🖥️ Order Confirmation Screen
   deactivate ConfirmOrderApi
 
-  Note over Customer,ShippingAddress: ✅ Place Order
+  Note over Admin,ShippingAddress: ✅ Confirm Delivery
+  Admin->System: ✅ Confirm Delivery
+  activate System
+  System->>Order: update
+  deactivate System
+
+  Note over Admin,ShippingAddress: ✅ Place Order
   Customer->>OrderCompleteScreen: ✅ Place Order
   OrderCompleteScreen->>PlaceOrderApi: ✅ Place Order
   activate PlaceOrderApi
@@ -55,7 +63,7 @@ sequenceDiagram
   OrderCompleteScreen-->>Customer: 🖥️ Order Complete Screen
   deactivate PlaceOrderApi
 
-  Note over Customer,ShippingAddress: ✅ Select Shipping Address
+  Note over Admin,ShippingAddress: ✅ Select Shipping Address
   Customer->>AddressSelectScreen: ✅ Select Shipping Address
   AddressSelectScreen->>SelectAddressApi: ✅ Select Shipping Address
   activate SelectAddressApi
@@ -64,7 +72,13 @@ sequenceDiagram
   AddressSelectScreen-->>Customer: 🖥️ Address Selection Screen
   deactivate SelectAddressApi
 
-  Note over Customer,ShippingAddress: ✅ View Order History
+  Note over Admin,ShippingAddress: ✅ Ship Order
+  Admin->System: ✅ Ship Order
+  activate System
+  System->>Order: update
+  deactivate System
+
+  Note over Admin,ShippingAddress: ✅ View Order History
   Customer->>OrderHistoryScreen: ✅ View Order History
   OrderHistoryScreen->>OrderHistoryApi: ✅ View Order History
   activate OrderHistoryApi

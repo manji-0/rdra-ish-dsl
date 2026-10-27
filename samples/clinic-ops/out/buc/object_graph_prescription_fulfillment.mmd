@@ -24,9 +24,7 @@ flowchart LR
     MedicationSearchScreen[["🖥️ Medication Search Screen"]]
     PharmacyStatusScreen[["🖥️ Pharmacy Status Screen"]]
     PrescriptionScreen[["🖥️ Prescription Screen"]]
-    EvPrescriptionCancelled{"⚡ Prescription Cancelled"}
     EvPrescriptionDispensed{"⚡ Prescription Dispensed"}
-    EvPrescriptionSent{"⚡ Prescription Sent"}
   end
   subgraph layer_system[System]
     direction TB
@@ -81,7 +79,6 @@ flowchart LR
   DraftPrescription -.->|requires_permission| PrescriptionWrite
   SendPrescription -.->|displays| PrescriptionScreen
   SendPrescription -.->|invokes| SendPrescriptionApi
-  SendPrescription -.->|raises| EvPrescriptionSent
   SendPrescription -.->|requires_medium| ClinicalWorkstation
   SendPrescription -.->|requires_permission| PrescriptionWrite
   ConfirmDispense -.->|displays| PharmacyStatusScreen
@@ -90,7 +87,6 @@ flowchart LR
   ConfirmDispense -.->|requires_medium| NurseStation
   ConfirmDispense -.->|requires_permission| PrescriptionDispense
   CancelPrescription -.->|displays| PrescriptionScreen
-  CancelPrescription -.->|raises| EvPrescriptionCancelled
   CancelPrescription -.->|requires_medium| ClinicalWorkstation
   CancelPrescription -.->|requires_permission| PrescriptionWrite
   CancelPrescription -.->|updates| Prescription

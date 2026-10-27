@@ -283,111 +283,16 @@ relate(PatientMessage, PatientAccount, N:1)
 relate(Notification, PatientAccount, N:1)
 relate(AuditEvent, PatientAccount, N:1)
 
-// Patient account state
-
-event EvPatientArchived "Patient Archived"
-event EvPatientMerged   "Patient Merged"
-
-transitions(PatientAccount.status, EvPatientArchived, patientactive -> patientinactive)
-transitions(PatientAccount.status, EvPatientMerged, patientactive -> patientmerged)
-
-sets(event::EvPatientArchived, PatientAccount, archived_at == present)
-
-// Appointment state
+// Events: the interface between use cases. Each lifecycle transition is
+// declared in its BUC file, next to the use case that drives it.
 
 event EvAppointmentScheduled   "Appointment Scheduled"
 event EvAppointmentRescheduled "Appointment Rescheduled"
 event EvAppointmentCheckedIn   "Appointment Checked In"
-event EvAppointmentCompleted   "Appointment Completed"
 event EvAppointmentCancelled   "Appointment Cancelled"
-event EvAppointmentNoShow      "Appointment Marked No Show"
-
-transitions(Appointment.status, EvAppointmentScheduled, apptrequested -> apptscheduled)
-transitions(Appointment.status, EvAppointmentRescheduled, apptscheduled -> apptscheduled)
-transitions(Appointment.status, EvAppointmentCheckedIn, apptscheduled -> apptcheckedin)
-transitions(Appointment.status, EvAppointmentCompleted, apptcheckedin -> apptcompleted)
-transitions(Appointment.status, EvAppointmentCancelled, apptscheduled -> apptcancelled)
-transitions(Appointment.status, EvAppointmentNoShow, apptscheduled -> apptnoshow)
-
-sets(event::EvAppointmentCheckedIn, Appointment, checked_in_at == present)
-sets(event::EvAppointmentCompleted, Appointment, completed_at == present)
-sets(event::EvAppointmentCancelled, Appointment, cancel_reason == present)
-
-// Intake state
-
-event EvIntakeCompleted "Intake Completed"
-event EvIntakeExpired   "Intake Expired"
-
-transitions(IntakePacket.status, EvIntakeCompleted, intakesent -> intakecompleted)
-transitions(IntakePacket.status, EvIntakeExpired, intakesent -> intakeexpired)
-
-sets(event::EvIntakeCompleted, IntakePacket, completed_at == present)
-
-// Encounter state
-
-event EvEncounterDocumented "Encounter Documented"
 event EvEncounterSigned     "Encounter Signed"
-event EvEncounterAmended    "Encounter Amended"
-
-transitions(Encounter.status, EvEncounterDocumented, encopen -> encdocumented)
-transitions(Encounter.status, EvEncounterSigned, encdocumented -> encsigned)
-transitions(Encounter.status, EvEncounterAmended, encsigned -> encamended)
-
-sets(event::EvEncounterSigned, Encounter, signed_at == present)
-
-// Clinical order state
-
-event EvClinicalOrderCollected "Specimen Collected"
-event EvClinicalOrderResulted  "Clinical Result Received"
 event EvClinicalOrderReviewed  "Clinical Result Reviewed"
-event EvClinicalOrderCancelled "Clinical Order Cancelled"
-
-transitions(ClinicalOrder.status, EvClinicalOrderCollected, clordered -> clcollected)
-transitions(ClinicalOrder.status, EvClinicalOrderResulted, clcollected -> clresulted)
-transitions(ClinicalOrder.status, EvClinicalOrderReviewed, clresulted -> clreviewed)
-transitions(ClinicalOrder.status, EvClinicalOrderCancelled, clordered -> clcancelled)
-
-sets(event::EvClinicalOrderCollected, ClinicalOrder, collected_at == present)
-sets(event::EvClinicalOrderResulted, ClinicalOrder, resulted_at == present)
-
-// Prescription state
-
-event EvPrescriptionSent      "Prescription Sent"
 event EvPrescriptionDispensed "Prescription Dispensed"
-event EvPrescriptionCancelled "Prescription Cancelled"
-
-transitions(Prescription.status, EvPrescriptionSent, rxdrafted -> rxsent)
-transitions(Prescription.status, EvPrescriptionDispensed, rxsent -> rxdispensed)
-transitions(Prescription.status, EvPrescriptionCancelled, rxdrafted -> rxcancelled)
-
-sets(event::EvPrescriptionSent, Prescription, sent_at == present)
-sets(event::EvPrescriptionDispensed, Prescription, dispensed_at == present)
-
-// Claim state
-
-event EvClaimSubmitted "Claim Submitted"
-event EvClaimAccepted  "Claim Accepted"
-event EvClaimDenied    "Claim Denied"
-event EvClaimPaid      "Claim Paid"
-
-transitions(Claim.status, EvClaimSubmitted, claimdraft -> claimsubmitted)
-transitions(Claim.status, EvClaimAccepted, claimsubmitted -> claimaccepted)
-transitions(Claim.status, EvClaimDenied, claimsubmitted -> claimdenied)
-transitions(Claim.status, EvClaimPaid, claimaccepted -> claimpaid)
-
-sets(event::EvClaimSubmitted, Claim, submitted_at == present)
-sets(event::EvClaimDenied, Claim, denial_reason == present)
-sets(event::EvClaimPaid, Claim, paid_at == present)
-
-// Care plan state
-
-event EvCarePlanMonitoring "Care Plan Monitoring"
-event EvCarePlanClosed     "Care Plan Closed"
-
-transitions(CarePlan.status, EvCarePlanMonitoring, careopen -> caremonitoring)
-transitions(CarePlan.status, EvCarePlanClosed, caremonitoring -> careclosed)
-
-sets(event::EvCarePlanClosed, CarePlan, closed_at == present)
 
 // State constraints
 invariant(Appointment)

@@ -12,9 +12,12 @@ rectangle "External Environment" {
 }
 
 rectangle "System Boundary" {
+  usecase "✅ Delete Account" as DeleteAccount
   usecase "✅ Delete Address" as DeleteAddress
   usecase "✅ Register Address" as RegisterAddress
+  usecase "✅ Restore Account" as RestoreAccount
   usecase "✅ Set Primary Address" as SetPrimaryAddress
+  usecase "✅ Suspend Account" as SuspendAccount
   usecase "✅ Update Address" as UpdateAddress
   usecase "✅ Update Personal Information" as UpdateProfile
   usecase "✅ View Personal Information" as ViewProfile
@@ -59,6 +62,9 @@ BucProfile --> RegisterAddress : contains
 BucProfile --> UpdateAddress : contains
 BucProfile --> DeleteAddress : contains
 BucProfile --> SetPrimaryAddress : contains
+BucProfile --> SuspendAccount : contains
+BucProfile --> RestoreAccount : contains
+BucProfile --> DeleteAccount : contains
 PersonalInfo -- UserAccount : 1:1
 PostalAddress -- UserAccount : N:1
 AuditLog -- UserAccount : N:1
@@ -74,4 +80,7 @@ DeleteAddress ..> AddressListScreen : displays
 DeleteAddress ..> DeleteAddressApi : invokes
 SetPrimaryAddress ..> AddressListScreen : displays
 SetPrimaryAddress ..> SetPrimaryAddressApi : invokes
+SuspendAccount ..> UserAccount : updates
+RestoreAccount ..> UserAccount : updates
+DeleteAccount ..> UserAccount : updates
 @enduml

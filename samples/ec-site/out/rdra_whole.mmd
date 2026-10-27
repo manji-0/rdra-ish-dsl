@@ -20,12 +20,14 @@ flowchart LR
     Cancel(["✅ Cancel Order"])
     Capture(["✅ Capture Payment"])
     ConfirmOrder(["✅ Confirm Order Details"])
+    DeliverOrder(["✅ Confirm Delivery"])
     InputPaymentInfo(["✅ Enter Payment Information"])
     PlaceOrder(["✅ Place Order"])
     RefundPayment(["✅ Refund Payment"])
     RemoveCartItem(["✅ Remove from Cart"])
     SearchProducts(["✅ Search Products"])
     SelectAddress(["✅ Select Shipping Address"])
+    ShipOrder(["✅ Ship Order"])
     UpdateCartItem(["✅ Change Cart Item Quantity"])
     ViewCart(["✅ View Cart"])
     ViewOrderHistory(["✅ View Order History"])
@@ -39,10 +41,6 @@ flowchart LR
     PaymentResultScreen[["🖥️ Payment Result Screen"]]
     ProductDetailScreen[["🖥️ Product Detail Screen"]]
     ProductSearchScreen[["🖥️ Product Search Screen"]]
-    Cancel{"⚡ Cancel Order"}
-    Capture{"⚡ Capture Payment"}
-    Deliver{"⚡ Confirm Delivery"}
-    Ship{"⚡ Start Shipping"}
   end
   subgraph layer_system[System]
     direction TB
@@ -81,6 +79,8 @@ flowchart LR
   Customer -->|performs| BucOrder
   Customer -->|performs| BucCart
   Customer -->|uses| PaymentGW
+  Admin -->|performs| ShipOrder
+  Admin -->|performs| DeliverOrder
   ProductSearchApi -.->|reads| Category
   ProductSearchApi -.->|reads| Product
   ProductDetailApi -.->|reads| Product
@@ -115,6 +115,8 @@ flowchart LR
   BucPayment -->|contains| Capture
   BucPayment -->|contains| RefundPayment
   BucOrder -.->|belongs| EcShopping
+  BucOrder -->|contains| ShipOrder
+  BucOrder -->|contains| DeliverOrder
   BucOrder -->|contains| SelectAddress
   BucOrder -->|contains| ConfirmOrder
   BucOrder -->|contains| PlaceOrder
@@ -152,6 +154,8 @@ flowchart LR
   CommerceSystem -->|contains| PlaceOrderApi
   CommerceSystem -->|contains| OrderHistoryApi
   CommerceSystem -->|contains| CancelOrderApi
+  ShipOrder -.->|updates| Order
+  DeliverOrder -.->|updates| Order
   SearchProducts -.->|displays| ProductSearchScreen
   SearchProducts -.->|invokes| ProductSearchApi
   ViewProduct -.->|displays| ProductDetailScreen
@@ -170,7 +174,6 @@ flowchart LR
   AuthorizePayment -.->|invokes| PaymentAuthorizationApi
   Capture -.->|displays| PaymentResultScreen
   Capture -.->|invokes| PaymentCaptureApi
-  Capture -.->|raises| Capture
   RefundPayment -.->|displays| PaymentResultScreen
   RefundPayment -.->|invokes| PaymentRefundApi
   SelectAddress -.->|displays| AddressSelectScreen
@@ -183,4 +186,3 @@ flowchart LR
   ViewOrderHistory -.->|invokes| OrderHistoryApi
   Cancel -.->|displays| OrderHistoryScreen
   Cancel -.->|invokes| CancelOrderApi
-  Cancel -.->|raises| Cancel

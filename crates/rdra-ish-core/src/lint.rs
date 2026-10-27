@@ -786,7 +786,7 @@ fn relation_degree(model: &SemanticModel) -> HashMap<NodeRef, usize> {
         .map(|(key, state)| (state.id.as_str(), key))
         .collect();
     for transition in &model.state_transitions {
-        touch(NodeRef::Event(transition.event));
+        touch(NodeRef::UseCase(transition.usecase));
         touch(NodeRef::Entity(transition.entity));
         let entity_id = &model.entities[transition.entity].id;
         for variant in [&transition.from, &transition.to] {
@@ -808,11 +808,11 @@ fn relation_degree(model: &SemanticModel) -> HashMap<NodeRef, usize> {
         touch(NodeRef::Entity(coordination.right));
     }
     for effect in &model.column_effects {
-        touch(effect.origin.clone());
+        touch(NodeRef::UseCase(effect.origin));
         touch(NodeRef::Entity(effect.entity));
     }
     for effect in &model.proposition_effects {
-        touch(effect.origin.clone());
+        touch(NodeRef::UseCase(effect.origin));
         touch(NodeRef::Entity(effect.entity));
     }
     for constraint in &model.forbidden_constraints {
@@ -1036,13 +1036,11 @@ api CreateOrder "Create order"
         let model = model_from(
             r#"
 usecase Place "Place"
-event Placed "Placed"
 entity Order "Order" {
   Id: Int @pk
   status: Enum(pending, paid)
 }
-raises(Place, Placed)
-transitions(Order.status, Placed, pending -> paid)
+transitions(Order.status, Place, pending -> paid)
 "#,
         );
 
@@ -1135,7 +1133,6 @@ entity Order "Order" {
     fn enum_attribute_flags_inline_enum_nothing_moves() {
         let model = model_from(
             r#"
-event Paid "Paid"
 usecase Place "Place"
 usecase Pay "Pay"
 entity Order "Order" {
@@ -1149,8 +1146,7 @@ variation PaymentMethod "Payment Method" {
   cash
   card
 }
-raises(Pay, Paid)
-transitions(Order.status, Paid, pending -> paid)
+transitions(Order.status, Pay, pending -> paid)
 sets(Place, Order, priority == high)
 "#,
         );

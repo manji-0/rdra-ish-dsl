@@ -652,14 +652,13 @@ fn is_column_set_by_path(
     entity: EntityKey,
     column: &str,
 ) -> bool {
-    let origin = match source {
-        ActorInputSource::UseCase => NodeRef::UseCase(usecase),
-        ActorInputSource::Api(api) => NodeRef::Api(api),
-    };
-    model
-        .column_effects
-        .iter()
-        .any(|effect| effect.origin == origin && effect.entity == entity && effect.column == column)
+    // `sets` takes a use case origin only, so an API path never sets a column.
+    if !matches!(source, ActorInputSource::UseCase) {
+        return false;
+    }
+    model.column_effects.iter().any(|effect| {
+        effect.origin == usecase && effect.entity == entity && effect.column == column
+    })
 }
 
 /// Actors that perform a use case: direct `performs(Actor, UC)` unioned with

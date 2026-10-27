@@ -212,7 +212,7 @@ sets(Sell, Stock, stock < selling, true)
     let effect = &model.proposition_effects[0];
     assert_eq!(effect.prop.axis_key(), "stock<selling");
     assert!(effect.truth);
-    assert!(matches!(effect.origin, NodeRef::UseCase(_)));
+    assert_eq!(model.use_cases[effect.origin].id, "Sell");
 }
 
 #[test]

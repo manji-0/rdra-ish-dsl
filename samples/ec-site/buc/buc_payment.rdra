@@ -8,7 +8,6 @@ buc BucPayment "Make Payment"
 
 usecase InputPaymentInfo "Enter Payment Information"
 usecase AuthorizePayment "Authorize Payment"
-// Same name as event Capture in shared.entities — usecase:: qualifier required
 usecase Capture          "Capture Payment"
 usecase RefundPayment    "Refund Payment"
 
@@ -24,7 +23,7 @@ performs(Customer, BucPayment)
 belongs(BucPayment, EcShopping)
 contains(BucPayment, InputPaymentInfo)
 contains(BucPayment, AuthorizePayment)
-contains(BucPayment, usecase::Capture)
+contains(BucPayment, Capture)
 contains(BucPayment, RefundPayment)
 contains(CommerceSystem, PaymentInputApi)
 contains(CommerceSystem, PaymentAuthorizationApi)
@@ -41,11 +40,11 @@ invokes(AuthorizePayment, PaymentAuthorizationApi)
 updates(PaymentAuthorizationApi, Payment)
 uses(Customer, PaymentGW)
 
-displays(usecase::Capture, PaymentResultScreen)
-invokes(usecase::Capture, PaymentCaptureApi)
+displays(Capture, PaymentResultScreen)
+invokes(Capture, PaymentCaptureApi)
 updates(PaymentCaptureApi, Payment)
 updates(PaymentCaptureApi, Order)
-raises(usecase::Capture, event::Capture)
+transitions(Order.status, Capture, pending -> paid)
 
 displays(RefundPayment, PaymentResultScreen)
 invokes(RefundPayment, PaymentRefundApi)
@@ -55,9 +54,9 @@ updates(PaymentRefundApi, Order)
 // ── Column effect declarations (sets) ────────────────────────────────────────
 // Payment.status has no state machine, so it is declared explicitly via sets
 sets(InputPaymentInfo, Payment, status == pending)
-sets(usecase::Capture, Payment, status == captured)
+sets(Capture, Payment, status == captured)
 sets(AuthorizePayment, Payment, status == authorized)
 sets(RefundPayment, Payment, status == refunded)
 // Order.delivered_at does not change at capture time (it changes on Deliver)
 // processed_at is nullable, so it is declared explicitly via sets
-sets(usecase::Capture, Payment, processed_at == present)
+sets(Capture, Payment, processed_at == present)

@@ -51,12 +51,6 @@ flowchart LR
     PatientProfileScreen[["🖥️ Patient Profile Screen"]]
     PatientSearchScreen[["🖥️ Patient Search Screen"]]
     EvAppointmentScheduled{"⚡ Appointment Scheduled"}
-    EvCarePlanClosed{"⚡ Care Plan Closed"}
-    EvCarePlanMonitoring{"⚡ Care Plan Monitoring"}
-    EvIntakeCompleted{"⚡ Intake Completed"}
-    EvIntakeExpired{"⚡ Intake Expired"}
-    EvPatientArchived{"⚡ Patient Archived"}
-    EvPatientMerged{"⚡ Patient Merged"}
   end
   subgraph layer_system[System]
     direction TB
@@ -178,22 +172,18 @@ flowchart LR
   SendIntakeForms -.->|requires_medium| FrontDeskTerminal
   SendIntakeForms -.->|requires_permission| IntakeManage
   CompleteIntakeForms -.->|displays| IntakePortalScreen
-  CompleteIntakeForms -.->|raises| EvIntakeCompleted
   CompleteIntakeForms -.->|requires_medium| PatientMobile
   CompleteIntakeForms -.->|requires_permission| ConsentCapture
   CompleteIntakeForms -.->|updates| IntakePacket
   ExpireIntakeForms -.->|displays| IntakePortalScreen
-  ExpireIntakeForms -.->|raises| EvIntakeExpired
   ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
   ExpireIntakeForms -.->|requires_permission| IntakeManage
   ExpireIntakeForms -.->|updates| IntakePacket
   MergeDuplicatePatient -.->|displays| PatientProfileScreen
-  MergeDuplicatePatient -.->|raises| EvPatientMerged
   MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
   MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
   MergeDuplicatePatient -.->|updates| PatientAccount
   ArchivePatient -.->|displays| PatientProfileScreen
-  ArchivePatient -.->|raises| EvPatientArchived
   ArchivePatient -.->|requires_medium| FrontDeskTerminal
   ArchivePatient -.->|requires_permission| PatientProfileWrite
   ArchivePatient -.->|updates| PatientAccount
@@ -210,7 +200,6 @@ flowchart LR
   SendFollowUpMessage -.->|requires_medium| CareCoordinationConsole
   SendFollowUpMessage -.->|requires_permission| PatientMessageSend
   ReviewPatientResponse -.->|displays| CarePlanScreen
-  ReviewPatientResponse -.->|raises| EvCarePlanMonitoring
   ReviewPatientResponse -.->|requires_medium| CareCoordinationConsole
   ReviewPatientResponse -.->|requires_permission| FollowUpManage
   ReviewPatientResponse -.->|updates| CarePlan
@@ -222,7 +211,6 @@ flowchart LR
   ScheduleFollowUpVisit -.->|requires_permission| FollowUpManage
   ScheduleFollowUpVisit -.->|requires_permission| ScheduleWrite
   CloseCarePlan -.->|displays| CarePlanScreen
-  CloseCarePlan -.->|raises| EvCarePlanClosed
   CloseCarePlan -.->|requires_medium| CareCoordinationConsole
   CloseCarePlan -.->|requires_permission| FollowUpManage
   CloseCarePlan -.->|updates| CarePlan

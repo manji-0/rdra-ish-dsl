@@ -108,19 +108,21 @@ triggers(EvAppointmentScheduled, SendIntakeForms)
 
 displays(CompleteIntakeForms, IntakePortalScreen)
 updates(CompleteIntakeForms, IntakePacket)
-raises(CompleteIntakeForms, EvIntakeCompleted)
+transitions(IntakePacket.status, CompleteIntakeForms, intakesent -> intakecompleted)
+sets(CompleteIntakeForms, IntakePacket, completed_at == present)
 
 displays(ExpireIntakeForms, IntakePortalScreen)
 updates(ExpireIntakeForms, IntakePacket)
-raises(ExpireIntakeForms, EvIntakeExpired)
+transitions(IntakePacket.status, ExpireIntakeForms, intakesent -> intakeexpired)
 
 displays(MergeDuplicatePatient, PatientProfileScreen)
 updates(MergeDuplicatePatient, PatientAccount)
-raises(MergeDuplicatePatient, EvPatientMerged)
+transitions(PatientAccount.status, MergeDuplicatePatient, patientactive -> patientmerged)
 
 displays(ArchivePatient, PatientProfileScreen)
 updates(ArchivePatient, PatientAccount)
-raises(ArchivePatient, EvPatientArchived)
+transitions(PatientAccount.status, ArchivePatient, patientactive -> patientinactive)
+sets(ArchivePatient, PatientAccount, archived_at == present)
 
 // Access constraints
 requires_permission(SearchPatient, PatientProfileRead)

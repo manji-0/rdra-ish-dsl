@@ -125,10 +125,11 @@ pub fn creation_status_effects(
         .column_effects
         .iter()
         .filter(|e| e.entity == ek && e.column == status_column)
-        .filter_map(|e| match (&e.origin, &e.value) {
-            (NodeRef::UseCase(uk), EffectValue::EnumVariant(v)) if creating.contains(uk) => {
-                Some((*uk, declared_variant_casing(model, ek, status_column, v)))
-            }
+        .filter_map(|e| match &e.value {
+            EffectValue::EnumVariant(v) if creating.contains(&e.origin) => Some((
+                e.origin,
+                declared_variant_casing(model, ek, status_column, v),
+            )),
             _ => None,
         })
         .collect();
@@ -349,14 +350,14 @@ entity Order "注文" {
   status:       Enum(pending, paid, shipped, delivered, cancelled) @default(pending)
   delivered_at: DateTime @null
 }
-event EvCapture  "決済確定"
-event EvShip     "発送開始"
-event EvDeliver  "配達確認"
-event EvCancel   "注文キャンセル"
-transitions(Order.status, EvCapture, pending -> paid)
-transitions(Order.status, EvShip,    paid -> shipped)
-transitions(Order.status, EvDeliver, shipped -> delivered)
-transitions(Order.status, EvCancel,  pending -> cancelled)
+usecase CapturePay "決済確定"
+usecase ShipOrder  "発送開始"
+usecase DeliverOrder "配達確認"
+usecase CancelOrder "注文キャンセル"
+transitions(Order.status, CapturePay, pending -> paid)
+transitions(Order.status, ShipOrder, paid -> shipped)
+transitions(Order.status, DeliverOrder, shipped -> delivered)
+transitions(Order.status, CancelOrder, pending -> cancelled)
 "#;
 
     #[test]
@@ -410,7 +411,7 @@ entity Doc "文書" {
   id: Int @pk
   status: Enum(Draft, Published) @default(Draft)
 }
-event Publish "公開"
+usecase Publish "公開"
 transitions(Doc.status, Publish, Draft -> Published)
 "#,
         );
@@ -440,8 +441,8 @@ entity Ticket "チケット" {
   status: Enum(open, closed) @default(open)
   phase: Enum(intake, work) @default(intake)
 }
-event Close "閉じる"
-event StartWork "作業開始"
+usecase Close "閉じる"
+usecase StartWork "作業開始"
 transitions(Ticket.phase, StartWork, intake -> work)
 transitions(Ticket.status, Close, open -> closed)
 "#,

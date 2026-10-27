@@ -971,7 +971,7 @@ actor Customer "重複定義"
     #[test]
     fn cross_kind_same_id_import_allows_kind_qualifiers() {
         // event Capture in shared + usecase Capture locally must coexist;
-        // kind::Capture must resolve each side (samples/ec-site pattern).
+        // kind::Capture must resolve each side.
         let dir = make_temp_dir("cross_kind_capture");
         let shared_dir = dir.join("shared");
         fs::create_dir_all(&shared_dir).unwrap();

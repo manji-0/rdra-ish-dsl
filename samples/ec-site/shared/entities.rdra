@@ -89,19 +89,5 @@ relate(OrderLine, Order, N:1)
 relate(OrderLine, Product, N:1)
 relate(Payment, Order, 1:1)
 
-// ── State transitions (order) ───────────────────────────
-// Capture / Cancel are also declared as use cases with the same names in
-// buc_payment.rdra and buc_order.rdra respectively. When the whole src/
-// tree is merged, the event and use case collide, so the first argument of
-// transitions must be qualified with event::.
-
-
-event Capture "Capture Payment"  // same name as use case Capture (buc_payment)
-event Ship    "Start Shipping"
-event Deliver "Confirm Delivery"
-event Cancel  "Cancel Order"     // same name as use case Cancel (buc_order)
-
-transitions(Order.status, event::Capture, pending -> paid)
-transitions(Order.status, event::Ship, paid -> shipped)
-transitions(Order.status, event::Deliver, shipped -> delivered)
-transitions(Order.status, event::Cancel, pending -> cancelled)
+// Order.status transitions are declared next to the use cases that drive them
+// (buc_payment.rdra: Capture; buc_order.rdra: Cancel, ShipOrder, DeliverOrder).

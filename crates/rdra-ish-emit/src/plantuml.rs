@@ -732,14 +732,14 @@ impl Emitter for StateDiagramEmitter {
             }
         }
 
-        // 遷移（event, from, to の三つ組をそのまま出力）
+        // 遷移（usecase, from, to の三つ組をそのまま出力）
         let mut sorted: Vec<_> = transitions.iter().collect();
         sorted.sort_by_key(|(from_sk, to_sk, t)| {
             format!(
                 "{}{}{}",
                 node_id(model, &NodeRef::State(*from_sk)).unwrap_or(""),
                 node_id(model, &NodeRef::State(*to_sk)).unwrap_or(""),
-                node_id(model, &NodeRef::Event(t.event)).unwrap_or(""),
+                node_id(model, &NodeRef::UseCase(t.usecase)).unwrap_or(""),
             )
         });
 
@@ -762,17 +762,17 @@ impl Emitter for StateDiagramEmitter {
         for (from_sk, to_sk, t) in &sorted {
             let from_nr = NodeRef::State(*from_sk);
             let to_nr = NodeRef::State(*to_sk);
-            let event_nr = NodeRef::Event(t.event);
-            if let (Some(from_id), Some(to_id), Some(ev_label)) = (
+            let usecase_nr = NodeRef::UseCase(t.usecase);
+            if let (Some(from_id), Some(to_id), Some(uc_label)) = (
                 node_id(model, &from_nr),
                 node_id(model, &to_nr),
-                node_label(model, &event_nr),
+                node_label(model, &usecase_nr),
             ) {
                 out.push_str(&format!(
                     "{} --> {} : {}\n",
                     from_id,
                     to_id,
-                    prefixed_node_label(&event_nr, ev_label)
+                    prefixed_node_label(&usecase_nr, uc_label)
                 ));
             }
         }
@@ -1498,23 +1498,20 @@ fn render_event_flow(
         .iter()
         .map(|(sk, s)| (s.id.clone(), sk))
         .collect();
-    let resolved_transitions: Vec<(StateKey, StateKey)> =
-        flow.transitions
-            .iter()
-            .filter_map(|(from_var, to_var)| {
-                let st = model.state_transitions.iter().find(|st| {
-                    st.event == flow.event && st.from == *from_var && st.to == *to_var
-                })?;
-                let entity_id = &model.entities.get(st.entity)?.id;
-                let from_sk = state_id_to_key
-                    .get(&format!("{entity_id}_{from_var}"))
-                    .copied()?;
-                let to_sk = state_id_to_key
-                    .get(&format!("{entity_id}_{to_var}"))
-                    .copied()?;
-                Some((from_sk, to_sk))
-            })
-            .collect();
+    let resolved_transitions: Vec<(StateKey, StateKey)> = flow
+        .transitions
+        .iter()
+        .filter_map(|st| {
+            let entity_id = &model.entities.get(st.entity)?.id;
+            let from_sk = state_id_to_key
+                .get(&format!("{entity_id}_{}", st.from))
+                .copied()?;
+            let to_sk = state_id_to_key
+                .get(&format!("{entity_id}_{}", st.to))
+                .copied()?;
+            Some((from_sk, to_sk))
+        })
+        .collect();
     let mut transitions = resolved_transitions;
     transitions.sort_by_key(|(from, _)| {
         model
@@ -2132,11 +2129,16 @@ entity Encounter "Encounter" {
   id: Int @pk
   status: Enum(pending, signed) @default(pending)
 }
+entity Claim "Claim" {
+  id: Int @pk
+  status: Enum(open, reviewed) @default(open)
+}
 event EncounterSigned "Encounter Signed"
 raises(SignEncounter, EncounterSigned)
 triggers(EncounterSigned, ReviewClaim)
 triggers(EncounterSigned, BucBillingClaims)
-transitions(Encounter.status, EncounterSigned, pending -> signed)
+transitions(Encounter.status, SignEncounter, pending -> signed)
+transitions(Claim.status, ReviewClaim, open -> reviewed)
 "#;
         let model = model_from(src);
         let flows = rdra_ish_core::collect_event_flows(&model);
@@ -2160,9 +2162,9 @@ transitions(Encounter.status, EncounterSigned, pending -> signed)
         assert!(out.contains("uc__SignEncounter ..> ev__EncounterSigned : raises"));
         assert!(out.contains("ev__EncounterSigned ..> uc__ReviewClaim : triggers"));
         assert!(out.contains("ev__EncounterSigned ..> buc__BucBillingClaims : triggers"));
-        assert!(
-            out.contains("st__Encounter_pending --> st__Encounter_signed : ⚡ Encounter Signed")
-        );
+        // The event leads to the transition its triggered use case drives, not to its raiser's.
+        assert!(out.contains("st__Claim_open --> st__Claim_reviewed : ⚡ Encounter Signed"));
+        assert!(!out.contains("st__Encounter_pending -->"));
     }
 
     #[test]

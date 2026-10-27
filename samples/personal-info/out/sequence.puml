@@ -2,6 +2,7 @@
 !theme plain
 
 box "System Value" #E3F2FD
+actor "👤 System Administrator" as SysAdmin
 actor "👤 User" as User
 end box
 box "System Boundary" #E0F7FA
@@ -15,6 +16,7 @@ boundary "🖥️ Password Setup Screen" as PasswordSetScreen
 boundary "🖥️ Personal Information Screen" as ProfileScreen
 end box
 box "System" #F3E5F5
+participant "🧩 システム" as System
 control "🔌 Change Password API" as ChangePasswordApi
 control "🔌 Delete Address API" as DeleteAddressApi
 control "🔌 Delete Card API" as DeleteCardApi
@@ -49,6 +51,12 @@ end
 ChangePasswordApi --> PasswordChangeScreen : 🖥️ Password Change Screen
 PasswordChangeScreen --> User : 🖥️ Password Change Screen
 deactivate ChangePasswordApi
+
+== ✅ Delete Account ==
+SysAdmin -> System : ✅ Delete Account
+activate System
+System -> UserAccount : update
+deactivate System
 
 == ✅ Delete Address ==
 User -> AddressListScreen : ✅ Delete Address
@@ -129,6 +137,12 @@ ResetPasswordApi --> PasswordResetScreen : 🖥️ Password Reset Screen
 PasswordResetScreen --> User : 🖥️ Password Reset Screen
 deactivate ResetPasswordApi
 
+== ✅ Restore Account ==
+SysAdmin -> System : ✅ Restore Account
+activate System
+System -> UserAccount : update
+deactivate System
+
 == ✅ Set Initial Password ==
 User -> PasswordSetScreen : ✅ Set Initial Password
 PasswordSetScreen -> SetInitialPasswordApi : ✅ Set Initial Password
@@ -166,6 +180,12 @@ end
 SetPrimaryCardApi --> CardListScreen : 🖥️ Card List Screen
 CardListScreen --> User : 🖥️ Card List Screen
 deactivate SetPrimaryCardApi
+
+== ✅ Suspend Account ==
+SysAdmin -> System : ✅ Suspend Account
+activate System
+System -> UserAccount : update
+deactivate System
 
 == ✅ Update Address ==
 User -> AddressEditScreen : ✅ Update Address

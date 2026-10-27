@@ -18,7 +18,6 @@ rectangle "System Boundary" {
   usecase "✅ Refund Payment" as RefundPayment
   boundary "🖥️ Payment Information Screen" as PaymentInputScreen
   boundary "🖥️ Payment Result Screen" as PaymentResultScreen
-  control "⚡ Capture Payment" as Capture
 }
 
 rectangle "System" {
@@ -50,7 +49,6 @@ AuthorizePayment ..> PaymentResultScreen : displays
 AuthorizePayment ..> PaymentAuthorizationApi : invokes
 Capture ..> PaymentResultScreen : displays
 Capture ..> PaymentCaptureApi : invokes
-Capture ..> Capture : raises
 RefundPayment ..> PaymentResultScreen : displays
 RefundPayment ..> PaymentRefundApi : invokes
 @enduml

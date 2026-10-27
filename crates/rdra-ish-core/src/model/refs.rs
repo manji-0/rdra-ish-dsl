@@ -142,23 +142,6 @@ impl EntityTouchpoint {
     }
 }
 
-/// `sets(usecase/event, entity, ...)` の起点。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum DataOrigin {
-    UseCase(UseCaseKey),
-    Event(EventKey),
-}
-
-impl DataOrigin {
-    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
-        match node {
-            NodeRef::UseCase(k) => Some(DataOrigin::UseCase(*k)),
-            NodeRef::Event(k) => Some(DataOrigin::Event(*k)),
-            _ => None,
-        }
-    }
-}
-
 /// `performs(actor, ...)` の第2引数。
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PerformTarget {

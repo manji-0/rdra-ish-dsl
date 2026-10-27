@@ -3,5 +3,5 @@ stateDiagram-v2
   state "🔄 normal" as Store_normal
   state "🔄 scheduled" as Store_scheduled
   state "🔄 blocked" as Store_blocked
-  Store_normal --> Store_scheduled : ⚡ Restock Scheduled
-  Store_scheduled --> Store_blocked : ⚡ Restock Blocked
+  Store_normal --> Store_scheduled : ✅ Change Next Restock Date
+  Store_scheduled --> Store_blocked : ✅ Block Scheduled Restock

@@ -12,14 +12,15 @@ flowchart LR
     direction TB
     Cancel(["✅ Cancel Order"])
     ConfirmOrder(["✅ Confirm Order Details"])
+    DeliverOrder(["✅ Confirm Delivery"])
     PlaceOrder(["✅ Place Order"])
     SelectAddress(["✅ Select Shipping Address"])
+    ShipOrder(["✅ Ship Order"])
     ViewOrderHistory(["✅ View Order History"])
     AddressSelectScreen[["🖥️ Address Selection Screen"]]
     OrderCompleteScreen[["🖥️ Order Complete Screen"]]
     OrderConfirmScreen[["🖥️ Order Confirmation Screen"]]
     OrderHistoryScreen[["🖥️ Order History Screen"]]
-    Cancel{"⚡ Cancel Order"}
   end
   subgraph layer_system[System]
     direction TB
@@ -46,6 +47,8 @@ flowchart LR
   OrderHistoryApi -.->|reads| OrderLine
   CancelOrderApi -.->|updates| Order
   BucOrder -.->|belongs| EcShopping
+  BucOrder -->|contains| ShipOrder
+  BucOrder -->|contains| DeliverOrder
   BucOrder -->|contains| SelectAddress
   BucOrder -->|contains| ConfirmOrder
   BucOrder -->|contains| PlaceOrder
@@ -54,6 +57,8 @@ flowchart LR
   CartItem ---|N:1| Cart
   Order ---|N:1| ShippingAddress
   OrderLine ---|N:1| Order
+  ShipOrder -.->|updates| Order
+  DeliverOrder -.->|updates| Order
   SelectAddress -.->|displays| AddressSelectScreen
   SelectAddress -.->|invokes| SelectAddressApi
   ConfirmOrder -.->|displays| OrderConfirmScreen
@@ -64,4 +69,3 @@ flowchart LR
   ViewOrderHistory -.->|invokes| OrderHistoryApi
   Cancel -.->|displays| OrderHistoryScreen
   Cancel -.->|invokes| CancelOrderApi
-  Cancel -.->|raises| Cancel

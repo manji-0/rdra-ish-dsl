@@ -10,9 +10,12 @@ flowchart LR
   end
   subgraph layer_boundary[System Boundary]
     direction TB
+    DeleteAccount(["✅ Delete Account"])
     DeleteAddress(["✅ Delete Address"])
     RegisterAddress(["✅ Register Address"])
+    RestoreAccount(["✅ Restore Account"])
     SetPrimaryAddress(["✅ Set Primary Address"])
+    SuspendAccount(["✅ Suspend Account"])
     UpdateAddress(["✅ Update Address"])
     UpdateProfile(["✅ Update Personal Information"])
     ViewProfile(["✅ View Personal Information"])
@@ -56,6 +59,9 @@ flowchart LR
   BucProfile -->|contains| UpdateAddress
   BucProfile -->|contains| DeleteAddress
   BucProfile -->|contains| SetPrimaryAddress
+  BucProfile -->|contains| SuspendAccount
+  BucProfile -->|contains| RestoreAccount
+  BucProfile -->|contains| DeleteAccount
   PersonalInfo ---|1:1| UserAccount
   PostalAddress ---|N:1| UserAccount
   AuditLog ---|N:1| UserAccount
@@ -71,3 +77,6 @@ flowchart LR
   DeleteAddress -.->|invokes| DeleteAddressApi
   SetPrimaryAddress -.->|displays| AddressListScreen
   SetPrimaryAddress -.->|invokes| SetPrimaryAddressApi
+  SuspendAccount -.->|updates| UserAccount
+  RestoreAccount -.->|updates| UserAccount
+  DeleteAccount -.->|updates| UserAccount

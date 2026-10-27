@@ -1,13 +1,11 @@
-use super::keys::{EntityKey, EventKey};
-use super::refs::NodeRef;
+use super::keys::{EntityKey, UseCaseKey};
 
-/// State transition triple (for state-transition diagrams).
-/// New form: `transitions(Entity.column, Event, from -> to)`.
+/// `transitions(Entity.column, UseCase, from -> to)`: the use case moves the column.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StateTransition {
     pub entity: EntityKey,
     pub column: std::string::String,
-    pub event: EventKey,
+    pub usecase: UseCaseKey,
     pub from: std::string::String,
     pub to: std::string::String,
 }
@@ -55,8 +53,8 @@ impl EffectValue {
 /// `sets(...)` 述語由来のカラム効果（解析後）
 #[derive(Debug, Clone)]
 pub struct ColumnEffect {
-    /// 効果を起こす usecase または event の NodeRef
-    pub origin: NodeRef,
+    /// 効果を起こす usecase
+    pub origin: UseCaseKey,
     /// 対象 entity のキー
     pub entity: EntityKey,
     /// 対象カラム名

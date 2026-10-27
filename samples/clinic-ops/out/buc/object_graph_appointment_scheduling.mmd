@@ -48,13 +48,8 @@ flowchart LR
     PatientSearchScreen[["🖥️ Patient Search Screen"]]
     ScheduleSearchScreen[["🖥️ Schedule Search Screen"]]
     EvAppointmentCancelled{"⚡ Appointment Cancelled"}
-    EvAppointmentNoShow{"⚡ Appointment Marked No Show"}
     EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
     EvAppointmentScheduled{"⚡ Appointment Scheduled"}
-    EvIntakeCompleted{"⚡ Intake Completed"}
-    EvIntakeExpired{"⚡ Intake Expired"}
-    EvPatientArchived{"⚡ Patient Archived"}
-    EvPatientMerged{"⚡ Patient Merged"}
   end
   subgraph layer_system[System]
     direction TB
@@ -205,22 +200,18 @@ flowchart LR
   SendIntakeForms -.->|requires_medium| FrontDeskTerminal
   SendIntakeForms -.->|requires_permission| IntakeManage
   CompleteIntakeForms -.->|displays| IntakePortalScreen
-  CompleteIntakeForms -.->|raises| EvIntakeCompleted
   CompleteIntakeForms -.->|requires_medium| PatientMobile
   CompleteIntakeForms -.->|requires_permission| ConsentCapture
   CompleteIntakeForms -.->|updates| IntakePacket
   ExpireIntakeForms -.->|displays| IntakePortalScreen
-  ExpireIntakeForms -.->|raises| EvIntakeExpired
   ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
   ExpireIntakeForms -.->|requires_permission| IntakeManage
   ExpireIntakeForms -.->|updates| IntakePacket
   MergeDuplicatePatient -.->|displays| PatientProfileScreen
-  MergeDuplicatePatient -.->|raises| EvPatientMerged
   MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
   MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
   MergeDuplicatePatient -.->|updates| PatientAccount
   ArchivePatient -.->|displays| PatientProfileScreen
-  ArchivePatient -.->|raises| EvPatientArchived
   ArchivePatient -.->|requires_medium| FrontDeskTerminal
   ArchivePatient -.->|requires_permission| PatientProfileWrite
   ArchivePatient -.->|updates| PatientAccount
@@ -253,7 +244,6 @@ flowchart LR
   CancelAppointment -.->|requires_medium| PatientMobile
   CancelAppointment -.->|requires_permission| ScheduleWrite
   MarkNoShow -.->|displays| AppointmentScreen
-  MarkNoShow -.->|raises| EvAppointmentNoShow
   MarkNoShow -.->|requires_medium| FrontDeskTerminal
   MarkNoShow -.->|requires_permission| ScheduleWrite
   MarkNoShow -.->|updates| Appointment

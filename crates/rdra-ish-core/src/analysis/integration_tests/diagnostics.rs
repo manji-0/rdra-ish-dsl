@@ -468,8 +468,8 @@ entity Ticket "チケット" {
   status: Enum(open, closed) @default(open)
   phase: Enum(intake, work) @default(intake)
 }
-event Close "閉じる"
-event StartWork "作業開始"
+usecase Close "閉じる"
+usecase StartWork "作業開始"
 transitions(Ticket.status, Close, open -> closed)
 transitions(Ticket.phase, StartWork, intake -> work)
 "#;
@@ -487,5 +487,69 @@ transitions(Ticket.phase, StartWork, intake -> work)
             .iter()
             .map(|d| d.error.to_string())
             .collect::<Vec<_>>()
+    );
+}
+
+fn event_origin_errors(line: &str) -> Vec<String> {
+    let src = format!(
+        r#"
+entity Order "Order" {{
+  id: Int @pk
+  status: Enum(pending, paid) @default(pending)
+  paid_at: DateTime @null
+}}
+usecase Pay "Pay"
+event EvPay "Paid"
+raises(Pay, EvPay)
+{line}
+"#
+    );
+    let (ast, parse_errors) = parse(&src);
+    assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
+    let (_, diags) = build_model(&ast);
+    diags
+        .iter()
+        .filter(|d| !d.is_warning)
+        .map(|d| d.error.to_string())
+        .collect()
+}
+
+#[test]
+fn transitions_keyed_by_an_event_names_the_codemod() {
+    for line in [
+        "transitions(Order.status, EvPay, pending -> paid)",
+        "transitions(Order.status, event::EvPay, pending -> paid)",
+    ] {
+        let errors = event_origin_errors(line);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("has kind event, expected usecase")
+                    && e.contains("name the use case that raises `EvPay`")
+                    && e.contains("scripts/migrate-phase3.py")),
+            "{line}: {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn sets_with_an_event_origin_names_the_codemod() {
+    let errors = event_origin_errors("sets(event::EvPay, Order, paid_at == present)");
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.contains("predicate 'sets'") && e.contains("scripts/migrate-phase3.py")),
+        "{errors:?}"
+    );
+}
+
+#[test]
+fn other_type_mismatches_keep_the_generic_hint() {
+    let errors = event_origin_errors("sets(Order, Order, paid_at == present)");
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.contains("check that you are passing the right element type")),
+        "{errors:?}"
     );
 }

@@ -16,6 +16,7 @@ rectangle "External Environment" {
 
 rectangle "System Boundary" {
   usecase "✅ Change Password" as ChangePassword
+  usecase "✅ Delete Account" as DeleteAccount
   usecase "✅ Delete Address" as DeleteAddress
   usecase "✅ Delete Card" as DeleteCard
   usecase "✅ List Cards" as ListCards
@@ -23,9 +24,11 @@ rectangle "System Boundary" {
   usecase "✅ Register Card" as RegisterCard
   usecase "✅ Request Password Reset" as RequestPasswordReset
   usecase "✅ Reset Password" as ResetPassword
+  usecase "✅ Restore Account" as RestoreAccount
   usecase "✅ Set Initial Password" as SetInitialPassword
   usecase "✅ Set Primary Address" as SetPrimaryAddress
   usecase "✅ Set Primary Card" as SetPrimaryCard
+  usecase "✅ Suspend Account" as SuspendAccount
   usecase "✅ Update Address" as UpdateAddress
   usecase "✅ Update Personal Information" as UpdateProfile
   usecase "✅ View Personal Information" as ViewProfile
@@ -37,9 +40,6 @@ rectangle "System Boundary" {
   boundary "🖥️ Password Reset Screen" as PasswordResetScreen
   boundary "🖥️ Password Setup Screen" as PasswordSetScreen
   boundary "🖥️ Personal Information Screen" as ProfileScreen
-  control "⚡ Restore Account" as Active
-  control "⚡ Delete Account" as Deleted
-  control "⚡ Suspend Account" as Suspended
 }
 
 rectangle "System" {
@@ -72,6 +72,9 @@ rectangle "System" {
 User --> BucProfile : performs
 User --> BucCard : performs
 User --> BucPassword : performs
+SysAdmin --> SuspendAccount : performs
+SysAdmin --> RestoreAccount : performs
+SysAdmin --> DeleteAccount : performs
 SetPrimaryCardApi ..> AuditLog : creates
 SetPrimaryCardApi ..> CreditCard : reads
 SetPrimaryCardApi ..> CreditCard : updates
@@ -111,11 +114,14 @@ BucProfile --> RegisterAddress : contains
 BucProfile --> UpdateAddress : contains
 BucProfile --> DeleteAddress : contains
 BucProfile --> SetPrimaryAddress : contains
+BucProfile --> SuspendAccount : contains
+BucProfile --> RestoreAccount : contains
+BucProfile --> DeleteAccount : contains
 BucCard ..> PersonalDataMgmt : belongs
-BucCard --> SetPrimaryCard : contains
 BucCard --> ListCards : contains
 BucCard --> RegisterCard : contains
 BucCard --> DeleteCard : contains
+BucCard --> SetPrimaryCard : contains
 BucPassword ..> PersonalDataMgmt : belongs
 BucPassword --> SetInitialPassword : contains
 BucPassword --> ChangePassword : contains
@@ -140,6 +146,12 @@ PersonalDataSystem --> SetPrimaryAddressApi : contains
 PersonalDataSystem --> ListCardsApi : contains
 PersonalDataSystem --> RegisterCardApi : contains
 PersonalDataSystem --> DeleteCardApi : contains
+ListCards ..> CardListScreen : displays
+ListCards ..> ListCardsApi : invokes
+RegisterCard ..> CardAddScreen : displays
+RegisterCard ..> RegisterCardApi : invokes
+DeleteCard ..> CardListScreen : displays
+DeleteCard ..> DeleteCardApi : invokes
 SetPrimaryCard ..> CardListScreen : displays
 SetPrimaryCard ..> SetPrimaryCardApi : invokes
 SetInitialPassword ..> PasswordSetScreen : displays
@@ -162,10 +174,7 @@ DeleteAddress ..> AddressListScreen : displays
 DeleteAddress ..> DeleteAddressApi : invokes
 SetPrimaryAddress ..> AddressListScreen : displays
 SetPrimaryAddress ..> SetPrimaryAddressApi : invokes
-ListCards ..> CardListScreen : displays
-ListCards ..> ListCardsApi : invokes
-RegisterCard ..> CardAddScreen : displays
-RegisterCard ..> RegisterCardApi : invokes
-DeleteCard ..> CardListScreen : displays
-DeleteCard ..> DeleteCardApi : invokes
+SuspendAccount ..> UserAccount : updates
+RestoreAccount ..> UserAccount : updates
+DeleteAccount ..> UserAccount : updates
 @enduml

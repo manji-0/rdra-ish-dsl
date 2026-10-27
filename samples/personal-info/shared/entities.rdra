@@ -73,17 +73,5 @@ relate(CreditCard, UserAccount, N:1)
 relate(PasswordCredential, UserAccount, 1:1)
 relate(AuditLog, UserAccount, N:1)
 
-// ── State transitions (account) ──────────────────────────
-// In a state machine it is natural for the "target state" and the "event that
-// causes it" to share the same name. Active / Suspended / Deleted are each
-// declared as both a state and an event; transitions disambiguates them with
-// state:: / event:: qualifiers.
-
-
-event Suspended "Suspend Account" // same name as state Suspended
-event Active    "Restore Account" // same name as state Active
-event Deleted   "Delete Account"  // same name as state Deleted
-
-transitions(UserAccount.status, event::Suspended, active -> suspended)
-transitions(UserAccount.status, event::Active, suspended -> active)
-transitions(UserAccount.status, event::Deleted, active -> deleted)
+// UserAccount.status transitions are declared next to the use cases that
+// drive them (buc_profile.rdra: SuspendAccount, RestoreAccount, DeleteAccount).

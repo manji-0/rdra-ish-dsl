@@ -15,11 +15,4 @@ entity Organization "Organization" {
 }
 
 
-event RestockScheduled "Restock Scheduled"
-event RestockBlocked "Restock Blocked"
-
 relate(Store, Organization, N:1)
-transitions(Store.restock_status, event::RestockScheduled, normal -> scheduled)
-transitions(Store.restock_status, event::RestockBlocked, scheduled -> blocked)
-sets(event::RestockScheduled, Store, next_restock_date == present)
-sets(event::RestockBlocked, Store, next_restock_date == null)

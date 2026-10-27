@@ -10,8 +10,9 @@ usecase SelectAddress    "Select Shipping Address"
 usecase ConfirmOrder     "Confirm Order Details"
 usecase PlaceOrder       "Place Order"
 usecase ViewOrderHistory "View Order History"
-// Same name as event Cancel in shared.entities — usecase:: qualifier required
 usecase Cancel           "Cancel Order"
+usecase ShipOrder        "Ship Order"
+usecase DeliverOrder     "Confirm Delivery"
 
 screen AddressSelectScreen "Address Selection Screen"
 screen OrderConfirmScreen  "Order Confirmation Screen"
@@ -30,7 +31,9 @@ contains(BucOrder, SelectAddress)
 contains(BucOrder, ConfirmOrder)
 contains(BucOrder, PlaceOrder)
 contains(BucOrder, ViewOrderHistory)
-contains(BucOrder, usecase::Cancel)
+contains(BucOrder, Cancel)
+contains(BucOrder, ShipOrder)
+contains(BucOrder, DeliverOrder)
 contains(CommerceSystem, SelectAddressApi)
 contains(CommerceSystem, ConfirmOrderApi)
 contains(CommerceSystem, PlaceOrderApi)
@@ -58,7 +61,16 @@ invokes(ViewOrderHistory, OrderHistoryApi)
 reads(OrderHistoryApi, Order)
 reads(OrderHistoryApi, OrderLine)
 
-displays(usecase::Cancel, OrderHistoryScreen)
-invokes(usecase::Cancel, CancelOrderApi)
+displays(Cancel, OrderHistoryScreen)
+invokes(Cancel, CancelOrderApi)
 updates(CancelOrderApi, Order)
-raises(usecase::Cancel, event::Cancel)
+transitions(Order.status, Cancel, pending -> cancelled)
+
+// Fulfilment: an administrator ships the order and confirms its delivery.
+performs(Admin, ShipOrder)
+updates(ShipOrder, Order)
+transitions(Order.status, ShipOrder, paid -> shipped)
+
+performs(Admin, DeliverOrder)
+updates(DeliverOrder, Order)
+transitions(Order.status, DeliverOrder, shipped -> delivered)

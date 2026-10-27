@@ -1044,7 +1044,7 @@ fn property_decl() -> impl Parser<Token, PropertyDecl, Error = Simple<Token>> + 
 ///
 /// 比較式を **最優先** でパースし、続けて遷移 / カード / atom にフォールバックする。
 /// - `forbidden(E, status == cancelled)` → `PredicateArg::Expr`
-/// - `transitions(E.col, Ev, a -> b)` の第3引数 → `PredicateArg::Transition`
+/// - `transitions(E.col, UseCase, a -> b)` の第3引数 → `PredicateArg::Transition`
 /// - `relate(A, B, N:1)` の第3引数 → `PredicateArg::Card`
 /// - `performs(A, B)` → `PredicateArg::Ref`
 fn predicate_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + Clone {
@@ -1708,7 +1708,7 @@ performs(actor::Add, usecase::Add)
             .expect("predicate not found");
         assert!(matches!(&pred.args[2], PredicateArg::Card(c) if c == "N:1"));
 
-        let trans = parse_ok("transitions(Order.status, EvCapture, pending -> paid)");
+        let trans = parse_ok("transitions(Order.status, CapturePay, pending -> paid)");
         let pred = trans
             .items
             .iter()

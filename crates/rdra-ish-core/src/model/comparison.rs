@@ -1,5 +1,4 @@
-use super::keys::EntityKey;
-use super::refs::NodeRef;
+use super::keys::{EntityKey, UseCaseKey};
 
 // ── 比較命題 ─────────────────────────────────────────────────────────────────
 
@@ -87,8 +86,8 @@ impl ComparisonProp {
 /// 比較命題の真偽効果（解析後）。
 #[derive(Debug, Clone)]
 pub struct PropositionEffect {
-    /// 効果を起こす usecase または event の NodeRef。
-    pub origin: NodeRef,
+    /// 効果を起こす usecase。
+    pub origin: UseCaseKey,
     /// 対象 entity のキー。
     pub entity: EntityKey,
     /// 真偽を変化させる比較命題。

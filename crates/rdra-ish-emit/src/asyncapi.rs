@@ -1,5 +1,8 @@
 use crate::{EmitError, Emitter, View};
-use rdra_ish_core::{collect_event_flows, model::SemanticModel};
+use rdra_ish_core::{
+    collect_event_flows,
+    model::{SemanticModel, StateTransition},
+};
 use serde_json::{json, Map, Value};
 
 pub struct AsyncApiJsonEmitter;
@@ -51,10 +54,7 @@ fn asyncapi_document(model: &SemanticModel) -> Value {
             operations.insert(format!("publish{message_key}"), operation);
         }
 
-        if !flow.triggers_ucs.is_empty()
-            || !flow.triggers_bucs.is_empty()
-            || !flow.transitions.is_empty()
-        {
+        if !flow.triggers_ucs.is_empty() || !flow.triggers_bucs.is_empty() {
             let mut operation = operation_base("receive", &message_key);
             if let Some(obj) = operation.as_object_mut() {
                 obj.insert(
@@ -159,13 +159,13 @@ fn buc_ids(model: &SemanticModel, keys: &[rdra_ish_core::model::BucKey]) -> Vec<
     ids
 }
 
-fn transition_ids(_model: &SemanticModel, transitions: &[(String, String)]) -> Vec<Value> {
+fn transition_ids(_model: &SemanticModel, transitions: &[StateTransition]) -> Vec<Value> {
     let mut ids: Vec<_> = transitions
         .iter()
-        .map(|(from, to)| {
+        .map(|st| {
             json!({
-                "from": from,
-                "to": to
+                "from": st.from,
+                "to": st.to
             })
         })
         .collect();
@@ -209,16 +209,23 @@ mod tests {
         let model = model_from(
             r#"
 usecase SignEncounter "Sign encounter"
+usecase SubmitClaim "Submit claim"
 buc ClaimSubmission "Claim submission"
 entity Encounter "Encounter" {
   id: Int @pk
   status: Enum(draft, signed) @default(draft)
 }
+entity Claim "Claim" {
+  id: Int @pk
+  status: Enum(draft, submitted) @default(draft)
+}
 event EncounterSigned "Encounter signed"
   description "Published when an encounter is signed."
 raises(SignEncounter, EncounterSigned)
 triggers(EncounterSigned, ClaimSubmission)
-transitions(Encounter.status, EncounterSigned, draft -> signed)
+triggers(EncounterSigned, SubmitClaim)
+transitions(Encounter.status, SignEncounter, draft -> signed)
+transitions(Claim.status, SubmitClaim, draft -> submitted)
 outbox(EncounterSigned)
 "#,
         );
@@ -241,7 +248,7 @@ outbox(EncounterSigned)
         );
         assert_eq!(
             doc["operations"]["consumeEncounterSigned"]["x-rdra-ish-transitions"][0]["to"],
-            "signed"
+            "submitted"
         );
     }
 }

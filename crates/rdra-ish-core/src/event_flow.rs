@@ -5,7 +5,9 @@
 
 use crate::diagnostics::{Diagnostic, RdraError};
 use crate::location::push_model_decl_diagnostic;
-use crate::model::{BucKey, EventKey, NodeRef, RelKind, SemanticModel, UseCaseKey};
+use crate::model::{
+    BucKey, EventKey, NodeRef, RelKind, SemanticModel, StateTransition, UseCaseKey,
+};
 use std::collections::HashMap;
 
 /// イベントを中心とした因果連鎖ファクト。
@@ -19,14 +21,14 @@ pub struct EventFlow {
     pub triggers_ucs: Vec<UseCaseKey>,
     /// `triggers(event, Buc)` で宣言した BUC の一覧。
     pub triggers_bucs: Vec<BucKey>,
-    /// `transitions(Entity.col, event, from -> to)` で宣言した状態遷移の一覧。
-    pub transitions: Vec<(String, String)>,
+    /// このイベントが `triggers` する UseCase が駆動する状態遷移（下流側、導出値）。
+    pub transitions: Vec<StateTransition>,
 }
 
 /// モデル内の全イベントについて `EventFlow` を収集する。
 ///
-/// `model.relations` と `model.state_transitions` を 1 パス走査し、
-/// イベントキーをインデックスに集約する。
+/// `model.relations` を 1 パス走査してイベントキーに集約し、
+/// `triggers` 先 UseCase の `transitions` を下流の遷移として付ける。
 pub fn collect_event_flows(model: &SemanticModel) -> Vec<EventFlow> {
     let mut map: HashMap<EventKey, EventFlow> = model
         .events
@@ -66,10 +68,13 @@ pub fn collect_event_flows(model: &SemanticModel) -> Vec<EventFlow> {
         }
     }
 
-    for st in &model.state_transitions {
-        if let Some(flow) = map.get_mut(&st.event) {
-            flow.transitions.push((st.from.clone(), st.to.clone()));
-        }
+    for flow in map.values_mut() {
+        flow.transitions = model
+            .state_transitions
+            .iter()
+            .filter(|st| flow.triggers_ucs.contains(&st.usecase))
+            .cloned()
+            .collect();
     }
 
     let mut result: Vec<EventFlow> = map.into_values().collect();
@@ -112,9 +117,8 @@ pub fn event_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
             );
         }
 
-        // raise されているが transition も triggers もしない（行き止まり）
+        // raise されているが triggers 先も outbox もない（行き止まり）
         if !flow.raised_by.is_empty()
-            && flow.transitions.is_empty()
             && flow.triggers_ucs.is_empty()
             && flow.triggers_bucs.is_empty()
             && !model.outbox_events.contains(&flow.event)
@@ -304,6 +308,58 @@ triggers(EncounterSigned, BucBillingClaims)
 
         assert_eq!(flow.triggers_bucs.len(), 1);
         assert_eq!(model.bucs[flow.triggers_bucs[0]].id, "BucBillingClaims");
+    }
+
+    #[test]
+    fn flow_transitions_are_those_of_triggered_usecases() {
+        let model = model_from(
+            r#"
+usecase SignEncounter "Sign Encounter"
+usecase SubmitClaim "Submit Claim"
+entity Encounter "Encounter" {
+  id: Int @pk
+  status: Enum(open, signed) @default(open)
+}
+entity Claim "Claim" {
+  id: Int @pk
+  status: Enum(draft, submitted) @default(draft)
+}
+event EncounterSigned "Encounter Signed"
+raises(SignEncounter, EncounterSigned)
+triggers(EncounterSigned, SubmitClaim)
+transitions(Encounter.status, SignEncounter, open -> signed)
+transitions(Claim.status, SubmitClaim, draft -> submitted)
+"#,
+        );
+
+        let flow = collect_event_flows(&model).pop().unwrap();
+        let transitions: Vec<_> = flow
+            .transitions
+            .iter()
+            .map(|st| (model.use_cases[st.usecase].id.as_str(), st.to.as_str()))
+            .collect();
+        assert_eq!(transitions, vec![("SubmitClaim", "submitted")]);
+    }
+
+    #[test]
+    fn event_whose_raiser_drives_a_transition_is_still_unconsumed() {
+        let model = model_from(
+            r#"
+usecase SignEncounter "Sign Encounter"
+entity Encounter "Encounter" {
+  id: Int @pk
+  status: Enum(open, signed) @default(open)
+}
+event EncounterSigned "Encounter Signed"
+raises(SignEncounter, EncounterSigned)
+transitions(Encounter.status, SignEncounter, open -> signed)
+"#,
+        );
+
+        let diags = event_diagnostics(&model);
+        assert!(diags
+            .iter()
+            .any(|diag| matches!(&diag.error, RdraError::EventNeverConsumed { event } if event == "EncounterSigned")));
     }
 
     #[test]

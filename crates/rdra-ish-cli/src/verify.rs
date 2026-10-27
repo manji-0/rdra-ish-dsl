@@ -287,7 +287,7 @@ The behavior up to this point is:
 State 1: <Initial predicate>
 /\ Order_status = "pending"
 /\ Order_delivered_at = "null"
-State 2: <Order_EvDeliver line 29>
+State 2: <Order_DeliverOrder_pending_to_delivered line 29>
 /\ Order_status = "delivered"
 /\ Order_delivered_at = "null"
 "#;

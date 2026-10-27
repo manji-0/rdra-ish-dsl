@@ -39,16 +39,16 @@ RegisterCardApi ..> AuditLog : creates
 DeleteCardApi ..> AuditLog : creates
 DeleteCardApi ..> CreditCard : deletes
 BucCard ..> PersonalDataMgmt : belongs
-BucCard --> SetPrimaryCard : contains
 BucCard --> ListCards : contains
 BucCard --> RegisterCard : contains
 BucCard --> DeleteCard : contains
-SetPrimaryCard ..> CardListScreen : displays
-SetPrimaryCard ..> SetPrimaryCardApi : invokes
+BucCard --> SetPrimaryCard : contains
 ListCards ..> CardListScreen : displays
 ListCards ..> ListCardsApi : invokes
 RegisterCard ..> CardAddScreen : displays
 RegisterCard ..> RegisterCardApi : invokes
 DeleteCard ..> CardListScreen : displays
 DeleteCard ..> DeleteCardApi : invokes
+SetPrimaryCard ..> CardListScreen : displays
+SetPrimaryCard ..> SetPrimaryCardApi : invokes
 @enduml

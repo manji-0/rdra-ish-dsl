@@ -14,14 +14,15 @@ rectangle "External Environment" {
 rectangle "System Boundary" {
   usecase "✅ Cancel Order" as Cancel
   usecase "✅ Confirm Order Details" as ConfirmOrder
+  usecase "✅ Confirm Delivery" as DeliverOrder
   usecase "✅ Place Order" as PlaceOrder
   usecase "✅ Select Shipping Address" as SelectAddress
+  usecase "✅ Ship Order" as ShipOrder
   usecase "✅ View Order History" as ViewOrderHistory
   boundary "🖥️ Address Selection Screen" as AddressSelectScreen
   boundary "🖥️ Order Complete Screen" as OrderCompleteScreen
   boundary "🖥️ Order Confirmation Screen" as OrderConfirmScreen
   boundary "🖥️ Order History Screen" as OrderHistoryScreen
-  control "⚡ Cancel Order" as Cancel
 }
 
 rectangle "System" {
@@ -49,6 +50,8 @@ OrderHistoryApi ..> Order : reads
 OrderHistoryApi ..> OrderLine : reads
 CancelOrderApi ..> Order : updates
 BucOrder ..> EcShopping : belongs
+BucOrder --> ShipOrder : contains
+BucOrder --> DeliverOrder : contains
 BucOrder --> SelectAddress : contains
 BucOrder --> ConfirmOrder : contains
 BucOrder --> PlaceOrder : contains
@@ -57,6 +60,8 @@ BucOrder --> Cancel : contains
 CartItem -- Cart : N:1
 Order -- ShippingAddress : N:1
 OrderLine -- Order : N:1
+ShipOrder ..> Order : updates
+DeliverOrder ..> Order : updates
 SelectAddress ..> AddressSelectScreen : displays
 SelectAddress ..> SelectAddressApi : invokes
 ConfirmOrder ..> OrderConfirmScreen : displays
@@ -67,5 +72,4 @@ ViewOrderHistory ..> OrderHistoryScreen : displays
 ViewOrderHistory ..> OrderHistoryApi : invokes
 Cancel ..> OrderHistoryScreen : displays
 Cancel ..> CancelOrderApi : invokes
-Cancel ..> Cancel : raises
 @enduml

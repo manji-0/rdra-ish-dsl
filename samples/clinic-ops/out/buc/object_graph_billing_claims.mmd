@@ -25,10 +25,6 @@ flowchart LR
     ChargeWorklistScreen[["🖥️ Charge Worklist Screen"]]
     ClaimScreen[["🖥️ Claim Screen"]]
     PaymentPostingScreen[["🖥️ Payment Posting Screen"]]
-    EvClaimAccepted{"⚡ Claim Accepted"}
-    EvClaimDenied{"⚡ Claim Denied"}
-    EvClaimPaid{"⚡ Claim Paid"}
-    EvClaimSubmitted{"⚡ Claim Submitted"}
   end
   subgraph layer_system[System]
     direction TB
@@ -86,22 +82,18 @@ flowchart LR
   GenerateClaim -.->|requires_permission| BillingClaimWrite
   SubmitClaim -.->|displays| ClaimScreen
   SubmitClaim -.->|invokes| SubmitClaimApi
-  SubmitClaim -.->|raises| EvClaimSubmitted
   SubmitClaim -.->|requires_medium| BillingWorkstation
   SubmitClaim -.->|requires_permission| BillingClaimWrite
   ReceiveClaimAccepted -.->|displays| ClaimScreen
-  ReceiveClaimAccepted -.->|raises| EvClaimAccepted
   ReceiveClaimAccepted -.->|requires_medium| BillingWorkstation
   ReceiveClaimAccepted -.->|requires_permission| BillingClaimWrite
   ReceiveClaimAccepted -.->|updates| Claim
   RecordClaimDenial -.->|displays| ClaimScreen
-  RecordClaimDenial -.->|raises| EvClaimDenied
   RecordClaimDenial -.->|requires_medium| BillingWorkstation
   RecordClaimDenial -.->|requires_permission| BillingClaimWrite
   RecordClaimDenial -.->|updates| Claim
   PostPayment -.->|displays| PaymentPostingScreen
   PostPayment -.->|invokes| PaymentPostApi
-  PostPayment -.->|raises| EvClaimPaid
   PostPayment -.->|requires_medium| BillingWorkstation
   PostPayment -.->|requires_permission| PaymentPost
   ReconcileBalance -.->|displays| BalanceScreen

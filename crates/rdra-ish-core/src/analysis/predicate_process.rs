@@ -215,7 +215,7 @@ fn process_transitions_predicate(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
-    let Some(Some(NodeRef::Event(event))) = resolved.get(1) else {
+    let Some(Some(NodeRef::UseCase(usecase))) = resolved.get(1) else {
         return;
     };
 
@@ -378,7 +378,7 @@ fn process_transitions_predicate(
     }
 
     model.state_transitions.push(crate::model::StateTransition {
-        event: *event,
+        usecase: *usecase,
         entity: entity_key,
         column: column.clone(),
         from: from.clone(),
@@ -387,7 +387,7 @@ fn process_transitions_predicate(
     model.typed_predicates.push(TypedPredicate::Transitions {
         entity: entity_key,
         column,
-        event: *event,
+        usecase: *usecase,
         from,
         to,
     });
@@ -422,13 +422,12 @@ fn process_sets_predicate(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
-    let (Some(Some(origin)), Some(Some(entity_ref))) = (resolved.first(), resolved.get(1)) else {
+    let (Some(Some(NodeRef::UseCase(origin))), Some(Some(NodeRef::Entity(entity_key)))) =
+        (resolved.first(), resolved.get(1))
+    else {
         return;
     };
-    let entity_key = match entity_ref {
-        NodeRef::Entity(k) => *k,
-        _ => return,
-    };
+    let (origin, entity_key) = (*origin, *entity_key);
 
     if let Some(PredicateArg::Expr(Expr::Cmp(cmp))) = pred.args.get(2) {
         let entity_id = model.entities[entity_key].id.clone();
@@ -456,18 +455,16 @@ fn process_sets_predicate(
                 Ok(Some((col_name, value))) => {
                     if truth_str == "true" {
                         model.column_effects.push(ColumnEffect {
-                            origin: origin.clone(),
+                            origin,
                             entity: entity_key,
                             column: col_name.clone(),
                             value,
                         });
-                        if let Some(origin) = DataOrigin::from_node_ref(origin) {
-                            model.typed_predicates.push(TypedPredicate::SetsColumn {
-                                origin,
-                                entity: entity_key,
-                                column: col_name,
-                            });
-                        }
+                        model.typed_predicates.push(TypedPredicate::SetsColumn {
+                            origin,
+                            entity: entity_key,
+                            column: col_name,
+                        });
                     } else {
                         push_error(
                             ctx,
@@ -490,21 +487,19 @@ fn process_sets_predicate(
                         resolve_comparison(&entity_cols, &entity_id, cmp, ctx, diags)
                     {
                         model.proposition_effects.push(PropositionEffect {
-                            origin: origin.clone(),
+                            origin,
                             entity: entity_key,
                             prop: prop.clone(),
                             truth: truth_str == "true",
                         });
-                        if let Some(origin) = DataOrigin::from_node_ref(origin) {
-                            model
-                                .typed_predicates
-                                .push(TypedPredicate::SetsProposition {
-                                    origin,
-                                    entity: entity_key,
-                                    prop,
-                                    truth: truth_str == "true",
-                                });
-                        }
+                        model
+                            .typed_predicates
+                            .push(TypedPredicate::SetsProposition {
+                                origin,
+                                entity: entity_key,
+                                prop,
+                                truth: truth_str == "true",
+                            });
                     }
                     return;
                 }
@@ -524,18 +519,16 @@ fn process_sets_predicate(
             )
         {
             model.column_effects.push(ColumnEffect {
-                origin: origin.clone(),
+                origin,
                 entity: entity_key,
                 column: col_name.clone(),
                 value,
             });
-            if let Some(origin) = DataOrigin::from_node_ref(origin) {
-                model.typed_predicates.push(TypedPredicate::SetsColumn {
-                    origin,
-                    entity: entity_key,
-                    column: col_name,
-                });
-            }
+            model.typed_predicates.push(TypedPredicate::SetsColumn {
+                origin,
+                entity: entity_key,
+                column: col_name,
+            });
         }
     }
 }

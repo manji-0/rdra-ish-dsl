@@ -2,7 +2,7 @@ use super::comparison::ComparisonProp;
 use super::keys::*;
 use super::refs::{
     AppliesToTarget, Cardinality, ConstrainsTarget, ContainedRef, ContainerRef, CoversTarget,
-    DataOrigin, DecidesTarget, EntityTouchpoint, NfrOrConstraint, PerformTarget, TriggerTarget,
+    DecidesTarget, EntityTouchpoint, NfrOrConstraint, PerformTarget, TriggerTarget,
 };
 
 /// 解析済み述語の型付き表現（discriminated union）。
@@ -144,7 +144,7 @@ pub enum TypedPredicate {
     Transitions {
         entity: EntityKey,
         column: std::string::String,
-        event: EventKey,
+        usecase: UseCaseKey,
         from: std::string::String,
         to: std::string::String,
     },
@@ -163,12 +163,12 @@ pub enum TypedPredicate {
         via: Option<EntityKey>,
     },
     SetsColumn {
-        origin: DataOrigin,
+        origin: UseCaseKey,
         entity: EntityKey,
         column: std::string::String,
     },
     SetsProposition {
-        origin: DataOrigin,
+        origin: UseCaseKey,
         entity: EntityKey,
         prop: ComparisonProp,
         truth: bool,

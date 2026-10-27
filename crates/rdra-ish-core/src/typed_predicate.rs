@@ -334,10 +334,12 @@ entity Appointment "Appointment" {
   status: Enum(draft, booked) @default(draft)
 }
 event EvBook "Booked"
+usecase Notify "Notify"
 performs(Staff, Book)
 creates(Book, Appointment)
 raises(Book, EvBook)
-transitions(Appointment.status, EvBook, draft -> booked)
+triggers(EvBook, Notify)
+transitions(Appointment.status, Book, draft -> booked)
 "#,
         );
 

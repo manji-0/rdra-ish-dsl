@@ -1,0 +1,29 @@
+// order.rdra without `sets(DeliverOrder, Order, delivered_at == present)`.
+// DeliverOrder still drives shipped -> delivered, so after(DeliverOrder).assert
+// binds to that action and its delivered_at postcondition fails
+// (expected TLC fail / counterexample on the AfterAssert property, not a vacuous pass).
+// The invariant and forbidden of order.rdra are left out so the after property is the only check.
+entity Order "注文" {
+  id:           Int @pk
+  status:       Enum(pending, paid, shipped, delivered, cancelled) @default(pending)
+  delivered_at: DateTime @null
+}
+
+usecase PlaceOrder   "注文確定"
+usecase CapturePay   "決済確定"
+usecase ShipOrder    "発送"
+usecase DeliverOrder "配達確認"
+usecase CancelOrder  "注文キャンセル"
+
+creates(PlaceOrder, Order)
+updates(CapturePay, Order)
+updates(ShipOrder, Order)
+updates(DeliverOrder, Order)
+updates(CancelOrder, Order)
+
+transitions(Order.status, CapturePay, pending -> paid)
+transitions(Order.status, ShipOrder, paid -> shipped)
+transitions(Order.status, DeliverOrder, shipped -> delivered)
+transitions(Order.status, CancelOrder, pending -> cancelled)
+
+after(DeliverOrder).assert(Order.status == delivered, Order.delivered_at == present)

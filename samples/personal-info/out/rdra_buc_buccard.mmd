@@ -36,15 +36,15 @@ flowchart LR
   DeleteCardApi -.->|creates| AuditLog
   DeleteCardApi -.->|deletes| CreditCard
   BucCard -.->|belongs| PersonalDataMgmt
-  BucCard -->|contains| SetPrimaryCard
   BucCard -->|contains| ListCards
   BucCard -->|contains| RegisterCard
   BucCard -->|contains| DeleteCard
-  SetPrimaryCard -.->|displays| CardListScreen
-  SetPrimaryCard -.->|invokes| SetPrimaryCardApi
+  BucCard -->|contains| SetPrimaryCard
   ListCards -.->|displays| CardListScreen
   ListCards -.->|invokes| ListCardsApi
   RegisterCard -.->|displays| CardAddScreen
   RegisterCard -.->|invokes| RegisterCardApi
   DeleteCard -.->|displays| CardListScreen
   DeleteCard -.->|invokes| DeleteCardApi
+  SetPrimaryCard -.->|displays| CardListScreen
+  SetPrimaryCard -.->|invokes| SetPrimaryCardApi

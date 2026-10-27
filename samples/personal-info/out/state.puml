@@ -2,7 +2,7 @@
 state "🔄 active" as UserAccount_active
 state "🔄 deleted" as UserAccount_deleted
 state "🔄 suspended" as UserAccount_suspended
-UserAccount_active --> UserAccount_deleted : ⚡ Delete Account
-UserAccount_active --> UserAccount_suspended : ⚡ Suspend Account
-UserAccount_suspended --> UserAccount_active : ⚡ Restore Account
+UserAccount_active --> UserAccount_deleted : ✅ Delete Account
+UserAccount_active --> UserAccount_suspended : ✅ Suspend Account
+UserAccount_suspended --> UserAccount_active : ✅ Restore Account
 @enduml

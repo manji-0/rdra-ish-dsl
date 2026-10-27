@@ -2,6 +2,7 @@
 !theme plain
 
 box "System Value" #E3F2FD
+actor "👤 Administrator" as Admin
 actor "👤 Customer" as Customer
 end box
 box "System Boundary" #E0F7FA
@@ -16,6 +17,7 @@ boundary "🖥️ Product Detail Screen" as ProductDetailScreen
 boundary "🖥️ Product Search Screen" as ProductSearchScreen
 end box
 box "System" #F3E5F5
+participant "🧩 システム" as System
 control "🔌 Add To Cart API" as AddToCartApi
 control "🔌 Cancel Order API" as CancelOrderApi
 control "🔌 Confirm Order API" as ConfirmOrderApi
@@ -95,6 +97,12 @@ ConfirmOrderApi --> OrderConfirmScreen : 🖥️ Order Confirmation Screen
 OrderConfirmScreen --> Customer : 🖥️ Order Confirmation Screen
 deactivate ConfirmOrderApi
 
+== ✅ Confirm Delivery ==
+Admin -> System : ✅ Confirm Delivery
+activate System
+System -> Order : update
+deactivate System
+
 == ✅ Enter Payment Information ==
 Customer -> PaymentInputScreen : ✅ Enter Payment Information
 PaymentInputScreen -> PaymentInputApi : ✅ Enter Payment Information
@@ -157,6 +165,12 @@ SelectAddressApi -> ShippingAddress : read
 SelectAddressApi --> AddressSelectScreen : 🖥️ Address Selection Screen
 AddressSelectScreen --> Customer : 🖥️ Address Selection Screen
 deactivate SelectAddressApi
+
+== ✅ Ship Order ==
+Admin -> System : ✅ Ship Order
+activate System
+System -> Order : update
+deactivate System
 
 == ✅ Change Cart Item Quantity ==
 Customer -> CartScreen : ✅ Change Cart Item Quantity

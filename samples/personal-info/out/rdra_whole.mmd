@@ -14,6 +14,7 @@ flowchart LR
   subgraph layer_boundary[System Boundary]
     direction TB
     ChangePassword(["✅ Change Password"])
+    DeleteAccount(["✅ Delete Account"])
     DeleteAddress(["✅ Delete Address"])
     DeleteCard(["✅ Delete Card"])
     ListCards(["✅ List Cards"])
@@ -21,9 +22,11 @@ flowchart LR
     RegisterCard(["✅ Register Card"])
     RequestPasswordReset(["✅ Request Password Reset"])
     ResetPassword(["✅ Reset Password"])
+    RestoreAccount(["✅ Restore Account"])
     SetInitialPassword(["✅ Set Initial Password"])
     SetPrimaryAddress(["✅ Set Primary Address"])
     SetPrimaryCard(["✅ Set Primary Card"])
+    SuspendAccount(["✅ Suspend Account"])
     UpdateAddress(["✅ Update Address"])
     UpdateProfile(["✅ Update Personal Information"])
     ViewProfile(["✅ View Personal Information"])
@@ -35,9 +38,6 @@ flowchart LR
     PasswordResetScreen[["🖥️ Password Reset Screen"]]
     PasswordSetScreen[["🖥️ Password Setup Screen"]]
     ProfileScreen[["🖥️ Personal Information Screen"]]
-    Active{"⚡ Restore Account"}
-    Deleted{"⚡ Delete Account"}
-    Suspended{"⚡ Suspend Account"}
   end
   subgraph layer_system[System]
     direction TB
@@ -69,6 +69,9 @@ flowchart LR
   User -->|performs| BucProfile
   User -->|performs| BucCard
   User -->|performs| BucPassword
+  SysAdmin -->|performs| SuspendAccount
+  SysAdmin -->|performs| RestoreAccount
+  SysAdmin -->|performs| DeleteAccount
   SetPrimaryCardApi -.->|creates| AuditLog
   SetPrimaryCardApi -.->|reads| CreditCard
   SetPrimaryCardApi -.->|updates| CreditCard
@@ -108,11 +111,14 @@ flowchart LR
   BucProfile -->|contains| UpdateAddress
   BucProfile -->|contains| DeleteAddress
   BucProfile -->|contains| SetPrimaryAddress
+  BucProfile -->|contains| SuspendAccount
+  BucProfile -->|contains| RestoreAccount
+  BucProfile -->|contains| DeleteAccount
   BucCard -.->|belongs| PersonalDataMgmt
-  BucCard -->|contains| SetPrimaryCard
   BucCard -->|contains| ListCards
   BucCard -->|contains| RegisterCard
   BucCard -->|contains| DeleteCard
+  BucCard -->|contains| SetPrimaryCard
   BucPassword -.->|belongs| PersonalDataMgmt
   BucPassword -->|contains| SetInitialPassword
   BucPassword -->|contains| ChangePassword
@@ -137,6 +143,12 @@ flowchart LR
   PersonalDataSystem -->|contains| ListCardsApi
   PersonalDataSystem -->|contains| RegisterCardApi
   PersonalDataSystem -->|contains| DeleteCardApi
+  ListCards -.->|displays| CardListScreen
+  ListCards -.->|invokes| ListCardsApi
+  RegisterCard -.->|displays| CardAddScreen
+  RegisterCard -.->|invokes| RegisterCardApi
+  DeleteCard -.->|displays| CardListScreen
+  DeleteCard -.->|invokes| DeleteCardApi
   SetPrimaryCard -.->|displays| CardListScreen
   SetPrimaryCard -.->|invokes| SetPrimaryCardApi
   SetInitialPassword -.->|displays| PasswordSetScreen
@@ -159,9 +171,6 @@ flowchart LR
   DeleteAddress -.->|invokes| DeleteAddressApi
   SetPrimaryAddress -.->|displays| AddressListScreen
   SetPrimaryAddress -.->|invokes| SetPrimaryAddressApi
-  ListCards -.->|displays| CardListScreen
-  ListCards -.->|invokes| ListCardsApi
-  RegisterCard -.->|displays| CardAddScreen
-  RegisterCard -.->|invokes| RegisterCardApi
-  DeleteCard -.->|displays| CardListScreen
-  DeleteCard -.->|invokes| DeleteCardApi
+  SuspendAccount -.->|updates| UserAccount
+  RestoreAccount -.->|updates| UserAccount
+  DeleteAccount -.->|updates| UserAccount

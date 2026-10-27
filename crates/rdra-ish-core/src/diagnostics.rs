@@ -28,7 +28,7 @@ pub enum RdraError {
     #[error("duplicate import alias '{alias}'\n  hint: each `import … as alias` name must be unique in the file; rename one alias")]
     DuplicateAlias { alias: String },
 
-    #[error("type mismatch in predicate '{pred}': argument '{id}' has kind {actual}, expected {expected}\n  hint: check that you are passing the right element type")]
+    #[error("type mismatch in predicate '{pred}': argument '{id}' has kind {actual}, expected {expected}\n  hint: {hint}", hint = type_mismatch_hint(pred, id, actual))]
     TypeMismatch {
         pred: String,
         id: String,
@@ -125,7 +125,7 @@ pub enum RdraError {
         allowed: String,
     },
 
-    #[error("transitions first argument must be `Entity.column`, got '{got}'\n  hint: write `transitions(Order.status, EvCapture, pending -> paid)`")]
+    #[error("transitions first argument must be `Entity.column`, got '{got}'\n  hint: write `transitions(Order.status, CapturePayment, pending -> paid)`")]
     InvalidTransitionsColumnRef { got: String },
 
     #[error("transitions column '{col}' on entity '{entity}' must be an inline Enum column\n  hint: lifecycle transitions bind an inline Enum status/lifecycle column; a column typed by a variation is an attribute and has no lifecycle")]
@@ -229,7 +229,7 @@ pub enum RdraError {
     #[error("event '{event}' is never raised by any use case\n  hint: add `raises(usecase::Foo, event::{event})` in the relevant BUC file")]
     EventNeverRaised { event: String },
 
-    #[error("event '{event}' is raised but has no transitions and triggers no use case or BUC\n  hint: add `transitions(Entity.column, event::{event}, from -> to)`, `triggers(event::{event}, SomeBuc)`, or `triggers(event::{event}, SomeUseCase)` to connect this event; use `outbox(event::{event})` if it is intentionally published outside this model")]
+    #[error("event '{event}' is raised but triggers no use case or BUC\n  hint: add `triggers(event::{event}, SomeUseCase)` or `triggers(event::{event}, SomeBuc)` to connect this event; use `outbox(event::{event})` if it is intentionally published outside this model, or delete it if nothing consumes it (a use case drives `transitions` directly)")]
     EventNeverConsumed { event: String },
 
     #[error("event '{event}' triggers use case '{usecase}' which belongs to no BUC\n  hint: add `contains(someBuc, usecase::{usecase})` to include the triggered use case in a BUC")]
@@ -328,6 +328,19 @@ pub struct Diagnostic {
     pub error: RdraError,
     pub is_warning: bool,
     pub location: Option<crate::location::LocatedSpan>,
+}
+
+/// Hint for `TypeMismatch`: an event passed where `transitions` or `sets` now takes a use case
+/// names the migration; every other mismatch keeps the generic hint.
+fn type_mismatch_hint(pred: &str, id: &str, actual: &str) -> String {
+    if actual == "event" && matches!(pred, "transitions" | "sets") {
+        let event = id.strip_prefix("event::").unwrap_or(id);
+        format!(
+            "`{pred}` takes the use case that drives the change, not an event; name the use case that raises `{event}`, or run `scripts/migrate-phase3.py` to rewrite the model"
+        )
+    } else {
+        "check that you are passing the right element type".to_string()
+    }
 }
 
 impl Diagnostic {

@@ -117,25 +117,9 @@ flowchart LR
     ArrivalTimeField[["🔤 Checked-in time"]]
     CopayAmountField[["🔤 Copay amount"]]
     EvAppointmentCheckedIn{"⚡ Appointment Checked In"}
-    EvAppointmentCompleted{"⚡ Appointment Completed"}
     EvAppointmentScheduled{"⚡ Appointment Scheduled"}
-    EvCarePlanClosed{"⚡ Care Plan Closed"}
-    EvCarePlanMonitoring{"⚡ Care Plan Monitoring"}
-    EvClaimAccepted{"⚡ Claim Accepted"}
-    EvClaimDenied{"⚡ Claim Denied"}
-    EvClaimPaid{"⚡ Claim Paid"}
-    EvClaimSubmitted{"⚡ Claim Submitted"}
-    EvClinicalOrderCancelled{"⚡ Clinical Order Cancelled"}
-    EvClinicalOrderCollected{"⚡ Specimen Collected"}
-    EvClinicalOrderResulted{"⚡ Clinical Result Received"}
     EvClinicalOrderReviewed{"⚡ Clinical Result Reviewed"}
-    EvEncounterAmended{"⚡ Encounter Amended"}
-    EvEncounterDocumented{"⚡ Encounter Documented"}
     EvEncounterSigned{"⚡ Encounter Signed"}
-    EvIntakeCompleted{"⚡ Intake Completed"}
-    EvIntakeExpired{"⚡ Intake Expired"}
-    EvPatientArchived{"⚡ Patient Archived"}
-    EvPatientMerged{"⚡ Patient Merged"}
   end
   subgraph layer_system[System]
     direction TB
@@ -393,6 +377,12 @@ flowchart LR
   EligibilityCheck ---|N:1| InsurancePolicy
   ConsentRecord ---|N:1| PatientAccount
   IntakePacket ---|N:1| PatientAccount
+  EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
+  EvAppointmentScheduled -.->|triggers| SendIntakeForms
+  EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
+  EvAppointmentCheckedIn -.->|triggers| BucClinicalEncounter
+  EvAppointmentCheckedIn -.->|triggers| OpenEncounter
+  EvAppointmentCheckedIn -.->|triggers| PrepareEncounter
   EvEncounterSigned -.->|triggers| BucOrdersResults
   EvEncounterSigned -.->|triggers| BucBillingClaims
   EvEncounterSigned -.->|triggers| BucFollowupCare
@@ -403,12 +393,6 @@ flowchart LR
   EvClinicalOrderReviewed -.->|triggers| BucFollowupCare
   EvClinicalOrderReviewed -.->|triggers| NotifyCriticalResult
   EvClinicalOrderReviewed -.->|triggers| NotifyPatientResult
-  EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
-  EvAppointmentScheduled -.->|triggers| SendIntakeForms
-  EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
-  EvAppointmentCheckedIn -.->|triggers| BucClinicalEncounter
-  EvAppointmentCheckedIn -.->|triggers| OpenEncounter
-  EvAppointmentCheckedIn -.->|triggers| PrepareEncounter
   ArrivalTimeField -.->|maps_field| Appointment
   CopayAmountField -.->|maps_field| PaymentTransaction
   VisitCheckInFlow -->|contains| ArrivalStep
@@ -442,22 +426,18 @@ flowchart LR
   SendIntakeForms -.->|requires_medium| FrontDeskTerminal
   SendIntakeForms -.->|requires_permission| IntakeManage
   CompleteIntakeForms -.->|displays| IntakePortalScreen
-  CompleteIntakeForms -.->|raises| EvIntakeCompleted
   CompleteIntakeForms -.->|requires_medium| PatientMobile
   CompleteIntakeForms -.->|requires_permission| ConsentCapture
   CompleteIntakeForms -.->|updates| IntakePacket
   ExpireIntakeForms -.->|displays| IntakePortalScreen
-  ExpireIntakeForms -.->|raises| EvIntakeExpired
   ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
   ExpireIntakeForms -.->|requires_permission| IntakeManage
   ExpireIntakeForms -.->|updates| IntakePacket
   MergeDuplicatePatient -.->|displays| PatientProfileScreen
-  MergeDuplicatePatient -.->|raises| EvPatientMerged
   MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
   MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
   MergeDuplicatePatient -.->|updates| PatientAccount
   ArchivePatient -.->|displays| PatientProfileScreen
-  ArchivePatient -.->|raises| EvPatientArchived
   ArchivePatient -.->|requires_medium| FrontDeskTerminal
   ArchivePatient -.->|requires_permission| PatientProfileWrite
   ArchivePatient -.->|updates| PatientAccount
@@ -467,12 +447,10 @@ flowchart LR
   PlaceLabOrder -.->|requires_permission| ClinicalOrderWrite
   CollectSpecimen -.->|displays| SpecimenScreen
   CollectSpecimen -.->|invokes| CollectSpecimenApi
-  CollectSpecimen -.->|raises| EvClinicalOrderCollected
   CollectSpecimen -.->|requires_medium| NurseStation
   CollectSpecimen -.->|requires_permission| ClinicalOrderWrite
   ReceiveLabResult -.->|displays| ResultReviewScreen
   ReceiveLabResult -.->|invokes| ReceiveLabResultApi
-  ReceiveLabResult -.->|raises| EvClinicalOrderResulted
   ReceiveLabResult -.->|requires_medium| NurseStation
   ReceiveLabResult -.->|requires_permission| LabResultManage
   ReviewLabResult -.->|displays| ResultReviewScreen
@@ -486,7 +464,6 @@ flowchart LR
   NotifyCriticalResult -.->|requires_permission| LabResultManage
   NotifyCriticalResult -.->|requires_permission| PatientMessageSend
   CancelClinicalOrder -.->|displays| OrderEntryScreen
-  CancelClinicalOrder -.->|raises| EvClinicalOrderCancelled
   CancelClinicalOrder -.->|requires_medium| ClinicalWorkstation
   CancelClinicalOrder -.->|requires_permission| ClinicalOrderWrite
   CancelClinicalOrder -.->|updates| ClinicalOrder
@@ -500,7 +477,6 @@ flowchart LR
   RecordVitals -.->|requires_permission| VitalsRecord
   DocumentAssessment -.->|displays| DiagnosisScreen
   DocumentAssessment -.->|invokes| DocumentAssessmentApi
-  DocumentAssessment -.->|raises| EvEncounterDocumented
   DocumentAssessment -.->|requires_medium| ClinicalWorkstation
   DocumentAssessment -.->|requires_permission| ClinicalDocument
   SignEncounter -.->|displays| EncounterWorkspaceScreen
@@ -510,12 +486,10 @@ flowchart LR
   SignEncounter -.->|requires_permission| EncounterSign
   AmendEncounter -.->|displays| EncounterWorkspaceScreen
   AmendEncounter -.->|invokes| AmendEncounterApi
-  AmendEncounter -.->|raises| EvEncounterAmended
   AmendEncounter -.->|requires_medium| ClinicalWorkstation
   AmendEncounter -.->|requires_permission| EncounterSign
   CompleteAppointment -.->|displays| EncounterWorkspaceScreen
   CompleteAppointment -.->|invokes| CompleteAppointmentApi
-  CompleteAppointment -.->|raises| EvAppointmentCompleted
   CompleteAppointment -.->|requires_medium| NurseStation
   CompleteAppointment -.->|requires_permission| EncounterOpen
   VerifyArrival -.->|displays| CheckInScreen
@@ -553,22 +527,18 @@ flowchart LR
   GenerateClaim -.->|requires_permission| BillingClaimWrite
   SubmitClaim -.->|displays| ClaimScreen
   SubmitClaim -.->|invokes| SubmitClaimApi
-  SubmitClaim -.->|raises| EvClaimSubmitted
   SubmitClaim -.->|requires_medium| BillingWorkstation
   SubmitClaim -.->|requires_permission| BillingClaimWrite
   ReceiveClaimAccepted -.->|displays| ClaimScreen
-  ReceiveClaimAccepted -.->|raises| EvClaimAccepted
   ReceiveClaimAccepted -.->|requires_medium| BillingWorkstation
   ReceiveClaimAccepted -.->|requires_permission| BillingClaimWrite
   ReceiveClaimAccepted -.->|updates| Claim
   RecordClaimDenial -.->|displays| ClaimScreen
-  RecordClaimDenial -.->|raises| EvClaimDenied
   RecordClaimDenial -.->|requires_medium| BillingWorkstation
   RecordClaimDenial -.->|requires_permission| BillingClaimWrite
   RecordClaimDenial -.->|updates| Claim
   PostPayment -.->|displays| PaymentPostingScreen
   PostPayment -.->|invokes| PaymentPostApi
-  PostPayment -.->|raises| EvClaimPaid
   PostPayment -.->|requires_medium| BillingWorkstation
   PostPayment -.->|requires_permission| PaymentPost
   ReconcileBalance -.->|displays| BalanceScreen
@@ -588,7 +558,6 @@ flowchart LR
   SendFollowUpMessage -.->|requires_medium| CareCoordinationConsole
   SendFollowUpMessage -.->|requires_permission| PatientMessageSend
   ReviewPatientResponse -.->|displays| CarePlanScreen
-  ReviewPatientResponse -.->|raises| EvCarePlanMonitoring
   ReviewPatientResponse -.->|requires_medium| CareCoordinationConsole
   ReviewPatientResponse -.->|requires_permission| FollowUpManage
   ReviewPatientResponse -.->|updates| CarePlan
@@ -600,7 +569,6 @@ flowchart LR
   ScheduleFollowUpVisit -.->|requires_permission| FollowUpManage
   ScheduleFollowUpVisit -.->|requires_permission| ScheduleWrite
   CloseCarePlan -.->|displays| CarePlanScreen
-  CloseCarePlan -.->|raises| EvCarePlanClosed
   CloseCarePlan -.->|requires_medium| CareCoordinationConsole
   CloseCarePlan -.->|requires_permission| FollowUpManage
   CloseCarePlan -.->|updates| CarePlan

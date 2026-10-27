@@ -40,29 +40,30 @@ stateDiagram-v2
   state "🔄 rxcancelled" as Prescription_rxcancelled
   state "🔄 rxsent" as Prescription_rxsent
   state "🔄 rxdispensed" as Prescription_rxdispensed
-  Appointment_apptcheckedin --> Appointment_apptcompleted : ⚡ Appointment Completed
-  Appointment_apptrequested --> Appointment_apptscheduled : ⚡ Appointment Scheduled
-  Appointment_apptscheduled --> Appointment_apptcancelled : ⚡ Appointment Cancelled
-  Appointment_apptscheduled --> Appointment_apptcheckedin : ⚡ Appointment Checked In
-  Appointment_apptscheduled --> Appointment_apptnoshow : ⚡ Appointment Marked No Show
-  Appointment_apptscheduled --> Appointment_apptscheduled : ⚡ Appointment Rescheduled
-  CarePlan_caremonitoring --> CarePlan_careclosed : ⚡ Care Plan Closed
-  CarePlan_careopen --> CarePlan_caremonitoring : ⚡ Care Plan Monitoring
-  Claim_claimaccepted --> Claim_claimpaid : ⚡ Claim Paid
-  Claim_claimdraft --> Claim_claimsubmitted : ⚡ Claim Submitted
-  Claim_claimsubmitted --> Claim_claimaccepted : ⚡ Claim Accepted
-  Claim_claimsubmitted --> Claim_claimdenied : ⚡ Claim Denied
-  ClinicalOrder_clcollected --> ClinicalOrder_clresulted : ⚡ Clinical Result Received
-  ClinicalOrder_clordered --> ClinicalOrder_clcancelled : ⚡ Clinical Order Cancelled
-  ClinicalOrder_clordered --> ClinicalOrder_clcollected : ⚡ Specimen Collected
-  ClinicalOrder_clresulted --> ClinicalOrder_clreviewed : ⚡ Clinical Result Reviewed
-  Encounter_encdocumented --> Encounter_encsigned : ⚡ Encounter Signed
-  Encounter_encopen --> Encounter_encdocumented : ⚡ Encounter Documented
-  Encounter_encsigned --> Encounter_encamended : ⚡ Encounter Amended
-  IntakePacket_intakesent --> IntakePacket_intakecompleted : ⚡ Intake Completed
-  IntakePacket_intakesent --> IntakePacket_intakeexpired : ⚡ Intake Expired
-  PatientAccount_patientactive --> PatientAccount_patientinactive : ⚡ Patient Archived
-  PatientAccount_patientactive --> PatientAccount_patientmerged : ⚡ Patient Merged
-  Prescription_rxdrafted --> Prescription_rxcancelled : ⚡ Prescription Cancelled
-  Prescription_rxdrafted --> Prescription_rxsent : ⚡ Prescription Sent
-  Prescription_rxsent --> Prescription_rxdispensed : ⚡ Prescription Dispensed
+  Appointment_apptcheckedin --> Appointment_apptcompleted : ✅ Complete Appointment
+  Appointment_apptrequested --> Appointment_apptscheduled : ✅ Book Appointment
+  Appointment_apptrequested --> Appointment_apptscheduled : ✅ Schedule Follow-Up Visit
+  Appointment_apptscheduled --> Appointment_apptcancelled : ✅ Cancel Appointment
+  Appointment_apptscheduled --> Appointment_apptcheckedin : ✅ Check In Patient
+  Appointment_apptscheduled --> Appointment_apptnoshow : ✅ Mark No Show
+  Appointment_apptscheduled --> Appointment_apptscheduled : ✅ Reschedule Appointment
+  CarePlan_caremonitoring --> CarePlan_careclosed : ✅ Close Care Plan
+  CarePlan_careopen --> CarePlan_caremonitoring : ✅ Review Patient Response
+  Claim_claimaccepted --> Claim_claimpaid : ✅ Post Payment
+  Claim_claimdraft --> Claim_claimsubmitted : ✅ Submit Claim
+  Claim_claimsubmitted --> Claim_claimaccepted : ✅ Receive Claim Accepted
+  Claim_claimsubmitted --> Claim_claimdenied : ✅ Record Claim Denial
+  ClinicalOrder_clcollected --> ClinicalOrder_clresulted : ✅ Receive Lab Result
+  ClinicalOrder_clordered --> ClinicalOrder_clcancelled : ✅ Cancel Clinical Order
+  ClinicalOrder_clordered --> ClinicalOrder_clcollected : ✅ Collect Specimen
+  ClinicalOrder_clresulted --> ClinicalOrder_clreviewed : ✅ Review Lab Result
+  Encounter_encdocumented --> Encounter_encsigned : ✅ Sign Encounter
+  Encounter_encopen --> Encounter_encdocumented : ✅ Document Assessment
+  Encounter_encsigned --> Encounter_encamended : ✅ Amend Signed Encounter
+  IntakePacket_intakesent --> IntakePacket_intakecompleted : ✅ Complete Intake Forms
+  IntakePacket_intakesent --> IntakePacket_intakeexpired : ✅ Expire Intake Forms
+  PatientAccount_patientactive --> PatientAccount_patientinactive : ✅ Archive Patient
+  PatientAccount_patientactive --> PatientAccount_patientmerged : ✅ Merge Duplicate Patient
+  Prescription_rxdrafted --> Prescription_rxcancelled : ✅ Cancel Prescription
+  Prescription_rxdrafted --> Prescription_rxsent : ✅ Send Prescription
+  Prescription_rxsent --> Prescription_rxdispensed : ✅ Confirm Dispense

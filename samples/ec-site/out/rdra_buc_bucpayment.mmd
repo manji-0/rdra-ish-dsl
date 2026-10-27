@@ -16,7 +16,6 @@ flowchart LR
     RefundPayment(["✅ Refund Payment"])
     PaymentInputScreen[["🖥️ Payment Information Screen"]]
     PaymentResultScreen[["🖥️ Payment Result Screen"]]
-    Capture{"⚡ Capture Payment"}
   end
   subgraph layer_system[System]
     direction TB
@@ -47,6 +46,5 @@ flowchart LR
   AuthorizePayment -.->|invokes| PaymentAuthorizationApi
   Capture -.->|displays| PaymentResultScreen
   Capture -.->|invokes| PaymentCaptureApi
-  Capture -.->|raises| Capture
   RefundPayment -.->|displays| PaymentResultScreen
   RefundPayment -.->|invokes| PaymentRefundApi

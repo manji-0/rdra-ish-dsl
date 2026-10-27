@@ -13,22 +13,15 @@ usecase Place "注文確定"
 usecase Pay "決済確定"
 usecase Cancel "キャンセル"
 
-event EvPay "決済"
-event EvCancel "キャンセル"
-
 creates(Place, Order)
 creates(Place, Payment)
 updates(Pay, Order)
 updates(Pay, Payment)
 updates(Cancel, Order)
 
-raises(Pay, EvPay)
-raises(Cancel, EvCancel)
-
-
-transitions(Order.status, EvPay, pending -> paid)
-transitions(Order.status, EvCancel, pending -> cancelled)
-transitions(Payment.status, EvPay, pending -> captured)
+transitions(Order.status, Pay, pending -> paid)
+transitions(Order.status, Cancel, pending -> cancelled)
+transitions(Payment.status, Pay, pending -> captured)
 
 relate(Payment, Order, N:1)
 

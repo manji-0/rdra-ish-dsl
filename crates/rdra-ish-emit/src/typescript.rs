@@ -153,23 +153,15 @@ usecase CapturePay  "決済確定"
 usecase ShipOrder   "発送"
 usecase DeliverOrder "配達確認"
 usecase CancelOrder "注文キャンセル"
-event EvCapture  "決済確定"
-event EvShip     "発送開始"
-event EvDeliver  "配達確認"
-event EvCancel   "注文キャンセル"
 creates(PlaceOrder, Order)
 updates(CapturePay,   Order)
 updates(ShipOrder,    Order)
 updates(DeliverOrder, Order)
 updates(CancelOrder,  Order)
-raises(CapturePay,   EvCapture)
-raises(ShipOrder,    EvShip)
-raises(DeliverOrder, EvDeliver)
-raises(CancelOrder,  EvCancel)
-transitions(Order.status, EvCapture, pending -> paid)
-transitions(Order.status, EvShip, paid -> shipped)
-transitions(Order.status, EvDeliver, shipped -> delivered)
-transitions(Order.status, EvCancel, pending -> cancelled)
+transitions(Order.status, CapturePay, pending -> paid)
+transitions(Order.status, ShipOrder, paid -> shipped)
+transitions(Order.status, DeliverOrder, shipped -> delivered)
+transitions(Order.status, CancelOrder, pending -> cancelled)
 sets(usecase::DeliverOrder, Order, delivered_at == present)
 "#;
 

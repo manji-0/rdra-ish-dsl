@@ -12,6 +12,9 @@ usecase RegisterAddress   "Register Address"
 usecase UpdateAddress     "Update Address"
 usecase DeleteAddress     "Delete Address"
 usecase SetPrimaryAddress "Set Primary Address"
+usecase SuspendAccount    "Suspend Account"
+usecase RestoreAccount    "Restore Account"
+usecase DeleteAccount     "Delete Account"
 
 screen ProfileScreen     "Personal Information Screen"
 screen AddressListScreen "Address List Screen"
@@ -32,6 +35,9 @@ contains(BucProfile, RegisterAddress)
 contains(BucProfile, UpdateAddress)
 contains(BucProfile, DeleteAddress)
 contains(BucProfile, SetPrimaryAddress)
+contains(BucProfile, SuspendAccount)
+contains(BucProfile, RestoreAccount)
+contains(BucProfile, DeleteAccount)
 contains(PersonalDataSystem, ViewProfileApi)
 contains(PersonalDataSystem, UpdateProfileApi)
 contains(PersonalDataSystem, RegisterAddressApi)
@@ -71,3 +77,16 @@ invokes(SetPrimaryAddress, SetPrimaryAddressApi)
 reads(SetPrimaryAddressApi, PostalAddress)
 updates(SetPrimaryAddressApi, PostalAddress)
 creates(SetPrimaryAddressApi, AuditLog)
+
+// Account lifecycle: a system administrator suspends, restores, or deletes the account.
+performs(SysAdmin, SuspendAccount)
+updates(SuspendAccount, UserAccount)
+transitions(UserAccount.status, SuspendAccount, active -> suspended)
+
+performs(SysAdmin, RestoreAccount)
+updates(RestoreAccount, UserAccount)
+transitions(UserAccount.status, RestoreAccount, suspended -> active)
+
+performs(SysAdmin, DeleteAccount)
+updates(DeleteAccount, UserAccount)
+transitions(UserAccount.status, DeleteAccount, active -> deleted)

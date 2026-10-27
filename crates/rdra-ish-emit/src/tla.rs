@@ -6,7 +6,7 @@ use rdra_ish_core::model::{
     CrossEntityCondition, CrossEntityInvariant, EffectValue, EntityInvariant, EntityKey,
     ExclusiveConstraint, ForbiddenConstraint, NodeRef, QualifiedModelColumnRef,
     QuantifierConstraint, QuantifierKind, RelKind, RequiredConstraint, SemanticModel, TemporalAtom,
-    TemporalExpr, TemporalFormula, TemporalProperty, TemporalRhs,
+    TemporalExpr, TemporalFormula, TemporalProperty, TemporalRhs, UseCaseKey,
 };
 use rdra_ish_core::{collect_entity_lifecycles, EntityLifecycle};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -112,6 +112,9 @@ struct SpecAxis {
 struct SpecAction {
     name: String,
     comment: String,
+    /// The use case whose `transitions` this action carries; `None` for sets-driven
+    /// and synthetic actions. `after(UC).assert` binds to actions with `Some(UC)`.
+    usecase: Option<UseCaseKey>,
     /// Optional `\E i \in Entity_Ids:` binder for multi-instance actions.
     exists_binder: Option<(String, String)>,
     /// Conjunction of guards (TLA fragments).
@@ -421,11 +424,7 @@ fn check_int_literals_in_range(
             continue;
         }
         let eid = model.entities[effect.entity].id.clone();
-        let origin = match &effect.origin {
-            NodeRef::UseCase(k) => model.use_cases[*k].id.clone(),
-            NodeRef::Event(k) => model.events[*k].id.clone(),
-            _ => "?".into(),
-        };
+        let origin = &model.use_cases[effect.origin].id;
         push_tla_fatal(
             warnings,
             "int_literal_out_of_range",
@@ -1146,74 +1145,26 @@ fn build_actions(
     let all_vars: Vec<String> = axes.iter().map(|a| a.var_name.clone()).collect();
     let entity_name = entity_id(model, lc.entity);
     let ids = format!("{}_Ids", sanitize_ident(&entity_name));
-    // Origins whose sets are folded into a transition action, keyed like append_sets_driven_actions.
+    // Use cases whose sets are folded into a transition action, keyed like append_sets_driven_actions.
     let mut folded: HashSet<String> = HashSet::new();
 
     for st in &lc.transitions {
         let from = st.from.to_lowercase();
         let to = st.to.to_lowercase();
-        let event_id = model.events[st.event].id.clone();
-        folded.insert(format!("ev:{event_id}"));
+        let uc = st.usecase;
+        let uc_id = model.use_cases[uc].id.clone();
+        folded.insert(format!("uc:{uc_id}"));
         let status_var = col_to_var
             .get(lc.status_column.as_str())
             .copied()
             .unwrap_or("status");
 
         let mut extra_effects: Vec<(String, String)> = Vec::new();
-        let raising_ucs: Vec<_> = model
-            .relations
+        for effect in model
+            .column_effects
             .iter()
-            .filter_map(|rel| {
-                if rel.kind != RelKind::Raises {
-                    return None;
-                }
-                match (&rel.from, &rel.to) {
-                    (NodeRef::UseCase(u), NodeRef::Event(e)) if *e == st.event => Some(*u),
-                    _ => None,
-                }
-            })
-            .collect();
-
-        for uc in &raising_ucs {
-            folded.insert(format!("uc:{}", model.use_cases[*uc].id));
-            for effect in model.column_effects.iter().filter(|e| {
-                e.entity == lc.entity
-                    && matches!(&e.origin, NodeRef::UseCase(u) if u == uc)
-                    && e.column != lc.status_column
-            }) {
-                if let Some(var) = col_to_var.get(effect.column.as_str()) {
-                    extra_effects.push(((*var).to_string(), effect_value_to_tla(&effect.value)));
-                } else {
-                    warnings.push(format!(
-                        "{}: sets effect on non-axis column {} not exported",
-                        entity_id(model, lc.entity),
-                        effect.column
-                    ));
-                }
-            }
-            for pe in model.proposition_effects.iter().filter(|e| {
-                e.entity == lc.entity && matches!(&e.origin, NodeRef::UseCase(u) if u == uc)
-            }) {
-                let key = format!("__cmp:{}", pe.prop.axis_key());
-                if let Some(var) = col_to_var.get(key.as_str()) {
-                    extra_effects.push((
-                        (*var).to_string(),
-                        if pe.truth {
-                            "TRUE".into()
-                        } else {
-                            "FALSE".into()
-                        },
-                    ));
-                }
-            }
-        }
-
-        // sets(Event, ...) on the transition event itself.
-        for effect in model.column_effects.iter().filter(|e| {
-            e.entity == lc.entity
-                && matches!(&e.origin, NodeRef::Event(ev) if *ev == st.event)
-                && e.column != lc.status_column
-        }) {
+            .filter(|e| e.entity == lc.entity && e.origin == uc && e.column != lc.status_column)
+        {
             if let Some(var) = col_to_var.get(effect.column.as_str()) {
                 extra_effects.push(((*var).to_string(), effect_value_to_tla(&effect.value)));
             } else {
@@ -1224,9 +1175,11 @@ fn build_actions(
                 ));
             }
         }
-        for pe in model.proposition_effects.iter().filter(|e| {
-            e.entity == lc.entity && matches!(&e.origin, NodeRef::Event(ev) if *ev == st.event)
-        }) {
+        for pe in model
+            .proposition_effects
+            .iter()
+            .filter(|e| e.entity == lc.entity && e.origin == uc)
+        {
             let key = format!("__cmp:{}", pe.prop.axis_key());
             if let Some(var) = col_to_var.get(key.as_str()) {
                 extra_effects.push((
@@ -1272,9 +1225,9 @@ fn build_actions(
             let base = format!(
                 "{}_{}",
                 sanitize_ident(&entity_id(model, lc.entity)),
-                sanitize_ident(&event_id)
+                sanitize_ident(&uc_id)
             );
-            // Same event can drive multiple from→to edges; disambiguate operator names.
+            // Same use case can drive multiple from→to edges; disambiguate operator names.
             let candidate = format!(
                 "{}_{}_to_{}",
                 base,
@@ -1296,7 +1249,8 @@ fn build_actions(
 
         actions.push(SpecAction {
             name: action_name,
-            comment: format!("{event_id}: {from} -> {to}"),
+            comment: format!("{uc_id}: {from} -> {to}"),
+            usecase: Some(uc),
             exists_binder: multi_instance.then(|| (binder.to_string(), ids.clone())),
             guards: vec![status_guard],
             effects,
@@ -1331,7 +1285,7 @@ fn build_actions(
     actions
 }
 
-/// One action per usecase/event whose `sets` no transition action already carries.
+/// One action per use case whose `sets` no transition action already carries.
 /// With transitions, the status column is theirs, so status effects are left out here.
 #[allow(clippy::too_many_arguments)]
 fn append_sets_driven_actions(
@@ -1361,17 +1315,8 @@ fn append_sets_driven_actions(
     for effect in model.column_effects.iter().filter(|e| {
         e.entity == lc.entity && !(status_owned_by_transitions && e.column == lc.status_column)
     }) {
-        let (key, comment) = match &effect.origin {
-            NodeRef::UseCase(u) => {
-                let id = model.use_cases[*u].id.clone();
-                (format!("uc:{id}"), format!("sets via usecase {id}"))
-            }
-            NodeRef::Event(e) => {
-                let id = model.events[*e].id.clone();
-                (format!("ev:{id}"), format!("sets via event {id}"))
-            }
-            _ => continue,
-        };
+        let id = &model.use_cases[effect.origin].id;
+        let (key, comment) = (format!("uc:{id}"), format!("sets via usecase {id}"));
         if folded.contains(&key) {
             continue;
         }
@@ -1401,17 +1346,8 @@ fn append_sets_driven_actions(
         let Some(var) = col_to_var.get(key_axis.as_str()) else {
             continue;
         };
-        let (key, comment) = match &pe.origin {
-            NodeRef::UseCase(u) => {
-                let id = model.use_cases[*u].id.clone();
-                (format!("uc:{id}"), format!("sets via usecase {id}"))
-            }
-            NodeRef::Event(e) => {
-                let id = model.events[*e].id.clone();
-                (format!("ev:{id}"), format!("sets via event {id}"))
-            }
-            _ => continue,
-        };
+        let id = &model.use_cases[pe.origin].id;
+        let (key, comment) = (format!("uc:{id}"), format!("sets via usecase {id}"));
         if folded.contains(&key) {
             continue;
         }
@@ -1449,6 +1385,7 @@ fn append_sets_driven_actions(
         actions.push(SpecAction {
             name,
             comment,
+            usecase: None,
             exists_binder: multi_instance.then(|| (binder.to_string(), ids.to_string())),
             guards: Vec::new(),
             effects,
@@ -1505,6 +1442,7 @@ fn append_undriven_int_assigns(
                 "synthetic nondet assign {entity_name}.{} (no modeled usecase)",
                 ax.column
             ),
+            usecase: None,
             exists_binder,
             guards: Vec::new(),
             effects,
@@ -2174,19 +2112,7 @@ fn apply_temporal_assertions(
                 continue;
             }
         };
-        let raising_events: Vec<_> = model
-            .relations
-            .iter()
-            .filter_map(|rel| {
-                if rel.kind != RelKind::Raises {
-                    return None;
-                }
-                match (&rel.from, &rel.to) {
-                    (NodeRef::UseCase(u), NodeRef::Event(e)) if *u == assertion.anchor => Some(*e),
-                    _ => None,
-                }
-            })
-            .collect();
+        let anchored = |a: &&SpecAction| a.usecase == Some(assertion.anchor);
 
         // Per-required implications: (matching action names, primed postconditions).
         let mut implications: Vec<(Vec<String>, Vec<String>)> = Vec::new();
@@ -2206,21 +2132,10 @@ fn apply_temporal_assertions(
                     let var = ax.var_name.clone();
                     let val = effect_value_to_tla(value);
                     let binder = spec.binder.clone();
-                    let event_names: HashSet<String> = raising_events
-                        .iter()
-                        .map(|ek| {
-                            format!(
-                                "{}_{}",
-                                sanitize_ident(&spec.entity_id),
-                                sanitize_ident(&model.events[*ek].id)
-                            )
-                        })
-                        .collect();
-
                     let matching: Vec<String> = spec
                         .actions
                         .iter()
-                        .filter(|a| action_matches_raising_event(&a.name, &event_names))
+                        .filter(anchored)
                         .map(|a| a.name.clone())
                         .collect();
                     if matching.is_empty() {
@@ -2228,11 +2143,7 @@ fn apply_temporal_assertions(
                         continue;
                     }
 
-                    for action in spec
-                        .actions
-                        .iter()
-                        .filter(|a| action_matches_raising_event(&a.name, &event_names))
-                    {
+                    for action in spec.actions.iter().filter(anchored) {
                         if effect_conflicts_assignment(
                             &action.effects,
                             &var,
@@ -2292,20 +2203,10 @@ fn apply_temporal_assertions(
                         assertion_ok = false;
                         continue;
                     };
-                    let event_names: HashSet<String> = raising_events
-                        .iter()
-                        .map(|ek| {
-                            format!(
-                                "{}_{}",
-                                sanitize_ident(&spec.entity_id),
-                                sanitize_ident(&model.events[*ek].id)
-                            )
-                        })
-                        .collect();
                     let matching: Vec<String> = spec
                         .actions
                         .iter()
-                        .filter(|a| action_matches_raising_event(&a.name, &event_names))
+                        .filter(anchored)
                         .map(|a| a.name.clone())
                         .collect();
                     if matching.is_empty() {
@@ -2431,12 +2332,6 @@ fn effect_already_sets(
 }
 
 /// True when `action_name` is `Entity_Event` or `Entity_Event_from_to_to` for a raising event.
-fn action_matches_raising_event(action_name: &str, event_names: &HashSet<String>) -> bool {
-    event_names
-        .iter()
-        .any(|en| action_name == en || action_name.starts_with(&format!("{en}_")))
-}
-
 /// Detect an existing primed assignment to `var` with a different value.
 fn effect_conflicts_assignment(
     effects: &[String],
@@ -3275,27 +3170,66 @@ forbidden(Item, stock < 0)
     }
 
     #[test]
-    fn tla_duplicate_event_transitions_get_unique_action_names() {
+    fn tla_duplicate_usecase_transitions_get_unique_action_names() {
         let src = r#"
 entity Order "注文" {
   id: Int @pk
   status: Enum(pending, paid, cancelled) @default(pending)
 }
 usecase Pay "pay"
-event EvPay "pay"
 updates(Pay, Order)
-raises(Pay, EvPay)
-transitions(Order.status, EvPay, pending -> paid)
-transitions(Order.status, EvPay, pending -> cancelled)
+transitions(Order.status, Pay, pending -> paid)
+transitions(Order.status, Pay, pending -> cancelled)
 "#;
         let model = model_from(src);
         let bundle = TlaPlusEmitter::default()
             .emit_bundle(&model, &View::whole())
             .unwrap();
-        assert!(bundle.tla.contains("Order_EvPay_pending_to_paid"));
-        assert!(bundle.tla.contains("Order_EvPay_pending_to_cancelled"));
-        let paid_defs = bundle.tla.matches("Order_EvPay_pending_to_paid ==").count();
+        assert!(bundle.tla.contains("Order_Pay_pending_to_paid"));
+        assert!(bundle.tla.contains("Order_Pay_pending_to_cancelled"));
+        let paid_defs = bundle.tla.matches("Order_Pay_pending_to_paid ==").count();
         assert_eq!(paid_defs, 1, "duplicate TLA operators:\n{}", bundle.tla);
+    }
+
+    #[test]
+    fn tla_two_usecases_on_one_edge_get_one_action_each() {
+        let src = r#"
+entity Appt "Appointment" {
+  id: Int @pk
+  status: Enum(requested, scheduled) @default(requested)
+  reminder_at: DateTime @null
+}
+usecase Book "book"
+usecase FollowUp "follow up"
+updates(Book, Appt)
+updates(FollowUp, Appt)
+transitions(Appt.status, Book, requested -> scheduled)
+transitions(Appt.status, FollowUp, requested -> scheduled)
+sets(Book, Appt, reminder_at == present)
+"#;
+        let bundle = TlaPlusEmitter::default()
+            .emit_bundle(&model_from(src), &View::whole())
+            .unwrap();
+        let block = |name: &str| {
+            bundle
+                .tla
+                .split(&format!("{name} =="))
+                .nth(1)
+                .unwrap_or_else(|| panic!("missing {name}:\n{}", bundle.tla))
+                .split("\n\n")
+                .next()
+                .unwrap()
+                .to_string()
+        };
+        assert!(
+            block("Appt_Book_requested_to_scheduled").contains("Appt_reminder_at' = \"present\"")
+        );
+        assert!(!block("Appt_FollowUp_requested_to_scheduled").contains("Appt_reminder_at'"));
+        assert!(
+            !bundle.tla.contains("Appt_uc_Book =="),
+            "Book's sets are folded into its transition:\n{}",
+            bundle.tla
+        );
     }
 
     #[test]
@@ -3306,10 +3240,8 @@ entity Order "注文" {
   status: Enum(pending, paid, cancelled) @default(pending)
 }
 usecase Pay "pay"
-event EvPay "pay"
 updates(Pay, Order)
-raises(Pay, EvPay)
-transitions(Order.status, EvPay, pending -> paid)
+transitions(Order.status, Pay, pending -> paid)
 sets(Pay, Order, status == paid)
 after(Pay).assert(Order.status == cancelled)
 "#;
@@ -3336,10 +3268,8 @@ entity Order "注文" {
   status: Enum(pending, paid) @default(pending)
 }
 usecase Pay "pay"
-event EvPay "pay"
 updates(Pay, Order)
-raises(Pay, EvPay)
-transitions(Order.status, EvPay, pending -> paid)
+transitions(Order.status, Pay, pending -> paid)
 after(Pay).assert(Order.status == paid)
 "#;
         let model = model_from(src);
@@ -3368,7 +3298,7 @@ after(Pay).assert(Order.status == paid)
         // Transition already sets paid; assert must not add a second assignment line.
         let pay_block = bundle
             .tla
-            .split("Order_EvPay_pending_to_paid ==")
+            .split("Order_Pay_pending_to_paid ==")
             .nth(1)
             .unwrap_or("")
             .split("Next ==")
@@ -3430,17 +3360,13 @@ relate(Order, Product, N:M).via(OrderProduct)
 usecase Place "Place"
 usecase Pay "Pay"
 usecase Archive "Archive"
-event EvPay "Pay"
-event EvArchive "Archive"
 creates(Place, Order)
 creates(Place, Product)
 creates(Place, OrderProduct)
 updates(Pay, Order)
 updates(Archive, Product)
-raises(Pay, EvPay)
-raises(Archive, EvArchive)
-transitions(Order.status, EvPay, pending -> paid)
-transitions(Product.status, EvArchive, active -> archived)
+transitions(Order.status, Pay, pending -> paid)
+transitions(Product.status, Archive, active -> archived)
 forbidden(Order, Product, Order.status == paid, Product.status == archived)
   .along(Order, OrderProduct, Product)
 "#;
@@ -3550,18 +3476,14 @@ entity Payment "決済" {
 usecase Place "注文"
 usecase Pay "決済"
 usecase Cancel "取消"
-event EvPay "決済"
-event EvCancel "取消"
 creates(Place, Order)
 creates(Place, Payment)
 updates(Pay, Order)
 updates(Pay, Payment)
 updates(Cancel, Order)
-raises(Pay, EvPay)
-raises(Cancel, EvCancel)
-transitions(Order.status, EvPay, pending -> paid)
-transitions(Order.status, EvCancel, pending -> cancelled)
-transitions(Payment.status, EvPay, pending -> captured)
+transitions(Order.status, Pay, pending -> paid)
+transitions(Order.status, Cancel, pending -> cancelled)
+transitions(Payment.status, Pay, pending -> captured)
 sets(Pay, Order, paid_at == present)
 relate(Payment, Order, N:1)
 invariant(Order).when(status == paid).then(paid_at == present)
@@ -3601,11 +3523,9 @@ entity Quote "見積" {
 }
 usecase Open "開く"
 usecase Close "閉じる"
-event EvClose "閉じる"
 creates(Open, Quote)
 updates(Close, Quote)
-raises(Close, EvClose)
-transitions(Quote.status, EvClose, open -> closed)
+transitions(Quote.status, Close, open -> closed)
 sets(Close, Quote, total == 5)
 forbidden(Quote, total < floor)
 "#;
@@ -3638,18 +3558,14 @@ entity Payment "決済" {
 usecase Place "注文"
 usecase Pay "決済"
 usecase Ship "発送"
-event EvPay "決済"
-event EvShip "発送"
 creates(Place, Order)
 creates(Place, Payment)
 updates(Pay, Order)
 updates(Pay, Payment)
 updates(Ship, Order)
-raises(Pay, EvPay)
-raises(Ship, EvShip)
-transitions(Order.status, EvPay, pending -> paid)
-transitions(Order.status, EvShip, paid -> shipped)
-transitions(Payment.status, EvPay, pending -> captured)
+transitions(Order.status, Pay, pending -> paid)
+transitions(Order.status, Ship, paid -> shipped)
+transitions(Payment.status, Pay, pending -> captured)
 relate(Payment, Order, N:1)
 forbidden(Order, Payment, Order.status == pending, Payment.status == captured)
   .along(Order, Payment)
@@ -3690,11 +3606,9 @@ entity Item "商品" {
 }
 usecase Create "登録"
 usecase Sell "販売"
-event EvSell "販売"
 creates(Create, Item)
 updates(Sell, Item)
-raises(Sell, EvSell)
-transitions(Item.status, EvSell, active -> sold)
+transitions(Item.status, Sell, active -> sold)
 sets(Sell, Item, sold == 1)
 after(Sell).assert(Item.sold >= 1)
 "#;
@@ -3843,12 +3757,10 @@ entity Order "O" {{
 }}
 usecase Place "place"
 usecase Ship "ship"
-event EvShip "ship"
 creates(Place, Order)
 sets(Place, Order, status == {created})
 updates(Ship, Order)
-raises(Ship, EvShip)
-transitions(Order.status, EvShip, placed -> shipped)
+transitions(Order.status, Ship, placed -> shipped)
 "#
             )
         };
@@ -3890,10 +3802,8 @@ entity Order "O" {
   flagged: Bool @default(false)
 }
 usecase Ship "ship"
-event EvShip "ship"
 updates(Ship, Order)
-raises(Ship, EvShip)
-transitions(Order.status, EvShip, placed -> shipped)
+transitions(Order.status, Ship, placed -> shipped)
 forbidden(Order, status == shipped, flagged == true)
 "#,
         );
@@ -3921,16 +3831,14 @@ entity Order "O" {
 usecase Place "place"
 usecase Draft "draft"
 usecase Ship "ship"
-event EvShip "ship"
-event EvPlace "place"
+usecase Confirm "confirm"
 creates(Place, Order)
 sets(Place, Order, status == placed)
 creates(Draft, Order)
 sets(Draft, Order, status == draft)
 updates(Ship, Order)
-raises(Ship, EvShip)
-transitions(Order.status, EvPlace, draft -> placed)
-transitions(Order.status, EvShip, placed -> shipped)
+transitions(Order.status, Confirm, draft -> placed)
+transitions(Order.status, Ship, placed -> shipped)
 "#;
         let bundle = TlaPlusEmitter::default()
             .emit_bundle(&model_from(src), &View::whole())
@@ -3955,10 +3863,8 @@ entity Order "O" {
   channel: Channel
 }
 usecase Pay "pay"
-event EvPay "pay"
 updates(Pay, Order)
-raises(Pay, EvPay)
-transitions(Order.status, EvPay, pending -> paid)
+transitions(Order.status, Pay, pending -> paid)
 "#;
 
     #[test]

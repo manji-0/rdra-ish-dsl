@@ -728,7 +728,7 @@ entity Entity "Entity" {
   id: Int @pk
   status: Enum(a, b)
 }
-transitions(Entity.status, event::Event, a -> b)
+transitions(Entity.status, Uc, a -> b)
 "#,
         );
 

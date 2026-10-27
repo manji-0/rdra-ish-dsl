@@ -6,5 +6,9 @@ PersonalInfo,Personal Information,0,birth_date,null,true,true,BucProfile/UpdateP
 PersonalInfo,Personal Information,0,phone,null,true,true,BucProfile/UpdateProfile
 PostalAddress,Postal Address,0,building,null,true,true,"BucProfile/DeleteAddress, BucProfile/RegisterAddress, BucProfile/SetPrimaryAddress, BucProfile/UpdateAddress"
 PostalAddress,Postal Address,0,is_primary,false,true,true,"BucProfile/DeleteAddress, BucProfile/RegisterAddress, BucProfile/SetPrimaryAddress, BucProfile/UpdateAddress"
-UserAccount,User Account,0,status,active,true,true,-
-UserAccount,User Account,0,last_login_at,null,true,true,-
+UserAccount,User Account,0,status,active,true,false,"BucProfile/RestoreAccount, BucProfile/SuspendAccount"
+UserAccount,User Account,0,last_login_at,null,true,false,"BucProfile/RestoreAccount, BucProfile/SuspendAccount"
+UserAccount,User Account,1,status,suspended,false,false,BucProfile/SuspendAccount
+UserAccount,User Account,1,last_login_at,null,false,false,BucProfile/SuspendAccount
+UserAccount,User Account,2,status,deleted,false,true,BucProfile/DeleteAccount
+UserAccount,User Account,2,last_login_at,null,false,true,BucProfile/DeleteAccount
