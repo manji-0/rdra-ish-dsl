@@ -182,6 +182,7 @@ fn push_col_type(
         ColType::Bool => "Bool",
         ColType::Decimal => "Decimal",
         ColType::Enum(_) => return,
+        ColType::Named(name) => name.as_str(),
     };
     if let Some(rel) = source.get(span.clone()).and_then(|slice| slice.find(name)) {
         let start = span.start + rel;

@@ -184,6 +184,7 @@ pub(crate) fn object_graph_layer(node: &NodeRef) -> ObjectGraphLayer {
         | NodeRef::Api(_)
         | NodeRef::Dto(_)
         | NodeRef::Entity(_)
+        | NodeRef::Variation(_)
         | NodeRef::State(_) => ObjectGraphLayer::System,
     }
 }
@@ -260,6 +261,7 @@ pub const KNOWN_DIAGRAM_NODE_KINDS: &[&str] = &[
     "timing",
     "medium",
     "permission",
+    "variation",
 ];
 
 /// Canonical `--edge-kind` tokens (after underscore→hyphen normalization).
@@ -349,6 +351,7 @@ pub(crate) fn node_kind_filter_name(node: &NodeRef) -> &'static str {
         NodeRef::Timing(_) => "timing",
         NodeRef::Medium(_) => "medium",
         NodeRef::Permission(_) => "permission",
+        NodeRef::Variation(_) => "variation",
     }
 }
 
@@ -409,6 +412,7 @@ pub(crate) fn node_description<'a>(model: &'a SemanticModel, node: &NodeRef) -> 
         NodeRef::Dto(key) => model.dtos.get(*key)?.description.as_deref(),
         NodeRef::Entity(key) => model.entities.get(*key)?.description.as_deref(),
         NodeRef::State(key) => model.states.get(*key)?.description.as_deref(),
+        NodeRef::Variation(key) => model.variations.get(*key)?.description.as_deref(),
     }
 }
 
@@ -437,6 +441,7 @@ pub(crate) fn node_emoji(node: &NodeRef) -> &'static str {
         NodeRef::Timing(_) => "⏱️",
         NodeRef::Medium(_) => "📱",
         NodeRef::Permission(_) => "🔑",
+        NodeRef::Variation(_) => "🎚️",
     }
 }
 
@@ -690,6 +695,7 @@ mod tests {
             NodeRef::System(k) => model.systems[*k].id.clone(),
             NodeRef::Entity(k) => model.entities[*k].id.clone(),
             NodeRef::State(k) => model.states[*k].id.clone(),
+            NodeRef::Variation(k) => model.variations[*k].id.clone(),
         }
     }
 

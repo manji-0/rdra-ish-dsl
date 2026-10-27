@@ -446,6 +446,7 @@ fn process_sets_predicate(
         };
         if let Some(truth_str) = truth_str.filter(|s| s == "true" || s == "false") {
             match super::constraint::resolve_entity_equals_from_comparison(
+                &model.variations,
                 &entity_cols,
                 &entity_id,
                 cmp,
@@ -514,6 +515,7 @@ fn process_sets_predicate(
         // Column effect form: sets(UC, E, status == captured)
         if let Ok(Some((col_name, value))) =
             super::constraint::resolve_entity_equals_from_comparison(
+                &model.variations,
                 &entity_cols,
                 &entity_id,
                 cmp,
@@ -551,9 +553,14 @@ fn process_forbidden_predicate(
     };
     let entity_id = model.entities[entity_key].id.clone();
     let entity_cols = model.entities[entity_key].columns.clone();
-    let Some(conditions) =
-        collect_entity_conditions(&entity_cols, &entity_id, &pred.args[1..], ctx, diags)
-    else {
+    let Some(conditions) = collect_entity_conditions(
+        &model.variations,
+        &entity_cols,
+        &entity_id,
+        &pred.args[1..],
+        ctx,
+        diags,
+    ) else {
         return;
     };
 
@@ -582,9 +589,14 @@ fn process_required_predicate(
     };
     let entity_id = model.entities[entity_key].id.clone();
     let entity_cols = model.entities[entity_key].columns.clone();
-    let Some(conditions) =
-        collect_entity_conditions(&entity_cols, &entity_id, &pred.args[1..], ctx, diags)
-    else {
+    let Some(conditions) = collect_entity_conditions(
+        &model.variations,
+        &entity_cols,
+        &entity_id,
+        &pred.args[1..],
+        ctx,
+        diags,
+    ) else {
         return;
     };
 
@@ -613,9 +625,14 @@ fn process_exclusive_predicate(
     };
     let entity_id = model.entities[entity_key].id.clone();
     let entity_cols = model.entities[entity_key].columns.clone();
-    let Some(conditions) =
-        collect_entity_conditions(&entity_cols, &entity_id, &pred.args[1..], ctx, diags)
-    else {
+    let Some(conditions) = collect_entity_conditions(
+        &model.variations,
+        &entity_cols,
+        &entity_id,
+        &pred.args[1..],
+        ctx,
+        diags,
+    ) else {
         return;
     };
 
@@ -664,6 +681,7 @@ fn process_invariant_predicate(
             match arg {
                 PredicateArg::Expr(Expr::Cmp(cmp)) => {
                     match resolve_entity_equals_from_comparison(
+                        &model.variations,
                         &entity_cols,
                         &entity_id,
                         cmp,
@@ -714,7 +732,7 @@ fn process_invariant_predicate(
                         );
                         return;
                     };
-                    match parse_effect_value(&col, &val_str) {
+                    match parse_effect_value(&model.variations, &col, &val_str) {
                         Ok(value) => {
                             if is_guard {
                                 guards.push((col_str, value));

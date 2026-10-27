@@ -25,4 +25,5 @@ new_key_type! {
     pub struct TimingKey;
     pub struct MediumKey;
     pub struct PermissionKey;
+    pub struct VariationKey;
 }

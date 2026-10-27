@@ -65,7 +65,7 @@ impl Emitter for EntityListCsvEmitter {
 
         for (_, ent) in &entities {
             for col in &ent.columns {
-                let col_type = col_type_to_str(&col.col_type);
+                let col_type = col_type_to_str(model, &col.col_type);
                 let fk_target = col.fk_target.as_deref().unwrap_or("").to_string();
                 let default_val = col.default_val.as_deref().unwrap_or("").to_string();
                 let is_pk = if col.is_pk { "true" } else { "false" };
@@ -85,7 +85,7 @@ impl Emitter for EntityListCsvEmitter {
                     ent.id.as_str(),
                     ent.label.as_str(),
                     col.name.as_str(),
-                    col_type,
+                    &col_type,
                     is_pk,
                     is_unique,
                     is_indexed,
@@ -508,8 +508,8 @@ impl Emitter for BusinessInputCsvEmitter {
                 .columns
                 .iter()
                 .find(|column| column.name == entry.column)
-                .map(|column| col_type_to_str(&column.col_type))
-                .unwrap_or("");
+                .map(|column| col_type_to_str(model, &column.col_type))
+                .unwrap_or_default();
             let (source_type, source_id) = match entry.source {
                 ActorInputSource::UseCase => ("usecase", usecase.id.as_str()),
                 ActorInputSource::Api(api) => ("api", model.apis[api].id.as_str()),
@@ -524,7 +524,7 @@ impl Emitter for BusinessInputCsvEmitter {
                 source_id,
                 entity.id.as_str(),
                 entry.column.as_str(),
-                column_type,
+                &column_type,
                 entry.operation.as_str(),
                 entry.reason.as_str(),
             ])?;
@@ -599,17 +599,8 @@ fn bool_str(value: bool) -> &'static str {
     }
 }
 
-fn col_type_to_str(ct: &ColumnType) -> &'static str {
-    match ct {
-        ColumnType::Int => "Int",
-        ColumnType::String => "String",
-        ColumnType::Money => "Money",
-        ColumnType::DateTime => "DateTime",
-        ColumnType::Date => "Date",
-        ColumnType::Bool => "Bool",
-        ColumnType::Decimal => "Decimal",
-        ColumnType::Enum(_) => "Enum",
-    }
+fn col_type_to_str(model: &SemanticModel, ct: &ColumnType) -> String {
+    crate::plantuml::col_type_str(model, ct)
 }
 
 fn bits_to_crud(bits: u8) -> String {

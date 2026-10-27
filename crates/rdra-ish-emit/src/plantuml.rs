@@ -459,6 +459,7 @@ impl Emitter for ObjectGraphPlantUmlEmitter {
                         NodeRef::Timing(_) => format!("  rectangle \"{}\" as {}\n", label, id),
                         NodeRef::Medium(_) => format!("  component \"{}\" as {}\n", label, id),
                         NodeRef::Permission(_) => format!("  rectangle \"{}\" as {}\n", label, id),
+                        NodeRef::Variation(_) => format!("  rectangle \"{}\" as {}\n", label, id),
                         NodeRef::UseCase(_) => format!("  usecase \"{}\" as {}\n", label, id),
                         NodeRef::Screen(_) => format!("  boundary \"{}\" as {}\n", label, id),
                         NodeRef::Field(_) => format!("  boundary \"{}\" as {}\n", label, id),
@@ -823,7 +824,7 @@ impl Emitter for ErPlantUmlEmitter {
             // PKs first
             let pks: Vec<_> = ent.columns.iter().filter(|c| c.is_pk).collect();
             for col in &pks {
-                let type_str = col_type_str(&col.col_type);
+                let type_str = col_type_str(model, &col.col_type);
                 out.push_str(&format!("  *{} : {} <<PK>>\n", col.name, type_str));
             }
 
@@ -834,7 +835,7 @@ impl Emitter for ErPlantUmlEmitter {
 
             // Non-PK columns
             for col in ent.columns.iter().filter(|c| !c.is_pk) {
-                let type_str = col_type_str(&col.col_type);
+                let type_str = col_type_str(model, &col.col_type);
                 if col.is_fk {
                     out.push_str(&format!("  {} : {} <<FK>>\n", col.name, type_str));
                 } else {
@@ -1683,6 +1684,7 @@ pub(crate) fn node_id<'a>(model: &'a SemanticModel, node: &NodeRef) -> Option<&'
         NodeRef::Timing(k) => model.timings.get(*k).map(|t| t.id.as_str()),
         NodeRef::Medium(k) => model.media.get(*k).map(|m| m.id.as_str()),
         NodeRef::Permission(k) => model.permissions.get(*k).map(|p| p.id.as_str()),
+        NodeRef::Variation(k) => model.variations.get(*k).map(|v| v.id.as_str()),
     }
 }
 
@@ -1711,19 +1713,26 @@ pub(crate) fn node_label<'a>(model: &'a SemanticModel, node: &NodeRef) -> Option
         NodeRef::Timing(k) => model.timings.get(*k).map(|t| t.label.as_str()),
         NodeRef::Medium(k) => model.media.get(*k).map(|m| m.label.as_str()),
         NodeRef::Permission(k) => model.permissions.get(*k).map(|p| p.label.as_str()),
+        NodeRef::Variation(k) => model.variations.get(*k).map(|v| v.label.as_str()),
     }
 }
 
-pub(crate) fn col_type_str(ct: &ColumnType) -> &'static str {
+/// Type name shown in ER diagrams and CSV: scalar names, `Enum`, or the variation's id.
+pub(crate) fn col_type_str(model: &SemanticModel, ct: &ColumnType) -> String {
     match ct {
-        ColumnType::Int => "Int",
-        ColumnType::String => "String",
-        ColumnType::Money => "Money",
-        ColumnType::DateTime => "DateTime",
-        ColumnType::Date => "Date",
-        ColumnType::Bool => "Bool",
-        ColumnType::Decimal => "Decimal",
-        ColumnType::Enum(_) => "Enum",
+        ColumnType::Int => "Int".to_string(),
+        ColumnType::String => "String".to_string(),
+        ColumnType::Money => "Money".to_string(),
+        ColumnType::DateTime => "DateTime".to_string(),
+        ColumnType::Date => "Date".to_string(),
+        ColumnType::Bool => "Bool".to_string(),
+        ColumnType::Decimal => "Decimal".to_string(),
+        ColumnType::Enum(_) => "Enum".to_string(),
+        ColumnType::Variation(key) => model
+            .variations
+            .get(*key)
+            .map(|v| v.id.clone())
+            .unwrap_or_else(|| "Variation".to_string()),
     }
 }
 

@@ -32,7 +32,7 @@ fn openapi_document(model: &SemanticModel) -> Value {
     let mut dtos: Vec<_> = model.dtos.iter().collect();
     dtos.sort_by_key(|(_, dto)| dto.id.as_str());
     for (_, dto) in dtos {
-        schemas.insert(dto.id.clone(), dto_schema(dto));
+        schemas.insert(dto.id.clone(), dto_schema(model, dto));
     }
 
     let mut components = Map::new();
@@ -229,11 +229,11 @@ fn related_dtos(model: &SemanticModel, api: NodeRef, kind: RelKind) -> Vec<DtoKe
     dtos
 }
 
-fn dto_schema(dto: &rdra_ish_core::model::Dto) -> Value {
+fn dto_schema(model: &SemanticModel, dto: &rdra_ish_core::model::Dto) -> Value {
     let mut properties = Map::new();
     let mut required = Vec::new();
     for field in &dto.fields {
-        properties.insert(field.name.clone(), column_schema(field));
+        properties.insert(field.name.clone(), column_schema(model, field));
         if !field.is_nullable {
             required.push(Value::String(field.name.clone()));
         }
@@ -248,7 +248,7 @@ fn dto_schema(dto: &rdra_ish_core::model::Dto) -> Value {
     Value::Object(schema)
 }
 
-fn column_schema(col: &rdra_ish_core::model::ModelColumn) -> Value {
+fn column_schema(model: &SemanticModel, col: &rdra_ish_core::model::ModelColumn) -> Value {
     let mut schema = match &col.col_type {
         ColumnType::Int => json!({ "type": "integer", "format": "int64" }),
         ColumnType::String => json!({ "type": "string" }),
@@ -256,7 +256,9 @@ fn column_schema(col: &rdra_ish_core::model::ModelColumn) -> Value {
         ColumnType::DateTime => json!({ "type": "string", "format": "date-time" }),
         ColumnType::Date => json!({ "type": "string", "format": "date" }),
         ColumnType::Bool => json!({ "type": "boolean" }),
-        ColumnType::Enum(values) => json!({ "type": "string", "enum": values }),
+        ColumnType::Enum(_) | ColumnType::Variation(_) => {
+            json!({ "type": "string", "enum": model.column_values(col).unwrap_or(&[]) })
+        }
     };
     if col.is_nullable {
         schema["nullable"] = json!(true);
@@ -437,6 +439,29 @@ response(CreateOrder, AcceptedResponse)
                 .as_str()
                 .unwrap_or("")
                 .contains("oneOf")
+        );
+    }
+
+    #[test]
+    fn dto_field_typed_by_a_variation_lists_its_values_as_enum() {
+        let model = model_from(
+            r#"
+variation Channel "Channel" {
+  web
+  phone
+}
+api Place "Place" method POST path "/orders"
+dto PlaceRequest "Place request" {
+  channel: Channel
+}
+request(Place, PlaceRequest)
+"#,
+        );
+        let json = OpenApiJsonEmitter.emit(&model, &View::whole()).unwrap();
+        let doc: Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            doc["components"]["schemas"]["PlaceRequest"]["properties"]["channel"]["enum"],
+            json!(["web", "phone"])
         );
     }
 }

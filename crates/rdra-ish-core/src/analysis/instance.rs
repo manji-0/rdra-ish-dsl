@@ -8,6 +8,7 @@ use crate::location::{DeclSite, DiagCtxt};
 use crate::model::*;
 use rdra_ish_syntax::ast::*;
 
+use super::arg_resolve::resolve_variation;
 use super::metadata::{
     adr_metadata_is_empty, api_metadata_is_empty, field_metadata_is_empty, nfr_metadata_is_empty,
     requirement_metadata_is_empty, usecase_metadata_is_empty,
@@ -254,7 +255,7 @@ pub(crate) fn register_instance(
         }
         Kind::Entity => {
             report_duplicate_columns(inst, "entity", ctx, diags);
-            let columns = inst.columns.iter().map(ast_column_to_model).collect();
+            let columns = model_columns(model, inst, ctx, diags);
             let primary_key = collect_primary_key(&inst.columns);
             let unique_constraints = collect_unique_constraints(&inst.columns);
             let indexes = collect_indexes(&inst.columns);
@@ -285,7 +286,7 @@ pub(crate) fn register_instance(
         }
         Kind::Dto => {
             report_duplicate_columns(inst, "dto", ctx, diags);
-            let fields = inst.columns.iter().map(ast_column_to_model).collect();
+            let fields = model_columns(model, inst, ctx, diags);
             let k = model.dtos.insert(Dto {
                 id: inst.id.clone(),
                 label: inst.label.clone(),
@@ -318,6 +319,24 @@ pub(crate) fn register_instance(
             });
             NodeRef::Permission(k)
         }
+        Kind::Variation => {
+            let k = model.variations.insert(Variation {
+                id: inst.id.clone(),
+                label: inst.label.clone(),
+                description: inst.description.clone(),
+                values: inst
+                    .variation_values
+                    .iter()
+                    .map(|v| v.value.clone())
+                    .collect(),
+                labels: inst
+                    .variation_values
+                    .iter()
+                    .map(|v| v.label.clone())
+                    .collect(),
+            });
+            NodeRef::Variation(k)
+        }
     };
 
     if model.symbols.insert_in_module(
@@ -348,7 +367,25 @@ pub(crate) fn register_instance(
     }
 }
 
-fn ast_column_to_model(col: &Column) -> ModelColumn {
+fn model_columns(
+    model: &SemanticModel,
+    inst: &InstanceDecl,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> Vec<ModelColumn> {
+    inst.columns
+        .iter()
+        .map(|col| ast_column_to_model(model, inst, col, ctx, diags))
+        .collect()
+}
+
+fn ast_column_to_model(
+    model: &SemanticModel,
+    inst: &InstanceDecl,
+    col: &Column,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> ModelColumn {
     let col_type = match &col.col_type {
         ColType::Int => ColumnType::Int,
         ColType::String => ColumnType::String,
@@ -358,6 +395,23 @@ fn ast_column_to_model(col: &Column) -> ModelColumn {
         ColType::Bool => ColumnType::Bool,
         ColType::Decimal => ColumnType::Decimal,
         ColType::Enum(vs) => ColumnType::Enum(vs.clone()),
+        ColType::Named(name) => match resolve_variation(model, name, ctx) {
+            Some(key) => ColumnType::Variation(key),
+            None => {
+                push_error(
+                    ctx,
+                    diags,
+                    col.span.clone(),
+                    RdraError::UnknownColumnType {
+                        entity: inst.id.clone(),
+                        col: col.name.clone(),
+                        name: name.clone(),
+                    },
+                );
+                // Keep the column so later passes still see it; it carries no values.
+                ColumnType::Enum(Vec::new())
+            }
+        },
     };
     let mut mc = ModelColumn {
         name: col.name.clone(),
@@ -389,7 +443,25 @@ fn ast_column_to_model(col: &Column) -> ModelColumn {
             Annotation::IndexComposite(_) => {}
             Annotation::Check(expr) => mc.check_constraints.push(expr.clone()),
             Annotation::Null => mc.is_nullable = true,
-            Annotation::Default(v) => mc.default_val = Some(v.clone()),
+            Annotation::Default(v) => {
+                if let ColumnType::Variation(key) = &mc.col_type {
+                    if let Some(variation) = model.variations.get(*key) {
+                        if !variation.values.iter().any(|value| value == v) {
+                            push_error(
+                                ctx,
+                                diags,
+                                col.span.clone(),
+                                RdraError::InvalidVariationValue {
+                                    variation: variation.id.clone(),
+                                    value: v.clone(),
+                                    allowed: variation.values.join(", "),
+                                },
+                            );
+                        }
+                    }
+                }
+                mc.default_val = Some(v.clone());
+            }
             Annotation::Label(l) => mc.label = Some(l.clone()),
             Annotation::SoftDelete => mc.is_soft_delete = true,
             Annotation::History => mc.is_history = true,

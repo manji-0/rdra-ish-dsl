@@ -202,6 +202,18 @@ pub struct Timing {
     pub description: Option<std::string::String>,
 }
 
+/// A closed set of values an actor chooses from (RDRA バリエーション).
+#[derive(Debug, Clone)]
+pub struct Variation {
+    pub id: std::string::String,
+    pub label: std::string::String,
+    pub description: Option<std::string::String>,
+    /// Value names in declaration order.
+    pub values: Vec<std::string::String>,
+    /// `labels[i]` is the optional label of `values[i]`.
+    pub labels: Vec<Option<std::string::String>>,
+}
+
 #[derive(Debug, Clone)]
 pub struct Medium {
     pub id: std::string::String,

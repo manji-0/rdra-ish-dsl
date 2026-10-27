@@ -19,10 +19,6 @@ const HINTS: &[(&str, &str)] = &[
         "condition",
         "removed reserved kind; model rules with use case conditions or entity state constraints",
     ),
-    (
-        "variation",
-        "removed reserved kind; model rules with use case conditions or entity state constraints",
-    ),
     ("concept", CONCEPTUAL),
     ("domain_object", CONCEPTUAL),
     ("aggregate", CONCEPTUAL),
@@ -83,15 +79,13 @@ mod tests {
     }
 
     #[test]
-    fn reserved_kinds_point_to_use_case_conditions() {
-        for kw in ["condition", "variation"] {
-            let msgs = messages(&format!("{kw} X \"X\"\n"));
-            assert!(
-                msgs.iter()
-                    .any(|m| m.contains(&format!("`{kw}`")) && m.contains("use case conditions")),
-                "{kw}: {msgs:?}"
-            );
-        }
+    fn reserved_condition_points_to_use_case_conditions() {
+        let msgs = messages("condition X \"X\"\n");
+        assert!(
+            msgs.iter()
+                .any(|m| m.contains("`condition`") && m.contains("use case conditions")),
+            "{msgs:?}"
+        );
     }
 
     #[test]

@@ -7,3 +7,4 @@ mod diagnostics;
 mod instance;
 mod nodes;
 mod predicate;
+mod variation;

@@ -522,6 +522,8 @@ fn identify_axes(
                     kind: AxisKind::Bool,
                 });
             }
+            // An attribute the actor chooses: not a lifecycle, so it multiplies no patterns.
+            ColumnType::Variation(_) => {}
             _ => {
                 if col.is_nullable {
                     let pg_type = pg_type_map.get(&col.name).cloned();

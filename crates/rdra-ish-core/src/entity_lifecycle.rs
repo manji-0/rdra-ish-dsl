@@ -230,7 +230,16 @@ fn preferred_effect_status_column(
                 .find(|c| matches!(c.col_type, ColumnType::Enum(_)))
         })
         .map(|c| c.name.clone())
-        .or_else(|| effect_cols.iter().next().map(|s| (*s).to_string()))
+        .or_else(|| {
+            entity
+                .columns
+                .iter()
+                .find(|c| {
+                    effect_cols.contains(c.name.as_str())
+                        && !matches!(c.col_type, ColumnType::Variation(_))
+                })
+                .map(|c| c.name.clone())
+        })
 }
 
 /// Lifecycle of an entity whose status Enum links to `transitions` states.

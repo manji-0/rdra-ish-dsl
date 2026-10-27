@@ -58,6 +58,8 @@ pub enum Token {
     Medium,
     #[token("permission")]
     Permission,
+    #[token("variation")]
+    Variation,
     #[token("property")]
     Property,
 

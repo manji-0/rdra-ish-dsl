@@ -20,6 +20,7 @@ fn json_schema_document(model: &SemanticModel) -> Value {
         defs.insert(
             format!("Dto.{}", dto.id),
             object_schema(
+                model,
                 "dto",
                 &dto.id,
                 &dto.label,
@@ -37,6 +38,7 @@ fn json_schema_document(model: &SemanticModel) -> Value {
         defs.insert(
             format!("Entity.{}", entity.id),
             object_schema(
+                model,
                 "entity",
                 &entity.id,
                 &entity.label,
@@ -56,7 +58,9 @@ fn json_schema_document(model: &SemanticModel) -> Value {
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn object_schema(
+    model: &SemanticModel,
     kind: &str,
     id: &str,
     label: &str,
@@ -68,7 +72,7 @@ fn object_schema(
     let mut properties = Map::new();
     let mut required = Vec::new();
     for column in columns {
-        properties.insert(column.name.clone(), column_schema(column));
+        properties.insert(column.name.clone(), column_schema(model, column));
         if !column.is_nullable {
             required.push(Value::String(column.name.clone()));
         }
@@ -99,7 +103,7 @@ fn object_schema(
     Value::Object(schema)
 }
 
-fn column_schema(column: &ModelColumn) -> Value {
+fn column_schema(model: &SemanticModel, column: &ModelColumn) -> Value {
     let mut schema = match &column.col_type {
         ColumnType::Int => json!({ "type": json_type("integer", column.is_nullable) }),
         ColumnType::String => json!({ "type": json_type("string", column.is_nullable) }),
@@ -115,8 +119,10 @@ fn column_schema(column: &ModelColumn) -> Value {
             "format": "date"
         }),
         ColumnType::Bool => json!({ "type": json_type("boolean", column.is_nullable) }),
-        ColumnType::Enum(values) => {
-            let mut enum_values: Vec<Value> = values
+        ColumnType::Enum(_) | ColumnType::Variation(_) => {
+            let mut enum_values: Vec<Value> = model
+                .column_values(column)
+                .unwrap_or(&[])
                 .iter()
                 .map(|value| Value::String(value.clone()))
                 .collect();
@@ -287,6 +293,31 @@ entity Order "Order" description "Logical order" {
         assert_eq!(
             doc["$defs"]["Entity.Order"]["x-rdra-ish-unique-constraints"],
             json!([["status", "store_id"]])
+        );
+    }
+
+    #[test]
+    fn variation_column_lists_the_variation_values_as_enum() {
+        let model = model_from(
+            r#"
+variation Channel "Channel" {
+  web
+  phone
+}
+entity Order "Order" {
+  id: Int @pk
+  channel: Channel
+  backup_channel: Channel @null
+}
+"#,
+        );
+        let json = JsonSchemaEmitter.emit(&model, &View::whole()).unwrap();
+        let doc: Value = serde_json::from_str(&json).unwrap();
+        let props = &doc["$defs"]["Entity.Order"]["properties"];
+        assert_eq!(props["channel"]["enum"], json!(["web", "phone"]));
+        assert_eq!(
+            props["backup_channel"]["enum"],
+            json!(["web", "phone", null])
         );
     }
 }

@@ -26,6 +26,7 @@ pub enum NodeRef {
     Timing(TimingKey),
     Medium(MediumKey),
     Permission(PermissionKey),
+    Variation(VariationKey),
 }
 
 /// 述語の種類
@@ -376,7 +377,10 @@ pub enum ColumnType {
     Date,
     Bool,
     Decimal,
+    /// Inline value set. With `transitions` it is a state axis.
     Enum(Vec<std::string::String>),
+    /// Attribute column typed by a `variation`. Never a lifecycle column, never a state axis.
+    Variation(VariationKey),
 }
 
 /// カラム

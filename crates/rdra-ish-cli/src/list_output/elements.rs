@@ -282,17 +282,25 @@ pub(crate) fn format_constraints(
     format_rows(&NFR_HEADERS, &rows, format, "constraints")
 }
 
-fn col_type_s(ct: &rdra_ish_core::model::ColumnType) -> &'static str {
+fn col_type_s(
+    model: &rdra_ish_core::SemanticModel,
+    ct: &rdra_ish_core::model::ColumnType,
+) -> String {
     use rdra_ish_core::model::ColumnType;
     match ct {
-        ColumnType::Int => "Int",
-        ColumnType::String => "String",
-        ColumnType::Money => "Money",
-        ColumnType::DateTime => "DateTime",
-        ColumnType::Date => "Date",
-        ColumnType::Bool => "Bool",
-        ColumnType::Decimal => "Decimal",
-        ColumnType::Enum(_) => "Enum",
+        ColumnType::Int => "Int".to_string(),
+        ColumnType::String => "String".to_string(),
+        ColumnType::Money => "Money".to_string(),
+        ColumnType::DateTime => "DateTime".to_string(),
+        ColumnType::Date => "Date".to_string(),
+        ColumnType::Bool => "Bool".to_string(),
+        ColumnType::Decimal => "Decimal".to_string(),
+        ColumnType::Enum(_) => "Enum".to_string(),
+        ColumnType::Variation(key) => model
+            .variations
+            .get(*key)
+            .map(|variation| variation.id.clone())
+            .unwrap_or_else(|| "Variation".to_string()),
     }
 }
 
@@ -361,7 +369,7 @@ pub(crate) fn format_dtos(
                 dto.id.clone(),
                 dto.label.clone(),
                 field.name.clone(),
-                col_type_s(&field.col_type).to_string(),
+                col_type_s(model, &field.col_type),
                 bool_cell(!field.is_nullable),
             ]);
         }
@@ -457,7 +465,7 @@ pub(crate) fn format_entities(
                 ent.id.clone(),
                 ent.label.clone(),
                 col.name.clone(),
-                col_type_s(&col.col_type).to_string(),
+                col_type_s(model, &col.col_type),
                 if col.is_pk { "true" } else { "false" }.to_string(),
                 if col.is_unique { "true" } else { "false" }.to_string(),
                 if col.is_indexed { "true" } else { "false" }.to_string(),

@@ -59,6 +59,28 @@ fn resolve_binding(
     }
 }
 
+/// Resolve a bare name to a `variation` visible from `ctx`, without reporting.
+pub(crate) fn resolve_variation(
+    model: &SemanticModel,
+    name: &str,
+    ctx: DiagCtxt,
+) -> Option<VariationKey> {
+    let mut found = None;
+    for binding in model
+        .import_scopes
+        .resolve_flat_bindings(ctx.source_id, name)
+    {
+        if let Some(NodeRef::Variation(key)) =
+            resolve_binding(model, &binding, Some(&Kind::Variation))
+        {
+            if found.replace(key).is_some() {
+                return None;
+            }
+        }
+    }
+    found
+}
+
 fn push_undefined(ctx: DiagCtxt, diags: &mut Vec<Diagnostic>, span: Span, id: String) {
     push_error(ctx, diags, span, RdraError::UndefinedSymbol { id });
 }

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::diagnostics::{Diagnostic, RdraError};
 use crate::location::LocatedSpan;
-use crate::model::{node_ref_kind, NodeRef, RelKind, SemanticModel, StateKey, StepKey};
+use crate::model::{node_ref_kind, ColumnType, NodeRef, RelKind, SemanticModel, StateKey, StepKey};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LintSeverity {
@@ -202,6 +202,7 @@ fn collect_findings(model: &SemanticModel) -> Vec<LintIssue> {
     lint_structural_coverage(model, &mut findings);
     lint_flow_cycles(model, &mut findings);
     lint_column_names(model, &mut findings);
+    lint_enum_attributes(model, &mut findings);
     findings
 }
 
@@ -589,6 +590,38 @@ fn lint_column_names(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
     }
 }
 
+/// An inline `Enum` that no `transitions` and no `sets` moves is an attribute, not a lifecycle.
+fn lint_enum_attributes(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
+    for (ek, entity) in &model.entities {
+        for column in &entity.columns {
+            if !matches!(column.col_type, ColumnType::Enum(_)) {
+                continue;
+            }
+            let moved = model.is_lifecycle_column(ek, &column.name)
+                || model
+                    .column_effects
+                    .iter()
+                    .any(|e| e.entity == ek && e.column == column.name);
+            if moved {
+                continue;
+            }
+            push_element_lint(
+                model,
+                issues,
+                "entity",
+                "entity-column",
+                &entity.id,
+                "enum-attribute",
+                format!(
+                    "{}.{} is an inline Enum that no transitions or sets moves",
+                    entity.id, column.name
+                ),
+                "type it by a variation if an actor chooses the value",
+            );
+        }
+    }
+}
+
 fn refinement_stages(model: &SemanticModel) -> [(&'static str, bool); 6] {
     [
         (
@@ -730,6 +763,7 @@ fn model_element_count(model: &SemanticModel) -> usize {
         + model.timings.len()
         + model.media.len()
         + model.permissions.len()
+        + model.variations.len()
 }
 
 fn relation_degree(model: &SemanticModel) -> HashMap<NodeRef, usize> {
@@ -758,6 +792,13 @@ fn relation_degree(model: &SemanticModel) -> HashMap<NodeRef, usize> {
         for variant in [&transition.from, &transition.to] {
             if let Some(&state) = state_by_id.get(format!("{entity_id}_{variant}").as_str()) {
                 touch(NodeRef::State(state));
+            }
+        }
+    }
+    for entity in model.entities.values() {
+        for column in &entity.columns {
+            if let ColumnType::Variation(key) = column.col_type {
+                touch(NodeRef::Variation(key));
             }
         }
     }
@@ -863,6 +904,12 @@ fn lint_node_refs(model: &SemanticModel) -> Vec<NodeRef> {
             .iter()
             .map(|(key, _)| NodeRef::Permission(key)),
     );
+    nodes.extend(
+        model
+            .variations
+            .iter()
+            .map(|(key, _)| NodeRef::Variation(key)),
+    );
     nodes
 }
 
@@ -891,6 +938,7 @@ fn node_kind_display(node: &NodeRef) -> String {
         NodeRef::Timing(_) => "timing".to_string(),
         NodeRef::Medium(_) => "medium".to_string(),
         NodeRef::Permission(_) => "permission".to_string(),
+        NodeRef::Variation(_) => "variation".to_string(),
     }
 }
 
@@ -919,6 +967,7 @@ fn node_id(model: &SemanticModel, node: &NodeRef) -> Option<String> {
         NodeRef::Timing(key) => model.timings.get(*key)?.id.clone(),
         NodeRef::Medium(key) => model.media.get(*key)?.id.clone(),
         NodeRef::Permission(key) => model.permissions.get(*key)?.id.clone(),
+        NodeRef::Variation(key) => model.variations.get(*key)?.id.clone(),
     })
 }
 
@@ -1072,6 +1121,72 @@ entity Order "Order" {
         );
         assert!(score.message.contains("missing stages"));
         assert!(score.message.contains("scaled"));
+    }
+
+    fn enum_attribute_columns(model: &SemanticModel) -> Vec<String> {
+        collect_findings(model)
+            .into_iter()
+            .filter(|issue| issue.rule == "enum-attribute")
+            .map(|issue| issue.message)
+            .collect()
+    }
+
+    #[test]
+    fn enum_attribute_flags_inline_enum_nothing_moves() {
+        let model = model_from(
+            r#"
+event Paid "Paid"
+usecase Place "Place"
+usecase Pay "Pay"
+entity Order "Order" {
+  Id: Int @pk
+  status: Enum(pending, paid) @default(pending)
+  channel: Enum(web, phone)
+  priority: Enum(low, high)
+  method: PaymentMethod
+}
+variation PaymentMethod "Payment Method" {
+  cash
+  card
+}
+raises(Pay, Paid)
+transitions(Order.status, Paid, pending -> paid)
+sets(Place, Order, priority == high)
+"#,
+        );
+        let flagged = enum_attribute_columns(&model);
+        assert_eq!(flagged.len(), 1, "{flagged:?}");
+        assert!(flagged[0].contains("Order.channel"), "{flagged:?}");
+        let issue = collect_findings(&model)
+            .into_iter()
+            .find(|issue| issue.rule == "enum-attribute")
+            .unwrap();
+        assert_eq!(issue.severity, LintSeverity::Warning);
+        assert!(issue.hint.contains("variation"), "{}", issue.hint);
+    }
+
+    #[test]
+    fn variation_typing_a_column_is_not_an_orphan() {
+        let model = model_from(
+            r#"
+variation Used "Used" {
+  a
+}
+variation Unused "Unused" {
+  a
+}
+entity E "E" {
+  Id: Int @pk
+  kind: Used
+}
+"#,
+        );
+        let orphans: Vec<_> = collect_findings(&model)
+            .into_iter()
+            .filter(|i| i.rule == "orphan-node" && i.subject_kind == "variation")
+            .map(|i| i.subject_id)
+            .collect();
+        assert_eq!(orphans, vec!["Unused".to_string()]);
     }
 
     #[test]

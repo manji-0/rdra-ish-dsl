@@ -111,10 +111,24 @@ pub enum RdraError {
         allowed: String,
     },
 
+    #[error("column '{col}' of '{entity}' is typed by '{name}', which names no variation\n  hint: declare `variation {name} \"Label\" {{ value ... }}` and import it, or use an inline `Enum(...)`")]
+    UnknownColumnType {
+        entity: String,
+        col: String,
+        name: String,
+    },
+
+    #[error("invalid variation value: '{value}' is not a value of variation '{variation}'\n  hint: declared values are: {allowed}")]
+    InvalidVariationValue {
+        variation: String,
+        value: String,
+        allowed: String,
+    },
+
     #[error("transitions first argument must be `Entity.column`, got '{got}'\n  hint: write `transitions(Order.status, EvCapture, pending -> paid)`")]
     InvalidTransitionsColumnRef { got: String },
 
-    #[error("transitions column '{col}' on entity '{entity}' must be an Enum column\n  hint: lifecycle transitions bind an Enum status/lifecycle column")]
+    #[error("transitions column '{col}' on entity '{entity}' must be an inline Enum column\n  hint: lifecycle transitions bind an inline Enum status/lifecycle column; a column typed by a variation is an attribute and has no lifecycle")]
     TransitionsColumnNotEnum { entity: String, col: String },
 
     #[error("invalid bool value: column '{col}' set to '{value}'; expected `true` or `false`")]

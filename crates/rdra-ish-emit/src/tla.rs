@@ -4,9 +4,9 @@ use crate::{EmitError, Emitter, View};
 use rdra_ish_core::model::{
     CmpOpModel, CmpRhs, ColumnType, ComparisonProp, CrossCmpRhs, CrossConstraintScope,
     CrossEntityCondition, CrossEntityInvariant, EffectValue, EntityInvariant, EntityKey,
-    ExclusiveConstraint, ForbiddenConstraint, NodeRef, QuantifierConstraint, QuantifierKind,
-    RelKind, RequiredConstraint, SemanticModel, TemporalAtom, TemporalExpr, TemporalFormula,
-    TemporalProperty, TemporalRhs,
+    ExclusiveConstraint, ForbiddenConstraint, NodeRef, QualifiedModelColumnRef,
+    QuantifierConstraint, QuantifierKind, RelKind, RequiredConstraint, SemanticModel, TemporalAtom,
+    TemporalExpr, TemporalFormula, TemporalProperty, TemporalRhs,
 };
 use rdra_ish_core::{collect_entity_lifecycles, EntityLifecycle};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -94,6 +94,8 @@ enum AxisKind {
     Int,
     /// Boolean proposition axis for non-arithmetic comparisons.
     Prop,
+    /// Variation-typed attribute that a constraint or `sets` names. Init is a free choice.
+    Choice,
 }
 
 #[derive(Debug, Clone)]
@@ -251,7 +253,11 @@ fn build_export(
 fn check_frozen_axes(model: &SemanticModel, specs: &[EntitySpec], warnings: &mut Vec<String>) {
     for spec in specs {
         let constrained: HashSet<&str> = constrained_columns(model, spec.entity_key);
-        for ax in spec.axes.iter().filter(|a| a.kind != AxisKind::Status) {
+        for ax in spec
+            .axes
+            .iter()
+            .filter(|a| !matches!(a.kind, AxisKind::Status | AxisKind::Choice))
+        {
             let primed = format!("{}'", ax.var_name);
             let assigned = spec
                 .actions
@@ -764,6 +770,26 @@ fn collect_spec_axes(
                 });
                 seen_cols.insert(col.name.clone());
             }
+            ColumnType::Variation(_) => {
+                if variation_column_is_named(model, lc.entity, &col.name) {
+                    let mut values: Vec<String> = model
+                        .column_values(col)
+                        .unwrap_or(&[])
+                        .iter()
+                        .map(|v| format!("\"{}\"", escape_tla_string(v)))
+                        .collect();
+                    if col.is_nullable {
+                        values.push("\"null\"".into());
+                    }
+                    axes.push(SpecAxis {
+                        var_name: format!("{prefix}_{}", sanitize_ident(&col.name)),
+                        column: col.name.clone(),
+                        domain: format!("{{{}}}", values.join(", ")),
+                        kind: AxisKind::Choice,
+                    });
+                    seen_cols.insert(col.name.clone());
+                }
+            }
             _ if col.is_nullable => {
                 axes.push(SpecAxis {
                     var_name: format!("{prefix}_{}", sanitize_ident(&col.name)),
@@ -884,6 +910,56 @@ fn collect_spec_axes(
     axes
 }
 
+/// A variation column is a TLA axis only when something reads or writes it: a `sets`,
+/// a local or cross-entity constraint, an `after` assertion, or a temporal property.
+fn variation_column_is_named(model: &SemanticModel, ek: EntityKey, column: &str) -> bool {
+    let entity_id = entity_id(model, ek);
+    let names = |c: &QualifiedModelColumnRef| c.entity == ek && c.column == column;
+    let in_conditions = |conditions: &[CrossEntityCondition]| {
+        conditions.iter().any(|cond| match cond {
+            CrossEntityCondition::Equals { column, .. } => names(column),
+            CrossEntityCondition::Comparison(cmp) => {
+                names(&cmp.lhs) || matches!(&cmp.rhs, CrossCmpRhs::Column(r) if names(r))
+            }
+        })
+    };
+
+    if model
+        .column_effects
+        .iter()
+        .any(|e| e.entity == ek && e.column == column)
+        || constrained_columns(model, ek).contains(column)
+    {
+        return true;
+    }
+    if model
+        .cross_forbidden_constraints
+        .iter()
+        .any(|c| in_conditions(&c.conditions))
+        || model
+            .cross_entity_invariants
+            .iter()
+            .any(|c| in_conditions(&c.guards) || in_conditions(&c.requireds))
+        || model
+            .temporal_assertions
+            .iter()
+            .any(|c| in_conditions(&c.requireds))
+        || model
+            .quantifier_constraints
+            .iter()
+            .any(|c| in_conditions(&c.guards) || in_conditions(&c.related_conditions))
+    {
+        return true;
+    }
+    let mut named_by_property = false;
+    for prop in &model.temporal_properties {
+        walk_temporal_for_int(model, &prop.formula, &mut |e, col| {
+            named_by_property |= e == entity_id && col == column;
+        });
+    }
+    named_by_property
+}
+
 fn build_init(
     model: &SemanticModel,
     lc: &EntityLifecycle,
@@ -966,6 +1042,15 @@ fn build_init(
     });
 
     for ax in axes {
+        if ax.kind == AxisKind::Choice {
+            let choice = if multi_instance {
+                format!("\\in [{ids} -> {}]", ax.domain)
+            } else {
+                format!("\\in {}", ax.domain)
+            };
+            init.push((ax.var_name.clone(), choice));
+            continue;
+        }
         if ax.column == lc.status_column {
             if let Some(choices) = &status_choices {
                 init.push((ax.var_name.clone(), choices.clone()));
@@ -1020,7 +1105,7 @@ fn init_scalar_value(
                 .map(|n| n.to_string());
             from_default.unwrap_or_else(|| "0".into())
         }
-        AxisKind::Nullable | AxisKind::Status | AxisKind::Prop => entity
+        AxisKind::Nullable | AxisKind::Status | AxisKind::Prop | AxisKind::Choice => entity
             .columns
             .iter()
             .find(|c| c.name == ax.column)
@@ -3855,6 +3940,76 @@ transitions(Order.status, EvShip, placed -> shipped)
                 .tla
                 .contains("Order_status \\in {\"draft\", \"placed\"}"),
             "expected Init over both creation statuses; got:\n{}",
+            bundle.tla
+        );
+    }
+
+    const ORDER_WITH_METHOD: &str = r#"
+variation Channel "Channel" {
+  web
+  phone
+}
+entity Order "O" {
+  id: Int @pk
+  status: Enum(pending, paid) @default(pending)
+  channel: Channel
+}
+usecase Pay "pay"
+event EvPay "pay"
+updates(Pay, Order)
+raises(Pay, EvPay)
+transitions(Order.status, EvPay, pending -> paid)
+"#;
+
+    #[test]
+    fn tla_variation_column_nothing_names_is_not_an_axis() {
+        let bundle = TlaPlusEmitter::default()
+            .emit_bundle(&model_from(ORDER_WITH_METHOD), &View::whole())
+            .unwrap();
+        assert!(
+            !bundle.tla.contains("Order_channel"),
+            "unnamed variation column must not become an axis:\n{}",
+            bundle.tla
+        );
+    }
+
+    #[test]
+    fn tla_variation_column_a_constraint_names_is_a_free_choice_axis() {
+        let src =
+            format!("{ORDER_WITH_METHOD}forbidden(Order, channel == phone, status == paid)\n");
+        let bundle = TlaPlusEmitter::default()
+            .emit_bundle(&model_from(&src), &View::whole())
+            .unwrap();
+        assert!(
+            bundle
+                .tla
+                .contains("Order_channel \\in {\"web\", \"phone\"}"),
+            "expected a free-choice Init over every value:\n{}",
+            bundle.tla
+        );
+        assert!(
+            !bundle.warnings.iter().any(|w| w.contains("TLA_FATAL")),
+            "{:?}",
+            bundle.warnings
+        );
+    }
+
+    #[test]
+    fn tla_variation_column_a_sets_names_is_an_axis_the_action_writes() {
+        let src = format!("{ORDER_WITH_METHOD}sets(Pay, Order, channel == phone)\n");
+        let bundle = TlaPlusEmitter::default()
+            .emit_bundle(&model_from(&src), &View::whole())
+            .unwrap();
+        assert!(
+            bundle.tla.contains("Order_channel' = \"phone\""),
+            "expected the transition to write the variation value:\n{}",
+            bundle.tla
+        );
+        assert!(
+            bundle
+                .tla
+                .contains("Order_channel \\in {\"web\", \"phone\"}"),
+            "{}",
             bundle.tla
         );
     }

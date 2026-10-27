@@ -58,6 +58,7 @@ fn node_kind_tag_str_labels_each_node_ref_kind() {
             annotations: vec![Annotation::Pk],
             span: 0..0,
         }],
+        variation_values: Vec::new(),
         span: 0..0,
     };
     register_instance(&mut model, &entity_inst, DiagCtxt::new(0), &mut diags);

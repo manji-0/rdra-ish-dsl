@@ -19,6 +19,26 @@ pub use typed::*;
 use slotmap::SlotMap;
 use std::collections::HashSet;
 
+impl SemanticModel {
+    /// Values of an `Enum` or variation-typed column; `None` for scalar types.
+    ///
+    /// This is the single lookup every exporter uses for "what may this column hold".
+    pub fn column_values<'a>(&'a self, col: &'a ModelColumn) -> Option<&'a [std::string::String]> {
+        match &col.col_type {
+            ColumnType::Enum(values) => Some(values),
+            ColumnType::Variation(key) => self.variations.get(*key).map(|v| v.values.as_slice()),
+            _ => None,
+        }
+    }
+
+    /// `transitions` names this column of this entity, so it is a state axis.
+    pub fn is_lifecycle_column(&self, entity: EntityKey, column: &str) -> bool {
+        self.state_transitions
+            .iter()
+            .any(|t| t.entity == entity && t.column == column)
+    }
+}
+
 /// セマンティックモデル
 #[derive(Debug, Default)]
 pub struct SemanticModel {
@@ -45,6 +65,7 @@ pub struct SemanticModel {
     pub timings: SlotMap<TimingKey, Timing>,
     pub media: SlotMap<MediumKey, Medium>,
     pub permissions: SlotMap<PermissionKey, Permission>,
+    pub variations: SlotMap<VariationKey, Variation>,
     pub relations: Vec<Relation>,
     pub boundary_coordinations: Vec<BoundaryCoordination>,
     pub business_mapping_contexts: Vec<BusinessMappingContext>,

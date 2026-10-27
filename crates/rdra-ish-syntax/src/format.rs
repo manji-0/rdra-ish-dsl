@@ -119,6 +119,17 @@ fn format_instance(instance: &InstanceDecl) -> String {
         lines.push("}".to_string());
     }
 
+    if !instance.variation_values.is_empty() {
+        lines[0].push_str(" {");
+        for value in &instance.variation_values {
+            lines.push(match &value.label {
+                Some(label) => format!("  {} {}", value.value, quote_string(label)),
+                None => format!("  {}", value.value),
+            });
+        }
+        lines.push("}".to_string());
+    }
+
     lines.join("\n")
 }
 
@@ -285,6 +296,7 @@ fn format_col_type(col_type: &ColType) -> String {
         ColType::Bool => "Bool".to_string(),
         ColType::Decimal => "Decimal".to_string(),
         ColType::Enum(values) => format!("Enum({})", values.join(", ")),
+        ColType::Named(name) => name.clone(),
     }
 }
 
@@ -427,6 +439,18 @@ mod tests {
             errors.is_empty(),
             "formatted output should parse: {errors:?}"
         );
+    }
+
+    #[test]
+    fn formats_variation_values_and_named_column_types() {
+        let src = "variation PaymentMethod \"Payment Method\" {cash \"Cash\" card\n adjustment \"Adj\"}\nentity E \"E\" {method:PaymentMethod @default(card)}\n";
+        let formatted = format_source(src).unwrap();
+        assert_eq!(
+            formatted,
+            "variation PaymentMethod \"Payment Method\" {\n  cash \"Cash\"\n  card\n  adjustment \"Adj\"\n}\n\nentity E \"E\" {\n  method: PaymentMethod @default(card)\n}\n"
+        );
+        let (_ast, errors) = parse(&formatted);
+        assert!(errors.is_empty(), "{errors:?}");
     }
 
     #[test]

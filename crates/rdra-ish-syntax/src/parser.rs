@@ -70,6 +70,7 @@ fn path_ident() -> impl Parser<Token, String, Error = Simple<Token>> + Clone {
         Token::Timing => "timing".to_string(),
         Token::Medium => "medium".to_string(),
         Token::Permission => "permission".to_string(),
+        Token::Variation => "variation".to_string(),
         Token::Property => "property".to_string(),
     }
 }
@@ -268,14 +269,31 @@ fn col_type() -> impl Parser<Token, ColType, Error = Simple<Token>> + Clone {
             }
         });
 
-    enum_ty.or(simple)
+    let named = ident().map(ColType::Named);
+
+    enum_ty.or(simple).or(named)
 }
 
 // ── Column definition ─────────────────────────────────────────────────────────
 
+/// A column name: an identifier, or a kind keyword that columns may still use.
+fn column_name() -> impl Parser<Token, String, Error = Simple<Token>> + Clone {
+    select! {
+        Token::Ident(s) => s,
+        Token::Variation => "variation".to_string(),
+    }
+}
+
+/// `cash "Cash"` or `adjustment` (label optional)
+fn variation_value() -> impl Parser<Token, VariationValue, Error = Simple<Token>> + Clone {
+    ident()
+        .then(string_lit().or_not())
+        .map_with_span(|(value, label), span| VariationValue { value, label, span })
+}
+
 /// `name: Type @ann1 @ann2 ...`
 fn column() -> impl Parser<Token, Column, Error = Simple<Token>> + Clone {
-    ident()
+    column_name()
         .then_ignore(just(Token::Colon))
         .then(col_type())
         .then(annotation().repeated())
@@ -313,13 +331,22 @@ fn kind_token() -> impl Parser<Token, Kind, Error = Simple<Token>> + Clone {
         Token::Timing      => Kind::Timing,
         Token::Medium      => Kind::Medium,
         Token::Permission  => Kind::Permission,
+        Token::Variation   => Kind::Variation,
     }
 }
 
 fn instance_decl() -> impl Parser<Token, InstanceDecl, Error = Simple<Token>> + Clone {
-    let body = just(Token::LBrace)
-        .ignore_then(column().repeated())
-        .then_ignore(just(Token::RBrace));
+    let body = just(Token::LBrace).ignore_then(
+        column()
+            .repeated()
+            .map(DeclBody::Columns)
+            .then_ignore(just(Token::RBrace))
+            .or(variation_value()
+                .repeated()
+                .at_least(1)
+                .map(DeclBody::Values)
+                .then_ignore(just(Token::RBrace))),
+    );
 
     let description = just(Token::Ident("description".to_string()))
         .ignore_then(string_lit())
@@ -343,16 +370,38 @@ fn instance_decl() -> impl Parser<Token, InstanceDecl, Error = Simple<Token>> + 
         .then(field_metadata)
         .then(usecase_metadata)
         .then(body.or_not())
-        .map_with_span(
+        .try_map(
             |(
                 (
                     ((((((((kind, id), label), description), requirement), adr), api), nfr), field),
                     usecase,
                 ),
-                columns,
+                body,
             ),
              span| {
-                InstanceDecl {
+                let (columns, variation_values) = match body {
+                    None => (Vec::new(), Vec::new()),
+                    Some(DeclBody::Columns(columns)) => (columns, Vec::new()),
+                    Some(DeclBody::Values(values)) => (Vec::new(), values),
+                };
+                if kind == Kind::Variation {
+                    check_variation_values(&variation_values, &span)?;
+                } else if !variation_values.is_empty() {
+                    return Err(Simple::custom(
+                        span,
+                        format!(
+                            "only `variation` declarations list values; `{}` takes columns",
+                            kind.name()
+                        ),
+                    ));
+                }
+                if kind == Kind::Variation && !columns.is_empty() {
+                    return Err(Simple::custom(
+                        span,
+                        "a `variation` lists values (`cash \"Cash\"`), not columns",
+                    ));
+                }
+                Ok(InstanceDecl {
                     kind,
                     id,
                     label,
@@ -363,11 +412,39 @@ fn instance_decl() -> impl Parser<Token, InstanceDecl, Error = Simple<Token>> + 
                     nfr: nfr.unwrap_or_default(),
                     field: field.unwrap_or_default(),
                     usecase: usecase.unwrap_or_default(),
-                    columns: columns.unwrap_or_default(),
+                    columns,
+                    variation_values,
                     span,
-                }
+                })
             },
         )
+}
+
+fn check_variation_values(
+    values: &[VariationValue],
+    decl_span: &Span,
+) -> Result<(), Simple<Token>> {
+    if values.is_empty() {
+        return Err(Simple::custom(
+            decl_span.clone(),
+            "a `variation` needs a body listing at least one value",
+        ));
+    }
+    let mut seen = std::collections::HashSet::new();
+    for value in values {
+        if !seen.insert(value.value.as_str()) {
+            return Err(Simple::custom(
+                value.span.clone(),
+                format!("duplicate variation value `{}`", value.value),
+            ));
+        }
+    }
+    Ok(())
+}
+
+enum DeclBody {
+    Columns(Vec<Column>),
+    Values(Vec<VariationValue>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1908,6 +1985,59 @@ performs(actor::Add, usecase::Add)
             msg.contains("Enum()") || msg.contains("variant"),
             "unexpected errors: {msg}"
         );
+    }
+
+    #[test]
+    fn variation_block_lists_values_with_optional_labels() {
+        let (ast, errors) =
+            parse("variation PaymentMethod \"Payment Method\" {\n  cash \"Cash\"\n  card\n}\n");
+        assert!(errors.is_empty(), "{errors:?}");
+        let Item::Instance(inst) = &ast.items[0] else {
+            panic!("expected instance");
+        };
+        assert_eq!(inst.kind.name(), "variation");
+        let values: Vec<_> = inst
+            .variation_values
+            .iter()
+            .map(|v| (v.value.as_str(), v.label.as_deref()))
+            .collect();
+        assert_eq!(values, vec![("cash", Some("Cash")), ("card", None)]);
+        assert!(inst.columns.is_empty());
+    }
+
+    #[test]
+    fn variation_without_values_is_parse_error() {
+        for src in [
+            "variation V \"V\"\n",
+            "variation V \"V\" {}\n",
+            "variation V \"V\" { a: Int }\n",
+            "variation V \"V\" { a\n a }\n",
+            "entity E \"E\" { a \"A\" }\n",
+        ] {
+            let (_ast, errors) = parse(src);
+            assert!(!errors.is_empty(), "must reject: {src}");
+        }
+    }
+
+    #[test]
+    fn column_type_position_accepts_a_variation_name() {
+        let (ast, errors) = parse("entity E \"E\" { method: PaymentMethod @default(card) }\n");
+        assert!(errors.is_empty(), "{errors:?}");
+        let Item::Instance(inst) = &ast.items[0] else {
+            panic!("expected instance");
+        };
+        assert_eq!(
+            inst.columns[0].col_type,
+            ColType::Named("PaymentMethod".into())
+        );
+    }
+
+    #[test]
+    fn variation_stays_usable_as_column_and_path_name() {
+        let (_, errors) = parse("entity E \"E\" { variation: String }\n");
+        assert!(errors.is_empty(), "{errors:?}");
+        let (_, errors) = parse("module variation.shared\nimport variation.shared\n");
+        assert!(errors.is_empty(), "{errors:?}");
     }
 
     #[test]

@@ -461,6 +461,7 @@ impl Emitter for ObjectGraphMermaidEmitter {
                         NodeRef::Timing(_) => format!("    {}[\"{}\"]\n", id, label),
                         NodeRef::Medium(_) => format!("    {}[/\"{}\"/]\n", id, label),
                         NodeRef::Permission(_) => format!("    {}[\"{}\"]\n", id, label),
+                        NodeRef::Variation(_) => format!("    {}[\"{}\"]\n", id, label),
                         NodeRef::UseCase(_) => format!("    {}([\"{}\"])\n", id, label),
                         NodeRef::Screen(_) => format!("    {}[[\"{}\"]]\n", id, label),
                         NodeRef::Field(_) => format!("    {}[[\"{}\"]]\n", id, label),
@@ -807,7 +808,7 @@ impl Emitter for ErMermaidEmitter {
             out.push_str(&format!("  {} {{\n", ent.id));
 
             for col in &ent.columns {
-                let type_str = col_type_str(&col.col_type);
+                let type_str = col_type_str(model, &col.col_type);
                 if col.is_pk {
                     out.push_str(&format!("    {} {} PK\n", type_str, col.name));
                 } else if col.is_fk {

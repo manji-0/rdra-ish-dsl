@@ -122,6 +122,7 @@ fn kind_from_name(name: &str) -> Option<Kind> {
         "timing" => Kind::Timing,
         "medium" => Kind::Medium,
         "permission" => Kind::Permission,
+        "variation" => Kind::Variation,
         _ => return None,
     })
 }
@@ -151,6 +152,7 @@ fn node_ref_label(model: &SemanticModel, node: &NodeRef) -> String {
         NodeRef::Timing(k) => model.timings.get(*k).map(|v| v.label.clone()),
         NodeRef::Medium(k) => model.media.get(*k).map(|v| v.label.clone()),
         NodeRef::Permission(k) => model.permissions.get(*k).map(|v| v.label.clone()),
+        NodeRef::Variation(k) => model.variations.get(*k).map(|v| v.label.clone()),
     }
     .unwrap_or_default()
 }

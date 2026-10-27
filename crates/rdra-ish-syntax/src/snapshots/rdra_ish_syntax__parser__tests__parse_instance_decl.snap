@@ -1,6 +1,5 @@
 ---
 source: crates/rdra-ish-syntax/src/parser.rs
-assertion_line: 998
 expression: ast
 ---
 Ast {
@@ -64,6 +63,7 @@ Ast {
                     errors: [],
                 },
                 columns: [],
+                variation_values: [],
                 span: 0..65,
             },
         ),

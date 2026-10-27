@@ -39,9 +39,14 @@ pub fn build_model_items_with_scopes(
     };
     let mut diags: Vec<Diagnostic> = vec![];
 
-    for (source_id, item) in items {
-        if let Item::Instance(inst) = item {
-            register_instance(&mut model, inst, DiagCtxt::new(*source_id), &mut diags);
+    // Variations first: entity columns resolve their type name against them.
+    for variations_pass in [true, false] {
+        for (source_id, item) in items {
+            if let Item::Instance(inst) = item {
+                if (inst.kind == Kind::Variation) == variations_pass {
+                    register_instance(&mut model, inst, DiagCtxt::new(*source_id), &mut diags);
+                }
+            }
         }
     }
 

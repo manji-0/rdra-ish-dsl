@@ -19,7 +19,9 @@ pub(crate) fn type_category(col_type: &ColumnType) -> &'static str {
     match col_type {
         ColumnType::Int | ColumnType::Money | ColumnType::Decimal => "numeric",
         ColumnType::Date | ColumnType::DateTime => "temporal",
-        ColumnType::String | ColumnType::Bool | ColumnType::Enum(_) => "equality",
+        ColumnType::String | ColumnType::Bool | ColumnType::Enum(_) | ColumnType::Variation(_) => {
+            "equality"
+        }
     }
 }
 

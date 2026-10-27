@@ -6,6 +6,8 @@ use crate::location::DiagCtxt;
 use crate::model::*;
 use rdra_ish_syntax::ast::*;
 
+use slotmap::SlotMap;
+
 use super::arg_resolve::resolve_arg;
 use super::comparison::{is_order_op, resolve_comparison, to_model_op, type_category};
 use super::effect::parse_effect_value;
@@ -34,6 +36,7 @@ pub(crate) struct EntityConditions {
 }
 
 pub(crate) fn resolve_entity_equals_from_comparison(
+    variations: &SlotMap<VariationKey, Variation>,
     entity_cols: &[ModelColumn],
     entity_id: &str,
     cmp: &Comparison,
@@ -80,7 +83,7 @@ pub(crate) fn resolve_entity_equals_from_comparison(
         );
         return Err(());
     };
-    match parse_effect_value(&col, &value_lit) {
+    match parse_effect_value(variations, &col, &value_lit) {
         Ok(value) => Ok(Some((col_str, value))),
         Err(e) => {
             push_error_cmp(ctx, diags, cmp, e);
@@ -90,6 +93,7 @@ pub(crate) fn resolve_entity_equals_from_comparison(
 }
 
 pub(crate) fn collect_entity_conditions(
+    variations: &SlotMap<VariationKey, Variation>,
     entity_cols: &[ModelColumn],
     entity_id: &str,
     args: &[PredicateArg],
@@ -99,7 +103,14 @@ pub(crate) fn collect_entity_conditions(
     let mut conditions = EntityConditions::default();
     for arg in args {
         if let PredicateArg::Expr(Expr::Cmp(cmp)) = arg {
-            match resolve_entity_equals_from_comparison(entity_cols, entity_id, cmp, ctx, diags) {
+            match resolve_entity_equals_from_comparison(
+                variations,
+                entity_cols,
+                entity_id,
+                cmp,
+                ctx,
+                diags,
+            ) {
                 Ok(Some(condition)) => conditions.equals.push(condition),
                 Ok(None) => {
                     if let Some(prop) = resolve_comparison(entity_cols, entity_id, cmp, ctx, diags)
@@ -878,7 +889,7 @@ fn temporal_equals_from_comparison(
         Operand::Now => "now".to_string(),
         Operand::QualifiedColumn(_) => return None,
     };
-    match parse_effect_value(&model_col, &value_lit) {
+    match parse_effect_value(&model.variations, &model_col, &value_lit) {
         Ok(value) => Some(CrossEntityCondition::Equals { column, value }),
         Err(e) => {
             push_error_cmp(ctx, diags, cmp, e);

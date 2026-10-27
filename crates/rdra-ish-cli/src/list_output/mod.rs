@@ -269,6 +269,7 @@ pub(crate) fn list_elements(
         ListKind::System => list_id_label!(model, systems, format, "systems"),
         ListKind::Api => format_apis(model, format),
         ListKind::Dto => format_dtos(model, format),
+        ListKind::Variation => list_id_label!(model, variations, format, "variations"),
         ListKind::PermissionCallables => format_permission_callables(model, format),
         ListKind::ActorPermissionAudit => format_actor_permission_audit(model, format),
         ListKind::BusinessInputs => format_business_inputs(model, format),

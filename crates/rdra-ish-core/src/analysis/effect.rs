@@ -1,7 +1,8 @@
 //! `sets(...)` effect value parsing.
 
 use crate::diagnostics::RdraError;
-use crate::model::{ColumnType, EffectValue, ModelColumn};
+use crate::model::{ColumnType, EffectValue, ModelColumn, Variation, VariationKey};
+use slotmap::SlotMap;
 
 fn is_pg_special_type(s: &str) -> bool {
     matches!(
@@ -42,7 +43,11 @@ fn is_pg_special_type(s: &str) -> bool {
     )
 }
 
-pub(crate) fn parse_effect_value(col: &ModelColumn, lit: &str) -> Result<EffectValue, RdraError> {
+pub(crate) fn parse_effect_value(
+    variations: &SlotMap<VariationKey, Variation>,
+    col: &ModelColumn,
+    lit: &str,
+) -> Result<EffectValue, RdraError> {
     match lit {
         "null" => {
             return if col.is_nullable {
@@ -83,6 +88,19 @@ pub(crate) fn parse_effect_value(col: &ModelColumn, lit: &str) -> Result<EffectV
                 })
             }
         }
+        ColumnType::Variation(key) => {
+            let variation = variations.get(*key);
+            let values = variation.map(|v| v.values.as_slice()).unwrap_or(&[]);
+            if values.iter().any(|v| v == lit) {
+                Ok(EffectValue::EnumVariant(lit.to_string()))
+            } else {
+                Err(RdraError::InvalidVariationValue {
+                    variation: variation.map(|v| v.id.clone()).unwrap_or_default(),
+                    value: lit.to_string(),
+                    allowed: values.join(", "),
+                })
+            }
+        }
         ColumnType::Bool => match lit {
             "true" => Ok(EffectValue::Bool(true)),
             "false" => Ok(EffectValue::Bool(false)),
@@ -109,6 +127,7 @@ pub(crate) fn parse_effect_value(col: &ModelColumn, lit: &str) -> Result<EffectV
 mod tests {
     use crate::diagnostics::RdraError;
     use crate::model::{ColumnType, EffectValue, ModelColumn};
+    use slotmap::SlotMap;
 
     use super::parse_effect_value;
 
@@ -146,27 +165,27 @@ mod tests {
         let bool_col = model_column("active", ColumnType::Bool);
 
         assert_eq!(
-            parse_effect_value(&nullable, "null").unwrap(),
+            parse_effect_value(&SlotMap::with_key(), &nullable, "null").unwrap(),
             EffectValue::Null
         );
         assert_eq!(
-            parse_effect_value(&nullable, "present").unwrap(),
+            parse_effect_value(&SlotMap::with_key(), &nullable, "present").unwrap(),
             EffectValue::Present
         );
         assert!(matches!(
-            parse_effect_value(&nullable, "jsonb"),
+            parse_effect_value(&SlotMap::with_key(), &nullable, "jsonb"),
             Err(RdraError::PgTypeNameInSets { .. })
         ));
         assert_eq!(
-            parse_effect_value(&enum_col, "closed").unwrap(),
+            parse_effect_value(&SlotMap::with_key(), &enum_col, "closed").unwrap(),
             EffectValue::EnumVariant("closed".to_string())
         );
         assert_eq!(
-            parse_effect_value(&bool_col, "true").unwrap(),
+            parse_effect_value(&SlotMap::with_key(), &bool_col, "true").unwrap(),
             EffectValue::Bool(true)
         );
         assert_eq!(
-            parse_effect_value(&bool_col, "false").unwrap(),
+            parse_effect_value(&SlotMap::with_key(), &bool_col, "false").unwrap(),
             EffectValue::Bool(false)
         );
     }
@@ -179,23 +198,23 @@ mod tests {
         let int_col = model_column("count", ColumnType::Int);
 
         assert!(matches!(
-            parse_effect_value(&string_col, "null"),
+            parse_effect_value(&SlotMap::with_key(), &string_col, "null"),
             Err(RdraError::NullOnNonNullable { .. })
         ));
         assert!(matches!(
-            parse_effect_value(&enum_col, "closed"),
+            parse_effect_value(&SlotMap::with_key(), &enum_col, "closed"),
             Err(RdraError::InvalidEnumVariant { .. })
         ));
         assert!(matches!(
-            parse_effect_value(&bool_col, "yes"),
+            parse_effect_value(&SlotMap::with_key(), &bool_col, "yes"),
             Err(RdraError::InvalidBoolValue { .. })
         ));
         assert_eq!(
-            parse_effect_value(&int_col, "42").unwrap(),
+            parse_effect_value(&SlotMap::with_key(), &int_col, "42").unwrap(),
             EffectValue::Int(42)
         );
         assert!(matches!(
-            parse_effect_value(&int_col, "nope"),
+            parse_effect_value(&SlotMap::with_key(), &int_col, "nope"),
             Err(RdraError::EffectOnNonStateColumn { .. })
         ));
     }

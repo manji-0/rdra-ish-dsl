@@ -27,6 +27,7 @@ pub(crate) fn node_kind_name(node: &NodeRef) -> &'static str {
         NodeRef::Timing(_) => "timing",
         NodeRef::Medium(_) => "medium",
         NodeRef::Permission(_) => "permission",
+        NodeRef::Variation(_) => "variation",
     }
 }
 
@@ -55,6 +56,7 @@ pub(crate) fn node_id(model: &rdra_ish_core::SemanticModel, node: &NodeRef) -> O
         NodeRef::Timing(key) => model.timings.get(*key)?.id.clone(),
         NodeRef::Medium(key) => model.media.get(*key)?.id.clone(),
         NodeRef::Permission(key) => model.permissions.get(*key)?.id.clone(),
+        NodeRef::Variation(key) => model.variations.get(*key)?.id.clone(),
     })
 }
 pub(crate) fn adr_targets(
@@ -101,5 +103,6 @@ pub(crate) fn node_label(model: &rdra_ish_core::SemanticModel, node: &NodeRef) -
         NodeRef::Timing(key) => model.timings.get(*key)?.label.clone(),
         NodeRef::Medium(key) => model.media.get(*key)?.label.clone(),
         NodeRef::Permission(key) => model.permissions.get(*key)?.label.clone(),
+        NodeRef::Variation(key) => model.variations.get(*key)?.label.clone(),
     })
 }

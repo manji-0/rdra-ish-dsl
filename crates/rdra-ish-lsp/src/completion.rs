@@ -28,6 +28,7 @@ const KIND_KEYWORDS: &[&str] = &[
     "timing",
     "medium",
     "permission",
+    "variation",
 ];
 
 pub fn completion_items(model: &SemanticModel, source: &str, offset: usize) -> Vec<CompletionItem> {

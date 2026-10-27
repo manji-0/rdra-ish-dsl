@@ -24,7 +24,7 @@ fn dbml_document(model: &SemanticModel) -> String {
         if index > 0 {
             out.push('\n');
         }
-        out.push_str(&dbml_table(entity));
+        out.push_str(&dbml_table(model, entity));
         out.push('\n');
     }
 
@@ -60,17 +60,34 @@ fn dbml_enums(model: &SemanticModel) -> Vec<String> {
             defs.push(lines.join("\n"));
         }
     }
+    let mut variations: Vec<_> = model.variations.values().collect();
+    variations.sort_by_key(|variation| variation.id.as_str());
+    for variation in variations {
+        let mut lines = vec![format!("Enum {} {{", dbml_ident(&variation.id))];
+        for (value, label) in variation.values.iter().zip(&variation.labels) {
+            lines.push(match label {
+                Some(label) => format!(
+                    "  {} [note: '{}']",
+                    dbml_ident(value),
+                    label.replace('\'', "\\'")
+                ),
+                None => format!("  {}", dbml_ident(value)),
+            });
+        }
+        lines.push("}".to_string());
+        defs.push(lines.join("\n"));
+    }
     defs
 }
 
-fn dbml_table(entity: &Entity) -> String {
+fn dbml_table(model: &SemanticModel, entity: &Entity) -> String {
     let mut lines = vec![format!(
         "Table {} [{}] {{",
         dbml_ident(&entity.id),
         dbml_settings(&table_settings(entity))
     )];
     for column in &entity.columns {
-        lines.push(format!("  {}", dbml_column(entity, column)));
+        lines.push(format!("  {}", dbml_column(model, entity, column)));
     }
     let indexes = dbml_indexes(entity);
     if !indexes.is_empty() {
@@ -100,7 +117,7 @@ fn table_settings(entity: &Entity) -> Vec<String> {
     settings
 }
 
-fn dbml_column(entity: &Entity, column: &ModelColumn) -> String {
+fn dbml_column(model: &SemanticModel, entity: &Entity, column: &ModelColumn) -> String {
     let settings = column_settings(entity, column);
     let settings = if settings.is_empty() {
         String::new()
@@ -110,7 +127,7 @@ fn dbml_column(entity: &Entity, column: &ModelColumn) -> String {
     format!(
         "{} {}{}",
         dbml_ident(&column.name),
-        dbml_type(entity, column),
+        dbml_type(model, entity, column),
         settings
     )
 }
@@ -162,7 +179,7 @@ fn column_note(column: &ModelColumn) -> String {
     notes.join("; ")
 }
 
-fn dbml_type(entity: &Entity, column: &ModelColumn) -> String {
+fn dbml_type(model: &SemanticModel, entity: &Entity, column: &ModelColumn) -> String {
     match &column.col_type {
         ColumnType::Int => "int".to_string(),
         ColumnType::String => "varchar".to_string(),
@@ -171,6 +188,11 @@ fn dbml_type(entity: &Entity, column: &ModelColumn) -> String {
         ColumnType::Date => "date".to_string(),
         ColumnType::Bool => "boolean".to_string(),
         ColumnType::Enum(_) => dbml_ident(&enum_type_name(entity, column)),
+        ColumnType::Variation(key) => model
+            .variations
+            .get(*key)
+            .map(|variation| dbml_ident(&variation.id))
+            .unwrap_or_else(|| "varchar".to_string()),
     }
 }
 
@@ -352,5 +374,34 @@ relate(Order, Product, N:M).via(OrderProduct)
                 || dbml.contains("(product_id, order_id) [unique]"),
             "expected composite unique on junction FKs in DBML:\n{dbml}"
         );
+    }
+
+    #[test]
+    fn variation_is_one_enum_shared_by_every_column_typed_by_it() {
+        let model = model_from(
+            r#"
+variation PaymentMethod "Payment Method" {
+  cash "Cash"
+  card
+}
+entity Payment "Payment" {
+  id: Int @pk
+  method: PaymentMethod @default(card)
+}
+entity Refund "Refund" {
+  id: Int @pk
+  method: PaymentMethod
+}
+"#,
+        );
+        let dbml = DbmlEmitter.emit(&model, &View::whole()).unwrap();
+        assert_eq!(dbml.matches("Enum PaymentMethod {").count(), 1, "{dbml}");
+        assert!(dbml.contains("cash [note: 'Cash']"), "{dbml}");
+        assert!(
+            dbml.contains("method PaymentMethod [not null, default: `card`]"),
+            "{dbml}"
+        );
+        assert!(dbml.contains("method PaymentMethod [not null]"), "{dbml}");
+        assert!(!dbml.contains("Payment_method"), "{dbml}");
     }
 }

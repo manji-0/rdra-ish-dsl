@@ -62,6 +62,7 @@ pub enum Kind {
     Timing,
     Medium,
     Permission,
+    Variation,
 }
 
 impl Kind {
@@ -89,6 +90,7 @@ impl Kind {
             Kind::Timing => "timing",
             Kind::Medium => "medium",
             Kind::Permission => "permission",
+            Kind::Variation => "variation",
         }
     }
 }
@@ -104,8 +106,18 @@ pub enum ColType {
     Date,
     Bool,
     Decimal,
-    /// `Enum(active, discontinued)`
+    /// `Enum(active, discontinued)`: an inline value set. With `transitions` it is a state axis.
     Enum(Vec<std::string::String>),
+    /// `PaymentMethod`: a variation id in type position. Resolved at model build.
+    Named(std::string::String),
+}
+
+/// One value of a `variation` declaration: `cash "Cash"`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VariationValue {
+    pub value: std::string::String,
+    pub label: Option<std::string::String>,
+    pub span: Span,
 }
 
 // ── Column annotation ────────────────────────────────────────────────────────
@@ -237,6 +249,8 @@ pub struct InstanceDecl {
     /// Non-empty only for `entity` declarations.
     /// DTO declarations also reuse this column shape for contract fields.
     pub columns: Vec<Column>,
+    /// Non-empty only for `variation` declarations.
+    pub variation_values: Vec<VariationValue>,
     pub span: Span,
 }
 
