@@ -1,36 +1,56 @@
 @startuml
 !theme plain
+left to right direction
 
-actor "Customer" as Customer
+rectangle "System Value" {
+  actor "👤 Customer" as Customer
+}
 
-usecase "Authorize Payment" as AuthorizePayment
-usecase "Capture Payment" as Capture
-usecase "Enter Payment Information" as InputPaymentInfo
-usecase "Refund Payment" as RefundPayment
+rectangle "External Environment" {
+  rectangle "💼 EC Shopping Business" as EcShopping
+  rectangle "📦 Make Payment" as BucPayment
+}
 
-rectangle "Make Payment" as BucPayment
+rectangle "System Boundary" {
+  usecase "✅ Authorize Payment" as AuthorizePayment
+  usecase "✅ Capture Payment" as Capture
+  usecase "✅ Enter Payment Information" as InputPaymentInfo
+  usecase "✅ Refund Payment" as RefundPayment
+  boundary "🖥️ Payment Information Screen" as PaymentInputScreen
+  boundary "🖥️ Payment Result Screen" as PaymentResultScreen
+  control "⚡ Capture Payment" as Capture
+}
 
+rectangle "System" {
+  control "🔌 Payment Authorization API" as PaymentAuthorizationApi
+  control "🔌 Payment Capture API" as PaymentCaptureApi
+  control "🔌 Payment Input API" as PaymentInputApi
+  control "🔌 Payment Refund API" as PaymentRefundApi
+  database "🗄️ Order" as Order
+  database "🗄️ Payment" as Payment
+}
 
-
-database "Order" as Order
-database "Payment" as Payment
-
-boundary "Payment Information Screen" as PaymentInputScreen
-boundary "Payment Result Screen" as PaymentResultScreen
-
-control "Capture Payment" as Capture
-
-
-Customer --> BucPayment
+Customer --> BucPayment : performs
+PaymentInputApi ..> Payment : creates
+PaymentInputApi ..> Order : reads
+PaymentAuthorizationApi ..> Payment : updates
+PaymentCaptureApi ..> Order : updates
+PaymentCaptureApi ..> Payment : updates
+PaymentRefundApi ..> Order : updates
+PaymentRefundApi ..> Payment : updates
 BucPayment ..> EcShopping : belongs
-BucPayment ..> InputPaymentInfo : contains
-BucPayment ..> AuthorizePayment : contains
-BucPayment ..> Capture : contains
-BucPayment ..> RefundPayment : contains
-Payment -- Order
+BucPayment --> InputPaymentInfo : contains
+BucPayment --> AuthorizePayment : contains
+BucPayment --> Capture : contains
+BucPayment --> RefundPayment : contains
+Payment -- Order : 1:1
 InputPaymentInfo ..> PaymentInputScreen : displays
+InputPaymentInfo ..> PaymentInputApi : invokes
 AuthorizePayment ..> PaymentResultScreen : displays
-Capture ..> Capture : raises
+AuthorizePayment ..> PaymentAuthorizationApi : invokes
 Capture ..> PaymentResultScreen : displays
+Capture ..> PaymentCaptureApi : invokes
+Capture ..> Capture : raises
 RefundPayment ..> PaymentResultScreen : displays
+RefundPayment ..> PaymentRefundApi : invokes
 @enduml

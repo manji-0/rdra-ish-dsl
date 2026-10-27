@@ -1,80 +1,167 @@
-graph TD
-  SysAdmin(["👤 System Administrator"])
-  User(["👤 User"])
-  ChangePassword(["Change Password"])
-  DeleteAddress(["Delete Address"])
-  DeleteCard(["Delete Card"])
-  ListCards(["List Cards"])
-  RegisterAddress(["Register Address"])
-  RegisterCard(["Register Card"])
-  RequestPasswordReset(["Request Password Reset"])
-  ResetPassword(["Reset Password"])
-  SetInitialPassword(["Set Initial Password"])
-  SetPrimaryAddress(["Set Primary Address"])
-  SetPrimaryCard(["Set Primary Card"])
-  UpdateAddress(["Update Address"])
-  UpdateProfile(["Update Personal Information"])
-  ViewProfile(["View Personal Information"])
-  BucCard["📦 Manage Credit Cards"]
-  BucPassword["📦 Manage Password"]
-  BucProfile["📦 Manage Personal Information"]
-  PersonalDataSystem["🧩 Personal Data System"]
-  AuditLog[("🗄 Audit Log")]
-  CreditCard[("🗄 Credit Card")]
-  PasswordCredential[("🗄 Password Credential")]
-  PersonalInfo[("🗄 Personal Information")]
-  PostalAddress[("🗄 Postal Address")]
-  UserAccount[("🗄 User Account")]
-  AddressEditScreen[["Address Edit Screen"]]
-  AddressListScreen[["Address List Screen"]]
-  CardAddScreen[["Card Registration Screen"]]
-  CardListScreen[["Card List Screen"]]
-  PasswordChangeScreen[["Password Change Screen"]]
-  PasswordResetScreen[["Password Reset Screen"]]
-  PasswordSetScreen[["Password Setup Screen"]]
-  ProfileScreen[["Personal Information Screen"]]
-  Active{"Restore Account"}
-  Deleted{"Delete Account"}
-  Suspended{"Suspend Account"}
-  Active("Active")  
-  Deleted("Deleted")  
-  Suspended("Suspended")  
-  User --> BucProfile
-  User --> BucCard
-  User --> BucPassword
-  BucProfile --> PersonalDataMgmt
-  BucProfile --> ViewProfile
-  BucProfile --> UpdateProfile
-  BucProfile --> RegisterAddress
-  BucProfile --> UpdateAddress
-  BucProfile --> DeleteAddress
-  BucProfile --> SetPrimaryAddress
-  BucCard --> PersonalDataMgmt
-  BucCard --> SetPrimaryCard
-  BucCard --> ListCards
-  BucCard --> RegisterCard
-  BucCard --> DeleteCard
-  BucPassword --> PersonalDataMgmt
-  BucPassword --> SetInitialPassword
-  BucPassword --> ChangePassword
-  BucPassword --> RequestPasswordReset
-  BucPassword --> ResetPassword
-  PersonalInfo --- UserAccount
-  PostalAddress --- UserAccount
-  CreditCard --- UserAccount
-  PasswordCredential --- UserAccount
-  AuditLog --- UserAccount
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    SysAdmin(["👤 System Administrator"])
+    User(["👤 User"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    PersonalDataMgmt["💼 Personal Data Management Business"]
+    BucCard["📦 Manage Credit Cards"]
+    BucPassword["📦 Manage Password"]
+    BucProfile["📦 Manage Personal Information"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    ChangePassword(["✅ Change Password"])
+    DeleteAddress(["✅ Delete Address"])
+    DeleteCard(["✅ Delete Card"])
+    ListCards(["✅ List Cards"])
+    RegisterAddress(["✅ Register Address"])
+    RegisterCard(["✅ Register Card"])
+    RequestPasswordReset(["✅ Request Password Reset"])
+    ResetPassword(["✅ Reset Password"])
+    SetInitialPassword(["✅ Set Initial Password"])
+    SetPrimaryAddress(["✅ Set Primary Address"])
+    SetPrimaryCard(["✅ Set Primary Card"])
+    UpdateAddress(["✅ Update Address"])
+    UpdateProfile(["✅ Update Personal Information"])
+    ViewProfile(["✅ View Personal Information"])
+    AddressEditScreen[["🖥️ Address Edit Screen"]]
+    AddressListScreen[["🖥️ Address List Screen"]]
+    CardAddScreen[["🖥️ Card Registration Screen"]]
+    CardListScreen[["🖥️ Card List Screen"]]
+    PasswordChangeScreen[["🖥️ Password Change Screen"]]
+    PasswordResetScreen[["🖥️ Password Reset Screen"]]
+    PasswordSetScreen[["🖥️ Password Setup Screen"]]
+    ProfileScreen[["🖥️ Personal Information Screen"]]
+    Active{"⚡ Restore Account"}
+    Deleted{"⚡ Delete Account"}
+    Suspended{"⚡ Suspend Account"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    ChangePasswordApi["🔌 Change Password API"]
+    DeleteAddressApi["🔌 Delete Address API"]
+    DeleteCardApi["🔌 Delete Card API"]
+    ListCardsApi["🔌 List Cards API"]
+    RegisterAddressApi["🔌 Register Address API"]
+    RegisterCardApi["🔌 Register Card API"]
+    RequestPasswordResetApi["🔌 Request Password Reset API"]
+    ResetPasswordApi["🔌 Reset Password API"]
+    SetInitialPasswordApi["🔌 Set Initial Password API"]
+    SetPrimaryAddressApi["🔌 Set Primary Address API"]
+    SetPrimaryCardApi["🔌 Set Primary Card API"]
+    UpdateAddressApi["🔌 Update Address API"]
+    UpdateProfileApi["🔌 Update Profile API"]
+    ViewProfileApi["🔌 View Profile API"]
+    PersonalDataSystem["🧩 Personal Data System"]
+    AuditLog[("🗄️ Audit Log")]
+    CreditCard[("🗄️ Credit Card")]
+    PasswordCredential[("🗄️ Password Credential")]
+    PersonalInfo[("🗄️ Personal Information")]
+    PostalAddress[("🗄️ Postal Address")]
+    UserAccount[("🗄️ User Account")]
+    UserAccount_active("🔄 active")
+    UserAccount_deleted("🔄 deleted")
+    UserAccount_suspended("🔄 suspended")
+  end
+  User -->|performs| BucProfile
+  User -->|performs| BucCard
+  User -->|performs| BucPassword
+  SetPrimaryCardApi -.->|creates| AuditLog
+  SetPrimaryCardApi -.->|reads| CreditCard
+  SetPrimaryCardApi -.->|updates| CreditCard
+  SetInitialPasswordApi -.->|creates| PasswordCredential
+  SetInitialPasswordApi -.->|creates| AuditLog
+  ChangePasswordApi -.->|creates| AuditLog
+  ChangePasswordApi -.->|reads| PasswordCredential
+  ChangePasswordApi -.->|updates| PasswordCredential
+  RequestPasswordResetApi -.->|creates| AuditLog
+  RequestPasswordResetApi -.->|reads| UserAccount
+  ResetPasswordApi -.->|creates| AuditLog
+  ResetPasswordApi -.->|updates| PasswordCredential
+  ViewProfileApi -.->|reads| UserAccount
+  ViewProfileApi -.->|reads| PersonalInfo
+  UpdateProfileApi -.->|creates| AuditLog
+  UpdateProfileApi -.->|reads| PersonalInfo
+  UpdateProfileApi -.->|updates| PersonalInfo
+  RegisterAddressApi -.->|creates| PostalAddress
+  RegisterAddressApi -.->|creates| AuditLog
+  UpdateAddressApi -.->|creates| AuditLog
+  UpdateAddressApi -.->|reads| PostalAddress
+  UpdateAddressApi -.->|updates| PostalAddress
+  DeleteAddressApi -.->|creates| AuditLog
+  DeleteAddressApi -.->|deletes| PostalAddress
+  SetPrimaryAddressApi -.->|creates| AuditLog
+  SetPrimaryAddressApi -.->|reads| PostalAddress
+  SetPrimaryAddressApi -.->|updates| PostalAddress
+  ListCardsApi -.->|reads| CreditCard
+  RegisterCardApi -.->|creates| CreditCard
+  RegisterCardApi -.->|creates| AuditLog
+  DeleteCardApi -.->|creates| AuditLog
+  DeleteCardApi -.->|deletes| CreditCard
+  BucProfile -.->|belongs| PersonalDataMgmt
+  BucProfile -->|contains| ViewProfile
+  BucProfile -->|contains| UpdateProfile
+  BucProfile -->|contains| RegisterAddress
+  BucProfile -->|contains| UpdateAddress
+  BucProfile -->|contains| DeleteAddress
+  BucProfile -->|contains| SetPrimaryAddress
+  BucCard -.->|belongs| PersonalDataMgmt
+  BucCard -->|contains| SetPrimaryCard
+  BucCard -->|contains| ListCards
+  BucCard -->|contains| RegisterCard
+  BucCard -->|contains| DeleteCard
+  BucPassword -.->|belongs| PersonalDataMgmt
+  BucPassword -->|contains| SetInitialPassword
+  BucPassword -->|contains| ChangePassword
+  BucPassword -->|contains| RequestPasswordReset
+  BucPassword -->|contains| ResetPassword
+  PersonalInfo ---|1:1| UserAccount
+  PostalAddress ---|N:1| UserAccount
+  CreditCard ---|N:1| UserAccount
+  PasswordCredential ---|1:1| UserAccount
+  AuditLog ---|N:1| UserAccount
+  PersonalDataSystem -->|contains| SetPrimaryCardApi
+  PersonalDataSystem -->|contains| SetInitialPasswordApi
+  PersonalDataSystem -->|contains| ChangePasswordApi
+  PersonalDataSystem -->|contains| RequestPasswordResetApi
+  PersonalDataSystem -->|contains| ResetPasswordApi
+  PersonalDataSystem -->|contains| ViewProfileApi
+  PersonalDataSystem -->|contains| UpdateProfileApi
+  PersonalDataSystem -->|contains| RegisterAddressApi
+  PersonalDataSystem -->|contains| UpdateAddressApi
+  PersonalDataSystem -->|contains| DeleteAddressApi
+  PersonalDataSystem -->|contains| SetPrimaryAddressApi
+  PersonalDataSystem -->|contains| ListCardsApi
+  PersonalDataSystem -->|contains| RegisterCardApi
+  PersonalDataSystem -->|contains| DeleteCardApi
   SetPrimaryCard -.->|displays| CardListScreen
+  SetPrimaryCard -.->|invokes| SetPrimaryCardApi
   SetInitialPassword -.->|displays| PasswordSetScreen
+  SetInitialPassword -.->|invokes| SetInitialPasswordApi
   ChangePassword -.->|displays| PasswordChangeScreen
+  ChangePassword -.->|invokes| ChangePasswordApi
   RequestPasswordReset -.->|displays| PasswordResetScreen
+  RequestPasswordReset -.->|invokes| RequestPasswordResetApi
   ResetPassword -.->|displays| PasswordResetScreen
+  ResetPassword -.->|invokes| ResetPasswordApi
   ViewProfile -.->|displays| ProfileScreen
+  ViewProfile -.->|invokes| ViewProfileApi
   UpdateProfile -.->|displays| ProfileScreen
+  UpdateProfile -.->|invokes| UpdateProfileApi
   RegisterAddress -.->|displays| AddressEditScreen
+  RegisterAddress -.->|invokes| RegisterAddressApi
   UpdateAddress -.->|displays| AddressEditScreen
+  UpdateAddress -.->|invokes| UpdateAddressApi
   DeleteAddress -.->|displays| AddressListScreen
+  DeleteAddress -.->|invokes| DeleteAddressApi
   SetPrimaryAddress -.->|displays| AddressListScreen
+  SetPrimaryAddress -.->|invokes| SetPrimaryAddressApi
   ListCards -.->|displays| CardListScreen
+  ListCards -.->|invokes| ListCardsApi
   RegisterCard -.->|displays| CardAddScreen
+  RegisterCard -.->|invokes| RegisterCardApi
   DeleteCard -.->|displays| CardListScreen
+  DeleteCard -.->|invokes| DeleteCardApi

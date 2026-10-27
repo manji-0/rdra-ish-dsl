@@ -1,172 +1,206 @@
 @startuml
 !theme plain
 
-actor "User" as User
-control "Change Password API" as ChangePasswordApi
-control "Delete Address API" as DeleteAddressApi
-control "Delete Card API" as DeleteCardApi
-control "Register Address API" as RegisterAddressApi
-control "Register Card API" as RegisterCardApi
-control "Request Password Reset API" as RequestPasswordResetApi
-control "Reset Password API" as ResetPasswordApi
-control "Set Initial Password API" as SetInitialPasswordApi
-control "Set Primary Address API" as SetPrimaryAddressApi
-control "Set Primary Card API" as SetPrimaryCardApi
-control "Update Address API" as UpdateAddressApi
-control "Update Profile API" as UpdateProfileApi
-database "Audit Log" as AuditLog
-database "Credit Card" as CreditCard
-database "Password Credential" as PasswordCredential
-database "Personal Information" as PersonalInfo
-database "Postal Address" as PostalAddress
-boundary "Address Edit Screen" as AddressEditScreen
-boundary "Address List Screen" as AddressListScreen
-boundary "Card Registration Screen" as CardAddScreen
-boundary "Card List Screen" as CardListScreen
-boundary "Password Change Screen" as PasswordChangeScreen
-boundary "Password Reset Screen" as PasswordResetScreen
-boundary "Password Setup Screen" as PasswordSetScreen
-boundary "Personal Information Screen" as ProfileScreen
+box "System Value" #E3F2FD
+actor "👤 User" as User
+end box
+box "System Boundary" #E0F7FA
+boundary "🖥️ Address Edit Screen" as AddressEditScreen
+boundary "🖥️ Address List Screen" as AddressListScreen
+boundary "🖥️ Card Registration Screen" as CardAddScreen
+boundary "🖥️ Card List Screen" as CardListScreen
+boundary "🖥️ Password Change Screen" as PasswordChangeScreen
+boundary "🖥️ Password Reset Screen" as PasswordResetScreen
+boundary "🖥️ Password Setup Screen" as PasswordSetScreen
+boundary "🖥️ Personal Information Screen" as ProfileScreen
+end box
+box "System" #F3E5F5
+control "🔌 Change Password API" as ChangePasswordApi
+control "🔌 Delete Address API" as DeleteAddressApi
+control "🔌 Delete Card API" as DeleteCardApi
+control "🔌 List Cards API" as ListCardsApi
+control "🔌 Register Address API" as RegisterAddressApi
+control "🔌 Register Card API" as RegisterCardApi
+control "🔌 Request Password Reset API" as RequestPasswordResetApi
+control "🔌 Reset Password API" as ResetPasswordApi
+control "🔌 Set Initial Password API" as SetInitialPasswordApi
+control "🔌 Set Primary Address API" as SetPrimaryAddressApi
+control "🔌 Set Primary Card API" as SetPrimaryCardApi
+control "🔌 Update Address API" as UpdateAddressApi
+control "🔌 Update Profile API" as UpdateProfileApi
+control "🔌 View Profile API" as ViewProfileApi
+database "🗄️ Audit Log" as AuditLog
+database "🗄️ Credit Card" as CreditCard
+database "🗄️ Password Credential" as PasswordCredential
+database "🗄️ Personal Information" as PersonalInfo
+database "🗄️ Postal Address" as PostalAddress
+database "🗄️ User Account" as UserAccount
+end box
 
-== Change Password ==
-User -> PasswordChangeScreen : Change Password
-PasswordChangeScreen -> ChangePasswordApi : Change Password
+== ✅ Change Password ==
+User -> PasswordChangeScreen : ✅ Change Password
+PasswordChangeScreen -> ChangePasswordApi : ✅ Change Password
 activate ChangePasswordApi
+ChangePasswordApi -> PasswordCredential : read
 group transaction (API atomic boundary)
 ChangePasswordApi -> AuditLog : create
 ChangePasswordApi -> PasswordCredential : update
 end
-ChangePasswordApi --> PasswordChangeScreen : Password Change Screen
-PasswordChangeScreen --> User : Password Change Screen
+ChangePasswordApi --> PasswordChangeScreen : 🖥️ Password Change Screen
+PasswordChangeScreen --> User : 🖥️ Password Change Screen
 deactivate ChangePasswordApi
 
-== Delete Address ==
-User -> AddressListScreen : Delete Address
-AddressListScreen -> DeleteAddressApi : Delete Address
+== ✅ Delete Address ==
+User -> AddressListScreen : ✅ Delete Address
+AddressListScreen -> DeleteAddressApi : ✅ Delete Address
 activate DeleteAddressApi
 group transaction (API atomic boundary)
 DeleteAddressApi -> AuditLog : create
 DeleteAddressApi -> PostalAddress : delete
 end
-DeleteAddressApi --> AddressListScreen : Address List Screen
-AddressListScreen --> User : Address List Screen
+DeleteAddressApi --> AddressListScreen : 🖥️ Address List Screen
+AddressListScreen --> User : 🖥️ Address List Screen
 deactivate DeleteAddressApi
 
-== Delete Card ==
-User -> CardListScreen : Delete Card
-CardListScreen -> DeleteCardApi : Delete Card
+== ✅ Delete Card ==
+User -> CardListScreen : ✅ Delete Card
+CardListScreen -> DeleteCardApi : ✅ Delete Card
 activate DeleteCardApi
 group transaction (API atomic boundary)
 DeleteCardApi -> AuditLog : create
 DeleteCardApi -> CreditCard : delete
 end
-DeleteCardApi --> CardListScreen : Card List Screen
-CardListScreen --> User : Card List Screen
+DeleteCardApi --> CardListScreen : 🖥️ Card List Screen
+CardListScreen --> User : 🖥️ Card List Screen
 deactivate DeleteCardApi
 
-== Register Address ==
-User -> AddressEditScreen : Register Address
-AddressEditScreen -> RegisterAddressApi : Register Address
+== ✅ List Cards ==
+User -> CardListScreen : ✅ List Cards
+CardListScreen -> ListCardsApi : ✅ List Cards
+activate ListCardsApi
+ListCardsApi -> CreditCard : read
+ListCardsApi --> CardListScreen : 🖥️ Card List Screen
+CardListScreen --> User : 🖥️ Card List Screen
+deactivate ListCardsApi
+
+== ✅ Register Address ==
+User -> AddressEditScreen : ✅ Register Address
+AddressEditScreen -> RegisterAddressApi : ✅ Register Address
 activate RegisterAddressApi
 group transaction (API atomic boundary)
 RegisterAddressApi -> AuditLog : create
 RegisterAddressApi -> PostalAddress : create
 end
-RegisterAddressApi --> AddressEditScreen : Address Edit Screen
-AddressEditScreen --> User : Address Edit Screen
+RegisterAddressApi --> AddressEditScreen : 🖥️ Address Edit Screen
+AddressEditScreen --> User : 🖥️ Address Edit Screen
 deactivate RegisterAddressApi
 
-== Register Card ==
-User -> CardAddScreen : Register Card
-CardAddScreen -> RegisterCardApi : Register Card
+== ✅ Register Card ==
+User -> CardAddScreen : ✅ Register Card
+CardAddScreen -> RegisterCardApi : ✅ Register Card
 activate RegisterCardApi
 group transaction (API atomic boundary)
 RegisterCardApi -> AuditLog : create
 RegisterCardApi -> CreditCard : create
 end
-RegisterCardApi --> CardAddScreen : Card Registration Screen
-CardAddScreen --> User : Card Registration Screen
+RegisterCardApi --> CardAddScreen : 🖥️ Card Registration Screen
+CardAddScreen --> User : 🖥️ Card Registration Screen
 deactivate RegisterCardApi
 
-== Request Password Reset ==
-User -> PasswordResetScreen : Request Password Reset
-PasswordResetScreen -> RequestPasswordResetApi : Request Password Reset
+== ✅ Request Password Reset ==
+User -> PasswordResetScreen : ✅ Request Password Reset
+PasswordResetScreen -> RequestPasswordResetApi : ✅ Request Password Reset
 activate RequestPasswordResetApi
+RequestPasswordResetApi -> UserAccount : read
 RequestPasswordResetApi -> AuditLog : create
-RequestPasswordResetApi --> PasswordResetScreen : Password Reset Screen
-PasswordResetScreen --> User : Password Reset Screen
+RequestPasswordResetApi --> PasswordResetScreen : 🖥️ Password Reset Screen
+PasswordResetScreen --> User : 🖥️ Password Reset Screen
 deactivate RequestPasswordResetApi
 
-== Reset Password ==
-User -> PasswordResetScreen : Reset Password
-PasswordResetScreen -> ResetPasswordApi : Reset Password
+== ✅ Reset Password ==
+User -> PasswordResetScreen : ✅ Reset Password
+PasswordResetScreen -> ResetPasswordApi : ✅ Reset Password
 activate ResetPasswordApi
 group transaction (API atomic boundary)
 ResetPasswordApi -> AuditLog : create
 ResetPasswordApi -> PasswordCredential : update
 end
-ResetPasswordApi --> PasswordResetScreen : Password Reset Screen
-PasswordResetScreen --> User : Password Reset Screen
+ResetPasswordApi --> PasswordResetScreen : 🖥️ Password Reset Screen
+PasswordResetScreen --> User : 🖥️ Password Reset Screen
 deactivate ResetPasswordApi
 
-== Set Initial Password ==
-User -> PasswordSetScreen : Set Initial Password
-PasswordSetScreen -> SetInitialPasswordApi : Set Initial Password
+== ✅ Set Initial Password ==
+User -> PasswordSetScreen : ✅ Set Initial Password
+PasswordSetScreen -> SetInitialPasswordApi : ✅ Set Initial Password
 activate SetInitialPasswordApi
 group transaction (API atomic boundary)
 SetInitialPasswordApi -> AuditLog : create
 SetInitialPasswordApi -> PasswordCredential : create
 end
-SetInitialPasswordApi --> PasswordSetScreen : Password Setup Screen
-PasswordSetScreen --> User : Password Setup Screen
+SetInitialPasswordApi --> PasswordSetScreen : 🖥️ Password Setup Screen
+PasswordSetScreen --> User : 🖥️ Password Setup Screen
 deactivate SetInitialPasswordApi
 
-== Set Primary Address ==
-User -> AddressListScreen : Set Primary Address
-AddressListScreen -> SetPrimaryAddressApi : Set Primary Address
+== ✅ Set Primary Address ==
+User -> AddressListScreen : ✅ Set Primary Address
+AddressListScreen -> SetPrimaryAddressApi : ✅ Set Primary Address
 activate SetPrimaryAddressApi
+SetPrimaryAddressApi -> PostalAddress : read
 group transaction (API atomic boundary)
 SetPrimaryAddressApi -> AuditLog : create
 SetPrimaryAddressApi -> PostalAddress : update
 end
-SetPrimaryAddressApi --> AddressListScreen : Address List Screen
-AddressListScreen --> User : Address List Screen
+SetPrimaryAddressApi --> AddressListScreen : 🖥️ Address List Screen
+AddressListScreen --> User : 🖥️ Address List Screen
 deactivate SetPrimaryAddressApi
 
-== Set Primary Card ==
-User -> CardListScreen : Set Primary Card
-CardListScreen -> SetPrimaryCardApi : Set Primary Card
+== ✅ Set Primary Card ==
+User -> CardListScreen : ✅ Set Primary Card
+CardListScreen -> SetPrimaryCardApi : ✅ Set Primary Card
 activate SetPrimaryCardApi
+SetPrimaryCardApi -> CreditCard : read
 group transaction (API atomic boundary)
 SetPrimaryCardApi -> AuditLog : create
 SetPrimaryCardApi -> CreditCard : update
 end
-SetPrimaryCardApi --> CardListScreen : Card List Screen
-CardListScreen --> User : Card List Screen
+SetPrimaryCardApi --> CardListScreen : 🖥️ Card List Screen
+CardListScreen --> User : 🖥️ Card List Screen
 deactivate SetPrimaryCardApi
 
-== Update Address ==
-User -> AddressEditScreen : Update Address
-AddressEditScreen -> UpdateAddressApi : Update Address
+== ✅ Update Address ==
+User -> AddressEditScreen : ✅ Update Address
+AddressEditScreen -> UpdateAddressApi : ✅ Update Address
 activate UpdateAddressApi
+UpdateAddressApi -> PostalAddress : read
 group transaction (API atomic boundary)
 UpdateAddressApi -> AuditLog : create
 UpdateAddressApi -> PostalAddress : update
 end
-UpdateAddressApi --> AddressEditScreen : Address Edit Screen
-AddressEditScreen --> User : Address Edit Screen
+UpdateAddressApi --> AddressEditScreen : 🖥️ Address Edit Screen
+AddressEditScreen --> User : 🖥️ Address Edit Screen
 deactivate UpdateAddressApi
 
-== Update Personal Information ==
-User -> ProfileScreen : Update Personal Information
-ProfileScreen -> UpdateProfileApi : Update Personal Information
+== ✅ Update Personal Information ==
+User -> ProfileScreen : ✅ Update Personal Information
+ProfileScreen -> UpdateProfileApi : ✅ Update Personal Information
 activate UpdateProfileApi
+UpdateProfileApi -> PersonalInfo : read
 group transaction (API atomic boundary)
 UpdateProfileApi -> AuditLog : create
 UpdateProfileApi -> PersonalInfo : update
 end
-UpdateProfileApi --> ProfileScreen : Personal Information Screen
-ProfileScreen --> User : Personal Information Screen
+UpdateProfileApi --> ProfileScreen : 🖥️ Personal Information Screen
+ProfileScreen --> User : 🖥️ Personal Information Screen
 deactivate UpdateProfileApi
+
+== ✅ View Personal Information ==
+User -> ProfileScreen : ✅ View Personal Information
+ProfileScreen -> ViewProfileApi : ✅ View Personal Information
+activate ViewProfileApi
+ViewProfileApi -> PersonalInfo : read
+ViewProfileApi -> UserAccount : read
+ViewProfileApi --> ProfileScreen : 🖥️ Personal Information Screen
+ProfileScreen --> User : 🖥️ Personal Information Screen
+deactivate ViewProfileApi
 
 @enduml

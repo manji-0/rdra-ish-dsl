@@ -1,92 +1,171 @@
 @startuml
 !theme plain
+left to right direction
 
-actor "System Administrator" as SysAdmin
-actor "User" as User
+rectangle "System Value" {
+  actor "👤 System Administrator" as SysAdmin
+  actor "👤 User" as User
+}
 
-usecase "Change Password" as ChangePassword
-usecase "Delete Address" as DeleteAddress
-usecase "Delete Card" as DeleteCard
-usecase "List Cards" as ListCards
-usecase "Register Address" as RegisterAddress
-usecase "Register Card" as RegisterCard
-usecase "Request Password Reset" as RequestPasswordReset
-usecase "Reset Password" as ResetPassword
-usecase "Set Initial Password" as SetInitialPassword
-usecase "Set Primary Address" as SetPrimaryAddress
-usecase "Set Primary Card" as SetPrimaryCard
-usecase "Update Address" as UpdateAddress
-usecase "Update Personal Information" as UpdateProfile
-usecase "View Personal Information" as ViewProfile
+rectangle "External Environment" {
+  rectangle "💼 Personal Data Management Business" as PersonalDataMgmt
+  rectangle "📦 Manage Credit Cards" as BucCard
+  rectangle "📦 Manage Password" as BucPassword
+  rectangle "📦 Manage Personal Information" as BucProfile
+}
 
-rectangle "Manage Credit Cards" as BucCard
-rectangle "Manage Password" as BucPassword
-rectangle "Manage Personal Information" as BucProfile
+rectangle "System Boundary" {
+  usecase "✅ Change Password" as ChangePassword
+  usecase "✅ Delete Address" as DeleteAddress
+  usecase "✅ Delete Card" as DeleteCard
+  usecase "✅ List Cards" as ListCards
+  usecase "✅ Register Address" as RegisterAddress
+  usecase "✅ Register Card" as RegisterCard
+  usecase "✅ Request Password Reset" as RequestPasswordReset
+  usecase "✅ Reset Password" as ResetPassword
+  usecase "✅ Set Initial Password" as SetInitialPassword
+  usecase "✅ Set Primary Address" as SetPrimaryAddress
+  usecase "✅ Set Primary Card" as SetPrimaryCard
+  usecase "✅ Update Address" as UpdateAddress
+  usecase "✅ Update Personal Information" as UpdateProfile
+  usecase "✅ View Personal Information" as ViewProfile
+  boundary "🖥️ Address Edit Screen" as AddressEditScreen
+  boundary "🖥️ Address List Screen" as AddressListScreen
+  boundary "🖥️ Card Registration Screen" as CardAddScreen
+  boundary "🖥️ Card List Screen" as CardListScreen
+  boundary "🖥️ Password Change Screen" as PasswordChangeScreen
+  boundary "🖥️ Password Reset Screen" as PasswordResetScreen
+  boundary "🖥️ Password Setup Screen" as PasswordSetScreen
+  boundary "🖥️ Personal Information Screen" as ProfileScreen
+  control "⚡ Restore Account" as Active
+  control "⚡ Delete Account" as Deleted
+  control "⚡ Suspend Account" as Suspended
+}
 
-package "Personal Data System" as PersonalDataSystem
+rectangle "System" {
+  control "🔌 Change Password API" as ChangePasswordApi
+  control "🔌 Delete Address API" as DeleteAddressApi
+  control "🔌 Delete Card API" as DeleteCardApi
+  control "🔌 List Cards API" as ListCardsApi
+  control "🔌 Register Address API" as RegisterAddressApi
+  control "🔌 Register Card API" as RegisterCardApi
+  control "🔌 Request Password Reset API" as RequestPasswordResetApi
+  control "🔌 Reset Password API" as ResetPasswordApi
+  control "🔌 Set Initial Password API" as SetInitialPasswordApi
+  control "🔌 Set Primary Address API" as SetPrimaryAddressApi
+  control "🔌 Set Primary Card API" as SetPrimaryCardApi
+  control "🔌 Update Address API" as UpdateAddressApi
+  control "🔌 Update Profile API" as UpdateProfileApi
+  control "🔌 View Profile API" as ViewProfileApi
+  package "🧩 Personal Data System" as PersonalDataSystem
+  database "🗄️ Audit Log" as AuditLog
+  database "🗄️ Credit Card" as CreditCard
+  database "🗄️ Password Credential" as PasswordCredential
+  database "🗄️ Personal Information" as PersonalInfo
+  database "🗄️ Postal Address" as PostalAddress
+  database "🗄️ User Account" as UserAccount
+  collections "🔄 active" as UserAccount_active
+  collections "🔄 deleted" as UserAccount_deleted
+  collections "🔄 suspended" as UserAccount_suspended
+}
 
-
-database "Audit Log" as AuditLog
-database "Credit Card" as CreditCard
-database "Password Credential" as PasswordCredential
-database "Personal Information" as PersonalInfo
-database "Postal Address" as PostalAddress
-database "User Account" as UserAccount
-
-boundary "Address Edit Screen" as AddressEditScreen
-boundary "Address List Screen" as AddressListScreen
-boundary "Card Registration Screen" as CardAddScreen
-boundary "Card List Screen" as CardListScreen
-boundary "Password Change Screen" as PasswordChangeScreen
-boundary "Password Reset Screen" as PasswordResetScreen
-boundary "Password Setup Screen" as PasswordSetScreen
-boundary "Personal Information Screen" as ProfileScreen
-
-control "Restore Account" as Active
-control "Delete Account" as Deleted
-control "Suspend Account" as Suspended
-
-collections "Active" as Active
-collections "Deleted" as Deleted
-collections "Suspended" as Suspended
-
-User --> BucProfile
-User --> BucCard
-User --> BucPassword
+User --> BucProfile : performs
+User --> BucCard : performs
+User --> BucPassword : performs
+SetPrimaryCardApi ..> AuditLog : creates
+SetPrimaryCardApi ..> CreditCard : reads
+SetPrimaryCardApi ..> CreditCard : updates
+SetInitialPasswordApi ..> PasswordCredential : creates
+SetInitialPasswordApi ..> AuditLog : creates
+ChangePasswordApi ..> AuditLog : creates
+ChangePasswordApi ..> PasswordCredential : reads
+ChangePasswordApi ..> PasswordCredential : updates
+RequestPasswordResetApi ..> AuditLog : creates
+RequestPasswordResetApi ..> UserAccount : reads
+ResetPasswordApi ..> AuditLog : creates
+ResetPasswordApi ..> PasswordCredential : updates
+ViewProfileApi ..> UserAccount : reads
+ViewProfileApi ..> PersonalInfo : reads
+UpdateProfileApi ..> AuditLog : creates
+UpdateProfileApi ..> PersonalInfo : reads
+UpdateProfileApi ..> PersonalInfo : updates
+RegisterAddressApi ..> PostalAddress : creates
+RegisterAddressApi ..> AuditLog : creates
+UpdateAddressApi ..> AuditLog : creates
+UpdateAddressApi ..> PostalAddress : reads
+UpdateAddressApi ..> PostalAddress : updates
+DeleteAddressApi ..> AuditLog : creates
+DeleteAddressApi ..> PostalAddress : deletes
+SetPrimaryAddressApi ..> AuditLog : creates
+SetPrimaryAddressApi ..> PostalAddress : reads
+SetPrimaryAddressApi ..> PostalAddress : updates
+ListCardsApi ..> CreditCard : reads
+RegisterCardApi ..> CreditCard : creates
+RegisterCardApi ..> AuditLog : creates
+DeleteCardApi ..> AuditLog : creates
+DeleteCardApi ..> CreditCard : deletes
 BucProfile ..> PersonalDataMgmt : belongs
-BucProfile ..> ViewProfile : contains
-BucProfile ..> UpdateProfile : contains
-BucProfile ..> RegisterAddress : contains
-BucProfile ..> UpdateAddress : contains
-BucProfile ..> DeleteAddress : contains
-BucProfile ..> SetPrimaryAddress : contains
+BucProfile --> ViewProfile : contains
+BucProfile --> UpdateProfile : contains
+BucProfile --> RegisterAddress : contains
+BucProfile --> UpdateAddress : contains
+BucProfile --> DeleteAddress : contains
+BucProfile --> SetPrimaryAddress : contains
 BucCard ..> PersonalDataMgmt : belongs
-BucCard ..> SetPrimaryCard : contains
-BucCard ..> ListCards : contains
-BucCard ..> RegisterCard : contains
-BucCard ..> DeleteCard : contains
+BucCard --> SetPrimaryCard : contains
+BucCard --> ListCards : contains
+BucCard --> RegisterCard : contains
+BucCard --> DeleteCard : contains
 BucPassword ..> PersonalDataMgmt : belongs
-BucPassword ..> SetInitialPassword : contains
-BucPassword ..> ChangePassword : contains
-BucPassword ..> RequestPasswordReset : contains
-BucPassword ..> ResetPassword : contains
-PersonalInfo -- UserAccount
-PostalAddress -- UserAccount
-CreditCard -- UserAccount
-PasswordCredential -- UserAccount
-AuditLog -- UserAccount
+BucPassword --> SetInitialPassword : contains
+BucPassword --> ChangePassword : contains
+BucPassword --> RequestPasswordReset : contains
+BucPassword --> ResetPassword : contains
+PersonalInfo -- UserAccount : 1:1
+PostalAddress -- UserAccount : N:1
+CreditCard -- UserAccount : N:1
+PasswordCredential -- UserAccount : 1:1
+AuditLog -- UserAccount : N:1
+PersonalDataSystem --> SetPrimaryCardApi : contains
+PersonalDataSystem --> SetInitialPasswordApi : contains
+PersonalDataSystem --> ChangePasswordApi : contains
+PersonalDataSystem --> RequestPasswordResetApi : contains
+PersonalDataSystem --> ResetPasswordApi : contains
+PersonalDataSystem --> ViewProfileApi : contains
+PersonalDataSystem --> UpdateProfileApi : contains
+PersonalDataSystem --> RegisterAddressApi : contains
+PersonalDataSystem --> UpdateAddressApi : contains
+PersonalDataSystem --> DeleteAddressApi : contains
+PersonalDataSystem --> SetPrimaryAddressApi : contains
+PersonalDataSystem --> ListCardsApi : contains
+PersonalDataSystem --> RegisterCardApi : contains
+PersonalDataSystem --> DeleteCardApi : contains
 SetPrimaryCard ..> CardListScreen : displays
+SetPrimaryCard ..> SetPrimaryCardApi : invokes
 SetInitialPassword ..> PasswordSetScreen : displays
+SetInitialPassword ..> SetInitialPasswordApi : invokes
 ChangePassword ..> PasswordChangeScreen : displays
+ChangePassword ..> ChangePasswordApi : invokes
 RequestPasswordReset ..> PasswordResetScreen : displays
+RequestPasswordReset ..> RequestPasswordResetApi : invokes
 ResetPassword ..> PasswordResetScreen : displays
+ResetPassword ..> ResetPasswordApi : invokes
 ViewProfile ..> ProfileScreen : displays
+ViewProfile ..> ViewProfileApi : invokes
 UpdateProfile ..> ProfileScreen : displays
+UpdateProfile ..> UpdateProfileApi : invokes
 RegisterAddress ..> AddressEditScreen : displays
+RegisterAddress ..> RegisterAddressApi : invokes
 UpdateAddress ..> AddressEditScreen : displays
+UpdateAddress ..> UpdateAddressApi : invokes
 DeleteAddress ..> AddressListScreen : displays
+DeleteAddress ..> DeleteAddressApi : invokes
 SetPrimaryAddress ..> AddressListScreen : displays
+SetPrimaryAddress ..> SetPrimaryAddressApi : invokes
 ListCards ..> CardListScreen : displays
+ListCards ..> ListCardsApi : invokes
 RegisterCard ..> CardAddScreen : displays
+RegisterCard ..> RegisterCardApi : invokes
 DeleteCard ..> CardListScreen : displays
+DeleteCard ..> DeleteCardApi : invokes
 @enduml

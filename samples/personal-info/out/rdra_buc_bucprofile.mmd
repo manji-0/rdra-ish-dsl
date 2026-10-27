@@ -1,33 +1,73 @@
-graph TD
-  User(["👤 User"])
-  DeleteAddress(["Delete Address"])
-  RegisterAddress(["Register Address"])
-  SetPrimaryAddress(["Set Primary Address"])
-  UpdateAddress(["Update Address"])
-  UpdateProfile(["Update Personal Information"])
-  ViewProfile(["View Personal Information"])
-  BucProfile["📦 Manage Personal Information"]
-  AuditLog[("🗄 Audit Log")]
-  PersonalInfo[("🗄 Personal Information")]
-  PostalAddress[("🗄 Postal Address")]
-  UserAccount[("🗄 User Account")]
-  AddressEditScreen[["Address Edit Screen"]]
-  AddressListScreen[["Address List Screen"]]
-  ProfileScreen[["Personal Information Screen"]]
-  User --> BucProfile
-  BucProfile --> PersonalDataMgmt
-  BucProfile --> ViewProfile
-  BucProfile --> UpdateProfile
-  BucProfile --> RegisterAddress
-  BucProfile --> UpdateAddress
-  BucProfile --> DeleteAddress
-  BucProfile --> SetPrimaryAddress
-  PersonalInfo --- UserAccount
-  PostalAddress --- UserAccount
-  AuditLog --- UserAccount
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    User(["👤 User"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    PersonalDataMgmt["💼 Personal Data Management Business"]
+    BucProfile["📦 Manage Personal Information"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    DeleteAddress(["✅ Delete Address"])
+    RegisterAddress(["✅ Register Address"])
+    SetPrimaryAddress(["✅ Set Primary Address"])
+    UpdateAddress(["✅ Update Address"])
+    UpdateProfile(["✅ Update Personal Information"])
+    ViewProfile(["✅ View Personal Information"])
+    AddressEditScreen[["🖥️ Address Edit Screen"]]
+    AddressListScreen[["🖥️ Address List Screen"]]
+    ProfileScreen[["🖥️ Personal Information Screen"]]
+  end
+  subgraph layer_system[System]
+    direction TB
+    DeleteAddressApi["🔌 Delete Address API"]
+    RegisterAddressApi["🔌 Register Address API"]
+    SetPrimaryAddressApi["🔌 Set Primary Address API"]
+    UpdateAddressApi["🔌 Update Address API"]
+    UpdateProfileApi["🔌 Update Profile API"]
+    ViewProfileApi["🔌 View Profile API"]
+    AuditLog[("🗄️ Audit Log")]
+    PersonalInfo[("🗄️ Personal Information")]
+    PostalAddress[("🗄️ Postal Address")]
+    UserAccount[("🗄️ User Account")]
+  end
+  User -->|performs| BucProfile
+  ViewProfileApi -.->|reads| UserAccount
+  ViewProfileApi -.->|reads| PersonalInfo
+  UpdateProfileApi -.->|creates| AuditLog
+  UpdateProfileApi -.->|reads| PersonalInfo
+  UpdateProfileApi -.->|updates| PersonalInfo
+  RegisterAddressApi -.->|creates| PostalAddress
+  RegisterAddressApi -.->|creates| AuditLog
+  UpdateAddressApi -.->|creates| AuditLog
+  UpdateAddressApi -.->|reads| PostalAddress
+  UpdateAddressApi -.->|updates| PostalAddress
+  DeleteAddressApi -.->|creates| AuditLog
+  DeleteAddressApi -.->|deletes| PostalAddress
+  SetPrimaryAddressApi -.->|creates| AuditLog
+  SetPrimaryAddressApi -.->|reads| PostalAddress
+  SetPrimaryAddressApi -.->|updates| PostalAddress
+  BucProfile -.->|belongs| PersonalDataMgmt
+  BucProfile -->|contains| ViewProfile
+  BucProfile -->|contains| UpdateProfile
+  BucProfile -->|contains| RegisterAddress
+  BucProfile -->|contains| UpdateAddress
+  BucProfile -->|contains| DeleteAddress
+  BucProfile -->|contains| SetPrimaryAddress
+  PersonalInfo ---|1:1| UserAccount
+  PostalAddress ---|N:1| UserAccount
+  AuditLog ---|N:1| UserAccount
   ViewProfile -.->|displays| ProfileScreen
+  ViewProfile -.->|invokes| ViewProfileApi
   UpdateProfile -.->|displays| ProfileScreen
+  UpdateProfile -.->|invokes| UpdateProfileApi
   RegisterAddress -.->|displays| AddressEditScreen
+  RegisterAddress -.->|invokes| RegisterAddressApi
   UpdateAddress -.->|displays| AddressEditScreen
+  UpdateAddress -.->|invokes| UpdateAddressApi
   DeleteAddress -.->|displays| AddressListScreen
+  DeleteAddress -.->|invokes| DeleteAddressApi
   SetPrimaryAddress -.->|displays| AddressListScreen
+  SetPrimaryAddress -.->|invokes| SetPrimaryAddressApi

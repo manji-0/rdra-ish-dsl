@@ -1,112 +1,190 @@
 @startuml
 !theme plain
+left to right direction
 
-actor "Administrator" as Admin
-actor "Customer" as Customer
+rectangle "System Value" {
+  actor "👤 Administrator" as Admin
+  actor "👤 Customer" as Customer
+}
 
-usecase "Add to Cart" as AddToCart
-usecase "Authorize Payment" as AuthorizePayment
-usecase "Cancel Order" as Cancel
-usecase "Capture Payment" as Capture
-usecase "Confirm Order Details" as ConfirmOrder
-usecase "Enter Payment Information" as InputPaymentInfo
-usecase "Place Order" as PlaceOrder
-usecase "Refund Payment" as RefundPayment
-usecase "Remove from Cart" as RemoveCartItem
-usecase "Search Products" as SearchProducts
-usecase "Select Shipping Address" as SelectAddress
-usecase "Change Cart Item Quantity" as UpdateCartItem
-usecase "View Cart" as ViewCart
-usecase "View Order History" as ViewOrderHistory
-usecase "View Product Details" as ViewProduct
+rectangle "External Environment" {
+  component "🌐 Payment Gateway" as PaymentGW
+  component "🌐 Shipping Service" as ShippingSvc
+  rectangle "💼 EC Shopping Business" as EcShopping
+  rectangle "📦 Add Products to Cart" as BucCart
+  rectangle "📦 Process Order" as BucOrder
+  rectangle "📦 Make Payment" as BucPayment
+}
 
-rectangle "Add Products to Cart" as BucCart
-rectangle "Process Order" as BucOrder
-rectangle "Make Payment" as BucPayment
+rectangle "System Boundary" {
+  usecase "✅ Add to Cart" as AddToCart
+  usecase "✅ Authorize Payment" as AuthorizePayment
+  usecase "✅ Cancel Order" as Cancel
+  usecase "✅ Capture Payment" as Capture
+  usecase "✅ Confirm Order Details" as ConfirmOrder
+  usecase "✅ Enter Payment Information" as InputPaymentInfo
+  usecase "✅ Place Order" as PlaceOrder
+  usecase "✅ Refund Payment" as RefundPayment
+  usecase "✅ Remove from Cart" as RemoveCartItem
+  usecase "✅ Search Products" as SearchProducts
+  usecase "✅ Select Shipping Address" as SelectAddress
+  usecase "✅ Change Cart Item Quantity" as UpdateCartItem
+  usecase "✅ View Cart" as ViewCart
+  usecase "✅ View Order History" as ViewOrderHistory
+  usecase "✅ View Product Details" as ViewProduct
+  boundary "🖥️ Address Selection Screen" as AddressSelectScreen
+  boundary "🖥️ Cart Screen" as CartScreen
+  boundary "🖥️ Order Complete Screen" as OrderCompleteScreen
+  boundary "🖥️ Order Confirmation Screen" as OrderConfirmScreen
+  boundary "🖥️ Order History Screen" as OrderHistoryScreen
+  boundary "🖥️ Payment Information Screen" as PaymentInputScreen
+  boundary "🖥️ Payment Result Screen" as PaymentResultScreen
+  boundary "🖥️ Product Detail Screen" as ProductDetailScreen
+  boundary "🖥️ Product Search Screen" as ProductSearchScreen
+  control "⚡ Cancel Order" as Cancel
+  control "⚡ Capture Payment" as Capture
+  control "⚡ Confirm Delivery" as Deliver
+  control "⚡ Start Shipping" as Ship
+}
 
-package "Commerce System" as CommerceSystem
+rectangle "System" {
+  control "🔌 Add To Cart API" as AddToCartApi
+  control "🔌 Cancel Order API" as CancelOrderApi
+  control "🔌 Confirm Order API" as ConfirmOrderApi
+  control "🔌 Order History API" as OrderHistoryApi
+  control "🔌 Payment Authorization API" as PaymentAuthorizationApi
+  control "🔌 Payment Capture API" as PaymentCaptureApi
+  control "🔌 Payment Input API" as PaymentInputApi
+  control "🔌 Payment Refund API" as PaymentRefundApi
+  control "🔌 Place Order API" as PlaceOrderApi
+  control "🔌 Product Detail API" as ProductDetailApi
+  control "🔌 Product Search API" as ProductSearchApi
+  control "🔌 Remove Cart Item API" as RemoveCartItemApi
+  control "🔌 Select Address API" as SelectAddressApi
+  control "🔌 Update Cart Item API" as UpdateCartItemApi
+  control "🔌 View Cart API" as ViewCartApi
+  package "🧩 Commerce System" as CommerceSystem
+  database "🗄️ Cart" as Cart
+  database "🗄️ Cart Item" as CartItem
+  database "🗄️ Category" as Category
+  database "🗄️ Customer Account" as CustomerAccount
+  database "🗄️ Order" as Order
+  database "🗄️ Order Line" as OrderLine
+  database "🗄️ Payment" as Payment
+  database "🗄️ Product" as Product
+  database "🗄️ Shipping Address" as ShippingAddress
+  collections "🔄 cancelled" as Order_cancelled
+  collections "🔄 delivered" as Order_delivered
+  collections "🔄 paid" as Order_paid
+  collections "🔄 pending" as Order_pending
+  collections "🔄 shipped" as Order_shipped
+}
 
-component "Payment Gateway" as PaymentGW
-component "Shipping Service" as ShippingSvc
-
-database "Cart" as Cart
-database "Cart Item" as CartItem
-database "Category" as Category
-database "Customer Account" as CustomerAccount
-database "Order" as Order
-database "Order Line" as OrderLine
-database "Payment" as Payment
-database "Product" as Product
-database "Shipping Address" as ShippingAddress
-
-boundary "Address Selection Screen" as AddressSelectScreen
-boundary "Cart Screen" as CartScreen
-boundary "Order Complete Screen" as OrderCompleteScreen
-boundary "Order Confirmation Screen" as OrderConfirmScreen
-boundary "Order History Screen" as OrderHistoryScreen
-boundary "Payment Information Screen" as PaymentInputScreen
-boundary "Payment Result Screen" as PaymentResultScreen
-boundary "Product Detail Screen" as ProductDetailScreen
-boundary "Product Search Screen" as ProductSearchScreen
-
-control "Cancel Order" as Cancel
-control "Capture Payment" as Capture
-control "Confirm Delivery" as Deliver
-control "Start Shipping" as Ship
-
-collections "Cancelled" as Cancelled
-collections "Delivered" as Delivered
-collections "Payment Completed" as Paid
-collections "Order Received" as Pending
-collections "Shipped" as Shipped
-
-Customer --> BucPayment
-Customer --> BucOrder
-Customer --> BucCart
-Customer --> PaymentGW
+Customer --> BucPayment : performs
+Customer --> BucOrder : performs
+Customer --> BucCart : performs
+Customer --> PaymentGW : uses
+ProductSearchApi ..> Category : reads
+ProductSearchApi ..> Product : reads
+ProductDetailApi ..> Product : reads
+AddToCartApi ..> CartItem : creates
+AddToCartApi ..> Product : reads
+AddToCartApi ..> Cart : updates
+UpdateCartItemApi ..> CartItem : updates
+RemoveCartItemApi ..> CartItem : deletes
+ViewCartApi ..> Product : reads
+ViewCartApi ..> Cart : reads
+ViewCartApi ..> CartItem : reads
+PaymentInputApi ..> Payment : creates
+PaymentInputApi ..> Order : reads
+PaymentAuthorizationApi ..> Payment : updates
+PaymentCaptureApi ..> Order : updates
+PaymentCaptureApi ..> Payment : updates
+PaymentRefundApi ..> Order : updates
+PaymentRefundApi ..> Payment : updates
+SelectAddressApi ..> ShippingAddress : reads
+ConfirmOrderApi ..> ShippingAddress : reads
+ConfirmOrderApi ..> Cart : reads
+ConfirmOrderApi ..> CartItem : reads
+PlaceOrderApi ..> Order : creates
+PlaceOrderApi ..> OrderLine : creates
+PlaceOrderApi ..> Cart : updates
+OrderHistoryApi ..> Order : reads
+OrderHistoryApi ..> OrderLine : reads
+CancelOrderApi ..> Order : updates
 BucPayment ..> EcShopping : belongs
-BucPayment ..> InputPaymentInfo : contains
-BucPayment ..> AuthorizePayment : contains
-BucPayment ..> Capture : contains
-BucPayment ..> RefundPayment : contains
+BucPayment --> InputPaymentInfo : contains
+BucPayment --> AuthorizePayment : contains
+BucPayment --> Capture : contains
+BucPayment --> RefundPayment : contains
 BucOrder ..> EcShopping : belongs
-BucOrder ..> SelectAddress : contains
-BucOrder ..> ConfirmOrder : contains
-BucOrder ..> PlaceOrder : contains
-BucOrder ..> ViewOrderHistory : contains
-BucOrder ..> Cancel : contains
+BucOrder --> SelectAddress : contains
+BucOrder --> ConfirmOrder : contains
+BucOrder --> PlaceOrder : contains
+BucOrder --> ViewOrderHistory : contains
+BucOrder --> Cancel : contains
 BucCart ..> EcShopping : belongs
-BucCart ..> SearchProducts : contains
-BucCart ..> ViewProduct : contains
-BucCart ..> AddToCart : contains
-BucCart ..> UpdateCartItem : contains
-BucCart ..> RemoveCartItem : contains
-BucCart ..> ViewCart : contains
-Product -- Category
-ShippingAddress -- CustomerAccount
-Cart -- CustomerAccount
-CartItem -- Product
-CartItem -- Cart
-Order -- CustomerAccount
-Order -- ShippingAddress
-OrderLine -- Product
-OrderLine -- Order
-Payment -- Order
+BucCart --> SearchProducts : contains
+BucCart --> ViewProduct : contains
+BucCart --> AddToCart : contains
+BucCart --> UpdateCartItem : contains
+BucCart --> RemoveCartItem : contains
+BucCart --> ViewCart : contains
+Product -- Category : N:1
+ShippingAddress -- CustomerAccount : N:1
+Cart -- CustomerAccount : N:1
+CartItem -- Product : N:1
+CartItem -- Cart : N:1
+Order -- CustomerAccount : N:1
+Order -- ShippingAddress : N:1
+OrderLine -- Product : N:1
+OrderLine -- Order : N:1
+Payment -- Order : 1:1
+CommerceSystem --> ProductSearchApi : contains
+CommerceSystem --> ProductDetailApi : contains
+CommerceSystem --> AddToCartApi : contains
+CommerceSystem --> UpdateCartItemApi : contains
+CommerceSystem --> RemoveCartItemApi : contains
+CommerceSystem --> ViewCartApi : contains
+CommerceSystem --> PaymentInputApi : contains
+CommerceSystem --> PaymentAuthorizationApi : contains
+CommerceSystem --> PaymentCaptureApi : contains
+CommerceSystem --> PaymentRefundApi : contains
+CommerceSystem --> SelectAddressApi : contains
+CommerceSystem --> ConfirmOrderApi : contains
+CommerceSystem --> PlaceOrderApi : contains
+CommerceSystem --> OrderHistoryApi : contains
+CommerceSystem --> CancelOrderApi : contains
 SearchProducts ..> ProductSearchScreen : displays
+SearchProducts ..> ProductSearchApi : invokes
 ViewProduct ..> ProductDetailScreen : displays
+ViewProduct ..> ProductDetailApi : invokes
 AddToCart ..> CartScreen : displays
+AddToCart ..> AddToCartApi : invokes
 UpdateCartItem ..> CartScreen : displays
+UpdateCartItem ..> UpdateCartItemApi : invokes
 RemoveCartItem ..> CartScreen : displays
+RemoveCartItem ..> RemoveCartItemApi : invokes
 ViewCart ..> CartScreen : displays
+ViewCart ..> ViewCartApi : invokes
 InputPaymentInfo ..> PaymentInputScreen : displays
+InputPaymentInfo ..> PaymentInputApi : invokes
 AuthorizePayment ..> PaymentResultScreen : displays
-Capture ..> Capture : raises
+AuthorizePayment ..> PaymentAuthorizationApi : invokes
 Capture ..> PaymentResultScreen : displays
+Capture ..> PaymentCaptureApi : invokes
+Capture ..> Capture : raises
 RefundPayment ..> PaymentResultScreen : displays
+RefundPayment ..> PaymentRefundApi : invokes
 SelectAddress ..> AddressSelectScreen : displays
+SelectAddress ..> SelectAddressApi : invokes
 ConfirmOrder ..> OrderConfirmScreen : displays
+ConfirmOrder ..> ConfirmOrderApi : invokes
 PlaceOrder ..> OrderCompleteScreen : displays
+PlaceOrder ..> PlaceOrderApi : invokes
 ViewOrderHistory ..> OrderHistoryScreen : displays
-Cancel ..> Cancel : raises
+ViewOrderHistory ..> OrderHistoryApi : invokes
 Cancel ..> OrderHistoryScreen : displays
+Cancel ..> CancelOrderApi : invokes
+Cancel ..> Cancel : raises
 @enduml

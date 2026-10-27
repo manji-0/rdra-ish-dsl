@@ -1,100 +1,186 @@
-graph TD
-  Admin(["👤 Administrator"])
-  Customer(["👤 Customer"])
-  AddToCart(["Add to Cart"])
-  AuthorizePayment(["Authorize Payment"])
-  Cancel(["Cancel Order"])
-  Capture(["Capture Payment"])
-  ConfirmOrder(["Confirm Order Details"])
-  InputPaymentInfo(["Enter Payment Information"])
-  PlaceOrder(["Place Order"])
-  RefundPayment(["Refund Payment"])
-  RemoveCartItem(["Remove from Cart"])
-  SearchProducts(["Search Products"])
-  SelectAddress(["Select Shipping Address"])
-  UpdateCartItem(["Change Cart Item Quantity"])
-  ViewCart(["View Cart"])
-  ViewOrderHistory(["View Order History"])
-  ViewProduct(["View Product Details"])
-  BucCart["📦 Add Products to Cart"]
-  BucOrder["📦 Process Order"]
-  BucPayment["📦 Make Payment"]
-  CommerceSystem["🧩 Commerce System"]
-  PaymentGW[/"Payment Gateway"/]
-  ShippingSvc[/"Shipping Service"/]
-  Cart[("🗄 Cart")]
-  CartItem[("🗄 Cart Item")]
-  Category[("🗄 Category")]
-  CustomerAccount[("🗄 Customer Account")]
-  Order[("🗄 Order")]
-  OrderLine[("🗄 Order Line")]
-  Payment[("🗄 Payment")]
-  Product[("🗄 Product")]
-  ShippingAddress[("🗄 Shipping Address")]
-  AddressSelectScreen[["Address Selection Screen"]]
-  CartScreen[["Cart Screen"]]
-  OrderCompleteScreen[["Order Complete Screen"]]
-  OrderConfirmScreen[["Order Confirmation Screen"]]
-  OrderHistoryScreen[["Order History Screen"]]
-  PaymentInputScreen[["Payment Information Screen"]]
-  PaymentResultScreen[["Payment Result Screen"]]
-  ProductDetailScreen[["Product Detail Screen"]]
-  ProductSearchScreen[["Product Search Screen"]]
-  Cancel{"Cancel Order"}
-  Capture{"Capture Payment"}
-  Deliver{"Confirm Delivery"}
-  Ship{"Start Shipping"}
-  Cancelled("Cancelled")  
-  Delivered("Delivered")  
-  Paid("Payment Completed")  
-  Pending("Order Received")  
-  Shipped("Shipped")  
-  Customer --> BucPayment
-  Customer --> BucOrder
-  Customer --> BucCart
-  Customer --> PaymentGW
-  BucPayment --> EcShopping
-  BucPayment --> InputPaymentInfo
-  BucPayment --> AuthorizePayment
-  BucPayment --> Capture
-  BucPayment --> RefundPayment
-  BucOrder --> EcShopping
-  BucOrder --> SelectAddress
-  BucOrder --> ConfirmOrder
-  BucOrder --> PlaceOrder
-  BucOrder --> ViewOrderHistory
-  BucOrder --> Cancel
-  BucCart --> EcShopping
-  BucCart --> SearchProducts
-  BucCart --> ViewProduct
-  BucCart --> AddToCart
-  BucCart --> UpdateCartItem
-  BucCart --> RemoveCartItem
-  BucCart --> ViewCart
-  Product --- Category
-  ShippingAddress --- CustomerAccount
-  Cart --- CustomerAccount
-  CartItem --- Product
-  CartItem --- Cart
-  Order --- CustomerAccount
-  Order --- ShippingAddress
-  OrderLine --- Product
-  OrderLine --- Order
-  Payment --- Order
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    Admin(["👤 Administrator"])
+    Customer(["👤 Customer"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    PaymentGW[/"🌐 Payment Gateway"/]
+    ShippingSvc[/"🌐 Shipping Service"/]
+    EcShopping["💼 EC Shopping Business"]
+    BucCart["📦 Add Products to Cart"]
+    BucOrder["📦 Process Order"]
+    BucPayment["📦 Make Payment"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    AddToCart(["✅ Add to Cart"])
+    AuthorizePayment(["✅ Authorize Payment"])
+    Cancel(["✅ Cancel Order"])
+    Capture(["✅ Capture Payment"])
+    ConfirmOrder(["✅ Confirm Order Details"])
+    InputPaymentInfo(["✅ Enter Payment Information"])
+    PlaceOrder(["✅ Place Order"])
+    RefundPayment(["✅ Refund Payment"])
+    RemoveCartItem(["✅ Remove from Cart"])
+    SearchProducts(["✅ Search Products"])
+    SelectAddress(["✅ Select Shipping Address"])
+    UpdateCartItem(["✅ Change Cart Item Quantity"])
+    ViewCart(["✅ View Cart"])
+    ViewOrderHistory(["✅ View Order History"])
+    ViewProduct(["✅ View Product Details"])
+    AddressSelectScreen[["🖥️ Address Selection Screen"]]
+    CartScreen[["🖥️ Cart Screen"]]
+    OrderCompleteScreen[["🖥️ Order Complete Screen"]]
+    OrderConfirmScreen[["🖥️ Order Confirmation Screen"]]
+    OrderHistoryScreen[["🖥️ Order History Screen"]]
+    PaymentInputScreen[["🖥️ Payment Information Screen"]]
+    PaymentResultScreen[["🖥️ Payment Result Screen"]]
+    ProductDetailScreen[["🖥️ Product Detail Screen"]]
+    ProductSearchScreen[["🖥️ Product Search Screen"]]
+    Cancel{"⚡ Cancel Order"}
+    Capture{"⚡ Capture Payment"}
+    Deliver{"⚡ Confirm Delivery"}
+    Ship{"⚡ Start Shipping"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    AddToCartApi["🔌 Add To Cart API"]
+    CancelOrderApi["🔌 Cancel Order API"]
+    ConfirmOrderApi["🔌 Confirm Order API"]
+    OrderHistoryApi["🔌 Order History API"]
+    PaymentAuthorizationApi["🔌 Payment Authorization API"]
+    PaymentCaptureApi["🔌 Payment Capture API"]
+    PaymentInputApi["🔌 Payment Input API"]
+    PaymentRefundApi["🔌 Payment Refund API"]
+    PlaceOrderApi["🔌 Place Order API"]
+    ProductDetailApi["🔌 Product Detail API"]
+    ProductSearchApi["🔌 Product Search API"]
+    RemoveCartItemApi["🔌 Remove Cart Item API"]
+    SelectAddressApi["🔌 Select Address API"]
+    UpdateCartItemApi["🔌 Update Cart Item API"]
+    ViewCartApi["🔌 View Cart API"]
+    CommerceSystem["🧩 Commerce System"]
+    Cart[("🗄️ Cart")]
+    CartItem[("🗄️ Cart Item")]
+    Category[("🗄️ Category")]
+    CustomerAccount[("🗄️ Customer Account")]
+    Order[("🗄️ Order")]
+    OrderLine[("🗄️ Order Line")]
+    Payment[("🗄️ Payment")]
+    Product[("🗄️ Product")]
+    ShippingAddress[("🗄️ Shipping Address")]
+    Order_cancelled("🔄 cancelled")
+    Order_delivered("🔄 delivered")
+    Order_paid("🔄 paid")
+    Order_pending("🔄 pending")
+    Order_shipped("🔄 shipped")
+  end
+  Customer -->|performs| BucPayment
+  Customer -->|performs| BucOrder
+  Customer -->|performs| BucCart
+  Customer -->|uses| PaymentGW
+  ProductSearchApi -.->|reads| Category
+  ProductSearchApi -.->|reads| Product
+  ProductDetailApi -.->|reads| Product
+  AddToCartApi -.->|creates| CartItem
+  AddToCartApi -.->|reads| Product
+  AddToCartApi -.->|updates| Cart
+  UpdateCartItemApi -.->|updates| CartItem
+  RemoveCartItemApi -.->|deletes| CartItem
+  ViewCartApi -.->|reads| Product
+  ViewCartApi -.->|reads| Cart
+  ViewCartApi -.->|reads| CartItem
+  PaymentInputApi -.->|creates| Payment
+  PaymentInputApi -.->|reads| Order
+  PaymentAuthorizationApi -.->|updates| Payment
+  PaymentCaptureApi -.->|updates| Order
+  PaymentCaptureApi -.->|updates| Payment
+  PaymentRefundApi -.->|updates| Order
+  PaymentRefundApi -.->|updates| Payment
+  SelectAddressApi -.->|reads| ShippingAddress
+  ConfirmOrderApi -.->|reads| ShippingAddress
+  ConfirmOrderApi -.->|reads| Cart
+  ConfirmOrderApi -.->|reads| CartItem
+  PlaceOrderApi -.->|creates| Order
+  PlaceOrderApi -.->|creates| OrderLine
+  PlaceOrderApi -.->|updates| Cart
+  OrderHistoryApi -.->|reads| Order
+  OrderHistoryApi -.->|reads| OrderLine
+  CancelOrderApi -.->|updates| Order
+  BucPayment -.->|belongs| EcShopping
+  BucPayment -->|contains| InputPaymentInfo
+  BucPayment -->|contains| AuthorizePayment
+  BucPayment -->|contains| Capture
+  BucPayment -->|contains| RefundPayment
+  BucOrder -.->|belongs| EcShopping
+  BucOrder -->|contains| SelectAddress
+  BucOrder -->|contains| ConfirmOrder
+  BucOrder -->|contains| PlaceOrder
+  BucOrder -->|contains| ViewOrderHistory
+  BucOrder -->|contains| Cancel
+  BucCart -.->|belongs| EcShopping
+  BucCart -->|contains| SearchProducts
+  BucCart -->|contains| ViewProduct
+  BucCart -->|contains| AddToCart
+  BucCart -->|contains| UpdateCartItem
+  BucCart -->|contains| RemoveCartItem
+  BucCart -->|contains| ViewCart
+  Product ---|N:1| Category
+  ShippingAddress ---|N:1| CustomerAccount
+  Cart ---|N:1| CustomerAccount
+  CartItem ---|N:1| Product
+  CartItem ---|N:1| Cart
+  Order ---|N:1| CustomerAccount
+  Order ---|N:1| ShippingAddress
+  OrderLine ---|N:1| Product
+  OrderLine ---|N:1| Order
+  Payment ---|1:1| Order
+  CommerceSystem -->|contains| ProductSearchApi
+  CommerceSystem -->|contains| ProductDetailApi
+  CommerceSystem -->|contains| AddToCartApi
+  CommerceSystem -->|contains| UpdateCartItemApi
+  CommerceSystem -->|contains| RemoveCartItemApi
+  CommerceSystem -->|contains| ViewCartApi
+  CommerceSystem -->|contains| PaymentInputApi
+  CommerceSystem -->|contains| PaymentAuthorizationApi
+  CommerceSystem -->|contains| PaymentCaptureApi
+  CommerceSystem -->|contains| PaymentRefundApi
+  CommerceSystem -->|contains| SelectAddressApi
+  CommerceSystem -->|contains| ConfirmOrderApi
+  CommerceSystem -->|contains| PlaceOrderApi
+  CommerceSystem -->|contains| OrderHistoryApi
+  CommerceSystem -->|contains| CancelOrderApi
   SearchProducts -.->|displays| ProductSearchScreen
+  SearchProducts -.->|invokes| ProductSearchApi
   ViewProduct -.->|displays| ProductDetailScreen
+  ViewProduct -.->|invokes| ProductDetailApi
   AddToCart -.->|displays| CartScreen
+  AddToCart -.->|invokes| AddToCartApi
   UpdateCartItem -.->|displays| CartScreen
+  UpdateCartItem -.->|invokes| UpdateCartItemApi
   RemoveCartItem -.->|displays| CartScreen
+  RemoveCartItem -.->|invokes| RemoveCartItemApi
   ViewCart -.->|displays| CartScreen
+  ViewCart -.->|invokes| ViewCartApi
   InputPaymentInfo -.->|displays| PaymentInputScreen
+  InputPaymentInfo -.->|invokes| PaymentInputApi
   AuthorizePayment -.->|displays| PaymentResultScreen
-  Capture -.->|raises| Capture
+  AuthorizePayment -.->|invokes| PaymentAuthorizationApi
   Capture -.->|displays| PaymentResultScreen
+  Capture -.->|invokes| PaymentCaptureApi
+  Capture -.->|raises| Capture
   RefundPayment -.->|displays| PaymentResultScreen
+  RefundPayment -.->|invokes| PaymentRefundApi
   SelectAddress -.->|displays| AddressSelectScreen
+  SelectAddress -.->|invokes| SelectAddressApi
   ConfirmOrder -.->|displays| OrderConfirmScreen
+  ConfirmOrder -.->|invokes| ConfirmOrderApi
   PlaceOrder -.->|displays| OrderCompleteScreen
+  PlaceOrder -.->|invokes| PlaceOrderApi
   ViewOrderHistory -.->|displays| OrderHistoryScreen
-  Cancel -.->|raises| Cancel
+  ViewOrderHistory -.->|invokes| OrderHistoryApi
   Cancel -.->|displays| OrderHistoryScreen
+  Cancel -.->|invokes| CancelOrderApi
+  Cancel -.->|raises| Cancel

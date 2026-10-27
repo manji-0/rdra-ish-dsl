@@ -1,11 +1,11 @@
 stateDiagram-v2
-  [*] --> Pending
-  state "🔄 Payment Completed" as Paid
-  state "🔄 Shipped" as Shipped
-  state "🔄 Order Received" as Pending
-  state "🔄 Cancelled" as Cancelled
-  state "🔄 Delivered" as Delivered
-  Paid --> Shipped : ⚡ Start Shipping
-  Pending --> Cancelled : ⚡ Cancel Order
-  Pending --> Paid : ⚡ Capture Payment
-  Shipped --> Delivered : ⚡ Confirm Delivery
+  [*] --> Order_pending
+  state "🔄 paid" as Order_paid
+  state "🔄 shipped" as Order_shipped
+  state "🔄 pending" as Order_pending
+  state "🔄 cancelled" as Order_cancelled
+  state "🔄 delivered" as Order_delivered
+  Order_paid --> Order_shipped : ⚡ Start Shipping
+  Order_pending --> Order_cancelled : ⚡ Cancel Order
+  Order_pending --> Order_paid : ⚡ Capture Payment
+  Order_shipped --> Order_delivered : ⚡ Confirm Delivery

@@ -1,21 +1,50 @@
-graph TD
-  User(["👤 User"])
-  DeleteCard(["Delete Card"])
-  ListCards(["List Cards"])
-  RegisterCard(["Register Card"])
-  SetPrimaryCard(["Set Primary Card"])
-  BucCard["📦 Manage Credit Cards"]
-  AuditLog[("🗄 Audit Log")]
-  CreditCard[("🗄 Credit Card")]
-  CardAddScreen[["Card Registration Screen"]]
-  CardListScreen[["Card List Screen"]]
-  User --> BucCard
-  BucCard --> PersonalDataMgmt
-  BucCard --> SetPrimaryCard
-  BucCard --> ListCards
-  BucCard --> RegisterCard
-  BucCard --> DeleteCard
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    User(["👤 User"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    PersonalDataMgmt["💼 Personal Data Management Business"]
+    BucCard["📦 Manage Credit Cards"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    DeleteCard(["✅ Delete Card"])
+    ListCards(["✅ List Cards"])
+    RegisterCard(["✅ Register Card"])
+    SetPrimaryCard(["✅ Set Primary Card"])
+    CardAddScreen[["🖥️ Card Registration Screen"]]
+    CardListScreen[["🖥️ Card List Screen"]]
+  end
+  subgraph layer_system[System]
+    direction TB
+    DeleteCardApi["🔌 Delete Card API"]
+    ListCardsApi["🔌 List Cards API"]
+    RegisterCardApi["🔌 Register Card API"]
+    SetPrimaryCardApi["🔌 Set Primary Card API"]
+    AuditLog[("🗄️ Audit Log")]
+    CreditCard[("🗄️ Credit Card")]
+  end
+  User -->|performs| BucCard
+  SetPrimaryCardApi -.->|creates| AuditLog
+  SetPrimaryCardApi -.->|reads| CreditCard
+  SetPrimaryCardApi -.->|updates| CreditCard
+  ListCardsApi -.->|reads| CreditCard
+  RegisterCardApi -.->|creates| CreditCard
+  RegisterCardApi -.->|creates| AuditLog
+  DeleteCardApi -.->|creates| AuditLog
+  DeleteCardApi -.->|deletes| CreditCard
+  BucCard -.->|belongs| PersonalDataMgmt
+  BucCard -->|contains| SetPrimaryCard
+  BucCard -->|contains| ListCards
+  BucCard -->|contains| RegisterCard
+  BucCard -->|contains| DeleteCard
   SetPrimaryCard -.->|displays| CardListScreen
+  SetPrimaryCard -.->|invokes| SetPrimaryCardApi
   ListCards -.->|displays| CardListScreen
+  ListCards -.->|invokes| ListCardsApi
   RegisterCard -.->|displays| CardAddScreen
+  RegisterCard -.->|invokes| RegisterCardApi
   DeleteCard -.->|displays| CardListScreen
+  DeleteCard -.->|invokes| DeleteCardApi

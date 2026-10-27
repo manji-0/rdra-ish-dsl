@@ -1,24 +1,52 @@
-graph TD
-  Customer(["👤 Customer"])
-  AuthorizePayment(["Authorize Payment"])
-  Capture(["Capture Payment"])
-  InputPaymentInfo(["Enter Payment Information"])
-  RefundPayment(["Refund Payment"])
-  BucPayment["📦 Make Payment"]
-  Order[("🗄 Order")]
-  Payment[("🗄 Payment")]
-  PaymentInputScreen[["Payment Information Screen"]]
-  PaymentResultScreen[["Payment Result Screen"]]
-  Capture{"Capture Payment"}
-  Customer --> BucPayment
-  BucPayment --> EcShopping
-  BucPayment --> InputPaymentInfo
-  BucPayment --> AuthorizePayment
-  BucPayment --> Capture
-  BucPayment --> RefundPayment
-  Payment --- Order
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    Customer(["👤 Customer"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    EcShopping["💼 EC Shopping Business"]
+    BucPayment["📦 Make Payment"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    AuthorizePayment(["✅ Authorize Payment"])
+    Capture(["✅ Capture Payment"])
+    InputPaymentInfo(["✅ Enter Payment Information"])
+    RefundPayment(["✅ Refund Payment"])
+    PaymentInputScreen[["🖥️ Payment Information Screen"]]
+    PaymentResultScreen[["🖥️ Payment Result Screen"]]
+    Capture{"⚡ Capture Payment"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    PaymentAuthorizationApi["🔌 Payment Authorization API"]
+    PaymentCaptureApi["🔌 Payment Capture API"]
+    PaymentInputApi["🔌 Payment Input API"]
+    PaymentRefundApi["🔌 Payment Refund API"]
+    Order[("🗄️ Order")]
+    Payment[("🗄️ Payment")]
+  end
+  Customer -->|performs| BucPayment
+  PaymentInputApi -.->|creates| Payment
+  PaymentInputApi -.->|reads| Order
+  PaymentAuthorizationApi -.->|updates| Payment
+  PaymentCaptureApi -.->|updates| Order
+  PaymentCaptureApi -.->|updates| Payment
+  PaymentRefundApi -.->|updates| Order
+  PaymentRefundApi -.->|updates| Payment
+  BucPayment -.->|belongs| EcShopping
+  BucPayment -->|contains| InputPaymentInfo
+  BucPayment -->|contains| AuthorizePayment
+  BucPayment -->|contains| Capture
+  BucPayment -->|contains| RefundPayment
+  Payment ---|1:1| Order
   InputPaymentInfo -.->|displays| PaymentInputScreen
+  InputPaymentInfo -.->|invokes| PaymentInputApi
   AuthorizePayment -.->|displays| PaymentResultScreen
-  Capture -.->|raises| Capture
+  AuthorizePayment -.->|invokes| PaymentAuthorizationApi
   Capture -.->|displays| PaymentResultScreen
+  Capture -.->|invokes| PaymentCaptureApi
+  Capture -.->|raises| Capture
   RefundPayment -.->|displays| PaymentResultScreen
+  RefundPayment -.->|invokes| PaymentRefundApi
