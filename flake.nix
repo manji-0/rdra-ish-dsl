@@ -66,6 +66,9 @@
               ];
             })
             pkgs.cargo-insta
+            # openssl-sys (rdra-ish-render `kroki` feature, built by --all-features)
+            pkgs.pkg-config
+            pkgs.openssl
 
             # Python packaging (maturin bin bindings, uv publish flow)
             pkgs.maturin
