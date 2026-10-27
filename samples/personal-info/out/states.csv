@@ -1,6 +1,5 @@
 entity_id,entity_label,pattern_idx,column,value,is_initial,is_terminal,via
 AuditLog,Audit Log,0,ip_address,null,true,true,"BucCard/DeleteCard, BucCard/RegisterCard, BucCard/SetPrimaryCard, BucPassword/ChangePassword, BucPassword/RequestPasswordReset, BucPassword/ResetPassword, BucPassword/SetInitialPassword, BucProfile/DeleteAddress, BucProfile/RegisterAddress, BucProfile/SetPrimaryAddress, BucProfile/UpdateAddress, BucProfile/UpdateProfile"
-CreditCard,Credit Card,0,brand,visa,true,true,"BucCard/DeleteCard, BucCard/RegisterCard, BucCard/SetPrimaryCard"
 CreditCard,Credit Card,0,is_primary,false,true,true,"BucCard/DeleteCard, BucCard/RegisterCard, BucCard/SetPrimaryCard"
 PasswordCredential,Password Credential,0,(no axes),,true,true,-
 PersonalInfo,Personal Information,0,birth_date,null,true,true,BucProfile/UpdateProfile

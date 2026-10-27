@@ -50,7 +50,7 @@ entity "Payment" as Payment {
   *id : Int <<PK>>
   --
   amount : Money
-  method : Enum
+  method : PaymentMethod
   status : Enum
   processed_at : DateTime
   gateway_ref : String

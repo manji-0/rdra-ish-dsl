@@ -1,5 +1,12 @@
 module shared.entities
 
+variation CardBrand "Card Brand" {
+  visa       "Visa"
+  mastercard "Mastercard"
+  amex       "American Express"
+  jcb        "JCB"
+}
+
 // ── Account ──────────────────────────────────────────────
 entity UserAccount "User Account" {
   id:            Int      @pk
@@ -34,7 +41,7 @@ entity CreditCard "Credit Card" {
   id:               Int    @pk
   card_number_hash: String @label("Card Number Hash")
   last4:            String @label("Last 4 Digits")
-  brand:            Enum(visa, mastercard, amex, jcb) @label("Brand")
+  brand:            CardBrand @label("Brand")
   expires_month:    Int
   expires_year:     Int
   holder_name:      String @label("Cardholder Name")

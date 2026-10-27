@@ -28,7 +28,7 @@ OrderLine,Order Line,order_id,Int,false,true,Order,false,
 OrderLine,Order Line,product_id,Int,false,true,Product,false,
 Payment,Payment,id,Int,true,false,,false,
 Payment,Payment,amount,Money,false,false,,false,
-Payment,Payment,method,Enum,false,false,,false,credit_card
+Payment,Payment,method,PaymentMethod,false,false,,false,credit_card
 Payment,Payment,status,Enum,false,false,,false,pending
 Payment,Payment,processed_at,DateTime,false,false,,true,
 Payment,Payment,gateway_ref,String,false,false,,true,

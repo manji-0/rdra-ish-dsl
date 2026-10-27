@@ -1,5 +1,37 @@
 module shared.entities
 
+// Values an actor chooses from. They type attribute columns and move no lifecycle.
+variation ConsentType "Consent Type" {
+  treatment "Treatment"
+  privacy   "Privacy"
+  billing   "Billing"
+}
+
+variation OrderType "Order Type" {
+  lab      "Lab"
+  imaging  "Imaging"
+  referral "Referral"
+}
+
+variation PaymentMethod "Payment Method" {
+  cash       "Cash"
+  card       "Card"
+  insurance  "Insurance"
+  adjustment "Adjustment"
+}
+
+variation MessageChannel "Message Channel" {
+  email  "Email"
+  sms    "SMS"
+  portal "Patient portal"
+}
+
+variation AuditSeverity "Audit Severity" {
+  low      "Low"
+  moderate "Moderate"
+  high     "High"
+}
+
 // Patient master data
 entity PatientAccount "Patient Account" {
   id:                Int      @pk
@@ -38,7 +70,7 @@ entity EligibilityCheck "Eligibility Check" {
 
 entity ConsentRecord "Consent Record" {
   id:           Int      @pk
-  consent_type: Enum(treatment, privacy, billing) @default(treatment)
+  consent_type: ConsentType @default(treatment)
   signed_at:    DateTime @null
   expires_at:   DateTime @null
   revoked:      Bool
@@ -120,7 +152,7 @@ entity Diagnosis "Diagnosis" {
 // Orders, results, and prescriptions
 entity ClinicalOrder "Clinical Order" {
   id:           Int      @pk
-  order_type:   Enum(lab, imaging, referral) @default(lab)
+  order_type:   OrderType @default(lab)
   status:       Enum(clordered, clcollected, clresulted, clreviewed, clcancelled) @default(clordered)
   ordered_at:   DateTime
   collected_at: DateTime @null
@@ -171,7 +203,7 @@ entity Claim "Claim" {
 entity PaymentTransaction "Payment Transaction" {
   id:           Int      @pk
   amount:       Money
-  method:       Enum(cash, card, insurance, adjustment) @default(card)
+  method:       PaymentMethod @default(card)
   status:       Enum(paypending, payposted, payfailed, payrefunded) @default(paypending)
   processed_at: DateTime @null
   gateway_ref:  String   @null
@@ -195,7 +227,7 @@ entity CarePlan "Care Plan" {
 
 entity PatientMessage "Patient Message" {
   id:      Int      @pk
-  channel: Enum(email, sms, portal) @default(portal)
+  channel: MessageChannel @default(portal)
   status:  Enum(msgdraft, msgsent, msgread, msgfailed) @default(msgdraft)
   sent_at: DateTime @null
   read_at: DateTime @null
@@ -213,7 +245,7 @@ entity AuditEvent "Audit Event" {
   action:      String
   actor_id:    String
   occurred_at: DateTime
-  severity:    Enum(low, moderate, high) @default(low)
+  severity:    AuditSeverity @default(low)
   is_resolved: Bool
 }
 

@@ -743,3 +743,32 @@ fn state_diag_message_formats_quantifier_not_evaluated() {
     ));
     assert!(message.contains("linked-instance cardinality is not represented in states"));
 }
+
+#[test]
+fn clinic_ops_attribute_columns_are_variations_not_unreachable_states() {
+    let inputs = vec![errors_fixture("samples/clinic-ops")];
+    let (_, model, diags) = load_model(&inputs).expect("load clinic-ops");
+    assert!(
+        diags.iter().all(|d| d.is_warning),
+        "clinic-ops must load without errors: {diags:?}"
+    );
+
+    let findings =
+        state_consistency_findings_with_policy(&model, rdra_ish_core::StateDiagPolicy::default());
+    let unreachable_method: Vec<_> = findings
+        .iter()
+        .filter(|(_, message)| message.contains("'method'") && message.contains("unreachable"))
+        .collect();
+    assert!(
+        unreachable_method.is_empty(),
+        "PaymentTransaction.method is chosen by an actor: {unreachable_method:?}"
+    );
+
+    let lint = lint_issues(&model, &diags);
+    let enum_attributes: Vec<_> = lint
+        .iter()
+        .filter(|issue| issue.rule == "enum-attribute")
+        .map(|issue| issue.message.as_str())
+        .collect();
+    assert!(enum_attributes.is_empty(), "{enum_attributes:?}");
+}

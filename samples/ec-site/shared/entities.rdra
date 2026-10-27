@@ -1,5 +1,11 @@
 module shared.entities
 
+variation PaymentMethod "Payment Method" {
+  credit_card   "Credit card"
+  bank_transfer "Bank transfer"
+  convenience   "Convenience store"
+}
+
 // ── Products / Catalog ───────────────────────────────────
 entity Category "Category" {
   id:   Int    @pk
@@ -65,7 +71,7 @@ entity OrderLine "Order Line" {
 entity Payment "Payment" {
   id:           Int      @pk
   amount:       Money
-  method:       Enum(credit_card, bank_transfer, convenience) @default(credit_card)
+  method:       PaymentMethod @default(credit_card)
   status:       Enum(pending, authorized, captured, failed, refunded) @default(pending)
   processed_at: DateTime @null
   gateway_ref:  String   @null @label("Payment Gateway Reference")

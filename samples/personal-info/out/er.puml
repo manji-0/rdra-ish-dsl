@@ -15,7 +15,7 @@ entity "Credit Card" as CreditCard {
   --
   card_number_hash : String
   last4 : String
-  brand : Enum
+  brand : CardBrand
   expires_month : Int
   expires_year : Int
   holder_name : String
