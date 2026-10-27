@@ -5,3 +5,7 @@
 *.vsix
 editors/vscode/node_modules/
 editors/vscode/out/
+
+# Nix
+/result
+/.direnv/

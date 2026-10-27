@@ -170,7 +170,7 @@ arithmetic Safety when Int axes exist.
 1. Model lifecycle with `transitions` / `sets` and entity-local rules.
 2. Run `rdra-ish states` for quick feedback on Enum/Bool/Nullable axes.
 3. `rdra-ish export --kind tla -o /tmp/rdra-tla` and inspect the Spec + `.cfg`.
-4. Install [TLA+ tools](https://github.com/tlaplus/tlaplus) so `tlc` is on `PATH`.
+4. Install [TLA+ tools](https://github.com/tlaplus/tlaplus) so `tlc` is on `PATH` (`nix develop` provides it).
 5. `rdra-ish verify --backend tlc -o /tmp/rdra-tla` to run TLC.
 
 Agent skill: `skills/rdra-ish-verify/` (routing + references + bundled samples).

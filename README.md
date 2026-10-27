@@ -100,6 +100,19 @@ rdra-ish verify samples/formal-verification/order.rdra --backend tlc -o /tmp/rdr
 - `skills/rdra-ish-verify/samples`: TLA+/TLC examples (also linked from
   `samples/formal-verification/`; check files individually)
 
+## Development
+
+The dev environment is a Nix flake. It provides the Rust toolchain, maturin, uv,
+Java, PlantUML, TLC, Node.js, and pre-commit.
+
+```sh
+nix develop          # or `direnv allow` with nix-direnv
+cargo test --all
+nix build            # builds the rdra-ish CLI into ./result
+```
+
+CI runs every step inside the same `nix develop` shell.
+
 ## Publish (maintainers)
 
 ```sh
