@@ -152,7 +152,8 @@ descriptions as review annotations where supported.
 | `api` | An API layer endpoint invoked by a use case. It operates entities on behalf of the use case, defines an atomic data operation boundary, and may carry HTTP contract metadata. | `lint` `api-unused`, `api-contract-missing`, `api-contract-incomplete`; sequence diagram; `csv --kind api-matrix`; `export --kind openapi` |
 | `dto` | A request, response, or error payload shape used by API contracts. DTOs may carry a column-like field body but are kept separate from database entities. | `lint` `dto-unused`, `naming-dto-field`; `export --kind openapi`, `json-schema` |
 | `permission` | A permission or role-like authority assignable to actors. | `check` `requires_permission` against `has_permission`; `csv --kind actor-permission-audit` |
-| `entity` | A logical data model: a table-like persistent structure. | `check`; `states`; ER diagram; `csv --kind matrix`; `export --kind dbml`, `json-schema`, `tla` |
+| `entity` | A logical data model: a table-like persistent structure. | `check`; `states`; ER diagram; `csv --kind matrix`; `export --kind dbml`, `json-schema`, `tla`; `lint` `enum-attribute` |
+| `variation` | A closed set of values an actor chooses from (an RDRA バリエーション), such as a payment method. It types attribute columns of entities and DTOs and is never a lifecycle. See [Variations](#variations). | `lint` `orphan-node` (a variation that types no column); `check` `UnknownColumnType`, `InvalidVariationValue`; ER diagram and `csv --kind entity` (the column type); `export --kind dbml`, `json-schema`, `openapi`; `list --kind variation` |
 
 ---
 
@@ -708,8 +709,10 @@ the actor has a permission that no modeled performer path currently requires.
 ## Data Layer
 
 `entity` is the logical data model. Its body declares columns, and `relate` declares
-relationships and generates foreign keys. Enum, Bool, and nullable columns are the
-state axes that the lifecycle layer reasons about.
+relationships and generates foreign keys. Inline Enum, Bool, and nullable columns are
+the state axes that the lifecycle layer reasons about. A column whose value an actor
+chooses, not a use case, is typed by a [`variation`](#variations) instead and is not an
+axis.
 
 ### Entity Bodies
 
@@ -742,7 +745,8 @@ is optional/nullable in the payload.
 | `Date` | Date. |
 | `Bool` | Boolean. A boolean column is a **state axis** (see [state-derivation.md](./state-derivation.md)). |
 | `Decimal` | Decimal number. |
-| `Enum(a, b, c)` | Enumeration over the listed variants. An Enum column is a **state axis** and can be linked to a state machine. |
+| `Enum(a, b, c)` | Inline value set. An Enum column is a **state axis** and can be linked to a state machine. Use it for a lifecycle column or a value that use cases set. `lint` `enum-attribute` warns on an inline Enum that no `transitions` and no `sets` moves, because an actor chooses its value: type it by a variation. |
+| `<VariationId>` | A [variation](#variations) in type position, such as `method: PaymentMethod`. The column holds one of the variation's values. It is an **attribute**: not a state axis, never a lifecycle column. An id that names no variation is `UnknownColumnType`. |
 
 #### Column annotations
 
@@ -774,6 +778,45 @@ notes so the review signal is not lost.
 `rdra-ish export --kind json-schema` also emits Entity schemas under `$defs` using
 `Entity.<id>` names, with RDRA-specific data-modeling metadata preserved as
 `x-rdra-ish-*` extensions.
+
+### Variations
+
+A `variation` declares the values an actor chooses from. RDRA keeps these apart from
+the state model: a payment method is picked, an order status is driven by use cases.
+
+```rdra
+variation PaymentMethod "Payment Method" {
+  cash       "Cash"
+  card       "Card"
+  insurance  "Insurance"
+  adjustment             // the label is optional
+}
+
+entity PaymentTransaction "Payment Transaction" {
+  id:     Int           @pk
+  method: PaymentMethod @default(card)
+  status: Enum(paypending, payposted) @default(paypending)
+}
+```
+
+The body lists at least one value; a value is an identifier with an optional label,
+and values are unique within the variation. Any entity or DTO column can name the
+variation as its type, and `@default(v)` must be one of its values (otherwise
+`InvalidVariationValue`). A `sets` value on such a column is checked against the same
+list. The type name resolves like a reference: through the file's imports, so a
+variation declared in `shared/entities.rdra` is visible wherever that module is
+imported.
+
+What a variation column does differently from an inline `Enum`:
+
+| Output | Inline `Enum` column | Variation-typed column |
+|---|---|---|
+| `states` | One axis; unreached variants are reported unreachable | No axis, no reachability check |
+| `transitions` | Allowed | Error (`TransitionsColumnNotEnum`): an attribute has no lifecycle |
+| TLA+ export | Status column of the lifecycle | An axis only when a `sets`, a constraint, an `after` assertion, or a `property` names the column; `Init` is a free choice over every value, so TLC checks them all |
+| `export --kind dbml` | One `Enum <Entity>_<column>` per column | One `Enum <VariationId>` shared by every column typed by it |
+| `export --kind json-schema`, `openapi` | `enum` of the variants | `enum` of the variation's values |
+| ER diagram, `csv --kind entity`, `list --kind entity` | Type `Enum` | Type is the variation id |
 
 ### `relate` and FK generation
 
@@ -1263,7 +1306,7 @@ to load with a message naming the replacement:
 | `usagescene` | `timing` in `belongs(...)` context. |
 | `location` | Deleted with the `.where(...)` clause of `belongs`; use `timing` / `.when(...)` and `medium` / `.by(...)` for Business-BUC context. |
 | `state` | Delete the declaration. States are the variants of the lifecycle Enum column named in `transitions(Entity.col, Event, from -> to)`; the analyzer derives one `{Entity}_{variant}` state per variant for the state diagram and `lint`. |
-| `condition`, `variation` | Use case clauses such as `precondition` and `guard`, or [Entity State Constraints](#entity-state-constraints). |
+| `condition` | Use case clauses such as `precondition` and `guard`, or [Entity State Constraints](#entity-state-constraints). |
 | `concept`, `domain_object`, `aggregate`, `value_object` / `valueobject`, and `maps_to` | `entity` for persistent structure, `dto` for payload shapes. |
 
 ---

@@ -84,3 +84,11 @@ sets(ReserveStock, Inventory, stock < selling, true)  # BFS proposition layer
 
 Use Int / Money / Decimal columns + arithmetic rules when the quantity itself
 must be checked under TLC.
+
+## Variation columns
+
+A column typed by a `variation` (`method: PaymentMethod`) is an attribute, not a
+lifecycle. `states` gives it no axis. The TLA+ export gives it a variable only when a
+`sets`, an entity-local or multi-entity constraint, an `after(UC).assert`, or a
+`property` names it; its `Init` is a free choice over every value, so TLC checks
+the rule against each one. A `transitions` on it is an error.

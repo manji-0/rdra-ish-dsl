@@ -182,7 +182,7 @@ triggers(<Event>, <EntryUC>)
 
 ### Step 4 — Add `sets` for non-transition column effects
 
-For every use case that modifies an `Enum` column without a state machine, a nullable column, or a `Bool` flag, add a `sets` predicate:
+For every use case that modifies an inline `Enum` column without a state machine, a nullable column, or a `Bool` flag, add a `sets` predicate. A value the actor chooses and no use case sets (a payment method, a channel) is not a state: type that column by a `variation` instead of an `Enum`.
 
 ```
 sets(<UC>, <Entity>, column_name == value)

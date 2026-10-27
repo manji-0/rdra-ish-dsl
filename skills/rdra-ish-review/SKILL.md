@@ -125,7 +125,7 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
      the correct downstream BUC and that the cross-BUC flow is intentional
 
 10. **Check `sets` predicate coverage**
-   - Every `Enum` column that lacks a `transitions` predicate should have a `sets` for each use case that modifies it
+   - Every inline `Enum` column that lacks a `transitions` predicate should have a `sets` for each use case that modifies it; an Enum that nothing moves is an attribute the actor chooses, so type it by a `variation` (`lint` `enum-attribute`)
    - Every `@null` column updated by a use case should have a `sets` with `"present"` / `"null"` / a PostgreSQL type
    - Every `Bool` column toggled by a use case should have a `sets` with `"true"` or `"false"`
 

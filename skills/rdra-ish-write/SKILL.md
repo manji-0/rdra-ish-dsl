@@ -200,6 +200,10 @@ import shared.actors.{Staff as S}
   `triggers(Event, UseCase)` later when the concrete entry action is known.
 - Use `sets` to make lifecycle effects explicit for `Enum`, `Bool`, nullable columns,
   and comparison propositions.
+- Type a column by a `variation` (`method: PaymentMethod`) when an actor chooses its
+  value; use an inline `Enum(...)` only for lifecycle columns or values that use cases
+  set. A variation column is not a `states` axis, and `lint` `enum-attribute` flags an
+  inline Enum that no `transitions` and no `sets` moves.
 - Add local rules in this order: `forbidden` / `exclusive` first, `invariant` /
   narrow `required` next, comparison and cross-entity constraints last.
 - Use multi-entity `forbidden` / `invariant` when a rule mentions columns from more
@@ -217,6 +221,8 @@ import shared.actors.{Staff as S}
 - Swapping predicate argument order: CRUD predicates take `(UseCase|Api, Entity)`.
 - Quoting `relate` cardinality when unquoted forms like `N:1` are preferred.
 - Adding quotes inside `Enum(...)` values.
+- Writing an inline `Enum(...)` for a value the actor picks (payment method, channel):
+  `states` then reports its unchosen variants unreachable. Declare a `variation`.
 - Forgetting `module`, or using a module name that does not match the file path.
 - Adding FK columns manually when `relate` already generates them.
 - Declaring `api` without `invokes(UseCase, Api)`.

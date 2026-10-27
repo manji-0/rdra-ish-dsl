@@ -6,8 +6,9 @@ terminal states, entity constraints, cross-entity rules, or state-pattern trunca
 ## Concept
 
 `rdra-ish states` derives reachable combinations of state-axis values per entity.
-State axes come from Enum, Bool, nullable columns, state-machine transitions, and
-explicit `sets` effects. The output is not just a diagram; it is executable feedback
+State axes come from inline Enum, Bool, nullable columns, state-machine transitions, and
+explicit `sets` effects. A column typed by a `variation` is an attribute the actor
+chooses and is never an axis. The output is not just a diagram; it is executable feedback
 about which combinations the modeled use cases and events can actually reach.
 It evaluates per-entity `forbidden`, `invariant`, `required`, and `exclusive` rules
 directly. Cross-entity rules are checked by combining reached patterns for the
@@ -57,6 +58,7 @@ Entity: Order (注文)
 | Signal | Interpretation | Next action |
 |---|---|---|
 | Enum/Bool/nullable column never appears in axes | No modeled lifecycle effect | Add `sets`, `transitions`, or accept that it is not stateful |
+| Enum variants reported unreachable that an actor simply chooses (payment method, channel) | The column is an attribute, not a lifecycle | Type it by a `variation`; `lint` `enum-attribute` finds these |
 | Expected combination never appears | Missing creation/effect path | Add or fix `creates`, `sets`, `raises`, or `transitions` |
 | Unexpected terminal state | Missing exit use case/event | Add transition/effect or mark terminal as intentional |
 | Too many combinations | Effects are too broad | Make `sets` more precise or add rules |

@@ -31,7 +31,11 @@ state. Only the kinds below become axes for BFS; Int / Money / Decimal / DateTim
 | comparison expression in `forbidden` / `invariant` / `required` / `exclusive` / `sets` | `Proposition` | `{false, true}` (driven by `sets(..., <expr>, bool)`) |
 
 A non-nullable, non-Enum, non-Bool column (e.g. a plain `Int` primary key) is not a
-state axis. An entity with no axes yields exactly one trivial pattern that is both
+state axis. A column typed by a [`variation`](./language-reference.md#variations) is an
+attribute the actor chooses and is **never** an axis, nullable or not: it multiplies no
+patterns and its values are not checked for reachability. (An inline `Enum` that no
+`transitions` and no `sets` moves is reported by `lint` `enum-attribute`; type it by a
+variation.) An entity with no axes yields exactly one trivial pattern that is both
 initial and terminal.
 
 The size of the search space is bounded by the product of the axis cardinalities (each
@@ -103,7 +107,8 @@ arbitrarily.
 
 ## The BFS Algorithm
 
-1. **Identify axes** for the entity (Enum / Bool / Nullable columns). In addition,
+1. **Identify axes** for the entity (inline Enum / Bool / Nullable columns;
+   variation-typed columns are skipped). In addition,
    collect all **`Proposition` axes** by scanning `forbidden` / `invariant` /
    `required` / `exclusive` constraints and `sets` proposition effects for comparison
    expressions that reference this entity. Each distinct normalized expression (e.g.

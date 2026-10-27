@@ -4,6 +4,9 @@
 
 ### Breaking
 
+- `variation` is a keyword again (it was a removed word), and a bare identifier in
+  column type position now names a variation instead of failing to parse. An inline
+  `Enum` that no `transitions` and no `sets` moves draws the `enum-attribute` warning.
 - Unknown chain methods on predicates are an error (`unknown chain method '.x' on
   predicate 'p'`). Previously they were silently ignored, so a typo such as
   `belongs(U, B).wehn(T)` or the removed `belongs(...).where(...)` loaded with
@@ -43,9 +46,8 @@
   - `state`: states are the variants of the lifecycle Enum column. Delete the
     declaration; the analyzer still derives `{Entity}_{variant}` state nodes from
     `transitions` for the state diagram.
-  - `condition`, `variation` (reserved kinds that only warned before): model
-    rules with use case conditions (`precondition`, `guard`, ...) or entity
-    state constraints.
+  - `condition` (a reserved kind that only warned before): model rules with use
+    case conditions (`precondition`, `guard`, ...) or entity state constraints.
   - `concept`, `domain_object`, `aggregate`, `value_object` (alias
     `valueobject`): conceptual-model kinds were removed; model persistent
     structure with `entity` (and `dto` for payloads).
@@ -58,11 +60,26 @@
     longer accept the matching node kinds or `maps-to`. The `domain-object` and
     `value-object` lint orphan-node kinds and the `ReservedKind` diagnostic are
     gone, as are the `rdra-ish-core` types `Concept`, `DomainObject`,
-    `Aggregate`, `ValueObject`, `UsageScene`, `Condition`, `Variation`,
+    `Aggregate`, `ValueObject`, `UsageScene`, `Condition`,
     `ConceptualRef`, and `ConceptMapping`.
 
 ### Added
 
+- `variation Id "Label" { value "Label"? ... }` declares the values an actor chooses
+  from (RDRA バリエーション). A column typed by its id (`method: PaymentMethod`) is an
+  attribute, not a lifecycle: `states` gives it no axis and no unreachable-variant
+  warnings, `transitions` rejects it, and `export --kind dbml` emits one `Enum` per
+  variation shared by every column typed by it. JSON Schema and OpenAPI list its values
+  as `enum`; ER diagrams and `csv` / `list --kind entity` show the variation id as the
+  column type. `list --kind variation` lists them. The TLA+ export gives a variation
+  column a variable only when a `sets`, constraint, `after` assertion, or `property`
+  names it, with a free-choice `Init` over every value. New diagnostics:
+  `UnknownColumnType`, `InvalidVariationValue` (`@default` and `sets` values).
+- Lint `enum-attribute` warns on an inline `Enum` column that no `transitions` and no
+  `sets` moves; the hint is to type it by a variation. The clinic-ops, ec-site and
+  personal-info samples now type their attribute columns by variations
+  (`PaymentMethod`, `ConsentType`, `OrderType`, `MessageChannel`, `AuditSeverity`,
+  `CardBrand`), so `states` no longer reports their unchosen values unreachable.
 - `export --kind tla` / `verify --backend tlc` accept `--instance-count` (default
   2) and `--int-range-max` (default 5). An approximation banner is always emitted
   when multi-instance or Int axes are used. `--int-range-max 0` is rejected;

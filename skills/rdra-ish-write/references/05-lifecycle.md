@@ -21,7 +21,8 @@ by use cases or events.
 ## Procedure
 
 1. Add lifecycle columns such as `Enum(...)`, `Bool`, and nullable timestamp/value
-   columns.
+   columns. Values an actor merely chooses are not lifecycle: type those columns by a
+   `variation` and leave them out of `transitions` / `sets`.
 2. Declare `event` nodes. States are not declared: each `transitions` variant becomes a
    state of its entity.
 3. Add `raises(UseCase, Event)` for event origins.

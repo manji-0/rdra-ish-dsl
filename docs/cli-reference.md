@@ -93,6 +93,9 @@ It also emits two `info` rows:
 - `stage-readiness` reports which refinement stages are present: `scope`,
   `business-flow`, `data`, `interaction`, `system-boundary`, and `rules`.
 - `flow-cycle` warns when `precedes` / `branches` edges form a cycle among steps.
+- `enum-attribute` warns on an inline `Enum` column that no `transitions` and no `sets`
+  moves. Its value is chosen by an actor, so the hint is to type the column by a
+  [`variation`](./language-reference.md#variations).
 
 Lint warnings do not fail the command. Existing parse/model errors are emitted as
 `semantic-error` rows and make the command exit with status `1`.
@@ -271,7 +274,8 @@ and `outbox` produce `send` operations; `triggers` and `transitions` produce
 or event payload DTOs directly, so those details are left unspecified and RDRA
 facts are preserved with `x-rdra-ish-*` extensions.
 
-For DBML export, each `entity` becomes a table with its Enum types, indexes, and
+For DBML export, each `entity` becomes a table with its Enum types (one per inline
+Enum column, plus one per `variation` shared by every column typed by it), indexes, and
 foreign-key references. DBML does not have native equivalents for every review annotation, so `@check`,
 `@soft_delete`, `@history`, `@tenant`, and `@derived` are preserved as column notes.
 
@@ -325,7 +329,7 @@ rdra-ish list <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--allow-tla-only]
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `actor` \| `entity` \| `requirement` \| `adr` \| `adr-impact` \| `nfr` \| `quality` \| `constraint` \| `buc` \| `flow` \| `step` \| `usecase` \| `field` \| `system` \| `api` \| `dto` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` | `actor` | The element kind to list. `actor` / `quality` / `buc` / `flow` / `step` / `system` list id+label; `usecase` lists UC preconditions, guards, postconditions, alternatives, errors, and description; `requirement` lists requirement metadata; `adr` lists decision metadata plus impacted targets from `decides`; `adr-impact` lists one row per ADR-target pair; `nfr` and `constraint` list non-functional metadata; `field` lists screen-field metadata plus Entity.column mappings; `api` lists API contract metadata; `dto` lists DTO fields; `entity` lists each column with type, PK/unique/index/FK flags, FK optionality/actions, check constraints, soft-delete/history/tenant markers, and derived expressions; `permission-callables` lists each permission with callable use case/API ids and API-level `UseCase->Api` paths derived from `requires_permission`; `actor-permission-audit` lists inferred actor-side assignment gaps; `business-inputs` lists inferred actor-entered fields. |
+| `--kind` | `actor` \| `entity` \| `requirement` \| `adr` \| `adr-impact` \| `nfr` \| `quality` \| `constraint` \| `buc` \| `flow` \| `step` \| `usecase` \| `field` \| `system` \| `api` \| `dto` \| `variation` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` | `actor` | The element kind to list. `actor` / `quality` / `buc` / `flow` / `step` / `system` / `variation` list id+label; `usecase` lists UC preconditions, guards, postconditions, alternatives, errors, and description; `requirement` lists requirement metadata; `adr` lists decision metadata plus impacted targets from `decides`; `adr-impact` lists one row per ADR-target pair; `nfr` and `constraint` list non-functional metadata; `field` lists screen-field metadata plus Entity.column mappings; `api` lists API contract metadata; `dto` lists DTO fields; `entity` lists each column with type, PK/unique/index/FK flags, FK optionality/actions, check constraints, soft-delete/history/tenant markers, and derived expressions; `permission-callables` lists each permission with callable use case/API ids and API-level `UseCase->Api` paths derived from `requires_permission`; `actor-permission-audit` lists inferred actor-side assignment gaps; `business-inputs` lists inferred actor-entered fields. |
 | `--format` | `table` \| `json` \| `csv` | `table` | Output format. |
 | `--allow-tla-only` | flag | off | Demote undriven comparisons / NotEvaluated so listing can proceed despite TLA-only state gaps. |
 
