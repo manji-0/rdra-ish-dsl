@@ -446,3 +446,24 @@ invariant(Order, Payment)
         errors
     );
 }
+
+#[test]
+fn a_bad_equality_value_in_a_cross_entity_constraint_is_one_error() {
+    let src = r#"
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(open, closed) @default(open)
+}
+entity Payment "Payment" {
+  id: Int @pk
+  amount: Int
+}
+forbidden(Order, Payment, Order.status == gone, Payment.amount > 1)
+forbidden(Order, Payment, Order.nope == 1, Payment.amount > 1)
+"#;
+    let (ast, errors) = parse(src);
+    assert!(errors.is_empty(), "{errors:?}");
+    let (_, diags) = build_model(&ast);
+    let errs: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+    assert_eq!(errs.len(), 2, "one error per bad condition: {errs:?}");
+}

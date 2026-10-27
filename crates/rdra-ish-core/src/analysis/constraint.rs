@@ -537,7 +537,7 @@ fn resolve_cross_comparison(
     })
 }
 
-fn resolve_cross_condition(
+pub(crate) fn resolve_cross_condition(
     model: &SemanticModel,
     scope: &[EntityKey],
     pred: &str,
@@ -547,12 +547,11 @@ fn resolve_cross_condition(
 ) -> Option<CrossEntityCondition> {
     match arg {
         PredicateArg::Expr(Expr::Cmp(cmp)) => {
-            if let Some(cond) = temporal_equals_from_comparison(model, scope, pred, cmp, ctx, diags)
-            {
-                Some(cond)
-            } else {
-                resolve_cross_comparison(model, scope, pred, cmp, ctx, diags)
-                    .map(CrossEntityCondition::Comparison)
+            match temporal_equals_from_comparison(model, scope, pred, cmp, ctx, diags) {
+                Ok(Some(cond)) => Some(cond),
+                Ok(None) => resolve_cross_comparison(model, scope, pred, cmp, ctx, diags)
+                    .map(CrossEntityCondition::Comparison),
+                Err(()) => None,
             }
         }
         _ => None,
@@ -831,16 +830,16 @@ fn temporal_equals_from_comparison(
     cmp: &Comparison,
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
-) -> Option<CrossEntityCondition> {
+) -> Result<Option<CrossEntityCondition>, ()> {
     if cmp.op != CmpOp::Eq {
-        return None;
+        return Ok(None);
     }
 
     let (column, model_col) = match &cmp.lhs {
         Operand::Column(column) if scope.len() == 1 => {
             let entity = scope[0];
             let model_col =
-                find_entity_column(model, entity, column, cmp.span.clone(), ctx, diags)?;
+                find_entity_column(model, entity, column, cmp.span.clone(), ctx, diags).ok_or(())?;
             (
                 QualifiedModelColumnRef {
                     entity,
@@ -850,9 +849,10 @@ fn temporal_equals_from_comparison(
             )
         }
         Operand::QualifiedColumn(qcol) => {
-            let entity = resolve_entity_qref(model, pred, &qcol.entity, ctx, diags)?;
+            let entity = resolve_entity_qref(model, pred, &qcol.entity, ctx, diags).ok_or(())?;
             let model_col =
-                find_entity_column(model, entity, &qcol.column, qcol.span.clone(), ctx, diags)?;
+                find_entity_column(model, entity, &qcol.column, qcol.span.clone(), ctx, diags)
+                    .ok_or(())?;
             (
                 QualifiedModelColumnRef {
                     entity,
@@ -861,7 +861,7 @@ fn temporal_equals_from_comparison(
                 model_col,
             )
         }
-        _ => return None,
+        _ => return Ok(None),
     };
 
     let value_lit = match &cmp.rhs {
@@ -874,26 +874,26 @@ fn temporal_equals_from_comparison(
                     .iter()
                     .any(|c| c.name == *value)
                 {
-                    return None;
+                    return Ok(None);
                 }
             } else if scope
                 .iter()
                 .any(|ek| model.entities[*ek].columns.iter().any(|c| c.name == *value))
             {
                 // Multi-entity bare column RHS is ambiguous for equals; leave to comparison.
-                return None;
+                return Ok(None);
             }
             value.clone()
         }
         Operand::IntLit(value) => value.clone(),
         Operand::Now => "now".to_string(),
-        Operand::QualifiedColumn(_) => return None,
+        Operand::QualifiedColumn(_) => return Ok(None),
     };
     match parse_effect_value(&model.variations, &model_col, &value_lit) {
-        Ok(value) => Some(CrossEntityCondition::Equals { column, value }),
+        Ok(value) => Ok(Some(CrossEntityCondition::Equals { column, value })),
         Err(e) => {
             push_error_cmp(ctx, diags, cmp, e);
-            None
+            Err(())
         }
     }
 }
@@ -909,12 +909,15 @@ fn collect_temporal_assert_conditions(
     let mut conditions = Vec::new();
     for arg in args {
         if let PredicateArg::Expr(Expr::Cmp(cmp)) = arg {
-            if let Some(cond) = temporal_equals_from_comparison(model, scope, pred, cmp, ctx, diags)
-            {
-                conditions.push(cond);
-            } else if let Some(cond) = resolve_cross_condition(model, scope, pred, arg, ctx, diags)
-            {
-                conditions.push(cond);
+            match temporal_equals_from_comparison(model, scope, pred, cmp, ctx, diags) {
+                Ok(Some(cond)) => conditions.push(cond),
+                Ok(None) => {
+                    if let Some(cond) = resolve_cross_condition(model, scope, pred, arg, ctx, diags)
+                    {
+                        conditions.push(cond);
+                    }
+                }
+                Err(()) => {}
             }
         }
     }
