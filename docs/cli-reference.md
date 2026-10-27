@@ -191,9 +191,10 @@ Notes:
   system value (`actor`), system boundary (`screen`, `api`), and system (`system`,
   `entity`). The use case itself remains the sequence section title.
 - For `--kind rdra`, model objects are placed into four RDRA-style layers:
-  system value (`actor`, `requirement`, `adr`), system external environment (`business`, `buc`,
-  `flow`, `step`, `extsystem`), system boundary
-  (`usecase`, `screen`, `field`, `event`), and system (`system`, `api`, `entity`, `state`).
+  system value (`actor`, `requirement`, `adr`, `nfr`), system external environment
+  (`extsystem`, `quality`, `constraint`, `business`, `buc`, `flow`, `step`, `timing`,
+  `medium`, `permission`), system boundary (`usecase`, `screen`, `field`, `event`), and
+  system (`system`, `api`, `dto`, `entity`, `state`).
 - For `--kind business-area`, the diagram shows only business actors, inferred input
   fields, and use cases. The input nodes are derived from `business-inputs`.
 - For `--kind technical-area`, each system is rendered as a container holding only its
@@ -270,9 +271,8 @@ and `outbox` produce `send` operations; `triggers` and `transitions` produce
 or event payload DTOs directly, so those details are left unspecified and RDRA
 facts are preserved with `x-rdra-ish-*` extensions.
 
-For DBML export, conceptual model elements are not emitted directly; they become
-part of the schema only through explicit `maps_to(..., Entity)` decisions. DBML
-does not have native equivalents for every review annotation, so `@check`,
+For DBML export, each `entity` becomes a table with its Enum types, indexes, and
+foreign-key references. DBML does not have native equivalents for every review annotation, so `@check`,
 `@soft_delete`, `@history`, `@tenant`, and `@derived` are preserved as column notes.
 
 For JSON Schema export, DTOs and Entities are emitted under `$defs` as

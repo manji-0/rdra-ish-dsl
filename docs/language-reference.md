@@ -140,17 +140,17 @@ descriptions as review annotations where supported.
 | `buc` | A business use case: a unit of business value composed of use cases. | `lint` `buc-empty`; RDRA, sequence, and event-flow diagrams (`--buc` filter) |
 | `flow` | A business flow: an ordered business narrative inside a BUC. A flow is composed of steps and can make UC and event ordering explicit without turning the diagram into the only source of truth. | `lint` `flow-empty`, `flow-cycle`; RDRA diagram |
 | `step` | A business flow step. A step is a business-language action that can cover a use case, API, or event while remaining distinct from implementation boundaries. | `lint` `step-no-cover`; RDRA diagram |
-| `timing` | A timing, trigger, or business situation for Business-BUC context. | `belongs(...).when(...)` context |
-| `medium` | A physical medium, device, terminal, or operation medium for Business-BUC context. | `belongs(...).by(...)` context; `requires_medium` in `csv --kind screen-constraints` |
+| `timing` | A timing, trigger, or business situation for Business-BUC context. | RDRA diagram node only. `belongs(...).when(...)` records it, but no output reads that context yet. |
+| `medium` | A physical medium, device, terminal, or operation medium for Business-BUC context. | `requires_medium` in `csv --kind screen-constraints`; RDRA diagram node. `belongs(...).by(...)` records it, but no output reads that context yet. |
 | `actor` | A human actor who performs use cases. | `check` permission paths; sequence diagram participant; `csv --kind actor-permission-audit` |
 | `usecase` | A use case: a concrete interaction that reads and writes entities and displays screens. | `check`; `states`; all diagrams; `csv --kind matrix` |
 | `screen` | A screen (UI surface) displayed by use cases. | `lint` `screen-no-fields`; sequence diagram; `csv --kind screen-constraints` |
 | `field` | A screen field: a first-class UI input or output item. It can carry editability, requiredness, and actor or system source metadata, and can map to an entity column without becoming one. | `lint` `field-unmapped`, `field-unplaced`; business-area diagram |
 | `event` | A domain event, used as the trigger of state transitions and as a `raises` and `triggers` endpoint. | `check` raised-but-unconsumed; `states`; event-flow diagram; `export --kind asyncapi`, `tla` |
-| `system` | An internal system boundary. It groups APIs; its entity set is derived from those APIs' CRUD targets. | `lint` `system-boundary`; boundary diagnostics; technical-area diagram |
-| `extsystem` | An external system used by actors or use cases. | RDRA diagram |
+| `system` | An internal system boundary. It groups APIs; its entity set is derived from those APIs' CRUD targets. | `lint` `stage-readiness` (its `system-boundary` stage needs a `system` and an `api`); `check` boundary diagnostics; technical-area diagram |
+| `extsystem` | An external system an actor reaches through `uses(actor, extsystem)`. | RDRA diagram; `lint` `orphan-node` |
 | `api` | An API layer endpoint invoked by a use case. It operates entities on behalf of the use case, defines an atomic data operation boundary, and may carry HTTP contract metadata. | `lint` `api-unused`, `api-contract-missing`, `api-contract-incomplete`; sequence diagram; `csv --kind api-matrix`; `export --kind openapi` |
-| `dto` | A request, response, or error payload shape used by API contracts. DTOs may carry a column-like field body but are kept separate from database entities. | `lint` `dto-unused`, `dto-field`; `export --kind openapi`, `json-schema` |
+| `dto` | A request, response, or error payload shape used by API contracts. DTOs may carry a column-like field body but are kept separate from database entities. | `lint` `dto-unused`, `naming-dto-field`; `export --kind openapi`, `json-schema` |
 | `permission` | A permission or role-like authority assignable to actors. | `check` `requires_permission` against `has_permission`; `csv --kind actor-permission-audit` |
 | `entity` | A logical data model: a table-like persistent structure. | `check`; `states`; ER diagram; `csv --kind matrix`; `export --kind dbml`, `json-schema`, `tla` |
 
