@@ -2861,8 +2861,6 @@ entity CertificateOrder "Certificate Order" {
   id: Int @pk
   status: Enum(requested, executed) @default(requested)
 }
-state Requested "Requested"
-state Executed "Executed"
 creates(ExecuteCertIssue, CertificateOrder)
 raises(ExecuteCertIssue, CertIssued)
 transitions(CertificateOrder.status, CertIssued, requested -> executed)
@@ -2990,9 +2988,6 @@ updates(usecase::Pay,    Order)
 updates(usecase::Cancel, Order)
 raises(usecase::Pay,    EvPaid)
 raises(usecase::Cancel, EvCancel)
-state Pending   "注文受付"
-state Paid      "支払済"
-state Cancelled "キャンセル済"
 transitions(Order.status, EvPaid, pending -> paid)
 transitions(Order.status, EvCancel, pending -> cancelled)
 "#,
@@ -3035,8 +3030,6 @@ event EvDeliver    "配達完了"
 creates(Place,         Order)
 updates(usecase::DeliverUc, Order)
 raises(usecase::DeliverUc, EvDeliver)
-state Pending   "受付中"
-state Delivered "配達完了"
 transitions(Order.status, EvDeliver, pending -> delivered)
 sets(usecase::DeliverUc, Order, delivered_at == present)
 "#,
@@ -3124,8 +3117,6 @@ event EvDeliver    "配達完了"
 creates(Place,              Order)
 updates(usecase::DeliverUc, Order)
 raises(usecase::DeliverUc, EvDeliver)
-state Pending   "受付中"
-state Delivered "配達完了"
 transitions(Order.status, EvDeliver, pending -> delivered)
 sets(event::EvDeliver, Order, delivered_at == present)
 "#,
@@ -3181,8 +3172,6 @@ event EvDeliver    "配達完了"
 creates(Place,              Order)
 updates(usecase::DeliverUc, Order)
 raises(usecase::DeliverUc, EvDeliver)
-state Pending   "受付中"
-state Delivered "配達完了"
 transitions(Order.status, EvDeliver, pending -> delivered)
 sets(event::EvDeliver, Order, delivered_at == present)
 "#,
@@ -3398,8 +3387,6 @@ creates(Create, Item)
 updates(Deactive, Item)
 deletes(Remove,   Item)
 raises(Deactive, Deactivate)
-state Active   "有効"
-state Inactive "無効"
 transitions(Item.status, Deactivate, active -> inactive)
 "#,
         );
@@ -3433,8 +3420,6 @@ event EvCancel "キャンセルイベント"
 creates(Place,  Order)
 updates(Cancel, Order)
 raises(Cancel, EvCancel)
-state Pending   "受付中"
-state Cancelled "キャンセル済"
 transitions(Order.status, EvCancel, pending -> cancelled)
 forbidden(Order, status == cancelled)
 "#,
@@ -3476,8 +3461,6 @@ creates(Place,   Order)
 updates(Deliver, Order)
 updates(Refund,  Order)
 raises(Deliver, EvDeliver)
-state Pending   "受付中"
-state Delivered "配達完了"
 transitions(Order.status, EvDeliver, pending -> delivered)
 sets(usecase::Refund, Order, refunded == true)
 forbidden(Order, status == delivered, refunded == true)
@@ -3612,8 +3595,6 @@ event EvDeliver  "配達イベント"
 creates(Place,   Order)
 updates(Deliver, Order)
 raises(Deliver,  EvDeliver)
-state Pending   "受付中"
-state Delivered "配達完了"
 transitions(Order.status, EvDeliver, pending -> delivered)
 invariant(Order)
   .when(status == delivered)
@@ -3731,8 +3712,6 @@ creates(Place,   Order)
 updates(Deliver, Order)
 updates(Refund,  Order)
 raises(Deliver, EvDeliver)
-state Pending   "受付中"
-state Delivered "配達完了"
 transitions(Order.status, EvDeliver, pending -> delivered)
 sets(usecase::Refund, Order, refunded == true)
 sets(usecase::Refund, Order, refund_id == present)
@@ -4150,8 +4129,6 @@ event EvDeliver  "配達イベント"
 creates(Place,   Order)
 updates(Deliver, Order)
 raises(Deliver,  EvDeliver)
-state Pending   "受付中"
-state Delivered "配達完了"
 transitions(Order.status, EvDeliver, pending -> delivered)
 sets(usecase::Deliver, Order, delivered_at == present)
 invariant(Order)

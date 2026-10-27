@@ -24,7 +24,7 @@ Before writing, classify the available information:
 | touched business objects | Biz object touchpoints | coarse `entity`, CRUD predicates | screens and APIs |
 | screens/API boundaries | Tech interaction boundary | `screen`, `field`, `api`, `dto`, `system`, `medium`, `permission`, `displays`, `shows`, `maps_field`, `invokes`, API contracts, access constraints | columns, relationships, cross-system coordination |
 | fields and relationships | Tech data design | columns, indexes/checks, `relate`, optional `owns` | lifecycle states/events |
-| lifecycle states/events | Tech lifecycle design | `state`, `event`, `transitions`, `raises`, `sets` | local guardrails first |
+| lifecycle states/events | Tech lifecycle design | `event`, `transitions`, `raises`, `sets` | local guardrails first |
 | invalid or mutually exclusive states | Tech-enforced rules | `forbidden`, `exclusive` | obligations and cross-entity rules |
 | conditional/global/cross-entity rules, NFRs, decisions | Tech-enforced rules | `invariant`, narrow `required`, multi-entity `forbidden` / `invariant`, optional `when`/`property`/`after.assert`, `nfr`, `constraint`, `adr` links | none; validate with `states` and TLA+ when needed |
 
@@ -56,7 +56,7 @@ Read the requirement and list:
 | `actor`, `extsystem` (if reused across BUCs) | `buc`, `usecase`, `screen` |
 | `business`, stable `requirement`, `nfr`, `quality`, `constraint`, `adr`, `system`, `timing`, `medium`, `permission` | BUC-local `flow`, `step`, `api`, `dto`, `field` |
 | reusable `entity` definitions, `relate` | CRUD, `displays`, `shows`, `maps_field`, `invokes`, API contracts, `coordinates`, access constraints, UC conditions, `raises`, `sets` |
-| cross-BUC `state`, `event`, `transitions` | BUC-local `event`, `state` |
+| cross-BUC `event`, `transitions` | BUC-local `event` |
 | cross-BUC or cross-entity `forbidden` / `invariant` / `required` / `exclusive` rules | predicates scoped to this BUC |
 
 If a shared file already declares the actor or entity you need, import it — do not redeclare.

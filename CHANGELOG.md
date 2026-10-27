@@ -35,6 +35,9 @@
   - `location` and the `.where(...)` clause of `belongs`: no output consumed
     them. Delete the declaration and the clause; keep `timing` / `.when(...)`
     and `medium` / `.by(...)`.
+  - `state`: states are the variants of the lifecycle Enum column. Delete the
+    declaration; the analyzer still derives `{Entity}_{variant}` state nodes from
+    `transitions` for the state diagram.
   - `condition`, `variation` (reserved kinds that only warned before): model
     rules with use case conditions (`precondition`, `guard`, ...) or entity
     state constraints.
@@ -110,6 +113,9 @@
 - Bare `relate(..., N:M)` without `.via` is an error (was a warning).
 - `coverage-score` no longer rates empty models as 100; stage-readiness gaps
   reduce the score; finding penalties are size-normalized (`×25/elements`).
+- `lint` no longer reports `orphan-node` or `naming-id` on derived state nodes:
+  a transition now counts as a connection for the states it joins, and state ids
+  (`{Entity}_{variant}`) are tool-generated, so the naming rule skips them.
 ## v0.2.0 - 2026-07-20
 
 ### Breaking

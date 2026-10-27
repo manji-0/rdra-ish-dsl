@@ -621,11 +621,6 @@ raises(CapturePay,   EvCapture)
 raises(ShipOrder,    EvShip)
 raises(DeliverOrder, EvDeliver)
 raises(CancelOrder,  EvCancel)
-state Pending   "注文受付"
-state Paid      "決済完了"
-state Shipped   "発送済"
-state Delivered "配達完了"
-state Cancelled "キャンセル"
 transitions(Order.status, EvCapture, pending -> paid)
 transitions(Order.status, EvShip, paid -> shipped)
 transitions(Order.status, EvDeliver, shipped -> delivered)

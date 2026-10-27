@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::diagnostics::{Diagnostic, RdraError};
 use crate::location::LocatedSpan;
-use crate::model::{node_ref_kind, NodeRef, RelKind, SemanticModel, StepKey};
+use crate::model::{node_ref_kind, NodeRef, RelKind, SemanticModel, StateKey, StepKey};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LintSeverity {
@@ -184,7 +184,8 @@ fn collect_findings(model: &SemanticModel) -> Vec<LintIssue> {
             );
         }
 
-        if !is_upper_camelish_id(&id) {
+        // State ids are derived as `{Entity}_{variant}` from Enum variants, not authored.
+        if !matches!(node, NodeRef::State(_)) && !is_upper_camelish_id(&id) {
             push_element_lint(
                 model,
                 &mut findings,
@@ -745,9 +746,20 @@ fn relation_degree(model: &SemanticModel) -> HashMap<NodeRef, usize> {
         touch(NodeRef::Field(mapping.field));
         touch(NodeRef::Entity(mapping.entity));
     }
+    let state_by_id: HashMap<&str, StateKey> = model
+        .states
+        .iter()
+        .map(|(key, state)| (state.id.as_str(), key))
+        .collect();
     for transition in &model.state_transitions {
         touch(NodeRef::Event(transition.event));
         touch(NodeRef::Entity(transition.entity));
+        let entity_id = &model.entities[transition.entity].id;
+        for variant in [&transition.from, &transition.to] {
+            if let Some(&state) = state_by_id.get(format!("{entity_id}_{variant}").as_str()) {
+                touch(NodeRef::State(state));
+            }
+        }
     }
     for coordination in &model.boundary_coordinations {
         touch(NodeRef::UseCase(coordination.usecase));
@@ -968,6 +980,29 @@ api CreateOrder "Create order"
                 issue.rule
             );
         }
+    }
+
+    #[test]
+    fn lint_leaves_states_derived_from_transitions_alone() {
+        let model = model_from(
+            r#"
+usecase Place "Place"
+event Placed "Placed"
+entity Order "Order" {
+  Id: Int @pk
+  status: Enum(pending, paid)
+}
+raises(Place, Placed)
+transitions(Order.status, Placed, pending -> paid)
+"#,
+        );
+
+        assert_eq!(model.states.len(), 2);
+        let on_states: Vec<_> = collect_findings(&model)
+            .into_iter()
+            .filter(|issue| issue.subject_kind == "state")
+            .collect();
+        assert!(on_states.is_empty(), "{on_states:?}");
     }
 
     #[test]

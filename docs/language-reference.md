@@ -25,7 +25,7 @@ same order:
 | Interaction | `actor`, `usecase`, `screen`, `field`, `event` | Who does what, on which screen, and what does it cause? | [Interaction Layer](#interaction-layer) |
 | System boundary | `system`, `extsystem`, `api`, `dto`, `permission` | Which boundary owns the operation, and who may call it? | [System Boundary](#system-boundary) |
 | Data | `entity` | What is stored, and how is it related? | [Data Layer](#data-layer) |
-| Lifecycle and rules | `state`, plus `transitions`, `sets`, and constraint declarations | Which states are reachable, and which are forbidden? | [Lifecycle](#lifecycle), [Entity State Constraints](#entity-state-constraints) |
+| Lifecycle and rules | `transitions`, `sets`, and constraint declarations | Which states are reachable, and which are forbidden? | [Lifecycle](#lifecycle), [Entity State Constraints](#entity-state-constraints) |
 
 A kind is part of the language only when some review output consumes it. The
 [kind index](#kind-index) lists that output for every kind.
@@ -153,7 +153,6 @@ descriptions as review annotations where supported.
 | `dto` | A request, response, or error payload shape used by API contracts. DTOs may carry a column-like field body but are kept separate from database entities. | `lint` `dto-unused`, `dto-field`; `export --kind openapi`, `json-schema` |
 | `permission` | A permission or role-like authority assignable to actors. | `check` `requires_permission` against `has_permission`; `csv --kind actor-permission-audit` |
 | `entity` | A logical data model: a table-like persistent structure. | `check`; `states`; ER diagram; `csv --kind matrix`; `export --kind dbml`, `json-schema`, `tla` |
-| `state` | Optional diagram and label sugar for an Enum lifecycle variant. Prefer `transitions(Entity.col, Event, from -> to)` with Enum variant names; the compiler also synthesizes `{Entity}_{variant}` state nodes for diagrams when needed. | state diagram |
 
 ---
 
@@ -1247,6 +1246,7 @@ to load with a message naming the replacement:
 |---|---|
 | `usagescene` | `timing` in `belongs(...)` context. |
 | `location` | Deleted with the `.where(...)` clause of `belongs`; use `timing` / `.when(...)` and `medium` / `.by(...)` for Business-BUC context. |
+| `state` | Delete the declaration. States are the variants of the lifecycle Enum column named in `transitions(Entity.col, Event, from -> to)`; the analyzer derives one `{Entity}_{variant}` state per variant for the state diagram and `lint`. |
 | `condition`, `variation` | Use case clauses such as `precondition` and `guard`, or [Entity State Constraints](#entity-state-constraints). |
 | `concept`, `domain_object`, `aggregate`, `value_object` / `valueobject`, and `maps_to` | `entity` for persistent structure, `dto` for payload shapes. |
 

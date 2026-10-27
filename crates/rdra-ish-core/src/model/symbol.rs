@@ -58,7 +58,6 @@ fn node_ref_matches_kind(node: &NodeRef, kind: &Kind) -> bool {
             | (NodeRef::Field(_), Kind::Field)
             | (NodeRef::Event(_), Kind::Event)
             | (NodeRef::Entity(_), Kind::Entity)
-            | (NodeRef::State(_), Kind::State)
             | (NodeRef::Api(_), Kind::Api)
             | (NodeRef::Dto(_), Kind::Dto)
             | (NodeRef::Timing(_), Kind::Timing)

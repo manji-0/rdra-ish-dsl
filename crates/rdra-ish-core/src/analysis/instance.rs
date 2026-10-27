@@ -270,14 +270,6 @@ pub(crate) fn register_instance(
             apply_primary_key_flags(&mut model.entities[k]);
             NodeRef::Entity(k)
         }
-        Kind::State => {
-            let k = model.states.insert(State {
-                id: inst.id.clone(),
-                label: inst.label.clone(),
-                description: inst.description.clone(),
-            });
-            NodeRef::State(k)
-        }
         Kind::Api => {
             let k = model.apis.insert(Api {
                 id: inst.id.clone(),

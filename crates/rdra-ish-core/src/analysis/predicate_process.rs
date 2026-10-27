@@ -399,16 +399,14 @@ fn ensure_entity_variant_state(
     variant: &str,
 ) -> crate::model::StateKey {
     let id = format!("{entity_id}_{variant}");
-    if let Some(NodeRef::State(k)) = model.symbols.lookup_qualified(&Kind::State, &id).cloned() {
+    if let Some((k, _)) = model.states.iter().find(|(_, s)| s.id == id) {
         return k;
     }
-    let k = model.states.insert(crate::model::State {
-        id: id.clone(),
+    model.states.insert(crate::model::State {
+        id,
         label: variant.to_string(),
         description: None,
-    });
-    model.symbols.insert(id, NodeRef::State(k));
-    k
+    })
 }
 
 fn process_outbox_predicate(model: &mut SemanticModel, resolved: &[Option<NodeRef>]) {

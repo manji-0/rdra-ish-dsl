@@ -14,9 +14,6 @@ entity Organization "Organization" {
   name: String
 }
 
-state Normal "Normal"
-state Scheduled "Scheduled"
-state Blocked "Blocked"
 
 event RestockScheduled "Restock Scheduled"
 event RestockBlocked "Restock Blocked"

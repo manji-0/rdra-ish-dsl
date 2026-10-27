@@ -22,7 +22,8 @@ by use cases or events.
 
 1. Add lifecycle columns such as `Enum(...)`, `Bool`, and nullable timestamp/value
    columns.
-2. Declare `event` and `state` nodes where a state machine is useful.
+2. Declare `event` nodes. States are not declared: each `transitions` variant becomes a
+   state of its entity.
 3. Add `raises(UseCase, Event)` for event origins.
 4. Add `transitions(Entity.col, Event, from -> to)` for lifecycle movement.
 5. For downstream automation, model BUC-level causality first:

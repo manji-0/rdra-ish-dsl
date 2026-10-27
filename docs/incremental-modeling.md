@@ -63,10 +63,10 @@ ownership clearer.
 |---|---|---|
 | `actor`, `extsystem` | `shared/actors.rdra` | many external systems justify `shared/external.rdra` |
 | `business`, stable `requirement`, reusable `timing` / `medium` / `permission` | `shared/biz.rdra` or another shared vocabulary file | context and authority vocabulary grows large enough to deserve its own file |
-| `entity`, `relate`, shared lifecycle states/events | `shared/entities.rdra` | entities naturally form bounded groups |
+| `entity`, `relate`, shared lifecycle events | `shared/entities.rdra` | entities naturally form bounded groups |
 | `buc`, `usecase`, `screen`, BUC-local `api`, BUC-local events | `buc/buc_<name>.rdra` | keep one BUC per file; do not split a single BUC early |
 | CRUD, `displays`, `invokes`, access constraints, `raises`, `sets` | the BUC file that explains the use case | never put BUC-specific predicates in shared files |
-| cross-BUC `event`, `state`, `transitions` | shared file near the owning entity | multiple BUC files raise or trigger the same event |
+| cross-BUC `event`, `transitions` | shared file near the owning entity | multiple BUC files raise or trigger the same event |
 | entity constraint predicates (`forbidden`, `invariant`, `required`, `exclusive`) | shared file near the constrained entity | constraints become numerous enough for `shared/rules.rdra` |
 
 ### Growth Pattern
@@ -139,7 +139,7 @@ import shared.lifecycle.order
 | 2 | Biz object touchpoints | Data touchpoints | Which data objects does each use case touch? | coarse `entity`, CRUD predicates | CRUD matrix, ER diagram |
 | 3 | Tech interaction boundary | Interaction boundary | What UI/API boundary mediates the work, and with which authority/media constraints? | `screen`, `displays`, `shows`, optional `api`/`invokes`, `permission`, `medium`, `has_permission`, `requires_*` | sequence diagram, screen-constraints CSV, actor-permission audit |
 | 4 | Tech data design | Entity structure | What structure and ownership does the data need? | columns, `@pk`, `relate`, cardinality | ER diagram, sequence TX warnings |
-| 5 | Tech lifecycle design | Lifecycle | Which states and event-triggered BUC entries are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `state`, `transitions`, `raises`, `triggers`, `sets` | `check`, `states`, state diagram, event-flow |
+| 5 | Tech lifecycle design | Lifecycle | Which states and event-triggered BUC entries are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `transitions`, `raises`, `triggers`, `sets` | `check`, `states`, state diagram, event-flow |
 | 6A | Tech-enforced rules | Local guardrails | Which simple states or facts must never co-occur? | `forbidden`, `exclusive` over Enum / Bool / nullable axes | `states` diagnostics |
 | 6B | Tech-enforced rules | Local obligations | Which reachable states imply or require other facts? | `invariant`, narrow `required` | `states` diagnostics |
 | 6C | Tech-enforced rules | Advanced rules | Which comparison or cross-entity facts are reviewable from the abstract state space? | comparison propositions, multi-entity `forbidden` / `invariant` | `states` diagnostics |
@@ -412,7 +412,7 @@ Ask the user:
 - Which use case or event causes each state change?
 - Does any event start another BUC, and is the concrete entry use case known yet?
 - Which nullable or boolean fields change together with the lifecycle?
-- Do you need optional `state` labels for diagrams, or are Enum variants enough?
+- Are the Enum variants the states you want to see? Diagrams derive one state per variant.
 
 Validation:
 

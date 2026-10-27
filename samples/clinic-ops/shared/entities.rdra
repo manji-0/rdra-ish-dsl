@@ -252,9 +252,6 @@ relate(Notification, PatientAccount, N:1)
 relate(AuditEvent, PatientAccount, N:1)
 
 // Patient account state
-state Patientactive   "Active Patient"
-state Patientinactive "Inactive Patient"
-state Patientmerged   "Merged Patient"
 
 event EvPatientArchived "Patient Archived"
 event EvPatientMerged   "Patient Merged"
@@ -265,12 +262,6 @@ transitions(PatientAccount.status, EvPatientMerged, patientactive -> patientmerg
 sets(event::EvPatientArchived, PatientAccount, archived_at == present)
 
 // Appointment state
-state Apptrequested "Appointment Requested"
-state Apptscheduled "Appointment Scheduled"
-state Apptcheckedin "Appointment Checked In"
-state Apptcompleted "Appointment Completed"
-state Apptcancelled "Appointment Cancelled"
-state Apptnoshow    "Appointment No Show"
 
 event EvAppointmentScheduled   "Appointment Scheduled"
 event EvAppointmentRescheduled "Appointment Rescheduled"
@@ -291,9 +282,6 @@ sets(event::EvAppointmentCompleted, Appointment, completed_at == present)
 sets(event::EvAppointmentCancelled, Appointment, cancel_reason == present)
 
 // Intake state
-state Intakesent      "Intake Sent"
-state Intakecompleted "Intake Completed"
-state Intakeexpired   "Intake Expired"
 
 event EvIntakeCompleted "Intake Completed"
 event EvIntakeExpired   "Intake Expired"
@@ -304,10 +292,6 @@ transitions(IntakePacket.status, EvIntakeExpired, intakesent -> intakeexpired)
 sets(event::EvIntakeCompleted, IntakePacket, completed_at == present)
 
 // Encounter state
-state Encopen       "Encounter Open"
-state Encdocumented "Encounter Documented"
-state Encsigned     "Encounter Signed"
-state Encamended    "Encounter Amended"
 
 event EvEncounterDocumented "Encounter Documented"
 event EvEncounterSigned     "Encounter Signed"
@@ -320,11 +304,6 @@ transitions(Encounter.status, EvEncounterAmended, encsigned -> encamended)
 sets(event::EvEncounterSigned, Encounter, signed_at == present)
 
 // Clinical order state
-state Clordered   "Clinical Order Placed"
-state Clcollected "Specimen Collected"
-state Clresulted  "Result Received"
-state Clreviewed  "Result Reviewed"
-state Clcancelled "Clinical Order Cancelled"
 
 event EvClinicalOrderCollected "Specimen Collected"
 event EvClinicalOrderResulted  "Clinical Result Received"
@@ -340,10 +319,6 @@ sets(event::EvClinicalOrderCollected, ClinicalOrder, collected_at == present)
 sets(event::EvClinicalOrderResulted, ClinicalOrder, resulted_at == present)
 
 // Prescription state
-state Rxdrafted   "Prescription Drafted"
-state Rxsent      "Prescription Sent"
-state Rxdispensed "Prescription Dispensed"
-state Rxcancelled "Prescription Cancelled"
 
 event EvPrescriptionSent      "Prescription Sent"
 event EvPrescriptionDispensed "Prescription Dispensed"
@@ -357,11 +332,6 @@ sets(event::EvPrescriptionSent, Prescription, sent_at == present)
 sets(event::EvPrescriptionDispensed, Prescription, dispensed_at == present)
 
 // Claim state
-state Claimdraft     "Claim Draft"
-state Claimsubmitted "Claim Submitted"
-state Claimaccepted  "Claim Accepted"
-state Claimdenied    "Claim Denied"
-state Claimpaid      "Claim Paid"
 
 event EvClaimSubmitted "Claim Submitted"
 event EvClaimAccepted  "Claim Accepted"
@@ -378,9 +348,6 @@ sets(event::EvClaimDenied, Claim, denial_reason == present)
 sets(event::EvClaimPaid, Claim, paid_at == present)
 
 // Care plan state
-state Careopen       "Care Plan Open"
-state Caremonitoring "Care Plan Monitoring"
-state Careclosed     "Care Plan Closed"
 
 event EvCarePlanMonitoring "Care Plan Monitoring"
 event EvCarePlanClosed     "Care Plan Closed"

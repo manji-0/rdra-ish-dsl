@@ -48,8 +48,6 @@ pub enum Token {
     Event,
     #[token("entity")]
     Entity,
-    #[token("state")]
-    State,
     #[token("api")]
     Api,
     #[token("dto")]

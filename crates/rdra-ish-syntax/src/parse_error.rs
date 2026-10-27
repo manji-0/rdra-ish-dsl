@@ -27,7 +27,6 @@ impl fmt::Display for Token {
             Token::Field => "field",
             Token::Event => "event",
             Token::Entity => "entity",
-            Token::State => "state",
             Token::Api => "api",
             Token::Dto => "dto",
             Token::Timing => "timing",

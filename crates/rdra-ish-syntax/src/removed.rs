@@ -12,6 +12,10 @@ const HINTS: &[(&str, &str)] = &[
         "no output consumed it. Delete the declaration and any `.where(...)` on `belongs`; keep `timing` / `.when(...)` and `medium` / `.by(...)` for Business-BUC context",
     ),
     (
+        "state",
+        "states are derived from the Enum column named in `transitions(Entity.col, ...)`; delete the declaration and list each state as a variant of the lifecycle Enum column",
+    ),
+    (
         "condition",
         "removed reserved kind; model rules with use case conditions or entity state constraints",
     ),
@@ -69,6 +73,16 @@ mod tests {
     }
 
     #[test]
+    fn state_points_to_the_lifecycle_enum() {
+        let msgs = messages("state Pending \"Order Received\"\n");
+        assert!(
+            msgs.iter()
+                .any(|m| m.contains("`state`") && m.contains("variant of the lifecycle Enum")),
+            "{msgs:?}"
+        );
+    }
+
+    #[test]
     fn reserved_kinds_point_to_use_case_conditions() {
         for kw in ["condition", "variation"] {
             let msgs = messages(&format!("{kw} X \"X\"\n"));
@@ -110,7 +124,8 @@ mod tests {
 
     #[test]
     fn removed_words_stay_usable_as_column_names() {
-        let (_, errs) = parse("entity E \"E\" { condition: String }\n");
+        let (_, errs) =
+            parse("entity E \"E\" { condition: String\n  state: String\n  location: String }\n");
         assert!(errs.is_empty(), "{errs:?}");
     }
 }

@@ -72,9 +72,6 @@ relate(AuditLog, UserAccount, N:1)
 // declared as both a state and an event; transitions disambiguates them with
 // state:: / event:: qualifiers.
 
-state Active    "Active"
-state Suspended "Suspended"
-state Deleted   "Deleted"
 
 event Suspended "Suspend Account" // same name as state Suspended
 event Active    "Restore Account" // same name as state Active

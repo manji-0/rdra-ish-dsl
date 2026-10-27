@@ -1796,7 +1796,6 @@ usecase PlaceOrder "注文する"
 screen OrderScreen "注文画面"
 api OrderApi "注文API"
 entity Order "注文" { id: Int @pk }
-state Draft "下書き"
 performs(Customer, BucOrder)
 contains(BucOrder, PlaceOrder)
 displays(PlaceOrder, OrderScreen)
@@ -1975,9 +1974,13 @@ transitions(Encounter.status, EncounterSigned, pending -> signed)
         let src = r#"
 usecase SignEncounter "Sign Encounter"
 buc BucBillingClaims "Billing Claims"
-state Pending "Pending"
 event EncounterSigned "Encounter Signed"
+entity Encounter "Encounter" {
+  id: Int @pk
+  status: Enum(pending, signed) @default(pending)
+}
 raises(SignEncounter, EncounterSigned)
+transitions(Encounter.status, EncounterSigned, pending -> signed)
 "#;
         let model = model_from(src);
         let flow = rdra_ish_core::collect_event_flows(&model).pop().unwrap();
@@ -1996,7 +1999,7 @@ raises(SignEncounter, EncounterSigned)
         let state = model
             .states
             .iter()
-            .find(|(_, state)| state.id == "Pending")
+            .find(|(_, state)| state.id == "Encounter_pending")
             .map(|(key, _)| key)
             .unwrap();
         let mut out = String::new();
@@ -2014,16 +2017,19 @@ raises(SignEncounter, EncounterSigned)
             declare_mermaid_event_flow_buc(&mut out, &mut declared, &model, buc).as_deref(),
             Some("buc__BucBillingClaims")
         );
-        assert_eq!(mermaid_event_flow_state_id("Pending"), "st__Pending");
+        assert_eq!(
+            mermaid_event_flow_state_id("Encounter_pending"),
+            "st__Encounter_pending"
+        );
         assert_eq!(
             declare_mermaid_event_flow_state(&mut out, &mut declared, &model, state).as_deref(),
-            Some("st__Pending")
+            Some("st__Encounter_pending")
         );
 
         assert!(out.contains("ev__EncounterSigned{\"⚡ Encounter Signed\"}"));
         assert!(out.contains("uc__SignEncounter([\"✅ Sign Encounter\"])"));
         assert!(out.contains("buc__BucBillingClaims[[\"📦 Billing Claims\"]]"));
-        assert!(out.contains("st__Pending(\"🔄 Pending\")"));
+        assert!(out.contains("st__Encounter_pending(\"🔄 pending\")"));
     }
 
     #[test]

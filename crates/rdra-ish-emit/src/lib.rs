@@ -718,8 +718,11 @@ event Event "Event"
 api Api "API"
 dto ApiRequest "API Request" { name: String }
 system Sys "System"
-entity Entity "Entity" { id: Int @pk }
-state State "State"
+entity Entity "Entity" {
+  id: Int @pk
+  status: Enum(a, b)
+}
+transitions(Entity.status, event::Event, a -> b)
 "#,
         );
 
@@ -753,7 +756,8 @@ state State "State"
                 "ApiRequest",
                 "Sys",
                 "Entity",
-                "State",
+                "Entity_a",
+                "Entity_b",
             ]
         );
     }
@@ -766,7 +770,6 @@ actor Customer "Customer"
 permission Admin "Admin"
 usecase Manage "Manage"
 entity Account "Account" { id: Int @pk }
-state Active "Active"
 "#,
         );
 
@@ -775,7 +778,7 @@ state Active "Active"
         });
         let ids: Vec<_> = nodes.iter().map(|node| node_id(&model, node)).collect();
 
-        assert_eq!(ids, vec!["Customer", "Manage", "Active"]);
+        assert_eq!(ids, vec!["Customer", "Manage"]);
         assert!(nodes
             .iter()
             .all(|node| !matches!(node, NodeRef::Permission(_) | NodeRef::Entity(_))));

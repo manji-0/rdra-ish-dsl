@@ -115,7 +115,7 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
      - `EventNeverConsumed`: the event is raised but drives no `transitions` and `triggers`
        nothing — add the missing predicate or investigate a modelling gap
      - `TriggeredUseCaseUnreachable`: the triggered UC belongs to no BUC — add a `contains`
-   - Every `state` referenced in `transitions` is declared
+   - Every `from -> to` variant in `transitions` is a variant of the Enum column
    - Review unreachable enum variants or state-pattern warnings from `rdra-ish check`
      and `rdra-ish states`; a state can still be valid as an initial state even if it
      never appears as a transition target

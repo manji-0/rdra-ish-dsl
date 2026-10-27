@@ -23,7 +23,6 @@ const KIND_KEYWORDS: &[&str] = &[
     "field",
     "event",
     "entity",
-    "state",
     "api",
     "dto",
     "timing",

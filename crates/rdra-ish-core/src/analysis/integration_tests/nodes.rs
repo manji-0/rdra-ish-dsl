@@ -26,7 +26,6 @@ fn node_kind_tag_str_labels_each_node_ref_kind() {
         (Kind::Screen, "ScreenA", "screen"),
         (Kind::Field, "FieldA", "field"),
         (Kind::Event, "EventA", "event"),
-        (Kind::State, "StateA", "state"),
         (Kind::Api, "ApiA", "api"),
         (Kind::Dto, "DtoA", "dto"),
         (Kind::Timing, "TimingA", "timing"),

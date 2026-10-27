@@ -117,7 +117,6 @@ fn kind_from_name(name: &str) -> Option<Kind> {
         "field" => Kind::Field,
         "event" => Kind::Event,
         "entity" => Kind::Entity,
-        "state" => Kind::State,
         "api" => Kind::Api,
         "dto" => Kind::Dto,
         "timing" => Kind::Timing,

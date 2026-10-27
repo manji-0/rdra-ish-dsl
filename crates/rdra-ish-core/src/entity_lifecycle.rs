@@ -48,66 +48,31 @@ fn declared_variant_casing(
         .unwrap_or_else(|| variant.to_string())
 }
 
-/// entity の Enum カラムと state 集合のマッピングを構築する。
+/// entity の status 列と、その列の遷移が結ぶ entity-scoped state (`{Entity}_{variant}`) を返す。
 ///
-/// `transitions(Entity.col, ...)` 由来の遷移があれば、その列と entity-scoped state
-/// (`{Entity}_{variant}`) を優先する。なければ旧来のグローバル state id 照合にフォールバック。
+/// state ノードは `transitions(Entity.col, ...)` から導出されるもののみ。遷移がなければ `None`。
 /// Map values use the **declared Enum casing** (not lowercased).
 pub fn link_entity_status_states(
     model: &SemanticModel,
     ek: EntityKey,
 ) -> Option<(String, HashMap<StateKey, String>)> {
-    let entity = &model.entities[ek];
-    let entity_id = &entity.id;
-
-    if let Some(column) = preferred_lifecycle_column(model, ek) {
-        let prefix = format!("{entity_id}_");
-        let mut map: HashMap<StateKey, String> = HashMap::new();
-        for st in model
-            .state_transitions
-            .iter()
-            .filter(|st| st.entity == ek && st.column == column)
-        {
-            for variant_name in [&st.from, &st.to] {
-                let declared = declared_variant_casing(model, ek, &column, variant_name);
-                let prefixed_id = format!("{prefix}{declared}");
-                if let Some((sk, _)) = model.states.iter().find(|(_, s)| {
-                    s.id == prefixed_id
-                        || s.id.eq_ignore_ascii_case(variant_name)
-                        || s.id == format!("{prefix}{variant_name}")
-                }) {
-                    map.insert(sk, declared);
-                }
-            }
-        }
-        if !map.is_empty() {
-            return Some((column, map));
-        }
-    }
-
-    let state_ids_lower: HashSet<String> =
-        model.states.values().map(|s| s.id.to_lowercase()).collect();
-
-    for col in &entity.columns {
-        if let ColumnType::Enum(variants) = &col.col_type {
-            let variants_lower: Vec<String> = variants.iter().map(|v| v.to_lowercase()).collect();
-            let matching = variants_lower
-                .iter()
-                .filter(|v| state_ids_lower.contains(*v))
-                .count();
-            if matching * 2 >= variants.len() && matching > 0 {
-                let mut map: HashMap<StateKey, String> = HashMap::new();
-                for (sk, state) in model.states.iter() {
-                    let lower = state.id.to_lowercase();
-                    if let Some(declared) = variants.iter().find(|v| v.to_lowercase() == lower) {
-                        map.insert(sk, declared.clone());
-                    }
-                }
-                return Some((col.name.clone(), map));
+    let entity_id = &model.entities[ek].id;
+    let column = preferred_lifecycle_column(model, ek)?;
+    let mut map: HashMap<StateKey, String> = HashMap::new();
+    for st in model
+        .state_transitions
+        .iter()
+        .filter(|st| st.entity == ek && st.column == column)
+    {
+        for variant_name in [&st.from, &st.to] {
+            let declared = declared_variant_casing(model, ek, &column, variant_name);
+            let state_id = format!("{entity_id}_{declared}");
+            if let Some((sk, _)) = model.states.iter().find(|(_, s)| s.id == state_id) {
+                map.insert(sk, declared);
             }
         }
     }
-    None
+    (!map.is_empty()).then_some((column, map))
 }
 
 /// 単一 entity のライフサイクル（状態集合と遷移グラフ）。

@@ -115,7 +115,7 @@ Kinds commonly used by this skill:
 | `business` / `buc` / `flow` / `step` / `usecase` | business value, flow order, and action boundaries |
 | `screen` / `field` / `api` / `dto` / `system` | UI items, payloads, interaction, and implementation boundaries |
 | `entity` | logical data modeling |
-| `state` / `event` | lifecycle and causality |
+| `event` | lifecycle and causality |
 | `timing` / `medium` / `permission` | context and access vocabulary |
 
 #### Predicate Signatures

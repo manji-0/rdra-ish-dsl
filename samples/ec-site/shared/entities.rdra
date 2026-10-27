@@ -89,11 +89,6 @@ relate(Payment, Order, 1:1)
 // tree is merged, the event and use case collide, so the first argument of
 // transitions must be qualified with event::.
 
-state Pending   "Order Received"
-state Paid      "Payment Completed"
-state Shipped   "Shipped"
-state Delivered "Delivered"
-state Cancelled "Cancelled"
 
 event Capture "Capture Payment"  // same name as use case Capture (buc_payment)
 event Ship    "Start Shipping"

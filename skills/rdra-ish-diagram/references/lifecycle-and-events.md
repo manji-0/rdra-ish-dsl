@@ -31,7 +31,7 @@ rdra-ish verify src/ --backend tlc -o out/
 
 ## Reading State Diagrams
 
-- Nodes are `state` declarations.
+- Nodes are the Enum variants of the entity's lifecycle column, named `{Entity}_{variant}`.
 - Arrows are labelled with event display names.
 - `[*]` initial state is derived from creation paths.
 
