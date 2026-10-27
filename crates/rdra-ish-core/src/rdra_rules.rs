@@ -8,7 +8,7 @@
 use std::collections::HashSet;
 
 use crate::lint::{node_id, node_kind_display, push_element_lint, LintIssue};
-use crate::model::{node_ref_kind, ColumnType, NodeRef, RelKind, SemanticModel};
+use crate::model::{node_ref_kind, ColumnType, NodeRef, SemanticModel};
 use crate::resolver::reachable_from_bucs;
 
 /// Which RDRA definition sheet a row belongs to. `RdraIsh` marks rows rdra-ish adds.
@@ -329,21 +329,10 @@ impl BucClosure {
     pub fn of(model: &SemanticModel) -> Self {
         let buc_ids: Vec<String> = model.bucs.values().map(|buc| buc.id.clone()).collect();
         let members = reachable_from_bucs(model, &buc_ids);
-        // `raises(ExtSystem, Event)` points at an event, and the closure holds that event only when
-        // a use case in it raises the event. An event that triggers a member is inbound.
-        let inbound_events: HashSet<&NodeRef> = model
-            .relations
-            .iter()
-            .filter(|rel| rel.kind == RelKind::Triggers && members.contains(&rel.to))
-            .map(|rel| &rel.from)
-            .collect();
         let pointing_in = model
             .relations
             .iter()
-            .filter(|rel| {
-                members.contains(&rel.to)
-                    || (rel.kind == RelKind::Raises && inbound_events.contains(&rel.to))
-            })
+            .filter(|rel| members.contains(&rel.to))
             .map(|rel| rel.from.clone())
             .collect();
         Self {
@@ -554,6 +543,21 @@ combines(Eligible, Method)
         let all = crate::lint::lint_issues(&model, &[]);
         let rdra: Vec<_> = all.iter().filter(|i| i.rule.starts_with("rdra-")).collect();
         assert!(rdra.is_empty(), "{rdra:?}");
+    }
+
+    #[test]
+    fn the_buc_closure_holds_inbound_events_and_their_external_systems() {
+        let (model, _) = build(CLEAN);
+        let closure = reachable_from_bucs(&model, &["Checkout".to_string()]);
+        let ids: HashSet<String> = closure
+            .iter()
+            .filter_map(|node| node_id(&model, node))
+            .collect();
+        assert!(ids.contains("EvIn"), "inbound event missing: {ids:?}");
+        assert!(
+            ids.contains("Inbound"),
+            "raising extsystem missing: {ids:?}"
+        );
     }
 
     #[test]

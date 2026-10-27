@@ -366,6 +366,20 @@ pub fn reachable_from_buc(model: &SemanticModel, buc_id: &str) -> HashSet<crate:
         }
     }
 
+    // 閉包内のユースケースを起動するイベント（外部システムからの inbound）も閉包に入れる。
+    // 前向き BFS は inbound イベントに到達しない。
+    let inbound: Vec<NodeRef> = model
+        .relations
+        .iter()
+        .filter(|rel| {
+            rel.kind == RelKind::Triggers
+                && matches!(rel.from, NodeRef::Event(_))
+                && visited.contains(&rel.to)
+        })
+        .map(|rel| rel.from.clone())
+        .collect();
+    visited.extend(inbound);
+
     // 第2パス: 起点 BUC に直接 performs している Actor と、閉包内へ入る Timer（triggers）/
     // 外部システム（raises）/ 条件（applies_to）を追加する（推移的探索はしない — 他 BUC への連鎖を防ぐ）。
     // 条件はそのバリエーションも連れてくる（バリエーションは関係では閉包に入らない）。
