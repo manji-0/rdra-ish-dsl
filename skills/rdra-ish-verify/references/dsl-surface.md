@@ -92,3 +92,10 @@ lifecycle. `states` gives it no axis. The TLA+ export gives it a variable only w
 `sets`, an entity-local or multi-entity constraint, an `after(UC).assert`, or a
 `property` names it; its `Init` is a free choice over every value, so TLC checks
 the rule against each one. A `transitions` on it is an error.
+
+## Conditions
+
+A `condition` with `combines` or a `holds` body is traceability in this version. `states`
+and the TLA+ export ignore it, and `verify` prints
+`condition <Id>: body stored, not yet checked (phase 4)` for each body. A passing TLC run
+says nothing about a condition.

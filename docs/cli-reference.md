@@ -96,6 +96,8 @@ It also emits two `info` rows:
 - `enum-attribute` warns on an inline `Enum` column that no `transitions` and no `sets`
   moves. Its value is chosen by an actor, so the hint is to type the column by a
   [`variation`](./language-reference.md#variations).
+- `condition-no-rdra-anchor` warns on a [condition](./language-reference.md#conditions) whose
+  `holds` body names neither a variation-typed column nor a lifecycle column.
 
 Lint warnings do not fail the command. Existing parse/model errors are emitted as
 `semantic-error` rows and make the command exit with status `1`.
@@ -315,6 +317,10 @@ rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [-
 | `--instance-count` | unsigned integer | `2` | Multi-instance `InstanceCount` (`>= 1`; `1` warns). |
 | `--int-range-max` | unsigned integer | `5` | Upper bound for `IntRange == 0..N` (`>= 1`; `0` rejected). |
 
+For each condition that has a `holds` body, `verify` first prints
+`condition <Id>: body stored, not yet checked (phase 4)` on stdout. Conditions change neither
+the exported spec nor the TLC result.
+
 Export warnings from the TLA emitter are printed on stderr (including the
 approximation banner when multi-instance or Int axes are used). Exits non-zero when TLC
 is missing or reports a violation.
@@ -332,7 +338,7 @@ rdra-ish list <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--allow-tla-only]
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `actor` \| `entity` \| `requirement` \| `adr` \| `adr-impact` \| `nfr` \| `quality` \| `constraint` \| `buc` \| `flow` \| `step` \| `usecase` \| `field` \| `system` \| `api` \| `dto` \| `variation` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` | `actor` | The element kind to list. `actor` / `quality` / `buc` / `flow` / `step` / `system` / `variation` list id+label; `usecase` lists UC preconditions, guards, postconditions, alternatives, errors, and description; `requirement` lists requirement metadata; `adr` lists decision metadata plus impacted targets from `decides`; `adr-impact` lists one row per ADR-target pair; `nfr` and `constraint` list non-functional metadata; `field` lists screen-field metadata plus Entity.column mappings; `api` lists API contract metadata; `dto` lists DTO fields; `entity` lists each column with type, PK/unique/index/FK flags, FK optionality/actions, check constraints, soft-delete/history/tenant markers, and derived expressions; `permission-callables` lists each permission with callable use case/API ids and API-level `UseCase->Api` paths derived from `requires_permission`; `actor-permission-audit` lists inferred actor-side assignment gaps; `business-inputs` lists inferred actor-entered fields. |
+| `--kind` | `actor` \| `entity` \| `requirement` \| `adr` \| `adr-impact` \| `nfr` \| `quality` \| `constraint` \| `buc` \| `flow` \| `step` \| `usecase` \| `field` \| `system` \| `api` \| `dto` \| `variation` \| `condition` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` | `actor` | The element kind to list. `actor` / `quality` / `buc` / `flow` / `step` / `system` / `variation` list id+label; `usecase` lists UC preconditions, guards, postconditions, alternatives, errors, and description; `requirement` lists requirement metadata; `adr` lists decision metadata plus impacted targets from `decides`; `adr-impact` lists one row per ADR-target pair; `nfr` and `constraint` list non-functional metadata; `field` lists screen-field metadata plus Entity.column mappings; `api` lists API contract metadata; `dto` lists DTO fields; `condition` lists the `holds` body, the variations and state models it combines (derived from the body, or from `combines` when there is none), and the targets of `applies_to`; `entity` lists each column with type, PK/unique/index/FK flags, FK optionality/actions, check constraints, soft-delete/history/tenant markers, and derived expressions; `permission-callables` lists each permission with callable use case/API ids and API-level `UseCase->Api` paths derived from `requires_permission`; `actor-permission-audit` lists inferred actor-side assignment gaps; `business-inputs` lists inferred actor-entered fields. |
 | `--format` | `table` \| `json` \| `csv` | `table` | Output format. |
 | `--allow-tla-only` | flag | off | Demote undriven comparisons / NotEvaluated so listing can proceed despite TLA-only state gaps. |
 

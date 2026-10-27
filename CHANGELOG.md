@@ -33,6 +33,8 @@
 - `variation` is a keyword again (it was a removed word), and a bare identifier in
   column type position now names a variation instead of failing to parse. An inline
   `Enum` that no `transitions` and no `sets` moves draws the `enum-attribute` warning.
+- `condition` is a keyword again (it was a removed word). It stays usable as a column
+  name and a module path segment.
 - Unknown chain methods on predicates are an error (`unknown chain method '.x' on
   predicate 'p'`). Previously they were silently ignored, so a typo such as
   `belongs(U, B).wehn(T)` or the removed `belongs(...).where(...)` loaded with
@@ -91,6 +93,23 @@
 
 ### Added
 
+- `condition Id "Label"` is an RDRA 条件, the combination of variations and a state
+  model. `combines(Condition, Variation | Entity.column)` links it for traceability (the
+  column must be a lifecycle column some `transitions` moves). `holds(Condition, cmp,
+  ...)` gives it a body, an implicit conjunction of entity-qualified comparisons; the
+  links are then derived from the columns the body names, and `combines` on the same
+  condition is an error. `applies_to` now takes a condition as well as an `nfr`. New
+  diagnostics: `ConditionCombinesWithBody`, `ConditionSecondBody`,
+  `ConditionCombinesAttribute`, `AmbiguousCombinesTarget`; body values report
+  `InvalidVariationValue` / `InvalidEnumVariant`. New lint `condition-no-rdra-anchor`.
+  `list --kind condition` shows the body and the derived links, the RDRA diagram draws
+  conditions in the system layer with edges to their variation, state model, and use
+  cases (a `--buc` view includes the conditions applied to its use cases), and `verify`
+  prints `condition <Id>: body stored, not yet checked (phase 4)` for each body. In this
+  release no engine reads a body: `states` and the TLA+ export are unchanged. The
+  clinic-ops sample gains `CopayDue` (traceability only) and `InsuredVisit` (with a body).
+- The RDRA object-graph diagram now lists `variation` nodes, which it already placed in
+  the system layer but never drew.
 - `variation Id "Label" { value "Label"? ... }` declares the values an actor chooses
   from (RDRA バリエーション). A column typed by its id (`method: PaymentMethod`) is an
   attribute, not a lifecycle: `states` gives it no axis and no unreachable-variant
@@ -152,6 +171,12 @@
   notes outstanding temporal properties / TLA-only obligations.
 - OpenAPI emits `oneOf` (+ `x-rdra-ish-ambiguous-status`) for multiple
   `response` / `error_response` DTOs.
+
+### Fixed
+
+- A bad equality value in a multi-entity constraint (`forbidden(A, B, A.status == gone,
+  ...)`) reported the same mistake two or three times, once of them as a missing entity
+  qualifier on the value. It now reports it once.
 
 ### Changed
 

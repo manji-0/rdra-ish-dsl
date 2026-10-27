@@ -117,6 +117,7 @@ Kinds commonly used by this skill:
 | `entity` | logical data modeling |
 | `event` | lifecycle and causality |
 | `timer` | schedule that triggers a use case |
+| `variation` / `condition` | values an actor chooses; the variation x state-model combination a use case applies under |
 | `medium` / `permission` | context and access vocabulary |
 
 #### Predicate Signatures
@@ -156,7 +157,9 @@ Kinds commonly used by this skill:
 | `has_permission` | `Actor == Permission` | actor-side grant |
 | `requires_permission` | `(UseCase\|Api, Permission)` | UC/API required authority |
 | `requires_medium` | `(UseCase\|Api, Medium)` | UC/API required operation medium |
-| `applies_to/qualifies/constrains` | `(Nfr\|Quality\|Constraint, target)` | non-functional and quality scope |
+| `applies_to/qualifies/constrains` | `(Nfr\|Condition\|Quality\|Constraint, target)` | non-functional and quality scope; `applies_to(Condition, UseCase)` scopes a condition |
+| `combines` | `(Condition, Variation\|Entity.column)` | traceability link to a variation or a lifecycle column |
+| `holds` | `(Condition, Entity.col == value, ...)` | condition body (implicit AND); links are then derived, so no `combines` |
 | `motivates` / `decides` | `Requirement == Buc` / `Adr == target` | requirement and decision traceability |
 
 #### Imports
@@ -205,6 +208,12 @@ import shared.actors.{Staff as S}
   value; use an inline `Enum(...)` only for lifecycle columns or values that use cases
   set. A variation column is not a `states` axis, and `lint` `enum-attribute` flags an
   inline Enum that no `transitions` and no `sets` moves.
+- Declare a `condition` for an RDRA 条件. Link it with `combines(Cond, Variation)` and
+  `combines(Cond, Entity.lifecycle_col)` for traceability only, or give it a body with
+  `holds(Cond, Entity.col == value, ...)` and no `combines` (the links come from the
+  columns the body names). Scope it with `applies_to(Cond, UseCase)` inside a BUC. A body
+  is stored and validated but not yet checked: `states` and TLA+ ignore it and `verify`
+  says so.
 - Add local rules in this order: `forbidden` / `exclusive` first, `invariant` /
   narrow `required` next, comparison and cross-entity constraints last.
 - Use multi-entity `forbidden` / `invariant` when a rule mentions columns from more

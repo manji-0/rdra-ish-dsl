@@ -151,6 +151,7 @@ descriptions as review annotations where supported.
 | `permission` | A permission or role-like authority assignable to actors. | `check` `requires_permission` against `has_permission`; `csv --kind actor-permission-audit` |
 | `entity` | A logical data model: a table-like persistent structure. | `check`; `states`; ER diagram; `csv --kind matrix`; `export --kind dbml`, `json-schema`, `tla`; `lint` `enum-attribute` |
 | `variation` | A closed set of values an actor chooses from (an RDRA バリエーション), such as a payment method. It types attribute columns of entities and DTOs and is never a lifecycle. See [Variations](#variations). | `lint` `orphan-node` (a variation that types no column); `check` `UnknownColumnType`, `InvalidVariationValue`; ER diagram and `csv --kind entity` (the column type); `export --kind dbml`, `json-schema`, `openapi`; `list --kind variation` |
+| `condition` | An RDRA 条件: the combination of variations and a state model that selects a business rule, such as "the visit is covered by insurance". It carries no body of its own for traceability, or a `holds` body that is stored but not yet checked. See [Conditions](#conditions). | `combines`, `holds`, `applies_to(Condition, UseCase \| Api \| System)`; `lint` `condition-no-rdra-anchor`, `orphan-node`; `check` `ConditionCombinesWithBody`, `ConditionSecondBody`, `ConditionCombinesAttribute`, `AmbiguousCombinesTarget`; RDRA diagram (system layer, edges to variation, state model, and use case); `list --kind condition`; `verify` notice for a body |
 
 ---
 
@@ -167,7 +168,9 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `request` | `Api == Dto` | The API accepts the DTO as a request payload. |
 | `response` | `Api == Dto` | The API returns the DTO as a successful response payload. |
 | `error_response` | `Api == Dto` | The API may return the DTO as an error payload. |
-| `applies_to` | `(Nfr, UseCase \| Api \| System)` | The non-functional requirement applies to the use case, API, or system boundary. Use this for performance, availability, or SLO requirements tied to an operation or system. |
+| `applies_to` | `(Nfr \| Condition, UseCase \| Api \| System)` | The non-functional requirement or condition applies to the use case, API, or system boundary. Use this for performance, availability, or SLO requirements tied to an operation or system, and for the rule a [condition](#conditions) selects on a use case. |
+| `combines` | `(Condition, Variation \| Entity.column)` | Links the condition to a variation or to the lifecycle column (a column some `transitions` moves) of an entity: the 条件 sheet's バリエーション and 状態モデル columns. Not allowed on a condition that has a `holds` body. |
+| `holds` | `(Condition, comparison, ...)` | The condition's body: a comma list of comparisons, an implicit conjunction, each on a qualified column such as `Payment.method == insurance`. At most one per condition. |
 | `qualifies` | `(Nfr \| Constraint, Quality)` | The non-functional requirement or constraint belongs to the given quality category. |
 | `constrains` | `(Constraint, UseCase \| Api \| System \| Entity \| Dto)` | The constraint applies to the target model element. Use this for audit/logging/retention/privacy rules that constrain system behavior or data handling. |
 | `reads` | `(UseCase \| Api, Entity)` | The use case or API reads the entity. |
@@ -222,7 +225,7 @@ only the methods below, and any other name is an `unknown chain method` error
 | `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)` |
 | `when` | `.has(...)`, `.none(...)` |
 | `after` | `.assert(...)` |
-| every other predicate | none |
+| every other predicate (including `combines` and `holds`) | none |
 
 ---
 
@@ -847,6 +850,50 @@ What a variation column does differently from an inline `Enum`:
 | `export --kind dbml` | One `Enum <Entity>_<column>` per column | One `Enum <VariationId>` shared by every column typed by it |
 | `export --kind json-schema`, `openapi` | `enum` of the variants | `enum` of the variation's values |
 | ER diagram, `csv --kind entity`, `list --kind entity` | Type `Enum` | Type is the variation id |
+
+### Conditions
+
+<!-- derived-from #variations -->
+
+A `condition` is an RDRA 条件: a combination of variations and a state model, tied to the
+use cases it applies to. It has two forms, and a condition uses exactly one.
+
+```rdra
+// Traceability only (RDRA requirements level): the links are declared.
+condition CopayDue "A copay is due at check-in"
+combines(CopayDue, PaymentMethod)             // 条件 to バリエーション
+combines(CopayDue, Appointment.status)        // 条件 to 状態モデル (a lifecycle column)
+applies_to(CopayDue, CollectCopay)            // UC to 条件
+
+// With a body: the links are derived from the columns the body names.
+condition InsuredVisit "The visit is covered by insurance"
+holds(InsuredVisit, PaymentTransaction.method == insurance, Appointment.status == apptcheckedin)
+applies_to(InsuredVisit, CollectCopay)
+```
+
+The second argument of `combines` is a variation or `Entity.column`. A one-part name is a
+variation. A two-part name is tried as a variation through the imports first (`shared.PaymentMethod`)
+and as an entity column second; when both match it is `AmbiguousCombinesTarget`, and
+`variation::Name` picks the variation. The column must be a lifecycle column, one that some
+`transitions` moves, wherever in the files that `transitions` sits; an attribute is
+`ConditionCombinesAttribute`.
+
+The body is a comma list of comparisons, the same form `forbidden` takes, so it is an
+implicit conjunction. Each operand names its entity, and `check` validates the entity,
+the column, and the value (`InvalidVariationValue` or `InvalidEnumVariant`). Disjunction and
+negation are not available yet. A second `holds` on one condition is `ConditionSecondBody`, and
+`combines` together with `holds` is `ConditionCombinesWithBody`, in either order.
+
+One function, `condition_edges`, gives a condition's links. With a body, an operand on a
+variation-typed column links the variation and an operand on a lifecycle column links the state
+model. Without a body, the `combines` declarations are the links. `list --kind condition`,
+the RDRA diagram, and `lint` all read it, so a body and its links cannot disagree. A body that
+names neither a variation column nor a lifecycle column is `lint` `condition-no-rdra-anchor`.
+
+A body is stored and validated, and nothing checks it yet: `states` and the TLA+ export ignore
+it, and `verify` prints `condition InsuredVisit: body stored, not yet checked (phase 4)` for
+each one so a passing run does not imply otherwise. A body may name columns of two entities;
+this version does not check that a relation path joins them.
 
 ### `relate` and FK generation
 

@@ -50,6 +50,7 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    - Every BUC has a `belongs` predicate
    - Every `extsystem` is connected through an event: `raises(ExtSystem, Event)` or `triggers(Event, ExtSystem)`
    - Every `timer` triggers a use case: `triggers(Timer, UseCase)`
+   - Every `condition` is applied to a use case (`applies_to(Condition, UseCase)`) and either `combines` a variation or lifecycle column or has a `holds` body that names one (`lint` `condition-no-rdra-anchor`)
 
 4.5. **Check requirements, flow, and decision traceability**
    - Stable requirement metadata should include priority/source/stakeholder/owner
@@ -217,7 +218,7 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 | `precedes` / `branches` / `excepts` / `repeats` | Step | Step | — |
 | `covers` | Step | UseCase / Api / Event | — |
 | `compensates` | UseCase | UseCase / Event | — |
-| `applies_to` / `qualifies` / `constrains` | Nfr / Quality / Constraint | target | — |
+| `applies_to` / `qualifies` / `constrains` | Nfr (or Condition for `applies_to`) / Quality / Constraint | target | — |
 | `decides` | Adr | target | — |
 | `has_permission` | Actor | Permission | — |
 | `requires_permission` | UseCase / Api | Permission | — |

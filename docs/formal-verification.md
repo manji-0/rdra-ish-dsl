@@ -44,6 +44,7 @@ allows stuttering via `[][Next]_vars`).
 | `sets` of a use case that drives a transition on the entity | Folded into each of that use case's transition actions |
 | Any other `sets` (a use case that drives no transition on the entity) | One action per use case (`Entity_uc_X`); with `transitions`, its status-column effects are left out |
 | Bool / `@null` columns (multi-axis) | Additional variables with `BOOLEAN` or `{"null","present"}` |
+| `condition` with `combines` or a `holds` body | Nothing. The spec and the TLC result are the same with or without conditions; `verify` prints `condition <Id>: body stored, not yet checked (phase 4)` for each `holds` body so a passing run does not imply the condition was checked |
 | Variation-typed column that a `sets`, constraint, `after` assertion, or `property` names | An additional variable over the variation's values (plus `"null"` when `@null`). `Init` is `var \in {values}` (or `\in [Entity_Ids -> {values}]` multi-instance): a free choice, so TLC explores every value. A variation column nothing names is not exported. |
 | Int / Money / Decimal / Date / DateTime used in comparisons or `sets` Int assigns | `EXTENDS Integers`, `IntRange == 0..N`, arithmetic Safety / primed effects (nullable numeric columns promote to Int, not Nullable; Date/DateTime column-vs-column cmps are arithmetic, not frozen BOOL props) |
 | Comparison propositions driven by `sets(..., cmp, bool)` only | Boolean `prop_*` variables (BFS layer; skipped when the same cmp is arithmetic) |
@@ -118,6 +119,9 @@ arithmetic Safety when Int axes exist.
 
 ## Approximations and limitations
 
+- **Conditions are not checked**: a `holds` body is stored and validated by `check`, but
+  neither `states` nor the TLA+ export reads it. A later phase compiles it to a guard on the
+  actions of the use cases the condition `applies_to`.
 - **`.along`**: multi-instance export quantifies over `Entity_Ids`, including
   intermediate binders for multi-hop paths such as `.along(A, Junction, B)`
   (from `relate(A, B, N:M).via(Junction)`). Pairwise `*_owner` filters are applied;

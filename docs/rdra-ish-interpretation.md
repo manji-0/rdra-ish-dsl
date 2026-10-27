@@ -149,6 +149,23 @@ external-environment layer with `business`, `buc`, `flow`, `step`, `medium`, and
 and may differ from RDRA; the layers are a reading aid for review, not a claim about the
 primary source.
 
+## Conditions
+
+<!-- constrained-by ./language-reference.md#conditions -->
+
+An RDRA 条件 is the combination of バリエーション and 状態モデル that selects a business
+rule (「条件」は「バリエーション」と「状態モデル」の組合せで出来ている). A `condition` is
+therefore a node between the data side and the use cases: `combines` points at the
+variation and the lifecycle column it is made of, and `applies_to` points at the use
+cases it governs.
+
+At the requirements level that is all a condition has to say, and `combines` records it
+without a body. A `holds` body is the rdra-ish extension for a team that wants to write the
+rule down. When there is a body, the variation and state-model links are derived from the
+columns it names rather than declared a second time, so the two cannot drift. In this
+version the body is stored and validated but no engine reads it; a later phase compiles it
+to a guard on the use cases the condition applies to, and the syntax does not change.
+
 ## Reading The Three Together
 
 The practical reading is:
