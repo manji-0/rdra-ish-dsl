@@ -235,6 +235,9 @@ pub enum RdraError {
     #[error("event '{event}' triggers use case '{usecase}' which belongs to no BUC\n  hint: add `contains(someBuc, usecase::{usecase})` to include the triggered use case in a BUC")]
     TriggeredUseCaseUnreachable { event: String, usecase: String },
 
+    #[error("timer '{timer}' triggers use case '{usecase}' which belongs to no BUC\n  hint: add `contains(someBuc, usecase::{usecase})` to include the scheduled use case in a BUC")]
+    TimerTriggeredUseCaseUnreachable { timer: String, usecase: String },
+
     // ── API 整合性診断 ────────────────────────────────────────────────────────
     #[error("api '{api}' is declared but never invoked by any use case\n  hint: add `invokes(usecase::Foo, api::{api})` in the relevant BUC file")]
     ApiNeverInvoked { api: String },

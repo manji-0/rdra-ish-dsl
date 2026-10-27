@@ -2,7 +2,8 @@ use super::comparison::ComparisonProp;
 use super::keys::*;
 use super::refs::{
     AppliesToTarget, Cardinality, ConstrainsTarget, ContainedRef, ContainerRef, CoversTarget,
-    DecidesTarget, EntityTouchpoint, NfrOrConstraint, PerformTarget, TriggerTarget,
+    DecidesTarget, EntityTouchpoint, NfrOrConstraint, PerformTarget, Raiser, TriggerSource,
+    TriggerTarget,
 };
 
 /// 解析済み述語の型付き表現（discriminated union）。
@@ -11,10 +12,6 @@ pub enum TypedPredicate {
     Performs {
         actor: ActorKey,
         target: PerformTarget,
-    },
-    Uses {
-        actor: ActorKey,
-        ext_system: ExtSystemKey,
     },
     Reads {
         origin: EntityTouchpoint,
@@ -77,11 +74,11 @@ pub enum TypedPredicate {
         entity: EntityKey,
     },
     Raises {
-        usecase: UseCaseKey,
+        raiser: Raiser,
         event: EventKey,
     },
     Triggers {
-        event: EventKey,
+        source: TriggerSource,
         target: TriggerTarget,
     },
     Contains {

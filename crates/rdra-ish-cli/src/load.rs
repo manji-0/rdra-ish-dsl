@@ -112,6 +112,7 @@ pub(crate) fn diagram_preset_filters(
         DiagramViewPreset::Business => (
             &[
                 "actor",
+                "extsystem",
                 "requirement",
                 "nfr",
                 "business",
@@ -120,6 +121,7 @@ pub(crate) fn diagram_preset_filters(
                 "step",
                 "usecase",
                 "event",
+                "timer",
             ],
             &[
                 "performs",
@@ -138,7 +140,15 @@ pub(crate) fn diagram_preset_filters(
         ),
         DiagramViewPreset::System => (
             &[
-                "usecase", "screen", "field", "event", "system", "api", "dto", "entity",
+                "usecase",
+                "extsystem",
+                "screen",
+                "field",
+                "event",
+                "system",
+                "api",
+                "dto",
+                "entity",
             ],
             &[
                 "contains",

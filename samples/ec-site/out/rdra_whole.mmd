@@ -3,11 +3,11 @@ flowchart LR
     direction TB
     Admin(["👤 Administrator"])
     Customer(["👤 Customer"])
+    PaymentGW[/"🌐 Payment Gateway"/]
+    ShippingSvc[/"🌐 Shipping Service"/]
   end
   subgraph layer_environment[External Environment]
     direction TB
-    PaymentGW[/"🌐 Payment Gateway"/]
-    ShippingSvc[/"🌐 Shipping Service"/]
     EcShopping["💼 EC Shopping Business"]
     BucCart["📦 Add Products to Cart"]
     BucOrder["📦 Process Order"]
@@ -41,6 +41,7 @@ flowchart LR
     PaymentResultScreen[["🖥️ Payment Result Screen"]]
     ProductDetailScreen[["🖥️ Product Detail Screen"]]
     ProductSearchScreen[["🖥️ Product Search Screen"]]
+    EvPaymentAuthorized{"⚡ Payment Authorized"}
   end
   subgraph layer_system[System]
     direction TB
@@ -78,7 +79,6 @@ flowchart LR
   Customer -->|performs| BucPayment
   Customer -->|performs| BucOrder
   Customer -->|performs| BucCart
-  Customer -->|uses| PaymentGW
   Admin -->|performs| ShipOrder
   Admin -->|performs| DeliverOrder
   ProductSearchApi -.->|reads| Category
@@ -139,6 +139,8 @@ flowchart LR
   OrderLine ---|N:1| Product
   OrderLine ---|N:1| Order
   Payment ---|1:1| Order
+  EvPaymentAuthorized -.->|triggers| Capture
+  PaymentGW -.->|raises| EvPaymentAuthorized
   CommerceSystem -->|contains| ProductSearchApi
   CommerceSystem -->|contains| ProductDetailApi
   CommerceSystem -->|contains| AddToCartApi

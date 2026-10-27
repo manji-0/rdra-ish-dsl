@@ -25,7 +25,7 @@ const KIND_KEYWORDS: &[&str] = &[
     "entity",
     "api",
     "dto",
-    "timing",
+    "timer",
     "medium",
     "permission",
     "variation",

@@ -17,7 +17,7 @@
 | API | `StoreAdminApi` | 店舗情報の更新境界 |
 | API | `OrganizationLookupApi` | 組織マスタの参照境界 |
 | System | `StoreAdminSystem / OrganizationSystem` | 店舗情報と組織マスタの仮の所有境界 |
-| Context | `StoreMasterMaintenanceWindow / BackOffice / OpsConsole` | BUC が適用されるタイミング、場所、操作媒体 |
+| Context | `OpsConsole` | BUC が適用される操作媒体 |
 | Access | `StoreMaintenanceWrite` | 店舗保守操作に必要な権限 |
 
 ## 3. 設計判断

@@ -43,9 +43,6 @@ contains(ClinicOpsSystem, SendFollowUpMessageApi)
 contains(ClinicOpsSystem, FollowUpScheduleApi)
 contains(ClinicOpsSystem, NotifyPatientResultApi)
 
-uses(CareCoordinator, MessagingGateway)
-uses(Patient, MessagingGateway)
-
 displays(CreateCarePlan, CarePlanScreen)
 invokes(CreateCarePlan, CreateCarePlanApi)
 creates(CreateCarePlanApi, CarePlan)

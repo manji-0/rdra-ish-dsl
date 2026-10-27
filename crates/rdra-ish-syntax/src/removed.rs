@@ -5,11 +5,19 @@ const CONCEPTUAL: &str = "conceptual-model kinds were removed; model persistent 
 const HINTS: &[(&str, &str)] = &[
     (
         "usagescene",
-        "use `timing` for Business-BUC context",
+        "use `timer` for a schedule that starts a use case, and `medium` / `.by(...)` for Business-BUC context",
     ),
     (
         "location",
-        "no output consumed it. Delete the declaration and any `.where(...)` on `belongs`; keep `timing` / `.when(...)` and `medium` / `.by(...)` for Business-BUC context",
+        "no output consumed it. Delete the declaration and any `.where(...)` on `belongs`; keep `medium` / `.by(...)` for Business-BUC context",
+    ),
+    (
+        "timing",
+        "use `timer`; `belongs(...).when(...)` was removed, connect the timer with `triggers(Timer, UseCase)`",
+    ),
+    (
+        "uses",
+        "RDRA connects an external system to use cases through events: `raises(ExtSystem, Event)` for inbound, `triggers(Event, ExtSystem)` for outbound",
     ),
     (
         "state",
@@ -48,22 +56,44 @@ mod tests {
     }
 
     #[test]
-    fn usagescene_points_to_timing() {
+    fn usagescene_points_to_timer() {
         let msgs = messages("usagescene Counter \"Counter\"\n");
         assert!(
             msgs.iter()
-                .any(|m| m.contains("`usagescene`") && m.contains("use `timing`")),
+                .any(|m| m.contains("`usagescene`") && m.contains("use `timer`")),
             "{msgs:?}"
         );
         assert!(!msgs.iter().any(|m| m.contains("`location`")), "{msgs:?}");
     }
 
     #[test]
-    fn location_points_to_timing_and_medium() {
+    fn location_points_to_medium() {
         let msgs = messages("location FrontDesk \"Front Desk\"\n");
         assert!(
             msgs.iter()
                 .any(|m| m.contains("`location`") && m.contains("`.where(...)`")),
+            "{msgs:?}"
+        );
+    }
+
+    #[test]
+    fn timing_points_to_timer() {
+        let msgs = messages("timing Nightly \"Nightly\"\n");
+        assert!(
+            msgs.iter().any(|m| m.contains("`timing`")
+                && m.contains("use `timer`")
+                && m.contains("triggers(Timer, UseCase)")),
+            "{msgs:?}"
+        );
+    }
+
+    #[test]
+    fn uses_points_to_events() {
+        let msgs = messages("uses(Staff, Lab)\n");
+        assert!(
+            msgs.iter().any(|m| m.contains("`uses`")
+                && m.contains("raises(ExtSystem, Event)")
+                && m.contains("triggers(Event, ExtSystem)")),
             "{msgs:?}"
         );
     }

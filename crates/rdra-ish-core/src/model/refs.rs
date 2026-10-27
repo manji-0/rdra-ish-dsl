@@ -23,7 +23,7 @@ pub enum NodeRef {
     State(StateKey),
     Api(ApiKey),
     Dto(DtoKey),
-    Timing(TimingKey),
+    Timer(TimerKey),
     Medium(MediumKey),
     Permission(PermissionKey),
     Variation(VariationKey),
@@ -33,7 +33,6 @@ pub enum NodeRef {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RelKind {
     Performs,
-    Uses,
     Reads,
     Writes,
     Creates,
@@ -100,7 +99,7 @@ pub struct BoundaryCoordination {
     pub right: EntityKey,
 }
 
-/// `belongs(Buc, Business).when(...).by(...)` で宣言される、
+/// `belongs(Buc, Business).by(...)` で宣言される、
 /// Business と BUC の対応関係に付く文脈値。
 #[derive(Debug, Clone)]
 pub enum BusinessMappingContextValue {
@@ -108,12 +107,11 @@ pub enum BusinessMappingContextValue {
     Ref(NodeRef),
 }
 
-/// Business と BUC の対応関係に付く When / By 文脈。
+/// Business と BUC の対応関係に付く By 文脈。
 #[derive(Debug, Clone)]
 pub struct BusinessMappingContext {
     pub buc: BucKey,
     pub business: BusinessKey,
-    pub whens: Vec<BusinessMappingContextValue>,
     pub bys: Vec<BusinessMappingContextValue>,
 }
 
@@ -147,6 +145,7 @@ impl EntityTouchpoint {
 pub enum PerformTarget {
     UseCase(UseCaseKey),
     Buc(BucKey),
+    Step(StepKey),
 }
 
 impl PerformTarget {
@@ -154,16 +153,52 @@ impl PerformTarget {
         match node {
             NodeRef::UseCase(k) => Some(PerformTarget::UseCase(*k)),
             NodeRef::Buc(k) => Some(PerformTarget::Buc(*k)),
+            NodeRef::Step(k) => Some(PerformTarget::Step(*k)),
             _ => None,
         }
     }
 }
 
-/// `triggers(event, ...)` の第2引数。
+/// `raises(raiser, event)` の第1引数。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Raiser {
+    UseCase(UseCaseKey),
+    ExtSystem(ExtSystemKey),
+}
+
+impl Raiser {
+    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
+        match node {
+            NodeRef::UseCase(k) => Some(Raiser::UseCase(*k)),
+            NodeRef::ExtSystem(k) => Some(Raiser::ExtSystem(*k)),
+            _ => None,
+        }
+    }
+}
+
+/// `triggers(source, ...)` の第1引数。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TriggerSource {
+    Event(EventKey),
+    Timer(TimerKey),
+}
+
+impl TriggerSource {
+    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
+        match node {
+            NodeRef::Event(k) => Some(TriggerSource::Event(*k)),
+            NodeRef::Timer(k) => Some(TriggerSource::Timer(*k)),
+            _ => None,
+        }
+    }
+}
+
+/// `triggers(..., target)` の第2引数。
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TriggerTarget {
     UseCase(UseCaseKey),
     Buc(BucKey),
+    ExtSystem(ExtSystemKey),
 }
 
 impl TriggerTarget {
@@ -171,6 +206,7 @@ impl TriggerTarget {
         match node {
             NodeRef::UseCase(k) => Some(TriggerTarget::UseCase(*k)),
             NodeRef::Buc(k) => Some(TriggerTarget::Buc(*k)),
+            NodeRef::ExtSystem(k) => Some(TriggerTarget::ExtSystem(*k)),
             _ => None,
         }
     }
@@ -285,6 +321,7 @@ pub enum CoversTarget {
     UseCase(UseCaseKey),
     Api(ApiKey),
     Event(EventKey),
+    Timer(TimerKey),
 }
 
 impl CoversTarget {
@@ -293,6 +330,7 @@ impl CoversTarget {
             NodeRef::UseCase(k) => Some(CoversTarget::UseCase(*k)),
             NodeRef::Api(k) => Some(CoversTarget::Api(*k)),
             NodeRef::Event(k) => Some(CoversTarget::Event(*k)),
+            NodeRef::Timer(k) => Some(CoversTarget::Timer(*k)),
             _ => None,
         }
     }

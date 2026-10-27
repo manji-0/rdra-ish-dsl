@@ -2,6 +2,5 @@ module shared.biz
 
 business StoreOperations "Store Operations" description "Store operations owns restock planning and store master maintenance."
 
-timing StoreMasterMaintenanceWindow "Store Master Maintenance Window"
 medium OpsConsole "Operations Console"
 permission StoreMaintenanceWrite "Store Maintenance Write"

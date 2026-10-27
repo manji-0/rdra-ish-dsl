@@ -366,14 +366,23 @@ pub fn reachable_from_buc(model: &SemanticModel, buc_id: &str) -> HashSet<crate:
         }
     }
 
-    // 第2パス: 起点 BUC に直接 performs / uses している Actor / ExternalSystem のみ追加
-    // （推移的探索はしない — 他 BUC への連鎖を防ぐ）
+    // 第2パス: 起点 BUC に直接 performs している Actor と、閉包内へ入る Timer（triggers）/
+    // 外部システム（raises）を追加する（推移的探索はしない — 他 BUC への連鎖を防ぐ）
     let buc_ref = NodeRef::Buc(buc_key);
+    let mut sources = Vec::new();
     for rel in &model.relations {
-        if matches!(rel.kind, RelKind::Performs | RelKind::Uses) && rel.to == buc_ref {
-            visited.insert(rel.from.clone());
+        let enters = match (&rel.kind, &rel.from) {
+            (RelKind::Performs, _) => rel.to == buc_ref,
+            (RelKind::Triggers, NodeRef::Timer(_)) | (RelKind::Raises, NodeRef::ExtSystem(_)) => {
+                visited.contains(&rel.to)
+            }
+            _ => false,
+        };
+        if enters {
+            sources.push(rel.from.clone());
         }
     }
+    visited.extend(sources);
 
     visited
 }

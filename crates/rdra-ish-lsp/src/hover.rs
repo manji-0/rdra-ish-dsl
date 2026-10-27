@@ -119,7 +119,7 @@ fn kind_from_name(name: &str) -> Option<Kind> {
         "entity" => Kind::Entity,
         "api" => Kind::Api,
         "dto" => Kind::Dto,
-        "timing" => Kind::Timing,
+        "timer" => Kind::Timer,
         "medium" => Kind::Medium,
         "permission" => Kind::Permission,
         "variation" => Kind::Variation,
@@ -149,7 +149,7 @@ fn node_ref_label(model: &SemanticModel, node: &NodeRef) -> String {
         NodeRef::State(k) => model.states.get(*k).map(|v| v.label.clone()),
         NodeRef::Api(k) => model.apis.get(*k).map(|v| v.label.clone()),
         NodeRef::Dto(k) => model.dtos.get(*k).map(|v| v.label.clone()),
-        NodeRef::Timing(k) => model.timings.get(*k).map(|v| v.label.clone()),
+        NodeRef::Timer(k) => model.timers.get(*k).map(|v| v.label.clone()),
         NodeRef::Medium(k) => model.media.get(*k).map(|v| v.label.clone()),
         NodeRef::Permission(k) => model.permissions.get(*k).map(|v| v.label.clone()),
         NodeRef::Variation(k) => model.variations.get(*k).map(|v| v.label.clone()),
@@ -196,7 +196,7 @@ performs(Staff, Book)
             HoverContents::Markup(markup) => markup,
             _ => panic!("expected markup"),
         };
-        assert!(markup.value.contains("performs(actor, usecase|buc)"));
+        assert!(markup.value.contains("performs(actor, usecase|buc|step)"));
     }
 
     #[test]

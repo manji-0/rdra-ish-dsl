@@ -4,7 +4,9 @@ use crate::analysis_diag::*;
 use crate::diagnostics::*;
 use crate::location::DiagCtxt;
 use crate::model::*;
-use crate::predicate::{predicate_chain_methods, predicate_signature, unknown_chain_method_hint};
+use crate::predicate::{
+    predicate_chain_methods, predicate_signature, unknown_chain_method_hint, TRIGGER_PAIRS,
+};
 use rdra_ish_syntax::ast::*;
 
 use super::arg_resolve::resolve_arg;
@@ -134,6 +136,45 @@ fn validate_contains_pair(
         }
     }
     true
+}
+
+/// `triggers` accepts only the kind pairs in `TRIGGER_PAIRS`; the per-argument signature
+/// cannot express that a timer has no external-system target.
+fn validate_trigger_pair(
+    pred: &PredicateCall,
+    sig: &[Vec<&'static str>],
+    resolved: &[Option<NodeRef>],
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> bool {
+    if pred.name != "triggers" {
+        return true;
+    }
+    let (Some(Some(from)), Some(Some(to))) = (resolved.first(), resolved.get(1)) else {
+        return true;
+    };
+    let pair = (node_kind_tag_str(from), node_kind_tag_str(to));
+    // A kind outside the signature was already reported by `validate_predicate_arg_types`.
+    let in_signature = sig[0].contains(&pair.0) && sig[1].contains(&pair.1);
+    if TRIGGER_PAIRS.contains(&pair) || !in_signature {
+        return true;
+    }
+    push_error(
+        ctx,
+        diags,
+        pred.span.clone(),
+        RdraError::TypeMismatch {
+            pred: pred.name.clone(),
+            id: "triggers pair".to_string(),
+            actual: format!("{} -> {}", pair.0, pair.1),
+            expected: TRIGGER_PAIRS
+                .iter()
+                .map(|(source, target)| format!("{source}->{target}"))
+                .collect::<Vec<_>>()
+                .join("|"),
+        },
+    );
+    false
 }
 
 fn process_maps_field_predicate(
@@ -763,7 +804,6 @@ fn process_invariant_predicate(
 fn relation_kind_for_predicate(pred_name: &str) -> Option<RelKind> {
     let kind = match pred_name {
         "performs" => RelKind::Performs,
-        "uses" => RelKind::Uses,
         "reads" => RelKind::Reads,
         "writes" => RelKind::Writes,
         "creates" => RelKind::Creates,
@@ -811,29 +851,22 @@ fn process_belongs_context(
     let (NodeRef::Buc(buc), NodeRef::Business(business)) = (from, to) else {
         return;
     };
-    let mut whens = Vec::new();
     let mut bys = Vec::new();
 
-    for cc in &pred.chain {
-        let (target, expected_kind) = match cc.name.as_str() {
-            "when" => (&mut whens, "timing"),
-            "by" => (&mut bys, "medium"),
-            _ => continue,
-        };
+    for cc in pred.chain.iter().filter(|cc| cc.name == "by") {
         for arg in &cc.args {
-            if let Some(value) = context_value_from_arg(model, arg, expected_kind, ctx, diags) {
-                target.push(value);
+            if let Some(value) = context_value_from_arg(model, arg, "medium", ctx, diags) {
+                bys.push(value);
             }
         }
     }
 
-    if !whens.is_empty() || !bys.is_empty() {
+    if !bys.is_empty() {
         model
             .business_mapping_contexts
             .push(BusinessMappingContext {
                 buc: *buc,
                 business: *business,
-                whens,
                 bys,
             });
     }
@@ -1141,7 +1174,9 @@ pub(crate) fn process_predicate(
 
     let resolved = resolve_predicate_args(model, pred, &sig, ctx, diags);
     validate_predicate_arg_types(pred, &sig, &resolved, ctx, diags);
-    if !validate_contains_pair(pred, &resolved, ctx, diags) {
+    if !validate_contains_pair(pred, &resolved, ctx, diags)
+        || !validate_trigger_pair(pred, &sig, &resolved, ctx, diags)
+    {
         return;
     }
 

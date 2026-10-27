@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Migrate .rdra sources to use-case-driven transitions (phase 3, unit 2).
+"""Migrate .rdra sources to the phase 3 surface (use-case-driven transitions, timers, external systems).
 
 usage: migrate-phase3.py [--keep EVENT[,EVENT...]] [--dry-run] WORKSPACE...
 
@@ -8,10 +8,15 @@ single .rdra file. References resolve within one workspace only, so pass each
 independent model as its own argument.
 
 Steps:
+  1. `timing X "..."` becomes `timer X "..."`, and `.when(...)` is deleted from
+     `belongs(...)`. A timer that should start a use case needs a
+     `triggers(Timer, UseCase)` line the codemod cannot guess.
   2. transitions(E.col, Ev, a -> b) becomes one transitions(E.col, UC, a -> b)
      per raises(UC, Ev). The line stays in place when the raiser's `raises` line
      is in the same file, otherwise it is written next to that `raises` line.
   3. sets(event::Ev, E, ...) fans out to sets(UC, E, ...) the same way.
+  4. `uses(Actor, ExtSystem)` is deleted. Connect the external system through events:
+     `raises(ExtSystem, Event)` inbound, `triggers(Event, ExtSystem)` outbound.
   5. An event with no remaining reference besides its declaration and its
      `raises` lines (no triggers, outbox, covers, unmigrated transitions or sets)
      is deleted together with its `raises` lines. Events named by --keep stay.
@@ -31,11 +36,15 @@ from pathlib import Path
 DECL_KINDS = {
     "actor", "extsystem", "system", "requirement", "adr", "nfr", "quality",
     "constraint", "business", "buc", "flow", "step", "usecase", "screen",
-    "field", "event", "entity", "api", "dto", "timing", "medium", "permission",
+    "field", "event", "entity", "api", "dto", "timing", "timer", "medium", "permission",
     "variation", "property",
 }
 DECL_RE = re.compile(r"^\s*([a-z_]+)\s+([A-Za-z_]\w*)\b")
 RAISES_RE = re.compile(r"^\s*raises\(\s*((?:usecase::)?\w+)\s*,\s*((?:event::)?\w+)\s*\)\s*$")
+TIMING_RE = re.compile(r"^(\s*)timing(\s+\w+\b.*)$")
+BELONGS_RE = re.compile(r"^\s*belongs\(")
+CHAIN_WHEN_RE = re.compile(r"^\s*\.when\(")
+USES_RE = re.compile(r"^\s*uses\(\s*(?:\w+::)?(\w+)\s*,\s*(?:\w+::)?(\w+)\s*\)\s*$")
 TRANSITIONS_RE = re.compile(r"^(\s*)transitions\(\s*([\w.]+)\s*,\s*((?:\w+::)?\w+)\s*,\s*(.*)\)\s*$")
 SETS_RE = re.compile(r"^(\s*)sets\(\s*((?:\w+::)?\w+)\s*,\s*(.*)\)\s*$")
 TOKEN_RE = re.compile(r"(?:\b(\w+)::)?\b([A-Za-z_]\w*)\b")
@@ -97,6 +106,9 @@ class SourceFile:
 @dataclass
 class Report:
     edits: int = 0
+    timings_renamed: int = 0
+    whens_deleted: int = 0
+    uses_deleted: int = 0
     transitions_migrated: int = 0
     transitions_written: int = 0
     sets_migrated: int = 0
@@ -159,6 +171,81 @@ def raisers(files: list[SourceFile], decls) -> dict[str, list[tuple[SourceFile, 
 
 def where(f: SourceFile, i: int) -> str:
     return f"{f.path}:{i + 1}"
+
+
+def strip_inline_when(code: str) -> str:
+    """Remove every `.when(...)` call (string-aware) from one `belongs(...)` line."""
+    out = []
+    i = 0
+    while i < len(code):
+        if code.startswith(".when(", i):
+            depth, j, in_str = 0, i + len(".when"), False
+            while j < len(code):
+                c = code[j]
+                if c == "\\" and in_str:
+                    j += 2
+                    continue
+                if c == '"':
+                    in_str = not in_str
+                elif not in_str and c == "(":
+                    depth += 1
+                elif not in_str and c == ")":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                j += 1
+            i = j + 1
+            continue
+        out.append(code[i])
+        i += 1
+    return "".join(out)
+
+
+def surface_changes(files, report: Report) -> None:
+    """Step 1 (`timing` to `timer`, `belongs(...).when` removal) and step 4 (`uses` removal)."""
+    for f in files:
+        in_belongs = False
+        for i in range(len(f.lines)):
+            code = f.code(i)
+            line = f.lines[i].rstrip("\n")
+            comment = split_comment(line)[1]
+            m = TIMING_RE.match(code)
+            if m:
+                new = f"{m.group(1)}timer{m.group(2)}" + (f"  {comment}" if comment else "")
+                f.replace[i] = [new + "\n"]
+                print(f"{where(f, i)}: - {line.strip()}")
+                print(f"{where(f, i)}: + {new.strip()}")
+                report.timings_renamed += 1
+                report.edits += 1
+                continue
+            if BELONGS_RE.match(code):
+                in_belongs = True
+                if ".when(" in code:
+                    stripped = strip_inline_when(code).rstrip()
+                    f.replace[i] = [stripped + (f"  {comment}" if comment else "") + "\n"]
+                    print(f"{where(f, i)}: - {line.strip()}")
+                    print(f"{where(f, i)}: + {stripped.strip()}")
+                    report.whens_deleted += 1
+                    report.edits += 1
+                continue
+            if in_belongs and code.strip().startswith("."):
+                if CHAIN_WHEN_RE.match(code):
+                    f.replace[i] = []
+                    print(f"{where(f, i)}: - {line.strip()}")
+                    report.whens_deleted += 1
+                    report.edits += 1
+                continue
+            in_belongs = False
+            u = USES_RE.match(code)
+            if u:
+                f.replace[i] = []
+                print(f"{where(f, i)}: - {line.strip()}")
+                print(
+                    f"{where(f, i)}: extsystem {u.group(2)} lost its only link; "
+                    f"add raises({u.group(2)}, Event) or triggers(Event, {u.group(2)})"
+                )
+                report.uses_deleted += 1
+                report.edits += 1
 
 
 def fan_out(files, decls, report: Report) -> None:
@@ -287,6 +374,7 @@ def migrate(root: Path, keep: set[str], dry_run: bool) -> Report:
     report = Report()
     files = load_workspace(root)
     decls = declarations(files)
+    surface_changes(files, report)
     fan_out(files, decls, report)
     delete_unconsumed(files, decls, keep, report)
     if not dry_run:
@@ -313,11 +401,15 @@ def main() -> int:
         for u in r.undecidable:
             print(f"UNDECIDED {u}")
         print(
-            f"summary {root}: {r.edits} edits; transitions {r.transitions_migrated} -> {r.transitions_written}; "
+            f"summary {root}: {r.edits} edits; timings {r.timings_renamed}; belongs .when {r.whens_deleted}; "
+            f"uses {r.uses_deleted}; transitions {r.transitions_migrated} -> {r.transitions_written}; "
             f"sets {r.sets_migrated} -> {r.sets_written}; events deleted {len(r.events_deleted)} "
             f"(raises deleted {r.raises_deleted}); kept {len(r.kept)}; undecided {len(r.undecidable)}"
         )
         total.edits += r.edits
+        total.timings_renamed += r.timings_renamed
+        total.whens_deleted += r.whens_deleted
+        total.uses_deleted += r.uses_deleted
         total.transitions_migrated += r.transitions_migrated
         total.transitions_written += r.transitions_written
         total.sets_migrated += r.sets_migrated
@@ -327,7 +419,8 @@ def main() -> int:
         total.kept += r.kept
         total.undecidable += r.undecidable
     print(
-        f"TOTAL: {total.edits} edits; transitions {total.transitions_migrated} -> {total.transitions_written}; "
+        f"TOTAL: {total.edits} edits; timings {total.timings_renamed}; belongs .when {total.whens_deleted}; "
+        f"uses {total.uses_deleted}; transitions {total.transitions_migrated} -> {total.transitions_written}; "
         f"sets {total.sets_migrated} -> {total.sets_written}; events deleted {len(total.events_deleted)} "
         f"(raises deleted {total.raises_deleted}); kept {len(total.kept)} {sorted(total.kept)}; "
         f"undecided {len(total.undecidable)}"

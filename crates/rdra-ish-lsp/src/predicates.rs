@@ -139,7 +139,7 @@ mod tests {
     fn formats_predicate_signature() {
         assert_eq!(
             format_predicate_signature("performs"),
-            Some("performs(actor, usecase|buc)".to_string())
+            Some("performs(actor, usecase|buc|step)".to_string())
         );
     }
 

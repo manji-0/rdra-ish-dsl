@@ -7,7 +7,8 @@ business ClinicAdministration "Clinic Administration"
 
 system ClinicOpsSystem "Clinic Operations System"
 
-timing PatientRequestWindow "Patient Request Window"
+timer IntakeExpiryCheck "Nightly intake expiry check"
+timer NoShowSweep "Nightly no-show sweep"
 medium FrontDeskTerminal "Front Desk Terminal"
 medium PatientMobile "Patient Mobile"
 medium ClinicalWorkstation "Clinical Workstation"

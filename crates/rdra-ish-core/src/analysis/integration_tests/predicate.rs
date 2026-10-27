@@ -28,15 +28,12 @@ invokes(PlaceOrder, OrderApi)
 }
 
 #[test]
-fn test_belongs_when_by_context() {
+fn test_belongs_by_context() {
     let src = r#"
 business ClinicOps "Clinic Operations"
 buc BucAppointmentScheduling "Appointment Scheduling"
-timing AppointmentRequested "Appointment Requested"
 medium FrontDeskTerminal "Front Desk Terminal"
 belongs(BucAppointmentScheduling, ClinicOps)
-  .when("patient requests a booking")
-  .when(AppointmentRequested)
   .by(FrontDeskTerminal)
   .by("tablet")
 "#;
@@ -54,17 +51,8 @@ belongs(BucAppointmentScheduling, ClinicOps)
     let ctx = &model.business_mapping_contexts[0];
     assert_eq!(model.bucs[ctx.buc].id, "BucAppointmentScheduling");
     assert_eq!(model.businesses[ctx.business].id, "ClinicOps");
-    assert_eq!(ctx.whens.len(), 2);
     assert_eq!(ctx.bys.len(), 2);
 
-    assert!(matches!(
-        &ctx.whens[0],
-        BusinessMappingContextValue::Text(s) if s == "patient requests a booking"
-    ));
-    assert!(matches!(
-        &ctx.whens[1],
-        BusinessMappingContextValue::Ref(NodeRef::Timing(_))
-    ));
     assert!(matches!(
         &ctx.bys[0],
         BusinessMappingContextValue::Ref(NodeRef::Medium(_))
@@ -279,7 +267,22 @@ fn typo_chain_method_is_unknown_chain_method() {
     let errs = unknown_chain_errors(&format!("{BELONGS_BASE}belongs(U, B).wehn(T)\n"));
     assert_eq!(errs.len(), 1, "{errs:?}");
     assert_eq!(errs[0].1, "wehn");
-    assert!(errs[0].2.contains(".when"), "{}", errs[0].2);
+    assert!(errs[0].2.contains(".by"), "{}", errs[0].2);
+}
+
+#[test]
+fn belongs_when_is_removed_with_a_timer_hint() {
+    let errs = unknown_chain_errors(&format!("{BELONGS_BASE}belongs(U, B).when(\"x\")\n"));
+    assert_eq!(errs.len(), 1, "{errs:?}");
+    assert_eq!(
+        (errs[0].0.as_str(), errs[0].1.as_str()),
+        ("belongs", "when")
+    );
+    assert!(
+        errs[0].2.contains("triggers(Timer, UseCase)"),
+        "{}",
+        errs[0].2
+    );
 }
 
 #[test]
@@ -290,8 +293,6 @@ fn predicate_without_chain_methods_rejects_any_chain() {
 
 #[test]
 fn known_chain_methods_are_accepted() {
-    let errs = unknown_chain_errors(&format!(
-        "{BELONGS_BASE}belongs(U, B).when(\"x\").by(\"y\")\n"
-    ));
+    let errs = unknown_chain_errors(&format!("{BELONGS_BASE}belongs(U, B).by(\"y\")\n"));
     assert!(errs.is_empty(), "{errs:?}");
 }

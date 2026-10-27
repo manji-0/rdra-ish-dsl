@@ -152,6 +152,7 @@ fn is_consistency_diag(err: &RdraError) -> bool {
             | RdraError::EventNeverRaised { .. }
             | RdraError::EventNeverConsumed { .. }
             | RdraError::TriggeredUseCaseUnreachable { .. }
+            | RdraError::TimerTriggeredUseCaseUnreachable { .. }
             | RdraError::SeparateTxInferred { .. }
             | RdraError::ApiOperatesEntityOutsideOwner { .. }
             | RdraError::CrossSystemEntityRelation { .. }
@@ -760,7 +761,7 @@ fn model_element_count(model: &SemanticModel) -> usize {
         + model.states.len()
         + model.apis.len()
         + model.dtos.len()
-        + model.timings.len()
+        + model.timers.len()
         + model.media.len()
         + model.permissions.len()
         + model.variations.len()
@@ -896,7 +897,7 @@ fn lint_node_refs(model: &SemanticModel) -> Vec<NodeRef> {
     nodes.extend(model.states.iter().map(|(key, _)| NodeRef::State(key)));
     nodes.extend(model.apis.iter().map(|(key, _)| NodeRef::Api(key)));
     nodes.extend(model.dtos.iter().map(|(key, _)| NodeRef::Dto(key)));
-    nodes.extend(model.timings.iter().map(|(key, _)| NodeRef::Timing(key)));
+    nodes.extend(model.timers.iter().map(|(key, _)| NodeRef::Timer(key)));
     nodes.extend(model.media.iter().map(|(key, _)| NodeRef::Medium(key)));
     nodes.extend(
         model
@@ -935,7 +936,7 @@ fn node_kind_display(node: &NodeRef) -> String {
         NodeRef::State(_) => "state".to_string(),
         NodeRef::Api(_) => "api".to_string(),
         NodeRef::Dto(_) => "dto".to_string(),
-        NodeRef::Timing(_) => "timing".to_string(),
+        NodeRef::Timer(_) => "timer".to_string(),
         NodeRef::Medium(_) => "medium".to_string(),
         NodeRef::Permission(_) => "permission".to_string(),
         NodeRef::Variation(_) => "variation".to_string(),
@@ -964,7 +965,7 @@ fn node_id(model: &SemanticModel, node: &NodeRef) -> Option<String> {
         NodeRef::State(key) => model.states.get(*key)?.id.clone(),
         NodeRef::Api(key) => model.apis.get(*key)?.id.clone(),
         NodeRef::Dto(key) => model.dtos.get(*key)?.id.clone(),
-        NodeRef::Timing(key) => model.timings.get(*key)?.id.clone(),
+        NodeRef::Timer(key) => model.timers.get(*key)?.id.clone(),
         NodeRef::Medium(key) => model.media.get(*key)?.id.clone(),
         NodeRef::Permission(key) => model.permissions.get(*key)?.id.clone(),
         NodeRef::Variation(key) => model.variations.get(*key)?.id.clone(),

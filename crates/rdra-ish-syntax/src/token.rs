@@ -52,8 +52,8 @@ pub enum Token {
     Api,
     #[token("dto")]
     Dto,
-    #[token("timing")]
-    Timing,
+    #[token("timer")]
+    Timer,
     #[token("medium")]
     Medium,
     #[token("permission")]

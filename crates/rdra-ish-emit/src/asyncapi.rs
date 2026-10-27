@@ -26,26 +26,34 @@ fn asyncapi_document(model: &SemanticModel) -> Value {
         };
         let message_key = asyncapi_key(&event.id);
 
-        channels.insert(
-            message_key.clone(),
-            json!({
-                "address": event.id,
-                "messages": {
-                    message_key.clone(): {
-                        "$ref": format!("#/components/messages/{message_key}")
-                    }
+        let mut channel = json!({
+            "address": event.id,
+            "messages": {
+                message_key.clone(): {
+                    "$ref": format!("#/components/messages/{message_key}")
                 }
-            }),
-        );
+            }
+        });
+        let publishers = extsystem_ids(model, &flow.raising_extsystems());
+        let subscribers = extsystem_ids(model, &flow.delivered_to);
+        if let Some(obj) = channel.as_object_mut() {
+            if !publishers.is_empty() {
+                obj.insert("x-publisher".to_string(), json!(publishers));
+            }
+            if !subscribers.is_empty() {
+                obj.insert("x-subscriber".to_string(), json!(subscribers));
+            }
+        }
+        channels.insert(message_key.clone(), channel);
 
         messages.insert(message_key.clone(), event_message(model, flow));
 
-        if !flow.raised_by.is_empty() || model.outbox_events.contains(&flow.event) {
+        if !flow.raising_usecases().is_empty() || model.outbox_events.contains(&flow.event) {
             let mut operation = operation_base("send", &message_key);
             if let Some(obj) = operation.as_object_mut() {
                 obj.insert(
                     "x-rdra-ish-raised-by-usecases".to_string(),
-                    json!(usecase_ids(model, &flow.raised_by)),
+                    json!(usecase_ids(model, &flow.raising_usecases())),
                 );
                 if model.outbox_events.contains(&flow.event) {
                     obj.insert("x-rdra-ish-outbox".to_string(), json!(true));
@@ -107,7 +115,7 @@ fn event_message(model: &SemanticModel, flow: &rdra_ish_core::EventFlow) -> Valu
     );
     message.insert(
         "x-rdra-ish-raised-by-usecases".to_string(),
-        json!(usecase_ids(model, &flow.raised_by)),
+        json!(usecase_ids(model, &flow.raising_usecases())),
     );
     message.insert(
         "x-rdra-ish-triggers-usecases".to_string(),
@@ -145,6 +153,18 @@ fn usecase_ids(model: &SemanticModel, keys: &[rdra_ish_core::model::UseCaseKey])
     let mut ids: Vec<_> = keys
         .iter()
         .filter_map(|key| model.use_cases.get(*key).map(|uc| uc.id.clone()))
+        .collect();
+    ids.sort();
+    ids
+}
+
+fn extsystem_ids(
+    model: &SemanticModel,
+    keys: &[rdra_ish_core::model::ExtSystemKey],
+) -> Vec<String> {
+    let mut ids: Vec<_> = keys
+        .iter()
+        .filter_map(|key| model.ext_systems.get(*key).map(|x| x.id.clone()))
         .collect();
     ids.sort();
     ids
@@ -202,6 +222,31 @@ mod tests {
         let errors: Vec<_> = diags.iter().filter(|diag| !diag.is_warning).collect();
         assert!(errors.is_empty(), "unexpected errors: {errors:?}");
         model
+    }
+
+    #[test]
+    fn extsystems_become_channel_publisher_and_subscriber() {
+        let model = model_from(
+            r#"
+usecase Book "Book"
+usecase Receive "Receive"
+extsystem Gateway "Gateway"
+extsystem Lab "Lab"
+event EvBooked "Booked"
+event EvResult "Result"
+raises(Book, EvBooked)
+triggers(EvBooked, Gateway)
+raises(Lab, EvResult)
+triggers(EvResult, Receive)
+"#,
+        );
+        let json = AsyncApiJsonEmitter.emit(&model, &View::whole()).unwrap();
+        let doc: Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(doc["channels"]["EvBooked"]["x-subscriber"][0], "Gateway");
+        assert!(doc["channels"]["EvBooked"].get("x-publisher").is_none());
+        assert_eq!(doc["channels"]["EvResult"]["x-publisher"][0], "Lab");
+        assert!(doc["operations"].get("publishEvResult").is_none());
+        assert_eq!(doc["operations"]["publishEvBooked"]["action"], "send");
     }
 
     #[test]

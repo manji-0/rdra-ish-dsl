@@ -5,11 +5,11 @@ left to right direction
 rectangle "System Value" {
   actor "👤 Administrator" as Admin
   actor "👤 Customer" as Customer
+  component "🌐 Payment Gateway" as PaymentGW
+  component "🌐 Shipping Service" as ShippingSvc
 }
 
 rectangle "External Environment" {
-  component "🌐 Payment Gateway" as PaymentGW
-  component "🌐 Shipping Service" as ShippingSvc
   rectangle "💼 EC Shopping Business" as EcShopping
   rectangle "📦 Add Products to Cart" as BucCart
   rectangle "📦 Process Order" as BucOrder
@@ -43,6 +43,7 @@ rectangle "System Boundary" {
   boundary "🖥️ Payment Result Screen" as PaymentResultScreen
   boundary "🖥️ Product Detail Screen" as ProductDetailScreen
   boundary "🖥️ Product Search Screen" as ProductSearchScreen
+  control "⚡ Payment Authorized" as EvPaymentAuthorized
 }
 
 rectangle "System" {
@@ -81,7 +82,6 @@ rectangle "System" {
 Customer --> BucPayment : performs
 Customer --> BucOrder : performs
 Customer --> BucCart : performs
-Customer --> PaymentGW : uses
 Admin --> ShipOrder : performs
 Admin --> DeliverOrder : performs
 ProductSearchApi ..> Category : reads
@@ -142,6 +142,8 @@ Order -- ShippingAddress : N:1
 OrderLine -- Product : N:1
 OrderLine -- Order : N:1
 Payment -- Order : 1:1
+EvPaymentAuthorized ..> Capture : triggers
+PaymentGW ..> EvPaymentAuthorized : raises
 CommerceSystem --> ProductSearchApi : contains
 CommerceSystem --> ProductDetailApi : contains
 CommerceSystem --> AddToCartApi : contains

@@ -46,9 +46,6 @@ contains(ClinicOpsSystem, ReceiveLabResultApi)
 contains(ClinicOpsSystem, ResultReviewApi)
 contains(ClinicOpsSystem, CriticalNoticeApi)
 
-uses(Nurse, LabSystem)
-uses(Clinician, MessagingGateway)
-
 displays(PlaceLabOrder, OrderEntryScreen)
 invokes(PlaceLabOrder, OrderEntryApi)
 creates(OrderEntryApi, ClinicalOrder)
@@ -69,6 +66,8 @@ updates(ReceiveLabResultApi, ClinicalOrder)
 transitions(ClinicalOrder.status, ReceiveLabResult, clcollected -> clresulted)
 sets(ReceiveLabResult, ClinicalOrder, resulted_at == present)
 sets(ReceiveLabResult, LabResult, received_at == present)
+raises(LabSystem, EvLabResultReceived)
+triggers(EvLabResultReceived, ReceiveLabResult)
 
 displays(ReviewLabResult, ResultReviewScreen)
 invokes(ReviewLabResult, ResultReviewApi)

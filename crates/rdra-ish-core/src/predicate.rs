@@ -1,10 +1,34 @@
 //! Built-in predicate catalog and argument kind signatures.
 
+/// Legal `(source, target)` kind pairs of `triggers`. The signature of `triggers` is derived
+/// from this table, and the pair check in `process_predicate` rejects the rest of the product.
+pub const TRIGGER_PAIRS: &[(&str, &str)] = &[
+    ("event", "usecase"),
+    ("event", "buc"),
+    ("event", "extsystem"),
+    ("timer", "usecase"),
+    ("timer", "buc"),
+];
+
+/// Kinds that may be the source of `raises`. The signature of `raises` is derived from it.
+pub const RAISE_SOURCES: &[&str] = &["usecase", "extsystem"];
+
+/// `triggers` argument kinds at `position` (0 = source, 1 = target), without duplicates.
+fn trigger_kinds(position: usize) -> Vec<&'static str> {
+    let mut kinds: Vec<&'static str> = Vec::new();
+    for pair in TRIGGER_PAIRS {
+        let kind = if position == 0 { pair.0 } else { pair.1 };
+        if !kinds.contains(&kind) {
+            kinds.push(kind);
+        }
+    }
+    kinds
+}
+
 /// Each predicate's expected argument kind strings per position.
 pub fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
     match pred {
-        "performs" => Some(vec![vec!["actor"], vec!["usecase", "buc"]]),
-        "uses" => Some(vec![vec!["actor"], vec!["extsystem"]]),
+        "performs" => Some(vec![vec!["actor"], vec!["usecase", "buc", "step"]]),
         "reads" | "writes" | "creates" | "updates" | "deletes" => {
             Some(vec![vec!["usecase", "api"], vec!["entity"]])
         }
@@ -20,15 +44,15 @@ pub fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
         "displays" => Some(vec![vec!["usecase"], vec!["screen"]]),
         "shows" => Some(vec![vec!["screen"], vec!["entity"]]),
         "maps_field" => Some(vec![vec!["field"], vec!["entity"], vec!["_col"]]),
-        "raises" => Some(vec![vec!["usecase"], vec!["event"]]),
-        "triggers" => Some(vec![vec!["event"], vec!["usecase", "buc"]]),
+        "raises" => Some(vec![RAISE_SOURCES.to_vec(), vec!["event"]]),
+        "triggers" => Some(vec![trigger_kinds(0), trigger_kinds(1)]),
         "outbox" => Some(vec![vec!["event"]]),
         "contains" => Some(vec![
             vec!["buc", "system", "flow", "screen"],
             vec!["usecase", "api", "flow", "step", "field"],
         ]),
         "precedes" | "branches" | "excepts" | "repeats" => Some(vec![vec!["step"], vec!["step"]]),
-        "covers" => Some(vec![vec!["step"], vec!["usecase", "api", "event"]]),
+        "covers" => Some(vec![vec!["step"], vec!["usecase", "api", "event", "timer"]]),
         "compensates" => Some(vec![vec!["usecase"], vec!["usecase"]]),
         "coordinates" => Some(vec![vec!["usecase"], vec!["entity"], vec!["entity"]]),
         "belongs" => Some(vec![vec!["buc"], vec!["business"]]),
@@ -64,7 +88,7 @@ pub fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
 /// chain name is rejected as `UnknownChainMethod`.
 pub fn predicate_chain_methods(pred: &str) -> &'static [&'static str] {
     match pred {
-        "belongs" => &["when", "by"],
+        "belongs" => &["by"],
         "relate" => &["via", "optional", "on_delete", "on_update"],
         "forbidden" => &["along"],
         "invariant" => &["when", "then", "has", "none", "along"],
@@ -86,13 +110,17 @@ pub fn unknown_chain_method_hint(pred: &str, name: &str) -> String {
     if pred == "belongs" && name == "where" {
         hint.push_str("; `.where(...)` was removed together with `location`, so delete it");
     }
+    if pred == "belongs" && name == "when" {
+        hint.push_str(
+            "; `.when(...)` was removed with `timing`; declare a `timer` and connect it with `triggers(Timer, UseCase)`",
+        );
+    }
     hint
 }
 
 /// Built-in predicate names accepted by the semantic model.
 pub const KNOWN_PREDICATES: &[&str] = &[
     "performs",
-    "uses",
     "reads",
     "writes",
     "creates",

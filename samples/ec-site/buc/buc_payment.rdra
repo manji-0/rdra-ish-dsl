@@ -10,6 +10,7 @@ usecase InputPaymentInfo "Enter Payment Information"
 usecase AuthorizePayment "Authorize Payment"
 usecase Capture          "Capture Payment"
 usecase RefundPayment    "Refund Payment"
+event EvPaymentAuthorized "Payment Authorized"
 
 screen PaymentInputScreen  "Payment Information Screen"
 screen PaymentResultScreen "Payment Result Screen"
@@ -38,13 +39,14 @@ creates(PaymentInputApi, Payment)
 displays(AuthorizePayment, PaymentResultScreen)
 invokes(AuthorizePayment, PaymentAuthorizationApi)
 updates(PaymentAuthorizationApi, Payment)
-uses(Customer, PaymentGW)
 
 displays(Capture, PaymentResultScreen)
 invokes(Capture, PaymentCaptureApi)
 updates(PaymentCaptureApi, Payment)
 updates(PaymentCaptureApi, Order)
 transitions(Order.status, Capture, pending -> paid)
+raises(PaymentGW, EvPaymentAuthorized)
+triggers(EvPaymentAuthorized, Capture)
 
 displays(RefundPayment, PaymentResultScreen)
 invokes(RefundPayment, PaymentRefundApi)

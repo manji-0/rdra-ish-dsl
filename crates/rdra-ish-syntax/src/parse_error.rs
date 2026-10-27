@@ -29,7 +29,7 @@ impl fmt::Display for Token {
             Token::Entity => "entity",
             Token::Api => "api",
             Token::Dto => "dto",
-            Token::Timing => "timing",
+            Token::Timer => "timer",
             Token::Medium => "medium",
             Token::Permission => "permission",
             Token::Variation => "variation",

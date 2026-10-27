@@ -43,8 +43,6 @@ contains(ClinicOpsSystem, SubmitClaimApi)
 contains(ClinicOpsSystem, PaymentPostApi)
 contains(ClinicOpsSystem, BalanceApi)
 
-uses(BillingSpecialist, PaymentGateway)
-
 displays(CreateCharge, ChargeWorklistScreen)
 invokes(CreateCharge, CreateChargeApi)
 creates(CreateChargeApi, Charge)
@@ -84,6 +82,8 @@ transitions(Claim.status, PostPayment, claimaccepted -> claimpaid)
 sets(PostPayment, Claim, paid_at == present)
 sets(PostPayment, PaymentTransaction, status == payposted)
 sets(PostPayment, PaymentTransaction, processed_at == present)
+raises(PaymentGateway, EvPaymentSettled)
+triggers(EvPaymentSettled, PostPayment)
 
 displays(ReconcileBalance, BalanceScreen)
 invokes(ReconcileBalance, BalanceApi)

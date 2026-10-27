@@ -45,8 +45,6 @@ contains(ClinicOpsSystem, SendPrescriptionApi)
 contains(ClinicOpsSystem, ConfirmDispenseApi)
 contains(ClinicOpsSystem, RefillPrescriptionApi)
 
-uses(Clinician, PharmacyNetwork)
-
 displays(SearchMedication, MedicationSearchScreen)
 invokes(SearchMedication, MedicationCatalogApi)
 reads(MedicationCatalogApi, Medication)
@@ -67,6 +65,7 @@ displays(ConfirmDispense, PharmacyStatusScreen)
 invokes(ConfirmDispense, ConfirmDispenseApi)
 updates(ConfirmDispenseApi, Prescription)
 raises(ConfirmDispense, EvPrescriptionDispensed)
+triggers(EvPrescriptionDispensed, PharmacyNetwork)
 transitions(Prescription.status, ConfirmDispense, rxsent -> rxdispensed)
 sets(ConfirmDispense, Prescription, dispensed_at == present)
 

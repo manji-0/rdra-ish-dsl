@@ -65,7 +65,7 @@ fn register_instance_populates_each_node_store_and_symbol_table() {
         (Kind::Event, "EventA"),
         (Kind::Api, "ApiA"),
         (Kind::Dto, "DtoA"),
-        (Kind::Timing, "TimingA"),
+        (Kind::Timer, "TimingA"),
         (Kind::Medium, "MediumA"),
         (Kind::Permission, "PermissionA"),
     ];
@@ -122,7 +122,7 @@ fn register_instance_populates_each_node_store_and_symbol_table() {
     assert_eq!(model.entities.len(), 1);
     assert_eq!(model.apis.len(), 1);
     assert_eq!(model.dtos.len(), 1);
-    assert_eq!(model.timings.len(), 1);
+    assert_eq!(model.timers.len(), 1);
     assert_eq!(model.media.len(), 1);
     assert_eq!(model.permissions.len(), 1);
 

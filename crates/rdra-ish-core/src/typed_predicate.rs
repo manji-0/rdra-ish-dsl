@@ -3,9 +3,9 @@
 use crate::model::{
     ActorKey, AdrKey, ApiKey, AppliesToTarget, BucKey, BusinessKey, Cardinality, ConstrainsTarget,
     ConstraintKey, ContainedRef, ContainerRef, CoversTarget, DecidesTarget, DtoKey, EntityKey,
-    EntityTouchpoint, EventKey, ExtSystemKey, FieldKey, MediumKey, NfrKey, NfrOrConstraint,
-    NodeRef, PerformTarget, PermissionKey, QualityKey, RequirementKey, ScreenKey, SemanticModel,
-    StepKey, SystemKey, TriggerTarget, TypedPredicate, UseCaseKey,
+    EntityTouchpoint, EventKey, FieldKey, MediumKey, NfrKey, NfrOrConstraint, NodeRef,
+    PerformTarget, PermissionKey, QualityKey, Raiser, RequirementKey, ScreenKey, SemanticModel,
+    StepKey, SystemKey, TriggerSource, TriggerTarget, TypedPredicate, UseCaseKey,
 };
 use rdra_ish_syntax::ast::{PredicateArg, PredicateCall};
 
@@ -70,10 +70,6 @@ pub fn build_typed_predicate(
                     actor: as_actor(from)?,
                     target: PerformTarget::from_node_ref(to)?,
                 }),
-                "uses" => Some(TypedPredicate::Uses {
-                    actor: as_actor(from)?,
-                    ext_system: as_ext_system(to)?,
-                }),
                 "reads" => Some(TypedPredicate::Reads {
                     origin: EntityTouchpoint::from_node_ref(from)?,
                     entity: as_entity(to)?,
@@ -135,11 +131,11 @@ pub fn build_typed_predicate(
                     entity: as_entity(to)?,
                 }),
                 "raises" => Some(TypedPredicate::Raises {
-                    usecase: as_usecase(from)?,
+                    raiser: Raiser::from_node_ref(from)?,
                     event: as_event(to)?,
                 }),
                 "triggers" => Some(TypedPredicate::Triggers {
-                    event: as_event(from)?,
+                    source: TriggerSource::from_node_ref(from)?,
                     target: TriggerTarget::from_node_ref(to)?,
                 }),
                 "contains" => Some(TypedPredicate::Contains {
@@ -210,7 +206,6 @@ pub fn collect_typed_predicates(model: &SemanticModel) -> Vec<TypedPredicate> {
 pub fn typed_predicate_name(pred: &TypedPredicate) -> &'static str {
     match pred {
         TypedPredicate::Performs { .. } => "performs",
-        TypedPredicate::Uses { .. } => "uses",
         TypedPredicate::Reads { .. } => "reads",
         TypedPredicate::Writes { .. } => "writes",
         TypedPredicate::Creates { .. } => "creates",
@@ -289,7 +284,6 @@ macro_rules! node_extractor {
 }
 
 node_extractor!(as_actor, Actor, ActorKey);
-node_extractor!(as_ext_system, ExtSystem, ExtSystemKey);
 node_extractor!(as_usecase, UseCase, UseCaseKey);
 node_extractor!(as_api, Api, ApiKey);
 node_extractor!(as_entity, Entity, EntityKey);

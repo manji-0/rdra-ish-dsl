@@ -42,8 +42,6 @@ contains(ClinicOpsSystem, CollectCopayApi)
 contains(ClinicOpsSystem, AssignRoomApi)
 contains(ClinicOpsSystem, PrepareEncounterApi)
 
-uses(FrontDesk, PaymentGateway)
-
 displays(VerifyArrival, CheckInScreen)
 invokes(VerifyArrival, VerifyArrivalApi)
 reads(VerifyArrivalApi, Appointment)

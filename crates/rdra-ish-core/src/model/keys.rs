@@ -22,7 +22,7 @@ new_key_type! {
     pub struct StateKey;
     pub struct ApiKey;
     pub struct DtoKey;
-    pub struct TimingKey;
+    pub struct TimerKey;
     pub struct MediumKey;
     pub struct PermissionKey;
     pub struct VariationKey;

@@ -6,7 +6,8 @@
 use crate::diagnostics::{Diagnostic, RdraError};
 use crate::location::push_model_decl_diagnostic;
 use crate::model::{
-    BucKey, EventKey, NodeRef, RelKind, SemanticModel, StateTransition, UseCaseKey,
+    BucKey, EventKey, ExtSystemKey, NodeRef, Raiser, RelKind, SemanticModel, StateTransition,
+    TimerKey, UseCaseKey,
 };
 use std::collections::HashMap;
 
@@ -15,14 +16,79 @@ use std::collections::HashMap;
 pub struct EventFlow {
     /// このフローのイベントキー。
     pub event: EventKey,
-    /// `raises(UseCase, event)` で宣言した UseCase の一覧。
-    pub raised_by: Vec<UseCaseKey>,
+    /// `raises(UseCase | ExtSystem, event)` で宣言した発生元の一覧。
+    pub raised_by: Vec<Raiser>,
     /// `triggers(event, UseCase)` で宣言した UseCase の一覧。
     pub triggers_ucs: Vec<UseCaseKey>,
     /// `triggers(event, Buc)` で宣言した BUC の一覧。
     pub triggers_bucs: Vec<BucKey>,
+    /// `triggers(event, ExtSystem)` で宣言した、イベントの配送先外部システムの一覧。
+    pub delivered_to: Vec<ExtSystemKey>,
     /// このイベントが `triggers` する UseCase が駆動する状態遷移（下流側、導出値）。
     pub transitions: Vec<StateTransition>,
+}
+
+impl EventFlow {
+    /// `raises(UseCase, event)` で宣言した UseCase。
+    pub fn raising_usecases(&self) -> Vec<UseCaseKey> {
+        self.raised_by
+            .iter()
+            .filter_map(|raiser| match raiser {
+                Raiser::UseCase(uk) => Some(*uk),
+                Raiser::ExtSystem(_) => None,
+            })
+            .collect()
+    }
+
+    /// `raises(ExtSystem, event)` で宣言した外部システム。
+    pub fn raising_extsystems(&self) -> Vec<ExtSystemKey> {
+        self.raised_by
+            .iter()
+            .filter_map(|raiser| match raiser {
+                Raiser::ExtSystem(xk) => Some(*xk),
+                Raiser::UseCase(_) => None,
+            })
+            .collect()
+    }
+}
+
+/// タイマーが起動する UseCase / BUC（イベントを介さない起動元）。
+#[derive(Debug)]
+pub struct TimerFlow {
+    pub timer: TimerKey,
+    /// `triggers(Timer, UseCase)` で宣言した UseCase の一覧。
+    pub triggers_ucs: Vec<UseCaseKey>,
+    /// `triggers(Timer, Buc)` で宣言した BUC の一覧。
+    pub triggers_bucs: Vec<BucKey>,
+}
+
+/// `triggers` の起動元になっている全タイマーを id 順に集める。
+pub fn collect_timer_flows(model: &SemanticModel) -> Vec<TimerFlow> {
+    let mut map: HashMap<TimerKey, TimerFlow> = HashMap::new();
+    for rel in &model.relations {
+        let (RelKind::Triggers, NodeRef::Timer(tk)) = (&rel.kind, &rel.from) else {
+            continue;
+        };
+        let flow = map.entry(*tk).or_insert_with(|| TimerFlow {
+            timer: *tk,
+            triggers_ucs: Vec::new(),
+            triggers_bucs: Vec::new(),
+        });
+        match &rel.to {
+            NodeRef::UseCase(uk) => flow.triggers_ucs.push(*uk),
+            NodeRef::Buc(bk) => flow.triggers_bucs.push(*bk),
+            _ => {}
+        }
+    }
+    let mut result: Vec<TimerFlow> = map.into_values().collect();
+    result.sort_by_key(|f| {
+        model
+            .timers
+            .get(f.timer)
+            .map(|t| t.id.clone())
+            .unwrap_or_default()
+    });
+    result
 }
 
 /// モデル内の全イベントについて `EventFlow` を収集する。
@@ -41,6 +107,7 @@ pub fn collect_event_flows(model: &SemanticModel) -> Vec<EventFlow> {
                     raised_by: Vec::new(),
                     triggers_ucs: Vec::new(),
                     triggers_bucs: Vec::new(),
+                    delivered_to: Vec::new(),
                     transitions: Vec::new(),
                 },
             )
@@ -49,9 +116,14 @@ pub fn collect_event_flows(model: &SemanticModel) -> Vec<EventFlow> {
 
     for rel in &model.relations {
         match (&rel.kind, &rel.from, &rel.to) {
-            (RelKind::Raises, NodeRef::UseCase(uk), NodeRef::Event(ek)) => {
+            (RelKind::Raises, from, NodeRef::Event(ek)) => {
+                if let (Some(flow), Some(raiser)) = (map.get_mut(ek), Raiser::from_node_ref(from)) {
+                    flow.raised_by.push(raiser);
+                }
+            }
+            (RelKind::Triggers, NodeRef::Event(ek), NodeRef::ExtSystem(xk)) => {
                 if let Some(flow) = map.get_mut(ek) {
-                    flow.raised_by.push(*uk);
+                    flow.delivered_to.push(*xk);
                 }
             }
             (RelKind::Triggers, NodeRef::Event(ek), NodeRef::UseCase(uk)) => {
@@ -121,6 +193,7 @@ pub fn event_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
         if !flow.raised_by.is_empty()
             && flow.triggers_ucs.is_empty()
             && flow.triggers_bucs.is_empty()
+            && flow.delivered_to.is_empty()
             && !model.outbox_events.contains(&flow.event)
         {
             push_model_decl_diagnostic(
@@ -160,6 +233,43 @@ pub fn event_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
                 );
             }
         }
+    }
+
+    // timer が triggers する UseCase がどの BUC にも contains されていない
+    for rel in &model.relations {
+        let (RelKind::Triggers, NodeRef::Timer(timer_key), NodeRef::UseCase(uc_key)) =
+            (&rel.kind, &rel.from, &rel.to)
+        else {
+            continue;
+        };
+        let belongs_to_buc = model
+            .relations
+            .iter()
+            .any(|r| r.kind == RelKind::Contains && r.to == NodeRef::UseCase(*uc_key));
+        if belongs_to_buc {
+            continue;
+        }
+        let timer_id = model
+            .timers
+            .get(*timer_key)
+            .map(|t| t.id.clone())
+            .unwrap_or_default();
+        let uc_id = model
+            .use_cases
+            .get(*uc_key)
+            .map(|u| u.id.clone())
+            .unwrap_or_default();
+        push_model_decl_diagnostic(
+            model,
+            &mut diags,
+            "usecase",
+            &uc_id,
+            RdraError::TimerTriggeredUseCaseUnreachable {
+                timer: timer_id,
+                usecase: uc_id.clone(),
+            },
+            true,
+        );
     }
 
     diags
@@ -266,6 +376,90 @@ mod tests {
         let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
         assert!(errors.is_empty(), "unexpected errors: {errors:?}");
         model
+    }
+
+    const EXT_SRC: &str = r#"
+usecase Book "Book"
+usecase Notify "Notify"
+buc Scheduling "Scheduling"
+contains(Scheduling, Book)
+contains(Scheduling, Notify)
+extsystem Gateway "Gateway"
+extsystem Lab "Lab"
+event EvBooked "Booked"
+event EvResult "Result"
+timer Nightly "Nightly"
+raises(Book, EvBooked)
+triggers(EvBooked, Gateway)
+raises(Lab, EvResult)
+triggers(EvResult, Notify)
+triggers(Nightly, Book)
+"#;
+
+    fn warnings(model: &SemanticModel) -> Vec<RdraError> {
+        event_diagnostics(model)
+            .into_iter()
+            .map(|d| d.error)
+            .collect()
+    }
+
+    #[test]
+    fn event_delivered_to_an_extsystem_is_consumed() {
+        let model = model_from(EXT_SRC);
+        let flows = collect_event_flows(&model);
+        let booked = flows
+            .iter()
+            .find(|f| model.events[f.event].id == "EvBooked")
+            .unwrap();
+        assert_eq!(booked.delivered_to.len(), 1);
+        let result = flows
+            .iter()
+            .find(|f| model.events[f.event].id == "EvResult")
+            .unwrap();
+        assert_eq!(result.raising_extsystems().len(), 1);
+        assert!(result.raising_usecases().is_empty());
+        let w = warnings(&model);
+        assert!(
+            !w.iter().any(|e| matches!(
+                e,
+                RdraError::EventNeverConsumed { .. } | RdraError::EventNeverRaised { .. }
+            )),
+            "{w:?}"
+        );
+    }
+
+    #[test]
+    fn timer_triggered_use_case_outside_any_buc_is_flagged() {
+        let model =
+            model_from("usecase Orphan \"o\"\ntimer Nightly \"n\"\ntriggers(Nightly, Orphan)\n");
+        assert!(
+            warnings(&model).iter().any(|e| matches!(
+                e,
+                RdraError::TimerTriggeredUseCaseUnreachable { timer, usecase }
+                    if timer == "Nightly" && usecase == "Orphan"
+            )),
+            "{:?}",
+            warnings(&model)
+        );
+        let model = model_from(EXT_SRC);
+        assert!(!warnings(&model)
+            .iter()
+            .any(|e| matches!(e, RdraError::TimerTriggeredUseCaseUnreachable { .. })));
+        assert_eq!(collect_timer_flows(&model).len(), 1);
+    }
+
+    #[test]
+    fn timer_cannot_trigger_an_extsystem() {
+        let (ast, errs) = parse("timer T \"t\"\nextsystem X \"x\"\ntriggers(T, X)\n");
+        assert!(errs.is_empty());
+        let (_model, diags) = build_model(&ast);
+        assert!(
+            diags.iter().any(|d| !d.is_warning
+                && matches!(&d.error, RdraError::TypeMismatch { pred, actual, .. }
+                    if pred == "triggers" && actual == "timer -> extsystem")),
+            "{:?}",
+            diags.iter().map(|d| &d.error).collect::<Vec<_>>()
+        );
     }
 
     #[test]

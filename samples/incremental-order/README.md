@@ -26,7 +26,7 @@ For each step, read `requirements-analysis.md` first, then `design.md`, then the
 
 The important modeling move is that Step 2 intentionally uses direct
 `UseCase -> Entity` CRUD. Step 3 adds APIs only where a consistency boundary is
-worth naming, and also introduces `timing` / `medium` /
+worth naming, and also introduces `medium` /
 `permission` vocabulary. Screen-level constraints are derived, not written by hand:
 run `rdra-ish csv ... --kind screen-constraints` to see which UC/API permission and
 medium requirements pass through each screen, and `rdra-ish csv ... --kind

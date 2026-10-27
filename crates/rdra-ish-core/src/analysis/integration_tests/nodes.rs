@@ -28,7 +28,7 @@ fn node_kind_tag_str_labels_each_node_ref_kind() {
         (Kind::Event, "EventA", "event"),
         (Kind::Api, "ApiA", "api"),
         (Kind::Dto, "DtoA", "dto"),
-        (Kind::Timing, "TimingA", "timing"),
+        (Kind::Timer, "TimingA", "timer"),
         (Kind::Medium, "MediumA", "medium"),
         (Kind::Permission, "PermissionA", "permission"),
     ];

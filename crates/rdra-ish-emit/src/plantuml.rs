@@ -6,12 +6,13 @@ use crate::{
     Emitter, Scope, View, OBJECT_GRAPH_LAYERS,
 };
 use rdra_ish_core::model::{
-    ActorKey, ApiKey, BucKey, ColumnType, EntityKey, NodeRef, RelKind, ScreenKey, SemanticModel,
-    StateKey, UseCaseKey,
+    ActorKey, ApiKey, BucKey, ColumnType, EntityKey, ExtSystemKey, NodeRef, Raiser, RelKind,
+    ScreenKey, SemanticModel, StateKey, TimerKey, UseCaseKey,
 };
 use rdra_ish_core::tx::infer_usecase_transactions;
 use rdra_ish_core::{
     derive_actor_input_inferences, derive_system_boundaries, ActorInputInference, EventFlow,
+    TimerFlow,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -201,7 +202,6 @@ fn render_rdra_node_declarations(
 fn rdra_relation_arrow(kind: &RelKind, from_id: &str, to_id: &str) -> Option<String> {
     let arrow = match kind {
         RelKind::Performs => format!("{} --> {}", from_id, to_id),
-        RelKind::Uses => format!("{} --> {}", from_id, to_id),
         RelKind::Reads => format!("{} ..> {} : reads", from_id, to_id),
         RelKind::Writes => format!("{} ..> {} : writes", from_id, to_id),
         RelKind::Creates => format!("{} ..> {} : creates", from_id, to_id),
@@ -456,7 +456,7 @@ impl Emitter for ObjectGraphPlantUmlEmitter {
                         NodeRef::Buc(_) => format!("  rectangle \"{}\" as {}\n", label, id),
                         NodeRef::Flow(_) => format!("  rectangle \"{}\" as {}\n", label, id),
                         NodeRef::Step(_) => format!("  usecase \"{}\" as {}\n", label, id),
-                        NodeRef::Timing(_) => format!("  rectangle \"{}\" as {}\n", label, id),
+                        NodeRef::Timer(_) => format!("  rectangle \"{}\" as {}\n", label, id),
                         NodeRef::Medium(_) => format!("  component \"{}\" as {}\n", label, id),
                         NodeRef::Permission(_) => format!("  rectangle \"{}\" as {}\n", label, id),
                         NodeRef::Variation(_) => format!("  rectangle \"{}\" as {}\n", label, id),
@@ -490,7 +490,7 @@ impl Emitter for ObjectGraphPlantUmlEmitter {
             {
                 let label = object_graph_rel_label(&rel.kind);
                 let line = match rel.kind {
-                    RelKind::Performs | RelKind::Contains | RelKind::Uses | RelKind::Owns => {
+                    RelKind::Performs | RelKind::Contains | RelKind::Owns => {
                         format!("{} --> {} : {}\n", from_id, to_id, label)
                     }
                     RelKind::RelateOneToOne
@@ -1358,6 +1358,50 @@ fn event_flow_state_id(id: &str) -> String {
     format!("st__{}", id)
 }
 
+fn event_flow_extsystem_id(id: &str) -> String {
+    format!("xs__{}", id)
+}
+
+fn event_flow_timer_id(id: &str) -> String {
+    format!("tm__{}", id)
+}
+
+fn declare_event_flow_extsystem(
+    out: &mut String,
+    declared: &mut HashSet<String>,
+    model: &SemanticModel,
+    extsystem: ExtSystemKey,
+) -> Option<String> {
+    let extsystem_model = model.ext_systems.get(extsystem)?;
+    let extsystem_id = event_flow_extsystem_id(&extsystem_model.id);
+    if declared.insert(extsystem_id.clone()) {
+        out.push_str(&format!(
+            "component \"{}\" as {}\n",
+            prefixed_label("🌐", &extsystem_model.label),
+            extsystem_id
+        ));
+    }
+    Some(extsystem_id)
+}
+
+fn declare_event_flow_timer(
+    out: &mut String,
+    declared: &mut HashSet<String>,
+    model: &SemanticModel,
+    timer: TimerKey,
+) -> Option<String> {
+    let timer_model = model.timers.get(timer)?;
+    let timer_id = event_flow_timer_id(&timer_model.id);
+    if declared.insert(timer_id.clone()) {
+        out.push_str(&format!(
+            "rectangle \"{}\" as {}\n",
+            prefixed_label("⏱️", &timer_model.label),
+            timer_id
+        ));
+    }
+    Some(timer_id)
+}
+
 fn declare_event_flow_event(
     out: &mut String,
     declared: &mut HashSet<String>,
@@ -1446,20 +1490,40 @@ fn render_event_flow(
     };
 
     let mut raised_by = flow.raised_by.to_vec();
-    raised_by.sort_by_key(|&uk| {
-        model
-            .use_cases
-            .get(uk)
-            .map(|uc| uc.id.as_str())
-            .unwrap_or("")
+    raised_by.sort_by_key(|raiser| match raiser {
+        Raiser::UseCase(usecase) => (
+            0,
+            model
+                .use_cases
+                .get(*usecase)
+                .map(|uc| uc.id.as_str())
+                .unwrap_or(""),
+        ),
+        Raiser::ExtSystem(extsystem) => (
+            1,
+            model
+                .ext_systems
+                .get(*extsystem)
+                .map(|x| x.id.as_str())
+                .unwrap_or(""),
+        ),
     });
-    for usecase in raised_by {
-        let node = NodeRef::UseCase(usecase);
+    for raiser in raised_by {
+        let (node, declared_id) = match raiser {
+            Raiser::UseCase(usecase) => (
+                NodeRef::UseCase(usecase),
+                declare_event_flow_usecase(out, declared, model, usecase),
+            ),
+            Raiser::ExtSystem(extsystem) => (
+                NodeRef::ExtSystem(extsystem),
+                declare_event_flow_extsystem(out, declared, model, extsystem),
+            ),
+        };
         if !event_flow_node_visible(reachable, &node) {
             continue;
         }
-        if let Some(usecase_id) = declare_event_flow_usecase(out, declared, model, usecase) {
-            out.push_str(&format!("{} ..> {} : raises\n", usecase_id, event_id));
+        if let Some(raiser_id) = declared_id {
+            out.push_str(&format!("{} ..> {} : raises\n", raiser_id, event_id));
         }
     }
 
@@ -1490,6 +1554,24 @@ fn render_event_flow(
         }
         if let Some(buc_id) = declare_event_flow_buc(out, declared, model, buc) {
             out.push_str(&format!("{} ..> {} : triggers\n", event_id, buc_id));
+        }
+    }
+
+    let mut delivered_to = flow.delivered_to.to_vec();
+    delivered_to.sort_by_key(|&xk| {
+        model
+            .ext_systems
+            .get(xk)
+            .map(|x| x.id.as_str())
+            .unwrap_or("")
+    });
+    for extsystem in delivered_to {
+        let node = NodeRef::ExtSystem(extsystem);
+        if !event_flow_node_visible(reachable, &node) {
+            continue;
+        }
+        if let Some(extsystem_id) = declare_event_flow_extsystem(out, declared, model, extsystem) {
+            out.push_str(&format!("{} ..> {} : delivers\n", event_id, extsystem_id));
         }
     }
 
@@ -1536,6 +1618,49 @@ fn render_event_flow(
     }
 }
 
+fn render_timer_flow(
+    out: &mut String,
+    declared: &mut HashSet<String>,
+    model: &SemanticModel,
+    reachable: &Option<HashSet<NodeRef>>,
+    flow: &TimerFlow,
+) {
+    if !event_flow_node_visible(reachable, &NodeRef::Timer(flow.timer)) {
+        return;
+    }
+    let Some(timer_id) = declare_event_flow_timer(out, declared, model, flow.timer) else {
+        return;
+    };
+
+    let mut usecases = flow.triggers_ucs.to_vec();
+    usecases.sort_by_key(|&uk| {
+        model
+            .use_cases
+            .get(uk)
+            .map(|uc| uc.id.as_str())
+            .unwrap_or("")
+    });
+    for usecase in usecases {
+        if !event_flow_node_visible(reachable, &NodeRef::UseCase(usecase)) {
+            continue;
+        }
+        if let Some(usecase_id) = declare_event_flow_usecase(out, declared, model, usecase) {
+            out.push_str(&format!("{} ..> {} : triggers\n", timer_id, usecase_id));
+        }
+    }
+
+    let mut bucs = flow.triggers_bucs.to_vec();
+    bucs.sort_by_key(|&bk| model.bucs.get(bk).map(|buc| buc.id.as_str()).unwrap_or(""));
+    for buc in bucs {
+        if !event_flow_node_visible(reachable, &NodeRef::Buc(buc)) {
+            continue;
+        }
+        if let Some(buc_id) = declare_event_flow_buc(out, declared, model, buc) {
+            out.push_str(&format!("{} ..> {} : triggers\n", timer_id, buc_id));
+        }
+    }
+}
+
 impl Emitter for EventFlowPlantUmlEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         let reachable: Option<HashSet<NodeRef>> = match &view.scope {
@@ -1553,6 +1678,9 @@ impl Emitter for EventFlowPlantUmlEmitter {
 
         for flow in &flows {
             render_event_flow(&mut out, &mut declared, model, &reachable, flow);
+        }
+        for timer_flow in rdra_ish_core::collect_timer_flows(model) {
+            render_timer_flow(&mut out, &mut declared, model, &reachable, &timer_flow);
         }
 
         out.push_str("\n@enduml\n");
@@ -1678,7 +1806,7 @@ pub(crate) fn node_id<'a>(model: &'a SemanticModel, node: &NodeRef) -> Option<&'
         NodeRef::State(k) => model.states.get(*k).map(|s| s.id.as_str()),
         NodeRef::Api(k) => model.apis.get(*k).map(|a| a.id.as_str()),
         NodeRef::Dto(k) => model.dtos.get(*k).map(|d| d.id.as_str()),
-        NodeRef::Timing(k) => model.timings.get(*k).map(|t| t.id.as_str()),
+        NodeRef::Timer(k) => model.timers.get(*k).map(|t| t.id.as_str()),
         NodeRef::Medium(k) => model.media.get(*k).map(|m| m.id.as_str()),
         NodeRef::Permission(k) => model.permissions.get(*k).map(|p| p.id.as_str()),
         NodeRef::Variation(k) => model.variations.get(*k).map(|v| v.id.as_str()),
@@ -1707,7 +1835,7 @@ pub(crate) fn node_label<'a>(model: &'a SemanticModel, node: &NodeRef) -> Option
         NodeRef::State(k) => model.states.get(*k).map(|s| s.label.as_str()),
         NodeRef::Api(k) => model.apis.get(*k).map(|a| a.label.as_str()),
         NodeRef::Dto(k) => model.dtos.get(*k).map(|d| d.label.as_str()),
-        NodeRef::Timing(k) => model.timings.get(*k).map(|t| t.label.as_str()),
+        NodeRef::Timer(k) => model.timers.get(*k).map(|t| t.label.as_str()),
         NodeRef::Medium(k) => model.media.get(*k).map(|m| m.label.as_str()),
         NodeRef::Permission(k) => model.permissions.get(*k).map(|p| p.label.as_str()),
         NodeRef::Variation(k) => model.variations.get(*k).map(|v| v.label.as_str()),
@@ -2099,6 +2227,41 @@ displays(PlaceOrder, OrderCompleteScreen)
 
         // スナップショット
         insta::assert_snapshot!(result);
+    }
+
+    #[test]
+    fn test_event_flow_plantuml_renders_timers_and_extsystems() {
+        let src = r#"
+usecase Book "Book"
+usecase Receive "Receive"
+usecase Sweep "Sweep"
+extsystem Gateway "Gateway"
+extsystem Lab "Lab"
+timer Nightly "Nightly"
+event EvBooked "Booked"
+event EvResult "Result"
+raises(Book, EvBooked)
+triggers(EvBooked, Gateway)
+raises(Lab, EvResult)
+triggers(EvResult, Receive)
+triggers(Nightly, Sweep)
+"#;
+        let model = model_from(src);
+        let result = EventFlowPlantUmlEmitter
+            .emit(&model, &View::whole())
+            .unwrap();
+        assert!(
+            result.contains("xs__Lab ..> ev__EvResult : raises"),
+            "{result}"
+        );
+        assert!(
+            result.contains("ev__EvBooked ..> xs__Gateway : delivers"),
+            "{result}"
+        );
+        assert!(
+            result.contains("tm__Nightly ..> uc__Sweep : triggers"),
+            "{result}"
+        );
     }
 
     #[test]

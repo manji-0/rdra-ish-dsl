@@ -10,12 +10,13 @@ use crate::{
     Emitter, Scope, View, OBJECT_GRAPH_LAYERS,
 };
 use rdra_ish_core::model::{
-    ActorKey, ApiKey, BucKey, EntityKey, NodeRef, RelKind, ScreenKey, SemanticModel, StateKey,
-    UseCaseKey,
+    ActorKey, ApiKey, BucKey, EntityKey, ExtSystemKey, NodeRef, Raiser, RelKind, ScreenKey,
+    SemanticModel, StateKey, TimerKey, UseCaseKey,
 };
 use rdra_ish_core::tx::infer_usecase_transactions;
 use rdra_ish_core::{
     derive_actor_input_inferences, derive_system_boundaries, ActorInputInference, EventFlow,
+    TimerFlow,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -192,7 +193,7 @@ fn render_mermaid_rdra_node_declarations(
 
 fn mermaid_rdra_relation_arrow(kind: &RelKind, from_id: &str, to_id: &str) -> Option<String> {
     let arrow = match kind {
-        RelKind::Performs | RelKind::Uses => format!("  {} --> {}\n", from_id, to_id),
+        RelKind::Performs => format!("  {} --> {}\n", from_id, to_id),
         RelKind::Reads => format!("  {} -.->|reads| {}\n", from_id, to_id),
         RelKind::Writes => format!("  {} -.->|writes| {}\n", from_id, to_id),
         RelKind::Creates => format!("  {} -.->|creates| {}\n", from_id, to_id),
@@ -458,7 +459,7 @@ impl Emitter for ObjectGraphMermaidEmitter {
                         NodeRef::Buc(_) => format!("    {}[\"{}\"]\n", id, label),
                         NodeRef::Flow(_) => format!("    {}[\"{}\"]\n", id, label),
                         NodeRef::Step(_) => format!("    {}([\"{}\"])\n", id, label),
-                        NodeRef::Timing(_) => format!("    {}[\"{}\"]\n", id, label),
+                        NodeRef::Timer(_) => format!("    {}[\"{}\"]\n", id, label),
                         NodeRef::Medium(_) => format!("    {}[/\"{}\"/]\n", id, label),
                         NodeRef::Permission(_) => format!("    {}[\"{}\"]\n", id, label),
                         NodeRef::Variation(_) => format!("    {}[\"{}\"]\n", id, label),
@@ -492,7 +493,7 @@ impl Emitter for ObjectGraphMermaidEmitter {
             {
                 let label = object_graph_rel_label(&rel.kind);
                 let line = match rel.kind {
-                    RelKind::Performs | RelKind::Contains | RelKind::Uses | RelKind::Owns => {
+                    RelKind::Performs | RelKind::Contains | RelKind::Owns => {
                         format!("  {} -->|{}| {}\n", from_id, label, to_id)
                     }
                     RelKind::RelateOneToOne
@@ -1325,6 +1326,50 @@ fn mermaid_event_flow_state_id(id: &str) -> String {
     format!("st__{}", id)
 }
 
+fn mermaid_event_flow_extsystem_id(id: &str) -> String {
+    format!("xs__{}", id)
+}
+
+fn mermaid_event_flow_timer_id(id: &str) -> String {
+    format!("tm__{}", id)
+}
+
+fn declare_mermaid_event_flow_extsystem(
+    out: &mut String,
+    declared: &mut HashSet<String>,
+    model: &SemanticModel,
+    extsystem: ExtSystemKey,
+) -> Option<String> {
+    let extsystem_model = model.ext_systems.get(extsystem)?;
+    let extsystem_id = mermaid_event_flow_extsystem_id(&extsystem_model.id);
+    if declared.insert(extsystem_id.clone()) {
+        out.push_str(&format!(
+            "  {}[/\"{}\"/]\n",
+            extsystem_id,
+            prefixed_label("🌐", &extsystem_model.label)
+        ));
+    }
+    Some(extsystem_id)
+}
+
+fn declare_mermaid_event_flow_timer(
+    out: &mut String,
+    declared: &mut HashSet<String>,
+    model: &SemanticModel,
+    timer: TimerKey,
+) -> Option<String> {
+    let timer_model = model.timers.get(timer)?;
+    let timer_id = mermaid_event_flow_timer_id(&timer_model.id);
+    if declared.insert(timer_id.clone()) {
+        out.push_str(&format!(
+            "  {}{{{{\"{}\"}}}}\n",
+            timer_id,
+            prefixed_label("⏱️", &timer_model.label)
+        ));
+    }
+    Some(timer_id)
+}
+
 fn declare_mermaid_event_flow_event(
     out: &mut String,
     declared: &mut HashSet<String>,
@@ -1413,21 +1458,40 @@ fn render_mermaid_event_flow(
     };
 
     let mut raised_by = flow.raised_by.to_vec();
-    raised_by.sort_by_key(|&usecase| {
-        model
-            .use_cases
-            .get(usecase)
-            .map(|uc| uc.id.as_str())
-            .unwrap_or("")
+    raised_by.sort_by_key(|raiser| match raiser {
+        Raiser::UseCase(usecase) => (
+            0,
+            model
+                .use_cases
+                .get(*usecase)
+                .map(|uc| uc.id.as_str())
+                .unwrap_or(""),
+        ),
+        Raiser::ExtSystem(extsystem) => (
+            1,
+            model
+                .ext_systems
+                .get(*extsystem)
+                .map(|x| x.id.as_str())
+                .unwrap_or(""),
+        ),
     });
-    for usecase in raised_by {
-        let node = NodeRef::UseCase(usecase);
+    for raiser in raised_by {
+        let (node, declared_id) = match raiser {
+            Raiser::UseCase(usecase) => (
+                NodeRef::UseCase(usecase),
+                declare_mermaid_event_flow_usecase(out, declared, model, usecase),
+            ),
+            Raiser::ExtSystem(extsystem) => (
+                NodeRef::ExtSystem(extsystem),
+                declare_mermaid_event_flow_extsystem(out, declared, model, extsystem),
+            ),
+        };
         if !scoped_node_visible(reachable, &node) {
             continue;
         }
-        if let Some(usecase_id) = declare_mermaid_event_flow_usecase(out, declared, model, usecase)
-        {
-            out.push_str(&format!("  {} -.->|raises| {}\n", usecase_id, event_id));
+        if let Some(raiser_id) = declared_id {
+            out.push_str(&format!("  {} -.->|raises| {}\n", raiser_id, event_id));
         }
     }
 
@@ -1459,6 +1523,26 @@ fn render_mermaid_event_flow(
         }
         if let Some(buc_id) = declare_mermaid_event_flow_buc(out, declared, model, buc) {
             out.push_str(&format!("  {} -.->|triggers| {}\n", event_id, buc_id));
+        }
+    }
+
+    let mut delivered_to = flow.delivered_to.to_vec();
+    delivered_to.sort_by_key(|&xk| {
+        model
+            .ext_systems
+            .get(xk)
+            .map(|x| x.id.as_str())
+            .unwrap_or("")
+    });
+    for extsystem in delivered_to {
+        let node = NodeRef::ExtSystem(extsystem);
+        if !scoped_node_visible(reachable, &node) {
+            continue;
+        }
+        if let Some(extsystem_id) =
+            declare_mermaid_event_flow_extsystem(out, declared, model, extsystem)
+        {
+            out.push_str(&format!("  {} -.->|delivers| {}\n", event_id, extsystem_id));
         }
     }
 
@@ -1505,6 +1589,50 @@ fn render_mermaid_event_flow(
     }
 }
 
+fn render_mermaid_timer_flow(
+    out: &mut String,
+    declared: &mut HashSet<String>,
+    model: &SemanticModel,
+    reachable: &Option<HashSet<NodeRef>>,
+    flow: &TimerFlow,
+) {
+    if !scoped_node_visible(reachable, &NodeRef::Timer(flow.timer)) {
+        return;
+    }
+    let Some(timer_id) = declare_mermaid_event_flow_timer(out, declared, model, flow.timer) else {
+        return;
+    };
+
+    let mut usecases = flow.triggers_ucs.to_vec();
+    usecases.sort_by_key(|&uk| {
+        model
+            .use_cases
+            .get(uk)
+            .map(|uc| uc.id.as_str())
+            .unwrap_or("")
+    });
+    for usecase in usecases {
+        if !scoped_node_visible(reachable, &NodeRef::UseCase(usecase)) {
+            continue;
+        }
+        if let Some(usecase_id) = declare_mermaid_event_flow_usecase(out, declared, model, usecase)
+        {
+            out.push_str(&format!("  {} -.->|triggers| {}\n", timer_id, usecase_id));
+        }
+    }
+
+    let mut bucs = flow.triggers_bucs.to_vec();
+    bucs.sort_by_key(|&bk| model.bucs.get(bk).map(|b| b.id.as_str()).unwrap_or(""));
+    for buc in bucs {
+        if !scoped_node_visible(reachable, &NodeRef::Buc(buc)) {
+            continue;
+        }
+        if let Some(buc_id) = declare_mermaid_event_flow_buc(out, declared, model, buc) {
+            out.push_str(&format!("  {} -.->|triggers| {}\n", timer_id, buc_id));
+        }
+    }
+}
+
 impl Emitter for EventFlowMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         let reachable = reachable_for_scope(model, &view.scope);
@@ -1517,6 +1645,9 @@ impl Emitter for EventFlowMermaidEmitter {
 
         for flow in &flows {
             render_mermaid_event_flow(&mut out, &mut declared, model, &reachable, flow);
+        }
+        for timer_flow in rdra_ish_core::collect_timer_flows(model) {
+            render_mermaid_timer_flow(&mut out, &mut declared, model, &reachable, &timer_flow);
         }
 
         Ok(out)
@@ -1902,6 +2033,41 @@ transitions(Doc.status, Publish, draft -> published)
         assert!(result.contains("[*] --> Doc_draft"));
         assert!(result.contains("Doc_draft --> Doc_published"));
         assert!(result.contains("公開する"));
+    }
+
+    #[test]
+    fn test_event_flow_mermaid_renders_timers_and_extsystems() {
+        let src = r#"
+usecase Book "Book"
+usecase Receive "Receive"
+usecase Sweep "Sweep"
+extsystem Gateway "Gateway"
+extsystem Lab "Lab"
+timer Nightly "Nightly"
+event EvBooked "Booked"
+event EvResult "Result"
+raises(Book, EvBooked)
+triggers(EvBooked, Gateway)
+raises(Lab, EvResult)
+triggers(EvResult, Receive)
+triggers(Nightly, Sweep)
+"#;
+        let model = model_from(src);
+        let result = EventFlowMermaidEmitter
+            .emit(&model, &View::whole())
+            .unwrap();
+        assert!(
+            result.contains("xs__Lab -.->|raises| ev__EvResult"),
+            "{result}"
+        );
+        assert!(
+            result.contains("ev__EvBooked -.->|delivers| xs__Gateway"),
+            "{result}"
+        );
+        assert!(
+            result.contains("tm__Nightly -.->|triggers| uc__Sweep"),
+            "{result}"
+        );
     }
 
     #[test]

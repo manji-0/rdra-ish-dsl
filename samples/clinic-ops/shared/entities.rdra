@@ -283,8 +283,9 @@ relate(PatientMessage, PatientAccount, N:1)
 relate(Notification, PatientAccount, N:1)
 relate(AuditEvent, PatientAccount, N:1)
 
-// Events: the interface between use cases. Each lifecycle transition is
-// declared in its BUC file, next to the use case that drives it.
+// Events: the interface between use cases, and between use cases and external
+// systems. Each lifecycle transition is declared in its BUC file, next to the
+// use case that drives it.
 
 event EvAppointmentScheduled   "Appointment Scheduled"
 event EvAppointmentRescheduled "Appointment Rescheduled"
@@ -293,6 +294,9 @@ event EvAppointmentCancelled   "Appointment Cancelled"
 event EvEncounterSigned     "Encounter Signed"
 event EvClinicalOrderReviewed  "Clinical Result Reviewed"
 event EvPrescriptionDispensed "Prescription Dispensed"
+event EvLabResultReceived "Lab Result Received"
+event EvEligibilityChecked "Eligibility Checked"
+event EvPaymentSettled "Payment Settled"
 
 // State constraints
 invariant(Appointment)

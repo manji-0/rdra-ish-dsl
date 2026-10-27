@@ -164,17 +164,18 @@ pub(crate) const OBJECT_GRAPH_LAYERS: [ObjectGraphLayer; 4] = [
 
 pub(crate) fn object_graph_layer(node: &NodeRef) -> ObjectGraphLayer {
     match node {
-        NodeRef::Actor(_) | NodeRef::Requirement(_) | NodeRef::Adr(_) | NodeRef::Nfr(_) => {
-            ObjectGraphLayer::SystemValue
-        }
-        NodeRef::ExtSystem(_)
-        | NodeRef::Quality(_)
+        NodeRef::Actor(_)
+        | NodeRef::ExtSystem(_)
+        | NodeRef::Requirement(_)
+        | NodeRef::Adr(_)
+        | NodeRef::Nfr(_) => ObjectGraphLayer::SystemValue,
+        NodeRef::Quality(_)
         | NodeRef::Constraint(_)
         | NodeRef::Business(_)
         | NodeRef::Buc(_)
         | NodeRef::Flow(_)
         | NodeRef::Step(_)
-        | NodeRef::Timing(_)
+        | NodeRef::Timer(_)
         | NodeRef::Medium(_)
         | NodeRef::Permission(_) => ObjectGraphLayer::ExternalEnvironment,
         NodeRef::UseCase(_) | NodeRef::Screen(_) | NodeRef::Field(_) | NodeRef::Event(_) => {
@@ -192,7 +193,6 @@ pub(crate) fn object_graph_layer(node: &NodeRef) -> ObjectGraphLayer {
 pub(crate) fn object_graph_rel_label(kind: &RelKind) -> &'static str {
     match kind {
         RelKind::Performs => "performs",
-        RelKind::Uses => "uses",
         RelKind::Reads => "reads",
         RelKind::Writes => "writes",
         RelKind::Creates => "creates",
@@ -258,7 +258,7 @@ pub const KNOWN_DIAGRAM_NODE_KINDS: &[&str] = &[
     "state",
     "api",
     "dto",
-    "timing",
+    "timer",
     "medium",
     "permission",
     "variation",
@@ -268,7 +268,6 @@ pub const KNOWN_DIAGRAM_NODE_KINDS: &[&str] = &[
 /// `relate` matches all cardinality relate edges; `1:1` / `1:n` / `n:1` / `n:m` are also accepted.
 pub const KNOWN_DIAGRAM_EDGE_KINDS: &[&str] = &[
     "performs",
-    "uses",
     "reads",
     "writes",
     "creates",
@@ -348,7 +347,7 @@ pub(crate) fn node_kind_filter_name(node: &NodeRef) -> &'static str {
         NodeRef::State(_) => "state",
         NodeRef::Api(_) => "api",
         NodeRef::Dto(_) => "dto",
-        NodeRef::Timing(_) => "timing",
+        NodeRef::Timer(_) => "timer",
         NodeRef::Medium(_) => "medium",
         NodeRef::Permission(_) => "permission",
         NodeRef::Variation(_) => "variation",
@@ -401,7 +400,7 @@ pub(crate) fn node_description<'a>(model: &'a SemanticModel, node: &NodeRef) -> 
         NodeRef::Buc(key) => model.bucs.get(*key)?.description.as_deref(),
         NodeRef::Flow(key) => model.flows.get(*key)?.description.as_deref(),
         NodeRef::Step(key) => model.steps.get(*key)?.description.as_deref(),
-        NodeRef::Timing(key) => model.timings.get(*key)?.description.as_deref(),
+        NodeRef::Timer(key) => model.timers.get(*key)?.description.as_deref(),
         NodeRef::Medium(key) => model.media.get(*key)?.description.as_deref(),
         NodeRef::Permission(key) => model.permissions.get(*key)?.description.as_deref(),
         NodeRef::UseCase(key) => model.use_cases.get(*key)?.description.as_deref(),
@@ -438,7 +437,7 @@ pub(crate) fn node_emoji(node: &NodeRef) -> &'static str {
         NodeRef::State(_) => "🔄",
         NodeRef::Api(_) => "🔌",
         NodeRef::Dto(_) => "📄",
-        NodeRef::Timing(_) => "⏱️",
+        NodeRef::Timer(_) => "⏱️",
         NodeRef::Medium(_) => "📱",
         NodeRef::Permission(_) => "🔑",
         NodeRef::Variation(_) => "🎚️",
@@ -546,12 +545,12 @@ pub(crate) fn collect_object_graph_nodes(
             .filter(|nr| is_visible(nr)),
     );
 
-    let mut timings: Vec<_> = model.timings.iter().collect();
-    timings.sort_by_key(|(_, t)| &t.id);
+    let mut timers: Vec<_> = model.timers.iter().collect();
+    timers.sort_by_key(|(_, t)| &t.id);
     nodes.extend(
-        timings
+        timers
             .into_iter()
-            .map(|(k, _)| NodeRef::Timing(k))
+            .map(|(k, _)| NodeRef::Timer(k))
             .filter(|nr| is_visible(nr)),
     );
 
@@ -661,6 +660,18 @@ mod tests {
     use rdra_ish_core::build_model;
     use rdra_ish_syntax::parse;
 
+    #[test]
+    fn extsystem_is_system_value_and_timer_is_external_environment() {
+        let model = model_from("extsystem X \"x\"\ntimer T \"t\"\n");
+        let ext = model.symbols.get("X").unwrap();
+        let timer = model.symbols.get("T").unwrap();
+        assert_eq!(object_graph_layer(ext), ObjectGraphLayer::SystemValue);
+        assert_eq!(
+            object_graph_layer(timer),
+            ObjectGraphLayer::ExternalEnvironment
+        );
+    }
+
     fn model_from(src: &str) -> SemanticModel {
         let (ast, errors) = parse(src);
         assert!(errors.is_empty(), "parse errors: {:?}", errors);
@@ -683,7 +694,7 @@ mod tests {
             NodeRef::Buc(k) => model.bucs[*k].id.clone(),
             NodeRef::Flow(k) => model.flows[*k].id.clone(),
             NodeRef::Step(k) => model.steps[*k].id.clone(),
-            NodeRef::Timing(k) => model.timings[*k].id.clone(),
+            NodeRef::Timer(k) => model.timers[*k].id.clone(),
             NodeRef::Medium(k) => model.media[*k].id.clone(),
             NodeRef::Permission(k) => model.permissions[*k].id.clone(),
             NodeRef::UseCase(k) => model.use_cases[*k].id.clone(),
@@ -714,7 +725,7 @@ business Biz "Business"
 buc Buc "BUC"
 flow Flow "Flow"
 step Step "Step"
-timing Time "Timing"
+timer Time "Timer"
 medium Med "Medium"
 permission Perm "Permission"
 usecase Uc "UseCase"

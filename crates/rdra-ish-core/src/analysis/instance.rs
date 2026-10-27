@@ -295,13 +295,13 @@ pub(crate) fn register_instance(
             });
             NodeRef::Dto(k)
         }
-        Kind::Timing => {
-            let k = model.timings.insert(Timing {
+        Kind::Timer => {
+            let k = model.timers.insert(Timer {
                 id: inst.id.clone(),
                 label: inst.label.clone(),
                 description: inst.description.clone(),
             });
-            NodeRef::Timing(k)
+            NodeRef::Timer(k)
         }
         Kind::Medium => {
             let k = model.media.insert(Medium {

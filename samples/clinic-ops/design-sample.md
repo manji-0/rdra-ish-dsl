@@ -58,8 +58,8 @@ rdra-ish csv samples/clinic-ops --kind actor-permission-audit --out samples/clin
 `shared/access.rdra` に分けている。各 BUC ファイルでは、UC/API 側の要求を
 `requires_permission` / `requires_medium` として定義する。
 
-`BucAppointmentScheduling` は `belongs(...).when(...).by(...)` で、
-予約業務が患者依頼のタイミング、窓口端末または患者モバイルから発生することを表す。
+`BucAppointmentScheduling` は `belongs(...).by(...)` で、
+予約業務が窓口端末または患者モバイルから発生することを表す。
 
 Screen には制約を直接書かない。`displays(UC, Screen)` と `invokes(UC, Api)` から
 次のような行が `out/screen_constraints.csv` に導出される。

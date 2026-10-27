@@ -196,7 +196,7 @@ pub struct Dto {
 }
 
 #[derive(Debug, Clone)]
-pub struct Timing {
+pub struct Timer {
     pub id: std::string::String,
     pub label: std::string::String,
     pub description: Option<std::string::String>,
