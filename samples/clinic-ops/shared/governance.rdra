@@ -1,0 +1,48 @@
+module shared.governance
+
+import shared.biz
+import shared.entities
+
+quality Auditability "Auditability"
+quality Availability "Availability"
+quality Privacy      "Privacy"
+
+nfr ScheduleLookupLatency "Schedule lookup latency"
+  metric p95_latency_ms
+  target "<=500"
+  window "5m"
+  slo "99.5%"
+  availability multi_az
+  resilience retryable
+
+constraint PatientDataPrivacy "Patient data privacy"
+  privacy restricted
+  logging structured
+  retention "10y"
+
+constraint BillingAuditTrail "Billing audit trail"
+  audit enabled
+  retention "7y"
+
+applies_to(ScheduleLookupLatency, ClinicOpsSystem)
+qualifies(ScheduleLookupLatency, Availability)
+qualifies(PatientDataPrivacy, Privacy)
+qualifies(BillingAuditTrail, Auditability)
+constrains(PatientDataPrivacy, PatientProfile)
+constrains(PatientDataPrivacy, InsurancePolicy)
+constrains(BillingAuditTrail, PaymentTransaction)
+constrains(BillingAuditTrail, ClinicOpsSystem)
+
+adr AdrSingleClinicSystem "Run clinic workflows as one system boundary"
+  description "Decision record for the clinic system boundary."
+  adr_status accepted
+  context "Front desk, clinical, and billing workflows share patient and appointment data."
+  decision "Keep every workflow inside a single ClinicOpsSystem boundary."
+  consequence "Cross-workflow changes deploy together."
+  accepted "Single system boundary"
+  rejected "Per-department systems"
+  reason "Shared patient data would otherwise need cross-system coordination."
+
+decides(AdrSingleClinicSystem, ClinicOpsSystem)
+decides(AdrSingleClinicSystem, PatientProfile)
+decides(AdrSingleClinicSystem, Appointment)

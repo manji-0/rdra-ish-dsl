@@ -97,3 +97,46 @@ requires_permission(AssignRoomApi, RoomAssign)
 requires_permission(PrepareEncounter, EncounterOpen)
 requires_medium(PrepareEncounter, NurseStation)
 requires_permission(PrepareEncounterApi, EncounterOpen)
+
+// Requirement traceability
+requirement ReqSwiftCheckIn "Patients are checked in and roomed without repeated data entry"
+  priority "must"
+  source "Front desk interviews"
+  stakeholder "Front Desk Staff"
+  acceptance criteria "A returning patient is checked in with a single confirmation step."
+  status "accepted"
+
+motivates(ReqSwiftCheckIn, BucVisitCheckIn)
+
+// Business flow
+flow VisitCheckInFlow "Visit check-in flow"
+step ArrivalStep       "Patient arrives"
+step CopayStep         "Copay is collected"
+step CopayDeferredStep "Copay is deferred"
+step RoomingStep       "Patient is roomed"
+
+contains(BucVisitCheckIn, VisitCheckInFlow)
+contains(VisitCheckInFlow, ArrivalStep)
+contains(VisitCheckInFlow, CopayStep)
+contains(VisitCheckInFlow, CopayDeferredStep)
+contains(VisitCheckInFlow, RoomingStep)
+
+precedes(ArrivalStep, CopayStep)
+precedes(CopayStep, RoomingStep)
+branches(CopayStep, CopayDeferredStep)
+precedes(CopayDeferredStep, RoomingStep)
+
+covers(ArrivalStep, VerifyArrival)
+covers(ArrivalStep, CheckInPatient)
+covers(CopayStep, CollectCopay)
+covers(CopayDeferredStep, CollectCopay)
+covers(RoomingStep, AssignRoom)
+
+// Screen fields
+field ArrivalTimeField "Checked-in time" access readonly required true source system
+field CopayAmountField "Copay amount"    access editable required true source actor
+
+contains(CheckInScreen, ArrivalTimeField)
+contains(CopayScreen, CopayAmountField)
+maps_field(ArrivalTimeField, Appointment, "checked_in_at")
+maps_field(CopayAmountField, PaymentTransaction, "amount")
