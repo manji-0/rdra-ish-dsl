@@ -23,22 +23,23 @@ by use cases or events.
 1. Add lifecycle columns such as `Enum(...)`, `Bool`, and nullable timestamp/value
    columns. Values an actor merely chooses are not lifecycle: type those columns by a
    `variation` and leave them out of `transitions` / `sets`.
-2. Declare `event` nodes. States are not declared: each `transitions` variant becomes a
-   state of its entity.
-3. Add `raises(UseCase, Event)` for event origins.
-4. Add `transitions(Entity.col, Event, from -> to)` for lifecycle movement.
-5. For downstream automation, model BUC-level causality first:
+2. Add `transitions(Entity.col, UseCase, from -> to)` for lifecycle movement, naming
+   the use case that drives each edge (the 遷移UC column of an RDRA state sheet).
+   States are not declared: each `transitions` variant becomes a state of its entity.
+3. Declare an `event` and `raises(UseCase, Event)` only for an interface between use
+   cases: something must consume the event.
+4. For downstream automation, model BUC-level causality first:
    `triggers(Event, TargetBuc)`.
-6. When the concrete entry action is known, refine with
+5. When the concrete entry action is known, refine with
    `contains(TargetBuc, EntryUseCase)` and `triggers(Event, EntryUseCase)` without
    removing the BUC-level trigger.
-7. Add `sets(UseCase|Event, Entity, col == val)` for enum, nullable, and boolean
+6. Add `sets(UseCase, Entity, col == val)` for enum, nullable, and boolean
    effects not fully explained by transitions.
-8. Add comparison-proposition `sets` when rules depend on derived comparisons
+7. Add comparison-proposition `sets` when rules depend on derived comparisons
    (BFS layer). Prefer Int / Money / Decimal columns plus arithmetic rules when the
    quantity itself must be checked; validate those with TLA+ export.
-9. Add `after(UseCase).assert(...)` for postconditions on events raised by that UC.
-10. Add `property Name [label] always|eventually|leads_to(...)` for temporal path
+8. Add `after(UseCase).assert(...)` for postconditions of that use case.
+9. Add `property Name [label] always|eventually|leads_to(...)` for temporal path
     properties (label string optional).
 
 ## Minimal Pattern
@@ -50,16 +51,15 @@ entity Order "Order" {
   submitted_at: DateTime @null
 }
 
-event OrderSubmitted "Order Submitted"
-
-raises(SubmitOrder, OrderSubmitted)
-transitions(Order.status, OrderSubmitted, draft -> submitted)
+transitions(Order.status, SubmitOrder, draft -> submitted)
 sets(SubmitOrder, Order, submitted_at == present)
 ```
 
 Event-started BUC:
 
 ```rdra
+event OrderSubmitted "Order Submitted"
+raises(SubmitOrder, OrderSubmitted)
 triggers(OrderSubmitted, BucFulfillment)
 
 contains(BucFulfillment, PickOrder)
@@ -80,7 +80,7 @@ rdra-ish export src/ --kind tla -o out/   # Int/now/temporal/after.assert
 ## Achievement Conditions
 
 - Events have clear origins through `raises` unless intentionally external.
-- Raised events are consumed by `transitions`, `triggers`, or documented open items.
+- Raised events are consumed by `triggers`, `outbox`, or documented open items.
 - Event-started BUCs are represented directly with `triggers(Event, Buc)`.
 - Concrete triggered use cases are contained by the downstream BUC.
 - State derivation explains expected reachable states and reviewed warnings.

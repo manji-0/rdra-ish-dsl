@@ -92,9 +92,6 @@ state::Active      // the state named Active
 
 Typical cases:
 
-- In `transitions(Order.status, event::Capture, pending -> paid)`, the event and states
-  may collide with use cases of the same name once modules are merged, so qualifiers are
-  used.
 - In `contains(BucOrder, usecase::Cancel)` and `raises(usecase::Cancel, event::Cancel)`,
   the `Cancel` use case and the `Cancel` event coexist.
 
@@ -859,10 +856,20 @@ patterns, and `export --kind tla` / `verify --backend tlc` check temporal proper
 
 ### `transitions` and the state machine
 
-`transitions(Order.status, event::E, from -> to)` declares one edge of an entity's state
-machine. The Enum column is required; state labels are the Enum variants
-(case-insensitively). The use case that drives a transition
-is found through `raises(UseCase, Event)`. See
+`transitions(Order.status, CapturePay, pending -> paid)` declares one edge of an entity's
+state machine, driven by the use case `CapturePay`. It is the 遷移UC column of an RDRA
+state sheet: the use case moves the state, and events stay the interface between use
+cases. The Enum column is required; state labels are the Enum variants
+(case-insensitively). Two use cases that drive the same edge each get their own line:
+
+```
+transitions(Order.status, CancelOrder,  pending -> cancelled)
+transitions(Order.status, ExpireOrder,  pending -> cancelled)
+```
+
+The second argument must be a use case. Passing an event, the earlier form, is a
+`TypeMismatch` whose hint names the use case to write and `scripts/migrate-phase3.py`,
+which rewrites a model to one line per use case that raises the event. See
 [state-derivation.md](./state-derivation.md) for how transitions feed derivation.
 
 ---
@@ -888,11 +895,10 @@ sets(usecase::Tag, Doc, metadata == present)
 
 // Set a nullable column to null
 sets(usecase::Logout, Session, token == null)
-
-// Event as origin: expanded to every UC that raises the event
-// (equivalent to sets on each raising UC, but kept close to the event definition)
-sets(event::EvDeliver, Order, delivered_at == present)
 ```
+
+The origin of `sets` is always a use case. An event origin is a `TypeMismatch` whose hint
+names `scripts/migrate-phase3.py`.
 
 | Value | Target column | Meaning |
 |---|---|---|
@@ -1305,7 +1311,7 @@ to load with a message naming the replacement:
 |---|---|
 | `usagescene` | `timing` in `belongs(...)` context. |
 | `location` | Deleted with the `.where(...)` clause of `belongs`; use `timing` / `.when(...)` and `medium` / `.by(...)` for Business-BUC context. |
-| `state` | Delete the declaration. States are the variants of the lifecycle Enum column named in `transitions(Entity.col, Event, from -> to)`; the analyzer derives one `{Entity}_{variant}` state per variant for the state diagram and `lint`. |
+| `state` | Delete the declaration. States are the variants of the lifecycle Enum column named in `transitions(Entity.col, UseCase, from -> to)`; the analyzer derives one `{Entity}_{variant}` state per variant for the state diagram and `lint`. |
 | `condition` | Use case clauses such as `precondition` and `guard`, or [Entity State Constraints](#entity-state-constraints). |
 | `concept`, `domain_object`, `aggregate`, `value_object` / `valueobject`, and `maps_to` | `entity` for persistent structure, `dto` for payload shapes. |
 

@@ -269,8 +269,8 @@ is projected as operation extension `x-rdra-ish-requires-permission` (not OpenAP
 `components.schemas`.
 
 For AsyncAPI export, each RDRA `event` becomes a channel and message. `raises`
-and `outbox` produce `send` operations; `triggers` and `transitions` produce
-`receive` operations. RDRA does not yet model broker protocol, server topology,
+and `outbox` produce `send` operations; `triggers` produce `receive` operations,
+which list the `transitions` of the triggered use cases. RDRA does not yet model broker protocol, server topology,
 or event payload DTOs directly, so those details are left unspecified and RDRA
 facts are preserved with `x-rdra-ish-*` extensions.
 

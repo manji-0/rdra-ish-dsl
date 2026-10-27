@@ -139,9 +139,9 @@ Kinds commonly used by this skill:
 | `owns` | `System == Entity` | explicit intended ownership before CRUD is complete |
 | `raises` | `UseCase == Event` | UC emits a domain event |
 | `triggers` | `(Event, UseCase\|Buc)` | event starts a UC or a BUC boundary |
-| `transitions` | `(Entity.col, Event, from -> to)` | event moves enum column from -> to |
-| `sets` | `(UseCase\|Event, Entity, col == val)` | explicit column effect |
-| `sets` | `(UseCase\|Event, Entity, col op rhs, true\|false)` | comparison proposition effect |
+| `transitions` | `(Entity.col, UseCase, from -> to)` | use case moves enum column from -> to |
+| `sets` | `(UseCase, Entity, col == val)` | explicit column effect |
+| `sets` | `(UseCase, Entity, col op rhs, true\|false)` | comparison proposition effect |
 | `forbidden` | `(Entity, col == val\|col op rhs, ...)` | forbidden reachable state combination |
 | `invariant` | `(Entity).when(...).then(...)` | required co-occurrence inside one entity |
 | `required` | `(Entity, col == val\|col op rhs, ...)` | always-required state facts |

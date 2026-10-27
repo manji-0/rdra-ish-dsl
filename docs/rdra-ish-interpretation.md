@@ -105,7 +105,8 @@ observable effects:
 - `displays` and `shows` connect the UC to UI surfaces and visible information.
 - `invokes` connects the UC to API boundaries.
 - CRUD predicates connect the UC or invoked API to entities.
-- `raises`, `triggers`, `transitions`, and `sets` connect the UC to lifecycle effects.
+- `transitions` and `sets` state the UC's lifecycle effects; `raises` and `triggers`
+  connect it to other UCs through events.
 - `requires_permission` and `requires_medium` state authority and medium constraints
   on the UC itself; API-specific constraints can be attached to the invoked API.
 
@@ -114,6 +115,17 @@ UC name should describe one actor-intelligible action such as "Place Order", "Ca
 Reservation", or "Capture Payment". If a UC needs many unrelated actors, screens, API
 boundaries, and state changes to make sense, it is probably too large and should be
 split under a BUC.
+
+## Events And State Transitions
+
+<!-- constrained-by ./language-reference.md#transitions-and-the-state-machine -->
+
+A use case moves a state; an event does not. `transitions(Order.status, CapturePay,
+pending -> paid)` names the use case that drives the edge, as the 遷移UC column of the
+RDRA state sheet does. An event is the interface between use cases, or between a use
+case and an external system: a UC `raises` it and it `triggers` a downstream UC or BUC,
+whose own transitions then move the state. An event that nothing consumes says nothing
+the model checks, so `raises` alone draws `EventNeverConsumed`.
 
 ## Reading The Three Together
 

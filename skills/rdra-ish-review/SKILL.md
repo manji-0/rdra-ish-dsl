@@ -112,8 +112,8 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    - Run `rdra-ish diagram <src-dir> --kind event-flow --format mermaid` and review the
      warnings printed to stderr before looking at the diagram itself:
      - `EventNeverRaised`: the event has no `raises` predicate — add one or remove the event
-     - `EventNeverConsumed`: the event is raised but drives no `transitions` and `triggers`
-       nothing — add the missing predicate or investigate a modelling gap
+     - `EventNeverConsumed`: the event is raised but `triggers` nothing and is not an
+       `outbox` publication — add the consumer, or delete the event and its `raises`
      - `TriggeredUseCaseUnreachable`: the triggered UC belongs to no BUC — add a `contains`
    - Every `from -> to` variant in `transitions` is a variant of the Enum column
    - Review unreachable enum variants or state-pattern warnings from `rdra-ish check`
@@ -222,8 +222,8 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 | `requires_permission` | UseCase / Api | Permission | — |
 | `requires_medium` | UseCase / Api | Medium | — |
 | `relate` | Entity | Entity | cardinality (`1:1` / `1:N` / `N:1` / `N:M`, unquoted preferred); `N:M` requires `.via(Junction)` |
-| `transitions` | Entity.col | Event | from -> to |
-| `sets` | UseCase / Event | Entity | `col == val` or comparison + bool |
+| `transitions` | Entity.col | UseCase | from -> to |
+| `sets` | UseCase | Entity | `col == val` or comparison + bool |
 | `forbidden` | Entity | condition(s) | — |
 | `invariant` | Entity | `.when(...)` / `.then(...)` chains | — |
 | `required` | Entity | condition(s) | — |

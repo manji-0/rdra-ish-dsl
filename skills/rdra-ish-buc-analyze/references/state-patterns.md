@@ -94,11 +94,10 @@ Export writes both `RdraSpec.tla` and `RdraSpec.cfg`. See `docs/formal-verificat
 
 ## How To Fix
 
-- Use `transitions(Entity.col, Event, from -> to)` when a real lifecycle state machine
-  exists.
-- Use `sets(UseCase|Event, Entity, column == value)` for Enum values without a
+- Use `transitions(Entity.col, UseCase, from -> to)` when a real lifecycle state
+  machine exists; name the use case that drives each edge.
+- Use `sets(UseCase, Entity, column == value)` for Enum values without a
   state machine, Bool flags, nullable columns, and derived lifecycle effects.
-- Use `raises(UseCase, Event)` before expecting an event transition to occur.
 - Use `triggers(Event, Buc)` for downstream BUC handoff, then refine to
   `triggers(Event, UseCase)` when the entry use case is known.
 

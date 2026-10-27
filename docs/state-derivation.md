@@ -71,7 +71,7 @@ and a set of effects (column → abstract value).
 | `deletes(UC, E)` | A `Delete` operation. Produces no successor; marks the matching pattern terminal. |
 | `sets(UC, E, col == val)` | A column effect attached to the originating use case's operation on `E`. |
 | `sets(UC, E, <expr>, bool)` | A **proposition effect** attached to the originating use case's operation on `E`. Advances or resets the `Proposition` axis whose key is the normalized comparison expression (e.g. `stock<selling`). |
-| `transitions(Entity.col, Ev, From -> To)` + `raises(UC, Ev)` | An `Update` operation on the entity's status column, **guarded** by `status == From`, with effect `status := To`. |
+| `transitions(Entity.col, UC, From -> To)` | An `Update` operation of `UC` on the entity's status column, **guarded** by `status == From`, with effect `status := To`. |
 
 ### How `sets` effects attach
 
@@ -116,7 +116,8 @@ arbitrarily.
    `Bool(false)`.
 2. **Collect operations** from `creates` / `updates` / `deletes` / `writes`, merge in
    `sets` column effects and `sets` proposition effects, and build transition-derived
-   guarded `Update`s from `transitions` + `raises`.
+   guarded `Update`s from `transitions`, one per declared edge, each owned by the use
+   case the edge names.
 3. **Seed.** Build the base pattern from `@default` values (or per-axis fallbacks:
    first Enum variant, `Bool=false`, `Nullable=null`). For each `Create` operation,
    apply its effects, including the status that its use case `sets`, to the base
@@ -212,8 +213,9 @@ use `Bool(true)` as the required value, enabling guards like "when the propositi
 holds".
 
 `triggersevent == UseCase` documents event flow. For a directly triggered use case,
-state derivation uses immediate same-entity effects from the upstream use case or
-event as execution guards when those effects target known state axes. This suppresses
+state derivation finds the upstream use cases through `raises(Upstream, Event)` and uses
+their immediate same-entity effects (their `sets` and the targets of the transitions
+they drive) as execution guards when those effects target known state axes. This suppresses
 false positives where the event handoff guarantees evidence columns such as timestamps.
 Diagnostics can still include a flow-order hint when a triggered witness has no
 modeled upstream evidence for the required axis, because full symbolic flow ordering is
@@ -234,8 +236,7 @@ after(ExecuteCertIssue)
 The current evaluator checks immediate equality effects only:
 
 - `sets(UseCase, Entity, col == val)` on the anchor use case;
-- `sets(Event, Entity, col == val)` on events raised by the anchor use case;
-- `transitions(Entity.col, Event, from -> to)` for events raised by the anchor use case, mapped to the
+- `transitions(Entity.col, UseCase, from -> to)` on the anchor use case, mapped to the
   entity Enum status column.
 
 Comparison assertions and longer event-triggered flows are reported as

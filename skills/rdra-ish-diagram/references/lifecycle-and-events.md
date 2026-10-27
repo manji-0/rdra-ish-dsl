@@ -39,7 +39,8 @@ rdra-ish verify src/ --backend tlc -o out/
 
 - Use-case-to-event edges come from `raises`.
 - Event-to-use-case or event-to-BUC edges come from `triggers`.
-- Event-to-state edges come from `transitions(Entity.col, Event, from -> to)`.
+- Event-to-state edges are the `transitions(Entity.col, UseCase, from -> to)` of the
+  use cases the event triggers.
 - AsyncAPI export is useful when event payload/contract review is needed alongside
   event causality.
 - Warnings such as an event never being raised or consumed are part of the review

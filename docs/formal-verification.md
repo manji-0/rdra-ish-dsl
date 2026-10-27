@@ -39,10 +39,10 @@ allows stuttering via `[][Next]_vars`).
 
 | RDRA | TLA+ |
 |---|---|
-| Entity status Enum + `transitions(Entity.col, Ev, a -> b)` | `VARIABLES`, `Init`, action disjuncts in `Next` |
+| Entity status Enum + `transitions(Entity.col, UC, a -> b)` | `VARIABLES`, `Init`, one action `{Entity}_{UC}_{a}_to_{b}` per transition in `Next` |
 | `Init` status | Every status that a `creates` use case `sets` (a set when there are several), else the start state of the `transitions`, else `@default`, else the first variant |
-| `sets` of a use case that raises a transition event, or of the transition event | Folded into that transition's action |
-| Any other `sets` (a use case that raises no transition event, or another event) | One action per use case or event (`Entity_uc_X` / `Entity_ev_X`); with `transitions`, its status-column effects are left out |
+| `sets` of a use case that drives a transition on the entity | Folded into each of that use case's transition actions |
+| Any other `sets` (a use case that drives no transition on the entity) | One action per use case (`Entity_uc_X`); with `transitions`, its status-column effects are left out |
 | Bool / `@null` columns (multi-axis) | Additional variables with `BOOLEAN` or `{"null","present"}` |
 | Variation-typed column that a `sets`, constraint, `after` assertion, or `property` names | An additional variable over the variation's values (plus `"null"` when `@null`). `Init` is `var \in {values}` (or `\in [Entity_Ids -> {values}]` multi-instance): a free choice, so TLC explores every value. A variation column nothing names is not exported. |
 | Int / Money / Decimal / Date / DateTime used in comparisons or `sets` Int assigns | `EXTENDS Integers`, `IntRange == 0..N`, arithmetic Safety / primed effects (nullable numeric columns promote to Int, not Nullable; Date/DateTime column-vs-column cmps are arithmetic, not frozen BOOL props) |
@@ -53,7 +53,7 @@ allows stuttering via `[][Next]_vars`).
 | Multi-entity `forbidden` / `invariant` | Safety over the multi-entity variable product |
 | `.along(...)` (RelationPath) | Quantified over `Entity_Ids` (including intermediate junction binders); with `relate` / `.via` uses pairwise `*_owner` filters (`Child_owner`, or `Child_Parent_owner` when a child has multiple parents) |
 | `when(...).none/has(...)` | Finite `Entity_Ids == 1..InstanceCount` with `\A`/`\E`; `relate` adds `*_owner` FK |
-| `after(UC).assert` equality | Independent `PROPERTY`: `[][raised actions => primed posts]_vars` (not injected into SpecActions) |
+| `after(UC).assert` equality | Independent `PROPERTY`: `[][UC's actions => primed posts]_vars` (not injected into SpecActions) |
 | `after(UC).assert` comparison | Same PROPERTY shape; Int arithmetic when axes exist (cross-entity RHS allowed); else `prop' = TRUE` |
 | `property` + `always` / `eventually` / `leads_to` | Named formulas listed as `PROPERTY` in the `.cfg` |
 | Multi-instance temporal formulas | Per-instance quantifiers: `[](\A i: …)`, `\A i: <>(…)`, `\A i: (p ~> q)` |
@@ -128,8 +128,9 @@ arithmetic Safety when Int axes exist.
   (`InstanceCount`, default **2**, override with `--instance-count`). When `relate`
   declares N:1 / 1:N (including via-synthesized edges), a `*_owner` function links
   related instances; otherwise the related side is quantified independently.
-- **Shared events across entities**: each entity still gets its own SpecAction for
-  the same event (e.g. `Order_EvPay` and `Payment_EvPay`). Steps can interleave;
+- **One use case across entities**: each entity gets its own SpecAction for the
+  same use case (e.g. `Order_Pay_pending_to_paid` and
+  `Payment_Pay_pending_to_captured`). Steps can interleave;
   they are not one atomic multi-entity action — `cross_order_payment` /
   `quantifier_none` are expected TLC fails under that semantics.
 - **Int arithmetic**: comparisons and `sets(..., col == N)` on Int / Money / Decimal

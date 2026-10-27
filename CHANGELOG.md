@@ -4,6 +4,17 @@
 
 ### Breaking
 
+- `transitions(Entity.col, UseCase, from -> to)` names the use case that drives the
+  edge, as the 遷移UC column of an RDRA state sheet does; `sets` takes a use case origin
+  only. The event forms `transitions(E.col, Ev, a -> b)` and `sets(event::Ev, ...)` are a
+  `TypeMismatch` whose hint names `scripts/migrate-phase3.py`. That script rewrites each
+  event form into one line per use case that raises the event, deletes events left with
+  no consumer together with their `raises`, keeps the events passed to `--keep`, and
+  prints the transitions it cannot migrate because no use case raises their event.
+  TLA actions are named `{Entity}_{UseCase}_{from}_to_{to}` (was
+  `{Entity}_{Event}_{from}_to_{to}`), and one event raised by two use cases now yields
+  one action per use case. State diagrams label edges by use case. An event whose raiser
+  drives a transition but that nothing triggers now draws `EventNeverConsumed`.
 - `variation` is a keyword again (it was a removed word), and a bare identifier in
   column type position now names a variation instead of failing to parse. An inline
   `Enum` that no `transitions` and no `sets` moves draws the `enum-attribute` warning.

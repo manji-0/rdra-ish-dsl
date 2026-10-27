@@ -17,9 +17,10 @@
 - **`now`**: global Int clock with `TickNow`. Assign/TickNow are **not** constrained
   to preserve `forbidden(col < now)`; TLC should find violations (`now_coupon`
   expected fail).
-- **`sets(Event, …)`**: effects on the transition event apply in SpecActions.
-- **Other `sets`**: a use case that raises no transition event gets its own action
-  (`Entity_uc_X`). `Init` status is every status that a `creates` use case `sets`.
+- **Transitions**: one action `{Entity}_{UseCase}_{from}_to_{to}` per
+  `transitions` line; the `sets` of that use case on the entity fold into it.
+- **Other `sets`**: a use case that drives no transition on the entity gets its own
+  action (`Entity_uc_X`). `Init` status is every status that a `creates` use case `sets`.
 - **Temporal `property`**: one lowering path; all names are listed in `.cfg` `PROPERTY`.
 - **`after.assert`**: independent `[][action => primed post]_vars` PROPERTY (not
   injected into SpecAction effects).

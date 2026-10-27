@@ -395,21 +395,19 @@ entity Order "Order" {
   paid_at: DateTime @null
 }
 
-event Capture "Capture Payment"
-event Cancel "Cancel Order"
-
-transitions(Order.status, event::Capture, pending -> paid)
-transitions(Order.status, event::Cancel, pending -> cancelled)
-
-raises(PlaceOrder, event::Capture)
-raises(CancelOrder, event::Cancel)
-sets(event::Capture, Order, paid_at == present)
+transitions(Order.status, CapturePayment, pending -> paid)
+transitions(Order.status, CancelOrder, pending -> cancelled)
+sets(CapturePayment, Order, paid_at == present)
 ```
+
+Each transition names the use case that moves the state, as the 遷移UC column of an RDRA
+state sheet does. Declare an `event` only when something consumes it: another BUC or use
+case it `triggers`, or an `outbox` publication.
 
 Ask the user:
 
 - Which Enum column and variants represent lifecycle state?
-- Which use case or event causes each state change?
+- Which use case causes each state change?
 - Does any event start another BUC, and is the concrete entry use case known yet?
 - Which nullable or boolean fields change together with the lifecycle?
 - Are the Enum variants the states you want to see? Diagrams derive one state per variant.

@@ -244,25 +244,25 @@ rdra-ish diagram samples/incremental-order/step-6-business-rules/src \
 
 ```mermaid
 stateDiagram-v2
-  [*] --> Normal
-  state "🔄 Normal" as Normal
-  state "🔄 Scheduled" as Scheduled
-  state "🔄 Blocked" as Blocked
-  Normal --> Scheduled : ⚡ Restock Scheduled
-  Scheduled --> Blocked : ⚡ Restock Blocked
+  [*] --> Store_normal
+  state "🔄 normal" as Store_normal
+  state "🔄 scheduled" as Store_scheduled
+  state "🔄 blocked" as Store_blocked
+  Store_normal --> Store_scheduled : ✅ Change Next Restock Date
+  Store_scheduled --> Store_blocked : ✅ Block Scheduled Restock
 ```
 
 How to read it:
 
 - The initial state comes from entity defaults.
-- Transitions are event driven; look back to the RDRA graph for which use case raises
-  each event.
+- Each edge is labelled with the use case that drives the transition, as the 遷移UC
+  column of an RDRA state sheet is.
 - This diagram shows lifecycle topology. Use `rdra-ish states` for rule satisfaction,
   reachable combinations, and diagnostics.
 
 Review points:
 
-- Is there an intended path out of `Blocked`, or is it terminal by design?
+- Is there an intended path out of `blocked`, or is it terminal by design?
 - Are business rules such as `scheduled` requiring `next_restock_date` covered by
   state-pattern diagnostics?
 - Do events represent domain facts rather than UI button clicks?

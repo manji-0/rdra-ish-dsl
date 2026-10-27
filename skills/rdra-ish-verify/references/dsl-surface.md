@@ -77,7 +77,7 @@ invariant(Order, Payment)
 ## Effects That Feed Axes
 
 ```rdra
-transitions(Order.status, OrderSubmitted, draft -> submitted)
+transitions(Order.status, SubmitOrder, draft -> submitted)
 sets(Restock, Item, stock == 3)
 sets(ReserveStock, Inventory, stock < selling, true)  # BFS proposition layer
 ```
