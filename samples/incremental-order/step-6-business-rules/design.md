@@ -1,6 +1,8 @@
 # 店舗補充管理 設計 Step 6: Business Rules
 
-<!-- constrained-by ../../../docs/incremental-modeling.md#stage-6-business-rules -->
+<!-- constrained-by ../../../docs/incremental-modeling.md#stage-6a-local-guardrails -->
+<!-- constrained-by ../../../docs/incremental-modeling.md#stage-6b-local-obligations -->
+<!-- constrained-by ../../../docs/incremental-modeling.md#stage-6c-comparison-and-cross-entity-rules -->
 <!-- derived-from ./requirements-analysis.md -->
 
 この文書は Step 6 時点の RDRA DSL 設計サンプルです。clinic-ops の設計書と同じく、レビューに必要な生成物は本文へ埋め込みます。
