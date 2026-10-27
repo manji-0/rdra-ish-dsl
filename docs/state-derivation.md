@@ -80,7 +80,9 @@ use case's operation on the entity:
 - Otherwise the effects form an unguarded operation.
 
 Effects on the entity's **status column** are ignored when a state machine exists for
-it — `transitions` is the source of truth there (see DoubleModeledEnum below).
+it — `transitions` is the source of truth there (see DoubleModeledEnum below). The
+exception is a status effect from a use case that `creates` the entity: that is the
+creation state, and it is applied to the seed (see Seed below).
 
 When `sets` carries a comparison expression instead of a column name (e.g.
 `sets(Sell, Stock, stock < selling, true)`), it registers a **`PropositionEffect`**
@@ -112,7 +114,10 @@ arbitrarily.
    guarded `Update`s from `transitions` + `raises`.
 3. **Seed.** Build the base pattern from `@default` values (or per-axis fallbacks:
    first Enum variant, `Bool=false`, `Nullable=null`). For each `Create` operation,
-   apply its effects to the base pattern and add the result as an **initial** pattern.
+   apply its effects, including the status that its use case `sets`, to the base
+   pattern and add the result as an **initial** pattern. A creation status that is not
+   a start state of the `transitions` (a `from` that is no `to`) yields
+   `CreationStateNotStart`.
    If there are no `Create` operations, seed the base pattern alone and emit
    `NoCreationPath`.
 4. **Expand.** Process a worklist of reached patterns. For each operation enabled in the
@@ -146,6 +151,10 @@ Enum column**, the column is "double-modeled." The derivation:
 - Emits a `DoubleModeledEnum { column }` diagnostic.
 - Treats `transitions` as the source of truth for that column and **ignores** the `sets`
   effects on it.
+
+A `sets` on the status column from a use case that `creates` the entity is not double
+modeling. It sets the creation state, so it seeds the initial pattern and emits no
+`DoubleModeledEnum`. The TLA export uses the same creation state for `Init`.
 
 Non-status effects from the same use case (e.g. a `sets` on a nullable timestamp) are
 still merged into the transition-derived guarded operation, so that, for example,
@@ -309,7 +318,8 @@ syntax and design rationale.
 |---|---|
 | `UnreachableEnumVariant { column, variant }` | A declared (or transition-target) Enum variant is never reached by any pattern. |
 | `ConflictingEffects { usecase, column }` | One operation assigns two different values to the same column (Enum abstract effects or Int `sets` literals). Emitted as **`[error]`** (fail-closed; TLA would otherwise get an unsatisfiable action). |
-| `DoubleModeledEnum { column }` | Both `transitions` and `sets` drive the same Enum column; `transitions` wins. |
+| `DoubleModeledEnum { column }` | Both `transitions` and `sets` drive the same Enum column; `transitions` wins. A creating use case's status `sets` does not count. |
+| `CreationStateNotStart { column, variant, starts }` | A `creates` use case sets the status to a variant that is not a start state of the `transitions`. Emitted as **`[error]`**; the TLA export refuses with `[TLA_FATAL:creation_state_not_start]`. |
 | `NoCreationPath` | The entity has no `creates`; the pattern set is seeded from defaults only. |
 | `PatternCapReached { cap, bound }` | The per-entity cap was hit; output is truncated. `bound` is the product-space size. Emitted as **`[error]`** (fail-closed). Raise `--max-patterns` or narrow `--buc`. |
 | `ForbiddenStateViolated { conditions, pattern_desc, correlation_hint }` | A reachable pattern matches all conditions of a `forbidden` declaration. Multi-axis witnesses include a correlation hint because they may reflect independent-axis product expansion. |

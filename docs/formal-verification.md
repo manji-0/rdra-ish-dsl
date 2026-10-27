@@ -40,10 +40,15 @@ allows stuttering via `[][Next]_vars`).
 | RDRA | TLA+ |
 |---|---|
 | Entity status Enum + `transitions(Entity.col, Ev, a -> b)` | `VARIABLES`, `Init`, action disjuncts in `Next` |
+| `Init` status | The status that the `creates` use case `sets`, else the start state of the `transitions`, else `@default`, else the first variant |
+| Creation status that is not a start state of the `transitions` | `[TLA_FATAL:creation_state_not_start]` (export/verify refuse) |
+| `sets` of a use case that raises a transition event, or of the transition event | Folded into that transition's action |
+| Any other `sets` (a use case that raises no transition event, or another event) | One action per use case or event (`Entity_uc_X` / `Entity_ev_X`); with `transitions`, its status-column effects are left out |
 | Bool / `@null` columns (multi-axis) | Additional variables with `BOOLEAN` or `{"null","present"}` |
 | Int / Money / Decimal / Date / DateTime used in comparisons or `sets` Int assigns | `EXTENDS Integers`, `IntRange == 0..N`, arithmetic Safety / primed effects (nullable numeric columns promote to Int, not Nullable; Date/DateTime column-vs-column cmps are arithmetic, not frozen BOOL props) |
 | Comparison propositions driven by `sets(..., cmp, bool)` only | Boolean `prop_*` variables (BFS layer; skipped when the same cmp is arithmetic) |
 | Prop axis never primed by any action | `[TLA_FATAL:frozen_proposition_axis]` (export/verify refuse; vacuous Safety) |
+| Bool / `@null` column read by an entity-local constraint and primed by no action | Warning: the constraint checks only the initial value |
 | Entity-local `invariant` / `forbidden` / `required` / `exclusive` | Safety conjuncts (`\A i \in Entity_Ids: …` when multi-instance) |
 | Multi-entity `forbidden` / `invariant` | Safety over the multi-entity variable product |
 | `.along(...)` (RelationPath) | Quantified over `Entity_Ids` (including intermediate junction binders); with `relate` / `.via` uses pairwise `*_owner` filters (`Child_owner`, or `Child_Parent_owner` when a child has multiple parents) |

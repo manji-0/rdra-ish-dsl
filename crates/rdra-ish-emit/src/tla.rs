@@ -229,7 +229,7 @@ fn build_export(
     let mut properties = build_all_temporal_properties(model, &specs, multi_instance, warnings);
     properties.extend(assertion_props);
 
-    check_frozen_proposition_axes(&specs, warnings);
+    check_frozen_axes(model, &specs, warnings);
     check_comparison_literals_in_range(model, int_range_max, warnings);
 
     TlaExport {
@@ -246,16 +246,21 @@ fn build_export(
     }
 }
 
-/// Proposition axes that no action ever primes stay FALSE forever — Safety over them is vacuous.
-fn check_frozen_proposition_axes(specs: &[EntitySpec], warnings: &mut Vec<String>) {
+/// Axes that no action ever primes keep their Init value. Safety over a frozen proposition
+/// is vacuous (fatal); a constraint over a frozen column checks only its initial value (warning).
+fn check_frozen_axes(model: &SemanticModel, specs: &[EntitySpec], warnings: &mut Vec<String>) {
     for spec in specs {
-        for ax in spec.axes.iter().filter(|a| a.kind == AxisKind::Prop) {
+        let constrained: HashSet<&str> = constrained_columns(model, spec.entity_key);
+        for ax in spec.axes.iter().filter(|a| a.kind != AxisKind::Status) {
             let primed = format!("{}'", ax.var_name);
             let assigned = spec
                 .actions
                 .iter()
                 .any(|action| action.effects.iter().any(|effect| effect.contains(&primed)));
-            if !assigned {
+            if assigned {
+                continue;
+            }
+            if ax.kind == AxisKind::Prop {
                 push_tla_fatal(
                     warnings,
                     "frozen_proposition_axis",
@@ -264,9 +269,44 @@ fn check_frozen_proposition_axes(specs: &[EntitySpec], warnings: &mut Vec<String
                         spec.entity_id, ax.column
                     ),
                 );
+            } else if constrained.contains(ax.column.as_str()) {
+                warnings.push(format!(
+                    "{}.{} is assigned by no action; constraints over it check only its initial value",
+                    spec.entity_id, ax.column
+                ));
             }
         }
     }
+}
+
+/// Columns that an entity-local `forbidden` / `invariant` / `required` / `exclusive` reads.
+fn constrained_columns(model: &SemanticModel, ek: EntityKey) -> HashSet<&str> {
+    let forbidden = model
+        .forbidden_constraints
+        .iter()
+        .filter(|c| c.entity == ek)
+        .flat_map(|c| c.conditions.iter());
+    let invariant = model
+        .entity_invariants
+        .iter()
+        .filter(|c| c.entity == ek)
+        .flat_map(|c| c.guards.iter().chain(c.requireds.iter()));
+    let required = model
+        .required_constraints
+        .iter()
+        .filter(|c| c.entity == ek)
+        .flat_map(|c| c.conditions.iter());
+    let exclusive = model
+        .exclusive_constraints
+        .iter()
+        .filter(|c| c.entity == ek)
+        .flat_map(|c| c.conditions.iter());
+    forbidden
+        .chain(invariant)
+        .chain(required)
+        .chain(exclusive)
+        .map(|(column, _)| column.as_str())
+        .collect()
 }
 
 fn check_comparison_literals_in_range(
@@ -858,12 +898,25 @@ fn build_init(
 
     let entity_name = model.entities[lc.entity].id.clone();
     let prefix = format!("{entity_name}_");
+    for status in lc.creation_status_outside_start(model) {
+        push_tla_fatal(
+            warnings,
+            "creation_state_not_start",
+            format!(
+                "{entity_name}.{}: creates sets '{status}', which is not a start state of the transitions",
+                lc.status_column
+            ),
+        );
+    }
     let resolved = lc
-        .initial
+        .creation_status
         .first()
-        .map(|sk| {
-            let id = &model.states[*sk].id;
-            id.strip_prefix(&prefix).unwrap_or(id).to_lowercase()
+        .map(|status| status.to_lowercase())
+        .or_else(|| {
+            lc.initial.first().map(|sk| {
+                let id = &model.states[*sk].id;
+                id.strip_prefix(&prefix).unwrap_or(id).to_lowercase()
+            })
         })
         .or_else(|| {
             entity
@@ -997,11 +1050,14 @@ fn build_actions(
     let all_vars: Vec<String> = axes.iter().map(|a| a.var_name.clone()).collect();
     let entity_name = entity_id(model, lc.entity);
     let ids = format!("{}_Ids", sanitize_ident(&entity_name));
+    // Origins whose sets are folded into a transition action, keyed like append_sets_driven_actions.
+    let mut folded: HashSet<String> = HashSet::new();
 
     for st in &lc.transitions {
         let from = st.from.to_lowercase();
         let to = st.to.to_lowercase();
         let event_id = model.events[st.event].id.clone();
+        folded.insert(format!("ev:{event_id}"));
         let status_var = col_to_var
             .get(lc.status_column.as_str())
             .copied()
@@ -1023,6 +1079,7 @@ fn build_actions(
             .collect();
 
         for uc in &raising_ucs {
+            folded.insert(format!("uc:{}", model.use_cases[*uc].id));
             for effect in model.column_effects.iter().filter(|e| {
                 e.entity == lc.entity
                     && matches!(&e.origin, NodeRef::UseCase(u) if u == uc)
@@ -1151,19 +1208,18 @@ fn build_actions(
         });
     }
 
-    if actions.is_empty() {
-        append_sets_driven_actions(
-            model,
-            lc,
-            &col_to_var,
-            &all_vars,
-            multi_instance,
-            binder,
-            &ids,
-            warnings,
-            &mut actions,
-        );
-    }
+    append_sets_driven_actions(
+        model,
+        lc,
+        &col_to_var,
+        &all_vars,
+        multi_instance,
+        binder,
+        &ids,
+        &folded,
+        warnings,
+        &mut actions,
+    );
 
     if actions.is_empty() {
         push_tla_fatal(
@@ -1179,7 +1235,8 @@ fn build_actions(
     actions
 }
 
-/// When there are no status transitions, still emit actions for usecase/event `sets`.
+/// One action per usecase/event whose `sets` no transition action already carries.
+/// With transitions, the status column is theirs, so status effects are left out here.
 #[allow(clippy::too_many_arguments)]
 fn append_sets_driven_actions(
     model: &SemanticModel,
@@ -1189,6 +1246,7 @@ fn append_sets_driven_actions(
     multi_instance: bool,
     binder: &str,
     ids: &str,
+    folded: &HashSet<String>,
     warnings: &mut Vec<String>,
     actions: &mut Vec<SpecAction>,
 ) {
@@ -1203,19 +1261,10 @@ fn append_sets_driven_actions(
                 .push((var, val));
         };
 
-    for effect in model
-        .column_effects
-        .iter()
-        .filter(|e| e.entity == lc.entity)
-    {
-        let Some(var) = col_to_var.get(effect.column.as_str()) else {
-            warnings.push(format!(
-                "{}: sets effect on non-axis column {} not exported",
-                entity_id(model, lc.entity),
-                effect.column
-            ));
-            continue;
-        };
+    let status_owned_by_transitions = !lc.transitions.is_empty();
+    for effect in model.column_effects.iter().filter(|e| {
+        e.entity == lc.entity && !(status_owned_by_transitions && e.column == lc.status_column)
+    }) {
         let (key, comment) = match &effect.origin {
             NodeRef::UseCase(u) => {
                 let id = model.use_cases[*u].id.clone();
@@ -1226,6 +1275,17 @@ fn append_sets_driven_actions(
                 (format!("ev:{id}"), format!("sets via event {id}"))
             }
             _ => continue,
+        };
+        if folded.contains(&key) {
+            continue;
+        }
+        let Some(var) = col_to_var.get(effect.column.as_str()) else {
+            warnings.push(format!(
+                "{}: sets effect on non-axis column {} not exported",
+                entity_id(model, lc.entity),
+                effect.column
+            ));
+            continue;
         };
         push_effect(
             key,
@@ -1256,6 +1316,9 @@ fn append_sets_driven_actions(
             }
             _ => continue,
         };
+        if folded.contains(&key) {
+            continue;
+        }
         let val = if pe.truth {
             "TRUE".into()
         } else {
@@ -3670,6 +3733,82 @@ forbidden(Item, stock < 100)
             bundle.tla.contains("Order_flagged' = TRUE"),
             "expected an action that sets Order_flagged; got:\n{}",
             bundle.tla
+        );
+    }
+
+    #[test]
+    fn tla_init_uses_creation_status_and_rejects_non_start() {
+        let src = |created: &str| {
+            format!(
+                r#"
+entity Order "O" {{
+  id: Int @pk
+  status: Enum(draft, placed, shipped) @default(draft)
+}}
+usecase Place "place"
+usecase Ship "ship"
+event EvShip "ship"
+creates(Place, Order)
+sets(Place, Order, status == {created})
+updates(Ship, Order)
+raises(Ship, EvShip)
+transitions(Order.status, EvShip, placed -> shipped)
+"#
+            )
+        };
+        let ok = TlaPlusEmitter::default()
+            .emit_bundle(&model_from(&src("placed")), &View::whole())
+            .unwrap();
+        assert!(
+            ok.tla.contains("Order_status = \"placed\""),
+            "expected Init at the creation status; got:\n{}",
+            ok.tla
+        );
+        assert!(
+            !ok.warnings.iter().any(|w| w.contains("TLA_FATAL")),
+            "unexpected fatal: {:?}",
+            ok.warnings
+        );
+        let bad = TlaPlusEmitter::default()
+            .emit_bundle(&model_from(&src("shipped")), &View::whole())
+            .unwrap();
+        assert!(
+            bad.warnings
+                .iter()
+                .any(|w| w.contains("[TLA_FATAL:creation_state_not_start]")),
+            "expected creation_state_not_start; got {:?}",
+            bad.warnings
+        );
+    }
+
+    #[test]
+    fn tla_warns_when_constrained_column_is_never_assigned() {
+        let model = model_from(
+            r#"
+entity Order "O" {
+  id: Int @pk
+  status: Enum(placed, shipped) @default(placed)
+  flagged: Bool @default(false)
+}
+usecase Ship "ship"
+event EvShip "ship"
+updates(Ship, Order)
+raises(Ship, EvShip)
+transitions(Order.status, EvShip, placed -> shipped)
+forbidden(Order, status == shipped, flagged == true)
+"#,
+        );
+        let bundle = TlaPlusEmitter::default()
+            .emit_bundle(&model, &View::whole())
+            .unwrap();
+        let warning = bundle
+            .warnings
+            .iter()
+            .find(|w| w.contains("Order.flagged is assigned by no action"));
+        assert!(
+            warning.is_some_and(|w| !w.contains("TLA_FATAL")),
+            "expected a non-fatal frozen-column warning; got {:?}",
+            bundle.warnings
         );
     }
 }

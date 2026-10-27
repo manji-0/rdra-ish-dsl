@@ -111,6 +111,14 @@ pub(crate) fn state_diag_message(diag: &rdra_ish_core::StateDiag) -> String {
             "enum column '{}' is driven by both transitions and sets; transitions are treated as the source of truth",
             column
         ),
+        rdra_ish_core::StateDiag::CreationStateNotStart {
+            column,
+            variant,
+            starts,
+        } => format!(
+            "creates sets enum column '{}' to '{}', which is not a start state of the transitions ({}); create the entity in a start state",
+            column, variant, starts
+        ),
         rdra_ish_core::StateDiag::NoCreationPath => {
             "no creates path; state derivation is seeded from defaults only".to_string()
         }

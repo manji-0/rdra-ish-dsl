@@ -4,7 +4,9 @@
 //! （Enum カラム・Bool カラム・Nullable カラム）の抽象値の組み合わせ。
 //! 有限直積空間上の BFS で到達可能なパターン集合を求める。
 
-use crate::entity_lifecycle::link_entity_status_states;
+use crate::entity_lifecycle::{
+    creation_status_effects, lifecycle_for_entity, link_entity_status_states,
+};
 use crate::model::{
     CmpOpModel, CmpRhs, ColumnEffect, ColumnType, ComparisonProp, CrossCmpRhs, CrossComparisonProp,
     CrossConstraintScope, CrossEntityCondition, CrossEntityInvariant, CrossForbiddenConstraint,
@@ -177,6 +179,12 @@ pub enum StateDiag {
     ConflictingEffects { usecase: String, column: String },
     /// transitions と sets の両方が同一 enum 軸を駆動している（transitions 優先）
     DoubleModeledEnum { column: String },
+    /// A `creates` use case sets the status to a state that is not a start state of the transitions
+    CreationStateNotStart {
+        column: String,
+        variant: String,
+        starts: String,
+    },
     /// entity に creates がなく defaults からシードした
     NoCreationPath,
     /// cap に達してパターン探索を打ち切った（制約結果は健全でない）
@@ -335,7 +343,8 @@ pub fn state_diag_severity_with_policy(
         }
         // Int literal conflicts make TLA actions unsatisfiable → fail-closed.
         StateDiag::ConflictingEffects { .. } => StateDiagSeverity::Error,
-        StateDiag::PatternCapReached { .. }
+        StateDiag::CreationStateNotStart { .. }
+        | StateDiag::PatternCapReached { .. }
         | StateDiag::ForbiddenStateViolated { .. }
         | StateDiag::InvariantViolated { .. }
         | StateDiag::RequiredStateViolated { .. }
@@ -586,7 +595,8 @@ fn default_value_for_axis(col: &ModelColumn) -> AbstractValue {
 
 /// `contains(Buc, UseCase)` + `raises(UseCase, Event)` + `state_transitions`
 /// から、entity の status 列に対する Update 演算を構築する。
-/// 返り値: (state_column_name, Vec<Operation>) — status 列が無い場合は None
+/// 返り値: (state_column_name, Vec<Operation>, creation status per creating usecase)
+/// — status 列が無い場合は None
 fn build_status_update_ops(
     model: &SemanticModel,
     ek: EntityKey,
@@ -595,19 +605,48 @@ fn build_status_update_ops(
     axes: &[StateAxis],
     diags: &mut Vec<StateDiag>,
     effects_for_entity: &[&ColumnEffect],
-) -> (Option<String>, Vec<Operation>) {
+) -> (
+    Option<String>,
+    Vec<Operation>,
+    HashMap<UseCaseKey, AbstractValue>,
+) {
     let Some((status_col, state_variant_map)) = link_states_to_enum(model, ek) else {
-        return (None, Vec::new());
+        return (None, Vec::new(), HashMap::new());
     };
 
     // status 軸が軸リストに存在するか確認
     let status_in_axes = axes.iter().any(|a| a.column == status_col);
     if !status_in_axes {
-        return (None, Vec::new());
+        return (None, Vec::new(), HashMap::new());
+    }
+
+    // A creating usecase's status effect is the creation state, not a second state machine.
+    let creation_status: HashMap<UseCaseKey, AbstractValue> =
+        creation_status_effects(model, ek, &status_col)
+            .into_iter()
+            .map(|(uk, v)| (uk, AbstractValue::Enum(v)))
+            .collect();
+    if let Some(lc) = lifecycle_for_entity(model, ek) {
+        let starts = lc
+            .initial
+            .iter()
+            .map(|sk| model.states[*sk].id.clone())
+            .collect::<Vec<_>>()
+            .join(", ");
+        for variant in lc.creation_status_outside_start(model) {
+            diags.push(StateDiag::CreationStateNotStart {
+                column: status_col.clone(),
+                variant,
+                starts: starts.clone(),
+            });
+        }
     }
 
     // effects にも同じカラムへの指定があれば DoubleModeledEnum を診断
-    let has_effect_on_status = effects_for_entity.iter().any(|e| e.column == status_col);
+    let has_effect_on_status = effects_for_entity.iter().any(|e| {
+        e.column == status_col
+            && !matches!(&e.origin, NodeRef::UseCase(uk) if creation_status.contains_key(uk))
+    });
     if has_effect_on_status {
         diags.push(StateDiag::DoubleModeledEnum {
             column: status_col.clone(),
@@ -666,7 +705,7 @@ fn build_status_update_ops(
 
     // state_variant_map is retained for parity with link_states_to_enum callers.
     let _ = state_variant_map;
-    (Some(status_col), ops)
+    (Some(status_col), ops, creation_status)
 }
 
 /// entity に対する全演算（Create/Update/Delete）を収集する
@@ -681,7 +720,7 @@ fn collect_operations(
 ) -> (Vec<Operation>, Option<String>) {
     // transitions 由来の status 遷移 Update 演算を構築し、
     // それぞれに対応する usecase key を取得する（non-status 効果マージ用）
-    let (status_col, mut ops) = build_status_update_ops(
+    let (status_col, mut ops, creation_status) = build_status_update_ops(
         model,
         ek,
         buc_of_usecase,
@@ -833,7 +872,12 @@ fn collect_operations(
         }
 
         // この usecase の non-status エフェクト（transitions に未マージのもの）を取得
-        let raw_effects = uc_effects.get(&uc_key).cloned().unwrap_or_default();
+        let mut raw_effects = uc_effects.get(&uc_key).cloned().unwrap_or_default();
+        if op_kind == OpKind::Create {
+            if let (Some(col), Some(status)) = (&status_col, creation_status.get(&uc_key)) {
+                raw_effects.insert(0, (col.clone(), status.clone()));
+            }
+        }
 
         // 重複・矛盾効果の診断（同一カラムに異なる値）
         let mut seen: HashMap<String, AbstractValue> = HashMap::new();
@@ -4676,6 +4720,44 @@ forbidden(Order, Payment,
                 .iter()
                 .any(|d| matches!(d, StateDiag::ForbiddenStateViolated { .. })),
             "expected Flag then Ship to reach the forbidden state: {:?}",
+            r.diagnostics
+        );
+    }
+
+    #[test]
+    fn creation_status_outside_start_states_is_error() {
+        let model = model_from(
+            r#"
+entity Order "O" {
+  id: Int @pk
+  status: Enum(draft, placed, shipped) @default(draft)
+}
+usecase Place "place"
+usecase Ship "ship"
+event EvShip "ship"
+creates(Place, Order)
+sets(Place, Order, status == shipped)
+updates(Ship, Order)
+raises(Ship, EvShip)
+transitions(Order.status, EvShip, placed -> shipped)
+"#,
+        );
+        let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
+        let r = results.iter().find(|r| r.entity_id == "Order").unwrap();
+        let diag = r
+            .diagnostics
+            .iter()
+            .find(|d| matches!(d, StateDiag::CreationStateNotStart { variant, .. } if variant == "shipped"));
+        assert!(
+            diag.is_some_and(|d| state_diag_severity(d) == StateDiagSeverity::Error),
+            "expected CreationStateNotStart error: {:?}",
+            r.diagnostics
+        );
+        assert!(
+            !r.diagnostics
+                .iter()
+                .any(|d| matches!(d, StateDiag::DoubleModeledEnum { .. })),
+            "creation status is not double modeling: {:?}",
             r.diagnostics
         );
     }

@@ -3,7 +3,10 @@
 //! `collect_entity_lifecycles` が `collect_event_flows` と同様の集約 API。
 //! entity の status Enum と state ノードの対応、およびその entity に属する遷移を返す。
 
-use crate::model::{ColumnType, EntityKey, SemanticModel, StateKey, StateTransition};
+use crate::model::{
+    ColumnType, EffectValue, EntityKey, NodeRef, RelKind, SemanticModel, StateKey, StateTransition,
+    UseCaseKey,
+};
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 /// Pick the lifecycle status column for an entity from its transitions.
@@ -121,6 +124,83 @@ pub struct EntityLifecycle {
     pub initial: Vec<StateKey>,
     /// 到達グラフ上の終端状態（いずれの `from` にも登場しない `to`）
     pub terminal: Vec<StateKey>,
+    /// Status values that `creates` use cases set on `status_column`, in use case id order.
+    pub creation_status: Vec<String>,
+}
+
+impl EntityLifecycle {
+    /// Creation statuses that are not a start state of the transitions.
+    pub fn creation_status_outside_start(&self, model: &SemanticModel) -> Vec<String> {
+        if self.initial.is_empty() {
+            return Vec::new();
+        }
+        let prefix = format!("{}_", model.entities[self.entity].id);
+        self.creation_status
+            .iter()
+            .filter(|status| {
+                !self.initial.iter().any(|sk| {
+                    let id = &model.states[*sk].id;
+                    id.strip_prefix(&prefix)
+                        .unwrap_or(id)
+                        .eq_ignore_ascii_case(status)
+                })
+            })
+            .cloned()
+            .collect()
+    }
+}
+
+/// Status values that each use case which `creates` the entity sets on `status_column`,
+/// in use case id order. These are creation effects, not updates of a live instance.
+pub fn creation_status_effects(
+    model: &SemanticModel,
+    ek: EntityKey,
+    status_column: &str,
+) -> Vec<(UseCaseKey, String)> {
+    let mut creating: HashSet<UseCaseKey> = HashSet::new();
+    for rel in model
+        .relations
+        .iter()
+        .filter(|r| r.kind == RelKind::Creates && r.to == NodeRef::Entity(ek))
+    {
+        match rel.from {
+            NodeRef::UseCase(uk) => {
+                creating.insert(uk);
+            }
+            NodeRef::Api(ak) => {
+                creating.extend(model.relations.iter().filter_map(|inv| {
+                    match (inv.kind == RelKind::Invokes, &inv.from, &inv.to) {
+                        (true, NodeRef::UseCase(uk), NodeRef::Api(a)) if *a == ak => Some(*uk),
+                        _ => None,
+                    }
+                }));
+            }
+            _ => {}
+        }
+    }
+    let mut effects: Vec<(UseCaseKey, String)> = model
+        .column_effects
+        .iter()
+        .filter(|e| e.entity == ek && e.column == status_column)
+        .filter_map(|e| match (&e.origin, &e.value) {
+            (NodeRef::UseCase(uk), EffectValue::EnumVariant(v)) if creating.contains(uk) => {
+                Some((*uk, declared_variant_casing(model, ek, status_column, v)))
+            }
+            _ => None,
+        })
+        .collect();
+    effects.sort_by_key(|(uk, _)| model.use_cases[*uk].id.clone());
+    effects
+}
+
+fn creation_status(model: &SemanticModel, ek: EntityKey, status_column: &str) -> Vec<String> {
+    let mut statuses: Vec<String> = Vec::new();
+    for (_, status) in creation_status_effects(model, ek, status_column) {
+        if !statuses.contains(&status) {
+            statuses.push(status);
+        }
+    }
+    statuses
 }
 
 /// モデル内の全 entity についてライフサイクルを収集する。
@@ -167,6 +247,7 @@ fn lifecycle_from_effects_only(model: &SemanticModel, ek: EntityKey) -> Option<E
 
     Some(EntityLifecycle {
         entity: ek,
+        creation_status: creation_status(model, ek, &status_column),
         status_column,
         states: Vec::new(),
         transitions: Vec::new(),
@@ -209,7 +290,8 @@ fn preferred_effect_status_column(
         .or_else(|| effect_cols.iter().next().map(|s| (*s).to_string()))
 }
 
-fn lifecycle_for_entity(model: &SemanticModel, ek: EntityKey) -> Option<EntityLifecycle> {
+/// Lifecycle of an entity whose status Enum links to `transitions` states.
+pub fn lifecycle_for_entity(model: &SemanticModel, ek: EntityKey) -> Option<EntityLifecycle> {
     let (status_column, state_map) = link_entity_status_states(model, ek)?;
 
     let states = ordered_states(model, ek, &status_column, &state_map);
@@ -245,6 +327,7 @@ fn lifecycle_for_entity(model: &SemanticModel, ek: EntityKey) -> Option<EntityLi
 
     Some(EntityLifecycle {
         entity: ek,
+        creation_status: creation_status(model, ek, &status_column),
         status_column,
         states,
         transitions,
