@@ -129,8 +129,8 @@ The transition system follows these rules:
    state sheet does. An event raised by an external system or by another use case
    triggers use cases. It does not move a state by itself.
 4. `creates` sets the initial values of a new instance, with `@default` filling the
-   rest. The state that a creation sets must be a start state of the state model. If
-   it is not, `check` reports an error.
+   rest. The state that a creation sets is a start state, as a transition with no
+   source state is in the RDRA state sheet. A transition may also enter that state.
 5. A column typed by a variation takes a value the actor chooses. The checker
    explores every value, so a variant needs no dedicated use case to be reachable.
 6. The transaction groups that `tx.rs` infers bound atomicity. A use case whose
@@ -141,8 +141,8 @@ The transition system follows these rules:
 
 A passing `verify` must mean something, and a failing one must say where to look:
 
-- Every constrained column is written by at least one exported action. If no action
-  writes it, `verify` fails before TLC runs.
+- Every effect in the model is exported. If a constraint reads a column that no
+  action writes, `verify` warns that the constraint checks only the initial value.
 - Every constraint is its own `INVARIANT`, named after the constraint. A violation
   names the rule that broke.
 - Every state in a state model gets a reachability witness. A state with no witness
@@ -180,7 +180,7 @@ element of the stage exists.
 Each phase ends in a check that the next phase depends on. Removal comes before
 addition.
 
-1. **Soundness.** Export every `sets` effect, fail when a constrained column has no
+1. **Soundness.** Export every `sets` effect, warn when a constrained column has no
    writer, and agree on one initial state. The check is a regression sample that
    reproduces today's vacuous `TLC: OK` and must now fail.
 2. **Subtraction.** Delete `location`, stop declaring `state`, and fix the docs that

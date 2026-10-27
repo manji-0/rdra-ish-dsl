@@ -898,16 +898,6 @@ fn build_init(
 
     let entity_name = model.entities[lc.entity].id.clone();
     let prefix = format!("{entity_name}_");
-    for status in lc.creation_status_outside_start(model) {
-        push_tla_fatal(
-            warnings,
-            "creation_state_not_start",
-            format!(
-                "{entity_name}.{}: creates sets '{status}', which is not a start state of the transitions",
-                lc.status_column
-            ),
-        );
-    }
     let resolved = lc
         .creation_status
         .first()
@@ -959,15 +949,36 @@ fn build_init(
     };
 
     let ids = format!("{}_Ids", sanitize_ident(&entity_name));
+    let mut creation_statuses: Vec<String> = lc
+        .creation_status
+        .iter()
+        .map(|status| format!("\"{}\"", escape_tla_string(&status.to_lowercase())))
+        .collect();
+    creation_statuses.sort();
+    creation_statuses.dedup();
+    let status_choices = (creation_statuses.len() > 1).then(|| {
+        let set = format!("{{{}}}", creation_statuses.join(", "));
+        if multi_instance {
+            format!("\\in [{ids} -> {set}]")
+        } else {
+            format!("\\in {set}")
+        }
+    });
 
     for ax in axes {
+        if ax.column == lc.status_column {
+            if let Some(choices) = &status_choices {
+                init.push((ax.var_name.clone(), choices.clone()));
+                continue;
+            }
+        }
         let scalar = init_scalar_value(entity, lc, ax, &initial_status, int_now);
         let value = if multi_instance {
             format!("[{binder} \\in {ids} |-> {scalar}]")
         } else {
             scalar
         };
-        init.push((ax.var_name.clone(), value));
+        init.push((ax.var_name.clone(), format!("= {value}")));
     }
     init
 }
@@ -2781,8 +2792,8 @@ fn render_tla(module_name: &str, export: &TlaExport, warnings: &[String]) -> Str
     // Init
     out.push_str("Init ==\n");
     for spec in &export.specs {
-        for (var, val) in &spec.init {
-            out.push_str(&format!("  /\\ {var} = {val}\n"));
+        for (var, rhs) in &spec.init {
+            out.push_str(&format!("  /\\ {var} {rhs}\n"));
         }
     }
     for o in &export.owners {
@@ -3737,7 +3748,7 @@ forbidden(Item, stock < 100)
     }
 
     #[test]
-    fn tla_init_uses_creation_status_and_rejects_non_start() {
+    fn tla_init_uses_creation_status_even_off_the_transition_start() {
         let src = |created: &str| {
             format!(
                 r#"
@@ -3769,15 +3780,18 @@ transitions(Order.status, EvShip, placed -> shipped)
             "unexpected fatal: {:?}",
             ok.warnings
         );
-        let bad = TlaPlusEmitter::default()
+        let shipped = TlaPlusEmitter::default()
             .emit_bundle(&model_from(&src("shipped")), &View::whole())
             .unwrap();
         assert!(
-            bad.warnings
-                .iter()
-                .any(|w| w.contains("[TLA_FATAL:creation_state_not_start]")),
-            "expected creation_state_not_start; got {:?}",
-            bad.warnings
+            shipped.tla.contains("Order_status = \"shipped\""),
+            "a creation status off the transition start is still the Init; got:\n{}",
+            shipped.tla
+        );
+        assert!(
+            !shipped.warnings.iter().any(|w| w.contains("TLA_FATAL")),
+            "unexpected fatal: {:?}",
+            shipped.warnings
         );
     }
 
@@ -3809,6 +3823,39 @@ forbidden(Order, status == shipped, flagged == true)
             warning.is_some_and(|w| !w.contains("TLA_FATAL")),
             "expected a non-fatal frozen-column warning; got {:?}",
             bundle.warnings
+        );
+    }
+
+    #[test]
+    fn tla_init_covers_every_creation_status() {
+        let src = r#"
+entity Order "O" {
+  id: Int @pk
+  status: Enum(draft, placed, shipped) @default(draft)
+}
+usecase Place "place"
+usecase Draft "draft"
+usecase Ship "ship"
+event EvShip "ship"
+event EvPlace "place"
+creates(Place, Order)
+sets(Place, Order, status == placed)
+creates(Draft, Order)
+sets(Draft, Order, status == draft)
+updates(Ship, Order)
+raises(Ship, EvShip)
+transitions(Order.status, EvPlace, draft -> placed)
+transitions(Order.status, EvShip, placed -> shipped)
+"#;
+        let bundle = TlaPlusEmitter::default()
+            .emit_bundle(&model_from(src), &View::whole())
+            .unwrap();
+        assert!(
+            bundle
+                .tla
+                .contains("Order_status \\in {\"draft\", \"placed\"}"),
+            "expected Init over both creation statuses; got:\n{}",
+            bundle.tla
         );
     }
 }

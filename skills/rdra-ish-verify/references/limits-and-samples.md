@@ -19,8 +19,7 @@
   expected fail).
 - **`sets(Event, …)`**: effects on the transition event apply in SpecActions.
 - **Other `sets`**: a use case that raises no transition event gets its own action
-  (`Entity_uc_X`). `Init` status is what the `creates` use case `sets`; a creation
-  status outside the start states is `creation_state_not_start` (fatal).
+  (`Entity_uc_X`). `Init` status is every status that a `creates` use case `sets`.
 - **Temporal `property`**: one lowering path; all names are listed in `.cfg` `PROPERTY`.
 - **`after.assert`**: independent `[][action => primed post]_vars` PROPERTY (not
   injected into SpecAction effects).

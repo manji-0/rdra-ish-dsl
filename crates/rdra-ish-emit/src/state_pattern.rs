@@ -61,16 +61,6 @@ fn diag_message(d: &StateDiag) -> String {
                 column
             )
         }
-        StateDiag::CreationStateNotStart {
-            column,
-            variant,
-            starts,
-        } => {
-            format!(
-                "column '{}': creates sets '{}', which is not a start state of the transitions ({})",
-                column, variant, starts
-            )
-        }
         StateDiag::NoCreationPath => {
             "no creates(...) found; seeded from column defaults".to_string()
         }

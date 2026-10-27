@@ -128,28 +128,6 @@ pub struct EntityLifecycle {
     pub creation_status: Vec<String>,
 }
 
-impl EntityLifecycle {
-    /// Creation statuses that are not a start state of the transitions.
-    pub fn creation_status_outside_start(&self, model: &SemanticModel) -> Vec<String> {
-        if self.initial.is_empty() {
-            return Vec::new();
-        }
-        let prefix = format!("{}_", model.entities[self.entity].id);
-        self.creation_status
-            .iter()
-            .filter(|status| {
-                !self.initial.iter().any(|sk| {
-                    let id = &model.states[*sk].id;
-                    id.strip_prefix(&prefix)
-                        .unwrap_or(id)
-                        .eq_ignore_ascii_case(status)
-                })
-            })
-            .cloned()
-            .collect()
-    }
-}
-
 /// Status values that each use case which `creates` the entity sets on `status_column`,
 /// in use case id order. These are creation effects, not updates of a live instance.
 pub fn creation_status_effects(
@@ -291,7 +269,7 @@ fn preferred_effect_status_column(
 }
 
 /// Lifecycle of an entity whose status Enum links to `transitions` states.
-pub fn lifecycle_for_entity(model: &SemanticModel, ek: EntityKey) -> Option<EntityLifecycle> {
+fn lifecycle_for_entity(model: &SemanticModel, ek: EntityKey) -> Option<EntityLifecycle> {
     let (status_column, state_map) = link_entity_status_states(model, ek)?;
 
     let states = ordered_states(model, ek, &status_column, &state_map);

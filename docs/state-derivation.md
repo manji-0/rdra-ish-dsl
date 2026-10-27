@@ -115,9 +115,8 @@ arbitrarily.
 3. **Seed.** Build the base pattern from `@default` values (or per-axis fallbacks:
    first Enum variant, `Bool=false`, `Nullable=null`). For each `Create` operation,
    apply its effects, including the status that its use case `sets`, to the base
-   pattern and add the result as an **initial** pattern. A creation status that is not
-   a start state of the `transitions` (a `from` that is no `to`) yields
-   `CreationStateNotStart`.
+   pattern and add the result as an **initial** pattern. A creation status is a start
+   state even when a `transitions` edge also enters it.
    If there are no `Create` operations, seed the base pattern alone and emit
    `NoCreationPath`.
 4. **Expand.** Process a worklist of reached patterns. For each operation enabled in the
@@ -319,7 +318,6 @@ syntax and design rationale.
 | `UnreachableEnumVariant { column, variant }` | A declared (or transition-target) Enum variant is never reached by any pattern. |
 | `ConflictingEffects { usecase, column }` | One operation assigns two different values to the same column (Enum abstract effects or Int `sets` literals). Emitted as **`[error]`** (fail-closed; TLA would otherwise get an unsatisfiable action). |
 | `DoubleModeledEnum { column }` | Both `transitions` and `sets` drive the same Enum column; `transitions` wins. A creating use case's status `sets` does not count. |
-| `CreationStateNotStart { column, variant, starts }` | A `creates` use case sets the status to a variant that is not a start state of the `transitions`. Emitted as **`[error]`**; the TLA export refuses with `[TLA_FATAL:creation_state_not_start]`. |
 | `NoCreationPath` | The entity has no `creates`; the pattern set is seeded from defaults only. |
 | `PatternCapReached { cap, bound }` | The per-entity cap was hit; output is truncated. `bound` is the product-space size. Emitted as **`[error]`** (fail-closed). Raise `--max-patterns` or narrow `--buc`. |
 | `ForbiddenStateViolated { conditions, pattern_desc, correlation_hint }` | A reachable pattern matches all conditions of a `forbidden` declaration. Multi-axis witnesses include a correlation hint because they may reflect independent-axis product expansion. |

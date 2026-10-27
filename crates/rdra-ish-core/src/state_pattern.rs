@@ -4,9 +4,7 @@
 //! （Enum カラム・Bool カラム・Nullable カラム）の抽象値の組み合わせ。
 //! 有限直積空間上の BFS で到達可能なパターン集合を求める。
 
-use crate::entity_lifecycle::{
-    creation_status_effects, lifecycle_for_entity, link_entity_status_states,
-};
+use crate::entity_lifecycle::{creation_status_effects, link_entity_status_states};
 use crate::model::{
     CmpOpModel, CmpRhs, ColumnEffect, ColumnType, ComparisonProp, CrossCmpRhs, CrossComparisonProp,
     CrossConstraintScope, CrossEntityCondition, CrossEntityInvariant, CrossForbiddenConstraint,
@@ -179,12 +177,6 @@ pub enum StateDiag {
     ConflictingEffects { usecase: String, column: String },
     /// transitions と sets の両方が同一 enum 軸を駆動している（transitions 優先）
     DoubleModeledEnum { column: String },
-    /// A `creates` use case sets the status to a state that is not a start state of the transitions
-    CreationStateNotStart {
-        column: String,
-        variant: String,
-        starts: String,
-    },
     /// entity に creates がなく defaults からシードした
     NoCreationPath,
     /// cap に達してパターン探索を打ち切った（制約結果は健全でない）
@@ -343,8 +335,7 @@ pub fn state_diag_severity_with_policy(
         }
         // Int literal conflicts make TLA actions unsatisfiable → fail-closed.
         StateDiag::ConflictingEffects { .. } => StateDiagSeverity::Error,
-        StateDiag::CreationStateNotStart { .. }
-        | StateDiag::PatternCapReached { .. }
+        StateDiag::PatternCapReached { .. }
         | StateDiag::ForbiddenStateViolated { .. }
         | StateDiag::InvariantViolated { .. }
         | StateDiag::RequiredStateViolated { .. }
@@ -626,22 +617,6 @@ fn build_status_update_ops(
             .into_iter()
             .map(|(uk, v)| (uk, AbstractValue::Enum(v)))
             .collect();
-    if let Some(lc) = lifecycle_for_entity(model, ek) {
-        let starts = lc
-            .initial
-            .iter()
-            .map(|sk| model.states[*sk].id.clone())
-            .collect::<Vec<_>>()
-            .join(", ");
-        for variant in lc.creation_status_outside_start(model) {
-            diags.push(StateDiag::CreationStateNotStart {
-                column: status_col.clone(),
-                variant,
-                starts: starts.clone(),
-            });
-        }
-    }
-
     // effects にも同じカラムへの指定があれば DoubleModeledEnum を診断
     let has_effect_on_status = effects_for_entity.iter().any(|e| {
         e.column == status_col
@@ -4725,7 +4700,7 @@ forbidden(Order, Payment,
     }
 
     #[test]
-    fn creation_status_outside_start_states_is_error() {
+    fn creation_status_seeds_even_off_the_transition_start() {
         let model = model_from(
             r#"
 entity Order "O" {
@@ -4744,13 +4719,17 @@ transitions(Order.status, EvShip, placed -> shipped)
         );
         let results = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
         let r = results.iter().find(|r| r.entity_id == "Order").unwrap();
-        let diag = r
-            .diagnostics
-            .iter()
-            .find(|d| matches!(d, StateDiag::CreationStateNotStart { variant, .. } if variant == "shipped"));
         assert!(
-            diag.is_some_and(|d| state_diag_severity(d) == StateDiagSeverity::Error),
-            "expected CreationStateNotStart error: {:?}",
+            r.patterns.iter().any(|p| p.is_initial
+                && p.pattern.values.get("status") == Some(&AbstractValue::Enum("shipped".into()))),
+            "expected an initial pattern at the creation status: {:?}",
+            r.patterns
+        );
+        assert!(
+            !r.diagnostics
+                .iter()
+                .any(|d| state_diag_severity(d) == StateDiagSeverity::Error),
+            "creating in a non-graph-start state is legitimate: {:?}",
             r.diagnostics
         );
         assert!(

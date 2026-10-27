@@ -40,8 +40,7 @@ allows stuttering via `[][Next]_vars`).
 | RDRA | TLA+ |
 |---|---|
 | Entity status Enum + `transitions(Entity.col, Ev, a -> b)` | `VARIABLES`, `Init`, action disjuncts in `Next` |
-| `Init` status | The status that the `creates` use case `sets`, else the start state of the `transitions`, else `@default`, else the first variant |
-| Creation status that is not a start state of the `transitions` | `[TLA_FATAL:creation_state_not_start]` (export/verify refuse) |
+| `Init` status | Every status that a `creates` use case `sets` (a set when there are several), else the start state of the `transitions`, else `@default`, else the first variant |
 | `sets` of a use case that raises a transition event, or of the transition event | Folded into that transition's action |
 | Any other `sets` (a use case that raises no transition event, or another event) | One action per use case or event (`Entity_uc_X` / `Entity_ev_X`); with `transitions`, its status-column effects are left out |
 | Bool / `@null` columns (multi-axis) | Additional variables with `BOOLEAN` or `{"null","present"}` |
