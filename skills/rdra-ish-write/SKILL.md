@@ -116,7 +116,8 @@ Kinds commonly used by this skill:
 | `screen` / `field` / `api` / `dto` / `system` | UI items, payloads, interaction, and implementation boundaries |
 | `entity` | logical data modeling |
 | `event` | lifecycle and causality |
-| `timing` / `medium` / `permission` | context and access vocabulary |
+| `timer` | schedule that triggers a use case |
+| `medium` / `permission` | context and access vocabulary |
 
 #### Predicate Signatures
 

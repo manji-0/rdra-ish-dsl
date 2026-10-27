@@ -21,7 +21,7 @@ same order:
 | Layer | Kinds | Review question | Section |
 |---|---|---|---|
 | Requirements and traceability | `requirement`, `adr`, `nfr`, `quality`, `constraint` | Why does this exist, and which quality bar applies? | [Requirements and Traceability](#requirements-and-traceability) |
-| Business | `business`, `buc`, `flow`, `step`, `timing`, `medium` | Which business value does it serve, in what order? | [Business Layer](#business-layer) |
+| Business | `business`, `buc`, `flow`, `step`, `timer`, `medium` | Which business value does it serve, in what order? | [Business Layer](#business-layer) |
 | Interaction | `actor`, `usecase`, `screen`, `field`, `event` | Who does what, on which screen, and what does it cause? | [Interaction Layer](#interaction-layer) |
 | System boundary | `system`, `extsystem`, `api`, `dto`, `permission` | Which boundary owns the operation, and who may call it? | [System Boundary](#system-boundary) |
 | Data | `entity` | What is stored, and how is it related? | [Data Layer](#data-layer) |
@@ -137,15 +137,15 @@ descriptions as review annotations where supported.
 | `buc` | A business use case: a unit of business value composed of use cases. | `lint` `buc-empty`; RDRA, sequence, and event-flow diagrams (`--buc` filter) |
 | `flow` | A business flow: an ordered business narrative inside a BUC. A flow is composed of steps and can make UC and event ordering explicit without turning the diagram into the only source of truth. | `lint` `flow-empty`, `flow-cycle`; RDRA diagram |
 | `step` | A business flow step. A step is a business-language action that can cover a use case, API, or event while remaining distinct from implementation boundaries. | `lint` `step-no-cover`; RDRA diagram |
-| `timing` | A timing, trigger, or business situation for Business-BUC context. | RDRA diagram node only. `belongs(...).when(...)` records it, but no output reads that context yet. |
+| `timer` | An RDRA タイマー: a schedule that starts a use case, such as a nightly sweep. See [Timers](#timers). | `triggers(Timer, UseCase)`; RDRA diagram (external-environment layer) and event-flow diagram; `lint` `orphan-node` |
 | `medium` | A physical medium, device, terminal, or operation medium for Business-BUC context. | `requires_medium` in `csv --kind screen-constraints`; RDRA diagram node. `belongs(...).by(...)` records it, but no output reads that context yet. |
 | `actor` | A human actor who performs use cases. | `check` permission paths; sequence diagram participant; `csv --kind actor-permission-audit` |
 | `usecase` | A use case: a concrete interaction that reads and writes entities and displays screens. | `check`; `states`; all diagrams; `csv --kind matrix` |
 | `screen` | A screen (UI surface) displayed by use cases. | `lint` `screen-no-fields`; sequence diagram; `csv --kind screen-constraints` |
 | `field` | A screen field: a first-class UI input or output item. It can carry editability, requiredness, and actor or system source metadata, and can map to an entity column without becoming one. | `lint` `field-unmapped`, `field-unplaced`; business-area diagram |
-| `event` | A domain event, used as the trigger of state transitions and as a `raises` and `triggers` endpoint. | `check` raised-but-unconsumed; `states`; event-flow diagram; `export --kind asyncapi`, `tla` |
+| `event` | A domain event, the interface between use cases and between use cases and external systems, and a `raises` and `triggers` endpoint. | `check` raised-but-unconsumed; `states`; event-flow diagram; `export --kind asyncapi`, `tla` |
 | `system` | An internal system boundary. It groups APIs; its entity set is derived from those APIs' CRUD targets. | `lint` `stage-readiness` (its `system-boundary` stage needs a `system` and an `api`); `check` boundary diagnostics; technical-area diagram |
-| `extsystem` | An external system an actor reaches through `uses(actor, extsystem)`. | RDRA diagram; `lint` `orphan-node` |
+| `extsystem` | An external system. It reaches use cases through events: `raises(ExtSystem, Event)` for inbound, `triggers(Event, ExtSystem)` for outbound. See [External systems](#external-systems). | RDRA diagram (system-value layer) and event-flow diagram; `export --kind asyncapi` (publisher or subscriber); `check` raised-but-unconsumed; `lint` `orphan-node` |
 | `api` | An API layer endpoint invoked by a use case. It operates entities on behalf of the use case, defines an atomic data operation boundary, and may carry HTTP contract metadata. | `lint` `api-unused`, `api-contract-missing`, `api-contract-incomplete`; sequence diagram; `csv --kind api-matrix`; `export --kind openapi` |
 | `dto` | A request, response, or error payload shape used by API contracts. DTOs may carry a column-like field body but are kept separate from database entities. | `lint` `dto-unused`, `naming-dto-field`; `export --kind openapi`, `json-schema` |
 | `permission` | A permission or role-like authority assignable to actors. | `check` `requires_permission` against `has_permission`; `csv --kind actor-permission-audit` |
@@ -162,8 +162,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 
 | Predicate | Signature | Semantics |
 |---|---|---|
-| `performs` | `(Actor, UseCase \| Buc)` | The actor performs the given use case or BUC. |
-| `uses` | `Actor == ExtSystem` | The actor uses the external system. |
+| `performs` | `(Actor, UseCase \| Buc \| Step)` | The actor performs the given use case, BUC, or business step. |
 | `invokes` | `UseCase == Api` | The use case invokes the API layer. Drives the `Screen → Api → Entity` lane in the sequence diagram. |
 | `request` | `Api == Dto` | The API accepts the DTO as a request payload. |
 | `response` | `Api == Dto` | The API returns the DTO as a successful response payload. |
@@ -179,8 +178,8 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `displays` | `UseCase == Screen` | The use case displays the screen. |
 | `shows` | `Screen == Entity` | The screen shows information from the entity. |
 | `maps_field` | `(Field, Entity, "column")` | Maps a screen field to a specific Entity column. Use with `contains(Screen, Field)` when screen-item level input/output mapping matters. |
-| `raises` | `UseCase == Event` | The use case raises the domain event, which `triggers` hands to downstream use cases or BUCs. |
-| `triggers` | `(Event, UseCase \| Buc)` | The event triggers a concrete use case or starts a BUC boundary. |
+| `raises` | `(UseCase \| ExtSystem, Event)` | The use case or external system raises the event, which `triggers` hands to downstream use cases or BUCs. An external system raising an event is the inbound direction. |
+| `triggers` | `(Event \| Timer, UseCase \| Buc \| ExtSystem)` | The event or timer triggers a concrete use case or starts a BUC boundary. An event triggering an external system delivers the event to it (outbound). A timer cannot trigger an external system: the legal pairs are `Event` to any of the three and `Timer` to `UseCase` or `Buc`. |
 | `outbox` | `(Event)` | Marks a raised event as intentionally published outside the local model, suppressing the raised-but-unconsumed warning. |
 | `contains` | `(Buc, UseCase \| Flow)`, `Flow == Step`, `Screen == Field`, or `System == Api` | The use case or flow composes the BUC, the step composes the flow, the field belongs to the screen, or the API belongs to the system boundary. |
 | `owns` | `System == Entity` | Optionally declares that a system is responsible for an entity even before API operations are fully modeled. API CRUD still records concrete access; `owns` records intended ownership. |
@@ -188,7 +187,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `branches` | `Step == Step` | The first step may branch to the second as an alternate path. |
 | `excepts` | `Step == Step` | The first step may route to the second as an exception path. |
 | `repeats` | `Step == Step` | The first step may loop back to the second. |
-| `covers` | `(Step, UseCase \| Api \| Event)` | The business step covers the referenced use case, API, or event. Use this to make UC ordering and event chains explicit in the DSL while keeping the step vocabulary business-facing. |
+| `covers` | `(Step, UseCase \| Api \| Event \| Timer)` | The business step covers the referenced use case, API, event, or timer. Use this to make UC ordering and event chains explicit in the DSL while keeping the step vocabulary business-facing. |
 | `compensates` | `UseCase == UseCase` | The first use case compensates for or rolls back the business effect of the second. Use this for alternative or exception flow review without forcing compensation into CRUD/state derivation. |
 | `coordinates` | `(UseCase, Entity, Entity)` | The use case coordinates consistency for a relation crossing system boundaries. The use case must invoke APIs on both system sides that operate the corresponding entities. |
 | `belongs` | `Buc == Business` | The BUC belongs to the business. |
@@ -213,11 +212,11 @@ review. `relate(A, B, 1:N)` applies the same options to the FK generated on `B`.
 
 A chain method is a `.name(...)` call after a predicate. Each predicate accepts
 only the methods below, and any other name is an `unknown chain method` error
-(this includes the removed `.where(...)` on `belongs`).
+(this includes the removed `.where(...)` and `.when(...)` on `belongs`).
 
 | Predicate | Chain methods |
 |---|---|
-| `belongs` | `.when(...)`, `.by(...)` |
+| `belongs` | `.by(...)` |
 | `relate` | `.via(...)`, `.optional()`, `.on_delete(...)`, `.on_update(...)` |
 | `forbidden` | `.along(...)` |
 | `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)` |
@@ -363,24 +362,38 @@ use case divide the review.
 ### `belongs` context
 
 `belongs(Buc, Business)` declares the Business area a BUC belongs to. The mapping can
-also carry optional When / By context with method-chain clauses:
+also carry optional By context with a method-chain clause:
 
 ```
-timing AppointmentRequested "Appointment Requested"
 medium FrontDeskTerminal "Front Desk Terminal"
 
 belongs(BucAppointmentScheduling, ClinicOps)
-  .when("patient requests a booking")
-  .when(AppointmentRequested)
   .by(FrontDeskTerminal)
   .by("tablet")
 ```
 
-- `.when(...)` records the timing, trigger, or business situation where the BUC applies.
 - `.by(...)` records the physical medium, device, terminal, or other operation medium.
-- Each argument may be a string literal or a reference to the corresponding typed element:
-  `.when(timing::...)` or `.by(medium::...)`.
-- Multiple `.when(...)` or `.by(...)` clauses accumulate as alternative context values.
+- Each argument may be a string literal or a reference to a `medium`: `.by(medium::...)`.
+- Multiple `.by(...)` clauses accumulate as alternative context values.
+- `.when(...)` was removed with `timing`. A schedule that starts work is a `timer`; see
+  [Timers](#timers).
+
+### Timers
+
+A `timer` is an RDRA タイマー: a schedule that starts a use case. Connect it with
+`triggers(Timer, UseCase)` (or `triggers(Timer, Buc)`) and declare the use case in a BUC
+like any other:
+
+```rdra
+timer IntakeExpiryCheck "Nightly intake expiry check"
+triggers(IntakeExpiryCheck, ExpireIntakeForms)
+```
+
+A timer triggers only use cases and BUCs, never an external system. A use case that a
+timer triggers and that belongs to no BUC is reported like an event-triggered one. A
+`step` may anchor the timer with `covers(Step, Timer)`. A timer sits in the
+external-environment layer of the RDRA diagram, and the event-flow diagram draws it
+with its `triggers` edges.
 
 ### Business flows
 
@@ -528,6 +541,26 @@ raised.
 ---
 
 ## System Boundary
+
+### External systems
+
+An `extsystem` talks to use cases through events, as RDRA requires. There is no direct
+actor link.
+
+```rdra
+extsystem LabSystem "Laboratory System"
+extsystem MessagingGateway "Messaging Gateway"
+
+raises(LabSystem, EvLabResultReceived)               // inbound: the system emits
+triggers(EvLabResultReceived, ReceiveLabResult)
+triggers(EvAppointmentScheduled, MessagingGateway)   // outbound: the event is delivered to it
+```
+
+An event delivered to an external system counts as consumed, so the raised-but-unconsumed
+warning stays quiet. `export --kind asyncapi` lists the raising systems as the channel's
+`x-publisher` and the receiving ones as `x-subscriber`. The event-flow diagram draws the
+systems and a `delivers` edge. `lint` `orphan-node` names an external system that no
+event reaches.
 
 APIs are the operation boundary between a use case and the data it changes. Systems
 group APIs, DTOs give them payload contracts, and permissions and media say who may
@@ -1309,8 +1342,10 @@ to load with a message naming the replacement:
 
 | Removed | Use instead |
 |---|---|
-| `usagescene` | `timing` in `belongs(...)` context. |
-| `location` | Deleted with the `.where(...)` clause of `belongs`; use `timing` / `.when(...)` and `medium` / `.by(...)` for Business-BUC context. |
+| `usagescene` | `timer` for a schedule that starts a use case, and `medium` / `.by(...)` for Business-BUC context. |
+| `timing` | `timer`. `belongs(...).when(...)` was removed; connect the timer with `triggers(Timer, UseCase)`. |
+| `uses` | Connect an external system through events: `raises(ExtSystem, Event)` inbound, `triggers(Event, ExtSystem)` outbound. |
+| `location` | Deleted with the `.where(...)` clause of `belongs`; use `medium` / `.by(...)` for Business-BUC context. |
 | `state` | Delete the declaration. States are the variants of the lifecycle Enum column named in `transitions(Entity.col, UseCase, from -> to)`; the analyzer derives one `{Entity}_{variant}` state per variant for the state diagram and `lint`. |
 | `condition` | Use case clauses such as `precondition` and `guard`, or [Entity State Constraints](#entity-state-constraints). |
 | `concept`, `domain_object`, `aggregate`, `value_object` / `valueobject`, and `maps_to` | `entity` for persistent structure, `dto` for payload shapes. |

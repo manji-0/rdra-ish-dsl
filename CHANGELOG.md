@@ -4,6 +4,21 @@
 
 ### Breaking
 
+- `timing` is now `timer`, an RDRA タイマー that starts a use case through
+  `triggers(Timer, UseCase | Buc)`. `belongs(...).when(...)` is removed (an unknown chain
+  method whose hint names `timer`); `.by(...)` stays. `uses(Actor, ExtSystem)` is
+  removed. An external system now meets use cases through events: `raises(ExtSystem,
+  Event)` inbound and `triggers(Event, ExtSystem)` outbound, and an event delivered to
+  an external system counts as consumed. `raises`, `triggers`, `covers`, and `performs`
+  widen to take these kinds (`performs` also takes a `Step`); `triggers(Timer,
+  ExtSystem)` is a `TypeMismatch`. `extsystem` moves to the system-value layer of the
+  RDRA diagram, and `timer` stays in the external-environment layer. `export --kind
+  asyncapi` lists raising and receiving external systems as the channel's `x-publisher`
+  and `x-subscriber`, and the event-flow diagrams draw timers, external systems, and a
+  `delivers` edge. `scripts/migrate-phase3.py` renames `timing`, drops
+  `belongs(...).when(...)`, and deletes `uses` lines, printing the external systems
+  that lost their only link. The removed words `timing` and `uses` fail to parse with a
+  hint.
 - `transitions(Entity.col, UseCase, from -> to)` names the use case that drives the
   edge, as the 遷移UC column of an RDRA state sheet does; `sets` takes a use case origin
   only. The event forms `transitions(E.col, Ev, a -> b)` and `sets(event::Ev, ...)` are a

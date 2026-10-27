@@ -23,7 +23,7 @@ scopes rather than as a strict copy of the original RDRA artifacts:
 
 | Concept | RDRA-ish role |
 |---|---|
-| BUC | A business-value slice and review container, optionally contextualized by timing/place/medium. |
+| BUC | A business-value slice and review container, optionally contextualized by the operation medium. |
 | Business flow | The concrete flow that realizes a BUC through UCs and events. |
 | UC | A concrete interaction and effect boundary that connects actors, screens, APIs, entities, events, permissions, and operation media. |
 
@@ -32,8 +32,8 @@ scopes rather than as a strict copy of the original RDRA artifacts:
 In RDRA-ish, a BUC is the unit that keeps business value, ownership, and review scope
 together. It is declared with `buc`, assigned to a business area with `belongs`, and
 composed from UCs with `contains`.
-When the assignment is contextual, `belongs(Buc, Business).when(...).by(...)`
-records the timing and medium in which that business mapping applies.
+When the assignment is contextual, `belongs(Buc, Business).by(...)`
+records the medium in which that business mapping applies.
 
 This differs from a reading where BUC itself is the detailed business-flow artifact.
 In RDRA-ish, the BUC is the business-value frame, and the business flow is its
@@ -126,6 +126,28 @@ RDRA state sheet does. An event is the interface between use cases, or between a
 case and an external system: a UC `raises` it and it `triggers` a downstream UC or BUC,
 whose own transitions then move the state. An event that nothing consumes says nothing
 the model checks, so `raises` alone draws `EventNeverConsumed`.
+
+## Timers And External Systems
+
+<!-- constrained-by ./vision.md#decisions -->
+
+A `timer` is an RDRA タイマー. It starts a use case on a schedule, so
+`triggers(Timer, UseCase)` is its only consumer. A timer never triggers an external
+system. `timing` and `belongs(...).when(...)` are gone: nothing read that context, and a
+window in which a BUC applies is not a schedule.
+
+An `extsystem` meets the model through events, as the RDRA rule 「外部システム」は
+「イベント」で「UC」と連携する says. `raises(ExtSystem, Event)` is inbound and
+`triggers(Event, ExtSystem)` is outbound. An event delivered to an external system counts
+as consumed. There is no `uses(actor, extsystem)`, because the actor reaches the outside
+world through a use case, and the use case reaches it through an event.
+
+Layer placement follows the decision in [vision.md](./vision.md#decisions). `extsystem`
+moves to the system-value layer of the RDRA diagram. `timer` stays in the
+external-environment layer with `business`, `buc`, `flow`, `step`, `medium`, and
+`permission`. The remaining placements are rdra-ish's own reading of the four layers
+and may differ from RDRA; the layers are a reading aid for review, not a claim about the
+primary source.
 
 ## Reading The Three Together
 

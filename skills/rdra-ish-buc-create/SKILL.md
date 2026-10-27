@@ -54,7 +54,7 @@ Read the requirement and list:
 | Goes in `shared/` | Goes in `buc/buc_<name>.rdra` |
 |-------------------|-------------------------------|
 | `actor`, `extsystem` (if reused across BUCs) | `buc`, `usecase`, `screen` |
-| `business`, stable `requirement`, `nfr`, `quality`, `constraint`, `adr`, `system`, `timing`, `medium`, `permission` | BUC-local `flow`, `step`, `api`, `dto`, `field` |
+| `business`, stable `requirement`, `nfr`, `quality`, `constraint`, `adr`, `system`, `timer`, `medium`, `permission` | BUC-local `flow`, `step`, `api`, `dto`, `field` |
 | reusable `entity` definitions, `relate` | CRUD, `displays`, `shows`, `maps_field`, `invokes`, API contracts, `coordinates`, access constraints, UC conditions, `raises`, `sets` |
 | cross-BUC `event`, `transitions` | BUC-local `event` |
 | cross-BUC or cross-entity `forbidden` / `invariant` / `required` / `exclusive` rules | predicates scoped to this BUC |
@@ -115,15 +115,14 @@ precedes(<Step1>, <Step2>)
 covers(<Step2>, <UC1>)
 ```
 
-If the Business-BUC mapping depends on a timing or physical medium, use a
-method chain on `belongs`:
+If the Business-BUC mapping depends on a physical medium, use a
+method chain on `belongs`. A schedule that starts a use case is a `timer`
+connected with `triggers(Timer, UseCase)`:
 
 ```
-timing <When> "<timing>"
 medium <Medium> "<device or terminal>"
 
 belongs(Buc<Name>, <Business>)
-  .when(<When>)
   .by(<Medium>)
 ```
 
@@ -202,7 +201,7 @@ See the `sets` value vocabulary in `rdra-ish-write`.
   `error_response` relations
 - New NFR/constraint/quality/ADR → add stable shared declaration and scope it with
   `applies_to`, `qualifies`, `constrains`, or `decides`
-- New timing/medium/permission → add to shared vocabulary when reused across BUCs
+- New timer/medium/permission → add to shared vocabulary when reused across BUCs
 - New cross-entity rule → add to `shared/rules.rdra` or the shared file nearest the
   involved entities, qualify columns as `Entity.column`, and add `.along(...)` only
   when the rule is intentionally scoped to linked instances on a declared `relate` path

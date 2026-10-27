@@ -48,7 +48,8 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 4. **Check actor and BUC coverage**
    - Every BUC has at least one `performs` predicate (a BUC with no actor is orphaned)
    - Every BUC has a `belongs` predicate
-   - Every `extsystem` is referenced by at least one `uses` predicate
+   - Every `extsystem` is connected through an event: `raises(ExtSystem, Event)` or `triggers(Event, ExtSystem)`
+   - Every `timer` triggers a use case: `triggers(Timer, UseCase)`
 
 4.5. **Check requirements, flow, and decision traceability**
    - Stable requirement metadata should include priority/source/stakeholder/owner
@@ -69,8 +70,8 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    - Actor authority is declared with `permission` and attached with `has_permission(Actor, Permission)`
    - UC/API requirements use `requires_permission(UseCase|Api, Permission)` and
      `requires_medium(UseCase|Api, Medium)`; do not model these as free-form notes
-   - If `belongs(Buc, Business)` has contextual `.when(...)` or `.by(...)`
-     clauses, typed references should point to `timing` and `medium`
+   - If `belongs(Buc, Business)` has contextual `.by(...)` clauses, typed
+     references should point to `medium`
    - Run `rdra-ish csv <src-dir>/ --kind screen-constraints` when reviewing UI access:
      screen patterns are derived from `displays` plus invoked API constraints
    - Run `rdra-ish csv <src-dir>/ --kind actor-permission-audit` when reviewing actor

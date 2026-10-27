@@ -55,7 +55,7 @@ meanings:
 | Permission enables too many callables | Requirement is too broad | Move `requires_permission` from UC to API or split permission |
 | API requires permission but no UC invokes it | Boundary is disconnected | Add `invokes` or remove the API |
 | UC/API declares `requires_medium` but screen path is not reviewed | Medium constraint may be invisible to UI review | Inspect `screen-constraints` |
-| Contextual `belongs(...).when/.by` uses untyped text | Context reference may not type-check as intended | Use declared `timing` or `medium` where appropriate |
+| Contextual `belongs(...).by` uses untyped text | Context reference may not type-check as intended | Use a declared `medium` where appropriate |
 
 ## How To Fix
 

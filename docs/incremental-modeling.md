@@ -62,7 +62,7 @@ ownership clearer.
 | Artifact | Default location | Split when |
 |---|---|---|
 | `actor`, `extsystem` | `shared/actors.rdra` | many external systems justify `shared/external.rdra` |
-| `business`, stable `requirement`, reusable `timing` / `medium` / `permission` | `shared/biz.rdra` or another shared vocabulary file | context and authority vocabulary grows large enough to deserve its own file |
+| `business`, stable `requirement`, reusable `timer` / `medium` / `permission` | `shared/biz.rdra` or another shared vocabulary file | context and authority vocabulary grows large enough to deserve its own file |
 | `entity`, `relate`, shared lifecycle events | `shared/entities.rdra` | entities naturally form bounded groups |
 | `buc`, `usecase`, `screen`, BUC-local `api`, BUC-local events | `buc/buc_<name>.rdra` | keep one BUC per file; do not split a single BUC early |
 | CRUD, `displays`, `invokes`, access constraints, `raises`, `sets` | the BUC file that explains the use case | never put BUC-specific predicates in shared files |
@@ -289,17 +289,18 @@ permission/media paths and actor-side assignments.
 
 ### BUC Context and Access Rules
 
-Use `belongs(Buc, Business).when(...).by(...)` when the BUC belongs to a
-business area only in a specific timing or operating medium.
+Use `belongs(Buc, Business).by(...)` when the BUC belongs to a
+business area only through a specific operating medium.
 
 ```rdra
-timing OrderSubmitted "Order Submitted"
 medium CustomerDevice "Customer Device"
 
 belongs(BucOrder, Commerce)
-  .when(OrderSubmitted)
   .by(CustomerDevice)
 ```
+
+A schedule that starts a use case is a `timer` connected with
+`triggers(Timer, UseCase)`, not belongs context.
 
 Use `has_permission(Actor, Permission)` for what an actor can do. Use
 `requires_permission` and `requires_medium` on UC/API nodes for what an operation

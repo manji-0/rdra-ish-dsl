@@ -43,7 +43,9 @@ Read `buc/buc_<name>.rdra` and the shared files it imports. Identify:
 | New event or state | `shared/entities.rdra` (if cross-BUC) or `buc/buc_<name>.rdra` |
 | New actor | `shared/actors.rdra` |
 | New system/API ownership | shared vocabulary for `system`, BUC/shared API file for `api`, then `contains(System, Api)` |
-| New Business-BUC context | shared vocabulary for `timing` / `medium`, then `belongs(...).when(...).by(...)` |
+| New Business-BUC context | shared vocabulary for `medium`, then `belongs(...).by(...)` |
+| New schedule | shared `timer`, then `triggers(Timer, UseCase)` in the owning BUC file |
+| New external system traffic | shared `extsystem`, then `raises(ExtSystem, Event)` or `triggers(Event, ExtSystem)` |
 | New permission or medium constraint | shared `permission` / `medium` vocabulary, then `has_permission`, `requires_permission`, or `requires_medium` in the owning BUC file |
 | New event-started BUC | target BUC file, then `triggers(Event, Buc)`; add `triggers(Event, EntryUC)` only after the entry UC is known |
 | New entity rule | shared rules file or shared entity area; use `forbidden`, `invariant`, `required`, or `exclusive` for single-entity state facts; use multi-entity `forbidden` / `invariant` with `Entity.column` conditions for multi-entity rules, and add `.along(...)` only for relation-scoped linked-instance intent; use `when(...).none/has`, `property`, and `after.assert` when quantifiers or temporal/postcondition checks matter |
@@ -147,11 +149,9 @@ maps_field(<Field>, <Entity>, "column_name")
 
 **Adding Business-BUC context:**
 ```
-timing <When> "<timing>"
 medium <Medium> "<device or terminal>"
 
 belongs(Buc<Name>, <Business>)
-  .when(<When>)
   .by(<Medium>)
 ```
 

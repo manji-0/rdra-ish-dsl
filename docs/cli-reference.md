@@ -147,7 +147,7 @@ rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]...
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `rdra` \| `boundaryless-graph` \| `er` \| `state` \| `sequence` \| `event-flow` \| `diff` \| `business-area` \| `technical-area` | `rdra` | The diagram kind. `rdra` = RDRA layered graph mapped onto the original four-layer structure; `boundaryless-graph` = dense relationship graph without RDRA layer boundaries; `er` = entity-relationship diagram; `state` = state machine; `sequence` = write-focused sequence diagram with FK-inferred transaction boundaries; `event-flow` = event causality graph showing UC->Event->UC/BUC and Event->State chains; `diff` = graph diff between `--diff-base` and current inputs; `business-area` = Actor -> input field -> UseCase; `technical-area` = System boxes containing only APIs and Entities. |
+| `--kind` | `rdra` \| `boundaryless-graph` \| `er` \| `state` \| `sequence` \| `event-flow` \| `diff` \| `business-area` \| `technical-area` | `rdra` | The diagram kind. `rdra` = RDRA layered graph mapped onto the original four-layer structure; `boundaryless-graph` = dense relationship graph without RDRA layer boundaries; `er` = entity-relationship diagram; `state` = state machine; `sequence` = write-focused sequence diagram with FK-inferred transaction boundaries; `event-flow` = event causality graph showing UC or ExtSystem->Event->UC/BUC/ExtSystem and Event->State chains, plus Timer->UC/BUC edges; `diff` = graph diff between `--diff-base` and current inputs; `business-area` = Actor -> input field -> UseCase; `technical-area` = System boxes containing only APIs and Entities. |
 | `--format` | `puml` \| `svg` \| `png` \| `mermaid` | `puml` | Output format. `puml` writes PlantUML text (`.puml`); `mermaid` writes Mermaid text (`.mmd`); `svg` / `png` render via plantuml.jar. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Filter to one or more BUCs by id. With multiple ids, the **union** of reachable nodes across the named BUCs is shown. Applies to all diagram kinds. For `sequence` and `business-area`, only use cases directly contained in the selected BUCs are shown; event-triggered use cases in other BUCs are left to `event-flow`. |
 | `--usecase <id>` | string (repeatable) | — (whole model) | Filter `sequence` or `business-area` diagrams to one or more use cases by id. Cannot be combined with `--buc`. |
@@ -194,8 +194,8 @@ Notes:
   system value (`actor`), system boundary (`screen`, `api`), and system (`system`,
   `entity`). The use case itself remains the sequence section title.
 - For `--kind rdra`, model objects are placed into four RDRA-style layers:
-  system value (`actor`, `requirement`, `adr`, `nfr`), system external environment
-  (`extsystem`, `quality`, `constraint`, `business`, `buc`, `flow`, `step`, `timing`,
+  system value (`actor`, `extsystem`, `requirement`, `adr`, `nfr`), system external
+  environment (`quality`, `constraint`, `business`, `buc`, `flow`, `step`, `timer`,
   `medium`, `permission`), system boundary (`usecase`, `screen`, `field`, `event`), and
   system (`system`, `api`, `dto`, `entity`, `state`).
 - For `--kind business-area`, the diagram shows only business actors, inferred input
@@ -270,7 +270,10 @@ is projected as operation extension `x-rdra-ish-requires-permission` (not OpenAP
 
 For AsyncAPI export, each RDRA `event` becomes a channel and message. `raises`
 and `outbox` produce `send` operations; `triggers` produce `receive` operations,
-which list the `transitions` of the triggered use cases. RDRA does not yet model broker protocol, server topology,
+which list the `transitions` of the triggered use cases. An external system that
+`raises` an event is listed as the channel's `x-publisher`, and one that the event
+`triggers` (is delivered to) as its `x-subscriber`; both keys appear only when non-empty.
+RDRA does not yet model broker protocol, server topology,
 or event payload DTOs directly, so those details are left unspecified and RDRA
 facts are preserved with `x-rdra-ish-*` extensions.
 
