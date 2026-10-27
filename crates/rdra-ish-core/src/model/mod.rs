@@ -42,7 +42,6 @@ pub struct SemanticModel {
     pub states: SlotMap<StateKey, State>,
     pub apis: SlotMap<ApiKey, Api>,
     pub dtos: SlotMap<DtoKey, Dto>,
-    pub locations: SlotMap<LocationKey, Location>,
     pub timings: SlotMap<TimingKey, Timing>,
     pub media: SlotMap<MediumKey, Medium>,
     pub permissions: SlotMap<PermissionKey, Permission>,

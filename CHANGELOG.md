@@ -31,7 +31,10 @@
   hides BUC performers in permission analysis).
 - Removed the kinds no review output consumed. A model that still uses one now
   fails to parse with a message naming the keyword and the replacement:
-  - `usagescene`: use `location` / `timing` for Business-BUC context.
+  - `usagescene`: use `timing` for Business-BUC context.
+  - `location` and the `.where(...)` clause of `belongs`: no output consumed
+    them. Delete the declaration and the clause; keep `timing` / `.when(...)`
+    and `medium` / `.by(...)`.
   - `condition`, `variation` (reserved kinds that only warned before): model
     rules with use case conditions (`precondition`, `guard`, ...) or entity
     state constraints.

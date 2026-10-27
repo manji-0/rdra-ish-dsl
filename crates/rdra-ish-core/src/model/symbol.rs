@@ -32,7 +32,6 @@ fn node_kind_tag(node: &NodeRef) -> &'static str {
         NodeRef::State(_) => "state",
         NodeRef::Api(_) => "api",
         NodeRef::Dto(_) => "dto",
-        NodeRef::Location(_) => "location",
         NodeRef::Timing(_) => "timing",
         NodeRef::Medium(_) => "medium",
         NodeRef::Permission(_) => "permission",
@@ -62,7 +61,6 @@ fn node_ref_matches_kind(node: &NodeRef, kind: &Kind) -> bool {
             | (NodeRef::State(_), Kind::State)
             | (NodeRef::Api(_), Kind::Api)
             | (NodeRef::Dto(_), Kind::Dto)
-            | (NodeRef::Location(_), Kind::Location)
             | (NodeRef::Timing(_), Kind::Timing)
             | (NodeRef::Medium(_), Kind::Medium)
             | (NodeRef::Permission(_), Kind::Permission)

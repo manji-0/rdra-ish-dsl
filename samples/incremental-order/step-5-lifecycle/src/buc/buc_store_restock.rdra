@@ -16,7 +16,6 @@ system OrganizationSystem "Organization System"
 
 belongs(BucStoreRestock, StoreOperations)
   .when(StoreMasterMaintenanceWindow)
-  .where(BackOffice)
   .by(OpsConsole)
 performs(OpsStaff, BucStoreRestock)
 has_permission(OpsStaff, StoreMaintenanceWrite)

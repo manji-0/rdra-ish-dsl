@@ -24,7 +24,6 @@ pub(crate) fn node_kind_tag_str(node: &NodeRef) -> &'static str {
         NodeRef::State(_) => "state",
         NodeRef::Api(_) => "api",
         NodeRef::Dto(_) => "dto",
-        NodeRef::Location(_) => "location",
         NodeRef::Timing(_) => "timing",
         NodeRef::Medium(_) => "medium",
         NodeRef::Permission(_) => "permission",

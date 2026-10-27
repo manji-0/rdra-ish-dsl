@@ -28,18 +28,15 @@ invokes(PlaceOrder, OrderApi)
 }
 
 #[test]
-fn test_belongs_when_where_context() {
+fn test_belongs_when_by_context() {
     let src = r#"
 business ClinicOps "Clinic Operations"
 buc BucAppointmentScheduling "Appointment Scheduling"
-location FrontDesk "Front Desk"
 timing AppointmentRequested "Appointment Requested"
 medium FrontDeskTerminal "Front Desk Terminal"
 belongs(BucAppointmentScheduling, ClinicOps)
   .when("patient requests a booking")
   .when(AppointmentRequested)
-  .where(FrontDesk)
-  .where("patient portal")
   .by(FrontDeskTerminal)
   .by("tablet")
 "#;
@@ -58,7 +55,6 @@ belongs(BucAppointmentScheduling, ClinicOps)
     assert_eq!(model.bucs[ctx.buc].id, "BucAppointmentScheduling");
     assert_eq!(model.businesses[ctx.business].id, "ClinicOps");
     assert_eq!(ctx.whens.len(), 2);
-    assert_eq!(ctx.wheres.len(), 2);
     assert_eq!(ctx.bys.len(), 2);
 
     assert!(matches!(
@@ -68,14 +64,6 @@ belongs(BucAppointmentScheduling, ClinicOps)
     assert!(matches!(
         &ctx.whens[1],
         BusinessMappingContextValue::Ref(NodeRef::Timing(_))
-    ));
-    assert!(matches!(
-        &ctx.wheres[0],
-        BusinessMappingContextValue::Ref(NodeRef::Location(_))
-    ));
-    assert!(matches!(
-        &ctx.wheres[1],
-        BusinessMappingContextValue::Text(s) if s == "patient portal"
     ));
     assert!(matches!(
         &ctx.bys[0],

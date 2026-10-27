@@ -69,8 +69,8 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    - Actor authority is declared with `permission` and attached with `has_permission(Actor, Permission)`
    - UC/API requirements use `requires_permission(UseCase|Api, Permission)` and
      `requires_medium(UseCase|Api, Medium)`; do not model these as free-form notes
-   - If `belongs(Buc, Business)` has contextual `.when(...)`, `.where(...)`, or `.by(...)`
-     clauses, typed references should point to `timing`, `location`, and `medium`
+   - If `belongs(Buc, Business)` has contextual `.when(...)` or `.by(...)`
+     clauses, typed references should point to `timing` and `medium`
    - Run `rdra-ish csv <src-dir>/ --kind screen-constraints` when reviewing UI access:
      screen patterns are derived from `displays` plus invoked API constraints
    - Run `rdra-ish csv <src-dir>/ --kind actor-permission-audit` when reviewing actor

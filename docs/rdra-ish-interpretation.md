@@ -32,8 +32,8 @@ scopes rather than as a strict copy of the original RDRA artifacts:
 In RDRA-ish, a BUC is the unit that keeps business value, ownership, and review scope
 together. It is declared with `buc`, assigned to a business area with `belongs`, and
 composed from UCs with `contains`.
-When the assignment is contextual, `belongs(Buc, Business).when(...).where(...).by(...)`
-records the timing, location/channel, and medium in which that business mapping applies.
+When the assignment is contextual, `belongs(Buc, Business).when(...).by(...)`
+records the timing and medium in which that business mapping applies.
 
 This differs from a reading where BUC itself is the detailed business-flow artifact.
 In RDRA-ish, the BUC is the business-value frame, and the business flow is its

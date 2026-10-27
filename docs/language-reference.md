@@ -21,7 +21,7 @@ same order:
 | Layer | Kinds | Review question | Section |
 |---|---|---|---|
 | Requirements and traceability | `requirement`, `adr`, `nfr`, `quality`, `constraint` | Why does this exist, and which quality bar applies? | [Requirements and Traceability](#requirements-and-traceability) |
-| Business | `business`, `buc`, `flow`, `step`, `timing`, `location`, `medium` | Which business value does it serve, in what order? | [Business Layer](#business-layer) |
+| Business | `business`, `buc`, `flow`, `step`, `timing`, `medium` | Which business value does it serve, in what order? | [Business Layer](#business-layer) |
 | Interaction | `actor`, `usecase`, `screen`, `field`, `event` | Who does what, on which screen, and what does it cause? | [Interaction Layer](#interaction-layer) |
 | System boundary | `system`, `extsystem`, `api`, `dto`, `permission` | Which boundary owns the operation, and who may call it? | [System Boundary](#system-boundary) |
 | Data | `entity` | What is stored, and how is it related? | [Data Layer](#data-layer) |
@@ -141,7 +141,6 @@ descriptions as review annotations where supported.
 | `flow` | A business flow: an ordered business narrative inside a BUC. A flow is composed of steps and can make UC and event ordering explicit without turning the diagram into the only source of truth. | `lint` `flow-empty`, `flow-cycle`; RDRA diagram |
 | `step` | A business flow step. A step is a business-language action that can cover a use case, API, or event while remaining distinct from implementation boundaries. | `lint` `step-no-cover`; RDRA diagram |
 | `timing` | A timing, trigger, or business situation for Business-BUC context. | `belongs(...).when(...)` context |
-| `location` | A place, channel, organization point, or usage scene for Business-BUC context. | `belongs(...).where(...)` context |
 | `medium` | A physical medium, device, terminal, or operation medium for Business-BUC context. | `belongs(...).by(...)` context; `requires_medium` in `csv --kind screen-constraints` |
 | `actor` | A human actor who performs use cases. | `check` permission paths; sequence diagram participant; `csv --kind actor-permission-audit` |
 | `usecase` | A use case: a concrete interaction that reads and writes entities and displays screens. | `check`; `states`; all diagrams; `csv --kind matrix` |
@@ -351,28 +350,24 @@ use case divide the review.
 ### `belongs` context
 
 `belongs(Buc, Business)` declares the Business area a BUC belongs to. The mapping can
-also carry optional When / Where / By context with method-chain clauses:
+also carry optional When / By context with method-chain clauses:
 
 ```
 timing AppointmentRequested "Appointment Requested"
-location FrontDesk "Front Desk"
 medium FrontDeskTerminal "Front Desk Terminal"
 
 belongs(BucAppointmentScheduling, ClinicOps)
   .when("patient requests a booking")
   .when(AppointmentRequested)
-  .where(FrontDesk)
-  .where("patient portal")
   .by(FrontDeskTerminal)
   .by("tablet")
 ```
 
 - `.when(...)` records the timing, trigger, or business situation where the BUC applies.
-- `.where(...)` records the place, channel, organization point, or usage scene.
 - `.by(...)` records the physical medium, device, terminal, or other operation medium.
 - Each argument may be a string literal or a reference to the corresponding typed element:
-  `.when(timing::...)`, `.where(location::...)`, or `.by(medium::...)`.
-- Multiple `.when(...)`, `.where(...)`, or `.by(...)` clauses accumulate as alternative context values.
+  `.when(timing::...)` or `.by(medium::...)`.
+- Multiple `.when(...)` or `.by(...)` clauses accumulate as alternative context values.
 
 ### Business flows
 
@@ -1250,7 +1245,8 @@ to load with a message naming the replacement:
 
 | Removed | Use instead |
 |---|---|
-| `usagescene` | `location` or `timing` in `belongs(...)` context. |
+| `usagescene` | `timing` in `belongs(...)` context. |
+| `location` | Deleted with the `.where(...)` clause of `belongs`; use `timing` / `.when(...)` and `medium` / `.by(...)` for Business-BUC context. |
 | `condition`, `variation` | Use case clauses such as `precondition` and `guard`, or [Entity State Constraints](#entity-state-constraints). |
 | `concept`, `domain_object`, `aggregate`, `value_object` / `valueobject`, and `maps_to` | `entity` for persistent structure, `dto` for payload shapes. |
 

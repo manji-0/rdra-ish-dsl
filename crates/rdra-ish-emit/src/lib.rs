@@ -174,7 +174,6 @@ pub(crate) fn object_graph_layer(node: &NodeRef) -> ObjectGraphLayer {
         | NodeRef::Buc(_)
         | NodeRef::Flow(_)
         | NodeRef::Step(_)
-        | NodeRef::Location(_)
         | NodeRef::Timing(_)
         | NodeRef::Medium(_)
         | NodeRef::Permission(_) => ObjectGraphLayer::ExternalEnvironment,
@@ -258,7 +257,6 @@ pub const KNOWN_DIAGRAM_NODE_KINDS: &[&str] = &[
     "state",
     "api",
     "dto",
-    "location",
     "timing",
     "medium",
     "permission",
@@ -348,7 +346,6 @@ pub(crate) fn node_kind_filter_name(node: &NodeRef) -> &'static str {
         NodeRef::State(_) => "state",
         NodeRef::Api(_) => "api",
         NodeRef::Dto(_) => "dto",
-        NodeRef::Location(_) => "location",
         NodeRef::Timing(_) => "timing",
         NodeRef::Medium(_) => "medium",
         NodeRef::Permission(_) => "permission",
@@ -401,7 +398,6 @@ pub(crate) fn node_description<'a>(model: &'a SemanticModel, node: &NodeRef) -> 
         NodeRef::Buc(key) => model.bucs.get(*key)?.description.as_deref(),
         NodeRef::Flow(key) => model.flows.get(*key)?.description.as_deref(),
         NodeRef::Step(key) => model.steps.get(*key)?.description.as_deref(),
-        NodeRef::Location(key) => model.locations.get(*key)?.description.as_deref(),
         NodeRef::Timing(key) => model.timings.get(*key)?.description.as_deref(),
         NodeRef::Medium(key) => model.media.get(*key)?.description.as_deref(),
         NodeRef::Permission(key) => model.permissions.get(*key)?.description.as_deref(),
@@ -438,7 +434,6 @@ pub(crate) fn node_emoji(node: &NodeRef) -> &'static str {
         NodeRef::State(_) => "🔄",
         NodeRef::Api(_) => "🔌",
         NodeRef::Dto(_) => "📄",
-        NodeRef::Location(_) => "📍",
         NodeRef::Timing(_) => "⏱️",
         NodeRef::Medium(_) => "📱",
         NodeRef::Permission(_) => "🔑",
@@ -543,15 +538,6 @@ pub(crate) fn collect_object_graph_nodes(
         steps
             .into_iter()
             .map(|(k, _)| NodeRef::Step(k))
-            .filter(|nr| is_visible(nr)),
-    );
-
-    let mut locations: Vec<_> = model.locations.iter().collect();
-    locations.sort_by_key(|(_, l)| &l.id);
-    nodes.extend(
-        locations
-            .into_iter()
-            .map(|(k, _)| NodeRef::Location(k))
             .filter(|nr| is_visible(nr)),
     );
 
@@ -692,7 +678,6 @@ mod tests {
             NodeRef::Buc(k) => model.bucs[*k].id.clone(),
             NodeRef::Flow(k) => model.flows[*k].id.clone(),
             NodeRef::Step(k) => model.steps[*k].id.clone(),
-            NodeRef::Location(k) => model.locations[*k].id.clone(),
             NodeRef::Timing(k) => model.timings[*k].id.clone(),
             NodeRef::Medium(k) => model.media[*k].id.clone(),
             NodeRef::Permission(k) => model.permissions[*k].id.clone(),
@@ -723,7 +708,6 @@ business Biz "Business"
 buc Buc "BUC"
 flow Flow "Flow"
 step Step "Step"
-location Loc "Location"
 timing Time "Timing"
 medium Med "Medium"
 permission Perm "Permission"
@@ -758,7 +742,6 @@ state State "State"
                 "Buc",
                 "Flow",
                 "Step",
-                "Loc",
                 "Time",
                 "Med",
                 "Perm",

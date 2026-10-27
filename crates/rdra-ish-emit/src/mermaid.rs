@@ -458,7 +458,6 @@ impl Emitter for ObjectGraphMermaidEmitter {
                         NodeRef::Buc(_) => format!("    {}[\"{}\"]\n", id, label),
                         NodeRef::Flow(_) => format!("    {}[\"{}\"]\n", id, label),
                         NodeRef::Step(_) => format!("    {}([\"{}\"])\n", id, label),
-                        NodeRef::Location(_) => format!("    {}[\"{}\"]\n", id, label),
                         NodeRef::Timing(_) => format!("    {}[\"{}\"]\n", id, label),
                         NodeRef::Medium(_) => format!("    {}[/\"{}\"/]\n", id, label),
                         NodeRef::Permission(_) => format!("    {}[\"{}\"]\n", id, label),

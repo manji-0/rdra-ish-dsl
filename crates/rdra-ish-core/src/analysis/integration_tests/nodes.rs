@@ -29,7 +29,6 @@ fn node_kind_tag_str_labels_each_node_ref_kind() {
         (Kind::State, "StateA", "state"),
         (Kind::Api, "ApiA", "api"),
         (Kind::Dto, "DtoA", "dto"),
-        (Kind::Location, "LocationA", "location"),
         (Kind::Timing, "TimingA", "timing"),
         (Kind::Medium, "MediumA", "medium"),
         (Kind::Permission, "PermissionA", "permission"),

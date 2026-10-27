@@ -45,11 +45,11 @@ pub use model::{
     node_ref_kind, Adr, AdrKey, Api, ApiKey, AppliesToTarget, Cardinality, ColumnEffect,
     ConstrainsTarget, ContainedRef, ContainerRef, CoversTarget, CrossCmpRhs, CrossComparisonProp,
     CrossEntityCondition, CrossEntityInvariant, CrossForbiddenConstraint, DataOrigin,
-    DecidesTarget, EffectValue, EntityKey, EntityTouchpoint, ExclusiveConstraint, Location,
-    LocationKey, LookupResult, Medium, MediumKey, NfrOrConstraint, PerformTarget, Permission,
-    PermissionKey, QualifiedModelColumnRef, RequiredConstraint, SemanticModel, StateTransition,
-    System, SystemKey, TemporalAtom, TemporalExpr, TemporalFormula, TemporalProperty, TemporalRhs,
-    Timing, TimingKey, TriggerTarget, TypedPredicate,
+    DecidesTarget, EffectValue, EntityKey, EntityTouchpoint, ExclusiveConstraint, LookupResult,
+    Medium, MediumKey, NfrOrConstraint, PerformTarget, Permission, PermissionKey,
+    QualifiedModelColumnRef, RequiredConstraint, SemanticModel, StateTransition, System, SystemKey,
+    TemporalAtom, TemporalExpr, TemporalFormula, TemporalProperty, TemporalRhs, Timing, TimingKey,
+    TriggerTarget, TypedPredicate,
 };
 pub use predicate::{predicate_signature, KNOWN_PREDICATES};
 pub use resolver::{

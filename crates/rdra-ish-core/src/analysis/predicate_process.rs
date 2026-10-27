@@ -803,13 +803,11 @@ fn process_belongs_context(
         return;
     };
     let mut whens = Vec::new();
-    let mut wheres = Vec::new();
     let mut bys = Vec::new();
 
     for cc in &pred.chain {
         let (target, expected_kind) = match cc.name.as_str() {
             "when" => (&mut whens, "timing"),
-            "where" => (&mut wheres, "location"),
             "by" => (&mut bys, "medium"),
             _ => continue,
         };
@@ -820,14 +818,13 @@ fn process_belongs_context(
         }
     }
 
-    if !whens.is_empty() || !wheres.is_empty() || !bys.is_empty() {
+    if !whens.is_empty() || !bys.is_empty() {
         model
             .business_mapping_contexts
             .push(BusinessMappingContext {
                 buc: *buc,
                 business: *business,
                 whens,
-                wheres,
                 bys,
             });
     }

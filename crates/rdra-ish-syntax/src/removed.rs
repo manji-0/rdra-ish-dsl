@@ -5,7 +5,11 @@ const CONCEPTUAL: &str = "conceptual-model kinds were removed; model persistent 
 const HINTS: &[(&str, &str)] = &[
     (
         "usagescene",
-        "use `location` / `timing` for Business-BUC context",
+        "use `timing` for Business-BUC context",
+    ),
+    (
+        "location",
+        "no output consumed it. Delete the declaration and any `.where(...)` on `belongs`; keep `timing` / `.when(...)` and `medium` / `.by(...)` for Business-BUC context",
     ),
     (
         "condition",
@@ -44,11 +48,22 @@ mod tests {
     }
 
     #[test]
-    fn usagescene_points_to_location_and_timing() {
+    fn usagescene_points_to_timing() {
         let msgs = messages("usagescene Counter \"Counter\"\n");
         assert!(
             msgs.iter()
-                .any(|m| m.contains("`usagescene`") && m.contains("`location` / `timing`")),
+                .any(|m| m.contains("`usagescene`") && m.contains("use `timing`")),
+            "{msgs:?}"
+        );
+        assert!(!msgs.iter().any(|m| m.contains("`location`")), "{msgs:?}");
+    }
+
+    #[test]
+    fn location_points_to_timing_and_medium() {
+        let msgs = messages("location FrontDesk \"Front Desk\"\n");
+        assert!(
+            msgs.iter()
+                .any(|m| m.contains("`location`") && m.contains("`.where(...)`")),
             "{msgs:?}"
         );
     }

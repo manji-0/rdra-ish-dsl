@@ -302,14 +302,6 @@ pub(crate) fn register_instance(
             });
             NodeRef::Dto(k)
         }
-        Kind::Location => {
-            let k = model.locations.insert(Location {
-                id: inst.id.clone(),
-                label: inst.label.clone(),
-                description: inst.description.clone(),
-            });
-            NodeRef::Location(k)
-        }
         Kind::Timing => {
             let k = model.timings.insert(Timing {
                 id: inst.id.clone(),

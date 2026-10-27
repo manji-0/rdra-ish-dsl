@@ -726,7 +726,6 @@ fn model_element_count(model: &SemanticModel) -> usize {
         + model.states.len()
         + model.apis.len()
         + model.dtos.len()
-        + model.locations.len()
         + model.timings.len()
         + model.media.len()
         + model.permissions.len()
@@ -844,12 +843,6 @@ fn lint_node_refs(model: &SemanticModel) -> Vec<NodeRef> {
     nodes.extend(model.states.iter().map(|(key, _)| NodeRef::State(key)));
     nodes.extend(model.apis.iter().map(|(key, _)| NodeRef::Api(key)));
     nodes.extend(model.dtos.iter().map(|(key, _)| NodeRef::Dto(key)));
-    nodes.extend(
-        model
-            .locations
-            .iter()
-            .map(|(key, _)| NodeRef::Location(key)),
-    );
     nodes.extend(model.timings.iter().map(|(key, _)| NodeRef::Timing(key)));
     nodes.extend(model.media.iter().map(|(key, _)| NodeRef::Medium(key)));
     nodes.extend(
@@ -883,7 +876,6 @@ fn node_kind_display(node: &NodeRef) -> String {
         NodeRef::State(_) => "state".to_string(),
         NodeRef::Api(_) => "api".to_string(),
         NodeRef::Dto(_) => "dto".to_string(),
-        NodeRef::Location(_) => "location".to_string(),
         NodeRef::Timing(_) => "timing".to_string(),
         NodeRef::Medium(_) => "medium".to_string(),
         NodeRef::Permission(_) => "permission".to_string(),
@@ -912,7 +904,6 @@ fn node_id(model: &SemanticModel, node: &NodeRef) -> Option<String> {
         NodeRef::State(key) => model.states.get(*key)?.id.clone(),
         NodeRef::Api(key) => model.apis.get(*key)?.id.clone(),
         NodeRef::Dto(key) => model.dtos.get(*key)?.id.clone(),
-        NodeRef::Location(key) => model.locations.get(*key)?.id.clone(),
         NodeRef::Timing(key) => model.timings.get(*key)?.id.clone(),
         NodeRef::Medium(key) => model.media.get(*key)?.id.clone(),
         NodeRef::Permission(key) => model.permissions.get(*key)?.id.clone(),

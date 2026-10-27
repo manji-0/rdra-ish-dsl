@@ -23,7 +23,6 @@ pub enum NodeRef {
     State(StateKey),
     Api(ApiKey),
     Dto(DtoKey),
-    Location(LocationKey),
     Timing(TimingKey),
     Medium(MediumKey),
     Permission(PermissionKey),
@@ -100,7 +99,7 @@ pub struct BoundaryCoordination {
     pub right: EntityKey,
 }
 
-/// `belongs(Buc, Business).when(...).where(...).by(...)` で宣言される、
+/// `belongs(Buc, Business).when(...).by(...)` で宣言される、
 /// Business と BUC の対応関係に付く文脈値。
 #[derive(Debug, Clone)]
 pub enum BusinessMappingContextValue {
@@ -108,13 +107,12 @@ pub enum BusinessMappingContextValue {
     Ref(NodeRef),
 }
 
-/// Business と BUC の対応関係に付く When / Where / By 文脈。
+/// Business と BUC の対応関係に付く When / By 文脈。
 #[derive(Debug, Clone)]
 pub struct BusinessMappingContext {
     pub buc: BucKey,
     pub business: BusinessKey,
     pub whens: Vec<BusinessMappingContextValue>,
-    pub wheres: Vec<BusinessMappingContextValue>,
     pub bys: Vec<BusinessMappingContextValue>,
 }
 

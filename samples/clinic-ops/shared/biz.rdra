@@ -8,8 +8,6 @@ business ClinicAdministration "Clinic Administration"
 system ClinicOpsSystem "Clinic Operations System"
 
 timing PatientRequestWindow "Patient Request Window"
-location FrontDeskCounter "Front Desk Counter"
-location PatientPortal "Patient Portal"
 medium FrontDeskTerminal "Front Desk Terminal"
 medium PatientMobile "Patient Mobile"
 medium ClinicalWorkstation "Clinical Workstation"
