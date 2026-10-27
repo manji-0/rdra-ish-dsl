@@ -1,6 +1,6 @@
 ---
 name: rdra-ish-buc-update
-description: Update an existing BUC by adding or modifying use cases, business flows, requirements, screens, fields, API contracts, concepts, NFRs, events, entities, ADR links, and predicates while preserving staged refinement
+description: Update an existing BUC by adding or modifying use cases, business flows, requirements, screens, fields, API contracts, NFRs, events, entities, ADR links, and predicates while preserving staged refinement
 license: MIT
 ---
 
@@ -21,7 +21,7 @@ Read `buc/buc_<name>.rdra` and the shared files it imports. Identify:
 - Which use cases already exist
 - Which entities are already referenced
 - What screens and events are already declared
-- Which flow/step, field, DTO, requirement/NFR, concept, and ADR elements already exist
+- Which flow/step, field, DTO, requirement/NFR, and ADR elements already exist
 - Which predicates are already defined
 - Whether the model still uses the small layout (`shared/actors.rdra`,
   `shared/biz.rdra`, `shared/entities.rdra`) or has split shared files
@@ -36,7 +36,6 @@ Read `buc/buc_<name>.rdra` and the shared files it imports. Identify:
 | New screen for an existing UC | `buc/buc_<name>.rdra` |
 | New screen field or input/output mapping | owning BUC/screen file; add `field`, `contains(Screen, Field)`, `maps_field` |
 | New API method/path or payload | owning API file; add API metadata, `dto`, `request`, `response`, `error_response` |
-| New concept/domain term | shared conceptual file; add `maps_to` only when logical data mapping is known |
 | New NFR/quality/constraint | stable shared file; scope with `applies_to`, `qualifies`, or `constrains` |
 | New ADR impact | stable shared ADR file; connect with `decides(Adr, Target)` |
 | New entity column | `shared/entities.rdra` |

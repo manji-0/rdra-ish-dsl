@@ -45,7 +45,7 @@ stage.
 | BUCs exist but actors/use cases are sparse | BUC skeleton | Which actors perform which user-visible actions? |
 | BUC has multiple ordered actions but no `flow`/`step` | BUC skeleton / business flow | Does the business sequence, branch, exception, or loop need review? |
 | Use cases exist but CRUD matrix is empty | BUC skeleton | Which business objects does each use case create/read/update/delete? |
-| CRUD exists but entities are coarse | Data touchpoints | Which objects are conceptual/domain terms versus logical data structures? |
+| CRUD exists but entities are coarse | Data touchpoints | Which objects are logical data structures versus business vocabulary? |
 | CRUD exists but sequence output uses only the legacy `System` lane | Data touchpoints | What screens and APIs mediate the work? |
 | APIs/screens/permissions/fields appear | Interaction boundary | Which system owns each API, which fields map to data, and which constraints apply to UC/API paths? |
 | APIs have method/path metadata | Contract boundary | Which request/response/error DTOs are part of the contract? |

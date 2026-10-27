@@ -2,7 +2,7 @@
 
 Use this reference when the model has reached entity-structure work: logical
 entities, columns, indexes, constraints, generated foreign keys, `relate`
-cardinality/options, and conceptual-to-logical mappings.
+and cardinality/options.
 
 ## Commands
 
@@ -38,5 +38,3 @@ rdra-ish export src/ --kind json-schema --out out/json-schema.json
   exact column metadata.
 - Pair ER output with `rdra-ish csv src/ --kind api-matrix` when entity ownership is
   being reviewed through API boundaries.
-- Pair ER output with conceptual `maps_to` review when business nouns are not all
-  persisted as logical entities.

@@ -98,8 +98,6 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    - Parent entities are declared before child entities in the same file
    - Index/unique/check/FK optionality/on-delete/on-update/soft-delete/history/tenant
      annotations reflect real reviewable constraints
-   - Conceptual/domain objects use `maps_to` only when the logical data mapping is
-     intentional
 
 8.5. **Check screen fields and non-functional constraints**
    - Every `field` is contained by a `screen`; actor-entered fields should use
@@ -219,7 +217,6 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 | `covers` | Step | UseCase / Api / Event | — |
 | `compensates` | UseCase | UseCase / Event | — |
 | `applies_to` / `qualifies` / `constrains` | Nfr / Quality / Constraint | target | — |
-| `maps_to` | Concept / DomainObject / Aggregate / ValueObject | Entity | — |
 | `decides` | Adr | target | — |
 | `has_permission` | Actor | Permission | — |
 | `requires_permission` | UseCase / Api | Permission | — |

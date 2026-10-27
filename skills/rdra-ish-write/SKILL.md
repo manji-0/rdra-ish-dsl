@@ -1,6 +1,6 @@
 ---
 name: rdra-ish-write
-description: Write RDRA DSL files from requirements using correct syntax and file structure, including staged abstract-to-concrete refinement, business flows, requirements/NFRs, conceptual models, screen fields, API contracts, data modeling annotations, ADR links, lint/format checks, and exports
+description: Write RDRA DSL files from requirements using correct syntax and file structure, including staged abstract-to-concrete refinement, business flows, requirements/NFRs, screen fields, API contracts, data modeling annotations, ADR links, lint/format checks, and exports
 license: MIT
 ---
 
@@ -19,7 +19,7 @@ continue with the single most relevant step.
 |---|---|---|---|
 | 0 | Scope sketch | `references/00-scope.md` | `business`, candidate `buc`, early `requirement` metadata |
 | 1 | BUC skeleton | `references/01-buc-skeleton.md` | actors, BUC ownership, contained use cases, optional `flow`/`step` order |
-| 2 | Data touchpoints | `references/02-data-touchpoints.md` | concepts/domain objects, coarse entities, UC CRUD |
+| 2 | Data touchpoints | `references/02-data-touchpoints.md` | coarse entities, UC CRUD |
 | 3 | Interaction boundary | `references/03-interaction-boundary.md` | screens, fields, APIs/DTO contracts, systems, media, permissions |
 | 4 | Entity structure | `references/04-entity-structure.md` | columns, indexes, constraints, relations, ownership, coordination |
 | 5 | Lifecycle | `references/05-lifecycle.md` | events, states, transitions, event-started BUCs, effects |
@@ -72,8 +72,7 @@ src/
 Placement rules:
 
 - Shared vocabulary goes in `shared/`: actors, external systems, businesses,
-  stable requirements/NFRs/qualities/constraints, reusable concepts/domain
-  objects/aggregates/value objects/entities, ADRs, systems, locations, timings,
+  stable requirements/NFRs/qualities/constraints, reusable entities, ADRs, systems, locations, timings,
   media, permissions, cross-BUC lifecycle, and cross-BUC / cross-entity rules.
 - BUC-local flow goes in `buc/buc_<name>.rdra`: `buc`, `flow`, `step`,
   `usecase`, `screen`, `field`, BUC-local `api`/`dto`, CRUD, `displays`,
@@ -115,7 +114,7 @@ Kinds commonly used by this skill:
 | `requirement` / `adr` / `nfr` / `quality` / `constraint` | traceability, decisions, and non-functional intent |
 | `business` / `buc` / `flow` / `step` / `usecase` | business value, flow order, and action boundaries |
 | `screen` / `field` / `api` / `dto` / `system` | UI items, payloads, interaction, and implementation boundaries |
-| `concept` / `domain_object` / `aggregate` / `valueobject` / `entity` | conceptual and logical data modeling |
+| `entity` | logical data modeling |
 | `state` / `event` | lifecycle and causality |
 | `location` / `timing` / `medium` / `permission` | context and access vocabulary |
 
@@ -157,7 +156,6 @@ Kinds commonly used by this skill:
 | `requires_permission` | `(UseCase\|Api, Permission)` | UC/API required authority |
 | `requires_medium` | `(UseCase\|Api, Medium)` | UC/API required operation medium |
 | `applies_to/qualifies/constrains` | `(Nfr\|Quality\|Constraint, target)` | non-functional and quality scope |
-| `maps_to` | `(Concept\|DomainObject\|Aggregate\|ValueObject, Entity)` | conceptual-to-logical mapping |
 | `motivates` / `decides` | `Requirement == Buc` / `Adr == target` | requirement and decision traceability |
 
 #### Imports
@@ -182,9 +180,8 @@ import shared.actors.{Staff as S}
   `requires_permission`, and `requires_medium`.
 - Use `field` + `maps_field` when screen input/output mapping matters; do not
   overload `entity` columns as UI fields.
-- Keep conceptual vocabulary separate from persistence. Use
-  `concept`/`domain_object`/`aggregate`/`valueobject` for business terms, `entity`
-  for logical data structures, and `maps_to` when the mapping is intentional.
+- Model persistent structure with `entity` (and `dto` for payloads). There is no
+  separate conceptual-model kind.
 - Put API method/path/idempotency/mode/auth metadata on `api`, and use `dto`
   declarations plus `request`/`response`/`error_response` relations when OpenAPI or
   payload review is needed.
@@ -192,7 +189,7 @@ import shared.actors.{Staff as S}
   for performance, availability, SLO, audit/logging, retention, privacy, and other
   non-functional requirements.
 - Link ADRs with `decides` only when a real design decision affects a BUC, use case,
-  API, system, entity, requirement, NFR, or conceptual model element.
+  API, system, entity, requirement, NFR, or constraint.
 - Use `rdra-ish csv src/ --kind permission-callables` to review which operations each
   permission enables; use `has_permission` for actor-side assignment and verify it with
   `rdra-ish csv src/ --kind actor-permission-audit`.
@@ -227,8 +224,8 @@ import shared.actors.{Staff as S}
 - Adding `owns(System, Entity)` that contradicts API CRUD ownership without
   reviewing the warning.
 - Adding a cross-system `relate` without `coordinates(UseCase, Entity, Entity)`.
-- Using `entity` for every business noun when a `concept` or `domain_object` would
-  keep the model intentionally conceptual.
+- Using `entity` for every business noun, including nouns that are never
+  persisted or exchanged.
 - Adding `field` without `contains(Screen, Field)` or mapping actor-entered values
   when the entity column exists.
 - Adding API method/path metadata without DTO request/response links when payload

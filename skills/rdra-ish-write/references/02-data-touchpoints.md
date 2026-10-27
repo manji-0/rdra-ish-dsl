@@ -11,33 +11,27 @@ without forcing final columns, APIs, or persistence design.
 ## Ask For
 
 - Which business objects are created, read, updated, or deleted by each use case?
-- Which nouns are conceptual only, and which are logical data structures?
+- Which nouns are logical data structures, and which are only business vocabulary?
 - Which entities are shared across BUCs?
-- Are aggregates or value objects already known?
 - Which operations are likely to require an API or transaction boundary later?
 
 ## Procedure
 
-1. Add `concept`, `domain_object`, `aggregate`, or `valueobject` declarations for
-   business concepts that should not yet imply database tables.
-2. Add coarse `entity` declarations only for logical data structures, usually with
-   only an `id: Int @pk` column.
-3. Add `maps_to(Concept|DomainObject|Aggregate|ValueObject, Entity)` when the
-   conceptual-to-logical mapping is already known.
-4. Add direct UC CRUD predicates: `creates`, `reads`, `updates`, `deletes`, or
+1. Add coarse `entity` declarations for the logical data structures, usually with
+   only an `id: Int @pk` column. Business nouns that do not need persistence stay
+   in labels and descriptions; there is no separate conceptual-model kind.
+2. Add direct UC CRUD predicates: `creates`, `reads`, `updates`, `deletes`, or
    `writes`.
-5. Prefer direct use-case CRUD here. Delay `api` until the boundary is meaningful.
-6. Keep column details, FK relations, `system`, and `coordinates` out unless already
+3. Prefer direct use-case CRUD here. Delay `api` until the boundary is meaningful.
+4. Keep column details, FK relations, `system`, and `coordinates` out unless already
    stable and necessary for review.
-7. Use the CRUD matrix to spot overloaded or empty use cases.
-8. Do not rely on `business-inputs` yet unless entity columns already exist; at this
+5. Use the CRUD matrix to spot overloaded or empty use cases.
+6. Do not rely on `business-inputs` yet unless entity columns already exist; at this
    stage it is usually enough to confirm actor/use-case/entity responsibility.
 
 ## Minimal Pattern
 
 ```rdra
-domain_object ShoppingCart "Shopping Cart"
-
 entity Order "Order" {
   id: Int @pk
 }
@@ -49,7 +43,6 @@ entity Cart "Cart" {
 creates(PlaceOrder, Order)
 updates(PlaceOrder, Cart)
 updates(CancelOrder, Order)
-maps_to(ShoppingCart, Cart)
 ```
 
 ## Validation
@@ -57,8 +50,7 @@ maps_to(ShoppingCart, Cart)
 ```sh
 rdra-ish check src/
 rdra-ish lint src/ --format table
-rdra-ish list src/ --kind concept --format table
-rdra-ish list src/ --kind domain-object --format table
+rdra-ish list src/ --kind entity --format table
 rdra-ish csv src/ --kind matrix
 rdra-ish diagram src/ --kind er --format mermaid --buc BucOrder
 ```
@@ -68,8 +60,8 @@ rdra-ish diagram src/ --kind er --format mermaid --buc BucOrder
 - The CRUD matrix tells a plausible business story.
 - Every data-changing use case has at least one entity touchpoint.
 - Read-only use cases are intentionally read-only, not accidentally empty.
-- Conceptual/domain nouns are not forced into `entity` just because they exist in
-  the language of the business.
+- Business nouns are not forced into `entity` just because they exist in the
+  language of the business.
 - Entity names represent logical data structures, not tables designed too early.
 - API and system boundaries are either not needed yet or noted for Step 3.
 

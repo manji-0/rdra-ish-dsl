@@ -29,6 +29,26 @@
   longer folds TypeOK).
 - `actors_for_usecase` unions BUC-level and direct `performs` (direct no longer
   hides BUC performers in permission analysis).
+- Removed the kinds no review output consumed. A model that still uses one now
+  fails to parse with a message naming the keyword and the replacement:
+  - `usagescene`: use `location` / `timing` for Business-BUC context.
+  - `condition`, `variation` (reserved kinds that only warned before): model
+    rules with use case conditions (`precondition`, `guard`, ...) or entity
+    state constraints.
+  - `concept`, `domain_object`, `aggregate`, `value_object` (alias
+    `valueobject`): conceptual-model kinds were removed; model persistent
+    structure with `entity` (and `dto` for payloads).
+  - `maps_to` predicate: removed with the conceptual-model kinds.
+  - `contains(Aggregate, DomainObject | ValueObject | Concept)` and the
+    Concept / DomainObject / Aggregate / ValueObject targets of `decides` are
+    gone; `decides` keeps its other targets.
+  - `rdra-ish list --kind` no longer accepts `concept`, `domain-object`,
+    `aggregate`, or `value-object`; `diagram --node-kind` / `--edge-kind` no
+    longer accept the matching node kinds or `maps-to`. The `domain-object` and
+    `value-object` lint orphan-node kinds and the `ReservedKind` diagnostic are
+    gone, as are the `rdra-ish-core` types `Concept`, `DomainObject`,
+    `Aggregate`, `ValueObject`, `UsageScene`, `Condition`, `Variation`,
+    `ConceptualRef`, and `ConceptMapping`.
 
 ### Added
 
