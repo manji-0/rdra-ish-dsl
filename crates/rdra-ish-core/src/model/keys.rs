@@ -26,4 +26,5 @@ new_key_type! {
     pub struct MediumKey;
     pub struct PermissionKey;
     pub struct VariationKey;
+    pub struct ConditionKey;
 }

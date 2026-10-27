@@ -33,6 +33,7 @@ impl fmt::Display for Token {
             Token::Medium => "medium",
             Token::Permission => "permission",
             Token::Variation => "variation",
+            Token::Condition => "condition",
             Token::Property => "property",
             Token::And => "and",
             Token::Or => "or",

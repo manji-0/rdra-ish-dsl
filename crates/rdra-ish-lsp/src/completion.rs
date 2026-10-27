@@ -29,6 +29,7 @@ const KIND_KEYWORDS: &[&str] = &[
     "medium",
     "permission",
     "variation",
+    "condition",
 ];
 
 pub fn completion_items(model: &SemanticModel, source: &str, offset: usize) -> Vec<CompletionItem> {
@@ -196,6 +197,40 @@ performs(Staff, )
         assert!(labels.contains(&"Book"));
         assert!(!labels.contains(&"Staff"));
         assert!(!labels.contains(&"Guest"));
+    }
+
+    #[test]
+    fn combines_offers_conditions_first_then_variations() {
+        let decls = r#"condition CopayDue "Copay due"
+variation Method "Method" {
+  cash
+}
+usecase Book "Book"
+"#;
+        let (ast, errs) = parse(decls);
+        assert!(errs.is_empty());
+        let (model, _) = build_model(&ast);
+        let first = format!("{decls}combines(");
+        let labels: Vec<_> = completion_items(&model, &first, first.len())
+            .into_iter()
+            .map(|item| item.label)
+            .collect();
+        assert!(labels.contains(&"CopayDue".to_string()), "{labels:?}");
+        assert!(!labels.contains(&"Method".to_string()), "{labels:?}");
+        let second = format!("{decls}combines(CopayDue, ");
+        let labels: Vec<_> = completion_items(&model, &second, second.len())
+            .into_iter()
+            .map(|item| item.label)
+            .collect();
+        assert!(labels.contains(&"Method".to_string()), "{labels:?}");
+        assert!(!labels.contains(&"Book".to_string()), "{labels:?}");
+    }
+
+    #[test]
+    fn condition_is_a_kind_keyword_and_holds_a_predicate() {
+        assert!(KIND_KEYWORDS.contains(&"condition"));
+        assert!(KNOWN_PREDICATES.contains(&"holds"));
+        assert!(KNOWN_PREDICATES.contains(&"combines"));
     }
 
     #[test]

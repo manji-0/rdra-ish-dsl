@@ -125,6 +125,26 @@ pub enum RdraError {
         allowed: String,
     },
 
+    #[error("condition '{condition}' declares both `combines` and `holds`\n  hint: with a `holds` body the variation and state-model links are derived from the columns it names; delete the `combines` lines, or delete `holds` and keep `combines` for traceability only")]
+    ConditionCombinesWithBody { condition: String },
+
+    #[error("condition '{condition}' already has a `holds` body\n  hint: list every comparison in one `holds(...)`; the comparisons are an implicit conjunction")]
+    ConditionSecondBody { condition: String },
+
+    #[error("`combines` links condition '{condition}' to '{entity}.{col}', which is not a lifecycle column\n  hint: a state model is a column named by `transitions`; to link a variation write `combines({condition}, SomeVariation)` instead")]
+    ConditionCombinesAttribute {
+        condition: String,
+        entity: String,
+        col: String,
+    },
+
+    #[error("`combines` target '{target}' names both variation '{variation}' and a column of entity '{entity}'\n  hint: write `variation::{variation}` to mean the variation, or rename the variation or the column")]
+    AmbiguousCombinesTarget {
+        target: String,
+        variation: String,
+        entity: String,
+    },
+
     #[error("transitions first argument must be `Entity.column`, got '{got}'\n  hint: write `transitions(Order.status, CapturePayment, pending -> paid)`")]
     InvalidTransitionsColumnRef { got: String },
 

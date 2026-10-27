@@ -77,6 +77,17 @@ reads(PrepareEncounterApi, Appointment)
 reads(PrepareEncounterApi, PatientProfile)
 triggers(EvAppointmentCheckedIn, PrepareEncounter)
 
+// Conditions (RDRA 条件). CopayDue is traceability only: it links the variation and the
+// state model it combines. InsuredVisit has a body, so its links come from the columns it names.
+condition CopayDue "A copay is due at check-in"
+combines(CopayDue, PaymentMethod)
+combines(CopayDue, Appointment.status)
+applies_to(CopayDue, CollectCopay)
+
+condition InsuredVisit "The visit is covered by insurance"
+holds(InsuredVisit, PaymentTransaction.method == insurance, Appointment.status == apptcheckedin)
+applies_to(InsuredVisit, CollectCopay)
+
 // Access constraints
 requires_permission(VerifyArrival, VisitCheckIn)
 requires_medium(VerifyArrival, FrontDeskTerminal)

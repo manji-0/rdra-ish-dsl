@@ -329,6 +329,17 @@ mod tests {
     use super::*;
 
     #[test]
+    fn condition_declaration_and_holds_body_are_tokenized() {
+        let src = "condition C \"C\"\nholds(C, Pay.method == cash)\n";
+        let (ast, errs) = parse(src);
+        assert!(errs.is_empty(), "{errs:?}");
+        let tokens = semantic_tokens(&ast);
+        // keyword + id + string, predicate name, condition ref, entity ref, column
+        assert!(tokens.data.len() >= 7, "{}", tokens.data.len());
+        assert_eq!(tokens.data[0].token_type, TOKEN_TYPE);
+    }
+
+    #[test]
     fn emits_tokens_for_declarations_and_predicates() {
         let src = r#"usecase Book "Book"
 actor Staff "Staff"

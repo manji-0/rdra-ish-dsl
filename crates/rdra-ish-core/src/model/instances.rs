@@ -195,6 +195,18 @@ pub struct Dto {
     pub fields: Vec<ModelColumn>,
 }
 
+/// An RDRA 条件: a variation x state-model combination that selects a business rule.
+#[derive(Debug, Clone)]
+pub struct Condition {
+    pub id: std::string::String,
+    pub label: std::string::String,
+    pub description: Option<std::string::String>,
+    /// Set by `holds(Cond, cmp, ...)`: an implicit conjunction of entity-qualified
+    /// comparisons. At most one per condition. Stored and validated in phase 3, compiled to a
+    /// guard in phase 4.
+    pub body: Option<Vec<crate::model::CrossEntityCondition>>,
+}
+
 #[derive(Debug, Clone)]
 pub struct Timer {
     pub id: std::string::String,

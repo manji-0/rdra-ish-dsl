@@ -221,6 +221,7 @@ fn mermaid_rdra_relation_arrow(kind: &RelKind, from_id: &str, to_id: &str) -> Op
         RelKind::Response => format!("  {} -.->|response| {}\n", from_id, to_id),
         RelKind::ErrorResponse => format!("  {} -.->|error_response| {}\n", from_id, to_id),
         RelKind::AppliesTo => format!("  {} -.->|applies_to| {}\n", from_id, to_id),
+        RelKind::Combines => format!("  {} -.->|combines| {}\n", from_id, to_id),
         RelKind::Qualifies => format!("  {} -.->|qualifies| {}\n", from_id, to_id),
         RelKind::Constrains => format!("  {} -.->|constrains| {}\n", from_id, to_id),
         RelKind::MapsField => format!("  {} -.->|maps_field| {}\n", from_id, to_id),
@@ -463,6 +464,7 @@ impl Emitter for ObjectGraphMermaidEmitter {
                         NodeRef::Medium(_) => format!("    {}[/\"{}\"/]\n", id, label),
                         NodeRef::Permission(_) => format!("    {}[\"{}\"]\n", id, label),
                         NodeRef::Variation(_) => format!("    {}[\"{}\"]\n", id, label),
+                        NodeRef::Condition(_) => format!("    {}{{\"{}\"}}\n", id, label),
                         NodeRef::UseCase(_) => format!("    {}([\"{}\"])\n", id, label),
                         NodeRef::Screen(_) => format!("    {}[[\"{}\"]]\n", id, label),
                         NodeRef::Field(_) => format!("    {}[[\"{}\"]]\n", id, label),
@@ -2033,6 +2035,38 @@ transitions(Doc.status, Publish, draft -> published)
         assert!(result.contains("[*] --> Doc_draft"));
         assert!(result.contains("Doc_draft --> Doc_published"));
         assert!(result.contains("公開する"));
+    }
+
+    #[test]
+    fn test_object_graph_mermaid_draws_a_condition_with_its_derived_links() {
+        let src = r#"
+variation Method "Method" {
+  cash
+  card
+}
+entity Pay "Pay" {
+  id: Int @pk
+  method: Method
+  status: Enum(open, paid) @default(open)
+}
+usecase Collect "Collect"
+transitions(Pay.status, Collect, open -> paid)
+condition Insured "Insured"
+holds(Insured, Pay.method == card, Pay.status == paid)
+applies_to(Insured, Collect)
+"#;
+        let model = model_from(src);
+        let result = ObjectGraphMermaidEmitter
+            .emit(&model, &View::whole())
+            .unwrap();
+        assert!(result.contains("Insured{\"🔀 Insured\"}"), "{result}");
+        assert!(result.contains("Method[\"🎚️ Method\"]"), "{result}");
+        assert!(result.contains("Insured -.->|combines| Method"), "{result}");
+        assert!(result.contains("Insured -.->|combines| Pay"), "{result}");
+        assert!(
+            result.contains("Insured -.->|applies_to| Collect"),
+            "{result}"
+        );
     }
 
     #[test]

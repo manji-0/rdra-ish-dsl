@@ -17,9 +17,27 @@ pub fn run_verify(
     instance_count: u32,
     int_range_max: u32,
 ) -> Result<()> {
+    for notice in condition_body_notices(model) {
+        println!("{notice}");
+    }
     match backend {
         VerifyBackend::Tlc => run_tlc(model, out, instance_count, int_range_max),
     }
+}
+
+/// A `holds` body is stored and validated in phase 3 but no engine reads it, so say so instead
+/// of letting a passing run imply the condition was checked.
+pub(crate) fn condition_body_notices(model: &SemanticModel) -> Vec<String> {
+    let mut ids: Vec<&str> = model
+        .conditions
+        .values()
+        .filter(|condition| condition.body.is_some())
+        .map(|condition| condition.id.as_str())
+        .collect();
+    ids.sort_unstable();
+    ids.into_iter()
+        .map(|id| format!("condition {id}: body stored, not yet checked (phase 4)"))
+        .collect()
 }
 
 /// Returns (tla_path, cfg_path, work_dir, tla_filename_for_tlc, cfg_filename_for_tlc, keep).

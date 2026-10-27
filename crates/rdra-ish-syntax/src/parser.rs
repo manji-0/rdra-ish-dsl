@@ -71,6 +71,7 @@ fn path_ident() -> impl Parser<Token, String, Error = Simple<Token>> + Clone {
         Token::Medium => "medium".to_string(),
         Token::Permission => "permission".to_string(),
         Token::Variation => "variation".to_string(),
+        Token::Condition => "condition".to_string(),
         Token::Property => "property".to_string(),
     }
 }
@@ -281,6 +282,7 @@ fn column_name() -> impl Parser<Token, String, Error = Simple<Token>> + Clone {
     select! {
         Token::Ident(s) => s,
         Token::Variation => "variation".to_string(),
+        Token::Condition => "condition".to_string(),
     }
 }
 
@@ -332,6 +334,7 @@ fn kind_token() -> impl Parser<Token, Kind, Error = Simple<Token>> + Clone {
         Token::Medium      => Kind::Medium,
         Token::Permission  => Kind::Permission,
         Token::Variation   => Kind::Variation,
+        Token::Condition   => Kind::Condition,
     }
 }
 
@@ -2037,6 +2040,21 @@ performs(actor::Add, usecase::Add)
         let (_, errors) = parse("entity E \"E\" { variation: String }\n");
         assert!(errors.is_empty(), "{errors:?}");
         let (_, errors) = parse("module variation.shared\nimport variation.shared\n");
+        assert!(errors.is_empty(), "{errors:?}");
+    }
+
+    #[test]
+    fn condition_is_a_kind_and_stays_usable_as_column_and_path_name() {
+        let (ast, errors) = parse("condition CopayDue \"A copay is due\"\n");
+        assert!(errors.is_empty(), "{errors:?}");
+        let inst = ast.items.iter().find_map(|i| match i {
+            Item::Instance(inst) => Some(inst),
+            _ => None,
+        });
+        assert_eq!(inst.map(|i| i.kind.name()), Some("condition"));
+        let (_, errors) = parse("entity E \"E\" { condition: String }\n");
+        assert!(errors.is_empty(), "{errors:?}");
+        let (_, errors) = parse("module condition.shared\nimport condition.shared\n");
         assert!(errors.is_empty(), "{errors:?}");
     }
 

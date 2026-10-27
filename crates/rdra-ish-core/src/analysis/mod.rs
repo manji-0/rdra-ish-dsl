@@ -5,6 +5,7 @@ use rdra_ish_syntax::ast::*;
 
 mod arg_resolve;
 mod comparison;
+mod condition;
 mod constraint;
 mod effect;
 mod fk;
@@ -15,6 +16,7 @@ mod predicate_process;
 mod property;
 mod qref_util;
 
+pub use condition::{condition_body_display, condition_edges, ConditionEdge};
 use fk::generate_fks;
 use instance::register_instance;
 use predicate_process::process_predicate;
@@ -62,6 +64,7 @@ pub fn build_model_items_with_scopes(
         }
     }
 
+    condition::derive_condition_links(&mut model, &mut diags);
     generate_fks(&mut model, &mut diags);
     diags.extend(crate::event_flow::api_route_diagnostics(&model));
 

@@ -186,6 +186,7 @@ pub(crate) fn object_graph_layer(node: &NodeRef) -> ObjectGraphLayer {
         | NodeRef::Dto(_)
         | NodeRef::Entity(_)
         | NodeRef::Variation(_)
+        | NodeRef::Condition(_)
         | NodeRef::State(_) => ObjectGraphLayer::System,
     }
 }
@@ -221,6 +222,7 @@ pub(crate) fn object_graph_rel_label(kind: &RelKind) -> &'static str {
         RelKind::Response => "response",
         RelKind::ErrorResponse => "error_response",
         RelKind::AppliesTo => "applies_to",
+        RelKind::Combines => "combines",
         RelKind::Qualifies => "qualifies",
         RelKind::Constrains => "constrains",
         RelKind::MapsField => "maps_field",
@@ -262,6 +264,7 @@ pub const KNOWN_DIAGRAM_NODE_KINDS: &[&str] = &[
     "medium",
     "permission",
     "variation",
+    "condition",
 ];
 
 /// Canonical `--edge-kind` tokens (after underscore→hyphen normalization).
@@ -296,6 +299,7 @@ pub const KNOWN_DIAGRAM_EDGE_KINDS: &[&str] = &[
     "response",
     "error-response",
     "applies-to",
+    "combines",
     "qualifies",
     "constrains",
     "maps-field",
@@ -351,6 +355,7 @@ pub(crate) fn node_kind_filter_name(node: &NodeRef) -> &'static str {
         NodeRef::Medium(_) => "medium",
         NodeRef::Permission(_) => "permission",
         NodeRef::Variation(_) => "variation",
+        NodeRef::Condition(_) => "condition",
     }
 }
 
@@ -412,6 +417,7 @@ pub(crate) fn node_description<'a>(model: &'a SemanticModel, node: &NodeRef) -> 
         NodeRef::Entity(key) => model.entities.get(*key)?.description.as_deref(),
         NodeRef::State(key) => model.states.get(*key)?.description.as_deref(),
         NodeRef::Variation(key) => model.variations.get(*key)?.description.as_deref(),
+        NodeRef::Condition(key) => model.conditions.get(*key)?.description.as_deref(),
     }
 }
 
@@ -441,6 +447,7 @@ pub(crate) fn node_emoji(node: &NodeRef) -> &'static str {
         NodeRef::Medium(_) => "📱",
         NodeRef::Permission(_) => "🔑",
         NodeRef::Variation(_) => "🎚️",
+        NodeRef::Condition(_) => "🔀",
     }
 }
 
@@ -651,6 +658,24 @@ pub(crate) fn collect_object_graph_nodes(
             .filter(|nr| is_visible(nr)),
     );
 
+    let mut variations: Vec<_> = model.variations.iter().collect();
+    variations.sort_by_key(|(_, v)| &v.id);
+    nodes.extend(
+        variations
+            .into_iter()
+            .map(|(k, _)| NodeRef::Variation(k))
+            .filter(|nr| is_visible(nr)),
+    );
+
+    let mut conditions: Vec<_> = model.conditions.iter().collect();
+    conditions.sort_by_key(|(_, c)| &c.id);
+    nodes.extend(
+        conditions
+            .into_iter()
+            .map(|(k, _)| NodeRef::Condition(k))
+            .filter(|nr| is_visible(nr)),
+    );
+
     nodes
 }
 
@@ -707,6 +732,7 @@ mod tests {
             NodeRef::Entity(k) => model.entities[*k].id.clone(),
             NodeRef::State(k) => model.states[*k].id.clone(),
             NodeRef::Variation(k) => model.variations[*k].id.clone(),
+            NodeRef::Condition(k) => model.conditions[*k].id.clone(),
         }
     }
 

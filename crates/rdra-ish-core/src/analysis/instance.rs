@@ -319,6 +319,15 @@ pub(crate) fn register_instance(
             });
             NodeRef::Permission(k)
         }
+        Kind::Condition => {
+            let k = model.conditions.insert(Condition {
+                id: inst.id.clone(),
+                label: inst.label.clone(),
+                description: inst.description.clone(),
+                body: None,
+            });
+            NodeRef::Condition(k)
+        }
         Kind::Variation => {
             let k = model.variations.insert(Variation {
                 id: inst.id.clone(),

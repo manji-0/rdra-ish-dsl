@@ -228,6 +228,7 @@ fn rdra_relation_arrow(kind: &RelKind, from_id: &str, to_id: &str) -> Option<Str
         RelKind::Response => format!("{} ..> {} : response", from_id, to_id),
         RelKind::ErrorResponse => format!("{} ..> {} : error_response", from_id, to_id),
         RelKind::AppliesTo => format!("{} ..> {} : applies_to", from_id, to_id),
+        RelKind::Combines => format!("{} ..> {} : combines", from_id, to_id),
         RelKind::Qualifies => format!("{} ..> {} : qualifies", from_id, to_id),
         RelKind::Constrains => format!("{} ..> {} : constrains", from_id, to_id),
         RelKind::MapsField => format!("{} ..> {} : maps_field", from_id, to_id),
@@ -460,6 +461,7 @@ impl Emitter for ObjectGraphPlantUmlEmitter {
                         NodeRef::Medium(_) => format!("  component \"{}\" as {}\n", label, id),
                         NodeRef::Permission(_) => format!("  rectangle \"{}\" as {}\n", label, id),
                         NodeRef::Variation(_) => format!("  rectangle \"{}\" as {}\n", label, id),
+                        NodeRef::Condition(_) => format!("  rectangle \"{}\" as {}\n", label, id),
                         NodeRef::UseCase(_) => format!("  usecase \"{}\" as {}\n", label, id),
                         NodeRef::Screen(_) => format!("  boundary \"{}\" as {}\n", label, id),
                         NodeRef::Field(_) => format!("  boundary \"{}\" as {}\n", label, id),
@@ -1810,6 +1812,7 @@ pub(crate) fn node_id<'a>(model: &'a SemanticModel, node: &NodeRef) -> Option<&'
         NodeRef::Medium(k) => model.media.get(*k).map(|m| m.id.as_str()),
         NodeRef::Permission(k) => model.permissions.get(*k).map(|p| p.id.as_str()),
         NodeRef::Variation(k) => model.variations.get(*k).map(|v| v.id.as_str()),
+        NodeRef::Condition(k) => model.conditions.get(*k).map(|c| c.id.as_str()),
     }
 }
 
@@ -1839,6 +1842,7 @@ pub(crate) fn node_label<'a>(model: &'a SemanticModel, node: &NodeRef) -> Option
         NodeRef::Medium(k) => model.media.get(*k).map(|m| m.label.as_str()),
         NodeRef::Permission(k) => model.permissions.get(*k).map(|p| p.label.as_str()),
         NodeRef::Variation(k) => model.variations.get(*k).map(|v| v.label.as_str()),
+        NodeRef::Condition(k) => model.conditions.get(*k).map(|c| c.label.as_str()),
     }
 }
 
@@ -2227,6 +2231,41 @@ displays(PlaceOrder, OrderCompleteScreen)
 
         // スナップショット
         insta::assert_snapshot!(result);
+    }
+
+    #[test]
+    fn test_object_graph_plantuml_draws_a_condition_with_its_derived_links() {
+        let src = r#"
+variation Method "Method" {
+  cash
+  card
+}
+entity Pay "Pay" {
+  id: Int @pk
+  method: Method
+}
+usecase Collect "Collect"
+condition Insured "Insured"
+holds(Insured, Pay.method == card)
+applies_to(Insured, Collect)
+"#;
+        let model = model_from(src);
+        let result = ObjectGraphPlantUmlEmitter
+            .emit(&model, &View::whole())
+            .unwrap();
+        assert!(
+            result.contains("rectangle \"🔀 Insured\" as Insured"),
+            "{result}"
+        );
+        assert!(result.contains("Insured ..> Method : combines"), "{result}");
+        assert!(
+            !result.contains("Insured ..> Pay"),
+            "Pay.method is an attribute, not a state model: {result}"
+        );
+        assert!(
+            result.contains("Insured ..> Collect : applies_to"),
+            "{result}"
+        );
     }
 
     #[test]

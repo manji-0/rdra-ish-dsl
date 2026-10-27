@@ -40,13 +40,17 @@ fn resolve_predicate_args(
                         | "invariant"
                         | "when"
                         | "after"
+                        | "holds"
                 ) {
                     None
                 } else {
                     resolve_arg(model, arg, ctx, diags)
                 };
             };
-            if matches!(kinds.as_slice(), ["_card"] | ["_col"] | ["_val"]) {
+            if matches!(
+                kinds.as_slice(),
+                ["_card"] | ["_col"] | ["_val"] | ["variation", "_col"]
+            ) {
                 return None;
             }
             resolve_arg(model, arg, ctx, diags)
@@ -54,7 +58,7 @@ fn resolve_predicate_args(
         .collect()
 }
 
-fn predicate_arg_display(arg: &PredicateArg) -> String {
+pub(super) fn predicate_arg_display(arg: &PredicateArg) -> String {
     match arg {
         PredicateArg::Ref(q) => {
             let id = q.parts.last().cloned().unwrap_or_default();
@@ -78,7 +82,10 @@ fn validate_predicate_arg_types(
     diags: &mut Vec<Diagnostic>,
 ) {
     for (i, expected_kinds) in sig.iter().enumerate() {
-        if matches!(expected_kinds.as_slice(), ["_card"] | ["_col"] | ["_val"]) {
+        if matches!(
+            expected_kinds.as_slice(),
+            ["_card"] | ["_col"] | ["_val"] | ["variation", "_col"]
+        ) {
             continue;
         }
         if let Some(Some(node)) = resolved.get(i) {
@@ -1186,6 +1193,10 @@ pub(crate) fn process_predicate(
         "outbox" => process_outbox_predicate(model, &resolved),
         "after" => process_after_predicate(model, pred, &resolved, ctx, diags),
         "sets" => process_sets_predicate(model, pred, &resolved, ctx, diags),
+        "combines" => {
+            super::condition::process_combines_predicate(model, pred, &resolved, ctx, diags)
+        }
+        "holds" => super::condition::process_holds_predicate(model, pred, &resolved, ctx, diags),
         "forbidden" => process_forbidden_predicate(model, pred, &resolved, ctx, diags),
         "invariant" => process_invariant_predicate(model, pred, &resolved, ctx, diags),
         "required" => process_required_predicate(model, pred, &resolved, ctx, diags),
@@ -1213,6 +1224,7 @@ fn arity_error(pred: &PredicateCall, sig: &[Vec<&'static str>]) -> Option<RdraEr
         // Cross-entity `invariant` may be empty before `.when(...).none/has(...)`.
         "invariant" => ("0 or more".into(), true),
         "forbidden" | "required" | "exclusive" => ("at least 1".into(), got >= 1),
+        "holds" => ("at least 2".into(), got >= 2),
         "transitions" => ("3".into(), got == 3),
         "maps_field" => ("3".into(), got == 3),
         "relate" => ("3".into(), got == 3),

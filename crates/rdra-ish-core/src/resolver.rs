@@ -367,18 +367,26 @@ pub fn reachable_from_buc(model: &SemanticModel, buc_id: &str) -> HashSet<crate:
     }
 
     // 第2パス: 起点 BUC に直接 performs している Actor と、閉包内へ入る Timer（triggers）/
-    // 外部システム（raises）を追加する（推移的探索はしない — 他 BUC への連鎖を防ぐ）
+    // 外部システム（raises）/ 条件（applies_to）を追加する（推移的探索はしない — 他 BUC への連鎖を防ぐ）。
+    // 条件はそのバリエーションも連れてくる（バリエーションは関係では閉包に入らない）。
     let buc_ref = NodeRef::Buc(buc_key);
     let mut sources = Vec::new();
     for rel in &model.relations {
         let enters = match (&rel.kind, &rel.from) {
             (RelKind::Performs, _) => rel.to == buc_ref,
-            (RelKind::Triggers, NodeRef::Timer(_)) | (RelKind::Raises, NodeRef::ExtSystem(_)) => {
-                visited.contains(&rel.to)
-            }
+            (RelKind::Triggers, NodeRef::Timer(_))
+            | (RelKind::Raises, NodeRef::ExtSystem(_))
+            | (RelKind::AppliesTo, NodeRef::Condition(_)) => visited.contains(&rel.to),
             _ => false,
         };
         if enters {
+            if let NodeRef::Condition(condition) = &rel.from {
+                for edge in crate::analysis::condition_edges(model, *condition) {
+                    if let crate::analysis::ConditionEdge::Variation(variation) = edge {
+                        sources.push(NodeRef::Variation(variation));
+                    }
+                }
+            }
             sources.push(rel.from.clone());
         }
     }
@@ -1071,5 +1079,40 @@ sets(usecase::Capture, Payment, status == captured)
         assert!(model.actors.len() >= 2);
         assert!(model.entities.len() >= 4);
         assert!(!model.bucs.is_empty());
+    }
+
+    #[test]
+    fn a_condition_enters_the_closure_of_the_buc_whose_use_case_it_applies_to() {
+        let src = r#"
+variation Method "Method" {
+  cash
+  card
+}
+entity Pay "Pay" {
+  id: Int @pk
+  method: Method
+}
+buc InBuc "In"
+buc OtherBuc "Other"
+usecase Collect "Collect"
+usecase Refund "Refund"
+contains(InBuc, Collect)
+contains(OtherBuc, Refund)
+condition Here "Here"
+holds(Here, Pay.method == cash)
+applies_to(Here, Collect)
+condition There "There"
+holds(There, Pay.method == card)
+applies_to(There, Refund)
+"#;
+        let (ast, errors) = rdra_ish_syntax::parse(src);
+        assert!(errors.is_empty(), "{errors:?}");
+        let (model, diags) = crate::analysis::build_model(&ast);
+        assert!(diags.iter().all(|d| d.is_warning), "{diags:?}");
+        let reached = reachable_from_buc(&model, "InBuc");
+        let id_of = |name: &str| model.symbols.get(name).cloned().unwrap();
+        assert!(reached.contains(&id_of("Here")));
+        assert!(!reached.contains(&id_of("There")));
+        assert!(reached.contains(&id_of("Method")));
     }
 }

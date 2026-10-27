@@ -27,6 +27,7 @@ pub enum NodeRef {
     Medium(MediumKey),
     Permission(PermissionKey),
     Variation(VariationKey),
+    Condition(ConditionKey),
 }
 
 /// 述語の種類
@@ -61,6 +62,8 @@ pub enum RelKind {
     Response,
     ErrorResponse,
     AppliesTo,
+    /// 条件 to バリエーション / 状態モデル。Derived from `condition_edges`.
+    Combines,
     Qualifies,
     Constrains,
     MapsField,
@@ -273,6 +276,34 @@ impl AppliesToTarget {
             _ => None,
         }
     }
+}
+
+/// `applies_to(source, ...)` の source 側。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum AppliesSource {
+    Nfr(NfrKey),
+    Condition(ConditionKey),
+}
+
+impl AppliesSource {
+    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
+        match node {
+            NodeRef::Nfr(k) => Some(AppliesSource::Nfr(*k)),
+            NodeRef::Condition(k) => Some(AppliesSource::Condition(*k)),
+            _ => None,
+        }
+    }
+}
+
+/// `combines(condition, target)` の target 側。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum CombinesTarget {
+    Variation(VariationKey),
+    /// A lifecycle column of an entity (RDRA 状態モデル).
+    StateModel {
+        entity: EntityKey,
+        column: std::string::String,
+    },
 }
 
 /// `qualifies(...)` の source 側。

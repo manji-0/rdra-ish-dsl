@@ -772,3 +772,44 @@ fn clinic_ops_attribute_columns_are_variations_not_unreachable_states() {
         .collect();
     assert!(enum_attributes.is_empty(), "{enum_attributes:?}");
 }
+
+#[test]
+fn clinic_ops_conditions_list_their_body_and_derived_links() {
+    let inputs = vec![errors_fixture("samples/clinic-ops")];
+    let (_, model, diags) = load_model(&inputs).expect("load clinic-ops");
+    assert!(diags.iter().all(|d| d.is_warning), "{diags:?}");
+
+    let csv = list_elements(&model, &ListKind::Condition, &ListFormat::Csv).unwrap();
+    let mut lines = csv.lines();
+    assert_eq!(
+        lines.next(),
+        Some("id,label,body,variations,state_models,applies_to")
+    );
+    let rows: Vec<&str> = lines.collect();
+    assert_eq!(
+        rows,
+        vec![
+            "CopayDue,A copay is due at check-in,,PaymentMethod,Appointment.status,CollectCopay",
+            "InsuredVisit,The visit is covered by insurance,\"PaymentTransaction.method == insurance, Appointment.status == apptcheckedin\",PaymentMethod,Appointment.status,CollectCopay",
+        ]
+    );
+
+    let lint = lint_issues(&model, &diags);
+    let condition_findings: Vec<_> = lint
+        .iter()
+        .filter(|issue| issue.subject_kind == "condition")
+        .map(|issue| (issue.rule, issue.subject_id.as_str()))
+        .collect();
+    assert!(condition_findings.is_empty(), "{condition_findings:?}");
+}
+
+#[test]
+fn verify_notice_names_each_condition_with_a_body_and_skips_traceability_only() {
+    let inputs = vec![errors_fixture("samples/clinic-ops")];
+    let (_, model, _) = load_model(&inputs).expect("load clinic-ops");
+    assert_eq!(
+        crate::verify::condition_body_notices(&model),
+        vec!["condition InsuredVisit: body stored, not yet checked (phase 4)".to_string()]
+    );
+    assert!(crate::verify::condition_body_notices(&SemanticModel::default()).is_empty());
+}

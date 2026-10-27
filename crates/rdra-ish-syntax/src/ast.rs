@@ -63,6 +63,7 @@ pub enum Kind {
     Medium,
     Permission,
     Variation,
+    Condition,
 }
 
 impl Kind {
@@ -91,6 +92,7 @@ impl Kind {
             Kind::Medium => "medium",
             Kind::Permission => "permission",
             Kind::Variation => "variation",
+            Kind::Condition => "condition",
         }
     }
 }

@@ -204,6 +204,7 @@ fn collect_findings(model: &SemanticModel) -> Vec<LintIssue> {
     lint_flow_cycles(model, &mut findings);
     lint_column_names(model, &mut findings);
     lint_enum_attributes(model, &mut findings);
+    lint_condition_anchors(model, &mut findings);
     findings
 }
 
@@ -623,6 +624,29 @@ fn lint_enum_attributes(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
     }
 }
 
+/// A `holds` body that names neither a variation column nor a lifecycle column is not
+/// RDRA 条件: it combines no バリエーション and no 状態モデル.
+fn lint_condition_anchors(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
+    for (key, condition) in &model.conditions {
+        if condition.body.is_none() || !crate::analysis::condition_edges(model, key).is_empty() {
+            continue;
+        }
+        push_element_lint(
+            model,
+            issues,
+            "condition",
+            "condition",
+            &condition.id,
+            "condition-no-rdra-anchor",
+            format!(
+                "condition {} has a body that names no variation column and no lifecycle column",
+                condition.id
+            ),
+            "compare a column typed by a variation or a column some `transitions` moves, or use `combines` to link the condition for traceability",
+        );
+    }
+}
+
 fn refinement_stages(model: &SemanticModel) -> [(&'static str, bool); 6] {
     [
         (
@@ -765,6 +789,7 @@ fn model_element_count(model: &SemanticModel) -> usize {
         + model.media.len()
         + model.permissions.len()
         + model.variations.len()
+        + model.conditions.len()
 }
 
 fn relation_degree(model: &SemanticModel) -> HashMap<NodeRef, usize> {
@@ -911,6 +936,12 @@ fn lint_node_refs(model: &SemanticModel) -> Vec<NodeRef> {
             .iter()
             .map(|(key, _)| NodeRef::Variation(key)),
     );
+    nodes.extend(
+        model
+            .conditions
+            .iter()
+            .map(|(key, _)| NodeRef::Condition(key)),
+    );
     nodes
 }
 
@@ -940,6 +971,7 @@ fn node_kind_display(node: &NodeRef) -> String {
         NodeRef::Medium(_) => "medium".to_string(),
         NodeRef::Permission(_) => "permission".to_string(),
         NodeRef::Variation(_) => "variation".to_string(),
+        NodeRef::Condition(_) => "condition".to_string(),
     }
 }
 
@@ -969,6 +1001,7 @@ fn node_id(model: &SemanticModel, node: &NodeRef) -> Option<String> {
         NodeRef::Medium(key) => model.media.get(*key)?.id.clone(),
         NodeRef::Permission(key) => model.permissions.get(*key)?.id.clone(),
         NodeRef::Variation(key) => model.variations.get(*key)?.id.clone(),
+        NodeRef::Condition(key) => model.conditions.get(*key)?.id.clone(),
     })
 }
 
@@ -1184,6 +1217,40 @@ entity E "E" {
             .map(|i| i.subject_id)
             .collect();
         assert_eq!(orphans, vec!["Unused".to_string()]);
+    }
+
+    #[test]
+    fn condition_body_without_a_variation_or_lifecycle_operand_has_no_rdra_anchor() {
+        let model = model_from(
+            r#"
+variation Method "Method" {
+  cash
+  card
+}
+entity Pay "Pay" {
+  Id: Int @pk
+  method: Method
+  amount: Int
+  status: Enum(open, paid) @default(open)
+}
+usecase Settle "Settle"
+transitions(Pay.status, Settle, open -> paid)
+condition Big "Big"
+holds(Big, Pay.amount > 100)
+condition ByCard "By card"
+holds(ByCard, Pay.method == card)
+condition Paid "Paid"
+holds(Paid, Pay.status == paid)
+condition Traceable "Traceable"
+combines(Traceable, Method)
+"#,
+        );
+        let flagged: Vec<_> = collect_findings(&model)
+            .into_iter()
+            .filter(|i| i.rule == "condition-no-rdra-anchor")
+            .map(|i| i.subject_id)
+            .collect();
+        assert_eq!(flagged, vec!["Big".to_string()]);
     }
 
     #[test]

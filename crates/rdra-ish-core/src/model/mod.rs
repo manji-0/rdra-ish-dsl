@@ -39,6 +39,15 @@ impl SemanticModel {
     }
 }
 
+/// One `combines` declaration. Condition links are read through `condition_edges`, which
+/// prefers the `holds` body over these.
+#[derive(Debug, Clone)]
+pub struct CombinesDecl {
+    pub condition: ConditionKey,
+    pub target: CombinesTarget,
+    pub location: Option<crate::location::LocatedSpan>,
+}
+
 /// セマンティックモデル
 #[derive(Debug, Default)]
 pub struct SemanticModel {
@@ -66,7 +75,10 @@ pub struct SemanticModel {
     pub media: SlotMap<MediumKey, Medium>,
     pub permissions: SlotMap<PermissionKey, Permission>,
     pub variations: SlotMap<VariationKey, Variation>,
+    pub conditions: SlotMap<ConditionKey, Condition>,
     pub relations: Vec<Relation>,
+    /// `combines(Condition, Variation | Entity.column)` declarations, in source order.
+    pub combines: Vec<CombinesDecl>,
     pub boundary_coordinations: Vec<BoundaryCoordination>,
     pub business_mapping_contexts: Vec<BusinessMappingContext>,
     pub field_mappings: Vec<FieldMapping>,

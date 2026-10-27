@@ -1,9 +1,9 @@
 //! 述語呼び出しの型付き discriminated union 構築・集約 API。
 
 use crate::model::{
-    ActorKey, AdrKey, ApiKey, AppliesToTarget, BucKey, BusinessKey, Cardinality, ConstrainsTarget,
-    ConstraintKey, ContainedRef, ContainerRef, CoversTarget, DecidesTarget, DtoKey, EntityKey,
-    EntityTouchpoint, EventKey, FieldKey, MediumKey, NfrKey, NfrOrConstraint, NodeRef,
+    ActorKey, AdrKey, ApiKey, AppliesSource, AppliesToTarget, BucKey, BusinessKey, Cardinality,
+    ConstrainsTarget, ConstraintKey, ContainedRef, ContainerRef, CoversTarget, DecidesTarget,
+    DtoKey, EntityKey, EntityTouchpoint, EventKey, FieldKey, MediumKey, NfrOrConstraint, NodeRef,
     PerformTarget, PermissionKey, QualityKey, Raiser, RequirementKey, ScreenKey, SemanticModel,
     StepKey, SystemKey, TriggerSource, TriggerTarget, TypedPredicate, UseCaseKey,
 };
@@ -107,7 +107,7 @@ pub fn build_typed_predicate(
                     dto: as_dto(to)?,
                 }),
                 "applies_to" => Some(TypedPredicate::AppliesTo {
-                    nfr: as_nfr(from)?,
+                    source: AppliesSource::from_node_ref(from)?,
                     target: AppliesToTarget::from_node_ref(to)?,
                 }),
                 "qualifies" => Some(TypedPredicate::Qualifies {
@@ -238,6 +238,8 @@ pub fn typed_predicate_name(pred: &TypedPredicate) -> &'static str {
         TypedPredicate::Motivates { .. } => "motivates",
         TypedPredicate::Decides { .. } => "decides",
         TypedPredicate::Transitions { .. } => "transitions",
+        TypedPredicate::Combines { .. } => "combines",
+        TypedPredicate::Holds { .. } => "holds",
         TypedPredicate::Outbox { .. } => "outbox",
         TypedPredicate::MapsField { .. } => "maps_field",
         TypedPredicate::Relate { .. } => "relate",
@@ -296,7 +298,6 @@ node_extractor!(as_permission, Permission, PermissionKey);
 node_extractor!(as_medium, Medium, MediumKey);
 node_extractor!(as_requirement, Requirement, RequirementKey);
 node_extractor!(as_adr, Adr, AdrKey);
-node_extractor!(as_nfr, Nfr, NfrKey);
 node_extractor!(as_quality, Quality, QualityKey);
 node_extractor!(as_constraint, Constraint, ConstraintKey);
 node_extractor!(as_system, System, SystemKey);

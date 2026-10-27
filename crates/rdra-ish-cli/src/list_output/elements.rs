@@ -487,3 +487,63 @@ pub(crate) fn format_entities(
 
     format_rows(&headers, &rows, format, "entities")
 }
+
+/// One row per condition: the `holds` body and the links `condition_edges` derives from it
+/// (or from `combines` when there is no body), plus the targets of `applies_to`.
+pub(crate) fn format_conditions(
+    model: &rdra_ish_core::SemanticModel,
+    format: &ListFormat,
+) -> Result<String> {
+    use rdra_ish_core::analysis::{condition_body_display, condition_edges, ConditionEdge};
+    use rdra_ish_core::model::{NodeRef, RelKind};
+
+    let mut conditions: Vec<_> = model.conditions.iter().collect();
+    conditions.sort_by_key(|(_, condition)| condition.id.as_str());
+
+    let headers = [
+        "id",
+        "label",
+        "body",
+        "variations",
+        "state_models",
+        "applies_to",
+    ];
+    let rows: Vec<[String; 6]> = conditions
+        .into_iter()
+        .map(|(key, condition)| {
+            let mut variations = Vec::new();
+            let mut state_models = Vec::new();
+            for edge in condition_edges(model, key) {
+                match edge {
+                    ConditionEdge::Variation(variation) => {
+                        if let Some(variation) = model.variations.get(variation) {
+                            variations.push(variation.id.clone());
+                        }
+                    }
+                    ConditionEdge::StateModel { entity, column } => {
+                        if let Some(entity) = model.entities.get(entity) {
+                            state_models.push(format!("{}.{}", entity.id, column));
+                        }
+                    }
+                }
+            }
+            let mut targets: Vec<String> = model
+                .relations
+                .iter()
+                .filter(|rel| rel.kind == RelKind::AppliesTo && rel.from == NodeRef::Condition(key))
+                .filter_map(|rel| node_id(model, &rel.to))
+                .collect();
+            targets.sort();
+            [
+                condition.id.clone(),
+                condition.label.clone(),
+                condition_body_display(model, key).unwrap_or_default(),
+                repeated_cell(&variations),
+                repeated_cell(&state_models),
+                repeated_cell(&targets),
+            ]
+        })
+        .collect();
+
+    format_rows(&headers, &rows, format, "conditions")
+}

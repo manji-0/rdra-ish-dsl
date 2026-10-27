@@ -23,10 +23,6 @@ const HINTS: &[(&str, &str)] = &[
         "state",
         "states are derived from the Enum column named in `transitions(Entity.col, ...)`; delete the declaration and list each state as a variant of the lifecycle Enum column",
     ),
-    (
-        "condition",
-        "removed reserved kind; model rules with use case conditions or entity state constraints",
-    ),
     ("concept", CONCEPTUAL),
     ("domain_object", CONCEPTUAL),
     ("aggregate", CONCEPTUAL),
@@ -104,16 +100,6 @@ mod tests {
         assert!(
             msgs.iter()
                 .any(|m| m.contains("`state`") && m.contains("variant of the lifecycle Enum")),
-            "{msgs:?}"
-        );
-    }
-
-    #[test]
-    fn reserved_condition_points_to_use_case_conditions() {
-        let msgs = messages("condition X \"X\"\n");
-        assert!(
-            msgs.iter()
-                .any(|m| m.contains("`condition`") && m.contains("use case conditions")),
             "{msgs:?}"
         );
     }

@@ -36,6 +36,7 @@ fn node_kind_tag(node: &NodeRef) -> &'static str {
         NodeRef::Medium(_) => "medium",
         NodeRef::Permission(_) => "permission",
         NodeRef::Variation(_) => "variation",
+        NodeRef::Condition(_) => "condition",
     }
 }
 
@@ -65,6 +66,7 @@ fn node_ref_matches_kind(node: &NodeRef, kind: &Kind) -> bool {
             | (NodeRef::Medium(_), Kind::Medium)
             | (NodeRef::Permission(_), Kind::Permission)
             | (NodeRef::Variation(_), Kind::Variation)
+            | (NodeRef::Condition(_), Kind::Condition)
     )
 }
 

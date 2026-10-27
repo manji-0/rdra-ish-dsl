@@ -60,6 +60,8 @@ pub enum Token {
     Permission,
     #[token("variation")]
     Variation,
+    #[token("condition")]
+    Condition,
     #[token("property")]
     Property,
 

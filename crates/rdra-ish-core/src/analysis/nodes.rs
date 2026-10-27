@@ -28,5 +28,6 @@ pub(crate) fn node_kind_tag_str(node: &NodeRef) -> &'static str {
         NodeRef::Medium(_) => "medium",
         NodeRef::Permission(_) => "permission",
         NodeRef::Variation(_) => "variation",
+        NodeRef::Condition(_) => "condition",
     }
 }

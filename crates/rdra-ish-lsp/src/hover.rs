@@ -123,6 +123,7 @@ fn kind_from_name(name: &str) -> Option<Kind> {
         "medium" => Kind::Medium,
         "permission" => Kind::Permission,
         "variation" => Kind::Variation,
+        "condition" => Kind::Condition,
         _ => return None,
     })
 }
@@ -153,6 +154,7 @@ fn node_ref_label(model: &SemanticModel, node: &NodeRef) -> String {
         NodeRef::Medium(k) => model.media.get(*k).map(|v| v.label.clone()),
         NodeRef::Permission(k) => model.permissions.get(*k).map(|v| v.label.clone()),
         NodeRef::Variation(k) => model.variations.get(*k).map(|v| v.label.clone()),
+        NodeRef::Condition(k) => model.conditions.get(*k).map(|v| v.label.clone()),
     }
     .unwrap_or_default()
 }
@@ -179,6 +181,36 @@ mod tests {
         };
         assert!(markup.value.contains("usecase"));
         assert!(markup.value.contains("Book appointment"));
+    }
+
+    #[test]
+    fn hovers_condition_declaration_and_combines_signature() {
+        let src = r#"condition CopayDue "A copay is due"
+variation Method "Method" {
+  cash
+}
+combines(CopayDue, Method)
+"#;
+        let (ast, errs) = parse(src);
+        assert!(errs.is_empty());
+        let (model, _) = build_model(&ast);
+        let offset = src.find("CopayDue").unwrap();
+        let hover = hover_content(&model, &ast, offset).expect("hover");
+        let HoverContents::Markup(markup) = hover.contents else {
+            panic!("expected markup");
+        };
+        assert!(markup.value.contains("condition"), "{}", markup.value);
+        assert!(markup.value.contains("A copay is due"), "{}", markup.value);
+        let offset = src.find("combines").unwrap();
+        let hover = hover_content(&model, &ast, offset).expect("hover");
+        let HoverContents::Markup(markup) = hover.contents else {
+            panic!("expected markup");
+        };
+        assert!(
+            markup.value.contains("combines(condition, variation)"),
+            "{}",
+            markup.value
+        );
     }
 
     #[test]

@@ -20,6 +20,7 @@ pub(crate) enum ListKind {
     Api,
     Dto,
     Variation,
+    Condition,
     /// Permission x callable UC/API list
     PermissionCallables,
     /// Actor x permission assignment audit inferred from UC/API requirements
@@ -114,7 +115,7 @@ pub(crate) enum Commands {
     List {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Element kind to list: actor, entity, requirement, adr, adr-impact, nfr, quality, constraint, buc, flow, step, usecase, field, system, api, dto, variation, permission-callables, actor-permission-audit, or business-inputs
+        /// Element kind to list: actor, entity, requirement, adr, adr-impact, nfr, quality, constraint, buc, flow, step, usecase, field, system, api, dto, variation, condition, permission-callables, actor-permission-audit, or business-inputs
         #[arg(long, default_value = "actor")]
         kind: ListKind,
         /// Output format: table, json, csv

@@ -34,7 +34,12 @@ pub fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
         }
         "invokes" => Some(vec![vec!["usecase"], vec!["api"]]),
         "request" | "response" | "error_response" => Some(vec![vec!["api"], vec!["dto"]]),
-        "applies_to" => Some(vec![vec!["nfr"], vec!["usecase", "api", "system"]]),
+        "applies_to" => Some(vec![
+            vec!["nfr", "condition"],
+            vec!["usecase", "api", "system"],
+        ]),
+        "combines" => Some(vec![vec!["condition"], vec!["variation", "_col"]]),
+        "holds" => Some(vec![vec!["condition"]]),
         "qualifies" => Some(vec![vec!["nfr", "constraint"], vec!["quality"]]),
         "constrains" => Some(vec![
             vec!["constraint"],
@@ -131,6 +136,8 @@ pub const KNOWN_PREDICATES: &[&str] = &[
     "response",
     "error_response",
     "applies_to",
+    "combines",
+    "holds",
     "qualifies",
     "constrains",
     "owns",
