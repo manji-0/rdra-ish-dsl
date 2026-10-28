@@ -77,6 +77,78 @@ impl UsecaseTx {
 ///    API 経由の同一 entity 書き込みがあれば API 側を優先する。
 /// 3. 直接書き込みは従来どおり FK 連結成分から transaction 境界を推論する。
 pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
+    infer_with(model, WriteRules::DIAGRAM)
+}
+
+/// Every write a use case makes, as the lifecycle layer reads it (vision rule 6).
+///
+/// On top of [`infer_usecase_transactions`] this counts `writes(..)` edges as updates, adds an
+/// implied update for every entity the use case only `sets` or transitions, and keeps the
+/// strongest kind per entity (`creates`, then `deletes`, then `updates`) instead of the first
+/// edge. Sequence diagrams keep reading [`infer_usecase_transactions`].
+pub fn infer_lifecycle_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
+    infer_with(model, WriteRules::LIFECYCLE)
+}
+
+/// Which facts count as writes, and how duplicates on one entity collapse.
+#[derive(Clone, Copy)]
+struct WriteRules {
+    writes_edges: bool,
+    implied_updates: bool,
+    strongest_kind: bool,
+}
+
+impl WriteRules {
+    const DIAGRAM: WriteRules = WriteRules {
+        writes_edges: false,
+        implied_updates: false,
+        strongest_kind: false,
+    };
+    const LIFECYCLE: WriteRules = WriteRules {
+        writes_edges: true,
+        implied_updates: true,
+        strongest_kind: true,
+    };
+
+    fn kind(self, rel: &RelKind) -> Option<WriteKind> {
+        match rel {
+            RelKind::Creates => Some(WriteKind::Creates),
+            RelKind::Updates => Some(WriteKind::Updates),
+            RelKind::Writes if self.writes_edges => Some(WriteKind::Updates),
+            RelKind::Deletes => Some(WriteKind::Deletes),
+            _ => None,
+        }
+    }
+}
+
+/// Entities a use case changes through `sets` or `transitions`.
+fn effect_entities(model: &SemanticModel, uc: UseCaseKey) -> Vec<EntityKey> {
+    let mut out: Vec<EntityKey> = model
+        .column_effects
+        .iter()
+        .filter(|e| e.origin == uc)
+        .map(|e| e.entity)
+        .chain(
+            model
+                .proposition_effects
+                .iter()
+                .filter(|e| e.origin == uc)
+                .map(|e| e.entity),
+        )
+        .chain(
+            model
+                .state_transitions
+                .iter()
+                .filter(|t| t.usecase == uc)
+                .map(|t| t.entity),
+        )
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+fn infer_with(model: &SemanticModel, rules: WriteRules) -> Vec<UsecaseTx> {
     let mut result = Vec::new();
 
     for (uc_key, _uc) in model.use_cases.iter() {
@@ -108,11 +180,8 @@ pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
                 if rel.from != NodeRef::Api(*ak) {
                     continue;
                 }
-                let wk = match rel.kind {
-                    RelKind::Creates => WriteKind::Creates,
-                    RelKind::Updates => WriteKind::Updates,
-                    RelKind::Deletes => WriteKind::Deletes,
-                    _ => continue,
+                let Some(wk) = rules.kind(&rel.kind) else {
+                    continue;
                 };
                 if let NodeRef::Entity(ek) = rel.to {
                     api_written_entities.insert(ek);
@@ -123,7 +192,7 @@ pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
                     });
                 }
             }
-            dedup_writes(&mut api_writes, model);
+            dedup_writes(&mut api_writes, model, rules);
             if api_writes.len() >= 2 {
                 fk_groups.push(TxGroup {
                     ordered_writes: topological_sort_writes(
@@ -144,11 +213,8 @@ pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
             if rel.from != NodeRef::UseCase(uc_key) {
                 continue;
             }
-            let wk = match rel.kind {
-                RelKind::Creates => WriteKind::Creates,
-                RelKind::Updates => WriteKind::Updates,
-                RelKind::Deletes => WriteKind::Deletes,
-                _ => continue,
+            let Some(wk) = rules.kind(&rel.kind) else {
+                continue;
             };
             if let NodeRef::Entity(ek) = rel.to {
                 if api_written_entities.contains(&ek) {
@@ -161,7 +227,21 @@ pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
                 });
             }
         }
-        let direct_tx = infer_fk_transactions_for_writes(direct_writes, model);
+        if rules.implied_updates {
+            for ek in effect_entities(model, uc_key) {
+                if api_written_entities.contains(&ek)
+                    || direct_writes.iter().any(|w| w.entity == ek)
+                {
+                    continue;
+                }
+                direct_writes.push(UcWrite {
+                    entity: ek,
+                    kind: WriteKind::Updates,
+                    via_api: None,
+                });
+            }
+        }
+        let direct_tx = infer_fk_transactions_for_writes(direct_writes, model, rules);
         fk_groups.extend(direct_tx.fk_groups);
         isolated_writes.extend(direct_tx.isolated_writes);
 
@@ -232,9 +312,13 @@ struct TxParts {
     isolated_writes: Vec<UcWrite>,
 }
 
-fn infer_fk_transactions_for_writes(writes: Vec<UcWrite>, model: &SemanticModel) -> TxParts {
+fn infer_fk_transactions_for_writes(
+    writes: Vec<UcWrite>,
+    model: &SemanticModel,
+    rules: WriteRules,
+) -> TxParts {
     let mut writes = writes;
-    dedup_writes(&mut writes, model);
+    dedup_writes(&mut writes, model, rules);
 
     let write_keys: HashSet<EntityKey> = writes.iter().map(|w| w.entity).collect();
 
@@ -316,7 +400,13 @@ fn infer_fk_transactions_for_writes(writes: Vec<UcWrite>, model: &SemanticModel)
     }
 }
 
-fn dedup_writes(writes: &mut Vec<UcWrite>, model: &SemanticModel) {
+fn dedup_writes(writes: &mut Vec<UcWrite>, model: &SemanticModel, rules: WriteRules) {
+    let rank = |kind: &WriteKind| match (rules.strongest_kind, kind) {
+        (false, _) => 0,
+        (true, WriteKind::Creates) => 0,
+        (true, WriteKind::Deletes) => 1,
+        (true, WriteKind::Updates) => 2,
+    };
     writes.sort_by_key(|w| {
         (
             model
@@ -324,6 +414,7 @@ fn dedup_writes(writes: &mut Vec<UcWrite>, model: &SemanticModel) {
                 .get(w.entity)
                 .map(|e| e.id.clone())
                 .unwrap_or_default(),
+            rank(&w.kind),
             w.via_api.is_none(),
         )
     });
@@ -790,5 +881,67 @@ creates(StoreParentOrgApi, StoreOrgAssignmentHistory)
             "API boundary is explicit atomicity, not FK inference"
         );
         assert_eq!(utx.fk_groups[0].ordered_writes.len(), 2);
+    }
+
+    fn writes_of(model: &SemanticModel, txs: &[UsecaseTx]) -> Vec<(String, String, &'static str)> {
+        let mut out: Vec<_> = txs
+            .iter()
+            .flat_map(|utx| {
+                utx.fk_groups
+                    .iter()
+                    .flat_map(|g| g.ordered_writes.iter())
+                    .chain(utx.isolated_writes.iter())
+                    .map(move |w| {
+                        (
+                            model.use_cases[utx.usecase].id.clone(),
+                            model.entities[w.entity].id.clone(),
+                            w.kind.label(),
+                        )
+                    })
+            })
+            .collect();
+        out.sort();
+        out
+    }
+
+    const LIFECYCLE_SRC: &str = r#"
+entity Order   "注文" { id: Int @pk  status: Enum(open, closed) }
+entity Ledger  "台帳" { id: Int @pk }
+entity Audit   "監査" { id: Int @pk  seen: Bool }
+usecase Close "締める"
+usecase Book  "記帳する"
+usecase Open  "開く"
+transitions(Order.status, Close, open -> closed)
+sets(Close, Audit, seen == true)
+writes(Book, Ledger)
+creates(Open, Order)
+updates(Open, Order)
+"#;
+
+    /// The lifecycle reading counts `writes`, implied updates, and the strongest kind.
+    #[test]
+    fn lifecycle_writes_include_writes_edges_and_implied_updates() {
+        let model = model_from(LIFECYCLE_SRC);
+        let txs = infer_lifecycle_transactions(&model);
+        assert_eq!(
+            writes_of(&model, &txs),
+            vec![
+                ("Book".into(), "Ledger".into(), "update"),
+                ("Close".into(), "Audit".into(), "update"),
+                ("Close".into(), "Order".into(), "update"),
+                ("Open".into(), "Order".into(), "create"),
+            ]
+        );
+    }
+
+    /// Sequence diagrams read the diagram rules, which the lifecycle rules leave unchanged.
+    #[test]
+    fn diagram_writes_ignore_writes_edges_and_effects() {
+        let model = model_from(LIFECYCLE_SRC);
+        let txs = infer_usecase_transactions(&model);
+        let writes = writes_of(&model, &txs);
+        assert_eq!(writes.len(), 1, "{writes:?}");
+        assert_eq!(writes[0].0, "Open");
+        assert_eq!(writes[0].1, "Order");
     }
 }
