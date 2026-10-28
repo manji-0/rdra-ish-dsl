@@ -15,6 +15,9 @@ flowchart LR
   ev__EvAppointmentCheckedIn -.->|triggers| uc__PrepareEncounter
   buc__BucClinicalEncounter[["📦 Conduct Clinical Encounter"]]
   ev__EvAppointmentCheckedIn -.->|triggers| buc__BucClinicalEncounter
+  st__Appointment_apptcheckedin("🔄 apptcheckedin")
+  st__Appointment_apptinconsult("🔄 apptinconsult")
+  st__Appointment_apptcheckedin -->|⚡ Appointment Checked In| st__Appointment_apptinconsult
   ev__EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
   uc__RescheduleAppointment(["✅ Reschedule Appointment"])
   uc__RescheduleAppointment -.->|raises| ev__EvAppointmentRescheduled
@@ -61,9 +64,8 @@ flowchart LR
   ev__EvEncounterSigned -.->|triggers| buc__BucFollowupCare
   buc__BucOrdersResults[["📦 Manage Orders and Results"]]
   ev__EvEncounterSigned -.->|triggers| buc__BucOrdersResults
-  st__Appointment_apptcheckedin("🔄 apptcheckedin")
   st__Appointment_apptcompleted("🔄 apptcompleted")
-  st__Appointment_apptcheckedin -->|⚡ Encounter Signed| st__Appointment_apptcompleted
+  st__Appointment_apptinconsult -->|⚡ Encounter Signed| st__Appointment_apptcompleted
   ev__EvLabResultReceived{"⚡ Lab Result Received"}
   xs__LabSystem[/"🌐 Laboratory System"/]
   xs__LabSystem -.->|raises| ev__EvLabResultReceived

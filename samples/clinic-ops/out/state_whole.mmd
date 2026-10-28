@@ -9,6 +9,7 @@ stateDiagram-v2
   [*] --> PatientAccount_patientactive
   [*] --> Prescription_rxdrafted
   state "🔄 apptcheckedin" as Appointment_apptcheckedin
+  state "🔄 apptinconsult" as Appointment_apptinconsult
   state "🔄 apptcompleted" as Appointment_apptcompleted
   state "🔄 apptrequested" as Appointment_apptrequested
   state "🔄 apptscheduled" as Appointment_apptscheduled
@@ -41,7 +42,8 @@ stateDiagram-v2
   state "🔄 rxcancelled" as Prescription_rxcancelled
   state "🔄 rxsent" as Prescription_rxsent
   state "🔄 rxdispensed" as Prescription_rxdispensed
-  Appointment_apptcheckedin --> Appointment_apptcompleted : ✅ Complete Appointment
+  Appointment_apptcheckedin --> Appointment_apptinconsult : ✅ Open Encounter
+  Appointment_apptinconsult --> Appointment_apptcompleted : ✅ Complete Appointment
   Appointment_apptrequested --> Appointment_apptscheduled : ✅ Book Appointment
   Appointment_apptrequested --> Appointment_apptscheduled : ✅ Schedule Follow-Up Visit
   Appointment_apptscheduled --> Appointment_apptcancelled : ✅ Cancel Appointment

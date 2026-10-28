@@ -61,8 +61,11 @@ sequenceDiagram
   Clinician->>EncounterWorkspaceScreen: ✅ Open Encounter
   EncounterWorkspaceScreen->>OpenEncounterApi: ✅ Open Encounter
   activate OpenEncounterApi
-  OpenEncounterApi->>Appointment: read
-  OpenEncounterApi->>Encounter: create
+  rect rgb(245,245,245)
+    Note right of OpenEncounterApi: transaction (API atomic boundary)
+    OpenEncounterApi->>Appointment: update
+    OpenEncounterApi->>Encounter: create
+  end
   OpenEncounterApi-->>EncounterWorkspaceScreen: 🖥️ Encounter Workspace
   EncounterWorkspaceScreen-->>Clinician: 🖥️ Encounter Workspace
   deactivate OpenEncounterApi

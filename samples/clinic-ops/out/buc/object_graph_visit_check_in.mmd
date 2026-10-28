@@ -248,8 +248,8 @@ flowchart LR
   CriticalNoticeApi -.->|creates| Notification
   CriticalNoticeApi -.->|requires_permission| PatientMessageSend
   OpenEncounterApi -.->|creates| Encounter
-  OpenEncounterApi -.->|reads| Appointment
   OpenEncounterApi -.->|requires_permission| EncounterOpen
+  OpenEncounterApi -.->|updates| Appointment
   RecordVitalsApi -.->|creates| VitalSign
   RecordVitalsApi -.->|requires_permission| VitalsRecord
   RecordVitalsApi -.->|updates| Encounter

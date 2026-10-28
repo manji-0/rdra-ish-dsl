@@ -118,7 +118,7 @@ entity ProviderSchedule "Provider Schedule" {
 entity Appointment "Appointment" {
   id:             Int      @pk
   reason:         String
-  status:         Enum(apptrequested, apptscheduled, apptcheckedin, apptcompleted, apptcancelled, apptnoshow) @default(apptrequested)
+  status:         Enum(apptrequested, apptscheduled, apptcheckedin, apptinconsult, apptcompleted, apptcancelled, apptnoshow) @default(apptrequested)
   scheduled_at:   DateTime
   checked_in_at:  DateTime @null
   completed_at:   DateTime @null
