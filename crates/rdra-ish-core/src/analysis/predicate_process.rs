@@ -967,7 +967,7 @@ fn process_relate_predicate(
     };
 
     let (via, had_via) = resolve_relate_via(model, pred, ctx, diags);
-    let options = super::fk::relation_options(pred, ctx, diags);
+    let mut options = super::fk::relation_options(pred, ctx, diags);
 
     let kind = match card_str {
         "1:1" => RelKind::RelateOneToOne,
@@ -986,6 +986,26 @@ fn process_relate_predicate(
             .unwrap_or_else(|| pred.span.clone());
         push_error(ctx, diags, span, RdraError::ViaOnlyForNM);
         return;
+    }
+
+    if kind == RelKind::RelateManyToMany {
+        for cc in pred
+            .chain
+            .iter()
+            .filter(|cc| matches!(cc.name.as_str(), "role" | "key"))
+        {
+            push_error(
+                ctx,
+                diags,
+                cc.span.clone(),
+                RdraError::KeyOptionOnManyToMany {
+                    method: cc.name.clone(),
+                },
+            );
+        }
+        // The junction relates synthesized from this one must not inherit them.
+        options.role = None;
+        options.key.clear();
     }
 
     if kind == RelKind::RelateManyToMany && via.is_none() {
@@ -1167,6 +1187,9 @@ pub(crate) fn process_predicate(
                 _ => {}
             }
             return;
+        }
+        if let Some(by) = pred.chain.iter().find(|cc| cc.name == "by") {
+            push_error(ctx, diags, by.span.clone(), RdraError::ByWithoutAlong);
         }
     }
 

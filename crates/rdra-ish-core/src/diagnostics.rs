@@ -100,6 +100,9 @@ pub enum RdraError {
         roles: String,
     },
 
+    #[error(".{method}(...) on relate(..., N:M) has no key to shape: an N:M holds no key of its own\n  hint: write the junction's two keys as `relate(Junction, A, N:1).{method}(...)` and `relate(Junction, B, N:1)` instead of `.via(Junction)`")]
+    KeyOptionOnManyToMany { method: String },
+
     #[error(".by(...) picks a key on an .along(...) path, and this constraint has none\n  hint: add `.along(A, B)` before `.by(...)`, or drop `.by(...)`")]
     ByWithoutAlong,
 

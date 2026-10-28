@@ -385,3 +385,36 @@ forbidden(Order, Address, Order.status == shipped, Address.status == closed).by(
         "{errors:?}"
     );
 }
+
+#[test]
+fn role_or_key_on_a_many_to_many_is_an_error_naming_the_junction_form() {
+    for (chain, method) in [(".role(buyer)", "role"), (".key(order_ref)", "key")] {
+        let (_, errors) = build(&format!(
+            "{ADDRESSES}
+entity OrderAddress \"OA\" {{ id: Int @pk  order_ref: Int }}
+relate(Order, Address, N:M).via(OrderAddress){chain}
+"
+        ));
+        assert!(
+            matches!(errors.as_slice(), [RdraError::KeyOptionOnManyToMany { method: m }] if m == method),
+            "{chain}: {errors:?}"
+        );
+        assert!(errors[0].to_string().contains("relate(Junction, A, N:1)"));
+    }
+}
+
+#[test]
+fn by_on_a_single_entity_constraint_is_an_error() {
+    for constraint in [
+        "forbidden(Order, status == shipped).by(ship_to)",
+        "invariant(Order).when(status == shipped).then(status == shipped).by(ship_to)",
+    ] {
+        let (_, errors) = build(&format!("{TWO_ADDRESSES}\n{constraint}\n"));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, RdraError::ByWithoutAlong)),
+            "{constraint}: {errors:?}"
+        );
+    }
+}
