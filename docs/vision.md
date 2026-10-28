@@ -111,31 +111,40 @@ DSL keeps these rules and adds what a normalized relational model needs:
 
 ## The lifecycle layer has one semantics
 
-Today `states` (a BFS over patterns) and the TLA export are two separate readings of
-the same model. They disagree on the initial state and on which effects exist. The
-target defines one transition system in `rdra-ish-core`, and both `states` and the
-TLA emitter read it.
+`rdra-ish-core` defines one transition system in `crates/rdra-ish-core/src/lifecycle/`.
+`states`, `check`, the TLA+ export, `verify`, the TypeScript state unions, and the state
+diagrams all read it. The TLA+ emitter only prints it. [State derivation](./state-derivation.md)
+describes how the tool explores the system.
 
 The transition system follows these rules:
 
 1. Every entity instance has an existence state: absent, present, or deleted. Every
-   instance starts absent.
+   instance of an entity that some use case creates starts absent. An entity that no
+   use case creates is pre-existing, as master data is: its instances start present at
+   the column defaults, and its variation columns start at any value. `states` reports
+   such an entity as `NoCreationPath` (info), because the model has no creation path to
+   draw.
 2. A use case is one atomic action. Its precondition combines the states it requires
    (the author's 「ある状態の時にUCが実行できる」) with the guards of its linked
    conditions. Its effect is every `creates`, `deletes`, `sets`, and transition it
-   causes, across all entities, applied in one step. Today the same event becomes one
-   action per entity, which allows counterexamples that no model can fix.
+   causes, across all entities, applied in one step.
 3. A transition names the use case that causes it, as the 遷移UC column of the RDRA
    state sheet does. An event raised by an external system or by another use case
-   triggers use cases. It does not move a state by itself.
+   triggers use cases. It does not move a state by itself, and the order in which a
+   model triggers use cases adds no guard of its own.
 4. `creates` sets the initial values of a new instance, with `@default` filling the
    rest. The state that a creation sets is a start state, as a transition with no
-   source state is in the RDRA state sheet. A transition may also enter that state.
+   source state is in the RDRA state sheet. A transition may also enter that state. A
+   condition that tests a column of the created instance constrains the creation: the
+   instance must satisfy it after the use case runs. A `creates` of a child whose
+   `relate` is `.optional()` can leave the child unlinked from its parent.
 5. A column typed by a variation takes a value the actor chooses. The checker
    explores every value, so a variant needs no dedicated use case to be reachable.
+   `@default` on such a column sets the DBML default only. It never pins the choice.
 6. The transaction groups that `tx.rs` infers bound atomicity. A use case whose
-   effects span two groups is two actions, and the checker explores the state in
-   between.
+   effects span k groups is k actions, named `<UseCase>_1` to `<UseCase>_k`. The checker
+   interleaves them freely with every other action, so it explores the states in
+   between. `after(UseCase).assert` holds after each of the k steps.
 
 ## Verification is bounded, fails closed, and points at the model
 
@@ -189,9 +198,12 @@ addition.
 3. **RDRA conformance.** Restore `condition` and `variation`, turn `timing` into a
    timer, make use cases the trigger of transitions, and add the definition-sheet
    lint rules. The check is that clinic-ops passes every inconsistency rule.
-4. **One transition system.** Build the shared transition system with existence
-   states and atomic use case actions, and move `states` and the TLA emitter onto it.
-   The check is that both engines report the same reachable states on every sample.
+4. **One transition system.** Done. The shared transition system has existence
+   states and atomic use case actions, and `states` and the TLA emitter read it. The
+   check is that both engines report the same reachable states on every sample. It
+   passed: breadth-first search and TLC agree on the states and on every
+   invariant and `after` verdict of every cone of every sample, and CI runs that test
+   (`engine_equivalence`) with TLC required.
 5. **Logical data gaps.** Add the relation and key features in the data layer list.
    The check is DBML output for every sample with no unresolved foreign keys.
 6. **Traceable verification.** Add per-constraint invariants, witnesses, deadlock
@@ -211,6 +223,18 @@ The maintainer decided these questions on 2026-10-27:
 - `location` is deleted. RDRA 3.0 has no counterpart.
 - `extsystem` moves to the system-value layer to match RDRA. Every other layer
   placement that differs from RDRA is documented in `rdra-ish-interpretation.md`.
+
+The maintainer decided these questions on 2026-10-28, during phase 4:
+
+- An entity that no use case creates is pre-existing: its instances start present.
+  Rule 1 states the exception. The strict reading, where such an entity never exists,
+  would make every constraint on master data hold vacuously, which is the phase 1 bug
+  again.
+- The guards that the tool inferred from the order of `raises` and `triggers` are
+  deleted. Rule 2 lists a use case's preconditions as its required states and the
+  guards of its linked conditions. Inferred order guards are neither, and they cut
+  reachable states from the model. Removing them changed no `states` output and no `check` exit code on
+  any sample.
 
 ## Sources
 
