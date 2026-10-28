@@ -19,10 +19,10 @@ Diagnostics are written to stderr as `error: ...` or `warning: ...`.
 - `check` and `lint` exit non-zero when semantic errors (or lint errors) are present.
 - Generator subcommands (`diagram`, `csv`, `list`, non-TLA `export`, `states`, `verify`)
   are **fail-closed**: they refuse to emit artifacts when the model has parse/resolve
-  errors **or** Error-severity state diagnostics. `export --kind tla` gates on parse
-  errors plus `[TLA_FATAL:…]` export obligations (state undriven/NotEvaluated alone
-  does not block TLA export — use `verify`, or pass `--allow-tla-only` on
-  generators / `check` / `states` for mixed Enum+Int models).
+  errors **or** Error-severity state diagnostics. `export --kind tla` and `verify` gate on
+  parse errors plus the Error diagnostics of the lifecycle transition system they print
+  (built at `--instance-count` / `--int-range-max`). Pass `--allow-tla-only` on
+  generators / `check` / `states` for mixed Enum+Int models.
 - `fmt` only requires a parseable source; it does not run semantic analysis.
 
 ---
@@ -264,9 +264,9 @@ rdra-ish export <INPUTS...> [--kind <KIND>] [-o <OUT>] [--instance-count <N>] [-
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--kind` | `openapi` \| `asyncapi` \| `dbml` \| `json-schema` \| `typescript-states` \| `mermaid-er` \| `plantuml-er` \| `tla` | `openapi` | Export kind. `openapi` emits an OpenAPI 3.0 JSON document from API `method`/`path` metadata and DTO `request` / `response` / `error_response` relations. `asyncapi` emits an AsyncAPI 3.1 event catalog from `event`, `raises`, `triggers`, `transitions`, and `outbox`. `dbml` emits a DBML schema from logical `entity` declarations, indexes, unique constraints, generated FK columns, and `relate` options. `json-schema` emits JSON Schema Draft 2020-12 definitions for DTO and Entity structures. `mermaid-er` and `plantuml-er` emit textual ER review artifacts from the same logical data model projection used by `diagram --kind er`. `tla` emits a TLA+ module plus TLC config from entity lifecycles and state constraints (see [formal-verification.md](./formal-verification.md)). |
 | `-o`, `--out` | path | `out` | Output file path. If no extension is given, `openapi.json`, `asyncapi.json`, `schema.dbml`, `json-schema.json`, `er.mmd`, `er.puml`, or `RdraSpec.tla` (with sibling `.cfg`) is used. For `--kind tla`, a path ending in `.tla` uses that file stem as the TLA+ module name (sibling `.cfg`). |
-| `--instance-count` | unsigned integer | `2` | TLA+ only: multi-instance `InstanceCount` (`>= 1`). Value `1` is accepted with a warning (singleton ids cannot distinguish multi-entity instances). |
-| `--int-range-max` | unsigned integer | `5` | TLA+ only: upper bound for `IntRange == 0..N` (`>= 1`; `0` is rejected). |
-| `--allow-tla-only` | flag | off | For non-TLA kinds: demote undriven comparisons / NotEvaluated so export can proceed (TLA export ignores this flag and gates on `[TLA_FATAL:…]` instead). |
+| `--instance-count` | unsigned integer | `2` | TLA+ only: multi-instance `InstanceCount` (`1..=255`). Value `1` is accepted with a warning (singleton ids cannot distinguish multi-entity instances). |
+| `--int-range-max` | unsigned integer | `5` | TLA+ only: upper bound for `IntRange == 0..N` (`1..=255`; `0` is rejected). |
+| `--allow-tla-only` | flag | off | For non-TLA kinds: demote undriven comparisons / NotEvaluated so export can proceed (TLA export ignores this flag and gates on the transition system's Error diagnostics instead). |
 
 For OpenAPI export, only APIs that declare both `method` and `path` become
 `paths` operations. Path segments `{name}` become required `parameters` (`in: path`,
@@ -321,16 +321,17 @@ rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [-
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--backend` | `tlc` | `tlc` | Verification backend. Requires `tlc` or `tlc2` on `PATH`. |
 | `-o`, `--out` | path | temp dir | If the path ends with `.tla`, write that file (module name = stem) and a sibling `.cfg`. Otherwise treat as a directory and write `RdraSpec.tla` / `RdraSpec.cfg` under it. TLC is invoked on bare filenames copied into a work directory. |
-| `--instance-count` | unsigned integer | `2` | Multi-instance `InstanceCount` (`>= 1`; `1` warns). |
-| `--int-range-max` | unsigned integer | `5` | Upper bound for `IntRange == 0..N` (`>= 1`; `0` rejected). |
+| `--instance-count` | unsigned integer | `2` | Multi-instance `InstanceCount` (`1..=255`; `1` warns). |
+| `--int-range-max` | unsigned integer | `5` | Upper bound for `IntRange == 0..N` (`1..=255`; `0` rejected). |
 
 For each condition that has a `holds` body, `verify` first prints
 `condition <Id>: body stored, not yet checked (phase 4)` on stdout. Conditions change neither
 the exported spec nor the TLC result.
 
-Export warnings from the TLA emitter are printed on stderr (including the
-approximation banner when multi-instance or Int axes are used). Exits non-zero when TLC
-is missing or reports a violation.
+Warnings and errors of the lifecycle transition system are printed on stderr, and an
+error stops `verify` before TLC runs. The `.tla` header states the bounds. Stdout or
+stderr carries one `tlc_result: ok|counterexample|tool_error` line. Exits non-zero when
+TLC is missing or reports a violation.
 
 ---
 
