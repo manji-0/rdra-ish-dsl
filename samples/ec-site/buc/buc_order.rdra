@@ -68,6 +68,7 @@ displays(Cancel, OrderHistoryScreen)
 invokes(Cancel, CancelOrderApi)
 updates(CancelOrderApi, Order)
 transitions(Order.status, Cancel, pending -> cancelled)
+transitions(Order.status, Cancel, awaiting_capture -> cancelled)
 
 // Fulfilment: an administrator ships the order and confirms its delivery.
 performs(Admin, ShipOrder)

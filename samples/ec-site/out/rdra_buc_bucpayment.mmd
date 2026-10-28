@@ -30,7 +30,7 @@ flowchart LR
   end
   Customer -->|performs| BucPayment
   PaymentInputApi -.->|creates| Payment
-  PaymentInputApi -.->|reads| Order
+  PaymentInputApi -.->|updates| Order
   PaymentAuthorizationApi -.->|updates| Payment
   PaymentCaptureApi -.->|updates| Order
   PaymentCaptureApi -.->|updates| Payment

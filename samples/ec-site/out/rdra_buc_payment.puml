@@ -33,7 +33,7 @@ rectangle "System" {
 
 Customer --> BucPayment : performs
 PaymentInputApi ..> Payment : creates
-PaymentInputApi ..> Order : reads
+PaymentInputApi ..> Order : updates
 PaymentAuthorizationApi ..> Payment : updates
 PaymentCaptureApi ..> Order : updates
 PaymentCaptureApi ..> Payment : updates

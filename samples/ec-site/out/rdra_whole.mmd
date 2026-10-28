@@ -71,6 +71,7 @@ flowchart LR
     Payment[("🗄️ Payment")]
     Product[("🗄️ Product")]
     ShippingAddress[("🗄️ Shipping Address")]
+    Order_awaiting_capture("🔄 awaiting_capture")
     Order_cancelled("🔄 cancelled")
     Order_delivered("🔄 delivered")
     Order_paid("🔄 paid")
@@ -95,7 +96,7 @@ flowchart LR
   ViewCartApi -.->|reads| Cart
   ViewCartApi -.->|reads| CartItem
   PaymentInputApi -.->|creates| Payment
-  PaymentInputApi -.->|reads| Order
+  PaymentInputApi -.->|updates| Order
   PaymentAuthorizationApi -.->|updates| Payment
   PaymentCaptureApi -.->|updates| Order
   PaymentCaptureApi -.->|updates| Payment

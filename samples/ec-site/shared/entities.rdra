@@ -56,7 +56,7 @@ entity Order "Order" {
   id:           Int      @pk
   total:        Money
   tax:          Money
-  status:       Enum(pending, paid, shipped, delivered, cancelled) @default(pending)
+  status:       Enum(pending, awaiting_capture, paid, shipped, delivered, cancelled) @default(pending)
   ordered_at:   DateTime
   delivered_at: DateTime @null
 }

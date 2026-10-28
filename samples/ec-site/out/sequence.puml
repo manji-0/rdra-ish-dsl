@@ -108,8 +108,10 @@ deactivate System
 Customer -> PaymentInputScreen : ✅ Enter Payment Information
 PaymentInputScreen -> PaymentInputApi : ✅ Enter Payment Information
 activate PaymentInputApi
-PaymentInputApi -> Order : read
+group transaction (API atomic boundary)
+PaymentInputApi -> Order : update
 PaymentInputApi -> Payment : create
+end
 PaymentInputApi --> PaymentInputScreen : 🖥️ Payment Information Screen
 PaymentInputScreen --> Customer : 🖥️ Payment Information Screen
 deactivate PaymentInputApi

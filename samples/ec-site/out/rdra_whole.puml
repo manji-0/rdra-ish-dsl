@@ -73,6 +73,7 @@ rectangle "System" {
   database "🗄️ Payment" as Payment
   database "🗄️ Product" as Product
   database "🗄️ Shipping Address" as ShippingAddress
+  collections "🔄 awaiting_capture" as Order_awaiting_capture
   collections "🔄 cancelled" as Order_cancelled
   collections "🔄 delivered" as Order_delivered
   collections "🔄 paid" as Order_paid
@@ -98,7 +99,7 @@ ViewCartApi ..> Product : reads
 ViewCartApi ..> Cart : reads
 ViewCartApi ..> CartItem : reads
 PaymentInputApi ..> Payment : creates
-PaymentInputApi ..> Order : reads
+PaymentInputApi ..> Order : updates
 PaymentAuthorizationApi ..> Payment : updates
 PaymentCaptureApi ..> Order : updates
 PaymentCaptureApi ..> Payment : updates
