@@ -391,6 +391,34 @@ when(ClientCertificate.status == revoked)
 }
 
 #[test]
+fn invariant_guards_are_a_conjunction() {
+    let d = derive_src(
+        r#"
+entity Order "注文" {
+  id:        Int @pk
+  status:    Enum(pending, delivered) @default(pending)
+  refunded:  Bool
+  refund_id: String @null
+}
+usecase Place   "注文確定"
+usecase Deliver "配達"
+usecase Refund  "返金"
+creates(Place,   Order)
+updates(Deliver, Order)
+updates(Refund,  Order)
+transitions(Order.status, Deliver, pending -> delivered)
+sets(usecase::Refund, Order, refunded == true)
+sets(usecase::Refund, Order, refund_id == present)
+invariant(Order)
+  .when(status == delivered)
+  .when(refunded == false)
+  .then(refund_id == null)
+"#,
+    );
+    assert!(!violated(&d, "Order", InvKind::Invariant), "{:?}", d.diags);
+}
+
+#[test]
 fn global_cross_forbidden_on_related_pre_existing_entities_is_evaluated() {
     let d = derive_src(
         r#"
