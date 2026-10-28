@@ -4,6 +4,12 @@
 
 ### Breaking
 
+- `@check` and `@derived` take an unquoted, typed expression: `@check(qty >= 1)`,
+  `@derived(total - discount)` or `@derived(qty >= 3)`. The quoted form is a parse
+  error whose message is the rewrite. The expression must name the entity's own
+  columns. Each `@check` is the invariant `Check_<Entity>_<column>_<n>` that `check`
+  and `verify` test; a `@derived` column is no state var, and a `sets` on it is an
+  error.
 - `timing` is now `timer`, an RDRA タイマー that starts a use case through
   `triggers(Timer, UseCase | Buc)`. `belongs(...).when(...)` is removed (an unknown chain
   method whose hint names `timer`); `.by(...)` stays. `uses(Actor, ExtSystem)` is

@@ -25,9 +25,11 @@ boundaries established in Step 3.
 
 1. Replace coarse entity shells with columns and stable annotations.
 2. Use `@pk`, `@pk(a, b)`, `@unique`, `@unique(a, b)`, `@index`,
-   `@index(a, b)`, `@check("...")`, `@null`, `@default(v)`, `@label("...")`,
-   `@soft_delete`, `@history`, `@tenant`, and `@derived("...")` where they
-   reflect real constraints. Composite `@pk(a, b)` does **not** auto-generate
+   `@index(a, b)`, `@check(expr)`, `@null`, `@default(v)`, `@label("...")`,
+   `@soft_delete`, `@history`, `@tenant`, and `@derived(expr)` where they
+   reflect real constraints. Write `@check` and `@derived` unquoted: `@check(total >= 0)`,
+   `@derived(total - discount)`. `@check` becomes an invariant that `check` and `verify`
+   test. Composite `@pk(a, b)` does **not** auto-generate
    FK columns via `relate` — declare FK columns explicitly on the many side.
 3. Type a column by a `variation` when an actor chooses its value (a payment method,
    a channel, a severity): declare `variation PaymentMethod "Payment Method" { cash
@@ -57,9 +59,9 @@ entity Order "Order" {
   id: Int @pk
   number: String @unique @index @label("Order No.")
   tenant_id: Int @tenant
-  total: Money @check("total >= 0")
+  total: Money @check(total >= 0)
   discount: Money @default(0)
-  net_total: Money @derived("total - discount")
+  net_total: Money @derived(total - discount)
   submitted_at: DateTime @null
   deleted_at: DateTime @null @soft_delete
 }

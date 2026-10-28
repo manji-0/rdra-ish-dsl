@@ -792,19 +792,21 @@ is optional/nullable in the payload.
 | `@unique(a, b)` | Declares a composite unique constraint over the named columns. |
 | `@index` | Adds an index for the column. |
 | `@index(a, b)` | Declares a composite index over the named columns. |
-| `@check("expr")` | Declares a check constraint expression for review/export. The expression is stored verbatim. |
+| `@check(expr)` | A check constraint: `expr` is a condition over the entity's own columns (`and`, `or`, `not` over comparisons), typed like a `forbidden` comparison. A missing column is `UnknownColumn`; arithmetic is `ArithNotInCheck`. The lifecycle checks it as the invariant `Check_<Entity>_<column>_<n>` (see [state-derivation.md](./state-derivation.md#checks)). |
 | `@null` | Makes the column nullable. A nullable column is a **state axis** with values `{null, present}`. |
 | `@default(v)` | Declares a default value `v`. Used as the seed value in state derivation. |
 | `@label("...")` | Overrides the column's display label. |
 | `@soft_delete` | Marks the column as the soft-delete marker, such as `deleted_at` or `is_deleted`. |
 | `@history` | Marks the column as part of history/versioning, such as `valid_from`, `valid_to`, or `version`. |
 | `@tenant` | Marks the column as the tenant-scope discriminator. |
-| `@derived("expr")` | Marks the column as derived and stores the derivation expression verbatim. |
+| `@derived(expr)` | Derives the column from the entity's own columns: a condition for a Bool column (`@derived(qty >= 3)`), or one `+`, `-`, or `*` over a column or an integer for an Int, Money, or Decimal column (`@derived(total - discount)`). A non-numeric operand is `ArithTypeMismatch`, and an expression that cannot derive the column's type is `DerivedTypeMismatch`. A derived column takes no `@check`, `@default`, `@pk`, or `@unique` (`DerivedColumnAnnotation`), and a `sets` on it is `DerivedColumnWritten`. |
 
 Composite `@pk(...)`, `@unique(...)`, and `@index(...)` annotations are written on
 one column line for locality, but semantically they belong to the entity as a whole.
-`@check(...)` and `@derived(...)` are expression-carrying metadata; the current model
-stores them for review/export and does not parse them into executable SQL.
+`@check(...)` and `@derived(...)` take an unquoted expression. The quoted form of earlier
+versions (`@check("qty >= 1")`) is a parse error whose message is the unquoted rewrite.
+DBML notes, JSON Schema `x-rdra-ish-check-constraints` / `x-rdra-ish-derived`, and the
+entity CSVs print the expression as `rdra-ish fmt` writes it.
 `rdra-ish export --kind dbml` projects logical `entity` declarations to DBML tables,
 including indexes, composite unique constraints, generated FK columns, and `relate`
 delete/update options. Metadata without a native DBML equivalent is preserved as

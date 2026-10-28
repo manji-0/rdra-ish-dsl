@@ -58,6 +58,7 @@ action, and `Spec` allows stuttering.
 | `col < now` | A global `now \in IntRange` and a `Tick` action that adds one while `now < max`. |
 | Entity-local and multi-entity `forbidden`, `invariant`, `required`, `exclusive` | One `INVARIANT` each, named `<Kind>_<Entity>_<n>` (`Forbidden_Order_0`, `Inv_Order_0`, `CrossForbidden_Order_0`). Each ranges over the present instances. |
 | `.along(...)` | Quantified over `<E>_Ids`, joined by `<Child>_owner_<Parent>` equalities. |
+| `col: T @check(expr)` | `INVARIANT Check_<Entity>_<column>_<n>` over the present instances. A nullable operand is guarded: `qty: Int @null @check(qty >= 1)` prints `(E_qty[b0] = -1) \/ (E_qty[b0] # -1 /\ E_qty[b0] >= 1)`. |
 | `relate(Child, Parent, 1:1)` | `INVARIANT Unique_<Child>_<role>` (role defaults to the parent id): `\A b0, b1 \in <Child>_Ids`, two present children are the same or have different owners. An unlinked optional child owns nothing. |
 | `relate(Child, Parent, 1..*:1)` (child-side minimum) | `INVARIANT MinCard_<Child>_<role>`: `\A b0 \in <Parent>_Ids`, a present parent has `\E b1 \in <Child>_Ids` present with `<Child>_owner_<Parent>[b1] = b0`. Checked in every state, so a parent created without a child in the same transaction, or a deleted last child, is a counterexample. |
 | Pre-existing child of a `relate` | `Init` links the owner: `\in [<Child>_Ids -> <Parent>_Ids]` for N:1, `[i \in <Child>_Ids \|-> i]` for 1:1 and for a child-side minimum. |
@@ -195,6 +196,8 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `one_to_one_shared.rdra` | pass, fail | `relate(.., 1:1)` adds `Unique_Shipment_Order`; Ship and Reship each link a Shipment to the same Order, which takes two instances |
 | `min_card_unmet.rdra` | fail, fail | `relate(OrderLine, Order, 1..*:1)` adds `MinCard_OrderLine_Order`; Place creates an Order without a line |
 | `min_card_met.rdra` | pass, pass | The same model with Place creating the Order and its first line in one transaction |
+| `check_unmet.rdra` | fail, fail | `qty: Int @default(1) @check(qty >= 1)` adds `Check_CartLine_qty_0`; ClearQty sets `qty` to 0 |
+| `check_met.rdra` | pass, pass | The same check with a use case that keeps `qty` in range; `forbidden` reads the derived `bulk: Bool @derived(qty >= 3)` as its expression |
 | `fail/order.rdra` | fail, fail | Intentionally unsafe (reachable invariant violation) |
 
 BFS and TLC give the same verdict on every row at the same bounds. `check` runs at one

@@ -31,6 +31,10 @@
   `relate(.., 1..*:1)` or `1..1:1`: every present parent has a present child. A use
   case that creates the parent without a child in the same transaction fails it, at one
   instance too, so `check` finds it.
+- **`@check`**: one `INVARIANT Check_<Entity>_<column>_<n>` per `@check(expr)`. A null
+  operand leaves a comparison unknown, which passes (SQL semantics). A `@derived` column
+  is never a state var: a Bool one is read as its expression, and an arithmetic one
+  cannot be read (`DerivedColumnRead`).
 - **Temporal `property`**: one lowering path; all names are listed in `.cfg` `PROPERTY`.
 - **`after.assert`**: independent `[][(\A p : UC(p) => post')]_vars` PROPERTY named
   `AfterAssert_<UC>_<n>` (not injected into the effects).
@@ -64,6 +68,8 @@ In the `rdra-ish-dsl` repository, `samples/formal-verification/` and
 | `samples/one_to_one_shared.rdra` | expected fail | `relate(.., 1:1)` is the invariant `Unique_<Child>_<role>`; two use cases link two children to one parent (`check` passes: one instance) |
 | `samples/min_card_unmet.rdra` | expected fail | `relate(.., 1..*:1)` is the invariant `MinCard_<Child>_<role>`; a use case creates the parent without a child (`check` exits 1 too) |
 | `samples/min_card_met.rdra` | expected pass | The same model with the parent and its first child created in one transaction |
+| `samples/check_unmet.rdra` | expected fail | `@check(qty >= 1)` is the invariant `Check_CartLine_qty_0`; a use case sets `qty` to 0 (`check` exits 1 too) |
+| `samples/check_met.rdra` | expected pass | The same check kept by every use case; a `forbidden` reads a Bool `@derived` column |
 | `samples/fail/order.rdra` | expected fail | Negative TLC (`check` exits 1 too) |
 
 ## Canonical Doc

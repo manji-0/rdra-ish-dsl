@@ -32,11 +32,15 @@ holds one value per slot.
 | An Enum column | the declared variants | Always |
 | A Bool column | `false`, `true` | Always |
 | A `@null` column of any other type | `null`, `present` | Always |
-| An Int, Money, Decimal, Date, or DateTime column | `0..5` (plus `null` for `@null`) | A `sets`, a constraint, an applied condition body, an `after` assertion, or a `property` names it |
+| An Int, Money, Decimal, Date, or DateTime column | `0..5` (plus `null` for `@null`) | A `sets`, a constraint, a `@check`, an applied condition body, an `after` assertion, or a `property` names it |
 | A column typed by a [`variation`](./language-reference.md#variations) | the variation's values | Something names it, as for Int |
 | A comparison proposition (`stock < selling`) | `false`, `true` | `sets(UC, E, cmp, bool)` drives the comparison |
 | An owner (a `relate` foreign key) | the parent's slot, or `null` for an optional relate | The entity is the child of an N:1, 1:N, or 1:1 `relate` |
 | `now` | `0..5` | Something compares a column to `now` |
+
+A `@derived` column is never a variable. A construct that reads a Bool `@derived` column
+reads its expression instead, so the columns of the expression become variables. A
+construct that reads an arithmetic `@derived` column is `DerivedColumnRead`.
 
 An undriven comparison (`stock < selling` with no matching `sets`) is not a variable. Both
 engines evaluate it on the Int values of its columns. A foreign key column is the owner
@@ -130,6 +134,7 @@ The order of `raises` and `triggers` between use cases adds no guard.
 | `when(E, ...).has/none(R, ...)` | An invariant over the present slots of `E` and the related slots of `R`. A `relate` links them through its owner; without one, `R` is independent. |
 | `relate(Child, Parent, 1:1)` | `Unique_<Child>_<role>`: no two present children belong to one parent slot. An unlinked optional child belongs to none. It holds vacuously at one instance. |
 | `relate(Child, Parent, 1..*:1)` | `MinCard_<Child>_<role>`: every present parent slot is owned by a present child, in every state. Info `MinCardNeedsCreate` names each use case that creates the parent and no child in the same transaction group. A pre-existing parent of a created child fails at the start and draws a warning; a pre-existing child of a pre-existing parent starts linked slot for slot. |
+| `col: T @check(expr)` | `Check_<Entity>_<column>_<n>`: no present slot makes `expr` false. A comparison over a null operand is unknown and passes (SQL semantics), so `qty: Int @null @check(qty >= 1)` holds while `qty` is null. A created slot starts at the base value: `@check(qty >= 1)` without `@default(1)` or a creating `sets` fails at creation. |
 | `after(UC).assert(...)` | A predicate on the state each step of `UC` leaves, checked on every step of every action of `UC`. An entity the step does not write is read as it stands. |
 | `property` with `always`, `eventually`, `leads_to` | Data only. BFS does not evaluate it, and `check` prints a `note:` that TLC does. |
 
@@ -302,7 +307,8 @@ makes the command exit non-zero in every format, and the generators refuse to em
 | `UnbindableScope { constraint }` | error | A multi-entity rule's `.along` names entities that no `relate` binds. |
 | `UnbindableCondition { condition, usecase }` | error | A condition body is applied to a use case that writes nothing. |
 | `UnresolvedPropertyAtom { property, column }` | error | A `property` atom names a column that no single entity owns. |
-| `ConstraintViolated { name, ... }` | error | A reachable state breaks a `forbidden`, `invariant`, `required`, `exclusive`, multi-entity, or quantifier rule. |
+| `DerivedColumnRead { column }` | error | A constraint, condition, assertion, or property reads an arithmetic `@derived` column, which the lifecycle cannot evaluate. |
+| `ConstraintViolated { name, ... }` | error | A reachable state breaks a `forbidden`, `invariant`, `required`, `exclusive`, `@check`, multi-entity, or quantifier rule. |
 | `AfterAssertViolated { anchor, ... }` | error | A step of the anchor use case ends in a state that fails the assertion. |
 | `AssertOnInertUseCase { anchor }` | error | `after(UC).assert` names a use case with no action. |
 | `PatternCapReached { cap, bound }` | error | An entity view exceeded `--max-patterns`. Raise the flag or narrow `--buc`. |
