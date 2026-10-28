@@ -2,8 +2,8 @@
 
 use crate::{EmitError, Emitter, Scope, View};
 use rdra_ish_core::{
-    collect_entity_state_variants, EntityStateVariant, EntityStateVariants, SemanticModel,
-    StateFieldValue, DEFAULT_PATTERN_CAP,
+    collect_entity_state_variants, lifecycle::Caps, EntityStateVariant, EntityStateVariants,
+    SemanticModel, StateFieldValue,
 };
 
 pub struct TypeScriptStateUnionEmitter {
@@ -13,7 +13,7 @@ pub struct TypeScriptStateUnionEmitter {
 impl Default for TypeScriptStateUnionEmitter {
     fn default() -> Self {
         Self {
-            cap: DEFAULT_PATTERN_CAP,
+            cap: Caps::DEFAULT_PATTERNS,
         }
     }
 }
@@ -87,6 +87,7 @@ fn ts_type_for_field(value: &StateFieldValue) -> String {
         StateFieldValue::Enum(variant) => ts_string_literal(variant),
         StateFieldValue::Bool(_) => "boolean".to_string(),
         StateFieldValue::Null => "null".to_string(),
+        StateFieldValue::Int(n) => n.to_string(),
         StateFieldValue::Present { pg_type } => match pg_type.as_deref() {
             Some("timestamptz" | "timestamp" | "date") => "Date".to_string(),
             Some("uuid") => "string".to_string(),
@@ -168,7 +169,7 @@ sets(usecase::DeliverOrder, Order, delivered_at == present)
     #[test]
     fn typescript_state_union_snapshot() {
         let model = model_from(ORDER_SRC);
-        let collections = collect_entity_state_variants(&model, &[], DEFAULT_PATTERN_CAP);
+        let collections = collect_entity_state_variants(&model, &[], Caps::DEFAULT_PATTERNS);
         insta::assert_snapshot!(emit_typescript_state_unions(&collections));
     }
 
@@ -179,7 +180,7 @@ sets(usecase::DeliverOrder, Order, delivered_at == present)
         let from_emitter = TypeScriptStateUnionEmitter::default()
             .emit(&model, &view)
             .unwrap();
-        let collections = collect_entity_state_variants(&model, &[], DEFAULT_PATTERN_CAP);
+        let collections = collect_entity_state_variants(&model, &[], Caps::DEFAULT_PATTERNS);
         assert_eq!(from_emitter, emit_typescript_state_unions(&collections));
     }
 }

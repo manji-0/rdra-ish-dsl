@@ -35,7 +35,8 @@ transitions(Order.status, Cancel, pending -> cancelled)
 fn forbidden_reachable_state_is_reported_with_its_pattern() {
     let d = derive_src(&format!("{ORDER}\nforbidden(Order, status == cancelled)"));
     assert!(violated(&d, "Order", InvKind::Forbidden));
-    assert_eq!(witnesses(&d, "Order"), vec!["note=null, status=cancelled"]);
+    // The verdict comes from the forbidden's own cone, which `note` is not in.
+    assert_eq!(witnesses(&d, "Order"), vec!["status=cancelled"]);
 }
 
 #[test]

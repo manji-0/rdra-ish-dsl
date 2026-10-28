@@ -12,6 +12,7 @@ mod diag;
 mod explore;
 mod expr;
 mod restrict;
+mod states;
 mod targets;
 mod types;
 mod view;
@@ -24,6 +25,7 @@ pub use diag::{has_errors, Diag, Severity, StateDiag};
 pub use explore::{Caps, ComponentRun, Exploration};
 pub use expr::State;
 pub use restrict::Component;
+pub use states::{derive_states, StatesReport};
 pub use targets::{ConeRun, TargetExploration};
 pub use types::{
     ActId, Action, ActionOrigin, AfterAssert, At, Birth, Bounds, CmpOp, Domain, Effect, EntId,

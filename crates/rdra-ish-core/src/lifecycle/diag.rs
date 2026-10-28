@@ -12,6 +12,17 @@ pub enum Severity {
     Error,
 }
 
+impl Severity {
+    /// The tag `states` and `check` print: `info`, `warn`, or `error`.
+    pub fn as_label(self) -> &'static str {
+        match self {
+            Severity::Info => "info",
+            Severity::Warning => "warn",
+            Severity::Error => "error",
+        }
+    }
+}
+
 /// A diagnostic and the entities whose views report it (empty: the whole system).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Diag {

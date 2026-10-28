@@ -1,10 +1,10 @@
 //! 導出済み状態パターンを discriminated union 形式に変換する API。
 
 use crate::entity_lifecycle::link_entity_status_states;
-use crate::model::{EntityKey, SemanticModel};
-use crate::state_pattern::{
-    derive_state_patterns, AbstractValue, AxisKind, EntityStateResult, ReachablePattern, StateAxis,
+use crate::lifecycle::{
+    derive_states, AbstractValue, AxisKind, EntityStateResult, ReachablePattern, Scope, StateAxis,
 };
+use crate::model::{EntityKey, SemanticModel};
 use std::collections::BTreeMap;
 
 /// 状態バリアント内のフィールド値（status 以外の軸）。
@@ -14,6 +14,7 @@ pub enum StateFieldValue {
     Bool(bool),
     Null,
     Present { pg_type: Option<String> },
+    Int(i64),
 }
 
 impl StateFieldValue {
@@ -25,6 +26,7 @@ impl StateFieldValue {
             AbstractValue::Present => StateFieldValue::Present {
                 pg_type: pg_type.map(str::to_string),
             },
+            AbstractValue::Int(n) => StateFieldValue::Int(*n),
         }
     }
 }
@@ -55,15 +57,26 @@ pub fn collect_entity_state_variants(
     buc_filter: &[String],
     cap: usize,
 ) -> Vec<EntityStateVariants> {
-    derive_state_patterns(model, buc_filter, cap)
-        .into_iter()
+    entity_state_variants(
+        model,
+        &derive_states(model, &Scope::from_bucs(buc_filter), cap).views,
+    )
+}
+
+/// The views `states` derived, as discriminated unions.
+pub fn entity_state_variants(
+    model: &SemanticModel,
+    views: &[EntityStateResult],
+) -> Vec<EntityStateVariants> {
+    views
+        .iter()
         .filter_map(|result| entity_state_variants_for_result(model, result))
         .collect()
 }
 
 fn entity_state_variants_for_result(
     model: &SemanticModel,
-    result: EntityStateResult,
+    result: &EntityStateResult,
 ) -> Option<EntityStateVariants> {
     let entity = model
         .entities
@@ -77,13 +90,13 @@ fn entity_state_variants_for_result(
 
     let variants = result
         .patterns
-        .into_iter()
+        .iter()
         .map(|reachable| to_entity_state_variant(&result.axes, &discriminator_column, reachable))
         .collect();
 
     Some(EntityStateVariants {
         entity,
-        entity_id: result.entity_id,
+        entity_id: result.entity_id.clone(),
         discriminator_column,
         variants,
     })
@@ -98,7 +111,7 @@ fn first_enum_axis_column(axes: &[StateAxis]) -> Option<String> {
 fn to_entity_state_variant(
     axes: &[StateAxis],
     discriminator_column: &str,
-    reachable: ReachablePattern,
+    reachable: &ReachablePattern,
 ) -> EntityStateVariant {
     let discriminator = reachable
         .pattern
@@ -141,7 +154,7 @@ fn to_entity_state_variant(
 mod tests {
     use super::*;
     use crate::analysis::build_model;
-    use crate::state_pattern::DEFAULT_PATTERN_CAP;
+    use crate::lifecycle::Caps;
     use rdra_ish_syntax::parse;
 
     fn model_from(src: &str) -> SemanticModel {
@@ -178,7 +191,7 @@ sets(usecase::DeliverOrder, Order, delivered_at == present)
     #[test]
     fn collect_entity_state_variants_order() {
         let model = model_from(ORDER_SRC);
-        let collections = collect_entity_state_variants(&model, &[], DEFAULT_PATTERN_CAP);
+        let collections = collect_entity_state_variants(&model, &[], Caps::DEFAULT_PATTERNS);
         assert_eq!(collections.len(), 1);
 
         let order = &collections[0];

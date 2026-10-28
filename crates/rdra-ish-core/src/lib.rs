@@ -32,7 +32,8 @@ pub use analysis::{build_model, build_model_items, build_model_items_with_scopes
 pub use diagnostics::{Diagnostic, RdraError};
 pub use entity_lifecycle::link_entity_status_states;
 pub use entity_state_variant::{
-    collect_entity_state_variants, EntityStateVariant, EntityStateVariants, StateFieldValue,
+    collect_entity_state_variants, entity_state_variants, EntityStateVariant, EntityStateVariants,
+    StateFieldValue,
 };
 pub use event_flow::{
     api_diagnostics, api_route_diagnostics, collect_event_flows, collect_timer_flows,
