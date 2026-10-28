@@ -480,11 +480,11 @@ pub(crate) fn format_entities(
                 action(fk.and_then(|fk| fk.on_update)).to_string(),
                 bool_cell(col.is_nullable),
                 col.default_val.clone().unwrap_or_default(),
-                col.check_constraints.join("|"),
+                col.checks_display(),
                 bool_cell(col.is_soft_delete),
                 bool_cell(col.is_history),
                 bool_cell(col.is_tenant_scope),
-                col.derived_expr.clone().unwrap_or_default(),
+                col.derived_display(),
             ]);
         }
     }

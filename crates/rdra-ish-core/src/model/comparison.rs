@@ -98,3 +98,90 @@ pub struct PropositionEffect {
     /// Source site of the predicate/declaration that produced this fact.
     pub site: Option<crate::location::LocatedSpan>,
 }
+
+// ── Column expressions (`@check`, `@derived`) ───────────────────────────────
+
+/// A condition over one entity's columns: a `@check`, or a logical `@derived`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum CheckExpr {
+    Cmp(ComparisonProp),
+    Not(Box<CheckExpr>),
+    And(Box<CheckExpr>, Box<CheckExpr>),
+    Or(Box<CheckExpr>, Box<CheckExpr>),
+}
+
+impl CheckExpr {
+    /// The canonical text, as `rdra-ish fmt` prints it.
+    pub fn display(&self) -> std::string::String {
+        match self {
+            CheckExpr::Cmp(prop) => prop.display(),
+            CheckExpr::Not(inner) => format!("not ({})", inner.display()),
+            CheckExpr::And(a, b) => format!("({}) and ({})", a.display(), b.display()),
+            CheckExpr::Or(a, b) => format!("({}) or ({})", a.display(), b.display()),
+        }
+    }
+
+    /// Every comparison leaf, left to right.
+    pub fn comparisons(&self) -> Vec<&ComparisonProp> {
+        match self {
+            CheckExpr::Cmp(prop) => vec![prop],
+            CheckExpr::Not(inner) => inner.comparisons(),
+            CheckExpr::And(a, b) | CheckExpr::Or(a, b) => {
+                let mut out = a.comparisons();
+                out.extend(b.comparisons());
+                out
+            }
+        }
+    }
+}
+
+/// One `@check(expr)` of a column.
+#[derive(Debug, Clone)]
+pub struct ColumnCheck {
+    pub expr: CheckExpr,
+    pub site: Option<crate::location::LocatedSpan>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ArithOperand {
+    Column(std::string::String),
+    Int(i64),
+}
+
+impl ArithOperand {
+    fn display(&self) -> std::string::String {
+        match self {
+            ArithOperand::Column(c) => c.clone(),
+            ArithOperand::Int(n) => n.to_string(),
+        }
+    }
+}
+
+/// `lhs op rhs` with `op` one of `+ - *`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArithExpr {
+    pub lhs: ArithOperand,
+    pub op: rdra_ish_syntax::ast::ArithOp,
+    pub rhs: ArithOperand,
+}
+
+/// The expression of `@derived(expr)`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DerivedExpr {
+    /// Derives a Bool column; the lifecycle substitutes it where a construct reads it.
+    Logical(CheckExpr),
+    /// Derives a numeric column; the lifecycle cannot read it.
+    Arith(ArithExpr),
+}
+
+impl DerivedExpr {
+    /// The canonical text, as `rdra-ish fmt` prints it.
+    pub fn display(&self) -> std::string::String {
+        match self {
+            DerivedExpr::Logical(expr) => expr.display(),
+            DerivedExpr::Arith(a) => {
+                format!("{} {} {}", a.lhs.display(), a.op.as_str(), a.rhs.display())
+            }
+        }
+    }
+}

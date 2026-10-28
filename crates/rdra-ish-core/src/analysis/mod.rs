@@ -4,6 +4,7 @@ use crate::model::*;
 use rdra_ish_syntax::ast::*;
 
 mod arg_resolve;
+mod column_expr;
 mod comparison;
 mod condition;
 mod constraint;
@@ -64,6 +65,7 @@ pub fn build_model_items_with_scopes(
         }
     }
 
+    column_expr::reject_derived_writes(&model, &mut diags);
     condition::derive_condition_links(&mut model, &mut diags);
     resolve_foreign_keys(&mut model, &mut diags);
     resolve_along_links(&mut model, &mut diags);

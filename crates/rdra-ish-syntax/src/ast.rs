@@ -138,8 +138,8 @@ pub enum Annotation {
     Index,
     /// `@index(a, b)`
     IndexComposite(Vec<std::string::String>),
-    /// `@check("...")`
-    Check(std::string::String),
+    /// `@check(expr)`
+    Check(ColumnExpr),
     /// `@null`
     Null,
     /// `@default(value)`
@@ -152,8 +152,8 @@ pub enum Annotation {
     History,
     /// `@tenant`
     Tenant,
-    /// `@derived("...")`
-    Derived(std::string::String),
+    /// `@derived(expr)`
+    Derived(ColumnExpr),
 }
 
 // ── Column definition ────────────────────────────────────────────────────────
@@ -300,7 +300,6 @@ impl CmpOp {
 }
 
 /// One operand in a comparison expression.
-/// Designed to be extensible toward arithmetic expressions in the future.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operand {
     /// A bare identifier referencing a column (e.g. `stock`, `expired_at`).
@@ -311,7 +310,6 @@ pub enum Operand {
     IntLit(std::string::String),
     /// The built-in temporal reference `now`.
     Now,
-    // Future: Arith(Box<Operand>, ArithOp, Box<Operand>)
 }
 
 /// A column reference qualified by an entity id.
@@ -346,6 +344,40 @@ pub enum Expr {
     Or(Box<Expr>, Box<Expr>),
     /// Logical NOT: `not a` or `~ a` (TLA alias).
     Not(Box<Expr>),
+}
+
+/// The expression of a `@check(...)` or `@derived(...)` column annotation.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ColumnExpr {
+    Logical(Expr),
+    /// One binary operation over a column or an integer: `total - discount`.
+    Arith(Arith),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Arith {
+    /// `Operand::Column` or `Operand::IntLit`; the parser admits nothing else.
+    pub lhs: Operand,
+    pub op: ArithOp,
+    pub rhs: Operand,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArithOp {
+    Add,
+    Sub,
+    Mul,
+}
+
+impl ArithOp {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ArithOp::Add => "+",
+            ArithOp::Sub => "-",
+            ArithOp::Mul => "*",
+        }
+    }
 }
 
 // ── Predicate call ───────────────────────────────────────────────────────────

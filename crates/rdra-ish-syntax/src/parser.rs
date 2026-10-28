@@ -196,12 +196,7 @@ fn annotation() -> impl Parser<Token, Annotation, Error = Simple<Token>> + Clone
             Some(v) => Annotation::IndexComposite(v),
         });
 
-    // @check("...")
-    let at_check = just(Token::AtCheck)
-        .ignore_then(just(Token::LParen))
-        .ignore_then(string_lit())
-        .then_ignore(just(Token::RParen))
-        .map(Annotation::Check);
+    let at_check = expr_annotation(Token::AtCheck, "@check", Annotation::Check);
 
     // @null
     let at_null = just(Token::AtNull).to(Annotation::Null);
@@ -223,11 +218,7 @@ fn annotation() -> impl Parser<Token, Annotation, Error = Simple<Token>> + Clone
     let at_soft_delete = just(Token::AtSoftDelete).to(Annotation::SoftDelete);
     let at_history = just(Token::AtHistory).to(Annotation::History);
     let at_tenant = just(Token::AtTenant).to(Annotation::Tenant);
-    let at_derived = just(Token::AtDerived)
-        .ignore_then(just(Token::LParen))
-        .ignore_then(string_lit())
-        .then_ignore(just(Token::RParen))
-        .map(Annotation::Derived);
+    let at_derived = expr_annotation(Token::AtDerived, "@derived", Annotation::Derived);
 
     choice((
         at_pk,
@@ -242,6 +233,43 @@ fn annotation() -> impl Parser<Token, Annotation, Error = Simple<Token>> + Clone
         at_tenant,
         at_derived,
     ))
+}
+
+/// `@check(expr)` / `@derived(expr)`. The quoted form of earlier versions is an error whose
+/// message is the unquoted rewrite.
+fn expr_annotation(
+    token: Token,
+    name: &'static str,
+    wrap: fn(ColumnExpr) -> Annotation,
+) -> impl Parser<Token, Annotation, Error = Simple<Token>> + Clone {
+    just(token)
+        .ignore_then(just(Token::LParen))
+        .ignore_then(string_lit().map(Err).or(column_expr().map(Ok)))
+        .then_ignore(just(Token::RParen))
+        .try_map(move |expr, span| match expr {
+            Ok(expr) => Ok(wrap(expr)),
+            Err(quoted) => Err(Simple::custom(
+                span,
+                format!("`{name}` takes an unquoted expression; write `{name}({quoted})`"),
+            )),
+        })
+}
+
+/// `operand (+|-|*) operand` over a column or an integer, or a logical expression.
+fn column_expr() -> impl Parser<Token, ColumnExpr, Error = Simple<Token>> + Clone {
+    let arith_operand =
+        select! { Token::IntLit(s) => Operand::IntLit(s) }.or(ident().map(Operand::Column));
+    let arith_op = select! {
+        Token::Plus => ArithOp::Add,
+        Token::Minus => ArithOp::Sub,
+        Token::Star => ArithOp::Mul,
+    };
+    let arith = arith_operand
+        .clone()
+        .then(arith_op)
+        .then(arith_operand)
+        .map_with_span(|((lhs, op), rhs), span| ColumnExpr::Arith(Arith { lhs, op, rhs, span }));
+    arith.or(logical_expr().map(ColumnExpr::Logical))
 }
 
 // ── Column type ───────────────────────────────────────────────────────────────
@@ -1434,18 +1462,76 @@ entity Product "商品" {
   id:  Int    @pk
   sku: String @unique @index
   name: String @label("商品名")
-  price: Decimal @check("price >= 0")
+  price: Decimal @check(price >= 0)
   store_id: Int @index(status, store_id) @unique(sku, store_id)
   status: Enum(active, discontinued) @default(active)
   note: String @null
   tenant_id: Int @tenant
   deleted_at: DateTime @null @soft_delete
   valid_from: DateTime @history
-  display_price: Money @derived("price * tax_rate")
+  display_price: Money @derived(price * tax_rate)
 }
 "#;
         let ast = parse_ok(src);
         insta::assert_debug_snapshot!(ast);
+    }
+
+    fn column_annotations(src: &str) -> Vec<Annotation> {
+        let ast = parse_ok(src);
+        let Item::Instance(entity) = &ast.items[0] else {
+            panic!("expected an entity");
+        };
+        entity.columns[0].annotations.clone()
+    }
+
+    #[test]
+    fn check_and_derived_take_typed_expressions() {
+        let check = column_annotations("entity E \"E\" { qty: Int @check(qty >= 1 and qty <= 5) }");
+        assert!(
+            matches!(
+                &check[0],
+                Annotation::Check(ColumnExpr::Logical(Expr::And(..)))
+            ),
+            "{check:?}"
+        );
+        let derived = column_annotations("entity E \"E\" { net: Int @derived(total - 2) }");
+        let Annotation::Derived(ColumnExpr::Arith(arith)) = &derived[0] else {
+            panic!("{derived:?}");
+        };
+        assert_eq!(arith.lhs, Operand::Column("total".to_string()));
+        assert_eq!(arith.op, ArithOp::Sub);
+        assert_eq!(arith.rhs, Operand::IntLit("2".to_string()));
+    }
+
+    #[test]
+    fn a_quoted_check_is_an_error_naming_the_unquoted_form() {
+        let (_, errors) = parse("entity E \"E\" { qty: Int @check(\"qty >= 1\") }");
+        let messages: Vec<String> = errors.iter().map(crate::format_parse_error).collect();
+        assert!(
+            messages
+                .iter()
+                .any(|m| m.contains("write `@check(qty >= 1)`")),
+            "{messages:?}"
+        );
+        let (_, errors) = parse("entity E \"E\" { net: Int @derived(\"a - b\") }");
+        let messages: Vec<String> = errors.iter().map(crate::format_parse_error).collect();
+        assert!(
+            messages
+                .iter()
+                .any(|m| m.contains("write `@derived(a - b)`")),
+            "{messages:?}"
+        );
+    }
+
+    #[test]
+    fn arith_takes_one_operator_over_columns_and_integers() {
+        for src in [
+            "entity E \"E\" { n: Int @derived(a + b + c) }",
+            "entity E \"E\" { n: Int @derived(now - a) }",
+            "entity E \"E\" { n: Int @derived(E.a * 2) }",
+        ] {
+            assert!(!parse(src).1.is_empty(), "{src} should not parse");
+        }
     }
 
     #[test]

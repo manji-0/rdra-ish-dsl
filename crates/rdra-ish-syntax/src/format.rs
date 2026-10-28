@@ -308,14 +308,14 @@ fn format_annotation(annotation: &Annotation) -> String {
         Annotation::UniqueComposite(columns) => format!("@unique({})", columns.join(", ")),
         Annotation::Index => "@index".to_string(),
         Annotation::IndexComposite(columns) => format!("@index({})", columns.join(", ")),
-        Annotation::Check(expr) => format!("@check({})", quote_string(expr)),
+        Annotation::Check(expr) => format!("@check({})", format_column_expr(expr)),
         Annotation::Null => "@null".to_string(),
         Annotation::Default(value) => format!("@default({})", format_metadata_value(value)),
         Annotation::Label(value) => format!("@label({})", quote_string(value)),
         Annotation::SoftDelete => "@soft_delete".to_string(),
         Annotation::History => "@history".to_string(),
         Annotation::Tenant => "@tenant".to_string(),
-        Annotation::Derived(expr) => format!("@derived({})", quote_string(expr)),
+        Annotation::Derived(expr) => format!("@derived({})", format_column_expr(expr)),
     }
 }
 
@@ -364,6 +364,18 @@ fn format_expr(expr: &Expr) -> String {
         Expr::Not(inner) => format!("not ({})", format_expr(inner)),
         Expr::And(a, b) => format!("({}) and ({})", format_expr(a), format_expr(b)),
         Expr::Or(a, b) => format!("({}) or ({})", format_expr(a), format_expr(b)),
+    }
+}
+
+fn format_column_expr(expr: &ColumnExpr) -> String {
+    match expr {
+        ColumnExpr::Logical(expr) => format_expr(expr),
+        ColumnExpr::Arith(arith) => format!(
+            "{} {} {}",
+            format_operand(&arith.lhs),
+            arith.op.as_str(),
+            format_operand(&arith.rhs)
+        ),
     }
 }
 
@@ -425,6 +437,18 @@ fn is_identish(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn formats_check_and_derived_unquoted() {
+        let src = "entity E \"E\" {\n  qty: Int @check(qty >= 1 and not qty > 4)\n  net: Int @derived(qty * 2)\n}\n";
+        let formatted = format_source(src).unwrap();
+        assert!(
+            formatted.contains("@check((qty >= 1) and (not (qty > 4)))"),
+            "{formatted}"
+        );
+        assert!(formatted.contains("@derived(qty * 2)"), "{formatted}");
+        assert_eq!(format_source(&formatted).unwrap(), formatted);
+    }
 
     #[test]
     fn formats_nm_via_chain() {

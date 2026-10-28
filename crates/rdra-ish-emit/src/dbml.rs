@@ -162,7 +162,7 @@ fn column_note(column: &ModelColumn) -> String {
         notes.push(label.clone());
     }
     for check in &column.check_constraints {
-        notes.push(format!("check: {check}"));
+        notes.push(format!("check: {}", check.expr.display()));
     }
     if column.is_soft_delete {
         notes.push("soft delete marker".to_string());
@@ -174,7 +174,7 @@ fn column_note(column: &ModelColumn) -> String {
         notes.push("tenant scope discriminator".to_string());
     }
     if let Some(expr) = &column.derived_expr {
-        notes.push(format!("derived: {expr}"));
+        notes.push(format!("derived: {}", expr.display()));
     }
     notes.join("; ")
 }
@@ -343,9 +343,10 @@ entity Order "Order" description "Logical order table" {
   id: Int @pk
   tenant_id: Int @tenant
   status: Enum(pending, paid) @default(pending)
-  total: Money @check("total >= 0")
+  total: Money @check(total >= 0)
+  discount: Money
   deleted_at: DateTime @null @soft_delete
-  net_total: Money @derived("total - discount")
+  net_total: Money @derived(total - discount)
   store_id: Int @index(status, store_id) @unique(status, store_id)
 }
 relate(Order, Customer, N:1).optional().on_delete(set_null).on_update(cascade)

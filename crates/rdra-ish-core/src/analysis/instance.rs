@@ -9,6 +9,7 @@ use crate::model::*;
 use rdra_ish_syntax::ast::*;
 
 use super::arg_resolve::resolve_variation;
+use super::column_expr::resolve_column_exprs;
 use super::metadata::{
     adr_metadata_is_empty, api_metadata_is_empty, field_metadata_is_empty, nfr_metadata_is_empty,
     requirement_metadata_is_empty, usecase_metadata_is_empty,
@@ -382,10 +383,13 @@ fn model_columns(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Vec<ModelColumn> {
-    inst.columns
+    let mut columns: Vec<ModelColumn> = inst
+        .columns
         .iter()
         .map(|col| ast_column_to_model(model, inst, col, ctx, diags))
-        .collect()
+        .collect();
+    resolve_column_exprs(inst, &mut columns, ctx, diags);
+    columns
 }
 
 fn ast_column_to_model(
@@ -445,7 +449,8 @@ fn ast_column_to_model(
             Annotation::UniqueComposite(_) => {}
             Annotation::Index => mc.is_indexed = true,
             Annotation::IndexComposite(_) => {}
-            Annotation::Check(expr) => mc.check_constraints.push(expr.clone()),
+            // Resolved against the whole column list by `resolve_column_exprs`.
+            Annotation::Check(_) | Annotation::Derived(_) => {}
             Annotation::Null => mc.is_nullable = true,
             Annotation::Default(v) => {
                 if let ColumnType::Variation(key) = &mc.col_type {
@@ -470,7 +475,6 @@ fn ast_column_to_model(
             Annotation::SoftDelete => mc.is_soft_delete = true,
             Annotation::History => mc.is_history = true,
             Annotation::Tenant => mc.is_tenant_scope = true,
-            Annotation::Derived(expr) => mc.derived_expr = Some(expr.clone()),
         }
     }
     mc

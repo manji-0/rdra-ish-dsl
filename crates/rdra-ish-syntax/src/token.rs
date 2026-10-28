@@ -141,10 +141,14 @@ pub enum Token {
     DotDot,
     #[token(".")]
     Dot,
-    /// The open upper bound of a cardinality range: `1..*`.
+    /// The open upper bound of a cardinality range (`1..*`), and multiplication.
     #[token("*")]
     Star,
-    // "->" must come before bare "-" if it is ever added
+    #[token("+")]
+    Plus,
+    // logos takes the longest match, so "->" never lexes as "-" then ">".
+    #[token("-")]
+    Minus,
     #[token("->")]
     Arrow,
     // Comparison operators: longer tokens must come before shorter ones

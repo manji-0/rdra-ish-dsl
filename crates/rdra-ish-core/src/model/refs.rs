@@ -1,3 +1,4 @@
+use super::comparison::{ColumnCheck, DerivedExpr};
 use super::foreign_key::RefAction;
 use super::keys::*;
 
@@ -436,9 +437,28 @@ pub struct ModelColumn {
     pub is_nullable: bool,
     pub default_val: Option<std::string::String>,
     pub label: Option<std::string::String>,
-    pub check_constraints: Vec<std::string::String>,
+    pub check_constraints: Vec<ColumnCheck>,
     pub is_soft_delete: bool,
     pub is_history: bool,
     pub is_tenant_scope: bool,
-    pub derived_expr: Option<std::string::String>,
+    pub derived_expr: Option<DerivedExpr>,
+}
+
+impl ModelColumn {
+    /// The `@check` expressions in canonical text, `|`-joined (CSV cells).
+    pub fn checks_display(&self) -> std::string::String {
+        self.check_constraints
+            .iter()
+            .map(|c| c.expr.display())
+            .collect::<Vec<_>>()
+            .join("|")
+    }
+
+    /// The `@derived` expression in canonical text, or empty.
+    pub fn derived_display(&self) -> std::string::String {
+        self.derived_expr
+            .as_ref()
+            .map(DerivedExpr::display)
+            .unwrap_or_default()
+    }
 }

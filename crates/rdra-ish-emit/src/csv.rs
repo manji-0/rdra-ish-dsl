@@ -81,11 +81,11 @@ impl Emitter for EntityListCsvEmitter {
                 let fk_on_delete = fk.and_then(|fk| fk.on_delete).map_or("", |a| a.as_str());
                 let fk_on_update = fk.and_then(|fk| fk.on_update).map_or("", |a| a.as_str());
                 let is_nullable = if col.is_nullable { "true" } else { "false" };
-                let check_constraints = col.check_constraints.join("|");
+                let check_constraints = col.checks_display();
                 let is_soft_delete = if col.is_soft_delete { "true" } else { "false" };
                 let is_history = if col.is_history { "true" } else { "false" };
                 let is_tenant_scope = if col.is_tenant_scope { "true" } else { "false" };
-                let derived_expr = col.derived_expr.as_deref().unwrap_or("").to_string();
+                let derived_expr = col.derived_display();
                 wtr.write_record([
                     ent.id.as_str(),
                     ent.label.as_str(),

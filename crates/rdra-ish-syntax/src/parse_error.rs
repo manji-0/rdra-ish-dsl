@@ -68,6 +68,8 @@ impl fmt::Display for Token {
             Token::DotDot => "..",
             Token::Dot => ".",
             Token::Star => "*",
+            Token::Plus => "+",
+            Token::Minus => "-",
             Token::Arrow => "->",
             Token::Le => "<=",
             Token::Ge => ">=",

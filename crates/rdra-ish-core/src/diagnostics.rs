@@ -160,6 +160,40 @@ pub enum RdraError {
     #[error("unknown column: entity '{entity}' has no column '{col}'\n  hint: check the column name in the entity definition")]
     UnknownColumn { entity: String, col: String },
 
+    // ── @check / @derived ────────────────────────────────────────────────────
+    #[error("`@check` on '{entity}.{column}' is arithmetic, not a condition\n  hint: write a comparison such as `@check({column} >= 0)`; put arithmetic in `@derived`")]
+    ArithNotInCheck { entity: String, column: String },
+
+    #[error("arithmetic in `@derived` of '{entity}.{column}' reads '{operand}', which is {operand_type}\n  hint: `+ - *` take Int, Money or Decimal columns and integers")]
+    ArithTypeMismatch {
+        entity: String,
+        column: String,
+        operand: String,
+        operand_type: String,
+    },
+
+    #[error("`@derived` of '{entity}.{column}' is {kind}, which cannot derive a {col_type} column\n  hint: a condition derives a Bool column; arithmetic derives an Int, Money or Decimal column")]
+    DerivedTypeMismatch {
+        entity: String,
+        column: String,
+        kind: String,
+        col_type: String,
+    },
+
+    #[error("derived column '{entity}.{column}' carries `{annotation}`\n  hint: a derived column follows from its expression; drop `{annotation}`, or put it on a column the expression reads")]
+    DerivedColumnAnnotation {
+        entity: String,
+        column: String,
+        annotation: String,
+    },
+
+    #[error("use case '{usecase}' writes derived column '{entity}.{column}'\n  hint: a derived column follows from its expression; write the columns it reads instead")]
+    DerivedColumnWritten {
+        entity: String,
+        column: String,
+        usecase: String,
+    },
+
     #[error("invalid enum value: column '{col}' has no variant '{value}'\n  hint: declared variants are: {allowed}")]
     InvalidEnumVariant {
         col: String,

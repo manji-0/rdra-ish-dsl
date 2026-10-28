@@ -221,7 +221,11 @@ fn insert_column_extensions(
     if !column.check_constraints.is_empty() {
         obj.insert(
             "x-rdra-ish-check-constraints".to_string(),
-            json!(column.check_constraints),
+            json!(column
+                .check_constraints
+                .iter()
+                .map(|c| c.expr.display())
+                .collect::<Vec<_>>()),
         );
     }
     if column.is_soft_delete {
@@ -234,7 +238,7 @@ fn insert_column_extensions(
         obj.insert("x-rdra-ish-tenant-scope".to_string(), json!(true));
     }
     if let Some(expr) = &column.derived_expr {
-        obj.insert("x-rdra-ish-derived".to_string(), json!(expr));
+        obj.insert("x-rdra-ish-derived".to_string(), json!(expr.display()));
     }
 }
 
@@ -295,9 +299,10 @@ entity Order "Order" description "Logical order" {
   id: Int @pk
   tenant_id: Int @tenant
   status: Enum(pending, paid) @default(pending)
-  total: Money @check("total >= 0")
+  total: Money @check(total >= 0)
+  discount: Money
   deleted_at: DateTime @null @soft_delete
-  net_total: Money @derived("total - discount")
+  net_total: Money @derived(total - discount)
   store_id: Int @index(status, store_id) @unique(status, store_id)
 }
 "#,

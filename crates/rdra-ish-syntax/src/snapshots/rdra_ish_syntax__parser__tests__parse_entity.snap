@@ -93,10 +93,23 @@ Ast {
                         col_type: Decimal,
                         annotations: [
                             Check(
-                                "price >= 0",
+                                Logical(
+                                    Cmp(
+                                        Comparison {
+                                            lhs: Column(
+                                                "price",
+                                            ),
+                                            op: Ge,
+                                            rhs: IntLit(
+                                                "0",
+                                            ),
+                                            span: 133..143,
+                                        },
+                                    ),
+                                ),
                             ),
                         ],
-                        span: 111..146,
+                        span: 111..144,
                     },
                     Column {
                         name: "store_id",
@@ -115,7 +128,7 @@ Ast {
                                 ],
                             ),
                         ],
-                        span: 149..210,
+                        span: 147..208,
                     },
                     Column {
                         name: "status",
@@ -130,7 +143,7 @@ Ast {
                                 "active",
                             ),
                         ],
-                        span: 213..264,
+                        span: 211..262,
                     },
                     Column {
                         name: "note",
@@ -138,7 +151,7 @@ Ast {
                         annotations: [
                             Null,
                         ],
-                        span: 267..285,
+                        span: 265..283,
                     },
                     Column {
                         name: "tenant_id",
@@ -146,7 +159,7 @@ Ast {
                         annotations: [
                             Tenant,
                         ],
-                        span: 288..310,
+                        span: 286..308,
                     },
                     Column {
                         name: "deleted_at",
@@ -155,7 +168,7 @@ Ast {
                             Null,
                             SoftDelete,
                         ],
-                        span: 313..352,
+                        span: 311..350,
                     },
                     Column {
                         name: "valid_from",
@@ -163,23 +176,34 @@ Ast {
                         annotations: [
                             History,
                         ],
-                        span: 355..384,
+                        span: 353..382,
                     },
                     Column {
                         name: "display_price",
                         col_type: Money,
                         annotations: [
                             Derived(
-                                "price * tax_rate",
+                                Arith(
+                                    Arith {
+                                        lhs: Column(
+                                            "price",
+                                        ),
+                                        op: Mul,
+                                        rhs: Column(
+                                            "tax_rate",
+                                        ),
+                                        span: 415..431,
+                                    },
+                                ),
                             ),
                         ],
-                        span: 387..436,
+                        span: 385..432,
                     },
                 ],
                 variation_values: [],
-                span: 1..438,
+                span: 1..434,
             },
         ),
     ],
-    source: "\nentity Product \"商品\" {\n  id:  Int    @pk\n  sku: String @unique @index\n  name: String @label(\"商品名\")\n  price: Decimal @check(\"price >= 0\")\n  store_id: Int @index(status, store_id) @unique(sku, store_id)\n  status: Enum(active, discontinued) @default(active)\n  note: String @null\n  tenant_id: Int @tenant\n  deleted_at: DateTime @null @soft_delete\n  valid_from: DateTime @history\n  display_price: Money @derived(\"price * tax_rate\")\n}\n",
+    source: "\nentity Product \"商品\" {\n  id:  Int    @pk\n  sku: String @unique @index\n  name: String @label(\"商品名\")\n  price: Decimal @check(price >= 0)\n  store_id: Int @index(status, store_id) @unique(sku, store_id)\n  status: Enum(active, discontinued) @default(active)\n  note: String @null\n  tenant_id: Int @tenant\n  deleted_at: DateTime @null @soft_delete\n  valid_from: DateTime @history\n  display_price: Money @derived(price * tax_rate)\n}\n",
 }

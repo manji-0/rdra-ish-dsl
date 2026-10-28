@@ -496,10 +496,11 @@ entity Customer "Customer" { id: Int @pk }
 entity Order "Order" {
   id: Int @pk
   tenant_id: Int @tenant
-  total: Money @check("total >= 0")
+  total: Money @check(total >= 0)
+  discount: Money
   deleted_at: DateTime @null @soft_delete
   valid_from: DateTime @history
-  net_total: Money @derived("total - discount")
+  net_total: Money @derived(total - discount)
 }
 relate(Order, Customer, N:1).optional().on_delete(set_null).on_update(cascade)
 "#;
