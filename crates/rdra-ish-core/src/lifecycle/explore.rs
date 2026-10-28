@@ -491,8 +491,14 @@ pub(crate) enum Scan {
 }
 
 impl TransitionSystem {
-    /// Which of `act`'s checks in `moves` hold in no state of `states`.
-    pub(crate) fn scan_guards(&self, act: ActId, states: &[State]) -> Scan {
+    /// Which of `act`'s checks in `moves` hold in no state of `states`. With `pin = (p, k)`,
+    /// only the bindings that put param `p` on slot `k` count.
+    pub(crate) fn scan_guards<'a>(
+        &self,
+        act: ActId,
+        states: impl IntoIterator<Item = &'a State>,
+        pin: Option<(usize, u8)>,
+    ) -> Scan {
         let action = &self.actions[act.index()];
         let mut bound = vec![false; action.params.len()];
         let mut held = vec![false; action.guards.len()];
@@ -504,9 +510,14 @@ impl TransitionSystem {
                     ParamRole::New => Value::ABSENT,
                     ParamRole::Existing | ParamRole::Parent => Value::PRESENT,
                 };
-                bound[p] |= (0..self.bounds.slots()).any(|slot| s.get(self, exists, slot) == want);
+                let mut slots = match pin {
+                    Some((q, k)) if q == p => usize::from(k)..usize::from(k) + 1,
+                    _ => 0..self.bounds.slots(),
+                };
+                bound[p] |= slots.any(|slot| s.get(self, exists, slot) == want);
             }
-            for params in self.bindings(action, s) {
+            let pinned = |params: &Vec<u8>| pin.is_none_or(|(p, k)| params[p] == k);
+            for params in self.bindings(action, s).into_iter().filter(pinned) {
                 any_binding = true;
                 for (g, guard) in action.guards.iter().enumerate() {
                     if held[g] {

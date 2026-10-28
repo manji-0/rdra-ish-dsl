@@ -1,5 +1,5 @@
-// cross_order_payment.rdra with Pay split across two APIs: each API is its own atomic
-// boundary, so Pay is two actions, Pay_1 and Pay_2 (docs/vision.md, rule 6).
+// cross_order_payment.rdra with Pay split across two APIs (two actions, Pay_1 and Pay_2;
+// docs/vision.md, rule 6), and a Cancel that does not delete the Payment.
 // TLC intent: expected FAIL. Pay_2 captures the payment while the linked Order is still
 // pending, Cancel then cancels that Order, and the forbidden pair is reached.
 entity Order "注文" {

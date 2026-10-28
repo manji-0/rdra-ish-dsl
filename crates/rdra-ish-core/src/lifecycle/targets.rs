@@ -7,7 +7,7 @@ use std::fmt;
 use super::cone::{Cone, Target};
 use super::diag::{Diag, StateDiag};
 use super::explore::{Caps, ComponentRun};
-use super::findings::{Runs, Witness};
+use super::findings::{Progress, Runs, Witness};
 use super::types::{EntId, ParamRole};
 use super::view::{entity_view, AbstractValue, EntityStateResult};
 use super::TransitionSystem;
@@ -37,6 +37,8 @@ pub struct Tally {
     pub state_models: usize,
     /// States of those models some reachable state holds.
     pub witnessed: usize,
+    /// States of those models an instance can get stuck at, the ones at the bound included.
+    pub deadlocks: usize,
     /// Actions no cone that keeps them runs.
     pub never_run: usize,
 }
@@ -61,6 +63,12 @@ pub enum Subject {
     },
     /// Whether an action can run.
     Runs { action: String },
+    /// Whether an instance can get stuck at a state of a state model.
+    Deadlock {
+        entity: String,
+        column: String,
+        value: String,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -82,6 +90,14 @@ impl fmt::Display for Undecided {
                 value,
             } => write!(f, "state {entity}.{column} = {value} is not decided: ")?,
             Subject::Runs { action } => write!(f, "whether {action} can run is not decided: ")?,
+            Subject::Deadlock {
+                entity,
+                column,
+                value,
+            } => write!(
+                f,
+                "whether some {entity} can get stuck at {column} = {value} is not decided: "
+            )?,
         }
         let cone = self.cone.as_deref().unwrap_or("its");
         match self.why {
@@ -140,7 +156,7 @@ impl TransitionSystem {
                     if !entity_cones.contains(&at) {
                         entity_cones.push(at);
                     }
-                    self.entity_findings(e, &cones[at].run, &mut out, &mut runs);
+                    self.entity_findings(e, &cones[at], &mut out, &mut runs);
                 }
                 _ => out.verdicts.extend(self.verdict(target, &cones[at])),
             }
@@ -185,16 +201,17 @@ impl TransitionSystem {
         EntId::at(at)
     }
 
-    /// The `NoWitness` errors of `e`'s state models on its cone and the states a capped cone
-    /// leaves undecided; and into `runs`, by this system's action, what the cone says about
-    /// each action it keeps.
+    /// The `NoWitness` errors and `Deadlock`s of `e`'s state models on its cone, each deadlock
+    /// with its trace, and what a capped cone leaves undecided; and into `runs`, by this
+    /// system's action, what the cone says about each action it keeps.
     fn entity_findings(
         &self,
         e: EntId,
-        run: &ComponentRun,
+        cone: &ConeRun,
         out: &mut TargetExploration,
         runs: &mut [RunsSoFar],
     ) {
+        let run = &cone.run;
         let decl = self.entity(e);
         let local = run.system.local_entity(decl.key);
         let why = run.diags.iter().find_map(|d| match d.diag {
@@ -228,6 +245,31 @@ impl TransitionSystem {
             }
         }
         out.tally.state_models += models.len();
+        for d in findings.deadlocks {
+            match d.progress {
+                Progress::Leaves => {}
+                Progress::Stuck { at, mut diag } => {
+                    if let Some(trace) = diag.trace_mut() {
+                        *trace = run.trace_to(at);
+                        trace.over_bound = self.over_bound(&cone.cone, trace);
+                    }
+                    out.tally.deadlocks += 1;
+                    out.verdicts.push(Diag {
+                        diag: *diag,
+                        entities: vec![decl.key],
+                    });
+                }
+                Progress::NotDecided => out.undecided.push(Undecided {
+                    subject: Subject::Deadlock {
+                        entity: decl.id.clone(),
+                        column: run.system.var_name(d.var),
+                        value: run.system.value_text(d.var, d.value),
+                    },
+                    cone: Some(decl.id.clone()),
+                    why: capped(),
+                }),
+            }
+        }
         for a in findings.runs {
             let name = &run.system.actions()[a.act.index()].name;
             let at = self
@@ -325,8 +367,8 @@ impl TargetExploration {
         &self.cones[at]
     }
 
-    /// Constraint and assert verdicts, `NoWitness` errors, and `NeverRuns` warnings, each from
-    /// its own cone and each once.
+    /// Constraint and assert verdicts, `NoWitness` errors, `Deadlock`s, and `NeverRuns`
+    /// warnings, each from its own cone and each once.
     pub fn verdicts(&self) -> &[Diag] {
         &self.verdicts
     }
@@ -341,8 +383,9 @@ impl TargetExploration {
         self.tally
     }
 
-    /// A run whose `--buc` drops use cases rules neither a state nor an action out: its
-    /// `NoWitness` errors and `NeverRuns` warnings become undecided.
+    /// A run whose `--buc` drops use cases rules neither a state, an action, nor a way out of
+    /// a state out: its `NoWitness` errors, `Deadlock`s, and `NeverRuns` warnings become
+    /// undecided.
     pub(crate) fn defer_progress(&mut self) {
         let mut kept = Vec::new();
         for d in std::mem::take(&mut self.verdicts) {
@@ -360,6 +403,16 @@ impl TargetExploration {
                 StateDiag::NeverRuns { action, .. } => Subject::Runs {
                     action: action.clone(),
                 },
+                StateDiag::Deadlock {
+                    entity,
+                    column,
+                    value,
+                    ..
+                } => Subject::Deadlock {
+                    entity: entity.clone(),
+                    column: column.clone(),
+                    value: value.clone(),
+                },
                 _ => {
                     kept.push(d);
                     continue;
@@ -372,6 +425,7 @@ impl TargetExploration {
             });
         }
         self.verdicts = kept;
+        self.tally.deadlocks = 0;
         self.tally.never_run = 0;
     }
 

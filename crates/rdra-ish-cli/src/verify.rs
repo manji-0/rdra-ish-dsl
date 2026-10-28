@@ -373,8 +373,9 @@ fn run_tlc(
     }
 }
 
-/// BFS on each entity cone at the verify bounds: the `NoWitness` errors and `NeverRuns`
-/// warnings, rendered, then one summary line. A state or an action a capped cone leaves
+/// BFS on each entity cone at the verify bounds: the `NoWitness` errors, the `Deadlock`s
+/// (errors, or warnings at the bound), and the `NeverRuns` warnings, rendered, then one
+/// summary line. A state or an action a capped cone leaves
 /// undecided prints a note. The exploration is dropped before TLC starts.
 fn state_models(program: &ResolvedProgram, model: &SemanticModel, ts: &TransitionSystem) -> usize {
     let entities: Vec<Target> = ts
@@ -398,10 +399,11 @@ fn state_models(program: &ResolvedProgram, model: &SemanticModel, ts: &Transitio
     let plural =
         |n: usize, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
     println!(
-        "state models (BFS on {}): {}, {} witnessed, {}",
+        "state models (BFS on {}): {}, {} witnessed, {}, {}",
         plural(t.entity_cones, "entity cone", "entity cones"),
         plural(t.state_models, "state model", "state models"),
         plural(t.witnessed, "state", "states"),
+        plural(t.deadlocks, "deadlock", "deadlocks"),
         plural(
             t.never_run,
             "use case that never runs",

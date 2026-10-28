@@ -124,7 +124,7 @@ impl TransitionSystem {
         Some(state)
     }
 
-    fn inst(&self, e: EntId, slot: usize) -> Inst {
+    pub(crate) fn inst(&self, e: EntId, slot: usize) -> Inst {
         Inst {
             entity: self.entity(e).id.clone(),
             slot: slot as u8 + 1,
@@ -145,7 +145,7 @@ impl TransitionSystem {
         }
     }
 
-    fn value_text(&self, var: VarId, value: Value) -> String {
+    pub(crate) fn value_text(&self, var: VarId, value: Value) -> String {
         match &self.var(var).domain {
             d @ Domain::Instance { parent, .. } => match d.slot(value) {
                 Some(slot) => self.inst(*parent, usize::from(slot)).to_string(),

@@ -1,9 +1,9 @@
 // A state nothing reaches. Refund leaves shipped only inside the refund window, and the
 // window holds only while the Order is pending, so no sequence of use cases enters refunded.
-// check/states/verify intent: expected FAIL with Witness_Order_status_refunded. TLC finds no
-// violation: the BFS state-model finding fails the run.
-// expect check: fail Witness_Order_status_refunded
-// expect verify: tlc=ok fail Witness_Order_status_refunded
+// Refund is also the only way out of shipped, so a shipped Order is a deadlock. TLC finds
+// no violation: the BFS state-model findings fail check and verify.
+// expect check: fail Witness_Order_status_refunded Deadlock_Order_status_shipped
+// expect verify: tlc=ok fail Witness_Order_status_refunded Deadlock_Order_status_shipped
 entity Order "注文" {
   id:         Int @pk
   status:     Enum(pending, paid, shipped, refunded) @default(pending)

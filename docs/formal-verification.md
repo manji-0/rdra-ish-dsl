@@ -122,10 +122,15 @@ Before TLC runs, `verify` explores each entity's cone with BFS at the same bound
 state model must have a witness there (see
 [state-derivation.md](./state-derivation.md#state-models-and-witnesses)). A `NoWitness`
 error fails `verify` even when every TLC check passes: the run prints `tlc_result: ok` and
-no `OK:` line, and exits 1. The same pass finds each use case that never runs (see
+no `OK:` line, and exits 1. A deadlock, an instance that no path moves off a state with a
+way out (see [state-derivation.md](./state-derivation.md#deadlocks)), fails it the same way;
+one whose way out lacks only a free slot is a warning at the bound. TLC's own deadlock check
+stays off: every bounded model ends with no enabled action, and an always-enabled loop would
+hide a stuck instance. The same pass finds each use case that never runs (see
 [state-derivation.md](./state-derivation.md#use-cases-that-never-run)) and prints it as a
 warning, which does not fail the run. A cone that stops at the cap decides nothing about its
-unwitnessed states or its actions with no edge, and `verify` prints a `note:` for each. The
+unwitnessed states, its deadlocks, or its actions with no edge, and `verify` prints a
+`note:` for each. The
 pass ends with a `state models (BFS on N entity cones): ...` summary line. On clinic-ops
 this pass takes about 11 s and 400 MB, most of it the `AccountBalance` cone (1,707,212
 states).
@@ -135,7 +140,7 @@ $ rdra-ish verify samples/formal-verification/order.rdra --backend tlc
 bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 2097152 states per BFS cone; entities a check does not read are unbounded
 cones: 1 for 2 invariant(s) and 1 after-assert(s)
 temporal properties: 2, checked on the whole model (fairness does not restrict to a cone)
-state models (BFS on 1 entity cone): 1 state model, 5 states witnessed, 0 use cases that never run
+state models (BFS on 1 entity cone): 1 state model, 5 states witnessed, 0 deadlocks, 0 use cases that never run
 Cone_Forbidden_Order_0 [Forbidden_Order_0, Inv_Order_0, AfterAssert_DeliverOrder_0]: ok (31 states)
 RdraSpec [PaidLeadsToShipped, EventuallyTerminal]: ok (31 states)
 tlc_result: ok
@@ -216,8 +221,8 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `order.rdra` | pass, pass | Lifecycle invariants + `after.assert` + `leads_to` / `eventually` + `WF_vars` |
 | `int_stock.rdra` | pass, pass | Int columns, arithmetic `forbidden`, Int temporal property |
 | `now_coupon.rdra` | fail, fail | `now` and `Tick`; the invariant finds `expired_at < now` |
-| `cross_order_payment.rdra` | pass, pass | Multi-instance + `.along` (Pay is one atomic action, so Cancel cannot interleave) |
-| `cross_order_payment_split.rdra` | fail, fail | The same model with Pay through two APIs: two transaction groups, so Cancel interleaves between `Pay_1` and `Pay_2` |
+| `cross_order_payment.rdra` | pass, pass | Multi-instance + `.along` (Pay is one atomic action, so Cancel cannot interleave; Cancel deletes the pending Payment) |
+| `cross_order_payment_split.rdra` | fail, fail | The same model with Pay through two APIs: two transaction groups, so Cancel interleaves between `Pay_1` and `Pay_2`; Cancel does not delete the Payment here |
 | `quantifier_none.rdra` | fail, fail | `when(...).none` (Revoke while Assign stays active) |
 | `untriggered_sets.rdra` | fail, fail | `sets` from a use case that drives no transition (Flag then Ship reaches the forbidden state) |
 | `after_assert_unmet.rdra` | fail, fail | `after(DeliverOrder).assert` without the `sets` that makes it true |
@@ -226,7 +231,8 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `min_card_met.rdra` | pass, pass | The same model with Place creating the Order and its first line in one transaction. At one instance `check` warns that AddLine never runs: an Order exists only with the one OrderLine slot taken. At two instances it runs |
 | `check_unmet.rdra` | fail, fail | `qty: Int @default(1) @check(qty >= 1)` adds `Check_CartLine_qty_0`; ClearQty sets `qty` to 0 |
 | `check_met.rdra` | pass, pass | The same check with a use case that keeps `qty` in range; `forbidden` reads the derived `bulk: Bool @derived(qty >= 3)` as its expression |
-| `unwitnessed_state.rdra` | fail, pass | `refunded` has no witness: Refund needs `shipped` and a refund window that holds only while `pending`. TLC passes; the BFS witness check fails `check` and `verify`, and both warn that Refund never runs (its guards never hold together) |
+| `unwitnessed_state.rdra` | fail, pass | `refunded` has no witness: Refund needs `shipped` and a refund window that holds only while `pending`. TLC passes; the BFS witness check fails `check` and `verify`, a shipped Order is a deadlock (Refund is its only way out), and both warn that Refund never runs (its guards never hold together) |
+| `deadlock.rdra` | fail, pass | An Order stays `paid` forever: Ship leaves `paid` only while a packing condition holds, and it holds only while `pending`. Express ships a pending Order, so `shipped` has a witness. TLC passes; the BFS deadlock check fails `check` and `verify`, and both warn that Ship never runs |
 | `fail/order.rdra` | fail, fail | Intentionally unsafe (reachable invariant violation) |
 
 BFS and TLC give the same verdict on every row at the same bounds. `check` runs at one

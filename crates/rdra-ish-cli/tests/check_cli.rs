@@ -153,9 +153,9 @@ guard: Order.status is paid (transitions of Refund) never_runs.rdra:18:1"
 }
 
 /// A state of a state model that no use case reaches is one error, with the arm that would
-/// enter it; the use case that would enter it never runs, a warning with its declaration;
-/// `states` reports both on the entity's view, and each reachable pattern carries the path
-/// that reaches it.
+/// enter it; the Order that would leave shipped through it never does, a deadlock; the use
+/// case that would enter it never runs, a warning with its declaration; `states` reports all
+/// three on the entity's view, and each reachable pattern carries the path that reaches it.
 #[test]
 fn check_reports_a_state_no_use_case_reaches() {
     let sample = "samples/formal-verification/unwitnessed_state.rdra";
@@ -171,6 +171,17 @@ fn check_reports_a_state_no_use_case_reaches() {
 {BOUNDS}
 error: state Order.status = refunded has no reachability witness: no sequence of use cases from the start reaches it
   state model: Order.status, entered by Refund (shipped -> refunded)   {file}:31:1
+error: deadlock: Order#1 stays at status = shipped forever, and shipped is not an end state
+  leaves shipped: Refund (shipped -> refunded)   {file}:31:1
+    guard: condition RefundWindow                {file}:36:1
+  reached by (3 steps):
+    1. Place [Order#1]                                 {file}:13:1
+         + Order#1 (status=pending, shipped_at=null)
+    2. Pay [Order#1]                                   {file}:14:1
+         Order#1.status: pending -> paid               {file}:29:1
+    3. Ship [Order#1]                                  {file}:15:1
+         Order#1.status: paid -> shipped               {file}:30:1
+         Order#1.shipped_at: null -> present           {file}:33:1
 warning: use case Refund can never run: each of its guards holds in some reachable state, but never all of them in one
   declared: use case Refund   {file}:16:1
 "
@@ -188,6 +199,10 @@ warning: use case Refund can never run: each of its guards holds in some reachab
         .contains("Order.status = refunded has no reachability witness"));
     assert_eq!(
         order["diagnostics"][1],
+        "[error] deadlock: Order#1 stays at status = shipped forever, and shipped is not an end state"
+    );
+    assert_eq!(
+        order["diagnostics"][2],
         "[warn] Refund can never run: each of its guards holds in some reachable state, but never all of them in one"
     );
     let shipped = order["patterns"]
@@ -203,6 +218,36 @@ warning: use case Refund can never run: each of its guards holds in some reachab
         .map(|s| s["action"].as_str().unwrap())
         .collect();
     assert_eq!(actions, ["Place", "Pay", "Ship"]);
+}
+
+/// An Order whose only way out of paid never opens is one deadlock error: the way out with
+/// the guard that never holds while it is stuck, and a shortest path into it.
+#[test]
+fn check_reports_an_instance_that_never_leaves_its_state() {
+    let sample = "samples/formal-verification/deadlock.rdra";
+    let output = run(&["check", sample]);
+    assert_eq!(output.status.code(), Some(1));
+    let root = format!("{}/", repo().display());
+    let stderr = String::from_utf8_lossy(&output.stderr).replace(&root, "");
+    let file = "skills/rdra-ish-verify/samples/deadlock.rdra";
+    assert_eq!(
+        stderr,
+        format!(
+            "\
+{BOUNDS}
+error: deadlock: Order#1 stays at status = paid forever, and paid is not an end state
+  leaves paid: Ship (paid -> shipped)   {file}:29:1
+    guard: condition Packed             {file}:33:1
+  reached by (2 steps):
+    1. Place [Order#1]                     {file}:12:1
+         + Order#1 (status=pending)
+    2. Pay [Order#1]                       {file}:13:1
+         Order#1.status: pending -> paid   {file}:28:1
+warning: use case Ship can never run: each of its guards holds in some reachable state, but never all of them in one
+  declared: use case Ship   {file}:14:1
+"
+        )
+    );
 }
 
 /// From a relative input, `states --format json` names witness sites in the path form

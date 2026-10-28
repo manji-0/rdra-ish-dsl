@@ -24,6 +24,19 @@
   2,097,152 states per cone, and a `NoWitness` there fails the run even when TLC passes
   (`tlc_result: ok`, no `OK:` line, exit 1). Its `bounds:` line gains `2097152 states per
   BFS cone`. On clinic-ops the pass adds about 11 s.
+- An instance at a state of a state model that has a way out, from which no path moves it
+  (no edge changes its column or deletes it), is now `Deadlock`, an error in `check`,
+  `states`, `verify`, and the generator gates. An end state is one with no `transitions`
+  arm to another state; a deletion leaves every state. The check is per instance, so a use
+  case that keeps running elsewhere does not hide a stuck instance. When a way out lacks
+  only a free slot of an entity it creates, it is a `deadlock at the bound` warning. Each
+  state is reported once, with each way out and what blocks it, and a shortest path into
+  the first stuck state. A capped cone or a `--buc` run leaves it undecided with a
+  `note:`. `verify`'s summary line gains `D deadlocks` before the use cases that never
+  run. TLC's `CHECK_DEADLOCK` stays `FALSE`. On the samples: `cross_order_payment` left
+  a cancelled Order's Payment pending forever, so its Cancel now deletes the Payment (the
+  split variant keeps it, so its counterexample stays); `unwitnessed_state` also fails on
+  `Deadlock_Order_status_shipped`. clinic-ops has none.
 
 - `@check` and `@derived` take an unquoted, typed expression: `@check(qty >= 1)`,
   `@derived(total - discount)` or `@derived(qty >= 3)`. The quoted form is a parse
@@ -205,6 +218,9 @@
 
 ### Added
 
+- New sample `deadlock.rdra`: an Order stays `paid` forever because Ship's packing
+  condition holds only while `pending`. `check` and `verify` fail on
+  `Deadlock_Order_status_paid`, and TLC passes.
 - Use cases that never run. An action (a use case, or one transaction group of a split use
   case such as `Pay_2`) that no edge of any entity cone that keeps it carries is the
   `NeverRuns` warning in `check`, `states`, and `verify`; a self-loop counts as running.

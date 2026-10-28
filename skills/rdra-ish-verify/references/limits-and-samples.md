@@ -65,7 +65,8 @@ In the `rdra-ish-dsl` repository, `samples/formal-verification/` and
 | `samples/quantifier_none.rdra` | expected fail | `when(...).none` (interleaving) |
 | `samples/untriggered_sets.rdra` | expected fail | `sets` from a use case that drives no transition, next to `transitions` |
 | `samples/after_assert_unmet.rdra` | expected fail | `after(UC).assert` whose postcondition the use case does not set (fails, never vacuous) |
-| `samples/unwitnessed_state.rdra` | expected fail (TLC passes) | A `transitions` endpoint no use case reaches: `NoWitness` fails `check` and `verify`; Refund warns `NeverRuns` (guards never hold together) |
+| `samples/unwitnessed_state.rdra` | expected fail (TLC passes) | A `transitions` endpoint no use case reaches: `NoWitness` and `Deadlock` (shipped, whose only way out is Refund) fail `check` and `verify`; Refund warns `NeverRuns` (guards never hold together) |
+| `samples/deadlock.rdra` | expected fail (TLC passes) | A state with a way out that never opens: `Deadlock` (Order stays `paid`) fails `check` and `verify`; Ship warns `NeverRuns` |
 | `samples/one_to_one_shared.rdra` | expected fail | `relate(.., 1:1)` is the invariant `Unique_<Child>_<role>`; two use cases link two children to one parent (`check` passes: one instance) |
 | `samples/min_card_unmet.rdra` | expected fail | `relate(.., 1..*:1)` is the invariant `MinCard_<Child>_<role>`; a use case creates the parent without a child (`check` exits 1 too) |
 | `samples/min_card_met.rdra` | expected pass | The same model with the parent and its first child created in one transaction; `check` warns AddLine never runs at one instance (no free child slot), `verify` runs it |

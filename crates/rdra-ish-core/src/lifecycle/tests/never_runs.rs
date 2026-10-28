@@ -16,9 +16,10 @@ fn never_runs(diags: &[Diag]) -> Vec<(&str, &Blocked)> {
         .collect()
 }
 
-/// On every sample at `Bounds::STATES`, the only actions that never run are the two the
-/// samples explain: `Refund` (its guards never hold together) and `AddLine`, whose `Order`
-/// exists only with its one `OrderLine` slot taken at one instance per entity.
+/// On every sample at `Bounds::STATES`, the only actions that never run are the three the
+/// samples explain: `Ship` in `deadlock` and `Refund` (their guards never hold together),
+/// and `AddLine`, whose `Order` exists only with its one `OrderLine` slot taken at one
+/// instance per entity.
 #[test]
 fn only_the_explained_sample_actions_never_run() {
     let mut found = Vec::new();
@@ -32,6 +33,11 @@ fn only_the_explained_sample_actions_never_run() {
     assert_eq!(
         found,
         [
+            (
+                "samples/formal-verification/deadlock.rdra",
+                "Ship".to_string(),
+                Blocked::Together
+            ),
             (
                 "samples/formal-verification/min_card_met.rdra",
                 "AddLine".to_string(),

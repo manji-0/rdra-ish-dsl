@@ -173,5 +173,19 @@ jobs:
             echo "expected tlc_result: ok and the refunded witness error for $sample" >&2
             exit 1
           fi
+      - name: Verify fails on an instance that can never leave its state while TLC passes
+        run: |
+          BIN=./target/release/rdra-ish
+          sample=samples/formal-verification/deadlock.rdra
+          set +e
+          out=$("$BIN" verify "$sample" --backend tlc 2>&1)
+          status=$?
+          set -e
+          echo "$out"
+          if [[ $status -eq 0 ]] || ! grep -q "tlc_result: ok" <<<"$out" \
+            || ! grep -q "deadlock: Order#1 stays at status = paid forever" <<<"$out"; then
+            echo "expected tlc_result: ok and the paid deadlock error for $sample" >&2
+            exit 1
+          fi
       - name: Lifecycle BFS and TLC agree on every sample
         run: RDRA_REQUIRE_TLC=1 cargo test -p rdra-ish-cli --test engine_equivalence

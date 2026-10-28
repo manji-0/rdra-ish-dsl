@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use super::trace::Trace;
+use super::trace::{Inst, Trace};
 use super::types::{ActionOrigin, GuardWhy, InvKind, InvText, ParamRole, Site};
 use crate::model::EntityKey;
 
@@ -104,6 +104,19 @@ pub enum StateDiag {
         site: Site,
         why: Blocked,
     },
+    /// A present instance at a state of a state model that has a way out, from which no path
+    /// moves it: no edge ever changes the column or deletes it. Reported once per state, at
+    /// the first such reachable state, with a shortest trace to it.
+    Deadlock {
+        entity: String,
+        column: String,
+        value: String,
+        /// The stuck instance in the trace's last state.
+        at: Inst,
+        /// Each way out of the state, and what keeps it from moving the instance.
+        exits: Vec<Exit>,
+        trace: Trace,
+    },
     /// `after(UC).assert` names a use case that changes nothing.
     AssertOnInertUseCase { anchor: String, site: Site },
     /// An Int literal outside the bounded domain `0..=max`.
@@ -148,7 +161,8 @@ pub enum StateDiag {
 
 impl StateDiag {
     /// The stable name expectations and engine comparisons use: the invariant name, or
-    /// `Witness_<entity>_<column>_<value>`, or `Runs_<action>`. `None` for a diagnostic without one yet.
+    /// `Witness_<entity>_<column>_<value>`, `Runs_<action>`, or `Deadlock_<entity>_<column>_<value>`.
+    /// `None` for a diagnostic without one yet.
     pub fn name(&self) -> Option<String> {
         match self {
             StateDiag::ConstraintViolated { name, .. } => Some(name.clone()),
@@ -159,15 +173,22 @@ impl StateDiag {
                 ..
             } => Some(format!("Witness_{entity}_{column}_{value}")),
             StateDiag::NeverRuns { action, .. } => Some(format!("Runs_{action}")),
+            StateDiag::Deadlock {
+                entity,
+                column,
+                value,
+                ..
+            } => Some(format!("Deadlock_{entity}_{column}_{value}")),
             _ => None,
         }
     }
 
-    /// The counterexample of a violated constraint or assert.
+    /// The counterexample of a violated constraint or assert, or the path into a deadlock.
     pub fn trace(&self) -> Option<&Trace> {
         match self {
             StateDiag::ConstraintViolated { trace, .. }
-            | StateDiag::AfterAssertViolated { trace, .. } => Some(trace),
+            | StateDiag::AfterAssertViolated { trace, .. }
+            | StateDiag::Deadlock { trace, .. } => Some(trace),
             _ => None,
         }
     }
@@ -175,13 +196,19 @@ impl StateDiag {
     pub fn trace_mut(&mut self) -> Option<&mut Trace> {
         match self {
             StateDiag::ConstraintViolated { trace, .. }
-            | StateDiag::AfterAssertViolated { trace, .. } => Some(trace),
+            | StateDiag::AfterAssertViolated { trace, .. }
+            | StateDiag::Deadlock { trace, .. } => Some(trace),
             _ => None,
         }
     }
 
+    /// A deadlock is an error, unless some way out is blocked only by the instance bound: it
+    /// needs a free slot no stuck state has. The author cannot fix that in the model.
     pub fn severity(&self) -> Severity {
         match self {
+            StateDiag::Deadlock { exits, .. } if exits.iter().any(|x| x.why.only_free_slots()) => {
+                Severity::Warning
+            }
             StateDiag::NoCreationPath | StateDiag::MinCardNeedsCreate { .. } => Severity::Info,
             StateDiag::UnreachableEnumVariant { .. }
             | StateDiag::UnwrittenConstrainedVar { .. }
@@ -196,6 +223,7 @@ impl StateDiag {
             | StateDiag::ConstraintViolated { .. }
             | StateDiag::AfterAssertViolated { .. }
             | StateDiag::NoWitness { .. }
+            | StateDiag::Deadlock { .. }
             | StateDiag::AssertOnInertUseCase { .. }
             | StateDiag::IntLiteralOutOfBounds { .. }
             | StateDiag::UnbindableScope { .. }
@@ -216,6 +244,19 @@ pub struct Entry {
     pub site: Site,
 }
 
+/// A way out of a state of a state model: a `transitions` arm from it, or a deletion.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Exit {
+    pub action: String,
+    pub origin: ActionOrigin,
+    /// The state the arm enters; `None` for a deletion.
+    pub to: Option<String>,
+    /// The arm, or the use case declaration for a deletion.
+    pub site: Site,
+    /// What keeps it from moving the stuck instance, read off the states it stays stuck in.
+    pub why: Blocked,
+}
+
 /// Why an action never runs, read off the reachable states of a cone that keeps it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Blocked {
@@ -229,6 +270,14 @@ pub enum Blocked {
     Guards(Vec<(GuardWhy, Site)>),
     /// Each guard holds in some reachable state, but never all of them in one.
     Together,
+}
+
+impl Blocked {
+    /// Only free slots are missing: every param it lacks is a `New` one.
+    pub fn only_free_slots(&self) -> bool {
+        matches!(self, Blocked::NoInstance(params)
+            if params.iter().all(|(_, role)| *role == ParamRole::New))
+    }
 }
 
 pub fn has_errors<'a>(diags: impl IntoIterator<Item = &'a Diag>) -> bool {
@@ -308,6 +357,34 @@ impl fmt::Display for StateDiag {
                     Blocked::Together => write!(
                         f,
                         "each of its guards holds in some reachable state, but never all of them in one"
+                    ),
+                }
+            }
+            StateDiag::Deadlock {
+                column,
+                value,
+                at,
+                exits,
+                ..
+            } => {
+                let bound = exits.iter().find_map(|x| match &x.why {
+                    Blocked::NoInstance(params) if x.why.only_free_slots() => {
+                        Some((&x.action, params))
+                    }
+                    _ => None,
+                });
+                match bound {
+                    Some((action, params)) => {
+                        let slots: Vec<&str> = params.iter().map(|(e, _)| e.as_str()).collect();
+                        write!(
+                            f,
+                            "deadlock at the bound: {at} stays at {column} = {value} forever; {action} needs a free {} slot within the instance bound",
+                            slots.join(" and ")
+                        )
+                    }
+                    None => write!(
+                        f,
+                        "deadlock: {at} stays at {column} = {value} forever, and {value} is not an end state"
                     ),
                 }
             }

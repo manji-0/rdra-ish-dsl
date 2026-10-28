@@ -198,7 +198,37 @@ fn an_unwitnessed_state_fails_verify_while_tlc_passes() {
     );
     assert!(
         stdout.lines().any(|l| l
-            == "state models (BFS on 1 entity cone): 1 state model, 3 states witnessed, 1 use case that never runs"),
+            == "state models (BFS on 1 entity cone): 1 state model, 3 states witnessed, 1 deadlock, 1 use case that never runs"),
+        "{stdout}"
+    );
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// An instance that can never leave a state fails `verify` from BFS on the entity cones,
+/// though TLC finds no violation; the summary line counts it.
+#[test]
+fn a_deadlock_fails_verify_while_tlc_passes() {
+    if !have_tlc() {
+        return;
+    }
+    let tmp = scratch("verify_cli_deadlock");
+    let sample = repo().join("samples/formal-verification/deadlock.rdra");
+    let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
+    assert!(stdout.lines().any(|l| l == "tlc_result: ok"), "{stdout}");
+    assert!(!stdout.contains("OK: no errors"), "{stdout}");
+    assert!(
+        stderr.contains(
+            "error: deadlock: Order#1 stays at status = paid forever, and paid is not an end state\n  leaves paid: Ship (paid -> shipped)"
+        ),
+        "{stderr}"
+    );
+    assert!(stderr.contains("deadlock.rdra:29:1"), "{stderr}");
+    assert!(
+        stdout.lines().any(|l| l
+            == "state models (BFS on 1 entity cone): 1 state model, 3 states witnessed, 1 deadlock, 1 use case that never runs"),
         "{stdout}"
     );
     let _ = std::fs::remove_dir_all(&tmp);

@@ -3,7 +3,7 @@
 
 use rdra_ish_core::lifecycle::{
     derive_states, ActionOrigin, Blocked, Caps, Change, GuardWhy, InvKind, InvText, ModelRef,
-    ParamRole, Scope, Severity, Site, StateDiag, TraceStep,
+    ParamRole, Scope, Severity, Site, StateDiag, Trace, TraceStep,
 };
 use rdra_ish_core::{format_location, ResolvedProgram, SemanticModel};
 
@@ -103,33 +103,93 @@ fn render_never_runs(
         format!("  declared: {}", action_label(model, action, origin)),
         location(program, site),
     )];
-    match why {
-        Blocked::NoInstance(params) | Blocked::Apart(params) => {
-            rows.extend(params.iter().map(|(entity, role)| {
-                let text = match role {
-                    ParamRole::New => {
-                        format!("  needs: a free {entity} slot within the instance bound")
-                    }
-                    ParamRole::Existing | ParamRole::Parent => {
-                        format!("  needs: an existing {entity}")
-                    }
-                };
-                (text, None)
-            }))
-        }
-        Blocked::Guards(guards) => rows.extend(guards.iter().map(|(why, site)| {
-            (
-                format!("  guard: {}", guard_text(model, *why, site)),
-                location(program, site),
-            )
-        })),
-        Blocked::Together => {}
-    }
+    rows.extend(blocked_rows(program, model, why, "  "));
     Some(format!(
         "{}{reason}{}",
         action_label(model, action, origin),
         aligned(rows)
     ))
+}
+
+/// What blocks an action, one row each: the instances it lacks, or the guards that never
+/// hold with their sites. Nothing when each guard holds somewhere, only never together.
+fn blocked_rows(
+    program: &ResolvedProgram,
+    model: &SemanticModel,
+    why: &Blocked,
+    indent: &str,
+) -> Vec<(String, Option<String>)> {
+    match why {
+        Blocked::NoInstance(params) | Blocked::Apart(params) => params
+            .iter()
+            .map(|(entity, role)| {
+                let text = match role {
+                    ParamRole::New => {
+                        format!("{indent}needs: a free {entity} slot within the instance bound")
+                    }
+                    ParamRole::Existing | ParamRole::Parent => {
+                        format!("{indent}needs: an existing {entity}")
+                    }
+                };
+                (text, None)
+            })
+            .collect(),
+        Blocked::Guards(guards) => guards
+            .iter()
+            .map(|(why, site)| {
+                (
+                    format!("{indent}guard: {}", guard_text(model, *why, site)),
+                    location(program, site),
+                )
+            })
+            .collect(),
+        Blocked::Together => Vec::new(),
+    }
+}
+
+/// A deadlock, each way out of its state with what blocks it, and the path into it.
+fn render_deadlock(
+    program: &ResolvedProgram,
+    model: &SemanticModel,
+    diag: &StateDiag,
+) -> Option<String> {
+    let StateDiag::Deadlock {
+        entity,
+        value,
+        exits,
+        trace,
+        ..
+    } = diag
+    else {
+        return None;
+    };
+    let mut rows = Vec::new();
+    for x in exits {
+        let how = match &x.to {
+            Some(to) => format!("{value} -> {to}"),
+            None => format!("deletes the {entity}"),
+        };
+        rows.push((
+            format!("  leaves {value}: {} ({how})", x.action),
+            location(program, &x.site),
+        ));
+        rows.extend(blocked_rows(program, model, &x.why, "    "));
+        if x.why == Blocked::Together {
+            rows.push((
+                "    its guards never hold together while stuck".to_string(),
+                None,
+            ));
+        }
+    }
+    let mut out = format!("{diag}{}", aligned(rows));
+    out.push_str(&trace_block(
+        program,
+        model,
+        ("reached by", "path"),
+        trace,
+        "",
+    ));
+    Some(out)
 }
 
 /// A guard as the model states it: the `from` states of the use case's transitions on the
@@ -187,6 +247,9 @@ pub(crate) fn render_violation(
     if let Some(text) = render_never_runs(program, model, diag) {
         return Some(text);
     }
+    if let Some(text) = render_deadlock(program, model, diag) {
+        return Some(text);
+    }
     if let StateDiag::NoWitness {
         entity,
         column,
@@ -235,13 +298,32 @@ pub(crate) fn render_violation(
     if let Some(at) = location(program, site) {
         out.push_str(&format!("\n  rule: {at}"));
     }
-    let steps = trace.steps.len();
-    let plural = if steps == 1 { "" } else { "s" };
     let from = match source {
         TraceSource::Bfs => "",
         TraceSource::Tlc => ", from TLC",
     };
-    out.push_str(&format!("\n  counterexample ({steps} step{plural}{from}):"));
+    out.push_str(&trace_block(
+        program,
+        model,
+        ("counterexample", "counterexample"),
+        trace,
+        from,
+    ));
+    Some(out)
+}
+
+/// `  <header> (N steps<from>):`, then the start and each step with its changes and sites.
+/// `noun` names the trace in the note on a trace past the bound.
+fn trace_block(
+    program: &ResolvedProgram,
+    model: &SemanticModel,
+    (header, noun): (&str, &str),
+    trace: &Trace,
+    from: &str,
+) -> String {
+    let steps = trace.steps.len();
+    let plural = if steps == 1 { "" } else { "s" };
+    let mut out = format!("\n  {header} ({steps} step{plural}{from}):");
     let mut rows: Vec<(String, Option<String>)> = Vec::new();
     if !trace.start.is_empty() {
         rows.push(("    start".to_string(), None));
@@ -257,10 +339,10 @@ pub(crate) fn render_violation(
     out.push_str(&aligned(rows));
     for entity in &trace.over_bound {
         out.push_str(&format!(
-            "\n  note: the counterexample creates more {entity} instances than the instance bound allows; this check's cone does not count {entity} slots, so the whole model may not reach it at this bound"
+            "\n  note: the {noun} creates more {entity} instances than the instance bound allows; this check's cone does not count {entity} slots, so the whole model may not reach it at this bound"
         ));
     }
-    Some(out)
+    out
 }
 
 /// One line per row, each row's site in a column after the longest text.
@@ -462,6 +544,7 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
         StateDiag::StateCapReached { .. }
         | StateDiag::NoWitness { .. }
         | StateDiag::NeverRuns { .. }
+        | StateDiag::Deadlock { .. }
         | StateDiag::ContradictoryDrivenComparison { .. }
         | StateDiag::AssertOnInertUseCase { .. }
         | StateDiag::IntLiteralOutOfBounds { .. }

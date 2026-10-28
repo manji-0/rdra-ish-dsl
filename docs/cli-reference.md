@@ -101,6 +101,26 @@ A capped cone leaves such an action undecided with a `note: whether Pay_2 can ru
 decided: ...` line. See
 [Use cases that never run](./state-derivation.md#use-cases-that-never-run).
 
+An instance at a state with a way out that no path ever moves is one `error:`. It names each
+way out (a `transitions` arm, or a deletion) with what blocks it, read off the states the
+instance stays stuck in, and a shortest path into the first such state:
+
+```
+error: deadlock: Order#1 stays at status = paid forever, and paid is not an end state
+  leaves paid: Ship (paid -> shipped)   deadlock.rdra:29:1
+    guard: condition Packed             deadlock.rdra:33:1
+  reached by (2 steps):
+    1. Place [Order#1]                     deadlock.rdra:12:1
+         + Order#1 (status=pending)
+    2. Pay [Order#1]                       deadlock.rdra:13:1
+         Order#1.status: pending -> paid   deadlock.rdra:28:1
+```
+
+When a way out lacks only a free slot of an entity it creates, the instance bound blocks
+it, not the model, and the line is `warning: deadlock at the bound: ...`. A capped cone
+leaves each state with a way out undecided with a `note: whether some E can get stuck at
+col = v is not decided: ...` line. See [Deadlocks](./state-derivation.md#deadlocks).
+
 | Option | Description |
 |---|---|
 | `--strict` | Promote permission / access consistency gaps (`ActorPermissionMissing`, no-actor paths, etc.) from warnings to errors for exit. |
@@ -118,8 +138,9 @@ decided: ...` line. See
   intentional external publications with `outbox(Event)` to suppress only the
   raised-but-unconsumed warning;
 - state diagnostics (same severity as `states`), including missing creation paths,
-  unreachable enum variants, a state of a state model with no reachability witness, a use
-  case that never runs, a reachable state that breaks a `forbidden`, `invariant`,
+  unreachable enum variants, a state of a state model with no reachability witness, an
+  instance that can never leave a state (deadlock), a use case that never runs, a reachable
+  state that breaks a `forbidden`, `invariant`,
   `required`, `exclusive`, multi-entity, or quantifier rule, a failed `after` assertion,
   a condition body that no use case can bind, and pattern truncation. See
   [Diagnostics](./state-derivation.md#diagnostics).
@@ -404,18 +425,19 @@ TLC is missing or reports a violation.
 
 Before TLC runs, `verify` explores each entity's cone with BFS at the same bounds, capped
 at 2,097,152 states per cone; the `bounds:` line names the cap as `2097152 states per BFS
-cone`. A state of a state model with no witness there prints as in `check` and fails the
-run even when TLC passes: stdout ends with `tlc_result: ok`, no `OK:` line follows, and the
-exit status is 1. A use case that never runs there prints as in `check`, as a `warning:`
-that does not fail the run. A cone that stops at the cap prints a `note:` for each state and
-each use case it leaves undecided. Then one summary line follows on stdout:
+cone`. A state of a state model with no witness there, and a deadlock, print as in `check`
+and fail the run even when TLC passes: stdout ends with `tlc_result: ok`, no `OK:` line
+follows, and the exit status is 1. A deadlock at the bound and a use case that never runs
+print as in `check`, as a `warning:` that does not fail the run. A cone that stops at the
+cap prints a `note:` for each state, each deadlock, and each use case it leaves undecided.
+Then one summary line follows on stdout:
 
 ```
-state models (BFS on 2 entity cones): 2 state models, 5 states witnessed, 0 use cases that never run
+state models (BFS on 2 entity cones): 2 state models, 5 states witnessed, 0 deadlocks, 0 use cases that never run
 ```
 
 The line counts the distinct entity cones, the columns with a state model, the states with
-a witness, and the `NeverRuns` warnings. It has no deadlock count yet.
+a witness, the deadlocks (errors and warnings at the bound), and the `NeverRuns` warnings.
 
 A failed run ends with `specs: <dir>`, the directory that holds the specs. Without `-o`
 it adds `(kept because a check failed)`. Each cone's TLC runs with `-continue`, so every

@@ -1,0 +1,34 @@
+// A state with a way out that never opens. Ship leaves paid only while the packing condition
+// holds, and it holds only while the Order is pending, so a paid Order stays paid forever.
+// Express ships a pending Order directly, so shipped is reachable and the deadlock is the one
+// error. TLC finds no violation: the BFS state-model finding fails the run.
+// expect check: fail Deadlock_Order_status_paid
+// expect verify: tlc=ok fail Deadlock_Order_status_paid
+entity Order "注文" {
+  id:     Int @pk
+  status: Enum(pending, paid, shipped) @default(pending)
+}
+
+usecase Place   "注文確定"
+usecase Pay     "支払い"
+usecase Ship    "発送"
+usecase Express "即日発送"
+
+buc BucOrderShipping "Order shipping"
+contains(BucOrderShipping, Place)
+contains(BucOrderShipping, Pay)
+contains(BucOrderShipping, Ship)
+contains(BucOrderShipping, Express)
+
+creates(Place, Order)
+updates(Pay, Order)
+updates(Ship, Order)
+updates(Express, Order)
+
+transitions(Order.status, Pay, pending -> paid)
+transitions(Order.status, Ship, paid -> shipped)
+transitions(Order.status, Express, pending -> shipped)
+
+condition Packed "梱包済み"
+holds(Packed, Order.status == pending)
+applies_to(Packed, Ship)

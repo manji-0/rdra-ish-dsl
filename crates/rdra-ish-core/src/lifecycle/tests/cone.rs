@@ -68,6 +68,7 @@ pub(super) const SAMPLES: &[&str] = &[
     "samples/formal-verification/check_unmet.rdra",
     "samples/formal-verification/cross_order_payment.rdra",
     "samples/formal-verification/cross_order_payment_split.rdra",
+    "samples/formal-verification/deadlock.rdra",
     "samples/formal-verification/int_stock.rdra",
     "samples/formal-verification/min_card_met.rdra",
     "samples/formal-verification/min_card_unmet.rdra",

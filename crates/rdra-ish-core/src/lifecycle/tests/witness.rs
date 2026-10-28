@@ -12,7 +12,7 @@ use crate::lifecycle::{
 const UNWITNESSED: &str = "samples/formal-verification/unwitnessed_state.rdra";
 
 /// What a trace leaves each instance holding: its start, then every step's changes.
-fn final_values(trace: &Trace) -> BTreeMap<(String, u8), BTreeMap<String, String>> {
+pub(super) fn final_values(trace: &Trace) -> BTreeMap<(String, u8), BTreeMap<String, String>> {
     let mut held: BTreeMap<(String, u8), BTreeMap<String, String>> = BTreeMap::new();
     let changes = trace
         .start
@@ -182,21 +182,33 @@ fn a_declared_value_outside_the_state_model_still_warns() {
     assert!(!d.has("Order", |x| matches!(x, StateDiag::NoWitness { .. })));
 }
 
-/// The undecided states of state models, by value, and the undecided actions, by name.
-fn undecided_by_subject(undecided: &[Undecided]) -> (Vec<(&str, UndecidedWhy)>, Vec<&str>) {
-    let mut states = Vec::new();
-    let mut actions = Vec::new();
-    for u in undecided {
-        match &u.subject {
-            Subject::State { value, .. } => states.push((value.as_str(), u.why)),
-            Subject::Runs { action } => actions.push(action.as_str()),
-        }
-    }
-    (states, actions)
+/// What a run left undecided, by subject: states of state models and deadlocks by value,
+/// actions by name.
+struct BySubject<'a> {
+    states: Vec<(&'a str, UndecidedWhy)>,
+    actions: Vec<&'a str>,
+    deadlocks: Vec<(&'a str, UndecidedWhy)>,
 }
 
-/// A cone stopped by its state cap rules nothing out: its unwitnessed states and its actions
-/// with no edge are undecided, with the cap, and none is an error or a warning.
+fn undecided_by_subject(undecided: &[Undecided]) -> BySubject<'_> {
+    let mut out = BySubject {
+        states: Vec::new(),
+        actions: Vec::new(),
+        deadlocks: Vec::new(),
+    };
+    for u in undecided {
+        match &u.subject {
+            Subject::State { value, .. } => out.states.push((value.as_str(), u.why)),
+            Subject::Runs { action } => out.actions.push(action.as_str()),
+            Subject::Deadlock { value, .. } => out.deadlocks.push((value.as_str(), u.why)),
+        }
+    }
+    out
+}
+
+/// A cone stopped by its state cap rules nothing out: its unwitnessed states, its actions
+/// with no edge, and every state with a way out are undecided, with the cap, and none is an
+/// error or a warning.
 #[test]
 fn a_capped_cone_leaves_its_states_and_actions_undecided() {
     let model = sample_model(UNWITNESSED);
@@ -207,12 +219,16 @@ fn a_capped_cone_leaves_its_states_and_actions_undecided() {
     assert!(
         !run.verdicts().iter().any(|d| matches!(
             d.diag,
-            StateDiag::NoWitness { .. } | StateDiag::NeverRuns { .. }
+            StateDiag::NoWitness { .. } | StateDiag::NeverRuns { .. } | StateDiag::Deadlock { .. }
         )),
         "{:?}",
         run.verdicts()
     );
-    let (states, actions) = undecided_by_subject(run.undecided());
+    let BySubject {
+        states,
+        actions,
+        deadlocks,
+    } = undecided_by_subject(run.undecided());
     assert_eq!(
         states,
         [
@@ -223,6 +239,23 @@ fn a_capped_cone_leaves_its_states_and_actions_undecided() {
     );
     assert!(actions.contains(&"Refund"), "{actions:?}");
     assert!(!actions.contains(&"Place"), "Place fired before the cap");
+    assert_eq!(
+        deadlocks,
+        [
+            ("pending", UndecidedWhy::StateCap(2)),
+            ("paid", UndecidedWhy::StateCap(2)),
+            ("shipped", UndecidedWhy::StateCap(2))
+        ]
+    );
+    let shipped = run
+        .undecided()
+        .iter()
+        .find(|u| matches!(&u.subject, Subject::Deadlock { value, .. } if value == "shipped"))
+        .expect("shipped is undecided");
+    assert_eq!(
+        shipped.to_string(),
+        "whether some Order can get stuck at status = shipped is not decided: the Order cone stopped at the state cap (2 states)"
+    );
     assert_eq!(
         run.undecided()[2].to_string(),
         "state Order.status = refunded is not decided: the Order cone stopped at the state cap (2 states)"
@@ -243,7 +276,8 @@ fn a_capped_cone_leaves_its_states_and_actions_undecided() {
     );
 }
 
-/// `--buc` drops use cases, so a run under it rules neither a state nor an action out.
+/// `--buc` drops use cases, so a run under it rules neither a state, an action, nor a
+/// deadlock out.
 #[test]
 fn a_buc_scope_leaves_unwitnessed_states_and_dead_actions_undecided() {
     let model = sample_model(UNWITNESSED);
@@ -254,16 +288,21 @@ fn a_buc_scope_leaves_unwitnessed_states_and_dead_actions_undecided() {
     );
     assert!(!report.has_errors(), "{:?}", report.diags);
     assert!(
-        !report
-            .diags
-            .iter()
-            .any(|d| matches!(d.diag, StateDiag::NeverRuns { .. })),
+        !report.diags.iter().any(|d| matches!(
+            d.diag,
+            StateDiag::NeverRuns { .. } | StateDiag::Deadlock { .. }
+        )),
         "{:?}",
         report.diags
     );
-    let (states, actions) = undecided_by_subject(&report.undecided);
+    let BySubject {
+        states,
+        actions,
+        deadlocks,
+    } = undecided_by_subject(&report.undecided);
     assert_eq!(states, [("refunded", UndecidedWhy::Scope)]);
     assert_eq!(actions, ["Refund"]);
+    assert_eq!(deadlocks, [("shipped", UndecidedWhy::Scope)]);
     assert!(report
         .undecided
         .iter()

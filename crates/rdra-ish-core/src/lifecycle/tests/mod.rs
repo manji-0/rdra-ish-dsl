@@ -3,6 +3,7 @@
 mod conditions;
 mod cone;
 mod constraints;
+mod deadlock;
 mod effects;
 mod never_runs;
 mod owners;

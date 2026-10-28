@@ -24,10 +24,12 @@ mod view;
 mod tests;
 
 pub use cone::{Cone, Target, VarSet};
-pub use diag::{has_errors, Blocked, Diag, Entry, Severity, StateDiag};
+pub use diag::{has_errors, Blocked, Diag, Entry, Exit, Severity, StateDiag};
 pub use explore::{Caps, ComponentRun, Edge, Exploration, Graph};
 pub use expr::State;
-pub use findings::{ActionRuns, Runs, StateModelFindings, ValueWitness, Witness};
+pub use findings::{
+    ActionRuns, Progress, Runs, StateModelFindings, ValueProgress, ValueWitness, Witness,
+};
 pub use restrict::Component;
 pub use states::{derive_states, BoundsLine, StatesReport};
 pub use targets::{ConeRun, Subject, Tally, TargetExploration, Undecided, UndecidedWhy};

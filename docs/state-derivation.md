@@ -299,6 +299,60 @@ prints `note: whether Refund can run is not decided: ...` and is not a warning. 
 frees an unread entity's slots (see [Bounds](#bounds)) can run an action the whole model
 cannot, so that case can miss a warning, and never adds a false one.
 
+### Deadlocks
+
+An **end state** of a state model has no way out: no `transitions` arm leads from it to
+another state. An arm back to the same state does not count. A deletion leaves every state,
+and a deleted instance is never checked. A **deadlock** is a reachable state of the entity's
+cone with a present instance at a state that is not an end state, from which no path moves
+that instance: no edge changes the column of that instance or deletes it.
+
+The check is per instance, so another use case that keeps running does not hide a stuck
+instance. A state where some action is enabled is still a deadlock for an instance that
+action never moves. An action that is disabled now and enabled later is not a deadlock.
+
+`state_model_findings` computes it on the cone's graph, linear in the edges. For each column
+and slot, the states that can leave are the sources of the edges that change the column at
+that slot or delete it, and backwards, every state with that slot present that steps into
+one. A present instance at a state with a way out, outside that set, is stuck. Each
+`(entity, column, state)` is reported once, at the first stuck state in BFS order, with a
+shortest path into it. The cone is closed, so this equals the whole model's answer within
+the bounds (see [Bounds](#bounds) for the exception of entities a check does not read).
+
+`check` prints each way out of the state with what blocks it, read off the states the
+instance stays stuck in, as `NeverRuns` reads them (see
+[Use cases that never run](#use-cases-that-never-run)), then the path:
+
+```
+$ rdra-ish check samples/formal-verification/deadlock.rdra
+bounds: 1 instance per entity, Int 0..5; 4096 states per cone; entities a check does not read are unbounded
+error: deadlock: Order#1 stays at status = paid forever, and paid is not an end state
+  leaves paid: Ship (paid -> shipped)   skills/rdra-ish-verify/samples/deadlock.rdra:29:1
+    guard: condition Packed             skills/rdra-ish-verify/samples/deadlock.rdra:33:1
+  reached by (2 steps):
+    1. Place [Order#1]                     skills/rdra-ish-verify/samples/deadlock.rdra:12:1
+         + Order#1 (status=pending)
+    2. Pay [Order#1]                       skills/rdra-ish-verify/samples/deadlock.rdra:13:1
+         Order#1.status: pending -> paid   skills/rdra-ish-verify/samples/deadlock.rdra:28:1
+warning: use case Ship can never run: each of its guards holds in some reachable state, but never all of them in one
+  declared: use case Ship   skills/rdra-ish-verify/samples/deadlock.rdra:14:1
+```
+
+A deadlock is an error, unless some way out lacks only a free slot of an entity it creates,
+in every state the instance stays stuck in. That is the instance bound, not the model, so it
+is a warning:
+
+```
+warning: deadlock at the bound: Order#1 stays at status = awaiting_retry forever; RetryPayment needs a free Payment slot within the instance bound
+```
+
+A cone that stops at a cap, or a `--buc` run, decides no deadlock. Each state with a way out
+prints `note: whether some Order can get stuck at status = paid is not decided: ...`, and is
+neither an error nor a warning. TLC's own deadlock check stays off (`CHECK_DEADLOCK FALSE`):
+every bounded model ends with no enabled action, because a deleted slot is never reused; a
+cone spec drops actions; and TLC cannot see one instance stuck while other actions keep
+running.
+
 ```
 $ rdra-ish states samples/formal-verification/order.rdra
 Entity: Order (注文)
@@ -390,6 +444,7 @@ makes the command exit non-zero in every format, and the generators refuse to em
 |---|---|---|
 | `UnreachableEnumVariant { column, variant }` | warning | No reachable pattern holds a declared Enum variant that is not a state of a state model. |
 | `NoWitness { entity, column, value, into }` | error | No reachable state holds a state of a state model: a `transitions` endpoint or a start value of a lifecycle column. Not raised when a cap stopped the cone or `--buc` drops use cases; those print a `not decided` note. |
+| `Deadlock { entity, column, value, at, exits, trace }` | error, or warning at the bound | A reachable state has a present instance at a state of a state model that is not an end state, and no path moves it: no edge changes its column or deletes it. Reported once per state, at the first such state, with a shortest path and each way out (`exits`, a `transitions` arm or a deletion) with what blocks it. A warning when some way out lacks only a free slot of an entity it creates. Not raised when a cap stopped the cone or `--buc` drops use cases; those print a `not decided` note. |
 | `NeverRuns { action, origin, site, why }` | warning | No edge of any entity cone that keeps the action carries it, self-loops included. `why` is `NoInstance`, `Apart` (the instances are never present at once), `Guards` (only the guards that hold in no reachable state, each with its site), or `Together`. Not raised when a cap stopped every such cone or `--buc` drops use cases; those print a `not decided` note. |
 | `UnwrittenConstrainedVar { column }` | warning | A constraint or a condition guard reads a column that no use case writes, so it checks only the start value. |
 | `NoCreationPath` | info | No use case creates the entity. It starts present. |

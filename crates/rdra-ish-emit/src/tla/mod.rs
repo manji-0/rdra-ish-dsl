@@ -129,7 +129,10 @@ fn render_cfg(ts: &TransitionSystem, names: &TlaNames, mode: PrintMode) -> Strin
             out.push_str(&format!("INVARIANT {}\n", names.invariant(i)));
         }
     }
-    // Lifecycles end in states with no enabled action; that is not an error until phase 6.
+    // TLC's deadlock check stays off. Every bounded model ends with no enabled action, since a
+    // deleted slot is never reused; a cone spec drops actions; and an always-enabled loop
+    // hides an instance that is stuck. `state_model_findings` reports a `Deadlock` per
+    // instance on the BFS cone graph instead.
     out.push_str("CHECK_DEADLOCK FALSE\n");
     if safety {
         for i in 0..ts.after_asserts().len() {
