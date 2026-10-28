@@ -1,93 +1,12 @@
-//! Whole-system behaviour: order.rdra against today's `states`, components, restrict, bounds.
+//! Whole-system behaviour: order.rdra, components, restrict, bounds.
 
 use super::*;
 use crate::lifecycle::{Birth, ParamRole};
-use crate::state_pattern::{derive_state_patterns, DEFAULT_PATTERN_CAP};
-
-/// Field-wise differences between the lifecycle view and today's `states` of one entity.
-fn diff_against_states(model: &SemanticModel, d: &Derived, id: &str) -> Vec<String> {
-    let old = derive_state_patterns(model, &[], DEFAULT_PATTERN_CAP);
-    let old = old.iter().find(|r| r.entity_id == id).expect("old view");
-    let new = d.entity(id);
-    let mut out = Vec::new();
-    let old_axes: Vec<&str> = old.axes.iter().map(|a| a.column.as_str()).collect();
-    let new_axes: Vec<&str> = new.axes.iter().map(|a| a.column.as_str()).collect();
-    if old_axes != new_axes {
-        out.push(format!("axes {old_axes:?} vs {new_axes:?}"));
-    }
-    let old_rows: Vec<String> = old
-        .patterns
-        .iter()
-        .map(|p| {
-            let values = p
-                .pattern
-                .values
-                .iter()
-                .map(|(c, v)| format!("{c}={}", v.display_with_type(None)))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let via: Vec<String> = p
-                .provenance
-                .via
-                .iter()
-                .map(|(b, u)| format!("{b:?}/{u}"))
-                .collect();
-            format!(
-                "{values} initial={} terminal={} via={via:?}",
-                p.is_initial, p.is_terminal
-            )
-        })
-        .collect();
-    let new_rows: Vec<String> = new
-        .patterns
-        .iter()
-        .map(|p| {
-            let values = p
-                .pattern
-                .values
-                .iter()
-                .map(|(c, v)| format!("{c}={}", v.display_with_type(None)))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let via: Vec<String> = p
-                .provenance
-                .via
-                .iter()
-                .map(|(b, u)| format!("{b:?}/{u}"))
-                .collect();
-            format!(
-                "{values} initial={} terminal={} via={via:?}",
-                p.is_initial, p.is_terminal
-            )
-        })
-        .collect();
-    if old_rows != new_rows {
-        out.push(format!(
-            "patterns\n  old {old_rows:#?}\n  new {new_rows:#?}"
-        ));
-    }
-    let old_bound: usize = old
-        .axes
-        .iter()
-        .map(|a| match &a.kind {
-            crate::state_pattern::AxisKind::Enum(v) => v.len(),
-            _ => 2,
-        })
-        .product();
-    if old_bound != new.bound() {
-        out.push(format!("bound {old_bound} vs {}", new.bound()));
-    }
-    out
-}
 
 #[test]
-fn order_sample_matches_todays_states_view() {
+fn order_sample_reaches_its_five_patterns() {
     let model = sample_model("samples/formal-verification/order.rdra");
     let d = derive(&model);
-    assert_eq!(
-        diff_against_states(&model, &d, "Order"),
-        Vec::<String>::new()
-    );
     let order = d.entity("Order");
     assert_eq!(order.patterns.len(), 5);
     assert_eq!(order.bound(), 10);

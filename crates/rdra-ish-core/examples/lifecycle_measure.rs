@@ -1,8 +1,7 @@
 //! Measurement gate for the lifecycle layer. For every root in `samples.txt` it builds at
 //! `Bounds::STATES` and explores the cone of each target (each entity view, invariant, and
 //! after-assert) under a state cap. It prints the cone size and reached-state count per
-//! target and the largest per sample, then each entity whose cone view differs from today's
-//! `states`.
+//! target and the largest per sample.
 //!
 //! Run: `cargo run --release -p rdra-ish-core --example lifecycle_measure [-- STATE_CAP]`
 
@@ -11,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use rdra_ish_core::lifecycle::{Bounds, Caps, Cone, Scope, Target, TransitionSystem, VarKind};
-use rdra_ish_core::{build_merged_model, derive_state_patterns, resolve, DEFAULT_PATTERN_CAP};
+use rdra_ish_core::{build_merged_model, resolve};
 
 fn rdra_files(root: &Path, out: &mut Vec<PathBuf>) {
     if root.is_file() {
@@ -57,36 +56,6 @@ fn target_name(ts: &TransitionSystem, t: Target) -> String {
     }
 }
 
-fn rows(r: &rdra_ish_core::lifecycle::EntityStateResult) -> String {
-    r.patterns
-        .iter()
-        .map(|p| {
-            p.pattern
-                .values
-                .iter()
-                .map(|(c, v)| format!("{c}={}", v.display_with_type(None)))
-                .collect::<Vec<_>>()
-                .join(",")
-        })
-        .collect::<Vec<_>>()
-        .join(" | ")
-}
-
-fn old_rows(r: &rdra_ish_core::EntityStateResult) -> String {
-    r.patterns
-        .iter()
-        .map(|p| {
-            p.pattern
-                .values
-                .iter()
-                .map(|(c, v)| format!("{c}={}", v.display_with_type(None)))
-                .collect::<Vec<_>>()
-                .join(",")
-        })
-        .collect::<Vec<_>>()
-        .join(" | ")
-}
-
 fn main() {
     let cap: usize = std::env::args()
         .nth(1)
@@ -96,7 +65,6 @@ fn main() {
     let list = std::fs::read_to_string(repo.join("samples.txt")).expect("samples.txt");
     let caps = Caps::new(usize::MAX, cap);
     println!("bounds: instances=1 int_max=5  state cap per cone: {cap}");
-    let mut view_diffs: Vec<String> = Vec::new();
     for sample in list
         .lines()
         .map(str::trim)
@@ -166,30 +134,5 @@ fn main() {
             worst.0.to_string()
         };
         println!("  max: {shown} states, {}", worst.1);
-
-        let exploration = ts.explore_targets(caps);
-        let views = exploration.entity_views(ts, &model, &built.diags);
-        let old = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
-        for new in &views {
-            let Some(old) = old.iter().find(|o| o.entity_id == new.entity_id) else {
-                continue;
-            };
-            let (o, n) = (old_rows(old), rows(new));
-            if o != n {
-                view_diffs.push(format!(
-                    "{sample} {}: states {} patterns, lifecycle {} patterns\n    states:    {o}\n    lifecycle: {n}",
-                    new.entity_id,
-                    old.patterns.len(),
-                    new.patterns.len()
-                ));
-            }
-        }
-    }
-    println!(
-        "\nentities whose view differs from today's `states` ({}):",
-        view_diffs.len()
-    );
-    for d in view_diffs {
-        println!("  {d}");
     }
 }

@@ -1,9 +1,7 @@
 //! エンティティの status Enum 列と、その列の遷移が結ぶ state ノードの対応。
 
-use crate::model::{
-    ColumnType, EffectValue, EntityKey, NodeRef, RelKind, SemanticModel, StateKey, UseCaseKey,
-};
-use std::collections::{BTreeSet, HashMap, HashSet};
+use crate::model::{ColumnType, EntityKey, SemanticModel, StateKey};
+use std::collections::{BTreeSet, HashMap};
 
 /// Pick the lifecycle status column for an entity from its transitions.
 /// Prefers `status` / `*_status`, then lexicographically first column.
@@ -69,48 +67,4 @@ pub fn link_entity_status_states(
         }
     }
     (!map.is_empty()).then_some((column, map))
-}
-
-/// Status values that each use case which `creates` the entity sets on `status_column`,
-/// in use case id order. These are creation effects, not updates of a live instance.
-pub fn creation_status_effects(
-    model: &SemanticModel,
-    ek: EntityKey,
-    status_column: &str,
-) -> Vec<(UseCaseKey, String)> {
-    let mut creating: HashSet<UseCaseKey> = HashSet::new();
-    for rel in model
-        .relations
-        .iter()
-        .filter(|r| r.kind == RelKind::Creates && r.to == NodeRef::Entity(ek))
-    {
-        match rel.from {
-            NodeRef::UseCase(uk) => {
-                creating.insert(uk);
-            }
-            NodeRef::Api(ak) => {
-                creating.extend(model.relations.iter().filter_map(|inv| {
-                    match (inv.kind == RelKind::Invokes, &inv.from, &inv.to) {
-                        (true, NodeRef::UseCase(uk), NodeRef::Api(a)) if *a == ak => Some(*uk),
-                        _ => None,
-                    }
-                }));
-            }
-            _ => {}
-        }
-    }
-    let mut effects: Vec<(UseCaseKey, String)> = model
-        .column_effects
-        .iter()
-        .filter(|e| e.entity == ek && e.column == status_column)
-        .filter_map(|e| match &e.value {
-            EffectValue::EnumVariant(v) if creating.contains(&e.origin) => Some((
-                e.origin,
-                declared_variant_casing(model, ek, status_column, v),
-            )),
-            _ => None,
-        })
-        .collect();
-    effects.sort_by_key(|(uk, _)| model.use_cases[*uk].id.clone());
-    effects
 }

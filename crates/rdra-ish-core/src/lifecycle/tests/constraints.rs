@@ -389,3 +389,134 @@ when(ClientCertificate.status == revoked)
         d.diags
     );
 }
+
+#[test]
+fn global_cross_forbidden_on_related_pre_existing_entities_is_evaluated() {
+    let d = derive_src(
+        r#"
+entity Terminal "端末" { id: Int @pk  status: Enum(active, deregistered) @default(deregistered) }
+entity ClientCertificate "証明書" { id: Int @pk  status: Enum(active, revoked) @default(active) }
+relate(Terminal, ClientCertificate, 1:N)
+forbidden(Terminal, ClientCertificate,
+  Terminal.status == deregistered,
+  ClientCertificate.status == active)
+"#,
+    );
+    for id in ["Terminal", "ClientCertificate"] {
+        assert!(violated(&d, id, InvKind::CrossForbidden), "{id}");
+    }
+}
+
+#[test]
+fn cross_comparison_of_numeric_columns_is_evaluated() {
+    let d = derive_src(
+        r#"
+entity Order "注文" { id: Int @pk  total: Decimal }
+entity Payment "支払い" { id: Int @pk  amount: Decimal }
+forbidden(Order, Payment, Payment.amount > Order.total)
+"#,
+    );
+    for id in ["Order", "Payment"] {
+        assert!(!violated(&d, id, InvKind::CrossForbidden), "{id}");
+        assert!(
+            !d.entity(id)
+                .diagnostics
+                .iter()
+                .any(|x| x.severity() == crate::lifecycle::Severity::Error),
+            "both start at 0, so the comparison is false: {:?}",
+            d.entity(id).diagnostics
+        );
+    }
+}
+
+#[test]
+fn relation_scoped_constraints_see_the_link_one_creation_makes() {
+    let forbidden = derive_src(
+        r#"
+entity Terminal "端末" { id: Int @pk  status: Enum(active, deregistered) @default(deregistered) }
+entity ClientCertificate "証明書" { id: Int @pk  status: Enum(active, suspended) @default(active) }
+usecase RegisterTerminalCertificate "登録"
+creates(RegisterTerminalCertificate, Terminal)
+creates(RegisterTerminalCertificate, ClientCertificate)
+relate(Terminal, ClientCertificate, 1:N)
+forbidden(Terminal, ClientCertificate,
+  Terminal.status == deregistered,
+  ClientCertificate.status == active)
+  .along(Terminal, ClientCertificate)
+"#,
+    );
+    for id in ["Terminal", "ClientCertificate"] {
+        assert!(violated(&forbidden, id, InvKind::CrossForbidden), "{id}");
+    }
+    let n_to_one = derive_src(
+        r#"
+entity Order "注文" { id: Int @pk  status: Enum(draft, submitted) @default(submitted) }
+entity LineItem "明細" { id: Int @pk  status: Enum(pending, allocated) @default(pending) }
+usecase SubmitOrder "注文確定"
+creates(SubmitOrder, Order)
+creates(SubmitOrder, LineItem)
+relate(LineItem, Order, N:1)
+invariant(Order, LineItem)
+  .along(Order, LineItem)
+  .when(Order.status == submitted)
+  .then(LineItem.status == allocated)
+"#,
+    );
+    for id in ["Order", "LineItem"] {
+        assert!(violated(&n_to_one, id, InvKind::CrossInvariant), "{id}");
+    }
+}
+
+#[test]
+fn relation_scoped_constraints_hold_on_unlinked_pre_existing_rows() {
+    let invariant = derive_src(
+        r#"
+entity Order "注文" { id: Int @pk  status: Enum(open, paid) @default(paid) }
+entity Payment "支払い" { id: Int @pk  status: Enum(pending, captured) @default(captured) }
+relate(Payment, Order, 1:1)
+invariant(Order, Payment)
+  .along(Order, Payment)
+  .when(Order.status == paid)
+  .then(Payment.status == captured)
+"#,
+    );
+    assert!(!violated(&invariant, "Order", InvKind::CrossInvariant));
+    let forbidden = derive_src(
+        r#"
+entity Order "注文" { id: Int @pk  status: Enum(open, paid) @default(open) }
+entity Payment "支払い" { id: Int @pk  status: Enum(pending, captured) @default(pending) }
+relate(Payment, Order, 1:1)
+forbidden(Order, Payment,
+  Order.status == paid,
+  Payment.status == pending)
+  .along(Order, Payment)
+"#,
+    );
+    assert!(!violated(&forbidden, "Order", InvKind::CrossForbidden));
+}
+
+#[test]
+fn a_creating_use_case_drives_its_proposition_at_creation() {
+    let d = derive_src(
+        r#"
+entity Stock "在庫" {
+  id: Int @pk
+  stock: Int
+  selling: Int
+  status: Enum(draft, on_sale) @default(draft)
+}
+usecase ListItem "出品"
+creates(ListItem, Stock)
+sets(ListItem, Stock, status == on_sale)
+sets(ListItem, Stock, stock < selling, true)
+invariant(Stock)
+  .when(status == on_sale)
+  .then(stock < selling)
+"#,
+    );
+    assert_eq!(
+        d.rows("Stock"),
+        vec!["__cmp:stock<selling=true, status=on_sale"]
+    );
+    assert!(!violated(&d, "Stock", InvKind::Invariant));
+}
