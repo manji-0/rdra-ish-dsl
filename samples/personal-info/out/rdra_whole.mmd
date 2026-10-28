@@ -64,6 +64,7 @@ flowchart LR
     UserAccount[("🗄️ User Account")]
     UserAccount_active("🔄 active")
     UserAccount_deleted("🔄 deleted")
+    UserAccount_provisioned("🔄 provisioned")
     UserAccount_suspended("🔄 suspended")
     CardBrand["🎚️ Card Brand"]
   end
@@ -78,6 +79,7 @@ flowchart LR
   SetPrimaryCardApi -.->|updates| CreditCard
   SetInitialPasswordApi -.->|creates| PasswordCredential
   SetInitialPasswordApi -.->|creates| AuditLog
+  SetInitialPasswordApi -.->|updates| UserAccount
   ChangePasswordApi -.->|creates| AuditLog
   ChangePasswordApi -.->|reads| PasswordCredential
   ChangePasswordApi -.->|updates| PasswordCredential

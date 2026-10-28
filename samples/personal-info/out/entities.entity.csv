@@ -36,6 +36,6 @@ PostalAddress,Postal Address,is_primary,Bool,false,false,false,false,,false,,,fa
 PostalAddress,Postal Address,useraccount_id,Int,false,false,false,true,UserAccount,false,,,false,,,false,false,false,
 UserAccount,User Account,id,Int,true,false,false,false,,false,,,false,,,false,false,false,
 UserAccount,User Account,email,String,false,true,false,false,,false,,,false,,,false,false,false,
-UserAccount,User Account,status,Enum,false,false,false,false,,false,,,false,active,,false,false,false,
+UserAccount,User Account,status,Enum,false,false,false,false,,false,,,false,provisioned,,false,false,false,
 UserAccount,User Account,created_at,DateTime,false,false,false,false,,false,,,false,,,false,false,false,
 UserAccount,User Account,last_login_at,DateTime,false,false,false,false,,false,,,true,,,false,false,false,

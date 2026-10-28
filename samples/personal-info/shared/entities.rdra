@@ -11,7 +11,7 @@ variation CardBrand "Card Brand" {
 entity UserAccount "User Account" {
   id:            Int      @pk
   email:         String   @unique
-  status:        Enum(active, suspended, deleted) @default(active)
+  status:        Enum(provisioned, active, suspended, deleted) @default(provisioned)
   created_at:    DateTime
   last_login_at: DateTime @null
 }

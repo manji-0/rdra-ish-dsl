@@ -148,6 +148,7 @@ User -> PasswordSetScreen : ✅ Set Initial Password
 PasswordSetScreen -> SetInitialPasswordApi : ✅ Set Initial Password
 activate SetInitialPasswordApi
 group transaction (API atomic boundary)
+SetInitialPasswordApi -> UserAccount : update
 SetInitialPasswordApi -> AuditLog : create
 SetInitialPasswordApi -> PasswordCredential : create
 end

@@ -66,6 +66,7 @@ rectangle "System" {
   database "🗄️ User Account" as UserAccount
   collections "🔄 active" as UserAccount_active
   collections "🔄 deleted" as UserAccount_deleted
+  collections "🔄 provisioned" as UserAccount_provisioned
   collections "🔄 suspended" as UserAccount_suspended
   rectangle "🎚️ Card Brand" as CardBrand
 }
@@ -81,6 +82,7 @@ SetPrimaryCardApi ..> CreditCard : reads
 SetPrimaryCardApi ..> CreditCard : updates
 SetInitialPasswordApi ..> PasswordCredential : creates
 SetInitialPasswordApi ..> AuditLog : creates
+SetInitialPasswordApi ..> UserAccount : updates
 ChangePasswordApi ..> AuditLog : creates
 ChangePasswordApi ..> PasswordCredential : reads
 ChangePasswordApi ..> PasswordCredential : updates
