@@ -43,7 +43,7 @@ impl TransitionSystem {
         }
         let verdicts = targets
             .iter()
-            .flat_map(|(t, at)| self.verdict(*t, &cones[*at].run))
+            .flat_map(|(t, at)| self.verdict(*t, &cones[*at]))
             .collect();
         TargetExploration {
             cones,
@@ -65,9 +65,11 @@ impl TransitionSystem {
         }
     }
 
-    /// What the target's own cone says about an invariant or assert: its violations, and any
-    /// cap that left the verdict incomplete.
-    fn verdict(&self, target: Target, run: &ComponentRun) -> Vec<Diag> {
+    /// What the target's own cone says about an invariant or assert: its violations, each
+    /// trace marked when it creates more instances than the bound, and any cap that left the
+    /// verdict incomplete.
+    fn verdict(&self, target: Target, cone: &ConeRun) -> Vec<Diag> {
+        let run = &cone.run;
         let entities: Vec<_> = match target {
             Target::Entity(_) => return Vec::new(),
             Target::Invariant(i) => self.invariants[i]
@@ -94,6 +96,12 @@ impl TransitionSystem {
             .iter()
             .filter(|d| self.reports(target, &d.diag))
             .cloned()
+            .map(|mut d| {
+                if let Some(trace) = d.diag.trace_mut() {
+                    trace.over_bound = self.over_bound(&cone.cone, trace);
+                }
+                d
+            })
             .collect();
         for d in run.diags.iter().filter(|d| {
             matches!(

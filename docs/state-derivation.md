@@ -256,8 +256,10 @@ The command prints the `bounds:` line on stderr.
 ## Constraint checking
 
 A violation is reported only when a reachable state witnesses it. Unreachable bad states
-never trigger a diagnostic. Each diagnostic names the constraint, for example
-`Forbidden_Order_0`, and the offending state.
+never trigger a diagnostic. Each constraint reports its first violation only: the
+diagnostic names the constraint, for example `Forbidden_Order_0`, the offending state, and
+a shortest trace to it. BFS reaches states in depth order, so the first violation found is
+the shallowest. `check` prints the trace; see [`check`](./cli-reference.md#check).
 
 ### `forbidden`
 

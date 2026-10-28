@@ -2,17 +2,15 @@
 //! the fly; per-entity view statistics are gathered from the edges as they are found. The run
 //! keeps every edge and, per state, the edge that first reached it.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use super::diag::{Diag, StateDiag};
 use super::expr::{Env, State};
 use super::restrict::Component;
+use super::trace::Trace;
 use super::types::{ActId, Action, Effect, EntId, InvKind, ParamRole, Rhs, Start, Value, VarId};
 use super::view::{describe_slot, pattern_bound};
 use super::TransitionSystem;
-
-/// Distinct witnesses kept per invariant or assert.
-const WITNESS_CAP: usize = 16;
 
 /// Where exploration of a component stops.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -97,6 +95,61 @@ impl ComponentRun {
         path.reverse();
         path
     }
+
+    /// The BFS path to `states[at]` in model terms: a shortest one, since BFS reaches states
+    /// in depth order.
+    pub fn trace_to(&self, at: u32) -> Trace {
+        let path = self.path_to(at);
+        let start = path.first().map_or(at, |e| e.from);
+        let ts = &self.system;
+        Trace {
+            start: ts.trace_start(&self.states[start as usize]),
+            steps: path
+                .iter()
+                .map(|e| {
+                    let (act, params) = self.step(e);
+                    let (pre, post) = (&self.states[e.from as usize], &self.states[e.to as usize]);
+                    ts.trace_step(act, params, pre, post)
+                })
+                .collect(),
+            over_bound: Vec::new(),
+        }
+    }
+
+    /// The trace of a violation: the path to the violating state, or for an after-assert the
+    /// path to the step's source and the step itself. The step need not be on the BFS path to
+    /// its target, which another path may reach first.
+    fn trace_of(&self, reach: &Reach) -> Trace {
+        match reach {
+            Reach::State(at) => self.trace_to(*at),
+            Reach::Step {
+                from,
+                act,
+                params,
+                to,
+            } => {
+                let mut trace = self.trace_to(*from);
+                let pre = &self.states[*from as usize];
+                trace
+                    .steps
+                    .push(self.system.trace_step(*act, params, pre, to));
+                trace
+            }
+        }
+    }
+}
+
+/// Where a violation was seen.
+enum Reach {
+    /// `states[at]` violates an invariant.
+    State(u32),
+    /// The step from `states[from]` to `to` fails an after-assert.
+    Step {
+        from: u32,
+        act: ActId,
+        params: Box<[u8]>,
+        to: State,
+    },
 }
 
 /// What the edges said about one entity's view patterns, indexed by pattern id.
@@ -188,9 +241,10 @@ impl TransitionSystem {
             parents,
             edges,
             bindings,
+            violations,
             ..
         } = bfs;
-        ComponentRun {
+        let mut run = ComponentRun {
             component,
             system: self,
             states,
@@ -200,7 +254,14 @@ impl TransitionSystem {
             parents,
             edges,
             bindings: bindings.list,
+        };
+        for (at, reach) in &violations {
+            let trace = run.trace_of(reach);
+            if let Some(t) = run.diags[*at].diag.trace_mut() {
+                *t = trace;
+            }
         }
+        run
     }
 
     pub(crate) fn pattern_key(&self, state: &State, e: EntId, slot: usize) -> Box<[u8]> {
@@ -212,19 +273,8 @@ impl TransitionSystem {
     }
 
     fn initial_states(&self) -> Vec<State> {
-        let mut base = State(vec![0u8; self.width].into_boxed_slice());
+        let mut base = self.base_state();
         let mut free: Vec<(VarId, usize, usize)> = Vec::new();
-        for (i, decl) in self.vars.iter().enumerate() {
-            let var = VarId::at(i);
-            let slots = if decl.kind == super::types::VarKind::Now {
-                1
-            } else {
-                self.bounds.slots()
-            };
-            for slot in 0..slots {
-                base.set(self, var, slot, decl.base);
-            }
-        }
         for decl in &self.entities {
             if decl.birth == super::types::Birth::PreExisting {
                 for slot in 0..self.bounds.slots() {
@@ -431,7 +481,10 @@ struct Bfs<'t> {
     views: Vec<EntityView>,
     /// Per action, per param: the action writes that param's existence or view columns.
     writes: Vec<Vec<bool>>,
-    witnesses: HashMap<String, usize>,
+    /// Invariants and asserts with a reported violation: each reports its first one only.
+    violated: HashSet<String>,
+    /// Per reported violation: its index in `diags` and where it was seen.
+    violations: Vec<(usize, Reach)>,
     parents: Vec<Option<u32>>,
     edges: Vec<Edge>,
     bindings: Bindings,
@@ -470,7 +523,8 @@ impl<'t> Bfs<'t> {
             diags: Vec::new(),
             views: ts.entities.iter().map(|_| EntityView::default()).collect(),
             writes,
-            witnesses: HashMap::new(),
+            violated: HashSet::new(),
+            violations: Vec::new(),
             parents: Vec::new(),
             edges: Vec::new(),
             bindings: Bindings::default(),
@@ -520,7 +574,7 @@ impl<'t> Bfs<'t> {
                     });
                     continue;
                 }
-                self.check_after(act, &params, &s2);
+                self.check_after(from, act, &params, &s2);
                 let to = match self.seen.get(&s2) {
                     Some(&to) => to,
                     None => {
@@ -553,7 +607,7 @@ impl<'t> Bfs<'t> {
             });
             return false;
         }
-        self.check_invariants(&s);
+        self.check_invariants(&s, self.states.len() as u32);
         self.seen.insert(s.clone(), self.states.len() as u32);
         self.states.push(s);
         self.parents.push(parent);
@@ -627,21 +681,27 @@ impl<'t> Bfs<'t> {
         true
     }
 
-    fn witness(&mut self, name: &str, diag: StateDiag, entities: Vec<crate::model::EntityKey>) {
-        let count = self.witnesses.entry(name.to_string()).or_insert(0);
-        if *count >= WITNESS_CAP {
-            return;
-        }
-        let d = Diag { entities, diag };
-        if !self.diags.contains(&d) {
-            *count += 1;
-            self.diags.push(d);
+    /// Reports the violation unless its rule already has one; the trace is filled in when the
+    /// run ends.
+    fn violation(
+        &mut self,
+        name: &str,
+        diag: StateDiag,
+        entities: Vec<crate::model::EntityKey>,
+        reach: Reach,
+    ) {
+        if self.violated.insert(name.to_string()) {
+            self.violations.push((self.diags.len(), reach));
+            self.diags.push(Diag { entities, diag });
         }
     }
 
-    fn check_invariants(&mut self, s: &State) {
+    fn check_invariants(&mut self, s: &State, at: u32) {
         let ts = self.ts;
         for inv in &ts.invariants {
+            if self.violated.contains(&inv.name) {
+                continue;
+            }
             let Some(binding) = ts.find_violation(&inv.binders, &inv.body, s, &[]) else {
                 continue;
             };
@@ -670,12 +730,13 @@ impl<'t> Bfs<'t> {
                 text: inv.text.clone(),
                 pattern_desc,
                 site: inv.site.clone(),
+                trace: Trace::default(),
             };
-            self.witness(&inv.name, diag, entities);
+            self.violation(&inv.name, diag, entities, Reach::State(at));
         }
     }
 
-    fn check_after(&mut self, act: ActId, params: &[u8], s2: &State) {
+    fn check_after(&mut self, from: u32, act: ActId, params: &[u8], s2: &State) {
         let ts = self.ts;
         let action = &ts.actions[act.index()];
         for (a, step) in ts
@@ -684,6 +745,9 @@ impl<'t> Bfs<'t> {
             .flat_map(|a| a.steps.iter().map(move |step| (a, step)))
             .filter(|(_, step)| step.act == act)
         {
+            if self.violated.contains(&a.name) {
+                continue;
+            }
             let Some(binding) = ts.find_violation(&step.binders, &step.post, s2, params) else {
                 continue;
             };
@@ -711,8 +775,15 @@ impl<'t> Bfs<'t> {
                 requireds: a.requireds.clone(),
                 actual: parts.join("; "),
                 site: a.site.clone(),
+                trace: Trace::default(),
             };
-            self.witness(&a.name, diag, entities);
+            let reach = Reach::Step {
+                from,
+                act,
+                params: params.into(),
+                to: s2.clone(),
+            };
+            self.violation(&a.name, diag, entities, reach);
         }
     }
 }

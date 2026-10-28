@@ -56,9 +56,9 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
     let (program, model, diags) = load_model(inputs)?;
     reject_model_errors(&program, &diags)?;
     if kind.reads_lifecycle() {
-        reject_state_errors(&model)?;
+        reject_state_errors(&program, &model)?;
     } else {
-        note_state_errors(&model);
+        note_state_errors(&program, &model);
     }
 
     for buc_id in &buc {
@@ -231,7 +231,7 @@ fn emit_diagram(
             DiagramKind::Diff => {
                 let (program, base_model, diags) = load_model(diff_base)?;
                 reject_model_errors(&program, &diags)?;
-                reject_state_errors(&base_model)?;
+                reject_state_errors(&program, &base_model)?;
                 Ok(DiffMermaidEmitter { base: &base_model }.emit_diff(model, view)?)
             }
             DiagramKind::BusinessArea => Ok(BusinessAreaMermaidEmitter.emit(model, view)?),
@@ -247,7 +247,7 @@ fn emit_diagram(
             DiagramKind::Diff => {
                 let (program, base_model, diags) = load_model(diff_base)?;
                 reject_model_errors(&program, &diags)?;
-                reject_state_errors(&base_model)?;
+                reject_state_errors(&program, &base_model)?;
                 Ok(DiffPlantUmlEmitter { base: &base_model }.emit_diff(model, view)?)
             }
             DiagramKind::BusinessArea => Ok(BusinessAreaPlantUmlEmitter.emit(model, view)?),

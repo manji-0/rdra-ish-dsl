@@ -36,7 +36,7 @@ pub enum AbstractValue {
 }
 
 impl AbstractValue {
-    fn of(domain: &Domain, value: Value) -> Self {
+    pub(crate) fn of(domain: &Domain, value: Value) -> Self {
         match domain {
             Domain::Enum(values) => AbstractValue::Enum(values[usize::from(value.0)].clone()),
             Domain::Bool => AbstractValue::Bool(value == Value::TRUE),

@@ -6,6 +6,7 @@ mod constraints;
 mod effects;
 mod owners;
 mod system;
+mod trace;
 mod tx_groups;
 
 use super::{Bounds, Caps, Diag, EntityStateResult, Scope, StateDiag, TransitionSystem};

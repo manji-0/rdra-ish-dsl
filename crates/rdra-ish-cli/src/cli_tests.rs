@@ -4,7 +4,7 @@ use crate::list_output::{
     format_lint_issues, list_elements, state_consistency_findings, state_diag_message,
 };
 use crate::load::load_model;
-use rdra_ish_core::lifecycle::{InvKind, InvText, ModelRef, Severity, Site, StateDiag};
+use rdra_ish_core::lifecycle::{InvKind, InvText, ModelRef, Severity, Site, StateDiag, Trace};
 use rdra_ish_core::{format_diagnostic_message, lint_issues, SemanticModel};
 use rdra_ish_emit::View;
 use std::path::PathBuf;
@@ -649,8 +649,7 @@ requires_permission(BookingApi, ScheduleWrite)
 
 #[test]
 fn consistency_warnings_include_permission_and_state_findings() {
-    use rdra_ish_core::{build_model, consistency_diagnostics};
-    use rdra_ish_syntax::parse;
+    use rdra_ish_core::consistency_diagnostics;
 
     let src = r#"
 actor Staff "Staff"
@@ -663,15 +662,18 @@ entity Appointment "Appointment" {
 performs(Staff, BookAppointment)
 requires_permission(BookAppointment, ScheduleWrite)
 "#;
-    let (ast, _) = parse(src);
-    let (model, diags) = build_model(&ast);
+    let dir = std::env::temp_dir().join(format!("rdra-ish-cli-tests-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("consistency.rdra");
+    std::fs::write(&file, src).unwrap();
+    let (program, model, diags) = load_model(&[file]).expect("load model");
     assert!(diags.iter().all(|diag| diag.is_warning));
 
     let warnings: Vec<_> = consistency_diagnostics(&model)
         .into_iter()
         .map(|d| d.error.to_string())
         .collect();
-    let state_findings = state_consistency_findings(&model);
+    let state_findings = state_consistency_findings(&program, &model);
 
     assert!(warnings
         .iter()
@@ -697,6 +699,7 @@ fn state_diag_message_formats_invariant_violation() {
         },
         pattern_desc: "status=booked, booked_at=null".to_string(),
         site: Site::bare(ModelRef::EntityInvariant(0)),
+        trace: Trace::default(),
     });
 
     assert_eq!(
@@ -717,6 +720,7 @@ fn state_diag_message_formats_cross_invariant_violation() {
         },
         pattern_desc: "Order(status=paid); Payment(status=pending)".to_string(),
         site: Site::bare(ModelRef::CrossInvariant(0)),
+        trace: Trace::default(),
     });
 
     assert_eq!(
@@ -732,6 +736,7 @@ fn state_diag_message_formats_temporal_assertion_violation() {
         requireds: "CertificateOrder.status=executed".to_string(),
         actual: "CertificateOrder(status=pending)".to_string(),
         site: Site::bare(ModelRef::TemporalAssertion(0)),
+        trace: Trace::default(),
     });
 
     assert_eq!(
@@ -753,6 +758,7 @@ fn state_diag_message_formats_quantifier_violation() {
         pattern_desc: "ClientCertificate(status=revoked); TerminalCertAssignment(status=active)"
             .to_string(),
         site: Site::bare(ModelRef::Quantifier(0)),
+        trace: Trace::default(),
     });
 
     assert!(message.starts_with(
@@ -766,13 +772,13 @@ fn state_diag_message_formats_quantifier_violation() {
 #[test]
 fn clinic_ops_attribute_columns_are_variations_not_unreachable_states() {
     let inputs = vec![errors_fixture("samples/clinic-ops")];
-    let (_, model, diags) = load_model(&inputs).expect("load clinic-ops");
+    let (program, model, diags) = load_model(&inputs).expect("load clinic-ops");
     assert!(
         diags.iter().all(|d| d.is_warning),
         "clinic-ops must load without errors: {diags:?}"
     );
 
-    let findings = state_consistency_findings(&model);
+    let findings = state_consistency_findings(&program, &model);
     let unreachable_method: Vec<_> = findings
         .iter()
         .filter(|(_, message)| message.contains("'method'") && message.contains("unreachable"))

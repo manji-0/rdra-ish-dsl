@@ -22,9 +22,9 @@ pub fn run_csv(inputs: &[PathBuf], kind: CsvKind, out: PathBuf) -> Result<()> {
     reject_model_errors(&program, &diags)?;
     // The entity list is the data layer; the other CSVs keep the lifecycle gate.
     if matches!(kind, CsvKind::Entity) {
-        note_state_errors(&model);
+        note_state_errors(&program, &model);
     } else {
-        reject_state_errors(&model)?;
+        reject_state_errors(&program, &model)?;
     }
 
     let view = View::whole();

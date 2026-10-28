@@ -49,6 +49,29 @@ run prints `OK: no errors`. When the model has temporal `property` declarations,
 `check` prints a trailing `note:` that those were not model-checked (use
 `verify --backend tlc`).
 
+A violated constraint or `after` assertion prints once, with a shortest counterexample:
+
+```
+error: invariant CrossForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order(status=cancelled); Payment(status=captured)
+  rule: cross_order_payment_split.rdra:41:1
+  counterexample (3 steps):
+    1. Place [Order#1, Payment#1]                            cross_order_payment_split.rdra:14:1
+         + Order#1 (status=pending)
+         + Payment#1 (status=pending, owner Order=Order#1)
+    2. Pay_1, transaction 1 of Pay [Payment#1]               cross_order_payment_split.rdra:15:1
+         Payment#1.status: pending -> captured               cross_order_payment_split.rdra:36:1
+    3. Cancel [Order#1]                                      cross_order_payment_split.rdra:16:1
+         Order#1.status: pending -> cancelled                cross_order_payment_split.rdra:35:1
+```
+
+A step names the use case (`Pay_1, transaction 1 of Pay` for a split one), the instances
+it binds, and the use case's declaration. Under it, `+ E#k` is a creation with the values
+the check reads, `- E#k` a deletion, `now: a -> b` a clock tick, and `E#k.col: a -> b` a
+change with the `transitions` arm or `sets` that wrote it. `start` lists the instances
+present before the first step. The trace shows only what the rule's cone reads. When the
+cone does not count an entity's slots and the trace creates more of them than the bound,
+a `note:` says that the whole model may not reach that state at this bound.
+
 | Option | Description |
 |---|---|
 | `--strict` | Promote permission / access consistency gaps (`ActorPermissionMissing`, no-actor paths, etc.) from warnings to errors for exit. |

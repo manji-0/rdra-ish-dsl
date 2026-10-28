@@ -342,6 +342,14 @@
 
 ### Changed
 
+- `check` prints each violated constraint or `after` assertion once, with a shortest
+  counterexample in model terms: the rule's `path:line:col`, then one line per step with
+  the use case, its bound instances (`Place [Order#1, Payment#1]`), and its declaration
+  site, and under each step the values it changed with the site of the `transitions` arm
+  or `sets` that wrote them. A multi-entity rule used to print once per entity it binds.
+  When the check's cone does not count an entity's slots and the trace creates more of
+  them than the instance bound, a `note:` says the whole model may not reach it. `states`
+  and the generator gates report one violation per rule instead of up to 16.
 - `verify` runs each cone's TLC with `-continue`, so every violated check of a cone prints
   its own counterexample, and the state count on a failing cone's line is the whole cone.
   Each cone JVM gets `-Xmx1g` and the temporal run `-Xmx2g`. `RDRA_TLC_HEAP` (such as

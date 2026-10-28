@@ -71,7 +71,7 @@ fn main() -> Result<()> {
             }
 
             // Same severity as `states` (fail-closed on caps and violated constraints).
-            for (severity, message) in state_consistency_findings(&model) {
+            for (severity, message) in state_consistency_findings(&program, &model) {
                 if severity == Severity::Error {
                     has_error = true;
                 }
@@ -127,7 +127,7 @@ fn main() -> Result<()> {
         } => {
             let (program, model, diags) = load_model(&inputs)?;
             reject_model_errors(&program, &diags)?;
-            reject_state_errors(&model)?;
+            reject_state_errors(&program, &model)?;
 
             let output = list_elements(&model, &kind, &format)?;
             print!("{}", output);
@@ -164,9 +164,9 @@ fn main() -> Result<()> {
             let (program, model, diags) = load_model(&inputs)?;
             reject_model_errors(&program, &diags)?;
             if kind.reads_lifecycle() {
-                reject_state_errors(&model)?;
+                reject_state_errors(&program, &model)?;
             } else if !matches!(kind, ExportKind::Tla) {
-                note_state_errors(&model);
+                note_state_errors(&program, &model);
             }
 
             let view = View::whole();

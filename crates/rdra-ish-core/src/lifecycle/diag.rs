@@ -2,6 +2,7 @@
 
 use std::fmt;
 
+use super::trace::Trace;
 use super::types::{InvKind, InvText, Site};
 use crate::model::EntityKey;
 
@@ -66,20 +67,24 @@ pub enum StateDiag {
     PatternCapReached { cap: usize, bound: usize },
     /// The component's joint state count exceeded the cap; exploration stopped.
     StateCapReached { cap: usize },
-    /// A reachable state violates a state constraint.
+    /// A reachable state violates a state constraint. Each constraint reports its first
+    /// violation, with a shortest trace to it.
     ConstraintViolated {
         name: String,
         kind: InvKind,
         text: InvText,
         pattern_desc: String,
         site: Site,
+        trace: Trace,
     },
-    /// A step of the anchor use case ends in a state that fails its `after(..).assert`.
+    /// A step of the anchor use case ends in a state that fails its `after(..).assert`. Each
+    /// assert reports its first violation, with a shortest trace ending in that step.
     AfterAssertViolated {
         anchor: String,
         requireds: String,
         actual: String,
         site: Site,
+        trace: Trace,
     },
     /// `after(UC).assert` names a use case that changes nothing.
     AssertOnInertUseCase { anchor: String, site: Site },
@@ -124,6 +129,23 @@ pub enum StateDiag {
 }
 
 impl StateDiag {
+    /// The counterexample of a violated constraint or assert.
+    pub fn trace(&self) -> Option<&Trace> {
+        match self {
+            StateDiag::ConstraintViolated { trace, .. }
+            | StateDiag::AfterAssertViolated { trace, .. } => Some(trace),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn trace_mut(&mut self) -> Option<&mut Trace> {
+        match self {
+            StateDiag::ConstraintViolated { trace, .. }
+            | StateDiag::AfterAssertViolated { trace, .. } => Some(trace),
+            _ => None,
+        }
+    }
+
     pub fn severity(&self) -> Severity {
         match self {
             StateDiag::NoCreationPath | StateDiag::MinCardNeedsCreate { .. } => Severity::Info,
