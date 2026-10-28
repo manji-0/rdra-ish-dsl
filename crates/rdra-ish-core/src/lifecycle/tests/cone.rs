@@ -209,3 +209,57 @@ fn an_entity_the_view_does_not_read_never_runs_out_of_slots() {
         assert!(via("PostalAddress").contains(uc), "PostalAddress via {uc}");
     }
 }
+
+/// The run's edges are exactly the moves of each expanded state, in order, and every state's
+/// parent path replays through `moves` from an initial state to that state.
+#[test]
+fn every_state_replays_from_its_parent_path_through_moves() {
+    let caps = Caps::new(usize::MAX, 200_000);
+    let mut replayed = 0;
+    for sample in SAMPLES {
+        let model = load(sample);
+        for bounds in [Bounds::STATES, Bounds::VERIFY] {
+            let built = TransitionSystem::build(&model, bounds, &Scope::All);
+            for cr in &built.ts.explore_targets(caps).cones {
+                let run = &cr.run;
+                let ts = &run.system;
+                assert!(run.complete, "{sample}: cone does not finish");
+                let mut edges = run.edges().iter();
+                for (from, s) in run.states.iter().enumerate() {
+                    for m in ts.moves(s) {
+                        let e = edges.next().expect("an edge per move");
+                        assert_eq!(e.from as usize, from, "{sample}: edge source");
+                        assert_eq!(run.step(e), (m.act, &m.params[..]), "{sample}: binding");
+                        assert_eq!(run.states[e.to as usize], m.next, "{sample}: successor");
+                    }
+                }
+                assert!(edges.next().is_none(), "{sample}: an edge with no move");
+                for at in 0..run.states.len() as u32 {
+                    let path = run.path_to(at);
+                    let start = path.first().map_or(at, |e| e.from);
+                    assert!(run.parent(start).is_none(), "{sample}: path starts initial");
+                    let mut cur = run.states[start as usize].clone();
+                    for e in &path {
+                        assert_eq!(run.states[e.from as usize], cur, "{sample}: path is joined");
+                        let (act, params) = run.step(e);
+                        let next = &run.states[e.to as usize];
+                        assert!(
+                            ts.moves(&cur).any(|m| m.act == act
+                                && &m.params[..] == params
+                                && m.next == *next),
+                            "{sample}: the parent edge of {} is a move",
+                            e.to
+                        );
+                        cur = next.clone();
+                    }
+                    assert_eq!(
+                        cur, run.states[at as usize],
+                        "{sample}: replay ends at {at}"
+                    );
+                    replayed += 1;
+                }
+            }
+        }
+    }
+    assert!(replayed > 1000, "replayed {replayed} states");
+}

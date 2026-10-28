@@ -13,6 +13,10 @@ impl Caps {
     pub const fn per_cone(patterns: usize) -> Self {
         Caps::new(patterns, patterns.saturating_mul(16))
     }
+
+    /// For BFS at `Bounds::VERIFY`: 2^21 states per cone. The largest sample cone, clinic-ops
+    /// `AccountBalance`, reaches 1,707,212.
+    pub const VERIFY: Caps = Caps::new(Caps::DEFAULT_PATTERNS, 1 << 21);
 }
 
 pub struct StatesReport {

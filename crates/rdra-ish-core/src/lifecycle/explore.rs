@@ -1,5 +1,6 @@
 //! BFS over one component's flat states. Guards, invariants, and after-asserts are checked on
-//! the fly; per-entity view statistics are gathered from the edges as they are found.
+//! the fly; per-entity view statistics are gathered from the edges as they are found. The run
+//! keeps every edge and, per state, the edge that first reached it.
 
 use std::collections::{BTreeSet, HashMap};
 
@@ -45,6 +46,57 @@ pub struct ComponentRun {
     pub complete: bool,
     pub diags: Vec<Diag>,
     pub(crate) views: Vec<EntityView>,
+    /// Parallel to `states`: the index in `edges` of the edge that first reached the state;
+    /// `None` for an initial state.
+    parents: Vec<Option<u32>>,
+    /// Every move from an expanded state, self-loops and repeats included, in discovery order.
+    edges: Vec<Edge>,
+    /// `(action, params)` of each distinct binding an edge names.
+    bindings: Vec<(ActId, Box<[u8]>)>,
+}
+
+/// One move of the run: `states[from]` steps to `states[to]` under one `(action, params)`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Edge {
+    pub from: u32,
+    pub to: u32,
+    binding: u32,
+}
+
+/// One step: an action, its bound slots, and the successor. BFS enumerates this, and nothing
+/// else evaluates guards and effects.
+pub(crate) struct Move {
+    pub act: ActId,
+    pub params: Box<[u8]>,
+    pub next: State,
+}
+
+impl ComponentRun {
+    pub fn edges(&self) -> &[Edge] {
+        &self.edges
+    }
+
+    /// The action and its params on an edge.
+    pub fn step(&self, edge: &Edge) -> (ActId, &[u8]) {
+        let (act, params) = &self.bindings[edge.binding as usize];
+        (*act, params)
+    }
+
+    /// The edge that first reached `states[at]`; `None` for an initial state.
+    pub fn parent(&self, at: u32) -> Option<&Edge> {
+        self.parents[at as usize].map(|e| &self.edges[e as usize])
+    }
+
+    /// The BFS path from an initial state to `states[at]`, first edge first.
+    pub fn path_to(&self, mut at: u32) -> Vec<Edge> {
+        let mut path = Vec::new();
+        while let Some(edge) = self.parent(at) {
+            path.push(*edge);
+            at = edge.from;
+        }
+        path.reverse();
+        path
+    }
 }
 
 /// What the edges said about one entity's view patterns, indexed by pattern id.
@@ -133,6 +185,9 @@ impl TransitionSystem {
             complete,
             diags,
             views,
+            parents,
+            edges,
+            bindings,
             ..
         } = bfs;
         ComponentRun {
@@ -142,6 +197,9 @@ impl TransitionSystem {
             complete,
             diags,
             views,
+            parents,
+            edges,
+            bindings: bindings.list,
         }
     }
 
@@ -296,6 +354,71 @@ impl TransitionSystem {
         }
         out
     }
+
+    /// Every move from `s`, in BFS order: actions by index, then `bindings`, then the
+    /// successors of each binding whose pre-guards hold, keeping those whose post-guards hold.
+    pub(crate) fn moves<'s>(&'s self, s: &'s State) -> impl Iterator<Item = Move> + 's {
+        self.actions
+            .iter()
+            .enumerate()
+            .flat_map(move |(ai, action)| {
+                self.bindings(action, s)
+                    .into_iter()
+                    .filter(move |params| {
+                        let mut env = Env::new(params);
+                        action
+                            .guards
+                            .iter()
+                            .filter(|g| !g.reads_successor())
+                            .all(|g| self.eval(&g.pred, s, &mut env))
+                    })
+                    .flat_map(move |params| {
+                        let params: Box<[u8]> = params.into();
+                        self.successors(action, &params, s)
+                            .into_iter()
+                            .filter(|next| {
+                                let mut env = Env {
+                                    next: Some(next),
+                                    ..Env::new(&params)
+                                };
+                                action
+                                    .guards
+                                    .iter()
+                                    .filter(|g| g.reads_successor())
+                                    .all(|g| self.eval(&g.pred, s, &mut env))
+                            })
+                            .map(|next| Move {
+                                act: ActId::at(ai),
+                                params: params.clone(),
+                                next,
+                            })
+                            .collect::<Vec<_>>()
+                    })
+            })
+    }
+}
+
+/// Interns each `(action, params)` an edge names, so an edge stores one index.
+#[derive(Default)]
+struct Bindings {
+    list: Vec<(ActId, Box<[u8]>)>,
+    /// Per action: its params to their index in `list`.
+    index: Vec<HashMap<Box<[u8]>, u32>>,
+}
+
+impl Bindings {
+    fn id(&mut self, act: ActId, params: &[u8]) -> u32 {
+        if self.index.len() <= act.index() {
+            self.index.resize_with(act.index() + 1, HashMap::new);
+        }
+        if let Some(id) = self.index[act.index()].get(params) {
+            return *id;
+        }
+        let id = u32::try_from(self.list.len()).expect("bindings fit in u32");
+        self.list.push((act, params.into()));
+        self.index[act.index()].insert(params.into(), id);
+        id
+    }
 }
 
 struct Bfs<'t> {
@@ -309,6 +432,9 @@ struct Bfs<'t> {
     /// Per action, per param: the action writes that param's existence or view columns.
     writes: Vec<Vec<bool>>,
     witnesses: HashMap<String, usize>,
+    parents: Vec<Option<u32>>,
+    edges: Vec<Edge>,
+    bindings: Bindings,
 }
 
 impl<'t> Bfs<'t> {
@@ -345,6 +471,9 @@ impl<'t> Bfs<'t> {
             views: ts.entities.iter().map(|_| EntityView::default()).collect(),
             writes,
             witnesses: HashMap::new(),
+            parents: Vec::new(),
+            edges: Vec::new(),
+            bindings: Bindings::default(),
         }
     }
 
@@ -363,48 +492,53 @@ impl<'t> Bfs<'t> {
                     }
                 }
             }
-            if !self.admit(s) {
+            if !self.admit(s, None) {
                 return;
             }
         }
         let mut next = 0;
         while next < self.states.len() {
+            let from = next as u32;
             let s = self.states[next].clone();
             next += 1;
-            for (ai, action) in ts.actions.iter().enumerate() {
-                for params in ts.bindings(action, &s) {
-                    let mut env = Env::new(&params);
-                    let (post, pre): (Vec<_>, Vec<_>) =
-                        action.guards.iter().partition(|g| g.reads_successor());
-                    if !pre.iter().all(|g| ts.eval(&g.pred, &s, &mut env)) {
-                        continue;
-                    }
-                    for s2 in ts.successors(action, &params, &s) {
-                        let mut env = Env {
-                            next: Some(&s2),
-                            ..Env::new(&params)
-                        };
-                        if !post.iter().all(|g| ts.eval(&g.pred, &s, &mut env)) {
-                            continue;
-                        }
-                        if !self.observe(ActId::at(ai), &params, &s, &s2) {
-                            return;
-                        }
-                        if s2 == s {
-                            continue;
-                        }
-                        self.check_after(ActId::at(ai), &params, &s2);
-                        if !self.seen.contains_key(&s2) && !self.admit(s2) {
-                            return;
-                        }
-                    }
+            for Move {
+                act,
+                params,
+                next: s2,
+            } in ts.moves(&s)
+            {
+                if !self.observe(act, &params, &s, &s2) {
+                    return;
                 }
+                let binding = self.bindings.id(act, &params);
+                let edge = self.edges.len() as u32;
+                if s2 == s {
+                    self.edges.push(Edge {
+                        from,
+                        to: from,
+                        binding,
+                    });
+                    continue;
+                }
+                self.check_after(act, &params, &s2);
+                let to = match self.seen.get(&s2) {
+                    Some(&to) => to,
+                    None => {
+                        let to = self.states.len() as u32;
+                        if !self.admit(s2, Some(edge)) {
+                            return;
+                        }
+                        to
+                    }
+                };
+                self.edges.push(Edge { from, to, binding });
             }
         }
     }
 
-    /// Adds a new state; false when the state cap stops the run.
-    fn admit(&mut self, s: State) -> bool {
+    /// Adds a new state; false when the state cap stops the run. `parent` is the index in
+    /// `edges` that the edge reaching it takes.
+    fn admit(&mut self, s: State, parent: Option<u32>) -> bool {
         if self.seen.contains_key(&s) {
             return true;
         }
@@ -422,6 +556,7 @@ impl<'t> Bfs<'t> {
         self.check_invariants(&s);
         self.seen.insert(s.clone(), self.states.len() as u32);
         self.states.push(s);
+        self.parents.push(parent);
         true
     }
 

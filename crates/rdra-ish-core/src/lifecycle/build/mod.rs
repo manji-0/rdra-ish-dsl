@@ -344,6 +344,7 @@ impl<'m> Builder<'m> {
         Some(Action {
             name: "Tick".to_string(),
             origin: ActionOrigin::Clock,
+            site: Site::bare(ModelRef::Synthesized),
             params: Vec::new(),
             guards: vec![Guard {
                 pred: Pred::Cmp(
@@ -456,6 +457,10 @@ impl<'m> Builder<'m> {
                 uc,
                 buc: first_buc(model, uc),
             },
+            site: Site::new(
+                ModelRef::UseCase(uc),
+                &model.decl_sites.located("usecase", &model.use_cases[uc].id),
+            ),
             params: a.params,
             guards: a.guards,
             effects: a.effects,

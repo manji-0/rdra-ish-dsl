@@ -275,6 +275,8 @@ pub struct Action {
     /// `Tick`.
     pub name: String,
     pub origin: ActionOrigin,
+    /// The use case declaration, or `Synthesized` for `Tick`.
+    pub site: Site,
     /// At most one param per entity.
     pub params: Vec<Param>,
     /// Conjunction, read on the pre-state.

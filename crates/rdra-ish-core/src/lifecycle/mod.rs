@@ -23,7 +23,7 @@ mod tests;
 
 pub use cone::{Cone, Target, VarSet};
 pub use diag::{has_errors, Diag, Severity, StateDiag};
-pub use explore::{Caps, ComponentRun, Exploration};
+pub use explore::{Caps, ComponentRun, Edge, Exploration};
 pub use expr::State;
 pub use restrict::Component;
 pub use states::{derive_states, StatesReport};
