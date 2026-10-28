@@ -77,6 +77,9 @@ impl RefAction {
 pub struct ForeignKey {
     pub child: EntityKey,
     pub parent: EntityKey,
+    /// `.role(x)`. `None` names the key after its parent: column `{parent}_{pk}` and owner
+    /// `{child}._owner_{parent}`. `(child, role)` is unique among a child's keys.
+    pub role: Option<String>,
     /// `(child column, parent key column)` pairs. Empty when `analysis::fk` rejected the key
     /// (`FkConflict`, `MissingPk`, `CompositePkFkUnsupported`).
     pub columns: Vec<(String, String)>,
@@ -92,6 +95,11 @@ pub struct ForeignKey {
 }
 
 impl ForeignKey {
+    /// The role, or the parent id when `.role` is absent.
+    pub fn role_or<'a>(&'a self, parent_id: &'a str) -> &'a str {
+        self.role.as_deref().unwrap_or(parent_id)
+    }
+
     pub fn optional(&self) -> bool {
         self.parent_min == Min::Zero
     }

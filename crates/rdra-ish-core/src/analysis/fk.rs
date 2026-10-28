@@ -9,7 +9,8 @@ use crate::model::*;
 use rdra_ish_syntax::ast::PredicateCall;
 use std::collections::{BTreeMap, BTreeSet};
 
-/// `.optional()`, `.on_delete(..)` and `.on_update(..)` of a relate chain.
+/// `.role(..)`, `.key(..)`, `.optional()`, `.on_delete(..)` and `.on_update(..)` of a relate
+/// chain.
 pub(crate) fn relation_options(
     pred: &PredicateCall,
     ctx: DiagCtxt,
@@ -18,6 +19,14 @@ pub(crate) fn relation_options(
     let mut options = RelationOptions::default();
     for cc in &pred.chain {
         let slot = match cc.name.as_str() {
+            "role" => {
+                options.role = cc.args.first().and_then(arg_as_str);
+                continue;
+            }
+            "key" => {
+                options.key = cc.args.iter().filter_map(arg_as_str).collect();
+                continue;
+            }
             "optional" => {
                 options.optional = true;
                 continue;
@@ -46,8 +55,8 @@ pub(crate) fn relation_options(
 }
 
 /// Writes `model.foreign_keys` and `model.junction_keys`, and appends each key's generated
-/// column to its child. A key the child cannot hold (no parent `@pk`, a composite parent
-/// key, a name clash) is reported and keeps no columns.
+/// columns to its child. A key the child cannot hold (a second key with the same role, no
+/// parent `@pk`, a composite parent key, a name clash) is reported and keeps no columns.
 pub(crate) fn resolve_foreign_keys(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>) {
     model.foreign_keys = model
         .relations
@@ -56,13 +65,38 @@ pub(crate) fn resolve_foreign_keys(model: &mut SemanticModel, diags: &mut Vec<Di
         .filter_map(|(relation, rel)| key_fact(relation, rel))
         .collect();
 
+    let mut roles: BTreeSet<(EntityKey, String)> = BTreeSet::new();
     for index in 0..model.foreign_keys.len() {
-        if let Some(column) = generate_key_column(model, diags, index) {
-            model.foreign_keys[index].columns.push(column);
+        let fk = &model.foreign_keys[index];
+        let role = fk.role_or(&model.entities[fk.parent].id).to_string();
+        if !roles.insert((fk.child, role.to_lowercase())) {
+            let err = RdraError::DuplicateRelateRole {
+                child: model.entities[fk.child].id.clone(),
+                role,
+            };
+            push_relate_error(model, diags, index, err);
+            continue;
+        }
+        if let Some(columns) = key_columns(model, diags, index, &role.to_lowercase()) {
+            model.foreign_keys[index].columns = columns;
         }
     }
 
     resolve_junction_keys(model, diags);
+}
+
+/// At the relate that yields key `index`, or at its child when the relate was synthesized.
+fn push_relate_error(
+    model: &SemanticModel,
+    diags: &mut Vec<Diagnostic>,
+    index: usize,
+    err: RdraError,
+) {
+    let fk = &model.foreign_keys[index];
+    match &fk.site {
+        Some(site) => diags.push(Diagnostic::error_at(err, site.clone())),
+        None => push_entity_error(model, diags, &model.entities[fk.child].id, err),
+    }
 }
 
 fn key_fact(relation: usize, rel: &Relation) -> Option<ForeignKey> {
@@ -78,6 +112,7 @@ fn key_fact(relation: usize, rel: &Relation) -> Option<ForeignKey> {
     Some(ForeignKey {
         child,
         parent,
+        role: rel.options.role.clone(),
         columns: Vec::new(),
         children: Multiplicity {
             min: Min::Zero,
@@ -95,12 +130,14 @@ fn key_fact(relation: usize, rel: &Relation) -> Option<ForeignKey> {
     })
 }
 
-/// Appends `{parent}_id` to the child, unique for a 1:1, and returns `(child column, parent key column)`.
-fn generate_key_column(
+/// Appends `{role}_{pk}` to the child, unique for a 1:1, and returns the `(child column,
+/// parent key column)` pairs. `role` is lowercase.
+fn key_columns(
     model: &mut SemanticModel,
     diags: &mut Vec<Diagnostic>,
     index: usize,
-) -> Option<(String, String)> {
+    role: &str,
+) -> Option<Vec<(String, String)>> {
     let (child_key, parent_key, optional, unique) = {
         let fk = &model.foreign_keys[index];
         (fk.child, fk.parent, fk.optional(), fk.unique())
@@ -135,7 +172,7 @@ fn generate_key_column(
         return None;
     };
     let (pk_name, pk_type) = (pk.name.clone(), pk.col_type.clone());
-    let name = format!("{}_id", parent.id.to_lowercase());
+    let name = format!("{role}_{pk_name}");
 
     let child = &model.entities[child_key];
     if child.columns.iter().any(|c| c.name == name) {
@@ -166,7 +203,7 @@ fn generate_key_column(
         is_tenant_scope: false,
         derived_expr: None,
     });
-    Some((name, pk_name))
+    Some(vec![(name, pk_name)])
 }
 
 /// Each N:M junction's two keys, which `unique_keys` reads as a composite unique set. A

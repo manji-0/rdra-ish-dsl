@@ -350,7 +350,9 @@ fn assert_owner_vars(sample: &str, model: &SemanticModel) {
         .vars()
         .iter()
         .filter_map(|var| match var.kind {
-            VarKind::Owner { child, parent, fk } => Some((
+            VarKind::Owner {
+                child, parent, fk, ..
+            } => Some((
                 fk,
                 entities[child.index()].key,
                 entities[parent.index()].key,

@@ -163,12 +163,14 @@ impl TransitionSystem {
             VarKind::Column { column, .. } => column.clone(),
             VarKind::Prop { key, .. } => format!("__cmp:{key}"),
             VarKind::Exists(e) => format!("{}._exists", self.entity(*e).id),
-            VarKind::Owner { child, parent, .. } => {
-                format!(
-                    "{}._owner_{}",
-                    self.entity(*child).id,
-                    self.entity(*parent).id
-                )
+            VarKind::Owner {
+                child,
+                parent,
+                role,
+                ..
+            } => {
+                let name = role.as_deref().unwrap_or(&self.entity(*parent).id);
+                format!("{}._owner_{name}", self.entity(*child).id)
             }
             VarKind::Now => "now".to_string(),
         }

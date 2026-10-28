@@ -415,10 +415,16 @@ impl Remap {
                 entity: self.e(*entity),
                 key: key.clone(),
             },
-            VarKind::Owner { child, parent, fk } => VarKind::Owner {
+            VarKind::Owner {
+                child,
+                parent,
+                fk,
+                role,
+            } => VarKind::Owner {
                 child: self.e(*child),
                 parent: self.e(*parent),
                 fk: *fk,
+                role: role.clone(),
             },
             VarKind::Now => VarKind::Now,
         }

@@ -123,3 +123,24 @@ when(Cert, status == revoked).none(Assign.status == active)
         d.entity("Cert").diagnostics
     );
 }
+
+#[test]
+fn owner_var_names_carry_the_role_only_when_one_is_given() {
+    let model = model_from(
+        r#"
+entity Address "Address" { id: Int @pk }
+entity Order "Order" { id: Int @pk }
+usecase Place "Place"
+creates(Place, Order)
+relate(Order, Address, N:1)
+relate(Order, Address, N:1).role(bill_to).optional()
+"#,
+    );
+    let ts = TransitionSystem::build(&model, Bounds::STATES, &Scope::All).ts;
+    let owners: Vec<String> = ts
+        .var_ids()
+        .map(|v| ts.var_name(v))
+        .filter(|n| n.contains("._owner_"))
+        .collect();
+    assert_eq!(owners, ["Order._owner_Address", "Order._owner_bill_to"]);
+}

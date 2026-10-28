@@ -91,9 +91,13 @@ pub struct Relation {
     pub site: Option<crate::location::LocatedSpan>,
 }
 
-/// What a `relate` chain says about its key: `.optional()`, `.on_delete(..)`, `.on_update(..)`.
+/// What a `relate` chain says about its key: `.role(..)`, `.key(..)`, `.optional()`,
+/// `.on_delete(..)`, `.on_update(..)`.
 #[derive(Debug, Clone, Default)]
 pub struct RelationOptions {
+    pub role: Option<String>,
+    /// Author columns of the child that hold the key, in parent key order. Empty generates them.
+    pub key: Vec<String>,
     pub optional: bool,
     pub on_delete: Option<RefAction>,
     pub on_update: Option<RefAction>,

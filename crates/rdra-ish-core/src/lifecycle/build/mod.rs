@@ -284,6 +284,7 @@ impl<'m> Builder<'m> {
                     child: c,
                     parent: p,
                     fk: id,
+                    role: fk.role.clone(),
                 },
                 Domain::Instance {
                     parent: p,

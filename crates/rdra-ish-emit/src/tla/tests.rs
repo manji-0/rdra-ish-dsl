@@ -140,3 +140,25 @@ fn module_name_is_sanitized() {
     );
     assert_eq!(print(&ts, PrintMode::Check, "").module_name, "RdraSpec");
 }
+
+#[test]
+fn owner_vars_take_the_role_only_when_one_is_given() {
+    let ts = system(
+        r#"
+entity Address "Address" { id: Int @pk }
+entity Order "Order" { id: Int @pk }
+usecase Place "Place"
+creates(Place, Order)
+relate(Order, Address, N:1)
+relate(Order, Address, N:1).role(bill_to).optional()
+"#,
+    );
+    let names = TlaNames::new(&ts);
+    let owners: Vec<&str> = names
+        .vars()
+        .iter()
+        .map(String::as_str)
+        .filter(|n| n.contains("_owner_"))
+        .collect();
+    assert_eq!(owners, ["Order_owner_Address", "Order_owner_bill_to"]);
+}

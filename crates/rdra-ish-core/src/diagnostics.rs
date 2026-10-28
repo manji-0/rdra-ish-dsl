@@ -79,8 +79,11 @@ pub enum RdraError {
     #[error("junction '{junction}' is used as .via for multiple N:M pairs ({pairs})\n  hint: give each N:M relation its own junction entity so composite unique and FK meaning stay unambiguous")]
     SharedJunctionVia { junction: String, pairs: String },
 
-    #[error("FK conflict: entity '{entity}' already has a column '{col}' that conflicts with auto-generated FK")]
+    #[error("FK conflict: entity '{entity}' already has a column '{col}' that conflicts with auto-generated FK\n  hint: name the key with `.role(...)` so it generates other columns, or adopt the column with `.key({col})`")]
     FkConflict { entity: String, col: String },
+
+    #[error("entity '{child}' has two relate keys with role '{role}'\n  hint: add `.role(...)` to one of them so each key gets its own columns and owner")]
+    DuplicateRelateRole { child: String, role: String },
 
     #[error("missing @pk: entity '{entity}' used as FK target has no @pk column\n  hint: add `id: Int @pk` (or another @pk column) to entity '{entity}'")]
     MissingPk { entity: String },

@@ -119,6 +119,8 @@ pub enum VarKind {
         child: EntId,
         parent: EntId,
         fk: FkId,
+        /// The key's `.role(..)`, which names the var in place of the parent.
+        role: Option<String>,
     },
     Now,
 }

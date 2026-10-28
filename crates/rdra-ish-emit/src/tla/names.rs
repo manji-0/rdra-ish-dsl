@@ -72,8 +72,14 @@ impl TlaNames {
                 VarKind::Prop { entity: e, key } => {
                     taken.claim(&format!("{}_prop_{key}", entity(*e)))
                 }
-                VarKind::Owner { child, parent, .. } => {
-                    taken.claim(&format!("{}_owner_{}", entity(*child), entity(*parent)))
+                VarKind::Owner {
+                    child,
+                    parent,
+                    role,
+                    ..
+                } => {
+                    let name = role.clone().unwrap_or_else(|| entity(*parent));
+                    taken.claim(&format!("{}_owner_{name}", entity(*child)))
                 }
             })
             .collect();
