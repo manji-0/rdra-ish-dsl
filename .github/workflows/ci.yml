@@ -24,7 +24,8 @@ jobs:
       - name: clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: test
-        run: cargo test --all
+        # The whole-sample engine comparison runs in release in formal-verify.
+        run: cargo test --all -- --skip bfs_and_tlc_reach_the_same_states_and_verdicts
       - name: sample artifact snapshots
         run: bash scripts/check-sample-artifacts.sh
 
