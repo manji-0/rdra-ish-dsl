@@ -425,7 +425,7 @@ impl Builder<'_> {
                     parent,
                     role,
                 },
-                site: Site::new(ModelRef::Relation(fk.relation), &fk.site),
+                site,
             });
         }
     }
