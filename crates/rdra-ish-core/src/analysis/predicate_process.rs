@@ -950,6 +950,70 @@ fn resolve_relate_via(
     (via, had_via)
 }
 
+/// A card's kind and its child-side minimum. A side is `1`, `N`/`M`, or `lo..hi` with `lo`
+/// in {0, 1} and `hi` in {1, *}; a range stands for the side `1` (hi 1) or `N`/`M` (hi *),
+/// and only the child side, the many side of N:1 / 1:N and the left of 1:1, may carry one.
+/// `Ok(None)` for a card no relate kind names, which today's forms drop silently.
+fn parse_card(card: &str) -> Result<Option<(RelKind, Min)>, RdraError> {
+    let Some((left, right)) = card.split_once(':') else {
+        return Ok(None);
+    };
+    let range = |side: &str| -> Result<Option<(Min, bool)>, RdraError> {
+        let Some((lo, hi)) = side.split_once("..") else {
+            return Ok(None);
+        };
+        let out_of_range = || RdraError::MinCardOutOfRange {
+            range: side.to_string(),
+        };
+        let min = match lo {
+            "0" => Min::Zero,
+            "1" => Min::One,
+            _ => return Err(out_of_range()),
+        };
+        let many = match hi {
+            "1" => false,
+            "*" => true,
+            _ => return Err(out_of_range()),
+        };
+        Ok(Some((min, many)))
+    };
+    let (l, r) = (range(left)?, range(right)?);
+    let base = |side: &'static str, written: &str, r: Option<(Min, bool)>| match r {
+        Some((_, true)) => side,
+        Some((_, false)) => "1",
+        None => match written {
+            "1" => "1",
+            "N" => "N",
+            "M" => "M",
+            _ => "?",
+        },
+    };
+    let left_base = base("N", left, l);
+    let right_base = base(if left_base == "1" { "N" } else { "M" }, right, r);
+    let kind = match (left_base, right_base) {
+        ("1", "1") => RelKind::RelateOneToOne,
+        ("1", "N") => RelKind::RelateOneToMany,
+        ("N", "1") => RelKind::RelateManyToOne,
+        ("N", "M") => RelKind::RelateManyToMany,
+        _ => return Ok(None),
+    };
+    let (child, parent) = match kind {
+        RelKind::RelateOneToMany => (r, l),
+        RelKind::RelateManyToMany if l.is_some() || r.is_some() => {
+            return Err(RdraError::MinCardOnManyToMany {
+                card: card.to_string(),
+            })
+        }
+        _ => (l, r),
+    };
+    if parent.is_some() {
+        return Err(RdraError::MinCardOnParentSide {
+            card: card.to_string(),
+        });
+    }
+    Ok(Some((kind, child.map_or(Min::Zero, |(min, _)| min))))
+}
+
 fn process_relate_predicate(
     model: &mut SemanticModel,
     pred: &PredicateCall,
@@ -969,13 +1033,21 @@ fn process_relate_predicate(
     let (via, had_via) = resolve_relate_via(model, pred, ctx, diags);
     let mut options = super::fk::relation_options(pred, ctx, diags);
 
-    let kind = match card_str {
-        "1:1" => RelKind::RelateOneToOne,
-        "1:N" => RelKind::RelateOneToMany,
-        "N:1" => RelKind::RelateManyToOne,
-        "N:M" => RelKind::RelateManyToMany,
-        _ => return,
+    let (kind, children_min) = match parse_card(card_str) {
+        Ok(Some(card)) => card,
+        Ok(None) => return,
+        Err(err) => {
+            let span = pred
+                .args
+                .get(2)
+                .map(arg_span)
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| pred.span.clone());
+            push_error(ctx, diags, span, err);
+            return;
+        }
     };
+    options.children_min = children_min;
 
     if had_via && kind != RelKind::RelateManyToMany {
         let span = pred

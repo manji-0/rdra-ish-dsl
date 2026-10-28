@@ -3,7 +3,7 @@
 use super::support::entity_key;
 use crate::analysis::build_model;
 use crate::diagnostics::RdraError;
-use crate::model::{ColumnType, CrossConstraintScope, SemanticModel, UniqueSource};
+use crate::model::{ColumnType, CrossConstraintScope, Max, Min, SemanticModel, UniqueSource};
 use rdra_ish_syntax::parse;
 
 fn build(src: &str) -> (SemanticModel, Vec<RdraError>) {
@@ -417,4 +417,74 @@ fn by_on_a_single_entity_constraint_is_an_error() {
             "{constraint}: {errors:?}"
         );
     }
+}
+
+const LINES: &str = "entity Order \"O\" { id: Int @pk }\nentity Line \"L\" { id: Int @pk }\n";
+
+/// `(optional, children.min, children.max)` of the one key of `Line`.
+fn line_key(relate: &str) -> (bool, Min, Max) {
+    let model = built(&format!("{LINES}{relate}\n"));
+    let line = entity_key(&model, "Line");
+    let (_, fk) = model
+        .foreign_keys()
+        .find(|(_, fk)| fk.child == line)
+        .unwrap_or_else(|| panic!("{relate}: no key on Line"));
+    (fk.optional(), fk.children.min, fk.children.max)
+}
+
+#[test]
+fn a_child_side_range_sets_the_minimum_children_and_keeps_the_kind() {
+    for (card, min, max) in [
+        ("N:1", Min::Zero, Max::Many),
+        ("0..*:1", Min::Zero, Max::Many),
+        ("1..*:1", Min::One, Max::Many),
+        ("1:1", Min::Zero, Max::One),
+        ("0..1:1", Min::Zero, Max::One),
+        ("1..1:1", Min::One, Max::One),
+    ] {
+        let relate = format!("relate(Line, Order, {card})");
+        assert_eq!(line_key(&relate), (false, min, max), "{card}");
+    }
+    assert_eq!(
+        line_key("relate(Order, Line, 1:1..*)"),
+        (false, Min::One, Max::Many),
+        "1:N puts the child on the right"
+    );
+    assert_eq!(
+        line_key("relate(Line, Order, 1..*:1).optional()"),
+        (true, Min::One, Max::Many)
+    );
+}
+
+#[test]
+fn a_range_out_of_bounds_on_the_parent_side_or_on_an_nm_is_an_error() {
+    for (card, want) in [
+        ("2..*:1", "range '2..*'"),
+        ("1..5:1", "range '1..5'"),
+        ("N:0..1", ".optional()"),
+        ("1..*:1..1", ".optional()"),
+        ("1:0..1", ".optional()"),
+    ] {
+        let (model, errors) = build(&format!("{LINES}relate(Line, Order, {card})\n"));
+        assert!(
+            matches!(
+                errors.as_slice(),
+                [RdraError::MinCardOutOfRange { .. } | RdraError::MinCardOnParentSide { .. }]
+            ),
+            "{card}: {errors:?}"
+        );
+        assert!(
+            errors[0].to_string().contains(want),
+            "{card}: {}",
+            errors[0]
+        );
+        assert_eq!(model.foreign_keys().count(), 0, "{card}");
+    }
+    let (_, errors) = build(&format!(
+        "{LINES}entity J \"J\" {{ id: Int @pk }}\nrelate(Line, Order, 1..*:M).via(J)\n"
+    ));
+    assert!(
+        matches!(errors.as_slice(), [RdraError::MinCardOnManyToMany { .. }]),
+        "{errors:?}"
+    );
 }

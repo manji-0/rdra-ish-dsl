@@ -24,8 +24,9 @@ pub struct Multiplicity {
     pub max: Max,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Min {
+    #[default]
     Zero,
     One,
 }
@@ -84,7 +85,8 @@ pub struct ForeignKey {
     /// column. Empty when `analysis::fk` rejected the key (`DuplicateRelateRole`,
     /// `MissingPk`, `FkConflict`, a `.key(..)` error).
     pub columns: Vec<(String, String)>,
-    /// Children per parent: `max == One` is a 1:1.
+    /// Children per parent: `max == One` is a 1:1; `min == One` is a child-side range
+    /// `1..*` / `1..1`, which the lifecycle checks as `MinCard_*`.
     pub children: Multiplicity,
     /// Parents per child: `Zero` is `.optional()`, a nullable key.
     pub parent_min: Min,

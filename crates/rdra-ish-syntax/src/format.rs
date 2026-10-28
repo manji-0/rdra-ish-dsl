@@ -442,6 +442,16 @@ mod tests {
     }
 
     #[test]
+    fn formats_a_cardinality_range_as_written() {
+        let formatted =
+            format_source("relate(Line, Order, 1 .. *:1)\nrelate(Note, Order, 0..1:1)\n").unwrap();
+        assert_eq!(
+            formatted,
+            "relate(Line, Order, 1..*:1)\n\nrelate(Note, Order, 0..1:1)\n"
+        );
+    }
+
+    #[test]
     fn formats_variation_values_and_named_column_types() {
         let src = "variation PaymentMethod \"Payment Method\" {cash \"Cash\" card\n adjustment \"Adj\"}\nentity E \"E\" {method:PaymentMethod @default(card)}\n";
         let formatted = format_source(src).unwrap();

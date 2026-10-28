@@ -903,13 +903,21 @@ fn predicate_atom() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> +
     lit.or(r)
 }
 
-/// `N:1` / `1:N` / `1:1` / `N:M` カーディナリティ（非クォート）。
+/// `N:1` / `1:N` / `1:1` / `N:M` カーディナリティ（非クォート）。A side may be a range
+/// `lo..hi` (`1..*:1`); the analysis checks its bounds and which side carries it.
 fn card_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + Clone {
-    let side = select! {
+    let int = select! { Token::IntLit(s) => s };
+    let range = int
+        .then_ignore(just(Token::DotDot))
+        .then(int.or(just(Token::Star).to("*".to_string())))
+        .map(|(lo, hi)| format!("{lo}..{hi}"));
+    let simple = select! {
         Token::Ident(s) if s == "N" || s == "M" => s,
         Token::IntLit(s) if s == "1" => s,
     };
-    side.then_ignore(just(Token::Colon))
+    let side = range.or(simple);
+    side.clone()
+        .then_ignore(just(Token::Colon))
         .then(side)
         .map(|(left, right)| PredicateArg::Card(format!("{left}:{right}")))
 }
@@ -1710,6 +1718,19 @@ performs(actor::Add, usecase::Add)
             })
             .expect("predicate not found");
         assert!(matches!(&pred.args[2], PredicateArg::Card(c) if c == "N:1"));
+
+        for card in ["1..*:1", "0..1:1", "1:1..*", "2..5:1"] {
+            let ast = parse_ok(&format!("relate(Line, Order, {card})"));
+            let Some(Item::Predicate(pred)) = ast.items.first() else {
+                panic!("no predicate for {card}");
+            };
+            assert!(matches!(&pred.args[2], PredicateArg::Card(c) if c == card));
+        }
+        let ast = parse_ok("/* a * b */ relate(Line, Order, 1 .. * : 1) // *");
+        let Some(Item::Predicate(pred)) = ast.items.first() else {
+            panic!("no predicate");
+        };
+        assert!(matches!(&pred.args[2], PredicateArg::Card(c) if c == "1..*:1"));
 
         let trans = parse_ok("transitions(Order.status, CapturePay, pending -> paid)");
         let pred = trans

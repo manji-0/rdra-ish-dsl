@@ -115,7 +115,7 @@ fn key_fact(relation: usize, rel: &Relation) -> Option<ForeignKey> {
         role: rel.options.role.clone(),
         columns: Vec::new(),
         children: Multiplicity {
-            min: Min::Zero,
+            min: rel.options.children_min,
             max,
         },
         parent_min: if rel.options.optional {

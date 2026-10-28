@@ -132,6 +132,15 @@ pub enum RdraError {
     #[error(".key(...) column '{child}.{column}' already holds another relate's key\n  hint: give each relate its own key columns")]
     KeyColumnShared { child: String, column: String },
 
+    #[error("cardinality range '{range}' is out of range: the low end is 0 or 1, the high end 1 or *\n  hint: write `0..*`, `1..*`, `0..1` or `1..1`")]
+    MinCardOutOfRange { range: String },
+
+    #[error("'{card}' puts a range on the parent side: a range counts the children per parent\n  hint: write that side as `1`, and add `.optional()` when a child may have no parent")]
+    MinCardOnParentSide { card: String },
+
+    #[error("'{card}' puts a range on an N:M, which holds no key of its own\n  hint: give the junction's keys the range, `relate(Junction, A, 1..*:1)`, instead of `.via(Junction)`")]
+    MinCardOnManyToMany { card: String },
+
     #[error("unknown referential action '{got}' in .{method}(...)\n  hint: use one of cascade, restrict, set_null, set_default, no_action")]
     UnknownRefAction { method: String, got: String },
 

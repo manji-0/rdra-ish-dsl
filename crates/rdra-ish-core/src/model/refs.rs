@@ -91,14 +91,16 @@ pub struct Relation {
     pub site: Option<crate::location::LocatedSpan>,
 }
 
-/// What a `relate` chain says about its key: `.role(..)`, `.key(..)`, `.optional()`,
-/// `.on_delete(..)`, `.on_update(..)`.
+/// What a `relate` says about its key: `.role(..)`, `.key(..)`, `.optional()`,
+/// `.on_delete(..)`, `.on_update(..)`, and the low end of a child-side range (`1..*:1`).
 #[derive(Debug, Clone, Default)]
 pub struct RelationOptions {
     pub role: Option<String>,
     /// Author columns of the child that hold the key, in parent key order. Empty generates them.
     pub key: Vec<String>,
     pub optional: bool,
+    /// Children per parent at least: `One` for `1..*` / `1..1` on the child side.
+    pub children_min: super::foreign_key::Min,
     pub on_delete: Option<RefAction>,
     pub on_update: Option<RefAction>,
 }

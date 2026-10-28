@@ -136,8 +136,14 @@ pub enum Token {
     ColonColon,
     #[token(":")]
     Colon,
+    // ".." must come before "." so the longer token wins
+    #[token("..")]
+    DotDot,
     #[token(".")]
     Dot,
+    /// The open upper bound of a cardinality range: `1..*`.
+    #[token("*")]
+    Star,
     // "->" must come before bare "-" if it is ever added
     #[token("->")]
     Arrow,
