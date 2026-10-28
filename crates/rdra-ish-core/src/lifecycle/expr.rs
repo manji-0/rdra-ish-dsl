@@ -167,11 +167,14 @@ fn compare(lhs: &Operand, op: CmpOp, rhs: &Operand) -> bool {
     let domain = numeric_domain(lhs).or_else(|| numeric_domain(rhs));
     let is_number = |o: &Operand| matches!(o, Operand::Number(_));
     if domain.is_some() || is_number(lhs) || is_number(rhs) {
-        let num = |o: &Operand| match (o, domain) {
-            (Operand::Number(n), _) => Some(*n),
-            (Operand::Slot(s), _) => Some(i64::from(*s)),
-            (Operand::Value(v, _), Some(d)) => d.number(*v),
-            (Operand::Value(v, _), None) => Some(i64::from(v.0)),
+        // A slot reads through its own domain; a literal through the other operand's.
+        let num = |o: &Operand| match o {
+            Operand::Number(n) => Some(*n),
+            Operand::Slot(s) => Some(i64::from(*s)),
+            Operand::Value(v, d) => match d.filter(|d| d.is_numeric()).or(domain) {
+                Some(d) => d.number(*v),
+                None => Some(i64::from(v.0)),
+            },
         };
         return compare_numbers(num(lhs), op, num(rhs));
     }

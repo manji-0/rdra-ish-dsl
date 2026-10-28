@@ -209,22 +209,8 @@ fn main() -> Result<()> {
                 } else {
                     "RdraSpec"
                 };
-                let bundle = export::export_tla_bundle_named(
-                    &model,
-                    &view,
-                    module_name,
-                    instance_count,
-                    int_range_max,
-                )?;
-                if let Some(fatal) = export::tla_obligation_errors(&bundle.warnings) {
-                    for w in &bundle.warnings {
-                        eprintln!("warning: tla export: {w}");
-                    }
-                    anyhow::bail!("{fatal}");
-                }
-                for w in &bundle.warnings {
-                    eprintln!("warning: tla export: {w}");
-                }
+                let bounds = export::tla_bounds(instance_count, int_range_max)?;
+                let bundle = export::tla_bundle(&model, bounds, module_name)?;
                 let (tla_path, cfg_path) = if out.extension().is_some_and(|e| e == "tla") {
                     let cfg = out.with_extension("cfg");
                     (out.clone(), cfg)

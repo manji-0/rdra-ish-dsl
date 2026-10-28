@@ -160,6 +160,21 @@ forbidden(Item, stock < selling)
 }
 
 #[test]
+fn int_and_nullable_int_columns_compare_by_their_own_numbers() {
+    let d = derive_src(
+        r#"
+entity Item "I" { id: Int @pk  stock: Int @default(2)  cap: Int @null }
+usecase Make "作る"
+usecase Cap "上限"
+creates(Make, Item)
+sets(Cap, Item, cap == 2)
+forbidden(Item, stock < cap)
+"#,
+    );
+    assert!(!violated(&d, "Item", InvKind::Forbidden));
+}
+
+#[test]
 fn cross_forbidden_is_reported_on_each_entity() {
     let d = derive_src(
         r#"

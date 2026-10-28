@@ -1,6 +1,9 @@
 //! CLI export artifact dispatch.
 
-use anyhow::Result;
+use std::num::NonZeroU8;
+
+use anyhow::{bail, Result};
+use rdra_ish_core::lifecycle::{has_errors, Bounds, Scope, Severity, TransitionSystem};
 use rdra_ish_core::SemanticModel;
 use rdra_ish_emit::{
     asyncapi::AsyncApiJsonEmitter,
@@ -9,7 +12,7 @@ use rdra_ish_emit::{
     mermaid::ErMermaidEmitter,
     openapi::OpenApiJsonEmitter,
     plantuml::ErPlantUmlEmitter,
-    tla::{TlaBundle, TlaPlusEmitter},
+    tla::{self, PrintMode, TlaBundle},
     typescript::TypeScriptStateUnionEmitter,
     Emitter, View,
 };
@@ -32,64 +35,56 @@ pub fn export_artifact(
         )),
         ExportKind::MermaidEr => Ok((ErMermaidEmitter.emit(model, view)?, "er.mmd")),
         ExportKind::PlantumlEr => Ok((ErPlantUmlEmitter.emit(model, view)?, "er.puml")),
-        ExportKind::Tla => Ok((TlaPlusEmitter::default().emit(model, view)?, "RdraSpec.tla")),
+        ExportKind::Tla => Ok((
+            tla_bundle(model, Bounds::VERIFY, "RdraSpec")?.tla,
+            "RdraSpec.tla",
+        )),
     }
 }
 
-fn tla_emitter(instance_count: u32, int_range_max: u32) -> Result<TlaPlusEmitter> {
-    if instance_count == 0 {
-        anyhow::bail!("--instance-count must be >= 1");
-    }
-    if int_range_max == 0 {
-        anyhow::bail!(
+/// `--instance-count` and `--int-range-max` as the system's bounds.
+pub fn tla_bounds(instance_count: u32, int_range_max: u32) -> Result<Bounds> {
+    let Some(instances) = u8::try_from(instance_count).ok().and_then(NonZeroU8::new) else {
+        bail!("--instance-count must be between 1 and 255");
+    };
+    let int_max = match u8::try_from(int_range_max) {
+        Ok(0) => bail!(
             "--int-range-max must be >= 1 (IntRange 0..0 is not a useful verification domain)"
-        );
-    }
-    if instance_count == 1 {
+        ),
+        Ok(n) => n,
+        Err(_) => bail!("--int-range-max must be at most 255"),
+    };
+    if instances.get() == 1 {
         eprintln!(
             "warning: --instance-count 1 yields singleton Entity_Ids; multi-entity .along / quantifiers cannot distinguish instances"
         );
     }
-    Ok(TlaPlusEmitter {
-        multi_axis: true,
-        instance_count: i64::from(instance_count),
-        int_range_max: i64::from(int_range_max),
-    })
+    Ok(Bounds { instances, int_max })
 }
 
-pub fn export_tla_bundle(
-    model: &SemanticModel,
-    view: &View,
-    instance_count: u32,
-    int_range_max: u32,
-) -> Result<TlaBundle> {
-    Ok(tla_emitter(instance_count, int_range_max)?.emit_bundle(model, view)?)
-}
-
-pub fn export_tla_bundle_named(
-    model: &SemanticModel,
-    view: &View,
-    module_name: &str,
-    instance_count: u32,
-    int_range_max: u32,
-) -> Result<TlaBundle> {
-    Ok(tla_emitter(instance_count, int_range_max)?.emit_bundle_named(model, view, module_name)?)
-}
-
-/// Warnings that mean the TLA+ artifact does not preserve source obligations.
-/// Only stable `[TLA_FATAL:code]` tags are treated as fatal.
-pub fn tla_obligation_errors(warnings: &[String]) -> Option<String> {
-    let fatal: Vec<&str> = warnings
-        .iter()
-        .filter(|w| w.contains("[TLA_FATAL:"))
-        .map(String::as_str)
-        .collect();
-    if fatal.is_empty() {
-        None
-    } else {
-        Some(format!(
-            "TLA+ export dropped or corrupted proof obligations:\n  - {}",
-            fatal.join("\n  - ")
-        ))
+/// Builds the transition system at `bounds`, reports its diagnostics, and prints it in Check
+/// mode. Any Error diagnostic stops the export, the gate `states` and `check` apply too.
+pub fn tla_bundle(model: &SemanticModel, bounds: Bounds, module_name: &str) -> Result<TlaBundle> {
+    let built = TransitionSystem::build(model, bounds, &Scope::All);
+    for d in &built.diags {
+        let level = match d.diag.severity() {
+            Severity::Info => continue,
+            Severity::Warning => "warning",
+            Severity::Error => "error",
+        };
+        let ids: Vec<&str> = d
+            .entities
+            .iter()
+            .map(|ek| model.entities[*ek].id.as_str())
+            .collect();
+        if ids.is_empty() {
+            eprintln!("{level}: {}", d.diag);
+        } else {
+            eprintln!("{level}: {}: {}", ids.join(", "), d.diag);
+        }
     }
+    if has_errors(&built.diags) {
+        bail!("the lifecycle model has errors; no TLA+ written");
+    }
+    Ok(tla::print(&built.ts, PrintMode::Check, module_name))
 }

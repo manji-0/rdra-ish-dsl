@@ -104,11 +104,21 @@ jobs:
             echo "expected tlc_result: ok for int_stock.rdra" >&2
             exit 1
           fi
+          # cross_order_payment: Pay is one atomic action over the linked Order and Payment.
+          echo "==> verify samples/formal-verification/cross_order_payment.rdra (atomic Pay)"
+          set +e
+          out=$("$BIN" verify samples/formal-verification/cross_order_payment.rdra --backend tlc -o /tmp/rdra-ci-tla 2>&1)
+          status=$?
+          set -e
+          echo "$out"
+          if [[ $status -ne 0 ]] || ! grep -q "tlc_result: ok" <<<"$out"; then
+            echo "expected tlc_result: ok for cross_order_payment.rdra" >&2
+            exit 1
+          fi
       - name: Verify fail samples report TLC counterexample
         run: |
           BIN=./target/release/rdra-ish
           for sample in \
-            samples/formal-verification/cross_order_payment.rdra \
             samples/formal-verification/quantifier_none.rdra \
             samples/formal-verification/now_coupon.rdra \
             samples/formal-verification/untriggered_sets.rdra \

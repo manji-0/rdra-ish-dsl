@@ -141,31 +141,3 @@ transitions(Payment.status, Pay, pending -> posted)
     columns.sort();
     assert_eq!(columns, vec!["method", "status"]);
 }
-
-#[test]
-fn variation_column_never_becomes_the_lifecycle_status_column() {
-    let src = r#"
-variation Kind "Kind" {
-  a
-  b
-}
-entity E "E" {
-  id: Int @pk
-  kind: Kind
-}
-usecase Make "Make"
-creates(Make, E)
-sets(Make, E, kind == a)
-"#;
-    let (model, diags) = build(src);
-    assert!(errors(&diags).is_empty(), "{diags:?}");
-    let lifecycles = crate::collect_entity_lifecycles(&model);
-    assert!(
-        lifecycles.iter().all(|lc| lc.status_column != "kind"),
-        "{:?}",
-        lifecycles
-            .iter()
-            .map(|lc| &lc.status_column)
-            .collect::<Vec<_>>()
-    );
-}

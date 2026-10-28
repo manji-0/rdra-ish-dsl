@@ -2,13 +2,12 @@
 
 use anyhow::{bail, Context, Result};
 use rdra_ish_core::SemanticModel;
-use rdra_ish_emit::View;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::cli::VerifyBackend;
-use crate::export::{export_tla_bundle, export_tla_bundle_named, tla_obligation_errors};
+use crate::export::{tla_bounds, tla_bundle};
 use crate::tlc_output::{summarize, Outcome, TlcRun};
 
 pub fn run_verify(
@@ -99,18 +98,8 @@ fn run_tlc(
         .filter(|p| p.extension().is_some_and(|e| e == "tla"))
         .and_then(|p| p.file_stem()?.to_str().map(str::to_string));
 
-    let bundle = if let Some(name) = module_hint.as_deref() {
-        export_tla_bundle_named(model, &View::whole(), name, instance_count, int_range_max)?
-    } else {
-        export_tla_bundle(model, &View::whole(), instance_count, int_range_max)?
-    };
-
-    for w in &bundle.warnings {
-        eprintln!("warning: tla export: {w}");
-    }
-    if let Some(fatal) = tla_obligation_errors(&bundle.warnings) {
-        bail!("{fatal}");
-    }
+    let bounds = tla_bounds(instance_count, int_range_max)?;
+    let bundle = tla_bundle(model, bounds, module_hint.as_deref().unwrap_or("RdraSpec"))?;
 
     let (tla_path, cfg_path, work_dir, tla_arg, cfg_arg, keep) =
         resolve_tla_out_paths(out, &bundle.module_name)?;

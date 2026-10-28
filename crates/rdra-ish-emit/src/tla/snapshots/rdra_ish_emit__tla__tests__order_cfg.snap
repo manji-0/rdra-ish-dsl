@@ -1,11 +1,12 @@
 ---
-source: crates/rdra-ish-emit/src/tla.rs
+source: crates/rdra-ish-emit/src/tla/tests.rs
 expression: bundle.cfg
 ---
 SPECIFICATION Spec
 INVARIANT TypeOK
-INVARIANT Safety
+INVARIANT Forbidden_Order_0
+INVARIANT Inv_Order_0
 CHECK_DEADLOCK FALSE
+PROPERTY AfterAssert_DeliverOrder_0
 PROPERTY PaidLeadsToShipped
 PROPERTY EventuallyTerminal
-PROPERTY AfterAssert_DeliverOrder_0

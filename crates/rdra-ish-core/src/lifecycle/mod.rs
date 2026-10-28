@@ -142,6 +142,18 @@ impl TransitionSystem {
         self.now
     }
 
+    pub fn entity_ids(&self) -> impl Iterator<Item = EntId> {
+        (0..self.entities.len()).map(EntId::at)
+    }
+
+    pub fn var_ids(&self) -> impl Iterator<Item = VarId> {
+        (0..self.vars.len()).map(VarId::at)
+    }
+
+    pub fn action_ids(&self) -> impl Iterator<Item = ActId> {
+        (0..self.actions.len()).map(ActId::at)
+    }
+
     /// Column name of a column or proposition var, as views label it.
     pub fn var_name(&self, var: VarId) -> String {
         match &self.var(var).kind {
