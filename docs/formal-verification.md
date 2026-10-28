@@ -165,9 +165,9 @@ points at the rule that broke.
 
 1. Model lifecycle with `transitions` / `sets` and entity-local rules.
 2. Run `rdra-ish states` and `rdra-ish check` for quick feedback.
-3. `rdra-ish export --kind tla -o /tmp/rdra-tla` and inspect the Spec and `.cfg`.
+3. `rdra-ish export samples/formal-verification/order.rdra --kind tla -o /tmp/rdra-tla` and inspect the Spec and `.cfg`.
 4. Install [TLA+ tools](https://github.com/tlaplus/tlaplus) so `tlc` is on `PATH` (`nix develop` provides it).
-5. `rdra-ish verify --backend tlc -o /tmp/rdra-tla` to run TLC.
+5. `rdra-ish verify samples/formal-verification/order.rdra --backend tlc -o /tmp/rdra-tla` to run TLC.
 
 Agent skill: `skills/rdra-ish-verify/` (routing + references + bundled samples).
 Install: see [`skills/README.md`](../skills/README.md) (`npx skills add` / `gh skill install`).

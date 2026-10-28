@@ -386,8 +386,8 @@ boundary.
 
 Add lifecycle axes and events after the structural model is stable.
 
-<!-- constrained-by ./state-derivation.md#state-axes -->
-<!-- constrained-by ./state-derivation.md#operations -->
+<!-- constrained-by ./state-derivation.md#variables -->
+<!-- constrained-by ./state-derivation.md#actions -->
 
 ```rdra
 entity Order "Order" {
