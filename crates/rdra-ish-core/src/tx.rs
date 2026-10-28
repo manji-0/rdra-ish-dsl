@@ -430,8 +430,8 @@ fn fk_parent_map(model: &SemanticModel) -> HashMap<EntityKey, Vec<EntityKey>> {
     parents_of
 }
 
-/// `(parent, child)` per foreign key.
-fn fk_edges(model: &SemanticModel) -> impl Iterator<Item = (EntityKey, EntityKey)> + '_ {
+/// `(parent, child)` per foreign key: the graph that orders a use case's writes.
+pub fn fk_edges(model: &SemanticModel) -> impl Iterator<Item = (EntityKey, EntityKey)> + '_ {
     model.foreign_keys().map(|(_, fk)| (fk.parent, fk.child))
 }
 
