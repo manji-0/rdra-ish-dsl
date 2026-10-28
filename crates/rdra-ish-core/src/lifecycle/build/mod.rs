@@ -165,6 +165,10 @@ impl<'m> Builder<'m> {
         birth: Birth,
     ) -> Option<VarId> {
         let model = self.model;
+        if col.is_fk {
+            // A relate's foreign key is the owner var, not a state column.
+            return None;
+        }
         let key = (ek, col.name.clone());
         let (domain, base, variation) = match &col.col_type {
             ColumnType::Enum(values) => {
@@ -265,7 +269,8 @@ impl<'m> Builder<'m> {
         Some(var)
     }
 
-    /// One owner var per relate whose foreign key the child holds (N:1, 1:N, 1:1).
+    /// One owner var per relate whose foreign key the child holds (N:1, 1:N, 1:1). An
+    /// `.optional()` relate's owner starts and may stay unlinked (`null`).
     fn owner_vars(&mut self) {
         for (idx, rel) in self.model.relations.iter().enumerate() {
             let (NodeRef::Entity(from), NodeRef::Entity(to)) = (&rel.from, &rel.to) else {
@@ -284,7 +289,10 @@ impl<'m> Builder<'m> {
                     child: c,
                     parent: p,
                 },
-                Domain::Instance(p),
+                Domain::Instance {
+                    parent: p,
+                    optional: rel.options.optional,
+                },
                 Value(0),
                 Site::new(ModelRef::Relation(idx), &rel.site),
             );
@@ -669,20 +677,30 @@ impl<'m> Builder<'m> {
         }
     }
 
-    /// R-bind: a created child belongs to a present parent; touched parents must own it.
+    /// R-bind: a created child belongs to its parent, a present one unless the relate is
+    /// optional; a child the action updates is linked to a parent the action creates, and must
+    /// already belong to a parent the action only updates.
     fn owner_bindings(&mut self, a: &mut ActionDraft) {
         for &(var, child, parent) in &self.owners.clone() {
             let Some(c) = a.param_of(child) else { continue };
             let site = self.ts.vars[var.index()].site.clone();
-            if a.params[usize::from(c)].role == ParamRole::New {
-                let p = match a.param_of(parent) {
-                    Some(p) => p,
-                    None => a.param(parent, ParamRole::Parent),
+            let parent_is_new = a
+                .param_of(parent)
+                .is_some_and(|p| a.params[usize::from(p)].role == ParamRole::New);
+            if a.params[usize::from(c)].role == ParamRole::New || parent_is_new {
+                let optional = matches!(
+                    self.ts.vars[var.index()].domain,
+                    Domain::Instance { optional: true, .. }
+                );
+                let rhs = match a.param_of(parent) {
+                    Some(p) => Rhs::Param(p),
+                    None if optional => Rhs::Lit(Value::NULL),
+                    None => Rhs::Param(a.param(parent, ParamRole::Parent)),
                 };
                 a.effects.push(Effect::Assign {
                     var,
                     param: c,
-                    rhs: Rhs::Param(p),
+                    rhs,
                     site,
                 });
             } else if let Some(p) = a.param_of(parent) {

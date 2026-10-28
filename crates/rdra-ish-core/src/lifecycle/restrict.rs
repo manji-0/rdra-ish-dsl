@@ -217,8 +217,11 @@ impl TransitionSystem {
             map.var[v.index()] = Some(VarId::at(out.vars.len()));
             let mut decl = self.vars[v.index()].clone();
             decl.kind = map.kind(&decl.kind);
-            if let Domain::Instance(p) = decl.domain {
-                decl.domain = Domain::Instance(map.e(p));
+            if let Domain::Instance { parent, optional } = decl.domain {
+                decl.domain = Domain::Instance {
+                    parent: map.e(parent),
+                    optional,
+                };
             }
             if decl.kind == VarKind::Now {
                 out.now = map.var[v.index()];

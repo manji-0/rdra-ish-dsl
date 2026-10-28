@@ -246,7 +246,7 @@ impl TransitionSystem {
                 } => {
                     let v = match rhs {
                         Rhs::Lit(v) => *v,
-                        Rhs::Param(q) => Value(params[usize::from(*q)]),
+                        Rhs::Param(q) => self.var(*var).domain.of_slot(params[usize::from(*q)]),
                     };
                     next.set(self, *var, slot(*param), v);
                 }

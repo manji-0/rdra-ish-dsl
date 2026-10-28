@@ -136,8 +136,11 @@ pub enum Domain {
     Int,
     /// null | 0..=int_max
     NullableInt,
-    /// A slot index of the parent entity.
-    Instance(EntId),
+    /// A slot of the parent entity; `optional` adds `null` (not linked) as value 0.
+    Instance {
+        parent: EntId,
+        optional: bool,
+    },
 }
 
 impl Domain {
@@ -149,7 +152,7 @@ impl Domain {
             Domain::Bool | Domain::Nullable => 2,
             Domain::Int => ints,
             Domain::NullableInt => ints + 1,
-            Domain::Instance(_) => bounds.slots(),
+            Domain::Instance { optional, .. } => bounds.slots() + usize::from(*optional),
         }
     }
 
@@ -172,6 +175,22 @@ impl Domain {
             Domain::Int => Some(Value(n as u8)),
             Domain::NullableInt => Some(Value(n as u8 + 1)),
             _ => None,
+        }
+    }
+
+    /// The owner value naming a parent slot.
+    pub fn of_slot(&self, slot: u8) -> Value {
+        match self {
+            Domain::Instance { optional: true, .. } => Value(slot + 1),
+            _ => Value(slot),
+        }
+    }
+
+    /// The parent slot an owner value names; `None` for an unlinked optional owner.
+    pub fn slot(&self, value: Value) -> Option<u8> {
+        match self {
+            Domain::Instance { optional: true, .. } => value.0.checked_sub(1),
+            _ => Some(value.0),
         }
     }
 

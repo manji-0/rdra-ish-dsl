@@ -46,7 +46,7 @@ impl AbstractValue {
                 Some(n) => AbstractValue::Int(n),
                 None => AbstractValue::Null,
             },
-            Domain::Existence | Domain::Instance(_) => AbstractValue::Int(i64::from(value.0)),
+            Domain::Existence | Domain::Instance { .. } => AbstractValue::Int(i64::from(value.0)),
         }
     }
 

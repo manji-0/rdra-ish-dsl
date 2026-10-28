@@ -47,6 +47,8 @@ impl<'a> Env<'a> {
 enum Operand<'d> {
     Value(Value, Option<&'d Domain>),
     Number(i64),
+    /// The slot index of a bound entity.
+    Slot(u8),
 }
 
 impl TransitionSystem {
@@ -133,7 +135,7 @@ impl TransitionSystem {
             ),
             Term::Lit(value) => Operand::Value(*value, None),
             Term::Int(n) => Operand::Number(*n),
-            Term::Index(at) => Operand::Value(Value(env.slot(*at) as u8), None),
+            Term::Index(at) => Operand::Slot(env.slot(*at) as u8),
             Term::Now => {
                 let now = self.now.expect("predicate reads now without a clock");
                 Operand::Number(i64::from(state.get(self, now, 0).0))
@@ -145,10 +147,21 @@ impl TransitionSystem {
 /// Numeric when either side is an integer or an Int-typed slot; `null` is equal only to
 /// `null` and is never ordered. Otherwise values compare as domain indices.
 fn compare(lhs: &Operand, op: CmpOp, rhs: &Operand) -> bool {
+    // An owner against a slot index: an unlinked optional owner names no slot.
+    if let (Operand::Slot(i), Operand::Value(v, Some(d)))
+    | (Operand::Value(v, Some(d)), Operand::Slot(i)) = (lhs, rhs)
+    {
+        let linked = d.slot(*v) == Some(*i);
+        return match op {
+            CmpOp::Eq => linked,
+            CmpOp::Ne => !linked,
+            _ => false,
+        };
+    }
     fn numeric_domain<'d>(o: &Operand<'d>) -> Option<&'d Domain> {
         match o {
             Operand::Value(_, d) => d.filter(|d| d.is_numeric()),
-            Operand::Number(_) => None,
+            Operand::Number(_) | Operand::Slot(_) => None,
         }
     }
     let domain = numeric_domain(lhs).or_else(|| numeric_domain(rhs));
@@ -156,6 +169,7 @@ fn compare(lhs: &Operand, op: CmpOp, rhs: &Operand) -> bool {
     if domain.is_some() || is_number(lhs) || is_number(rhs) {
         let num = |o: &Operand| match (o, domain) {
             (Operand::Number(n), _) => Some(*n),
+            (Operand::Slot(s), _) => Some(i64::from(*s)),
             (Operand::Value(v, _), Some(d)) => d.number(*v),
             (Operand::Value(v, _), None) => Some(i64::from(v.0)),
         };
@@ -163,6 +177,7 @@ fn compare(lhs: &Operand, op: CmpOp, rhs: &Operand) -> bool {
     }
     let index = |o: &Operand| match o {
         Operand::Value(v, _) => v.0,
+        Operand::Slot(s) => *s,
         Operand::Number(_) => unreachable!("numbers take the numeric path"),
     };
     ordered(index(lhs).cmp(&index(rhs)), op)
