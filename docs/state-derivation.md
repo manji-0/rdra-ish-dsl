@@ -213,7 +213,7 @@ no new state appears or a cap is hit.
 cone. A cone also stops after 16 joint states per allowed pattern, 4096 at the default.
 When a cap is hit, the view is marked `truncated` and `PatternCapReached` or
 `StateCapReached` is an error: a rule checked on a partial set is not sound. The
-largest cone of any sample, in `clinic-ops`, reaches 184 states.
+largest cone of any sample, in `clinic-ops`, reaches 126 states.
 
 ---
 

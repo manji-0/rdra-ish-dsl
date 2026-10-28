@@ -13,13 +13,13 @@ use crate::model::{EntityKey, SemanticModel};
 
 impl Caps {
     /// `--max-patterns` per entity view, and 16 joint states per allowed pattern for each
-    /// target cone. The largest cone of any sample reaches 184 states, under the 4096 default.
+    /// target cone. The largest cone of any sample reaches 126 states, under the 4096 default.
     pub const fn per_cone(patterns: usize) -> Self {
         Caps::new(patterns, patterns.saturating_mul(16))
     }
 
     /// For BFS at `Bounds::VERIFY`: 2^21 states per cone. The largest sample cone, clinic-ops
-    /// `AccountBalance`, reaches 1,707,212.
+    /// `Charge`, reaches 969,167.
     pub const VERIFY: Caps = Caps::new(Caps::DEFAULT_PATTERNS, 1 << 21);
 }
 

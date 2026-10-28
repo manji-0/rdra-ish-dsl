@@ -1,7 +1,8 @@
 sequenceDiagram
   box System Value
-    actor Clinician as 👤 Clinician
-    actor Nurse as 👤 Nurse
+    actor Clinician as 👤 医師
+    actor MedicalClerk as 👤 医師事務作業補助者
+    actor Nurse as 👤 看護師
   end
   box System Boundary
     participant CriticalNoticeScreen as 🖥️ Critical Result Notice Screen
@@ -12,10 +13,14 @@ sequenceDiagram
   box System
     participant System as 🧩 システム
     participant CollectSpecimenApi as 🔌 Collect Specimen API
+    participant ConfirmOrderApi as 🔌 オーダ確定 API
     participant CriticalNoticeApi as 🔌 Critical Notice API
     participant OrderEntryApi as 🔌 Order Entry API
+    participant PerformedProcedureApi as 🔌 実施登録 API
+    participant ProxyOrderApi as 🔌 代行入力 API
     participant ReceiveLabResultApi as 🔌 Receive Lab Result API
     participant ResultReviewApi as 🔌 Result Review API
+    participant Charge as 🗄️ Charge
     participant ClinicalOrder as 🗄️ Clinical Order
     participant Encounter as 🗄️ Encounter
     participant LabResult as 🗄️ Lab Result
@@ -31,13 +36,32 @@ sequenceDiagram
   deactivate System
 
   Note over Clinician,PatientMessage: ✅ Collect Specimen
-  Clinician->>SpecimenScreen: ✅ Collect Specimen
+  Nurse->>SpecimenScreen: ✅ Collect Specimen
   SpecimenScreen->>CollectSpecimenApi: ✅ Collect Specimen
   activate CollectSpecimenApi
   CollectSpecimenApi->>ClinicalOrder: update
   CollectSpecimenApi-->>SpecimenScreen: 🖥️ Specimen Collection Screen
-  SpecimenScreen-->>Clinician: 🖥️ Specimen Collection Screen
+  SpecimenScreen-->>Nurse: 🖥️ Specimen Collection Screen
   deactivate CollectSpecimenApi
+
+  Note over Clinician,PatientMessage: ✅ 代行入力オーダの確定
+  Clinician->>OrderEntryScreen: ✅ 代行入力オーダの確定
+  OrderEntryScreen->>ConfirmOrderApi: ✅ 代行入力オーダの確定
+  activate ConfirmOrderApi
+  ConfirmOrderApi->>ClinicalOrder: update
+  ConfirmOrderApi-->>OrderEntryScreen: 🖥️ Order Entry Screen
+  OrderEntryScreen-->>Clinician: 🖥️ Order Entry Screen
+  deactivate ConfirmOrderApi
+
+  Note over Clinician,PatientMessage: ✅ 検体検査オーダの代行入力
+  MedicalClerk->>OrderEntryScreen: ✅ 検体検査オーダの代行入力
+  OrderEntryScreen->>ProxyOrderApi: ✅ 検体検査オーダの代行入力
+  activate ProxyOrderApi
+  ProxyOrderApi->>Encounter: read
+  ProxyOrderApi->>ClinicalOrder: create
+  ProxyOrderApi-->>OrderEntryScreen: 🖥️ Order Entry Screen
+  OrderEntryScreen-->>MedicalClerk: 🖥️ Order Entry Screen
+  deactivate ProxyOrderApi
 
   Note over Clinician,PatientMessage: ✅ Notify Critical Result
   Clinician->>CriticalNoticeScreen: ✅ Notify Critical Result
@@ -62,8 +86,15 @@ sequenceDiagram
   OrderEntryScreen-->>Clinician: 🖥️ Order Entry Screen
   deactivate OrderEntryApi
 
+  Note over Clinician,PatientMessage: ✅ 採血管ラベル発行・貼付
+  Nurse->System: ✅ 採血管ラベル発行・貼付
+  activate System
+  System->>ClinicalOrder: read
+  System-->>Nurse: 🖥️ Specimen Collection Screen
+  deactivate System
+
   Note over Clinician,PatientMessage: ✅ Receive Lab Result
-  Clinician->>ResultReviewScreen: ✅ Receive Lab Result
+  Nurse->>ResultReviewScreen: ✅ Receive Lab Result
   ResultReviewScreen->>ReceiveLabResultApi: ✅ Receive Lab Result
   activate ReceiveLabResultApi
   rect rgb(245,245,245)
@@ -72,8 +103,19 @@ sequenceDiagram
     ReceiveLabResultApi->>LabResult: create
   end
   ReceiveLabResultApi-->>ResultReviewScreen: 🖥️ Result Review Screen
-  ResultReviewScreen-->>Clinician: 🖥️ Result Review Screen
+  ResultReviewScreen-->>Nurse: 🖥️ Result Review Screen
   deactivate ReceiveLabResultApi
+
+  Note over Clinician,PatientMessage: ✅ 実施内容（コスト）の登録
+  Nurse->>SpecimenScreen: ✅ 実施内容（コスト）の登録
+  SpecimenScreen->>PerformedProcedureApi: ✅ 実施内容（コスト）の登録
+  activate PerformedProcedureApi
+  PerformedProcedureApi->>ClinicalOrder: read
+  PerformedProcedureApi->>Encounter: read
+  PerformedProcedureApi->>Charge: create
+  PerformedProcedureApi-->>SpecimenScreen: 🖥️ Specimen Collection Screen
+  SpecimenScreen-->>Nurse: 🖥️ Specimen Collection Screen
+  deactivate PerformedProcedureApi
 
   Note over Clinician,PatientMessage: ✅ Review Lab Result
   Clinician->>ResultReviewScreen: ✅ Review Lab Result

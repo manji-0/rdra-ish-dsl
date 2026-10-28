@@ -1,0 +1,23 @@
+sequenceDiagram
+  box System Value
+    actor Nurse as 👤 看護師
+    actor ReceptionClerk as 👤 医事課 受付担当
+  end
+  box System Boundary
+    participant EligibilityScreen as 🖥️ 資格確認画面
+  end
+  box System
+    participant OnlineEligibilityApi as 🔌 オンライン資格確認 API
+    participant EligibilityCheck as 🗄️ 資格確認
+    participant InsurancePolicy as 🗄️ 保険資格
+  end
+
+  Note over Nurse,InsurancePolicy: ✅ 資格の一括照会
+  Nurse->>EligibilityScreen: ✅ 資格の一括照会
+  EligibilityScreen->>OnlineEligibilityApi: ✅ 資格の一括照会
+  activate OnlineEligibilityApi
+  OnlineEligibilityApi->>InsurancePolicy: read
+  OnlineEligibilityApi->>EligibilityCheck: create
+  OnlineEligibilityApi-->>EligibilityScreen: 🖥️ 資格確認画面
+  EligibilityScreen-->>Nurse: 🖥️ 資格確認画面
+  deactivate OnlineEligibilityApi

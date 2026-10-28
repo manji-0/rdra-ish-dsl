@@ -884,19 +884,19 @@ use cases it applies to. It has two forms, and a condition uses exactly one.
 
 ```rdra
 // Traceability only (RDRA requirements level): the links are declared.
-condition CopayDue "A copay is due at check-in"
-combines(CopayDue, PaymentMethod)             // 条件 to バリエーション
-combines(CopayDue, Appointment.status)        // 条件 to 状態モデル (a lifecycle column)
-applies_to(CopayDue, CollectCopay)            // UC to 条件
+condition CopayCappedAtLimit "窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"
+combines(CopayCappedAtLimit, BurdenRatio)            // 条件 to バリエーション
+combines(CopayCappedAtLimit, Appointment.status)     // 条件 to 状態モデル (a lifecycle column)
+applies_to(CopayCappedAtLimit, CalculateVisitBill)   // UC to 条件
 
 // With a body: the links are derived from the columns the body names.
-condition InsuredVisit "The visit is covered by insurance"
-holds(InsuredVisit, PaymentTransaction.method == insurance, Appointment.status == apptcheckedin)
-applies_to(InsuredVisit, CollectCopay)
+condition UnreferredFirstVisit "紹介状なしの初診で、除外に当たらない"
+holds(UnreferredFirstVisit, Charge.kind == selectedtreatment, Appointment.referral == unreferred)
+applies_to(UnreferredFirstVisit, ApplySelectedTreatmentFee)
 ```
 
 The second argument of `combines` is a variation or `Entity.column`. A one-part name is a
-variation. A two-part name is tried as a variation through the imports first (`shared.PaymentMethod`)
+variation. A two-part name is tried as a variation through the imports first (`shared.BurdenRatio`)
 and as an entity column second; when both match it is `AmbiguousCombinesTarget`, and
 `variation::Name` picks the variation. The column must be a lifecycle column, one that some
 `transitions` moves, wherever in the files that `transitions` sits; an attribute is
@@ -921,8 +921,8 @@ case that invokes the API, and `applies_to(Condition, System)` adds no guard. `s
 
 - A comparison on an entity that the use case writes reads that instance. When the use case
   creates the entity, the comparison tests the new instance after the use case runs, so
-  the condition constrains the creation. `InsuredVisit` above lets `CollectCopay` create
-  only a payment whose `method` is `insurance`.
+  the condition constrains the creation. `UnreferredFirstVisit` above lets
+  `ApplySelectedTreatmentFee` create only a charge whose `kind` is `selectedtreatment`.
 - A comparison on any other entity needs some existing instance that satisfies it.
   Comparisons on one such entity share one instance. A direct `relate` links that instance
   to the entities it relates to; without a `relate`, it is independent.

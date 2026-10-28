@@ -1,0 +1,23 @@
+sequenceDiagram
+  box System Value
+    actor MedicalClerk as 👤 医師事務作業補助者
+    actor Nurse as 👤 看護師
+  end
+  box System Boundary
+    participant OrderEntryScreen as 🖥️ Order Entry Screen
+  end
+  box System
+    participant ProxyOrderApi as 🔌 代行入力 API
+    participant ClinicalOrder as 🗄️ Clinical Order
+    participant Encounter as 🗄️ Encounter
+  end
+
+  Note over MedicalClerk,Encounter: ✅ 検体検査オーダの代行入力
+  MedicalClerk->>OrderEntryScreen: ✅ 検体検査オーダの代行入力
+  OrderEntryScreen->>ProxyOrderApi: ✅ 検体検査オーダの代行入力
+  activate ProxyOrderApi
+  ProxyOrderApi->>Encounter: read
+  ProxyOrderApi->>ClinicalOrder: create
+  ProxyOrderApi-->>OrderEntryScreen: 🖥️ Order Entry Screen
+  OrderEntryScreen-->>MedicalClerk: 🖥️ Order Entry Screen
+  deactivate ProxyOrderApi

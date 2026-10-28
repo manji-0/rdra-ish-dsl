@@ -4,41 +4,72 @@ import shared.actors
 import shared.entities
 import shared.biz
 
-buc BucVisitCheckIn "Check In Visit"
+// Sources cited as file:line are under ~/research/japan-hospital-operations/sources/.
 
-usecase VerifyArrival     "Verify Patient Arrival"
-usecase CheckInPatient    "Check In Patient"
-usecase CollectCopay      "Collect Copay"
+buc BucVisitCheckIn "受付（初診・再診）" description "到着確認、資格確認、紹介状の受付、診察室への案内。会計は診察の後に行う。"
+
+// 予約票・診察券の確認 at 再診受付 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:58); 到着の確認
+// (sendai-iji-gairai-shiyousyo.txt:169).
+usecase VerifyArrival     "予約票・診察券の確認"
+// Every 受付 checks the patient's 資格 (egov-ryotan-kisoku-332M50000100015.txt:80), with the
+// オンライン資格確認 first (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:43). A 資格 the 一括照会
+// found 無効 is checked again at 受付 (mhlw-2023-online-shikaku-tebiki-001085572.txt:366-367).
+usecase CheckInPatient    "受付（初診・再診）"
+usecase BatchVerifyEligibility "資格の一括照会"
+usecase ReceiveEligibilityValid "資格確認結果（有効）の取込"
+usecase ReceiveEligibilityInvalid "資格確認結果（無効）の取込"
+usecase ReceiveEligibilityNoInfo "資格確認結果（該当資格なし）の取込"
+usecase RecheckEligibility "資格の再確認"
+usecase RecordEligibilityDeclaration "被保険者資格申立書の受領"
+usecase ConfirmEligibilityInOutageMode "システム障害時モードでの資格確認"
+// 紹介状を受領し各診察室へ回付 (sendai-iji-gairai-shiyousyo.txt:171); 紹介状受付処理
+// (koseikan-2024-iji-shiyousyo.txt:101).
+usecase ReceiveReferralLetter "紹介状受付処理"
 usecase AssignRoom        "Assign Room"
 usecase PrepareEncounter  "Prepare Encounter"
 
-screen CheckInScreen     "Check-In Screen"
-screen CopayScreen       "Copay Screen"
+screen CheckInScreen     "受付画面"
+screen EligibilityScreen "資格確認画面"
+screen ReferralScreen    "紹介状受付画面"
 screen RoomBoardScreen   "Room Board Screen"
 
-api VerifyArrivalApi    "Verify Arrival API"
-api CheckInPatientApi   "Check-In Patient API"
-api CollectCopayApi     "Collect Copay API"
-api AssignRoomApi       "Assign Room API"
-api PrepareEncounterApi "Prepare Encounter API"
+api VerifyArrivalApi     "Verify Arrival API"
+api CheckInPatientApi    "Check-In Patient API"
+api OnlineEligibilityApi "オンライン資格確認 API"
+api EligibilityResultApi "資格確認結果 API"
+api ReferralLetterApi    "紹介状 API"
+api AssignRoomApi        "Assign Room API"
+api PrepareEncounterApi  "Prepare Encounter API"
 
-performs(FrontDesk, BucVisitCheckIn)
+performs(ReceptionClerk, BucVisitCheckIn)
 performs(Nurse, BucVisitCheckIn)
-performs(FrontDesk, VerifyArrival)
-performs(FrontDesk, CheckInPatient)
-performs(FrontDesk, CollectCopay)
+performs(ReceptionClerk, VerifyArrival)
+performs(ReceptionClerk, CheckInPatient)
+performs(ReceptionClerk, RecheckEligibility)
+performs(ReceptionClerk, RecordEligibilityDeclaration)
+performs(ReceptionClerk, ConfirmEligibilityInOutageMode)
+performs(ReceptionClerk, ReceiveReferralLetter)
 performs(Nurse, AssignRoom)
 performs(Nurse, PrepareEncounter)
 belongs(BucVisitCheckIn, PatientAccess)
 
 contains(BucVisitCheckIn, VerifyArrival)
 contains(BucVisitCheckIn, CheckInPatient)
-contains(BucVisitCheckIn, CollectCopay)
+contains(BucVisitCheckIn, BatchVerifyEligibility)
+contains(BucVisitCheckIn, ReceiveEligibilityValid)
+contains(BucVisitCheckIn, ReceiveEligibilityInvalid)
+contains(BucVisitCheckIn, ReceiveEligibilityNoInfo)
+contains(BucVisitCheckIn, RecheckEligibility)
+contains(BucVisitCheckIn, RecordEligibilityDeclaration)
+contains(BucVisitCheckIn, ConfirmEligibilityInOutageMode)
+contains(BucVisitCheckIn, ReceiveReferralLetter)
 contains(BucVisitCheckIn, AssignRoom)
 contains(BucVisitCheckIn, PrepareEncounter)
 contains(ClinicOpsSystem, VerifyArrivalApi)
 contains(ClinicOpsSystem, CheckInPatientApi)
-contains(ClinicOpsSystem, CollectCopayApi)
+contains(ClinicOpsSystem, OnlineEligibilityApi)
+contains(ClinicOpsSystem, EligibilityResultApi)
+contains(ClinicOpsSystem, ReferralLetterApi)
 contains(ClinicOpsSystem, AssignRoomApi)
 contains(ClinicOpsSystem, PrepareEncounterApi)
 
@@ -49,21 +80,70 @@ reads(VerifyArrivalApi, PatientAccount)
 reads(VerifyArrivalApi, InsurancePolicy)
 shows(CheckInScreen, Appointment)
 
+// 受付 always queries the オンライン資格確認等システム: the check is part of the use case, not a step
+// one may skip.
 displays(CheckInPatient, CheckInScreen)
 invokes(CheckInPatient, CheckInPatientApi)
+invokes(CheckInPatient, OnlineEligibilityApi)
 updates(CheckInPatientApi, Appointment)
 updates(CheckInPatientApi, PatientAccount)
+creates(OnlineEligibilityApi, EligibilityCheck)
+reads(OnlineEligibilityApi, InsurancePolicy)
 raises(CheckInPatient, EvAppointmentCheckedIn)
 transitions(Appointment.status, CheckInPatient, apptscheduled -> apptcheckedin)
 sets(CheckInPatient, Appointment, checked_in_at == present)
+triggers(EvAppointmentCheckedIn, OnlineEligibilitySystem)
 
-displays(CollectCopay, CopayScreen)
-invokes(CollectCopay, CollectCopayApi)
-creates(CollectCopayApi, PaymentTransaction)
-updates(CollectCopayApi, AccountBalance)
-sets(CollectCopay, PaymentTransaction, status == payposted)
-sets(CollectCopay, PaymentTransaction, processed_at == present)
-sets(CollectCopay, PaymentTransaction, gateway_ref == present)
+// 一括照会 checks the 資格 of the patients booked ahead (mhlw-2023-online-shikaku-tebiki-001085572.txt:365).
+displays(BatchVerifyEligibility, EligibilityScreen)
+invokes(BatchVerifyEligibility, OnlineEligibilityApi)
+triggers(EligibilityBatchInquiry, BatchVerifyEligibility)
+condition BookedPatient "予約済みの患者"
+holds(BookedPatient, Appointment.status == apptscheduled)
+applies_to(BookedPatient, BatchVerifyEligibility)
+
+// The result is one of 有効, 無効, 該当資格なし (mhlw-2023-online-shikaku-tebiki-001085572.txt:383-401).
+raises(OnlineEligibilitySystem, EvEligibilityChecked)
+updates(EligibilityResultApi, EligibilityCheck)
+
+displays(ReceiveEligibilityValid, EligibilityScreen)
+invokes(ReceiveEligibilityValid, EligibilityResultApi)
+triggers(EvEligibilityChecked, ReceiveEligibilityValid)
+transitions(EligibilityCheck.result, ReceiveEligibilityValid, eligpending -> eligvalid)
+sets(ReceiveEligibilityValid, EligibilityCheck, reference_no == present)
+
+displays(ReceiveEligibilityInvalid, EligibilityScreen)
+invokes(ReceiveEligibilityInvalid, EligibilityResultApi)
+triggers(EvEligibilityChecked, ReceiveEligibilityInvalid)
+transitions(EligibilityCheck.result, ReceiveEligibilityInvalid, eligpending -> eliginvalid)
+
+displays(ReceiveEligibilityNoInfo, EligibilityScreen)
+invokes(ReceiveEligibilityNoInfo, EligibilityResultApi)
+triggers(EvEligibilityChecked, ReceiveEligibilityNoInfo)
+transitions(EligibilityCheck.result, ReceiveEligibilityNoInfo, eligpending -> elignoinfo)
+
+// 無効 or 該当資格なし: the patient shows the current 資格 and the clerk queries again.
+displays(RecheckEligibility, EligibilityScreen)
+invokes(RecheckEligibility, EligibilityResultApi)
+transitions(EligibilityCheck.result, RecheckEligibility, eliginvalid -> eligpending)
+transitions(EligibilityCheck.result, RecheckEligibility, elignoinfo -> eligpending)
+
+// The system cannot answer: the patient fills in a 被保険者資格申立書
+// (mhlw-2023-online-shikaku-dekinai-baai.txt:36-37) and pays the usual share, 3割等 (:50).
+displays(RecordEligibilityDeclaration, EligibilityScreen)
+invokes(RecordEligibilityDeclaration, EligibilityResultApi)
+transitions(EligibilityCheck.result, RecordEligibilityDeclaration, eligpending -> eligdeclared)
+
+// システム障害時モード, on the spot or afterwards (mhlw-2023-online-shikaku-dekinai-baai.txt:80).
+displays(ConfirmEligibilityInOutageMode, EligibilityScreen)
+invokes(ConfirmEligibilityInOutageMode, EligibilityResultApi)
+transitions(EligibilityCheck.result, ConfirmEligibilityInOutageMode, eligpending -> eligvalid)
+
+displays(ReceiveReferralLetter, ReferralScreen)
+invokes(ReceiveReferralLetter, ReferralLetterApi)
+creates(ReferralLetterApi, ReferralLetter)
+sets(ReceiveReferralLetter, ReferralLetter, direction == inbound)
+sets(ReceiveReferralLetter, ReferralLetter, received_at == present)
 
 displays(AssignRoom, RoomBoardScreen)
 invokes(AssignRoom, AssignRoomApi)
@@ -77,17 +157,6 @@ reads(PrepareEncounterApi, Appointment)
 reads(PrepareEncounterApi, PatientProfile)
 triggers(EvAppointmentCheckedIn, PrepareEncounter)
 
-// Conditions (RDRA 条件). CopayDue is traceability only: it links the variation and the
-// state model it combines. InsuredVisit has a body, so its links come from the columns it names.
-condition CopayDue "A copay is due at check-in"
-combines(CopayDue, PaymentMethod)
-combines(CopayDue, Appointment.status)
-applies_to(CopayDue, CollectCopay)
-
-condition InsuredVisit "The visit is covered by insurance"
-holds(InsuredVisit, PaymentTransaction.method == insurance, Appointment.status == apptcheckedin)
-applies_to(InsuredVisit, CollectCopay)
-
 // Access constraints
 requires_permission(VerifyArrival, VisitCheckIn)
 requires_medium(VerifyArrival, FrontDeskTerminal)
@@ -96,10 +165,21 @@ requires_permission(VerifyArrivalApi, VisitCheckIn)
 requires_permission(CheckInPatient, VisitCheckIn)
 requires_medium(CheckInPatient, FrontDeskTerminal)
 requires_permission(CheckInPatientApi, VisitCheckIn)
+requires_permission(OnlineEligibilityApi, InsuranceVerify)
 
-requires_permission(CollectCopay, CopayCollect)
-requires_medium(CollectCopay, FrontDeskTerminal)
-requires_permission(CollectCopayApi, CopayCollect)
+requires_permission(RecheckEligibility, InsuranceVerify)
+requires_medium(RecheckEligibility, FrontDeskTerminal)
+requires_permission(EligibilityResultApi, InsuranceVerify)
+
+requires_permission(RecordEligibilityDeclaration, InsuranceVerify)
+requires_medium(RecordEligibilityDeclaration, FrontDeskTerminal)
+
+requires_permission(ConfirmEligibilityInOutageMode, InsuranceVerify)
+requires_medium(ConfirmEligibilityInOutageMode, FrontDeskTerminal)
+
+requires_permission(ReceiveReferralLetter, ReferralManage)
+requires_medium(ReceiveReferralLetter, FrontDeskTerminal)
+requires_permission(ReferralLetterApi, ReferralManage)
 
 requires_permission(AssignRoom, RoomAssign)
 requires_medium(AssignRoom, NurseStation)
@@ -113,41 +193,64 @@ requires_permission(PrepareEncounterApi, EncounterOpen)
 requirement ReqSwiftCheckIn "Patients are checked in and roomed without repeated data entry"
   priority "must"
   source "Front desk interviews"
-  stakeholder "Front Desk Staff"
+  stakeholder "医事課 受付担当"
   acceptance criteria "A returning patient is checked in with a single confirmation step."
   status "accepted"
 
+requirement ReqEligibilityEveryVisit "受付のたびに保険資格を確認する"
+  priority "must"
+  source "保険医療機関及び保険医療養担当規則 第3条 (egov-ryotan-kisoku-332M50000100015.txt:80)"
+  stakeholder "医事課 受付担当"
+  acceptance criteria "受付は必ずオンライン資格確認を伴い、確認できない場合は被保険者資格申立書かシステム障害時モードで確認する。"
+  status "accepted"
+
 motivates(ReqSwiftCheckIn, BucVisitCheckIn)
+motivates(ReqEligibilityEveryVisit, BucVisitCheckIn)
 
 // Business flow
-flow VisitCheckInFlow "Visit check-in flow"
-step ArrivalStep       "Patient arrives"
-step CopayStep         "Copay is collected"
-step CopayDeferredStep "Copay is deferred"
-step RoomingStep       "Patient is roomed"
+flow VisitCheckInFlow "受付の流れ"
+step ArrivalStep        "到着・予約票の確認"
+step EligibilityStep    "資格確認"
+step DeclarationStep    "資格を確認できない（申立書・障害時モード）"
+step ReferralStep       "紹介状あり（初診）"
+step RoomingStep        "診察室への案内"
 
 contains(BucVisitCheckIn, VisitCheckInFlow)
 contains(VisitCheckInFlow, ArrivalStep)
-contains(VisitCheckInFlow, CopayStep)
-contains(VisitCheckInFlow, CopayDeferredStep)
+contains(VisitCheckInFlow, EligibilityStep)
+contains(VisitCheckInFlow, DeclarationStep)
+contains(VisitCheckInFlow, ReferralStep)
 contains(VisitCheckInFlow, RoomingStep)
 
-precedes(ArrivalStep, CopayStep)
-precedes(CopayStep, RoomingStep)
-branches(CopayStep, CopayDeferredStep)
-precedes(CopayDeferredStep, RoomingStep)
+precedes(ArrivalStep, EligibilityStep)
+excepts(EligibilityStep, DeclarationStep)
+precedes(EligibilityStep, RoomingStep)
+precedes(DeclarationStep, RoomingStep)
+// A 初診 without a 紹介状 goes straight to the room; its 選定療養費 is charged at 会計計算
+// (ApplySelectedTreatmentFee in BucVisitPayment).
+branches(EligibilityStep, ReferralStep)
+precedes(ReferralStep, RoomingStep)
 
 covers(ArrivalStep, VerifyArrival)
-covers(ArrivalStep, CheckInPatient)
-covers(CopayStep, CollectCopay)
-covers(CopayDeferredStep, CollectCopay)
+covers(EligibilityStep, CheckInPatient)
+covers(EligibilityStep, ReceiveEligibilityValid)
+covers(EligibilityStep, ReceiveEligibilityInvalid)
+covers(EligibilityStep, ReceiveEligibilityNoInfo)
+covers(EligibilityStep, RecheckEligibility)
+covers(DeclarationStep, RecordEligibilityDeclaration)
+covers(DeclarationStep, ConfirmEligibilityInOutageMode)
+covers(ReferralStep, ReceiveReferralLetter)
 covers(RoomingStep, AssignRoom)
 
 // Screen fields
-field ArrivalTimeField "Checked-in time" access readonly required true source system
-field CopayAmountField "Copay amount"    access editable required true source actor
+field ArrivalTimeField "受付時刻" access readonly required true source system
+field EligibilityResultField "資格確認結果" access readonly required true source system
 
 contains(CheckInScreen, ArrivalTimeField)
-contains(CopayScreen, CopayAmountField)
+field ReferralReceivedField "紹介状の受領日時" access readonly required true source system
+
+contains(EligibilityScreen, EligibilityResultField)
+contains(ReferralScreen, ReferralReceivedField)
 maps_field(ArrivalTimeField, Appointment, "checked_in_at")
-maps_field(CopayAmountField, PaymentTransaction, "amount")
+maps_field(EligibilityResultField, EligibilityCheck, "result")
+maps_field(ReferralReceivedField, ReferralLetter, "received_at")

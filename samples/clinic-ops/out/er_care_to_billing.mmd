@@ -9,6 +9,7 @@ erDiagram
   Appointment {
     Int id PK
     String reason
+    ReferralCategory referral
     Enum status
     DateTime scheduled_at
     DateTime checked_in_at
@@ -31,19 +32,21 @@ erDiagram
   Charge {
     Int id PK
     String code
+    ChargeKind kind
     Money amount
     DateTime posted_at
     Enum status
     Int encounter_id FK
-    Int claim_id FK
+    Int claimstatement_id FK
   }
-  Claim {
+  ClaimStatement {
     Int id PK
-    String claim_no
+    Date service_month
     Enum status
+    PayerChange payer_change
     DateTime submitted_at
     DateTime paid_at
-    String denial_reason
+    String return_reason
     Int patientaccount_id FK
     Int insurancepolicy_id FK
   }
@@ -75,8 +78,10 @@ erDiagram
   InsurancePolicy {
     Int id PK
     String payer_name
+    String payer_no
     String member_no
-    String plan_name
+    BurdenRatio burden_ratio
+    LimitCategory limit_category
     Enum verification_status
     DateTime verified_at
     Bool active
@@ -128,7 +133,7 @@ erDiagram
     Enum status
     DateTime processed_at
     String gateway_ref
-    Int claim_id FK
+    Int appointment_id FK
   }
   ProviderSchedule {
     Int id PK
@@ -144,10 +149,10 @@ erDiagram
   Encounter ||--|| Appointment : ""
   Encounter }o--|| PatientAccount : ""
   Charge }o--|| Encounter : ""
-  Charge }o--|| Claim : ""
-  Claim }o--|| PatientAccount : ""
-  Claim }o--|| InsurancePolicy : ""
-  PaymentTransaction }o--|| Claim : ""
+  Charge }o--|| ClaimStatement : ""
+  ClaimStatement }o--|| PatientAccount : ""
+  ClaimStatement }o--|| InsurancePolicy : ""
+  PaymentTransaction }o--|| Appointment : ""
   AccountBalance ||--|| PatientAccount : ""
   CarePlan }o--|| Encounter : ""
   CarePlan }o--|| PatientAccount : ""

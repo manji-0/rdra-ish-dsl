@@ -1,0 +1,24 @@
+sequenceDiagram
+  box System Value
+    actor ClaimsClerk as 👤 医事課 レセプト担当
+  end
+  box System Boundary
+    participant ClaimScreen as 🖥️ レセプト画面
+  end
+  box System
+    participant GenerateClaimApi as 🔌 レセプト作成 API
+    participant Charge as 🗄️ Charge
+    participant ClaimStatement as 🗄️ レセプト
+    participant InsurancePolicy as 🗄️ 保険資格
+  end
+
+  Note over ClaimsClerk,InsurancePolicy: ✅ レセプト作成
+  ClaimsClerk->>ClaimScreen: ✅ レセプト作成
+  ClaimScreen->>GenerateClaimApi: ✅ レセプト作成
+  activate GenerateClaimApi
+  GenerateClaimApi->>Charge: read
+  GenerateClaimApi->>InsurancePolicy: read
+  GenerateClaimApi->>ClaimStatement: create
+  GenerateClaimApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate GenerateClaimApi

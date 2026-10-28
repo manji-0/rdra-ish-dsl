@@ -2,32 +2,47 @@ stateDiagram-v2
   [*] --> Appointment_apptrequested
   [*] --> Appointment_apptscheduled
   [*] --> CarePlan_careopen
-  [*] --> Claim_claimdraft
+  [*] --> ClaimStatement_stmtdrafting
   [*] --> ClinicalOrder_clordered
+  [*] --> EligibilityCheck_eligpending
+  [*] --> EligibilityCheck_eligvalid
   [*] --> Encounter_encopen
   [*] --> IntakePacket_intakesent
   [*] --> PatientAccount_patientactive
   [*] --> Prescription_rxdrafted
+  state "🔄 apptawaitingcalc" as Appointment_apptawaitingcalc
+  state "🔄 apptawaitingpay" as Appointment_apptawaitingpay
+  state "🔄 apptsettled" as Appointment_apptsettled
   state "🔄 apptcheckedin" as Appointment_apptcheckedin
   state "🔄 apptinconsult" as Appointment_apptinconsult
-  state "🔄 apptcompleted" as Appointment_apptcompleted
   state "🔄 apptrequested" as Appointment_apptrequested
   state "🔄 apptscheduled" as Appointment_apptscheduled
   state "🔄 apptcancelled" as Appointment_apptcancelled
   state "🔄 apptnoshow" as Appointment_apptnoshow
+  state "🔄 apptcompleted" as Appointment_apptcompleted
   state "🔄 caremonitoring" as CarePlan_caremonitoring
   state "🔄 careclosed" as CarePlan_careclosed
   state "🔄 careopen" as CarePlan_careopen
-  state "🔄 claimaccepted" as Claim_claimaccepted
-  state "🔄 claimpaid" as Claim_claimpaid
-  state "🔄 claimdraft" as Claim_claimdraft
-  state "🔄 claimsubmitted" as Claim_claimsubmitted
-  state "🔄 claimdenied" as Claim_claimdenied
+  state "🔄 stmtassessed" as ClaimStatement_stmtassessed
+  state "🔄 stmtpaid" as ClaimStatement_stmtpaid
+  state "🔄 stmtrereview" as ClaimStatement_stmtrereview
+  state "🔄 stmtdrafting" as ClaimStatement_stmtdrafting
+  state "🔄 stmtinspecting" as ClaimStatement_stmtinspecting
+  state "🔄 stmtonhold" as ClaimStatement_stmtonhold
+  state "🔄 stmtsubmitted" as ClaimStatement_stmtsubmitted
+  state "🔄 stmtreceipterror" as ClaimStatement_stmtreceipterror
+  state "🔄 stmtreturned" as ClaimStatement_stmtreturned
+  state "🔄 stmtunderreview" as ClaimStatement_stmtunderreview
   state "🔄 clcollected" as ClinicalOrder_clcollected
   state "🔄 clresulted" as ClinicalOrder_clresulted
   state "🔄 clordered" as ClinicalOrder_clordered
   state "🔄 clcancelled" as ClinicalOrder_clcancelled
   state "🔄 clreviewed" as ClinicalOrder_clreviewed
+  state "🔄 eliginvalid" as EligibilityCheck_eliginvalid
+  state "🔄 eligpending" as EligibilityCheck_eligpending
+  state "🔄 elignoinfo" as EligibilityCheck_elignoinfo
+  state "🔄 eligdeclared" as EligibilityCheck_eligdeclared
+  state "🔄 eligvalid" as EligibilityCheck_eligvalid
   state "🔄 encdocumented" as Encounter_encdocumented
   state "🔄 encsigned" as Encounter_encsigned
   state "🔄 encopen" as Encounter_encopen
@@ -38,28 +53,55 @@ stateDiagram-v2
   state "🔄 patientactive" as PatientAccount_patientactive
   state "🔄 patientinactive" as PatientAccount_patientinactive
   state "🔄 patientmerged" as PatientAccount_patientmerged
+  state "🔄 rxaudited" as Prescription_rxaudited
+  state "🔄 rxcounseled" as Prescription_rxcounseled
+  state "🔄 rxdispensed" as Prescription_rxdispensed
   state "🔄 rxdrafted" as Prescription_rxdrafted
   state "🔄 rxcancelled" as Prescription_rxcancelled
-  state "🔄 rxsent" as Prescription_rxsent
-  state "🔄 rxdispensed" as Prescription_rxdispensed
+  state "🔄 rxissued" as Prescription_rxissued
+  state "🔄 rxvoucher" as Prescription_rxvoucher
+  state "🔄 rxinquiry" as Prescription_rxinquiry
+  state "🔄 rxexpired" as Prescription_rxexpired
+  Appointment_apptawaitingcalc --> Appointment_apptawaitingpay : ✅ 会計計算入力
+  Appointment_apptawaitingpay --> Appointment_apptsettled : ✅ 自動精算機での精算
+  Appointment_apptawaitingpay --> Appointment_apptsettled : ✅ 会計窓口での精算
   Appointment_apptcheckedin --> Appointment_apptinconsult : ✅ Open Encounter
-  Appointment_apptinconsult --> Appointment_apptcompleted : ✅ Complete Appointment
+  Appointment_apptinconsult --> Appointment_apptawaitingcalc : ✅ 診察終了
   Appointment_apptrequested --> Appointment_apptscheduled : ✅ Book Appointment
   Appointment_apptrequested --> Appointment_apptscheduled : ✅ Schedule Follow-Up Visit
   Appointment_apptscheduled --> Appointment_apptcancelled : ✅ Cancel Appointment
-  Appointment_apptscheduled --> Appointment_apptcheckedin : ✅ Check In Patient
+  Appointment_apptscheduled --> Appointment_apptcheckedin : ✅ 受付（初診・再診）
   Appointment_apptscheduled --> Appointment_apptnoshow : ✅ Mark No Show
   Appointment_apptscheduled --> Appointment_apptscheduled : ✅ Reschedule Appointment
+  Appointment_apptsettled --> Appointment_apptcompleted : ✅ 領収証・明細書の交付
   CarePlan_caremonitoring --> CarePlan_careclosed : ✅ Close Care Plan
   CarePlan_careopen --> CarePlan_caremonitoring : ✅ Review Patient Response
-  Claim_claimaccepted --> Claim_claimpaid : ✅ Post Payment
-  Claim_claimdraft --> Claim_claimsubmitted : ✅ Submit Claim
-  Claim_claimsubmitted --> Claim_claimaccepted : ✅ Receive Claim Accepted
-  Claim_claimsubmitted --> Claim_claimdenied : ✅ Record Claim Denial
+  ClaimStatement_stmtassessed --> ClaimStatement_stmtpaid : ✅ 診療報酬の入金
+  ClaimStatement_stmtassessed --> ClaimStatement_stmtrereview : ✅ 再審査請求
+  ClaimStatement_stmtdrafting --> ClaimStatement_stmtinspecting : ✅ レセプトの院内点検
+  ClaimStatement_stmtinspecting --> ClaimStatement_stmtonhold : ✅ レセプトの保留（月遅れ）
+  ClaimStatement_stmtinspecting --> ClaimStatement_stmtsubmitted : ✅ レセプト請求
+  ClaimStatement_stmtonhold --> ClaimStatement_stmtinspecting : ✅ 保留レセプトの再提出準備
+  ClaimStatement_stmtreceipterror --> ClaimStatement_stmtsubmitted : ✅ エラー分レセプトの再送
+  ClaimStatement_stmtrereview --> ClaimStatement_stmtpaid : ✅ 診療報酬の入金
+  ClaimStatement_stmtreturned --> ClaimStatement_stmtinspecting : ✅ 返戻レセプトの訂正（再請求）
+  ClaimStatement_stmtsubmitted --> ClaimStatement_stmtreceipterror : ✅ 受付不能・要確認の確認
+  ClaimStatement_stmtsubmitted --> ClaimStatement_stmtunderreview : ✅ レセプト受付（審査へ）
+  ClaimStatement_stmtunderreview --> ClaimStatement_stmtassessed : ✅ 査定の取込
+  ClaimStatement_stmtunderreview --> ClaimStatement_stmtpaid : ✅ 診療報酬の入金
+  ClaimStatement_stmtunderreview --> ClaimStatement_stmtreturned : ✅ 返戻レセプトの取込
   ClinicalOrder_clcollected --> ClinicalOrder_clresulted : ✅ Receive Lab Result
   ClinicalOrder_clordered --> ClinicalOrder_clcancelled : ✅ Cancel Clinical Order
   ClinicalOrder_clordered --> ClinicalOrder_clcollected : ✅ Collect Specimen
+  ClinicalOrder_clordered --> ClinicalOrder_clordered : ✅ 代行入力オーダの確定
   ClinicalOrder_clresulted --> ClinicalOrder_clreviewed : ✅ Review Lab Result
+  EligibilityCheck_eliginvalid --> EligibilityCheck_eligpending : ✅ 資格の再確認
+  EligibilityCheck_elignoinfo --> EligibilityCheck_eligpending : ✅ 資格の再確認
+  EligibilityCheck_eligpending --> EligibilityCheck_eligdeclared : ✅ 被保険者資格申立書の受領
+  EligibilityCheck_eligpending --> EligibilityCheck_eliginvalid : ✅ 資格確認結果（無効）の取込
+  EligibilityCheck_eligpending --> EligibilityCheck_elignoinfo : ✅ 資格確認結果（該当資格なし）の取込
+  EligibilityCheck_eligpending --> EligibilityCheck_eligvalid : ✅ システム障害時モードでの資格確認
+  EligibilityCheck_eligpending --> EligibilityCheck_eligvalid : ✅ 資格確認結果（有効）の取込
   Encounter_encdocumented --> Encounter_encsigned : ✅ Sign Encounter
   Encounter_encopen --> Encounter_encdocumented : ✅ Document Assessment
   Encounter_encsigned --> Encounter_encamended : ✅ Amend Signed Encounter
@@ -67,6 +109,14 @@ stateDiagram-v2
   IntakePacket_intakesent --> IntakePacket_intakeexpired : ✅ Expire Intake Forms
   PatientAccount_patientactive --> PatientAccount_patientinactive : ✅ Archive Patient
   PatientAccount_patientactive --> PatientAccount_patientmerged : ✅ Merge Duplicate Patient
-  Prescription_rxdrafted --> Prescription_rxcancelled : ✅ Cancel Prescription
-  Prescription_rxdrafted --> Prescription_rxsent : ✅ Send Prescription
-  Prescription_rxsent --> Prescription_rxdispensed : ✅ Confirm Dispense
+  Prescription_rxaudited --> Prescription_rxcounseled : ✅ 服薬指導
+  Prescription_rxcounseled --> Prescription_rxdispensed : ✅ 薬剤交付
+  Prescription_rxdrafted --> Prescription_rxcancelled : ✅ 処方の取消
+  Prescription_rxdrafted --> Prescription_rxissued : ✅ 院外処方箋の発行
+  Prescription_rxdrafted --> Prescription_rxvoucher : ✅ 院内処方用引換券の交付
+  Prescription_rxinquiry --> Prescription_rxvoucher : ✅ 疑義照会への回答
+  Prescription_rxissued --> Prescription_rxdispensed : ✅ 保険薬局での調剤結果の受信
+  Prescription_rxissued --> Prescription_rxexpired : ✅ 処方箋の使用期間切れ
+  Prescription_rxissued --> Prescription_rxissued : ✅ 保険薬局からの疑義照会への回答
+  Prescription_rxvoucher --> Prescription_rxaudited : ✅ 調剤・監査
+  Prescription_rxvoucher --> Prescription_rxinquiry : ✅ 疑義照会

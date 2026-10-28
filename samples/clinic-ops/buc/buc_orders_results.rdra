@@ -4,10 +4,22 @@ import shared.actors
 import shared.entities
 import shared.biz
 
+// Sources cited as file:line are under ~/research/japan-hospital-operations/sources/.
+
 buc BucOrdersResults "Manage Orders and Results"
 
+// 検体検査オーダの登録 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:108).
 usecase PlaceLabOrder       "Place Lab Order"
+// 看護師や医師事務作業補助者 enter the physician's 指示 into the chart as a 代行入力（代行オーダー）
+// (mhlw-2020-dairi-nyuuryoku.txt:71-79). The 指示 itself is the physician's alone (:9), and the
+// physician checks what the order needs before it is carried out (:15).
+usecase EnterProxyOrder     "検体検査オーダの代行入力"
+usecase ConfirmProxyOrder   "代行入力オーダの確定"
+// 採血管ラベル発行・貼付 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:129).
+usecase PrintSpecimenLabel  "採血管ラベル発行・貼付"
 usecase CollectSpecimen     "Collect Specimen"
+// 実施内容(コスト)の登録 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:152), which 会計計算 reads.
+usecase RegisterPerformedProcedure "実施内容（コスト）の登録"
 usecase ReceiveLabResult    "Receive Lab Result"
 usecase ReviewLabResult     "Review Lab Result"
 usecase NotifyCriticalResult "Notify Critical Result"
@@ -19,15 +31,21 @@ screen ResultReviewScreen    "Result Review Screen"
 screen CriticalNoticeScreen  "Critical Result Notice Screen"
 
 api OrderEntryApi     "Order Entry API"
+api ProxyOrderApi     "代行入力 API"
+api ConfirmOrderApi   "オーダ確定 API"
+api PerformedProcedureApi "実施登録 API"
 api CollectSpecimenApi "Collect Specimen API"
 api ReceiveLabResultApi "Receive Lab Result API"
 api ResultReviewApi   "Result Review API"
 api CriticalNoticeApi "Critical Notice API"
 
-performs(Clinician, BucOrdersResults)
 performs(Nurse, BucOrdersResults)
 performs(Clinician, PlaceLabOrder)
+performs(MedicalClerk, EnterProxyOrder)
+performs(Clinician, ConfirmProxyOrder)
+performs(Nurse, PrintSpecimenLabel)
 performs(Nurse, CollectSpecimen)
+performs(Nurse, RegisterPerformedProcedure)
 performs(Nurse, ReceiveLabResult)
 performs(Clinician, ReviewLabResult)
 performs(Clinician, NotifyCriticalResult)
@@ -35,12 +53,19 @@ performs(Clinician, CancelClinicalOrder)
 belongs(BucOrdersResults, CareDelivery)
 
 contains(BucOrdersResults, PlaceLabOrder)
+contains(BucOrdersResults, EnterProxyOrder)
+contains(BucOrdersResults, ConfirmProxyOrder)
+contains(BucOrdersResults, PrintSpecimenLabel)
 contains(BucOrdersResults, CollectSpecimen)
+contains(BucOrdersResults, RegisterPerformedProcedure)
 contains(BucOrdersResults, ReceiveLabResult)
 contains(BucOrdersResults, ReviewLabResult)
 contains(BucOrdersResults, NotifyCriticalResult)
 contains(BucOrdersResults, CancelClinicalOrder)
 contains(ClinicOpsSystem, OrderEntryApi)
+contains(ClinicOpsSystem, ProxyOrderApi)
+contains(ClinicOpsSystem, ConfirmOrderApi)
+contains(ClinicOpsSystem, PerformedProcedureApi)
 contains(ClinicOpsSystem, CollectSpecimenApi)
 contains(ClinicOpsSystem, ReceiveLabResultApi)
 contains(ClinicOpsSystem, ResultReviewApi)
@@ -50,14 +75,45 @@ displays(PlaceLabOrder, OrderEntryScreen)
 invokes(PlaceLabOrder, OrderEntryApi)
 creates(OrderEntryApi, ClinicalOrder)
 reads(OrderEntryApi, Encounter)
+sets(PlaceLabOrder, ClinicalOrder, physician_confirmed == true)
 triggers(EvEncounterSigned, BucOrdersResults)
 triggers(EvEncounterSigned, PlaceLabOrder)
+
+displays(EnterProxyOrder, OrderEntryScreen)
+invokes(EnterProxyOrder, ProxyOrderApi)
+creates(ProxyOrderApi, ClinicalOrder)
+reads(ProxyOrderApi, Encounter)
+sets(EnterProxyOrder, ClinicalOrder, physician_confirmed == false)
+
+displays(ConfirmProxyOrder, OrderEntryScreen)
+invokes(ConfirmProxyOrder, ConfirmOrderApi)
+updates(ConfirmOrderApi, ClinicalOrder)
+transitions(ClinicalOrder.status, ConfirmProxyOrder, clordered -> clordered)
+sets(ConfirmProxyOrder, ClinicalOrder, physician_confirmed == true)
+
+displays(PrintSpecimenLabel, SpecimenScreen)
+reads(PrintSpecimenLabel, ClinicalOrder)
 
 displays(CollectSpecimen, SpecimenScreen)
 invokes(CollectSpecimen, CollectSpecimenApi)
 updates(CollectSpecimenApi, ClinicalOrder)
 transitions(ClinicalOrder.status, CollectSpecimen, clordered -> clcollected)
 sets(CollectSpecimen, ClinicalOrder, collected_at == present)
+
+// 看護師 acts on the physician's instruction (egov-hokanhou-323AC0000000203.txt:311): the order is the
+// instruction, and a proxy-entered one counts only after the physician confirms it.
+condition OrderConfirmedByPhysician "医師が確定したオーダ"
+holds(OrderConfirmedByPhysician, ClinicalOrder.physician_confirmed == true, ClinicalOrder.status == clordered)
+applies_to(OrderConfirmedByPhysician, CollectSpecimen)
+
+displays(RegisterPerformedProcedure, SpecimenScreen)
+invokes(RegisterPerformedProcedure, PerformedProcedureApi)
+creates(PerformedProcedureApi, Charge)
+reads(PerformedProcedureApi, ClinicalOrder)
+reads(PerformedProcedureApi, Encounter)
+sets(RegisterPerformedProcedure, Charge, status == chargeposted)
+sets(RegisterPerformedProcedure, Charge, posted_at == present)
+sets(RegisterPerformedProcedure, Charge, kind == insured)
 
 displays(ReceiveLabResult, ResultReviewScreen)
 invokes(ReceiveLabResult, ReceiveLabResultApi)
@@ -66,7 +122,8 @@ updates(ReceiveLabResultApi, ClinicalOrder)
 transitions(ClinicalOrder.status, ReceiveLabResult, clcollected -> clresulted)
 sets(ReceiveLabResult, ClinicalOrder, resulted_at == present)
 sets(ReceiveLabResult, LabResult, received_at == present)
-raises(LabSystem, EvLabResultReceived)
+// 検査結果(外注検査等)の確認 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:110); 外注検査システム (:1319).
+raises(OutsourcedLabSystem, EvLabResultReceived)
 triggers(EvLabResultReceived, ReceiveLabResult)
 
 displays(ReviewLabResult, ResultReviewScreen)
@@ -95,6 +152,21 @@ transitions(ClinicalOrder.status, CancelClinicalOrder, clordered -> clcancelled)
 requires_permission(PlaceLabOrder, ClinicalOrderWrite)
 requires_medium(PlaceLabOrder, ClinicalWorkstation)
 requires_permission(OrderEntryApi, ClinicalOrderWrite)
+
+requires_permission(EnterProxyOrder, ProxyOrderEntry)
+requires_medium(EnterProxyOrder, ClinicalWorkstation)
+requires_permission(ProxyOrderApi, ProxyOrderEntry)
+
+requires_permission(ConfirmProxyOrder, ClinicalOrderWrite)
+requires_medium(ConfirmProxyOrder, ClinicalWorkstation)
+requires_permission(ConfirmOrderApi, ClinicalOrderWrite)
+
+requires_permission(PrintSpecimenLabel, ClinicalOrderWrite)
+requires_medium(PrintSpecimenLabel, NurseStation)
+
+requires_permission(RegisterPerformedProcedure, ClinicalOrderWrite)
+requires_medium(RegisterPerformedProcedure, NurseStation)
+requires_permission(PerformedProcedureApi, ClinicalOrderWrite)
 
 requires_permission(CollectSpecimen, ClinicalOrderWrite)
 requires_medium(CollectSpecimen, NurseStation)

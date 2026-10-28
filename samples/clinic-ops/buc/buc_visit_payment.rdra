@@ -1,0 +1,192 @@
+module buc.visit_payment
+
+import shared.actors
+import shared.entities
+import shared.biz
+
+// Sources cited as file:line are under ~/research/japan-hospital-operations/sources/.
+// 会計 follows the consultation: 計算受付 (本日内容の実施済み確認, 会計計算入力), then 会計受付
+// (患者呼び出し, 精算, 領収書発行) (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:141-144, :155-157).
+
+buc BucVisitPayment "計算・会計" description "診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。"
+
+// オーダリングデータの確認、取込み and 診療費等の計算 (sendai-iji-gairai-shiyousyo.txt:183-186).
+usecase CalculateVisitBill       "会計計算入力"
+usecase ApplySelectedTreatmentFee "選定療養費の算定"
+// 計算処理終了後、患者を呼び出し (sendai-iji-gairai-shiyousyo.txt:191).
+usecase CallPatientForPayment    "会計の呼出"
+// 2番窓口または自動精算機で支払 (sendai-iji-gairai-shiyousyo.txt:191); 計算が複雑な場合は窓口 (:194).
+usecase SettleAtWindow           "会計窓口での精算"
+usecase SettleAtKiosk            "自動精算機での精算"
+// 個別の費用ごとに区分して記載した領収証を無償で交付 (egov-ryotan-kisoku-332M50000100015.txt:117);
+// 会計のお知らせ、診療明細書 (sendai-iji-gairai-shiyousyo.txt:189).
+usecase IssueReceipt             "領収証・明細書の交付"
+
+screen BillCalculationScreen "会計計算画面"
+screen PaymentWindowScreen   "会計窓口画面"
+screen KioskScreen           "自動精算機画面"
+
+api CalculateVisitBillApi "会計計算 API"
+api SelectedFeeApi        "選定療養費 API"
+api SettlementApi         "精算 API"
+api ReceiptApi            "領収証 API"
+
+performs(AccountsClerk, BucVisitPayment)
+performs(AccountsClerk, CalculateVisitBill)
+performs(AccountsClerk, ApplySelectedTreatmentFee)
+performs(AccountsClerk, CallPatientForPayment)
+performs(AccountsClerk, SettleAtWindow)
+performs(AccountsClerk, IssueReceipt)
+belongs(BucVisitPayment, RevenueCycle)
+  .by(AccountsWindow)
+  .by(PaymentKiosk)
+
+contains(BucVisitPayment, CalculateVisitBill)
+contains(BucVisitPayment, ApplySelectedTreatmentFee)
+contains(BucVisitPayment, CallPatientForPayment)
+contains(BucVisitPayment, SettleAtWindow)
+contains(BucVisitPayment, SettleAtKiosk)
+contains(BucVisitPayment, IssueReceipt)
+contains(ClinicOpsSystem, CalculateVisitBillApi)
+contains(ClinicOpsSystem, SelectedFeeApi)
+contains(ClinicOpsSystem, SettlementApi)
+contains(ClinicOpsSystem, ReceiptApi)
+
+displays(CalculateVisitBill, BillCalculationScreen)
+invokes(CalculateVisitBill, CalculateVisitBillApi)
+updates(CalculateVisitBillApi, Appointment)
+reads(CalculateVisitBillApi, Charge)
+reads(CalculateVisitBillApi, InsurancePolicy)
+raises(CalculateVisitBill, EvBillCalculated)
+transitions(Appointment.status, CalculateVisitBill, apptawaitingcalc -> apptawaitingpay)
+triggers(EvEncounterSigned, BucVisitPayment)
+
+// 一部負担金 is the amount times the 負担割合 (egov-kenkou-hokenhou-211AC0000000070.txt:1204). With the
+// 限度額情報, the patient pays no more than the 自己負担限度額 at the window
+// (mhlw-2012-gairai-kougaku.txt:9-10, mhlw-2023-online-shikaku-tebiki-001085572.txt:411); the rest is
+// 高額療養費 the insurer pays (egov-kenkou-hokenhou-211AC0000000070.txt:1652). The amounts are not state,
+// so the condition records which variations and which state the calculation combines.
+condition CopayCappedAtLimit "窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"
+combines(CopayCappedAtLimit, BurdenRatio)
+combines(CopayCappedAtLimit, LimitCategory)
+combines(CopayCappedAtLimit, Appointment.status)
+applies_to(CopayCappedAtLimit, CalculateVisitBill)
+
+// 紹介状なしで初診 at a hospital that must collect it: a 選定療養費 of at least the amount the minister sets
+// (saigai-hosp-2022-senteiryoyo.txt:6-7, egov-ryotan-kisoku-332M50000100015.txt:114), except 救急搬送 and
+// the other cases (saigai-hosp-2022-senteiryoyo.txt:17-18). The amount is the hospital's setting.
+displays(ApplySelectedTreatmentFee, BillCalculationScreen)
+invokes(ApplySelectedTreatmentFee, SelectedFeeApi)
+creates(SelectedFeeApi, Charge)
+reads(SelectedFeeApi, SelectedTreatmentFeeSetting)
+reads(SelectedFeeApi, Encounter)
+sets(ApplySelectedTreatmentFee, Charge, status == chargeposted)
+sets(ApplySelectedTreatmentFee, Charge, posted_at == present)
+
+condition UnreferredFirstVisit "紹介状なしの初診で、除外に当たらない"
+holds(UnreferredFirstVisit, Charge.kind == selectedtreatment, Appointment.referral == unreferred)
+applies_to(UnreferredFirstVisit, ApplySelectedTreatmentFee)
+
+displays(CallPatientForPayment, PaymentWindowScreen)
+reads(CallPatientForPayment, Appointment)
+triggers(EvBillCalculated, CallPatientForPayment)
+
+displays(SettleAtWindow, PaymentWindowScreen)
+invokes(SettleAtWindow, SettlementApi)
+creates(SettlementApi, PaymentTransaction)
+updates(SettlementApi, Appointment)
+updates(SettlementApi, AccountBalance)
+transitions(Appointment.status, SettleAtWindow, apptawaitingpay -> apptsettled)
+sets(SettleAtWindow, PaymentTransaction, status == payposted)
+sets(SettleAtWindow, PaymentTransaction, processed_at == present)
+
+displays(SettleAtKiosk, KioskScreen)
+invokes(SettleAtKiosk, SettlementApi)
+transitions(Appointment.status, SettleAtKiosk, apptawaitingpay -> apptsettled)
+sets(SettleAtKiosk, PaymentTransaction, status == payposted)
+sets(SettleAtKiosk, PaymentTransaction, processed_at == present)
+sets(SettleAtKiosk, PaymentTransaction, gateway_ref == present)
+raises(PaymentGateway, EvPaymentSettled)
+triggers(EvPaymentSettled, SettleAtKiosk)
+triggers(EvBillCalculated, PaymentGateway)
+
+displays(IssueReceipt, PaymentWindowScreen)
+invokes(IssueReceipt, ReceiptApi)
+updates(ReceiptApi, Appointment)
+reads(ReceiptApi, PaymentTransaction)
+reads(ReceiptApi, Charge)
+transitions(Appointment.status, IssueReceipt, apptsettled -> apptcompleted)
+sets(IssueReceipt, Appointment, completed_at == present)
+
+// Access constraints
+requires_permission(CalculateVisitBill, BillCalculate)
+requires_medium(CalculateVisitBill, BillingWorkstation)
+requires_permission(CalculateVisitBillApi, BillCalculate)
+
+requires_permission(ApplySelectedTreatmentFee, BillCalculate)
+requires_medium(ApplySelectedTreatmentFee, BillingWorkstation)
+requires_permission(SelectedFeeApi, BillCalculate)
+
+requires_medium(CallPatientForPayment, AccountsWindow)
+
+requires_permission(SettleAtWindow, PaymentCollect)
+requires_medium(SettleAtWindow, AccountsWindow)
+requires_permission(SettlementApi, PaymentCollect)
+
+requires_medium(SettleAtKiosk, PaymentKiosk)
+
+requires_permission(IssueReceipt, PaymentCollect)
+requires_medium(IssueReceipt, AccountsWindow)
+requires_permission(ReceiptApi, PaymentCollect)
+
+// Requirement traceability
+requirement ReqPayAfterConsultation "会計は診察の後に一度で行う"
+  priority "must"
+  source "標準型電子カルテ 業務フロー: 計算受付・会計受付 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:141-144)"
+  stakeholder "医事課 会計担当"
+  acceptance criteria "受付では支払を受けず、会計計算入力の後に窓口または自動精算機で精算し、領収証を交付する。"
+  status "accepted"
+
+motivates(ReqPayAfterConsultation, BucVisitPayment)
+
+// Business flow
+flow VisitPaymentFlow "計算・会計の流れ"
+step CalculationStep "計算受付・会計計算入力"
+step CallStep        "会計の呼出"
+step WindowStep      "会計窓口で精算"
+step KioskStep       "自動精算機で精算"
+step ReceiptStep     "領収証・明細書の交付"
+
+contains(BucVisitPayment, VisitPaymentFlow)
+contains(VisitPaymentFlow, CalculationStep)
+contains(VisitPaymentFlow, CallStep)
+contains(VisitPaymentFlow, WindowStep)
+contains(VisitPaymentFlow, KioskStep)
+contains(VisitPaymentFlow, ReceiptStep)
+
+precedes(CalculationStep, CallStep)
+precedes(CallStep, WindowStep)
+branches(CallStep, KioskStep)
+precedes(WindowStep, ReceiptStep)
+precedes(KioskStep, ReceiptStep)
+
+covers(CalculationStep, CalculateVisitBill)
+covers(CalculationStep, ApplySelectedTreatmentFee)
+covers(CallStep, CallPatientForPayment)
+covers(WindowStep, SettleAtWindow)
+covers(KioskStep, SettleAtKiosk)
+covers(KioskStep, EvPaymentSettled)
+covers(ReceiptStep, IssueReceipt)
+
+// Screen fields
+field PaymentAmountField "お支払額" access readonly required true source system
+
+field ChargeCodeField "診療行為" access readonly required true source system
+field KioskReferenceField "精算機の取引番号" access readonly required true source system
+
+contains(PaymentWindowScreen, PaymentAmountField)
+contains(BillCalculationScreen, ChargeCodeField)
+contains(KioskScreen, KioskReferenceField)
+maps_field(PaymentAmountField, PaymentTransaction, "amount")
+maps_field(ChargeCodeField, Charge, "code")
+maps_field(KioskReferenceField, PaymentTransaction, "gateway_ref")

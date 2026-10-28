@@ -1,105 +1,179 @@
 sequenceDiagram
   box System Value
-    actor BillingSpecialist as 👤 Billing Specialist
+    actor ClaimsClerk as 👤 医事課 レセプト担当
   end
   box System Boundary
-    participant BalanceScreen as 🖥️ Balance Screen
+    participant BalanceScreen as 🖥️ 未収金画面
     participant ChargeWorklistScreen as 🖥️ Charge Worklist Screen
-    participant ClaimScreen as 🖥️ Claim Screen
-    participant PaymentPostingScreen as 🖥️ Payment Posting Screen
+    participant ClaimScreen as 🖥️ レセプト画面
+    participant PaymentPostingScreen as 🖥️ 入金画面
   end
   box System
     participant System as 🧩 システム
-    participant BalanceApi as 🔌 Balance API
+    participant BalanceApi as 🔌 未収金 API
+    participant ClaimEditApi as 🔌 レセプト点検・訂正 API
+    participant ClaimResultApi as 🔌 審査結果 API
     participant CreateChargeApi as 🔌 Create Charge API
-    participant GenerateClaimApi as 🔌 Generate Claim API
-    participant PaymentPostApi as 🔌 Payment Posting API
-    participant SubmitClaimApi as 🔌 Submit Claim API
-    participant AccountBalance as 🗄️ Account Balance
+    participant GenerateClaimApi as 🔌 レセプト作成 API
+    participant PaymentPostApi as 🔌 入金 API
+    participant SubmitClaimApi as 🔌 オンライン請求 API
+    participant AccountBalance as 🗄️ 未収金残高
     participant Charge as 🗄️ Charge
-    participant Claim as 🗄️ Claim
+    participant ClaimStatement as 🗄️ レセプト
     participant Encounter as 🗄️ Encounter
-    participant InsurancePolicy as 🗄️ Insurance Policy
+    participant InsurancePolicy as 🗄️ 保険資格
     participant PaymentTransaction as 🗄️ Payment Transaction
   end
 
-  Note over BillingSpecialist,PaymentTransaction: ✅ Create Charge
-  BillingSpecialist->>ChargeWorklistScreen: ✅ Create Charge
-  ChargeWorklistScreen->>CreateChargeApi: ✅ Create Charge
+  Note over ClaimsClerk,PaymentTransaction: ✅ 返戻レセプトの訂正（再請求）
+  ClaimsClerk->>ClaimScreen: ✅ 返戻レセプトの訂正（再請求）
+  ClaimScreen->>ClaimEditApi: ✅ 返戻レセプトの訂正（再請求）
+  activate ClaimEditApi
+  ClaimEditApi->>ClaimStatement: update
+  ClaimEditApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimEditApi
+
+  Note over ClaimsClerk,PaymentTransaction: ✅ コスト情報の登録
+  ClaimsClerk->>ChargeWorklistScreen: ✅ コスト情報の登録
+  ChargeWorklistScreen->>CreateChargeApi: ✅ コスト情報の登録
   activate CreateChargeApi
   CreateChargeApi->>Encounter: read
-  rect rgb(245,245,245)
-    Note right of CreateChargeApi: transaction (API atomic boundary)
-    CreateChargeApi->>AccountBalance: update
-    CreateChargeApi->>Charge: create
-  end
+  CreateChargeApi->>Charge: create
   CreateChargeApi-->>ChargeWorklistScreen: 🖥️ Charge Worklist Screen
-  ChargeWorklistScreen-->>BillingSpecialist: 🖥️ Charge Worklist Screen
+  ChargeWorklistScreen-->>ClaimsClerk: 🖥️ Charge Worklist Screen
   deactivate CreateChargeApi
 
-  Note over BillingSpecialist,PaymentTransaction: ✅ Generate Claim
-  BillingSpecialist->>ClaimScreen: ✅ Generate Claim
-  ClaimScreen->>GenerateClaimApi: ✅ Generate Claim
+  Note over ClaimsClerk,PaymentTransaction: ✅ レセプト作成
+  ClaimsClerk->>ClaimScreen: ✅ レセプト作成
+  ClaimScreen->>GenerateClaimApi: ✅ レセプト作成
   activate GenerateClaimApi
+  GenerateClaimApi->>Charge: read
   GenerateClaimApi->>InsurancePolicy: read
-  rect rgb(245,245,245)
-    Note right of GenerateClaimApi: transaction (API atomic boundary)
-    GenerateClaimApi->>Claim: create
-    GenerateClaimApi->>Charge: update
-  end
-  GenerateClaimApi-->>ClaimScreen: 🖥️ Claim Screen
-  ClaimScreen-->>BillingSpecialist: 🖥️ Claim Screen
+  GenerateClaimApi->>ClaimStatement: create
+  GenerateClaimApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
   deactivate GenerateClaimApi
 
-  Note over BillingSpecialist,PaymentTransaction: ✅ Post Payment
-  BillingSpecialist->>PaymentPostingScreen: ✅ Post Payment
-  PaymentPostingScreen->>PaymentPostApi: ✅ Post Payment
+  Note over ClaimsClerk,PaymentTransaction: ✅ レセプトの保留（月遅れ）
+  ClaimsClerk->>ClaimScreen: ✅ レセプトの保留（月遅れ）
+  ClaimScreen->>ClaimEditApi: ✅ レセプトの保留（月遅れ）
+  activate ClaimEditApi
+  ClaimEditApi->>ClaimStatement: update
+  ClaimEditApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimEditApi
+
+  Note over ClaimsClerk,PaymentTransaction: ✅ レセプトの院内点検
+  ClaimsClerk->>ClaimScreen: ✅ レセプトの院内点検
+  ClaimScreen->>ClaimEditApi: ✅ レセプトの院内点検
+  activate ClaimEditApi
+  ClaimEditApi->>ClaimStatement: update
+  ClaimEditApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimEditApi
+
+  Note over ClaimsClerk,PaymentTransaction: ✅ 診療報酬の入金
+  ClaimsClerk->>PaymentPostingScreen: ✅ 診療報酬の入金
+  PaymentPostingScreen->>PaymentPostApi: ✅ 診療報酬の入金
   activate PaymentPostApi
-  rect rgb(245,245,245)
-    Note right of PaymentPostApi: transaction (API atomic boundary)
-    PaymentPostApi->>Claim: update
-    PaymentPostApi->>PaymentTransaction: create
-  end
-  PaymentPostApi-->>PaymentPostingScreen: 🖥️ Payment Posting Screen
-  PaymentPostingScreen-->>BillingSpecialist: 🖥️ Payment Posting Screen
+  PaymentPostApi->>ClaimStatement: update
+  PaymentPostApi-->>PaymentPostingScreen: 🖥️ 入金画面
+  PaymentPostingScreen-->>ClaimsClerk: 🖥️ 入金画面
   deactivate PaymentPostApi
 
-  Note over BillingSpecialist,PaymentTransaction: ✅ Receive Claim Accepted
-  BillingSpecialist->System: ✅ Receive Claim Accepted
-  activate System
-  System->>Claim: update
-  System-->>BillingSpecialist: 🖥️ Claim Screen
-  deactivate System
+  Note over ClaimsClerk,PaymentTransaction: ✅ レセプト受付（審査へ）
+  ClaimsClerk->>ClaimScreen: ✅ レセプト受付（審査へ）
+  ClaimScreen->>ClaimResultApi: ✅ レセプト受付（審査へ）
+  activate ClaimResultApi
+  ClaimResultApi->>ClaimStatement: update
+  ClaimResultApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimResultApi
 
-  Note over BillingSpecialist,PaymentTransaction: ✅ Reconcile Balance
-  BillingSpecialist->>BalanceScreen: ✅ Reconcile Balance
-  BalanceScreen->>BalanceApi: ✅ Reconcile Balance
+  Note over ClaimsClerk,PaymentTransaction: ✅ 未収金管理台帳の作成
+  ClaimsClerk->>BalanceScreen: ✅ 未収金管理台帳の作成
+  BalanceScreen->>BalanceApi: ✅ 未収金管理台帳の作成
   activate BalanceApi
   BalanceApi->>PaymentTransaction: read
   BalanceApi->>AccountBalance: update
-  BalanceApi-->>BalanceScreen: 🖥️ Balance Screen
-  BalanceScreen-->>BillingSpecialist: 🖥️ Balance Screen
+  BalanceApi-->>BalanceScreen: 🖥️ 未収金画面
+  BalanceScreen-->>ClaimsClerk: 🖥️ 未収金画面
   deactivate BalanceApi
 
-  Note over BillingSpecialist,PaymentTransaction: ✅ Record Claim Denial
-  BillingSpecialist->System: ✅ Record Claim Denial
-  activate System
-  System->>Claim: update
-  System-->>BillingSpecialist: 🖥️ Claim Screen
-  deactivate System
+  Note over ClaimsClerk,PaymentTransaction: ✅ 査定の取込
+  ClaimsClerk->>ClaimScreen: ✅ 査定の取込
+  ClaimScreen->>ClaimResultApi: ✅ 査定の取込
+  activate ClaimResultApi
+  ClaimResultApi->>ClaimStatement: update
+  ClaimResultApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimResultApi
 
-  Note over BillingSpecialist,PaymentTransaction: ✅ Submit Claim
-  BillingSpecialist->>ClaimScreen: ✅ Submit Claim
-  ClaimScreen->>SubmitClaimApi: ✅ Submit Claim
+  Note over ClaimsClerk,PaymentTransaction: ✅ 返戻レセプトの取込
+  ClaimsClerk->>ClaimScreen: ✅ 返戻レセプトの取込
+  ClaimScreen->>ClaimResultApi: ✅ 返戻レセプトの取込
+  activate ClaimResultApi
+  ClaimResultApi->>ClaimStatement: update
+  ClaimResultApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimResultApi
+
+  Note over ClaimsClerk,PaymentTransaction: ✅ 受付不能・要確認の確認
+  ClaimsClerk->>ClaimScreen: ✅ 受付不能・要確認の確認
+  ClaimScreen->>ClaimResultApi: ✅ 受付不能・要確認の確認
+  activate ClaimResultApi
+  ClaimResultApi->>ClaimStatement: update
+  ClaimResultApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimResultApi
+
+  Note over ClaimsClerk,PaymentTransaction: ✅ 保留レセプトの再提出準備
+  ClaimsClerk->>ClaimScreen: ✅ 保留レセプトの再提出準備
+  ClaimScreen->>ClaimEditApi: ✅ 保留レセプトの再提出準備
+  activate ClaimEditApi
+  ClaimEditApi->>ClaimStatement: update
+  ClaimEditApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimEditApi
+
+  Note over ClaimsClerk,PaymentTransaction: ✅ 再審査請求
+  ClaimsClerk->>ClaimScreen: ✅ 再審査請求
+  ClaimScreen->>SubmitClaimApi: ✅ 再審査請求
   activate SubmitClaimApi
-  SubmitClaimApi->>Claim: update
-  SubmitClaimApi-->>ClaimScreen: 🖥️ Claim Screen
-  ClaimScreen-->>BillingSpecialist: 🖥️ Claim Screen
+  SubmitClaimApi->>ClaimStatement: update
+  SubmitClaimApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
   deactivate SubmitClaimApi
 
-  Note over BillingSpecialist,PaymentTransaction: ✅ Void Charge
-  BillingSpecialist->System: ✅ Void Charge
+  Note over ClaimsClerk,PaymentTransaction: ✅ エラー分レセプトの再送
+  ClaimsClerk->>ClaimScreen: ✅ エラー分レセプトの再送
+  ClaimScreen->>SubmitClaimApi: ✅ エラー分レセプトの再送
+  activate SubmitClaimApi
+  SubmitClaimApi->>ClaimStatement: update
+  SubmitClaimApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate SubmitClaimApi
+
+  Note over ClaimsClerk,PaymentTransaction: ✅ 資格の振替・分割の確認
+  ClaimsClerk->System: ✅ 資格の振替・分割の確認
+  activate System
+  System->>ClaimStatement: read
+  System-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate System
+
+  Note over ClaimsClerk,PaymentTransaction: ✅ レセプト請求
+  ClaimsClerk->>ClaimScreen: ✅ レセプト請求
+  ClaimScreen->>SubmitClaimApi: ✅ レセプト請求
+  activate SubmitClaimApi
+  SubmitClaimApi->>ClaimStatement: update
+  SubmitClaimApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate SubmitClaimApi
+
+  Note over ClaimsClerk,PaymentTransaction: ✅ コストの取消
+  ClaimsClerk->System: ✅ コストの取消
   activate System
   System->>Charge: update
-  System-->>BillingSpecialist: 🖥️ Charge Worklist Screen
+  System-->>ClaimsClerk: 🖥️ Charge Worklist Screen
   deactivate System

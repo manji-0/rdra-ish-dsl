@@ -1,0 +1,27 @@
+sequenceDiagram
+  box System Value
+    actor AccountsClerk as 👤 医事課 会計担当
+  end
+  box System Boundary
+    participant KioskScreen as 🖥️ 自動精算機画面
+  end
+  box System
+    participant SettlementApi as 🔌 精算 API
+    participant AccountBalance as 🗄️ 未収金残高
+    participant Appointment as 🗄️ Appointment
+    participant PaymentTransaction as 🗄️ Payment Transaction
+  end
+
+  Note over AccountsClerk,PaymentTransaction: ✅ 自動精算機での精算
+  AccountsClerk->>KioskScreen: ✅ 自動精算機での精算
+  KioskScreen->>SettlementApi: ✅ 自動精算機での精算
+  activate SettlementApi
+  rect rgb(245,245,245)
+    Note right of SettlementApi: transaction (API atomic boundary)
+    SettlementApi->>AccountBalance: update
+    SettlementApi->>Appointment: update
+    SettlementApi->>PaymentTransaction: create
+  end
+  SettlementApi-->>KioskScreen: 🖥️ 自動精算機画面
+  KioskScreen-->>AccountsClerk: 🖥️ 自動精算機画面
+  deactivate SettlementApi

@@ -11,18 +11,25 @@ usecase RecordVitals        "Record Vitals"
 usecase DocumentAssessment  "Document Assessment"
 usecase SignEncounter       "Sign Encounter"
 usecase AmendEncounter      "Amend Signed Encounter"
-usecase CompleteAppointment "Complete Appointment"
+// 診療情報提供書の作成・送信 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:121); 紹介を希望した患者に紹介状を
+// 手渡す (sendai-iji-gairai-shiyousyo.txt:198).
+usecase IssueReferralLetter "診療情報提供書の作成・送信"
+// 診察終了後, the patient brings the papers to 計算受付 (sendai-iji-gairai-shiyousyo.txt:176,
+// mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:141): the visit now waits for 会計計算.
+usecase CompleteConsultation "診察終了"
 
 screen EncounterWorkspaceScreen "Encounter Workspace"
 screen VitalsScreen             "Vitals Screen"
 screen DiagnosisScreen          "Diagnosis Screen"
+screen ReferralLetterScreen     "診療情報提供書画面"
 
 api OpenEncounterApi       "Open Encounter API"
 api RecordVitalsApi        "Record Vitals API"
 api DocumentAssessmentApi  "Document Assessment API"
 api SignEncounterApi       "Sign Encounter API"
 api AmendEncounterApi      "Amend Encounter API"
-api CompleteAppointmentApi "Complete Appointment API"
+api IssueReferralLetterApi "診療情報提供書 API"
+api CompleteConsultationApi "診察終了 API"
 
 performs(Nurse, BucClinicalEncounter)
 performs(Clinician, BucClinicalEncounter)
@@ -31,7 +38,8 @@ performs(Nurse, RecordVitals)
 performs(Clinician, DocumentAssessment)
 performs(Clinician, SignEncounter)
 performs(Clinician, AmendEncounter)
-performs(Nurse, CompleteAppointment)
+performs(Clinician, IssueReferralLetter)
+performs(Nurse, CompleteConsultation)
 belongs(BucClinicalEncounter, CareDelivery)
 
 contains(BucClinicalEncounter, OpenEncounter)
@@ -39,13 +47,15 @@ contains(BucClinicalEncounter, RecordVitals)
 contains(BucClinicalEncounter, DocumentAssessment)
 contains(BucClinicalEncounter, SignEncounter)
 contains(BucClinicalEncounter, AmendEncounter)
-contains(BucClinicalEncounter, CompleteAppointment)
+contains(BucClinicalEncounter, IssueReferralLetter)
+contains(BucClinicalEncounter, CompleteConsultation)
 contains(ClinicOpsSystem, OpenEncounterApi)
 contains(ClinicOpsSystem, RecordVitalsApi)
 contains(ClinicOpsSystem, DocumentAssessmentApi)
 contains(ClinicOpsSystem, SignEncounterApi)
 contains(ClinicOpsSystem, AmendEncounterApi)
-contains(ClinicOpsSystem, CompleteAppointmentApi)
+contains(ClinicOpsSystem, IssueReferralLetterApi)
+contains(ClinicOpsSystem, CompleteConsultationApi)
 
 displays(OpenEncounter, EncounterWorkspaceScreen)
 invokes(OpenEncounter, OpenEncounterApi)
@@ -78,14 +88,24 @@ invokes(AmendEncounter, AmendEncounterApi)
 updates(AmendEncounterApi, Encounter)
 transitions(Encounter.status, AmendEncounter, encsigned -> encamended)
 
-displays(CompleteAppointment, EncounterWorkspaceScreen)
-invokes(CompleteAppointment, CompleteAppointmentApi)
-updates(CompleteAppointmentApi, Appointment)
-updates(CompleteAppointmentApi, Room)
-transitions(Appointment.status, CompleteAppointment, apptinconsult -> apptcompleted)
-sets(CompleteAppointment, Appointment, completed_at == present)
-sets(CompleteAppointment, Room, occupancy_status == roomcleaning)
-triggers(EvEncounterSigned, CompleteAppointment)
+displays(IssueReferralLetter, ReferralLetterScreen)
+invokes(IssueReferralLetter, IssueReferralLetterApi)
+creates(IssueReferralLetterApi, ReferralLetter)
+reads(IssueReferralLetterApi, Encounter)
+sets(IssueReferralLetter, ReferralLetter, direction == outbound)
+
+displays(CompleteConsultation, EncounterWorkspaceScreen)
+invokes(CompleteConsultation, CompleteConsultationApi)
+updates(CompleteConsultationApi, Appointment)
+updates(CompleteConsultationApi, Room)
+transitions(Appointment.status, CompleteConsultation, apptinconsult -> apptawaitingcalc)
+sets(CompleteConsultation, Room, occupancy_status == roomcleaning)
+triggers(EvEncounterSigned, CompleteConsultation)
+
+// Screen fields
+field ReferralDirectionField "紹介の向き" access readonly required true source system
+contains(ReferralLetterScreen, ReferralDirectionField)
+maps_field(ReferralDirectionField, ReferralLetter, "direction")
 
 // Access constraints
 requires_permission(OpenEncounter, EncounterOpen)
@@ -108,6 +128,10 @@ requires_permission(AmendEncounter, EncounterSign)
 requires_medium(AmendEncounter, ClinicalWorkstation)
 requires_permission(AmendEncounterApi, EncounterSign)
 
-requires_permission(CompleteAppointment, EncounterOpen)
-requires_medium(CompleteAppointment, NurseStation)
-requires_permission(CompleteAppointmentApi, EncounterOpen)
+requires_permission(IssueReferralLetter, ReferralManage)
+requires_medium(IssueReferralLetter, ClinicalWorkstation)
+requires_permission(IssueReferralLetterApi, ReferralManage)
+
+requires_permission(CompleteConsultation, EncounterOpen)
+requires_medium(CompleteConsultation, NurseStation)
+requires_permission(CompleteConsultationApi, EncounterOpen)

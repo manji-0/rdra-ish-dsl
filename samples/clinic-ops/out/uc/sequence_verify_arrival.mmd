@@ -1,25 +1,25 @@
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
-    actor Nurse as 👤 Nurse
+    actor Nurse as 👤 看護師
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
-    participant CheckInScreen as 🖥️ Check-In Screen
+    participant CheckInScreen as 🖥️ 受付画面
   end
   box System
     participant VerifyArrivalApi as 🔌 Verify Arrival API
     participant Appointment as 🗄️ Appointment
-    participant InsurancePolicy as 🗄️ Insurance Policy
+    participant InsurancePolicy as 🗄️ 保険資格
     participant PatientAccount as 🗄️ Patient Account
   end
 
-  Note over FrontDesk,PatientAccount: ✅ Verify Patient Arrival
-  FrontDesk->>CheckInScreen: ✅ Verify Patient Arrival
-  CheckInScreen->>VerifyArrivalApi: ✅ Verify Patient Arrival
+  Note over Nurse,PatientAccount: ✅ 予約票・診察券の確認
+  Nurse->>CheckInScreen: ✅ 予約票・診察券の確認
+  CheckInScreen->>VerifyArrivalApi: ✅ 予約票・診察券の確認
   activate VerifyArrivalApi
   VerifyArrivalApi->>Appointment: read
   VerifyArrivalApi->>PatientAccount: read
   VerifyArrivalApi->>InsurancePolicy: read
-  VerifyArrivalApi-->>CheckInScreen: 🖥️ Check-In Screen
-  CheckInScreen-->>FrontDesk: 🖥️ Check-In Screen
+  VerifyArrivalApi-->>CheckInScreen: 🖥️ 受付画面
+  CheckInScreen-->>Nurse: 🖥️ 受付画面
   deactivate VerifyArrivalApi

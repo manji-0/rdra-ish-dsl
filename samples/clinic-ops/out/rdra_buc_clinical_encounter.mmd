@@ -1,31 +1,57 @@
 flowchart LR
   subgraph layer_value[System Value]
     direction TB
-    Clinician(["👤 Clinician"])
-    Nurse(["👤 Nurse"])
-    EligibilityService[/"🌐 Insurance Eligibility Service"/]
-    LabSystem[/"🌐 Laboratory System"/]
+    Clinician(["👤 医師"])
+    Nurse(["👤 看護師"])
+    ClaimsReviewOrganization[/"🌐 審査支払機関（支払基金・国保連）"/]
     MessagingGateway[/"🌐 Messaging Gateway"/]
-    PaymentGateway[/"🌐 Payment Gateway"/]
+    OutsourcedLabSystem[/"🌐 外注検査システム"/]
+    PaymentGateway[/"🌐 自動精算機・クレジット決済"/]
   end
   subgraph layer_environment[External Environment]
     direction TB
     CareDelivery["💼 Care Delivery"]
     PatientAccess["💼 Patient Access"]
     RevenueCycle["💼 Revenue Cycle"]
-    BucBillingClaims["📦 Bill and Collect Claims"]
+    BucBillingClaims["📦 レセプト作成・請求"]
     BucClinicalEncounter["📦 Conduct Clinical Encounter"]
     BucFollowupCare["📦 Coordinate Follow-Up Care"]
     BucOrdersResults["📦 Manage Orders and Results"]
     BucPatientOnboarding["📦 Onboard and Maintain Patient"]
+    BucVisitPayment["📦 計算・会計"]
+    ClaimCycleFlow["🧭 レセプトの月次サイクル"]
+    VisitPaymentFlow["🧭 計算・会計の流れ"]
+    AssessStep(["➡️ 査定と再審査請求"])
+    CalculationStep(["➡️ 計算受付・会計計算入力"])
+    CallStep(["➡️ 会計の呼出"])
+    CreateStatementStep(["➡️ レセプト作成（月初）"])
+    HoldStep(["➡️ 保留（月遅れ）"])
+    InspectStep(["➡️ 院内点検"])
+    KioskStep(["➡️ 自動精算機で精算"])
+    PaidStep(["➡️ 支払（診療翌々月）"])
+    ReceiptErrorStep(["➡️ 受付不能・要確認の再送（11日・12日）"])
+    ReceiptStep(["➡️ 領収証・明細書の交付"])
+    ReturnStep(["➡️ 返戻と再請求"])
+    ReviewStep(["➡️ 審査"])
+    SubmitStep(["➡️ 請求（5日～10日）"])
+    WindowStep(["➡️ 会計窓口で精算"])
+    ErrorResendWindow["⏱️ エラー分レセプトの再送（毎月11日・12日）"]
     IntakeExpiryCheck["⏱️ Nightly intake expiry check"]
+    MonthlyClaimCreation["⏱️ 前月分レセプトの作成（月初）"]
+    MonthlyClaimDeadline["⏱️ 前月分レセプトの請求（毎月5日～10日）"]
+    ReceivablesMonthlyReview["⏱️ 未収金管理台帳の作成（毎月）"]
+    ReturnDownloadCheck["⏱️ 返戻レセプトの取得（3か月以内）"]
+    AccountsWindow[/"📱 会計窓口"/]
     BillingWorkstation[/"📱 Billing Workstation"/]
     CareCoordinationConsole[/"📱 Care Coordination Console"/]
     ClinicalWorkstation[/"📱 Clinical Workstation"/]
     FrontDeskTerminal[/"📱 Front Desk Terminal"/]
     NurseStation[/"📱 Nurse Station"/]
+    OnlineClaimTerminal[/"📱 オンライン請求用端末"/]
     PatientMobile[/"📱 Patient Mobile"/]
-    BillingClaimWrite["🔑 Billing Claim Write"]
+    PaymentKiosk[/"📱 自動精算機"/]
+    BillCalculate["🔑 会計計算"]
+    BillingClaimWrite["🔑 レセプト業務"]
     ClinicalDocument["🔑 Clinical Document"]
     ClinicalOrderWrite["🔑 Clinical Order Write"]
     ConsentCapture["🔑 Consent Capture"]
@@ -38,7 +64,10 @@ flowchart LR
     PatientMessageSend["🔑 Patient Message Send"]
     PatientProfileRead["🔑 Patient Profile Read"]
     PatientProfileWrite["🔑 Patient Profile Write"]
+    PaymentCollect["🔑 窓口収納"]
     PaymentPost["🔑 Payment Post"]
+    ProxyOrderEntry["🔑 代行入力"]
+    ReferralManage["🔑 紹介状管理"]
     ScheduleRead["🔑 Schedule Read"]
     ScheduleWrite["🔑 Schedule Write"]
     VitalsRecord["🔑 Vitals Record"]
@@ -46,30 +75,48 @@ flowchart LR
   subgraph layer_boundary[System Boundary]
     direction TB
     AmendEncounter(["✅ Amend Signed Encounter"])
+    ApplySelectedTreatmentFee(["✅ 選定療養費の算定"])
     ArchivePatient(["✅ Archive Patient"])
+    CalculateVisitBill(["✅ 会計計算入力"])
+    CallPatientForPayment(["✅ 会計の呼出"])
     CancelClinicalOrder(["✅ Cancel Clinical Order"])
     CaptureConsent(["✅ Capture Consent"])
     CloseCarePlan(["✅ Close Care Plan"])
     CollectSpecimen(["✅ Collect Specimen"])
-    CompleteAppointment(["✅ Complete Appointment"])
+    CompleteConsultation(["✅ 診察終了"])
     CompleteIntakeForms(["✅ Complete Intake Forms"])
+    ConfirmProxyOrder(["✅ 代行入力オーダの確定"])
+    CorrectReturnedStatement(["✅ 返戻レセプトの訂正（再請求）"])
     CreateCarePlan(["✅ Create Care Plan"])
-    CreateCharge(["✅ Create Charge"])
+    CreateCharge(["✅ コスト情報の登録"])
     DocumentAssessment(["✅ Document Assessment"])
+    EnterProxyOrder(["✅ 検体検査オーダの代行入力"])
     ExpireIntakeForms(["✅ Expire Intake Forms"])
-    GenerateClaim(["✅ Generate Claim"])
+    GenerateClaimStatement(["✅ レセプト作成"])
+    HoldClaimStatement(["✅ レセプトの保留（月遅れ）"])
+    InspectClaimStatement(["✅ レセプトの院内点検"])
+    IssueReceipt(["✅ 領収証・明細書の交付"])
+    IssueReferralLetter(["✅ 診療情報提供書の作成・送信"])
     MergeDuplicatePatient(["✅ Merge Duplicate Patient"])
     NotifyCriticalResult(["✅ Notify Critical Result"])
     NotifyPatientResult(["✅ Notify Patient Result"])
     OpenEncounter(["✅ Open Encounter"])
     PlaceLabOrder(["✅ Place Lab Order"])
-    PostPayment(["✅ Post Payment"])
-    ReceiveClaimAccepted(["✅ Receive Claim Accepted"])
+    PostPayment(["✅ 診療報酬の入金"])
+    PrintSpecimenLabel(["✅ 採血管ラベル発行・貼付"])
+    ReceiveClaimAccepted(["✅ レセプト受付（審査へ）"])
     ReceiveLabResult(["✅ Receive Lab Result"])
-    ReconcileBalance(["✅ Reconcile Balance"])
-    RecordClaimDenial(["✅ Record Claim Denial"])
+    ReconcileBalance(["✅ 未収金管理台帳の作成"])
+    RecordClaimAssessment(["✅ 査定の取込"])
+    RecordClaimReturn(["✅ 返戻レセプトの取込"])
+    RecordReceiptError(["✅ 受付不能・要確認の確認"])
     RecordVitals(["✅ Record Vitals"])
     RegisterPatient(["✅ Register Patient"])
+    RegisterPerformedProcedure(["✅ 実施内容（コスト）の登録"])
+    ReleaseHeldStatement(["✅ 保留レセプトの再提出準備"])
+    RequestReexamination(["✅ 再審査請求"])
+    ResendErroredStatement(["✅ エラー分レセプトの再送"])
+    ReviewClaimTransfer(["✅ 資格の振替・分割の確認"])
     ReviewLabResult(["✅ Review Lab Result"])
     ReviewPatientResponse(["✅ Review Patient Response"])
     ScheduleFollowUpVisit(["✅ Schedule Follow-Up Visit"])
@@ -77,16 +124,19 @@ flowchart LR
     SendAppointmentNotice(["✅ Send Appointment Notice"])
     SendFollowUpMessage(["✅ Send Follow-Up Message"])
     SendIntakeForms(["✅ Send Intake Forms"])
+    SettleAtKiosk(["✅ 自動精算機での精算"])
+    SettleAtWindow(["✅ 会計窓口での精算"])
     SignEncounter(["✅ Sign Encounter"])
-    SubmitClaim(["✅ Submit Claim"])
+    SubmitClaimStatements(["✅ レセプト請求"])
     UpdateDemographics(["✅ Update Demographics"])
-    VerifyInsurance(["✅ Verify Insurance"])
-    VoidCharge(["✅ Void Charge"])
+    VerifyInsurance(["✅ 保険資格・限度額情報の登録（新患登録）"])
+    VoidCharge(["✅ コストの取消"])
     AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
-    BalanceScreen[["🖥️ Balance Screen"]]
+    BalanceScreen[["🖥️ 未収金画面"]]
+    BillCalculationScreen[["🖥️ 会計計算画面"]]
     CarePlanScreen[["🖥️ Care Plan Screen"]]
     ChargeWorklistScreen[["🖥️ Charge Worklist Screen"]]
-    ClaimScreen[["🖥️ Claim Screen"]]
+    ClaimScreen[["🖥️ レセプト画面"]]
     ConsentScreen[["🖥️ Consent Capture Screen"]]
     CriticalNoticeScreen[["🖥️ Critical Result Notice Screen"]]
     DiagnosisScreen[["🖥️ Diagnosis Screen"]]
@@ -94,31 +144,49 @@ flowchart LR
     FollowUpScheduleScreen[["🖥️ Follow-Up Schedule Screen"]]
     InsuranceScreen[["🖥️ Insurance Verification Screen"]]
     IntakePortalScreen[["🖥️ Intake Portal Screen"]]
+    KioskScreen[["🖥️ 自動精算機画面"]]
     OrderEntryScreen[["🖥️ Order Entry Screen"]]
     PatientMessageScreen[["🖥️ Patient Message Screen"]]
     PatientProfileScreen[["🖥️ Patient Profile Screen"]]
     PatientSearchScreen[["🖥️ Patient Search Screen"]]
-    PaymentPostingScreen[["🖥️ Payment Posting Screen"]]
+    PaymentPostingScreen[["🖥️ 入金画面"]]
+    PaymentWindowScreen[["🖥️ 会計窓口画面"]]
+    ReferralLetterScreen[["🖥️ 診療情報提供書画面"]]
     ResultReviewScreen[["🖥️ Result Review Screen"]]
     SpecimenScreen[["🖥️ Specimen Collection Screen"]]
     VitalsScreen[["🖥️ Vitals Screen"]]
+    ChargeCodeField[["🔤 診療行為"]]
+    KioskReferenceField[["🔤 精算機の取引番号"]]
+    PaymentAmountField[["🔤 お支払額"]]
+    ReferralDirectionField[["🔤 紹介の向き"]]
     EvAppointmentCancelled{"⚡ Appointment Cancelled"}
     EvAppointmentCheckedIn{"⚡ Appointment Checked In"}
     EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
     EvAppointmentScheduled{"⚡ Appointment Scheduled"}
+    EvBillCalculated{"⚡ 会計計算完了"}
+    EvClaimAccepted{"⚡ レセプト受付"}
+    EvClaimAssessed{"⚡ 査定"}
+    EvClaimReceiptError{"⚡ 受付不能・要確認"}
+    EvClaimReturned{"⚡ 返戻"}
+    EvClaimStatementsSubmitted{"⚡ レセプト請求"}
+    EvClaimTransferred{"⚡ 資格の振替・分割"}
     EvClinicalOrderReviewed{"⚡ Clinical Result Reviewed"}
-    EvEligibilityChecked{"⚡ Eligibility Checked"}
     EvEncounterSigned{"⚡ Encounter Signed"}
     EvLabResultReceived{"⚡ Lab Result Received"}
-    EvPaymentSettled{"⚡ Payment Settled"}
+    EvPaymentSettled{"⚡ 自動精算機での精算完了"}
+    EvRemittance{"⚡ 診療報酬の支払"}
   end
   subgraph layer_system[System]
     direction TB
     AmendEncounterApi["🔌 Amend Encounter API"]
     AppointmentNoticeApi["🔌 Appointment Notice API"]
-    BalanceApi["🔌 Balance API"]
+    BalanceApi["🔌 未収金 API"]
+    CalculateVisitBillApi["🔌 会計計算 API"]
+    ClaimEditApi["🔌 レセプト点検・訂正 API"]
+    ClaimResultApi["🔌 審査結果 API"]
     CollectSpecimenApi["🔌 Collect Specimen API"]
-    CompleteAppointmentApi["🔌 Complete Appointment API"]
+    CompleteConsultationApi["🔌 診察終了 API"]
+    ConfirmOrderApi["🔌 オーダ確定 API"]
     ConsentApi["🔌 Consent API"]
     CreateCarePlanApi["🔌 Create Care Plan API"]
     CreateChargeApi["🔌 Create Charge API"]
@@ -126,32 +194,38 @@ flowchart LR
     DocumentAssessmentApi["🔌 Document Assessment API"]
     EligibilityApi["🔌 Eligibility API"]
     FollowUpScheduleApi["🔌 Follow-Up Schedule API"]
-    GenerateClaimApi["🔌 Generate Claim API"]
+    GenerateClaimApi["🔌 レセプト作成 API"]
     IntakeMessagingApi["🔌 Intake Messaging API"]
+    IssueReferralLetterApi["🔌 診療情報提供書 API"]
     NotifyPatientResultApi["🔌 Notify Patient Result API"]
     OpenEncounterApi["🔌 Open Encounter API"]
     OrderEntryApi["🔌 Order Entry API"]
-    PaymentPostApi["🔌 Payment Posting API"]
+    PaymentPostApi["🔌 入金 API"]
+    PerformedProcedureApi["🔌 実施登録 API"]
+    ProxyOrderApi["🔌 代行入力 API"]
+    ReceiptApi["🔌 領収証 API"]
     ReceiveLabResultApi["🔌 Receive Lab Result API"]
     RecordVitalsApi["🔌 Record Vitals API"]
     RegisterPatientApi["🔌 Register Patient API"]
     ResultReviewApi["🔌 Result Review API"]
     SearchPatientApi["🔌 Search Patient API"]
+    SelectedFeeApi["🔌 選定療養費 API"]
     SendFollowUpMessageApi["🔌 Send Follow-Up Message API"]
+    SettlementApi["🔌 精算 API"]
     SignEncounterApi["🔌 Sign Encounter API"]
-    SubmitClaimApi["🔌 Submit Claim API"]
+    SubmitClaimApi["🔌 オンライン請求 API"]
     UpdateDemographicsApi["🔌 Update Demographics API"]
-    AccountBalance[("🗄️ Account Balance")]
+    AccountBalance[("🗄️ 未収金残高")]
     Appointment[("🗄️ Appointment")]
     CarePlan[("🗄️ Care Plan")]
     Charge[("🗄️ Charge")]
-    Claim[("🗄️ Claim")]
+    ClaimStatement[("🗄️ レセプト")]
     ClinicalOrder[("🗄️ Clinical Order")]
     ConsentRecord[("🗄️ Consent Record")]
     Diagnosis[("🗄️ Diagnosis")]
-    EligibilityCheck[("🗄️ Eligibility Check")]
+    EligibilityCheck[("🗄️ 資格確認")]
     Encounter[("🗄️ Encounter")]
-    InsurancePolicy[("🗄️ Insurance Policy")]
+    InsurancePolicy[("🗄️ 保険資格")]
     IntakePacket[("🗄️ Intake Packet")]
     LabResult[("🗄️ Lab Result")]
     Notification[("🗄️ Notification")]
@@ -160,9 +234,21 @@ flowchart LR
     PatientProfile[("🗄️ Patient Profile")]
     PaymentTransaction[("🗄️ Payment Transaction")]
     ProviderSchedule[("🗄️ Provider Schedule")]
+    ReferralLetter[("🗄️ 紹介状・診療情報提供書")]
     Room[("🗄️ Room")]
+    SelectedTreatmentFeeSetting[("🗄️ 選定療養費の設定")]
     VitalSign[("🗄️ Vital Sign")]
+    BurdenRatio["🎚️ 負担割合"]
+    ChargeKind["🎚️ 診療費の種類"]
+    LimitCategory["🎚️ 限度額適用区分"]
+    PayerChange["🎚️ 資格変更の種類"]
+    ReferralCategory["🎚️ 紹介の有無"]
+    CopayCappedAtLimit{"🔀 窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"}
+    OrderConfirmedByPhysician{"🔀 医師が確定したオーダ"}
+    TransferNotPossible{"🔀 振替・分割の対象外（負担割合の相違・公費）"}
+    UnreferredFirstVisit{"🔀 紹介状なしの初診で、除外に当たらない"}
   end
+  Nurse -.->|has_permission| ProxyOrderEntry
   Nurse -.->|has_permission| EncounterOpen
   Nurse -.->|has_permission| VitalsRecord
   Nurse -.->|has_permission| ClinicalOrderWrite
@@ -171,26 +257,33 @@ flowchart LR
   Nurse -->|performs| BucOrdersResults
   Nurse -->|performs| OpenEncounter
   Nurse -->|performs| RecordVitals
-  Nurse -->|performs| CompleteAppointment
+  Nurse -->|performs| CompleteConsultation
+  Nurse -->|performs| PrintSpecimenLabel
   Nurse -->|performs| CollectSpecimen
+  Nurse -->|performs| RegisterPerformedProcedure
   Nurse -->|performs| ReceiveLabResult
+  Clinician -.->|has_permission| ReferralManage
   Clinician -.->|has_permission| EncounterOpen
   Clinician -.->|has_permission| ClinicalDocument
   Clinician -.->|has_permission| EncounterSign
   Clinician -.->|has_permission| ClinicalOrderWrite
   Clinician -.->|has_permission| LabResultManage
   Clinician -->|performs| BucClinicalEncounter
-  Clinician -->|performs| BucOrdersResults
   Clinician -->|performs| DocumentAssessment
   Clinician -->|performs| SignEncounter
   Clinician -->|performs| AmendEncounter
+  Clinician -->|performs| IssueReferralLetter
   Clinician -->|performs| PlaceLabOrder
+  Clinician -->|performs| ConfirmProxyOrder
   Clinician -->|performs| ReviewLabResult
   Clinician -->|performs| NotifyCriticalResult
   Clinician -->|performs| CancelClinicalOrder
-  PaymentPostApi -.->|creates| PaymentTransaction
+  SubmitClaimApi -.->|requires_permission| BillingClaimWrite
+  SubmitClaimApi -.->|updates| ClaimStatement
+  ClaimResultApi -.->|requires_permission| BillingClaimWrite
+  ClaimResultApi -.->|updates| ClaimStatement
   PaymentPostApi -.->|requires_permission| PaymentPost
-  PaymentPostApi -.->|updates| Claim
+  PaymentPostApi -.->|updates| ClaimStatement
   BalanceApi -.->|reads| PaymentTransaction
   BalanceApi -.->|requires_permission| PaymentPost
   BalanceApi -.->|updates| AccountBalance
@@ -207,9 +300,12 @@ flowchart LR
   SignEncounterApi -.->|updates| Encounter
   AmendEncounterApi -.->|requires_permission| EncounterSign
   AmendEncounterApi -.->|updates| Encounter
-  CompleteAppointmentApi -.->|requires_permission| EncounterOpen
-  CompleteAppointmentApi -.->|updates| Appointment
-  CompleteAppointmentApi -.->|updates| Room
+  IssueReferralLetterApi -.->|creates| ReferralLetter
+  IssueReferralLetterApi -.->|reads| Encounter
+  IssueReferralLetterApi -.->|requires_permission| ReferralManage
+  CompleteConsultationApi -.->|requires_permission| EncounterOpen
+  CompleteConsultationApi -.->|updates| Appointment
+  CompleteConsultationApi -.->|updates| Room
   CreateCarePlanApi -.->|creates| CarePlan
   CreateCarePlanApi -.->|reads| Encounter
   CreateCarePlanApi -.->|requires_permission| FollowUpManage
@@ -223,6 +319,15 @@ flowchart LR
   OrderEntryApi -.->|creates| ClinicalOrder
   OrderEntryApi -.->|reads| Encounter
   OrderEntryApi -.->|requires_permission| ClinicalOrderWrite
+  ProxyOrderApi -.->|creates| ClinicalOrder
+  ProxyOrderApi -.->|reads| Encounter
+  ProxyOrderApi -.->|requires_permission| ProxyOrderEntry
+  ConfirmOrderApi -.->|requires_permission| ClinicalOrderWrite
+  ConfirmOrderApi -.->|updates| ClinicalOrder
+  PerformedProcedureApi -.->|creates| Charge
+  PerformedProcedureApi -.->|reads| Encounter
+  PerformedProcedureApi -.->|reads| ClinicalOrder
+  PerformedProcedureApi -.->|requires_permission| ClinicalOrderWrite
   CollectSpecimenApi -.->|requires_permission| ClinicalOrderWrite
   CollectSpecimenApi -.->|updates| ClinicalOrder
   ReceiveLabResultApi -.->|creates| LabResult
@@ -251,34 +356,67 @@ flowchart LR
   IntakeMessagingApi -.->|creates| PatientMessage
   IntakeMessagingApi -.->|creates| IntakePacket
   IntakeMessagingApi -.->|requires_permission| PatientMessageSend
+  CalculateVisitBillApi -.->|reads| Charge
+  CalculateVisitBillApi -.->|reads| InsurancePolicy
+  CalculateVisitBillApi -.->|requires_permission| BillCalculate
+  CalculateVisitBillApi -.->|updates| Appointment
+  SelectedFeeApi -.->|creates| Charge
+  SelectedFeeApi -.->|reads| Encounter
+  SelectedFeeApi -.->|reads| SelectedTreatmentFeeSetting
+  SelectedFeeApi -.->|requires_permission| BillCalculate
+  SettlementApi -.->|creates| PaymentTransaction
+  SettlementApi -.->|requires_permission| PaymentCollect
+  SettlementApi -.->|updates| Appointment
+  SettlementApi -.->|updates| AccountBalance
+  ReceiptApi -.->|reads| Charge
+  ReceiptApi -.->|reads| PaymentTransaction
+  ReceiptApi -.->|requires_permission| PaymentCollect
+  ReceiptApi -.->|updates| Appointment
   AppointmentNoticeApi -.->|creates| PatientMessage
   AppointmentNoticeApi -.->|creates| Notification
   CreateChargeApi -.->|creates| Charge
   CreateChargeApi -.->|reads| Encounter
-  CreateChargeApi -.->|requires_permission| BillingClaimWrite
-  CreateChargeApi -.->|updates| AccountBalance
-  GenerateClaimApi -.->|creates| Claim
+  GenerateClaimApi -.->|creates| ClaimStatement
+  GenerateClaimApi -.->|reads| Charge
   GenerateClaimApi -.->|reads| InsurancePolicy
   GenerateClaimApi -.->|requires_permission| BillingClaimWrite
-  GenerateClaimApi -.->|updates| Charge
-  SubmitClaimApi -.->|requires_permission| BillingClaimWrite
-  SubmitClaimApi -.->|updates| Claim
+  ClaimEditApi -.->|requires_permission| BillingClaimWrite
+  ClaimEditApi -.->|updates| ClaimStatement
+  BucVisitPayment -.->|belongs| RevenueCycle
+  BucVisitPayment -->|contains| VisitPaymentFlow
+  BucVisitPayment -->|contains| CalculateVisitBill
+  BucVisitPayment -->|contains| ApplySelectedTreatmentFee
+  BucVisitPayment -->|contains| CallPatientForPayment
+  BucVisitPayment -->|contains| SettleAtWindow
+  BucVisitPayment -->|contains| SettleAtKiosk
+  BucVisitPayment -->|contains| IssueReceipt
   BucBillingClaims -.->|belongs| RevenueCycle
-  BucBillingClaims -->|contains| SubmitClaim
+  BucBillingClaims -->|contains| ClaimCycleFlow
+  BucBillingClaims -->|contains| InspectClaimStatement
+  BucBillingClaims -->|contains| HoldClaimStatement
+  BucBillingClaims -->|contains| ReleaseHeldStatement
+  BucBillingClaims -->|contains| SubmitClaimStatements
+  BucBillingClaims -->|contains| RecordReceiptError
+  BucBillingClaims -->|contains| ResendErroredStatement
   BucBillingClaims -->|contains| ReceiveClaimAccepted
-  BucBillingClaims -->|contains| RecordClaimDenial
+  BucBillingClaims -->|contains| ReviewClaimTransfer
+  BucBillingClaims -->|contains| RecordClaimReturn
+  BucBillingClaims -->|contains| CorrectReturnedStatement
+  BucBillingClaims -->|contains| RecordClaimAssessment
+  BucBillingClaims -->|contains| RequestReexamination
   BucBillingClaims -->|contains| PostPayment
   BucBillingClaims -->|contains| ReconcileBalance
   BucBillingClaims -->|contains| VoidCharge
   BucBillingClaims -->|contains| CreateCharge
-  BucBillingClaims -->|contains| GenerateClaim
+  BucBillingClaims -->|contains| GenerateClaimStatement
   BucClinicalEncounter -.->|belongs| CareDelivery
   BucClinicalEncounter -->|contains| OpenEncounter
   BucClinicalEncounter -->|contains| RecordVitals
   BucClinicalEncounter -->|contains| DocumentAssessment
   BucClinicalEncounter -->|contains| SignEncounter
   BucClinicalEncounter -->|contains| AmendEncounter
-  BucClinicalEncounter -->|contains| CompleteAppointment
+  BucClinicalEncounter -->|contains| IssueReferralLetter
+  BucClinicalEncounter -->|contains| CompleteConsultation
   BucFollowupCare -.->|belongs| PatientAccess
   BucFollowupCare -->|contains| CreateCarePlan
   BucFollowupCare -->|contains| SendFollowUpMessage
@@ -288,7 +426,11 @@ flowchart LR
   BucFollowupCare -->|contains| NotifyPatientResult
   BucOrdersResults -.->|belongs| CareDelivery
   BucOrdersResults -->|contains| PlaceLabOrder
+  BucOrdersResults -->|contains| EnterProxyOrder
+  BucOrdersResults -->|contains| ConfirmProxyOrder
+  BucOrdersResults -->|contains| PrintSpecimenLabel
   BucOrdersResults -->|contains| CollectSpecimen
+  BucOrdersResults -->|contains| RegisterPerformedProcedure
   BucOrdersResults -->|contains| ReceiveLabResult
   BucOrdersResults -->|contains| ReviewLabResult
   BucOrdersResults -->|contains| NotifyCriticalResult
@@ -304,6 +446,18 @@ flowchart LR
   BucPatientOnboarding -->|contains| ExpireIntakeForms
   BucPatientOnboarding -->|contains| MergeDuplicatePatient
   BucPatientOnboarding -->|contains| ArchivePatient
+  TransferNotPossible -.->|applies_to| RecordClaimReturn
+  TransferNotPossible -.->|combines| ClaimStatement
+  TransferNotPossible -.->|combines| PayerChange
+  OrderConfirmedByPhysician -.->|applies_to| CollectSpecimen
+  OrderConfirmedByPhysician -.->|combines| ClinicalOrder
+  CopayCappedAtLimit -.->|applies_to| CalculateVisitBill
+  CopayCappedAtLimit -.->|combines| Appointment
+  CopayCappedAtLimit -.->|combines| BurdenRatio
+  CopayCappedAtLimit -.->|combines| LimitCategory
+  UnreferredFirstVisit -.->|applies_to| ApplySelectedTreatmentFee
+  UnreferredFirstVisit -.->|combines| ReferralCategory
+  UnreferredFirstVisit -.->|combines| ChargeKind
   Appointment ---|N:1| PatientAccount
   Appointment ---|N:1| Room
   Encounter ---|N:1| PatientAccount
@@ -313,11 +467,12 @@ flowchart LR
   ClinicalOrder ---|N:1| Encounter
   LabResult ---|1:1| ClinicalOrder
   Charge ---|N:1| Encounter
-  Charge ---|N:1| Claim
-  Claim ---|N:1| PatientAccount
-  Claim ---|N:1| InsurancePolicy
-  PaymentTransaction ---|N:1| Claim
+  Charge ---|N:1| ClaimStatement
+  ClaimStatement ---|N:1| PatientAccount
+  ClaimStatement ---|N:1| InsurancePolicy
+  PaymentTransaction ---|N:1| Appointment
   AccountBalance ---|1:1| PatientAccount
+  ReferralLetter ---|N:1| PatientAccount
   CarePlan ---|N:1| Encounter
   CarePlan ---|N:1| PatientAccount
   PatientMessage ---|N:1| PatientAccount
@@ -327,7 +482,16 @@ flowchart LR
   EligibilityCheck ---|N:1| InsurancePolicy
   ConsentRecord ---|N:1| PatientAccount
   IntakePacket ---|N:1| PatientAccount
-  EvPaymentSettled -.->|triggers| PostPayment
+  EvPaymentSettled -.->|triggers| SettleAtKiosk
+  EvBillCalculated -.->|triggers| PaymentGateway
+  EvBillCalculated -.->|triggers| CallPatientForPayment
+  EvClaimStatementsSubmitted -.->|triggers| ClaimsReviewOrganization
+  EvClaimReceiptError -.->|triggers| RecordReceiptError
+  EvClaimAccepted -.->|triggers| ReceiveClaimAccepted
+  EvClaimReturned -.->|triggers| RecordClaimReturn
+  EvClaimAssessed -.->|triggers| RecordClaimAssessment
+  EvClaimTransferred -.->|triggers| ReviewClaimTransfer
+  EvRemittance -.->|triggers| PostPayment
   EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
   EvAppointmentScheduled -.->|triggers| MessagingGateway
   EvAppointmentScheduled -.->|triggers| SendIntakeForms
@@ -338,10 +502,11 @@ flowchart LR
   EvAppointmentCheckedIn -.->|triggers| OpenEncounter
   EvAppointmentCancelled -.->|triggers| MessagingGateway
   EvAppointmentCancelled -.->|triggers| SendAppointmentNotice
+  EvEncounterSigned -.->|triggers| BucVisitPayment
   EvEncounterSigned -.->|triggers| BucBillingClaims
   EvEncounterSigned -.->|triggers| BucFollowupCare
   EvEncounterSigned -.->|triggers| BucOrdersResults
-  EvEncounterSigned -.->|triggers| CompleteAppointment
+  EvEncounterSigned -.->|triggers| CompleteConsultation
   EvEncounterSigned -.->|triggers| CreateCarePlan
   EvEncounterSigned -.->|triggers| PlaceLabOrder
   EvEncounterSigned -.->|triggers| CreateCharge
@@ -349,25 +514,134 @@ flowchart LR
   EvClinicalOrderReviewed -.->|triggers| NotifyPatientResult
   EvClinicalOrderReviewed -.->|triggers| NotifyCriticalResult
   EvLabResultReceived -.->|triggers| ReceiveLabResult
-  EvEligibilityChecked -.->|triggers| VerifyInsurance
-  EligibilityService -.->|raises| EvEligibilityChecked
   PaymentGateway -.->|raises| EvPaymentSettled
-  LabSystem -.->|raises| EvLabResultReceived
+  OutsourcedLabSystem -.->|raises| EvLabResultReceived
+  ClaimsReviewOrganization -.->|raises| EvClaimReceiptError
+  ClaimsReviewOrganization -.->|raises| EvClaimAccepted
+  ClaimsReviewOrganization -.->|raises| EvClaimReturned
+  ClaimsReviewOrganization -.->|raises| EvClaimAssessed
+  ClaimsReviewOrganization -.->|raises| EvClaimTransferred
+  ClaimsReviewOrganization -.->|raises| EvRemittance
+  KioskReferenceField -.->|maps_field| PaymentTransaction
+  ReferralDirectionField -.->|maps_field| ReferralLetter
+  PaymentAmountField -.->|maps_field| PaymentTransaction
+  ChargeCodeField -.->|maps_field| Charge
+  ClaimCycleFlow -->|contains| CreateStatementStep
+  ClaimCycleFlow -->|contains| InspectStep
+  ClaimCycleFlow -->|contains| HoldStep
+  ClaimCycleFlow -->|contains| SubmitStep
+  ClaimCycleFlow -->|contains| ReceiptErrorStep
+  ClaimCycleFlow -->|contains| ReviewStep
+  ClaimCycleFlow -->|contains| ReturnStep
+  ClaimCycleFlow -->|contains| AssessStep
+  ClaimCycleFlow -->|contains| PaidStep
+  VisitPaymentFlow -->|contains| CalculationStep
+  VisitPaymentFlow -->|contains| CallStep
+  VisitPaymentFlow -->|contains| WindowStep
+  VisitPaymentFlow -->|contains| KioskStep
+  VisitPaymentFlow -->|contains| ReceiptStep
+  ReferralLetterScreen -->|contains| ReferralDirectionField
   PatientSearchScreen -.->|shows| PatientAccount
   PatientProfileScreen -.->|shows| PatientProfile
+  BillCalculationScreen -->|contains| ChargeCodeField
+  PaymentWindowScreen -->|contains| PaymentAmountField
+  KioskScreen -->|contains| KioskReferenceField
+  CreateStatementStep -.->|covers| MonthlyClaimCreation
+  CreateStatementStep -.->|covers| GenerateClaimStatement
+  CreateStatementStep -.->|precedes| InspectStep
+  CalculationStep -.->|covers| CalculateVisitBill
+  CalculationStep -.->|covers| ApplySelectedTreatmentFee
+  CalculationStep -.->|precedes| CallStep
+  CallStep -.->|branches| KioskStep
+  CallStep -.->|covers| CallPatientForPayment
+  CallStep -.->|precedes| WindowStep
+  WindowStep -.->|covers| SettleAtWindow
+  WindowStep -.->|precedes| ReceiptStep
+  KioskStep -.->|covers| EvPaymentSettled
+  KioskStep -.->|covers| SettleAtKiosk
+  KioskStep -.->|precedes| ReceiptStep
+  ReceiptStep -.->|covers| IssueReceipt
+  InspectStep -.->|branches| HoldStep
+  InspectStep -.->|covers| InspectClaimStatement
+  InspectStep -.->|precedes| SubmitStep
+  HoldStep -.->|covers| HoldClaimStatement
+  HoldStep -.->|covers| ReleaseHeldStatement
+  HoldStep -.->|repeats| InspectStep
+  SubmitStep -.->|covers| MonthlyClaimDeadline
+  SubmitStep -.->|covers| SubmitClaimStatements
+  SubmitStep -.->|excepts| ReceiptErrorStep
+  SubmitStep -.->|precedes| ReviewStep
+  ReceiptErrorStep -.->|covers| ErrorResendWindow
+  ReceiptErrorStep -.->|covers| RecordReceiptError
+  ReceiptErrorStep -.->|covers| ResendErroredStatement
+  ReceiptErrorStep -.->|repeats| SubmitStep
+  ReviewStep -.->|branches| AssessStep
+  ReviewStep -.->|covers| ReceiveClaimAccepted
+  ReviewStep -.->|covers| ReviewClaimTransfer
+  ReviewStep -.->|excepts| ReturnStep
+  ReviewStep -.->|precedes| PaidStep
+  ReturnStep -.->|covers| RecordClaimReturn
+  ReturnStep -.->|covers| CorrectReturnedStatement
+  ReturnStep -.->|repeats| InspectStep
+  AssessStep -.->|covers| RecordClaimAssessment
+  AssessStep -.->|covers| RequestReexamination
+  AssessStep -.->|precedes| PaidStep
+  PaidStep -.->|covers| PostPayment
   IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
-  SubmitClaim -.->|displays| ClaimScreen
-  SubmitClaim -.->|invokes| SubmitClaimApi
-  SubmitClaim -.->|requires_medium| BillingWorkstation
-  SubmitClaim -.->|requires_permission| BillingClaimWrite
+  MonthlyClaimCreation -.->|triggers| GenerateClaimStatement
+  MonthlyClaimDeadline -.->|triggers| SubmitClaimStatements
+  ErrorResendWindow -.->|triggers| ResendErroredStatement
+  ReturnDownloadCheck -.->|triggers| RecordClaimReturn
+  ReceivablesMonthlyReview -.->|triggers| ReconcileBalance
+  InspectClaimStatement -.->|displays| ClaimScreen
+  InspectClaimStatement -.->|invokes| ClaimEditApi
+  InspectClaimStatement -.->|requires_medium| BillingWorkstation
+  InspectClaimStatement -.->|requires_permission| BillingClaimWrite
+  HoldClaimStatement -.->|displays| ClaimScreen
+  HoldClaimStatement -.->|invokes| ClaimEditApi
+  HoldClaimStatement -.->|requires_medium| BillingWorkstation
+  HoldClaimStatement -.->|requires_permission| BillingClaimWrite
+  ReleaseHeldStatement -.->|displays| ClaimScreen
+  ReleaseHeldStatement -.->|invokes| ClaimEditApi
+  ReleaseHeldStatement -.->|requires_medium| BillingWorkstation
+  ReleaseHeldStatement -.->|requires_permission| BillingClaimWrite
+  SubmitClaimStatements -.->|displays| ClaimScreen
+  SubmitClaimStatements -.->|invokes| SubmitClaimApi
+  SubmitClaimStatements -.->|raises| EvClaimStatementsSubmitted
+  SubmitClaimStatements -.->|requires_medium| OnlineClaimTerminal
+  SubmitClaimStatements -.->|requires_permission| BillingClaimWrite
+  RecordReceiptError -.->|displays| ClaimScreen
+  RecordReceiptError -.->|invokes| ClaimResultApi
+  RecordReceiptError -.->|requires_medium| OnlineClaimTerminal
+  RecordReceiptError -.->|requires_permission| BillingClaimWrite
+  ResendErroredStatement -.->|displays| ClaimScreen
+  ResendErroredStatement -.->|invokes| SubmitClaimApi
+  ResendErroredStatement -.->|requires_medium| OnlineClaimTerminal
+  ResendErroredStatement -.->|requires_permission| BillingClaimWrite
   ReceiveClaimAccepted -.->|displays| ClaimScreen
-  ReceiveClaimAccepted -.->|requires_medium| BillingWorkstation
+  ReceiveClaimAccepted -.->|invokes| ClaimResultApi
+  ReceiveClaimAccepted -.->|requires_medium| OnlineClaimTerminal
   ReceiveClaimAccepted -.->|requires_permission| BillingClaimWrite
-  ReceiveClaimAccepted -.->|updates| Claim
-  RecordClaimDenial -.->|displays| ClaimScreen
-  RecordClaimDenial -.->|requires_medium| BillingWorkstation
-  RecordClaimDenial -.->|requires_permission| BillingClaimWrite
-  RecordClaimDenial -.->|updates| Claim
+  ReviewClaimTransfer -.->|displays| ClaimScreen
+  ReviewClaimTransfer -.->|reads| ClaimStatement
+  ReviewClaimTransfer -.->|requires_medium| OnlineClaimTerminal
+  ReviewClaimTransfer -.->|requires_permission| BillingClaimWrite
+  RecordClaimReturn -.->|displays| ClaimScreen
+  RecordClaimReturn -.->|invokes| ClaimResultApi
+  RecordClaimReturn -.->|requires_medium| OnlineClaimTerminal
+  RecordClaimReturn -.->|requires_permission| BillingClaimWrite
+  CorrectReturnedStatement -.->|displays| ClaimScreen
+  CorrectReturnedStatement -.->|invokes| ClaimEditApi
+  CorrectReturnedStatement -.->|requires_medium| BillingWorkstation
+  CorrectReturnedStatement -.->|requires_permission| BillingClaimWrite
+  RecordClaimAssessment -.->|displays| ClaimScreen
+  RecordClaimAssessment -.->|invokes| ClaimResultApi
+  RecordClaimAssessment -.->|requires_medium| OnlineClaimTerminal
+  RecordClaimAssessment -.->|requires_permission| BillingClaimWrite
+  RequestReexamination -.->|displays| ClaimScreen
+  RequestReexamination -.->|invokes| SubmitClaimApi
+  RequestReexamination -.->|requires_medium| OnlineClaimTerminal
+  RequestReexamination -.->|requires_permission| BillingClaimWrite
   PostPayment -.->|displays| PaymentPostingScreen
   PostPayment -.->|invokes| PaymentPostApi
   PostPayment -.->|requires_medium| BillingWorkstation
@@ -401,10 +675,14 @@ flowchart LR
   AmendEncounter -.->|invokes| AmendEncounterApi
   AmendEncounter -.->|requires_medium| ClinicalWorkstation
   AmendEncounter -.->|requires_permission| EncounterSign
-  CompleteAppointment -.->|displays| EncounterWorkspaceScreen
-  CompleteAppointment -.->|invokes| CompleteAppointmentApi
-  CompleteAppointment -.->|requires_medium| NurseStation
-  CompleteAppointment -.->|requires_permission| EncounterOpen
+  IssueReferralLetter -.->|displays| ReferralLetterScreen
+  IssueReferralLetter -.->|invokes| IssueReferralLetterApi
+  IssueReferralLetter -.->|requires_medium| ClinicalWorkstation
+  IssueReferralLetter -.->|requires_permission| ReferralManage
+  CompleteConsultation -.->|displays| EncounterWorkspaceScreen
+  CompleteConsultation -.->|invokes| CompleteConsultationApi
+  CompleteConsultation -.->|requires_medium| NurseStation
+  CompleteConsultation -.->|requires_permission| EncounterOpen
   CreateCarePlan -.->|displays| CarePlanScreen
   CreateCarePlan -.->|invokes| CreateCarePlanApi
   CreateCarePlan -.->|requires_medium| CareCoordinationConsole
@@ -436,10 +714,26 @@ flowchart LR
   PlaceLabOrder -.->|invokes| OrderEntryApi
   PlaceLabOrder -.->|requires_medium| ClinicalWorkstation
   PlaceLabOrder -.->|requires_permission| ClinicalOrderWrite
+  EnterProxyOrder -.->|displays| OrderEntryScreen
+  EnterProxyOrder -.->|invokes| ProxyOrderApi
+  EnterProxyOrder -.->|requires_medium| ClinicalWorkstation
+  EnterProxyOrder -.->|requires_permission| ProxyOrderEntry
+  ConfirmProxyOrder -.->|displays| OrderEntryScreen
+  ConfirmProxyOrder -.->|invokes| ConfirmOrderApi
+  ConfirmProxyOrder -.->|requires_medium| ClinicalWorkstation
+  ConfirmProxyOrder -.->|requires_permission| ClinicalOrderWrite
+  PrintSpecimenLabel -.->|displays| SpecimenScreen
+  PrintSpecimenLabel -.->|reads| ClinicalOrder
+  PrintSpecimenLabel -.->|requires_medium| NurseStation
+  PrintSpecimenLabel -.->|requires_permission| ClinicalOrderWrite
   CollectSpecimen -.->|displays| SpecimenScreen
   CollectSpecimen -.->|invokes| CollectSpecimenApi
   CollectSpecimen -.->|requires_medium| NurseStation
   CollectSpecimen -.->|requires_permission| ClinicalOrderWrite
+  RegisterPerformedProcedure -.->|displays| SpecimenScreen
+  RegisterPerformedProcedure -.->|invokes| PerformedProcedureApi
+  RegisterPerformedProcedure -.->|requires_medium| NurseStation
+  RegisterPerformedProcedure -.->|requires_permission| ClinicalOrderWrite
   ReceiveLabResult -.->|displays| ResultReviewScreen
   ReceiveLabResult -.->|invokes| ReceiveLabResultApi
   ReceiveLabResult -.->|requires_medium| NurseStation
@@ -504,9 +798,31 @@ flowchart LR
   SendAppointmentNotice -.->|requires_permission| ScheduleRead
   CreateCharge -.->|displays| ChargeWorklistScreen
   CreateCharge -.->|invokes| CreateChargeApi
-  CreateCharge -.->|requires_medium| BillingWorkstation
-  CreateCharge -.->|requires_permission| BillingClaimWrite
-  GenerateClaim -.->|displays| ClaimScreen
-  GenerateClaim -.->|invokes| GenerateClaimApi
-  GenerateClaim -.->|requires_medium| BillingWorkstation
-  GenerateClaim -.->|requires_permission| BillingClaimWrite
+  CreateCharge -.->|requires_medium| ClinicalWorkstation
+  CalculateVisitBill -.->|displays| BillCalculationScreen
+  CalculateVisitBill -.->|invokes| CalculateVisitBillApi
+  CalculateVisitBill -.->|raises| EvBillCalculated
+  CalculateVisitBill -.->|requires_medium| BillingWorkstation
+  CalculateVisitBill -.->|requires_permission| BillCalculate
+  ApplySelectedTreatmentFee -.->|displays| BillCalculationScreen
+  ApplySelectedTreatmentFee -.->|invokes| SelectedFeeApi
+  ApplySelectedTreatmentFee -.->|requires_medium| BillingWorkstation
+  ApplySelectedTreatmentFee -.->|requires_permission| BillCalculate
+  CallPatientForPayment -.->|displays| PaymentWindowScreen
+  CallPatientForPayment -.->|reads| Appointment
+  CallPatientForPayment -.->|requires_medium| AccountsWindow
+  SettleAtWindow -.->|displays| PaymentWindowScreen
+  SettleAtWindow -.->|invokes| SettlementApi
+  SettleAtWindow -.->|requires_medium| AccountsWindow
+  SettleAtWindow -.->|requires_permission| PaymentCollect
+  SettleAtKiosk -.->|displays| KioskScreen
+  SettleAtKiosk -.->|invokes| SettlementApi
+  SettleAtKiosk -.->|requires_medium| PaymentKiosk
+  IssueReceipt -.->|displays| PaymentWindowScreen
+  IssueReceipt -.->|invokes| ReceiptApi
+  IssueReceipt -.->|requires_medium| AccountsWindow
+  IssueReceipt -.->|requires_permission| PaymentCollect
+  GenerateClaimStatement -.->|displays| ClaimScreen
+  GenerateClaimStatement -.->|invokes| GenerateClaimApi
+  GenerateClaimStatement -.->|requires_medium| BillingWorkstation
+  GenerateClaimStatement -.->|requires_permission| BillingClaimWrite

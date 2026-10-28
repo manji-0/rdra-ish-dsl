@@ -1,7 +1,7 @@
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
     actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant PatientProfileScreen as 🖥️ Patient Profile Screen
@@ -11,11 +11,11 @@ sequenceDiagram
     participant PatientProfile as 🗄️ Patient Profile
   end
 
-  Note over FrontDesk,PatientProfile: ✅ Update Demographics
-  FrontDesk->>PatientProfileScreen: ✅ Update Demographics
+  Note over Patient,PatientProfile: ✅ Update Demographics
+  Patient->>PatientProfileScreen: ✅ Update Demographics
   PatientProfileScreen->>UpdateDemographicsApi: ✅ Update Demographics
   activate UpdateDemographicsApi
   UpdateDemographicsApi->>PatientProfile: update
   UpdateDemographicsApi-->>PatientProfileScreen: 🖥️ Patient Profile Screen
-  PatientProfileScreen-->>FrontDesk: 🖥️ Patient Profile Screen
+  PatientProfileScreen-->>Patient: 🖥️ Patient Profile Screen
   deactivate UpdateDemographicsApi

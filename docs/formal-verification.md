@@ -132,7 +132,7 @@ warning, which does not fail the run. A cone that stops at the cap decides nothi
 unwitnessed states, its deadlocks, or its actions with no edge, and `verify` lists each
 under `not checked:`. The
 pass ends with a `state models (BFS on N entity cones): ...` summary line. On clinic-ops
-this pass takes about 11 s and 400 MB, most of it the `AccountBalance` cone (1,707,212
+this pass takes about 13 s and 350 MB; its largest cone is `Charge` (969,167
 states).
 
 ```

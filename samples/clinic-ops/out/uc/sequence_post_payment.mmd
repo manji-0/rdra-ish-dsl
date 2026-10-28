@@ -1,25 +1,20 @@
 sequenceDiagram
   box System Value
-    actor BillingSpecialist as 👤 Billing Specialist
+    actor ClaimsClerk as 👤 医事課 レセプト担当
   end
   box System Boundary
-    participant PaymentPostingScreen as 🖥️ Payment Posting Screen
+    participant PaymentPostingScreen as 🖥️ 入金画面
   end
   box System
-    participant PaymentPostApi as 🔌 Payment Posting API
-    participant Claim as 🗄️ Claim
-    participant PaymentTransaction as 🗄️ Payment Transaction
+    participant PaymentPostApi as 🔌 入金 API
+    participant ClaimStatement as 🗄️ レセプト
   end
 
-  Note over BillingSpecialist,PaymentTransaction: ✅ Post Payment
-  BillingSpecialist->>PaymentPostingScreen: ✅ Post Payment
-  PaymentPostingScreen->>PaymentPostApi: ✅ Post Payment
+  Note over ClaimsClerk,ClaimStatement: ✅ 診療報酬の入金
+  ClaimsClerk->>PaymentPostingScreen: ✅ 診療報酬の入金
+  PaymentPostingScreen->>PaymentPostApi: ✅ 診療報酬の入金
   activate PaymentPostApi
-  rect rgb(245,245,245)
-    Note right of PaymentPostApi: transaction (API atomic boundary)
-    PaymentPostApi->>Claim: update
-    PaymentPostApi->>PaymentTransaction: create
-  end
-  PaymentPostApi-->>PaymentPostingScreen: 🖥️ Payment Posting Screen
-  PaymentPostingScreen-->>BillingSpecialist: 🖥️ Payment Posting Screen
+  PaymentPostApi->>ClaimStatement: update
+  PaymentPostApi-->>PaymentPostingScreen: 🖥️ 入金画面
+  PaymentPostingScreen-->>ClaimsClerk: 🖥️ 入金画面
   deactivate PaymentPostApi

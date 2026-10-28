@@ -1,7 +1,7 @@
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
     actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant ScheduleSearchScreen as 🖥️ Schedule Search Screen
@@ -13,13 +13,13 @@ sequenceDiagram
     participant ProviderSchedule as 🗄️ Provider Schedule
   end
 
-  Note over FrontDesk,ProviderSchedule: ✅ Search Availability
-  FrontDesk->>ScheduleSearchScreen: ✅ Search Availability
+  Note over Patient,ProviderSchedule: ✅ Search Availability
+  Patient->>ScheduleSearchScreen: ✅ Search Availability
   ScheduleSearchScreen->>SearchAvailabilityApi: ✅ Search Availability
   activate SearchAvailabilityApi
   SearchAvailabilityApi->>ProviderSchedule: read
   SearchAvailabilityApi->>Provider: read
   SearchAvailabilityApi->>ClinicLocation: read
   SearchAvailabilityApi-->>ScheduleSearchScreen: 🖥️ Schedule Search Screen
-  ScheduleSearchScreen-->>FrontDesk: 🖥️ Schedule Search Screen
+  ScheduleSearchScreen-->>Patient: 🖥️ Schedule Search Screen
   deactivate SearchAvailabilityApi

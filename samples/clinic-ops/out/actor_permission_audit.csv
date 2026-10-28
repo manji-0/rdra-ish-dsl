@@ -1,46 +1,38 @@
 actor_id,actor_label,permission_id,permission_label,assigned,required,status,required_usecase_ids,required_api_paths
-BillingSpecialist,Billing Specialist,BillingClaimWrite,Billing Claim Write,true,true,ok,CreateCharge|GenerateClaim|ReceiveClaimAccepted|RecordClaimDenial|SubmitClaim|VoidCharge,CreateCharge->CreateChargeApi|GenerateClaim->GenerateClaimApi|SubmitClaim->SubmitClaimApi
-BillingSpecialist,Billing Specialist,PaymentPost,Payment Post,true,true,ok,PostPayment|ReconcileBalance,PostPayment->PaymentPostApi|ReconcileBalance->BalanceApi
+AccountsClerk,医事課 会計担当,BillCalculate,会計計算,true,true,ok,ApplySelectedTreatmentFee|CalculateVisitBill,ApplySelectedTreatmentFee->SelectedFeeApi|CalculateVisitBill->CalculateVisitBillApi
+AccountsClerk,医事課 会計担当,PaymentCollect,窓口収納,true,true,ok,IssueReceipt|SettleAtWindow,IssueReceipt->ReceiptApi|SettleAtKiosk->SettlementApi|SettleAtWindow->SettlementApi
 CareCoordinator,Care Coordinator,FollowUpManage,Follow-Up Manage,true,true,ok,CloseCarePlan|CreateCarePlan|ReviewPatientResponse|ScheduleFollowUpVisit,CreateCarePlan->CreateCarePlanApi
 CareCoordinator,Care Coordinator,PatientMessageSend,Patient Message Send,true,true,ok,NotifyPatientResult|SendFollowUpMessage,NotifyPatientResult->NotifyPatientResultApi|SendFollowUpMessage->SendFollowUpMessageApi
 CareCoordinator,Care Coordinator,ScheduleWrite,Schedule Write,true,true,ok,ScheduleFollowUpVisit,ScheduleFollowUpVisit->FollowUpScheduleApi
+ClaimsClerk,医事課 レセプト担当,BillingClaimWrite,レセプト業務,true,true,ok,CorrectReturnedStatement|GenerateClaimStatement|HoldClaimStatement|InspectClaimStatement|ReceiveClaimAccepted|RecordClaimAssessment|RecordClaimReturn|RecordReceiptError|ReleaseHeldStatement|RequestReexamination|ResendErroredStatement|ReviewClaimTransfer|SubmitClaimStatements|VoidCharge,CorrectReturnedStatement->ClaimEditApi|GenerateClaimStatement->GenerateClaimApi|HoldClaimStatement->ClaimEditApi|InspectClaimStatement->ClaimEditApi|ReceiveClaimAccepted->ClaimResultApi|RecordClaimAssessment->ClaimResultApi|RecordClaimReturn->ClaimResultApi|RecordReceiptError->ClaimResultApi|ReleaseHeldStatement->ClaimEditApi|RequestReexamination->SubmitClaimApi|ResendErroredStatement->SubmitClaimApi|SubmitClaimStatements->SubmitClaimApi
+ClaimsClerk,医事課 レセプト担当,PaymentPost,Payment Post,true,true,ok,PostPayment|ReconcileBalance,PostPayment->PaymentPostApi|ReconcileBalance->BalanceApi
 ClinicAdmin,Clinic Administrator,AuditRead,Audit Read,true,true,ok,ReviewAuditEvents,ReviewAuditEvents->AuditApi
 ClinicAdmin,Clinic Administrator,AuditResolve,Audit Resolve,true,true,ok,ResolveAuditFinding,
 ClinicAdmin,Clinic Administrator,ProviderScheduleAdmin,Provider Schedule Admin,true,true,ok,BlockScheduleSlot|ManageProviderSchedule,BlockScheduleSlot->BlockScheduleSlotApi|ManageProviderSchedule->ManageProviderScheduleApi
 ClinicAdmin,Clinic Administrator,RoomAdmin,Room Admin,true,true,ok,ConfigureRoom|ReleaseRoom,ConfigureRoom->RoomAdminApi
-Clinician,Clinician,ClinicalDocument,Clinical Document,true,true,ok,DocumentAssessment,DocumentAssessment->DocumentAssessmentApi
-Clinician,Clinician,ClinicalOrderWrite,Clinical Order Write,true,true,ok,CancelClinicalOrder|CollectSpecimen|PlaceLabOrder,CollectSpecimen->CollectSpecimenApi|PlaceLabOrder->OrderEntryApi
-Clinician,Clinician,EncounterOpen,Encounter Open,true,true,ok,CompleteAppointment|OpenEncounter,CompleteAppointment->CompleteAppointmentApi|OpenEncounter->OpenEncounterApi
-Clinician,Clinician,EncounterSign,Encounter Sign,true,true,ok,AmendEncounter|SignEncounter,AmendEncounter->AmendEncounterApi|SignEncounter->SignEncounterApi
-Clinician,Clinician,LabResultManage,Lab Result Manage,true,true,ok,NotifyCriticalResult|ReceiveLabResult|ReviewLabResult,ReceiveLabResult->ReceiveLabResultApi|ReviewLabResult->ResultReviewApi
-Clinician,Clinician,PatientMessageSend,Patient Message Send,false,true,missing,NotifyCriticalResult,NotifyCriticalResult->CriticalNoticeApi
-Clinician,Clinician,PrescriptionDispense,Prescription Dispense,false,true,missing,ConfirmDispense,ConfirmDispense->ConfirmDispenseApi
-Clinician,Clinician,PrescriptionWrite,Prescription Write,true,true,ok,CancelPrescription|DraftPrescription|RefillPrescription|SearchMedication|SendPrescription,DraftPrescription->DraftPrescriptionApi|RefillPrescription->RefillPrescriptionApi|SearchMedication->MedicationCatalogApi|SendPrescription->SendPrescriptionApi
-Clinician,Clinician,VitalsRecord,Vitals Record,false,true,missing,RecordVitals,RecordVitals->RecordVitalsApi
-FrontDesk,Front Desk Staff,ConsentCapture,Consent Capture,false,true,missing,CaptureConsent|CompleteIntakeForms,CaptureConsent->ConsentApi
-FrontDesk,Front Desk Staff,CopayCollect,Copay Collect,true,true,ok,CollectCopay,CollectCopay->CollectCopayApi
-FrontDesk,Front Desk Staff,EncounterOpen,Encounter Open,false,true,missing,PrepareEncounter,PrepareEncounter->PrepareEncounterApi
-FrontDesk,Front Desk Staff,InsuranceVerify,Insurance Verify,true,true,ok,VerifyInsurance,VerifyInsurance->EligibilityApi
-FrontDesk,Front Desk Staff,IntakeManage,Intake Manage,true,true,ok,ExpireIntakeForms|SendIntakeForms,
-FrontDesk,Front Desk Staff,PatientMessageSend,Patient Message Send,false,true,missing,,SendIntakeForms->IntakeMessagingApi
-FrontDesk,Front Desk Staff,PatientProfileRead,Patient Profile Read,true,true,ok,SearchPatient,SearchPatient->SearchPatientApi
-FrontDesk,Front Desk Staff,PatientProfileWrite,Patient Profile Write,true,true,ok,ArchivePatient|MergeDuplicatePatient|RegisterPatient|UpdateDemographics,RegisterPatient->RegisterPatientApi|UpdateDemographics->UpdateDemographicsApi
-FrontDesk,Front Desk Staff,RoomAssign,Room Assign,false,true,missing,AssignRoom,AssignRoom->AssignRoomApi
-FrontDesk,Front Desk Staff,ScheduleRead,Schedule Read,true,true,ok,SearchAvailability|SendAppointmentNotice,SearchAvailability->SearchAvailabilityApi
-FrontDesk,Front Desk Staff,ScheduleWrite,Schedule Write,true,true,ok,BookAppointment|CancelAppointment|MarkNoShow|RescheduleAppointment|ReserveAppointment,BookAppointment->BookAppointmentApi|CancelAppointment->CancelAppointmentApi|RescheduleAppointment->RescheduleAppointmentApi|ReserveAppointment->ReserveAppointmentApi
-FrontDesk,Front Desk Staff,VisitCheckIn,Visit Check-In,true,true,ok,CheckInPatient|VerifyArrival,CheckInPatient->CheckInPatientApi|VerifyArrival->VerifyArrivalApi
-Nurse,Nurse,ClinicalDocument,Clinical Document,false,true,missing,DocumentAssessment,DocumentAssessment->DocumentAssessmentApi
-Nurse,Nurse,ClinicalOrderWrite,Clinical Order Write,true,true,ok,CancelClinicalOrder|CollectSpecimen|PlaceLabOrder,CollectSpecimen->CollectSpecimenApi|PlaceLabOrder->OrderEntryApi
-Nurse,Nurse,CopayCollect,Copay Collect,false,true,missing,CollectCopay,CollectCopay->CollectCopayApi
-Nurse,Nurse,EncounterOpen,Encounter Open,true,true,ok,CompleteAppointment|OpenEncounter|PrepareEncounter,CompleteAppointment->CompleteAppointmentApi|OpenEncounter->OpenEncounterApi|PrepareEncounter->PrepareEncounterApi
-Nurse,Nurse,EncounterSign,Encounter Sign,false,true,missing,AmendEncounter|SignEncounter,AmendEncounter->AmendEncounterApi|SignEncounter->SignEncounterApi
-Nurse,Nurse,LabResultManage,Lab Result Manage,true,true,ok,NotifyCriticalResult|ReceiveLabResult|ReviewLabResult,ReceiveLabResult->ReceiveLabResultApi|ReviewLabResult->ResultReviewApi
-Nurse,Nurse,PatientMessageSend,Patient Message Send,false,true,missing,NotifyCriticalResult,NotifyCriticalResult->CriticalNoticeApi
-Nurse,Nurse,PrescriptionDispense,Prescription Dispense,true,true,ok,ConfirmDispense,ConfirmDispense->ConfirmDispenseApi
-Nurse,Nurse,PrescriptionWrite,Prescription Write,false,true,missing,CancelPrescription|DraftPrescription|RefillPrescription|SearchMedication|SendPrescription,DraftPrescription->DraftPrescriptionApi|RefillPrescription->RefillPrescriptionApi|SearchMedication->MedicationCatalogApi|SendPrescription->SendPrescriptionApi
-Nurse,Nurse,RoomAssign,Room Assign,true,true,ok,AssignRoom,AssignRoom->AssignRoomApi
-Nurse,Nurse,VisitCheckIn,Visit Check-In,true,true,ok,CheckInPatient|VerifyArrival,CheckInPatient->CheckInPatientApi|VerifyArrival->VerifyArrivalApi
-Nurse,Nurse,VitalsRecord,Vitals Record,true,true,ok,RecordVitals,RecordVitals->RecordVitalsApi
+Clinician,医師,ClinicalDocument,Clinical Document,true,true,ok,DocumentAssessment,DocumentAssessment->DocumentAssessmentApi
+Clinician,医師,ClinicalOrderWrite,Clinical Order Write,true,true,ok,CancelClinicalOrder|ConfirmProxyOrder|PlaceLabOrder,ConfirmProxyOrder->ConfirmOrderApi|PlaceLabOrder->OrderEntryApi
+Clinician,医師,EncounterOpen,Encounter Open,true,true,ok,CompleteConsultation|OpenEncounter,CompleteConsultation->CompleteConsultationApi|OpenEncounter->OpenEncounterApi
+Clinician,医師,EncounterSign,Encounter Sign,true,true,ok,AmendEncounter|SignEncounter,AmendEncounter->AmendEncounterApi|SignEncounter->SignEncounterApi
+Clinician,医師,LabResultManage,Lab Result Manage,true,true,ok,NotifyCriticalResult|ReviewLabResult,ReviewLabResult->ResultReviewApi
+Clinician,医師,PatientMessageSend,Patient Message Send,false,true,missing,NotifyCriticalResult,NotifyCriticalResult->CriticalNoticeApi
+Clinician,医師,PrescriptionDispense,Prescription Dispense,false,true,missing,CounselMedication|DispenseAndAudit|HandOverMedication|RaisePrescriptionInquiry,CounselMedication->DispensingApi|DispenseAndAudit->DispensingApi|HandOverMedication->DispensingApi|RaisePrescriptionInquiry->DispensingApi
+Clinician,医師,PrescriptionWrite,Prescription Write,true,true,ok,AnswerPharmacyInquiry|AnswerPrescriptionInquiry|CancelPrescription|DraftPrescription|IssueInhouseVoucher|IssueOutsidePrescription|IssueRefillPrescription|SearchMedication,AnswerPharmacyInquiry->PrescriptionInquiryApi|AnswerPrescriptionInquiry->PrescriptionInquiryApi|DraftPrescription->DraftPrescriptionApi|IssueInhouseVoucher->IssuePrescriptionApi|IssueOutsidePrescription->IssuePrescriptionApi|IssueRefillPrescription->DraftPrescriptionApi|SearchMedication->MedicationCatalogApi
+Clinician,医師,ReferralManage,紹介状管理,true,true,ok,IssueReferralLetter,IssueReferralLetter->IssueReferralLetterApi
+Clinician,医師,VitalsRecord,Vitals Record,false,true,missing,RecordVitals,RecordVitals->RecordVitalsApi
+MedicalClerk,医師事務作業補助者,ProxyOrderEntry,代行入力,true,true,ok,EnterProxyOrder,EnterProxyOrder->ProxyOrderApi
+Nurse,看護師,ClinicalDocument,Clinical Document,false,true,missing,DocumentAssessment,DocumentAssessment->DocumentAssessmentApi
+Nurse,看護師,ClinicalOrderWrite,Clinical Order Write,true,true,ok,CancelClinicalOrder|CollectSpecimen|ConfirmProxyOrder|PlaceLabOrder|PrintSpecimenLabel|RegisterPerformedProcedure,CollectSpecimen->CollectSpecimenApi|ConfirmProxyOrder->ConfirmOrderApi|PlaceLabOrder->OrderEntryApi|RegisterPerformedProcedure->PerformedProcedureApi
+Nurse,看護師,EncounterOpen,Encounter Open,true,true,ok,CompleteConsultation|OpenEncounter|PrepareEncounter,CompleteConsultation->CompleteConsultationApi|OpenEncounter->OpenEncounterApi|PrepareEncounter->PrepareEncounterApi
+Nurse,看護師,EncounterSign,Encounter Sign,false,true,missing,AmendEncounter|SignEncounter,AmendEncounter->AmendEncounterApi|SignEncounter->SignEncounterApi
+Nurse,看護師,InsuranceVerify,Insurance Verify,false,true,missing,ConfirmEligibilityInOutageMode|RecheckEligibility|RecordEligibilityDeclaration,BatchVerifyEligibility->OnlineEligibilityApi|CheckInPatient->OnlineEligibilityApi|ConfirmEligibilityInOutageMode->EligibilityResultApi|ReceiveEligibilityInvalid->EligibilityResultApi|ReceiveEligibilityNoInfo->EligibilityResultApi|ReceiveEligibilityValid->EligibilityResultApi|RecheckEligibility->EligibilityResultApi|RecordEligibilityDeclaration->EligibilityResultApi
+Nurse,看護師,LabResultManage,Lab Result Manage,true,true,ok,NotifyCriticalResult|ReceiveLabResult|ReviewLabResult,ReceiveLabResult->ReceiveLabResultApi|ReviewLabResult->ResultReviewApi
+Nurse,看護師,PatientMessageSend,Patient Message Send,false,true,missing,NotifyCriticalResult,NotifyCriticalResult->CriticalNoticeApi
+Nurse,看護師,ProxyOrderEntry,代行入力,true,true,ok,EnterProxyOrder,EnterProxyOrder->ProxyOrderApi
+Nurse,看護師,ReferralManage,紹介状管理,false,true,missing,IssueReferralLetter|ReceiveReferralLetter,IssueReferralLetter->IssueReferralLetterApi|ReceiveReferralLetter->ReferralLetterApi
+Nurse,看護師,RoomAssign,Room Assign,true,true,ok,AssignRoom,AssignRoom->AssignRoomApi
+Nurse,看護師,VisitCheckIn,Visit Check-In,true,true,ok,CheckInPatient|VerifyArrival,CheckInPatient->CheckInPatientApi|VerifyArrival->VerifyArrivalApi
+Nurse,看護師,VitalsRecord,Vitals Record,true,true,ok,RecordVitals,RecordVitals->RecordVitalsApi
 Patient,Patient,ConsentCapture,Consent Capture,true,true,ok,CaptureConsent|CompleteIntakeForms,CaptureConsent->ConsentApi
 Patient,Patient,FollowUpManage,Follow-Up Manage,false,true,missing,CloseCarePlan|CreateCarePlan|ReviewPatientResponse|ScheduleFollowUpVisit,CreateCarePlan->CreateCarePlanApi
 Patient,Patient,InsuranceVerify,Insurance Verify,false,true,missing,VerifyInsurance,VerifyInsurance->EligibilityApi
@@ -50,3 +42,16 @@ Patient,Patient,PatientProfileRead,Patient Profile Read,true,true,ok,SearchPatie
 Patient,Patient,PatientProfileWrite,Patient Profile Write,false,true,missing,ArchivePatient|MergeDuplicatePatient|RegisterPatient|UpdateDemographics,RegisterPatient->RegisterPatientApi|UpdateDemographics->UpdateDemographicsApi
 Patient,Patient,ScheduleRead,Schedule Read,true,true,ok,SearchAvailability|SendAppointmentNotice,SearchAvailability->SearchAvailabilityApi
 Patient,Patient,ScheduleWrite,Schedule Write,false,true,missing,BookAppointment|CancelAppointment|MarkNoShow|RescheduleAppointment|ReserveAppointment|ScheduleFollowUpVisit,BookAppointment->BookAppointmentApi|CancelAppointment->CancelAppointmentApi|RescheduleAppointment->RescheduleAppointmentApi|ReserveAppointment->ReserveAppointmentApi|ScheduleFollowUpVisit->FollowUpScheduleApi
+Pharmacist,薬剤師,PrescriptionDispense,Prescription Dispense,true,true,ok,CounselMedication|DispenseAndAudit|HandOverMedication|RaisePrescriptionInquiry,CounselMedication->DispensingApi|DispenseAndAudit->DispensingApi|HandOverMedication->DispensingApi|RaisePrescriptionInquiry->DispensingApi
+ReceptionClerk,医事課 受付担当,ConsentCapture,Consent Capture,false,true,missing,CaptureConsent|CompleteIntakeForms,CaptureConsent->ConsentApi
+ReceptionClerk,医事課 受付担当,EncounterOpen,Encounter Open,false,true,missing,PrepareEncounter,PrepareEncounter->PrepareEncounterApi
+ReceptionClerk,医事課 受付担当,InsuranceVerify,Insurance Verify,true,true,ok,ConfirmEligibilityInOutageMode|RecheckEligibility|RecordEligibilityDeclaration|VerifyInsurance,BatchVerifyEligibility->OnlineEligibilityApi|CheckInPatient->OnlineEligibilityApi|ConfirmEligibilityInOutageMode->EligibilityResultApi|ReceiveEligibilityInvalid->EligibilityResultApi|ReceiveEligibilityNoInfo->EligibilityResultApi|ReceiveEligibilityValid->EligibilityResultApi|RecheckEligibility->EligibilityResultApi|RecordEligibilityDeclaration->EligibilityResultApi|VerifyInsurance->EligibilityApi
+ReceptionClerk,医事課 受付担当,IntakeManage,Intake Manage,true,true,ok,ExpireIntakeForms|SendIntakeForms,
+ReceptionClerk,医事課 受付担当,PatientMessageSend,Patient Message Send,false,true,missing,,SendIntakeForms->IntakeMessagingApi
+ReceptionClerk,医事課 受付担当,PatientProfileRead,Patient Profile Read,true,true,ok,SearchPatient,SearchPatient->SearchPatientApi
+ReceptionClerk,医事課 受付担当,PatientProfileWrite,Patient Profile Write,true,true,ok,ArchivePatient|MergeDuplicatePatient|RegisterPatient|UpdateDemographics,RegisterPatient->RegisterPatientApi|UpdateDemographics->UpdateDemographicsApi
+ReceptionClerk,医事課 受付担当,ReferralManage,紹介状管理,true,true,ok,ReceiveReferralLetter,ReceiveReferralLetter->ReferralLetterApi
+ReceptionClerk,医事課 受付担当,RoomAssign,Room Assign,false,true,missing,AssignRoom,AssignRoom->AssignRoomApi
+ReceptionClerk,医事課 受付担当,ScheduleRead,Schedule Read,true,true,ok,SearchAvailability|SendAppointmentNotice,SearchAvailability->SearchAvailabilityApi
+ReceptionClerk,医事課 受付担当,ScheduleWrite,Schedule Write,true,true,ok,BookAppointment|CancelAppointment|MarkNoShow|RescheduleAppointment|ReserveAppointment,BookAppointment->BookAppointmentApi|CancelAppointment->CancelAppointmentApi|RescheduleAppointment->RescheduleAppointmentApi|ReserveAppointment->ReserveAppointmentApi
+ReceptionClerk,医事課 受付担当,VisitCheckIn,Visit Check-In,true,true,ok,CheckInPatient|VerifyArrival,CheckInPatient->CheckInPatientApi|VerifyArrival->VerifyArrivalApi

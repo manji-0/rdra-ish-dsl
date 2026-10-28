@@ -3,7 +3,6 @@ flowchart LR
     direction TB
     CareCoordinator(["👤 Care Coordinator"])
     Patient(["👤 Patient"])
-    EligibilityService[/"🌐 Insurance Eligibility Service"/]
     MessagingGateway[/"🌐 Messaging Gateway"/]
   end
   subgraph layer_environment[External Environment]
@@ -43,7 +42,7 @@ flowchart LR
     SendFollowUpMessage(["✅ Send Follow-Up Message"])
     SendIntakeForms(["✅ Send Intake Forms"])
     UpdateDemographics(["✅ Update Demographics"])
-    VerifyInsurance(["✅ Verify Insurance"])
+    VerifyInsurance(["✅ 保険資格・限度額情報の登録（新患登録）"])
     AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
     CarePlanScreen[["🖥️ Care Plan Screen"]]
     ConsentScreen[["🖥️ Consent Capture Screen"]]
@@ -57,7 +56,6 @@ flowchart LR
     EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
     EvAppointmentScheduled{"⚡ Appointment Scheduled"}
     EvClinicalOrderReviewed{"⚡ Clinical Result Reviewed"}
-    EvEligibilityChecked{"⚡ Eligibility Checked"}
     EvEncounterSigned{"⚡ Encounter Signed"}
   end
   subgraph layer_system[System]
@@ -76,9 +74,9 @@ flowchart LR
     Appointment[("🗄️ Appointment")]
     CarePlan[("🗄️ Care Plan")]
     ConsentRecord[("🗄️ Consent Record")]
-    EligibilityCheck[("🗄️ Eligibility Check")]
+    EligibilityCheck[("🗄️ 資格確認")]
     Encounter[("🗄️ Encounter")]
-    InsurancePolicy[("🗄️ Insurance Policy")]
+    InsurancePolicy[("🗄️ 保険資格")]
     IntakePacket[("🗄️ Intake Packet")]
     Notification[("🗄️ Notification")]
     PatientAccount[("🗄️ Patient Account")]
@@ -174,8 +172,6 @@ flowchart LR
   EvEncounterSigned -.->|triggers| CreateCarePlan
   EvClinicalOrderReviewed -.->|triggers| BucFollowupCare
   EvClinicalOrderReviewed -.->|triggers| NotifyPatientResult
-  EvEligibilityChecked -.->|triggers| VerifyInsurance
-  EligibilityService -.->|raises| EvEligibilityChecked
   PatientSearchScreen -.->|shows| PatientAccount
   PatientProfileScreen -.->|shows| PatientProfile
   IntakeExpiryCheck -.->|triggers| ExpireIntakeForms

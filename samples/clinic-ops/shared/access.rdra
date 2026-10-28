@@ -7,14 +7,17 @@ has_permission(Patient, PatientProfileRead)
 has_permission(Patient, ConsentCapture)
 has_permission(Patient, ScheduleRead)
 
-has_permission(FrontDesk, PatientProfileRead)
-has_permission(FrontDesk, PatientProfileWrite)
-has_permission(FrontDesk, InsuranceVerify)
-has_permission(FrontDesk, IntakeManage)
-has_permission(FrontDesk, ScheduleRead)
-has_permission(FrontDesk, ScheduleWrite)
-has_permission(FrontDesk, VisitCheckIn)
-has_permission(FrontDesk, CopayCollect)
+has_permission(ReceptionClerk, PatientProfileRead)
+has_permission(ReceptionClerk, PatientProfileWrite)
+has_permission(ReceptionClerk, InsuranceVerify)
+has_permission(ReceptionClerk, IntakeManage)
+has_permission(ReceptionClerk, ScheduleRead)
+has_permission(ReceptionClerk, ScheduleWrite)
+has_permission(ReceptionClerk, VisitCheckIn)
+has_permission(ReceptionClerk, ReferralManage)
+
+has_permission(AccountsClerk, BillCalculate)
+has_permission(AccountsClerk, PaymentCollect)
 
 has_permission(Nurse, VisitCheckIn)
 has_permission(Nurse, RoomAssign)
@@ -22,7 +25,8 @@ has_permission(Nurse, EncounterOpen)
 has_permission(Nurse, VitalsRecord)
 has_permission(Nurse, ClinicalOrderWrite)
 has_permission(Nurse, LabResultManage)
-has_permission(Nurse, PrescriptionDispense)
+// 看護師 also enters orders on the physician's behalf (mhlw-2020-dairi-nyuuryoku.txt:71-79).
+has_permission(Nurse, ProxyOrderEntry)
 
 has_permission(Clinician, EncounterOpen)
 has_permission(Clinician, ClinicalDocument)
@@ -30,9 +34,16 @@ has_permission(Clinician, EncounterSign)
 has_permission(Clinician, ClinicalOrderWrite)
 has_permission(Clinician, LabResultManage)
 has_permission(Clinician, PrescriptionWrite)
+has_permission(Clinician, ReferralManage)
 
-has_permission(BillingSpecialist, BillingClaimWrite)
-has_permission(BillingSpecialist, PaymentPost)
+// 代行入力 drafts an order; the 指示 is the physician's, who checks it before it is carried out
+// (mhlw-2020-dairi-nyuuryoku.txt:9, :15, :71-79).
+has_permission(MedicalClerk, ProxyOrderEntry)
+
+has_permission(Pharmacist, PrescriptionDispense)
+
+has_permission(ClaimsClerk, BillingClaimWrite)
+has_permission(ClaimsClerk, PaymentPost)
 
 has_permission(CareCoordinator, FollowUpManage)
 has_permission(CareCoordinator, PatientMessageSend)

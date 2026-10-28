@@ -1,7 +1,7 @@
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
     actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant PatientSearchScreen as 🖥️ Patient Search Screen
@@ -12,12 +12,12 @@ sequenceDiagram
     participant PatientProfile as 🗄️ Patient Profile
   end
 
-  Note over FrontDesk,PatientProfile: ✅ Search Patient
-  FrontDesk->>PatientSearchScreen: ✅ Search Patient
+  Note over Patient,PatientProfile: ✅ Search Patient
+  Patient->>PatientSearchScreen: ✅ Search Patient
   PatientSearchScreen->>SearchPatientApi: ✅ Search Patient
   activate SearchPatientApi
   SearchPatientApi->>PatientAccount: read
   SearchPatientApi->>PatientProfile: read
   SearchPatientApi-->>PatientSearchScreen: 🖥️ Patient Search Screen
-  PatientSearchScreen-->>FrontDesk: 🖥️ Patient Search Screen
+  PatientSearchScreen-->>Patient: 🖥️ Patient Search Screen
   deactivate SearchPatientApi

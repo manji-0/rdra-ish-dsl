@@ -1,23 +1,26 @@
 sequenceDiagram
   box System Value
-    actor Clinician as 👤 Clinician
-    actor Nurse as 👤 Nurse
+    actor Clinician as 👤 医師
+    actor Nurse as 👤 看護師
   end
   box System Boundary
     participant DiagnosisScreen as 🖥️ Diagnosis Screen
     participant EncounterWorkspaceScreen as 🖥️ Encounter Workspace
+    participant ReferralLetterScreen as 🖥️ 診療情報提供書画面
     participant VitalsScreen as 🖥️ Vitals Screen
   end
   box System
     participant AmendEncounterApi as 🔌 Amend Encounter API
-    participant CompleteAppointmentApi as 🔌 Complete Appointment API
+    participant CompleteConsultationApi as 🔌 診察終了 API
     participant DocumentAssessmentApi as 🔌 Document Assessment API
+    participant IssueReferralLetterApi as 🔌 診療情報提供書 API
     participant OpenEncounterApi as 🔌 Open Encounter API
     participant RecordVitalsApi as 🔌 Record Vitals API
     participant SignEncounterApi as 🔌 Sign Encounter API
     participant Appointment as 🗄️ Appointment
     participant Diagnosis as 🗄️ Diagnosis
     participant Encounter as 🗄️ Encounter
+    participant ReferralLetter as 🗄️ 紹介状・診療情報提供書
     participant Room as 🗄️ Room
     participant VitalSign as 🗄️ Vital Sign
   end
@@ -31,18 +34,18 @@ sequenceDiagram
   EncounterWorkspaceScreen-->>Clinician: 🖥️ Encounter Workspace
   deactivate AmendEncounterApi
 
-  Note over Clinician,VitalSign: ✅ Complete Appointment
-  Clinician->>EncounterWorkspaceScreen: ✅ Complete Appointment
-  EncounterWorkspaceScreen->>CompleteAppointmentApi: ✅ Complete Appointment
-  activate CompleteAppointmentApi
+  Note over Clinician,VitalSign: ✅ 診察終了
+  Clinician->>EncounterWorkspaceScreen: ✅ 診察終了
+  EncounterWorkspaceScreen->>CompleteConsultationApi: ✅ 診察終了
+  activate CompleteConsultationApi
   rect rgb(245,245,245)
-    Note right of CompleteAppointmentApi: transaction (API atomic boundary)
-    CompleteAppointmentApi->>Room: update
-    CompleteAppointmentApi->>Appointment: update
+    Note right of CompleteConsultationApi: transaction (API atomic boundary)
+    CompleteConsultationApi->>Room: update
+    CompleteConsultationApi->>Appointment: update
   end
-  CompleteAppointmentApi-->>EncounterWorkspaceScreen: 🖥️ Encounter Workspace
+  CompleteConsultationApi-->>EncounterWorkspaceScreen: 🖥️ Encounter Workspace
   EncounterWorkspaceScreen-->>Clinician: 🖥️ Encounter Workspace
-  deactivate CompleteAppointmentApi
+  deactivate CompleteConsultationApi
 
   Note over Clinician,VitalSign: ✅ Document Assessment
   Clinician->>DiagnosisScreen: ✅ Document Assessment
@@ -56,6 +59,16 @@ sequenceDiagram
   DocumentAssessmentApi-->>DiagnosisScreen: 🖥️ Diagnosis Screen
   DiagnosisScreen-->>Clinician: 🖥️ Diagnosis Screen
   deactivate DocumentAssessmentApi
+
+  Note over Clinician,VitalSign: ✅ 診療情報提供書の作成・送信
+  Clinician->>ReferralLetterScreen: ✅ 診療情報提供書の作成・送信
+  ReferralLetterScreen->>IssueReferralLetterApi: ✅ 診療情報提供書の作成・送信
+  activate IssueReferralLetterApi
+  IssueReferralLetterApi->>Encounter: read
+  IssueReferralLetterApi->>ReferralLetter: create
+  IssueReferralLetterApi-->>ReferralLetterScreen: 🖥️ 診療情報提供書画面
+  ReferralLetterScreen-->>Clinician: 🖥️ 診療情報提供書画面
+  deactivate IssueReferralLetterApi
 
   Note over Clinician,VitalSign: ✅ Open Encounter
   Clinician->>EncounterWorkspaceScreen: ✅ Open Encounter

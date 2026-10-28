@@ -1,0 +1,91 @@
+sequenceDiagram
+  box System Value
+    actor AccountsClerk as 👤 医事課 会計担当
+  end
+  box System Boundary
+    participant BillCalculationScreen as 🖥️ 会計計算画面
+    participant KioskScreen as 🖥️ 自動精算機画面
+    participant PaymentWindowScreen as 🖥️ 会計窓口画面
+  end
+  box System
+    participant System as 🧩 システム
+    participant CalculateVisitBillApi as 🔌 会計計算 API
+    participant ReceiptApi as 🔌 領収証 API
+    participant SelectedFeeApi as 🔌 選定療養費 API
+    participant SettlementApi as 🔌 精算 API
+    participant AccountBalance as 🗄️ 未収金残高
+    participant Appointment as 🗄️ Appointment
+    participant Charge as 🗄️ Charge
+    participant Encounter as 🗄️ Encounter
+    participant InsurancePolicy as 🗄️ 保険資格
+    participant PaymentTransaction as 🗄️ Payment Transaction
+    participant SelectedTreatmentFeeSetting as 🗄️ 選定療養費の設定
+  end
+
+  Note over AccountsClerk,SelectedTreatmentFeeSetting: ✅ 選定療養費の算定
+  AccountsClerk->>BillCalculationScreen: ✅ 選定療養費の算定
+  BillCalculationScreen->>SelectedFeeApi: ✅ 選定療養費の算定
+  activate SelectedFeeApi
+  SelectedFeeApi->>SelectedTreatmentFeeSetting: read
+  SelectedFeeApi->>Encounter: read
+  SelectedFeeApi->>Charge: create
+  SelectedFeeApi-->>BillCalculationScreen: 🖥️ 会計計算画面
+  BillCalculationScreen-->>AccountsClerk: 🖥️ 会計計算画面
+  deactivate SelectedFeeApi
+
+  Note over AccountsClerk,SelectedTreatmentFeeSetting: ✅ 会計計算入力
+  AccountsClerk->>BillCalculationScreen: ✅ 会計計算入力
+  BillCalculationScreen->>CalculateVisitBillApi: ✅ 会計計算入力
+  activate CalculateVisitBillApi
+  CalculateVisitBillApi->>Charge: read
+  CalculateVisitBillApi->>InsurancePolicy: read
+  CalculateVisitBillApi->>Appointment: update
+  CalculateVisitBillApi-->>BillCalculationScreen: 🖥️ 会計計算画面
+  BillCalculationScreen-->>AccountsClerk: 🖥️ 会計計算画面
+  deactivate CalculateVisitBillApi
+
+  Note over AccountsClerk,SelectedTreatmentFeeSetting: ✅ 会計の呼出
+  AccountsClerk->System: ✅ 会計の呼出
+  activate System
+  System->>Appointment: read
+  System-->>AccountsClerk: 🖥️ 会計窓口画面
+  deactivate System
+
+  Note over AccountsClerk,SelectedTreatmentFeeSetting: ✅ 領収証・明細書の交付
+  AccountsClerk->>PaymentWindowScreen: ✅ 領収証・明細書の交付
+  PaymentWindowScreen->>ReceiptApi: ✅ 領収証・明細書の交付
+  activate ReceiptApi
+  ReceiptApi->>PaymentTransaction: read
+  ReceiptApi->>Charge: read
+  ReceiptApi->>Appointment: update
+  ReceiptApi-->>PaymentWindowScreen: 🖥️ 会計窓口画面
+  PaymentWindowScreen-->>AccountsClerk: 🖥️ 会計窓口画面
+  deactivate ReceiptApi
+
+  Note over AccountsClerk,SelectedTreatmentFeeSetting: ✅ 自動精算機での精算
+  AccountsClerk->>KioskScreen: ✅ 自動精算機での精算
+  KioskScreen->>SettlementApi: ✅ 自動精算機での精算
+  activate SettlementApi
+  rect rgb(245,245,245)
+    Note right of SettlementApi: transaction (API atomic boundary)
+    SettlementApi->>AccountBalance: update
+    SettlementApi->>Appointment: update
+    SettlementApi->>PaymentTransaction: create
+  end
+  SettlementApi-->>KioskScreen: 🖥️ 自動精算機画面
+  KioskScreen-->>AccountsClerk: 🖥️ 自動精算機画面
+  deactivate SettlementApi
+
+  Note over AccountsClerk,SelectedTreatmentFeeSetting: ✅ 会計窓口での精算
+  AccountsClerk->>PaymentWindowScreen: ✅ 会計窓口での精算
+  PaymentWindowScreen->>SettlementApi: ✅ 会計窓口での精算
+  activate SettlementApi
+  rect rgb(245,245,245)
+    Note right of SettlementApi: transaction (API atomic boundary)
+    SettlementApi->>AccountBalance: update
+    SettlementApi->>Appointment: update
+    SettlementApi->>PaymentTransaction: create
+  end
+  SettlementApi-->>PaymentWindowScreen: 🖥️ 会計窓口画面
+  PaymentWindowScreen-->>AccountsClerk: 🖥️ 会計窓口画面
+  deactivate SettlementApi

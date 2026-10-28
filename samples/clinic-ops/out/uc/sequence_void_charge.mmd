@@ -1,6 +1,6 @@
 sequenceDiagram
   box System Value
-    actor BillingSpecialist as 👤 Billing Specialist
+    actor ClaimsClerk as 👤 医事課 レセプト担当
   end
   box System Boundary
     participant ChargeWorklistScreen as 🖥️ Charge Worklist Screen
@@ -10,9 +10,9 @@ sequenceDiagram
     participant Charge as 🗄️ Charge
   end
 
-  Note over BillingSpecialist,Charge: ✅ Void Charge
-  BillingSpecialist->System: ✅ Void Charge
+  Note over ClaimsClerk,Charge: ✅ コストの取消
+  ClaimsClerk->System: ✅ コストの取消
   activate System
   System->>Charge: update
-  System-->>BillingSpecialist: 🖥️ Charge Worklist Screen
+  System-->>ClaimsClerk: 🖥️ Charge Worklist Screen
   deactivate System

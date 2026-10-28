@@ -1,0 +1,21 @@
+sequenceDiagram
+  box System Value
+    actor Nurse as 👤 看護師
+    actor ReceptionClerk as 👤 医事課 受付担当
+  end
+  box System Boundary
+    participant EligibilityScreen as 🖥️ 資格確認画面
+  end
+  box System
+    participant EligibilityResultApi as 🔌 資格確認結果 API
+    participant EligibilityCheck as 🗄️ 資格確認
+  end
+
+  Note over Nurse,EligibilityCheck: ✅ 資格確認結果（該当資格なし）の取込
+  Nurse->>EligibilityScreen: ✅ 資格確認結果（該当資格なし）の取込
+  EligibilityScreen->>EligibilityResultApi: ✅ 資格確認結果（該当資格なし）の取込
+  activate EligibilityResultApi
+  EligibilityResultApi->>EligibilityCheck: update
+  EligibilityResultApi-->>EligibilityScreen: 🖥️ 資格確認画面
+  EligibilityScreen-->>Nurse: 🖥️ 資格確認画面
+  deactivate EligibilityResultApi

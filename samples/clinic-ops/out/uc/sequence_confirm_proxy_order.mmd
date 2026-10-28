@@ -1,0 +1,21 @@
+sequenceDiagram
+  box System Value
+    actor Clinician as 👤 医師
+    actor Nurse as 👤 看護師
+  end
+  box System Boundary
+    participant OrderEntryScreen as 🖥️ Order Entry Screen
+  end
+  box System
+    participant ConfirmOrderApi as 🔌 オーダ確定 API
+    participant ClinicalOrder as 🗄️ Clinical Order
+  end
+
+  Note over Clinician,ClinicalOrder: ✅ 代行入力オーダの確定
+  Clinician->>OrderEntryScreen: ✅ 代行入力オーダの確定
+  OrderEntryScreen->>ConfirmOrderApi: ✅ 代行入力オーダの確定
+  activate ConfirmOrderApi
+  ConfirmOrderApi->>ClinicalOrder: update
+  ConfirmOrderApi-->>OrderEntryScreen: 🖥️ Order Entry Screen
+  OrderEntryScreen-->>Clinician: 🖥️ Order Entry Screen
+  deactivate ConfirmOrderApi

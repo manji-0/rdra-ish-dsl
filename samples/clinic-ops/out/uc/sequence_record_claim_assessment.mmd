@@ -1,0 +1,20 @@
+sequenceDiagram
+  box System Value
+    actor ClaimsClerk as 👤 医事課 レセプト担当
+  end
+  box System Boundary
+    participant ClaimScreen as 🖥️ レセプト画面
+  end
+  box System
+    participant ClaimResultApi as 🔌 審査結果 API
+    participant ClaimStatement as 🗄️ レセプト
+  end
+
+  Note over ClaimsClerk,ClaimStatement: ✅ 査定の取込
+  ClaimsClerk->>ClaimScreen: ✅ 査定の取込
+  ClaimScreen->>ClaimResultApi: ✅ 査定の取込
+  activate ClaimResultApi
+  ClaimResultApi->>ClaimStatement: update
+  ClaimResultApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimResultApi

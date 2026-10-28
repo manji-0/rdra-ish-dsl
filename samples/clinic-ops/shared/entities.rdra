@@ -13,11 +13,64 @@ variation OrderType "Order Type" {
   referral "Referral"
 }
 
+// The patient pays at the 会計窓口 or the 自動精算機 (sendai-iji-gairai-shiyousyo.txt:191).
+// The insurer's share is paid through the 審査支払機関 on the レセプト, never at the window.
 variation PaymentMethod "Payment Method" {
-  cash       "Cash"
-  card       "Card"
-  insurance  "Insurance"
-  adjustment "Adjustment"
+  cash       "現金"
+  card       "クレジットカード"
+  // 還付・追加徴収 after an insurance change or a calculation error (sendai-iji-gairai-shiyousyo.txt:196).
+  adjustment "還付・追加徴収"
+}
+
+// 一部負担金 is the 療養の給付 amount times a ratio (egov-kenkou-hokenhou-211AC0000000070.txt:1204):
+// 百分の三十 up to the month one turns 70 (:1206-1207), 百分の二十 after it (:1209-1210), and
+// 百分の三十 again above an income threshold (:1212-1213).
+variation BurdenRatio "負担割合" {
+  thirty "3割"
+  twenty "2割"
+}
+
+// 適用区分 is set by the insurer from income and decides the 自己負担限度額
+// (mhlw-2023-online-shikaku-tebiki-001085572.txt:467). The sources name no category values,
+// so the model records only whether the hospital obtained the 限度額情報 (:411, with the
+// patient's consent, mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:46).
+variation LimitCategory "限度額適用区分" {
+  notobtained "限度額情報なし"
+  obtained    "適用区分を取得済"
+}
+
+// 初診 is a visit without a written referral from another institution (hyogo-senteiryoyo.md:72).
+// 救急搬送, 初診時にそのまま入院, 生活保護, 労災・自賠責 pay no 初診時選定療養費
+// (saigai-hosp-2022-senteiryoyo.txt:17-18).
+variation ReferralCategory "紹介の有無" {
+  revisit    "再診"
+  referred   "紹介状あり初診"
+  unreferred "紹介状なし初診"
+  exempt     "紹介状なし初診（救急搬送等の除外）"
+}
+
+variation ChargeKind "診療費の種類" {
+  insured           "保険診療"
+  // 選定療養: a set amount the patient pays in full (egov-ryotan-kisoku-332M50000100015.txt:114).
+  selectedtreatment "選定療養（自費）"
+}
+
+variation ReferralDirection "紹介の向き" {
+  // 紹介状受付処理 (koseikan-2024-iji-shiyousyo.txt:101).
+  inbound  "紹介元から受領"
+  // 診療情報提供書の作成・送信 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:121).
+  outbound "紹介先へ送付"
+}
+
+// What changed in the patient's insurance after the visit. The 審査支払機関 moves a レセプト to the
+// new insurance (振替・分割) instead of returning it (mhlw-2021-shikaku-kago-furikae.txt:11).
+// A change of 負担割合 cannot be moved at all (:70, 項番7), a 公費 レセプト cannot be split (:43-44,
+// 項番1), and such a レセプト is returned to the hospital after billing (:40).
+variation PayerChange "資格変更の種類" {
+  nochange      "資格変更なし"
+  sameratio     "負担割合が同じ資格への変更"
+  ratiochanged  "負担割合が異なる資格への変更"
+  publicexpense "公費が関わる変更"
 }
 
 variation MessageChannel "Message Channel" {
@@ -51,20 +104,26 @@ entity PatientProfile "Patient Profile" {
   emergency_contact: String @null
 }
 
-entity InsurancePolicy "Insurance Policy" {
+entity InsurancePolicy "保険資格" {
   id:                  Int    @pk
   payer_name:          String
+  payer_no:            String
   member_no:           String
-  plan_name:           String
+  burden_ratio:        BurdenRatio   @default(thirty)
+  limit_category:      LimitCategory @default(notobtained)
   verification_status: Enum(unverified, verified, rejected) @default(unverified)
   verified_at:         DateTime @null
   active:              Bool
 }
 
-entity EligibilityCheck "Eligibility Check" {
+// One query to the オンライン資格確認等システム. The result values follow the 一括照会 result list:
+// 有効, 無効 (資格喪失等), 該当資格なし (mhlw-2023-online-shikaku-tebiki-001085572.txt:383-401).
+// When the system cannot answer, the patient fills in a 被保険者資格申立書
+// (mhlw-2023-online-shikaku-dekinai-baai.txt:36-37), or the hospital uses the システム障害時モード (:80).
+entity EligibilityCheck "資格確認" {
   id:           Int      @pk
   checked_at:   DateTime
-  result:       Enum(eligible, ineligible, pending) @default(pending)
+  result:       Enum(eligpending, eligvalid, eliginvalid, elignoinfo, eligdeclared) @default(eligpending)
   reference_no: String   @null
 }
 
@@ -115,10 +174,14 @@ entity ProviderSchedule "Provider Schedule" {
 }
 
 // Visit lifecycle
+// 会計 comes after the consultation: 計算受付, then 会計受付 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:141-144,
+// :2488). A visit waits for the calculation (apptawaitingcalc) and for payment (apptawaitingpay),
+// is paid (apptsettled), and completes when the 領収証 is handed over.
 entity Appointment "Appointment" {
   id:             Int      @pk
   reason:         String
-  status:         Enum(apptrequested, apptscheduled, apptcheckedin, apptinconsult, apptcompleted, apptcancelled, apptnoshow) @default(apptrequested)
+  referral:       ReferralCategory @default(revisit)
+  status:         Enum(apptrequested, apptscheduled, apptcheckedin, apptinconsult, apptawaitingcalc, apptawaitingpay, apptsettled, apptcompleted, apptcancelled, apptnoshow) @default(apptrequested)
   scheduled_at:   DateTime
   checked_in_at:  DateTime @null
   completed_at:   DateTime @null
@@ -154,6 +217,8 @@ entity ClinicalOrder "Clinical Order" {
   id:           Int      @pk
   order_type:   OrderType @default(lab)
   status:       Enum(clordered, clcollected, clresulted, clreviewed, clcancelled) @default(clordered)
+  // false while an order a 医師事務作業補助者 entered awaits the physician's confirmation.
+  physician_confirmed: Bool
   ordered_at:   DateTime
   collected_at: DateTime @null
   resulted_at:  DateTime @null
@@ -174,30 +239,52 @@ entity Medication "Medication" {
   route:    String
 }
 
-entity Prescription "Prescription" {
-  id:           Int      @pk
-  directions:   String
-  status:       Enum(rxdrafted, rxsent, rxdispensed, rxcancelled) @default(rxdrafted)
-  sent_at:      DateTime @null
-  dispensed_at: DateTime @null
+// A physician who finds a drug necessary gives the patient a 処方箋 (egov-ishihou-323AC0000000201.txt:251).
+// 院外: the signed 処方箋 goes to the 電子処方箋管理サービス (mhlw-denshi-shohousen-unyou.txt:28-30) and is
+// dispensed at a 保険薬局. 院内: an 引換券, then 調剤・監査, 服薬指導, 薬剤交付
+// (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:117, :167-170). The hospital never tells the patient
+// which 保険薬局 to use (egov-ryotan-kisoku-332M50000100015.txt:49), so a 処方箋 names no pharmacy.
+entity Prescription "処方箋" {
+  id:              Int      @pk
+  directions:      String
+  status:          Enum(rxdrafted, rxissued, rxvoucher, rxinquiry, rxaudited, rxcounseled, rxdispensed, rxexpired, rxcancelled) @default(rxdrafted)
+  issued_on:       Date
+  // 交付の日を含めて四日以内, unless 長期の旅行等特殊の事情 (egov-ryotan-kisoku-332M50000100015.txt:311-312).
+  use_period_days: Int @default(4)
+  // リフィル処方箋 carries the upper limit of its uses (egov-ryotan-kisoku-332M50000100015.txt:481).
+  refill_limit:    Int @null
+  sent_at:         DateTime @null
+  dispensed_at:    DateTime @null
 }
 
 // Revenue cycle
+// One 診療行為 with its cost: 指導・管理料 and comments the physician enters
+// (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:104), 実施内容(コスト) a test or treatment room enters
+// (:152), and 選定療養費.
 entity Charge "Charge" {
   id:        Int      @pk
   code:      String
+  kind:      ChargeKind @default(insured)
   amount:    Money
   posted_at: DateTime @null
   status:    Enum(chargepending, chargeposted, chargevoided) @default(chargepending)
 }
 
-entity Claim "Claim" {
+// レセプト: one patient, one 診療月, one payer. 作成 and 院内点検 (koseikan-2024-iji-shiyousyo.txt:222-227),
+// 請求 by the 10th of the next month (egov-seikyu-meirei-351M50000100036.txt:55), 受付不能 resent on the
+// 11th-12th (ssk-online-seikyu-sousa-tejunsho.txt:2294), 審査, then 支払 in the month after next
+// (mhlw-2021-shikaku-kago-furikae.txt:34). A 返戻 can be corrected and billed again with the current
+// month's レセプト (mhlw-online-henrei-saiseikyu.txt:111). A 査定 cannot be billed again
+// (medicom-receipt-return.md:127, vendor article); the hospital may ask for 再審査
+// (koseikan-2024-iji-shiyousyo.txt:238, :241). 月遅れ・保留 レセプト are submitted later (:237).
+entity ClaimStatement "レセプト" {
   id:            Int      @pk
-  claim_no:      String   @unique
-  status:        Enum(claimdraft, claimsubmitted, claimaccepted, claimdenied, claimpaid) @default(claimdraft)
+  service_month: Date
+  status:        Enum(stmtdrafting, stmtinspecting, stmtonhold, stmtsubmitted, stmtreceipterror, stmtunderreview, stmtpaid, stmtreturned, stmtassessed, stmtrereview) @default(stmtdrafting)
+  payer_change:  PayerChange @default(nochange)
   submitted_at:  DateTime @null
   paid_at:       DateTime @null
-  denial_reason: String   @null
+  return_reason: String   @null
 }
 
 entity PaymentTransaction "Payment Transaction" {
@@ -209,11 +296,28 @@ entity PaymentTransaction "Payment Transaction" {
   gateway_ref:  String   @null
 }
 
-entity AccountBalance "Account Balance" {
+// 未収金: what the patient still owes after 精算 (koseikan-2024-iji-shiyousyo.txt:214, :219).
+entity AccountBalance "未収金残高" {
   id:        Int      @pk
   balance:   Money
   is_closed: Bool
   closed_at: DateTime @null
+}
+
+// 紹介状 received at 初診受付 and 診療情報提供書 sent to another institution.
+entity ReferralLetter "紹介状・診療情報提供書" {
+  id:          Int      @pk
+  direction:   ReferralDirection @default(inbound)
+  received_at: DateTime @null
+}
+
+// 選定療養費: the amount is at least what the 厚生労働大臣 sets (egov-ryotan-kisoku-332M50000100015.txt:114),
+// and hospitals publish different amounts (7,000円 at hyogo-senteiryoyo.md:65, 7,700円 at
+// saigai-hosp-2022-senteiryoyo.txt:15). The hospital sets it here; the model holds no number.
+entity SelectedTreatmentFeeSetting "選定療養費の設定" {
+  id:               Int   @pk
+  first_visit_fee:  Money
+  return_visit_fee: Money
 }
 
 // Engagement, follow-up, and audit
@@ -272,10 +376,11 @@ relate(LabResult, ClinicalOrder, 1:1)
 relate(Prescription, Encounter, N:1)
 relate(Prescription, Medication, N:1)
 relate(Charge, Encounter, N:1)
-relate(Charge, Claim, N:1).optional()
-relate(Claim, PatientAccount, N:1)
-relate(Claim, InsurancePolicy, N:1)
-relate(PaymentTransaction, Claim, N:1).optional()
+relate(Charge, ClaimStatement, N:1).optional()
+relate(ClaimStatement, PatientAccount, N:1)
+relate(ClaimStatement, InsurancePolicy, N:1)
+relate(PaymentTransaction, Appointment, N:1)
+relate(ReferralLetter, PatientAccount, N:1)
 relate(AccountBalance, PatientAccount, 1:1)
 relate(CarePlan, PatientAccount, N:1)
 relate(CarePlan, Encounter, N:1)
@@ -295,8 +400,18 @@ event EvEncounterSigned     "Encounter Signed"
 event EvClinicalOrderReviewed  "Clinical Result Reviewed"
 event EvPrescriptionDispensed "Prescription Dispensed"
 event EvLabResultReceived "Lab Result Received"
-event EvEligibilityChecked "Eligibility Checked"
-event EvPaymentSettled "Payment Settled"
+event EvEligibilityChecked "資格確認結果"
+event EvPaymentSettled "自動精算機での精算完了"
+event EvBillCalculated "会計計算完了"
+event EvClaimStatementsSubmitted "レセプト請求"
+event EvClaimReceiptError "受付不能・要確認"
+event EvClaimAccepted "レセプト受付"
+event EvClaimReturned "返戻"
+event EvClaimAssessed "査定"
+event EvClaimTransferred "資格の振替・分割"
+event EvRemittance "診療報酬の支払"
+event EvPharmacyInquiry "保険薬局からの疑義照会"
+event EvPrescriptionIssued "電子処方箋の登録"
 
 // State constraints
 invariant(Appointment)
@@ -316,11 +431,16 @@ invariant(ClinicalOrder)
   .then(resulted_at == present)
 
 invariant(Prescription)
-  .when(status == rxsent)
+  .when(status == rxissued)
   .then(sent_at == present)
 
-invariant(Claim)
-  .when(status == claimpaid)
+invariant(ClaimStatement)
+  .when(status == stmtpaid)
   .then(paid_at == present)
 
-forbidden(Claim, status == claimpaid, denial_reason == present)
+// A corrected 返戻 clears its reason before it is billed again.
+forbidden(ClaimStatement, status == stmtpaid, return_reason == present)
+
+// 看護師 collects a specimen only on the physician's instruction (egov-hokanhou-323AC0000000203.txt:311),
+// so an order a 医師事務作業補助者 entered is confirmed by the physician first.
+forbidden(ClinicalOrder, status == clcollected, physician_confirmed == false)

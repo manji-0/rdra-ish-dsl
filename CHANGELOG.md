@@ -425,6 +425,16 @@
 
 ### Changed
 
+- `samples/clinic-ops` now models Japanese hospital outpatient operations, each business
+  rule cited to a primary source in a `//` comment. Payment moves after the consultation into
+  a new `BucVisitPayment` (会計計算入力, 呼出, 窓口 or 自動精算機, 領収証), so `CollectCopay`,
+  `CopayDue`, and `InsuredVisit` are gone. `Claim` becomes `ClaimStatement` (レセプト) with
+  返戻, 査定, 再請求, 再審査請求, and 保留 states and monthly timers. `EligibilityService`,
+  `PharmacyNetwork`, and `LabSystem` become `OnlineEligibilitySystem`, `EPrescriptionService`,
+  and `OutsourcedLabSystem`, with `InsurancePharmacy` and `ClaimsReviewOrganization` added.
+  `FrontDesk` and `BillingSpecialist` become `ReceptionClerk`, `AccountsClerk`, and
+  `ClaimsClerk`, with `MedicalClerk` and `Pharmacist` added. The largest `verify` BFS cone
+  drops from 1,707,212 states (`AccountBalance`) to 969,167 (`Charge`).
 - `check` prints each violated constraint or `after` assertion once, with a shortest
   counterexample in model terms: the rule's `path:line:col`, then one line per step with
   the use case, its bound instances (`Place [Order#1, Payment#1]`), and its declaration

@@ -1,9 +1,8 @@
 flowchart LR
   subgraph layer_value[System Value]
     direction TB
-    FrontDesk(["👤 Front Desk Staff"])
     Patient(["👤 Patient"])
-    EligibilityService[/"🌐 Insurance Eligibility Service"/]
+    ReceptionClerk(["👤 医事課 受付担当"])
   end
   subgraph layer_environment[External Environment]
     direction TB
@@ -30,14 +29,13 @@ flowchart LR
     SearchPatient(["✅ Search Patient"])
     SendIntakeForms(["✅ Send Intake Forms"])
     UpdateDemographics(["✅ Update Demographics"])
-    VerifyInsurance(["✅ Verify Insurance"])
+    VerifyInsurance(["✅ 保険資格・限度額情報の登録（新患登録）"])
     ConsentScreen[["🖥️ Consent Capture Screen"]]
     InsuranceScreen[["🖥️ Insurance Verification Screen"]]
     IntakePortalScreen[["🖥️ Intake Portal Screen"]]
     PatientProfileScreen[["🖥️ Patient Profile Screen"]]
     PatientSearchScreen[["🖥️ Patient Search Screen"]]
     EvAppointmentScheduled{"⚡ Appointment Scheduled"}
-    EvEligibilityChecked{"⚡ Eligibility Checked"}
   end
   subgraph layer_system[System]
     direction TB
@@ -48,8 +46,8 @@ flowchart LR
     SearchPatientApi["🔌 Search Patient API"]
     UpdateDemographicsApi["🔌 Update Demographics API"]
     ConsentRecord[("🗄️ Consent Record")]
-    EligibilityCheck[("🗄️ Eligibility Check")]
-    InsurancePolicy[("🗄️ Insurance Policy")]
+    EligibilityCheck[("🗄️ 資格確認")]
+    InsurancePolicy[("🗄️ 保険資格")]
     IntakePacket[("🗄️ Intake Packet")]
     PatientAccount[("🗄️ Patient Account")]
     PatientMessage[("🗄️ Patient Message")]
@@ -60,19 +58,19 @@ flowchart LR
   Patient -->|performs| BucPatientOnboarding
   Patient -->|performs| CaptureConsent
   Patient -->|performs| CompleteIntakeForms
-  FrontDesk -.->|has_permission| PatientProfileRead
-  FrontDesk -.->|has_permission| PatientProfileWrite
-  FrontDesk -.->|has_permission| InsuranceVerify
-  FrontDesk -.->|has_permission| IntakeManage
-  FrontDesk -->|performs| BucPatientOnboarding
-  FrontDesk -->|performs| SearchPatient
-  FrontDesk -->|performs| RegisterPatient
-  FrontDesk -->|performs| UpdateDemographics
-  FrontDesk -->|performs| VerifyInsurance
-  FrontDesk -->|performs| SendIntakeForms
-  FrontDesk -->|performs| ExpireIntakeForms
-  FrontDesk -->|performs| MergeDuplicatePatient
-  FrontDesk -->|performs| ArchivePatient
+  ReceptionClerk -.->|has_permission| PatientProfileRead
+  ReceptionClerk -.->|has_permission| PatientProfileWrite
+  ReceptionClerk -.->|has_permission| InsuranceVerify
+  ReceptionClerk -.->|has_permission| IntakeManage
+  ReceptionClerk -->|performs| BucPatientOnboarding
+  ReceptionClerk -->|performs| SearchPatient
+  ReceptionClerk -->|performs| RegisterPatient
+  ReceptionClerk -->|performs| UpdateDemographics
+  ReceptionClerk -->|performs| VerifyInsurance
+  ReceptionClerk -->|performs| SendIntakeForms
+  ReceptionClerk -->|performs| ExpireIntakeForms
+  ReceptionClerk -->|performs| MergeDuplicatePatient
+  ReceptionClerk -->|performs| ArchivePatient
   SearchPatientApi -.->|reads| PatientAccount
   SearchPatientApi -.->|reads| PatientProfile
   SearchPatientApi -.->|requires_permission| PatientProfileRead
@@ -109,8 +107,6 @@ flowchart LR
   IntakePacket ---|N:1| PatientAccount
   EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
   EvAppointmentScheduled -.->|triggers| SendIntakeForms
-  EvEligibilityChecked -.->|triggers| VerifyInsurance
-  EligibilityService -.->|raises| EvEligibilityChecked
   PatientSearchScreen -.->|shows| PatientAccount
   PatientProfileScreen -.->|shows| PatientProfile
   IntakeExpiryCheck -.->|triggers| ExpireIntakeForms

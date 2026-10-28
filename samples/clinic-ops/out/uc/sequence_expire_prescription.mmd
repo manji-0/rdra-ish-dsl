@@ -1,0 +1,20 @@
+sequenceDiagram
+  box System Value
+    actor Clinician as 👤 医師
+  end
+  box System Boundary
+    participant PharmacyStatusScreen as 🖥️ 電子処方箋の状況画面
+  end
+  box System
+    participant ConfirmDispenseApi as 🔌 調剤結果 API
+    participant Prescription as 🗄️ 処方箋
+  end
+
+  Note over Clinician,Prescription: ✅ 処方箋の使用期間切れ
+  Clinician->>PharmacyStatusScreen: ✅ 処方箋の使用期間切れ
+  PharmacyStatusScreen->>ConfirmDispenseApi: ✅ 処方箋の使用期間切れ
+  activate ConfirmDispenseApi
+  ConfirmDispenseApi->>Prescription: update
+  ConfirmDispenseApi-->>PharmacyStatusScreen: 🖥️ 電子処方箋の状況画面
+  PharmacyStatusScreen-->>Clinician: 🖥️ 電子処方箋の状況画面
+  deactivate ConfirmDispenseApi

@@ -1,0 +1,24 @@
+sequenceDiagram
+  box System Value
+    actor AccountsClerk as 👤 医事課 会計担当
+  end
+  box System Boundary
+    participant BillCalculationScreen as 🖥️ 会計計算画面
+  end
+  box System
+    participant SelectedFeeApi as 🔌 選定療養費 API
+    participant Charge as 🗄️ Charge
+    participant Encounter as 🗄️ Encounter
+    participant SelectedTreatmentFeeSetting as 🗄️ 選定療養費の設定
+  end
+
+  Note over AccountsClerk,SelectedTreatmentFeeSetting: ✅ 選定療養費の算定
+  AccountsClerk->>BillCalculationScreen: ✅ 選定療養費の算定
+  BillCalculationScreen->>SelectedFeeApi: ✅ 選定療養費の算定
+  activate SelectedFeeApi
+  SelectedFeeApi->>SelectedTreatmentFeeSetting: read
+  SelectedFeeApi->>Encounter: read
+  SelectedFeeApi->>Charge: create
+  SelectedFeeApi-->>BillCalculationScreen: 🖥️ 会計計算画面
+  BillCalculationScreen-->>AccountsClerk: 🖥️ 会計計算画面
+  deactivate SelectedFeeApi

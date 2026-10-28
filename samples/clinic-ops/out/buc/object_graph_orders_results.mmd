@@ -1,11 +1,9 @@
 flowchart LR
   subgraph layer_value[System Value]
     direction TB
-    Clinician(["👤 Clinician"])
-    Nurse(["👤 Nurse"])
-    EligibilityService[/"🌐 Insurance Eligibility Service"/]
-    LabSystem[/"🌐 Laboratory System"/]
+    Nurse(["👤 看護師"])
     MessagingGateway[/"🌐 Messaging Gateway"/]
+    OutsourcedLabSystem[/"🌐 外注検査システム"/]
   end
   subgraph layer_environment[External Environment]
     direction TB
@@ -29,6 +27,7 @@ flowchart LR
     PatientMessageSend["🔑 Patient Message Send"]
     PatientProfileRead["🔑 Patient Profile Read"]
     PatientProfileWrite["🔑 Patient Profile Write"]
+    ProxyOrderEntry["🔑 代行入力"]
     ScheduleRead["🔑 Schedule Read"]
     ScheduleWrite["🔑 Schedule Write"]
   end
@@ -40,14 +39,18 @@ flowchart LR
     CloseCarePlan(["✅ Close Care Plan"])
     CollectSpecimen(["✅ Collect Specimen"])
     CompleteIntakeForms(["✅ Complete Intake Forms"])
+    ConfirmProxyOrder(["✅ 代行入力オーダの確定"])
     CreateCarePlan(["✅ Create Care Plan"])
+    EnterProxyOrder(["✅ 検体検査オーダの代行入力"])
     ExpireIntakeForms(["✅ Expire Intake Forms"])
     MergeDuplicatePatient(["✅ Merge Duplicate Patient"])
     NotifyCriticalResult(["✅ Notify Critical Result"])
     NotifyPatientResult(["✅ Notify Patient Result"])
     PlaceLabOrder(["✅ Place Lab Order"])
+    PrintSpecimenLabel(["✅ 採血管ラベル発行・貼付"])
     ReceiveLabResult(["✅ Receive Lab Result"])
     RegisterPatient(["✅ Register Patient"])
+    RegisterPerformedProcedure(["✅ 実施内容（コスト）の登録"])
     ReviewLabResult(["✅ Review Lab Result"])
     ReviewPatientResponse(["✅ Review Patient Response"])
     ScheduleFollowUpVisit(["✅ Schedule Follow-Up Visit"])
@@ -56,7 +59,7 @@ flowchart LR
     SendFollowUpMessage(["✅ Send Follow-Up Message"])
     SendIntakeForms(["✅ Send Intake Forms"])
     UpdateDemographics(["✅ Update Demographics"])
-    VerifyInsurance(["✅ Verify Insurance"])
+    VerifyInsurance(["✅ 保険資格・限度額情報の登録（新患登録）"])
     AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
     CarePlanScreen[["🖥️ Care Plan Screen"]]
     ConsentScreen[["🖥️ Consent Capture Screen"]]
@@ -74,7 +77,6 @@ flowchart LR
     EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
     EvAppointmentScheduled{"⚡ Appointment Scheduled"}
     EvClinicalOrderReviewed{"⚡ Clinical Result Reviewed"}
-    EvEligibilityChecked{"⚡ Eligibility Checked"}
     EvEncounterSigned{"⚡ Encounter Signed"}
     EvLabResultReceived{"⚡ Lab Result Received"}
   end
@@ -82,6 +84,7 @@ flowchart LR
     direction TB
     AppointmentNoticeApi["🔌 Appointment Notice API"]
     CollectSpecimenApi["🔌 Collect Specimen API"]
+    ConfirmOrderApi["🔌 オーダ確定 API"]
     ConsentApi["🔌 Consent API"]
     CreateCarePlanApi["🔌 Create Care Plan API"]
     CriticalNoticeApi["🔌 Critical Notice API"]
@@ -90,6 +93,8 @@ flowchart LR
     IntakeMessagingApi["🔌 Intake Messaging API"]
     NotifyPatientResultApi["🔌 Notify Patient Result API"]
     OrderEntryApi["🔌 Order Entry API"]
+    PerformedProcedureApi["🔌 実施登録 API"]
+    ProxyOrderApi["🔌 代行入力 API"]
     ReceiveLabResultApi["🔌 Receive Lab Result API"]
     RegisterPatientApi["🔌 Register Patient API"]
     ResultReviewApi["🔌 Result Review API"]
@@ -98,11 +103,12 @@ flowchart LR
     UpdateDemographicsApi["🔌 Update Demographics API"]
     Appointment[("🗄️ Appointment")]
     CarePlan[("🗄️ Care Plan")]
+    Charge[("🗄️ Charge")]
     ClinicalOrder[("🗄️ Clinical Order")]
     ConsentRecord[("🗄️ Consent Record")]
-    EligibilityCheck[("🗄️ Eligibility Check")]
+    EligibilityCheck[("🗄️ 資格確認")]
     Encounter[("🗄️ Encounter")]
-    InsurancePolicy[("🗄️ Insurance Policy")]
+    InsurancePolicy[("🗄️ 保険資格")]
     IntakePacket[("🗄️ Intake Packet")]
     LabResult[("🗄️ Lab Result")]
     Notification[("🗄️ Notification")]
@@ -110,19 +116,16 @@ flowchart LR
     PatientMessage[("🗄️ Patient Message")]
     PatientProfile[("🗄️ Patient Profile")]
     ProviderSchedule[("🗄️ Provider Schedule")]
+    OrderConfirmedByPhysician{"🔀 医師が確定したオーダ"}
   end
+  Nurse -.->|has_permission| ProxyOrderEntry
   Nurse -.->|has_permission| ClinicalOrderWrite
   Nurse -.->|has_permission| LabResultManage
   Nurse -->|performs| BucOrdersResults
+  Nurse -->|performs| PrintSpecimenLabel
   Nurse -->|performs| CollectSpecimen
+  Nurse -->|performs| RegisterPerformedProcedure
   Nurse -->|performs| ReceiveLabResult
-  Clinician -.->|has_permission| ClinicalOrderWrite
-  Clinician -.->|has_permission| LabResultManage
-  Clinician -->|performs| BucOrdersResults
-  Clinician -->|performs| PlaceLabOrder
-  Clinician -->|performs| ReviewLabResult
-  Clinician -->|performs| NotifyCriticalResult
-  Clinician -->|performs| CancelClinicalOrder
   CreateCarePlanApi -.->|creates| CarePlan
   CreateCarePlanApi -.->|reads| Encounter
   CreateCarePlanApi -.->|requires_permission| FollowUpManage
@@ -136,6 +139,15 @@ flowchart LR
   OrderEntryApi -.->|creates| ClinicalOrder
   OrderEntryApi -.->|reads| Encounter
   OrderEntryApi -.->|requires_permission| ClinicalOrderWrite
+  ProxyOrderApi -.->|creates| ClinicalOrder
+  ProxyOrderApi -.->|reads| Encounter
+  ProxyOrderApi -.->|requires_permission| ProxyOrderEntry
+  ConfirmOrderApi -.->|requires_permission| ClinicalOrderWrite
+  ConfirmOrderApi -.->|updates| ClinicalOrder
+  PerformedProcedureApi -.->|creates| Charge
+  PerformedProcedureApi -.->|reads| Encounter
+  PerformedProcedureApi -.->|reads| ClinicalOrder
+  PerformedProcedureApi -.->|requires_permission| ClinicalOrderWrite
   CollectSpecimenApi -.->|requires_permission| ClinicalOrderWrite
   CollectSpecimenApi -.->|updates| ClinicalOrder
   ReceiveLabResultApi -.->|creates| LabResult
@@ -175,7 +187,11 @@ flowchart LR
   BucFollowupCare -->|contains| NotifyPatientResult
   BucOrdersResults -.->|belongs| CareDelivery
   BucOrdersResults -->|contains| PlaceLabOrder
+  BucOrdersResults -->|contains| EnterProxyOrder
+  BucOrdersResults -->|contains| ConfirmProxyOrder
+  BucOrdersResults -->|contains| PrintSpecimenLabel
   BucOrdersResults -->|contains| CollectSpecimen
+  BucOrdersResults -->|contains| RegisterPerformedProcedure
   BucOrdersResults -->|contains| ReceiveLabResult
   BucOrdersResults -->|contains| ReviewLabResult
   BucOrdersResults -->|contains| NotifyCriticalResult
@@ -191,11 +207,14 @@ flowchart LR
   BucPatientOnboarding -->|contains| ExpireIntakeForms
   BucPatientOnboarding -->|contains| MergeDuplicatePatient
   BucPatientOnboarding -->|contains| ArchivePatient
+  OrderConfirmedByPhysician -.->|applies_to| CollectSpecimen
+  OrderConfirmedByPhysician -.->|combines| ClinicalOrder
   Appointment ---|N:1| PatientAccount
   Encounter ---|N:1| PatientAccount
   Encounter ---|1:1| Appointment
   ClinicalOrder ---|N:1| Encounter
   LabResult ---|1:1| ClinicalOrder
+  Charge ---|N:1| Encounter
   CarePlan ---|N:1| Encounter
   CarePlan ---|N:1| PatientAccount
   PatientMessage ---|N:1| PatientAccount
@@ -221,9 +240,7 @@ flowchart LR
   EvClinicalOrderReviewed -.->|triggers| NotifyPatientResult
   EvClinicalOrderReviewed -.->|triggers| NotifyCriticalResult
   EvLabResultReceived -.->|triggers| ReceiveLabResult
-  EvEligibilityChecked -.->|triggers| VerifyInsurance
-  EligibilityService -.->|raises| EvEligibilityChecked
-  LabSystem -.->|raises| EvLabResultReceived
+  OutsourcedLabSystem -.->|raises| EvLabResultReceived
   PatientSearchScreen -.->|shows| PatientAccount
   PatientProfileScreen -.->|shows| PatientProfile
   IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
@@ -258,10 +275,26 @@ flowchart LR
   PlaceLabOrder -.->|invokes| OrderEntryApi
   PlaceLabOrder -.->|requires_medium| ClinicalWorkstation
   PlaceLabOrder -.->|requires_permission| ClinicalOrderWrite
+  EnterProxyOrder -.->|displays| OrderEntryScreen
+  EnterProxyOrder -.->|invokes| ProxyOrderApi
+  EnterProxyOrder -.->|requires_medium| ClinicalWorkstation
+  EnterProxyOrder -.->|requires_permission| ProxyOrderEntry
+  ConfirmProxyOrder -.->|displays| OrderEntryScreen
+  ConfirmProxyOrder -.->|invokes| ConfirmOrderApi
+  ConfirmProxyOrder -.->|requires_medium| ClinicalWorkstation
+  ConfirmProxyOrder -.->|requires_permission| ClinicalOrderWrite
+  PrintSpecimenLabel -.->|displays| SpecimenScreen
+  PrintSpecimenLabel -.->|reads| ClinicalOrder
+  PrintSpecimenLabel -.->|requires_medium| NurseStation
+  PrintSpecimenLabel -.->|requires_permission| ClinicalOrderWrite
   CollectSpecimen -.->|displays| SpecimenScreen
   CollectSpecimen -.->|invokes| CollectSpecimenApi
   CollectSpecimen -.->|requires_medium| NurseStation
   CollectSpecimen -.->|requires_permission| ClinicalOrderWrite
+  RegisterPerformedProcedure -.->|displays| SpecimenScreen
+  RegisterPerformedProcedure -.->|invokes| PerformedProcedureApi
+  RegisterPerformedProcedure -.->|requires_medium| NurseStation
+  RegisterPerformedProcedure -.->|requires_permission| ClinicalOrderWrite
   ReceiveLabResult -.->|displays| ResultReviewScreen
   ReceiveLabResult -.->|invokes| ReceiveLabResultApi
   ReceiveLabResult -.->|requires_medium| NurseStation

@@ -1,0 +1,20 @@
+sequenceDiagram
+  box System Value
+    actor Clinician as 👤 医師
+  end
+  box System Boundary
+    participant PrescriptionScreen as 🖥️ 処方画面
+  end
+  box System
+    participant IssuePrescriptionApi as 🔌 処方箋発行 API
+    participant Prescription as 🗄️ 処方箋
+  end
+
+  Note over Clinician,Prescription: ✅ 院外処方箋の発行
+  Clinician->>PrescriptionScreen: ✅ 院外処方箋の発行
+  PrescriptionScreen->>IssuePrescriptionApi: ✅ 院外処方箋の発行
+  activate IssuePrescriptionApi
+  IssuePrescriptionApi->>Prescription: update
+  IssuePrescriptionApi-->>PrescriptionScreen: 🖥️ 処方画面
+  PrescriptionScreen-->>Clinician: 🖥️ 処方画面
+  deactivate IssuePrescriptionApi

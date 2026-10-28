@@ -9,7 +9,9 @@ buc BucPatientOnboarding "Onboard and Maintain Patient"
 usecase SearchPatient         "Search Patient"
 usecase RegisterPatient       "Register Patient"
 usecase UpdateDemographics    "Update Demographics"
-usecase VerifyInsurance       "Verify Insurance"
+// 新患登録 with the 保険情報 and, with consent, the 限度額情報 from the オンライン資格確認
+// (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:46, :51; koseikan-2024-iji-shiyousyo.txt:92).
+usecase VerifyInsurance       "保険資格・限度額情報の登録（新患登録）"
 usecase CaptureConsent        "Capture Consent"
 usecase SendIntakeForms       "Send Intake Forms"
 usecase CompleteIntakeForms   "Complete Intake Forms"
@@ -30,18 +32,18 @@ api EligibilityApi       "Eligibility API"
 api ConsentApi           "Consent API"
 api IntakeMessagingApi   "Intake Messaging API"
 
-performs(FrontDesk, BucPatientOnboarding)
+performs(ReceptionClerk, BucPatientOnboarding)
 performs(Patient, BucPatientOnboarding)
-performs(FrontDesk, SearchPatient)
-performs(FrontDesk, RegisterPatient)
-performs(FrontDesk, UpdateDemographics)
-performs(FrontDesk, VerifyInsurance)
+performs(ReceptionClerk, SearchPatient)
+performs(ReceptionClerk, RegisterPatient)
+performs(ReceptionClerk, UpdateDemographics)
+performs(ReceptionClerk, VerifyInsurance)
 performs(Patient, CaptureConsent)
-performs(FrontDesk, SendIntakeForms)
+performs(ReceptionClerk, SendIntakeForms)
 performs(Patient, CompleteIntakeForms)
-performs(FrontDesk, ExpireIntakeForms)
-performs(FrontDesk, MergeDuplicatePatient)
-performs(FrontDesk, ArchivePatient)
+performs(ReceptionClerk, ExpireIntakeForms)
+performs(ReceptionClerk, MergeDuplicatePatient)
+performs(ReceptionClerk, ArchivePatient)
 belongs(BucPatientOnboarding, PatientAccess)
 
 contains(BucPatientOnboarding, SearchPatient)
@@ -84,10 +86,9 @@ creates(EligibilityApi, EligibilityCheck)
 updates(EligibilityApi, InsurancePolicy)
 sets(VerifyInsurance, InsurancePolicy, verification_status == verified)
 sets(VerifyInsurance, InsurancePolicy, verified_at == present)
-sets(VerifyInsurance, EligibilityCheck, result == eligible)
+sets(VerifyInsurance, InsurancePolicy, limit_category == obtained)
+sets(VerifyInsurance, EligibilityCheck, result == eligvalid)
 sets(VerifyInsurance, EligibilityCheck, reference_no == present)
-raises(EligibilityService, EvEligibilityChecked)
-triggers(EvEligibilityChecked, VerifyInsurance)
 
 displays(CaptureConsent, ConsentScreen)
 invokes(CaptureConsent, ConsentApi)

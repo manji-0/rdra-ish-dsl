@@ -1,0 +1,22 @@
+sequenceDiagram
+  box System Value
+    actor Clinician as 👤 医師
+  end
+  box System Boundary
+    participant PrescriptionScreen as 🖥️ 処方画面
+  end
+  box System
+    participant DraftPrescriptionApi as 🔌 処方オーダ API
+    participant Encounter as 🗄️ Encounter
+    participant Prescription as 🗄️ 処方箋
+  end
+
+  Note over Clinician,Prescription: ✅ リフィル処方箋の処方オーダ
+  Clinician->>PrescriptionScreen: ✅ リフィル処方箋の処方オーダ
+  PrescriptionScreen->>DraftPrescriptionApi: ✅ リフィル処方箋の処方オーダ
+  activate DraftPrescriptionApi
+  DraftPrescriptionApi->>Encounter: read
+  DraftPrescriptionApi->>Prescription: create
+  DraftPrescriptionApi-->>PrescriptionScreen: 🖥️ 処方画面
+  PrescriptionScreen-->>Clinician: 🖥️ 処方画面
+  deactivate DraftPrescriptionApi

@@ -813,8 +813,11 @@ fn clinic_ops_conditions_list_their_body_and_derived_links() {
     assert_eq!(
         rows,
         vec![
-            "CopayDue,A copay is due at check-in,,PaymentMethod,Appointment.status,CollectCopay",
-            "InsuredVisit,The visit is covered by insurance,\"PaymentTransaction.method == insurance, Appointment.status == apptcheckedin\",PaymentMethod,Appointment.status,CollectCopay",
+            "BookedPatient,予約済みの患者,Appointment.status == apptscheduled,,Appointment.status,BatchVerifyEligibility",
+            "CopayCappedAtLimit,窓口負担は負担割合で計算し、限度額情報があれば限度額までとする,,BurdenRatio|LimitCategory,Appointment.status,CalculateVisitBill",
+            "OrderConfirmedByPhysician,医師が確定したオーダ,\"ClinicalOrder.physician_confirmed == true, ClinicalOrder.status == clordered\",,ClinicalOrder.status,CollectSpecimen",
+            "TransferNotPossible,振替・分割の対象外（負担割合の相違・公費）,,PayerChange,ClaimStatement.status,RecordClaimReturn",
+            "UnreferredFirstVisit,紹介状なしの初診で、除外に当たらない,\"Charge.kind == selectedtreatment, Appointment.referral == unreferred\",ChargeKind|ReferralCategory,,ApplySelectedTreatmentFee",
         ]
     );
 

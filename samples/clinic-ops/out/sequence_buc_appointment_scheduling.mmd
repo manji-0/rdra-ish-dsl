@@ -1,7 +1,7 @@
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
     actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant AppointmentNoticeScreen as 🖥️ Appointment Notice Screen
@@ -24,8 +24,8 @@ sequenceDiagram
     participant ProviderSchedule as 🗄️ Provider Schedule
   end
 
-  Note over FrontDesk,ProviderSchedule: ✅ Book Appointment
-  FrontDesk->>AppointmentScreen: ✅ Book Appointment
+  Note over Patient,ProviderSchedule: ✅ Book Appointment
+  Patient->>AppointmentScreen: ✅ Book Appointment
   AppointmentScreen->>BookAppointmentApi: ✅ Book Appointment
   activate BookAppointmentApi
   rect rgb(245,245,245)
@@ -34,11 +34,11 @@ sequenceDiagram
     BookAppointmentApi->>ProviderSchedule: update
   end
   BookAppointmentApi-->>AppointmentScreen: 🖥️ Appointment Screen
-  AppointmentScreen-->>FrontDesk: 🖥️ Appointment Screen
+  AppointmentScreen-->>Patient: 🖥️ Appointment Screen
   deactivate BookAppointmentApi
 
-  Note over FrontDesk,ProviderSchedule: ✅ Cancel Appointment
-  FrontDesk->>AppointmentScreen: ✅ Cancel Appointment
+  Note over Patient,ProviderSchedule: ✅ Cancel Appointment
+  Patient->>AppointmentScreen: ✅ Cancel Appointment
   AppointmentScreen->>CancelAppointmentApi: ✅ Cancel Appointment
   activate CancelAppointmentApi
   rect rgb(245,245,245)
@@ -47,18 +47,18 @@ sequenceDiagram
     CancelAppointmentApi->>ProviderSchedule: update
   end
   CancelAppointmentApi-->>AppointmentScreen: 🖥️ Appointment Screen
-  AppointmentScreen-->>FrontDesk: 🖥️ Appointment Screen
+  AppointmentScreen-->>Patient: 🖥️ Appointment Screen
   deactivate CancelAppointmentApi
 
-  Note over FrontDesk,ProviderSchedule: ✅ Mark No Show
-  FrontDesk->System: ✅ Mark No Show
+  Note over Patient,ProviderSchedule: ✅ Mark No Show
+  Patient->System: ✅ Mark No Show
   activate System
   System->>Appointment: update
-  System-->>FrontDesk: 🖥️ Appointment Screen
+  System-->>Patient: 🖥️ Appointment Screen
   deactivate System
 
-  Note over FrontDesk,ProviderSchedule: ✅ Reschedule Appointment
-  FrontDesk->>AppointmentScreen: ✅ Reschedule Appointment
+  Note over Patient,ProviderSchedule: ✅ Reschedule Appointment
+  Patient->>AppointmentScreen: ✅ Reschedule Appointment
   AppointmentScreen->>RescheduleAppointmentApi: ✅ Reschedule Appointment
   activate RescheduleAppointmentApi
   rect rgb(245,245,245)
@@ -67,11 +67,11 @@ sequenceDiagram
     RescheduleAppointmentApi->>ProviderSchedule: update
   end
   RescheduleAppointmentApi-->>AppointmentScreen: 🖥️ Appointment Screen
-  AppointmentScreen-->>FrontDesk: 🖥️ Appointment Screen
+  AppointmentScreen-->>Patient: 🖥️ Appointment Screen
   deactivate RescheduleAppointmentApi
 
-  Note over FrontDesk,ProviderSchedule: ✅ Reserve Appointment
-  FrontDesk->>AppointmentScreen: ✅ Reserve Appointment
+  Note over Patient,ProviderSchedule: ✅ Reserve Appointment
+  Patient->>AppointmentScreen: ✅ Reserve Appointment
   AppointmentScreen->>ReserveAppointmentApi: ✅ Reserve Appointment
   activate ReserveAppointmentApi
   rect rgb(245,245,245)
@@ -80,22 +80,22 @@ sequenceDiagram
     ReserveAppointmentApi->>ProviderSchedule: update
   end
   ReserveAppointmentApi-->>AppointmentScreen: 🖥️ Appointment Screen
-  AppointmentScreen-->>FrontDesk: 🖥️ Appointment Screen
+  AppointmentScreen-->>Patient: 🖥️ Appointment Screen
   deactivate ReserveAppointmentApi
 
-  Note over FrontDesk,ProviderSchedule: ✅ Search Availability
-  FrontDesk->>ScheduleSearchScreen: ✅ Search Availability
+  Note over Patient,ProviderSchedule: ✅ Search Availability
+  Patient->>ScheduleSearchScreen: ✅ Search Availability
   ScheduleSearchScreen->>SearchAvailabilityApi: ✅ Search Availability
   activate SearchAvailabilityApi
   SearchAvailabilityApi->>ProviderSchedule: read
   SearchAvailabilityApi->>Provider: read
   SearchAvailabilityApi->>ClinicLocation: read
   SearchAvailabilityApi-->>ScheduleSearchScreen: 🖥️ Schedule Search Screen
-  ScheduleSearchScreen-->>FrontDesk: 🖥️ Schedule Search Screen
+  ScheduleSearchScreen-->>Patient: 🖥️ Schedule Search Screen
   deactivate SearchAvailabilityApi
 
-  Note over FrontDesk,ProviderSchedule: ✅ Send Appointment Notice
-  FrontDesk->>AppointmentNoticeScreen: ✅ Send Appointment Notice
+  Note over Patient,ProviderSchedule: ✅ Send Appointment Notice
+  Patient->>AppointmentNoticeScreen: ✅ Send Appointment Notice
   AppointmentNoticeScreen->>AppointmentNoticeApi: ✅ Send Appointment Notice
   activate AppointmentNoticeApi
   rect rgb(245,245,245)
@@ -104,5 +104,5 @@ sequenceDiagram
     AppointmentNoticeApi->>PatientMessage: create
   end
   AppointmentNoticeApi-->>AppointmentNoticeScreen: 🖥️ Appointment Notice Screen
-  AppointmentNoticeScreen-->>FrontDesk: 🖥️ Appointment Notice Screen
+  AppointmentNoticeScreen-->>Patient: 🖥️ Appointment Notice Screen
   deactivate AppointmentNoticeApi

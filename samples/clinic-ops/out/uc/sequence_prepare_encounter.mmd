@@ -1,10 +1,10 @@
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
-    actor Nurse as 👤 Nurse
+    actor Nurse as 👤 看護師
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
-    participant CheckInScreen as 🖥️ Check-In Screen
+    participant CheckInScreen as 🖥️ 受付画面
   end
   box System
     participant PrepareEncounterApi as 🔌 Prepare Encounter API
@@ -12,12 +12,12 @@ sequenceDiagram
     participant PatientProfile as 🗄️ Patient Profile
   end
 
-  Note over FrontDesk,PatientProfile: ✅ Prepare Encounter
-  FrontDesk->>CheckInScreen: ✅ Prepare Encounter
+  Note over Nurse,PatientProfile: ✅ Prepare Encounter
+  Nurse->>CheckInScreen: ✅ Prepare Encounter
   CheckInScreen->>PrepareEncounterApi: ✅ Prepare Encounter
   activate PrepareEncounterApi
   PrepareEncounterApi->>Appointment: read
   PrepareEncounterApi->>PatientProfile: read
-  PrepareEncounterApi-->>CheckInScreen: 🖥️ Check-In Screen
-  CheckInScreen-->>FrontDesk: 🖥️ Check-In Screen
+  PrepareEncounterApi-->>CheckInScreen: 🖥️ 受付画面
+  CheckInScreen-->>Nurse: 🖥️ 受付画面
   deactivate PrepareEncounterApi

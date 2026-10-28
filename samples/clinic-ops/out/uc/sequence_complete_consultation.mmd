@@ -1,0 +1,26 @@
+sequenceDiagram
+  box System Value
+    actor Clinician as 👤 医師
+    actor Nurse as 👤 看護師
+  end
+  box System Boundary
+    participant EncounterWorkspaceScreen as 🖥️ Encounter Workspace
+  end
+  box System
+    participant CompleteConsultationApi as 🔌 診察終了 API
+    participant Appointment as 🗄️ Appointment
+    participant Room as 🗄️ Room
+  end
+
+  Note over Clinician,Room: ✅ 診察終了
+  Clinician->>EncounterWorkspaceScreen: ✅ 診察終了
+  EncounterWorkspaceScreen->>CompleteConsultationApi: ✅ 診察終了
+  activate CompleteConsultationApi
+  rect rgb(245,245,245)
+    Note right of CompleteConsultationApi: transaction (API atomic boundary)
+    CompleteConsultationApi->>Room: update
+    CompleteConsultationApi->>Appointment: update
+  end
+  CompleteConsultationApi-->>EncounterWorkspaceScreen: 🖥️ Encounter Workspace
+  EncounterWorkspaceScreen-->>Clinician: 🖥️ Encounter Workspace
+  deactivate CompleteConsultationApi

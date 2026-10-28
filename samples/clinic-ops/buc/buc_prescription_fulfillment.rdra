@@ -4,46 +4,76 @@ import shared.actors
 import shared.entities
 import shared.biz
 
-buc BucPrescriptionFulfillment "Fulfill Prescriptions"
+// Sources cited as file:line are under ~/research/japan-hospital-operations/sources/.
+
+buc BucPrescriptionFulfillment "処方" description "処方オーダ、院外処方箋の発行と電子処方箋管理サービスへの登録、院内処方の調剤・監査・服薬指導・交付、疑義照会。"
 
 usecase SearchMedication     "Search Medication"
-usecase DraftPrescription    "Draft Prescription"
-usecase SendPrescription     "Send Prescription"
-usecase ConfirmDispense      "Confirm Dispense"
-usecase CancelPrescription   "Cancel Prescription"
-usecase RefillPrescription   "Refill Prescription"
+// 処方オーダの登録(リフィル処方含む) (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:114).
+usecase DraftPrescription    "処方オーダの登録"
+usecase IssueRefillPrescription "リフィル処方箋の処方オーダ"
+// 院外処方箋の電子署名・印刷 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:116).
+usecase IssueOutsidePrescription "院外処方箋の発行"
+// 院内処方用引換券の印刷・交付 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:117).
+usecase IssueInhouseVoucher  "院内処方用引換券の交付"
+// 院内処方受付: 引換券の確認, 調剤・監査, 服薬指導, 薬剤交付 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:167-170).
+usecase DispenseAndAudit     "調剤・監査"
+usecase CounselMedication    "服薬指導"
+usecase HandOverMedication   "薬剤交付"
+usecase RaisePrescriptionInquiry "疑義照会"
+usecase AnswerPrescriptionInquiry "疑義照会への回答"
+usecase AnswerPharmacyInquiry "保険薬局からの疑義照会への回答"
+usecase ConfirmDispense      "保険薬局での調剤結果の受信"
+usecase ExpirePrescription   "処方箋の使用期間切れ"
+usecase CancelPrescription   "処方の取消"
 
 screen MedicationSearchScreen "Medication Search Screen"
-screen PrescriptionScreen     "Prescription Screen"
-screen PharmacyStatusScreen   "Pharmacy Status Screen"
+screen PrescriptionScreen     "処方画面"
+screen DispensingScreen       "調剤・監査画面"
+screen PharmacyStatusScreen   "電子処方箋の状況画面"
 
-api MedicationCatalogApi "Medication Catalog API"
-api DraftPrescriptionApi  "Draft Prescription API"
-api SendPrescriptionApi   "Send Prescription API"
-api ConfirmDispenseApi    "Confirm Dispense API"
-api RefillPrescriptionApi "Refill Prescription API"
+api MedicationCatalogApi  "Medication Catalog API"
+api DraftPrescriptionApi  "処方オーダ API"
+api IssuePrescriptionApi  "処方箋発行 API"
+api DispensingApi         "院内調剤 API"
+api ConfirmDispenseApi    "調剤結果 API"
+api PrescriptionInquiryApi "疑義照会 API"
 
 performs(Clinician, BucPrescriptionFulfillment)
-performs(Nurse, BucPrescriptionFulfillment)
 performs(Clinician, SearchMedication)
 performs(Clinician, DraftPrescription)
-performs(Clinician, SendPrescription)
-performs(Nurse, ConfirmDispense)
+performs(Clinician, IssueRefillPrescription)
+performs(Clinician, IssueOutsidePrescription)
+performs(Clinician, IssueInhouseVoucher)
+performs(Pharmacist, DispenseAndAudit)
+performs(Pharmacist, CounselMedication)
+performs(Pharmacist, HandOverMedication)
+performs(Pharmacist, RaisePrescriptionInquiry)
+performs(Clinician, AnswerPrescriptionInquiry)
+performs(Clinician, AnswerPharmacyInquiry)
 performs(Clinician, CancelPrescription)
-performs(Clinician, RefillPrescription)
 belongs(BucPrescriptionFulfillment, CareDelivery)
 
 contains(BucPrescriptionFulfillment, SearchMedication)
 contains(BucPrescriptionFulfillment, DraftPrescription)
-contains(BucPrescriptionFulfillment, SendPrescription)
+contains(BucPrescriptionFulfillment, IssueRefillPrescription)
+contains(BucPrescriptionFulfillment, IssueOutsidePrescription)
+contains(BucPrescriptionFulfillment, IssueInhouseVoucher)
+contains(BucPrescriptionFulfillment, DispenseAndAudit)
+contains(BucPrescriptionFulfillment, CounselMedication)
+contains(BucPrescriptionFulfillment, HandOverMedication)
+contains(BucPrescriptionFulfillment, RaisePrescriptionInquiry)
+contains(BucPrescriptionFulfillment, AnswerPrescriptionInquiry)
+contains(BucPrescriptionFulfillment, AnswerPharmacyInquiry)
 contains(BucPrescriptionFulfillment, ConfirmDispense)
+contains(BucPrescriptionFulfillment, ExpirePrescription)
 contains(BucPrescriptionFulfillment, CancelPrescription)
-contains(BucPrescriptionFulfillment, RefillPrescription)
 contains(ClinicOpsSystem, MedicationCatalogApi)
 contains(ClinicOpsSystem, DraftPrescriptionApi)
-contains(ClinicOpsSystem, SendPrescriptionApi)
+contains(ClinicOpsSystem, IssuePrescriptionApi)
+contains(ClinicOpsSystem, DispensingApi)
 contains(ClinicOpsSystem, ConfirmDispenseApi)
-contains(ClinicOpsSystem, RefillPrescriptionApi)
+contains(ClinicOpsSystem, PrescriptionInquiryApi)
 
 displays(SearchMedication, MedicationSearchScreen)
 invokes(SearchMedication, MedicationCatalogApi)
@@ -55,28 +85,83 @@ invokes(DraftPrescription, DraftPrescriptionApi)
 reads(DraftPrescriptionApi, Encounter)
 creates(DraftPrescriptionApi, Prescription)
 
-displays(SendPrescription, PrescriptionScreen)
-invokes(SendPrescription, SendPrescriptionApi)
-updates(SendPrescriptionApi, Prescription)
-transitions(Prescription.status, SendPrescription, rxdrafted -> rxsent)
-sets(SendPrescription, Prescription, sent_at == present)
+// リフィル処方箋 states that it is one and its upper limit of uses (egov-ryotan-kisoku-332M50000100015.txt:481).
+displays(IssueRefillPrescription, PrescriptionScreen)
+invokes(IssueRefillPrescription, DraftPrescriptionApi)
+
+// The signed 処方箋 is sent to the 電子処方箋管理サービス, also when a paper one is printed
+// (mhlw-denshi-shohousen-unyou.txt:28-30); the paper one carries an 引換番号 (:131). The patient takes it
+// to any 保険薬局: the hospital may not point to one (egov-ryotan-kisoku-332M50000100015.txt:49).
+// 処方箋発行形態確認 at 受付 decides 院外 or 院内 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:45).
+displays(IssueOutsidePrescription, PrescriptionScreen)
+invokes(IssueOutsidePrescription, IssuePrescriptionApi)
+updates(IssuePrescriptionApi, Prescription)
+raises(IssueOutsidePrescription, EvPrescriptionIssued)
+transitions(Prescription.status, IssueOutsidePrescription, rxdrafted -> rxissued)
+sets(IssueOutsidePrescription, Prescription, sent_at == present)
+triggers(EvPrescriptionIssued, EPrescriptionService)
+
+displays(IssueInhouseVoucher, PrescriptionScreen)
+invokes(IssueInhouseVoucher, IssuePrescriptionApi)
+transitions(Prescription.status, IssueInhouseVoucher, rxdrafted -> rxvoucher)
+
+displays(DispenseAndAudit, DispensingScreen)
+invokes(DispenseAndAudit, DispensingApi)
+updates(DispensingApi, Prescription)
+transitions(Prescription.status, DispenseAndAudit, rxvoucher -> rxaudited)
+
+displays(CounselMedication, DispensingScreen)
+invokes(CounselMedication, DispensingApi)
+transitions(Prescription.status, CounselMedication, rxaudited -> rxcounseled)
+
+displays(HandOverMedication, DispensingScreen)
+invokes(HandOverMedication, DispensingApi)
+transitions(Prescription.status, HandOverMedication, rxcounseled -> rxdispensed)
+sets(HandOverMedication, Prescription, dispensed_at == present)
+
+// 薬剤師は、処方せん中に疑わしい点があるときは…確かめた後でなければ調剤してはならない
+// (egov-yakuzaishihou-335AC0000000146.txt:202), and changes a prescription only with the physician's
+// consent (:199). The 疑義照会 holds the 引換券 until the physician answers.
+displays(RaisePrescriptionInquiry, DispensingScreen)
+invokes(RaisePrescriptionInquiry, DispensingApi)
+transitions(Prescription.status, RaisePrescriptionInquiry, rxvoucher -> rxinquiry)
+
+displays(AnswerPrescriptionInquiry, PrescriptionScreen)
+invokes(AnswerPrescriptionInquiry, PrescriptionInquiryApi)
+updates(PrescriptionInquiryApi, Prescription)
+transitions(Prescription.status, AnswerPrescriptionInquiry, rxinquiry -> rxvoucher)
+
+// The pharmacist of the 保険薬局 asks the issuing physician (egov-yakuzaishihou-335AC0000000146.txt:202).
+// The 処方箋 is already at the pharmacy, so the answer leaves its state as it is.
+displays(AnswerPharmacyInquiry, PrescriptionScreen)
+invokes(AnswerPharmacyInquiry, PrescriptionInquiryApi)
+transitions(Prescription.status, AnswerPharmacyInquiry, rxissued -> rxissued)
+raises(InsurancePharmacy, EvPharmacyInquiry)
+triggers(EvPharmacyInquiry, AnswerPharmacyInquiry)
 
 displays(ConfirmDispense, PharmacyStatusScreen)
 invokes(ConfirmDispense, ConfirmDispenseApi)
 updates(ConfirmDispenseApi, Prescription)
-raises(ConfirmDispense, EvPrescriptionDispensed)
-triggers(EvPrescriptionDispensed, PharmacyNetwork)
-transitions(Prescription.status, ConfirmDispense, rxsent -> rxdispensed)
+raises(EPrescriptionService, EvPrescriptionDispensed)
+triggers(EvPrescriptionDispensed, ConfirmDispense)
+transitions(Prescription.status, ConfirmDispense, rxissued -> rxdispensed)
 sets(ConfirmDispense, Prescription, dispensed_at == present)
+
+// 使用期間は、交付の日を含めて四日以内 (egov-ryotan-kisoku-332M50000100015.txt:311), holidays included
+// (mhlw-shohousen-shiyoukikan.md:185). The DSL counts no days, so a timer moves an unused 処方箋.
+displays(ExpirePrescription, PharmacyStatusScreen)
+invokes(ExpirePrescription, ConfirmDispenseApi)
+transitions(Prescription.status, ExpirePrescription, rxissued -> rxexpired)
+triggers(PrescriptionUsePeriodCheck, ExpirePrescription)
 
 displays(CancelPrescription, PrescriptionScreen)
 updates(CancelPrescription, Prescription)
 transitions(Prescription.status, CancelPrescription, rxdrafted -> rxcancelled)
 
-displays(RefillPrescription, PrescriptionScreen)
-invokes(RefillPrescription, RefillPrescriptionApi)
-creates(RefillPrescriptionApi, Prescription)
-reads(RefillPrescriptionApi, Medication)
+// 特定の保険薬局への誘導の禁止 (egov-ryotan-kisoku-332M50000100015.txt:49).
+constraint NoPharmacySteering "特定の保険薬局において調剤を受けるべき旨の指示等を行わない"
+  audit enabled
+constrains(NoPharmacySteering, Prescription)
 
 // Access constraints
 requires_permission(SearchMedication, PrescriptionWrite)
@@ -87,17 +172,88 @@ requires_permission(DraftPrescription, PrescriptionWrite)
 requires_medium(DraftPrescription, ClinicalWorkstation)
 requires_permission(DraftPrescriptionApi, PrescriptionWrite)
 
-requires_permission(SendPrescription, PrescriptionWrite)
-requires_medium(SendPrescription, ClinicalWorkstation)
-requires_permission(SendPrescriptionApi, PrescriptionWrite)
+requires_permission(IssueRefillPrescription, PrescriptionWrite)
+requires_medium(IssueRefillPrescription, ClinicalWorkstation)
 
-requires_permission(ConfirmDispense, PrescriptionDispense)
-requires_medium(ConfirmDispense, NurseStation)
-requires_permission(ConfirmDispenseApi, PrescriptionDispense)
+requires_permission(IssueOutsidePrescription, PrescriptionWrite)
+requires_medium(IssueOutsidePrescription, ClinicalWorkstation)
+requires_permission(IssuePrescriptionApi, PrescriptionWrite)
+
+requires_permission(IssueInhouseVoucher, PrescriptionWrite)
+requires_medium(IssueInhouseVoucher, ClinicalWorkstation)
+
+requires_permission(DispenseAndAudit, PrescriptionDispense)
+requires_medium(DispenseAndAudit, PharmacyWorkstation)
+requires_permission(DispensingApi, PrescriptionDispense)
+
+requires_permission(CounselMedication, PrescriptionDispense)
+requires_medium(CounselMedication, PharmacyWorkstation)
+
+requires_permission(HandOverMedication, PrescriptionDispense)
+requires_medium(HandOverMedication, PharmacyWorkstation)
+
+requires_permission(RaisePrescriptionInquiry, PrescriptionDispense)
+requires_medium(RaisePrescriptionInquiry, PharmacyWorkstation)
+
+requires_permission(AnswerPrescriptionInquiry, PrescriptionWrite)
+requires_medium(AnswerPrescriptionInquiry, ClinicalWorkstation)
+
+requires_permission(AnswerPharmacyInquiry, PrescriptionWrite)
+requires_medium(AnswerPharmacyInquiry, ClinicalWorkstation)
+requires_permission(PrescriptionInquiryApi, PrescriptionWrite)
+
+requires_medium(ConfirmDispense, PharmacyWorkstation)
 
 requires_permission(CancelPrescription, PrescriptionWrite)
 requires_medium(CancelPrescription, ClinicalWorkstation)
 
-requires_permission(RefillPrescription, PrescriptionWrite)
-requires_medium(RefillPrescription, ClinicalWorkstation)
-requires_permission(RefillPrescriptionApi, PrescriptionWrite)
+// Screen fields
+field UsePeriodField "使用期間（日）" access readonly required true source system
+field RefillLimitField "リフィルの使用回数の上限" access editable required false source actor
+field DispensedAtField "交付日時" access readonly required true source system
+
+contains(PrescriptionScreen, UsePeriodField)
+contains(PrescriptionScreen, RefillLimitField)
+contains(DispensingScreen, DispensedAtField)
+maps_field(UsePeriodField, Prescription, "use_period_days")
+maps_field(RefillLimitField, Prescription, "refill_limit")
+maps_field(DispensedAtField, Prescription, "dispensed_at")
+
+// Business flow
+flow PrescriptionFlow "処方の流れ"
+step OrderStep        "処方オーダ"
+step OutsideStep      "院外処方箋（電子処方箋管理サービス）"
+step InhouseStep      "院内処方（引換券）"
+step DispenseStep     "調剤・監査"
+step InquiryStep      "疑義照会"
+step CounselStep      "服薬指導・薬剤交付"
+step PharmacyStep     "保険薬局での調剤"
+
+contains(BucPrescriptionFulfillment, PrescriptionFlow)
+contains(PrescriptionFlow, OrderStep)
+contains(PrescriptionFlow, OutsideStep)
+contains(PrescriptionFlow, InhouseStep)
+contains(PrescriptionFlow, DispenseStep)
+contains(PrescriptionFlow, InquiryStep)
+contains(PrescriptionFlow, CounselStep)
+contains(PrescriptionFlow, PharmacyStep)
+
+precedes(OrderStep, OutsideStep)
+branches(OrderStep, InhouseStep)
+precedes(OutsideStep, PharmacyStep)
+precedes(InhouseStep, DispenseStep)
+excepts(DispenseStep, InquiryStep)
+repeats(InquiryStep, DispenseStep)
+precedes(DispenseStep, CounselStep)
+
+covers(OrderStep, DraftPrescription)
+covers(OrderStep, IssueRefillPrescription)
+covers(OutsideStep, IssueOutsidePrescription)
+covers(InhouseStep, IssueInhouseVoucher)
+covers(DispenseStep, DispenseAndAudit)
+covers(InquiryStep, RaisePrescriptionInquiry)
+covers(InquiryStep, AnswerPrescriptionInquiry)
+covers(CounselStep, CounselMedication)
+covers(CounselStep, HandOverMedication)
+covers(PharmacyStep, ConfirmDispense)
+covers(PharmacyStep, AnswerPharmacyInquiry)

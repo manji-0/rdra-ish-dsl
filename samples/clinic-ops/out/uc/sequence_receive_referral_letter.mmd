@@ -1,0 +1,21 @@
+sequenceDiagram
+  box System Value
+    actor Nurse as 👤 看護師
+    actor ReceptionClerk as 👤 医事課 受付担当
+  end
+  box System Boundary
+    participant ReferralScreen as 🖥️ 紹介状受付画面
+  end
+  box System
+    participant ReferralLetterApi as 🔌 紹介状 API
+    participant ReferralLetter as 🗄️ 紹介状・診療情報提供書
+  end
+
+  Note over Nurse,ReferralLetter: ✅ 紹介状受付処理
+  Nurse->>ReferralScreen: ✅ 紹介状受付処理
+  ReferralScreen->>ReferralLetterApi: ✅ 紹介状受付処理
+  activate ReferralLetterApi
+  ReferralLetterApi->>ReferralLetter: create
+  ReferralLetterApi-->>ReferralScreen: 🖥️ 紹介状受付画面
+  ReferralScreen-->>Nurse: 🖥️ 紹介状受付画面
+  deactivate ReferralLetterApi

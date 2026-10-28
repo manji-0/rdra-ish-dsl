@@ -9,6 +9,23 @@ system ClinicOpsSystem "Clinic Operations System"
 
 timer IntakeExpiryCheck "Nightly intake expiry check"
 timer NoShowSweep "Nightly no-show sweep"
+// 一括照会 checks the insurance of the patients booked ahead (mhlw-2023-online-shikaku-tebiki-001085572.txt:365).
+timer EligibilityBatchInquiry "予約患者の資格の一括照会（来院前）"
+// Each month's レセプト are billed by the 10th of the next month (egov-seikyu-meirei-351M50000100036.txt:55),
+// so they are made from the previous month's 診療行為 at the start of the month.
+timer MonthlyClaimCreation "前月分レセプトの作成（月初）"
+// 請求可能期間 5日～10日 (ssk-online-seikyu-sousa-tejunsho.txt:748).
+timer MonthlyClaimDeadline "前月分レセプトの請求（毎月5日～10日）"
+// エラー分（受付不能・要確認）may be sent again on the 11th and 12th (ssk-online-seikyu-sousa-tejunsho.txt:2294,
+// 訂正可能期間 5日～12日 at :749).
+timer ErrorResendWindow "エラー分レセプトの再送（毎月11日・12日）"
+// 返戻ファイル can be downloaded for 3 months (mhlw-online-henrei-saiseikyu.txt:119).
+timer ReturnDownloadCheck "返戻レセプトの取得（3か月以内）"
+// 使用期間は交付の日を含めて四日以内 (egov-ryotan-kisoku-332M50000100015.txt:311), holidays included
+// (mhlw-shohousen-shiyoukikan.md:185).
+timer PrescriptionUsePeriodCheck "処方箋の使用期間切れ確認"
+// 未収金管理台帳 is made every month (koseikan-2024-iji-shiyousyo.txt:219).
+timer ReceivablesMonthlyReview "未収金管理台帳の作成（毎月）"
 medium FrontDeskTerminal "Front Desk Terminal"
 medium PatientMobile "Patient Mobile"
 medium ClinicalWorkstation "Clinical Workstation"
@@ -16,6 +33,11 @@ medium NurseStation "Nurse Station"
 medium BillingWorkstation "Billing Workstation"
 medium CareCoordinationConsole "Care Coordination Console"
 medium AdminConsole "Admin Console"
+medium AccountsWindow "会計窓口"
+medium PaymentKiosk "自動精算機"
+medium PharmacyWorkstation "薬剤部端末"
+// オンライン請求用端末 sends and resends レセプト (mhlw-online-henrei-saiseikyu.txt:111).
+medium OnlineClaimTerminal "オンライン請求用端末"
 
 permission PatientProfileRead "Patient Profile Read"
 permission PatientProfileWrite "Patient Profile Write"
@@ -25,7 +47,10 @@ permission IntakeManage "Intake Manage"
 permission ScheduleRead "Schedule Read"
 permission ScheduleWrite "Schedule Write"
 permission VisitCheckIn "Visit Check-In"
-permission CopayCollect "Copay Collect"
+permission PaymentCollect "窓口収納"
+permission BillCalculate "会計計算"
+permission ReferralManage "紹介状管理"
+permission ProxyOrderEntry "代行入力"
 permission RoomAssign "Room Assign"
 permission EncounterOpen "Encounter Open"
 permission VitalsRecord "Vitals Record"
@@ -35,7 +60,7 @@ permission ClinicalOrderWrite "Clinical Order Write"
 permission LabResultManage "Lab Result Manage"
 permission PrescriptionWrite "Prescription Write"
 permission PrescriptionDispense "Prescription Dispense"
-permission BillingClaimWrite "Billing Claim Write"
+permission BillingClaimWrite "レセプト業務"
 permission PaymentPost "Payment Post"
 permission FollowUpManage "Follow-Up Manage"
 permission PatientMessageSend "Patient Message Send"

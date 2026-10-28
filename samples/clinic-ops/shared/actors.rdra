@@ -1,15 +1,35 @@
 module shared.actors
 
+// Sources cited as file:line are under ~/research/japan-hospital-operations/sources/.
+// The MHLW outpatient flow splits the work into the lanes 患者, 医師, 看護師等, 事務職員
+// (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:334).
+
 actor Patient           "Patient" description "A person receiving care through the clinic."
-actor FrontDesk         "Front Desk Staff" description "Staff member who handles access, scheduling, and check-in workflows."
+// 医事課: reception, 会計, and レセプト are the 医事業務 a hospital contracts out
+// (sendai-iji-gairai-shiyousyo.txt:171-196, koseikan-2024-iji-shiyousyo.txt:88-101, :222-241).
+actor ReceptionClerk    "医事課 受付担当" description "初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。"
+actor AccountsClerk     "医事課 会計担当" description "会計計算入力、患者の呼出、窓口精算、領収証・明細書の交付を行う事務職員。"
+actor ClaimsClerk       "医事課 レセプト担当" description "レセプトの作成・院内点検・請求と、返戻・査定への対応を行う事務職員。"
+// 医師事務作業補助者 enters orders on the physician's behalf (mhlw-2020-dairi-nyuuryoku.txt:71-79);
+// the reception checks the orders the physician or medical clerk entered (sendai-iji-gairai-shiyousyo.txt:199).
+actor MedicalClerk      "医師事務作業補助者" description "医師の指示で電子カルテへ代行入力する。確定は医師が行う。"
 actor CareCoordinator   "Care Coordinator"
-actor Nurse             "Nurse"
-actor Clinician         "Clinician"
-actor BillingSpecialist "Billing Specialist"
+// 看護師 assists in care, and uses devices or gives medicine only on a physician's
+// instruction (egov-hokanhou-323AC0000000203.txt:29, :311).
+actor Nurse             "看護師" description "医師の指示の下で診療の補助を行う。"
+actor Clinician         "医師"
+// 薬剤師 dispenses and audits in-house prescriptions (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:167-170).
+actor Pharmacist        "薬剤師"
 actor ClinicAdmin       "Clinic Administrator"
 
-extsystem EligibilityService "Insurance Eligibility Service"
-extsystem PaymentGateway     "Payment Gateway"
-extsystem LabSystem          "Laboratory System"
-extsystem PharmacyNetwork    "Pharmacy Network"
+// オンライン資格確認 is the first step of 初診受付 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:43).
+extsystem OnlineEligibilitySystem "オンライン資格確認等システム"
+// 自動精算機 is one of the two places a patient pays (sendai-iji-gairai-shiyousyo.txt:191).
+extsystem PaymentGateway     "自動精算機・クレジット決済"
+extsystem OutsourcedLabSystem "外注検査システム"
+extsystem EPrescriptionService "電子処方箋管理サービス"
+// 保険薬局 is outside the hospital; a 院外処方箋 is dispensed there.
+extsystem InsurancePharmacy  "保険薬局"
+// 審査支払機関: 社保 (支払基金) and 国保 (国保連) (medicom-receipt-return.md:129, vendor article).
+extsystem ClaimsReviewOrganization "審査支払機関（支払基金・国保連）"
 extsystem MessagingGateway   "Messaging Gateway"

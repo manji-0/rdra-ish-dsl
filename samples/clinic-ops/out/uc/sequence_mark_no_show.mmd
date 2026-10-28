@@ -1,7 +1,7 @@
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
     actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant AppointmentScreen as 🖥️ Appointment Screen
@@ -11,9 +11,9 @@ sequenceDiagram
     participant Appointment as 🗄️ Appointment
   end
 
-  Note over FrontDesk,Appointment: ✅ Mark No Show
-  FrontDesk->System: ✅ Mark No Show
+  Note over Patient,Appointment: ✅ Mark No Show
+  Patient->System: ✅ Mark No Show
   activate System
   System->>Appointment: update
-  System-->>FrontDesk: 🖥️ Appointment Screen
+  System-->>Patient: 🖥️ Appointment Screen
   deactivate System

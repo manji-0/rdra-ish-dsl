@@ -1,7 +1,7 @@
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
     actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant IntakePortalScreen as 🖥️ Intake Portal Screen
@@ -11,9 +11,9 @@ sequenceDiagram
     participant IntakePacket as 🗄️ Intake Packet
   end
 
-  Note over FrontDesk,IntakePacket: ✅ Expire Intake Forms
-  FrontDesk->System: ✅ Expire Intake Forms
+  Note over Patient,IntakePacket: ✅ Expire Intake Forms
+  Patient->System: ✅ Expire Intake Forms
   activate System
   System->>IntakePacket: update
-  System-->>FrontDesk: 🖥️ Intake Portal Screen
+  System-->>Patient: 🖥️ Intake Portal Screen
   deactivate System

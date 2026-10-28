@@ -1,96 +1,243 @@
 flowchart LR
   subgraph layer_value[System Value]
     direction TB
-    BillingSpecialist(["👤 Billing Specialist"])
-    PaymentGateway[/"🌐 Payment Gateway"/]
+    ClaimsClerk(["👤 医事課 レセプト担当"])
+    ClaimsReviewOrganization[/"🌐 審査支払機関（支払基金・国保連）"/]
   end
   subgraph layer_environment[External Environment]
     direction TB
     RevenueCycle["💼 Revenue Cycle"]
-    BucBillingClaims["📦 Bill and Collect Claims"]
+    BucBillingClaims["📦 レセプト作成・請求"]
+    ClaimCycleFlow["🧭 レセプトの月次サイクル"]
+    AssessStep(["➡️ 査定と再審査請求"])
+    CreateStatementStep(["➡️ レセプト作成（月初）"])
+    HoldStep(["➡️ 保留（月遅れ）"])
+    InspectStep(["➡️ 院内点検"])
+    PaidStep(["➡️ 支払（診療翌々月）"])
+    ReceiptErrorStep(["➡️ 受付不能・要確認の再送（11日・12日）"])
+    ReturnStep(["➡️ 返戻と再請求"])
+    ReviewStep(["➡️ 審査"])
+    SubmitStep(["➡️ 請求（5日～10日）"])
+    ErrorResendWindow["⏱️ エラー分レセプトの再送（毎月11日・12日）"]
+    MonthlyClaimCreation["⏱️ 前月分レセプトの作成（月初）"]
+    MonthlyClaimDeadline["⏱️ 前月分レセプトの請求（毎月5日～10日）"]
+    ReceivablesMonthlyReview["⏱️ 未収金管理台帳の作成（毎月）"]
+    ReturnDownloadCheck["⏱️ 返戻レセプトの取得（3か月以内）"]
     BillingWorkstation[/"📱 Billing Workstation"/]
-    BillingClaimWrite["🔑 Billing Claim Write"]
+    ClinicalWorkstation[/"📱 Clinical Workstation"/]
+    OnlineClaimTerminal[/"📱 オンライン請求用端末"/]
+    BillingClaimWrite["🔑 レセプト業務"]
     PaymentPost["🔑 Payment Post"]
   end
   subgraph layer_boundary[System Boundary]
     direction TB
-    CreateCharge(["✅ Create Charge"])
-    GenerateClaim(["✅ Generate Claim"])
-    PostPayment(["✅ Post Payment"])
-    ReceiveClaimAccepted(["✅ Receive Claim Accepted"])
-    ReconcileBalance(["✅ Reconcile Balance"])
-    RecordClaimDenial(["✅ Record Claim Denial"])
-    SubmitClaim(["✅ Submit Claim"])
-    VoidCharge(["✅ Void Charge"])
-    BalanceScreen[["🖥️ Balance Screen"]]
+    CorrectReturnedStatement(["✅ 返戻レセプトの訂正（再請求）"])
+    CreateCharge(["✅ コスト情報の登録"])
+    GenerateClaimStatement(["✅ レセプト作成"])
+    HoldClaimStatement(["✅ レセプトの保留（月遅れ）"])
+    InspectClaimStatement(["✅ レセプトの院内点検"])
+    PostPayment(["✅ 診療報酬の入金"])
+    ReceiveClaimAccepted(["✅ レセプト受付（審査へ）"])
+    ReconcileBalance(["✅ 未収金管理台帳の作成"])
+    RecordClaimAssessment(["✅ 査定の取込"])
+    RecordClaimReturn(["✅ 返戻レセプトの取込"])
+    RecordReceiptError(["✅ 受付不能・要確認の確認"])
+    ReleaseHeldStatement(["✅ 保留レセプトの再提出準備"])
+    RequestReexamination(["✅ 再審査請求"])
+    ResendErroredStatement(["✅ エラー分レセプトの再送"])
+    ReviewClaimTransfer(["✅ 資格の振替・分割の確認"])
+    SubmitClaimStatements(["✅ レセプト請求"])
+    VoidCharge(["✅ コストの取消"])
+    BalanceScreen[["🖥️ 未収金画面"]]
     ChargeWorklistScreen[["🖥️ Charge Worklist Screen"]]
-    ClaimScreen[["🖥️ Claim Screen"]]
-    PaymentPostingScreen[["🖥️ Payment Posting Screen"]]
+    ClaimScreen[["🖥️ レセプト画面"]]
+    PaymentPostingScreen[["🖥️ 入金画面"]]
+    EvClaimAccepted{"⚡ レセプト受付"}
+    EvClaimAssessed{"⚡ 査定"}
+    EvClaimReceiptError{"⚡ 受付不能・要確認"}
+    EvClaimReturned{"⚡ 返戻"}
+    EvClaimStatementsSubmitted{"⚡ レセプト請求"}
+    EvClaimTransferred{"⚡ 資格の振替・分割"}
     EvEncounterSigned{"⚡ Encounter Signed"}
-    EvPaymentSettled{"⚡ Payment Settled"}
+    EvRemittance{"⚡ 診療報酬の支払"}
   end
   subgraph layer_system[System]
     direction TB
-    BalanceApi["🔌 Balance API"]
+    BalanceApi["🔌 未収金 API"]
+    ClaimEditApi["🔌 レセプト点検・訂正 API"]
+    ClaimResultApi["🔌 審査結果 API"]
     CreateChargeApi["🔌 Create Charge API"]
-    GenerateClaimApi["🔌 Generate Claim API"]
-    PaymentPostApi["🔌 Payment Posting API"]
-    SubmitClaimApi["🔌 Submit Claim API"]
-    AccountBalance[("🗄️ Account Balance")]
+    GenerateClaimApi["🔌 レセプト作成 API"]
+    PaymentPostApi["🔌 入金 API"]
+    SubmitClaimApi["🔌 オンライン請求 API"]
+    AccountBalance[("🗄️ 未収金残高")]
     Charge[("🗄️ Charge")]
-    Claim[("🗄️ Claim")]
+    ClaimStatement[("🗄️ レセプト")]
     Encounter[("🗄️ Encounter")]
-    InsurancePolicy[("🗄️ Insurance Policy")]
+    InsurancePolicy[("🗄️ 保険資格")]
     PaymentTransaction[("🗄️ Payment Transaction")]
+    PayerChange["🎚️ 資格変更の種類"]
+    TransferNotPossible{"🔀 振替・分割の対象外（負担割合の相違・公費）"}
   end
-  BillingSpecialist -.->|has_permission| BillingClaimWrite
-  BillingSpecialist -.->|has_permission| PaymentPost
-  BillingSpecialist -->|performs| BucBillingClaims
-  PaymentPostApi -.->|creates| PaymentTransaction
+  ClaimsClerk -.->|has_permission| BillingClaimWrite
+  ClaimsClerk -.->|has_permission| PaymentPost
+  ClaimsClerk -->|performs| BucBillingClaims
+  ClaimsClerk -->|performs| InspectClaimStatement
+  ClaimsClerk -->|performs| HoldClaimStatement
+  ClaimsClerk -->|performs| ReleaseHeldStatement
+  ClaimsClerk -->|performs| CorrectReturnedStatement
+  ClaimsClerk -->|performs| RequestReexamination
+  ClaimsClerk -->|performs| ReconcileBalance
+  ClaimsClerk -->|performs| VoidCharge
+  SubmitClaimApi -.->|requires_permission| BillingClaimWrite
+  SubmitClaimApi -.->|updates| ClaimStatement
+  ClaimResultApi -.->|requires_permission| BillingClaimWrite
+  ClaimResultApi -.->|updates| ClaimStatement
   PaymentPostApi -.->|requires_permission| PaymentPost
-  PaymentPostApi -.->|updates| Claim
+  PaymentPostApi -.->|updates| ClaimStatement
   BalanceApi -.->|reads| PaymentTransaction
   BalanceApi -.->|requires_permission| PaymentPost
   BalanceApi -.->|updates| AccountBalance
   CreateChargeApi -.->|creates| Charge
   CreateChargeApi -.->|reads| Encounter
-  CreateChargeApi -.->|requires_permission| BillingClaimWrite
-  CreateChargeApi -.->|updates| AccountBalance
-  GenerateClaimApi -.->|creates| Claim
+  GenerateClaimApi -.->|creates| ClaimStatement
+  GenerateClaimApi -.->|reads| Charge
   GenerateClaimApi -.->|reads| InsurancePolicy
   GenerateClaimApi -.->|requires_permission| BillingClaimWrite
-  GenerateClaimApi -.->|updates| Charge
-  SubmitClaimApi -.->|requires_permission| BillingClaimWrite
-  SubmitClaimApi -.->|updates| Claim
+  ClaimEditApi -.->|requires_permission| BillingClaimWrite
+  ClaimEditApi -.->|updates| ClaimStatement
   BucBillingClaims -.->|belongs| RevenueCycle
-  BucBillingClaims -->|contains| SubmitClaim
+  BucBillingClaims -->|contains| ClaimCycleFlow
+  BucBillingClaims -->|contains| InspectClaimStatement
+  BucBillingClaims -->|contains| HoldClaimStatement
+  BucBillingClaims -->|contains| ReleaseHeldStatement
+  BucBillingClaims -->|contains| SubmitClaimStatements
+  BucBillingClaims -->|contains| RecordReceiptError
+  BucBillingClaims -->|contains| ResendErroredStatement
   BucBillingClaims -->|contains| ReceiveClaimAccepted
-  BucBillingClaims -->|contains| RecordClaimDenial
+  BucBillingClaims -->|contains| ReviewClaimTransfer
+  BucBillingClaims -->|contains| RecordClaimReturn
+  BucBillingClaims -->|contains| CorrectReturnedStatement
+  BucBillingClaims -->|contains| RecordClaimAssessment
+  BucBillingClaims -->|contains| RequestReexamination
   BucBillingClaims -->|contains| PostPayment
   BucBillingClaims -->|contains| ReconcileBalance
   BucBillingClaims -->|contains| VoidCharge
   BucBillingClaims -->|contains| CreateCharge
-  BucBillingClaims -->|contains| GenerateClaim
+  BucBillingClaims -->|contains| GenerateClaimStatement
+  TransferNotPossible -.->|applies_to| RecordClaimReturn
+  TransferNotPossible -.->|combines| ClaimStatement
+  TransferNotPossible -.->|combines| PayerChange
   Charge ---|N:1| Encounter
-  Charge ---|N:1| Claim
-  Claim ---|N:1| InsurancePolicy
-  PaymentTransaction ---|N:1| Claim
-  EvPaymentSettled -.->|triggers| PostPayment
+  Charge ---|N:1| ClaimStatement
+  ClaimStatement ---|N:1| InsurancePolicy
+  EvClaimStatementsSubmitted -.->|triggers| ClaimsReviewOrganization
+  EvClaimReceiptError -.->|triggers| RecordReceiptError
+  EvClaimAccepted -.->|triggers| ReceiveClaimAccepted
+  EvClaimReturned -.->|triggers| RecordClaimReturn
+  EvClaimAssessed -.->|triggers| RecordClaimAssessment
+  EvClaimTransferred -.->|triggers| ReviewClaimTransfer
+  EvRemittance -.->|triggers| PostPayment
   EvEncounterSigned -.->|triggers| BucBillingClaims
   EvEncounterSigned -.->|triggers| CreateCharge
-  PaymentGateway -.->|raises| EvPaymentSettled
-  SubmitClaim -.->|displays| ClaimScreen
-  SubmitClaim -.->|invokes| SubmitClaimApi
-  SubmitClaim -.->|requires_medium| BillingWorkstation
-  SubmitClaim -.->|requires_permission| BillingClaimWrite
+  ClaimsReviewOrganization -.->|raises| EvClaimReceiptError
+  ClaimsReviewOrganization -.->|raises| EvClaimAccepted
+  ClaimsReviewOrganization -.->|raises| EvClaimReturned
+  ClaimsReviewOrganization -.->|raises| EvClaimAssessed
+  ClaimsReviewOrganization -.->|raises| EvClaimTransferred
+  ClaimsReviewOrganization -.->|raises| EvRemittance
+  ClaimCycleFlow -->|contains| CreateStatementStep
+  ClaimCycleFlow -->|contains| InspectStep
+  ClaimCycleFlow -->|contains| HoldStep
+  ClaimCycleFlow -->|contains| SubmitStep
+  ClaimCycleFlow -->|contains| ReceiptErrorStep
+  ClaimCycleFlow -->|contains| ReviewStep
+  ClaimCycleFlow -->|contains| ReturnStep
+  ClaimCycleFlow -->|contains| AssessStep
+  ClaimCycleFlow -->|contains| PaidStep
+  CreateStatementStep -.->|covers| MonthlyClaimCreation
+  CreateStatementStep -.->|covers| GenerateClaimStatement
+  CreateStatementStep -.->|precedes| InspectStep
+  InspectStep -.->|branches| HoldStep
+  InspectStep -.->|covers| InspectClaimStatement
+  InspectStep -.->|precedes| SubmitStep
+  HoldStep -.->|covers| HoldClaimStatement
+  HoldStep -.->|covers| ReleaseHeldStatement
+  HoldStep -.->|repeats| InspectStep
+  SubmitStep -.->|covers| MonthlyClaimDeadline
+  SubmitStep -.->|covers| SubmitClaimStatements
+  SubmitStep -.->|excepts| ReceiptErrorStep
+  SubmitStep -.->|precedes| ReviewStep
+  ReceiptErrorStep -.->|covers| ErrorResendWindow
+  ReceiptErrorStep -.->|covers| RecordReceiptError
+  ReceiptErrorStep -.->|covers| ResendErroredStatement
+  ReceiptErrorStep -.->|repeats| SubmitStep
+  ReviewStep -.->|branches| AssessStep
+  ReviewStep -.->|covers| ReceiveClaimAccepted
+  ReviewStep -.->|covers| ReviewClaimTransfer
+  ReviewStep -.->|excepts| ReturnStep
+  ReviewStep -.->|precedes| PaidStep
+  ReturnStep -.->|covers| RecordClaimReturn
+  ReturnStep -.->|covers| CorrectReturnedStatement
+  ReturnStep -.->|repeats| InspectStep
+  AssessStep -.->|covers| RecordClaimAssessment
+  AssessStep -.->|covers| RequestReexamination
+  AssessStep -.->|precedes| PaidStep
+  PaidStep -.->|covers| PostPayment
+  MonthlyClaimCreation -.->|triggers| GenerateClaimStatement
+  MonthlyClaimDeadline -.->|triggers| SubmitClaimStatements
+  ErrorResendWindow -.->|triggers| ResendErroredStatement
+  ReturnDownloadCheck -.->|triggers| RecordClaimReturn
+  ReceivablesMonthlyReview -.->|triggers| ReconcileBalance
+  InspectClaimStatement -.->|displays| ClaimScreen
+  InspectClaimStatement -.->|invokes| ClaimEditApi
+  InspectClaimStatement -.->|requires_medium| BillingWorkstation
+  InspectClaimStatement -.->|requires_permission| BillingClaimWrite
+  HoldClaimStatement -.->|displays| ClaimScreen
+  HoldClaimStatement -.->|invokes| ClaimEditApi
+  HoldClaimStatement -.->|requires_medium| BillingWorkstation
+  HoldClaimStatement -.->|requires_permission| BillingClaimWrite
+  ReleaseHeldStatement -.->|displays| ClaimScreen
+  ReleaseHeldStatement -.->|invokes| ClaimEditApi
+  ReleaseHeldStatement -.->|requires_medium| BillingWorkstation
+  ReleaseHeldStatement -.->|requires_permission| BillingClaimWrite
+  SubmitClaimStatements -.->|displays| ClaimScreen
+  SubmitClaimStatements -.->|invokes| SubmitClaimApi
+  SubmitClaimStatements -.->|raises| EvClaimStatementsSubmitted
+  SubmitClaimStatements -.->|requires_medium| OnlineClaimTerminal
+  SubmitClaimStatements -.->|requires_permission| BillingClaimWrite
+  RecordReceiptError -.->|displays| ClaimScreen
+  RecordReceiptError -.->|invokes| ClaimResultApi
+  RecordReceiptError -.->|requires_medium| OnlineClaimTerminal
+  RecordReceiptError -.->|requires_permission| BillingClaimWrite
+  ResendErroredStatement -.->|displays| ClaimScreen
+  ResendErroredStatement -.->|invokes| SubmitClaimApi
+  ResendErroredStatement -.->|requires_medium| OnlineClaimTerminal
+  ResendErroredStatement -.->|requires_permission| BillingClaimWrite
   ReceiveClaimAccepted -.->|displays| ClaimScreen
-  ReceiveClaimAccepted -.->|requires_medium| BillingWorkstation
+  ReceiveClaimAccepted -.->|invokes| ClaimResultApi
+  ReceiveClaimAccepted -.->|requires_medium| OnlineClaimTerminal
   ReceiveClaimAccepted -.->|requires_permission| BillingClaimWrite
-  ReceiveClaimAccepted -.->|updates| Claim
-  RecordClaimDenial -.->|displays| ClaimScreen
-  RecordClaimDenial -.->|requires_medium| BillingWorkstation
-  RecordClaimDenial -.->|requires_permission| BillingClaimWrite
-  RecordClaimDenial -.->|updates| Claim
+  ReviewClaimTransfer -.->|displays| ClaimScreen
+  ReviewClaimTransfer -.->|reads| ClaimStatement
+  ReviewClaimTransfer -.->|requires_medium| OnlineClaimTerminal
+  ReviewClaimTransfer -.->|requires_permission| BillingClaimWrite
+  RecordClaimReturn -.->|displays| ClaimScreen
+  RecordClaimReturn -.->|invokes| ClaimResultApi
+  RecordClaimReturn -.->|requires_medium| OnlineClaimTerminal
+  RecordClaimReturn -.->|requires_permission| BillingClaimWrite
+  CorrectReturnedStatement -.->|displays| ClaimScreen
+  CorrectReturnedStatement -.->|invokes| ClaimEditApi
+  CorrectReturnedStatement -.->|requires_medium| BillingWorkstation
+  CorrectReturnedStatement -.->|requires_permission| BillingClaimWrite
+  RecordClaimAssessment -.->|displays| ClaimScreen
+  RecordClaimAssessment -.->|invokes| ClaimResultApi
+  RecordClaimAssessment -.->|requires_medium| OnlineClaimTerminal
+  RecordClaimAssessment -.->|requires_permission| BillingClaimWrite
+  RequestReexamination -.->|displays| ClaimScreen
+  RequestReexamination -.->|invokes| SubmitClaimApi
+  RequestReexamination -.->|requires_medium| OnlineClaimTerminal
+  RequestReexamination -.->|requires_permission| BillingClaimWrite
   PostPayment -.->|displays| PaymentPostingScreen
   PostPayment -.->|invokes| PaymentPostApi
   PostPayment -.->|requires_medium| BillingWorkstation
@@ -105,9 +252,8 @@ flowchart LR
   VoidCharge -.->|updates| Charge
   CreateCharge -.->|displays| ChargeWorklistScreen
   CreateCharge -.->|invokes| CreateChargeApi
-  CreateCharge -.->|requires_medium| BillingWorkstation
-  CreateCharge -.->|requires_permission| BillingClaimWrite
-  GenerateClaim -.->|displays| ClaimScreen
-  GenerateClaim -.->|invokes| GenerateClaimApi
-  GenerateClaim -.->|requires_medium| BillingWorkstation
-  GenerateClaim -.->|requires_permission| BillingClaimWrite
+  CreateCharge -.->|requires_medium| ClinicalWorkstation
+  GenerateClaimStatement -.->|displays| ClaimScreen
+  GenerateClaimStatement -.->|invokes| GenerateClaimApi
+  GenerateClaimStatement -.->|requires_medium| BillingWorkstation
+  GenerateClaimStatement -.->|requires_permission| BillingClaimWrite

@@ -1,19 +1,18 @@
 sequenceDiagram
   box System Value
-    actor Clinician as 👤 Clinician
-    actor Nurse as 👤 Nurse
+    actor Clinician as 👤 医師
   end
   box System Boundary
-    participant PrescriptionScreen as 🖥️ Prescription Screen
+    participant PrescriptionScreen as 🖥️ 処方画面
   end
   box System
     participant System as 🧩 システム
-    participant Prescription as 🗄️ Prescription
+    participant Prescription as 🗄️ 処方箋
   end
 
-  Note over Clinician,Prescription: ✅ Cancel Prescription
-  Clinician->System: ✅ Cancel Prescription
+  Note over Clinician,Prescription: ✅ 処方の取消
+  Clinician->System: ✅ 処方の取消
   activate System
   System->>Prescription: update
-  System-->>Clinician: 🖥️ Prescription Screen
+  System-->>Clinician: 🖥️ 処方画面
   deactivate System

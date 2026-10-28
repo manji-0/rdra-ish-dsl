@@ -1,7 +1,7 @@
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
     actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant PatientProfileScreen as 🖥️ Patient Profile Screen
@@ -11,9 +11,9 @@ sequenceDiagram
     participant PatientAccount as 🗄️ Patient Account
   end
 
-  Note over FrontDesk,PatientAccount: ✅ Merge Duplicate Patient
-  FrontDesk->System: ✅ Merge Duplicate Patient
+  Note over Patient,PatientAccount: ✅ Merge Duplicate Patient
+  Patient->System: ✅ Merge Duplicate Patient
   activate System
   System->>PatientAccount: update
-  System-->>FrontDesk: 🖥️ Patient Profile Screen
+  System-->>Patient: 🖥️ Patient Profile Screen
   deactivate System

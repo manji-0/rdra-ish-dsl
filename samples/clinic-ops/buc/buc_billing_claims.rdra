@@ -4,116 +4,261 @@ import shared.actors
 import shared.entities
 import shared.biz
 
-buc BucBillingClaims "Bill and Collect Claims"
+// Sources cited as file:line are under ~/research/japan-hospital-operations/sources/.
 
-usecase CreateCharge        "Create Charge"
-usecase GenerateClaim       "Generate Claim"
-usecase SubmitClaim         "Submit Claim"
-usecase ReceiveClaimAccepted "Receive Claim Accepted"
-usecase RecordClaimDenial   "Record Claim Denial"
-usecase PostPayment         "Post Payment"
-usecase ReconcileBalance    "Reconcile Balance"
-usecase VoidCharge          "Void Charge"
+buc BucBillingClaims "レセプト作成・請求" description "月ごとのレセプトの作成・院内点検・請求と、審査支払機関からの受付不能・返戻・査定・支払への対応。"
+
+usecase CreateCharge         "コスト情報の登録"
+usecase GenerateClaimStatement "レセプト作成"
+usecase InspectClaimStatement "レセプトの院内点検"
+usecase HoldClaimStatement   "レセプトの保留（月遅れ）"
+usecase ReleaseHeldStatement "保留レセプトの再提出準備"
+usecase SubmitClaimStatements "レセプト請求"
+usecase RecordReceiptError   "受付不能・要確認の確認"
+usecase ResendErroredStatement "エラー分レセプトの再送"
+usecase ReceiveClaimAccepted "レセプト受付（審査へ）"
+usecase ReviewClaimTransfer  "資格の振替・分割の確認"
+usecase RecordClaimReturn    "返戻レセプトの取込"
+usecase CorrectReturnedStatement "返戻レセプトの訂正（再請求）"
+usecase RecordClaimAssessment "査定の取込"
+usecase RequestReexamination "再審査請求"
+usecase PostPayment          "診療報酬の入金"
+usecase ReconcileBalance     "未収金管理台帳の作成"
+usecase VoidCharge           "コストの取消"
 
 screen ChargeWorklistScreen "Charge Worklist Screen"
-screen ClaimScreen          "Claim Screen"
-screen PaymentPostingScreen "Payment Posting Screen"
-screen BalanceScreen        "Balance Screen"
+screen ClaimScreen          "レセプト画面"
+screen PaymentPostingScreen "入金画面"
+screen BalanceScreen        "未収金画面"
 
 api CreateChargeApi      "Create Charge API"
-api GenerateClaimApi     "Generate Claim API"
-api SubmitClaimApi       "Submit Claim API"
-api PaymentPostApi       "Payment Posting API"
-api BalanceApi           "Balance API"
+api GenerateClaimApi     "レセプト作成 API"
+api ClaimEditApi        "レセプト点検・訂正 API"
+api SubmitClaimApi       "オンライン請求 API"
+api ClaimResultApi       "審査結果 API"
+api PaymentPostApi       "入金 API"
+api BalanceApi           "未収金 API"
 
-performs(BillingSpecialist, BucBillingClaims)
+performs(ClaimsClerk, BucBillingClaims)
+performs(ClaimsClerk, InspectClaimStatement)
+performs(ClaimsClerk, HoldClaimStatement)
+performs(ClaimsClerk, ReleaseHeldStatement)
+performs(ClaimsClerk, CorrectReturnedStatement)
+performs(ClaimsClerk, RequestReexamination)
+performs(ClaimsClerk, ReconcileBalance)
+performs(ClaimsClerk, VoidCharge)
 belongs(BucBillingClaims, RevenueCycle)
+  .by(BillingWorkstation)
+  .by(OnlineClaimTerminal)
 
 contains(BucBillingClaims, CreateCharge)
-contains(BucBillingClaims, GenerateClaim)
-contains(BucBillingClaims, SubmitClaim)
+contains(BucBillingClaims, GenerateClaimStatement)
+contains(BucBillingClaims, InspectClaimStatement)
+contains(BucBillingClaims, HoldClaimStatement)
+contains(BucBillingClaims, ReleaseHeldStatement)
+contains(BucBillingClaims, SubmitClaimStatements)
+contains(BucBillingClaims, RecordReceiptError)
+contains(BucBillingClaims, ResendErroredStatement)
 contains(BucBillingClaims, ReceiveClaimAccepted)
-contains(BucBillingClaims, RecordClaimDenial)
+contains(BucBillingClaims, ReviewClaimTransfer)
+contains(BucBillingClaims, RecordClaimReturn)
+contains(BucBillingClaims, CorrectReturnedStatement)
+contains(BucBillingClaims, RecordClaimAssessment)
+contains(BucBillingClaims, RequestReexamination)
 contains(BucBillingClaims, PostPayment)
 contains(BucBillingClaims, ReconcileBalance)
 contains(BucBillingClaims, VoidCharge)
 contains(ClinicOpsSystem, CreateChargeApi)
 contains(ClinicOpsSystem, GenerateClaimApi)
+contains(ClinicOpsSystem, ClaimEditApi)
 contains(ClinicOpsSystem, SubmitClaimApi)
+contains(ClinicOpsSystem, ClaimResultApi)
 contains(ClinicOpsSystem, PaymentPostApi)
 contains(ClinicOpsSystem, BalanceApi)
 
+// 指導・管理料、摘要欄コメント等のコスト情報 the physician registers in the chart
+// (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:104). The chart hands them over when the encounter is
+// signed, so this step is system-triggered and has no performer.
 displays(CreateCharge, ChargeWorklistScreen)
 invokes(CreateCharge, CreateChargeApi)
 creates(CreateChargeApi, Charge)
-updates(CreateChargeApi, AccountBalance)
 reads(CreateChargeApi, Encounter)
 sets(CreateCharge, Charge, status == chargeposted)
 sets(CreateCharge, Charge, posted_at == present)
+sets(CreateCharge, Charge, kind == insured)
 triggers(EvEncounterSigned, BucBillingClaims)
 triggers(EvEncounterSigned, CreateCharge)
 
-displays(GenerateClaim, ClaimScreen)
-invokes(GenerateClaim, GenerateClaimApi)
-creates(GenerateClaimApi, Claim)
-updates(GenerateClaimApi, Charge)
+// One レセプト per patient, 診療月, and payer, made from the month's 診療行為. It reads the Charges
+// and does not move them: a Charge has no state that billing changes, and writing it here would tie
+// the レセプト cycle to every visit's state in verify.
+displays(GenerateClaimStatement, ClaimScreen)
+invokes(GenerateClaimStatement, GenerateClaimApi)
+creates(GenerateClaimApi, ClaimStatement)
+reads(GenerateClaimApi, Charge)
 reads(GenerateClaimApi, InsurancePolicy)
+triggers(MonthlyClaimCreation, GenerateClaimStatement)
 
-displays(SubmitClaim, ClaimScreen)
-invokes(SubmitClaim, SubmitClaimApi)
-updates(SubmitClaimApi, Claim)
-transitions(Claim.status, SubmitClaim, claimdraft -> claimsubmitted)
-sets(SubmitClaim, Claim, submitted_at == present)
+// レセプトを点検し…病名依頼等の付箋を貼付; 医師別に全てのレセプト点検依頼（月２回）
+// (koseikan-2024-iji-shiyousyo.txt:225, :227).
+displays(InspectClaimStatement, ClaimScreen)
+invokes(InspectClaimStatement, ClaimEditApi)
+updates(ClaimEditApi, ClaimStatement)
+transitions(ClaimStatement.status, InspectClaimStatement, stmtdrafting -> stmtinspecting)
+
+// 月遅れレセプト、保留レセプト…の再提出処理 (koseikan-2024-iji-shiyousyo.txt:237).
+displays(HoldClaimStatement, ClaimScreen)
+invokes(HoldClaimStatement, ClaimEditApi)
+transitions(ClaimStatement.status, HoldClaimStatement, stmtinspecting -> stmtonhold)
+
+displays(ReleaseHeldStatement, ClaimScreen)
+invokes(ReleaseHeldStatement, ClaimEditApi)
+transitions(ClaimStatement.status, ReleaseHeldStatement, stmtonhold -> stmtinspecting)
+
+// 各月分について翌月十日まで (egov-seikyu-meirei-351M50000100036.txt:55); 請求可能期間 5日～10日
+// (ssk-online-seikyu-sousa-tejunsho.txt:748). The timer is the deadline; the DSL has no calendar.
+displays(SubmitClaimStatements, ClaimScreen)
+invokes(SubmitClaimStatements, SubmitClaimApi)
+updates(SubmitClaimApi, ClaimStatement)
+raises(SubmitClaimStatements, EvClaimStatementsSubmitted)
+transitions(ClaimStatement.status, SubmitClaimStatements, stmtinspecting -> stmtsubmitted)
+sets(SubmitClaimStatements, ClaimStatement, submitted_at == present)
+triggers(MonthlyClaimDeadline, SubmitClaimStatements)
+triggers(EvClaimStatementsSubmitted, ClaimsReviewOrganization)
+
+// エラー分（受付不能・要確認）, resent on the 11th and 12th (ssk-online-seikyu-sousa-tejunsho.txt:2294).
+displays(RecordReceiptError, ClaimScreen)
+invokes(RecordReceiptError, ClaimResultApi)
+updates(ClaimResultApi, ClaimStatement)
+transitions(ClaimStatement.status, RecordReceiptError, stmtsubmitted -> stmtreceipterror)
+raises(ClaimsReviewOrganization, EvClaimReceiptError)
+triggers(EvClaimReceiptError, RecordReceiptError)
+
+displays(ResendErroredStatement, ClaimScreen)
+invokes(ResendErroredStatement, SubmitClaimApi)
+transitions(ClaimStatement.status, ResendErroredStatement, stmtreceipterror -> stmtsubmitted)
+triggers(ErrorResendWindow, ResendErroredStatement)
 
 displays(ReceiveClaimAccepted, ClaimScreen)
-updates(ReceiveClaimAccepted, Claim)
-transitions(Claim.status, ReceiveClaimAccepted, claimsubmitted -> claimaccepted)
+invokes(ReceiveClaimAccepted, ClaimResultApi)
+transitions(ClaimStatement.status, ReceiveClaimAccepted, stmtsubmitted -> stmtunderreview)
+raises(ClaimsReviewOrganization, EvClaimAccepted)
+triggers(EvClaimAccepted, ReceiveClaimAccepted)
 
-displays(RecordClaimDenial, ClaimScreen)
-updates(RecordClaimDenial, Claim)
-transitions(Claim.status, RecordClaimDenial, claimsubmitted -> claimdenied)
-sets(RecordClaimDenial, Claim, denial_reason == present)
+// The 審査支払機関 moves a レセプト whose 資格 changed to the new insurer instead of returning it
+// (mhlw-2021-shikaku-kago-furikae.txt:11); the hospital only sees the result, so this writes nothing.
+// 審査支払機関は、職権で、当該不備を補正することができる (egov-seikyu-meirei-351M50000100036.txt:41).
+displays(ReviewClaimTransfer, ClaimScreen)
+reads(ReviewClaimTransfer, ClaimStatement)
+raises(ClaimsReviewOrganization, EvClaimTransferred)
+triggers(EvClaimTransferred, ReviewClaimTransfer)
 
+// 返戻: 事務上, 審査上, 資格関係等 (ssk-henrei-kiroku-jouken-rezept01.txt:5530-5533). The 返戻ファイル must be
+// downloaded within 3 months (mhlw-online-henrei-saiseikyu.txt:119), so a timer checks for it.
+displays(RecordClaimReturn, ClaimScreen)
+invokes(RecordClaimReturn, ClaimResultApi)
+transitions(ClaimStatement.status, RecordClaimReturn, stmtunderreview -> stmtreturned)
+sets(RecordClaimReturn, ClaimStatement, return_reason == present)
+raises(ClaimsReviewOrganization, EvClaimReturned)
+triggers(EvClaimReturned, RecordClaimReturn)
+triggers(ReturnDownloadCheck, RecordClaimReturn)
+
+// A 資格 change that 振替・分割 cannot handle comes back as a 返戻 (mhlw-2021-shikaku-kago-furikae.txt:40, :70).
+condition TransferNotPossible "振替・分割の対象外（負担割合の相違・公費）"
+combines(TransferNotPossible, PayerChange)
+combines(TransferNotPossible, ClaimStatement.status)
+applies_to(TransferNotPossible, RecordClaimReturn)
+
+// 返戻ファイルを修正し、当月請求のレセプトと併せて再請求 (mhlw-online-henrei-saiseikyu.txt:105-111).
+displays(CorrectReturnedStatement, ClaimScreen)
+invokes(CorrectReturnedStatement, ClaimEditApi)
+transitions(ClaimStatement.status, CorrectReturnedStatement, stmtreturned -> stmtinspecting)
+sets(CorrectReturnedStatement, ClaimStatement, return_reason == null)
+
+// 査定: in principle not billed again (medicom-receipt-return.md:127, vendor article); 査定減点 is analysed
+// and reported (koseikan-2024-iji-shiyousyo.txt:239-241).
+displays(RecordClaimAssessment, ClaimScreen)
+invokes(RecordClaimAssessment, ClaimResultApi)
+transitions(ClaimStatement.status, RecordClaimAssessment, stmtunderreview -> stmtassessed)
+raises(ClaimsReviewOrganization, EvClaimAssessed)
+triggers(EvClaimAssessed, RecordClaimAssessment)
+
+// 再審査へ提出すべき項目を抽出 (koseikan-2024-iji-shiyousyo.txt:238), within the 再審査等請求期間 5日～月末
+// (ssk-online-seikyu-sousa-tejunsho.txt:754). The period is a comment: a use case has no calendar guard.
+displays(RequestReexamination, ClaimScreen)
+invokes(RequestReexamination, SubmitClaimApi)
+transitions(ClaimStatement.status, RequestReexamination, stmtassessed -> stmtrereview)
+
+// 診療翌々月に医療機関・薬局へ診療報酬等支払 (mhlw-2021-shikaku-kago-furikae.txt:34). A 査定 is paid at the
+// reduced amount; a 再審査 is paid at its result, 原審 or 復活 (koseikan-2024-iji-shiyousyo.txt:241).
 displays(PostPayment, PaymentPostingScreen)
 invokes(PostPayment, PaymentPostApi)
-creates(PaymentPostApi, PaymentTransaction)
-updates(PaymentPostApi, Claim)
-transitions(Claim.status, PostPayment, claimaccepted -> claimpaid)
-sets(PostPayment, Claim, paid_at == present)
-sets(PostPayment, PaymentTransaction, status == payposted)
-sets(PostPayment, PaymentTransaction, processed_at == present)
-raises(PaymentGateway, EvPaymentSettled)
-triggers(EvPaymentSettled, PostPayment)
+updates(PaymentPostApi, ClaimStatement)
+transitions(ClaimStatement.status, PostPayment, stmtunderreview -> stmtpaid)
+transitions(ClaimStatement.status, PostPayment, stmtassessed -> stmtpaid)
+transitions(ClaimStatement.status, PostPayment, stmtrereview -> stmtpaid)
+sets(PostPayment, ClaimStatement, paid_at == present)
+raises(ClaimsReviewOrganization, EvRemittance)
+triggers(EvRemittance, PostPayment)
 
+// 未収金管理台帳の作成 (毎月) (koseikan-2024-iji-shiyousyo.txt:219).
 displays(ReconcileBalance, BalanceScreen)
 invokes(ReconcileBalance, BalanceApi)
 updates(BalanceApi, AccountBalance)
 reads(BalanceApi, PaymentTransaction)
 sets(ReconcileBalance, AccountBalance, is_closed == true)
 sets(ReconcileBalance, AccountBalance, closed_at == present)
+triggers(ReceivablesMonthlyReview, ReconcileBalance)
 
 displays(VoidCharge, ChargeWorklistScreen)
 updates(VoidCharge, Charge)
 sets(VoidCharge, Charge, status == chargevoided)
 
 // Access constraints
-requires_permission(CreateCharge, BillingClaimWrite)
-requires_medium(CreateCharge, BillingWorkstation)
-requires_permission(CreateChargeApi, BillingClaimWrite)
+requires_medium(CreateCharge, ClinicalWorkstation)
 
-requires_permission(GenerateClaim, BillingClaimWrite)
-requires_medium(GenerateClaim, BillingWorkstation)
+requires_permission(GenerateClaimStatement, BillingClaimWrite)
+requires_medium(GenerateClaimStatement, BillingWorkstation)
 requires_permission(GenerateClaimApi, BillingClaimWrite)
 
-requires_permission(SubmitClaim, BillingClaimWrite)
-requires_medium(SubmitClaim, BillingWorkstation)
+requires_permission(InspectClaimStatement, BillingClaimWrite)
+requires_medium(InspectClaimStatement, BillingWorkstation)
+requires_permission(ClaimEditApi, BillingClaimWrite)
+
+requires_permission(HoldClaimStatement, BillingClaimWrite)
+requires_medium(HoldClaimStatement, BillingWorkstation)
+
+requires_permission(ReleaseHeldStatement, BillingClaimWrite)
+requires_medium(ReleaseHeldStatement, BillingWorkstation)
+
+requires_permission(SubmitClaimStatements, BillingClaimWrite)
+requires_medium(SubmitClaimStatements, OnlineClaimTerminal)
 requires_permission(SubmitClaimApi, BillingClaimWrite)
 
-requires_permission(ReceiveClaimAccepted, BillingClaimWrite)
-requires_medium(ReceiveClaimAccepted, BillingWorkstation)
+requires_permission(RecordReceiptError, BillingClaimWrite)
+requires_medium(RecordReceiptError, OnlineClaimTerminal)
+requires_permission(ClaimResultApi, BillingClaimWrite)
 
-requires_permission(RecordClaimDenial, BillingClaimWrite)
-requires_medium(RecordClaimDenial, BillingWorkstation)
+requires_permission(ResendErroredStatement, BillingClaimWrite)
+requires_medium(ResendErroredStatement, OnlineClaimTerminal)
+
+requires_permission(ReceiveClaimAccepted, BillingClaimWrite)
+requires_medium(ReceiveClaimAccepted, OnlineClaimTerminal)
+
+requires_permission(ReviewClaimTransfer, BillingClaimWrite)
+requires_medium(ReviewClaimTransfer, OnlineClaimTerminal)
+
+requires_permission(RecordClaimReturn, BillingClaimWrite)
+requires_medium(RecordClaimReturn, OnlineClaimTerminal)
+
+requires_permission(CorrectReturnedStatement, BillingClaimWrite)
+requires_medium(CorrectReturnedStatement, BillingWorkstation)
+
+requires_permission(RecordClaimAssessment, BillingClaimWrite)
+requires_medium(RecordClaimAssessment, OnlineClaimTerminal)
+
+requires_permission(RequestReexamination, BillingClaimWrite)
+requires_medium(RequestReexamination, OnlineClaimTerminal)
 
 requires_permission(PostPayment, PaymentPost)
 requires_medium(PostPayment, BillingWorkstation)
@@ -125,3 +270,57 @@ requires_permission(BalanceApi, PaymentPost)
 
 requires_permission(VoidCharge, BillingClaimWrite)
 requires_medium(VoidCharge, BillingWorkstation)
+
+// Business flow
+flow ClaimCycleFlow "レセプトの月次サイクル"
+step CreateStatementStep  "レセプト作成（月初）"
+step InspectStep          "院内点検"
+step HoldStep             "保留（月遅れ）"
+step SubmitStep           "請求（5日～10日）"
+step ReceiptErrorStep     "受付不能・要確認の再送（11日・12日）"
+step ReviewStep           "審査"
+step ReturnStep           "返戻と再請求"
+step AssessStep           "査定と再審査請求"
+step PaidStep             "支払（診療翌々月）"
+
+contains(BucBillingClaims, ClaimCycleFlow)
+contains(ClaimCycleFlow, CreateStatementStep)
+contains(ClaimCycleFlow, InspectStep)
+contains(ClaimCycleFlow, HoldStep)
+contains(ClaimCycleFlow, SubmitStep)
+contains(ClaimCycleFlow, ReceiptErrorStep)
+contains(ClaimCycleFlow, ReviewStep)
+contains(ClaimCycleFlow, ReturnStep)
+contains(ClaimCycleFlow, AssessStep)
+contains(ClaimCycleFlow, PaidStep)
+
+precedes(CreateStatementStep, InspectStep)
+precedes(InspectStep, SubmitStep)
+branches(InspectStep, HoldStep)
+repeats(HoldStep, InspectStep)
+precedes(SubmitStep, ReviewStep)
+excepts(SubmitStep, ReceiptErrorStep)
+repeats(ReceiptErrorStep, SubmitStep)
+precedes(ReviewStep, PaidStep)
+excepts(ReviewStep, ReturnStep)
+repeats(ReturnStep, InspectStep)
+branches(ReviewStep, AssessStep)
+precedes(AssessStep, PaidStep)
+
+covers(CreateStatementStep, GenerateClaimStatement)
+covers(CreateStatementStep, MonthlyClaimCreation)
+covers(InspectStep, InspectClaimStatement)
+covers(HoldStep, HoldClaimStatement)
+covers(HoldStep, ReleaseHeldStatement)
+covers(SubmitStep, SubmitClaimStatements)
+covers(SubmitStep, MonthlyClaimDeadline)
+covers(ReceiptErrorStep, RecordReceiptError)
+covers(ReceiptErrorStep, ResendErroredStatement)
+covers(ReceiptErrorStep, ErrorResendWindow)
+covers(ReviewStep, ReceiveClaimAccepted)
+covers(ReviewStep, ReviewClaimTransfer)
+covers(ReturnStep, RecordClaimReturn)
+covers(ReturnStep, CorrectReturnedStatement)
+covers(AssessStep, RecordClaimAssessment)
+covers(AssessStep, RequestReexamination)
+covers(PaidStep, PostPayment)

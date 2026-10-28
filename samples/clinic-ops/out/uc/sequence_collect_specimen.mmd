@@ -1,7 +1,6 @@
 sequenceDiagram
   box System Value
-    actor Clinician as 👤 Clinician
-    actor Nurse as 👤 Nurse
+    actor Nurse as 👤 看護師
   end
   box System Boundary
     participant SpecimenScreen as 🖥️ Specimen Collection Screen
@@ -11,11 +10,11 @@ sequenceDiagram
     participant ClinicalOrder as 🗄️ Clinical Order
   end
 
-  Note over Clinician,ClinicalOrder: ✅ Collect Specimen
-  Clinician->>SpecimenScreen: ✅ Collect Specimen
+  Note over Nurse,ClinicalOrder: ✅ Collect Specimen
+  Nurse->>SpecimenScreen: ✅ Collect Specimen
   SpecimenScreen->>CollectSpecimenApi: ✅ Collect Specimen
   activate CollectSpecimenApi
   CollectSpecimenApi->>ClinicalOrder: update
   CollectSpecimenApi-->>SpecimenScreen: 🖥️ Specimen Collection Screen
-  SpecimenScreen-->>Clinician: 🖥️ Specimen Collection Screen
+  SpecimenScreen-->>Nurse: 🖥️ Specimen Collection Screen
   deactivate CollectSpecimenApi

@@ -4,7 +4,7 @@
 <!-- derived-from ../../docs/cli-reference.md -->
 <!-- derived-from ../../docs/state-derivation.md -->
 
-この文書は `samples/clinic-ops/` を題材に、要求整理、BUC 分解、UC 分解、System/API 境界、データモデリング、状態検証をレビューできる粒度でまとめる設計書サンプルです。
+この文書は `samples/clinic-ops/` を題材に、要求整理、BUC 分解、UC 分解、System/API 境界、データモデリング、状態検証をレビューできる粒度でまとめる設計書サンプルです。題材は日本の病院の外来業務（受付、資格確認、診察、検査、処方、計算・会計、レセプト請求）で、業務規則は `.rdra` の `//` コメントに一次資料の出典（ファイル名:行）を付けています。入院は対象外です。
 
 図は外部リンクではなく本文に埋め込みます。レビューでは対象章だけを開き、BUC 単位、UC 単位、System/API 単位、データモデル単位の順に確認します。
 
@@ -21,7 +21,7 @@
 | Event flow | `out/event_flow.mmd` | BUC 間イベント連鎖を確認する |
 | ER 図 | `out/er_care_to_billing.mmd` | 診療から請求までのデータ関係を確認する |
 | State 図 | `out/state_whole.mmd` | 主要状態遷移の全体像を確認する |
-| 状態到達表 | `out/states_appointment.txt`, `out/states_claim.txt` | lifecycle の到達可能性を確認する |
+| 状態到達表 | `out/states_appointment.txt`, `out/states_claim_statement.txt` | lifecycle の到達可能性を確認する |
 
 生成コマンド例:
 
@@ -36,19 +36,31 @@ rdra-ish csv samples/clinic-ops --kind actor-permission-audit --out samples/clin
 
 ## 2. 業務スコープ
 
-対象は診療所運営の中核業務です。患者登録、予約、受付、診療、検査、処方、請求、フォローアップ、運営管理を BUC として分け、業務担当者がレビューしやすい単位にしています。
+対象は病院の外来業務です。患者登録、予約、受付、診療、検査、処方、計算・会計、レセプト請求、フォローアップ、運営管理を BUC として分け、業務担当者がレビューしやすい単位にしています。受付・会計・レセプトは医事課の業務で、病院が外部に委託することもあります。
 
 | Business | BUC | 主な actor | 目的 |
 |---|---|---|---|
-| `PatientAccess` | `BucPatientOnboarding` | FrontDesk, Patient | 患者登録から問診送付までを扱う |
-| `PatientAccess` | `BucAppointmentScheduling` | FrontDesk, Patient | 予約検索、仮押さえ、予約確定、変更、取消、通知を扱う |
-| `PatientAccess` | `BucVisitCheckIn` | FrontDesk, Nurse | 来院確認から部屋割り、診療準備までを扱う |
-| `CareDelivery` | `BucClinicalEncounter` | Nurse, Clinician | 診療記録を開き、バイタル、診断、署名、予約完了までを扱う |
-| `CareDelivery` | `BucOrdersResults` | Clinician, Nurse | 検査オーダーから結果確認、重要結果通知までを扱う |
-| `CareDelivery` | `BucPrescriptionFulfillment` | Clinician, Nurse | 処方作成、薬剤検索、薬局ネットワーク送信、調剤確認、取消、再処方を扱う |
-| `RevenueCycle` | `BucBillingClaims` | BillingSpecialist | 診療署名後のチャージ作成、請求生成、請求送信、受理/否認、入金、残高消込を扱う |
-| `PatientAccess` | `BucFollowupCare` | CareCoordinator, Patient | 診療後のケアプラン作成、患者連絡、患者応答確認、再診予約、ケアプラン終了を扱う |
-| `ClinicAdministration` | `BucStaffAdministration` | ClinicAdmin | 診療所運営のマスタ・監査系業務を扱う |
+| `PatientAccess` | `BucPatientOnboarding` | ReceptionClerk（医事課 受付担当）, Patient | Patient Onboarding |
+| `PatientAccess` | `BucAppointmentScheduling` | ReceptionClerk, Patient | Appointment Scheduling |
+| `PatientAccess` | `BucVisitCheckIn` | ReceptionClerk, Nurse | 受付（初診・再診） |
+| `CareDelivery` | `BucClinicalEncounter` | Nurse（看護師）, Clinician（医師） | Clinical Encounter |
+| `CareDelivery` | `BucOrdersResults` | Clinician, Nurse, MedicalClerk（医師事務作業補助者） | Orders and Results |
+| `CareDelivery` | `BucPrescriptionFulfillment` | Clinician（医師）, Pharmacist（薬剤師） | 処方 |
+| `RevenueCycle` | `BucVisitPayment` | AccountsClerk（医事課 会計担当） | 計算・会計 |
+| `RevenueCycle` | `BucBillingClaims` | ClaimsClerk（医事課 レセプト担当） | レセプト作成・請求 |
+| `PatientAccess` | `BucFollowupCare` | CareCoordinator, Patient | Follow-Up Care |
+| `ClinicAdministration` | `BucStaffAdministration` | ClinicAdmin | Staff Administration |
+
+米国型の診療所モデルとの主な違いは次のとおりです。
+
+| 論点 | このモデル |
+|---|---|
+| 支払の時点 | 受付では支払わない。診察の後に計算受付・会計受付で精算する |
+| 窓口負担 | 負担割合（3割・2割）で計算し、限度額情報があれば自己負担限度額までを窓口で受け取る |
+| 資格確認 | 受付のたびにオンライン資格確認等システムで確認する。来院前の一括照会、申立書、システム障害時モードがある |
+| 請求 | レセプトを月ごとに審査支払機関（支払基金・国保連）へ請求する。返戻は再請求でき、査定は再審査請求で争う |
+| 処方 | 院外処方箋は電子処方箋管理サービスへ登録し、患者が選ぶ保険薬局で調剤する。院内処方は薬剤師が調剤・監査する |
+| 紹介 | 紹介状なしの初診は選定療養費（自費）の対象。救急搬送などは除外 |
 
 レビューでは、まず BUC の責務境界を確認し、次に UC 単位で API/Entity 操作を確認します。最後に System/API マトリクスと ER/状態検証で横断的な整合性を見ます。
 
@@ -59,7 +71,9 @@ rdra-ish csv samples/clinic-ops --kind actor-permission-audit --out samples/clin
 `requires_permission` / `requires_medium` として定義する。
 
 `BucAppointmentScheduling` は `belongs(...).by(...)` で、
-予約業務が窓口端末または患者モバイルから発生することを表す。
+予約業務が窓口端末または患者モバイルから発生することを表す。`BucVisitPayment` は
+`AccountsWindow`（会計窓口）と `PaymentKiosk`（自動精算機）、`BucBillingClaims` は
+`BillingWorkstation` と `OnlineClaimTerminal`（オンライン請求用端末）から発生する。
 
 Screen には制約を直接書かない。`displays(UC, Screen)` と `invokes(UC, Api)` から
 次のような行が `out/screen_constraints.csv` に導出される。
@@ -68,9 +82,10 @@ Screen には制約を直接書かない。`displays(UC, Screen)` と `invokes(U
 screen_id,usecase_id,api_id,required_permissions,required_media
 ConsentScreen,CaptureConsent,ConsentApi,ConsentCapture,PatientMobile
 AppointmentScreen,BookAppointment,BookAppointmentApi,ScheduleWrite,FrontDeskTerminal|PatientMobile
-DiagnosisScreen,DocumentAssessment,DocumentAssessmentApi,ClinicalDocument,ClinicalWorkstation
-ClaimScreen,GenerateClaim,GenerateClaimApi,BillingClaimWrite,BillingWorkstation
-ScheduleAdminScreen,ManageProviderSchedule,ManageProviderScheduleApi,ProviderScheduleAdmin,AdminConsole
+CheckInScreen,CheckInPatient,CheckInPatientApi,VisitCheckIn,FrontDeskTerminal
+PaymentWindowScreen,SettleAtWindow,SettlementApi,PaymentCollect,AccountsWindow
+ClaimScreen,SubmitClaimStatements,SubmitClaimApi,BillingClaimWrite,OnlineClaimTerminal
+DispensingScreen,DispenseAndAudit,DispensingApi,PrescriptionDispense,PharmacyWorkstation
 ```
 
 Actor 側の権限付与は `out/actor_permission_audit.csv` で確認する。`missing` は
@@ -85,16 +100,16 @@ UC/API 要求に対して actor の `has_permission` が不足していること
 |---|---|
 | BUC | `BucPatientOnboarding` |
 | Business | `PatientAccess` |
-| 主な actor | FrontDesk, Patient |
+| 主な actor | ReceptionClerk（医事課 受付担当）, Patient |
 | 必要権限 | `PatientProfileRead`, `PatientProfileWrite`, `InsuranceVerify`, `ConsentCapture`, `IntakeManage`, `PatientMessageSend` |
 | 主なデータ | `PatientAccount`, `PatientProfile`, `InsurancePolicy`, `EligibilityCheck`, `ConsentRecord`, `IntakePacket`, `PatientMessage` |
 
-患者登録から問診送付までを扱う。患者マスタの新規作成、保険資格確認、同意取得、問診フォーム送付は同じ BUC にあるが、API 境界は UC ごとに分け、患者登録 API と外部資格確認 API の責務が混ざらないようにする。
+新患登録から問診送付までを扱う。新患登録では、オンライン資格確認で得た保険情報と、患者が同意した場合の限度額情報（適用区分）を `InsurancePolicy` に登録する。負担割合 `burden_ratio` と限度額適用区分 `limit_category` は actor が選ぶ値ではなく保険者が決める値なので、variation 型の属性として持つ。
 
 レビュー観点:
 
-- SearchPatient と RegisterPatient の境界が明確か。
-- EligibilityApi が保険確認結果と保険ポリシー更新を同じ整合性境界で扱ってよいか。
+- VerifyInsurance が、保険資格の登録と限度額情報の取得を同じ API 境界で扱ってよいか。
+- 受付ごとの資格確認（`BucVisitCheckIn`）と新患登録時の資格登録の責務が混ざっていないか。
 - SendIntakeForms は予約イベントから起動されるため、予約 BUC 側の責務と混同しないか。
 
 #### Patient Onboarding RDRA Layered Graph 図
@@ -109,13 +124,14 @@ rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucPatien
 flowchart LR
   subgraph layer_value[System Value]
     direction TB
-    FrontDesk(["👤 Front Desk Staff"])
     Patient(["👤 Patient"])
+    ReceptionClerk(["👤 医事課 受付担当"])
   end
   subgraph layer_environment[External Environment]
     direction TB
     PatientAccess["💼 Patient Access"]
     BucPatientOnboarding["📦 Onboard and Maintain Patient"]
+    IntakeExpiryCheck["⏱️ Nightly intake expiry check"]
     FrontDeskTerminal[/"📱 Front Desk Terminal"/]
     PatientMobile[/"📱 Patient Mobile"/]
     ConsentCapture["🔑 Consent Capture"]
@@ -136,16 +152,13 @@ flowchart LR
     SearchPatient(["✅ Search Patient"])
     SendIntakeForms(["✅ Send Intake Forms"])
     UpdateDemographics(["✅ Update Demographics"])
-    VerifyInsurance(["✅ Verify Insurance"])
+    VerifyInsurance(["✅ 保険資格・限度額情報の登録（新患登録）"])
     ConsentScreen[["🖥️ Consent Capture Screen"]]
     InsuranceScreen[["🖥️ Insurance Verification Screen"]]
     IntakePortalScreen[["🖥️ Intake Portal Screen"]]
     PatientProfileScreen[["🖥️ Patient Profile Screen"]]
     PatientSearchScreen[["🖥️ Patient Search Screen"]]
-    EvIntakeCompleted{"⚡ Intake Completed"}
-    EvIntakeExpired{"⚡ Intake Expired"}
-    EvPatientArchived{"⚡ Patient Archived"}
-    EvPatientMerged{"⚡ Patient Merged"}
+    EvAppointmentScheduled{"⚡ Appointment Scheduled"}
   end
   subgraph layer_system[System]
     direction TB
@@ -156,8 +169,8 @@ flowchart LR
     SearchPatientApi["🔌 Search Patient API"]
     UpdateDemographicsApi["🔌 Update Demographics API"]
     ConsentRecord[("🗄️ Consent Record")]
-    EligibilityCheck[("🗄️ Eligibility Check")]
-    InsurancePolicy[("🗄️ Insurance Policy")]
+    EligibilityCheck[("🗄️ 資格確認")]
+    InsurancePolicy[("🗄️ 保険資格")]
     IntakePacket[("🗄️ Intake Packet")]
     PatientAccount[("🗄️ Patient Account")]
     PatientMessage[("🗄️ Patient Message")]
@@ -168,24 +181,19 @@ flowchart LR
   Patient -->|performs| BucPatientOnboarding
   Patient -->|performs| CaptureConsent
   Patient -->|performs| CompleteIntakeForms
-  FrontDesk -.->|has_permission| PatientProfileRead
-  FrontDesk -.->|has_permission| PatientProfileWrite
-  FrontDesk -.->|has_permission| InsuranceVerify
-  FrontDesk -.->|has_permission| IntakeManage
-  FrontDesk -->|performs| BucPatientOnboarding
-  FrontDesk -->|performs| VerifyInsurance
-  FrontDesk -->|performs| SendIntakeForms
-  FrontDesk -->|performs| ExpireIntakeForms
-  FrontDesk -->|performs| MergeDuplicatePatient
-  FrontDesk -->|performs| ArchivePatient
-  FrontDesk -->|performs| SearchPatient
-  FrontDesk -->|performs| RegisterPatient
-  FrontDesk -->|performs| UpdateDemographics
-  ConsentApi -.->|creates| ConsentRecord
-  ConsentApi -.->|requires_permission| ConsentCapture
-  IntakeMessagingApi -.->|creates| PatientMessage
-  IntakeMessagingApi -.->|creates| IntakePacket
-  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
+  ReceptionClerk -.->|has_permission| PatientProfileRead
+  ReceptionClerk -.->|has_permission| PatientProfileWrite
+  ReceptionClerk -.->|has_permission| InsuranceVerify
+  ReceptionClerk -.->|has_permission| IntakeManage
+  ReceptionClerk -->|performs| BucPatientOnboarding
+  ReceptionClerk -->|performs| SearchPatient
+  ReceptionClerk -->|performs| RegisterPatient
+  ReceptionClerk -->|performs| UpdateDemographics
+  ReceptionClerk -->|performs| VerifyInsurance
+  ReceptionClerk -->|performs| SendIntakeForms
+  ReceptionClerk -->|performs| ExpireIntakeForms
+  ReceptionClerk -->|performs| MergeDuplicatePatient
+  ReceptionClerk -->|performs| ArchivePatient
   SearchPatientApi -.->|reads| PatientAccount
   SearchPatientApi -.->|reads| PatientProfile
   SearchPatientApi -.->|requires_permission| PatientProfileRead
@@ -198,7 +206,15 @@ flowchart LR
   EligibilityApi -.->|reads| InsurancePolicy
   EligibilityApi -.->|requires_permission| InsuranceVerify
   EligibilityApi -.->|updates| InsurancePolicy
+  ConsentApi -.->|creates| ConsentRecord
+  ConsentApi -.->|requires_permission| ConsentCapture
+  IntakeMessagingApi -.->|creates| PatientMessage
+  IntakeMessagingApi -.->|creates| IntakePacket
+  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
   BucPatientOnboarding -.->|belongs| PatientAccess
+  BucPatientOnboarding -->|contains| SearchPatient
+  BucPatientOnboarding -->|contains| RegisterPatient
+  BucPatientOnboarding -->|contains| UpdateDemographics
   BucPatientOnboarding -->|contains| VerifyInsurance
   BucPatientOnboarding -->|contains| CaptureConsent
   BucPatientOnboarding -->|contains| SendIntakeForms
@@ -206,17 +222,29 @@ flowchart LR
   BucPatientOnboarding -->|contains| ExpireIntakeForms
   BucPatientOnboarding -->|contains| MergeDuplicatePatient
   BucPatientOnboarding -->|contains| ArchivePatient
-  BucPatientOnboarding -->|contains| SearchPatient
-  BucPatientOnboarding -->|contains| RegisterPatient
-  BucPatientOnboarding -->|contains| UpdateDemographics
   PatientMessage ---|N:1| PatientAccount
   PatientProfile ---|1:1| PatientAccount
   InsurancePolicy ---|N:1| PatientAccount
   EligibilityCheck ---|N:1| InsurancePolicy
   ConsentRecord ---|N:1| PatientAccount
   IntakePacket ---|N:1| PatientAccount
+  EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
+  EvAppointmentScheduled -.->|triggers| SendIntakeForms
   PatientSearchScreen -.->|shows| PatientAccount
   PatientProfileScreen -.->|shows| PatientProfile
+  IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
+  SearchPatient -.->|displays| PatientSearchScreen
+  SearchPatient -.->|invokes| SearchPatientApi
+  SearchPatient -.->|requires_medium| FrontDeskTerminal
+  SearchPatient -.->|requires_permission| PatientProfileRead
+  RegisterPatient -.->|displays| PatientProfileScreen
+  RegisterPatient -.->|invokes| RegisterPatientApi
+  RegisterPatient -.->|requires_medium| FrontDeskTerminal
+  RegisterPatient -.->|requires_permission| PatientProfileWrite
+  UpdateDemographics -.->|displays| PatientProfileScreen
+  UpdateDemographics -.->|invokes| UpdateDemographicsApi
+  UpdateDemographics -.->|requires_medium| FrontDeskTerminal
+  UpdateDemographics -.->|requires_permission| PatientProfileWrite
   VerifyInsurance -.->|displays| InsuranceScreen
   VerifyInsurance -.->|invokes| EligibilityApi
   VerifyInsurance -.->|requires_medium| FrontDeskTerminal
@@ -230,38 +258,21 @@ flowchart LR
   SendIntakeForms -.->|requires_medium| FrontDeskTerminal
   SendIntakeForms -.->|requires_permission| IntakeManage
   CompleteIntakeForms -.->|displays| IntakePortalScreen
-  CompleteIntakeForms -.->|raises| EvIntakeCompleted
   CompleteIntakeForms -.->|requires_medium| PatientMobile
   CompleteIntakeForms -.->|requires_permission| ConsentCapture
   CompleteIntakeForms -.->|updates| IntakePacket
   ExpireIntakeForms -.->|displays| IntakePortalScreen
-  ExpireIntakeForms -.->|raises| EvIntakeExpired
   ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
   ExpireIntakeForms -.->|requires_permission| IntakeManage
   ExpireIntakeForms -.->|updates| IntakePacket
   MergeDuplicatePatient -.->|displays| PatientProfileScreen
-  MergeDuplicatePatient -.->|raises| EvPatientMerged
   MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
   MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
   MergeDuplicatePatient -.->|updates| PatientAccount
   ArchivePatient -.->|displays| PatientProfileScreen
-  ArchivePatient -.->|raises| EvPatientArchived
   ArchivePatient -.->|requires_medium| FrontDeskTerminal
   ArchivePatient -.->|requires_permission| PatientProfileWrite
   ArchivePatient -.->|updates| PatientAccount
-  SearchPatient -.->|displays| PatientSearchScreen
-  SearchPatient -.->|invokes| SearchPatientApi
-  SearchPatient -.->|requires_medium| FrontDeskTerminal
-  SearchPatient -.->|requires_permission| PatientProfileRead
-  RegisterPatient -.->|displays| PatientProfileScreen
-  RegisterPatient -.->|invokes| RegisterPatientApi
-  RegisterPatient -.->|requires_medium| FrontDeskTerminal
-  RegisterPatient -.->|requires_permission| PatientProfileWrite
-  UpdateDemographics -.->|displays| PatientProfileScreen
-  UpdateDemographics -.->|invokes| UpdateDemographicsApi
-  UpdateDemographics -.->|requires_medium| FrontDeskTerminal
-  UpdateDemographics -.->|requires_permission| PatientProfileWrite
-
 ```
 
 #### Patient Onboarding sequence 図
@@ -275,8 +286,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucPa
 ```mermaid
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
     actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant ConsentScreen as 🖥️ Consent Capture Screen
@@ -294,22 +305,22 @@ sequenceDiagram
     participant SearchPatientApi as 🔌 Search Patient API
     participant UpdateDemographicsApi as 🔌 Update Demographics API
     participant ConsentRecord as 🗄️ Consent Record
-    participant EligibilityCheck as 🗄️ Eligibility Check
-    participant InsurancePolicy as 🗄️ Insurance Policy
+    participant EligibilityCheck as 🗄️ 資格確認
+    participant InsurancePolicy as 🗄️ 保険資格
     participant IntakePacket as 🗄️ Intake Packet
     participant PatientAccount as 🗄️ Patient Account
     participant PatientMessage as 🗄️ Patient Message
     participant PatientProfile as 🗄️ Patient Profile
   end
 
-  Note over FrontDesk,PatientProfile: ✅ Archive Patient
-  FrontDesk->System: ✅ Archive Patient
+  Note over Patient,PatientProfile: ✅ Archive Patient
+  Patient->System: ✅ Archive Patient
   activate System
   System->>PatientAccount: update
-  System-->>FrontDesk: 🖥️ Patient Profile Screen
+  System-->>Patient: 🖥️ Patient Profile Screen
   deactivate System
 
-  Note over FrontDesk,PatientProfile: ✅ Capture Consent
+  Note over Patient,PatientProfile: ✅ Capture Consent
   Patient->>ConsentScreen: ✅ Capture Consent
   ConsentScreen->>ConsentApi: ✅ Capture Consent
   activate ConsentApi
@@ -318,29 +329,29 @@ sequenceDiagram
   ConsentScreen-->>Patient: 🖥️ Consent Capture Screen
   deactivate ConsentApi
 
-  Note over FrontDesk,PatientProfile: ✅ Complete Intake Forms
+  Note over Patient,PatientProfile: ✅ Complete Intake Forms
   Patient->System: ✅ Complete Intake Forms
   activate System
   System->>IntakePacket: update
   System-->>Patient: 🖥️ Intake Portal Screen
   deactivate System
 
-  Note over FrontDesk,PatientProfile: ✅ Expire Intake Forms
-  FrontDesk->System: ✅ Expire Intake Forms
+  Note over Patient,PatientProfile: ✅ Expire Intake Forms
+  Patient->System: ✅ Expire Intake Forms
   activate System
   System->>IntakePacket: update
-  System-->>FrontDesk: 🖥️ Intake Portal Screen
+  System-->>Patient: 🖥️ Intake Portal Screen
   deactivate System
 
-  Note over FrontDesk,PatientProfile: ✅ Merge Duplicate Patient
-  FrontDesk->System: ✅ Merge Duplicate Patient
+  Note over Patient,PatientProfile: ✅ Merge Duplicate Patient
+  Patient->System: ✅ Merge Duplicate Patient
   activate System
   System->>PatientAccount: update
-  System-->>FrontDesk: 🖥️ Patient Profile Screen
+  System-->>Patient: 🖥️ Patient Profile Screen
   deactivate System
 
-  Note over FrontDesk,PatientProfile: ✅ Register Patient
-  FrontDesk->>PatientProfileScreen: ✅ Register Patient
+  Note over Patient,PatientProfile: ✅ Register Patient
+  Patient->>PatientProfileScreen: ✅ Register Patient
   PatientProfileScreen->>RegisterPatientApi: ✅ Register Patient
   activate RegisterPatientApi
   rect rgb(245,245,245)
@@ -349,21 +360,21 @@ sequenceDiagram
     RegisterPatientApi->>PatientProfile: create
   end
   RegisterPatientApi-->>PatientProfileScreen: 🖥️ Patient Profile Screen
-  PatientProfileScreen-->>FrontDesk: 🖥️ Patient Profile Screen
+  PatientProfileScreen-->>Patient: 🖥️ Patient Profile Screen
   deactivate RegisterPatientApi
 
-  Note over FrontDesk,PatientProfile: ✅ Search Patient
-  FrontDesk->>PatientSearchScreen: ✅ Search Patient
+  Note over Patient,PatientProfile: ✅ Search Patient
+  Patient->>PatientSearchScreen: ✅ Search Patient
   PatientSearchScreen->>SearchPatientApi: ✅ Search Patient
   activate SearchPatientApi
   SearchPatientApi->>PatientAccount: read
   SearchPatientApi->>PatientProfile: read
   SearchPatientApi-->>PatientSearchScreen: 🖥️ Patient Search Screen
-  PatientSearchScreen-->>FrontDesk: 🖥️ Patient Search Screen
+  PatientSearchScreen-->>Patient: 🖥️ Patient Search Screen
   deactivate SearchPatientApi
 
-  Note over FrontDesk,PatientProfile: ✅ Send Intake Forms
-  FrontDesk->>IntakePortalScreen: ✅ Send Intake Forms
+  Note over Patient,PatientProfile: ✅ Send Intake Forms
+  Patient->>IntakePortalScreen: ✅ Send Intake Forms
   IntakePortalScreen->>IntakeMessagingApi: ✅ Send Intake Forms
   activate IntakeMessagingApi
   rect rgb(245,245,245)
@@ -372,21 +383,21 @@ sequenceDiagram
     IntakeMessagingApi->>PatientMessage: create
   end
   IntakeMessagingApi-->>IntakePortalScreen: 🖥️ Intake Portal Screen
-  IntakePortalScreen-->>FrontDesk: 🖥️ Intake Portal Screen
+  IntakePortalScreen-->>Patient: 🖥️ Intake Portal Screen
   deactivate IntakeMessagingApi
 
-  Note over FrontDesk,PatientProfile: ✅ Update Demographics
-  FrontDesk->>PatientProfileScreen: ✅ Update Demographics
+  Note over Patient,PatientProfile: ✅ Update Demographics
+  Patient->>PatientProfileScreen: ✅ Update Demographics
   PatientProfileScreen->>UpdateDemographicsApi: ✅ Update Demographics
   activate UpdateDemographicsApi
   UpdateDemographicsApi->>PatientProfile: update
   UpdateDemographicsApi-->>PatientProfileScreen: 🖥️ Patient Profile Screen
-  PatientProfileScreen-->>FrontDesk: 🖥️ Patient Profile Screen
+  PatientProfileScreen-->>Patient: 🖥️ Patient Profile Screen
   deactivate UpdateDemographicsApi
 
-  Note over FrontDesk,PatientProfile: ✅ Verify Insurance
-  FrontDesk->>InsuranceScreen: ✅ Verify Insurance
-  InsuranceScreen->>EligibilityApi: ✅ Verify Insurance
+  Note over Patient,PatientProfile: ✅ 保険資格・限度額情報の登録（新患登録）
+  Patient->>InsuranceScreen: ✅ 保険資格・限度額情報の登録（新患登録）
+  InsuranceScreen->>EligibilityApi: ✅ 保険資格・限度額情報の登録（新患登録）
   activate EligibilityApi
   EligibilityApi->>InsurancePolicy: read
   rect rgb(245,245,245)
@@ -395,7 +406,7 @@ sequenceDiagram
     EligibilityApi->>EligibilityCheck: create
   end
   EligibilityApi-->>InsuranceScreen: 🖥️ Insurance Verification Screen
-  InsuranceScreen-->>FrontDesk: 🖥️ Insurance Verification Screen
+  InsuranceScreen-->>Patient: 🖥️ Insurance Verification Screen
   deactivate EligibilityApi
 ```
 
@@ -405,17 +416,17 @@ sequenceDiagram
 |---|---|
 | BUC | `BucAppointmentScheduling` |
 | Business | `PatientAccess` |
-| 主な actor | FrontDesk, Patient |
+| 主な actor | ReceptionClerk, Patient |
 | 必要権限 | `ScheduleRead`, `ScheduleWrite` |
 | 主なデータ | `Appointment`, `ProviderSchedule`, `Notification`, `PatientMessage` |
 
-予約検索、仮押さえ、予約確定、変更、取消、通知を扱う。予約枠と予約レコードを同時に更新する UC は専用 API を持ち、予約通知は AppointmentNoticeApi に分ける。
+予約検索、仮押さえ、予約確定、変更、取消、通知を扱う。予約枠と予約レコードを同時に更新する UC は専用 API を持ち、予約通知は AppointmentNoticeApi に分ける。予約済みの患者は、来院前に `BucVisitCheckIn` の一括照会の対象になる。
 
 レビュー観点:
 
 - ReserveAppointment と BookAppointment の差が業務上必要か。
 - CancelAppointment が Appointment と ProviderSchedule を同じ API 境界で更新することが妥当か。
-- MarkNoShow は direct CRUD のままでよいか。
+- 予約時に選ばれる `Appointment.referral`（再診・紹介状あり・紹介状なし・除外）が、受付で確認する紹介状の有無と一致するか。
 
 #### Appointment Scheduling RDRA Layered Graph 図
 
@@ -429,36 +440,56 @@ rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucAppoin
 flowchart LR
   subgraph layer_value[System Value]
     direction TB
-    FrontDesk(["👤 Front Desk Staff"])
     Patient(["👤 Patient"])
+    ReceptionClerk(["👤 医事課 受付担当"])
+    MessagingGateway[/"🌐 Messaging Gateway"/]
   end
   subgraph layer_environment[External Environment]
     direction TB
     PatientAccess["💼 Patient Access"]
     BucAppointmentScheduling["📦 Schedule Appointments"]
+    BucPatientOnboarding["📦 Onboard and Maintain Patient"]
+    IntakeExpiryCheck["⏱️ Nightly intake expiry check"]
+    NoShowSweep["⏱️ Nightly no-show sweep"]
     FrontDeskTerminal[/"📱 Front Desk Terminal"/]
     PatientMobile[/"📱 Patient Mobile"/]
+    ConsentCapture["🔑 Consent Capture"]
+    InsuranceVerify["🔑 Insurance Verify"]
     IntakeManage["🔑 Intake Manage"]
     PatientMessageSend["🔑 Patient Message Send"]
+    PatientProfileRead["🔑 Patient Profile Read"]
+    PatientProfileWrite["🔑 Patient Profile Write"]
     ScheduleRead["🔑 Schedule Read"]
     ScheduleWrite["🔑 Schedule Write"]
   end
   subgraph layer_boundary[System Boundary]
     direction TB
+    ArchivePatient(["✅ Archive Patient"])
     BookAppointment(["✅ Book Appointment"])
     CancelAppointment(["✅ Cancel Appointment"])
+    CaptureConsent(["✅ Capture Consent"])
+    CompleteIntakeForms(["✅ Complete Intake Forms"])
+    ExpireIntakeForms(["✅ Expire Intake Forms"])
     MarkNoShow(["✅ Mark No Show"])
+    MergeDuplicatePatient(["✅ Merge Duplicate Patient"])
+    RegisterPatient(["✅ Register Patient"])
     RescheduleAppointment(["✅ Reschedule Appointment"])
     ReserveAppointment(["✅ Reserve Appointment"])
     SearchAvailability(["✅ Search Availability"])
+    SearchPatient(["✅ Search Patient"])
     SendAppointmentNotice(["✅ Send Appointment Notice"])
     SendIntakeForms(["✅ Send Intake Forms"])
+    UpdateDemographics(["✅ Update Demographics"])
+    VerifyInsurance(["✅ 保険資格・限度額情報の登録（新患登録）"])
     AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
     AppointmentScreen[["🖥️ Appointment Screen"]]
+    ConsentScreen[["🖥️ Consent Capture Screen"]]
+    InsuranceScreen[["🖥️ Insurance Verification Screen"]]
     IntakePortalScreen[["🖥️ Intake Portal Screen"]]
+    PatientProfileScreen[["🖥️ Patient Profile Screen"]]
+    PatientSearchScreen[["🖥️ Patient Search Screen"]]
     ScheduleSearchScreen[["🖥️ Schedule Search Screen"]]
     EvAppointmentCancelled{"⚡ Appointment Cancelled"}
-    EvAppointmentNoShow{"⚡ Appointment Marked No Show"}
     EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
     EvAppointmentScheduled{"⚡ Appointment Scheduled"}
   end
@@ -467,40 +498,63 @@ flowchart LR
     AppointmentNoticeApi["🔌 Appointment Notice API"]
     BookAppointmentApi["🔌 Book Appointment API"]
     CancelAppointmentApi["🔌 Cancel Appointment API"]
+    ConsentApi["🔌 Consent API"]
+    EligibilityApi["🔌 Eligibility API"]
     IntakeMessagingApi["🔌 Intake Messaging API"]
+    RegisterPatientApi["🔌 Register Patient API"]
     RescheduleAppointmentApi["🔌 Reschedule Appointment API"]
     ReserveAppointmentApi["🔌 Reserve Appointment API"]
     SearchAvailabilityApi["🔌 Search Availability API"]
+    SearchPatientApi["🔌 Search Patient API"]
+    UpdateDemographicsApi["🔌 Update Demographics API"]
     Appointment[("🗄️ Appointment")]
     ClinicLocation[("🗄️ Clinic Location")]
+    ConsentRecord[("🗄️ Consent Record")]
+    EligibilityCheck[("🗄️ 資格確認")]
+    InsurancePolicy[("🗄️ 保険資格")]
     IntakePacket[("🗄️ Intake Packet")]
     Notification[("🗄️ Notification")]
+    PatientAccount[("🗄️ Patient Account")]
     PatientMessage[("🗄️ Patient Message")]
+    PatientProfile[("🗄️ Patient Profile")]
     Provider[("🗄️ Provider")]
     ProviderSchedule[("🗄️ Provider Schedule")]
   end
+  Patient -.->|has_permission| PatientProfileRead
+  Patient -.->|has_permission| ConsentCapture
   Patient -.->|has_permission| ScheduleRead
   Patient -->|performs| BucAppointmentScheduling
+  Patient -->|performs| BucPatientOnboarding
   Patient -->|performs| SearchAvailability
   Patient -->|performs| ReserveAppointment
   Patient -->|performs| BookAppointment
   Patient -->|performs| RescheduleAppointment
+  Patient -->|performs| CaptureConsent
+  Patient -->|performs| CompleteIntakeForms
   Patient -->|performs| CancelAppointment
-  FrontDesk -.->|has_permission| IntakeManage
-  FrontDesk -.->|has_permission| ScheduleRead
-  FrontDesk -.->|has_permission| ScheduleWrite
-  FrontDesk -->|performs| BucAppointmentScheduling
-  FrontDesk -->|performs| SendIntakeForms
-  FrontDesk -->|performs| SearchAvailability
-  FrontDesk -->|performs| ReserveAppointment
-  FrontDesk -->|performs| BookAppointment
-  FrontDesk -->|performs| RescheduleAppointment
-  FrontDesk -->|performs| CancelAppointment
-  FrontDesk -->|performs| MarkNoShow
-  FrontDesk -->|performs| SendAppointmentNotice
-  IntakeMessagingApi -.->|creates| PatientMessage
-  IntakeMessagingApi -.->|creates| IntakePacket
-  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
+  ReceptionClerk -.->|has_permission| PatientProfileRead
+  ReceptionClerk -.->|has_permission| PatientProfileWrite
+  ReceptionClerk -.->|has_permission| InsuranceVerify
+  ReceptionClerk -.->|has_permission| IntakeManage
+  ReceptionClerk -.->|has_permission| ScheduleRead
+  ReceptionClerk -.->|has_permission| ScheduleWrite
+  ReceptionClerk -->|performs| BucAppointmentScheduling
+  ReceptionClerk -->|performs| BucPatientOnboarding
+  ReceptionClerk -->|performs| SearchAvailability
+  ReceptionClerk -->|performs| ReserveAppointment
+  ReceptionClerk -->|performs| BookAppointment
+  ReceptionClerk -->|performs| SearchPatient
+  ReceptionClerk -->|performs| RegisterPatient
+  ReceptionClerk -->|performs| RescheduleAppointment
+  ReceptionClerk -->|performs| UpdateDemographics
+  ReceptionClerk -->|performs| VerifyInsurance
+  ReceptionClerk -->|performs| SendIntakeForms
+  ReceptionClerk -->|performs| ExpireIntakeForms
+  ReceptionClerk -->|performs| MergeDuplicatePatient
+  ReceptionClerk -->|performs| ArchivePatient
+  ReceptionClerk -->|performs| CancelAppointment
+  ReceptionClerk -->|performs| MarkNoShow
+  ReceptionClerk -->|performs| SendAppointmentNotice
   SearchAvailabilityApi -.->|reads| ProviderSchedule
   SearchAvailabilityApi -.->|reads| Provider
   SearchAvailabilityApi -.->|reads| ClinicLocation
@@ -508,6 +562,23 @@ flowchart LR
   ReserveAppointmentApi -.->|creates| Appointment
   ReserveAppointmentApi -.->|requires_permission| ScheduleWrite
   ReserveAppointmentApi -.->|updates| ProviderSchedule
+  SearchPatientApi -.->|reads| PatientAccount
+  SearchPatientApi -.->|reads| PatientProfile
+  SearchPatientApi -.->|requires_permission| PatientProfileRead
+  RegisterPatientApi -.->|creates| PatientAccount
+  RegisterPatientApi -.->|creates| PatientProfile
+  RegisterPatientApi -.->|requires_permission| PatientProfileWrite
+  UpdateDemographicsApi -.->|requires_permission| PatientProfileWrite
+  UpdateDemographicsApi -.->|updates| PatientProfile
+  EligibilityApi -.->|creates| EligibilityCheck
+  EligibilityApi -.->|reads| InsurancePolicy
+  EligibilityApi -.->|requires_permission| InsuranceVerify
+  EligibilityApi -.->|updates| InsurancePolicy
+  ConsentApi -.->|creates| ConsentRecord
+  ConsentApi -.->|requires_permission| ConsentCapture
+  IntakeMessagingApi -.->|creates| PatientMessage
+  IntakeMessagingApi -.->|creates| IntakePacket
+  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
   BookAppointmentApi -.->|requires_permission| ScheduleWrite
   BookAppointmentApi -.->|updates| ProviderSchedule
   BookAppointmentApi -.->|updates| Appointment
@@ -527,19 +598,42 @@ flowchart LR
   BucAppointmentScheduling -->|contains| CancelAppointment
   BucAppointmentScheduling -->|contains| MarkNoShow
   BucAppointmentScheduling -->|contains| SendAppointmentNotice
+  BucPatientOnboarding -.->|belongs| PatientAccess
+  BucPatientOnboarding -->|contains| SearchPatient
+  BucPatientOnboarding -->|contains| RegisterPatient
+  BucPatientOnboarding -->|contains| UpdateDemographics
+  BucPatientOnboarding -->|contains| VerifyInsurance
+  BucPatientOnboarding -->|contains| CaptureConsent
+  BucPatientOnboarding -->|contains| SendIntakeForms
+  BucPatientOnboarding -->|contains| CompleteIntakeForms
+  BucPatientOnboarding -->|contains| ExpireIntakeForms
+  BucPatientOnboarding -->|contains| MergeDuplicatePatient
+  BucPatientOnboarding -->|contains| ArchivePatient
   ProviderSchedule ---|N:1| Provider
   ProviderSchedule ---|N:1| ClinicLocation
+  Appointment ---|N:1| PatientAccount
   Appointment ---|N:1| Provider
   Appointment ---|N:1| ClinicLocation
+  PatientMessage ---|N:1| PatientAccount
+  Notification ---|N:1| PatientAccount
+  PatientProfile ---|1:1| PatientAccount
+  InsurancePolicy ---|N:1| PatientAccount
+  EligibilityCheck ---|N:1| InsurancePolicy
+  ConsentRecord ---|N:1| PatientAccount
+  IntakePacket ---|N:1| PatientAccount
+  EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
+  EvAppointmentScheduled -.->|triggers| MessagingGateway
   EvAppointmentScheduled -.->|triggers| SendIntakeForms
   EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
+  EvAppointmentRescheduled -.->|triggers| MessagingGateway
   EvAppointmentRescheduled -.->|triggers| SendAppointmentNotice
+  EvAppointmentCancelled -.->|triggers| MessagingGateway
   EvAppointmentCancelled -.->|triggers| SendAppointmentNotice
+  PatientSearchScreen -.->|shows| PatientAccount
   ScheduleSearchScreen -.->|shows| ProviderSchedule
-  SendIntakeForms -.->|displays| IntakePortalScreen
-  SendIntakeForms -.->|invokes| IntakeMessagingApi
-  SendIntakeForms -.->|requires_medium| FrontDeskTerminal
-  SendIntakeForms -.->|requires_permission| IntakeManage
+  PatientProfileScreen -.->|shows| PatientProfile
+  IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
+  NoShowSweep -.->|triggers| MarkNoShow
   SearchAvailability -.->|displays| ScheduleSearchScreen
   SearchAvailability -.->|invokes| SearchAvailabilityApi
   SearchAvailability -.->|requires_medium| FrontDeskTerminal
@@ -556,12 +650,52 @@ flowchart LR
   BookAppointment -.->|requires_medium| FrontDeskTerminal
   BookAppointment -.->|requires_medium| PatientMobile
   BookAppointment -.->|requires_permission| ScheduleWrite
+  SearchPatient -.->|displays| PatientSearchScreen
+  SearchPatient -.->|invokes| SearchPatientApi
+  SearchPatient -.->|requires_medium| FrontDeskTerminal
+  SearchPatient -.->|requires_permission| PatientProfileRead
+  RegisterPatient -.->|displays| PatientProfileScreen
+  RegisterPatient -.->|invokes| RegisterPatientApi
+  RegisterPatient -.->|requires_medium| FrontDeskTerminal
+  RegisterPatient -.->|requires_permission| PatientProfileWrite
   RescheduleAppointment -.->|displays| AppointmentScreen
   RescheduleAppointment -.->|invokes| RescheduleAppointmentApi
   RescheduleAppointment -.->|raises| EvAppointmentRescheduled
   RescheduleAppointment -.->|requires_medium| FrontDeskTerminal
   RescheduleAppointment -.->|requires_medium| PatientMobile
   RescheduleAppointment -.->|requires_permission| ScheduleWrite
+  UpdateDemographics -.->|displays| PatientProfileScreen
+  UpdateDemographics -.->|invokes| UpdateDemographicsApi
+  UpdateDemographics -.->|requires_medium| FrontDeskTerminal
+  UpdateDemographics -.->|requires_permission| PatientProfileWrite
+  VerifyInsurance -.->|displays| InsuranceScreen
+  VerifyInsurance -.->|invokes| EligibilityApi
+  VerifyInsurance -.->|requires_medium| FrontDeskTerminal
+  VerifyInsurance -.->|requires_permission| InsuranceVerify
+  CaptureConsent -.->|displays| ConsentScreen
+  CaptureConsent -.->|invokes| ConsentApi
+  CaptureConsent -.->|requires_medium| PatientMobile
+  CaptureConsent -.->|requires_permission| ConsentCapture
+  SendIntakeForms -.->|displays| IntakePortalScreen
+  SendIntakeForms -.->|invokes| IntakeMessagingApi
+  SendIntakeForms -.->|requires_medium| FrontDeskTerminal
+  SendIntakeForms -.->|requires_permission| IntakeManage
+  CompleteIntakeForms -.->|displays| IntakePortalScreen
+  CompleteIntakeForms -.->|requires_medium| PatientMobile
+  CompleteIntakeForms -.->|requires_permission| ConsentCapture
+  CompleteIntakeForms -.->|updates| IntakePacket
+  ExpireIntakeForms -.->|displays| IntakePortalScreen
+  ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
+  ExpireIntakeForms -.->|requires_permission| IntakeManage
+  ExpireIntakeForms -.->|updates| IntakePacket
+  MergeDuplicatePatient -.->|displays| PatientProfileScreen
+  MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
+  MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
+  MergeDuplicatePatient -.->|updates| PatientAccount
+  ArchivePatient -.->|displays| PatientProfileScreen
+  ArchivePatient -.->|requires_medium| FrontDeskTerminal
+  ArchivePatient -.->|requires_permission| PatientProfileWrite
+  ArchivePatient -.->|updates| PatientAccount
   CancelAppointment -.->|displays| AppointmentScreen
   CancelAppointment -.->|invokes| CancelAppointmentApi
   CancelAppointment -.->|raises| EvAppointmentCancelled
@@ -569,7 +703,6 @@ flowchart LR
   CancelAppointment -.->|requires_medium| PatientMobile
   CancelAppointment -.->|requires_permission| ScheduleWrite
   MarkNoShow -.->|displays| AppointmentScreen
-  MarkNoShow -.->|raises| EvAppointmentNoShow
   MarkNoShow -.->|requires_medium| FrontDeskTerminal
   MarkNoShow -.->|requires_permission| ScheduleWrite
   MarkNoShow -.->|updates| Appointment
@@ -577,7 +710,6 @@ flowchart LR
   SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
   SendAppointmentNotice -.->|requires_medium| FrontDeskTerminal
   SendAppointmentNotice -.->|requires_permission| ScheduleRead
-
 ```
 
 #### Appointment Scheduling sequence 図
@@ -591,7 +723,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucAp
 ```mermaid
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
+    actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant AppointmentNoticeScreen as 🖥️ Appointment Notice Screen
@@ -614,8 +747,8 @@ sequenceDiagram
     participant ProviderSchedule as 🗄️ Provider Schedule
   end
 
-  Note over FrontDesk,ProviderSchedule: ✅ Book Appointment
-  FrontDesk->>AppointmentScreen: ✅ Book Appointment
+  Note over Patient,ProviderSchedule: ✅ Book Appointment
+  Patient->>AppointmentScreen: ✅ Book Appointment
   AppointmentScreen->>BookAppointmentApi: ✅ Book Appointment
   activate BookAppointmentApi
   rect rgb(245,245,245)
@@ -624,11 +757,11 @@ sequenceDiagram
     BookAppointmentApi->>ProviderSchedule: update
   end
   BookAppointmentApi-->>AppointmentScreen: 🖥️ Appointment Screen
-  AppointmentScreen-->>FrontDesk: 🖥️ Appointment Screen
+  AppointmentScreen-->>Patient: 🖥️ Appointment Screen
   deactivate BookAppointmentApi
 
-  Note over FrontDesk,ProviderSchedule: ✅ Cancel Appointment
-  FrontDesk->>AppointmentScreen: ✅ Cancel Appointment
+  Note over Patient,ProviderSchedule: ✅ Cancel Appointment
+  Patient->>AppointmentScreen: ✅ Cancel Appointment
   AppointmentScreen->>CancelAppointmentApi: ✅ Cancel Appointment
   activate CancelAppointmentApi
   rect rgb(245,245,245)
@@ -637,18 +770,18 @@ sequenceDiagram
     CancelAppointmentApi->>ProviderSchedule: update
   end
   CancelAppointmentApi-->>AppointmentScreen: 🖥️ Appointment Screen
-  AppointmentScreen-->>FrontDesk: 🖥️ Appointment Screen
+  AppointmentScreen-->>Patient: 🖥️ Appointment Screen
   deactivate CancelAppointmentApi
 
-  Note over FrontDesk,ProviderSchedule: ✅ Mark No Show
-  FrontDesk->System: ✅ Mark No Show
+  Note over Patient,ProviderSchedule: ✅ Mark No Show
+  Patient->System: ✅ Mark No Show
   activate System
   System->>Appointment: update
-  System-->>FrontDesk: 🖥️ Appointment Screen
+  System-->>Patient: 🖥️ Appointment Screen
   deactivate System
 
-  Note over FrontDesk,ProviderSchedule: ✅ Reschedule Appointment
-  FrontDesk->>AppointmentScreen: ✅ Reschedule Appointment
+  Note over Patient,ProviderSchedule: ✅ Reschedule Appointment
+  Patient->>AppointmentScreen: ✅ Reschedule Appointment
   AppointmentScreen->>RescheduleAppointmentApi: ✅ Reschedule Appointment
   activate RescheduleAppointmentApi
   rect rgb(245,245,245)
@@ -657,11 +790,11 @@ sequenceDiagram
     RescheduleAppointmentApi->>ProviderSchedule: update
   end
   RescheduleAppointmentApi-->>AppointmentScreen: 🖥️ Appointment Screen
-  AppointmentScreen-->>FrontDesk: 🖥️ Appointment Screen
+  AppointmentScreen-->>Patient: 🖥️ Appointment Screen
   deactivate RescheduleAppointmentApi
 
-  Note over FrontDesk,ProviderSchedule: ✅ Reserve Appointment
-  FrontDesk->>AppointmentScreen: ✅ Reserve Appointment
+  Note over Patient,ProviderSchedule: ✅ Reserve Appointment
+  Patient->>AppointmentScreen: ✅ Reserve Appointment
   AppointmentScreen->>ReserveAppointmentApi: ✅ Reserve Appointment
   activate ReserveAppointmentApi
   rect rgb(245,245,245)
@@ -670,22 +803,22 @@ sequenceDiagram
     ReserveAppointmentApi->>ProviderSchedule: update
   end
   ReserveAppointmentApi-->>AppointmentScreen: 🖥️ Appointment Screen
-  AppointmentScreen-->>FrontDesk: 🖥️ Appointment Screen
+  AppointmentScreen-->>Patient: 🖥️ Appointment Screen
   deactivate ReserveAppointmentApi
 
-  Note over FrontDesk,ProviderSchedule: ✅ Search Availability
-  FrontDesk->>ScheduleSearchScreen: ✅ Search Availability
+  Note over Patient,ProviderSchedule: ✅ Search Availability
+  Patient->>ScheduleSearchScreen: ✅ Search Availability
   ScheduleSearchScreen->>SearchAvailabilityApi: ✅ Search Availability
   activate SearchAvailabilityApi
   SearchAvailabilityApi->>ProviderSchedule: read
   SearchAvailabilityApi->>Provider: read
   SearchAvailabilityApi->>ClinicLocation: read
   SearchAvailabilityApi-->>ScheduleSearchScreen: 🖥️ Schedule Search Screen
-  ScheduleSearchScreen-->>FrontDesk: 🖥️ Schedule Search Screen
+  ScheduleSearchScreen-->>Patient: 🖥️ Schedule Search Screen
   deactivate SearchAvailabilityApi
 
-  Note over FrontDesk,ProviderSchedule: ✅ Send Appointment Notice
-  FrontDesk->>AppointmentNoticeScreen: ✅ Send Appointment Notice
+  Note over Patient,ProviderSchedule: ✅ Send Appointment Notice
+  Patient->>AppointmentNoticeScreen: ✅ Send Appointment Notice
   AppointmentNoticeScreen->>AppointmentNoticeApi: ✅ Send Appointment Notice
   activate AppointmentNoticeApi
   rect rgb(245,245,245)
@@ -694,29 +827,29 @@ sequenceDiagram
     AppointmentNoticeApi->>PatientMessage: create
   end
   AppointmentNoticeApi-->>AppointmentNoticeScreen: 🖥️ Appointment Notice Screen
-  AppointmentNoticeScreen-->>FrontDesk: 🖥️ Appointment Notice Screen
+  AppointmentNoticeScreen-->>Patient: 🖥️ Appointment Notice Screen
   deactivate AppointmentNoticeApi
 ```
 
-### 3.3 Visit Check-In
+### 3.3 受付（初診・再診）
 
 | 項目 | 内容 |
 |---|---|
 | BUC | `BucVisitCheckIn` |
 | Business | `PatientAccess` |
-| 主な actor | FrontDesk, Nurse |
-| 必要権限 | `VisitCheckIn`, `CopayCollect`, `RoomAssign`, `EncounterOpen` |
-| 主なデータ | `Appointment`, `PatientAccount`, `InsurancePolicy`, `PaymentTransaction`, `AccountBalance`, `Room`, `PatientProfile` |
+| 主な actor | ReceptionClerk, Nurse |
+| 必要権限 | `VisitCheckIn`, `InsuranceVerify`, `ReferralManage`, `RoomAssign`, `EncounterOpen` |
+| 主なデータ | `Appointment`, `PatientAccount`, `InsurancePolicy`, `EligibilityCheck`, `ReferralLetter`, `Room` |
 
-来院確認から部屋割り、診療準備までを扱う。受付業務と看護師業務が同じ BUC に含まれるため、UC 単位 sequence で担当境界を確認する。
+到着確認、資格確認、紹介状の受付、診察室への案内を扱う。療養担当規則 第3条により受付のたびに資格を確認するので、`CheckInPatient` は必ずオンライン資格確認を伴い `EligibilityCheck` を作る。結果は 有効・無効・該当資格なし の 3 通りで、無効と該当資格なしは再確認へ戻る。システムが答えられない場合は被保険者資格申立書かシステム障害時モードで確認する。来院前には予約済み患者の一括照会を行う。受付では支払を受けない（会計は `BucVisitPayment`）。
 
 レビュー観点:
 
-- VerifyArrival は read-only API として十分か。
-- CheckInPatient は予約と患者アカウントを同時更新する必要があるか。
-- AssignRoom は Room と Appointment を同じ API 境界で更新することでよいか。
+- 受付と資格確認が 1 つの UC にまとまり、資格確認を飛ばす経路がないか。
+- 一括照会の結果が無効だった患者を、受付で再確認する流れが説明できるか。
+- 被保険者資格申立書とシステム障害時モードが、資格確認結果の状態として区別されているか。
 
-#### Visit Check-In RDRA Layered Graph 図
+#### 受付（初診・再診） RDRA Layered Graph 図
 
 生成コマンド:
 
@@ -728,272 +861,66 @@ rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucVisitC
 flowchart LR
   subgraph layer_value[System Value]
     direction TB
-    FrontDesk(["👤 Front Desk Staff"])
-    Nurse(["👤 Nurse"])
-  end
-  subgraph layer_environment[External Environment]
-    direction TB
-    PatientAccess["💼 Patient Access"]
-    BucVisitCheckIn["📦 Check In Visit"]
-    FrontDeskTerminal[/"📱 Front Desk Terminal"/]
-    NurseStation[/"📱 Nurse Station"/]
-    CopayCollect["🔑 Copay Collect"]
-    EncounterOpen["🔑 Encounter Open"]
-    RoomAssign["🔑 Room Assign"]
-    VisitCheckIn["🔑 Visit Check-In"]
-  end
-  subgraph layer_boundary[System Boundary]
-    direction TB
-    AssignRoom(["✅ Assign Room"])
-    CheckInPatient(["✅ Check In Patient"])
-    CollectCopay(["✅ Collect Copay"])
-    OpenEncounter(["✅ Open Encounter"])
-    PrepareEncounter(["✅ Prepare Encounter"])
-    VerifyArrival(["✅ Verify Patient Arrival"])
-    CheckInScreen[["🖥️ Check-In Screen"]]
-    CopayScreen[["🖥️ Copay Screen"]]
-    EncounterWorkspaceScreen[["🖥️ Encounter Workspace"]]
-    RoomBoardScreen[["🖥️ Room Board Screen"]]
-    EvAppointmentCheckedIn{"⚡ Appointment Checked In"}
-  end
-  subgraph layer_system[System]
-    direction TB
-    AssignRoomApi["🔌 Assign Room API"]
-    CheckInPatientApi["🔌 Check-In Patient API"]
-    CollectCopayApi["🔌 Collect Copay API"]
-    OpenEncounterApi["🔌 Open Encounter API"]
-    PrepareEncounterApi["🔌 Prepare Encounter API"]
-    VerifyArrivalApi["🔌 Verify Arrival API"]
-    AccountBalance[("🗄️ Account Balance")]
-    Appointment[("🗄️ Appointment")]
-    Encounter[("🗄️ Encounter")]
-    InsurancePolicy[("🗄️ Insurance Policy")]
-    PatientAccount[("🗄️ Patient Account")]
-    PatientProfile[("🗄️ Patient Profile")]
-    PaymentTransaction[("🗄️ Payment Transaction")]
-    Room[("🗄️ Room")]
-  end
-  FrontDesk -.->|has_permission| VisitCheckIn
-  FrontDesk -.->|has_permission| CopayCollect
-  FrontDesk -->|performs| BucVisitCheckIn
-  FrontDesk -->|performs| VerifyArrival
-  FrontDesk -->|performs| CheckInPatient
-  FrontDesk -->|performs| CollectCopay
-  Nurse -.->|has_permission| RoomAssign
-  Nurse -.->|has_permission| EncounterOpen
-  Nurse -.->|has_permission| VisitCheckIn
-  Nurse -->|performs| BucVisitCheckIn
-  Nurse -->|performs| OpenEncounter
-  Nurse -->|performs| AssignRoom
-  Nurse -->|performs| PrepareEncounter
-  OpenEncounterApi -.->|creates| Encounter
-  OpenEncounterApi -.->|reads| Appointment
-  OpenEncounterApi -.->|requires_permission| EncounterOpen
-  VerifyArrivalApi -.->|reads| Appointment
-  VerifyArrivalApi -.->|reads| PatientAccount
-  VerifyArrivalApi -.->|reads| InsurancePolicy
-  VerifyArrivalApi -.->|requires_permission| VisitCheckIn
-  CheckInPatientApi -.->|requires_permission| VisitCheckIn
-  CheckInPatientApi -.->|updates| Appointment
-  CheckInPatientApi -.->|updates| PatientAccount
-  CollectCopayApi -.->|creates| PaymentTransaction
-  CollectCopayApi -.->|requires_permission| CopayCollect
-  CollectCopayApi -.->|updates| AccountBalance
-  AssignRoomApi -.->|requires_permission| RoomAssign
-  AssignRoomApi -.->|updates| Appointment
-  AssignRoomApi -.->|updates| Room
-  PrepareEncounterApi -.->|reads| Appointment
-  PrepareEncounterApi -.->|reads| PatientProfile
-  PrepareEncounterApi -.->|requires_permission| EncounterOpen
-  BucVisitCheckIn -.->|belongs| PatientAccess
-  BucVisitCheckIn -->|contains| VerifyArrival
-  BucVisitCheckIn -->|contains| CheckInPatient
-  BucVisitCheckIn -->|contains| CollectCopay
-  BucVisitCheckIn -->|contains| AssignRoom
-  BucVisitCheckIn -->|contains| PrepareEncounter
-  Appointment ---|N:1| PatientAccount
-  Appointment ---|N:1| Room
-  Encounter ---|N:1| PatientAccount
-  Encounter ---|1:1| Appointment
-  AccountBalance ---|1:1| PatientAccount
-  PatientProfile ---|1:1| PatientAccount
-  InsurancePolicy ---|N:1| PatientAccount
-  EvAppointmentCheckedIn -.->|triggers| OpenEncounter
-  EvAppointmentCheckedIn -.->|triggers| PrepareEncounter
-  CheckInScreen -.->|shows| Appointment
-  OpenEncounter -.->|displays| EncounterWorkspaceScreen
-  OpenEncounter -.->|invokes| OpenEncounterApi
-  OpenEncounter -.->|requires_medium| NurseStation
-  OpenEncounter -.->|requires_permission| EncounterOpen
-  VerifyArrival -.->|displays| CheckInScreen
-  VerifyArrival -.->|invokes| VerifyArrivalApi
-  VerifyArrival -.->|requires_medium| FrontDeskTerminal
-  VerifyArrival -.->|requires_permission| VisitCheckIn
-  CheckInPatient -.->|displays| CheckInScreen
-  CheckInPatient -.->|invokes| CheckInPatientApi
-  CheckInPatient -.->|raises| EvAppointmentCheckedIn
-  CheckInPatient -.->|requires_medium| FrontDeskTerminal
-  CheckInPatient -.->|requires_permission| VisitCheckIn
-  CollectCopay -.->|displays| CopayScreen
-  CollectCopay -.->|invokes| CollectCopayApi
-  CollectCopay -.->|requires_medium| FrontDeskTerminal
-  CollectCopay -.->|requires_permission| CopayCollect
-  AssignRoom -.->|displays| RoomBoardScreen
-  AssignRoom -.->|invokes| AssignRoomApi
-  AssignRoom -.->|requires_medium| NurseStation
-  AssignRoom -.->|requires_permission| RoomAssign
-  PrepareEncounter -.->|displays| CheckInScreen
-  PrepareEncounter -.->|invokes| PrepareEncounterApi
-  PrepareEncounter -.->|requires_medium| NurseStation
-  PrepareEncounter -.->|requires_permission| EncounterOpen
-
-```
-
-#### Visit Check-In sequence 図
-
-生成コマンド:
-
-```sh
-rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucVisitCheckIn --out samples/clinic-ops/out/buc/sequence_visit_check_in
-```
-
-```mermaid
-sequenceDiagram
-  box System Value
-    actor FrontDesk as 👤 Front Desk Staff
-    actor Nurse as 👤 Nurse
-  end
-  box System Boundary
-    participant CheckInScreen as 🖥️ Check-In Screen
-    participant CopayScreen as 🖥️ Copay Screen
-    participant RoomBoardScreen as 🖥️ Room Board Screen
-  end
-  box System
-    participant AssignRoomApi as 🔌 Assign Room API
-    participant CheckInPatientApi as 🔌 Check-In Patient API
-    participant CollectCopayApi as 🔌 Collect Copay API
-    participant PrepareEncounterApi as 🔌 Prepare Encounter API
-    participant VerifyArrivalApi as 🔌 Verify Arrival API
-    participant AccountBalance as 🗄️ Account Balance
-    participant Appointment as 🗄️ Appointment
-    participant InsurancePolicy as 🗄️ Insurance Policy
-    participant PatientAccount as 🗄️ Patient Account
-    participant PatientProfile as 🗄️ Patient Profile
-    participant PaymentTransaction as 🗄️ Payment Transaction
-    participant Room as 🗄️ Room
-  end
-
-  Note over FrontDesk,Room: ✅ Assign Room
-  Nurse->>RoomBoardScreen: ✅ Assign Room
-  RoomBoardScreen->>AssignRoomApi: ✅ Assign Room
-  activate AssignRoomApi
-  rect rgb(245,245,245)
-    Note right of AssignRoomApi: transaction (API atomic boundary)
-    AssignRoomApi->>Room: update
-    AssignRoomApi->>Appointment: update
-  end
-  AssignRoomApi-->>RoomBoardScreen: 🖥️ Room Board Screen
-  RoomBoardScreen-->>Nurse: 🖥️ Room Board Screen
-  deactivate AssignRoomApi
-
-  Note over FrontDesk,Room: ✅ Check In Patient
-  FrontDesk->>CheckInScreen: ✅ Check In Patient
-  CheckInScreen->>CheckInPatientApi: ✅ Check In Patient
-  activate CheckInPatientApi
-  rect rgb(245,245,245)
-    Note right of CheckInPatientApi: transaction (API atomic boundary)
-    CheckInPatientApi->>PatientAccount: update
-    CheckInPatientApi->>Appointment: update
-  end
-  CheckInPatientApi-->>CheckInScreen: 🖥️ Check-In Screen
-  CheckInScreen-->>FrontDesk: 🖥️ Check-In Screen
-  deactivate CheckInPatientApi
-
-  Note over FrontDesk,Room: ✅ Collect Copay
-  FrontDesk->>CopayScreen: ✅ Collect Copay
-  CopayScreen->>CollectCopayApi: ✅ Collect Copay
-  activate CollectCopayApi
-  rect rgb(245,245,245)
-    Note right of CollectCopayApi: transaction (API atomic boundary)
-    CollectCopayApi->>AccountBalance: update
-    CollectCopayApi->>PaymentTransaction: create
-  end
-  CollectCopayApi-->>CopayScreen: 🖥️ Copay Screen
-  CopayScreen-->>FrontDesk: 🖥️ Copay Screen
-  deactivate CollectCopayApi
-
-  Note over FrontDesk,Room: ✅ Prepare Encounter
-  Nurse->>CheckInScreen: ✅ Prepare Encounter
-  CheckInScreen->>PrepareEncounterApi: ✅ Prepare Encounter
-  activate PrepareEncounterApi
-  PrepareEncounterApi->>Appointment: read
-  PrepareEncounterApi->>PatientProfile: read
-  PrepareEncounterApi-->>CheckInScreen: 🖥️ Check-In Screen
-  CheckInScreen-->>Nurse: 🖥️ Check-In Screen
-  deactivate PrepareEncounterApi
-
-  Note over FrontDesk,Room: ✅ Verify Patient Arrival
-  FrontDesk->>CheckInScreen: ✅ Verify Patient Arrival
-  CheckInScreen->>VerifyArrivalApi: ✅ Verify Patient Arrival
-  activate VerifyArrivalApi
-  VerifyArrivalApi->>Appointment: read
-  VerifyArrivalApi->>PatientAccount: read
-  VerifyArrivalApi->>InsurancePolicy: read
-  VerifyArrivalApi-->>CheckInScreen: 🖥️ Check-In Screen
-  CheckInScreen-->>FrontDesk: 🖥️ Check-In Screen
-  deactivate VerifyArrivalApi
-```
-
-### 3.4 Clinical Encounter
-
-| 項目 | 内容 |
-|---|---|
-| BUC | `BucClinicalEncounter` |
-| Business | `CareDelivery` |
-| 主な actor | Nurse, Clinician |
-| 必要権限 | `EncounterOpen`, `VitalsRecord`, `ClinicalDocument`, `EncounterSign` |
-| 主なデータ | `Encounter`, `Appointment`, `VitalSign`, `Diagnosis`, `Room` |
-
-診療記録を開き、バイタル、診断、署名、予約完了までを扱う。EvEncounterSigned は検査、請求、ケアプラン作成を起動する重要なイベントであり、署名前後の編集可能範囲が状態検証の中心になる。
-
-レビュー観点:
-
-- SignEncounter を後続 BUC の起点イベントとして扱ってよいか。
-- CompleteAppointment は診療署名イベントから自動的に起動される業務か。
-- AmendEncounter が署名済み記録の修正として十分な粒度か。
-
-#### Clinical Encounter RDRA Layered Graph 図
-
-生成コマンド:
-
-```sh
-rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucClinicalEncounter --out samples/clinic-ops/out/buc/object_graph_clinical_encounter
-```
-
-```mermaid
-flowchart LR
-  subgraph layer_value[System Value]
-    direction TB
-    Clinician(["👤 Clinician"])
-    Nurse(["👤 Nurse"])
+    Nurse(["👤 看護師"])
+    ReceptionClerk(["👤 医事課 受付担当"])
+    ClaimsReviewOrganization[/"🌐 審査支払機関（支払基金・国保連）"/]
+    MessagingGateway[/"🌐 Messaging Gateway"/]
+    OnlineEligibilitySystem[/"🌐 オンライン資格確認等システム"/]
+    OutsourcedLabSystem[/"🌐 外注検査システム"/]
+    PaymentGateway[/"🌐 自動精算機・クレジット決済"/]
   end
   subgraph layer_environment[External Environment]
     direction TB
     CareDelivery["💼 Care Delivery"]
     PatientAccess["💼 Patient Access"]
     RevenueCycle["💼 Revenue Cycle"]
-    BucBillingClaims["📦 Bill and Collect Claims"]
+    BucBillingClaims["📦 レセプト作成・請求"]
     BucClinicalEncounter["📦 Conduct Clinical Encounter"]
     BucFollowupCare["📦 Coordinate Follow-Up Care"]
     BucOrdersResults["📦 Manage Orders and Results"]
     BucPatientOnboarding["📦 Onboard and Maintain Patient"]
+    BucVisitCheckIn["📦 受付（初診・再診）"]
+    BucVisitPayment["📦 計算・会計"]
+    ClaimCycleFlow["🧭 レセプトの月次サイクル"]
+    VisitCheckInFlow["🧭 受付の流れ"]
+    VisitPaymentFlow["🧭 計算・会計の流れ"]
+    ArrivalStep(["➡️ 到着・予約票の確認"])
+    AssessStep(["➡️ 査定と再審査請求"])
+    CalculationStep(["➡️ 計算受付・会計計算入力"])
+    CallStep(["➡️ 会計の呼出"])
+    CreateStatementStep(["➡️ レセプト作成（月初）"])
+    DeclarationStep(["➡️ 資格を確認できない（申立書・障害時モード）"])
+    EligibilityStep(["➡️ 資格確認"])
+    HoldStep(["➡️ 保留（月遅れ）"])
+    InspectStep(["➡️ 院内点検"])
+    KioskStep(["➡️ 自動精算機で精算"])
+    PaidStep(["➡️ 支払（診療翌々月）"])
+    ReceiptErrorStep(["➡️ 受付不能・要確認の再送（11日・12日）"])
+    ReceiptStep(["➡️ 領収証・明細書の交付"])
+    ReferralStep(["➡️ 紹介状あり（初診）"])
+    ReturnStep(["➡️ 返戻と再請求"])
+    ReviewStep(["➡️ 審査"])
+    RoomingStep(["➡️ 診察室への案内"])
+    SubmitStep(["➡️ 請求（5日～10日）"])
+    WindowStep(["➡️ 会計窓口で精算"])
+    EligibilityBatchInquiry["⏱️ 予約患者の資格の一括照会（来院前）"]
+    ErrorResendWindow["⏱️ エラー分レセプトの再送（毎月11日・12日）"]
+    IntakeExpiryCheck["⏱️ Nightly intake expiry check"]
+    MonthlyClaimCreation["⏱️ 前月分レセプトの作成（月初）"]
+    MonthlyClaimDeadline["⏱️ 前月分レセプトの請求（毎月5日～10日）"]
+    ReceivablesMonthlyReview["⏱️ 未収金管理台帳の作成（毎月）"]
+    ReturnDownloadCheck["⏱️ 返戻レセプトの取得（3か月以内）"]
+    AccountsWindow[/"📱 会計窓口"/]
     BillingWorkstation[/"📱 Billing Workstation"/]
     CareCoordinationConsole[/"📱 Care Coordination Console"/]
     ClinicalWorkstation[/"📱 Clinical Workstation"/]
     FrontDeskTerminal[/"📱 Front Desk Terminal"/]
     NurseStation[/"📱 Nurse Station"/]
+    OnlineClaimTerminal[/"📱 オンライン請求用端末"/]
     PatientMobile[/"📱 Patient Mobile"/]
-    BillingClaimWrite["🔑 Billing Claim Write"]
+    PaymentKiosk[/"📱 自動精算機"/]
+    BillCalculate["🔑 会計計算"]
+    BillingClaimWrite["🔑 レセプト業務"]
     ClinicalDocument["🔑 Clinical Document"]
     ClinicalOrderWrite["🔑 Clinical Order Write"]
     ConsentCapture["🔑 Consent Capture"]
@@ -1006,38 +933,72 @@ flowchart LR
     PatientMessageSend["🔑 Patient Message Send"]
     PatientProfileRead["🔑 Patient Profile Read"]
     PatientProfileWrite["🔑 Patient Profile Write"]
+    PaymentCollect["🔑 窓口収納"]
     PaymentPost["🔑 Payment Post"]
+    ProxyOrderEntry["🔑 代行入力"]
+    ReferralManage["🔑 紹介状管理"]
+    RoomAssign["🔑 Room Assign"]
     ScheduleRead["🔑 Schedule Read"]
     ScheduleWrite["🔑 Schedule Write"]
+    VisitCheckIn["🔑 Visit Check-In"]
     VitalsRecord["🔑 Vitals Record"]
   end
   subgraph layer_boundary[System Boundary]
     direction TB
     AmendEncounter(["✅ Amend Signed Encounter"])
+    ApplySelectedTreatmentFee(["✅ 選定療養費の算定"])
     ArchivePatient(["✅ Archive Patient"])
+    AssignRoom(["✅ Assign Room"])
+    BatchVerifyEligibility(["✅ 資格の一括照会"])
+    CalculateVisitBill(["✅ 会計計算入力"])
+    CallPatientForPayment(["✅ 会計の呼出"])
     CancelClinicalOrder(["✅ Cancel Clinical Order"])
     CaptureConsent(["✅ Capture Consent"])
+    CheckInPatient(["✅ 受付（初診・再診）"])
     CloseCarePlan(["✅ Close Care Plan"])
     CollectSpecimen(["✅ Collect Specimen"])
-    CompleteAppointment(["✅ Complete Appointment"])
+    CompleteConsultation(["✅ 診察終了"])
     CompleteIntakeForms(["✅ Complete Intake Forms"])
+    ConfirmEligibilityInOutageMode(["✅ システム障害時モードでの資格確認"])
+    ConfirmProxyOrder(["✅ 代行入力オーダの確定"])
+    CorrectReturnedStatement(["✅ 返戻レセプトの訂正（再請求）"])
     CreateCarePlan(["✅ Create Care Plan"])
-    CreateCharge(["✅ Create Charge"])
+    CreateCharge(["✅ コスト情報の登録"])
     DocumentAssessment(["✅ Document Assessment"])
+    EnterProxyOrder(["✅ 検体検査オーダの代行入力"])
     ExpireIntakeForms(["✅ Expire Intake Forms"])
-    GenerateClaim(["✅ Generate Claim"])
+    GenerateClaimStatement(["✅ レセプト作成"])
+    HoldClaimStatement(["✅ レセプトの保留（月遅れ）"])
+    InspectClaimStatement(["✅ レセプトの院内点検"])
+    IssueReceipt(["✅ 領収証・明細書の交付"])
+    IssueReferralLetter(["✅ 診療情報提供書の作成・送信"])
     MergeDuplicatePatient(["✅ Merge Duplicate Patient"])
     NotifyCriticalResult(["✅ Notify Critical Result"])
     NotifyPatientResult(["✅ Notify Patient Result"])
     OpenEncounter(["✅ Open Encounter"])
     PlaceLabOrder(["✅ Place Lab Order"])
-    PostPayment(["✅ Post Payment"])
-    ReceiveClaimAccepted(["✅ Receive Claim Accepted"])
+    PostPayment(["✅ 診療報酬の入金"])
+    PrepareEncounter(["✅ Prepare Encounter"])
+    PrintSpecimenLabel(["✅ 採血管ラベル発行・貼付"])
+    ReceiveClaimAccepted(["✅ レセプト受付（審査へ）"])
+    ReceiveEligibilityInvalid(["✅ 資格確認結果（無効）の取込"])
+    ReceiveEligibilityNoInfo(["✅ 資格確認結果（該当資格なし）の取込"])
+    ReceiveEligibilityValid(["✅ 資格確認結果（有効）の取込"])
     ReceiveLabResult(["✅ Receive Lab Result"])
-    ReconcileBalance(["✅ Reconcile Balance"])
-    RecordClaimDenial(["✅ Record Claim Denial"])
+    ReceiveReferralLetter(["✅ 紹介状受付処理"])
+    RecheckEligibility(["✅ 資格の再確認"])
+    ReconcileBalance(["✅ 未収金管理台帳の作成"])
+    RecordClaimAssessment(["✅ 査定の取込"])
+    RecordClaimReturn(["✅ 返戻レセプトの取込"])
+    RecordEligibilityDeclaration(["✅ 被保険者資格申立書の受領"])
+    RecordReceiptError(["✅ 受付不能・要確認の確認"])
     RecordVitals(["✅ Record Vitals"])
     RegisterPatient(["✅ Register Patient"])
+    RegisterPerformedProcedure(["✅ 実施内容（コスト）の登録"])
+    ReleaseHeldStatement(["✅ 保留レセプトの再提出準備"])
+    RequestReexamination(["✅ 再審査請求"])
+    ResendErroredStatement(["✅ エラー分レセプトの再送"])
+    ReviewClaimTransfer(["✅ 資格の振替・分割の確認"])
     ReviewLabResult(["✅ Review Lab Result"])
     ReviewPatientResponse(["✅ Review Patient Response"])
     ScheduleFollowUpVisit(["✅ Schedule Follow-Up Visit"])
@@ -1045,91 +1006,124 @@ flowchart LR
     SendAppointmentNotice(["✅ Send Appointment Notice"])
     SendFollowUpMessage(["✅ Send Follow-Up Message"])
     SendIntakeForms(["✅ Send Intake Forms"])
+    SettleAtKiosk(["✅ 自動精算機での精算"])
+    SettleAtWindow(["✅ 会計窓口での精算"])
     SignEncounter(["✅ Sign Encounter"])
-    SubmitClaim(["✅ Submit Claim"])
+    SubmitClaimStatements(["✅ レセプト請求"])
     UpdateDemographics(["✅ Update Demographics"])
-    VerifyInsurance(["✅ Verify Insurance"])
-    VoidCharge(["✅ Void Charge"])
+    VerifyArrival(["✅ 予約票・診察券の確認"])
+    VerifyInsurance(["✅ 保険資格・限度額情報の登録（新患登録）"])
+    VoidCharge(["✅ コストの取消"])
     AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
-    BalanceScreen[["🖥️ Balance Screen"]]
+    BalanceScreen[["🖥️ 未収金画面"]]
+    BillCalculationScreen[["🖥️ 会計計算画面"]]
     CarePlanScreen[["🖥️ Care Plan Screen"]]
     ChargeWorklistScreen[["🖥️ Charge Worklist Screen"]]
-    ClaimScreen[["🖥️ Claim Screen"]]
+    CheckInScreen[["🖥️ 受付画面"]]
+    ClaimScreen[["🖥️ レセプト画面"]]
     ConsentScreen[["🖥️ Consent Capture Screen"]]
     CriticalNoticeScreen[["🖥️ Critical Result Notice Screen"]]
     DiagnosisScreen[["🖥️ Diagnosis Screen"]]
+    EligibilityScreen[["🖥️ 資格確認画面"]]
     EncounterWorkspaceScreen[["🖥️ Encounter Workspace"]]
     FollowUpScheduleScreen[["🖥️ Follow-Up Schedule Screen"]]
     InsuranceScreen[["🖥️ Insurance Verification Screen"]]
     IntakePortalScreen[["🖥️ Intake Portal Screen"]]
+    KioskScreen[["🖥️ 自動精算機画面"]]
     OrderEntryScreen[["🖥️ Order Entry Screen"]]
     PatientMessageScreen[["🖥️ Patient Message Screen"]]
     PatientProfileScreen[["🖥️ Patient Profile Screen"]]
     PatientSearchScreen[["🖥️ Patient Search Screen"]]
-    PaymentPostingScreen[["🖥️ Payment Posting Screen"]]
+    PaymentPostingScreen[["🖥️ 入金画面"]]
+    PaymentWindowScreen[["🖥️ 会計窓口画面"]]
+    ReferralLetterScreen[["🖥️ 診療情報提供書画面"]]
+    ReferralScreen[["🖥️ 紹介状受付画面"]]
     ResultReviewScreen[["🖥️ Result Review Screen"]]
+    RoomBoardScreen[["🖥️ Room Board Screen"]]
     SpecimenScreen[["🖥️ Specimen Collection Screen"]]
     VitalsScreen[["🖥️ Vitals Screen"]]
-    EvAppointmentCompleted{"⚡ Appointment Completed"}
+    ArrivalTimeField[["🔤 受付時刻"]]
+    ChargeCodeField[["🔤 診療行為"]]
+    EligibilityResultField[["🔤 資格確認結果"]]
+    KioskReferenceField[["🔤 精算機の取引番号"]]
+    PaymentAmountField[["🔤 お支払額"]]
+    ReferralDirectionField[["🔤 紹介の向き"]]
+    ReferralReceivedField[["🔤 紹介状の受領日時"]]
+    EvAppointmentCancelled{"⚡ Appointment Cancelled"}
+    EvAppointmentCheckedIn{"⚡ Appointment Checked In"}
+    EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
     EvAppointmentScheduled{"⚡ Appointment Scheduled"}
-    EvCarePlanClosed{"⚡ Care Plan Closed"}
-    EvCarePlanMonitoring{"⚡ Care Plan Monitoring"}
-    EvClaimAccepted{"⚡ Claim Accepted"}
-    EvClaimDenied{"⚡ Claim Denied"}
-    EvClaimPaid{"⚡ Claim Paid"}
-    EvClaimSubmitted{"⚡ Claim Submitted"}
-    EvClinicalOrderCancelled{"⚡ Clinical Order Cancelled"}
-    EvClinicalOrderCollected{"⚡ Specimen Collected"}
-    EvClinicalOrderResulted{"⚡ Clinical Result Received"}
+    EvBillCalculated{"⚡ 会計計算完了"}
+    EvClaimAccepted{"⚡ レセプト受付"}
+    EvClaimAssessed{"⚡ 査定"}
+    EvClaimReceiptError{"⚡ 受付不能・要確認"}
+    EvClaimReturned{"⚡ 返戻"}
+    EvClaimStatementsSubmitted{"⚡ レセプト請求"}
+    EvClaimTransferred{"⚡ 資格の振替・分割"}
     EvClinicalOrderReviewed{"⚡ Clinical Result Reviewed"}
-    EvEncounterAmended{"⚡ Encounter Amended"}
-    EvEncounterDocumented{"⚡ Encounter Documented"}
+    EvEligibilityChecked{"⚡ 資格確認結果"}
     EvEncounterSigned{"⚡ Encounter Signed"}
-    EvIntakeCompleted{"⚡ Intake Completed"}
-    EvIntakeExpired{"⚡ Intake Expired"}
-    EvPatientArchived{"⚡ Patient Archived"}
-    EvPatientMerged{"⚡ Patient Merged"}
+    EvLabResultReceived{"⚡ Lab Result Received"}
+    EvPaymentSettled{"⚡ 自動精算機での精算完了"}
+    EvRemittance{"⚡ 診療報酬の支払"}
   end
   subgraph layer_system[System]
     direction TB
     AmendEncounterApi["🔌 Amend Encounter API"]
     AppointmentNoticeApi["🔌 Appointment Notice API"]
-    BalanceApi["🔌 Balance API"]
+    AssignRoomApi["🔌 Assign Room API"]
+    BalanceApi["🔌 未収金 API"]
+    CalculateVisitBillApi["🔌 会計計算 API"]
+    CheckInPatientApi["🔌 Check-In Patient API"]
+    ClaimEditApi["🔌 レセプト点検・訂正 API"]
+    ClaimResultApi["🔌 審査結果 API"]
     CollectSpecimenApi["🔌 Collect Specimen API"]
-    CompleteAppointmentApi["🔌 Complete Appointment API"]
+    CompleteConsultationApi["🔌 診察終了 API"]
+    ConfirmOrderApi["🔌 オーダ確定 API"]
     ConsentApi["🔌 Consent API"]
     CreateCarePlanApi["🔌 Create Care Plan API"]
     CreateChargeApi["🔌 Create Charge API"]
     CriticalNoticeApi["🔌 Critical Notice API"]
     DocumentAssessmentApi["🔌 Document Assessment API"]
     EligibilityApi["🔌 Eligibility API"]
+    EligibilityResultApi["🔌 資格確認結果 API"]
     FollowUpScheduleApi["🔌 Follow-Up Schedule API"]
-    GenerateClaimApi["🔌 Generate Claim API"]
+    GenerateClaimApi["🔌 レセプト作成 API"]
     IntakeMessagingApi["🔌 Intake Messaging API"]
+    IssueReferralLetterApi["🔌 診療情報提供書 API"]
     NotifyPatientResultApi["🔌 Notify Patient Result API"]
+    OnlineEligibilityApi["🔌 オンライン資格確認 API"]
     OpenEncounterApi["🔌 Open Encounter API"]
     OrderEntryApi["🔌 Order Entry API"]
-    PaymentPostApi["🔌 Payment Posting API"]
+    PaymentPostApi["🔌 入金 API"]
+    PerformedProcedureApi["🔌 実施登録 API"]
+    PrepareEncounterApi["🔌 Prepare Encounter API"]
+    ProxyOrderApi["🔌 代行入力 API"]
+    ReceiptApi["🔌 領収証 API"]
     ReceiveLabResultApi["🔌 Receive Lab Result API"]
     RecordVitalsApi["🔌 Record Vitals API"]
+    ReferralLetterApi["🔌 紹介状 API"]
     RegisterPatientApi["🔌 Register Patient API"]
     ResultReviewApi["🔌 Result Review API"]
     SearchPatientApi["🔌 Search Patient API"]
+    SelectedFeeApi["🔌 選定療養費 API"]
     SendFollowUpMessageApi["🔌 Send Follow-Up Message API"]
+    SettlementApi["🔌 精算 API"]
     SignEncounterApi["🔌 Sign Encounter API"]
-    SubmitClaimApi["🔌 Submit Claim API"]
+    SubmitClaimApi["🔌 オンライン請求 API"]
     UpdateDemographicsApi["🔌 Update Demographics API"]
-    AccountBalance[("🗄️ Account Balance")]
+    VerifyArrivalApi["🔌 Verify Arrival API"]
+    AccountBalance[("🗄️ 未収金残高")]
     Appointment[("🗄️ Appointment")]
     CarePlan[("🗄️ Care Plan")]
     Charge[("🗄️ Charge")]
-    Claim[("🗄️ Claim")]
+    ClaimStatement[("🗄️ レセプト")]
     ClinicalOrder[("🗄️ Clinical Order")]
     ConsentRecord[("🗄️ Consent Record")]
     Diagnosis[("🗄️ Diagnosis")]
-    EligibilityCheck[("🗄️ Eligibility Check")]
+    EligibilityCheck[("🗄️ 資格確認")]
     Encounter[("🗄️ Encounter")]
-    InsurancePolicy[("🗄️ Insurance Policy")]
+    InsurancePolicy[("🗄️ 保険資格")]
     IntakePacket[("🗄️ Intake Packet")]
     LabResult[("🗄️ Lab Result")]
     Notification[("🗄️ Notification")]
@@ -1138,42 +1132,115 @@ flowchart LR
     PatientProfile[("🗄️ Patient Profile")]
     PaymentTransaction[("🗄️ Payment Transaction")]
     ProviderSchedule[("🗄️ Provider Schedule")]
+    ReferralLetter[("🗄️ 紹介状・診療情報提供書")]
     Room[("🗄️ Room")]
+    SelectedTreatmentFeeSetting[("🗄️ 選定療養費の設定")]
     VitalSign[("🗄️ Vital Sign")]
+    BurdenRatio["🎚️ 負担割合"]
+    ChargeKind["🎚️ 診療費の種類"]
+    LimitCategory["🎚️ 限度額適用区分"]
+    PayerChange["🎚️ 資格変更の種類"]
+    ReferralCategory["🎚️ 紹介の有無"]
+    BookedPatient{"🔀 予約済みの患者"}
+    CopayCappedAtLimit{"🔀 窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"}
+    OrderConfirmedByPhysician{"🔀 医師が確定したオーダ"}
+    TransferNotPossible{"🔀 振替・分割の対象外（負担割合の相違・公費）"}
+    UnreferredFirstVisit{"🔀 紹介状なしの初診で、除外に当たらない"}
   end
+  ReceptionClerk -.->|has_permission| ReferralManage
+  ReceptionClerk -.->|has_permission| PatientProfileRead
+  ReceptionClerk -.->|has_permission| PatientProfileWrite
+  ReceptionClerk -.->|has_permission| InsuranceVerify
+  ReceptionClerk -.->|has_permission| IntakeManage
+  ReceptionClerk -.->|has_permission| ScheduleRead
+  ReceptionClerk -.->|has_permission| ScheduleWrite
+  ReceptionClerk -.->|has_permission| VisitCheckIn
+  ReceptionClerk -->|performs| BucPatientOnboarding
+  ReceptionClerk -->|performs| BucVisitCheckIn
+  ReceptionClerk -->|performs| SearchPatient
+  ReceptionClerk -->|performs| RegisterPatient
+  ReceptionClerk -->|performs| UpdateDemographics
+  ReceptionClerk -->|performs| VerifyInsurance
+  ReceptionClerk -->|performs| SendIntakeForms
+  ReceptionClerk -->|performs| ExpireIntakeForms
+  ReceptionClerk -->|performs| MergeDuplicatePatient
+  ReceptionClerk -->|performs| ArchivePatient
+  ReceptionClerk -->|performs| VerifyArrival
+  ReceptionClerk -->|performs| CheckInPatient
+  ReceptionClerk -->|performs| SendAppointmentNotice
+  ReceptionClerk -->|performs| RecheckEligibility
+  ReceptionClerk -->|performs| RecordEligibilityDeclaration
+  ReceptionClerk -->|performs| ConfirmEligibilityInOutageMode
+  ReceptionClerk -->|performs| ReceiveReferralLetter
+  Nurse -.->|has_permission| ProxyOrderEntry
+  Nurse -.->|has_permission| RoomAssign
   Nurse -.->|has_permission| EncounterOpen
   Nurse -.->|has_permission| VitalsRecord
   Nurse -.->|has_permission| ClinicalOrderWrite
   Nurse -.->|has_permission| LabResultManage
-  Nurse -->|performs| BucOrdersResults
+  Nurse -.->|has_permission| VisitCheckIn
   Nurse -->|performs| BucClinicalEncounter
-  Nurse -->|performs| CollectSpecimen
-  Nurse -->|performs| ReceiveLabResult
+  Nurse -->|performs| BucOrdersResults
+  Nurse -->|performs| BucVisitCheckIn
   Nurse -->|performs| OpenEncounter
   Nurse -->|performs| RecordVitals
-  Nurse -->|performs| CompleteAppointment
-  Clinician -.->|has_permission| EncounterOpen
-  Clinician -.->|has_permission| ClinicalDocument
-  Clinician -.->|has_permission| EncounterSign
-  Clinician -.->|has_permission| ClinicalOrderWrite
-  Clinician -.->|has_permission| LabResultManage
-  Clinician -->|performs| BucOrdersResults
-  Clinician -->|performs| BucClinicalEncounter
-  Clinician -->|performs| PlaceLabOrder
-  Clinician -->|performs| ReviewLabResult
-  Clinician -->|performs| NotifyCriticalResult
-  Clinician -->|performs| CancelClinicalOrder
-  Clinician -->|performs| DocumentAssessment
-  Clinician -->|performs| SignEncounter
-  Clinician -->|performs| AmendEncounter
-  ConsentApi -.->|creates| ConsentRecord
-  ConsentApi -.->|requires_permission| ConsentCapture
-  IntakeMessagingApi -.->|creates| PatientMessage
-  IntakeMessagingApi -.->|creates| IntakePacket
-  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
+  Nurse -->|performs| CompleteConsultation
+  Nurse -->|performs| PrintSpecimenLabel
+  Nurse -->|performs| CollectSpecimen
+  Nurse -->|performs| RegisterPerformedProcedure
+  Nurse -->|performs| ReceiveLabResult
+  Nurse -->|performs| AssignRoom
+  Nurse -->|performs| PrepareEncounter
+  SubmitClaimApi -.->|requires_permission| BillingClaimWrite
+  SubmitClaimApi -.->|updates| ClaimStatement
+  ClaimResultApi -.->|requires_permission| BillingClaimWrite
+  ClaimResultApi -.->|updates| ClaimStatement
+  PaymentPostApi -.->|requires_permission| PaymentPost
+  PaymentPostApi -.->|updates| ClaimStatement
+  BalanceApi -.->|reads| PaymentTransaction
+  BalanceApi -.->|requires_permission| PaymentPost
+  BalanceApi -.->|updates| AccountBalance
+  OpenEncounterApi -.->|creates| Encounter
+  OpenEncounterApi -.->|requires_permission| EncounterOpen
+  OpenEncounterApi -.->|updates| Appointment
+  RecordVitalsApi -.->|creates| VitalSign
+  RecordVitalsApi -.->|requires_permission| VitalsRecord
+  RecordVitalsApi -.->|updates| Encounter
+  DocumentAssessmentApi -.->|creates| Diagnosis
+  DocumentAssessmentApi -.->|requires_permission| ClinicalDocument
+  DocumentAssessmentApi -.->|updates| Encounter
+  SignEncounterApi -.->|requires_permission| EncounterSign
+  SignEncounterApi -.->|updates| Encounter
+  AmendEncounterApi -.->|requires_permission| EncounterSign
+  AmendEncounterApi -.->|updates| Encounter
+  IssueReferralLetterApi -.->|creates| ReferralLetter
+  IssueReferralLetterApi -.->|reads| Encounter
+  IssueReferralLetterApi -.->|requires_permission| ReferralManage
+  CompleteConsultationApi -.->|requires_permission| EncounterOpen
+  CompleteConsultationApi -.->|updates| Appointment
+  CompleteConsultationApi -.->|updates| Room
+  CreateCarePlanApi -.->|creates| CarePlan
+  CreateCarePlanApi -.->|reads| Encounter
+  CreateCarePlanApi -.->|requires_permission| FollowUpManage
+  SendFollowUpMessageApi -.->|creates| PatientMessage
+  SendFollowUpMessageApi -.->|requires_permission| PatientMessageSend
+  FollowUpScheduleApi -.->|creates| Appointment
+  FollowUpScheduleApi -.->|requires_permission| ScheduleWrite
+  FollowUpScheduleApi -.->|updates| ProviderSchedule
+  NotifyPatientResultApi -.->|creates| Notification
+  NotifyPatientResultApi -.->|requires_permission| PatientMessageSend
   OrderEntryApi -.->|creates| ClinicalOrder
   OrderEntryApi -.->|reads| Encounter
   OrderEntryApi -.->|requires_permission| ClinicalOrderWrite
+  ProxyOrderApi -.->|creates| ClinicalOrder
+  ProxyOrderApi -.->|reads| Encounter
+  ProxyOrderApi -.->|requires_permission| ProxyOrderEntry
+  ConfirmOrderApi -.->|requires_permission| ClinicalOrderWrite
+  ConfirmOrderApi -.->|updates| ClinicalOrder
+  PerformedProcedureApi -.->|creates| Charge
+  PerformedProcedureApi -.->|reads| Encounter
+  PerformedProcedureApi -.->|reads| ClinicalOrder
+  PerformedProcedureApi -.->|requires_permission| ClinicalOrderWrite
   CollectSpecimenApi -.->|requires_permission| ClinicalOrderWrite
   CollectSpecimenApi -.->|updates| ClinicalOrder
   ReceiveLabResultApi -.->|creates| LabResult
@@ -1185,50 +1252,6 @@ flowchart LR
   CriticalNoticeApi -.->|creates| PatientMessage
   CriticalNoticeApi -.->|creates| Notification
   CriticalNoticeApi -.->|requires_permission| PatientMessageSend
-  OpenEncounterApi -.->|creates| Encounter
-  OpenEncounterApi -.->|reads| Appointment
-  OpenEncounterApi -.->|requires_permission| EncounterOpen
-  RecordVitalsApi -.->|creates| VitalSign
-  RecordVitalsApi -.->|requires_permission| VitalsRecord
-  RecordVitalsApi -.->|updates| Encounter
-  DocumentAssessmentApi -.->|creates| Diagnosis
-  DocumentAssessmentApi -.->|requires_permission| ClinicalDocument
-  DocumentAssessmentApi -.->|updates| Encounter
-  SignEncounterApi -.->|requires_permission| EncounterSign
-  SignEncounterApi -.->|updates| Encounter
-  AmendEncounterApi -.->|requires_permission| EncounterSign
-  AmendEncounterApi -.->|updates| Encounter
-  CompleteAppointmentApi -.->|requires_permission| EncounterOpen
-  CompleteAppointmentApi -.->|updates| Appointment
-  CompleteAppointmentApi -.->|updates| Room
-  AppointmentNoticeApi -.->|creates| PatientMessage
-  AppointmentNoticeApi -.->|creates| Notification
-  CreateChargeApi -.->|creates| Charge
-  CreateChargeApi -.->|reads| Encounter
-  CreateChargeApi -.->|requires_permission| BillingClaimWrite
-  CreateChargeApi -.->|updates| AccountBalance
-  GenerateClaimApi -.->|creates| Claim
-  GenerateClaimApi -.->|reads| InsurancePolicy
-  GenerateClaimApi -.->|requires_permission| BillingClaimWrite
-  GenerateClaimApi -.->|updates| Charge
-  SubmitClaimApi -.->|requires_permission| BillingClaimWrite
-  SubmitClaimApi -.->|updates| Claim
-  PaymentPostApi -.->|creates| PaymentTransaction
-  PaymentPostApi -.->|requires_permission| PaymentPost
-  PaymentPostApi -.->|updates| Claim
-  BalanceApi -.->|reads| PaymentTransaction
-  BalanceApi -.->|requires_permission| PaymentPost
-  BalanceApi -.->|updates| AccountBalance
-  CreateCarePlanApi -.->|creates| CarePlan
-  CreateCarePlanApi -.->|reads| Encounter
-  CreateCarePlanApi -.->|requires_permission| FollowUpManage
-  SendFollowUpMessageApi -.->|creates| PatientMessage
-  SendFollowUpMessageApi -.->|requires_permission| PatientMessageSend
-  FollowUpScheduleApi -.->|creates| Appointment
-  FollowUpScheduleApi -.->|requires_permission| ScheduleWrite
-  FollowUpScheduleApi -.->|updates| ProviderSchedule
-  NotifyPatientResultApi -.->|creates| Notification
-  NotifyPatientResultApi -.->|requires_permission| PatientMessageSend
   SearchPatientApi -.->|reads| PatientAccount
   SearchPatientApi -.->|reads| PatientProfile
   SearchPatientApi -.->|requires_permission| PatientProfileRead
@@ -1241,40 +1264,92 @@ flowchart LR
   EligibilityApi -.->|reads| InsurancePolicy
   EligibilityApi -.->|requires_permission| InsuranceVerify
   EligibilityApi -.->|updates| InsurancePolicy
-  BucPatientOnboarding -.->|belongs| PatientAccess
-  BucPatientOnboarding -->|contains| VerifyInsurance
-  BucPatientOnboarding -->|contains| CaptureConsent
-  BucPatientOnboarding -->|contains| SendIntakeForms
-  BucPatientOnboarding -->|contains| CompleteIntakeForms
-  BucPatientOnboarding -->|contains| ExpireIntakeForms
-  BucPatientOnboarding -->|contains| MergeDuplicatePatient
-  BucPatientOnboarding -->|contains| ArchivePatient
-  BucPatientOnboarding -->|contains| SearchPatient
-  BucPatientOnboarding -->|contains| RegisterPatient
-  BucPatientOnboarding -->|contains| UpdateDemographics
-  BucOrdersResults -.->|belongs| CareDelivery
-  BucOrdersResults -->|contains| PlaceLabOrder
-  BucOrdersResults -->|contains| CollectSpecimen
-  BucOrdersResults -->|contains| ReceiveLabResult
-  BucOrdersResults -->|contains| ReviewLabResult
-  BucOrdersResults -->|contains| NotifyCriticalResult
-  BucOrdersResults -->|contains| CancelClinicalOrder
+  ConsentApi -.->|creates| ConsentRecord
+  ConsentApi -.->|requires_permission| ConsentCapture
+  IntakeMessagingApi -.->|creates| PatientMessage
+  IntakeMessagingApi -.->|creates| IntakePacket
+  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
+  VerifyArrivalApi -.->|reads| Appointment
+  VerifyArrivalApi -.->|reads| PatientAccount
+  VerifyArrivalApi -.->|reads| InsurancePolicy
+  VerifyArrivalApi -.->|requires_permission| VisitCheckIn
+  CheckInPatientApi -.->|requires_permission| VisitCheckIn
+  CheckInPatientApi -.->|updates| Appointment
+  CheckInPatientApi -.->|updates| PatientAccount
+  OnlineEligibilityApi -.->|creates| EligibilityCheck
+  OnlineEligibilityApi -.->|reads| InsurancePolicy
+  OnlineEligibilityApi -.->|requires_permission| InsuranceVerify
+  EligibilityResultApi -.->|requires_permission| InsuranceVerify
+  EligibilityResultApi -.->|updates| EligibilityCheck
+  ReferralLetterApi -.->|creates| ReferralLetter
+  ReferralLetterApi -.->|requires_permission| ReferralManage
+  AssignRoomApi -.->|requires_permission| RoomAssign
+  AssignRoomApi -.->|updates| Appointment
+  AssignRoomApi -.->|updates| Room
+  PrepareEncounterApi -.->|reads| Appointment
+  PrepareEncounterApi -.->|reads| PatientProfile
+  PrepareEncounterApi -.->|requires_permission| EncounterOpen
+  CalculateVisitBillApi -.->|reads| Charge
+  CalculateVisitBillApi -.->|reads| InsurancePolicy
+  CalculateVisitBillApi -.->|requires_permission| BillCalculate
+  CalculateVisitBillApi -.->|updates| Appointment
+  SelectedFeeApi -.->|creates| Charge
+  SelectedFeeApi -.->|reads| Encounter
+  SelectedFeeApi -.->|reads| SelectedTreatmentFeeSetting
+  SelectedFeeApi -.->|requires_permission| BillCalculate
+  SettlementApi -.->|creates| PaymentTransaction
+  SettlementApi -.->|requires_permission| PaymentCollect
+  SettlementApi -.->|updates| Appointment
+  SettlementApi -.->|updates| AccountBalance
+  ReceiptApi -.->|reads| Charge
+  ReceiptApi -.->|reads| PaymentTransaction
+  ReceiptApi -.->|requires_permission| PaymentCollect
+  ReceiptApi -.->|updates| Appointment
+  AppointmentNoticeApi -.->|creates| PatientMessage
+  AppointmentNoticeApi -.->|creates| Notification
+  CreateChargeApi -.->|creates| Charge
+  CreateChargeApi -.->|reads| Encounter
+  GenerateClaimApi -.->|creates| ClaimStatement
+  GenerateClaimApi -.->|reads| Charge
+  GenerateClaimApi -.->|reads| InsurancePolicy
+  GenerateClaimApi -.->|requires_permission| BillingClaimWrite
+  ClaimEditApi -.->|requires_permission| BillingClaimWrite
+  ClaimEditApi -.->|updates| ClaimStatement
+  BucVisitPayment -.->|belongs| RevenueCycle
+  BucVisitPayment -->|contains| VisitPaymentFlow
+  BucVisitPayment -->|contains| CalculateVisitBill
+  BucVisitPayment -->|contains| ApplySelectedTreatmentFee
+  BucVisitPayment -->|contains| CallPatientForPayment
+  BucVisitPayment -->|contains| SettleAtWindow
+  BucVisitPayment -->|contains| SettleAtKiosk
+  BucVisitPayment -->|contains| IssueReceipt
+  BucBillingClaims -.->|belongs| RevenueCycle
+  BucBillingClaims -->|contains| ClaimCycleFlow
+  BucBillingClaims -->|contains| InspectClaimStatement
+  BucBillingClaims -->|contains| HoldClaimStatement
+  BucBillingClaims -->|contains| ReleaseHeldStatement
+  BucBillingClaims -->|contains| SubmitClaimStatements
+  BucBillingClaims -->|contains| RecordReceiptError
+  BucBillingClaims -->|contains| ResendErroredStatement
+  BucBillingClaims -->|contains| ReceiveClaimAccepted
+  BucBillingClaims -->|contains| ReviewClaimTransfer
+  BucBillingClaims -->|contains| RecordClaimReturn
+  BucBillingClaims -->|contains| CorrectReturnedStatement
+  BucBillingClaims -->|contains| RecordClaimAssessment
+  BucBillingClaims -->|contains| RequestReexamination
+  BucBillingClaims -->|contains| PostPayment
+  BucBillingClaims -->|contains| ReconcileBalance
+  BucBillingClaims -->|contains| VoidCharge
+  BucBillingClaims -->|contains| CreateCharge
+  BucBillingClaims -->|contains| GenerateClaimStatement
   BucClinicalEncounter -.->|belongs| CareDelivery
   BucClinicalEncounter -->|contains| OpenEncounter
   BucClinicalEncounter -->|contains| RecordVitals
   BucClinicalEncounter -->|contains| DocumentAssessment
   BucClinicalEncounter -->|contains| SignEncounter
   BucClinicalEncounter -->|contains| AmendEncounter
-  BucClinicalEncounter -->|contains| CompleteAppointment
-  BucBillingClaims -.->|belongs| RevenueCycle
-  BucBillingClaims -->|contains| CreateCharge
-  BucBillingClaims -->|contains| GenerateClaim
-  BucBillingClaims -->|contains| SubmitClaim
-  BucBillingClaims -->|contains| ReceiveClaimAccepted
-  BucBillingClaims -->|contains| RecordClaimDenial
-  BucBillingClaims -->|contains| PostPayment
-  BucBillingClaims -->|contains| ReconcileBalance
-  BucBillingClaims -->|contains| VoidCharge
+  BucClinicalEncounter -->|contains| IssueReferralLetter
+  BucClinicalEncounter -->|contains| CompleteConsultation
   BucFollowupCare -.->|belongs| PatientAccess
   BucFollowupCare -->|contains| CreateCarePlan
   BucFollowupCare -->|contains| SendFollowUpMessage
@@ -1282,6 +1357,56 @@ flowchart LR
   BucFollowupCare -->|contains| ScheduleFollowUpVisit
   BucFollowupCare -->|contains| CloseCarePlan
   BucFollowupCare -->|contains| NotifyPatientResult
+  BucOrdersResults -.->|belongs| CareDelivery
+  BucOrdersResults -->|contains| PlaceLabOrder
+  BucOrdersResults -->|contains| EnterProxyOrder
+  BucOrdersResults -->|contains| ConfirmProxyOrder
+  BucOrdersResults -->|contains| PrintSpecimenLabel
+  BucOrdersResults -->|contains| CollectSpecimen
+  BucOrdersResults -->|contains| RegisterPerformedProcedure
+  BucOrdersResults -->|contains| ReceiveLabResult
+  BucOrdersResults -->|contains| ReviewLabResult
+  BucOrdersResults -->|contains| NotifyCriticalResult
+  BucOrdersResults -->|contains| CancelClinicalOrder
+  BucPatientOnboarding -.->|belongs| PatientAccess
+  BucPatientOnboarding -->|contains| SearchPatient
+  BucPatientOnboarding -->|contains| RegisterPatient
+  BucPatientOnboarding -->|contains| UpdateDemographics
+  BucPatientOnboarding -->|contains| VerifyInsurance
+  BucPatientOnboarding -->|contains| CaptureConsent
+  BucPatientOnboarding -->|contains| SendIntakeForms
+  BucPatientOnboarding -->|contains| CompleteIntakeForms
+  BucPatientOnboarding -->|contains| ExpireIntakeForms
+  BucPatientOnboarding -->|contains| MergeDuplicatePatient
+  BucPatientOnboarding -->|contains| ArchivePatient
+  BucVisitCheckIn -.->|belongs| PatientAccess
+  BucVisitCheckIn -->|contains| VisitCheckInFlow
+  BucVisitCheckIn -->|contains| VerifyArrival
+  BucVisitCheckIn -->|contains| CheckInPatient
+  BucVisitCheckIn -->|contains| BatchVerifyEligibility
+  BucVisitCheckIn -->|contains| ReceiveEligibilityValid
+  BucVisitCheckIn -->|contains| ReceiveEligibilityInvalid
+  BucVisitCheckIn -->|contains| ReceiveEligibilityNoInfo
+  BucVisitCheckIn -->|contains| RecheckEligibility
+  BucVisitCheckIn -->|contains| RecordEligibilityDeclaration
+  BucVisitCheckIn -->|contains| ConfirmEligibilityInOutageMode
+  BucVisitCheckIn -->|contains| ReceiveReferralLetter
+  BucVisitCheckIn -->|contains| AssignRoom
+  BucVisitCheckIn -->|contains| PrepareEncounter
+  TransferNotPossible -.->|applies_to| RecordClaimReturn
+  TransferNotPossible -.->|combines| ClaimStatement
+  TransferNotPossible -.->|combines| PayerChange
+  OrderConfirmedByPhysician -.->|applies_to| CollectSpecimen
+  OrderConfirmedByPhysician -.->|combines| ClinicalOrder
+  BookedPatient -.->|applies_to| BatchVerifyEligibility
+  BookedPatient -.->|combines| Appointment
+  CopayCappedAtLimit -.->|applies_to| CalculateVisitBill
+  CopayCappedAtLimit -.->|combines| Appointment
+  CopayCappedAtLimit -.->|combines| BurdenRatio
+  CopayCappedAtLimit -.->|combines| LimitCategory
+  UnreferredFirstVisit -.->|applies_to| ApplySelectedTreatmentFee
+  UnreferredFirstVisit -.->|combines| ReferralCategory
+  UnreferredFirstVisit -.->|combines| ChargeKind
   Appointment ---|N:1| PatientAccount
   Appointment ---|N:1| Room
   Encounter ---|N:1| PatientAccount
@@ -1291,11 +1416,12 @@ flowchart LR
   ClinicalOrder ---|N:1| Encounter
   LabResult ---|1:1| ClinicalOrder
   Charge ---|N:1| Encounter
-  Charge ---|N:1| Claim
-  Claim ---|N:1| PatientAccount
-  Claim ---|N:1| InsurancePolicy
-  PaymentTransaction ---|N:1| Claim
+  Charge ---|N:1| ClaimStatement
+  ClaimStatement ---|N:1| PatientAccount
+  ClaimStatement ---|N:1| InsurancePolicy
+  PaymentTransaction ---|N:1| Appointment
   AccountBalance ---|1:1| PatientAccount
+  ReferralLetter ---|N:1| PatientAccount
   CarePlan ---|N:1| Encounter
   CarePlan ---|N:1| PatientAccount
   PatientMessage ---|N:1| PatientAccount
@@ -1305,65 +1431,295 @@ flowchart LR
   EligibilityCheck ---|N:1| InsurancePolicy
   ConsentRecord ---|N:1| PatientAccount
   IntakePacket ---|N:1| PatientAccount
-  EvEncounterSigned -.->|triggers| BucOrdersResults
-  EvEncounterSigned -.->|triggers| BucBillingClaims
-  EvEncounterSigned -.->|triggers| BucFollowupCare
-  EvEncounterSigned -.->|triggers| PlaceLabOrder
-  EvEncounterSigned -.->|triggers| CompleteAppointment
-  EvEncounterSigned -.->|triggers| CreateCharge
-  EvEncounterSigned -.->|triggers| CreateCarePlan
-  EvClinicalOrderReviewed -.->|triggers| BucFollowupCare
-  EvClinicalOrderReviewed -.->|triggers| NotifyCriticalResult
-  EvClinicalOrderReviewed -.->|triggers| NotifyPatientResult
+  EvPaymentSettled -.->|triggers| SettleAtKiosk
+  EvBillCalculated -.->|triggers| PaymentGateway
+  EvBillCalculated -.->|triggers| CallPatientForPayment
+  EvClaimStatementsSubmitted -.->|triggers| ClaimsReviewOrganization
+  EvClaimReceiptError -.->|triggers| RecordReceiptError
+  EvClaimAccepted -.->|triggers| ReceiveClaimAccepted
+  EvClaimReturned -.->|triggers| RecordClaimReturn
+  EvClaimAssessed -.->|triggers| RecordClaimAssessment
+  EvClaimTransferred -.->|triggers| ReviewClaimTransfer
+  EvRemittance -.->|triggers| PostPayment
   EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
+  EvAppointmentScheduled -.->|triggers| MessagingGateway
   EvAppointmentScheduled -.->|triggers| SendIntakeForms
   EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
+  EvAppointmentRescheduled -.->|triggers| MessagingGateway
+  EvAppointmentRescheduled -.->|triggers| SendAppointmentNotice
+  EvAppointmentCheckedIn -.->|triggers| BucClinicalEncounter
+  EvAppointmentCheckedIn -.->|triggers| OnlineEligibilitySystem
+  EvAppointmentCheckedIn -.->|triggers| OpenEncounter
+  EvAppointmentCheckedIn -.->|triggers| PrepareEncounter
+  EvAppointmentCancelled -.->|triggers| MessagingGateway
+  EvAppointmentCancelled -.->|triggers| SendAppointmentNotice
+  EvEncounterSigned -.->|triggers| BucVisitPayment
+  EvEncounterSigned -.->|triggers| BucBillingClaims
+  EvEncounterSigned -.->|triggers| BucFollowupCare
+  EvEncounterSigned -.->|triggers| BucOrdersResults
+  EvEncounterSigned -.->|triggers| CompleteConsultation
+  EvEncounterSigned -.->|triggers| CreateCarePlan
+  EvEncounterSigned -.->|triggers| PlaceLabOrder
+  EvEncounterSigned -.->|triggers| CreateCharge
+  EvClinicalOrderReviewed -.->|triggers| BucFollowupCare
+  EvClinicalOrderReviewed -.->|triggers| NotifyPatientResult
+  EvClinicalOrderReviewed -.->|triggers| NotifyCriticalResult
+  EvLabResultReceived -.->|triggers| ReceiveLabResult
+  EvEligibilityChecked -.->|triggers| ReceiveEligibilityValid
+  EvEligibilityChecked -.->|triggers| ReceiveEligibilityInvalid
+  EvEligibilityChecked -.->|triggers| ReceiveEligibilityNoInfo
+  OnlineEligibilitySystem -.->|raises| EvEligibilityChecked
+  PaymentGateway -.->|raises| EvPaymentSettled
+  OutsourcedLabSystem -.->|raises| EvLabResultReceived
+  ClaimsReviewOrganization -.->|raises| EvClaimReceiptError
+  ClaimsReviewOrganization -.->|raises| EvClaimAccepted
+  ClaimsReviewOrganization -.->|raises| EvClaimReturned
+  ClaimsReviewOrganization -.->|raises| EvClaimAssessed
+  ClaimsReviewOrganization -.->|raises| EvClaimTransferred
+  ClaimsReviewOrganization -.->|raises| EvRemittance
+  KioskReferenceField -.->|maps_field| PaymentTransaction
+  ReferralDirectionField -.->|maps_field| ReferralLetter
+  ArrivalTimeField -.->|maps_field| Appointment
+  EligibilityResultField -.->|maps_field| EligibilityCheck
+  ReferralReceivedField -.->|maps_field| ReferralLetter
+  PaymentAmountField -.->|maps_field| PaymentTransaction
+  ChargeCodeField -.->|maps_field| Charge
+  ClaimCycleFlow -->|contains| CreateStatementStep
+  ClaimCycleFlow -->|contains| InspectStep
+  ClaimCycleFlow -->|contains| HoldStep
+  ClaimCycleFlow -->|contains| SubmitStep
+  ClaimCycleFlow -->|contains| ReceiptErrorStep
+  ClaimCycleFlow -->|contains| ReviewStep
+  ClaimCycleFlow -->|contains| ReturnStep
+  ClaimCycleFlow -->|contains| AssessStep
+  ClaimCycleFlow -->|contains| PaidStep
+  VisitCheckInFlow -->|contains| ArrivalStep
+  VisitCheckInFlow -->|contains| EligibilityStep
+  VisitCheckInFlow -->|contains| DeclarationStep
+  VisitCheckInFlow -->|contains| ReferralStep
+  VisitCheckInFlow -->|contains| RoomingStep
+  VisitPaymentFlow -->|contains| CalculationStep
+  VisitPaymentFlow -->|contains| CallStep
+  VisitPaymentFlow -->|contains| WindowStep
+  VisitPaymentFlow -->|contains| KioskStep
+  VisitPaymentFlow -->|contains| ReceiptStep
+  ReferralLetterScreen -->|contains| ReferralDirectionField
   PatientSearchScreen -.->|shows| PatientAccount
   PatientProfileScreen -.->|shows| PatientProfile
-  VerifyInsurance -.->|displays| InsuranceScreen
-  VerifyInsurance -.->|invokes| EligibilityApi
-  VerifyInsurance -.->|requires_medium| FrontDeskTerminal
-  VerifyInsurance -.->|requires_permission| InsuranceVerify
-  CaptureConsent -.->|displays| ConsentScreen
-  CaptureConsent -.->|invokes| ConsentApi
-  CaptureConsent -.->|requires_medium| PatientMobile
-  CaptureConsent -.->|requires_permission| ConsentCapture
-  SendIntakeForms -.->|displays| IntakePortalScreen
-  SendIntakeForms -.->|invokes| IntakeMessagingApi
-  SendIntakeForms -.->|requires_medium| FrontDeskTerminal
-  SendIntakeForms -.->|requires_permission| IntakeManage
-  CompleteIntakeForms -.->|displays| IntakePortalScreen
-  CompleteIntakeForms -.->|raises| EvIntakeCompleted
-  CompleteIntakeForms -.->|requires_medium| PatientMobile
-  CompleteIntakeForms -.->|requires_permission| ConsentCapture
-  CompleteIntakeForms -.->|updates| IntakePacket
-  ExpireIntakeForms -.->|displays| IntakePortalScreen
-  ExpireIntakeForms -.->|raises| EvIntakeExpired
-  ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
-  ExpireIntakeForms -.->|requires_permission| IntakeManage
-  ExpireIntakeForms -.->|updates| IntakePacket
-  MergeDuplicatePatient -.->|displays| PatientProfileScreen
-  MergeDuplicatePatient -.->|raises| EvPatientMerged
-  MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
-  MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
-  MergeDuplicatePatient -.->|updates| PatientAccount
-  ArchivePatient -.->|displays| PatientProfileScreen
-  ArchivePatient -.->|raises| EvPatientArchived
-  ArchivePatient -.->|requires_medium| FrontDeskTerminal
-  ArchivePatient -.->|requires_permission| PatientProfileWrite
-  ArchivePatient -.->|updates| PatientAccount
+  CheckInScreen -->|contains| ArrivalTimeField
+  CheckInScreen -.->|shows| Appointment
+  EligibilityScreen -->|contains| EligibilityResultField
+  ReferralScreen -->|contains| ReferralReceivedField
+  BillCalculationScreen -->|contains| ChargeCodeField
+  PaymentWindowScreen -->|contains| PaymentAmountField
+  KioskScreen -->|contains| KioskReferenceField
+  ArrivalStep -.->|covers| VerifyArrival
+  ArrivalStep -.->|precedes| EligibilityStep
+  EligibilityStep -.->|branches| ReferralStep
+  EligibilityStep -.->|covers| CheckInPatient
+  EligibilityStep -.->|covers| ReceiveEligibilityValid
+  EligibilityStep -.->|covers| ReceiveEligibilityInvalid
+  EligibilityStep -.->|covers| ReceiveEligibilityNoInfo
+  EligibilityStep -.->|covers| RecheckEligibility
+  EligibilityStep -.->|excepts| DeclarationStep
+  EligibilityStep -.->|precedes| RoomingStep
+  DeclarationStep -.->|covers| RecordEligibilityDeclaration
+  DeclarationStep -.->|covers| ConfirmEligibilityInOutageMode
+  DeclarationStep -.->|precedes| RoomingStep
+  CreateStatementStep -.->|covers| MonthlyClaimCreation
+  CreateStatementStep -.->|covers| GenerateClaimStatement
+  CreateStatementStep -.->|precedes| InspectStep
+  ReferralStep -.->|covers| ReceiveReferralLetter
+  ReferralStep -.->|precedes| RoomingStep
+  RoomingStep -.->|covers| AssignRoom
+  CalculationStep -.->|covers| CalculateVisitBill
+  CalculationStep -.->|covers| ApplySelectedTreatmentFee
+  CalculationStep -.->|precedes| CallStep
+  CallStep -.->|branches| KioskStep
+  CallStep -.->|covers| CallPatientForPayment
+  CallStep -.->|precedes| WindowStep
+  WindowStep -.->|covers| SettleAtWindow
+  WindowStep -.->|precedes| ReceiptStep
+  KioskStep -.->|covers| EvPaymentSettled
+  KioskStep -.->|covers| SettleAtKiosk
+  KioskStep -.->|precedes| ReceiptStep
+  ReceiptStep -.->|covers| IssueReceipt
+  InspectStep -.->|branches| HoldStep
+  InspectStep -.->|covers| InspectClaimStatement
+  InspectStep -.->|precedes| SubmitStep
+  HoldStep -.->|covers| HoldClaimStatement
+  HoldStep -.->|covers| ReleaseHeldStatement
+  HoldStep -.->|repeats| InspectStep
+  SubmitStep -.->|covers| MonthlyClaimDeadline
+  SubmitStep -.->|covers| SubmitClaimStatements
+  SubmitStep -.->|excepts| ReceiptErrorStep
+  SubmitStep -.->|precedes| ReviewStep
+  ReceiptErrorStep -.->|covers| ErrorResendWindow
+  ReceiptErrorStep -.->|covers| RecordReceiptError
+  ReceiptErrorStep -.->|covers| ResendErroredStatement
+  ReceiptErrorStep -.->|repeats| SubmitStep
+  ReviewStep -.->|branches| AssessStep
+  ReviewStep -.->|covers| ReceiveClaimAccepted
+  ReviewStep -.->|covers| ReviewClaimTransfer
+  ReviewStep -.->|excepts| ReturnStep
+  ReviewStep -.->|precedes| PaidStep
+  ReturnStep -.->|covers| RecordClaimReturn
+  ReturnStep -.->|covers| CorrectReturnedStatement
+  ReturnStep -.->|repeats| InspectStep
+  AssessStep -.->|covers| RecordClaimAssessment
+  AssessStep -.->|covers| RequestReexamination
+  AssessStep -.->|precedes| PaidStep
+  PaidStep -.->|covers| PostPayment
+  IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
+  EligibilityBatchInquiry -.->|triggers| BatchVerifyEligibility
+  MonthlyClaimCreation -.->|triggers| GenerateClaimStatement
+  MonthlyClaimDeadline -.->|triggers| SubmitClaimStatements
+  ErrorResendWindow -.->|triggers| ResendErroredStatement
+  ReturnDownloadCheck -.->|triggers| RecordClaimReturn
+  ReceivablesMonthlyReview -.->|triggers| ReconcileBalance
+  InspectClaimStatement -.->|displays| ClaimScreen
+  InspectClaimStatement -.->|invokes| ClaimEditApi
+  InspectClaimStatement -.->|requires_medium| BillingWorkstation
+  InspectClaimStatement -.->|requires_permission| BillingClaimWrite
+  HoldClaimStatement -.->|displays| ClaimScreen
+  HoldClaimStatement -.->|invokes| ClaimEditApi
+  HoldClaimStatement -.->|requires_medium| BillingWorkstation
+  HoldClaimStatement -.->|requires_permission| BillingClaimWrite
+  ReleaseHeldStatement -.->|displays| ClaimScreen
+  ReleaseHeldStatement -.->|invokes| ClaimEditApi
+  ReleaseHeldStatement -.->|requires_medium| BillingWorkstation
+  ReleaseHeldStatement -.->|requires_permission| BillingClaimWrite
+  SubmitClaimStatements -.->|displays| ClaimScreen
+  SubmitClaimStatements -.->|invokes| SubmitClaimApi
+  SubmitClaimStatements -.->|raises| EvClaimStatementsSubmitted
+  SubmitClaimStatements -.->|requires_medium| OnlineClaimTerminal
+  SubmitClaimStatements -.->|requires_permission| BillingClaimWrite
+  RecordReceiptError -.->|displays| ClaimScreen
+  RecordReceiptError -.->|invokes| ClaimResultApi
+  RecordReceiptError -.->|requires_medium| OnlineClaimTerminal
+  RecordReceiptError -.->|requires_permission| BillingClaimWrite
+  ResendErroredStatement -.->|displays| ClaimScreen
+  ResendErroredStatement -.->|invokes| SubmitClaimApi
+  ResendErroredStatement -.->|requires_medium| OnlineClaimTerminal
+  ResendErroredStatement -.->|requires_permission| BillingClaimWrite
+  ReceiveClaimAccepted -.->|displays| ClaimScreen
+  ReceiveClaimAccepted -.->|invokes| ClaimResultApi
+  ReceiveClaimAccepted -.->|requires_medium| OnlineClaimTerminal
+  ReceiveClaimAccepted -.->|requires_permission| BillingClaimWrite
+  ReviewClaimTransfer -.->|displays| ClaimScreen
+  ReviewClaimTransfer -.->|reads| ClaimStatement
+  ReviewClaimTransfer -.->|requires_medium| OnlineClaimTerminal
+  ReviewClaimTransfer -.->|requires_permission| BillingClaimWrite
+  RecordClaimReturn -.->|displays| ClaimScreen
+  RecordClaimReturn -.->|invokes| ClaimResultApi
+  RecordClaimReturn -.->|requires_medium| OnlineClaimTerminal
+  RecordClaimReturn -.->|requires_permission| BillingClaimWrite
+  CorrectReturnedStatement -.->|displays| ClaimScreen
+  CorrectReturnedStatement -.->|invokes| ClaimEditApi
+  CorrectReturnedStatement -.->|requires_medium| BillingWorkstation
+  CorrectReturnedStatement -.->|requires_permission| BillingClaimWrite
+  RecordClaimAssessment -.->|displays| ClaimScreen
+  RecordClaimAssessment -.->|invokes| ClaimResultApi
+  RecordClaimAssessment -.->|requires_medium| OnlineClaimTerminal
+  RecordClaimAssessment -.->|requires_permission| BillingClaimWrite
+  RequestReexamination -.->|displays| ClaimScreen
+  RequestReexamination -.->|invokes| SubmitClaimApi
+  RequestReexamination -.->|requires_medium| OnlineClaimTerminal
+  RequestReexamination -.->|requires_permission| BillingClaimWrite
+  PostPayment -.->|displays| PaymentPostingScreen
+  PostPayment -.->|invokes| PaymentPostApi
+  PostPayment -.->|requires_medium| BillingWorkstation
+  PostPayment -.->|requires_permission| PaymentPost
+  ReconcileBalance -.->|displays| BalanceScreen
+  ReconcileBalance -.->|invokes| BalanceApi
+  ReconcileBalance -.->|requires_medium| BillingWorkstation
+  ReconcileBalance -.->|requires_permission| PaymentPost
+  VoidCharge -.->|displays| ChargeWorklistScreen
+  VoidCharge -.->|requires_medium| BillingWorkstation
+  VoidCharge -.->|requires_permission| BillingClaimWrite
+  VoidCharge -.->|updates| Charge
+  OpenEncounter -.->|displays| EncounterWorkspaceScreen
+  OpenEncounter -.->|invokes| OpenEncounterApi
+  OpenEncounter -.->|requires_medium| NurseStation
+  OpenEncounter -.->|requires_permission| EncounterOpen
+  RecordVitals -.->|displays| VitalsScreen
+  RecordVitals -.->|invokes| RecordVitalsApi
+  RecordVitals -.->|requires_medium| NurseStation
+  RecordVitals -.->|requires_permission| VitalsRecord
+  DocumentAssessment -.->|displays| DiagnosisScreen
+  DocumentAssessment -.->|invokes| DocumentAssessmentApi
+  DocumentAssessment -.->|requires_medium| ClinicalWorkstation
+  DocumentAssessment -.->|requires_permission| ClinicalDocument
+  SignEncounter -.->|displays| EncounterWorkspaceScreen
+  SignEncounter -.->|invokes| SignEncounterApi
+  SignEncounter -.->|raises| EvEncounterSigned
+  SignEncounter -.->|requires_medium| ClinicalWorkstation
+  SignEncounter -.->|requires_permission| EncounterSign
+  AmendEncounter -.->|displays| EncounterWorkspaceScreen
+  AmendEncounter -.->|invokes| AmendEncounterApi
+  AmendEncounter -.->|requires_medium| ClinicalWorkstation
+  AmendEncounter -.->|requires_permission| EncounterSign
+  IssueReferralLetter -.->|displays| ReferralLetterScreen
+  IssueReferralLetter -.->|invokes| IssueReferralLetterApi
+  IssueReferralLetter -.->|requires_medium| ClinicalWorkstation
+  IssueReferralLetter -.->|requires_permission| ReferralManage
+  CompleteConsultation -.->|displays| EncounterWorkspaceScreen
+  CompleteConsultation -.->|invokes| CompleteConsultationApi
+  CompleteConsultation -.->|requires_medium| NurseStation
+  CompleteConsultation -.->|requires_permission| EncounterOpen
+  CreateCarePlan -.->|displays| CarePlanScreen
+  CreateCarePlan -.->|invokes| CreateCarePlanApi
+  CreateCarePlan -.->|requires_medium| CareCoordinationConsole
+  CreateCarePlan -.->|requires_permission| FollowUpManage
+  SendFollowUpMessage -.->|displays| PatientMessageScreen
+  SendFollowUpMessage -.->|invokes| SendFollowUpMessageApi
+  SendFollowUpMessage -.->|requires_medium| CareCoordinationConsole
+  SendFollowUpMessage -.->|requires_permission| PatientMessageSend
+  ReviewPatientResponse -.->|displays| CarePlanScreen
+  ReviewPatientResponse -.->|requires_medium| CareCoordinationConsole
+  ReviewPatientResponse -.->|requires_permission| FollowUpManage
+  ReviewPatientResponse -.->|updates| CarePlan
+  ReviewPatientResponse -.->|updates| PatientMessage
+  ScheduleFollowUpVisit -.->|displays| FollowUpScheduleScreen
+  ScheduleFollowUpVisit -.->|invokes| FollowUpScheduleApi
+  ScheduleFollowUpVisit -.->|raises| EvAppointmentScheduled
+  ScheduleFollowUpVisit -.->|requires_medium| CareCoordinationConsole
+  ScheduleFollowUpVisit -.->|requires_permission| FollowUpManage
+  ScheduleFollowUpVisit -.->|requires_permission| ScheduleWrite
+  CloseCarePlan -.->|displays| CarePlanScreen
+  CloseCarePlan -.->|requires_medium| CareCoordinationConsole
+  CloseCarePlan -.->|requires_permission| FollowUpManage
+  CloseCarePlan -.->|updates| CarePlan
+  NotifyPatientResult -.->|displays| PatientMessageScreen
+  NotifyPatientResult -.->|invokes| NotifyPatientResultApi
+  NotifyPatientResult -.->|requires_medium| CareCoordinationConsole
+  NotifyPatientResult -.->|requires_permission| PatientMessageSend
   PlaceLabOrder -.->|displays| OrderEntryScreen
   PlaceLabOrder -.->|invokes| OrderEntryApi
   PlaceLabOrder -.->|requires_medium| ClinicalWorkstation
   PlaceLabOrder -.->|requires_permission| ClinicalOrderWrite
+  EnterProxyOrder -.->|displays| OrderEntryScreen
+  EnterProxyOrder -.->|invokes| ProxyOrderApi
+  EnterProxyOrder -.->|requires_medium| ClinicalWorkstation
+  EnterProxyOrder -.->|requires_permission| ProxyOrderEntry
+  ConfirmProxyOrder -.->|displays| OrderEntryScreen
+  ConfirmProxyOrder -.->|invokes| ConfirmOrderApi
+  ConfirmProxyOrder -.->|requires_medium| ClinicalWorkstation
+  ConfirmProxyOrder -.->|requires_permission| ClinicalOrderWrite
+  PrintSpecimenLabel -.->|displays| SpecimenScreen
+  PrintSpecimenLabel -.->|reads| ClinicalOrder
+  PrintSpecimenLabel -.->|requires_medium| NurseStation
+  PrintSpecimenLabel -.->|requires_permission| ClinicalOrderWrite
   CollectSpecimen -.->|displays| SpecimenScreen
   CollectSpecimen -.->|invokes| CollectSpecimenApi
-  CollectSpecimen -.->|raises| EvClinicalOrderCollected
   CollectSpecimen -.->|requires_medium| NurseStation
   CollectSpecimen -.->|requires_permission| ClinicalOrderWrite
+  RegisterPerformedProcedure -.->|displays| SpecimenScreen
+  RegisterPerformedProcedure -.->|invokes| PerformedProcedureApi
+  RegisterPerformedProcedure -.->|requires_medium| NurseStation
+  RegisterPerformedProcedure -.->|requires_permission| ClinicalOrderWrite
   ReceiveLabResult -.->|displays| ResultReviewScreen
   ReceiveLabResult -.->|invokes| ReceiveLabResultApi
-  ReceiveLabResult -.->|raises| EvClinicalOrderResulted
   ReceiveLabResult -.->|requires_medium| NurseStation
   ReceiveLabResult -.->|requires_permission| LabResultManage
   ReviewLabResult -.->|displays| ResultReviewScreen
@@ -1377,107 +1733,9 @@ flowchart LR
   NotifyCriticalResult -.->|requires_permission| LabResultManage
   NotifyCriticalResult -.->|requires_permission| PatientMessageSend
   CancelClinicalOrder -.->|displays| OrderEntryScreen
-  CancelClinicalOrder -.->|raises| EvClinicalOrderCancelled
   CancelClinicalOrder -.->|requires_medium| ClinicalWorkstation
   CancelClinicalOrder -.->|requires_permission| ClinicalOrderWrite
   CancelClinicalOrder -.->|updates| ClinicalOrder
-  OpenEncounter -.->|displays| EncounterWorkspaceScreen
-  OpenEncounter -.->|invokes| OpenEncounterApi
-  OpenEncounter -.->|requires_medium| NurseStation
-  OpenEncounter -.->|requires_permission| EncounterOpen
-  RecordVitals -.->|displays| VitalsScreen
-  RecordVitals -.->|invokes| RecordVitalsApi
-  RecordVitals -.->|requires_medium| NurseStation
-  RecordVitals -.->|requires_permission| VitalsRecord
-  DocumentAssessment -.->|displays| DiagnosisScreen
-  DocumentAssessment -.->|invokes| DocumentAssessmentApi
-  DocumentAssessment -.->|raises| EvEncounterDocumented
-  DocumentAssessment -.->|requires_medium| ClinicalWorkstation
-  DocumentAssessment -.->|requires_permission| ClinicalDocument
-  SignEncounter -.->|displays| EncounterWorkspaceScreen
-  SignEncounter -.->|invokes| SignEncounterApi
-  SignEncounter -.->|raises| EvEncounterSigned
-  SignEncounter -.->|requires_medium| ClinicalWorkstation
-  SignEncounter -.->|requires_permission| EncounterSign
-  AmendEncounter -.->|displays| EncounterWorkspaceScreen
-  AmendEncounter -.->|invokes| AmendEncounterApi
-  AmendEncounter -.->|raises| EvEncounterAmended
-  AmendEncounter -.->|requires_medium| ClinicalWorkstation
-  AmendEncounter -.->|requires_permission| EncounterSign
-  CompleteAppointment -.->|displays| EncounterWorkspaceScreen
-  CompleteAppointment -.->|invokes| CompleteAppointmentApi
-  CompleteAppointment -.->|raises| EvAppointmentCompleted
-  CompleteAppointment -.->|requires_medium| NurseStation
-  CompleteAppointment -.->|requires_permission| EncounterOpen
-  SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
-  SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
-  SendAppointmentNotice -.->|requires_medium| FrontDeskTerminal
-  SendAppointmentNotice -.->|requires_permission| ScheduleRead
-  CreateCharge -.->|displays| ChargeWorklistScreen
-  CreateCharge -.->|invokes| CreateChargeApi
-  CreateCharge -.->|requires_medium| BillingWorkstation
-  CreateCharge -.->|requires_permission| BillingClaimWrite
-  GenerateClaim -.->|displays| ClaimScreen
-  GenerateClaim -.->|invokes| GenerateClaimApi
-  GenerateClaim -.->|requires_medium| BillingWorkstation
-  GenerateClaim -.->|requires_permission| BillingClaimWrite
-  SubmitClaim -.->|displays| ClaimScreen
-  SubmitClaim -.->|invokes| SubmitClaimApi
-  SubmitClaim -.->|raises| EvClaimSubmitted
-  SubmitClaim -.->|requires_medium| BillingWorkstation
-  SubmitClaim -.->|requires_permission| BillingClaimWrite
-  ReceiveClaimAccepted -.->|displays| ClaimScreen
-  ReceiveClaimAccepted -.->|raises| EvClaimAccepted
-  ReceiveClaimAccepted -.->|requires_medium| BillingWorkstation
-  ReceiveClaimAccepted -.->|requires_permission| BillingClaimWrite
-  ReceiveClaimAccepted -.->|updates| Claim
-  RecordClaimDenial -.->|displays| ClaimScreen
-  RecordClaimDenial -.->|raises| EvClaimDenied
-  RecordClaimDenial -.->|requires_medium| BillingWorkstation
-  RecordClaimDenial -.->|requires_permission| BillingClaimWrite
-  RecordClaimDenial -.->|updates| Claim
-  PostPayment -.->|displays| PaymentPostingScreen
-  PostPayment -.->|invokes| PaymentPostApi
-  PostPayment -.->|raises| EvClaimPaid
-  PostPayment -.->|requires_medium| BillingWorkstation
-  PostPayment -.->|requires_permission| PaymentPost
-  ReconcileBalance -.->|displays| BalanceScreen
-  ReconcileBalance -.->|invokes| BalanceApi
-  ReconcileBalance -.->|requires_medium| BillingWorkstation
-  ReconcileBalance -.->|requires_permission| PaymentPost
-  VoidCharge -.->|displays| ChargeWorklistScreen
-  VoidCharge -.->|requires_medium| BillingWorkstation
-  VoidCharge -.->|requires_permission| BillingClaimWrite
-  VoidCharge -.->|updates| Charge
-  CreateCarePlan -.->|displays| CarePlanScreen
-  CreateCarePlan -.->|invokes| CreateCarePlanApi
-  CreateCarePlan -.->|requires_medium| CareCoordinationConsole
-  CreateCarePlan -.->|requires_permission| FollowUpManage
-  SendFollowUpMessage -.->|displays| PatientMessageScreen
-  SendFollowUpMessage -.->|invokes| SendFollowUpMessageApi
-  SendFollowUpMessage -.->|requires_medium| CareCoordinationConsole
-  SendFollowUpMessage -.->|requires_permission| PatientMessageSend
-  ReviewPatientResponse -.->|displays| CarePlanScreen
-  ReviewPatientResponse -.->|raises| EvCarePlanMonitoring
-  ReviewPatientResponse -.->|requires_medium| CareCoordinationConsole
-  ReviewPatientResponse -.->|requires_permission| FollowUpManage
-  ReviewPatientResponse -.->|updates| CarePlan
-  ReviewPatientResponse -.->|updates| PatientMessage
-  ScheduleFollowUpVisit -.->|displays| FollowUpScheduleScreen
-  ScheduleFollowUpVisit -.->|invokes| FollowUpScheduleApi
-  ScheduleFollowUpVisit -.->|raises| EvAppointmentScheduled
-  ScheduleFollowUpVisit -.->|requires_medium| CareCoordinationConsole
-  ScheduleFollowUpVisit -.->|requires_permission| FollowUpManage
-  ScheduleFollowUpVisit -.->|requires_permission| ScheduleWrite
-  CloseCarePlan -.->|displays| CarePlanScreen
-  CloseCarePlan -.->|raises| EvCarePlanClosed
-  CloseCarePlan -.->|requires_medium| CareCoordinationConsole
-  CloseCarePlan -.->|requires_permission| FollowUpManage
-  CloseCarePlan -.->|updates| CarePlan
-  NotifyPatientResult -.->|displays| PatientMessageScreen
-  NotifyPatientResult -.->|invokes| NotifyPatientResultApi
-  NotifyPatientResult -.->|requires_medium| CareCoordinationConsole
-  NotifyPatientResult -.->|requires_permission| PatientMessageSend
   SearchPatient -.->|displays| PatientSearchScreen
   SearchPatient -.->|invokes| SearchPatientApi
   SearchPatient -.->|requires_medium| FrontDeskTerminal
@@ -1490,7 +1748,1127 @@ flowchart LR
   UpdateDemographics -.->|invokes| UpdateDemographicsApi
   UpdateDemographics -.->|requires_medium| FrontDeskTerminal
   UpdateDemographics -.->|requires_permission| PatientProfileWrite
+  VerifyInsurance -.->|displays| InsuranceScreen
+  VerifyInsurance -.->|invokes| EligibilityApi
+  VerifyInsurance -.->|requires_medium| FrontDeskTerminal
+  VerifyInsurance -.->|requires_permission| InsuranceVerify
+  CaptureConsent -.->|displays| ConsentScreen
+  CaptureConsent -.->|invokes| ConsentApi
+  CaptureConsent -.->|requires_medium| PatientMobile
+  CaptureConsent -.->|requires_permission| ConsentCapture
+  SendIntakeForms -.->|displays| IntakePortalScreen
+  SendIntakeForms -.->|invokes| IntakeMessagingApi
+  SendIntakeForms -.->|requires_medium| FrontDeskTerminal
+  SendIntakeForms -.->|requires_permission| IntakeManage
+  CompleteIntakeForms -.->|displays| IntakePortalScreen
+  CompleteIntakeForms -.->|requires_medium| PatientMobile
+  CompleteIntakeForms -.->|requires_permission| ConsentCapture
+  CompleteIntakeForms -.->|updates| IntakePacket
+  ExpireIntakeForms -.->|displays| IntakePortalScreen
+  ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
+  ExpireIntakeForms -.->|requires_permission| IntakeManage
+  ExpireIntakeForms -.->|updates| IntakePacket
+  MergeDuplicatePatient -.->|displays| PatientProfileScreen
+  MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
+  MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
+  MergeDuplicatePatient -.->|updates| PatientAccount
+  ArchivePatient -.->|displays| PatientProfileScreen
+  ArchivePatient -.->|requires_medium| FrontDeskTerminal
+  ArchivePatient -.->|requires_permission| PatientProfileWrite
+  ArchivePatient -.->|updates| PatientAccount
+  VerifyArrival -.->|displays| CheckInScreen
+  VerifyArrival -.->|invokes| VerifyArrivalApi
+  VerifyArrival -.->|requires_medium| FrontDeskTerminal
+  VerifyArrival -.->|requires_permission| VisitCheckIn
+  CheckInPatient -.->|displays| CheckInScreen
+  CheckInPatient -.->|invokes| CheckInPatientApi
+  CheckInPatient -.->|invokes| OnlineEligibilityApi
+  CheckInPatient -.->|raises| EvAppointmentCheckedIn
+  CheckInPatient -.->|requires_medium| FrontDeskTerminal
+  CheckInPatient -.->|requires_permission| VisitCheckIn
+  SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
+  SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
+  SendAppointmentNotice -.->|requires_medium| FrontDeskTerminal
+  SendAppointmentNotice -.->|requires_permission| ScheduleRead
+  BatchVerifyEligibility -.->|displays| EligibilityScreen
+  BatchVerifyEligibility -.->|invokes| OnlineEligibilityApi
+  ReceiveEligibilityValid -.->|displays| EligibilityScreen
+  ReceiveEligibilityValid -.->|invokes| EligibilityResultApi
+  ReceiveEligibilityInvalid -.->|displays| EligibilityScreen
+  ReceiveEligibilityInvalid -.->|invokes| EligibilityResultApi
+  ReceiveEligibilityNoInfo -.->|displays| EligibilityScreen
+  ReceiveEligibilityNoInfo -.->|invokes| EligibilityResultApi
+  RecheckEligibility -.->|displays| EligibilityScreen
+  RecheckEligibility -.->|invokes| EligibilityResultApi
+  RecheckEligibility -.->|requires_medium| FrontDeskTerminal
+  RecheckEligibility -.->|requires_permission| InsuranceVerify
+  RecordEligibilityDeclaration -.->|displays| EligibilityScreen
+  RecordEligibilityDeclaration -.->|invokes| EligibilityResultApi
+  RecordEligibilityDeclaration -.->|requires_medium| FrontDeskTerminal
+  RecordEligibilityDeclaration -.->|requires_permission| InsuranceVerify
+  ConfirmEligibilityInOutageMode -.->|displays| EligibilityScreen
+  ConfirmEligibilityInOutageMode -.->|invokes| EligibilityResultApi
+  ConfirmEligibilityInOutageMode -.->|requires_medium| FrontDeskTerminal
+  ConfirmEligibilityInOutageMode -.->|requires_permission| InsuranceVerify
+  ReceiveReferralLetter -.->|displays| ReferralScreen
+  ReceiveReferralLetter -.->|invokes| ReferralLetterApi
+  ReceiveReferralLetter -.->|requires_medium| FrontDeskTerminal
+  ReceiveReferralLetter -.->|requires_permission| ReferralManage
+  AssignRoom -.->|displays| RoomBoardScreen
+  AssignRoom -.->|invokes| AssignRoomApi
+  AssignRoom -.->|requires_medium| NurseStation
+  AssignRoom -.->|requires_permission| RoomAssign
+  PrepareEncounter -.->|displays| CheckInScreen
+  PrepareEncounter -.->|invokes| PrepareEncounterApi
+  PrepareEncounter -.->|requires_medium| NurseStation
+  PrepareEncounter -.->|requires_permission| EncounterOpen
+  CreateCharge -.->|displays| ChargeWorklistScreen
+  CreateCharge -.->|invokes| CreateChargeApi
+  CreateCharge -.->|requires_medium| ClinicalWorkstation
+  CalculateVisitBill -.->|displays| BillCalculationScreen
+  CalculateVisitBill -.->|invokes| CalculateVisitBillApi
+  CalculateVisitBill -.->|raises| EvBillCalculated
+  CalculateVisitBill -.->|requires_medium| BillingWorkstation
+  CalculateVisitBill -.->|requires_permission| BillCalculate
+  ApplySelectedTreatmentFee -.->|displays| BillCalculationScreen
+  ApplySelectedTreatmentFee -.->|invokes| SelectedFeeApi
+  ApplySelectedTreatmentFee -.->|requires_medium| BillingWorkstation
+  ApplySelectedTreatmentFee -.->|requires_permission| BillCalculate
+  CallPatientForPayment -.->|displays| PaymentWindowScreen
+  CallPatientForPayment -.->|reads| Appointment
+  CallPatientForPayment -.->|requires_medium| AccountsWindow
+  SettleAtWindow -.->|displays| PaymentWindowScreen
+  SettleAtWindow -.->|invokes| SettlementApi
+  SettleAtWindow -.->|requires_medium| AccountsWindow
+  SettleAtWindow -.->|requires_permission| PaymentCollect
+  SettleAtKiosk -.->|displays| KioskScreen
+  SettleAtKiosk -.->|invokes| SettlementApi
+  SettleAtKiosk -.->|requires_medium| PaymentKiosk
+  IssueReceipt -.->|displays| PaymentWindowScreen
+  IssueReceipt -.->|invokes| ReceiptApi
+  IssueReceipt -.->|requires_medium| AccountsWindow
+  IssueReceipt -.->|requires_permission| PaymentCollect
+  GenerateClaimStatement -.->|displays| ClaimScreen
+  GenerateClaimStatement -.->|invokes| GenerateClaimApi
+  GenerateClaimStatement -.->|requires_medium| BillingWorkstation
+  GenerateClaimStatement -.->|requires_permission| BillingClaimWrite
+```
 
+#### 受付（初診・再診） sequence 図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucVisitCheckIn --out samples/clinic-ops/out/buc/sequence_visit_check_in
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor Nurse as 👤 看護師
+    actor ReceptionClerk as 👤 医事課 受付担当
+  end
+  box System Boundary
+    participant CheckInScreen as 🖥️ 受付画面
+    participant EligibilityScreen as 🖥️ 資格確認画面
+    participant ReferralScreen as 🖥️ 紹介状受付画面
+    participant RoomBoardScreen as 🖥️ Room Board Screen
+  end
+  box System
+    participant AssignRoomApi as 🔌 Assign Room API
+    participant CheckInPatientApi as 🔌 Check-In Patient API
+    participant EligibilityResultApi as 🔌 資格確認結果 API
+    participant OnlineEligibilityApi as 🔌 オンライン資格確認 API
+    participant PrepareEncounterApi as 🔌 Prepare Encounter API
+    participant ReferralLetterApi as 🔌 紹介状 API
+    participant VerifyArrivalApi as 🔌 Verify Arrival API
+    participant Appointment as 🗄️ Appointment
+    participant EligibilityCheck as 🗄️ 資格確認
+    participant InsurancePolicy as 🗄️ 保険資格
+    participant PatientAccount as 🗄️ Patient Account
+    participant PatientProfile as 🗄️ Patient Profile
+    participant ReferralLetter as 🗄️ 紹介状・診療情報提供書
+    participant Room as 🗄️ Room
+  end
+
+  Note over Nurse,Room: ✅ Assign Room
+  Nurse->>RoomBoardScreen: ✅ Assign Room
+  RoomBoardScreen->>AssignRoomApi: ✅ Assign Room
+  activate AssignRoomApi
+  rect rgb(245,245,245)
+    Note right of AssignRoomApi: transaction (API atomic boundary)
+    AssignRoomApi->>Room: update
+    AssignRoomApi->>Appointment: update
+  end
+  AssignRoomApi-->>RoomBoardScreen: 🖥️ Room Board Screen
+  RoomBoardScreen-->>Nurse: 🖥️ Room Board Screen
+  deactivate AssignRoomApi
+
+  Note over Nurse,Room: ✅ 資格の一括照会
+  Nurse->>EligibilityScreen: ✅ 資格の一括照会
+  EligibilityScreen->>OnlineEligibilityApi: ✅ 資格の一括照会
+  activate OnlineEligibilityApi
+  OnlineEligibilityApi->>InsurancePolicy: read
+  OnlineEligibilityApi->>EligibilityCheck: create
+  OnlineEligibilityApi-->>EligibilityScreen: 🖥️ 資格確認画面
+  EligibilityScreen-->>Nurse: 🖥️ 資格確認画面
+  deactivate OnlineEligibilityApi
+
+  Note over Nurse,Room: ✅ 受付（初診・再診）
+  Nurse->>CheckInScreen: ✅ 受付（初診・再診）
+  CheckInScreen->>CheckInPatientApi: ✅ 受付（初診・再診）
+  activate CheckInPatientApi
+  OnlineEligibilityApi->>InsurancePolicy: read
+  rect rgb(245,245,245)
+    Note right of CheckInPatientApi: transaction (API atomic boundary)
+    CheckInPatientApi->>PatientAccount: update
+    CheckInPatientApi->>Appointment: update
+  end
+  OnlineEligibilityApi->>EligibilityCheck: create
+  CheckInPatientApi-->>CheckInScreen: 🖥️ 受付画面
+  CheckInScreen-->>Nurse: 🖥️ 受付画面
+  deactivate CheckInPatientApi
+
+  Note over Nurse,Room: ✅ システム障害時モードでの資格確認
+  Nurse->>EligibilityScreen: ✅ システム障害時モードでの資格確認
+  EligibilityScreen->>EligibilityResultApi: ✅ システム障害時モードでの資格確認
+  activate EligibilityResultApi
+  EligibilityResultApi->>EligibilityCheck: update
+  EligibilityResultApi-->>EligibilityScreen: 🖥️ 資格確認画面
+  EligibilityScreen-->>Nurse: 🖥️ 資格確認画面
+  deactivate EligibilityResultApi
+
+  Note over Nurse,Room: ✅ Prepare Encounter
+  Nurse->>CheckInScreen: ✅ Prepare Encounter
+  CheckInScreen->>PrepareEncounterApi: ✅ Prepare Encounter
+  activate PrepareEncounterApi
+  PrepareEncounterApi->>Appointment: read
+  PrepareEncounterApi->>PatientProfile: read
+  PrepareEncounterApi-->>CheckInScreen: 🖥️ 受付画面
+  CheckInScreen-->>Nurse: 🖥️ 受付画面
+  deactivate PrepareEncounterApi
+
+  Note over Nurse,Room: ✅ 資格確認結果（無効）の取込
+  Nurse->>EligibilityScreen: ✅ 資格確認結果（無効）の取込
+  EligibilityScreen->>EligibilityResultApi: ✅ 資格確認結果（無効）の取込
+  activate EligibilityResultApi
+  EligibilityResultApi->>EligibilityCheck: update
+  EligibilityResultApi-->>EligibilityScreen: 🖥️ 資格確認画面
+  EligibilityScreen-->>Nurse: 🖥️ 資格確認画面
+  deactivate EligibilityResultApi
+
+  Note over Nurse,Room: ✅ 資格確認結果（該当資格なし）の取込
+  Nurse->>EligibilityScreen: ✅ 資格確認結果（該当資格なし）の取込
+  EligibilityScreen->>EligibilityResultApi: ✅ 資格確認結果（該当資格なし）の取込
+  activate EligibilityResultApi
+  EligibilityResultApi->>EligibilityCheck: update
+  EligibilityResultApi-->>EligibilityScreen: 🖥️ 資格確認画面
+  EligibilityScreen-->>Nurse: 🖥️ 資格確認画面
+  deactivate EligibilityResultApi
+
+  Note over Nurse,Room: ✅ 資格確認結果（有効）の取込
+  Nurse->>EligibilityScreen: ✅ 資格確認結果（有効）の取込
+  EligibilityScreen->>EligibilityResultApi: ✅ 資格確認結果（有効）の取込
+  activate EligibilityResultApi
+  EligibilityResultApi->>EligibilityCheck: update
+  EligibilityResultApi-->>EligibilityScreen: 🖥️ 資格確認画面
+  EligibilityScreen-->>Nurse: 🖥️ 資格確認画面
+  deactivate EligibilityResultApi
+
+  Note over Nurse,Room: ✅ 紹介状受付処理
+  Nurse->>ReferralScreen: ✅ 紹介状受付処理
+  ReferralScreen->>ReferralLetterApi: ✅ 紹介状受付処理
+  activate ReferralLetterApi
+  ReferralLetterApi->>ReferralLetter: create
+  ReferralLetterApi-->>ReferralScreen: 🖥️ 紹介状受付画面
+  ReferralScreen-->>Nurse: 🖥️ 紹介状受付画面
+  deactivate ReferralLetterApi
+
+  Note over Nurse,Room: ✅ 資格の再確認
+  Nurse->>EligibilityScreen: ✅ 資格の再確認
+  EligibilityScreen->>EligibilityResultApi: ✅ 資格の再確認
+  activate EligibilityResultApi
+  EligibilityResultApi->>EligibilityCheck: update
+  EligibilityResultApi-->>EligibilityScreen: 🖥️ 資格確認画面
+  EligibilityScreen-->>Nurse: 🖥️ 資格確認画面
+  deactivate EligibilityResultApi
+
+  Note over Nurse,Room: ✅ 被保険者資格申立書の受領
+  Nurse->>EligibilityScreen: ✅ 被保険者資格申立書の受領
+  EligibilityScreen->>EligibilityResultApi: ✅ 被保険者資格申立書の受領
+  activate EligibilityResultApi
+  EligibilityResultApi->>EligibilityCheck: update
+  EligibilityResultApi-->>EligibilityScreen: 🖥️ 資格確認画面
+  EligibilityScreen-->>Nurse: 🖥️ 資格確認画面
+  deactivate EligibilityResultApi
+
+  Note over Nurse,Room: ✅ 予約票・診察券の確認
+  Nurse->>CheckInScreen: ✅ 予約票・診察券の確認
+  CheckInScreen->>VerifyArrivalApi: ✅ 予約票・診察券の確認
+  activate VerifyArrivalApi
+  VerifyArrivalApi->>Appointment: read
+  VerifyArrivalApi->>PatientAccount: read
+  VerifyArrivalApi->>InsurancePolicy: read
+  VerifyArrivalApi-->>CheckInScreen: 🖥️ 受付画面
+  CheckInScreen-->>Nurse: 🖥️ 受付画面
+  deactivate VerifyArrivalApi
+```
+
+### 3.4 Clinical Encounter
+
+| 項目 | 内容 |
+|---|---|
+| BUC | `BucClinicalEncounter` |
+| Business | `CareDelivery` |
+| 主な actor | Nurse（看護師）, Clinician（医師） |
+| 必要権限 | `EncounterOpen`, `VitalsRecord`, `ClinicalDocument`, `EncounterSign`, `ReferralManage` |
+| 主なデータ | `Encounter`, `Appointment`, `VitalSign`, `Diagnosis`, `Room`, `ReferralLetter` |
+
+診療記録を開き、バイタル、診断、署名、診察終了までを扱う。診察終了 `CompleteConsultation` で予約は「計算待ち」になり、会計は計算受付へ移る。他院紹介では医師が診療情報提供書を作成・送信する。EvEncounterSigned は検査、コスト登録、会計、ケアプラン作成を起動する。
+
+レビュー観点:
+
+- SignEncounter を後続 BUC の起点イベントとして扱ってよいか。
+- CompleteConsultation が予約を完了にせず「計算待ち」に置くことで、会計前に予約が閉じないか。
+- IssueReferralLetter（診療情報提供書）と受付の紹介状受付（ReceiveReferralLetter）が同じ `ReferralLetter` を向きで区別できるか。
+
+#### Clinical Encounter RDRA Layered Graph 図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucClinicalEncounter --out samples/clinic-ops/out/buc/object_graph_clinical_encounter
+```
+
+```mermaid
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    Clinician(["👤 医師"])
+    Nurse(["👤 看護師"])
+    ClaimsReviewOrganization[/"🌐 審査支払機関（支払基金・国保連）"/]
+    MessagingGateway[/"🌐 Messaging Gateway"/]
+    OutsourcedLabSystem[/"🌐 外注検査システム"/]
+    PaymentGateway[/"🌐 自動精算機・クレジット決済"/]
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    CareDelivery["💼 Care Delivery"]
+    PatientAccess["💼 Patient Access"]
+    RevenueCycle["💼 Revenue Cycle"]
+    BucBillingClaims["📦 レセプト作成・請求"]
+    BucClinicalEncounter["📦 Conduct Clinical Encounter"]
+    BucFollowupCare["📦 Coordinate Follow-Up Care"]
+    BucOrdersResults["📦 Manage Orders and Results"]
+    BucPatientOnboarding["📦 Onboard and Maintain Patient"]
+    BucVisitPayment["📦 計算・会計"]
+    ClaimCycleFlow["🧭 レセプトの月次サイクル"]
+    VisitPaymentFlow["🧭 計算・会計の流れ"]
+    AssessStep(["➡️ 査定と再審査請求"])
+    CalculationStep(["➡️ 計算受付・会計計算入力"])
+    CallStep(["➡️ 会計の呼出"])
+    CreateStatementStep(["➡️ レセプト作成（月初）"])
+    HoldStep(["➡️ 保留（月遅れ）"])
+    InspectStep(["➡️ 院内点検"])
+    KioskStep(["➡️ 自動精算機で精算"])
+    PaidStep(["➡️ 支払（診療翌々月）"])
+    ReceiptErrorStep(["➡️ 受付不能・要確認の再送（11日・12日）"])
+    ReceiptStep(["➡️ 領収証・明細書の交付"])
+    ReturnStep(["➡️ 返戻と再請求"])
+    ReviewStep(["➡️ 審査"])
+    SubmitStep(["➡️ 請求（5日～10日）"])
+    WindowStep(["➡️ 会計窓口で精算"])
+    ErrorResendWindow["⏱️ エラー分レセプトの再送（毎月11日・12日）"]
+    IntakeExpiryCheck["⏱️ Nightly intake expiry check"]
+    MonthlyClaimCreation["⏱️ 前月分レセプトの作成（月初）"]
+    MonthlyClaimDeadline["⏱️ 前月分レセプトの請求（毎月5日～10日）"]
+    ReceivablesMonthlyReview["⏱️ 未収金管理台帳の作成（毎月）"]
+    ReturnDownloadCheck["⏱️ 返戻レセプトの取得（3か月以内）"]
+    AccountsWindow[/"📱 会計窓口"/]
+    BillingWorkstation[/"📱 Billing Workstation"/]
+    CareCoordinationConsole[/"📱 Care Coordination Console"/]
+    ClinicalWorkstation[/"📱 Clinical Workstation"/]
+    FrontDeskTerminal[/"📱 Front Desk Terminal"/]
+    NurseStation[/"📱 Nurse Station"/]
+    OnlineClaimTerminal[/"📱 オンライン請求用端末"/]
+    PatientMobile[/"📱 Patient Mobile"/]
+    PaymentKiosk[/"📱 自動精算機"/]
+    BillCalculate["🔑 会計計算"]
+    BillingClaimWrite["🔑 レセプト業務"]
+    ClinicalDocument["🔑 Clinical Document"]
+    ClinicalOrderWrite["🔑 Clinical Order Write"]
+    ConsentCapture["🔑 Consent Capture"]
+    EncounterOpen["🔑 Encounter Open"]
+    EncounterSign["🔑 Encounter Sign"]
+    FollowUpManage["🔑 Follow-Up Manage"]
+    InsuranceVerify["🔑 Insurance Verify"]
+    IntakeManage["🔑 Intake Manage"]
+    LabResultManage["🔑 Lab Result Manage"]
+    PatientMessageSend["🔑 Patient Message Send"]
+    PatientProfileRead["🔑 Patient Profile Read"]
+    PatientProfileWrite["🔑 Patient Profile Write"]
+    PaymentCollect["🔑 窓口収納"]
+    PaymentPost["🔑 Payment Post"]
+    ProxyOrderEntry["🔑 代行入力"]
+    ReferralManage["🔑 紹介状管理"]
+    ScheduleRead["🔑 Schedule Read"]
+    ScheduleWrite["🔑 Schedule Write"]
+    VitalsRecord["🔑 Vitals Record"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    AmendEncounter(["✅ Amend Signed Encounter"])
+    ApplySelectedTreatmentFee(["✅ 選定療養費の算定"])
+    ArchivePatient(["✅ Archive Patient"])
+    CalculateVisitBill(["✅ 会計計算入力"])
+    CallPatientForPayment(["✅ 会計の呼出"])
+    CancelClinicalOrder(["✅ Cancel Clinical Order"])
+    CaptureConsent(["✅ Capture Consent"])
+    CloseCarePlan(["✅ Close Care Plan"])
+    CollectSpecimen(["✅ Collect Specimen"])
+    CompleteConsultation(["✅ 診察終了"])
+    CompleteIntakeForms(["✅ Complete Intake Forms"])
+    ConfirmProxyOrder(["✅ 代行入力オーダの確定"])
+    CorrectReturnedStatement(["✅ 返戻レセプトの訂正（再請求）"])
+    CreateCarePlan(["✅ Create Care Plan"])
+    CreateCharge(["✅ コスト情報の登録"])
+    DocumentAssessment(["✅ Document Assessment"])
+    EnterProxyOrder(["✅ 検体検査オーダの代行入力"])
+    ExpireIntakeForms(["✅ Expire Intake Forms"])
+    GenerateClaimStatement(["✅ レセプト作成"])
+    HoldClaimStatement(["✅ レセプトの保留（月遅れ）"])
+    InspectClaimStatement(["✅ レセプトの院内点検"])
+    IssueReceipt(["✅ 領収証・明細書の交付"])
+    IssueReferralLetter(["✅ 診療情報提供書の作成・送信"])
+    MergeDuplicatePatient(["✅ Merge Duplicate Patient"])
+    NotifyCriticalResult(["✅ Notify Critical Result"])
+    NotifyPatientResult(["✅ Notify Patient Result"])
+    OpenEncounter(["✅ Open Encounter"])
+    PlaceLabOrder(["✅ Place Lab Order"])
+    PostPayment(["✅ 診療報酬の入金"])
+    PrintSpecimenLabel(["✅ 採血管ラベル発行・貼付"])
+    ReceiveClaimAccepted(["✅ レセプト受付（審査へ）"])
+    ReceiveLabResult(["✅ Receive Lab Result"])
+    ReconcileBalance(["✅ 未収金管理台帳の作成"])
+    RecordClaimAssessment(["✅ 査定の取込"])
+    RecordClaimReturn(["✅ 返戻レセプトの取込"])
+    RecordReceiptError(["✅ 受付不能・要確認の確認"])
+    RecordVitals(["✅ Record Vitals"])
+    RegisterPatient(["✅ Register Patient"])
+    RegisterPerformedProcedure(["✅ 実施内容（コスト）の登録"])
+    ReleaseHeldStatement(["✅ 保留レセプトの再提出準備"])
+    RequestReexamination(["✅ 再審査請求"])
+    ResendErroredStatement(["✅ エラー分レセプトの再送"])
+    ReviewClaimTransfer(["✅ 資格の振替・分割の確認"])
+    ReviewLabResult(["✅ Review Lab Result"])
+    ReviewPatientResponse(["✅ Review Patient Response"])
+    ScheduleFollowUpVisit(["✅ Schedule Follow-Up Visit"])
+    SearchPatient(["✅ Search Patient"])
+    SendAppointmentNotice(["✅ Send Appointment Notice"])
+    SendFollowUpMessage(["✅ Send Follow-Up Message"])
+    SendIntakeForms(["✅ Send Intake Forms"])
+    SettleAtKiosk(["✅ 自動精算機での精算"])
+    SettleAtWindow(["✅ 会計窓口での精算"])
+    SignEncounter(["✅ Sign Encounter"])
+    SubmitClaimStatements(["✅ レセプト請求"])
+    UpdateDemographics(["✅ Update Demographics"])
+    VerifyInsurance(["✅ 保険資格・限度額情報の登録（新患登録）"])
+    VoidCharge(["✅ コストの取消"])
+    AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
+    BalanceScreen[["🖥️ 未収金画面"]]
+    BillCalculationScreen[["🖥️ 会計計算画面"]]
+    CarePlanScreen[["🖥️ Care Plan Screen"]]
+    ChargeWorklistScreen[["🖥️ Charge Worklist Screen"]]
+    ClaimScreen[["🖥️ レセプト画面"]]
+    ConsentScreen[["🖥️ Consent Capture Screen"]]
+    CriticalNoticeScreen[["🖥️ Critical Result Notice Screen"]]
+    DiagnosisScreen[["🖥️ Diagnosis Screen"]]
+    EncounterWorkspaceScreen[["🖥️ Encounter Workspace"]]
+    FollowUpScheduleScreen[["🖥️ Follow-Up Schedule Screen"]]
+    InsuranceScreen[["🖥️ Insurance Verification Screen"]]
+    IntakePortalScreen[["🖥️ Intake Portal Screen"]]
+    KioskScreen[["🖥️ 自動精算機画面"]]
+    OrderEntryScreen[["🖥️ Order Entry Screen"]]
+    PatientMessageScreen[["🖥️ Patient Message Screen"]]
+    PatientProfileScreen[["🖥️ Patient Profile Screen"]]
+    PatientSearchScreen[["🖥️ Patient Search Screen"]]
+    PaymentPostingScreen[["🖥️ 入金画面"]]
+    PaymentWindowScreen[["🖥️ 会計窓口画面"]]
+    ReferralLetterScreen[["🖥️ 診療情報提供書画面"]]
+    ResultReviewScreen[["🖥️ Result Review Screen"]]
+    SpecimenScreen[["🖥️ Specimen Collection Screen"]]
+    VitalsScreen[["🖥️ Vitals Screen"]]
+    ChargeCodeField[["🔤 診療行為"]]
+    KioskReferenceField[["🔤 精算機の取引番号"]]
+    PaymentAmountField[["🔤 お支払額"]]
+    ReferralDirectionField[["🔤 紹介の向き"]]
+    EvAppointmentCancelled{"⚡ Appointment Cancelled"}
+    EvAppointmentCheckedIn{"⚡ Appointment Checked In"}
+    EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
+    EvAppointmentScheduled{"⚡ Appointment Scheduled"}
+    EvBillCalculated{"⚡ 会計計算完了"}
+    EvClaimAccepted{"⚡ レセプト受付"}
+    EvClaimAssessed{"⚡ 査定"}
+    EvClaimReceiptError{"⚡ 受付不能・要確認"}
+    EvClaimReturned{"⚡ 返戻"}
+    EvClaimStatementsSubmitted{"⚡ レセプト請求"}
+    EvClaimTransferred{"⚡ 資格の振替・分割"}
+    EvClinicalOrderReviewed{"⚡ Clinical Result Reviewed"}
+    EvEncounterSigned{"⚡ Encounter Signed"}
+    EvLabResultReceived{"⚡ Lab Result Received"}
+    EvPaymentSettled{"⚡ 自動精算機での精算完了"}
+    EvRemittance{"⚡ 診療報酬の支払"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    AmendEncounterApi["🔌 Amend Encounter API"]
+    AppointmentNoticeApi["🔌 Appointment Notice API"]
+    BalanceApi["🔌 未収金 API"]
+    CalculateVisitBillApi["🔌 会計計算 API"]
+    ClaimEditApi["🔌 レセプト点検・訂正 API"]
+    ClaimResultApi["🔌 審査結果 API"]
+    CollectSpecimenApi["🔌 Collect Specimen API"]
+    CompleteConsultationApi["🔌 診察終了 API"]
+    ConfirmOrderApi["🔌 オーダ確定 API"]
+    ConsentApi["🔌 Consent API"]
+    CreateCarePlanApi["🔌 Create Care Plan API"]
+    CreateChargeApi["🔌 Create Charge API"]
+    CriticalNoticeApi["🔌 Critical Notice API"]
+    DocumentAssessmentApi["🔌 Document Assessment API"]
+    EligibilityApi["🔌 Eligibility API"]
+    FollowUpScheduleApi["🔌 Follow-Up Schedule API"]
+    GenerateClaimApi["🔌 レセプト作成 API"]
+    IntakeMessagingApi["🔌 Intake Messaging API"]
+    IssueReferralLetterApi["🔌 診療情報提供書 API"]
+    NotifyPatientResultApi["🔌 Notify Patient Result API"]
+    OpenEncounterApi["🔌 Open Encounter API"]
+    OrderEntryApi["🔌 Order Entry API"]
+    PaymentPostApi["🔌 入金 API"]
+    PerformedProcedureApi["🔌 実施登録 API"]
+    ProxyOrderApi["🔌 代行入力 API"]
+    ReceiptApi["🔌 領収証 API"]
+    ReceiveLabResultApi["🔌 Receive Lab Result API"]
+    RecordVitalsApi["🔌 Record Vitals API"]
+    RegisterPatientApi["🔌 Register Patient API"]
+    ResultReviewApi["🔌 Result Review API"]
+    SearchPatientApi["🔌 Search Patient API"]
+    SelectedFeeApi["🔌 選定療養費 API"]
+    SendFollowUpMessageApi["🔌 Send Follow-Up Message API"]
+    SettlementApi["🔌 精算 API"]
+    SignEncounterApi["🔌 Sign Encounter API"]
+    SubmitClaimApi["🔌 オンライン請求 API"]
+    UpdateDemographicsApi["🔌 Update Demographics API"]
+    AccountBalance[("🗄️ 未収金残高")]
+    Appointment[("🗄️ Appointment")]
+    CarePlan[("🗄️ Care Plan")]
+    Charge[("🗄️ Charge")]
+    ClaimStatement[("🗄️ レセプト")]
+    ClinicalOrder[("🗄️ Clinical Order")]
+    ConsentRecord[("🗄️ Consent Record")]
+    Diagnosis[("🗄️ Diagnosis")]
+    EligibilityCheck[("🗄️ 資格確認")]
+    Encounter[("🗄️ Encounter")]
+    InsurancePolicy[("🗄️ 保険資格")]
+    IntakePacket[("🗄️ Intake Packet")]
+    LabResult[("🗄️ Lab Result")]
+    Notification[("🗄️ Notification")]
+    PatientAccount[("🗄️ Patient Account")]
+    PatientMessage[("🗄️ Patient Message")]
+    PatientProfile[("🗄️ Patient Profile")]
+    PaymentTransaction[("🗄️ Payment Transaction")]
+    ProviderSchedule[("🗄️ Provider Schedule")]
+    ReferralLetter[("🗄️ 紹介状・診療情報提供書")]
+    Room[("🗄️ Room")]
+    SelectedTreatmentFeeSetting[("🗄️ 選定療養費の設定")]
+    VitalSign[("🗄️ Vital Sign")]
+    BurdenRatio["🎚️ 負担割合"]
+    ChargeKind["🎚️ 診療費の種類"]
+    LimitCategory["🎚️ 限度額適用区分"]
+    PayerChange["🎚️ 資格変更の種類"]
+    ReferralCategory["🎚️ 紹介の有無"]
+    CopayCappedAtLimit{"🔀 窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"}
+    OrderConfirmedByPhysician{"🔀 医師が確定したオーダ"}
+    TransferNotPossible{"🔀 振替・分割の対象外（負担割合の相違・公費）"}
+    UnreferredFirstVisit{"🔀 紹介状なしの初診で、除外に当たらない"}
+  end
+  Nurse -.->|has_permission| ProxyOrderEntry
+  Nurse -.->|has_permission| EncounterOpen
+  Nurse -.->|has_permission| VitalsRecord
+  Nurse -.->|has_permission| ClinicalOrderWrite
+  Nurse -.->|has_permission| LabResultManage
+  Nurse -->|performs| BucClinicalEncounter
+  Nurse -->|performs| BucOrdersResults
+  Nurse -->|performs| OpenEncounter
+  Nurse -->|performs| RecordVitals
+  Nurse -->|performs| CompleteConsultation
+  Nurse -->|performs| PrintSpecimenLabel
+  Nurse -->|performs| CollectSpecimen
+  Nurse -->|performs| RegisterPerformedProcedure
+  Nurse -->|performs| ReceiveLabResult
+  Clinician -.->|has_permission| ReferralManage
+  Clinician -.->|has_permission| EncounterOpen
+  Clinician -.->|has_permission| ClinicalDocument
+  Clinician -.->|has_permission| EncounterSign
+  Clinician -.->|has_permission| ClinicalOrderWrite
+  Clinician -.->|has_permission| LabResultManage
+  Clinician -->|performs| BucClinicalEncounter
+  Clinician -->|performs| DocumentAssessment
+  Clinician -->|performs| SignEncounter
+  Clinician -->|performs| AmendEncounter
+  Clinician -->|performs| IssueReferralLetter
+  Clinician -->|performs| PlaceLabOrder
+  Clinician -->|performs| ConfirmProxyOrder
+  Clinician -->|performs| ReviewLabResult
+  Clinician -->|performs| NotifyCriticalResult
+  Clinician -->|performs| CancelClinicalOrder
+  SubmitClaimApi -.->|requires_permission| BillingClaimWrite
+  SubmitClaimApi -.->|updates| ClaimStatement
+  ClaimResultApi -.->|requires_permission| BillingClaimWrite
+  ClaimResultApi -.->|updates| ClaimStatement
+  PaymentPostApi -.->|requires_permission| PaymentPost
+  PaymentPostApi -.->|updates| ClaimStatement
+  BalanceApi -.->|reads| PaymentTransaction
+  BalanceApi -.->|requires_permission| PaymentPost
+  BalanceApi -.->|updates| AccountBalance
+  OpenEncounterApi -.->|creates| Encounter
+  OpenEncounterApi -.->|requires_permission| EncounterOpen
+  OpenEncounterApi -.->|updates| Appointment
+  RecordVitalsApi -.->|creates| VitalSign
+  RecordVitalsApi -.->|requires_permission| VitalsRecord
+  RecordVitalsApi -.->|updates| Encounter
+  DocumentAssessmentApi -.->|creates| Diagnosis
+  DocumentAssessmentApi -.->|requires_permission| ClinicalDocument
+  DocumentAssessmentApi -.->|updates| Encounter
+  SignEncounterApi -.->|requires_permission| EncounterSign
+  SignEncounterApi -.->|updates| Encounter
+  AmendEncounterApi -.->|requires_permission| EncounterSign
+  AmendEncounterApi -.->|updates| Encounter
+  IssueReferralLetterApi -.->|creates| ReferralLetter
+  IssueReferralLetterApi -.->|reads| Encounter
+  IssueReferralLetterApi -.->|requires_permission| ReferralManage
+  CompleteConsultationApi -.->|requires_permission| EncounterOpen
+  CompleteConsultationApi -.->|updates| Appointment
+  CompleteConsultationApi -.->|updates| Room
+  CreateCarePlanApi -.->|creates| CarePlan
+  CreateCarePlanApi -.->|reads| Encounter
+  CreateCarePlanApi -.->|requires_permission| FollowUpManage
+  SendFollowUpMessageApi -.->|creates| PatientMessage
+  SendFollowUpMessageApi -.->|requires_permission| PatientMessageSend
+  FollowUpScheduleApi -.->|creates| Appointment
+  FollowUpScheduleApi -.->|requires_permission| ScheduleWrite
+  FollowUpScheduleApi -.->|updates| ProviderSchedule
+  NotifyPatientResultApi -.->|creates| Notification
+  NotifyPatientResultApi -.->|requires_permission| PatientMessageSend
+  OrderEntryApi -.->|creates| ClinicalOrder
+  OrderEntryApi -.->|reads| Encounter
+  OrderEntryApi -.->|requires_permission| ClinicalOrderWrite
+  ProxyOrderApi -.->|creates| ClinicalOrder
+  ProxyOrderApi -.->|reads| Encounter
+  ProxyOrderApi -.->|requires_permission| ProxyOrderEntry
+  ConfirmOrderApi -.->|requires_permission| ClinicalOrderWrite
+  ConfirmOrderApi -.->|updates| ClinicalOrder
+  PerformedProcedureApi -.->|creates| Charge
+  PerformedProcedureApi -.->|reads| Encounter
+  PerformedProcedureApi -.->|reads| ClinicalOrder
+  PerformedProcedureApi -.->|requires_permission| ClinicalOrderWrite
+  CollectSpecimenApi -.->|requires_permission| ClinicalOrderWrite
+  CollectSpecimenApi -.->|updates| ClinicalOrder
+  ReceiveLabResultApi -.->|creates| LabResult
+  ReceiveLabResultApi -.->|requires_permission| LabResultManage
+  ReceiveLabResultApi -.->|updates| ClinicalOrder
+  ResultReviewApi -.->|requires_permission| LabResultManage
+  ResultReviewApi -.->|updates| ClinicalOrder
+  ResultReviewApi -.->|updates| LabResult
+  CriticalNoticeApi -.->|creates| PatientMessage
+  CriticalNoticeApi -.->|creates| Notification
+  CriticalNoticeApi -.->|requires_permission| PatientMessageSend
+  SearchPatientApi -.->|reads| PatientAccount
+  SearchPatientApi -.->|reads| PatientProfile
+  SearchPatientApi -.->|requires_permission| PatientProfileRead
+  RegisterPatientApi -.->|creates| PatientAccount
+  RegisterPatientApi -.->|creates| PatientProfile
+  RegisterPatientApi -.->|requires_permission| PatientProfileWrite
+  UpdateDemographicsApi -.->|requires_permission| PatientProfileWrite
+  UpdateDemographicsApi -.->|updates| PatientProfile
+  EligibilityApi -.->|creates| EligibilityCheck
+  EligibilityApi -.->|reads| InsurancePolicy
+  EligibilityApi -.->|requires_permission| InsuranceVerify
+  EligibilityApi -.->|updates| InsurancePolicy
+  ConsentApi -.->|creates| ConsentRecord
+  ConsentApi -.->|requires_permission| ConsentCapture
+  IntakeMessagingApi -.->|creates| PatientMessage
+  IntakeMessagingApi -.->|creates| IntakePacket
+  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
+  CalculateVisitBillApi -.->|reads| Charge
+  CalculateVisitBillApi -.->|reads| InsurancePolicy
+  CalculateVisitBillApi -.->|requires_permission| BillCalculate
+  CalculateVisitBillApi -.->|updates| Appointment
+  SelectedFeeApi -.->|creates| Charge
+  SelectedFeeApi -.->|reads| Encounter
+  SelectedFeeApi -.->|reads| SelectedTreatmentFeeSetting
+  SelectedFeeApi -.->|requires_permission| BillCalculate
+  SettlementApi -.->|creates| PaymentTransaction
+  SettlementApi -.->|requires_permission| PaymentCollect
+  SettlementApi -.->|updates| Appointment
+  SettlementApi -.->|updates| AccountBalance
+  ReceiptApi -.->|reads| Charge
+  ReceiptApi -.->|reads| PaymentTransaction
+  ReceiptApi -.->|requires_permission| PaymentCollect
+  ReceiptApi -.->|updates| Appointment
+  AppointmentNoticeApi -.->|creates| PatientMessage
+  AppointmentNoticeApi -.->|creates| Notification
+  CreateChargeApi -.->|creates| Charge
+  CreateChargeApi -.->|reads| Encounter
+  GenerateClaimApi -.->|creates| ClaimStatement
+  GenerateClaimApi -.->|reads| Charge
+  GenerateClaimApi -.->|reads| InsurancePolicy
+  GenerateClaimApi -.->|requires_permission| BillingClaimWrite
+  ClaimEditApi -.->|requires_permission| BillingClaimWrite
+  ClaimEditApi -.->|updates| ClaimStatement
+  BucVisitPayment -.->|belongs| RevenueCycle
+  BucVisitPayment -->|contains| VisitPaymentFlow
+  BucVisitPayment -->|contains| CalculateVisitBill
+  BucVisitPayment -->|contains| ApplySelectedTreatmentFee
+  BucVisitPayment -->|contains| CallPatientForPayment
+  BucVisitPayment -->|contains| SettleAtWindow
+  BucVisitPayment -->|contains| SettleAtKiosk
+  BucVisitPayment -->|contains| IssueReceipt
+  BucBillingClaims -.->|belongs| RevenueCycle
+  BucBillingClaims -->|contains| ClaimCycleFlow
+  BucBillingClaims -->|contains| InspectClaimStatement
+  BucBillingClaims -->|contains| HoldClaimStatement
+  BucBillingClaims -->|contains| ReleaseHeldStatement
+  BucBillingClaims -->|contains| SubmitClaimStatements
+  BucBillingClaims -->|contains| RecordReceiptError
+  BucBillingClaims -->|contains| ResendErroredStatement
+  BucBillingClaims -->|contains| ReceiveClaimAccepted
+  BucBillingClaims -->|contains| ReviewClaimTransfer
+  BucBillingClaims -->|contains| RecordClaimReturn
+  BucBillingClaims -->|contains| CorrectReturnedStatement
+  BucBillingClaims -->|contains| RecordClaimAssessment
+  BucBillingClaims -->|contains| RequestReexamination
+  BucBillingClaims -->|contains| PostPayment
+  BucBillingClaims -->|contains| ReconcileBalance
+  BucBillingClaims -->|contains| VoidCharge
+  BucBillingClaims -->|contains| CreateCharge
+  BucBillingClaims -->|contains| GenerateClaimStatement
+  BucClinicalEncounter -.->|belongs| CareDelivery
+  BucClinicalEncounter -->|contains| OpenEncounter
+  BucClinicalEncounter -->|contains| RecordVitals
+  BucClinicalEncounter -->|contains| DocumentAssessment
+  BucClinicalEncounter -->|contains| SignEncounter
+  BucClinicalEncounter -->|contains| AmendEncounter
+  BucClinicalEncounter -->|contains| IssueReferralLetter
+  BucClinicalEncounter -->|contains| CompleteConsultation
+  BucFollowupCare -.->|belongs| PatientAccess
+  BucFollowupCare -->|contains| CreateCarePlan
+  BucFollowupCare -->|contains| SendFollowUpMessage
+  BucFollowupCare -->|contains| ReviewPatientResponse
+  BucFollowupCare -->|contains| ScheduleFollowUpVisit
+  BucFollowupCare -->|contains| CloseCarePlan
+  BucFollowupCare -->|contains| NotifyPatientResult
+  BucOrdersResults -.->|belongs| CareDelivery
+  BucOrdersResults -->|contains| PlaceLabOrder
+  BucOrdersResults -->|contains| EnterProxyOrder
+  BucOrdersResults -->|contains| ConfirmProxyOrder
+  BucOrdersResults -->|contains| PrintSpecimenLabel
+  BucOrdersResults -->|contains| CollectSpecimen
+  BucOrdersResults -->|contains| RegisterPerformedProcedure
+  BucOrdersResults -->|contains| ReceiveLabResult
+  BucOrdersResults -->|contains| ReviewLabResult
+  BucOrdersResults -->|contains| NotifyCriticalResult
+  BucOrdersResults -->|contains| CancelClinicalOrder
+  BucPatientOnboarding -.->|belongs| PatientAccess
+  BucPatientOnboarding -->|contains| SearchPatient
+  BucPatientOnboarding -->|contains| RegisterPatient
+  BucPatientOnboarding -->|contains| UpdateDemographics
+  BucPatientOnboarding -->|contains| VerifyInsurance
+  BucPatientOnboarding -->|contains| CaptureConsent
+  BucPatientOnboarding -->|contains| SendIntakeForms
+  BucPatientOnboarding -->|contains| CompleteIntakeForms
+  BucPatientOnboarding -->|contains| ExpireIntakeForms
+  BucPatientOnboarding -->|contains| MergeDuplicatePatient
+  BucPatientOnboarding -->|contains| ArchivePatient
+  TransferNotPossible -.->|applies_to| RecordClaimReturn
+  TransferNotPossible -.->|combines| ClaimStatement
+  TransferNotPossible -.->|combines| PayerChange
+  OrderConfirmedByPhysician -.->|applies_to| CollectSpecimen
+  OrderConfirmedByPhysician -.->|combines| ClinicalOrder
+  CopayCappedAtLimit -.->|applies_to| CalculateVisitBill
+  CopayCappedAtLimit -.->|combines| Appointment
+  CopayCappedAtLimit -.->|combines| BurdenRatio
+  CopayCappedAtLimit -.->|combines| LimitCategory
+  UnreferredFirstVisit -.->|applies_to| ApplySelectedTreatmentFee
+  UnreferredFirstVisit -.->|combines| ReferralCategory
+  UnreferredFirstVisit -.->|combines| ChargeKind
+  Appointment ---|N:1| PatientAccount
+  Appointment ---|N:1| Room
+  Encounter ---|N:1| PatientAccount
+  Encounter ---|1:1| Appointment
+  VitalSign ---|N:1| Encounter
+  Diagnosis ---|N:1| Encounter
+  ClinicalOrder ---|N:1| Encounter
+  LabResult ---|1:1| ClinicalOrder
+  Charge ---|N:1| Encounter
+  Charge ---|N:1| ClaimStatement
+  ClaimStatement ---|N:1| PatientAccount
+  ClaimStatement ---|N:1| InsurancePolicy
+  PaymentTransaction ---|N:1| Appointment
+  AccountBalance ---|1:1| PatientAccount
+  ReferralLetter ---|N:1| PatientAccount
+  CarePlan ---|N:1| Encounter
+  CarePlan ---|N:1| PatientAccount
+  PatientMessage ---|N:1| PatientAccount
+  Notification ---|N:1| PatientAccount
+  PatientProfile ---|1:1| PatientAccount
+  InsurancePolicy ---|N:1| PatientAccount
+  EligibilityCheck ---|N:1| InsurancePolicy
+  ConsentRecord ---|N:1| PatientAccount
+  IntakePacket ---|N:1| PatientAccount
+  EvPaymentSettled -.->|triggers| SettleAtKiosk
+  EvBillCalculated -.->|triggers| PaymentGateway
+  EvBillCalculated -.->|triggers| CallPatientForPayment
+  EvClaimStatementsSubmitted -.->|triggers| ClaimsReviewOrganization
+  EvClaimReceiptError -.->|triggers| RecordReceiptError
+  EvClaimAccepted -.->|triggers| ReceiveClaimAccepted
+  EvClaimReturned -.->|triggers| RecordClaimReturn
+  EvClaimAssessed -.->|triggers| RecordClaimAssessment
+  EvClaimTransferred -.->|triggers| ReviewClaimTransfer
+  EvRemittance -.->|triggers| PostPayment
+  EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
+  EvAppointmentScheduled -.->|triggers| MessagingGateway
+  EvAppointmentScheduled -.->|triggers| SendIntakeForms
+  EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
+  EvAppointmentRescheduled -.->|triggers| MessagingGateway
+  EvAppointmentRescheduled -.->|triggers| SendAppointmentNotice
+  EvAppointmentCheckedIn -.->|triggers| BucClinicalEncounter
+  EvAppointmentCheckedIn -.->|triggers| OpenEncounter
+  EvAppointmentCancelled -.->|triggers| MessagingGateway
+  EvAppointmentCancelled -.->|triggers| SendAppointmentNotice
+  EvEncounterSigned -.->|triggers| BucVisitPayment
+  EvEncounterSigned -.->|triggers| BucBillingClaims
+  EvEncounterSigned -.->|triggers| BucFollowupCare
+  EvEncounterSigned -.->|triggers| BucOrdersResults
+  EvEncounterSigned -.->|triggers| CompleteConsultation
+  EvEncounterSigned -.->|triggers| CreateCarePlan
+  EvEncounterSigned -.->|triggers| PlaceLabOrder
+  EvEncounterSigned -.->|triggers| CreateCharge
+  EvClinicalOrderReviewed -.->|triggers| BucFollowupCare
+  EvClinicalOrderReviewed -.->|triggers| NotifyPatientResult
+  EvClinicalOrderReviewed -.->|triggers| NotifyCriticalResult
+  EvLabResultReceived -.->|triggers| ReceiveLabResult
+  PaymentGateway -.->|raises| EvPaymentSettled
+  OutsourcedLabSystem -.->|raises| EvLabResultReceived
+  ClaimsReviewOrganization -.->|raises| EvClaimReceiptError
+  ClaimsReviewOrganization -.->|raises| EvClaimAccepted
+  ClaimsReviewOrganization -.->|raises| EvClaimReturned
+  ClaimsReviewOrganization -.->|raises| EvClaimAssessed
+  ClaimsReviewOrganization -.->|raises| EvClaimTransferred
+  ClaimsReviewOrganization -.->|raises| EvRemittance
+  KioskReferenceField -.->|maps_field| PaymentTransaction
+  ReferralDirectionField -.->|maps_field| ReferralLetter
+  PaymentAmountField -.->|maps_field| PaymentTransaction
+  ChargeCodeField -.->|maps_field| Charge
+  ClaimCycleFlow -->|contains| CreateStatementStep
+  ClaimCycleFlow -->|contains| InspectStep
+  ClaimCycleFlow -->|contains| HoldStep
+  ClaimCycleFlow -->|contains| SubmitStep
+  ClaimCycleFlow -->|contains| ReceiptErrorStep
+  ClaimCycleFlow -->|contains| ReviewStep
+  ClaimCycleFlow -->|contains| ReturnStep
+  ClaimCycleFlow -->|contains| AssessStep
+  ClaimCycleFlow -->|contains| PaidStep
+  VisitPaymentFlow -->|contains| CalculationStep
+  VisitPaymentFlow -->|contains| CallStep
+  VisitPaymentFlow -->|contains| WindowStep
+  VisitPaymentFlow -->|contains| KioskStep
+  VisitPaymentFlow -->|contains| ReceiptStep
+  ReferralLetterScreen -->|contains| ReferralDirectionField
+  PatientSearchScreen -.->|shows| PatientAccount
+  PatientProfileScreen -.->|shows| PatientProfile
+  BillCalculationScreen -->|contains| ChargeCodeField
+  PaymentWindowScreen -->|contains| PaymentAmountField
+  KioskScreen -->|contains| KioskReferenceField
+  CreateStatementStep -.->|covers| MonthlyClaimCreation
+  CreateStatementStep -.->|covers| GenerateClaimStatement
+  CreateStatementStep -.->|precedes| InspectStep
+  CalculationStep -.->|covers| CalculateVisitBill
+  CalculationStep -.->|covers| ApplySelectedTreatmentFee
+  CalculationStep -.->|precedes| CallStep
+  CallStep -.->|branches| KioskStep
+  CallStep -.->|covers| CallPatientForPayment
+  CallStep -.->|precedes| WindowStep
+  WindowStep -.->|covers| SettleAtWindow
+  WindowStep -.->|precedes| ReceiptStep
+  KioskStep -.->|covers| EvPaymentSettled
+  KioskStep -.->|covers| SettleAtKiosk
+  KioskStep -.->|precedes| ReceiptStep
+  ReceiptStep -.->|covers| IssueReceipt
+  InspectStep -.->|branches| HoldStep
+  InspectStep -.->|covers| InspectClaimStatement
+  InspectStep -.->|precedes| SubmitStep
+  HoldStep -.->|covers| HoldClaimStatement
+  HoldStep -.->|covers| ReleaseHeldStatement
+  HoldStep -.->|repeats| InspectStep
+  SubmitStep -.->|covers| MonthlyClaimDeadline
+  SubmitStep -.->|covers| SubmitClaimStatements
+  SubmitStep -.->|excepts| ReceiptErrorStep
+  SubmitStep -.->|precedes| ReviewStep
+  ReceiptErrorStep -.->|covers| ErrorResendWindow
+  ReceiptErrorStep -.->|covers| RecordReceiptError
+  ReceiptErrorStep -.->|covers| ResendErroredStatement
+  ReceiptErrorStep -.->|repeats| SubmitStep
+  ReviewStep -.->|branches| AssessStep
+  ReviewStep -.->|covers| ReceiveClaimAccepted
+  ReviewStep -.->|covers| ReviewClaimTransfer
+  ReviewStep -.->|excepts| ReturnStep
+  ReviewStep -.->|precedes| PaidStep
+  ReturnStep -.->|covers| RecordClaimReturn
+  ReturnStep -.->|covers| CorrectReturnedStatement
+  ReturnStep -.->|repeats| InspectStep
+  AssessStep -.->|covers| RecordClaimAssessment
+  AssessStep -.->|covers| RequestReexamination
+  AssessStep -.->|precedes| PaidStep
+  PaidStep -.->|covers| PostPayment
+  IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
+  MonthlyClaimCreation -.->|triggers| GenerateClaimStatement
+  MonthlyClaimDeadline -.->|triggers| SubmitClaimStatements
+  ErrorResendWindow -.->|triggers| ResendErroredStatement
+  ReturnDownloadCheck -.->|triggers| RecordClaimReturn
+  ReceivablesMonthlyReview -.->|triggers| ReconcileBalance
+  InspectClaimStatement -.->|displays| ClaimScreen
+  InspectClaimStatement -.->|invokes| ClaimEditApi
+  InspectClaimStatement -.->|requires_medium| BillingWorkstation
+  InspectClaimStatement -.->|requires_permission| BillingClaimWrite
+  HoldClaimStatement -.->|displays| ClaimScreen
+  HoldClaimStatement -.->|invokes| ClaimEditApi
+  HoldClaimStatement -.->|requires_medium| BillingWorkstation
+  HoldClaimStatement -.->|requires_permission| BillingClaimWrite
+  ReleaseHeldStatement -.->|displays| ClaimScreen
+  ReleaseHeldStatement -.->|invokes| ClaimEditApi
+  ReleaseHeldStatement -.->|requires_medium| BillingWorkstation
+  ReleaseHeldStatement -.->|requires_permission| BillingClaimWrite
+  SubmitClaimStatements -.->|displays| ClaimScreen
+  SubmitClaimStatements -.->|invokes| SubmitClaimApi
+  SubmitClaimStatements -.->|raises| EvClaimStatementsSubmitted
+  SubmitClaimStatements -.->|requires_medium| OnlineClaimTerminal
+  SubmitClaimStatements -.->|requires_permission| BillingClaimWrite
+  RecordReceiptError -.->|displays| ClaimScreen
+  RecordReceiptError -.->|invokes| ClaimResultApi
+  RecordReceiptError -.->|requires_medium| OnlineClaimTerminal
+  RecordReceiptError -.->|requires_permission| BillingClaimWrite
+  ResendErroredStatement -.->|displays| ClaimScreen
+  ResendErroredStatement -.->|invokes| SubmitClaimApi
+  ResendErroredStatement -.->|requires_medium| OnlineClaimTerminal
+  ResendErroredStatement -.->|requires_permission| BillingClaimWrite
+  ReceiveClaimAccepted -.->|displays| ClaimScreen
+  ReceiveClaimAccepted -.->|invokes| ClaimResultApi
+  ReceiveClaimAccepted -.->|requires_medium| OnlineClaimTerminal
+  ReceiveClaimAccepted -.->|requires_permission| BillingClaimWrite
+  ReviewClaimTransfer -.->|displays| ClaimScreen
+  ReviewClaimTransfer -.->|reads| ClaimStatement
+  ReviewClaimTransfer -.->|requires_medium| OnlineClaimTerminal
+  ReviewClaimTransfer -.->|requires_permission| BillingClaimWrite
+  RecordClaimReturn -.->|displays| ClaimScreen
+  RecordClaimReturn -.->|invokes| ClaimResultApi
+  RecordClaimReturn -.->|requires_medium| OnlineClaimTerminal
+  RecordClaimReturn -.->|requires_permission| BillingClaimWrite
+  CorrectReturnedStatement -.->|displays| ClaimScreen
+  CorrectReturnedStatement -.->|invokes| ClaimEditApi
+  CorrectReturnedStatement -.->|requires_medium| BillingWorkstation
+  CorrectReturnedStatement -.->|requires_permission| BillingClaimWrite
+  RecordClaimAssessment -.->|displays| ClaimScreen
+  RecordClaimAssessment -.->|invokes| ClaimResultApi
+  RecordClaimAssessment -.->|requires_medium| OnlineClaimTerminal
+  RecordClaimAssessment -.->|requires_permission| BillingClaimWrite
+  RequestReexamination -.->|displays| ClaimScreen
+  RequestReexamination -.->|invokes| SubmitClaimApi
+  RequestReexamination -.->|requires_medium| OnlineClaimTerminal
+  RequestReexamination -.->|requires_permission| BillingClaimWrite
+  PostPayment -.->|displays| PaymentPostingScreen
+  PostPayment -.->|invokes| PaymentPostApi
+  PostPayment -.->|requires_medium| BillingWorkstation
+  PostPayment -.->|requires_permission| PaymentPost
+  ReconcileBalance -.->|displays| BalanceScreen
+  ReconcileBalance -.->|invokes| BalanceApi
+  ReconcileBalance -.->|requires_medium| BillingWorkstation
+  ReconcileBalance -.->|requires_permission| PaymentPost
+  VoidCharge -.->|displays| ChargeWorklistScreen
+  VoidCharge -.->|requires_medium| BillingWorkstation
+  VoidCharge -.->|requires_permission| BillingClaimWrite
+  VoidCharge -.->|updates| Charge
+  OpenEncounter -.->|displays| EncounterWorkspaceScreen
+  OpenEncounter -.->|invokes| OpenEncounterApi
+  OpenEncounter -.->|requires_medium| NurseStation
+  OpenEncounter -.->|requires_permission| EncounterOpen
+  RecordVitals -.->|displays| VitalsScreen
+  RecordVitals -.->|invokes| RecordVitalsApi
+  RecordVitals -.->|requires_medium| NurseStation
+  RecordVitals -.->|requires_permission| VitalsRecord
+  DocumentAssessment -.->|displays| DiagnosisScreen
+  DocumentAssessment -.->|invokes| DocumentAssessmentApi
+  DocumentAssessment -.->|requires_medium| ClinicalWorkstation
+  DocumentAssessment -.->|requires_permission| ClinicalDocument
+  SignEncounter -.->|displays| EncounterWorkspaceScreen
+  SignEncounter -.->|invokes| SignEncounterApi
+  SignEncounter -.->|raises| EvEncounterSigned
+  SignEncounter -.->|requires_medium| ClinicalWorkstation
+  SignEncounter -.->|requires_permission| EncounterSign
+  AmendEncounter -.->|displays| EncounterWorkspaceScreen
+  AmendEncounter -.->|invokes| AmendEncounterApi
+  AmendEncounter -.->|requires_medium| ClinicalWorkstation
+  AmendEncounter -.->|requires_permission| EncounterSign
+  IssueReferralLetter -.->|displays| ReferralLetterScreen
+  IssueReferralLetter -.->|invokes| IssueReferralLetterApi
+  IssueReferralLetter -.->|requires_medium| ClinicalWorkstation
+  IssueReferralLetter -.->|requires_permission| ReferralManage
+  CompleteConsultation -.->|displays| EncounterWorkspaceScreen
+  CompleteConsultation -.->|invokes| CompleteConsultationApi
+  CompleteConsultation -.->|requires_medium| NurseStation
+  CompleteConsultation -.->|requires_permission| EncounterOpen
+  CreateCarePlan -.->|displays| CarePlanScreen
+  CreateCarePlan -.->|invokes| CreateCarePlanApi
+  CreateCarePlan -.->|requires_medium| CareCoordinationConsole
+  CreateCarePlan -.->|requires_permission| FollowUpManage
+  SendFollowUpMessage -.->|displays| PatientMessageScreen
+  SendFollowUpMessage -.->|invokes| SendFollowUpMessageApi
+  SendFollowUpMessage -.->|requires_medium| CareCoordinationConsole
+  SendFollowUpMessage -.->|requires_permission| PatientMessageSend
+  ReviewPatientResponse -.->|displays| CarePlanScreen
+  ReviewPatientResponse -.->|requires_medium| CareCoordinationConsole
+  ReviewPatientResponse -.->|requires_permission| FollowUpManage
+  ReviewPatientResponse -.->|updates| CarePlan
+  ReviewPatientResponse -.->|updates| PatientMessage
+  ScheduleFollowUpVisit -.->|displays| FollowUpScheduleScreen
+  ScheduleFollowUpVisit -.->|invokes| FollowUpScheduleApi
+  ScheduleFollowUpVisit -.->|raises| EvAppointmentScheduled
+  ScheduleFollowUpVisit -.->|requires_medium| CareCoordinationConsole
+  ScheduleFollowUpVisit -.->|requires_permission| FollowUpManage
+  ScheduleFollowUpVisit -.->|requires_permission| ScheduleWrite
+  CloseCarePlan -.->|displays| CarePlanScreen
+  CloseCarePlan -.->|requires_medium| CareCoordinationConsole
+  CloseCarePlan -.->|requires_permission| FollowUpManage
+  CloseCarePlan -.->|updates| CarePlan
+  NotifyPatientResult -.->|displays| PatientMessageScreen
+  NotifyPatientResult -.->|invokes| NotifyPatientResultApi
+  NotifyPatientResult -.->|requires_medium| CareCoordinationConsole
+  NotifyPatientResult -.->|requires_permission| PatientMessageSend
+  PlaceLabOrder -.->|displays| OrderEntryScreen
+  PlaceLabOrder -.->|invokes| OrderEntryApi
+  PlaceLabOrder -.->|requires_medium| ClinicalWorkstation
+  PlaceLabOrder -.->|requires_permission| ClinicalOrderWrite
+  EnterProxyOrder -.->|displays| OrderEntryScreen
+  EnterProxyOrder -.->|invokes| ProxyOrderApi
+  EnterProxyOrder -.->|requires_medium| ClinicalWorkstation
+  EnterProxyOrder -.->|requires_permission| ProxyOrderEntry
+  ConfirmProxyOrder -.->|displays| OrderEntryScreen
+  ConfirmProxyOrder -.->|invokes| ConfirmOrderApi
+  ConfirmProxyOrder -.->|requires_medium| ClinicalWorkstation
+  ConfirmProxyOrder -.->|requires_permission| ClinicalOrderWrite
+  PrintSpecimenLabel -.->|displays| SpecimenScreen
+  PrintSpecimenLabel -.->|reads| ClinicalOrder
+  PrintSpecimenLabel -.->|requires_medium| NurseStation
+  PrintSpecimenLabel -.->|requires_permission| ClinicalOrderWrite
+  CollectSpecimen -.->|displays| SpecimenScreen
+  CollectSpecimen -.->|invokes| CollectSpecimenApi
+  CollectSpecimen -.->|requires_medium| NurseStation
+  CollectSpecimen -.->|requires_permission| ClinicalOrderWrite
+  RegisterPerformedProcedure -.->|displays| SpecimenScreen
+  RegisterPerformedProcedure -.->|invokes| PerformedProcedureApi
+  RegisterPerformedProcedure -.->|requires_medium| NurseStation
+  RegisterPerformedProcedure -.->|requires_permission| ClinicalOrderWrite
+  ReceiveLabResult -.->|displays| ResultReviewScreen
+  ReceiveLabResult -.->|invokes| ReceiveLabResultApi
+  ReceiveLabResult -.->|requires_medium| NurseStation
+  ReceiveLabResult -.->|requires_permission| LabResultManage
+  ReviewLabResult -.->|displays| ResultReviewScreen
+  ReviewLabResult -.->|invokes| ResultReviewApi
+  ReviewLabResult -.->|raises| EvClinicalOrderReviewed
+  ReviewLabResult -.->|requires_medium| ClinicalWorkstation
+  ReviewLabResult -.->|requires_permission| LabResultManage
+  NotifyCriticalResult -.->|displays| CriticalNoticeScreen
+  NotifyCriticalResult -.->|invokes| CriticalNoticeApi
+  NotifyCriticalResult -.->|requires_medium| ClinicalWorkstation
+  NotifyCriticalResult -.->|requires_permission| LabResultManage
+  NotifyCriticalResult -.->|requires_permission| PatientMessageSend
+  CancelClinicalOrder -.->|displays| OrderEntryScreen
+  CancelClinicalOrder -.->|requires_medium| ClinicalWorkstation
+  CancelClinicalOrder -.->|requires_permission| ClinicalOrderWrite
+  CancelClinicalOrder -.->|updates| ClinicalOrder
+  SearchPatient -.->|displays| PatientSearchScreen
+  SearchPatient -.->|invokes| SearchPatientApi
+  SearchPatient -.->|requires_medium| FrontDeskTerminal
+  SearchPatient -.->|requires_permission| PatientProfileRead
+  RegisterPatient -.->|displays| PatientProfileScreen
+  RegisterPatient -.->|invokes| RegisterPatientApi
+  RegisterPatient -.->|requires_medium| FrontDeskTerminal
+  RegisterPatient -.->|requires_permission| PatientProfileWrite
+  UpdateDemographics -.->|displays| PatientProfileScreen
+  UpdateDemographics -.->|invokes| UpdateDemographicsApi
+  UpdateDemographics -.->|requires_medium| FrontDeskTerminal
+  UpdateDemographics -.->|requires_permission| PatientProfileWrite
+  VerifyInsurance -.->|displays| InsuranceScreen
+  VerifyInsurance -.->|invokes| EligibilityApi
+  VerifyInsurance -.->|requires_medium| FrontDeskTerminal
+  VerifyInsurance -.->|requires_permission| InsuranceVerify
+  CaptureConsent -.->|displays| ConsentScreen
+  CaptureConsent -.->|invokes| ConsentApi
+  CaptureConsent -.->|requires_medium| PatientMobile
+  CaptureConsent -.->|requires_permission| ConsentCapture
+  SendIntakeForms -.->|displays| IntakePortalScreen
+  SendIntakeForms -.->|invokes| IntakeMessagingApi
+  SendIntakeForms -.->|requires_medium| FrontDeskTerminal
+  SendIntakeForms -.->|requires_permission| IntakeManage
+  CompleteIntakeForms -.->|displays| IntakePortalScreen
+  CompleteIntakeForms -.->|requires_medium| PatientMobile
+  CompleteIntakeForms -.->|requires_permission| ConsentCapture
+  CompleteIntakeForms -.->|updates| IntakePacket
+  ExpireIntakeForms -.->|displays| IntakePortalScreen
+  ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
+  ExpireIntakeForms -.->|requires_permission| IntakeManage
+  ExpireIntakeForms -.->|updates| IntakePacket
+  MergeDuplicatePatient -.->|displays| PatientProfileScreen
+  MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
+  MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
+  MergeDuplicatePatient -.->|updates| PatientAccount
+  ArchivePatient -.->|displays| PatientProfileScreen
+  ArchivePatient -.->|requires_medium| FrontDeskTerminal
+  ArchivePatient -.->|requires_permission| PatientProfileWrite
+  ArchivePatient -.->|updates| PatientAccount
+  SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
+  SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
+  SendAppointmentNotice -.->|requires_medium| FrontDeskTerminal
+  SendAppointmentNotice -.->|requires_permission| ScheduleRead
+  CreateCharge -.->|displays| ChargeWorklistScreen
+  CreateCharge -.->|invokes| CreateChargeApi
+  CreateCharge -.->|requires_medium| ClinicalWorkstation
+  CalculateVisitBill -.->|displays| BillCalculationScreen
+  CalculateVisitBill -.->|invokes| CalculateVisitBillApi
+  CalculateVisitBill -.->|raises| EvBillCalculated
+  CalculateVisitBill -.->|requires_medium| BillingWorkstation
+  CalculateVisitBill -.->|requires_permission| BillCalculate
+  ApplySelectedTreatmentFee -.->|displays| BillCalculationScreen
+  ApplySelectedTreatmentFee -.->|invokes| SelectedFeeApi
+  ApplySelectedTreatmentFee -.->|requires_medium| BillingWorkstation
+  ApplySelectedTreatmentFee -.->|requires_permission| BillCalculate
+  CallPatientForPayment -.->|displays| PaymentWindowScreen
+  CallPatientForPayment -.->|reads| Appointment
+  CallPatientForPayment -.->|requires_medium| AccountsWindow
+  SettleAtWindow -.->|displays| PaymentWindowScreen
+  SettleAtWindow -.->|invokes| SettlementApi
+  SettleAtWindow -.->|requires_medium| AccountsWindow
+  SettleAtWindow -.->|requires_permission| PaymentCollect
+  SettleAtKiosk -.->|displays| KioskScreen
+  SettleAtKiosk -.->|invokes| SettlementApi
+  SettleAtKiosk -.->|requires_medium| PaymentKiosk
+  IssueReceipt -.->|displays| PaymentWindowScreen
+  IssueReceipt -.->|invokes| ReceiptApi
+  IssueReceipt -.->|requires_medium| AccountsWindow
+  IssueReceipt -.->|requires_permission| PaymentCollect
+  GenerateClaimStatement -.->|displays| ClaimScreen
+  GenerateClaimStatement -.->|invokes| GenerateClaimApi
+  GenerateClaimStatement -.->|requires_medium| BillingWorkstation
+  GenerateClaimStatement -.->|requires_permission| BillingClaimWrite
 ```
 
 #### Clinical Encounter sequence 図
@@ -1504,24 +2882,27 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucCl
 ```mermaid
 sequenceDiagram
   box System Value
-    actor Clinician as 👤 Clinician
-    actor Nurse as 👤 Nurse
+    actor Clinician as 👤 医師
+    actor Nurse as 👤 看護師
   end
   box System Boundary
     participant DiagnosisScreen as 🖥️ Diagnosis Screen
     participant EncounterWorkspaceScreen as 🖥️ Encounter Workspace
+    participant ReferralLetterScreen as 🖥️ 診療情報提供書画面
     participant VitalsScreen as 🖥️ Vitals Screen
   end
   box System
     participant AmendEncounterApi as 🔌 Amend Encounter API
-    participant CompleteAppointmentApi as 🔌 Complete Appointment API
+    participant CompleteConsultationApi as 🔌 診察終了 API
     participant DocumentAssessmentApi as 🔌 Document Assessment API
+    participant IssueReferralLetterApi as 🔌 診療情報提供書 API
     participant OpenEncounterApi as 🔌 Open Encounter API
     participant RecordVitalsApi as 🔌 Record Vitals API
     participant SignEncounterApi as 🔌 Sign Encounter API
     participant Appointment as 🗄️ Appointment
     participant Diagnosis as 🗄️ Diagnosis
     participant Encounter as 🗄️ Encounter
+    participant ReferralLetter as 🗄️ 紹介状・診療情報提供書
     participant Room as 🗄️ Room
     participant VitalSign as 🗄️ Vital Sign
   end
@@ -1535,18 +2916,18 @@ sequenceDiagram
   EncounterWorkspaceScreen-->>Clinician: 🖥️ Encounter Workspace
   deactivate AmendEncounterApi
 
-  Note over Clinician,VitalSign: ✅ Complete Appointment
-  Nurse->>EncounterWorkspaceScreen: ✅ Complete Appointment
-  EncounterWorkspaceScreen->>CompleteAppointmentApi: ✅ Complete Appointment
-  activate CompleteAppointmentApi
+  Note over Clinician,VitalSign: ✅ 診察終了
+  Clinician->>EncounterWorkspaceScreen: ✅ 診察終了
+  EncounterWorkspaceScreen->>CompleteConsultationApi: ✅ 診察終了
+  activate CompleteConsultationApi
   rect rgb(245,245,245)
-    Note right of CompleteAppointmentApi: transaction (API atomic boundary)
-    CompleteAppointmentApi->>Room: update
-    CompleteAppointmentApi->>Appointment: update
+    Note right of CompleteConsultationApi: transaction (API atomic boundary)
+    CompleteConsultationApi->>Room: update
+    CompleteConsultationApi->>Appointment: update
   end
-  CompleteAppointmentApi-->>EncounterWorkspaceScreen: 🖥️ Encounter Workspace
-  EncounterWorkspaceScreen-->>Nurse: 🖥️ Encounter Workspace
-  deactivate CompleteAppointmentApi
+  CompleteConsultationApi-->>EncounterWorkspaceScreen: 🖥️ Encounter Workspace
+  EncounterWorkspaceScreen-->>Clinician: 🖥️ Encounter Workspace
+  deactivate CompleteConsultationApi
 
   Note over Clinician,VitalSign: ✅ Document Assessment
   Clinician->>DiagnosisScreen: ✅ Document Assessment
@@ -1561,18 +2942,31 @@ sequenceDiagram
   DiagnosisScreen-->>Clinician: 🖥️ Diagnosis Screen
   deactivate DocumentAssessmentApi
 
+  Note over Clinician,VitalSign: ✅ 診療情報提供書の作成・送信
+  Clinician->>ReferralLetterScreen: ✅ 診療情報提供書の作成・送信
+  ReferralLetterScreen->>IssueReferralLetterApi: ✅ 診療情報提供書の作成・送信
+  activate IssueReferralLetterApi
+  IssueReferralLetterApi->>Encounter: read
+  IssueReferralLetterApi->>ReferralLetter: create
+  IssueReferralLetterApi-->>ReferralLetterScreen: 🖥️ 診療情報提供書画面
+  ReferralLetterScreen-->>Clinician: 🖥️ 診療情報提供書画面
+  deactivate IssueReferralLetterApi
+
   Note over Clinician,VitalSign: ✅ Open Encounter
-  Nurse->>EncounterWorkspaceScreen: ✅ Open Encounter
+  Clinician->>EncounterWorkspaceScreen: ✅ Open Encounter
   EncounterWorkspaceScreen->>OpenEncounterApi: ✅ Open Encounter
   activate OpenEncounterApi
-  OpenEncounterApi->>Appointment: read
-  OpenEncounterApi->>Encounter: create
+  rect rgb(245,245,245)
+    Note right of OpenEncounterApi: transaction (API atomic boundary)
+    OpenEncounterApi->>Appointment: update
+    OpenEncounterApi->>Encounter: create
+  end
   OpenEncounterApi-->>EncounterWorkspaceScreen: 🖥️ Encounter Workspace
-  EncounterWorkspaceScreen-->>Nurse: 🖥️ Encounter Workspace
+  EncounterWorkspaceScreen-->>Clinician: 🖥️ Encounter Workspace
   deactivate OpenEncounterApi
 
   Note over Clinician,VitalSign: ✅ Record Vitals
-  Nurse->>VitalsScreen: ✅ Record Vitals
+  Clinician->>VitalsScreen: ✅ Record Vitals
   VitalsScreen->>RecordVitalsApi: ✅ Record Vitals
   activate RecordVitalsApi
   rect rgb(245,245,245)
@@ -1581,7 +2975,7 @@ sequenceDiagram
     RecordVitalsApi->>VitalSign: create
   end
   RecordVitalsApi-->>VitalsScreen: 🖥️ Vitals Screen
-  VitalsScreen-->>Nurse: 🖥️ Vitals Screen
+  VitalsScreen-->>Clinician: 🖥️ Vitals Screen
   deactivate RecordVitalsApi
 
   Note over Clinician,VitalSign: ✅ Sign Encounter
@@ -1600,17 +2994,17 @@ sequenceDiagram
 |---|---|
 | BUC | `BucOrdersResults` |
 | Business | `CareDelivery` |
-| 主な actor | Clinician, Nurse |
-| 必要権限 | `ClinicalOrderWrite`, `LabResultManage`, `PatientMessageSend` |
-| 主なデータ | `ClinicalOrder`, `LabResult`, `Notification`, `PatientMessage` |
+| 主な actor | Clinician, Nurse, MedicalClerk（医師事務作業補助者） |
+| 必要権限 | `ClinicalOrderWrite`, `ProxyOrderEntry`, `LabResultManage`, `PatientMessageSend` |
+| 主なデータ | `ClinicalOrder`, `LabResult`, `Charge`, `Notification`, `PatientMessage` |
 
-検査オーダーから結果確認、重要結果通知までを扱う。検査システム連携は external system として扱い、内部 DSL では API と Entity の境界を確認する。
+検査オーダーから結果確認、重要結果通知までを扱う。医師事務作業補助者や看護師がオーダを代行入力した場合、医師が確定するまで看護師は採血しない（保助看法 第37条）。この規則は `OrderConfirmedByPhysician` 条件と `forbidden(ClinicalOrder, status == clcollected, physician_confirmed == false)` で検証する。外注検査の結果は外注検査システムから届く。採血管ラベルの発行と実施内容（コスト）の登録が会計計算の入力になる。
 
 レビュー観点:
 
-- ReceiveLabResult で LabResult 作成と ClinicalOrder 更新を同じ境界にしてよいか。
+- 代行入力オーダが医師の確定前に採血へ進まないことが、状態検証で示されているか。
+- RegisterPerformedProcedure が作る Charge を、会計計算入力が読めるか。
 - NotifyCriticalResult は結果確認イベントから起動されるため、手動 UC と自動 UC の違いをレビューできるか。
-- CancelClinicalOrder は direct CRUD のままでよいか。
 
 #### Orders and Results RDRA Layered Graph 図
 
@@ -1624,8 +3018,9 @@ rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucOrders
 flowchart LR
   subgraph layer_value[System Value]
     direction TB
-    Clinician(["👤 Clinician"])
-    Nurse(["👤 Nurse"])
+    Nurse(["👤 看護師"])
+    MessagingGateway[/"🌐 Messaging Gateway"/]
+    OutsourcedLabSystem[/"🌐 外注検査システム"/]
   end
   subgraph layer_environment[External Environment]
     direction TB
@@ -1634,6 +3029,7 @@ flowchart LR
     BucFollowupCare["📦 Coordinate Follow-Up Care"]
     BucOrdersResults["📦 Manage Orders and Results"]
     BucPatientOnboarding["📦 Onboard and Maintain Patient"]
+    IntakeExpiryCheck["⏱️ Nightly intake expiry check"]
     CareCoordinationConsole[/"📱 Care Coordination Console"/]
     ClinicalWorkstation[/"📱 Clinical Workstation"/]
     FrontDeskTerminal[/"📱 Front Desk Terminal"/]
@@ -1648,6 +3044,7 @@ flowchart LR
     PatientMessageSend["🔑 Patient Message Send"]
     PatientProfileRead["🔑 Patient Profile Read"]
     PatientProfileWrite["🔑 Patient Profile Write"]
+    ProxyOrderEntry["🔑 代行入力"]
     ScheduleRead["🔑 Schedule Read"]
     ScheduleWrite["🔑 Schedule Write"]
   end
@@ -1659,14 +3056,18 @@ flowchart LR
     CloseCarePlan(["✅ Close Care Plan"])
     CollectSpecimen(["✅ Collect Specimen"])
     CompleteIntakeForms(["✅ Complete Intake Forms"])
+    ConfirmProxyOrder(["✅ 代行入力オーダの確定"])
     CreateCarePlan(["✅ Create Care Plan"])
+    EnterProxyOrder(["✅ 検体検査オーダの代行入力"])
     ExpireIntakeForms(["✅ Expire Intake Forms"])
     MergeDuplicatePatient(["✅ Merge Duplicate Patient"])
     NotifyCriticalResult(["✅ Notify Critical Result"])
     NotifyPatientResult(["✅ Notify Patient Result"])
     PlaceLabOrder(["✅ Place Lab Order"])
+    PrintSpecimenLabel(["✅ 採血管ラベル発行・貼付"])
     ReceiveLabResult(["✅ Receive Lab Result"])
     RegisterPatient(["✅ Register Patient"])
+    RegisterPerformedProcedure(["✅ 実施内容（コスト）の登録"])
     ReviewLabResult(["✅ Review Lab Result"])
     ReviewPatientResponse(["✅ Review Patient Response"])
     ScheduleFollowUpVisit(["✅ Schedule Follow-Up Visit"])
@@ -1675,7 +3076,7 @@ flowchart LR
     SendFollowUpMessage(["✅ Send Follow-Up Message"])
     SendIntakeForms(["✅ Send Intake Forms"])
     UpdateDemographics(["✅ Update Demographics"])
-    VerifyInsurance(["✅ Verify Insurance"])
+    VerifyInsurance(["✅ 保険資格・限度額情報の登録（新患登録）"])
     AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
     CarePlanScreen[["🖥️ Care Plan Screen"]]
     ConsentScreen[["🖥️ Consent Capture Screen"]]
@@ -1689,22 +3090,18 @@ flowchart LR
     PatientSearchScreen[["🖥️ Patient Search Screen"]]
     ResultReviewScreen[["🖥️ Result Review Screen"]]
     SpecimenScreen[["🖥️ Specimen Collection Screen"]]
+    EvAppointmentCancelled{"⚡ Appointment Cancelled"}
+    EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
     EvAppointmentScheduled{"⚡ Appointment Scheduled"}
-    EvCarePlanClosed{"⚡ Care Plan Closed"}
-    EvCarePlanMonitoring{"⚡ Care Plan Monitoring"}
-    EvClinicalOrderCancelled{"⚡ Clinical Order Cancelled"}
-    EvClinicalOrderCollected{"⚡ Specimen Collected"}
-    EvClinicalOrderResulted{"⚡ Clinical Result Received"}
     EvClinicalOrderReviewed{"⚡ Clinical Result Reviewed"}
-    EvIntakeCompleted{"⚡ Intake Completed"}
-    EvIntakeExpired{"⚡ Intake Expired"}
-    EvPatientArchived{"⚡ Patient Archived"}
-    EvPatientMerged{"⚡ Patient Merged"}
+    EvEncounterSigned{"⚡ Encounter Signed"}
+    EvLabResultReceived{"⚡ Lab Result Received"}
   end
   subgraph layer_system[System]
     direction TB
     AppointmentNoticeApi["🔌 Appointment Notice API"]
     CollectSpecimenApi["🔌 Collect Specimen API"]
+    ConfirmOrderApi["🔌 オーダ確定 API"]
     ConsentApi["🔌 Consent API"]
     CreateCarePlanApi["🔌 Create Care Plan API"]
     CriticalNoticeApi["🔌 Critical Notice API"]
@@ -1713,6 +3110,8 @@ flowchart LR
     IntakeMessagingApi["🔌 Intake Messaging API"]
     NotifyPatientResultApi["🔌 Notify Patient Result API"]
     OrderEntryApi["🔌 Order Entry API"]
+    PerformedProcedureApi["🔌 実施登録 API"]
+    ProxyOrderApi["🔌 代行入力 API"]
     ReceiveLabResultApi["🔌 Receive Lab Result API"]
     RegisterPatientApi["🔌 Register Patient API"]
     ResultReviewApi["🔌 Result Review API"]
@@ -1721,11 +3120,12 @@ flowchart LR
     UpdateDemographicsApi["🔌 Update Demographics API"]
     Appointment[("🗄️ Appointment")]
     CarePlan[("🗄️ Care Plan")]
+    Charge[("🗄️ Charge")]
     ClinicalOrder[("🗄️ Clinical Order")]
     ConsentRecord[("🗄️ Consent Record")]
-    EligibilityCheck[("🗄️ Eligibility Check")]
+    EligibilityCheck[("🗄️ 資格確認")]
     Encounter[("🗄️ Encounter")]
-    InsurancePolicy[("🗄️ Insurance Policy")]
+    InsurancePolicy[("🗄️ 保険資格")]
     IntakePacket[("🗄️ Intake Packet")]
     LabResult[("🗄️ Lab Result")]
     Notification[("🗄️ Notification")]
@@ -1733,27 +3133,38 @@ flowchart LR
     PatientMessage[("🗄️ Patient Message")]
     PatientProfile[("🗄️ Patient Profile")]
     ProviderSchedule[("🗄️ Provider Schedule")]
+    OrderConfirmedByPhysician{"🔀 医師が確定したオーダ"}
   end
+  Nurse -.->|has_permission| ProxyOrderEntry
   Nurse -.->|has_permission| ClinicalOrderWrite
   Nurse -.->|has_permission| LabResultManage
   Nurse -->|performs| BucOrdersResults
+  Nurse -->|performs| PrintSpecimenLabel
   Nurse -->|performs| CollectSpecimen
+  Nurse -->|performs| RegisterPerformedProcedure
   Nurse -->|performs| ReceiveLabResult
-  Clinician -.->|has_permission| ClinicalOrderWrite
-  Clinician -.->|has_permission| LabResultManage
-  Clinician -->|performs| BucOrdersResults
-  Clinician -->|performs| PlaceLabOrder
-  Clinician -->|performs| ReviewLabResult
-  Clinician -->|performs| NotifyCriticalResult
-  Clinician -->|performs| CancelClinicalOrder
-  ConsentApi -.->|creates| ConsentRecord
-  ConsentApi -.->|requires_permission| ConsentCapture
-  IntakeMessagingApi -.->|creates| PatientMessage
-  IntakeMessagingApi -.->|creates| IntakePacket
-  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
+  CreateCarePlanApi -.->|creates| CarePlan
+  CreateCarePlanApi -.->|reads| Encounter
+  CreateCarePlanApi -.->|requires_permission| FollowUpManage
+  SendFollowUpMessageApi -.->|creates| PatientMessage
+  SendFollowUpMessageApi -.->|requires_permission| PatientMessageSend
+  FollowUpScheduleApi -.->|creates| Appointment
+  FollowUpScheduleApi -.->|requires_permission| ScheduleWrite
+  FollowUpScheduleApi -.->|updates| ProviderSchedule
+  NotifyPatientResultApi -.->|creates| Notification
+  NotifyPatientResultApi -.->|requires_permission| PatientMessageSend
   OrderEntryApi -.->|creates| ClinicalOrder
   OrderEntryApi -.->|reads| Encounter
   OrderEntryApi -.->|requires_permission| ClinicalOrderWrite
+  ProxyOrderApi -.->|creates| ClinicalOrder
+  ProxyOrderApi -.->|reads| Encounter
+  ProxyOrderApi -.->|requires_permission| ProxyOrderEntry
+  ConfirmOrderApi -.->|requires_permission| ClinicalOrderWrite
+  ConfirmOrderApi -.->|updates| ClinicalOrder
+  PerformedProcedureApi -.->|creates| Charge
+  PerformedProcedureApi -.->|reads| Encounter
+  PerformedProcedureApi -.->|reads| ClinicalOrder
+  PerformedProcedureApi -.->|requires_permission| ClinicalOrderWrite
   CollectSpecimenApi -.->|requires_permission| ClinicalOrderWrite
   CollectSpecimenApi -.->|updates| ClinicalOrder
   ReceiveLabResultApi -.->|creates| LabResult
@@ -1765,18 +3176,6 @@ flowchart LR
   CriticalNoticeApi -.->|creates| PatientMessage
   CriticalNoticeApi -.->|creates| Notification
   CriticalNoticeApi -.->|requires_permission| PatientMessageSend
-  AppointmentNoticeApi -.->|creates| PatientMessage
-  AppointmentNoticeApi -.->|creates| Notification
-  CreateCarePlanApi -.->|creates| CarePlan
-  CreateCarePlanApi -.->|reads| Encounter
-  CreateCarePlanApi -.->|requires_permission| FollowUpManage
-  SendFollowUpMessageApi -.->|creates| PatientMessage
-  SendFollowUpMessageApi -.->|requires_permission| PatientMessageSend
-  FollowUpScheduleApi -.->|creates| Appointment
-  FollowUpScheduleApi -.->|requires_permission| ScheduleWrite
-  FollowUpScheduleApi -.->|updates| ProviderSchedule
-  NotifyPatientResultApi -.->|creates| Notification
-  NotifyPatientResultApi -.->|requires_permission| PatientMessageSend
   SearchPatientApi -.->|reads| PatientAccount
   SearchPatientApi -.->|reads| PatientProfile
   SearchPatientApi -.->|requires_permission| PatientProfileRead
@@ -1789,24 +3188,13 @@ flowchart LR
   EligibilityApi -.->|reads| InsurancePolicy
   EligibilityApi -.->|requires_permission| InsuranceVerify
   EligibilityApi -.->|updates| InsurancePolicy
-  BucPatientOnboarding -.->|belongs| PatientAccess
-  BucPatientOnboarding -->|contains| VerifyInsurance
-  BucPatientOnboarding -->|contains| CaptureConsent
-  BucPatientOnboarding -->|contains| SendIntakeForms
-  BucPatientOnboarding -->|contains| CompleteIntakeForms
-  BucPatientOnboarding -->|contains| ExpireIntakeForms
-  BucPatientOnboarding -->|contains| MergeDuplicatePatient
-  BucPatientOnboarding -->|contains| ArchivePatient
-  BucPatientOnboarding -->|contains| SearchPatient
-  BucPatientOnboarding -->|contains| RegisterPatient
-  BucPatientOnboarding -->|contains| UpdateDemographics
-  BucOrdersResults -.->|belongs| CareDelivery
-  BucOrdersResults -->|contains| PlaceLabOrder
-  BucOrdersResults -->|contains| CollectSpecimen
-  BucOrdersResults -->|contains| ReceiveLabResult
-  BucOrdersResults -->|contains| ReviewLabResult
-  BucOrdersResults -->|contains| NotifyCriticalResult
-  BucOrdersResults -->|contains| CancelClinicalOrder
+  ConsentApi -.->|creates| ConsentRecord
+  ConsentApi -.->|requires_permission| ConsentCapture
+  IntakeMessagingApi -.->|creates| PatientMessage
+  IntakeMessagingApi -.->|creates| IntakePacket
+  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
+  AppointmentNoticeApi -.->|creates| PatientMessage
+  AppointmentNoticeApi -.->|creates| Notification
   BucFollowupCare -.->|belongs| PatientAccess
   BucFollowupCare -->|contains| CreateCarePlan
   BucFollowupCare -->|contains| SendFollowUpMessage
@@ -1814,11 +3202,36 @@ flowchart LR
   BucFollowupCare -->|contains| ScheduleFollowUpVisit
   BucFollowupCare -->|contains| CloseCarePlan
   BucFollowupCare -->|contains| NotifyPatientResult
+  BucOrdersResults -.->|belongs| CareDelivery
+  BucOrdersResults -->|contains| PlaceLabOrder
+  BucOrdersResults -->|contains| EnterProxyOrder
+  BucOrdersResults -->|contains| ConfirmProxyOrder
+  BucOrdersResults -->|contains| PrintSpecimenLabel
+  BucOrdersResults -->|contains| CollectSpecimen
+  BucOrdersResults -->|contains| RegisterPerformedProcedure
+  BucOrdersResults -->|contains| ReceiveLabResult
+  BucOrdersResults -->|contains| ReviewLabResult
+  BucOrdersResults -->|contains| NotifyCriticalResult
+  BucOrdersResults -->|contains| CancelClinicalOrder
+  BucPatientOnboarding -.->|belongs| PatientAccess
+  BucPatientOnboarding -->|contains| SearchPatient
+  BucPatientOnboarding -->|contains| RegisterPatient
+  BucPatientOnboarding -->|contains| UpdateDemographics
+  BucPatientOnboarding -->|contains| VerifyInsurance
+  BucPatientOnboarding -->|contains| CaptureConsent
+  BucPatientOnboarding -->|contains| SendIntakeForms
+  BucPatientOnboarding -->|contains| CompleteIntakeForms
+  BucPatientOnboarding -->|contains| ExpireIntakeForms
+  BucPatientOnboarding -->|contains| MergeDuplicatePatient
+  BucPatientOnboarding -->|contains| ArchivePatient
+  OrderConfirmedByPhysician -.->|applies_to| CollectSpecimen
+  OrderConfirmedByPhysician -.->|combines| ClinicalOrder
   Appointment ---|N:1| PatientAccount
   Encounter ---|N:1| PatientAccount
   Encounter ---|1:1| Appointment
   ClinicalOrder ---|N:1| Encounter
   LabResult ---|1:1| ClinicalOrder
+  Charge ---|N:1| Encounter
   CarePlan ---|N:1| Encounter
   CarePlan ---|N:1| PatientAccount
   PatientMessage ---|N:1| PatientAccount
@@ -1828,58 +3241,79 @@ flowchart LR
   EligibilityCheck ---|N:1| InsurancePolicy
   ConsentRecord ---|N:1| PatientAccount
   IntakePacket ---|N:1| PatientAccount
-  EvClinicalOrderReviewed -.->|triggers| BucFollowupCare
-  EvClinicalOrderReviewed -.->|triggers| NotifyCriticalResult
-  EvClinicalOrderReviewed -.->|triggers| NotifyPatientResult
   EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
+  EvAppointmentScheduled -.->|triggers| MessagingGateway
   EvAppointmentScheduled -.->|triggers| SendIntakeForms
   EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
+  EvAppointmentRescheduled -.->|triggers| MessagingGateway
+  EvAppointmentRescheduled -.->|triggers| SendAppointmentNotice
+  EvAppointmentCancelled -.->|triggers| MessagingGateway
+  EvAppointmentCancelled -.->|triggers| SendAppointmentNotice
+  EvEncounterSigned -.->|triggers| BucFollowupCare
+  EvEncounterSigned -.->|triggers| BucOrdersResults
+  EvEncounterSigned -.->|triggers| CreateCarePlan
+  EvEncounterSigned -.->|triggers| PlaceLabOrder
+  EvClinicalOrderReviewed -.->|triggers| BucFollowupCare
+  EvClinicalOrderReviewed -.->|triggers| NotifyPatientResult
+  EvClinicalOrderReviewed -.->|triggers| NotifyCriticalResult
+  EvLabResultReceived -.->|triggers| ReceiveLabResult
+  OutsourcedLabSystem -.->|raises| EvLabResultReceived
   PatientSearchScreen -.->|shows| PatientAccount
   PatientProfileScreen -.->|shows| PatientProfile
-  VerifyInsurance -.->|displays| InsuranceScreen
-  VerifyInsurance -.->|invokes| EligibilityApi
-  VerifyInsurance -.->|requires_medium| FrontDeskTerminal
-  VerifyInsurance -.->|requires_permission| InsuranceVerify
-  CaptureConsent -.->|displays| ConsentScreen
-  CaptureConsent -.->|invokes| ConsentApi
-  CaptureConsent -.->|requires_medium| PatientMobile
-  CaptureConsent -.->|requires_permission| ConsentCapture
-  SendIntakeForms -.->|displays| IntakePortalScreen
-  SendIntakeForms -.->|invokes| IntakeMessagingApi
-  SendIntakeForms -.->|requires_medium| FrontDeskTerminal
-  SendIntakeForms -.->|requires_permission| IntakeManage
-  CompleteIntakeForms -.->|displays| IntakePortalScreen
-  CompleteIntakeForms -.->|raises| EvIntakeCompleted
-  CompleteIntakeForms -.->|requires_medium| PatientMobile
-  CompleteIntakeForms -.->|requires_permission| ConsentCapture
-  CompleteIntakeForms -.->|updates| IntakePacket
-  ExpireIntakeForms -.->|displays| IntakePortalScreen
-  ExpireIntakeForms -.->|raises| EvIntakeExpired
-  ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
-  ExpireIntakeForms -.->|requires_permission| IntakeManage
-  ExpireIntakeForms -.->|updates| IntakePacket
-  MergeDuplicatePatient -.->|displays| PatientProfileScreen
-  MergeDuplicatePatient -.->|raises| EvPatientMerged
-  MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
-  MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
-  MergeDuplicatePatient -.->|updates| PatientAccount
-  ArchivePatient -.->|displays| PatientProfileScreen
-  ArchivePatient -.->|raises| EvPatientArchived
-  ArchivePatient -.->|requires_medium| FrontDeskTerminal
-  ArchivePatient -.->|requires_permission| PatientProfileWrite
-  ArchivePatient -.->|updates| PatientAccount
+  IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
+  CreateCarePlan -.->|displays| CarePlanScreen
+  CreateCarePlan -.->|invokes| CreateCarePlanApi
+  CreateCarePlan -.->|requires_medium| CareCoordinationConsole
+  CreateCarePlan -.->|requires_permission| FollowUpManage
+  SendFollowUpMessage -.->|displays| PatientMessageScreen
+  SendFollowUpMessage -.->|invokes| SendFollowUpMessageApi
+  SendFollowUpMessage -.->|requires_medium| CareCoordinationConsole
+  SendFollowUpMessage -.->|requires_permission| PatientMessageSend
+  ReviewPatientResponse -.->|displays| CarePlanScreen
+  ReviewPatientResponse -.->|requires_medium| CareCoordinationConsole
+  ReviewPatientResponse -.->|requires_permission| FollowUpManage
+  ReviewPatientResponse -.->|updates| CarePlan
+  ReviewPatientResponse -.->|updates| PatientMessage
+  ScheduleFollowUpVisit -.->|displays| FollowUpScheduleScreen
+  ScheduleFollowUpVisit -.->|invokes| FollowUpScheduleApi
+  ScheduleFollowUpVisit -.->|raises| EvAppointmentScheduled
+  ScheduleFollowUpVisit -.->|requires_medium| CareCoordinationConsole
+  ScheduleFollowUpVisit -.->|requires_permission| FollowUpManage
+  ScheduleFollowUpVisit -.->|requires_permission| ScheduleWrite
+  CloseCarePlan -.->|displays| CarePlanScreen
+  CloseCarePlan -.->|requires_medium| CareCoordinationConsole
+  CloseCarePlan -.->|requires_permission| FollowUpManage
+  CloseCarePlan -.->|updates| CarePlan
+  NotifyPatientResult -.->|displays| PatientMessageScreen
+  NotifyPatientResult -.->|invokes| NotifyPatientResultApi
+  NotifyPatientResult -.->|requires_medium| CareCoordinationConsole
+  NotifyPatientResult -.->|requires_permission| PatientMessageSend
   PlaceLabOrder -.->|displays| OrderEntryScreen
   PlaceLabOrder -.->|invokes| OrderEntryApi
   PlaceLabOrder -.->|requires_medium| ClinicalWorkstation
   PlaceLabOrder -.->|requires_permission| ClinicalOrderWrite
+  EnterProxyOrder -.->|displays| OrderEntryScreen
+  EnterProxyOrder -.->|invokes| ProxyOrderApi
+  EnterProxyOrder -.->|requires_medium| ClinicalWorkstation
+  EnterProxyOrder -.->|requires_permission| ProxyOrderEntry
+  ConfirmProxyOrder -.->|displays| OrderEntryScreen
+  ConfirmProxyOrder -.->|invokes| ConfirmOrderApi
+  ConfirmProxyOrder -.->|requires_medium| ClinicalWorkstation
+  ConfirmProxyOrder -.->|requires_permission| ClinicalOrderWrite
+  PrintSpecimenLabel -.->|displays| SpecimenScreen
+  PrintSpecimenLabel -.->|reads| ClinicalOrder
+  PrintSpecimenLabel -.->|requires_medium| NurseStation
+  PrintSpecimenLabel -.->|requires_permission| ClinicalOrderWrite
   CollectSpecimen -.->|displays| SpecimenScreen
   CollectSpecimen -.->|invokes| CollectSpecimenApi
-  CollectSpecimen -.->|raises| EvClinicalOrderCollected
   CollectSpecimen -.->|requires_medium| NurseStation
   CollectSpecimen -.->|requires_permission| ClinicalOrderWrite
+  RegisterPerformedProcedure -.->|displays| SpecimenScreen
+  RegisterPerformedProcedure -.->|invokes| PerformedProcedureApi
+  RegisterPerformedProcedure -.->|requires_medium| NurseStation
+  RegisterPerformedProcedure -.->|requires_permission| ClinicalOrderWrite
   ReceiveLabResult -.->|displays| ResultReviewScreen
   ReceiveLabResult -.->|invokes| ReceiveLabResultApi
-  ReceiveLabResult -.->|raises| EvClinicalOrderResulted
   ReceiveLabResult -.->|requires_medium| NurseStation
   ReceiveLabResult -.->|requires_permission| LabResultManage
   ReviewLabResult -.->|displays| ResultReviewScreen
@@ -1893,43 +3327,9 @@ flowchart LR
   NotifyCriticalResult -.->|requires_permission| LabResultManage
   NotifyCriticalResult -.->|requires_permission| PatientMessageSend
   CancelClinicalOrder -.->|displays| OrderEntryScreen
-  CancelClinicalOrder -.->|raises| EvClinicalOrderCancelled
   CancelClinicalOrder -.->|requires_medium| ClinicalWorkstation
   CancelClinicalOrder -.->|requires_permission| ClinicalOrderWrite
   CancelClinicalOrder -.->|updates| ClinicalOrder
-  SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
-  SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
-  SendAppointmentNotice -.->|requires_medium| FrontDeskTerminal
-  SendAppointmentNotice -.->|requires_permission| ScheduleRead
-  CreateCarePlan -.->|displays| CarePlanScreen
-  CreateCarePlan -.->|invokes| CreateCarePlanApi
-  CreateCarePlan -.->|requires_medium| CareCoordinationConsole
-  CreateCarePlan -.->|requires_permission| FollowUpManage
-  SendFollowUpMessage -.->|displays| PatientMessageScreen
-  SendFollowUpMessage -.->|invokes| SendFollowUpMessageApi
-  SendFollowUpMessage -.->|requires_medium| CareCoordinationConsole
-  SendFollowUpMessage -.->|requires_permission| PatientMessageSend
-  ReviewPatientResponse -.->|displays| CarePlanScreen
-  ReviewPatientResponse -.->|raises| EvCarePlanMonitoring
-  ReviewPatientResponse -.->|requires_medium| CareCoordinationConsole
-  ReviewPatientResponse -.->|requires_permission| FollowUpManage
-  ReviewPatientResponse -.->|updates| CarePlan
-  ReviewPatientResponse -.->|updates| PatientMessage
-  ScheduleFollowUpVisit -.->|displays| FollowUpScheduleScreen
-  ScheduleFollowUpVisit -.->|invokes| FollowUpScheduleApi
-  ScheduleFollowUpVisit -.->|raises| EvAppointmentScheduled
-  ScheduleFollowUpVisit -.->|requires_medium| CareCoordinationConsole
-  ScheduleFollowUpVisit -.->|requires_permission| FollowUpManage
-  ScheduleFollowUpVisit -.->|requires_permission| ScheduleWrite
-  CloseCarePlan -.->|displays| CarePlanScreen
-  CloseCarePlan -.->|raises| EvCarePlanClosed
-  CloseCarePlan -.->|requires_medium| CareCoordinationConsole
-  CloseCarePlan -.->|requires_permission| FollowUpManage
-  CloseCarePlan -.->|updates| CarePlan
-  NotifyPatientResult -.->|displays| PatientMessageScreen
-  NotifyPatientResult -.->|invokes| NotifyPatientResultApi
-  NotifyPatientResult -.->|requires_medium| CareCoordinationConsole
-  NotifyPatientResult -.->|requires_permission| PatientMessageSend
   SearchPatient -.->|displays| PatientSearchScreen
   SearchPatient -.->|invokes| SearchPatientApi
   SearchPatient -.->|requires_medium| FrontDeskTerminal
@@ -1942,7 +3342,38 @@ flowchart LR
   UpdateDemographics -.->|invokes| UpdateDemographicsApi
   UpdateDemographics -.->|requires_medium| FrontDeskTerminal
   UpdateDemographics -.->|requires_permission| PatientProfileWrite
-
+  VerifyInsurance -.->|displays| InsuranceScreen
+  VerifyInsurance -.->|invokes| EligibilityApi
+  VerifyInsurance -.->|requires_medium| FrontDeskTerminal
+  VerifyInsurance -.->|requires_permission| InsuranceVerify
+  CaptureConsent -.->|displays| ConsentScreen
+  CaptureConsent -.->|invokes| ConsentApi
+  CaptureConsent -.->|requires_medium| PatientMobile
+  CaptureConsent -.->|requires_permission| ConsentCapture
+  SendIntakeForms -.->|displays| IntakePortalScreen
+  SendIntakeForms -.->|invokes| IntakeMessagingApi
+  SendIntakeForms -.->|requires_medium| FrontDeskTerminal
+  SendIntakeForms -.->|requires_permission| IntakeManage
+  CompleteIntakeForms -.->|displays| IntakePortalScreen
+  CompleteIntakeForms -.->|requires_medium| PatientMobile
+  CompleteIntakeForms -.->|requires_permission| ConsentCapture
+  CompleteIntakeForms -.->|updates| IntakePacket
+  ExpireIntakeForms -.->|displays| IntakePortalScreen
+  ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
+  ExpireIntakeForms -.->|requires_permission| IntakeManage
+  ExpireIntakeForms -.->|updates| IntakePacket
+  MergeDuplicatePatient -.->|displays| PatientProfileScreen
+  MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
+  MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
+  MergeDuplicatePatient -.->|updates| PatientAccount
+  ArchivePatient -.->|displays| PatientProfileScreen
+  ArchivePatient -.->|requires_medium| FrontDeskTerminal
+  ArchivePatient -.->|requires_permission| PatientProfileWrite
+  ArchivePatient -.->|updates| PatientAccount
+  SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
+  SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
+  SendAppointmentNotice -.->|requires_medium| FrontDeskTerminal
+  SendAppointmentNotice -.->|requires_permission| ScheduleRead
 ```
 
 #### Orders and Results sequence 図
@@ -1956,8 +3387,9 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucOr
 ```mermaid
 sequenceDiagram
   box System Value
-    actor Clinician as 👤 Clinician
-    actor Nurse as 👤 Nurse
+    actor Clinician as 👤 医師
+    actor MedicalClerk as 👤 医師事務作業補助者
+    actor Nurse as 👤 看護師
   end
   box System Boundary
     participant CriticalNoticeScreen as 🖥️ Critical Result Notice Screen
@@ -1968,10 +3400,14 @@ sequenceDiagram
   box System
     participant System as 🧩 システム
     participant CollectSpecimenApi as 🔌 Collect Specimen API
+    participant ConfirmOrderApi as 🔌 オーダ確定 API
     participant CriticalNoticeApi as 🔌 Critical Notice API
     participant OrderEntryApi as 🔌 Order Entry API
+    participant PerformedProcedureApi as 🔌 実施登録 API
+    participant ProxyOrderApi as 🔌 代行入力 API
     participant ReceiveLabResultApi as 🔌 Receive Lab Result API
     participant ResultReviewApi as 🔌 Result Review API
+    participant Charge as 🗄️ Charge
     participant ClinicalOrder as 🗄️ Clinical Order
     participant Encounter as 🗄️ Encounter
     participant LabResult as 🗄️ Lab Result
@@ -1994,6 +3430,25 @@ sequenceDiagram
   CollectSpecimenApi-->>SpecimenScreen: 🖥️ Specimen Collection Screen
   SpecimenScreen-->>Nurse: 🖥️ Specimen Collection Screen
   deactivate CollectSpecimenApi
+
+  Note over Clinician,PatientMessage: ✅ 代行入力オーダの確定
+  Clinician->>OrderEntryScreen: ✅ 代行入力オーダの確定
+  OrderEntryScreen->>ConfirmOrderApi: ✅ 代行入力オーダの確定
+  activate ConfirmOrderApi
+  ConfirmOrderApi->>ClinicalOrder: update
+  ConfirmOrderApi-->>OrderEntryScreen: 🖥️ Order Entry Screen
+  OrderEntryScreen-->>Clinician: 🖥️ Order Entry Screen
+  deactivate ConfirmOrderApi
+
+  Note over Clinician,PatientMessage: ✅ 検体検査オーダの代行入力
+  MedicalClerk->>OrderEntryScreen: ✅ 検体検査オーダの代行入力
+  OrderEntryScreen->>ProxyOrderApi: ✅ 検体検査オーダの代行入力
+  activate ProxyOrderApi
+  ProxyOrderApi->>Encounter: read
+  ProxyOrderApi->>ClinicalOrder: create
+  ProxyOrderApi-->>OrderEntryScreen: 🖥️ Order Entry Screen
+  OrderEntryScreen-->>MedicalClerk: 🖥️ Order Entry Screen
+  deactivate ProxyOrderApi
 
   Note over Clinician,PatientMessage: ✅ Notify Critical Result
   Clinician->>CriticalNoticeScreen: ✅ Notify Critical Result
@@ -2018,6 +3473,13 @@ sequenceDiagram
   OrderEntryScreen-->>Clinician: 🖥️ Order Entry Screen
   deactivate OrderEntryApi
 
+  Note over Clinician,PatientMessage: ✅ 採血管ラベル発行・貼付
+  Nurse->System: ✅ 採血管ラベル発行・貼付
+  activate System
+  System->>ClinicalOrder: read
+  System-->>Nurse: 🖥️ Specimen Collection Screen
+  deactivate System
+
   Note over Clinician,PatientMessage: ✅ Receive Lab Result
   Nurse->>ResultReviewScreen: ✅ Receive Lab Result
   ResultReviewScreen->>ReceiveLabResultApi: ✅ Receive Lab Result
@@ -2030,6 +3492,17 @@ sequenceDiagram
   ReceiveLabResultApi-->>ResultReviewScreen: 🖥️ Result Review Screen
   ResultReviewScreen-->>Nurse: 🖥️ Result Review Screen
   deactivate ReceiveLabResultApi
+
+  Note over Clinician,PatientMessage: ✅ 実施内容（コスト）の登録
+  Nurse->>SpecimenScreen: ✅ 実施内容（コスト）の登録
+  SpecimenScreen->>PerformedProcedureApi: ✅ 実施内容（コスト）の登録
+  activate PerformedProcedureApi
+  PerformedProcedureApi->>ClinicalOrder: read
+  PerformedProcedureApi->>Encounter: read
+  PerformedProcedureApi->>Charge: create
+  PerformedProcedureApi-->>SpecimenScreen: 🖥️ Specimen Collection Screen
+  SpecimenScreen-->>Nurse: 🖥️ Specimen Collection Screen
+  deactivate PerformedProcedureApi
 
   Note over Clinician,PatientMessage: ✅ Review Lab Result
   Clinician->>ResultReviewScreen: ✅ Review Lab Result
@@ -2045,25 +3518,25 @@ sequenceDiagram
   deactivate ResultReviewApi
 ```
 
-### 3.6 Prescription Fulfillment
+### 3.6 処方
 
 | 項目 | 内容 |
 |---|---|
 | BUC | `BucPrescriptionFulfillment` |
 | Business | `CareDelivery` |
-| 主な actor | Clinician, Nurse |
+| 主な actor | Clinician（医師）, Pharmacist（薬剤師） |
 | 必要権限 | `PrescriptionWrite`, `PrescriptionDispense` |
-| 主なデータ | `Medication`, `Encounter`, `Prescription` |
+| 主なデータ | `Prescription`, `Medication`, `Encounter` |
 
-処方作成、薬剤検索、薬局ネットワーク送信、調剤確認、取消、再処方を扱う。外部薬局ネットワークは uses で表し、内部 API 境界は UC ごとに分ける。
+処方オーダから院外処方箋の発行、院内処方の調剤・監査・服薬指導・交付、疑義照会までを扱う。院外処方箋は電子処方箋管理サービスへ登録し、患者が選ぶ保険薬局で調剤される。病院は特定の保険薬局を指示しない（療担規則 第2条の5）ので、`Prescription` は薬局を持たない。使用期間は交付日を含めて4日以内で、日数は DSL で数えられないためタイマーで期限切れにする。薬剤師は疑わしい点があれば医師に問い合わせ、回答までは調剤しない。
 
 レビュー観点:
 
-- DraftPrescription と SendPrescription の間に承認 UC が必要か。
-- RefillPrescription が新しい Prescription を作成する設計でよいか。
-- ConfirmDispense は外部通知イベントとして扱うべきか。
+- 院外（rxissued）と院内（rxvoucher → rxaudited → rxcounseled → rxdispensed）の経路が状態で区別できるか。
+- 疑義照会中（rxinquiry）の処方箋が調剤・監査に進まないか。
+- 使用期間切れ（rxexpired）が院外処方箋にだけ起きることが業務と合うか。
 
-#### Prescription Fulfillment RDRA Layered Graph 図
+#### 処方 RDRA Layered Graph 図
 
 生成コマンド:
 
@@ -2075,76 +3548,145 @@ rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucPrescr
 flowchart LR
   subgraph layer_value[System Value]
     direction TB
-    Clinician(["👤 Clinician"])
-    Nurse(["👤 Nurse"])
+    Clinician(["👤 医師"])
+    EPrescriptionService[/"🌐 電子処方箋管理サービス"/]
+    InsurancePharmacy[/"🌐 保険薬局"/]
   end
   subgraph layer_environment[External Environment]
     direction TB
     CareDelivery["💼 Care Delivery"]
-    BucPrescriptionFulfillment["📦 Fulfill Prescriptions"]
+    BucPrescriptionFulfillment["📦 処方"]
+    PrescriptionFlow["🧭 処方の流れ"]
+    CounselStep(["➡️ 服薬指導・薬剤交付"])
+    DispenseStep(["➡️ 調剤・監査"])
+    InhouseStep(["➡️ 院内処方（引換券）"])
+    InquiryStep(["➡️ 疑義照会"])
+    OrderStep(["➡️ 処方オーダ"])
+    OutsideStep(["➡️ 院外処方箋（電子処方箋管理サービス）"])
+    PharmacyStep(["➡️ 保険薬局での調剤"])
+    PrescriptionUsePeriodCheck["⏱️ 処方箋の使用期間切れ確認"]
     ClinicalWorkstation[/"📱 Clinical Workstation"/]
-    NurseStation[/"📱 Nurse Station"/]
+    PharmacyWorkstation[/"📱 薬剤部端末"/]
     PrescriptionDispense["🔑 Prescription Dispense"]
     PrescriptionWrite["🔑 Prescription Write"]
   end
   subgraph layer_boundary[System Boundary]
     direction TB
-    CancelPrescription(["✅ Cancel Prescription"])
-    ConfirmDispense(["✅ Confirm Dispense"])
-    DraftPrescription(["✅ Draft Prescription"])
-    RefillPrescription(["✅ Refill Prescription"])
+    AnswerPharmacyInquiry(["✅ 保険薬局からの疑義照会への回答"])
+    AnswerPrescriptionInquiry(["✅ 疑義照会への回答"])
+    CancelPrescription(["✅ 処方の取消"])
+    ConfirmDispense(["✅ 保険薬局での調剤結果の受信"])
+    CounselMedication(["✅ 服薬指導"])
+    DispenseAndAudit(["✅ 調剤・監査"])
+    DraftPrescription(["✅ 処方オーダの登録"])
+    ExpirePrescription(["✅ 処方箋の使用期間切れ"])
+    HandOverMedication(["✅ 薬剤交付"])
+    IssueInhouseVoucher(["✅ 院内処方用引換券の交付"])
+    IssueOutsidePrescription(["✅ 院外処方箋の発行"])
+    IssueRefillPrescription(["✅ リフィル処方箋の処方オーダ"])
+    RaisePrescriptionInquiry(["✅ 疑義照会"])
     SearchMedication(["✅ Search Medication"])
-    SendPrescription(["✅ Send Prescription"])
+    DispensingScreen[["🖥️ 調剤・監査画面"]]
     MedicationSearchScreen[["🖥️ Medication Search Screen"]]
-    PharmacyStatusScreen[["🖥️ Pharmacy Status Screen"]]
-    PrescriptionScreen[["🖥️ Prescription Screen"]]
-    EvPrescriptionCancelled{"⚡ Prescription Cancelled"}
+    PharmacyStatusScreen[["🖥️ 電子処方箋の状況画面"]]
+    PrescriptionScreen[["🖥️ 処方画面"]]
+    DispensedAtField[["🔤 交付日時"]]
+    RefillLimitField[["🔤 リフィルの使用回数の上限"]]
+    UsePeriodField[["🔤 使用期間（日）"]]
+    EvPharmacyInquiry{"⚡ 保険薬局からの疑義照会"}
     EvPrescriptionDispensed{"⚡ Prescription Dispensed"}
-    EvPrescriptionSent{"⚡ Prescription Sent"}
+    EvPrescriptionIssued{"⚡ 電子処方箋の登録"}
   end
   subgraph layer_system[System]
     direction TB
-    ConfirmDispenseApi["🔌 Confirm Dispense API"]
-    DraftPrescriptionApi["🔌 Draft Prescription API"]
+    ConfirmDispenseApi["🔌 調剤結果 API"]
+    DispensingApi["🔌 院内調剤 API"]
+    DraftPrescriptionApi["🔌 処方オーダ API"]
+    IssuePrescriptionApi["🔌 処方箋発行 API"]
     MedicationCatalogApi["🔌 Medication Catalog API"]
-    RefillPrescriptionApi["🔌 Refill Prescription API"]
-    SendPrescriptionApi["🔌 Send Prescription API"]
+    PrescriptionInquiryApi["🔌 疑義照会 API"]
     Encounter[("🗄️ Encounter")]
     Medication[("🗄️ Medication")]
-    Prescription[("🗄️ Prescription")]
+    Prescription[("🗄️ 処方箋")]
   end
-  Nurse -.->|has_permission| PrescriptionDispense
-  Nurse -->|performs| BucPrescriptionFulfillment
-  Nurse -->|performs| ConfirmDispense
   Clinician -.->|has_permission| PrescriptionWrite
   Clinician -->|performs| BucPrescriptionFulfillment
   Clinician -->|performs| SearchMedication
   Clinician -->|performs| DraftPrescription
-  Clinician -->|performs| SendPrescription
+  Clinician -->|performs| IssueRefillPrescription
+  Clinician -->|performs| IssueOutsidePrescription
+  Clinician -->|performs| IssueInhouseVoucher
+  Clinician -->|performs| AnswerPrescriptionInquiry
+  Clinician -->|performs| AnswerPharmacyInquiry
   Clinician -->|performs| CancelPrescription
-  Clinician -->|performs| RefillPrescription
   MedicationCatalogApi -.->|reads| Medication
   MedicationCatalogApi -.->|requires_permission| PrescriptionWrite
   DraftPrescriptionApi -.->|creates| Prescription
   DraftPrescriptionApi -.->|reads| Encounter
   DraftPrescriptionApi -.->|requires_permission| PrescriptionWrite
-  SendPrescriptionApi -.->|requires_permission| PrescriptionWrite
-  SendPrescriptionApi -.->|updates| Prescription
-  ConfirmDispenseApi -.->|requires_permission| PrescriptionDispense
+  IssuePrescriptionApi -.->|requires_permission| PrescriptionWrite
+  IssuePrescriptionApi -.->|updates| Prescription
+  DispensingApi -.->|requires_permission| PrescriptionDispense
+  DispensingApi -.->|updates| Prescription
   ConfirmDispenseApi -.->|updates| Prescription
-  RefillPrescriptionApi -.->|creates| Prescription
-  RefillPrescriptionApi -.->|reads| Medication
-  RefillPrescriptionApi -.->|requires_permission| PrescriptionWrite
+  PrescriptionInquiryApi -.->|requires_permission| PrescriptionWrite
+  PrescriptionInquiryApi -.->|updates| Prescription
   BucPrescriptionFulfillment -.->|belongs| CareDelivery
+  BucPrescriptionFulfillment -->|contains| PrescriptionFlow
   BucPrescriptionFulfillment -->|contains| SearchMedication
   BucPrescriptionFulfillment -->|contains| DraftPrescription
-  BucPrescriptionFulfillment -->|contains| SendPrescription
+  BucPrescriptionFulfillment -->|contains| IssueRefillPrescription
+  BucPrescriptionFulfillment -->|contains| IssueOutsidePrescription
+  BucPrescriptionFulfillment -->|contains| IssueInhouseVoucher
+  BucPrescriptionFulfillment -->|contains| DispenseAndAudit
+  BucPrescriptionFulfillment -->|contains| CounselMedication
+  BucPrescriptionFulfillment -->|contains| HandOverMedication
+  BucPrescriptionFulfillment -->|contains| RaisePrescriptionInquiry
+  BucPrescriptionFulfillment -->|contains| AnswerPrescriptionInquiry
+  BucPrescriptionFulfillment -->|contains| AnswerPharmacyInquiry
   BucPrescriptionFulfillment -->|contains| ConfirmDispense
+  BucPrescriptionFulfillment -->|contains| ExpirePrescription
   BucPrescriptionFulfillment -->|contains| CancelPrescription
-  BucPrescriptionFulfillment -->|contains| RefillPrescription
   Prescription ---|N:1| Encounter
   Prescription ---|N:1| Medication
+  EvPharmacyInquiry -.->|triggers| AnswerPharmacyInquiry
+  EvPrescriptionIssued -.->|triggers| EPrescriptionService
+  EvPrescriptionDispensed -.->|triggers| ConfirmDispense
+  EPrescriptionService -.->|raises| EvPrescriptionDispensed
+  InsurancePharmacy -.->|raises| EvPharmacyInquiry
+  UsePeriodField -.->|maps_field| Prescription
+  RefillLimitField -.->|maps_field| Prescription
+  DispensedAtField -.->|maps_field| Prescription
+  PrescriptionFlow -->|contains| OrderStep
+  PrescriptionFlow -->|contains| OutsideStep
+  PrescriptionFlow -->|contains| InhouseStep
+  PrescriptionFlow -->|contains| DispenseStep
+  PrescriptionFlow -->|contains| InquiryStep
+  PrescriptionFlow -->|contains| CounselStep
+  PrescriptionFlow -->|contains| PharmacyStep
   MedicationSearchScreen -.->|shows| Medication
+  PrescriptionScreen -->|contains| UsePeriodField
+  PrescriptionScreen -->|contains| RefillLimitField
+  DispensingScreen -->|contains| DispensedAtField
+  OrderStep -.->|branches| InhouseStep
+  OrderStep -.->|covers| DraftPrescription
+  OrderStep -.->|covers| IssueRefillPrescription
+  OrderStep -.->|precedes| OutsideStep
+  OutsideStep -.->|covers| IssueOutsidePrescription
+  OutsideStep -.->|precedes| PharmacyStep
+  InhouseStep -.->|covers| IssueInhouseVoucher
+  InhouseStep -.->|precedes| DispenseStep
+  DispenseStep -.->|covers| DispenseAndAudit
+  DispenseStep -.->|excepts| InquiryStep
+  DispenseStep -.->|precedes| CounselStep
+  InquiryStep -.->|covers| RaisePrescriptionInquiry
+  InquiryStep -.->|covers| AnswerPrescriptionInquiry
+  InquiryStep -.->|repeats| DispenseStep
+  CounselStep -.->|covers| CounselMedication
+  CounselStep -.->|covers| HandOverMedication
+  PharmacyStep -.->|covers| AnswerPharmacyInquiry
+  PharmacyStep -.->|covers| ConfirmDispense
+  PrescriptionUsePeriodCheck -.->|triggers| ExpirePrescription
   SearchMedication -.->|displays| MedicationSearchScreen
   SearchMedication -.->|invokes| MedicationCatalogApi
   SearchMedication -.->|requires_medium| ClinicalWorkstation
@@ -2153,29 +3695,55 @@ flowchart LR
   DraftPrescription -.->|invokes| DraftPrescriptionApi
   DraftPrescription -.->|requires_medium| ClinicalWorkstation
   DraftPrescription -.->|requires_permission| PrescriptionWrite
-  SendPrescription -.->|displays| PrescriptionScreen
-  SendPrescription -.->|invokes| SendPrescriptionApi
-  SendPrescription -.->|raises| EvPrescriptionSent
-  SendPrescription -.->|requires_medium| ClinicalWorkstation
-  SendPrescription -.->|requires_permission| PrescriptionWrite
+  IssueRefillPrescription -.->|displays| PrescriptionScreen
+  IssueRefillPrescription -.->|invokes| DraftPrescriptionApi
+  IssueRefillPrescription -.->|requires_medium| ClinicalWorkstation
+  IssueRefillPrescription -.->|requires_permission| PrescriptionWrite
+  IssueOutsidePrescription -.->|displays| PrescriptionScreen
+  IssueOutsidePrescription -.->|invokes| IssuePrescriptionApi
+  IssueOutsidePrescription -.->|raises| EvPrescriptionIssued
+  IssueOutsidePrescription -.->|requires_medium| ClinicalWorkstation
+  IssueOutsidePrescription -.->|requires_permission| PrescriptionWrite
+  IssueInhouseVoucher -.->|displays| PrescriptionScreen
+  IssueInhouseVoucher -.->|invokes| IssuePrescriptionApi
+  IssueInhouseVoucher -.->|requires_medium| ClinicalWorkstation
+  IssueInhouseVoucher -.->|requires_permission| PrescriptionWrite
+  DispenseAndAudit -.->|displays| DispensingScreen
+  DispenseAndAudit -.->|invokes| DispensingApi
+  DispenseAndAudit -.->|requires_medium| PharmacyWorkstation
+  DispenseAndAudit -.->|requires_permission| PrescriptionDispense
+  CounselMedication -.->|displays| DispensingScreen
+  CounselMedication -.->|invokes| DispensingApi
+  CounselMedication -.->|requires_medium| PharmacyWorkstation
+  CounselMedication -.->|requires_permission| PrescriptionDispense
+  HandOverMedication -.->|displays| DispensingScreen
+  HandOverMedication -.->|invokes| DispensingApi
+  HandOverMedication -.->|requires_medium| PharmacyWorkstation
+  HandOverMedication -.->|requires_permission| PrescriptionDispense
+  RaisePrescriptionInquiry -.->|displays| DispensingScreen
+  RaisePrescriptionInquiry -.->|invokes| DispensingApi
+  RaisePrescriptionInquiry -.->|requires_medium| PharmacyWorkstation
+  RaisePrescriptionInquiry -.->|requires_permission| PrescriptionDispense
+  AnswerPrescriptionInquiry -.->|displays| PrescriptionScreen
+  AnswerPrescriptionInquiry -.->|invokes| PrescriptionInquiryApi
+  AnswerPrescriptionInquiry -.->|requires_medium| ClinicalWorkstation
+  AnswerPrescriptionInquiry -.->|requires_permission| PrescriptionWrite
+  AnswerPharmacyInquiry -.->|displays| PrescriptionScreen
+  AnswerPharmacyInquiry -.->|invokes| PrescriptionInquiryApi
+  AnswerPharmacyInquiry -.->|requires_medium| ClinicalWorkstation
+  AnswerPharmacyInquiry -.->|requires_permission| PrescriptionWrite
   ConfirmDispense -.->|displays| PharmacyStatusScreen
   ConfirmDispense -.->|invokes| ConfirmDispenseApi
-  ConfirmDispense -.->|raises| EvPrescriptionDispensed
-  ConfirmDispense -.->|requires_medium| NurseStation
-  ConfirmDispense -.->|requires_permission| PrescriptionDispense
+  ConfirmDispense -.->|requires_medium| PharmacyWorkstation
+  ExpirePrescription -.->|displays| PharmacyStatusScreen
+  ExpirePrescription -.->|invokes| ConfirmDispenseApi
   CancelPrescription -.->|displays| PrescriptionScreen
-  CancelPrescription -.->|raises| EvPrescriptionCancelled
   CancelPrescription -.->|requires_medium| ClinicalWorkstation
   CancelPrescription -.->|requires_permission| PrescriptionWrite
   CancelPrescription -.->|updates| Prescription
-  RefillPrescription -.->|displays| PrescriptionScreen
-  RefillPrescription -.->|invokes| RefillPrescriptionApi
-  RefillPrescription -.->|requires_medium| ClinicalWorkstation
-  RefillPrescription -.->|requires_permission| PrescriptionWrite
-
 ```
 
-#### Prescription Fulfillment sequence 図
+#### 処方 sequence 図
 
 生成コマンド:
 
@@ -2186,61 +3754,144 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucPr
 ```mermaid
 sequenceDiagram
   box System Value
-    actor Clinician as 👤 Clinician
-    actor Nurse as 👤 Nurse
+    actor Clinician as 👤 医師
+    actor Pharmacist as 👤 薬剤師
   end
   box System Boundary
+    participant DispensingScreen as 🖥️ 調剤・監査画面
     participant MedicationSearchScreen as 🖥️ Medication Search Screen
-    participant PharmacyStatusScreen as 🖥️ Pharmacy Status Screen
-    participant PrescriptionScreen as 🖥️ Prescription Screen
+    participant PharmacyStatusScreen as 🖥️ 電子処方箋の状況画面
+    participant PrescriptionScreen as 🖥️ 処方画面
   end
   box System
     participant System as 🧩 システム
-    participant ConfirmDispenseApi as 🔌 Confirm Dispense API
-    participant DraftPrescriptionApi as 🔌 Draft Prescription API
+    participant ConfirmDispenseApi as 🔌 調剤結果 API
+    participant DispensingApi as 🔌 院内調剤 API
+    participant DraftPrescriptionApi as 🔌 処方オーダ API
+    participant IssuePrescriptionApi as 🔌 処方箋発行 API
     participant MedicationCatalogApi as 🔌 Medication Catalog API
-    participant RefillPrescriptionApi as 🔌 Refill Prescription API
-    participant SendPrescriptionApi as 🔌 Send Prescription API
+    participant PrescriptionInquiryApi as 🔌 疑義照会 API
     participant Encounter as 🗄️ Encounter
     participant Medication as 🗄️ Medication
-    participant Prescription as 🗄️ Prescription
+    participant Prescription as 🗄️ 処方箋
   end
 
-  Note over Clinician,Prescription: ✅ Cancel Prescription
-  Clinician->System: ✅ Cancel Prescription
+  Note over Clinician,Prescription: ✅ 保険薬局からの疑義照会への回答
+  Clinician->>PrescriptionScreen: ✅ 保険薬局からの疑義照会への回答
+  PrescriptionScreen->>PrescriptionInquiryApi: ✅ 保険薬局からの疑義照会への回答
+  activate PrescriptionInquiryApi
+  PrescriptionInquiryApi->>Prescription: update
+  PrescriptionInquiryApi-->>PrescriptionScreen: 🖥️ 処方画面
+  PrescriptionScreen-->>Clinician: 🖥️ 処方画面
+  deactivate PrescriptionInquiryApi
+
+  Note over Clinician,Prescription: ✅ 疑義照会への回答
+  Clinician->>PrescriptionScreen: ✅ 疑義照会への回答
+  PrescriptionScreen->>PrescriptionInquiryApi: ✅ 疑義照会への回答
+  activate PrescriptionInquiryApi
+  PrescriptionInquiryApi->>Prescription: update
+  PrescriptionInquiryApi-->>PrescriptionScreen: 🖥️ 処方画面
+  PrescriptionScreen-->>Clinician: 🖥️ 処方画面
+  deactivate PrescriptionInquiryApi
+
+  Note over Clinician,Prescription: ✅ 処方の取消
+  Clinician->System: ✅ 処方の取消
   activate System
   System->>Prescription: update
-  System-->>Clinician: 🖥️ Prescription Screen
+  System-->>Clinician: 🖥️ 処方画面
   deactivate System
 
-  Note over Clinician,Prescription: ✅ Confirm Dispense
-  Nurse->>PharmacyStatusScreen: ✅ Confirm Dispense
-  PharmacyStatusScreen->>ConfirmDispenseApi: ✅ Confirm Dispense
+  Note over Clinician,Prescription: ✅ 保険薬局での調剤結果の受信
+  Clinician->>PharmacyStatusScreen: ✅ 保険薬局での調剤結果の受信
+  PharmacyStatusScreen->>ConfirmDispenseApi: ✅ 保険薬局での調剤結果の受信
   activate ConfirmDispenseApi
   ConfirmDispenseApi->>Prescription: update
-  ConfirmDispenseApi-->>PharmacyStatusScreen: 🖥️ Pharmacy Status Screen
-  PharmacyStatusScreen-->>Nurse: 🖥️ Pharmacy Status Screen
+  ConfirmDispenseApi-->>PharmacyStatusScreen: 🖥️ 電子処方箋の状況画面
+  PharmacyStatusScreen-->>Clinician: 🖥️ 電子処方箋の状況画面
   deactivate ConfirmDispenseApi
 
-  Note over Clinician,Prescription: ✅ Draft Prescription
-  Clinician->>PrescriptionScreen: ✅ Draft Prescription
-  PrescriptionScreen->>DraftPrescriptionApi: ✅ Draft Prescription
+  Note over Clinician,Prescription: ✅ 服薬指導
+  Clinician->>DispensingScreen: ✅ 服薬指導
+  DispensingScreen->>DispensingApi: ✅ 服薬指導
+  activate DispensingApi
+  DispensingApi->>Prescription: update
+  DispensingApi-->>DispensingScreen: 🖥️ 調剤・監査画面
+  DispensingScreen-->>Clinician: 🖥️ 調剤・監査画面
+  deactivate DispensingApi
+
+  Note over Clinician,Prescription: ✅ 調剤・監査
+  Clinician->>DispensingScreen: ✅ 調剤・監査
+  DispensingScreen->>DispensingApi: ✅ 調剤・監査
+  activate DispensingApi
+  DispensingApi->>Prescription: update
+  DispensingApi-->>DispensingScreen: 🖥️ 調剤・監査画面
+  DispensingScreen-->>Clinician: 🖥️ 調剤・監査画面
+  deactivate DispensingApi
+
+  Note over Clinician,Prescription: ✅ 処方オーダの登録
+  Clinician->>PrescriptionScreen: ✅ 処方オーダの登録
+  PrescriptionScreen->>DraftPrescriptionApi: ✅ 処方オーダの登録
   activate DraftPrescriptionApi
   DraftPrescriptionApi->>Encounter: read
   DraftPrescriptionApi->>Prescription: create
-  DraftPrescriptionApi-->>PrescriptionScreen: 🖥️ Prescription Screen
-  PrescriptionScreen-->>Clinician: 🖥️ Prescription Screen
+  DraftPrescriptionApi-->>PrescriptionScreen: 🖥️ 処方画面
+  PrescriptionScreen-->>Clinician: 🖥️ 処方画面
   deactivate DraftPrescriptionApi
 
-  Note over Clinician,Prescription: ✅ Refill Prescription
-  Clinician->>PrescriptionScreen: ✅ Refill Prescription
-  PrescriptionScreen->>RefillPrescriptionApi: ✅ Refill Prescription
-  activate RefillPrescriptionApi
-  RefillPrescriptionApi->>Medication: read
-  RefillPrescriptionApi->>Prescription: create
-  RefillPrescriptionApi-->>PrescriptionScreen: 🖥️ Prescription Screen
-  PrescriptionScreen-->>Clinician: 🖥️ Prescription Screen
-  deactivate RefillPrescriptionApi
+  Note over Clinician,Prescription: ✅ 処方箋の使用期間切れ
+  Clinician->>PharmacyStatusScreen: ✅ 処方箋の使用期間切れ
+  PharmacyStatusScreen->>ConfirmDispenseApi: ✅ 処方箋の使用期間切れ
+  activate ConfirmDispenseApi
+  ConfirmDispenseApi->>Prescription: update
+  ConfirmDispenseApi-->>PharmacyStatusScreen: 🖥️ 電子処方箋の状況画面
+  PharmacyStatusScreen-->>Clinician: 🖥️ 電子処方箋の状況画面
+  deactivate ConfirmDispenseApi
+
+  Note over Clinician,Prescription: ✅ 薬剤交付
+  Clinician->>DispensingScreen: ✅ 薬剤交付
+  DispensingScreen->>DispensingApi: ✅ 薬剤交付
+  activate DispensingApi
+  DispensingApi->>Prescription: update
+  DispensingApi-->>DispensingScreen: 🖥️ 調剤・監査画面
+  DispensingScreen-->>Clinician: 🖥️ 調剤・監査画面
+  deactivate DispensingApi
+
+  Note over Clinician,Prescription: ✅ 院内処方用引換券の交付
+  Clinician->>PrescriptionScreen: ✅ 院内処方用引換券の交付
+  PrescriptionScreen->>IssuePrescriptionApi: ✅ 院内処方用引換券の交付
+  activate IssuePrescriptionApi
+  IssuePrescriptionApi->>Prescription: update
+  IssuePrescriptionApi-->>PrescriptionScreen: 🖥️ 処方画面
+  PrescriptionScreen-->>Clinician: 🖥️ 処方画面
+  deactivate IssuePrescriptionApi
+
+  Note over Clinician,Prescription: ✅ 院外処方箋の発行
+  Clinician->>PrescriptionScreen: ✅ 院外処方箋の発行
+  PrescriptionScreen->>IssuePrescriptionApi: ✅ 院外処方箋の発行
+  activate IssuePrescriptionApi
+  IssuePrescriptionApi->>Prescription: update
+  IssuePrescriptionApi-->>PrescriptionScreen: 🖥️ 処方画面
+  PrescriptionScreen-->>Clinician: 🖥️ 処方画面
+  deactivate IssuePrescriptionApi
+
+  Note over Clinician,Prescription: ✅ リフィル処方箋の処方オーダ
+  Clinician->>PrescriptionScreen: ✅ リフィル処方箋の処方オーダ
+  PrescriptionScreen->>DraftPrescriptionApi: ✅ リフィル処方箋の処方オーダ
+  activate DraftPrescriptionApi
+  DraftPrescriptionApi->>Encounter: read
+  DraftPrescriptionApi->>Prescription: create
+  DraftPrescriptionApi-->>PrescriptionScreen: 🖥️ 処方画面
+  PrescriptionScreen-->>Clinician: 🖥️ 処方画面
+  deactivate DraftPrescriptionApi
+
+  Note over Clinician,Prescription: ✅ 疑義照会
+  Clinician->>DispensingScreen: ✅ 疑義照会
+  DispensingScreen->>DispensingApi: ✅ 疑義照会
+  activate DispensingApi
+  DispensingApi->>Prescription: update
+  DispensingApi-->>DispensingScreen: 🖥️ 調剤・監査画面
+  DispensingScreen-->>Clinician: 🖥️ 調剤・監査画面
+  deactivate DispensingApi
 
   Note over Clinician,Prescription: ✅ Search Medication
   Clinician->>MedicationSearchScreen: ✅ Search Medication
@@ -2250,36 +3901,311 @@ sequenceDiagram
   MedicationCatalogApi-->>MedicationSearchScreen: 🖥️ Medication Search Screen
   MedicationSearchScreen-->>Clinician: 🖥️ Medication Search Screen
   deactivate MedicationCatalogApi
-
-  Note over Clinician,Prescription: ✅ Send Prescription
-  Clinician->>PrescriptionScreen: ✅ Send Prescription
-  PrescriptionScreen->>SendPrescriptionApi: ✅ Send Prescription
-  activate SendPrescriptionApi
-  SendPrescriptionApi->>Prescription: update
-  SendPrescriptionApi-->>PrescriptionScreen: 🖥️ Prescription Screen
-  PrescriptionScreen-->>Clinician: 🖥️ Prescription Screen
-  deactivate SendPrescriptionApi
 ```
 
-### 3.7 Billing Claims
+### 3.7 計算・会計
+
+| 項目 | 内容 |
+|---|---|
+| BUC | `BucVisitPayment` |
+| Business | `RevenueCycle` |
+| 主な actor | AccountsClerk（医事課 会計担当） |
+| 必要権限 | `BillCalculate`, `PaymentCollect` |
+| 主なデータ | `Appointment`, `Charge`, `PaymentTransaction`, `AccountBalance`, `InsurancePolicy`, `SelectedTreatmentFeeSetting` |
+
+診察の後の会計計算入力、患者の呼出、会計窓口または自動精算機での精算、領収証・明細書の交付を扱う。一部負担金は負担割合で計算し、限度額情報があれば窓口での支払は自己負担限度額までになる（`CopayCappedAtLimit`）。紹介状なしの初診で除外に当たらない場合は選定療養費を自費の Charge として算定する（`UnreferredFirstVisit`）。金額は病院の設定 `SelectedTreatmentFeeSetting` に置き、モデルは数値を持たない。
+
+レビュー観点:
+
+- 予約が 計算待ち → 会計待ち → 精算済 → 完了 と進み、受付時点で支払が発生しないか。
+- 選定療養費の除外（救急搬送、初診時にそのまま入院 など）が `ReferralCategory` の値として説明できるか。
+- 窓口精算と自動精算機の精算が同じ PaymentTransaction と未収金残高を更新してよいか。
+
+#### 計算・会計 RDRA Layered Graph 図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucVisitPayment --out samples/clinic-ops/out/buc/object_graph_visit_payment
+```
+
+```mermaid
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    AccountsClerk(["👤 医事課 会計担当"])
+    PaymentGateway[/"🌐 自動精算機・クレジット決済"/]
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    RevenueCycle["💼 Revenue Cycle"]
+    BucVisitPayment["📦 計算・会計"]
+    VisitPaymentFlow["🧭 計算・会計の流れ"]
+    CalculationStep(["➡️ 計算受付・会計計算入力"])
+    CallStep(["➡️ 会計の呼出"])
+    KioskStep(["➡️ 自動精算機で精算"])
+    ReceiptStep(["➡️ 領収証・明細書の交付"])
+    WindowStep(["➡️ 会計窓口で精算"])
+    AccountsWindow[/"📱 会計窓口"/]
+    BillingWorkstation[/"📱 Billing Workstation"/]
+    PaymentKiosk[/"📱 自動精算機"/]
+    BillCalculate["🔑 会計計算"]
+    PaymentCollect["🔑 窓口収納"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    ApplySelectedTreatmentFee(["✅ 選定療養費の算定"])
+    CalculateVisitBill(["✅ 会計計算入力"])
+    CallPatientForPayment(["✅ 会計の呼出"])
+    IssueReceipt(["✅ 領収証・明細書の交付"])
+    SettleAtKiosk(["✅ 自動精算機での精算"])
+    SettleAtWindow(["✅ 会計窓口での精算"])
+    BillCalculationScreen[["🖥️ 会計計算画面"]]
+    KioskScreen[["🖥️ 自動精算機画面"]]
+    PaymentWindowScreen[["🖥️ 会計窓口画面"]]
+    ChargeCodeField[["🔤 診療行為"]]
+    KioskReferenceField[["🔤 精算機の取引番号"]]
+    PaymentAmountField[["🔤 お支払額"]]
+    EvBillCalculated{"⚡ 会計計算完了"}
+    EvEncounterSigned{"⚡ Encounter Signed"}
+    EvPaymentSettled{"⚡ 自動精算機での精算完了"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    CalculateVisitBillApi["🔌 会計計算 API"]
+    ReceiptApi["🔌 領収証 API"]
+    SelectedFeeApi["🔌 選定療養費 API"]
+    SettlementApi["🔌 精算 API"]
+    AccountBalance[("🗄️ 未収金残高")]
+    Appointment[("🗄️ Appointment")]
+    Charge[("🗄️ Charge")]
+    Encounter[("🗄️ Encounter")]
+    InsurancePolicy[("🗄️ 保険資格")]
+    PaymentTransaction[("🗄️ Payment Transaction")]
+    SelectedTreatmentFeeSetting[("🗄️ 選定療養費の設定")]
+    BurdenRatio["🎚️ 負担割合"]
+    ChargeKind["🎚️ 診療費の種類"]
+    LimitCategory["🎚️ 限度額適用区分"]
+    ReferralCategory["🎚️ 紹介の有無"]
+    CopayCappedAtLimit{"🔀 窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"}
+    UnreferredFirstVisit{"🔀 紹介状なしの初診で、除外に当たらない"}
+  end
+  AccountsClerk -.->|has_permission| BillCalculate
+  AccountsClerk -.->|has_permission| PaymentCollect
+  AccountsClerk -->|performs| BucVisitPayment
+  AccountsClerk -->|performs| CalculateVisitBill
+  AccountsClerk -->|performs| ApplySelectedTreatmentFee
+  AccountsClerk -->|performs| CallPatientForPayment
+  AccountsClerk -->|performs| SettleAtWindow
+  AccountsClerk -->|performs| IssueReceipt
+  CalculateVisitBillApi -.->|reads| Charge
+  CalculateVisitBillApi -.->|reads| InsurancePolicy
+  CalculateVisitBillApi -.->|requires_permission| BillCalculate
+  CalculateVisitBillApi -.->|updates| Appointment
+  SelectedFeeApi -.->|creates| Charge
+  SelectedFeeApi -.->|reads| Encounter
+  SelectedFeeApi -.->|reads| SelectedTreatmentFeeSetting
+  SelectedFeeApi -.->|requires_permission| BillCalculate
+  SettlementApi -.->|creates| PaymentTransaction
+  SettlementApi -.->|requires_permission| PaymentCollect
+  SettlementApi -.->|updates| Appointment
+  SettlementApi -.->|updates| AccountBalance
+  ReceiptApi -.->|reads| Charge
+  ReceiptApi -.->|reads| PaymentTransaction
+  ReceiptApi -.->|requires_permission| PaymentCollect
+  ReceiptApi -.->|updates| Appointment
+  BucVisitPayment -.->|belongs| RevenueCycle
+  BucVisitPayment -->|contains| VisitPaymentFlow
+  BucVisitPayment -->|contains| CalculateVisitBill
+  BucVisitPayment -->|contains| ApplySelectedTreatmentFee
+  BucVisitPayment -->|contains| CallPatientForPayment
+  BucVisitPayment -->|contains| SettleAtWindow
+  BucVisitPayment -->|contains| SettleAtKiosk
+  BucVisitPayment -->|contains| IssueReceipt
+  CopayCappedAtLimit -.->|applies_to| CalculateVisitBill
+  CopayCappedAtLimit -.->|combines| Appointment
+  CopayCappedAtLimit -.->|combines| BurdenRatio
+  CopayCappedAtLimit -.->|combines| LimitCategory
+  UnreferredFirstVisit -.->|applies_to| ApplySelectedTreatmentFee
+  UnreferredFirstVisit -.->|combines| ReferralCategory
+  UnreferredFirstVisit -.->|combines| ChargeKind
+  Encounter ---|1:1| Appointment
+  Charge ---|N:1| Encounter
+  PaymentTransaction ---|N:1| Appointment
+  EvPaymentSettled -.->|triggers| SettleAtKiosk
+  EvBillCalculated -.->|triggers| PaymentGateway
+  EvBillCalculated -.->|triggers| CallPatientForPayment
+  EvEncounterSigned -.->|triggers| BucVisitPayment
+  PaymentGateway -.->|raises| EvPaymentSettled
+  KioskReferenceField -.->|maps_field| PaymentTransaction
+  PaymentAmountField -.->|maps_field| PaymentTransaction
+  ChargeCodeField -.->|maps_field| Charge
+  VisitPaymentFlow -->|contains| CalculationStep
+  VisitPaymentFlow -->|contains| CallStep
+  VisitPaymentFlow -->|contains| WindowStep
+  VisitPaymentFlow -->|contains| KioskStep
+  VisitPaymentFlow -->|contains| ReceiptStep
+  BillCalculationScreen -->|contains| ChargeCodeField
+  PaymentWindowScreen -->|contains| PaymentAmountField
+  KioskScreen -->|contains| KioskReferenceField
+  CalculationStep -.->|covers| CalculateVisitBill
+  CalculationStep -.->|covers| ApplySelectedTreatmentFee
+  CalculationStep -.->|precedes| CallStep
+  CallStep -.->|branches| KioskStep
+  CallStep -.->|covers| CallPatientForPayment
+  CallStep -.->|precedes| WindowStep
+  WindowStep -.->|covers| SettleAtWindow
+  WindowStep -.->|precedes| ReceiptStep
+  KioskStep -.->|covers| EvPaymentSettled
+  KioskStep -.->|covers| SettleAtKiosk
+  KioskStep -.->|precedes| ReceiptStep
+  ReceiptStep -.->|covers| IssueReceipt
+  CalculateVisitBill -.->|displays| BillCalculationScreen
+  CalculateVisitBill -.->|invokes| CalculateVisitBillApi
+  CalculateVisitBill -.->|raises| EvBillCalculated
+  CalculateVisitBill -.->|requires_medium| BillingWorkstation
+  CalculateVisitBill -.->|requires_permission| BillCalculate
+  ApplySelectedTreatmentFee -.->|displays| BillCalculationScreen
+  ApplySelectedTreatmentFee -.->|invokes| SelectedFeeApi
+  ApplySelectedTreatmentFee -.->|requires_medium| BillingWorkstation
+  ApplySelectedTreatmentFee -.->|requires_permission| BillCalculate
+  CallPatientForPayment -.->|displays| PaymentWindowScreen
+  CallPatientForPayment -.->|reads| Appointment
+  CallPatientForPayment -.->|requires_medium| AccountsWindow
+  SettleAtWindow -.->|displays| PaymentWindowScreen
+  SettleAtWindow -.->|invokes| SettlementApi
+  SettleAtWindow -.->|requires_medium| AccountsWindow
+  SettleAtWindow -.->|requires_permission| PaymentCollect
+  SettleAtKiosk -.->|displays| KioskScreen
+  SettleAtKiosk -.->|invokes| SettlementApi
+  SettleAtKiosk -.->|requires_medium| PaymentKiosk
+  IssueReceipt -.->|displays| PaymentWindowScreen
+  IssueReceipt -.->|invokes| ReceiptApi
+  IssueReceipt -.->|requires_medium| AccountsWindow
+  IssueReceipt -.->|requires_permission| PaymentCollect
+```
+
+#### 計算・会計 sequence 図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucVisitPayment --out samples/clinic-ops/out/buc/sequence_visit_payment
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor AccountsClerk as 👤 医事課 会計担当
+  end
+  box System Boundary
+    participant BillCalculationScreen as 🖥️ 会計計算画面
+    participant KioskScreen as 🖥️ 自動精算機画面
+    participant PaymentWindowScreen as 🖥️ 会計窓口画面
+  end
+  box System
+    participant System as 🧩 システム
+    participant CalculateVisitBillApi as 🔌 会計計算 API
+    participant ReceiptApi as 🔌 領収証 API
+    participant SelectedFeeApi as 🔌 選定療養費 API
+    participant SettlementApi as 🔌 精算 API
+    participant AccountBalance as 🗄️ 未収金残高
+    participant Appointment as 🗄️ Appointment
+    participant Charge as 🗄️ Charge
+    participant Encounter as 🗄️ Encounter
+    participant InsurancePolicy as 🗄️ 保険資格
+    participant PaymentTransaction as 🗄️ Payment Transaction
+    participant SelectedTreatmentFeeSetting as 🗄️ 選定療養費の設定
+  end
+
+  Note over AccountsClerk,SelectedTreatmentFeeSetting: ✅ 選定療養費の算定
+  AccountsClerk->>BillCalculationScreen: ✅ 選定療養費の算定
+  BillCalculationScreen->>SelectedFeeApi: ✅ 選定療養費の算定
+  activate SelectedFeeApi
+  SelectedFeeApi->>SelectedTreatmentFeeSetting: read
+  SelectedFeeApi->>Encounter: read
+  SelectedFeeApi->>Charge: create
+  SelectedFeeApi-->>BillCalculationScreen: 🖥️ 会計計算画面
+  BillCalculationScreen-->>AccountsClerk: 🖥️ 会計計算画面
+  deactivate SelectedFeeApi
+
+  Note over AccountsClerk,SelectedTreatmentFeeSetting: ✅ 会計計算入力
+  AccountsClerk->>BillCalculationScreen: ✅ 会計計算入力
+  BillCalculationScreen->>CalculateVisitBillApi: ✅ 会計計算入力
+  activate CalculateVisitBillApi
+  CalculateVisitBillApi->>Charge: read
+  CalculateVisitBillApi->>InsurancePolicy: read
+  CalculateVisitBillApi->>Appointment: update
+  CalculateVisitBillApi-->>BillCalculationScreen: 🖥️ 会計計算画面
+  BillCalculationScreen-->>AccountsClerk: 🖥️ 会計計算画面
+  deactivate CalculateVisitBillApi
+
+  Note over AccountsClerk,SelectedTreatmentFeeSetting: ✅ 会計の呼出
+  AccountsClerk->System: ✅ 会計の呼出
+  activate System
+  System->>Appointment: read
+  System-->>AccountsClerk: 🖥️ 会計窓口画面
+  deactivate System
+
+  Note over AccountsClerk,SelectedTreatmentFeeSetting: ✅ 領収証・明細書の交付
+  AccountsClerk->>PaymentWindowScreen: ✅ 領収証・明細書の交付
+  PaymentWindowScreen->>ReceiptApi: ✅ 領収証・明細書の交付
+  activate ReceiptApi
+  ReceiptApi->>PaymentTransaction: read
+  ReceiptApi->>Charge: read
+  ReceiptApi->>Appointment: update
+  ReceiptApi-->>PaymentWindowScreen: 🖥️ 会計窓口画面
+  PaymentWindowScreen-->>AccountsClerk: 🖥️ 会計窓口画面
+  deactivate ReceiptApi
+
+  Note over AccountsClerk,SelectedTreatmentFeeSetting: ✅ 自動精算機での精算
+  AccountsClerk->>KioskScreen: ✅ 自動精算機での精算
+  KioskScreen->>SettlementApi: ✅ 自動精算機での精算
+  activate SettlementApi
+  rect rgb(245,245,245)
+    Note right of SettlementApi: transaction (API atomic boundary)
+    SettlementApi->>AccountBalance: update
+    SettlementApi->>Appointment: update
+    SettlementApi->>PaymentTransaction: create
+  end
+  SettlementApi-->>KioskScreen: 🖥️ 自動精算機画面
+  KioskScreen-->>AccountsClerk: 🖥️ 自動精算機画面
+  deactivate SettlementApi
+
+  Note over AccountsClerk,SelectedTreatmentFeeSetting: ✅ 会計窓口での精算
+  AccountsClerk->>PaymentWindowScreen: ✅ 会計窓口での精算
+  PaymentWindowScreen->>SettlementApi: ✅ 会計窓口での精算
+  activate SettlementApi
+  rect rgb(245,245,245)
+    Note right of SettlementApi: transaction (API atomic boundary)
+    SettlementApi->>AccountBalance: update
+    SettlementApi->>Appointment: update
+    SettlementApi->>PaymentTransaction: create
+  end
+  SettlementApi-->>PaymentWindowScreen: 🖥️ 会計窓口画面
+  PaymentWindowScreen-->>AccountsClerk: 🖥️ 会計窓口画面
+  deactivate SettlementApi
+```
+
+### 3.8 レセプト作成・請求
 
 | 項目 | 内容 |
 |---|---|
 | BUC | `BucBillingClaims` |
 | Business | `RevenueCycle` |
-| 主な actor | BillingSpecialist |
+| 主な actor | ClaimsClerk（医事課 レセプト担当） |
 | 必要権限 | `BillingClaimWrite`, `PaymentPost` |
-| 主なデータ | `Charge`, `Claim`, `InsurancePolicy`, `PaymentTransaction`, `AccountBalance` |
+| 主なデータ | `ClaimStatement`, `Charge`, `InsurancePolicy`, `AccountBalance` |
 
-診療署名後のチャージ作成、請求生成、請求送信、受理/否認、入金、残高消込を扱う。Revenue Cycle の状態検証では Claim が中心になる。
+レセプト（患者 × 診療月 × 保険者）の作成・院内点検・請求と、審査支払機関（支払基金・国保連）からの受付不能・返戻・査定・支払への対応を扱う。前月分は翌月10日までに請求し、受付不能・要確認は11日・12日に再送する。返戻は訂正して当月分と併せて再請求できるが、査定は再請求できず再審査請求で争う。資格が変わったレセプトは審査支払機関が振替・分割するので返戻にならないが、負担割合が異なる変更や公費の分割はできず返戻になる。支払は診療の翌々月。期間のうち DSL で表せないもの（10日、11・12日、5日〜月末、3か月、翌々月）はタイマーとコメントで示す。
 
 レビュー観点:
 
-- CreateCharge が AccountBalance も更新する境界でよいか。
-- GenerateClaim と SubmitClaim を分ける必要があるか。
-- PostPayment と ReconcileBalance の責務境界が明確か。
+- 返戻（stmtreturned → stmtinspecting）と査定（stmtassessed → stmtrereview）の出口が区別されているか。
+- 保留（月遅れ）と受付不能が、それぞれ請求前と請求後の状態として説明できるか。
+- GenerateClaimStatement が Charge を更新しない（読むだけ）ことで、レセプトの検証が受診の状態から切り離されていることが妥当か。
 
-#### Billing Claims RDRA Layered Graph 図
+#### レセプト作成・請求 RDRA Layered Graph 図
 
 生成コマンド:
 
@@ -2291,107 +4217,245 @@ rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucBillin
 flowchart LR
   subgraph layer_value[System Value]
     direction TB
-    BillingSpecialist(["👤 Billing Specialist"])
+    ClaimsClerk(["👤 医事課 レセプト担当"])
+    ClaimsReviewOrganization[/"🌐 審査支払機関（支払基金・国保連）"/]
   end
   subgraph layer_environment[External Environment]
     direction TB
     RevenueCycle["💼 Revenue Cycle"]
-    BucBillingClaims["📦 Bill and Collect Claims"]
+    BucBillingClaims["📦 レセプト作成・請求"]
+    ClaimCycleFlow["🧭 レセプトの月次サイクル"]
+    AssessStep(["➡️ 査定と再審査請求"])
+    CreateStatementStep(["➡️ レセプト作成（月初）"])
+    HoldStep(["➡️ 保留（月遅れ）"])
+    InspectStep(["➡️ 院内点検"])
+    PaidStep(["➡️ 支払（診療翌々月）"])
+    ReceiptErrorStep(["➡️ 受付不能・要確認の再送（11日・12日）"])
+    ReturnStep(["➡️ 返戻と再請求"])
+    ReviewStep(["➡️ 審査"])
+    SubmitStep(["➡️ 請求（5日～10日）"])
+    ErrorResendWindow["⏱️ エラー分レセプトの再送（毎月11日・12日）"]
+    MonthlyClaimCreation["⏱️ 前月分レセプトの作成（月初）"]
+    MonthlyClaimDeadline["⏱️ 前月分レセプトの請求（毎月5日～10日）"]
+    ReceivablesMonthlyReview["⏱️ 未収金管理台帳の作成（毎月）"]
+    ReturnDownloadCheck["⏱️ 返戻レセプトの取得（3か月以内）"]
     BillingWorkstation[/"📱 Billing Workstation"/]
-    BillingClaimWrite["🔑 Billing Claim Write"]
+    ClinicalWorkstation[/"📱 Clinical Workstation"/]
+    OnlineClaimTerminal[/"📱 オンライン請求用端末"/]
+    BillingClaimWrite["🔑 レセプト業務"]
     PaymentPost["🔑 Payment Post"]
   end
   subgraph layer_boundary[System Boundary]
     direction TB
-    CreateCharge(["✅ Create Charge"])
-    GenerateClaim(["✅ Generate Claim"])
-    PostPayment(["✅ Post Payment"])
-    ReceiveClaimAccepted(["✅ Receive Claim Accepted"])
-    ReconcileBalance(["✅ Reconcile Balance"])
-    RecordClaimDenial(["✅ Record Claim Denial"])
-    SubmitClaim(["✅ Submit Claim"])
-    VoidCharge(["✅ Void Charge"])
-    BalanceScreen[["🖥️ Balance Screen"]]
+    CorrectReturnedStatement(["✅ 返戻レセプトの訂正（再請求）"])
+    CreateCharge(["✅ コスト情報の登録"])
+    GenerateClaimStatement(["✅ レセプト作成"])
+    HoldClaimStatement(["✅ レセプトの保留（月遅れ）"])
+    InspectClaimStatement(["✅ レセプトの院内点検"])
+    PostPayment(["✅ 診療報酬の入金"])
+    ReceiveClaimAccepted(["✅ レセプト受付（審査へ）"])
+    ReconcileBalance(["✅ 未収金管理台帳の作成"])
+    RecordClaimAssessment(["✅ 査定の取込"])
+    RecordClaimReturn(["✅ 返戻レセプトの取込"])
+    RecordReceiptError(["✅ 受付不能・要確認の確認"])
+    ReleaseHeldStatement(["✅ 保留レセプトの再提出準備"])
+    RequestReexamination(["✅ 再審査請求"])
+    ResendErroredStatement(["✅ エラー分レセプトの再送"])
+    ReviewClaimTransfer(["✅ 資格の振替・分割の確認"])
+    SubmitClaimStatements(["✅ レセプト請求"])
+    VoidCharge(["✅ コストの取消"])
+    BalanceScreen[["🖥️ 未収金画面"]]
     ChargeWorklistScreen[["🖥️ Charge Worklist Screen"]]
-    ClaimScreen[["🖥️ Claim Screen"]]
-    PaymentPostingScreen[["🖥️ Payment Posting Screen"]]
-    EvClaimAccepted{"⚡ Claim Accepted"}
-    EvClaimDenied{"⚡ Claim Denied"}
-    EvClaimPaid{"⚡ Claim Paid"}
-    EvClaimSubmitted{"⚡ Claim Submitted"}
+    ClaimScreen[["🖥️ レセプト画面"]]
+    PaymentPostingScreen[["🖥️ 入金画面"]]
+    EvClaimAccepted{"⚡ レセプト受付"}
+    EvClaimAssessed{"⚡ 査定"}
+    EvClaimReceiptError{"⚡ 受付不能・要確認"}
+    EvClaimReturned{"⚡ 返戻"}
+    EvClaimStatementsSubmitted{"⚡ レセプト請求"}
+    EvClaimTransferred{"⚡ 資格の振替・分割"}
+    EvEncounterSigned{"⚡ Encounter Signed"}
+    EvRemittance{"⚡ 診療報酬の支払"}
   end
   subgraph layer_system[System]
     direction TB
-    BalanceApi["🔌 Balance API"]
+    BalanceApi["🔌 未収金 API"]
+    ClaimEditApi["🔌 レセプト点検・訂正 API"]
+    ClaimResultApi["🔌 審査結果 API"]
     CreateChargeApi["🔌 Create Charge API"]
-    GenerateClaimApi["🔌 Generate Claim API"]
-    PaymentPostApi["🔌 Payment Posting API"]
-    SubmitClaimApi["🔌 Submit Claim API"]
-    AccountBalance[("🗄️ Account Balance")]
+    GenerateClaimApi["🔌 レセプト作成 API"]
+    PaymentPostApi["🔌 入金 API"]
+    SubmitClaimApi["🔌 オンライン請求 API"]
+    AccountBalance[("🗄️ 未収金残高")]
     Charge[("🗄️ Charge")]
-    Claim[("🗄️ Claim")]
+    ClaimStatement[("🗄️ レセプト")]
     Encounter[("🗄️ Encounter")]
-    InsurancePolicy[("🗄️ Insurance Policy")]
+    InsurancePolicy[("🗄️ 保険資格")]
     PaymentTransaction[("🗄️ Payment Transaction")]
+    PayerChange["🎚️ 資格変更の種類"]
+    TransferNotPossible{"🔀 振替・分割の対象外（負担割合の相違・公費）"}
   end
-  BillingSpecialist -.->|has_permission| BillingClaimWrite
-  BillingSpecialist -.->|has_permission| PaymentPost
-  BillingSpecialist -->|performs| BucBillingClaims
-  CreateChargeApi -.->|creates| Charge
-  CreateChargeApi -.->|reads| Encounter
-  CreateChargeApi -.->|requires_permission| BillingClaimWrite
-  CreateChargeApi -.->|updates| AccountBalance
-  GenerateClaimApi -.->|creates| Claim
-  GenerateClaimApi -.->|reads| InsurancePolicy
-  GenerateClaimApi -.->|requires_permission| BillingClaimWrite
-  GenerateClaimApi -.->|updates| Charge
+  ClaimsClerk -.->|has_permission| BillingClaimWrite
+  ClaimsClerk -.->|has_permission| PaymentPost
+  ClaimsClerk -->|performs| BucBillingClaims
+  ClaimsClerk -->|performs| InspectClaimStatement
+  ClaimsClerk -->|performs| HoldClaimStatement
+  ClaimsClerk -->|performs| ReleaseHeldStatement
+  ClaimsClerk -->|performs| CorrectReturnedStatement
+  ClaimsClerk -->|performs| RequestReexamination
+  ClaimsClerk -->|performs| ReconcileBalance
+  ClaimsClerk -->|performs| VoidCharge
   SubmitClaimApi -.->|requires_permission| BillingClaimWrite
-  SubmitClaimApi -.->|updates| Claim
-  PaymentPostApi -.->|creates| PaymentTransaction
+  SubmitClaimApi -.->|updates| ClaimStatement
+  ClaimResultApi -.->|requires_permission| BillingClaimWrite
+  ClaimResultApi -.->|updates| ClaimStatement
   PaymentPostApi -.->|requires_permission| PaymentPost
-  PaymentPostApi -.->|updates| Claim
+  PaymentPostApi -.->|updates| ClaimStatement
   BalanceApi -.->|reads| PaymentTransaction
   BalanceApi -.->|requires_permission| PaymentPost
   BalanceApi -.->|updates| AccountBalance
+  CreateChargeApi -.->|creates| Charge
+  CreateChargeApi -.->|reads| Encounter
+  GenerateClaimApi -.->|creates| ClaimStatement
+  GenerateClaimApi -.->|reads| Charge
+  GenerateClaimApi -.->|reads| InsurancePolicy
+  GenerateClaimApi -.->|requires_permission| BillingClaimWrite
+  ClaimEditApi -.->|requires_permission| BillingClaimWrite
+  ClaimEditApi -.->|updates| ClaimStatement
   BucBillingClaims -.->|belongs| RevenueCycle
-  BucBillingClaims -->|contains| CreateCharge
-  BucBillingClaims -->|contains| GenerateClaim
-  BucBillingClaims -->|contains| SubmitClaim
+  BucBillingClaims -->|contains| ClaimCycleFlow
+  BucBillingClaims -->|contains| InspectClaimStatement
+  BucBillingClaims -->|contains| HoldClaimStatement
+  BucBillingClaims -->|contains| ReleaseHeldStatement
+  BucBillingClaims -->|contains| SubmitClaimStatements
+  BucBillingClaims -->|contains| RecordReceiptError
+  BucBillingClaims -->|contains| ResendErroredStatement
   BucBillingClaims -->|contains| ReceiveClaimAccepted
-  BucBillingClaims -->|contains| RecordClaimDenial
+  BucBillingClaims -->|contains| ReviewClaimTransfer
+  BucBillingClaims -->|contains| RecordClaimReturn
+  BucBillingClaims -->|contains| CorrectReturnedStatement
+  BucBillingClaims -->|contains| RecordClaimAssessment
+  BucBillingClaims -->|contains| RequestReexamination
   BucBillingClaims -->|contains| PostPayment
   BucBillingClaims -->|contains| ReconcileBalance
   BucBillingClaims -->|contains| VoidCharge
+  BucBillingClaims -->|contains| CreateCharge
+  BucBillingClaims -->|contains| GenerateClaimStatement
+  TransferNotPossible -.->|applies_to| RecordClaimReturn
+  TransferNotPossible -.->|combines| ClaimStatement
+  TransferNotPossible -.->|combines| PayerChange
   Charge ---|N:1| Encounter
-  Charge ---|N:1| Claim
-  Claim ---|N:1| InsurancePolicy
-  PaymentTransaction ---|N:1| Claim
-  CreateCharge -.->|displays| ChargeWorklistScreen
-  CreateCharge -.->|invokes| CreateChargeApi
-  CreateCharge -.->|requires_medium| BillingWorkstation
-  CreateCharge -.->|requires_permission| BillingClaimWrite
-  GenerateClaim -.->|displays| ClaimScreen
-  GenerateClaim -.->|invokes| GenerateClaimApi
-  GenerateClaim -.->|requires_medium| BillingWorkstation
-  GenerateClaim -.->|requires_permission| BillingClaimWrite
-  SubmitClaim -.->|displays| ClaimScreen
-  SubmitClaim -.->|invokes| SubmitClaimApi
-  SubmitClaim -.->|raises| EvClaimSubmitted
-  SubmitClaim -.->|requires_medium| BillingWorkstation
-  SubmitClaim -.->|requires_permission| BillingClaimWrite
+  Charge ---|N:1| ClaimStatement
+  ClaimStatement ---|N:1| InsurancePolicy
+  EvClaimStatementsSubmitted -.->|triggers| ClaimsReviewOrganization
+  EvClaimReceiptError -.->|triggers| RecordReceiptError
+  EvClaimAccepted -.->|triggers| ReceiveClaimAccepted
+  EvClaimReturned -.->|triggers| RecordClaimReturn
+  EvClaimAssessed -.->|triggers| RecordClaimAssessment
+  EvClaimTransferred -.->|triggers| ReviewClaimTransfer
+  EvRemittance -.->|triggers| PostPayment
+  EvEncounterSigned -.->|triggers| BucBillingClaims
+  EvEncounterSigned -.->|triggers| CreateCharge
+  ClaimsReviewOrganization -.->|raises| EvClaimReceiptError
+  ClaimsReviewOrganization -.->|raises| EvClaimAccepted
+  ClaimsReviewOrganization -.->|raises| EvClaimReturned
+  ClaimsReviewOrganization -.->|raises| EvClaimAssessed
+  ClaimsReviewOrganization -.->|raises| EvClaimTransferred
+  ClaimsReviewOrganization -.->|raises| EvRemittance
+  ClaimCycleFlow -->|contains| CreateStatementStep
+  ClaimCycleFlow -->|contains| InspectStep
+  ClaimCycleFlow -->|contains| HoldStep
+  ClaimCycleFlow -->|contains| SubmitStep
+  ClaimCycleFlow -->|contains| ReceiptErrorStep
+  ClaimCycleFlow -->|contains| ReviewStep
+  ClaimCycleFlow -->|contains| ReturnStep
+  ClaimCycleFlow -->|contains| AssessStep
+  ClaimCycleFlow -->|contains| PaidStep
+  CreateStatementStep -.->|covers| MonthlyClaimCreation
+  CreateStatementStep -.->|covers| GenerateClaimStatement
+  CreateStatementStep -.->|precedes| InspectStep
+  InspectStep -.->|branches| HoldStep
+  InspectStep -.->|covers| InspectClaimStatement
+  InspectStep -.->|precedes| SubmitStep
+  HoldStep -.->|covers| HoldClaimStatement
+  HoldStep -.->|covers| ReleaseHeldStatement
+  HoldStep -.->|repeats| InspectStep
+  SubmitStep -.->|covers| MonthlyClaimDeadline
+  SubmitStep -.->|covers| SubmitClaimStatements
+  SubmitStep -.->|excepts| ReceiptErrorStep
+  SubmitStep -.->|precedes| ReviewStep
+  ReceiptErrorStep -.->|covers| ErrorResendWindow
+  ReceiptErrorStep -.->|covers| RecordReceiptError
+  ReceiptErrorStep -.->|covers| ResendErroredStatement
+  ReceiptErrorStep -.->|repeats| SubmitStep
+  ReviewStep -.->|branches| AssessStep
+  ReviewStep -.->|covers| ReceiveClaimAccepted
+  ReviewStep -.->|covers| ReviewClaimTransfer
+  ReviewStep -.->|excepts| ReturnStep
+  ReviewStep -.->|precedes| PaidStep
+  ReturnStep -.->|covers| RecordClaimReturn
+  ReturnStep -.->|covers| CorrectReturnedStatement
+  ReturnStep -.->|repeats| InspectStep
+  AssessStep -.->|covers| RecordClaimAssessment
+  AssessStep -.->|covers| RequestReexamination
+  AssessStep -.->|precedes| PaidStep
+  PaidStep -.->|covers| PostPayment
+  MonthlyClaimCreation -.->|triggers| GenerateClaimStatement
+  MonthlyClaimDeadline -.->|triggers| SubmitClaimStatements
+  ErrorResendWindow -.->|triggers| ResendErroredStatement
+  ReturnDownloadCheck -.->|triggers| RecordClaimReturn
+  ReceivablesMonthlyReview -.->|triggers| ReconcileBalance
+  InspectClaimStatement -.->|displays| ClaimScreen
+  InspectClaimStatement -.->|invokes| ClaimEditApi
+  InspectClaimStatement -.->|requires_medium| BillingWorkstation
+  InspectClaimStatement -.->|requires_permission| BillingClaimWrite
+  HoldClaimStatement -.->|displays| ClaimScreen
+  HoldClaimStatement -.->|invokes| ClaimEditApi
+  HoldClaimStatement -.->|requires_medium| BillingWorkstation
+  HoldClaimStatement -.->|requires_permission| BillingClaimWrite
+  ReleaseHeldStatement -.->|displays| ClaimScreen
+  ReleaseHeldStatement -.->|invokes| ClaimEditApi
+  ReleaseHeldStatement -.->|requires_medium| BillingWorkstation
+  ReleaseHeldStatement -.->|requires_permission| BillingClaimWrite
+  SubmitClaimStatements -.->|displays| ClaimScreen
+  SubmitClaimStatements -.->|invokes| SubmitClaimApi
+  SubmitClaimStatements -.->|raises| EvClaimStatementsSubmitted
+  SubmitClaimStatements -.->|requires_medium| OnlineClaimTerminal
+  SubmitClaimStatements -.->|requires_permission| BillingClaimWrite
+  RecordReceiptError -.->|displays| ClaimScreen
+  RecordReceiptError -.->|invokes| ClaimResultApi
+  RecordReceiptError -.->|requires_medium| OnlineClaimTerminal
+  RecordReceiptError -.->|requires_permission| BillingClaimWrite
+  ResendErroredStatement -.->|displays| ClaimScreen
+  ResendErroredStatement -.->|invokes| SubmitClaimApi
+  ResendErroredStatement -.->|requires_medium| OnlineClaimTerminal
+  ResendErroredStatement -.->|requires_permission| BillingClaimWrite
   ReceiveClaimAccepted -.->|displays| ClaimScreen
-  ReceiveClaimAccepted -.->|raises| EvClaimAccepted
-  ReceiveClaimAccepted -.->|requires_medium| BillingWorkstation
+  ReceiveClaimAccepted -.->|invokes| ClaimResultApi
+  ReceiveClaimAccepted -.->|requires_medium| OnlineClaimTerminal
   ReceiveClaimAccepted -.->|requires_permission| BillingClaimWrite
-  ReceiveClaimAccepted -.->|updates| Claim
-  RecordClaimDenial -.->|displays| ClaimScreen
-  RecordClaimDenial -.->|raises| EvClaimDenied
-  RecordClaimDenial -.->|requires_medium| BillingWorkstation
-  RecordClaimDenial -.->|requires_permission| BillingClaimWrite
-  RecordClaimDenial -.->|updates| Claim
+  ReviewClaimTransfer -.->|displays| ClaimScreen
+  ReviewClaimTransfer -.->|reads| ClaimStatement
+  ReviewClaimTransfer -.->|requires_medium| OnlineClaimTerminal
+  ReviewClaimTransfer -.->|requires_permission| BillingClaimWrite
+  RecordClaimReturn -.->|displays| ClaimScreen
+  RecordClaimReturn -.->|invokes| ClaimResultApi
+  RecordClaimReturn -.->|requires_medium| OnlineClaimTerminal
+  RecordClaimReturn -.->|requires_permission| BillingClaimWrite
+  CorrectReturnedStatement -.->|displays| ClaimScreen
+  CorrectReturnedStatement -.->|invokes| ClaimEditApi
+  CorrectReturnedStatement -.->|requires_medium| BillingWorkstation
+  CorrectReturnedStatement -.->|requires_permission| BillingClaimWrite
+  RecordClaimAssessment -.->|displays| ClaimScreen
+  RecordClaimAssessment -.->|invokes| ClaimResultApi
+  RecordClaimAssessment -.->|requires_medium| OnlineClaimTerminal
+  RecordClaimAssessment -.->|requires_permission| BillingClaimWrite
+  RequestReexamination -.->|displays| ClaimScreen
+  RequestReexamination -.->|invokes| SubmitClaimApi
+  RequestReexamination -.->|requires_medium| OnlineClaimTerminal
+  RequestReexamination -.->|requires_permission| BillingClaimWrite
   PostPayment -.->|displays| PaymentPostingScreen
   PostPayment -.->|invokes| PaymentPostApi
-  PostPayment -.->|raises| EvClaimPaid
   PostPayment -.->|requires_medium| BillingWorkstation
   PostPayment -.->|requires_permission| PaymentPost
   ReconcileBalance -.->|displays| BalanceScreen
@@ -2402,10 +4466,16 @@ flowchart LR
   VoidCharge -.->|requires_medium| BillingWorkstation
   VoidCharge -.->|requires_permission| BillingClaimWrite
   VoidCharge -.->|updates| Charge
-
+  CreateCharge -.->|displays| ChargeWorklistScreen
+  CreateCharge -.->|invokes| CreateChargeApi
+  CreateCharge -.->|requires_medium| ClinicalWorkstation
+  GenerateClaimStatement -.->|displays| ClaimScreen
+  GenerateClaimStatement -.->|invokes| GenerateClaimApi
+  GenerateClaimStatement -.->|requires_medium| BillingWorkstation
+  GenerateClaimStatement -.->|requires_permission| BillingClaimWrite
 ```
 
-#### Billing Claims sequence 図
+#### レセプト作成・請求 sequence 図
 
 生成コマンド:
 
@@ -2416,112 +4486,186 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucBi
 ```mermaid
 sequenceDiagram
   box System Value
-    actor BillingSpecialist as 👤 Billing Specialist
+    actor ClaimsClerk as 👤 医事課 レセプト担当
   end
   box System Boundary
-    participant BalanceScreen as 🖥️ Balance Screen
+    participant BalanceScreen as 🖥️ 未収金画面
     participant ChargeWorklistScreen as 🖥️ Charge Worklist Screen
-    participant ClaimScreen as 🖥️ Claim Screen
-    participant PaymentPostingScreen as 🖥️ Payment Posting Screen
+    participant ClaimScreen as 🖥️ レセプト画面
+    participant PaymentPostingScreen as 🖥️ 入金画面
   end
   box System
     participant System as 🧩 システム
-    participant BalanceApi as 🔌 Balance API
+    participant BalanceApi as 🔌 未収金 API
+    participant ClaimEditApi as 🔌 レセプト点検・訂正 API
+    participant ClaimResultApi as 🔌 審査結果 API
     participant CreateChargeApi as 🔌 Create Charge API
-    participant GenerateClaimApi as 🔌 Generate Claim API
-    participant PaymentPostApi as 🔌 Payment Posting API
-    participant SubmitClaimApi as 🔌 Submit Claim API
-    participant AccountBalance as 🗄️ Account Balance
+    participant GenerateClaimApi as 🔌 レセプト作成 API
+    participant PaymentPostApi as 🔌 入金 API
+    participant SubmitClaimApi as 🔌 オンライン請求 API
+    participant AccountBalance as 🗄️ 未収金残高
     participant Charge as 🗄️ Charge
-    participant Claim as 🗄️ Claim
+    participant ClaimStatement as 🗄️ レセプト
     participant Encounter as 🗄️ Encounter
-    participant InsurancePolicy as 🗄️ Insurance Policy
+    participant InsurancePolicy as 🗄️ 保険資格
     participant PaymentTransaction as 🗄️ Payment Transaction
   end
 
-  Note over BillingSpecialist,PaymentTransaction: ✅ Create Charge
-  BillingSpecialist->>ChargeWorklistScreen: ✅ Create Charge
-  ChargeWorklistScreen->>CreateChargeApi: ✅ Create Charge
+  Note over ClaimsClerk,PaymentTransaction: ✅ 返戻レセプトの訂正（再請求）
+  ClaimsClerk->>ClaimScreen: ✅ 返戻レセプトの訂正（再請求）
+  ClaimScreen->>ClaimEditApi: ✅ 返戻レセプトの訂正（再請求）
+  activate ClaimEditApi
+  ClaimEditApi->>ClaimStatement: update
+  ClaimEditApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimEditApi
+
+  Note over ClaimsClerk,PaymentTransaction: ✅ コスト情報の登録
+  ClaimsClerk->>ChargeWorklistScreen: ✅ コスト情報の登録
+  ChargeWorklistScreen->>CreateChargeApi: ✅ コスト情報の登録
   activate CreateChargeApi
   CreateChargeApi->>Encounter: read
-  rect rgb(245,245,245)
-    Note right of CreateChargeApi: transaction (API atomic boundary)
-    CreateChargeApi->>AccountBalance: update
-    CreateChargeApi->>Charge: create
-  end
+  CreateChargeApi->>Charge: create
   CreateChargeApi-->>ChargeWorklistScreen: 🖥️ Charge Worklist Screen
-  ChargeWorklistScreen-->>BillingSpecialist: 🖥️ Charge Worklist Screen
+  ChargeWorklistScreen-->>ClaimsClerk: 🖥️ Charge Worklist Screen
   deactivate CreateChargeApi
 
-  Note over BillingSpecialist,PaymentTransaction: ✅ Generate Claim
-  BillingSpecialist->>ClaimScreen: ✅ Generate Claim
-  ClaimScreen->>GenerateClaimApi: ✅ Generate Claim
+  Note over ClaimsClerk,PaymentTransaction: ✅ レセプト作成
+  ClaimsClerk->>ClaimScreen: ✅ レセプト作成
+  ClaimScreen->>GenerateClaimApi: ✅ レセプト作成
   activate GenerateClaimApi
+  GenerateClaimApi->>Charge: read
   GenerateClaimApi->>InsurancePolicy: read
-  rect rgb(245,245,245)
-    Note right of GenerateClaimApi: transaction (API atomic boundary)
-    GenerateClaimApi->>Claim: create
-    GenerateClaimApi->>Charge: update
-  end
-  GenerateClaimApi-->>ClaimScreen: 🖥️ Claim Screen
-  ClaimScreen-->>BillingSpecialist: 🖥️ Claim Screen
+  GenerateClaimApi->>ClaimStatement: create
+  GenerateClaimApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
   deactivate GenerateClaimApi
 
-  Note over BillingSpecialist,PaymentTransaction: ✅ Post Payment
-  BillingSpecialist->>PaymentPostingScreen: ✅ Post Payment
-  PaymentPostingScreen->>PaymentPostApi: ✅ Post Payment
+  Note over ClaimsClerk,PaymentTransaction: ✅ レセプトの保留（月遅れ）
+  ClaimsClerk->>ClaimScreen: ✅ レセプトの保留（月遅れ）
+  ClaimScreen->>ClaimEditApi: ✅ レセプトの保留（月遅れ）
+  activate ClaimEditApi
+  ClaimEditApi->>ClaimStatement: update
+  ClaimEditApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimEditApi
+
+  Note over ClaimsClerk,PaymentTransaction: ✅ レセプトの院内点検
+  ClaimsClerk->>ClaimScreen: ✅ レセプトの院内点検
+  ClaimScreen->>ClaimEditApi: ✅ レセプトの院内点検
+  activate ClaimEditApi
+  ClaimEditApi->>ClaimStatement: update
+  ClaimEditApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimEditApi
+
+  Note over ClaimsClerk,PaymentTransaction: ✅ 診療報酬の入金
+  ClaimsClerk->>PaymentPostingScreen: ✅ 診療報酬の入金
+  PaymentPostingScreen->>PaymentPostApi: ✅ 診療報酬の入金
   activate PaymentPostApi
-  rect rgb(245,245,245)
-    Note right of PaymentPostApi: transaction (API atomic boundary)
-    PaymentPostApi->>Claim: update
-    PaymentPostApi->>PaymentTransaction: create
-  end
-  PaymentPostApi-->>PaymentPostingScreen: 🖥️ Payment Posting Screen
-  PaymentPostingScreen-->>BillingSpecialist: 🖥️ Payment Posting Screen
+  PaymentPostApi->>ClaimStatement: update
+  PaymentPostApi-->>PaymentPostingScreen: 🖥️ 入金画面
+  PaymentPostingScreen-->>ClaimsClerk: 🖥️ 入金画面
   deactivate PaymentPostApi
 
-  Note over BillingSpecialist,PaymentTransaction: ✅ Receive Claim Accepted
-  BillingSpecialist->System: ✅ Receive Claim Accepted
-  activate System
-  System->>Claim: update
-  System-->>BillingSpecialist: 🖥️ Claim Screen
-  deactivate System
+  Note over ClaimsClerk,PaymentTransaction: ✅ レセプト受付（審査へ）
+  ClaimsClerk->>ClaimScreen: ✅ レセプト受付（審査へ）
+  ClaimScreen->>ClaimResultApi: ✅ レセプト受付（審査へ）
+  activate ClaimResultApi
+  ClaimResultApi->>ClaimStatement: update
+  ClaimResultApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimResultApi
 
-  Note over BillingSpecialist,PaymentTransaction: ✅ Reconcile Balance
-  BillingSpecialist->>BalanceScreen: ✅ Reconcile Balance
-  BalanceScreen->>BalanceApi: ✅ Reconcile Balance
+  Note over ClaimsClerk,PaymentTransaction: ✅ 未収金管理台帳の作成
+  ClaimsClerk->>BalanceScreen: ✅ 未収金管理台帳の作成
+  BalanceScreen->>BalanceApi: ✅ 未収金管理台帳の作成
   activate BalanceApi
   BalanceApi->>PaymentTransaction: read
   BalanceApi->>AccountBalance: update
-  BalanceApi-->>BalanceScreen: 🖥️ Balance Screen
-  BalanceScreen-->>BillingSpecialist: 🖥️ Balance Screen
+  BalanceApi-->>BalanceScreen: 🖥️ 未収金画面
+  BalanceScreen-->>ClaimsClerk: 🖥️ 未収金画面
   deactivate BalanceApi
 
-  Note over BillingSpecialist,PaymentTransaction: ✅ Record Claim Denial
-  BillingSpecialist->System: ✅ Record Claim Denial
-  activate System
-  System->>Claim: update
-  System-->>BillingSpecialist: 🖥️ Claim Screen
-  deactivate System
+  Note over ClaimsClerk,PaymentTransaction: ✅ 査定の取込
+  ClaimsClerk->>ClaimScreen: ✅ 査定の取込
+  ClaimScreen->>ClaimResultApi: ✅ 査定の取込
+  activate ClaimResultApi
+  ClaimResultApi->>ClaimStatement: update
+  ClaimResultApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimResultApi
 
-  Note over BillingSpecialist,PaymentTransaction: ✅ Submit Claim
-  BillingSpecialist->>ClaimScreen: ✅ Submit Claim
-  ClaimScreen->>SubmitClaimApi: ✅ Submit Claim
+  Note over ClaimsClerk,PaymentTransaction: ✅ 返戻レセプトの取込
+  ClaimsClerk->>ClaimScreen: ✅ 返戻レセプトの取込
+  ClaimScreen->>ClaimResultApi: ✅ 返戻レセプトの取込
+  activate ClaimResultApi
+  ClaimResultApi->>ClaimStatement: update
+  ClaimResultApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimResultApi
+
+  Note over ClaimsClerk,PaymentTransaction: ✅ 受付不能・要確認の確認
+  ClaimsClerk->>ClaimScreen: ✅ 受付不能・要確認の確認
+  ClaimScreen->>ClaimResultApi: ✅ 受付不能・要確認の確認
+  activate ClaimResultApi
+  ClaimResultApi->>ClaimStatement: update
+  ClaimResultApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimResultApi
+
+  Note over ClaimsClerk,PaymentTransaction: ✅ 保留レセプトの再提出準備
+  ClaimsClerk->>ClaimScreen: ✅ 保留レセプトの再提出準備
+  ClaimScreen->>ClaimEditApi: ✅ 保留レセプトの再提出準備
+  activate ClaimEditApi
+  ClaimEditApi->>ClaimStatement: update
+  ClaimEditApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimEditApi
+
+  Note over ClaimsClerk,PaymentTransaction: ✅ 再審査請求
+  ClaimsClerk->>ClaimScreen: ✅ 再審査請求
+  ClaimScreen->>SubmitClaimApi: ✅ 再審査請求
   activate SubmitClaimApi
-  SubmitClaimApi->>Claim: update
-  SubmitClaimApi-->>ClaimScreen: 🖥️ Claim Screen
-  ClaimScreen-->>BillingSpecialist: 🖥️ Claim Screen
+  SubmitClaimApi->>ClaimStatement: update
+  SubmitClaimApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
   deactivate SubmitClaimApi
 
-  Note over BillingSpecialist,PaymentTransaction: ✅ Void Charge
-  BillingSpecialist->System: ✅ Void Charge
+  Note over ClaimsClerk,PaymentTransaction: ✅ エラー分レセプトの再送
+  ClaimsClerk->>ClaimScreen: ✅ エラー分レセプトの再送
+  ClaimScreen->>SubmitClaimApi: ✅ エラー分レセプトの再送
+  activate SubmitClaimApi
+  SubmitClaimApi->>ClaimStatement: update
+  SubmitClaimApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate SubmitClaimApi
+
+  Note over ClaimsClerk,PaymentTransaction: ✅ 資格の振替・分割の確認
+  ClaimsClerk->System: ✅ 資格の振替・分割の確認
+  activate System
+  System->>ClaimStatement: read
+  System-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate System
+
+  Note over ClaimsClerk,PaymentTransaction: ✅ レセプト請求
+  ClaimsClerk->>ClaimScreen: ✅ レセプト請求
+  ClaimScreen->>SubmitClaimApi: ✅ レセプト請求
+  activate SubmitClaimApi
+  SubmitClaimApi->>ClaimStatement: update
+  SubmitClaimApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate SubmitClaimApi
+
+  Note over ClaimsClerk,PaymentTransaction: ✅ コストの取消
+  ClaimsClerk->System: ✅ コストの取消
   activate System
   System->>Charge: update
-  System-->>BillingSpecialist: 🖥️ Charge Worklist Screen
+  System-->>ClaimsClerk: 🖥️ Charge Worklist Screen
   deactivate System
 ```
 
-### 3.8 Follow-Up Care
+### 3.9 Follow-Up Care
 
 | 項目 | 内容 |
 |---|---|
@@ -2529,15 +4673,14 @@ sequenceDiagram
 | Business | `PatientAccess` |
 | 主な actor | CareCoordinator, Patient |
 | 必要権限 | `FollowUpManage`, `PatientMessageSend`, `ScheduleWrite` |
-| 主なデータ | `CarePlan`, `Encounter`, `PatientMessage`, `Appointment`, `ProviderSchedule`, `Notification` |
+| 主なデータ | `CarePlan`, `PatientMessage`, `Appointment`, `Notification` |
 
-診療後のケアプラン作成、患者連絡、患者応答確認、再診予約、ケアプラン終了を扱う。診療署名イベントと検査結果確認イベントを受けるため、イベントフロー上は複数 BUC と接続する。
+診療後のケアプラン作成、患者連絡、患者応答確認、再診予約、ケアプラン終了を扱う。
 
 レビュー観点:
 
-- CreateCarePlan が EvEncounterSigned から起動される設計でよいか。
-- ScheduleFollowUpVisit は予約 BUC に移すべきか、フォローアップ BUC に置くべきか。
-- 患者応答を PatientMessage の状態として扱うだけで足りるか。
+- ScheduleFollowUpVisit が予約 BUC と同じ Appointment lifecycle を使ってよいか。
+- NotifyPatientResult と NotifyCriticalResult の通知責務が重複していないか。
 
 #### Follow-Up Care RDRA Layered Graph 図
 
@@ -2553,12 +4696,14 @@ flowchart LR
     direction TB
     CareCoordinator(["👤 Care Coordinator"])
     Patient(["👤 Patient"])
+    MessagingGateway[/"🌐 Messaging Gateway"/]
   end
   subgraph layer_environment[External Environment]
     direction TB
     PatientAccess["💼 Patient Access"]
     BucFollowupCare["📦 Coordinate Follow-Up Care"]
     BucPatientOnboarding["📦 Onboard and Maintain Patient"]
+    IntakeExpiryCheck["⏱️ Nightly intake expiry check"]
     CareCoordinationConsole[/"📱 Care Coordination Console"/]
     FrontDeskTerminal[/"📱 Front Desk Terminal"/]
     PatientMobile[/"📱 Patient Mobile"/]
@@ -2590,7 +4735,7 @@ flowchart LR
     SendFollowUpMessage(["✅ Send Follow-Up Message"])
     SendIntakeForms(["✅ Send Intake Forms"])
     UpdateDemographics(["✅ Update Demographics"])
-    VerifyInsurance(["✅ Verify Insurance"])
+    VerifyInsurance(["✅ 保険資格・限度額情報の登録（新患登録）"])
     AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
     CarePlanScreen[["🖥️ Care Plan Screen"]]
     ConsentScreen[["🖥️ Consent Capture Screen"]]
@@ -2600,13 +4745,11 @@ flowchart LR
     PatientMessageScreen[["🖥️ Patient Message Screen"]]
     PatientProfileScreen[["🖥️ Patient Profile Screen"]]
     PatientSearchScreen[["🖥️ Patient Search Screen"]]
+    EvAppointmentCancelled{"⚡ Appointment Cancelled"}
+    EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
     EvAppointmentScheduled{"⚡ Appointment Scheduled"}
-    EvCarePlanClosed{"⚡ Care Plan Closed"}
-    EvCarePlanMonitoring{"⚡ Care Plan Monitoring"}
-    EvIntakeCompleted{"⚡ Intake Completed"}
-    EvIntakeExpired{"⚡ Intake Expired"}
-    EvPatientArchived{"⚡ Patient Archived"}
-    EvPatientMerged{"⚡ Patient Merged"}
+    EvClinicalOrderReviewed{"⚡ Clinical Result Reviewed"}
+    EvEncounterSigned{"⚡ Encounter Signed"}
   end
   subgraph layer_system[System]
     direction TB
@@ -2624,9 +4767,9 @@ flowchart LR
     Appointment[("🗄️ Appointment")]
     CarePlan[("🗄️ Care Plan")]
     ConsentRecord[("🗄️ Consent Record")]
-    EligibilityCheck[("🗄️ Eligibility Check")]
+    EligibilityCheck[("🗄️ 資格確認")]
     Encounter[("🗄️ Encounter")]
-    InsurancePolicy[("🗄️ Insurance Policy")]
+    InsurancePolicy[("🗄️ 保険資格")]
     IntakePacket[("🗄️ Intake Packet")]
     Notification[("🗄️ Notification")]
     PatientAccount[("🗄️ Patient Account")]
@@ -2637,8 +4780,8 @@ flowchart LR
   Patient -.->|has_permission| PatientProfileRead
   Patient -.->|has_permission| ConsentCapture
   Patient -.->|has_permission| ScheduleRead
-  Patient -->|performs| BucPatientOnboarding
   Patient -->|performs| BucFollowupCare
+  Patient -->|performs| BucPatientOnboarding
   Patient -->|performs| CaptureConsent
   Patient -->|performs| CompleteIntakeForms
   CareCoordinator -.->|has_permission| FollowUpManage
@@ -2651,13 +4794,6 @@ flowchart LR
   CareCoordinator -->|performs| ScheduleFollowUpVisit
   CareCoordinator -->|performs| CloseCarePlan
   CareCoordinator -->|performs| NotifyPatientResult
-  ConsentApi -.->|creates| ConsentRecord
-  ConsentApi -.->|requires_permission| ConsentCapture
-  IntakeMessagingApi -.->|creates| PatientMessage
-  IntakeMessagingApi -.->|creates| IntakePacket
-  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
-  AppointmentNoticeApi -.->|creates| PatientMessage
-  AppointmentNoticeApi -.->|creates| Notification
   CreateCarePlanApi -.->|creates| CarePlan
   CreateCarePlanApi -.->|reads| Encounter
   CreateCarePlanApi -.->|requires_permission| FollowUpManage
@@ -2680,17 +4816,13 @@ flowchart LR
   EligibilityApi -.->|reads| InsurancePolicy
   EligibilityApi -.->|requires_permission| InsuranceVerify
   EligibilityApi -.->|updates| InsurancePolicy
-  BucPatientOnboarding -.->|belongs| PatientAccess
-  BucPatientOnboarding -->|contains| VerifyInsurance
-  BucPatientOnboarding -->|contains| CaptureConsent
-  BucPatientOnboarding -->|contains| SendIntakeForms
-  BucPatientOnboarding -->|contains| CompleteIntakeForms
-  BucPatientOnboarding -->|contains| ExpireIntakeForms
-  BucPatientOnboarding -->|contains| MergeDuplicatePatient
-  BucPatientOnboarding -->|contains| ArchivePatient
-  BucPatientOnboarding -->|contains| SearchPatient
-  BucPatientOnboarding -->|contains| RegisterPatient
-  BucPatientOnboarding -->|contains| UpdateDemographics
+  ConsentApi -.->|creates| ConsentRecord
+  ConsentApi -.->|requires_permission| ConsentCapture
+  IntakeMessagingApi -.->|creates| PatientMessage
+  IntakeMessagingApi -.->|creates| IntakePacket
+  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
+  AppointmentNoticeApi -.->|creates| PatientMessage
+  AppointmentNoticeApi -.->|creates| Notification
   BucFollowupCare -.->|belongs| PatientAccess
   BucFollowupCare -->|contains| CreateCarePlan
   BucFollowupCare -->|contains| SendFollowUpMessage
@@ -2698,6 +4830,17 @@ flowchart LR
   BucFollowupCare -->|contains| ScheduleFollowUpVisit
   BucFollowupCare -->|contains| CloseCarePlan
   BucFollowupCare -->|contains| NotifyPatientResult
+  BucPatientOnboarding -.->|belongs| PatientAccess
+  BucPatientOnboarding -->|contains| SearchPatient
+  BucPatientOnboarding -->|contains| RegisterPatient
+  BucPatientOnboarding -->|contains| UpdateDemographics
+  BucPatientOnboarding -->|contains| VerifyInsurance
+  BucPatientOnboarding -->|contains| CaptureConsent
+  BucPatientOnboarding -->|contains| SendIntakeForms
+  BucPatientOnboarding -->|contains| CompleteIntakeForms
+  BucPatientOnboarding -->|contains| ExpireIntakeForms
+  BucPatientOnboarding -->|contains| MergeDuplicatePatient
+  BucPatientOnboarding -->|contains| ArchivePatient
   Appointment ---|N:1| PatientAccount
   Encounter ---|N:1| PatientAccount
   Encounter ---|1:1| Appointment
@@ -2711,46 +4854,20 @@ flowchart LR
   ConsentRecord ---|N:1| PatientAccount
   IntakePacket ---|N:1| PatientAccount
   EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
+  EvAppointmentScheduled -.->|triggers| MessagingGateway
   EvAppointmentScheduled -.->|triggers| SendIntakeForms
   EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
+  EvAppointmentRescheduled -.->|triggers| MessagingGateway
+  EvAppointmentRescheduled -.->|triggers| SendAppointmentNotice
+  EvAppointmentCancelled -.->|triggers| MessagingGateway
+  EvAppointmentCancelled -.->|triggers| SendAppointmentNotice
+  EvEncounterSigned -.->|triggers| BucFollowupCare
+  EvEncounterSigned -.->|triggers| CreateCarePlan
+  EvClinicalOrderReviewed -.->|triggers| BucFollowupCare
+  EvClinicalOrderReviewed -.->|triggers| NotifyPatientResult
   PatientSearchScreen -.->|shows| PatientAccount
   PatientProfileScreen -.->|shows| PatientProfile
-  VerifyInsurance -.->|displays| InsuranceScreen
-  VerifyInsurance -.->|invokes| EligibilityApi
-  VerifyInsurance -.->|requires_medium| FrontDeskTerminal
-  VerifyInsurance -.->|requires_permission| InsuranceVerify
-  CaptureConsent -.->|displays| ConsentScreen
-  CaptureConsent -.->|invokes| ConsentApi
-  CaptureConsent -.->|requires_medium| PatientMobile
-  CaptureConsent -.->|requires_permission| ConsentCapture
-  SendIntakeForms -.->|displays| IntakePortalScreen
-  SendIntakeForms -.->|invokes| IntakeMessagingApi
-  SendIntakeForms -.->|requires_medium| FrontDeskTerminal
-  SendIntakeForms -.->|requires_permission| IntakeManage
-  CompleteIntakeForms -.->|displays| IntakePortalScreen
-  CompleteIntakeForms -.->|raises| EvIntakeCompleted
-  CompleteIntakeForms -.->|requires_medium| PatientMobile
-  CompleteIntakeForms -.->|requires_permission| ConsentCapture
-  CompleteIntakeForms -.->|updates| IntakePacket
-  ExpireIntakeForms -.->|displays| IntakePortalScreen
-  ExpireIntakeForms -.->|raises| EvIntakeExpired
-  ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
-  ExpireIntakeForms -.->|requires_permission| IntakeManage
-  ExpireIntakeForms -.->|updates| IntakePacket
-  MergeDuplicatePatient -.->|displays| PatientProfileScreen
-  MergeDuplicatePatient -.->|raises| EvPatientMerged
-  MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
-  MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
-  MergeDuplicatePatient -.->|updates| PatientAccount
-  ArchivePatient -.->|displays| PatientProfileScreen
-  ArchivePatient -.->|raises| EvPatientArchived
-  ArchivePatient -.->|requires_medium| FrontDeskTerminal
-  ArchivePatient -.->|requires_permission| PatientProfileWrite
-  ArchivePatient -.->|updates| PatientAccount
-  SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
-  SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
-  SendAppointmentNotice -.->|requires_medium| FrontDeskTerminal
-  SendAppointmentNotice -.->|requires_permission| ScheduleRead
+  IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
   CreateCarePlan -.->|displays| CarePlanScreen
   CreateCarePlan -.->|invokes| CreateCarePlanApi
   CreateCarePlan -.->|requires_medium| CareCoordinationConsole
@@ -2760,7 +4877,6 @@ flowchart LR
   SendFollowUpMessage -.->|requires_medium| CareCoordinationConsole
   SendFollowUpMessage -.->|requires_permission| PatientMessageSend
   ReviewPatientResponse -.->|displays| CarePlanScreen
-  ReviewPatientResponse -.->|raises| EvCarePlanMonitoring
   ReviewPatientResponse -.->|requires_medium| CareCoordinationConsole
   ReviewPatientResponse -.->|requires_permission| FollowUpManage
   ReviewPatientResponse -.->|updates| CarePlan
@@ -2772,7 +4888,6 @@ flowchart LR
   ScheduleFollowUpVisit -.->|requires_permission| FollowUpManage
   ScheduleFollowUpVisit -.->|requires_permission| ScheduleWrite
   CloseCarePlan -.->|displays| CarePlanScreen
-  CloseCarePlan -.->|raises| EvCarePlanClosed
   CloseCarePlan -.->|requires_medium| CareCoordinationConsole
   CloseCarePlan -.->|requires_permission| FollowUpManage
   CloseCarePlan -.->|updates| CarePlan
@@ -2792,7 +4907,38 @@ flowchart LR
   UpdateDemographics -.->|invokes| UpdateDemographicsApi
   UpdateDemographics -.->|requires_medium| FrontDeskTerminal
   UpdateDemographics -.->|requires_permission| PatientProfileWrite
-
+  VerifyInsurance -.->|displays| InsuranceScreen
+  VerifyInsurance -.->|invokes| EligibilityApi
+  VerifyInsurance -.->|requires_medium| FrontDeskTerminal
+  VerifyInsurance -.->|requires_permission| InsuranceVerify
+  CaptureConsent -.->|displays| ConsentScreen
+  CaptureConsent -.->|invokes| ConsentApi
+  CaptureConsent -.->|requires_medium| PatientMobile
+  CaptureConsent -.->|requires_permission| ConsentCapture
+  SendIntakeForms -.->|displays| IntakePortalScreen
+  SendIntakeForms -.->|invokes| IntakeMessagingApi
+  SendIntakeForms -.->|requires_medium| FrontDeskTerminal
+  SendIntakeForms -.->|requires_permission| IntakeManage
+  CompleteIntakeForms -.->|displays| IntakePortalScreen
+  CompleteIntakeForms -.->|requires_medium| PatientMobile
+  CompleteIntakeForms -.->|requires_permission| ConsentCapture
+  CompleteIntakeForms -.->|updates| IntakePacket
+  ExpireIntakeForms -.->|displays| IntakePortalScreen
+  ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
+  ExpireIntakeForms -.->|requires_permission| IntakeManage
+  ExpireIntakeForms -.->|updates| IntakePacket
+  MergeDuplicatePatient -.->|displays| PatientProfileScreen
+  MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
+  MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
+  MergeDuplicatePatient -.->|updates| PatientAccount
+  ArchivePatient -.->|displays| PatientProfileScreen
+  ArchivePatient -.->|requires_medium| FrontDeskTerminal
+  ArchivePatient -.->|requires_permission| PatientProfileWrite
+  ArchivePatient -.->|updates| PatientAccount
+  SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
+  SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
+  SendAppointmentNotice -.->|requires_medium| FrontDeskTerminal
+  SendAppointmentNotice -.->|requires_permission| ScheduleRead
 ```
 
 #### Follow-Up Care sequence 図
@@ -2807,6 +4953,7 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucFo
 sequenceDiagram
   box System Value
     actor CareCoordinator as 👤 Care Coordinator
+    actor Patient as 👤 Patient
   end
   box System Boundary
     participant CarePlanScreen as 🖥️ Care Plan Screen
@@ -2856,8 +5003,11 @@ sequenceDiagram
   Note over CareCoordinator,ProviderSchedule: ✅ Review Patient Response
   CareCoordinator->System: ✅ Review Patient Response
   activate System
-  System->>CarePlan: update
-  System->>PatientMessage: update
+  rect rgb(245,245,245)
+    Note right of System: transaction (inferred from FK)
+    System->>CarePlan: update
+    System->>PatientMessage: update
+  end
   System-->>CareCoordinator: 🖥️ Care Plan Screen
   deactivate System
 
@@ -2884,7 +5034,7 @@ sequenceDiagram
   deactivate SendFollowUpMessageApi
 ```
 
-### 3.9 Staff Administration
+### 3.10 Staff Administration
 
 | 項目 | 内容 |
 |---|---|
@@ -2892,15 +5042,14 @@ sequenceDiagram
 | Business | `ClinicAdministration` |
 | 主な actor | ClinicAdmin |
 | 必要権限 | `ProviderScheduleAdmin`, `RoomAdmin`, `AuditRead`, `AuditResolve` |
-| 主なデータ | `ProviderSchedule`, `Provider`, `Room`, `AuditEvent`, `PatientAccount` |
+| 主なデータ | `Provider`, `ProviderSchedule`, `Room`, `AuditEvent` |
 
-診療所運営のマスタ・監査系業務を扱う。患者アクセスや診療とは別 Business に分けることで、通常業務と管理業務の責務を分ける。
+診療所運営のマスタ・監査系業務を扱う。
 
 レビュー観点:
 
-- ManageProviderSchedule と BlockScheduleSlot の粒度が適切か。
-- ReviewAuditEvents は read-only API として十分か。
-- ResolveAuditFinding は direct CRUD のままでよいか。
+- ReleaseRoom と診察終了の部屋状態更新が重複しないか。
+- ResolveAuditFinding が AdminConsole に限定されているか。
 
 #### Staff Administration RDRA Layered Graph 図
 
@@ -3001,7 +5150,6 @@ flowchart LR
   ResolveAuditFinding -.->|requires_medium| AdminConsole
   ResolveAuditFinding -.->|requires_permission| AuditResolve
   ResolveAuditFinding -.->|updates| AuditEvent
-
 ```
 
 #### Staff Administration sequence 図
@@ -3104,7 +5252,7 @@ actor は `performs(Actor, UseCase)` があれば UC 直結の actor を優先�
 | `SearchPatient` | `PatientProfileRead` | 患者検索が read-only API として表現され、患者作成と混ざらないこと |
 | `RegisterPatient` | `PatientProfileWrite` | PatientAccount と PatientProfile を同時作成する境界 |
 | `UpdateDemographics` | `PatientProfileWrite` | 患者属性更新の API 境界 |
-| `VerifyInsurance` | `InsuranceVerify` | 保険参照、資格確認作成、保険状態更新 |
+| `VerifyInsurance` | `InsuranceVerify` | 保険資格の登録と限度額情報（適用区分）の取得 |
 | `CaptureConsent` | `ConsentCapture` | 同意記録作成と nullable/Bool effect |
 | `SendIntakeForms` | `IntakeManage`, `PatientMessageSend` | 問診パケットとメッセージ作成 |
 | `CompleteIntakeForms` | `ConsentCapture` | 問診完了イベント |
@@ -3114,7 +5262,7 @@ actor は `performs(Actor, UseCase)` があれば UC 直結の actor を優先�
 
 #### SearchPatient
 
-患者検索が read-only API として表現され、患者作成と混ざらないこと
+Search Patient。患者検索が read-only API として表現され、患者作成と混ざらないこと
 
 生成コマンド:
 
@@ -3125,7 +5273,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase S
 ```mermaid
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
+    actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant PatientSearchScreen as 🖥️ Patient Search Screen
@@ -3136,20 +5285,20 @@ sequenceDiagram
     participant PatientProfile as 🗄️ Patient Profile
   end
 
-  Note over FrontDesk,PatientProfile: ✅ Search Patient
-  FrontDesk->>PatientSearchScreen: ✅ Search Patient
+  Note over Patient,PatientProfile: ✅ Search Patient
+  Patient->>PatientSearchScreen: ✅ Search Patient
   PatientSearchScreen->>SearchPatientApi: ✅ Search Patient
   activate SearchPatientApi
   SearchPatientApi->>PatientAccount: read
   SearchPatientApi->>PatientProfile: read
   SearchPatientApi-->>PatientSearchScreen: 🖥️ Patient Search Screen
-  PatientSearchScreen-->>FrontDesk: 🖥️ Patient Search Screen
+  PatientSearchScreen-->>Patient: 🖥️ Patient Search Screen
   deactivate SearchPatientApi
 ```
 
 #### RegisterPatient
 
-PatientAccount と PatientProfile を同時作成する境界
+Register Patient。PatientAccount と PatientProfile を同時作成する境界
 
 生成コマンド:
 
@@ -3160,7 +5309,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase R
 ```mermaid
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
+    actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant PatientProfileScreen as 🖥️ Patient Profile Screen
@@ -3171,8 +5321,8 @@ sequenceDiagram
     participant PatientProfile as 🗄️ Patient Profile
   end
 
-  Note over FrontDesk,PatientProfile: ✅ Register Patient
-  FrontDesk->>PatientProfileScreen: ✅ Register Patient
+  Note over Patient,PatientProfile: ✅ Register Patient
+  Patient->>PatientProfileScreen: ✅ Register Patient
   PatientProfileScreen->>RegisterPatientApi: ✅ Register Patient
   activate RegisterPatientApi
   rect rgb(245,245,245)
@@ -3181,13 +5331,13 @@ sequenceDiagram
     RegisterPatientApi->>PatientProfile: create
   end
   RegisterPatientApi-->>PatientProfileScreen: 🖥️ Patient Profile Screen
-  PatientProfileScreen-->>FrontDesk: 🖥️ Patient Profile Screen
+  PatientProfileScreen-->>Patient: 🖥️ Patient Profile Screen
   deactivate RegisterPatientApi
 ```
 
 #### UpdateDemographics
 
-患者属性更新の API 境界
+Update Demographics。患者属性更新の API 境界
 
 生成コマンド:
 
@@ -3198,7 +5348,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase U
 ```mermaid
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
+    actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant PatientProfileScreen as 🖥️ Patient Profile Screen
@@ -3208,19 +5359,19 @@ sequenceDiagram
     participant PatientProfile as 🗄️ Patient Profile
   end
 
-  Note over FrontDesk,PatientProfile: ✅ Update Demographics
-  FrontDesk->>PatientProfileScreen: ✅ Update Demographics
+  Note over Patient,PatientProfile: ✅ Update Demographics
+  Patient->>PatientProfileScreen: ✅ Update Demographics
   PatientProfileScreen->>UpdateDemographicsApi: ✅ Update Demographics
   activate UpdateDemographicsApi
   UpdateDemographicsApi->>PatientProfile: update
   UpdateDemographicsApi-->>PatientProfileScreen: 🖥️ Patient Profile Screen
-  PatientProfileScreen-->>FrontDesk: 🖥️ Patient Profile Screen
+  PatientProfileScreen-->>Patient: 🖥️ Patient Profile Screen
   deactivate UpdateDemographicsApi
 ```
 
 #### VerifyInsurance
 
-保険参照、資格確認作成、保険状態更新
+保険資格・限度額情報の登録（新患登録）。保険資格の登録と限度額情報（適用区分）の取得
 
 生成コマンド:
 
@@ -3231,20 +5382,21 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase V
 ```mermaid
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
+    actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant InsuranceScreen as 🖥️ Insurance Verification Screen
   end
   box System
     participant EligibilityApi as 🔌 Eligibility API
-    participant EligibilityCheck as 🗄️ Eligibility Check
-    participant InsurancePolicy as 🗄️ Insurance Policy
+    participant EligibilityCheck as 🗄️ 資格確認
+    participant InsurancePolicy as 🗄️ 保険資格
   end
 
-  Note over FrontDesk,InsurancePolicy: ✅ Verify Insurance
-  FrontDesk->>InsuranceScreen: ✅ Verify Insurance
-  InsuranceScreen->>EligibilityApi: ✅ Verify Insurance
+  Note over Patient,InsurancePolicy: ✅ 保険資格・限度額情報の登録（新患登録）
+  Patient->>InsuranceScreen: ✅ 保険資格・限度額情報の登録（新患登録）
+  InsuranceScreen->>EligibilityApi: ✅ 保険資格・限度額情報の登録（新患登録）
   activate EligibilityApi
   EligibilityApi->>InsurancePolicy: read
   rect rgb(245,245,245)
@@ -3253,13 +5405,13 @@ sequenceDiagram
     EligibilityApi->>EligibilityCheck: create
   end
   EligibilityApi-->>InsuranceScreen: 🖥️ Insurance Verification Screen
-  InsuranceScreen-->>FrontDesk: 🖥️ Insurance Verification Screen
+  InsuranceScreen-->>Patient: 🖥️ Insurance Verification Screen
   deactivate EligibilityApi
 ```
 
 #### CaptureConsent
 
-同意記録作成と nullable/Bool effect
+Capture Consent。同意記録作成と nullable/Bool effect
 
 生成コマンド:
 
@@ -3271,6 +5423,7 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 sequenceDiagram
   box System Value
     actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant ConsentScreen as 🖥️ Consent Capture Screen
@@ -3292,7 +5445,7 @@ sequenceDiagram
 
 #### SendIntakeForms
 
-問診パケットとメッセージ作成
+Send Intake Forms。問診パケットとメッセージ作成
 
 生成コマンド:
 
@@ -3303,7 +5456,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase S
 ```mermaid
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
+    actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant IntakePortalScreen as 🖥️ Intake Portal Screen
@@ -3314,8 +5468,8 @@ sequenceDiagram
     participant PatientMessage as 🗄️ Patient Message
   end
 
-  Note over FrontDesk,PatientMessage: ✅ Send Intake Forms
-  FrontDesk->>IntakePortalScreen: ✅ Send Intake Forms
+  Note over Patient,PatientMessage: ✅ Send Intake Forms
+  Patient->>IntakePortalScreen: ✅ Send Intake Forms
   IntakePortalScreen->>IntakeMessagingApi: ✅ Send Intake Forms
   activate IntakeMessagingApi
   rect rgb(245,245,245)
@@ -3324,13 +5478,13 @@ sequenceDiagram
     IntakeMessagingApi->>PatientMessage: create
   end
   IntakeMessagingApi-->>IntakePortalScreen: 🖥️ Intake Portal Screen
-  IntakePortalScreen-->>FrontDesk: 🖥️ Intake Portal Screen
+  IntakePortalScreen-->>Patient: 🖥️ Intake Portal Screen
   deactivate IntakeMessagingApi
 ```
 
 #### CompleteIntakeForms
 
-問診完了イベント
+Complete Intake Forms。問診完了イベント
 
 生成コマンド:
 
@@ -3342,6 +5496,7 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 sequenceDiagram
   box System Value
     actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant IntakePortalScreen as 🖥️ Intake Portal Screen
@@ -3361,7 +5516,7 @@ sequenceDiagram
 
 #### ExpireIntakeForms
 
-問診期限切れイベント
+Expire Intake Forms。問診期限切れイベント
 
 生成コマンド:
 
@@ -3372,7 +5527,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase E
 ```mermaid
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
+    actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant IntakePortalScreen as 🖥️ Intake Portal Screen
@@ -3382,17 +5538,17 @@ sequenceDiagram
     participant IntakePacket as 🗄️ Intake Packet
   end
 
-  Note over FrontDesk,IntakePacket: ✅ Expire Intake Forms
-  FrontDesk->System: ✅ Expire Intake Forms
+  Note over Patient,IntakePacket: ✅ Expire Intake Forms
+  Patient->System: ✅ Expire Intake Forms
   activate System
   System->>IntakePacket: update
-  System-->>FrontDesk: 🖥️ Intake Portal Screen
+  System-->>Patient: 🖥️ Intake Portal Screen
   deactivate System
 ```
 
 #### MergeDuplicatePatient
 
-患者統合状態
+Merge Duplicate Patient。患者統合状態
 
 生成コマンド:
 
@@ -3403,7 +5559,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase M
 ```mermaid
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
+    actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant PatientProfileScreen as 🖥️ Patient Profile Screen
@@ -3413,17 +5570,17 @@ sequenceDiagram
     participant PatientAccount as 🗄️ Patient Account
   end
 
-  Note over FrontDesk,PatientAccount: ✅ Merge Duplicate Patient
-  FrontDesk->System: ✅ Merge Duplicate Patient
+  Note over Patient,PatientAccount: ✅ Merge Duplicate Patient
+  Patient->System: ✅ Merge Duplicate Patient
   activate System
   System->>PatientAccount: update
-  System-->>FrontDesk: 🖥️ Patient Profile Screen
+  System-->>Patient: 🖥️ Patient Profile Screen
   deactivate System
 ```
 
 #### ArchivePatient
 
-患者アーカイブ状態
+Archive Patient。患者アーカイブ状態
 
 生成コマンド:
 
@@ -3434,7 +5591,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase A
 ```mermaid
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
+    actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant PatientProfileScreen as 🖥️ Patient Profile Screen
@@ -3444,11 +5602,11 @@ sequenceDiagram
     participant PatientAccount as 🗄️ Patient Account
   end
 
-  Note over FrontDesk,PatientAccount: ✅ Archive Patient
-  FrontDesk->System: ✅ Archive Patient
+  Note over Patient,PatientAccount: ✅ Archive Patient
+  Patient->System: ✅ Archive Patient
   activate System
   System->>PatientAccount: update
-  System-->>FrontDesk: 🖥️ Patient Profile Screen
+  System-->>Patient: 🖥️ Patient Profile Screen
   deactivate System
 ```
 
@@ -3456,17 +5614,17 @@ sequenceDiagram
 
 | UC | 必要権限 | 主な確認点 |
 |---|---|---|
-| `SearchAvailability` | `ScheduleRead` | 予定枠検索の read-only 境界 |
-| `ReserveAppointment` | `ScheduleWrite` | 予約作成と予定枠更新 |
-| `BookAppointment` | `ScheduleWrite` | 予約確定と予定枠更新 |
-| `RescheduleAppointment` | `ScheduleWrite` | 予約変更と予定枠更新 |
-| `CancelAppointment` | `ScheduleWrite` | 予約取消と予定枠更新 |
-| `MarkNoShow` | `ScheduleWrite` | no-show 状態への直接更新 |
-| `SendAppointmentNotice` | `ScheduleRead` | 通知と患者メッセージ作成 |
+| `SearchAvailability` | `ScheduleRead` | 予約枠検索の read-only API |
+| `ReserveAppointment` | `ScheduleWrite` | 仮押さえで Appointment を作る境界 |
+| `BookAppointment` | `ScheduleWrite` | 予約確定と予約枠更新 |
+| `RescheduleAppointment` | `ScheduleWrite` | 予約変更の自己遷移 |
+| `CancelAppointment` | `ScheduleWrite` | 取消理由と予約枠更新 |
+| `MarkNoShow` | `ScheduleWrite` | タイマー起動の未来院処理 |
+| `SendAppointmentNotice` | `ScheduleRead` | 予約イベントからの通知作成 |
 
 #### SearchAvailability
 
-予定枠検索の read-only 境界
+Search Availability。予約枠検索の read-only API
 
 生成コマンド:
 
@@ -3477,7 +5635,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase S
 ```mermaid
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
+    actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant ScheduleSearchScreen as 🖥️ Schedule Search Screen
@@ -3489,21 +5648,21 @@ sequenceDiagram
     participant ProviderSchedule as 🗄️ Provider Schedule
   end
 
-  Note over FrontDesk,ProviderSchedule: ✅ Search Availability
-  FrontDesk->>ScheduleSearchScreen: ✅ Search Availability
+  Note over Patient,ProviderSchedule: ✅ Search Availability
+  Patient->>ScheduleSearchScreen: ✅ Search Availability
   ScheduleSearchScreen->>SearchAvailabilityApi: ✅ Search Availability
   activate SearchAvailabilityApi
   SearchAvailabilityApi->>ProviderSchedule: read
   SearchAvailabilityApi->>Provider: read
   SearchAvailabilityApi->>ClinicLocation: read
   SearchAvailabilityApi-->>ScheduleSearchScreen: 🖥️ Schedule Search Screen
-  ScheduleSearchScreen-->>FrontDesk: 🖥️ Schedule Search Screen
+  ScheduleSearchScreen-->>Patient: 🖥️ Schedule Search Screen
   deactivate SearchAvailabilityApi
 ```
 
 #### ReserveAppointment
 
-予約作成と予定枠更新
+Reserve Appointment。仮押さえで Appointment を作る境界
 
 生成コマンド:
 
@@ -3514,7 +5673,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase R
 ```mermaid
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
+    actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant AppointmentScreen as 🖥️ Appointment Screen
@@ -3525,8 +5685,8 @@ sequenceDiagram
     participant ProviderSchedule as 🗄️ Provider Schedule
   end
 
-  Note over FrontDesk,ProviderSchedule: ✅ Reserve Appointment
-  FrontDesk->>AppointmentScreen: ✅ Reserve Appointment
+  Note over Patient,ProviderSchedule: ✅ Reserve Appointment
+  Patient->>AppointmentScreen: ✅ Reserve Appointment
   AppointmentScreen->>ReserveAppointmentApi: ✅ Reserve Appointment
   activate ReserveAppointmentApi
   rect rgb(245,245,245)
@@ -3535,13 +5695,13 @@ sequenceDiagram
     ReserveAppointmentApi->>ProviderSchedule: update
   end
   ReserveAppointmentApi-->>AppointmentScreen: 🖥️ Appointment Screen
-  AppointmentScreen-->>FrontDesk: 🖥️ Appointment Screen
+  AppointmentScreen-->>Patient: 🖥️ Appointment Screen
   deactivate ReserveAppointmentApi
 ```
 
 #### BookAppointment
 
-予約確定と予定枠更新
+Book Appointment。予約確定と予約枠更新
 
 生成コマンド:
 
@@ -3552,7 +5712,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase B
 ```mermaid
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
+    actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant AppointmentScreen as 🖥️ Appointment Screen
@@ -3563,8 +5724,8 @@ sequenceDiagram
     participant ProviderSchedule as 🗄️ Provider Schedule
   end
 
-  Note over FrontDesk,ProviderSchedule: ✅ Book Appointment
-  FrontDesk->>AppointmentScreen: ✅ Book Appointment
+  Note over Patient,ProviderSchedule: ✅ Book Appointment
+  Patient->>AppointmentScreen: ✅ Book Appointment
   AppointmentScreen->>BookAppointmentApi: ✅ Book Appointment
   activate BookAppointmentApi
   rect rgb(245,245,245)
@@ -3573,13 +5734,13 @@ sequenceDiagram
     BookAppointmentApi->>ProviderSchedule: update
   end
   BookAppointmentApi-->>AppointmentScreen: 🖥️ Appointment Screen
-  AppointmentScreen-->>FrontDesk: 🖥️ Appointment Screen
+  AppointmentScreen-->>Patient: 🖥️ Appointment Screen
   deactivate BookAppointmentApi
 ```
 
 #### RescheduleAppointment
 
-予約変更と予定枠更新
+Reschedule Appointment。予約変更の自己遷移
 
 生成コマンド:
 
@@ -3590,7 +5751,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase R
 ```mermaid
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
+    actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant AppointmentScreen as 🖥️ Appointment Screen
@@ -3601,8 +5763,8 @@ sequenceDiagram
     participant ProviderSchedule as 🗄️ Provider Schedule
   end
 
-  Note over FrontDesk,ProviderSchedule: ✅ Reschedule Appointment
-  FrontDesk->>AppointmentScreen: ✅ Reschedule Appointment
+  Note over Patient,ProviderSchedule: ✅ Reschedule Appointment
+  Patient->>AppointmentScreen: ✅ Reschedule Appointment
   AppointmentScreen->>RescheduleAppointmentApi: ✅ Reschedule Appointment
   activate RescheduleAppointmentApi
   rect rgb(245,245,245)
@@ -3611,13 +5773,13 @@ sequenceDiagram
     RescheduleAppointmentApi->>ProviderSchedule: update
   end
   RescheduleAppointmentApi-->>AppointmentScreen: 🖥️ Appointment Screen
-  AppointmentScreen-->>FrontDesk: 🖥️ Appointment Screen
+  AppointmentScreen-->>Patient: 🖥️ Appointment Screen
   deactivate RescheduleAppointmentApi
 ```
 
 #### CancelAppointment
 
-予約取消と予定枠更新
+Cancel Appointment。取消理由と予約枠更新
 
 生成コマンド:
 
@@ -3628,7 +5790,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 ```mermaid
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
+    actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant AppointmentScreen as 🖥️ Appointment Screen
@@ -3639,8 +5802,8 @@ sequenceDiagram
     participant ProviderSchedule as 🗄️ Provider Schedule
   end
 
-  Note over FrontDesk,ProviderSchedule: ✅ Cancel Appointment
-  FrontDesk->>AppointmentScreen: ✅ Cancel Appointment
+  Note over Patient,ProviderSchedule: ✅ Cancel Appointment
+  Patient->>AppointmentScreen: ✅ Cancel Appointment
   AppointmentScreen->>CancelAppointmentApi: ✅ Cancel Appointment
   activate CancelAppointmentApi
   rect rgb(245,245,245)
@@ -3649,13 +5812,13 @@ sequenceDiagram
     CancelAppointmentApi->>ProviderSchedule: update
   end
   CancelAppointmentApi-->>AppointmentScreen: 🖥️ Appointment Screen
-  AppointmentScreen-->>FrontDesk: 🖥️ Appointment Screen
+  AppointmentScreen-->>Patient: 🖥️ Appointment Screen
   deactivate CancelAppointmentApi
 ```
 
 #### MarkNoShow
 
-no-show 状態への直接更新
+Mark No Show。タイマー起動の未来院処理
 
 生成コマンド:
 
@@ -3666,7 +5829,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase M
 ```mermaid
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
+    actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant AppointmentScreen as 🖥️ Appointment Screen
@@ -3676,17 +5840,17 @@ sequenceDiagram
     participant Appointment as 🗄️ Appointment
   end
 
-  Note over FrontDesk,Appointment: ✅ Mark No Show
-  FrontDesk->System: ✅ Mark No Show
+  Note over Patient,Appointment: ✅ Mark No Show
+  Patient->System: ✅ Mark No Show
   activate System
   System->>Appointment: update
-  System-->>FrontDesk: 🖥️ Appointment Screen
+  System-->>Patient: 🖥️ Appointment Screen
   deactivate System
 ```
 
 #### SendAppointmentNotice
 
-通知と患者メッセージ作成
+Send Appointment Notice。予約イベントからの通知作成
 
 生成コマンド:
 
@@ -3697,7 +5861,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase S
 ```mermaid
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
+    actor Patient as 👤 Patient
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant AppointmentNoticeScreen as 🖥️ Appointment Notice Screen
@@ -3708,8 +5873,8 @@ sequenceDiagram
     participant PatientMessage as 🗄️ Patient Message
   end
 
-  Note over FrontDesk,PatientMessage: ✅ Send Appointment Notice
-  FrontDesk->>AppointmentNoticeScreen: ✅ Send Appointment Notice
+  Note over Patient,PatientMessage: ✅ Send Appointment Notice
+  Patient->>AppointmentNoticeScreen: ✅ Send Appointment Notice
   AppointmentNoticeScreen->>AppointmentNoticeApi: ✅ Send Appointment Notice
   activate AppointmentNoticeApi
   rect rgb(245,245,245)
@@ -3718,23 +5883,30 @@ sequenceDiagram
     AppointmentNoticeApi->>PatientMessage: create
   end
   AppointmentNoticeApi-->>AppointmentNoticeScreen: 🖥️ Appointment Notice Screen
-  AppointmentNoticeScreen-->>FrontDesk: 🖥️ Appointment Notice Screen
+  AppointmentNoticeScreen-->>Patient: 🖥️ Appointment Notice Screen
   deactivate AppointmentNoticeApi
 ```
 
-### 4.3 Visit Check-In UC
+### 4.3 受付（初診・再診） UC
 
 | UC | 必要権限 | 主な確認点 |
 |---|---|---|
-| `VerifyArrival` | `VisitCheckIn` | 受付時の参照情報 |
-| `CheckInPatient` | `VisitCheckIn` | 予約と患者アカウント更新 |
-| `CollectCopay` | `CopayCollect` | 会計取引と残高更新 |
+| `VerifyArrival` | `VisitCheckIn` | 予約票・診察券の確認（参照のみ） |
+| `CheckInPatient` | `VisitCheckIn`, `InsuranceVerify` | 受付で予約を受付済にし、同時にオンライン資格確認を作る |
+| `BatchVerifyEligibility` | `InsuranceVerify` | 予約済み患者（BookedPatient 条件）だけを一括照会する |
+| `ReceiveEligibilityValid` | `InsuranceVerify` | 資格確認結果「有効」の取込 |
+| `ReceiveEligibilityInvalid` | `InsuranceVerify` | 資格確認結果「無効」の取込 |
+| `ReceiveEligibilityNoInfo` | `InsuranceVerify` | 資格確認結果「該当資格なし」の取込 |
+| `RecheckEligibility` | `InsuranceVerify` | 無効・該当資格なしからの再確認 |
+| `RecordEligibilityDeclaration` | `InsuranceVerify` | 被保険者資格申立書による確認 |
+| `ConfirmEligibilityInOutageMode` | `InsuranceVerify` | システム障害時モードによる確認 |
+| `ReceiveReferralLetter` | `ReferralManage` | 紹介状の受領と受付処理 |
 | `AssignRoom` | `RoomAssign` | 部屋と予約の同期更新 |
 | `PrepareEncounter` | `EncounterOpen` | 診療準備の参照情報 |
 
 #### VerifyArrival
 
-受付時の参照情報
+予約票・診察券の確認。予約票・診察券の確認（参照のみ）
 
 生成コマンド:
 
@@ -3745,33 +5917,34 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase V
 ```mermaid
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
+    actor Nurse as 👤 看護師
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
-    participant CheckInScreen as 🖥️ Check-In Screen
+    participant CheckInScreen as 🖥️ 受付画面
   end
   box System
     participant VerifyArrivalApi as 🔌 Verify Arrival API
     participant Appointment as 🗄️ Appointment
-    participant InsurancePolicy as 🗄️ Insurance Policy
+    participant InsurancePolicy as 🗄️ 保険資格
     participant PatientAccount as 🗄️ Patient Account
   end
 
-  Note over FrontDesk,PatientAccount: ✅ Verify Patient Arrival
-  FrontDesk->>CheckInScreen: ✅ Verify Patient Arrival
-  CheckInScreen->>VerifyArrivalApi: ✅ Verify Patient Arrival
+  Note over Nurse,PatientAccount: ✅ 予約票・診察券の確認
+  Nurse->>CheckInScreen: ✅ 予約票・診察券の確認
+  CheckInScreen->>VerifyArrivalApi: ✅ 予約票・診察券の確認
   activate VerifyArrivalApi
   VerifyArrivalApi->>Appointment: read
   VerifyArrivalApi->>PatientAccount: read
   VerifyArrivalApi->>InsurancePolicy: read
-  VerifyArrivalApi-->>CheckInScreen: 🖥️ Check-In Screen
-  CheckInScreen-->>FrontDesk: 🖥️ Check-In Screen
+  VerifyArrivalApi-->>CheckInScreen: 🖥️ 受付画面
+  CheckInScreen-->>Nurse: 🖥️ 受付画面
   deactivate VerifyArrivalApi
 ```
 
 #### CheckInPatient
 
-予約と患者アカウント更新
+受付（初診・再診）。受付で予約を受付済にし、同時にオンライン資格確認を作る
 
 生成コマンド:
 
@@ -3782,72 +5955,314 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 ```mermaid
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
+    actor Nurse as 👤 看護師
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
-    participant CheckInScreen as 🖥️ Check-In Screen
+    participant CheckInScreen as 🖥️ 受付画面
   end
   box System
     participant CheckInPatientApi as 🔌 Check-In Patient API
+    participant OnlineEligibilityApi as 🔌 オンライン資格確認 API
     participant Appointment as 🗄️ Appointment
+    participant EligibilityCheck as 🗄️ 資格確認
+    participant InsurancePolicy as 🗄️ 保険資格
     participant PatientAccount as 🗄️ Patient Account
   end
 
-  Note over FrontDesk,PatientAccount: ✅ Check In Patient
-  FrontDesk->>CheckInScreen: ✅ Check In Patient
-  CheckInScreen->>CheckInPatientApi: ✅ Check In Patient
+  Note over Nurse,PatientAccount: ✅ 受付（初診・再診）
+  Nurse->>CheckInScreen: ✅ 受付（初診・再診）
+  CheckInScreen->>CheckInPatientApi: ✅ 受付（初診・再診）
   activate CheckInPatientApi
+  OnlineEligibilityApi->>InsurancePolicy: read
   rect rgb(245,245,245)
     Note right of CheckInPatientApi: transaction (API atomic boundary)
     CheckInPatientApi->>PatientAccount: update
     CheckInPatientApi->>Appointment: update
   end
-  CheckInPatientApi-->>CheckInScreen: 🖥️ Check-In Screen
-  CheckInScreen-->>FrontDesk: 🖥️ Check-In Screen
+  OnlineEligibilityApi->>EligibilityCheck: create
+  CheckInPatientApi-->>CheckInScreen: 🖥️ 受付画面
+  CheckInScreen-->>Nurse: 🖥️ 受付画面
   deactivate CheckInPatientApi
 ```
 
-#### CollectCopay
+#### BatchVerifyEligibility
 
-会計取引と残高更新
+資格の一括照会。予約済み患者（BookedPatient 条件）だけを一括照会する
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase CollectCopay --out samples/clinic-ops/out/uc/sequence_collect_copay
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase BatchVerifyEligibility --out samples/clinic-ops/out/uc/sequence_batch_verify_eligibility
 ```
 
 ```mermaid
 sequenceDiagram
   box System Value
-    actor FrontDesk as 👤 Front Desk Staff
+    actor Nurse as 👤 看護師
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
-    participant CopayScreen as 🖥️ Copay Screen
+    participant EligibilityScreen as 🖥️ 資格確認画面
   end
   box System
-    participant CollectCopayApi as 🔌 Collect Copay API
-    participant AccountBalance as 🗄️ Account Balance
-    participant PaymentTransaction as 🗄️ Payment Transaction
+    participant OnlineEligibilityApi as 🔌 オンライン資格確認 API
+    participant EligibilityCheck as 🗄️ 資格確認
+    participant InsurancePolicy as 🗄️ 保険資格
   end
 
-  Note over FrontDesk,PaymentTransaction: ✅ Collect Copay
-  FrontDesk->>CopayScreen: ✅ Collect Copay
-  CopayScreen->>CollectCopayApi: ✅ Collect Copay
-  activate CollectCopayApi
-  rect rgb(245,245,245)
-    Note right of CollectCopayApi: transaction (API atomic boundary)
-    CollectCopayApi->>AccountBalance: update
-    CollectCopayApi->>PaymentTransaction: create
+  Note over Nurse,InsurancePolicy: ✅ 資格の一括照会
+  Nurse->>EligibilityScreen: ✅ 資格の一括照会
+  EligibilityScreen->>OnlineEligibilityApi: ✅ 資格の一括照会
+  activate OnlineEligibilityApi
+  OnlineEligibilityApi->>InsurancePolicy: read
+  OnlineEligibilityApi->>EligibilityCheck: create
+  OnlineEligibilityApi-->>EligibilityScreen: 🖥️ 資格確認画面
+  EligibilityScreen-->>Nurse: 🖥️ 資格確認画面
+  deactivate OnlineEligibilityApi
+```
+
+#### ReceiveEligibilityValid
+
+資格確認結果（有効）の取込。資格確認結果「有効」の取込
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ReceiveEligibilityValid --out samples/clinic-ops/out/uc/sequence_receive_eligibility_valid
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor Nurse as 👤 看護師
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
-  CollectCopayApi-->>CopayScreen: 🖥️ Copay Screen
-  CopayScreen-->>FrontDesk: 🖥️ Copay Screen
-  deactivate CollectCopayApi
+  box System Boundary
+    participant EligibilityScreen as 🖥️ 資格確認画面
+  end
+  box System
+    participant EligibilityResultApi as 🔌 資格確認結果 API
+    participant EligibilityCheck as 🗄️ 資格確認
+  end
+
+  Note over Nurse,EligibilityCheck: ✅ 資格確認結果（有効）の取込
+  Nurse->>EligibilityScreen: ✅ 資格確認結果（有効）の取込
+  EligibilityScreen->>EligibilityResultApi: ✅ 資格確認結果（有効）の取込
+  activate EligibilityResultApi
+  EligibilityResultApi->>EligibilityCheck: update
+  EligibilityResultApi-->>EligibilityScreen: 🖥️ 資格確認画面
+  EligibilityScreen-->>Nurse: 🖥️ 資格確認画面
+  deactivate EligibilityResultApi
+```
+
+#### ReceiveEligibilityInvalid
+
+資格確認結果（無効）の取込。資格確認結果「無効」の取込
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ReceiveEligibilityInvalid --out samples/clinic-ops/out/uc/sequence_receive_eligibility_invalid
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor Nurse as 👤 看護師
+    actor ReceptionClerk as 👤 医事課 受付担当
+  end
+  box System Boundary
+    participant EligibilityScreen as 🖥️ 資格確認画面
+  end
+  box System
+    participant EligibilityResultApi as 🔌 資格確認結果 API
+    participant EligibilityCheck as 🗄️ 資格確認
+  end
+
+  Note over Nurse,EligibilityCheck: ✅ 資格確認結果（無効）の取込
+  Nurse->>EligibilityScreen: ✅ 資格確認結果（無効）の取込
+  EligibilityScreen->>EligibilityResultApi: ✅ 資格確認結果（無効）の取込
+  activate EligibilityResultApi
+  EligibilityResultApi->>EligibilityCheck: update
+  EligibilityResultApi-->>EligibilityScreen: 🖥️ 資格確認画面
+  EligibilityScreen-->>Nurse: 🖥️ 資格確認画面
+  deactivate EligibilityResultApi
+```
+
+#### ReceiveEligibilityNoInfo
+
+資格確認結果（該当資格なし）の取込。資格確認結果「該当資格なし」の取込
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ReceiveEligibilityNoInfo --out samples/clinic-ops/out/uc/sequence_receive_eligibility_no_info
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor Nurse as 👤 看護師
+    actor ReceptionClerk as 👤 医事課 受付担当
+  end
+  box System Boundary
+    participant EligibilityScreen as 🖥️ 資格確認画面
+  end
+  box System
+    participant EligibilityResultApi as 🔌 資格確認結果 API
+    participant EligibilityCheck as 🗄️ 資格確認
+  end
+
+  Note over Nurse,EligibilityCheck: ✅ 資格確認結果（該当資格なし）の取込
+  Nurse->>EligibilityScreen: ✅ 資格確認結果（該当資格なし）の取込
+  EligibilityScreen->>EligibilityResultApi: ✅ 資格確認結果（該当資格なし）の取込
+  activate EligibilityResultApi
+  EligibilityResultApi->>EligibilityCheck: update
+  EligibilityResultApi-->>EligibilityScreen: 🖥️ 資格確認画面
+  EligibilityScreen-->>Nurse: 🖥️ 資格確認画面
+  deactivate EligibilityResultApi
+```
+
+#### RecheckEligibility
+
+資格の再確認。無効・該当資格なしからの再確認
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase RecheckEligibility --out samples/clinic-ops/out/uc/sequence_recheck_eligibility
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor Nurse as 👤 看護師
+    actor ReceptionClerk as 👤 医事課 受付担当
+  end
+  box System Boundary
+    participant EligibilityScreen as 🖥️ 資格確認画面
+  end
+  box System
+    participant EligibilityResultApi as 🔌 資格確認結果 API
+    participant EligibilityCheck as 🗄️ 資格確認
+  end
+
+  Note over Nurse,EligibilityCheck: ✅ 資格の再確認
+  Nurse->>EligibilityScreen: ✅ 資格の再確認
+  EligibilityScreen->>EligibilityResultApi: ✅ 資格の再確認
+  activate EligibilityResultApi
+  EligibilityResultApi->>EligibilityCheck: update
+  EligibilityResultApi-->>EligibilityScreen: 🖥️ 資格確認画面
+  EligibilityScreen-->>Nurse: 🖥️ 資格確認画面
+  deactivate EligibilityResultApi
+```
+
+#### RecordEligibilityDeclaration
+
+被保険者資格申立書の受領。被保険者資格申立書による確認
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase RecordEligibilityDeclaration --out samples/clinic-ops/out/uc/sequence_record_eligibility_declaration
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor Nurse as 👤 看護師
+    actor ReceptionClerk as 👤 医事課 受付担当
+  end
+  box System Boundary
+    participant EligibilityScreen as 🖥️ 資格確認画面
+  end
+  box System
+    participant EligibilityResultApi as 🔌 資格確認結果 API
+    participant EligibilityCheck as 🗄️ 資格確認
+  end
+
+  Note over Nurse,EligibilityCheck: ✅ 被保険者資格申立書の受領
+  Nurse->>EligibilityScreen: ✅ 被保険者資格申立書の受領
+  EligibilityScreen->>EligibilityResultApi: ✅ 被保険者資格申立書の受領
+  activate EligibilityResultApi
+  EligibilityResultApi->>EligibilityCheck: update
+  EligibilityResultApi-->>EligibilityScreen: 🖥️ 資格確認画面
+  EligibilityScreen-->>Nurse: 🖥️ 資格確認画面
+  deactivate EligibilityResultApi
+```
+
+#### ConfirmEligibilityInOutageMode
+
+システム障害時モードでの資格確認。システム障害時モードによる確認
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ConfirmEligibilityInOutageMode --out samples/clinic-ops/out/uc/sequence_confirm_eligibility_in_outage_mode
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor Nurse as 👤 看護師
+    actor ReceptionClerk as 👤 医事課 受付担当
+  end
+  box System Boundary
+    participant EligibilityScreen as 🖥️ 資格確認画面
+  end
+  box System
+    participant EligibilityResultApi as 🔌 資格確認結果 API
+    participant EligibilityCheck as 🗄️ 資格確認
+  end
+
+  Note over Nurse,EligibilityCheck: ✅ システム障害時モードでの資格確認
+  Nurse->>EligibilityScreen: ✅ システム障害時モードでの資格確認
+  EligibilityScreen->>EligibilityResultApi: ✅ システム障害時モードでの資格確認
+  activate EligibilityResultApi
+  EligibilityResultApi->>EligibilityCheck: update
+  EligibilityResultApi-->>EligibilityScreen: 🖥️ 資格確認画面
+  EligibilityScreen-->>Nurse: 🖥️ 資格確認画面
+  deactivate EligibilityResultApi
+```
+
+#### ReceiveReferralLetter
+
+紹介状受付処理。紹介状の受領と受付処理
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ReceiveReferralLetter --out samples/clinic-ops/out/uc/sequence_receive_referral_letter
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor Nurse as 👤 看護師
+    actor ReceptionClerk as 👤 医事課 受付担当
+  end
+  box System Boundary
+    participant ReferralScreen as 🖥️ 紹介状受付画面
+  end
+  box System
+    participant ReferralLetterApi as 🔌 紹介状 API
+    participant ReferralLetter as 🗄️ 紹介状・診療情報提供書
+  end
+
+  Note over Nurse,ReferralLetter: ✅ 紹介状受付処理
+  Nurse->>ReferralScreen: ✅ 紹介状受付処理
+  ReferralScreen->>ReferralLetterApi: ✅ 紹介状受付処理
+  activate ReferralLetterApi
+  ReferralLetterApi->>ReferralLetter: create
+  ReferralLetterApi-->>ReferralScreen: 🖥️ 紹介状受付画面
+  ReferralScreen-->>Nurse: 🖥️ 紹介状受付画面
+  deactivate ReferralLetterApi
 ```
 
 #### AssignRoom
 
-部屋と予約の同期更新
+Assign Room。部屋と予約の同期更新
 
 生成コマンド:
 
@@ -3858,7 +6273,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase A
 ```mermaid
 sequenceDiagram
   box System Value
-    actor Nurse as 👤 Nurse
+    actor Nurse as 👤 看護師
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
     participant RoomBoardScreen as 🖥️ Room Board Screen
@@ -3885,7 +6301,7 @@ sequenceDiagram
 
 #### PrepareEncounter
 
-診療準備の参照情報
+Prepare Encounter。診療準備の参照情報
 
 生成コマンド:
 
@@ -3896,10 +6312,11 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase P
 ```mermaid
 sequenceDiagram
   box System Value
-    actor Nurse as 👤 Nurse
+    actor Nurse as 👤 看護師
+    actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
-    participant CheckInScreen as 🖥️ Check-In Screen
+    participant CheckInScreen as 🖥️ 受付画面
   end
   box System
     participant PrepareEncounterApi as 🔌 Prepare Encounter API
@@ -3913,8 +6330,8 @@ sequenceDiagram
   activate PrepareEncounterApi
   PrepareEncounterApi->>Appointment: read
   PrepareEncounterApi->>PatientProfile: read
-  PrepareEncounterApi-->>CheckInScreen: 🖥️ Check-In Screen
-  CheckInScreen-->>Nurse: 🖥️ Check-In Screen
+  PrepareEncounterApi-->>CheckInScreen: 🖥️ 受付画面
+  CheckInScreen-->>Nurse: 🖥️ 受付画面
   deactivate PrepareEncounterApi
 ```
 
@@ -3922,16 +6339,17 @@ sequenceDiagram
 
 | UC | 必要権限 | 主な確認点 |
 |---|---|---|
-| `OpenEncounter` | `EncounterOpen` | 予約から診療記録を開始する |
-| `RecordVitals` | `VitalsRecord` | バイタル作成と診療記録更新 |
-| `DocumentAssessment` | `ClinicalDocument` | 診断作成と診療記録更新 |
-| `SignEncounter` | `EncounterSign` | 診療署名イベント |
-| `AmendEncounter` | `EncounterSign` | 署名後修正 |
-| `CompleteAppointment` | `EncounterOpen` | 予約完了と部屋清掃状態 |
+| `OpenEncounter` | `EncounterOpen` | 受付済の予約から診療記録を開く |
+| `RecordVitals` | `VitalsRecord` | バイタル記録 |
+| `DocumentAssessment` | `ClinicalDocument` | 診断記録と記録状態 |
+| `SignEncounter` | `EncounterSign` | 署名と後続 BUC の起点イベント |
+| `AmendEncounter` | `EncounterSign` | 署名済み記録の修正 |
+| `IssueReferralLetter` | `ReferralManage` | 診療情報提供書の作成・送信 |
+| `CompleteConsultation` | `EncounterOpen` | 診察終了で予約を計算待ちにし、部屋を清掃中にする |
 
 #### OpenEncounter
 
-予約から診療記録を開始する
+Open Encounter。受付済の予約から診療記録を開く
 
 生成コマンド:
 
@@ -3942,7 +6360,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase O
 ```mermaid
 sequenceDiagram
   box System Value
-    actor Nurse as 👤 Nurse
+    actor Clinician as 👤 医師
+    actor Nurse as 👤 看護師
   end
   box System Boundary
     participant EncounterWorkspaceScreen as 🖥️ Encounter Workspace
@@ -3953,20 +6372,23 @@ sequenceDiagram
     participant Encounter as 🗄️ Encounter
   end
 
-  Note over Nurse,Encounter: ✅ Open Encounter
-  Nurse->>EncounterWorkspaceScreen: ✅ Open Encounter
+  Note over Clinician,Encounter: ✅ Open Encounter
+  Clinician->>EncounterWorkspaceScreen: ✅ Open Encounter
   EncounterWorkspaceScreen->>OpenEncounterApi: ✅ Open Encounter
   activate OpenEncounterApi
-  OpenEncounterApi->>Appointment: read
-  OpenEncounterApi->>Encounter: create
+  rect rgb(245,245,245)
+    Note right of OpenEncounterApi: transaction (API atomic boundary)
+    OpenEncounterApi->>Appointment: update
+    OpenEncounterApi->>Encounter: create
+  end
   OpenEncounterApi-->>EncounterWorkspaceScreen: 🖥️ Encounter Workspace
-  EncounterWorkspaceScreen-->>Nurse: 🖥️ Encounter Workspace
+  EncounterWorkspaceScreen-->>Clinician: 🖥️ Encounter Workspace
   deactivate OpenEncounterApi
 ```
 
 #### RecordVitals
 
-バイタル作成と診療記録更新
+Record Vitals。バイタル記録
 
 生成コマンド:
 
@@ -3977,7 +6399,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase R
 ```mermaid
 sequenceDiagram
   box System Value
-    actor Nurse as 👤 Nurse
+    actor Clinician as 👤 医師
+    actor Nurse as 👤 看護師
   end
   box System Boundary
     participant VitalsScreen as 🖥️ Vitals Screen
@@ -3988,8 +6411,8 @@ sequenceDiagram
     participant VitalSign as 🗄️ Vital Sign
   end
 
-  Note over Nurse,VitalSign: ✅ Record Vitals
-  Nurse->>VitalsScreen: ✅ Record Vitals
+  Note over Clinician,VitalSign: ✅ Record Vitals
+  Clinician->>VitalsScreen: ✅ Record Vitals
   VitalsScreen->>RecordVitalsApi: ✅ Record Vitals
   activate RecordVitalsApi
   rect rgb(245,245,245)
@@ -3998,13 +6421,13 @@ sequenceDiagram
     RecordVitalsApi->>VitalSign: create
   end
   RecordVitalsApi-->>VitalsScreen: 🖥️ Vitals Screen
-  VitalsScreen-->>Nurse: 🖥️ Vitals Screen
+  VitalsScreen-->>Clinician: 🖥️ Vitals Screen
   deactivate RecordVitalsApi
 ```
 
 #### DocumentAssessment
 
-診断作成と診療記録更新
+Document Assessment。診断記録と記録状態
 
 生成コマンド:
 
@@ -4015,7 +6438,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase D
 ```mermaid
 sequenceDiagram
   box System Value
-    actor Clinician as 👤 Clinician
+    actor Clinician as 👤 医師
+    actor Nurse as 👤 看護師
   end
   box System Boundary
     participant DiagnosisScreen as 🖥️ Diagnosis Screen
@@ -4042,7 +6466,7 @@ sequenceDiagram
 
 #### SignEncounter
 
-診療署名イベント
+Sign Encounter。署名と後続 BUC の起点イベント
 
 生成コマンド:
 
@@ -4053,7 +6477,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase S
 ```mermaid
 sequenceDiagram
   box System Value
-    actor Clinician as 👤 Clinician
+    actor Clinician as 👤 医師
+    actor Nurse as 👤 看護師
   end
   box System Boundary
     participant EncounterWorkspaceScreen as 🖥️ Encounter Workspace
@@ -4075,7 +6500,7 @@ sequenceDiagram
 
 #### AmendEncounter
 
-署名後修正
+Amend Signed Encounter。署名済み記録の修正
 
 生成コマンド:
 
@@ -4086,7 +6511,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase A
 ```mermaid
 sequenceDiagram
   box System Value
-    actor Clinician as 👤 Clinician
+    actor Clinician as 👤 医師
+    actor Nurse as 👤 看護師
   end
   box System Boundary
     participant EncounterWorkspaceScreen as 🖥️ Encounter Workspace
@@ -4106,58 +6532,99 @@ sequenceDiagram
   deactivate AmendEncounterApi
 ```
 
-#### CompleteAppointment
+#### IssueReferralLetter
 
-予約完了と部屋清掃状態
+診療情報提供書の作成・送信。診療情報提供書の作成・送信
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase CompleteAppointment --out samples/clinic-ops/out/uc/sequence_complete_appointment
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase IssueReferralLetter --out samples/clinic-ops/out/uc/sequence_issue_referral_letter
 ```
 
 ```mermaid
 sequenceDiagram
   box System Value
-    actor Nurse as 👤 Nurse
+    actor Clinician as 👤 医師
+    actor Nurse as 👤 看護師
+  end
+  box System Boundary
+    participant ReferralLetterScreen as 🖥️ 診療情報提供書画面
+  end
+  box System
+    participant IssueReferralLetterApi as 🔌 診療情報提供書 API
+    participant Encounter as 🗄️ Encounter
+    participant ReferralLetter as 🗄️ 紹介状・診療情報提供書
+  end
+
+  Note over Clinician,ReferralLetter: ✅ 診療情報提供書の作成・送信
+  Clinician->>ReferralLetterScreen: ✅ 診療情報提供書の作成・送信
+  ReferralLetterScreen->>IssueReferralLetterApi: ✅ 診療情報提供書の作成・送信
+  activate IssueReferralLetterApi
+  IssueReferralLetterApi->>Encounter: read
+  IssueReferralLetterApi->>ReferralLetter: create
+  IssueReferralLetterApi-->>ReferralLetterScreen: 🖥️ 診療情報提供書画面
+  ReferralLetterScreen-->>Clinician: 🖥️ 診療情報提供書画面
+  deactivate IssueReferralLetterApi
+```
+
+#### CompleteConsultation
+
+診察終了。診察終了で予約を計算待ちにし、部屋を清掃中にする
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase CompleteConsultation --out samples/clinic-ops/out/uc/sequence_complete_consultation
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor Clinician as 👤 医師
+    actor Nurse as 👤 看護師
   end
   box System Boundary
     participant EncounterWorkspaceScreen as 🖥️ Encounter Workspace
   end
   box System
-    participant CompleteAppointmentApi as 🔌 Complete Appointment API
+    participant CompleteConsultationApi as 🔌 診察終了 API
     participant Appointment as 🗄️ Appointment
     participant Room as 🗄️ Room
   end
 
-  Note over Nurse,Room: ✅ Complete Appointment
-  Nurse->>EncounterWorkspaceScreen: ✅ Complete Appointment
-  EncounterWorkspaceScreen->>CompleteAppointmentApi: ✅ Complete Appointment
-  activate CompleteAppointmentApi
+  Note over Clinician,Room: ✅ 診察終了
+  Clinician->>EncounterWorkspaceScreen: ✅ 診察終了
+  EncounterWorkspaceScreen->>CompleteConsultationApi: ✅ 診察終了
+  activate CompleteConsultationApi
   rect rgb(245,245,245)
-    Note right of CompleteAppointmentApi: transaction (API atomic boundary)
-    CompleteAppointmentApi->>Room: update
-    CompleteAppointmentApi->>Appointment: update
+    Note right of CompleteConsultationApi: transaction (API atomic boundary)
+    CompleteConsultationApi->>Room: update
+    CompleteConsultationApi->>Appointment: update
   end
-  CompleteAppointmentApi-->>EncounterWorkspaceScreen: 🖥️ Encounter Workspace
-  EncounterWorkspaceScreen-->>Nurse: 🖥️ Encounter Workspace
-  deactivate CompleteAppointmentApi
+  CompleteConsultationApi-->>EncounterWorkspaceScreen: 🖥️ Encounter Workspace
+  EncounterWorkspaceScreen-->>Clinician: 🖥️ Encounter Workspace
+  deactivate CompleteConsultationApi
 ```
 
 ### 4.5 Orders and Results UC
 
 | UC | 必要権限 | 主な確認点 |
 |---|---|---|
-| `PlaceLabOrder` | `ClinicalOrderWrite` | 検査オーダー作成 |
-| `CollectSpecimen` | `ClinicalOrderWrite` | 検体採取状態 |
-| `ReceiveLabResult` | `LabResultManage` | 検査結果受領 |
-| `ReviewLabResult` | `LabResultManage` | 結果確認イベント |
-| `NotifyCriticalResult` | `LabResultManage`, `PatientMessageSend` | 重要結果通知 |
-| `CancelClinicalOrder` | `ClinicalOrderWrite` | 検査オーダー取消 |
+| `PlaceLabOrder` | `ClinicalOrderWrite` | 医師が登録したオーダは確定済み |
+| `EnterProxyOrder` | `ProxyOrderEntry` | 代行入力オーダは未確定で作られる |
+| `ConfirmProxyOrder` | `ClinicalOrderWrite` | 医師による代行入力オーダの確定 |
+| `PrintSpecimenLabel` | `ClinicalOrderWrite` | 採血管ラベルの発行（参照のみ） |
+| `CollectSpecimen` | `ClinicalOrderWrite` | 医師が確定したオーダだけを採取する |
+| `RegisterPerformedProcedure` | `ClinicalOrderWrite` | 実施内容（コスト）の登録 |
+| `ReceiveLabResult` | `LabResultManage` | 外注検査システムからの結果受信 |
+| `ReviewLabResult` | `LabResultManage` | 結果確認と後続通知の起点 |
+| `NotifyCriticalResult` | `LabResultManage`, `PatientMessageSend` | 重要結果の患者通知 |
+| `CancelClinicalOrder` | `ClinicalOrderWrite` | オーダ取消 |
 
 #### PlaceLabOrder
 
-検査オーダー作成
+Place Lab Order。医師が登録したオーダは確定済み
 
 生成コマンド:
 
@@ -4168,7 +6635,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase P
 ```mermaid
 sequenceDiagram
   box System Value
-    actor Clinician as 👤 Clinician
+    actor Clinician as 👤 医師
+    actor Nurse as 👤 看護師
   end
   box System Boundary
     participant OrderEntryScreen as 🖥️ Order Entry Screen
@@ -4190,9 +6658,110 @@ sequenceDiagram
   deactivate OrderEntryApi
 ```
 
+#### EnterProxyOrder
+
+検体検査オーダの代行入力。代行入力オーダは未確定で作られる
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase EnterProxyOrder --out samples/clinic-ops/out/uc/sequence_enter_proxy_order
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor MedicalClerk as 👤 医師事務作業補助者
+    actor Nurse as 👤 看護師
+  end
+  box System Boundary
+    participant OrderEntryScreen as 🖥️ Order Entry Screen
+  end
+  box System
+    participant ProxyOrderApi as 🔌 代行入力 API
+    participant ClinicalOrder as 🗄️ Clinical Order
+    participant Encounter as 🗄️ Encounter
+  end
+
+  Note over MedicalClerk,Encounter: ✅ 検体検査オーダの代行入力
+  MedicalClerk->>OrderEntryScreen: ✅ 検体検査オーダの代行入力
+  OrderEntryScreen->>ProxyOrderApi: ✅ 検体検査オーダの代行入力
+  activate ProxyOrderApi
+  ProxyOrderApi->>Encounter: read
+  ProxyOrderApi->>ClinicalOrder: create
+  ProxyOrderApi-->>OrderEntryScreen: 🖥️ Order Entry Screen
+  OrderEntryScreen-->>MedicalClerk: 🖥️ Order Entry Screen
+  deactivate ProxyOrderApi
+```
+
+#### ConfirmProxyOrder
+
+代行入力オーダの確定。医師による代行入力オーダの確定
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ConfirmProxyOrder --out samples/clinic-ops/out/uc/sequence_confirm_proxy_order
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor Clinician as 👤 医師
+    actor Nurse as 👤 看護師
+  end
+  box System Boundary
+    participant OrderEntryScreen as 🖥️ Order Entry Screen
+  end
+  box System
+    participant ConfirmOrderApi as 🔌 オーダ確定 API
+    participant ClinicalOrder as 🗄️ Clinical Order
+  end
+
+  Note over Clinician,ClinicalOrder: ✅ 代行入力オーダの確定
+  Clinician->>OrderEntryScreen: ✅ 代行入力オーダの確定
+  OrderEntryScreen->>ConfirmOrderApi: ✅ 代行入力オーダの確定
+  activate ConfirmOrderApi
+  ConfirmOrderApi->>ClinicalOrder: update
+  ConfirmOrderApi-->>OrderEntryScreen: 🖥️ Order Entry Screen
+  OrderEntryScreen-->>Clinician: 🖥️ Order Entry Screen
+  deactivate ConfirmOrderApi
+```
+
+#### PrintSpecimenLabel
+
+採血管ラベル発行・貼付。採血管ラベルの発行（参照のみ）
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase PrintSpecimenLabel --out samples/clinic-ops/out/uc/sequence_print_specimen_label
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor Nurse as 👤 看護師
+  end
+  box System Boundary
+    participant SpecimenScreen as 🖥️ Specimen Collection Screen
+  end
+  box System
+    participant System as 🧩 システム
+    participant ClinicalOrder as 🗄️ Clinical Order
+  end
+
+  Note over Nurse,ClinicalOrder: ✅ 採血管ラベル発行・貼付
+  Nurse->System: ✅ 採血管ラベル発行・貼付
+  activate System
+  System->>ClinicalOrder: read
+  System-->>Nurse: 🖥️ Specimen Collection Screen
+  deactivate System
+```
+
 #### CollectSpecimen
 
-検体採取状態
+Collect Specimen。医師が確定したオーダだけを採取する
 
 生成コマンド:
 
@@ -4203,7 +6772,7 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 ```mermaid
 sequenceDiagram
   box System Value
-    actor Nurse as 👤 Nurse
+    actor Nurse as 👤 看護師
   end
   box System Boundary
     participant SpecimenScreen as 🖥️ Specimen Collection Screen
@@ -4223,9 +6792,46 @@ sequenceDiagram
   deactivate CollectSpecimenApi
 ```
 
+#### RegisterPerformedProcedure
+
+実施内容（コスト）の登録。実施内容（コスト）の登録
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase RegisterPerformedProcedure --out samples/clinic-ops/out/uc/sequence_register_performed_procedure
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor Nurse as 👤 看護師
+  end
+  box System Boundary
+    participant SpecimenScreen as 🖥️ Specimen Collection Screen
+  end
+  box System
+    participant PerformedProcedureApi as 🔌 実施登録 API
+    participant Charge as 🗄️ Charge
+    participant ClinicalOrder as 🗄️ Clinical Order
+    participant Encounter as 🗄️ Encounter
+  end
+
+  Note over Nurse,Encounter: ✅ 実施内容（コスト）の登録
+  Nurse->>SpecimenScreen: ✅ 実施内容（コスト）の登録
+  SpecimenScreen->>PerformedProcedureApi: ✅ 実施内容（コスト）の登録
+  activate PerformedProcedureApi
+  PerformedProcedureApi->>ClinicalOrder: read
+  PerformedProcedureApi->>Encounter: read
+  PerformedProcedureApi->>Charge: create
+  PerformedProcedureApi-->>SpecimenScreen: 🖥️ Specimen Collection Screen
+  SpecimenScreen-->>Nurse: 🖥️ Specimen Collection Screen
+  deactivate PerformedProcedureApi
+```
+
 #### ReceiveLabResult
 
-検査結果受領
+Receive Lab Result。外注検査システムからの結果受信
 
 生成コマンド:
 
@@ -4236,7 +6842,7 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase R
 ```mermaid
 sequenceDiagram
   box System Value
-    actor Nurse as 👤 Nurse
+    actor Nurse as 👤 看護師
   end
   box System Boundary
     participant ResultReviewScreen as 🖥️ Result Review Screen
@@ -4263,7 +6869,7 @@ sequenceDiagram
 
 #### ReviewLabResult
 
-結果確認イベント
+Review Lab Result。結果確認と後続通知の起点
 
 生成コマンド:
 
@@ -4274,7 +6880,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase R
 ```mermaid
 sequenceDiagram
   box System Value
-    actor Clinician as 👤 Clinician
+    actor Clinician as 👤 医師
+    actor Nurse as 👤 看護師
   end
   box System Boundary
     participant ResultReviewScreen as 🖥️ Result Review Screen
@@ -4301,7 +6908,7 @@ sequenceDiagram
 
 #### NotifyCriticalResult
 
-重要結果通知
+Notify Critical Result。重要結果の患者通知
 
 生成コマンド:
 
@@ -4312,7 +6919,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase N
 ```mermaid
 sequenceDiagram
   box System Value
-    actor Clinician as 👤 Clinician
+    actor Clinician as 👤 医師
+    actor Nurse as 👤 看護師
   end
   box System Boundary
     participant CriticalNoticeScreen as 🖥️ Critical Result Notice Screen
@@ -4339,7 +6947,7 @@ sequenceDiagram
 
 #### CancelClinicalOrder
 
-検査オーダー取消
+Cancel Clinical Order。オーダ取消
 
 生成コマンド:
 
@@ -4350,7 +6958,8 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 ```mermaid
 sequenceDiagram
   box System Value
-    actor Clinician as 👤 Clinician
+    actor Clinician as 👤 医師
+    actor Nurse as 👤 看護師
   end
   box System Boundary
     participant OrderEntryScreen as 🖥️ Order Entry Screen
@@ -4368,20 +6977,28 @@ sequenceDiagram
   deactivate System
 ```
 
-### 4.6 Prescription Fulfillment UC
+### 4.6 処方 UC
 
 | UC | 必要権限 | 主な確認点 |
 |---|---|---|
-| `SearchMedication` | `PrescriptionWrite` | 薬剤カタログ参照 |
-| `DraftPrescription` | `PrescriptionWrite` | 処方下書き |
-| `SendPrescription` | `PrescriptionWrite` | 薬局ネットワーク送信 |
-| `ConfirmDispense` | `PrescriptionDispense` | 調剤確認 |
-| `CancelPrescription` | `PrescriptionWrite` | 処方取消 |
-| `RefillPrescription` | `PrescriptionWrite` | 再処方作成 |
+| `SearchMedication` | `PrescriptionWrite` | 薬剤検索の read-only API |
+| `DraftPrescription` | `PrescriptionWrite` | 処方オーダの作成 |
+| `IssueRefillPrescription` | `PrescriptionWrite` | リフィル処方箋の処方オーダ（使用回数の上限を記載） |
+| `IssueOutsidePrescription` | `PrescriptionWrite` | 院外処方箋の発行と電子処方箋管理サービスへの登録 |
+| `IssueInhouseVoucher` | `PrescriptionWrite` | 院内処方用引換券の交付 |
+| `DispenseAndAudit` | `PrescriptionDispense` | 薬剤師による調剤・監査 |
+| `CounselMedication` | `PrescriptionDispense` | 服薬指導 |
+| `HandOverMedication` | `PrescriptionDispense` | 薬剤交付 |
+| `RaisePrescriptionInquiry` | `PrescriptionDispense` | 薬剤師による疑義照会 |
+| `AnswerPrescriptionInquiry` | `PrescriptionWrite` | 医師の回答で引換券へ戻す |
+| `AnswerPharmacyInquiry` | `PrescriptionWrite` | 保険薬局からの疑義照会への回答 |
+| `ConfirmDispense` | （なし） | 保険薬局での調剤結果の受信 |
+| `ExpirePrescription` | （なし） | 使用期間切れのタイマー処理 |
+| `CancelPrescription` | `PrescriptionWrite` | 処方の取消 |
 
 #### SearchMedication
 
-薬剤カタログ参照
+Search Medication。薬剤検索の read-only API
 
 生成コマンド:
 
@@ -4392,7 +7009,7 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase S
 ```mermaid
 sequenceDiagram
   box System Value
-    actor Clinician as 👤 Clinician
+    actor Clinician as 👤 医師
   end
   box System Boundary
     participant MedicationSearchScreen as 🖥️ Medication Search Screen
@@ -4414,7 +7031,7 @@ sequenceDiagram
 
 #### DraftPrescription
 
-処方下書き
+処方オーダの登録。処方オーダの作成
 
 生成コマンド:
 
@@ -4425,64 +7042,334 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase D
 ```mermaid
 sequenceDiagram
   box System Value
-    actor Clinician as 👤 Clinician
+    actor Clinician as 👤 医師
   end
   box System Boundary
-    participant PrescriptionScreen as 🖥️ Prescription Screen
+    participant PrescriptionScreen as 🖥️ 処方画面
   end
   box System
-    participant DraftPrescriptionApi as 🔌 Draft Prescription API
+    participant DraftPrescriptionApi as 🔌 処方オーダ API
     participant Encounter as 🗄️ Encounter
-    participant Prescription as 🗄️ Prescription
+    participant Prescription as 🗄️ 処方箋
   end
 
-  Note over Clinician,Prescription: ✅ Draft Prescription
-  Clinician->>PrescriptionScreen: ✅ Draft Prescription
-  PrescriptionScreen->>DraftPrescriptionApi: ✅ Draft Prescription
+  Note over Clinician,Prescription: ✅ 処方オーダの登録
+  Clinician->>PrescriptionScreen: ✅ 処方オーダの登録
+  PrescriptionScreen->>DraftPrescriptionApi: ✅ 処方オーダの登録
   activate DraftPrescriptionApi
   DraftPrescriptionApi->>Encounter: read
   DraftPrescriptionApi->>Prescription: create
-  DraftPrescriptionApi-->>PrescriptionScreen: 🖥️ Prescription Screen
-  PrescriptionScreen-->>Clinician: 🖥️ Prescription Screen
+  DraftPrescriptionApi-->>PrescriptionScreen: 🖥️ 処方画面
+  PrescriptionScreen-->>Clinician: 🖥️ 処方画面
   deactivate DraftPrescriptionApi
 ```
 
-#### SendPrescription
+#### IssueRefillPrescription
 
-薬局ネットワーク送信
+リフィル処方箋の処方オーダ。リフィル処方箋の処方オーダ（使用回数の上限を記載）
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase SendPrescription --out samples/clinic-ops/out/uc/sequence_send_prescription
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase IssueRefillPrescription --out samples/clinic-ops/out/uc/sequence_issue_refill_prescription
 ```
 
 ```mermaid
 sequenceDiagram
   box System Value
-    actor Clinician as 👤 Clinician
+    actor Clinician as 👤 医師
   end
   box System Boundary
-    participant PrescriptionScreen as 🖥️ Prescription Screen
+    participant PrescriptionScreen as 🖥️ 処方画面
   end
   box System
-    participant SendPrescriptionApi as 🔌 Send Prescription API
-    participant Prescription as 🗄️ Prescription
+    participant DraftPrescriptionApi as 🔌 処方オーダ API
+    participant Encounter as 🗄️ Encounter
+    participant Prescription as 🗄️ 処方箋
   end
 
-  Note over Clinician,Prescription: ✅ Send Prescription
-  Clinician->>PrescriptionScreen: ✅ Send Prescription
-  PrescriptionScreen->>SendPrescriptionApi: ✅ Send Prescription
-  activate SendPrescriptionApi
-  SendPrescriptionApi->>Prescription: update
-  SendPrescriptionApi-->>PrescriptionScreen: 🖥️ Prescription Screen
-  PrescriptionScreen-->>Clinician: 🖥️ Prescription Screen
-  deactivate SendPrescriptionApi
+  Note over Clinician,Prescription: ✅ リフィル処方箋の処方オーダ
+  Clinician->>PrescriptionScreen: ✅ リフィル処方箋の処方オーダ
+  PrescriptionScreen->>DraftPrescriptionApi: ✅ リフィル処方箋の処方オーダ
+  activate DraftPrescriptionApi
+  DraftPrescriptionApi->>Encounter: read
+  DraftPrescriptionApi->>Prescription: create
+  DraftPrescriptionApi-->>PrescriptionScreen: 🖥️ 処方画面
+  PrescriptionScreen-->>Clinician: 🖥️ 処方画面
+  deactivate DraftPrescriptionApi
+```
+
+#### IssueOutsidePrescription
+
+院外処方箋の発行。院外処方箋の発行と電子処方箋管理サービスへの登録
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase IssueOutsidePrescription --out samples/clinic-ops/out/uc/sequence_issue_outside_prescription
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor Clinician as 👤 医師
+  end
+  box System Boundary
+    participant PrescriptionScreen as 🖥️ 処方画面
+  end
+  box System
+    participant IssuePrescriptionApi as 🔌 処方箋発行 API
+    participant Prescription as 🗄️ 処方箋
+  end
+
+  Note over Clinician,Prescription: ✅ 院外処方箋の発行
+  Clinician->>PrescriptionScreen: ✅ 院外処方箋の発行
+  PrescriptionScreen->>IssuePrescriptionApi: ✅ 院外処方箋の発行
+  activate IssuePrescriptionApi
+  IssuePrescriptionApi->>Prescription: update
+  IssuePrescriptionApi-->>PrescriptionScreen: 🖥️ 処方画面
+  PrescriptionScreen-->>Clinician: 🖥️ 処方画面
+  deactivate IssuePrescriptionApi
+```
+
+#### IssueInhouseVoucher
+
+院内処方用引換券の交付。院内処方用引換券の交付
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase IssueInhouseVoucher --out samples/clinic-ops/out/uc/sequence_issue_inhouse_voucher
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor Clinician as 👤 医師
+  end
+  box System Boundary
+    participant PrescriptionScreen as 🖥️ 処方画面
+  end
+  box System
+    participant IssuePrescriptionApi as 🔌 処方箋発行 API
+    participant Prescription as 🗄️ 処方箋
+  end
+
+  Note over Clinician,Prescription: ✅ 院内処方用引換券の交付
+  Clinician->>PrescriptionScreen: ✅ 院内処方用引換券の交付
+  PrescriptionScreen->>IssuePrescriptionApi: ✅ 院内処方用引換券の交付
+  activate IssuePrescriptionApi
+  IssuePrescriptionApi->>Prescription: update
+  IssuePrescriptionApi-->>PrescriptionScreen: 🖥️ 処方画面
+  PrescriptionScreen-->>Clinician: 🖥️ 処方画面
+  deactivate IssuePrescriptionApi
+```
+
+#### DispenseAndAudit
+
+調剤・監査。薬剤師による調剤・監査
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase DispenseAndAudit --out samples/clinic-ops/out/uc/sequence_dispense_and_audit
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor Clinician as 👤 医師
+    actor Pharmacist as 👤 薬剤師
+  end
+  box System Boundary
+    participant DispensingScreen as 🖥️ 調剤・監査画面
+  end
+  box System
+    participant DispensingApi as 🔌 院内調剤 API
+    participant Prescription as 🗄️ 処方箋
+  end
+
+  Note over Clinician,Prescription: ✅ 調剤・監査
+  Clinician->>DispensingScreen: ✅ 調剤・監査
+  DispensingScreen->>DispensingApi: ✅ 調剤・監査
+  activate DispensingApi
+  DispensingApi->>Prescription: update
+  DispensingApi-->>DispensingScreen: 🖥️ 調剤・監査画面
+  DispensingScreen-->>Clinician: 🖥️ 調剤・監査画面
+  deactivate DispensingApi
+```
+
+#### CounselMedication
+
+服薬指導。服薬指導
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase CounselMedication --out samples/clinic-ops/out/uc/sequence_counsel_medication
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor Clinician as 👤 医師
+    actor Pharmacist as 👤 薬剤師
+  end
+  box System Boundary
+    participant DispensingScreen as 🖥️ 調剤・監査画面
+  end
+  box System
+    participant DispensingApi as 🔌 院内調剤 API
+    participant Prescription as 🗄️ 処方箋
+  end
+
+  Note over Clinician,Prescription: ✅ 服薬指導
+  Clinician->>DispensingScreen: ✅ 服薬指導
+  DispensingScreen->>DispensingApi: ✅ 服薬指導
+  activate DispensingApi
+  DispensingApi->>Prescription: update
+  DispensingApi-->>DispensingScreen: 🖥️ 調剤・監査画面
+  DispensingScreen-->>Clinician: 🖥️ 調剤・監査画面
+  deactivate DispensingApi
+```
+
+#### HandOverMedication
+
+薬剤交付。薬剤交付
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase HandOverMedication --out samples/clinic-ops/out/uc/sequence_hand_over_medication
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor Clinician as 👤 医師
+    actor Pharmacist as 👤 薬剤師
+  end
+  box System Boundary
+    participant DispensingScreen as 🖥️ 調剤・監査画面
+  end
+  box System
+    participant DispensingApi as 🔌 院内調剤 API
+    participant Prescription as 🗄️ 処方箋
+  end
+
+  Note over Clinician,Prescription: ✅ 薬剤交付
+  Clinician->>DispensingScreen: ✅ 薬剤交付
+  DispensingScreen->>DispensingApi: ✅ 薬剤交付
+  activate DispensingApi
+  DispensingApi->>Prescription: update
+  DispensingApi-->>DispensingScreen: 🖥️ 調剤・監査画面
+  DispensingScreen-->>Clinician: 🖥️ 調剤・監査画面
+  deactivate DispensingApi
+```
+
+#### RaisePrescriptionInquiry
+
+疑義照会。薬剤師による疑義照会
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase RaisePrescriptionInquiry --out samples/clinic-ops/out/uc/sequence_raise_prescription_inquiry
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor Clinician as 👤 医師
+    actor Pharmacist as 👤 薬剤師
+  end
+  box System Boundary
+    participant DispensingScreen as 🖥️ 調剤・監査画面
+  end
+  box System
+    participant DispensingApi as 🔌 院内調剤 API
+    participant Prescription as 🗄️ 処方箋
+  end
+
+  Note over Clinician,Prescription: ✅ 疑義照会
+  Clinician->>DispensingScreen: ✅ 疑義照会
+  DispensingScreen->>DispensingApi: ✅ 疑義照会
+  activate DispensingApi
+  DispensingApi->>Prescription: update
+  DispensingApi-->>DispensingScreen: 🖥️ 調剤・監査画面
+  DispensingScreen-->>Clinician: 🖥️ 調剤・監査画面
+  deactivate DispensingApi
+```
+
+#### AnswerPrescriptionInquiry
+
+疑義照会への回答。医師の回答で引換券へ戻す
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase AnswerPrescriptionInquiry --out samples/clinic-ops/out/uc/sequence_answer_prescription_inquiry
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor Clinician as 👤 医師
+  end
+  box System Boundary
+    participant PrescriptionScreen as 🖥️ 処方画面
+  end
+  box System
+    participant PrescriptionInquiryApi as 🔌 疑義照会 API
+    participant Prescription as 🗄️ 処方箋
+  end
+
+  Note over Clinician,Prescription: ✅ 疑義照会への回答
+  Clinician->>PrescriptionScreen: ✅ 疑義照会への回答
+  PrescriptionScreen->>PrescriptionInquiryApi: ✅ 疑義照会への回答
+  activate PrescriptionInquiryApi
+  PrescriptionInquiryApi->>Prescription: update
+  PrescriptionInquiryApi-->>PrescriptionScreen: 🖥️ 処方画面
+  PrescriptionScreen-->>Clinician: 🖥️ 処方画面
+  deactivate PrescriptionInquiryApi
+```
+
+#### AnswerPharmacyInquiry
+
+保険薬局からの疑義照会への回答。保険薬局からの疑義照会への回答
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase AnswerPharmacyInquiry --out samples/clinic-ops/out/uc/sequence_answer_pharmacy_inquiry
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor Clinician as 👤 医師
+  end
+  box System Boundary
+    participant PrescriptionScreen as 🖥️ 処方画面
+  end
+  box System
+    participant PrescriptionInquiryApi as 🔌 疑義照会 API
+    participant Prescription as 🗄️ 処方箋
+  end
+
+  Note over Clinician,Prescription: ✅ 保険薬局からの疑義照会への回答
+  Clinician->>PrescriptionScreen: ✅ 保険薬局からの疑義照会への回答
+  PrescriptionScreen->>PrescriptionInquiryApi: ✅ 保険薬局からの疑義照会への回答
+  activate PrescriptionInquiryApi
+  PrescriptionInquiryApi->>Prescription: update
+  PrescriptionInquiryApi-->>PrescriptionScreen: 🖥️ 処方画面
+  PrescriptionScreen-->>Clinician: 🖥️ 処方画面
+  deactivate PrescriptionInquiryApi
 ```
 
 #### ConfirmDispense
 
-調剤確認
+保険薬局での調剤結果の受信。保険薬局での調剤結果の受信
 
 生成コマンド:
 
@@ -4493,29 +7380,62 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 ```mermaid
 sequenceDiagram
   box System Value
-    actor Nurse as 👤 Nurse
+    actor Clinician as 👤 医師
   end
   box System Boundary
-    participant PharmacyStatusScreen as 🖥️ Pharmacy Status Screen
+    participant PharmacyStatusScreen as 🖥️ 電子処方箋の状況画面
   end
   box System
-    participant ConfirmDispenseApi as 🔌 Confirm Dispense API
-    participant Prescription as 🗄️ Prescription
+    participant ConfirmDispenseApi as 🔌 調剤結果 API
+    participant Prescription as 🗄️ 処方箋
   end
 
-  Note over Nurse,Prescription: ✅ Confirm Dispense
-  Nurse->>PharmacyStatusScreen: ✅ Confirm Dispense
-  PharmacyStatusScreen->>ConfirmDispenseApi: ✅ Confirm Dispense
+  Note over Clinician,Prescription: ✅ 保険薬局での調剤結果の受信
+  Clinician->>PharmacyStatusScreen: ✅ 保険薬局での調剤結果の受信
+  PharmacyStatusScreen->>ConfirmDispenseApi: ✅ 保険薬局での調剤結果の受信
   activate ConfirmDispenseApi
   ConfirmDispenseApi->>Prescription: update
-  ConfirmDispenseApi-->>PharmacyStatusScreen: 🖥️ Pharmacy Status Screen
-  PharmacyStatusScreen-->>Nurse: 🖥️ Pharmacy Status Screen
+  ConfirmDispenseApi-->>PharmacyStatusScreen: 🖥️ 電子処方箋の状況画面
+  PharmacyStatusScreen-->>Clinician: 🖥️ 電子処方箋の状況画面
+  deactivate ConfirmDispenseApi
+```
+
+#### ExpirePrescription
+
+処方箋の使用期間切れ。使用期間切れのタイマー処理
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ExpirePrescription --out samples/clinic-ops/out/uc/sequence_expire_prescription
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor Clinician as 👤 医師
+  end
+  box System Boundary
+    participant PharmacyStatusScreen as 🖥️ 電子処方箋の状況画面
+  end
+  box System
+    participant ConfirmDispenseApi as 🔌 調剤結果 API
+    participant Prescription as 🗄️ 処方箋
+  end
+
+  Note over Clinician,Prescription: ✅ 処方箋の使用期間切れ
+  Clinician->>PharmacyStatusScreen: ✅ 処方箋の使用期間切れ
+  PharmacyStatusScreen->>ConfirmDispenseApi: ✅ 処方箋の使用期間切れ
+  activate ConfirmDispenseApi
+  ConfirmDispenseApi->>Prescription: update
+  ConfirmDispenseApi-->>PharmacyStatusScreen: 🖥️ 電子処方箋の状況画面
+  PharmacyStatusScreen-->>Clinician: 🖥️ 電子処方箋の状況画面
   deactivate ConfirmDispenseApi
 ```
 
 #### CancelPrescription
 
-処方取消
+処方の取消。処方の取消
 
 生成コマンド:
 
@@ -4526,75 +7446,282 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 ```mermaid
 sequenceDiagram
   box System Value
-    actor Clinician as 👤 Clinician
+    actor Clinician as 👤 医師
   end
   box System Boundary
-    participant PrescriptionScreen as 🖥️ Prescription Screen
+    participant PrescriptionScreen as 🖥️ 処方画面
   end
   box System
     participant System as 🧩 システム
-    participant Prescription as 🗄️ Prescription
+    participant Prescription as 🗄️ 処方箋
   end
 
-  Note over Clinician,Prescription: ✅ Cancel Prescription
-  Clinician->System: ✅ Cancel Prescription
+  Note over Clinician,Prescription: ✅ 処方の取消
+  Clinician->System: ✅ 処方の取消
   activate System
   System->>Prescription: update
-  System-->>Clinician: 🖥️ Prescription Screen
+  System-->>Clinician: 🖥️ 処方画面
   deactivate System
 ```
 
-#### RefillPrescription
+### 4.7 計算・会計 UC
 
-再処方作成
+| UC | 必要権限 | 主な確認点 |
+|---|---|---|
+| `CalculateVisitBill` | `BillCalculate` | 会計計算入力で予約を会計待ちにする |
+| `ApplySelectedTreatmentFee` | `BillCalculate` | 紹介状なし初診だけに選定療養費の Charge を作る |
+| `CallPatientForPayment` | （なし） | 会計の呼出（参照のみ） |
+| `SettleAtWindow` | `PaymentCollect` | 会計窓口での精算 |
+| `SettleAtKiosk` | `PaymentCollect` | 自動精算機での精算 |
+| `IssueReceipt` | `PaymentCollect` | 領収証・明細書の交付で予約を完了にする |
+
+#### CalculateVisitBill
+
+会計計算入力。会計計算入力で予約を会計待ちにする
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase RefillPrescription --out samples/clinic-ops/out/uc/sequence_refill_prescription
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase CalculateVisitBill --out samples/clinic-ops/out/uc/sequence_calculate_visit_bill
 ```
 
 ```mermaid
 sequenceDiagram
   box System Value
-    actor Clinician as 👤 Clinician
+    actor AccountsClerk as 👤 医事課 会計担当
   end
   box System Boundary
-    participant PrescriptionScreen as 🖥️ Prescription Screen
+    participant BillCalculationScreen as 🖥️ 会計計算画面
   end
   box System
-    participant RefillPrescriptionApi as 🔌 Refill Prescription API
-    participant Medication as 🗄️ Medication
-    participant Prescription as 🗄️ Prescription
+    participant CalculateVisitBillApi as 🔌 会計計算 API
+    participant Appointment as 🗄️ Appointment
+    participant Charge as 🗄️ Charge
+    participant InsurancePolicy as 🗄️ 保険資格
   end
 
-  Note over Clinician,Prescription: ✅ Refill Prescription
-  Clinician->>PrescriptionScreen: ✅ Refill Prescription
-  PrescriptionScreen->>RefillPrescriptionApi: ✅ Refill Prescription
-  activate RefillPrescriptionApi
-  RefillPrescriptionApi->>Medication: read
-  RefillPrescriptionApi->>Prescription: create
-  RefillPrescriptionApi-->>PrescriptionScreen: 🖥️ Prescription Screen
-  PrescriptionScreen-->>Clinician: 🖥️ Prescription Screen
-  deactivate RefillPrescriptionApi
+  Note over AccountsClerk,InsurancePolicy: ✅ 会計計算入力
+  AccountsClerk->>BillCalculationScreen: ✅ 会計計算入力
+  BillCalculationScreen->>CalculateVisitBillApi: ✅ 会計計算入力
+  activate CalculateVisitBillApi
+  CalculateVisitBillApi->>Charge: read
+  CalculateVisitBillApi->>InsurancePolicy: read
+  CalculateVisitBillApi->>Appointment: update
+  CalculateVisitBillApi-->>BillCalculationScreen: 🖥️ 会計計算画面
+  BillCalculationScreen-->>AccountsClerk: 🖥️ 会計計算画面
+  deactivate CalculateVisitBillApi
 ```
 
-### 4.7 Billing Claims UC
+#### ApplySelectedTreatmentFee
+
+選定療養費の算定。紹介状なし初診だけに選定療養費の Charge を作る
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ApplySelectedTreatmentFee --out samples/clinic-ops/out/uc/sequence_apply_selected_treatment_fee
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor AccountsClerk as 👤 医事課 会計担当
+  end
+  box System Boundary
+    participant BillCalculationScreen as 🖥️ 会計計算画面
+  end
+  box System
+    participant SelectedFeeApi as 🔌 選定療養費 API
+    participant Charge as 🗄️ Charge
+    participant Encounter as 🗄️ Encounter
+    participant SelectedTreatmentFeeSetting as 🗄️ 選定療養費の設定
+  end
+
+  Note over AccountsClerk,SelectedTreatmentFeeSetting: ✅ 選定療養費の算定
+  AccountsClerk->>BillCalculationScreen: ✅ 選定療養費の算定
+  BillCalculationScreen->>SelectedFeeApi: ✅ 選定療養費の算定
+  activate SelectedFeeApi
+  SelectedFeeApi->>SelectedTreatmentFeeSetting: read
+  SelectedFeeApi->>Encounter: read
+  SelectedFeeApi->>Charge: create
+  SelectedFeeApi-->>BillCalculationScreen: 🖥️ 会計計算画面
+  BillCalculationScreen-->>AccountsClerk: 🖥️ 会計計算画面
+  deactivate SelectedFeeApi
+```
+
+#### CallPatientForPayment
+
+会計の呼出。会計の呼出（参照のみ）
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase CallPatientForPayment --out samples/clinic-ops/out/uc/sequence_call_patient_for_payment
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor AccountsClerk as 👤 医事課 会計担当
+  end
+  box System Boundary
+    participant PaymentWindowScreen as 🖥️ 会計窓口画面
+  end
+  box System
+    participant System as 🧩 システム
+    participant Appointment as 🗄️ Appointment
+  end
+
+  Note over AccountsClerk,Appointment: ✅ 会計の呼出
+  AccountsClerk->System: ✅ 会計の呼出
+  activate System
+  System->>Appointment: read
+  System-->>AccountsClerk: 🖥️ 会計窓口画面
+  deactivate System
+```
+
+#### SettleAtWindow
+
+会計窓口での精算。会計窓口での精算
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase SettleAtWindow --out samples/clinic-ops/out/uc/sequence_settle_at_window
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor AccountsClerk as 👤 医事課 会計担当
+  end
+  box System Boundary
+    participant PaymentWindowScreen as 🖥️ 会計窓口画面
+  end
+  box System
+    participant SettlementApi as 🔌 精算 API
+    participant AccountBalance as 🗄️ 未収金残高
+    participant Appointment as 🗄️ Appointment
+    participant PaymentTransaction as 🗄️ Payment Transaction
+  end
+
+  Note over AccountsClerk,PaymentTransaction: ✅ 会計窓口での精算
+  AccountsClerk->>PaymentWindowScreen: ✅ 会計窓口での精算
+  PaymentWindowScreen->>SettlementApi: ✅ 会計窓口での精算
+  activate SettlementApi
+  rect rgb(245,245,245)
+    Note right of SettlementApi: transaction (API atomic boundary)
+    SettlementApi->>AccountBalance: update
+    SettlementApi->>Appointment: update
+    SettlementApi->>PaymentTransaction: create
+  end
+  SettlementApi-->>PaymentWindowScreen: 🖥️ 会計窓口画面
+  PaymentWindowScreen-->>AccountsClerk: 🖥️ 会計窓口画面
+  deactivate SettlementApi
+```
+
+#### SettleAtKiosk
+
+自動精算機での精算。自動精算機での精算
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase SettleAtKiosk --out samples/clinic-ops/out/uc/sequence_settle_at_kiosk
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor AccountsClerk as 👤 医事課 会計担当
+  end
+  box System Boundary
+    participant KioskScreen as 🖥️ 自動精算機画面
+  end
+  box System
+    participant SettlementApi as 🔌 精算 API
+    participant AccountBalance as 🗄️ 未収金残高
+    participant Appointment as 🗄️ Appointment
+    participant PaymentTransaction as 🗄️ Payment Transaction
+  end
+
+  Note over AccountsClerk,PaymentTransaction: ✅ 自動精算機での精算
+  AccountsClerk->>KioskScreen: ✅ 自動精算機での精算
+  KioskScreen->>SettlementApi: ✅ 自動精算機での精算
+  activate SettlementApi
+  rect rgb(245,245,245)
+    Note right of SettlementApi: transaction (API atomic boundary)
+    SettlementApi->>AccountBalance: update
+    SettlementApi->>Appointment: update
+    SettlementApi->>PaymentTransaction: create
+  end
+  SettlementApi-->>KioskScreen: 🖥️ 自動精算機画面
+  KioskScreen-->>AccountsClerk: 🖥️ 自動精算機画面
+  deactivate SettlementApi
+```
+
+#### IssueReceipt
+
+領収証・明細書の交付。領収証・明細書の交付で予約を完了にする
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase IssueReceipt --out samples/clinic-ops/out/uc/sequence_issue_receipt
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor AccountsClerk as 👤 医事課 会計担当
+  end
+  box System Boundary
+    participant PaymentWindowScreen as 🖥️ 会計窓口画面
+  end
+  box System
+    participant ReceiptApi as 🔌 領収証 API
+    participant Appointment as 🗄️ Appointment
+    participant Charge as 🗄️ Charge
+    participant PaymentTransaction as 🗄️ Payment Transaction
+  end
+
+  Note over AccountsClerk,PaymentTransaction: ✅ 領収証・明細書の交付
+  AccountsClerk->>PaymentWindowScreen: ✅ 領収証・明細書の交付
+  PaymentWindowScreen->>ReceiptApi: ✅ 領収証・明細書の交付
+  activate ReceiptApi
+  ReceiptApi->>PaymentTransaction: read
+  ReceiptApi->>Charge: read
+  ReceiptApi->>Appointment: update
+  ReceiptApi-->>PaymentWindowScreen: 🖥️ 会計窓口画面
+  PaymentWindowScreen-->>AccountsClerk: 🖥️ 会計窓口画面
+  deactivate ReceiptApi
+```
+
+### 4.8 レセプト作成・請求 UC
 
 | UC | 必要権限 | 主な確認点 |
 |---|---|---|
-| `CreateCharge` | `BillingClaimWrite` | チャージ作成と残高更新 |
-| `GenerateClaim` | `BillingClaimWrite` | 請求生成 |
-| `SubmitClaim` | `BillingClaimWrite` | 請求送信 |
-| `ReceiveClaimAccepted` | `BillingClaimWrite` | 請求受理 |
-| `RecordClaimDenial` | `BillingClaimWrite` | 請求否認 |
-| `PostPayment` | `PaymentPost` | 入金登録 |
-| `ReconcileBalance` | `PaymentPost` | 残高消込 |
-| `VoidCharge` | `BillingClaimWrite` | チャージ取消 |
+| `CreateCharge` | （なし） | 署名時のコスト情報登録（システム起動） |
+| `GenerateClaimStatement` | `BillingClaimWrite` | 月初のレセプト作成 |
+| `InspectClaimStatement` | `BillingClaimWrite` | 院内点検 |
+| `HoldClaimStatement` | `BillingClaimWrite` | 保留（月遅れ） |
+| `ReleaseHeldStatement` | `BillingClaimWrite` | 保留レセプトの再提出準備 |
+| `SubmitClaimStatements` | `BillingClaimWrite` | 毎月10日までの請求 |
+| `RecordReceiptError` | `BillingClaimWrite` | 受付不能・要確認の確認 |
+| `ResendErroredStatement` | `BillingClaimWrite` | 11日・12日のエラー分再送 |
+| `ReceiveClaimAccepted` | `BillingClaimWrite` | 審査支払機関の受付で審査中になる |
+| `ReviewClaimTransfer` | `BillingClaimWrite` | 資格の振替・分割の確認（参照のみ） |
+| `RecordClaimReturn` | `BillingClaimWrite` | 返戻レセプトの取込（3か月以内） |
+| `CorrectReturnedStatement` | `BillingClaimWrite` | 返戻の訂正と再請求 |
+| `RecordClaimAssessment` | `BillingClaimWrite` | 査定の取込 |
+| `RequestReexamination` | `BillingClaimWrite` | 再審査請求 |
+| `PostPayment` | `PaymentPost` | 診療翌々月の入金 |
+| `ReconcileBalance` | `PaymentPost` | 未収金管理台帳の作成 |
+| `VoidCharge` | `BillingClaimWrite` | コストの取消 |
 
 #### CreateCharge
 
-チャージ作成と残高更新
+コスト情報の登録。署名時のコスト情報登録（システム起動）
 
 生成コマンド:
 
@@ -4605,109 +7732,266 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 ```mermaid
 sequenceDiagram
   box System Value
-    actor BillingSpecialist as 👤 Billing Specialist
+    actor ClaimsClerk as 👤 医事課 レセプト担当
   end
   box System Boundary
     participant ChargeWorklistScreen as 🖥️ Charge Worklist Screen
   end
   box System
     participant CreateChargeApi as 🔌 Create Charge API
-    participant AccountBalance as 🗄️ Account Balance
     participant Charge as 🗄️ Charge
     participant Encounter as 🗄️ Encounter
   end
 
-  Note over BillingSpecialist,Encounter: ✅ Create Charge
-  BillingSpecialist->>ChargeWorklistScreen: ✅ Create Charge
-  ChargeWorklistScreen->>CreateChargeApi: ✅ Create Charge
+  Note over ClaimsClerk,Encounter: ✅ コスト情報の登録
+  ClaimsClerk->>ChargeWorklistScreen: ✅ コスト情報の登録
+  ChargeWorklistScreen->>CreateChargeApi: ✅ コスト情報の登録
   activate CreateChargeApi
   CreateChargeApi->>Encounter: read
-  rect rgb(245,245,245)
-    Note right of CreateChargeApi: transaction (API atomic boundary)
-    CreateChargeApi->>AccountBalance: update
-    CreateChargeApi->>Charge: create
-  end
+  CreateChargeApi->>Charge: create
   CreateChargeApi-->>ChargeWorklistScreen: 🖥️ Charge Worklist Screen
-  ChargeWorklistScreen-->>BillingSpecialist: 🖥️ Charge Worklist Screen
+  ChargeWorklistScreen-->>ClaimsClerk: 🖥️ Charge Worklist Screen
   deactivate CreateChargeApi
 ```
 
-#### GenerateClaim
+#### GenerateClaimStatement
 
-請求生成
+レセプト作成。月初のレセプト作成
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase GenerateClaim --out samples/clinic-ops/out/uc/sequence_generate_claim
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase GenerateClaimStatement --out samples/clinic-ops/out/uc/sequence_generate_claim_statement
 ```
 
 ```mermaid
 sequenceDiagram
   box System Value
-    actor BillingSpecialist as 👤 Billing Specialist
+    actor ClaimsClerk as 👤 医事課 レセプト担当
   end
   box System Boundary
-    participant ClaimScreen as 🖥️ Claim Screen
+    participant ClaimScreen as 🖥️ レセプト画面
   end
   box System
-    participant GenerateClaimApi as 🔌 Generate Claim API
+    participant GenerateClaimApi as 🔌 レセプト作成 API
     participant Charge as 🗄️ Charge
-    participant Claim as 🗄️ Claim
-    participant InsurancePolicy as 🗄️ Insurance Policy
+    participant ClaimStatement as 🗄️ レセプト
+    participant InsurancePolicy as 🗄️ 保険資格
   end
 
-  Note over BillingSpecialist,InsurancePolicy: ✅ Generate Claim
-  BillingSpecialist->>ClaimScreen: ✅ Generate Claim
-  ClaimScreen->>GenerateClaimApi: ✅ Generate Claim
+  Note over ClaimsClerk,InsurancePolicy: ✅ レセプト作成
+  ClaimsClerk->>ClaimScreen: ✅ レセプト作成
+  ClaimScreen->>GenerateClaimApi: ✅ レセプト作成
   activate GenerateClaimApi
+  GenerateClaimApi->>Charge: read
   GenerateClaimApi->>InsurancePolicy: read
-  rect rgb(245,245,245)
-    Note right of GenerateClaimApi: transaction (API atomic boundary)
-    GenerateClaimApi->>Claim: create
-    GenerateClaimApi->>Charge: update
-  end
-  GenerateClaimApi-->>ClaimScreen: 🖥️ Claim Screen
-  ClaimScreen-->>BillingSpecialist: 🖥️ Claim Screen
+  GenerateClaimApi->>ClaimStatement: create
+  GenerateClaimApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
   deactivate GenerateClaimApi
 ```
 
-#### SubmitClaim
+#### InspectClaimStatement
 
-請求送信
+レセプトの院内点検。院内点検
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase SubmitClaim --out samples/clinic-ops/out/uc/sequence_submit_claim
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase InspectClaimStatement --out samples/clinic-ops/out/uc/sequence_inspect_claim_statement
 ```
 
 ```mermaid
 sequenceDiagram
   box System Value
-    actor BillingSpecialist as 👤 Billing Specialist
+    actor ClaimsClerk as 👤 医事課 レセプト担当
   end
   box System Boundary
-    participant ClaimScreen as 🖥️ Claim Screen
+    participant ClaimScreen as 🖥️ レセプト画面
   end
   box System
-    participant SubmitClaimApi as 🔌 Submit Claim API
-    participant Claim as 🗄️ Claim
+    participant ClaimEditApi as 🔌 レセプト点検・訂正 API
+    participant ClaimStatement as 🗄️ レセプト
   end
 
-  Note over BillingSpecialist,Claim: ✅ Submit Claim
-  BillingSpecialist->>ClaimScreen: ✅ Submit Claim
-  ClaimScreen->>SubmitClaimApi: ✅ Submit Claim
+  Note over ClaimsClerk,ClaimStatement: ✅ レセプトの院内点検
+  ClaimsClerk->>ClaimScreen: ✅ レセプトの院内点検
+  ClaimScreen->>ClaimEditApi: ✅ レセプトの院内点検
+  activate ClaimEditApi
+  ClaimEditApi->>ClaimStatement: update
+  ClaimEditApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimEditApi
+```
+
+#### HoldClaimStatement
+
+レセプトの保留（月遅れ）。保留（月遅れ）
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase HoldClaimStatement --out samples/clinic-ops/out/uc/sequence_hold_claim_statement
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor ClaimsClerk as 👤 医事課 レセプト担当
+  end
+  box System Boundary
+    participant ClaimScreen as 🖥️ レセプト画面
+  end
+  box System
+    participant ClaimEditApi as 🔌 レセプト点検・訂正 API
+    participant ClaimStatement as 🗄️ レセプト
+  end
+
+  Note over ClaimsClerk,ClaimStatement: ✅ レセプトの保留（月遅れ）
+  ClaimsClerk->>ClaimScreen: ✅ レセプトの保留（月遅れ）
+  ClaimScreen->>ClaimEditApi: ✅ レセプトの保留（月遅れ）
+  activate ClaimEditApi
+  ClaimEditApi->>ClaimStatement: update
+  ClaimEditApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimEditApi
+```
+
+#### ReleaseHeldStatement
+
+保留レセプトの再提出準備。保留レセプトの再提出準備
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ReleaseHeldStatement --out samples/clinic-ops/out/uc/sequence_release_held_statement
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor ClaimsClerk as 👤 医事課 レセプト担当
+  end
+  box System Boundary
+    participant ClaimScreen as 🖥️ レセプト画面
+  end
+  box System
+    participant ClaimEditApi as 🔌 レセプト点検・訂正 API
+    participant ClaimStatement as 🗄️ レセプト
+  end
+
+  Note over ClaimsClerk,ClaimStatement: ✅ 保留レセプトの再提出準備
+  ClaimsClerk->>ClaimScreen: ✅ 保留レセプトの再提出準備
+  ClaimScreen->>ClaimEditApi: ✅ 保留レセプトの再提出準備
+  activate ClaimEditApi
+  ClaimEditApi->>ClaimStatement: update
+  ClaimEditApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimEditApi
+```
+
+#### SubmitClaimStatements
+
+レセプト請求。毎月10日までの請求
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase SubmitClaimStatements --out samples/clinic-ops/out/uc/sequence_submit_claim_statements
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor ClaimsClerk as 👤 医事課 レセプト担当
+  end
+  box System Boundary
+    participant ClaimScreen as 🖥️ レセプト画面
+  end
+  box System
+    participant SubmitClaimApi as 🔌 オンライン請求 API
+    participant ClaimStatement as 🗄️ レセプト
+  end
+
+  Note over ClaimsClerk,ClaimStatement: ✅ レセプト請求
+  ClaimsClerk->>ClaimScreen: ✅ レセプト請求
+  ClaimScreen->>SubmitClaimApi: ✅ レセプト請求
   activate SubmitClaimApi
-  SubmitClaimApi->>Claim: update
-  SubmitClaimApi-->>ClaimScreen: 🖥️ Claim Screen
-  ClaimScreen-->>BillingSpecialist: 🖥️ Claim Screen
+  SubmitClaimApi->>ClaimStatement: update
+  SubmitClaimApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate SubmitClaimApi
+```
+
+#### RecordReceiptError
+
+受付不能・要確認の確認。受付不能・要確認の確認
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase RecordReceiptError --out samples/clinic-ops/out/uc/sequence_record_receipt_error
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor ClaimsClerk as 👤 医事課 レセプト担当
+  end
+  box System Boundary
+    participant ClaimScreen as 🖥️ レセプト画面
+  end
+  box System
+    participant ClaimResultApi as 🔌 審査結果 API
+    participant ClaimStatement as 🗄️ レセプト
+  end
+
+  Note over ClaimsClerk,ClaimStatement: ✅ 受付不能・要確認の確認
+  ClaimsClerk->>ClaimScreen: ✅ 受付不能・要確認の確認
+  ClaimScreen->>ClaimResultApi: ✅ 受付不能・要確認の確認
+  activate ClaimResultApi
+  ClaimResultApi->>ClaimStatement: update
+  ClaimResultApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimResultApi
+```
+
+#### ResendErroredStatement
+
+エラー分レセプトの再送。11日・12日のエラー分再送
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ResendErroredStatement --out samples/clinic-ops/out/uc/sequence_resend_errored_statement
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor ClaimsClerk as 👤 医事課 レセプト担当
+  end
+  box System Boundary
+    participant ClaimScreen as 🖥️ レセプト画面
+  end
+  box System
+    participant SubmitClaimApi as 🔌 オンライン請求 API
+    participant ClaimStatement as 🗄️ レセプト
+  end
+
+  Note over ClaimsClerk,ClaimStatement: ✅ エラー分レセプトの再送
+  ClaimsClerk->>ClaimScreen: ✅ エラー分レセプトの再送
+  ClaimScreen->>SubmitClaimApi: ✅ エラー分レセプトの再送
+  activate SubmitClaimApi
+  SubmitClaimApi->>ClaimStatement: update
+  SubmitClaimApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
   deactivate SubmitClaimApi
 ```
 
 #### ReceiveClaimAccepted
 
-請求受理
+レセプト受付（審査へ）。審査支払機関の受付で審査中になる
 
 生成コマンド:
 
@@ -4718,58 +8002,192 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase R
 ```mermaid
 sequenceDiagram
   box System Value
-    actor BillingSpecialist as 👤 Billing Specialist
+    actor ClaimsClerk as 👤 医事課 レセプト担当
   end
   box System Boundary
-    participant ClaimScreen as 🖥️ Claim Screen
+    participant ClaimScreen as 🖥️ レセプト画面
   end
   box System
-    participant System as 🧩 システム
-    participant Claim as 🗄️ Claim
+    participant ClaimResultApi as 🔌 審査結果 API
+    participant ClaimStatement as 🗄️ レセプト
   end
 
-  Note over BillingSpecialist,Claim: ✅ Receive Claim Accepted
-  BillingSpecialist->System: ✅ Receive Claim Accepted
-  activate System
-  System->>Claim: update
-  System-->>BillingSpecialist: 🖥️ Claim Screen
-  deactivate System
+  Note over ClaimsClerk,ClaimStatement: ✅ レセプト受付（審査へ）
+  ClaimsClerk->>ClaimScreen: ✅ レセプト受付（審査へ）
+  ClaimScreen->>ClaimResultApi: ✅ レセプト受付（審査へ）
+  activate ClaimResultApi
+  ClaimResultApi->>ClaimStatement: update
+  ClaimResultApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimResultApi
 ```
 
-#### RecordClaimDenial
+#### ReviewClaimTransfer
 
-請求否認
+資格の振替・分割の確認。資格の振替・分割の確認（参照のみ）
 
 生成コマンド:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase RecordClaimDenial --out samples/clinic-ops/out/uc/sequence_record_claim_denial
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase ReviewClaimTransfer --out samples/clinic-ops/out/uc/sequence_review_claim_transfer
 ```
 
 ```mermaid
 sequenceDiagram
   box System Value
-    actor BillingSpecialist as 👤 Billing Specialist
+    actor ClaimsClerk as 👤 医事課 レセプト担当
   end
   box System Boundary
-    participant ClaimScreen as 🖥️ Claim Screen
+    participant ClaimScreen as 🖥️ レセプト画面
   end
   box System
     participant System as 🧩 システム
-    participant Claim as 🗄️ Claim
+    participant ClaimStatement as 🗄️ レセプト
   end
 
-  Note over BillingSpecialist,Claim: ✅ Record Claim Denial
-  BillingSpecialist->System: ✅ Record Claim Denial
+  Note over ClaimsClerk,ClaimStatement: ✅ 資格の振替・分割の確認
+  ClaimsClerk->System: ✅ 資格の振替・分割の確認
   activate System
-  System->>Claim: update
-  System-->>BillingSpecialist: 🖥️ Claim Screen
+  System->>ClaimStatement: read
+  System-->>ClaimsClerk: 🖥️ レセプト画面
   deactivate System
+```
+
+#### RecordClaimReturn
+
+返戻レセプトの取込。返戻レセプトの取込（3か月以内）
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase RecordClaimReturn --out samples/clinic-ops/out/uc/sequence_record_claim_return
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor ClaimsClerk as 👤 医事課 レセプト担当
+  end
+  box System Boundary
+    participant ClaimScreen as 🖥️ レセプト画面
+  end
+  box System
+    participant ClaimResultApi as 🔌 審査結果 API
+    participant ClaimStatement as 🗄️ レセプト
+  end
+
+  Note over ClaimsClerk,ClaimStatement: ✅ 返戻レセプトの取込
+  ClaimsClerk->>ClaimScreen: ✅ 返戻レセプトの取込
+  ClaimScreen->>ClaimResultApi: ✅ 返戻レセプトの取込
+  activate ClaimResultApi
+  ClaimResultApi->>ClaimStatement: update
+  ClaimResultApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimResultApi
+```
+
+#### CorrectReturnedStatement
+
+返戻レセプトの訂正（再請求）。返戻の訂正と再請求
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase CorrectReturnedStatement --out samples/clinic-ops/out/uc/sequence_correct_returned_statement
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor ClaimsClerk as 👤 医事課 レセプト担当
+  end
+  box System Boundary
+    participant ClaimScreen as 🖥️ レセプト画面
+  end
+  box System
+    participant ClaimEditApi as 🔌 レセプト点検・訂正 API
+    participant ClaimStatement as 🗄️ レセプト
+  end
+
+  Note over ClaimsClerk,ClaimStatement: ✅ 返戻レセプトの訂正（再請求）
+  ClaimsClerk->>ClaimScreen: ✅ 返戻レセプトの訂正（再請求）
+  ClaimScreen->>ClaimEditApi: ✅ 返戻レセプトの訂正（再請求）
+  activate ClaimEditApi
+  ClaimEditApi->>ClaimStatement: update
+  ClaimEditApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimEditApi
+```
+
+#### RecordClaimAssessment
+
+査定の取込。査定の取込
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase RecordClaimAssessment --out samples/clinic-ops/out/uc/sequence_record_claim_assessment
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor ClaimsClerk as 👤 医事課 レセプト担当
+  end
+  box System Boundary
+    participant ClaimScreen as 🖥️ レセプト画面
+  end
+  box System
+    participant ClaimResultApi as 🔌 審査結果 API
+    participant ClaimStatement as 🗄️ レセプト
+  end
+
+  Note over ClaimsClerk,ClaimStatement: ✅ 査定の取込
+  ClaimsClerk->>ClaimScreen: ✅ 査定の取込
+  ClaimScreen->>ClaimResultApi: ✅ 査定の取込
+  activate ClaimResultApi
+  ClaimResultApi->>ClaimStatement: update
+  ClaimResultApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate ClaimResultApi
+```
+
+#### RequestReexamination
+
+再審査請求。再審査請求
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase RequestReexamination --out samples/clinic-ops/out/uc/sequence_request_reexamination
+```
+
+```mermaid
+sequenceDiagram
+  box System Value
+    actor ClaimsClerk as 👤 医事課 レセプト担当
+  end
+  box System Boundary
+    participant ClaimScreen as 🖥️ レセプト画面
+  end
+  box System
+    participant SubmitClaimApi as 🔌 オンライン請求 API
+    participant ClaimStatement as 🗄️ レセプト
+  end
+
+  Note over ClaimsClerk,ClaimStatement: ✅ 再審査請求
+  ClaimsClerk->>ClaimScreen: ✅ 再審査請求
+  ClaimScreen->>SubmitClaimApi: ✅ 再審査請求
+  activate SubmitClaimApi
+  SubmitClaimApi->>ClaimStatement: update
+  SubmitClaimApi-->>ClaimScreen: 🖥️ レセプト画面
+  ClaimScreen-->>ClaimsClerk: 🖥️ レセプト画面
+  deactivate SubmitClaimApi
 ```
 
 #### PostPayment
 
-入金登録
+診療報酬の入金。診療翌々月の入金
 
 生成コマンド:
 
@@ -4780,34 +8198,29 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase P
 ```mermaid
 sequenceDiagram
   box System Value
-    actor BillingSpecialist as 👤 Billing Specialist
+    actor ClaimsClerk as 👤 医事課 レセプト担当
   end
   box System Boundary
-    participant PaymentPostingScreen as 🖥️ Payment Posting Screen
+    participant PaymentPostingScreen as 🖥️ 入金画面
   end
   box System
-    participant PaymentPostApi as 🔌 Payment Posting API
-    participant Claim as 🗄️ Claim
-    participant PaymentTransaction as 🗄️ Payment Transaction
+    participant PaymentPostApi as 🔌 入金 API
+    participant ClaimStatement as 🗄️ レセプト
   end
 
-  Note over BillingSpecialist,PaymentTransaction: ✅ Post Payment
-  BillingSpecialist->>PaymentPostingScreen: ✅ Post Payment
-  PaymentPostingScreen->>PaymentPostApi: ✅ Post Payment
+  Note over ClaimsClerk,ClaimStatement: ✅ 診療報酬の入金
+  ClaimsClerk->>PaymentPostingScreen: ✅ 診療報酬の入金
+  PaymentPostingScreen->>PaymentPostApi: ✅ 診療報酬の入金
   activate PaymentPostApi
-  rect rgb(245,245,245)
-    Note right of PaymentPostApi: transaction (API atomic boundary)
-    PaymentPostApi->>Claim: update
-    PaymentPostApi->>PaymentTransaction: create
-  end
-  PaymentPostApi-->>PaymentPostingScreen: 🖥️ Payment Posting Screen
-  PaymentPostingScreen-->>BillingSpecialist: 🖥️ Payment Posting Screen
+  PaymentPostApi->>ClaimStatement: update
+  PaymentPostApi-->>PaymentPostingScreen: 🖥️ 入金画面
+  PaymentPostingScreen-->>ClaimsClerk: 🖥️ 入金画面
   deactivate PaymentPostApi
 ```
 
 #### ReconcileBalance
 
-残高消込
+未収金管理台帳の作成。未収金管理台帳の作成
 
 生成コマンド:
 
@@ -4818,31 +8231,31 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase R
 ```mermaid
 sequenceDiagram
   box System Value
-    actor BillingSpecialist as 👤 Billing Specialist
+    actor ClaimsClerk as 👤 医事課 レセプト担当
   end
   box System Boundary
-    participant BalanceScreen as 🖥️ Balance Screen
+    participant BalanceScreen as 🖥️ 未収金画面
   end
   box System
-    participant BalanceApi as 🔌 Balance API
-    participant AccountBalance as 🗄️ Account Balance
+    participant BalanceApi as 🔌 未収金 API
+    participant AccountBalance as 🗄️ 未収金残高
     participant PaymentTransaction as 🗄️ Payment Transaction
   end
 
-  Note over BillingSpecialist,PaymentTransaction: ✅ Reconcile Balance
-  BillingSpecialist->>BalanceScreen: ✅ Reconcile Balance
-  BalanceScreen->>BalanceApi: ✅ Reconcile Balance
+  Note over ClaimsClerk,PaymentTransaction: ✅ 未収金管理台帳の作成
+  ClaimsClerk->>BalanceScreen: ✅ 未収金管理台帳の作成
+  BalanceScreen->>BalanceApi: ✅ 未収金管理台帳の作成
   activate BalanceApi
   BalanceApi->>PaymentTransaction: read
   BalanceApi->>AccountBalance: update
-  BalanceApi-->>BalanceScreen: 🖥️ Balance Screen
-  BalanceScreen-->>BillingSpecialist: 🖥️ Balance Screen
+  BalanceApi-->>BalanceScreen: 🖥️ 未収金画面
+  BalanceScreen-->>ClaimsClerk: 🖥️ 未収金画面
   deactivate BalanceApi
 ```
 
 #### VoidCharge
 
-チャージ取消
+コストの取消。コストの取消
 
 生成コマンド:
 
@@ -4853,7 +8266,7 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase V
 ```mermaid
 sequenceDiagram
   box System Value
-    actor BillingSpecialist as 👤 Billing Specialist
+    actor ClaimsClerk as 👤 医事課 レセプト担当
   end
   box System Boundary
     participant ChargeWorklistScreen as 🖥️ Charge Worklist Screen
@@ -4863,28 +8276,28 @@ sequenceDiagram
     participant Charge as 🗄️ Charge
   end
 
-  Note over BillingSpecialist,Charge: ✅ Void Charge
-  BillingSpecialist->System: ✅ Void Charge
+  Note over ClaimsClerk,Charge: ✅ コストの取消
+  ClaimsClerk->System: ✅ コストの取消
   activate System
   System->>Charge: update
-  System-->>BillingSpecialist: 🖥️ Charge Worklist Screen
+  System-->>ClaimsClerk: 🖥️ Charge Worklist Screen
   deactivate System
 ```
 
-### 4.8 Follow-Up Care UC
+### 4.9 Follow-Up Care UC
 
 | UC | 必要権限 | 主な確認点 |
 |---|---|---|
-| `CreateCarePlan` | `FollowUpManage` | ケアプラン作成 |
-| `SendFollowUpMessage` | `PatientMessageSend` | 患者フォロー連絡 |
-| `ReviewPatientResponse` | `FollowUpManage` | 患者応答確認 |
+| `CreateCarePlan` | `FollowUpManage` | 署名イベントからのケアプラン作成 |
+| `SendFollowUpMessage` | `PatientMessageSend` | 患者連絡 |
+| `ReviewPatientResponse` | `FollowUpManage` | 患者応答の確認 |
 | `ScheduleFollowUpVisit` | `FollowUpManage`, `ScheduleWrite` | 再診予約 |
 | `CloseCarePlan` | `FollowUpManage` | ケアプラン終了 |
-| `NotifyPatientResult` | `PatientMessageSend` | 患者結果通知 |
+| `NotifyPatientResult` | `PatientMessageSend` | 結果の患者通知 |
 
 #### CreateCarePlan
 
-ケアプラン作成
+Create Care Plan。署名イベントからのケアプラン作成
 
 生成コマンド:
 
@@ -4896,6 +8309,7 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 sequenceDiagram
   box System Value
     actor CareCoordinator as 👤 Care Coordinator
+    actor Patient as 👤 Patient
   end
   box System Boundary
     participant CarePlanScreen as 🖥️ Care Plan Screen
@@ -4919,7 +8333,7 @@ sequenceDiagram
 
 #### SendFollowUpMessage
 
-患者フォロー連絡
+Send Follow-Up Message。患者連絡
 
 生成コマンド:
 
@@ -4931,6 +8345,7 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase S
 sequenceDiagram
   box System Value
     actor CareCoordinator as 👤 Care Coordinator
+    actor Patient as 👤 Patient
   end
   box System Boundary
     participant PatientMessageScreen as 🖥️ Patient Message Screen
@@ -4952,7 +8367,7 @@ sequenceDiagram
 
 #### ReviewPatientResponse
 
-患者応答確認
+Review Patient Response。患者応答の確認
 
 生成コマンド:
 
@@ -4964,6 +8379,7 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase R
 sequenceDiagram
   box System Value
     actor CareCoordinator as 👤 Care Coordinator
+    actor Patient as 👤 Patient
   end
   box System Boundary
     participant CarePlanScreen as 🖥️ Care Plan Screen
@@ -4977,15 +8393,18 @@ sequenceDiagram
   Note over CareCoordinator,PatientMessage: ✅ Review Patient Response
   CareCoordinator->System: ✅ Review Patient Response
   activate System
-  System->>CarePlan: update
-  System->>PatientMessage: update
+  rect rgb(245,245,245)
+    Note right of System: transaction (inferred from FK)
+    System->>CarePlan: update
+    System->>PatientMessage: update
+  end
   System-->>CareCoordinator: 🖥️ Care Plan Screen
   deactivate System
 ```
 
 #### ScheduleFollowUpVisit
 
-再診予約
+Schedule Follow-Up Visit。再診予約
 
 生成コマンド:
 
@@ -4997,6 +8416,7 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase S
 sequenceDiagram
   box System Value
     actor CareCoordinator as 👤 Care Coordinator
+    actor Patient as 👤 Patient
   end
   box System Boundary
     participant FollowUpScheduleScreen as 🖥️ Follow-Up Schedule Screen
@@ -5023,7 +8443,7 @@ sequenceDiagram
 
 #### CloseCarePlan
 
-ケアプラン終了
+Close Care Plan。ケアプラン終了
 
 生成コマンド:
 
@@ -5035,6 +8455,7 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase C
 sequenceDiagram
   box System Value
     actor CareCoordinator as 👤 Care Coordinator
+    actor Patient as 👤 Patient
   end
   box System Boundary
     participant CarePlanScreen as 🖥️ Care Plan Screen
@@ -5054,7 +8475,7 @@ sequenceDiagram
 
 #### NotifyPatientResult
 
-患者結果通知
+Notify Patient Result。結果の患者通知
 
 生成コマンド:
 
@@ -5066,6 +8487,7 @@ rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase N
 sequenceDiagram
   box System Value
     actor CareCoordinator as 👤 Care Coordinator
+    actor Patient as 👤 Patient
   end
   box System Boundary
     participant PatientMessageScreen as 🖥️ Patient Message Screen
@@ -5085,20 +8507,20 @@ sequenceDiagram
   deactivate NotifyPatientResultApi
 ```
 
-### 4.9 Staff Administration UC
+### 4.10 Staff Administration UC
 
 | UC | 必要権限 | 主な確認点 |
 |---|---|---|
-| `ManageProviderSchedule` | `ProviderScheduleAdmin` | 医師予定管理 |
-| `BlockScheduleSlot` | `ProviderScheduleAdmin` | 予定枠ブロック |
-| `ConfigureRoom` | `RoomAdmin` | 部屋設定 |
-| `ReleaseRoom` | `RoomAdmin` | 部屋解放 |
-| `ReviewAuditEvents` | `AuditRead` | 監査イベント参照 |
-| `ResolveAuditFinding` | `AuditResolve` | 監査指摘解決 |
+| `ManageProviderSchedule` | `ProviderScheduleAdmin` | 診療枠の管理 |
+| `BlockScheduleSlot` | `ProviderScheduleAdmin` | 診療枠の停止 |
+| `ConfigureRoom` | `RoomAdmin` | 部屋の設定 |
+| `ReleaseRoom` | `RoomAdmin` | 部屋の解放 |
+| `ReviewAuditEvents` | `AuditRead` | 監査イベントの確認 |
+| `ResolveAuditFinding` | `AuditResolve` | 監査指摘の解決 |
 
 #### ManageProviderSchedule
 
-医師予定管理
+Manage Provider Schedule。診療枠の管理
 
 生成コマンド:
 
@@ -5136,7 +8558,7 @@ sequenceDiagram
 
 #### BlockScheduleSlot
 
-予定枠ブロック
+Block Schedule Slot。診療枠の停止
 
 生成コマンド:
 
@@ -5169,7 +8591,7 @@ sequenceDiagram
 
 #### ConfigureRoom
 
-部屋設定
+Configure Room。部屋の設定
 
 生成コマンド:
 
@@ -5202,7 +8624,7 @@ sequenceDiagram
 
 #### ReleaseRoom
 
-部屋解放
+Release Room。部屋の解放
 
 生成コマンド:
 
@@ -5233,7 +8655,7 @@ sequenceDiagram
 
 #### ReviewAuditEvents
 
-監査イベント参照
+Review Audit Events。監査イベントの確認
 
 生成コマンド:
 
@@ -5268,7 +8690,7 @@ sequenceDiagram
 
 #### ResolveAuditFinding
 
-監査指摘解決
+Resolve Audit Finding。監査指摘の解決
 
 生成コマンド:
 
@@ -5301,7 +8723,17 @@ sequenceDiagram
 
 ### 5.1 System 境界
 
-本サンプルでは、内部 System を `ClinicOpsSystem` に集約しています。現時点の意図は、分散システム境界よりも API と Entity CRUD の棚卸しをレビューすることです。複数 System への分割は、外部サービスや所有組織が明確になった時点で追加する想定です。
+本サンプルでは、内部 System を `ClinicOpsSystem` に集約しています。現時点の意図は、分散システム境界よりも API と Entity CRUD の棚卸しをレビューすることです。院外の仕組みは外部システムとしてイベントでつなぎます。
+
+| 外部システム | 役割 |
+|---|---|
+| `OnlineEligibilitySystem` | オンライン資格確認等システム。受付と一括照会の資格確認結果を返す |
+| `PaymentGateway` | 自動精算機・クレジット決済。精算完了を通知する |
+| `OutsourcedLabSystem` | 外注検査システム。検査結果を返す |
+| `EPrescriptionService` | 電子処方箋管理サービス。院外処方箋を受け、保険薬局での調剤結果を返す |
+| `InsurancePharmacy` | 保険薬局。疑義照会を送る |
+| `ClaimsReviewOrganization` | 審査支払機関（支払基金・国保連）。受付不能、受付、振替・分割、返戻、査定、支払を返す |
+| `MessagingGateway` | 患者への通知 |
 
 ```rdra
 system ClinicOpsSystem "Clinic Operations System"
@@ -5315,6 +8747,7 @@ contains(ClinicOpsSystem, <EachApi>)
 | 書き込み UC は原則 UC 専用 API を持つ | sequence 図で責務境界が混ざらないようにする |
 | read-only UC も必要に応じて API 化する | API matrix で参照責務を確認する |
 | direct CRUD は単純な状態更新に限定する | API 境界を置くほどの一貫性責務がない場合のみ使用する |
+| 作成 API と更新 API を分ける | 作成 API を呼ぶ UC は空きスロットを要するので、状態だけを動かす UC には更新 API を使う |
 
 ### 5.3 Event flow
 
@@ -5333,11 +8766,10 @@ flowchart LR
   uc__CancelAppointment -.->|raises| ev__EvAppointmentCancelled
   uc__SendAppointmentNotice(["✅ Send Appointment Notice"])
   ev__EvAppointmentCancelled -.->|triggers| uc__SendAppointmentNotice
-  st__Apptscheduled("🔄 Appointment Scheduled")
-  st__Apptcancelled("🔄 Appointment Cancelled")
-  st__Apptscheduled -->|⚡ Appointment Cancelled| st__Apptcancelled
+  xs__MessagingGateway[/"🌐 Messaging Gateway"/]
+  ev__EvAppointmentCancelled -.->|delivers| xs__MessagingGateway
   ev__EvAppointmentCheckedIn{"⚡ Appointment Checked In"}
-  uc__CheckInPatient(["✅ Check In Patient"])
+  uc__CheckInPatient(["✅ 受付（初診・再診）"])
   uc__CheckInPatient -.->|raises| ev__EvAppointmentCheckedIn
   uc__OpenEncounter(["✅ Open Encounter"])
   ev__EvAppointmentCheckedIn -.->|triggers| uc__OpenEncounter
@@ -5345,23 +8777,16 @@ flowchart LR
   ev__EvAppointmentCheckedIn -.->|triggers| uc__PrepareEncounter
   buc__BucClinicalEncounter[["📦 Conduct Clinical Encounter"]]
   ev__EvAppointmentCheckedIn -.->|triggers| buc__BucClinicalEncounter
-  st__Apptcheckedin("🔄 Appointment Checked In")
-  st__Apptscheduled -->|⚡ Appointment Checked In| st__Apptcheckedin
-  ev__EvAppointmentCompleted{"⚡ Appointment Completed"}
-  uc__CompleteAppointment(["✅ Complete Appointment"])
-  uc__CompleteAppointment -.->|raises| ev__EvAppointmentCompleted
-  st__Apptcompleted("🔄 Appointment Completed")
-  st__Apptcheckedin -->|⚡ Appointment Completed| st__Apptcompleted
-  ev__EvAppointmentNoShow{"⚡ Appointment Marked No Show"}
-  uc__MarkNoShow(["✅ Mark No Show"])
-  uc__MarkNoShow -.->|raises| ev__EvAppointmentNoShow
-  st__Apptnoshow("🔄 Appointment No Show")
-  st__Apptscheduled -->|⚡ Appointment Marked No Show| st__Apptnoshow
+  xs__OnlineEligibilitySystem[/"🌐 オンライン資格確認等システム"/]
+  ev__EvAppointmentCheckedIn -.->|delivers| xs__OnlineEligibilitySystem
+  st__Appointment_apptcheckedin("🔄 apptcheckedin")
+  st__Appointment_apptinconsult("🔄 apptinconsult")
+  st__Appointment_apptcheckedin -->|⚡ Appointment Checked In| st__Appointment_apptinconsult
   ev__EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
   uc__RescheduleAppointment(["✅ Reschedule Appointment"])
   uc__RescheduleAppointment -.->|raises| ev__EvAppointmentRescheduled
   ev__EvAppointmentRescheduled -.->|triggers| uc__SendAppointmentNotice
-  st__Apptscheduled -->|⚡ Appointment Rescheduled| st__Apptscheduled
+  ev__EvAppointmentRescheduled -.->|delivers| xs__MessagingGateway
   ev__EvAppointmentScheduled{"⚡ Appointment Scheduled"}
   uc__BookAppointment(["✅ Book Appointment"])
   uc__BookAppointment -.->|raises| ev__EvAppointmentScheduled
@@ -5372,56 +8797,48 @@ flowchart LR
   ev__EvAppointmentScheduled -.->|triggers| uc__SendIntakeForms
   buc__BucPatientOnboarding[["📦 Onboard and Maintain Patient"]]
   ev__EvAppointmentScheduled -.->|triggers| buc__BucPatientOnboarding
-  st__Apptrequested("🔄 Appointment Requested")
-  st__Apptrequested -->|⚡ Appointment Scheduled| st__Apptscheduled
-  ev__EvCarePlanClosed{"⚡ Care Plan Closed"}
-  uc__CloseCarePlan(["✅ Close Care Plan"])
-  uc__CloseCarePlan -.->|raises| ev__EvCarePlanClosed
-  st__Caremonitoring("🔄 Care Plan Monitoring")
-  st__Careclosed("🔄 Care Plan Closed")
-  st__Caremonitoring -->|⚡ Care Plan Closed| st__Careclosed
-  ev__EvCarePlanMonitoring{"⚡ Care Plan Monitoring"}
-  uc__ReviewPatientResponse(["✅ Review Patient Response"])
-  uc__ReviewPatientResponse -.->|raises| ev__EvCarePlanMonitoring
-  st__Careopen("🔄 Care Plan Open")
-  st__Careopen -->|⚡ Care Plan Monitoring| st__Caremonitoring
-  ev__EvClaimAccepted{"⚡ Claim Accepted"}
-  uc__ReceiveClaimAccepted(["✅ Receive Claim Accepted"])
-  uc__ReceiveClaimAccepted -.->|raises| ev__EvClaimAccepted
-  st__Claimsubmitted("🔄 Claim Submitted")
-  st__Claimaccepted("🔄 Claim Accepted")
-  st__Claimsubmitted -->|⚡ Claim Accepted| st__Claimaccepted
-  ev__EvClaimDenied{"⚡ Claim Denied"}
-  uc__RecordClaimDenial(["✅ Record Claim Denial"])
-  uc__RecordClaimDenial -.->|raises| ev__EvClaimDenied
-  st__Claimdenied("🔄 Claim Denied")
-  st__Claimsubmitted -->|⚡ Claim Denied| st__Claimdenied
-  ev__EvClaimPaid{"⚡ Claim Paid"}
-  uc__PostPayment(["✅ Post Payment"])
-  uc__PostPayment -.->|raises| ev__EvClaimPaid
-  st__Claimpaid("🔄 Claim Paid")
-  st__Claimaccepted -->|⚡ Claim Paid| st__Claimpaid
-  ev__EvClaimSubmitted{"⚡ Claim Submitted"}
-  uc__SubmitClaim(["✅ Submit Claim"])
-  uc__SubmitClaim -.->|raises| ev__EvClaimSubmitted
-  st__Claimdraft("🔄 Claim Draft")
-  st__Claimdraft -->|⚡ Claim Submitted| st__Claimsubmitted
-  ev__EvClinicalOrderCancelled{"⚡ Clinical Order Cancelled"}
-  uc__CancelClinicalOrder(["✅ Cancel Clinical Order"])
-  uc__CancelClinicalOrder -.->|raises| ev__EvClinicalOrderCancelled
-  st__Clordered("🔄 Clinical Order Placed")
-  st__Clcancelled("🔄 Clinical Order Cancelled")
-  st__Clordered -->|⚡ Clinical Order Cancelled| st__Clcancelled
-  ev__EvClinicalOrderCollected{"⚡ Specimen Collected"}
-  uc__CollectSpecimen(["✅ Collect Specimen"])
-  uc__CollectSpecimen -.->|raises| ev__EvClinicalOrderCollected
-  st__Clcollected("🔄 Specimen Collected")
-  st__Clordered -->|⚡ Specimen Collected| st__Clcollected
-  ev__EvClinicalOrderResulted{"⚡ Clinical Result Received"}
-  uc__ReceiveLabResult(["✅ Receive Lab Result"])
-  uc__ReceiveLabResult -.->|raises| ev__EvClinicalOrderResulted
-  st__Clresulted("🔄 Result Received")
-  st__Clcollected -->|⚡ Clinical Result Received| st__Clresulted
+  ev__EvAppointmentScheduled -.->|delivers| xs__MessagingGateway
+  ev__EvBillCalculated{"⚡ 会計計算完了"}
+  uc__CalculateVisitBill(["✅ 会計計算入力"])
+  uc__CalculateVisitBill -.->|raises| ev__EvBillCalculated
+  uc__CallPatientForPayment(["✅ 会計の呼出"])
+  ev__EvBillCalculated -.->|triggers| uc__CallPatientForPayment
+  xs__PaymentGateway[/"🌐 自動精算機・クレジット決済"/]
+  ev__EvBillCalculated -.->|delivers| xs__PaymentGateway
+  ev__EvClaimAccepted{"⚡ レセプト受付"}
+  xs__ClaimsReviewOrganization[/"🌐 審査支払機関（支払基金・国保連）"/]
+  xs__ClaimsReviewOrganization -.->|raises| ev__EvClaimAccepted
+  uc__ReceiveClaimAccepted(["✅ レセプト受付（審査へ）"])
+  ev__EvClaimAccepted -.->|triggers| uc__ReceiveClaimAccepted
+  st__ClaimStatement_stmtsubmitted("🔄 stmtsubmitted")
+  st__ClaimStatement_stmtunderreview("🔄 stmtunderreview")
+  st__ClaimStatement_stmtsubmitted -->|⚡ レセプト受付| st__ClaimStatement_stmtunderreview
+  ev__EvClaimAssessed{"⚡ 査定"}
+  xs__ClaimsReviewOrganization -.->|raises| ev__EvClaimAssessed
+  uc__RecordClaimAssessment(["✅ 査定の取込"])
+  ev__EvClaimAssessed -.->|triggers| uc__RecordClaimAssessment
+  st__ClaimStatement_stmtassessed("🔄 stmtassessed")
+  st__ClaimStatement_stmtunderreview -->|⚡ 査定| st__ClaimStatement_stmtassessed
+  ev__EvClaimReceiptError{"⚡ 受付不能・要確認"}
+  xs__ClaimsReviewOrganization -.->|raises| ev__EvClaimReceiptError
+  uc__RecordReceiptError(["✅ 受付不能・要確認の確認"])
+  ev__EvClaimReceiptError -.->|triggers| uc__RecordReceiptError
+  st__ClaimStatement_stmtreceipterror("🔄 stmtreceipterror")
+  st__ClaimStatement_stmtsubmitted -->|⚡ 受付不能・要確認| st__ClaimStatement_stmtreceipterror
+  ev__EvClaimReturned{"⚡ 返戻"}
+  xs__ClaimsReviewOrganization -.->|raises| ev__EvClaimReturned
+  uc__RecordClaimReturn(["✅ 返戻レセプトの取込"])
+  ev__EvClaimReturned -.->|triggers| uc__RecordClaimReturn
+  st__ClaimStatement_stmtreturned("🔄 stmtreturned")
+  st__ClaimStatement_stmtunderreview -->|⚡ 返戻| st__ClaimStatement_stmtreturned
+  ev__EvClaimStatementsSubmitted{"⚡ レセプト請求"}
+  uc__SubmitClaimStatements(["✅ レセプト請求"])
+  uc__SubmitClaimStatements -.->|raises| ev__EvClaimStatementsSubmitted
+  ev__EvClaimStatementsSubmitted -.->|delivers| xs__ClaimsReviewOrganization
+  ev__EvClaimTransferred{"⚡ 資格の振替・分割"}
+  xs__ClaimsReviewOrganization -.->|raises| ev__EvClaimTransferred
+  uc__ReviewClaimTransfer(["✅ 資格の振替・分割の確認"])
+  ev__EvClaimTransferred -.->|triggers| uc__ReviewClaimTransfer
   ev__EvClinicalOrderReviewed{"⚡ Clinical Result Reviewed"}
   uc__ReviewLabResult(["✅ Review Lab Result"])
   uc__ReviewLabResult -.->|raises| ev__EvClinicalOrderReviewed
@@ -5431,86 +8848,138 @@ flowchart LR
   ev__EvClinicalOrderReviewed -.->|triggers| uc__NotifyPatientResult
   buc__BucFollowupCare[["📦 Coordinate Follow-Up Care"]]
   ev__EvClinicalOrderReviewed -.->|triggers| buc__BucFollowupCare
-  st__Clreviewed("🔄 Result Reviewed")
-  st__Clresulted -->|⚡ Clinical Result Reviewed| st__Clreviewed
-  ev__EvEncounterAmended{"⚡ Encounter Amended"}
-  uc__AmendEncounter(["✅ Amend Signed Encounter"])
-  uc__AmendEncounter -.->|raises| ev__EvEncounterAmended
-  st__Encsigned("🔄 Encounter Signed")
-  st__Encamended("🔄 Encounter Amended")
-  st__Encsigned -->|⚡ Encounter Amended| st__Encamended
-  ev__EvEncounterDocumented{"⚡ Encounter Documented"}
-  uc__DocumentAssessment(["✅ Document Assessment"])
-  uc__DocumentAssessment -.->|raises| ev__EvEncounterDocumented
-  st__Encopen("🔄 Encounter Open")
-  st__Encdocumented("🔄 Encounter Documented")
-  st__Encopen -->|⚡ Encounter Documented| st__Encdocumented
+  ev__EvEligibilityChecked{"⚡ 資格確認結果"}
+  xs__OnlineEligibilitySystem -.->|raises| ev__EvEligibilityChecked
+  uc__ReceiveEligibilityInvalid(["✅ 資格確認結果（無効）の取込"])
+  ev__EvEligibilityChecked -.->|triggers| uc__ReceiveEligibilityInvalid
+  uc__ReceiveEligibilityNoInfo(["✅ 資格確認結果（該当資格なし）の取込"])
+  ev__EvEligibilityChecked -.->|triggers| uc__ReceiveEligibilityNoInfo
+  uc__ReceiveEligibilityValid(["✅ 資格確認結果（有効）の取込"])
+  ev__EvEligibilityChecked -.->|triggers| uc__ReceiveEligibilityValid
+  st__EligibilityCheck_eligpending("🔄 eligpending")
+  st__EligibilityCheck_eligvalid("🔄 eligvalid")
+  st__EligibilityCheck_eligpending -->|⚡ 資格確認結果| st__EligibilityCheck_eligvalid
+  st__EligibilityCheck_eliginvalid("🔄 eliginvalid")
+  st__EligibilityCheck_eligpending -->|⚡ 資格確認結果| st__EligibilityCheck_eliginvalid
+  st__EligibilityCheck_elignoinfo("🔄 elignoinfo")
+  st__EligibilityCheck_eligpending -->|⚡ 資格確認結果| st__EligibilityCheck_elignoinfo
   ev__EvEncounterSigned{"⚡ Encounter Signed"}
   uc__SignEncounter(["✅ Sign Encounter"])
   uc__SignEncounter -.->|raises| ev__EvEncounterSigned
-  ev__EvEncounterSigned -.->|triggers| uc__CompleteAppointment
+  uc__CompleteConsultation(["✅ 診察終了"])
+  ev__EvEncounterSigned -.->|triggers| uc__CompleteConsultation
   uc__CreateCarePlan(["✅ Create Care Plan"])
   ev__EvEncounterSigned -.->|triggers| uc__CreateCarePlan
-  uc__CreateCharge(["✅ Create Charge"])
+  uc__CreateCharge(["✅ コスト情報の登録"])
   ev__EvEncounterSigned -.->|triggers| uc__CreateCharge
   uc__PlaceLabOrder(["✅ Place Lab Order"])
   ev__EvEncounterSigned -.->|triggers| uc__PlaceLabOrder
-  buc__BucBillingClaims[["📦 Bill and Collect Claims"]]
+  buc__BucBillingClaims[["📦 レセプト作成・請求"]]
   ev__EvEncounterSigned -.->|triggers| buc__BucBillingClaims
   ev__EvEncounterSigned -.->|triggers| buc__BucFollowupCare
   buc__BucOrdersResults[["📦 Manage Orders and Results"]]
   ev__EvEncounterSigned -.->|triggers| buc__BucOrdersResults
-  st__Encdocumented -->|⚡ Encounter Signed| st__Encsigned
-  ev__EvIntakeCompleted{"⚡ Intake Completed"}
-  uc__CompleteIntakeForms(["✅ Complete Intake Forms"])
-  uc__CompleteIntakeForms -.->|raises| ev__EvIntakeCompleted
-  st__Intakesent("🔄 Intake Sent")
-  st__Intakecompleted("🔄 Intake Completed")
-  st__Intakesent -->|⚡ Intake Completed| st__Intakecompleted
-  ev__EvIntakeExpired{"⚡ Intake Expired"}
-  uc__ExpireIntakeForms(["✅ Expire Intake Forms"])
-  uc__ExpireIntakeForms -.->|raises| ev__EvIntakeExpired
-  st__Intakeexpired("🔄 Intake Expired")
-  st__Intakesent -->|⚡ Intake Expired| st__Intakeexpired
-  ev__EvPatientArchived{"⚡ Patient Archived"}
-  uc__ArchivePatient(["✅ Archive Patient"])
-  uc__ArchivePatient -.->|raises| ev__EvPatientArchived
-  st__Patientactive("🔄 Active Patient")
-  st__Patientinactive("🔄 Inactive Patient")
-  st__Patientactive -->|⚡ Patient Archived| st__Patientinactive
-  ev__EvPatientMerged{"⚡ Patient Merged"}
-  uc__MergeDuplicatePatient(["✅ Merge Duplicate Patient"])
-  uc__MergeDuplicatePatient -.->|raises| ev__EvPatientMerged
-  st__Patientmerged("🔄 Merged Patient")
-  st__Patientactive -->|⚡ Patient Merged| st__Patientmerged
-  ev__EvPrescriptionCancelled{"⚡ Prescription Cancelled"}
-  uc__CancelPrescription(["✅ Cancel Prescription"])
-  uc__CancelPrescription -.->|raises| ev__EvPrescriptionCancelled
-  st__Rxdrafted("🔄 Prescription Drafted")
-  st__Rxcancelled("🔄 Prescription Cancelled")
-  st__Rxdrafted -->|⚡ Prescription Cancelled| st__Rxcancelled
+  buc__BucVisitPayment[["📦 計算・会計"]]
+  ev__EvEncounterSigned -.->|triggers| buc__BucVisitPayment
+  st__Appointment_apptawaitingcalc("🔄 apptawaitingcalc")
+  st__Appointment_apptinconsult -->|⚡ Encounter Signed| st__Appointment_apptawaitingcalc
+  ev__EvLabResultReceived{"⚡ Lab Result Received"}
+  xs__OutsourcedLabSystem[/"🌐 外注検査システム"/]
+  xs__OutsourcedLabSystem -.->|raises| ev__EvLabResultReceived
+  uc__ReceiveLabResult(["✅ Receive Lab Result"])
+  ev__EvLabResultReceived -.->|triggers| uc__ReceiveLabResult
+  st__ClinicalOrder_clcollected("🔄 clcollected")
+  st__ClinicalOrder_clresulted("🔄 clresulted")
+  st__ClinicalOrder_clcollected -->|⚡ Lab Result Received| st__ClinicalOrder_clresulted
+  ev__EvPaymentSettled{"⚡ 自動精算機での精算完了"}
+  xs__PaymentGateway -.->|raises| ev__EvPaymentSettled
+  uc__SettleAtKiosk(["✅ 自動精算機での精算"])
+  ev__EvPaymentSettled -.->|triggers| uc__SettleAtKiosk
+  st__Appointment_apptawaitingpay("🔄 apptawaitingpay")
+  st__Appointment_apptsettled("🔄 apptsettled")
+  st__Appointment_apptawaitingpay -->|⚡ 自動精算機での精算完了| st__Appointment_apptsettled
+  ev__EvPharmacyInquiry{"⚡ 保険薬局からの疑義照会"}
+  xs__InsurancePharmacy[/"🌐 保険薬局"/]
+  xs__InsurancePharmacy -.->|raises| ev__EvPharmacyInquiry
+  uc__AnswerPharmacyInquiry(["✅ 保険薬局からの疑義照会への回答"])
+  ev__EvPharmacyInquiry -.->|triggers| uc__AnswerPharmacyInquiry
+  st__Prescription_rxissued("🔄 rxissued")
+  st__Prescription_rxissued -->|⚡ 保険薬局からの疑義照会| st__Prescription_rxissued
   ev__EvPrescriptionDispensed{"⚡ Prescription Dispensed"}
-  uc__ConfirmDispense(["✅ Confirm Dispense"])
-  uc__ConfirmDispense -.->|raises| ev__EvPrescriptionDispensed
-  st__Rxsent("🔄 Prescription Sent")
-  st__Rxdispensed("🔄 Prescription Dispensed")
-  st__Rxsent -->|⚡ Prescription Dispensed| st__Rxdispensed
-  ev__EvPrescriptionSent{"⚡ Prescription Sent"}
-  uc__SendPrescription(["✅ Send Prescription"])
-  uc__SendPrescription -.->|raises| ev__EvPrescriptionSent
-  st__Rxdrafted -->|⚡ Prescription Sent| st__Rxsent
+  xs__EPrescriptionService[/"🌐 電子処方箋管理サービス"/]
+  xs__EPrescriptionService -.->|raises| ev__EvPrescriptionDispensed
+  uc__ConfirmDispense(["✅ 保険薬局での調剤結果の受信"])
+  ev__EvPrescriptionDispensed -.->|triggers| uc__ConfirmDispense
+  st__Prescription_rxdispensed("🔄 rxdispensed")
+  st__Prescription_rxissued -->|⚡ Prescription Dispensed| st__Prescription_rxdispensed
+  ev__EvPrescriptionIssued{"⚡ 電子処方箋の登録"}
+  uc__IssueOutsidePrescription(["✅ 院外処方箋の発行"])
+  uc__IssueOutsidePrescription -.->|raises| ev__EvPrescriptionIssued
+  ev__EvPrescriptionIssued -.->|delivers| xs__EPrescriptionService
+  ev__EvRemittance{"⚡ 診療報酬の支払"}
+  xs__ClaimsReviewOrganization -.->|raises| ev__EvRemittance
+  uc__PostPayment(["✅ 診療報酬の入金"])
+  ev__EvRemittance -.->|triggers| uc__PostPayment
+  st__ClaimStatement_stmtpaid("🔄 stmtpaid")
+  st__ClaimStatement_stmtassessed -->|⚡ 診療報酬の支払| st__ClaimStatement_stmtpaid
+  st__ClaimStatement_stmtrereview("🔄 stmtrereview")
+  st__ClaimStatement_stmtrereview -->|⚡ 診療報酬の支払| st__ClaimStatement_stmtpaid
+  st__ClaimStatement_stmtunderreview -->|⚡ 診療報酬の支払| st__ClaimStatement_stmtpaid
+  tm__EligibilityBatchInquiry{{"⏱️ 予約患者の資格の一括照会（来院前）"}}
+  uc__BatchVerifyEligibility(["✅ 資格の一括照会"])
+  tm__EligibilityBatchInquiry -.->|triggers| uc__BatchVerifyEligibility
+  tm__ErrorResendWindow{{"⏱️ エラー分レセプトの再送（毎月11日・12日）"}}
+  uc__ResendErroredStatement(["✅ エラー分レセプトの再送"])
+  tm__ErrorResendWindow -.->|triggers| uc__ResendErroredStatement
+  tm__IntakeExpiryCheck{{"⏱️ Nightly intake expiry check"}}
+  uc__ExpireIntakeForms(["✅ Expire Intake Forms"])
+  tm__IntakeExpiryCheck -.->|triggers| uc__ExpireIntakeForms
+  tm__MonthlyClaimCreation{{"⏱️ 前月分レセプトの作成（月初）"}}
+  uc__GenerateClaimStatement(["✅ レセプト作成"])
+  tm__MonthlyClaimCreation -.->|triggers| uc__GenerateClaimStatement
+  tm__MonthlyClaimDeadline{{"⏱️ 前月分レセプトの請求（毎月5日～10日）"}}
+  tm__MonthlyClaimDeadline -.->|triggers| uc__SubmitClaimStatements
+  tm__NoShowSweep{{"⏱️ Nightly no-show sweep"}}
+  uc__MarkNoShow(["✅ Mark No Show"])
+  tm__NoShowSweep -.->|triggers| uc__MarkNoShow
+  tm__PrescriptionUsePeriodCheck{{"⏱️ 処方箋の使用期間切れ確認"}}
+  uc__ExpirePrescription(["✅ 処方箋の使用期間切れ"])
+  tm__PrescriptionUsePeriodCheck -.->|triggers| uc__ExpirePrescription
+  tm__ReceivablesMonthlyReview{{"⏱️ 未収金管理台帳の作成（毎月）"}}
+  uc__ReconcileBalance(["✅ 未収金管理台帳の作成"])
+  tm__ReceivablesMonthlyReview -.->|triggers| uc__ReconcileBalance
+  tm__ReturnDownloadCheck{{"⏱️ 返戻レセプトの取得（3か月以内）"}}
+  tm__ReturnDownloadCheck -.->|triggers| uc__RecordClaimReturn
 ```
 
-重要なイベント:
+主要イベントと起動先:
 
-| Event | 発生元 | 後続 |
+| Event | 発生元 | 起動先 |
 |---|---|---|
-| `EvAppointmentScheduled` | `BookAppointment`, `ScheduleFollowUpVisit` | `BucPatientOnboarding`, `SendAppointmentNotice`, `SendIntakeForms` |
-| `EvAppointmentCheckedIn` | `CheckInPatient` | `BucClinicalEncounter`, `OpenEncounter`, `PrepareEncounter` |
-| `EvEncounterSigned` | `SignEncounter` | `BucBillingClaims`, `BucFollowupCare`, `BucOrdersResults`, `CompleteAppointment`, `PlaceLabOrder`, `CreateCharge`, `CreateCarePlan` |
-| `EvClinicalOrderReviewed` | `ReviewLabResult` | `BucFollowupCare`, `NotifyCriticalResult`, `NotifyPatientResult` |
-| `EvClaimSubmitted` | `SubmitClaim` | Claim state transition |
-| `EvClaimPaid` | `PostPayment` | Claim state transition |
+| `EvAppointmentCheckedIn` | `CheckInPatient` | `OnlineEligibilitySystem`, `BucClinicalEncounter`, `OpenEncounter`, `PrepareEncounter` |
+| `EvEligibilityChecked` | `OnlineEligibilitySystem` | `ReceiveEligibilityValid`, `ReceiveEligibilityInvalid`, `ReceiveEligibilityNoInfo` |
+| `EvEncounterSigned` | `SignEncounter` | `BucBillingClaims`, `BucVisitPayment`, `BucFollowupCare`, `BucOrdersResults`, `CompleteConsultation`, `PlaceLabOrder`, `CreateCharge`, `CreateCarePlan` |
+| `EvBillCalculated` | `CalculateVisitBill` | `CallPatientForPayment`, `PaymentGateway` |
+| `EvPaymentSettled` | `PaymentGateway` | `SettleAtKiosk` |
+| `EvClaimStatementsSubmitted` | `SubmitClaimStatements` | `ClaimsReviewOrganization` |
+| `EvClaimReturned` | `ClaimsReviewOrganization` | `RecordClaimReturn` |
+| `EvClaimAssessed` | `ClaimsReviewOrganization` | `RecordClaimAssessment` |
+| `EvRemittance` | `ClaimsReviewOrganization` | `PostPayment` |
+| `EvPharmacyInquiry` | `InsurancePharmacy` | `AnswerPharmacyInquiry` |
+
+タイマーと起動先:
+
+| Timer | 起動先 | 根拠となる期間 |
+|---|---|---|
+| `EligibilityBatchInquiry` | `BatchVerifyEligibility` | 来院前（予約済み患者） |
+| `MonthlyClaimCreation` | `GenerateClaimStatement` | 前月分を月初に作成 |
+| `MonthlyClaimDeadline` | `SubmitClaimStatements` | 翌月10日まで、請求可能期間 5日～10日 |
+| `ErrorResendWindow` | `ResendErroredStatement` | エラー分は 11日・12日 |
+| `ReturnDownloadCheck` | `RecordClaimReturn` | 返戻ファイルのダウンロード期間 3か月 |
+| `PrescriptionUsePeriodCheck` | `ExpirePrescription` | 交付の日を含めて4日以内 |
+| `ReceivablesMonthlyReview` | `ReconcileBalance` | 未収金管理台帳（毎月） |
+
+再審査等請求期間（5日～月末）と支払の時期（診療翌々月）は、use case を起動する時点ではないため `.rdra` のコメントに出典付きで書いている。
 
 ### 5.4 API マトリクスの読み方
 
@@ -5522,12 +8991,25 @@ flowchart LR
 
 | 領域 | Entity |
 |---|---|
-| 患者マスタ | `PatientAccount`, `PatientProfile`, `InsurancePolicy`, `EligibilityCheck`, `ConsentRecord`, `IntakePacket` |
+| 患者マスタ | `PatientAccount`, `PatientProfile`, `InsurancePolicy`, `EligibilityCheck`, `ConsentRecord`, `IntakePacket`, `ReferralLetter` |
 | 施設・予定 | `Provider`, `ClinicLocation`, `Room`, `ProviderSchedule` |
 | 予約・診療 | `Appointment`, `Encounter`, `VitalSign`, `Diagnosis` |
 | オーダー・結果・処方 | `ClinicalOrder`, `LabResult`, `Medication`, `Prescription` |
-| 請求 | `Charge`, `Claim`, `PaymentTransaction`, `AccountBalance` |
+| 会計 | `Charge`, `PaymentTransaction`, `AccountBalance`, `SelectedTreatmentFeeSetting` |
+| 請求 | `ClaimStatement` |
 | フォロー・通知・監査 | `CarePlan`, `PatientMessage`, `Notification`, `AuditEvent` |
+
+variation（actor や保険者が決め、use case が動かさない値）:
+
+| Variation | 型を付ける列 | 値 |
+|---|---|---|
+| `BurdenRatio` | `InsurancePolicy.burden_ratio` | 3割, 2割 |
+| `LimitCategory` | `InsurancePolicy.limit_category` | 限度額情報なし, 適用区分を取得済 |
+| `ReferralCategory` | `Appointment.referral` | 再診, 紹介状あり初診, 紹介状なし初診, 紹介状なし初診（救急搬送等の除外） |
+| `ChargeKind` | `Charge.kind` | 保険診療, 選定療養（自費） |
+| `ReferralDirection` | `ReferralLetter.direction` | 紹介元から受領, 紹介先へ送付 |
+| `PayerChange` | `ClaimStatement.payer_change` | 資格変更なし, 負担割合が同じ資格への変更, 負担割合が異なる資格への変更, 公費が関わる変更 |
+| `PaymentMethod` | `PaymentTransaction.method` | 現金, クレジットカード, 還付・追加徴収 |
 
 ### 6.2 ER 図
 
@@ -5544,10 +9026,12 @@ erDiagram
     Money balance
     Bool is_closed
     DateTime closed_at
+    Int patientaccount_id FK
   }
   Appointment {
     Int id PK
     String reason
+    ReferralCategory referral
     Enum status
     DateTime scheduled_at
     DateTime checked_in_at
@@ -5570,20 +9054,37 @@ erDiagram
   Charge {
     Int id PK
     String code
+    ChargeKind kind
     Money amount
     DateTime posted_at
     Enum status
     Int encounter_id FK
-    Int claim_id FK
+    Int claimstatement_id FK
   }
-  Claim {
+  ClaimStatement {
     Int id PK
-    String claim_no
+    Date service_month
     Enum status
+    PayerChange payer_change
     DateTime submitted_at
     DateTime paid_at
-    String denial_reason
+    String return_reason
     Int patientaccount_id FK
+    Int insurancepolicy_id FK
+  }
+  ConsentRecord {
+    Int id PK
+    ConsentType consent_type
+    DateTime signed_at
+    DateTime expires_at
+    Bool revoked
+    Int patientaccount_id FK
+  }
+  EligibilityCheck {
+    Int id PK
+    DateTime checked_at
+    Enum result
+    String reference_no
     Int insurancepolicy_id FK
   }
   Encounter {
@@ -5592,14 +9093,17 @@ erDiagram
     Enum status
     DateTime opened_at
     DateTime signed_at
+    Int appointment_id FK
     Int patientaccount_id FK
     Int provider_id FK
   }
   InsurancePolicy {
     Int id PK
     String payer_name
+    String payer_no
     String member_no
-    String plan_name
+    BurdenRatio burden_ratio
+    LimitCategory limit_category
     Enum verification_status
     DateTime verified_at
     Bool active
@@ -5619,22 +9123,39 @@ erDiagram
     DateTime delivered_at
     Int patientaccount_id FK
   }
+  PatientAccount {
+    Int id PK
+    String medical_record_no
+    Enum status
+    DateTime created_at
+    DateTime archived_at
+  }
   PatientMessage {
     Int id PK
-    Enum channel
+    MessageChannel channel
     Enum status
     DateTime sent_at
     DateTime read_at
     Int patientaccount_id FK
   }
+  PatientProfile {
+    Int id PK
+    String legal_name
+    String preferred_name
+    Date birth_date
+    String phone
+    String email
+    String emergency_contact
+    Int patientaccount_id FK
+  }
   PaymentTransaction {
     Int id PK
     Money amount
-    Enum method
+    PaymentMethod method
     Enum status
     DateTime processed_at
     String gateway_ref
-    Int claim_id FK
+    Int appointment_id FK
   }
   ProviderSchedule {
     Int id PK
@@ -5646,12 +9167,24 @@ erDiagram
     Int provider_id FK
     Int cliniclocation_id FK
   }
+  Appointment }o--|| PatientAccount : ""
   Encounter ||--|| Appointment : ""
+  Encounter }o--|| PatientAccount : ""
   Charge }o--|| Encounter : ""
-  Charge }o--|| Claim : ""
-  Claim }o--|| InsurancePolicy : ""
-  PaymentTransaction }o--|| Claim : ""
+  Charge }o--|| ClaimStatement : ""
+  ClaimStatement }o--|| PatientAccount : ""
+  ClaimStatement }o--|| InsurancePolicy : ""
+  PaymentTransaction }o--|| Appointment : ""
+  AccountBalance ||--|| PatientAccount : ""
   CarePlan }o--|| Encounter : ""
+  CarePlan }o--|| PatientAccount : ""
+  PatientMessage }o--|| PatientAccount : ""
+  Notification }o--|| PatientAccount : ""
+  PatientProfile ||--|| PatientAccount : ""
+  InsurancePolicy }o--|| PatientAccount : ""
+  EligibilityCheck }o--|| InsurancePolicy : ""
+  ConsentRecord }o--|| PatientAccount : ""
+  IntakePacket }o--|| PatientAccount : ""
 ```
 
 ### 6.3 State 図
@@ -5664,73 +9197,127 @@ rdra-ish diagram samples/clinic-ops --kind state --format mermaid --out samples/
 
 ```mermaid
 stateDiagram-v2
-  [*] --> Apptrequested
-  [*] --> Careopen
-  [*] --> Claimdraft
-  [*] --> Clordered
-  [*] --> Encopen
-  [*] --> Intakesent
-  [*] --> Patientactive
-  [*] --> Rxdrafted
-  state "🔄 Appointment Checked In" as Apptcheckedin
-  state "🔄 Appointment Completed" as Apptcompleted
-  state "🔄 Appointment Requested" as Apptrequested
-  state "🔄 Appointment Scheduled" as Apptscheduled
-  state "🔄 Appointment Cancelled" as Apptcancelled
-  state "🔄 Appointment No Show" as Apptnoshow
-  state "🔄 Care Plan Monitoring" as Caremonitoring
-  state "🔄 Care Plan Closed" as Careclosed
-  state "🔄 Care Plan Open" as Careopen
-  state "🔄 Claim Accepted" as Claimaccepted
-  state "🔄 Claim Paid" as Claimpaid
-  state "🔄 Claim Draft" as Claimdraft
-  state "🔄 Claim Submitted" as Claimsubmitted
-  state "🔄 Claim Denied" as Claimdenied
-  state "🔄 Specimen Collected" as Clcollected
-  state "🔄 Result Received" as Clresulted
-  state "🔄 Clinical Order Placed" as Clordered
-  state "🔄 Clinical Order Cancelled" as Clcancelled
-  state "🔄 Result Reviewed" as Clreviewed
-  state "🔄 Encounter Documented" as Encdocumented
-  state "🔄 Encounter Signed" as Encsigned
-  state "🔄 Encounter Open" as Encopen
-  state "🔄 Encounter Amended" as Encamended
-  state "🔄 Intake Sent" as Intakesent
-  state "🔄 Intake Completed" as Intakecompleted
-  state "🔄 Intake Expired" as Intakeexpired
-  state "🔄 Active Patient" as Patientactive
-  state "🔄 Inactive Patient" as Patientinactive
-  state "🔄 Merged Patient" as Patientmerged
-  state "🔄 Prescription Drafted" as Rxdrafted
-  state "🔄 Prescription Cancelled" as Rxcancelled
-  state "🔄 Prescription Sent" as Rxsent
-  state "🔄 Prescription Dispensed" as Rxdispensed
-  Apptcheckedin --> Apptcompleted : ⚡ Appointment Completed
-  Apptrequested --> Apptscheduled : ⚡ Appointment Scheduled
-  Apptscheduled --> Apptcancelled : ⚡ Appointment Cancelled
-  Apptscheduled --> Apptcheckedin : ⚡ Appointment Checked In
-  Apptscheduled --> Apptnoshow : ⚡ Appointment Marked No Show
-  Apptscheduled --> Apptscheduled : ⚡ Appointment Rescheduled
-  Caremonitoring --> Careclosed : ⚡ Care Plan Closed
-  Careopen --> Caremonitoring : ⚡ Care Plan Monitoring
-  Claimaccepted --> Claimpaid : ⚡ Claim Paid
-  Claimdraft --> Claimsubmitted : ⚡ Claim Submitted
-  Claimsubmitted --> Claimaccepted : ⚡ Claim Accepted
-  Claimsubmitted --> Claimdenied : ⚡ Claim Denied
-  Clcollected --> Clresulted : ⚡ Clinical Result Received
-  Clordered --> Clcancelled : ⚡ Clinical Order Cancelled
-  Clordered --> Clcollected : ⚡ Specimen Collected
-  Clresulted --> Clreviewed : ⚡ Clinical Result Reviewed
-  Encdocumented --> Encsigned : ⚡ Encounter Signed
-  Encopen --> Encdocumented : ⚡ Encounter Documented
-  Encsigned --> Encamended : ⚡ Encounter Amended
-  Intakesent --> Intakecompleted : ⚡ Intake Completed
-  Intakesent --> Intakeexpired : ⚡ Intake Expired
-  Patientactive --> Patientinactive : ⚡ Patient Archived
-  Patientactive --> Patientmerged : ⚡ Patient Merged
-  Rxdrafted --> Rxcancelled : ⚡ Prescription Cancelled
-  Rxdrafted --> Rxsent : ⚡ Prescription Sent
-  Rxsent --> Rxdispensed : ⚡ Prescription Dispensed
+  [*] --> Appointment_apptrequested
+  [*] --> Appointment_apptscheduled
+  [*] --> CarePlan_careopen
+  [*] --> ClaimStatement_stmtdrafting
+  [*] --> ClinicalOrder_clordered
+  [*] --> EligibilityCheck_eligpending
+  [*] --> EligibilityCheck_eligvalid
+  [*] --> Encounter_encopen
+  [*] --> IntakePacket_intakesent
+  [*] --> PatientAccount_patientactive
+  [*] --> Prescription_rxdrafted
+  state "🔄 apptawaitingcalc" as Appointment_apptawaitingcalc
+  state "🔄 apptawaitingpay" as Appointment_apptawaitingpay
+  state "🔄 apptsettled" as Appointment_apptsettled
+  state "🔄 apptcheckedin" as Appointment_apptcheckedin
+  state "🔄 apptinconsult" as Appointment_apptinconsult
+  state "🔄 apptrequested" as Appointment_apptrequested
+  state "🔄 apptscheduled" as Appointment_apptscheduled
+  state "🔄 apptcancelled" as Appointment_apptcancelled
+  state "🔄 apptnoshow" as Appointment_apptnoshow
+  state "🔄 apptcompleted" as Appointment_apptcompleted
+  state "🔄 caremonitoring" as CarePlan_caremonitoring
+  state "🔄 careclosed" as CarePlan_careclosed
+  state "🔄 careopen" as CarePlan_careopen
+  state "🔄 stmtassessed" as ClaimStatement_stmtassessed
+  state "🔄 stmtpaid" as ClaimStatement_stmtpaid
+  state "🔄 stmtrereview" as ClaimStatement_stmtrereview
+  state "🔄 stmtdrafting" as ClaimStatement_stmtdrafting
+  state "🔄 stmtinspecting" as ClaimStatement_stmtinspecting
+  state "🔄 stmtonhold" as ClaimStatement_stmtonhold
+  state "🔄 stmtsubmitted" as ClaimStatement_stmtsubmitted
+  state "🔄 stmtreceipterror" as ClaimStatement_stmtreceipterror
+  state "🔄 stmtreturned" as ClaimStatement_stmtreturned
+  state "🔄 stmtunderreview" as ClaimStatement_stmtunderreview
+  state "🔄 clcollected" as ClinicalOrder_clcollected
+  state "🔄 clresulted" as ClinicalOrder_clresulted
+  state "🔄 clordered" as ClinicalOrder_clordered
+  state "🔄 clcancelled" as ClinicalOrder_clcancelled
+  state "🔄 clreviewed" as ClinicalOrder_clreviewed
+  state "🔄 eliginvalid" as EligibilityCheck_eliginvalid
+  state "🔄 eligpending" as EligibilityCheck_eligpending
+  state "🔄 elignoinfo" as EligibilityCheck_elignoinfo
+  state "🔄 eligdeclared" as EligibilityCheck_eligdeclared
+  state "🔄 eligvalid" as EligibilityCheck_eligvalid
+  state "🔄 encdocumented" as Encounter_encdocumented
+  state "🔄 encsigned" as Encounter_encsigned
+  state "🔄 encopen" as Encounter_encopen
+  state "🔄 encamended" as Encounter_encamended
+  state "🔄 intakesent" as IntakePacket_intakesent
+  state "🔄 intakecompleted" as IntakePacket_intakecompleted
+  state "🔄 intakeexpired" as IntakePacket_intakeexpired
+  state "🔄 patientactive" as PatientAccount_patientactive
+  state "🔄 patientinactive" as PatientAccount_patientinactive
+  state "🔄 patientmerged" as PatientAccount_patientmerged
+  state "🔄 rxaudited" as Prescription_rxaudited
+  state "🔄 rxcounseled" as Prescription_rxcounseled
+  state "🔄 rxdispensed" as Prescription_rxdispensed
+  state "🔄 rxdrafted" as Prescription_rxdrafted
+  state "🔄 rxcancelled" as Prescription_rxcancelled
+  state "🔄 rxissued" as Prescription_rxissued
+  state "🔄 rxvoucher" as Prescription_rxvoucher
+  state "🔄 rxinquiry" as Prescription_rxinquiry
+  state "🔄 rxexpired" as Prescription_rxexpired
+  Appointment_apptawaitingcalc --> Appointment_apptawaitingpay : ✅ 会計計算入力
+  Appointment_apptawaitingpay --> Appointment_apptsettled : ✅ 自動精算機での精算
+  Appointment_apptawaitingpay --> Appointment_apptsettled : ✅ 会計窓口での精算
+  Appointment_apptcheckedin --> Appointment_apptinconsult : ✅ Open Encounter
+  Appointment_apptinconsult --> Appointment_apptawaitingcalc : ✅ 診察終了
+  Appointment_apptrequested --> Appointment_apptscheduled : ✅ Book Appointment
+  Appointment_apptrequested --> Appointment_apptscheduled : ✅ Schedule Follow-Up Visit
+  Appointment_apptscheduled --> Appointment_apptcancelled : ✅ Cancel Appointment
+  Appointment_apptscheduled --> Appointment_apptcheckedin : ✅ 受付（初診・再診）
+  Appointment_apptscheduled --> Appointment_apptnoshow : ✅ Mark No Show
+  Appointment_apptscheduled --> Appointment_apptscheduled : ✅ Reschedule Appointment
+  Appointment_apptsettled --> Appointment_apptcompleted : ✅ 領収証・明細書の交付
+  CarePlan_caremonitoring --> CarePlan_careclosed : ✅ Close Care Plan
+  CarePlan_careopen --> CarePlan_caremonitoring : ✅ Review Patient Response
+  ClaimStatement_stmtassessed --> ClaimStatement_stmtpaid : ✅ 診療報酬の入金
+  ClaimStatement_stmtassessed --> ClaimStatement_stmtrereview : ✅ 再審査請求
+  ClaimStatement_stmtdrafting --> ClaimStatement_stmtinspecting : ✅ レセプトの院内点検
+  ClaimStatement_stmtinspecting --> ClaimStatement_stmtonhold : ✅ レセプトの保留（月遅れ）
+  ClaimStatement_stmtinspecting --> ClaimStatement_stmtsubmitted : ✅ レセプト請求
+  ClaimStatement_stmtonhold --> ClaimStatement_stmtinspecting : ✅ 保留レセプトの再提出準備
+  ClaimStatement_stmtreceipterror --> ClaimStatement_stmtsubmitted : ✅ エラー分レセプトの再送
+  ClaimStatement_stmtrereview --> ClaimStatement_stmtpaid : ✅ 診療報酬の入金
+  ClaimStatement_stmtreturned --> ClaimStatement_stmtinspecting : ✅ 返戻レセプトの訂正（再請求）
+  ClaimStatement_stmtsubmitted --> ClaimStatement_stmtreceipterror : ✅ 受付不能・要確認の確認
+  ClaimStatement_stmtsubmitted --> ClaimStatement_stmtunderreview : ✅ レセプト受付（審査へ）
+  ClaimStatement_stmtunderreview --> ClaimStatement_stmtassessed : ✅ 査定の取込
+  ClaimStatement_stmtunderreview --> ClaimStatement_stmtpaid : ✅ 診療報酬の入金
+  ClaimStatement_stmtunderreview --> ClaimStatement_stmtreturned : ✅ 返戻レセプトの取込
+  ClinicalOrder_clcollected --> ClinicalOrder_clresulted : ✅ Receive Lab Result
+  ClinicalOrder_clordered --> ClinicalOrder_clcancelled : ✅ Cancel Clinical Order
+  ClinicalOrder_clordered --> ClinicalOrder_clcollected : ✅ Collect Specimen
+  ClinicalOrder_clordered --> ClinicalOrder_clordered : ✅ 代行入力オーダの確定
+  ClinicalOrder_clresulted --> ClinicalOrder_clreviewed : ✅ Review Lab Result
+  EligibilityCheck_eliginvalid --> EligibilityCheck_eligpending : ✅ 資格の再確認
+  EligibilityCheck_elignoinfo --> EligibilityCheck_eligpending : ✅ 資格の再確認
+  EligibilityCheck_eligpending --> EligibilityCheck_eligdeclared : ✅ 被保険者資格申立書の受領
+  EligibilityCheck_eligpending --> EligibilityCheck_eliginvalid : ✅ 資格確認結果（無効）の取込
+  EligibilityCheck_eligpending --> EligibilityCheck_elignoinfo : ✅ 資格確認結果（該当資格なし）の取込
+  EligibilityCheck_eligpending --> EligibilityCheck_eligvalid : ✅ システム障害時モードでの資格確認
+  EligibilityCheck_eligpending --> EligibilityCheck_eligvalid : ✅ 資格確認結果（有効）の取込
+  Encounter_encdocumented --> Encounter_encsigned : ✅ Sign Encounter
+  Encounter_encopen --> Encounter_encdocumented : ✅ Document Assessment
+  Encounter_encsigned --> Encounter_encamended : ✅ Amend Signed Encounter
+  IntakePacket_intakesent --> IntakePacket_intakecompleted : ✅ Complete Intake Forms
+  IntakePacket_intakesent --> IntakePacket_intakeexpired : ✅ Expire Intake Forms
+  PatientAccount_patientactive --> PatientAccount_patientinactive : ✅ Archive Patient
+  PatientAccount_patientactive --> PatientAccount_patientmerged : ✅ Merge Duplicate Patient
+  Prescription_rxaudited --> Prescription_rxcounseled : ✅ 服薬指導
+  Prescription_rxcounseled --> Prescription_rxdispensed : ✅ 薬剤交付
+  Prescription_rxdrafted --> Prescription_rxcancelled : ✅ 処方の取消
+  Prescription_rxdrafted --> Prescription_rxissued : ✅ 院外処方箋の発行
+  Prescription_rxdrafted --> Prescription_rxvoucher : ✅ 院内処方用引換券の交付
+  Prescription_rxinquiry --> Prescription_rxvoucher : ✅ 疑義照会への回答
+  Prescription_rxissued --> Prescription_rxdispensed : ✅ 保険薬局での調剤結果の受信
+  Prescription_rxissued --> Prescription_rxexpired : ✅ 処方箋の使用期間切れ
+  Prescription_rxissued --> Prescription_rxissued : ✅ 保険薬局からの疑義照会への回答
+  Prescription_rxvoucher --> Prescription_rxaudited : ✅ 調剤・監査
+  Prescription_rxvoucher --> Prescription_rxinquiry : ✅ 疑義照会
 ```
 
 ### 6.4 状態到達表
@@ -5739,38 +9326,90 @@ Appointment:
 
 ```text
 Entity: Appointment (Appointment)
-  axes: status[apptrequested|apptscheduled|apptcheckedin|apptcompleted|apptcancelled|apptnoshow], checked_in_at[null|present:timestamptz], completed_at[null|present:timestamptz], cancel_reason[null|present]
+  axes: referral[revisit|referred|unreferred|exempt], status[apptrequested|apptscheduled|apptcheckedin|apptinconsult|apptawaitingcalc|apptawaitingpay|apptsettled|apptcompleted|apptcancelled|apptnoshow], checked_in_at[null|present], completed_at[null|present], cancel_reason[null|present]
 
-  STATUS         CHECKED_IN_AT        COMPLETED_AT         CANCEL_REASON  INITIAL  TERMINAL  VIA
-  ─────────────  ───────────────────  ───────────────────  ─────────────  ───────  ────────  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  apptrequested  null                 null                 null           yes      no        BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
-  apptscheduled  null                 null                 null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
-  apptcheckedin  present:timestamptz  null                 null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
-  apptcancelled  null                 null                 present        no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/CancelAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
-  apptnoshow     null                 null                 null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/MarkNoShow, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
-  apptcompleted  present:timestamptz  present:timestamptz  null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
+  REFERRAL    STATUS            CHECKED_IN_AT  COMPLETED_AT  CANCEL_REASON  INITIAL  TERMINAL  VIA
+  ──────────  ────────────────  ─────────────  ────────────  ─────────────  ───────  ────────  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  revisit     apptscheduled     null           null          null           yes      no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
+  referred    apptscheduled     null           null          null           yes      no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
+  unreferred  apptscheduled     null           null          null           yes      no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
+  exempt      apptscheduled     null           null          null           yes      no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
+  revisit     apptrequested     null           null          null           yes      no        BucAppointmentScheduling/ReserveAppointment, BucVisitCheckIn/AssignRoom
+  referred    apptrequested     null           null          null           yes      no        BucAppointmentScheduling/ReserveAppointment, BucVisitCheckIn/AssignRoom
+  unreferred  apptrequested     null           null          null           yes      no        BucAppointmentScheduling/ReserveAppointment, BucVisitCheckIn/AssignRoom
+  exempt      apptrequested     null           null          null           yes      no        BucAppointmentScheduling/ReserveAppointment, BucVisitCheckIn/AssignRoom
+  revisit     apptcancelled     null           null          present        no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/CancelAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
+  revisit     apptnoshow        null           null          null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/MarkNoShow, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
+  revisit     apptcheckedin     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
+  referred    apptcancelled     null           null          present        no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/CancelAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
+  referred    apptnoshow        null           null          null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/MarkNoShow, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
+  referred    apptcheckedin     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
+  unreferred  apptcancelled     null           null          present        no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/CancelAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
+  unreferred  apptnoshow        null           null          null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/MarkNoShow, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
+  unreferred  apptcheckedin     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
+  exempt      apptcancelled     null           null          present        no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/CancelAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
+  exempt      apptnoshow        null           null          null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/MarkNoShow, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
+  exempt      apptcheckedin     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
+  revisit     apptinconsult     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
+  referred    apptinconsult     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
+  unreferred  apptinconsult     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
+  exempt      apptinconsult     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
+  revisit     apptawaitingcalc  present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
+  referred    apptawaitingcalc  present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
+  unreferred  apptawaitingcalc  present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
+  exempt      apptawaitingcalc  present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
+  revisit     apptawaitingpay   present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill
+  referred    apptawaitingpay   present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill
+  unreferred  apptawaitingpay   present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill
+  exempt      apptawaitingpay   present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill
+  revisit     apptsettled       present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
+  referred    apptsettled       present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
+  unreferred  apptsettled       present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
+  exempt      apptsettled       present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
+  revisit     apptcompleted     present        present       null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/IssueReceipt, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
+  referred    apptcompleted     present        present       null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/IssueReceipt, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
+  unreferred  apptcompleted     present        present       null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/IssueReceipt, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
+  exempt      apptcompleted     present        present       null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/IssueReceipt, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
 
-  reachable: 6 / bound: 48
+  reachable: 40 / bound: 320
 ```
 
-Claim:
+ClaimStatement（レセプト）:
 
 ```text
-Entity: Claim (Claim)
-  axes: status[claimdraft|claimsubmitted|claimaccepted|claimdenied|claimpaid], submitted_at[null|present:timestamptz], paid_at[null|present:timestamptz], denial_reason[null|present]
+Entity: ClaimStatement (レセプト)
+  axes: status[stmtdrafting|stmtinspecting|stmtonhold|stmtsubmitted|stmtreceipterror|stmtunderreview|stmtpaid|stmtreturned|stmtassessed|stmtrereview], submitted_at[null|present], paid_at[null|present], return_reason[null|present]
 
-  STATUS          SUBMITTED_AT         PAID_AT              DENIAL_REASON  INITIAL  TERMINAL  VIA
-  ──────────────  ───────────────────  ───────────────────  ─────────────  ───────  ────────  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  claimdraft      null                 null                 null           yes      no        BucBillingClaims/GenerateClaim
-  claimsubmitted  present:timestamptz  null                 null           no       no        BucBillingClaims/GenerateClaim, BucBillingClaims/SubmitClaim
-  claimaccepted   present:timestamptz  null                 null           no       no        BucBillingClaims/GenerateClaim, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/SubmitClaim
-  claimdenied     present:timestamptz  null                 present        no       yes       BucBillingClaims/GenerateClaim, BucBillingClaims/RecordClaimDenial, BucBillingClaims/SubmitClaim
-  claimpaid       present:timestamptz  present:timestamptz  null           no       yes       BucBillingClaims/GenerateClaim, BucBillingClaims/PostPayment, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/SubmitClaim
+  STATUS            SUBMITTED_AT  PAID_AT  RETURN_REASON  INITIAL  TERMINAL  VIA
+  ────────────────  ────────────  ───────  ─────────────  ───────  ────────  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  stmtdrafting      null          null     null           yes      no        BucBillingClaims/GenerateClaimStatement
+  stmtinspecting    null          null     null           no       no        BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReleaseHeldStatement
+  stmtonhold        null          null     null           no       no        BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReleaseHeldStatement
+  stmtsubmitted     present       null     null           no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
+  stmtreceipterror  present       null     null           no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
+  stmtunderreview   present       null     null           no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
+  stmtreturned      present       null     present        no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
+  stmtassessed      present       null     null           no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimAssessment, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
+  stmtpaid          present       present  null           no       yes       BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/PostPayment, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimAssessment, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/RequestReexamination, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
+  stmtinspecting    present       null     null           no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
+  stmtrereview      present       null     null           no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimAssessment, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/RequestReexamination, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
+  stmtonhold        present       null     null           no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
 
-  reachable: 5 / bound: 40
+  reachable: 12 / bound: 80
 ```
 
-状態検証では、初期状態から想定する終端状態へ到達できるか、到達してはいけない状態組み合わせがないか、nullable column や Bool column の `sets` が不足していないかを確認します。
+状態検証では、初期状態から想定する終端状態へ到達できるか、到達してはいけない状態組み合わせがないか、nullable column や Bool column の `sets` が不足していないかを確認します。`rdra-ish check samples/clinic-ops` と `rdra-ish verify samples/clinic-ops` は、各状態の到達証拠（NoWitness なし）、抜け出せない状態（Deadlock なし）、実行されない use case（NeverRuns なし）、invariant・forbidden・1:1 の一意性を検証する。
+
+検証で確かめている業務規則:
+
+| 規則 | 宣言 |
+|---|---|
+| 精算前に予約が完了しない | `Appointment` の状態 `apptawaitingcalc → apptawaitingpay → apptsettled → apptcompleted` と `invariant(Appointment).when(status == apptcompleted).then(completed_at == present)` |
+| 医師が確定していないオーダは採取しない | `forbidden(ClinicalOrder, status == clcollected, physician_confirmed == false)` と `OrderConfirmedByPhysician` |
+| 返戻の理由は再請求前に消す | `forbidden(ClaimStatement, status == stmtpaid, return_reason == present)` |
+| 支払済のレセプトは入金日を持つ | `invariant(ClaimStatement).when(status == stmtpaid).then(paid_at == present)` |
+| 院外処方箋は送信日時を持つ | `invariant(Prescription).when(status == rxissued).then(sent_at == present)` |
+| 選定療養費は紹介状なし初診だけに付く | `UnreferredFirstVisit` が `ApplySelectedTreatmentFee` の作成を制約する |
 
 ## 7. 権限モデルレビュー
 
@@ -5787,16 +9426,20 @@ Entity: Claim (Claim)
 | Actor | 権限 |
 |---|---|
 | `Patient` | `PatientProfileRead`, `ConsentCapture`, `ScheduleRead` |
-| `FrontDesk` | `PatientProfileRead`, `PatientProfileWrite`, `InsuranceVerify`, `IntakeManage`, `ScheduleRead`, `ScheduleWrite`, `VisitCheckIn`, `CopayCollect` |
-| `Nurse` | `VisitCheckIn`, `RoomAssign`, `EncounterOpen`, `VitalsRecord`, `ClinicalOrderWrite`, `LabResultManage`, `PrescriptionDispense` |
-| `Clinician` | `EncounterOpen`, `ClinicalDocument`, `EncounterSign`, `ClinicalOrderWrite`, `LabResultManage`, `PrescriptionWrite` |
-| `BillingSpecialist` | `BillingClaimWrite`, `PaymentPost` |
+| `ReceptionClerk` | `PatientProfileRead`, `PatientProfileWrite`, `InsuranceVerify`, `IntakeManage`, `ScheduleRead`, `ScheduleWrite`, `VisitCheckIn`, `ReferralManage` |
+| `AccountsClerk` | `BillCalculate`, `PaymentCollect` |
+| `Nurse` | `VisitCheckIn`, `RoomAssign`, `EncounterOpen`, `VitalsRecord`, `ClinicalOrderWrite`, `LabResultManage`, `ProxyOrderEntry` |
+| `Clinician` | `EncounterOpen`, `ClinicalDocument`, `EncounterSign`, `ClinicalOrderWrite`, `LabResultManage`, `PrescriptionWrite`, `ReferralManage` |
+| `MedicalClerk` | `ProxyOrderEntry` |
+| `Pharmacist` | `PrescriptionDispense` |
+| `ClaimsClerk` | `BillingClaimWrite`, `PaymentPost` |
 | `CareCoordinator` | `FollowUpManage`, `PatientMessageSend`, `ScheduleWrite` |
 | `ClinicAdmin` | `ProviderScheduleAdmin`, `RoomAdmin`, `AuditRead`, `AuditResolve` |
 
 レビューでは、actor に付いた権限が BUC の責務と合っているかを先に見る。たとえば
-`FrontDesk` は患者アクセスと来院受付を広く扱うが、診療記録の署名や処方作成は持たない。
-`Clinician` は診療・処方・検査指示を持つが、請求や監査解決は持たない。
+`ReceptionClerk` は受付と資格確認を広く扱うが、会計の収納やレセプト請求は持たない。
+`MedicalClerk`（医師事務作業補助者）は代行入力 `ProxyOrderEntry` だけを持ち、オーダの確定
+`ClinicalOrderWrite` は医師が持つ。`Pharmacist` は調剤 `PrescriptionDispense` を持つが処方の作成は持たない。
 
 ### 7.2 UC/API 要求の読み方
 
@@ -5807,15 +9450,15 @@ UC には「その操作を開始するのに必要な権限」と「操作媒�
 | BUC | 代表 UC/API | 要求 |
 |---|---|---|
 | Appointment Scheduling | `BookAppointment` / `BookAppointmentApi` | `ScheduleWrite`、`FrontDeskTerminal` または `PatientMobile` |
+| 受付 | `CheckInPatient` / `OnlineEligibilityApi` | `VisitCheckIn` と `InsuranceVerify`、`FrontDeskTerminal` |
 | Clinical Encounter | `SignEncounter` / `SignEncounterApi` | `EncounterSign`、`ClinicalWorkstation` |
-| Orders and Results | `NotifyCriticalResult` / `CriticalNoticeApi` | `LabResultManage` と `PatientMessageSend`、`ClinicalWorkstation` |
-| Billing Claims | `PostPayment` / `PaymentPostApi` | `PaymentPost`、`BillingWorkstation` |
+| 計算・会計 | `SettleAtWindow` / `SettlementApi` | `PaymentCollect`、`AccountsWindow` |
+| レセプト作成・請求 | `SubmitClaimStatements` / `SubmitClaimApi` | `BillingClaimWrite`、`OnlineClaimTerminal` |
 | Staff Administration | `ResolveAuditFinding` | `AuditResolve`、`AdminConsole` |
 
 権限レビューでは、UC の要求と API の要求が同じである必要はない。たとえば
-`NotifyCriticalResult` は検査結果の判断権限に加えて、患者通知 API 側の
-`PatientMessageSend` も必要になる。これは「臨床判断」と「患者通知」の能力が
-同じとは限らないことを示している。
+`CheckInPatient` は受付の権限に加えて、オンライン資格確認 API 側の `InsuranceVerify`
+も必要になる。
 
 ### 7.3 Screen 制約パターン
 
@@ -5833,6 +9476,7 @@ screen_id,usecase_id,api_id,required_permissions,required_media
 AppointmentScreen,BookAppointment,BookAppointmentApi,ScheduleWrite,FrontDeskTerminal|PatientMobile
 DiagnosisScreen,DocumentAssessment,DocumentAssessmentApi,ClinicalDocument,ClinicalWorkstation
 CriticalNoticeScreen,NotifyCriticalResult,CriticalNoticeApi,LabResultManage|PatientMessageSend,ClinicalWorkstation
+KioskScreen,SettleAtKiosk,SettlementApi,PaymentCollect,PaymentKiosk
 PaymentPostingScreen,PostPayment,PaymentPostApi,PaymentPost,BillingWorkstation
 AuditReviewScreen,ResolveAuditFinding,,AuditResolve,AdminConsole
 ```
@@ -5859,10 +9503,10 @@ rdra-ish csv samples/clinic-ops --kind actor-permission-audit --out samples/clin
 
 ```csv
 actor_id,actor_label,permission_id,permission_label,assigned,required,status,required_usecase_ids,required_api_paths
-Clinician,Clinician,PatientMessageSend,Patient Message Send,false,true,missing,NotifyCriticalResult,NotifyCriticalResult->CriticalNoticeApi
-FrontDesk,Front Desk Staff,PatientMessageSend,Patient Message Send,false,true,missing,,SendIntakeForms->IntakeMessagingApi
-Nurse,Nurse,VisitCheckIn,Visit Check-In,true,false,excess,,
-BillingSpecialist,Billing Specialist,BillingClaimWrite,Billing Claim Write,true,true,ok,CreateCharge|GenerateClaim|ReceiveClaimAccepted|RecordClaimDenial|SubmitClaim|VoidCharge,CreateCharge->CreateChargeApi|GenerateClaim->GenerateClaimApi|SubmitClaim->SubmitClaimApi
+Clinician,医師,PatientMessageSend,Patient Message Send,false,true,missing,NotifyCriticalResult,NotifyCriticalResult->CriticalNoticeApi
+ReceptionClerk,医事課 受付担当,PatientMessageSend,Patient Message Send,false,true,missing,,SendIntakeForms->IntakeMessagingApi
+MedicalClerk,医師事務作業補助者,ProxyOrderEntry,代行入力,true,true,ok,EnterProxyOrder,EnterProxyOrder->ProxyOrderApi
+ClaimsClerk,医事課 レセプト担当,BillingClaimWrite,レセプト業務,true,true,ok,CorrectReturnedStatement|GenerateClaimStatement|HoldClaimStatement|InspectClaimStatement|ReceiveClaimAccepted|RecordClaimAssessment|RecordClaimReturn|RecordReceiptError|ReleaseHeldStatement|RequestReexamination|ResendErroredStatement|ReviewClaimTransfer|SubmitClaimStatements|VoidCharge,CorrectReturnedStatement->ClaimEditApi|GenerateClaimStatement->GenerateClaimApi|HoldClaimStatement->ClaimEditApi|InspectClaimStatement->ClaimEditApi|ReceiveClaimAccepted->ClaimResultApi|RecordClaimAssessment->ClaimResultApi|RecordClaimReturn->ClaimResultApi|RecordReceiptError->ClaimResultApi|ReleaseHeldStatement->ClaimEditApi|RequestReexamination->SubmitClaimApi|ResendErroredStatement->SubmitClaimApi|SubmitClaimStatements->SubmitClaimApi
 ```
 
 読み方:
@@ -5876,10 +9520,10 @@ BillingSpecialist,Billing Specialist,BillingClaimWrite,Billing Claim Write,true,
 | 観点 | 確認すること | 指摘例 |
 |---|---|---|
 | Actor coverage | `performs` する actor が必要権限を持つか | `Patient` が `BookAppointment` を実行するなら `ScheduleWrite` を持つべきか、患者用の別権限へ分けるべきか確認する |
-| Least privilege | actor に不要な権限がないか | `FrontDesk` に `EncounterSign` や `PrescriptionWrite` を付けない |
-| Media constraint | 操作媒体が業務実態と合うか | `ResolveAuditFinding` は `AdminConsole` のみに制限し、患者モバイルからは通さない |
-| UC/API split | UC と API の権限が混ざっていないか | 患者通知 API には `PatientMessageSend`、検査レビュー UC には `LabResultManage` を置く |
-| Screen path | 同じ画面の操作ごとに制約を区別できるか | `AppointmentScreen` の検索、予約、取消を同じ権限として扱ってよいか確認する |
+| Least privilege | actor に不要な権限がないか | `MedicalClerk` に `ClinicalOrderWrite` を付けない（確定は医師） |
+| Media constraint | 操作媒体が業務実態と合うか | レセプト請求はオンライン請求用端末に限定する |
+| UC/API split | UC と API の権限が混ざっていないか | 受付 UC には `VisitCheckIn`、資格確認 API には `InsuranceVerify` を置く |
+| Screen path | 同じ画面の操作ごとに制約を区別できるか | `ClaimScreen` の点検、保留、請求を同じ権限として扱ってよいか確認する |
 
 レビューでは `shared/access.rdra`、各 BUC ファイルの Access constraints ブロック、
 `out/screen_constraints.csv`、`out/actor_permission_audit.csv` を突き合わせ、
@@ -5890,24 +9534,26 @@ actor が実行する UC/API パスに必要な権限と媒体が説明できる
 1. BUC 単位の RDRA Layered Graph 図でスコープと actor/usecase を確認する。
 2. BUC 単位の sequence 図で、その BUC 内の UC と API 境界を確認する。
 3. 論点のある UC は UC 単位 sequence 図で個別に確認する。
-4. Event flow で BUC 間連鎖を確認する。
+4. Event flow で BUC 間連鎖とタイマーを確認する。
 5. API matrix で API/Entity CRUD の責務を横断確認する。
 6. Screen 制約パターンで権限と媒体を横断確認する。
 7. Actor 権限割当監査で不足/過剰な actor 側権限を確認する。
 8. ER 図で最終データ構造を確認する。
 9. State 図と状態到達表で lifecycle と rule の不足を確認する。
+10. `.rdra` のコメントの出典で、各業務規則が一次資料に基づくことを確認する。
 
 ## 9. 承認条件
 
 | 観点 | 承認条件 |
 |---|---|
-| BUC | 業務スコープが 9 BUC に分解され、担当 actor が説明できる |
+| BUC | 業務スコープが 10 BUC に分解され、担当 actor が説明できる |
 | UC | 各 UC の主要 CRUD、参照、イベントが説明できる |
 | API | API matrix 上で責務の広すぎる API がない |
 | Access | actor 権限、UC/API 要求、媒体制約が screen constraint 行と actor permission audit 行として説明できる |
 | Sequence | BUC/UC sequence に対象外の actor/API/System が出ない |
-| Event | BUC 間イベント連鎖が Event flow で説明できる |
+| Event | BUC 間イベント連鎖とタイマーが Event flow で説明できる |
 | Data | ER と状態到達表で主要 lifecycle が確認できる |
+| 出典 | 業務規則ごとに一次資料の出典が `.rdra` のコメントにある |
 
 ## Summary
 

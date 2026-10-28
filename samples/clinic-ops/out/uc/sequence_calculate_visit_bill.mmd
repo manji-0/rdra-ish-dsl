@@ -1,0 +1,24 @@
+sequenceDiagram
+  box System Value
+    actor AccountsClerk as 👤 医事課 会計担当
+  end
+  box System Boundary
+    participant BillCalculationScreen as 🖥️ 会計計算画面
+  end
+  box System
+    participant CalculateVisitBillApi as 🔌 会計計算 API
+    participant Appointment as 🗄️ Appointment
+    participant Charge as 🗄️ Charge
+    participant InsurancePolicy as 🗄️ 保険資格
+  end
+
+  Note over AccountsClerk,InsurancePolicy: ✅ 会計計算入力
+  AccountsClerk->>BillCalculationScreen: ✅ 会計計算入力
+  BillCalculationScreen->>CalculateVisitBillApi: ✅ 会計計算入力
+  activate CalculateVisitBillApi
+  CalculateVisitBillApi->>Charge: read
+  CalculateVisitBillApi->>InsurancePolicy: read
+  CalculateVisitBillApi->>Appointment: update
+  CalculateVisitBillApi-->>BillCalculationScreen: 🖥️ 会計計算画面
+  BillCalculationScreen-->>AccountsClerk: 🖥️ 会計計算画面
+  deactivate CalculateVisitBillApi

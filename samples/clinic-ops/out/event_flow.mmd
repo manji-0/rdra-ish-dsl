@@ -7,7 +7,7 @@ flowchart LR
   xs__MessagingGateway[/"🌐 Messaging Gateway"/]
   ev__EvAppointmentCancelled -.->|delivers| xs__MessagingGateway
   ev__EvAppointmentCheckedIn{"⚡ Appointment Checked In"}
-  uc__CheckInPatient(["✅ Check In Patient"])
+  uc__CheckInPatient(["✅ 受付（初診・再診）"])
   uc__CheckInPatient -.->|raises| ev__EvAppointmentCheckedIn
   uc__OpenEncounter(["✅ Open Encounter"])
   ev__EvAppointmentCheckedIn -.->|triggers| uc__OpenEncounter
@@ -15,6 +15,8 @@ flowchart LR
   ev__EvAppointmentCheckedIn -.->|triggers| uc__PrepareEncounter
   buc__BucClinicalEncounter[["📦 Conduct Clinical Encounter"]]
   ev__EvAppointmentCheckedIn -.->|triggers| buc__BucClinicalEncounter
+  xs__OnlineEligibilitySystem[/"🌐 オンライン資格確認等システム"/]
+  ev__EvAppointmentCheckedIn -.->|delivers| xs__OnlineEligibilitySystem
   st__Appointment_apptcheckedin("🔄 apptcheckedin")
   st__Appointment_apptinconsult("🔄 apptinconsult")
   st__Appointment_apptcheckedin -->|⚡ Appointment Checked In| st__Appointment_apptinconsult
@@ -34,6 +36,47 @@ flowchart LR
   buc__BucPatientOnboarding[["📦 Onboard and Maintain Patient"]]
   ev__EvAppointmentScheduled -.->|triggers| buc__BucPatientOnboarding
   ev__EvAppointmentScheduled -.->|delivers| xs__MessagingGateway
+  ev__EvBillCalculated{"⚡ 会計計算完了"}
+  uc__CalculateVisitBill(["✅ 会計計算入力"])
+  uc__CalculateVisitBill -.->|raises| ev__EvBillCalculated
+  uc__CallPatientForPayment(["✅ 会計の呼出"])
+  ev__EvBillCalculated -.->|triggers| uc__CallPatientForPayment
+  xs__PaymentGateway[/"🌐 自動精算機・クレジット決済"/]
+  ev__EvBillCalculated -.->|delivers| xs__PaymentGateway
+  ev__EvClaimAccepted{"⚡ レセプト受付"}
+  xs__ClaimsReviewOrganization[/"🌐 審査支払機関（支払基金・国保連）"/]
+  xs__ClaimsReviewOrganization -.->|raises| ev__EvClaimAccepted
+  uc__ReceiveClaimAccepted(["✅ レセプト受付（審査へ）"])
+  ev__EvClaimAccepted -.->|triggers| uc__ReceiveClaimAccepted
+  st__ClaimStatement_stmtsubmitted("🔄 stmtsubmitted")
+  st__ClaimStatement_stmtunderreview("🔄 stmtunderreview")
+  st__ClaimStatement_stmtsubmitted -->|⚡ レセプト受付| st__ClaimStatement_stmtunderreview
+  ev__EvClaimAssessed{"⚡ 査定"}
+  xs__ClaimsReviewOrganization -.->|raises| ev__EvClaimAssessed
+  uc__RecordClaimAssessment(["✅ 査定の取込"])
+  ev__EvClaimAssessed -.->|triggers| uc__RecordClaimAssessment
+  st__ClaimStatement_stmtassessed("🔄 stmtassessed")
+  st__ClaimStatement_stmtunderreview -->|⚡ 査定| st__ClaimStatement_stmtassessed
+  ev__EvClaimReceiptError{"⚡ 受付不能・要確認"}
+  xs__ClaimsReviewOrganization -.->|raises| ev__EvClaimReceiptError
+  uc__RecordReceiptError(["✅ 受付不能・要確認の確認"])
+  ev__EvClaimReceiptError -.->|triggers| uc__RecordReceiptError
+  st__ClaimStatement_stmtreceipterror("🔄 stmtreceipterror")
+  st__ClaimStatement_stmtsubmitted -->|⚡ 受付不能・要確認| st__ClaimStatement_stmtreceipterror
+  ev__EvClaimReturned{"⚡ 返戻"}
+  xs__ClaimsReviewOrganization -.->|raises| ev__EvClaimReturned
+  uc__RecordClaimReturn(["✅ 返戻レセプトの取込"])
+  ev__EvClaimReturned -.->|triggers| uc__RecordClaimReturn
+  st__ClaimStatement_stmtreturned("🔄 stmtreturned")
+  st__ClaimStatement_stmtunderreview -->|⚡ 返戻| st__ClaimStatement_stmtreturned
+  ev__EvClaimStatementsSubmitted{"⚡ レセプト請求"}
+  uc__SubmitClaimStatements(["✅ レセプト請求"])
+  uc__SubmitClaimStatements -.->|raises| ev__EvClaimStatementsSubmitted
+  ev__EvClaimStatementsSubmitted -.->|delivers| xs__ClaimsReviewOrganization
+  ev__EvClaimTransferred{"⚡ 資格の振替・分割"}
+  xs__ClaimsReviewOrganization -.->|raises| ev__EvClaimTransferred
+  uc__ReviewClaimTransfer(["✅ 資格の振替・分割の確認"])
+  ev__EvClaimTransferred -.->|triggers| uc__ReviewClaimTransfer
   ev__EvClinicalOrderReviewed{"⚡ Clinical Result Reviewed"}
   uc__ReviewLabResult(["✅ Review Lab Result"])
   uc__ReviewLabResult -.->|raises| ev__EvClinicalOrderReviewed
@@ -43,53 +86,105 @@ flowchart LR
   ev__EvClinicalOrderReviewed -.->|triggers| uc__NotifyPatientResult
   buc__BucFollowupCare[["📦 Coordinate Follow-Up Care"]]
   ev__EvClinicalOrderReviewed -.->|triggers| buc__BucFollowupCare
-  ev__EvEligibilityChecked{"⚡ Eligibility Checked"}
-  xs__EligibilityService[/"🌐 Insurance Eligibility Service"/]
-  xs__EligibilityService -.->|raises| ev__EvEligibilityChecked
-  uc__VerifyInsurance(["✅ Verify Insurance"])
-  ev__EvEligibilityChecked -.->|triggers| uc__VerifyInsurance
+  ev__EvEligibilityChecked{"⚡ 資格確認結果"}
+  xs__OnlineEligibilitySystem -.->|raises| ev__EvEligibilityChecked
+  uc__ReceiveEligibilityInvalid(["✅ 資格確認結果（無効）の取込"])
+  ev__EvEligibilityChecked -.->|triggers| uc__ReceiveEligibilityInvalid
+  uc__ReceiveEligibilityNoInfo(["✅ 資格確認結果（該当資格なし）の取込"])
+  ev__EvEligibilityChecked -.->|triggers| uc__ReceiveEligibilityNoInfo
+  uc__ReceiveEligibilityValid(["✅ 資格確認結果（有効）の取込"])
+  ev__EvEligibilityChecked -.->|triggers| uc__ReceiveEligibilityValid
+  st__EligibilityCheck_eligpending("🔄 eligpending")
+  st__EligibilityCheck_eligvalid("🔄 eligvalid")
+  st__EligibilityCheck_eligpending -->|⚡ 資格確認結果| st__EligibilityCheck_eligvalid
+  st__EligibilityCheck_eliginvalid("🔄 eliginvalid")
+  st__EligibilityCheck_eligpending -->|⚡ 資格確認結果| st__EligibilityCheck_eliginvalid
+  st__EligibilityCheck_elignoinfo("🔄 elignoinfo")
+  st__EligibilityCheck_eligpending -->|⚡ 資格確認結果| st__EligibilityCheck_elignoinfo
   ev__EvEncounterSigned{"⚡ Encounter Signed"}
   uc__SignEncounter(["✅ Sign Encounter"])
   uc__SignEncounter -.->|raises| ev__EvEncounterSigned
-  uc__CompleteAppointment(["✅ Complete Appointment"])
-  ev__EvEncounterSigned -.->|triggers| uc__CompleteAppointment
+  uc__CompleteConsultation(["✅ 診察終了"])
+  ev__EvEncounterSigned -.->|triggers| uc__CompleteConsultation
   uc__CreateCarePlan(["✅ Create Care Plan"])
   ev__EvEncounterSigned -.->|triggers| uc__CreateCarePlan
-  uc__CreateCharge(["✅ Create Charge"])
+  uc__CreateCharge(["✅ コスト情報の登録"])
   ev__EvEncounterSigned -.->|triggers| uc__CreateCharge
   uc__PlaceLabOrder(["✅ Place Lab Order"])
   ev__EvEncounterSigned -.->|triggers| uc__PlaceLabOrder
-  buc__BucBillingClaims[["📦 Bill and Collect Claims"]]
+  buc__BucBillingClaims[["📦 レセプト作成・請求"]]
   ev__EvEncounterSigned -.->|triggers| buc__BucBillingClaims
   ev__EvEncounterSigned -.->|triggers| buc__BucFollowupCare
   buc__BucOrdersResults[["📦 Manage Orders and Results"]]
   ev__EvEncounterSigned -.->|triggers| buc__BucOrdersResults
-  st__Appointment_apptcompleted("🔄 apptcompleted")
-  st__Appointment_apptinconsult -->|⚡ Encounter Signed| st__Appointment_apptcompleted
+  buc__BucVisitPayment[["📦 計算・会計"]]
+  ev__EvEncounterSigned -.->|triggers| buc__BucVisitPayment
+  st__Appointment_apptawaitingcalc("🔄 apptawaitingcalc")
+  st__Appointment_apptinconsult -->|⚡ Encounter Signed| st__Appointment_apptawaitingcalc
   ev__EvLabResultReceived{"⚡ Lab Result Received"}
-  xs__LabSystem[/"🌐 Laboratory System"/]
-  xs__LabSystem -.->|raises| ev__EvLabResultReceived
+  xs__OutsourcedLabSystem[/"🌐 外注検査システム"/]
+  xs__OutsourcedLabSystem -.->|raises| ev__EvLabResultReceived
   uc__ReceiveLabResult(["✅ Receive Lab Result"])
   ev__EvLabResultReceived -.->|triggers| uc__ReceiveLabResult
   st__ClinicalOrder_clcollected("🔄 clcollected")
   st__ClinicalOrder_clresulted("🔄 clresulted")
   st__ClinicalOrder_clcollected -->|⚡ Lab Result Received| st__ClinicalOrder_clresulted
-  ev__EvPaymentSettled{"⚡ Payment Settled"}
-  xs__PaymentGateway[/"🌐 Payment Gateway"/]
+  ev__EvPaymentSettled{"⚡ 自動精算機での精算完了"}
   xs__PaymentGateway -.->|raises| ev__EvPaymentSettled
-  uc__PostPayment(["✅ Post Payment"])
-  ev__EvPaymentSettled -.->|triggers| uc__PostPayment
-  st__Claim_claimaccepted("🔄 claimaccepted")
-  st__Claim_claimpaid("🔄 claimpaid")
-  st__Claim_claimaccepted -->|⚡ Payment Settled| st__Claim_claimpaid
+  uc__SettleAtKiosk(["✅ 自動精算機での精算"])
+  ev__EvPaymentSettled -.->|triggers| uc__SettleAtKiosk
+  st__Appointment_apptawaitingpay("🔄 apptawaitingpay")
+  st__Appointment_apptsettled("🔄 apptsettled")
+  st__Appointment_apptawaitingpay -->|⚡ 自動精算機での精算完了| st__Appointment_apptsettled
+  ev__EvPharmacyInquiry{"⚡ 保険薬局からの疑義照会"}
+  xs__InsurancePharmacy[/"🌐 保険薬局"/]
+  xs__InsurancePharmacy -.->|raises| ev__EvPharmacyInquiry
+  uc__AnswerPharmacyInquiry(["✅ 保険薬局からの疑義照会への回答"])
+  ev__EvPharmacyInquiry -.->|triggers| uc__AnswerPharmacyInquiry
+  st__Prescription_rxissued("🔄 rxissued")
+  st__Prescription_rxissued -->|⚡ 保険薬局からの疑義照会| st__Prescription_rxissued
   ev__EvPrescriptionDispensed{"⚡ Prescription Dispensed"}
-  uc__ConfirmDispense(["✅ Confirm Dispense"])
-  uc__ConfirmDispense -.->|raises| ev__EvPrescriptionDispensed
-  xs__PharmacyNetwork[/"🌐 Pharmacy Network"/]
-  ev__EvPrescriptionDispensed -.->|delivers| xs__PharmacyNetwork
+  xs__EPrescriptionService[/"🌐 電子処方箋管理サービス"/]
+  xs__EPrescriptionService -.->|raises| ev__EvPrescriptionDispensed
+  uc__ConfirmDispense(["✅ 保険薬局での調剤結果の受信"])
+  ev__EvPrescriptionDispensed -.->|triggers| uc__ConfirmDispense
+  st__Prescription_rxdispensed("🔄 rxdispensed")
+  st__Prescription_rxissued -->|⚡ Prescription Dispensed| st__Prescription_rxdispensed
+  ev__EvPrescriptionIssued{"⚡ 電子処方箋の登録"}
+  uc__IssueOutsidePrescription(["✅ 院外処方箋の発行"])
+  uc__IssueOutsidePrescription -.->|raises| ev__EvPrescriptionIssued
+  ev__EvPrescriptionIssued -.->|delivers| xs__EPrescriptionService
+  ev__EvRemittance{"⚡ 診療報酬の支払"}
+  xs__ClaimsReviewOrganization -.->|raises| ev__EvRemittance
+  uc__PostPayment(["✅ 診療報酬の入金"])
+  ev__EvRemittance -.->|triggers| uc__PostPayment
+  st__ClaimStatement_stmtpaid("🔄 stmtpaid")
+  st__ClaimStatement_stmtassessed -->|⚡ 診療報酬の支払| st__ClaimStatement_stmtpaid
+  st__ClaimStatement_stmtrereview("🔄 stmtrereview")
+  st__ClaimStatement_stmtrereview -->|⚡ 診療報酬の支払| st__ClaimStatement_stmtpaid
+  st__ClaimStatement_stmtunderreview -->|⚡ 診療報酬の支払| st__ClaimStatement_stmtpaid
+  tm__EligibilityBatchInquiry{{"⏱️ 予約患者の資格の一括照会（来院前）"}}
+  uc__BatchVerifyEligibility(["✅ 資格の一括照会"])
+  tm__EligibilityBatchInquiry -.->|triggers| uc__BatchVerifyEligibility
+  tm__ErrorResendWindow{{"⏱️ エラー分レセプトの再送（毎月11日・12日）"}}
+  uc__ResendErroredStatement(["✅ エラー分レセプトの再送"])
+  tm__ErrorResendWindow -.->|triggers| uc__ResendErroredStatement
   tm__IntakeExpiryCheck{{"⏱️ Nightly intake expiry check"}}
   uc__ExpireIntakeForms(["✅ Expire Intake Forms"])
   tm__IntakeExpiryCheck -.->|triggers| uc__ExpireIntakeForms
+  tm__MonthlyClaimCreation{{"⏱️ 前月分レセプトの作成（月初）"}}
+  uc__GenerateClaimStatement(["✅ レセプト作成"])
+  tm__MonthlyClaimCreation -.->|triggers| uc__GenerateClaimStatement
+  tm__MonthlyClaimDeadline{{"⏱️ 前月分レセプトの請求（毎月5日～10日）"}}
+  tm__MonthlyClaimDeadline -.->|triggers| uc__SubmitClaimStatements
   tm__NoShowSweep{{"⏱️ Nightly no-show sweep"}}
   uc__MarkNoShow(["✅ Mark No Show"])
   tm__NoShowSweep -.->|triggers| uc__MarkNoShow
+  tm__PrescriptionUsePeriodCheck{{"⏱️ 処方箋の使用期間切れ確認"}}
+  uc__ExpirePrescription(["✅ 処方箋の使用期間切れ"])
+  tm__PrescriptionUsePeriodCheck -.->|triggers| uc__ExpirePrescription
+  tm__ReceivablesMonthlyReview{{"⏱️ 未収金管理台帳の作成（毎月）"}}
+  uc__ReconcileBalance(["✅ 未収金管理台帳の作成"])
+  tm__ReceivablesMonthlyReview -.->|triggers| uc__ReconcileBalance
+  tm__ReturnDownloadCheck{{"⏱️ 返戻レセプトの取得（3か月以内）"}}
+  tm__ReturnDownloadCheck -.->|triggers| uc__RecordClaimReturn

@@ -1,0 +1,153 @@
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    AccountsClerk(["👤 医事課 会計担当"])
+    PaymentGateway[/"🌐 自動精算機・クレジット決済"/]
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    RevenueCycle["💼 Revenue Cycle"]
+    BucVisitPayment["📦 計算・会計"]
+    VisitPaymentFlow["🧭 計算・会計の流れ"]
+    CalculationStep(["➡️ 計算受付・会計計算入力"])
+    CallStep(["➡️ 会計の呼出"])
+    KioskStep(["➡️ 自動精算機で精算"])
+    ReceiptStep(["➡️ 領収証・明細書の交付"])
+    WindowStep(["➡️ 会計窓口で精算"])
+    AccountsWindow[/"📱 会計窓口"/]
+    BillingWorkstation[/"📱 Billing Workstation"/]
+    PaymentKiosk[/"📱 自動精算機"/]
+    BillCalculate["🔑 会計計算"]
+    PaymentCollect["🔑 窓口収納"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    ApplySelectedTreatmentFee(["✅ 選定療養費の算定"])
+    CalculateVisitBill(["✅ 会計計算入力"])
+    CallPatientForPayment(["✅ 会計の呼出"])
+    IssueReceipt(["✅ 領収証・明細書の交付"])
+    SettleAtKiosk(["✅ 自動精算機での精算"])
+    SettleAtWindow(["✅ 会計窓口での精算"])
+    BillCalculationScreen[["🖥️ 会計計算画面"]]
+    KioskScreen[["🖥️ 自動精算機画面"]]
+    PaymentWindowScreen[["🖥️ 会計窓口画面"]]
+    ChargeCodeField[["🔤 診療行為"]]
+    KioskReferenceField[["🔤 精算機の取引番号"]]
+    PaymentAmountField[["🔤 お支払額"]]
+    EvBillCalculated{"⚡ 会計計算完了"}
+    EvEncounterSigned{"⚡ Encounter Signed"}
+    EvPaymentSettled{"⚡ 自動精算機での精算完了"}
+  end
+  subgraph layer_system[System]
+    direction TB
+    CalculateVisitBillApi["🔌 会計計算 API"]
+    ReceiptApi["🔌 領収証 API"]
+    SelectedFeeApi["🔌 選定療養費 API"]
+    SettlementApi["🔌 精算 API"]
+    AccountBalance[("🗄️ 未収金残高")]
+    Appointment[("🗄️ Appointment")]
+    Charge[("🗄️ Charge")]
+    Encounter[("🗄️ Encounter")]
+    InsurancePolicy[("🗄️ 保険資格")]
+    PaymentTransaction[("🗄️ Payment Transaction")]
+    SelectedTreatmentFeeSetting[("🗄️ 選定療養費の設定")]
+    BurdenRatio["🎚️ 負担割合"]
+    ChargeKind["🎚️ 診療費の種類"]
+    LimitCategory["🎚️ 限度額適用区分"]
+    ReferralCategory["🎚️ 紹介の有無"]
+    CopayCappedAtLimit{"🔀 窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"}
+    UnreferredFirstVisit{"🔀 紹介状なしの初診で、除外に当たらない"}
+  end
+  AccountsClerk -.->|has_permission| BillCalculate
+  AccountsClerk -.->|has_permission| PaymentCollect
+  AccountsClerk -->|performs| BucVisitPayment
+  AccountsClerk -->|performs| CalculateVisitBill
+  AccountsClerk -->|performs| ApplySelectedTreatmentFee
+  AccountsClerk -->|performs| CallPatientForPayment
+  AccountsClerk -->|performs| SettleAtWindow
+  AccountsClerk -->|performs| IssueReceipt
+  CalculateVisitBillApi -.->|reads| Charge
+  CalculateVisitBillApi -.->|reads| InsurancePolicy
+  CalculateVisitBillApi -.->|requires_permission| BillCalculate
+  CalculateVisitBillApi -.->|updates| Appointment
+  SelectedFeeApi -.->|creates| Charge
+  SelectedFeeApi -.->|reads| Encounter
+  SelectedFeeApi -.->|reads| SelectedTreatmentFeeSetting
+  SelectedFeeApi -.->|requires_permission| BillCalculate
+  SettlementApi -.->|creates| PaymentTransaction
+  SettlementApi -.->|requires_permission| PaymentCollect
+  SettlementApi -.->|updates| Appointment
+  SettlementApi -.->|updates| AccountBalance
+  ReceiptApi -.->|reads| Charge
+  ReceiptApi -.->|reads| PaymentTransaction
+  ReceiptApi -.->|requires_permission| PaymentCollect
+  ReceiptApi -.->|updates| Appointment
+  BucVisitPayment -.->|belongs| RevenueCycle
+  BucVisitPayment -->|contains| VisitPaymentFlow
+  BucVisitPayment -->|contains| CalculateVisitBill
+  BucVisitPayment -->|contains| ApplySelectedTreatmentFee
+  BucVisitPayment -->|contains| CallPatientForPayment
+  BucVisitPayment -->|contains| SettleAtWindow
+  BucVisitPayment -->|contains| SettleAtKiosk
+  BucVisitPayment -->|contains| IssueReceipt
+  CopayCappedAtLimit -.->|applies_to| CalculateVisitBill
+  CopayCappedAtLimit -.->|combines| Appointment
+  CopayCappedAtLimit -.->|combines| BurdenRatio
+  CopayCappedAtLimit -.->|combines| LimitCategory
+  UnreferredFirstVisit -.->|applies_to| ApplySelectedTreatmentFee
+  UnreferredFirstVisit -.->|combines| ReferralCategory
+  UnreferredFirstVisit -.->|combines| ChargeKind
+  Encounter ---|1:1| Appointment
+  Charge ---|N:1| Encounter
+  PaymentTransaction ---|N:1| Appointment
+  EvPaymentSettled -.->|triggers| SettleAtKiosk
+  EvBillCalculated -.->|triggers| PaymentGateway
+  EvBillCalculated -.->|triggers| CallPatientForPayment
+  EvEncounterSigned -.->|triggers| BucVisitPayment
+  PaymentGateway -.->|raises| EvPaymentSettled
+  KioskReferenceField -.->|maps_field| PaymentTransaction
+  PaymentAmountField -.->|maps_field| PaymentTransaction
+  ChargeCodeField -.->|maps_field| Charge
+  VisitPaymentFlow -->|contains| CalculationStep
+  VisitPaymentFlow -->|contains| CallStep
+  VisitPaymentFlow -->|contains| WindowStep
+  VisitPaymentFlow -->|contains| KioskStep
+  VisitPaymentFlow -->|contains| ReceiptStep
+  BillCalculationScreen -->|contains| ChargeCodeField
+  PaymentWindowScreen -->|contains| PaymentAmountField
+  KioskScreen -->|contains| KioskReferenceField
+  CalculationStep -.->|covers| CalculateVisitBill
+  CalculationStep -.->|covers| ApplySelectedTreatmentFee
+  CalculationStep -.->|precedes| CallStep
+  CallStep -.->|branches| KioskStep
+  CallStep -.->|covers| CallPatientForPayment
+  CallStep -.->|precedes| WindowStep
+  WindowStep -.->|covers| SettleAtWindow
+  WindowStep -.->|precedes| ReceiptStep
+  KioskStep -.->|covers| EvPaymentSettled
+  KioskStep -.->|covers| SettleAtKiosk
+  KioskStep -.->|precedes| ReceiptStep
+  ReceiptStep -.->|covers| IssueReceipt
+  CalculateVisitBill -.->|displays| BillCalculationScreen
+  CalculateVisitBill -.->|invokes| CalculateVisitBillApi
+  CalculateVisitBill -.->|raises| EvBillCalculated
+  CalculateVisitBill -.->|requires_medium| BillingWorkstation
+  CalculateVisitBill -.->|requires_permission| BillCalculate
+  ApplySelectedTreatmentFee -.->|displays| BillCalculationScreen
+  ApplySelectedTreatmentFee -.->|invokes| SelectedFeeApi
+  ApplySelectedTreatmentFee -.->|requires_medium| BillingWorkstation
+  ApplySelectedTreatmentFee -.->|requires_permission| BillCalculate
+  CallPatientForPayment -.->|displays| PaymentWindowScreen
+  CallPatientForPayment -.->|reads| Appointment
+  CallPatientForPayment -.->|requires_medium| AccountsWindow
+  SettleAtWindow -.->|displays| PaymentWindowScreen
+  SettleAtWindow -.->|invokes| SettlementApi
+  SettleAtWindow -.->|requires_medium| AccountsWindow
+  SettleAtWindow -.->|requires_permission| PaymentCollect
+  SettleAtKiosk -.->|displays| KioskScreen
+  SettleAtKiosk -.->|invokes| SettlementApi
+  SettleAtKiosk -.->|requires_medium| PaymentKiosk
+  IssueReceipt -.->|displays| PaymentWindowScreen
+  IssueReceipt -.->|invokes| ReceiptApi
+  IssueReceipt -.->|requires_medium| AccountsWindow
+  IssueReceipt -.->|requires_permission| PaymentCollect
