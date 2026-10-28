@@ -21,7 +21,7 @@ use rdra_ish_emit::{
 use std::fs;
 
 use crate::cli::{DiagramKind, DiagramViewPreset, OutputFormat};
-use crate::list_output::reject_state_errors;
+use crate::list_output::{note_state_errors, reject_state_errors};
 use crate::load::{diagram_preset_filters, load_model, reject_model_errors};
 
 pub struct DiagramRequest {
@@ -55,7 +55,11 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
     let inputs = inputs.as_slice();
     let (program, model, diags) = load_model(inputs)?;
     reject_model_errors(&program, &diags)?;
-    reject_state_errors(&model)?;
+    if kind.reads_lifecycle() {
+        reject_state_errors(&model)?;
+    } else {
+        note_state_errors(&model);
+    }
 
     for buc_id in &buc {
         if !model.bucs.values().any(|b| b.id == *buc_id) {

@@ -55,6 +55,21 @@ fn data_layer_exports_despite_lifecycle_errors() {
 }
 
 #[test]
+fn er_diagram_draws_despite_lifecycle_errors() {
+    let dir = scratch("export_gate_er_diagram");
+    let output = rdra_ish(
+        &["diagram", FAILING, "--kind", "er", "--format", "mermaid"],
+        &dir.join("er"),
+    );
+    assert!(output.status.success(), "{output:?}");
+    assert!(
+        dir.join("er.mmd").is_file(),
+        "diagram --kind er wrote nothing"
+    );
+    assert_eq!(note_count(&output), 1, "{output:?}");
+}
+
+#[test]
 fn lifecycle_exports_refuse_on_lifecycle_errors() {
     let dir = scratch("export_gate_lifecycle");
     for (args, file) in [
@@ -63,6 +78,10 @@ fn lifecycle_exports_refuse_on_lifecycle_errors() {
             "states.ts",
         ),
         (vec!["csv", FAILING, "--kind", "matrix"], "matrix.csv"),
+        (
+            vec!["diagram", FAILING, "--kind", "state", "--format", "mermaid"],
+            "state.mmd",
+        ),
     ] {
         let out = dir.join(file);
         let output = rdra_ish(&args, &out);

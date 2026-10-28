@@ -211,6 +211,14 @@ pub(crate) enum DiagramKind {
     TechnicalArea,
 }
 
+impl DiagramKind {
+    /// Whether a lifecycle error makes the diagram wrong. ER draws only the data layer, as
+    /// `export --kind mermaid-er` does; the other kinds keep the gate.
+    pub(crate) fn reads_lifecycle(&self) -> bool {
+        !matches!(self, DiagramKind::Er)
+    }
+}
+
 #[derive(ValueEnum, Clone)]
 pub(crate) enum DiagramViewPreset {
     Business,
