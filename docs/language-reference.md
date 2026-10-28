@@ -151,7 +151,7 @@ descriptions as review annotations where supported.
 | `permission` | A permission or role-like authority assignable to actors. | `check` `requires_permission` against `has_permission`; `csv --kind actor-permission-audit` |
 | `entity` | A logical data model: a table-like persistent structure. | `check`; `states`; ER diagram; `csv --kind matrix`; `export --kind dbml`, `json-schema`, `tla`; `lint` `enum-attribute` |
 | `variation` | A closed set of values an actor chooses from (an RDRA バリエーション), such as a payment method. It types attribute columns of entities and DTOs and is never a lifecycle. See [Variations](#variations). | `lint` `orphan-node` (a variation that types no column); `check` `UnknownColumnType`, `InvalidVariationValue`; ER diagram and `csv --kind entity` (the column type); `export --kind dbml`, `json-schema`, `openapi`; `list --kind variation` |
-| `condition` | An RDRA 条件: the combination of variations and a state model that selects a business rule, such as "the visit is covered by insurance". It carries no body of its own for traceability, or a `holds` body that is stored but not yet checked. See [Conditions](#conditions). | `combines`, `holds`, `applies_to(Condition, UseCase \| Api \| System)`; `lint` `condition-no-rdra-anchor`, `orphan-node`; `check` `ConditionCombinesWithBody`, `ConditionSecondBody`, `ConditionCombinesAttribute`, `AmbiguousCombinesTarget`; RDRA diagram (system layer, edges to variation, state model, and use case); `list --kind condition`; `verify` notice for a body |
+| `condition` | An RDRA 条件: the combination of variations and a state model that selects a business rule, such as "the visit is covered by insurance". It carries no body for traceability only, or a `holds` body that guards the use cases it applies to. See [Conditions](#conditions). | `combines`, `holds`, `applies_to(Condition, UseCase \| Api \| System)`; `lint` `condition-no-rdra-anchor`, `orphan-node`; `check` `ConditionCombinesWithBody`, `ConditionSecondBody`, `ConditionCombinesAttribute`, `AmbiguousCombinesTarget`; RDRA diagram (system layer, edges to variation, state model, and use case); `list --kind condition`; `states`, `check`, `export --kind tla`, and `verify` read a body as a guard |
 
 ---
 
@@ -199,12 +199,12 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `requires_medium` | `(UseCase \| Api, Medium)` | The use case or API requires the operation medium. |
 | `motivates` | `Requirement == Buc` | The requirement motivates the BUC. |
 | `decides` | `(Adr, Buc \| UseCase \| Api \| System \| Entity \| Requirement \| Nfr \| Constraint \| Dto)` | The ADR records a design decision that affects the target element. Use this for impact review and design traceability without making the target depend on a document file path. |
-| `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `1:1`, `1:N`, `N:1`, `N:M` (unquoted). For `N:M`, require `.via(JunctionEntity)` where the junction is distinct from both ends: the model keeps the logical N:M edge **and synthesizes** two `N:1` edges `Junction→A` / `Junction→B` (FK columns, composite unique on the FK pair when missing, TLA `*_owner`, ER crowfoot, `.along` paths). Equivalent manual form: two explicit `N:1` relates from the junction. FK options can be chained with `.optional()`, `.on_delete(action)`, and `.on_update(action)` (for `N:M`, options apply to both generated FKs). |
+| `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `1:1`, `1:N`, `N:1`, `N:M` (unquoted). For `N:M`, require `.via(JunctionEntity)` where the junction is distinct from both ends: the model keeps the logical N:M edge **and synthesizes** two `N:1` edges `Junction→A` / `Junction→B` (FK columns, composite unique on the FK pair when missing, TLA owner links, ER crowfoot, `.along` paths). Equivalent manual form: two explicit `N:1` relates from the junction. FK options can be chained with `.optional()`, `.on_delete(action)`, and `.on_update(action)` (for `N:M`, options apply to both generated FKs). An `.optional()` relate lets the child exist unlinked in `states` and in the TLA+ export; a mandatory relate does not. |
 | `transitions` | `(Entity.column, UseCase, from -> to)` | A lifecycle edge on an Enum column: the use case moves the entity from the first variant to the second. |
-| `after` | `(UseCase).assert(...)` | A temporal anchor assertion checked against the use case's immediate `sets` and `raises`/`transitions` effects. |
+| `after` | `(UseCase).assert(...)` | A temporal anchor assertion: a predicate on the state that each step of the use case leaves. |
 | `when` | `(conditions...).none/has(conditions...)` | A to-many quantifier constraint (replaces `forbidden_when`). Prefer qualified columns such as `Cert.status == revoked`. |
-| `sets` | `(UseCase, Entity, col == val)` | An explicit column effect, consumed by state pattern derivation. Use `present` (not PostgreSQL type names) for nullable non-null. |
-| `sets` | `(UseCase, Entity, col op rhs, true \| false)` | Drives the truth value of a comparison proposition (derived Bool axis) in state pattern derivation. |
+| `sets` | `(UseCase, Entity, col == val)` | An explicit column effect, read by state derivation. Use `present` (not PostgreSQL type names) for nullable non-null. |
+| `sets` | `(UseCase, Entity, col op rhs, true \| false)` | Drives the truth value of a comparison proposition (a derived Bool axis) in state derivation. |
 
 `relate(A, B, N:1)` generates a `b_id` FK on `A`. With
 `.optional().on_delete(set_null).on_update(cascade)`, the generated FK column is
@@ -531,9 +531,9 @@ event-initiated without reshaping the BUC itself.
 use case to execute. This is the refined form when the entry action is known. The tool
 validates that a triggered use case belongs to at least one BUC via `contains`; a warning
 is emitted otherwise. Use `diagram --kind event-flow` to visualise the full
-`raises -> Event -> triggers` chain alongside state transitions. State derivation uses
-the immediate same-entity effects of the use cases that raise the event as guards for
-the triggered use case when those effects target known state axes.
+`raises -> Event -> triggers` chain alongside state transitions. The order of `raises`
+and `triggers` between use cases adds no guard to state derivation: a use case is limited
+only by the states it requires and by the guards of its linked conditions.
 
 `outbox(event::E)` declares that a raised event is intentionally published outside the
 local model boundary, such as a domain event sent to an outbox, external subscriber, or
@@ -744,8 +744,9 @@ the actor has a permission that no modeled performer path currently requires.
 `entity` is the logical data model. Its body declares columns, and `relate` declares
 relationships and generates foreign keys. Inline Enum, Bool, and nullable columns are
 the state axes that the lifecycle layer reasons about. A column whose value an actor
-chooses, not a use case, is typed by a [`variation`](#variations) instead and is not an
-axis.
+chooses, not a use case, is typed by a [`variation`](#variations) instead. Such a column
+is an axis only when a `sets`, a constraint, a condition body, an `after` assertion, or a
+`property` names it.
 
 ### Entity Bodies
 
@@ -890,10 +891,23 @@ model. Without a body, the `combines` declarations are the links. `list --kind c
 the RDRA diagram, and `lint` all read it, so a body and its links cannot disagree. A body that
 names neither a variation column nor a lifecycle column is `lint` `condition-no-rdra-anchor`.
 
-A body is stored and validated, and nothing checks it yet: `states` and the TLA+ export ignore
-it, and `verify` prints `condition InsuredVisit: body stored, not yet checked (phase 4)` for
-each one so a passing run does not imply otherwise. A body may name columns of two entities;
-this version does not check that a relation path joins them.
+A body with `applies_to(Condition, UseCase)` is a guard on that use case: the use case runs
+only in a state where every comparison holds. `applies_to(Condition, Api)` guards each use
+case that invokes the API, and `applies_to(Condition, System)` adds no guard. `states`,
+`check`, and the TLA+ export read the same guard.
+
+- A comparison on an entity that the use case writes reads that instance. When the use case
+  creates the entity, the comparison tests the new instance after the use case runs, so
+  the condition constrains the creation. `InsuredVisit` above lets `CollectCopay` create
+  only a payment whose `method` is `insurance`.
+- A comparison on any other entity needs some existing instance that satisfies it.
+  Comparisons on one such entity share one instance. A direct `relate` links that instance
+  to the entities it relates to; without a `relate`, it is independent.
+- A body applied to a use case that writes nothing has no action to guard. That is
+  `UnbindableCondition`, an error.
+- A body names its columns, so a column the body reads that no use case writes draws the
+  `UnwrittenConstrainedVar` warning. A condition with no body is a trace link and guards
+  nothing.
 
 ### RDRA lint rules
 
@@ -1034,9 +1048,10 @@ value. Display/storage types belong on entity annotations or DBML export inferen
 ### Driving comparison propositions with `sets`
 
 A **comparison proposition** (`col op rhs`, e.g. `stock < selling`, `expired_at < now`) is
-a derived Bool axis in the state space. Because continuous values such as `Int` or `DateTime`
-are not tracked in the abstract state space, the truth value of a comparison proposition
-**must be driven explicitly** using the four-argument form of `sets`:
+evaluated on the Int values of its columns over `0..5` and on `now`. Change the columns
+with `sets(Restock, Stock, stock == 3)` and the comparison follows. When the model does
+not track the values, drive the truth value of the comparison instead with the
+four-argument form of `sets`:
 
 ```
 // Tell the model that Sell causes (stock < selling) to become true
@@ -1049,9 +1064,10 @@ sets(Refund, Stock, stock < selling, false)
 The third argument is the bare comparison expression (no quotes); the fourth argument is
 the bare boolean literal `true` or `false`. Value equality (`col == variant`) must not use
 `, false` — that form is rejected (`SetsFalseOnEquals`); omit the fourth argument and set
-a different value instead. If no `sets` drives a comparison proposition, it is treated as
-**always false** (the comparison never holds) throughout state derivation, and the
-state-pattern diagnostics report `UndrivenComparisonProp` for constraints that depend on it.
+a different value instead. Once any `sets` drives a comparison, the comparison is a Bool
+variable that only those `sets` change, and the Int columns no longer define it. A use case
+that drives a comparison to one truth while its own Int `sets` make it the other is
+`ContradictoryDrivenComparison`, an error.
 
 | Fourth argument | Meaning |
 |---|---|
@@ -1065,9 +1081,9 @@ state-pattern diagnostics report `UndrivenComparisonProp` for constraints that d
 <!-- derived-from ./state-derivation.md#temporal-anchor-assertions -->
 
 State constraints assert facts about the **reachable state space** of an entity. They
-are evaluated after BFS state-pattern derivation: a constraint is only reported as
-violated if a reachable pattern actually witnesses the violation. Unreachable bad
-states never trigger a diagnostic.
+are evaluated on the reachable states of the lifecycle transition system: a constraint is
+only reported as violated if a reachable state actually witnesses the violation.
+Unreachable bad states never trigger a diagnostic.
 
 There are four entity-local constraint forms. Each one names a common shape in the
 reachable state space:
@@ -1102,13 +1118,11 @@ forbidden(Coupon, expired_at < now)
 
 Each condition is either a `column == value` tuple or a comparison expression. All
 conditions are combined with **AND**: the state is forbidden only when **every** condition
-holds at once. If any reachable pattern satisfies all conditions, a
-`ForbiddenStateViolated` diagnostic is emitted, naming the conditions and the offending
-pattern. Multi-axis witnesses include a correlation hint, because independently modeled
-state axes can combine in the abstract product space even when a business flow would
-normally move those axes together. If one axis is a comparison proposition, set that
-proposition to `true` or `false` in the same use case that moves the correlated status
-axis.
+holds at once. If any reachable state satisfies all conditions, a `ConstraintViolated`
+diagnostic is emitted, naming the constraint (`Forbidden_Order_0`), the conditions, and
+the offending state. Columns that two use cases change separately can combine in a
+reachable state. When the business flow changes correlated columns together, set them in
+the same use case.
 
 **Design rationale.** A forbidden state is a *point* (or a sub-cube) in the finite
 product state space — fundamentally a conjunction of column assignments. The
@@ -1145,11 +1159,9 @@ and the `.then(...)` clauses are requirements (the consequent). Each clause is e
 combined with **AND**. The rule reads: **whenever all `.when()` guards hold, all
 `.then()` requirements must also hold.**
 
-For every reachable pattern that satisfies all the guards but violates any requirement,
-an `InvariantViolated` diagnostic is emitted, naming the guards, the requirements, and
-the offending pattern. If the witness comes from a use case reached through
-`triggers(...)`, the diagnostic can include a flow-order hint when immediate upstream
-effects do not prove the required guard coverage.
+For every reachable state that satisfies all the guards but violates any requirement,
+a `ConstraintViolated` diagnostic is emitted, naming the guards, the requirements, and
+the offending state.
 
 **Design rationale.** Unlike `forbidden`, an invariant has *two distinct sides* — a
 guard and a requirement — joined by implication. A flat tuple list cannot express which
@@ -1170,7 +1182,7 @@ either a `column == value` tuple or a comparison expression. All listed conditio
 combined with **AND**. The rule reads: **every reachable pattern of this entity must
 satisfy all listed conditions**.
 
-If a reachable pattern is missing any required condition, a `RequiredStateViolated`
+If a reachable state is missing any required condition, a `ConstraintViolated`
 diagnostic is emitted.
 
 **Design rationale.** `required` is the no-guard form of an invariant. It is possible to
@@ -1190,8 +1202,8 @@ either a `column == value` tuple or a comparison expression. The listed conditio
 treated as alternatives. A reachable pattern violates the rule when **two or more** of
 the listed conditions hold at the same time.
 
-If a reachable pattern satisfies multiple exclusive conditions, an
-`ExclusiveStateViolated` diagnostic is emitted.
+If a reachable state satisfies multiple exclusive conditions, a
+`ConstraintViolated` diagnostic is emitted.
 
 **Design rationale.** Mutual exclusion can be expanded into pairwise `forbidden`
 constraints, but the predicate names the business intent directly. This is useful for
@@ -1201,8 +1213,8 @@ not co-occur.
 ### Cross-Entity Constraints
 
 Cross-entity constraints describe rules that mention columns from more than one entity.
-They are parsed, type-checked, and checked by `states` after each participating
-entity's reachable patterns have been derived.
+They are parsed, type-checked, and checked by `states` and `verify` over every
+combination of the participating entities' present instances.
 
 Use `Entity.column` when a condition points at a column. The optional leading entity
 arguments declare the intended scope; when omitted, the scope is inferred from qualified
@@ -1235,11 +1247,21 @@ uses the same implication shape as single-entity `invariant`: `.when(...)` claus
 When more than one entity is in scope, bare column names are rejected so the rule stays
 unambiguous. With a single-entity scope, bare columns are still accepted as a shorthand.
 
+Without `.along`, the rule holds for every pair of instances, linked or not. Adding
+`.along(EntityA, EntityB, ...)` restricts it to instances connected through the listed
+`relate` path. Paths may include junction entities from `relate(A, B, N:M).via(J)` — e.g.
+`.along(A, J, B)` — because via synthesizes the `J→A` / `J→B` edges. Each adjacent pair
+of the path needs a `relate` that binds it (N:1, 1:N, or 1:1), and the path must cover
+every entity of the scope. Otherwise the rule is `UnbindableScope`, an error. An unlinked
+owner (an `.optional()` relate not yet linked) is not linked for `.along`.
+
 `after(UseCase).assert(Entity.column == value, ...)` checks an assertion at a specific
-use-case boundary instead of against the full cross-product of reachable state patterns.
-The assertion is evaluated from the use case's immediate `sets` effects and any
-`transitions` reached through events raised by that use case. Comparison forms are also
-valid, for example `after(ExecuteCertIssue).assert(CertificateOrder.status == executed)`.
+use-case boundary instead of against every reachable state. The tool checks the predicate
+on the state that each step of the use case leaves. A use case whose writes span k
+transaction groups is k steps, and the assertion holds after each one. Comparison forms
+are also valid, for example
+`after(ExecuteCertIssue).assert(CertificateOrder.status == executed)`. An `after` on a
+use case that changes nothing is `AssertOnInertUseCase`.
 
 ### Temporal path properties
 
@@ -1271,59 +1293,25 @@ The property label string is optional: `property StockOk always(Item.stock >= It
 
 When any `eventually` / `leads_to` property is exported, the Spec includes
 `WF_vars(Next)` (fairness is on the whole `Next` disjunction — not configurable
-from the CLI). In multi-instance export (triggered by multi-entity rules or
-quantifiers), temporal formulas are quantified per instance binder
-(`\A i \in Entity_Ids: …`). Equality and comparison forms of
-`after(UseCase).assert(...)` become independent TLA `PROPERTY` formulas
-`[][raised SpecActions => primed posts]_vars` — they check outcomes and are **not**
-injected into SpecAction effects. Comparison forms prefer Int arithmetic when those
-columns are axes (including cross-entity RHS); otherwise they require a proposition
-axis to be `TRUE` after the action when that axis exists.
-`forbidden(EntityA, EntityB, ...)` / `invariant(EntityA, EntityB)` (including `.along`) become Safety
-conjuncts. Quantifiers and `.along` use finite `Entity_Ids` instance sets when
-exported; see [formal-verification.md](./formal-verification.md).
+from the CLI). Temporal formulas are quantified over the present instances of each
+entity. `after(UseCase).assert(...)` becomes an independent TLA `PROPERTY`,
+`[][(\A p : UC(p) => post')]_vars`, that checks the state each step leaves and is **not**
+injected into the effects. Every constraint is its own `INVARIANT`; see
+[formal-verification.md](./formal-verification.md).
 
-`sets(UC, Entity, intCol == 3)` assigns an Int effect used by TLA+ export.
-Money / Decimal columns used in arithmetic also become `IntRange` axes (nullable
-numeric columns promote to Int rather than staying as Nullable). The exported
-Int domain is a fixed approximation (default `0..5`, override with
-`--int-range-max`) unless you edit the `.tla` by hand.
-`@default(0)` is valid on Int columns. BFS `states` still ignores Int axes and treats
-comparison propositions as Bool axes driven by `sets(..., cmp, true/false)`.
+`sets(UC, Entity, intCol == 3)` assigns an Int effect. Int, Money, Decimal, Date, and
+DateTime columns that something names become `0..5` variables in `states` and in the TLA+
+export (nullable ones add `null`). The export domain is a fixed approximation (default
+`0..5`, override with `--int-range-max`), and an Int literal outside it is
+`IntLiteralOutOfBounds`. `@default(0)` is valid on Int columns.
 
 `when(Entity, conditions...).has/none(...)` or
-`when(Entity.col == val).has/none(Related.col == val)` declares a
-to-many quantifier rule. The syntax is accepted and type-checked, but `states` does not
-track linked related-row counts. It emits `QuantifierConstraintNotEvaluated` as an
-`[error]` under `states` when the related condition has reachable patterns (fail-closed;
-use TLA for linked cardinality). For `none(...)`, if the related condition is
-globally unreachable, the rule is treated as satisfied.
-
-`states` evaluates cross-entity rules by taking the cross-product of each participating
-entity's reached state patterns when those entities are not connected by a declared
-`relate` path. Conditions that reference actual state axes can produce
-`CrossForbiddenViolated` or `CrossInvariantViolated` diagnostics in that global-product
-case (messages say **multi-entity**; the `Cross*` id is historical). Conditions that require values absent from the abstract state space, such as
-ordinary numeric amount comparisons, produce `CrossConstraintNotEvaluated` instead.
-
-When the participating entities are connected by `relate(...)`, a global-product
-witness is reported as `CrossConstraintNotEvaluated` rather than as a violation. The
-state pattern engine does not yet track which concrete rows are linked, so the witness
-may be a false positive for linked-instance rules.
-
-Adding `.along(EntityA, EntityB, ...)` declares that the rule is intended to apply only
-to instances connected through the listed `relate` path, not to the global cross-product.
-Paths may include junction entities from `relate(A, B, N:M).via(J)` —
-e.g. `.along(A, J, B)` — because via synthesizes the `J→A` / `J→B` edges. TLA export
-quantifies intermediate binders and applies pairwise owner filters; dropping a filter
-always emits a warning.
-The current `states` engine validates that the path is declared, can prove the rule
-satisfied when even the broader global cross-product has no witness, and can report a
-violation when each adjacent pair in the path shares use-case provenance for the
-witness patterns. If a witness exists without shared operation provenance, `states`
-reports `CrossConstraintNotEvaluated` rather than treating it as a linked-instance
-violation, because concrete row identity and FK reachability are not represented in
-state patterns.
+`when(Entity.col == val).has/none(Related.col == val)` declares a to-many quantifier
+rule. It ranges over the present instances: `none` fails in a reachable state where the
+anchor condition holds and some related instance satisfies the related condition. A
+`relate` between the two entities links the related instance through its owner; without
+one, the related side is independent. `states` runs one instance per entity, so use
+`verify --instance-count 2` for rules that need two related instances.
 
 ### Comparison Expressions in Constraints
 
@@ -1361,10 +1349,11 @@ the same type category (numeric with numeric, temporal with temporal). When `rhs
 
 #### Semantics and interaction with `sets`
 
-A comparison expression is treated as a **derived Bool proposition axis** in the state
-space. Because continuous-valued types (`Int`, `DateTime`, etc.) are abstracted away in
-the state-pattern model, the runtime truth value of a comparison cannot be inferred
-automatically. Instead, it must be driven explicitly with `sets`:
+A comparison expression is evaluated on the values of its columns: Int, Money, Decimal,
+Date, and DateTime columns that it names become `0..5` variables, and `now` is a clock
+that ticks up to 5. Change the values with `sets(UC, Entity, col == N)`. To say that a
+use case makes the comparison true or false without modeling the values, drive it
+explicitly with `sets`, and the comparison becomes a Bool variable:
 
 ```
 // Declare that the Sell use case causes (stock < selling) to become true
@@ -1374,26 +1363,10 @@ sets(Sell,   Stock, stock < selling, true)
 sets(Refund, Stock, stock < selling, false)
 ```
 
-If no `sets` drives a given comparison proposition, the proposition is treated as
-**always false** (the comparison never holds) for the purposes of state-pattern
-derivation and constraint checking. In practice this means:
-
-- A `forbidden` condition containing an undriven comparison is never triggered (the
-  comparison is never true, so the conjunction is never satisfied).
-- A `required` condition containing an undriven comparison is violated in every
-  reachable pattern, because the required proposition is always false.
-- An `exclusive` condition containing an undriven comparison never contributes to an
-  exclusivity violation.
-- A `.when()` guard containing an undriven comparison is never satisfied, so the
-  invariant never fires.
-- A `.then()` requirement containing an undriven comparison is always violated whenever
-  its guard is satisfied.
-
-Always add matching `sets` calls whenever you use a comparison expression in a
-constraint. The state-pattern diagnostics emit `UndrivenComparisonProp` when a
-comparison is used without a matching `sets(..., comparison, true/false)`, because
-the constraint will have no practical effect (for `forbidden`, `exclusive`, or
-`.when`) or will always fire (for `required` or `.then`).
+A comparison that no `sets` drives is not a variable. It reads the Int values, so a
+`forbidden(Stock, stock < selling)` is violated in any reachable state where `stock` is
+below `selling`, and `required` and `exclusive` read the values the same way. `states`,
+`check`, and TLC read it the same way.
 
 ### Bare identifiers
 
@@ -1435,14 +1408,13 @@ to load with a message naming the replacement:
 | `uses` | Connect an external system through events: `raises(ExtSystem, Event)` inbound, `triggers(Event, ExtSystem)` outbound. |
 | `location` | Deleted with the `.where(...)` clause of `belongs`; use `medium` / `.by(...)` for Business-BUC context. |
 | `state` | Delete the declaration. States are the variants of the lifecycle Enum column named in `transitions(Entity.col, UseCase, from -> to)`; the analyzer derives one `{Entity}_{variant}` state per variant for the state diagram and `lint`. |
-| `condition` | Use case clauses such as `precondition` and `guard`, or [Entity State Constraints](#entity-state-constraints). |
 | `concept`, `domain_object`, `aggregate`, `value_object` / `valueobject`, and `maps_to` | `entity` for persistent structure, `dto` for payload shapes. |
 
 ---
 
 ## See Also
 
-- [state-derivation.md](./state-derivation.md) — how reachable state patterns are
-  derived, how predicates feed the BFS, and how entity constraints are checked.
+- [state-derivation.md](./state-derivation.md) — how reachable states are explored,
+  how predicates become actions and guards, and how entity constraints are checked.
 - [cli-reference.md](./cli-reference.md) — the `rdra-ish` command-line interface,
   including the `diagram --kind event-flow` command for event causality visualisation.

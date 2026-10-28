@@ -494,8 +494,9 @@ too many violations, prefer narrowing it into an `invariant` before adding more 
 ## Stage 6C: Comparison and Cross-Entity Rules
 
 Add comparison propositions and cross-entity constraints last. These rules are powerful
-but carry more modeling obligations: comparison propositions need explicit `sets`, and
-cross-entity rules are evaluated from the participating entities' reached patterns.
+but carry more modeling obligations: a comparison needs `sets` that move its columns (or
+`sets` that drive it), and a cross-entity rule ranges over every combination of the
+participating entities' instances unless `.along` links them.
 
 ```rdra
 sets(SellItem, Inventory, stock < selling, true)
@@ -512,8 +513,8 @@ invariant(Order, Payment)
 
 Ask the user:
 
-- Which comparisons matter even though the concrete numeric or date values are not
-  tracked in the abstract state space?
+- Which comparisons matter, and which use cases move the numeric or date values they
+  read?
 - Which rules really mention more than one entity?
 - Is a cross-entity rule a global cross-product rule, or only intended along a declared
   relation path?
@@ -525,8 +526,7 @@ rdra-ish states src/
 rdra-ish states src/ --entity Order --format json
 ```
 
-Move on when advanced diagnostics either disappear, are accepted as known modeling gaps,
-or are intentionally reported as not evaluable from the current abstract state axes.
+Move on when advanced diagnostics either disappear or are accepted as known modeling gaps.
 
 ## Choosing the Next Question
 
