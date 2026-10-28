@@ -65,6 +65,7 @@ const SAMPLES: &[&str] = &[
     "samples/personal-info",
     "samples/formal-verification/after_assert_unmet.rdra",
     "samples/formal-verification/cross_order_payment.rdra",
+    "samples/formal-verification/cross_order_payment_split.rdra",
     "samples/formal-verification/int_stock.rdra",
     "samples/formal-verification/now_coupon.rdra",
     "samples/formal-verification/order.rdra",

@@ -107,7 +107,8 @@ jobs:
             samples/formal-verification/quantifier_none.rdra \
             samples/formal-verification/now_coupon.rdra \
             samples/formal-verification/untriggered_sets.rdra \
-            samples/formal-verification/after_assert_unmet.rdra
+            samples/formal-verification/after_assert_unmet.rdra \
+            samples/formal-verification/cross_order_payment_split.rdra
           do
             echo "==> expect TLC counterexample: $sample"
             set +e

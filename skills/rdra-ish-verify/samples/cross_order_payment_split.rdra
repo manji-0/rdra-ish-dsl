@@ -1,0 +1,44 @@
+// cross_order_payment.rdra with Pay split across two APIs: each API is its own atomic
+// boundary, so Pay is two actions, Pay_1 and Pay_2 (docs/vision.md, rule 6).
+// TLC intent: expected FAIL. Pay_2 captures the payment while the linked Order is still
+// pending, Cancel then cancels that Order, and the forbidden pair is reached.
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, cancelled) @default(pending)
+}
+entity Payment "決済" {
+  id: Int @pk
+  status: Enum(pending, captured) @default(pending)
+}
+
+usecase Place "注文確定"
+usecase Pay "決済確定"
+usecase Cancel "キャンセル"
+
+api PayOrderApi "Order payment API"
+api CapturePaymentApi "Payment capture API"
+
+buc BucOrderPayment "Order and payment"
+contains(BucOrderPayment, Place)
+contains(BucOrderPayment, Pay)
+contains(BucOrderPayment, Cancel)
+
+creates(Place, Order)
+creates(Place, Payment)
+invokes(Pay, PayOrderApi)
+updates(PayOrderApi, Order)
+invokes(Pay, CapturePaymentApi)
+updates(CapturePaymentApi, Payment)
+updates(Cancel, Order)
+
+transitions(Order.status, Pay, pending -> paid)
+transitions(Order.status, Cancel, pending -> cancelled)
+transitions(Payment.status, Pay, pending -> captured)
+
+relate(Payment, Order, N:1)
+
+// Cancelled order must not coexist with a captured payment on the same link.
+forbidden(Order, Payment,
+  Order.status == cancelled,
+  Payment.status == captured)
+  .along(Order, Payment)

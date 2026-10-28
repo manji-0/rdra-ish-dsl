@@ -8,8 +8,10 @@
   without a link, quantifies over the instance product (stronger than linked-only).
 - **Quantifiers**: finite `Entity_Ids` with `InstanceCount` (default 2;
   `--instance-count`).
-- **Shared events**: one use case is one atomic action over every entity it
-  writes, so `cross_order_payment` passes; `quantifier_none` still fails.
+- **Shared events**: one use case is one atomic action per transaction group it
+  writes, so `cross_order_payment` passes; a use case spanning k groups is k
+  actions `<UC>_1..k`, so `cross_order_payment_split` fails; `quantifier_none`
+  still fails.
 - **Int arithmetic**: `IntRange` default `0..5` (`--int-range-max`). Undriven Int
   axes get nondet `Assign_*` over the full range (Safety is checked, not baked
   into Next).
@@ -47,6 +49,7 @@ In the `rdra-ish-dsl` repository, `samples/formal-verification/` and
 | `samples/int_stock.rdra` | expected pass | Int arithmetic Safety / property |
 | `samples/now_coupon.rdra` | expected fail | `now` / unconstrained Assign + TickNow |
 | `samples/cross_order_payment.rdra` | expected pass | Multi-instance + `.along` (atomic Pay) |
+| `samples/cross_order_payment_split.rdra` | expected fail | Pay through two APIs is two actions (in-between state) |
 | `samples/quantifier_none.rdra` | expected fail | `when(...).none` (interleaving) |
 | `samples/untriggered_sets.rdra` | expected fail | `sets` from a use case that drives no transition, next to `transitions` |
 | `samples/after_assert_unmet.rdra` | expected fail | `after(UC).assert` whose postcondition the use case does not set (fails, never vacuous) |

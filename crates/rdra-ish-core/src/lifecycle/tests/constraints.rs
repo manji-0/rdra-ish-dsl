@@ -328,6 +328,18 @@ fn cross_order_payment_sample_holds_under_atomic_pay() {
 }
 
 #[test]
+fn cross_order_payment_split_sample_reaches_the_in_between_state() {
+    let d = derive(&sample_model(
+        "samples/formal-verification/cross_order_payment_split.rdra",
+    ));
+    assert!(
+        violated(&d, "Order", InvKind::CrossForbidden),
+        "{:?}",
+        d.diags
+    );
+}
+
+#[test]
 fn untriggered_sets_sample_reaches_its_forbidden_state() {
     let d = derive(&sample_model(
         "samples/formal-verification/untriggered_sets.rdra",

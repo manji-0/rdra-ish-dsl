@@ -132,9 +132,11 @@ arithmetic Safety when Int axes exist.
   (`InstanceCount`, default **2**, override with `--instance-count`). When `relate`
   declares N:1 / 1:N (including via-synthesized edges), a `*_owner` function links
   related instances; otherwise the related side is quantified independently.
-- **One use case across entities**: a use case is one atomic action over every
-  entity it writes (e.g. `Pay(p0, p1)` moves the Order and its owned Payment in one
-  step), so `cross_order_payment` passes. `quantifier_none` still fails.
+- **One use case across entities**: a use case is one atomic action per transaction
+  group it writes (e.g. `Pay(p0, p1)` moves the Order and its owned Payment in one
+  step), so `cross_order_payment` passes. A use case whose writes span k groups is k
+  actions `<UC>_1..k` that interleave freely, so `cross_order_payment_split` (Pay
+  through two APIs) fails. `quantifier_none` still fails.
 - **Int arithmetic**: comparisons and `sets(..., col == N)` on Int / Money / Decimal
   use TLC Integers on `IntRange` (default **`0..5`**, override with `--int-range-max`).
   Literals outside that window are `[TLA_FATAL:int_literal_out_of_range]` (raise
@@ -193,6 +195,7 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `int_stock.rdra` | expected pass | Int axes, arithmetic `forbidden`, Int temporal property |
 | `now_coupon.rdra` | expected fail | `now` / unconstrained Assign + TickNow; Safety finds `expired_at < now` |
 | `cross_order_payment.rdra` | expected pass | Multi-instance + `.along` (Pay is one atomic action, so Cancel cannot interleave) |
+| `cross_order_payment_split.rdra` | expected fail | The same model with Pay through two APIs: two transaction groups, so Cancel interleaves between `Pay_1` and `Pay_2` |
 | `quantifier_none.rdra` | expected fail | `when(...).none` (Revoke while Assign stays active) |
 | `untriggered_sets.rdra` | expected fail | `sets` from a use case that drives no transition (Flag then Ship reaches the forbidden state) |
 | `after_assert_unmet.rdra` | expected fail | `after(DeliverOrder).assert` without the `sets` that makes it true; the property binds to DeliverOrder's transition action and fails instead of passing vacuously |
