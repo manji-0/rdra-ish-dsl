@@ -78,6 +78,13 @@ pub enum StateDiag {
         reason: String,
         site: Site,
     },
+    /// A use case drives a comparison to one truth while its own Int literals give the other.
+    ContradictoryDrivenComparison {
+        usecase: String,
+        proposition: String,
+        driven: bool,
+        sites: Vec<Site>,
+    },
     /// A constraint reads a column that no action writes.
     UnwrittenConstrainedVar { column: String, site: Site },
     /// A comparison the bounded domains cannot evaluate (non-numeric operands).
@@ -103,6 +110,7 @@ impl StateDiag {
             StateDiag::ConflictingEffects { .. }
             | StateDiag::DoubleModeledEnum { .. }
             | StateDiag::PatternCapReached { .. }
+            | StateDiag::ContradictoryDrivenComparison { .. }
             | StateDiag::StateCapReached { .. }
             | StateDiag::ConstraintViolated { .. }
             | StateDiag::AfterAssertViolated { .. }
@@ -169,6 +177,16 @@ impl fmt::Display for StateDiag {
             StateDiag::UnbindableScope {
                 constraint, reason, ..
             } => write!(f, "{constraint}: {reason}"),
+            StateDiag::ContradictoryDrivenComparison {
+                usecase,
+                proposition,
+                driven,
+                ..
+            } => write!(
+                f,
+                "{usecase} drives {proposition} to {driven}, but its own Int values make it {}",
+                !driven
+            ),
             StateDiag::UnwrittenConstrainedVar { column, .. } => {
                 write!(f, "{column} is constrained but no use case writes it")
             }

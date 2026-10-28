@@ -145,6 +145,47 @@ forbidden(Item, status == on, stock < selling)
 }
 
 #[test]
+fn driven_comparison_contradicting_the_same_use_case_ints_is_an_error() {
+    let src = r#"
+entity Item "Item" {
+  id: Int @pk
+  stock: Int
+  selling: Int
+  status: Enum(active, archived) @default(active)
+}
+usecase Sell "Sell"
+creates(Sell, Item)
+updates(Sell, Item)
+sets(Sell, Item, stock == 0)
+sets(Sell, Item, selling == 1)
+sets(Sell, Item, stock < selling, DRIVEN)
+forbidden(Item, stock < selling)
+"#;
+    let d = derive_src(&src.replace("DRIVEN", "false"));
+    let found: Vec<&StateDiag> = d
+        .entity("Item")
+        .diagnostics
+        .iter()
+        .filter(|x| matches!(x, StateDiag::ContradictoryDrivenComparison { .. }))
+        .collect();
+    assert!(
+        matches!(
+            found.as_slice(),
+            [StateDiag::ContradictoryDrivenComparison { driven: false, sites, .. }] if sites.len() == 3
+        ),
+        "the drive and both Int sets are named: {:?}",
+        d.entity("Item").diagnostics
+    );
+    assert!(crate::lifecycle::has_errors(&d.diags), "fail-closed");
+    let agreeing = derive_src(&src.replace("DRIVEN", "true"));
+    assert!(!agreeing
+        .entity("Item")
+        .diagnostics
+        .iter()
+        .any(|x| matches!(x, StateDiag::ContradictoryDrivenComparison { .. })));
+}
+
+#[test]
 fn undriven_comparison_is_evaluated_over_the_int_domain() {
     let d = derive_src(
         r#"

@@ -14,7 +14,8 @@ use super::types::{
 };
 use super::{Built, Scope, TransitionSystem};
 use crate::model::{
-    ColumnType, EffectValue, EntityKey, ModelColumn, NodeRef, RelKind, SemanticModel, UseCaseKey,
+    CmpOpModel, CmpRhs, ColumnType, EffectValue, EntityKey, ModelColumn, NodeRef, RelKind,
+    SemanticModel, UseCaseKey,
 };
 use crate::resolver::reachable_from_bucs;
 use crate::tx::{infer_lifecycle_transactions, WriteKind};
@@ -474,8 +475,64 @@ impl<'m> Builder<'m> {
             };
             let v = if pe.truth { Value::TRUE } else { Value::FALSE };
             let site = Site::new(ModelRef::PropositionEffect(idx), &pe.site);
+            self.check_driven_truth(uc, idx, &site);
             self.assign(a, uc, pe.entity, var, p, Rhs::Lit(v), site);
         }
+    }
+
+    /// A use case that drives a comparison and also sets every Int operand of it to a literal
+    /// must drive the truth those literals give. Otherwise the model contradicts itself.
+    fn check_driven_truth(&mut self, uc: UseCaseKey, idx: usize, site: &Site) {
+        let model = self.model;
+        let pe = &model.proposition_effects[idx];
+        let literal = |column: &str| {
+            model.column_effects.iter().enumerate().find_map(|(i, ce)| {
+                match (ce.origin == uc && ce.entity == pe.entity && ce.column == column)
+                    .then(|| ce.value.normalize())
+                {
+                    Some(EffectValue::Int(n)) => Some((*n, i)),
+                    _ => None,
+                }
+            })
+        };
+        let Some((lhs, lhs_at)) = literal(&pe.prop.lhs_column) else {
+            return;
+        };
+        let (rhs, rhs_at) = match &pe.prop.rhs {
+            CmpRhs::IntLit(n) => (*n, None),
+            CmpRhs::Column(c) => match literal(c) {
+                Some((n, i)) => (n, Some(i)),
+                None => return,
+            },
+            CmpRhs::Now => return,
+        };
+        let holds = match pe.prop.op {
+            CmpOpModel::Lt => lhs < rhs,
+            CmpOpModel::Gt => lhs > rhs,
+            CmpOpModel::Le => lhs <= rhs,
+            CmpOpModel::Ge => lhs >= rhs,
+            CmpOpModel::Eq => lhs == rhs,
+            CmpOpModel::Ne => lhs != rhs,
+        };
+        if holds == pe.truth {
+            return;
+        }
+        let mut sites = vec![site.clone()];
+        for i in std::iter::once(lhs_at).chain(rhs_at) {
+            sites.push(Site::new(
+                ModelRef::ColumnEffect(i),
+                &model.column_effects[i].site,
+            ));
+        }
+        self.diag(
+            vec![pe.entity],
+            StateDiag::ContradictoryDrivenComparison {
+                usecase: model.use_cases[uc].id.clone(),
+                proposition: pe.prop.display(),
+                driven: pe.truth,
+                sites,
+            },
+        );
     }
 
     #[allow(clippy::too_many_arguments)]

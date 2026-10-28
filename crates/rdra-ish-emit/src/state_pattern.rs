@@ -166,6 +166,7 @@ fn diag_message(d: &StateDiag) -> String {
             "temporal assertion violated after '{anchor}': expected ({requireds}) but found {actual}"
         ),
         StateDiag::StateCapReached { .. }
+        | StateDiag::ContradictoryDrivenComparison { .. }
         | StateDiag::AssertOnInertUseCase { .. }
         | StateDiag::IntLiteralOutOfBounds { .. }
         | StateDiag::UnbindableScope { .. }
