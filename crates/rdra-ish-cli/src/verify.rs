@@ -9,6 +9,7 @@ use std::process::Command;
 
 use crate::cli::VerifyBackend;
 use crate::export::{export_tla_bundle, export_tla_bundle_named, tla_obligation_errors};
+use crate::tlc_output::{summarize, Outcome, TlcRun};
 
 pub fn run_verify(
     model: &SemanticModel,
@@ -135,134 +136,35 @@ fn run_tlc(
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     let combined = format!("{stdout}{stderr}");
-
-    if !output.status.success() {
-        let summary = summarize_tlc_failure(&combined);
-        if !keep {
-            let _ = fs::remove_dir_all(&work_dir);
-        }
-        if tlc_reports_violation(&combined) {
-            eprintln!("tlc_result: counterexample");
-            if combined.contains("Assign_") {
-                eprintln!(
-                    "note: counterexample mentions Assign_* — that step is a synthetic nondeterministic assignment for an undriven Int/Money/DateTime column, not a modeled use case"
-                );
-            }
-            bail!(
-                "TLC verification failed (spec: {})\n{summary}",
-                tla_path.display()
-            );
-        }
-        eprintln!("tlc_result: tool_error");
-        bail!(
-            "TLC tool failed without a model violation (spec: {})\n{summary}",
-            tla_path.display()
-        );
-    }
-
-    if !tlc_reports_success(&combined) {
-        if !keep {
-            let _ = fs::remove_dir_all(&work_dir);
-        }
-        eprintln!("tlc_result: tool_error");
-        bail!(
-            "TLC exited 0 but success fingerprint missing (spec: {})\n{}",
-            tla_path.display(),
-            summarize_tlc_failure(&combined)
-        );
-    }
-
     if !keep {
         let _ = fs::remove_dir_all(&work_dir);
     }
 
-    println!("tlc_result: ok");
-    println!("TLC: OK");
-    Ok(())
-}
-
-/// True when TLC reported an invariant/property/temporal violation (not a tool crash).
-fn tlc_reports_violation(output: &str) -> bool {
-    let lower = output.to_ascii_lowercase();
-    (lower.contains("invariant") && lower.contains("violated"))
-        || (lower.contains("property") && lower.contains("violated"))
-        || lower.contains("temporal properties were violated")
-        || lower.lines().any(|line| {
-            let t = line.trim();
-            t.starts_with("Error:")
-                && (t.contains("violated")
-                    || t.contains("Temporal")
-                    || t.contains("Invariant")
-                    || t.contains("Property"))
-        })
-}
-
-/// True when TLC reported a completed successful model-checking run.
-fn tlc_reports_success(output: &str) -> bool {
-    output.contains("Model checking completed")
-        || output.contains("No error has been found")
-        || output.contains("No errors found")
-}
-
-/// Extract a short RDRA-oriented summary from TLC stdout/stderr.
-fn summarize_tlc_failure(output: &str) -> String {
-    let mut lines = Vec::new();
-
-    if let Some(inv) = find_line_containing(output, "Invariant") {
-        lines.push(format!("invariant/property: {inv}"));
-    } else if let Some(prop) = find_line_containing(output, "Property") {
-        lines.push(format!("invariant/property: {prop}"));
-    } else if let Some(err) = find_line_containing(output, "Error:") {
-        lines.push(format!("error: {err}"));
+    let run = TlcRun::parse(&combined);
+    let outcome = run.outcome(output.status.success());
+    if outcome == Outcome::Ok {
+        println!("tlc_result: ok");
+        println!("TLC: OK");
+        return Ok(());
     }
-
-    let states: Vec<&str> = output
-        .lines()
-        .filter(|line| {
-            let t = line.trim();
-            t.starts_with("State ")
-                || t.contains("/\\")
-                || t.contains(" = ") && (t.contains("status") || t.contains("Order_"))
-        })
-        .take(12)
-        .collect();
-
-    if !states.is_empty() {
-        lines.push("counterexample (first steps):".into());
-        for s in states {
-            lines.push(format!("  {}", s.trim()));
+    eprintln!("tlc_result: {}", outcome.as_str());
+    match outcome {
+        Outcome::Ok => Ok(()),
+        Outcome::Counterexample => {
+            bail!(
+                "TLC verification failed (spec: {})\n{}",
+                tla_path.display(),
+                summarize(&run, &combined)
+            );
         }
-    } else {
-        let tail: Vec<&str> = output
-            .lines()
-            .map(str::trim)
-            .filter(|l| !l.is_empty())
-            .rev()
-            .take(20)
-            .collect::<Vec<_>>()
-            .into_iter()
-            .rev()
-            .collect();
-        if !tail.is_empty() {
-            lines.push("TLC output (tail):".into());
-            for s in tail {
-                lines.push(format!("  {s}"));
-            }
+        Outcome::ToolError => {
+            bail!(
+                "TLC tool failed without a model violation (spec: {})\n{}",
+                tla_path.display(),
+                summarize(&run, &combined)
+            );
         }
     }
-
-    if lines.is_empty() {
-        "no counterexample details captured; inspect the generated .tla/.cfg".into()
-    } else {
-        lines.join("\n")
-    }
-}
-
-fn find_line_containing<'a>(output: &'a str, needle: &str) -> Option<&'a str> {
-    output
-        .lines()
-        .map(str::trim)
-        .find(|line| line.contains(needle))
 }
 
 fn find_tlc() -> Result<PathBuf> {
@@ -291,36 +193,4 @@ fn which(cmd: &str) -> Result<PathBuf> {
         bail!("`{cmd}` not found");
     }
     Ok(PathBuf::from(path))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn summarize_extracts_invariant_and_states() {
-        let output = r#"
-Error: Invariant Safety is violated.
-The behavior up to this point is:
-State 1: <Initial predicate>
-/\ Order_status = "pending"
-/\ Order_delivered_at = "null"
-State 2: <Order_DeliverOrder_pending_to_delivered line 29>
-/\ Order_status = "delivered"
-/\ Order_delivered_at = "null"
-"#;
-        let summary = summarize_tlc_failure(output);
-        assert!(summary.contains("Safety"));
-        assert!(summary.contains("counterexample"));
-        assert!(summary.contains("Order_status"));
-        assert!(tlc_reports_violation(output));
-        assert!(!tlc_reports_success(output));
-    }
-
-    #[test]
-    fn tlc_success_fingerprint() {
-        let output = "Model checking completed. No error has been found.\n";
-        assert!(tlc_reports_success(output));
-        assert!(!tlc_reports_violation(output));
-    }
 }
