@@ -3,7 +3,7 @@
 use super::support::entity_key;
 use crate::analysis::build_model;
 use crate::diagnostics::RdraError;
-use crate::model::SemanticModel;
+use crate::model::{ColumnType, SemanticModel, UniqueSource};
 use rdra_ish_syntax::parse;
 
 fn build(src: &str) -> (SemanticModel, Vec<RdraError>) {
@@ -138,5 +138,170 @@ relate(Order, Address, N:1)
     assert!(
         text.contains("`.role(...)`") && text.contains("`.key(address_id)`"),
         "{text}"
+    );
+}
+
+const SHIPMENT: &str = r#"
+entity Order "Order" { id: Int @pk }
+entity Shipment "Shipment" {
+  id: Int @pk
+  order_ref: Int @null
+  code: String
+}
+"#;
+
+#[test]
+fn key_adopts_author_columns_as_the_key() {
+    let model = built(&format!(
+        "{SHIPMENT}\nrelate(Shipment, Order, 1:1).key(order_ref)\n"
+    ));
+    assert_eq!(
+        keys_of(&model, "Shipment"),
+        vec![pairs(&[("order_ref", "id")])]
+    );
+    let shipment = entity_key(&model, "Shipment");
+    let column = model.entities[shipment]
+        .columns
+        .iter()
+        .find(|c| c.name == "order_ref")
+        .unwrap();
+    assert!(column.is_unique, "a 1:1 key column is unique");
+    assert!(!column.is_nullable, "a mandatory key is not null");
+    assert!(model.column_fk(shipment, "order_ref").is_some());
+    assert!(
+        model.entities[shipment]
+            .columns
+            .iter()
+            .all(|c| c.name != "order_id"),
+        "no column is generated"
+    );
+}
+
+fn key_error(relate: &str) -> RdraError {
+    let (model, errors) = build(&format!("{SHIPMENT}\n{relate}\n"));
+    assert_eq!(keys_of(&model, "Shipment"), vec![vec![]], "no key columns");
+    match <[RdraError; 1]>::try_from(errors) {
+        Ok([err]) => err,
+        Err(errors) => panic!("{errors:?}"),
+    }
+}
+
+#[test]
+fn key_with_the_wrong_column_count_is_key_arity() {
+    let err = key_error("relate(Shipment, Order, N:1).key(order_ref, code)");
+    assert!(
+        matches!(
+            err,
+            RdraError::KeyArity {
+                got: 2,
+                want: 1,
+                ..
+            }
+        ),
+        "{err:?}"
+    );
+}
+
+#[test]
+fn key_naming_an_undeclared_column_is_key_column_undefined() {
+    let err = key_error("relate(Shipment, Order, N:1).key(order_no)");
+    assert!(
+        matches!(&err, RdraError::KeyColumnUndefined { column, .. } if column == "order_no"),
+        "{err:?}"
+    );
+}
+
+#[test]
+fn key_of_another_type_is_key_type_mismatch() {
+    let err = key_error("relate(Shipment, Order, N:1).key(code)");
+    assert!(
+        matches!(&err, RdraError::KeyTypeMismatch { got, want, .. } if got == "String" && want == "Int"),
+        "{err:?}"
+    );
+}
+
+#[test]
+fn a_column_holds_one_key_only() {
+    let (_, errors) = build(&format!(
+        "{SHIPMENT}
+relate(Shipment, Order, N:1).key(order_ref)
+relate(Shipment, Order, N:1).role(origin).key(order_ref)
+"
+    ));
+    assert!(
+        matches!(errors.as_slice(), [RdraError::KeyColumnShared { column, .. }] if column == "order_ref"),
+        "{errors:?}"
+    );
+}
+
+const BIN: &str = r#"
+entity Bin "Bin" {
+  site: String @pk(site, shelf)
+  shelf: Int
+}
+entity Stock "Stock" {
+  id: Int @pk
+  alt_site: String
+  alt_shelf: Int
+}
+"#;
+
+#[test]
+fn a_composite_parent_key_generates_one_column_per_key_column() {
+    let model = built(&format!(
+        "{BIN}
+relate(Stock, Bin, N:1)
+relate(Stock, Bin, N:1).role(alt).key(alt_site, alt_shelf)
+"
+    ));
+    assert_eq!(
+        keys_of(&model, "Stock"),
+        vec![
+            pairs(&[("bin_site", "site"), ("bin_shelf", "shelf")]),
+            pairs(&[("alt_site", "site"), ("alt_shelf", "shelf")]),
+        ]
+    );
+    let stock = &model.entities[entity_key(&model, "Stock")];
+    let types: Vec<_> = stock
+        .columns
+        .iter()
+        .filter(|c| c.name.starts_with("bin_"))
+        .map(|c| c.col_type.clone())
+        .collect();
+    assert_eq!(types, [ColumnType::String, ColumnType::Int]);
+}
+
+#[test]
+fn a_composite_one_to_one_key_is_a_unique_set_not_unique_columns() {
+    let model = built(&format!("{BIN}\nrelate(Stock, Bin, 1:1)\n"));
+    let stock = entity_key(&model, "Stock");
+    assert!(model.entities[stock]
+        .columns
+        .iter()
+        .filter(|c| c.name.starts_with("bin_"))
+        .all(|c| !c.is_unique));
+    let unique: Vec<_> = model
+        .unique_keys(stock)
+        .into_iter()
+        .map(|k| (k.columns, k.source))
+        .collect();
+    assert!(
+        matches!(
+            unique.as_slice(),
+            [(columns, UniqueSource::OneToOne(_))] if columns == &["bin_shelf", "bin_site"]
+        ),
+        "{unique:?}"
+    );
+}
+
+#[test]
+fn key_against_a_composite_parent_checks_arity_and_types_in_key_order() {
+    let (_, errors) = build(&format!(
+        "{BIN}\nrelate(Stock, Bin, N:1).key(alt_shelf, alt_site)\n"
+    ));
+    assert!(
+        matches!(errors.as_slice(), [RdraError::KeyTypeMismatch { column, parent_column, .. }]
+            if column == "alt_shelf" && parent_column == "site"),
+        "{errors:?}"
     );
 }

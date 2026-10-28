@@ -80,8 +80,9 @@ pub struct ForeignKey {
     /// `.role(x)`. `None` names the key after its parent: column `{parent}_{pk}` and owner
     /// `{child}._owner_{parent}`. `(child, role)` is unique among a child's keys.
     pub role: Option<String>,
-    /// `(child column, parent key column)` pairs. Empty when `analysis::fk` rejected the key
-    /// (`FkConflict`, `MissingPk`, `CompositePkFkUnsupported`).
+    /// `(child column, parent key column)` pairs in parent key order, one per parent key
+    /// column. Empty when `analysis::fk` rejected the key (`DuplicateRelateRole`,
+    /// `MissingPk`, `FkConflict`, a `.key(..)` error).
     pub columns: Vec<(String, String)>,
     /// Children per parent: `max == One` is a 1:1.
     pub children: Multiplicity,
@@ -122,6 +123,8 @@ pub enum UniqueSource {
     Declared,
     /// The two key columns of an N:M junction.
     Junction(FkId, FkId),
+    /// The columns of a composite 1:1 key. A single-column one stays on the column.
+    OneToOne(FkId),
 }
 
 impl SemanticModel {
@@ -143,8 +146,9 @@ impl SemanticModel {
         })
     }
 
-    /// Composite unique sets of `entity`: the declared ones, then each junction pair that
-    /// no declared set already covers. Single-column `@unique` stays on the column.
+    /// Composite unique sets of `entity`: the declared ones, then each junction pair and
+    /// composite 1:1 key that no declared set already covers. Single-column `@unique` stays
+    /// on the column.
     pub fn unique_keys(&self, entity: EntityKey) -> Vec<UniqueKey> {
         let mut keys: Vec<UniqueKey> = self.entities[entity]
             .unique_constraints
@@ -154,11 +158,17 @@ impl SemanticModel {
                 source: UniqueSource::Declared,
             })
             .collect();
-        for &(junction, a, b) in &self.junction_keys {
-            if junction != entity {
-                continue;
-            }
-            let mut columns: Vec<String> = [a, b]
+        let junctions = self
+            .junction_keys
+            .iter()
+            .filter(|&&(junction, ..)| junction == entity)
+            .map(|&(_, a, b)| (vec![a, b], UniqueSource::Junction(a, b)));
+        let one_to_one = self
+            .foreign_keys()
+            .filter(|(_, fk)| fk.child == entity && fk.unique() && fk.columns.len() > 1)
+            .map(|(id, _)| (vec![id], UniqueSource::OneToOne(id)));
+        for (ids, source) in junctions.chain(one_to_one) {
+            let mut columns: Vec<String> = ids
                 .iter()
                 .flat_map(|&id| self.foreign_key(id).columns.iter().map(|(c, _)| c.clone()))
                 .collect();
@@ -169,10 +179,7 @@ impl SemanticModel {
                 declared == columns
             });
             if !covered {
-                keys.push(UniqueKey {
-                    columns,
-                    source: UniqueSource::Junction(a, b),
-                });
+                keys.push(UniqueKey { columns, source });
             }
         }
         keys

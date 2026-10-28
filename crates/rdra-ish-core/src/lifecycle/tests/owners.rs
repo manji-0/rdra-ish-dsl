@@ -144,3 +144,28 @@ relate(Order, Address, N:1).role(bill_to).optional()
         .collect();
     assert_eq!(owners, ["Order._owner_Address", "Order._owner_bill_to"]);
 }
+
+#[test]
+fn an_adopted_key_column_is_the_owner_not_a_state_column() {
+    let src = |relate: &str| {
+        format!(
+            r#"
+entity Order "Order" {{ id: Int @pk }}
+entity Shipment "Shipment" {{ id: Int @pk  order_ref: Int @null }}
+usecase Ship "Ship"
+creates(Ship, Shipment)
+{relate}
+"#
+        )
+    };
+    let names = |relate: &str| {
+        let model = model_from(&src(relate));
+        let ts = TransitionSystem::build(&model, Bounds::STATES, &Scope::All).ts;
+        ts.var_ids().map(|v| ts.var_name(v)).collect::<Vec<_>>()
+    };
+    let generated = names("relate(Shipment, Order, N:1).optional()");
+    assert!(generated.iter().any(|n| n == "order_ref"), "{generated:?}");
+    let adopted = names("relate(Shipment, Order, N:1).optional().key(order_ref)");
+    assert!(!adopted.iter().any(|n| n == "order_ref"), "{adopted:?}");
+    assert!(adopted.iter().any(|n| n == "Shipment._owner_Order"));
+}

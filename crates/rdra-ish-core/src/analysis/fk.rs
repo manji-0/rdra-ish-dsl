@@ -130,80 +130,178 @@ fn key_fact(relation: usize, rel: &Relation) -> Option<ForeignKey> {
     })
 }
 
-/// Appends `{role}_{pk}` to the child, unique for a 1:1, and returns the `(child column,
-/// parent key column)` pairs. `role` is lowercase.
+/// The `(child column, parent key column)` pairs of key `index`, one per parent key column:
+/// the `.key(..)` columns when the relate names them, otherwise `{role}_{pk}` columns
+/// appended to the child. `role` is lowercase.
 fn key_columns(
     model: &mut SemanticModel,
     diags: &mut Vec<Diagnostic>,
     index: usize,
     role: &str,
 ) -> Option<Vec<(String, String)>> {
-    let (child_key, parent_key, optional, unique) = {
-        let fk = &model.foreign_keys[index];
-        (fk.child, fk.parent, fk.optional(), fk.unique())
+    let fk = &model.foreign_keys[index];
+    let parent = &model.entities[fk.parent];
+    let pk: Option<Vec<(String, ColumnType)>> = parent
+        .primary_key
+        .iter()
+        .map(|name| {
+            let column = parent.columns.iter().find(|c| c.name == *name)?;
+            Some((column.name.clone(), column.col_type.clone()))
+        })
+        .collect();
+    let pk = match pk {
+        Some(pk) if !pk.is_empty() => pk,
+        _ => {
+            let entity = parent.id.clone();
+            let err = RdraError::MissingPk {
+                entity: entity.clone(),
+            };
+            push_entity_error(model, diags, &entity, err);
+            return None;
+        }
     };
-    let parent = &model.entities[parent_key];
-    if parent.primary_key.len() > 1 {
-        push_entity_error(
-            model,
-            diags,
-            &parent.id,
-            RdraError::CompositePkFkUnsupported {
-                entity: parent.id.clone(),
-            },
-        );
-        return None;
+    let declared = &model.relations[fk.relation].options.key;
+    if declared.is_empty() {
+        generate_key_columns(model, diags, index, role, &pk)
+    } else {
+        let declared = declared.clone();
+        adopt_key_columns(model, diags, index, &declared, &pk)
     }
-    let pk = parent.columns.iter().find(|c| c.is_pk).or_else(|| {
-        parent
-            .primary_key
-            .first()
-            .and_then(|name| parent.columns.iter().find(|c| c.name == *name))
-    });
-    let Some(pk) = pk else {
-        push_entity_error(
-            model,
-            diags,
-            &parent.id,
-            RdraError::MissingPk {
-                entity: parent.id.clone(),
-            },
-        );
-        return None;
-    };
-    let (pk_name, pk_type) = (pk.name.clone(), pk.col_type.clone());
-    let name = format!("{role}_{pk_name}");
+}
 
+/// Appends `{role}_{pk}` per parent key column, nullable for an optional key and unique for
+/// a single-column 1:1 (a composite 1:1 is a `unique_keys` set).
+fn generate_key_columns(
+    model: &mut SemanticModel,
+    diags: &mut Vec<Diagnostic>,
+    index: usize,
+    role: &str,
+    pk: &[(String, ColumnType)],
+) -> Option<Vec<(String, String)>> {
+    let fk = &model.foreign_keys[index];
+    let (child_key, optional, unique) = (fk.child, fk.optional(), fk.unique());
     let child = &model.entities[child_key];
-    if child.columns.iter().any(|c| c.name == name) {
-        push_entity_error(
-            model,
-            diags,
-            &child.id,
-            RdraError::FkConflict {
-                entity: child.id.clone(),
-                col: name,
-            },
-        );
+    let names: Vec<String> = pk.iter().map(|(pk, _)| format!("{role}_{pk}")).collect();
+    if let Some(col) = names
+        .iter()
+        .find(|name| child.columns.iter().any(|c| c.name == **name))
+    {
+        let err = RdraError::FkConflict {
+            entity: child.id.clone(),
+            col: col.clone(),
+        };
+        push_entity_error(model, diags, &child.id, err);
         return None;
     }
 
-    model.entities[child_key].columns.push(ModelColumn {
-        name: name.clone(),
-        col_type: pk_type,
-        is_pk: false,
-        is_unique: unique,
-        is_indexed: false,
-        is_nullable: optional,
-        default_val: None,
-        label: None,
-        check_constraints: Vec::new(),
-        is_soft_delete: false,
-        is_history: false,
-        is_tenant_scope: false,
-        derived_expr: None,
-    });
-    Some(vec![(name, pk_name)])
+    for (name, (_, col_type)) in names.iter().zip(pk) {
+        model.entities[child_key].columns.push(ModelColumn {
+            name: name.clone(),
+            col_type: col_type.clone(),
+            is_pk: false,
+            is_unique: unique && pk.len() == 1,
+            is_indexed: false,
+            is_nullable: optional,
+            default_val: None,
+            label: None,
+            check_constraints: Vec::new(),
+            is_soft_delete: false,
+            is_history: false,
+            is_tenant_scope: false,
+            derived_expr: None,
+        });
+    }
+    Some(
+        names
+            .into_iter()
+            .zip(pk.iter().map(|(pk, _)| pk.clone()))
+            .collect(),
+    )
+}
+
+/// Checks that `.key(..)` names one child column per parent key column, of the same type and
+/// held by no other key, then gives those columns the key's nullability and 1:1 uniqueness.
+fn adopt_key_columns(
+    model: &mut SemanticModel,
+    diags: &mut Vec<Diagnostic>,
+    index: usize,
+    declared: &[String],
+    pk: &[(String, ColumnType)],
+) -> Option<Vec<(String, String)>> {
+    let fk = &model.foreign_keys[index];
+    let (child_key, optional, unique) = (fk.child, fk.optional(), fk.unique());
+    let child = &model.entities[child_key];
+    let child_id = child.id.clone();
+    let err = if declared.len() != pk.len() {
+        Some(RdraError::KeyArity {
+            child: child_id.clone(),
+            parent: model.entities[fk.parent].id.clone(),
+            got: declared.len(),
+            want: pk.len(),
+        })
+    } else {
+        declared
+            .iter()
+            .zip(pk)
+            .find_map(|(name, (pk_name, pk_type))| {
+                let Some(column) = child.columns.iter().find(|c| c.name == *name) else {
+                    return Some(RdraError::KeyColumnUndefined {
+                        child: child_id.clone(),
+                        column: name.clone(),
+                    });
+                };
+                if column.col_type != *pk_type {
+                    return Some(RdraError::KeyTypeMismatch {
+                        child: child_id.clone(),
+                        column: name.clone(),
+                        got: type_name(model, &column.col_type),
+                        parent_column: pk_name.clone(),
+                        want: type_name(model, pk_type),
+                    });
+                }
+                model
+                    .column_fk(child_key, name)
+                    .map(|_| RdraError::KeyColumnShared {
+                        child: child_id.clone(),
+                        column: name.clone(),
+                    })
+            })
+    };
+    if let Some(err) = err {
+        push_relate_error(model, diags, index, err);
+        return None;
+    }
+
+    for column in model.entities[child_key].columns.iter_mut() {
+        if declared.contains(&column.name) {
+            column.is_nullable = optional;
+            column.is_unique |= unique && pk.len() == 1;
+        }
+    }
+    Some(
+        declared
+            .iter()
+            .cloned()
+            .zip(pk.iter().map(|(pk, _)| pk.clone()))
+            .collect(),
+    )
+}
+
+fn type_name(model: &SemanticModel, col_type: &ColumnType) -> String {
+    match col_type {
+        ColumnType::Int => "Int".to_string(),
+        ColumnType::String => "String".to_string(),
+        ColumnType::Money => "Money".to_string(),
+        ColumnType::DateTime => "DateTime".to_string(),
+        ColumnType::Date => "Date".to_string(),
+        ColumnType::Bool => "Bool".to_string(),
+        ColumnType::Decimal => "Decimal".to_string(),
+        ColumnType::Enum(values) => format!("Enum({})", values.join(", ")),
+        ColumnType::Variation(key) => model
+            .variations
+            .get(*key)
+            .map_or_else(|| "variation".to_string(), |v| v.id.clone()),
+    }
 }
 
 /// Each N:M junction's two keys, which `unique_keys` reads as a composite unique set. A

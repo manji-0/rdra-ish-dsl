@@ -786,8 +786,8 @@ is optional/nullable in the payload.
 
 | Annotation | Description |
 |---|---|
-| `@pk` | Marks the column as the primary key. FK columns are auto-generated against this key by `relate` (single-column `@pk` only). |
-| `@pk(a, b)` | Declares a composite primary key over the named columns. Auto-FK generation is **not** supported for composite keys — declare FK columns explicitly on the many side. |
+| `@pk` | Marks the column as the primary key. FK columns are auto-generated against this key by `relate`. |
+| `@pk(a, b)` | Declares a composite primary key over the named columns. A `relate` to the entity generates one FK column per key column. |
 | `@unique` | Adds a unique constraint. |
 | `@unique(a, b)` | Declares a composite unique constraint over the named columns. |
 | `@index` | Adds an index for the column. |
@@ -975,9 +975,18 @@ still valid: `relate(Junction, A, N:1)` plus `relate(Junction, B, N:1)` (synthes
 skips edges that already exist). Self N:M (`relate(A, A, N:M)`) and `.via` equal to
 either endpoint are errors.
 
-Auto-FK requires a **single-column** `@pk` on the parent. If the parent uses
-`@pk(a, b)` (composite), the model reports `CompositePkFkUnsupported` — declare the
-foreign-key column(s) explicitly on the child instead.
+The generated column is `{role}_{key column}` for each parent key column, where the
+role defaults to the parent id in lowercase (`customeraccount_id`). A composite parent
+`@pk(site, shelf)` yields `bin_site` and `bin_shelf`, printed in DBML as
+`Ref: Stock.(bin_site, bin_shelf) > Bin.(site, shelf)`. Two chain methods shape the key:
+
+- `.role(ship_to)` names the key: columns `ship_to_id`, owner `Order._owner_ship_to`.
+  Two relates from one child to one parent need distinct roles, or the second is
+  `DuplicateRelateRole`.
+- `.key(order_ref)` adopts columns the child already declares instead of generating
+  them, one per parent key column in key order and of the same type (`KeyArity`,
+  `KeyColumnUndefined`, `KeyTypeMismatch`). The adopted columns are the key in every
+  output, and in the lifecycle they are the owner, not a state column.
 
 ---
 
@@ -1392,7 +1401,6 @@ column is of type `Date` or `DateTime`.
 |---|---|
 | Bare `relate(..., N:M)` without `.via` | Error. Use `relate(A, B, N:M).via(Junction)` or two explicit `N:1` relates through a junction entity. |
 | `relate(A, A, N:M)` or `.via` equal to an endpoint | Error (`SelfNMRelation` / `ViaMustBeDistinct`). Junction must be a distinct entity. |
-| Composite `@pk(a, b)` auto-FK | `relate` does not auto-generate FKs against composite primary keys — declare FK columns explicitly on the many side. |
 | AsyncAPI protocol / server / payload schemas | `export --kind asyncapi` projects event causality only; broker protocol, servers, and exact payload schemas are not inferred. |
 | OpenAPI auth / permissions | Unknown `auth` schemes become `apiKey` + `x-rdra-ish-auth-scheme`; `requires_permission` is an extension, not OpenAPI `security`. |
 

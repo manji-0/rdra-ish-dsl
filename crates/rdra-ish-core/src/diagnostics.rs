@@ -88,8 +88,28 @@ pub enum RdraError {
     #[error("missing @pk: entity '{entity}' used as FK target has no @pk column\n  hint: add `id: Int @pk` (or another @pk column) to entity '{entity}'")]
     MissingPk { entity: String },
 
-    #[error("composite @pk on entity '{entity}' cannot auto-generate a single FK column\n  hint: declare the foreign key column(s) explicitly on the many-side entity")]
-    CompositePkFkUnsupported { entity: String },
+    #[error(".key(...) on relate({child}, {parent}, ..) names {got} column(s) but '{parent}' has a {want}-column key\n  hint: list one '{child}' column per '{parent}' key column, in key order")]
+    KeyArity {
+        child: String,
+        parent: String,
+        got: usize,
+        want: usize,
+    },
+
+    #[error(".key(...) names '{column}', which entity '{child}' does not declare\n  hint: declare the column on '{child}', or drop `.key(...)` to generate it")]
+    KeyColumnUndefined { child: String, column: String },
+
+    #[error(".key(...) column '{child}.{column}' is {got} but the parent key column '{parent_column}' is {want}\n  hint: give '{column}' the type {want}")]
+    KeyTypeMismatch {
+        child: String,
+        column: String,
+        got: String,
+        parent_column: String,
+        want: String,
+    },
+
+    #[error(".key(...) column '{child}.{column}' already holds another relate's key\n  hint: give each relate its own key columns")]
+    KeyColumnShared { child: String, column: String },
 
     #[error("unknown referential action '{got}' in .{method}(...)\n  hint: use one of cascade, restrict, set_null, set_default, no_action")]
     UnknownRefAction { method: String, got: String },
