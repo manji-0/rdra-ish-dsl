@@ -58,6 +58,8 @@ action, and `Spec` allows stuttering.
 | `col < now` | A global `now \in IntRange` and a `Tick` action that adds one while `now < max`. |
 | Entity-local and multi-entity `forbidden`, `invariant`, `required`, `exclusive` | One `INVARIANT` each, named `<Kind>_<Entity>_<n>` (`Forbidden_Order_0`, `Inv_Order_0`, `CrossForbidden_Order_0`). Each ranges over the present instances. |
 | `.along(...)` | Quantified over `<E>_Ids`, joined by `<Child>_owner_<Parent>` equalities. |
+| `relate(Child, Parent, 1:1)` | `INVARIANT Unique_<Child>_<role>` (role defaults to the parent id): `\A b0, b1 \in <Child>_Ids`, two present children are the same or have different owners. An unlinked optional child owns nothing. |
+| Pre-existing child of a `relate` | `Init` links the owner: `\in [<Child>_Ids -> <Parent>_Ids]` for N:1, `[i \in <Child>_Ids \|-> i]` for 1:1. |
 | `when(...).none/has(...)` | `\A` / `\E` over the ids, named `Quantifier_<Entity>_<n>`. A `relate` joins the sides by owner; without one the related side is independent. |
 | `after(UC).assert(...)` | `PROPERTY AfterAssert_<UC>_<n>`: `[][(\A p : UC(p) => post')]_vars`. It checks every step of the use case's actions. |
 | `property` with `always`, `eventually`, `leads_to` | A named formula and a `PROPERTY`, quantified per present instance |
@@ -189,6 +191,8 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `quantifier_none.rdra` | fail, fail | `when(...).none` (Revoke while Assign stays active) |
 | `untriggered_sets.rdra` | fail, fail | `sets` from a use case that drives no transition (Flag then Ship reaches the forbidden state) |
 | `after_assert_unmet.rdra` | fail, fail | `after(DeliverOrder).assert` without the `sets` that makes it true |
+| `one_to_one_shared.rdra` | pass, fail | `relate(.., 1:1)` adds `Unique_Shipment_Order`; Ship and Reship each link a Shipment to the same Order, which takes two instances |
 | `fail/order.rdra` | fail, fail | Intentionally unsafe (reachable invariant violation) |
 
-BFS and TLC give the same verdict on every row.
+BFS and TLC give the same verdict on every row at the same bounds. `check` runs at one
+instance per entity, where `Unique_*` holds vacuously.

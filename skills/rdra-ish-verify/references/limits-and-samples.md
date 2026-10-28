@@ -24,6 +24,9 @@
   `transitions` guard the source value and its `sets` assign in the same step.
 - **Constraints**: one `INVARIANT` per constraint, named `<Kind>_<Entity>_<n>`
   (`Forbidden_Order_0`), plus `INVARIANT TypeOK`.
+- **1:1 keys**: one `INVARIANT Unique_<Child>_<role>` per `relate(.., 1:1)` (role
+  defaults to the parent id): no two present children own one parent slot. It holds
+  vacuously at one instance, so only `verify` (two or more) can fail it.
 - **Temporal `property`**: one lowering path; all names are listed in `.cfg` `PROPERTY`.
 - **`after.assert`**: independent `[][(\A p : UC(p) => post')]_vars` PROPERTY named
   `AfterAssert_<UC>_<n>` (not injected into the effects).
@@ -54,6 +57,7 @@ In the `rdra-ish-dsl` repository, `samples/formal-verification/` and
 | `samples/quantifier_none.rdra` | expected fail | `when(...).none` (interleaving) |
 | `samples/untriggered_sets.rdra` | expected fail | `sets` from a use case that drives no transition, next to `transitions` |
 | `samples/after_assert_unmet.rdra` | expected fail | `after(UC).assert` whose postcondition the use case does not set (fails, never vacuous) |
+| `samples/one_to_one_shared.rdra` | expected fail | `relate(.., 1:1)` is the invariant `Unique_<Child>_<role>`; two use cases link two children to one parent (`check` passes: one instance) |
 | `samples/fail/order.rdra` | expected fail | Negative TLC (`check` exits 1 too) |
 
 ## Canonical Doc
