@@ -47,9 +47,17 @@ impl TransitionSystem {
 
     fn pred_footprint(&self, pred: &Pred, fp: &mut Footprint) {
         let term = |t: &Term, fp: &mut Footprint| match t {
-            Term::Slot { var, .. } => match self.var_entity(*var) {
-                Some(e) => fp.add(e),
-                None => fp.now = true,
+            // An owner var's domain names its parent's slots, and `restrict` keeps it only
+            // with both ends.
+            Term::Slot { var, .. } => match self.var(*var).kind {
+                VarKind::Owner { child, parent, .. } => {
+                    fp.add(child);
+                    fp.add(parent);
+                }
+                _ => match self.var_entity(*var) {
+                    Some(e) => fp.add(e),
+                    None => fp.now = true,
+                },
             },
             Term::Now => fp.now = true,
             Term::Lit(_) | Term::Int(_) | Term::Index(_) => {}
