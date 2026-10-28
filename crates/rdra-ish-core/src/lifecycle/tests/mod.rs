@@ -6,6 +6,7 @@ mod constraints;
 mod effects;
 mod owners;
 mod system;
+mod tx_groups;
 
 use super::{Bounds, Caps, Diag, EntityStateResult, Scope, StateDiag, TransitionSystem};
 use crate::analysis::build_model;

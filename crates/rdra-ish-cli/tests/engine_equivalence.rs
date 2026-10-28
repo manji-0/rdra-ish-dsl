@@ -318,24 +318,61 @@ invariant(Payment, Visit)
 
 #[test]
 fn bfs_and_tlc_agree_on_condition_guards() {
+    check_fixture("condition_guards", CONDITION_GUARDS);
+}
+
+/// A use case split into two transaction groups (one API each): an after-assert checked after
+/// each step, with the other group's entity universally bound, and a condition guard on the
+/// group whose entity it reads.
+const SPLIT_USE_CASE: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid) @default(pending)  rush: Bool }
+entity Payment "決済" { id: Int @pk  status: Enum(pending, captured) @default(pending) }
+relate(Payment, Order, N:1)
+usecase Place "注文確定"
+usecase Pay "決済確定"
+usecase Rush "急ぎ"
+api CapturePaymentApi "Capture"
+api PayOrderApi "Pay order"
+creates(Place, Order)
+creates(Place, Payment)
+invokes(Pay, CapturePaymentApi)
+updates(CapturePaymentApi, Payment)
+invokes(Pay, PayOrderApi)
+updates(PayOrderApi, Order)
+transitions(Order.status, Pay, pending -> paid)
+transitions(Payment.status, Pay, pending -> captured)
+sets(Rush, Order, rush == true)
+condition Ready "可"
+holds(Ready, Order.rush == true)
+applies_to(Ready, Pay)
+after(Pay).assert(Order.status == paid, Payment.status == captured)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_split_use_cases() {
+    check_fixture("split_use_case", SPLIT_USE_CASE);
+}
+
+/// One inline model at both bounds.
+fn check_fixture(name: &str, src: &str) {
     let Some(tlc) = find_tlc() else {
         let reason = "tlc not on PATH (run inside `nix develop`)";
         assert!(
             std::env::var("RDRA_REQUIRE_TLC").as_deref() != Ok("1"),
             "RDRA_REQUIRE_TLC=1 but {reason}"
         );
-        println!("skipped condition-guard equivalence: {reason}");
+        println!("skipped {name} equivalence: {reason}");
         return;
     };
     let scratch =
-        std::env::temp_dir().join(format!("rdra-equivalence-cond-{}", std::process::id()));
+        std::env::temp_dir().join(format!("rdra-equivalence-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&scratch);
     std::fs::create_dir_all(&scratch).expect("scratch dir");
-    let file = scratch.join("conditions.rdra");
-    std::fs::write(&file, CONDITION_GUARDS).expect("write model");
+    let file = scratch.join(format!("{name}.rdra"));
+    std::fs::write(&file, src).expect("write model");
     let model = load(file.to_str().expect("utf-8 path"));
     for bounds in [Bounds::STATES, Bounds::VERIFY] {
-        check_model(&tlc, &scratch, "condition_guards", &model, bounds);
+        check_model(&tlc, &scratch, name, &model, bounds);
     }
     let _ = std::fs::remove_dir_all(&scratch);
 }

@@ -281,11 +281,12 @@ sets(Flag, Order, flagged == true)
 }
 
 #[test]
-fn shared_use_case_is_atomic_and_transitions_do_not_leak() {
-    let d = derive_src(
-        r#"
-entity Order "注文" { id: Int @pk  status: Enum(pending, paid) @default(pending) }
-entity Payment "決済" { id: Int @pk  status: Enum(pending, paid) @default(pending) }
+fn shared_use_case_is_atomic_within_a_transaction_group() {
+    let src = |relate: &str| {
+        format!(
+            r#"
+entity Order "注文" {{ id: Int @pk  status: Enum(pending, paid) @default(pending) }}
+entity Payment "決済" {{ id: Int @pk  status: Enum(pending, paid) @default(pending) }}
 usecase Init "初期化"
 usecase Flip "更新"
 creates(Init, Order)
@@ -294,11 +295,18 @@ updates(Flip, Order)
 updates(Flip, Payment)
 transitions(Order.status, Flip, pending -> paid)
 transitions(Payment.status, Flip, paid -> pending)
-"#,
-    );
+{relate}
+"#
+        )
+    };
+    let d = derive_src(&src("relate(Payment, Order, N:1)"));
     assert_eq!(d.rows("Payment"), vec!["status=pending"]);
     // One atomic Flip needs Payment paid, which nothing reaches, so Order stays pending.
     assert_eq!(d.rows("Order"), vec!["status=pending"]);
+    // Unrelated, the two writes are two transaction groups, so Flip_2 pays the Order alone.
+    let d = derive_src(&src(""));
+    assert_eq!(d.rows("Payment"), vec!["status=pending"]);
+    assert_eq!(d.rows("Order"), vec!["status=pending", "status=paid"]);
 }
 
 #[test]

@@ -43,8 +43,8 @@ struct Builder<'m> {
     prop_var: HashMap<(EntId, String), VarId>,
     /// (owner var, child, parent)
     owners: Vec<(VarId, EntId, EntId)>,
-    /// Use cases whose action exists, in action order.
-    uc_action: HashMap<UseCaseKey, super::types::ActId>,
+    /// Use cases whose actions exist, each with its actions in transaction order.
+    uc_actions: HashMap<UseCaseKey, Vec<super::types::ActId>>,
     /// Use cases with any write in the full model (before the scope filter).
     active_ucs: HashSet<UseCaseKey>,
     diags: Vec<Diag>,
@@ -61,7 +61,7 @@ impl<'m> Builder<'m> {
             col_var: HashMap::new(),
             prop_var: HashMap::new(),
             owners: Vec::new(),
-            uc_action: HashMap::new(),
+            uc_actions: HashMap::new(),
             active_ucs: HashSet::new(),
             diags: Vec::new(),
         }
@@ -100,7 +100,8 @@ impl<'m> Builder<'m> {
         let model = self.model;
         let created: HashSet<EntityKey> = infer_lifecycle_transactions(model)
             .iter()
-            .flat_map(writes_of)
+            .flat_map(tx_groups)
+            .flatten()
             .filter(|(_, kind)| *kind == WriteKind::Creates)
             .map(|(ek, _)| ek)
             .collect();
@@ -368,10 +369,24 @@ impl<'m> Builder<'m> {
             {
                 continue;
             }
-            let action = self.usecase_action(uc, &writes_of(utx));
-            self.uc_action
-                .insert(uc, super::types::ActId::at(self.ts.actions.len()));
-            self.ts.actions.push(action);
+            let groups = tx_groups(utx);
+            let entities: Vec<Vec<EntityKey>> = groups
+                .iter()
+                .map(|g| g.iter().map(|(ek, _)| *ek).collect())
+                .collect();
+            let id = &model.use_cases[uc].id;
+            for (g, writes) in groups.iter().enumerate() {
+                let name = match groups.len() {
+                    1 => id.clone(),
+                    _ => format!("{id}_{}", g + 1),
+                };
+                let action = self.usecase_action(uc, name, writes, &entities, g);
+                self.uc_actions
+                    .entry(uc)
+                    .or_default()
+                    .push(super::types::ActId::at(self.ts.actions.len()));
+                self.ts.actions.push(action);
+            }
         }
         if let Some(tick) = self.tick() {
             self.ts.actions.push(tick);
@@ -379,8 +394,17 @@ impl<'m> Builder<'m> {
         self.inert_conditions();
     }
 
-    /// One atomic action for the use case: every effect on every entity in one step.
-    fn usecase_action(&mut self, uc: UseCaseKey, writes: &[(EntityKey, WriteKind)]) -> Action {
+    /// One atomic action for one transaction group of the use case: every effect on every
+    /// entity of the group in one step. `groups` lists every group's entities, in transaction
+    /// order; `group` is this one.
+    fn usecase_action(
+        &mut self,
+        uc: UseCaseKey,
+        name: String,
+        writes: &[(EntityKey, WriteKind)],
+        groups: &[Vec<EntityKey>],
+        group: usize,
+    ) -> Action {
         let model = self.model;
         let mut a = ActionDraft::default();
         let mut sorted: Vec<(EntId, WriteKind)> = writes
@@ -404,10 +428,10 @@ impl<'m> Builder<'m> {
         self.transition_effects(uc, &mut a);
         self.creation_choices(&mut a);
         self.owner_bindings(&mut a);
-        let guards = self.condition_guards(uc, &a.params);
+        let guards = self.condition_guards(uc, &a.params, groups, group);
         a.guards.extend(guards);
         Action {
-            name: model.use_cases[uc].id.clone(),
+            name,
             origin: ActionOrigin::UseCase {
                 uc,
                 buc: first_buc(model, uc),
@@ -816,12 +840,15 @@ impl ActionDraft {
     }
 }
 
-fn writes_of(utx: &crate::tx::UsecaseTx) -> Vec<(EntityKey, WriteKind)> {
+/// The use case's transaction groups in transaction order (vision rule 6): its FK-connected or
+/// API-bounded groups, then each isolated write as a group of its own, as sequence diagrams draw
+/// them.
+fn tx_groups(utx: &crate::tx::UsecaseTx) -> Vec<Vec<(EntityKey, WriteKind)>> {
+    let write = |w: &crate::tx::UcWrite| (w.entity, w.kind.clone());
     utx.fk_groups
         .iter()
-        .flat_map(|g| g.ordered_writes.iter())
-        .chain(utx.isolated_writes.iter())
-        .map(|w| (w.entity, w.kind.clone()))
+        .map(|g| g.ordered_writes.iter().map(write).collect())
+        .chain(utx.isolated_writes.iter().map(|w| vec![write(w)]))
         .collect()
 }
 

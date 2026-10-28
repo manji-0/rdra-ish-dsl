@@ -264,7 +264,8 @@ impl Site {
 
 #[derive(Clone, Debug)]
 pub struct Action {
-    /// The use case id, or `Tick`.
+    /// The use case id, `<id>_<n>` for the n-th transaction group of a split use case, or
+    /// `Tick`.
     pub name: String,
     pub origin: ActionOrigin,
     /// At most one param per entity.
@@ -277,8 +278,7 @@ pub struct Action {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ActionOrigin {
-    /// One atomic action per use case. Splitting by transaction group (vision rule 6) is the
-    /// next unit; it will add the group index here.
+    /// One atomic action per transaction group of the use case (vision rule 6).
     UseCase {
         uc: UseCaseKey,
         /// The first BUC that contains the use case, as provenance names it.
@@ -493,7 +493,8 @@ pub enum InvText {
     },
 }
 
-/// `after(UC).assert(..)`: a post-state predicate checked after every action of the use case.
+/// `after(UC).assert(..)`: a post-state predicate checked after every action of the use case,
+/// so after each transaction group of a split one.
 #[derive(Clone, Debug)]
 pub struct AfterAssert {
     pub name: String,

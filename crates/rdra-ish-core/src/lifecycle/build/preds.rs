@@ -12,7 +12,8 @@ use crate::lifecycle::types::{
 };
 use crate::model::{
     CmpOpModel, CmpRhs, ComparisonProp, CrossCmpRhs, CrossConstraintScope, CrossEntityCondition,
-    EffectValue, EntityKey, QuantifierKind, TemporalExpr, TemporalFormula, TemporalRhs, UseCaseKey,
+    EffectValue, EntityKey, HoldsBody, QuantifierKind, TemporalExpr, TemporalFormula, TemporalRhs,
+    UseCaseKey,
 };
 
 /// Binds each entity of a predicate to a slot reference.
@@ -509,18 +510,25 @@ impl Builder<'_> {
 
     // ── R-guard: condition bodies ────────────────────────────────────────────
 
-    /// One guard per `holds` body applied to the use case. An entity the action binds reads its
-    /// param: on the pre-state, or in the successor (`At::Next`) when the action creates it, so
-    /// the body constrains what is created. Any other entity is `Exists` over present instances
-    /// of the pre-state, one
-    /// witness per entity shared by the body's atoms, linked by a direct owner var (one hop) to
-    /// each param or other witness it relates to; with no such relate it is independent.
-    pub(super) fn condition_guards(&mut self, uc: UseCaseKey, params: &[Param]) -> Vec<Guard> {
+    /// One guard per `holds` body applied to the use case and placed on this transaction group
+    /// (see [`condition_group`]). An entity the action binds reads its param: on the pre-state,
+    /// or in the successor (`At::Next`) when the action creates it, so the body constrains what
+    /// is created. Any other entity, an entity of a sibling group included, is `Exists` over
+    /// present instances of the pre-state, one witness per entity shared by the body's atoms,
+    /// linked by a direct owner var (one hop) to each param or other witness it relates to; with
+    /// no such relate it is independent.
+    pub(super) fn condition_guards(
+        &mut self,
+        uc: UseCaseKey,
+        params: &[Param],
+        groups: &[Vec<EntityKey>],
+        group: usize,
+    ) -> Vec<Guard> {
         let model = self.model;
         let mut guards = Vec::new();
         for (ck, _, body) in applied_bodies(model)
             .into_iter()
-            .filter(|(_, u, _)| *u == uc)
+            .filter(|(_, u, body)| *u == uc && condition_group(body, groups) == group)
         {
             let site = Site::new(ModelRef::Condition(ck), &body.site);
             let mut binding: Binding = params
@@ -593,14 +601,14 @@ impl Builder<'_> {
 
     // ── R-after ──────────────────────────────────────────────────────────────
 
-    /// One step per action of the anchor use case. A scope entity the step does not bind is
-    /// universally bound.
+    /// One step per action of the anchor use case, so a split use case is checked after each
+    /// transaction group. A scope entity the step does not bind is universally bound.
     pub(super) fn after_asserts(&mut self) {
         let model = self.model;
         for (i, ta) in model.temporal_assertions.iter().enumerate() {
             let site = Site::new(ModelRef::TemporalAssertion(i), &ta.site);
             let anchor = model.use_cases[ta.anchor].id.clone();
-            let Some(acts) = self.uc_action.get(&ta.anchor).map(|a| vec![*a]) else {
+            let Some(acts) = self.uc_actions.get(&ta.anchor).cloned() else {
                 if !self.active_ucs.contains(&ta.anchor) {
                     self.diag(
                         ta.scope.clone(),
@@ -804,6 +812,18 @@ impl Builder<'_> {
             );
         }
     }
+}
+
+/// The transaction group whose action carries a condition body: the first, in transaction
+/// order, that writes an entity the body reads, else the first. A body is a precondition of the
+/// use case, so it guards one step only, and an atom on a sibling group's entity reads that
+/// entity's pre-state.
+fn condition_group(body: &HoldsBody, groups: &[Vec<EntityKey>]) -> usize {
+    let read: Vec<EntityKey> = body.conds.iter().flat_map(cond_entities).collect();
+    groups
+        .iter()
+        .position(|g| g.iter().any(|ek| read.contains(ek)))
+        .unwrap_or(0)
 }
 
 /// The entities a body atom reads, left operand first.
