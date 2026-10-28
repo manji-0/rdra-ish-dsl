@@ -1,7 +1,6 @@
 # State Derivation
 
 <!-- derived-from ./language-reference.md#entity-state-constraints -->
-<!-- constrained-by ./vision.md#the-lifecycle-layer-has-one-semantics -->
 
 State derivation answers the question: *for each entity, which combinations of its
 state columns are reachable, and does any reachable state break a declared rule?*
