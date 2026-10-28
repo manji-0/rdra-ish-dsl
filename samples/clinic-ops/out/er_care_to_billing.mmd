@@ -4,6 +4,7 @@ erDiagram
     Money balance
     Bool is_closed
     DateTime closed_at
+    Int patientaccount_id FK
   }
   Appointment {
     Int id PK
@@ -67,6 +68,7 @@ erDiagram
     Enum status
     DateTime opened_at
     DateTime signed_at
+    Int appointment_id FK
     Int patientaccount_id FK
     Int provider_id FK
   }
@@ -117,6 +119,7 @@ erDiagram
     String phone
     String email
     String emergency_contact
+    Int patientaccount_id FK
   }
   PaymentTransaction {
     Int id PK

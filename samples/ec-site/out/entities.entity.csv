@@ -32,6 +32,7 @@ Payment,Payment,method,PaymentMethod,false,false,false,false,,false,,,false,cred
 Payment,Payment,status,Enum,false,false,false,false,,false,,,false,pending,,false,false,false,
 Payment,Payment,processed_at,DateTime,false,false,false,false,,false,,,true,,,false,false,false,
 Payment,Payment,gateway_ref,String,false,false,false,false,,false,,,true,,,false,false,false,
+Payment,Payment,order_id,Int,false,true,false,true,Order,false,,,false,,,false,false,false,
 Product,Product,id,Int,true,false,false,false,,false,,,false,,,false,false,false,
 Product,Product,sku,String,false,true,false,false,,false,,,false,,,false,false,false,
 Product,Product,name,String,false,false,false,false,,false,,,false,,,false,false,false,

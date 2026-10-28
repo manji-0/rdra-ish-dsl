@@ -77,9 +77,8 @@ impl RefAction {
 pub struct ForeignKey {
     pub child: EntityKey,
     pub parent: EntityKey,
-    /// `(child column, parent key column)` pairs. Empty when the child holds no key column:
-    /// a 1:1 (none is generated yet), or a key `analysis::fk` rejected (`FkConflict`,
-    /// `MissingPk`, `CompositePkFkUnsupported`).
+    /// `(child column, parent key column)` pairs. Empty when `analysis::fk` rejected the key
+    /// (`FkConflict`, `MissingPk`, `CompositePkFkUnsupported`).
     pub columns: Vec<(String, String)>,
     /// Children per parent: `max == One` is a 1:1.
     pub children: Multiplicity,

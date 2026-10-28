@@ -57,10 +57,6 @@ pub(crate) fn resolve_foreign_keys(model: &mut SemanticModel, diags: &mut Vec<Di
         .collect();
 
     for index in 0..model.foreign_keys.len() {
-        // A 1:1 key generates no column yet.
-        if model.foreign_keys[index].unique() {
-            continue;
-        }
         if let Some(column) = generate_key_column(model, diags, index) {
             model.foreign_keys[index].columns.push(column);
         }
@@ -99,15 +95,15 @@ fn key_fact(relation: usize, rel: &Relation) -> Option<ForeignKey> {
     })
 }
 
-/// Appends `{parent}_id` to the child and returns `(child column, parent key column)`.
+/// Appends `{parent}_id` to the child, unique for a 1:1, and returns `(child column, parent key column)`.
 fn generate_key_column(
     model: &mut SemanticModel,
     diags: &mut Vec<Diagnostic>,
     index: usize,
 ) -> Option<(String, String)> {
-    let (child_key, parent_key, optional) = {
+    let (child_key, parent_key, optional, unique) = {
         let fk = &model.foreign_keys[index];
-        (fk.child, fk.parent, fk.optional())
+        (fk.child, fk.parent, fk.optional(), fk.unique())
     };
     let parent = &model.entities[parent_key];
     if parent.primary_key.len() > 1 {
@@ -159,7 +155,7 @@ fn generate_key_column(
         name: name.clone(),
         col_type: pk_type,
         is_pk: false,
-        is_unique: false,
+        is_unique: unique,
         is_indexed: false,
         is_nullable: optional,
         default_val: None,

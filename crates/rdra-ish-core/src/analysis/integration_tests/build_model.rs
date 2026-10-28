@@ -83,6 +83,38 @@ relate(Order, Customer_profile, N:1)
 }
 
 #[test]
+fn one_to_one_key_is_a_unique_column_on_the_left_end() {
+    let src = r#"
+entity Order "Order" { id: Int @pk }
+entity Payment "Payment" { id: Int @pk }
+entity Receipt "Receipt" { id: Int @pk }
+relate(Payment, Order, 1:1)
+relate(Receipt, Order, 1:1).optional()
+"#;
+    let (ast, errors) = parse(src);
+    assert!(errors.is_empty(), "parse errors: {errors:?}");
+    let (model, diags) = build_model(&ast);
+    assert!(diags.is_empty(), "{diags:?}");
+
+    for (child, nullable) in [("Payment", false), ("Receipt", true)] {
+        let (child_key, entity) = model.entities.iter().find(|(_, e)| e.id == child).unwrap();
+        let column = entity
+            .columns
+            .iter()
+            .find(|c| c.name == "order_id")
+            .unwrap_or_else(|| panic!("{child} holds order_id"));
+        assert!(column.is_unique, "{child}.order_id is unique");
+        assert_eq!(column.is_nullable, nullable, "{child}.order_id nullability");
+        let (_, fk) = model.column_fk(child_key, "order_id").unwrap();
+        assert!(fk.unique());
+        assert_eq!(model.entities[fk.parent].id, "Order");
+        assert_eq!(fk.columns, vec![("order_id".to_string(), "id".to_string())]);
+    }
+    let order = model.entities.values().find(|e| e.id == "Order").unwrap();
+    assert!(!order.columns.iter().any(|c| c.name.ends_with("_id")));
+}
+
+#[test]
 fn test_build_model_requirement_metadata() {
     let src = r#"
 requirement ReqCheckout "Checkout must be reliable"

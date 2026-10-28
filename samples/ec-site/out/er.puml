@@ -54,6 +54,7 @@ entity "🗄️ Payment" as Payment {
   status : Enum
   processed_at : DateTime
   gateway_ref : String
+  order_id : Int <<FK>>
 }
 entity "🗄️ Product" as Product {
   *id : Int <<PK>>

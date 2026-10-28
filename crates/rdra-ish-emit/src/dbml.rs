@@ -260,8 +260,9 @@ fn dbml_refs(model: &SemanticModel) -> Vec<String> {
             } else {
                 format!(" [{}]", settings.join(", "))
             };
+            let relation = if fk.unique() { "-" } else { ">" };
             refs.push(format!(
-                "Ref: {}.{} > {}.{}{}",
+                "Ref: {}.{} {relation} {}.{}{}",
                 dbml_ident(&entity.id),
                 dbml_ident(&column.name),
                 dbml_ident(&target.id),

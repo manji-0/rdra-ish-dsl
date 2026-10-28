@@ -24,6 +24,7 @@ erDiagram
     String salt
     String algorithm
     DateTime updated_at
+    Int useraccount_id FK
   }
   PersonalInfo {
     Int id PK
@@ -31,6 +32,7 @@ erDiagram
     String family_name
     Date birth_date
     String phone
+    Int useraccount_id FK
   }
   PostalAddress {
     Int id PK

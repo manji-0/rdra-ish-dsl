@@ -29,6 +29,7 @@ entity "🗄️ Password Credential" as PasswordCredential {
   salt : String
   algorithm : String
   updated_at : DateTime
+  useraccount_id : Int <<FK>>
 }
 entity "🗄️ Personal Information" as PersonalInfo {
   *id : Int <<PK>>
@@ -37,6 +38,7 @@ entity "🗄️ Personal Information" as PersonalInfo {
   family_name : String
   birth_date : Date
   phone : String
+  useraccount_id : Int <<FK>>
 }
 entity "🗄️ Postal Address" as PostalAddress {
   *id : Int <<PK>>
