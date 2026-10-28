@@ -1,9 +1,9 @@
 //! Measurement gate for the lifecycle layer. For every root in `samples.txt` it builds at
-//! `Bounds::STATES` and explores the cone of each target (each entity view, invariant, and
+//! `Bounds::STATES` (or `Bounds::VERIFY`, the bounds of `verify`'s BFS pass) and explores the cone of each target (each entity view, invariant, and
 //! after-assert) under a state cap. It prints the cone size and reached-state count per
 //! target and the largest per sample.
 //!
-//! Run: `cargo run --release -p rdra-ish-core --example lifecycle_measure [-- STATE_CAP]`
+//! Run: `cargo run --release -p rdra-ish-core --example lifecycle_measure [-- STATE_CAP [verify [SAMPLE]]]`
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
@@ -61,21 +61,27 @@ fn main() {
         .nth(1)
         .map(|s| s.parse().expect("state cap"))
         .unwrap_or(1_000_000);
+    let (bounds, instances) = match std::env::args().nth(2).as_deref() {
+        Some("verify") => (Bounds::VERIFY, Bounds::VERIFY.instances),
+        _ => (Bounds::STATES, Bounds::STATES.instances),
+    };
+    let only = std::env::args().nth(3);
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let list = std::fs::read_to_string(repo.join("samples.txt")).expect("samples.txt");
     let caps = Caps::new(usize::MAX, cap);
-    println!("bounds: instances=1 int_max=5  state cap per cone: {cap}");
+    println!("bounds: instances={instances} int_max=5  state cap per cone: {cap}");
     for sample in list
         .lines()
         .map(str::trim)
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .filter(|l| only.as_deref().is_none_or(|o| o == *l))
     {
         let mut files = Vec::new();
         rdra_files(&repo.join(sample), &mut files);
         let includes = include_paths(&files);
         let (program, _) = resolve(&files, &includes);
         let (model, _) = build_merged_model(&program, &includes);
-        let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
+        let built = TransitionSystem::build(&model, bounds, &Scope::ALL);
         let ts = &built.ts;
         println!("\n{sample}");
         println!(
