@@ -12,6 +12,7 @@ mod diag;
 mod explore;
 mod expr;
 mod restrict;
+mod starts;
 mod states;
 mod targets;
 mod types;
