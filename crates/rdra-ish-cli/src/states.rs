@@ -3,18 +3,15 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use rdra_ish_core::{
-    derive_state_patterns, state_diag_severity_with_policy, state_results_have_errors_with_policy,
-    StateDiagPolicy,
-};
+use rdra_ish_core::entity_state_variants;
+use rdra_ish_core::lifecycle::{derive_states, Scope, Severity, StatesReport};
 use rdra_ish_emit::{
-    state_pattern::{StatePatternCsvEmitter, StatePatternJsonEmitter, StatePatternTableEmitter},
-    typescript::TypeScriptStateUnionEmitter,
-    Emitter, View,
+    state_pattern::{render_csv, render_json, render_table},
+    typescript::emit_typescript_state_unions,
 };
 
 use crate::cli::StatesFormat;
-use crate::list_output::filter_entity_output;
+use crate::list_output::{filter_entity_output, state_diag_message};
 use crate::load::{load_model, reject_model_errors};
 
 pub fn run_states(
@@ -23,7 +20,6 @@ pub fn run_states(
     buc: Vec<String>,
     max_patterns: usize,
     entity: Option<String>,
-    allow_tla_only: bool,
 ) -> Result<()> {
     let (program, model, diags) = load_model(inputs)?;
     reject_model_errors(&program, &diags)?;
@@ -39,23 +35,20 @@ pub fn run_states(
         }
     }
 
-    let policy = if allow_tla_only {
-        StateDiagPolicy::allow_tla_only()
-    } else {
-        StateDiagPolicy::default()
-    };
-
-    let view = View::bucs(buc.clone());
     // Exit on structured severity (not string scan) so csv / typescript also fail-closed.
-    let results = derive_state_patterns(&model, &buc, max_patterns);
-    let has_error = state_results_have_errors_with_policy(&results, policy);
+    let report = derive_states(&model, &Scope::from_bucs(&buc), max_patterns);
+    eprintln!("{}", bounds_line(&report));
+    for d in report.unattributed() {
+        eprintln!("{}: {}", d.severity().as_label(), state_diag_message(d));
+    }
 
     if let Some(ref entity_id) = entity {
-        let other_errors: usize = results
+        let other_errors: usize = report
+            .views
             .iter()
             .filter(|r| r.entity_id != *entity_id)
             .flat_map(|r| r.diagnostics.iter())
-            .filter(|d| state_diag_severity_with_policy(d, policy).is_error())
+            .filter(|d| d.severity() == Severity::Error)
             .count();
         if other_errors > 0 {
             eprintln!(
@@ -65,21 +58,11 @@ pub fn run_states(
     }
 
     let output = match format {
-        StatesFormat::Table => {
-            let emitter = StatePatternTableEmitter { cap: max_patterns };
-            emitter.emit(&model, &view)?
-        }
-        StatesFormat::Csv => {
-            let emitter = StatePatternCsvEmitter { cap: max_patterns };
-            emitter.emit(&model, &view)?
-        }
-        StatesFormat::Json => {
-            let emitter = StatePatternJsonEmitter { cap: max_patterns };
-            emitter.emit(&model, &view)?
-        }
+        StatesFormat::Table => render_table(&report.views),
+        StatesFormat::Csv => render_csv(&report.views)?,
+        StatesFormat::Json => render_json(&report.views)?,
         StatesFormat::TypeScript => {
-            let emitter = TypeScriptStateUnionEmitter { cap: max_patterns };
-            emitter.emit(&model, &view)?
+            emit_typescript_state_unions(&entity_state_variants(&model, &report.views))
         }
     };
 
@@ -91,9 +74,17 @@ pub fn run_states(
 
     print!("{}", rendered);
 
-    if has_error {
+    if report.has_errors() {
         std::process::exit(1);
     }
 
     Ok(())
+}
+
+/// The bounds the views were derived under, printed on stderr so stdout stays the artifact.
+fn bounds_line(report: &StatesReport) -> String {
+    format!(
+        "bounds: {} instance per entity, Int 0..{}, --max-patterns {} per target cone ({} states per cone)",
+        report.bounds.instances, report.bounds.int_max, report.caps.patterns, report.caps.states
+    )
 }

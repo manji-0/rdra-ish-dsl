@@ -8,6 +8,7 @@ mod access;
 mod elements;
 mod node_ref;
 mod render;
+mod state_findings;
 
 use access::{format_actor_permission_audit, format_business_inputs, format_permission_callables};
 use elements::{
@@ -15,6 +16,9 @@ use elements::{
     format_dtos, format_entities, format_fields, format_nfrs, format_requirements, format_usecases,
 };
 use render::{format_rows, format_sorted_id_labels};
+pub(crate) use state_findings::{
+    reject_state_errors, state_consistency_findings, state_diag_message,
+};
 
 macro_rules! list_id_label {
     ($model:expr, $field:ident, $format:expr, $label:expr) => {
@@ -22,54 +26,6 @@ macro_rules! list_id_label {
             (item.id.as_str(), item.label.as_str())
         })
     };
-}
-
-/// State-pattern diagnostics with the same severity as `states` / emitters.
-pub(crate) fn state_consistency_findings_with_policy(
-    model: &rdra_ish_core::SemanticModel,
-    policy: rdra_ish_core::StateDiagPolicy,
-) -> Vec<(rdra_ish_core::StateDiagSeverity, String)> {
-    let mut findings = Vec::new();
-    for result in
-        rdra_ish_core::derive_state_patterns(model, &[], rdra_ish_core::DEFAULT_PATTERN_CAP)
-    {
-        for diag in result.diagnostics {
-            let severity = rdra_ish_core::state_diag_severity_with_policy(&diag, policy);
-            findings.push((
-                severity,
-                format!(
-                    "state derivation for entity '{}': {}",
-                    result.entity_id,
-                    state_diag_message(&diag)
-                ),
-            ));
-        }
-    }
-    findings
-}
-
-/// Fail closed when state derivation has Error-severity diagnostics (generators).
-pub(crate) fn reject_state_errors(
-    model: &rdra_ish_core::SemanticModel,
-    allow_tla_only: bool,
-) -> anyhow::Result<()> {
-    let policy = if allow_tla_only {
-        rdra_ish_core::StateDiagPolicy::allow_tla_only()
-    } else {
-        rdra_ish_core::StateDiagPolicy::default()
-    };
-    let findings = state_consistency_findings_with_policy(model, policy);
-    let mut has_error = false;
-    for (severity, message) in &findings {
-        if severity.is_error() {
-            eprintln!("error: {message}");
-            has_error = true;
-        }
-    }
-    if has_error {
-        anyhow::bail!("model has state errors; refusing to emit artifacts");
-    }
-    Ok(())
 }
 
 pub(crate) fn format_lint_issues(issues: &[LintIssue], format: &ListFormat) -> Result<String> {
@@ -97,156 +53,6 @@ pub(crate) fn format_lint_issues(issues: &[LintIssue], format: &ListFormat) -> R
 
     format_rows(&headers, &rows, format, "lint issues")
 }
-pub(crate) fn state_diag_message(diag: &rdra_ish_core::StateDiag) -> String {
-    match diag {
-        rdra_ish_core::StateDiag::UnreachableEnumVariant { column, variant } => format!(
-            "enum variant '{}.{}' is unreachable; add a create/default/transition/sets path or remove the variant",
-            column, variant
-        ),
-        rdra_ish_core::StateDiag::ConflictingEffects { usecase, column } => format!(
-            "usecase '{}' assigns conflicting effects to column '{}'; the last effect wins",
-            usecase, column
-        ),
-        rdra_ish_core::StateDiag::DoubleModeledEnum { column } => format!(
-            "enum column '{}' is driven by both transitions and sets; transitions are treated as the source of truth",
-            column
-        ),
-        rdra_ish_core::StateDiag::NoCreationPath => {
-            "no creates path; state derivation is seeded from defaults only".to_string()
-        }
-        rdra_ish_core::StateDiag::PatternCapReached { cap, bound } => format!(
-            "pattern cap reached at {} while the theoretical state-space bound is {} (constraints on truncated set are not sound; raise --max-patterns or narrow --buc)",
-            cap, bound
-        ),
-        rdra_ish_core::StateDiag::ForbiddenStateViolated {
-            conditions,
-            pattern_desc,
-            correlation_hint,
-        } => {
-            let mut message = format!(
-                "forbidden state is reachable: {} witnessed by {}",
-                conditions, pattern_desc
-            );
-            if let Some(hint) = correlation_hint {
-                message.push_str(&format!("; hint: {}", hint));
-            }
-            message
-        }
-        rdra_ish_core::StateDiag::InvariantViolated {
-            guards,
-            requireds,
-            pattern_desc,
-            flow_order_hint,
-        } => {
-            let mut message = format!(
-                "invariant violated: when {} then {} is broken by {}",
-                guards, requireds, pattern_desc
-            );
-            if let Some(hint) = flow_order_hint {
-                message.push_str(&format!("; hint: {}", hint));
-            }
-            message
-        }
-        rdra_ish_core::StateDiag::RequiredStateViolated {
-            conditions,
-            pattern_desc,
-        } => format!(
-            "required state is missing: {} is not satisfied by {}",
-            conditions, pattern_desc
-        ),
-        rdra_ish_core::StateDiag::ExclusiveStateViolated {
-            conditions,
-            pattern_desc,
-        } => format!(
-            "exclusive state conditions co-occur: {} witnessed by {}",
-            conditions, pattern_desc
-        ),
-        rdra_ish_core::StateDiag::CrossForbiddenViolated {
-            entities,
-            conditions,
-            pattern_desc,
-            scope_hint,
-        } => {
-            let mut message = format!(
-                "multi-entity forbidden state is reachable across [{}]: {} witnessed by {}",
-                entities, conditions, pattern_desc
-            );
-            if let Some(hint) = scope_hint {
-                message.push_str(&format!("; hint: {}", hint));
-            }
-            message
-        }
-        rdra_ish_core::StateDiag::CrossInvariantViolated {
-            entities,
-            guards,
-            requireds,
-            pattern_desc,
-            scope_hint,
-        } => {
-            let mut message = format!(
-                "multi-entity invariant violated across [{}]: when {} then {} is broken by {}",
-                entities, guards, requireds, pattern_desc
-            );
-            if let Some(hint) = scope_hint {
-                message.push_str(&format!("; hint: {}", hint));
-            }
-            message
-        }
-        rdra_ish_core::StateDiag::CrossConstraintNotEvaluated {
-            entities,
-            constraint,
-            reason,
-        } => format!(
-            "multi-entity constraint was not fully evaluated across [{}]: {} ({}); hint: linked-instance / non-state values are not in states — use export --kind tla / verify --backend tlc when the rule needs related rows or arithmetic",
-            entities, constraint, reason
-        ),
-        rdra_ish_core::StateDiag::TemporalAssertionViolated {
-            anchor,
-            requireds,
-            actual,
-        } => format!(
-            "temporal assertion violated after '{}': expected {}, but {}",
-            anchor, requireds, actual
-        ),
-        rdra_ish_core::StateDiag::TemporalAssertionNotEvaluated {
-            anchor,
-            requireds,
-            reason,
-        } => format!(
-            "temporal assertion after '{}' was not evaluated: {} ({}); hint: after.assert comparisons need TLA; states checks immediate equality sets/transitions only",
-            anchor, requireds, reason
-        ),
-        rdra_ish_core::StateDiag::QuantifierConstraintNotEvaluated {
-            anchor,
-            related,
-            constraint,
-            reason,
-        } => format!(
-            "to-many quantifier constraint was not evaluated from '{}' to '{}': {} ({}); hint: linked-instance cardinality is not in states — use export --kind tla / verify --backend tlc",
-            anchor, related, constraint, reason
-        ),
-        rdra_ish_core::StateDiag::UndrivenComparisonProp {
-            proposition,
-            usage,
-            effect,
-            hint,
-        } => format!(
-            "comparison proposition '{}' used in {} is not driven by sets(..., <comparison>, true/false): {}; hint: {}",
-            proposition, usage, effect, hint
-        ),
-        rdra_ish_core::StateDiag::DrivenComparisonContradictsEffects {
-            usecase,
-            entity,
-            prop,
-            driven_truth,
-            evaluated,
-        } => format!(
-            "driven comparison '{}' on entity '{}' from '{}' sets truth={} but Int assignments evaluate to {}; hint: align sets(..., cmp, bool) with sets(..., col == N) in the same operation, or remove the contradictory drive",
-            prop, entity, usecase, driven_truth, evaluated
-        ),
-    }
-}
-
 pub(crate) fn list_elements(
     model: &rdra_ish_core::SemanticModel,
     kind: &ListKind,

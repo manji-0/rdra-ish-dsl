@@ -1,9 +1,10 @@
 use crate::cli::{ExportKind, ListFormat, ListKind};
 use crate::export::export_artifact;
 use crate::list_output::{
-    format_lint_issues, list_elements, state_consistency_findings_with_policy, state_diag_message,
+    format_lint_issues, list_elements, state_consistency_findings, state_diag_message,
 };
 use crate::load::load_model;
+use rdra_ish_core::lifecycle::{InvKind, InvText, ModelRef, Severity, Site, StateDiag};
 use rdra_ish_core::{format_diagnostic_message, lint_issues, SemanticModel};
 use rdra_ish_emit::View;
 use std::path::PathBuf;
@@ -669,29 +670,32 @@ requires_permission(BookAppointment, ScheduleWrite)
         .into_iter()
         .map(|d| d.error.to_string())
         .collect();
-    let state_findings =
-        state_consistency_findings_with_policy(&model, rdra_ish_core::StateDiagPolicy::default());
+    let state_findings = state_consistency_findings(&model);
 
     assert!(warnings
         .iter()
         .any(|warning| warning.contains("actor 'Staff' is missing permission 'ScheduleWrite'")));
     assert!(state_findings.iter().any(|(severity, message)| {
-        *severity == rdra_ish_core::StateDiagSeverity::Info
+        *severity == Severity::Info
             && message.contains("state derivation for entity 'Appointment': no creates path")
     }));
     assert!(state_findings.iter().any(|(severity, message)| {
-        *severity == rdra_ish_core::StateDiagSeverity::Warning
+        *severity == Severity::Warning
             && message.contains("enum variant 'status.booked' is unreachable")
     }));
 }
 
 #[test]
 fn state_diag_message_formats_invariant_violation() {
-    let message = state_diag_message(&rdra_ish_core::StateDiag::InvariantViolated {
-        guards: "status=booked".to_string(),
-        requireds: "booked_at=present".to_string(),
+    let message = state_diag_message(&StateDiag::ConstraintViolated {
+        name: "Inv0".to_string(),
+        kind: InvKind::Invariant,
+        text: InvText::WhenThen {
+            guards: "status=booked".to_string(),
+            requireds: "booked_at=present".to_string(),
+        },
         pattern_desc: "status=booked, booked_at=null".to_string(),
-        flow_order_hint: None,
+        site: Site::bare(ModelRef::EntityInvariant(0)),
     });
 
     assert_eq!(
@@ -701,52 +705,61 @@ fn state_diag_message_formats_invariant_violation() {
 }
 
 #[test]
-fn state_diag_message_includes_cross_scope_hint() {
-    let message = state_diag_message(&rdra_ish_core::StateDiag::CrossInvariantViolated {
-        entities: "Order, Payment".to_string(),
-        guards: "Order.status=paid".to_string(),
-        requireds: "Payment.status=captured".to_string(),
+fn state_diag_message_formats_cross_invariant_violation() {
+    let message = state_diag_message(&StateDiag::ConstraintViolated {
+        name: "Cross0".to_string(),
+        kind: InvKind::CrossInvariant,
+        text: InvText::CrossWhenThen {
+            entities: "Order, Payment".to_string(),
+            guards: "Order.status=paid".to_string(),
+            requireds: "Payment.status=captured".to_string(),
+        },
         pattern_desc: "Order(status=paid); Payment(status=pending)".to_string(),
-        scope_hint: Some(
-            "use .along(Order, Payment) if this rule is intended to apply only to linked instances"
-                .to_string(),
-        ),
-    });
-
-    assert!(message.contains("multi-entity invariant violated across [Order, Payment]"));
-    assert!(message.contains(
-        "hint: use .along(Order, Payment) if this rule is intended to apply only to linked instances"
-    ));
-}
-
-#[test]
-fn state_diag_message_formats_temporal_assertion_violation() {
-    let message = state_diag_message(&rdra_ish_core::StateDiag::TemporalAssertionViolated {
-        anchor: "ExecuteCertIssue".to_string(),
-        requireds: "CertificateOrder.status=executed".to_string(),
-        actual: "CertificateOrder.status has no immediate effect".to_string(),
+        site: Site::bare(ModelRef::CrossInvariant(0)),
     });
 
     assert_eq!(
         message,
-        "temporal assertion violated after 'ExecuteCertIssue': expected CertificateOrder.status=executed, but CertificateOrder.status has no immediate effect"
+        "multi-entity invariant violated across [Order, Payment]: when Order.status=paid then Payment.status=captured is broken by Order(status=paid); Payment(status=pending)"
     );
 }
 
 #[test]
-fn state_diag_message_formats_quantifier_not_evaluated() {
-    let message =
-        state_diag_message(&rdra_ish_core::StateDiag::QuantifierConstraintNotEvaluated {
+fn state_diag_message_formats_temporal_assertion_violation() {
+    let message = state_diag_message(&StateDiag::AfterAssertViolated {
+        anchor: "ExecuteCertIssue".to_string(),
+        requireds: "CertificateOrder.status=executed".to_string(),
+        actual: "CertificateOrder(status=pending)".to_string(),
+        site: Site::bare(ModelRef::TemporalAssertion(0)),
+    });
+
+    assert_eq!(
+        message,
+        "temporal assertion violated after 'ExecuteCertIssue': expected CertificateOrder.status=executed, but found CertificateOrder(status=pending)"
+    );
+}
+
+#[test]
+fn state_diag_message_formats_quantifier_violation() {
+    let message = state_diag_message(&StateDiag::ConstraintViolated {
+        name: "Quant0".to_string(),
+        kind: InvKind::Quantifier,
+        text: InvText::Quantifier {
             anchor: "ClientCertificate".to_string(),
             related: "TerminalCertAssignment".to_string(),
             constraint: "ClientCertificate when (status=revoked) none TerminalCertAssignment where (status=active)".to_string(),
-            reason: "linked-instance cardinality is not represented in states".to_string(),
-        });
+        },
+        pattern_desc: "ClientCertificate(status=revoked); TerminalCertAssignment(status=active)"
+            .to_string(),
+        site: Site::bare(ModelRef::Quantifier(0)),
+    });
 
-    assert!(message.contains(
-        "to-many quantifier constraint was not evaluated from 'ClientCertificate' to 'TerminalCertAssignment'"
+    assert!(message.starts_with(
+        "to-many quantifier constraint is violated from 'ClientCertificate' to 'TerminalCertAssignment'"
     ));
-    assert!(message.contains("linked-instance cardinality is not represented in states"));
+    assert!(message.ends_with(
+        "witnessed by ClientCertificate(status=revoked); TerminalCertAssignment(status=active)"
+    ));
 }
 
 #[test]
@@ -758,8 +771,7 @@ fn clinic_ops_attribute_columns_are_variations_not_unreachable_states() {
         "clinic-ops must load without errors: {diags:?}"
     );
 
-    let findings =
-        state_consistency_findings_with_policy(&model, rdra_ish_core::StateDiagPolicy::default());
+    let findings = state_consistency_findings(&model);
     let unreachable_method: Vec<_> = findings
         .iter()
         .filter(|(_, message)| message.contains("'method'") && message.contains("unreachable"))

@@ -36,7 +36,6 @@ pub struct DiagramRequest {
     pub edge_kind: Vec<String>,
     pub view_preset: Option<DiagramViewPreset>,
     pub out: PathBuf,
-    pub allow_tla_only: bool,
 }
 
 pub fn run_diagram(request: DiagramRequest) -> Result<()> {
@@ -52,12 +51,11 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
         edge_kind,
         view_preset,
         out,
-        allow_tla_only,
     } = request;
     let inputs = inputs.as_slice();
     let (program, model, diags) = load_model(inputs)?;
     reject_model_errors(&program, &diags)?;
-    reject_state_errors(&model, allow_tla_only)?;
+    reject_state_errors(&model)?;
 
     for buc_id in &buc {
         if !model.bucs.values().any(|b| b.id == *buc_id) {
@@ -173,7 +171,7 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
         }
     }
 
-    let diagram_text = emit_diagram(&model, &kind, &format, &view, &diff_base, allow_tla_only)?;
+    let diagram_text = emit_diagram(&model, &kind, &format, &view, &diff_base)?;
 
     match format {
         OutputFormat::Puml => {
@@ -217,7 +215,6 @@ fn emit_diagram(
     format: &OutputFormat,
     view: &View,
     diff_base: &[PathBuf],
-    allow_tla_only: bool,
 ) -> Result<String> {
     match format {
         OutputFormat::Mermaid => match kind {
@@ -230,7 +227,7 @@ fn emit_diagram(
             DiagramKind::Diff => {
                 let (program, base_model, diags) = load_model(diff_base)?;
                 reject_model_errors(&program, &diags)?;
-                reject_state_errors(&base_model, allow_tla_only)?;
+                reject_state_errors(&base_model)?;
                 Ok(DiffMermaidEmitter { base: &base_model }.emit_diff(model, view)?)
             }
             DiagramKind::BusinessArea => Ok(BusinessAreaMermaidEmitter.emit(model, view)?),
@@ -246,7 +243,7 @@ fn emit_diagram(
             DiagramKind::Diff => {
                 let (program, base_model, diags) = load_model(diff_base)?;
                 reject_model_errors(&program, &diags)?;
-                reject_state_errors(&base_model, allow_tla_only)?;
+                reject_state_errors(&base_model)?;
                 Ok(DiffPlantUmlEmitter { base: &base_model }.emit_diff(model, view)?)
             }
             DiagramKind::BusinessArea => Ok(BusinessAreaPlantUmlEmitter.emit(model, view)?),

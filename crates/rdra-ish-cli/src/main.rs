@@ -16,9 +16,10 @@ use diagram::{run_diagram, DiagramRequest};
 use export::export_artifact;
 use fmt_cmd::run_fmt;
 use list_output::{
-    format_lint_issues, list_elements, reject_state_errors, state_consistency_findings_with_policy,
+    format_lint_issues, list_elements, reject_state_errors, state_consistency_findings,
 };
 use load::{eprint_diagnostic, load_model, reject_model_errors};
+use rdra_ish_core::lifecycle::Severity;
 use rdra_ish_core::{lint_issues, LintSeverity, RdraError};
 use rdra_ish_emit::View;
 use states::run_states;
@@ -38,21 +39,20 @@ fn is_strict_access_gap(error: &RdraError) -> bool {
     )
 }
 
+fn severity_word(severity: Severity) -> &'static str {
+    match severity {
+        Severity::Info => "info",
+        Severity::Warning => "warning",
+        Severity::Error => "error",
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Check {
-            inputs,
-            allow_tla_only,
-            strict,
-        } => {
+        Commands::Check { inputs, strict } => {
             let (program, model, diags) = load_model(&inputs)?;
-            let policy = if allow_tla_only {
-                rdra_ish_core::StateDiagPolicy::allow_tla_only()
-            } else {
-                rdra_ish_core::StateDiagPolicy::default()
-            };
 
             let mut has_error = false;
             for diag in &diags {
@@ -76,36 +76,18 @@ fn main() -> Result<()> {
                 }
             }
 
-            // Same severity as `states` (fail-closed on PatternCap / forbidden / NotEvaluated).
-            for (severity, message) in state_consistency_findings_with_policy(&model, policy) {
-                match severity {
-                    rdra_ish_core::StateDiagSeverity::Error => {
-                        eprintln!("error: {}", message);
-                        has_error = true;
-                    }
-                    rdra_ish_core::StateDiagSeverity::Warning => {
-                        eprintln!("warning: {}", message);
-                    }
-                    rdra_ish_core::StateDiagSeverity::Info => {
-                        eprintln!("info: {}", message);
-                    }
+            // Same severity as `states` (fail-closed on caps and violated constraints).
+            for (severity, message) in state_consistency_findings(&model) {
+                if severity == Severity::Error {
+                    has_error = true;
                 }
+                eprintln!("{}: {}", severity_word(severity), message);
             }
 
-            let state_results = rdra_ish_core::derive_state_patterns(
-                &model,
-                &[],
-                rdra_ish_core::DEFAULT_PATTERN_CAP,
-            );
-            let tla_only = state_results
-                .iter()
-                .flat_map(|r| r.diagnostics.iter())
-                .filter(|d| rdra_ish_core::is_tla_only_state_diag(d))
-                .count();
             let property_count = model.temporal_properties.len();
-            if property_count > 0 || tla_only > 0 {
+            if property_count > 0 {
                 eprintln!(
-                    "note: {property_count} temporal properties and {tla_only} TLA-only obligation(s) were not model-checked by check; use verify --backend tlc"
+                    "note: {property_count} temporal properties were not model-checked by check; use verify --backend tlc"
                 );
             }
 
@@ -128,7 +110,6 @@ fn main() -> Result<()> {
             edge_kind,
             view_preset,
             out,
-            allow_tla_only,
         } => run_diagram(DiagramRequest {
             inputs,
             kind,
@@ -141,25 +122,18 @@ fn main() -> Result<()> {
             edge_kind,
             view_preset,
             out,
-            allow_tla_only,
         })?,
 
-        Commands::Csv {
-            inputs,
-            kind,
-            out,
-            allow_tla_only,
-        } => run_csv(&inputs, kind, out, allow_tla_only)?,
+        Commands::Csv { inputs, kind, out } => run_csv(&inputs, kind, out)?,
 
         Commands::List {
             inputs,
             kind,
             format,
-            allow_tla_only,
         } => {
             let (program, model, diags) = load_model(&inputs)?;
             reject_model_errors(&program, &diags)?;
-            reject_state_errors(&model, allow_tla_only)?;
+            reject_state_errors(&model)?;
 
             let output = list_elements(&model, &kind, &format)?;
             print!("{}", output);
@@ -192,12 +166,11 @@ fn main() -> Result<()> {
             out,
             instance_count,
             int_range_max,
-            allow_tla_only,
         } => {
             let (program, model, diags) = load_model(&inputs)?;
             reject_model_errors(&program, &diags)?;
             if !matches!(kind, ExportKind::Tla) {
-                reject_state_errors(&model, allow_tla_only)?;
+                reject_state_errors(&model)?;
             }
 
             let view = View::whole();
@@ -264,8 +237,7 @@ fn main() -> Result<()> {
             buc,
             max_patterns,
             entity,
-            allow_tla_only,
-        } => run_states(&inputs, format, buc, max_patterns, entity, allow_tla_only)?,
+        } => run_states(&inputs, format, buc, max_patterns, entity)?,
 
         Commands::Verify {
             inputs,

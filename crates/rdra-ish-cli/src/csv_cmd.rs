@@ -17,15 +17,10 @@ use crate::cli::CsvKind;
 use crate::list_output::reject_state_errors;
 use crate::load::{load_model, reject_model_errors};
 
-pub fn run_csv(
-    inputs: &[PathBuf],
-    kind: CsvKind,
-    out: PathBuf,
-    allow_tla_only: bool,
-) -> Result<()> {
+pub fn run_csv(inputs: &[PathBuf], kind: CsvKind, out: PathBuf) -> Result<()> {
     let (program, model, diags) = load_model(inputs)?;
     reject_model_errors(&program, &diags)?;
-    reject_state_errors(&model, allow_tla_only)?;
+    reject_state_errors(&model)?;
 
     let view = View::whole();
 

@@ -50,9 +50,6 @@ pub(crate) enum Commands {
     Check {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Demote TLA-only state gaps (undriven comparisons / NotEvaluated) to warnings
-        #[arg(long)]
-        allow_tla_only: bool,
         /// Treat permission / access consistency gaps as errors (exit 1)
         #[arg(long)]
         strict: bool,
@@ -94,9 +91,6 @@ pub(crate) enum Commands {
         view_preset: Option<DiagramViewPreset>,
         #[arg(short, long, default_value = "out")]
         out: PathBuf,
-        /// Demote TLA-only state gaps (undriven comparisons / NotEvaluated) so generators can emit
-        #[arg(long)]
-        allow_tla_only: bool,
     },
     /// Generate CSV
     Csv {
@@ -107,9 +101,6 @@ pub(crate) enum Commands {
         kind: CsvKind,
         #[arg(short, long, default_value = "out")]
         out: PathBuf,
-        /// Demote TLA-only state gaps (undriven comparisons / NotEvaluated) so generators can emit
-        #[arg(long)]
-        allow_tla_only: bool,
     },
     /// List elements in human-readable form
     List {
@@ -121,9 +112,6 @@ pub(crate) enum Commands {
         /// Output format: table, json, csv
         #[arg(long, default_value = "table")]
         format: ListFormat,
-        /// Demote TLA-only state gaps (undriven comparisons / NotEvaluated) so generators can emit
-        #[arg(long)]
-        allow_tla_only: bool,
     },
     /// Audit model coverage and review readiness
     Lint {
@@ -159,9 +147,6 @@ pub(crate) enum Commands {
         /// TLA+ `IntRange == 0..N` upper bound (export --kind tla / verify only)
         #[arg(long, default_value_t = 5)]
         int_range_max: u32,
-        /// Demote TLA-only state gaps for non-TLA export kinds (openapi, dbml, …)
-        #[arg(long)]
-        allow_tla_only: bool,
     },
     /// Derive reachable state patterns per entity (aggregated across BUCs)
     States {
@@ -173,15 +158,13 @@ pub(crate) enum Commands {
         /// Filter to one or more BUCs (by id); repeatable. Union of reachable nodes.
         #[arg(long)]
         buc: Vec<String>,
-        /// Cap per-entity pattern count before truncation
+        /// Cap on each entity's distinct patterns within one target cone (that cone also stops
+        /// after 16 joint states per allowed pattern)
         #[arg(long, default_value_t = 256)]
         max_patterns: usize,
         /// Restrict output to a single entity id
         #[arg(long)]
         entity: Option<String>,
-        /// Demote TLA-only state gaps (undriven comparisons / NotEvaluated) for exit code
-        #[arg(long)]
-        allow_tla_only: bool,
     },
     /// Formally verify temporal/safety properties via an external checker
     Verify {
@@ -332,7 +315,6 @@ mod tests {
                 edge_kind,
                 view_preset,
                 out,
-                allow_tla_only,
             } => {
                 assert_eq!(inputs, vec![PathBuf::from("sample.rdra")]);
                 assert!(matches!(kind, DiagramKind::BusinessArea));
@@ -345,7 +327,6 @@ mod tests {
                 assert_eq!(edge_kind, vec!["invokes"]);
                 assert!(matches!(view_preset, Some(DiagramViewPreset::Api)));
                 assert_eq!(out, PathBuf::from("out.mmd"));
-                assert!(!allow_tla_only);
             }
             _ => panic!("expected diagram command"),
         }
@@ -395,7 +376,6 @@ mod tests {
                 inputs,
                 kind,
                 format,
-                allow_tla_only: _,
             } => {
                 assert_eq!(inputs, vec![PathBuf::from("sample.rdra")]);
                 assert!(matches!(kind, ListKind::Requirement));
@@ -420,7 +400,6 @@ mod tests {
                 inputs,
                 kind,
                 format,
-                allow_tla_only: _,
             } => {
                 assert_eq!(inputs, vec![PathBuf::from("sample.rdra")]);
                 assert!(matches!(kind, ListKind::AdrImpact));
@@ -471,7 +450,6 @@ mod tests {
                 inputs,
                 kind,
                 format,
-                allow_tla_only: _,
             } => {
                 assert_eq!(inputs, vec![PathBuf::from("sample.rdra")]);
                 assert!(matches!(kind, ListKind::BusinessInputs));
@@ -492,12 +470,7 @@ mod tests {
         .unwrap();
 
         match cli.command {
-            Commands::Csv {
-                inputs,
-                kind,
-                out,
-                allow_tla_only: _,
-            } => {
+            Commands::Csv { inputs, kind, out } => {
                 assert_eq!(inputs, vec![PathBuf::from("sample.rdra")]);
                 assert!(matches!(kind, CsvKind::BusinessInputs));
                 assert_eq!(out, PathBuf::from("inputs.csv"));
@@ -567,7 +540,6 @@ mod tests {
                 out,
                 instance_count,
                 int_range_max,
-                allow_tla_only: _,
             } => {
                 assert_eq!(inputs, vec![PathBuf::from("sample.rdra")]);
                 assert!(matches!(kind, ExportKind::JsonSchema));
