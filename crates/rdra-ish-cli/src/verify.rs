@@ -6,7 +6,7 @@
 //! verdict on the whole model. Temporal properties are not restricted: `WF_vars(Next)` on a
 //! cone drops the actions outside it, which on the whole system could starve the cone's.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -15,15 +15,18 @@ use std::sync::Mutex;
 
 use anyhow::{bail, Context, Result};
 use rdra_ish_core::lifecycle::{Cone, Target, TransitionSystem, VarSet};
-use rdra_ish_core::SemanticModel;
+use rdra_ish_core::{ResolvedProgram, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
 
 use crate::cli::VerifyBackend;
 use crate::export::{checked_system, tla_bounds};
+use crate::list_output::{render_violation, TraceSource};
 use crate::tlc_env::{tlc_env, Heap};
 use crate::tlc_output::{summarize, Outcome, TlcRun};
+use crate::tlc_replay::explain_violation;
 
 pub fn run_verify(
+    program: &ResolvedProgram,
     model: &SemanticModel,
     backend: VerifyBackend,
     out: Option<PathBuf>,
@@ -31,7 +34,7 @@ pub fn run_verify(
     int_range_max: u32,
 ) -> Result<()> {
     match backend {
-        VerifyBackend::Tlc => run_tlc(model, out, instance_count, int_range_max),
+        VerifyBackend::Tlc => run_tlc(program, model, out, instance_count, int_range_max),
     }
 }
 
@@ -42,6 +45,16 @@ struct Job {
     cfg: String,
     checks: Vec<String>,
     heap: Heap,
+    /// What a cone run's counterexamples replay on; `None` for the temporal run.
+    cone: Option<ConeSystem>,
+}
+
+/// A cone as TLC checks it: the whole system's cone, its restricted system, and the names
+/// its module prints.
+struct ConeSystem {
+    cone: Cone,
+    system: TransitionSystem,
+    names: TlaNames,
 }
 
 struct Ran {
@@ -117,6 +130,11 @@ fn cone_jobs(ts: &TransitionSystem, names: &TlaNames) -> Vec<Job> {
                 cfg: bundle.cfg,
                 checks,
                 heap: Heap::Cone,
+                cone: Some(ConeSystem {
+                    cone,
+                    system: sub,
+                    names: bundle.names,
+                }),
             }
         })
         .collect()
@@ -191,7 +209,37 @@ fn write_job(dir: &Path, job: &Job) -> Result<()> {
     Ok(())
 }
 
+/// Each violated check of a cone run once, in model terms, from its first TLC trace. A trace
+/// that does not replay is a disagreement between the engines and says so.
+fn model_traces(
+    program: &ResolvedProgram,
+    model: &SemanticModel,
+    ts: &TransitionSystem,
+    cs: &ConeSystem,
+    run: &TlcRun,
+) -> Vec<String> {
+    let mut seen = BTreeSet::new();
+    run.violations
+        .iter()
+        .filter(|v| v.name.is_some() && seen.insert(&v.name))
+        .map(|v| match explain_violation(&cs.system, &cs.names, v) {
+            Ok(mut diag) => {
+                if let Some(trace) = diag.trace_mut() {
+                    trace.over_bound = ts.over_bound(&cs.cone, trace);
+                }
+                let text = render_violation(program, model, &diag, TraceSource::Tlc)
+                    .expect("explain returns a violation");
+                format!("error: {text}")
+            }
+            Err(why) => {
+                format!("error: {why}; BFS and TLC disagree (a tool bug). Raw TLC trace follows.")
+            }
+        })
+        .collect()
+}
+
 fn run_tlc(
+    program: &ResolvedProgram,
     model: &SemanticModel,
     out: Option<PathBuf>,
     instance_count: u32,
@@ -216,6 +264,7 @@ fn run_tlc(
                 .map(|i| names.property(i).to_string())
                 .collect(),
             heap: Heap::Temporal,
+            cone: None,
         })
     };
     println!(
@@ -296,12 +345,19 @@ fn run_tlc(
         .zip(&ran)
         .filter(|(_, r)| r.outcome == outcome)
         .map(|(job, r)| {
-            format!(
-                "{} ({}):\n{}",
+            let mut body = format!(
+                "{} ({}):\n",
                 job.module,
-                dir.join(format!("{}.tla", job.module)).display(),
-                summarize(&r.run, &r.log)
-            )
+                dir.join(format!("{}.tla", job.module)).display()
+            );
+            if let (Outcome::Counterexample, Some(cs)) = (r.outcome, &job.cone) {
+                for block in model_traces(program, model, &ts, cs, &r.run) {
+                    body.push_str(&block);
+                    body.push('\n');
+                }
+            }
+            body.push_str(&summarize(&r.run, &r.log));
+            body
         })
         .collect();
     let specs = if keep {

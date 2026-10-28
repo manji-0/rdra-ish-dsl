@@ -138,7 +138,7 @@ impl StateDiag {
         }
     }
 
-    pub(crate) fn trace_mut(&mut self) -> Option<&mut Trace> {
+    pub fn trace_mut(&mut self) -> Option<&mut Trace> {
         match self {
             StateDiag::ConstraintViolated { trace, .. }
             | StateDiag::AfterAssertViolated { trace, .. } => Some(trace),

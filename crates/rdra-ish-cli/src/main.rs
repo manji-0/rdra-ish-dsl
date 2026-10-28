@@ -10,6 +10,7 @@ mod load;
 mod states;
 mod tlc_env;
 mod tlc_output;
+mod tlc_replay;
 mod verify;
 use cli::{Cli, Commands, ExportKind};
 use csv_cmd::run_csv;
@@ -244,7 +245,14 @@ fn main() -> Result<()> {
         } => {
             let (program, model, diags) = load_model(&inputs)?;
             reject_model_errors(&program, &diags)?;
-            run_verify(&model, backend, out, instance_count, int_range_max)?;
+            run_verify(
+                &program,
+                &model,
+                backend,
+                out,
+                instance_count,
+                int_range_max,
+            )?;
         }
     }
 

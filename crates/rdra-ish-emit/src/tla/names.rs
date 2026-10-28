@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, HashSet};
 
-use rdra_ish_core::lifecycle::{ActId, EntId, State, TransitionSystem, VarId, VarKind};
+use rdra_ish_core::lifecycle::{ActId, EntId, State, TransitionSystem, Value, VarId, VarKind};
 
 use super::{render_value, sanitize_ident};
 
@@ -145,6 +145,12 @@ impl TlaNames {
         self.after.iter().position(|n| n == name)
     }
 
+    /// The action a TLC trace label names.
+    pub fn action_index(&self, ts: &TransitionSystem, label: &str) -> Option<ActId> {
+        let i = self.actions.iter().position(|n| n == label)?;
+        ts.action_ids().nth(i)
+    }
+
     /// The key of each slot: `name[k]` (TLA index, from 1) per instance, bare `now`.
     pub fn slot_keys(&self, ts: &TransitionSystem) -> Vec<String> {
         let mut out = Vec::new();
@@ -179,5 +185,26 @@ impl TlaNames {
             }
         }
         out
+    }
+
+    /// The inverse of `canon`: each slot's value is the one whose text `render_value` prints,
+    /// so the two cannot drift. `None` when a key is missing or extra, or a text is no value
+    /// of its var's domain.
+    pub fn decode(&self, ts: &TransitionSystem, canon: &BTreeMap<String, String>) -> Option<State> {
+        let mut used = 0;
+        let state = ts.state_from(|var, slot| {
+            let d = ts.var(var);
+            let name = &self.vars[var.index()];
+            let key = match d.kind {
+                VarKind::Now => name.clone(),
+                _ => format!("{name}[{}]", slot + 1),
+            };
+            let text = canon.get(&key)?;
+            used += 1;
+            (0..d.domain.size(ts.bounds))
+                .map(|v| Value(v as u8))
+                .find(|v| render_value(&d.domain, *v) == *text)
+        })?;
+        (used == canon.len()).then_some(state)
     }
 }

@@ -8,6 +8,9 @@
 //! comparison), and its distinct-state count must equal the dump's, so it is known to have
 //! finished.
 //!
+//! Every trace TLC prints for a violation replays through the BFS step relation, and the
+//! check `explain` builds at its end is the one TLC named.
+//!
 //! Without `tlc` on PATH the TLC test is skipped with a printed reason; `RDRA_REQUIRE_TLC=1`
 //! turns the skip into a failure.
 
@@ -17,6 +20,8 @@ mod tlc_env;
 #[path = "../src/tlc_output.rs"]
 #[allow(dead_code)]
 mod tlc_output;
+#[path = "../src/tlc_replay.rs"]
+mod tlc_replay;
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -29,6 +34,7 @@ use rdra_ish_core::{build_merged_model, resolve, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
 use tlc_env::{tlc_env, Heap};
 use tlc_output::{parse_dump, CanonState, Outcome, TlcRun};
+use tlc_replay::explain_violation;
 
 /// Far above the largest cone of any sample (clinic-ops peaks at a few hundred states).
 const STATE_CAP: usize = 200_000;
@@ -100,32 +106,65 @@ fn find_tlc() -> Option<PathBuf> {
     (out.status.success() && !path.is_empty()).then(|| PathBuf::from(path))
 }
 
+/// The TLA name of the invariant or after-assert a violation reports.
+fn verdict_name(ts: &TransitionSystem, names: &TlaNames, diag: &StateDiag) -> Option<String> {
+    match diag {
+        StateDiag::ConstraintViolated { name, .. } => {
+            let i = ts
+                .invariants()
+                .iter()
+                .position(|inv| inv.name == *name)
+                .expect("violated invariant is in the cone");
+            Some(names.invariant(i).to_string())
+        }
+        StateDiag::AfterAssertViolated { site, .. } => {
+            let i = ts
+                .after_asserts()
+                .iter()
+                .position(|a| a.site == *site)
+                .expect("violated assert is in the cone");
+            Some(names.after(i).to_string())
+        }
+        _ => None,
+    }
+}
+
 /// Invariants and after-asserts the BFS found violated, by TLA name.
 fn bfs_verdicts(run: &ComponentRun, names: &TlaNames) -> BTreeSet<String> {
-    let ts = &run.system;
-    let mut out = BTreeSet::new();
-    for d in &run.diags {
-        match &d.diag {
-            StateDiag::ConstraintViolated { name, .. } => {
-                let i = ts
-                    .invariants()
-                    .iter()
-                    .position(|inv| inv.name == *name)
-                    .expect("violated invariant is in the cone");
-                out.insert(names.invariant(i).to_string());
-            }
-            StateDiag::AfterAssertViolated { site, .. } => {
-                let i = ts
-                    .after_asserts()
-                    .iter()
-                    .position(|a| a.site == *site)
-                    .expect("violated assert is in the cone");
-                out.insert(names.after(i).to_string());
-            }
-            _ => {}
-        }
+    run.diags
+        .iter()
+        .filter_map(|d| verdict_name(&run.system, names, &d.diag))
+        .collect()
+}
+
+/// Each trace TLC printed replays step for step, with TLC's labels, and ends in the check TLC
+/// named.
+fn replay_violations(label: &str, ts: &TransitionSystem, names: &TlaNames, run: &TlcRun) {
+    for v in &run.violations {
+        let name = v.name.as_deref().expect("a safety run names its checks");
+        let diag = explain_violation(ts, names, v)
+            .unwrap_or_else(|why| panic!("{label}: TLC trace of {name} does not replay: {why}"));
+        assert_eq!(
+            verdict_name(ts, names, &diag).as_deref(),
+            Some(name),
+            "{label}: explain names another check"
+        );
+        let steps: Vec<&str> = diag
+            .trace()
+            .expect("a violation has a trace")
+            .steps
+            .iter()
+            .map(|s| s.action.as_str())
+            .collect();
+        let labels: Vec<&str> = v.trace[1..]
+            .iter()
+            .map(|s| {
+                let a = names.action_index(ts, &s.label).expect("a known label");
+                ts.actions()[a.index()].name.as_str()
+            })
+            .collect();
+        assert_eq!(steps, labels, "{label}: {name} replays another path");
     }
-    out
 }
 
 struct ConeReport {
@@ -213,6 +252,7 @@ fn check_cone(tlc: &Path, dir: &Path, label: &str, run: &ComponentRun) -> ConeRe
         "{label}: verdicts differ\n{}",
         check.tla
     );
+    replay_violations(label, ts, &check.names, &parsed);
     ConeReport {
         states: bfs.len(),
         violated,
@@ -445,4 +485,71 @@ fn tla_names_cover_every_slot() {
             );
         }
     }
+}
+
+/// A TLC trace that leaves the step relation fails closed: a state no step reaches, a label
+/// that names no use case, and a text that is no value. The untouched trace replays.
+#[test]
+fn a_corrupted_tlc_trace_does_not_replay() {
+    let Some(tlc) = find_tlc() else {
+        let reason = "tlc not on PATH (run inside `nix develop`)";
+        assert!(
+            std::env::var("RDRA_REQUIRE_TLC").as_deref() != Ok("1"),
+            "RDRA_REQUIRE_TLC=1 but {reason}"
+        );
+        println!("skipped corrupted trace: {reason}");
+        return;
+    };
+    let dir = std::env::temp_dir().join(format!("rdra-corrupted-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let model = load("samples/formal-verification/cross_order_payment_split.rdra");
+    let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::All).ts;
+    let exploration = ts.explore_targets(Caps::new(usize::MAX, STATE_CAP));
+    let cone = exploration
+        .cones
+        .iter()
+        .find(|c| !c.run.system.invariants().is_empty())
+        .expect("the forbidden's cone");
+    let sub = &cone.run.system;
+    let check = tla::print(sub, PrintMode::Safety, "Cone");
+    let (_, log) = run_tlc(&tlc, &dir, &["-continue"], &check.tla, &check.cfg);
+    let _ = std::fs::remove_dir_all(&dir);
+    let parsed = TlcRun::parse(&log);
+    let v = parsed.violations.first().expect("TLC finds the violation");
+    let labels: Vec<&str> = v.trace.iter().map(|s| s.label.as_str()).collect();
+    assert_eq!(
+        labels,
+        ["Initial predicate", "Place", "Pay_1", "Cancel"],
+        "{log}"
+    );
+    assert!(explain_violation(sub, &check.names, v).is_ok());
+
+    let mut state = v.clone();
+    state.trace[1]
+        .state
+        .insert("Order_status[1]".to_string(), "\"cancelled\"".to_string());
+    assert_eq!(
+        explain_violation(sub, &check.names, &state),
+        Err("TLC step 2 (label Place) matches no move of the cone".to_string())
+    );
+    let mut label = v.clone();
+    label.trace[2].label = "Cancel".to_string();
+    assert_eq!(
+        explain_violation(sub, &check.names, &label),
+        Err("TLC step 3 (label Cancel) matches no move of the cone".to_string())
+    );
+    let mut unknown = v.clone();
+    unknown.trace[2].label = "NoSuchAction".to_string();
+    assert_eq!(
+        explain_violation(sub, &check.names, &unknown),
+        Err("TLC step 3 (label NoSuchAction) names no use case of the cone".to_string())
+    );
+    let mut text = v.clone();
+    text.trace[3]
+        .state
+        .insert("Order_status[1]".to_string(), "\"refunded\"".to_string());
+    assert_eq!(
+        explain_violation(sub, &check.names, &text),
+        Err("TLC state 4 is no state of the cone".to_string())
+    );
 }

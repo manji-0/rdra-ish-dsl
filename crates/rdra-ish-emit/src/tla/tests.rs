@@ -264,3 +264,40 @@ forbidden(Order, Address, Order.status == shipped, Address.status == closed)
         assert!(!line.contains(&format!("Order_owner_{other}")), "{line}");
     }
 }
+
+/// `decode` inverts `canon` on every reached state, and rejects a text that is no value of
+/// its domain, a key the system does not have, and a missing key.
+#[test]
+fn decode_inverts_canon() {
+    let caps = rdra_ish_core::lifecycle::Caps::new(usize::MAX, 100_000);
+    for name in [
+        "order.rdra",
+        "cross_order_payment_split.rdra",
+        "now_coupon.rdra",
+        "int_stock.rdra",
+        "one_to_one_shared.rdra",
+    ] {
+        let run = system(&sample(name)).run(caps);
+        let ts = &run.system;
+        let names = TlaNames::new(ts);
+        for s in &run.states {
+            let canon = names.canon(ts, s);
+            assert_eq!(names.decode(ts, &canon).as_ref(), Some(s), "{name}");
+        }
+        let canon = names.canon(ts, &run.states[0]);
+        let key = canon
+            .keys()
+            .find(|k| k.contains("_exists"))
+            .unwrap()
+            .clone();
+        let mut bogus = canon.clone();
+        bogus.insert(key, "\"bogus\"".to_string());
+        assert_eq!(names.decode(ts, &bogus), None, "{name}");
+        let mut extra = canon.clone();
+        extra.insert("Ghost[1]".to_string(), "1".to_string());
+        assert_eq!(names.decode(ts, &extra), None, "{name}");
+        let mut missing = canon;
+        missing.pop_first();
+        assert_eq!(names.decode(ts, &missing), None, "{name}");
+    }
+}

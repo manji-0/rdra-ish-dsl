@@ -272,7 +272,7 @@ impl TransitionSystem {
             .collect()
     }
 
-    fn initial_states(&self) -> Vec<State> {
+    pub(crate) fn initial_states(&self) -> Vec<State> {
         let mut base = self.base_state();
         let mut free: Vec<(VarId, usize, usize)> = Vec::new();
         for decl in &self.entities {
@@ -444,6 +444,92 @@ impl TransitionSystem {
                             })
                             .collect::<Vec<_>>()
                     })
+            })
+    }
+}
+
+impl TransitionSystem {
+    /// The violation of `invariants()[i]` in `s`, with an empty trace; `None` when it holds.
+    /// BFS and the replay of a TLC trace both build the diagnostic here.
+    pub(crate) fn invariant_violation(&self, i: usize, s: &State) -> Option<Diag> {
+        let inv = &self.invariants[i];
+        let binding = self.find_violation(&inv.binders, &inv.body, s, &[])?;
+        let local = matches!(
+            inv.kind,
+            InvKind::Forbidden
+                | InvKind::Invariant
+                | InvKind::Required
+                | InvKind::Exclusive
+                | InvKind::Check
+        );
+        let pattern_desc = if local {
+            describe_slot(self, s, inv.binders[0], usize::from(binding[0]), false)
+        } else {
+            inv.binders
+                .iter()
+                .zip(&binding)
+                .map(|(e, slot)| describe_slot(self, s, *e, usize::from(*slot), true))
+                .collect::<Vec<_>>()
+                .join("; ")
+        };
+        Some(Diag {
+            entities: inv.binders.iter().map(|e| self.entity(*e).key).collect(),
+            diag: StateDiag::ConstraintViolated {
+                name: inv.name.clone(),
+                kind: inv.kind,
+                text: inv.text.clone(),
+                pattern_desc,
+                site: inv.site.clone(),
+                trace: Trace::default(),
+            },
+        })
+    }
+
+    /// The violation of `after_asserts()[i]` by the step `act` with `params` into `s2`, with
+    /// an empty trace; `None` when the step does not trigger it or it holds.
+    pub(crate) fn after_violation(
+        &self,
+        i: usize,
+        act: ActId,
+        params: &[u8],
+        s2: &State,
+    ) -> Option<Diag> {
+        let a = &self.after[i];
+        let action = &self.actions[act.index()];
+        a.steps
+            .iter()
+            .filter(|step| step.act == act)
+            .find_map(|step| {
+                let binding = self.find_violation(&step.binders, &step.post, s2, params)?;
+                let mut parts: Vec<String> = Vec::new();
+                let mut entities = Vec::new();
+                for (p, param) in action.params.iter().enumerate() {
+                    if param.role == ParamRole::Parent {
+                        continue;
+                    }
+                    parts.push(describe_slot(
+                        self,
+                        s2,
+                        param.entity,
+                        usize::from(params[p]),
+                        true,
+                    ));
+                    entities.push(self.entity(param.entity).key);
+                }
+                for (e, slot) in step.binders.iter().zip(&binding) {
+                    parts.push(describe_slot(self, s2, *e, usize::from(*slot), true));
+                    entities.push(self.entity(*e).key);
+                }
+                Some(Diag {
+                    entities,
+                    diag: StateDiag::AfterAssertViolated {
+                        anchor: a.anchor.clone(),
+                        requireds: a.requireds.clone(),
+                        actual: parts.join("; "),
+                        site: a.site.clone(),
+                        trace: Trace::default(),
+                    },
+                })
             })
     }
 }
@@ -683,107 +769,40 @@ impl<'t> Bfs<'t> {
 
     /// Reports the violation unless its rule already has one; the trace is filled in when the
     /// run ends.
-    fn violation(
-        &mut self,
-        name: &str,
-        diag: StateDiag,
-        entities: Vec<crate::model::EntityKey>,
-        reach: Reach,
-    ) {
+    fn violation(&mut self, name: &str, diag: Diag, reach: Reach) {
         if self.violated.insert(name.to_string()) {
             self.violations.push((self.diags.len(), reach));
-            self.diags.push(Diag { entities, diag });
+            self.diags.push(diag);
         }
     }
 
     fn check_invariants(&mut self, s: &State, at: u32) {
         let ts = self.ts;
-        for inv in &ts.invariants {
+        for (i, inv) in ts.invariants.iter().enumerate() {
             if self.violated.contains(&inv.name) {
                 continue;
             }
-            let Some(binding) = ts.find_violation(&inv.binders, &inv.body, s, &[]) else {
-                continue;
-            };
-            let local = matches!(
-                inv.kind,
-                InvKind::Forbidden
-                    | InvKind::Invariant
-                    | InvKind::Required
-                    | InvKind::Exclusive
-                    | InvKind::Check
-            );
-            let pattern_desc = if local {
-                describe_slot(ts, s, inv.binders[0], usize::from(binding[0]), false)
-            } else {
-                inv.binders
-                    .iter()
-                    .zip(&binding)
-                    .map(|(e, slot)| describe_slot(ts, s, *e, usize::from(*slot), true))
-                    .collect::<Vec<_>>()
-                    .join("; ")
-            };
-            let entities = inv.binders.iter().map(|e| ts.entity(*e).key).collect();
-            let diag = StateDiag::ConstraintViolated {
-                name: inv.name.clone(),
-                kind: inv.kind,
-                text: inv.text.clone(),
-                pattern_desc,
-                site: inv.site.clone(),
-                trace: Trace::default(),
-            };
-            self.violation(&inv.name, diag, entities, Reach::State(at));
+            if let Some(d) = ts.invariant_violation(i, s) {
+                self.violation(&inv.name, d, Reach::State(at));
+            }
         }
     }
 
     fn check_after(&mut self, from: u32, act: ActId, params: &[u8], s2: &State) {
         let ts = self.ts;
-        let action = &ts.actions[act.index()];
-        for (a, step) in ts
-            .after
-            .iter()
-            .flat_map(|a| a.steps.iter().map(move |step| (a, step)))
-            .filter(|(_, step)| step.act == act)
-        {
+        for (i, a) in ts.after.iter().enumerate() {
             if self.violated.contains(&a.name) {
                 continue;
             }
-            let Some(binding) = ts.find_violation(&step.binders, &step.post, s2, params) else {
-                continue;
-            };
-            let mut parts: Vec<String> = Vec::new();
-            let mut entities = Vec::new();
-            for (p, param) in action.params.iter().enumerate() {
-                if param.role == ParamRole::Parent {
-                    continue;
-                }
-                parts.push(describe_slot(
-                    ts,
-                    s2,
-                    param.entity,
-                    usize::from(params[p]),
-                    true,
-                ));
-                entities.push(ts.entity(param.entity).key);
+            if let Some(d) = ts.after_violation(i, act, params, s2) {
+                let reach = Reach::Step {
+                    from,
+                    act,
+                    params: params.into(),
+                    to: s2.clone(),
+                };
+                self.violation(&a.name, d, reach);
             }
-            for (e, slot) in step.binders.iter().zip(&binding) {
-                parts.push(describe_slot(ts, s2, *e, usize::from(*slot), true));
-                entities.push(ts.entity(*e).key);
-            }
-            let diag = StateDiag::AfterAssertViolated {
-                anchor: a.anchor.clone(),
-                requireds: a.requireds.clone(),
-                actual: parts.join("; "),
-                site: a.site.clone(),
-                trace: Trace::default(),
-            };
-            let reach = Reach::Step {
-                from,
-                act,
-                params: params.into(),
-                to: s2.clone(),
-            };
-            self.violation(&a.name, diag, entities, reach);
         }
     }
 }

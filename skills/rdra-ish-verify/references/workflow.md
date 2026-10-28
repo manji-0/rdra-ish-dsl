@@ -28,7 +28,9 @@ rdra-ish verify "$FILE" --backend tlc -o <OUT>
 - `-o` ends with `.tla` → that basename is the module; sibling `.cfg` next to it
 - `-o` is a directory or has no extension → `<dir>/RdraSpec.tla` and
   `<dir>/RdraSpec.cfg`
-- `verify` copies bare `Module.tla` / `Module.cfg` into its work dir for TLC
+- `verify` writes one `Cone_<first check>.tla` / `.cfg` pair per cone, a whole-model
+  `RdraSpec` pair when the model has temporal properties, and `cones.txt` into the `-o`
+  dir (or a temp dir), and runs TLC there
 - `verify` without `-o` uses a temp dir: deleted on success, kept on failure and named
   by the closing `specs: <dir> (kept because a check failed)` line
 - `verify` reports `tool_error` with a memory hint when TLC runs out of heap: set
@@ -41,7 +43,11 @@ rdra-ish verify "$FILE" --backend tlc -o <OUT>
 2. `states` for Enum/Bool/Nullable feedback.
 3. `export --kind tla` and skim `Init` / `Next` / `INVARIANT` / `PROPERTY` in `.cfg`.
 4. Install [TLA+ tools](https://github.com/tlaplus/tlaplus) so `tlc` is on `PATH`.
-5. `verify --backend tlc` and capture counterexamples.
+5. `verify --backend tlc` and capture counterexamples. Each violated invariant or
+   `after` assertion prints first in model terms (`counterexample (N steps, from TLC):`,
+   one use case per step with its bound instances and `path:line:col`), then TLC's raw
+   trace. An `error: TLC step <n> ... BFS and TLC disagree` line is a tool bug to report,
+   not a model defect.
 
 ## Reporting Tips
 

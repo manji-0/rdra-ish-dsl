@@ -128,9 +128,17 @@ tlc_result: ok
 TLC: OK
 ```
 
-A violation prints the name of the invariant or property and TLC's trace, with one
+A violated invariant or `after` assertion prints in model terms first, the same way
+`check` prints it: the rule's `path:line:col`, one line per step with the use case, its
+bound instances (`Place [Order#1, Payment#1]`), and its site, and under each step the
+values it changed. `verify` gets that trace by decoding TLC's states and replaying them
+through the step relation BFS uses, and builds the message with the code `check` uses.
+TLC's own `violated: Error: ... is violated.` line and its trace follow, with one
 `name[slot] = value` line per variable and slot. The name is the constraint's name, so it
-points at the rule that broke.
+points at the rule that broke. A step that no move of the cone explains is a tool bug, and
+`verify` says the engines disagree instead of printing the model-term block. The full
+output is in [cli-reference.md](./cli-reference.md#verify). A temporal property's
+counterexample prints only TLC's trace.
 
 ## Approximations and limitations
 
@@ -165,7 +173,9 @@ points at the rule that broke.
   finds the same violations as TLC in that window. The test `engine_equivalence`
   (`crates/rdra-ish-cli/tests/engine_equivalence.rs`) runs BFS and TLC on every cone of
   every sample and compares the reached states and the verdict of each invariant and
-  `after` assertion. CI sets `RDRA_REQUIRE_TLC=1`, so a missing `tlc` fails the job.
+  `after` assertion. Every trace TLC prints for a violation must replay through the BFS
+  step relation and end in the check TLC named. CI sets `RDRA_REQUIRE_TLC=1`, so a
+  missing `tlc` fails the job.
 - User-facing state diagnostics for multi-entity rules say **multi-entity**. The
   `Cross*` prefix in some constraint names is historical.
 

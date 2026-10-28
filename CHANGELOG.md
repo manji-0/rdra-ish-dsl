@@ -350,6 +350,12 @@
   When the check's cone does not count an entity's slots and the trace creates more of
   them than the instance bound, a `note:` says the whole model may not reach it. `states`
   and the generator gates report one violation per rule instead of up to 16.
+- `verify` prints each TLC counterexample of an invariant or `after` assertion in model
+  terms, through the renderer `check` uses, before TLC's `violated:` line and raw trace.
+  It decodes TLC's states and replays them through the step relation BFS uses, and the
+  violation message comes from the same code as in `check`; only the header adds
+  `from TLC`. A step that replays to no move fails closed: `verify` says BFS and TLC
+  disagree and prints the raw trace. Temporal counterexamples stay raw.
 - `verify` runs each cone's TLC with `-continue`, so every violated check of a cone prints
   its own counterexample, and the state count on a failing cone's line is the whole cone.
   Each cone JVM gets `-Xmx1g` and the temporal run `-Xmx2g`. `RDRA_TLC_HEAP` (such as

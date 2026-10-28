@@ -29,7 +29,7 @@ pub use expr::State;
 pub use restrict::Component;
 pub use states::{derive_states, StatesReport};
 pub use targets::{ConeRun, TargetExploration};
-pub use trace::{Change, Inst, Trace, TraceStep};
+pub use trace::{Change, Inst, Replay, ReplayError, Trace, TraceStep};
 pub use types::{
     ActId, Action, ActionOrigin, AfterAssert, AfterStep, At, Birth, Bounds, CmpOp, Domain, Effect,
     EntId, EntityDecl, Guard, GuardWhy, InvKind, InvText, Invariant, Ltl, ModelRef, Param,

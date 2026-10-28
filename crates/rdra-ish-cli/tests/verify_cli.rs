@@ -113,3 +113,35 @@ fn relative_out_is_relative_to_the_working_directory() {
     assert!(index.contains("Check_CartLine_qty_0"), "{index}");
     let _ = std::fs::remove_dir_all(&cwd);
 }
+
+/// TLC's counterexample prints in model terms, through the renderer `check` uses, before
+/// TLC's own error line.
+#[test]
+fn a_tlc_counterexample_prints_in_model_terms() {
+    if !have_tlc() {
+        return;
+    }
+    let tmp = scratch("verify_cli_model_terms");
+    let sample = repo().join("samples/formal-verification/cross_order_payment_split.rdra");
+    let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stderr}");
+    let mut rest: &str = &stderr;
+    for expected in [
+        "error: invariant CrossForbidden_Order_0 is violated: ",
+        "  rule: ",
+        "cross_order_payment_split.rdra:41:1",
+        "  counterexample (3 steps, from TLC):",
+        "    1. Place [Order#1, Payment#1]",
+        "    2. Pay_1, transaction 1 of Pay [Payment#1]",
+        "         Payment#1.status: pending -> captured",
+        "    3. Cancel [Order#1]",
+        "violated: Error: Invariant CrossForbidden_Order_0 is violated.",
+    ] {
+        let at = rest
+            .find(expected)
+            .unwrap_or_else(|| panic!("{expected:?} missing or out of order\n{stderr}"));
+        rest = &rest[at + expected.len()..];
+    }
+    let _ = std::fs::remove_dir_all(&tmp);
+}

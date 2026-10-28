@@ -376,6 +376,43 @@ A failed run ends with `specs: <dir>`, the directory that holds the specs. Witho
 it adds `(kept because a check failed)`. Each cone's TLC runs with `-continue`, so every
 violated check of a cone prints its own counterexample.
 
+Each violated invariant or `after` assertion of a cone prints once in model terms, through
+the renderer `check` uses, before TLC's own `violated: Error: ... is violated.` line and
+raw trace. `verify` decodes TLC's states, replays them through the step relation BFS uses
+(the lowest binding when several give the same state), and builds the violation message
+with the code `check` uses. Only the header says `from TLC`:
+
+```
+$ rdra-ish verify samples/formal-verification/cross_order_payment_split.rdra
+...
+Cone_CrossForbidden_Order_0 [CrossForbidden_Order_0]: counterexample (43 states)
+tlc_result: counterexample
+Error: TLC verification failed
+Cone_CrossForbidden_Order_0 (/tmp/rdra-ish-tlc-4242/Cone_CrossForbidden_Order_0.tla):
+error: invariant CrossForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order[1](status=cancelled); Payment[1](status=captured)
+  rule: skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:41:1
+  counterexample (3 steps, from TLC):
+    1. Place [Order#1, Payment#1]                            skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:14:1
+         + Order#1 (status=pending)
+         + Payment#1 (status=pending, owner Order=Order#1)
+    2. Pay_1, transaction 1 of Pay [Payment#1]               skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:15:1
+         Payment#1.status: pending -> captured               skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:36:1
+    3. Cancel [Order#1]                                      skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:16:1
+         Order#1.status: pending -> cancelled                skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:35:1
+violated: Error: Invariant CrossForbidden_Order_0 is violated.
+counterexample:
+  State 1: Initial predicate
+    Order_exists[1] = "absent"
+    ...
+specs: /tmp/rdra-ish-tlc-4242 (kept because a check failed)
+```
+
+If a TLC step matches no move of the cone, the engines disagree. That is a tool bug, and
+`verify` prints `error: TLC step <n> (label <action>) matches no move of the cone; BFS and
+TLC disagree (a tool bug). Raw TLC trace follows.` in place of the model-term block. The
+raw trace still follows, the result stays `counterexample`, and the exit status is 1.
+A temporal property's counterexample prints only TLC's raw trace.
+
 | Environment variable | Effect |
 |---|---|
 | `RDRA_TLC_HEAP` | Heap of every TLC JVM, such as `4g`. Without it a cone gets `1g` and the temporal run `2g`. |

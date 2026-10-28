@@ -1,7 +1,7 @@
 //! Counterexample traces: one per violated rule, a shortest one, in model terms.
 
 use super::*;
-use crate::lifecycle::{Change, Trace};
+use crate::lifecycle::{Change, ReplayError, Target, Trace};
 
 fn traces(d: &Derived) -> Vec<(&StateDiag, &Trace)> {
     d.diags
@@ -109,4 +109,68 @@ forbidden(Order, status == retried)
     let (_, trace) = found[0];
     assert_eq!(actions(trace), ["Place", "Retry"]);
     assert_eq!(trace.over_bound, ["Payment"]);
+}
+
+/// Replaying a violation's BFS path gives back the same violation, trace included; a state or
+/// an action the step relation does not take fails, naming the state.
+#[test]
+fn a_replayed_path_explains_its_violation_and_a_corrupted_one_fails() {
+    let model = model_from(&format!("{ORDER}\nforbidden(Order, status == shipped)"));
+    let ts = TransitionSystem::build(&model, Bounds::STATES, &Scope::All).ts;
+    let run = ts.run(Caps::new(usize::MAX, 100_000));
+    let ts = &run.system;
+    let bfs = run
+        .diags
+        .iter()
+        .map(|d| &d.diag)
+        .find(|d| matches!(d, StateDiag::ConstraintViolated { .. }))
+        .expect("a violation");
+    let at = (0..run.states.len() as u32)
+        .find(|&i| run.trace_to(i) == *bfs.trace().unwrap())
+        .expect("the violating state");
+    let path = run.path_to(at);
+    let states: Vec<_> = std::iter::once(path[0].from)
+        .chain(path.iter().map(|e| e.to))
+        .map(|i| run.states[i as usize].clone())
+        .collect();
+    let acts: Vec<_> = path.iter().map(|e| run.step(e).0).collect();
+    assert_eq!(acts.len(), 3, "Place, Pay, Ship");
+    let replay = ts
+        .replay(states.clone(), &acts)
+        .expect("the BFS path replays");
+    assert_eq!(
+        ts.explain(Target::Invariant(0), &replay).as_ref(),
+        Some(bfs)
+    );
+    let short = ts.replay(states[..3].to_vec(), &acts[..2]).unwrap();
+    assert_eq!(
+        ts.explain(Target::Invariant(0), &short),
+        None,
+        "paid is allowed"
+    );
+
+    // Ship's successor replaced by Pay's: no Ship move reaches it.
+    let mut corrupted = states.clone();
+    corrupted[3] = states[2].clone();
+    assert_eq!(
+        ts.replay(corrupted, &acts),
+        Err(ReplayError::NoMove {
+            state: 4,
+            action: acts[2]
+        })
+    );
+    let mut relabelled = acts.clone();
+    relabelled[1] = acts[2];
+    assert_eq!(
+        ts.replay(states.clone(), &relabelled),
+        Err(ReplayError::NoMove {
+            state: 3,
+            action: acts[2]
+        })
+    );
+    assert_eq!(
+        ts.replay(states[1..].to_vec(), &acts[1..]),
+        Err(ReplayError::NotInitial)
+    );
+    assert_eq!(ts.replay(states, &acts[1..]), Err(ReplayError::Length));
 }

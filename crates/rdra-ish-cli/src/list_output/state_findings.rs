@@ -38,7 +38,7 @@ pub(crate) fn state_consistency_findings(
         })
     });
     let violations = report.diags.iter().filter_map(|d| {
-        let text = render_violation(program, model, &d.diag)?;
+        let text = render_violation(program, model, &d.diag, TraceSource::Bfs)?;
         Some((d.diag.severity(), text))
     });
     let unattributed = report
@@ -52,13 +52,21 @@ fn location(program: &ResolvedProgram, site: &Site) -> Option<String> {
     format_location(program, site.span.as_ref()?)
 }
 
+/// The engine that found a counterexample; only the trace header names it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TraceSource {
+    Bfs,
+    Tlc,
+}
+
 /// A violation, the rule's site, and its counterexample: one step per line with its use case
 /// site, and under it each changed value with the site of the effect that wrote it. `None`
 /// for a diagnostic that is not a violation.
-fn render_violation(
+pub(crate) fn render_violation(
     program: &ResolvedProgram,
     model: &SemanticModel,
     diag: &StateDiag,
+    source: TraceSource,
 ) -> Option<String> {
     let (head, site, trace) = match diag {
         StateDiag::ConstraintViolated {
@@ -79,7 +87,11 @@ fn render_violation(
     }
     let steps = trace.steps.len();
     let plural = if steps == 1 { "" } else { "s" };
-    out.push_str(&format!("\n  counterexample ({steps} step{plural}):"));
+    let from = match source {
+        TraceSource::Bfs => "",
+        TraceSource::Tlc => ", from TLC",
+    };
+    out.push_str(&format!("\n  counterexample ({steps} step{plural}{from}):"));
     let mut rows: Vec<(String, Option<String>)> = Vec::new();
     if !trace.start.is_empty() {
         rows.push(("    start".to_string(), None));

@@ -256,6 +256,17 @@ fn every_state_replays_from_its_parent_path_through_moves() {
                         cur, run.states[at as usize],
                         "{sample}: replay ends at {at}"
                     );
+                    let states = std::iter::once(start)
+                        .chain(path.iter().map(|e| e.to))
+                        .map(|i| run.states[i as usize].clone())
+                        .collect();
+                    let acts: Vec<_> = path.iter().map(|e| run.step(e).0).collect();
+                    let replay = ts.replay(states, &acts).expect("a BFS path replays");
+                    assert_eq!(
+                        ts.replay_trace(&replay),
+                        run.trace_to(at),
+                        "{sample}: the replay of the path to {at} is its BFS trace"
+                    );
                     replayed += 1;
                 }
             }

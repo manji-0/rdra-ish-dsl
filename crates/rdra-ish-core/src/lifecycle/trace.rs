@@ -4,13 +4,37 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use super::cone::Cone;
+use super::cone::{Cone, Target};
+use super::diag::StateDiag;
 use super::expr::State;
 use super::types::{
     ActId, ActionOrigin, Domain, Effect, EntId, ParamRole, Site, Value, VarId, VarKind,
 };
 use super::view::AbstractValue;
 use super::TransitionSystem;
+
+/// A trace from another engine matched step by step against `moves`, the step relation BFS
+/// uses: its states and the move each step took.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Replay {
+    states: Vec<State>,
+    moves: Vec<(ActId, Box<[u8]>)>,
+}
+
+/// Where a trace leaves the step relation. `state` counts from 1, as TLC numbers its states.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ReplayError {
+    Empty,
+    /// Not one action per step.
+    Length,
+    /// The first state is not an initial state.
+    NotInitial,
+    /// No move of `action` reaches `states[state - 1]` from the state before it.
+    NoMove {
+        state: usize,
+        action: ActId,
+    },
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Trace {
@@ -76,18 +100,28 @@ pub enum Change {
 impl TransitionSystem {
     /// Every var at its base value: no instance present, the clock at 0.
     pub(crate) fn base_state(&self) -> State {
-        let mut base = State(vec![0u8; self.width].into_boxed_slice());
-        for (i, decl) in self.vars.iter().enumerate() {
-            let slots = if decl.kind == VarKind::Now {
+        self.state_from(|var, _| Some(self.var(var).base))
+            .expect("every var has a base")
+    }
+
+    /// The state holding `value(var, slot)` in each slot (`now` has slot 0 only); `None` when
+    /// some slot has no value. The caller keeps each value inside its var's domain.
+    pub fn state_from(
+        &self,
+        mut value: impl FnMut(VarId, usize) -> Option<Value>,
+    ) -> Option<State> {
+        let mut state = State(vec![0u8; self.width].into_boxed_slice());
+        for var in self.var_ids() {
+            let slots = if self.var(var).kind == VarKind::Now {
                 1
             } else {
                 self.bounds.slots()
             };
             for slot in 0..slots {
-                base.set(self, VarId::at(i), slot, decl.base);
+                state.set(self, var, slot, value(var, slot)?);
             }
         }
-        base
+        Some(state)
     }
 
     fn inst(&self, e: EntId, slot: usize) -> Inst {
@@ -234,7 +268,7 @@ impl TransitionSystem {
 
     /// Entities whose slots the cone does not count and that the trace creates more often than
     /// the bound allows, in id order.
-    pub(crate) fn over_bound(&self, cone: &Cone, trace: &Trace) -> Vec<String> {
+    pub fn over_bound(&self, cone: &Cone, trace: &Trace) -> Vec<String> {
         if !self.cone_frees_slots(cone) {
             return Vec::new();
         }
@@ -255,5 +289,63 @@ impl TransitionSystem {
             .filter(|(_, n)| *n > self.bounds.slots())
             .map(|(id, _)| id)
             .collect()
+    }
+}
+
+impl TransitionSystem {
+    /// Matches each step `states[k] -> states[k + 1]` with a move of `actions[k]`. When several
+    /// bindings of that action reach the same successor they are symmetric, and the replay
+    /// takes the first in `moves` order, the lowest one, as BFS does.
+    pub fn replay(&self, states: Vec<State>, actions: &[ActId]) -> Result<Replay, ReplayError> {
+        let first = states.first().ok_or(ReplayError::Empty)?;
+        if !self.initial_states().contains(first) {
+            return Err(ReplayError::NotInitial);
+        }
+        if actions.len() + 1 != states.len() {
+            return Err(ReplayError::Length);
+        }
+        let mut moves = Vec::with_capacity(actions.len());
+        for (k, (pair, &action)) in states.windows(2).zip(actions).enumerate() {
+            let m = self
+                .moves(&pair[0])
+                .find(|m| m.act == action && m.next == pair[1])
+                .ok_or(ReplayError::NoMove {
+                    state: k + 2,
+                    action,
+                })?;
+            moves.push((m.act, m.params));
+        }
+        Ok(Replay { states, moves })
+    }
+
+    /// The replayed path in model terms.
+    pub(crate) fn replay_trace(&self, replay: &Replay) -> Trace {
+        let pairs = replay.states.windows(2).zip(&replay.moves);
+        Trace {
+            start: self.trace_start(&replay.states[0]),
+            steps: pairs
+                .map(|(s, (act, params))| self.trace_step(*act, params, &s[0], &s[1]))
+                .collect(),
+            over_bound: Vec::new(),
+        }
+    }
+
+    /// The violation of `target` the replayed trace ends in, built by the code BFS reports
+    /// with, so its text does not depend on the engine that found the trace. `None` when the
+    /// last state (for an after-assert, the last step) does not violate it.
+    pub fn explain(&self, target: Target, replay: &Replay) -> Option<StateDiag> {
+        let last = replay.states.last()?;
+        let mut d = match target {
+            Target::Entity(_) => return None,
+            Target::Invariant(i) => self.invariant_violation(i, last)?,
+            Target::AfterAssert(i) => {
+                let (act, params) = replay.moves.last()?;
+                self.after_violation(i, *act, params, last)?
+            }
+        };
+        if let Some(t) = d.diag.trace_mut() {
+            *t = self.replay_trace(replay);
+        }
+        Some(d.diag)
     }
 }
