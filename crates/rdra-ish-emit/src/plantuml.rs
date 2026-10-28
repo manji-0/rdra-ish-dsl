@@ -876,17 +876,11 @@ impl Emitter for ErPlantUmlEmitter {
         out.push('\n');
 
         // ER relations (relate only)
-        // Collect entity id → key mapping
-        let entity_key_map: std::collections::HashMap<&str, EntityKey> = model
-            .entities
-            .iter()
-            .map(|(k, e)| (e.id.as_str(), k))
-            .collect();
-
         let mut er_rels: Vec<_> = model
             .relations
             .iter()
-            .filter(|r| {
+            .enumerate()
+            .filter(|(_, r)| {
                 matches!(
                     r.kind,
                     RelKind::RelateOneToOne
@@ -896,32 +890,19 @@ impl Emitter for ErPlantUmlEmitter {
                 )
             })
             .collect();
-        er_rels.sort_by_key(|r| format!("{:?}{:?}", r.from, r.to));
+        er_rels.sort_by_key(|(_, r)| format!("{:?}{:?}", r.from, r.to));
 
-        for rel in &er_rels {
+        for &(index, rel) in &er_rels {
             if !is_visible(&rel.from) || !is_visible(&rel.to) {
                 continue;
             }
             if let (Some(from_id), Some(to_id)) =
                 (node_id(model, &rel.from), node_id(model, &rel.to))
             {
-                let _ = entity_key_map; // suppress unused warning
-                let line = match &rel.kind {
-                    RelKind::RelateManyToOne => {
-                        format!("{} }}o--|| {} : \"\"\n", from_id, to_id)
-                    }
-                    RelKind::RelateOneToMany => {
-                        format!("{} ||--o{{ {} : \"\"\n", from_id, to_id)
-                    }
-                    RelKind::RelateOneToOne => {
-                        format!("{} ||--|| {} : \"\"\n", from_id, to_id)
-                    }
-                    RelKind::RelateManyToMany => {
-                        format!("{} }}o--o{{ {} : \"\"\n", from_id, to_id)
-                    }
-                    _ => continue,
+                let Some(glyph) = crate::er_glyph(model, index) else {
+                    continue;
                 };
-                out.push_str(&line);
+                out.push_str(&format!("{from_id} {glyph} {to_id} : \"\"\n"));
             }
         }
 

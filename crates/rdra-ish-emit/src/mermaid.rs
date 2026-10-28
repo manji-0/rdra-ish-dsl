@@ -826,7 +826,8 @@ impl Emitter for ErMermaidEmitter {
         let mut er_rels: Vec<_> = model
             .relations
             .iter()
-            .filter(|r| {
+            .enumerate()
+            .filter(|(_, r)| {
                 matches!(
                     r.kind,
                     RelKind::RelateOneToOne
@@ -836,36 +837,19 @@ impl Emitter for ErMermaidEmitter {
                 )
             })
             .collect();
-        er_rels.sort_by_key(|r| format!("{:?}{:?}", r.from, r.to));
+        er_rels.sort_by_key(|(_, r)| format!("{:?}{:?}", r.from, r.to));
 
-        for rel in &er_rels {
+        for &(index, rel) in &er_rels {
             if !is_visible(&rel.from) || !is_visible(&rel.to) {
                 continue;
             }
             if let (Some(from_id), Some(to_id)) =
                 (node_id(model, &rel.from), node_id(model, &rel.to))
             {
-                // Mermaid erDiagram の基数記法:
-                //   ||--||  1対1
-                //   ||--o{  1対多
-                //   }o--||  多対1
-                //   }o--o{  多対多
-                let line = match &rel.kind {
-                    RelKind::RelateOneToOne => {
-                        format!("  {} ||--|| {} : \"\"\n", from_id, to_id)
-                    }
-                    RelKind::RelateOneToMany => {
-                        format!("  {} ||--o{{ {} : \"\"\n", from_id, to_id)
-                    }
-                    RelKind::RelateManyToOne => {
-                        format!("  {} }}o--|| {} : \"\"\n", from_id, to_id)
-                    }
-                    RelKind::RelateManyToMany => {
-                        format!("  {} }}o--o{{ {} : \"\"\n", from_id, to_id)
-                    }
-                    _ => continue,
+                let Some(glyph) = crate::er_glyph(model, index) else {
+                    continue;
                 };
-                out.push_str(&line);
+                out.push_str(&format!("  {from_id} {glyph} {to_id} : \"\"\n"));
             }
         }
 
@@ -2015,6 +1999,23 @@ relate(Order, Customer, N:1)
         let (model, _) = build_model(&ast);
         let result = ErMermaidEmitter.emit(&model, &View::er()).unwrap();
         insta::assert_snapshot!(result);
+    }
+
+    #[test]
+    fn a_child_side_minimum_draws_one_or_more_at_the_child_end() {
+        let src = "entity Order \"O\" { id: Int @pk }\nentity Line \"L\" { id: Int @pk }\nentity Tag \"T\" { id: Int @pk }\nrelate(Line, Order, 1..*:1)\nrelate(Order, Tag, 1:1..*)\n";
+        let (ast, _) = parse(src);
+        let (model, _) = build_model(&ast);
+        let mermaid = ErMermaidEmitter.emit(&model, &View::er()).unwrap();
+        assert!(
+            mermaid.contains("  Line }|--|| Order : \"\"\n"),
+            "{mermaid}"
+        );
+        assert!(mermaid.contains("  Order ||--|{ Tag : \"\"\n"), "{mermaid}");
+        let puml = crate::plantuml::ErPlantUmlEmitter
+            .emit(&model, &View::er())
+            .unwrap();
+        assert!(puml.contains("Line }|--|| Order : \"\"\n"), "{puml}");
     }
 
     #[test]

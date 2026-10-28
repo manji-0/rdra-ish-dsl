@@ -234,6 +234,24 @@ pub(crate) fn object_graph_rel_label(kind: &RelKind) -> &'static str {
     }
 }
 
+/// The crow's-foot edge Mermaid and PlantUML ER diagrams draw for a relate, `from` on the
+/// left. The child end is `o{` / `}o` (zero or more), or `|{` / `}|` under a child-side
+/// minimum (`1..*`); a 1:1 draws `||` on both ends either way.
+pub(crate) fn er_glyph(model: &SemanticModel, relation: usize) -> Option<&'static str> {
+    let at_least_one = model.foreign_keys().any(|(_, fk)| {
+        fk.relation == relation && fk.children.min == rdra_ish_core::model::Min::One
+    });
+    Some(match (&model.relations[relation].kind, at_least_one) {
+        (RelKind::RelateOneToOne, _) => "||--||",
+        (RelKind::RelateOneToMany, false) => "||--o{",
+        (RelKind::RelateOneToMany, true) => "||--|{",
+        (RelKind::RelateManyToOne, false) => "}o--||",
+        (RelKind::RelateManyToOne, true) => "}|--||",
+        (RelKind::RelateManyToMany, _) => "}o--o{",
+        _ => return None,
+    })
+}
+
 pub(crate) fn normalize_filter_token(value: &str) -> String {
     value.trim().to_ascii_lowercase().replace('_', "-")
 }

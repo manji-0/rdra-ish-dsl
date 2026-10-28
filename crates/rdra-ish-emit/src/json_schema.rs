@@ -1,5 +1,5 @@
 use crate::{EmitError, Emitter, View};
-use rdra_ish_core::model::{ColumnType, EntityKey, ForeignKey, ModelColumn, SemanticModel};
+use rdra_ish_core::model::{ColumnType, EntityKey, ForeignKey, Min, ModelColumn, SemanticModel};
 use serde_json::{json, Map, Number, Value};
 
 pub struct JsonSchemaEmitter;
@@ -201,6 +201,10 @@ fn insert_column_extensions(
         if fk.optional() {
             obj.insert("x-rdra-ish-fk-optional".to_string(), json!(true));
         }
+        // A child-side `1..*` / `1..1`: each parent has at least one child row.
+        if fk.children.min == Min::One {
+            obj.insert("x-rdra-ish-fk-min-children".to_string(), json!(1));
+        }
         if let Some(action) = fk.on_delete {
             obj.insert(
                 "x-rdra-ish-fk-on-delete".to_string(),
@@ -356,6 +360,19 @@ entity Order "Order" {
             props["backup_channel"]["enum"],
             json!(["web", "phone", null])
         );
+    }
+
+    #[test]
+    fn a_child_side_minimum_marks_the_key_column_and_only_then() {
+        let model = model_from(
+            "entity Order \"O\" { id: Int @pk }\nentity Line \"L\" { id: Int @pk }\nentity Note \"N\" { id: Int @pk }\nrelate(Line, Order, 1..*:1)\nrelate(Note, Order, N:1)\n",
+        );
+        let json = JsonSchemaEmitter.emit(&model, &View::whole()).unwrap();
+        let doc: Value = serde_json::from_str(&json).unwrap();
+        let line = &doc["$defs"]["Entity.Line"]["properties"]["order_id"];
+        assert_eq!(line["x-rdra-ish-fk-min-children"], 1);
+        let note = &doc["$defs"]["Entity.Note"]["properties"]["order_id"];
+        assert!(note.get("x-rdra-ish-fk-min-children").is_none(), "{note}");
     }
 
     #[test]
