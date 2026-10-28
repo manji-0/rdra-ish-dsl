@@ -447,6 +447,15 @@ syntax.
 `states`, `check`, `export --kind tla`, and `verify` share the severities. An error
 makes the command exit non-zero in every format, and the generators refuse to emit.
 
+Four diagnostics have a stable name (`StateDiag::name()`): `ConstraintViolated` is the
+invariant's name, `NoWitness` is `Witness_<entity>_<column>_<value>`, `NeverRuns` is
+`Runs_<action>`, and `Deadlock` is `Deadlock_<entity>_<column>_<value>`. The test
+`engine_equivalence` compares the BFS and TLC findings by these names, and the `// expect`
+headers of the samples list the names of the errors
+(see [Sample expectations](./formal-verification.md#sample-expectations)). The output prints
+the invariant's name. For the other three it prints the entity, column, value, or action
+that the name is built from.
+
 | Diagnostic | Severity | When |
 |---|---|---|
 | `UnreachableEnumVariant { column, variant }` | warning | No reachable pattern holds a declared Enum variant that is not a state of a state model. |

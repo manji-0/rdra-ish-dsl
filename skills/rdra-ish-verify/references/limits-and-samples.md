@@ -50,6 +50,11 @@
   `--buc B` drops the use cases outside `B`, so witnesses, deadlocks, and use cases that
   never run are not decided. Both print a `not checked:` block, skip temporal properties
   in `verify`, and end with `OK: no errors in the selected scope, within ...`.
+- **BFS and TLC agree**: the repository test `engine_equivalence` runs both engines on every
+  cone of every sample at 1 and 2 instances and compares the reached and initial states, the
+  edge sets `(from, to, use case)`, the witness, never-runs, and deadlock findings by name,
+  and each check's verdict. A cone over 200,000 BFS states at 2 instances is compared at 1
+  instance only; the test pins those cones in `VERIFY_FALLBACK` (today 8 clinic-ops cones).
 
 ## Bundled Samples
 
@@ -59,6 +64,12 @@ Canonical files live next to this skill under `samples/` (shipped with
 
 In the `rdra-ish-dsl` repository, `samples/formal-verification/` and
 `samples/formal-verification-fail/` are symlinks to these same files.
+
+A sample that does not pass both commands states its result in `// expect` lines at the
+top, for example `// expect verify: tlc=counterexample fail Forbidden_Order_0`. The
+repository's `scripts/verify-samples.sh` runs `check` and `verify` on every sample and
+fails when a result differs. The grammar is in `docs/formal-verification.md`
+("Sample expectations").
 
 | Skill path | TLC intent | Focus |
 |---|---|---|

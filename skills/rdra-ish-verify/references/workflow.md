@@ -52,6 +52,13 @@ rdra-ish verify "$FILE" --backend tlc -o <OUT>
    one use case per step with its bound instances and `path:line:col`), then TLC's raw
    trace. An `error: TLC step <n> ... BFS and TLC disagree` line is a tool bug to report,
    not a model defect.
+6. Read the result against the `bounds:` line, the first line of `check`, `states`, and
+   `verify`: an `OK: no errors within ...` holds only inside those bounds. Before TLC,
+   `verify` runs BFS on each entity's cone. A state with no witness
+   (`Witness_<E>_<col>_<value>`) or a deadlock (`Deadlock_<E>_<col>_<value>`) fails the run
+   with `tlc_result: ok` and exit 1. A use case that never runs (`Runs_<action>`) and a
+   deadlock at the bound are warnings. Whatever a cap or a scope left undecided is under
+   `not checked:`, never silently passed.
 
 ## Reporting Tips
 
