@@ -206,10 +206,15 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `sets` | `(UseCase, Entity, col == val)` | An explicit column effect, read by state derivation. Use `present` (not PostgreSQL type names) for nullable non-null. |
 | `sets` | `(UseCase, Entity, col op rhs, true \| false)` | Drives the truth value of a comparison proposition (a derived Bool axis) in state derivation. |
 
-`relate(A, B, N:1)` generates a `b_id` FK on `A`. With
-`.optional().on_delete(set_null).on_update(cascade)`, the generated FK column is
+`relate(A, B, N:1)` generates a key column on `A` named `{role}_{parent key column}`.
+With the default role (the parent id in lowercase) and a parent key `id`, that is `b_id`.
+`relate(A, B, 1:1)` generates the same column on `A`, marked unique, and
+`relate(A, B, 1:N)` generates it on `B`. The column is nullable only under `.optional()`.
+With `.optional().on_delete(set_null).on_update(cascade)`, the generated column is
 nullable, marked `fk_optional`, and carries the delete/update actions for CSV/list
-review. `relate(A, B, 1:N)` applies the same options to the FK generated on `B`.
+review. An action other than `cascade`, `restrict`, `set_null`, `set_default`, or
+`no_action` is `UnknownRefAction`. [Keys and roles](#relate-and-fk-generation) covers
+`.role`, `.key`, and composite parent keys.
 
 ### Chain methods
 
@@ -220,9 +225,9 @@ only the methods below, and any other name is an `unknown chain method` error
 | Predicate | Chain methods |
 |---|---|
 | `belongs` | `.by(...)` |
-| `relate` | `.via(...)`, `.optional()`, `.on_delete(...)`, `.on_update(...)` |
-| `forbidden` | `.along(...)` |
-| `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)` |
+| `relate` | `.via(...)`, `.optional()`, `.on_delete(...)`, `.on_update(...)`, `.role(...)`, `.key(...)` |
+| `forbidden` | `.along(...)`, `.by(...)` |
+| `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)`, `.by(...)` |
 | `when` | `.has(...)`, `.none(...)` |
 | `after` | `.assert(...)` |
 | every other predicate (including `combines` and `holds`) | none |
@@ -606,6 +611,10 @@ updates(PlaceOrder, Cart)   // direct write still allowed (mixed form)
 - FK-grouped direct writes use the full `relate` graph for connectivity. Two written
   sibling entities that share an unwritten parent entity are still grouped as one
   inferred transaction.
+- The diagram draws the transactions that `states` and `verify` run
+  (`UsecaseTx::groups()`). A `writes(..)` edge, and an entity a use case only `sets` or
+  transitions, both draw as an update. An entity written in its own transaction after
+  an FK group draws a note and raises `SeparateTxInferred`.
 
 **System boundary behaviour**:
 - `contains(System, Api)` assigns an API to an internal system boundary.
@@ -805,8 +814,11 @@ Composite `@pk(...)`, `@unique(...)`, and `@index(...)` annotations are written 
 one column line for locality, but semantically they belong to the entity as a whole.
 `@check(...)` and `@derived(...)` take an unquoted expression. The quoted form of earlier
 versions (`@check("qty >= 1")`) is a parse error whose message is the unquoted rewrite.
-DBML notes, JSON Schema `x-rdra-ish-check-constraints` / `x-rdra-ish-derived`, and the
-entity CSVs print the expression as `rdra-ish fmt` writes it.
+A comparison in `@check` has a column, an integer, or `now` on each side. An Enum value
+such as `status == open` reads `open` as a column name and fails with `right-hand side
+column 'open' not found`. DBML notes, JSON Schema `x-rdra-ish-check-constraints` /
+`x-rdra-ish-derived`, and the entity CSVs print the expression with bare column names:
+`rdra-ish fmt` keeps a written `Order.qty` qualifier, and the emitters print `qty`.
 `rdra-ish export --kind dbml` projects logical `entity` declarations to DBML tables,
 including indexes, composite unique constraints, generated FK columns, and `relate`
 delete/update options. Metadata without a native DBML equivalent is preserved as
@@ -814,6 +826,15 @@ notes so the review signal is not lost.
 `rdra-ish export --kind json-schema` also emits Entity schemas under `$defs` using
 `Entity.<id>` names, with RDRA-specific data-modeling metadata preserved as
 `x-rdra-ish-*` extensions.
+
+Both exports print every key from the same fact, so they agree on it. DBML prints one
+`Ref` per key at its first column, with the composite form `Ref: Stock.(bin_site,
+bin_shelf) > Bin.(site, shelf)`. JSON Schema marks each key column with
+`x-rdra-ish-foreign-key` and `x-rdra-ish-fk-target`, adds `x-rdra-ish-fk-target-column`
+to the columns of a composite key, `x-rdra-ish-fk-role` to a key with an explicit
+`.role`, and `x-rdra-ish-fk-min-children: 1` to the child column of a key whose card has
+a minimum of 1. The Mermaid and PlantUML ER diagrams draw that child end as one-or-more.
+DBML and the entity CSVs have no notation for a minimum.
 
 ### Variations
 
@@ -980,24 +1001,60 @@ either endpoint are errors.
 The generated column is `{role}_{key column}` for each parent key column, where the
 role defaults to the parent id in lowercase (`customeraccount_id`). A composite parent
 `@pk(site, shelf)` yields `bin_site` and `bin_shelf`, printed in DBML as
-`Ref: Stock.(bin_site, bin_shelf) > Bin.(site, shelf)`. Two chain methods shape the key:
+`Ref: Stock.(bin_site, bin_shelf) > Bin.(site, shelf)`. The left end of a `1:1` holds the
+key, marked `[unique]`, and DBML prints its ref as `Ref: Shipment.order_id - Order.id`.
+Two chain methods shape the key:
 
 - `.role(ship_to)` names the key: columns `ship_to_id`, owner `Order._owner_ship_to`.
   Two relates from one child to one parent need distinct roles, or the second is
-  `DuplicateRelateRole`.
+  `DuplicateRelateRole`. A column the entity already declares under a generated name is
+  `FkConflict`; name the key with `.role` or adopt the column with `.key`.
 - `.key(order_ref)` adopts columns the child already declares instead of generating
-  them, one per parent key column in key order and of the same type (`KeyArity`,
-  `KeyColumnUndefined`, `KeyTypeMismatch`). The adopted columns are the key in every
-  output, and in the lifecycle they are the owner, not a state column.
+  them, one per parent key column in key order and of the same type. The adopted
+  columns keep their names, take the key's nullability and, for a single-column `1:1`,
+  its uniqueness. They are the key in every output, and in the lifecycle they are the
+  owner, not a state column.
 
-An N:M holds no key of its own, so `.role` or `.key` on `relate(A, B, N:M)` is
-`KeyOptionOnManyToMany`. Write the junction's keys as two `N:1` relates instead.
+| Diagnostic | When |
+|---|---|
+| `DuplicateRelateRole` | Two keys of one child have the same role. |
+| `KeyArity` | `.key(...)` names a different number of columns than the parent key has. |
+| `KeyColumnUndefined` | `.key(...)` names a column the child does not declare. |
+| `KeyTypeMismatch` | An adopted column has a different type than the parent key column. |
+| `KeyColumnShared` | An adopted column already holds another relate's key. |
+| `KeyOptionOnManyToMany` | `.role` or `.key` on `relate(A, B, N:M)`. An N:M holds no key of its own, so write the junction's keys as two `N:1` relates instead. |
+| `UnknownRefAction` | `.on_delete(...)` or `.on_update(...)` names an unknown action. |
 
 A constraint's `.along(A, B)` follows the key between `A` and `B`. When two keys join
 them, `.along(A, B).by(ship_to)` names the one to follow (the role, or the parent id for
 a key without `.role`); without `.by` the constraint is `AmbiguousOwnerLink`. `.by` that
 names no key on the path is `UnknownOwnerRole`, and `.by` without `.along` is
-`ByWithoutAlong`.
+`ByWithoutAlong`. A quantifier (`when(...).has/none(...)`) and a condition take no `.by`
+and follow the first key between the pair.
+
+### Cardinality ranges
+
+The child side of a card, the `N` of `N:1` and `1:N` or the left of `1:1`, accepts a
+range `lo..hi` where `lo` is `0` or `1` and `hi` is `1` or `*`. A range stands for the
+side it ends in: `hi` of `1` for `1`, `*` for `N`. Every card without a range keeps its
+kind. A minimum of 1 means every parent has at least one child:
+
+```rdra
+relate(OrderLine, Order, 1..*:1)   // every Order has an OrderLine
+relate(Shipment, Order, 1..1:1)    // every Order has exactly one Shipment
+```
+
+The lifecycle checks that minimum as the invariant `MinCard_<Child>_<role>` (see
+[state-derivation.md](./state-derivation.md#checks)). A minimum of 0 is the default and
+adds no check. `rdra-ish fmt` prints the card as written. One spelling serves each
+side, so a parent that may have no child needs no range, and a child that may have no
+parent is `.optional()`.
+
+| Diagnostic | When |
+|---|---|
+| `MinCardOutOfRange` | The low end is not 0 or 1, or the high end is not 1 or `*` (`2..*:1`). |
+| `MinCardOnParentSide` | A range sits on the parent side (`N:0..1`). Write that side as `1` and add `.optional()` when a child may have no parent. |
+| `MinCardOnManyToMany` | A range makes the card an N:M, which holds no key of its own (`N:1..*`, `1..*:M`). Give the junction's keys the range instead. |
 
 ---
 

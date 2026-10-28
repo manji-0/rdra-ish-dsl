@@ -54,12 +54,18 @@ A new slot starts as follows:
   every column at its base value, and `NoCreationPath` (info) says so. A variation column
   of a pre-existing entity starts at any value. [vision.md](./vision.md#decisions)
   records why.
-- The owner of a pre-existing child starts linked. An N:1 child starts under any parent
-  slot, or unlinked when the `relate` is `.optional()`. A 1:1 child starts under the
-  parent slot with its own index, so no two children share a parent at the start. When
-  some use case creates the parent, every parent slot starts `absent`: an optional owner
-  then starts unlinked, and a mandatory one starts as above and draws
-  `PreExistingChildOfCreatedParent`.
+- The owner of a pre-existing child starts linked. The code names the three start rules
+  `Base`, `Any`, and `Identity`:
+  - `Any`: an N:1 child starts under any parent slot, or unlinked when the `relate` is
+    `.optional()`.
+  - `Identity`: a 1:1 child, and the child of a key whose card has a minimum of 1
+    (`1..*:1`), starts under the parent slot with its own index. No two children share a
+    parent at the start, and every parent has a child.
+  - `Base`: the owner of a created entity, and an optional owner whose parent some use
+    case creates, starts unlinked.
+
+  When some use case creates the parent, every parent slot starts `absent`. A mandatory
+  owner then starts as `Any` or `Identity` says and draws `PreExistingChildOfCreatedParent`.
 
 The base value of a column is its `@default`. Without one it is the first Enum variant,
 `false`, `null`, or `0`.
@@ -74,8 +80,11 @@ actions interleave: in each step the tool picks any enabled action and applies i
   writes.
 - **k actions when the writes form k groups.** The groups that `tx.rs` infers bound
   atomicity: FK-connected or API-bounded groups, then each isolated write.
-  The use case becomes `<UC>_1` to `<UC>_k` in transaction order, and the actions
-  interleave freely with every other action.
+  `UsecaseTx::groups()` yields them in that order, each as a `TxGroup` of kind `Fk`,
+  `Api`, or `Isolated`. The lifecycle and the sequence diagrams read this one list, so a
+  diagram draws the transactions that `states` and `verify` run. The use case becomes
+  `<UC>_1` to `<UC>_k` in transaction order, and the actions interleave freely with
+  every other action.
   [`cross_order_payment_split`](../samples/formal-verification/cross_order_payment_split.rdra)
   routes `Pay` through two APIs, so `Cancel` runs between `Pay_1` and `Pay_2`.
 - **A use case with no write has no action.**
@@ -103,6 +112,20 @@ requires that the child belongs to the parent the action also writes. A mandator
 `.optional()` `relate` does not: the child is created unlinked, and a parent
 that the action writes links it. An unlinked owner is not linked for `.along`,
 quantifiers, or owner guards.
+
+**Relinking.** An action that creates the parent and updates an existing child links the
+child to the new parent. The rule depends on the key:
+
+- An `.optional()` key links the child only while it is unlinked. The action adds the
+  guard `owner == null` before it assigns the owner, so a child that already has a
+  parent stays with its first parent.
+- A mandatory key always has a parent, so the same action moves the child to the new
+  parent.
+
+A `.along(A, B)` hop reads the owner of the key that joins `A` and `B`. With two keys
+between them, `.by(role)` picks one (see
+[language-reference.md](./language-reference.md#relate-and-fk-generation)). A
+quantifier or condition body takes the first owner between the pair.
 
 **Conditions as guards.** `applies_to(Condition, UseCase)` with a `holds` body, or
 `applies_to(Condition, Api)` for each use case that invokes the API, guards the use
@@ -298,6 +321,8 @@ makes the command exit non-zero in every format, and the generators refuse to em
 | `UnreachableEnumVariant { column, variant }` | warning | No reachable pattern holds a declared Enum variant. |
 | `UnwrittenConstrainedVar { column }` | warning | A constraint or a condition guard reads a column that no use case writes, so it checks only the start value. |
 | `NoCreationPath` | info | No use case creates the entity. It starts present. |
+| `MinCardNeedsCreate { usecase, child }` | info | A use case creates the parent of a `1..*` key and no child in the same transaction group, so `MinCard_*` fails after it unless the use case also creates a child. A child that the action links by update counts. |
+| `MinCardOfPreExistingParent { child }` | warning | The parent of a `1..*` key starts present but every child starts absent, so `MinCard_*` fails at the start. |
 | `PreExistingChildOfCreatedParent { parent }` | warning | No use case creates the entity, but some use case creates the parent of its mandatory `relate`. Each slot starts owned by a parent slot that is still `absent`. |
 | `ConflictingEffects { usecase, column }` | error | One use case assigns two values to one column. |
 | `DoubleModeledEnum { column, usecase }` | error | A use case that does not create the entity `sets` a lifecycle column that `transitions` drive. The creating use case's `sets` of the status is the start state and is not an error. |
