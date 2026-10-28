@@ -14,6 +14,9 @@ mod restrict;
 mod types;
 mod view;
 
+#[cfg(test)]
+mod tests;
+
 pub use diag::{has_errors, Diag, Severity, StateDiag};
 pub use explore::{Caps, ComponentRun, Exploration};
 pub use expr::State;
