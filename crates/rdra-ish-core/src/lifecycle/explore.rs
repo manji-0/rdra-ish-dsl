@@ -171,9 +171,14 @@ impl TransitionSystem {
             if decl.birth == super::types::Birth::PreExisting {
                 for slot in 0..self.bounds.slots() {
                     base.set(self, decl.exists, slot, Value::PRESENT);
-                    for &var in &decl.columns {
-                        if self.var(var).start == Start::Any {
-                            free.push((var, slot, self.var(var).domain.size(self.bounds)));
+                    for &var in decl.columns.iter().chain(&decl.owners) {
+                        let d = self.var(var);
+                        match d.start {
+                            Start::Base => {}
+                            Start::Any => free.push((var, slot, d.domain.size(self.bounds))),
+                            Start::Identity => {
+                                base.set(self, var, slot, d.domain.of_slot(slot as u8));
+                            }
                         }
                     }
                 }

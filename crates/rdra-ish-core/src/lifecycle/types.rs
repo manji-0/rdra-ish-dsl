@@ -92,8 +92,12 @@ pub struct VarDecl {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Start {
     Base,
-    /// Any domain value: a variation column of a pre-existing entity (vision rule 5).
+    /// Any domain value: a variation column of a pre-existing entity (vision rule 5), or the
+    /// owner of a pre-existing N:1 child.
     Any,
+    /// The slot's own index: the owner of a pre-existing 1:1 child, so no two children share
+    /// a parent at the start.
+    Identity,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

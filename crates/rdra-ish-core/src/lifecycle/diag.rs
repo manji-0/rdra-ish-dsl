@@ -49,6 +49,9 @@ pub enum StateDiag {
     },
     /// No use case creates the entity: its slots start present at base.
     NoCreationPath,
+    /// A pre-existing child's mandatory key names a parent that some use case creates, so at
+    /// the start every child slot belongs to a parent slot that is still absent.
+    PreExistingChildOfCreatedParent { parent: String, site: Site },
     /// The entity's view exceeded the pattern cap; the component's exploration stopped.
     PatternCapReached { cap: usize, bound: usize },
     /// The component's joint state count exceeded the cap; exploration stopped.
@@ -113,7 +116,8 @@ impl StateDiag {
         match self {
             StateDiag::NoCreationPath => Severity::Info,
             StateDiag::UnreachableEnumVariant { .. }
-            | StateDiag::UnwrittenConstrainedVar { .. } => Severity::Warning,
+            | StateDiag::UnwrittenConstrainedVar { .. }
+            | StateDiag::PreExistingChildOfCreatedParent { .. } => Severity::Warning,
             StateDiag::ConflictingEffects { .. }
             | StateDiag::DoubleModeledEnum { .. }
             | StateDiag::PatternCapReached { .. }
@@ -155,6 +159,10 @@ impl fmt::Display for StateDiag {
             StateDiag::NoCreationPath => {
                 write!(f, "no use case creates this entity; it starts present")
             }
+            StateDiag::PreExistingChildOfCreatedParent { parent, .. } => write!(
+                f,
+                "this entity starts present, but its parent {parent} starts absent; it starts owned by a {parent} that does not exist yet"
+            ),
             StateDiag::PatternCapReached { cap, bound } => {
                 write!(
                     f,

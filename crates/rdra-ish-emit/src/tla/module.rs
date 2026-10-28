@@ -109,14 +109,18 @@ fn init(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
         } else {
             d.base
         };
-        if pre && d.start == Start::Any && ts.entity(e).columns.contains(&v) {
-            let set = domain_set(ts, names, &d.domain);
-            out.push_str(&format!("  /\\ {name} \\in [{ids} -> {set}]\n"));
-        } else {
-            out.push_str(&format!(
+        // Only a pre-existing entity's vars start anywhere but at base.
+        match d.start {
+            Start::Base => out.push_str(&format!(
                 "  /\\ {name} = [i \\in {ids} |-> {}]\n",
                 render_value(&d.domain, value)
-            ));
+            )),
+            Start::Any => {
+                let set = domain_set(ts, names, &d.domain);
+                out.push_str(&format!("  /\\ {name} \\in [{ids} -> {set}]\n"));
+            }
+            // Child slot i owns parent slot i, which is TLA index i in both owner domains.
+            Start::Identity => out.push_str(&format!("  /\\ {name} = [i \\in {ids} |-> i]\n")),
         }
     }
     out.push('\n');

@@ -172,6 +172,7 @@ fn diag_message(d: &StateDiag) -> String {
         | StateDiag::UnbindableScope { .. }
         | StateDiag::UnbindableCondition { .. }
         | StateDiag::UnwrittenConstrainedVar { .. }
+        | StateDiag::PreExistingChildOfCreatedParent { .. }
         | StateDiag::UnsupportedComparison { .. }
         | StateDiag::UnresolvedPropertyAtom { .. } => d.to_string(),
     };

@@ -74,6 +74,7 @@ Entity: Order (注文)
 | `ContradictoryDrivenComparison` | A use case drives a comparison one way while its own Int `sets` make it the other | `[error]`. Fix the `sets` or drop the driving `sets` |
 | `UnwrittenConstrainedVar` | A rule reads a column that no use case writes | Warning. The rule checks only the start value; add the `sets` or drop the rule |
 | `NoCreationPath` | No use case creates the entity | Info. It starts present; add `creates` if that is wrong |
+| `PreExistingChildOfCreatedParent` | No use case creates the entity, but some use case creates the parent of its mandatory `relate` | Warning. It starts owned by a parent that does not exist yet; add a `creates` for the child, or make the `relate` `.optional()` |
 | `present` lacks type suffix where type matters | Nullable effect is vague | Prefer `present` (PG type names in `sets` are rejected) |
 
 ## Formal verification (TLA+)

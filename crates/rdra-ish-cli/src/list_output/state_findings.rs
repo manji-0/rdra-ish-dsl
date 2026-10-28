@@ -152,6 +152,7 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
         | StateDiag::UnbindableScope { .. }
         | StateDiag::UnbindableCondition { .. }
         | StateDiag::UnwrittenConstrainedVar { .. }
+        | StateDiag::PreExistingChildOfCreatedParent { .. }
         | StateDiag::UnsupportedComparison { .. }
         | StateDiag::UnresolvedPropertyAtom { .. } => diag.to_string(),
     }

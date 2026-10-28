@@ -30,7 +30,7 @@ impl TransitionSystem {
         let mut starts: Vec<Value> = Vec::new();
         if ent.birth == Birth::PreExisting {
             match decl.start {
-                Start::Base => starts.push(decl.base),
+                Start::Base | Start::Identity => starts.push(decl.base),
                 Start::Any => starts.extend((0..names.len()).map(|i| Value(i as u8))),
             }
         } else {

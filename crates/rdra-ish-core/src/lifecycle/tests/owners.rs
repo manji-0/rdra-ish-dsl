@@ -169,3 +169,92 @@ creates(Ship, Shipment)
     assert!(!adopted.iter().any(|n| n == "order_ref"), "{adopted:?}");
     assert!(adopted.iter().any(|n| n == "Shipment._owner_Order"));
 }
+
+/// Profile is master data; Account is too unless `parent_birth` creates it.
+fn master(relate: &str, parent_birth: &str) -> String {
+    format!(
+        r#"
+entity Account "Account" {{ id: Int @pk }}
+entity Profile "Profile" {{ id: Int @pk }}
+usecase Open "Open"
+{parent_birth}
+{relate}
+"#
+    )
+}
+
+/// Profile's owner in each initial state at two slots, as parent slots (`None`: unlinked).
+fn initial_owners(src: &str) -> (Vec<Vec<Option<u8>>>, Vec<Diag>) {
+    let built = TransitionSystem::build(&model_from(src), Bounds::VERIFY, &Scope::All);
+    let mut idle = built.ts;
+    // Without actions the reachable states are the initial states.
+    idle.actions.clear();
+    let profile = idle
+        .entity_ids()
+        .find(|e| idle.entity(*e).id == "Profile")
+        .unwrap();
+    let owner = idle.entity(profile).owners[0];
+    let domain = idle.var(owner).domain.clone();
+    let run = idle.run(Caps::new(Caps::DEFAULT_PATTERNS, 100));
+    let mut out: Vec<Vec<Option<u8>>> = run
+        .states
+        .iter()
+        .map(|s| {
+            (0..2)
+                .map(|slot| domain.slot(s.get(&run.system, owner, slot)))
+                .collect()
+        })
+        .collect();
+    out.sort();
+    (out, built.diags)
+}
+
+#[test]
+fn a_pre_existing_n_to_one_child_starts_under_any_parent() {
+    let (starts, _) = initial_owners(&master("relate(Profile, Account, N:1)", ""));
+    let s = |a, b| vec![Some(a), Some(b)];
+    assert_eq!(starts, [s(0, 0), s(0, 1), s(1, 0), s(1, 1)]);
+    let (starts, _) = initial_owners(&master("relate(Profile, Account, N:1).optional()", ""));
+    assert_eq!(
+        starts.len(),
+        9,
+        "unlinked or either slot, per child: {starts:?}"
+    );
+}
+
+#[test]
+fn a_pre_existing_one_to_one_child_starts_under_its_own_slot() {
+    for relate in [
+        "relate(Profile, Account, 1:1)",
+        "relate(Profile, Account, 1:1).optional()",
+    ] {
+        let (starts, diags) = initial_owners(&master(relate, ""));
+        assert_eq!(starts, [vec![Some(0), Some(1)]], "{relate}");
+        assert!(
+            !diags
+                .iter()
+                .any(|d| matches!(d.diag, StateDiag::PreExistingChildOfCreatedParent { .. })),
+            "{relate}: {diags:?}"
+        );
+    }
+}
+
+#[test]
+fn a_pre_existing_child_of_a_created_parent_is_warned() {
+    let created = "creates(Open, Account)";
+    let (_, diags) = initial_owners(&master("relate(Profile, Account, 1:1)", created));
+    assert!(
+        diags.iter().any(|d| matches!(
+            &d.diag,
+            StateDiag::PreExistingChildOfCreatedParent { parent, .. } if parent == "Account"
+        )),
+        "{diags:?}"
+    );
+    // An optional key has a legitimate start: unlinked until the parent exists.
+    let (starts, diags) =
+        initial_owners(&master("relate(Profile, Account, N:1).optional()", created));
+    assert_eq!(starts, [vec![None, None]]);
+    assert!(!diags
+        .iter()
+        .any(|d| matches!(d.diag, StateDiag::PreExistingChildOfCreatedParent { .. })));
+}

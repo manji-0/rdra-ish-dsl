@@ -50,6 +50,12 @@ A new slot starts as follows:
   every column at its base value, and `NoCreationPath` (info) says so. A variation column
   of a pre-existing entity starts at any value. [vision.md](./vision.md#decisions)
   records why.
+- The owner of a pre-existing child starts linked. An N:1 child starts under any parent
+  slot, or unlinked when the `relate` is `.optional()`. A 1:1 child starts under the
+  parent slot with its own index, so no two children share a parent at the start. When
+  some use case creates the parent, every parent slot starts `absent`: an optional owner
+  then starts unlinked, and a mandatory one starts as above and draws
+  `PreExistingChildOfCreatedParent`.
 
 The base value of a column is its `@default`. Without one it is the first Enum variant,
 `false`, `null`, or `0`.
@@ -170,7 +176,7 @@ cone of influence:
   `personal-info`, and the formal-verification samples.
 - **Shared.** Targets with the same cone are explored once.
 
-BFS starts from the single initial state, applies every enabled action, and stops when
+BFS starts from every initial state, applies every enabled action, and stops when
 no new state appears or a cap is hit.
 
 `--max-patterns` (default 256) caps the distinct patterns of one entity view within a
@@ -285,6 +291,7 @@ makes the command exit non-zero in every format, and the generators refuse to em
 | `UnreachableEnumVariant { column, variant }` | warning | No reachable pattern holds a declared Enum variant. |
 | `UnwrittenConstrainedVar { column }` | warning | A constraint or a condition guard reads a column that no use case writes, so it checks only the start value. |
 | `NoCreationPath` | info | No use case creates the entity. It starts present. |
+| `PreExistingChildOfCreatedParent { parent }` | warning | No use case creates the entity, but some use case creates the parent of its mandatory `relate`. Each slot starts owned by a parent slot that is still `absent`. |
 | `ConflictingEffects { usecase, column }` | error | One use case assigns two values to one column. |
 | `DoubleModeledEnum { column, usecase }` | error | A use case that does not create the entity `sets` a lifecycle column that `transitions` drive. The creating use case's `sets` of the status is the start state and is not an error. |
 | `ContradictoryDrivenComparison { usecase, proposition, driven }` | error | A use case drives a comparison to one truth while its own Int `sets` make it the other. |

@@ -272,13 +272,33 @@ impl<'m> Builder<'m> {
     }
 
     /// One owner var per foreign key. An `.optional()` key's owner starts and may stay
-    /// unlinked (`null`).
+    /// unlinked (`null`). A pre-existing child starts linked: an N:1 child to any parent slot
+    /// (or unlinked, when optional), a 1:1 child to the parent slot of its own index. Under a
+    /// created parent that slot is absent at the start, so an optional child starts unlinked
+    /// and a mandatory one draws `PreExistingChildOfCreatedParent`.
     fn owner_vars(&mut self) {
         for (id, fk) in self.model.foreign_keys() {
             let (Some(&c), Some(&p)) = (self.ent_of.get(&fk.child), self.ent_of.get(&fk.parent))
             else {
                 continue;
             };
+            let child_pre = self.ts.entities[c.index()].birth == Birth::PreExisting;
+            let parent_created = self.ts.entities[p.index()].birth == Birth::Created;
+            let start = match (child_pre, parent_created && fk.optional()) {
+                (false, _) | (true, true) => Start::Base,
+                (true, false) if fk.unique() => Start::Identity,
+                (true, false) => Start::Any,
+            };
+            if child_pre && parent_created && !fk.optional() {
+                let model = self.model;
+                self.diag(
+                    vec![fk.child],
+                    StateDiag::PreExistingChildOfCreatedParent {
+                        parent: model.entities[fk.parent].id.clone(),
+                        site: Site::new(ModelRef::Relation(fk.relation), &fk.site),
+                    },
+                );
+            }
             let var = self.push_var(
                 VarKind::Owner {
                     child: c,
@@ -293,6 +313,7 @@ impl<'m> Builder<'m> {
                 Value(0),
                 Site::new(ModelRef::Relation(fk.relation), &fk.site),
             );
+            self.ts.vars[var.index()].start = start;
             self.ts.entities[c.index()].owners.push(var);
             self.owners.push((var, c, p));
         }
