@@ -6,8 +6,9 @@ use super::naming::{applied_bodies, is_driven, property_entity};
 use super::Builder;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{
-    AfterAssert, At, CmpOp, Domain, Effect, Guard, GuardWhy, InvKind, InvText, Invariant, Ltl,
-    ModelRef, Param, ParamRole, Pred, Property, Site, Start, Term, Value, VarId, VarKind,
+    AfterAssert, AfterStep, At, CmpOp, Domain, Effect, Guard, GuardWhy, InvKind, InvText,
+    Invariant, Ltl, ModelRef, Param, ParamRole, Pred, Property, Site, Start, Term, Value, VarId,
+    VarKind,
 };
 use crate::model::{
     CmpOpModel, CmpRhs, ComparisonProp, CrossCmpRhs, CrossConstraintScope, CrossEntityCondition,
@@ -592,12 +593,14 @@ impl Builder<'_> {
 
     // ── R-after ──────────────────────────────────────────────────────────────
 
+    /// One step per action of the anchor use case. A scope entity the step does not bind is
+    /// universally bound.
     pub(super) fn after_asserts(&mut self) {
         let model = self.model;
         for (i, ta) in model.temporal_assertions.iter().enumerate() {
             let site = Site::new(ModelRef::TemporalAssertion(i), &ta.site);
             let anchor = model.use_cases[ta.anchor].id.clone();
-            let Some(&act) = self.uc_action.get(&ta.anchor) else {
+            let Some(acts) = self.uc_action.get(&ta.anchor).map(|a| vec![*a]) else {
                 if !self.active_ucs.contains(&ta.anchor) {
                     self.diag(
                         ta.scope.clone(),
@@ -606,7 +609,6 @@ impl Builder<'_> {
                 }
                 continue;
             };
-            let params = self.ts.actions[act.index()].params.clone();
             let mut entities: Vec<EntityKey> = ta.scope.clone();
             for cond in &ta.requireds {
                 let ek = match cond {
@@ -617,25 +619,28 @@ impl Builder<'_> {
                     entities.push(ek);
                 }
             }
-            let mut binding: Binding = Vec::new();
-            let mut binders = Vec::new();
-            for &ek in &entities {
-                let e = self.ent_of[&ek];
-                match params.iter().position(|p| p.entity == e) {
-                    Some(p) => binding.push((ek, At::Param(p as u8))),
-                    None => {
-                        binding.push((ek, At::Bound(binders.len() as u8)));
-                        binders.push(e);
+            let mut steps = Vec::new();
+            for act in acts {
+                let params = self.ts.actions[act.index()].params.clone();
+                let mut binding: Binding = Vec::new();
+                let mut binders = Vec::new();
+                for &ek in &entities {
+                    let e = self.ent_of[&ek];
+                    match params.iter().position(|p| p.entity == e) {
+                        Some(p) => binding.push((ek, At::Param(p as u8))),
+                        None => {
+                            binding.push((ek, At::Bound(binders.len() as u8)));
+                            binders.push(e);
+                        }
                     }
                 }
+                let post = self.cross_all(&ta.requireds, &binding, &site);
+                steps.push(AfterStep { act, binders, post });
             }
-            let post = self.cross_all(&ta.requireds, &binding, &site);
             self.ts.after.push(AfterAssert {
                 name: format!("AfterAssert_{anchor}_{i}"),
-                anchor: ta.anchor,
-                on: vec![act],
-                binders,
-                post,
+                anchor,
+                steps,
                 requireds: cross_display(model, &ta.requireds),
                 site,
             });
@@ -761,8 +766,8 @@ impl Builder<'_> {
         for inv in &self.ts.invariants {
             collect_vars(&inv.body, &mut read);
         }
-        for a in &self.ts.after {
-            collect_vars(&a.post, &mut read);
+        for step in self.ts.after.iter().flat_map(|a| a.steps.iter()) {
+            collect_vars(&step.post, &mut read);
         }
         let condition_guards = self.ts.actions.iter().flat_map(|a| a.guards.iter());
         for g in condition_guards.filter(|g| matches!(g.why, GuardWhy::Condition { .. })) {

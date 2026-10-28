@@ -169,12 +169,13 @@ impl TransitionSystem {
                 self.pred_reads(&inv.body, &mut seed);
             }
             Target::AfterAssert(i) => {
-                let a = &self.after[i];
-                for e in &a.binders {
-                    seed.insert(self.entity(*e).exists);
+                for step in &self.after[i].steps {
+                    for e in &step.binders {
+                        seed.insert(self.entity(*e).exists);
+                    }
+                    self.pred_reads(&step.post, &mut seed);
+                    keep.insert(step.act);
                 }
-                self.pred_reads(&a.post, &mut seed);
-                keep.extend(a.on.iter().copied());
             }
         }
         Cone {

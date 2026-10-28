@@ -7,8 +7,8 @@ use std::collections::BTreeSet;
 
 use super::cone::VarSet;
 use super::types::{
-    ActId, Action, AfterAssert, At, Domain, Effect, EntId, Guard, Invariant, Ltl, ParamRole, Pred,
-    Property, Rhs, Term, VarId, VarKind,
+    ActId, Action, AfterAssert, AfterStep, At, Domain, Effect, EntId, Guard, Invariant, Ltl,
+    ParamRole, Pred, Property, Rhs, Term, VarId, VarKind,
 };
 use super::TransitionSystem;
 
@@ -90,13 +90,13 @@ impl TransitionSystem {
 
     fn after_footprint(&self, a: &AfterAssert) -> Footprint {
         let mut fp = Footprint::default();
-        for act in &a.on {
-            let afp = self.action_footprint(&self.actions[act.index()]);
+        for step in &a.steps {
+            let afp = self.action_footprint(&self.actions[step.act.index()]);
             afp.entities.into_iter().for_each(|e| fp.add(e));
             fp.now |= afp.now;
+            step.binders.iter().for_each(|e| fp.add(*e));
+            self.pred_footprint(&step.post, &mut fp);
         }
-        a.binders.iter().for_each(|e| fp.add(*e));
-        self.pred_footprint(&a.post, &mut fp);
         fp
     }
 
@@ -281,14 +281,20 @@ impl TransitionSystem {
             }
         }
         for a in &self.after {
-            let on: Vec<ActId> = a.on.iter().filter_map(|x| map.act[x.index()]).collect();
-            if on.len() == a.on.len() && reads_inside(&[&a.post], &a.binders) {
-                out.after.push(AfterAssert {
-                    on,
-                    binders: a.binders.iter().map(|e| map.e(*e)).collect(),
-                    post: map.pred(&a.post),
-                    ..a.clone()
-                });
+            let steps: Vec<AfterStep> = a
+                .steps
+                .iter()
+                .filter(|step| reads_inside(&[&step.post], &step.binders))
+                .filter_map(|step| {
+                    Some(AfterStep {
+                        act: map.act[step.act.index()]?,
+                        binders: step.binders.iter().map(|e| map.e(*e)).collect(),
+                        post: map.pred(&step.post),
+                    })
+                })
+                .collect();
+            if steps.len() == a.steps.len() {
+                out.after.push(AfterAssert { steps, ..a.clone() });
             }
         }
         for p in &self.properties {

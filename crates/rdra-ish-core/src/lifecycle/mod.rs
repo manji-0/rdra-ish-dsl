@@ -29,9 +29,9 @@ pub use restrict::Component;
 pub use states::{derive_states, StatesReport};
 pub use targets::{ConeRun, TargetExploration};
 pub use types::{
-    ActId, Action, ActionOrigin, AfterAssert, At, Birth, Bounds, CmpOp, Domain, Effect, EntId,
-    EntityDecl, Guard, GuardWhy, InvKind, InvText, Invariant, Ltl, ModelRef, Param, ParamRole,
-    Pred, Property, Rhs, Site, Start, Term, Value, VarDecl, VarId, VarKind,
+    ActId, Action, ActionOrigin, AfterAssert, AfterStep, At, Birth, Bounds, CmpOp, Domain, Effect,
+    EntId, EntityDecl, Guard, GuardWhy, InvKind, InvText, Invariant, Ltl, ModelRef, Param,
+    ParamRole, Pred, Property, Rhs, Site, Start, Term, Value, VarDecl, VarId, VarKind,
 };
 pub use view::{
     AbstractValue, AxisKind, EntityStateResult, Provenance, ReachablePattern, StateAxis,

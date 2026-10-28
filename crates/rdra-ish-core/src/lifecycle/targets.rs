@@ -76,16 +76,17 @@ impl TransitionSystem {
                 .map(|e| self.entity(*e).key)
                 .collect(),
             Target::AfterAssert(i) => {
-                let a = &self.after[i];
-                let params =
-                    a.on.iter()
-                        .flat_map(|act| self.actions[act.index()].params.iter().map(|p| p.entity));
-                a.binders
-                    .iter()
-                    .copied()
-                    .chain(params)
-                    .map(|e| self.entity(e).key)
-                    .collect()
+                let mut entities = Vec::new();
+                for step in &self.after[i].steps {
+                    let params = self.actions[step.act.index()].params.iter();
+                    for e in step.binders.iter().copied().chain(params.map(|p| p.entity)) {
+                        let key = self.entity(e).key;
+                        if !entities.contains(&key) {
+                            entities.push(key);
+                        }
+                    }
+                }
+                entities
             }
         };
         let mut out: Vec<Diag> = run

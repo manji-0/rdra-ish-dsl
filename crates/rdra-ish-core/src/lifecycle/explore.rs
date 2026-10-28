@@ -534,8 +534,13 @@ impl<'t> Bfs<'t> {
     fn check_after(&mut self, act: ActId, params: &[u8], s2: &State) {
         let ts = self.ts;
         let action = &ts.actions[act.index()];
-        for a in ts.after.iter().filter(|a| a.on.contains(&act)) {
-            let Some(binding) = ts.find_violation(&a.binders, &a.post, s2, params) else {
+        for (a, step) in ts
+            .after
+            .iter()
+            .flat_map(|a| a.steps.iter().map(move |step| (a, step)))
+            .filter(|(_, step)| step.act == act)
+        {
+            let Some(binding) = ts.find_violation(&step.binders, &step.post, s2, params) else {
                 continue;
             };
             let mut parts: Vec<String> = Vec::new();
@@ -553,12 +558,12 @@ impl<'t> Bfs<'t> {
                 ));
                 entities.push(ts.entity(param.entity).key);
             }
-            for (e, slot) in a.binders.iter().zip(&binding) {
+            for (e, slot) in step.binders.iter().zip(&binding) {
                 parts.push(describe_slot(ts, s2, *e, usize::from(*slot), true));
                 entities.push(ts.entity(*e).key);
             }
             let diag = StateDiag::AfterAssertViolated {
-                anchor: action.name.clone(),
+                anchor: a.anchor.clone(),
                 requireds: a.requireds.clone(),
                 actual: parts.join("; "),
                 site: a.site.clone(),

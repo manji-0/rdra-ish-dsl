@@ -380,18 +380,19 @@ fn checks(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
         ));
     }
     for (i, a) in ts.after_asserts().iter().enumerate() {
-        let post = closed(ts, names, &a.binders, true, &a.post);
-        let steps: Vec<String> =
-            a.on.iter()
-                .map(|id| {
-                    let act = &ts.actions()[id.index()];
-                    format!(
-                        "({}{} => ({post}))",
-                        binder(names, act, "\\A"),
-                        signature(names, *id, act)
-                    )
-                })
-                .collect();
+        let steps: Vec<String> = a
+            .steps
+            .iter()
+            .map(|step| {
+                let act = &ts.actions()[step.act.index()];
+                let post = closed(ts, names, &step.binders, true, &step.post);
+                format!(
+                    "({}{} => ({post}))",
+                    binder(names, act, "\\A"),
+                    signature(names, step.act, act)
+                )
+            })
+            .collect();
         out.push_str(&format!(
             "{} == [][{}]_vars\n",
             names.after(i),

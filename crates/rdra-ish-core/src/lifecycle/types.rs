@@ -493,18 +493,25 @@ pub enum InvText {
     },
 }
 
-/// `after(UC).assert(..)`: a post-state predicate on every action of the use case.
+/// `after(UC).assert(..)`: a post-state predicate checked after every action of the use case.
 #[derive(Clone, Debug)]
 pub struct AfterAssert {
     pub name: String,
-    pub anchor: UseCaseKey,
-    pub on: Vec<ActId>,
+    /// The use case id.
+    pub anchor: String,
+    pub steps: Vec<AfterStep>,
+    pub requireds: String,
+    pub site: Site,
+}
+
+/// The assert as one action's post-state reads it.
+#[derive(Clone, Debug)]
+pub struct AfterStep {
+    pub act: ActId,
     /// Scope entities the action does not bind, universally bound in the post-state.
     pub binders: Vec<EntId>,
     /// `At::Param` reads the action's params in the post-state.
     pub post: Pred,
-    pub requireds: String,
-    pub site: Site,
 }
 
 /// A temporal property. Data only: the explorer does not evaluate it.
