@@ -39,8 +39,8 @@
   case that keeps running elsewhere does not hide a stuck instance. When a way out lacks
   only a free slot of an entity it creates, it is a `deadlock at the bound` warning. Each
   state is reported once, with each way out and what blocks it, and a shortest path into
-  the first stuck state. A capped cone or a `--buc` run leaves it undecided with a
-  `note:`. `verify`'s summary line gains `D deadlocks` before the use cases that never
+  the first stuck state. A capped cone or a `--buc` run leaves it undecided under
+  `not checked:`. `verify`'s summary line gains `D deadlocks` before the use cases that never
   run. TLC's `CHECK_DEADLOCK` stays `FALSE`. On the samples: `cross_order_payment` left
   a cancelled Order's Payment pending forever, so its Cancel now deletes the Payment (the
   split variant keeps it, so its counterexample stays); `unwitnessed_state` also fails on
@@ -226,6 +226,22 @@
 
 ### Added
 
+- Traceable verification (phase 6). Every constraint is its own named invariant, a state
+  of a state model with no reachability witness and an instance that can never leave its
+  state are errors, a use case that never runs is a warning, and a counterexample prints as
+  use cases with their bound instances and source locations, from BFS and from TLC alike.
+  `--buc` and `--entity` check part of a model, every result opens with its `bounds:` line,
+  and CI checks and verifies every sample against the `// expect` header it carries.
+- `rdra-ish files <INPUTS...>` prints the `.rdra` files the inputs load, one per line, in
+  load order (each directory's entries sorted by file name).
+- `scripts/verify-samples.sh <binary>` runs `check` and `verify` on every `samples.txt`
+  root and compares each run with the `// expect` header of the root's first file: the
+  exit status, the `tlc_result:` line, and the exact set of error names
+  (`CrossForbidden_Order_0`, `AfterAssert_DeliverOrder_0`, `Witness_*`, `Deadlock_*`).
+  `// expect verify --entity Order: tlc=ok` adds a run with flags. It prints the wall time
+  and maximum RSS of each run. The nine counterexample samples now carry headers, which
+  moves their source lines down by two (`cross_order_payment_split.rdra:41:1` is now
+  `:43:1`). The grammar is in `docs/formal-verification.md` ("Sample expectations").
 - `check`, `states`, and `verify` take `--buc <id>` and `--entity <id>`, both repeatable,
   to check part of a model. `--buc` keeps only the use cases reachable from the BUCs, so
   witnesses, deadlocks, and use cases that never run are not decided. `--entity` selects
@@ -238,7 +254,7 @@
   `scope:` line after `bounds:`, skips temporal properties in `verify`, and ends with `OK:
   no errors in the selected scope, within ...`. New sample `partial_scope.rdra`: its whole
   run fails on a `DerivedColumnRead` on Audit, and `verify --entity Order` passes with
-  the error deferred (own CI step).
+  the error deferred.
 - New sample `deadlock.rdra`: an Order stays `paid` forever because Ship's packing
   condition holds only while `pending`. `check` and `verify` fail on
   `Deadlock_Order_status_paid`, and TLC passes.
@@ -249,7 +265,7 @@
   no reachable state has (`needs:`), the instances never present at once, each guard that
   holds in no reachable state (`guard:` with its site), or a first line saying the guards
   each hold somewhere but never together. A capped cone or a `--buc` run leaves it
-  undecided with a `note:`. `verify` adds `state models (BFS on N entity cones): M state
+  undecided under `not checked:`. `verify` adds `state models (BFS on N entity cones): M state
   models, K states witnessed, J use cases that never run` to stdout. On the samples, Refund
   in `unwitnessed_state` warns (its guards never hold together), and AddLine in
   `min_card_met` warns in `check` only: at one instance an Order exists only with its one
@@ -259,7 +275,7 @@
   step's use case, bound instances, changes, and sites. `check` prints a `NoWitness` once,
   with each `transitions` arm or creation that would enter the state and its site. A cone
   that stops at a cap, or a `--buc` run, leaves its unwitnessed states undecided and
-  prints a `note:` that names the cap or the scope. The witness logic is
+  lists them under `not checked:` with the cap or the scope. The witness logic is
   `state_model_findings`, a pure function of the system and a cone's `Graph`. New sample
   `unwitnessed_state.rdra`: `check` and `verify` fail on `Order.status = refunded`, and
   TLC passes.
@@ -376,9 +392,13 @@
   whole system's projected onto it, which a test checks on `ec-site`, `personal-info`, and
   the formal-verification samples. `verify` runs TLC per cone in parallel, so clinic-ops
   finishes where a whole-model run did not.
-- The test `engine_equivalence` compares BFS and TLC on every cone of every sample: the
-  reached states, and the verdict of each invariant and `after` assertion. The CI
-  `formal-verify` job runs it with `RDRA_REQUIRE_TLC=1`. `scripts/engine-diff.sh` snapshots
+- The test `engine_equivalence` compares BFS and TLC on every cone of every sample, at 1
+  and 2 instances: the reached and initial states, the edge sets `(from, to, use case)`
+  from TLC's `-dump dot,actionlabels`, the witness, never-runs, and deadlock findings by
+  name, and the verdict of each invariant and `after` assertion; every TLC violation trace
+  must replay through the BFS step relation. A cone over 200,000 BFS states at 2 instances
+  is compared at 1 instance only and must be listed in `VERIFY_FALLBACK` (8 clinic-ops
+  cones). The CI `formal-verify` job runs it in release with `RDRA_REQUIRE_TLC=1`. `scripts/engine-diff.sh` snapshots
   `states`, the TLA text, and `verify` per sample.
 - `.optional()` on a `relate` is honoured: the owner may stay `null`, and creating the
   child leaves it unlinked.
@@ -425,6 +445,13 @@
 
 ### Changed
 
+- CI checks and verifies every `samples.txt` root, clinic-ops included, in one
+  `formal-verify` step that runs `scripts/verify-samples.sh` on the release binary
+  (`timeout-minutes: 5`, job `timeout-minutes: 15`). It replaces the `check` job's sample
+  loop and the five per-sample `verify` steps (the pass list, the counterexample loop, and
+  the `unwitnessed_state`, `deadlock`, and `partial_scope` steps). `engine_equivalence`
+  runs with `cargo test --release`: the debug build took 315 s on the runner, over its
+  300 s budget. The Linux dev shell adds GNU `time` for the script.
 - `samples/clinic-ops` now models Japanese hospital outpatient operations, each business
   rule cited to a primary source in a `//` comment. Payment moves after the consultation into
   a new `BucVisitPayment` (会計計算入力, 呼出, 窓口 or 自動精算機, 領収証), so `CollectCopay`,

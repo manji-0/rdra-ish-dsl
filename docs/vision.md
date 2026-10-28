@@ -165,14 +165,16 @@ A passing `verify` must mean something, and a failing one must say where to look
 - Every state in a state model gets a reachability witness. A state with no witness
   is an error, not a lint warning.
 - A state with no outgoing transition is an end state, as in the RDRA state sheet. A
-  deadlock check reports a non-end state with no enabled action.
+  deadlock check reports an instance at a non-end state that can never leave it: no path
+  from that state changes the instance's column or deletes it. An instance with no enabled
+  action is the simplest such case.
 - A counterexample is printed as a sequence of use case names and source locations,
   not TLA action names.
 - `verify --buc` and `verify --entity` check part of a model, so one entity that
   cannot be exported no longer blocks the whole run.
 - Every result states its bounds: the instance count and the integer range.
-- CI runs `verify` on every sample, including `samples/clinic-ops`. Today it runs only
-  `samples/formal-verification`.
+- CI runs `check` and `verify` on every sample, including `samples/clinic-ops`, and each
+  sample states the result it expects.
 
 ## One stage order replaces three
 
@@ -226,9 +228,16 @@ addition.
    samples `one_to_one_shared`, `min_card_unmet`, `min_card_met`, `check_unmet`, and
    `check_met` show the `Unique_*`, `MinCard_*`, and `Check_*` invariants fail and pass
    under both engines, and CI runs them.
-6. **Traceable verification.** Add per-constraint invariants, witnesses, deadlock
-   checks, counterexamples in model terms, and partial verification. Then make CI
-   verify every sample. The check is CI.
+6. **Traceable verification.** Done. Every constraint is its own named invariant. A state
+   of a state model with no witness and an instance that can never leave its state are
+   errors, and a use case that never runs is a warning. A counterexample prints as use
+   cases with their bound instances and source locations, from BFS and from TLC alike.
+   `--buc` and `--entity` check part of a model, and every result opens with its
+   `bounds:` line. The check is CI: `scripts/verify-samples.sh` runs `check` and `verify`
+   on every `samples.txt` root, clinic-ops included, and compares each run with the
+   `// expect` header the sample carries, down to the exact set of failing names. The test
+   `engine_equivalence` confirms that BFS and TLC reach the same states and edges and give
+   the same findings on every cone of every sample.
 
 ## Decisions
 
@@ -281,6 +290,37 @@ The maintainer decided these questions on 2026-10-28, during phase 5:
   its parent (the order to `awaiting_capture`, the account to `active`, the appointment
   to `apptinconsult`), so a second run fails its guard. `PaymentTransaction` to `Claim`
   became optional in clinic-ops, because a copay precedes any claim.
+
+These questions were decided on 2026-10-29, during phase 6:
+
+- A deadlock is per instance: an instance at a non-end state is stuck when no path from
+  that state changes its column or deletes it. The literal reading, a state with no enabled
+  action, misses most stuck instances. One action that stays enabled anywhere in the cone,
+  such as a self-loop or a use case that can always run on another instance, masks every
+  stuck instance, because no state is then without an enabled action. clinic-ops has such
+  actions, so the literal check would never fire on it. A state with no enabled action is
+  the sub-case where no path leaves at all, so the per-instance reading reports it too.
+- A deadlock whose way out lacks only a free slot of an entity it creates is a warning
+  (`deadlock at the bound`), not an error. The instance bound blocks it, not the model, and
+  the author cannot fix that in the model.
+- A state of a state model is a `transitions` endpoint or a value a creating use case sets.
+  Such a state with no reachability witness is an error. Every other unheld Enum variant
+  keeps the `UnreachableEnumVariant` warning. A use case that never runs is a warning.
+- `--buc` builds the system without the use cases outside the BUCs, which could reach,
+  enable, or unblock a state. So under `--buc` a missing witness, a use case that never
+  runs, and a deadlock are not decided: they are listed under `not checked:` and are never
+  an error or a warning. A cone that stops at a state cap decides none of them either.
+  `--entity` keeps exact cones, so its findings are decided.
+- `verify` computes the witnesses, the use cases that never run, and the deadlocks by BFS on
+  each entity cone, at the same bounds as TLC. The test `engine_equivalence` confirms them on
+  TLC's state graph. It compares every cone of every sample at 2 instances, except a cone
+  whose BFS passes 200,000 states there, which it compares at 1 instance. The test lists
+  those cones in `VERIFY_FALLBACK` and fails when a cone joins or leaves the list, so the
+  coverage it gives up is always named. Today the list holds 8 clinic-ops cones.
+- Each sample states its expected result in `// expect` lines of its first file in load
+  order, so CI keeps no second list of samples. The deadlock check found one model defect:
+  in `cross_order_payment`, Cancel left the Payment of a cancelled Order pending forever,
+  so Cancel now deletes it.
 
 ## Sources
 
