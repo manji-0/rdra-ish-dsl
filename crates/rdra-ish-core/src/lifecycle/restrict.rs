@@ -354,8 +354,10 @@ fn drop_unread_new_params(mut action: Action, kept: impl Fn(EntId) -> bool) -> A
 fn renumber_pred(pred: &mut Pred, at: &impl Fn(&mut u8)) {
     let term = |t: &mut Term| {
         if let Term::Slot {
-            at: At::Param(p), ..
-        } = t
+            at: At::Param(p) | At::Next(p),
+            ..
+        }
+        | Term::Index(At::Param(p) | At::Next(p)) = t
         {
             at(p);
         }

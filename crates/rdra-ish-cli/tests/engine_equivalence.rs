@@ -274,9 +274,21 @@ fn check_model(tlc: &Path, scratch: &Path, sample: &str, model: &SemanticModel, 
     );
 }
 
-/// Condition guards in both engines: a bound atom, an `Exists` along an owner, and an
-/// independent `Exists`, each enabled in some reachable states and not in others.
+/// Condition guards in both engines: a bound atom, an `Exists` along an owner, an independent
+/// `Exists`, and an atom on a created param that filters the creation's choices, each enabled
+/// in some reachable states and not in others.
 const CONDITION_GUARDS: &str = r#"
+variation Kind "種別" {
+  selfpay "自費"
+  insured "保険"
+}
+entity Claim "請求" { id: Int @pk  kind: Kind @default(selfpay) }
+relate(Claim, Visit, N:1)
+usecase File "請求作成"
+creates(File, Claim)
+condition Filed "請求可能"
+holds(Filed, Claim.kind == insured, Visit.status == arrived, Room.state == busy)
+applies_to(Filed, File)
 entity Visit "来院" { id: Int @pk  status: Enum(booked, arrived) }
 entity Payment "支払い" { id: Int @pk  status: Enum(open, paid)  method: Enum(cash, insurance) }
 entity Room "診察室" { id: Int @pk  state: Enum(free, busy) }

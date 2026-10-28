@@ -154,3 +154,52 @@ fn a_condition_without_a_body_adds_nothing() {
     assert!(reaches_paid(&d));
     assert!(!crate::lifecycle::has_errors(&d.diags), "{:?}", d.diags);
 }
+
+#[test]
+fn an_atom_on_a_created_param_constrains_what_is_created() {
+    let src = r#"
+variation Method "支払方法" {
+  cash "現金"
+  insurance "保険"
+}
+entity Visit "来院" { id: Int @pk  status: Enum(booked, arrived) }
+entity Payment "支払い" { id: Int @pk  method: Method @default(cash) }
+relate(Payment, Visit, N:1)
+usecase Book "予約"
+usecase Arrive "到着"
+usecase Collect "徴収"
+creates(Book, Visit)
+transitions(Visit.status, Arrive, booked -> arrived)
+creates(Collect, Payment)
+condition Covered "保険適用"
+holds(Covered, Payment.method == insurance, Visit.status == arrived)
+applies_to(Covered, Collect)
+invariant(Payment, Visit)
+  .along(Payment, Visit)
+  .when(Payment.method == insurance)
+  .then(Visit.status == arrived)
+"#;
+    let model = model_from(src);
+    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::All);
+    let collect = built
+        .ts
+        .actions()
+        .iter()
+        .find(|a| a.name == "Collect")
+        .expect("Collect action");
+    let cond: Vec<_> = collect
+        .guards
+        .iter()
+        .filter(|g| matches!(g.why, GuardWhy::Condition { .. }))
+        .collect();
+    assert!(
+        matches!(cond.as_slice(), [g] if g.reads_successor()),
+        "{cond:?}"
+    );
+    let d = derive(&model);
+    assert_eq!(d.rows("Payment"), vec!["method=insurance"]);
+    assert!(!crate::lifecycle::has_errors(&d.diags), "{:?}", d.diags);
+    // The parent atom reads the pre-state: at two instances only an arrived visit's payment.
+    let d = derive_scoped(&model, Bounds::VERIFY, &Scope::All);
+    assert!(!crate::lifecycle::has_errors(&d.diags), "{:?}", d.diags);
+}

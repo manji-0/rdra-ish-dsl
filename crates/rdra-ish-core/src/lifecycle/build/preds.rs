@@ -508,8 +508,10 @@ impl Builder<'_> {
 
     // ── R-guard: condition bodies ────────────────────────────────────────────
 
-    /// One guard per `holds` body applied to the use case, read on the pre-state. An entity the
-    /// action binds reads its param. Any other entity is `Exists` over present instances, one
+    /// One guard per `holds` body applied to the use case. An entity the action binds reads its
+    /// param: on the pre-state, or in the successor (`At::Next`) when the action creates it, so
+    /// the body constrains what is created. Any other entity is `Exists` over present instances
+    /// of the pre-state, one
     /// witness per entity shared by the body's atoms, linked by a direct owner var (one hop) to
     /// each param or other witness it relates to; with no such relate it is independent.
     pub(super) fn condition_guards(&mut self, uc: UseCaseKey, params: &[Param]) -> Vec<Guard> {
@@ -523,7 +525,13 @@ impl Builder<'_> {
             let mut binding: Binding = params
                 .iter()
                 .enumerate()
-                .map(|(i, p)| (self.ts.entities[p.entity.index()].key, At::Param(i as u8)))
+                .map(|(i, p)| {
+                    let at = match p.role {
+                        ParamRole::New => At::Next(i as u8),
+                        ParamRole::Existing | ParamRole::Parent => At::Param(i as u8),
+                    };
+                    (self.ts.entities[p.entity.index()].key, at)
+                })
                 .collect();
             let mut witnesses = Vec::new();
             for ek in body.conds.iter().flat_map(cond_entities) {
@@ -532,14 +540,11 @@ impl Builder<'_> {
                     witnesses.push(self.ent_of[&ek]);
                 }
             }
-            // A new param's owner is unset before the step, so only a witness links, and only
-            // to a param that exists before the step.
             let witness = |(_, at): (EntityKey, At)| matches!(at, At::Bound(_));
-            let fresh = |(_, at): (EntityKey, At)| matches!(at, At::Param(p) if params[usize::from(p)].role == ParamRole::New);
             let mut parts = Vec::new();
             for (i, &x) in binding.iter().enumerate() {
                 for &y in &binding[i + 1..] {
-                    if (witness(x) || witness(y)) && !fresh(x) && !fresh(y) {
+                    if witness(x) || witness(y) {
                         parts.extend(self.owner_link(x, y));
                     }
                 }

@@ -369,10 +369,19 @@ impl<'t> Bfs<'t> {
             for (ai, action) in ts.actions.iter().enumerate() {
                 for params in ts.bindings(action, &s) {
                     let mut env = Env::new(&params);
-                    if !action.guards.iter().all(|g| ts.eval(&g.pred, &s, &mut env)) {
+                    let (post, pre): (Vec<_>, Vec<_>) =
+                        action.guards.iter().partition(|g| g.reads_successor());
+                    if !pre.iter().all(|g| ts.eval(&g.pred, &s, &mut env)) {
                         continue;
                     }
                     for s2 in ts.successors(action, &params, &s) {
+                        let mut env = Env {
+                            next: Some(&s2),
+                            ..Env::new(&params)
+                        };
+                        if !post.iter().all(|g| ts.eval(&g.pred, &s, &mut env)) {
+                            continue;
+                        }
                         if !self.observe(ActId::at(ai), &params, &s, &s2) {
                             return;
                         }

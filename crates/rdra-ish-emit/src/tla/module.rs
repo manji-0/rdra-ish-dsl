@@ -154,17 +154,21 @@ fn action(ts: &TransitionSystem, names: &TlaNames, id: ActId, out: &mut String) 
             ParamRole::Existing | ParamRole::Parent => format!("{exists}[p{p}] = \"present\""),
         });
     }
-    for g in &a.guards {
+    let guard = |g: &rdra_ish_core::lifecycle::Guard| {
         let mut ctx = Ctx {
             ts,
             names,
             primed: false,
             depth: 0,
         };
-        conj.push(ctx.pred(&g.pred));
-    }
+        ctx.pred(&g.pred)
+    };
+    // TLC reads a primed var only after the conjunct that assigns it.
+    let (post, pre): (Vec<_>, Vec<_>) = a.guards.iter().partition(|g| g.reads_successor());
+    conj.extend(pre.into_iter().map(guard));
     let (assigns, written) = effects(ts, names, a);
     conj.extend(assigns);
+    conj.extend(post.into_iter().map(guard));
     let unchanged: Vec<&str> = ts
         .var_ids()
         .filter(|v| !written.contains(v))

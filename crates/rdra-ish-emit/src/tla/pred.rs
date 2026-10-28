@@ -18,7 +18,7 @@ pub(super) struct Ctx<'a> {
 
 pub(super) fn at(a: At) -> String {
     match a {
-        At::Param(p) => format!("p{p}"),
+        At::Param(p) | At::Next(p) => format!("p{p}"),
         At::Bound(b) => format!("b{b}"),
     }
 }
@@ -79,10 +79,16 @@ impl Ctx<'_> {
 
     fn slot(&self, t: &Term) -> Option<(String, &Domain)> {
         match t {
-            Term::Slot { var, at: a } => Some((
-                format!("{}{}[{}]", self.names.var(*var), self.prime(), at(*a)),
-                &self.ts.var(*var).domain,
-            )),
+            Term::Slot { var, at: a } => {
+                let prime = match a {
+                    At::Next(_) => "'",
+                    _ => self.prime(),
+                };
+                Some((
+                    format!("{}{prime}[{}]", self.names.var(*var), at(*a)),
+                    &self.ts.var(*var).domain,
+                ))
+            }
             _ => None,
         }
     }

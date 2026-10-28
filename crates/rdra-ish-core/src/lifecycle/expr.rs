@@ -26,6 +26,8 @@ impl State {
 pub(crate) struct Env<'a> {
     pub params: &'a [u8],
     pub bound: Vec<u8>,
+    /// The successor `At::Next` reads.
+    pub next: Option<&'a State>,
 }
 
 impl<'a> Env<'a> {
@@ -33,12 +35,13 @@ impl<'a> Env<'a> {
         Env {
             params,
             bound: Vec::new(),
+            next: None,
         }
     }
 
     fn slot(&self, at: At) -> usize {
         usize::from(match at {
-            At::Param(p) => self.params[usize::from(p)],
+            At::Param(p) | At::Next(p) => self.params[usize::from(p)],
             At::Bound(b) => self.bound[usize::from(b)],
         })
     }
@@ -129,10 +132,16 @@ impl TransitionSystem {
 
     fn operand(&self, term: &Term, state: &State, env: &Env) -> Operand<'_> {
         match term {
-            Term::Slot { var, at } => Operand::Value(
-                state.get(self, *var, env.slot(*at)),
-                Some(&self.var(*var).domain),
-            ),
+            Term::Slot { var, at } => {
+                let read = match at {
+                    At::Next(_) => env.next.expect("a successor guard without a successor"),
+                    _ => state,
+                };
+                Operand::Value(
+                    read.get(self, *var, env.slot(*at)),
+                    Some(&self.var(*var).domain),
+                )
+            }
             Term::Lit(value) => Operand::Value(*value, None),
             Term::Int(n) => Operand::Number(*n),
             Term::Index(at) => Operand::Slot(env.slot(*at) as u8),

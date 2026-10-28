@@ -304,11 +304,41 @@ pub enum ParamRole {
     Parent,
 }
 
+/// A guard holds on the pre-state, or, when it reads `At::Next`, on the pre-state and the
+/// successor together: such a guard filters the successors after the effects.
 #[derive(Clone, Debug)]
 pub struct Guard {
     pub pred: Pred,
     pub why: GuardWhy,
     pub site: Site,
+}
+
+impl Guard {
+    pub fn reads_successor(&self) -> bool {
+        self.pred.reads_next()
+    }
+}
+
+impl Pred {
+    /// Whether some slot reference points into the successor.
+    pub fn reads_next(&self) -> bool {
+        let term = |t: &Term| {
+            matches!(
+                t,
+                Term::Slot {
+                    at: At::Next(_),
+                    ..
+                } | Term::Index(At::Next(_))
+            )
+        };
+        match self {
+            Pred::True | Pred::False => false,
+            Pred::Cmp(a, _, b) => term(a) || term(b),
+            Pred::Not(p) => p.reads_next(),
+            Pred::And(ps) | Pred::Or(ps) => ps.iter().any(Pred::reads_next),
+            Pred::Forall { body, .. } | Pred::Exists { body, .. } => body.reads_next(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -366,6 +396,9 @@ pub enum At {
     Param(u8),
     /// The n-th binder of the enclosing invariant, assert, or property, outermost first.
     Bound(u8),
+    /// An action parameter's slot in the successor. A condition atom on a created param reads
+    /// it, so the condition constrains what the action creates.
+    Next(u8),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
