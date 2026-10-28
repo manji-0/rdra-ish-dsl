@@ -170,6 +170,7 @@ fn diag_message(d: &StateDiag) -> String {
         | StateDiag::AssertOnInertUseCase { .. }
         | StateDiag::IntLiteralOutOfBounds { .. }
         | StateDiag::UnbindableScope { .. }
+        | StateDiag::UnbindableCondition { .. }
         | StateDiag::UnwrittenConstrainedVar { .. }
         | StateDiag::UnsupportedComparison { .. }
         | StateDiag::UnresolvedPropertyAtom { .. } => d.to_string(),

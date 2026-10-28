@@ -1,11 +1,11 @@
 //! Which columns something names (R-var): a column becomes a state var only when a `sets`,
-//! a constraint, an assert, or a property reads or writes it.
+//! a constraint, an applied condition body, an assert, or a property reads or writes it.
 
 use std::collections::HashSet;
 
 use crate::model::{
-    CmpRhs, ComparisonProp, CrossCmpRhs, CrossEntityCondition, EffectValue, EntityKey,
-    SemanticModel, TemporalExpr, TemporalRhs,
+    CmpRhs, ComparisonProp, ConditionKey, CrossCmpRhs, CrossEntityCondition, EffectValue,
+    EntityKey, HoldsBody, NodeRef, RelKind, SemanticModel, TemporalExpr, TemporalRhs, UseCaseKey,
 };
 
 #[derive(Default)]
@@ -112,6 +112,11 @@ impl Named {
                     .temporal_assertions
                     .iter()
                     .flat_map(|c| c.requireds.iter()),
+            )
+            .chain(
+                applied_bodies(model)
+                    .into_iter()
+                    .flat_map(|(_, _, body)| body.conds.iter()),
             );
         for cond in cross {
             n.cross(cond);
@@ -228,6 +233,44 @@ impl Named {
             }
         }
     }
+}
+
+/// Every `holds` body that guards a use case: `applies_to(Cond, UC)`, or `applies_to(Cond, Api)`
+/// for each use case that invokes the API. In relation order, without duplicates.
+pub(super) fn applied_bodies(model: &SemanticModel) -> Vec<(ConditionKey, UseCaseKey, &HoldsBody)> {
+    let mut out: Vec<(ConditionKey, UseCaseKey, &HoldsBody)> = Vec::new();
+    for rel in model
+        .relations
+        .iter()
+        .filter(|r| r.kind == RelKind::AppliesTo)
+    {
+        let NodeRef::Condition(ck) = rel.from else {
+            continue;
+        };
+        let Some(body) = model.conditions[ck].body.as_ref() else {
+            continue;
+        };
+        let ucs: Vec<UseCaseKey> = match rel.to {
+            NodeRef::UseCase(uc) => vec![uc],
+            NodeRef::Api(api) => model
+                .relations
+                .iter()
+                .filter_map(|r| match (&r.kind, &r.from, &r.to) {
+                    (RelKind::Invokes, NodeRef::UseCase(uc), NodeRef::Api(a)) if *a == api => {
+                        Some(*uc)
+                    }
+                    _ => None,
+                })
+                .collect(),
+            _ => continue,
+        };
+        for uc in ucs {
+            if !out.iter().any(|(c, u, _)| (*c, *u) == (ck, uc)) {
+                out.push((ck, uc, body));
+            }
+        }
+    }
+    out
 }
 
 /// A property atom's entity: the named one, or the only entity that has the column.

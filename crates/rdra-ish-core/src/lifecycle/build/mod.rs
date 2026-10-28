@@ -376,6 +376,7 @@ impl<'m> Builder<'m> {
         if let Some(tick) = self.tick() {
             self.ts.actions.push(tick);
         }
+        self.inert_conditions();
     }
 
     /// One atomic action for the use case: every effect on every entity in one step.
@@ -403,7 +404,8 @@ impl<'m> Builder<'m> {
         self.transition_effects(uc, &mut a);
         self.creation_choices(&mut a);
         self.owner_bindings(&mut a);
-        a.guards.extend(condition_guards(model, uc));
+        let guards = self.condition_guards(uc, &a.params);
+        a.guards.extend(guards);
         Action {
             name: model.use_cases[uc].id.clone(),
             origin: ActionOrigin::UseCase {
@@ -776,12 +778,6 @@ impl<'m> Builder<'m> {
             }
         }
     }
-}
-
-/// Condition guards (`applies_to(Cond, UC)` with a `holds` body) join the action's guards
-/// here. They are the next unit; until then a use case has no condition guard.
-fn condition_guards(_model: &SemanticModel, _uc: UseCaseKey) -> Vec<Guard> {
-    Vec::new()
 }
 
 enum EffectRhs {

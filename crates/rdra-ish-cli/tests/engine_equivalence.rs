@@ -230,42 +230,100 @@ fn bfs_and_tlc_reach_the_same_states_and_verdicts() {
     };
     let scratch = std::env::temp_dir().join(format!("rdra-equivalence-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&scratch);
-    let workers = std::thread::available_parallelism().map_or(4, |n| n.get().min(8));
     for sample in samples() {
         let model = load(&sample);
         for bounds in bounds_for(&sample) {
-            let built = TransitionSystem::build(&model, bounds, &Scope::All);
-            let exploration = built.ts.explore_targets(Caps::new(usize::MAX, STATE_CAP));
-            let cones = &exploration.cones;
-            let next = AtomicUsize::new(0);
-            let reports: Mutex<Vec<(usize, ConeReport)>> = Mutex::new(Vec::new());
-            std::thread::scope(|s| {
-                for _ in 0..workers {
-                    s.spawn(|| loop {
-                        let i = next.fetch_add(1, Ordering::SeqCst);
-                        let Some(cone) = cones.get(i) else { break };
-                        let label = format!("{sample} at {bounds:?}, cone {i}");
-                        let dir = scratch.join(format!(
-                            "{}-{}-{i}",
-                            sample.replace('/', "_"),
-                            bounds.instances
-                        ));
-                        let report = check_cone(&tlc, &dir, &label, &cone.run);
-                        reports.lock().unwrap().push((i, report));
-                    });
-                }
-            });
-            let mut reports = reports.into_inner().unwrap();
-            reports.sort_by_key(|(i, _)| *i);
-            let states: usize = reports.iter().map(|(_, r)| r.states).sum();
-            let violated: BTreeSet<&String> =
-                reports.iter().flat_map(|(_, r)| &r.violated).collect();
-            println!(
-                "{sample} instances={}: {} cones, {states} states, violated {violated:?}",
-                bounds.instances,
-                reports.len()
-            );
+            check_model(&tlc, &scratch, &sample, &model, bounds);
         }
+    }
+    let _ = std::fs::remove_dir_all(&scratch);
+}
+
+/// Every cone of the model at these bounds, checked in parallel.
+fn check_model(tlc: &Path, scratch: &Path, sample: &str, model: &SemanticModel, bounds: Bounds) {
+    let workers = std::thread::available_parallelism().map_or(4, |n| n.get().min(8));
+    let built = TransitionSystem::build(model, bounds, &Scope::All);
+    let exploration = built.ts.explore_targets(Caps::new(usize::MAX, STATE_CAP));
+    let cones = &exploration.cones;
+    let next = AtomicUsize::new(0);
+    let reports: Mutex<Vec<(usize, ConeReport)>> = Mutex::new(Vec::new());
+    std::thread::scope(|s| {
+        for _ in 0..workers {
+            s.spawn(|| loop {
+                let i = next.fetch_add(1, Ordering::SeqCst);
+                let Some(cone) = cones.get(i) else { break };
+                let label = format!("{sample} at {bounds:?}, cone {i}");
+                let dir = scratch.join(format!(
+                    "{}-{}-{i}",
+                    sample.replace('/', "_"),
+                    bounds.instances
+                ));
+                let report = check_cone(tlc, &dir, &label, &cone.run);
+                reports.lock().unwrap().push((i, report));
+            });
+        }
+    });
+    let mut reports = reports.into_inner().unwrap();
+    reports.sort_by_key(|(i, _)| *i);
+    let states: usize = reports.iter().map(|(_, r)| r.states).sum();
+    let violated: BTreeSet<&String> = reports.iter().flat_map(|(_, r)| &r.violated).collect();
+    println!(
+        "{sample} instances={}: {} cones, {states} states, violated {violated:?}",
+        bounds.instances,
+        reports.len()
+    );
+}
+
+/// Condition guards in both engines: a bound atom, an `Exists` along an owner, and an
+/// independent `Exists`, each enabled in some reachable states and not in others.
+const CONDITION_GUARDS: &str = r#"
+entity Visit "来院" { id: Int @pk  status: Enum(booked, arrived) }
+entity Payment "支払い" { id: Int @pk  status: Enum(open, paid)  method: Enum(cash, insurance) }
+entity Room "診察室" { id: Int @pk  state: Enum(free, busy) }
+relate(Payment, Visit, N:1)
+usecase Book "予約"
+usecase Arrive "到着"
+usecase Open "会計開始"
+usecase Insure "保険"
+usecase Pay "支払い"
+usecase Prepare "準備"
+usecase Occupy "入室"
+creates(Book, Visit)
+transitions(Visit.status, Arrive, booked -> arrived)
+creates(Open, Payment)
+sets(Insure, Payment, method == insurance)
+transitions(Payment.status, Pay, open -> paid)
+creates(Prepare, Room)
+transitions(Room.state, Occupy, free -> busy)
+condition Ready "支払い可能"
+holds(Ready, Payment.method == insurance, Visit.status == arrived, Room.state == busy)
+applies_to(Ready, Pay)
+invariant(Payment, Visit)
+  .along(Payment, Visit)
+  .when(Payment.status == paid)
+  .then(Visit.status == arrived)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_condition_guards() {
+    let Some(tlc) = find_tlc() else {
+        let reason = "tlc not on PATH (run inside `nix develop`)";
+        assert!(
+            std::env::var("RDRA_REQUIRE_TLC").as_deref() != Ok("1"),
+            "RDRA_REQUIRE_TLC=1 but {reason}"
+        );
+        println!("skipped condition-guard equivalence: {reason}");
+        return;
+    };
+    let scratch =
+        std::env::temp_dir().join(format!("rdra-equivalence-cond-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&scratch);
+    std::fs::create_dir_all(&scratch).expect("scratch dir");
+    let file = scratch.join("conditions.rdra");
+    std::fs::write(&file, CONDITION_GUARDS).expect("write model");
+    let model = load(file.to_str().expect("utf-8 path"));
+    for bounds in [Bounds::STATES, Bounds::VERIFY] {
+        check_model(&tlc, &scratch, "condition_guards", &model, bounds);
     }
     let _ = std::fs::remove_dir_all(&scratch);
 }

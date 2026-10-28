@@ -78,6 +78,13 @@ pub enum StateDiag {
         reason: String,
         site: Site,
     },
+    /// `applies_to(Cond, UC)` with a `holds` body, where the guard has nothing to read.
+    UnbindableCondition {
+        condition: String,
+        usecase: String,
+        reason: String,
+        site: Site,
+    },
     /// A use case drives a comparison to one truth while its own Int literals give the other.
     ContradictoryDrivenComparison {
         usecase: String,
@@ -85,7 +92,7 @@ pub enum StateDiag {
         driven: bool,
         sites: Vec<Site>,
     },
-    /// A constraint reads a column that no action writes.
+    /// A constraint or a condition guard reads a column that no action writes.
     UnwrittenConstrainedVar { column: String, site: Site },
     /// A comparison the bounded domains cannot evaluate (non-numeric operands).
     UnsupportedComparison {
@@ -117,6 +124,7 @@ impl StateDiag {
             | StateDiag::AssertOnInertUseCase { .. }
             | StateDiag::IntLiteralOutOfBounds { .. }
             | StateDiag::UnbindableScope { .. }
+            | StateDiag::UnbindableCondition { .. }
             | StateDiag::UnsupportedComparison { .. }
             | StateDiag::UnresolvedPropertyAtom { .. } => Severity::Error,
         }
@@ -177,6 +185,12 @@ impl fmt::Display for StateDiag {
             StateDiag::UnbindableScope {
                 constraint, reason, ..
             } => write!(f, "{constraint}: {reason}"),
+            StateDiag::UnbindableCondition {
+                condition,
+                usecase,
+                reason,
+                ..
+            } => write!(f, "condition {condition} on {usecase}: {reason}"),
             StateDiag::ContradictoryDrivenComparison {
                 usecase,
                 proposition,

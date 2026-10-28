@@ -2,16 +2,16 @@
 
 use std::collections::HashSet;
 
-use super::naming::{is_driven, property_entity};
+use super::naming::{applied_bodies, is_driven, property_entity};
 use super::Builder;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{
-    AfterAssert, At, CmpOp, Domain, Effect, InvKind, InvText, Invariant, Ltl, ModelRef, Pred,
-    Property, Site, Start, Term, Value, VarId, VarKind,
+    AfterAssert, At, CmpOp, Domain, Effect, Guard, GuardWhy, InvKind, InvText, Invariant, Ltl,
+    ModelRef, Param, ParamRole, Pred, Property, Site, Start, Term, Value, VarId, VarKind,
 };
 use crate::model::{
     CmpOpModel, CmpRhs, ComparisonProp, CrossCmpRhs, CrossConstraintScope, CrossEntityCondition,
-    EffectValue, EntityKey, QuantifierKind, TemporalExpr, TemporalFormula, TemporalRhs,
+    EffectValue, EntityKey, QuantifierKind, TemporalExpr, TemporalFormula, TemporalRhs, UseCaseKey,
 };
 
 /// Binds each entity of a predicate to a slot reference.
@@ -506,6 +506,85 @@ impl Builder<'_> {
         }
     }
 
+    // ── R-guard: condition bodies ────────────────────────────────────────────
+
+    /// One guard per `holds` body applied to the use case, read on the pre-state. An entity the
+    /// action binds reads its param. Any other entity is `Exists` over present instances, one
+    /// witness per entity shared by the body's atoms, linked by a direct owner var (one hop) to
+    /// each param or other witness it relates to; with no such relate it is independent.
+    pub(super) fn condition_guards(&mut self, uc: UseCaseKey, params: &[Param]) -> Vec<Guard> {
+        let model = self.model;
+        let mut guards = Vec::new();
+        for (ck, _, body) in applied_bodies(model)
+            .into_iter()
+            .filter(|(_, u, _)| *u == uc)
+        {
+            let site = Site::new(ModelRef::Condition(ck), &body.site);
+            let mut binding: Binding = params
+                .iter()
+                .enumerate()
+                .map(|(i, p)| (self.ts.entities[p.entity.index()].key, At::Param(i as u8)))
+                .collect();
+            let mut witnesses = Vec::new();
+            for ek in body.conds.iter().flat_map(cond_entities) {
+                if at_of(&binding, ek).is_none() {
+                    binding.push((ek, At::Bound(witnesses.len() as u8)));
+                    witnesses.push(self.ent_of[&ek]);
+                }
+            }
+            // A new param's owner is unset before the step, so only a witness links, and only
+            // to a param that exists before the step.
+            let witness = |(_, at): (EntityKey, At)| matches!(at, At::Bound(_));
+            let fresh = |(_, at): (EntityKey, At)| matches!(at, At::Param(p) if params[usize::from(p)].role == ParamRole::New);
+            let mut parts = Vec::new();
+            for (i, &x) in binding.iter().enumerate() {
+                for &y in &binding[i + 1..] {
+                    if (witness(x) || witness(y)) && !fresh(x) && !fresh(y) {
+                        parts.extend(self.owner_link(x, y));
+                    }
+                }
+            }
+            parts.extend(
+                body.conds
+                    .iter()
+                    .map(|c| self.cross_atom(c, &binding, &site)),
+            );
+            let pred = witnesses
+                .into_iter()
+                .rev()
+                .fold(Pred::And(parts), |inner, entity| Pred::Exists {
+                    entity,
+                    body: Box::new(inner),
+                });
+            guards.push(Guard {
+                pred,
+                why: GuardWhy::Condition { cond: ck },
+                site,
+            });
+        }
+        guards
+    }
+
+    /// A body applied to a use case that writes nothing has no action to guard.
+    pub(super) fn inert_conditions(&mut self) {
+        let model = self.model;
+        for (ck, uc, body) in applied_bodies(model) {
+            if self.active_ucs.contains(&uc) {
+                continue;
+            }
+            self.diag(
+                body.conds.iter().flat_map(cond_entities).collect(),
+                StateDiag::UnbindableCondition {
+                    condition: model.conditions[ck].id.clone(),
+                    usecase: model.use_cases[uc].id.clone(),
+                    reason: "the use case writes nothing, so no action carries the guard"
+                        .to_string(),
+                    site: Site::new(ModelRef::Condition(ck), &body.site),
+                },
+            );
+        }
+    }
+
     // ── R-after ──────────────────────────────────────────────────────────────
 
     pub(super) fn after_asserts(&mut self) {
@@ -680,6 +759,10 @@ impl Builder<'_> {
         for a in &self.ts.after {
             collect_vars(&a.post, &mut read);
         }
+        let condition_guards = self.ts.actions.iter().flat_map(|a| a.guards.iter());
+        for g in condition_guards.filter(|g| matches!(g.why, GuardWhy::Condition { .. })) {
+            collect_vars(&g.pred, &mut read);
+        }
         let written: HashSet<VarId> = self
             .ts
             .actions
@@ -710,6 +793,17 @@ impl Builder<'_> {
                 StateDiag::UnwrittenConstrainedVar { column, site },
             );
         }
+    }
+}
+
+/// The entities a body atom reads, left operand first.
+fn cond_entities(cond: &CrossEntityCondition) -> Vec<EntityKey> {
+    match cond {
+        CrossEntityCondition::Equals { column, .. } => vec![column.entity],
+        CrossEntityCondition::Comparison(p) => match &p.rhs {
+            CrossCmpRhs::Column(rc) => vec![p.lhs.entity, rc.entity],
+            _ => vec![p.lhs.entity],
+        },
     }
 }
 

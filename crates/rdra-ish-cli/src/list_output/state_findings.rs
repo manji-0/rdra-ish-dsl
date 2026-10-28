@@ -137,6 +137,7 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
         | StateDiag::AssertOnInertUseCase { .. }
         | StateDiag::IntLiteralOutOfBounds { .. }
         | StateDiag::UnbindableScope { .. }
+        | StateDiag::UnbindableCondition { .. }
         | StateDiag::UnwrittenConstrainedVar { .. }
         | StateDiag::UnsupportedComparison { .. }
         | StateDiag::UnresolvedPropertyAtom { .. } => diag.to_string(),

@@ -4,7 +4,7 @@
 use std::num::NonZeroU8;
 
 use crate::location::LocatedSpan;
-use crate::model::{BucKey, EntityKey, UseCaseKey};
+use crate::model::{BucKey, ConditionKey, EntityKey, UseCaseKey};
 
 /// Bounds are an input to the semantics, not a printer option. Every report states them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -236,6 +236,8 @@ pub enum ModelRef {
     },
     Entity(EntityKey),
     UseCase(UseCaseKey),
+    /// A condition's `holds` body.
+    Condition(ConditionKey),
     /// Added by the system itself (the clock).
     Synthesized,
 }
@@ -317,6 +319,8 @@ pub enum GuardWhy {
     Owner,
     /// `now` has room to tick.
     Clock,
+    /// `holds(Cond, ..)` of a condition that `applies_to` the use case.
+    Condition { cond: ConditionKey },
 }
 
 #[derive(Clone, Debug)]
