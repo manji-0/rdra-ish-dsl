@@ -10,6 +10,42 @@
   columns. Each `@check` is the invariant `Check_<Entity>_<column>_<n>` that `check`
   and `verify` test; a `@derived` column is no state var, and a `sets` on it is an
   error.
+- A generated key column takes the parent key column's name: `{role}_{parent key column}`
+  instead of `{parent}_id`. The default role is the parent id in lowercase, and every
+  sample's parent key is `id`, so no sample output moves. A model whose parent key is
+  not `id` gets different column names.
+- Two relates from one child to one parent with the same role are `DuplicateRelateRole`
+  at the relate. Before, the second key was silently dropped as an `FkConflict`. `FkConflict` now means a column the entity declares collides with a generated
+  one, and its hint names `.role(...)` and `.key(...)`.
+- A `.along(A, B)` over two keys between the same pair is `AmbiguousOwnerLink` unless
+  `.by(role)` names one. Before, the lifecycle followed the first owner between the pair
+  without a message. `.by` that names no key on the path is `UnknownOwnerRole`, and `.by`
+  without `.along` is `ByWithoutAlong`.
+- `.role(...)` or `.key(...)` on an N:M relate is `KeyOptionOnManyToMany`. An unknown
+  `.on_delete(...)` or `.on_update(...)` action is `UnknownRefAction`.
+- `CompositePkFkUnsupported` is gone. A relate to a composite `@pk` generates one key
+  column per parent key column.
+- A 1:1 relate now has a key column on its left entity. It appears in DBML, JSON Schema,
+  the entity CSV, `list --kind entity`, and the ER diagrams on `ec-site`, `clinic-ops`,
+  and `personal-info`, and DBML prints the ref as `Ref: Child.col - Parent.id`.
+- Every 1:1 key is the invariant `Unique_<Child>_<role>`, and every key with a minimum
+  of one child is `MinCard_<Child>_<role>`. Both fail `check` and `verify` where a model
+  breaks them, so a model that passed can now fail.
+- The `ec-site`, `personal-info`, and `clinic-ops` state models change, because
+  `Unique_*` found a use case that ran twice and linked two children to one parent.
+  `ec-site`: `InputPaymentInfo` moves the Order `pending -> awaiting_capture`, `Capture`
+  leaves from `awaiting_capture`, and `Cancel` also takes `awaiting_capture -> cancelled`.
+  `personal-info`: an account starts `provisioned`, `SetInitialPassword` moves it to
+  `active`, and `SuspendAccount` and `DeleteAccount` leave from `active`. `clinic-ops`:
+  `OpenEncounter` moves the Appointment `apptcheckedin -> apptinconsult`,
+  `CompleteAppointment` leaves from `apptinconsult`, `CollectCopay` runs at check-in
+  before any encounter, and `PaymentTransaction -> Claim` is `.optional()` like
+  `Charge -> Claim`.
+- `SeparateTxInferred` reads: `usecase 'X' writes 'E' in its own transaction after the
+  FK-grouped writes`. The sequence diagrams and the lifecycle read the same transaction
+  groups (`UsecaseTx::groups()`), so a `writes(..)` edge, and an entity a use case only
+  `sets` or transitions, now draw as an update. The `rdra-ish-core` items
+  `tx_groups`, `infer_lifecycle_transactions`, and `has_writes` are gone.
 - `timing` is now `timer`, an RDRA タイマー that starts a use case through
   `triggers(Timer, UseCase | Buc)`. `belongs(...).when(...)` is removed (an unknown chain
   method whose hint names `timer`); `.by(...)` stays. `uses(Actor, ExtSystem)` is
@@ -53,9 +89,15 @@
   as `warning:` before `OK: no errors`.
 - `states --format csv` / `type-script` exit non-zero on Error-severity state
   diagnostics (exit no longer depends on scanning `[error]` in rendered text).
-- `diagram` / `csv` / `list` / non-TLA `export` refuse to emit when state
-  diagnostics are Error severity (aligned with fail-closed docs). `export --kind tla`
-  and `verify` refuse on the Error diagnostics of the transition system they print.
+- Outputs that print the lifecycle refuse to emit when state diagnostics are Error
+  severity: `states`, `list`, `diagram` of every kind except `er`, `csv` of every kind
+  except `entity`, and `export --kind typescript-states`. `export --kind tla` and
+  `verify` refuse on the Error diagnostics of the transition system they print. The data
+  exports no longer refuse: `export` of `dbml`, `json-schema`, `openapi`, `asyncapi`,
+  `mermaid-er`, and `plantuml-er`, `diagram --kind er`, and `csv --kind entity` read no
+  reachability result, so they gate on model errors only and print one stderr note when
+  the lifecycle has errors. The six verification samples with lifecycle errors now
+  export DBML, JSON Schema, and the entity CSV.
 - `ConflictingEffects` (same-origin dual assigns, including Int `sets`) is
   `[error]` / fail-closed (was warning with last-wins).
 - Junction composite unique uses the N:M endpoint FK pair only (extra FKs on the
@@ -142,6 +184,38 @@
 
 ### Added
 
+- Logical data layer (phase 5). One `ForeignKey` fact per key-side `relate` feeds DBML,
+  JSON Schema, the entity CSV, `list --kind entity`, the ER diagrams, the transaction
+  graph, and the lifecycle owner variables. New relate syntax: `.role(x)` names a key,
+  `.key(cols)` adopts columns the child declares, and a composite parent `@pk` yields a
+  multi-column key (`Ref: Stock.(bin_site, bin_shelf) > Bin.(site, shelf)`).
+  `.along(A, B).by(role)` picks the key a constraint follows. A child-side range
+  (`1..*:1`, `1..1:1`) states a minimum, and `fmt` prints the card as written. New
+  diagnostics: `DuplicateRelateRole`, `AmbiguousOwnerLink`, `UnknownOwnerRole`,
+  `ByWithoutAlong`, `KeyArity`, `KeyColumnUndefined`, `KeyTypeMismatch`,
+  `KeyColumnShared`, `KeyOptionOnManyToMany`, `UnknownRefAction`, `MinCardOutOfRange`,
+  `MinCardOnParentSide`, `MinCardOnManyToMany`. See the `relate` section of the
+  [language reference](docs/language-reference.md#relate-and-fk-generation).
+- The lifecycle checks the new keys: `Unique_<Child>_<role>` for a 1:1,
+  `MinCard_<Child>_<role>` for a minimum of one child, and `Check_<Entity>_<column>_<n>`
+  for each `@check`, in BFS and in the TLA+ export. A pre-existing child's owner starts
+  linked (`Any` under an N:1 key, `Identity` under a 1:1 or a `1..*` key). New state
+  diagnostics: `PreExistingChildOfCreatedParent` (warning), `MinCardOfPreExistingParent`
+  (warning), `MinCardNeedsCreate` (info), `DerivedColumnRead` (error). JSON Schema and
+  the ER diagrams show a minimum of one child: `x-rdra-ish-fk-min-children`, and a
+  one-or-more child end.
+- Formal-verification samples `one_to_one_shared`, `min_card_unmet`, `min_card_met`,
+  `check_unmet`, and `check_met`. CI expects a TLC counterexample for `one_to_one_shared`,
+  `min_card_unmet`, and `check_unmet`, and a pass for `min_card_met` and `check_met`.
+- The test `key_facts` walks every `samples.txt` root: each key-side `relate` yields one
+  fact, no DBML ref is unresolved, DBML, JSON Schema, CSV, ER, transaction edges, and
+  owner variables agree, DBML and JSON Schema export, and each `@check` has one `Check_*`
+  invariant.
+- `scripts/sample-artifacts.tsv` lists every committed `out/` file of `ec-site`,
+  `clinic-ops`, `personal-info`, `step-6-business-rules`, and `api-contract` with the
+  command that writes it, and `scripts/check-sample-artifacts.sh` regenerates all of
+  them. `scripts/data-diff.sh LABEL` snapshots the DBML, JSON Schema, and entity CSV of
+  every sample so two builds compare with `diff -r`.
 - The 15 不整合 columns of the RDRA definition sheet are lint rules, held as one table
   (`RDRA_RULES` in `rdra_rules.rs`) with a witness model per row. The four "unconnected"
   columns are new `lint` warnings: `rdra-actor-no-buc`, `rdra-extsystem-no-buc`,
@@ -240,6 +314,18 @@
 
 ### Fixed
 
+- 91 of the 126 committed `out/` files under `ec-site`, `clinic-ops`, and `personal-info`
+  no longer matched what the generator prints, because no CI step regenerated them. They
+  are regenerated, and `check-sample-artifacts.sh` now covers them.
+- `check` dropped the verdicts of the constraints that an entity without state columns
+  binds, because its view returned before they were added. It now reports them.
+- `MinCardNeedsCreate` fired for a use case that creates a parent and updates an existing
+  child, although the action links that child and the minimum holds.
+- A use case that creates a parent no longer takes an already-linked child from its
+  parent when the key is `.optional()`. The action links the child only while it is
+  unlinked. A mandatory key still moves the child.
+- `diagram --kind er` refused on lifecycle errors while `export --kind mermaid-er` did
+  not. Both now draw the data layer.
 - A bad equality value in a multi-entity constraint (`forbidden(A, B, A.status == gone,
   ...)`) reported the same mistake two or three times, once of them as a missing entity
   qualifier on the value. It now reports it once.
