@@ -1,0 +1,18 @@
+// qty: Int @check(qty >= 1) adds the invariant Check_CartLine_qty_0: no present CartLine has
+// qty below 1. TLC intent: expected FAIL at InstanceCount == 1. AddLine creates a line with
+// qty 1 (@default(1)); ClearQty sets qty to 0, which breaks the check. check_met.rdra keeps
+// qty in range and passes.
+entity CartLine "カート明細" {
+  id: Int @pk
+  qty: Int @default(1) @check(qty >= 1)
+}
+
+usecase AddLine "明細追加"
+usecase ClearQty "数量クリア"
+
+buc BucCart "Cart"
+contains(BucCart, AddLine)
+contains(BucCart, ClearQty)
+
+creates(AddLine, CartLine)
+sets(ClearQty, CartLine, qty == 0)

@@ -479,6 +479,8 @@ pub enum InvKind {
     Unique,
     /// A child-side range `1..*` / `1..1`: every present parent slot has a present child.
     MinCard,
+    /// A column's `@check(expr)`: no present slot makes the expression false.
+    Check,
 }
 
 /// The parts of a constraint that a violation message names.

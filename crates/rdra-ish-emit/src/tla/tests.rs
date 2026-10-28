@@ -77,6 +77,22 @@ fn a_child_side_minimum_is_an_invariant_over_a_parent_and_a_witness_child() {
 }
 
 #[test]
+fn a_column_check_is_an_invariant_that_passes_on_null() {
+    let bundle = print(&system(&sample("check_unmet.rdra")), PrintMode::Check, "M");
+    assert!(bundle.tla.contains(
+        "Check_CartLine_qty_0 == \\A b0 \\in CartLine_Ids : (CartLine_exists[b0] = \"present\") => (CartLine_qty[b0] >= 1)\n"
+    ), "{}", bundle.tla);
+    assert!(bundle.cfg.contains("INVARIANT Check_CartLine_qty_0\n"));
+    let nullable = system(
+        "entity L \"L\" { id: Int @pk  qty: Int @null @check(qty >= 1) }\nusecase A \"A\"\ncreates(A, L)\nsets(A, L, qty == 2)\n",
+    );
+    let tla = print(&nullable, PrintMode::Check, "M").tla;
+    assert!(tla.contains(
+        "Check_L_qty_0 == \\A b0 \\in L_Ids : (L_exists[b0] = \"present\") => ((L_qty[b0] = -1) \\/ (L_qty[b0] # -1 /\\ L_qty[b0] >= 1))\n"
+    ), "{tla}");
+}
+
+#[test]
 fn a_pre_existing_child_owner_starts_linked() {
     let src = |card: &str| {
         format!("entity A \"A\" {{ id: Int @pk }}\nentity B \"B\" {{ id: Int @pk }}\nrelate(B, A, {card})\n")

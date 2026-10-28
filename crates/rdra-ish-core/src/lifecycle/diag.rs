@@ -113,6 +113,8 @@ pub enum StateDiag {
         reason: String,
         site: Site,
     },
+    /// A lifecycle construct reads an arithmetic `@derived` column, which has no state var.
+    DerivedColumnRead { column: String, site: Site },
     /// A property atom names a column no single entity owns.
     UnresolvedPropertyAtom {
         property: String,
@@ -141,6 +143,7 @@ impl StateDiag {
             | StateDiag::UnbindableScope { .. }
             | StateDiag::UnbindableCondition { .. }
             | StateDiag::UnsupportedComparison { .. }
+            | StateDiag::DerivedColumnRead { .. }
             | StateDiag::UnresolvedPropertyAtom { .. } => Severity::Error,
         }
     }
@@ -234,6 +237,10 @@ impl fmt::Display for StateDiag {
             StateDiag::UnsupportedComparison {
                 comparison, reason, ..
             } => write!(f, "{comparison}: {reason}"),
+            StateDiag::DerivedColumnRead { column, .. } => write!(
+                f,
+                "{column} is derived by arithmetic, which the lifecycle cannot evaluate; compare the columns it reads instead"
+            ),
             StateDiag::UnresolvedPropertyAtom {
                 property, column, ..
             } => write!(

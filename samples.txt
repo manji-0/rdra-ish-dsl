@@ -4,6 +4,8 @@ samples/personal-info
 samples/api-contract
 samples/incremental-order/step-6-business-rules/src
 samples/formal-verification/after_assert_unmet.rdra
+samples/formal-verification/check_met.rdra
+samples/formal-verification/check_unmet.rdra
 samples/formal-verification/cross_order_payment.rdra
 samples/formal-verification/cross_order_payment_split.rdra
 samples/formal-verification/int_stock.rdra

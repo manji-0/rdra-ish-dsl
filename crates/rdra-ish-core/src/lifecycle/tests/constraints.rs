@@ -601,3 +601,93 @@ invariant(Stock)
     );
     assert!(!violated(&d, "Stock", InvKind::Invariant));
 }
+
+const CART: &str = r#"
+entity Line "明細" { id: Int @pk  qty: Int @default(1) @check(qty >= 1) }
+usecase Add "追加"
+usecase Clear "クリア"
+creates(Add, Line)
+"#;
+
+#[test]
+fn a_check_is_an_invariant_a_use_case_can_break() {
+    let d = derive_src(&format!("{CART}\nsets(Clear, Line, qty == 0)"));
+    assert!(violated(&d, "Line", InvKind::Check));
+    assert_eq!(witnesses(&d, "Line"), vec!["qty=0"]);
+    let d = derive_src(&format!("{CART}\nsets(Clear, Line, qty == 3)"));
+    assert!(!violated(&d, "Line", InvKind::Check));
+}
+
+#[test]
+fn a_check_on_a_created_entity_starts_at_the_base_value() {
+    let d = derive_src(
+        r#"
+entity Line "明細" { id: Int @pk  qty: Int @check(qty >= 1) }
+usecase Add "追加"
+creates(Add, Line)
+"#,
+    );
+    assert!(violated(&d, "Line", InvKind::Check));
+}
+
+#[test]
+fn a_null_operand_leaves_a_check_unknown_which_passes() {
+    let src = |value: &str| {
+        format!(
+            r#"
+entity Line "明細" {{ id: Int @pk  qty: Int @null @check(qty >= 1 and qty <= 4) }}
+usecase Add "追加"
+usecase Set "設定"
+creates(Add, Line)
+sets(Set, Line, qty == {value})
+"#
+        )
+    };
+    assert!(!violated(&derive_src(&src("null")), "Line", InvKind::Check));
+    assert!(!violated(&derive_src(&src("2")), "Line", InvKind::Check));
+    assert!(violated(&derive_src(&src("5")), "Line", InvKind::Check));
+}
+
+#[test]
+fn a_logical_derived_column_is_its_expression_and_no_axis() {
+    let src = |qty: u8| {
+        format!(
+            r#"
+entity Line "明細" {{ id: Int @pk  qty: Int @default(1)  bulk: Bool @derived(qty >= 3) }}
+usecase Add "追加"
+usecase Set "設定"
+creates(Add, Line)
+sets(Set, Line, qty == {qty})
+forbidden(Line, bulk == true)
+"#
+        )
+    };
+    let d = derive_src(&src(4));
+    assert!(violated(&d, "Line", InvKind::Forbidden));
+    assert!(
+        d.rows("Line").iter().all(|r| !r.contains("bulk")),
+        "{:?}",
+        d.rows("Line")
+    );
+    assert!(!violated(&derive_src(&src(2)), "Line", InvKind::Forbidden));
+}
+
+#[test]
+fn reading_an_arithmetic_derived_column_is_derived_column_read() {
+    let d = derive_src(
+        r#"
+entity Line "明細" { id: Int @pk  qty: Int  price: Int  total: Int @derived(qty * price) }
+usecase Add "追加"
+creates(Add, Line)
+forbidden(Line, total > 3)
+"#,
+    );
+    assert!(
+        d.has(
+            "Line",
+            |x| matches!(x, StateDiag::DerivedColumnRead { column, .. } if column == "Line.total")
+        ),
+        "{:?}",
+        d.diags
+    );
+}

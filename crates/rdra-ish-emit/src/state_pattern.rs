@@ -85,6 +85,9 @@ fn violation_message(kind: &InvKind, text: &InvText, p: &str) -> Option<String> 
         (InvKind::Exclusive, InvText::Conditions(c)) => {
             format!("exclusive state conditions co-occur: ({c}) in pattern ({p})")
         }
+        (InvKind::Check, InvText::Conditions(c)) => {
+            format!("check constraint false: ({c}) in pattern ({p})")
+        }
         (InvKind::Invariant, InvText::WhenThen { guards, requireds }) => format!(
             "invariant violated: when ({guards}) holds, ({requireds}) must also hold — but found pattern ({p})"
         ),
@@ -196,6 +199,7 @@ fn diag_message(d: &StateDiag) -> String {
         | StateDiag::MinCardOfPreExistingParent { .. }
         | StateDiag::MinCardNeedsCreate { .. }
         | StateDiag::UnsupportedComparison { .. }
+        | StateDiag::DerivedColumnRead { .. }
         | StateDiag::UnresolvedPropertyAtom { .. } => d.to_string(),
     };
     format!("[{label}] {body}")

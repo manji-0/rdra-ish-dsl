@@ -4,8 +4,9 @@
 use std::collections::HashSet;
 
 use crate::model::{
-    CmpRhs, ComparisonProp, ConditionKey, CrossCmpRhs, CrossEntityCondition, EffectValue,
-    EntityKey, HoldsBody, NodeRef, RelKind, SemanticModel, TemporalExpr, TemporalRhs, UseCaseKey,
+    CheckExpr, CmpRhs, ComparisonProp, ConditionKey, CrossCmpRhs, CrossEntityCondition,
+    DerivedExpr, EffectValue, EntityKey, HoldsBody, NodeRef, RelKind, SemanticModel, TemporalExpr,
+    TemporalRhs, UseCaseKey,
 };
 
 #[derive(Default)]
@@ -121,6 +122,11 @@ impl Named {
         for cond in cross {
             n.cross(cond);
         }
+        for (ek, entity) in &model.entities {
+            for check in entity.columns.iter().flat_map(|c| &c.check_constraints) {
+                n.check(model, ek, &check.expr);
+            }
+        }
         for prop in &model.temporal_properties {
             let (a, b) = match &prop.formula {
                 crate::model::TemporalFormula::Always(e)
@@ -135,7 +141,25 @@ impl Named {
                 n.temporal(model, b);
             }
         }
+        // A read of a logical `@derived` column reads the columns of its expression.
+        for (ek, entity) in &model.entities {
+            for col in &entity.columns {
+                if let Some(DerivedExpr::Logical(expr)) = &col.derived_expr {
+                    if n.any.contains(&(ek, col.name.clone())) {
+                        n.check(model, ek, expr);
+                    }
+                }
+            }
+        }
         n
+    }
+
+    fn check(&mut self, model: &SemanticModel, ek: EntityKey, expr: &CheckExpr) {
+        for prop in expr.comparisons() {
+            if !is_driven(model, ek, prop) {
+                self.comparison(ek, prop);
+            }
+        }
     }
 
     fn name(&mut self, ek: EntityKey, column: &str) {

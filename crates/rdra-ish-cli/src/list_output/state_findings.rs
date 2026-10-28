@@ -77,6 +77,9 @@ fn violation_message(kind: &InvKind, text: &InvText, p: &str) -> Option<String> 
         (InvKind::Invariant, InvText::WhenThen { guards, requireds }) => {
             format!("invariant violated: when {guards} then {requireds} is broken by {p}")
         }
+        (InvKind::Check, InvText::Conditions(c)) => {
+            format!("check constraint is false: {c} is broken by {p}")
+        }
         (
             InvKind::CrossForbidden,
             InvText::Cross {
@@ -176,6 +179,7 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
         | StateDiag::MinCardOfPreExistingParent { .. }
         | StateDiag::MinCardNeedsCreate { .. }
         | StateDiag::UnsupportedComparison { .. }
+        | StateDiag::DerivedColumnRead { .. }
         | StateDiag::UnresolvedPropertyAtom { .. } => diag.to_string(),
     }
 }

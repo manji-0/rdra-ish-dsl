@@ -512,7 +512,11 @@ impl<'t> Bfs<'t> {
             };
             let local = matches!(
                 inv.kind,
-                InvKind::Forbidden | InvKind::Invariant | InvKind::Required | InvKind::Exclusive
+                InvKind::Forbidden
+                    | InvKind::Invariant
+                    | InvKind::Required
+                    | InvKind::Exclusive
+                    | InvKind::Check
             );
             let pattern_desc = if local {
                 describe_slot(ts, s, inv.binders[0], usize::from(binding[0]), false)

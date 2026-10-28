@@ -12,9 +12,9 @@ use crate::lifecycle::types::{
 };
 use crate::lifecycle::EntId;
 use crate::model::{
-    CmpOpModel, CmpRhs, ComparisonProp, CrossCmpRhs, CrossConstraintScope, CrossEntityCondition,
-    EffectValue, EntityKey, FkId, HoldsBody, Min, QuantifierKind, TemporalExpr, TemporalFormula,
-    TemporalRhs, UseCaseKey,
+    CheckExpr, CmpOpModel, CmpRhs, ComparisonProp, CrossCmpRhs, CrossConstraintScope,
+    CrossEntityCondition, DerivedExpr, EffectValue, EntityKey, FkId, HoldsBody, Min,
+    QuantifierKind, TemporalExpr, TemporalFormula, TemporalRhs, UseCaseKey,
 };
 
 /// Binds each entity of a predicate to a slot reference.
@@ -24,7 +24,7 @@ fn at_of(binding: &Binding, ek: EntityKey) -> Option<At> {
     binding.iter().find(|(k, _)| *k == ek).map(|(_, at)| *at)
 }
 
-impl Builder<'_> {
+impl<'m> Builder<'m> {
     // ── Atoms ────────────────────────────────────────────────────────────────
 
     fn slot(&self, ek: EntityKey, column: &str, at: At) -> Option<(Term, Domain)> {
@@ -36,6 +36,34 @@ impl Builder<'_> {
         ))
     }
 
+    /// The `@derived` expression of a column, if it has one.
+    fn derived(&self, ek: EntityKey, column: &str) -> Option<&'m DerivedExpr> {
+        let model = self.model;
+        model.entities[ek]
+            .columns
+            .iter()
+            .find(|c| c.name == column)?
+            .derived_expr
+            .as_ref()
+    }
+
+    /// `slot`, after reporting a read of an arithmetic `@derived` column, which has no var.
+    fn read_slot(
+        &mut self,
+        ek: EntityKey,
+        column: &str,
+        at: At,
+        site: &Site,
+    ) -> Option<(Term, Domain)> {
+        if let Some(DerivedExpr::Arith(_)) = self.derived(ek, column) {
+            let column = format!("{}.{column}", self.model.entities[ek].id);
+            let site = site.clone();
+            self.diag(vec![ek], StateDiag::DerivedColumnRead { column, site });
+            return None;
+        }
+        self.slot(ek, column, at)
+    }
+
     /// `column == value` on one entity slot.
     fn eq_atom(
         &mut self,
@@ -45,12 +73,15 @@ impl Builder<'_> {
         value: &EffectValue,
         site: &Site,
     ) -> Pred {
+        if let Some(DerivedExpr::Logical(expr)) = self.derived(ek, column) {
+            return self.derived_eq(ek, at, expr, value, site);
+        }
         if let EffectValue::Int(n) = value {
             if !(0..=i64::from(self.bounds.int_max)).contains(n) {
                 self.out_of_bounds(*n, site, ek);
             }
         }
-        let Some((term, domain)) = self.slot(ek, column, at) else {
+        let Some((term, domain)) = self.read_slot(ek, column, at, site) else {
             // Not a state var: a non-null column is always present and never null.
             return match value.normalize() {
                 EffectValue::Present => Pred::True,
@@ -87,6 +118,10 @@ impl Builder<'_> {
         site: &Site,
         what: &str,
     ) -> Option<Term> {
+        if let Some(DerivedExpr::Arith(_)) = self.derived(ek, column) {
+            self.read_slot(ek, column, at, site);
+            return None;
+        }
         match self.slot(ek, column, at) {
             Some((term, domain)) if domain.is_numeric() => Some(term),
             _ => {
@@ -159,8 +194,8 @@ impl Builder<'_> {
                         let Some(rat) = at_of(binding, rc.entity) else {
                             return Pred::False;
                         };
-                        let l = self.slot(prop.lhs.entity, &prop.lhs.column, lat);
-                        let r = self.slot(rc.entity, &rc.column, rat);
+                        let l = self.read_slot(prop.lhs.entity, &prop.lhs.column, lat, site);
+                        let r = self.read_slot(rc.entity, &rc.column, rat, site);
                         match (l, r) {
                             (Some((lt, ld)), Some((rt, rd)))
                                 if (ld.is_numeric() && rd.is_numeric())
@@ -252,6 +287,125 @@ impl Builder<'_> {
             CmpOp::Eq,
             Term::Index(p),
         ))
+    }
+
+    // ── Column expressions (`@check`, logical `@derived`) ────────────────────
+
+    /// `expr` under SQL semantics, where a comparison over a null operand is unknown.
+    /// `passes(expr, true)` holds unless `expr` is false; `passes(expr, false)` holds unless
+    /// it is true. Without a nullable operand they are `expr` and `not expr`.
+    fn passes(
+        &mut self,
+        ek: EntityKey,
+        at: At,
+        expr: &CheckExpr,
+        polarity: bool,
+        site: &Site,
+    ) -> Pred {
+        match expr {
+            CheckExpr::Cmp(prop) => {
+                let cmp = self.cmp_atom(ek, at, prop, site);
+                let cmp = if polarity {
+                    cmp
+                } else {
+                    Pred::Not(Box::new(cmp))
+                };
+                let mut unknown = self.null_operands(ek, at, prop);
+                if unknown.is_empty() {
+                    return cmp;
+                }
+                unknown.push(cmp);
+                Pred::Or(unknown)
+            }
+            CheckExpr::Not(inner) => self.passes(ek, at, inner, !polarity, site),
+            CheckExpr::And(a, b) | CheckExpr::Or(a, b) => {
+                let parts = vec![
+                    self.passes(ek, at, a, polarity, site),
+                    self.passes(ek, at, b, polarity, site),
+                ];
+                if matches!(expr, CheckExpr::And(..)) == polarity {
+                    Pred::And(parts)
+                } else {
+                    Pred::Or(parts)
+                }
+            }
+        }
+    }
+
+    /// `operand = null` for each nullable Int operand of an undriven comparison.
+    fn null_operands(&self, ek: EntityKey, at: At, prop: &ComparisonProp) -> Vec<Pred> {
+        if is_driven(self.model, ek, prop) {
+            return Vec::new();
+        }
+        let rhs = match &prop.rhs {
+            CmpRhs::Column(c) => Some(c.as_str()),
+            CmpRhs::IntLit(_) | CmpRhs::Now => None,
+        };
+        std::iter::once(prop.lhs_column.as_str())
+            .chain(rhs)
+            .filter_map(|column| match self.slot(ek, column, at)? {
+                (term, Domain::NullableInt) => {
+                    Some(Pred::Cmp(term, CmpOp::Eq, Term::Lit(Value::NULL)))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// A logical `@derived` column read as `column == value`: its expression, substituted.
+    fn derived_eq(
+        &mut self,
+        ek: EntityKey,
+        at: At,
+        expr: &CheckExpr,
+        value: &EffectValue,
+        site: &Site,
+    ) -> Pred {
+        let not = |p: Pred| Pred::Not(Box::new(p));
+        let nullable = expr
+            .comparisons()
+            .iter()
+            .any(|prop| !self.null_operands(ek, at, prop).is_empty());
+        match value.normalize() {
+            EffectValue::Bool(b) if !nullable => self.passes(ek, at, expr, *b, site),
+            EffectValue::Bool(true) => not(self.passes(ek, at, expr, false, site)),
+            EffectValue::Bool(false) => not(self.passes(ek, at, expr, true, site)),
+            // Neither true nor false: a null operand left it unknown.
+            EffectValue::Null => Pred::And(vec![
+                self.passes(ek, at, expr, true, site),
+                self.passes(ek, at, expr, false, site),
+            ]),
+            EffectValue::Present => not(Pred::And(vec![
+                self.passes(ek, at, expr, true, site),
+                self.passes(ek, at, expr, false, site),
+            ])),
+            _ => Pred::False,
+        }
+    }
+
+    /// `Check_{entity}_{column}_{i}` per `@check`: no present slot makes the expression false.
+    fn column_checks(&mut self) {
+        let model = self.model;
+        for (ek, entity) in &model.entities {
+            for col in &entity.columns {
+                for (i, check) in col.check_constraints.iter().enumerate() {
+                    let fact = ModelRef::Column {
+                        entity: ek,
+                        column: col.name.clone(),
+                    };
+                    let site = Site::new(fact, &check.site);
+                    let body = self.passes(ek, At::Bound(0), &check.expr, true, &site);
+                    self.ts.invariants.push(Invariant {
+                        name: format!("Check_{}_{}_{i}", entity.id, col.name),
+                        kind: InvKind::Check,
+                        binders: vec![self.ent_of[&ek]],
+                        body,
+                        text: InvText::Conditions(check.expr.display()),
+                        site,
+                    });
+                }
+            }
+        }
     }
 
     // ── Invariants ───────────────────────────────────────────────────────────
@@ -351,6 +505,7 @@ impl Builder<'_> {
             let body = Pred::Not(Box::new(Pred::Or(pairs)));
             self.push_invariant("Exclusive", i, InvKind::Exclusive, &b, body, text, site);
         }
+        self.column_checks();
         self.cross_invariants();
         self.quantifiers();
         self.unique_keys();
@@ -903,7 +1058,10 @@ impl Builder<'_> {
                         );
                         let Some(rk) = rk else { return Pred::False };
                         let rat = Self::bind(binding, rk);
-                        match (self.slot(ek, &atom.column, at), self.slot(rk, column, rat)) {
+                        match (
+                            self.read_slot(ek, &atom.column, at, site),
+                            self.read_slot(rk, column, rat, site),
+                        ) {
                             (Some((l, _)), Some((r, _))) => Pred::Cmp(l, op, r),
                             _ => Pred::False,
                         }

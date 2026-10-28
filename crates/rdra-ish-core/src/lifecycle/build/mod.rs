@@ -170,6 +170,10 @@ impl<'m> Builder<'m> {
             // A relate's foreign key is the owner var, not a state column.
             return None;
         }
+        if col.derived_expr.is_some() {
+            // Its readers substitute the expression (or reject arithmetic); nothing writes it.
+            return None;
+        }
         let key = (ek, col.name.clone());
         let (domain, base, variation) = match &col.col_type {
             ColumnType::Enum(values) => {
