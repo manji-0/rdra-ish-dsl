@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 use anyhow::{bail, Context, Result};
-use rdra_ish_core::lifecycle::{BoundsLine, Cone, Target, TransitionSystem, VarSet};
+use rdra_ish_core::lifecycle::{BoundsLine, Caps, Cone, Target, TransitionSystem, VarSet};
 use rdra_ish_core::{ResolvedProgram, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
 
@@ -267,7 +267,7 @@ fn run_tlc(
             cone: None,
         })
     };
-    let line = BoundsLine::verify(bounds);
+    let line = BoundsLine::verify(bounds, Some(Caps::VERIFY));
     println!("{line}");
     println!(
         "cones: {cones} for {} invariant(s) and {} after-assert(s)",
@@ -282,6 +282,7 @@ fn run_tlc(
         None => println!("temporal properties: none, no whole-model run"),
     }
     jobs.extend(temporal);
+    let bfs_errors = state_models(program, model, &ts);
 
     let mut index = String::new();
     for job in &jobs {
@@ -301,8 +302,7 @@ fn run_tlc(
         }
         println!("nothing to check");
         println!("tlc_result: ok");
-        println!("OK: no errors within {}", line.within());
-        return Ok(());
+        return finish(bfs_errors, &line);
     }
     let tlc = find_tlc()?;
     let mut ran = run_all(&tlc, &dir, &jobs[..cones])?;
@@ -334,8 +334,7 @@ fn run_tlc(
             let _ = fs::remove_dir_all(&dir);
         }
         println!("tlc_result: ok");
-        println!("OK: no errors within {}", line.within());
-        return Ok(());
+        return finish(bfs_errors, &line);
     }
     eprintln!("tlc_result: {}", outcome.as_str());
     let failed: Vec<String> = jobs
@@ -370,6 +369,39 @@ fn run_tlc(
             failed.join("\n")
         ),
     }
+}
+
+/// BFS on each entity cone at the verify bounds: the `NoWitness` errors, rendered. A state a
+/// capped cone leaves undecided prints a note. The exploration is dropped before TLC starts.
+fn state_models(program: &ResolvedProgram, model: &SemanticModel, ts: &TransitionSystem) -> usize {
+    let entities: Vec<Target> = ts
+        .targets()
+        .into_iter()
+        .filter(|t| matches!(t, Target::Entity(_)))
+        .collect();
+    let run = ts.explore_targets(&entities, Caps::VERIFY);
+    for u in run.undecided() {
+        println!("note: {u}");
+    }
+    let mut errors = 0;
+    for d in run.verdicts() {
+        if let Some(text) = render_violation(program, model, &d.diag, TraceSource::Bfs) {
+            eprintln!("error: {text}");
+            errors += 1;
+        }
+    }
+    errors
+}
+
+/// The end of a run whose TLC checks passed: a BFS error still fails it.
+fn finish(bfs_errors: usize, line: &BoundsLine) -> Result<()> {
+    if bfs_errors > 0 {
+        bail!(
+            "verification failed: {bfs_errors} state-model error(s) from BFS on the entity cones"
+        );
+    }
+    println!("OK: no errors within {}", line.within());
+    Ok(())
 }
 
 fn find_tlc() -> Result<PathBuf> {

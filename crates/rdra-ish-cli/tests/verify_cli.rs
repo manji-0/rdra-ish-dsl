@@ -159,7 +159,7 @@ fn verify_prints_the_bounds_line_and_an_ok_line_that_repeats_them() {
     assert!(output.status.success(), "{stdout}");
     assert!(
         stdout.lines().any(|l| l
-            == "bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); entities a check does not read are unbounded"),
+            == "bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 2097152 states per BFS cone; entities a check does not read are unbounded"),
         "{stdout}"
     );
     assert_eq!(
@@ -167,5 +167,30 @@ fn verify_prints_the_bounds_line_and_an_ok_line_that_repeats_them() {
         Some("OK: no errors within 2 instances per entity, Int 0..5"),
         "{stdout}"
     );
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// A state no use case reaches fails `verify` from BFS on the entity cones, though TLC finds
+/// no violation.
+#[test]
+fn an_unwitnessed_state_fails_verify_while_tlc_passes() {
+    if !have_tlc() {
+        return;
+    }
+    let tmp = scratch("verify_cli_unwitnessed");
+    let sample = repo().join("samples/formal-verification/unwitnessed_state.rdra");
+    let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
+    assert!(stdout.lines().any(|l| l == "tlc_result: ok"), "{stdout}");
+    assert!(!stdout.contains("OK: no errors"), "{stdout}");
+    assert!(
+        stderr.contains(
+            "error: state Order.status = refunded has no reachability witness: no sequence of use cases from the start reaches it\n  state model: Order.status, entered by Refund (shipped -> refunded)"
+        ),
+        "{stderr}"
+    );
+    assert!(stderr.contains("unwitnessed_state.rdra:31:1"), "{stderr}");
     let _ = std::fs::remove_dir_all(&tmp);
 }

@@ -1,6 +1,8 @@
 //! The start values of an entity's lifecycle column, for diagrams that draw the initial edge.
 
-use super::{Birth, Domain, Effect, ParamRole, Start, TransitionSystem, Value, VarKind};
+use super::{
+    Action, Birth, Domain, Effect, EntId, ParamRole, Start, TransitionSystem, Value, VarId, VarKind,
+};
 use crate::model::EntityKey;
 
 impl TransitionSystem {
@@ -23,44 +25,51 @@ impl TransitionSystem {
         ) else {
             return Vec::new();
         };
-        let decl = self.var(var);
-        let Domain::Enum(names) = &decl.domain else {
+        let Domain::Enum(names) = &self.var(var).domain else {
             return Vec::new();
         };
-        let mut starts: Vec<Value> = Vec::new();
-        if ent.birth == Birth::PreExisting {
-            match decl.start {
-                Start::Base | Start::Identity => starts.push(decl.base),
-                Start::Any => starts.extend((0..names.len()).map(|i| Value(i as u8))),
-            }
-        } else {
-            for action in &self.actions {
-                for effect in &action.effects {
-                    let Effect::Create { param } = effect else {
-                        continue;
-                    };
-                    let p = action.params[usize::from(*param)];
-                    if p.entity != ent_id || p.role != ParamRole::New {
-                        continue;
-                    }
-                    starts.extend(Self::created_value(action, var, *param, decl.base));
-                }
-            }
-        }
-        starts.sort();
-        starts.dedup();
-        starts
+        self.start_values(ent_id, var)
             .into_iter()
             .filter_map(|v| names.get(v.0 as usize).map(String::as_str))
             .collect()
     }
 
-    fn created_value(
-        action: &super::Action,
-        var: super::VarId,
-        param: u8,
-        base: Value,
-    ) -> Vec<Value> {
+    /// The values a fresh slot of `ent_id` holds in `var`, sorted: for a created entity what
+    /// each creating action leaves, for a pre-existing one its start.
+    pub(crate) fn start_values(&self, ent_id: EntId, var: VarId) -> Vec<Value> {
+        let decl = self.var(var);
+        let mut starts: Vec<Value> = Vec::new();
+        if self.entity(ent_id).birth == Birth::PreExisting {
+            match decl.start {
+                Start::Base | Start::Identity => starts.push(decl.base),
+                Start::Any => {
+                    starts.extend((0..decl.domain.size(self.bounds)).map(|i| Value(i as u8)))
+                }
+            }
+        } else {
+            for (action, param) in self.creations(ent_id) {
+                starts.extend(Self::created_value(action, var, param, decl.base));
+            }
+        }
+        starts.sort();
+        starts.dedup();
+        starts
+    }
+
+    /// Each action that creates `ent_id`, with the param it creates.
+    pub(crate) fn creations(&self, ent_id: EntId) -> impl Iterator<Item = (&Action, u8)> + '_ {
+        self.actions.iter().flat_map(move |action| {
+            action.effects.iter().filter_map(move |effect| {
+                let Effect::Create { param } = effect else {
+                    return None;
+                };
+                let p = action.params[usize::from(*param)];
+                (p.entity == ent_id && p.role == ParamRole::New).then_some((action, *param))
+            })
+        })
+    }
+
+    pub(crate) fn created_value(action: &Action, var: VarId, param: u8, base: Value) -> Vec<Value> {
         let mut out = Vec::new();
         for effect in &action.effects {
             match effect {

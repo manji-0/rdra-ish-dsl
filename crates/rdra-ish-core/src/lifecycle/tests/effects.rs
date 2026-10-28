@@ -218,7 +218,14 @@ transitions(Order.status, Ship, placed -> shipped)
         x,
         StateDiag::DoubleModeledEnum { .. }
     )));
-    assert!(!crate::lifecycle::has_errors(&d.diags), "{:?}", d.diags);
+    // `placed` is a transition endpoint that nothing enters: the one error is its witness.
+    let errors: Vec<Option<String>> = d
+        .diags
+        .iter()
+        .filter(|x| x.diag.severity() == crate::lifecycle::Severity::Error)
+        .map(|x| x.diag.name())
+        .collect();
+    assert_eq!(errors, [Some("Witness_Order_status_placed".to_string())]);
 }
 
 #[test]

@@ -231,7 +231,37 @@ assignment of the entity's state columns.
 | `reachable` / `bound` | The count of patterns, and the product of the column domain sizes. |
 
 An entity with no state column has one trivial pattern that is both initial and terminal.
-An Enum variant that no pattern holds draws `UnreachableEnumVariant`.
+
+### State models and witnesses
+
+A lifecycle column (one that `transitions` names, and not a `variation`) has a **state
+model**. Its states are the `from` and `to` endpoints of its `transitions` and the values a
+fresh instance starts at (`column_start_values`: what each creating use case sets, or the
+start of a pre-existing entity). Each state is either witnessed or an error:
+
+- **Witnessed.** Some reachable state of the entity's cone has an instance that holds it.
+- **`NoWitness`.** No reachable state holds it. `check` prints it once, with each
+  `transitions` arm or creation that would enter it and that arm's site.
+- **Not decided.** No state holds it, but the cone stopped at a cap, or `--buc` left use
+  cases out, so the run cannot rule it out. `check` and `states` print a `note:` line that
+  names the cap or the scope. It is neither an error nor a warning.
+
+Every other declared Enum variant that no pattern holds draws the `UnreachableEnumVariant`
+warning, as do Enum columns without a state model. For example, `untriggered_sets` declares
+`draft`, which no `transitions` arm names and no use case sets.
+
+```
+$ rdra-ish check samples/formal-verification/unwitnessed_state.rdra
+bounds: 1 instance per entity, Int 0..5; 4096 states per cone; entities a check does not read are unbounded
+error: state Order.status = refunded has no reachability witness: no sequence of use cases from the start reaches it
+  state model: Order.status, entered by Refund (shipped -> refunded)   skills/rdra-ish-verify/samples/unwitnessed_state.rdra:31:1
+```
+
+Each pattern's **witness** is a shortest path from an initial state to the first state in
+BFS order where an instance holds the pattern. `states --format json` prints it per pattern
+as `witness`. The witness is computed by `state_model_findings` in
+`crates/rdra-ish-core/src/lifecycle/findings.rs`, a pure function of the system and one
+cone's `Graph` (its states and `(from, to, action)` edges).
 
 ```
 $ rdra-ish states samples/formal-verification/order.rdra
@@ -322,7 +352,8 @@ makes the command exit non-zero in every format, and the generators refuse to em
 
 | Diagnostic | Severity | When |
 |---|---|---|
-| `UnreachableEnumVariant { column, variant }` | warning | No reachable pattern holds a declared Enum variant. |
+| `UnreachableEnumVariant { column, variant }` | warning | No reachable pattern holds a declared Enum variant that is not a state of a state model. |
+| `NoWitness { entity, column, value, into }` | error | No reachable state holds a state of a state model: a `transitions` endpoint or a start value of a lifecycle column. Not raised when a cap stopped the cone or `--buc` drops use cases; those print a `not decided` note. |
 | `UnwrittenConstrainedVar { column }` | warning | A constraint or a condition guard reads a column that no use case writes, so it checks only the start value. |
 | `NoCreationPath` | info | No use case creates the entity. It starts present. |
 | `MinCardNeedsCreate { usecase, child }` | info | A use case creates the parent of a `1..*` key and no child in the same transaction group, so `MinCard_*` fails after it unless the use case also creates a child. A child that the action links by update counts. |
@@ -356,7 +387,10 @@ makes the command exit non-zero in every format, and the generators refuse to em
   `value`, `is_initial`, `is_terminal`, and `via`.
 - `json`. One object per entity with `axes` (each with its `domain`), `patterns`,
   `diagnostics`, `no_creation_path`, and the entity id and label. An Int domain lists
-  `"0"` to `"5"`.
+  `"0"` to `"5"`. Each pattern has a `witness`: `start` (the instances a pre-existing
+  entity starts with), `steps` (each with `action`, `usecase`, `bound`, `changes`, and the
+  use case's `site`), and `over_bound`. A change is `create`, `delete`, `set` (with the
+  `site` of the arm or `sets` that wrote it), or `tick`.
 - `typescript`. One union per entity. The union reads the same views.
 
 All formats honor `--entity <id>`, `--buc <id>`, and `--max-patterns <n>`. `--buc`

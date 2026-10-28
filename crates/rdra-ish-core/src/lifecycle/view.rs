@@ -6,6 +6,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::diag::{Diag, StateDiag};
 use super::explore::{ComponentRun, Exploration};
 use super::expr::State;
+use super::findings::Witness;
+use super::trace::Trace;
 use super::types::{ActionOrigin, Birth, Domain, EntId, Value, VarKind};
 use super::TransitionSystem;
 use crate::model::SemanticModel;
@@ -82,6 +84,10 @@ pub struct ReachablePattern {
     /// No enabled action moves a slot off it, or some enabled action deletes it.
     pub is_terminal: bool,
     pub provenance: Provenance,
+    /// A shortest path to the first state where some instance holds the pattern; `None` for
+    /// the trivial pattern of an entity without state columns, or when a cap stopped the run
+    /// before it admitted that state.
+    pub witness: Option<Trace>,
 }
 
 #[derive(Debug, Clone)]
@@ -206,6 +212,25 @@ impl Exploration {
     }
 }
 
+/// Per pattern of `e`'s view, the first state in discovery order where a present slot holds
+/// it.
+fn first_states(run: &ComponentRun, e: EntId) -> Vec<Option<u32>> {
+    let ts = &run.system;
+    let view = &run.views[e.index()];
+    let mut first = vec![None; view.patterns.len()];
+    for (at, s) in run.states.iter().enumerate() {
+        for slot in 0..ts.bounds.slots() {
+            if !s.is_present(ts, e, slot) {
+                continue;
+            }
+            if let Some(id) = view.id(&ts.pattern_key(s, e, slot)) {
+                first[id].get_or_insert(at as u32);
+            }
+        }
+    }
+    first
+}
+
 fn is_cap(d: &StateDiag) -> bool {
     matches!(
         d,
@@ -233,10 +258,15 @@ pub(crate) fn entity_view(
         .collect();
     let in_cone = verdicts.is_some();
     let found: Vec<StateDiag> = verdicts.unwrap_or_else(|| {
+        let witnesses = ts.state_model_findings(e, &run.graph()).witnesses;
         run.diags
             .iter()
             .filter(|d| !is_cap(&d.diag) && d.entities.contains(&decl.key))
             .map(|d| d.diag.clone())
+            .chain(witnesses.into_iter().filter_map(|w| match w.witness {
+                Witness::Missing(diag) => Some(*diag),
+                _ => None,
+            }))
             .collect()
     });
     if axes.is_empty() {
@@ -255,6 +285,7 @@ pub(crate) fn entity_view(
                 is_initial: true,
                 is_terminal: true,
                 provenance: Provenance::default(),
+                witness: None,
             }],
             truncated: false,
             no_creation_path: false,
@@ -262,6 +293,7 @@ pub(crate) fn entity_view(
         };
     }
     let via = view.via();
+    let first = first_states(run, e);
     let patterns: Vec<ReachablePattern> = (0..view.patterns.len())
         .map(|id| ReachablePattern {
             pattern: pattern(ts, e, &view.patterns[id]),
@@ -279,6 +311,7 @@ pub(crate) fn entity_view(
                     })
                     .collect(),
             },
+            witness: first[id].map(|at| run.trace_to(at)),
         })
         .collect();
     let caps = run
@@ -290,6 +323,8 @@ pub(crate) fn entity_view(
             diagnostics.push(d.diag.clone());
         }
     }
+    // A state of a state model is witnessed or `NoWitness`; only other values warn.
+    let state_model = ts.state_model_values(e);
     for &var in &decl.columns {
         let (
             VarKind::Column {
@@ -301,7 +336,10 @@ pub(crate) fn entity_view(
             continue;
         };
         let column = ts.var_name(var);
-        for variant in values {
+        for (i, variant) in values.iter().enumerate() {
+            if state_model.contains(&(var, Value(i as u8))) {
+                continue;
+            }
             let held = AbstractValue::Enum(variant.clone());
             if !patterns
                 .iter()

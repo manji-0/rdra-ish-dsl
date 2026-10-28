@@ -5,6 +5,7 @@ use std::fmt;
 
 use super::diag::{Diag, Severity, StateDiag};
 use super::explore::Caps;
+use super::targets::Undecided;
 use super::view::EntityStateResult;
 use super::{Bounds, Scope, TransitionSystem};
 use crate::model::SemanticModel;
@@ -42,11 +43,11 @@ impl BoundsLine {
         }
     }
 
-    /// What `verify` runs at; TLC has no state cap.
-    pub fn verify(bounds: Bounds) -> Self {
+    /// What `verify` runs at: TLC has no state cap; `caps` bound the BFS of the entity cones.
+    pub fn verify(bounds: Bounds, caps: Option<Caps>) -> Self {
         BoundsLine {
             bounds,
-            caps: None,
+            caps,
             tla: true,
         }
     }
@@ -92,6 +93,8 @@ pub struct StatesReport {
     pub views: Vec<EntityStateResult>,
     /// Every diagnostic of the build and the cone runs' verdicts.
     pub diags: Vec<Diag>,
+    /// States of state models the run did not decide.
+    pub undecided: Vec<Undecided>,
 }
 
 impl StatesReport {
@@ -128,7 +131,10 @@ pub fn derive_states(model: &SemanticModel, scope: &Scope, max_patterns: usize) 
     let bounds = Bounds::STATES;
     let caps = Caps::per_cone(max_patterns);
     let built = TransitionSystem::build(model, bounds, scope);
-    let run = built.ts.explore_targets(caps);
+    let mut run = built.ts.explore_targets(&built.ts.targets(), caps);
+    if *scope != Scope::All {
+        run.defer_witnesses();
+    }
     let views = run.entity_views(&built.ts, model, &built.diags);
     let mut diags = built.diags;
     for d in run.verdicts() {
@@ -141,6 +147,7 @@ pub fn derive_states(model: &SemanticModel, scope: &Scope, max_patterns: usize) 
         caps,
         views,
         diags,
+        undecided: run.undecided().to_vec(),
     }
 }
 

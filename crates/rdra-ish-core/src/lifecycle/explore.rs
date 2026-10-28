@@ -69,9 +69,37 @@ pub(crate) struct Move {
     pub next: State,
 }
 
+/// What both engines produce for one cone: the reached states in discovery order, initial
+/// ones first, and the moves between them. Findings read only this.
+pub struct Graph<'a> {
+    pub states: &'a [State],
+    /// False when a cap stopped the exploration, so a state it did not reach may be reachable.
+    pub complete: bool,
+    edges: &'a [Edge],
+    bindings: &'a [(ActId, Box<[u8]>)],
+}
+
+impl Graph<'_> {
+    /// Every move as `(from, to, action)`, self-loops and repeats included.
+    pub fn edges(&self) -> impl Iterator<Item = (u32, u32, ActId)> + '_ {
+        self.edges
+            .iter()
+            .map(|e| (e.from, e.to, self.bindings[e.binding as usize].0))
+    }
+}
+
 impl ComponentRun {
     pub fn edges(&self) -> &[Edge] {
         &self.edges
+    }
+
+    pub fn graph(&self) -> Graph<'_> {
+        Graph {
+            states: &self.states,
+            complete: self.complete,
+            edges: &self.edges,
+            bindings: &self.bindings,
+        }
     }
 
     /// The action and its params on an edge.
@@ -170,7 +198,7 @@ pub(crate) struct EntityView {
 }
 
 impl EntityView {
-    fn id(&self, key: &[u8]) -> Option<usize> {
+    pub(crate) fn id(&self, key: &[u8]) -> Option<usize> {
         self.index.get(key).copied()
     }
 

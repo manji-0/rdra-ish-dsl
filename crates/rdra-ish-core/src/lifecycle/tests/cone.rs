@@ -9,7 +9,7 @@ use super::*;
 use crate::lifecycle::{EntityStateResult, Exploration, State, Target};
 use crate::{build_merged_model, resolve};
 
-fn load(rel: &str) -> SemanticModel {
+pub(super) fn load(rel: &str) -> SemanticModel {
     let root = repo_root().join(rel);
     let mut files: Vec<PathBuf> = Vec::new();
     let mut stack = vec![root];
@@ -60,7 +60,7 @@ fn violated(diags: &[&StateDiag], target: Target, ts: &TransitionSystem) -> bool
     })
 }
 
-const SAMPLES: &[&str] = &[
+pub(super) const SAMPLES: &[&str] = &[
     "samples/ec-site",
     "samples/personal-info",
     "samples/formal-verification/after_assert_unmet.rdra",
@@ -76,6 +76,7 @@ const SAMPLES: &[&str] = &[
     "samples/formal-verification/order.rdra",
     "samples/formal-verification/quantifier_none.rdra",
     "samples/formal-verification/untriggered_sets.rdra",
+    "samples/formal-verification/unwitnessed_state.rdra",
     "samples/formal-verification-fail/order.rdra",
 ];
 
@@ -96,7 +97,7 @@ fn cone_exploration_equals_the_projection_of_the_whole_component() {
             let full_views = whole.entity_views(&model, &[]);
             let full_diags: Vec<&StateDiag> = whole.diags().map(|d| &d.diag).collect();
             let full_run = &whole.runs[0];
-            let cones = sub.explore_targets(caps);
+            let cones = sub.explore_targets(&sub.targets(), caps);
             let cone_views = cones.entity_views(&sub, &model, &[]);
             let cone_diags: Vec<&StateDiag> = cones.verdicts().iter().map(|d| &d.diag).collect();
             for target in sub.targets() {
@@ -220,7 +221,7 @@ fn every_state_replays_from_its_parent_path_through_moves() {
         let model = load(sample);
         for bounds in [Bounds::STATES, Bounds::VERIFY] {
             let built = TransitionSystem::build(&model, bounds, &Scope::All);
-            for cr in &built.ts.explore_targets(caps).cones {
+            for cr in &built.ts.explore_targets(&built.ts.targets(), caps).cones {
                 let run = &cr.run;
                 let ts = &run.system;
                 assert!(run.complete, "{sample}: cone does not finish");

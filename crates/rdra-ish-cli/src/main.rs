@@ -19,7 +19,7 @@ use export::export_artifact;
 use fmt_cmd::run_fmt;
 use list_output::{
     format_lint_issues, list_elements, note_state_errors, reject_state_errors, severity_word,
-    state_consistency_findings,
+    state_findings,
 };
 use load::{eprint_diagnostic, load_model, reject_model_errors};
 use rdra_ish_core::lifecycle::{BoundsLine, Caps, Severity};
@@ -74,11 +74,15 @@ fn main() -> Result<()> {
             }
 
             // Same severity as `states` (fail-closed on caps and violated constraints).
-            for (severity, message) in state_consistency_findings(&program, &model) {
+            let (findings, notes) = state_findings(&program, &model);
+            for (severity, message) in findings {
                 if severity == Severity::Error {
                     has_error = true;
                 }
                 eprintln!("{}: {}", severity_word(severity), message);
+            }
+            for note in notes {
+                eprintln!("note: {note}");
             }
 
             let property_count = model.temporal_properties.len();

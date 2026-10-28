@@ -18,14 +18,23 @@ pub(crate) fn severity_word(severity: Severity) -> &'static str {
 
 /// Every diagnostic of the lifecycle views at the `states` defaults, with its severity: those
 /// on an entity view first, then each violated constraint or assert once with its
-/// counterexample, then those that name no entity.
+/// counterexample and each unwitnessed state once, then those that name no entity.
 pub(crate) fn state_consistency_findings(
     program: &ResolvedProgram,
     model: &SemanticModel,
 ) -> Vec<(Severity, String)> {
+    state_findings(program, model).0
+}
+
+/// The findings of `state_consistency_findings`, and a note per state of a state model the
+/// run did not decide.
+pub(crate) fn state_findings(
+    program: &ResolvedProgram,
+    model: &SemanticModel,
+) -> (Vec<(Severity, String)>, Vec<String>) {
     let report = derive_states(model, &Scope::All, Caps::DEFAULT_PATTERNS);
     let on_views = report.views.iter().flat_map(|result| {
-        let diags = result.diagnostics.iter().filter(|d| d.trace().is_none());
+        let diags = result.diagnostics.iter().filter(|d| !has_block(d));
         diags.map(move |diag| {
             (
                 diag.severity(),
@@ -43,9 +52,18 @@ pub(crate) fn state_consistency_findings(
     });
     let unattributed = report
         .unattributed()
-        .filter(|d| d.trace().is_none())
+        .filter(|d| !has_block(d))
         .map(|diag| (diag.severity(), state_diag_message(diag)));
-    on_views.chain(violations).chain(unattributed).collect()
+    let notes = report.undecided.iter().map(ToString::to_string).collect();
+    (
+        on_views.chain(violations).chain(unattributed).collect(),
+        notes,
+    )
+}
+
+/// `render_violation` prints it once, as a block with sites, instead of once per view.
+fn has_block(diag: &StateDiag) -> bool {
+    diag.trace().is_some() || matches!(diag, StateDiag::NoWitness { .. })
 }
 
 fn location(program: &ResolvedProgram, site: &Site) -> Option<String> {
@@ -60,14 +78,46 @@ pub(crate) enum TraceSource {
 }
 
 /// A violation, the rule's site, and its counterexample: one step per line with its use case
-/// site, and under it each changed value with the site of the effect that wrote it. `None`
-/// for a diagnostic that is not a violation.
+/// site, and under it each changed value with the site of the effect that wrote it. An
+/// unwitnessed state prints with the arms that would enter it. `None` for any other
+/// diagnostic.
 pub(crate) fn render_violation(
     program: &ResolvedProgram,
     model: &SemanticModel,
     diag: &StateDiag,
     source: TraceSource,
 ) -> Option<String> {
+    if let StateDiag::NoWitness {
+        entity,
+        column,
+        value,
+        into,
+    } = diag
+    {
+        let mut rows: Vec<(String, Option<String>)> = into
+            .iter()
+            .map(|entry| {
+                let how = match &entry.from {
+                    Some(from) => format!("{from} -> {value}"),
+                    None => "creates it".to_string(),
+                };
+                (
+                    format!(
+                        "  state model: {entity}.{column}, entered by {} ({how})",
+                        entry.action
+                    ),
+                    location(program, &entry.site),
+                )
+            })
+            .collect();
+        if rows.is_empty() {
+            rows.push((
+                format!("  state model: {entity}.{column}; no use case enters {value}"),
+                None,
+            ));
+        }
+        return Some(format!("{diag}{}", aligned(rows)));
+    }
     let (head, site, trace) = match diag {
         StateDiag::ConstraintViolated {
             name, site, trace, ..
@@ -104,11 +154,23 @@ pub(crate) fn render_violation(
         ));
         rows.extend(step.changes.iter().map(|c| change_row(program, c)));
     }
+    out.push_str(&aligned(rows));
+    for entity in &trace.over_bound {
+        out.push_str(&format!(
+            "\n  note: the counterexample creates more {entity} instances than the instance bound allows; this check's cone does not count {entity} slots, so the whole model may not reach it at this bound"
+        ));
+    }
+    Some(out)
+}
+
+/// One line per row, each row's site in a column after the longest text.
+fn aligned(rows: Vec<(String, Option<String>)>) -> String {
     let width = rows
         .iter()
         .map(|(text, _)| text.chars().count())
         .max()
         .unwrap_or(0);
+    let mut out = String::new();
     for (text, at) in rows {
         match at {
             Some(at) => {
@@ -118,12 +180,7 @@ pub(crate) fn render_violation(
             None => out.push_str(&format!("\n{text}")),
         }
     }
-    for entity in &trace.over_bound {
-        out.push_str(&format!(
-            "\n  note: the counterexample creates more {entity} instances than the instance bound allows; this check's cone does not count {entity} slots, so the whole model may not reach it at this bound"
-        ));
-    }
-    Some(out)
+    out
 }
 
 /// `Pay_1, transaction 1 of Pay [Payment#1]`.
@@ -303,6 +360,7 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
             "temporal assertion violated after '{anchor}': expected {requireds}, but found {actual}"
         ),
         StateDiag::StateCapReached { .. }
+        | StateDiag::NoWitness { .. }
         | StateDiag::ContradictoryDrivenComparison { .. }
         | StateDiag::AssertOnInertUseCase { .. }
         | StateDiag::IntLiteralOutOfBounds { .. }

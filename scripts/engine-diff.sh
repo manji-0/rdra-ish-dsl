@@ -23,6 +23,8 @@ while IFS= read -r sample; do
 
   "$bin" states "$sample" --format json >"$dir/states.json" 2>&1
   echo $? >"$dir/states.exit"
+  # Witness sites are absolute paths; keep the checkout out so two checkouts diff cleanly.
+  sed -i.bak -e "s|$repo_root/||g" "$dir/states.json" && rm -f "$dir/states.json.bak"
 
   "$bin" check "$sample" >"$dir/check.txt" 2>&1
   echo "exit=$?" >>"$dir/check.txt"

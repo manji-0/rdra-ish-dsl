@@ -1,0 +1,39 @@
+// A state nothing reaches. Refund leaves shipped only inside the refund window, and the
+// window holds only while the Order is pending, so no sequence of use cases enters refunded.
+// check/states/verify intent: expected FAIL with Witness_Order_status_refunded. TLC finds no
+// violation: the BFS state-model finding fails the run.
+// expect check: fail Witness_Order_status_refunded
+// expect verify: tlc=ok fail Witness_Order_status_refunded
+entity Order "注文" {
+  id:         Int @pk
+  status:     Enum(pending, paid, shipped, refunded) @default(pending)
+  shipped_at: DateTime @null
+}
+
+usecase Place  "注文確定"
+usecase Pay    "支払い"
+usecase Ship   "発送"
+usecase Refund "返金"
+
+buc BucOrderRefund "Order refund"
+contains(BucOrderRefund, Place)
+contains(BucOrderRefund, Pay)
+contains(BucOrderRefund, Ship)
+contains(BucOrderRefund, Refund)
+
+creates(Place, Order)
+updates(Pay, Order)
+updates(Ship, Order)
+updates(Refund, Order)
+
+transitions(Order.status, Pay, pending -> paid)
+transitions(Order.status, Ship, paid -> shipped)
+transitions(Order.status, Refund, shipped -> refunded)
+
+sets(Ship, Order, shipped_at == present)
+
+condition RefundWindow "返金受付期間"
+holds(RefundWindow, Order.status == pending)
+applies_to(RefundWindow, Refund)
+
+forbidden(Order, status == pending, shipped_at == present)

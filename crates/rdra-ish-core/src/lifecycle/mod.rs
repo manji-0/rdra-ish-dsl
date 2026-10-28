@@ -11,6 +11,7 @@ mod cone;
 mod diag;
 mod explore;
 mod expr;
+mod findings;
 mod restrict;
 mod starts;
 mod states;
@@ -23,12 +24,13 @@ mod view;
 mod tests;
 
 pub use cone::{Cone, Target, VarSet};
-pub use diag::{has_errors, Diag, Severity, StateDiag};
-pub use explore::{Caps, ComponentRun, Edge, Exploration};
+pub use diag::{has_errors, Diag, Entry, Severity, StateDiag};
+pub use explore::{Caps, ComponentRun, Edge, Exploration, Graph};
 pub use expr::State;
+pub use findings::{StateModelFindings, ValueWitness, Witness};
 pub use restrict::Component;
 pub use states::{derive_states, BoundsLine, StatesReport};
-pub use targets::{ConeRun, TargetExploration};
+pub use targets::{ConeRun, TargetExploration, Undecided, UndecidedWhy};
 pub use trace::{Change, Inst, Replay, ReplayError, Trace, TraceStep};
 pub use types::{
     ActId, Action, ActionOrigin, AfterAssert, AfterStep, At, Birth, Bounds, CmpOp, Domain, Effect,

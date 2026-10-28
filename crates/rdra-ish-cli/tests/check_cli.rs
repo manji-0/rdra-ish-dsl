@@ -79,3 +79,49 @@ fn check_and_states_print_the_bounds_line() {
         Some(BOUNDS)
     );
 }
+
+/// A state of a state model that no use case reaches is one error, with the arm that would
+/// enter it; `states` reports it on the entity's view, and each reachable pattern carries the
+/// path that reaches it.
+#[test]
+fn check_reports_a_state_no_use_case_reaches() {
+    let sample = "samples/formal-verification/unwitnessed_state.rdra";
+    let output = run(&["check", sample]);
+    assert_eq!(output.status.code(), Some(1));
+    let root = format!("{}/", repo().display());
+    let stderr = String::from_utf8_lossy(&output.stderr).replace(&root, "");
+    let file = "skills/rdra-ish-verify/samples/unwitnessed_state.rdra";
+    assert_eq!(
+        stderr,
+        format!(
+            "\
+{BOUNDS}
+error: state Order.status = refunded has no reachability witness: no sequence of use cases from the start reaches it
+  state model: Order.status, entered by Refund (shipped -> refunded)   {file}:31:1
+"
+        )
+    );
+
+    let states = run(&["states", sample, "--format", "json"]);
+    assert_eq!(states.status.code(), Some(1));
+    let json: serde_json::Value =
+        serde_json::from_slice(&states.stdout).expect("states prints JSON");
+    let order = &json[0];
+    assert!(order["diagnostics"][0]
+        .as_str()
+        .unwrap()
+        .contains("Order.status = refunded has no reachability witness"));
+    let shipped = order["patterns"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["values"]["status"] == "shipped")
+        .expect("shipped is reachable");
+    let actions: Vec<&str> = shipped["witness"]["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["action"].as_str().unwrap())
+        .collect();
+    assert_eq!(actions, ["Place", "Pay", "Ship"]);
+}

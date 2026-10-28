@@ -14,6 +14,16 @@
   (`4096 states per cone`). `verify` no longer prints `bounds: InstanceCount=2 IntRange=0..5`;
   the line now reads `bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2,
   IntRange=0..5); entities a check does not read are unbounded`.
+- A state of a state model that no reachable state holds is now `NoWitness`, an error in
+  `check`, `states`, `verify`, and the generator gates. A state of a state model is a
+  `transitions` endpoint or a value a creating use case sets, on a lifecycle column that is
+  not a `variation`. Before, it was the `UnreachableEnumVariant` warning. No sample has
+  one; a model with a `from` state that nothing enters now fails. Every other unheld Enum
+  variant keeps the warning.
+- `verify` runs BFS on every entity's cone before TLC, at the same bounds and at most
+  2,097,152 states per cone, and a `NoWitness` there fails the run even when TLC passes
+  (`tlc_result: ok`, no `OK:` line, exit 1). Its `bounds:` line gains `2097152 states per
+  BFS cone`. On clinic-ops the pass adds about 11 s.
 
 - `@check` and `@derived` take an unquoted, typed expression: `@check(qty >= 1)`,
   `@derived(total - discount)` or `@derived(qty >= 3)`. The quoted form is a parse
@@ -195,6 +205,15 @@
 
 ### Added
 
+- Reachability witnesses. `states --format json` gives each pattern a `witness`: a
+  shortest path from the start to the first state that holds the pattern, with each
+  step's use case, bound instances, changes, and sites. `check` prints a `NoWitness` once,
+  with each `transitions` arm or creation that would enter the state and its site. A cone
+  that stops at a cap, or a `--buc` run, leaves its unwitnessed states undecided and
+  prints a `note:` that names the cap or the scope. The witness logic is
+  `state_model_findings`, a pure function of the system and a cone's `Graph`. New sample
+  `unwitnessed_state.rdra`: `check` and `verify` fail on `Order.status = refunded`, and
+  TLC passes.
 - Logical data layer (phase 5). One `ForeignKey` fact per key-side `relate` feeds DBML,
   JSON Schema, the entity CSV, `list --kind entity`, the ER diagrams, the transaction
   graph, and the lifecycle owner variables. New relate syntax: `.role(x)` names a key,

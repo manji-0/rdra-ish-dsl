@@ -3,8 +3,8 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use rdra_ish_core::entity_state_variants;
-use rdra_ish_core::lifecycle::{derive_states, Scope, Severity};
+use rdra_ish_core::lifecycle::{derive_states, Scope, Severity, Site};
+use rdra_ish_core::{entity_state_variants, format_location};
 use rdra_ish_emit::{
     state_pattern::{render_csv, render_json, render_table},
     typescript::emit_typescript_state_unions,
@@ -41,6 +41,9 @@ pub fn run_states(
     for d in report.unattributed() {
         eprintln!("{}: {}", severity_word(d.severity()), state_diag_message(d));
     }
+    for u in &report.undecided {
+        eprintln!("note: {u}");
+    }
 
     if let Some(ref entity_id) = entity {
         let other_errors: usize = report
@@ -60,7 +63,9 @@ pub fn run_states(
     let output = match format {
         StatesFormat::Table => render_table(&report.views),
         StatesFormat::Csv => render_csv(&report.views)?,
-        StatesFormat::Json => render_json(&report.views)?,
+        StatesFormat::Json => render_json(&report.views, &model, &|site: &Site| {
+            format_location(&program, site.span.as_ref()?)
+        })?,
         StatesFormat::TypeScript => {
             emit_typescript_state_unions(&entity_state_variants(&model, &report.views))
         }

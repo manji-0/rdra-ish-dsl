@@ -8,6 +8,7 @@ mod owners;
 mod system;
 mod trace;
 mod tx_groups;
+mod witness;
 
 use super::{Bounds, Caps, Diag, EntityStateResult, Scope, StateDiag, TransitionSystem};
 use crate::analysis::build_model;

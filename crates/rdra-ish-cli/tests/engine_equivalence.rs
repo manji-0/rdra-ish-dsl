@@ -285,7 +285,9 @@ fn bfs_and_tlc_reach_the_same_states_and_verdicts() {
 fn check_model(tlc: &Path, scratch: &Path, sample: &str, model: &SemanticModel, bounds: Bounds) {
     let workers = std::thread::available_parallelism().map_or(4, |n| n.get().min(8));
     let built = TransitionSystem::build(model, bounds, &Scope::All);
-    let exploration = built.ts.explore_targets(Caps::new(usize::MAX, STATE_CAP));
+    let exploration = built
+        .ts
+        .explore_targets(&built.ts.targets(), Caps::new(usize::MAX, STATE_CAP));
     let cones = &exploration.cones;
     let next = AtomicUsize::new(0);
     let reports: Mutex<Vec<(usize, ConeReport)>> = Mutex::new(Vec::new());
@@ -504,7 +506,7 @@ fn a_corrupted_tlc_trace_does_not_replay() {
     let _ = std::fs::remove_dir_all(&dir);
     let model = load("samples/formal-verification/cross_order_payment_split.rdra");
     let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::All).ts;
-    let exploration = ts.explore_targets(Caps::new(usize::MAX, STATE_CAP));
+    let exploration = ts.explore_targets(&ts.targets(), Caps::new(usize::MAX, STATE_CAP));
     let cone = exploration
         .cones
         .iter()

@@ -117,9 +117,18 @@ This keeps clinic-ops tractable: a whole-model run at `InstanceCount=2` took 62 
 Temporal properties need fairness on the whole system, which does not restrict to a
 cone. `verify` checks them on the whole model, and only when the model declares any.
 
+Before TLC runs, `verify` explores each entity's cone with BFS at the same bounds, capped at
+2,097,152 states per cone (`Caps::VERIFY`, named in the `bounds:` line). Each state of a
+state model must have a witness there (see
+[state-derivation.md](./state-derivation.md#state-models-and-witnesses)). A `NoWitness`
+error fails `verify` even when every TLC check passes: the run prints `tlc_result: ok` and
+no `OK:` line, and exits 1. A cone that stops at the cap decides nothing about its
+unwitnessed states, and `verify` prints a `note:` for each. On clinic-ops this pass takes
+about 11 s and 400 MB, most of it the `AccountBalance` cone (1,707,212 states).
+
 ```
 $ rdra-ish verify samples/formal-verification/order.rdra --backend tlc
-bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); entities a check does not read are unbounded
+bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 2097152 states per BFS cone; entities a check does not read are unbounded
 cones: 1 for 2 invariant(s) and 1 after-assert(s)
 temporal properties: 2, checked on the whole model (fairness does not restrict to a cone)
 Cone_Forbidden_Order_0 [Forbidden_Order_0, Inv_Order_0, AfterAssert_DeliverOrder_0]: ok (31 states)
@@ -212,6 +221,7 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `min_card_met.rdra` | pass, pass | The same model with Place creating the Order and its first line in one transaction |
 | `check_unmet.rdra` | fail, fail | `qty: Int @default(1) @check(qty >= 1)` adds `Check_CartLine_qty_0`; ClearQty sets `qty` to 0 |
 | `check_met.rdra` | pass, pass | The same check with a use case that keeps `qty` in range; `forbidden` reads the derived `bulk: Bool @derived(qty >= 3)` as its expression |
+| `unwitnessed_state.rdra` | fail, pass | `refunded` has no witness: Refund needs `shipped` and a refund window that holds only while `pending`. TLC passes; the BFS witness check fails `check` and `verify` |
 | `fail/order.rdra` | fail, fail | Intentionally unsafe (reachable invariant violation) |
 
 BFS and TLC give the same verdict on every row at the same bounds. `check` runs at one

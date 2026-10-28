@@ -38,7 +38,31 @@ expression: result
         },
         "via": [
           "PlaceOrder"
-        ]
+        ],
+        "witness": {
+          "over_bound": [],
+          "start": [],
+          "steps": [
+            {
+              "action": "PlaceOrder",
+              "bound": [
+                "Order#1"
+              ],
+              "changes": [
+                {
+                  "at": "Order#1",
+                  "kind": "create",
+                  "values": {
+                    "delivered_at": "null",
+                    "status": "pending"
+                  }
+                }
+              ],
+              "site": null,
+              "usecase": "PlaceOrder"
+            }
+          ]
+        }
       },
       {
         "idx": 1,
@@ -51,7 +75,49 @@ expression: result
         "via": [
           "CapturePay",
           "PlaceOrder"
-        ]
+        ],
+        "witness": {
+          "over_bound": [],
+          "start": [],
+          "steps": [
+            {
+              "action": "PlaceOrder",
+              "bound": [
+                "Order#1"
+              ],
+              "changes": [
+                {
+                  "at": "Order#1",
+                  "kind": "create",
+                  "values": {
+                    "delivered_at": "null",
+                    "status": "pending"
+                  }
+                }
+              ],
+              "site": null,
+              "usecase": "PlaceOrder"
+            },
+            {
+              "action": "CapturePay",
+              "bound": [
+                "Order#1"
+              ],
+              "changes": [
+                {
+                  "at": "Order#1",
+                  "field": "status",
+                  "from": "pending",
+                  "kind": "set",
+                  "site": null,
+                  "to": "paid"
+                }
+              ],
+              "site": null,
+              "usecase": "CapturePay"
+            }
+          ]
+        }
       },
       {
         "idx": 2,
@@ -64,7 +130,49 @@ expression: result
         "via": [
           "CancelOrder",
           "PlaceOrder"
-        ]
+        ],
+        "witness": {
+          "over_bound": [],
+          "start": [],
+          "steps": [
+            {
+              "action": "PlaceOrder",
+              "bound": [
+                "Order#1"
+              ],
+              "changes": [
+                {
+                  "at": "Order#1",
+                  "kind": "create",
+                  "values": {
+                    "delivered_at": "null",
+                    "status": "pending"
+                  }
+                }
+              ],
+              "site": null,
+              "usecase": "PlaceOrder"
+            },
+            {
+              "action": "CancelOrder",
+              "bound": [
+                "Order#1"
+              ],
+              "changes": [
+                {
+                  "at": "Order#1",
+                  "field": "status",
+                  "from": "pending",
+                  "kind": "set",
+                  "site": null,
+                  "to": "cancelled"
+                }
+              ],
+              "site": null,
+              "usecase": "CancelOrder"
+            }
+          ]
+        }
       },
       {
         "idx": 3,
@@ -78,7 +186,67 @@ expression: result
           "CapturePay",
           "PlaceOrder",
           "ShipOrder"
-        ]
+        ],
+        "witness": {
+          "over_bound": [],
+          "start": [],
+          "steps": [
+            {
+              "action": "PlaceOrder",
+              "bound": [
+                "Order#1"
+              ],
+              "changes": [
+                {
+                  "at": "Order#1",
+                  "kind": "create",
+                  "values": {
+                    "delivered_at": "null",
+                    "status": "pending"
+                  }
+                }
+              ],
+              "site": null,
+              "usecase": "PlaceOrder"
+            },
+            {
+              "action": "CapturePay",
+              "bound": [
+                "Order#1"
+              ],
+              "changes": [
+                {
+                  "at": "Order#1",
+                  "field": "status",
+                  "from": "pending",
+                  "kind": "set",
+                  "site": null,
+                  "to": "paid"
+                }
+              ],
+              "site": null,
+              "usecase": "CapturePay"
+            },
+            {
+              "action": "ShipOrder",
+              "bound": [
+                "Order#1"
+              ],
+              "changes": [
+                {
+                  "at": "Order#1",
+                  "field": "status",
+                  "from": "paid",
+                  "kind": "set",
+                  "site": null,
+                  "to": "shipped"
+                }
+              ],
+              "site": null,
+              "usecase": "ShipOrder"
+            }
+          ]
+        }
       },
       {
         "idx": 4,
@@ -93,7 +261,93 @@ expression: result
           "DeliverOrder",
           "PlaceOrder",
           "ShipOrder"
-        ]
+        ],
+        "witness": {
+          "over_bound": [],
+          "start": [],
+          "steps": [
+            {
+              "action": "PlaceOrder",
+              "bound": [
+                "Order#1"
+              ],
+              "changes": [
+                {
+                  "at": "Order#1",
+                  "kind": "create",
+                  "values": {
+                    "delivered_at": "null",
+                    "status": "pending"
+                  }
+                }
+              ],
+              "site": null,
+              "usecase": "PlaceOrder"
+            },
+            {
+              "action": "CapturePay",
+              "bound": [
+                "Order#1"
+              ],
+              "changes": [
+                {
+                  "at": "Order#1",
+                  "field": "status",
+                  "from": "pending",
+                  "kind": "set",
+                  "site": null,
+                  "to": "paid"
+                }
+              ],
+              "site": null,
+              "usecase": "CapturePay"
+            },
+            {
+              "action": "ShipOrder",
+              "bound": [
+                "Order#1"
+              ],
+              "changes": [
+                {
+                  "at": "Order#1",
+                  "field": "status",
+                  "from": "paid",
+                  "kind": "set",
+                  "site": null,
+                  "to": "shipped"
+                }
+              ],
+              "site": null,
+              "usecase": "ShipOrder"
+            },
+            {
+              "action": "DeliverOrder",
+              "bound": [
+                "Order#1"
+              ],
+              "changes": [
+                {
+                  "at": "Order#1",
+                  "field": "status",
+                  "from": "shipped",
+                  "kind": "set",
+                  "site": null,
+                  "to": "delivered"
+                },
+                {
+                  "at": "Order#1",
+                  "field": "delivered_at",
+                  "from": "null",
+                  "kind": "set",
+                  "site": null,
+                  "to": "present"
+                }
+              ],
+              "site": null,
+              "usecase": "DeliverOrder"
+            }
+          ]
+        }
       }
     ],
     "reachable": 5,

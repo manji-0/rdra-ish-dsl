@@ -72,6 +72,19 @@ present before the first step. The trace shows only what the rule's cone reads. 
 cone does not count an entity's slots and the trace creates more of them than the bound,
 a `note:` says that the whole model may not reach that state at this bound.
 
+A state of a state model (a `transitions` endpoint, or a value a creating use case sets)
+that no reachable state holds is one `error:` with each arm that would enter it:
+
+```
+error: state Order.status = refunded has no reachability witness: no sequence of use cases from the start reaches it
+  state model: Order.status, entered by Refund (shipped -> refunded)   unwitnessed_state.rdra:31:1
+```
+
+When an entity's cone stops at a cap, its unwitnessed states are not decided, and each
+prints a `note: state E.col = v is not decided: ...` line naming the cap. Such a state is
+neither an error nor a warning. See
+[State models and witnesses](./state-derivation.md#state-models-and-witnesses).
+
 | Option | Description |
 |---|---|
 | `--strict` | Promote permission / access consistency gaps (`ActorPermissionMissing`, no-actor paths, etc.) from warnings to errors for exit. |
@@ -89,7 +102,8 @@ a `note:` says that the whole model may not reach that state at this bound.
   intentional external publications with `outbox(Event)` to suppress only the
   raised-but-unconsumed warning;
 - state diagnostics (same severity as `states`), including missing creation paths,
-  unreachable enum variants, a reachable state that breaks a `forbidden`, `invariant`,
+  unreachable enum variants, a state of a state model with no reachability witness, a
+  reachable state that breaks a `forbidden`, `invariant`,
   `required`, `exclusive`, multi-entity, or quantifier rule, a failed `after` assertion,
   a condition body that no use case can bind, and pattern truncation. See
   [Diagnostics](./state-derivation.md#diagnostics).
@@ -372,6 +386,13 @@ the model declares any. Stdout names the bounds, the cone count, and each run's 
 stderr carries one `tlc_result: ok|counterexample|tool_error` line. Exits non-zero when
 TLC is missing or reports a violation.
 
+Before TLC runs, `verify` explores each entity's cone with BFS at the same bounds, capped
+at 2,097,152 states per cone; the `bounds:` line names the cap as `2097152 states per BFS
+cone`. A state of a state model with no witness there prints as in `check` and fails the
+run even when TLC passes: stdout ends with `tlc_result: ok`, no `OK:` line follows, and the
+exit status is 1. A cone that stops at the cap prints a `note:` for each state it leaves
+undecided.
+
 A failed run ends with `specs: <dir>`, the directory that holds the specs. Without `-o`
 it adds `(kept because a check failed)`. Each cone's TLC runs with `-continue`, so every
 violated check of a cone prints its own counterexample.
@@ -464,7 +485,10 @@ Output is written to stdout. Exit is based on structured severity (all formats),
 string-scanning `[error]`. stderr starts with a `bounds:` line: one instance per entity,
 the Int range, the state cap per target cone, and that entities a check does not read are unbounded.
 `check` prints the same line, and `verify` prints it on stdout with the TLA+ constants. Diagnostics that name no entity are printed
-on stderr too.
+on stderr too, and so is a `note:` for each state of a state model the run does not decide
+(a capped cone, or `--buc`, which leaves use cases out). With `--format json`, each pattern
+carries a `witness`: a shortest path to the first state that holds it, as `start` and
+`steps` objects with sites (see [Output formats](./state-derivation.md#output-formats)).
 
 ---
 

@@ -16,4 +16,5 @@ samples/formal-verification/one_to_one_shared.rdra
 samples/formal-verification/order.rdra
 samples/formal-verification/quantifier_none.rdra
 samples/formal-verification/untriggered_sets.rdra
+samples/formal-verification/unwitnessed_state.rdra
 samples/formal-verification-fail/order.rdra

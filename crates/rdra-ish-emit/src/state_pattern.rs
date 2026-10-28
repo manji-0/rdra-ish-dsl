@@ -3,8 +3,8 @@
 use crate::{EmitError, Emitter, Scope, View};
 use rdra_ish_core::{
     lifecycle::{
-        derive_states, AbstractValue, AxisKind, Caps, EntityStateResult, InvKind, InvText,
-        Provenance, Scope as SystemScope, StateDiag,
+        derive_states, AbstractValue, ActionOrigin, AxisKind, Caps, Change, EntityStateResult,
+        InvKind, InvText, Provenance, Scope as SystemScope, Site, StateDiag, Trace,
     },
     SemanticModel,
 };
@@ -189,6 +189,7 @@ fn diag_message(d: &StateDiag) -> String {
             "temporal assertion violated after '{anchor}': expected ({requireds}) but found {actual}"
         ),
         StateDiag::StateCapReached { .. }
+        | StateDiag::NoWitness { .. }
         | StateDiag::ContradictoryDrivenComparison { .. }
         | StateDiag::AssertOnInertUseCase { .. }
         | StateDiag::IntLiteralOutOfBounds { .. }
@@ -461,19 +462,99 @@ impl Default for StatePatternJsonEmitter {
 
 impl Emitter for StatePatternJsonEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
-        render_json(&derive_views(model, view, self.cap))
+        render_json(&derive_views(model, view, self.cap), model, &|_| None)
     }
 }
 
-/// A pretty-printed array with one object per entity.
-pub fn render_json(results: &[EntityStateResult]) -> Result<String, EmitError> {
-    let serializable: Vec<serde_json::Value> = results.iter().map(entity_result_to_json).collect();
+/// A pretty-printed array with one object per entity. `locate` prints a site as
+/// `path:line:col`; each pattern's `witness` names its steps' sites with it.
+pub fn render_json(
+    results: &[EntityStateResult],
+    model: &SemanticModel,
+    locate: &dyn Fn(&Site) -> Option<String>,
+) -> Result<String, EmitError> {
+    let serializable: Vec<serde_json::Value> = results
+        .iter()
+        .map(|r| entity_result_to_json(r, model, locate))
+        .collect();
     let json = serde_json::to_string_pretty(&serializable)
         .map_err(|e| std::io::Error::other(e.to_string()))?;
     Ok(json + "\n")
 }
 
-fn entity_result_to_json(r: &EntityStateResult) -> serde_json::Value {
+/// A witness path: the instances the initial state holds, then one object per step.
+fn trace_to_json(
+    trace: &Trace,
+    model: &SemanticModel,
+    locate: &dyn Fn(&Site) -> Option<String>,
+) -> serde_json::Value {
+    let changes = |changes: &[Change]| -> Vec<serde_json::Value> {
+        changes
+            .iter()
+            .map(|c| match c {
+                Change::Create { at, values } => serde_json::json!({
+                    "kind": "create",
+                    "at": at.to_string(),
+                    "values": values
+                        .iter()
+                        .map(|(f, v)| (f.clone(), serde_json::json!(v)))
+                        .collect::<serde_json::Map<_, _>>(),
+                }),
+                Change::Delete { at } => serde_json::json!({
+                    "kind": "delete",
+                    "at": at.to_string(),
+                }),
+                Change::Set {
+                    at,
+                    field,
+                    from,
+                    to,
+                    cause,
+                } => serde_json::json!({
+                    "kind": "set",
+                    "at": at.to_string(),
+                    "field": field,
+                    "from": from,
+                    "to": to,
+                    "site": cause.as_ref().and_then(locate),
+                }),
+                Change::Tick { from, to } => serde_json::json!({
+                    "kind": "tick",
+                    "from": from,
+                    "to": to,
+                }),
+            })
+            .collect()
+    };
+    let steps: Vec<serde_json::Value> = trace
+        .steps
+        .iter()
+        .map(|step| {
+            let usecase = match &step.origin {
+                ActionOrigin::UseCase { uc, .. } => Some(model.use_cases[*uc].id.clone()),
+                ActionOrigin::Clock => None,
+            };
+            serde_json::json!({
+                "action": step.action,
+                "usecase": usecase,
+                "bound": step.bound.iter().map(ToString::to_string).collect::<Vec<_>>(),
+                "changes": changes(&step.changes),
+                "site": locate(&step.site),
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "start": changes(&trace.start),
+        "steps": steps,
+        "over_bound": trace.over_bound,
+    })
+}
+
+fn entity_result_to_json(
+    r: &EntityStateResult,
+    model: &SemanticModel,
+    locate: &dyn Fn(&Site) -> Option<String>,
+) -> serde_json::Value {
     let axes: Vec<serde_json::Value> = r
         .axes
         .iter()
@@ -513,6 +594,7 @@ fn entity_result_to_json(r: &EntityStateResult) -> serde_json::Value {
                         None => u.clone(),
                     }
                 }).collect::<Vec<_>>(),
+                "witness": p.witness.as_ref().map(|t| trace_to_json(t, model, locate)),
             })
         })
         .collect();

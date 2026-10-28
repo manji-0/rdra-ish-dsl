@@ -86,6 +86,15 @@ pub enum StateDiag {
         site: Site,
         trace: Trace,
     },
+    /// A state of a state model (a `transitions` endpoint, or a value a creating use case
+    /// sets) that no reachable state holds.
+    NoWitness {
+        entity: String,
+        column: String,
+        value: String,
+        /// The transition arms and creations that would enter it.
+        into: Vec<Entry>,
+    },
     /// `after(UC).assert` names a use case that changes nothing.
     AssertOnInertUseCase { anchor: String, site: Site },
     /// An Int literal outside the bounded domain `0..=max`.
@@ -129,6 +138,21 @@ pub enum StateDiag {
 }
 
 impl StateDiag {
+    /// The stable name expectations and engine comparisons use: the invariant name, or
+    /// `Witness_<entity>_<column>_<value>`. `None` for a diagnostic without one yet.
+    pub fn name(&self) -> Option<String> {
+        match self {
+            StateDiag::ConstraintViolated { name, .. } => Some(name.clone()),
+            StateDiag::NoWitness {
+                entity,
+                column,
+                value,
+                ..
+            } => Some(format!("Witness_{entity}_{column}_{value}")),
+            _ => None,
+        }
+    }
+
     /// The counterexample of a violated constraint or assert.
     pub fn trace(&self) -> Option<&Trace> {
         match self {
@@ -160,6 +184,7 @@ impl StateDiag {
             | StateDiag::StateCapReached { .. }
             | StateDiag::ConstraintViolated { .. }
             | StateDiag::AfterAssertViolated { .. }
+            | StateDiag::NoWitness { .. }
             | StateDiag::AssertOnInertUseCase { .. }
             | StateDiag::IntLiteralOutOfBounds { .. }
             | StateDiag::UnbindableScope { .. }
@@ -169,6 +194,15 @@ impl StateDiag {
             | StateDiag::UnresolvedPropertyAtom { .. } => Severity::Error,
         }
     }
+}
+
+/// A way into a state: a `transitions` arm from `from`, or a creation (`from` is `None`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Entry {
+    pub action: String,
+    pub from: Option<String>,
+    /// The arm, the `sets`, or the creating use case.
+    pub site: Site,
 }
 
 pub fn has_errors<'a>(diags: impl IntoIterator<Item = &'a Diag>) -> bool {
@@ -225,6 +259,15 @@ impl fmt::Display for StateDiag {
                 actual,
                 ..
             } => write!(f, "after({anchor}).assert({requireds}) fails: {actual}"),
+            StateDiag::NoWitness {
+                entity,
+                column,
+                value,
+                ..
+            } => write!(
+                f,
+                "state {entity}.{column} = {value} has no reachability witness: no sequence of use cases from the start reaches it"
+            ),
             StateDiag::AssertOnInertUseCase { anchor, .. } => {
                 write!(f, "after({anchor}).assert names a use case with no effect")
             }
