@@ -1,4 +1,4 @@
-// .along with relate → quantified Safety over Order_Ids × Payment_Ids linked by Payment_owner.
+// .along with relate → an invariant over Order_Ids × Payment_Ids linked by Payment_owner_Order.
 // TLC intent: expected PASS. Pay is one atomic action that needs the linked Order pending, so
 // Cancel and Pay cannot both act on one link (docs/vision.md, rule 6).
 entity Order "注文" {

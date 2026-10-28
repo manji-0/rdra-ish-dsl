@@ -6,9 +6,11 @@
 <!-- derived-from ./cli-reference.md#export -->
 <!-- derived-from ./cli-reference.md#verify -->
 
-RDRA-ish can export entity lifecycles and state constraints to **TLA+** and
-optionally check them with **TLC**. This complements `rdra-ish states` (fast BFS
-reachability) with classical model checking for invariants and temporal properties.
+RDRA-ish prints its lifecycle transition system as **TLA+** and optionally checks it
+with **TLC**. `rdra-ish states` and `check` explore the same system by breadth-first
+search (BFS) at one instance per entity. `verify` runs TLC on it at two instances by
+default and adds the temporal properties that BFS does not evaluate. See
+[state-derivation.md](./state-derivation.md) for the system itself.
 
 ## Commands
 
@@ -19,53 +21,50 @@ rdra-ish verify <INPUTS...> --backend tlc [-o <OUT_DIR>] [--instance-count N] [-
 
 | Command | Role |
 |---|---|
-| `export --kind tla` | Write `RdraSpec.tla` **and** sibling `RdraSpec.cfg` |
-| `verify --backend tlc` | Export, then run `tlc` / `tlc2` from `PATH` |
-| `states` | Local BFS checks (no TLC dependency) |
+| `export --kind tla` | Write `RdraSpec.tla` **and** sibling `RdraSpec.cfg` for the whole model |
+| `verify --backend tlc` | Print one spec per cone of influence, then run `tlc` / `tlc2` from `PATH` |
+| `states`, `check` | BFS on the same system, with no TLC dependency |
 
-`--instance-count` (default `2`) sets multi-instance `InstanceCount` (`>= 1`;
-`0` is rejected, `1` warns that singleton ids cannot distinguish multi-entity
-instances).
-`--int-range-max` (default `5`) sets `IntRange == 0..N` (`>= 1`; `0` is rejected).
-When either approximation is used, export/verify always warn with the active bounds.
+`--instance-count` (default `2`) sets `InstanceCount` (`1..=255`; `1` warns that
+singleton ids cannot distinguish instances). `--int-range-max` (default `5`) sets
+`IntRange == 0..N` (`1..=255`). Both commands fail on the Error diagnostics of the
+transition system they print, for example `IntLiteralOutOfBounds` or `DoubleModeledEnum`.
 
-If `-o` ends with `.tla`, the sibling `.cfg` is written next to it. If `-o` is a
-directory (or has no extension), files are written as `<dir>/RdraSpec.tla` and
-`<dir>/RdraSpec.cfg`. The `.cfg` sets `CHECK_DEADLOCK FALSE` because lifecycle
-models often have terminal states with no enabled `Next` action (Spec still
-allows stuttering via `[][Next]_vars`).
+If `-o` ends with `.tla`, the sibling `.cfg` is written next to it and the file stem is the
+module name. If `-o` is a directory (or has no extension), `export` writes
+`<dir>/RdraSpec.tla` and `<dir>/RdraSpec.cfg`. `verify -o <dir>` writes one
+`Cone_<first check>.tla` and `.cfg` pair per cone, the whole-model `RdraSpec` pair
+when the model has temporal properties, and `cones.txt`.
+
+The `.cfg` names `SPECIFICATION Spec`, `INVARIANT TypeOK`, one `INVARIANT` per
+constraint, one `PROPERTY` per `after` assertion and temporal property, and
+`CHECK_DEADLOCK FALSE`. Lifecycle models often end in terminal states with no enabled
+action, and `Spec` allows stuttering.
 
 ## Mapping
 
 | RDRA | TLA+ |
 |---|---|
-| Entity status Enum + `transitions(Entity.col, UC, a -> b)` | `VARIABLES`, `Init`, one action `{Entity}_{UC}_{a}_to_{b}` per transition in `Next` |
-| `Init` status | Every status that a `creates` use case `sets` (a set when there are several), else the start state of the `transitions`, else `@default`, else the first variant |
-| `sets` of a use case that drives a transition on the entity | Folded into each of that use case's transition actions |
-| Any other `sets` (a use case that drives no transition on the entity) | One action per use case (`Entity_uc_X`); with `transitions`, its status-column effects are left out |
-| Bool / `@null` columns (multi-axis) | Additional variables with `BOOLEAN` or `{"null","present"}` |
-| `condition` with `combines` or a `holds` body | Nothing. The spec and the TLC result are the same with or without conditions; `verify` prints `condition <Id>: body stored, not yet checked (phase 4)` for each `holds` body so a passing run does not imply the condition was checked |
-| Variation-typed column that a `sets`, constraint, `after` assertion, or `property` names | An additional variable over the variation's values (plus `"null"` when `@null`). `Init` is `var \in {values}` (or `\in [Entity_Ids -> {values}]` multi-instance): a free choice, so TLC explores every value. A variation column nothing names is not exported. |
-| Int / Money / Decimal / Date / DateTime used in comparisons or `sets` Int assigns | `EXTENDS Integers`, `IntRange == 0..N`, arithmetic Safety / primed effects (nullable numeric columns promote to Int, not Nullable; Date/DateTime column-vs-column cmps are arithmetic, not frozen BOOL props) |
-| Comparison propositions driven by `sets(..., cmp, bool)` only | Boolean `prop_*` variables (BFS layer; skipped when the same cmp is arithmetic) |
-| Prop axis never primed by any action | `[TLA_FATAL:frozen_proposition_axis]` (export/verify refuse; vacuous Safety) |
-| Bool / `@null` column read by an entity-local constraint and primed by no action | Warning: the constraint checks only the initial value (a variation column is exempt: its `Init` already ranges over every value) |
-| Entity-local `invariant` / `forbidden` / `required` / `exclusive` | Safety conjuncts (`\A i \in Entity_Ids: …` when multi-instance) |
-| Multi-entity `forbidden` / `invariant` | Safety over the multi-entity variable product |
-| `.along(...)` (RelationPath) | Quantified over `Entity_Ids` (including intermediate junction binders); with `relate` / `.via` uses pairwise `*_owner` filters (`Child_owner`, or `Child_Parent_owner` when a child has multiple parents) |
-| `when(...).none/has(...)` | Finite `Entity_Ids == 1..InstanceCount` with `\A`/`\E`; `relate` adds `*_owner` FK |
-| `after(UC).assert` equality | Independent `PROPERTY`: `[][UC's actions => primed posts]_vars` (not injected into SpecActions) |
-| `after(UC).assert` comparison | Same PROPERTY shape; Int arithmetic when axes exist (cross-entity RHS allowed); else `prop' = TRUE` |
-| `property` + `always` / `eventually` / `leads_to` | Named formulas listed as `PROPERTY` in the `.cfg` |
-| Multi-instance temporal formulas | Per-instance quantifiers: `[](\A i: …)`, `\A i: <>(…)`, `\A i: (p ~> q)` |
-| Temporal atoms with Int compares | `stock < selling`, `stock >= 1`, etc. map to TLC arithmetic |
-| `col < now` / DateTime vs `now` | Global `now \in IntRange`, `TickNow`, lhs promoted to Int axis |
-| Undriven Int axes | Synthetic nondet `Assign_*` actions (`\E v \in IntRange: col' = v`) — not modeled use cases |
-| `sets` Int literal or comparison RHS IntLit outside `0..int_range_max` | `[TLA_FATAL:int_literal_out_of_range]` (export/verify refuse) |
-| TypeOK vs Safety | `.cfg` has separate `INVARIANT TypeOK` and `INVARIANT Safety` (domain vs business rules) |
+| Entity | `<E>_Ids == 1..InstanceCount` and `<E>_exists`, a function over the ids with values `"absent"`, `"present"`, `"deleted"` |
+| Enum, Bool, `@null`, Int, Money, Decimal, Date, or DateTime column the system reads or writes; a variation-typed column that something names | `<E>_<col>`, a function over `<E>_Ids`. Int-like columns range over `IntRange` (nullable ones add `"null"`). |
+| `relate` N:1, 1:N, 1:1 | `<Child>_owner_<Parent>`, a function from child ids to parent ids. An `.optional()` relate adds `0` for an unlinked child. |
+| Use case | One operator `<UC>(p0, ...)` per transaction group (`<UC>_1`, `<UC>_2`, ... when the writes form several groups). `Next` is the disjunction of `\E` over the parameters. |
+| `creates` | `FirstAbsent(<E>_exists, p)` and `<E>_exists' = ... "present"`. A deleted slot is never reused. |
+| `deletes` | `<E>_exists'` becomes `"deleted"`, columns and owners return to the base value. |
+| `sets`, `transitions(E.col, UC, a -> b)` | Primed assignments. A transition guards `col = a`. `UNCHANGED` lists every variable the action does not assign. |
+| Variation column of a created instance | `\E v0 \in {values} : col' = ...`, so TLC explores every value. `@default` does not pin it. |
+| `applies_to(Condition, UseCase \| Api)` with a `holds` body | A guard conjunct on the use case's operator. A condition on a created instance is evaluated on the primed variable, after the assignments. |
+| Comparison proposition driven by `sets(..., cmp, bool)` | A Boolean variable. An undriven comparison is TLC arithmetic on the Int columns. |
+| `col < now` | A global `now \in IntRange` and a `Tick` action that adds one while `now < max`. |
+| Entity-local and multi-entity `forbidden`, `invariant`, `required`, `exclusive` | One `INVARIANT` each, named `<Kind>_<Entity>_<n>` (`Forbidden_Order_0`, `Inv_Order_0`, `CrossForbidden_Order_0`). Each ranges over the present instances. |
+| `.along(...)` | Quantified over `<E>_Ids`, joined by `<Child>_owner_<Parent>` equalities. |
+| `when(...).none/has(...)` | `\A` / `\E` over the ids, named `Quantifier_<Entity>_<n>`. A `relate` joins the sides by owner; without one the related side is independent. |
+| `after(UC).assert(...)` | `PROPERTY AfterAssert_<UC>_<n>`: `[][(\A p : UC(p) => post')]_vars`. It checks every step of the use case's actions. |
+| `property` with `always`, `eventually`, `leads_to` | A named formula and a `PROPERTY`, quantified per present instance |
 | Any `eventually` / `leads_to` property | `Spec` includes `WF_vars(Next)` |
+| Domain of every variable | `INVARIANT TypeOK`, kept apart from the business rules |
 
-Example temporal / Int syntax:
+Example temporal and Int syntax:
 
 ```rdra
 property PaidLeadsToShipped "paid eventually reaches shipped"
@@ -95,87 +94,78 @@ Operators:
 - Connectives inside expressions: prefer `and` / `or` / `not` (`/\` `\/` `~` aliases)
 - Property label string is optional (`property StockOk always(...)`)
 
-Path properties are **not** evaluated by `rdra-ish states`; use `export` / `verify`.
+`rdra-ish states` does not evaluate path properties, and `check` prints a `note:` that it
+did not model-check them. Use `export` or `verify`.
 
-## Two layers for Int / `now`
+## What `verify` checks
 
-| Layer | Tool | How continuous values appear |
-|---|---|---|
-| Abstract propositions | `rdra-ish states` | `stock < selling` is a Bool axis; drive with `sets(..., cmp, true/false)` |
-| Arithmetic model checking | `export --kind tla` / `verify` | Int / Money / Decimal and `now` become `IntRange` variables; comparisons are TLC arithmetic |
+`verify` restricts the system to the cone of influence of each invariant and
+`after` assertion, prints that cone, and runs TLC on each cone in parallel. A cone
+reaches exactly the whole model's states projected onto it, so the union of the cone
+verdicts is the whole-model verdict. Cones over the same variables share one run.
+This keeps clinic-ops tractable: a whole-model run at `InstanceCount=2` took 62 s and
+11 GB on ec-site and did not finish in 300 s on clinic-ops.
 
-Do not mix the layers in one expectation: a `forbidden(Item, stock < selling)` without
-`sets(..., stock < selling, …)` is inert under `states`, but TLA export still emits
-arithmetic Safety when Int axes exist.
+Temporal properties need fairness on the whole system, which does not restrict to a
+cone. `verify` checks them on the whole model, and only when the model declares any.
 
-## Scalar vs multi-instance export
+```
+$ rdra-ish verify samples/formal-verification/order.rdra --backend tlc
+bounds: InstanceCount=2 IntRange=0..5
+cones: 1 for 2 invariant(s) and 1 after-assert(s)
+temporal properties: 2, checked on the whole model (fairness does not restrict to a cone)
+Cone_Forbidden_Order_0 [Forbidden_Order_0, Inv_Order_0, AfterAssert_DeliverOrder_0]: ok (31 states)
+RdraSpec [PaidLeadsToShipped, EventuallyTerminal]: ok (31 states)
+tlc_result: ok
+TLC: OK
+```
 
-- **Scalar** (default): one variable per axis. Used when the model has no multi-entity
-  `forbidden` / `invariant` and no `when(...).none/has`.
-- **Multi-instance**: triggered by those constructs. Emits `InstanceCount`,
-  `Entity_Ids`, function-valued axes (`status \in [Ids -> …]`), and `Child_owner`
-  from `relate(..., N:1)` / `1:N`. Entity-local Safety and temporal properties are
-  quantified per instance binder.
+A violation prints the name of the invariant or property and TLC's trace, with one
+`name[slot] = value` line per variable and slot. The name is the constraint's name, so it
+points at the rule that broke.
 
 ## Approximations and limitations
 
-- **Conditions are not checked**: a `holds` body is stored and validated by `check`, but
-  neither `states` nor the TLA+ export reads it. A later phase compiles it to a guard on the
-  actions of the use cases the condition `applies_to`.
-- **`.along`**: multi-instance export quantifies over `Entity_Ids`, including
-  intermediate binders for multi-hop paths such as `.along(A, Junction, B)`
-  (from `relate(A, B, N:M).via(Junction)`). Pairwise `*_owner` filters are applied;
-  a child with multiple parents uses `{Child}_{Parent}_owner`. Missing binders or
-  missing relate links emit a warning and drop the filter (global product) —
-  never silently. Junction entities without state axes still get `Junction_Ids`.
-- **Quantifiers (`has` / `none`)**: exported over finite instance sets
-  (`InstanceCount`, default **2**, override with `--instance-count`). When `relate`
-  declares N:1 / 1:N (including via-synthesized edges), a `*_owner` function links
-  related instances; otherwise the related side is quantified independently.
-- **One use case across entities**: a use case is one atomic action per transaction
-  group it writes (e.g. `Pay(p0, p1)` moves the Order and its owned Payment in one
+- **Bounds.** A `verify` OK holds for the stated `InstanceCount` and `IntRange` and says
+  nothing outside them. The `.tla` header comment and the `bounds:` line of `verify`
+  state both. A deleted slot is never reused, so an entity is created at most
+  `InstanceCount` times.
+- **Conditions are checked.** A `holds` body is a guard on each use case it applies to.
+  A body applied to a use case that writes nothing is `UnbindableCondition`, an error.
+- **One use case across entities.** A use case is one atomic action per transaction
+  group it writes (`Pay(p0, p1)` moves the Order and its owned Payment in one
   step), so `cross_order_payment` passes. A use case whose writes span k groups is k
-  actions `<UC>_1..k` that interleave freely, so `cross_order_payment_split` (Pay
+  actions `<UC>_1..k` that interleave freely, so `cross_order_payment_split` (`Pay`
   through two APIs) fails. `quantifier_none` still fails.
-- **Int arithmetic**: comparisons and `sets(..., col == N)` on Int / Money / Decimal
-  use TLC Integers on `IntRange` (default **`0..5`**, override with `--int-range-max`).
-  Literals outside that window are `[TLA_FATAL:int_literal_out_of_range]` (raise
-  `--int-range-max` or lower the literal). Undriven Int axes get synthetic nondet
-  `Assign_*` actions so TLC can explore values; `verify` notes when a counterexample
-  mentions `Assign_*`. `@default(0)` is accepted for Int columns. Boundedness is an
-  approximation — `verify` OK does not prove behaviour outside `IntRange`.
-  Domain violations report as `TypeOK`; business rules as `Safety`.
-- **Approximation banner**: whenever multi-instance or integer axes are used,
-  export/verify always emit
-  `tla approximation: InstanceCount=… IntRange=0..…; verify OK does not prove outside this window`
-  on stderr and as a `\\* WARNING:` comment in the `.tla`.
-- **`now`**: exported as a global Int clock with `TickNow`. Columns compared to
-  `now` (including DateTime) become Int axes. **Safety is not baked into Next**:
-  `Assign_*` and `TickNow` may choose values that violate `forbidden(col < now)`;
-  TLC is expected to find those counterexamples (see `now_coupon.rdra`).
-- **`WF_vars(Next)`**: fairness is on the whole `Next` disjunction, not per action.
-  Sufficient for simple `eventually` / `leads_to` on small models; not a substitute
-  for per-action weak fairness.
-- BFS `rdra-ish states` reads the same transition system at one instance per
-  entity: Int and `now` columns that something names are axes over `0..5`, and
-  comparisons, quantifiers, and multi-entity constraints get real verdicts.
-  `int_stock.rdra` passes `check`, `states`, and `verify`.
-- Export warnings (skipped mappings, `.along` without `relate`, unmapped
-  `after.assert`, …) are printed on stderr by `export --kind tla` / `verify` and
-  also embedded as `\\* WARNING:` comments in the `.tla`. Fatal obligation drops
-  are tagged `[TLA_FATAL:…]` and fail export/verify.
-- `after(UC).assert(...)` becomes an independent TLA `PROPERTY`
-  `[][actions => primed posts]_vars` — it does **not** inject assignments into
-  SpecActions (so asserts check outcomes rather than enabling assumptions).
-- User-facing state diagnostics for multi-entity rules say **multi-entity**
-  (enum / table ids may still use a historical `Cross*` prefix). The DSL
-  surface remains multi-entity `forbidden` / `invariant`.
+- **Int arithmetic.** Comparisons and `sets(..., col == N)` on Int, Money, Decimal,
+  Date, and DateTime columns use TLC integers on `IntRange` (default `0..5`, override
+  with `--int-range-max`). A literal outside that window is
+  `IntLiteralOutOfBounds` in `check` and `states` too: raise `--int-range-max` or lower
+  the literal. `@default(0)` is accepted for Int columns.
+- **`now`.** `now` is a global Int clock with a `Tick` action. Nothing pins a column
+  that `now` is compared to, so the clock can tick past it and TLC finds a violation of
+  `forbidden(col < now)` (see `now_coupon.rdra`).
+- **`WF_vars(Next)`.** Fairness is on the whole `Next` disjunction, not per action. That
+  suffices for simple `eventually` and `leads_to` on small models. It does not replace
+  per-action weak fairness.
+- **`.along`.** An `.along` path needs a `relate` that binds each adjacent pair. Without
+  one, the rule is `UnbindableScope`, an error in every command, not a dropped filter.
+- **Quantifiers.** `has` and `none` range over the `InstanceCount` ids. Where a `relate`
+  declares the relationship, an owner function links the related instances. Otherwise the
+  related side is independent.
+- `check` and `states` run BFS on the same system at one instance per entity, so `check`
+  finds the same violations as TLC in that window. The test `engine_equivalence`
+  (`crates/rdra-ish-cli/tests/engine_equivalence.rs`) runs BFS and TLC on every cone of
+  every sample and compares the reached states and the verdict of each invariant and
+  `after` assertion. CI sets `RDRA_REQUIRE_TLC=1`, so a missing `tlc` fails the job.
+- User-facing state diagnostics for multi-entity rules say **multi-entity**. The
+  `Cross*` prefix in some constraint names is historical.
 
 ## Workflow
 
 1. Model lifecycle with `transitions` / `sets` and entity-local rules.
-2. Run `rdra-ish states` for quick feedback on Enum/Bool/Nullable axes.
-3. `rdra-ish export --kind tla -o /tmp/rdra-tla` and inspect the Spec + `.cfg`.
+2. Run `rdra-ish states` and `rdra-ish check` for quick feedback.
+3. `rdra-ish export --kind tla -o /tmp/rdra-tla` and inspect the Spec and `.cfg`.
 4. Install [TLA+ tools](https://github.com/tlaplus/tlaplus) so `tlc` is on `PATH` (`nix develop` provides it).
 5. `rdra-ish verify --backend tlc -o /tmp/rdra-tla` to run TLC.
 
@@ -189,17 +179,16 @@ do not `check` the whole directory; ids such as `Order` collide). In this repo,
 `samples/formal-verification/` and `samples/formal-verification-fail/` are
 symlinks to those skill-bundled files (CLI tests keep working after skill install).
 
-| Sample | TLC intent | Focus |
+| Sample | `check` and TLC | Focus |
 |---|---|---|
-| `order.rdra` | expected pass | Lifecycle Safety + `after.assert` + `leads_to` / `eventually` + `WF_vars` |
-| `int_stock.rdra` | expected pass | Int axes, arithmetic `forbidden`, Int temporal property |
-| `now_coupon.rdra` | expected fail | `now` / unconstrained Assign + TickNow; Safety finds `expired_at < now` |
-| `cross_order_payment.rdra` | expected pass | Multi-instance + `.along` (Pay is one atomic action, so Cancel cannot interleave) |
-| `cross_order_payment_split.rdra` | expected fail | The same model with Pay through two APIs: two transaction groups, so Cancel interleaves between `Pay_1` and `Pay_2` |
-| `quantifier_none.rdra` | expected fail | `when(...).none` (Revoke while Assign stays active) |
-| `untriggered_sets.rdra` | expected fail | `sets` from a use case that drives no transition (Flag then Ship reaches the forbidden state) |
-| `after_assert_unmet.rdra` | expected fail | `after(DeliverOrder).assert` without the `sets` that makes it true; the property binds to DeliverOrder's transition action and fails instead of passing vacuously |
-| `fail/order.rdra` | expected fail | Intentionally unsafe (reachable forbidden → `check`/`states` exit 1; TLC fails Safety) |
+| `order.rdra` | pass, pass | Lifecycle invariants + `after.assert` + `leads_to` / `eventually` + `WF_vars` |
+| `int_stock.rdra` | pass, pass | Int columns, arithmetic `forbidden`, Int temporal property |
+| `now_coupon.rdra` | fail, fail | `now` and `Tick`; the invariant finds `expired_at < now` |
+| `cross_order_payment.rdra` | pass, pass | Multi-instance + `.along` (Pay is one atomic action, so Cancel cannot interleave) |
+| `cross_order_payment_split.rdra` | fail, fail | The same model with Pay through two APIs: two transaction groups, so Cancel interleaves between `Pay_1` and `Pay_2` |
+| `quantifier_none.rdra` | fail, fail | `when(...).none` (Revoke while Assign stays active) |
+| `untriggered_sets.rdra` | fail, fail | `sets` from a use case that drives no transition (Flag then Ship reaches the forbidden state) |
+| `after_assert_unmet.rdra` | fail, fail | `after(DeliverOrder).assert` without the `sets` that makes it true |
+| `fail/order.rdra` | fail, fail | Intentionally unsafe (reachable invariant violation) |
 
-`rdra-ish check` fails closed on reachable forbidden / undriven comparisons; use TLC
-for temporal properties and Int arithmetic that `check` only notes as TLA-only.
+BFS and TLC give the same verdict on every row.

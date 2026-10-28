@@ -1,4 +1,4 @@
-// Int axes driven by sets + arithmetic Safety / temporal property.
+// Int axes driven by sets + arithmetic invariant / temporal property.
 // Init stock/selling must satisfy forbidden/property (TLC-pass).
 // `forbidden(Item, stock < selling)` is evaluated over Int 0..5 by both
 // `check`/`states` and TLC; all three pass.

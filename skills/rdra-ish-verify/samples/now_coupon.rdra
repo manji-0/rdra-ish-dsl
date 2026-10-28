@@ -1,5 +1,5 @@
 // Global `now` clock + arithmetic comparison (expired_at < now).
-// Next does not bake Safety into Assign/TickNow: TLC should find that
+// Nothing pins `expired_at`, so the clock can tick past it: TLC finds that
 // `forbidden(expired_at < now)` is reachable (expected TLC fail / counterexample).
 entity Coupon "クーポン" {
   id: Int @pk
