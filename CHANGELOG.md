@@ -40,29 +40,21 @@
   `belongs(U, B).wehn(T)` or the removed `belongs(...).where(...)` loaded with
   `OK: no errors`. The accepted methods per predicate are listed in the language
   reference under Chain methods.
-- `rdra-ish states` treats undriven comparison propositions and unevaluated
-  multi-entity / quantifier / temporal-comparison constraints as `[error]`
-  (non-zero exit on table/json). Previously these were `[warn]` and could leave
-  a green exit while rules were inert or TLA-only.
 - `PatternCapReached` (pattern truncation via `--max-patterns`) is `[error]` /
   fail-closed: constraints checked on a truncated set are not sound.
-- `rdra-ish check` uses the same state-diagnostic severity as `states` (reachable
-  forbidden / NotEvaluated / undriven comparisons / truncation → `error:` and
-  exit 1). Previously those were printed as `warning:` before `OK: no errors`.
+- `rdra-ish check` uses the same state-diagnostic severity as `states` (a reachable
+  forbidden state or truncation → `error:` and exit 1). Previously those were printed
+  as `warning:` before `OK: no errors`.
 - `states --format csv` / `type-script` exit non-zero on Error-severity state
   diagnostics (exit no longer depends on scanning `[error]` in rendered text).
 - `diagram` / `csv` / `list` / non-TLA `export` refuse to emit when state
-  diagnostics are Error severity (aligned with fail-closed docs). Pass
-  `--allow-tla-only` on those generators to demote undriven / NotEvaluated gaps.
-  TLA export gates on `[TLA_FATAL:…]` (including out-of-range IntLits and frozen
-  proposition axes).
+  diagnostics are Error severity (aligned with fail-closed docs). `export --kind tla`
+  and `verify` refuse on the Error diagnostics of the transition system they print.
 - `ConflictingEffects` (same-origin dual assigns, including Int `sets`) is
   `[error]` / fail-closed (was warning with last-wins).
 - Junction composite unique uses the N:M endpoint FK pair only (extra FKs on the
   junction are excluded). Sharing one `.via` across multiple N:M pairs is an error
   (`SharedJunctionVia`).
-- TLA `.cfg` emits separate `INVARIANT TypeOK` and `INVARIANT Safety` (Safety no
-  longer folds TypeOK).
 - `actors_for_usecase` unions BUC-level and direct `performs` (direct no longer
   hides BUC performers in permission analysis).
 - Removed the kinds no review output consumed. A model that still uses one now
@@ -90,6 +82,59 @@
     gone, as are the `rdra-ish-core` types `Concept`, `DomainObject`,
     `Aggregate`, `ValueObject`, `UsageScene`, `Condition`,
     `ConceptualRef`, and `ConceptMapping`.
+- `states`, `check`, `export --kind tla`, `verify`, the TypeScript state unions, and the
+  state diagrams read one transition system (`rdra_ish_core::lifecycle`). The crate root no
+  longer re-exports the state-pattern types of `state_pattern.rs`, which is deleted.
+  `StateDiag` loses `CrossConstraintNotEvaluated`, `UndrivenComparisonProp`,
+  `TemporalAssertionNotEvaluated`, and `QuantifierConstraintNotEvaluated`: those
+  constraints now get real verdicts, so a model that failed `check` only on them can
+  pass, and a model that passed can now fail on a violation they hid.
+- `--allow-tla-only` is removed from `check`, `states`, `diagram`, `csv`, `list`, and
+  `export`. No state diagnostic is TLA-only any more. (The flag was added earlier in this
+  release and never shipped.)
+- The TLA+ text changes shape. Every per-instance variable is a function over
+  `<E>_Ids`, with an `<E>_exists` variable (`absent`, `present`, `deleted`) and
+  `<Child>_owner_<Parent>` owner links. Each use case is one operator `<UC>(p0, ...)`,
+  or `<UC>_1..k` for k transaction groups, in place of `{Entity}_{UseCase}_{from}_to_{to}`
+  and `Entity_uc_X`. The clock action is `Tick` (was `TickNow`). The `.cfg` has one
+  `INVARIANT` per constraint, named `<Kind>_<Entity>_<n>` (`Forbidden_Order_0`), and no
+  `Safety`, and `after(UC).assert` is `PROPERTY AfterAssert_<UC>_<n>`. The synthetic
+  `Assign_*` actions and the `[TLA_FATAL:…]` tags are gone: `export --kind tla` and
+  `verify` fail on the Error diagnostics of the system (`IntLiteralOutOfBounds` replaces
+  `int_literal_out_of_range`).
+- `verify` checks each invariant and `after` assertion on its cone of influence, and the
+  temporal properties on the whole model. `-o DIR` gets one `Cone_<check>.tla` / `.cfg`
+  pair per cone and `cones.txt`, and the whole-model `RdraSpec` pair only when the model
+  declares temporal properties.
+- `DoubleModeledEnum` is an error (was a warning). A use case that does not create the
+  entity and `sets` a column that `transitions` drive is refused instead of ignored.
+- `ContradictoryDrivenComparison` is an error: a use case drives a comparison to one
+  truth while its own Int `sets` make it the other. `UnbindableCondition` is an error: a `holds` body applied to a use case that writes
+  nothing has no action to guard. `UnbindableScope`, `IntLiteralOutOfBounds`,
+  `AssertOnInertUseCase`, and `UnsupportedComparison` are errors that every command
+  reports from the same diagnostic stream.
+- The `cross_order_payment` verdict flips from counterexample to `ok`: `Pay` is one atomic
+  action over the linked Order and Payment, so `Cancel` cannot run between the two writes.
+  `int_stock` now passes `check` (both engines evaluate `stock < selling` over `0..5`).
+  CI expects both.
+- A `relate` foreign key column is the owner variable, so it is no longer an axis of
+  `states`. An `.optional()` relate lets the child exist unlinked.
+- `states` output changes. An Int column that something names is an axis and prints its
+  values (`stock[0..5]`, JSON domain `"0".."5"`). `TERMINAL` means a use case deletes the
+  instance or no enabled use case moves it, and `VIA` is the least set of use cases on
+  some path to the pattern. The pattern order changes for `ec-site` Order and Payment and
+  `clinic-ops` Appointment. A constraint violation no longer carries the global-product
+  or flow-order hint. `states` prints a `bounds:` line on stderr, and diagnostics that name
+  no entity go to stderr as `warning:` or `error:`. `--max-patterns` caps each entity view
+  within one target cone, and an entity that a target does not read has no slot limit.
+- A `@default` on a column typed by a variation no longer pins the value. A created instance
+  takes any value of the variation unless its use case sets it, and a pre-existing
+  instance starts at any value. `@default` still sets the DBML default. In `clinic-ops`,
+  `PaymentTransaction.method` is now chosen by `PostPayment`, and `CollectCopay` creates
+  an insurance payment only.
+- An entity that no use case creates starts present at its column defaults
+  (`NoCreationPath`, info). The order of `raises` and `triggers` between use cases no longer
+  guards a use case.
 
 ### Added
 
@@ -113,9 +158,8 @@
   `InvalidVariationValue` / `InvalidEnumVariant`. New lint `condition-no-rdra-anchor`.
   `list --kind condition` shows the body and the derived links, the RDRA diagram draws
   conditions in the system layer with edges to their variation, state model, and use
-  cases (a `--buc` view includes the conditions applied to its use cases), and `verify`
-  prints `condition <Id>: body stored, not yet checked (phase 4)` for each body. In this
-  release no engine reads a body: `states` and the TLA+ export are unchanged. The
+  cases (a `--buc` view includes the conditions applied to its use cases). A body
+  guards the use cases it applies to (see the lifecycle layer below). The
   clinic-ops sample gains `CopayDue` (traceability only) and `InsuredVisit` (with a body).
 - The RDRA object-graph diagram now lists `variation` nodes, which it already placed in
   the system layer but never drew.
@@ -135,11 +179,9 @@
   (`PaymentMethod`, `ConsentType`, `OrderType`, `MessageChannel`, `AuditSeverity`,
   `CardBrand`), so `states` no longer reports their unchosen values unreachable.
 - `export --kind tla` / `verify --backend tlc` accept `--instance-count` (default
-  2) and `--int-range-max` (default 5). An approximation banner is always emitted
-  when multi-instance or Int axes are used. `--int-range-max 0` is rejected;
+  2) and `--int-range-max` (default 5). The `.tla` header comment and the `verify`
+  output state the bounds. `--int-range-max 0` is rejected;
   `--instance-count 1` warns that singleton ids cannot distinguish instances.
-- State diagnostics for undriven / NotEvaluated cases include evaluator hints
-  (states vs TLA).
 - `relate(A, B, N:M).via(Junction)` — many-to-many with an explicit junction
   entity; auto-generates both FK columns on the junction and a composite unique
   on the FK pair when missing. Bare `N:M` is an error. Also synthesizes `N:1`
@@ -158,34 +200,53 @@
   uses `{Child}_{Parent}_owner`); owner-only entities still get `*_Ids`.
 - Multi-hop `.along` adds binders for intermediate entities and warns instead of
   silently dropping the link filter.
-- `check` / `states --allow-tla-only` demotes undriven comparisons and
-  NotEvaluated diagnostics to warnings for exit (PatternCap / forbidden stay
-  fail-closed).
 - Import scopes keep same-id bindings of different kinds (e.g. `event Capture` +
   `usecase Capture`); `kind::Id` resolves across modules. CI runs `check` on
   sample models including `samples/ec-site`.
-- `DrivenComparisonContradictsEffects`: `sets(..., cmp, bool)` that disagree with
-  same-origin Int `sets` are Error (closes check-green / TLC-red dual-drive gap).
-- TLA export rejects `sets` Int literals and comparison RHS IntLits outside
-  `0..int_range_max` with `[TLA_FATAL:int_literal_out_of_range]`.
-- Date / DateTime column-vs-column comparisons export as Int arithmetic (not
-  frozen BOOLEAN props); never-assigned prop axes are
-  `[TLA_FATAL:frozen_proposition_axis]`.
-- `--allow-tla-only` on `diagram` / `csv` / `list` / non-TLA `export`.
+- Date / DateTime column-vs-column comparisons are Int arithmetic in `states` and in
+  the TLA+ export.
 - Sequence emitters (PlantUML / Mermaid) use `actors_for_usecase` (BUC ∪ direct
   performers) so a direct `performs` no longer hides BUC-level actors.
-- `Assign_*` actions are labeled as synthetic nondet; `verify` notes when a
-  counterexample mentions `Assign_`.
 - `check --strict` promotes permission/access gaps to errors; `check` always
-  notes outstanding temporal properties / TLA-only obligations.
+  notes outstanding temporal properties.
 - OpenAPI emits `oneOf` (+ `x-rdra-ish-ambiguous-status`) for multiple
   `response` / `error_response` DTOs.
+- The lifecycle layer, `crates/rdra-ish-core/src/lifecycle/`: existence states (`absent`,
+  `present`, `deleted`), one atomic action per use case per transaction group, owner
+  links from `relate`, a clock for `now`, and constraints as invariants over the present
+  instances. [docs/state-derivation.md](docs/state-derivation.md) describes it.
+- Each `states` view and each constraint verdict is explored on its exact cone of influence,
+  the smallest set of variables the target reads. The cone's reachable states equal the
+  whole system's projected onto it, which a test checks on `ec-site`, `personal-info`, and
+  the formal-verification samples. `verify` runs TLC per cone in parallel, so clinic-ops
+  finishes where a whole-model run did not.
+- The test `engine_equivalence` compares BFS and TLC on every cone of every sample: the
+  reached states, and the verdict of each invariant and `after` assertion. The CI
+  `formal-verify` job runs it with `RDRA_REQUIRE_TLC=1`. `scripts/engine-diff.sh` snapshots
+  `states`, the TLA text, and `verify` per sample.
+- `.optional()` on a `relate` is honoured: the owner may stay `null`, and creating the
+  child leaves it unlinked.
+- `applies_to(Condition, UseCase)` with a `holds` body, or `applies_to(Condition, Api)` for
+  each use case that invokes the API, is a guard in `states`, `check`, `export --kind tla`,
+  and `verify`. A comparison on a created entity constrains the creation. The `verify`
+  notice `body stored, not yet checked` is gone.
+- A use case whose writes form k > 1 transaction groups is k actions `<UC>_1..k` that
+  interleave freely, and `after(UC).assert` holds after each step. No existing sample
+  splits; `cross_order_payment_split.rdra` (`Pay` through two APIs) is the counterexample
+  that CI expects.
 
 ### Fixed
 
 - A bad equality value in a multi-entity constraint (`forbidden(A, B, A.status == gone,
   ...)`) reported the same mistake two or three times, once of them as a missing entity
   qualifier on the value. It now reports it once.
+- `export --kind tla` works on `samples/api-contract` (the generated `TypeOK` referred to
+  an undefined name) and on `samples/clinic-ops` (it ended in `TLA_FATAL:init_pending_fallback`).
+- `clinic-ops` Charge and Claim no longer form a creation cycle: a charge's claim is
+  `.optional()`, because `GenerateClaimApi` creates the claim after the charges exist.
+- State diagrams draw the `[*]` start edges from the creation status of the transition
+  system. `clinic-ops` Appointment and `personal-info` UserAccount gain start edges they lacked.
+- `verify -o <relative dir>` no longer breaks TLC's temporary directory.
 
 ### Changed
 
