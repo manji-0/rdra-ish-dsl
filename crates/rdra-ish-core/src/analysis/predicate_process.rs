@@ -1197,8 +1197,7 @@ pub(crate) fn process_predicate(
         _ => process_relation_predicate(model, pred, &resolved, ctx, diags),
     }
 
-    if let Some(typed) =
-        crate::typed_predicate::build_typed_predicate(model, &pred.name, &resolved, pred)
+    if let Some(typed) = crate::typed_predicate::build_typed_predicate(&pred.name, &resolved, pred)
     {
         model.typed_predicates.push(typed);
     }

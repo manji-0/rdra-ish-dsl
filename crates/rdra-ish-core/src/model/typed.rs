@@ -1,9 +1,9 @@
 use super::comparison::ComparisonProp;
 use super::keys::*;
 use super::refs::{
-    AppliesSource, AppliesToTarget, Cardinality, CombinesTarget, ConstrainsTarget, ContainedRef,
-    ContainerRef, CoversTarget, DecidesTarget, EntityTouchpoint, NfrOrConstraint, PerformTarget,
-    Raiser, TriggerSource, TriggerTarget,
+    AppliesSource, AppliesToTarget, CombinesTarget, ConstrainsTarget, ContainedRef, ContainerRef,
+    CoversTarget, DecidesTarget, EntityTouchpoint, NfrOrConstraint, PerformTarget, Raiser,
+    TriggerSource, TriggerTarget,
 };
 
 /// 解析済み述語の型付き表現（discriminated union）。
@@ -159,12 +159,6 @@ pub enum TypedPredicate {
         field: FieldKey,
         entity: EntityKey,
         column: std::string::String,
-    },
-    Relate {
-        from: EntityKey,
-        to: EntityKey,
-        cardinality: Cardinality,
-        via: Option<EntityKey>,
     },
     SetsColumn {
         origin: UseCaseKey,

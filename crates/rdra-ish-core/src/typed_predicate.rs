@@ -1,7 +1,7 @@
 //! 述語呼び出しの型付き discriminated union 構築・集約 API。
 
 use crate::model::{
-    ActorKey, AdrKey, ApiKey, AppliesSource, AppliesToTarget, BucKey, BusinessKey, Cardinality,
+    ActorKey, AdrKey, ApiKey, AppliesSource, AppliesToTarget, BucKey, BusinessKey,
     ConstrainsTarget, ConstraintKey, ContainedRef, ContainerRef, CoversTarget, DecidesTarget,
     DtoKey, EntityKey, EntityTouchpoint, EventKey, FieldKey, MediumKey, NfrOrConstraint, NodeRef,
     PerformTarget, PermissionKey, QualityKey, Raiser, RequirementKey, ScreenKey, SemanticModel,
@@ -13,7 +13,6 @@ use rdra_ish_syntax::ast::{PredicateArg, PredicateCall};
 /// 引数の型が期待と一致しない場合は `None`。
 /// `sets` / 制約述語 / `cross_*` / `after` は専用ハンドラで登録する。
 pub fn build_typed_predicate(
-    model: &SemanticModel,
     name: &str,
     resolved: &[Option<NodeRef>],
     pred: &PredicateCall,
@@ -34,33 +33,6 @@ pub fn build_typed_predicate(
                 field: as_field(from)?,
                 entity: as_entity(to)?,
                 column,
-            })
-        }
-        "relate" => {
-            let (from, to) = pair(resolved)?;
-            let card = match pred.args.get(2) {
-                Some(PredicateArg::Card(c)) => c.as_str(),
-                Some(PredicateArg::Lit(c)) => c.as_str(),
-                _ => return None,
-            };
-            let via = pred
-                .chain
-                .iter()
-                .find(|cc| cc.name == "via")
-                .and_then(|cc| cc.args.first())
-                .and_then(arg_as_str)
-                .and_then(|id| {
-                    model
-                        .entities
-                        .iter()
-                        .find(|(_, e)| e.id == id)
-                        .map(|(k, _)| k)
-                });
-            Some(TypedPredicate::Relate {
-                from: as_entity(from)?,
-                to: as_entity(to)?,
-                cardinality: Cardinality::from_literal(card)?,
-                via,
             })
         }
         _ => {
@@ -242,7 +214,6 @@ pub fn typed_predicate_name(pred: &TypedPredicate) -> &'static str {
         TypedPredicate::Holds { .. } => "holds",
         TypedPredicate::Outbox { .. } => "outbox",
         TypedPredicate::MapsField { .. } => "maps_field",
-        TypedPredicate::Relate { .. } => "relate",
         TypedPredicate::SetsColumn { .. } => "sets",
         TypedPredicate::SetsProposition { .. } => "sets",
         TypedPredicate::After { .. } => "after",
@@ -362,6 +333,6 @@ transitions(Appointment.status, Book, draft -> booked)
             chain: vec![],
             span: 0..0,
         };
-        assert!(build_typed_predicate(&SemanticModel::default(), "performs", &[], &pred).is_none());
+        assert!(build_typed_predicate("performs", &[], &pred).is_none());
     }
 }

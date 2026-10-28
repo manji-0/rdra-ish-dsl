@@ -45,8 +45,8 @@ pub use location::{
     push_model_decl_diagnostic, DeclIndex, DeclSite, DiagCtxt, LocatedSpan, Position, SourceId,
 };
 pub use model::{
-    node_ref_kind, Adr, AdrKey, Api, ApiKey, AppliesToTarget, Cardinality, ColumnEffect,
-    ConstrainsTarget, ContainedRef, ContainerRef, CoversTarget, CrossCmpRhs, CrossComparisonProp,
+    node_ref_kind, Adr, AdrKey, Api, ApiKey, AppliesToTarget, ColumnEffect, ConstrainsTarget,
+    ContainedRef, ContainerRef, CoversTarget, CrossCmpRhs, CrossComparisonProp,
     CrossEntityCondition, CrossEntityInvariant, CrossForbiddenConstraint, DecidesTarget,
     EffectValue, EntityKey, EntityTouchpoint, ExclusiveConstraint, LookupResult, Medium, MediumKey,
     NfrOrConstraint, PerformTarget, Permission, PermissionKey, QualifiedModelColumnRef, Raiser,

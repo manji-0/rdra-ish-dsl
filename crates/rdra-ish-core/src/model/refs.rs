@@ -403,27 +403,6 @@ impl DecidesTarget {
     }
 }
 
-/// `relate(..., N:1)` のカーディナリティ。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Cardinality {
-    OneToOne,
-    OneToMany,
-    ManyToOne,
-    ManyToMany,
-}
-
-impl Cardinality {
-    pub fn from_literal(card: &str) -> Option<Self> {
-        match card {
-            "1:1" => Some(Cardinality::OneToOne),
-            "1:N" => Some(Cardinality::OneToMany),
-            "N:1" => Some(Cardinality::ManyToOne),
-            "N:M" => Some(Cardinality::ManyToMany),
-            _ => None,
-        }
-    }
-}
-
 /// カラム型
 #[derive(Debug, Clone, PartialEq)]
 pub enum ColumnType {
