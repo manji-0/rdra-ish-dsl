@@ -89,8 +89,8 @@ flowchart LR
   Patient -.->|has_permission| PatientProfileRead
   Patient -.->|has_permission| ConsentCapture
   Patient -.->|has_permission| ScheduleRead
-  Patient -->|performs| BucPatientOnboarding
   Patient -->|performs| BucFollowupCare
+  Patient -->|performs| BucPatientOnboarding
   Patient -->|performs| CaptureConsent
   Patient -->|performs| CompleteIntakeForms
   CareCoordinator -.->|has_permission| FollowUpManage
@@ -103,13 +103,6 @@ flowchart LR
   CareCoordinator -->|performs| ScheduleFollowUpVisit
   CareCoordinator -->|performs| CloseCarePlan
   CareCoordinator -->|performs| NotifyPatientResult
-  ConsentApi -.->|creates| ConsentRecord
-  ConsentApi -.->|requires_permission| ConsentCapture
-  IntakeMessagingApi -.->|creates| PatientMessage
-  IntakeMessagingApi -.->|creates| IntakePacket
-  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
-  AppointmentNoticeApi -.->|creates| PatientMessage
-  AppointmentNoticeApi -.->|creates| Notification
   CreateCarePlanApi -.->|creates| CarePlan
   CreateCarePlanApi -.->|reads| Encounter
   CreateCarePlanApi -.->|requires_permission| FollowUpManage
@@ -132,17 +125,13 @@ flowchart LR
   EligibilityApi -.->|reads| InsurancePolicy
   EligibilityApi -.->|requires_permission| InsuranceVerify
   EligibilityApi -.->|updates| InsurancePolicy
-  BucPatientOnboarding -.->|belongs| PatientAccess
-  BucPatientOnboarding -->|contains| VerifyInsurance
-  BucPatientOnboarding -->|contains| CaptureConsent
-  BucPatientOnboarding -->|contains| SendIntakeForms
-  BucPatientOnboarding -->|contains| CompleteIntakeForms
-  BucPatientOnboarding -->|contains| ExpireIntakeForms
-  BucPatientOnboarding -->|contains| MergeDuplicatePatient
-  BucPatientOnboarding -->|contains| ArchivePatient
-  BucPatientOnboarding -->|contains| SearchPatient
-  BucPatientOnboarding -->|contains| RegisterPatient
-  BucPatientOnboarding -->|contains| UpdateDemographics
+  ConsentApi -.->|creates| ConsentRecord
+  ConsentApi -.->|requires_permission| ConsentCapture
+  IntakeMessagingApi -.->|creates| PatientMessage
+  IntakeMessagingApi -.->|creates| IntakePacket
+  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
+  AppointmentNoticeApi -.->|creates| PatientMessage
+  AppointmentNoticeApi -.->|creates| Notification
   BucFollowupCare -.->|belongs| PatientAccess
   BucFollowupCare -->|contains| CreateCarePlan
   BucFollowupCare -->|contains| SendFollowUpMessage
@@ -150,6 +139,17 @@ flowchart LR
   BucFollowupCare -->|contains| ScheduleFollowUpVisit
   BucFollowupCare -->|contains| CloseCarePlan
   BucFollowupCare -->|contains| NotifyPatientResult
+  BucPatientOnboarding -.->|belongs| PatientAccess
+  BucPatientOnboarding -->|contains| SearchPatient
+  BucPatientOnboarding -->|contains| RegisterPatient
+  BucPatientOnboarding -->|contains| UpdateDemographics
+  BucPatientOnboarding -->|contains| VerifyInsurance
+  BucPatientOnboarding -->|contains| CaptureConsent
+  BucPatientOnboarding -->|contains| SendIntakeForms
+  BucPatientOnboarding -->|contains| CompleteIntakeForms
+  BucPatientOnboarding -->|contains| ExpireIntakeForms
+  BucPatientOnboarding -->|contains| MergeDuplicatePatient
+  BucPatientOnboarding -->|contains| ArchivePatient
   Appointment ---|N:1| PatientAccount
   Encounter ---|N:1| PatientAccount
   Encounter ---|1:1| Appointment
@@ -179,38 +179,6 @@ flowchart LR
   PatientSearchScreen -.->|shows| PatientAccount
   PatientProfileScreen -.->|shows| PatientProfile
   IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
-  VerifyInsurance -.->|displays| InsuranceScreen
-  VerifyInsurance -.->|invokes| EligibilityApi
-  VerifyInsurance -.->|requires_medium| FrontDeskTerminal
-  VerifyInsurance -.->|requires_permission| InsuranceVerify
-  CaptureConsent -.->|displays| ConsentScreen
-  CaptureConsent -.->|invokes| ConsentApi
-  CaptureConsent -.->|requires_medium| PatientMobile
-  CaptureConsent -.->|requires_permission| ConsentCapture
-  SendIntakeForms -.->|displays| IntakePortalScreen
-  SendIntakeForms -.->|invokes| IntakeMessagingApi
-  SendIntakeForms -.->|requires_medium| FrontDeskTerminal
-  SendIntakeForms -.->|requires_permission| IntakeManage
-  CompleteIntakeForms -.->|displays| IntakePortalScreen
-  CompleteIntakeForms -.->|requires_medium| PatientMobile
-  CompleteIntakeForms -.->|requires_permission| ConsentCapture
-  CompleteIntakeForms -.->|updates| IntakePacket
-  ExpireIntakeForms -.->|displays| IntakePortalScreen
-  ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
-  ExpireIntakeForms -.->|requires_permission| IntakeManage
-  ExpireIntakeForms -.->|updates| IntakePacket
-  MergeDuplicatePatient -.->|displays| PatientProfileScreen
-  MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
-  MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
-  MergeDuplicatePatient -.->|updates| PatientAccount
-  ArchivePatient -.->|displays| PatientProfileScreen
-  ArchivePatient -.->|requires_medium| FrontDeskTerminal
-  ArchivePatient -.->|requires_permission| PatientProfileWrite
-  ArchivePatient -.->|updates| PatientAccount
-  SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
-  SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
-  SendAppointmentNotice -.->|requires_medium| FrontDeskTerminal
-  SendAppointmentNotice -.->|requires_permission| ScheduleRead
   CreateCarePlan -.->|displays| CarePlanScreen
   CreateCarePlan -.->|invokes| CreateCarePlanApi
   CreateCarePlan -.->|requires_medium| CareCoordinationConsole
@@ -250,3 +218,35 @@ flowchart LR
   UpdateDemographics -.->|invokes| UpdateDemographicsApi
   UpdateDemographics -.->|requires_medium| FrontDeskTerminal
   UpdateDemographics -.->|requires_permission| PatientProfileWrite
+  VerifyInsurance -.->|displays| InsuranceScreen
+  VerifyInsurance -.->|invokes| EligibilityApi
+  VerifyInsurance -.->|requires_medium| FrontDeskTerminal
+  VerifyInsurance -.->|requires_permission| InsuranceVerify
+  CaptureConsent -.->|displays| ConsentScreen
+  CaptureConsent -.->|invokes| ConsentApi
+  CaptureConsent -.->|requires_medium| PatientMobile
+  CaptureConsent -.->|requires_permission| ConsentCapture
+  SendIntakeForms -.->|displays| IntakePortalScreen
+  SendIntakeForms -.->|invokes| IntakeMessagingApi
+  SendIntakeForms -.->|requires_medium| FrontDeskTerminal
+  SendIntakeForms -.->|requires_permission| IntakeManage
+  CompleteIntakeForms -.->|displays| IntakePortalScreen
+  CompleteIntakeForms -.->|requires_medium| PatientMobile
+  CompleteIntakeForms -.->|requires_permission| ConsentCapture
+  CompleteIntakeForms -.->|updates| IntakePacket
+  ExpireIntakeForms -.->|displays| IntakePortalScreen
+  ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
+  ExpireIntakeForms -.->|requires_permission| IntakeManage
+  ExpireIntakeForms -.->|updates| IntakePacket
+  MergeDuplicatePatient -.->|displays| PatientProfileScreen
+  MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
+  MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
+  MergeDuplicatePatient -.->|updates| PatientAccount
+  ArchivePatient -.->|displays| PatientProfileScreen
+  ArchivePatient -.->|requires_medium| FrontDeskTerminal
+  ArchivePatient -.->|requires_permission| PatientProfileWrite
+  ArchivePatient -.->|updates| PatientAccount
+  SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
+  SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
+  SendAppointmentNotice -.->|requires_medium| FrontDeskTerminal
+  SendAppointmentNotice -.->|requires_permission| ScheduleRead

@@ -42,6 +42,9 @@ rectangle "System" {
 }
 
 Customer --> BucOrder : performs
+OrderHistoryApi ..> Order : reads
+OrderHistoryApi ..> OrderLine : reads
+CancelOrderApi ..> Order : updates
 SelectAddressApi ..> ShippingAddress : reads
 ConfirmOrderApi ..> ShippingAddress : reads
 ConfirmOrderApi ..> Cart : reads
@@ -50,17 +53,14 @@ PlaceOrderApi ..> Order : creates
 PlaceOrderApi ..> OrderLine : creates
 PlaceOrderApi ..> CustomerAccount : reads
 PlaceOrderApi ..> Cart : updates
-OrderHistoryApi ..> Order : reads
-OrderHistoryApi ..> OrderLine : reads
-CancelOrderApi ..> Order : updates
 BucOrder ..> EcShopping : belongs
+BucOrder --> ViewOrderHistory : contains
+BucOrder --> Cancel : contains
 BucOrder --> ShipOrder : contains
 BucOrder --> DeliverOrder : contains
 BucOrder --> SelectAddress : contains
 BucOrder --> ConfirmOrder : contains
 BucOrder --> PlaceOrder : contains
-BucOrder --> ViewOrderHistory : contains
-BucOrder --> Cancel : contains
 ShippingAddress -- CustomerAccount : N:1
 Cart -- CustomerAccount : N:1
 CartItem -- Cart : N:1
@@ -68,6 +68,10 @@ Order -- CustomerAccount : N:1
 Order -- ShippingAddress : N:1
 OrderLine -- Order : N:1
 EvOrderShipped ..> ShippingSvc : triggers
+ViewOrderHistory ..> OrderHistoryScreen : displays
+ViewOrderHistory ..> OrderHistoryApi : invokes
+Cancel ..> OrderHistoryScreen : displays
+Cancel ..> CancelOrderApi : invokes
 ShipOrder ..> EvOrderShipped : raises
 ShipOrder ..> Order : updates
 DeliverOrder ..> Order : updates
@@ -77,8 +81,4 @@ ConfirmOrder ..> OrderConfirmScreen : displays
 ConfirmOrder ..> ConfirmOrderApi : invokes
 PlaceOrder ..> OrderCompleteScreen : displays
 PlaceOrder ..> PlaceOrderApi : invokes
-ViewOrderHistory ..> OrderHistoryScreen : displays
-ViewOrderHistory ..> OrderHistoryApi : invokes
-Cancel ..> OrderHistoryScreen : displays
-Cancel ..> CancelOrderApi : invokes
 @enduml

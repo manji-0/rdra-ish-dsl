@@ -40,8 +40,6 @@ rectangle "System" {
 }
 
 User --> BucProfile : performs
-ViewProfileApi ..> UserAccount : reads
-ViewProfileApi ..> PersonalInfo : reads
 UpdateProfileApi ..> AuditLog : creates
 UpdateProfileApi ..> PersonalInfo : reads
 UpdateProfileApi ..> PersonalInfo : updates
@@ -55,8 +53,9 @@ DeleteAddressApi ..> PostalAddress : deletes
 SetPrimaryAddressApi ..> AuditLog : creates
 SetPrimaryAddressApi ..> PostalAddress : reads
 SetPrimaryAddressApi ..> PostalAddress : updates
+ViewProfileApi ..> UserAccount : reads
+ViewProfileApi ..> PersonalInfo : reads
 BucProfile ..> PersonalDataMgmt : belongs
-BucProfile --> ViewProfile : contains
 BucProfile --> UpdateProfile : contains
 BucProfile --> RegisterAddress : contains
 BucProfile --> UpdateAddress : contains
@@ -65,11 +64,10 @@ BucProfile --> SetPrimaryAddress : contains
 BucProfile --> SuspendAccount : contains
 BucProfile --> RestoreAccount : contains
 BucProfile --> DeleteAccount : contains
+BucProfile --> ViewProfile : contains
 PersonalInfo -- UserAccount : 1:1
 PostalAddress -- UserAccount : N:1
 AuditLog -- UserAccount : N:1
-ViewProfile ..> ProfileScreen : displays
-ViewProfile ..> ViewProfileApi : invokes
 UpdateProfile ..> ProfileScreen : displays
 UpdateProfile ..> UpdateProfileApi : invokes
 RegisterAddress ..> AddressEditScreen : displays
@@ -83,4 +81,6 @@ SetPrimaryAddress ..> SetPrimaryAddressApi : invokes
 SuspendAccount ..> UserAccount : updates
 RestoreAccount ..> UserAccount : updates
 DeleteAccount ..> UserAccount : updates
+ViewProfile ..> ProfileScreen : displays
+ViewProfile ..> ViewProfileApi : invokes
 @enduml

@@ -46,6 +46,12 @@ flowchart LR
   BillingSpecialist -.->|has_permission| BillingClaimWrite
   BillingSpecialist -.->|has_permission| PaymentPost
   BillingSpecialist -->|performs| BucBillingClaims
+  PaymentPostApi -.->|creates| PaymentTransaction
+  PaymentPostApi -.->|requires_permission| PaymentPost
+  PaymentPostApi -.->|updates| Claim
+  BalanceApi -.->|reads| PaymentTransaction
+  BalanceApi -.->|requires_permission| PaymentPost
+  BalanceApi -.->|updates| AccountBalance
   CreateChargeApi -.->|creates| Charge
   CreateChargeApi -.->|reads| Encounter
   CreateChargeApi -.->|requires_permission| BillingClaimWrite
@@ -56,21 +62,15 @@ flowchart LR
   GenerateClaimApi -.->|updates| Charge
   SubmitClaimApi -.->|requires_permission| BillingClaimWrite
   SubmitClaimApi -.->|updates| Claim
-  PaymentPostApi -.->|creates| PaymentTransaction
-  PaymentPostApi -.->|requires_permission| PaymentPost
-  PaymentPostApi -.->|updates| Claim
-  BalanceApi -.->|reads| PaymentTransaction
-  BalanceApi -.->|requires_permission| PaymentPost
-  BalanceApi -.->|updates| AccountBalance
   BucBillingClaims -.->|belongs| RevenueCycle
-  BucBillingClaims -->|contains| CreateCharge
-  BucBillingClaims -->|contains| GenerateClaim
   BucBillingClaims -->|contains| SubmitClaim
   BucBillingClaims -->|contains| ReceiveClaimAccepted
   BucBillingClaims -->|contains| RecordClaimDenial
   BucBillingClaims -->|contains| PostPayment
   BucBillingClaims -->|contains| ReconcileBalance
   BucBillingClaims -->|contains| VoidCharge
+  BucBillingClaims -->|contains| CreateCharge
+  BucBillingClaims -->|contains| GenerateClaim
   Charge ---|N:1| Encounter
   Charge ---|N:1| Claim
   Claim ---|N:1| InsurancePolicy
@@ -79,14 +79,6 @@ flowchart LR
   EvEncounterSigned -.->|triggers| BucBillingClaims
   EvEncounterSigned -.->|triggers| CreateCharge
   PaymentGateway -.->|raises| EvPaymentSettled
-  CreateCharge -.->|displays| ChargeWorklistScreen
-  CreateCharge -.->|invokes| CreateChargeApi
-  CreateCharge -.->|requires_medium| BillingWorkstation
-  CreateCharge -.->|requires_permission| BillingClaimWrite
-  GenerateClaim -.->|displays| ClaimScreen
-  GenerateClaim -.->|invokes| GenerateClaimApi
-  GenerateClaim -.->|requires_medium| BillingWorkstation
-  GenerateClaim -.->|requires_permission| BillingClaimWrite
   SubmitClaim -.->|displays| ClaimScreen
   SubmitClaim -.->|invokes| SubmitClaimApi
   SubmitClaim -.->|requires_medium| BillingWorkstation
@@ -111,3 +103,11 @@ flowchart LR
   VoidCharge -.->|requires_medium| BillingWorkstation
   VoidCharge -.->|requires_permission| BillingClaimWrite
   VoidCharge -.->|updates| Charge
+  CreateCharge -.->|displays| ChargeWorklistScreen
+  CreateCharge -.->|invokes| CreateChargeApi
+  CreateCharge -.->|requires_medium| BillingWorkstation
+  CreateCharge -.->|requires_permission| BillingClaimWrite
+  GenerateClaim -.->|displays| ClaimScreen
+  GenerateClaim -.->|invokes| GenerateClaimApi
+  GenerateClaim -.->|requires_medium| BillingWorkstation
+  GenerateClaim -.->|requires_permission| BillingClaimWrite

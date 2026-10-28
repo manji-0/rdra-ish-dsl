@@ -65,19 +65,14 @@ flowchart LR
   FrontDesk -.->|has_permission| InsuranceVerify
   FrontDesk -.->|has_permission| IntakeManage
   FrontDesk -->|performs| BucPatientOnboarding
+  FrontDesk -->|performs| SearchPatient
+  FrontDesk -->|performs| RegisterPatient
+  FrontDesk -->|performs| UpdateDemographics
   FrontDesk -->|performs| VerifyInsurance
   FrontDesk -->|performs| SendIntakeForms
   FrontDesk -->|performs| ExpireIntakeForms
   FrontDesk -->|performs| MergeDuplicatePatient
   FrontDesk -->|performs| ArchivePatient
-  FrontDesk -->|performs| SearchPatient
-  FrontDesk -->|performs| RegisterPatient
-  FrontDesk -->|performs| UpdateDemographics
-  ConsentApi -.->|creates| ConsentRecord
-  ConsentApi -.->|requires_permission| ConsentCapture
-  IntakeMessagingApi -.->|creates| PatientMessage
-  IntakeMessagingApi -.->|creates| IntakePacket
-  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
   SearchPatientApi -.->|reads| PatientAccount
   SearchPatientApi -.->|reads| PatientProfile
   SearchPatientApi -.->|requires_permission| PatientProfileRead
@@ -90,7 +85,15 @@ flowchart LR
   EligibilityApi -.->|reads| InsurancePolicy
   EligibilityApi -.->|requires_permission| InsuranceVerify
   EligibilityApi -.->|updates| InsurancePolicy
+  ConsentApi -.->|creates| ConsentRecord
+  ConsentApi -.->|requires_permission| ConsentCapture
+  IntakeMessagingApi -.->|creates| PatientMessage
+  IntakeMessagingApi -.->|creates| IntakePacket
+  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
   BucPatientOnboarding -.->|belongs| PatientAccess
+  BucPatientOnboarding -->|contains| SearchPatient
+  BucPatientOnboarding -->|contains| RegisterPatient
+  BucPatientOnboarding -->|contains| UpdateDemographics
   BucPatientOnboarding -->|contains| VerifyInsurance
   BucPatientOnboarding -->|contains| CaptureConsent
   BucPatientOnboarding -->|contains| SendIntakeForms
@@ -98,9 +101,6 @@ flowchart LR
   BucPatientOnboarding -->|contains| ExpireIntakeForms
   BucPatientOnboarding -->|contains| MergeDuplicatePatient
   BucPatientOnboarding -->|contains| ArchivePatient
-  BucPatientOnboarding -->|contains| SearchPatient
-  BucPatientOnboarding -->|contains| RegisterPatient
-  BucPatientOnboarding -->|contains| UpdateDemographics
   PatientMessage ---|N:1| PatientAccount
   PatientProfile ---|1:1| PatientAccount
   InsurancePolicy ---|N:1| PatientAccount
@@ -114,6 +114,18 @@ flowchart LR
   PatientSearchScreen -.->|shows| PatientAccount
   PatientProfileScreen -.->|shows| PatientProfile
   IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
+  SearchPatient -.->|displays| PatientSearchScreen
+  SearchPatient -.->|invokes| SearchPatientApi
+  SearchPatient -.->|requires_medium| FrontDeskTerminal
+  SearchPatient -.->|requires_permission| PatientProfileRead
+  RegisterPatient -.->|displays| PatientProfileScreen
+  RegisterPatient -.->|invokes| RegisterPatientApi
+  RegisterPatient -.->|requires_medium| FrontDeskTerminal
+  RegisterPatient -.->|requires_permission| PatientProfileWrite
+  UpdateDemographics -.->|displays| PatientProfileScreen
+  UpdateDemographics -.->|invokes| UpdateDemographicsApi
+  UpdateDemographics -.->|requires_medium| FrontDeskTerminal
+  UpdateDemographics -.->|requires_permission| PatientProfileWrite
   VerifyInsurance -.->|displays| InsuranceScreen
   VerifyInsurance -.->|invokes| EligibilityApi
   VerifyInsurance -.->|requires_medium| FrontDeskTerminal
@@ -142,15 +154,3 @@ flowchart LR
   ArchivePatient -.->|requires_medium| FrontDeskTerminal
   ArchivePatient -.->|requires_permission| PatientProfileWrite
   ArchivePatient -.->|updates| PatientAccount
-  SearchPatient -.->|displays| PatientSearchScreen
-  SearchPatient -.->|invokes| SearchPatientApi
-  SearchPatient -.->|requires_medium| FrontDeskTerminal
-  SearchPatient -.->|requires_permission| PatientProfileRead
-  RegisterPatient -.->|displays| PatientProfileScreen
-  RegisterPatient -.->|invokes| RegisterPatientApi
-  RegisterPatient -.->|requires_medium| FrontDeskTerminal
-  RegisterPatient -.->|requires_permission| PatientProfileWrite
-  UpdateDemographics -.->|displays| PatientProfileScreen
-  UpdateDemographics -.->|invokes| UpdateDemographicsApi
-  UpdateDemographics -.->|requires_medium| FrontDeskTerminal
-  UpdateDemographics -.->|requires_permission| PatientProfileWrite

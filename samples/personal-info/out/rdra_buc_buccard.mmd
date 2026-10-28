@@ -27,14 +27,14 @@ flowchart LR
     CreditCard[("🗄️ Credit Card")]
   end
   User -->|performs| BucCard
-  SetPrimaryCardApi -.->|creates| AuditLog
-  SetPrimaryCardApi -.->|reads| CreditCard
-  SetPrimaryCardApi -.->|updates| CreditCard
   ListCardsApi -.->|reads| CreditCard
   RegisterCardApi -.->|creates| CreditCard
   RegisterCardApi -.->|creates| AuditLog
   DeleteCardApi -.->|creates| AuditLog
   DeleteCardApi -.->|deletes| CreditCard
+  SetPrimaryCardApi -.->|creates| AuditLog
+  SetPrimaryCardApi -.->|reads| CreditCard
+  SetPrimaryCardApi -.->|updates| CreditCard
   BucCard -.->|belongs| PersonalDataMgmt
   BucCard -->|contains| ListCards
   BucCard -->|contains| RegisterCard

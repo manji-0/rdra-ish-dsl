@@ -18,7 +18,11 @@ pub(crate) fn collect_rdra_files(inputs: &[PathBuf]) -> Result<Vec<PathBuf>> {
         if input.is_file() {
             files.push(input.clone());
         } else if input.is_dir() {
-            for entry in walkdir::WalkDir::new(input).into_iter().flatten() {
+            for entry in walkdir::WalkDir::new(input)
+                .sort_by_file_name()
+                .into_iter()
+                .flatten()
+            {
                 if entry.path().extension().is_some_and(|e| e == "rdra") {
                     files.push(entry.path().to_owned());
                 }

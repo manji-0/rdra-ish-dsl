@@ -5,10 +5,10 @@ Category,Category,0,(no axes),,true,true,-
 CustomerAccount,Customer Account,0,(no axes),,true,true,-
 Order,Order,0,status,pending,true,false,BucOrder/PlaceOrder
 Order,Order,0,delivered_at,null,true,false,BucOrder/PlaceOrder
-Order,Order,1,status,awaiting_capture,false,false,"BucOrder/PlaceOrder, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
-Order,Order,1,delivered_at,null,false,false,"BucOrder/PlaceOrder, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
-Order,Order,2,status,cancelled,false,true,"BucOrder/Cancel, BucOrder/PlaceOrder, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
-Order,Order,2,delivered_at,null,false,true,"BucOrder/Cancel, BucOrder/PlaceOrder, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Order,Order,1,status,cancelled,false,true,"BucOrder/Cancel, BucOrder/PlaceOrder, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Order,Order,1,delivered_at,null,false,true,"BucOrder/Cancel, BucOrder/PlaceOrder, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Order,Order,2,status,awaiting_capture,false,false,"BucOrder/PlaceOrder, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Order,Order,2,delivered_at,null,false,false,"BucOrder/PlaceOrder, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
 Order,Order,3,status,paid,false,false,"BucOrder/PlaceOrder, BucPayment/Capture, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
 Order,Order,3,delivered_at,null,false,false,"BucOrder/PlaceOrder, BucPayment/Capture, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
 Order,Order,4,status,shipped,false,false,"BucOrder/PlaceOrder, BucOrder/ShipOrder, BucPayment/Capture, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"

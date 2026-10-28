@@ -653,6 +653,7 @@ fn discover_rdra_files(roots: &[PathBuf]) -> Vec<PathBuf> {
             continue;
         }
         for entry in WalkDir::new(root)
+            .sort_by_file_name()
             .into_iter()
             .filter_map(|entry| entry.ok())
         {

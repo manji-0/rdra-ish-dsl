@@ -68,27 +68,12 @@ flowchart LR
     UserAccount_suspended("🔄 suspended")
     CardBrand["🎚️ Card Brand"]
   end
-  User -->|performs| BucProfile
   User -->|performs| BucCard
   User -->|performs| BucPassword
+  User -->|performs| BucProfile
   SysAdmin -->|performs| SuspendAccount
   SysAdmin -->|performs| RestoreAccount
   SysAdmin -->|performs| DeleteAccount
-  SetPrimaryCardApi -.->|creates| AuditLog
-  SetPrimaryCardApi -.->|reads| CreditCard
-  SetPrimaryCardApi -.->|updates| CreditCard
-  SetInitialPasswordApi -.->|creates| PasswordCredential
-  SetInitialPasswordApi -.->|creates| AuditLog
-  SetInitialPasswordApi -.->|updates| UserAccount
-  ChangePasswordApi -.->|creates| AuditLog
-  ChangePasswordApi -.->|reads| PasswordCredential
-  ChangePasswordApi -.->|updates| PasswordCredential
-  RequestPasswordResetApi -.->|creates| AuditLog
-  RequestPasswordResetApi -.->|reads| UserAccount
-  ResetPasswordApi -.->|creates| AuditLog
-  ResetPasswordApi -.->|updates| PasswordCredential
-  ViewProfileApi -.->|reads| UserAccount
-  ViewProfileApi -.->|reads| PersonalInfo
   UpdateProfileApi -.->|creates| AuditLog
   UpdateProfileApi -.->|reads| PersonalInfo
   UpdateProfileApi -.->|updates| PersonalInfo
@@ -107,16 +92,21 @@ flowchart LR
   RegisterCardApi -.->|creates| AuditLog
   DeleteCardApi -.->|creates| AuditLog
   DeleteCardApi -.->|deletes| CreditCard
-  BucProfile -.->|belongs| PersonalDataMgmt
-  BucProfile -->|contains| ViewProfile
-  BucProfile -->|contains| UpdateProfile
-  BucProfile -->|contains| RegisterAddress
-  BucProfile -->|contains| UpdateAddress
-  BucProfile -->|contains| DeleteAddress
-  BucProfile -->|contains| SetPrimaryAddress
-  BucProfile -->|contains| SuspendAccount
-  BucProfile -->|contains| RestoreAccount
-  BucProfile -->|contains| DeleteAccount
+  SetPrimaryCardApi -.->|creates| AuditLog
+  SetPrimaryCardApi -.->|reads| CreditCard
+  SetPrimaryCardApi -.->|updates| CreditCard
+  SetInitialPasswordApi -.->|creates| PasswordCredential
+  SetInitialPasswordApi -.->|creates| AuditLog
+  SetInitialPasswordApi -.->|updates| UserAccount
+  ChangePasswordApi -.->|creates| AuditLog
+  ChangePasswordApi -.->|reads| PasswordCredential
+  ChangePasswordApi -.->|updates| PasswordCredential
+  RequestPasswordResetApi -.->|creates| AuditLog
+  RequestPasswordResetApi -.->|reads| UserAccount
+  ResetPasswordApi -.->|creates| AuditLog
+  ResetPasswordApi -.->|updates| PasswordCredential
+  ViewProfileApi -.->|reads| UserAccount
+  ViewProfileApi -.->|reads| PersonalInfo
   BucCard -.->|belongs| PersonalDataMgmt
   BucCard -->|contains| ListCards
   BucCard -->|contains| RegisterCard
@@ -127,17 +117,21 @@ flowchart LR
   BucPassword -->|contains| ChangePassword
   BucPassword -->|contains| RequestPasswordReset
   BucPassword -->|contains| ResetPassword
+  BucProfile -.->|belongs| PersonalDataMgmt
+  BucProfile -->|contains| UpdateProfile
+  BucProfile -->|contains| RegisterAddress
+  BucProfile -->|contains| UpdateAddress
+  BucProfile -->|contains| DeleteAddress
+  BucProfile -->|contains| SetPrimaryAddress
+  BucProfile -->|contains| SuspendAccount
+  BucProfile -->|contains| RestoreAccount
+  BucProfile -->|contains| DeleteAccount
+  BucProfile -->|contains| ViewProfile
   PersonalInfo ---|1:1| UserAccount
   PostalAddress ---|N:1| UserAccount
   CreditCard ---|N:1| UserAccount
   PasswordCredential ---|1:1| UserAccount
   AuditLog ---|N:1| UserAccount
-  PersonalDataSystem -->|contains| SetPrimaryCardApi
-  PersonalDataSystem -->|contains| SetInitialPasswordApi
-  PersonalDataSystem -->|contains| ChangePasswordApi
-  PersonalDataSystem -->|contains| RequestPasswordResetApi
-  PersonalDataSystem -->|contains| ResetPasswordApi
-  PersonalDataSystem -->|contains| ViewProfileApi
   PersonalDataSystem -->|contains| UpdateProfileApi
   PersonalDataSystem -->|contains| RegisterAddressApi
   PersonalDataSystem -->|contains| UpdateAddressApi
@@ -146,6 +140,25 @@ flowchart LR
   PersonalDataSystem -->|contains| ListCardsApi
   PersonalDataSystem -->|contains| RegisterCardApi
   PersonalDataSystem -->|contains| DeleteCardApi
+  PersonalDataSystem -->|contains| SetPrimaryCardApi
+  PersonalDataSystem -->|contains| SetInitialPasswordApi
+  PersonalDataSystem -->|contains| ChangePasswordApi
+  PersonalDataSystem -->|contains| RequestPasswordResetApi
+  PersonalDataSystem -->|contains| ResetPasswordApi
+  PersonalDataSystem -->|contains| ViewProfileApi
+  UpdateProfile -.->|displays| ProfileScreen
+  UpdateProfile -.->|invokes| UpdateProfileApi
+  RegisterAddress -.->|displays| AddressEditScreen
+  RegisterAddress -.->|invokes| RegisterAddressApi
+  UpdateAddress -.->|displays| AddressEditScreen
+  UpdateAddress -.->|invokes| UpdateAddressApi
+  DeleteAddress -.->|displays| AddressListScreen
+  DeleteAddress -.->|invokes| DeleteAddressApi
+  SetPrimaryAddress -.->|displays| AddressListScreen
+  SetPrimaryAddress -.->|invokes| SetPrimaryAddressApi
+  SuspendAccount -.->|updates| UserAccount
+  RestoreAccount -.->|updates| UserAccount
+  DeleteAccount -.->|updates| UserAccount
   ListCards -.->|displays| CardListScreen
   ListCards -.->|invokes| ListCardsApi
   RegisterCard -.->|displays| CardAddScreen
@@ -164,16 +177,3 @@ flowchart LR
   ResetPassword -.->|invokes| ResetPasswordApi
   ViewProfile -.->|displays| ProfileScreen
   ViewProfile -.->|invokes| ViewProfileApi
-  UpdateProfile -.->|displays| ProfileScreen
-  UpdateProfile -.->|invokes| UpdateProfileApi
-  RegisterAddress -.->|displays| AddressEditScreen
-  RegisterAddress -.->|invokes| RegisterAddressApi
-  UpdateAddress -.->|displays| AddressEditScreen
-  UpdateAddress -.->|invokes| UpdateAddressApi
-  DeleteAddress -.->|displays| AddressListScreen
-  DeleteAddress -.->|invokes| DeleteAddressApi
-  SetPrimaryAddress -.->|displays| AddressListScreen
-  SetPrimaryAddress -.->|invokes| SetPrimaryAddressApi
-  SuspendAccount -.->|updates| UserAccount
-  RestoreAccount -.->|updates| UserAccount
-  DeleteAccount -.->|updates| UserAccount

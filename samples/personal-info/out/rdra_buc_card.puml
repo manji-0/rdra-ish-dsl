@@ -30,14 +30,14 @@ rectangle "System" {
 }
 
 User --> BucCard : performs
-SetPrimaryCardApi ..> AuditLog : creates
-SetPrimaryCardApi ..> CreditCard : reads
-SetPrimaryCardApi ..> CreditCard : updates
 ListCardsApi ..> CreditCard : reads
 RegisterCardApi ..> CreditCard : creates
 RegisterCardApi ..> AuditLog : creates
 DeleteCardApi ..> AuditLog : creates
 DeleteCardApi ..> CreditCard : deletes
+SetPrimaryCardApi ..> AuditLog : creates
+SetPrimaryCardApi ..> CreditCard : reads
+SetPrimaryCardApi ..> CreditCard : updates
 BucCard ..> PersonalDataMgmt : belongs
 BucCard --> ListCards : contains
 BucCard --> RegisterCard : contains

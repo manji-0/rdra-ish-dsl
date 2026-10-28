@@ -167,46 +167,33 @@ flowchart LR
   Nurse -.->|has_permission| VitalsRecord
   Nurse -.->|has_permission| ClinicalOrderWrite
   Nurse -.->|has_permission| LabResultManage
-  Nurse -->|performs| BucOrdersResults
   Nurse -->|performs| BucClinicalEncounter
-  Nurse -->|performs| CollectSpecimen
-  Nurse -->|performs| ReceiveLabResult
+  Nurse -->|performs| BucOrdersResults
   Nurse -->|performs| OpenEncounter
   Nurse -->|performs| RecordVitals
   Nurse -->|performs| CompleteAppointment
+  Nurse -->|performs| CollectSpecimen
+  Nurse -->|performs| ReceiveLabResult
   Clinician -.->|has_permission| EncounterOpen
   Clinician -.->|has_permission| ClinicalDocument
   Clinician -.->|has_permission| EncounterSign
   Clinician -.->|has_permission| ClinicalOrderWrite
   Clinician -.->|has_permission| LabResultManage
-  Clinician -->|performs| BucOrdersResults
   Clinician -->|performs| BucClinicalEncounter
+  Clinician -->|performs| BucOrdersResults
+  Clinician -->|performs| DocumentAssessment
+  Clinician -->|performs| SignEncounter
+  Clinician -->|performs| AmendEncounter
   Clinician -->|performs| PlaceLabOrder
   Clinician -->|performs| ReviewLabResult
   Clinician -->|performs| NotifyCriticalResult
   Clinician -->|performs| CancelClinicalOrder
-  Clinician -->|performs| DocumentAssessment
-  Clinician -->|performs| SignEncounter
-  Clinician -->|performs| AmendEncounter
-  ConsentApi -.->|creates| ConsentRecord
-  ConsentApi -.->|requires_permission| ConsentCapture
-  IntakeMessagingApi -.->|creates| PatientMessage
-  IntakeMessagingApi -.->|creates| IntakePacket
-  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
-  OrderEntryApi -.->|creates| ClinicalOrder
-  OrderEntryApi -.->|reads| Encounter
-  OrderEntryApi -.->|requires_permission| ClinicalOrderWrite
-  CollectSpecimenApi -.->|requires_permission| ClinicalOrderWrite
-  CollectSpecimenApi -.->|updates| ClinicalOrder
-  ReceiveLabResultApi -.->|creates| LabResult
-  ReceiveLabResultApi -.->|requires_permission| LabResultManage
-  ReceiveLabResultApi -.->|updates| ClinicalOrder
-  ResultReviewApi -.->|requires_permission| LabResultManage
-  ResultReviewApi -.->|updates| ClinicalOrder
-  ResultReviewApi -.->|updates| LabResult
-  CriticalNoticeApi -.->|creates| PatientMessage
-  CriticalNoticeApi -.->|creates| Notification
-  CriticalNoticeApi -.->|requires_permission| PatientMessageSend
+  PaymentPostApi -.->|creates| PaymentTransaction
+  PaymentPostApi -.->|requires_permission| PaymentPost
+  PaymentPostApi -.->|updates| Claim
+  BalanceApi -.->|reads| PaymentTransaction
+  BalanceApi -.->|requires_permission| PaymentPost
+  BalanceApi -.->|updates| AccountBalance
   OpenEncounterApi -.->|creates| Encounter
   OpenEncounterApi -.->|requires_permission| EncounterOpen
   OpenEncounterApi -.->|updates| Appointment
@@ -223,24 +210,6 @@ flowchart LR
   CompleteAppointmentApi -.->|requires_permission| EncounterOpen
   CompleteAppointmentApi -.->|updates| Appointment
   CompleteAppointmentApi -.->|updates| Room
-  AppointmentNoticeApi -.->|creates| PatientMessage
-  AppointmentNoticeApi -.->|creates| Notification
-  CreateChargeApi -.->|creates| Charge
-  CreateChargeApi -.->|reads| Encounter
-  CreateChargeApi -.->|requires_permission| BillingClaimWrite
-  CreateChargeApi -.->|updates| AccountBalance
-  GenerateClaimApi -.->|creates| Claim
-  GenerateClaimApi -.->|reads| InsurancePolicy
-  GenerateClaimApi -.->|requires_permission| BillingClaimWrite
-  GenerateClaimApi -.->|updates| Charge
-  SubmitClaimApi -.->|requires_permission| BillingClaimWrite
-  SubmitClaimApi -.->|updates| Claim
-  PaymentPostApi -.->|creates| PaymentTransaction
-  PaymentPostApi -.->|requires_permission| PaymentPost
-  PaymentPostApi -.->|updates| Claim
-  BalanceApi -.->|reads| PaymentTransaction
-  BalanceApi -.->|requires_permission| PaymentPost
-  BalanceApi -.->|updates| AccountBalance
   CreateCarePlanApi -.->|creates| CarePlan
   CreateCarePlanApi -.->|reads| Encounter
   CreateCarePlanApi -.->|requires_permission| FollowUpManage
@@ -251,6 +220,20 @@ flowchart LR
   FollowUpScheduleApi -.->|updates| ProviderSchedule
   NotifyPatientResultApi -.->|creates| Notification
   NotifyPatientResultApi -.->|requires_permission| PatientMessageSend
+  OrderEntryApi -.->|creates| ClinicalOrder
+  OrderEntryApi -.->|reads| Encounter
+  OrderEntryApi -.->|requires_permission| ClinicalOrderWrite
+  CollectSpecimenApi -.->|requires_permission| ClinicalOrderWrite
+  CollectSpecimenApi -.->|updates| ClinicalOrder
+  ReceiveLabResultApi -.->|creates| LabResult
+  ReceiveLabResultApi -.->|requires_permission| LabResultManage
+  ReceiveLabResultApi -.->|updates| ClinicalOrder
+  ResultReviewApi -.->|requires_permission| LabResultManage
+  ResultReviewApi -.->|updates| ClinicalOrder
+  ResultReviewApi -.->|updates| LabResult
+  CriticalNoticeApi -.->|creates| PatientMessage
+  CriticalNoticeApi -.->|creates| Notification
+  CriticalNoticeApi -.->|requires_permission| PatientMessageSend
   SearchPatientApi -.->|reads| PatientAccount
   SearchPatientApi -.->|reads| PatientProfile
   SearchPatientApi -.->|requires_permission| PatientProfileRead
@@ -263,24 +246,32 @@ flowchart LR
   EligibilityApi -.->|reads| InsurancePolicy
   EligibilityApi -.->|requires_permission| InsuranceVerify
   EligibilityApi -.->|updates| InsurancePolicy
-  BucPatientOnboarding -.->|belongs| PatientAccess
-  BucPatientOnboarding -->|contains| VerifyInsurance
-  BucPatientOnboarding -->|contains| CaptureConsent
-  BucPatientOnboarding -->|contains| SendIntakeForms
-  BucPatientOnboarding -->|contains| CompleteIntakeForms
-  BucPatientOnboarding -->|contains| ExpireIntakeForms
-  BucPatientOnboarding -->|contains| MergeDuplicatePatient
-  BucPatientOnboarding -->|contains| ArchivePatient
-  BucPatientOnboarding -->|contains| SearchPatient
-  BucPatientOnboarding -->|contains| RegisterPatient
-  BucPatientOnboarding -->|contains| UpdateDemographics
-  BucOrdersResults -.->|belongs| CareDelivery
-  BucOrdersResults -->|contains| PlaceLabOrder
-  BucOrdersResults -->|contains| CollectSpecimen
-  BucOrdersResults -->|contains| ReceiveLabResult
-  BucOrdersResults -->|contains| ReviewLabResult
-  BucOrdersResults -->|contains| NotifyCriticalResult
-  BucOrdersResults -->|contains| CancelClinicalOrder
+  ConsentApi -.->|creates| ConsentRecord
+  ConsentApi -.->|requires_permission| ConsentCapture
+  IntakeMessagingApi -.->|creates| PatientMessage
+  IntakeMessagingApi -.->|creates| IntakePacket
+  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
+  AppointmentNoticeApi -.->|creates| PatientMessage
+  AppointmentNoticeApi -.->|creates| Notification
+  CreateChargeApi -.->|creates| Charge
+  CreateChargeApi -.->|reads| Encounter
+  CreateChargeApi -.->|requires_permission| BillingClaimWrite
+  CreateChargeApi -.->|updates| AccountBalance
+  GenerateClaimApi -.->|creates| Claim
+  GenerateClaimApi -.->|reads| InsurancePolicy
+  GenerateClaimApi -.->|requires_permission| BillingClaimWrite
+  GenerateClaimApi -.->|updates| Charge
+  SubmitClaimApi -.->|requires_permission| BillingClaimWrite
+  SubmitClaimApi -.->|updates| Claim
+  BucBillingClaims -.->|belongs| RevenueCycle
+  BucBillingClaims -->|contains| SubmitClaim
+  BucBillingClaims -->|contains| ReceiveClaimAccepted
+  BucBillingClaims -->|contains| RecordClaimDenial
+  BucBillingClaims -->|contains| PostPayment
+  BucBillingClaims -->|contains| ReconcileBalance
+  BucBillingClaims -->|contains| VoidCharge
+  BucBillingClaims -->|contains| CreateCharge
+  BucBillingClaims -->|contains| GenerateClaim
   BucClinicalEncounter -.->|belongs| CareDelivery
   BucClinicalEncounter -->|contains| OpenEncounter
   BucClinicalEncounter -->|contains| RecordVitals
@@ -288,15 +279,6 @@ flowchart LR
   BucClinicalEncounter -->|contains| SignEncounter
   BucClinicalEncounter -->|contains| AmendEncounter
   BucClinicalEncounter -->|contains| CompleteAppointment
-  BucBillingClaims -.->|belongs| RevenueCycle
-  BucBillingClaims -->|contains| CreateCharge
-  BucBillingClaims -->|contains| GenerateClaim
-  BucBillingClaims -->|contains| SubmitClaim
-  BucBillingClaims -->|contains| ReceiveClaimAccepted
-  BucBillingClaims -->|contains| RecordClaimDenial
-  BucBillingClaims -->|contains| PostPayment
-  BucBillingClaims -->|contains| ReconcileBalance
-  BucBillingClaims -->|contains| VoidCharge
   BucFollowupCare -.->|belongs| PatientAccess
   BucFollowupCare -->|contains| CreateCarePlan
   BucFollowupCare -->|contains| SendFollowUpMessage
@@ -304,6 +286,24 @@ flowchart LR
   BucFollowupCare -->|contains| ScheduleFollowUpVisit
   BucFollowupCare -->|contains| CloseCarePlan
   BucFollowupCare -->|contains| NotifyPatientResult
+  BucOrdersResults -.->|belongs| CareDelivery
+  BucOrdersResults -->|contains| PlaceLabOrder
+  BucOrdersResults -->|contains| CollectSpecimen
+  BucOrdersResults -->|contains| ReceiveLabResult
+  BucOrdersResults -->|contains| ReviewLabResult
+  BucOrdersResults -->|contains| NotifyCriticalResult
+  BucOrdersResults -->|contains| CancelClinicalOrder
+  BucPatientOnboarding -.->|belongs| PatientAccess
+  BucPatientOnboarding -->|contains| SearchPatient
+  BucPatientOnboarding -->|contains| RegisterPatient
+  BucPatientOnboarding -->|contains| UpdateDemographics
+  BucPatientOnboarding -->|contains| VerifyInsurance
+  BucPatientOnboarding -->|contains| CaptureConsent
+  BucPatientOnboarding -->|contains| SendIntakeForms
+  BucPatientOnboarding -->|contains| CompleteIntakeForms
+  BucPatientOnboarding -->|contains| ExpireIntakeForms
+  BucPatientOnboarding -->|contains| MergeDuplicatePatient
+  BucPatientOnboarding -->|contains| ArchivePatient
   Appointment ---|N:1| PatientAccount
   Appointment ---|N:1| Room
   Encounter ---|N:1| PatientAccount
@@ -338,16 +338,16 @@ flowchart LR
   EvAppointmentCheckedIn -.->|triggers| OpenEncounter
   EvAppointmentCancelled -.->|triggers| MessagingGateway
   EvAppointmentCancelled -.->|triggers| SendAppointmentNotice
-  EvEncounterSigned -.->|triggers| BucOrdersResults
   EvEncounterSigned -.->|triggers| BucBillingClaims
   EvEncounterSigned -.->|triggers| BucFollowupCare
-  EvEncounterSigned -.->|triggers| PlaceLabOrder
+  EvEncounterSigned -.->|triggers| BucOrdersResults
   EvEncounterSigned -.->|triggers| CompleteAppointment
-  EvEncounterSigned -.->|triggers| CreateCharge
   EvEncounterSigned -.->|triggers| CreateCarePlan
+  EvEncounterSigned -.->|triggers| PlaceLabOrder
+  EvEncounterSigned -.->|triggers| CreateCharge
   EvClinicalOrderReviewed -.->|triggers| BucFollowupCare
-  EvClinicalOrderReviewed -.->|triggers| NotifyCriticalResult
   EvClinicalOrderReviewed -.->|triggers| NotifyPatientResult
+  EvClinicalOrderReviewed -.->|triggers| NotifyCriticalResult
   EvLabResultReceived -.->|triggers| ReceiveLabResult
   EvEligibilityChecked -.->|triggers| VerifyInsurance
   EligibilityService -.->|raises| EvEligibilityChecked
@@ -356,6 +356,120 @@ flowchart LR
   PatientSearchScreen -.->|shows| PatientAccount
   PatientProfileScreen -.->|shows| PatientProfile
   IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
+  SubmitClaim -.->|displays| ClaimScreen
+  SubmitClaim -.->|invokes| SubmitClaimApi
+  SubmitClaim -.->|requires_medium| BillingWorkstation
+  SubmitClaim -.->|requires_permission| BillingClaimWrite
+  ReceiveClaimAccepted -.->|displays| ClaimScreen
+  ReceiveClaimAccepted -.->|requires_medium| BillingWorkstation
+  ReceiveClaimAccepted -.->|requires_permission| BillingClaimWrite
+  ReceiveClaimAccepted -.->|updates| Claim
+  RecordClaimDenial -.->|displays| ClaimScreen
+  RecordClaimDenial -.->|requires_medium| BillingWorkstation
+  RecordClaimDenial -.->|requires_permission| BillingClaimWrite
+  RecordClaimDenial -.->|updates| Claim
+  PostPayment -.->|displays| PaymentPostingScreen
+  PostPayment -.->|invokes| PaymentPostApi
+  PostPayment -.->|requires_medium| BillingWorkstation
+  PostPayment -.->|requires_permission| PaymentPost
+  ReconcileBalance -.->|displays| BalanceScreen
+  ReconcileBalance -.->|invokes| BalanceApi
+  ReconcileBalance -.->|requires_medium| BillingWorkstation
+  ReconcileBalance -.->|requires_permission| PaymentPost
+  VoidCharge -.->|displays| ChargeWorklistScreen
+  VoidCharge -.->|requires_medium| BillingWorkstation
+  VoidCharge -.->|requires_permission| BillingClaimWrite
+  VoidCharge -.->|updates| Charge
+  OpenEncounter -.->|displays| EncounterWorkspaceScreen
+  OpenEncounter -.->|invokes| OpenEncounterApi
+  OpenEncounter -.->|requires_medium| NurseStation
+  OpenEncounter -.->|requires_permission| EncounterOpen
+  RecordVitals -.->|displays| VitalsScreen
+  RecordVitals -.->|invokes| RecordVitalsApi
+  RecordVitals -.->|requires_medium| NurseStation
+  RecordVitals -.->|requires_permission| VitalsRecord
+  DocumentAssessment -.->|displays| DiagnosisScreen
+  DocumentAssessment -.->|invokes| DocumentAssessmentApi
+  DocumentAssessment -.->|requires_medium| ClinicalWorkstation
+  DocumentAssessment -.->|requires_permission| ClinicalDocument
+  SignEncounter -.->|displays| EncounterWorkspaceScreen
+  SignEncounter -.->|invokes| SignEncounterApi
+  SignEncounter -.->|raises| EvEncounterSigned
+  SignEncounter -.->|requires_medium| ClinicalWorkstation
+  SignEncounter -.->|requires_permission| EncounterSign
+  AmendEncounter -.->|displays| EncounterWorkspaceScreen
+  AmendEncounter -.->|invokes| AmendEncounterApi
+  AmendEncounter -.->|requires_medium| ClinicalWorkstation
+  AmendEncounter -.->|requires_permission| EncounterSign
+  CompleteAppointment -.->|displays| EncounterWorkspaceScreen
+  CompleteAppointment -.->|invokes| CompleteAppointmentApi
+  CompleteAppointment -.->|requires_medium| NurseStation
+  CompleteAppointment -.->|requires_permission| EncounterOpen
+  CreateCarePlan -.->|displays| CarePlanScreen
+  CreateCarePlan -.->|invokes| CreateCarePlanApi
+  CreateCarePlan -.->|requires_medium| CareCoordinationConsole
+  CreateCarePlan -.->|requires_permission| FollowUpManage
+  SendFollowUpMessage -.->|displays| PatientMessageScreen
+  SendFollowUpMessage -.->|invokes| SendFollowUpMessageApi
+  SendFollowUpMessage -.->|requires_medium| CareCoordinationConsole
+  SendFollowUpMessage -.->|requires_permission| PatientMessageSend
+  ReviewPatientResponse -.->|displays| CarePlanScreen
+  ReviewPatientResponse -.->|requires_medium| CareCoordinationConsole
+  ReviewPatientResponse -.->|requires_permission| FollowUpManage
+  ReviewPatientResponse -.->|updates| CarePlan
+  ReviewPatientResponse -.->|updates| PatientMessage
+  ScheduleFollowUpVisit -.->|displays| FollowUpScheduleScreen
+  ScheduleFollowUpVisit -.->|invokes| FollowUpScheduleApi
+  ScheduleFollowUpVisit -.->|raises| EvAppointmentScheduled
+  ScheduleFollowUpVisit -.->|requires_medium| CareCoordinationConsole
+  ScheduleFollowUpVisit -.->|requires_permission| FollowUpManage
+  ScheduleFollowUpVisit -.->|requires_permission| ScheduleWrite
+  CloseCarePlan -.->|displays| CarePlanScreen
+  CloseCarePlan -.->|requires_medium| CareCoordinationConsole
+  CloseCarePlan -.->|requires_permission| FollowUpManage
+  CloseCarePlan -.->|updates| CarePlan
+  NotifyPatientResult -.->|displays| PatientMessageScreen
+  NotifyPatientResult -.->|invokes| NotifyPatientResultApi
+  NotifyPatientResult -.->|requires_medium| CareCoordinationConsole
+  NotifyPatientResult -.->|requires_permission| PatientMessageSend
+  PlaceLabOrder -.->|displays| OrderEntryScreen
+  PlaceLabOrder -.->|invokes| OrderEntryApi
+  PlaceLabOrder -.->|requires_medium| ClinicalWorkstation
+  PlaceLabOrder -.->|requires_permission| ClinicalOrderWrite
+  CollectSpecimen -.->|displays| SpecimenScreen
+  CollectSpecimen -.->|invokes| CollectSpecimenApi
+  CollectSpecimen -.->|requires_medium| NurseStation
+  CollectSpecimen -.->|requires_permission| ClinicalOrderWrite
+  ReceiveLabResult -.->|displays| ResultReviewScreen
+  ReceiveLabResult -.->|invokes| ReceiveLabResultApi
+  ReceiveLabResult -.->|requires_medium| NurseStation
+  ReceiveLabResult -.->|requires_permission| LabResultManage
+  ReviewLabResult -.->|displays| ResultReviewScreen
+  ReviewLabResult -.->|invokes| ResultReviewApi
+  ReviewLabResult -.->|raises| EvClinicalOrderReviewed
+  ReviewLabResult -.->|requires_medium| ClinicalWorkstation
+  ReviewLabResult -.->|requires_permission| LabResultManage
+  NotifyCriticalResult -.->|displays| CriticalNoticeScreen
+  NotifyCriticalResult -.->|invokes| CriticalNoticeApi
+  NotifyCriticalResult -.->|requires_medium| ClinicalWorkstation
+  NotifyCriticalResult -.->|requires_permission| LabResultManage
+  NotifyCriticalResult -.->|requires_permission| PatientMessageSend
+  CancelClinicalOrder -.->|displays| OrderEntryScreen
+  CancelClinicalOrder -.->|requires_medium| ClinicalWorkstation
+  CancelClinicalOrder -.->|requires_permission| ClinicalOrderWrite
+  CancelClinicalOrder -.->|updates| ClinicalOrder
+  SearchPatient -.->|displays| PatientSearchScreen
+  SearchPatient -.->|invokes| SearchPatientApi
+  SearchPatient -.->|requires_medium| FrontDeskTerminal
+  SearchPatient -.->|requires_permission| PatientProfileRead
+  RegisterPatient -.->|displays| PatientProfileScreen
+  RegisterPatient -.->|invokes| RegisterPatientApi
+  RegisterPatient -.->|requires_medium| FrontDeskTerminal
+  RegisterPatient -.->|requires_permission| PatientProfileWrite
+  UpdateDemographics -.->|displays| PatientProfileScreen
+  UpdateDemographics -.->|invokes| UpdateDemographicsApi
+  UpdateDemographics -.->|requires_medium| FrontDeskTerminal
+  UpdateDemographics -.->|requires_permission| PatientProfileWrite
   VerifyInsurance -.->|displays| InsuranceScreen
   VerifyInsurance -.->|invokes| EligibilityApi
   VerifyInsurance -.->|requires_medium| FrontDeskTerminal
@@ -384,57 +498,6 @@ flowchart LR
   ArchivePatient -.->|requires_medium| FrontDeskTerminal
   ArchivePatient -.->|requires_permission| PatientProfileWrite
   ArchivePatient -.->|updates| PatientAccount
-  PlaceLabOrder -.->|displays| OrderEntryScreen
-  PlaceLabOrder -.->|invokes| OrderEntryApi
-  PlaceLabOrder -.->|requires_medium| ClinicalWorkstation
-  PlaceLabOrder -.->|requires_permission| ClinicalOrderWrite
-  CollectSpecimen -.->|displays| SpecimenScreen
-  CollectSpecimen -.->|invokes| CollectSpecimenApi
-  CollectSpecimen -.->|requires_medium| NurseStation
-  CollectSpecimen -.->|requires_permission| ClinicalOrderWrite
-  ReceiveLabResult -.->|displays| ResultReviewScreen
-  ReceiveLabResult -.->|invokes| ReceiveLabResultApi
-  ReceiveLabResult -.->|requires_medium| NurseStation
-  ReceiveLabResult -.->|requires_permission| LabResultManage
-  ReviewLabResult -.->|displays| ResultReviewScreen
-  ReviewLabResult -.->|invokes| ResultReviewApi
-  ReviewLabResult -.->|raises| EvClinicalOrderReviewed
-  ReviewLabResult -.->|requires_medium| ClinicalWorkstation
-  ReviewLabResult -.->|requires_permission| LabResultManage
-  NotifyCriticalResult -.->|displays| CriticalNoticeScreen
-  NotifyCriticalResult -.->|invokes| CriticalNoticeApi
-  NotifyCriticalResult -.->|requires_medium| ClinicalWorkstation
-  NotifyCriticalResult -.->|requires_permission| LabResultManage
-  NotifyCriticalResult -.->|requires_permission| PatientMessageSend
-  CancelClinicalOrder -.->|displays| OrderEntryScreen
-  CancelClinicalOrder -.->|requires_medium| ClinicalWorkstation
-  CancelClinicalOrder -.->|requires_permission| ClinicalOrderWrite
-  CancelClinicalOrder -.->|updates| ClinicalOrder
-  OpenEncounter -.->|displays| EncounterWorkspaceScreen
-  OpenEncounter -.->|invokes| OpenEncounterApi
-  OpenEncounter -.->|requires_medium| NurseStation
-  OpenEncounter -.->|requires_permission| EncounterOpen
-  RecordVitals -.->|displays| VitalsScreen
-  RecordVitals -.->|invokes| RecordVitalsApi
-  RecordVitals -.->|requires_medium| NurseStation
-  RecordVitals -.->|requires_permission| VitalsRecord
-  DocumentAssessment -.->|displays| DiagnosisScreen
-  DocumentAssessment -.->|invokes| DocumentAssessmentApi
-  DocumentAssessment -.->|requires_medium| ClinicalWorkstation
-  DocumentAssessment -.->|requires_permission| ClinicalDocument
-  SignEncounter -.->|displays| EncounterWorkspaceScreen
-  SignEncounter -.->|invokes| SignEncounterApi
-  SignEncounter -.->|raises| EvEncounterSigned
-  SignEncounter -.->|requires_medium| ClinicalWorkstation
-  SignEncounter -.->|requires_permission| EncounterSign
-  AmendEncounter -.->|displays| EncounterWorkspaceScreen
-  AmendEncounter -.->|invokes| AmendEncounterApi
-  AmendEncounter -.->|requires_medium| ClinicalWorkstation
-  AmendEncounter -.->|requires_permission| EncounterSign
-  CompleteAppointment -.->|displays| EncounterWorkspaceScreen
-  CompleteAppointment -.->|invokes| CompleteAppointmentApi
-  CompleteAppointment -.->|requires_medium| NurseStation
-  CompleteAppointment -.->|requires_permission| EncounterOpen
   SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
   SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
   SendAppointmentNotice -.->|requires_medium| FrontDeskTerminal
@@ -447,66 +510,3 @@ flowchart LR
   GenerateClaim -.->|invokes| GenerateClaimApi
   GenerateClaim -.->|requires_medium| BillingWorkstation
   GenerateClaim -.->|requires_permission| BillingClaimWrite
-  SubmitClaim -.->|displays| ClaimScreen
-  SubmitClaim -.->|invokes| SubmitClaimApi
-  SubmitClaim -.->|requires_medium| BillingWorkstation
-  SubmitClaim -.->|requires_permission| BillingClaimWrite
-  ReceiveClaimAccepted -.->|displays| ClaimScreen
-  ReceiveClaimAccepted -.->|requires_medium| BillingWorkstation
-  ReceiveClaimAccepted -.->|requires_permission| BillingClaimWrite
-  ReceiveClaimAccepted -.->|updates| Claim
-  RecordClaimDenial -.->|displays| ClaimScreen
-  RecordClaimDenial -.->|requires_medium| BillingWorkstation
-  RecordClaimDenial -.->|requires_permission| BillingClaimWrite
-  RecordClaimDenial -.->|updates| Claim
-  PostPayment -.->|displays| PaymentPostingScreen
-  PostPayment -.->|invokes| PaymentPostApi
-  PostPayment -.->|requires_medium| BillingWorkstation
-  PostPayment -.->|requires_permission| PaymentPost
-  ReconcileBalance -.->|displays| BalanceScreen
-  ReconcileBalance -.->|invokes| BalanceApi
-  ReconcileBalance -.->|requires_medium| BillingWorkstation
-  ReconcileBalance -.->|requires_permission| PaymentPost
-  VoidCharge -.->|displays| ChargeWorklistScreen
-  VoidCharge -.->|requires_medium| BillingWorkstation
-  VoidCharge -.->|requires_permission| BillingClaimWrite
-  VoidCharge -.->|updates| Charge
-  CreateCarePlan -.->|displays| CarePlanScreen
-  CreateCarePlan -.->|invokes| CreateCarePlanApi
-  CreateCarePlan -.->|requires_medium| CareCoordinationConsole
-  CreateCarePlan -.->|requires_permission| FollowUpManage
-  SendFollowUpMessage -.->|displays| PatientMessageScreen
-  SendFollowUpMessage -.->|invokes| SendFollowUpMessageApi
-  SendFollowUpMessage -.->|requires_medium| CareCoordinationConsole
-  SendFollowUpMessage -.->|requires_permission| PatientMessageSend
-  ReviewPatientResponse -.->|displays| CarePlanScreen
-  ReviewPatientResponse -.->|requires_medium| CareCoordinationConsole
-  ReviewPatientResponse -.->|requires_permission| FollowUpManage
-  ReviewPatientResponse -.->|updates| CarePlan
-  ReviewPatientResponse -.->|updates| PatientMessage
-  ScheduleFollowUpVisit -.->|displays| FollowUpScheduleScreen
-  ScheduleFollowUpVisit -.->|invokes| FollowUpScheduleApi
-  ScheduleFollowUpVisit -.->|raises| EvAppointmentScheduled
-  ScheduleFollowUpVisit -.->|requires_medium| CareCoordinationConsole
-  ScheduleFollowUpVisit -.->|requires_permission| FollowUpManage
-  ScheduleFollowUpVisit -.->|requires_permission| ScheduleWrite
-  CloseCarePlan -.->|displays| CarePlanScreen
-  CloseCarePlan -.->|requires_medium| CareCoordinationConsole
-  CloseCarePlan -.->|requires_permission| FollowUpManage
-  CloseCarePlan -.->|updates| CarePlan
-  NotifyPatientResult -.->|displays| PatientMessageScreen
-  NotifyPatientResult -.->|invokes| NotifyPatientResultApi
-  NotifyPatientResult -.->|requires_medium| CareCoordinationConsole
-  NotifyPatientResult -.->|requires_permission| PatientMessageSend
-  SearchPatient -.->|displays| PatientSearchScreen
-  SearchPatient -.->|invokes| SearchPatientApi
-  SearchPatient -.->|requires_medium| FrontDeskTerminal
-  SearchPatient -.->|requires_permission| PatientProfileRead
-  RegisterPatient -.->|displays| PatientProfileScreen
-  RegisterPatient -.->|invokes| RegisterPatientApi
-  RegisterPatient -.->|requires_medium| FrontDeskTerminal
-  RegisterPatient -.->|requires_permission| PatientProfileWrite
-  UpdateDemographics -.->|displays| PatientProfileScreen
-  UpdateDemographics -.->|invokes| UpdateDemographicsApi
-  UpdateDemographics -.->|requires_medium| FrontDeskTerminal
-  UpdateDemographics -.->|requires_permission| PatientProfileWrite

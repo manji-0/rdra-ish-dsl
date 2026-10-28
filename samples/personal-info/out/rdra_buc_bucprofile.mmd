@@ -37,8 +37,6 @@ flowchart LR
     UserAccount[("🗄️ User Account")]
   end
   User -->|performs| BucProfile
-  ViewProfileApi -.->|reads| UserAccount
-  ViewProfileApi -.->|reads| PersonalInfo
   UpdateProfileApi -.->|creates| AuditLog
   UpdateProfileApi -.->|reads| PersonalInfo
   UpdateProfileApi -.->|updates| PersonalInfo
@@ -52,8 +50,9 @@ flowchart LR
   SetPrimaryAddressApi -.->|creates| AuditLog
   SetPrimaryAddressApi -.->|reads| PostalAddress
   SetPrimaryAddressApi -.->|updates| PostalAddress
+  ViewProfileApi -.->|reads| UserAccount
+  ViewProfileApi -.->|reads| PersonalInfo
   BucProfile -.->|belongs| PersonalDataMgmt
-  BucProfile -->|contains| ViewProfile
   BucProfile -->|contains| UpdateProfile
   BucProfile -->|contains| RegisterAddress
   BucProfile -->|contains| UpdateAddress
@@ -62,11 +61,10 @@ flowchart LR
   BucProfile -->|contains| SuspendAccount
   BucProfile -->|contains| RestoreAccount
   BucProfile -->|contains| DeleteAccount
+  BucProfile -->|contains| ViewProfile
   PersonalInfo ---|1:1| UserAccount
   PostalAddress ---|N:1| UserAccount
   AuditLog ---|N:1| UserAccount
-  ViewProfile -.->|displays| ProfileScreen
-  ViewProfile -.->|invokes| ViewProfileApi
   UpdateProfile -.->|displays| ProfileScreen
   UpdateProfile -.->|invokes| UpdateProfileApi
   RegisterAddress -.->|displays| AddressEditScreen
@@ -80,3 +78,5 @@ flowchart LR
   SuspendAccount -.->|updates| UserAccount
   RestoreAccount -.->|updates| UserAccount
   DeleteAccount -.->|updates| UserAccount
+  ViewProfile -.->|displays| ProfileScreen
+  ViewProfile -.->|invokes| ViewProfileApi

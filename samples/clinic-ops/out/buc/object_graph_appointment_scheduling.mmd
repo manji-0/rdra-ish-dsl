@@ -86,13 +86,13 @@ flowchart LR
   Patient -.->|has_permission| PatientProfileRead
   Patient -.->|has_permission| ConsentCapture
   Patient -.->|has_permission| ScheduleRead
-  Patient -->|performs| BucPatientOnboarding
   Patient -->|performs| BucAppointmentScheduling
-  Patient -->|performs| CaptureConsent
-  Patient -->|performs| CompleteIntakeForms
+  Patient -->|performs| BucPatientOnboarding
   Patient -->|performs| SearchAvailability
   Patient -->|performs| ReserveAppointment
+  Patient -->|performs| CaptureConsent
   Patient -->|performs| BookAppointment
+  Patient -->|performs| CompleteIntakeForms
   Patient -->|performs| RescheduleAppointment
   Patient -->|performs| CancelAppointment
   FrontDesk -.->|has_permission| PatientProfileRead
@@ -101,35 +101,47 @@ flowchart LR
   FrontDesk -.->|has_permission| IntakeManage
   FrontDesk -.->|has_permission| ScheduleRead
   FrontDesk -.->|has_permission| ScheduleWrite
-  FrontDesk -->|performs| BucPatientOnboarding
   FrontDesk -->|performs| BucAppointmentScheduling
+  FrontDesk -->|performs| BucPatientOnboarding
+  FrontDesk -->|performs| SearchAvailability
+  FrontDesk -->|performs| ReserveAppointment
+  FrontDesk -->|performs| SearchPatient
+  FrontDesk -->|performs| RegisterPatient
+  FrontDesk -->|performs| UpdateDemographics
   FrontDesk -->|performs| VerifyInsurance
   FrontDesk -->|performs| SendIntakeForms
+  FrontDesk -->|performs| BookAppointment
   FrontDesk -->|performs| ExpireIntakeForms
   FrontDesk -->|performs| MergeDuplicatePatient
   FrontDesk -->|performs| ArchivePatient
-  FrontDesk -->|performs| SearchAvailability
-  FrontDesk -->|performs| ReserveAppointment
-  FrontDesk -->|performs| BookAppointment
   FrontDesk -->|performs| RescheduleAppointment
   FrontDesk -->|performs| CancelAppointment
   FrontDesk -->|performs| MarkNoShow
   FrontDesk -->|performs| SendAppointmentNotice
-  FrontDesk -->|performs| SearchPatient
-  FrontDesk -->|performs| RegisterPatient
-  FrontDesk -->|performs| UpdateDemographics
+  SearchAvailabilityApi -.->|reads| ProviderSchedule
+  SearchAvailabilityApi -.->|reads| Provider
+  SearchAvailabilityApi -.->|reads| ClinicLocation
+  SearchAvailabilityApi -.->|requires_permission| ScheduleRead
+  SearchPatientApi -.->|reads| PatientAccount
+  SearchPatientApi -.->|reads| PatientProfile
+  SearchPatientApi -.->|requires_permission| PatientProfileRead
+  RegisterPatientApi -.->|creates| PatientAccount
+  RegisterPatientApi -.->|creates| PatientProfile
+  RegisterPatientApi -.->|requires_permission| PatientProfileWrite
+  UpdateDemographicsApi -.->|requires_permission| PatientProfileWrite
+  UpdateDemographicsApi -.->|updates| PatientProfile
+  ReserveAppointmentApi -.->|creates| Appointment
+  ReserveAppointmentApi -.->|requires_permission| ScheduleWrite
+  ReserveAppointmentApi -.->|updates| ProviderSchedule
+  EligibilityApi -.->|creates| EligibilityCheck
+  EligibilityApi -.->|reads| InsurancePolicy
+  EligibilityApi -.->|requires_permission| InsuranceVerify
+  EligibilityApi -.->|updates| InsurancePolicy
   ConsentApi -.->|creates| ConsentRecord
   ConsentApi -.->|requires_permission| ConsentCapture
   IntakeMessagingApi -.->|creates| PatientMessage
   IntakeMessagingApi -.->|creates| IntakePacket
   IntakeMessagingApi -.->|requires_permission| PatientMessageSend
-  SearchAvailabilityApi -.->|reads| ProviderSchedule
-  SearchAvailabilityApi -.->|reads| Provider
-  SearchAvailabilityApi -.->|reads| ClinicLocation
-  SearchAvailabilityApi -.->|requires_permission| ScheduleRead
-  ReserveAppointmentApi -.->|creates| Appointment
-  ReserveAppointmentApi -.->|requires_permission| ScheduleWrite
-  ReserveAppointmentApi -.->|updates| ProviderSchedule
   BookAppointmentApi -.->|requires_permission| ScheduleWrite
   BookAppointmentApi -.->|updates| ProviderSchedule
   BookAppointmentApi -.->|updates| Appointment
@@ -141,29 +153,6 @@ flowchart LR
   CancelAppointmentApi -.->|updates| Appointment
   AppointmentNoticeApi -.->|creates| PatientMessage
   AppointmentNoticeApi -.->|creates| Notification
-  SearchPatientApi -.->|reads| PatientAccount
-  SearchPatientApi -.->|reads| PatientProfile
-  SearchPatientApi -.->|requires_permission| PatientProfileRead
-  RegisterPatientApi -.->|creates| PatientAccount
-  RegisterPatientApi -.->|creates| PatientProfile
-  RegisterPatientApi -.->|requires_permission| PatientProfileWrite
-  UpdateDemographicsApi -.->|requires_permission| PatientProfileWrite
-  UpdateDemographicsApi -.->|updates| PatientProfile
-  EligibilityApi -.->|creates| EligibilityCheck
-  EligibilityApi -.->|reads| InsurancePolicy
-  EligibilityApi -.->|requires_permission| InsuranceVerify
-  EligibilityApi -.->|updates| InsurancePolicy
-  BucPatientOnboarding -.->|belongs| PatientAccess
-  BucPatientOnboarding -->|contains| VerifyInsurance
-  BucPatientOnboarding -->|contains| CaptureConsent
-  BucPatientOnboarding -->|contains| SendIntakeForms
-  BucPatientOnboarding -->|contains| CompleteIntakeForms
-  BucPatientOnboarding -->|contains| ExpireIntakeForms
-  BucPatientOnboarding -->|contains| MergeDuplicatePatient
-  BucPatientOnboarding -->|contains| ArchivePatient
-  BucPatientOnboarding -->|contains| SearchPatient
-  BucPatientOnboarding -->|contains| RegisterPatient
-  BucPatientOnboarding -->|contains| UpdateDemographics
   BucAppointmentScheduling -.->|belongs| PatientAccess
   BucAppointmentScheduling -->|contains| SearchAvailability
   BucAppointmentScheduling -->|contains| ReserveAppointment
@@ -172,6 +161,17 @@ flowchart LR
   BucAppointmentScheduling -->|contains| CancelAppointment
   BucAppointmentScheduling -->|contains| MarkNoShow
   BucAppointmentScheduling -->|contains| SendAppointmentNotice
+  BucPatientOnboarding -.->|belongs| PatientAccess
+  BucPatientOnboarding -->|contains| SearchPatient
+  BucPatientOnboarding -->|contains| RegisterPatient
+  BucPatientOnboarding -->|contains| UpdateDemographics
+  BucPatientOnboarding -->|contains| VerifyInsurance
+  BucPatientOnboarding -->|contains| CaptureConsent
+  BucPatientOnboarding -->|contains| SendIntakeForms
+  BucPatientOnboarding -->|contains| CompleteIntakeForms
+  BucPatientOnboarding -->|contains| ExpireIntakeForms
+  BucPatientOnboarding -->|contains| MergeDuplicatePatient
+  BucPatientOnboarding -->|contains| ArchivePatient
   ProviderSchedule ---|N:1| Provider
   ProviderSchedule ---|N:1| ClinicLocation
   Appointment ---|N:1| PatientAccount
@@ -194,11 +194,33 @@ flowchart LR
   EvAppointmentCancelled -.->|triggers| SendAppointmentNotice
   EvEligibilityChecked -.->|triggers| VerifyInsurance
   EligibilityService -.->|raises| EvEligibilityChecked
-  ScheduleSearchScreen -.->|shows| ProviderSchedule
   PatientSearchScreen -.->|shows| PatientAccount
   PatientProfileScreen -.->|shows| PatientProfile
+  ScheduleSearchScreen -.->|shows| ProviderSchedule
   IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
   NoShowSweep -.->|triggers| MarkNoShow
+  SearchAvailability -.->|displays| ScheduleSearchScreen
+  SearchAvailability -.->|invokes| SearchAvailabilityApi
+  SearchAvailability -.->|requires_medium| FrontDeskTerminal
+  SearchAvailability -.->|requires_medium| PatientMobile
+  SearchAvailability -.->|requires_permission| ScheduleRead
+  ReserveAppointment -.->|displays| AppointmentScreen
+  ReserveAppointment -.->|invokes| ReserveAppointmentApi
+  ReserveAppointment -.->|requires_medium| FrontDeskTerminal
+  ReserveAppointment -.->|requires_medium| PatientMobile
+  ReserveAppointment -.->|requires_permission| ScheduleWrite
+  SearchPatient -.->|displays| PatientSearchScreen
+  SearchPatient -.->|invokes| SearchPatientApi
+  SearchPatient -.->|requires_medium| FrontDeskTerminal
+  SearchPatient -.->|requires_permission| PatientProfileRead
+  RegisterPatient -.->|displays| PatientProfileScreen
+  RegisterPatient -.->|invokes| RegisterPatientApi
+  RegisterPatient -.->|requires_medium| FrontDeskTerminal
+  RegisterPatient -.->|requires_permission| PatientProfileWrite
+  UpdateDemographics -.->|displays| PatientProfileScreen
+  UpdateDemographics -.->|invokes| UpdateDemographicsApi
+  UpdateDemographics -.->|requires_medium| FrontDeskTerminal
+  UpdateDemographics -.->|requires_permission| PatientProfileWrite
   VerifyInsurance -.->|displays| InsuranceScreen
   VerifyInsurance -.->|invokes| EligibilityApi
   VerifyInsurance -.->|requires_medium| FrontDeskTerminal
@@ -211,6 +233,12 @@ flowchart LR
   SendIntakeForms -.->|invokes| IntakeMessagingApi
   SendIntakeForms -.->|requires_medium| FrontDeskTerminal
   SendIntakeForms -.->|requires_permission| IntakeManage
+  BookAppointment -.->|displays| AppointmentScreen
+  BookAppointment -.->|invokes| BookAppointmentApi
+  BookAppointment -.->|raises| EvAppointmentScheduled
+  BookAppointment -.->|requires_medium| FrontDeskTerminal
+  BookAppointment -.->|requires_medium| PatientMobile
+  BookAppointment -.->|requires_permission| ScheduleWrite
   CompleteIntakeForms -.->|displays| IntakePortalScreen
   CompleteIntakeForms -.->|requires_medium| PatientMobile
   CompleteIntakeForms -.->|requires_permission| ConsentCapture
@@ -227,22 +255,6 @@ flowchart LR
   ArchivePatient -.->|requires_medium| FrontDeskTerminal
   ArchivePatient -.->|requires_permission| PatientProfileWrite
   ArchivePatient -.->|updates| PatientAccount
-  SearchAvailability -.->|displays| ScheduleSearchScreen
-  SearchAvailability -.->|invokes| SearchAvailabilityApi
-  SearchAvailability -.->|requires_medium| FrontDeskTerminal
-  SearchAvailability -.->|requires_medium| PatientMobile
-  SearchAvailability -.->|requires_permission| ScheduleRead
-  ReserveAppointment -.->|displays| AppointmentScreen
-  ReserveAppointment -.->|invokes| ReserveAppointmentApi
-  ReserveAppointment -.->|requires_medium| FrontDeskTerminal
-  ReserveAppointment -.->|requires_medium| PatientMobile
-  ReserveAppointment -.->|requires_permission| ScheduleWrite
-  BookAppointment -.->|displays| AppointmentScreen
-  BookAppointment -.->|invokes| BookAppointmentApi
-  BookAppointment -.->|raises| EvAppointmentScheduled
-  BookAppointment -.->|requires_medium| FrontDeskTerminal
-  BookAppointment -.->|requires_medium| PatientMobile
-  BookAppointment -.->|requires_permission| ScheduleWrite
   RescheduleAppointment -.->|displays| AppointmentScreen
   RescheduleAppointment -.->|invokes| RescheduleAppointmentApi
   RescheduleAppointment -.->|raises| EvAppointmentRescheduled
@@ -263,15 +275,3 @@ flowchart LR
   SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
   SendAppointmentNotice -.->|requires_medium| FrontDeskTerminal
   SendAppointmentNotice -.->|requires_permission| ScheduleRead
-  SearchPatient -.->|displays| PatientSearchScreen
-  SearchPatient -.->|invokes| SearchPatientApi
-  SearchPatient -.->|requires_medium| FrontDeskTerminal
-  SearchPatient -.->|requires_permission| PatientProfileRead
-  RegisterPatient -.->|displays| PatientProfileScreen
-  RegisterPatient -.->|invokes| RegisterPatientApi
-  RegisterPatient -.->|requires_medium| FrontDeskTerminal
-  RegisterPatient -.->|requires_permission| PatientProfileWrite
-  UpdateDemographics -.->|displays| PatientProfileScreen
-  UpdateDemographics -.->|invokes| UpdateDemographicsApi
-  UpdateDemographics -.->|requires_medium| FrontDeskTerminal
-  UpdateDemographics -.->|requires_permission| PatientProfileWrite

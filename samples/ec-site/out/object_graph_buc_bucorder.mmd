@@ -39,6 +39,9 @@ flowchart LR
     ShippingAddress[("🗄️ Shipping Address")]
   end
   Customer -->|performs| BucOrder
+  OrderHistoryApi -.->|reads| Order
+  OrderHistoryApi -.->|reads| OrderLine
+  CancelOrderApi -.->|updates| Order
   SelectAddressApi -.->|reads| ShippingAddress
   ConfirmOrderApi -.->|reads| ShippingAddress
   ConfirmOrderApi -.->|reads| Cart
@@ -47,17 +50,14 @@ flowchart LR
   PlaceOrderApi -.->|creates| OrderLine
   PlaceOrderApi -.->|reads| CustomerAccount
   PlaceOrderApi -.->|updates| Cart
-  OrderHistoryApi -.->|reads| Order
-  OrderHistoryApi -.->|reads| OrderLine
-  CancelOrderApi -.->|updates| Order
   BucOrder -.->|belongs| EcShopping
+  BucOrder -->|contains| ViewOrderHistory
+  BucOrder -->|contains| Cancel
   BucOrder -->|contains| ShipOrder
   BucOrder -->|contains| DeliverOrder
   BucOrder -->|contains| SelectAddress
   BucOrder -->|contains| ConfirmOrder
   BucOrder -->|contains| PlaceOrder
-  BucOrder -->|contains| ViewOrderHistory
-  BucOrder -->|contains| Cancel
   ShippingAddress ---|N:1| CustomerAccount
   Cart ---|N:1| CustomerAccount
   CartItem ---|N:1| Cart
@@ -65,6 +65,10 @@ flowchart LR
   Order ---|N:1| ShippingAddress
   OrderLine ---|N:1| Order
   EvOrderShipped -.->|triggers| ShippingSvc
+  ViewOrderHistory -.->|displays| OrderHistoryScreen
+  ViewOrderHistory -.->|invokes| OrderHistoryApi
+  Cancel -.->|displays| OrderHistoryScreen
+  Cancel -.->|invokes| CancelOrderApi
   ShipOrder -.->|raises| EvOrderShipped
   ShipOrder -.->|updates| Order
   DeliverOrder -.->|updates| Order
@@ -74,7 +78,3 @@ flowchart LR
   ConfirmOrder -.->|invokes| ConfirmOrderApi
   PlaceOrder -.->|displays| OrderCompleteScreen
   PlaceOrder -.->|invokes| PlaceOrderApi
-  ViewOrderHistory -.->|displays| OrderHistoryScreen
-  ViewOrderHistory -.->|invokes| OrderHistoryApi
-  Cancel -.->|displays| OrderHistoryScreen
-  Cancel -.->|invokes| CancelOrderApi
