@@ -263,7 +263,7 @@ impl<'m> Builder<'m> {
                 column: col.name.clone(),
             }),
         );
-        if variation && birth == Birth::PreExisting && col.default_val.is_none() {
+        if variation && birth == Birth::PreExisting {
             self.ts.vars[var.index()].start = Start::Any;
         }
         self.col_var.insert((e, col.name.clone()), var);
@@ -701,29 +701,22 @@ impl<'m> Builder<'m> {
         }
     }
 
-    /// A variation column that neither `@default` nor the creating use case fixes is chosen.
+    /// Vision rule 5: an actor chooses a variation column's value, so a created instance takes
+    /// any value unless the creating use case sets it. `@default` does not pin the choice.
     fn creation_choices(&mut self, a: &mut ActionDraft) {
-        let model = self.model;
         for p in 0..a.params.len() {
             let Param { entity, role } = a.params[p];
             if role != ParamRole::New {
                 continue;
             }
-            let decl = &self.ts.entities[entity.index()];
-            for &var in &decl.columns {
+            for &var in &self.ts.entities[entity.index()].columns {
                 let VarKind::Column {
-                    variation: true,
-                    column,
-                    ..
+                    variation: true, ..
                 } = &self.ts.vars[var.index()].kind
                 else {
                     continue;
                 };
-                let has_default = model.entities[decl.key]
-                    .columns
-                    .iter()
-                    .any(|c| c.name == *column && c.default_val.is_some());
-                if has_default || a.writes(var, p as u8) {
+                if a.writes(var, p as u8) {
                     continue;
                 }
                 let size = self.ts.vars[var.index()].domain.size(self.bounds);

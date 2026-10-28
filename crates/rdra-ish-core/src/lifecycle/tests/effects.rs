@@ -338,6 +338,40 @@ required(Item, size == small)
 }
 
 #[test]
+fn a_default_does_not_pin_a_variation_choice() {
+    let src = |extra: &str| {
+        format!(
+            r#"
+variation Size "サイズ" {{
+  small "S"
+  large "L"
+}}
+entity Item "商品" {{ id: Int @pk  size: Size @default(large) }}
+entity Stock "在庫" {{ id: Int @pk  size: Size @default(large) }}
+usecase Make "作る"
+creates(Make, Item)
+required(Item, size == small)
+required(Stock, size == small)
+{extra}
+"#
+        )
+    };
+    let d = derive_src(&src(""));
+    assert_eq!(d.rows("Item"), vec!["size=small", "size=large"]);
+    assert_eq!(
+        d.rows("Stock"),
+        vec!["size=small", "size=large"],
+        "a pre-existing instance starts at any value"
+    );
+    let d = derive_src(&src("sets(Make, Item, size == large)"));
+    assert_eq!(
+        d.rows("Item"),
+        vec!["size=large"],
+        "the creating use case sets it"
+    );
+}
+
+#[test]
 fn int_literal_outside_the_bound_is_an_error() {
     let d = derive_src(
         r#"
