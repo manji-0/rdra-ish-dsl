@@ -5,6 +5,7 @@ use crate::{
     prefixed_label, prefixed_node_label, view_node_visible, view_relation_visible, EmitError,
     Emitter, Scope, View, OBJECT_GRAPH_LAYERS,
 };
+use rdra_ish_core::lifecycle::{Bounds, Scope as LifecycleScope, TransitionSystem};
 use rdra_ish_core::model::{
     ActorKey, ApiKey, BucKey, ColumnType, EntityKey, ExtSystemKey, NodeRef, Raiser, RelKind,
     ScreenKey, SemanticModel, StateKey, TimerKey, UseCaseKey,
@@ -15,6 +16,32 @@ use rdra_ish_core::{
     TimerFlow,
 };
 use std::collections::{HashMap, HashSet};
+
+/// Start states of the lifecycle columns the visible transitions name, read from the
+/// transition system (the creation status, else the column's base), sorted by node id.
+pub(crate) fn lifecycle_start_states(
+    model: &SemanticModel,
+    columns: impl IntoIterator<Item = (EntityKey, String)>,
+    resolve: impl Fn(EntityKey, &str) -> Option<StateKey>,
+) -> Vec<StateKey> {
+    let built = TransitionSystem::build(model, Bounds::STATES, &LifecycleScope::All);
+    let columns: std::collections::BTreeSet<(EntityKey, String)> = columns.into_iter().collect();
+    let mut starts: Vec<StateKey> = columns
+        .iter()
+        .flat_map(|(entity, column)| {
+            built
+                .ts
+                .column_start_values(*entity, column)
+                .into_iter()
+                .filter_map(|variant| resolve(*entity, variant))
+                .collect::<Vec<_>>()
+        })
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    starts.sort_by_key(|sk| node_id(model, &NodeRef::State(*sk)).unwrap_or(""));
+    starts
+}
 
 // ── RDRA全体図エミッタ ────────────────────────────────────────────────────────
 
@@ -714,16 +741,14 @@ impl Emitter for StateDiagramEmitter {
             return Ok("@startuml\n@enduml\n".to_string());
         }
 
-        // 初期状態 = いずれの to にも登場しない from
-        let to_set: HashSet<StateKey> = transitions.iter().map(|(_, to_sk, _)| *to_sk).collect();
-        let mut initial_states: Vec<StateKey> = transitions
-            .iter()
-            .map(|(from_sk, _, _)| *from_sk)
-            .filter(|sk| !to_set.contains(sk))
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect();
-        initial_states.sort_by_key(|sk| node_id(model, &NodeRef::State(*sk)).unwrap_or(""));
+        // 初期状態 = 遷移系 (lifecycle) が作成時に与える開始値
+        let initial_states = lifecycle_start_states(
+            model,
+            transitions
+                .iter()
+                .map(|(_, _, t)| (t.entity, t.column.clone())),
+            resolve_sk,
+        );
 
         let mut out = String::new();
         out.push_str("@startuml\n");
@@ -2560,5 +2585,44 @@ contains(BucB, UcB)
             !result.contains("UcC"),
             "UcC should be excluded (unreachable)"
         );
+    }
+
+    #[test]
+    fn test_state_start_is_the_creation_status_not_a_graph_source() {
+        let src = r#"
+entity Doc "文書" {
+  id: Int @pk
+  status: Enum(draft, review, published) @default(draft)
+}
+usecase Submit "提出"
+usecase Publish "公開"
+usecase Reopen "戻す"
+creates(Submit, Doc)
+sets(Submit, Doc, status == review)
+transitions(Doc.status, Publish, review -> published)
+transitions(Doc.status, Reopen, published -> review)
+"#;
+        let model = model_from(src);
+        let result = StateDiagramEmitter.emit(&model, &View::whole()).unwrap();
+        assert!(result.contains("[*] --> Doc_review"), "{result}");
+        assert!(!result.contains("[*] --> Doc_draft"), "{result}");
+    }
+
+    #[test]
+    fn test_state_start_of_a_preexisting_entity_is_its_base() {
+        let src = r#"
+entity Acct "口座" {
+  id: Int @pk
+  status: Enum(active, frozen) @default(active)
+}
+usecase Freeze "凍結"
+usecase Thaw "解除"
+transitions(Acct.status, Freeze, active -> frozen)
+transitions(Acct.status, Thaw, frozen -> active)
+"#;
+        let model = model_from(src);
+        let result = StateDiagramEmitter.emit(&model, &View::whole()).unwrap();
+        assert!(result.contains("[*] --> Acct_active"), "{result}");
+        assert!(!result.contains("[*] --> Acct_frozen"), "{result}");
     }
 }

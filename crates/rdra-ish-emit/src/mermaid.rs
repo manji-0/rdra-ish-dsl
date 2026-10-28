@@ -3,7 +3,7 @@
 //! plantuml.rs と同じ3エミッタをMermaid記法で出力する。
 //! ヘルパー関数 (node_id / node_label / col_type_str) は plantuml モジュールから再利用。
 
-use crate::plantuml::{col_type_str, node_id, node_label};
+use crate::plantuml::{col_type_str, lifecycle_start_states, node_id, node_label};
 use crate::{
     collect_object_graph_nodes, node_description, object_graph_layer, object_graph_rel_label,
     prefixed_label, prefixed_node_label, view_node_visible, view_relation_visible, EmitError,
@@ -709,16 +709,14 @@ impl Emitter for StateMermaidEmitter {
             return Ok("stateDiagram-v2\n".to_string());
         }
 
-        // 初期状態 = いずれの to にも登場しない from
-        let to_set: HashSet<StateKey> = transitions.iter().map(|(_, to_sk, _)| *to_sk).collect();
-        let mut initial_states: Vec<StateKey> = transitions
-            .iter()
-            .map(|(from_sk, _, _)| *from_sk)
-            .filter(|sk| !to_set.contains(sk))
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect();
-        initial_states.sort_by_key(|sk| node_id(model, &NodeRef::State(*sk)).unwrap_or(""));
+        // 初期状態 = 遷移系 (lifecycle) が作成時に与える開始値
+        let initial_states = lifecycle_start_states(
+            model,
+            transitions
+                .iter()
+                .map(|(_, _, t)| (t.entity, t.column.clone())),
+            resolve_sk,
+        );
 
         let mut out = String::new();
         out.push_str("stateDiagram-v2\n");
@@ -2035,6 +2033,45 @@ transitions(Doc.status, Publish, draft -> published)
         assert!(result.contains("[*] --> Doc_draft"));
         assert!(result.contains("Doc_draft --> Doc_published"));
         assert!(result.contains("公開する"));
+    }
+
+    #[test]
+    fn test_state_start_is_the_creation_status_not_a_graph_source() {
+        let src = r#"
+entity Doc "文書" {
+  id: Int @pk
+  status: Enum(draft, review, published) @default(draft)
+}
+usecase Submit "提出"
+usecase Publish "公開"
+usecase Reopen "戻す"
+creates(Submit, Doc)
+sets(Submit, Doc, status == review)
+transitions(Doc.status, Publish, review -> published)
+transitions(Doc.status, Reopen, published -> review)
+"#;
+        let model = model_from(src);
+        let result = StateMermaidEmitter.emit(&model, &View::whole()).unwrap();
+        assert!(result.contains("[*] --> Doc_review"), "{result}");
+        assert!(!result.contains("[*] --> Doc_draft"), "{result}");
+    }
+
+    #[test]
+    fn test_state_start_of_a_preexisting_entity_is_its_base() {
+        let src = r#"
+entity Acct "口座" {
+  id: Int @pk
+  status: Enum(active, frozen) @default(active)
+}
+usecase Freeze "凍結"
+usecase Thaw "解除"
+transitions(Acct.status, Freeze, active -> frozen)
+transitions(Acct.status, Thaw, frozen -> active)
+"#;
+        let model = model_from(src);
+        let result = StateMermaidEmitter.emit(&model, &View::whole()).unwrap();
+        assert!(result.contains("[*] --> Acct_active"), "{result}");
+        assert!(!result.contains("[*] --> Acct_frozen"), "{result}");
     }
 
     #[test]
