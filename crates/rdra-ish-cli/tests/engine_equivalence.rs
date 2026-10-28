@@ -353,6 +353,36 @@ fn bfs_and_tlc_agree_on_split_use_cases() {
     check_fixture("split_use_case", SPLIT_USE_CASE);
 }
 
+/// A created parent links an updated child: the optional charge only while unlinked, so each
+/// claim keeps its charge; the mandatory bed always moves, which empties its first ward at two
+/// slots.
+const RELINK: &str = r#"
+entity Claim "請求" { id: Int @pk }
+entity Charge "料金" { id: Int @pk }
+relate(Charge, Claim, 1..*:1).optional()
+usecase CreateCharge "計上"
+usecase GenerateClaim "請求作成"
+creates(CreateCharge, Charge)
+creates(GenerateClaim, Claim)
+updates(GenerateClaim, Charge)
+entity Ward "病棟" { id: Int @pk }
+entity Bed "病床" { id: Int @pk }
+relate(Bed, Ward, 1..*:1)
+usecase OpenWard "開設"
+usecase AddBed "増床"
+usecase SplitWard "分割"
+creates(OpenWard, Ward)
+creates(OpenWard, Bed)
+creates(AddBed, Bed)
+creates(SplitWard, Ward)
+updates(SplitWard, Bed)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_relinks() {
+    check_fixture("relink", RELINK);
+}
+
 /// One inline model at both bounds.
 fn check_fixture(name: &str, src: &str) {
     let Some(tlc) = find_tlc() else {

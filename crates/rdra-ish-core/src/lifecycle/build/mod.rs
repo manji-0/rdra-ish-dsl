@@ -773,8 +773,12 @@ impl<'m> Builder<'m> {
     }
 
     /// R-bind: a created child belongs to its parent, a present one unless the relate is
-    /// optional; a child the action updates is linked to a parent the action creates, and must
-    /// already belong to a parent the action only updates.
+    /// optional; a child the action updates must already belong to a parent the action only
+    /// updates.
+    ///
+    /// Relink: an action that creates the parent and updates an existing child links the child.
+    /// For an optional key the child must be unlinked, so a linked child is not relinked; a
+    /// mandatory child always has a parent, so the link is a move.
     fn owner_bindings(&mut self, a: &mut ActionDraft) {
         for &(var, child, parent) in &self.owners.clone() {
             let Some(c) = a.param_of(child) else { continue };
@@ -782,11 +786,26 @@ impl<'m> Builder<'m> {
             let parent_is_new = a
                 .param_of(parent)
                 .is_some_and(|p| a.params[usize::from(p)].role == ParamRole::New);
-            if a.params[usize::from(c)].role == ParamRole::New || parent_is_new {
+            let child_is_new = a.params[usize::from(c)].role == ParamRole::New;
+            if child_is_new || parent_is_new {
                 let optional = matches!(
                     self.ts.vars[var.index()].domain,
                     Domain::Instance { optional: true, .. }
                 );
+                if optional && !child_is_new {
+                    a.guards.push(Guard {
+                        pred: Pred::Cmp(
+                            Term::Slot {
+                                var,
+                                at: At::Param(c),
+                            },
+                            CmpOp::Eq,
+                            Term::Lit(Value::NULL),
+                        ),
+                        why: GuardWhy::Owner,
+                        site: site.clone(),
+                    });
+                }
                 let rhs = match a.param_of(parent) {
                     Some(p) => Rhs::Param(p),
                     None if optional => Rhs::Lit(Value::NULL),

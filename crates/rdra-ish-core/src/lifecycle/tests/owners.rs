@@ -1,7 +1,7 @@
 //! Relate bindings: mandatory owners need a present parent, optional owners may stay unlinked.
 
 use super::*;
-use crate::lifecycle::{InvKind, ParamRole};
+use crate::lifecycle::{InvKind, ParamRole, Value};
 
 /// clinic-ops' Charge/Claim shape: the claim's creator updates the charge it bills.
 fn billing(relate: &str) -> String {
@@ -367,4 +367,74 @@ fn a_pre_existing_parent_of_a_created_child_is_warned_and_fails_at_the_start() {
     assert!(!min_card_violated(&derive(&master)));
     let d = derive_scoped(&master, Bounds::VERIFY, &Scope::All);
     assert!(!min_card_violated(&d), "{:?}", d.diags);
+}
+
+/// GenerateClaim creates a claim and updates an existing charge, so it links the charge.
+fn relinking(relate: &str, extra: &str) -> String {
+    format!(
+        r#"
+entity Claim "請求" {{ id: Int @pk  origin: Enum(opened, generated) @default(opened) }}
+entity Charge "料金" {{ id: Int @pk }}
+usecase CreateCharge "計上"
+usecase GenerateClaim "請求作成"
+creates(CreateCharge, Charge)
+creates(GenerateClaim, Claim)
+updates(GenerateClaim, Charge)
+sets(GenerateClaim, Claim, origin == generated)
+{relate}
+{extra}
+"#
+    )
+}
+
+/// Every reachable `(claims present, charges present)` pair at two slots.
+fn populations(src: &str) -> Vec<(usize, usize)> {
+    let ts = TransitionSystem::build(&model_from(src), Bounds::VERIFY, &Scope::All).ts;
+    let run = ts.run(Caps::new(Caps::DEFAULT_PATTERNS, 100_000));
+    let ts = &run.system;
+    let exists = |id: &str| {
+        let e = ts.entity_ids().find(|e| ts.entity(*e).id == id).unwrap();
+        ts.entity(e).exists
+    };
+    let (claim, charge) = (exists("Claim"), exists("Charge"));
+    let mut out: Vec<(usize, usize)> = run
+        .states
+        .iter()
+        .map(|s| {
+            let present = |var| {
+                (0..2)
+                    .filter(|&i| s.get(ts, var, i) == Value::PRESENT)
+                    .count()
+            };
+            (present(claim), present(charge))
+        })
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+#[test]
+fn optional_child_is_linked_only_when_unlinked() {
+    let pops = populations(&relinking("relate(Charge, Claim, N:1).optional()", ""));
+    assert!(pops.contains(&(2, 2)), "{pops:?}");
+    assert!(
+        !pops.contains(&(2, 1)),
+        "the second claim cannot take the first claim's charge: {pops:?}"
+    );
+}
+
+#[test]
+fn mandatory_child_moves_to_a_created_parent() {
+    // OpenClaim creates the first claim; every charge then has one, so a link is a move.
+    let src = relinking(
+        "relate(Charge, Claim, N:1)",
+        "usecase OpenClaim \"開設\"\ncreates(OpenClaim, Claim)",
+    );
+    let d = derive_scoped(&model_from(&src), Bounds::VERIFY, &Scope::All);
+    assert_eq!(d.rows("Claim"), vec!["origin=opened", "origin=generated"]);
+    assert!(
+        populations(&src).contains(&(2, 1)),
+        "the charge moved to the second claim"
+    );
 }

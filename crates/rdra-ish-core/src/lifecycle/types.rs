@@ -352,7 +352,8 @@ impl Pred {
 pub enum GuardWhy {
     /// `transitions(E.col, UC, from -> to)`: the column is one of the `from` values.
     TransitionFrom,
-    /// The child param belongs to the parent param.
+    /// The child param belongs to the parent param, or is unlinked before a created parent
+    /// links it.
     Owner,
     /// `now` has room to tick.
     Clock,
