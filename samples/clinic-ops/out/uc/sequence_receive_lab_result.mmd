@@ -1,5 +1,6 @@
 sequenceDiagram
   box System Value
+    actor Clinician as 👤 Clinician
     actor Nurse as 👤 Nurse
   end
   box System Boundary
@@ -11,8 +12,8 @@ sequenceDiagram
     participant LabResult as 🗄️ Lab Result
   end
 
-  Note over Nurse,LabResult: ✅ Receive Lab Result
-  Nurse->>ResultReviewScreen: ✅ Receive Lab Result
+  Note over Clinician,LabResult: ✅ Receive Lab Result
+  Clinician->>ResultReviewScreen: ✅ Receive Lab Result
   ResultReviewScreen->>ReceiveLabResultApi: ✅ Receive Lab Result
   activate ReceiveLabResultApi
   rect rgb(245,245,245)
@@ -21,5 +22,5 @@ sequenceDiagram
     ReceiveLabResultApi->>LabResult: create
   end
   ReceiveLabResultApi-->>ResultReviewScreen: 🖥️ Result Review Screen
-  ResultReviewScreen-->>Nurse: 🖥️ Result Review Screen
+  ResultReviewScreen-->>Clinician: 🖥️ Result Review Screen
   deactivate ReceiveLabResultApi

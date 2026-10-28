@@ -1,5 +1,6 @@
 sequenceDiagram
   box System Value
+    actor FrontDesk as 👤 Front Desk Staff
     actor Nurse as 👤 Nurse
   end
   box System Boundary
@@ -11,12 +12,12 @@ sequenceDiagram
     participant PatientProfile as 🗄️ Patient Profile
   end
 
-  Note over Nurse,PatientProfile: ✅ Prepare Encounter
-  Nurse->>CheckInScreen: ✅ Prepare Encounter
+  Note over FrontDesk,PatientProfile: ✅ Prepare Encounter
+  FrontDesk->>CheckInScreen: ✅ Prepare Encounter
   CheckInScreen->>PrepareEncounterApi: ✅ Prepare Encounter
   activate PrepareEncounterApi
   PrepareEncounterApi->>Appointment: read
   PrepareEncounterApi->>PatientProfile: read
   PrepareEncounterApi-->>CheckInScreen: 🖥️ Check-In Screen
-  CheckInScreen-->>Nurse: 🖥️ Check-In Screen
+  CheckInScreen-->>FrontDesk: 🖥️ Check-In Screen
   deactivate PrepareEncounterApi

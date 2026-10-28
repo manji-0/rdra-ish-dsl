@@ -3,6 +3,10 @@ flowchart LR
     direction TB
     FrontDesk(["👤 Front Desk Staff"])
     Nurse(["👤 Nurse"])
+    EligibilityService[/"🌐 Insurance Eligibility Service"/]
+    LabSystem[/"🌐 Laboratory System"/]
+    MessagingGateway[/"🌐 Messaging Gateway"/]
+    PaymentGateway[/"🌐 Payment Gateway"/]
   end
   subgraph layer_environment[External Environment]
     direction TB
@@ -20,6 +24,7 @@ flowchart LR
     CopayDeferredStep(["➡️ Copay is deferred"])
     CopayStep(["➡️ Copay is collected"])
     RoomingStep(["➡️ Patient is roomed"])
+    IntakeExpiryCheck["⏱️ Nightly intake expiry check"]
     BillingWorkstation[/"📱 Billing Workstation"/]
     CareCoordinationConsole[/"📱 Care Coordination Console"/]
     ClinicalWorkstation[/"📱 Clinical Workstation"/]
@@ -116,10 +121,15 @@ flowchart LR
     VitalsScreen[["🖥️ Vitals Screen"]]
     ArrivalTimeField[["🔤 Checked-in time"]]
     CopayAmountField[["🔤 Copay amount"]]
+    EvAppointmentCancelled{"⚡ Appointment Cancelled"}
     EvAppointmentCheckedIn{"⚡ Appointment Checked In"}
+    EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
     EvAppointmentScheduled{"⚡ Appointment Scheduled"}
     EvClinicalOrderReviewed{"⚡ Clinical Result Reviewed"}
+    EvEligibilityChecked{"⚡ Eligibility Checked"}
     EvEncounterSigned{"⚡ Encounter Signed"}
+    EvLabResultReceived{"⚡ Lab Result Received"}
+    EvPaymentSettled{"⚡ Payment Settled"}
   end
   subgraph layer_system[System]
     direction TB
@@ -176,6 +186,9 @@ flowchart LR
     ProviderSchedule[("🗄️ Provider Schedule")]
     Room[("🗄️ Room")]
     VitalSign[("🗄️ Vital Sign")]
+    PaymentMethod["🎚️ Payment Method"]
+    CopayDue{"🔀 A copay is due at check-in"}
+    InsuredVisit{"🔀 The visit is covered by insurance"}
   end
   FrontDesk -.->|has_permission| PatientProfileRead
   FrontDesk -.->|has_permission| PatientProfileWrite
@@ -354,6 +367,12 @@ flowchart LR
   BucFollowupCare -->|contains| ScheduleFollowUpVisit
   BucFollowupCare -->|contains| CloseCarePlan
   BucFollowupCare -->|contains| NotifyPatientResult
+  CopayDue -.->|applies_to| CollectCopay
+  CopayDue -.->|combines| Appointment
+  CopayDue -.->|combines| PaymentMethod
+  InsuredVisit -.->|applies_to| CollectCopay
+  InsuredVisit -.->|combines| Appointment
+  InsuredVisit -.->|combines| PaymentMethod
   Appointment ---|N:1| PatientAccount
   Appointment ---|N:1| Room
   Encounter ---|N:1| PatientAccount
@@ -377,12 +396,18 @@ flowchart LR
   EligibilityCheck ---|N:1| InsurancePolicy
   ConsentRecord ---|N:1| PatientAccount
   IntakePacket ---|N:1| PatientAccount
+  EvPaymentSettled -.->|triggers| PostPayment
   EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
+  EvAppointmentScheduled -.->|triggers| MessagingGateway
   EvAppointmentScheduled -.->|triggers| SendIntakeForms
   EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
+  EvAppointmentRescheduled -.->|triggers| MessagingGateway
+  EvAppointmentRescheduled -.->|triggers| SendAppointmentNotice
   EvAppointmentCheckedIn -.->|triggers| BucClinicalEncounter
   EvAppointmentCheckedIn -.->|triggers| OpenEncounter
   EvAppointmentCheckedIn -.->|triggers| PrepareEncounter
+  EvAppointmentCancelled -.->|triggers| MessagingGateway
+  EvAppointmentCancelled -.->|triggers| SendAppointmentNotice
   EvEncounterSigned -.->|triggers| BucOrdersResults
   EvEncounterSigned -.->|triggers| BucBillingClaims
   EvEncounterSigned -.->|triggers| BucFollowupCare
@@ -393,6 +418,11 @@ flowchart LR
   EvClinicalOrderReviewed -.->|triggers| BucFollowupCare
   EvClinicalOrderReviewed -.->|triggers| NotifyCriticalResult
   EvClinicalOrderReviewed -.->|triggers| NotifyPatientResult
+  EvLabResultReceived -.->|triggers| ReceiveLabResult
+  EvEligibilityChecked -.->|triggers| VerifyInsurance
+  EligibilityService -.->|raises| EvEligibilityChecked
+  PaymentGateway -.->|raises| EvPaymentSettled
+  LabSystem -.->|raises| EvLabResultReceived
   ArrivalTimeField -.->|maps_field| Appointment
   CopayAmountField -.->|maps_field| PaymentTransaction
   VisitCheckInFlow -->|contains| ArrivalStep
@@ -413,6 +443,7 @@ flowchart LR
   CopayDeferredStep -.->|covers| CollectCopay
   CopayDeferredStep -.->|precedes| RoomingStep
   RoomingStep -.->|covers| AssignRoom
+  IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
   VerifyInsurance -.->|displays| InsuranceScreen
   VerifyInsurance -.->|invokes| EligibilityApi
   VerifyInsurance -.->|requires_medium| FrontDeskTerminal

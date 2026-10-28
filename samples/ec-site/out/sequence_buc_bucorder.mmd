@@ -18,6 +18,7 @@ sequenceDiagram
     participant SelectAddressApi as 🔌 Select Address API
     participant Cart as 🗄️ Cart
     participant CartItem as 🗄️ Cart Item
+    participant CustomerAccount as 🗄️ Customer Account
     participant Order as 🗄️ Order
     participant OrderLine as 🗄️ Order Line
     participant ShippingAddress as 🗄️ Shipping Address
@@ -53,6 +54,7 @@ sequenceDiagram
   Customer->>OrderCompleteScreen: ✅ Place Order
   OrderCompleteScreen->>PlaceOrderApi: ✅ Place Order
   activate PlaceOrderApi
+  PlaceOrderApi->>CustomerAccount: read
   rect rgb(245,245,245)
     Note right of PlaceOrderApi: transaction (API atomic boundary)
     PlaceOrderApi->>Cart: update

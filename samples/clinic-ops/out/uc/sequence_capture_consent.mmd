@@ -1,5 +1,6 @@
 sequenceDiagram
   box System Value
+    actor FrontDesk as 👤 Front Desk Staff
     actor Patient as 👤 Patient
   end
   box System Boundary
@@ -10,11 +11,11 @@ sequenceDiagram
     participant ConsentRecord as 🗄️ Consent Record
   end
 
-  Note over Patient,ConsentRecord: ✅ Capture Consent
-  Patient->>ConsentScreen: ✅ Capture Consent
+  Note over FrontDesk,ConsentRecord: ✅ Capture Consent
+  FrontDesk->>ConsentScreen: ✅ Capture Consent
   ConsentScreen->>ConsentApi: ✅ Capture Consent
   activate ConsentApi
   ConsentApi->>ConsentRecord: create
   ConsentApi-->>ConsentScreen: 🖥️ Consent Capture Screen
-  ConsentScreen-->>Patient: 🖥️ Consent Capture Screen
+  ConsentScreen-->>FrontDesk: 🖥️ Consent Capture Screen
   deactivate ConsentApi

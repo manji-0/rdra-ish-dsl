@@ -1,33 +1,33 @@
 @startuml
 !theme plain
 
-entity "Cart" as Cart {
+entity "🗄️ Cart" as Cart {
   *id : Int <<PK>>
   --
   created_at : DateTime
   customeraccount_id : Int <<FK>>
 }
-entity "Cart Item" as CartItem {
+entity "🗄️ Cart Item" as CartItem {
   *id : Int <<PK>>
   --
   qty : Int
   cart_id : Int <<FK>>
   product_id : Int <<FK>>
 }
-entity "Category" as Category {
+entity "🗄️ Category" as Category {
   *id : Int <<PK>>
   --
   name : String
   slug : String
 }
-entity "Customer Account" as CustomerAccount {
+entity "🗄️ Customer Account" as CustomerAccount {
   *id : Int <<PK>>
   --
   email : String
   name : String
   created_at : DateTime
 }
-entity "Order" as Order {
+entity "🗄️ Order" as Order {
   *id : Int <<PK>>
   --
   total : Money
@@ -38,7 +38,7 @@ entity "Order" as Order {
   customeraccount_id : Int <<FK>>
   shippingaddress_id : Int <<FK>>
 }
-entity "Order Line" as OrderLine {
+entity "🗄️ Order Line" as OrderLine {
   *id : Int <<PK>>
   --
   qty : Int
@@ -46,7 +46,7 @@ entity "Order Line" as OrderLine {
   order_id : Int <<FK>>
   product_id : Int <<FK>>
 }
-entity "Payment" as Payment {
+entity "🗄️ Payment" as Payment {
   *id : Int <<PK>>
   --
   amount : Money
@@ -55,7 +55,7 @@ entity "Payment" as Payment {
   processed_at : DateTime
   gateway_ref : String
 }
-entity "Product" as Product {
+entity "🗄️ Product" as Product {
   *id : Int <<PK>>
   --
   sku : String
@@ -66,7 +66,7 @@ entity "Product" as Product {
   is_active : Bool
   category_id : Int <<FK>>
 }
-entity "Shipping Address" as ShippingAddress {
+entity "🗄️ Shipping Address" as ShippingAddress {
   *id : Int <<PK>>
   --
   postal_code : String

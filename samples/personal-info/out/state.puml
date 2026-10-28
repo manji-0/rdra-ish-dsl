@@ -1,4 +1,5 @@
 @startuml
+[*] --> UserAccount_active
 state "🔄 active" as UserAccount_active
 state "🔄 deleted" as UserAccount_deleted
 state "🔄 suspended" as UserAccount_suspended

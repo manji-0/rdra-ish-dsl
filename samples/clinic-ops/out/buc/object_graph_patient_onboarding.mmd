@@ -3,11 +3,13 @@ flowchart LR
     direction TB
     FrontDesk(["👤 Front Desk Staff"])
     Patient(["👤 Patient"])
+    EligibilityService[/"🌐 Insurance Eligibility Service"/]
   end
   subgraph layer_environment[External Environment]
     direction TB
     PatientAccess["💼 Patient Access"]
     BucPatientOnboarding["📦 Onboard and Maintain Patient"]
+    IntakeExpiryCheck["⏱️ Nightly intake expiry check"]
     FrontDeskTerminal[/"📱 Front Desk Terminal"/]
     PatientMobile[/"📱 Patient Mobile"/]
     ConsentCapture["🔑 Consent Capture"]
@@ -34,6 +36,8 @@ flowchart LR
     IntakePortalScreen[["🖥️ Intake Portal Screen"]]
     PatientProfileScreen[["🖥️ Patient Profile Screen"]]
     PatientSearchScreen[["🖥️ Patient Search Screen"]]
+    EvAppointmentScheduled{"⚡ Appointment Scheduled"}
+    EvEligibilityChecked{"⚡ Eligibility Checked"}
   end
   subgraph layer_system[System]
     direction TB
@@ -103,8 +107,13 @@ flowchart LR
   EligibilityCheck ---|N:1| InsurancePolicy
   ConsentRecord ---|N:1| PatientAccount
   IntakePacket ---|N:1| PatientAccount
+  EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
+  EvAppointmentScheduled -.->|triggers| SendIntakeForms
+  EvEligibilityChecked -.->|triggers| VerifyInsurance
+  EligibilityService -.->|raises| EvEligibilityChecked
   PatientSearchScreen -.->|shows| PatientAccount
   PatientProfileScreen -.->|shows| PatientProfile
+  IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
   VerifyInsurance -.->|displays| InsuranceScreen
   VerifyInsurance -.->|invokes| EligibilityApi
   VerifyInsurance -.->|requires_medium| FrontDeskTerminal

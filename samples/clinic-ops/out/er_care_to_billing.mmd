@@ -46,6 +46,21 @@ erDiagram
     Int patientaccount_id FK
     Int insurancepolicy_id FK
   }
+  ConsentRecord {
+    Int id PK
+    ConsentType consent_type
+    DateTime signed_at
+    DateTime expires_at
+    Bool revoked
+    Int patientaccount_id FK
+  }
+  EligibilityCheck {
+    Int id PK
+    DateTime checked_at
+    Enum result
+    String reference_no
+    Int insurancepolicy_id FK
+  }
   Encounter {
     Int id PK
     String chief_complaint
@@ -79,6 +94,13 @@ erDiagram
     DateTime delivered_at
     Int patientaccount_id FK
   }
+  PatientAccount {
+    Int id PK
+    String medical_record_no
+    Enum status
+    DateTime created_at
+    DateTime archived_at
+  }
   PatientMessage {
     Int id PK
     MessageChannel channel
@@ -86,6 +108,15 @@ erDiagram
     DateTime sent_at
     DateTime read_at
     Int patientaccount_id FK
+  }
+  PatientProfile {
+    Int id PK
+    String legal_name
+    String preferred_name
+    Date birth_date
+    String phone
+    String email
+    String emergency_contact
   }
   PaymentTransaction {
     Int id PK
@@ -106,9 +137,21 @@ erDiagram
     Int provider_id FK
     Int cliniclocation_id FK
   }
+  Appointment }o--|| PatientAccount : ""
   Encounter ||--|| Appointment : ""
+  Encounter }o--|| PatientAccount : ""
   Charge }o--|| Encounter : ""
   Charge }o--|| Claim : ""
+  Claim }o--|| PatientAccount : ""
   Claim }o--|| InsurancePolicy : ""
   PaymentTransaction }o--|| Claim : ""
+  AccountBalance ||--|| PatientAccount : ""
   CarePlan }o--|| Encounter : ""
+  CarePlan }o--|| PatientAccount : ""
+  PatientMessage }o--|| PatientAccount : ""
+  Notification }o--|| PatientAccount : ""
+  PatientProfile ||--|| PatientAccount : ""
+  InsurancePolicy }o--|| PatientAccount : ""
+  EligibilityCheck }o--|| InsurancePolicy : ""
+  ConsentRecord }o--|| PatientAccount : ""
+  IntakePacket }o--|| PatientAccount : ""

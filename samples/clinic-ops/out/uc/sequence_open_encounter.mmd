@@ -1,5 +1,6 @@
 sequenceDiagram
   box System Value
+    actor Clinician as 👤 Clinician
     actor Nurse as 👤 Nurse
   end
   box System Boundary
@@ -11,12 +12,12 @@ sequenceDiagram
     participant Encounter as 🗄️ Encounter
   end
 
-  Note over Nurse,Encounter: ✅ Open Encounter
-  Nurse->>EncounterWorkspaceScreen: ✅ Open Encounter
+  Note over Clinician,Encounter: ✅ Open Encounter
+  Clinician->>EncounterWorkspaceScreen: ✅ Open Encounter
   EncounterWorkspaceScreen->>OpenEncounterApi: ✅ Open Encounter
   activate OpenEncounterApi
   OpenEncounterApi->>Appointment: read
   OpenEncounterApi->>Encounter: create
   OpenEncounterApi-->>EncounterWorkspaceScreen: 🖥️ Encounter Workspace
-  EncounterWorkspaceScreen-->>Nurse: 🖥️ Encounter Workspace
+  EncounterWorkspaceScreen-->>Clinician: 🖥️ Encounter Workspace
   deactivate OpenEncounterApi

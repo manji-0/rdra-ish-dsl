@@ -1,5 +1,6 @@
 sequenceDiagram
   box System Value
+    actor Clinician as 👤 Clinician
     actor Nurse as 👤 Nurse
   end
   box System Boundary
@@ -11,8 +12,8 @@ sequenceDiagram
     participant Room as 🗄️ Room
   end
 
-  Note over Nurse,Room: ✅ Complete Appointment
-  Nurse->>EncounterWorkspaceScreen: ✅ Complete Appointment
+  Note over Clinician,Room: ✅ Complete Appointment
+  Clinician->>EncounterWorkspaceScreen: ✅ Complete Appointment
   EncounterWorkspaceScreen->>CompleteAppointmentApi: ✅ Complete Appointment
   activate CompleteAppointmentApi
   rect rgb(245,245,245)
@@ -21,5 +22,5 @@ sequenceDiagram
     CompleteAppointmentApi->>Appointment: update
   end
   CompleteAppointmentApi-->>EncounterWorkspaceScreen: 🖥️ Encounter Workspace
-  EncounterWorkspaceScreen-->>Nurse: 🖥️ Encounter Workspace
+  EncounterWorkspaceScreen-->>Clinician: 🖥️ Encounter Workspace
   deactivate CompleteAppointmentApi

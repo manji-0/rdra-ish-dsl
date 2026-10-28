@@ -3,6 +3,7 @@ flowchart LR
     direction TB
     Clinician(["👤 Clinician"])
     Nurse(["👤 Nurse"])
+    PharmacyNetwork[/"🌐 Pharmacy Network"/]
   end
   subgraph layer_environment[External Environment]
     direction TB
@@ -68,6 +69,7 @@ flowchart LR
   BucPrescriptionFulfillment -->|contains| RefillPrescription
   Prescription ---|N:1| Encounter
   Prescription ---|N:1| Medication
+  EvPrescriptionDispensed -.->|triggers| PharmacyNetwork
   MedicationSearchScreen -.->|shows| Medication
   SearchMedication -.->|displays| MedicationSearchScreen
   SearchMedication -.->|invokes| MedicationCatalogApi

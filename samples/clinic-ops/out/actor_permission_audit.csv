@@ -9,29 +9,44 @@ ClinicAdmin,Clinic Administrator,AuditResolve,Audit Resolve,true,true,ok,Resolve
 ClinicAdmin,Clinic Administrator,ProviderScheduleAdmin,Provider Schedule Admin,true,true,ok,BlockScheduleSlot|ManageProviderSchedule,BlockScheduleSlot->BlockScheduleSlotApi|ManageProviderSchedule->ManageProviderScheduleApi
 ClinicAdmin,Clinic Administrator,RoomAdmin,Room Admin,true,true,ok,ConfigureRoom|ReleaseRoom,ConfigureRoom->RoomAdminApi
 Clinician,Clinician,ClinicalDocument,Clinical Document,true,true,ok,DocumentAssessment,DocumentAssessment->DocumentAssessmentApi
-Clinician,Clinician,ClinicalOrderWrite,Clinical Order Write,true,true,ok,CancelClinicalOrder|PlaceLabOrder,PlaceLabOrder->OrderEntryApi
-Clinician,Clinician,EncounterOpen,Encounter Open,true,false,excess,,
+Clinician,Clinician,ClinicalOrderWrite,Clinical Order Write,true,true,ok,CancelClinicalOrder|CollectSpecimen|PlaceLabOrder,CollectSpecimen->CollectSpecimenApi|PlaceLabOrder->OrderEntryApi
+Clinician,Clinician,EncounterOpen,Encounter Open,true,true,ok,CompleteAppointment|OpenEncounter,CompleteAppointment->CompleteAppointmentApi|OpenEncounter->OpenEncounterApi
 Clinician,Clinician,EncounterSign,Encounter Sign,true,true,ok,AmendEncounter|SignEncounter,AmendEncounter->AmendEncounterApi|SignEncounter->SignEncounterApi
-Clinician,Clinician,LabResultManage,Lab Result Manage,true,true,ok,NotifyCriticalResult|ReviewLabResult,ReviewLabResult->ResultReviewApi
+Clinician,Clinician,LabResultManage,Lab Result Manage,true,true,ok,NotifyCriticalResult|ReceiveLabResult|ReviewLabResult,ReceiveLabResult->ReceiveLabResultApi|ReviewLabResult->ResultReviewApi
 Clinician,Clinician,PatientMessageSend,Patient Message Send,false,true,missing,NotifyCriticalResult,NotifyCriticalResult->CriticalNoticeApi
+Clinician,Clinician,PrescriptionDispense,Prescription Dispense,false,true,missing,ConfirmDispense,ConfirmDispense->ConfirmDispenseApi
 Clinician,Clinician,PrescriptionWrite,Prescription Write,true,true,ok,CancelPrescription|DraftPrescription|RefillPrescription|SearchMedication|SendPrescription,DraftPrescription->DraftPrescriptionApi|RefillPrescription->RefillPrescriptionApi|SearchMedication->MedicationCatalogApi|SendPrescription->SendPrescriptionApi
+Clinician,Clinician,VitalsRecord,Vitals Record,false,true,missing,RecordVitals,RecordVitals->RecordVitalsApi
+FrontDesk,Front Desk Staff,ConsentCapture,Consent Capture,false,true,missing,CaptureConsent|CompleteIntakeForms,CaptureConsent->ConsentApi
 FrontDesk,Front Desk Staff,CopayCollect,Copay Collect,true,true,ok,CollectCopay,CollectCopay->CollectCopayApi
+FrontDesk,Front Desk Staff,EncounterOpen,Encounter Open,false,true,missing,PrepareEncounter,PrepareEncounter->PrepareEncounterApi
 FrontDesk,Front Desk Staff,InsuranceVerify,Insurance Verify,true,true,ok,VerifyInsurance,VerifyInsurance->EligibilityApi
 FrontDesk,Front Desk Staff,IntakeManage,Intake Manage,true,true,ok,ExpireIntakeForms|SendIntakeForms,
 FrontDesk,Front Desk Staff,PatientMessageSend,Patient Message Send,false,true,missing,,SendIntakeForms->IntakeMessagingApi
 FrontDesk,Front Desk Staff,PatientProfileRead,Patient Profile Read,true,true,ok,SearchPatient,SearchPatient->SearchPatientApi
 FrontDesk,Front Desk Staff,PatientProfileWrite,Patient Profile Write,true,true,ok,ArchivePatient|MergeDuplicatePatient|RegisterPatient|UpdateDemographics,RegisterPatient->RegisterPatientApi|UpdateDemographics->UpdateDemographicsApi
+FrontDesk,Front Desk Staff,RoomAssign,Room Assign,false,true,missing,AssignRoom,AssignRoom->AssignRoomApi
 FrontDesk,Front Desk Staff,ScheduleRead,Schedule Read,true,true,ok,SearchAvailability|SendAppointmentNotice,SearchAvailability->SearchAvailabilityApi
 FrontDesk,Front Desk Staff,ScheduleWrite,Schedule Write,true,true,ok,BookAppointment|CancelAppointment|MarkNoShow|RescheduleAppointment|ReserveAppointment,BookAppointment->BookAppointmentApi|CancelAppointment->CancelAppointmentApi|RescheduleAppointment->RescheduleAppointmentApi|ReserveAppointment->ReserveAppointmentApi
 FrontDesk,Front Desk Staff,VisitCheckIn,Visit Check-In,true,true,ok,CheckInPatient|VerifyArrival,CheckInPatient->CheckInPatientApi|VerifyArrival->VerifyArrivalApi
-Nurse,Nurse,ClinicalOrderWrite,Clinical Order Write,true,true,ok,CollectSpecimen,CollectSpecimen->CollectSpecimenApi
+Nurse,Nurse,ClinicalDocument,Clinical Document,false,true,missing,DocumentAssessment,DocumentAssessment->DocumentAssessmentApi
+Nurse,Nurse,ClinicalOrderWrite,Clinical Order Write,true,true,ok,CancelClinicalOrder|CollectSpecimen|PlaceLabOrder,CollectSpecimen->CollectSpecimenApi|PlaceLabOrder->OrderEntryApi
+Nurse,Nurse,CopayCollect,Copay Collect,false,true,missing,CollectCopay,CollectCopay->CollectCopayApi
 Nurse,Nurse,EncounterOpen,Encounter Open,true,true,ok,CompleteAppointment|OpenEncounter|PrepareEncounter,CompleteAppointment->CompleteAppointmentApi|OpenEncounter->OpenEncounterApi|PrepareEncounter->PrepareEncounterApi
-Nurse,Nurse,LabResultManage,Lab Result Manage,true,true,ok,ReceiveLabResult,ReceiveLabResult->ReceiveLabResultApi
+Nurse,Nurse,EncounterSign,Encounter Sign,false,true,missing,AmendEncounter|SignEncounter,AmendEncounter->AmendEncounterApi|SignEncounter->SignEncounterApi
+Nurse,Nurse,LabResultManage,Lab Result Manage,true,true,ok,NotifyCriticalResult|ReceiveLabResult|ReviewLabResult,ReceiveLabResult->ReceiveLabResultApi|ReviewLabResult->ResultReviewApi
+Nurse,Nurse,PatientMessageSend,Patient Message Send,false,true,missing,NotifyCriticalResult,NotifyCriticalResult->CriticalNoticeApi
 Nurse,Nurse,PrescriptionDispense,Prescription Dispense,true,true,ok,ConfirmDispense,ConfirmDispense->ConfirmDispenseApi
+Nurse,Nurse,PrescriptionWrite,Prescription Write,false,true,missing,CancelPrescription|DraftPrescription|RefillPrescription|SearchMedication|SendPrescription,DraftPrescription->DraftPrescriptionApi|RefillPrescription->RefillPrescriptionApi|SearchMedication->MedicationCatalogApi|SendPrescription->SendPrescriptionApi
 Nurse,Nurse,RoomAssign,Room Assign,true,true,ok,AssignRoom,AssignRoom->AssignRoomApi
-Nurse,Nurse,VisitCheckIn,Visit Check-In,true,false,excess,,
+Nurse,Nurse,VisitCheckIn,Visit Check-In,true,true,ok,CheckInPatient|VerifyArrival,CheckInPatient->CheckInPatientApi|VerifyArrival->VerifyArrivalApi
 Nurse,Nurse,VitalsRecord,Vitals Record,true,true,ok,RecordVitals,RecordVitals->RecordVitalsApi
 Patient,Patient,ConsentCapture,Consent Capture,true,true,ok,CaptureConsent|CompleteIntakeForms,CaptureConsent->ConsentApi
-Patient,Patient,PatientProfileRead,Patient Profile Read,true,false,excess,,
-Patient,Patient,ScheduleRead,Schedule Read,true,true,ok,SearchAvailability,SearchAvailability->SearchAvailabilityApi
-Patient,Patient,ScheduleWrite,Schedule Write,false,true,missing,BookAppointment|CancelAppointment|RescheduleAppointment|ReserveAppointment,BookAppointment->BookAppointmentApi|CancelAppointment->CancelAppointmentApi|RescheduleAppointment->RescheduleAppointmentApi|ReserveAppointment->ReserveAppointmentApi
+Patient,Patient,FollowUpManage,Follow-Up Manage,false,true,missing,CloseCarePlan|CreateCarePlan|ReviewPatientResponse|ScheduleFollowUpVisit,CreateCarePlan->CreateCarePlanApi
+Patient,Patient,InsuranceVerify,Insurance Verify,false,true,missing,VerifyInsurance,VerifyInsurance->EligibilityApi
+Patient,Patient,IntakeManage,Intake Manage,false,true,missing,ExpireIntakeForms|SendIntakeForms,
+Patient,Patient,PatientMessageSend,Patient Message Send,false,true,missing,NotifyPatientResult|SendFollowUpMessage,NotifyPatientResult->NotifyPatientResultApi|SendFollowUpMessage->SendFollowUpMessageApi|SendIntakeForms->IntakeMessagingApi
+Patient,Patient,PatientProfileRead,Patient Profile Read,true,true,ok,SearchPatient,SearchPatient->SearchPatientApi
+Patient,Patient,PatientProfileWrite,Patient Profile Write,false,true,missing,ArchivePatient|MergeDuplicatePatient|RegisterPatient|UpdateDemographics,RegisterPatient->RegisterPatientApi|UpdateDemographics->UpdateDemographicsApi
+Patient,Patient,ScheduleRead,Schedule Read,true,true,ok,SearchAvailability|SendAppointmentNotice,SearchAvailability->SearchAvailabilityApi
+Patient,Patient,ScheduleWrite,Schedule Write,false,true,missing,BookAppointment|CancelAppointment|MarkNoShow|RescheduleAppointment|ReserveAppointment|ScheduleFollowUpVisit,BookAppointment->BookAppointmentApi|CancelAppointment->CancelAppointmentApi|RescheduleAppointment->RescheduleAppointmentApi|ReserveAppointment->ReserveAppointmentApi|ScheduleFollowUpVisit->FollowUpScheduleApi

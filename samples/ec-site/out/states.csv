@@ -5,10 +5,10 @@ Category,Category,0,(no axes),,true,true,-
 CustomerAccount,Customer Account,0,(no axes),,true,true,-
 Order,Order,0,status,pending,true,false,"BucOrder/PlaceOrder, BucPayment/RefundPayment"
 Order,Order,0,delivered_at,null,true,false,"BucOrder/PlaceOrder, BucPayment/RefundPayment"
-Order,Order,1,status,paid,false,false,"BucOrder/PlaceOrder, BucPayment/Capture, BucPayment/RefundPayment"
-Order,Order,1,delivered_at,null,false,false,"BucOrder/PlaceOrder, BucPayment/Capture, BucPayment/RefundPayment"
-Order,Order,2,status,cancelled,false,true,"BucOrder/Cancel, BucOrder/PlaceOrder, BucPayment/RefundPayment"
-Order,Order,2,delivered_at,null,false,true,"BucOrder/Cancel, BucOrder/PlaceOrder, BucPayment/RefundPayment"
+Order,Order,1,status,cancelled,false,true,"BucOrder/Cancel, BucOrder/PlaceOrder, BucPayment/RefundPayment"
+Order,Order,1,delivered_at,null,false,true,"BucOrder/Cancel, BucOrder/PlaceOrder, BucPayment/RefundPayment"
+Order,Order,2,status,paid,false,false,"BucOrder/PlaceOrder, BucPayment/Capture, BucPayment/RefundPayment"
+Order,Order,2,delivered_at,null,false,false,"BucOrder/PlaceOrder, BucPayment/Capture, BucPayment/RefundPayment"
 Order,Order,3,status,shipped,false,false,"BucOrder/PlaceOrder, BucOrder/ShipOrder, BucPayment/Capture, BucPayment/RefundPayment"
 Order,Order,3,delivered_at,null,false,false,"BucOrder/PlaceOrder, BucOrder/ShipOrder, BucPayment/Capture, BucPayment/RefundPayment"
 Order,Order,4,status,delivered,false,true,"BucOrder/DeliverOrder, BucOrder/PlaceOrder, BucOrder/ShipOrder, BucPayment/Capture, BucPayment/RefundPayment"
@@ -17,12 +17,12 @@ OrderLine,Order Line,0,(no axes),,true,true,-
 Payment,Payment,0,status,pending,true,false,BucPayment/InputPaymentInfo
 Payment,Payment,0,processed_at,null,true,false,BucPayment/InputPaymentInfo
 Payment,Payment,0,gateway_ref,null,true,false,BucPayment/InputPaymentInfo
-Payment,Payment,1,status,authorized,false,false,"BucPayment/AuthorizePayment, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
-Payment,Payment,1,processed_at,null,false,false,"BucPayment/AuthorizePayment, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
-Payment,Payment,1,gateway_ref,null,false,false,"BucPayment/AuthorizePayment, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
-Payment,Payment,2,status,captured,false,false,"BucPayment/AuthorizePayment, BucPayment/Capture, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
-Payment,Payment,2,processed_at,present,false,false,"BucPayment/AuthorizePayment, BucPayment/Capture, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
-Payment,Payment,2,gateway_ref,null,false,false,"BucPayment/AuthorizePayment, BucPayment/Capture, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,Payment,1,status,captured,false,false,"BucPayment/AuthorizePayment, BucPayment/Capture, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,Payment,1,processed_at,present,false,false,"BucPayment/AuthorizePayment, BucPayment/Capture, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,Payment,1,gateway_ref,null,false,false,"BucPayment/AuthorizePayment, BucPayment/Capture, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,Payment,2,status,authorized,false,false,"BucPayment/AuthorizePayment, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,Payment,2,processed_at,null,false,false,"BucPayment/AuthorizePayment, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
+Payment,Payment,2,gateway_ref,null,false,false,"BucPayment/AuthorizePayment, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
 Payment,Payment,3,status,refunded,false,false,"BucPayment/AuthorizePayment, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
 Payment,Payment,3,processed_at,null,false,false,"BucPayment/AuthorizePayment, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"
 Payment,Payment,3,gateway_ref,null,false,false,"BucPayment/AuthorizePayment, BucPayment/InputPaymentInfo, BucPayment/RefundPayment"

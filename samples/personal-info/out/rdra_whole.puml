@@ -67,6 +67,7 @@ rectangle "System" {
   collections "🔄 active" as UserAccount_active
   collections "🔄 deleted" as UserAccount_deleted
   collections "🔄 suspended" as UserAccount_suspended
+  rectangle "🎚️ Card Brand" as CardBrand
 }
 
 User --> BucProfile : performs

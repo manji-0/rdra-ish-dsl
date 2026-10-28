@@ -2,6 +2,7 @@ flowchart LR
   subgraph layer_value[System Value]
     direction TB
     Customer(["👤 Customer"])
+    PaymentGW[/"🌐 Payment Gateway"/]
   end
   subgraph layer_environment[External Environment]
     direction TB
@@ -16,6 +17,7 @@ flowchart LR
     RefundPayment(["✅ Refund Payment"])
     PaymentInputScreen[["🖥️ Payment Information Screen"]]
     PaymentResultScreen[["🖥️ Payment Result Screen"]]
+    EvPaymentAuthorized{"⚡ Payment Authorized"}
   end
   subgraph layer_system[System]
     direction TB
@@ -40,6 +42,8 @@ flowchart LR
   BucPayment -->|contains| Capture
   BucPayment -->|contains| RefundPayment
   Payment ---|1:1| Order
+  EvPaymentAuthorized -.->|triggers| Capture
+  PaymentGW -.->|raises| EvPaymentAuthorized
   InputPaymentInfo -.->|displays| PaymentInputScreen
   InputPaymentInfo -.->|invokes| PaymentInputApi
   AuthorizePayment -.->|displays| PaymentResultScreen

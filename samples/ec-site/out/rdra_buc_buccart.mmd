@@ -1,33 +1,69 @@
-graph TD
-  Customer(["👤 Customer"])
-  AddToCart(["Add to Cart"])
-  RemoveCartItem(["Remove from Cart"])
-  SearchProducts(["Search Products"])
-  UpdateCartItem(["Change Cart Item Quantity"])
-  ViewCart(["View Cart"])
-  ViewProduct(["View Product Details"])
-  BucCart["📦 Add Products to Cart"]
-  Cart[("🗄 Cart")]
-  CartItem[("🗄 Cart Item")]
-  Category[("🗄 Category")]
-  Product[("🗄 Product")]
-  CartScreen[["Cart Screen"]]
-  ProductDetailScreen[["Product Detail Screen"]]
-  ProductSearchScreen[["Product Search Screen"]]
-  Customer --> BucCart
-  BucCart --> EcShopping
-  BucCart --> SearchProducts
-  BucCart --> ViewProduct
-  BucCart --> AddToCart
-  BucCart --> UpdateCartItem
-  BucCart --> RemoveCartItem
-  BucCart --> ViewCart
-  Product --- Category
-  CartItem --- Product
-  CartItem --- Cart
+flowchart LR
+  subgraph layer_value[System Value]
+    direction TB
+    Customer(["👤 Customer"])
+  end
+  subgraph layer_environment[External Environment]
+    direction TB
+    EcShopping["💼 EC Shopping Business"]
+    BucCart["📦 Add Products to Cart"]
+  end
+  subgraph layer_boundary[System Boundary]
+    direction TB
+    AddToCart(["✅ Add to Cart"])
+    RemoveCartItem(["✅ Remove from Cart"])
+    SearchProducts(["✅ Search Products"])
+    UpdateCartItem(["✅ Change Cart Item Quantity"])
+    ViewCart(["✅ View Cart"])
+    ViewProduct(["✅ View Product Details"])
+    CartScreen[["🖥️ Cart Screen"]]
+    ProductDetailScreen[["🖥️ Product Detail Screen"]]
+    ProductSearchScreen[["🖥️ Product Search Screen"]]
+  end
+  subgraph layer_system[System]
+    direction TB
+    AddToCartApi["🔌 Add To Cart API"]
+    ProductDetailApi["🔌 Product Detail API"]
+    ProductSearchApi["🔌 Product Search API"]
+    RemoveCartItemApi["🔌 Remove Cart Item API"]
+    UpdateCartItemApi["🔌 Update Cart Item API"]
+    ViewCartApi["🔌 View Cart API"]
+    Cart[("🗄️ Cart")]
+    CartItem[("🗄️ Cart Item")]
+    Category[("🗄️ Category")]
+    Product[("🗄️ Product")]
+  end
+  Customer -->|performs| BucCart
+  ProductSearchApi -.->|reads| Category
+  ProductSearchApi -.->|reads| Product
+  ProductDetailApi -.->|reads| Product
+  AddToCartApi -.->|creates| CartItem
+  AddToCartApi -.->|reads| Product
+  AddToCartApi -.->|updates| Cart
+  UpdateCartItemApi -.->|updates| CartItem
+  RemoveCartItemApi -.->|deletes| CartItem
+  ViewCartApi -.->|reads| Product
+  ViewCartApi -.->|reads| Cart
+  ViewCartApi -.->|reads| CartItem
+  BucCart -.->|belongs| EcShopping
+  BucCart -->|contains| SearchProducts
+  BucCart -->|contains| ViewProduct
+  BucCart -->|contains| AddToCart
+  BucCart -->|contains| UpdateCartItem
+  BucCart -->|contains| RemoveCartItem
+  BucCart -->|contains| ViewCart
+  Product ---|N:1| Category
+  CartItem ---|N:1| Product
+  CartItem ---|N:1| Cart
   SearchProducts -.->|displays| ProductSearchScreen
+  SearchProducts -.->|invokes| ProductSearchApi
   ViewProduct -.->|displays| ProductDetailScreen
+  ViewProduct -.->|invokes| ProductDetailApi
   AddToCart -.->|displays| CartScreen
+  AddToCart -.->|invokes| AddToCartApi
   UpdateCartItem -.->|displays| CartScreen
+  UpdateCartItem -.->|invokes| UpdateCartItemApi
   RemoveCartItem -.->|displays| CartScreen
+  RemoveCartItem -.->|invokes| RemoveCartItemApi
   ViewCart -.->|displays| CartScreen
+  ViewCart -.->|invokes| ViewCartApi

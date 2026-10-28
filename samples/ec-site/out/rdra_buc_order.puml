@@ -4,6 +4,7 @@ left to right direction
 
 rectangle "System Value" {
   actor "👤 Customer" as Customer
+  component "🌐 Shipping Service" as ShippingSvc
 }
 
 rectangle "External Environment" {
@@ -23,6 +24,7 @@ rectangle "System Boundary" {
   boundary "🖥️ Order Complete Screen" as OrderCompleteScreen
   boundary "🖥️ Order Confirmation Screen" as OrderConfirmScreen
   boundary "🖥️ Order History Screen" as OrderHistoryScreen
+  control "⚡ Order Shipped" as EvOrderShipped
 }
 
 rectangle "System" {
@@ -33,6 +35,7 @@ rectangle "System" {
   control "🔌 Select Address API" as SelectAddressApi
   database "🗄️ Cart" as Cart
   database "🗄️ Cart Item" as CartItem
+  database "🗄️ Customer Account" as CustomerAccount
   database "🗄️ Order" as Order
   database "🗄️ Order Line" as OrderLine
   database "🗄️ Shipping Address" as ShippingAddress
@@ -45,6 +48,7 @@ ConfirmOrderApi ..> Cart : reads
 ConfirmOrderApi ..> CartItem : reads
 PlaceOrderApi ..> Order : creates
 PlaceOrderApi ..> OrderLine : creates
+PlaceOrderApi ..> CustomerAccount : reads
 PlaceOrderApi ..> Cart : updates
 OrderHistoryApi ..> Order : reads
 OrderHistoryApi ..> OrderLine : reads
@@ -57,9 +61,14 @@ BucOrder --> ConfirmOrder : contains
 BucOrder --> PlaceOrder : contains
 BucOrder --> ViewOrderHistory : contains
 BucOrder --> Cancel : contains
+ShippingAddress -- CustomerAccount : N:1
+Cart -- CustomerAccount : N:1
 CartItem -- Cart : N:1
+Order -- CustomerAccount : N:1
 Order -- ShippingAddress : N:1
 OrderLine -- Order : N:1
+EvOrderShipped ..> ShippingSvc : triggers
+ShipOrder ..> EvOrderShipped : raises
 ShipOrder ..> Order : updates
 DeliverOrder ..> Order : updates
 SelectAddress ..> AddressSelectScreen : displays

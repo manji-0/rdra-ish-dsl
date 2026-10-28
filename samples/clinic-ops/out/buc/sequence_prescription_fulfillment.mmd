@@ -28,12 +28,12 @@ sequenceDiagram
   deactivate System
 
   Note over Clinician,Prescription: ✅ Confirm Dispense
-  Nurse->>PharmacyStatusScreen: ✅ Confirm Dispense
+  Clinician->>PharmacyStatusScreen: ✅ Confirm Dispense
   PharmacyStatusScreen->>ConfirmDispenseApi: ✅ Confirm Dispense
   activate ConfirmDispenseApi
   ConfirmDispenseApi->>Prescription: update
   ConfirmDispenseApi-->>PharmacyStatusScreen: 🖥️ Pharmacy Status Screen
-  PharmacyStatusScreen-->>Nurse: 🖥️ Pharmacy Status Screen
+  PharmacyStatusScreen-->>Clinician: 🖥️ Pharmacy Status Screen
   deactivate ConfirmDispenseApi
 
   Note over Clinician,Prescription: ✅ Draft Prescription

@@ -3,12 +3,16 @@ flowchart LR
     direction TB
     FrontDesk(["👤 Front Desk Staff"])
     Patient(["👤 Patient"])
+    EligibilityService[/"🌐 Insurance Eligibility Service"/]
+    MessagingGateway[/"🌐 Messaging Gateway"/]
   end
   subgraph layer_environment[External Environment]
     direction TB
     PatientAccess["💼 Patient Access"]
     BucAppointmentScheduling["📦 Schedule Appointments"]
     BucPatientOnboarding["📦 Onboard and Maintain Patient"]
+    IntakeExpiryCheck["⏱️ Nightly intake expiry check"]
+    NoShowSweep["⏱️ Nightly no-show sweep"]
     FrontDeskTerminal[/"📱 Front Desk Terminal"/]
     PatientMobile[/"📱 Patient Mobile"/]
     ConsentCapture["🔑 Consent Capture"]
@@ -50,6 +54,7 @@ flowchart LR
     EvAppointmentCancelled{"⚡ Appointment Cancelled"}
     EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
     EvAppointmentScheduled{"⚡ Appointment Scheduled"}
+    EvEligibilityChecked{"⚡ Eligibility Checked"}
   end
   subgraph layer_system[System]
     direction TB
@@ -180,13 +185,20 @@ flowchart LR
   ConsentRecord ---|N:1| PatientAccount
   IntakePacket ---|N:1| PatientAccount
   EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
+  EvAppointmentScheduled -.->|triggers| MessagingGateway
   EvAppointmentScheduled -.->|triggers| SendIntakeForms
   EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
+  EvAppointmentRescheduled -.->|triggers| MessagingGateway
   EvAppointmentRescheduled -.->|triggers| SendAppointmentNotice
+  EvAppointmentCancelled -.->|triggers| MessagingGateway
   EvAppointmentCancelled -.->|triggers| SendAppointmentNotice
+  EvEligibilityChecked -.->|triggers| VerifyInsurance
+  EligibilityService -.->|raises| EvEligibilityChecked
   ScheduleSearchScreen -.->|shows| ProviderSchedule
   PatientSearchScreen -.->|shows| PatientAccount
   PatientProfileScreen -.->|shows| PatientProfile
+  IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
+  NoShowSweep -.->|triggers| MarkNoShow
   VerifyInsurance -.->|displays| InsuranceScreen
   VerifyInsurance -.->|invokes| EligibilityApi
   VerifyInsurance -.->|requires_medium| FrontDeskTerminal

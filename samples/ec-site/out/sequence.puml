@@ -36,6 +36,7 @@ control "🔌 View Cart API" as ViewCartApi
 database "🗄️ Cart" as Cart
 database "🗄️ Cart Item" as CartItem
 database "🗄️ Category" as Category
+database "🗄️ Customer Account" as CustomerAccount
 database "🗄️ Order" as Order
 database "🗄️ Order Line" as OrderLine
 database "🗄️ Payment" as Payment
@@ -117,6 +118,7 @@ deactivate PaymentInputApi
 Customer -> OrderCompleteScreen : ✅ Place Order
 OrderCompleteScreen -> PlaceOrderApi : ✅ Place Order
 activate PlaceOrderApi
+PlaceOrderApi -> CustomerAccount : read
 group transaction (API atomic boundary)
 PlaceOrderApi -> Cart : update
 PlaceOrderApi -> Order : create

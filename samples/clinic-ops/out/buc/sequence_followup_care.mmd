@@ -1,6 +1,7 @@
 sequenceDiagram
   box System Value
     actor CareCoordinator as 👤 Care Coordinator
+    actor Patient as 👤 Patient
   end
   box System Boundary
     participant CarePlanScreen as 🖥️ Care Plan Screen
@@ -50,8 +51,11 @@ sequenceDiagram
   Note over CareCoordinator,ProviderSchedule: ✅ Review Patient Response
   CareCoordinator->System: ✅ Review Patient Response
   activate System
-  System->>CarePlan: update
-  System->>PatientMessage: update
+  rect rgb(245,245,245)
+    Note right of System: transaction (inferred from FK)
+    System->>CarePlan: update
+    System->>PatientMessage: update
+  end
   System-->>CareCoordinator: 🖥️ Care Plan Screen
   deactivate System
 

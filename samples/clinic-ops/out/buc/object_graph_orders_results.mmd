@@ -3,6 +3,9 @@ flowchart LR
     direction TB
     Clinician(["👤 Clinician"])
     Nurse(["👤 Nurse"])
+    EligibilityService[/"🌐 Insurance Eligibility Service"/]
+    LabSystem[/"🌐 Laboratory System"/]
+    MessagingGateway[/"🌐 Messaging Gateway"/]
   end
   subgraph layer_environment[External Environment]
     direction TB
@@ -11,6 +14,7 @@ flowchart LR
     BucFollowupCare["📦 Coordinate Follow-Up Care"]
     BucOrdersResults["📦 Manage Orders and Results"]
     BucPatientOnboarding["📦 Onboard and Maintain Patient"]
+    IntakeExpiryCheck["⏱️ Nightly intake expiry check"]
     CareCoordinationConsole[/"📱 Care Coordination Console"/]
     ClinicalWorkstation[/"📱 Clinical Workstation"/]
     FrontDeskTerminal[/"📱 Front Desk Terminal"/]
@@ -66,8 +70,13 @@ flowchart LR
     PatientSearchScreen[["🖥️ Patient Search Screen"]]
     ResultReviewScreen[["🖥️ Result Review Screen"]]
     SpecimenScreen[["🖥️ Specimen Collection Screen"]]
+    EvAppointmentCancelled{"⚡ Appointment Cancelled"}
+    EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
     EvAppointmentScheduled{"⚡ Appointment Scheduled"}
     EvClinicalOrderReviewed{"⚡ Clinical Result Reviewed"}
+    EvEligibilityChecked{"⚡ Eligibility Checked"}
+    EvEncounterSigned{"⚡ Encounter Signed"}
+    EvLabResultReceived{"⚡ Lab Result Received"}
   end
   subgraph layer_system[System]
     direction TB
@@ -197,13 +206,27 @@ flowchart LR
   ConsentRecord ---|N:1| PatientAccount
   IntakePacket ---|N:1| PatientAccount
   EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
+  EvAppointmentScheduled -.->|triggers| MessagingGateway
   EvAppointmentScheduled -.->|triggers| SendIntakeForms
   EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
+  EvAppointmentRescheduled -.->|triggers| MessagingGateway
+  EvAppointmentRescheduled -.->|triggers| SendAppointmentNotice
+  EvAppointmentCancelled -.->|triggers| MessagingGateway
+  EvAppointmentCancelled -.->|triggers| SendAppointmentNotice
+  EvEncounterSigned -.->|triggers| BucOrdersResults
+  EvEncounterSigned -.->|triggers| BucFollowupCare
+  EvEncounterSigned -.->|triggers| PlaceLabOrder
+  EvEncounterSigned -.->|triggers| CreateCarePlan
   EvClinicalOrderReviewed -.->|triggers| BucFollowupCare
   EvClinicalOrderReviewed -.->|triggers| NotifyCriticalResult
   EvClinicalOrderReviewed -.->|triggers| NotifyPatientResult
+  EvLabResultReceived -.->|triggers| ReceiveLabResult
+  EvEligibilityChecked -.->|triggers| VerifyInsurance
+  EligibilityService -.->|raises| EvEligibilityChecked
+  LabSystem -.->|raises| EvLabResultReceived
   PatientSearchScreen -.->|shows| PatientAccount
   PatientProfileScreen -.->|shows| PatientProfile
+  IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
   VerifyInsurance -.->|displays| InsuranceScreen
   VerifyInsurance -.->|invokes| EligibilityApi
   VerifyInsurance -.->|requires_medium| FrontDeskTerminal

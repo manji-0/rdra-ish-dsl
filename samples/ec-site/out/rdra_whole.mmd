@@ -41,6 +41,7 @@ flowchart LR
     PaymentResultScreen[["🖥️ Payment Result Screen"]]
     ProductDetailScreen[["🖥️ Product Detail Screen"]]
     ProductSearchScreen[["🖥️ Product Search Screen"]]
+    EvOrderShipped{"⚡ Order Shipped"}
     EvPaymentAuthorized{"⚡ Payment Authorized"}
   end
   subgraph layer_system[System]
@@ -75,6 +76,7 @@ flowchart LR
     Order_paid("🔄 paid")
     Order_pending("🔄 pending")
     Order_shipped("🔄 shipped")
+    PaymentMethod["🎚️ Payment Method"]
   end
   Customer -->|performs| BucPayment
   Customer -->|performs| BucOrder
@@ -105,6 +107,7 @@ flowchart LR
   ConfirmOrderApi -.->|reads| CartItem
   PlaceOrderApi -.->|creates| Order
   PlaceOrderApi -.->|creates| OrderLine
+  PlaceOrderApi -.->|reads| CustomerAccount
   PlaceOrderApi -.->|updates| Cart
   OrderHistoryApi -.->|reads| Order
   OrderHistoryApi -.->|reads| OrderLine
@@ -140,6 +143,7 @@ flowchart LR
   OrderLine ---|N:1| Order
   Payment ---|1:1| Order
   EvPaymentAuthorized -.->|triggers| Capture
+  EvOrderShipped -.->|triggers| ShippingSvc
   PaymentGW -.->|raises| EvPaymentAuthorized
   CommerceSystem -->|contains| ProductSearchApi
   CommerceSystem -->|contains| ProductDetailApi
@@ -156,6 +160,7 @@ flowchart LR
   CommerceSystem -->|contains| PlaceOrderApi
   CommerceSystem -->|contains| OrderHistoryApi
   CommerceSystem -->|contains| CancelOrderApi
+  ShipOrder -.->|raises| EvOrderShipped
   ShipOrder -.->|updates| Order
   DeliverOrder -.->|updates| Order
   SearchProducts -.->|displays| ProductSearchScreen

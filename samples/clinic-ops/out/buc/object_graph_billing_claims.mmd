@@ -2,6 +2,7 @@ flowchart LR
   subgraph layer_value[System Value]
     direction TB
     BillingSpecialist(["👤 Billing Specialist"])
+    PaymentGateway[/"🌐 Payment Gateway"/]
   end
   subgraph layer_environment[External Environment]
     direction TB
@@ -25,6 +26,8 @@ flowchart LR
     ChargeWorklistScreen[["🖥️ Charge Worklist Screen"]]
     ClaimScreen[["🖥️ Claim Screen"]]
     PaymentPostingScreen[["🖥️ Payment Posting Screen"]]
+    EvEncounterSigned{"⚡ Encounter Signed"}
+    EvPaymentSettled{"⚡ Payment Settled"}
   end
   subgraph layer_system[System]
     direction TB
@@ -72,6 +75,10 @@ flowchart LR
   Charge ---|N:1| Claim
   Claim ---|N:1| InsurancePolicy
   PaymentTransaction ---|N:1| Claim
+  EvPaymentSettled -.->|triggers| PostPayment
+  EvEncounterSigned -.->|triggers| BucBillingClaims
+  EvEncounterSigned -.->|triggers| CreateCharge
+  PaymentGateway -.->|raises| EvPaymentSettled
   CreateCharge -.->|displays| ChargeWorklistScreen
   CreateCharge -.->|invokes| CreateChargeApi
   CreateCharge -.->|requires_medium| BillingWorkstation

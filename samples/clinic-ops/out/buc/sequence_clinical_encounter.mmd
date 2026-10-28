@@ -32,7 +32,7 @@ sequenceDiagram
   deactivate AmendEncounterApi
 
   Note over Clinician,VitalSign: ✅ Complete Appointment
-  Nurse->>EncounterWorkspaceScreen: ✅ Complete Appointment
+  Clinician->>EncounterWorkspaceScreen: ✅ Complete Appointment
   EncounterWorkspaceScreen->>CompleteAppointmentApi: ✅ Complete Appointment
   activate CompleteAppointmentApi
   rect rgb(245,245,245)
@@ -41,7 +41,7 @@ sequenceDiagram
     CompleteAppointmentApi->>Appointment: update
   end
   CompleteAppointmentApi-->>EncounterWorkspaceScreen: 🖥️ Encounter Workspace
-  EncounterWorkspaceScreen-->>Nurse: 🖥️ Encounter Workspace
+  EncounterWorkspaceScreen-->>Clinician: 🖥️ Encounter Workspace
   deactivate CompleteAppointmentApi
 
   Note over Clinician,VitalSign: ✅ Document Assessment
@@ -58,17 +58,17 @@ sequenceDiagram
   deactivate DocumentAssessmentApi
 
   Note over Clinician,VitalSign: ✅ Open Encounter
-  Nurse->>EncounterWorkspaceScreen: ✅ Open Encounter
+  Clinician->>EncounterWorkspaceScreen: ✅ Open Encounter
   EncounterWorkspaceScreen->>OpenEncounterApi: ✅ Open Encounter
   activate OpenEncounterApi
   OpenEncounterApi->>Appointment: read
   OpenEncounterApi->>Encounter: create
   OpenEncounterApi-->>EncounterWorkspaceScreen: 🖥️ Encounter Workspace
-  EncounterWorkspaceScreen-->>Nurse: 🖥️ Encounter Workspace
+  EncounterWorkspaceScreen-->>Clinician: 🖥️ Encounter Workspace
   deactivate OpenEncounterApi
 
   Note over Clinician,VitalSign: ✅ Record Vitals
-  Nurse->>VitalsScreen: ✅ Record Vitals
+  Clinician->>VitalsScreen: ✅ Record Vitals
   VitalsScreen->>RecordVitalsApi: ✅ Record Vitals
   activate RecordVitalsApi
   rect rgb(245,245,245)
@@ -77,7 +77,7 @@ sequenceDiagram
     RecordVitalsApi->>VitalSign: create
   end
   RecordVitalsApi-->>VitalsScreen: 🖥️ Vitals Screen
-  VitalsScreen-->>Nurse: 🖥️ Vitals Screen
+  VitalsScreen-->>Clinician: 🖥️ Vitals Screen
   deactivate RecordVitalsApi
 
   Note over Clinician,VitalSign: ✅ Sign Encounter

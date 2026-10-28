@@ -1,5 +1,6 @@
 sequenceDiagram
   box System Value
+    actor FrontDesk as 👤 Front Desk Staff
     actor Patient as 👤 Patient
   end
   box System Boundary
@@ -10,9 +11,9 @@ sequenceDiagram
     participant IntakePacket as 🗄️ Intake Packet
   end
 
-  Note over Patient,IntakePacket: ✅ Complete Intake Forms
-  Patient->System: ✅ Complete Intake Forms
+  Note over FrontDesk,IntakePacket: ✅ Complete Intake Forms
+  FrontDesk->System: ✅ Complete Intake Forms
   activate System
   System->>IntakePacket: update
-  System-->>Patient: 🖥️ Intake Portal Screen
+  System-->>FrontDesk: 🖥️ Intake Portal Screen
   deactivate System
