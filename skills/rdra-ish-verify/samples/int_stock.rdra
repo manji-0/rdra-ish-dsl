@@ -1,8 +1,7 @@
 // Int axes driven by sets + arithmetic Safety / temporal property.
 // Init stock/selling must satisfy forbidden/property (TLC-pass).
-// Note: `forbidden(Item, stock < selling)` is TLA-evaluated; default
-// `check`/`states` report UndrivenComparisonProp [error]. Use
-// `--allow-tla-only` for a green check when TLC owns the Int rule.
+// `forbidden(Item, stock < selling)` is evaluated over Int 0..5 by both
+// `check`/`states` and TLC; all three pass.
 entity Item "商品" {
   id: Int @pk
   status: Enum(active, archived) @default(active)
