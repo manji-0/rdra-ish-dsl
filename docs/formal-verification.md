@@ -35,6 +35,9 @@ module name. If `-o` is a directory (or has no extension), `export` writes
 `<dir>/RdraSpec.tla` and `<dir>/RdraSpec.cfg`. `verify -o <dir>` writes one
 `Cone_<first check>.tla` and `.cfg` pair per cone, the whole-model `RdraSpec` pair
 when the model has temporal properties, and `cones.txt`.
+Without `-o`, `verify` writes them to a temp dir. It deletes the dir when every check
+passes, and keeps it and prints `specs: <dir>` when one fails. The TLC heap settings
+(`RDRA_TLC_HEAP`, `JAVA_TOOL_OPTIONS`) are in [cli-reference.md](./cli-reference.md#verify).
 
 The `.cfg` names `SPECIFICATION Spec`, `INVARIANT TypeOK`, one `INVARIANT` per
 constraint, one `PROPERTY` per `after` assertion and temporal property, and

@@ -8,6 +8,7 @@ mod fmt_cmd;
 mod list_output;
 mod load;
 mod states;
+mod tlc_env;
 mod tlc_output;
 mod verify;
 use cli::{Cli, Commands, ExportKind};

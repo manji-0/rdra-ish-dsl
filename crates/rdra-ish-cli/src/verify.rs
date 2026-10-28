@@ -20,6 +20,7 @@ use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
 
 use crate::cli::VerifyBackend;
 use crate::export::{checked_system, tla_bounds};
+use crate::tlc_env::{tlc_env, Heap};
 use crate::tlc_output::{summarize, Outcome, TlcRun};
 
 pub fn run_verify(
@@ -40,6 +41,7 @@ struct Job {
     tla: String,
     cfg: String,
     checks: Vec<String>,
+    heap: Heap,
 }
 
 struct Ran {
@@ -114,6 +116,7 @@ fn cone_jobs(ts: &TransitionSystem, names: &TlaNames) -> Vec<Job> {
                 tla: bundle.tla,
                 cfg: bundle.cfg,
                 checks,
+                heap: Heap::Cone,
             }
         })
         .collect()
@@ -126,13 +129,18 @@ fn run_job(tlc: &Path, dir: &Path, job: &Job, workers: &str) -> Result<Ran> {
     // TLC unpacks its standard modules into java.io.tmpdir; parallel runs must not share it.
     let tmp = dir.join(format!("{}.tmp", job.module));
     fs::create_dir_all(&tmp).with_context(|| format!("failed to create {}", tmp.display()))?;
-    let output = Command::new(tlc)
-        .env(
-            "JAVA_TOOL_OPTIONS",
-            format!("-Djava.io.tmpdir={}", tmp.display()),
-        )
+    let (key, value) = tlc_env(job.heap, &tmp);
+    let mut command = Command::new(tlc);
+    command
+        .env(key, value)
         .args(["-workers", workers, "-metadir"])
-        .arg(&meta)
+        .arg(&meta);
+    // `-continue` reports every violated check of a cone, each with its own trace. The
+    // temporal run keeps TLC's default and stops at its first violation.
+    if job.heap == Heap::Cone {
+        command.arg("-continue");
+    }
+    let output = command
         .args(["-config", &cfg, &tla])
         .current_dir(dir)
         .output()
@@ -207,6 +215,7 @@ fn run_tlc(
             checks: (0..ts.properties().len())
                 .map(|i| names.property(i).to_string())
                 .collect(),
+            heap: Heap::Temporal,
         })
     };
     println!(
@@ -240,6 +249,9 @@ fn run_tlc(
     }
 
     if jobs.is_empty() {
+        if !keep {
+            let _ = fs::remove_dir_all(&dir);
+        }
         println!("nothing to check");
         println!("tlc_result: ok");
         println!("TLC: OK");
@@ -249,9 +261,6 @@ fn run_tlc(
     let mut ran = run_all(&tlc, &dir, &jobs[..cones])?;
     if let Some(job) = jobs.get(cones) {
         ran.push(run_job(&tlc, &dir, job, "auto")?);
-    }
-    if !keep {
-        let _ = fs::remove_dir_all(&dir);
     }
 
     for (job, r) in jobs.iter().zip(&ran) {
@@ -274,6 +283,9 @@ fn run_tlc(
         Outcome::Ok
     };
     if outcome == Outcome::Ok {
+        if !keep {
+            let _ = fs::remove_dir_all(&dir);
+        }
         println!("tlc_result: ok");
         println!("TLC: OK");
         return Ok(());
@@ -292,10 +304,15 @@ fn run_tlc(
             )
         })
         .collect();
+    let specs = if keep {
+        format!("specs: {}", dir.display())
+    } else {
+        format!("specs: {} (kept because a check failed)", dir.display())
+    };
     match outcome {
-        Outcome::Counterexample => bail!("TLC verification failed\n{}", failed.join("\n")),
+        Outcome::Counterexample => bail!("TLC verification failed\n{}\n{specs}", failed.join("\n")),
         _ => bail!(
-            "TLC tool failed without a model violation\n{}",
+            "TLC tool failed without a model violation\n{}\n{specs}",
             failed.join("\n")
         ),
     }

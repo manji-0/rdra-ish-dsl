@@ -336,9 +336,17 @@
 - State diagrams draw the `[*]` start edges from the creation status of the transition
   system. `clinic-ops` Appointment and `personal-info` UserAccount gain start edges they lacked.
 - `verify -o <relative dir>` no longer breaks TLC's temporary directory.
+- `verify` without `-o` deleted its spec dir before it printed the paths into it. A failed
+  run now keeps the dir and ends with `specs: <dir> (kept because a check failed)`; a
+  passing run still deletes it. With `-o`, a failed run ends with `specs: <dir>`.
 
 ### Changed
 
+- `verify` runs each cone's TLC with `-continue`, so every violated check of a cone prints
+  its own counterexample, and the state count on a failing cone's line is the whole cone.
+  Each cone JVM gets `-Xmx1g` and the temporal run `-Xmx2g`. `RDRA_TLC_HEAP` (such as
+  `4g`) replaces both, and a `-Xmx` in your own `JAVA_TOOL_OPTIONS` wins over either. A
+  run that runs out of memory is a `tool_error` whose message names both settings.
 - Language reference separates reserved kinds and unsupported/limited topics;
   UC `precondition`/`postcondition`/`guard` are documented as review metadata
   only (use `after.assert` for machine-checked posts).

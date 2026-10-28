@@ -29,6 +29,11 @@ rdra-ish verify "$FILE" --backend tlc -o <OUT>
 - `-o` is a directory or has no extension → `<dir>/RdraSpec.tla` and
   `<dir>/RdraSpec.cfg`
 - `verify` copies bare `Module.tla` / `Module.cfg` into its work dir for TLC
+- `verify` without `-o` uses a temp dir: deleted on success, kept on failure and named
+  by the closing `specs: <dir> (kept because a check failed)` line
+- `verify` reports `tool_error` with a memory hint when TLC runs out of heap: set
+  `RDRA_TLC_HEAP=4g` (default `1g` per cone, `2g` for the temporal run) or
+  `JAVA_TOOL_OPTIONS=-Xmx4g`, which wins
 
 ## Suggested Order
 

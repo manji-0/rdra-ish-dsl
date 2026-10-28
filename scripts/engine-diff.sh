@@ -24,6 +24,10 @@ while IFS= read -r sample; do
   "$bin" states "$sample" --format json >"$dir/states.json" 2>&1
   echo $? >"$dir/states.exit"
 
+  "$bin" check "$sample" >"$dir/check.txt" 2>&1
+  echo "exit=$?" >>"$dir/check.txt"
+  sed -i.bak -e "s|$repo_root/||g" "$dir/check.txt" && rm -f "$dir/check.txt.bak"
+
   "$bin" export "$sample" --kind tla -o "$dir/tla" >"$dir/export.log" 2>&1
   echo $? >"$dir/export.exit"
   # Keep the label out of the log so two runs diff cleanly.

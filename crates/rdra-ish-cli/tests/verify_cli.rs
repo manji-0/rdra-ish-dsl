@@ -1,0 +1,115 @@
+//! Where `verify` leaves its specs. Without `-o` a failed run keeps its temp dir and names
+//! it; a relative `-o` resolves against the working directory, not TLC's.
+//!
+//! Without `tlc` on PATH each test is skipped with a printed reason; `RDRA_REQUIRE_TLC=1`
+//! turns the skip into a failure.
+
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
+
+fn repo() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("repo root")
+}
+
+fn scratch(test: &str) -> PathBuf {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(test);
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+fn have_tlc() -> bool {
+    let found = Command::new("which")
+        .arg("tlc")
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !found {
+        let reason = "tlc not on PATH (run inside `nix develop`)";
+        assert!(
+            std::env::var("RDRA_REQUIRE_TLC").as_deref() != Ok("1"),
+            "RDRA_REQUIRE_TLC=1 but {reason}"
+        );
+        println!("skipped: {reason}");
+    }
+    found
+}
+
+fn verify(cwd: &Path, tmpdir: &Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .current_dir(cwd)
+        .env("TMPDIR", tmpdir)
+        .arg("verify")
+        .args(args)
+        .output()
+        .expect("rdra-ish runs")
+}
+
+#[test]
+fn failed_verify_without_out_keeps_and_names_its_specs() {
+    if !have_tlc() {
+        return;
+    }
+    let tmp = scratch("verify_cli_kept_specs");
+    let sample = repo().join("samples/formal-verification-fail/order.rdra");
+    let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stderr}");
+    let line = stderr
+        .lines()
+        .find_map(|l| l.strip_prefix("specs: "))
+        .unwrap_or_else(|| panic!("no specs: line\n{stderr}"));
+    let dir = line
+        .strip_suffix(" (kept because a check failed)")
+        .unwrap_or_else(|| panic!("specs: line does not say it was kept: {line}"));
+    let dir = Path::new(dir);
+    assert!(
+        dir.join("cones.txt").is_file(),
+        "{} is not kept",
+        dir.display()
+    );
+    assert!(dir.join("Cone_Inv_Order_0.tla").is_file());
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn passing_verify_without_out_removes_its_specs() {
+    if !have_tlc() {
+        return;
+    }
+    let tmp = scratch("verify_cli_removed_specs");
+    let sample = repo().join("samples/formal-verification/check_met.rdra");
+    let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let left: Vec<_> = std::fs::read_dir(&tmp).unwrap().flatten().collect();
+    assert!(
+        left.iter()
+            .all(|e| !e.file_name().to_string_lossy().starts_with("rdra-ish-tlc-")),
+        "a passing run left {left:?}"
+    );
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn relative_out_is_relative_to_the_working_directory() {
+    if !have_tlc() {
+        return;
+    }
+    let cwd = scratch("verify_cli_relative_out");
+    let sample = repo().join("samples/formal-verification/check_met.rdra");
+    let output = verify(&cwd, &cwd, &[sample.to_str().unwrap(), "-o", "specs"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let index = std::fs::read_to_string(cwd.join("specs/cones.txt")).expect("specs/cones.txt");
+    assert!(index.contains("Check_CartLine_qty_0"), "{index}");
+    let _ = std::fs::remove_dir_all(&cwd);
+}

@@ -299,21 +299,31 @@ pub fn parse_dump(text: &str) -> Vec<CanonState> {
     out
 }
 
-/// A short report of a failed run: the error line and the first trace steps.
+/// A short report of a failed run: each violated check's error line and its first trace, or
+/// the log's tail when nothing was violated.
 pub fn summarize(run: &TlcRun, output: &str) -> String {
     let mut lines = Vec::new();
-    if let Some(v) = run.violations.first() {
-        lines.push(format!("violated: {}", v.line));
-        if !v.trace.is_empty() {
-            lines.push("counterexample:".to_string());
-            for (n, step) in v.trace.iter().enumerate() {
-                lines.push(format!("  State {}: {}", n + 1, step.label));
-                for (var, value) in &step.state {
-                    lines.push(format!("    {var} = {value}"));
+    if !run.violations.is_empty() {
+        let mut seen = BTreeSet::new();
+        for v in run.violations.iter().filter(|v| seen.insert(&v.line)) {
+            lines.push(format!("violated: {}", v.line));
+            if !v.trace.is_empty() {
+                lines.push("counterexample:".to_string());
+                for (n, step) in v.trace.iter().enumerate() {
+                    lines.push(format!("  State {}: {}", n + 1, step.label));
+                    for (var, value) in &step.state {
+                        lines.push(format!("    {var} = {value}"));
+                    }
                 }
             }
         }
         return lines.join("\n");
+    }
+    if output.contains("OutOfMemoryError") || output.contains("out of memory") {
+        lines.push(
+            "hint: TLC ran out of memory; raise the heap with RDRA_TLC_HEAP=4g or JAVA_TOOL_OPTIONS=-Xmx4g"
+                .to_string(),
+        );
     }
     let tail: Vec<&str> = output
         .lines()
@@ -413,5 +423,24 @@ Model checking completed. No error has been found.
         assert!(s.contains("Error: Invariant I1 is violated."));
         assert!(s.contains("State 2: C"));
         assert!(s.contains("e[1] = \"present\""));
+        assert!(s.contains("violated: Error: Action property A1 is violated."));
+    }
+
+    #[test]
+    fn summary_reports_a_repeated_violation_once() {
+        let log = "Error: Invariant I1 is violated.\nError: Invariant I1 is violated.\n";
+        let s = summarize(&TlcRun::parse(log), log);
+        assert_eq!(s.matches("violated: ").count(), 1);
+    }
+
+    #[test]
+    fn out_of_memory_names_the_heap_settings() {
+        let log = "Exception in thread \"main\" java.lang.OutOfMemoryError: Java heap space\n";
+        let run = TlcRun::parse(log);
+        assert_eq!(run.outcome(false), Outcome::ToolError);
+        let s = summarize(&run, log);
+        assert!(s.starts_with("hint: TLC ran out of memory"), "{s}");
+        assert!(s.contains("RDRA_TLC_HEAP=4g"), "{s}");
+        assert!(s.contains("OutOfMemoryError"), "{s}");
     }
 }

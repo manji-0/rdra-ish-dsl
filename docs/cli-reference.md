@@ -333,7 +333,7 @@ rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [-
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--backend` | `tlc` | `tlc` | Verification backend. Requires `tlc` or `tlc2` on `PATH`. |
-| `-o`, `--out` | path | temp dir | Directory for the specs: one `Cone_<check>.tla` / `.cfg` pair per cone, named after the first invariant or after-assert that reads it, a whole-model `RdraSpec.tla` / `.cfg` when the model declares temporal properties, and `cones.txt` listing each module and the checks it answers. A path ending in `.tla` writes into its directory and names the whole-model module after its stem. |
+| `-o`, `--out` | path | temp dir, deleted when every check passes and kept when one fails | Directory for the specs: one `Cone_<check>.tla` / `.cfg` pair per cone, named after the first invariant or after-assert that reads it, a whole-model `RdraSpec.tla` / `.cfg` when the model declares temporal properties, and `cones.txt` listing each module and the checks it answers. A path ending in `.tla` writes into its directory and names the whole-model module after its stem. |
 | `--instance-count` | unsigned integer | `2` | Multi-instance `InstanceCount` (`1..=255`; `1` warns). |
 | `--int-range-max` | unsigned integer | `5` | Upper bound for `IntRange == 0..N` (`1..=255`; `0` rejected). |
 
@@ -348,6 +348,17 @@ need fairness on the whole system, so they are checked on the whole model, and o
 the model declares any. Stdout names the bounds, the cone count, and each run's result. Stdout or
 stderr carries one `tlc_result: ok|counterexample|tool_error` line. Exits non-zero when
 TLC is missing or reports a violation.
+
+A failed run ends with `specs: <dir>`, the directory that holds the specs. Without `-o`
+it adds `(kept because a check failed)`. Each cone's TLC runs with `-continue`, so every
+violated check of a cone prints its own counterexample.
+
+| Environment variable | Effect |
+|---|---|
+| `RDRA_TLC_HEAP` | Heap of every TLC JVM, such as `4g`. Without it a cone gets `1g` and the temporal run `2g`. |
+| `JAVA_TOOL_OPTIONS` | Appended after the options `verify` sets (`-Xmx`, `-Djava.io.tmpdir`), so a `-Xmx` here wins. |
+
+A run that runs out of memory is a `tool_error` whose message names both variables.
 
 ---
 

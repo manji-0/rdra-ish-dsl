@@ -11,6 +11,9 @@
 //! Without `tlc` on PATH the TLC test is skipped with a printed reason; `RDRA_REQUIRE_TLC=1`
 //! turns the skip into a failure.
 
+#[path = "../src/tlc_env.rs"]
+#[allow(dead_code)]
+mod tlc_env;
 #[path = "../src/tlc_output.rs"]
 #[allow(dead_code)]
 mod tlc_output;
@@ -24,6 +27,7 @@ use std::sync::Mutex;
 use rdra_ish_core::lifecycle::{Bounds, Caps, ComponentRun, Scope, StateDiag, TransitionSystem};
 use rdra_ish_core::{build_merged_model, resolve, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
+use tlc_env::{tlc_env, Heap};
 use tlc_output::{parse_dump, CanonState, Outcome, TlcRun};
 
 /// Far above the largest cone of any sample (clinic-ops peaks at a few hundred states).
@@ -136,11 +140,9 @@ fn run_tlc(tlc: &Path, dir: &Path, args: &[&str], tla: &str, cfg: &str) -> (bool
     // TLC unpacks its standard modules into java.io.tmpdir; parallel runs must not share it.
     let tmp = dir.join("java-tmp");
     std::fs::create_dir_all(&tmp).expect("java tmp dir");
+    let (key, value) = tlc_env(Heap::Cone, &tmp);
     let out = Command::new(tlc)
-        .env(
-            "JAVA_TOOL_OPTIONS",
-            format!("-Djava.io.tmpdir={}", tmp.display()),
-        )
+        .env(key, value)
         .args(["-workers", "1", "-metadir", "meta"])
         .args(args)
         .args(["-config", "Cone.cfg", "Cone.tla"])
