@@ -201,10 +201,16 @@ pub struct Condition {
     pub id: std::string::String,
     pub label: std::string::String,
     pub description: Option<std::string::String>,
-    /// Set by `holds(Cond, cmp, ...)`: an implicit conjunction of entity-qualified
-    /// comparisons. At most one per condition. Stored and validated in phase 3, compiled to a
-    /// guard in phase 4.
-    pub body: Option<Vec<crate::model::CrossEntityCondition>>,
+    /// Set by `holds(Cond, cmp, ...)`. At most one per condition. `applies_to(Cond, UC)`
+    /// compiles it to a guard on the use case's action.
+    pub body: Option<HoldsBody>,
+}
+
+/// The comparisons of one `holds` predicate, an implicit conjunction, and where it was written.
+#[derive(Debug, Clone)]
+pub struct HoldsBody {
+    pub conds: Vec<crate::model::CrossEntityCondition>,
+    pub site: Option<crate::location::LocatedSpan>,
 }
 
 #[derive(Debug, Clone)]

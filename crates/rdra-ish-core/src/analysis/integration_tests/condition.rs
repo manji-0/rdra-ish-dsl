@@ -76,7 +76,7 @@ fn holds_stores_the_body_and_derives_the_same_edges() {
     );
     assert!(errors(&diags).is_empty(), "{diags:?}");
     let (ck, cond) = model.conditions.iter().next().unwrap();
-    assert_eq!(cond.body.as_ref().map(Vec::len), Some(2));
+    assert_eq!(cond.body.as_ref().map(|b| b.conds.len()), Some(2));
     assert_eq!(
         condition_body_display(&model, ck).as_deref(),
         Some("Payment.method == insurance, Appointment.status == checkedin")

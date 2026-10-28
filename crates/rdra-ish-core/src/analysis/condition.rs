@@ -57,7 +57,7 @@ pub fn condition_edges(model: &SemanticModel, ck: ConditionKey) -> Vec<Condition
     };
     match &condition.body {
         Some(body) => {
-            for operand in body.iter().flat_map(body_columns) {
+            for operand in body.conds.iter().flat_map(body_columns) {
                 let Some(entity) = model.entities.get(operand.entity) else {
                     continue;
                 };
@@ -139,7 +139,8 @@ pub fn condition_body_display(
 ) -> Option<std::string::String> {
     let body = model.conditions.get(ck)?.body.as_ref()?;
     Some(
-        body.iter()
+        body.conds
+            .iter()
             .map(|c| body_condition_display(model, c))
             .collect::<Vec<_>>()
             .join(", "),
@@ -354,7 +355,10 @@ pub(crate) fn process_holds_predicate(
     if body.is_empty() {
         return;
     }
-    model.conditions[condition].body = Some(body);
+    model.conditions[condition].body = Some(HoldsBody {
+        conds: body,
+        site: Some(ctx.locate(pred.span.clone())),
+    });
     model
         .typed_predicates
         .push(TypedPredicate::Holds { condition });
