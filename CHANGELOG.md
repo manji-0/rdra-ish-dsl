@@ -59,15 +59,13 @@
   hides BUC performers in permission analysis).
 - Removed the kinds no review output consumed. A model that still uses one now
   fails to parse with a message naming the keyword and the replacement:
-  - `usagescene`: use `timing` for Business-BUC context.
+  - `usagescene`: use a `timer` with `triggers(Timer, UseCase)` for Business-BUC
+    context.
   - `location` and the `.where(...)` clause of `belongs`: no output consumed
-    them. Delete the declaration and the clause; keep `timing` / `.when(...)`
-    and `medium` / `.by(...)`.
+    them. Delete the declaration and the clause; keep `medium` / `.by(...)`.
   - `state`: states are the variants of the lifecycle Enum column. Delete the
     declaration; the analyzer still derives `{Entity}_{variant}` state nodes from
     `transitions` for the state diagram.
-  - `condition` (a reserved kind that only warned before): model rules with use
-    case conditions (`precondition`, `guard`, ...) or entity state constraints.
   - `concept`, `domain_object`, `aggregate`, `value_object` (alias
     `valueobject`): conceptual-model kinds were removed; model persistent
     structure with `entity` (and `dto` for payloads).
@@ -195,7 +193,6 @@
   `coverage-score` 0 with missing-stage penalties (−8 each).
 - `states --format typescript` accepts alias `type-script`; `--entity` prints a
   stderr note when other entities still have Error-severity diagnostics.
-- `condition` / `variation` kinds emit `ReservedKind` warnings (still accepted).
 - TLA owner links keep every `(child, parent)` pair (junction with two parents
   uses `{Child}_{Parent}_owner`); owner-only entities still get `*_Ids`.
 - Multi-hop `.along` adds binders for intermediate entities and warns instead of
