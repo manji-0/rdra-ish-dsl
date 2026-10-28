@@ -96,7 +96,11 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 
 8. **Check entity consistency**
    - `relate` is defined in the correct direction with the right cardinality
-   - No manually declared FK columns that duplicate a `relate`-generated FK
+   - No manually declared FK columns that duplicate a `relate`-generated FK (`FkConflict`
+     unless adopted with `.key(...)`); two relates from one child to one parent carry
+     distinct `.role(...)`s (`DuplicateRelateRole`)
+   - A parent that must have a child uses `1..*:1`; `MinCardNeedsCreate` names each use
+     case that creates such a parent without a child
    - Parent entities are declared before child entities in the same file
    - Index/unique/check/FK optionality/on-delete/on-update/soft-delete/history/tenant
      annotations reflect real reviewable constraints
@@ -222,7 +226,7 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 | `has_permission` | Actor | Permission | — |
 | `requires_permission` | UseCase / Api | Permission | — |
 | `requires_medium` | UseCase / Api | Medium | — |
-| `relate` | Entity | Entity | cardinality (`1:1` / `1:N` / `N:1` / `N:M`, unquoted preferred); `N:M` requires `.via(Junction)` |
+| `relate` | Entity | Entity | cardinality (`1:1` / `1:N` / `N:1` / `N:M`, child side may be a range such as `1..*`; unquoted preferred); `N:M` requires `.via(Junction)`; chain `.optional()`, `.role(x)`, `.key(cols)` |
 | `transitions` | Entity.col | UseCase | from -> to |
 | `sets` | UseCase | Entity | `col == val` or comparison + bool |
 | `forbidden` | Entity | condition(s) | — |

@@ -70,6 +70,9 @@ invariant(Order, Payment)
 - Qualify columns as `Entity.column`.
 - Add `.along(...)` only for relation-scoped linked-instance intent. Each adjacent pair
   needs a `relate` (it supplies `Child_owner_Parent`), else `UnbindableScope`.
+- Two relates between the same pair of entities (distinct `.role`s) need `.by(role)` on
+  the rule: `.along(Order, Address).by(ship_to)`. Without it the rule is
+  `AmbiguousOwnerLink`.
 - Diagnostic ids may still say `Cross*` even though surface syntax is
   multi-entity `forbidden` / `invariant`.
 
