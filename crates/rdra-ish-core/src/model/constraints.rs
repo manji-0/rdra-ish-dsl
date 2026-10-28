@@ -11,6 +11,9 @@ pub struct ForbiddenConstraint {
     pub conditions: Vec<(std::string::String, EffectValue)>,
     /// 禁止条件に含まれる比較命題（全件 AND、等値条件と合わせて評価）
     pub comparisons: Vec<ComparisonProp>,
+
+    /// Source site of the predicate/declaration that produced this fact.
+    pub site: Option<crate::location::LocatedSpan>,
 }
 
 /// `invariant(Entity).when(col == val).then(col == val)` で宣言された不変条件。
@@ -26,6 +29,9 @@ pub struct EntityInvariant {
     pub requireds: Vec<(std::string::String, EffectValue)>,
     /// 比較命題必要条件（全件 AND、等値 requireds と合わせて評価）
     pub required_comparisons: Vec<ComparisonProp>,
+
+    /// Source site of the predicate/declaration that produced this fact.
+    pub site: Option<crate::location::LocatedSpan>,
 }
 
 /// `required(Entity, col == val, ...)` で宣言された常時成立制約。
@@ -37,6 +43,9 @@ pub struct RequiredConstraint {
     pub conditions: Vec<(std::string::String, EffectValue)>,
     /// 常に true であるべき比較命題（全件 AND）
     pub comparisons: Vec<ComparisonProp>,
+
+    /// Source site of the predicate/declaration that produced this fact.
+    pub site: Option<crate::location::LocatedSpan>,
 }
 
 /// `exclusive(Entity, col == val, ...)` で宣言された相互排他制約。
@@ -48,6 +57,9 @@ pub struct ExclusiveConstraint {
     pub conditions: Vec<(std::string::String, EffectValue)>,
     /// 相互排他にしたい比較命題
     pub comparisons: Vec<ComparisonProp>,
+
+    /// Source site of the predicate/declaration that produced this fact.
+    pub site: Option<crate::location::LocatedSpan>,
 }
 
 // ── クロスエンティティ制約 ───────────────────────────────────────────────────
@@ -105,6 +117,9 @@ pub struct CrossForbiddenConstraint {
     pub scope: Vec<EntityKey>,
     pub scope_semantics: CrossConstraintScope,
     pub conditions: Vec<CrossEntityCondition>,
+
+    /// Source site of the predicate/declaration that produced this fact.
+    pub site: Option<crate::location::LocatedSpan>,
 }
 
 /// `invariant(EntityA, EntityB).when(...).then(...)`.
@@ -114,6 +129,9 @@ pub struct CrossEntityInvariant {
     pub scope_semantics: CrossConstraintScope,
     pub guards: Vec<CrossEntityCondition>,
     pub requireds: Vec<CrossEntityCondition>,
+
+    /// Source site of the predicate/declaration that produced this fact.
+    pub site: Option<crate::location::LocatedSpan>,
 }
 
 /// `after(UseCase).assert(...)` で宣言される時相アンカー制約。
@@ -122,6 +140,9 @@ pub struct TemporalAssertion {
     pub anchor: UseCaseKey,
     pub scope: Vec<EntityKey>,
     pub requireds: Vec<CrossEntityCondition>,
+
+    /// Source site of the predicate/declaration that produced this fact.
+    pub site: Option<crate::location::LocatedSpan>,
 }
 
 /// to-many 関連先に対する量化制約。
@@ -140,6 +161,9 @@ pub struct QuantifierConstraint {
     pub kind: QuantifierKind,
     pub related: EntityKey,
     pub related_conditions: Vec<CrossEntityCondition>,
+
+    /// Source site of the predicate/declaration that produced this fact.
+    pub site: Option<crate::location::LocatedSpan>,
 }
 
 // ── Temporal properties (TLA+ / TLC) ──────────────────────────────────────────
@@ -197,4 +221,7 @@ pub struct TemporalProperty {
     pub id: std::string::String,
     pub label: std::string::String,
     pub formula: TemporalFormula,
+
+    /// Source site of the predicate/declaration that produced this fact.
+    pub site: Option<crate::location::LocatedSpan>,
 }

@@ -8,6 +8,9 @@ pub struct StateTransition {
     pub usecase: UseCaseKey,
     pub from: std::string::String,
     pub to: std::string::String,
+
+    /// Source site of the predicate/declaration that produced this fact.
+    pub site: Option<crate::location::LocatedSpan>,
 }
 
 /// `sets(...)` 述語で宣言されるカラム効果の抽象値
@@ -61,4 +64,7 @@ pub struct ColumnEffect {
     pub column: std::string::String,
     /// 設定する抽象値
     pub value: EffectValue,
+
+    /// Source site of the predicate/declaration that produced this fact.
+    pub site: Option<crate::location::LocatedSpan>,
 }

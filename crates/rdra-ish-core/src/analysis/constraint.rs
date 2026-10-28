@@ -663,6 +663,7 @@ pub(crate) fn process_forbidden(
     model
         .cross_forbidden_constraints
         .push(CrossForbiddenConstraint {
+            site: Some(ctx.locate(pred.span.clone())),
             scope: scope.clone(),
             scope_semantics,
             conditions,
@@ -708,6 +709,7 @@ pub(crate) fn process_invariant(
     add_condition_entities_to_scope(&mut scope, &requireds);
     let scope_semantics = cross_scope_semantics_from_chain(model, pred, ctx, diags);
     model.cross_entity_invariants.push(CrossEntityInvariant {
+        site: Some(ctx.locate(pred.span.clone())),
         scope: scope.clone(),
         scope_semantics,
         guards,
@@ -815,6 +817,7 @@ fn process_quantifier_chain(
     model
         .quantifier_constraints
         .push(crate::model::QuantifierConstraint {
+            site: Some(ctx.locate(cc.span.clone())),
             anchor,
             guards: guards.to_vec(),
             kind,
@@ -952,6 +955,7 @@ pub(crate) fn process_after_predicate(
     model
         .temporal_assertions
         .push(crate::model::TemporalAssertion {
+            site: Some(ctx.locate(pred.span.clone())),
             anchor: *anchor,
             scope,
             requireds,

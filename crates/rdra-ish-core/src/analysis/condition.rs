@@ -391,6 +391,7 @@ pub(crate) fn derive_condition_links(model: &mut SemanticModel, diags: &mut Vec<
                 ConditionEdge::StateModel { entity, .. } => NodeRef::Entity(entity),
             };
             model.relations.push(Relation {
+                site: None,
                 from: NodeRef::Condition(ck),
                 to,
                 kind: RelKind::Combines,

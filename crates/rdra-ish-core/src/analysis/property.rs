@@ -30,6 +30,7 @@ pub(crate) fn register_property(
     match lower_formula(&decl.formula) {
         Ok(formula) => {
             model.temporal_properties.push(TemporalProperty {
+                site: Some(ctx.locate(decl.span.clone())),
                 id: decl.id.clone(),
                 label: decl.label.clone().unwrap_or_else(|| decl.id.clone()),
                 formula,

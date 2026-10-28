@@ -94,4 +94,7 @@ pub struct PropositionEffect {
     pub prop: ComparisonProp,
     /// 設定する真偽値。
     pub truth: bool,
+
+    /// Source site of the predicate/declaration that produced this fact.
+    pub site: Option<crate::location::LocatedSpan>,
 }

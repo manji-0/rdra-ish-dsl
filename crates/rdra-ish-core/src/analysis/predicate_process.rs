@@ -230,6 +230,7 @@ fn process_maps_field_predicate(
         column,
     });
     model.relations.push(Relation {
+        site: Some(ctx.locate(pred.span.clone())),
         from: NodeRef::Field(*field),
         to: NodeRef::Entity(*entity),
         kind: RelKind::MapsField,
@@ -426,6 +427,7 @@ fn process_transitions_predicate(
     }
 
     model.state_transitions.push(crate::model::StateTransition {
+        site: Some(ctx.locate(pred.span.clone())),
         usecase: *usecase,
         entity: entity_key,
         column: column.clone(),
@@ -503,6 +505,7 @@ fn process_sets_predicate(
                 Ok(Some((col_name, value))) => {
                     if truth_str == "true" {
                         model.column_effects.push(ColumnEffect {
+                            site: Some(ctx.locate(pred.span.clone())),
                             origin,
                             entity: entity_key,
                             column: col_name.clone(),
@@ -535,6 +538,7 @@ fn process_sets_predicate(
                         resolve_comparison(&entity_cols, &entity_id, cmp, ctx, diags)
                     {
                         model.proposition_effects.push(PropositionEffect {
+                            site: Some(ctx.locate(pred.span.clone())),
                             origin,
                             entity: entity_key,
                             prop: prop.clone(),
@@ -567,6 +571,7 @@ fn process_sets_predicate(
             )
         {
             model.column_effects.push(ColumnEffect {
+                site: Some(ctx.locate(pred.span.clone())),
                 origin,
                 entity: entity_key,
                 column: col_name.clone(),
@@ -607,6 +612,7 @@ fn process_forbidden_predicate(
 
     if !conditions.equals.is_empty() || !conditions.comparisons.is_empty() {
         model.forbidden_constraints.push(ForbiddenConstraint {
+            site: Some(ctx.locate(pred.span.clone())),
             entity: entity_key,
             conditions: conditions.equals,
             comparisons: conditions.comparisons,
@@ -643,6 +649,7 @@ fn process_required_predicate(
 
     if !conditions.equals.is_empty() || !conditions.comparisons.is_empty() {
         model.required_constraints.push(RequiredConstraint {
+            site: Some(ctx.locate(pred.span.clone())),
             entity: entity_key,
             conditions: conditions.equals,
             comparisons: conditions.comparisons,
@@ -679,6 +686,7 @@ fn process_exclusive_predicate(
 
     if conditions.equals.len() + conditions.comparisons.len() >= 2 {
         model.exclusive_constraints.push(ExclusiveConstraint {
+            site: Some(ctx.locate(pred.span.clone())),
             entity: entity_key,
             conditions: conditions.equals,
             comparisons: conditions.comparisons,
@@ -796,6 +804,7 @@ fn process_invariant_predicate(
     let has_requireds = !requireds.is_empty() || !required_comparisons.is_empty();
     if has_guards && has_requireds {
         model.entity_invariants.push(EntityInvariant {
+            site: Some(ctx.locate(pred.span.clone())),
             entity: entity_key,
             guards,
             guard_comparisons,
@@ -891,6 +900,7 @@ fn process_relation_predicate(
     };
     if let (Some(Some(from)), Some(Some(to))) = (resolved.first(), resolved.get(1)) {
         model.relations.push(Relation {
+            site: Some(ctx.locate(pred.span.clone())),
             from: from.clone(),
             to: to.clone(),
             kind,
@@ -1070,6 +1080,7 @@ fn process_relate_predicate(
     let synthesize_via_n1 = kind == RelKind::RelateManyToMany && via.is_some();
     let via_for_synth = via.clone();
     model.relations.push(Relation {
+        site: Some(ctx.locate(pred.span.clone())),
         from: from.clone(),
         to: to.clone(),
         kind,
@@ -1088,6 +1099,7 @@ fn process_relate_predicate(
                     && !relation_exists(model, &end, &junction_ref, RelKind::RelateOneToMany)
                 {
                     model.relations.push(Relation {
+                        site: Some(ctx.locate(pred.span.clone())),
                         from: junction_ref.clone(),
                         to: end,
                         kind: RelKind::RelateManyToOne,

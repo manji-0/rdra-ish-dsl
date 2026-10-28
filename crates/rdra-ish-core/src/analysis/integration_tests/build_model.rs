@@ -4,6 +4,32 @@ use crate::model::*;
 use rdra_ish_syntax::parse;
 
 #[test]
+fn transition_and_sets_facts_carry_their_predicate_site() {
+    let src = r#"
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(open, paid) @default(open)
+  note: DateTime @null
+}
+usecase Pay "Pay"
+transitions(Order.status, Pay, open -> paid)
+sets(Pay, Order, note == present)
+"#;
+    let (ast, errors) = parse(src);
+    assert!(errors.is_empty(), "parse errors: {errors:?}");
+    let (model, diags) = build_model(&ast);
+    assert!(diags.iter().all(|d| d.is_warning), "{diags:?}");
+
+    let transition = model.state_transitions.first().expect("a transition");
+    let site = transition.site.as_ref().expect("transition site");
+    assert!(src[site.span.clone()].starts_with("transitions("));
+
+    let effect = model.column_effects.first().expect("a sets effect");
+    let site = effect.site.as_ref().expect("sets site");
+    assert!(src[site.span.clone()].starts_with("sets("));
+}
+
+#[test]
 fn test_build_model_basic() {
     let src = r#"
 actor Customer "顧客" description "商品を購入する顧客"

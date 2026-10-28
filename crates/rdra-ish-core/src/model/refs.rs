@@ -84,6 +84,9 @@ pub struct Relation {
     pub options: RelationOptions,
     /// Junction entity for `relate(A, B, N:M).via(Junction)`.
     pub via: Option<NodeRef>,
+
+    /// Source site of the predicate/declaration that produced this fact.
+    pub site: Option<crate::location::LocatedSpan>,
 }
 
 /// Relation-level options, currently used by `relate` to shape generated FKs.
