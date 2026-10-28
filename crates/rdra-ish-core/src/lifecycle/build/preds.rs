@@ -6,14 +6,14 @@ use super::naming::{applied_bodies, is_driven, property_entity};
 use super::Builder;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{
-    AfterAssert, AfterStep, At, CmpOp, Domain, Effect, Guard, GuardWhy, InvKind, InvText,
-    Invariant, Ltl, ModelRef, Param, ParamRole, Pred, Property, Site, Start, Term, Value, VarId,
-    VarKind,
+    Action, ActionOrigin, AfterAssert, AfterStep, At, Birth, CmpOp, Domain, Effect, Guard,
+    GuardWhy, InvKind, InvText, Invariant, Ltl, ModelRef, Param, ParamRole, Pred, Property, Site,
+    Start, Term, Value, VarId, VarKind,
 };
 use crate::lifecycle::EntId;
 use crate::model::{
     CmpOpModel, CmpRhs, ComparisonProp, CrossCmpRhs, CrossConstraintScope, CrossEntityCondition,
-    EffectValue, EntityKey, FkId, HoldsBody, QuantifierKind, TemporalExpr, TemporalFormula,
+    EffectValue, EntityKey, FkId, HoldsBody, Min, QuantifierKind, TemporalExpr, TemporalFormula,
     TemporalRhs, UseCaseKey,
 };
 
@@ -354,6 +354,80 @@ impl Builder<'_> {
         self.cross_invariants();
         self.quantifiers();
         self.unique_keys();
+        self.min_cards();
+    }
+
+    /// `MinCard_{child}_{role}` per child-side range `1..*` / `1..1`: every present parent
+    /// slot is owned by a present child.
+    fn min_cards(&mut self) {
+        let model = self.model;
+        for (id, fk) in model
+            .foreign_keys()
+            .filter(|(_, fk)| fk.children.min == Min::One)
+        {
+            let at = |ek, b| (ek, At::Bound(b));
+            // Child first, so a self-relate reads the child at the inner binder.
+            let Some(link) = self.key_link(id, at(fk.child, 1), at(fk.parent, 0)) else {
+                continue;
+            };
+            let (child, parent) = (
+                model.entities[fk.child].id.clone(),
+                model.entities[fk.parent].id.clone(),
+            );
+            let role = fk.role_or(&parent).to_string();
+            let site = Site::new(ModelRef::Relation(fk.relation), &fk.site);
+            let (c, p) = (self.ent_of[&fk.child], self.ent_of[&fk.parent]);
+            let birth = |e: EntId| self.ts.entities[e.index()].birth;
+            if birth(p) == Birth::PreExisting && birth(c) == Birth::Created {
+                self.diag(
+                    vec![fk.parent],
+                    StateDiag::MinCardOfPreExistingParent {
+                        child: child.clone(),
+                        site: site.clone(),
+                    },
+                );
+            }
+            let creates = |a: &Action, e: EntId| {
+                a.params
+                    .iter()
+                    .any(|q| q.entity == e && q.role == ParamRole::New)
+            };
+            let lone: Vec<UseCaseKey> = self
+                .ts
+                .actions
+                .iter()
+                .filter(|a| creates(a, p) && !creates(a, c))
+                .filter_map(|a| match a.origin {
+                    ActionOrigin::UseCase { uc, .. } => Some(uc),
+                    _ => None,
+                })
+                .collect();
+            for uc in lone {
+                self.diag(
+                    vec![fk.parent],
+                    StateDiag::MinCardNeedsCreate {
+                        usecase: model.use_cases[uc].id.clone(),
+                        child: child.clone(),
+                        site: site.clone(),
+                    },
+                );
+            }
+            self.ts.invariants.push(Invariant {
+                name: format!("MinCard_{child}_{role}"),
+                kind: InvKind::MinCard,
+                binders: vec![self.ent_of[&fk.parent]],
+                body: Pred::Exists {
+                    entity: self.ent_of[&fk.child],
+                    body: Box::new(link),
+                },
+                text: InvText::MinCard {
+                    child,
+                    parent,
+                    role,
+                },
+                site: Site::new(ModelRef::Relation(fk.relation), &fk.site),
+            });
+        }
     }
 
     /// `Unique_{child}_{role}` per 1:1 key: two distinct present children never share a

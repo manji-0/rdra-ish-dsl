@@ -127,6 +127,16 @@ fn violation_message(kind: &InvKind, text: &InvText, p: &str) -> Option<String> 
         ) => format!(
             "1:1 key shared: two '{child}' rows belong to one '{parent}' through '{role}' in patterns ({p})"
         ),
+        (
+            InvKind::MinCard,
+            InvText::MinCard {
+                child,
+                parent,
+                role,
+            },
+        ) => format!(
+            "minimum children unmet: a '{parent}' has no '{child}' through '{role}' in patterns ({p})"
+        ),
         _ => return None,
     })
 }
@@ -183,6 +193,8 @@ fn diag_message(d: &StateDiag) -> String {
         | StateDiag::UnbindableCondition { .. }
         | StateDiag::UnwrittenConstrainedVar { .. }
         | StateDiag::PreExistingChildOfCreatedParent { .. }
+        | StateDiag::MinCardOfPreExistingParent { .. }
+        | StateDiag::MinCardNeedsCreate { .. }
         | StateDiag::UnsupportedComparison { .. }
         | StateDiag::UnresolvedPropertyAtom { .. } => d.to_string(),
     };

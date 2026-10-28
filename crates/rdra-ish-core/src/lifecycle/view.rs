@@ -231,9 +231,19 @@ pub(crate) fn entity_view(
         .filter(|d| d.entities.contains(&decl.key))
         .map(|d| d.diag.clone())
         .collect();
+    let in_cone = verdicts.is_some();
+    let found: Vec<StateDiag> = verdicts.unwrap_or_else(|| {
+        run.diags
+            .iter()
+            .filter(|d| !is_cap(&d.diag) && d.entities.contains(&decl.key))
+            .map(|d| d.diag.clone())
+            .collect()
+    });
     if axes.is_empty() {
-        // An entity with no state columns has one trivial pattern, as `states` reports it.
+        // An entity with no state columns has one trivial pattern, as `states` reports it,
+        // and still the verdicts of the constraints it binds.
         diagnostics.retain(|d| *d != StateDiag::NoCreationPath);
+        diagnostics.extend(found);
         return EntityStateResult {
             entity_id: decl.id.clone(),
             entity_label: decl.label.clone(),
@@ -271,7 +281,6 @@ pub(crate) fn entity_view(
             },
         })
         .collect();
-    let in_cone = verdicts.is_some();
     let caps = run
         .diags
         .iter()
@@ -281,13 +290,6 @@ pub(crate) fn entity_view(
             diagnostics.push(d.diag.clone());
         }
     }
-    let found: Vec<StateDiag> = verdicts.unwrap_or_else(|| {
-        run.diags
-            .iter()
-            .filter(|d| !is_cap(&d.diag) && d.entities.contains(&decl.key))
-            .map(|d| d.diag.clone())
-            .collect()
-    });
     for &var in &decl.columns {
         let (
             VarKind::Column {

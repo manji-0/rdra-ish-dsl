@@ -58,6 +58,25 @@ fn a_one_to_one_key_is_a_unique_invariant_over_two_binders() {
 }
 
 #[test]
+fn a_child_side_minimum_is_an_invariant_over_a_parent_and_a_witness_child() {
+    let bundle = print(
+        &system(&sample("min_card_unmet.rdra")),
+        PrintMode::Check,
+        "M",
+    );
+    assert!(bundle.tla.contains(
+        "MinCard_OrderLine_Order == \\A b0 \\in Order_Ids : (Order_exists[b0] = \"present\") => (\\E b1 \\in OrderLine_Ids : (OrderLine_exists[b1] = \"present\") /\\ (OrderLine_owner_Order[b1] = b0))\n"
+    ), "{}", bundle.tla);
+    assert!(bundle.cfg.contains("INVARIANT MinCard_OrderLine_Order\n"));
+    let master = system(
+        "entity A \"A\" { id: Int @pk }\nentity B \"B\" { id: Int @pk }\nrelate(B, A, 1..*:1)\n",
+    );
+    assert!(print(&master, PrintMode::Check, "M")
+        .tla
+        .contains("  /\\ B_owner_A = [i \\in B_Ids |-> i]\n"));
+}
+
+#[test]
 fn a_pre_existing_child_owner_starts_linked() {
     let src = |card: &str| {
         format!("entity A \"A\" {{ id: Int @pk }}\nentity B \"B\" {{ id: Int @pk }}\nrelate(B, A, {card})\n")

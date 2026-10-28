@@ -297,3 +297,74 @@ fn unlinked_children_share_no_parent_and_identity_starts_hold() {
     let d = derive_scoped(&model_from(&master), Bounds::VERIFY, &Scope::All);
     assert!(!unique_violated(&d, "Note"), "{:?}", d.diags);
 }
+
+fn min_card_violated(d: &Derived) -> bool {
+    d.diags.iter().any(|x| {
+        matches!(&x.diag, StateDiag::ConstraintViolated { name, kind: InvKind::MinCard, .. }
+            if name == "MinCard_OrderLine_Order")
+    })
+}
+
+fn needs_create(d: &Derived) -> Vec<&str> {
+    d.diags
+        .iter()
+        .filter_map(|x| match &x.diag {
+            StateDiag::MinCardNeedsCreate { usecase, .. } => Some(usecase.as_str()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_parent_created_without_a_child_breaks_the_minimum_at_one_slot() {
+    let model = sample_model("samples/formal-verification/min_card_unmet.rdra");
+    for d in [
+        derive(&model),
+        derive_scoped(&model, Bounds::VERIFY, &Scope::All),
+    ] {
+        assert!(min_card_violated(&d), "{:?}", d.diags);
+        assert_eq!(needs_create(&d), ["Place"]);
+    }
+    // `check` reads the views: Order has no state column, and its view still reports it.
+    let order = derive(&model);
+    assert!(order.entity("Order").diagnostics.iter().any(|x| matches!(
+        x,
+        StateDiag::ConstraintViolated {
+            kind: InvKind::MinCard,
+            ..
+        }
+    )));
+}
+
+#[test]
+fn a_parent_created_with_its_first_child_meets_the_minimum_until_a_delete() {
+    let path = "skills/rdra-ish-verify/samples/min_card_met.rdra";
+    let model = sample_model(path);
+    for d in [
+        derive(&model),
+        derive_scoped(&model, Bounds::VERIFY, &Scope::All),
+    ] {
+        assert!(!min_card_violated(&d), "{:?}", d.diags);
+        assert!(needs_create(&d).is_empty(), "{:?}", d.diags);
+    }
+    let src = std::fs::read_to_string(repo_root().join(path)).unwrap();
+    let deleting =
+        format!("{src}usecase RemoveLine \"明細削除\"\ndeletes(RemoveLine, OrderLine)\n");
+    assert!(min_card_violated(&derive_src(&deleting)));
+}
+
+#[test]
+fn a_pre_existing_parent_of_a_created_child_is_warned_and_fails_at_the_start() {
+    let src = "entity Order \"O\" { id: Int @pk }\nentity OrderLine \"L\" { id: Int @pk }\nusecase AddLine \"A\"\ncreates(AddLine, OrderLine)\nrelate(OrderLine, Order, 1..*:1)\n";
+    let d = derive_src(src);
+    assert!(min_card_violated(&d), "{:?}", d.diags);
+    assert!(d
+        .diags
+        .iter()
+        .any(|x| matches!(&x.diag, StateDiag::MinCardOfPreExistingParent { child, .. } if child == "OrderLine")));
+    // Master data on both sides starts linked one to one, so it holds at any slot count.
+    let master = model_from("entity Order \"O\" { id: Int @pk }\nentity OrderLine \"L\" { id: Int @pk }\nrelate(OrderLine, Order, 1..*:1)\n");
+    assert!(!min_card_violated(&derive(&master)));
+    let d = derive_scoped(&master, Bounds::VERIFY, &Scope::All);
+    assert!(!min_card_violated(&d), "{:?}", d.diags);
+}

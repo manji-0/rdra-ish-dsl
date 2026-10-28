@@ -476,6 +476,8 @@ pub enum InvKind {
     Quantifier,
     /// A 1:1 key: no two present children belong to one parent slot.
     Unique,
+    /// A child-side range `1..*` / `1..1`: every present parent slot has a present child.
+    MinCard,
 }
 
 /// The parts of a constraint that a violation message names.
@@ -502,6 +504,12 @@ pub enum InvText {
     },
     /// `relate(child, parent, 1:1)`, by the key's role.
     Unique {
+        child: String,
+        parent: String,
+        role: String,
+    },
+    /// `relate(child, parent, 1..*:1)`, by the key's role.
+    MinCard {
         child: String,
         parent: String,
         role: String,

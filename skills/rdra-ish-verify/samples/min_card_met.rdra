@@ -1,0 +1,23 @@
+// relate(OrderLine, Order, 1..*:1) adds the invariant MinCard_OrderLine_Order: every Order
+// has at least one OrderLine. TLC intent: expected PASS. Place creates the Order and its
+// first line in one transaction; AddLine only adds lines. min_card_unmet.rdra is the same
+// model with a Place that creates no line.
+entity Order "注文" {
+  id: Int @pk
+}
+entity OrderLine "注文明細" {
+  id: Int @pk
+}
+
+usecase Place "注文確定"
+usecase AddLine "明細追加"
+
+buc BucOrdering "Ordering"
+contains(BucOrdering, Place)
+contains(BucOrdering, AddLine)
+
+creates(Place, Order)
+creates(Place, OrderLine)
+creates(AddLine, OrderLine)
+
+relate(OrderLine, Order, 1..*:1)

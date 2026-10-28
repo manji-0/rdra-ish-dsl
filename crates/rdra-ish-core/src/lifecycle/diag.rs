@@ -52,6 +52,16 @@ pub enum StateDiag {
     /// A pre-existing child's mandatory key names a parent that some use case creates, so at
     /// the start every child slot belongs to a parent slot that is still absent.
     PreExistingChildOfCreatedParent { parent: String, site: Site },
+    /// A child-side range needs a child per parent, but the parent starts present and the
+    /// child absent, so `MinCard_*` fails in the initial state.
+    MinCardOfPreExistingParent { child: String, site: Site },
+    /// A use case creates the parent of a child-side range `1..*` and no child in the same
+    /// transaction group, so the parent it leaves has no child.
+    MinCardNeedsCreate {
+        usecase: String,
+        child: String,
+        site: Site,
+    },
     /// The entity's view exceeded the pattern cap; the component's exploration stopped.
     PatternCapReached { cap: usize, bound: usize },
     /// The component's joint state count exceeded the cap; exploration stopped.
@@ -114,10 +124,11 @@ pub enum StateDiag {
 impl StateDiag {
     pub fn severity(&self) -> Severity {
         match self {
-            StateDiag::NoCreationPath => Severity::Info,
+            StateDiag::NoCreationPath | StateDiag::MinCardNeedsCreate { .. } => Severity::Info,
             StateDiag::UnreachableEnumVariant { .. }
             | StateDiag::UnwrittenConstrainedVar { .. }
-            | StateDiag::PreExistingChildOfCreatedParent { .. } => Severity::Warning,
+            | StateDiag::PreExistingChildOfCreatedParent { .. }
+            | StateDiag::MinCardOfPreExistingParent { .. } => Severity::Warning,
             StateDiag::ConflictingEffects { .. }
             | StateDiag::DoubleModeledEnum { .. }
             | StateDiag::PatternCapReached { .. }
@@ -162,6 +173,14 @@ impl fmt::Display for StateDiag {
             StateDiag::PreExistingChildOfCreatedParent { parent, .. } => write!(
                 f,
                 "this entity starts present, but its parent {parent} starts absent; it starts owned by a {parent} that does not exist yet"
+            ),
+            StateDiag::MinCardOfPreExistingParent { child, .. } => write!(
+                f,
+                "this entity starts present and needs a {child}, but every {child} starts absent; its minimum-children invariant fails at the start"
+            ),
+            StateDiag::MinCardNeedsCreate { usecase, child, .. } => write!(
+                f,
+                "{usecase} creates this entity without a {child} in the same transaction; its minimum-children invariant fails after {usecase} unless the use case also creates a {child}"
             ),
             StateDiag::PatternCapReached { cap, bound } => {
                 write!(

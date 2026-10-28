@@ -14,7 +14,7 @@ use super::types::{
 };
 use super::{Built, Scope, TransitionSystem};
 use crate::model::{
-    CmpOpModel, CmpRhs, ColumnType, EffectValue, EntityKey, ModelColumn, NodeRef, RelKind,
+    CmpOpModel, CmpRhs, ColumnType, EffectValue, EntityKey, Min, ModelColumn, NodeRef, RelKind,
     SemanticModel, UseCaseKey,
 };
 use crate::resolver::reachable_from_bucs;
@@ -273,7 +273,8 @@ impl<'m> Builder<'m> {
 
     /// One owner var per foreign key. An `.optional()` key's owner starts and may stay
     /// unlinked (`null`). A pre-existing child starts linked: an N:1 child to any parent slot
-    /// (or unlinked, when optional), a 1:1 child to the parent slot of its own index. Under a
+    /// (or unlinked, when optional), a 1:1 child or the child of a `1..*` key to the parent
+    /// slot of its own index. Under a
     /// created parent that slot is absent at the start, so an optional child starts unlinked
     /// and a mandatory one draws `PreExistingChildOfCreatedParent`.
     fn owner_vars(&mut self) {
@@ -286,7 +287,9 @@ impl<'m> Builder<'m> {
             let parent_created = self.ts.entities[p.index()].birth == Birth::Created;
             let start = match (child_pre, parent_created && fk.optional()) {
                 (false, _) | (true, true) => Start::Base,
-                (true, false) if fk.unique() => Start::Identity,
+                // Under a minimum of one child per parent, with as many child slots as
+                // parent slots, every start that holds is a permutation of the identity.
+                (true, false) if fk.unique() || fk.children.min == Min::One => Start::Identity,
                 (true, false) => Start::Any,
             };
             if child_pre && parent_created && !fk.optional() {
