@@ -438,3 +438,9 @@ fn mandatory_child_moves_to_a_created_parent() {
         "the charge moved to the second claim"
     );
 }
+
+#[test]
+fn a_creating_action_that_links_an_existing_child_needs_no_create_hint() {
+    let d = derive_src(&relinking("relate(Charge, Claim, 1..*:1).optional()", ""));
+    assert!(needs_create(&d).is_empty(), "{:?}", d.diags);
+}

@@ -547,11 +547,18 @@ impl<'m> Builder<'m> {
                     .iter()
                     .any(|q| q.entity == e && q.role == ParamRole::New)
             };
+            // An action that creates the parent links every child it creates or updates
+            // (`owner_bindings`), so either kind of child param gives the parent its first child.
+            let gives_child = |a: &Action| {
+                a.params
+                    .iter()
+                    .any(|q| q.entity == c && q.role != ParamRole::Parent)
+            };
             let lone: Vec<UseCaseKey> = self
                 .ts
                 .actions
                 .iter()
-                .filter(|a| creates(a, p) && !creates(a, c))
+                .filter(|a| creates(a, p) && !gives_child(a))
                 .filter_map(|a| match a.origin {
                     ActionOrigin::UseCase { uc, .. } => Some(uc),
                     _ => None,
