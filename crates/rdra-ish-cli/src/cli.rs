@@ -123,6 +123,11 @@ pub(crate) enum Commands {
         #[arg(long, default_value = "table")]
         format: ListFormat,
     },
+    /// Print the .rdra files the inputs load, one per line, in load order
+    Files {
+        #[arg(required = true)]
+        inputs: Vec<PathBuf>,
+    },
     /// Format RDRA DSL source files
     Fmt {
         #[arg(required = true)]

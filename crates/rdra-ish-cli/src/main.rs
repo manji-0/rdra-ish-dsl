@@ -21,7 +21,7 @@ use list_output::{
     format_lint_issues, list_elements, note_state_errors, reject_state_errors, severity_word,
     state_findings,
 };
-use load::{eprint_diagnostic, load_model, reject_model_errors};
+use load::{collect_rdra_files, eprint_diagnostic, load_model, reject_model_errors};
 use rdra_ish_core::lifecycle::{Scope, Severity};
 use rdra_ish_core::{lint_issues, LintSeverity, RdraError};
 use rdra_ish_emit::View;
@@ -156,6 +156,16 @@ fn main() -> Result<()> {
 
             if has_error {
                 std::process::exit(1);
+            }
+        }
+
+        Commands::Files { inputs } => {
+            let files = collect_rdra_files(&inputs)?;
+            if files.is_empty() {
+                anyhow::bail!("no .rdra files found in the given inputs");
+            }
+            for file in files {
+                println!("{}", file.display());
             }
         }
 
