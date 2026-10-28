@@ -8,6 +8,7 @@ pub mod entity_lifecycle;
 pub mod entity_state_variant;
 pub mod event_flow;
 pub mod import_scope;
+pub mod lifecycle;
 pub mod lint;
 pub mod location;
 pub mod model;
