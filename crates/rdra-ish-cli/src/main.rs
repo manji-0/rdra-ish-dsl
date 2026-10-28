@@ -16,7 +16,7 @@ use diagram::{run_diagram, DiagramRequest};
 use export::export_artifact;
 use fmt_cmd::run_fmt;
 use list_output::{
-    format_lint_issues, list_elements, reject_state_errors, severity_word,
+    format_lint_issues, list_elements, note_state_errors, reject_state_errors, severity_word,
     state_consistency_findings,
 };
 use load::{eprint_diagnostic, load_model, reject_model_errors};
@@ -162,8 +162,10 @@ fn main() -> Result<()> {
         } => {
             let (program, model, diags) = load_model(&inputs)?;
             reject_model_errors(&program, &diags)?;
-            if !matches!(kind, ExportKind::Tla) {
+            if kind.reads_lifecycle() {
                 reject_state_errors(&model)?;
+            } else if !matches!(kind, ExportKind::Tla) {
+                note_state_errors(&model);
             }
 
             let view = View::whole();

@@ -251,6 +251,14 @@ pub(crate) enum ExportKind {
     Tla,
 }
 
+impl ExportKind {
+    /// Whether the output prints the derived lifecycle, so a lifecycle error makes it wrong.
+    /// TLA is not one: it builds its own system and reports violations through TLC.
+    pub(crate) fn reads_lifecycle(&self) -> bool {
+        matches!(self, ExportKind::TypeScriptStates)
+    }
+}
+
 #[derive(ValueEnum, Clone)]
 pub(crate) enum CsvKind {
     Actor,

@@ -49,6 +49,19 @@ pub(crate) fn reject_state_errors(model: &SemanticModel) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Data-layer outputs read no reachability result, so lifecycle errors only earn a note.
+pub(crate) fn note_state_errors(model: &SemanticModel) {
+    let errors = state_consistency_findings(model)
+        .into_iter()
+        .filter(|(severity, _)| *severity == Severity::Error)
+        .count();
+    if errors > 0 {
+        eprintln!(
+            "note: the lifecycle has {errors} error(s) (see `rdra-ish check`); the data layer does not depend on them"
+        );
+    }
+}
+
 /// A constraint violation in the wording `check` has always used for its kind.
 fn violation_message(kind: &InvKind, text: &InvText, p: &str) -> Option<String> {
     Some(match (kind, text) {
