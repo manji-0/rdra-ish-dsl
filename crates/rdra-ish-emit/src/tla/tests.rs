@@ -39,6 +39,42 @@ fn check_cfg_names_each_invariant_and_explore_cfg_checks_nothing() {
 }
 
 #[test]
+fn a_one_to_one_key_is_a_unique_invariant_over_two_binders() {
+    let bundle = print(
+        &system(&sample("one_to_one_shared.rdra")),
+        PrintMode::Check,
+        "M",
+    );
+    assert!(bundle.tla.contains(
+        "Unique_Shipment_Order == \\A b0 \\in Shipment_Ids, b1 \\in Shipment_Ids : (Shipment_exists[b0] = \"present\" /\\ Shipment_exists[b1] = \"present\") => ((b0 = b1) \\/ (Shipment_owner_Order[b0] # Shipment_owner_Order[b1]))\n"
+    ), "{}", bundle.tla);
+    assert!(bundle.cfg.contains("INVARIANT Unique_Shipment_Order\n"));
+    let optional = system(
+        "entity A \"A\" { id: Int @pk }\nentity B \"B\" { id: Int @pk }\nusecase U \"U\"\ncreates(U, B)\nrelate(B, A, 1:1).optional()\n",
+    );
+    assert!(print(&optional, PrintMode::Check, "M")
+        .tla
+        .contains("((b0 = b1) \\/ (B_owner_A[b0] # B_owner_A[b1]) \\/ (B_owner_A[b0] = 0))"));
+}
+
+#[test]
+fn a_pre_existing_child_owner_starts_linked() {
+    let src = |card: &str| {
+        format!("entity A \"A\" {{ id: Int @pk }}\nentity B \"B\" {{ id: Int @pk }}\nrelate(B, A, {card})\n")
+    };
+    let n_to_one = print(&system(&src("N:1")), PrintMode::Check, "M").tla;
+    assert!(
+        n_to_one.contains("  /\\ B_owner_A \\in [B_Ids -> A_Ids]\n"),
+        "{n_to_one}"
+    );
+    let one_to_one = print(&system(&src("1:1")), PrintMode::Check, "M").tla;
+    assert!(
+        one_to_one.contains("  /\\ B_owner_A = [i \\in B_Ids |-> i]\n"),
+        "{one_to_one}"
+    );
+}
+
+#[test]
 fn after_assert_reads_the_post_state_of_its_action() {
     let tla = print(&system(&sample("order.rdra")), PrintMode::Check, "M").tla;
     assert!(tla.contains(

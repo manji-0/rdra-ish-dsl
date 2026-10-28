@@ -128,6 +128,7 @@ The order of `raises` and `triggers` between use cases adds no guard.
 | `forbidden`, `invariant`, `required`, `exclusive` | An invariant over the present slots of the entity, evaluated in every reachable state. |
 | Multi-entity `forbidden`, `invariant` | An invariant over every combination of present slots. `.along(A, B)` restricts it to combinations that the `relate` owners link. |
 | `when(E, ...).has/none(R, ...)` | An invariant over the present slots of `E` and the related slots of `R`. A `relate` links them through its owner; without one, `R` is independent. |
+| `relate(Child, Parent, 1:1)` | `Unique_<Child>_<role>`: no two present children belong to one parent slot. An unlinked optional child belongs to none. It holds vacuously at one instance. |
 | `after(UC).assert(...)` | A predicate on the state each step of `UC` leaves, checked on every step of every action of `UC`. An entity the step does not write is read as it stands. |
 | `property` with `always`, `eventually`, `leads_to` | Data only. BFS does not evaluate it, and `check` prints a `note:` that TLC does. |
 

@@ -106,6 +106,16 @@ fn violation_message(kind: &InvKind, text: &InvText, p: &str) -> Option<String> 
         ) => format!(
             "to-many quantifier constraint is violated from '{anchor}' to '{related}': {constraint} witnessed by {p}"
         ),
+        (
+            InvKind::Unique,
+            InvText::Unique {
+                child,
+                parent,
+                role,
+            },
+        ) => format!(
+            "1:1 key is shared: two '{child}' rows belong to one '{parent}' through '{role}', witnessed by {p}"
+        ),
         _ => return None,
     })
 }

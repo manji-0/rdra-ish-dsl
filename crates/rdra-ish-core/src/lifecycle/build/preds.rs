@@ -353,6 +353,57 @@ impl Builder<'_> {
         }
         self.cross_invariants();
         self.quantifiers();
+        self.unique_keys();
+    }
+
+    /// `Unique_{child}_{role}` per 1:1 key: two distinct present children never share a
+    /// parent slot. An unlinked optional owner shares nothing.
+    fn unique_keys(&mut self) {
+        let model = self.model;
+        for (id, fk) in model.foreign_keys().filter(|(_, fk)| fk.unique()) {
+            let Some(owner) = self
+                .ts
+                .vars
+                .iter()
+                .position(|d| matches!(d.kind, VarKind::Owner { fk: f, .. } if f == id))
+            else {
+                continue;
+            };
+            let owner = VarId::at(owner);
+            let c = self.ent_of[&fk.child];
+            let slot = |b| Term::Slot {
+                var: owner,
+                at: At::Bound(b),
+            };
+            let mut apart = vec![
+                Pred::Cmp(
+                    Term::Index(At::Bound(0)),
+                    CmpOp::Eq,
+                    Term::Index(At::Bound(1)),
+                ),
+                Pred::Cmp(slot(0), CmpOp::Ne, slot(1)),
+            ];
+            if fk.optional() {
+                apart.push(Pred::Cmp(slot(0), CmpOp::Eq, Term::Lit(Value::NULL)));
+            }
+            let (child, parent) = (
+                model.entities[fk.child].id.clone(),
+                model.entities[fk.parent].id.clone(),
+            );
+            let role = fk.role_or(&parent).to_string();
+            self.ts.invariants.push(Invariant {
+                name: format!("Unique_{child}_{role}"),
+                kind: InvKind::Unique,
+                binders: vec![c, c],
+                body: Pred::Or(apart),
+                text: InvText::Unique {
+                    child,
+                    parent,
+                    role,
+                },
+                site: Site::new(ModelRef::Relation(fk.relation), &fk.site),
+            });
+        }
     }
 
     /// Binders for a cross constraint's scope, plus the relate links its `.along` names.

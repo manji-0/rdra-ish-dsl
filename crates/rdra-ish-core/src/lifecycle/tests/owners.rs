@@ -258,3 +258,42 @@ fn a_pre_existing_child_of_a_created_parent_is_warned() {
         .iter()
         .any(|d| matches!(d.diag, StateDiag::PreExistingChildOfCreatedParent { .. })));
 }
+
+fn unique_violated(d: &Derived, child: &str) -> bool {
+    d.diags.iter().any(|x| {
+        matches!(&x.diag, StateDiag::ConstraintViolated { name, kind: InvKind::Unique, .. }
+            if *name == format!("Unique_{child}_Order"))
+    })
+}
+
+#[test]
+fn two_children_of_one_parent_break_a_one_to_one_key_only_at_two_slots() {
+    let model = sample_model("samples/formal-verification/one_to_one_shared.rdra");
+    assert!(unique_violated(
+        &derive_scoped(&model, Bounds::VERIFY, &Scope::All),
+        "Shipment"
+    ));
+    assert!(
+        !unique_violated(&derive(&model), "Shipment"),
+        "vacuous at one slot"
+    );
+}
+
+#[test]
+fn unlinked_children_share_no_parent_and_identity_starts_hold() {
+    let src = |relate: &str, births: &str| {
+        format!(
+            "entity Order \"Order\" {{ id: Int @pk }}\nentity Note \"Note\" {{ id: Int @pk }}\nusecase Write \"Write\"\n{births}\n{relate}\n"
+        )
+    };
+    // Two notes are created and never linked.
+    let unlinked = src(
+        "relate(Note, Order, 1:1).optional()",
+        "creates(Write, Note)",
+    );
+    let d = derive_scoped(&model_from(&unlinked), Bounds::VERIFY, &Scope::All);
+    assert!(!unique_violated(&d, "Note"), "{:?}", d.diags);
+    let master = src("relate(Note, Order, 1:1)", "");
+    let d = derive_scoped(&model_from(&master), Bounds::VERIFY, &Scope::All);
+    assert!(!unique_violated(&d, "Note"), "{:?}", d.diags);
+}

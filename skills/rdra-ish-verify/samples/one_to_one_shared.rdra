@@ -1,0 +1,29 @@
+// relate(Shipment, Order, 1:1) adds the invariant Unique_Shipment_Order: no two Shipments
+// belong to one Order. TLC intent: expected FAIL at InstanceCount == 2. Ship and Reship each
+// create a Shipment under any present Order, so both can link a Shipment to the same Order.
+// At one instance per entity the invariant holds vacuously, so `check` passes.
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(placed, shipped) @default(placed)
+}
+entity Shipment "出荷" {
+  id: Int @pk
+}
+
+usecase Place "注文確定"
+usecase Ship "出荷"
+usecase Reship "再出荷"
+
+buc BucShipping "Shipping"
+contains(BucShipping, Place)
+contains(BucShipping, Ship)
+contains(BucShipping, Reship)
+
+creates(Place, Order)
+creates(Ship, Shipment)
+updates(Ship, Order)
+creates(Reship, Shipment)
+
+transitions(Order.status, Ship, placed -> shipped)
+
+relate(Shipment, Order, 1:1)

@@ -474,6 +474,8 @@ pub enum InvKind {
     CrossForbidden,
     CrossInvariant,
     Quantifier,
+    /// A 1:1 key: no two present children belong to one parent slot.
+    Unique,
 }
 
 /// The parts of a constraint that a violation message names.
@@ -497,6 +499,12 @@ pub enum InvText {
         anchor: String,
         related: String,
         constraint: String,
+    },
+    /// `relate(child, parent, 1:1)`, by the key's role.
+    Unique {
+        child: String,
+        parent: String,
+        role: String,
     },
 }
 
