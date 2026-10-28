@@ -1,0 +1,13 @@
+samples/ec-site
+samples/clinic-ops
+samples/personal-info
+samples/api-contract
+samples/incremental-order/step-6-business-rules/src
+samples/formal-verification/after_assert_unmet.rdra
+samples/formal-verification/cross_order_payment.rdra
+samples/formal-verification/int_stock.rdra
+samples/formal-verification/now_coupon.rdra
+samples/formal-verification/order.rdra
+samples/formal-verification/quantifier_none.rdra
+samples/formal-verification/untriggered_sets.rdra
+samples/formal-verification-fail/order.rdra
