@@ -1,0 +1,142 @@
+# Committed sample artifacts: output path, then the rdra-ish command that writes it.
+# scripts/check-sample-artifacts.sh regenerates every row and fails on a diff.
+samples/api-contract/out/openapi.json	export samples/api-contract/src --kind openapi
+samples/clinic-ops/out/actor_permission_audit.csv	csv samples/clinic-ops --kind actor-permission-audit
+samples/clinic-ops/out/api_matrix.csv	csv samples/clinic-ops --kind api-matrix
+samples/clinic-ops/out/buc/object_graph_appointment_scheduling.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucAppointmentScheduling
+samples/clinic-ops/out/buc/object_graph_billing_claims.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucBillingClaims
+samples/clinic-ops/out/buc/object_graph_clinical_encounter.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucClinicalEncounter
+samples/clinic-ops/out/buc/object_graph_followup_care.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucFollowupCare
+samples/clinic-ops/out/buc/object_graph_orders_results.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucOrdersResults
+samples/clinic-ops/out/buc/object_graph_patient_onboarding.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucPatientOnboarding
+samples/clinic-ops/out/buc/object_graph_prescription_fulfillment.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucPrescriptionFulfillment
+samples/clinic-ops/out/buc/object_graph_staff_administration.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucStaffAdministration
+samples/clinic-ops/out/buc/object_graph_visit_check_in.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucVisitCheckIn
+samples/clinic-ops/out/buc/sequence_appointment_scheduling.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --buc BucAppointmentScheduling
+samples/clinic-ops/out/buc/sequence_billing_claims.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --buc BucBillingClaims
+samples/clinic-ops/out/buc/sequence_clinical_encounter.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --buc BucClinicalEncounter
+samples/clinic-ops/out/buc/sequence_followup_care.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --buc BucFollowupCare
+samples/clinic-ops/out/buc/sequence_orders_results.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --buc BucOrdersResults
+samples/clinic-ops/out/buc/sequence_patient_onboarding.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --buc BucPatientOnboarding
+samples/clinic-ops/out/buc/sequence_prescription_fulfillment.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --buc BucPrescriptionFulfillment
+samples/clinic-ops/out/buc/sequence_staff_administration.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --buc BucStaffAdministration
+samples/clinic-ops/out/buc/sequence_visit_check_in.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --buc BucVisitCheckIn
+samples/clinic-ops/out/er_care_to_billing.mmd	diagram samples/clinic-ops --kind er --format mermaid --buc BucFollowupCare --buc BucBillingClaims
+samples/clinic-ops/out/event_flow.mmd	diagram samples/clinic-ops --kind event-flow --format mermaid
+samples/clinic-ops/out/rdra_buc_clinical_encounter.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucClinicalEncounter
+samples/clinic-ops/out/screen_constraints.csv	csv samples/clinic-ops --kind screen-constraints
+samples/clinic-ops/out/sequence_buc_appointment_scheduling.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --buc BucAppointmentScheduling
+samples/clinic-ops/out/sequence_buc_clinical_encounter.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --buc BucClinicalEncounter
+samples/clinic-ops/out/state_whole.mmd	diagram samples/clinic-ops --kind state --format mermaid
+samples/clinic-ops/out/states_appointment.txt	states samples/clinic-ops --format table --entity Appointment
+samples/clinic-ops/out/states_claim.txt	states samples/clinic-ops --format table --entity Claim
+samples/clinic-ops/out/uc/sequence_amend_encounter.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase AmendEncounter
+samples/clinic-ops/out/uc/sequence_archive_patient.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase ArchivePatient
+samples/clinic-ops/out/uc/sequence_assign_room.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase AssignRoom
+samples/clinic-ops/out/uc/sequence_block_schedule_slot.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase BlockScheduleSlot
+samples/clinic-ops/out/uc/sequence_book_appointment.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase BookAppointment
+samples/clinic-ops/out/uc/sequence_cancel_appointment.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase CancelAppointment
+samples/clinic-ops/out/uc/sequence_cancel_clinical_order.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase CancelClinicalOrder
+samples/clinic-ops/out/uc/sequence_cancel_prescription.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase CancelPrescription
+samples/clinic-ops/out/uc/sequence_capture_consent.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase CaptureConsent
+samples/clinic-ops/out/uc/sequence_check_in_patient.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase CheckInPatient
+samples/clinic-ops/out/uc/sequence_close_care_plan.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase CloseCarePlan
+samples/clinic-ops/out/uc/sequence_collect_copay.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase CollectCopay
+samples/clinic-ops/out/uc/sequence_collect_specimen.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase CollectSpecimen
+samples/clinic-ops/out/uc/sequence_complete_appointment.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase CompleteAppointment
+samples/clinic-ops/out/uc/sequence_complete_intake_forms.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase CompleteIntakeForms
+samples/clinic-ops/out/uc/sequence_configure_room.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase ConfigureRoom
+samples/clinic-ops/out/uc/sequence_confirm_dispense.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase ConfirmDispense
+samples/clinic-ops/out/uc/sequence_create_care_plan.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase CreateCarePlan
+samples/clinic-ops/out/uc/sequence_create_charge.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase CreateCharge
+samples/clinic-ops/out/uc/sequence_document_assessment.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase DocumentAssessment
+samples/clinic-ops/out/uc/sequence_draft_prescription.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase DraftPrescription
+samples/clinic-ops/out/uc/sequence_expire_intake_forms.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase ExpireIntakeForms
+samples/clinic-ops/out/uc/sequence_generate_claim.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase GenerateClaim
+samples/clinic-ops/out/uc/sequence_manage_provider_schedule.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase ManageProviderSchedule
+samples/clinic-ops/out/uc/sequence_mark_no_show.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase MarkNoShow
+samples/clinic-ops/out/uc/sequence_merge_duplicate_patient.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase MergeDuplicatePatient
+samples/clinic-ops/out/uc/sequence_notify_critical_result.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase NotifyCriticalResult
+samples/clinic-ops/out/uc/sequence_notify_patient_result.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase NotifyPatientResult
+samples/clinic-ops/out/uc/sequence_open_encounter.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase OpenEncounter
+samples/clinic-ops/out/uc/sequence_place_lab_order.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase PlaceLabOrder
+samples/clinic-ops/out/uc/sequence_post_payment.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase PostPayment
+samples/clinic-ops/out/uc/sequence_prepare_encounter.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase PrepareEncounter
+samples/clinic-ops/out/uc/sequence_receive_claim_accepted.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase ReceiveClaimAccepted
+samples/clinic-ops/out/uc/sequence_receive_lab_result.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase ReceiveLabResult
+samples/clinic-ops/out/uc/sequence_reconcile_balance.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase ReconcileBalance
+samples/clinic-ops/out/uc/sequence_record_claim_denial.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase RecordClaimDenial
+samples/clinic-ops/out/uc/sequence_record_vitals.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase RecordVitals
+samples/clinic-ops/out/uc/sequence_refill_prescription.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase RefillPrescription
+samples/clinic-ops/out/uc/sequence_register_patient.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase RegisterPatient
+samples/clinic-ops/out/uc/sequence_release_room.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase ReleaseRoom
+samples/clinic-ops/out/uc/sequence_reschedule_appointment.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase RescheduleAppointment
+samples/clinic-ops/out/uc/sequence_reserve_appointment.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase ReserveAppointment
+samples/clinic-ops/out/uc/sequence_resolve_audit_finding.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase ResolveAuditFinding
+samples/clinic-ops/out/uc/sequence_review_audit_events.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase ReviewAuditEvents
+samples/clinic-ops/out/uc/sequence_review_lab_result.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase ReviewLabResult
+samples/clinic-ops/out/uc/sequence_review_patient_response.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase ReviewPatientResponse
+samples/clinic-ops/out/uc/sequence_schedule_follow_up_visit.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase ScheduleFollowUpVisit
+samples/clinic-ops/out/uc/sequence_search_availability.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase SearchAvailability
+samples/clinic-ops/out/uc/sequence_search_medication.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase SearchMedication
+samples/clinic-ops/out/uc/sequence_search_patient.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase SearchPatient
+samples/clinic-ops/out/uc/sequence_send_appointment_notice.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase SendAppointmentNotice
+samples/clinic-ops/out/uc/sequence_send_follow_up_message.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase SendFollowUpMessage
+samples/clinic-ops/out/uc/sequence_send_intake_forms.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase SendIntakeForms
+samples/clinic-ops/out/uc/sequence_send_prescription.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase SendPrescription
+samples/clinic-ops/out/uc/sequence_sign_encounter.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase SignEncounter
+samples/clinic-ops/out/uc/sequence_submit_claim.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase SubmitClaim
+samples/clinic-ops/out/uc/sequence_update_demographics.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase UpdateDemographics
+samples/clinic-ops/out/uc/sequence_verify_arrival.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase VerifyArrival
+samples/clinic-ops/out/uc/sequence_verify_insurance.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase VerifyInsurance
+samples/clinic-ops/out/uc/sequence_void_charge.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase VoidCharge
+samples/ec-site/out/actors.actor.csv	csv samples/ec-site --kind actor
+samples/ec-site/out/api_matrix.csv	csv samples/ec-site --kind api-matrix
+samples/ec-site/out/entities.entity.csv	csv samples/ec-site --kind entity
+samples/ec-site/out/er.mmd	diagram samples/ec-site --kind er --format mermaid
+samples/ec-site/out/er.puml	diagram samples/ec-site --kind er --format puml
+samples/ec-site/out/matrix.matrix.csv	csv samples/ec-site --kind matrix
+samples/ec-site/out/object_graph_buc_bucorder.mmd	diagram samples/ec-site --kind rdra --format mermaid --buc BucOrder
+samples/ec-site/out/rdra_buc_buccart.mmd	diagram samples/ec-site --kind rdra --format mermaid --buc BucCart
+samples/ec-site/out/rdra_buc_bucpayment.mmd	diagram samples/ec-site --kind rdra --format mermaid --buc BucPayment
+samples/ec-site/out/rdra_buc_cart.puml	diagram samples/ec-site --kind rdra --format puml --buc BucCart
+samples/ec-site/out/rdra_buc_order.puml	diagram samples/ec-site --kind rdra --format puml --buc BucOrder
+samples/ec-site/out/rdra_buc_payment.puml	diagram samples/ec-site --kind rdra --format puml --buc BucPayment
+samples/ec-site/out/rdra_whole.mmd	diagram samples/ec-site --kind rdra --format mermaid
+samples/ec-site/out/rdra_whole.puml	diagram samples/ec-site --kind rdra --format puml
+samples/ec-site/out/sequence.puml	diagram samples/ec-site --kind sequence --format puml
+samples/ec-site/out/sequence_buc_bucorder.mmd	diagram samples/ec-site --kind sequence --format mermaid --buc BucOrder
+samples/ec-site/out/state.mmd	diagram samples/ec-site --kind state --format mermaid
+samples/ec-site/out/state.puml	diagram samples/ec-site --kind state --format puml
+samples/ec-site/out/states.csv	states samples/ec-site --format csv
+samples/incremental-order/step-6-business-rules/out/actor_permission_audit.csv	csv samples/incremental-order/step-6-business-rules/src --kind actor-permission-audit
+samples/incremental-order/step-6-business-rules/out/api_matrix.csv	csv samples/incremental-order/step-6-business-rules/src --kind api-matrix
+samples/incremental-order/step-6-business-rules/out/asyncapi.json	export samples/incremental-order/step-6-business-rules/src --kind asyncapi
+samples/incremental-order/step-6-business-rules/out/er.mmd	diagram samples/incremental-order/step-6-business-rules/src --kind er --format mermaid
+samples/incremental-order/step-6-business-rules/out/er.puml	diagram samples/incremental-order/step-6-business-rules/src --kind er --format puml
+samples/incremental-order/step-6-business-rules/out/json-schema.json	export samples/incremental-order/step-6-business-rules/src --kind json-schema
+samples/incremental-order/step-6-business-rules/out/object_graph_buc_store_restock.mmd	diagram samples/incremental-order/step-6-business-rules/src --kind rdra --format mermaid --buc BucStoreRestock
+samples/incremental-order/step-6-business-rules/out/schema.dbml	export samples/incremental-order/step-6-business-rules/src --kind dbml
+samples/incremental-order/step-6-business-rules/out/screen_constraints.csv	csv samples/incremental-order/step-6-business-rules/src --kind screen-constraints
+samples/incremental-order/step-6-business-rules/out/sequence_buc_store_restock.mmd	diagram samples/incremental-order/step-6-business-rules/src --kind sequence --format mermaid --buc BucStoreRestock
+samples/incremental-order/step-6-business-rules/out/state.mmd	diagram samples/incremental-order/step-6-business-rules/src --kind state --format mermaid
+samples/incremental-order/step-6-business-rules/out/states_store.txt	states samples/incremental-order/step-6-business-rules/src --format table --entity Store
+samples/incremental-order/step-6-business-rules/out/usecase_matrix.csv	csv samples/incremental-order/step-6-business-rules/src --kind matrix
+samples/personal-info/out/actors.actor.csv	csv samples/personal-info --kind actor
+samples/personal-info/out/api_matrix.csv	csv samples/personal-info --kind api-matrix
+samples/personal-info/out/entities.entity.csv	csv samples/personal-info --kind entity
+samples/personal-info/out/er.mmd	diagram samples/personal-info --kind er --format mermaid
+samples/personal-info/out/er.puml	diagram samples/personal-info --kind er --format puml
+samples/personal-info/out/matrix.matrix.csv	csv samples/personal-info --kind matrix
+samples/personal-info/out/rdra_buc_buccard.mmd	diagram samples/personal-info --kind rdra --format mermaid --buc BucCard
+samples/personal-info/out/rdra_buc_bucpassword.mmd	diagram samples/personal-info --kind rdra --format mermaid --buc BucPassword
+samples/personal-info/out/rdra_buc_bucprofile.mmd	diagram samples/personal-info --kind rdra --format mermaid --buc BucProfile
+samples/personal-info/out/rdra_buc_card.puml	diagram samples/personal-info --kind rdra --format puml --buc BucCard
+samples/personal-info/out/rdra_buc_password.puml	diagram samples/personal-info --kind rdra --format puml --buc BucPassword
+samples/personal-info/out/rdra_buc_profile.puml	diagram samples/personal-info --kind rdra --format puml --buc BucProfile
+samples/personal-info/out/rdra_whole.mmd	diagram samples/personal-info --kind rdra --format mermaid
+samples/personal-info/out/rdra_whole.puml	diagram samples/personal-info --kind rdra --format puml
+samples/personal-info/out/sequence.puml	diagram samples/personal-info --kind sequence --format puml
+samples/personal-info/out/state.mmd	diagram samples/personal-info --kind state --format mermaid
+samples/personal-info/out/state.puml	diagram samples/personal-info --kind state --format puml
+samples/personal-info/out/states.csv	states samples/personal-info --format csv
