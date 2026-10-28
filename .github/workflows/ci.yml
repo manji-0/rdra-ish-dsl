@@ -38,7 +38,8 @@ jobs:
             samples/api-contract \
             samples/incremental-order/step-6-business-rules/src \
             samples/formal-verification/order.rdra \
-            samples/formal-verification/int_stock.rdra
+            samples/formal-verification/int_stock.rdra \
+            samples/formal-verification/min_card_met.rdra
           do
             echo "==> check $sample"
             "$BIN" check "$sample"
@@ -100,6 +101,18 @@ jobs:
             echo "expected tlc_result: ok for cross_order_payment.rdra" >&2
             exit 1
           fi
+          # min_card_met: Place creates the Order and its first line in one transaction.
+          echo "==> check/verify samples/formal-verification/min_card_met.rdra"
+          "$BIN" check samples/formal-verification/min_card_met.rdra
+          set +e
+          out=$("$BIN" verify samples/formal-verification/min_card_met.rdra --backend tlc -o /tmp/rdra-ci-tla 2>&1)
+          status=$?
+          set -e
+          echo "$out"
+          if [[ $status -ne 0 ]] || ! grep -q "tlc_result: ok" <<<"$out"; then
+            echo "expected tlc_result: ok for min_card_met.rdra" >&2
+            exit 1
+          fi
       - name: Verify fail samples report TLC counterexample
         run: |
           BIN=./target/release/rdra-ish
@@ -109,7 +122,8 @@ jobs:
             samples/formal-verification/untriggered_sets.rdra \
             samples/formal-verification/after_assert_unmet.rdra \
             samples/formal-verification/cross_order_payment_split.rdra \
-            samples/formal-verification/one_to_one_shared.rdra
+            samples/formal-verification/one_to_one_shared.rdra \
+            samples/formal-verification/min_card_unmet.rdra
           do
             echo "==> expect TLC counterexample: $sample"
             set +e

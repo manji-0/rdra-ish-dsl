@@ -27,6 +27,10 @@
 - **1:1 keys**: one `INVARIANT Unique_<Child>_<role>` per `relate(.., 1:1)` (role
   defaults to the parent id): no two present children own one parent slot. It holds
   vacuously at one instance, so only `verify` (two or more) can fail it.
+- **Child-side minimum**: one `INVARIANT MinCard_<Child>_<role>` per
+  `relate(.., 1..*:1)` or `1..1:1`: every present parent has a present child. A use
+  case that creates the parent without a child in the same transaction fails it, at one
+  instance too, so `check` finds it.
 - **Temporal `property`**: one lowering path; all names are listed in `.cfg` `PROPERTY`.
 - **`after.assert`**: independent `[][(\A p : UC(p) => post')]_vars` PROPERTY named
   `AfterAssert_<UC>_<n>` (not injected into the effects).
@@ -58,6 +62,8 @@ In the `rdra-ish-dsl` repository, `samples/formal-verification/` and
 | `samples/untriggered_sets.rdra` | expected fail | `sets` from a use case that drives no transition, next to `transitions` |
 | `samples/after_assert_unmet.rdra` | expected fail | `after(UC).assert` whose postcondition the use case does not set (fails, never vacuous) |
 | `samples/one_to_one_shared.rdra` | expected fail | `relate(.., 1:1)` is the invariant `Unique_<Child>_<role>`; two use cases link two children to one parent (`check` passes: one instance) |
+| `samples/min_card_unmet.rdra` | expected fail | `relate(.., 1..*:1)` is the invariant `MinCard_<Child>_<role>`; a use case creates the parent without a child (`check` exits 1 too) |
+| `samples/min_card_met.rdra` | expected pass | The same model with the parent and its first child created in one transaction |
 | `samples/fail/order.rdra` | expected fail | Negative TLC (`check` exits 1 too) |
 
 ## Canonical Doc
