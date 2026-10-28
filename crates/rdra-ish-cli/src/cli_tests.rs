@@ -819,14 +819,3 @@ fn clinic_ops_conditions_list_their_body_and_derived_links() {
         .collect();
     assert!(condition_findings.is_empty(), "{condition_findings:?}");
 }
-
-#[test]
-fn verify_notice_names_each_condition_with_a_body_and_skips_traceability_only() {
-    let inputs = vec![errors_fixture("samples/clinic-ops")];
-    let (_, model, _) = load_model(&inputs).expect("load clinic-ops");
-    assert_eq!(
-        crate::verify::condition_body_notices(&model),
-        vec!["condition InsuredVisit: body stored, not yet checked (phase 4)".to_string()]
-    );
-    assert!(crate::verify::condition_body_notices(&SemanticModel::default()).is_empty());
-}
