@@ -1017,10 +1017,7 @@ impl Emitter for SequenceDiagramEmitter {
         let mut uc_list: Vec<(UseCaseKey, &rdra_ish_core::model::UseCase)> = model
             .use_cases
             .iter()
-            .filter(|(k, _)| {
-                is_visible_usecase(*k)
-                    && (uc_tx_map.get(k).map(|t| t.has_writes()).unwrap_or(false) || has_reads(*k))
-            })
+            .filter(|(k, _)| is_visible_usecase(*k) && (uc_tx_map.contains_key(k) || has_reads(*k)))
             .collect();
         uc_list.sort_by_key(|(_, u)| u.id.as_str());
 
@@ -1040,14 +1037,7 @@ impl Emitter for SequenceDiagramEmitter {
                 actor_keys.insert(ak);
             }
             if let Some(tx) = uc_tx_map.get(uk) {
-                for g in &tx.fk_groups {
-                    for w in &g.ordered_writes {
-                        entity_keys.insert(w.entity);
-                    }
-                }
-                for w in &tx.isolated_writes {
-                    entity_keys.insert(w.entity);
-                }
+                entity_keys.extend(tx.writes().map(|w| w.entity));
             }
             for &ek in uc_to_reads.get(uk).into_iter().flatten() {
                 entity_keys.insert(ek);
@@ -1211,48 +1201,11 @@ impl Emitter for SequenceDiagramEmitter {
                 }
 
                 if let Some(tx) = uc_tx_map.get(uk) {
-                    let singletons_set: HashSet<EntityKey> =
-                        tx.singletons_note.iter().cloned().collect();
-
-                    for group in &tx.fk_groups {
-                        let label = if group.inferred {
-                            "transaction (inferred from FK)"
-                        } else {
-                            "transaction (API atomic boundary)"
-                        };
-                        out.push_str(&format!("group {}\n", label));
-                        for w in &group.ordered_writes {
-                            if let Some(ent) = model.entities.get(w.entity) {
-                                // via_api に対応するAPIのID、なければ最初のAPIを使用
-                                let src = w
-                                    .via_api
-                                    .and_then(|ak| model.apis.get(ak))
-                                    .map(|a| a.id.as_str())
-                                    .unwrap_or(first_api_id);
-                                out.push_str(&format!(
-                                    "{} -> {} : {}\n",
-                                    src,
-                                    ent.id,
-                                    w.kind.label()
-                                ));
-                            }
-                        }
-                        out.push_str("end\n");
-                    }
-
-                    for w in &tx.isolated_writes {
-                        if let Some(ent) = model.entities.get(w.entity) {
-                            let src = w
-                                .via_api
-                                .and_then(|ak| model.apis.get(ak))
-                                .map(|a| a.id.as_str())
-                                .unwrap_or(first_api_id);
-                            out.push_str(&format!("{} -> {} : {}\n", src, ent.id, w.kind.label()));
-                            if singletons_set.contains(&w.entity) {
-                                out.push_str("note right : FK非連結 — 別TX？API境界で明示を\n");
-                            }
-                        }
-                    }
+                    push_tx_writes(&mut out, model, tx, |w| {
+                        w.via_api
+                            .and_then(|ak| model.apis.get(ak))
+                            .map_or(first_api_id, |a| a.id.as_str())
+                    });
                 }
 
                 // API → Screen（あれば）→ Actor へ返す
@@ -1288,36 +1241,7 @@ impl Emitter for SequenceDiagramEmitter {
                 }
 
                 if let Some(tx) = uc_tx_map.get(uk) {
-                    let singletons_set: HashSet<EntityKey> =
-                        tx.singletons_note.iter().cloned().collect();
-
-                    for group in &tx.fk_groups {
-                        let label = if group.inferred {
-                            "transaction (inferred from FK)"
-                        } else {
-                            "transaction (API atomic boundary)"
-                        };
-                        out.push_str(&format!("group {}\n", label));
-                        for w in &group.ordered_writes {
-                            if let Some(ent) = model.entities.get(w.entity) {
-                                out.push_str(&format!(
-                                    "System -> {} : {}\n",
-                                    ent.id,
-                                    w.kind.label()
-                                ));
-                            }
-                        }
-                        out.push_str("end\n");
-                    }
-
-                    for w in &tx.isolated_writes {
-                        if let Some(ent) = model.entities.get(w.entity) {
-                            out.push_str(&format!("System -> {} : {}\n", ent.id, w.kind.label()));
-                            if singletons_set.contains(&w.entity) {
-                                out.push_str("note right : FK非連結 — 別TX？API境界で明示を\n");
-                            }
-                        }
-                    }
+                    push_tx_writes(&mut out, model, tx, |_| "System");
                 }
 
                 if let Some(ref sid) = screen_id {
@@ -1336,6 +1260,48 @@ impl Emitter for SequenceDiagramEmitter {
 
         out.push_str("@enduml\n");
         Ok(out)
+    }
+}
+
+/// The use case's writes in transaction order: a `group` per grouped transaction, labelled by
+/// its kind, and each isolated write on its own. `src_of` names the participant that issues a
+/// write.
+fn push_tx_writes<'a>(
+    out: &mut String,
+    model: &SemanticModel,
+    tx: &rdra_ish_core::UsecaseTx,
+    src_of: impl Fn(&rdra_ish_core::UcWrite) -> &'a str,
+) {
+    let separate: HashSet<EntityKey> = tx.separate_writes().collect();
+    for group in tx.groups() {
+        let writes = group
+            .ordered_writes
+            .iter()
+            .filter_map(|w| Some((w, &model.entities.get(w.entity)?.id)));
+        let Some(label) = group.kind.frame_label() else {
+            for (w, entity) in writes {
+                out.push_str(&format!(
+                    "{} -> {} : {}\n",
+                    src_of(w),
+                    entity,
+                    w.kind.label()
+                ));
+                if separate.contains(&w.entity) {
+                    out.push_str("note right : FK非連結 — 別TX？API境界で明示を\n");
+                }
+            }
+            continue;
+        };
+        out.push_str(&format!("group {}\n", label));
+        for (w, entity) in writes {
+            out.push_str(&format!(
+                "{} -> {} : {}\n",
+                src_of(w),
+                entity,
+                w.kind.label()
+            ));
+        }
+        out.push_str("end\n");
     }
 }
 
@@ -2174,6 +2140,26 @@ performs(Customer, Browse)
 
         assert!(result.contains("note right of Customer\nPlaces orders\nend note"));
         assert!(result.contains("note right of Browse\nFinds products\nend note"));
+    }
+
+    /// The diagram draws the writes the lifecycle runs: an implied update and a `writes` edge.
+    #[test]
+    fn test_sequence_draws_implied_updates_and_writes_edges() {
+        let src = r#"
+actor Clerk "係員"
+usecase Close "締める"
+usecase Book "記帳する"
+entity Order  "注文" { id: Int @pk  status: Enum(open, closed) }
+entity Ledger "台帳" { id: Int @pk }
+performs(Clerk, Close)
+performs(Clerk, Book)
+transitions(Order.status, Close, open -> closed)
+writes(Book, Ledger)
+"#;
+        let model = model_from(src);
+        let result = SequenceDiagramEmitter.emit(&model, &View::whole()).unwrap();
+        assert!(result.contains("System -> Order : update"), "{result}");
+        assert!(result.contains("System -> Ledger : update"), "{result}");
     }
 
     #[test]

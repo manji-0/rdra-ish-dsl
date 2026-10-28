@@ -59,6 +59,8 @@ pub use resolver::{
     build_merged_model, reachable_from_bucs, resolve, resolve_overlaid, ResolvedProgram,
 };
 pub use system::{derive_system_boundaries, system_diagnostics, SystemBoundary};
-pub use tx::{infer_usecase_transactions, tx_diagnostics, TxGroup, UcWrite, UsecaseTx, WriteKind};
+pub use tx::{
+    infer_usecase_transactions, tx_diagnostics, TxGroup, TxKind, UcWrite, UsecaseTx, WriteKind,
+};
 pub use typed_predicate::{build_typed_predicate, collect_typed_predicates, typed_predicate_name};
 pub use workspace::{analyze_workspace, consistency_diagnostics, WorkspaceAnalysis};

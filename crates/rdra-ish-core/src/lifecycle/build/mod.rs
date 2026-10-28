@@ -18,7 +18,7 @@ use crate::model::{
     SemanticModel, UseCaseKey,
 };
 use crate::resolver::reachable_from_bucs;
-use crate::tx::{infer_lifecycle_transactions, WriteKind};
+use crate::tx::{infer_usecase_transactions, UcWrite, WriteKind};
 use naming::Named;
 
 pub(super) fn build(model: &SemanticModel, bounds: Bounds, scope: &Scope) -> Built {
@@ -98,12 +98,11 @@ impl<'m> Builder<'m> {
 
     fn entities(&mut self) {
         let model = self.model;
-        let created: HashSet<EntityKey> = infer_lifecycle_transactions(model)
+        let created: HashSet<EntityKey> = infer_usecase_transactions(model)
             .iter()
-            .flat_map(tx_groups)
-            .flatten()
-            .filter(|(_, kind)| *kind == WriteKind::Creates)
-            .map(|(ek, _)| ek)
+            .flat_map(|utx| utx.writes())
+            .filter(|w| w.kind == WriteKind::Creates)
+            .map(|w| w.entity)
             .collect();
         let mut keys: Vec<EntityKey> = model.entities.keys().collect();
         keys.sort_by(|a, b| model.entities[*a].id.cmp(&model.entities[*b].id));
@@ -363,8 +362,7 @@ impl<'m> Builder<'m> {
             Scope::All => None,
             Scope::Bucs(ids) => Some(reachable_from_bucs(model, ids)),
         };
-        let mut txs = infer_lifecycle_transactions(model);
-        txs.retain(|utx| utx.has_writes());
+        let mut txs = infer_usecase_transactions(model);
         self.active_ucs = txs.iter().map(|utx| utx.usecase).collect();
         // Transitions first in declaration order, then the rest by use case id.
         let first_transition = |uc: UseCaseKey| {
@@ -388,18 +386,17 @@ impl<'m> Builder<'m> {
             {
                 continue;
             }
-            let groups = tx_groups(utx);
-            let entities: Vec<Vec<EntityKey>> = groups
-                .iter()
-                .map(|g| g.iter().map(|(ek, _)| *ek).collect())
+            let entities: Vec<Vec<EntityKey>> = utx
+                .groups()
+                .map(|g| g.ordered_writes.iter().map(|w| w.entity).collect())
                 .collect();
             let id = &model.use_cases[uc].id;
-            for (g, writes) in groups.iter().enumerate() {
-                let name = match groups.len() {
+            for (g, group) in utx.groups().enumerate() {
+                let name = match entities.len() {
                     1 => id.clone(),
                     _ => format!("{id}_{}", g + 1),
                 };
-                let action = self.usecase_action(uc, name, writes, &entities, g);
+                let action = self.usecase_action(uc, name, &group.ordered_writes, &entities, g);
                 self.uc_actions
                     .entry(uc)
                     .or_default()
@@ -420,7 +417,7 @@ impl<'m> Builder<'m> {
         &mut self,
         uc: UseCaseKey,
         name: String,
-        writes: &[(EntityKey, WriteKind)],
+        writes: &[UcWrite],
         groups: &[Vec<EntityKey>],
         group: usize,
     ) -> Action {
@@ -428,7 +425,7 @@ impl<'m> Builder<'m> {
         let mut a = ActionDraft::default();
         let mut sorted: Vec<(EntId, WriteKind)> = writes
             .iter()
-            .map(|(ek, kind)| (self.ent_of[ek], kind.clone()))
+            .map(|w| (self.ent_of[&w.entity], w.kind.clone()))
             .collect();
         sorted.sort_by_key(|(e, _)| *e);
         for (e, kind) in sorted {
@@ -876,18 +873,6 @@ impl ActionDraft {
             _ => false,
         })
     }
-}
-
-/// The use case's transaction groups in transaction order (vision rule 6): its FK-connected or
-/// API-bounded groups, then each isolated write as a group of its own, as sequence diagrams draw
-/// them.
-fn tx_groups(utx: &crate::tx::UsecaseTx) -> Vec<Vec<(EntityKey, WriteKind)>> {
-    let write = |w: &crate::tx::UcWrite| (w.entity, w.kind.clone());
-    utx.fk_groups
-        .iter()
-        .map(|g| g.ordered_writes.iter().map(write).collect())
-        .chain(utx.isolated_writes.iter().map(|w| vec![write(w)]))
-        .collect()
 }
 
 fn first_buc(model: &SemanticModel, uc: UseCaseKey) -> Option<crate::model::BucKey> {

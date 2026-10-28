@@ -46,6 +46,8 @@ rdra-ish csv src/ --kind actor-permission-audit
 - Without `invokes`, legacy direct use-case CRUD renders through the `System` lane.
 - Shaded `rect` blocks mark transaction groups. Notes distinguish `inferred from FK`
   from `API atomic boundary`.
+- The writes and groups are the ones `states` and `verify` run: a `writes(..)` edge and an
+  entity the use case only `sets` or transitions both draw as `update`.
 - `Note right of ...: FK非連結` means entities are written outside a common FK chain;
   consider modeling the consistency boundary through an API.
 

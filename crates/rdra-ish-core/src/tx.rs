@@ -25,6 +25,15 @@ impl WriteKind {
             WriteKind::Deletes => "delete",
         }
     }
+
+    /// Which kind wins when a use case writes one entity several ways.
+    fn rank(&self) -> u8 {
+        match self {
+            WriteKind::Creates => 0,
+            WriteKind::Deletes => 1,
+            WriteKind::Updates => 2,
+        }
+    }
 }
 
 /// ユースケースによるエンティティへの1書き込み操作。
@@ -37,87 +46,198 @@ pub struct UcWrite {
     pub via_api: Option<ApiKey>,
 }
 
-/// FK連結成分ごとのTXグループ。
+/// Why a group's writes commit together.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TxKind {
+    /// Two or more direct writes connected through foreign keys: inferred as one transaction.
+    Fk,
+    /// Two or more writes of one invoked API: its explicit atomic boundary.
+    Api,
+    /// One write on its own.
+    Isolated,
+}
+
+impl TxKind {
+    /// The note a sequence diagram puts on the group's frame; an isolated write has no frame.
+    pub fn frame_label(self) -> Option<&'static str> {
+        match self {
+            TxKind::Fk => Some("transaction (inferred from FK)"),
+            TxKind::Api => Some("transaction (API atomic boundary)"),
+            TxKind::Isolated => None,
+        }
+    }
+}
+
+/// One transaction of a use case.
 #[derive(Debug, Clone)]
 pub struct TxGroup {
+    pub kind: TxKind,
     /// FK親→子順にソートされた書き込み列。
     pub ordered_writes: Vec<UcWrite>,
-    /// true = FK由来の推論、false = API境界で明示された原子性。
-    pub inferred: bool,
 }
 
 /// 1ユースケースのTX境界分析結果。
 #[derive(Debug, Clone)]
 pub struct UsecaseTx {
     pub usecase: UseCaseKey,
-    /// FK連結の書き込みグループ（2エンティティ以上）。sequence図で group/end を付ける。
-    pub fk_groups: Vec<TxGroup>,
-    /// FK連結のないの孤立書き込み（1エンティティ）。
-    pub isolated_writes: Vec<UcWrite>,
-    /// isolated_writes のうち fk_groups が存在する文脈で孤立しているエンティティ。
-    /// → 診断ヒントと sequence 図の note right の対象。
-    pub singletons_note: Vec<EntityKey>,
+    groups: Vec<TxGroup>,
 }
 
 impl UsecaseTx {
-    /// このユースケースに書き込み操作が1つ以上あるか。
-    pub fn has_writes(&self) -> bool {
-        !self.fk_groups.is_empty() || !self.isolated_writes.is_empty()
+    /// The use case's transactions in transaction order (vision rule 6): the API-bounded and
+    /// FK-connected groups, then each isolated write. Never empty.
+    pub fn groups(&self) -> impl Iterator<Item = &TxGroup> {
+        self.groups.iter()
+    }
+
+    /// Every write, in transaction order.
+    pub fn writes(&self) -> impl Iterator<Item = &UcWrite> {
+        self.groups().flat_map(|g| g.ordered_writes.iter())
+    }
+
+    /// Entities written in their own transaction after an FK-inferred group: the
+    /// `SeparateTxInferred` warning and the sequence diagram's note.
+    pub fn separate_writes(&self) -> impl Iterator<Item = EntityKey> + '_ {
+        let fk_inferred = self.groups().any(|g| g.kind == TxKind::Fk);
+        self.groups()
+            .filter(move |g| fk_inferred && g.kind == TxKind::Isolated)
+            .flat_map(|g| g.ordered_writes.iter().map(|w| w.entity))
     }
 }
 
 // ── 推論エントリポイント ──────────────────────────────────────────────────────
 
-/// モデル内の全ユースケースについてTX境界を推論する。
+/// Every write each use case makes, grouped into transactions (vision rule 6). The lifecycle
+/// runs one action per group and sequence diagrams draw the same groups.
 ///
-/// アルゴリズム（ユースケースごと）:
-/// 1. invokes(uc, api) で呼ばれる API ごとに creates/updates/deletes を収集する。
-///    API の書き込み集合は FK 接続の有無に関係なく 1 つの原子境界として扱う。
-/// 2. 直接 usecase に付いた creates/updates/deletes はレガシー形式として収集し、
-///    API 経由の同一 entity 書き込みがあれば API 側を優先する。
-/// 3. 直接書き込みは従来どおり FK 連結成分から transaction 境界を推論する。
+/// Writes are `creates`, `updates`, `writes` (an update) and `deletes` edges from the use case
+/// or an API it invokes, plus an implied update for every entity the use case only `sets` or
+/// transitions. One entity keeps its strongest kind (`creates`, then `deletes`, then
+/// `updates`), API-origin first.
+///
+/// Grouping (ユースケースごと):
+/// 1. invokes(uc, api) で呼ばれる API ごとの書き込み集合は FK 接続の有無に関係なく
+///    1 つの原子境界として扱う。
+/// 2. 直接 usecase に付いた書き込みはレガシー形式として収集し、API 経由の同一 entity
+///    書き込みがあれば API 側を優先する。
+/// 3. 直接書き込みは FK 連結成分から transaction 境界を推論する。
 pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
-    infer_with(model, WriteRules::DIAGRAM)
-}
+    let mut result = Vec::new();
 
-/// Every write a use case makes, as the lifecycle layer reads it (vision rule 6).
-///
-/// On top of [`infer_usecase_transactions`] this counts `writes(..)` edges as updates, adds an
-/// implied update for every entity the use case only `sets` or transitions, and keeps the
-/// strongest kind per entity (`creates`, then `deletes`, then `updates`) instead of the first
-/// edge. Sequence diagrams keep reading [`infer_usecase_transactions`].
-pub fn infer_lifecycle_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
-    infer_with(model, WriteRules::LIFECYCLE)
-}
+    for (uc_key, _uc) in model.use_cases.iter() {
+        let mut grouped: Vec<TxGroup> = Vec::new();
+        let mut isolated: Vec<TxGroup> = Vec::new();
+        let mut api_written_entities: HashSet<EntityKey> = HashSet::new();
 
-/// Which facts count as writes, and how duplicates on one entity collapse.
-#[derive(Clone, Copy)]
-struct WriteRules {
-    writes_edges: bool,
-    implied_updates: bool,
-    strongest_kind: bool,
-}
-
-impl WriteRules {
-    const DIAGRAM: WriteRules = WriteRules {
-        writes_edges: false,
-        implied_updates: false,
-        strongest_kind: false,
-    };
-    const LIFECYCLE: WriteRules = WriteRules {
-        writes_edges: true,
-        implied_updates: true,
-        strongest_kind: true,
-    };
-
-    fn kind(self, rel: &RelKind) -> Option<WriteKind> {
-        match rel {
-            RelKind::Creates => Some(WriteKind::Creates),
-            RelKind::Updates => Some(WriteKind::Updates),
-            RelKind::Writes if self.writes_edges => Some(WriteKind::Updates),
-            RelKind::Deletes => Some(WriteKind::Deletes),
-            _ => None,
+        let mut invoked_apis: Vec<ApiKey> = Vec::new();
+        for rel in &model.relations {
+            if rel.from == NodeRef::UseCase(uc_key) && rel.kind == RelKind::Invokes {
+                if let NodeRef::Api(ak) = rel.to {
+                    invoked_apis.push(ak);
+                }
+            }
         }
+        invoked_apis.sort_by_key(|ak| {
+            model
+                .apis
+                .get(*ak)
+                .map(|a| a.id.clone())
+                .unwrap_or_default()
+        });
+        invoked_apis.dedup();
+
+        for ak in &invoked_apis {
+            let mut api_writes: Vec<UcWrite> = Vec::new();
+            for rel in &model.relations {
+                if rel.from != NodeRef::Api(*ak) {
+                    continue;
+                }
+                let Some(wk) = write_kind(&rel.kind) else {
+                    continue;
+                };
+                if let NodeRef::Entity(ek) = rel.to {
+                    api_written_entities.insert(ek);
+                    api_writes.push(UcWrite {
+                        entity: ek,
+                        kind: wk,
+                        via_api: Some(*ak),
+                    });
+                }
+            }
+            dedup_writes(&mut api_writes, model);
+            if api_writes.len() >= 2 {
+                grouped.push(TxGroup {
+                    kind: TxKind::Api,
+                    ordered_writes: topological_sort_writes(
+                        api_writes,
+                        &fk_parent_map(model),
+                        model,
+                    ),
+                });
+            } else {
+                isolated.extend(api_writes.into_iter().map(isolated_group));
+            }
+        }
+
+        let mut direct_writes: Vec<UcWrite> = Vec::new();
+        for rel in &model.relations {
+            if rel.from != NodeRef::UseCase(uc_key) {
+                continue;
+            }
+            let Some(wk) = write_kind(&rel.kind) else {
+                continue;
+            };
+            if let NodeRef::Entity(ek) = rel.to {
+                if api_written_entities.contains(&ek) {
+                    continue;
+                }
+                direct_writes.push(UcWrite {
+                    entity: ek,
+                    kind: wk,
+                    via_api: None,
+                });
+            }
+        }
+        for ek in effect_entities(model, uc_key) {
+            if api_written_entities.contains(&ek) || direct_writes.iter().any(|w| w.entity == ek) {
+                continue;
+            }
+            direct_writes.push(UcWrite {
+                entity: ek,
+                kind: WriteKind::Updates,
+                via_api: None,
+            });
+        }
+        let (fk, singles) = infer_fk_transactions_for_writes(direct_writes, model);
+        grouped.extend(fk);
+        isolated.extend(singles);
+
+        if grouped.is_empty() && isolated.is_empty() {
+            continue;
+        }
+        grouped.extend(isolated);
+        result.push(UsecaseTx {
+            usecase: uc_key,
+            groups: grouped,
+        });
+    }
+
+    result
+}
+
+fn write_kind(rel: &RelKind) -> Option<WriteKind> {
+    match rel {
+        RelKind::Creates => Some(WriteKind::Creates),
+        RelKind::Updates | RelKind::Writes => Some(WriteKind::Updates),
+        RelKind::Deletes => Some(WriteKind::Deletes),
+        _ => None,
+    }
+}
+
+fn isolated_group(w: UcWrite) -> TxGroup {
+    TxGroup {
+        kind: TxKind::Isolated,
+        ordered_writes: vec![w],
     }
 }
 
@@ -148,142 +268,17 @@ fn effect_entities(model: &SemanticModel, uc: UseCaseKey) -> Vec<EntityKey> {
     out
 }
 
-fn infer_with(model: &SemanticModel, rules: WriteRules) -> Vec<UsecaseTx> {
-    let mut result = Vec::new();
-
-    for (uc_key, _uc) in model.use_cases.iter() {
-        let mut fk_groups: Vec<TxGroup> = Vec::new();
-        let mut isolated_writes: Vec<UcWrite> = Vec::new();
-        let mut api_written_entities: HashSet<EntityKey> = HashSet::new();
-
-        // Step 1: invokes(uc, api) で繋がった API の書き込みを、API単位の原子境界として収集。
-        let mut invoked_apis: Vec<ApiKey> = Vec::new();
-        for rel in &model.relations {
-            if rel.from == NodeRef::UseCase(uc_key) && rel.kind == RelKind::Invokes {
-                if let NodeRef::Api(ak) = rel.to {
-                    invoked_apis.push(ak);
-                }
-            }
-        }
-        invoked_apis.sort_by_key(|ak| {
-            model
-                .apis
-                .get(*ak)
-                .map(|a| a.id.clone())
-                .unwrap_or_default()
-        });
-        invoked_apis.dedup();
-
-        for ak in &invoked_apis {
-            let mut api_writes: Vec<UcWrite> = Vec::new();
-            for rel in &model.relations {
-                if rel.from != NodeRef::Api(*ak) {
-                    continue;
-                }
-                let Some(wk) = rules.kind(&rel.kind) else {
-                    continue;
-                };
-                if let NodeRef::Entity(ek) = rel.to {
-                    api_written_entities.insert(ek);
-                    api_writes.push(UcWrite {
-                        entity: ek,
-                        kind: wk,
-                        via_api: Some(*ak),
-                    });
-                }
-            }
-            dedup_writes(&mut api_writes, model, rules);
-            if api_writes.len() >= 2 {
-                fk_groups.push(TxGroup {
-                    ordered_writes: topological_sort_writes(
-                        api_writes,
-                        &fk_parent_map(model),
-                        model,
-                    ),
-                    inferred: false,
-                });
-            } else {
-                isolated_writes.extend(api_writes);
-            }
-        }
-
-        // Step 2: usecase が直接書き込む操作をレガシー形式として収集。
-        let mut direct_writes: Vec<UcWrite> = Vec::new();
-        for rel in &model.relations {
-            if rel.from != NodeRef::UseCase(uc_key) {
-                continue;
-            }
-            let Some(wk) = rules.kind(&rel.kind) else {
-                continue;
-            };
-            if let NodeRef::Entity(ek) = rel.to {
-                if api_written_entities.contains(&ek) {
-                    continue;
-                }
-                direct_writes.push(UcWrite {
-                    entity: ek,
-                    kind: wk,
-                    via_api: None,
-                });
-            }
-        }
-        if rules.implied_updates {
-            for ek in effect_entities(model, uc_key) {
-                if api_written_entities.contains(&ek)
-                    || direct_writes.iter().any(|w| w.entity == ek)
-                {
-                    continue;
-                }
-                direct_writes.push(UcWrite {
-                    entity: ek,
-                    kind: WriteKind::Updates,
-                    via_api: None,
-                });
-            }
-        }
-        let direct_tx = infer_fk_transactions_for_writes(direct_writes, model, rules);
-        fk_groups.extend(direct_tx.fk_groups);
-        isolated_writes.extend(direct_tx.isolated_writes);
-
-        if fk_groups.is_empty() && isolated_writes.is_empty() {
-            continue;
-        }
-
-        // Step 5: FK多成分グループが存在するときに孤立する書き込み → singletons_note
-        let has_inferred_fk_group = fk_groups.iter().any(|g| g.inferred);
-        let singletons_note: Vec<EntityKey> = if has_inferred_fk_group {
-            isolated_writes.iter().map(|w| w.entity).collect()
-        } else {
-            Vec::new()
-        };
-
-        result.push(UsecaseTx {
-            usecase: uc_key,
-            fk_groups,
-            isolated_writes,
-            singletons_note,
-        });
-    }
-
-    result
-}
-
-/// FK孤立書き込みに対する診断ヒントを生成する。
-///
-/// `infer_usecase_transactions` の結果を受け取り、`singletons_note` が空でない
-/// ユースケースについて `SeparateTxInferred` warning を返す。
+/// FK孤立書き込みに対する診断ヒントを生成する: [`UsecaseTx::separate_writes`] ごとに
+/// `SeparateTxInferred` warning を返す。
 pub fn tx_diagnostics(model: &SemanticModel, txs: &[UsecaseTx]) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
     for utx in txs {
-        if utx.singletons_note.is_empty() {
-            continue;
-        }
         let uc_id = model
             .use_cases
             .get(utx.usecase)
             .map(|u| u.id.clone())
             .unwrap_or_else(|| "?".to_string());
-        for &ek in &utx.singletons_note {
+        for ek in utx.separate_writes() {
             let entity_id = model
                 .entities
                 .get(ek)
@@ -307,18 +302,14 @@ pub fn tx_diagnostics(model: &SemanticModel, txs: &[UsecaseTx]) -> Vec<Diagnosti
 
 // ── 内部ヘルパー ──────────────────────────────────────────────────────────────
 
-struct TxParts {
-    fk_groups: Vec<TxGroup>,
-    isolated_writes: Vec<UcWrite>,
-}
-
+/// The FK-connected groups of the direct writes, then each remaining write on its own,
+/// sorted by entity id.
 fn infer_fk_transactions_for_writes(
     writes: Vec<UcWrite>,
     model: &SemanticModel,
-    rules: WriteRules,
-) -> TxParts {
+) -> (Vec<TxGroup>, Vec<TxGroup>) {
     let mut writes = writes;
-    dedup_writes(&mut writes, model, rules);
+    dedup_writes(&mut writes, model);
 
     let write_keys: HashSet<EntityKey> = writes.iter().map(|w| w.entity).collect();
 
@@ -376,10 +367,9 @@ fn infer_fk_transactions_for_writes(
     for cid in cids {
         let comp = comp_writes.remove(&cid).unwrap();
         if comp.len() >= 2 {
-            let ordered = topological_sort_writes(comp, &fk_parent_map(model), model);
             fk_groups.push(TxGroup {
-                ordered_writes: ordered,
-                inferred: true,
+                kind: TxKind::Fk,
+                ordered_writes: topological_sort_writes(comp, &fk_parent_map(model), model),
             });
         } else {
             isolated_writes.extend(comp);
@@ -394,19 +384,13 @@ fn infer_fk_transactions_for_writes(
             .unwrap_or_default()
     });
 
-    TxParts {
+    (
         fk_groups,
-        isolated_writes,
-    }
+        isolated_writes.into_iter().map(isolated_group).collect(),
+    )
 }
 
-fn dedup_writes(writes: &mut Vec<UcWrite>, model: &SemanticModel, rules: WriteRules) {
-    let rank = |kind: &WriteKind| match (rules.strongest_kind, kind) {
-        (false, _) => 0,
-        (true, WriteKind::Creates) => 0,
-        (true, WriteKind::Deletes) => 1,
-        (true, WriteKind::Updates) => 2,
-    };
+fn dedup_writes(writes: &mut Vec<UcWrite>, model: &SemanticModel) {
     writes.sort_by_key(|w| {
         (
             model
@@ -414,7 +398,7 @@ fn dedup_writes(writes: &mut Vec<UcWrite>, model: &SemanticModel, rules: WriteRu
                 .get(w.entity)
                 .map(|e| e.id.clone())
                 .unwrap_or_default(),
-            rank(&w.kind),
+            w.kind.rank(),
             w.via_api.is_none(),
         )
     });
@@ -543,10 +527,38 @@ mod tests {
         model
     }
 
-    /// PlaceOrder 相当: Order + OrderLine（FK連結）+ Cart（FK非連結）
-    #[test]
-    fn test_fk_group_and_singleton() {
-        let src = r#"
+    /// The one use case's groups in transaction order, as entity ids.
+    fn groups(src: &str) -> Vec<(TxKind, Vec<String>)> {
+        let model = model_from(src);
+        let txs = infer_usecase_transactions(&model);
+        assert_eq!(txs.len(), 1);
+        txs[0]
+            .groups()
+            .map(|g| {
+                let ids = g
+                    .ordered_writes
+                    .iter()
+                    .map(|w| model.entities[w.entity].id.clone())
+                    .collect();
+                (g.kind, ids)
+            })
+            .collect()
+    }
+
+    fn separate(src: &str) -> Vec<String> {
+        let model = model_from(src);
+        infer_usecase_transactions(&model)
+            .iter()
+            .flat_map(|utx| utx.separate_writes())
+            .map(|ek| model.entities[ek].id.clone())
+            .collect()
+    }
+
+    fn ids(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    const PLACE_ORDER: &str = r#"
 entity Order     "注文"     { id: Int @pk }
 entity OrderLine "注文明細" { id: Int @pk }
 entity Cart      "カート"   { id: Int @pk }
@@ -556,47 +568,21 @@ creates(PlaceOrder, Order)
 creates(PlaceOrder, OrderLine)
 updates(PlaceOrder, Cart)
 "#;
-        let model = model_from(src);
-        let txs = infer_usecase_transactions(&model);
-        assert_eq!(txs.len(), 1);
-        let utx = &txs[0];
 
-        // FK連結グループ: {Order, OrderLine}
-        assert_eq!(utx.fk_groups.len(), 1);
-        let group = &utx.fk_groups[0];
-        assert_eq!(group.ordered_writes.len(), 2);
-        assert!(group.inferred);
-
-        // FK親(Order)が先、子(OrderLine)が後
-        let ids: Vec<&str> = group
-            .ordered_writes
-            .iter()
-            .map(|w| model.entities.get(w.entity).unwrap().id.as_str())
-            .collect();
-        assert_eq!(ids, vec!["Order", "OrderLine"], "parent-before-child order");
-
-        // 孤立書き込み: Cart
-        assert_eq!(utx.isolated_writes.len(), 1);
-        let cart_id = model
-            .entities
-            .get(utx.isolated_writes[0].entity)
-            .unwrap()
-            .id
-            .as_str();
-        assert_eq!(cart_id, "Cart");
-
-        // singletons_note には Cart が入る
-        assert_eq!(utx.singletons_note.len(), 1);
-        let note_id = model
-            .entities
-            .get(utx.singletons_note[0])
-            .unwrap()
-            .id
-            .as_str();
-        assert_eq!(note_id, "Cart");
+    /// PlaceOrder 相当: Order + OrderLine（FK連結、親が先）の後に Cart（FK非連結）。
+    #[test]
+    fn test_fk_group_and_singleton() {
+        assert_eq!(
+            groups(PLACE_ORDER),
+            vec![
+                (TxKind::Fk, ids(&["Order", "OrderLine"])),
+                (TxKind::Isolated, ids(&["Cart"])),
+            ]
+        );
+        assert_eq!(separate(PLACE_ORDER), ids(&["Cart"]));
     }
 
-    /// Capture 相当: Payment → Order (1:1) → 全体が1グループ
+    /// Capture 相当: Payment → Order (1:1) → 全体が1グループ、親 Order が先。
     #[test]
     fn test_one_to_one_single_group() {
         let src = r#"
@@ -607,23 +593,8 @@ relate(Payment, Order, 1:1)
 updates(Capture, Payment)
 updates(Capture, Order)
 "#;
-        let model = model_from(src);
-        let txs = infer_usecase_transactions(&model);
-        assert_eq!(txs.len(), 1);
-        let utx = &txs[0];
-
-        // 全部1グループ
-        assert_eq!(utx.fk_groups.len(), 1);
-        assert_eq!(utx.isolated_writes.len(), 0);
-        assert_eq!(utx.singletons_note.len(), 0);
-
-        // Order(親) → Payment(子) の順
-        let ids: Vec<&str> = utx.fk_groups[0]
-            .ordered_writes
-            .iter()
-            .map(|w| model.entities.get(w.entity).unwrap().id.as_str())
-            .collect();
-        assert_eq!(ids, vec!["Order", "Payment"]);
+        assert_eq!(groups(src), vec![(TxKind::Fk, ids(&["Order", "Payment"]))]);
+        assert!(separate(src).is_empty());
     }
 
     /// 共通親を経由する sibling writes は、親自身を書かなくても1つのFK連結成分。
@@ -639,25 +610,13 @@ relate(ClientCertificate, Terminal, N:1)
 creates(IssueCertificate, CertificateOrder)
 creates(IssueCertificate, ClientCertificate)
 "#;
-        let model = model_from(src);
-        let txs = infer_usecase_transactions(&model);
-        assert_eq!(txs.len(), 1);
-        let utx = &txs[0];
-
-        assert_eq!(utx.fk_groups.len(), 1);
-        assert_eq!(utx.isolated_writes.len(), 0);
-        assert_eq!(utx.singletons_note.len(), 0);
-
-        let mut ids: Vec<&str> = utx.fk_groups[0]
-            .ordered_writes
-            .iter()
-            .map(|w| model.entities.get(w.entity).unwrap().id.as_str())
-            .collect();
-        ids.sort();
-        assert_eq!(ids, vec!["CertificateOrder", "ClientCertificate"]);
+        assert_eq!(
+            groups(src),
+            vec![(TxKind::Fk, ids(&["CertificateOrder", "ClientCertificate"]))]
+        );
     }
 
-    /// 全書き込みがFKなし → singletons_note は空（全部 isolated_writes）
+    /// 全書き込みがFKなし → 全部 isolated で、別TXの警告対象はない。
     #[test]
     fn test_all_isolated_no_note() {
         let src = r#"
@@ -667,45 +626,34 @@ usecase DoSomething "何かする"
 creates(DoSomething, A)
 updates(DoSomething, B)
 "#;
-        let model = model_from(src);
-        let txs = infer_usecase_transactions(&model);
-        assert_eq!(txs.len(), 1);
-        let utx = &txs[0];
-
-        assert_eq!(utx.fk_groups.len(), 0);
-        assert_eq!(utx.isolated_writes.len(), 2);
         assert_eq!(
-            utx.singletons_note.len(),
-            0,
-            "no note when no FK groups exist"
+            groups(src),
+            vec![
+                (TxKind::Isolated, ids(&["A"])),
+                (TxKind::Isolated, ids(&["B"])),
+            ]
         );
+        assert!(separate(src).is_empty(), "no note when no FK groups exist");
     }
 
-    /// 診断: singletons_note があれば warning が出る
     #[test]
     fn test_tx_diagnostics_warns_singleton() {
-        let src = r#"
-entity Order     "注文"     { id: Int @pk }
-entity OrderLine "注文明細" { id: Int @pk }
-entity Cart      "カート"   { id: Int @pk }
-usecase PlaceOrder "注文を確定する"
-relate(OrderLine, Order, N:1)
-creates(PlaceOrder, Order)
-creates(PlaceOrder, OrderLine)
-updates(PlaceOrder, Cart)
-"#;
-        let model = model_from(src);
+        let model = model_from(PLACE_ORDER);
         let txs = infer_usecase_transactions(&model);
         let diags = tx_diagnostics(&model, &txs);
 
         assert_eq!(diags.len(), 1);
         assert!(diags[0].is_warning);
         let msg = diags[0].error.to_string();
-        assert!(msg.contains("PlaceOrder"), "should mention the usecase");
-        assert!(msg.contains("Cart"), "should mention the entity");
+        assert!(
+            msg.starts_with(
+                "usecase 'PlaceOrder' writes 'Cart' in its own transaction after the FK-grouped writes"
+            ),
+            "{msg}"
+        );
     }
 
-    /// api 経由の書き込みが usecase の実効書き込みとして収集・グループ化される
+    /// api 経由の書き込みは API の原子境界で1グループ、FK親→子の順。
     #[test]
     fn test_api_writes_collected_via_invokes() {
         let src = r#"
@@ -718,32 +666,13 @@ creates(OrderApi, Order)
 creates(OrderApi, OrderLine)
 relate(OrderLine, Order, N:1)
 "#;
+        assert_eq!(
+            groups(src),
+            vec![(TxKind::Api, ids(&["Order", "OrderLine"]))]
+        );
         let model = model_from(src);
         let txs = infer_usecase_transactions(&model);
-        assert_eq!(txs.len(), 1);
-        let utx = &txs[0];
-
-        // FK連結グループが1つ（Order + OrderLine）
-        assert_eq!(utx.fk_groups.len(), 1, "should have 1 FK group");
-        let group = &utx.fk_groups[0];
-        assert_eq!(group.ordered_writes.len(), 2);
-        assert!(
-            !group.inferred,
-            "API writes should be grouped by the API atomic boundary"
-        );
-
-        // FK親(Order) → 子(OrderLine) の順
-        let ids: Vec<&str> = group
-            .ordered_writes
-            .iter()
-            .map(|w| model.entities.get(w.entity).unwrap().id.as_str())
-            .collect();
-        assert_eq!(ids, vec!["Order", "OrderLine"]);
-
-        // 全ての書き込みが via_api = Some(_)
-        for w in &group.ordered_writes {
-            assert!(w.via_api.is_some(), "write via api should have via_api set");
-        }
+        assert!(txs[0].writes().all(|w| w.via_api.is_some()));
     }
 
     /// api 経由と直接の混在: 重複 entity は api-origin が優先される
@@ -759,18 +688,10 @@ updates(Checkout, Cart)
 "#;
         let model = model_from(src);
         let txs = infer_usecase_transactions(&model);
-        assert_eq!(txs.len(), 1);
-        let utx = &txs[0];
-
-        // Cart が1件のみ（重複排除）
-        assert_eq!(
-            utx.isolated_writes.len(),
-            1,
-            "Cart should appear only once after dedup"
-        );
-        // api-origin が優先される
+        let writes: Vec<&UcWrite> = txs[0].writes().collect();
+        assert_eq!(writes.len(), 1, "Cart should appear only once after dedup");
         assert!(
-            utx.isolated_writes[0].via_api.is_some(),
+            writes[0].via_api.is_some(),
             "api-origin should be preferred over direct write"
         );
     }
@@ -793,12 +714,6 @@ updates(BookAppointment, ProviderSchedule)
 "#;
         let model = model_from(src);
         let txs = infer_usecase_transactions(&model);
-        assert_eq!(
-            txs.len(),
-            2,
-            "both invoking usecases inherit the API write boundary"
-        );
-
         let mut uc_ids: Vec<&str> = txs
             .iter()
             .map(|tx| model.use_cases.get(tx.usecase).unwrap().id.as_str())
@@ -806,9 +721,10 @@ updates(BookAppointment, ProviderSchedule)
         uc_ids.sort();
         assert_eq!(uc_ids, vec!["BookAppointment", "SearchAvailability"]);
         for tx in &txs {
-            assert_eq!(tx.isolated_writes.len(), 1);
+            let writes: Vec<&UcWrite> = tx.writes().collect();
+            assert_eq!(writes.len(), 1);
             assert!(
-                tx.isolated_writes[0].via_api.is_some(),
+                writes[0].via_api.is_some(),
                 "API-origin writes should be rendered from the API lane"
             );
         }
@@ -826,41 +742,66 @@ invokes(ChangeStoreParentOrg, StoreParentOrgApi)
 updates(StoreParentOrgApi, Store)
 creates(StoreParentOrgApi, StoreOrgAssignmentHistory)
 "#;
-        let model = model_from(src);
-        let txs = infer_usecase_transactions(&model);
-        assert_eq!(txs.len(), 1);
-        let utx = &txs[0];
-        assert_eq!(utx.fk_groups.len(), 1);
-        assert_eq!(utx.isolated_writes.len(), 0);
-        assert!(
-            !utx.fk_groups[0].inferred,
-            "API boundary is explicit atomicity, not FK inference"
+        let g = groups(src);
+        assert_eq!(g.len(), 1);
+        assert_eq!(g[0].0, TxKind::Api, "explicit atomicity, not FK inference");
+        assert_eq!(g[0].1.len(), 2);
+    }
+
+    /// API-bounded and FK groups come first, then the isolated writes.
+    #[test]
+    fn groups_are_in_transaction_order() {
+        let src = r#"
+entity Order     "注文"     { id: Int @pk }
+entity OrderLine "注文明細" { id: Int @pk }
+entity Audit     "監査"     { id: Int @pk }
+entity Ledger    "台帳"     { id: Int @pk }
+entity Mail      "通知"     { id: Int @pk }
+usecase Place "注文確定"
+api BookApi "記帳"
+api MailApi "通知"
+relate(OrderLine, Order, N:1)
+invokes(Place, BookApi)
+invokes(Place, MailApi)
+creates(BookApi, Ledger)
+creates(BookApi, Audit)
+creates(MailApi, Mail)
+creates(Place, Order)
+creates(Place, OrderLine)
+updates(Place, Audit)
+"#;
+        assert_eq!(
+            groups(src),
+            vec![
+                (TxKind::Api, ids(&["Audit", "Ledger"])),
+                (TxKind::Fk, ids(&["Order", "OrderLine"])),
+                (TxKind::Isolated, ids(&["Mail"])),
+            ]
         );
-        assert_eq!(utx.fk_groups[0].ordered_writes.len(), 2);
+        assert_eq!(separate(src), ids(&["Mail"]));
     }
 
     fn writes_of(model: &SemanticModel, txs: &[UsecaseTx]) -> Vec<(String, String, &'static str)> {
         let mut out: Vec<_> = txs
             .iter()
             .flat_map(|utx| {
-                utx.fk_groups
-                    .iter()
-                    .flat_map(|g| g.ordered_writes.iter())
-                    .chain(utx.isolated_writes.iter())
-                    .map(move |w| {
-                        (
-                            model.use_cases[utx.usecase].id.clone(),
-                            model.entities[w.entity].id.clone(),
-                            w.kind.label(),
-                        )
-                    })
+                utx.writes().map(move |w| {
+                    (
+                        model.use_cases[utx.usecase].id.clone(),
+                        model.entities[w.entity].id.clone(),
+                        w.kind.label(),
+                    )
+                })
             })
             .collect();
         out.sort();
         out
     }
 
-    const LIFECYCLE_SRC: &str = r#"
+    /// Writes count `writes` edges, implied updates, and keep the strongest kind per entity.
+    #[test]
+    fn writes_include_writes_edges_and_implied_updates() {
+        let src = r#"
 entity Order   "注文" { id: Int @pk  status: Enum(open, closed) }
 entity Ledger  "台帳" { id: Int @pk }
 entity Audit   "監査" { id: Int @pk  seen: Bool }
@@ -870,15 +811,11 @@ usecase Open  "開く"
 transitions(Order.status, Close, open -> closed)
 sets(Close, Audit, seen == true)
 writes(Book, Ledger)
-creates(Open, Order)
 updates(Open, Order)
+creates(Open, Order)
 "#;
-
-    /// The lifecycle reading counts `writes`, implied updates, and the strongest kind.
-    #[test]
-    fn lifecycle_writes_include_writes_edges_and_implied_updates() {
-        let model = model_from(LIFECYCLE_SRC);
-        let txs = infer_lifecycle_transactions(&model);
+        let model = model_from(src);
+        let txs = infer_usecase_transactions(&model);
         assert_eq!(
             writes_of(&model, &txs),
             vec![
@@ -888,16 +825,5 @@ updates(Open, Order)
                 ("Open".into(), "Order".into(), "create"),
             ]
         );
-    }
-
-    /// Sequence diagrams read the diagram rules, which the lifecycle rules leave unchanged.
-    #[test]
-    fn diagram_writes_ignore_writes_edges_and_effects() {
-        let model = model_from(LIFECYCLE_SRC);
-        let txs = infer_usecase_transactions(&model);
-        let writes = writes_of(&model, &txs);
-        assert_eq!(writes.len(), 1, "{writes:?}");
-        assert_eq!(writes[0].0, "Open");
-        assert_eq!(writes[0].1, "Order");
     }
 }
