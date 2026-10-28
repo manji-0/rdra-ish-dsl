@@ -17,12 +17,18 @@ e.g., `shared/actors.rdra` resolves from a root containing both `shared/` and `b
 Diagnostics are written to stderr as `error: ...` or `warning: ...`.
 
 - `check` and `lint` exit non-zero when semantic errors (or lint errors) are present.
-- Generator subcommands (`diagram`, `csv`, `list`, non-TLA `export`, `states`, `verify`)
-  are **fail-closed**: they refuse to emit artifacts when the model has parse/resolve
-  errors **or** Error-severity state diagnostics. `export --kind tla` and `verify` gate on
-  parse errors plus the Error diagnostics of the lifecycle transition system they print
-  (built at `--instance-count` / `--int-range-max`). Every command reads the same
-  lifecycle transition system, so every command refuses the same models.
+- Every generator subcommand refuses to emit when the model has parse or resolve errors.
+  Whether Error-severity state diagnostics also stop it depends on whether the output
+  prints the lifecycle. An output that prints it (`states`, `list`, `diagram` of every kind
+  except `er`, `csv` of every kind except `entity`, `export --kind typescript-states`)
+  is **fail-closed** and refuses. An output that reads only the data layer (`diagram
+  --kind er`, `csv --kind entity`, and `export` of `dbml`, `json-schema`, `openapi`,
+  `asyncapi`, `mermaid-er`, and `plantuml-er`) is written, and the command prints one
+  stderr note that gives the error count and points to `rdra-ish check`.
+  `export --kind tla` and `verify` gate on parse errors plus the Error
+  diagnostics of the lifecycle transition system they print (built at `--instance-count`
+  / `--int-range-max`). The code decides this per kind in `ExportKind::reads_lifecycle()`
+  and `DiagramKind::reads_lifecycle()`.
 - `fmt` only requires a parseable source; it does not run semantic analysis.
 
 ---
@@ -221,13 +227,21 @@ Notes:
 
 ## Sample Artifact Snapshots
 
-CI runs `scripts/check-sample-artifacts.sh` after the Rust snapshot tests. The script
-regenerates representative artifacts from
-`samples/incremental-order/step-6-business-rules` and `samples/api-contract`, then
-fails if the tracked files under those samples' `out/` directories change. This makes
-DSL or emitter changes visible as a normal PR diff for Mermaid diagrams, PlantUML
-diagrams, CSV review tables, state-pattern output, and representative exports such as
-OpenAPI, AsyncAPI, DBML, and JSON Schema.
+`scripts/sample-artifacts.tsv` lists every committed `out/` file of `samples/ec-site`,
+`samples/clinic-ops`, `samples/personal-info`,
+`samples/incremental-order/step-6-business-rules`, and `samples/api-contract`. Each row
+holds the output path and the `rdra-ish` command that writes it. CI runs
+`scripts/check-sample-artifacts.sh` after the Rust snapshot tests. The script builds the
+binary once, runs every row, and fails if a tracked file changes. A generator change
+therefore shows up as a diff of Mermaid diagrams, PlantUML diagrams, CSV review tables,
+state-pattern output, and exports such as OpenAPI, AsyncAPI, DBML, and JSON Schema. After
+an intended change, run the script and commit the regenerated files.
+
+To compare the data layer of every sample across two builds, run
+`scripts/data-diff.sh LABEL` with each build. The script writes the DBML, JSON Schema,
+and entity CSV of every `samples.txt` root, with each exit code and log, under
+`target/data-diff/LABEL/`. It uses `target/release/rdra-ish` (override with `RDRA_BIN`).
+Compare two runs with `diff -r target/data-diff/A target/data-diff/B`.
 
 ---
 
@@ -285,7 +299,9 @@ facts are preserved with `x-rdra-ish-*` extensions.
 
 For DBML export, each `entity` becomes a table with its Enum types (one per inline
 Enum column, plus one per `variation` shared by every column typed by it), indexes, and
-foreign-key references. DBML does not have native equivalents for every review annotation, so `@check`,
+foreign-key references. Every `relate` key prints as a `Ref`: a `1:1` key as `-` on a
+`[unique]` column, a composite key as `Ref: Stock.(bin_site, bin_shelf) >
+Bin.(site, shelf)`. DBML does not have native equivalents for every review annotation, so `@check`,
 `@soft_delete`, `@history`, `@tenant`, and `@derived` are preserved as column notes.
 
 For JSON Schema export, DTOs and Entities are emitted under `$defs` as
