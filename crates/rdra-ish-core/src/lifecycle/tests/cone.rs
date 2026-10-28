@@ -1,6 +1,6 @@
 //! The cone reduction is exact: on every sample whose components finish, each target's cone
 //! reaches exactly the projection of the whole component's states, and gives the same view
-//! and the same verdict.
+//! and the same verdict. A cone that frees an unread entity's slots reaches a superset.
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -77,7 +77,9 @@ const SAMPLES: &[&str] = &[
 fn cone_exploration_equals_the_projection_of_the_whole_component() {
     let caps = Caps::new(usize::MAX, 200_000);
     let mut checked = 0;
+    let mut freed = 0;
     for sample in SAMPLES {
+        let mut exact_here = 0;
         let model = load(sample);
         let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::All);
         for comp in built.ts.components() {
@@ -99,7 +101,17 @@ fn cone_exploration_equals_the_projection_of_the_whole_component() {
                     .map(|s| sub.project(s, &cr.cone.vars))
                     .collect();
                 let reached: BTreeSet<State> = cr.run.states.iter().cloned().collect();
+                if sub.cone_frees_slots(&cr.cone) {
+                    // An entity the target does not read never runs out of slots.
+                    assert!(
+                        projected.is_subset(&reached),
+                        "{sample} {target:?}: a freed cone still reaches the projection"
+                    );
+                    freed += 1;
+                    continue;
+                }
                 assert_eq!(projected, reached, "{sample} {target:?}: reachable states");
+                exact_here += 1;
                 match target {
                     Target::Entity(e) => {
                         let id = &sub.entity(e).id;
@@ -116,8 +128,13 @@ fn cone_exploration_equals_the_projection_of_the_whole_component() {
                 checked += 1;
             }
         }
+        assert!(exact_here > 0, "{sample}: no target checked exactly");
     }
-    assert!(checked >= 35, "checked {checked} targets");
+    assert!(
+        checked >= 25,
+        "checked {checked} targets exactly, {freed} freed"
+    );
+    assert!(freed > 0, "no sample frees a slot");
 }
 
 #[test]
@@ -155,4 +172,34 @@ creates(AddLine, Line)
         vec!["AddLine", "Open"],
         "Close writes nothing in the cone"
     );
+}
+
+#[test]
+fn an_entity_the_view_does_not_read_never_runs_out_of_slots() {
+    // Every card and address use case also creates an AuditLog. With one slot per entity the
+    // first creator would spend it; the card and address views do not read AuditLog.
+    let model = load("samples/personal-info");
+    let report = crate::lifecycle::derive_states(&model, &Scope::All, Caps::DEFAULT_PATTERNS);
+    let via = |id: &str| -> BTreeSet<String> {
+        report
+            .views
+            .iter()
+            .find(|v| v.entity_id == id)
+            .unwrap()
+            .patterns
+            .iter()
+            .flat_map(|p| p.provenance.via.iter().map(|(_, uc)| uc.clone()))
+            .collect()
+    };
+    for uc in ["RegisterCard", "SetPrimaryCard", "DeleteCard"] {
+        assert!(via("CreditCard").contains(uc), "CreditCard via {uc}");
+    }
+    for uc in [
+        "RegisterAddress",
+        "UpdateAddress",
+        "SetPrimaryAddress",
+        "DeleteAddress",
+    ] {
+        assert!(via("PostalAddress").contains(uc), "PostalAddress via {uc}");
+    }
 }

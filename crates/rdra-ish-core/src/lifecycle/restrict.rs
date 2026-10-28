@@ -7,8 +7,8 @@ use std::collections::BTreeSet;
 
 use super::cone::VarSet;
 use super::types::{
-    ActId, Action, AfterAssert, Domain, Effect, EntId, Guard, Invariant, Ltl, Pred, Property, Term,
-    VarId, VarKind,
+    ActId, Action, AfterAssert, At, Domain, Effect, EntId, Guard, Invariant, Ltl, ParamRole, Pred,
+    Property, Rhs, Term, VarId, VarKind,
 };
 use super::TransitionSystem;
 
@@ -259,6 +259,7 @@ impl TransitionSystem {
             }
             let mut action = action.clone();
             action.effects = effects;
+            let action = drop_unread_new_params(action, |e| vars.contains(&self.entity(e).exists));
             map.act[i] = Some(ActId::at(out.actions.len()));
             out.actions.push(map.action(&action));
         }
@@ -310,6 +311,64 @@ impl TransitionSystem {
         }
         out.layout();
         out
+    }
+}
+
+/// Drops each `New` param whose entity is outside the system, with nothing left to point at
+/// it, and renumbers the rest. Outside a target's cone an entity never runs out of slots.
+fn drop_unread_new_params(mut action: Action, kept: impl Fn(EntId) -> bool) -> Action {
+    let mut index: Vec<Option<u8>> = Vec::with_capacity(action.params.len());
+    let mut params = Vec::new();
+    for p in &action.params {
+        if p.role == ParamRole::New && !kept(p.entity) {
+            index.push(None);
+        } else {
+            index.push(Some(u8::try_from(params.len()).expect("params fit in u8")));
+            params.push(*p);
+        }
+    }
+    if params.len() == action.params.len() {
+        return action;
+    }
+    let at = |p: &mut u8| *p = index[usize::from(*p)].expect("a dropped param is unreferenced");
+    action.params = params;
+    for g in &mut action.guards {
+        renumber_pred(&mut g.pred, &at);
+    }
+    for eff in &mut action.effects {
+        match eff {
+            Effect::Create { param } | Effect::Delete { param } => at(param),
+            Effect::Assign { param, rhs, .. } => {
+                at(param);
+                if let Rhs::Param(p) = rhs {
+                    at(p);
+                }
+            }
+            Effect::Transition { param, .. } | Effect::Choose { param, .. } => at(param),
+            Effect::Tick => {}
+        }
+    }
+    action
+}
+
+fn renumber_pred(pred: &mut Pred, at: &impl Fn(&mut u8)) {
+    let term = |t: &mut Term| {
+        if let Term::Slot {
+            at: At::Param(p), ..
+        } = t
+        {
+            at(p);
+        }
+    };
+    match pred {
+        Pred::True | Pred::False => {}
+        Pred::Cmp(a, _, b) => {
+            term(a);
+            term(b);
+        }
+        Pred::Not(p) => renumber_pred(p, at),
+        Pred::And(ps) | Pred::Or(ps) => ps.iter_mut().for_each(|p| renumber_pred(p, at)),
+        Pred::Forall { body, .. } | Pred::Exists { body, .. } => renumber_pred(body, at),
     }
 }
 

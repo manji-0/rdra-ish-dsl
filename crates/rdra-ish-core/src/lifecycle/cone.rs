@@ -55,10 +55,12 @@ impl TransitionSystem {
         }
     }
 
-    /// Guards, slot selection (each param's existence), transition sources, and the clock.
+    /// Guards, slot selection, transition sources, and the clock. Selecting a present slot
+    /// reads its entity's existence; taking a new slot does not count as a read, so an entity
+    /// a target never reads is never out of slots (`restrict_to` drops that param).
     pub(crate) fn action_reads(&self, action: &Action) -> VarSet {
         let mut out = VarSet::new();
-        for p in &action.params {
+        for p in action.params.iter().filter(|p| p.role != ParamRole::New) {
             out.insert(self.entity(p.entity).exists);
         }
         for g in &action.guards {
@@ -117,16 +119,22 @@ impl TransitionSystem {
                     s.extend(reads[i].iter().copied());
                 }
             }
-            // An owner var's domain names its parent's slots.
-            let parents: Vec<VarId> = s
+            // A slot's vars mean nothing without its existence, and an owner var's domain
+            // names its parent's slots.
+            let existences: Vec<VarId> = s
                 .iter()
-                .filter_map(|v| match self.var(*v).kind {
-                    VarKind::Owner { parent, .. } => Some(self.entity(parent).exists),
-                    _ => None,
+                .flat_map(|v| match self.var(*v).kind {
+                    VarKind::Owner { child, parent } => {
+                        vec![self.entity(child).exists, self.entity(parent).exists]
+                    }
+                    VarKind::Column { entity, .. } | VarKind::Prop { entity, .. } => {
+                        vec![self.entity(entity).exists]
+                    }
+                    VarKind::Exists(_) | VarKind::Now => Vec::new(),
                 })
                 .collect();
-            for p in parents {
-                grew |= s.insert(p);
+            for e in existences {
+                grew |= s.insert(e);
             }
             if !grew {
                 return s;
@@ -173,6 +181,19 @@ impl TransitionSystem {
             vars: self.cone(&seed, &keep),
             keep,
         }
+    }
+
+    /// Some action of the cone takes a new slot of an entity outside it. That entity is
+    /// unbounded in the cone, so the cone reaches a superset of the whole system's projection.
+    pub fn cone_frees_slots(&self, cone: &Cone) -> bool {
+        self.actions.iter().enumerate().any(|(i, a)| {
+            let inside = cone.keep.contains(&ActId::at(i))
+                || self.action_writes(a).iter().any(|v| cone.vars.contains(v));
+            inside
+                && a.params.iter().any(|p| {
+                    p.role == ParamRole::New && !cone.vars.contains(&self.entity(p.entity).exists)
+                })
+        })
     }
 
     pub fn targets(&self) -> Vec<Target> {
