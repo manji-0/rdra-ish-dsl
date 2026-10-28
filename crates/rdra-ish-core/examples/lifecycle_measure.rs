@@ -75,7 +75,7 @@ fn main() {
         let includes = include_paths(&files);
         let (program, _) = resolve(&files, &includes);
         let (model, _) = build_merged_model(&program, &includes);
-        let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::All);
+        let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
         let ts = &built.ts;
         println!("\n{sample}");
         println!(

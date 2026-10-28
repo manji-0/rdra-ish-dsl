@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 #[derive(ValueEnum, Clone)]
@@ -53,6 +53,8 @@ pub(crate) enum Commands {
         /// Treat permission / access consistency gaps as errors (exit 1)
         #[arg(long)]
         strict: bool,
+        #[command(flatten)]
+        scope: ScopeArgs,
     },
     /// Generate diagram (PlantUML or Mermaid)
     Diagram {
@@ -155,16 +157,12 @@ pub(crate) enum Commands {
         /// Output format: table, csv, json, or typescript
         #[arg(long, default_value = "table")]
         format: StatesFormat,
-        /// Filter to one or more BUCs (by id); repeatable. Union of reachable nodes.
-        #[arg(long)]
-        buc: Vec<String>,
         /// Cap on each entity's distinct patterns within one target cone (that cone also stops
         /// after 16 joint states per allowed pattern)
         #[arg(long, default_value_t = 256)]
         max_patterns: usize,
-        /// Restrict output to a single entity id
-        #[arg(long)]
-        entity: Option<String>,
+        #[command(flatten)]
+        scope: ScopeArgs,
     },
     /// Formally verify temporal/safety properties via an external checker
     Verify {
@@ -182,7 +180,22 @@ pub(crate) enum Commands {
         /// TLA+ `IntRange == 0..N` upper bound
         #[arg(long, default_value_t = 5)]
         int_range_max: u32,
+        #[command(flatten)]
+        scope: ScopeArgs,
     },
+}
+
+/// The part of the model `check`, `states`, and `verify` cover.
+#[derive(Args, Clone, Debug, Default)]
+pub(crate) struct ScopeArgs {
+    /// Keep only the use cases reachable from this BUC (by id); repeatable. Whether a state is
+    /// reachable, a use case runs, or an instance gets stuck is then not decided.
+    #[arg(long)]
+    pub(crate) buc: Vec<String>,
+    /// Check only this entity's view and the invariants and after-asserts that read it (by
+    /// id); repeatable. Build errors on entities no checked cone reads are deferred.
+    #[arg(long)]
+    pub(crate) entity: Vec<String>,
 }
 
 #[derive(ValueEnum, Clone)]

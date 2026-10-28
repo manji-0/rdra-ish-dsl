@@ -432,6 +432,9 @@ impl TransitionSystem {
                     .collect(),
             ),
             Scan::EachHeld => Blocked::Together,
+            Scan::Crowded(params) => {
+                Blocked::Crowded(params.into_iter().map(|p| need(p).0).collect())
+            }
         }
     }
 

@@ -128,7 +128,7 @@ sets(usecase::SetC, Multi, c == present)
 sets(usecase::SetD, Multi, d == present)
 "#,
     );
-    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::All);
+    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
     let run = built.ts.explore(Caps::new(5, 1000));
     let views = run.entity_views(&model, &built.diags);
     assert!(views[0].truncated);

@@ -5,10 +5,11 @@ use std::fmt;
 
 use super::diag::{Diag, Severity, StateDiag};
 use super::explore::Caps;
+use super::select::{NotChecked, Scope, Selection};
 use super::targets::Undecided;
 use super::view::EntityStateResult;
-use super::{Bounds, Scope, TransitionSystem};
-use crate::model::SemanticModel;
+use super::{Bounds, TransitionSystem};
+use crate::model::{EntityKey, SemanticModel};
 
 impl Caps {
     /// `--max-patterns` per entity view, and 16 joint states per allowed pattern for each
@@ -23,14 +24,17 @@ impl Caps {
 }
 
 /// The one bounds line every command prints: `check` and `states` on stderr, `verify` on
-/// stdout. A result holds within these bounds and says nothing outside them.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// stdout. A result holds within these bounds and says nothing outside them; under a scope
+/// it holds only within the scope, which a second line states.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BoundsLine {
     pub bounds: Bounds,
     /// BFS caps; `None` when the command runs no BFS.
     pub caps: Option<Caps>,
     /// Also name the TLA+ constants the bounds map to.
     pub tla: bool,
+    /// The `scope:` line (`Scope::line`); `None` for a whole run.
+    pub scope: Option<String>,
 }
 
 impl BoundsLine {
@@ -40,6 +44,7 @@ impl BoundsLine {
             bounds: Bounds::STATES,
             caps: Some(Caps::per_cone(max_patterns)),
             tla: false,
+            scope: None,
         }
     }
 
@@ -49,12 +54,23 @@ impl BoundsLine {
             bounds,
             caps,
             tla: true,
+            scope: None,
         }
     }
 
-    /// The bounds alone, as the final `OK: no errors within ...` line states them.
-    pub fn within(&self) -> impl fmt::Display + '_ {
-        Within(self.bounds)
+    pub fn with_scope(self, scope: Option<String>) -> Self {
+        BoundsLine { scope, ..self }
+    }
+
+    /// The final line of a run with no error: `OK: no errors within ...`, with `in the
+    /// selected scope` when a scope is set.
+    pub fn ok(&self) -> String {
+        let scoped = if self.scope.is_some() {
+            " in the selected scope,"
+        } else {
+            ""
+        };
+        format!("OK: no errors{scoped} within {}", Within(self.bounds))
     }
 }
 
@@ -82,13 +98,20 @@ impl fmt::Display for BoundsLine {
             let bfs = if self.tla { "BFS " } else { "" };
             write!(f, "; {} states per {bfs}cone", caps.states)?;
         }
-        write!(f, "; entities a check does not read are unbounded")
+        write!(f, "; entities a check does not read are unbounded")?;
+        if let Some(scope) = &self.scope {
+            write!(f, "\n{scope}")?;
+        }
+        Ok(())
     }
 }
 
 pub struct StatesReport {
     pub bounds: Bounds,
     pub caps: Caps,
+    pub scope: Scope,
+    /// The targets the scope answered; `views` holds the selected entities only.
+    pub selection: Selection,
     /// Sorted by entity id; each carries the diagnostics that name its entity.
     pub views: Vec<EntityStateResult>,
     /// Every diagnostic of the build and the cone runs' verdicts.
@@ -98,12 +121,29 @@ pub struct StatesReport {
 }
 
 impl StatesReport {
-    /// The bounds the views were derived under.
-    pub fn bounds_line(&self) -> BoundsLine {
+    /// The bounds and the scope the views were derived under.
+    pub fn bounds_line(&self, model: &SemanticModel) -> BoundsLine {
         BoundsLine {
             bounds: self.bounds,
             caps: Some(self.caps),
             tla: false,
+            scope: self.scope.line(model, &self.selection),
+        }
+    }
+
+    /// What the scope left out and what the run did not decide.
+    pub fn not_checked<'a>(
+        &'a self,
+        ts: &'a TransitionSystem,
+        model: &'a SemanticModel,
+    ) -> NotChecked<'a> {
+        NotChecked {
+            ts,
+            model,
+            scope: &self.scope,
+            selection: &self.selection,
+            undecided: &self.undecided,
+            temporal: 0,
         }
     }
 
@@ -124,15 +164,55 @@ impl StatesReport {
             .filter(|d| d.entities.is_empty())
             .map(|d| &d.diag)
     }
+
+    /// Under `--entity`, the errors and never-run use cases that name only entities whose
+    /// views the scope leaves out, with those entities' ids. A selected cone reads them, so
+    /// they count; no view prints them.
+    pub fn outside_views<'a>(
+        &'a self,
+        model: &'a SemanticModel,
+    ) -> impl Iterator<Item = (Vec<&'a str>, &'a StateDiag)> + 'a {
+        let viewed = move |k: &EntityKey| {
+            let id = &model.entities[*k].id;
+            self.views.iter().any(|v| v.entity_id == *id)
+        };
+        self.diags
+            .iter()
+            .filter(move |d| {
+                !d.entities.is_empty()
+                    && !d.entities.iter().any(viewed)
+                    && (d.diag.severity() == Severity::Error
+                        || matches!(d.diag, StateDiag::NeverRuns { .. }))
+            })
+            .map(move |d| {
+                let ids = d
+                    .entities
+                    .iter()
+                    .map(|k| model.entities[*k].id.as_str())
+                    .collect();
+                (ids, &d.diag)
+            })
+    }
 }
 
-/// Builds the system for `scope` at `Bounds::STATES` and explores each target's cone.
+/// Builds the system for `scope` at `Bounds::STATES` and explores each selected target's
+/// cone. A `--buc` that drops use cases leaves the progress findings undecided; `--entity`
+/// does not, because each selected cone is exact.
 pub fn derive_states(model: &SemanticModel, scope: &Scope, max_patterns: usize) -> StatesReport {
+    derive_states_built(model, scope, max_patterns).0
+}
+
+/// `derive_states`, and the system it explored, which names what the scope left out.
+pub fn derive_states_built(
+    model: &SemanticModel,
+    scope: &Scope,
+    max_patterns: usize,
+) -> (StatesReport, TransitionSystem) {
     let bounds = Bounds::STATES;
     let caps = Caps::per_cone(max_patterns);
     let built = TransitionSystem::build(model, bounds, scope);
-    let mut run = built.ts.explore_targets(&built.ts.targets(), caps);
-    if *scope != Scope::All {
+    let mut run = built.ts.explore_targets(&built.selection.targets, caps);
+    if !scope.bucs.is_empty() {
         run.defer_progress();
     }
     let views = run.entity_views(&built.ts, model, &built.diags);
@@ -142,22 +222,14 @@ pub fn derive_states(model: &SemanticModel, scope: &Scope, max_patterns: usize) 
             diags.push(d.clone());
         }
     }
-    StatesReport {
+    let report = StatesReport {
         bounds,
         caps,
+        scope: scope.clone(),
+        selection: built.selection,
         views,
         diags,
         undecided: run.undecided().to_vec(),
-    }
-}
-
-impl Scope {
-    /// `--buc` as a scope: no ids is the whole model.
-    pub fn from_bucs(bucs: &[String]) -> Self {
-        if bucs.is_empty() {
-            Scope::All
-        } else {
-            Scope::Bucs(bucs.to_vec())
-        }
-    }
+    };
+    (report, built.ts)
 }

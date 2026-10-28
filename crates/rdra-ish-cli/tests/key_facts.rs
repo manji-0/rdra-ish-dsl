@@ -420,7 +420,7 @@ fn assert_tx_edges(sample: &str, model: &SemanticModel) {
 
 /// One owner var per fact whose child and parent are both lifecycle entities.
 fn assert_owner_vars(sample: &str, model: &SemanticModel) {
-    let ts = TransitionSystem::build(model, Bounds::STATES, &Scope::All).ts;
+    let ts = TransitionSystem::build(model, Bounds::STATES, &Scope::ALL).ts;
     let entities = ts.entities();
     let owners: Vec<_> = ts
         .vars()
@@ -451,7 +451,7 @@ fn assert_owner_vars(sample: &str, model: &SemanticModel) {
 
 /// One `Check_{entity}_{column}_{i}` invariant per `@check` in the model.
 fn assert_checks(sample: &str, model: &SemanticModel) {
-    let ts = TransitionSystem::build(model, Bounds::STATES, &Scope::All).ts;
+    let ts = TransitionSystem::build(model, Bounds::STATES, &Scope::ALL).ts;
     let built: Vec<String> = ts
         .invariants()
         .iter()

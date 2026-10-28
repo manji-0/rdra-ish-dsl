@@ -32,7 +32,7 @@ applies_to(Ready, Pay)
 }
 
 fn pay_guards(model: &SemanticModel) -> Vec<Pred> {
-    let built = TransitionSystem::build(model, Bounds::STATES, &Scope::All);
+    let built = TransitionSystem::build(model, Bounds::STATES, &Scope::ALL);
     let pay = built
         .ts
         .actions()
@@ -96,7 +96,7 @@ fn an_unbound_atom_is_an_exists_along_the_owner() {
     let d = derive(&model);
     assert!(reaches_paid(&d));
     // Two visits, one arrived: only a payment of the arrived visit can be paid.
-    let d = derive_scoped(&model, Bounds::VERIFY, &Scope::All);
+    let d = derive_scoped(&model, Bounds::VERIFY, &Scope::ALL);
     let violated = d.diags.iter().any(|x| {
         matches!(
             &x.diag,
@@ -180,7 +180,7 @@ invariant(Payment, Visit)
   .then(Visit.status == arrived)
 "#;
     let model = model_from(src);
-    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::All);
+    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
     let collect = built
         .ts
         .actions()
@@ -200,6 +200,6 @@ invariant(Payment, Visit)
     assert_eq!(d.rows("Payment"), vec!["method=insurance"]);
     assert!(!crate::lifecycle::has_errors(&d.diags), "{:?}", d.diags);
     // The parent atom reads the pre-state: at two instances only an arrived visit's payment.
-    let d = derive_scoped(&model, Bounds::VERIFY, &Scope::All);
+    let d = derive_scoped(&model, Bounds::VERIFY, &Scope::ALL);
     assert!(!crate::lifecycle::has_errors(&d.diags), "{:?}", d.diags);
 }

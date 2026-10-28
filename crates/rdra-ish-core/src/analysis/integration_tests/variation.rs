@@ -122,7 +122,7 @@ transitions(Payment.status, Pay, pending -> posted)
     );
     let (model, diags) = build(&as_variation);
     assert!(errors(&diags).is_empty(), "{diags:?}");
-    let result = &derive_states(&model, &Scope::All, Caps::DEFAULT_PATTERNS).views[0];
+    let result = &derive_states(&model, &Scope::ALL, Caps::DEFAULT_PATTERNS).views[0];
     let columns: Vec<_> = result.axes.iter().map(|a| a.column.as_str()).collect();
     assert_eq!(columns, vec!["status"], "{:?}", result.axes);
     assert!(result
@@ -136,7 +136,7 @@ transitions(Payment.status, Pay, pending -> posted)
     );
     let (model, diags) = build(&as_enum);
     assert!(errors(&diags).is_empty(), "{diags:?}");
-    let result = &derive_states(&model, &Scope::All, Caps::DEFAULT_PATTERNS).views[0];
+    let result = &derive_states(&model, &Scope::ALL, Caps::DEFAULT_PATTERNS).views[0];
     let mut columns: Vec<_> = result.axes.iter().map(|a| a.column.as_str()).collect();
     columns.sort();
     assert_eq!(columns, vec!["method", "status"]);

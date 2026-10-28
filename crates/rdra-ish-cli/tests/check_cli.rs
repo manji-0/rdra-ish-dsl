@@ -287,3 +287,74 @@ fn witness_sites_use_the_path_form_of_check() {
         );
     }
 }
+
+const NOT_CHECKED_ORDER: &str = "\
+scope: --entity Order
+not checked: 1 entity view (Audit), 1 invariant (Forbidden_Audit_1), 0 after-asserts; 1 build error deferred; 1 finding not decided
+  deferred error: Audit: Audit.score is derived by arithmetic, which the lifecycle cannot evaluate; compare the columns it reads instead
+  whether Record can run is not decided: no cone of a selected entity keeps it
+";
+
+/// Audit's build error fails the whole `check`; `--entity Order` defers it, lists it under
+/// `not checked:`, and passes in the selected scope. `states` takes the same scope.
+#[test]
+fn an_entity_scope_defers_an_error_outside_its_cones() {
+    let sample = "samples/formal-verification/partial_scope.rdra";
+    let whole = run(&["check", sample]);
+    let stderr = String::from_utf8_lossy(&whole.stderr);
+    assert_eq!(whole.status.code(), Some(1), "{stderr}");
+    assert!(
+        stderr.contains(
+            "error: state derivation for entity 'Audit': Audit.score is derived by arithmetic"
+        ),
+        "{stderr}"
+    );
+
+    let scoped = run(&["check", sample, "--entity", "Order"]);
+    let stderr = String::from_utf8_lossy(&scoped.stderr);
+    assert_eq!(scoped.status.code(), Some(0), "{stderr}");
+    assert_eq!(stderr, format!("{BOUNDS}\n{NOT_CHECKED_ORDER}"));
+    assert_eq!(
+        String::from_utf8_lossy(&scoped.stdout),
+        "OK: no errors in the selected scope, within 1 instance per entity, Int 0..5\n"
+    );
+
+    let states = run(&["states", sample, "--entity", "Order"]);
+    let stderr = String::from_utf8_lossy(&states.stderr);
+    assert_eq!(states.status.code(), Some(0), "{stderr}");
+    assert_eq!(stderr, format!("{BOUNDS}\n{NOT_CHECKED_ORDER}"));
+    assert!(String::from_utf8_lossy(&states.stdout).starts_with("Entity: Order "));
+}
+
+/// `--buc` drops use cases, so whether a state is reached, a use case runs, or an instance
+/// gets stuck is not decided: the whole run's errors become `not checked:` lines.
+#[test]
+fn a_buc_scope_lists_progress_findings_as_not_checked() {
+    let output = run(&[
+        "check",
+        "samples/formal-verification/unwitnessed_state.rdra",
+        "--buc",
+        "BucOrderRefund",
+    ]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(0), "{stderr}");
+    assert!(
+        stderr.contains(
+            "\nnot checked: 3 findings not decided\n  state Order.status = refunded is not decided: --buc leaves use cases out of the run\n"
+        ),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("note:"), "{stderr}");
+}
+
+#[test]
+fn an_unknown_scope_id_is_an_error() {
+    let output = run(&[
+        "check",
+        "samples/formal-verification/partial_scope.rdra",
+        "--entity",
+        "Nope",
+    ]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("unknown entity `Nope`"));
+}

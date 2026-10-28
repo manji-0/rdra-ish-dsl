@@ -22,7 +22,7 @@ fn only_the_explained_samples_deadlock() {
     let mut found = Vec::new();
     for sample in SAMPLES {
         let report =
-            super::super::derive_states(&load(sample), &Scope::All, Caps::DEFAULT_PATTERNS);
+            super::super::derive_states(&load(sample), &Scope::ALL, Caps::DEFAULT_PATTERNS);
         for d in deadlocks(&report.diags) {
             found.push((*sample, d.name().unwrap(), d.severity()));
         }
@@ -50,7 +50,7 @@ fn every_deadlock_trace_ends_at_its_state() {
     let mut checked = 0;
     for sample in SAMPLES {
         let report =
-            super::super::derive_states(&load(sample), &Scope::All, Caps::DEFAULT_PATTERNS);
+            super::super::derive_states(&load(sample), &Scope::ALL, Caps::DEFAULT_PATTERNS);
         for d in deadlocks(&report.diags) {
             let StateDiag::Deadlock {
                 column,
@@ -113,7 +113,7 @@ fn a_paid_order_that_ship_never_leaves_is_one_error() {
 /// RetryPayment leaves awaiting_retry, and it needs a new Payment. At one instance per
 /// entity the failed Payment holds the only slot: a warning, since the model cannot fix the
 /// bound. At two instances two failed Orders take both slots, and that is a warning too.
-const RETRY: &str = r#"
+pub(super) const RETRY: &str = r#"
 entity Order "注文" { id: Int @pk  status: Enum(pending, awaiting_retry, paid) @default(pending) }
 entity Payment "決済" { id: Int @pk  status: Enum(failed, captured) @default(failed) }
 relate(Payment, Order, N:1)
@@ -138,7 +138,7 @@ applies_to(Unsettled, RetryPayment)
 #[test]
 fn a_way_out_blocked_only_by_the_instance_bound_is_a_warning() {
     let model = model_from(RETRY);
-    let report = super::super::derive_states(&model, &Scope::All, Caps::DEFAULT_PATTERNS);
+    let report = super::super::derive_states(&model, &Scope::ALL, Caps::DEFAULT_PATTERNS);
     let found = deadlocks(&report.diags);
     assert_eq!(found.len(), 1, "{found:?}");
     assert_eq!(found[0].severity(), Severity::Warning);
@@ -155,7 +155,7 @@ fn a_way_out_blocked_only_by_the_instance_bound_is_a_warning() {
     );
     assert!(!report.has_errors(), "{:?}", report.diags);
 
-    let built = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::All);
+    let built = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL);
     let run = built.ts.explore_targets(&built.ts.targets(), Caps::VERIFY);
     let found = deadlocks(run.verdicts());
     assert!(
@@ -192,7 +192,7 @@ holds(Packed, Order.status == pending)
 applies_to(Packed, Ship)
 "#;
     let model = model_from(src);
-    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::All);
+    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
     let ts = &built.ts;
     let run = ts.explore_targets(&ts.targets(), Caps::per_cone(Caps::DEFAULT_PATTERNS));
     let order = ts.local_entity(model.entities.keys().next().unwrap());

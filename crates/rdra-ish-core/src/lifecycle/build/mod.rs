@@ -30,7 +30,7 @@ pub(super) fn build(model: &SemanticModel, bounds: Bounds, scope: &Scope) -> Bui
     b.after_asserts();
     b.properties();
     b.unwritten_vars();
-    b.finish()
+    b.finish(scope)
 }
 
 struct Builder<'m> {
@@ -48,6 +48,10 @@ struct Builder<'m> {
     /// Use cases with any write in the full model (before the scope filter).
     active_ucs: HashSet<UseCaseKey>,
     diags: Vec<Diag>,
+    /// Parallel to `diags`: the entities of the actions each diagnostic altered.
+    altered: Vec<Vec<EntityKey>>,
+    /// The entities of the use case action being built, if any.
+    acting: Vec<EntityKey>,
 }
 
 impl<'m> Builder<'m> {
@@ -64,21 +68,59 @@ impl<'m> Builder<'m> {
             uc_actions: HashMap::new(),
             active_ucs: HashSet::new(),
             diags: Vec::new(),
+            altered: Vec::new(),
+            acting: Vec::new(),
         }
     }
 
-    fn finish(mut self) -> Built {
+    fn finish(mut self, scope: &Scope) -> Built {
         self.ts.layout();
+        let model = self.model;
+        let mut inactive: Vec<UseCaseKey> = self
+            .active_ucs
+            .iter()
+            .copied()
+            .filter(|uc| !self.uc_actions.contains_key(uc))
+            .collect();
+        inactive.sort_by(|a, b| model.use_cases[*a].id.cmp(&model.use_cases[*b].id));
+        let diags = self
+            .diags
+            .into_iter()
+            .zip(self.altered)
+            .map(|(d, mut involves)| {
+                for k in &d.entities {
+                    if !involves.contains(k) {
+                        involves.push(*k);
+                    }
+                }
+                (d, involves)
+            })
+            .collect();
+        let (diags, selection) = self.ts.select(scope, diags, inactive);
         Built {
             ts: self.ts,
-            diags: self.diags,
+            diags,
+            selection,
         }
     }
 
+    /// Records a diagnostic once. One raised while a use case action is built may have
+    /// dropped or changed a guard or an effect of it, so it also involves every entity that
+    /// action binds: a selection that reads the action does not defer it.
     fn diag(&mut self, entities: Vec<EntityKey>, diag: StateDiag) {
         let d = Diag { entities, diag };
-        if !self.diags.contains(&d) {
-            self.diags.push(d);
+        let at = match self.diags.iter().position(|x| *x == d) {
+            Some(at) => at,
+            None => {
+                self.diags.push(d);
+                self.altered.push(Vec::new());
+                self.diags.len() - 1
+            }
+        };
+        for k in &self.acting {
+            if !self.altered[at].contains(k) {
+                self.altered[at].push(*k);
+            }
         }
     }
 
@@ -363,10 +405,8 @@ impl<'m> Builder<'m> {
 
     fn actions(&mut self, scope: &Scope) {
         let model = self.model;
-        let in_scope: Option<HashSet<NodeRef>> = match scope {
-            Scope::All => None,
-            Scope::Bucs(ids) => Some(reachable_from_bucs(model, ids)),
-        };
+        let in_scope: Option<HashSet<NodeRef>> =
+            (!scope.bucs.is_empty()).then(|| reachable_from_bucs(model, &scope.bucs));
         let mut txs = infer_usecase_transactions(model);
         self.active_ucs = txs.iter().map(|utx| utx.usecase).collect();
         // Transitions first in declaration order, then the rest by use case id.
@@ -401,7 +441,9 @@ impl<'m> Builder<'m> {
                     1 => id.clone(),
                     _ => format!("{id}_{}", g + 1),
                 };
+                self.acting = group.ordered_writes.iter().map(|w| w.entity).collect();
                 let action = self.usecase_action(uc, name, &group.ordered_writes, &entities, g);
+                self.acting.clear();
                 self.uc_actions
                     .entry(uc)
                     .or_default()

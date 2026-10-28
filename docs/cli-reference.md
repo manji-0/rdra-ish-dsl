@@ -38,14 +38,14 @@ Diagnostics are written to stderr as `error: ...` or `warning: ...`.
 Parse, type-check, and run whole-model consistency checks; produce no artifact output.
 
 ```
-rdra-ish check <INPUTS...> [--strict]
+rdra-ish check <INPUTS...> [--strict] [--buc <ID>]... [--entity <ID>]...
 ```
 
 Prints each diagnostic to stderr. If any error (non-warning) is present, exits with
 status `1` before running secondary consistency checks. Otherwise it reports unresolved
 model warnings and state-pattern findings. State diagnostics share severity with
 `states`: Error-severity findings print as `error:` and cause exit `1`; only a clean
-run prints `OK: no errors within <bounds>` (for example `OK: no errors within 1 instance per entity, Int 0..5`). When the model has temporal `property` declarations,
+run prints `OK: no errors within <bounds>` (for example `OK: no errors within 1 instance per entity, Int 0..5`), or `OK: no errors in the selected scope, within <bounds>` under `--buc` or `--entity` (see [Partial runs](#partial-runs)). When the model has temporal `property` declarations,
 `check` prints a trailing `note:` that those were not model-checked (use
 `verify --backend tlc`).
 
@@ -81,15 +81,16 @@ error: state Order.status = refunded has no reachability witness: no sequence of
 ```
 
 When an entity's cone stops at a cap, its unwitnessed states are not decided, and each
-prints a `note: state E.col = v is not decided: ...` line naming the cap. Such a state is
-neither an error nor a warning. See
+is listed under `not checked:` as `state E.col = v is not decided: ...`, naming the cap.
+Such a state is neither an error nor a warning. See
 [State models and witnesses](./state-derivation.md#state-models-and-witnesses).
 
 A use case, or one transaction group of a split use case, that no edge of its entity cones
 carries is one `warning:`. It names the use case's declaration and only what blocks it:
-`needs:` for an instance no reachable state has, `guard:` with its site for each guard that
-holds in no reachable state, or, when each guard holds somewhere, a first line that says
-they never hold together:
+`needs:` for an instance no reachable state has, or for a free slot when its guards hold
+only in states where the instance bound leaves none, `guard:` with its site for each guard
+that holds in no reachable state, or, when each guard holds somewhere, a first line that
+says they never hold together:
 
 ```
 warning: transaction 2 of Pay (Pay_2) can never run: in no reachable state do its guards hold
@@ -97,8 +98,8 @@ warning: transaction 2 of Pay (Pay_2) can never run: in no reachable state do it
   guard: condition Settled                 never_runs.rdra:20:1
 ```
 
-A capped cone leaves such an action undecided with a `note: whether Pay_2 can run is not
-decided: ...` line. See
+A capped cone leaves such an action undecided, listed under `not checked:` as `whether
+Pay_2 can run is not decided: ...`. See
 [Use cases that never run](./state-derivation.md#use-cases-that-never-run).
 
 An instance at a state with a way out that no path ever moves is one `error:`. It names each
@@ -118,12 +119,51 @@ error: deadlock: Order#1 stays at status = paid forever, and paid is not an end 
 
 When a way out lacks only a free slot of an entity it creates, the instance bound blocks
 it, not the model, and the line is `warning: deadlock at the bound: ...`. A capped cone
-leaves each state with a way out undecided with a `note: whether some E can get stuck at
-col = v is not decided: ...` line. See [Deadlocks](./state-derivation.md#deadlocks).
+leaves each state with a way out undecided, listed under `not checked:` as `whether some
+E can get stuck at col = v is not decided: ...`. See [Deadlocks](./state-derivation.md#deadlocks).
 
 | Option | Description |
 |---|---|
 | `--strict` | Promote permission / access consistency gaps (`ActorPermissionMissing`, no-actor paths, etc.) from warnings to errors for exit. |
+| `--buc <id>` | Keep only the use cases reachable from the BUC; repeatable. See [Partial runs](#partial-runs). |
+| `--entity <id>` | Check only the entity's view and the invariants and after-asserts that read it; repeatable. See [Partial runs](#partial-runs). |
+
+### Partial runs
+
+`check`, `states`, and `verify` take the same two flags. Each id is checked against the
+model, and an unknown one is an error.
+
+- `--buc <id>` keeps only the use cases reachable from the BUC, when the system is built.
+  A run without the other use cases cannot rule out what they would reach, enable, or
+  unblock. So a state with no witness, a use case that never runs, and a deadlock are each
+  **not decided**: they are listed under `not checked:` and are neither errors nor warnings.
+- `--entity <id>` selects targets: the entity's view, each invariant that binds the entity,
+  and each after-assert whose anchor or predicate binds it. Each target is explored on its
+  own cone, as in a whole run, so every finding on a selected target is exact. A use case
+  that no selected entity's cone keeps is not decided.
+
+A build error whose entities no selected cone reads is **deferred**. It is listed under
+`not checked:` and does not fail the run. A build error that alters a use case (a guard
+or an effect that the error dropped) also involves every entity that use case writes, so a
+selection whose cones read that use case still fails on it. A build error that names no
+entity always fails the run. A run without `--entity` reports every build error as an error,
+so the whole model still fails:
+
+```
+$ rdra-ish check samples/formal-verification/partial_scope.rdra --entity Order
+bounds: 1 instance per entity, Int 0..5; 4096 states per cone; entities a check does not read are unbounded
+scope: --entity Order
+not checked: 1 entity view (Audit), 1 invariant (Forbidden_Audit_1), 0 after-asserts; 1 build error deferred; 1 finding not decided
+  deferred error: Audit: Audit.score is derived by arithmetic, which the lifecycle cannot evaluate; compare the columns it reads instead
+  whether Record can run is not decided: no cone of a selected entity keeps it
+OK: no errors in the selected scope, within 1 instance per entity, Int 0..5
+```
+
+The `scope:` line follows the `bounds:` line and names each flag; for `--buc` it counts the
+use cases outside the BUCs. The `not checked:` block lists the targets the scope leaves
+out, the deferred build errors, and each finding a scope or a cap left undecided. A whole
+run prints it only when a cap left something undecided. `verify` under a scope also lists
+the temporal properties: a scoped run has no whole model to check them on.
 
 <!-- derived-from ./state-derivation.md#diagnostics -->
 `check` includes the same broad review signals exposed elsewhere:
@@ -400,7 +440,7 @@ Export a TLA+ specification and run TLC formal verification. See
 [formal-verification.md](./formal-verification.md).
 
 ```
-rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [--int-range-max <N>]
+rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [--int-range-max <N>] [--buc <ID>]... [--entity <ID>]...
 ```
 
 | Option | Type | Default | Description |
@@ -410,6 +450,8 @@ rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [-
 | `-o`, `--out` | path | temp dir, deleted when every check passes and kept when one fails | Directory for the specs: one `Cone_<check>.tla` / `.cfg` pair per cone, named after the first invariant or after-assert that reads it, a whole-model `RdraSpec.tla` / `.cfg` when the model declares temporal properties, and `cones.txt` listing each module and the checks it answers. A path ending in `.tla` writes into its directory and names the whole-model module after its stem. |
 | `--instance-count` | unsigned integer | `2` | Multi-instance `InstanceCount` (`1..=255`; `1` warns). |
 | `--int-range-max` | unsigned integer | `5` | Upper bound for `IntRange == 0..N` (`1..=255`; `0` rejected). |
+| `--buc <id>` | string (repeatable) | — (whole model) | Keep only the use cases reachable from the BUC. See [Partial runs](#partial-runs). |
+| `--entity <id>` | string (repeatable) | — (all entities) | Check only the entity's view and the invariants and after-asserts that read it, with one TLC job per selected cone. See [Partial runs](#partial-runs). |
 
 A `holds` body applied to a use case is a guard in the spec, so TLC checks it. `verify`
 prints no notice for conditions.
@@ -429,8 +471,8 @@ cone`. A state of a state model with no witness there, and a deadlock, print as 
 and fail the run even when TLC passes: stdout ends with `tlc_result: ok`, no `OK:` line
 follows, and the exit status is 1. A deadlock at the bound and a use case that never runs
 print as in `check`, as a `warning:` that does not fail the run. A cone that stops at the
-cap prints a `note:` for each state, each deadlock, and each use case it leaves undecided.
-Then one summary line follows on stdout:
+cap lists each state, each deadlock, and each use case it leaves undecided under `not
+checked:` on stdout. Then one summary line follows on stdout:
 
 ```
 state models (BFS on 2 entity cones): 2 state models, 5 states witnessed, 0 deadlocks, 0 use cases that never run
@@ -516,23 +558,24 @@ Derive the reachable state patterns per entity, aggregated across BUCs. See
 [state-derivation.md](./state-derivation.md) for the algorithm.
 
 ```
-rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns <N>] [--entity <ID>]
+rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns <N>] [--entity <ID>]...
 ```
 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--format` | `table` \| `csv` \| `json` \| `typescript` | `table` | Output format. `typescript` (alias `type-script`) emits entity state unions. |
-| `--buc <id>` | string (repeatable) | — (whole model) | Restrict the reachable scope to the union of the named BUCs. |
+| `--buc <id>` | string (repeatable) | — (whole model) | Keep only the use cases reachable from the named BUCs. See [Partial runs](#partial-runs). |
 | `--max-patterns` | unsigned integer | `256` | Cap on each entity's distinct patterns within one target cone (an entity view, invariant, or after-assert is explored on the variables it reads). The cone also stops after 16 joint states per allowed pattern (4096 at the default). Only entities the target reads are bounded to one instance: a use case that also creates an entity outside the cone (an audit row, say) never runs out of slots for it. When a cap is hit, the result is marked `truncated` and a fail-closed `PatternCapReached` or `StateCapReached` **error** is recorded (exit non-zero for all formats). |
-| `--entity <id>` | string | — (all entities) | Restrict **stdout** to a single entity id. Filtering is applied to whichever output format is selected. Exit severity still considers the whole model; when other entities have Error-severity diagnostics, a stderr note reports the count. |
+| `--entity <id>` | string (repeatable) | — (all entities) | Derive only the named entities' views, and the invariants and after-asserts that read them, each on its own cone. Every output format holds only those views. Exit severity considers the selected targets and the build errors their cones read; a build error outside them is deferred and listed under `not checked:`. See [Partial runs](#partial-runs). |
 
 Output is written to stdout. Exit is based on structured severity (all formats), not
 string-scanning `[error]`. stderr starts with a `bounds:` line: one instance per entity,
 the Int range, the state cap per target cone, and that entities a check does not read are unbounded.
 `check` prints the same line, and `verify` prints it on stdout with the TLA+ constants. Diagnostics that name no entity are printed
-on stderr too, and so is a `note:` for each state of a state model and each use case the run
-does not decide (a capped cone, or `--buc`, which leaves use cases out). With `--format json`, each pattern
+on stderr too, and so is the `not checked:` block, which lists each state of a state model,
+each deadlock, and each use case the run does not decide (a capped cone, or `--buc`, which
+leaves use cases out). With `--format json`, each pattern
 carries a `witness`: a shortest path to the first state that holds it, as `start` and
 `steps` objects with sites (see [Output formats](./state-derivation.md#output-formats)).
 

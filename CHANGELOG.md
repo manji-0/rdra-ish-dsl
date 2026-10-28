@@ -4,6 +4,14 @@
 
 ### Breaking
 
+- `states --entity` derives only the named entities' views, each on its own cone, with the
+  invariants and after-asserts that read them; before, it filtered the whole run's stdout.
+  The stdout of a run is unchanged. The exit status now counts only the selected targets
+  and the build errors their cones read, so an error on another entity no longer fails it,
+  and the stderr note that counted those errors is gone. `--entity` is now repeatable.
+- The `note:` lines for a state, a deadlock, or a use case a run did not decide are now one
+  `not checked:` block, in `check` and `states` on stderr and in `verify` on stdout. A
+  whole run prints it only when a cap left something undecided; no sample does.
 - `verify` ends a passing run with `OK: no errors within 2 instances per entity, Int 0..5`
   instead of `TLC: OK`, and `check` ends with `OK: no errors within 1 instance per entity,
   Int 0..5` instead of `OK: no errors`. A script that matches `TLC: OK` must match
@@ -218,6 +226,19 @@
 
 ### Added
 
+- `check`, `states`, and `verify` take `--buc <id>` and `--entity <id>`, both repeatable,
+  to check part of a model. `--buc` keeps only the use cases reachable from the BUCs, so
+  witnesses, deadlocks, and use cases that never run are not decided. `--entity` selects
+  the entity's view and the invariants and after-asserts that read it; each runs on its
+  exact cone, and a use case no selected cone keeps is not decided. A build error whose
+  entities no selected cone reads is deferred: it is listed under `not checked:` and does
+  not fail the run, while the whole run still fails on it. An error raised while a use
+  case's guards or effects were built also involves the entities that use case writes, so
+  a selection whose cones read that use case still fails on it. A scoped run prints a
+  `scope:` line after `bounds:`, skips temporal properties in `verify`, and ends with `OK:
+  no errors in the selected scope, within ...`. New sample `partial_scope.rdra`: its whole
+  run fails on a `DerivedColumnRead` on Audit, and `verify --entity Order` passes with
+  the error deferred (own CI step).
 - New sample `deadlock.rdra`: an Order stays `paid` forever because Ship's packing
   condition holds only while `pending`. `check` and `verify` fail on
   `Deadlock_Order_status_paid`, and TLC passes.
@@ -372,6 +393,10 @@
 
 ### Fixed
 
+- A use case that never runs because, once its guards hold, the instance bound leaves no
+  free slot for an entity it creates now says so (`needs: a free Payment slot within the
+  instance bound`). Before, it listed a guard that failed only in the states where a slot
+  was still free.
 - 91 of the 126 committed `out/` files under `ec-site`, `clinic-ops`, and `personal-info`
   no longer matched what the generator prints, because no CI step regenerated them. They
   are regenerated, and `check-sample-artifacts.sh` now covers them.

@@ -15,7 +15,8 @@ use std::sync::Mutex;
 
 use anyhow::{bail, Context, Result};
 use rdra_ish_core::lifecycle::{
-    BoundsLine, Caps, Cone, Severity, Target, TransitionSystem, VarSet,
+    BoundsLine, Caps, Cone, NotChecked, Scope, Selection, Severity, Target, TransitionSystem,
+    VarSet,
 };
 use rdra_ish_core::{ResolvedProgram, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
@@ -27,16 +28,17 @@ use crate::tlc_env::{tlc_env, Heap};
 use crate::tlc_output::{summarize, Outcome, TlcRun};
 use crate::tlc_replay::explain_violation;
 
+/// `bounds` is `(--instance-count, --int-range-max)`.
 pub fn run_verify(
     program: &ResolvedProgram,
     model: &SemanticModel,
     backend: VerifyBackend,
     out: Option<PathBuf>,
-    instance_count: u32,
-    int_range_max: u32,
+    bounds: (u32, u32),
+    scope: &Scope,
 ) -> Result<()> {
     match backend {
-        VerifyBackend::Tlc => run_tlc(program, model, out, instance_count, int_range_max),
+        VerifyBackend::Tlc => run_tlc(program, model, out, bounds, scope),
     }
 }
 
@@ -95,13 +97,13 @@ fn out_dir(out: Option<PathBuf>) -> Result<(PathBuf, String, bool)> {
     Ok((dir, whole, keep))
 }
 
-/// Each distinct cone of an invariant or after-assert, in target order, named after the
-/// first check that reads it. Cones over the same vars share one run: an action kept for an
-/// after-assert writes nothing in the cone, so it adds edges but no states.
-fn cone_jobs(ts: &TransitionSystem, names: &TlaNames) -> Vec<Job> {
+/// Each distinct cone of a selected invariant or after-assert, in target order, named after
+/// the first check that reads it. Cones over the same vars share one run: an action kept for
+/// an after-assert writes nothing in the cone, so it adds edges but no states.
+fn cone_jobs(ts: &TransitionSystem, names: &TlaNames, targets: &[Target]) -> Vec<Job> {
     let mut at: BTreeMap<VarSet, usize> = BTreeMap::new();
     let mut order: Vec<(Cone, String)> = Vec::new();
-    for target in ts.targets() {
+    for &target in targets {
         let first = match target {
             Target::Entity(_) => continue,
             Target::Invariant(i) => names.invariant(i).to_string(),
@@ -244,17 +246,20 @@ fn run_tlc(
     program: &ResolvedProgram,
     model: &SemanticModel,
     out: Option<PathBuf>,
-    instance_count: u32,
-    int_range_max: u32,
+    (instance_count, int_range_max): (u32, u32),
+    scope: &Scope,
 ) -> Result<()> {
     let bounds = tla_bounds(instance_count, int_range_max)?;
-    let ts = checked_system(model, bounds)?;
+    let built = checked_system(model, bounds, scope)?;
+    let (ts, selection) = (built.ts, built.selection);
     let (dir, whole_name, keep) = out_dir(out)?;
     let names = TlaNames::new(&ts);
 
-    let mut jobs = cone_jobs(&ts, &names);
+    let mut jobs = cone_jobs(&ts, &names, &selection.targets);
     let cones = jobs.len();
-    let temporal = if ts.properties().is_empty() {
+    // A scope checks no whole model: `--buc` drops use cases fairness would read, and an
+    // error `--entity` defers may sit in it.
+    let temporal = if ts.properties().is_empty() || !scope.is_whole() {
         None
     } else {
         let bundle = tla::print(&ts, PrintMode::Temporal, &whole_name);
@@ -269,22 +274,30 @@ fn run_tlc(
             cone: None,
         })
     };
-    let line = BoundsLine::verify(bounds, Some(Caps::VERIFY));
+    let line =
+        BoundsLine::verify(bounds, Some(Caps::VERIFY)).with_scope(scope.line(model, &selection));
     println!("{line}");
+    let checked = |pick: fn(&Target) -> bool| selection.targets.iter().filter(|t| pick(t)).count();
     println!(
         "cones: {cones} for {} invariant(s) and {} after-assert(s)",
-        ts.invariants().len(),
-        ts.after_asserts().len()
+        checked(|t| matches!(t, Target::Invariant(_))),
+        checked(|t| matches!(t, Target::AfterAssert(_)))
     );
     match &temporal {
         Some(job) => println!(
             "temporal properties: {}, checked on the whole model (fairness does not restrict to a cone)",
             job.checks.len()
         ),
-        None => println!("temporal properties: none, no whole-model run"),
+        None if ts.properties().is_empty() => {
+            println!("temporal properties: none, no whole-model run")
+        }
+        None => println!(
+            "temporal properties: {}, not checked: a scoped run has no whole-model run",
+            ts.properties().len()
+        ),
     }
     jobs.extend(temporal);
-    let bfs_errors = state_models(program, model, &ts);
+    let bfs_errors = state_models(program, model, &ts, scope, &selection);
 
     let mut index = String::new();
     for job in &jobs {
@@ -373,19 +386,37 @@ fn run_tlc(
     }
 }
 
-/// BFS on each entity cone at the verify bounds: the `NoWitness` errors, the `Deadlock`s
-/// (errors, or warnings at the bound), and the `NeverRuns` warnings, rendered, then one
-/// summary line. A state or an action a capped cone leaves
-/// undecided prints a note. The exploration is dropped before TLC starts.
-fn state_models(program: &ResolvedProgram, model: &SemanticModel, ts: &TransitionSystem) -> usize {
-    let entities: Vec<Target> = ts
-        .targets()
-        .into_iter()
+/// BFS on each selected entity cone at the verify bounds: the `NoWitness` errors, the
+/// `Deadlock`s (errors, or warnings at the bound), and the `NeverRuns` warnings, rendered,
+/// then the `not checked:` block and one summary line. The exploration is dropped before TLC
+/// starts.
+fn state_models(
+    program: &ResolvedProgram,
+    model: &SemanticModel,
+    ts: &TransitionSystem,
+    scope: &Scope,
+    selection: &Selection,
+) -> usize {
+    let entities: Vec<Target> = selection
+        .targets
+        .iter()
+        .copied()
         .filter(|t| matches!(t, Target::Entity(_)))
         .collect();
-    let run = ts.explore_targets(&entities, Caps::VERIFY);
-    for u in run.undecided() {
-        println!("note: {u}");
+    let mut run = ts.explore_targets(&entities, Caps::VERIFY);
+    if !scope.bucs.is_empty() {
+        run.defer_progress();
+    }
+    let not_checked = NotChecked {
+        ts,
+        model,
+        scope,
+        selection,
+        undecided: run.undecided(),
+        temporal: ts.properties().len(),
+    };
+    if !not_checked.is_empty() {
+        println!("{not_checked}");
     }
     let mut errors = 0;
     for d in run.verdicts() {
@@ -420,7 +451,7 @@ fn finish(bfs_errors: usize, line: &BoundsLine) -> Result<()> {
             "verification failed: {bfs_errors} state-model error(s) from BFS on the entity cones"
         );
     }
-    println!("OK: no errors within {}", line.within());
+    println!("{}", line.ok());
     Ok(())
 }
 

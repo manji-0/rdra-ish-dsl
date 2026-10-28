@@ -33,6 +33,10 @@ rdra-ish verify "$FILE" --backend tlc -o <OUT>
   dir (or a temp dir), and runs TLC there
 - `verify` without `-o` uses a temp dir: deleted on success, kept on failure and named
   by the closing `specs: <dir> (kept because a check failed)` line
+- `verify --entity <E>` (repeatable) checks only `E`'s view and the invariants and
+  after-asserts that read it; `verify --buc <B>` keeps only the use cases reachable from
+  `B`. Both list what they skip under `not checked:`; an error on an entity no selected
+  cone reads is deferred there instead of stopping the run
 - `verify` reports `tool_error` with a memory hint when TLC runs out of heap: set
   `RDRA_TLC_HEAP=4g` (default `1g` per cone, `2g` for the temporal run) or
   `JAVA_TOOL_OPTIONS=-Xmx4g`, which wins

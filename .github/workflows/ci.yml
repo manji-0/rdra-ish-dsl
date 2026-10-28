@@ -187,5 +187,27 @@ jobs:
             echo "expected tlc_result: ok and the paid deadlock error for $sample" >&2
             exit 1
           fi
+      - name: Verify checks part of a model and defers an error outside it
+        run: |
+          BIN=./target/release/rdra-ish
+          sample=samples/formal-verification/partial_scope.rdra
+          set +e
+          whole=$("$BIN" verify "$sample" --backend tlc 2>&1)
+          whole_status=$?
+          out=$("$BIN" verify "$sample" --backend tlc --entity Order 2>&1)
+          status=$?
+          set -e
+          echo "$whole"
+          echo "$out"
+          if [[ $whole_status -eq 0 ]] || ! grep -q "Audit.score is derived by arithmetic" <<<"$whole"; then
+            echo "expected the whole run of $sample to fail on the Audit build error" >&2
+            exit 1
+          fi
+          if [[ $status -ne 0 ]] || ! grep -q "tlc_result: ok" <<<"$out" \
+            || ! grep -q "1 build error deferred" <<<"$out" \
+            || ! grep -q "OK: no errors in the selected scope" <<<"$out"; then
+            echo "expected verify --entity Order to pass with the deferred error for $sample" >&2
+            exit 1
+          fi
       - name: Lifecycle BFS and TLC agree on every sample
         run: RDRA_REQUIRE_TLC=1 cargo test -p rdra-ish-cli --test engine_equivalence

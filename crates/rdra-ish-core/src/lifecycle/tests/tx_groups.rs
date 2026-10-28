@@ -33,7 +33,7 @@ transitions(Payment.status, Pay, pending -> captured)
 }
 
 fn built(src: &str) -> TransitionSystem {
-    TransitionSystem::build(&model_from(src), Bounds::STATES, &Scope::All).ts
+    TransitionSystem::build(&model_from(src), Bounds::STATES, &Scope::ALL).ts
 }
 
 fn action_names(ts: &TransitionSystem) -> Vec<String> {
@@ -52,7 +52,7 @@ fn bound(ts: &TransitionSystem, name: &str) -> Vec<String> {
 #[test]
 fn a_use_case_spanning_two_groups_is_one_action_per_group_in_tx_order() {
     let model = model_from(&split_pay(""));
-    let ts = TransitionSystem::build(&model, Bounds::STATES, &Scope::All).ts;
+    let ts = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL).ts;
     assert_eq!(action_names(&ts), vec!["Pay_1", "Pay_2", "Place", "Staff"]);
     assert_eq!(bound(&ts, "Pay_1"), vec!["Payment"]);
     assert_eq!(bound(&ts, "Pay_2"), vec!["Order"]);

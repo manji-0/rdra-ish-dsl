@@ -2,8 +2,8 @@
 //! counterexample traces.
 
 use rdra_ish_core::lifecycle::{
-    derive_states, ActionOrigin, Blocked, Caps, Change, GuardWhy, InvKind, InvText, ModelRef,
-    ParamRole, Scope, Severity, Site, StateDiag, Trace, TraceStep,
+    derive_states_built, ActionOrigin, Blocked, BoundsLine, Caps, Change, GuardWhy, InvKind,
+    InvText, ModelRef, ParamRole, Scope, Severity, Site, StateDiag, Trace, TraceStep,
 };
 use rdra_ish_core::{format_location, ResolvedProgram, SemanticModel};
 
@@ -23,16 +23,25 @@ pub(crate) fn state_consistency_findings(
     program: &ResolvedProgram,
     model: &SemanticModel,
 ) -> Vec<(Severity, String)> {
-    state_findings(program, model).0
+    state_findings(program, model, &Scope::ALL).findings
 }
 
-/// The findings of `state_consistency_findings`, and a note per state of a state model the
-/// run did not decide.
+/// What `check` prints of the lifecycle: the bounds and scope, the findings, and the
+/// `not checked:` block when the scope or a cap left something out.
+pub(crate) struct StateFindings {
+    pub(crate) bounds: BoundsLine,
+    pub(crate) findings: Vec<(Severity, String)>,
+    pub(crate) not_checked: Option<String>,
+}
+
+/// The findings of `state_consistency_findings` for `scope`, with its bounds line and what
+/// it did not check.
 pub(crate) fn state_findings(
     program: &ResolvedProgram,
     model: &SemanticModel,
-) -> (Vec<(Severity, String)>, Vec<String>) {
-    let report = derive_states(model, &Scope::All, Caps::DEFAULT_PATTERNS);
+    scope: &Scope,
+) -> StateFindings {
+    let (report, ts) = derive_states_built(model, scope, Caps::DEFAULT_PATTERNS);
     let on_views = report.views.iter().flat_map(|result| {
         let diags = result.diagnostics.iter().filter(|d| !has_block(d));
         diags.map(move |diag| {
@@ -54,11 +63,30 @@ pub(crate) fn state_findings(
         .unattributed()
         .filter(|d| !has_block(d))
         .map(|diag| (diag.severity(), state_diag_message(diag)));
-    let notes = report.undecided.iter().map(ToString::to_string).collect();
-    (
-        on_views.chain(violations).chain(unattributed).collect(),
-        notes,
-    )
+    let outside = report
+        .outside_views(model)
+        .filter(|(_, diag)| !has_block(diag))
+        .map(|(ids, diag)| {
+            (
+                diag.severity(),
+                format!(
+                    "state derivation for entity '{}': {}",
+                    ids.join("', '"),
+                    state_diag_message(diag)
+                ),
+            )
+        });
+    let findings = on_views
+        .chain(outside)
+        .chain(violations)
+        .chain(unattributed)
+        .collect();
+    let not_checked = report.not_checked(&ts, model);
+    StateFindings {
+        bounds: report.bounds_line(model),
+        findings,
+        not_checked: (!not_checked.is_empty()).then(|| not_checked.to_string()),
+    }
 }
 
 /// `render_violation` prints it once, as a block with sites, instead of once per view.
@@ -140,6 +168,15 @@ fn blocked_rows(
                 (
                     format!("{indent}guard: {}", guard_text(model, *why, site)),
                     location(program, site),
+                )
+            })
+            .collect(),
+        Blocked::Crowded(entities) => entities
+            .iter()
+            .map(|entity| {
+                (
+                    format!("{indent}needs: a free {entity} slot within the instance bound"),
+                    None,
                 )
             })
             .collect(),

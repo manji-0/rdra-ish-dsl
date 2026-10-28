@@ -284,7 +284,7 @@ fn bfs_and_tlc_reach_the_same_states_and_verdicts() {
 /// Every cone of the model at these bounds, checked in parallel.
 fn check_model(tlc: &Path, scratch: &Path, sample: &str, model: &SemanticModel, bounds: Bounds) {
     let workers = std::thread::available_parallelism().map_or(4, |n| n.get().min(8));
-    let built = TransitionSystem::build(model, bounds, &Scope::All);
+    let built = TransitionSystem::build(model, bounds, &Scope::ALL);
     let exploration = built
         .ts
         .explore_targets(&built.ts.targets(), Caps::new(usize::MAX, STATE_CAP));
@@ -458,7 +458,7 @@ fn tla_names_cover_every_slot() {
     for sample in samples() {
         let model = load(&sample);
         for bounds in [Bounds::STATES, Bounds::VERIFY] {
-            let ts = TransitionSystem::build(&model, bounds, &Scope::All).ts;
+            let ts = TransitionSystem::build(&model, bounds, &Scope::ALL).ts;
             let bundle = tla::print(&ts, PrintMode::Explore, "M");
             let names = &bundle.names;
             let keys = names.slot_keys(&ts);
@@ -505,7 +505,7 @@ fn a_corrupted_tlc_trace_does_not_replay() {
     let dir = std::env::temp_dir().join(format!("rdra-corrupted-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let model = load("samples/formal-verification/cross_order_payment_split.rdra");
-    let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::All).ts;
+    let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
     let exploration = ts.explore_targets(&ts.targets(), Caps::new(usize::MAX, STATE_CAP));
     let cone = exploration
         .cones

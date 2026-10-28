@@ -25,7 +25,7 @@ fn only_the_explained_sample_actions_never_run() {
     let mut found = Vec::new();
     for sample in SAMPLES {
         let report =
-            super::super::derive_states(&load(sample), &Scope::All, Caps::DEFAULT_PATTERNS);
+            super::super::derive_states(&load(sample), &Scope::ALL, Caps::DEFAULT_PATTERNS);
         for (action, why) in never_runs(&report.diags) {
             found.push((*sample, action.to_string(), why.clone()));
         }
@@ -156,7 +156,7 @@ updates(Touch, Order)
 transitions(Order.status, Pay, pending -> paid)
 "#;
     let model = model_from(src);
-    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::All);
+    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
     let ts = &built.ts;
     let run = ts.explore_targets(&ts.targets(), Caps::per_cone(Caps::DEFAULT_PATTERNS));
     let order = run.cone_of(Target::Entity(
@@ -222,4 +222,54 @@ applies_to(Audited, Refund)
     assert_eq!(guards[0].0, GuardWhy::Condition { cond: audited });
     assert_eq!(guards[0].1.fact, ModelRef::Condition(audited));
     assert!(guards[0].1.span.is_some(), "the guard has a site");
+}
+
+/// RetryPayment's guards hold once Fail leaves the Order awaiting_retry, and by then Fail's
+/// Payment holds the one slot. The why is that slot, not the from-state guard, which fails
+/// only in the states where a slot is still free.
+#[test]
+fn a_creation_the_bound_crowds_out_names_the_slot_not_a_guard() {
+    let model = model_from(super::deadlock::RETRY);
+    let d = derive(&model);
+    let runs = never_runs(&d.diags);
+    assert_eq!(
+        runs,
+        [(
+            "RetryPayment",
+            &Blocked::Crowded(vec!["Payment".to_string()])
+        )]
+    );
+    let diag = d
+        .diags
+        .iter()
+        .find(|x| matches!(x.diag, StateDiag::NeverRuns { .. }))
+        .unwrap();
+    assert_eq!(diag.diag.severity(), Severity::Warning);
+    assert_eq!(
+        diag.diag.to_string(),
+        "RetryPayment can never run: whenever its guards hold, the instance bound leaves no free slot for an instance it creates"
+    );
+}
+
+/// The same model with a condition on the created Payment that never holds: the bound is not
+/// the blocker, the condition is, and it is the one guard listed.
+#[test]
+fn a_crowded_creation_still_names_a_guard_on_its_successor_that_never_holds() {
+    let src = super::deadlock::RETRY.replace(
+        "holds(Unsettled, Payment.status == failed)",
+        "holds(Unsettled, Payment.status == captured)",
+    );
+    let model = model_from(&src);
+    let d = derive(&model);
+    let runs = never_runs(&d.diags);
+    let [("RetryPayment", Blocked::Guards(guards))] = runs.as_slice() else {
+        panic!("{runs:?}")
+    };
+    let (unsettled, _) = model
+        .conditions
+        .iter()
+        .find(|(_, c)| c.id == "Unsettled")
+        .unwrap();
+    let whys: Vec<GuardWhy> = guards.iter().map(|(why, _)| *why).collect();
+    assert_eq!(whys, [GuardWhy::Condition { cond: unsettled }]);
 }

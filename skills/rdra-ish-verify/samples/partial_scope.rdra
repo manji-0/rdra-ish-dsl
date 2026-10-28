@@ -1,0 +1,40 @@
+// One entity that cannot be checked does not block the rest. Audit's forbidden reads the
+// arithmetic `@derived` column score, which has no state var: a DerivedColumnRead build error
+// that fails check and verify on the whole model. Order's cone does not read Audit, so
+// `--entity Order` defers that error, lists it under `not checked:`, and passes.
+// The build error has no stable name, so the headers name none.
+// expect check: fail
+// expect verify: fail
+// expect verify --entity Order: tlc=ok
+entity Order "注文" {
+  id:     Int @pk
+  status: Enum(pending, paid) @default(pending)
+  amount: Int @default(1)
+}
+
+entity Audit "監査記録" {
+  id:    Int @pk
+  count: Int @default(0)
+  score: Int @derived(count * 2)
+}
+
+usecase Place  "注文確定"
+usecase Pay    "支払い"
+usecase Record "監査記録"
+
+buc BucOrder "Order"
+contains(BucOrder, Place)
+contains(BucOrder, Pay)
+
+buc BucAudit "Audit"
+contains(BucAudit, Record)
+
+creates(Place, Order)
+updates(Pay, Order)
+creates(Record, Audit)
+
+transitions(Order.status, Pay, pending -> paid)
+sets(Pay, Order, amount == 2)
+
+forbidden(Order, amount > 2)
+forbidden(Audit, score > 3)

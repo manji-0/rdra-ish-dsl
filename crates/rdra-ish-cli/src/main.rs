@@ -22,7 +22,7 @@ use list_output::{
     state_findings,
 };
 use load::{eprint_diagnostic, load_model, reject_model_errors};
-use rdra_ish_core::lifecycle::{BoundsLine, Caps, Severity};
+use rdra_ish_core::lifecycle::{Scope, Severity};
 use rdra_ish_core::{lint_issues, LintSeverity, RdraError};
 use rdra_ish_emit::View;
 use states::run_states;
@@ -46,7 +46,11 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Check { inputs, strict } => {
+        Commands::Check {
+            inputs,
+            strict,
+            scope,
+        } => {
             let (program, model, diags) = load_model(&inputs)?;
 
             let mut has_error = false;
@@ -61,8 +65,10 @@ fn main() -> Result<()> {
                 std::process::exit(1);
             }
 
-            let bounds = BoundsLine::states(Caps::DEFAULT_PATTERNS);
-            eprintln!("{bounds}");
+            let scope = Scope::parse(&model, &scope.buc, &scope.entity)?;
+            // Same severity as `states` (fail-closed on caps and violated constraints).
+            let lifecycle = state_findings(&program, &model, &scope);
+            eprintln!("{}", lifecycle.bounds);
             for diag in rdra_ish_core::consistency_diagnostics(&model) {
                 let as_error = strict && is_strict_access_gap(&diag.error);
                 if as_error {
@@ -73,16 +79,14 @@ fn main() -> Result<()> {
                 }
             }
 
-            // Same severity as `states` (fail-closed on caps and violated constraints).
-            let (findings, notes) = state_findings(&program, &model);
-            for (severity, message) in findings {
+            for (severity, message) in lifecycle.findings {
                 if severity == Severity::Error {
                     has_error = true;
                 }
                 eprintln!("{}: {}", severity_word(severity), message);
             }
-            for note in notes {
-                eprintln!("note: {note}");
+            if let Some(block) = lifecycle.not_checked {
+                eprintln!("{block}");
             }
 
             let property_count = model.temporal_properties.len();
@@ -96,7 +100,7 @@ fn main() -> Result<()> {
                 std::process::exit(1);
             }
 
-            println!("OK: no errors within {}", bounds.within());
+            println!("{}", lifecycle.bounds.ok());
         }
 
         Commands::Diagram {
@@ -237,10 +241,9 @@ fn main() -> Result<()> {
         Commands::States {
             inputs,
             format,
-            buc,
             max_patterns,
-            entity,
-        } => run_states(&inputs, format, buc, max_patterns, entity)?,
+            scope,
+        } => run_states(&inputs, format, max_patterns, &scope)?,
 
         Commands::Verify {
             inputs,
@@ -248,16 +251,18 @@ fn main() -> Result<()> {
             out,
             instance_count,
             int_range_max,
+            scope,
         } => {
             let (program, model, diags) = load_model(&inputs)?;
             reject_model_errors(&program, &diags)?;
+            let scope = Scope::parse(&model, &scope.buc, &scope.entity)?;
             run_verify(
                 &program,
                 &model,
                 backend,
                 out,
-                instance_count,
-                int_range_max,
+                (instance_count, int_range_max),
+                &scope,
             )?;
         }
     }

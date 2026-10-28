@@ -233,3 +233,81 @@ fn a_deadlock_fails_verify_while_tlc_passes() {
     );
     let _ = std::fs::remove_dir_all(&tmp);
 }
+
+/// `verify --entity Order` defers Audit's build error, runs TLC on Order's invariant cone,
+/// and passes in the selected scope; the whole run stops at the build gate.
+#[test]
+fn an_entity_scope_verifies_part_of_a_model() {
+    if !have_tlc() {
+        return;
+    }
+    let tmp = scratch("verify_cli_partial_scope");
+    let sample = repo().join("samples/formal-verification/partial_scope.rdra");
+    let sample = sample.to_str().unwrap();
+    let whole = verify(&repo(), &tmp, &[sample]);
+    let stderr = String::from_utf8_lossy(&whole.stderr);
+    assert_eq!(whole.status.code(), Some(1), "{stderr}");
+    assert!(stderr.contains("no TLA+ written"), "{stderr}");
+
+    let scoped = verify(&repo(), &tmp, &[sample, "--entity", "Order"]);
+    let stdout = String::from_utf8_lossy(&scoped.stdout);
+    let stderr = String::from_utf8_lossy(&scoped.stderr);
+    assert_eq!(scoped.status.code(), Some(0), "{stdout}{stderr}");
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines[1], "scope: --entity Order", "{stdout}");
+    assert!(
+        stdout.contains(
+            "\nnot checked: 1 entity view (Audit), 1 invariant (Forbidden_Audit_1), 0 after-asserts; 1 build error deferred; 1 finding not decided\n  deferred error: Audit: Audit.score is derived by arithmetic"
+        ),
+        "{stdout}"
+    );
+    assert!(
+        lines.contains(&"Cone_Forbidden_Order_0 [Forbidden_Order_0]: ok (7 states)"),
+        "{stdout}"
+    );
+    assert!(lines.contains(&"tlc_result: ok"), "{stdout}");
+    assert_eq!(
+        lines.last(),
+        Some(&"OK: no errors in the selected scope, within 2 instances per entity, Int 0..5"),
+        "{stdout}"
+    );
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// `verify --buc` runs the BFS pass on the scoped system, lists what it cannot decide and the
+/// temporal properties it skips under `not checked:`, and passes in the selected scope.
+#[test]
+fn a_buc_scope_skips_temporal_properties_and_leaves_progress_undecided() {
+    if !have_tlc() {
+        return;
+    }
+    let tmp = scratch("verify_cli_buc_scope");
+    let sample = repo().join("samples/formal-verification/order.rdra");
+    let output = verify(
+        &repo(),
+        &tmp,
+        &[sample.to_str().unwrap(), "--buc", "BucOrderLifecycle"],
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(0), "{stdout}{stderr}");
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert!(
+        lines[1].starts_with("scope: --buc BucOrderLifecycle ("),
+        "{stdout}"
+    );
+    assert!(
+        lines.contains(&"temporal properties: 2, not checked: a scoped run has no whole-model run"),
+        "{stdout}"
+    );
+    assert!(
+        lines.contains(&"not checked: 2 temporal properties"),
+        "{stdout}"
+    );
+    assert_eq!(
+        lines.last(),
+        Some(&"OK: no errors in the selected scope, within 2 instances per entity, Int 0..5"),
+        "{stdout}"
+    );
+    let _ = std::fs::remove_dir_all(&tmp);
+}

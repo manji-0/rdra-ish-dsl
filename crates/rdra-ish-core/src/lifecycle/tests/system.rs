@@ -68,7 +68,7 @@ sets(Pay, Payment, state == captured)
 forbidden(Order, Payment, Order.status == pending, Payment.state == captured)
 "#;
     let model = model_from(src);
-    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::All);
+    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
     let pay = built
         .ts
         .actions()
@@ -99,7 +99,7 @@ creates(Open, Order)
 creates(AddLine, Line)
 "#;
     let model = model_from(src);
-    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::All);
+    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
     let add = built
         .ts
         .actions()
@@ -130,7 +130,7 @@ creates(MakeB, B)
 transitions(A.s, FlipA, x -> y)
 "#;
     let model = model_from(src);
-    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::All);
+    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
     let comps = built.ts.components();
     assert_eq!(comps.len(), 2);
     let run = built.ts.explore(Caps::new(256, 1000));
@@ -154,7 +154,7 @@ usecase Promote "昇格"
 sets(Promote, Member, tier == gold)
 "#;
     let model = model_from(src);
-    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::All);
+    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
     assert_eq!(built.ts.entities()[0].birth, Birth::PreExisting);
     let d = derive(&model);
     let member = d.entity("Member");
@@ -177,7 +177,7 @@ creates(Issue, Ticket)
 sets(Use, Ticket, used == true)
 "#;
     let model = model_from(src);
-    let built = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::All);
+    let built = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL);
     let run = built.ts.explore(Caps::new(256, 1000));
     // Slots fill in order: (a,a) (p,a) (p,p); each present slot is used or not.
     // (a,a) + (f,a) (t,a) + (f,f) (t,f) (f,t) (t,t) = 7
@@ -189,7 +189,7 @@ sets(Use, Ticket, used == true)
 #[test]
 fn now_ticks_only_when_a_predicate_reads_it() {
     let model = sample_model("samples/formal-verification/now_coupon.rdra");
-    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::All);
+    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
     assert!(built.ts.now().is_some());
     assert!(built.ts.actions().iter().any(|a| a.name == "Tick"));
     assert_eq!(
@@ -217,7 +217,7 @@ usecase Grant "付与"
 creates(Grant, Coupon)
 "#,
     );
-    let built = TransitionSystem::build(&plain, Bounds::STATES, &Scope::All);
+    let built = TransitionSystem::build(&plain, Bounds::STATES, &Scope::ALL);
     assert!(built.ts.now().is_none());
 }
 
@@ -235,9 +235,9 @@ creates(Open, Order)
 transitions(Order.status, Close, open -> closed)
 "#;
     let model = model_from(src);
-    let b1 = derive_scoped(&model, Bounds::STATES, &Scope::Bucs(vec!["B1".into()]));
+    let b1 = derive_scoped(&model, Bounds::STATES, &Scope::from_bucs(&["B1".into()]));
     assert_eq!(b1.rows("Order"), vec!["status=open"]);
-    let b2 = derive_scoped(&model, Bounds::STATES, &Scope::Bucs(vec!["B2".into()]));
+    let b2 = derive_scoped(&model, Bounds::STATES, &Scope::from_bucs(&["B2".into()]));
     assert!(
         b2.entity("Order").patterns.is_empty(),
         "Order is still created, by a use case outside the scope"

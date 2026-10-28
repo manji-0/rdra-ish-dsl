@@ -116,7 +116,7 @@ forbidden(Order, status == retried)
 #[test]
 fn a_replayed_path_explains_its_violation_and_a_corrupted_one_fails() {
     let model = model_from(&format!("{ORDER}\nforbidden(Order, status == shipped)"));
-    let ts = TransitionSystem::build(&model, Bounds::STATES, &Scope::All).ts;
+    let ts = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL).ts;
     let run = ts.run(Caps::new(usize::MAX, 100_000));
     let ts = &run.system;
     let bfs = run

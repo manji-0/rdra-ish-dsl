@@ -25,7 +25,7 @@ transitions(Claim.status, SendClaim, draft -> sent)
 #[test]
 fn mandatory_owner_needs_a_present_parent_so_the_cycle_creates_nothing() {
     let model = model_from(&billing("relate(Charge, Claim, N:1)"));
-    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::All);
+    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
     let create = built
         .ts
         .actions()
@@ -41,7 +41,7 @@ fn mandatory_owner_needs_a_present_parent_so_the_cycle_creates_nothing() {
 #[test]
 fn optional_owner_starts_unlinked_and_the_claim_links_it() {
     let model = model_from(&billing("relate(Charge, Claim, N:1).optional()"));
-    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::All);
+    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
     let create = built
         .ts
         .actions()
@@ -72,7 +72,7 @@ fn an_unlinked_optional_owner_is_not_linked_for_along() {
         billing("relate(Charge, Claim, N:1).optional()")
     );
     // Two slots: the second charge is created after the claim and stays unlinked.
-    let d = derive_scoped(&model_from(&src), Bounds::VERIFY, &Scope::All);
+    let d = derive_scoped(&model_from(&src), Bounds::VERIFY, &Scope::ALL);
     assert!(
         !d.has("Charge", |x| matches!(
             x,
@@ -85,7 +85,7 @@ fn an_unlinked_optional_owner_is_not_linked_for_along() {
         "{}\nforbidden(Charge, Claim, Charge.status == posted, Claim.status == sent)",
         billing("relate(Charge, Claim, N:1).optional()")
     );
-    let d = derive_scoped(&model_from(&global), Bounds::VERIFY, &Scope::All);
+    let d = derive_scoped(&model_from(&global), Bounds::VERIFY, &Scope::ALL);
     assert!(
         d.has("Charge", |x| matches!(
             x,
@@ -136,7 +136,7 @@ relate(Order, Address, N:1)
 relate(Order, Address, N:1).role(bill_to).optional()
 "#,
     );
-    let ts = TransitionSystem::build(&model, Bounds::STATES, &Scope::All).ts;
+    let ts = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL).ts;
     let owners: Vec<String> = ts
         .var_ids()
         .map(|v| ts.var_name(v))
@@ -160,7 +160,7 @@ creates(Ship, Shipment)
     };
     let names = |relate: &str| {
         let model = model_from(&src(relate));
-        let ts = TransitionSystem::build(&model, Bounds::STATES, &Scope::All).ts;
+        let ts = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL).ts;
         ts.var_ids().map(|v| ts.var_name(v)).collect::<Vec<_>>()
     };
     let generated = names("relate(Shipment, Order, N:1).optional()");
@@ -185,7 +185,7 @@ usecase Open "Open"
 
 /// Profile's owner in each initial state at two slots, as parent slots (`None`: unlinked).
 fn initial_owners(src: &str) -> (Vec<Vec<Option<u8>>>, Vec<Diag>) {
-    let built = TransitionSystem::build(&model_from(src), Bounds::VERIFY, &Scope::All);
+    let built = TransitionSystem::build(&model_from(src), Bounds::VERIFY, &Scope::ALL);
     let mut idle = built.ts;
     // Without actions the reachable states are the initial states.
     idle.actions.clear();
@@ -270,7 +270,7 @@ fn unique_violated(d: &Derived, child: &str) -> bool {
 fn two_children_of_one_parent_break_a_one_to_one_key_only_at_two_slots() {
     let model = sample_model("samples/formal-verification/one_to_one_shared.rdra");
     assert!(unique_violated(
-        &derive_scoped(&model, Bounds::VERIFY, &Scope::All),
+        &derive_scoped(&model, Bounds::VERIFY, &Scope::ALL),
         "Shipment"
     ));
     assert!(
@@ -291,10 +291,10 @@ fn unlinked_children_share_no_parent_and_identity_starts_hold() {
         "relate(Note, Order, 1:1).optional()",
         "creates(Write, Note)",
     );
-    let d = derive_scoped(&model_from(&unlinked), Bounds::VERIFY, &Scope::All);
+    let d = derive_scoped(&model_from(&unlinked), Bounds::VERIFY, &Scope::ALL);
     assert!(!unique_violated(&d, "Note"), "{:?}", d.diags);
     let master = src("relate(Note, Order, 1:1)", "");
-    let d = derive_scoped(&model_from(&master), Bounds::VERIFY, &Scope::All);
+    let d = derive_scoped(&model_from(&master), Bounds::VERIFY, &Scope::ALL);
     assert!(!unique_violated(&d, "Note"), "{:?}", d.diags);
 }
 
@@ -320,7 +320,7 @@ fn a_parent_created_without_a_child_breaks_the_minimum_at_one_slot() {
     let model = sample_model("samples/formal-verification/min_card_unmet.rdra");
     for d in [
         derive(&model),
-        derive_scoped(&model, Bounds::VERIFY, &Scope::All),
+        derive_scoped(&model, Bounds::VERIFY, &Scope::ALL),
     ] {
         assert!(min_card_violated(&d), "{:?}", d.diags);
         assert_eq!(needs_create(&d), ["Place"]);
@@ -342,7 +342,7 @@ fn a_parent_created_with_its_first_child_meets_the_minimum_until_a_delete() {
     let model = sample_model(path);
     for d in [
         derive(&model),
-        derive_scoped(&model, Bounds::VERIFY, &Scope::All),
+        derive_scoped(&model, Bounds::VERIFY, &Scope::ALL),
     ] {
         assert!(!min_card_violated(&d), "{:?}", d.diags);
         assert!(needs_create(&d).is_empty(), "{:?}", d.diags);
@@ -365,7 +365,7 @@ fn a_pre_existing_parent_of_a_created_child_is_warned_and_fails_at_the_start() {
     // Master data on both sides starts linked one to one, so it holds at any slot count.
     let master = model_from("entity Order \"O\" { id: Int @pk }\nentity OrderLine \"L\" { id: Int @pk }\nrelate(OrderLine, Order, 1..*:1)\n");
     assert!(!min_card_violated(&derive(&master)));
-    let d = derive_scoped(&master, Bounds::VERIFY, &Scope::All);
+    let d = derive_scoped(&master, Bounds::VERIFY, &Scope::ALL);
     assert!(!min_card_violated(&d), "{:?}", d.diags);
 }
 
@@ -389,7 +389,7 @@ sets(GenerateClaim, Claim, origin == generated)
 
 /// Every reachable `(claims present, charges present)` pair at two slots.
 fn populations(src: &str) -> Vec<(usize, usize)> {
-    let ts = TransitionSystem::build(&model_from(src), Bounds::VERIFY, &Scope::All).ts;
+    let ts = TransitionSystem::build(&model_from(src), Bounds::VERIFY, &Scope::ALL).ts;
     let run = ts.run(Caps::new(Caps::DEFAULT_PATTERNS, 100_000));
     let ts = &run.system;
     let exists = |id: &str| {
@@ -431,7 +431,7 @@ fn mandatory_child_moves_to_a_created_parent() {
         "relate(Charge, Claim, N:1)",
         "usecase OpenClaim \"開設\"\ncreates(OpenClaim, Claim)",
     );
-    let d = derive_scoped(&model_from(&src), Bounds::VERIFY, &Scope::All);
+    let d = derive_scoped(&model_from(&src), Bounds::VERIFY, &Scope::ALL);
     assert_eq!(d.rows("Claim"), vec!["origin=opened", "origin=generated"]);
     assert!(
         populations(&src).contains(&(2, 1)),

@@ -129,8 +129,8 @@ stays off: every bounded model ends with no enabled action, and an always-enable
 hide a stuck instance. The same pass finds each use case that never runs (see
 [state-derivation.md](./state-derivation.md#use-cases-that-never-run)) and prints it as a
 warning, which does not fail the run. A cone that stops at the cap decides nothing about its
-unwitnessed states, its deadlocks, or its actions with no edge, and `verify` prints a
-`note:` for each. The
+unwitnessed states, its deadlocks, or its actions with no edge, and `verify` lists each
+under `not checked:`. The
 pass ends with a `state models (BFS on N entity cones): ...` summary line. On clinic-ops
 this pass takes about 11 s and 400 MB, most of it the `AccountBalance` cone (1,707,212
 states).
@@ -159,11 +159,42 @@ points at the rule that broke. A step that no move of the cone explains is a too
 output is in [cli-reference.md](./cli-reference.md#verify). A temporal property's
 counterexample prints only TLC's trace.
 
+### Part of a model
+
+<!-- derived-from ./cli-reference.md#partial-runs -->
+`verify --entity E` checks the entity's view and the invariants and after-asserts that
+read `E`, each on its own cone, so each verdict is the whole-model verdict for that target.
+`verify --buc B` builds the system with only the use cases reachable from `B`, so it cannot
+decide whether a state has a witness, a use case runs, or an instance gets stuck. A scoped
+run checks no temporal property, because it has no whole model. A build error that no
+selected cone reads is deferred: one entity that cannot be exported does not block the
+rest. The whole run still fails on it:
+
+```
+$ rdra-ish verify samples/formal-verification/partial_scope.rdra --entity Order
+bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 2097152 states per BFS cone; entities a check does not read are unbounded
+scope: --entity Order
+cones: 1 for 1 invariant(s) and 0 after-assert(s)
+temporal properties: none, no whole-model run
+not checked: 1 entity view (Audit), 1 invariant (Forbidden_Audit_1), 0 after-asserts; 1 build error deferred; 1 finding not decided
+  deferred error: Audit: Audit.score is derived by arithmetic, which the lifecycle cannot evaluate; compare the columns it reads instead
+  whether Record can run is not decided: no cone of a selected entity keeps it
+state models (BFS on 1 entity cone): 1 state model, 2 states witnessed, 0 deadlocks, 0 use cases that never run
+Cone_Forbidden_Order_0 [Forbidden_Order_0]: ok (7 states)
+tlc_result: ok
+OK: no errors in the selected scope, within 2 instances per entity, Int 0..5
+```
+
+The rules for each flag and for deferral are in
+[cli-reference.md](./cli-reference.md#partial-runs).
+
 ## Approximations and limitations
 
 - **Bounds.** A `verify` OK holds for the stated `InstanceCount` and `IntRange` and says
   nothing outside them. The `.tla` header comment and the `bounds:` line of `verify`
-  state both, and so does the final `OK: no errors within ...` line. A deleted slot is never reused, so an entity is created at most
+  state both, and so does the final `OK: no errors within ...` line. A scoped run says
+  `OK: no errors in the selected scope, within ...` and holds only for the selected
+  targets. A deleted slot is never reused, so an entity is created at most
   `InstanceCount` times.
 - **Conditions are checked.** A `holds` body is a guard on each use case it applies to.
   A body applied to a use case that writes nothing is `UnbindableCondition`, an error.
@@ -233,6 +264,7 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `check_met.rdra` | pass, pass | The same check with a use case that keeps `qty` in range; `forbidden` reads the derived `bulk: Bool @derived(qty >= 3)` as its expression |
 | `unwitnessed_state.rdra` | fail, pass | `refunded` has no witness: Refund needs `shipped` and a refund window that holds only while `pending`. TLC passes; the BFS witness check fails `check` and `verify`, a shipped Order is a deadlock (Refund is its only way out), and both warn that Refund never runs (its guards never hold together) |
 | `deadlock.rdra` | fail, pass | An Order stays `paid` forever: Ship leaves `paid` only while a packing condition holds, and it holds only while `pending`. Express ships a pending Order, so `shipped` has a witness. TLC passes; the BFS deadlock check fails `check` and `verify`, and both warn that Ship never runs |
+| `partial_scope.rdra` | fail, not run | Audit's `forbidden` reads the arithmetic `@derived` column `score`: a `DerivedColumnRead` build error stops `check` and `verify` before TLC. With `--entity Order` both defer it under `not checked:` and pass; TLC checks `Forbidden_Order_0` |
 | `fail/order.rdra` | fail, fail | Intentionally unsafe (reachable invariant violation) |
 
 BFS and TLC give the same verdict on every row at the same bounds. `check` runs at one

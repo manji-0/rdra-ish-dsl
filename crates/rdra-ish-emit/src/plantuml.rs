@@ -24,7 +24,7 @@ pub(crate) fn lifecycle_start_states(
     columns: impl IntoIterator<Item = (EntityKey, String)>,
     resolve: impl Fn(EntityKey, &str) -> Option<StateKey>,
 ) -> Vec<StateKey> {
-    let built = TransitionSystem::build(model, Bounds::STATES, &LifecycleScope::All);
+    let built = TransitionSystem::build(model, Bounds::STATES, &LifecycleScope::ALL);
     let columns: std::collections::BTreeSet<(EntityKey, String)> = columns.into_iter().collect();
     let mut starts: Vec<StateKey> = columns
         .iter()

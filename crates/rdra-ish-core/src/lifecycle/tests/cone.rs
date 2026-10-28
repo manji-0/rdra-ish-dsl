@@ -75,6 +75,7 @@ pub(super) const SAMPLES: &[&str] = &[
     "samples/formal-verification/now_coupon.rdra",
     "samples/formal-verification/one_to_one_shared.rdra",
     "samples/formal-verification/order.rdra",
+    "samples/formal-verification/partial_scope.rdra",
     "samples/formal-verification/quantifier_none.rdra",
     "samples/formal-verification/untriggered_sets.rdra",
     "samples/formal-verification/unwitnessed_state.rdra",
@@ -89,7 +90,7 @@ fn cone_exploration_equals_the_projection_of_the_whole_component() {
     for sample in SAMPLES {
         let mut exact_here = 0;
         let model = load(sample);
-        let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::All);
+        let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
         for comp in built.ts.components() {
             let sub = built.ts.restrict(&comp);
             let full = sub.clone().run(caps);
@@ -159,7 +160,7 @@ transitions(Order.status, Close, open -> closed)
 creates(AddLine, Line)
 "#;
     let model = model_from(src);
-    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::All);
+    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
     let ts = &built.ts;
     let order = ts.entities().iter().find(|e| e.id == "Order").unwrap();
     let line = ts
@@ -187,7 +188,7 @@ fn an_entity_the_view_does_not_read_never_runs_out_of_slots() {
     // Every card and address use case also creates an AuditLog. With one slot per entity the
     // first creator would spend it; the card and address views do not read AuditLog.
     let model = load("samples/personal-info");
-    let report = crate::lifecycle::derive_states(&model, &Scope::All, Caps::DEFAULT_PATTERNS);
+    let report = crate::lifecycle::derive_states(&model, &Scope::ALL, Caps::DEFAULT_PATTERNS);
     let via = |id: &str| -> BTreeSet<String> {
         report
             .views
@@ -221,7 +222,7 @@ fn every_state_replays_from_its_parent_path_through_moves() {
     for sample in SAMPLES {
         let model = load(sample);
         for bounds in [Bounds::STATES, Bounds::VERIFY] {
-            let built = TransitionSystem::build(&model, bounds, &Scope::All);
+            let built = TransitionSystem::build(&model, bounds, &Scope::ALL);
             for cr in &built.ts.explore_targets(&built.ts.targets(), caps).cones {
                 let run = &cr.run;
                 let ts = &run.system;

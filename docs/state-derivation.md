@@ -243,8 +243,8 @@ start of a pre-existing entity). Each state is either witnessed or an error:
 - **`NoWitness`.** No reachable state holds it. `check` prints it once, with each
   `transitions` arm or creation that would enter it and that arm's site.
 - **Not decided.** No state holds it, but the cone stopped at a cap, or `--buc` left use
-  cases out, so the run cannot rule it out. `check` and `states` print a `note:` line that
-  names the cap or the scope. It is neither an error nor a warning.
+  cases out, so the run cannot rule it out. `check` and `states` list it under `not
+  checked:` with the cap or the scope. It is neither an error nor a warning.
 
 Every other declared Enum variant that no pattern holds draws the `UnreachableEnumVariant`
 warning, as do Enum columns without a state model. For example, `untriggered_sets` declares
@@ -281,6 +281,11 @@ states of the cone for each check that `moves` makes, one check at a time:
   param prints as `needs:`. At one instance per entity this is often the bound: in
   `min_card_met`, an `Order` exists only with its one `OrderLine` slot taken, so `AddLine`
   never runs in `check` and runs in `verify`.
+- **No free slot while enabled.** In some reachable state every guard that reads the
+  current state holds and every other param finds an instance, but an entity the action
+  creates has no free slot there. Each such entity prints as `needs: a free E slot within
+  the instance bound`, and no guard prints: a guard that fails only in the states where a
+  slot is still free does not block the action.
 - **Guards.** Each guard (a `transitions` from-state, an `applies_to` condition, a relate
   link, the clock) that holds under no binding of any reachable state prints as `guard:`
   with its site. A guard that holds somewhere is left out.
@@ -295,7 +300,9 @@ warning: use case Refund can never run: each of its guards holds in some reachab
 ```
 
 A cone that stops at a cap, or a `--buc` run, leaves an action with no edge undecided. It
-prints `note: whether Refund can run is not decided: ...` and is not a warning. A cone that
+is listed under `not checked:` as `whether Refund can run is not decided: ...` and is not a
+warning. Under `--entity`, an action that no selected entity's cone keeps is not decided
+the same way. A cone that
 frees an unread entity's slots (see [Bounds](#bounds)) can run an action the whole model
 cannot, so that case can miss a warning, and never adds a false one.
 
@@ -347,8 +354,8 @@ warning: deadlock at the bound: Order#1 stays at status = awaiting_retry forever
 ```
 
 A cone that stops at a cap, or a `--buc` run, decides no deadlock. Each state with a way out
-prints `note: whether some Order can get stuck at status = paid is not decided: ...`, and is
-neither an error nor a warning. TLC's own deadlock check stays off (`CHECK_DEADLOCK FALSE`):
+is listed under `not checked:` as `whether some Order can get stuck at status = paid is not
+decided: ...`, and is neither an error nor a warning. TLC's own deadlock check stays off (`CHECK_DEADLOCK FALSE`):
 every bounded model ends with no enabled action, because a deleted slot is never reused; a
 cone spec drops actions; and TLC cannot see one instance stuck while other actions keep
 running.
@@ -443,9 +450,9 @@ makes the command exit non-zero in every format, and the generators refuse to em
 | Diagnostic | Severity | When |
 |---|---|---|
 | `UnreachableEnumVariant { column, variant }` | warning | No reachable pattern holds a declared Enum variant that is not a state of a state model. |
-| `NoWitness { entity, column, value, into }` | error | No reachable state holds a state of a state model: a `transitions` endpoint or a start value of a lifecycle column. Not raised when a cap stopped the cone or `--buc` drops use cases; those print a `not decided` note. |
-| `Deadlock { entity, column, value, at, exits, trace }` | error, or warning at the bound | A reachable state has a present instance at a state of a state model that is not an end state, and no path moves it: no edge changes its column or deletes it. Reported once per state, at the first such state, with a shortest path and each way out (`exits`, a `transitions` arm or a deletion) with what blocks it. A warning when some way out lacks only a free slot of an entity it creates. Not raised when a cap stopped the cone or `--buc` drops use cases; those print a `not decided` note. |
-| `NeverRuns { action, origin, site, why }` | warning | No edge of any entity cone that keeps the action carries it, self-loops included. `why` is `NoInstance`, `Apart` (the instances are never present at once), `Guards` (only the guards that hold in no reachable state, each with its site), or `Together`. Not raised when a cap stopped every such cone or `--buc` drops use cases; those print a `not decided` note. |
+| `NoWitness { entity, column, value, into }` | error | No reachable state holds a state of a state model: a `transitions` endpoint or a start value of a lifecycle column. Not raised when a cap stopped the cone or `--buc` drops use cases; those are listed under `not checked:`. |
+| `Deadlock { entity, column, value, at, exits, trace }` | error, or warning at the bound | A reachable state has a present instance at a state of a state model that is not an end state, and no path moves it: no edge changes its column or deletes it. Reported once per state, at the first such state, with a shortest path and each way out (`exits`, a `transitions` arm or a deletion) with what blocks it. A warning when some way out lacks only a free slot of an entity it creates. Not raised when a cap stopped the cone or `--buc` drops use cases; those are listed under `not checked:`. |
+| `NeverRuns { action, origin, site, why }` | warning | No edge of any entity cone that keeps the action carries it, self-loops included. `why` is `NoInstance`, `Apart` (the instances are never present at once), `Crowded` (the guards hold only where a created entity has no free slot), `Guards` (only the guards that hold in no reachable state, each with its site), or `Together`. Not raised when a cap stopped every such cone, `--buc` drops use cases, or `--entity` selects no cone that keeps the action; those are listed under `not checked:`. |
 | `UnwrittenConstrainedVar { column }` | warning | A constraint or a condition guard reads a column that no use case writes, so it checks only the start value. |
 | `NoCreationPath` | info | No use case creates the entity. It starts present. |
 | `MinCardNeedsCreate { usecase, child }` | info | A use case creates the parent of a `1..*` key and no child in the same transaction group, so `MinCard_*` fails after it unless the use case also creates a child. A child that the action links by update counts. |
@@ -487,7 +494,10 @@ makes the command exit non-zero in every format, and the generators refuse to em
 
 All formats honor `--entity <id>`, `--buc <id>`, and `--max-patterns <n>`. `--buc`
 keeps the use cases reachable from the named BUCs. It does not change how an entity
-starts: whether an entity is pre-existing is decided on the whole model.
+starts: whether an entity is pre-existing is decided on the whole model. `--entity`
+derives only the named entities' views, each on its own cone, and the invariants and
+after-asserts that read them. Both are described in
+[Partial runs](./cli-reference.md#partial-runs).
 
 ---
 

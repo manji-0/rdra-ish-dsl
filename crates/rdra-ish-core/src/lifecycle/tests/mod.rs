@@ -7,6 +7,7 @@ mod deadlock;
 mod effects;
 mod never_runs;
 mod owners;
+mod select;
 mod system;
 mod trace;
 mod tx_groups;
@@ -71,7 +72,7 @@ pub(super) fn derive_scoped(model: &SemanticModel, bounds: Bounds, scope: &Scope
 
 /// What `states` derives: `Bounds::STATES`, each view and verdict on its own cone.
 pub(super) fn derive(model: &SemanticModel) -> Derived {
-    let report = super::derive_states(model, &Scope::All, Caps::DEFAULT_PATTERNS);
+    let report = super::derive_states(model, &Scope::ALL, Caps::DEFAULT_PATTERNS);
     Derived {
         views: report.views,
         diags: report.diags,

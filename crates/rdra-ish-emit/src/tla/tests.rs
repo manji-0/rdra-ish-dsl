@@ -8,7 +8,7 @@ fn system(src: &str) -> TransitionSystem {
     assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
     let (model, diags) = build_model(&ast);
     assert!(diags.iter().all(|d| d.is_warning), "{diags:?}");
-    let built = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::All);
+    let built = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL);
     assert!(!has_errors(&built.diags), "{:?}", built.diags);
     built.ts
 }

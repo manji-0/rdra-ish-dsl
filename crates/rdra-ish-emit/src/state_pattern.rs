@@ -15,7 +15,7 @@ use rdra_ish_core::{
 fn derive_views(model: &SemanticModel, view: &View, cap: usize) -> Vec<EntityStateResult> {
     let scope = match &view.scope {
         Scope::Bucs(ids) => SystemScope::from_bucs(ids),
-        Scope::Whole | Scope::UseCases(_) => SystemScope::All,
+        Scope::Whole | Scope::UseCases(_) => SystemScope::ALL,
     };
     derive_states(model, &scope, cap).views
 }

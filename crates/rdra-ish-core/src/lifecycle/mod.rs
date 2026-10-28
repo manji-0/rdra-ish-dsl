@@ -13,6 +13,7 @@ mod explore;
 mod expr;
 mod findings;
 mod restrict;
+mod select;
 mod starts;
 mod states;
 mod targets;
@@ -31,7 +32,8 @@ pub use findings::{
     ActionRuns, Progress, Runs, StateModelFindings, ValueProgress, ValueWitness, Witness,
 };
 pub use restrict::Component;
-pub use states::{derive_states, BoundsLine, StatesReport};
+pub use select::{NotChecked, Scope, Selection, UnknownId};
+pub use states::{derive_states, derive_states_built, BoundsLine, StatesReport};
 pub use targets::{ConeRun, Subject, Tally, TargetExploration, Undecided, UndecidedWhy};
 pub use trace::{Change, Inst, Replay, ReplayError, Trace, TraceStep};
 pub use types::{
@@ -46,21 +48,16 @@ pub use view::{
 
 use crate::model::SemanticModel;
 
-/// Which use cases the system includes. Birth is decided on the whole model either way, so a
-/// scope never changes how an entity starts.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub enum Scope {
-    #[default]
-    All,
-    /// Use cases reachable from these BUC ids.
-    Bucs(Vec<String>),
-}
-
 /// A built system and what the build found. `build` never fails: callers gate on
-/// `has_errors(&built.diags)`.
+/// `has_errors(&built.diags)`. A scope's `--buc` decides which use cases the system has;
+/// birth is decided on the whole model either way, so a scope never changes how an entity
+/// starts.
 pub struct Built {
     pub ts: TransitionSystem,
+    /// Blocking: an error here stops exports and `verify`.
     pub diags: Vec<Diag>,
+    /// The targets the scope answers; errors it defers are here, not in `diags`.
+    pub selection: Selection,
 }
 
 #[derive(Clone, Debug)]

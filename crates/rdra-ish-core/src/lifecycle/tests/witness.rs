@@ -79,7 +79,7 @@ fn every_witness_ends_in_its_pattern() {
 }
 
 fn derive_states_all(model: &SemanticModel) -> Vec<EntityStateResult> {
-    super::super::derive_states(model, &Scope::All, Caps::DEFAULT_PATTERNS).views
+    super::super::derive_states(model, &Scope::ALL, Caps::DEFAULT_PATTERNS).views
 }
 
 /// At both bounds, a witnessed state's first state holds it in a present slot, and no state
@@ -89,7 +89,7 @@ fn a_witness_state_holds_its_value() {
     for sample in SAMPLES {
         let model = load(sample);
         for bounds in [Bounds::STATES, Bounds::VERIFY] {
-            let built = TransitionSystem::build(&model, bounds, &Scope::All);
+            let built = TransitionSystem::build(&model, bounds, &Scope::ALL);
             let ts = &built.ts;
             let entities: Vec<Target> = ts
                 .targets()
@@ -212,7 +212,7 @@ fn undecided_by_subject(undecided: &[Undecided]) -> BySubject<'_> {
 #[test]
 fn a_capped_cone_leaves_its_states_and_actions_undecided() {
     let model = sample_model(UNWITNESSED);
-    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::All);
+    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
     let run = built
         .ts
         .explore_targets(&built.ts.targets(), Caps::new(Caps::DEFAULT_PATTERNS, 2));
@@ -283,7 +283,7 @@ fn a_buc_scope_leaves_unwitnessed_states_and_dead_actions_undecided() {
     let model = sample_model(UNWITNESSED);
     let report = super::super::derive_states(
         &model,
-        &Scope::Bucs(vec!["BucOrderRefund".to_string()]),
+        &Scope::from_bucs(&["BucOrderRefund".to_string()]),
         Caps::DEFAULT_PATTERNS,
     );
     assert!(!report.has_errors(), "{:?}", report.diags);

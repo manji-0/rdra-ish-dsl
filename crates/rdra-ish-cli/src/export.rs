@@ -3,7 +3,7 @@
 use std::num::NonZeroU8;
 
 use anyhow::{bail, Result};
-use rdra_ish_core::lifecycle::{has_errors, Bounds, Scope, Severity, TransitionSystem};
+use rdra_ish_core::lifecycle::{has_errors, Bounds, Built, Scope, Severity, TransitionSystem};
 use rdra_ish_core::SemanticModel;
 use rdra_ish_emit::{
     asyncapi::AsyncApiJsonEmitter,
@@ -64,14 +64,15 @@ pub fn tla_bounds(instance_count: u32, int_range_max: u32) -> Result<Bounds> {
 
 /// The whole system printed in Check mode, after the `checked_system` gate.
 pub fn tla_bundle(model: &SemanticModel, bounds: Bounds, module_name: &str) -> Result<TlaBundle> {
-    let ts = checked_system(model, bounds)?;
-    Ok(tla::print(&ts, PrintMode::Check, module_name))
+    let built = checked_system(model, bounds, &Scope::ALL)?;
+    Ok(tla::print(&built.ts, PrintMode::Check, module_name))
 }
 
-/// Builds the transition system at `bounds` and reports its diagnostics. Any Error diagnostic
-/// stops the command, the gate `states` and `check` apply too.
-pub fn checked_system(model: &SemanticModel, bounds: Bounds) -> Result<TransitionSystem> {
-    let built = TransitionSystem::build(model, bounds, &Scope::All);
+/// Builds the transition system of `scope` at `bounds` and reports its diagnostics. Any Error
+/// diagnostic stops the command, the gate `states` and `check` apply too; an error the
+/// scope defers is in `selection.deferred` and does not.
+pub fn checked_system(model: &SemanticModel, bounds: Bounds, scope: &Scope) -> Result<Built> {
+    let built = TransitionSystem::build(model, bounds, scope);
     for d in &built.diags {
         let level = match d.diag.severity() {
             Severity::Info => continue,
@@ -92,5 +93,5 @@ pub fn checked_system(model: &SemanticModel, bounds: Bounds) -> Result<Transitio
     if has_errors(&built.diags) {
         bail!("the lifecycle model has errors; no TLA+ written");
     }
-    Ok(built.ts)
+    Ok(built)
 }

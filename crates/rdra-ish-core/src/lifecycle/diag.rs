@@ -270,13 +270,19 @@ pub enum Blocked {
     Guards(Vec<(GuardWhy, Site)>),
     /// Each guard holds in some reachable state, but never all of them in one.
     Together,
+    /// In some reachable state its guards hold and every other instance is there, but these
+    /// entities it creates have no free slot within the instance bound.
+    Crowded(Vec<String>),
 }
 
 impl Blocked {
     /// Only free slots are missing: every param it lacks is a `New` one.
     pub fn only_free_slots(&self) -> bool {
-        matches!(self, Blocked::NoInstance(params)
-            if params.iter().all(|(_, role)| *role == ParamRole::New))
+        match self {
+            Blocked::NoInstance(params) => params.iter().all(|(_, role)| *role == ParamRole::New),
+            Blocked::Crowded(_) => true,
+            Blocked::Apart(_) | Blocked::Guards(_) | Blocked::Together => false,
+        }
     }
 }
 
@@ -358,6 +364,10 @@ impl fmt::Display for StateDiag {
                         f,
                         "each of its guards holds in some reachable state, but never all of them in one"
                     ),
+                    Blocked::Crowded(_) => write!(
+                        f,
+                        "whenever its guards hold, the instance bound leaves no free slot for an instance it creates"
+                    ),
                 }
             }
             StateDiag::Deadlock {
@@ -368,14 +378,17 @@ impl fmt::Display for StateDiag {
                 ..
             } => {
                 let bound = exits.iter().find_map(|x| match &x.why {
-                    Blocked::NoInstance(params) if x.why.only_free_slots() => {
-                        Some((&x.action, params))
+                    Blocked::NoInstance(params) if x.why.only_free_slots() => Some((
+                        &x.action,
+                        params.iter().map(|(e, _)| e.as_str()).collect::<Vec<_>>(),
+                    )),
+                    Blocked::Crowded(entities) => {
+                        Some((&x.action, entities.iter().map(String::as_str).collect()))
                     }
                     _ => None,
                 });
                 match bound {
-                    Some((action, params)) => {
-                        let slots: Vec<&str> = params.iter().map(|(e, _)| e.as_str()).collect();
+                    Some((action, slots)) => {
                         write!(
                             f,
                             "deadlock at the bound: {at} stays at {column} = {value} forever; {action} needs a free {} slot within the instance bound",

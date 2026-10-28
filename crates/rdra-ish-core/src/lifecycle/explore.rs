@@ -339,15 +339,23 @@ impl TransitionSystem {
     /// Slot choices for each param: the lowest absent slot for `New`, every present slot
     /// otherwise.
     fn bindings(&self, action: &Action, state: &State) -> Vec<Vec<u8>> {
+        self.bindings_for(action, state, false)
+    }
+
+    /// `bindings`, except that with `crowd` a `New` param with no free slot takes every slot,
+    /// as if the bound left one free.
+    fn bindings_for(&self, action: &Action, state: &State, crowd: bool) -> Vec<Vec<u8>> {
         let mut out: Vec<Vec<u8>> = vec![Vec::new()];
         for p in &action.params {
             let exists = self.entity(p.entity).exists;
             let slots: Vec<u8> = match p.role {
-                ParamRole::New => (0..self.bounds.slots())
+                ParamRole::New => match (0..self.bounds.slots())
                     .find(|&s| state.get(self, exists, s) == Value::ABSENT)
-                    .map(|s| s as u8)
-                    .into_iter()
-                    .collect(),
+                {
+                    Some(s) => vec![s as u8],
+                    None if crowd => (0..self.bounds.slots() as u8).collect(),
+                    None => Vec::new(),
+                },
                 ParamRole::Existing | ParamRole::Parent => (0..self.bounds.slots())
                     .filter(|&s| state.get(self, exists, s) == Value::PRESENT)
                     .map(|s| s as u8)
@@ -488,6 +496,9 @@ pub(crate) enum Scan {
     /// Some state binds every param and every guard holds under some binding, but not all of
     /// them in one state.
     EachHeld,
+    /// In some state every pre-guard holds and every param but these `New` ones finds a slot:
+    /// the instance bound leaves them none there.
+    Crowded(Vec<usize>),
 }
 
 impl TransitionSystem {
@@ -503,6 +514,8 @@ impl TransitionSystem {
         let mut bound = vec![false; action.params.len()];
         let mut held = vec![false; action.guards.len()];
         let mut any_binding = false;
+        let mut crowded = vec![false; action.params.len()];
+        let creates = action.params.iter().any(|p| p.role == ParamRole::New);
         for s in states {
             for (p, param) in action.params.iter().enumerate() {
                 let exists = self.entity(param.entity).exists;
@@ -536,7 +549,13 @@ impl TransitionSystem {
                     };
                 }
             }
-            if any_binding && held.iter().all(|b| *b) {
+            if creates {
+                for p in self.crowded_in(action, s, pin) {
+                    crowded[p] = true;
+                }
+            }
+            // A creation keeps scanning: a later state may show the bound as what blocks it.
+            if !creates && any_binding && held.iter().all(|b| *b) {
                 return Scan::EachHeld;
             }
         }
@@ -547,11 +566,59 @@ impl TransitionSystem {
         if !any_binding {
             return Scan::Apart;
         }
+        let crowded: Vec<usize> = (0..crowded.len()).filter(|p| crowded[*p]).collect();
+        if !crowded.is_empty() {
+            // The crowded states read no post-guard, so one that never held under a real
+            // binding still blocks; the pre-guards held there and are not the blocker.
+            let post_never: Vec<usize> = (0..held.len())
+                .filter(|g| !held[*g] && action.guards[*g].reads_successor())
+                .collect();
+            return if post_never.is_empty() {
+                Scan::Crowded(crowded)
+            } else {
+                Scan::NeverHeld(post_never)
+            };
+        }
         let never: Vec<usize> = (0..held.len()).filter(|g| !held[*g]).collect();
         if never.is_empty() {
             Scan::EachHeld
         } else {
             Scan::NeverHeld(never)
+        }
+    }
+
+    /// The `New` params of `action` that find no free slot in `s` while every other param
+    /// finds one and every pre-guard holds under some binding that gives them any slot; empty
+    /// when `s` has no such binding. Post-guards are not read: a creation on a taken slot has
+    /// no successor to read them on.
+    fn crowded_in(&self, action: &Action, s: &State, pin: Option<(usize, u8)>) -> Vec<usize> {
+        let free = |p: &super::types::Param| {
+            let exists = self.entity(p.entity).exists;
+            (0..self.bounds.slots()).any(|slot| s.get(self, exists, slot) == Value::ABSENT)
+        };
+        let missing: Vec<usize> = (0..action.params.len())
+            .filter(|&p| action.params[p].role == ParamRole::New && !free(&action.params[p]))
+            .collect();
+        if missing.is_empty() {
+            return missing;
+        }
+        let pinned = |params: &Vec<u8>| pin.is_none_or(|(p, k)| params[p] == k);
+        let holds = self
+            .bindings_for(action, s, true)
+            .into_iter()
+            .filter(pinned)
+            .any(|params| {
+                let mut env = Env::new(&params);
+                action
+                    .guards
+                    .iter()
+                    .filter(|g| !g.reads_successor())
+                    .all(|g| self.eval(&g.pred, s, &mut env))
+            });
+        if holds {
+            missing
+        } else {
+            Vec::new()
         }
     }
 

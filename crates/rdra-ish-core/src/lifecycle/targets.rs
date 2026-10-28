@@ -8,7 +8,7 @@ use super::cone::{Cone, Target};
 use super::diag::{Diag, StateDiag};
 use super::explore::{Caps, ComponentRun};
 use super::findings::{Progress, Runs, Witness};
-use super::types::{EntId, ParamRole};
+use super::types::{ActionOrigin, EntId, ParamRole};
 use super::view::{entity_view, AbstractValue, EntityStateResult};
 use super::TransitionSystem;
 use crate::model::{EntityKey, SemanticModel};
@@ -79,6 +79,8 @@ pub enum UndecidedWhy {
     PatternCap(usize),
     /// `--buc` leaves use cases out, so what they would reach or enable is not ruled out.
     Scope,
+    /// `--entity` explores no cone that keeps the action.
+    Unselected,
 }
 
 impl fmt::Display for Undecided {
@@ -109,6 +111,7 @@ impl fmt::Display for Undecided {
                 "the {cone} cone stopped at the pattern cap ({cap} patterns)"
             ),
             UndecidedWhy::Scope => write!(f, "--buc leaves use cases out of the run"),
+            UndecidedWhy::Unselected => write!(f, "no cone of a selected entity keeps it"),
         }
     }
 }
@@ -116,6 +119,8 @@ impl fmt::Display for Undecided {
 /// What the entity cones that keep one action say about it.
 #[derive(Default)]
 struct RunsSoFar {
+    /// Some explored entity cone keeps the action.
+    kept: bool,
     fired: bool,
     /// The first complete cone's `NeverRuns`.
     never: Option<StateDiag>,
@@ -185,10 +190,26 @@ impl TransitionSystem {
                     cone: Some(cone),
                     why,
                 });
+            } else if !r.kept && self.judged_by_entity_cones(i) {
+                out.undecided.push(Undecided {
+                    subject: Subject::Runs {
+                        action: self.actions[i].name.clone(),
+                    },
+                    cone: None,
+                    why: UndecidedWhy::Unselected,
+                });
             }
         }
         out.targets = answered;
         out
+    }
+
+    /// Whether the action can run is decided on the cones of the entities it binds other than
+    /// as a parent, as `state_model_findings` does; the clock is not a use case.
+    fn judged_by_entity_cones(&self, i: usize) -> bool {
+        let action = &self.actions[i];
+        matches!(action.origin, ActionOrigin::UseCase { .. })
+            && action.params.iter().any(|p| p.role != ParamRole::Parent)
     }
 
     /// The id of the entity `key` in this (restricted) system.
@@ -278,6 +299,7 @@ impl TransitionSystem {
                 .position(|x| x.name == *name)
                 .expect("a cone action is an action of the system");
             let r = &mut runs[at];
+            r.kept = true;
             match a.runs {
                 Runs::Fired => r.fired = true,
                 Runs::Never(diag) => {
@@ -308,27 +330,10 @@ impl TransitionSystem {
     /// verdict incomplete.
     fn verdict(&self, target: Target, cone: &ConeRun) -> Vec<Diag> {
         let run = &cone.run;
-        let entities: Vec<_> = match target {
-            Target::Entity(_) => return Vec::new(),
-            Target::Invariant(i) => self.invariants[i]
-                .binders
-                .iter()
-                .map(|e| self.entity(*e).key)
-                .collect(),
-            Target::AfterAssert(i) => {
-                let mut entities = Vec::new();
-                for step in &self.after[i].steps {
-                    let params = self.actions[step.act.index()].params.iter();
-                    for e in step.binders.iter().copied().chain(params.map(|p| p.entity)) {
-                        let key = self.entity(e).key;
-                        if !entities.contains(&key) {
-                            entities.push(key);
-                        }
-                    }
-                }
-                entities
-            }
-        };
+        if matches!(target, Target::Entity(_)) {
+            return Vec::new();
+        }
+        let entities = self.target_entities(target);
         let mut out: Vec<Diag> = run
             .diags
             .iter()
@@ -386,7 +391,7 @@ impl TargetExploration {
     /// A run whose `--buc` drops use cases rules neither a state, an action, nor a way out of
     /// a state out: its `NoWitness` errors, `Deadlock`s, and `NeverRuns` warnings become
     /// undecided.
-    pub(crate) fn defer_progress(&mut self) {
+    pub fn defer_progress(&mut self) {
         let mut kept = Vec::new();
         for d in std::mem::take(&mut self.verdicts) {
             let subject = match &d.diag {
@@ -429,7 +434,8 @@ impl TargetExploration {
         self.tally.never_run = 0;
     }
 
-    /// Per-entity views sorted by entity id, each from the entity's cone.
+    /// The views of the explored entity targets, sorted by entity id, each from the entity's
+    /// cone.
     pub fn entity_views(
         &self,
         ts: &TransitionSystem,
@@ -437,6 +443,11 @@ impl TargetExploration {
         build_diags: &[Diag],
     ) -> Vec<EntityStateResult> {
         let mut out: Vec<EntityStateResult> = (0..ts.entities().len())
+            .filter(|i| {
+                self.targets
+                    .iter()
+                    .any(|(t, _)| *t == Target::Entity(EntId::at(*i)))
+            })
             .map(|i| {
                 let key = ts.entities()[i].key;
                 let cone = self.cone_of(Target::Entity(EntId::at(i)));
