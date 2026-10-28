@@ -22,7 +22,7 @@ Diagnostics are written to stderr as `error: ...` or `warning: ...`.
   errors **or** Error-severity state diagnostics. `export --kind tla` and `verify` gate on
   parse errors plus the Error diagnostics of the lifecycle transition system they print
   (built at `--instance-count` / `--int-range-max`). Every command reads the same
-  lifecycle transition system, so no state diagnostic is TLA-only.
+  lifecycle transition system, so every command refuses the same models.
 - `fmt` only requires a parseable source; it does not run semantic analysis.
 
 ---
@@ -59,10 +59,11 @@ run prints `OK: no errors`. When the model has temporal `property` declarations,
   no transition/use case/BUC, or triggered use cases with no containing BUC. Mark
   intentional external publications with `outbox(Event)` to suppress only the
   raised-but-unconsumed warning;
-- state-pattern diagnostics (same severity as `states`), including missing creation paths, unreachable enum variants,
-  forbidden reachable states, invariant / required / exclusive violations, temporal
-  anchor assertion diagnostics, to-many quantifier evaluation gaps, and pattern
-  truncation.
+- state diagnostics (same severity as `states`), including missing creation paths,
+  unreachable enum variants, a reachable state that breaks a `forbidden`, `invariant`,
+  `required`, `exclusive`, multi-entity, or quantifier rule, a failed `after` assertion,
+  a condition body that no use case can bind, and pattern truncation. See
+  [Diagnostics](./state-derivation.md#diagnostics).
 
 | Argument | Type | Description |
 |---|---|---|
@@ -320,9 +321,8 @@ rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [-
 | `--instance-count` | unsigned integer | `2` | Multi-instance `InstanceCount` (`1..=255`; `1` warns). |
 | `--int-range-max` | unsigned integer | `5` | Upper bound for `IntRange == 0..N` (`1..=255`; `0` rejected). |
 
-For each condition that has a `holds` body, `verify` first prints
-`condition <Id>: body stored, not yet checked (phase 4)` on stdout. Conditions change neither
-the exported spec nor the TLC result.
+A `holds` body applied to a use case is a guard in the spec, so TLC checks it. `verify`
+prints no notice for conditions.
 
 Warnings and errors of the lifecycle transition system are printed on stderr, and an
 error stops `verify` before TLC runs. Each invariant and `after(..).assert` is checked on
