@@ -17,7 +17,7 @@ use elements::{
 };
 use render::{format_rows, format_sorted_id_labels};
 pub(crate) use state_findings::{
-    reject_state_errors, state_consistency_findings, state_diag_message,
+    reject_state_errors, severity_word, state_consistency_findings, state_diag_message,
 };
 
 macro_rules! list_id_label {

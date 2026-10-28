@@ -370,12 +370,12 @@ rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns 
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--format` | `table` \| `csv` \| `json` \| `typescript` | `table` | Output format. `typescript` (alias `type-script`) emits entity state unions. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Restrict the reachable scope to the union of the named BUCs. |
-| `--max-patterns` | unsigned integer | `256` | Cap on each entity's distinct patterns within one target cone (an entity view, invariant, or after-assert is explored on the variables it reads). The cone also stops after 16 joint states per allowed pattern (4096 at the default). When a cap is hit, the result is marked `truncated` and a fail-closed `PatternCapReached` or `StateCapReached` **error** is recorded (exit non-zero for all formats). |
+| `--max-patterns` | unsigned integer | `256` | Cap on each entity's distinct patterns within one target cone (an entity view, invariant, or after-assert is explored on the variables it reads). The cone also stops after 16 joint states per allowed pattern (4096 at the default). Only entities the target reads are bounded to one instance: a use case that also creates an entity outside the cone (an audit row, say) never runs out of slots for it. When a cap is hit, the result is marked `truncated` and a fail-closed `PatternCapReached` or `StateCapReached` **error** is recorded (exit non-zero for all formats). |
 | `--entity <id>` | string | — (all entities) | Restrict **stdout** to a single entity id. Filtering is applied to whichever output format is selected. Exit severity still considers the whole model; when other entities have Error-severity diagnostics, a stderr note reports the count. |
 
 Output is written to stdout. Exit is based on structured severity (all formats), not
 string-scanning `[error]`. stderr starts with a `bounds:` line: one instance per entity,
-the Int range, and the caps per target cone. Diagnostics that name no entity are printed
+the Int range, the caps per target cone, and that entities a check does not read are unbounded. Diagnostics that name no entity are printed
 on stderr too.
 
 ---

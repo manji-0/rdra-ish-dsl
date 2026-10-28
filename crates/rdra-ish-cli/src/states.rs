@@ -11,7 +11,7 @@ use rdra_ish_emit::{
 };
 
 use crate::cli::StatesFormat;
-use crate::list_output::{filter_entity_output, state_diag_message};
+use crate::list_output::{filter_entity_output, severity_word, state_diag_message};
 use crate::load::{load_model, reject_model_errors};
 
 pub fn run_states(
@@ -39,7 +39,7 @@ pub fn run_states(
     let report = derive_states(&model, &Scope::from_bucs(&buc), max_patterns);
     eprintln!("{}", bounds_line(&report));
     for d in report.unattributed() {
-        eprintln!("{}: {}", d.severity().as_label(), state_diag_message(d));
+        eprintln!("{}: {}", severity_word(d.severity()), state_diag_message(d));
     }
 
     if let Some(ref entity_id) = entity {
@@ -84,7 +84,7 @@ pub fn run_states(
 /// The bounds the views were derived under, printed on stderr so stdout stays the artifact.
 fn bounds_line(report: &StatesReport) -> String {
     format!(
-        "bounds: {} instance per entity, Int 0..{}, --max-patterns {} per target cone ({} states per cone)",
+        "bounds: {} instance per entity, Int 0..{}, --max-patterns {} per target cone ({} states per cone); entities a check does not read are unbounded",
         report.bounds.instances, report.bounds.int_max, report.caps.patterns, report.caps.states
     )
 }

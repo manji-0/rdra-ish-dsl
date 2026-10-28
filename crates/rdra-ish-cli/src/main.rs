@@ -16,7 +16,8 @@ use diagram::{run_diagram, DiagramRequest};
 use export::export_artifact;
 use fmt_cmd::run_fmt;
 use list_output::{
-    format_lint_issues, list_elements, reject_state_errors, state_consistency_findings,
+    format_lint_issues, list_elements, reject_state_errors, severity_word,
+    state_consistency_findings,
 };
 use load::{eprint_diagnostic, load_model, reject_model_errors};
 use rdra_ish_core::lifecycle::Severity;
@@ -37,14 +38,6 @@ fn is_strict_access_gap(error: &RdraError) -> bool {
             | RdraError::ApiPermissionNotHeld { .. }
             | RdraError::UseCasePermissionNotHeld { .. }
     )
-}
-
-fn severity_word(severity: Severity) -> &'static str {
-    match severity {
-        Severity::Info => "info",
-        Severity::Warning => "warning",
-        Severity::Error => "error",
-    }
 }
 
 fn main() -> Result<()> {

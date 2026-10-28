@@ -3,6 +3,15 @@
 use rdra_ish_core::lifecycle::{derive_states, Caps, InvKind, InvText, Scope, Severity, StateDiag};
 use rdra_ish_core::SemanticModel;
 
+/// The word `check` and `states` print before a diagnostic.
+pub(crate) fn severity_word(severity: Severity) -> &'static str {
+    match severity {
+        Severity::Info => "info",
+        Severity::Warning => "warning",
+        Severity::Error => "error",
+    }
+}
+
 /// Every diagnostic of the lifecycle views at the `states` defaults, with its severity: those
 /// on an entity view first, then those that name no entity.
 pub(crate) fn state_consistency_findings(model: &SemanticModel) -> Vec<(Severity, String)> {
