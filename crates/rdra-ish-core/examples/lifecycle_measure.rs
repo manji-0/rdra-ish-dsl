@@ -1,13 +1,16 @@
-//! Measurement gate for the lifecycle layer: for every root in `samples.txt`, build at
-//! `Bounds::STATES`, explore each component under a state cap, and print the entity count and
-//! reached-state count per component. Then compare each entity's view with today's `states`.
+//! Measurement gate for the lifecycle layer. For every root in `samples.txt` it builds at
+//! `Bounds::STATES` and explores the cone of each target (each entity view, invariant, and
+//! after-assert) under a state cap. It prints the cone size and reached-state count per
+//! target and the largest per sample, then each entity whose cone view differs from today's
+//! `states`.
 //!
 //! Run: `cargo run --release -p rdra-ish-core --example lifecycle_measure [-- STATE_CAP]`
 
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use rdra_ish_core::lifecycle::{Bounds, Caps, Scope, TransitionSystem};
+use rdra_ish_core::lifecycle::{Bounds, Caps, Cone, Scope, Target, TransitionSystem, VarKind};
 use rdra_ish_core::{build_merged_model, derive_state_patterns, resolve, DEFAULT_PATTERN_CAP};
 
 fn rdra_files(root: &Path, out: &mut Vec<PathBuf>) {
@@ -46,6 +49,44 @@ fn include_paths(files: &[PathBuf]) -> Vec<PathBuf> {
     paths
 }
 
+fn target_name(ts: &TransitionSystem, t: Target) -> String {
+    match t {
+        Target::Entity(e) => format!("view {}", ts.entity(e).id),
+        Target::Invariant(i) => format!("inv {}", ts.invariants()[i].name),
+        Target::AfterAssert(i) => format!("after {}", ts.after_asserts()[i].name),
+    }
+}
+
+fn rows(r: &rdra_ish_core::lifecycle::EntityStateResult) -> String {
+    r.patterns
+        .iter()
+        .map(|p| {
+            p.pattern
+                .values
+                .iter()
+                .map(|(c, v)| format!("{c}={}", v.display_with_type(None)))
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .collect::<Vec<_>>()
+        .join(" | ")
+}
+
+fn old_rows(r: &rdra_ish_core::EntityStateResult) -> String {
+    r.patterns
+        .iter()
+        .map(|p| {
+            p.pattern
+                .values
+                .iter()
+                .map(|(c, v)| format!("{c}={}", v.display_with_type(None)))
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .collect::<Vec<_>>()
+        .join(" | ")
+}
+
 fn main() {
     let cap: usize = std::env::args()
         .nth(1)
@@ -53,11 +94,8 @@ fn main() {
         .unwrap_or(1_000_000);
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let list = std::fs::read_to_string(repo.join("samples.txt")).expect("samples.txt");
-    println!("bounds: instances=1 int_max=5  state cap per component: {cap}");
-    println!(
-        "{:<58} {:>4} {:>8} {:>10} {:>9}  entities",
-        "sample", "comp", "entities", "states", "ms"
-    );
+    let caps = Caps::new(usize::MAX, cap);
+    println!("bounds: instances=1 int_max=5  state cap per cone: {cap}");
     let mut view_diffs: Vec<String> = Vec::new();
     for sample in list
         .lines()
@@ -70,67 +108,76 @@ fn main() {
         let (program, _) = resolve(&files, &includes);
         let (model, _) = build_merged_model(&program, &includes);
         let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::All);
-        let mut runs = Vec::new();
-        for (i, comp) in built.ts.components().iter().enumerate() {
-            let sub = built.ts.restrict(comp);
-            let ids: Vec<String> = sub.entities().iter().map(|e| e.id.clone()).collect();
-            let start = Instant::now();
-            let run = sub.run(Caps::new(usize::MAX, cap));
-            let ms = start.elapsed().as_millis();
-            let states = if run.complete {
-                run.states.len().to_string()
-            } else {
-                format!(">{}", run.states.len())
+        let ts = &built.ts;
+        println!("\n{sample}");
+        println!(
+            "  {:<44} {:>5} {:>8} {:>10} {:>7}",
+            "target", "vars", "entities", "states", "ms"
+        );
+        let mut seen: HashMap<Cone, (usize, String)> = HashMap::new();
+        let mut worst: (usize, String) = (0, String::new());
+        for t in ts.targets() {
+            let cone = ts.target_cone(t);
+            let entities: BTreeSet<_> = cone
+                .vars
+                .iter()
+                .filter_map(|v| match ts.var(*v).kind {
+                    VarKind::Exists(e) => Some(e),
+                    _ => None,
+                })
+                .collect();
+            let (states, ms) = match seen.get(&cone) {
+                Some((n, _)) => (*n, "cached".to_string()),
+                None => {
+                    let start = Instant::now();
+                    let run = ts.restrict_to(&cone.vars, &cone.keep).run(caps);
+                    let n = if run.complete {
+                        run.states.len()
+                    } else {
+                        usize::MAX
+                    };
+                    let ms = start.elapsed().as_millis().to_string();
+                    seen.insert(cone.clone(), (n, ms.clone()));
+                    (n, ms)
+                }
             };
-            let clock = if comp.now { " +now" } else { "" };
+            let shown = if states == usize::MAX {
+                format!(">{cap}")
+            } else {
+                states.to_string()
+            };
+            let name = target_name(ts, t);
             println!(
-                "{:<58} {:>4} {:>8} {:>10} {:>9}  {}{clock}",
-                sample,
-                i,
-                ids.len(),
-                states,
-                ms,
-                ids.join(",")
+                "  {:<44} {:>5} {:>8} {:>10} {:>7}",
+                name,
+                cone.vars.len(),
+                entities.len(),
+                shown,
+                ms
             );
-            runs.push(run);
+            if states >= worst.0 {
+                let ids: Vec<&str> = entities.iter().map(|e| ts.entity(*e).id.as_str()).collect();
+                worst = (states, format!("{name} [{}]", ids.join(",")));
+            }
         }
-        let exploration = rdra_ish_core::lifecycle::Exploration { runs };
-        let views = exploration.entity_views(&model, &built.diags);
+        let shown = if worst.0 == usize::MAX {
+            format!(">{cap}")
+        } else {
+            worst.0.to_string()
+        };
+        println!("  max: {shown} states, {}", worst.1);
+
+        let exploration = ts.explore_targets(caps);
+        let views = exploration.entity_views(ts, &model, &built.diags);
         let old = derive_state_patterns(&model, &[], DEFAULT_PATTERN_CAP);
         for new in &views {
             let Some(old) = old.iter().find(|o| o.entity_id == new.entity_id) else {
                 continue;
             };
-            let render = |values: Vec<String>| values.join(" | ");
-            let old_rows = render(
-                old.patterns
-                    .iter()
-                    .map(|p| {
-                        p.pattern
-                            .values
-                            .iter()
-                            .map(|(c, v)| format!("{c}={}", v.display_with_type(None)))
-                            .collect::<Vec<_>>()
-                            .join(",")
-                    })
-                    .collect(),
-            );
-            let new_rows = render(
-                new.patterns
-                    .iter()
-                    .map(|p| {
-                        p.pattern
-                            .values
-                            .iter()
-                            .map(|(c, v)| format!("{c}={}", v.display_with_type(None)))
-                            .collect::<Vec<_>>()
-                            .join(",")
-                    })
-                    .collect(),
-            );
-            if old_rows != new_rows {
+            let (o, n) = (old_rows(old), rows(new));
+            if o != n {
                 view_diffs.push(format!(
-                    "{sample} {}: states {} patterns, lifecycle {} patterns\n    states:    {old_rows}\n    lifecycle: {new_rows}",
+                    "{sample} {}: states {} patterns, lifecycle {} patterns\n    states:    {o}\n    lifecycle: {n}",
                     new.entity_id,
                     old.patterns.len(),
                     new.patterns.len()
