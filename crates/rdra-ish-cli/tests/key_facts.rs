@@ -96,8 +96,31 @@ fn export(sample: &str, args: &[&str], file: &str) -> String {
     std::fs::read_to_string(&out).unwrap_or_else(|e| panic!("{sample}: {}: {e}", out.display()))
 }
 
-/// One printed key column: `(child, column, parent, parent column, unique)`.
-type Key = (String, String, String, String, bool);
+/// One printed key column.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct Key {
+    child: String,
+    column: String,
+    parent: String,
+    parent_column: String,
+    /// The key is a 1:1.
+    unique: bool,
+    /// The key has more than one column.
+    composite: bool,
+}
+
+impl Key {
+    /// What a per-column output prints: `(child, column, parent, column is unique)`. A
+    /// composite 1:1 is unique as a set, not per column.
+    fn per_column(&self) -> (String, String, String, bool) {
+        (
+            self.child.clone(),
+            self.column.clone(),
+            self.parent.clone(),
+            self.unique && !self.composite,
+        )
+    }
+}
 
 fn fact_keys(model: &SemanticModel) -> Vec<Key> {
     let mut keys: Vec<Key> = model
@@ -105,14 +128,13 @@ fn fact_keys(model: &SemanticModel) -> Vec<Key> {
         .flat_map(|(_, fk)| {
             let child = &model.entities[fk.child].id;
             let parent = &model.entities[fk.parent].id;
-            fk.columns.iter().map(move |(column, parent_column)| {
-                (
-                    child.clone(),
-                    column.clone(),
-                    parent.clone(),
-                    parent_column.clone(),
-                    fk.unique(),
-                )
+            fk.columns.iter().map(move |(column, parent_column)| Key {
+                child: child.clone(),
+                column: column.clone(),
+                parent: parent.clone(),
+                parent_column: parent_column.clone(),
+                unique: fk.unique(),
+                composite: fk.columns.len() > 1,
             })
         })
         .collect();
@@ -171,12 +193,26 @@ fn assert_coverage(sample: &str, model: &SemanticModel) {
     }
 }
 
-/// `A.b` or `"A"."b"` at the start of `text`, and the rest after it.
-fn dotted(text: &str) -> (String, String, &str) {
+/// `A.b`, `"A"."b"` or `A.(b, c)` at the start of `text`, and the rest after it.
+fn dotted(text: &str) -> (String, Vec<String>, &str) {
     let (table, rest) = ident(text);
     let rest = rest.strip_prefix('.').expect("dotted DBML ref");
-    let (column, rest) = ident(rest);
-    (table, column, rest)
+    let Some(mut rest) = rest.strip_prefix('(') else {
+        let (column, rest) = ident(rest);
+        return (table, vec![column], rest);
+    };
+    let mut columns = Vec::new();
+    loop {
+        let (column, after) = ident(rest.trim_start());
+        columns.push(column);
+        match after.strip_prefix(", ") {
+            Some(next) => rest = next,
+            None => {
+                let after = after.strip_prefix(')').expect("closed column list");
+                return (table, columns, after);
+            }
+        }
+    }
 }
 
 fn ident(text: &str) -> (String, &str) {
@@ -222,21 +258,40 @@ fn assert_dbml(sample: &str, dbml: &str, facts: &[Key]) {
         let Some(rest) = line.strip_prefix("Ref: ") else {
             continue;
         };
-        let (child, column, rest) = dotted(rest);
+        let (child, columns, rest) = dotted(rest);
         let (op, rest) = rest.trim_start().split_at(1);
-        let (parent, parent_column, _) = dotted(rest.trim_start());
-        for (table, col) in [(&child, &column), (&parent, &parent_column)] {
-            assert!(
-                tables.get(table).is_some_and(|cols| cols.contains(col)),
-                "{sample}: unresolved DBML ref `{line}`: no {table}.{col}"
-            );
+        let (parent, parent_columns, _) = dotted(rest.trim_start());
+        assert_eq!(
+            columns.len(),
+            parent_columns.len(),
+            "{sample}: DBML ref `{line}` pairs its columns"
+        );
+        for (table, cols) in [(&child, &columns), (&parent, &parent_columns)] {
+            for col in cols {
+                assert!(
+                    tables.get(table).is_some_and(|known| known.contains(col)),
+                    "{sample}: unresolved DBML ref `{line}`: no {table}.{col}"
+                );
+            }
         }
-        refs.push((child, column, parent, parent_column, op == "-"));
+        let composite = columns.len() > 1;
+        for (column, parent_column) in columns.into_iter().zip(parent_columns) {
+            refs.push(Key {
+                child: child.clone(),
+                column,
+                parent: parent.clone(),
+                parent_column,
+                unique: op == "-",
+                composite,
+            });
+        }
     }
     assert_eq!(sorted(refs), facts, "{sample}: DBML refs");
 }
 
-fn assert_json_schema(sample: &str, json: &str, facts: &[Key]) {
+/// Per key column, as in [`Key::per_column`], plus the parent column a composite key column
+/// names. Each composite 1:1 key is also one of its entity's unique sets.
+fn assert_json_schema(sample: &str, json: &str, model: &SemanticModel, facts: &[Key]) {
     let doc: serde_json::Value = serde_json::from_str(json).expect("JSON Schema parses");
     let mut keys = Vec::new();
     for def in doc["$defs"].as_object().expect("$defs").values() {
@@ -249,16 +304,40 @@ fn assert_json_schema(sample: &str, json: &str, facts: &[Key]) {
                 continue;
             }
             keys.push((
-                entity.to_string(),
-                column.clone(),
-                prop["x-rdra-ish-fk-target"].as_str().unwrap().to_string(),
-                prop["x-rdra-ish-unique"] == true,
+                (
+                    entity.to_string(),
+                    column.clone(),
+                    prop["x-rdra-ish-fk-target"].as_str().unwrap().to_string(),
+                    prop["x-rdra-ish-unique"] == true,
+                ),
+                prop["x-rdra-ish-fk-target-column"]
+                    .as_str()
+                    .map(str::to_string),
             ));
         }
     }
+    for (_, fk) in model.foreign_keys() {
+        if !(fk.unique() && fk.columns.len() > 1) {
+            continue;
+        }
+        let child = &model.entities[fk.child].id;
+        let mut columns: Vec<&str> = fk.columns.iter().map(|(c, _)| c.as_str()).collect();
+        columns.sort();
+        let sets = &doc["$defs"][format!("Entity.{child}")]["x-rdra-ish-unique-constraints"];
+        assert!(
+            sets.as_array()
+                .is_some_and(|sets| sets.iter().any(|set| *set == serde_json::json!(columns))),
+            "{sample}: JSON Schema unique set {columns:?} on {child}"
+        );
+    }
     let want: Vec<_> = facts
         .iter()
-        .map(|(c, col, p, _, u)| (c.clone(), col.clone(), p.clone(), *u))
+        .map(|key| {
+            (
+                key.per_column(),
+                key.composite.then(|| key.parent_column.clone()),
+            )
+        })
         .collect();
     assert_eq!(sorted(keys), sorted(want), "{sample}: JSON Schema keys");
 }
@@ -305,10 +384,7 @@ fn assert_entity_csv(sample: &str, csv: &str, facts: &[Key]) {
             )
         })
         .collect();
-    let want: Vec<_> = facts
-        .iter()
-        .map(|(c, col, p, _, u)| (c.clone(), col.clone(), p.clone(), *u))
-        .collect();
+    let want: Vec<_> = facts.iter().map(Key::per_column).collect();
     assert_eq!(sorted(rows), sorted(want), "{sample}: entity CSV FK rows");
 }
 
@@ -328,7 +404,7 @@ fn assert_er(sample: &str, mermaid: &str, facts: &[Key]) {
     }
     let want: Vec<_> = facts
         .iter()
-        .map(|(c, col, ..)| (c.clone(), col.clone()))
+        .map(|key| (key.child.clone(), key.column.clone()))
         .collect();
     assert_eq!(sorted(markers), sorted(want), "{sample}: ER FK markers");
 }
@@ -373,23 +449,79 @@ fn assert_owner_vars(sample: &str, model: &SemanticModel) {
     );
 }
 
+fn assert_key_facts(sample: &str) {
+    let model = load(sample);
+    assert_coverage(sample, &model);
+    let facts = fact_keys(&model);
+
+    let dbml = export(sample, &["export", "--kind", "dbml"], "schema.dbml");
+    assert_dbml(sample, &dbml, &facts);
+    let json = export(sample, &["export", "--kind", "json-schema"], "schema.json");
+    assert_json_schema(sample, &json, &model, &facts);
+    let csv = export(sample, &["csv", "--kind", "entity"], "entity.csv");
+    assert_entity_csv(sample, &csv, &facts);
+    let er = export(sample, &["export", "--kind", "mermaid-er"], "er.mmd");
+    assert_er(sample, &er, &facts);
+
+    assert_tx_edges(sample, &model);
+    assert_owner_vars(sample, &model);
+}
+
 #[test]
 fn key_facts_hold_on_every_sample() {
     for sample in samples() {
-        let model = load(&sample);
-        assert_coverage(&sample, &model);
-        let facts = fact_keys(&model);
-
-        let dbml = export(&sample, &["export", "--kind", "dbml"], "schema.dbml");
-        assert_dbml(&sample, &dbml, &facts);
-        let json = export(&sample, &["export", "--kind", "json-schema"], "schema.json");
-        assert_json_schema(&sample, &json, &facts);
-        let csv = export(&sample, &["csv", "--kind", "entity"], "entity.csv");
-        assert_entity_csv(&sample, &csv, &facts);
-        let er = export(&sample, &["export", "--kind", "mermaid-er"], "er.mmd");
-        assert_er(&sample, &er, &facts);
-
-        assert_tx_edges(&sample, &model);
-        assert_owner_vars(&sample, &model);
+        assert_key_facts(&sample);
     }
+}
+
+/// No sample has a composite, named or adopted key, so this model carries one of each.
+const KEY_SHAPES: &str = r#"
+entity Bin "Bin" {
+  site: String @pk(site, shelf)
+  shelf: Int
+  status: Enum(open, closed)
+}
+entity Address "Address" { id: Int @pk }
+entity Stock "Stock" {
+  id: Int @pk
+  alt_site: String
+  alt_shelf: Int
+  status: Enum(stocked, empty)
+}
+entity Label "Label" { id: Int @pk }
+entity Order "Order" { id: Int @pk  invoice_ref: Int  status: Enum(pending, shipped) }
+entity Invoice "Invoice" { id: Int @pk }
+usecase Stocking "Stocking"
+usecase Labelling "Labelling"
+usecase Ordering "Ordering"
+usecase Invoicing "Invoicing"
+usecase Shipping "Shipping"
+creates(Stocking, Stock)
+creates(Labelling, Label)
+creates(Ordering, Order)
+creates(Invoicing, Invoice)
+transitions(Order.status, Shipping, pending -> shipped)
+relate(Stock, Bin, N:1)
+relate(Stock, Bin, N:1).role(alt).key(alt_site, alt_shelf).optional()
+relate(Label, Bin, 1:1)
+relate(Order, Address, N:1).role(ship_to)
+relate(Order, Address, N:1).role(bill_to).optional()
+relate(Order, Invoice, 1:1).key(invoice_ref)
+"#;
+
+#[test]
+fn key_facts_hold_on_composite_named_and_adopted_keys() {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("key_facts_shapes");
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("keys.rdra");
+    std::fs::write(&file, KEY_SHAPES).unwrap();
+    let sample = file.to_str().unwrap();
+
+    let model = load(sample);
+    let composite = model
+        .foreign_keys()
+        .filter(|(_, fk)| fk.columns.len() == 2)
+        .count();
+    assert_eq!(composite, 3, "the model has the shapes it claims");
+    assert_key_facts(sample);
 }
