@@ -3,7 +3,7 @@
 use super::support::entity_key;
 use crate::analysis::build_model;
 use crate::diagnostics::RdraError;
-use crate::model::{ColumnType, SemanticModel, UniqueSource};
+use crate::model::{ColumnType, CrossConstraintScope, SemanticModel, UniqueSource};
 use rdra_ish_syntax::parse;
 
 fn build(src: &str) -> (SemanticModel, Vec<RdraError>) {
@@ -302,6 +302,86 @@ fn key_against_a_composite_parent_checks_arity_and_types_in_key_order() {
     assert!(
         matches!(errors.as_slice(), [RdraError::KeyTypeMismatch { column, parent_column, .. }]
             if column == "alt_shelf" && parent_column == "site"),
+        "{errors:?}"
+    );
+}
+
+const TWO_ADDRESSES: &str = r#"
+entity Address "Address" { id: Int @pk  status: Enum(open, closed) }
+entity Order "Order" { id: Int @pk  status: Enum(pending, shipped) }
+relate(Order, Address, N:1).role(ship_to)
+relate(Order, Address, N:1).role(bill_to)
+"#;
+
+const FORBID: &str =
+    "forbidden(Order, Address, Order.status == shipped, Address.status == closed).along(Order, Address)";
+
+/// The keys each `.along` hop of the model's one cross forbidden resolved to, by role.
+fn hop_roles(model: &SemanticModel) -> Vec<Option<String>> {
+    let CrossConstraintScope::RelationPath { links, .. } =
+        &model.cross_forbidden_constraints[0].scope_semantics
+    else {
+        panic!("expected an .along path");
+    };
+    links
+        .iter()
+        .map(|link| link.and_then(|id| model.foreign_key(id).role.clone()))
+        .collect()
+}
+
+#[test]
+fn along_between_two_keys_is_ambiguous_without_by() {
+    let (model, errors) = build(&format!("{TWO_ADDRESSES}\n{FORBID}\n"));
+    assert!(
+        matches!(errors.as_slice(), [RdraError::AmbiguousOwnerLink { roles, .. }] if roles == "ship_to, bill_to"),
+        "{errors:?}"
+    );
+    assert!(errors[0].to_string().contains("`.along(...).by(ship_to)`"));
+    assert_eq!(hop_roles(&model), [None]);
+}
+
+#[test]
+fn by_picks_the_key_with_its_role() {
+    let model = built(&format!("{TWO_ADDRESSES}\n{FORBID}.by(bill_to)\n"));
+    assert_eq!(hop_roles(&model), [Some("bill_to".to_string())]);
+}
+
+#[test]
+fn along_with_one_key_needs_no_by() {
+    let model = built(&format!(
+        "{ADDRESSES}
+relate(Order, Address, N:1)
+forbidden(Order, Address, Order.id == 0, Address.id == 0).along(Order, Address)
+"
+    ));
+    let CrossConstraintScope::RelationPath { links, .. } =
+        &model.cross_forbidden_constraints[0].scope_semantics
+    else {
+        panic!("expected an .along path");
+    };
+    assert!(matches!(links.as_slice(), [Some(_)]), "{links:?}");
+}
+
+#[test]
+fn by_naming_no_key_on_the_path_is_unknown_owner_role() {
+    let (_, errors) = build(&format!("{TWO_ADDRESSES}\n{FORBID}.by(ship)\n"));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, RdraError::UnknownOwnerRole { role, .. } if role == "ship")),
+        "{errors:?}"
+    );
+}
+
+#[test]
+fn by_without_along_is_an_error() {
+    let (_, errors) = build(&format!(
+        "{TWO_ADDRESSES}
+forbidden(Order, Address, Order.status == shipped, Address.status == closed).by(ship_to)
+"
+    ));
+    assert!(
+        matches!(errors.as_slice(), [RdraError::ByWithoutAlong]),
         "{errors:?}"
     );
 }

@@ -162,3 +162,34 @@ relate(Order, Address, N:1).role(bill_to).optional()
         .collect();
     assert_eq!(owners, ["Order_owner_Address", "Order_owner_bill_to"]);
 }
+
+#[test]
+fn along_by_links_through_the_owner_of_that_role() {
+    let src = |role: &str| {
+        format!(
+            r#"
+entity Address "Address" {{ id: Int @pk  status: Enum(open, closed) }}
+entity Order "Order" {{ id: Int @pk  status: Enum(pending, shipped) }}
+usecase Place "Place"
+usecase Close "Close"
+usecase Ship "Ship"
+creates(Place, Order)
+transitions(Address.status, Close, open -> closed)
+transitions(Order.status, Ship, pending -> shipped)
+relate(Order, Address, N:1).role(ship_to)
+relate(Order, Address, N:1).role(bill_to)
+forbidden(Order, Address, Order.status == shipped, Address.status == closed)
+  .along(Order, Address).by({role})
+"#
+        )
+    };
+    for (role, other) in [("ship_to", "bill_to"), ("bill_to", "ship_to")] {
+        let tla = print(&system(&src(role)), PrintMode::Check, "M").tla;
+        let line = tla
+            .lines()
+            .find(|l| l.starts_with("CrossForbidden_"))
+            .expect("the forbidden prints as an invariant");
+        assert!(line.contains(&format!("Order_owner_{role}")), "{line}");
+        assert!(!line.contains(&format!("Order_owner_{other}")), "{line}");
+    }
+}

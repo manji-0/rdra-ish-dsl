@@ -84,7 +84,7 @@ fn cross_scope_semantics_from_chain_returns_relation_path_for_along_chain() {
     let semantics = cross_scope_semantics_from_chain(&model, &pred, DiagCtxt::new(0), &mut diags);
 
     assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
-    let CrossConstraintScope::RelationPath(path) = semantics else {
+    let CrossConstraintScope::RelationPath { path, .. } = semantics else {
         panic!("expected relation path scope");
     };
     assert_eq!(
@@ -374,7 +374,7 @@ invariant(Order, Payment)
     assert!(errors.is_empty(), "unexpected errors: {:?}", errors);
 
     let invariant = &model.cross_entity_invariants[0];
-    let CrossConstraintScope::RelationPath(path) = &invariant.scope_semantics else {
+    let CrossConstraintScope::RelationPath { path, .. } = &invariant.scope_semantics else {
         panic!(
             "expected relation-path scope, got {:?}",
             invariant.scope_semantics

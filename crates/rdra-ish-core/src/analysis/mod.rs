@@ -17,7 +17,7 @@ mod property;
 mod qref_util;
 
 pub use condition::{condition_body_display, condition_edges, ConditionEdge};
-use fk::resolve_foreign_keys;
+use fk::{resolve_along_links, resolve_foreign_keys};
 use instance::register_instance;
 use predicate_process::process_predicate;
 use property::register_property;
@@ -66,6 +66,7 @@ pub fn build_model_items_with_scopes(
 
     condition::derive_condition_links(&mut model, &mut diags);
     resolve_foreign_keys(&mut model, &mut diags);
+    resolve_along_links(&mut model, &mut diags);
     diags.extend(crate::event_flow::api_route_diagnostics(&model));
 
     (model, diags)

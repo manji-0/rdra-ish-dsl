@@ -1,5 +1,6 @@
 use super::comparison::{CmpOpModel, ComparisonProp};
 use super::effects::EffectValue;
+use super::foreign_key::FkId;
 use super::keys::{EntityKey, UseCaseKey};
 
 /// `forbidden(Entity, col == val, ...)` で宣言された禁止状態制約。
@@ -107,8 +108,15 @@ pub enum CrossEntityCondition {
 pub enum CrossConstraintScope {
     /// Evaluate the cross-product of each participating entity's reached patterns.
     GlobalProduct,
-    /// Intended to evaluate only instances connected by the declared relation path.
-    RelationPath(Vec<EntityKey>),
+    /// `.along(A, B, ..)`: only instances connected by the keys between neighbours.
+    RelationPath {
+        path: Vec<EntityKey>,
+        /// `.by(role)`: on a hop that two keys join, the one with this role.
+        by: Option<String>,
+        /// The key joining `path[i]` and `path[i + 1]`. `None` when no key joins them, or
+        /// when the hop is ambiguous (reported as `AmbiguousOwnerLink`).
+        links: Vec<Option<FkId>>,
+    },
 }
 
 /// `forbidden(EntityA, EntityB, ...)`.

@@ -10,10 +10,11 @@ use crate::lifecycle::types::{
     Invariant, Ltl, ModelRef, Param, ParamRole, Pred, Property, Site, Start, Term, Value, VarId,
     VarKind,
 };
+use crate::lifecycle::EntId;
 use crate::model::{
     CmpOpModel, CmpRhs, ComparisonProp, CrossCmpRhs, CrossConstraintScope, CrossEntityCondition,
-    EffectValue, EntityKey, HoldsBody, QuantifierKind, TemporalExpr, TemporalFormula, TemporalRhs,
-    UseCaseKey,
+    EffectValue, EntityKey, FkId, HoldsBody, QuantifierKind, TemporalExpr, TemporalFormula,
+    TemporalRhs, UseCaseKey,
 };
 
 /// Binds each entity of a predicate to a slot reference.
@@ -217,23 +218,40 @@ impl Builder<'_> {
         )
     }
 
-    /// `owner[child] == parent` for a relate between the two bound entities.
+    /// `owner[child] == parent` for the first relate between the two bound entities.
     fn owner_link(&self, a: (EntityKey, At), b: (EntityKey, At)) -> Option<Pred> {
-        let (ea, eb) = (self.ent_of[&a.0], self.ent_of[&b.0]);
-        self.owners.iter().find_map(|&(var, child, parent)| {
-            let (c, p) = if (child, parent) == (ea, eb) {
-                (a.1, b.1)
-            } else if (child, parent) == (eb, ea) {
-                (b.1, a.1)
-            } else {
-                return None;
-            };
-            Some(Pred::Cmp(
-                Term::Slot { var, at: c },
-                CmpOp::Eq,
-                Term::Index(p),
-            ))
+        self.owners.iter().find_map(|&owner| {
+            Self::link_pred(self.ent_of[&a.0], self.ent_of[&b.0], owner, a.1, b.1)
         })
+    }
+
+    /// `owner[child] == parent` for key `fk`, which joins the two bound entities.
+    fn key_link(&self, fk: FkId, a: (EntityKey, At), b: (EntityKey, At)) -> Option<Pred> {
+        let &owner = self.owners.iter().find(|(var, ..)| {
+            matches!(self.ts.vars[var.index()].kind, VarKind::Owner { fk: id, .. } if id == fk)
+        })?;
+        Self::link_pred(self.ent_of[&a.0], self.ent_of[&b.0], owner, a.1, b.1)
+    }
+
+    fn link_pred(
+        ea: EntId,
+        eb: EntId,
+        (var, child, parent): (VarId, EntId, EntId),
+        at_a: At,
+        at_b: At,
+    ) -> Option<Pred> {
+        let (c, p) = if (child, parent) == (ea, eb) {
+            (at_a, at_b)
+        } else if (child, parent) == (eb, ea) {
+            (at_b, at_a)
+        } else {
+            return None;
+        };
+        Some(Pred::Cmp(
+            Term::Slot { var, at: c },
+            CmpOp::Eq,
+            Term::Index(p),
+        ))
     }
 
     // ── Invariants ───────────────────────────────────────────────────────────
@@ -351,7 +369,10 @@ impl Builder<'_> {
                 binding.push((ek, At::Bound(binding.len() as u8)));
             }
         }
-        let CrossConstraintScope::RelationPath(path) = semantics else {
+        let CrossConstraintScope::RelationPath {
+            path, links: keys, ..
+        } = semantics
+        else {
             return Some((binding, Pred::True));
         };
         let fail = |b: &mut Self, reason: String| {
@@ -373,14 +394,15 @@ impl Builder<'_> {
             return fail(self, format!("along(..) does not cover {id}"));
         }
         let mut links = Vec::new();
-        for pair in path.windows(2) {
+        for (i, pair) in path.windows(2).enumerate() {
+            let key = keys.get(i).copied().flatten();
             let (Some(a), Some(b)) = (at_of(&binding, pair[0]), at_of(&binding, pair[1])) else {
                 return fail(
                     self,
                     "along(..) names an entity outside the scope".to_string(),
                 );
             };
-            match self.owner_link((pair[0], a), (pair[1], b)) {
+            match key.and_then(|fk| self.key_link(fk, (pair[0], a), (pair[1], b))) {
                 Some(link) => links.push(link),
                 None => {
                     let (x, y) = (

@@ -634,9 +634,19 @@ pub(crate) fn cross_scope_semantics_from_chain(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> CrossConstraintScope {
+    let by = pred.chain.iter().find(|cc| cc.name == "by");
     match collect_cross_along_path(model, pred, ctx, diags) {
-        Some(path) => CrossConstraintScope::RelationPath(path),
-        None => CrossConstraintScope::GlobalProduct,
+        Some(path) => CrossConstraintScope::RelationPath {
+            path,
+            by: by.and_then(|cc| cc.args.first()).and_then(arg_as_str),
+            links: Vec::new(),
+        },
+        None => {
+            if let Some(by) = by {
+                push_error(ctx, diags, by.span.clone(), RdraError::ByWithoutAlong);
+            }
+            CrossConstraintScope::GlobalProduct
+        }
     }
 }
 

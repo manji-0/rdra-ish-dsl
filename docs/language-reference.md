@@ -988,6 +988,12 @@ role defaults to the parent id in lowercase (`customeraccount_id`). A composite 
   `KeyColumnUndefined`, `KeyTypeMismatch`). The adopted columns are the key in every
   output, and in the lifecycle they are the owner, not a state column.
 
+A constraint's `.along(A, B)` follows the key between `A` and `B`. When two keys join
+them, `.along(A, B).by(ship_to)` names the one to follow (the role, or the parent id for
+a key without `.role`); without `.by` the constraint is `AmbiguousOwnerLink`. `.by` that
+names no key on the path is `UnknownOwnerRole`, and `.by` without `.along` is
+`ByWithoutAlong`.
+
 ---
 
 ## Lifecycle

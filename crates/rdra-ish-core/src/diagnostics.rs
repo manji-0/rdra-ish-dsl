@@ -85,6 +85,24 @@ pub enum RdraError {
     #[error("entity '{child}' has two relate keys with role '{role}'\n  hint: add `.role(...)` to one of them so each key gets its own columns and owner")]
     DuplicateRelateRole { child: String, role: String },
 
+    #[error(".along(...) cannot tell which key joins '{a}' and '{b}': roles {roles}\n  hint: name one with `.along(...).by({first})`")]
+    AmbiguousOwnerLink {
+        a: String,
+        b: String,
+        roles: String,
+        first: String,
+    },
+
+    #[error(".by({role}) names no key on .along({along})\n  hint: use the role of a key between neighbours on the path: {roles}")]
+    UnknownOwnerRole {
+        role: String,
+        along: String,
+        roles: String,
+    },
+
+    #[error(".by(...) picks a key on an .along(...) path, and this constraint has none\n  hint: add `.along(A, B)` before `.by(...)`, or drop `.by(...)`")]
+    ByWithoutAlong,
+
     #[error("missing @pk: entity '{entity}' used as FK target has no @pk column\n  hint: add `id: Int @pk` (or another @pk column) to entity '{entity}'")]
     MissingPk { entity: String },
 

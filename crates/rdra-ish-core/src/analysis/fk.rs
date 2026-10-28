@@ -4,7 +4,7 @@
 use super::constraint::arg_as_str;
 use crate::analysis_diag::{push_entity_error, push_error};
 use crate::diagnostics::{Diagnostic, RdraError};
-use crate::location::DiagCtxt;
+use crate::location::{DiagCtxt, LocatedSpan};
 use crate::model::*;
 use rdra_ish_syntax::ast::PredicateCall;
 use std::collections::{BTreeMap, BTreeSet};
@@ -362,4 +362,109 @@ fn resolve_junction_keys(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>)
         }
     }
     model.junction_keys = junction_keys;
+}
+
+/// Fills each `.along(..)` path's `links`: the one key between each pair of neighbours, or
+/// the one whose role `.by(..)` names when several join them.
+pub(crate) fn resolve_along_links(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>) {
+    let scopes = model
+        .cross_forbidden_constraints
+        .iter()
+        .map(|c| (&c.scope_semantics, &c.site))
+        .chain(
+            model
+                .cross_entity_invariants
+                .iter()
+                .map(|c| (&c.scope_semantics, &c.site)),
+        );
+    let resolved: Vec<Vec<Option<FkId>>> = scopes
+        .map(|(scope, site)| match scope {
+            CrossConstraintScope::RelationPath { path, by, .. } => {
+                along_links(model, path, by.as_deref(), site.as_ref(), diags)
+            }
+            CrossConstraintScope::GlobalProduct => Vec::new(),
+        })
+        .collect();
+    let scopes = model
+        .cross_forbidden_constraints
+        .iter_mut()
+        .map(|c| &mut c.scope_semantics)
+        .chain(
+            model
+                .cross_entity_invariants
+                .iter_mut()
+                .map(|c| &mut c.scope_semantics),
+        );
+    for (scope, resolved) in scopes.zip(resolved) {
+        if let CrossConstraintScope::RelationPath { links, .. } = scope {
+            *links = resolved;
+        }
+    }
+}
+
+fn along_links(
+    model: &SemanticModel,
+    path: &[EntityKey],
+    by: Option<&str>,
+    site: Option<&LocatedSpan>,
+    diags: &mut Vec<Diagnostic>,
+) -> Vec<Option<FkId>> {
+    let push = |diags: &mut Vec<Diagnostic>, err| {
+        diags.push(match site {
+            Some(site) => Diagnostic::error_at(err, site.clone()),
+            None => Diagnostic::error(err),
+        });
+    };
+    let role = |fk: &ForeignKey| fk.role_or(&model.entities[fk.parent].id).to_string();
+    let mut by_used = false;
+    let mut path_roles: Vec<String> = Vec::new();
+    let mut links = Vec::new();
+    for pair in path.windows(2) {
+        let between: Vec<(FkId, &ForeignKey)> = model
+            .foreign_keys()
+            .filter(|(_, fk)| {
+                (fk.child, fk.parent) == (pair[0], pair[1])
+                    || (fk.child, fk.parent) == (pair[1], pair[0])
+            })
+            .collect();
+        path_roles.extend(between.iter().map(|(_, fk)| role(fk)));
+        let named: Vec<FkId> = between
+            .iter()
+            .filter(|(_, fk)| by.is_some_and(|by| role(fk).eq_ignore_ascii_case(by)))
+            .map(|&(id, _)| id)
+            .collect();
+        by_used |= !named.is_empty();
+        links.push(match (between.as_slice(), named.as_slice()) {
+            ([], _) => None,
+            ([(id, _)], _) | (_, [id]) => Some(*id),
+            _ => {
+                let roles: Vec<String> = between.iter().map(|(_, fk)| role(fk)).collect();
+                push(
+                    diags,
+                    RdraError::AmbiguousOwnerLink {
+                        a: model.entities[pair[0]].id.clone(),
+                        b: model.entities[pair[1]].id.clone(),
+                        first: roles[0].clone(),
+                        roles: roles.join(", "),
+                    },
+                );
+                None
+            }
+        });
+    }
+    if let Some(by) = by.filter(|_| !by_used) {
+        let along: Vec<&str> = path
+            .iter()
+            .map(|e| model.entities[*e].id.as_str())
+            .collect();
+        push(
+            diags,
+            RdraError::UnknownOwnerRole {
+                role: by.to_string(),
+                along: along.join(", "),
+                roles: path_roles.join(", "),
+            },
+        );
+    }
+    links
 }
