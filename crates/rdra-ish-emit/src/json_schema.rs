@@ -185,6 +185,19 @@ fn insert_column_extensions(
             "x-rdra-ish-fk-target".to_string(),
             json!(model.entities[fk.parent].id),
         );
+        // Only a composite key needs the pairing, and only a named key the role, so a
+        // single-column key under the default role prints as it always has.
+        if fk.columns.len() > 1 {
+            if let Some((_, parent_column)) = fk.columns.iter().find(|(c, _)| *c == column.name) {
+                obj.insert(
+                    "x-rdra-ish-fk-target-column".to_string(),
+                    json!(parent_column),
+                );
+            }
+        }
+        if let Some(role) = &fk.role {
+            obj.insert("x-rdra-ish-fk-role".to_string(), json!(role));
+        }
         if fk.optional() {
             obj.insert("x-rdra-ish-fk-optional".to_string(), json!(true));
         }
@@ -343,5 +356,42 @@ entity Order "Order" {
             props["backup_channel"]["enum"],
             json!(["web", "phone", null])
         );
+    }
+
+    #[test]
+    fn composite_key_columns_name_their_parent_column_and_a_named_key_its_role() {
+        let model = model_from(
+            r#"
+entity Bin "Bin" {
+  site: String @pk(site, shelf)
+  shelf: Int
+}
+entity Address "Address" { id: Int @pk }
+entity Stock "Stock" { id: Int @pk }
+relate(Stock, Bin, N:1)
+relate(Stock, Address, N:1)
+relate(Stock, Address, N:1).role(bill_to)
+"#,
+        );
+        let json = JsonSchemaEmitter.emit(&model, &View::whole()).unwrap();
+        let doc: Value = serde_json::from_str(&json).unwrap();
+        let props = &doc["$defs"]["Entity.Stock"]["properties"];
+        for (column, parent) in [("bin_site", "site"), ("bin_shelf", "shelf")] {
+            assert_eq!(props[column]["x-rdra-ish-foreign-key"], true);
+            assert_eq!(props[column]["x-rdra-ish-fk-target"], "Bin");
+            assert_eq!(props[column]["x-rdra-ish-fk-target-column"], parent);
+        }
+        assert_eq!(
+            props["address_id"],
+            json!({
+                "type": "integer",
+                "x-rdra-ish-foreign-key": true,
+                "x-rdra-ish-fk-target": "Address"
+            })
+        );
+        assert_eq!(props["bill_to_id"]["x-rdra-ish-fk-role"], "bill_to");
+        assert!(props["bill_to_id"]
+            .get("x-rdra-ish-fk-target-column")
+            .is_none());
     }
 }

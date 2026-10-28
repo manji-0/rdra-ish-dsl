@@ -243,11 +243,15 @@ fn dbml_refs(model: &SemanticModel) -> Vec<String> {
             let Some((_, fk)) = model.column_fk(key, &column.name) else {
                 continue;
             };
-            let target = &model.entities[fk.parent];
-            let Some((_, target_column)) = fk.columns.iter().find(|(c, _)| *c == column.name)
-            else {
+            // One ref per key, printed at its first column.
+            if fk
+                .columns
+                .first()
+                .is_none_or(|(first, _)| *first != column.name)
+            {
                 continue;
-            };
+            }
+            let target = &model.entities[fk.parent];
             let mut settings = Vec::new();
             if let Some(action) = fk.on_delete {
                 settings.push(format!("delete: {}", dbml_ref_action(action)));
@@ -264,14 +268,23 @@ fn dbml_refs(model: &SemanticModel) -> Vec<String> {
             refs.push(format!(
                 "Ref: {}.{} {relation} {}.{}{}",
                 dbml_ident(&entity.id),
-                dbml_ident(&column.name),
+                ref_columns(fk.columns.iter().map(|(child, _)| child)),
                 dbml_ident(&target.id),
-                dbml_ident(target_column),
+                ref_columns(fk.columns.iter().map(|(_, parent)| parent)),
                 settings
             ));
         }
     }
     refs
+}
+
+/// `a` for one key column, `(a, b)` for a composite key.
+fn ref_columns<'a>(columns: impl Iterator<Item = &'a String>) -> String {
+    let columns: Vec<String> = columns.map(|c| dbml_ident(c)).collect();
+    match columns.as_slice() {
+        [one] => one.clone(),
+        _ => format!("({})", columns.join(", ")),
+    }
 }
 
 fn enum_type_name(entity: &Entity, column: &ModelColumn) -> String {
@@ -352,6 +365,42 @@ relate(Order, Customer, N:1).optional().on_delete(set_null).on_update(cascade)
         assert!(dbml.contains("(status, store_id) [unique]"));
         assert!(dbml
             .contains("Ref: Order.customer_id > Customer.id [delete: set null, update: cascade]"));
+    }
+
+    #[test]
+    fn a_composite_key_is_one_ref_over_its_columns() {
+        let model = model_from(
+            r#"
+entity Bin "Bin" {
+  site: String @pk(site, shelf)
+  shelf: Int
+}
+entity Stock "Stock" {
+  id: Int @pk
+  alt_site: String
+  alt_shelf: Int
+}
+entity Label "Label" { id: Int @pk }
+relate(Stock, Bin, N:1)
+relate(Stock, Bin, N:1).role(alt).key(alt_site, alt_shelf).optional()
+relate(Label, Bin, 1:1)
+"#,
+        );
+        let dbml = DbmlEmitter.emit(&model, &View::whole()).unwrap();
+        let refs: Vec<&str> = dbml.lines().filter(|l| l.starts_with("Ref:")).collect();
+        assert_eq!(
+            refs,
+            [
+                "Ref: Label.(bin_site, bin_shelf) - Bin.(site, shelf)",
+                "Ref: Stock.(alt_site, alt_shelf) > Bin.(site, shelf)",
+                "Ref: Stock.(bin_site, bin_shelf) > Bin.(site, shelf)",
+            ]
+        );
+        assert!(
+            dbml.contains("    (bin_shelf, bin_site) [unique]\n"),
+            "{dbml}"
+        );
+        assert!(dbml.contains("  alt_site varchar\n"), "{dbml}");
     }
 
     #[test]
