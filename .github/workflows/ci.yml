@@ -144,3 +144,5 @@ jobs:
               exit 1
             fi
           done
+      - name: Lifecycle BFS and TLC agree on every sample
+        run: RDRA_REQUIRE_TLC=1 cargo test -p rdra-ish-cli --test engine_equivalence
