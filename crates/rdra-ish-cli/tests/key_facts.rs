@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use rdra_ish_core::lifecycle::{Bounds, Scope, TransitionSystem, VarKind};
+use rdra_ish_core::lifecycle::{Bounds, InvKind, Scope, TransitionSystem, VarKind};
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
 use rdra_ish_core::{build_merged_model, resolve, tx};
 
@@ -449,6 +449,32 @@ fn assert_owner_vars(sample: &str, model: &SemanticModel) {
     );
 }
 
+/// One `Check_{entity}_{column}_{i}` invariant per `@check` in the model.
+fn assert_checks(sample: &str, model: &SemanticModel) {
+    let ts = TransitionSystem::build(model, Bounds::STATES, &Scope::All).ts;
+    let built: Vec<String> = ts
+        .invariants()
+        .iter()
+        .filter(|inv| inv.kind == InvKind::Check)
+        .map(|inv| inv.name.clone())
+        .collect();
+    let declared: Vec<String> = model
+        .entities
+        .values()
+        .flat_map(|e| {
+            e.columns.iter().flat_map(move |c| {
+                (0..c.check_constraints.len())
+                    .map(move |i| format!("Check_{}_{}_{i}", e.id, c.name))
+            })
+        })
+        .collect();
+    assert_eq!(
+        sorted(built),
+        sorted(declared),
+        "{sample}: Check_* invariants"
+    );
+}
+
 fn assert_key_facts(sample: &str) {
     let model = load(sample);
     assert_coverage(sample, &model);
@@ -465,6 +491,7 @@ fn assert_key_facts(sample: &str) {
 
     assert_tx_edges(sample, &model);
     assert_owner_vars(sample, &model);
+    assert_checks(sample, &model);
 }
 
 #[test]

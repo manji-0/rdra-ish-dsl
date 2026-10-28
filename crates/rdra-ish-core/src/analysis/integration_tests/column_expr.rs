@@ -29,18 +29,29 @@ fn column<'m>(model: &'m SemanticModel, entity: &str, column: &str) -> &'m Model
 
 #[test]
 fn a_check_resolves_to_a_typed_condition_over_its_entity() {
-    let (model, diags) = build(
-        r#"entity Item "Item" {
+    let src = r#"entity Item "Item" {
   id: Int @pk
-  qty: Int @check(qty >= 1 and qty <= stock)
+  qty: Int @check(qty >= 1 and not qty > stock)
   stock: Int
-}"#,
-    );
+  net: Int @derived(stock - qty)
+}"#;
+    let (model, diags) = build(src);
     assert!(diags.iter().all(|d| d.is_warning), "{diags:?}");
     let qty = column(&model, "Item", "qty");
     assert_eq!(qty.check_constraints.len(), 1);
-    assert_eq!(qty.checks_display(), "(qty >= 1) and (qty <= stock)");
+    assert_eq!(qty.checks_display(), "(qty >= 1) and (not (qty > stock))");
     assert!(qty.check_constraints[0].site.is_some());
+    // The emitters print what `rdra-ish fmt` writes.
+    let formatted = rdra_ish_syntax::format_source(src).unwrap();
+    assert!(
+        formatted.contains(&format!("@check({})", qty.checks_display())),
+        "{formatted}"
+    );
+    let net = column(&model, "Item", "net").derived_display();
+    assert!(
+        formatted.contains(&format!("@derived({net})")),
+        "{formatted}"
+    );
 }
 
 #[test]
