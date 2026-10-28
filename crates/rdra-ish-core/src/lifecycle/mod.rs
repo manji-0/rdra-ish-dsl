@@ -26,7 +26,7 @@ mod tests;
 
 pub use cone::{Cone, Target, VarSet};
 pub use diag::{has_errors, Blocked, Diag, Entry, Exit, Severity, StateDiag};
-pub use explore::{Caps, ComponentRun, Edge, Exploration, Graph};
+pub use explore::{Caps, ComponentRun, Edge, Exploration, Graph, LabelledEdges};
 pub use expr::State;
 pub use findings::{
     ActionRuns, Progress, Runs, StateModelFindings, ValueProgress, ValueWitness, Witness,

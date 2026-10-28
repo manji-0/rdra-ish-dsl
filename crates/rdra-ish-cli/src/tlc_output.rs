@@ -1,4 +1,4 @@
-//! TLC's text output in a canonical form: the state files `tlc -dump` writes and the run log
+//! TLC's text output in a canonical form: the state graph `tlc -dump dot` writes and the run log
 //! (violated invariant or property names and their trace blocks).
 //!
 //! A state is a map from `name[slot]` (or a bare `name` for a global) to the value text as
@@ -281,22 +281,106 @@ fn split_top(items: &str) -> Vec<String> {
     out
 }
 
-/// The states of a `tlc -dump` file, in file order.
+/// The state graph `tlc -dump dot,actionlabels` writes. TLC prints a node line per distinct
+/// state and an edge line per successor it generates, self-loops included and repeated when
+/// two bindings reach the same successor.
 #[allow(dead_code)] // read by tests/engine_equivalence.rs
-pub fn parse_dump(text: &str) -> Vec<CanonState> {
-    let lines: Vec<&str> = text.lines().collect();
-    let mut out = Vec::new();
-    let mut i = 0;
-    while i < lines.len() {
-        if state_header(lines[i].trim()).is_some() {
-            let (state, next) = parse_block(&lines, i + 1);
-            out.push(state);
-            i = next;
-        } else {
-            i += 1;
+#[derive(Debug)]
+pub struct DotGraph<T> {
+    /// In the order TLC first names them.
+    pub nodes: Vec<DotNode<T>>,
+    /// The distinct edge labels: the action operator names.
+    pub labels: Vec<String>,
+    /// `(from, to, label)`, indices into `nodes` and `labels`, in file order.
+    pub edges: Vec<(u32, u32, u32)>,
+}
+
+#[allow(dead_code)] // read by tests/engine_equivalence.rs
+#[derive(Debug)]
+pub struct DotNode<T> {
+    pub state: T,
+    /// TLC fills the initial states.
+    pub initial: bool,
+}
+
+/// Reads a dot dump line by line, each node's state through `state`. An `Err` names the line
+/// that is neither a node nor an edge, a node `state` rejects (with its text), or a node an
+/// edge names but no line declares.
+#[allow(dead_code)] // read by tests/engine_equivalence.rs
+pub fn parse_dot<T>(
+    dot: impl std::io::BufRead,
+    mut state: impl FnMut(&CanonState) -> Option<T>,
+) -> Result<DotGraph<T>, String> {
+    let mut ids: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+    let mut nodes: Vec<Option<DotNode<T>>> = Vec::new();
+    let mut labels: Vec<String> = Vec::new();
+    let mut edges = Vec::new();
+    let mut node = |id: &str, nodes: &mut Vec<Option<DotNode<T>>>| {
+        *ids.entry(id.to_string()).or_insert_with(|| {
+            nodes.push(None);
+            (nodes.len() - 1) as u32
+        })
+    };
+    for line in dot.lines() {
+        let line = line.map_err(|e| format!("reading the dot dump: {e}"))?;
+        let line = line.trim();
+        let Some((head, attrs)) = line.split_once(" [") else {
+            continue;
+        };
+        let label = dot_label(attrs).ok_or_else(|| format!("no label: {line}"))?;
+        match head.split_once(" -> ") {
+            Some((from, to)) => {
+                let from = node(from.trim(), &mut nodes);
+                let to = node(to.trim(), &mut nodes);
+                let l = match labels.iter().position(|l| *l == label) {
+                    Some(l) => l,
+                    None => {
+                        labels.push(label);
+                        labels.len() - 1
+                    }
+                };
+                edges.push((from, to, l as u32));
+            }
+            None => {
+                let at = node(head, &mut nodes) as usize;
+                let lines: Vec<&str> = label.lines().collect();
+                let (canon, _) = parse_block(&lines, 0);
+                let decoded =
+                    state(&canon).ok_or_else(|| format!("no state of the cone:\n{label}"))?;
+                nodes[at] = Some(DotNode {
+                    state: decoded,
+                    initial: attrs.contains("style = filled"),
+                });
+            }
         }
     }
-    out
+    let nodes = nodes
+        .into_iter()
+        .enumerate()
+        .map(|(i, n)| n.ok_or_else(|| format!("an edge names node {i}, which no line declares")))
+        .collect::<Result<_, _>>()?;
+    Ok(DotGraph {
+        nodes,
+        labels,
+        edges,
+    })
+}
+
+/// The `label="..."` attribute, unescaped.
+fn dot_label(attrs: &str) -> Option<String> {
+    let rest = &attrs[attrs.find("label=\"")? + "label=\"".len()..];
+    let mut out = String::new();
+    let mut chars = rest.chars();
+    loop {
+        match chars.next()? {
+            '"' => return Some(out),
+            '\\' => match chars.next()? {
+                'n' => out.push('\n'),
+                c => out.push(c),
+            },
+            c => out.push(c),
+        }
+    }
 }
 
 /// A short report of a failed run: each violated check's error line and its first trace, or
@@ -406,14 +490,46 @@ Model checking completed. No error has been found.
         assert!(run.violations[0].name.is_none());
     }
 
+    /// TLC 1.7.4's layout: an edge may name its target before the target's node line, an
+    /// identical edge repeats, and the rank lines carry no label.
+    const DOT: &str = r#"strict digraph DiskGraph {
+nodesep=0.35;
+subgraph cluster_graph {
+color="white";
+-64 [label="/\\ a = <<\"x, y\", \"z\">>\n/\\ b = <<1, 2>>",style = filled]
+-64 -> 72 [label="Make",color="black",fontcolor="black"];
+72 [label="/\\ a = <<\"q\", \"r\">>\n/\\ b = <<3, 4>>"];
+72 -> 72 [label="Noop",color="black",fontcolor="black"];
+72 -> 72 [label="Noop",color="black",fontcolor="black"];
+{rank = same; -64;}
+{rank = same; 72;}
+}
+}"#;
+
     #[test]
-    fn dump_joins_wrapped_values_and_splits_tuples() {
-        let dump = "State 1:\n/\\ a = <<\"x, y\", \"z\">>\n/\\ b = << 1,\n       2 >>\n\nState 2:\n/\\ a = <<\"q\", \"r\">>\n/\\ b = <<3, 4>>\n";
-        let states = parse_dump(dump);
-        assert_eq!(states.len(), 2);
-        assert_eq!(states[0]["a[1]"], "\"x, y\"");
-        assert_eq!(states[0]["b[2]"], "2");
-        assert_eq!(states[1]["a[2]"], "\"r\"");
+    fn dot_dump_gives_states_and_labelled_edges() {
+        let g = parse_dot(DOT.as_bytes(), |s| Some(s.clone())).unwrap();
+        assert_eq!(g.nodes.len(), 2);
+        assert!(g.nodes[0].initial && !g.nodes[1].initial);
+        assert_eq!(g.nodes[0].state["a[1]"], "\"x, y\"");
+        assert_eq!(g.nodes[0].state["b[2]"], "2");
+        assert_eq!(g.nodes[1].state["a[2]"], "\"r\"");
+        assert_eq!(g.labels, ["Make", "Noop"]);
+        assert_eq!(g.edges, [(0, 1, 0), (1, 1, 1), (1, 1, 1)]);
+    }
+
+    #[test]
+    fn dot_dump_rejects_a_state_and_an_undeclared_node() {
+        let err = parse_dot(DOT.as_bytes(), |s| s.contains_key("b[3]").then_some(())).unwrap_err();
+        assert!(
+            err.starts_with("no state of the cone:\n/\\ a = <<\"x, y\""),
+            "{err}"
+        );
+        let dangling = "1 -> 2 [label=\"Make\"];\n1 [label=\"/\\\\ a = 1\"];\n";
+        assert_eq!(
+            parse_dot(dangling.as_bytes(), |_| Some(())).unwrap_err(),
+            "an edge names node 1, which no line declares"
+        );
     }
 
     #[test]

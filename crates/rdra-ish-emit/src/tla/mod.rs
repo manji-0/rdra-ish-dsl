@@ -14,7 +14,7 @@ mod tests;
 
 use rdra_ish_core::lifecycle::{Domain, Ltl, TransitionSystem, Value};
 
-pub use names::TlaNames;
+pub use names::{Decoder, TlaNames};
 
 /// What the cfg asks TLC to do.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

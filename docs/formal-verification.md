@@ -222,10 +222,36 @@ The rules for each flag and for deferral are in
 - `check` and `states` run BFS on the same system at one instance per entity, so `check`
   finds the same violations as TLC in that window. The test `engine_equivalence`
   (`crates/rdra-ish-cli/tests/engine_equivalence.rs`) runs BFS and TLC on every cone of
-  every sample and compares the reached states and the verdict of each invariant and
-  `after` assertion. Every trace TLC prints for a violation must replay through the BFS
-  step relation and end in the check TLC named. CI sets `RDRA_REQUIRE_TLC=1`, so a
-  missing `tlc` fails the job.
+  every sample, at 1 and at 2 instances per entity. On each cone it compares:
+  - The reached states and the initial states. TLC's side is the graph that
+    `tlc -dump dot,actionlabels` writes; each node decodes to a model state.
+  - The edge sets, as `(from, to, use case)`. Self-loops count. TLC repeats an edge when
+    two bindings reach the same successor, so the test compares sets, not counts.
+  - The state-model findings of every entity on both graphs: which states are witnessed
+    or `NoWitness`, which use cases never run (with the reason), and which states are
+    deadlocks (by name and severity).
+  - The verdict of each invariant and `after` assertion. Every trace TLC prints for a
+    violation must replay through the BFS step relation and end in the check TLC named.
+
+  At 2 instances, a cone whose BFS passes the test's cap of 200,000 states is compared at
+  1 instance only. The test lists these cones in `VERIFY_FALLBACK` and fails when the list
+  changes. Today all of them are in `samples/clinic-ops` (states at 2 instances, measured
+  with `lifecycle_measure`):
+
+  | Cone (first target that reads it) | States |
+  |---|---:|
+  | entity `Charge` | 969,167 |
+  | entity `Prescription` | 427,607 |
+  | invariant `Inv_Prescription_4` | 427,607 |
+  | entity `ClinicalOrder` | 235,607 |
+  | entity `LabResult` | 235,607 |
+  | invariant `Forbidden_ClinicalOrder_1` (also `Unique_LabResult_ClinicalOrder`) | 235,607 |
+  | invariant `Inv_ClinicalOrder_3` | 235,607 |
+  | entity `EligibilityCheck` | 223,901 |
+
+  The other 31 clinic-ops cones at 2 instances (595,325 states in total, the largest
+  `PatientMessage` at 169,203) are compared. CI sets `RDRA_REQUIRE_TLC=1`, so a missing
+  `tlc` fails the job.
 - User-facing state diagnostics for multi-entity rules say **multi-entity**. The
   `Cross*` prefix in some constraint names is historical.
 

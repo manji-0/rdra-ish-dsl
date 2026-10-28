@@ -1,12 +1,18 @@
-//! The explorer and TLC agree on every sample: for each cone `explore_targets` explores, the
-//! states TLC reaches on the printed cone (`tlc -dump`) are the states the BFS reached, and
-//! the invariants and after-asserts TLC finds violated are the ones the BFS found violated.
+//! The explorer and TLC agree on every sample: for each cone a target reads, the state graph
+//! TLC dumps for the printed cone (`tlc -dump dot,actionlabels`) has the BFS's states, initial
+//! states, and `(from, to, action)` edges; the state-model findings (witnesses, use cases that
+//! never run, deadlocks) of every entity are the same on both graphs; and the invariants and
+//! after-asserts TLC finds violated are the ones the BFS found violated.
+//!
+//! Every sample runs at `Bounds::STATES` and `Bounds::VERIFY`. A cone whose BFS passes
+//! `STATE_CAP` at VERIFY is compared at STATES only; `VERIFY_FALLBACK` lists those cones, so a
+//! cone that grows past the cap fails the test until it is listed.
 //!
 //! TLC stops at the first violation unless run with `-continue`, which explores the whole
-//! state space and reports every violated invariant and action property. The verdict run
+//! state space and reports every violated invariant and action property. One run per cone
 //! uses `-continue` on the Safety-mode cfg (temporal properties are excluded from the
-//! comparison), and its distinct-state count must equal the dump's, so it is known to have
-//! finished.
+//! comparison) and dumps the graph; its distinct-state count must equal the BFS's, so it is
+//! known to have finished.
 //!
 //! Every trace TLC prints for a violation replays through the BFS step relation, and the
 //! check `explain` builds at its end is the one TLC named.
@@ -23,21 +29,39 @@ mod tlc_output;
 #[path = "../src/tlc_replay.rs"]
 mod tlc_replay;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
-use rdra_ish_core::lifecycle::{Bounds, Caps, ComponentRun, Scope, StateDiag, TransitionSystem};
+use rdra_ish_core::lifecycle::{
+    ActId, Bounds, Caps, ComponentRun, Cone, LabelledEdges, Progress, Runs, Scope, State,
+    StateDiag, StateModelFindings, Target, TransitionSystem, Witness,
+};
 use rdra_ish_core::{build_merged_model, resolve, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
 use tlc_env::{tlc_env, Heap};
-use tlc_output::{parse_dump, CanonState, Outcome, TlcRun};
+use tlc_output::{parse_dot, TlcRun};
 use tlc_replay::explain_violation;
 
-/// Far above the largest cone of any sample (clinic-ops peaks at a few hundred states).
+/// The largest cone the test compares. At `Bounds::STATES` every cone of every sample is far
+/// below it.
 const STATE_CAP: usize = 200_000;
+
+/// `(sample, cone)`: the cones whose BFS at `Bounds::VERIFY` passes `STATE_CAP`, each named by
+/// the first target that reads it. Each is compared at `Bounds::STATES`.
+const VERIFY_FALLBACK: &[(&str, &str)] = &[
+    ("samples/clinic-ops", "entity Charge"),
+    ("samples/clinic-ops", "entity ClinicalOrder"),
+    ("samples/clinic-ops", "entity EligibilityCheck"),
+    ("samples/clinic-ops", "entity LabResult"),
+    ("samples/clinic-ops", "entity Prescription"),
+    ("samples/clinic-ops", "invariant Forbidden_ClinicalOrder_1"),
+    ("samples/clinic-ops", "invariant Inv_ClinicalOrder_3"),
+    ("samples/clinic-ops", "invariant Inv_Prescription_4"),
+];
 
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -51,14 +75,6 @@ fn samples() -> Vec<String> {
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
         .map(str::to_string)
         .collect()
-}
-
-fn bounds_for(sample: &str) -> Vec<Bounds> {
-    if sample.starts_with("samples/formal-verification") {
-        vec![Bounds::STATES, Bounds::VERIFY]
-    } else {
-        vec![Bounds::STATES]
-    }
 }
 
 fn rdra_files(root: &Path, out: &mut Vec<PathBuf>) {
@@ -196,41 +212,142 @@ fn run_tlc(tlc: &Path, dir: &Path, args: &[&str], tla: &str, cfg: &str) -> (bool
     (out.status.success(), text)
 }
 
-fn check_cone(tlc: &Path, dir: &Path, label: &str, run: &ComponentRun) -> ConeReport {
+/// TLC's state graph of the cone in BFS terms: its edges as BFS state indices and actions,
+/// sorted and without repeats. Panics where TLC's states or initial states differ from the
+/// BFS's.
+fn tlc_edges(dir: &Path, label: &str, run: &ComponentRun, names: &TlaNames) -> Vec<Move> {
     let ts = &run.system;
-    assert!(run.complete, "{label}: BFS hit a cap");
-    let explore = tla::print(ts, PrintMode::Explore, "Cone");
-    let names = &explore.names;
-    let bfs: BTreeSet<CanonState> = run.states.iter().map(|s| names.canon(ts, s)).collect();
-
-    let (ok, log) = run_tlc(tlc, dir, &["-dump", "states"], &explore.tla, &explore.cfg);
-    let outcome = TlcRun::parse(&log).outcome(ok);
-    assert_eq!(
-        outcome,
-        Outcome::Ok,
-        "{label}: TLC explore run failed\n{log}"
-    );
-    let dump = std::fs::read_to_string(dir.join("states.dump")).expect("states.dump");
-    let dumped = parse_dump(&dump);
-    let tlc_states: BTreeSet<CanonState> = dumped.iter().cloned().collect();
-    assert_eq!(
-        dumped.len(),
-        tlc_states.len(),
-        "{label}: duplicate dumped state"
-    );
-    if tlc_states != bfs {
-        let only_tlc: Vec<_> = tlc_states.difference(&bfs).take(3).collect();
-        let only_bfs: Vec<_> = bfs.difference(&tlc_states).take(3).collect();
+    let index: HashMap<&State, u32> = run
+        .states
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (s, i as u32))
+        .collect();
+    let decoder = names.decoder(ts);
+    let file = std::fs::File::open(dir.join("graph.dot")).expect("graph.dot");
+    let dot = parse_dot(BufReader::new(file), |canon| {
+        let state = decoder.decode(canon)?;
+        index.get(&state).copied()
+    })
+    .unwrap_or_else(|why| panic!("{label}: TLC's graph does not map onto the BFS's: {why}"));
+    let at: Vec<u32> = dot.nodes.iter().map(|n| n.state).collect();
+    let distinct: BTreeSet<u32> = at.iter().copied().collect();
+    if distinct.len() != at.len() || distinct.len() != run.states.len() {
+        let only_bfs: Vec<_> = (0..run.states.len() as u32)
+            .filter(|i| !distinct.contains(i))
+            .take(3)
+            .map(|i| names.canon(ts, &run.states[i as usize]))
+            .collect();
         panic!(
-            "{label}: reachable sets differ (TLC {}, BFS {})\nonly TLC: {only_tlc:#?}\nonly BFS: {only_bfs:#?}\n{}",
-            tlc_states.len(),
-            bfs.len(),
-            explore.tla
+            "{label}: reachable sets differ (TLC {} nodes, {} distinct; BFS {})\nonly BFS: {only_bfs:#?}",
+            at.len(),
+            distinct.len(),
+            run.states.len()
         );
     }
+    let tlc_initial: BTreeSet<u32> = dot
+        .nodes
+        .iter()
+        .filter(|n| n.initial)
+        .map(|n| n.state)
+        .collect();
+    let bfs_initial: BTreeSet<u32> = (0..run.states.len() as u32)
+        .filter(|&i| run.parent(i).is_none())
+        .collect();
+    assert_eq!(tlc_initial, bfs_initial, "{label}: initial states differ");
+    // A cone with no action prints `Next == UNCHANGED vars`, a step BFS does not take.
+    let stutter = |l: &str| ts.actions().is_empty() && l == "Next";
+    let acts: Vec<Option<ActId>> = dot
+        .labels
+        .iter()
+        .map(|l| {
+            let act = names.action_index(ts, l);
+            assert!(
+                act.is_some() || stutter(l),
+                "{label}: TLC edge label {l} names no use case"
+            );
+            act
+        })
+        .collect();
+    let mut edges: Vec<Move> = dot
+        .edges
+        .iter()
+        .filter_map(|&(from, to, l)| {
+            let (from, to) = (at[from as usize], at[to as usize]);
+            let act = acts[l as usize];
+            assert!(
+                act.is_some() || from == to,
+                "{label}: `Next` changes a state"
+            );
+            Some((from, to, act?))
+        })
+        .collect();
+    edges.sort_unstable();
+    edges.dedup();
+    edges
+}
 
+/// `(from, to, action)` over BFS state indices.
+type Move = (u32, u32, ActId);
+
+/// A few edges only one engine has, in model terms: the action, the source state, and the
+/// slots the step changes.
+fn describe_moves(run: &ComponentRun, names: &TlaNames, moves: &[&Move]) -> String {
+    let ts = &run.system;
+    moves
+        .iter()
+        .take(3)
+        .map(|&&(from, to, act)| {
+            let pre = names.canon(ts, &run.states[from as usize]);
+            let post = names.canon(ts, &run.states[to as usize]);
+            let changed: Vec<String> = post
+                .iter()
+                .filter(|(k, v)| pre.get(*k) != Some(v))
+                .map(|(k, v)| format!("{k} := {v}"))
+                .collect();
+            format!(
+                "  {} from state {from} to state {to}, changing [{}]\n  from {pre:?}",
+                ts.actions()[act.index()].name,
+                changed.join(", ")
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// The findings with the state indices left out: which state of each model is witnessed or
+/// missing, which actions run, and which states are deadlocks, by name and severity.
+fn finding_names(ts: &TransitionSystem, f: &StateModelFindings) -> Vec<String> {
+    let value = |var, v| format!("{} = {v:?}", ts.var_name(var));
+    let witnesses = f.witnesses.iter().map(|w| match &w.witness {
+        Witness::At(_) => format!("witnessed {}", value(w.var, w.value)),
+        Witness::Missing(d) => format!("{:?}", d.name()),
+        Witness::NotDecided => format!("not decided {}", value(w.var, w.value)),
+    });
+    let runs = f.runs.iter().map(|r| match &r.runs {
+        Runs::Fired => format!("runs {}", ts.actions()[r.act.index()].name),
+        Runs::Never(d) => format!("{d:?}"),
+        Runs::NotDecided => format!("not decided {}", ts.actions()[r.act.index()].name),
+    });
+    let deadlocks = f.deadlocks.iter().map(|d| match &d.progress {
+        Progress::Leaves => format!("leaves {}", value(d.var, d.value)),
+        Progress::Stuck { diag, .. } => format!("{:?} {:?}", diag.name(), diag.severity()),
+        Progress::NotDecided => format!("not decided {}", value(d.var, d.value)),
+    });
+    witnesses.chain(runs).chain(deadlocks).collect()
+}
+
+fn check_cone(tlc: &Path, dir: &Path, label: &str, run: &ComponentRun) -> ConeReport {
+    let ts = &run.system;
     let check = tla::print(ts, PrintMode::Safety, "Cone");
-    let (_, log) = run_tlc(tlc, dir, &["-continue"], &check.tla, &check.cfg);
+    let names = &check.names;
+    let (_, log) = run_tlc(
+        tlc,
+        dir,
+        &["-continue", "-dump", "dot,actionlabels", "graph"],
+        &check.tla,
+        &check.cfg,
+    );
     let parsed = TlcRun::parse(&log);
     assert!(
         parsed.completed,
@@ -238,9 +355,44 @@ fn check_cone(tlc: &Path, dir: &Path, label: &str, run: &ComponentRun) -> ConeRe
     );
     assert_eq!(
         parsed.distinct_states,
-        Some(bfs.len() as u64),
+        Some(run.states.len() as u64),
         "{label}: TLC check run explored a different state count\n{log}"
     );
+
+    let of_tlc = tlc_edges(dir, label, run, names);
+    let mut of_bfs: Vec<Move> = run.graph().edges().collect();
+    of_bfs.sort_unstable();
+    of_bfs.dedup();
+    if of_tlc != of_bfs {
+        let only_tlc: Vec<&Move> = of_tlc
+            .iter()
+            .filter(|m| of_bfs.binary_search(m).is_err())
+            .collect();
+        let only_bfs: Vec<&Move> = of_bfs
+            .iter()
+            .filter(|m| of_tlc.binary_search(m).is_err())
+            .collect();
+        panic!(
+            "{label}: edge sets differ (TLC {}, BFS {})\nonly TLC ({}):\n{}\nonly BFS ({}):\n{}",
+            of_tlc.len(),
+            of_bfs.len(),
+            only_tlc.len(),
+            describe_moves(run, names, &only_tlc),
+            only_bfs.len(),
+            describe_moves(run, names, &only_bfs),
+        );
+    }
+    let tlc_moves = LabelledEdges::new(ts, of_tlc);
+    let tlc_graph = tlc_moves.graph(&run.states, true);
+    for e in ts.entity_ids() {
+        assert_eq!(
+            finding_names(ts, &ts.state_model_findings(e, &run.graph())),
+            finding_names(ts, &ts.state_model_findings(e, &tlc_graph)),
+            "{label}: state-model findings of {} differ (left BFS, right TLC)",
+            ts.entity(e).id
+        );
+    }
+
     let violated = parsed.violated_names();
     assert!(
         !violated.contains("TypeOK"),
@@ -252,9 +404,9 @@ fn check_cone(tlc: &Path, dir: &Path, label: &str, run: &ComponentRun) -> ConeRe
         "{label}: verdicts differ\n{}",
         check.tla
     );
-    replay_violations(label, ts, &check.names, &parsed);
+    replay_violations(label, ts, names, &parsed);
     ConeReport {
-        states: bfs.len(),
+        states: run.states.len(),
         violated,
     }
 }
@@ -272,50 +424,96 @@ fn bfs_and_tlc_reach_the_same_states_and_verdicts() {
     };
     let scratch = std::env::temp_dir().join(format!("rdra-equivalence-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&scratch);
+    let mut fallback = Vec::new();
     for sample in samples() {
         let model = load(&sample);
-        for bounds in bounds_for(&sample) {
-            check_model(&tlc, &scratch, &sample, &model, bounds);
+        assert!(
+            check_model(&tlc, &scratch, &sample, &model, Bounds::STATES).is_empty(),
+            "{sample}: a cone passes the state cap at STATES"
+        );
+        for cone in check_model(&tlc, &scratch, &sample, &model, Bounds::VERIFY) {
+            fallback.push((sample.clone(), cone));
         }
     }
     let _ = std::fs::remove_dir_all(&scratch);
+    let expected: Vec<(String, String)> = VERIFY_FALLBACK
+        .iter()
+        .map(|(s, c)| (s.to_string(), c.to_string()))
+        .collect();
+    assert_eq!(
+        fallback, expected,
+        "the cones past the state cap at VERIFY are not VERIFY_FALLBACK (docs/formal-verification.md lists them)"
+    );
 }
 
-/// Every cone of the model at these bounds, checked in parallel.
-fn check_model(tlc: &Path, scratch: &Path, sample: &str, model: &SemanticModel, bounds: Bounds) {
+/// The first target that reads a cone, as the cone's name.
+fn target_label(ts: &TransitionSystem, t: Target) -> String {
+    match t {
+        Target::Entity(e) => format!("entity {}", ts.entity(e).id),
+        Target::Invariant(i) => format!("invariant {}", ts.invariants()[i].name),
+        Target::AfterAssert(i) => format!("after {}", ts.after_asserts()[i].name),
+    }
+}
+
+/// Every cone of the model at these bounds, explored and checked in parallel; returns the
+/// cones whose BFS passes `STATE_CAP`, which are not compared.
+fn check_model(
+    tlc: &Path,
+    scratch: &Path,
+    sample: &str,
+    model: &SemanticModel,
+    bounds: Bounds,
+) -> Vec<String> {
     let workers = std::thread::available_parallelism().map_or(4, |n| n.get().min(8));
-    let built = TransitionSystem::build(model, bounds, &Scope::ALL);
-    let exploration = built
-        .ts
-        .explore_targets(&built.ts.targets(), Caps::new(usize::MAX, STATE_CAP));
-    let cones = &exploration.cones;
+    let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
+    let mut cones: Vec<(Cone, String)> = Vec::new();
+    for t in ts.targets() {
+        let cone = ts.target_cone(t);
+        if !cones.iter().any(|(c, _)| *c == cone) {
+            cones.push((cone, target_label(&ts, t)));
+        }
+    }
     let next = AtomicUsize::new(0);
-    let reports: Mutex<Vec<(usize, ConeReport)>> = Mutex::new(Vec::new());
+    let reports: Mutex<Vec<(usize, Option<ConeReport>)>> = Mutex::new(Vec::new());
     std::thread::scope(|s| {
         for _ in 0..workers {
             s.spawn(|| loop {
                 let i = next.fetch_add(1, Ordering::SeqCst);
-                let Some(cone) = cones.get(i) else { break };
-                let label = format!("{sample} at {bounds:?}, cone {i}");
-                let dir = scratch.join(format!(
-                    "{}-{}-{i}",
-                    sample.replace('/', "_"),
-                    bounds.instances
-                ));
-                let report = check_cone(tlc, &dir, &label, &cone.run);
+                let Some((cone, name)) = cones.get(i) else {
+                    break;
+                };
+                let run = ts
+                    .restrict_to(&cone.vars, &cone.keep)
+                    .run(Caps::new(usize::MAX, STATE_CAP));
+                let report = run.complete.then(|| {
+                    let label = format!("{sample} at {bounds:?}, cone {i} ({name})");
+                    let dir = scratch.join(format!(
+                        "{}-{}-{i}",
+                        sample.replace('/', "_"),
+                        bounds.instances
+                    ));
+                    check_cone(tlc, &dir, &label, &run)
+                });
                 reports.lock().unwrap().push((i, report));
             });
         }
     });
     let mut reports = reports.into_inner().unwrap();
     reports.sort_by_key(|(i, _)| *i);
-    let states: usize = reports.iter().map(|(_, r)| r.states).sum();
-    let violated: BTreeSet<&String> = reports.iter().flat_map(|(_, r)| &r.violated).collect();
+    let checked: Vec<&ConeReport> = reports.iter().filter_map(|(_, r)| r.as_ref()).collect();
+    let states: usize = checked.iter().map(|r| r.states).sum();
+    let violated: BTreeSet<&String> = checked.iter().flat_map(|r| &r.violated).collect();
+    let capped: Vec<String> = reports
+        .iter()
+        .filter(|(_, r)| r.is_none())
+        .map(|(i, _)| cones[*i].1.clone())
+        .collect();
     println!(
-        "{sample} instances={}: {} cones, {states} states, violated {violated:?}",
+        "{sample} instances={}: {} cones, {states} states, violated {violated:?}, past the cap {capped:?}",
         bounds.instances,
-        reports.len()
+        checked.len()
     );
+    capped
 }
 
 /// Condition guards in both engines: a bound atom, an `Exists` along an owner, an independent
@@ -446,7 +644,8 @@ fn check_fixture(name: &str, src: &str) {
     std::fs::write(&file, src).expect("write model");
     let model = load(file.to_str().expect("utf-8 path"));
     for bounds in [Bounds::STATES, Bounds::VERIFY] {
-        check_model(&tlc, &scratch, name, &model, bounds);
+        let capped = check_model(&tlc, &scratch, name, &model, bounds);
+        assert!(capped.is_empty(), "{name}: {capped:?} pass the state cap");
     }
     let _ = std::fs::remove_dir_all(&scratch);
 }

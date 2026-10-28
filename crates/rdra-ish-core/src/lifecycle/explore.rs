@@ -88,6 +88,39 @@ impl Graph<'_> {
     }
 }
 
+/// Moves another engine found, each naming its action but not its params, so that its graph
+/// gets the findings BFS gets.
+pub struct LabelledEdges {
+    edges: Vec<Edge>,
+    bindings: Vec<(ActId, Box<[u8]>)>,
+}
+
+impl LabelledEdges {
+    /// `(from, to, action)` moves of `ts`, between indices of the states the graph will have.
+    pub fn new(ts: &TransitionSystem, moves: impl IntoIterator<Item = (u32, u32, ActId)>) -> Self {
+        LabelledEdges {
+            edges: moves
+                .into_iter()
+                .map(|(from, to, act)| Edge {
+                    from,
+                    to,
+                    binding: act.0.into(),
+                })
+                .collect(),
+            bindings: ts.action_ids().map(|a| (a, Box::from([]))).collect(),
+        }
+    }
+
+    pub fn graph<'a>(&'a self, states: &'a [State], complete: bool) -> Graph<'a> {
+        Graph {
+            states,
+            complete,
+            edges: &self.edges,
+            bindings: &self.bindings,
+        }
+    }
+}
+
 impl ComponentRun {
     pub fn edges(&self) -> &[Edge] {
         &self.edges

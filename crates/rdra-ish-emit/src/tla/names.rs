@@ -1,6 +1,6 @@
 //! TLA+ identifiers for every item of a system, distinct after sanitizing.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use rdra_ish_core::lifecycle::{ActId, EntId, State, TransitionSystem, Value, VarId, VarKind};
 
@@ -191,19 +191,48 @@ impl TlaNames {
     /// so the two cannot drift. `None` when a key is missing or extra, or a text is no value
     /// of its var's domain.
     pub fn decode(&self, ts: &TransitionSystem, canon: &BTreeMap<String, String>) -> Option<State> {
+        self.decoder(ts).decode(canon)
+    }
+
+    /// `decode` for many states: every key and value text is rendered once.
+    pub fn decoder<'a>(&self, ts: &'a TransitionSystem) -> Decoder<'a> {
+        let vars = ts
+            .var_ids()
+            .map(|var| {
+                let d = ts.var(var);
+                let name = &self.vars[var.index()];
+                let keys = match d.kind {
+                    VarKind::Now => vec![name.clone()],
+                    _ => (1..=ts.bounds.slots())
+                        .map(|k| format!("{name}[{k}]"))
+                        .collect(),
+                };
+                let mut values = HashMap::new();
+                for v in (0..d.domain.size(ts.bounds)).map(|v| Value(v as u8)) {
+                    values.entry(render_value(&d.domain, v)).or_insert(v);
+                }
+                (keys, values)
+            })
+            .collect();
+        Decoder { ts, vars }
+    }
+}
+
+/// `TlaNames::decode` with its tables built.
+pub struct Decoder<'a> {
+    ts: &'a TransitionSystem,
+    /// Per var: the key of each slot, and the value each text names.
+    vars: Vec<(Vec<String>, HashMap<String, Value>)>,
+}
+
+impl Decoder<'_> {
+    pub fn decode(&self, canon: &BTreeMap<String, String>) -> Option<State> {
         let mut used = 0;
-        let state = ts.state_from(|var, slot| {
-            let d = ts.var(var);
-            let name = &self.vars[var.index()];
-            let key = match d.kind {
-                VarKind::Now => name.clone(),
-                _ => format!("{name}[{}]", slot + 1),
-            };
-            let text = canon.get(&key)?;
+        let state = self.ts.state_from(|var, slot| {
+            let (keys, values) = &self.vars[var.index()];
+            let text = canon.get(&keys[slot])?;
             used += 1;
-            (0..d.domain.size(ts.bounds))
-                .map(|v| Value(v as u8))
-                .find(|v| render_value(&d.domain, *v) == *text)
+            values.get(text).copied()
         })?;
         (used == canon.len()).then_some(state)
     }
