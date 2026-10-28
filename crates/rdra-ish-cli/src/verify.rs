@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 use anyhow::{bail, Context, Result};
-use rdra_ish_core::lifecycle::{Cone, Target, TransitionSystem, VarSet};
+use rdra_ish_core::lifecycle::{BoundsLine, Cone, Target, TransitionSystem, VarSet};
 use rdra_ish_core::{ResolvedProgram, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
 
@@ -267,10 +267,8 @@ fn run_tlc(
             cone: None,
         })
     };
-    println!(
-        "bounds: InstanceCount={} IntRange=0..{}",
-        bounds.instances, bounds.int_max
-    );
+    let line = BoundsLine::verify(bounds);
+    println!("{line}");
     println!(
         "cones: {cones} for {} invariant(s) and {} after-assert(s)",
         ts.invariants().len(),
@@ -303,7 +301,7 @@ fn run_tlc(
         }
         println!("nothing to check");
         println!("tlc_result: ok");
-        println!("TLC: OK");
+        println!("OK: no errors within {}", line.within());
         return Ok(());
     }
     let tlc = find_tlc()?;
@@ -336,7 +334,7 @@ fn run_tlc(
             let _ = fs::remove_dir_all(&dir);
         }
         println!("tlc_result: ok");
-        println!("TLC: OK");
+        println!("OK: no errors within {}", line.within());
         return Ok(());
     }
     eprintln!("tlc_result: {}", outcome.as_str());

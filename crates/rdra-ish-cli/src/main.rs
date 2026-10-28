@@ -22,7 +22,7 @@ use list_output::{
     state_consistency_findings,
 };
 use load::{eprint_diagnostic, load_model, reject_model_errors};
-use rdra_ish_core::lifecycle::Severity;
+use rdra_ish_core::lifecycle::{BoundsLine, Caps, Severity};
 use rdra_ish_core::{lint_issues, LintSeverity, RdraError};
 use rdra_ish_emit::View;
 use states::run_states;
@@ -61,6 +61,8 @@ fn main() -> Result<()> {
                 std::process::exit(1);
             }
 
+            let bounds = BoundsLine::states(Caps::DEFAULT_PATTERNS);
+            eprintln!("{bounds}");
             for diag in rdra_ish_core::consistency_diagnostics(&model) {
                 let as_error = strict && is_strict_access_gap(&diag.error);
                 if as_error {
@@ -90,7 +92,7 @@ fn main() -> Result<()> {
                 std::process::exit(1);
             }
 
-            println!("OK: no errors");
+            println!("OK: no errors within {}", bounds.within());
         }
 
         Commands::Diagram {

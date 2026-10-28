@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use rdra_ish_core::entity_state_variants;
-use rdra_ish_core::lifecycle::{derive_states, Scope, Severity, StatesReport};
+use rdra_ish_core::lifecycle::{derive_states, Scope, Severity};
 use rdra_ish_emit::{
     state_pattern::{render_csv, render_json, render_table},
     typescript::emit_typescript_state_unions,
@@ -37,7 +37,7 @@ pub fn run_states(
 
     // Exit on structured severity (not string scan) so csv / typescript also fail-closed.
     let report = derive_states(&model, &Scope::from_bucs(&buc), max_patterns);
-    eprintln!("{}", bounds_line(&report));
+    eprintln!("{}", report.bounds_line());
     for d in report.unattributed() {
         eprintln!("{}: {}", severity_word(d.severity()), state_diag_message(d));
     }
@@ -79,12 +79,4 @@ pub fn run_states(
     }
 
     Ok(())
-}
-
-/// The bounds the views were derived under, printed on stderr so stdout stays the artifact.
-fn bounds_line(report: &StatesReport) -> String {
-    format!(
-        "bounds: {} instance per entity, Int 0..{}, --max-patterns {} per target cone ({} states per cone); entities a check does not read are unbounded",
-        report.bounds.instances, report.bounds.int_max, report.caps.patterns, report.caps.states
-    )
 }

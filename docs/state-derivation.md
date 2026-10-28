@@ -178,7 +178,7 @@ The bounds are inputs of the system, and every result states them.
 `states` prints its bounds on stderr first:
 
 ```
-bounds: 1 instance per entity, Int 0..5, --max-patterns 256 per target cone (4096 states per cone); entities a check does not read are unbounded
+bounds: 1 instance per entity, Int 0..5; 4096 states per cone; entities a check does not read are unbounded
 ```
 
 With one slot, an entity is created once, and deleting it does not free the slot.
@@ -249,7 +249,9 @@ Entity: Order (注文)
   reachable: 5 / bound: 10
 ```
 
-The command prints the `bounds:` line on stderr.
+`states` and `check` print the `bounds:` line on stderr, and `verify` prints it on stdout. One
+type, `BoundsLine`, renders all three. The pattern cap shows in the `PatternCapReached` message;
+the line shows the state cap it implies (16 states per allowed pattern).
 
 ---
 

@@ -45,7 +45,7 @@ Prints each diagnostic to stderr. If any error (non-warning) is present, exits w
 status `1` before running secondary consistency checks. Otherwise it reports unresolved
 model warnings and state-pattern findings. State diagnostics share severity with
 `states`: Error-severity findings print as `error:` and cause exit `1`; only a clean
-run prints `OK: no errors`. When the model has temporal `property` declarations,
+run prints `OK: no errors within <bounds>` (for example `OK: no errors within 1 instance per entity, Int 0..5`). When the model has temporal `property` declarations,
 `check` prints a trailing `note:` that those were not model-checked (use
 `verify --backend tlc`).
 
@@ -462,7 +462,8 @@ rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns 
 
 Output is written to stdout. Exit is based on structured severity (all formats), not
 string-scanning `[error]`. stderr starts with a `bounds:` line: one instance per entity,
-the Int range, the caps per target cone, and that entities a check does not read are unbounded. Diagnostics that name no entity are printed
+the Int range, the state cap per target cone, and that entities a check does not read are unbounded.
+`check` prints the same line, and `verify` prints it on stdout with the TLA+ constants. Diagnostics that name no entity are printed
 on stderr too.
 
 ---

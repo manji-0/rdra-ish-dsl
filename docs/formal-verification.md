@@ -119,13 +119,13 @@ cone. `verify` checks them on the whole model, and only when the model declares 
 
 ```
 $ rdra-ish verify samples/formal-verification/order.rdra --backend tlc
-bounds: InstanceCount=2 IntRange=0..5
+bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); entities a check does not read are unbounded
 cones: 1 for 2 invariant(s) and 1 after-assert(s)
 temporal properties: 2, checked on the whole model (fairness does not restrict to a cone)
 Cone_Forbidden_Order_0 [Forbidden_Order_0, Inv_Order_0, AfterAssert_DeliverOrder_0]: ok (31 states)
 RdraSpec [PaidLeadsToShipped, EventuallyTerminal]: ok (31 states)
 tlc_result: ok
-TLC: OK
+OK: no errors within 2 instances per entity, Int 0..5
 ```
 
 A violated invariant or `after` assertion prints in model terms first, the same way
@@ -144,7 +144,7 @@ counterexample prints only TLC's trace.
 
 - **Bounds.** A `verify` OK holds for the stated `InstanceCount` and `IntRange` and says
   nothing outside them. The `.tla` header comment and the `bounds:` line of `verify`
-  state both. A deleted slot is never reused, so an entity is created at most
+  state both, and so does the final `OK: no errors within ...` line. A deleted slot is never reused, so an entity is created at most
   `InstanceCount` times.
 - **Conditions are checked.** A `holds` body is a guard on each use case it applies to.
   A body applied to a use case that writes nothing is `UnbindableCondition`, an error.

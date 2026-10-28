@@ -4,6 +4,17 @@
 
 ### Breaking
 
+- `verify` ends a passing run with `OK: no errors within 2 instances per entity, Int 0..5`
+  instead of `TLC: OK`, and `check` ends with `OK: no errors within 1 instance per entity,
+  Int 0..5` instead of `OK: no errors`. A script that matches `TLC: OK` must match
+  `OK: no errors within` or, better, `tlc_result: ok`, which is unchanged. The `OK: no errors`
+  prefix of `check` still matches. The repo's own scripts and workflows match neither.
+- One `bounds:` line, from one type, now heads `check` (stderr), `states` (stderr), and
+  `verify` (stdout). `states` no longer names `--max-patterns` in it, only the state cap
+  (`4096 states per cone`). `verify` no longer prints `bounds: InstanceCount=2 IntRange=0..5`;
+  the line now reads `bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2,
+  IntRange=0..5); entities a check does not read are unbounded`.
+
 - `@check` and `@derived` take an unquoted, typed expression: `@check(qty >= 1)`,
   `@derived(total - discount)` or `@derived(qty >= 3)`. The quoted form is a parse
   error whose message is the rewrite. The expression must name the entity's own

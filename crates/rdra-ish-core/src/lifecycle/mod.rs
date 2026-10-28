@@ -27,7 +27,7 @@ pub use diag::{has_errors, Diag, Severity, StateDiag};
 pub use explore::{Caps, ComponentRun, Edge, Exploration};
 pub use expr::State;
 pub use restrict::Component;
-pub use states::{derive_states, StatesReport};
+pub use states::{derive_states, BoundsLine, StatesReport};
 pub use targets::{ConeRun, TargetExploration};
 pub use trace::{Change, Inst, Replay, ReplayError, Trace, TraceStep};
 pub use types::{

@@ -145,3 +145,27 @@ fn a_tlc_counterexample_prints_in_model_terms() {
     }
     let _ = std::fs::remove_dir_all(&tmp);
 }
+
+/// `verify` states the bounds first, and a passing run ends with them in its `OK:` line.
+#[test]
+fn verify_prints_the_bounds_line_and_an_ok_line_that_repeats_them() {
+    if !have_tlc() {
+        return;
+    }
+    let tmp = scratch("verify_cli_bounds");
+    let sample = repo().join("samples/formal-verification/check_met.rdra");
+    let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "{stdout}");
+    assert!(
+        stdout.lines().any(|l| l
+            == "bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); entities a check does not read are unbounded"),
+        "{stdout}"
+    );
+    assert_eq!(
+        stdout.lines().last(),
+        Some("OK: no errors within 2 instances per entity, Int 0..5"),
+        "{stdout}"
+    );
+    let _ = std::fs::remove_dir_all(&tmp);
+}

@@ -1,6 +1,8 @@
 //! What `states`, `check`, and the generator gates read: the system at `Bounds::STATES`, each
 //! entity view and each constraint verdict computed on its own target cone.
 
+use std::fmt;
+
 use super::diag::{Diag, Severity, StateDiag};
 use super::explore::Caps;
 use super::view::EntityStateResult;
@@ -19,6 +21,70 @@ impl Caps {
     pub const VERIFY: Caps = Caps::new(Caps::DEFAULT_PATTERNS, 1 << 21);
 }
 
+/// The one bounds line every command prints: `check` and `states` on stderr, `verify` on
+/// stdout. A result holds within these bounds and says nothing outside them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BoundsLine {
+    pub bounds: Bounds,
+    /// BFS caps; `None` when the command runs no BFS.
+    pub caps: Option<Caps>,
+    /// Also name the TLA+ constants the bounds map to.
+    pub tla: bool,
+}
+
+impl BoundsLine {
+    /// What `states`, `check`, and the generators run at.
+    pub fn states(max_patterns: usize) -> Self {
+        BoundsLine {
+            bounds: Bounds::STATES,
+            caps: Some(Caps::per_cone(max_patterns)),
+            tla: false,
+        }
+    }
+
+    /// What `verify` runs at; TLC has no state cap.
+    pub fn verify(bounds: Bounds) -> Self {
+        BoundsLine {
+            bounds,
+            caps: None,
+            tla: true,
+        }
+    }
+
+    /// The bounds alone, as the final `OK: no errors within ...` line states them.
+    pub fn within(&self) -> impl fmt::Display + '_ {
+        Within(self.bounds)
+    }
+}
+
+struct Within(Bounds);
+
+impl fmt::Display for Within {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let n = self.0.instances.get();
+        let s = if n == 1 { "" } else { "s" };
+        write!(f, "{n} instance{s} per entity, Int 0..{}", self.0.int_max)
+    }
+}
+
+impl fmt::Display for BoundsLine {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "bounds: {}", Within(self.bounds))?;
+        if self.tla {
+            write!(
+                f,
+                " (TLA+ InstanceCount={}, IntRange=0..{})",
+                self.bounds.instances, self.bounds.int_max
+            )?;
+        }
+        if let Some(caps) = self.caps {
+            let bfs = if self.tla { "BFS " } else { "" };
+            write!(f, "; {} states per {bfs}cone", caps.states)?;
+        }
+        write!(f, "; entities a check does not read are unbounded")
+    }
+}
+
 pub struct StatesReport {
     pub bounds: Bounds,
     pub caps: Caps,
@@ -29,6 +95,15 @@ pub struct StatesReport {
 }
 
 impl StatesReport {
+    /// The bounds the views were derived under.
+    pub fn bounds_line(&self) -> BoundsLine {
+        BoundsLine {
+            bounds: self.bounds,
+            caps: Some(self.caps),
+            tla: false,
+        }
+    }
+
     /// Any Error diagnostic, on a view or naming no entity.
     pub fn has_errors(&self) -> bool {
         super::has_errors(&self.diags)

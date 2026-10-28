@@ -27,6 +27,7 @@ fn check_prints_one_verdict_with_its_counterexample() {
     let file = "skills/rdra-ish-verify/samples/cross_order_payment_split.rdra";
     let expected = format!(
         "\
+bounds: 1 instance per entity, Int 0..5; 4096 states per cone; entities a check does not read are unbounded
 error: invariant CrossForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order(status=cancelled); Payment(status=captured)
   rule: {file}:41:1
   counterexample (3 steps):
@@ -42,4 +43,39 @@ error: invariant CrossForbidden_Order_0 is violated: multi-entity forbidden stat
     assert_eq!(stderr, expected);
     let verdicts = stderr.lines().filter(|l| l.starts_with("error:")).count();
     assert_eq!(verdicts, 1, "a multi-entity rule prints once: {stderr}");
+}
+
+const BOUNDS: &str = "bounds: 1 instance per entity, Int 0..5; 4096 states per cone; entities a check does not read are unbounded";
+
+fn run(args: &[&str]) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .current_dir(repo())
+        .args(args)
+        .output()
+        .expect("rdra-ish runs")
+}
+
+/// `check` and `states` state the bounds on stderr, and a clean `check` repeats them in its
+/// `OK:` line.
+#[test]
+fn check_and_states_print_the_bounds_line() {
+    let sample = "samples/formal-verification/check_met.rdra";
+    let check = run(&["check", sample]);
+    assert!(check.status.success());
+    let stderr = String::from_utf8_lossy(&check.stderr);
+    assert_eq!(
+        stderr.lines().find(|l| l.starts_with("bounds:")),
+        Some(BOUNDS)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&check.stdout),
+        "OK: no errors within 1 instance per entity, Int 0..5\n"
+    );
+
+    let states = run(&["states", sample]);
+    let stderr = String::from_utf8_lossy(&states.stderr);
+    assert_eq!(
+        stderr.lines().find(|l| l.starts_with("bounds:")),
+        Some(BOUNDS)
+    );
 }
