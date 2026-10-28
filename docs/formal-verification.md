@@ -122,15 +122,20 @@ Before TLC runs, `verify` explores each entity's cone with BFS at the same bound
 state model must have a witness there (see
 [state-derivation.md](./state-derivation.md#state-models-and-witnesses)). A `NoWitness`
 error fails `verify` even when every TLC check passes: the run prints `tlc_result: ok` and
-no `OK:` line, and exits 1. A cone that stops at the cap decides nothing about its
-unwitnessed states, and `verify` prints a `note:` for each. On clinic-ops this pass takes
-about 11 s and 400 MB, most of it the `AccountBalance` cone (1,707,212 states).
+no `OK:` line, and exits 1. The same pass finds each use case that never runs (see
+[state-derivation.md](./state-derivation.md#use-cases-that-never-run)) and prints it as a
+warning, which does not fail the run. A cone that stops at the cap decides nothing about its
+unwitnessed states or its actions with no edge, and `verify` prints a `note:` for each. The
+pass ends with a `state models (BFS on N entity cones): ...` summary line. On clinic-ops
+this pass takes about 11 s and 400 MB, most of it the `AccountBalance` cone (1,707,212
+states).
 
 ```
 $ rdra-ish verify samples/formal-verification/order.rdra --backend tlc
 bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 2097152 states per BFS cone; entities a check does not read are unbounded
 cones: 1 for 2 invariant(s) and 1 after-assert(s)
 temporal properties: 2, checked on the whole model (fairness does not restrict to a cone)
+state models (BFS on 1 entity cone): 1 state model, 5 states witnessed, 0 use cases that never run
 Cone_Forbidden_Order_0 [Forbidden_Order_0, Inv_Order_0, AfterAssert_DeliverOrder_0]: ok (31 states)
 RdraSpec [PaidLeadsToShipped, EventuallyTerminal]: ok (31 states)
 tlc_result: ok
@@ -218,10 +223,10 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `after_assert_unmet.rdra` | fail, fail | `after(DeliverOrder).assert` without the `sets` that makes it true |
 | `one_to_one_shared.rdra` | pass, fail | `relate(.., 1:1)` adds `Unique_Shipment_Order`; Ship and Reship each link a Shipment to the same Order, which takes two instances |
 | `min_card_unmet.rdra` | fail, fail | `relate(OrderLine, Order, 1..*:1)` adds `MinCard_OrderLine_Order`; Place creates an Order without a line |
-| `min_card_met.rdra` | pass, pass | The same model with Place creating the Order and its first line in one transaction |
+| `min_card_met.rdra` | pass, pass | The same model with Place creating the Order and its first line in one transaction. At one instance `check` warns that AddLine never runs: an Order exists only with the one OrderLine slot taken. At two instances it runs |
 | `check_unmet.rdra` | fail, fail | `qty: Int @default(1) @check(qty >= 1)` adds `Check_CartLine_qty_0`; ClearQty sets `qty` to 0 |
 | `check_met.rdra` | pass, pass | The same check with a use case that keeps `qty` in range; `forbidden` reads the derived `bulk: Bool @derived(qty >= 3)` as its expression |
-| `unwitnessed_state.rdra` | fail, pass | `refunded` has no witness: Refund needs `shipped` and a refund window that holds only while `pending`. TLC passes; the BFS witness check fails `check` and `verify` |
+| `unwitnessed_state.rdra` | fail, pass | `refunded` has no witness: Refund needs `shipped` and a refund window that holds only while `pending`. TLC passes; the BFS witness check fails `check` and `verify`, and both warn that Refund never runs (its guards never hold together) |
 | `fail/order.rdra` | fail, fail | Intentionally unsafe (reachable invariant violation) |
 
 BFS and TLC give the same verdict on every row at the same bounds. `check` runs at one

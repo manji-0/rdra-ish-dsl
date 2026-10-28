@@ -3,7 +3,7 @@
 use std::fmt;
 
 use super::trace::Trace;
-use super::types::{InvKind, InvText, Site};
+use super::types::{ActionOrigin, GuardWhy, InvKind, InvText, ParamRole, Site};
 use crate::model::EntityKey;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -95,6 +95,15 @@ pub enum StateDiag {
         /// The transition arms and creations that would enter it.
         into: Vec<Entry>,
     },
+    /// An action (a use case, or one transaction group of a split one) that labels no edge of
+    /// any cone that keeps it: in no reachable state can it run.
+    NeverRuns {
+        action: String,
+        origin: ActionOrigin,
+        /// The use case declaration.
+        site: Site,
+        why: Blocked,
+    },
     /// `after(UC).assert` names a use case that changes nothing.
     AssertOnInertUseCase { anchor: String, site: Site },
     /// An Int literal outside the bounded domain `0..=max`.
@@ -139,7 +148,7 @@ pub enum StateDiag {
 
 impl StateDiag {
     /// The stable name expectations and engine comparisons use: the invariant name, or
-    /// `Witness_<entity>_<column>_<value>`. `None` for a diagnostic without one yet.
+    /// `Witness_<entity>_<column>_<value>`, or `Runs_<action>`. `None` for a diagnostic without one yet.
     pub fn name(&self) -> Option<String> {
         match self {
             StateDiag::ConstraintViolated { name, .. } => Some(name.clone()),
@@ -149,6 +158,7 @@ impl StateDiag {
                 value,
                 ..
             } => Some(format!("Witness_{entity}_{column}_{value}")),
+            StateDiag::NeverRuns { action, .. } => Some(format!("Runs_{action}")),
             _ => None,
         }
     }
@@ -176,7 +186,8 @@ impl StateDiag {
             StateDiag::UnreachableEnumVariant { .. }
             | StateDiag::UnwrittenConstrainedVar { .. }
             | StateDiag::PreExistingChildOfCreatedParent { .. }
-            | StateDiag::MinCardOfPreExistingParent { .. } => Severity::Warning,
+            | StateDiag::MinCardOfPreExistingParent { .. }
+            | StateDiag::NeverRuns { .. } => Severity::Warning,
             StateDiag::ConflictingEffects { .. }
             | StateDiag::DoubleModeledEnum { .. }
             | StateDiag::PatternCapReached { .. }
@@ -203,6 +214,21 @@ pub struct Entry {
     pub from: Option<String>,
     /// The arm, the `sets`, or the creating use case.
     pub site: Site,
+}
+
+/// Why an action never runs, read off the reachable states of a cone that keeps it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Blocked {
+    /// No reachable state has an instance for these params: a free slot for a `New` one, a
+    /// present instance otherwise. Each is the entity id and the role.
+    NoInstance(Vec<(String, ParamRole)>),
+    /// Each param finds an instance in some reachable state, but no state has all of these at
+    /// once.
+    Apart(Vec<(String, ParamRole)>),
+    /// These guards hold in no reachable state, under any binding of the params.
+    Guards(Vec<(GuardWhy, Site)>),
+    /// Each guard holds in some reachable state, but never all of them in one.
+    Together,
 }
 
 pub fn has_errors<'a>(diags: impl IntoIterator<Item = &'a Diag>) -> bool {
@@ -268,6 +294,23 @@ impl fmt::Display for StateDiag {
                 f,
                 "state {entity}.{column} = {value} has no reachability witness: no sequence of use cases from the start reaches it"
             ),
+            StateDiag::NeverRuns { action, why, .. } => {
+                write!(f, "{action} can never run: ")?;
+                match why {
+                    Blocked::NoInstance(_) => {
+                        write!(f, "no reachable state has an instance it needs")
+                    }
+                    Blocked::Apart(_) => write!(
+                        f,
+                        "no reachable state has all the instances it needs at once"
+                    ),
+                    Blocked::Guards(_) => write!(f, "in no reachable state do its guards hold"),
+                    Blocked::Together => write!(
+                        f,
+                        "each of its guards holds in some reachable state, but never all of them in one"
+                    ),
+                }
+            }
             StateDiag::AssertOnInertUseCase { anchor, .. } => {
                 write!(f, "after({anchor}).assert names a use case with no effect")
             }

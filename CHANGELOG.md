@@ -205,6 +205,18 @@
 
 ### Added
 
+- Use cases that never run. An action (a use case, or one transaction group of a split use
+  case such as `Pay_2`) that no edge of any entity cone that keeps it carries is the
+  `NeverRuns` warning in `check`, `states`, and `verify`; a self-loop counts as running.
+  It prints once per action, with the use case's site and only what blocks it: an instance
+  no reachable state has (`needs:`), the instances never present at once, each guard that
+  holds in no reachable state (`guard:` with its site), or a first line saying the guards
+  each hold somewhere but never together. A capped cone or a `--buc` run leaves it
+  undecided with a `note:`. `verify` adds `state models (BFS on N entity cones): M state
+  models, K states witnessed, J use cases that never run` to stdout. On the samples, Refund
+  in `unwitnessed_state` warns (its guards never hold together), and AddLine in
+  `min_card_met` warns in `check` only: at one instance an Order exists only with its one
+  OrderLine slot taken. clinic-ops CollectCopay runs.
 - Reachability witnesses. `states --format json` gives each pattern a `witness`: a
   shortest path from the start to the first state that holds the pattern, with each
   step's use case, bound instances, changes, and sites. `check` prints a `NoWitness` once,

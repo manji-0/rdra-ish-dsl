@@ -263,6 +263,42 @@ as `witness`. The witness is computed by `state_model_findings` in
 `crates/rdra-ish-core/src/lifecycle/findings.rs`, a pure function of the system and one
 cone's `Graph` (its states and `(from, to, action)` edges).
 
+### Use cases that never run
+
+An action is one use case, or one transaction group of a split use case (`Pay_1`, `Pay_2`).
+It runs when some edge of a cone that keeps it carries its label. A self-loop counts: an
+action that changes nothing still runs. An entity's cone keeps every action with a param on
+the entity that is not only a parent, with all of its guards, so each such cone decides the
+action exactly. `NeverRuns` is the warning for an action that no edge of any of these cones
+carries. It prints once per action, not once per cone.
+
+The warning names only what blocks the action. `state_model_findings` scans the reachable
+states of the cone for each check that `moves` makes, one check at a time:
+
+- **No instance.** A param finds no slot in any reachable state: a free slot for a created
+  entity, a present instance otherwise. Each one prints as `needs:`.
+- **Not at once.** Each param finds a slot in some state, but no state has them all. Each
+  param prints as `needs:`. At one instance per entity this is often the bound: in
+  `min_card_met`, an `Order` exists only with its one `OrderLine` slot taken, so `AddLine`
+  never runs in `check` and runs in `verify`.
+- **Guards.** Each guard (a `transitions` from-state, an `applies_to` condition, a relate
+  link, the clock) that holds under no binding of any reachable state prints as `guard:`
+  with its site. A guard that holds somewhere is left out.
+- **Never together.** Every guard holds in some reachable state, but never all of them in
+  one. The warning says so in its first line.
+
+```
+$ rdra-ish check samples/formal-verification/unwitnessed_state.rdra
+...
+warning: use case Refund can never run: each of its guards holds in some reachable state, but never all of them in one
+  declared: use case Refund   skills/rdra-ish-verify/samples/unwitnessed_state.rdra:16:1
+```
+
+A cone that stops at a cap, or a `--buc` run, leaves an action with no edge undecided. It
+prints `note: whether Refund can run is not decided: ...` and is not a warning. A cone that
+frees an unread entity's slots (see [Bounds](#bounds)) can run an action the whole model
+cannot, so that case can miss a warning, and never adds a false one.
+
 ```
 $ rdra-ish states samples/formal-verification/order.rdra
 Entity: Order (注文)
@@ -354,6 +390,7 @@ makes the command exit non-zero in every format, and the generators refuse to em
 |---|---|---|
 | `UnreachableEnumVariant { column, variant }` | warning | No reachable pattern holds a declared Enum variant that is not a state of a state model. |
 | `NoWitness { entity, column, value, into }` | error | No reachable state holds a state of a state model: a `transitions` endpoint or a start value of a lifecycle column. Not raised when a cap stopped the cone or `--buc` drops use cases; those print a `not decided` note. |
+| `NeverRuns { action, origin, site, why }` | warning | No edge of any entity cone that keeps the action carries it, self-loops included. `why` is `NoInstance`, `Apart` (the instances are never present at once), `Guards` (only the guards that hold in no reachable state, each with its site), or `Together`. Not raised when a cap stopped every such cone or `--buc` drops use cases; those print a `not decided` note. |
 | `UnwrittenConstrainedVar { column }` | warning | A constraint or a condition guard reads a column that no use case writes, so it checks only the start value. |
 | `NoCreationPath` | info | No use case creates the entity. It starts present. |
 | `MinCardNeedsCreate { usecase, child }` | info | A use case creates the parent of a `1..*` key and no child in the same transaction group, so `MinCard_*` fails after it unless the use case also creates a child. A child that the action links by update counts. |

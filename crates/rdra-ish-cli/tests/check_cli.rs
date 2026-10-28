@@ -80,9 +80,82 @@ fn check_and_states_print_the_bounds_line() {
     );
 }
 
+/// A never-run action names its transaction group and lists only the guards that hold in no
+/// reachable state, each at its site: Pay_2's settlement condition reads a state only Refund
+/// enters, and Refund leaves `paid`, which only Pay_2 enters.
+#[test]
+fn check_lists_only_the_guards_that_never_hold() {
+    let dir = std::env::temp_dir().join(format!("rdra-never-runs-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let dir = std::fs::canonicalize(&dir).unwrap();
+    let file = dir.join("never_runs.rdra");
+    std::fs::write(
+        &file,
+        r#"entity Order "注文" { id: Int @pk  status: Enum(pending, paid, refunded) @default(pending) }
+entity Payment "決済" { id: Int @pk  status: Enum(pending, captured) @default(pending) }
+relate(Payment, Order, N:1)
+usecase Place "注文確定"
+usecase Pay "決済確定"
+usecase Refund "返金"
+api CapturePaymentApi "Capture"
+api PayOrderApi "Pay order"
+creates(Place, Order)
+creates(Place, Payment)
+invokes(Pay, CapturePaymentApi)
+updates(CapturePaymentApi, Payment)
+invokes(Pay, PayOrderApi)
+updates(PayOrderApi, Order)
+updates(Refund, Order)
+transitions(Order.status, Pay, pending -> paid)
+transitions(Payment.status, Pay, pending -> captured)
+transitions(Order.status, Refund, paid -> refunded)
+condition Settled "精算済み"
+holds(Settled, Order.status == refunded)
+applies_to(Settled, Pay)
+"#,
+    )
+    .unwrap();
+    let output = run(&["check", file.to_str().unwrap()]);
+    let _ = std::fs::remove_dir_all(&dir);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let blocks: Vec<&str> = stderr
+        .split("\nwarning: ")
+        .skip(1)
+        .map(|b| b.split("\nerror: ").next().unwrap())
+        .collect();
+    assert_eq!(blocks.len(), 2, "{stderr}");
+    let squash = |b: &str| {
+        b.lines()
+            .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
+            .collect::<Vec<_>>()
+            .join("\n")
+            .replace(&format!("{}/", dir.display()), "")
+    };
+    assert_eq!(
+        squash(blocks[0]),
+        "\
+transaction 2 of Pay (Pay_2) can never run: in no reachable state do its guards hold
+declared: transaction 2 of Pay (Pay_2) never_runs.rdra:5:1
+guard: condition Settled never_runs.rdra:20:1"
+    );
+    assert_eq!(
+        squash(blocks[1]),
+        "\
+use case Refund can never run: in no reachable state do its guards hold
+declared: use case Refund never_runs.rdra:6:1
+guard: Order.status is paid (transitions of Refund) never_runs.rdra:18:1"
+    );
+    let warnings = stderr
+        .lines()
+        .filter(|l| l.starts_with("warning: "))
+        .count();
+    assert_eq!(warnings, 2, "each action warns once: {stderr}");
+}
+
 /// A state of a state model that no use case reaches is one error, with the arm that would
-/// enter it; `states` reports it on the entity's view, and each reachable pattern carries the
-/// path that reaches it.
+/// enter it; the use case that would enter it never runs, a warning with its declaration;
+/// `states` reports both on the entity's view, and each reachable pattern carries the path
+/// that reaches it.
 #[test]
 fn check_reports_a_state_no_use_case_reaches() {
     let sample = "samples/formal-verification/unwitnessed_state.rdra";
@@ -98,6 +171,8 @@ fn check_reports_a_state_no_use_case_reaches() {
 {BOUNDS}
 error: state Order.status = refunded has no reachability witness: no sequence of use cases from the start reaches it
   state model: Order.status, entered by Refund (shipped -> refunded)   {file}:31:1
+warning: use case Refund can never run: each of its guards holds in some reachable state, but never all of them in one
+  declared: use case Refund   {file}:16:1
 "
         )
     );
@@ -111,6 +186,10 @@ error: state Order.status = refunded has no reachability witness: no sequence of
         .as_str()
         .unwrap()
         .contains("Order.status = refunded has no reachability witness"));
+    assert_eq!(
+        order["diagnostics"][1],
+        "[warn] Refund can never run: each of its guards holds in some reachable state, but never all of them in one"
+    );
     let shipped = order["patterns"]
         .as_array()
         .unwrap()

@@ -476,7 +476,74 @@ impl TransitionSystem {
     }
 }
 
+/// What `moves` checks for one action, scanned over a set of states one check at a time.
+pub(crate) enum Scan {
+    /// These params find no slot in any state: `New` no absent one, the others no present one.
+    Unbound(Vec<usize>),
+    /// Each param finds a slot in some state, but no state binds them all.
+    Apart,
+    /// These guards are false under every binding of every state; post-guards are read on
+    /// every successor of the binding, whether or not the pre-guards hold.
+    NeverHeld(Vec<usize>),
+    /// Some state binds every param and every guard holds under some binding, but not all of
+    /// them in one state.
+    EachHeld,
+}
+
 impl TransitionSystem {
+    /// Which of `act`'s checks in `moves` hold in no state of `states`.
+    pub(crate) fn scan_guards(&self, act: ActId, states: &[State]) -> Scan {
+        let action = &self.actions[act.index()];
+        let mut bound = vec![false; action.params.len()];
+        let mut held = vec![false; action.guards.len()];
+        let mut any_binding = false;
+        for s in states {
+            for (p, param) in action.params.iter().enumerate() {
+                let exists = self.entity(param.entity).exists;
+                let want = match param.role {
+                    ParamRole::New => Value::ABSENT,
+                    ParamRole::Existing | ParamRole::Parent => Value::PRESENT,
+                };
+                bound[p] |= (0..self.bounds.slots()).any(|slot| s.get(self, exists, slot) == want);
+            }
+            for params in self.bindings(action, s) {
+                any_binding = true;
+                for (g, guard) in action.guards.iter().enumerate() {
+                    if held[g] {
+                        continue;
+                    }
+                    held[g] = if guard.reads_successor() {
+                        self.successors(action, &params, s).iter().any(|next| {
+                            let mut env = Env {
+                                next: Some(next),
+                                ..Env::new(&params)
+                            };
+                            self.eval(&guard.pred, s, &mut env)
+                        })
+                    } else {
+                        self.eval(&guard.pred, s, &mut Env::new(&params))
+                    };
+                }
+            }
+            if any_binding && held.iter().all(|b| *b) {
+                return Scan::EachHeld;
+            }
+        }
+        let unbound: Vec<usize> = (0..bound.len()).filter(|p| !bound[*p]).collect();
+        if !unbound.is_empty() {
+            return Scan::Unbound(unbound);
+        }
+        if !any_binding {
+            return Scan::Apart;
+        }
+        let never: Vec<usize> = (0..held.len()).filter(|g| !held[*g]).collect();
+        if never.is_empty() {
+            Scan::EachHeld
+        } else {
+            Scan::NeverHeld(never)
+        }
+    }
+
     /// The violation of `invariants()[i]` in `s`, with an empty trace; `None` when it holds.
     /// BFS and the replay of a TLC trace both build the diagnostic here.
     pub(crate) fn invariant_violation(&self, i: usize, s: &State) -> Option<Diag> {

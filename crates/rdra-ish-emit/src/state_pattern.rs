@@ -190,6 +190,7 @@ fn diag_message(d: &StateDiag) -> String {
         ),
         StateDiag::StateCapReached { .. }
         | StateDiag::NoWitness { .. }
+        | StateDiag::NeverRuns { .. }
         | StateDiag::ContradictoryDrivenComparison { .. }
         | StateDiag::AssertOnInertUseCase { .. }
         | StateDiag::IntLiteralOutOfBounds { .. }

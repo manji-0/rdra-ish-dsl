@@ -85,6 +85,22 @@ prints a `note: state E.col = v is not decided: ...` line naming the cap. Such a
 neither an error nor a warning. See
 [State models and witnesses](./state-derivation.md#state-models-and-witnesses).
 
+A use case, or one transaction group of a split use case, that no edge of its entity cones
+carries is one `warning:`. It names the use case's declaration and only what blocks it:
+`needs:` for an instance no reachable state has, `guard:` with its site for each guard that
+holds in no reachable state, or, when each guard holds somewhere, a first line that says
+they never hold together:
+
+```
+warning: transaction 2 of Pay (Pay_2) can never run: in no reachable state do its guards hold
+  declared: transaction 2 of Pay (Pay_2)   never_runs.rdra:5:1
+  guard: condition Settled                 never_runs.rdra:20:1
+```
+
+A capped cone leaves such an action undecided with a `note: whether Pay_2 can run is not
+decided: ...` line. See
+[Use cases that never run](./state-derivation.md#use-cases-that-never-run).
+
 | Option | Description |
 |---|---|
 | `--strict` | Promote permission / access consistency gaps (`ActorPermissionMissing`, no-actor paths, etc.) from warnings to errors for exit. |
@@ -102,8 +118,8 @@ neither an error nor a warning. See
   intentional external publications with `outbox(Event)` to suppress only the
   raised-but-unconsumed warning;
 - state diagnostics (same severity as `states`), including missing creation paths,
-  unreachable enum variants, a state of a state model with no reachability witness, a
-  reachable state that breaks a `forbidden`, `invariant`,
+  unreachable enum variants, a state of a state model with no reachability witness, a use
+  case that never runs, a reachable state that breaks a `forbidden`, `invariant`,
   `required`, `exclusive`, multi-entity, or quantifier rule, a failed `after` assertion,
   a condition body that no use case can bind, and pattern truncation. See
   [Diagnostics](./state-derivation.md#diagnostics).
@@ -390,8 +406,16 @@ Before TLC runs, `verify` explores each entity's cone with BFS at the same bound
 at 2,097,152 states per cone; the `bounds:` line names the cap as `2097152 states per BFS
 cone`. A state of a state model with no witness there prints as in `check` and fails the
 run even when TLC passes: stdout ends with `tlc_result: ok`, no `OK:` line follows, and the
-exit status is 1. A cone that stops at the cap prints a `note:` for each state it leaves
-undecided.
+exit status is 1. A use case that never runs there prints as in `check`, as a `warning:`
+that does not fail the run. A cone that stops at the cap prints a `note:` for each state and
+each use case it leaves undecided. Then one summary line follows on stdout:
+
+```
+state models (BFS on 2 entity cones): 2 state models, 5 states witnessed, 0 use cases that never run
+```
+
+The line counts the distinct entity cones, the columns with a state model, the states with
+a witness, and the `NeverRuns` warnings. It has no deadlock count yet.
 
 A failed run ends with `specs: <dir>`, the directory that holds the specs. Without `-o`
 it adds `(kept because a check failed)`. Each cone's TLC runs with `-continue`, so every
@@ -485,8 +509,8 @@ Output is written to stdout. Exit is based on structured severity (all formats),
 string-scanning `[error]`. stderr starts with a `bounds:` line: one instance per entity,
 the Int range, the state cap per target cone, and that entities a check does not read are unbounded.
 `check` prints the same line, and `verify` prints it on stdout with the TLA+ constants. Diagnostics that name no entity are printed
-on stderr too, and so is a `note:` for each state of a state model the run does not decide
-(a capped cone, or `--buc`, which leaves use cases out). With `--format json`, each pattern
+on stderr too, and so is a `note:` for each state of a state model and each use case the run
+does not decide (a capped cone, or `--buc`, which leaves use cases out). With `--format json`, each pattern
 carries a `witness`: a shortest path to the first state that holds it, as `start` and
 `steps` objects with sites (see [Output formats](./state-derivation.md#output-formats)).
 

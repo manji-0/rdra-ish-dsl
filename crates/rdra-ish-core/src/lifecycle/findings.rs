@@ -1,9 +1,9 @@
 //! What a cone's graph says about an entity's state models. A pure function of the system and
 //! the graph, so any engine that produces the graph gets the same findings.
 
-use super::diag::{Entry, StateDiag};
-use super::explore::Graph;
-use super::types::{Domain, Effect, EntId, Value, VarId, VarKind};
+use super::diag::{Blocked, Entry, StateDiag};
+use super::explore::{Graph, Scan};
+use super::types::{ActId, ActionOrigin, Domain, Effect, EntId, ParamRole, Value, VarId, VarKind};
 use super::TransitionSystem;
 
 /// What the graph says about one state of a state model.
@@ -24,10 +24,30 @@ pub struct ValueWitness {
     pub witness: Witness,
 }
 
+/// What the graph says about one action the entity's cone keeps.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Runs {
+    /// Some edge carries it, a self-loop included.
+    Fired,
+    /// No edge of a complete graph carries it: a `NeverRuns` warning.
+    Never(Box<StateDiag>),
+    /// No edge carries it, but a cap stopped the exploration, so it may still run.
+    NotDecided,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ActionRuns {
+    pub act: ActId,
+    pub runs: Runs,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct StateModelFindings {
     /// Each state of the entity's state models, column by column in declared value order.
     pub witnesses: Vec<ValueWitness>,
+    /// Each use case action with a param on the entity that it does not only point at as a
+    /// parent, in action order. The entity's cone keeps exactly these, with every guard.
+    pub runs: Vec<ActionRuns>,
 }
 
 impl TransitionSystem {
@@ -101,7 +121,65 @@ impl TransitionSystem {
                 },
             })
             .collect();
-        StateModelFindings { witnesses }
+        StateModelFindings {
+            witnesses,
+            runs: self.runs(e, g),
+        }
+    }
+
+    /// Whether each action the cone of `e` keeps labels an edge of `g`. `observe` sees a
+    /// self-loop as any other move, so a self-loop counts.
+    fn runs(&self, e: EntId, g: &Graph) -> Vec<ActionRuns> {
+        let mut fired = vec![false; self.actions.len()];
+        for (_, _, act) in g.edges() {
+            fired[act.index()] = true;
+        }
+        self.action_ids()
+            .filter(|act| {
+                let action = &self.actions[act.index()];
+                matches!(action.origin, ActionOrigin::UseCase { .. })
+                    && action
+                        .params
+                        .iter()
+                        .any(|p| p.entity == e && p.role != ParamRole::Parent)
+            })
+            .map(|act| ActionRuns {
+                act,
+                runs: if fired[act.index()] {
+                    Runs::Fired
+                } else if g.complete {
+                    Runs::Never(Box::new(self.never_runs(act, g)))
+                } else {
+                    Runs::NotDecided
+                },
+            })
+            .collect()
+    }
+
+    /// The `NeverRuns` of `act`: only the checks of `moves` that hold in no state of `g`.
+    fn never_runs(&self, act: ActId, g: &Graph) -> StateDiag {
+        let action = &self.actions[act.index()];
+        let need = |p: usize| {
+            let param = action.params[p];
+            (self.entity(param.entity).id.clone(), param.role)
+        };
+        let why = match self.scan_guards(act, g.states) {
+            Scan::Unbound(params) => Blocked::NoInstance(params.into_iter().map(need).collect()),
+            Scan::Apart => Blocked::Apart((0..action.params.len()).map(need).collect()),
+            Scan::NeverHeld(guards) => Blocked::Guards(
+                guards
+                    .into_iter()
+                    .map(|i| (action.guards[i].why, action.guards[i].site.clone()))
+                    .collect(),
+            ),
+            Scan::EachHeld => Blocked::Together,
+        };
+        StateDiag::NeverRuns {
+            action: action.name.clone(),
+            origin: action.origin.clone(),
+            site: action.site.clone(),
+            why,
+        }
     }
 
     fn no_witness(&self, e: EntId, var: VarId, value: Value) -> StateDiag {

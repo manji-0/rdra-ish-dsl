@@ -192,5 +192,14 @@ fn an_unwitnessed_state_fails_verify_while_tlc_passes() {
         "{stderr}"
     );
     assert!(stderr.contains("unwitnessed_state.rdra:31:1"), "{stderr}");
+    assert!(
+        stderr.contains("\nwarning: use case Refund can never run: each of its guards holds in some reachable state, but never all of them in one\n"),
+        "{stderr}"
+    );
+    assert!(
+        stdout.lines().any(|l| l
+            == "state models (BFS on 1 entity cone): 1 state model, 3 states witnessed, 1 use case that never runs"),
+        "{stdout}"
+    );
     let _ = std::fs::remove_dir_all(&tmp);
 }

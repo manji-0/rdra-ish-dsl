@@ -5,7 +5,9 @@ use std::collections::BTreeMap;
 
 use super::cone::{load, SAMPLES};
 use super::*;
-use crate::lifecycle::{Change, Severity, Target, Trace, UndecidedWhy, Witness};
+use crate::lifecycle::{
+    Change, Severity, Subject, Target, Trace, Undecided, UndecidedWhy, Witness,
+};
 
 const UNWITNESSED: &str = "samples/formal-verification/unwitnessed_state.rdra";
 
@@ -180,44 +182,70 @@ fn a_declared_value_outside_the_state_model_still_warns() {
     assert!(!d.has("Order", |x| matches!(x, StateDiag::NoWitness { .. })));
 }
 
-/// A cone stopped by its state cap rules nothing out: its unwitnessed states are undecided,
-/// with the cap, and none is an error.
+/// The undecided states of state models, by value, and the undecided actions, by name.
+fn undecided_by_subject(undecided: &[Undecided]) -> (Vec<(&str, UndecidedWhy)>, Vec<&str>) {
+    let mut states = Vec::new();
+    let mut actions = Vec::new();
+    for u in undecided {
+        match &u.subject {
+            Subject::State { value, .. } => states.push((value.as_str(), u.why)),
+            Subject::Runs { action } => actions.push(action.as_str()),
+        }
+    }
+    (states, actions)
+}
+
+/// A cone stopped by its state cap rules nothing out: its unwitnessed states and its actions
+/// with no edge are undecided, with the cap, and none is an error or a warning.
 #[test]
-fn a_capped_cone_leaves_its_states_undecided() {
+fn a_capped_cone_leaves_its_states_and_actions_undecided() {
     let model = sample_model(UNWITNESSED);
     let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::All);
     let run = built
         .ts
         .explore_targets(&built.ts.targets(), Caps::new(Caps::DEFAULT_PATTERNS, 2));
     assert!(
-        !run.verdicts()
-            .iter()
-            .any(|d| matches!(d.diag, StateDiag::NoWitness { .. })),
+        !run.verdicts().iter().any(|d| matches!(
+            d.diag,
+            StateDiag::NoWitness { .. } | StateDiag::NeverRuns { .. }
+        )),
         "{:?}",
         run.verdicts()
     );
-    let undecided: Vec<(&str, UndecidedWhy)> = run
-        .undecided()
-        .iter()
-        .map(|u| (u.value.as_str(), u.why))
-        .collect();
+    let (states, actions) = undecided_by_subject(run.undecided());
     assert_eq!(
-        undecided,
+        states,
         [
             ("paid", UndecidedWhy::StateCap(2)),
             ("shipped", UndecidedWhy::StateCap(2)),
             ("refunded", UndecidedWhy::StateCap(2))
         ]
     );
+    assert!(actions.contains(&"Refund"), "{actions:?}");
+    assert!(!actions.contains(&"Place"), "Place fired before the cap");
     assert_eq!(
         run.undecided()[2].to_string(),
         "state Order.status = refunded is not decided: the Order cone stopped at the state cap (2 states)"
     );
+    let refund = run
+        .undecided()
+        .iter()
+        .find(|u| {
+            u.subject
+                == Subject::Runs {
+                    action: "Refund".to_string(),
+                }
+        })
+        .expect("Refund is undecided");
+    assert_eq!(
+        refund.to_string(),
+        "whether Refund can run is not decided: the Order cone stopped at the state cap (2 states)"
+    );
 }
 
-/// `--buc` drops use cases, so a run under it cannot rule a state out.
+/// `--buc` drops use cases, so a run under it rules neither a state nor an action out.
 #[test]
-fn a_buc_scope_leaves_unwitnessed_states_undecided() {
+fn a_buc_scope_leaves_unwitnessed_states_and_dead_actions_undecided() {
     let model = sample_model(UNWITNESSED);
     let report = super::super::derive_states(
         &model,
@@ -225,7 +253,19 @@ fn a_buc_scope_leaves_unwitnessed_states_undecided() {
         Caps::DEFAULT_PATTERNS,
     );
     assert!(!report.has_errors(), "{:?}", report.diags);
-    assert_eq!(report.undecided.len(), 1, "{:?}", report.undecided);
-    assert_eq!(report.undecided[0].value, "refunded");
-    assert_eq!(report.undecided[0].why, UndecidedWhy::Scope);
+    assert!(
+        !report
+            .diags
+            .iter()
+            .any(|d| matches!(d.diag, StateDiag::NeverRuns { .. })),
+        "{:?}",
+        report.diags
+    );
+    let (states, actions) = undecided_by_subject(&report.undecided);
+    assert_eq!(states, [("refunded", UndecidedWhy::Scope)]);
+    assert_eq!(actions, ["Refund"]);
+    assert!(report
+        .undecided
+        .iter()
+        .all(|u| u.why == UndecidedWhy::Scope));
 }

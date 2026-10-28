@@ -133,7 +133,7 @@ pub fn derive_states(model: &SemanticModel, scope: &Scope, max_patterns: usize) 
     let built = TransitionSystem::build(model, bounds, scope);
     let mut run = built.ts.explore_targets(&built.ts.targets(), caps);
     if *scope != Scope::All {
-        run.defer_witnesses();
+        run.defer_progress();
     }
     let views = run.entity_views(&built.ts, model, &built.diags);
     let mut diags = built.diags;

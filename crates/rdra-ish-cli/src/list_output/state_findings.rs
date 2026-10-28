@@ -2,8 +2,8 @@
 //! counterexample traces.
 
 use rdra_ish_core::lifecycle::{
-    derive_states, ActionOrigin, Caps, Change, InvKind, InvText, Scope, Severity, Site, StateDiag,
-    TraceStep,
+    derive_states, ActionOrigin, Blocked, Caps, Change, GuardWhy, InvKind, InvText, ModelRef,
+    ParamRole, Scope, Severity, Site, StateDiag, TraceStep,
 };
 use rdra_ish_core::{format_location, ResolvedProgram, SemanticModel};
 
@@ -63,7 +63,104 @@ pub(crate) fn state_findings(
 
 /// `render_violation` prints it once, as a block with sites, instead of once per view.
 fn has_block(diag: &StateDiag) -> bool {
-    diag.trace().is_some() || matches!(diag, StateDiag::NoWitness { .. })
+    diag.trace().is_some()
+        || matches!(
+            diag,
+            StateDiag::NoWitness { .. } | StateDiag::NeverRuns { .. }
+        )
+}
+
+/// `use case Refund`, or `transaction 2 of Pay (Pay_2)` for one group of a split use case.
+fn action_label(model: &SemanticModel, action: &str, origin: &ActionOrigin) -> String {
+    if let ActionOrigin::UseCase { uc, .. } = origin {
+        let id = &model.use_cases[*uc].id;
+        if let Some(n) = action.strip_prefix(&format!("{id}_")) {
+            return format!("transaction {n} of {id} ({action})");
+        }
+    }
+    format!("use case {action}")
+}
+
+/// A never-run action, its use case site, and only what blocks it: the instances no reachable
+/// state has, or each guard that holds in no reachable state with its site.
+fn render_never_runs(
+    program: &ResolvedProgram,
+    model: &SemanticModel,
+    diag: &StateDiag,
+) -> Option<String> {
+    let StateDiag::NeverRuns {
+        action,
+        origin,
+        site,
+        why,
+    } = diag
+    else {
+        return None;
+    };
+    let reason = diag.to_string();
+    let reason = reason.strip_prefix(action.as_str()).unwrap_or(&reason);
+    let mut rows = vec![(
+        format!("  declared: {}", action_label(model, action, origin)),
+        location(program, site),
+    )];
+    match why {
+        Blocked::NoInstance(params) | Blocked::Apart(params) => {
+            rows.extend(params.iter().map(|(entity, role)| {
+                let text = match role {
+                    ParamRole::New => {
+                        format!("  needs: a free {entity} slot within the instance bound")
+                    }
+                    ParamRole::Existing | ParamRole::Parent => {
+                        format!("  needs: an existing {entity}")
+                    }
+                };
+                (text, None)
+            }))
+        }
+        Blocked::Guards(guards) => rows.extend(guards.iter().map(|(why, site)| {
+            (
+                format!("  guard: {}", guard_text(model, *why, site)),
+                location(program, site),
+            )
+        })),
+        Blocked::Together => {}
+    }
+    Some(format!(
+        "{}{reason}{}",
+        action_label(model, action, origin),
+        aligned(rows)
+    ))
+}
+
+/// A guard as the model states it: the `from` states of the use case's transitions on the
+/// column, the condition, the relate, or the clock.
+fn guard_text(model: &SemanticModel, why: GuardWhy, site: &Site) -> String {
+    match (why, &site.fact) {
+        (GuardWhy::TransitionFrom, ModelRef::Transition(i)) => {
+            let st = &model.state_transitions[*i];
+            let froms: Vec<&str> = model
+                .state_transitions
+                .iter()
+                .filter(|t| {
+                    t.usecase == st.usecase && t.entity == st.entity && t.column == st.column
+                })
+                .map(|t| t.from.as_str())
+                .collect();
+            let entity = &model.entities[st.entity].id;
+            let uc = &model.use_cases[st.usecase].id;
+            format!(
+                "{entity}.{} is {} (transitions of {uc})",
+                st.column,
+                froms.join(" or ")
+            )
+        }
+        (GuardWhy::Condition { cond }, _) => format!("condition {}", model.conditions[cond].id),
+        (GuardWhy::Owner, _) => "the bound instances belong to each other (relate)".to_string(),
+        (GuardWhy::Clock, _) => "now has room to tick".to_string(),
+        (GuardWhy::TransitionFrom, _) => {
+            "the column is in a from state of its transitions".to_string()
+        }
+    }
 }
 
 fn location(program: &ResolvedProgram, site: &Site) -> Option<String> {
@@ -79,14 +176,17 @@ pub(crate) enum TraceSource {
 
 /// A violation, the rule's site, and its counterexample: one step per line with its use case
 /// site, and under it each changed value with the site of the effect that wrote it. An
-/// unwitnessed state prints with the arms that would enter it. `None` for any other
-/// diagnostic.
+/// unwitnessed state prints with the arms that would enter it, and a never-run action with
+/// what blocks it. `None` for any other diagnostic.
 pub(crate) fn render_violation(
     program: &ResolvedProgram,
     model: &SemanticModel,
     diag: &StateDiag,
     source: TraceSource,
 ) -> Option<String> {
+    if let Some(text) = render_never_runs(program, model, diag) {
+        return Some(text);
+    }
     if let StateDiag::NoWitness {
         entity,
         column,
@@ -361,6 +461,7 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
         ),
         StateDiag::StateCapReached { .. }
         | StateDiag::NoWitness { .. }
+        | StateDiag::NeverRuns { .. }
         | StateDiag::ContradictoryDrivenComparison { .. }
         | StateDiag::AssertOnInertUseCase { .. }
         | StateDiag::IntLiteralOutOfBounds { .. }
