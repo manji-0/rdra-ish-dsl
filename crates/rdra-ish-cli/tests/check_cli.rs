@@ -125,3 +125,41 @@ error: state Order.status = refunded has no reachability witness: no sequence of
         .collect();
     assert_eq!(actions, ["Place", "Pay", "Ship"]);
 }
+
+/// From a relative input, `states --format json` names witness sites in the path form
+/// `check`'s text renderer prints for the same file.
+#[test]
+fn witness_sites_use_the_path_form_of_check() {
+    let sample = "samples/formal-verification/unwitnessed_state.rdra";
+    let check = run(&["check", sample]);
+    let stderr = String::from_utf8_lossy(&check.stderr);
+    let text_site = stderr
+        .lines()
+        .find(|l| l.contains("entered by Refund"))
+        .and_then(|l| l.split_whitespace().last())
+        .expect("check names the arm's site");
+    let text_path = text_site.rsplitn(3, ':').nth(2).unwrap();
+
+    let states = run(&["states", sample, "--format", "json"]);
+    let json: serde_json::Value = serde_json::from_slice(&states.stdout).unwrap();
+    let sites: Vec<String> = json[0]["patterns"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|p| p["witness"]["steps"].as_array().unwrap().clone())
+        .map(|s| {
+            s["site"]
+                .as_str()
+                .expect("a use case step has a site")
+                .to_string()
+        })
+        .collect();
+    assert!(!sites.is_empty());
+    for site in &sites {
+        assert_eq!(
+            site.rsplitn(3, ':').nth(2),
+            Some(text_path),
+            "{site} vs {text_site}"
+        );
+    }
+}
