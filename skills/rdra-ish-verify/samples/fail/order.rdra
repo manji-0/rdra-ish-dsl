@@ -1,4 +1,6 @@
 // Intentionally unsafe: delivered without delivered_at present.
+// expect check: fail Inv_Order_0
+// expect verify: tlc=counterexample fail Inv_Order_0
 entity Order "注文" {
   id:     Int @pk
   status: Enum(pending, delivered) @default(pending)

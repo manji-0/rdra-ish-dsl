@@ -1,6 +1,8 @@
 // Quantifier none over finite Cert_Ids / Assign_Ids (InstanceCount == 2).
 // relate(Assign, Cert, N:1) adds Assign_owner_Cert linking related instances.
 // TLC intent: expected FAIL if Revoke runs while a linked Assign stays active.
+// expect check: fail Quantifier_Cert_0
+// expect verify: tlc=counterexample fail Quantifier_Cert_0
 entity Cert "証明書" {
   id: Int @pk
   status: Enum(active, revoked) @default(active)

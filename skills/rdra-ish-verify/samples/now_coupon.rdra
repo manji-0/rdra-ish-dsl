@@ -1,6 +1,8 @@
 // Global `now` clock + arithmetic comparison (expired_at < now).
 // Nothing pins `expired_at`, so the clock can tick past it: TLC finds that
 // `forbidden(expired_at < now)` is reachable (expected TLC fail / counterexample).
+// expect check: fail Forbidden_Coupon_0
+// expect verify: tlc=counterexample fail Forbidden_Coupon_0
 entity Coupon "クーポン" {
   id: Int @pk
   status: Enum(active, expired) @default(active)

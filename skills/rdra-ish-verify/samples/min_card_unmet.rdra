@@ -2,6 +2,8 @@
 // has at least one OrderLine. TLC intent: expected FAIL at InstanceCount == 1. Place creates
 // an Order without a line (info MinCardNeedsCreate), so the state after Place breaks it;
 // min_card_met.rdra creates both in one transaction and passes.
+// expect check: fail MinCard_OrderLine_Order
+// expect verify: tlc=counterexample fail MinCard_OrderLine_Order
 entity Order "注文" {
   id: Int @pk
 }

@@ -250,8 +250,10 @@ The rules for each flag and for deferral are in
   | entity `EligibilityCheck` | 223,901 |
 
   The other 31 clinic-ops cones at 2 instances (595,325 states in total, the largest
-  `PatientMessage` at 169,203) are compared. CI sets `RDRA_REQUIRE_TLC=1`, so a missing
-  `tlc` fails the job.
+  `PatientMessage` at 169,203) are compared. CI runs the test with `cargo test --release`
+  and sets `RDRA_REQUIRE_TLC=1`, so a missing `tlc` fails the job. The debug build took
+  315 s on the CI runner, over its 300 s budget; the release build takes 68 s locally
+  (Apple silicon, measured).
 - User-facing state diagnostics for multi-entity rules say **multi-entity**. The
   `Cross*` prefix in some constraint names is historical.
 
@@ -295,3 +297,53 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 
 BFS and TLC give the same verdict on every row at the same bounds. `check` runs at one
 instance per entity, where `Unique_*` holds vacuously.
+
+### Sample expectations
+
+Each sample root in `samples.txt` states what `check` and `verify` must report in
+`// expect` comment lines. `scripts/verify-samples.sh <rdra-ish binary>` runs both commands
+on every root and fails when a run differs from its header. CI runs it on the release
+binary in the `formal-verify` job.
+
+The script reads the header from the root's first `.rdra` file in load order, which
+`rdra-ish files <root>` prints first. An `// expect` line in any other file of the root
+fails the script. The grammar is:
+
+```
+header       = "// expect " command [" " flags] ": " expectation
+command      = "check" | "verify"
+flags        = CLI words passed to the command as written, e.g. "--entity Order"
+check exp    = "ok" | "fail" { " " Name }
+verify exp   = "tlc=" ("ok" | "counterexample") [" fail" { " " Name }] | "fail" { " " Name }
+```
+
+- `fail` means exit status 1, and its absence exit status 0. Any other status, such as a
+  `tool_error` exit, is a mismatch.
+- `tlc=` must equal the `tlc_result:` line. A `verify` expectation without `tlc=` asserts
+  that no `tlc_result:` line is printed: the run stops before TLC, as at a build error.
+  `tlc=counterexample` also needs TLC's own `violated: Error: ... is violated.` line.
+- The names after `fail` must equal the set of names of the run's errors, not just be
+  part of it. A name is the invariant or `after` property name (`CrossForbidden_Order_0`,
+  `AfterAssert_DeliverOrder_0`), `Witness_<Entity>_<column>_<value>` for a state with no
+  witness, or `Deadlock_<Entity>_<column>_<value>` for a deadlock error. `check` prints no
+  name for a violated `after` assertion or a build error, so `fail` with no names expects
+  exit 1 and no named error.
+- Each `(command, flags)` pair runs once, and a pair may appear on one line only. A root
+  with no `check` line expects `check: ok`, and one with no unflagged `verify` line expects
+  `verify: tlc=ok`. A flagged line adds a run and replaces neither default.
+
+```rdra
+// unwitnessed_state.rdra: TLC passes, and the BFS state-model findings fail the run.
+// expect check: fail Witness_Order_status_refunded Deadlock_Order_status_shipped
+// expect verify: tlc=ok fail Witness_Order_status_refunded Deadlock_Order_status_shipped
+
+// partial_scope.rdra: the build error stops both commands before TLC; --entity Order passes.
+// expect check: fail
+// expect verify: fail
+// expect verify --entity Order: tlc=ok
+```
+
+The script prints one line per run with the verdict, the wall time, and the maximum RSS
+(GNU `time` on Linux, BSD `/usr/bin/time` on macOS), then the count of roots and runs.
+Locally (Apple silicon) the 45 runs of the 22 roots take about 56 s, and clinic-ops `verify`
+takes 35 s of that at about 830 MB, its TLC JVMs included. The CI step has 5 minutes.

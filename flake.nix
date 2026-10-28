@@ -84,7 +84,9 @@
             pkgs.nodejs
 
             pkgs.pre-commit
-          ];
+          ]
+          # GNU time for scripts/verify-samples.sh (macOS has BSD /usr/bin/time).
+          ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.time ];
 
           JAVA_HOME = "${pkgs.jdk17_headless}";
           PLANTUML_JAR = "${pkgs.plantuml}/lib/plantuml.jar";

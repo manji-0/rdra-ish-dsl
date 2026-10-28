@@ -29,15 +29,15 @@ fn check_prints_one_verdict_with_its_counterexample() {
         "\
 bounds: 1 instance per entity, Int 0..5; 4096 states per cone; entities a check does not read are unbounded
 error: invariant CrossForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order(status=cancelled); Payment(status=captured)
-  rule: {file}:41:1
+  rule: {file}:43:1
   counterexample (3 steps):
-    1. Place [Order#1, Payment#1]                            {file}:14:1
+    1. Place [Order#1, Payment#1]                            {file}:16:1
          + Order#1 (status=pending)
          + Payment#1 (status=pending, owner Order=Order#1)
-    2. Pay_1, transaction 1 of Pay [Payment#1]               {file}:15:1
-         Payment#1.status: pending -> captured               {file}:36:1
-    3. Cancel [Order#1]                                      {file}:16:1
-         Order#1.status: pending -> cancelled                {file}:35:1
+    2. Pay_1, transaction 1 of Pay [Payment#1]               {file}:17:1
+         Payment#1.status: pending -> captured               {file}:38:1
+    3. Cancel [Order#1]                                      {file}:18:1
+         Order#1.status: pending -> cancelled                {file}:37:1
 "
     );
     assert_eq!(stderr, expected);

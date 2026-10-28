@@ -2,6 +2,8 @@
 // lifecycle with transitions. Place creates the Order at `placed`, so
 // Flag then Ship reaches the forbidden state
 // (expected TLC fail / counterexample; `check`/`states` also report it).
+// expect check: fail Forbidden_Order_0
+// expect verify: tlc=counterexample fail Forbidden_Order_0
 entity Order "注文" {
   id: Int @pk
   status: Enum(draft, placed, shipped) @default(draft)

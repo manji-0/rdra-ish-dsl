@@ -53,15 +53,15 @@ A violated constraint or `after` assertion prints once, with a shortest countere
 
 ```
 error: invariant CrossForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order(status=cancelled); Payment(status=captured)
-  rule: cross_order_payment_split.rdra:41:1
+  rule: cross_order_payment_split.rdra:43:1
   counterexample (3 steps):
-    1. Place [Order#1, Payment#1]                            cross_order_payment_split.rdra:14:1
+    1. Place [Order#1, Payment#1]                            cross_order_payment_split.rdra:16:1
          + Order#1 (status=pending)
          + Payment#1 (status=pending, owner Order=Order#1)
-    2. Pay_1, transaction 1 of Pay [Payment#1]               cross_order_payment_split.rdra:15:1
-         Payment#1.status: pending -> captured               cross_order_payment_split.rdra:36:1
-    3. Cancel [Order#1]                                      cross_order_payment_split.rdra:16:1
-         Order#1.status: pending -> cancelled                cross_order_payment_split.rdra:35:1
+    2. Pay_1, transaction 1 of Pay [Payment#1]               cross_order_payment_split.rdra:17:1
+         Payment#1.status: pending -> captured               cross_order_payment_split.rdra:38:1
+    3. Cancel [Order#1]                                      cross_order_payment_split.rdra:18:1
+         Order#1.status: pending -> cancelled                cross_order_payment_split.rdra:37:1
 ```
 
 A step names the use case (`Pay_1, transaction 1 of Pay` for a split one), the instances
@@ -236,6 +236,26 @@ Lint warnings do not fail the command. Existing parse/model errors are emitted a
 
 ---
 
+## `files`
+
+Print the `.rdra` files the inputs load, one path per line, in load order.
+
+```
+rdra-ish files <INPUTS...>
+```
+
+Every loading command collects its inputs the same way: each file as given, then each
+directory walked recursively with the entries of every directory sorted by file name. So
+the order is the same on every platform. Exits `1` when the inputs hold no `.rdra` file.
+`scripts/verify-samples.sh` reads a sample's `// expect` header from the first path it
+prints (see [Sample expectations](./formal-verification.md#sample-expectations)).
+
+| Argument | Type | Description |
+|---|---|---|
+| `<INPUTS...>` | paths (required) | Files and/or directories to list. |
+
+---
+
 ## `fmt`
 
 Format RDRA DSL source files.
@@ -356,6 +376,11 @@ To compare the data layer of every sample across two builds, run
 and entity CSV of every `samples.txt` root, with each exit code and log, under
 `target/data-diff/LABEL/`. It uses `target/release/rdra-ish` (override with `RDRA_BIN`).
 Compare two runs with `diff -r target/data-diff/A target/data-diff/B`.
+
+`scripts/verify-samples.sh <binary>` runs `check` and `verify` on every `samples.txt` root
+and compares each run with the root's `// expect` header. CI runs it on the release binary.
+The header grammar is in
+[Sample expectations](./formal-verification.md#sample-expectations).
 
 ---
 
@@ -499,15 +524,15 @@ tlc_result: counterexample
 Error: TLC verification failed
 Cone_CrossForbidden_Order_0 (/tmp/rdra-ish-tlc-4242/Cone_CrossForbidden_Order_0.tla):
 error: invariant CrossForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order[1](status=cancelled); Payment[1](status=captured)
-  rule: skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:41:1
+  rule: skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:43:1
   counterexample (3 steps, from TLC):
-    1. Place [Order#1, Payment#1]                            skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:14:1
+    1. Place [Order#1, Payment#1]                            skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:16:1
          + Order#1 (status=pending)
          + Payment#1 (status=pending, owner Order=Order#1)
-    2. Pay_1, transaction 1 of Pay [Payment#1]               skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:15:1
-         Payment#1.status: pending -> captured               skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:36:1
-    3. Cancel [Order#1]                                      skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:16:1
-         Order#1.status: pending -> cancelled                skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:35:1
+    2. Pay_1, transaction 1 of Pay [Payment#1]               skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:17:1
+         Payment#1.status: pending -> captured               skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:38:1
+    3. Cancel [Order#1]                                      skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:18:1
+         Order#1.status: pending -> cancelled                skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:37:1
 violated: Error: Invariant CrossForbidden_Order_0 is violated.
 counterexample:
   State 1: Initial predicate

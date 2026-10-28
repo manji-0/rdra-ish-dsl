@@ -130,7 +130,7 @@ fn a_tlc_counterexample_prints_in_model_terms() {
     for expected in [
         "error: invariant CrossForbidden_Order_0 is violated: ",
         "  rule: ",
-        "cross_order_payment_split.rdra:41:1",
+        "cross_order_payment_split.rdra:43:1",
         "  counterexample (3 steps, from TLC):",
         "    1. Place [Order#1, Payment#1]",
         "    2. Pay_1, transaction 1 of Pay [Payment#1]",

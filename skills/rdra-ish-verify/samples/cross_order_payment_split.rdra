@@ -2,6 +2,8 @@
 // docs/vision.md, rule 6), and a Cancel that does not delete the Payment.
 // TLC intent: expected FAIL. Pay_2 captures the payment while the linked Order is still
 // pending, Cancel then cancels that Order, and the forbidden pair is reached.
+// expect check: fail CrossForbidden_Order_0
+// expect verify: tlc=counterexample fail CrossForbidden_Order_0
 entity Order "注文" {
   id: Int @pk
   status: Enum(pending, paid, cancelled) @default(pending)
