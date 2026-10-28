@@ -98,15 +98,24 @@ one entity. A parent and child are linked by the child holding the parent's ID. 
 models and variations become enums, and an entity holds a column for its state. The
 DSL keeps these rules and adds what a normalized relational model needs:
 
-- A 1:1 relation generates a foreign key with a unique constraint. Today it generates
-  no column (`resolve_foreign_keys` in `crates/rdra-ish-core/src/analysis/fk.rs`).
-- A relation can name its role, so two relations to the same parent stop colliding on
-  `{parent}_id` (`generate_key_column` in `fk.rs`).
-- A foreign key can be declared explicitly, and it can reference a composite key.
-- `@check` and `@derived` parse into typed expressions. Today they are stored as
-  strings. A typed `@check` is also an invariant that verification checks.
-- A relation can state a minimum cardinality, such as `1..*`, and verification checks
-  it.
+- A 1:1 relation generates a foreign key column on its left entity. The column is
+  unique, and nullable only under `.optional()`. Verification checks the uniqueness as
+  the invariant `Unique_<Child>_<role>`.
+- A relation can name its role with `.role(x)`, so two relations to the same parent
+  stop colliding on `{parent}_id`. The key columns are `{role}_{parent key column}`
+  (`generate_key_columns` in `crates/rdra-ish-core/src/analysis/fk.rs`). Two keys of
+  one child with the same role are `DuplicateRelateRole`.
+- A relation can adopt columns the child declares with `.key(cols)`, and it can
+  reference a composite key: a parent `@pk(site, shelf)` yields one child column per key
+  column, and DBML prints the composite `Ref`. `.along(A, B).by(role)` picks the key a
+  constraint follows when two keys join the same pair.
+- `@check(expr)` and `@derived(expr)` parse into typed expressions. A quoted form is a
+  parse error. Each `@check` is the invariant `Check_<Entity>_<column>_<n>`, which BFS
+  and TLC check alike with SQL null semantics. A `@derived` column is never a state
+  variable: a logical one is read as its expression, and an arithmetic one cannot be
+  read by a constraint.
+- A relation can state a minimum cardinality on its child side, such as `1..*:1`.
+  Verification checks it as the invariant `MinCard_<Child>_<role>`, which is always on.
 - An `Enum` column typed by a variation is an attribute, not a state axis.
 
 ## The lifecycle layer has one semantics
@@ -204,8 +213,20 @@ addition.
    passed: breadth-first search and TLC agree on the states and on every
    invariant and `after` verdict of every cone of every sample, and CI runs that test
    (`engine_equivalence`) with TLC required.
-5. **Logical data gaps.** Add the relation and key features in the data layer list.
-   The check is DBML output for every sample with no unresolved foreign keys.
+5. **Logical data gaps.** Done. The data layer list above holds. One `ForeignKey` fact
+   per key-side `relate` feeds DBML, JSON Schema, the entity CSV, the ER diagrams, the
+   transaction graph, and the lifecycle owner variables. The check is the test
+   `key_facts` (`crates/rdra-ish-cli/tests/key_facts.rs`), which walks every
+   `samples.txt` root. Coverage: each key-side `relate` yields exactly one fact, on the
+   side its cardinality names, unique if and only if it is 1:1. Resolution: every DBML
+   `Ref` names a table column that exists, so no foreign key is unresolved. Agreement:
+   the DBML refs, the JSON Schema entries, the entity CSV rows, the ER markers, the
+   transaction edges, and the owner variables all equal the fact set. Exportability: DBML
+   and JSON Schema export on every sample, including the ones whose lifecycle has
+   errors. Each `@check` yields exactly one `Check_*` invariant. The formal-verification
+   samples `one_to_one_shared`, `min_card_unmet`, `min_card_met`, `check_unmet`, and
+   `check_met` show the `Unique_*`, `MinCard_*`, and `Check_*` invariants fail and pass
+   under both engines, and CI runs them.
 6. **Traceable verification.** Add per-constraint invariants, witnesses, deadlock
    checks, counterexamples in model terms, and partial verification. Then make CI
    verify every sample. The check is CI.
@@ -235,6 +256,32 @@ The maintainer decided these questions on 2026-10-28, during phase 4:
   guards of its linked conditions. Inferred order guards are neither, and they cut
   reachable states from the model. Removing them changed no `states` output and no `check` exit code on
   any sample.
+
+The maintainer decided these questions on 2026-10-28, during phase 5:
+
+- The data exports do not wait for the lifecycle. DBML, JSON Schema, OpenAPI, AsyncAPI,
+  the ER exports and diagram, and `csv --kind entity` read no reachability result, so
+  they gate on model errors and print one note when the lifecycle has errors. Only
+  outputs that print the lifecycle (`export --kind typescript-states`, the state and
+  sequence diagrams, and the other CSV kinds) still refuse. The six verification samples
+  with lifecycle errors now export DBML, JSON Schema, and the entity CSV.
+- A minimum cardinality is always checked. `1..*:1` adds `MinCard_*` with no switch.
+- A 1:1 key is unique as an invariant, `Unique_*`, not as a guard on the use case that
+  links.
+- A use case that creates a parent and updates an existing child links the child. For an
+  optional key it links only while the child is unlinked, so a linked child keeps its
+  first parent. For a mandatory key the child always has a parent, so the link is a move.
+- A card side has one spelling. The range goes on the child side (`1..*:1`), and a
+  parent that may be absent is `.optional()`. A range on the parent side is
+  `MinCardOnParentSide`.
+- A quoted `@check("...")` or `@derived("...")` is a parse error whose message is the
+  unquoted rewrite.
+- `Unique_*` found three double-create bugs in the samples: a second run of
+  `InputPaymentInfo` (ec-site), `SetInitialPassword` (personal-info), and `OpenEncounter`
+  (clinic-ops) each linked a second child to one parent. Each use case now also moves
+  its parent (the order to `awaiting_capture`, the account to `active`, the appointment
+  to `apptinconsult`), so a second run fails its guard. `PaymentTransaction` to `Claim`
+  became optional in clinic-ops, because a copay precedes any claim.
 
 ## Sources
 
