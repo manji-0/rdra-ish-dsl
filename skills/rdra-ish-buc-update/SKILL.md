@@ -224,9 +224,10 @@ invariant(<EntityA>, <EntityB>)
 Use bare column names only when the rule has a single-entity scope. Multi-entity rules
 must qualify columns as `Entity.column`.
 Use `.along(...)` only when the rule is about instances linked by a declared `relate`
-path; current `states` reports such relation-scoped rules as `CrossConstraintNotEvaluated`
-instead of checking the global cross-product. TLC evaluates `.along` via `*_owner` when
-`relate` exists — use `rdra-ish export --kind tla` for that check.
+path. `states` and TLC join the instances through the `relate` owners; without a `relate`
+that binds each adjacent pair the rule is `UnbindableScope`. Without `.along`, the rule
+holds for every pair of instances. Use `rdra-ish export --kind tla` to check it at two
+instances.
 
 **Removing a use case:**
 1. Delete the `usecase` declaration
@@ -257,8 +258,8 @@ instead of checking the global cross-product. TLC evaluates `.along` via `*_owne
 - Every `coordinates` use case invokes APIs on both system sides
 - Every cross-entity rule qualifies columns as `Entity.column` and names or implies
   the participating entities
-- Every `.along(...)` cross-entity rule names a declared `relate` path and is treated
-  as `CrossConstraintNotEvaluated` until linked-instance reachability is implemented
+- Every `.along(...)` cross-entity rule names a declared `relate` path that binds each
+  adjacent pair (else `UnbindableScope`)
 - The diff does not jump more than one abstraction level unless the user supplied the
   missing information explicitly
 - New shared files follow path/module correspondence, e.g.

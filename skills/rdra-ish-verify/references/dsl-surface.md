@@ -19,7 +19,7 @@ property EventuallyTerminal
 - Label string after the name is **optional**.
 - Prefer `and` / `or` / `not` (`/\` `\/` `~` remain aliases).
 - Any `eventually` / `leads_to` causes `WF_vars(Next)` in the Spec.
-- In multi-instance export, temporals are quantified per binder
+- Temporals are quantified over the present instances
   (`[](\A i: …)`, `\A i: <>…`, `\A i: (p ~> q)`).
 
 | Form | TLA+ |
@@ -36,9 +36,8 @@ after(Sell).assert(Item.sold >= 1)
 ```
 
 - Equality and comparison forms become an independent TLA `PROPERTY`
-  `[][raised SpecActions => primed posts]_vars` (not injected into SpecAction
-  effects). Comparison forms prefer Int arithmetic when axes exist (cross-entity
-  RHS ok); otherwise require a proposition axis `TRUE` after the action.
+  `[][(\A p : UC(p) => post')]_vars` (not injected into the effects). `states` checks the
+  same predicate after each step of the use case.
 
 UC `precondition` / `postcondition` / `guard` strings are **review metadata only**
 (`list --kind usecase`); they are not checked by `states` or TLA. Use
@@ -69,8 +68,8 @@ invariant(Order, Payment)
 ```
 
 - Qualify columns as `Entity.column`.
-- Add `.along(...)` only for relation-scoped linked-instance intent (`relate`
-  supplies `*_owner` in TLA export).
+- Add `.along(...)` only for relation-scoped linked-instance intent. Each adjacent pair
+  needs a `relate` (it supplies `Child_owner_Parent`), else `UnbindableScope`.
 - Diagnostic ids may still say `Cross*` even though surface syntax is
   multi-entity `forbidden` / `invariant`.
 
@@ -79,7 +78,7 @@ invariant(Order, Payment)
 ```rdra
 transitions(Order.status, SubmitOrder, draft -> submitted)
 sets(Restock, Item, stock == 3)
-sets(ReserveStock, Inventory, stock < selling, true)  # BFS proposition layer
+sets(ReserveStock, Inventory, stock < selling, true)  # drives the comparison as a Bool
 ```
 
 Use Int / Money / Decimal columns + arithmetic rules when the quantity itself
@@ -88,14 +87,15 @@ must be checked under TLC.
 ## Variation columns
 
 A column typed by a `variation` (`method: PaymentMethod`) is an attribute, not a
-lifecycle. `states` gives it no axis. The TLA+ export gives it a variable only when a
-`sets`, an entity-local or multi-entity constraint, an `after(UC).assert`, or a
-`property` names it; its `Init` is a free choice over every value, so TLC checks
-the rule against each one. A `transitions` on it is an error.
+lifecycle. `states` and the TLA+ export give it a variable only when a `sets`, an
+entity-local or multi-entity constraint, a condition body, an `after(UC).assert`, or a
+`property` names it. A created instance takes any value unless the creating use case sets
+it, and `@default` does not pin the choice, so TLC checks the rule against each value.
+A `transitions` on it is an error.
 
 ## Conditions
 
-A `condition` with `combines` or a `holds` body is traceability in this version. `states`
-and the TLA+ export ignore it, and `verify` prints
-`condition <Id>: body stored, not yet checked (phase 4)` for each body. A passing TLC run
-says nothing about a condition.
+A `condition` with a `holds` body that `applies_to` a use case (or an API that the use case
+invokes) is a guard on that use case in `states`, `check`, and the TLA+ export. TLC checks
+it. A body applied to a use case that writes nothing is `UnbindableCondition`. A condition
+with only `combines` is a trace link and guards nothing.

@@ -2,37 +2,38 @@
 
 <!-- derived-from ../../../docs/formal-verification.md -->
 
-## Emitter Approximations
+## Printer Approximations
 
-- **`.along`**: with usable `relate` N:1 / 1:N, Safety filters by `Child_owner`;
-  without a link, quantifies over the instance product (stronger than linked-only).
-- **Quantifiers**: finite `Entity_Ids` with `InstanceCount` (default 2;
-  `--instance-count`).
-- **Shared events**: one use case is one atomic action per transaction group it
+- **Bounds**: `InstanceCount` (default 2, `--instance-count`) and `IntRange` (default
+  `0..5`, `--int-range-max`). A `verify` OK says nothing outside them, and a deleted slot
+  is never reused.
+- **`.along`**: each adjacent pair needs a `relate` that binds it; the invariant joins
+  them with `Child_owner_Parent` equalities. Without a `relate` the rule is
+  `UnbindableScope`, an error.
+- **Quantifiers**: `\A` / `\E` over `Entity_Ids`. A `relate` links the related instance
+  through its owner; otherwise the related side is independent.
+- **Atomic use case**: one use case is one atomic action per transaction group it
   writes, so `cross_order_payment` passes; a use case spanning k groups is k
   actions `<UC>_1..k`, so `cross_order_payment_split` fails; `quantifier_none`
   still fails.
-- **Int arithmetic**: `IntRange` default `0..5` (`--int-range-max`). Undriven Int
-  axes get nondet `Assign_*` over the full range (Safety is checked, not baked
-  into Next).
-- **Approximation banner**: always emitted when multi-instance or Int axes are used.
-- **`now`**: global Int clock with `TickNow`. Assign/TickNow are **not** constrained
-  to preserve `forbidden(col < now)`; TLC should find violations (`now_coupon`
-  expected fail).
-- **Transitions**: one action `{Entity}_{UseCase}_{from}_to_{to}` per
-  `transitions` line; the `sets` of that use case on the entity fold into it.
-- **Other `sets`**: a use case that drives no transition on the entity gets its own
-  action (`Entity_uc_X`). `Init` status is every status that a `creates` use case `sets`.
+- **Int arithmetic**: `IntRange` default `0..5`. A literal outside it is
+  `IntLiteralOutOfBounds`, an error in `check` too.
+- **`now`**: a global Int clock with a `Tick` action. Nothing pins a column compared to
+  `now`, so TLC finds violations (`now_coupon` expected fail).
+- **Transitions and `sets`**: each use case is one operator `<UC>(p0, ...)`; its
+  `transitions` guard the source value and its `sets` assign in the same step.
+- **Constraints**: one `INVARIANT` per constraint, named `<Kind>_<Entity>_<n>`
+  (`Forbidden_Order_0`), plus `INVARIANT TypeOK`.
 - **Temporal `property`**: one lowering path; all names are listed in `.cfg` `PROPERTY`.
-- **`after.assert`**: independent `[][action => primed post]_vars` PROPERTY (not
-  injected into SpecAction effects).
+- **`after.assert`**: independent `[][(\A p : UC(p) => post')]_vars` PROPERTY named
+  `AfterAssert_<UC>_<n>` (not injected into the effects).
 - **`WF_vars(Next)`**: fairness on whole `Next`, not per action.
-- Lifecycles with no transitions and no `sets`-driven actions fail export
-  (`stuttering_only`).
-- Nullable Money/Decimal used in arithmetic promote to Int axes (not Nullable).
-- BFS `states` still ignores Int / `now` as axes; undriven / NotEvaluated diags are
-  `[error]` under `states` (fail-closed). Prefer `verify` for Int/`now` samples.
-- Export warnings go to stderr (`warning: tla export: …`) and `.tla` comments.
+- **Cones**: `verify` checks each invariant and `after` assertion on its cone of
+  influence and the temporal properties on the whole model.
+- Nullable Money/Decimal used in arithmetic promote to Int variables (not Nullable).
+- `states` and `check` read the same system at one instance per entity, so Int and `now`
+  columns that something names are `0..5` variables there too.
+- Error diagnostics of the system stop `export` and `verify`; warnings go to stderr.
 
 ## Bundled Samples
 
@@ -46,14 +47,14 @@ In the `rdra-ish-dsl` repository, `samples/formal-verification/` and
 | Skill path | TLC intent | Focus |
 |---|---|---|
 | `samples/order.rdra` | expected pass | Lifecycle + `after.assert` + temporal |
-| `samples/int_stock.rdra` | expected pass | Int arithmetic Safety / property |
-| `samples/now_coupon.rdra` | expected fail | `now` / unconstrained Assign + TickNow |
+| `samples/int_stock.rdra` | expected pass | Int arithmetic invariant / property |
+| `samples/now_coupon.rdra` | expected fail | `now` and `Tick`; no action pins `expired_at` |
 | `samples/cross_order_payment.rdra` | expected pass | Multi-instance + `.along` (atomic Pay) |
 | `samples/cross_order_payment_split.rdra` | expected fail | Pay through two APIs is two actions (in-between state) |
 | `samples/quantifier_none.rdra` | expected fail | `when(...).none` (interleaving) |
 | `samples/untriggered_sets.rdra` | expected fail | `sets` from a use case that drives no transition, next to `transitions` |
 | `samples/after_assert_unmet.rdra` | expected fail | `after(UC).assert` whose postcondition the use case does not set (fails, never vacuous) |
-| `samples/fail/order.rdra` | expected fail | Negative TLC (`check` may exit 0 with warnings) |
+| `samples/fail/order.rdra` | expected fail | Negative TLC (`check` exits 1 too) |
 
 ## Canonical Doc
 

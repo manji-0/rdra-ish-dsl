@@ -212,19 +212,18 @@ import shared.actors.{Staff as S}
   `combines(Cond, Entity.lifecycle_col)` for traceability only, or give it a body with
   `holds(Cond, Entity.col == value, ...)` and no `combines` (the links come from the
   columns the body names). Scope it with `applies_to(Cond, UseCase)` inside a BUC. A body
-  is stored and validated but not yet checked: `states` and TLA+ ignore it and `verify`
-  says so.
+  is a guard on each use case it applies to: `states`, `check`, and TLA+ read it, and a
+  body applied to a use case that writes nothing is `UnbindableCondition`.
 - Add local rules in this order: `forbidden` / `exclusive` first, `invariant` /
   narrow `required` next, comparison and cross-entity constraints last.
 - Use multi-entity `forbidden` / `invariant` when a rule mentions columns from more
   than one entity; qualify multi-entity columns as `Entity.column`.
 - Add `.along(EntityA, EntityB, ...)` only when the rule is about instances linked by
-  a declared `relate` path. Current `states` reports these relation-scoped rules as
-  `CrossConstraintNotEvaluated` instead of evaluating the global cross-product; TLC
-  evaluates them via `*_owner` when exporting TLA+.
+  a declared `relate` path; each adjacent pair needs a `relate`, else `UnbindableScope`.
+  `states` and TLC join the instances through the `relate` owners.
 - Use `when(...).none/has(...)` for quantifiers; use `property` / `after.assert` for
-  temporal and postcondition checks; validate Int/`now`/temporal with
-  `export --kind tla`.
+  temporal and postcondition checks; validate temporal properties with
+  `export --kind tla` / `verify`.
 
 ### Common Mistakes
 

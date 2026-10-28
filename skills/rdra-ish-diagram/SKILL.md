@@ -27,8 +27,8 @@ the selected view.
 | Diagram size or review focus | view presets, node/edge filters, or diff diagram | `references/formats-and-output.md` |
 | One concrete use case flow | `sequence --usecase <UseCaseId>` | `references/sequence-and-access.md` |
 | Lifecycle and event causality | `state --buc <BucId>` plus `event-flow` | `references/lifecycle-and-events.md` |
-| Business rules or state constraints | `states`, including cross-entity rule diagnostics when state axes are involved | `references/lifecycle-and-events.md` |
-| Int / now / temporal / multi-instance rules | Prefer skill `rdra-ish-verify`; else `export --kind tla` | `references/lifecycle-and-events.md` |
+| Business rules or state constraints | `states`, including cross-entity rule diagnostics | `references/lifecycle-and-events.md` |
+| Temporal `property` and rules that need two instances | Prefer skill `rdra-ish-verify`; else `export --kind tla` | `references/lifecycle-and-events.md` |
 | Output format/rendering choice | Mermaid by default; PlantUML/SVG/PNG only when requested | `references/formats-and-output.md` |
 
 ### Default Workflow

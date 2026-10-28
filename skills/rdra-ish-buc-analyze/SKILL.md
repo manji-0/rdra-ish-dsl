@@ -19,7 +19,7 @@ reference file for the concrete analysis task.
 | "Are permissions/media correct?" | screen/access paths, permission callables, actor grants | `references/access-permissions.md` |
 | "Are API/system boundaries sound?" | API ownership, API CRUD, cross-system relations, coordination | `references/api-system-boundaries.md` |
 | "Are lifecycle states/rules valid?" | reachable state patterns, terminals, truncation, per-entity rule diagnostics, and cross-entity rule inventory | `references/state-patterns.md` |
-| "Do Int/now/temporal/multi-entity rules hold?" | Prefer skill `rdra-ish-verify` (TLA+/TLC); else TLA export notes here | `references/state-patterns.md` |
+| "Do temporal `property` rules or two-instance rules hold?" | Prefer skill `rdra-ish-verify` (TLA+/TLC); else TLA export notes here | `references/state-patterns.md` |
 | "Summarize findings for review" | severity, evidence, next questions, and concrete recommendations | `references/reporting.md` |
 
 ### Default Workflow

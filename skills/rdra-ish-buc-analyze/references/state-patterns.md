@@ -5,18 +5,18 @@ terminal states, entity constraints, cross-entity rules, or state-pattern trunca
 
 ## Concept
 
-`rdra-ish states` derives reachable combinations of state-axis values per entity.
-State axes come from inline Enum, Bool, nullable columns, state-machine transitions, and
-explicit `sets` effects. A column typed by a `variation` is an attribute the actor
-chooses and is never an axis. The output is not just a diagram; it is executable feedback
-about which combinations the modeled use cases and events can actually reach.
-It evaluates per-entity `forbidden`, `invariant`, `required`, and `exclusive` rules
-directly. Cross-entity rules are checked by combining reached patterns for the
-participating entities when their conditions reference state axes; otherwise they
-surface as `CrossConstraintNotEvaluated`.
-Rules with `.along(EntityA, EntityB, ...)` are relation-scoped: `states` verifies the
-declared `relate` path shape, then reports `CrossConstraintNotEvaluated` because it
-does not yet track linked instance reachability.
+`rdra-ish states` derives reachable combinations of state-axis values per entity from one
+transition system that `check` and `verify` share. State axes come from inline Enum, Bool,
+nullable columns, state-machine transitions, explicit `sets` effects, and Int columns that a
+`sets` or a rule names. A column typed by a `variation` is an attribute the actor chooses;
+it is an axis only when something names it, and its unreached values draw no warning. The
+output is not just a diagram; it is executable feedback about which combinations the
+modeled use cases can actually reach.
+It evaluates every `forbidden`, `invariant`, `required`, and `exclusive` rule, every
+multi-entity rule, every `when(...).none/has(...)` rule, and every `after(...).assert`
+against the reachable states. Rules with `.along(EntityA, EntityB, ...)` count only the
+instances that a `relate` links. A use case is one atomic action per transaction group,
+and an entity that no use case creates starts present.
 
 Use state analysis after entity structure is stable enough to know which fields can
 change. Do not invent lifecycle detail during early BUC skeleton work.
@@ -48,7 +48,8 @@ Entity: Order (注文)
 ```
 
 - `INITIAL`: reachable from a creation path.
-- `TERMINAL`: no modeled use case exits that combination.
+- `TERMINAL`: a use case deletes the instance in that combination, or no enabled use case
+  moves it to another combination.
 - `VIA`: which BUC/use case reached the pattern.
 - Missing combinations may be good or bad. Treat them as design questions, not
   automatic defects.
@@ -68,8 +69,11 @@ Entity: Order (注文)
 | Required violation | Always-required fact is absent in a reachable pattern | Add missing `sets`/transition or relax the required fact |
 | Exclusive violation | Mutually exclusive facts co-occur in a reachable pattern | Add missing transition/effect guards or revise the exclusivity rule |
 | Cross-entity violation | Rule violation across entity patterns | Fix lifecycle/effects or update the cross rule |
-| `CrossConstraintNotEvaluated` | Rule depends on values outside abstract state patterns, exceeds the cross-product cap, or uses `.along(...)` linked-instance semantics | Report the unevaluated condition/reason; `states` exits non-zero (`[error]`). Decide whether it needs a state axis/proposition or TLA linked-instance evaluation |
-| `UndrivenComparisonProp` | Comparison proposition is never driven or is made unreachable/always violated by rules | `[error]` under `states`. Add `sets(..., expr, true/false)`, switch to Int arithmetic + TLA+, or revise the rule |
+| `UnbindableScope` | `.along(...)` names entities that no `relate` binds | `[error]`. Declare the `relate`, or drop `.along` for a rule over every pair |
+| `UnbindableCondition` | A condition body is applied to a use case that writes nothing | `[error]`. Apply it to a use case that writes, or drop the body |
+| `ContradictoryDrivenComparison` | A use case drives a comparison one way while its own Int `sets` make it the other | `[error]`. Fix the `sets` or drop the driving `sets` |
+| `UnwrittenConstrainedVar` | A rule reads a column that no use case writes | Warning. The rule checks only the start value; add the `sets` or drop the rule |
+| `NoCreationPath` | No use case creates the entity | Info. It starts present; add `creates` if that is wrong |
 | `present` lacks type suffix where type matters | Nullable effect is vague | Prefer `present` (PG type names in `sets` are rejected) |
 
 ## Formal verification (TLA+)
@@ -77,13 +81,12 @@ Entity: Order (注文)
 For the dedicated workflow (when to use TLA, DSL surface, export/verify,
 samples), load skill **`rdra-ish-verify`**.
 
-BFS `states` ignores Int / Money / Decimal axes and only evaluates comparison
-propositions as Bool axes. Use TLA+ when the model has:
+`states` and `check` read the same system as TLC at one instance per entity. Use TLA+
+when the model has:
 
-- Int / Money / Decimal arithmetic or `now`
-- multi-entity `forbidden` / `invariant` with `.along`
-- `when(...).none/has(...)`
-- `property` / `after(...).assert(...)`
+- `property` (`always`, `eventually`, `leads_to`), which `states` does not evaluate
+- rules that need two instances: `when(...).none/has(...)` over several rows, or
+  `.along` between entities with more than one linked row
 
 ```sh
 rdra-ish export src/ --kind tla -o out/
@@ -105,5 +108,5 @@ Export writes both `RdraSpec.tla` and `RdraSpec.cfg`. See `docs/formal-verificat
 
 Report state findings as patterns and paths, not just columns. Include the entity,
 axis values, whether the pattern is initial/terminal, and the BUC/use case/event path
-that reached it. For Int/temporal findings, cite TLC property names or Safety
-conjuncts from the exported `.cfg`.
+that reached it. For temporal findings, cite TLC property names or the `INVARIANT` names
+from the exported `.cfg`.

@@ -24,7 +24,7 @@ rdra-ish states src/ --entity <EntityId>
 rdra-ish states src/ --buc <BucId>
 rdra-ish states src/ --format json --entity <EntityId>
 
-# Formal verification (Int / now / temporal / multi-instance)
+# Formal verification (temporal / two-instance rules)
 rdra-ish export src/ --kind tla -o out/
 rdra-ish verify src/ --backend tlc -o out/
 ```
@@ -49,18 +49,16 @@ rdra-ish verify src/ --backend tlc -o out/
 ## When To Prefer `states`
 
 - Use `states` before diagram polish when reviewing entity constraints.
-- Treat multi-entity `forbidden` / `invariant` diagnostics as cross-product checks over
-  participating entities; `CrossConstraintNotEvaluated` means the rule references
-  values that are not present in abstract state patterns, exceeds the cross-product
-  cap, or uses relation-scoped `.along(...)` linked-instance semantics.
+- Treat multi-entity `forbidden` / `invariant` diagnostics as checks over every
+  combination of the participating entities' instances; `.along(...)` restricts them to
+  instances linked by a `relate` path, and `UnbindableScope` means no `relate` binds the path.
 - Use `states --entity <EntityId>` when a whole-model state table is too broad.
 - Use `states --format json` when checking truncation or exact reachable combinations.
 
 ## When To Prefer TLA+
 
 Prefer skill **`rdra-ish-verify`** for the full workflow. Short rule: use
-`export --kind tla` when rules involve Int / Money / Decimal, `now`, temporal
-`property`, `after.assert`, quantifiers, or multi-instance `.along` that BFS does
-not evaluate. Export writes both `.tla` and `.cfg`.
+`export --kind tla` when rules involve temporal `property`, or quantifiers and
+`.along` that need two instances; `states` does not evaluate `property`. Export writes both `.tla` and `.cfg`.
 Prefer one FV sample/module at a time; standalone FV samples can collide on ids if
 checked as a whole directory.

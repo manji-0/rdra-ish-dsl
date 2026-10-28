@@ -7,29 +7,23 @@
 
 | Concern | Prefer | Why |
 |---|---|---|
-| Enum / Bool / Nullable reachable patterns | `rdra-ish states` | Fast BFS over finite axes |
+| Enum / Bool / Nullable reachable patterns | `rdra-ish states` | Fast BFS at one instance per entity |
 | Terminal / unreachable enum variants | `states` | Built-in diagnostics |
-| Comparison as Bool proposition (`sets(..., cmp, true/false)`) | `states` | Proposition axes |
-| Int / Money / Decimal arithmetic | `export --kind tla` | `IntRange` + TLC Integers |
-| `col < now` / DateTime vs `now` | TLA | Global `now` + Assign/TickNow; Safety finds violations (not baked into Next) |
+| Int comparison (`stock < selling`) | `states` or TLA | Both read Int values over `0..5` |
+| Int / Money / Decimal arithmetic | `states`, `check`, or `export --kind tla` | `IntRange` + TLC Integers |
+| `col < now` / DateTime vs `now` | `states` or TLA | Global `now` + `Tick`; the invariant finds violations |
 | `property` `always` / `eventually` / `leads_to` | TLA | Path properties; not evaluated by `states` |
-| `after(UC).assert(...)` | TLA | Independent `[][action => primed post]_vars` PROPERTY (not baked into Next) |
-| `when(...).none/has(...)` | TLA | Finite `Entity_Ids` quantifiers |
-| Multi-entity `forbidden` / `invariant` + `.along` | TLA for linked instances; `states` emits `CrossConstraintNotEvaluated` as `[error]` when unevaluable | TLC uses `*_owner` when `relate` exists |
+| `after(UC).assert(...)` | `states` or TLA | Checked after each step of the use case; TLA: `[][(\A p : UC(p) => post')]_vars` |
+| `when(...).none/has(...)` | `states`, or TLA for two instances | Quantifiers over present instances |
+| Multi-entity `forbidden` / `invariant` + `.along` | `states` for one instance, TLA for two | Both join instances through `Child_owner_Parent` |
 
-## Two Layers (do not mix expectations)
+## Same System, Different Bounds
 
-| Layer | Tool | Continuous values |
+| Command | Instances per entity | Reaches |
 |---|---|---|
-| Abstract propositions | `states` | `stock < selling` is a Bool axis driven by `sets(..., cmp, bool)` |
-| Arithmetic model checking | TLA / TLC | Int / Money / Decimal / `now` are `IntRange` variables |
+| `states`, `check` | 1 | Per-entity views, every constraint verdict, no temporal properties |
+| `export --kind tla`, `verify` | 2 by default | The same verdicts at two instances, plus `property` formulas |
 
-A `forbidden(Item, stock < selling)` without a driving `sets` is inert under
-`states`, but TLA export still emits arithmetic Safety when Int axes exist.
-
-## Scalar vs Multi-instance Export
-
-- **Scalar** (default): one variable per axis — no multi-entity rules / quantifiers.
-- **Multi-instance**: triggered by multi-entity `forbidden` / `invariant` or
-  `when(...).none/has`. Emits `InstanceCount`, `Entity_Ids`, function-valued
-  axes, and `Child_owner` from `relate`.
+Both read one transition system, so a verdict that differs between them comes from the
+bounds, not from a second reading of the model. Choose `verify` when a rule needs two
+instances (a quantifier or `.along` over several rows) or a temporal `property`.

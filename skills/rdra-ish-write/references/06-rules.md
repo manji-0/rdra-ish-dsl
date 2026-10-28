@@ -7,13 +7,11 @@ invalid, conditional, mandatory, or mutually exclusive state facts as executable
 
 Add business rules that can be type-checked as model predicates. Move in three passes:
 local guardrails, local obligations, then advanced comparison or cross-entity rules.
-Per-entity rules are validated against derived state patterns; cross-entity rules are
-checked by combining the reached patterns of the participating entities when their
-conditions reference state axes.
+Every rule is validated against the reachable states of the lifecycle transition system.
+Cross-entity rules range over every combination of the participating entities' instances.
 Use `.along(EntityA, EntityB, ...)` only for rules that should quantify over instances
-linked by a declared `relate` path; current `states` validates the path shape but
-reports the rule as `CrossConstraintNotEvaluated` because linked-instance reachability
-is not tracked yet.
+linked by a declared `relate` path; each adjacent pair needs a `relate`, else the rule is
+`UnbindableScope`.
 
 ## Ask For
 
@@ -46,7 +44,7 @@ is not tracked yet.
 9. Add `when(...).none/has(...)` for to-many quantifiers (not `forbidden_when`).
 10. Add `property` / `after(...).assert(...)` when temporal or postcondition checks
     matter; validate with skill `rdra-ish-verify` / `export --kind tla`
-    (BFS `states` ignores Int/`now` axes).
+    (`states` does not evaluate `property`).
 11. Keep implementation policy notes outside the DSL unless they can be expressed as
     state, effect, forbidden, invariant, required, exclusive, quantifier, property,
     or cross-entity predicates.
@@ -91,7 +89,7 @@ rdra-ish check src/
 rdra-ish lint src/ --format table
 rdra-ish states src/ --entity Order
 rdra-ish states src/ --format json --entity Order
-# Int / now / multi-entity / temporal: use TLA+ (BFS does not cover these axes)
+# temporal property / two-instance rules: use TLA+ (`states` does not evaluate `property`)
 rdra-ish export src/ --kind tla -o out/
 # optional if tlc is on PATH:
 # rdra-ish verify src/ --backend tlc -o out/
@@ -102,18 +100,16 @@ rdra-ish export src/ --kind tla -o out/
 - Rules are expressed as model predicates, not prose-only comments.
 - Per-entity violations from `states` are either fixed or intentionally listed as
   open design items.
-- Cross-entity rules use `Entity.column`; if `states` reports them as not evaluated,
-  explain whether the reason is an ordinary non-state condition, cap overflow, or
-  relation-scoped `.along(...)` linked-instance semantics (TLC evaluates `.along`
-  via `*_owner` when `relate` exists).
-- Int / Money / Decimal / `now` and temporal `property` rules are checked with
-  `export --kind tla` / `verify --backend tlc`, not only `states`.
+- Cross-entity rules use `Entity.column`; if `states` reports `UnbindableScope`, declare
+  the `relate` that binds the `.along(...)` path.
+- Temporal `property` rules, and rules that need two instances, are checked with
+  `export --kind tla` / `verify --backend tlc`, not by `states`.
 - Required lifecycle effects have corresponding `sets` or transitions.
 - Terminal, unreachable, and no-create warnings are reviewed instead of ignored.
-- `UndrivenComparisonProp` and NotEvaluated multi-entity / quantifier / temporal
-  diagnostics are **`[error]`** under `states` (fail-closed). Resolve by driving
-  comparison propositions with `sets(..., expr, true/false)`, by Int arithmetic
-  export (`verify`), or by revising the rule.
+- A comparison reads the Int values of its columns. Move them with `sets(UC, E, col == N)`,
+  or drive the comparison with `sets(..., expr, true/false)`. A use case that drives it one
+  way while its own Int `sets` make it the other is `ContradictoryDrivenComparison`, an
+  **`[error]`** under `states` (fail-closed).
 - The final model can explain BUC scope, actor authority, API/system boundaries,
   entity structure, lifecycle, and rules as a single refinement chain.
 

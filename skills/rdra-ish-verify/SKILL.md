@@ -23,7 +23,7 @@ symlink mirror of the same files.
 
 | User intent | Do first | Load |
 |---|---|---|
-| "states で足りる？ / TLA が必要？" | Compare BFS axes vs TLC arithmetic / temporal | `references/when-to-use.md` |
+| "states で足りる？ / TLA が必要？" | Compare `states` (one instance) vs TLC (two instances, temporal) | `references/when-to-use.md` |
 | "property / after.assert / when / .along を書きたい" | Author the DSL surface correctly | `references/dsl-surface.md` |
 | "export / verify を回したい" | Run check → export → (optional) TLC | `references/workflow.md` |
 | "サンプルや制限は？" | Open a file under `samples/`; note approximations | `references/limits-and-samples.md` |
@@ -34,13 +34,14 @@ symlink mirror of the same files.
    `rdra-ish check` on **one** sample file under `samples/` (ids collide across
    files — never check the whole `samples/` directory at once).
 2. Decide BFS vs TLA using `references/when-to-use.md`. Prefer `states` for
-   Enum / Bool / Nullable reachability; use TLA for Int/`now`, temporal
-   `property`, `after.assert`, quantifiers, and multi-instance `.along`.
+   Enum / Bool / Nullable reachability; use TLA for temporal `property` and for
+   rules that need two instances (quantifiers, multi-instance `.along`). Both read one
+   transition system.
 3. Export: `rdra-ish export <file> --kind tla -o <OUT>` (writes `.tla` and `.cfg`).
 4. If `tlc` / `tlc2` is on `PATH`: `rdra-ish verify <file> --backend tlc -o <OUT>`.
    Prefer **expected-pass** samples from `references/limits-and-samples.md`; use
-   `samples/fail/` only for negative TLC checks (`check` may exit 0 with warnings).
-5. Report evidence from TLC property names / Safety failures, not only intuition.
+   `samples/fail/` only for negative TLC checks (`check` exits 1 there too).
+5. Report evidence from the names of the violated invariants and properties, not only intuition.
    Heed stderr `warning: tla export: …` lines (skipped mappings / approximations).
 6. For full mapping tables in the monorepo, see `docs/formal-verification.md`.
 

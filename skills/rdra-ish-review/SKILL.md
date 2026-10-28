@@ -140,14 +140,13 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    - Multi-entity conditions qualify columns as `Entity.column`
    - Relation-scoped rules use `.along(EntityA, EntityB, ...)` only when the listed
      entities are connected by a declared `relate` path
-   - Review `CrossForbiddenViolated`, `CrossInvariantViolated`, and
-     `CrossConstraintNotEvaluated` diagnostics from `states`; the last one means a
-     rule condition is outside the abstract state space, exceeded the cross-product cap,
-     or uses relation-scoped `.along(...)` linked-instance semantics. For Int/`now`,
-     temporal `property`, `after.assert`, and multi-instance `.along` that TLC can
-     check, also run `rdra-ish export --kind tla` (and `verify --backend tlc` when TLC
-     is available). Diagnostic ids may still say `Cross*` even though surface syntax is
-     multi-entity `forbidden` / `invariant`.
+   - Review the `ConstraintViolated` diagnostics from `states` and `check`; each names the
+     constraint (`CrossForbidden_Order_0`) and a reachable state that breaks it. An
+     `UnbindableScope` error means an `.along(...)` path that no `relate` binds. For
+     temporal `property` and rules that need two instances, also run
+     `rdra-ish export --kind tla` (and `verify --backend tlc` when TLC is available).
+     Constraint names may still say `Cross*` even though surface syntax is multi-entity
+     `forbidden` / `invariant`.
 
 12. **Check imports**
    - Every referenced symbol has a corresponding `import`

@@ -35,9 +35,10 @@ by use cases or events.
    removing the BUC-level trigger.
 6. Add `sets(UseCase, Entity, col == val)` for enum, nullable, and boolean
    effects not fully explained by transitions.
-7. Add comparison-proposition `sets` when rules depend on derived comparisons
-   (BFS layer). Prefer Int / Money / Decimal columns plus arithmetic rules when the
-   quantity itself must be checked; validate those with TLA+ export.
+7. Add comparison-proposition `sets` when rules depend on a derived comparison and the
+   model does not track the values. Prefer Int / Money / Decimal columns plus
+   `sets(UC, E, col == N)` when the quantity itself must be checked: a comparison
+   reads those values in `states` and in TLA+.
 8. Add `after(UseCase).assert(...)` for postconditions of that use case.
 9. Add `property Name [label] always|eventually|leads_to(...)` for temporal path
     properties (label string optional).
