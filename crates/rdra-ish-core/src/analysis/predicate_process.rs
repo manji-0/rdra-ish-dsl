@@ -913,27 +913,6 @@ fn process_relation_predicate(
     }
 }
 
-fn relation_options_from_chain(pred: &PredicateCall) -> RelationOptions {
-    let mut options = RelationOptions::default();
-    for cc in &pred.chain {
-        match cc.name.as_str() {
-            "optional" => options.optional = true,
-            "on_delete" => {
-                if let Some(value) = cc.args.first().and_then(arg_as_str) {
-                    options.on_delete = Some(value);
-                }
-            }
-            "on_update" => {
-                if let Some(value) = cc.args.first().and_then(arg_as_str) {
-                    options.on_update = Some(value);
-                }
-            }
-            _ => {}
-        }
-    }
-    options
-}
-
 /// Resolve `.via(Entity)` from the relate chain. Returns `(via, had_via_call)`.
 fn resolve_relate_via(
     model: &SemanticModel,
@@ -988,7 +967,7 @@ fn process_relate_predicate(
     };
 
     let (via, had_via) = resolve_relate_via(model, pred, ctx, diags);
-    let options = relation_options_from_chain(pred);
+    let options = super::fk::relation_options(pred, ctx, diags);
 
     let kind = match card_str {
         "1:1" => RelKind::RelateOneToOne,

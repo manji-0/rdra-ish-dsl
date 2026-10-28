@@ -180,7 +180,7 @@ impl TransitionSystem {
                 VarKind::Exists(e)
                 | VarKind::Column { entity: e, .. }
                 | VarKind::Prop { entity: e, .. } => inside(e),
-                VarKind::Owner { child, parent } => inside(child) && inside(parent),
+                VarKind::Owner { child, parent, .. } => inside(child) && inside(parent),
                 VarKind::Now => comp.now,
             })
             .map(|(i, _)| VarId::at(i))
@@ -415,9 +415,10 @@ impl Remap {
                 entity: self.e(*entity),
                 key: key.clone(),
             },
-            VarKind::Owner { child, parent } => VarKind::Owner {
+            VarKind::Owner { child, parent, fk } => VarKind::Owner {
                 child: self.e(*child),
                 parent: self.e(*parent),
+                fk: *fk,
             },
             VarKind::Now => VarKind::Now,
         }

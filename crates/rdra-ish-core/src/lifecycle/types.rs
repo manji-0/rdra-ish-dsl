@@ -4,7 +4,7 @@
 use std::num::NonZeroU8;
 
 use crate::location::LocatedSpan;
-use crate::model::{BucKey, ConditionKey, EntityKey, UseCaseKey};
+use crate::model::{BucKey, ConditionKey, EntityKey, FkId, UseCaseKey};
 
 /// Bounds are an input to the semantics, not a printer option. Every report states them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -114,10 +114,11 @@ pub enum VarKind {
         entity: EntId,
         key: String,
     },
-    /// Index of the parent slot this child slot belongs to.
+    /// Index of the parent slot this child slot belongs to, for one foreign key.
     Owner {
         child: EntId,
         parent: EntId,
+        fk: FkId,
     },
     Now,
 }

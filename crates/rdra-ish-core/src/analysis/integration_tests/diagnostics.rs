@@ -100,25 +100,29 @@ relate(A, B, N:M).via(AB)
     let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
     assert!(errors.is_empty(), "{errors:?}");
 
-    let ab = model.entities.values().find(|e| e.id == "AB").unwrap();
+    let (ab_key, ab) = model.entities.iter().find(|(_, e)| e.id == "AB").unwrap();
     let fk_names: Vec<_> = ab
         .columns
         .iter()
-        .filter(|c| c.is_fk)
+        .filter(|c| model.column_fk(ab_key, &c.name).is_some())
         .map(|c| c.name.as_str())
+        .collect();
+    let unique: Vec<_> = model
+        .unique_keys(ab_key)
+        .into_iter()
+        .map(|u| u.columns)
         .collect();
     assert!(fk_names.contains(&"a_id"), "{fk_names:?}");
     assert!(fk_names.contains(&"b_id"), "{fk_names:?}");
     let mut expected_unique = vec!["a_id".to_string(), "b_id".to_string()];
     expected_unique.sort();
     assert!(
-        ab.unique_constraints.iter().any(|u| {
+        unique.iter().any(|u| {
             let mut sorted = u.clone();
             sorted.sort();
             sorted == expected_unique
         }),
-        "expected composite unique on junction FKs, got {:?}",
-        ab.unique_constraints
+        "expected composite unique on junction FKs, got {unique:?}"
     );
 
     let nm = model
@@ -179,16 +183,21 @@ relate(Enrollment, Campus, N:1)
     let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
     assert!(errors.is_empty(), "{errors:?}");
 
-    let enrollment = model
+    let (enrollment_key, enrollment) = model
         .entities
-        .values()
-        .find(|e| e.id == "Enrollment")
+        .iter()
+        .find(|(_, e)| e.id == "Enrollment")
         .unwrap();
     let fk_names: Vec<_> = enrollment
         .columns
         .iter()
-        .filter(|c| c.is_fk)
+        .filter(|c| model.column_fk(enrollment_key, &c.name).is_some())
         .map(|c| c.name.as_str())
+        .collect();
+    let unique: Vec<_> = model
+        .unique_keys(enrollment_key)
+        .into_iter()
+        .map(|u| u.columns)
         .collect();
     assert!(fk_names.contains(&"student_id"), "{fk_names:?}");
     assert!(fk_names.contains(&"course_id"), "{fk_names:?}");
@@ -197,21 +206,16 @@ relate(Enrollment, Campus, N:1)
     let mut expected_unique = vec!["course_id".to_string(), "student_id".to_string()];
     expected_unique.sort();
     assert!(
-        enrollment.unique_constraints.iter().any(|u| {
+        unique.iter().any(|u| {
             let mut sorted = u.clone();
             sorted.sort();
             sorted == expected_unique
         }),
-        "unique must be N:M ends only, got {:?}",
-        enrollment.unique_constraints
+        "unique must be N:M ends only, got {unique:?}"
     );
     assert!(
-        !enrollment
-            .unique_constraints
-            .iter()
-            .any(|u| u.contains(&"campus_id".to_string())),
-        "campus_id must not join the N:M composite unique: {:?}",
-        enrollment.unique_constraints
+        !unique.iter().any(|u| u.contains(&"campus_id".to_string())),
+        "campus_id must not join the N:M composite unique: {unique:?}"
     );
 }
 
@@ -418,10 +422,14 @@ relate(Customer, Order, 1:N)
             .collect::<Vec<_>>()
     );
 
-    let order = model.entities.values().find(|e| e.id == "Order").unwrap();
+    let (order_key, order) = model
+        .entities
+        .iter()
+        .find(|(_, e)| e.id == "Order")
+        .unwrap();
     let fk = order.columns.iter().find(|c| c.name == "customer_id");
     assert!(fk.is_some(), "customer_id FK not found in Order");
-    assert!(fk.unwrap().is_fk);
+    assert!(model.column_fk(order_key, "customer_id").is_some());
 }
 
 #[test]
@@ -552,4 +560,32 @@ fn other_type_mismatches_keep_the_generic_hint() {
             .any(|e| e.contains("check that you are passing the right element type")),
         "{errors:?}"
     );
+}
+
+#[test]
+fn unknown_ref_action_is_an_error_naming_the_accepted_actions() {
+    let src = r#"
+entity Customer "Customer" { id: Int @pk }
+entity Order "Order" { id: Int @pk }
+relate(Order, Customer, N:1).on_delete(set_nul).on_update(cascade)
+"#;
+    let (ast, _) = parse(src);
+    let (model, diags) = build_model(&ast);
+    let errors: Vec<_> = diags
+        .iter()
+        .filter(|d| !d.is_warning)
+        .map(|d| d.error.to_string())
+        .collect();
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(
+        errors[0].contains("'set_nul' in .on_delete(...)")
+            && errors[0].contains("cascade, restrict, set_null, set_default, no_action"),
+        "{errors:?}"
+    );
+    let (_, fk) = model
+        .foreign_keys()
+        .next()
+        .expect("the relate still yields its key");
+    assert_eq!(fk.on_delete, None);
+    assert_eq!(fk.on_update, Some(crate::model::RefAction::Cascade));
 }

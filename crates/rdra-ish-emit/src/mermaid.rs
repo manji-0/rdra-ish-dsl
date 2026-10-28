@@ -812,7 +812,7 @@ impl Emitter for ErMermaidEmitter {
                 let type_str = col_type_str(model, &col.col_type);
                 if col.is_pk {
                     out.push_str(&format!("    {} {} PK\n", type_str, col.name));
-                } else if col.is_fk {
+                } else if model.column_fk(*k, &col.name).is_some() {
                     out.push_str(&format!("    {} {} FK\n", type_str, col.name));
                 } else {
                     out.push_str(&format!("    {} {}\n", type_str, col.name));

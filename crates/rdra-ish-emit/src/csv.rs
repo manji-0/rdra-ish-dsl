@@ -63,18 +63,23 @@ impl Emitter for EntityListCsvEmitter {
         let mut entities: Vec<_> = model.entities.iter().collect();
         entities.sort_by_key(|(_, e)| &e.id);
 
-        for (_, ent) in &entities {
+        for (key, ent) in &entities {
             for col in &ent.columns {
                 let col_type = col_type_to_str(model, &col.col_type);
-                let fk_target = col.fk_target.as_deref().unwrap_or("").to_string();
+                let fk = model.column_fk(*key, &col.name).map(|(_, fk)| fk);
+                let fk_target = fk.map_or("", |fk| model.entities[fk.parent].id.as_str());
                 let default_val = col.default_val.as_deref().unwrap_or("").to_string();
                 let is_pk = if col.is_pk { "true" } else { "false" };
                 let is_unique = if col.is_unique { "true" } else { "false" };
                 let is_indexed = if col.is_indexed { "true" } else { "false" };
-                let is_fk = if col.is_fk { "true" } else { "false" };
-                let fk_optional = if col.fk_optional { "true" } else { "false" };
-                let fk_on_delete = col.fk_on_delete.as_deref().unwrap_or("").to_string();
-                let fk_on_update = col.fk_on_update.as_deref().unwrap_or("").to_string();
+                let is_fk = if fk.is_some() { "true" } else { "false" };
+                let fk_optional = if fk.is_some_and(|fk| fk.optional()) {
+                    "true"
+                } else {
+                    "false"
+                };
+                let fk_on_delete = fk.and_then(|fk| fk.on_delete).map_or("", |a| a.as_str());
+                let fk_on_update = fk.and_then(|fk| fk.on_update).map_or("", |a| a.as_str());
                 let is_nullable = if col.is_nullable { "true" } else { "false" };
                 let check_constraints = col.check_constraints.join("|");
                 let is_soft_delete = if col.is_soft_delete { "true" } else { "false" };
@@ -90,10 +95,10 @@ impl Emitter for EntityListCsvEmitter {
                     is_unique,
                     is_indexed,
                     is_fk,
-                    fk_target.as_str(),
+                    fk_target,
                     fk_optional,
-                    fk_on_delete.as_str(),
-                    fk_on_update.as_str(),
+                    fk_on_delete,
+                    fk_on_update,
                     is_nullable,
                     default_val.as_str(),
                     check_constraints.as_str(),

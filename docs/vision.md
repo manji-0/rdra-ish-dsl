@@ -99,9 +99,9 @@ models and variations become enums, and an entity holds a column for its state. 
 DSL keeps these rules and adds what a normalized relational model needs:
 
 - A 1:1 relation generates a foreign key with a unique constraint. Today it generates
-  nothing (`crates/rdra-ish-core/src/analysis/fk.rs:13-35`).
+  no column (`resolve_foreign_keys` in `crates/rdra-ish-core/src/analysis/fk.rs`).
 - A relation can name its role, so two relations to the same parent stop colliding on
-  `{parent}_id` (`fk.rs:152-170`).
+  `{parent}_id` (`generate_key_column` in `fk.rs`).
 - A foreign key can be declared explicitly, and it can reference a composite key.
 - `@check` and `@derived` parse into typed expressions. Today they are stored as
   strings. A typed `@check` is also an invariant that verification checks.

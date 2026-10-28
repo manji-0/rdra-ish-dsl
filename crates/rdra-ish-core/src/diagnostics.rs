@@ -88,6 +88,9 @@ pub enum RdraError {
     #[error("composite @pk on entity '{entity}' cannot auto-generate a single FK column\n  hint: declare the foreign key column(s) explicitly on the many-side entity")]
     CompositePkFkUnsupported { entity: String },
 
+    #[error("unknown referential action '{got}' in .{method}(...)\n  hint: use one of cascade, restrict, set_null, set_default, no_action")]
+    UnknownRefAction { method: String, got: String },
+
     #[error("IO error reading '{path}': {msg}")]
     IoError { path: String, msg: String },
 

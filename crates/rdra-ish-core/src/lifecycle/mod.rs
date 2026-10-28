@@ -163,7 +163,7 @@ impl TransitionSystem {
             VarKind::Column { column, .. } => column.clone(),
             VarKind::Prop { key, .. } => format!("__cmp:{key}"),
             VarKind::Exists(e) => format!("{}._exists", self.entity(*e).id),
-            VarKind::Owner { child, parent } => {
+            VarKind::Owner { child, parent, .. } => {
                 format!(
                     "{}._owner_{}",
                     self.entity(*child).id,

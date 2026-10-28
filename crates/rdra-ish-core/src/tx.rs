@@ -430,53 +430,9 @@ fn fk_parent_map(model: &SemanticModel) -> HashMap<EntityKey, Vec<EntityKey>> {
     parents_of
 }
 
-fn fk_edges(model: &SemanticModel) -> Vec<(EntityKey, EntityKey)> {
-    let mut edges = Vec::new();
-    for rel in &model.relations {
-        let maybe: Option<(EntityKey, EntityKey)> = match &rel.kind {
-            RelKind::RelateManyToOne => {
-                if let (NodeRef::Entity(child_k), NodeRef::Entity(parent_k)) = (&rel.from, &rel.to)
-                {
-                    Some((*parent_k, *child_k))
-                } else {
-                    None
-                }
-            }
-            RelKind::RelateOneToMany => {
-                if let (NodeRef::Entity(parent_k), NodeRef::Entity(child_k)) = (&rel.from, &rel.to)
-                {
-                    Some((*parent_k, *child_k))
-                } else {
-                    None
-                }
-            }
-            RelKind::RelateOneToOne => {
-                if let (NodeRef::Entity(child_k), NodeRef::Entity(parent_k)) = (&rel.from, &rel.to)
-                {
-                    Some((*parent_k, *child_k))
-                } else {
-                    None
-                }
-            }
-            RelKind::RelateManyToMany => {
-                // Edges are emitted below for both ends through the junction.
-                None
-            }
-            _ => None,
-        };
-        if let Some(edge) = maybe {
-            edges.push(edge);
-        }
-        if matches!(rel.kind, RelKind::RelateManyToMany) {
-            if let (NodeRef::Entity(from), NodeRef::Entity(to), Some(NodeRef::Entity(via))) =
-                (&rel.from, &rel.to, rel.via.as_ref())
-            {
-                edges.push((*from, *via));
-                edges.push((*to, *via));
-            }
-        }
-    }
-    edges
+/// `(parent, child)` per foreign key.
+fn fk_edges(model: &SemanticModel) -> impl Iterator<Item = (EntityKey, EntityKey)> + '_ {
+    model.foreign_keys().map(|(_, fk)| (fk.parent, fk.child))
 }
 
 /// FK親→子の順にカーン法でトポロジカルソートする。

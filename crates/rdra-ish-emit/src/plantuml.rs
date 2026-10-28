@@ -863,7 +863,7 @@ impl Emitter for ErPlantUmlEmitter {
             // Non-PK columns
             for col in ent.columns.iter().filter(|c| !c.is_pk) {
                 let type_str = col_type_str(model, &col.col_type);
-                if col.is_fk {
+                if model.column_fk(*k, &col.name).is_some() {
                     out.push_str(&format!("  {} : {} <<FK>>\n", col.name, type_str));
                 } else {
                     out.push_str(&format!("  {} : {}\n", col.name, type_str));

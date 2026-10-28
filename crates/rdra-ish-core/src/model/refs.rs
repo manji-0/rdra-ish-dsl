@@ -1,3 +1,4 @@
+use super::foreign_key::RefAction;
 use super::keys::*;
 
 /// NodeRef: 異種ノード間関連を一様表現
@@ -81,7 +82,8 @@ pub struct Relation {
     pub from: NodeRef,
     pub to: NodeRef,
     pub kind: RelKind,
-    pub options: RelationOptions,
+    /// Read by `analysis::fk` only; consumers read the resulting `ForeignKey`.
+    pub(crate) options: RelationOptions,
     /// Junction entity for `relate(A, B, N:M).via(Junction)`.
     pub via: Option<NodeRef>,
 
@@ -89,12 +91,12 @@ pub struct Relation {
     pub site: Option<crate::location::LocatedSpan>,
 }
 
-/// Relation-level options, currently used by `relate` to shape generated FKs.
+/// What a `relate` chain says about its key: `.optional()`, `.on_delete(..)`, `.on_update(..)`.
 #[derive(Debug, Clone, Default)]
 pub struct RelationOptions {
     pub optional: bool,
-    pub on_delete: Option<std::string::String>,
-    pub on_update: Option<std::string::String>,
+    pub on_delete: Option<RefAction>,
+    pub on_update: Option<RefAction>,
 }
 
 /// `coordinates(usecase, entity, entity)` で宣言される、system境界越えrelationの調停責務。
@@ -449,11 +451,6 @@ pub struct ModelColumn {
     pub is_nullable: bool,
     pub default_val: Option<std::string::String>,
     pub label: Option<std::string::String>,
-    pub is_fk: bool,
-    pub fk_target: Option<std::string::String>,
-    pub fk_optional: bool,
-    pub fk_on_delete: Option<std::string::String>,
-    pub fk_on_update: Option<std::string::String>,
     pub check_constraints: Vec<std::string::String>,
     pub is_soft_delete: bool,
     pub is_history: bool,

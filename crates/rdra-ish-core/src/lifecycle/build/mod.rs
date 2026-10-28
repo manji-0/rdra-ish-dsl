@@ -167,7 +167,7 @@ impl<'m> Builder<'m> {
         birth: Birth,
     ) -> Option<VarId> {
         let model = self.model;
-        if col.is_fk {
+        if model.column_fk(ek, &col.name).is_some() {
             // A relate's foreign key is the owner var, not a state column.
             return None;
         }
@@ -271,32 +271,26 @@ impl<'m> Builder<'m> {
         Some(var)
     }
 
-    /// One owner var per relate whose foreign key the child holds (N:1, 1:N, 1:1). An
-    /// `.optional()` relate's owner starts and may stay unlinked (`null`).
+    /// One owner var per foreign key. An `.optional()` key's owner starts and may stay
+    /// unlinked (`null`).
     fn owner_vars(&mut self) {
-        for (idx, rel) in self.model.relations.iter().enumerate() {
-            let (NodeRef::Entity(from), NodeRef::Entity(to)) = (&rel.from, &rel.to) else {
-                continue;
-            };
-            let (child, parent) = match rel.kind {
-                RelKind::RelateManyToOne | RelKind::RelateOneToOne => (*from, *to),
-                RelKind::RelateOneToMany => (*to, *from),
-                _ => continue,
-            };
-            let (Some(&c), Some(&p)) = (self.ent_of.get(&child), self.ent_of.get(&parent)) else {
+        for (id, fk) in self.model.foreign_keys() {
+            let (Some(&c), Some(&p)) = (self.ent_of.get(&fk.child), self.ent_of.get(&fk.parent))
+            else {
                 continue;
             };
             let var = self.push_var(
                 VarKind::Owner {
                     child: c,
                     parent: p,
+                    fk: id,
                 },
                 Domain::Instance {
                     parent: p,
-                    optional: rel.options.optional,
+                    optional: fk.optional(),
                 },
                 Value(0),
-                Site::new(ModelRef::Relation(idx), &rel.site),
+                Site::new(ModelRef::Relation(fk.relation), &fk.site),
             );
             self.ts.entities[c.index()].owners.push(var);
             self.owners.push((var, c, p));

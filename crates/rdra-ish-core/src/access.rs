@@ -622,7 +622,10 @@ fn add_input_rows_for_operation(
 ) {
     let entity = &model.entities[op.entity];
     for column in &entity.columns {
-        if column.is_pk || column.is_fk || column.default_val.is_some() {
+        if column.is_pk
+            || column.default_val.is_some()
+            || model.column_fk(op.entity, &column.name).is_some()
+        {
             continue;
         }
         if is_column_set_by_path(model, usecase, op.source, op.entity, &column.name) {

@@ -1,6 +1,7 @@
 mod comparison;
 mod constraints;
 mod effects;
+mod foreign_key;
 mod instances;
 mod keys;
 mod refs;
@@ -10,6 +11,7 @@ mod typed;
 pub use comparison::*;
 pub use constraints::*;
 pub use effects::*;
+pub use foreign_key::*;
 pub use instances::*;
 pub use keys::*;
 pub use refs::*;
@@ -77,6 +79,11 @@ pub struct SemanticModel {
     pub variations: SlotMap<VariationKey, Variation>,
     pub conditions: SlotMap<ConditionKey, Condition>,
     pub relations: Vec<Relation>,
+    /// One per relate whose child holds the key, in relation order. Read through
+    /// `foreign_keys()`, `column_fk()` and `unique_keys()`.
+    pub(crate) foreign_keys: Vec<ForeignKey>,
+    /// `(junction, key to one end, key to the other)` of each `relate(A, B, N:M).via(J)`.
+    pub(crate) junction_keys: Vec<(EntityKey, FkId, FkId)>,
     /// `combines(Condition, Variation | Entity.column)` declarations, in source order.
     pub combines: Vec<CombinesDecl>,
     pub boundary_coordinations: Vec<BoundaryCoordination>,

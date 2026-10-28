@@ -62,10 +62,10 @@ relate(Order, Customer_profile, N:1)
     let use_case = model.use_cases.values().next().unwrap();
     assert_eq!(use_case.description.as_deref(), Some("商品一覧を参照する"));
 
-    let order = model
+    let (order_key, order) = model
         .entities
-        .values()
-        .find(|e| e.id == "Order")
+        .iter()
+        .find(|(_, e)| e.id == "Order")
         .expect("Order entity not found");
     assert_eq!(order.description.as_deref(), Some("受注情報"));
 
@@ -75,8 +75,10 @@ relate(Order, Customer_profile, N:1)
         .find(|c| c.name == "customer_profile_id")
         .expect("customer_profile_id FK column not found");
 
-    assert!(fk_col.is_fk);
-    assert_eq!(fk_col.fk_target.as_deref(), Some("Customer_profile"));
+    let (_, fk) = model
+        .column_fk(order_key, &fk_col.name)
+        .expect("customer_profile_id is a key column");
+    assert_eq!(model.entities[fk.parent].id, "Customer_profile");
     assert_eq!(fk_col.col_type, ColumnType::Int);
 }
 
@@ -491,11 +493,17 @@ relate(Order, Customer, N:1).optional().on_delete(set_null).on_update(cascade)
         .iter()
         .find(|column| column.name == "customer_id")
         .unwrap();
-    assert!(customer_id.is_fk);
-    assert!(customer_id.fk_optional);
+    let order_key = model
+        .entities
+        .iter()
+        .find(|(_, e)| e.id == "Order")
+        .map(|(k, _)| k)
+        .unwrap();
+    let (_, fk) = model.column_fk(order_key, &customer_id.name).unwrap();
+    assert!(fk.optional());
     assert!(customer_id.is_nullable);
-    assert_eq!(customer_id.fk_on_delete.as_deref(), Some("set_null"));
-    assert_eq!(customer_id.fk_on_update.as_deref(), Some("cascade"));
+    assert_eq!(fk.on_delete, Some(RefAction::SetNull));
+    assert_eq!(fk.on_update, Some(RefAction::Cascade));
 }
 
 #[test]

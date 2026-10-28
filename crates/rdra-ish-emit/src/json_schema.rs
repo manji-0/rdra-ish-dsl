@@ -1,5 +1,5 @@
 use crate::{EmitError, Emitter, View};
-use rdra_ish_core::model::{ColumnType, ModelColumn, SemanticModel};
+use rdra_ish_core::model::{ColumnType, EntityKey, ForeignKey, ModelColumn, SemanticModel};
 use serde_json::{json, Map, Number, Value};
 
 pub struct JsonSchemaEmitter;
@@ -21,6 +21,7 @@ fn json_schema_document(model: &SemanticModel) -> Value {
             format!("Dto.{}", dto.id),
             object_schema(
                 model,
+                None,
                 "dto",
                 &dto.id,
                 &dto.label,
@@ -34,18 +35,24 @@ fn json_schema_document(model: &SemanticModel) -> Value {
 
     let mut entities: Vec<_> = model.entities.iter().collect();
     entities.sort_by_key(|(_, entity)| entity.id.as_str());
-    for (_, entity) in entities {
+    for (key, entity) in entities {
+        let unique_keys: Vec<Vec<String>> = model
+            .unique_keys(key)
+            .into_iter()
+            .map(|unique| unique.columns)
+            .collect();
         defs.insert(
             format!("Entity.{}", entity.id),
             object_schema(
                 model,
+                Some(key),
                 "entity",
                 &entity.id,
                 &entity.label,
                 entity.description.as_deref(),
                 &entity.columns,
                 &entity.indexes,
-                &entity.unique_constraints,
+                &unique_keys,
             ),
         );
     }
@@ -61,6 +68,7 @@ fn json_schema_document(model: &SemanticModel) -> Value {
 #[allow(clippy::too_many_arguments)]
 fn object_schema(
     model: &SemanticModel,
+    entity: Option<EntityKey>,
     kind: &str,
     id: &str,
     label: &str,
@@ -72,7 +80,11 @@ fn object_schema(
     let mut properties = Map::new();
     let mut required = Vec::new();
     for column in columns {
-        properties.insert(column.name.clone(), column_schema(model, column));
+        let fk = entity.and_then(|key| model.column_fk(key, &column.name));
+        properties.insert(
+            column.name.clone(),
+            column_schema(model, fk.map(|(_, fk)| fk), column),
+        );
         if !column.is_nullable {
             required.push(Value::String(column.name.clone()));
         }
@@ -103,7 +115,7 @@ fn object_schema(
     Value::Object(schema)
 }
 
-fn column_schema(model: &SemanticModel, column: &ModelColumn) -> Value {
+fn column_schema(model: &SemanticModel, fk: Option<&ForeignKey>, column: &ModelColumn) -> Value {
     let mut schema = match &column.col_type {
         ColumnType::Int => json!({ "type": json_type("integer", column.is_nullable) }),
         ColumnType::String => json!({ "type": json_type("string", column.is_nullable) }),
@@ -146,13 +158,18 @@ fn column_schema(model: &SemanticModel, column: &ModelColumn) -> Value {
                 default_value(default, &column.col_type),
             );
         }
-        insert_column_extensions(obj, column);
+        insert_column_extensions(model, obj, fk, column);
     }
 
     schema
 }
 
-fn insert_column_extensions(obj: &mut Map<String, Value>, column: &ModelColumn) {
+fn insert_column_extensions(
+    model: &SemanticModel,
+    obj: &mut Map<String, Value>,
+    fk: Option<&ForeignKey>,
+    column: &ModelColumn,
+) {
     if column.is_pk {
         obj.insert("x-rdra-ish-primary-key".to_string(), json!(true));
     }
@@ -162,20 +179,27 @@ fn insert_column_extensions(obj: &mut Map<String, Value>, column: &ModelColumn) 
     if column.is_indexed {
         obj.insert("x-rdra-ish-indexed".to_string(), json!(true));
     }
-    if column.is_fk {
+    if let Some(fk) = fk {
         obj.insert("x-rdra-ish-foreign-key".to_string(), json!(true));
-    }
-    if let Some(target) = &column.fk_target {
-        obj.insert("x-rdra-ish-fk-target".to_string(), json!(target));
-    }
-    if column.fk_optional {
-        obj.insert("x-rdra-ish-fk-optional".to_string(), json!(true));
-    }
-    if let Some(action) = &column.fk_on_delete {
-        obj.insert("x-rdra-ish-fk-on-delete".to_string(), json!(action));
-    }
-    if let Some(action) = &column.fk_on_update {
-        obj.insert("x-rdra-ish-fk-on-update".to_string(), json!(action));
+        obj.insert(
+            "x-rdra-ish-fk-target".to_string(),
+            json!(model.entities[fk.parent].id),
+        );
+        if fk.optional() {
+            obj.insert("x-rdra-ish-fk-optional".to_string(), json!(true));
+        }
+        if let Some(action) = fk.on_delete {
+            obj.insert(
+                "x-rdra-ish-fk-on-delete".to_string(),
+                json!(action.as_str()),
+            );
+        }
+        if let Some(action) = fk.on_update {
+            obj.insert(
+                "x-rdra-ish-fk-on-update".to_string(),
+                json!(action.as_str()),
+            );
+        }
     }
     if !column.check_constraints.is_empty() {
         obj.insert(

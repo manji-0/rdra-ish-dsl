@@ -1,6 +1,7 @@
 //! Structured element list formatters (requirements, APIs, entities, etc.).
 
 use anyhow::Result;
+use rdra_ish_core::model::RefAction;
 
 use crate::cli::ListFormat;
 
@@ -459,8 +460,10 @@ pub(crate) fn format_entities(
     ];
 
     let mut rows: Vec<[String; 19]> = Vec::new();
-    for (_, ent) in &ents {
+    for (key, ent) in &ents {
         for col in &ent.columns {
+            let fk = model.column_fk(*key, &col.name).map(|(_, fk)| fk);
+            let action = |a: Option<RefAction>| a.map(RefAction::as_str).unwrap_or_default();
             rows.push([
                 ent.id.clone(),
                 ent.label.clone(),
@@ -469,11 +472,12 @@ pub(crate) fn format_entities(
                 if col.is_pk { "true" } else { "false" }.to_string(),
                 if col.is_unique { "true" } else { "false" }.to_string(),
                 if col.is_indexed { "true" } else { "false" }.to_string(),
-                if col.is_fk { "true" } else { "false" }.to_string(),
-                col.fk_target.clone().unwrap_or_default(),
-                bool_cell(col.fk_optional),
-                col.fk_on_delete.clone().unwrap_or_default(),
-                col.fk_on_update.clone().unwrap_or_default(),
+                bool_cell(fk.is_some()),
+                fk.map(|fk| model.entities[fk.parent].id.clone())
+                    .unwrap_or_default(),
+                bool_cell(fk.is_some_and(|fk| fk.optional())),
+                action(fk.and_then(|fk| fk.on_delete)).to_string(),
+                action(fk.and_then(|fk| fk.on_update)).to_string(),
                 bool_cell(col.is_nullable),
                 col.default_val.clone().unwrap_or_default(),
                 col.check_constraints.join("|"),

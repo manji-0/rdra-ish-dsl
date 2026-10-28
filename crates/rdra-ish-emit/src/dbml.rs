@@ -1,5 +1,5 @@
 use crate::{EmitError, Emitter, View};
-use rdra_ish_core::model::{ColumnType, Entity, ModelColumn, SemanticModel};
+use rdra_ish_core::model::{ColumnType, Entity, EntityKey, ModelColumn, RefAction, SemanticModel};
 
 pub struct DbmlEmitter;
 
@@ -20,11 +20,11 @@ fn dbml_document(model: &SemanticModel) -> String {
 
     let mut entities: Vec<_> = model.entities.iter().collect();
     entities.sort_by_key(|(_, entity)| entity.id.as_str());
-    for (index, (_, entity)) in entities.iter().enumerate() {
+    for (index, (key, entity)) in entities.iter().enumerate() {
         if index > 0 {
             out.push('\n');
         }
-        out.push_str(&dbml_table(model, entity));
+        out.push_str(&dbml_table(model, *key, entity));
         out.push('\n');
     }
 
@@ -80,7 +80,7 @@ fn dbml_enums(model: &SemanticModel) -> Vec<String> {
     defs
 }
 
-fn dbml_table(model: &SemanticModel, entity: &Entity) -> String {
+fn dbml_table(model: &SemanticModel, key: EntityKey, entity: &Entity) -> String {
     let mut lines = vec![format!(
         "Table {} [{}] {{",
         dbml_ident(&entity.id),
@@ -89,7 +89,7 @@ fn dbml_table(model: &SemanticModel, entity: &Entity) -> String {
     for column in &entity.columns {
         lines.push(format!("  {}", dbml_column(model, entity, column)));
     }
-    let indexes = dbml_indexes(entity);
+    let indexes = dbml_indexes(model, key, entity);
     if !indexes.is_empty() {
         lines.push(String::new());
         lines.push("  indexes {".to_string());
@@ -196,7 +196,7 @@ fn dbml_type(model: &SemanticModel, entity: &Entity, column: &ModelColumn) -> St
     }
 }
 
-fn dbml_indexes(entity: &Entity) -> Vec<String> {
+fn dbml_indexes(model: &SemanticModel, key: EntityKey, entity: &Entity) -> Vec<String> {
     let mut indexes = Vec::new();
     if entity.primary_key.len() > 1 {
         indexes.push(format_index(&entity.primary_key, &["pk"]));
@@ -204,7 +204,8 @@ fn dbml_indexes(entity: &Entity) -> Vec<String> {
     for columns in &entity.indexes {
         indexes.push(format_index(columns, &[]));
     }
-    for columns in &entity.unique_constraints {
+    for unique in model.unique_keys(key) {
+        let columns = &unique.columns;
         if columns.len() == 1
             && entity
                 .columns
@@ -237,27 +238,21 @@ fn dbml_refs(model: &SemanticModel) -> Vec<String> {
     let mut refs = Vec::new();
     let mut entities: Vec<_> = model.entities.iter().collect();
     entities.sort_by_key(|(_, entity)| entity.id.as_str());
-    for (_, entity) in entities {
+    for (key, entity) in entities {
         for column in &entity.columns {
-            let Some(target_id) = &column.fk_target else {
+            let Some((_, fk)) = model.column_fk(key, &column.name) else {
                 continue;
             };
-            let Some(target) = model
-                .entities
-                .iter()
-                .map(|(_, entity)| entity)
-                .find(|candidate| candidate.id == *target_id)
+            let target = &model.entities[fk.parent];
+            let Some((_, target_column)) = fk.columns.iter().find(|(c, _)| *c == column.name)
             else {
                 continue;
             };
-            let Some(target_pk) = target.columns.iter().find(|column| column.is_pk) else {
-                continue;
-            };
             let mut settings = Vec::new();
-            if let Some(action) = &column.fk_on_delete {
+            if let Some(action) = fk.on_delete {
                 settings.push(format!("delete: {}", dbml_ref_action(action)));
             }
-            if let Some(action) = &column.fk_on_update {
+            if let Some(action) = fk.on_update {
                 settings.push(format!("update: {}", dbml_ref_action(action)));
             }
             let settings = if settings.is_empty() {
@@ -270,7 +265,7 @@ fn dbml_refs(model: &SemanticModel) -> Vec<String> {
                 dbml_ident(&entity.id),
                 dbml_ident(&column.name),
                 dbml_ident(&target.id),
-                dbml_ident(&target_pk.name),
+                dbml_ident(target_column),
                 settings
             ));
         }
@@ -286,8 +281,8 @@ fn dbml_settings(settings: &[String]) -> String {
     settings.join(", ")
 }
 
-fn dbml_ref_action(action: &str) -> String {
-    action.replace('_', " ")
+fn dbml_ref_action(action: RefAction) -> String {
+    action.as_str().replace('_', " ")
 }
 
 fn dbml_string(value: &str) -> String {

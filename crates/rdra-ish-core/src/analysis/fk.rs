@@ -1,56 +1,209 @@
-//! Foreign-key generation from relate predicates.
+//! The key facts: one `ForeignKey` per relate whose child holds the key, and the key
+//! columns each one generates on its child.
 
-use crate::analysis_diag::push_entity_error;
+use super::constraint::arg_as_str;
+use crate::analysis_diag::{push_entity_error, push_error};
 use crate::diagnostics::{Diagnostic, RdraError};
+use crate::location::DiagCtxt;
 use crate::model::*;
+use rdra_ish_syntax::ast::PredicateCall;
 use std::collections::{BTreeMap, BTreeSet};
 
-pub(crate) fn generate_fks(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>) {
-    let mut jobs: Vec<(EntityKey, EntityKey, RelationOptions)> = Vec::new();
-    // Junction → N:M endpoint pairs (for composite unique + shared-via detection).
-    let mut junction_nms: BTreeMap<EntityKey, Vec<(EntityKey, EntityKey)>> = BTreeMap::new();
+/// `.optional()`, `.on_delete(..)` and `.on_update(..)` of a relate chain.
+pub(crate) fn relation_options(
+    pred: &PredicateCall,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> RelationOptions {
+    let mut options = RelationOptions::default();
+    for cc in &pred.chain {
+        let slot = match cc.name.as_str() {
+            "optional" => {
+                options.optional = true;
+                continue;
+            }
+            "on_delete" => &mut options.on_delete,
+            "on_update" => &mut options.on_update,
+            _ => continue,
+        };
+        let Some(text) = cc.args.first().and_then(arg_as_str) else {
+            continue;
+        };
+        match RefAction::parse(&text) {
+            Some(action) => *slot = Some(action),
+            None => push_error(
+                ctx,
+                diags,
+                cc.span.clone(),
+                RdraError::UnknownRefAction {
+                    method: cc.name.clone(),
+                    got: text,
+                },
+            ),
+        }
+    }
+    options
+}
 
+/// Writes `model.foreign_keys` and `model.junction_keys`, and appends each key's generated
+/// column to its child. A key the child cannot hold (no parent `@pk`, a composite parent
+/// key, a name clash) is reported and keeps no columns.
+pub(crate) fn resolve_foreign_keys(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>) {
+    model.foreign_keys = model
+        .relations
+        .iter()
+        .enumerate()
+        .filter_map(|(relation, rel)| key_fact(relation, rel))
+        .collect();
+
+    for index in 0..model.foreign_keys.len() {
+        // A 1:1 key generates no column yet.
+        if model.foreign_keys[index].unique() {
+            continue;
+        }
+        if let Some(column) = generate_key_column(model, diags, index) {
+            model.foreign_keys[index].columns.push(column);
+        }
+    }
+
+    resolve_junction_keys(model, diags);
+}
+
+fn key_fact(relation: usize, rel: &Relation) -> Option<ForeignKey> {
+    let (NodeRef::Entity(from), NodeRef::Entity(to)) = (&rel.from, &rel.to) else {
+        return None;
+    };
+    let (child, parent, max) = match rel.kind {
+        RelKind::RelateManyToOne => (*from, *to, Max::Many),
+        RelKind::RelateOneToMany => (*to, *from, Max::Many),
+        RelKind::RelateOneToOne => (*from, *to, Max::One),
+        _ => return None,
+    };
+    Some(ForeignKey {
+        child,
+        parent,
+        columns: Vec::new(),
+        children: Multiplicity {
+            min: Min::Zero,
+            max,
+        },
+        parent_min: if rel.options.optional {
+            Min::Zero
+        } else {
+            Min::One
+        },
+        on_delete: rel.options.on_delete,
+        on_update: rel.options.on_update,
+        relation,
+        site: rel.site.clone(),
+    })
+}
+
+/// Appends `{parent}_id` to the child and returns `(child column, parent key column)`.
+fn generate_key_column(
+    model: &mut SemanticModel,
+    diags: &mut Vec<Diagnostic>,
+    index: usize,
+) -> Option<(String, String)> {
+    let (child_key, parent_key, optional) = {
+        let fk = &model.foreign_keys[index];
+        (fk.child, fk.parent, fk.optional())
+    };
+    let parent = &model.entities[parent_key];
+    if parent.primary_key.len() > 1 {
+        push_entity_error(
+            model,
+            diags,
+            &parent.id,
+            RdraError::CompositePkFkUnsupported {
+                entity: parent.id.clone(),
+            },
+        );
+        return None;
+    }
+    let pk = parent.columns.iter().find(|c| c.is_pk).or_else(|| {
+        parent
+            .primary_key
+            .first()
+            .and_then(|name| parent.columns.iter().find(|c| c.name == *name))
+    });
+    let Some(pk) = pk else {
+        push_entity_error(
+            model,
+            diags,
+            &parent.id,
+            RdraError::MissingPk {
+                entity: parent.id.clone(),
+            },
+        );
+        return None;
+    };
+    let (pk_name, pk_type) = (pk.name.clone(), pk.col_type.clone());
+    let name = format!("{}_id", parent.id.to_lowercase());
+
+    let child = &model.entities[child_key];
+    if child.columns.iter().any(|c| c.name == name) {
+        push_entity_error(
+            model,
+            diags,
+            &child.id,
+            RdraError::FkConflict {
+                entity: child.id.clone(),
+                col: name,
+            },
+        );
+        return None;
+    }
+
+    model.entities[child_key].columns.push(ModelColumn {
+        name: name.clone(),
+        col_type: pk_type,
+        is_pk: false,
+        is_unique: false,
+        is_indexed: false,
+        is_nullable: optional,
+        default_val: None,
+        label: None,
+        check_constraints: Vec::new(),
+        is_soft_delete: false,
+        is_history: false,
+        is_tenant_scope: false,
+        derived_expr: None,
+    });
+    Some((name, pk_name))
+}
+
+/// Each N:M junction's two keys, which `unique_keys` reads as a composite unique set. A
+/// junction shared by two N:M pairs is an error and gets none.
+fn resolve_junction_keys(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>) {
+    let mut ends: BTreeMap<EntityKey, Vec<(EntityKey, EntityKey)>> = BTreeMap::new();
     for rel in &model.relations {
-        match &rel.kind {
-            RelKind::RelateManyToOne => {
-                if let (NodeRef::Entity(fk), NodeRef::Entity(tk)) = (&rel.from, &rel.to) {
-                    jobs.push((*fk, *tk, rel.options.clone()));
-                }
-            }
-            RelKind::RelateOneToMany => {
-                if let (NodeRef::Entity(ok), NodeRef::Entity(mk)) = (&rel.from, &rel.to) {
-                    jobs.push((*mk, *ok, rel.options.clone()));
-                }
-            }
-            // N:M.via FKs come from synthesized N:1 edges (see process_relate_predicate).
-            RelKind::RelateManyToMany => {
-                if let (NodeRef::Entity(a), NodeRef::Entity(b), Some(NodeRef::Entity(junction))) =
-                    (&rel.from, &rel.to, rel.via.as_ref())
-                {
-                    junction_nms.entry(*junction).or_default().push((*a, *b));
-                }
-            }
-            _ => {}
+        if let (
+            RelKind::RelateManyToMany,
+            NodeRef::Entity(a),
+            NodeRef::Entity(b),
+            Some(NodeRef::Entity(junction)),
+        ) = (&rel.kind, &rel.from, &rel.to, rel.via.as_ref())
+        {
+            ends.entry(*junction).or_default().push((*a, *b));
         }
     }
 
-    for (many_key, one_key, options) in jobs {
-        generate_fk_column(model, diags, many_key, one_key, options);
-    }
-
-    for (junction, ends) in &junction_nms {
-        let mut unique_pairs: BTreeSet<(EntityKey, EntityKey)> = BTreeSet::new();
-        for &(a, b) in ends {
-            let pair = if model.entities[a].id <= model.entities[b].id {
-                (a, b)
-            } else {
-                (b, a)
-            };
-            unique_pairs.insert(pair);
-        }
-        if unique_pairs.len() > 1 {
+    let mut junction_keys = Vec::new();
+    for (junction, pairs) in &ends {
+        let distinct: BTreeSet<(EntityKey, EntityKey)> = pairs
+            .iter()
+            .map(|&(a, b)| {
+                if model.entities[a].id <= model.entities[b].id {
+                    (a, b)
+                } else {
+                    (b, a)
+                }
+            })
+            .collect();
+        if distinct.len() > 1 {
             let junction_id = model.entities[*junction].id.clone();
-            let pairs_desc = unique_pairs
+            let pairs = distinct
                 .iter()
                 .map(|(a, b)| format!("{}×{}", model.entities[*a].id, model.entities[*b].id))
                 .collect::<Vec<_>>()
@@ -61,133 +214,21 @@ pub(crate) fn generate_fks(model: &mut SemanticModel, diags: &mut Vec<Diagnostic
                 &junction_id,
                 RdraError::SharedJunctionVia {
                     junction: junction_id.clone(),
-                    pairs: pairs_desc,
+                    pairs,
                 },
             );
             continue;
         }
-        if let Some(&(a, b)) = ends.first() {
-            ensure_junction_composite_unique(model, *junction, a, b);
+        let (a, b) = pairs[0];
+        let key_to = |end: EntityKey| {
+            model
+                .foreign_keys()
+                .find(|(_, fk)| fk.child == *junction && fk.parent == end && !fk.columns.is_empty())
+                .map(|(id, _)| id)
+        };
+        if let (Some(fa), Some(fb)) = (key_to(a), key_to(b)) {
+            junction_keys.push((*junction, fa, fb));
         }
     }
-}
-
-fn fk_col_name_for(model: &SemanticModel, target: EntityKey) -> String {
-    format!("{}_id", model.entities[target].id.to_lowercase())
-}
-
-fn ensure_junction_composite_unique(
-    model: &mut SemanticModel,
-    junction: EntityKey,
-    end_a: EntityKey,
-    end_b: EntityKey,
-) {
-    let name_a = fk_col_name_for(model, end_a);
-    let name_b = fk_col_name_for(model, end_b);
-    let has_a = model.entities[junction]
-        .columns
-        .iter()
-        .any(|c| c.is_fk && c.name == name_a);
-    let has_b = model.entities[junction]
-        .columns
-        .iter()
-        .any(|c| c.is_fk && c.name == name_b);
-    if !has_a || !has_b {
-        return;
-    }
-    let mut pair = vec![name_a, name_b];
-    pair.sort();
-
-    let already = model.entities[junction].unique_constraints.iter().any(|u| {
-        let mut sorted = u.clone();
-        sorted.sort();
-        sorted == pair
-    });
-    if !already {
-        model.entities[junction].unique_constraints.push(pair);
-    }
-}
-
-fn generate_fk_column(
-    model: &mut SemanticModel,
-    diags: &mut Vec<Diagnostic>,
-    many_key: EntityKey,
-    one_key: EntityKey,
-    options: RelationOptions,
-) {
-    let (one_id, pk_type) = {
-        let one = &model.entities[one_key];
-        if one.primary_key.len() > 1 {
-            push_entity_error(
-                model,
-                diags,
-                &one.id,
-                RdraError::CompositePkFkUnsupported {
-                    entity: one.id.clone(),
-                },
-            );
-            return;
-        }
-        let pk = one.columns.iter().find(|c| c.is_pk).or_else(|| {
-            one.primary_key
-                .first()
-                .and_then(|name| one.columns.iter().find(|c| c.name == *name))
-        });
-        match pk {
-            Some(col) => (one.id.clone(), col.col_type.clone()),
-            None => {
-                push_entity_error(
-                    model,
-                    diags,
-                    &one.id,
-                    RdraError::MissingPk {
-                        entity: one.id.clone(),
-                    },
-                );
-                return;
-            }
-        }
-    };
-
-    let fk_col_name = format!("{}_id", one_id.to_lowercase());
-
-    let many_entity_id = model.entities[many_key].id.clone();
-    if model.entities[many_key]
-        .columns
-        .iter()
-        .any(|c| c.name == fk_col_name)
-    {
-        push_entity_error(
-            model,
-            diags,
-            &many_entity_id,
-            RdraError::FkConflict {
-                entity: many_entity_id.clone(),
-                col: fk_col_name.clone(),
-            },
-        );
-        return;
-    }
-
-    let fk_col = ModelColumn {
-        name: fk_col_name,
-        col_type: pk_type,
-        is_pk: false,
-        is_unique: false,
-        is_indexed: false,
-        is_nullable: options.optional,
-        default_val: None,
-        label: None,
-        is_fk: true,
-        fk_target: Some(one_id),
-        fk_optional: options.optional,
-        fk_on_delete: options.on_delete,
-        fk_on_update: options.on_update,
-        check_constraints: Vec::new(),
-        is_soft_delete: false,
-        is_history: false,
-        is_tenant_scope: false,
-        derived_expr: None,
-    };
-    model.entities[many_key].columns.push(fk_col);
+    model.junction_keys = junction_keys;
 }

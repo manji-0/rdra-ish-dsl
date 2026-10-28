@@ -124,7 +124,7 @@ impl TransitionSystem {
             let existences: Vec<VarId> = s
                 .iter()
                 .flat_map(|v| match self.var(*v).kind {
-                    VarKind::Owner { child, parent } => {
+                    VarKind::Owner { child, parent, .. } => {
                         vec![self.entity(child).exists, self.entity(parent).exists]
                     }
                     VarKind::Column { entity, .. } | VarKind::Prop { entity, .. } => {
