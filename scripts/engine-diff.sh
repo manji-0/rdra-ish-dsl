@@ -37,6 +37,10 @@ while IFS= read -r sample; do
     "$bin" verify "$sample" --backend tlc -o "$dir/tla" >"$dir/verify.txt" 2>&1
     echo "exit=$?" >>"$dir/verify.txt"
     sed -i.bak "s|$root|ROOT|g" "$dir/verify.txt" && rm -f "$dir/verify.txt.bak"
+    # Drop TLC run noise (seed, timestamps, its states/ work dir) so verdicts diff cleanly.
+    grep -vE 'seed -?[0-9]+|^ *Parsing file |^ *Starting\.\.\. \(|Finished in .* at \(' "$dir/verify.txt" >"$dir/verify.txt.tmp"
+    mv "$dir/verify.txt.tmp" "$dir/verify.txt"
+    rm -rf "$dir/tla/states"
   else
     echo skipped >"$dir/verify.txt"
   fi
