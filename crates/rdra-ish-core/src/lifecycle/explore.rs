@@ -57,7 +57,10 @@ pub(crate) struct EntityView {
     pub changes: Vec<bool>,
     /// Some enabled action deletes a slot in this pattern.
     pub deletable: Vec<bool>,
-    pub via: Vec<BTreeSet<ActId>>,
+    /// Actions that create, delete, or touch a slot in this pattern without moving it.
+    touch: Vec<BTreeSet<ActId>>,
+    /// (from pattern, action, to pattern) for every move between patterns.
+    moves: BTreeSet<(usize, ActId, usize)>,
     pub truncated: bool,
 }
 
@@ -76,8 +79,28 @@ impl EntityView {
         self.initial.push(false);
         self.changes.push(false);
         self.deletable.push(false);
-        self.via.push(BTreeSet::new());
+        self.touch.push(BTreeSet::new());
         id
+    }
+
+    /// The actions on some path to each pattern: the least set closed under the moves.
+    /// It depends only on which moves exist, not on the order BFS found them.
+    pub fn via(&self) -> Vec<BTreeSet<ActId>> {
+        let mut via = self.touch.clone();
+        loop {
+            let mut grew = false;
+            for &(from, act, to) in &self.moves {
+                let mut add = via[from].clone();
+                add.insert(act);
+                if !add.is_subset(&via[to]) {
+                    via[to].extend(add);
+                    grew = true;
+                }
+            }
+            if !grew {
+                return via;
+            }
+        }
     }
 }
 
@@ -278,7 +301,7 @@ struct Bfs<'t> {
     complete: bool,
     diags: Vec<Diag>,
     views: Vec<EntityView>,
-    /// Per action, per param: the action writes that param's slot.
+    /// Per action, per param: the action writes that param's existence or view columns.
     writes: Vec<Vec<bool>>,
     witnesses: HashMap<String, usize>,
 }
@@ -291,12 +314,16 @@ impl<'t> Bfs<'t> {
             .map(|a| {
                 (0..a.params.len())
                     .map(|p| {
+                        let columns = &ts.entity(a.params[p].entity).columns;
                         a.effects.iter().any(|eff| match eff {
-                            Effect::Create { param }
-                            | Effect::Delete { param }
-                            | Effect::Assign { param, .. }
-                            | Effect::Transition { param, .. }
-                            | Effect::Choose { param, .. } => usize::from(*param) == p,
+                            Effect::Create { param } | Effect::Delete { param } => {
+                                usize::from(*param) == p
+                            }
+                            Effect::Assign { var, param, .. }
+                            | Effect::Transition { var, param, .. }
+                            | Effect::Choose { var, param, .. } => {
+                                usize::from(*param) == p && columns.contains(var)
+                            }
                             Effect::Tick => false,
                         })
                     })
@@ -426,12 +453,12 @@ impl<'t> Bfs<'t> {
                     };
                     let view = &mut self.views[e.index()];
                     view.initial[id] = true;
-                    view.via[id].insert(act);
+                    view.touch[id].insert(act);
                 }
                 (Some(id), false) => {
                     let view = &mut self.views[e.index()];
                     view.deletable[id] = true;
-                    view.via[id].insert(act);
+                    view.touch[id].insert(act);
                 }
                 (Some(id), true) => {
                     let Some(id2) = self.intern(e, ts.pattern_key(s2, e, slot)) else {
@@ -440,11 +467,9 @@ impl<'t> Bfs<'t> {
                     let view = &mut self.views[e.index()];
                     if id2 != id {
                         view.changes[id] = true;
-                        let mut via = view.via[id].clone();
-                        via.insert(act);
-                        view.via[id2].extend(via);
+                        view.moves.insert((id, act, id2));
                     } else if !self.writes[act.index()][p] {
-                        view.via[id].insert(act);
+                        view.touch[id].insert(act);
                     }
                 }
                 (None, false) => {}

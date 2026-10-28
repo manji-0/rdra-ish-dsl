@@ -7,20 +7,24 @@
 //! views shaped like the `states` output.
 
 mod build;
+mod cone;
 mod diag;
 mod explore;
 mod expr;
 mod restrict;
+mod targets;
 mod types;
 mod view;
 
 #[cfg(test)]
 mod tests;
 
+pub use cone::{Cone, Target, VarSet};
 pub use diag::{has_errors, Diag, Severity, StateDiag};
 pub use explore::{Caps, ComponentRun, Exploration};
 pub use expr::State;
 pub use restrict::Component;
+pub use targets::{ConeRun, TargetExploration};
 pub use types::{
     ActId, Action, ActionOrigin, AfterAssert, At, Birth, Bounds, CmpOp, Domain, Effect, EntId,
     EntityDecl, Guard, GuardWhy, InvKind, InvText, Invariant, Ltl, ModelRef, Param, ParamRole,

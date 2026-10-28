@@ -198,7 +198,7 @@ impl Exploration {
             .iter()
             .flat_map(|run| {
                 (0..run.system.entities().len())
-                    .map(move |i| entity_view(model, run, EntId::at(i), build_diags))
+                    .map(move |i| entity_view(model, run, EntId::at(i), build_diags, None))
             })
             .collect();
         out.sort_by(|a, b| a.entity_id.cmp(&b.entity_id));
@@ -206,11 +206,21 @@ impl Exploration {
     }
 }
 
-fn entity_view(
+fn is_cap(d: &StateDiag) -> bool {
+    matches!(
+        d,
+        StateDiag::PatternCapReached { .. } | StateDiag::StateCapReached { .. }
+    )
+}
+
+/// The view of `e` in `run`. With `verdicts`, the run is the entity's cone: a cap anywhere in
+/// it makes the view incomplete, and the constraint verdicts come from their own cones.
+pub(crate) fn entity_view(
     model: &SemanticModel,
     run: &ComponentRun,
     e: EntId,
     build_diags: &[Diag],
+    verdicts: Option<Vec<StateDiag>>,
 ) -> EntityStateResult {
     let ts = &run.system;
     let decl = ts.entity(e);
@@ -241,13 +251,14 @@ fn entity_view(
             diagnostics,
         };
     }
+    let via = view.via();
     let patterns: Vec<ReachablePattern> = (0..view.patterns.len())
         .map(|id| ReachablePattern {
             pattern: pattern(ts, e, &view.patterns[id]),
             is_initial: view.initial[id],
             is_terminal: view.deletable[id] || !view.changes[id],
             provenance: Provenance {
-                via: view.via[id]
+                via: via[id]
                     .iter()
                     .filter_map(|act| match &ts.actions()[act.index()].origin {
                         ActionOrigin::UseCase { uc, buc } => Some((
@@ -260,17 +271,23 @@ fn entity_view(
             },
         })
         .collect();
-    let (caps, found): (Vec<&Diag>, Vec<&Diag>) = run
+    let in_cone = verdicts.is_some();
+    let caps = run
         .diags
         .iter()
-        .filter(|d| d.entities.contains(&decl.key))
-        .partition(|d| {
-            matches!(
-                d.diag,
-                StateDiag::PatternCapReached { .. } | StateDiag::StateCapReached { .. }
-            )
-        });
-    diagnostics.extend(caps.into_iter().map(|d| d.diag.clone()));
+        .filter(|d| is_cap(&d.diag) && (in_cone || d.entities.contains(&decl.key)));
+    for d in caps {
+        if !diagnostics.contains(&d.diag) {
+            diagnostics.push(d.diag.clone());
+        }
+    }
+    let found: Vec<StateDiag> = verdicts.unwrap_or_else(|| {
+        run.diags
+            .iter()
+            .filter(|d| !is_cap(&d.diag) && d.entities.contains(&decl.key))
+            .map(|d| d.diag.clone())
+            .collect()
+    });
     for &var in &decl.columns {
         let (
             VarKind::Column {
@@ -295,13 +312,13 @@ fn entity_view(
             }
         }
     }
-    diagnostics.extend(found.into_iter().map(|d| d.diag.clone()));
+    diagnostics.extend(found);
     EntityStateResult {
         entity_id: decl.id.clone(),
         entity_label: decl.label.clone(),
         axes,
         patterns,
-        truncated: view.truncated,
+        truncated: view.truncated || (in_cone && !run.complete),
         no_creation_path: decl.birth == Birth::PreExisting,
         diagnostics,
     }

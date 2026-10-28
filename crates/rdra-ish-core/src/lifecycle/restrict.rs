@@ -3,6 +3,9 @@
 //! Components interleave freely, so the reachable set of the whole system is the product of
 //! the components' sets.
 
+use std::collections::BTreeSet;
+
+use super::cone::VarSet;
 use super::types::{
     ActId, Action, AfterAssert, Domain, Effect, EntId, Guard, Invariant, Ltl, Pred, Property, Term,
     VarId, VarKind,
@@ -97,19 +100,6 @@ impl TransitionSystem {
         fp
     }
 
-    fn property_footprint(&self, p: &Property) -> Footprint {
-        let mut fp = Footprint::default();
-        p.binders.iter().for_each(|e| fp.add(*e));
-        match &p.formula {
-            Ltl::Always(a) | Ltl::Eventually(a) => self.pred_footprint(a, &mut fp),
-            Ltl::LeadsTo(a, b) => {
-                self.pred_footprint(a, &mut fp);
-                self.pred_footprint(b, &mut fp);
-            }
-        }
-        fp
-    }
-
     /// Connected components of the footprint graph, ordered by their first entity; a
     /// component that holds only the clock comes last.
     pub fn components(&self) -> Vec<Component> {
@@ -181,43 +171,68 @@ impl TransitionSystem {
     /// The subsystem of one component: its entities' vars, and the actions, invariants,
     /// asserts, and properties that lie inside it.
     pub fn restrict(&self, comp: &Component) -> TransitionSystem {
+        let inside = |e: EntId| comp.entities.contains(&e);
+        let vars: VarSet = self
+            .vars
+            .iter()
+            .enumerate()
+            .filter(|(_, d)| match d.kind {
+                VarKind::Exists(e)
+                | VarKind::Column { entity: e, .. }
+                | VarKind::Prop { entity: e, .. } => inside(e),
+                VarKind::Owner { child, parent } => inside(child) && inside(parent),
+                VarKind::Now => comp.now,
+            })
+            .map(|(i, _)| VarId::at(i))
+            .collect();
+        let keep: BTreeSet<ActId> = (0..self.actions.len())
+            .filter(|&i| {
+                let fp = self.action_footprint(&self.actions[i]);
+                let nonempty = !fp.entities.is_empty() || fp.now;
+                nonempty && fp.entities.iter().all(|e| inside(*e)) && (!fp.now || comp.now)
+            })
+            .map(ActId::at)
+            .collect();
+        self.restrict_to(&vars, &keep)
+    }
+
+    /// The system over `vars` only. An action stays when it writes a var in `vars` or is in
+    /// `keep`; it keeps every guard and param, and only its effects on `vars`. Invariants,
+    /// asserts, and properties stay when everything they read is in `vars`. For a closed
+    /// `vars` (see `cone`) its reachable states are the projection of this system's.
+    pub fn restrict_to(&self, vars: &VarSet, keep: &BTreeSet<ActId>) -> TransitionSystem {
         let mut map = Remap {
             ent: vec![None; self.entities.len()],
             var: vec![None; self.vars.len()],
             act: vec![None; self.actions.len()],
         };
-        for (i, e) in comp.entities.iter().enumerate() {
-            map.ent[e.index()] = Some(EntId::at(i));
+        let kept_entities: Vec<usize> = (0..self.entities.len())
+            .filter(|&i| vars.contains(&self.entities[i].exists))
+            .collect();
+        for (n, &i) in kept_entities.iter().enumerate() {
+            map.ent[i] = Some(EntId::at(n));
         }
         let mut out = TransitionSystem::empty(self.bounds);
-        for (i, decl) in self.vars.iter().enumerate() {
-            let keep = match decl.kind {
-                VarKind::Exists(e)
-                | VarKind::Column { entity: e, .. }
-                | VarKind::Prop { entity: e, .. } => map.ent[e.index()].is_some(),
-                VarKind::Owner { child, parent } => {
-                    map.ent[child.index()].is_some() && map.ent[parent.index()].is_some()
-                }
-                VarKind::Now => comp.now,
-            };
-            if !keep {
-                continue;
-            }
-            map.var[i] = Some(VarId::at(out.vars.len()));
-            let mut decl = decl.clone();
+        for &v in vars {
+            map.var[v.index()] = Some(VarId::at(out.vars.len()));
+            let mut decl = self.vars[v.index()].clone();
             decl.kind = map.kind(&decl.kind);
             if let Domain::Instance(p) = decl.domain {
                 decl.domain = Domain::Instance(map.e(p));
             }
             if decl.kind == VarKind::Now {
-                out.now = map.var[i];
+                out.now = map.var[v.index()];
             }
             out.vars.push(decl);
         }
-        for e in &comp.entities {
-            let mut decl = self.entities[e.index()].clone();
+        for &i in &kept_entities {
+            let mut decl = self.entities[i].clone();
             decl.exists = map.v(decl.exists);
-            decl.columns = decl.columns.iter().map(|v| map.v(*v)).collect();
+            decl.columns = decl
+                .columns
+                .iter()
+                .filter_map(|v| map.var[v.index()])
+                .collect();
             decl.owners = decl
                 .owners
                 .iter()
@@ -225,22 +240,35 @@ impl TransitionSystem {
                 .collect();
             out.entities.push(decl);
         }
-        let inside = |fp: Footprint| {
-            fp.entities.iter().all(|e| map.ent[e.index()].is_some()) && (!fp.now || comp.now)
-        };
-        let kept: Vec<usize> = (0..self.actions.len())
-            .filter(|&i| {
-                let fp = self.action_footprint(&self.actions[i]);
-                let nonempty = !fp.entities.is_empty() || fp.now;
-                nonempty && inside(fp)
-            })
-            .collect();
-        for i in kept {
+        for (i, action) in self.actions.iter().enumerate() {
+            let effects: Vec<Effect> = action
+                .effects
+                .iter()
+                .filter(|eff| {
+                    self.effect_writes(action, eff)
+                        .iter()
+                        .any(|v| vars.contains(v))
+                })
+                .cloned()
+                .collect();
+            if effects.is_empty() && !keep.contains(&ActId::at(i)) {
+                continue;
+            }
+            let mut action = action.clone();
+            action.effects = effects;
             map.act[i] = Some(ActId::at(out.actions.len()));
-            out.actions.push(map.action(&self.actions[i]));
+            out.actions.push(map.action(&action));
         }
+        let reads_inside = |preds: &[&Pred], binders: &[EntId]| {
+            let mut r = VarSet::new();
+            binders.iter().for_each(|e| {
+                r.insert(self.entity(*e).exists);
+            });
+            preds.iter().for_each(|p| self.pred_reads(p, &mut r));
+            r.is_subset(vars)
+        };
         for inv in &self.invariants {
-            if inside(self.invariant_footprint(inv)) {
+            if reads_inside(&[&inv.body], &inv.binders) {
                 out.invariants.push(Invariant {
                     binders: inv.binders.iter().map(|e| map.e(*e)).collect(),
                     body: map.pred(&inv.body),
@@ -249,9 +277,10 @@ impl TransitionSystem {
             }
         }
         for a in &self.after {
-            if inside(self.after_footprint(a)) {
+            let on: Vec<ActId> = a.on.iter().filter_map(|x| map.act[x.index()]).collect();
+            if on.len() == a.on.len() && reads_inside(&[&a.post], &a.binders) {
                 out.after.push(AfterAssert {
-                    on: a.on.iter().filter_map(|x| map.act[x.index()]).collect(),
+                    on,
                     binders: a.binders.iter().map(|e| map.e(*e)).collect(),
                     post: map.pred(&a.post),
                     ..a.clone()
@@ -259,7 +288,11 @@ impl TransitionSystem {
             }
         }
         for p in &self.properties {
-            if inside(self.property_footprint(p)) {
+            let preds: Vec<&Pred> = match &p.formula {
+                Ltl::Always(x) | Ltl::Eventually(x) => vec![x],
+                Ltl::LeadsTo(x, y) => vec![x, y],
+            };
+            if reads_inside(&preds, &p.binders) {
                 let formula = match &p.formula {
                     Ltl::Always(x) => Ltl::Always(map.pred(x)),
                     Ltl::Eventually(x) => Ltl::Eventually(map.pred(x)),
