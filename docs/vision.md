@@ -5,7 +5,6 @@ that also carries a logical data model and a lifecycle that TLC can check. It re
 where today's DSL stands against the RDRA primary sources, the semantics the finished
 DSL commits to, and the order of work that gets there.
 
-<!-- derived-from ./rdra-ish-interpretation.md -->
 <!-- constrained-by ./language-reference.md -->
 <!-- constrained-by ./formal-verification.md -->
 <!-- constrained-by ./state-derivation.md -->
