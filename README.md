@@ -97,7 +97,7 @@ rdra-ish verify samples/formal-verification/order.rdra --backend tlc -o /tmp/rdr
 - [Language Reference](./docs/language-reference.md)
 - [CLI Reference](./docs/cli-reference.md)
 - [RDRA-ish Interpretation](./docs/rdra-ish-interpretation.md)
-- [State Pattern Derivation](./docs/state-derivation.md)
+- [State Derivation](./docs/state-derivation.md)
 - [Formal Verification (TLA+/TLC)](./docs/formal-verification.md)
 - [Diagram Sample Review Guide](./docs/diagram-sample-review.md)
 - [Changelog](./CHANGELOG.md)
