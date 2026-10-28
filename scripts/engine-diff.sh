@@ -38,7 +38,7 @@ while IFS= read -r sample; do
     rc=$?
     [[ $rc -eq 124 ]] && echo "tlc_result: timeout after ${RDRA_VERIFY_TIMEOUT:-300}s" >>"$dir/verify.txt"
     echo "exit=$rc" >>"$dir/verify.txt"
-    sed -i.bak "s|$root|ROOT|g" "$dir/verify.txt" && rm -f "$dir/verify.txt.bak"
+    sed -i.bak -e "s|$repo_root/||g" -e "s|$root|ROOT|g" "$dir/verify.txt" && rm -f "$dir/verify.txt.bak"
     # Drop TLC run noise (seed, timestamps, its states/ work dir) so verdicts diff cleanly.
     grep -vE 'seed -?[0-9]+|^ *Parsing file |^ *Starting\.\.\. \(|Finished in .* at \(' "$dir/verify.txt" >"$dir/verify.txt.tmp"
     mv "$dir/verify.txt.tmp" "$dir/verify.txt"
