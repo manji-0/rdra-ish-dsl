@@ -4,7 +4,7 @@
 //!
 //! TLC stops at the first violation unless run with `-continue`, which explores the whole
 //! state space and reports every violated invariant and action property. The verdict run
-//! uses `-continue` on the Check-mode cfg minus temporal properties (excluded from the
+//! uses `-continue` on the Safety-mode cfg (temporal properties are excluded from the
 //! comparison), and its distinct-state count must equal the dump's, so it is known to have
 //! finished.
 //!
@@ -188,17 +188,8 @@ fn check_cone(tlc: &Path, dir: &Path, label: &str, run: &ComponentRun) -> ConeRe
         );
     }
 
-    let check = tla::print(ts, PrintMode::Check, "Cone");
-    let temporal: BTreeSet<String> = (0..ts.properties().len())
-        .map(|i| format!("PROPERTY {}", names.property(i)))
-        .collect();
-    let cfg: String = check
-        .cfg
-        .lines()
-        .filter(|l| !temporal.contains(*l))
-        .map(|l| format!("{l}\n"))
-        .collect();
-    let (_, log) = run_tlc(tlc, dir, &["-continue"], &check.tla, &cfg);
+    let check = tla::print(ts, PrintMode::Safety, "Cone");
+    let (_, log) = run_tlc(tlc, dir, &["-continue"], &check.tla, &check.cfg);
     let parsed = TlcRun::parse(&log);
     assert!(
         parsed.completed,

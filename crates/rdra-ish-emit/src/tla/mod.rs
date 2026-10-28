@@ -21,6 +21,10 @@ pub use names::TlaNames;
 pub enum PrintMode {
     /// Check `TypeOK`, every invariant, every after-assert, and every temporal property.
     Check,
+    /// `TypeOK`, invariants, and after-asserts: the checks a cone answers exactly.
+    Safety,
+    /// `TypeOK` and the temporal properties, which need the whole system's fairness.
+    Temporal,
     /// No INVARIANT or PROPERTY lines, so `tlc -dump` sees the whole reachable set.
     Explore,
 }
@@ -110,19 +114,29 @@ fn domain_set(ts: &TransitionSystem, names: &TlaNames, domain: &Domain) -> Strin
 }
 
 fn render_cfg(ts: &TransitionSystem, names: &TlaNames, mode: PrintMode) -> String {
+    let (safety, temporal) = match mode {
+        PrintMode::Check => (true, true),
+        PrintMode::Safety => (true, false),
+        PrintMode::Temporal => (false, true),
+        PrintMode::Explore => (false, false),
+    };
     let mut out = String::from("SPECIFICATION Spec\n");
-    if mode == PrintMode::Check {
+    if mode != PrintMode::Explore {
         out.push_str("INVARIANT TypeOK\n");
+    }
+    if safety {
         for i in 0..ts.invariants().len() {
             out.push_str(&format!("INVARIANT {}\n", names.invariant(i)));
         }
     }
     // Lifecycles end in states with no enabled action; that is not an error until phase 6.
     out.push_str("CHECK_DEADLOCK FALSE\n");
-    if mode == PrintMode::Check {
+    if safety {
         for i in 0..ts.after_asserts().len() {
             out.push_str(&format!("PROPERTY {}\n", names.after(i)));
         }
+    }
+    if temporal {
         for i in 0..ts.properties().len() {
             out.push_str(&format!("PROPERTY {}\n", names.property(i)));
         }

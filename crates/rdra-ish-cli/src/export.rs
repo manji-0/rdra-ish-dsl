@@ -62,9 +62,15 @@ pub fn tla_bounds(instance_count: u32, int_range_max: u32) -> Result<Bounds> {
     Ok(Bounds { instances, int_max })
 }
 
-/// Builds the transition system at `bounds`, reports its diagnostics, and prints it in Check
-/// mode. Any Error diagnostic stops the export, the gate `states` and `check` apply too.
+/// The whole system printed in Check mode, after the `checked_system` gate.
 pub fn tla_bundle(model: &SemanticModel, bounds: Bounds, module_name: &str) -> Result<TlaBundle> {
+    let ts = checked_system(model, bounds)?;
+    Ok(tla::print(&ts, PrintMode::Check, module_name))
+}
+
+/// Builds the transition system at `bounds` and reports its diagnostics. Any Error diagnostic
+/// stops the command, the gate `states` and `check` apply too.
+pub fn checked_system(model: &SemanticModel, bounds: Bounds) -> Result<TransitionSystem> {
     let built = TransitionSystem::build(model, bounds, &Scope::All);
     for d in &built.diags {
         let level = match d.diag.severity() {
@@ -86,5 +92,5 @@ pub fn tla_bundle(model: &SemanticModel, bounds: Bounds, module_name: &str) -> R
     if has_errors(&built.diags) {
         bail!("the lifecycle model has errors; no TLA+ written");
     }
-    Ok(tla::print(&built.ts, PrintMode::Check, module_name))
+    Ok(built.ts)
 }

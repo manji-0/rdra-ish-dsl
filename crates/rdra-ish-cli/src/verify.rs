@@ -1,13 +1,25 @@
-//! `rdra-ish verify --backend tlc` — export TLA+ and run TLC.
+//! `rdra-ish verify --backend tlc`: check every invariant and after-assert on its own cone,
+//! and temporal properties on the whole system.
+//!
+//! A cone (`TransitionSystem::target_cone`) is closed: its restricted system reaches exactly
+//! the projection of the whole system's states, so a safety verdict on the cone is the
+//! verdict on the whole model. Temporal properties are not restricted: `WF_vars(Next)` on a
+//! cone drops the actions outside it, which on the whole system could starve the cone's.
 
-use anyhow::{bail, Context, Result};
-use rdra_ish_core::SemanticModel;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
+
+use anyhow::{bail, Context, Result};
+use rdra_ish_core::lifecycle::{Cone, Target, TransitionSystem, VarSet};
+use rdra_ish_core::SemanticModel;
+use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
 
 use crate::cli::VerifyBackend;
-use crate::export::{tla_bounds, tla_bundle};
+use crate::export::{checked_system, tla_bounds};
 use crate::tlc_output::{summarize, Outcome, TlcRun};
 
 pub fn run_verify(
@@ -40,51 +52,150 @@ pub(crate) fn condition_body_notices(model: &SemanticModel) -> Vec<String> {
         .collect()
 }
 
-/// Returns (tla_path, cfg_path, work_dir, tla_filename_for_tlc, cfg_filename_for_tlc, keep).
-fn resolve_tla_out_paths(
-    out: Option<PathBuf>,
-    module_name: &str,
-) -> Result<(PathBuf, PathBuf, PathBuf, PathBuf, PathBuf, bool)> {
-    match out {
+/// One TLC run: a module, its cfg, and the checks it answers.
+struct Job {
+    module: String,
+    tla: String,
+    cfg: String,
+    checks: Vec<String>,
+}
+
+struct Ran {
+    outcome: Outcome,
+    run: TlcRun,
+    log: String,
+}
+
+/// Where the specs go, and the whole-model module name. `-o X.tla` writes next to `X.tla`
+/// and names the whole-model module `X`; any other `-o` is a directory.
+fn out_dir(out: Option<PathBuf>) -> Result<(PathBuf, String, bool)> {
+    let (dir, whole, keep) = match out {
         Some(path) if path.extension().is_some_and(|e| e == "tla") => {
-            let parent = path.parent().unwrap_or_else(|| Path::new("."));
-            let work_dir = if parent.as_os_str().is_empty() {
-                PathBuf::from(".")
-            } else {
-                fs::create_dir_all(parent)
-                    .with_context(|| format!("failed to create {}", parent.display()))?;
-                parent.to_path_buf()
+            let stem = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("RdraSpec")
+                .to_string();
+            let parent = match path.parent() {
+                Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
+                _ => PathBuf::from("."),
             };
-            let cfg = path.with_extension("cfg");
-            let tla_name = PathBuf::from(path.file_name().unwrap_or_default());
-            let cfg_name = PathBuf::from(cfg.file_name().unwrap_or_default());
-            Ok((path, cfg, work_dir, tla_name, cfg_name, true))
+            (parent, stem, true)
         }
-        Some(path) => {
-            let dir = if (path.exists() && path.is_dir()) || path.extension().is_none() {
-                path
-            } else {
-                path.parent().unwrap_or(Path::new(".")).to_path_buf()
-            };
-            fs::create_dir_all(&dir)
-                .with_context(|| format!("failed to create {}", dir.display()))?;
-            let tla_name = PathBuf::from(format!("{module_name}.tla"));
-            let cfg_name = PathBuf::from(format!("{module_name}.cfg"));
-            let tla = dir.join(&tla_name);
-            let cfg = dir.join(&cfg_name);
-            Ok((tla, cfg, dir, tla_name, cfg_name, true))
-        }
-        None => {
-            let dir = std::env::temp_dir().join(format!("rdra-ish-tlc-{}", std::process::id()));
-            fs::create_dir_all(&dir)
-                .with_context(|| format!("failed to create {}", dir.display()))?;
-            let tla_name = PathBuf::from(format!("{module_name}.tla"));
-            let cfg_name = PathBuf::from(format!("{module_name}.cfg"));
-            let tla = dir.join(&tla_name);
-            let cfg = dir.join(&cfg_name);
-            Ok((tla, cfg, dir, tla_name, cfg_name, false))
+        Some(path) => (path, "RdraSpec".to_string(), true),
+        None => (
+            std::env::temp_dir().join(format!("rdra-ish-tlc-{}", std::process::id())),
+            "RdraSpec".to_string(),
+            false,
+        ),
+    };
+    fs::create_dir_all(&dir).with_context(|| format!("failed to create {}", dir.display()))?;
+    Ok((dir, whole, keep))
+}
+
+/// Each distinct cone of an invariant or after-assert, in target order, named after the
+/// first check that reads it. Cones over the same vars share one run: an action kept for an
+/// after-assert writes nothing in the cone, so it adds edges but no states.
+fn cone_jobs(ts: &TransitionSystem, names: &TlaNames) -> Vec<Job> {
+    let mut at: BTreeMap<VarSet, usize> = BTreeMap::new();
+    let mut order: Vec<(Cone, String)> = Vec::new();
+    for target in ts.targets() {
+        let first = match target {
+            Target::Entity(_) => continue,
+            Target::Invariant(i) => names.invariant(i).to_string(),
+            Target::AfterAssert(i) => names.after(i).to_string(),
+        };
+        let cone = ts.target_cone(target);
+        match at.get(&cone.vars) {
+            Some(&k) => order[k].0.keep.extend(cone.keep),
+            None => {
+                at.insert(cone.vars.clone(), order.len());
+                order.push((cone, first));
+            }
         }
     }
+    order
+        .into_iter()
+        .map(|(cone, first)| {
+            let sub = ts.restrict_to(&cone.vars, &cone.keep);
+            let bundle = tla::print(&sub, PrintMode::Safety, &format!("Cone_{first}"));
+            let n = &bundle.names;
+            let checks = (0..sub.invariants().len())
+                .map(|i| n.invariant(i).to_string())
+                .chain((0..sub.after_asserts().len()).map(|i| n.after(i).to_string()))
+                .collect();
+            Job {
+                module: bundle.module_name,
+                tla: bundle.tla,
+                cfg: bundle.cfg,
+                checks,
+            }
+        })
+        .collect()
+}
+
+fn run_job(tlc: &Path, dir: &Path, job: &Job, workers: &str) -> Result<Ran> {
+    let tla = format!("{}.tla", job.module);
+    let cfg = format!("{}.cfg", job.module);
+    let meta = dir.join(format!("{}.states", job.module));
+    // TLC unpacks its standard modules into java.io.tmpdir; parallel runs must not share it.
+    let tmp = dir.join(format!("{}.tmp", job.module));
+    fs::create_dir_all(&tmp).with_context(|| format!("failed to create {}", tmp.display()))?;
+    let output = Command::new(tlc)
+        .env(
+            "JAVA_TOOL_OPTIONS",
+            format!("-Djava.io.tmpdir={}", tmp.display()),
+        )
+        .args(["-workers", workers, "-metadir"])
+        .arg(&meta)
+        .args(["-config", &cfg, &tla])
+        .current_dir(dir)
+        .output()
+        .with_context(|| format!("failed to execute {}", tlc.display()))?;
+    let _ = fs::remove_dir_all(&meta);
+    let _ = fs::remove_dir_all(&tmp);
+    let log = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let run = TlcRun::parse(&log);
+    Ok(Ran {
+        outcome: run.outcome(output.status.success()),
+        run,
+        log,
+    })
+}
+
+/// Runs the cone jobs in parallel, one TLC worker each.
+fn run_all(tlc: &Path, dir: &Path, jobs: &[Job]) -> Result<Vec<Ran>> {
+    let next = AtomicUsize::new(0);
+    let done: Mutex<Vec<(usize, Result<Ran>)>> = Mutex::new(Vec::new());
+    let workers = std::thread::available_parallelism()
+        .map_or(4, |n| n.get())
+        .min(8)
+        .min(jobs.len().max(1));
+    std::thread::scope(|s| {
+        for _ in 0..workers {
+            s.spawn(|| loop {
+                let i = next.fetch_add(1, Ordering::SeqCst);
+                let Some(job) = jobs.get(i) else { break };
+                let ran = run_job(tlc, dir, job, "1");
+                done.lock().expect("lock").push((i, ran));
+            });
+        }
+    });
+    let mut done = done.into_inner().expect("lock");
+    done.sort_by_key(|(i, _)| *i);
+    done.into_iter().map(|(_, r)| r).collect()
+}
+
+fn write_job(dir: &Path, job: &Job) -> Result<()> {
+    for (ext, text) in [("tla", &job.tla), ("cfg", &job.cfg)] {
+        let path = dir.join(format!("{}.{ext}", job.module));
+        fs::write(&path, text).with_context(|| format!("failed to write {}", path.display()))?;
+    }
+    Ok(())
 }
 
 fn run_tlc(
@@ -93,66 +204,115 @@ fn run_tlc(
     instance_count: u32,
     int_range_max: u32,
 ) -> Result<()> {
-    let module_hint = out
-        .as_ref()
-        .filter(|p| p.extension().is_some_and(|e| e == "tla"))
-        .and_then(|p| p.file_stem()?.to_str().map(str::to_string));
-
     let bounds = tla_bounds(instance_count, int_range_max)?;
-    let bundle = tla_bundle(model, bounds, module_hint.as_deref().unwrap_or("RdraSpec"))?;
+    let ts = checked_system(model, bounds)?;
+    let (dir, whole_name, keep) = out_dir(out)?;
+    let names = TlaNames::new(&ts);
 
-    let (tla_path, cfg_path, work_dir, tla_arg, cfg_arg, keep) =
-        resolve_tla_out_paths(out, &bundle.module_name)?;
+    let mut jobs = cone_jobs(&ts, &names);
+    let cones = jobs.len();
+    let temporal = if ts.properties().is_empty() {
+        None
+    } else {
+        let bundle = tla::print(&ts, PrintMode::Temporal, &whole_name);
+        Some(Job {
+            module: bundle.module_name,
+            tla: bundle.tla,
+            cfg: bundle.cfg,
+            checks: (0..ts.properties().len())
+                .map(|i| names.property(i).to_string())
+                .collect(),
+        })
+    };
+    println!(
+        "bounds: InstanceCount={} IntRange=0..{}",
+        bounds.instances, bounds.int_max
+    );
+    println!(
+        "cones: {cones} for {} invariant(s) and {} after-assert(s)",
+        ts.invariants().len(),
+        ts.after_asserts().len()
+    );
+    match &temporal {
+        Some(job) => println!(
+            "temporal properties: {}, checked on the whole model (fairness does not restrict to a cone)",
+            job.checks.len()
+        ),
+        None => println!("temporal properties: none, no whole-model run"),
+    }
+    jobs.extend(temporal);
 
-    fs::write(&tla_path, &bundle.tla)
-        .with_context(|| format!("failed to write {}", tla_path.display()))?;
-    fs::write(&cfg_path, &bundle.cfg)
-        .with_context(|| format!("failed to write {}", cfg_path.display()))?;
-
-    println!("wrote {}", tla_path.display());
-    println!("wrote {}", cfg_path.display());
-
-    let tlc = find_tlc()?;
-    // Pass bare filenames so TLC resolves them relative to work_dir (module name == file stem).
-    let output = Command::new(&tlc)
-        .arg("-config")
-        .arg(&cfg_arg)
-        .arg(&tla_arg)
-        .current_dir(&work_dir)
-        .output()
-        .with_context(|| format!("failed to execute {}", tlc.display()))?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let combined = format!("{stdout}{stderr}");
-    if !keep {
-        let _ = fs::remove_dir_all(&work_dir);
+    let mut index = String::new();
+    for job in &jobs {
+        write_job(&dir, job)?;
+        index.push_str(&format!("{}.tla: {}\n", job.module, job.checks.join(" ")));
+    }
+    let index_path = dir.join("cones.txt");
+    fs::write(&index_path, &index)
+        .with_context(|| format!("failed to write {}", index_path.display()))?;
+    if keep {
+        println!("wrote {} specs and {}", jobs.len(), index_path.display());
     }
 
-    let run = TlcRun::parse(&combined);
-    let outcome = run.outcome(output.status.success());
+    if jobs.is_empty() {
+        println!("nothing to check");
+        println!("tlc_result: ok");
+        println!("TLC: OK");
+        return Ok(());
+    }
+    let tlc = find_tlc()?;
+    let mut ran = run_all(&tlc, &dir, &jobs[..cones])?;
+    if let Some(job) = jobs.get(cones) {
+        ran.push(run_job(&tlc, &dir, job, "auto")?);
+    }
+    if !keep {
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    for (job, r) in jobs.iter().zip(&ran) {
+        let states = r
+            .run
+            .distinct_states
+            .map_or(String::new(), |n| format!(" ({n} states)"));
+        println!(
+            "{} [{}]: {}{states}",
+            job.module,
+            job.checks.join(", "),
+            r.outcome.as_str()
+        );
+    }
+    let outcome = if ran.iter().any(|r| r.outcome == Outcome::Counterexample) {
+        Outcome::Counterexample
+    } else if ran.iter().any(|r| r.outcome == Outcome::ToolError) {
+        Outcome::ToolError
+    } else {
+        Outcome::Ok
+    };
     if outcome == Outcome::Ok {
         println!("tlc_result: ok");
         println!("TLC: OK");
         return Ok(());
     }
     eprintln!("tlc_result: {}", outcome.as_str());
+    let failed: Vec<String> = jobs
+        .iter()
+        .zip(&ran)
+        .filter(|(_, r)| r.outcome == outcome)
+        .map(|(job, r)| {
+            format!(
+                "{} ({}):\n{}",
+                job.module,
+                dir.join(format!("{}.tla", job.module)).display(),
+                summarize(&r.run, &r.log)
+            )
+        })
+        .collect();
     match outcome {
-        Outcome::Ok => Ok(()),
-        Outcome::Counterexample => {
-            bail!(
-                "TLC verification failed (spec: {})\n{}",
-                tla_path.display(),
-                summarize(&run, &combined)
-            );
-        }
-        Outcome::ToolError => {
-            bail!(
-                "TLC tool failed without a model violation (spec: {})\n{}",
-                tla_path.display(),
-                summarize(&run, &combined)
-            );
-        }
+        Outcome::Counterexample => bail!("TLC verification failed\n{}", failed.join("\n")),
+        _ => bail!(
+            "TLC tool failed without a model violation\n{}",
+            failed.join("\n")
+        ),
     }
 }
 

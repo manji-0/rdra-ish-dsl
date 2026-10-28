@@ -320,7 +320,7 @@ rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [-
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--backend` | `tlc` | `tlc` | Verification backend. Requires `tlc` or `tlc2` on `PATH`. |
-| `-o`, `--out` | path | temp dir | If the path ends with `.tla`, write that file (module name = stem) and a sibling `.cfg`. Otherwise treat as a directory and write `RdraSpec.tla` / `RdraSpec.cfg` under it. TLC is invoked on bare filenames copied into a work directory. |
+| `-o`, `--out` | path | temp dir | Directory for the specs: one `Cone_<check>.tla` / `.cfg` pair per cone, named after the first invariant or after-assert that reads it, a whole-model `RdraSpec.tla` / `.cfg` when the model declares temporal properties, and `cones.txt` listing each module and the checks it answers. A path ending in `.tla` writes into its directory and names the whole-model module after its stem. |
 | `--instance-count` | unsigned integer | `2` | Multi-instance `InstanceCount` (`1..=255`; `1` warns). |
 | `--int-range-max` | unsigned integer | `5` | Upper bound for `IntRange == 0..N` (`1..=255`; `0` rejected). |
 
@@ -329,7 +329,11 @@ For each condition that has a `holds` body, `verify` first prints
 the exported spec nor the TLC result.
 
 Warnings and errors of the lifecycle transition system are printed on stderr, and an
-error stops `verify` before TLC runs. The `.tla` header states the bounds. Stdout or
+error stops `verify` before TLC runs. Each invariant and `after(..).assert` is checked on
+its own cone of influence, a restriction of the system whose reachable states are exactly
+the whole model's projected onto it, with the cones run in parallel. Temporal properties
+need fairness on the whole system, so they are checked on the whole model, and only when
+the model declares any. Stdout names the bounds, the cone count, and each run's result. Stdout or
 stderr carries one `tlc_result: ok|counterexample|tool_error` line. Exits non-zero when
 TLC is missing or reports a violation.
 
