@@ -21,8 +21,8 @@ Diagnostics are written to stderr as `error: ...` or `warning: ...`.
   are **fail-closed**: they refuse to emit artifacts when the model has parse/resolve
   errors **or** Error-severity state diagnostics. `export --kind tla` and `verify` gate on
   parse errors plus the Error diagnostics of the lifecycle transition system they print
-  (built at `--instance-count` / `--int-range-max`). Pass `--allow-tla-only` on
-  generators / `check` / `states` for mixed Enum+Int models.
+  (built at `--instance-count` / `--int-range-max`). Every command reads the same
+  lifecycle transition system, so no state diagnostic is TLA-only.
 - `fmt` only requires a parseable source; it does not run semantic analysis.
 
 ---
@@ -32,20 +32,19 @@ Diagnostics are written to stderr as `error: ...` or `warning: ...`.
 Parse, type-check, and run whole-model consistency checks; produce no artifact output.
 
 ```
-rdra-ish check <INPUTS...> [--allow-tla-only] [--strict]
+rdra-ish check <INPUTS...> [--strict]
 ```
 
 Prints each diagnostic to stderr. If any error (non-warning) is present, exits with
 status `1` before running secondary consistency checks. Otherwise it reports unresolved
 model warnings and state-pattern findings. State diagnostics share severity with
 `states`: Error-severity findings print as `error:` and cause exit `1`; only a clean
-run prints `OK: no errors`. When the model has temporal `property` declarations or
-TLA-only state gaps, `check` prints a trailing `note:` that those were not
-model-checked (use `verify --backend tlc`).
+run prints `OK: no errors`. When the model has temporal `property` declarations,
+`check` prints a trailing `note:` that those were not model-checked (use
+`verify --backend tlc`).
 
 | Option | Description |
 |---|---|
-| `--allow-tla-only` | Demote undriven comparisons and NotEvaluated state gaps to warnings for exit (still printed). Does not demote pattern truncation or reachable forbidden / invariant violations. Use for mixed Enum+Int models whose Int rules are verified with TLC. |
 | `--strict` | Promote permission / access consistency gaps (`ActorPermissionMissing`, no-actor paths, etc.) from warnings to errors for exit. |
 
 <!-- derived-from ./state-derivation.md#diagnostics -->
@@ -150,7 +149,7 @@ input files, each output block is prefixed by a `// <path>` marker.
 Generate a diagram in PlantUML or Mermaid.
 
 ```
-rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]... [--usecase <ID>]... [--diff-base <PATH>]... [--show-description] [--node-kind <KIND>]... [--edge-kind <KIND>]... [--view-preset <PRESET>] [-o <OUT>] [--allow-tla-only]
+rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]... [--usecase <ID>]... [--diff-base <PATH>]... [--show-description] [--node-kind <KIND>]... [--edge-kind <KIND>]... [--view-preset <PRESET>] [-o <OUT>]
 ```
 
 | Option | Type | Default | Description |
@@ -166,7 +165,6 @@ rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]...
 | `--edge-kind <kind>` | string (repeatable) | — (all edges) | Filter graph diagrams to specific relation kinds. Applies to `rdra`, `boundaryless-graph`, and `diff`. Examples: `contains`, `invokes`, `reads`, `writes`, `creates`, `maps-field`, `owns`, `relate`. Alias: `--edge-filter`. |
 | `--view-preset <preset>` | `business` \| `system` \| `data` \| `api` \| `ui` | — | Apply a graph filter preset. Explicit `--node-kind` or `--edge-kind` values override the preset for that dimension. |
 | `-o`, `--out` | path | `out` | Output file path. The extension is added automatically based on `--format` (`.puml`, `.mmd`, `.svg`, `.png`). |
-| `--allow-tla-only` | flag | off | Demote undriven comparisons / NotEvaluated so the generator can emit despite TLA-only state gaps (same policy as `check` / `states`). |
 
 Notes:
 
@@ -237,7 +235,7 @@ OpenAPI, AsyncAPI, DBML, and JSON Schema.
 Generate CSV output.
 
 ```
-rdra-ish csv <INPUTS...> [--kind <KIND>] [-o <OUT>] [--allow-tla-only]
+rdra-ish csv <INPUTS...> [--kind <KIND>] [-o <OUT>]
 ```
 
 | Option | Type | Default | Description |
@@ -245,7 +243,6 @@ rdra-ish csv <INPUTS...> [--kind <KIND>] [-o <OUT>] [--allow-tla-only]
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--kind` | `actor` \| `entity` \| `matrix` \| `api` \| `api-matrix` \| `screen-constraints` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` | `entity` | CSV kind. `actor` = actor list; `entity` = entity/column list; `matrix` = use-case × entity CRUD matrix; `api` = API contract list including method/path/idempotency/mode/auth; `api-matrix` = API × entity CRUD matrix; `screen-constraints` = screen × UC/API permission/medium paths; `permission-callables` = permission × callable UC/API list derived from `requires_permission`, including `UseCase->Api` paths for API-level requirements; `actor-permission-audit` = actor × permission assignment audit inferred from UC/API requirements; `business-inputs` = Actor x inferred input field x UseCase rows derived from C/U/W paths. |
 | `-o`, `--out` | path | `out` | Output file path. If no extension is given, a default is appended (`actor.csv` / `entity.csv` / `matrix.csv` / etc.). |
-| `--allow-tla-only` | flag | off | Demote undriven comparisons / NotEvaluated so the generator can emit despite TLA-only state gaps. |
 
 The command writes the CSV to the output path and prints `wrote <path>`.
 
@@ -256,7 +253,7 @@ The command writes the CSV to the output path and prints `wrote <path>`.
 Export machine-readable or review artifacts from the model.
 
 ```
-rdra-ish export <INPUTS...> [--kind <KIND>] [-o <OUT>] [--instance-count <N>] [--int-range-max <N>] [--allow-tla-only]
+rdra-ish export <INPUTS...> [--kind <KIND>] [-o <OUT>] [--instance-count <N>] [--int-range-max <N>]
 ```
 
 | Option | Type | Default | Description |
@@ -266,7 +263,6 @@ rdra-ish export <INPUTS...> [--kind <KIND>] [-o <OUT>] [--instance-count <N>] [-
 | `-o`, `--out` | path | `out` | Output file path. If no extension is given, `openapi.json`, `asyncapi.json`, `schema.dbml`, `json-schema.json`, `er.mmd`, `er.puml`, or `RdraSpec.tla` (with sibling `.cfg`) is used. For `--kind tla`, a path ending in `.tla` uses that file stem as the TLA+ module name (sibling `.cfg`). |
 | `--instance-count` | unsigned integer | `2` | TLA+ only: multi-instance `InstanceCount` (`1..=255`). Value `1` is accepted with a warning (singleton ids cannot distinguish multi-entity instances). |
 | `--int-range-max` | unsigned integer | `5` | TLA+ only: upper bound for `IntRange == 0..N` (`1..=255`; `0` is rejected). |
-| `--allow-tla-only` | flag | off | For non-TLA kinds: demote undriven comparisons / NotEvaluated so export can proceed (TLA export ignores this flag and gates on the transition system's Error diagnostics instead). |
 
 For OpenAPI export, only APIs that declare both `method` and `path` become
 `paths` operations. Path segments `{name}` become required `parameters` (`in: path`,
@@ -344,7 +340,7 @@ TLC is missing or reports a violation.
 List model elements in a human-readable form.
 
 ```
-rdra-ish list <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--allow-tla-only]
+rdra-ish list <INPUTS...> [--kind <KIND>] [--format <FORMAT>]
 ```
 
 | Option | Type | Default | Description |
@@ -352,7 +348,6 @@ rdra-ish list <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--allow-tla-only]
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--kind` | `actor` \| `entity` \| `requirement` \| `adr` \| `adr-impact` \| `nfr` \| `quality` \| `constraint` \| `buc` \| `flow` \| `step` \| `usecase` \| `field` \| `system` \| `api` \| `dto` \| `variation` \| `condition` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` | `actor` | The element kind to list. `actor` / `quality` / `buc` / `flow` / `step` / `system` / `variation` list id+label; `usecase` lists UC preconditions, guards, postconditions, alternatives, errors, and description; `requirement` lists requirement metadata; `adr` lists decision metadata plus impacted targets from `decides`; `adr-impact` lists one row per ADR-target pair; `nfr` and `constraint` list non-functional metadata; `field` lists screen-field metadata plus Entity.column mappings; `api` lists API contract metadata; `dto` lists DTO fields; `condition` lists the `holds` body, the variations and state models it combines (derived from the body, or from `combines` when there is none), and the targets of `applies_to`; `entity` lists each column with type, PK/unique/index/FK flags, FK optionality/actions, check constraints, soft-delete/history/tenant markers, and derived expressions; `permission-callables` lists each permission with callable use case/API ids and API-level `UseCase->Api` paths derived from `requires_permission`; `actor-permission-audit` lists inferred actor-side assignment gaps; `business-inputs` lists inferred actor-entered fields. |
 | `--format` | `table` \| `json` \| `csv` | `table` | Output format. |
-| `--allow-tla-only` | flag | off | Demote undriven comparisons / NotEvaluated so listing can proceed despite TLA-only state gaps. |
 
 Output is written to stdout.
 
@@ -367,7 +362,7 @@ Derive the reachable state patterns per entity, aggregated across BUCs. See
 [state-derivation.md](./state-derivation.md) for the algorithm.
 
 ```
-rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns <N>] [--entity <ID>] [--allow-tla-only]
+rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns <N>] [--entity <ID>]
 ```
 
 | Option | Type | Default | Description |
@@ -375,13 +370,13 @@ rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns 
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--format` | `table` \| `csv` \| `json` \| `typescript` | `table` | Output format. `typescript` (alias `type-script`) emits entity state unions. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Restrict the reachable scope to the union of the named BUCs. |
-| `--max-patterns` | unsigned integer | `256` | Per-entity cap on the number of patterns before truncation. When exceeded, the entity result is marked `truncated` and a fail-closed `PatternCapReached` **error** is recorded (exit non-zero for all formats). |
+| `--max-patterns` | unsigned integer | `256` | Cap on each entity's distinct patterns within one target cone (an entity view, invariant, or after-assert is explored on the variables it reads). The cone also stops after 16 joint states per allowed pattern (4096 at the default). When a cap is hit, the result is marked `truncated` and a fail-closed `PatternCapReached` or `StateCapReached` **error** is recorded (exit non-zero for all formats). |
 | `--entity <id>` | string | — (all entities) | Restrict **stdout** to a single entity id. Filtering is applied to whichever output format is selected. Exit severity still considers the whole model; when other entities have Error-severity diagnostics, a stderr note reports the count. |
-| `--allow-tla-only` | flag | off | Demote undriven comparisons / NotEvaluated for **exit code** only (table still shows `[error]` labels). Pattern truncation and reachable forbidden stay fail-closed. |
 
 Output is written to stdout. Exit is based on structured severity (all formats), not
-string-scanning `[error]`. By default undriven comparisons and NotEvaluated multi-entity /
-quantifier / temporal-comparison obligations are Error severity.
+string-scanning `[error]`. stderr starts with a `bounds:` line: one instance per entity,
+the Int range, and the caps per target cone. Diagnostics that name no entity are printed
+on stderr too.
 
 ---
 

@@ -154,14 +154,10 @@ arithmetic Safety when Int axes exist.
 - **`WF_vars(Next)`**: fairness is on the whole `Next` disjunction, not per action.
   Sufficient for simple `eventually` / `leads_to` on small models; not a substitute
   for per-action weak fairness.
-- BFS `rdra-ish states` still does not treat Int / `now` as state axes; use
-  TLA/TLC for those checks. Undriven comparison props and NotEvaluated multi-entity /
-  quantifier / temporal-comparison diagnostics are **`[error]`** under `states`
-  (fail-closed). For mixed Enum+Int models, `check` / `states` /
-  `diagram` / `csv` / `list` / non-TLA `export --allow-tla-only` demote those
-  TLA-only gaps for exit while keeping PatternCap / forbidden fail-closed.
-  Int comparison samples such as `int_stock.rdra` are for `verify`
-  (or `--allow-tla-only`), not a green default `states` exit.
+- BFS `rdra-ish states` reads the same transition system at one instance per
+  entity: Int and `now` columns that something names are axes over `0..5`, and
+  comparisons, quantifiers, and multi-entity constraints get real verdicts.
+  `int_stock.rdra` passes `check`, `states`, and `verify`.
 - Export warnings (skipped mappings, `.along` without `relate`, unmapped
   `after.assert`, …) are printed on stderr by `export --kind tla` / `verify` and
   also embedded as `\\* WARNING:` comments in the `.tla`. Fatal obligation drops
