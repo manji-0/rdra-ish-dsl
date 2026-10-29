@@ -3,7 +3,14 @@
 //! plantuml.rs と同じ3エミッタをMermaid記法で出力する。
 //! ヘルパー関数 (node_id / node_label / col_type_str) は plantuml モジュールから再利用。
 
-use crate::diagram_common::{col_type_str, lifecycle_start_states, node_id, node_label};
+use crate::diagram_common::{
+    business_actor_node_id, business_input_node_id, business_input_visible,
+    business_usecase_node_id, col_type_str, event_flow_buc_id, event_flow_event_id,
+    event_flow_extsystem_id, event_flow_state_id, event_flow_timer_id, event_flow_usecase_id,
+    graph_node_visible, is_entity_operation, lifecycle_start_states, node_id, node_label,
+    rdra_description_nodes, reachable_for_scope, scoped_id, scoped_node_visible,
+    sequence_usecase_scope, technical_api_node_id, technical_entity_node_id,
+};
 use crate::{
     collect_object_graph_nodes, node_description, object_graph_layer, object_graph_rel_label,
     prefixed_label, prefixed_node_label, view_node_visible, view_relation_visible, EmitError,
@@ -15,18 +22,13 @@ use rdra_ish_core::model::{
 };
 use rdra_ish_core::tx::infer_usecase_transactions;
 use rdra_ish_core::{
-    derive_actor_input_inferences, derive_system_boundaries, ActorInputInference, EventFlow,
-    TimerFlow,
+    derive_actor_input_inferences, derive_system_boundaries, EventFlow, TimerFlow,
 };
 use std::collections::{HashMap, HashSet};
 
 // ── RDRA全体図エミッタ (Mermaid) ──────────────────────────────────────────────
 
 pub struct RdraMermaidEmitter;
-
-fn graph_node_visible(reachable: &Option<HashSet<NodeRef>>, view: &View, node: &NodeRef) -> bool {
-    scoped_node_visible(reachable, node) && view_node_visible(view, node)
-}
 
 fn render_mermaid_rdra_node_declarations(
     out: &mut String,
@@ -233,106 +235,6 @@ fn mermaid_rdra_relation_arrow(kind: &RelKind, from_id: &str, to_id: &str) -> Op
         | RelKind::RelateManyToMany => format!("  {} --- {}\n", from_id, to_id),
     };
     Some(arrow)
-}
-
-fn rdra_description_nodes(
-    model: &SemanticModel,
-    reachable: &Option<HashSet<NodeRef>>,
-) -> Vec<NodeRef> {
-    let mut nodes = Vec::new();
-    nodes.extend(
-        model
-            .actors
-            .iter()
-            .map(|(key, _)| NodeRef::Actor(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .adrs
-            .iter()
-            .map(|(key, _)| NodeRef::Adr(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .use_cases
-            .iter()
-            .map(|(key, _)| NodeRef::UseCase(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .bucs
-            .iter()
-            .map(|(key, _)| NodeRef::Buc(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .flows
-            .iter()
-            .map(|(key, _)| NodeRef::Flow(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .steps
-            .iter()
-            .map(|(key, _)| NodeRef::Step(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .systems
-            .iter()
-            .map(|(key, _)| NodeRef::System(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .ext_systems
-            .iter()
-            .map(|(key, _)| NodeRef::ExtSystem(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .entities
-            .iter()
-            .map(|(key, _)| NodeRef::Entity(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .screens
-            .iter()
-            .map(|(key, _)| NodeRef::Screen(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .fields
-            .iter()
-            .map(|(key, _)| NodeRef::Field(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .events
-            .iter()
-            .map(|(key, _)| NodeRef::Event(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .states
-            .iter()
-            .map(|(key, _)| NodeRef::State(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.sort_by_key(|node| node_id(model, node).unwrap_or_default().to_string());
-    nodes
 }
 
 fn render_mermaid_description_annotations(
@@ -612,7 +514,7 @@ impl Emitter for TechnicalAreaMermaidEmitter {
                 continue;
             }
 
-            let system_id = scoped_mermaid_id("system", &system.id);
+            let system_id = scoped_id("system", &system.id);
             out.push_str(&format!(
                 "  subgraph {}[{}]\n",
                 system_id,
@@ -860,46 +762,6 @@ impl Emitter for ErMermaidEmitter {
 // ── シーケンス図エミッタ (Mermaid) ───────────────────────────────────────────
 
 pub struct SequenceMermaidEmitter;
-
-fn sequence_usecase_scope(model: &SemanticModel, scope: &Scope) -> Option<HashSet<UseCaseKey>> {
-    match scope {
-        Scope::Whole => None,
-        Scope::UseCases(usecase_ids) => {
-            let wanted: HashSet<&str> = usecase_ids.iter().map(String::as_str).collect();
-            Some(
-                model
-                    .use_cases
-                    .iter()
-                    .filter_map(|(key, uc)| wanted.contains(uc.id.as_str()).then_some(key))
-                    .collect(),
-            )
-        }
-        Scope::Bucs(buc_ids) => {
-            let wanted: HashSet<&str> = buc_ids.iter().map(String::as_str).collect();
-            let buc_keys: HashSet<BucKey> = model
-                .bucs
-                .iter()
-                .filter_map(|(key, buc)| wanted.contains(buc.id.as_str()).then_some(key))
-                .collect();
-            Some(
-                model
-                    .relations
-                    .iter()
-                    .filter_map(|rel| {
-                        if rel.kind == RelKind::Contains {
-                            if let (NodeRef::Buc(buc), NodeRef::UseCase(usecase)) =
-                                (&rel.from, &rel.to)
-                            {
-                                return buc_keys.contains(buc).then_some(*usecase);
-                            }
-                        }
-                        None
-                    })
-                    .collect(),
-            )
-        }
-    }
-}
 
 impl Emitter for SequenceMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
@@ -1255,38 +1117,14 @@ fn push_tx_writes<'a>(
 
 pub struct EventFlowMermaidEmitter;
 
-fn mermaid_event_flow_event_id(id: &str) -> String {
-    format!("ev__{}", id)
-}
-
-fn mermaid_event_flow_usecase_id(id: &str) -> String {
-    format!("uc__{}", id)
-}
-
-fn mermaid_event_flow_buc_id(id: &str) -> String {
-    format!("buc__{}", id)
-}
-
-fn mermaid_event_flow_state_id(id: &str) -> String {
-    format!("st__{}", id)
-}
-
-fn mermaid_event_flow_extsystem_id(id: &str) -> String {
-    format!("xs__{}", id)
-}
-
-fn mermaid_event_flow_timer_id(id: &str) -> String {
-    format!("tm__{}", id)
-}
-
-fn declare_mermaid_event_flow_extsystem(
+fn declare_event_flow_extsystem(
     out: &mut String,
     declared: &mut HashSet<String>,
     model: &SemanticModel,
     extsystem: ExtSystemKey,
 ) -> Option<String> {
     let extsystem_model = model.ext_systems.get(extsystem)?;
-    let extsystem_id = mermaid_event_flow_extsystem_id(&extsystem_model.id);
+    let extsystem_id = event_flow_extsystem_id(&extsystem_model.id);
     if declared.insert(extsystem_id.clone()) {
         out.push_str(&format!(
             "  {}[/\"{}\"/]\n",
@@ -1297,14 +1135,14 @@ fn declare_mermaid_event_flow_extsystem(
     Some(extsystem_id)
 }
 
-fn declare_mermaid_event_flow_timer(
+fn declare_event_flow_timer(
     out: &mut String,
     declared: &mut HashSet<String>,
     model: &SemanticModel,
     timer: TimerKey,
 ) -> Option<String> {
     let timer_model = model.timers.get(timer)?;
-    let timer_id = mermaid_event_flow_timer_id(&timer_model.id);
+    let timer_id = event_flow_timer_id(&timer_model.id);
     if declared.insert(timer_id.clone()) {
         out.push_str(&format!(
             "  {}{{{{\"{}\"}}}}\n",
@@ -1315,14 +1153,14 @@ fn declare_mermaid_event_flow_timer(
     Some(timer_id)
 }
 
-fn declare_mermaid_event_flow_event(
+fn declare_event_flow_event(
     out: &mut String,
     declared: &mut HashSet<String>,
     model: &SemanticModel,
     flow: &EventFlow,
 ) -> Option<String> {
     let event = model.events.get(flow.event)?;
-    let event_id = mermaid_event_flow_event_id(&event.id);
+    let event_id = event_flow_event_id(&event.id);
     if declared.insert(event_id.clone()) {
         out.push_str(&format!(
             "  {}{{\"{}\"}}\n",
@@ -1333,14 +1171,14 @@ fn declare_mermaid_event_flow_event(
     Some(event_id)
 }
 
-fn declare_mermaid_event_flow_usecase(
+fn declare_event_flow_usecase(
     out: &mut String,
     declared: &mut HashSet<String>,
     model: &SemanticModel,
     usecase: UseCaseKey,
 ) -> Option<String> {
     let usecase_model = model.use_cases.get(usecase)?;
-    let usecase_id = mermaid_event_flow_usecase_id(&usecase_model.id);
+    let usecase_id = event_flow_usecase_id(&usecase_model.id);
     if declared.insert(usecase_id.clone()) {
         out.push_str(&format!(
             "  {}([\"{}\"])\n",
@@ -1351,14 +1189,14 @@ fn declare_mermaid_event_flow_usecase(
     Some(usecase_id)
 }
 
-fn declare_mermaid_event_flow_buc(
+fn declare_event_flow_buc(
     out: &mut String,
     declared: &mut HashSet<String>,
     model: &SemanticModel,
     buc: BucKey,
 ) -> Option<String> {
     let buc_model = model.bucs.get(buc)?;
-    let buc_id = mermaid_event_flow_buc_id(&buc_model.id);
+    let buc_id = event_flow_buc_id(&buc_model.id);
     if declared.insert(buc_id.clone()) {
         out.push_str(&format!(
             "  {}[[\"{}\"]]\n",
@@ -1369,14 +1207,14 @@ fn declare_mermaid_event_flow_buc(
     Some(buc_id)
 }
 
-fn declare_mermaid_event_flow_state(
+fn declare_event_flow_state(
     out: &mut String,
     declared: &mut HashSet<String>,
     model: &SemanticModel,
     state: rdra_ish_core::model::StateKey,
 ) -> Option<String> {
     let state_model = model.states.get(state)?;
-    let state_id = mermaid_event_flow_state_id(&state_model.id);
+    let state_id = event_flow_state_id(&state_model.id);
     if declared.insert(state_id.clone()) {
         out.push_str(&format!(
             "  {}(\"{}\")\n",
@@ -1398,7 +1236,7 @@ fn render_mermaid_event_flow(
     if !scoped_node_visible(reachable, &event_node) {
         return;
     }
-    let Some(event_id) = declare_mermaid_event_flow_event(out, declared, model, flow) else {
+    let Some(event_id) = declare_event_flow_event(out, declared, model, flow) else {
         return;
     };
 
@@ -1425,11 +1263,11 @@ fn render_mermaid_event_flow(
         let (node, declared_id) = match raiser {
             Raiser::UseCase(usecase) => (
                 NodeRef::UseCase(usecase),
-                declare_mermaid_event_flow_usecase(out, declared, model, usecase),
+                declare_event_flow_usecase(out, declared, model, usecase),
             ),
             Raiser::ExtSystem(extsystem) => (
                 NodeRef::ExtSystem(extsystem),
-                declare_mermaid_event_flow_extsystem(out, declared, model, extsystem),
+                declare_event_flow_extsystem(out, declared, model, extsystem),
             ),
         };
         if !scoped_node_visible(reachable, &node) {
@@ -1453,8 +1291,7 @@ fn render_mermaid_event_flow(
         if !scoped_node_visible(reachable, &node) {
             continue;
         }
-        if let Some(usecase_id) = declare_mermaid_event_flow_usecase(out, declared, model, usecase)
-        {
+        if let Some(usecase_id) = declare_event_flow_usecase(out, declared, model, usecase) {
             out.push_str(&format!("  {} -.->|triggers| {}\n", event_id, usecase_id));
         }
     }
@@ -1466,7 +1303,7 @@ fn render_mermaid_event_flow(
         if !scoped_node_visible(reachable, &node) {
             continue;
         }
-        if let Some(buc_id) = declare_mermaid_event_flow_buc(out, declared, model, buc) {
+        if let Some(buc_id) = declare_event_flow_buc(out, declared, model, buc) {
             out.push_str(&format!("  {} -.->|triggers| {}\n", event_id, buc_id));
         }
     }
@@ -1484,9 +1321,7 @@ fn render_mermaid_event_flow(
         if !scoped_node_visible(reachable, &node) {
             continue;
         }
-        if let Some(extsystem_id) =
-            declare_mermaid_event_flow_extsystem(out, declared, model, extsystem)
-        {
+        if let Some(extsystem_id) = declare_event_flow_extsystem(out, declared, model, extsystem) {
             out.push_str(&format!("  {} -.->|delivers| {}\n", event_id, extsystem_id));
         }
     }
@@ -1524,10 +1359,10 @@ fn render_mermaid_event_flow(
         .map(|event| prefixed_label("⚡", &event.label))
         .unwrap_or_default();
     for (from, to) in &transitions {
-        let Some(from_id) = declare_mermaid_event_flow_state(out, declared, model, *from) else {
+        let Some(from_id) = declare_event_flow_state(out, declared, model, *from) else {
             continue;
         };
-        let Some(to_id) = declare_mermaid_event_flow_state(out, declared, model, *to) else {
+        let Some(to_id) = declare_event_flow_state(out, declared, model, *to) else {
             continue;
         };
         out.push_str(&format!("  {} -->|{}| {}\n", from_id, event_label, to_id));
@@ -1544,7 +1379,7 @@ fn render_mermaid_timer_flow(
     if !scoped_node_visible(reachable, &NodeRef::Timer(flow.timer)) {
         return;
     }
-    let Some(timer_id) = declare_mermaid_event_flow_timer(out, declared, model, flow.timer) else {
+    let Some(timer_id) = declare_event_flow_timer(out, declared, model, flow.timer) else {
         return;
     };
 
@@ -1560,8 +1395,7 @@ fn render_mermaid_timer_flow(
         if !scoped_node_visible(reachable, &NodeRef::UseCase(usecase)) {
             continue;
         }
-        if let Some(usecase_id) = declare_mermaid_event_flow_usecase(out, declared, model, usecase)
-        {
+        if let Some(usecase_id) = declare_event_flow_usecase(out, declared, model, usecase) {
             out.push_str(&format!("  {} -.->|triggers| {}\n", timer_id, usecase_id));
         }
     }
@@ -1572,7 +1406,7 @@ fn render_mermaid_timer_flow(
         if !scoped_node_visible(reachable, &NodeRef::Buc(buc)) {
             continue;
         }
-        if let Some(buc_id) = declare_mermaid_event_flow_buc(out, declared, model, buc) {
+        if let Some(buc_id) = declare_event_flow_buc(out, declared, model, buc) {
             out.push_str(&format!("  {} -.->|triggers| {}\n", timer_id, buc_id));
         }
     }
@@ -1599,107 +1433,12 @@ impl Emitter for EventFlowMermaidEmitter {
     }
 }
 
-fn business_input_visible(model: &SemanticModel, view: &View, entry: &ActorInputInference) -> bool {
-    match &view.scope {
-        Scope::Whole => true,
-        Scope::UseCases(usecase_ids) => usecase_ids
-            .iter()
-            .any(|id| id == &model.use_cases[entry.usecase].id),
-        Scope::Bucs(buc_ids) => entry
-            .buc
-            .is_some_and(|buc| buc_ids.iter().any(|id| id == &model.bucs[buc].id)),
-    }
-}
-
-fn business_input_node_id(model: &SemanticModel, entry: &ActorInputInference) -> String {
-    scoped_mermaid_id(
-        "input",
-        &format!(
-            "{}_{}_{}_{}",
-            model.actors[entry.actor].id,
-            model.use_cases[entry.usecase].id,
-            model.entities[entry.entity].id,
-            entry.column
-        ),
-    )
-}
-
-fn business_actor_node_id(model: &SemanticModel, entry: &ActorInputInference) -> String {
-    scoped_mermaid_id("actor", &model.actors[entry.actor].id)
-}
-
-fn business_usecase_node_id(model: &SemanticModel, entry: &ActorInputInference) -> String {
-    scoped_mermaid_id("usecase", &model.use_cases[entry.usecase].id)
-}
-
-fn reachable_for_scope(model: &SemanticModel, scope: &Scope) -> Option<HashSet<NodeRef>> {
-    match scope {
-        Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
-        Scope::Whole | Scope::UseCases(_) => None,
-    }
-}
-
-fn scoped_node_visible(reachable: &Option<HashSet<NodeRef>>, node: &NodeRef) -> bool {
-    match reachable {
-        Some(set) => set.contains(node),
-        None => true,
-    }
-}
-
-fn technical_api_node_id(
-    model: &SemanticModel,
-    system: rdra_ish_core::SystemKey,
-    api: ApiKey,
-) -> String {
-    scoped_mermaid_id(
-        "api",
-        &format!("{}_{}", model.systems[system].id, model.apis[api].id),
-    )
-}
-
-fn technical_entity_node_id(
-    model: &SemanticModel,
-    system: rdra_ish_core::SystemKey,
-    entity: EntityKey,
-) -> String {
-    scoped_mermaid_id(
-        "entity",
-        &format!("{}_{}", model.systems[system].id, model.entities[entity].id),
-    )
-}
-
-fn scoped_mermaid_id(prefix: &str, raw: &str) -> String {
-    let safe: String = raw
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() || ch == '_' {
-                ch
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    format!("{}__{}", prefix, safe)
-}
-
-fn is_entity_operation(kind: &RelKind) -> bool {
-    matches!(
-        kind,
-        RelKind::Reads | RelKind::Writes | RelKind::Creates | RelKind::Updates | RelKind::Deletes
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::diagram_common::model_from;
     use rdra_ish_core::build_model;
     use rdra_ish_syntax::parse;
-
-    fn model_from(src: &str) -> SemanticModel {
-        let (ast, _) = parse(src);
-        let (model, _) = build_model(&ast);
-        model
-    }
 
     #[test]
     fn test_rdra_mermaid_emit() {
@@ -2122,7 +1861,7 @@ triggers(EncounterSigned, BucBillingClaims)
     }
 
     #[test]
-    fn test_mermaid_event_flow_helpers_deduplicate_declarations_and_render_transitions() {
+    fn test_event_flow_helpers_deduplicate_declarations_and_render_transitions() {
         let src = r#"
 usecase SignEncounter "Sign Encounter"
 usecase ReviewClaim "Review Claim"
@@ -2174,7 +1913,7 @@ transitions(Claim.status, ReviewClaim, open -> reviewed)
     }
 
     #[test]
-    fn test_mermaid_event_flow_declare_helpers_emit_prefixed_nodes_once() {
+    fn test_event_flow_declare_helpers_emit_prefixed_nodes_once() {
         let src = r#"
 usecase SignEncounter "Sign Encounter"
 buc BucBillingClaims "Billing Claims"
@@ -2210,23 +1949,23 @@ transitions(Encounter.status, SignEncounter, pending -> signed)
         let mut declared = HashSet::new();
 
         assert_eq!(
-            declare_mermaid_event_flow_event(&mut out, &mut declared, &model, &flow).as_deref(),
+            declare_event_flow_event(&mut out, &mut declared, &model, &flow).as_deref(),
             Some("ev__EncounterSigned")
         );
         assert_eq!(
-            declare_mermaid_event_flow_usecase(&mut out, &mut declared, &model, usecase).as_deref(),
+            declare_event_flow_usecase(&mut out, &mut declared, &model, usecase).as_deref(),
             Some("uc__SignEncounter")
         );
         assert_eq!(
-            declare_mermaid_event_flow_buc(&mut out, &mut declared, &model, buc).as_deref(),
+            declare_event_flow_buc(&mut out, &mut declared, &model, buc).as_deref(),
             Some("buc__BucBillingClaims")
         );
         assert_eq!(
-            mermaid_event_flow_state_id("Encounter_pending"),
+            event_flow_state_id("Encounter_pending"),
             "st__Encounter_pending"
         );
         assert_eq!(
-            declare_mermaid_event_flow_state(&mut out, &mut declared, &model, state).as_deref(),
+            declare_event_flow_state(&mut out, &mut declared, &model, state).as_deref(),
             Some("st__Encounter_pending")
         );
 
@@ -2237,7 +1976,7 @@ transitions(Encounter.status, SignEncounter, pending -> signed)
     }
 
     #[test]
-    fn test_mermaid_event_flow_visibility_skips_hidden_event_scope() {
+    fn test_event_flow_visibility_skips_hidden_event_scope() {
         let src = r#"
 usecase SignEncounter "Sign Encounter"
 event EncounterSigned "Encounter Signed"
@@ -2250,13 +1989,10 @@ raises(SignEncounter, EncounterSigned)
         let reachable = Some(HashSet::new());
 
         assert_eq!(
-            mermaid_event_flow_event_id("EncounterSigned"),
+            event_flow_event_id("EncounterSigned"),
             "ev__EncounterSigned"
         );
-        assert_eq!(
-            mermaid_event_flow_usecase_id("SignEncounter"),
-            "uc__SignEncounter"
-        );
+        assert_eq!(event_flow_usecase_id("SignEncounter"), "uc__SignEncounter");
         render_mermaid_event_flow(&mut out, &mut declared, &model, &reachable, &flow);
 
         assert!(out.is_empty());

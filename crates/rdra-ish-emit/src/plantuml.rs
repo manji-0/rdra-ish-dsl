@@ -1,6 +1,13 @@
 //! PlantUML emitters: RDRA全体図、BUC別図、ER図、状態遷移図、sequence図。
 
-use crate::diagram_common::{col_type_str, lifecycle_start_states, node_id, node_label};
+use crate::diagram_common::{
+    business_actor_node_id, business_input_node_id, business_input_visible,
+    business_usecase_node_id, col_type_str, event_flow_buc_id, event_flow_event_id,
+    event_flow_extsystem_id, event_flow_state_id, event_flow_timer_id, event_flow_usecase_id,
+    graph_node_visible, is_entity_operation, lifecycle_start_states, node_id, node_label,
+    rdra_description_nodes, reachable_for_scope, scoped_node_visible, sequence_usecase_scope,
+    technical_api_node_id, technical_entity_node_id,
+};
 use crate::{
     collect_object_graph_nodes, node_description, object_graph_layer, object_graph_rel_label,
     prefixed_label, prefixed_node_label, view_node_visible, view_relation_visible, EmitError,
@@ -12,18 +19,13 @@ use rdra_ish_core::model::{
 };
 use rdra_ish_core::tx::infer_usecase_transactions;
 use rdra_ish_core::{
-    derive_actor_input_inferences, derive_system_boundaries, ActorInputInference, EventFlow,
-    TimerFlow,
+    derive_actor_input_inferences, derive_system_boundaries, EventFlow, TimerFlow,
 };
 use std::collections::{HashMap, HashSet};
 
 // ── RDRA全体図エミッタ ────────────────────────────────────────────────────────
 
 pub struct RdraPlantUmlEmitter;
-
-fn graph_node_visible(reachable: &Option<HashSet<NodeRef>>, view: &View, node: &NodeRef) -> bool {
-    scoped_node_visible(reachable, node) && view_node_visible(view, node)
-}
 
 fn render_rdra_node_declarations(
     out: &mut String,
@@ -270,106 +272,6 @@ fn render_rdra_relations(
             }
         }
     }
-}
-
-fn rdra_description_nodes(
-    model: &SemanticModel,
-    reachable: &Option<HashSet<NodeRef>>,
-) -> Vec<NodeRef> {
-    let mut nodes = Vec::new();
-    nodes.extend(
-        model
-            .actors
-            .iter()
-            .map(|(key, _)| NodeRef::Actor(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .adrs
-            .iter()
-            .map(|(key, _)| NodeRef::Adr(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .use_cases
-            .iter()
-            .map(|(key, _)| NodeRef::UseCase(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .bucs
-            .iter()
-            .map(|(key, _)| NodeRef::Buc(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .flows
-            .iter()
-            .map(|(key, _)| NodeRef::Flow(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .steps
-            .iter()
-            .map(|(key, _)| NodeRef::Step(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .systems
-            .iter()
-            .map(|(key, _)| NodeRef::System(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .ext_systems
-            .iter()
-            .map(|(key, _)| NodeRef::ExtSystem(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .entities
-            .iter()
-            .map(|(key, _)| NodeRef::Entity(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .screens
-            .iter()
-            .map(|(key, _)| NodeRef::Screen(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .fields
-            .iter()
-            .map(|(key, _)| NodeRef::Field(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .events
-            .iter()
-            .map(|(key, _)| NodeRef::Event(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .states
-            .iter()
-            .map(|(key, _)| NodeRef::State(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.sort_by_key(|node| node_id(model, node).unwrap_or_default().to_string());
-    nodes
 }
 
 fn render_plantuml_description_notes(out: &mut String, model: &SemanticModel, nodes: &[NodeRef]) {
@@ -894,46 +796,6 @@ impl Emitter for ErPlantUmlEmitter {
 /// `--buc` による絞り込み（`Scope::Bucs`）に対応。
 pub struct SequenceDiagramEmitter;
 
-fn sequence_usecase_scope(model: &SemanticModel, scope: &Scope) -> Option<HashSet<UseCaseKey>> {
-    match scope {
-        Scope::Whole => None,
-        Scope::UseCases(usecase_ids) => {
-            let wanted: HashSet<&str> = usecase_ids.iter().map(String::as_str).collect();
-            Some(
-                model
-                    .use_cases
-                    .iter()
-                    .filter_map(|(key, uc)| wanted.contains(uc.id.as_str()).then_some(key))
-                    .collect(),
-            )
-        }
-        Scope::Bucs(buc_ids) => {
-            let wanted: HashSet<&str> = buc_ids.iter().map(String::as_str).collect();
-            let buc_keys: HashSet<BucKey> = model
-                .bucs
-                .iter()
-                .filter_map(|(key, buc)| wanted.contains(buc.id.as_str()).then_some(key))
-                .collect();
-            Some(
-                model
-                    .relations
-                    .iter()
-                    .filter_map(|rel| {
-                        if rel.kind == RelKind::Contains {
-                            if let (NodeRef::Buc(buc), NodeRef::UseCase(usecase)) =
-                                (&rel.from, &rel.to)
-                            {
-                                return buc_keys.contains(buc).then_some(*usecase);
-                            }
-                        }
-                        None
-                    })
-                    .collect(),
-            )
-        }
-    }
-}
-
 impl Emitter for SequenceDiagramEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         let scoped_usecases = sequence_usecase_scope(model, &view.scope);
@@ -1283,37 +1145,6 @@ fn push_tx_writes<'a>(
 
 pub struct EventFlowPlantUmlEmitter;
 
-fn event_flow_node_visible(reachable: &Option<HashSet<NodeRef>>, node: &NodeRef) -> bool {
-    match reachable {
-        Some(set) => set.contains(node),
-        None => true,
-    }
-}
-
-fn event_flow_event_id(id: &str) -> String {
-    format!("ev__{}", id)
-}
-
-fn event_flow_usecase_id(id: &str) -> String {
-    format!("uc__{}", id)
-}
-
-fn event_flow_buc_id(id: &str) -> String {
-    format!("buc__{}", id)
-}
-
-fn event_flow_state_id(id: &str) -> String {
-    format!("st__{}", id)
-}
-
-fn event_flow_extsystem_id(id: &str) -> String {
-    format!("xs__{}", id)
-}
-
-fn event_flow_timer_id(id: &str) -> String {
-    format!("tm__{}", id)
-}
-
 fn declare_event_flow_extsystem(
     out: &mut String,
     declared: &mut HashSet<String>,
@@ -1430,7 +1261,7 @@ fn render_event_flow(
     flow: &EventFlow,
 ) {
     let event_node = NodeRef::Event(flow.event);
-    if !event_flow_node_visible(reachable, &event_node) {
+    if !scoped_node_visible(reachable, &event_node) {
         return;
     }
     let Some(event_id) = declare_event_flow_event(out, declared, model, flow) else {
@@ -1467,7 +1298,7 @@ fn render_event_flow(
                 declare_event_flow_extsystem(out, declared, model, extsystem),
             ),
         };
-        if !event_flow_node_visible(reachable, &node) {
+        if !scoped_node_visible(reachable, &node) {
             continue;
         }
         if let Some(raiser_id) = declared_id {
@@ -1485,7 +1316,7 @@ fn render_event_flow(
     });
     for usecase in triggers {
         let node = NodeRef::UseCase(usecase);
-        if !event_flow_node_visible(reachable, &node) {
+        if !scoped_node_visible(reachable, &node) {
             continue;
         }
         if let Some(usecase_id) = declare_event_flow_usecase(out, declared, model, usecase) {
@@ -1497,7 +1328,7 @@ fn render_event_flow(
     triggered_bucs.sort_by_key(|&bk| model.bucs.get(bk).map(|buc| buc.id.as_str()).unwrap_or(""));
     for buc in triggered_bucs {
         let node = NodeRef::Buc(buc);
-        if !event_flow_node_visible(reachable, &node) {
+        if !scoped_node_visible(reachable, &node) {
             continue;
         }
         if let Some(buc_id) = declare_event_flow_buc(out, declared, model, buc) {
@@ -1515,7 +1346,7 @@ fn render_event_flow(
     });
     for extsystem in delivered_to {
         let node = NodeRef::ExtSystem(extsystem);
-        if !event_flow_node_visible(reachable, &node) {
+        if !scoped_node_visible(reachable, &node) {
             continue;
         }
         if let Some(extsystem_id) = declare_event_flow_extsystem(out, declared, model, extsystem) {
@@ -1573,7 +1404,7 @@ fn render_timer_flow(
     reachable: &Option<HashSet<NodeRef>>,
     flow: &TimerFlow,
 ) {
-    if !event_flow_node_visible(reachable, &NodeRef::Timer(flow.timer)) {
+    if !scoped_node_visible(reachable, &NodeRef::Timer(flow.timer)) {
         return;
     }
     let Some(timer_id) = declare_event_flow_timer(out, declared, model, flow.timer) else {
@@ -1589,7 +1420,7 @@ fn render_timer_flow(
             .unwrap_or("")
     });
     for usecase in usecases {
-        if !event_flow_node_visible(reachable, &NodeRef::UseCase(usecase)) {
+        if !scoped_node_visible(reachable, &NodeRef::UseCase(usecase)) {
             continue;
         }
         if let Some(usecase_id) = declare_event_flow_usecase(out, declared, model, usecase) {
@@ -1600,7 +1431,7 @@ fn render_timer_flow(
     let mut bucs = flow.triggers_bucs.to_vec();
     bucs.sort_by_key(|&bk| model.bucs.get(bk).map(|buc| buc.id.as_str()).unwrap_or(""));
     for buc in bucs {
-        if !event_flow_node_visible(reachable, &NodeRef::Buc(buc)) {
+        if !scoped_node_visible(reachable, &NodeRef::Buc(buc)) {
             continue;
         }
         if let Some(buc_id) = declare_event_flow_buc(out, declared, model, buc) {
@@ -1638,111 +1469,16 @@ impl Emitter for EventFlowPlantUmlEmitter {
 
 // ── ヘルパー ──────────────────────────────────────────────────────────────────
 
-fn business_input_visible(model: &SemanticModel, view: &View, entry: &ActorInputInference) -> bool {
-    match &view.scope {
-        Scope::Whole => true,
-        Scope::UseCases(usecase_ids) => usecase_ids
-            .iter()
-            .any(|id| id == &model.use_cases[entry.usecase].id),
-        Scope::Bucs(buc_ids) => entry
-            .buc
-            .is_some_and(|buc| buc_ids.iter().any(|id| id == &model.bucs[buc].id)),
-    }
-}
-
-fn business_input_node_id(model: &SemanticModel, entry: &ActorInputInference) -> String {
-    scoped_plantuml_id(
-        "input",
-        &format!(
-            "{}_{}_{}_{}",
-            model.actors[entry.actor].id,
-            model.use_cases[entry.usecase].id,
-            model.entities[entry.entity].id,
-            entry.column
-        ),
-    )
-}
-
-fn business_actor_node_id(model: &SemanticModel, entry: &ActorInputInference) -> String {
-    scoped_plantuml_id("actor", &model.actors[entry.actor].id)
-}
-
-fn business_usecase_node_id(model: &SemanticModel, entry: &ActorInputInference) -> String {
-    scoped_plantuml_id("usecase", &model.use_cases[entry.usecase].id)
-}
-
-fn reachable_for_scope(model: &SemanticModel, scope: &Scope) -> Option<HashSet<NodeRef>> {
-    match scope {
-        Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
-        Scope::Whole | Scope::UseCases(_) => None,
-    }
-}
-
-fn scoped_node_visible(reachable: &Option<HashSet<NodeRef>>, node: &NodeRef) -> bool {
-    match reachable {
-        Some(set) => set.contains(node),
-        None => true,
-    }
-}
-
-fn technical_api_node_id(
-    model: &SemanticModel,
-    system: rdra_ish_core::SystemKey,
-    api: ApiKey,
-) -> String {
-    scoped_plantuml_id(
-        "api",
-        &format!("{}_{}", model.systems[system].id, model.apis[api].id),
-    )
-}
-
-fn technical_entity_node_id(
-    model: &SemanticModel,
-    system: rdra_ish_core::SystemKey,
-    entity: EntityKey,
-) -> String {
-    scoped_plantuml_id(
-        "entity",
-        &format!("{}_{}", model.systems[system].id, model.entities[entity].id),
-    )
-}
-
-fn scoped_plantuml_id(prefix: &str, raw: &str) -> String {
-    let safe: String = raw
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() || ch == '_' {
-                ch
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    format!("{}__{}", prefix, safe)
-}
-
 fn plantuml_label(label: &str) -> String {
     label.replace('"', "\\\"")
-}
-
-fn is_entity_operation(kind: &RelKind) -> bool {
-    matches!(
-        kind,
-        RelKind::Reads | RelKind::Writes | RelKind::Creates | RelKind::Updates | RelKind::Deletes
-    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::diagram_common::model_from;
     use rdra_ish_core::build_model;
     use rdra_ish_syntax::parse;
-
-    fn model_from(src: &str) -> SemanticModel {
-        let (ast, _) = parse(src);
-        let (model, _) = build_model(&ast);
-        model
-    }
 
     #[test]
     fn test_rdra_plantuml_emit() {

@@ -1,7 +1,11 @@
 //! Helpers the PlantUML and Mermaid emitters share.
 
+use crate::{view_node_visible, Scope, View};
 use rdra_ish_core::lifecycle::{Bounds, Scope as LifecycleScope, TransitionSystem};
-use rdra_ish_core::model::{ColumnType, EntityKey, NodeRef, SemanticModel, StateKey};
+use rdra_ish_core::model::{
+    ApiKey, BucKey, ColumnType, EntityKey, NodeRef, RelKind, SemanticModel, StateKey, UseCaseKey,
+};
+use rdra_ish_core::ActorInputInference;
 use std::collections::HashSet;
 
 /// Start states of the lifecycle columns the visible transitions name, read from the
@@ -107,4 +111,286 @@ pub(crate) fn col_type_str(model: &SemanticModel, ct: &ColumnType) -> String {
             .map(|v| v.id.clone())
             .unwrap_or_else(|| "Variation".to_string()),
     }
+}
+
+pub(crate) fn graph_node_visible(
+    reachable: &Option<HashSet<NodeRef>>,
+    view: &View,
+    node: &NodeRef,
+) -> bool {
+    scoped_node_visible(reachable, node) && view_node_visible(view, node)
+}
+
+pub(crate) fn rdra_description_nodes(
+    model: &SemanticModel,
+    reachable: &Option<HashSet<NodeRef>>,
+) -> Vec<NodeRef> {
+    let mut nodes = Vec::new();
+    nodes.extend(
+        model
+            .actors
+            .iter()
+            .map(|(key, _)| NodeRef::Actor(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .adrs
+            .iter()
+            .map(|(key, _)| NodeRef::Adr(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .use_cases
+            .iter()
+            .map(|(key, _)| NodeRef::UseCase(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .bucs
+            .iter()
+            .map(|(key, _)| NodeRef::Buc(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .flows
+            .iter()
+            .map(|(key, _)| NodeRef::Flow(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .steps
+            .iter()
+            .map(|(key, _)| NodeRef::Step(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .systems
+            .iter()
+            .map(|(key, _)| NodeRef::System(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .ext_systems
+            .iter()
+            .map(|(key, _)| NodeRef::ExtSystem(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .entities
+            .iter()
+            .map(|(key, _)| NodeRef::Entity(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .screens
+            .iter()
+            .map(|(key, _)| NodeRef::Screen(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .fields
+            .iter()
+            .map(|(key, _)| NodeRef::Field(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .events
+            .iter()
+            .map(|(key, _)| NodeRef::Event(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.extend(
+        model
+            .states
+            .iter()
+            .map(|(key, _)| NodeRef::State(key))
+            .filter(|node| scoped_node_visible(reachable, node)),
+    );
+    nodes.sort_by_key(|node| node_id(model, node).unwrap_or_default().to_string());
+    nodes
+}
+
+pub(crate) fn sequence_usecase_scope(
+    model: &SemanticModel,
+    scope: &Scope,
+) -> Option<HashSet<UseCaseKey>> {
+    match scope {
+        Scope::Whole => None,
+        Scope::UseCases(usecase_ids) => {
+            let wanted: HashSet<&str> = usecase_ids.iter().map(String::as_str).collect();
+            Some(
+                model
+                    .use_cases
+                    .iter()
+                    .filter_map(|(key, uc)| wanted.contains(uc.id.as_str()).then_some(key))
+                    .collect(),
+            )
+        }
+        Scope::Bucs(buc_ids) => {
+            let wanted: HashSet<&str> = buc_ids.iter().map(String::as_str).collect();
+            let buc_keys: HashSet<BucKey> = model
+                .bucs
+                .iter()
+                .filter_map(|(key, buc)| wanted.contains(buc.id.as_str()).then_some(key))
+                .collect();
+            Some(
+                model
+                    .relations
+                    .iter()
+                    .filter_map(|rel| {
+                        if rel.kind == RelKind::Contains {
+                            if let (NodeRef::Buc(buc), NodeRef::UseCase(usecase)) =
+                                (&rel.from, &rel.to)
+                            {
+                                return buc_keys.contains(buc).then_some(*usecase);
+                            }
+                        }
+                        None
+                    })
+                    .collect(),
+            )
+        }
+    }
+}
+
+pub(crate) fn business_input_visible(
+    model: &SemanticModel,
+    view: &View,
+    entry: &ActorInputInference,
+) -> bool {
+    match &view.scope {
+        Scope::Whole => true,
+        Scope::UseCases(usecase_ids) => usecase_ids
+            .iter()
+            .any(|id| id == &model.use_cases[entry.usecase].id),
+        Scope::Bucs(buc_ids) => entry
+            .buc
+            .is_some_and(|buc| buc_ids.iter().any(|id| id == &model.bucs[buc].id)),
+    }
+}
+
+pub(crate) fn business_input_node_id(model: &SemanticModel, entry: &ActorInputInference) -> String {
+    scoped_id(
+        "input",
+        &format!(
+            "{}_{}_{}_{}",
+            model.actors[entry.actor].id,
+            model.use_cases[entry.usecase].id,
+            model.entities[entry.entity].id,
+            entry.column
+        ),
+    )
+}
+
+pub(crate) fn business_actor_node_id(model: &SemanticModel, entry: &ActorInputInference) -> String {
+    scoped_id("actor", &model.actors[entry.actor].id)
+}
+
+pub(crate) fn business_usecase_node_id(
+    model: &SemanticModel,
+    entry: &ActorInputInference,
+) -> String {
+    scoped_id("usecase", &model.use_cases[entry.usecase].id)
+}
+
+pub(crate) fn technical_api_node_id(
+    model: &SemanticModel,
+    system: rdra_ish_core::SystemKey,
+    api: ApiKey,
+) -> String {
+    scoped_id(
+        "api",
+        &format!("{}_{}", model.systems[system].id, model.apis[api].id),
+    )
+}
+
+pub(crate) fn technical_entity_node_id(
+    model: &SemanticModel,
+    system: rdra_ish_core::SystemKey,
+    entity: EntityKey,
+) -> String {
+    scoped_id(
+        "entity",
+        &format!("{}_{}", model.systems[system].id, model.entities[entity].id),
+    )
+}
+
+pub(crate) fn scoped_id(prefix: &str, raw: &str) -> String {
+    let safe: String = raw
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    format!("{}__{}", prefix, safe)
+}
+
+pub(crate) fn reachable_for_scope(
+    model: &SemanticModel,
+    scope: &Scope,
+) -> Option<HashSet<NodeRef>> {
+    match scope {
+        Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
+        Scope::Whole | Scope::UseCases(_) => None,
+    }
+}
+
+pub(crate) fn scoped_node_visible(reachable: &Option<HashSet<NodeRef>>, node: &NodeRef) -> bool {
+    match reachable {
+        Some(set) => set.contains(node),
+        None => true,
+    }
+}
+
+pub(crate) fn is_entity_operation(kind: &RelKind) -> bool {
+    matches!(
+        kind,
+        RelKind::Reads | RelKind::Writes | RelKind::Creates | RelKind::Updates | RelKind::Deletes
+    )
+}
+
+pub(crate) fn event_flow_event_id(id: &str) -> String {
+    format!("ev__{}", id)
+}
+
+pub(crate) fn event_flow_usecase_id(id: &str) -> String {
+    format!("uc__{}", id)
+}
+
+pub(crate) fn event_flow_buc_id(id: &str) -> String {
+    format!("buc__{}", id)
+}
+
+pub(crate) fn event_flow_state_id(id: &str) -> String {
+    format!("st__{}", id)
+}
+
+pub(crate) fn event_flow_extsystem_id(id: &str) -> String {
+    format!("xs__{}", id)
+}
+
+pub(crate) fn event_flow_timer_id(id: &str) -> String {
+    format!("tm__{}", id)
+}
+
+#[cfg(test)]
+pub(crate) fn model_from(src: &str) -> SemanticModel {
+    let (ast, _) = rdra_ish_syntax::parse(src);
+    let (model, _) = rdra_ish_core::build_model(&ast);
+    model
 }
