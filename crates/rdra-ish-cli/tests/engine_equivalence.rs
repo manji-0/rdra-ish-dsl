@@ -27,6 +27,7 @@ mod tlc_env;
 #[allow(dead_code)]
 mod tlc_output;
 #[path = "../src/tlc_replay.rs"]
+#[allow(dead_code)]
 mod tlc_replay;
 
 use std::collections::{BTreeSet, HashMap};

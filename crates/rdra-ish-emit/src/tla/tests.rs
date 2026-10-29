@@ -38,6 +38,32 @@ fn check_cfg_names_each_invariant_and_explore_cfg_checks_nothing() {
     assert_eq!(explore, "SPECIFICATION Spec\nCHECK_DEADLOCK FALSE\n");
 }
 
+#[test]
+fn a_property_cfg_checks_that_property_alone() {
+    let ts = system(&sample("order.rdra"));
+    let temporal = print(&ts, PrintMode::Temporal, "M");
+    let one = print(&ts, PrintMode::Property(1), "M");
+    let props = |cfg: &str| -> Vec<String> {
+        cfg.lines()
+            .filter(|l| l.starts_with("PROPERTY") || l.starts_with("INVARIANT"))
+            .map(str::to_string)
+            .collect()
+    };
+    assert_eq!(
+        props(&temporal.cfg),
+        [
+            "INVARIANT TypeOK",
+            "PROPERTY PaidLeadsToShipped",
+            "PROPERTY EventuallyTerminal"
+        ]
+    );
+    assert_eq!(
+        props(&one.cfg),
+        ["INVARIANT TypeOK", "PROPERTY EventuallyTerminal"]
+    );
+    assert_eq!(one.tla, temporal.tla, "the same module, fairness included");
+}
+
 /// The name BFS gives a failed after-assert is the property TLC checks and reports.
 #[test]
 fn the_bfs_after_assert_name_is_the_tla_property_name() {

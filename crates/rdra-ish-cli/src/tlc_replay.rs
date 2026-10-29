@@ -2,7 +2,9 @@
 //! relation BFS uses, and the violated check built by the code BFS reports with.
 //! `tests/engine_equivalence.rs` includes this file by path beside `tlc_output.rs`.
 
-use rdra_ish_core::lifecycle::{ActId, ReplayError, State, StateDiag, Target, TransitionSystem};
+use rdra_ish_core::lifecycle::{
+    ActId, Loop, ReplayError, State, StateDiag, Target, TransitionSystem,
+};
 use rdra_ish_emit::tla::TlaNames;
 
 use crate::tlc_output::{Lasso, Violation, ViolationKind};
@@ -27,6 +29,42 @@ pub fn explain_violation(
         .map_err(|e| replay_error(v, e))?;
     ts.explain(target, &replay)
         .ok_or_else(|| format!("the last TLC state does not violate {name}"))
+}
+
+/// The violation of `properties()[i]` that TLC's lasso shows, in a run that checks that
+/// property alone. TLC does not name the property it reports, so the run says which.
+pub fn explain_property(
+    ts: &TransitionSystem,
+    names: &TlaNames,
+    i: usize,
+    v: &Violation,
+) -> Result<StateDiag, String> {
+    let name = names.property(i);
+    if v.kind != ViolationKind::Temporal {
+        return Err(format!("TLC reports `{}` in the run of {name}", v.line));
+    }
+    let (states, mut actions) = decode(ts, names, v)?;
+    let tail = match v.lasso.as_ref().ok_or("TLC printed no lasso")? {
+        Lasso::Stutter => Loop::Stutter,
+        Lasso::Back { to, label } => {
+            actions.push(names.action_index(ts, label).ok_or_else(|| {
+                format!("TLC's step back to state {to} (label {label}) names no use case")
+            })?);
+            Loop::Back { to: *to }
+        }
+    };
+    let replay = ts
+        .replay_lasso(states, &actions, tail)
+        .map_err(|e| replay_error(v, e))?;
+    let mut diag = ts
+        .explain_property(i, &replay)
+        .ok_or_else(|| format!("TLC's lasso does not violate {name}"))?;
+    // The module renames a property whose name another identifier took; the finding carries
+    // the name TLC checked.
+    if let StateDiag::PropertyViolated { name: n, .. } = &mut diag {
+        *n = name.to_string();
+    }
+    Ok(diag)
 }
 
 /// TLC's states decoded, and the action each step after the first names.

@@ -5,7 +5,7 @@ use std::fmt;
 
 use rdra_ish_core::lifecycle::{
     derive_states_built, ActionOrigin, Blocked, BoundsLine, Caps, Change, GuardWhy, InvKind,
-    InvText, ModelRef, ParamRole, Scope, Severity, Site, StateDiag, Trace, TraceStep,
+    InvText, Loop, ModelRef, ParamRole, Scope, Severity, Site, StateDiag, Trace, TraceStep,
 };
 use rdra_ish_core::{format_location, ResolvedProgram, SemanticModel};
 
@@ -353,7 +353,8 @@ pub(crate) fn render_violation(
             site,
             trace,
         ),
-        StateDiag::AfterAssertViolated { site, trace, .. } => {
+        StateDiag::AfterAssertViolated { site, trace, .. }
+        | StateDiag::PropertyViolated { site, trace, .. } => {
             (state_diag_message(diag), site, trace)
         }
         _ => return None,
@@ -373,6 +374,17 @@ pub(crate) fn render_violation(
         trace,
         from,
     ));
+    match diag {
+        StateDiag::PropertyViolated {
+            lasso: Loop::Stutter,
+            ..
+        } => out.push_str("\n    then nothing changes forever"),
+        StateDiag::PropertyViolated {
+            lasso: Loop::Back { to },
+            ..
+        } => out.push_str(&format!("\n    then loops back to step {to}")),
+        _ => {}
+    }
     Some(out)
 }
 

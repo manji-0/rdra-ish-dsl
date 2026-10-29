@@ -1,10 +1,11 @@
 //! `rdra-ish verify --backend tlc`: check every invariant and after-assert on its own cone,
-//! and temporal properties on the whole system.
+//! and each temporal property on the whole system.
 //!
 //! A cone (`TransitionSystem::target_cone`) is closed: its restricted system reaches exactly
 //! the projection of the whole system's states, so a safety verdict on the cone is the
 //! verdict on the whole model. Temporal properties are not restricted: `WF_vars(Next)` on a
 //! cone drops the actions outside it, which on the whole system could starve the cone's.
+//! Each property runs alone, because TLC does not say which property its lasso violates.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -15,8 +16,8 @@ use std::sync::Mutex;
 
 use anyhow::{bail, Context, Result};
 use rdra_ish_core::lifecycle::{
-    BoundsLine, Caps, Cone, NotChecked, Scope, Selection, Severity, Target, TransitionSystem,
-    VarSet,
+    BoundsLine, Caps, Cone, NotChecked, Scope, Selection, Severity, StateDiag, Target,
+    TransitionSystem, VarSet,
 };
 use rdra_ish_core::{ResolvedProgram, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
@@ -26,7 +27,7 @@ use crate::export::{checked_system, tla_bounds};
 use crate::list_output::{render_violation, Finding, TraceSource};
 use crate::tlc_env::{tlc_env, Heap};
 use crate::tlc_output::{summarize, Outcome, TlcRun};
-use crate::tlc_replay::explain_violation;
+use crate::tlc_replay::{explain_property, explain_violation};
 
 /// `bounds` is `(--instance-count, --int-range-max)`.
 pub fn run_verify(
@@ -48,9 +49,23 @@ struct Job {
     tla: String,
     cfg: String,
     checks: Vec<String>,
-    heap: Heap,
-    /// What a cone run's counterexamples replay on; `None` for the temporal run.
-    cone: Option<ConeSystem>,
+    kind: JobKind,
+}
+
+/// What a run's counterexamples replay on.
+enum JobKind {
+    Cone(Box<ConeSystem>),
+    /// `properties()[i]` on the whole system.
+    Property(usize),
+}
+
+impl Job {
+    fn heap(&self) -> Heap {
+        match self.kind {
+            JobKind::Cone(_) => Heap::Cone,
+            JobKind::Property(_) => Heap::Temporal,
+        }
+    }
 }
 
 /// A cone as TLC checks it: the whole system's cone, its restricted system, and the names
@@ -133,12 +148,30 @@ fn cone_jobs(ts: &TransitionSystem, names: &TlaNames, targets: &[Target]) -> Vec
                 tla: bundle.tla,
                 cfg: bundle.cfg,
                 checks,
-                heap: Heap::Cone,
-                cone: Some(ConeSystem {
+                kind: JobKind::Cone(Box::new(ConeSystem {
                     cone,
                     system: sub,
                     names: bundle.names,
-                }),
+                })),
+            }
+        })
+        .collect()
+}
+
+/// One whole-system run per temporal property, module `<whole>_<property>`. Each prints the
+/// same module text as the whole-model module, fairness included, and a cfg that names one
+/// property.
+fn property_jobs(ts: &TransitionSystem, names: &TlaNames, whole: &str) -> Vec<Job> {
+    (0..ts.properties().len())
+        .map(|i| {
+            let name = names.property(i);
+            let bundle = tla::print(ts, PrintMode::Property(i), &format!("{whole}_{name}"));
+            Job {
+                module: bundle.module_name,
+                tla: bundle.tla,
+                cfg: bundle.cfg,
+                checks: vec![name.to_string()],
+                kind: JobKind::Property(i),
             }
         })
         .collect()
@@ -151,15 +184,15 @@ fn run_job(tlc: &Path, dir: &Path, job: &Job, workers: &str) -> Result<Ran> {
     // TLC unpacks its standard modules into java.io.tmpdir; parallel runs must not share it.
     let tmp = dir.join(format!("{}.tmp", job.module));
     fs::create_dir_all(&tmp).with_context(|| format!("failed to create {}", tmp.display()))?;
-    let (key, value) = tlc_env(job.heap, &tmp);
+    let (key, value) = tlc_env(job.heap(), &tmp);
     let mut command = Command::new(tlc);
     command
         .env(key, value)
         .args(["-workers", workers, "-metadir"])
         .arg(&meta);
-    // `-continue` reports every violated check of a cone, each with its own trace. The
-    // temporal run keeps TLC's default and stops at its first violation.
-    if job.heap == Heap::Cone {
+    // `-continue` reports every violated check of a cone, each with its own trace. A property
+    // run keeps TLC's default and stops at its first violation.
+    if job.heap() == Heap::Cone {
         command.arg("-continue");
     }
     let output = command
@@ -182,20 +215,38 @@ fn run_job(tlc: &Path, dir: &Path, job: &Job, workers: &str) -> Result<Ran> {
     })
 }
 
-/// Runs the cone jobs in parallel, one TLC worker each.
+/// Runs the cone jobs, up to 8 at once with one TLC worker each, then the property jobs, up
+/// to 2 at once (each takes the temporal heap) sharing the cores.
 fn run_all(tlc: &Path, dir: &Path, jobs: &[Job]) -> Result<Vec<Ran>> {
+    let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
+    let split = jobs
+        .iter()
+        .position(|j| matches!(j.kind, JobKind::Property(_)))
+        .unwrap_or(jobs.len());
+    let (cones, properties) = jobs.split_at(split);
+    let mut ran = run_some(tlc, dir, cones, cores.min(8), "1")?;
+    let at_once = properties.len().clamp(1, 2);
+    let workers = (cores / at_once).max(1).to_string();
+    ran.extend(run_some(tlc, dir, properties, at_once, &workers)?);
+    Ok(ran)
+}
+
+/// Runs `jobs` on `threads` threads, each TLC run with `workers` workers, in job order.
+fn run_some(
+    tlc: &Path,
+    dir: &Path,
+    jobs: &[Job],
+    threads: usize,
+    workers: &str,
+) -> Result<Vec<Ran>> {
     let next = AtomicUsize::new(0);
     let done: Mutex<Vec<(usize, Result<Ran>)>> = Mutex::new(Vec::new());
-    let workers = std::thread::available_parallelism()
-        .map_or(4, |n| n.get())
-        .min(8)
-        .min(jobs.len().max(1));
     std::thread::scope(|s| {
-        for _ in 0..workers {
+        for _ in 0..threads.min(jobs.len()) {
             s.spawn(|| loop {
                 let i = next.fetch_add(1, Ordering::SeqCst);
                 let Some(job) = jobs.get(i) else { break };
-                let ran = run_job(tlc, dir, job, "1");
+                let ran = run_job(tlc, dir, job, workers);
                 done.lock().expect("lock").push((i, ran));
             });
         }
@@ -205,9 +256,9 @@ fn run_all(tlc: &Path, dir: &Path, jobs: &[Job]) -> Result<Vec<Ran>> {
     done.into_iter().map(|(_, r)| r).collect()
 }
 
-fn write_job(dir: &Path, job: &Job) -> Result<()> {
-    for (ext, text) in [("tla", &job.tla), ("cfg", &job.cfg)] {
-        let path = dir.join(format!("{}.{ext}", job.module));
+fn write_spec(dir: &Path, module: &str, tla: &str, cfg: &str) -> Result<()> {
+    for (ext, text) in [("tla", tla), ("cfg", cfg)] {
+        let path = dir.join(format!("{module}.{ext}"));
         fs::write(&path, text).with_context(|| format!("failed to write {}", path.display()))?;
     }
     Ok(())
@@ -218,19 +269,34 @@ fn write_job(dir: &Path, job: &Job) -> Result<()> {
 fn model_traces(
     program: &ResolvedProgram,
     model: &SemanticModel,
-    ts: &TransitionSystem,
-    cs: &ConeSystem,
+    (ts, names): (&TransitionSystem, &TlaNames),
+    job: &JobKind,
     run: &TlcRun,
 ) -> Vec<String> {
     let mut seen = BTreeSet::new();
-    run.violations
-        .iter()
-        .filter(|v| v.name.is_some() && seen.insert(&v.name))
-        .map(|v| match explain_violation(&cs.system, &cs.names, v) {
-            Ok(mut diag) => {
+    let explained: Vec<Result<StateDiag, String>> = match job {
+        JobKind::Cone(cs) => run
+            .violations
+            .iter()
+            .filter(|v| v.name.is_some() && seen.insert(&v.name))
+            .map(|v| {
+                let mut diag = explain_violation(&cs.system, &cs.names, v)?;
                 if let Some(trace) = diag.trace_mut() {
                     trace.over_bound = ts.over_bound(&cs.cone, trace);
                 }
+                Ok(diag)
+            })
+            .collect(),
+        JobKind::Property(i) => run
+            .violations
+            .iter()
+            .map(|v| explain_property(ts, names, *i, v))
+            .collect(),
+    };
+    explained
+        .into_iter()
+        .map(|explained| match explained {
+            Ok(diag) => {
                 let message = render_violation(program, model, &diag, TraceSource::Tlc)
                     .expect("explain returns a violation");
                 let finding = Finding {
@@ -264,21 +330,7 @@ fn run_tlc(
     let cones = jobs.len();
     // A scope checks no whole model: `--buc` drops use cases fairness would read, and an
     // error `--entity` defers may sit in it.
-    let temporal = if ts.properties().is_empty() || !scope.is_whole() {
-        None
-    } else {
-        let bundle = tla::print(&ts, PrintMode::Temporal, &whole_name);
-        Some(Job {
-            module: bundle.module_name,
-            tla: bundle.tla,
-            cfg: bundle.cfg,
-            checks: (0..ts.properties().len())
-                .map(|i| names.property(i).to_string())
-                .collect(),
-            heap: Heap::Temporal,
-            cone: None,
-        })
-    };
+    let temporal = !ts.properties().is_empty() && scope.is_whole();
     let line =
         BoundsLine::verify(bounds, Some(Caps::VERIFY)).with_scope(scope.line(model, &selection));
     println!("{line}");
@@ -288,32 +340,40 @@ fn run_tlc(
         checked(|t| matches!(t, Target::Invariant(_))),
         checked(|t| matches!(t, Target::AfterAssert(_)))
     );
-    match &temporal {
-        Some(job) => println!(
-            "temporal properties: {}, checked on the whole model (fairness does not restrict to a cone)",
-            job.checks.len()
+    match (temporal, ts.properties().len()) {
+        (_, 0) => println!("temporal properties: none, no whole-model run"),
+        (true, n) => println!(
+            "temporal properties: {n}, each checked in its own run on the whole model (fairness does not restrict to a cone)"
         ),
-        None if ts.properties().is_empty() => {
-            println!("temporal properties: none, no whole-model run")
-        }
-        None => println!(
-            "temporal properties: {}, not checked: a scoped run has no whole-model run",
-            ts.properties().len()
+        (false, n) => println!(
+            "temporal properties: {n}, not checked: a scoped run has no whole-model run"
         ),
     }
-    jobs.extend(temporal);
+    // The whole-model module with every property, for a run by hand; verify runs each
+    // property in its own copy of it.
+    let whole = temporal.then(|| tla::print(&ts, PrintMode::Temporal, &whole_name));
+    if temporal {
+        jobs.extend(property_jobs(&ts, &names, &whole_name));
+    }
     let bfs_errors = state_models(program, model, &ts, scope, &selection);
 
     let mut index = String::new();
     for job in &jobs {
-        write_job(&dir, job)?;
+        write_spec(&dir, &job.module, &job.tla, &job.cfg)?;
         index.push_str(&format!("{}.tla: {}\n", job.module, job.checks.join(" ")));
+    }
+    if let Some(w) = &whole {
+        write_spec(&dir, &w.module_name, &w.tla, &w.cfg)?;
     }
     let index_path = dir.join("cones.txt");
     fs::write(&index_path, &index)
         .with_context(|| format!("failed to write {}", index_path.display()))?;
     if keep {
-        println!("wrote {} specs and {}", jobs.len(), index_path.display());
+        println!(
+            "wrote {} specs and {}",
+            jobs.len() + usize::from(whole.is_some()),
+            index_path.display()
+        );
     }
 
     if jobs.is_empty() {
@@ -325,10 +385,7 @@ fn run_tlc(
         return finish(bfs_errors, &line);
     }
     let tlc = find_tlc()?;
-    let mut ran = run_all(&tlc, &dir, &jobs[..cones])?;
-    if let Some(job) = jobs.get(cones) {
-        ran.push(run_job(&tlc, &dir, job, "auto")?);
-    }
+    let ran = run_all(&tlc, &dir, &jobs)?;
 
     for (job, r) in jobs.iter().zip(&ran) {
         let states = r
@@ -367,8 +424,8 @@ fn run_tlc(
                 job.module,
                 dir.join(format!("{}.tla", job.module)).display()
             );
-            if let (Outcome::Counterexample, Some(cs)) = (r.outcome, &job.cone) {
-                for block in model_traces(program, model, &ts, cs, &r.run) {
+            if r.outcome == Outcome::Counterexample {
+                for block in model_traces(program, model, (&ts, &names), &job.kind, &r.run) {
                     body.push_str(&block);
                     body.push('\n');
                 }

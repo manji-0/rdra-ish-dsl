@@ -25,6 +25,9 @@ pub enum PrintMode {
     Safety,
     /// `TypeOK` and the temporal properties, which need the whole system's fairness.
     Temporal,
+    /// `TypeOK` and `properties()[i]` alone: TLC does not say which property a temporal
+    /// counterexample breaks, so `verify` checks each in its own run.
+    Property(usize),
     /// No INVARIANT or PROPERTY lines, so `tlc -dump` sees the whole reachable set.
     Explore,
 }
@@ -114,11 +117,13 @@ fn domain_set(ts: &TransitionSystem, names: &TlaNames, domain: &Domain) -> Strin
 }
 
 fn render_cfg(ts: &TransitionSystem, names: &TlaNames, mode: PrintMode) -> String {
-    let (safety, temporal) = match mode {
-        PrintMode::Check => (true, true),
-        PrintMode::Safety => (true, false),
-        PrintMode::Temporal => (false, true),
-        PrintMode::Explore => (false, false),
+    let all = 0..ts.properties().len();
+    let (safety, properties) = match mode {
+        PrintMode::Check => (true, all),
+        PrintMode::Safety => (true, 0..0),
+        PrintMode::Temporal => (false, all),
+        PrintMode::Property(i) => (false, i..i + 1),
+        PrintMode::Explore => (false, 0..0),
     };
     let mut out = String::from("SPECIFICATION Spec\n");
     if mode != PrintMode::Explore {
@@ -139,10 +144,8 @@ fn render_cfg(ts: &TransitionSystem, names: &TlaNames, mode: PrintMode) -> Strin
             out.push_str(&format!("PROPERTY {}\n", names.after(i)));
         }
     }
-    if temporal {
-        for i in 0..ts.properties().len() {
-            out.push_str(&format!("PROPERTY {}\n", names.property(i)));
-        }
+    for i in properties {
+        out.push_str(&format!("PROPERTY {}\n", names.property(i)));
     }
     out
 }
