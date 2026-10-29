@@ -25,6 +25,16 @@ pub struct TraceStep {
     pub state: CanonState,
 }
 
+/// How a temporal counterexample goes on after its last state.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Lasso {
+    /// `State N: Stuttering`: the last state repeats forever.
+    Stutter,
+    /// `Back to state K: <Action ...>`: the action `label` moves the last state back to state
+    /// `to` (from 1), and the behavior repeats from there.
+    Back { to: usize, label: String },
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Violation {
     pub kind: ViolationKind,
@@ -33,6 +43,8 @@ pub struct Violation {
     /// TLC's error line, verbatim.
     pub line: String,
     pub trace: Vec<TraceStep>,
+    /// The loop a temporal counterexample ends in; `None` for a finite trace.
+    pub lasso: Option<Lasso>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -81,13 +93,14 @@ impl TlcRun {
                 continue;
             };
             let name = violation_name(line);
-            let (trace, next) = parse_trace(&lines, i);
+            let (trace, lasso, next) = parse_trace(&lines, i);
             i = next;
             run.violations.push(Violation {
                 kind,
                 name,
                 line: line.to_string(),
                 trace,
+                lasso,
             });
         }
         run
@@ -147,11 +160,15 @@ fn distinct_states(line: &str) -> Option<u64> {
         .ok()
 }
 
-/// The `State n:` blocks after a violation line, up to the next `Error:` or summary line.
-fn parse_trace(lines: &[&str], mut i: usize) -> (Vec<TraceStep>, usize) {
+/// The `State n:` blocks after a violation line, up to the next `Error:` or summary line, and
+/// the lasso line that ends a temporal counterexample.
+fn parse_trace(lines: &[&str], mut i: usize) -> (Vec<TraceStep>, Option<Lasso>, usize) {
     let mut steps = Vec::new();
     while i < lines.len() {
         let line = lines[i].trim();
+        if let Some(lasso) = lasso_line(line) {
+            return (steps, Some(lasso), i + 1);
+        }
         if let Some(label) = state_header(line) {
             let (state, next) = parse_block(lines, i + 1);
             steps.push(TraceStep { label, state });
@@ -165,7 +182,22 @@ fn parse_trace(lines: &[&str], mut i: usize) -> (Vec<TraceStep>, usize) {
             break;
         }
     }
-    (steps, i)
+    (steps, None, i)
+}
+
+/// `State 9: Stuttering`, or `Back to state 7: <Cancel line 48, col 3 to ...>`. An action
+/// label always prints in angle brackets, so a bare word is TLC's own stutter marker.
+fn lasso_line(line: &str) -> Option<Lasso> {
+    if let Some(rest) = line.strip_prefix("Back to state ") {
+        let (to, label) = rest.split_once(':')?;
+        return Some(Lasso::Back {
+            to: to.trim().parse().ok()?,
+            label: action_label(label),
+        });
+    }
+    let (num, label) = line.strip_prefix("State ")?.split_once(':')?;
+    num.trim().parse::<u64>().ok()?;
+    (label.trim() == "Stuttering").then_some(Lasso::Stutter)
 }
 
 /// `State 3: <Pay line 9, col 3 to ...>` gives `Pay`; `State 1:` alone gives "".
@@ -173,6 +205,11 @@ fn state_header(line: &str) -> Option<String> {
     let rest = line.strip_prefix("State ")?;
     let (num, label) = rest.split_once(':')?;
     num.trim().parse::<u64>().ok()?;
+    Some(action_label(label))
+}
+
+/// `<Pay line 9, col 3 to ...>` gives `Pay`; a label without brackets stays as it is.
+fn action_label(label: &str) -> String {
     let label = label.trim();
     let label = label
         .strip_prefix('<')
@@ -182,7 +219,7 @@ fn state_header(line: &str) -> Option<String> {
         Some((op, _)) => op,
         None => label,
     };
-    Some(label.trim().to_string())
+    label.trim().to_string()
 }
 
 /// The `/\ var = value` lines from `start` to the next blank or header line. A line that
@@ -399,6 +436,15 @@ pub fn summarize(run: &TlcRun, output: &str) -> String {
                         lines.push(format!("    {var} = {value}"));
                     }
                 }
+                match &v.lasso {
+                    Some(Lasso::Stutter) => {
+                        lines.push(format!("  State {}: Stuttering", v.trace.len() + 1));
+                    }
+                    Some(Lasso::Back { to, label }) => {
+                        lines.push(format!("  Back to state {to}: {label}"));
+                    }
+                    None => {}
+                }
             }
         }
         return lines.join("\n");
@@ -488,6 +534,76 @@ Model checking completed. No error has been found.
         let run = TlcRun::parse("Error: Temporal properties were violated.\n");
         assert_eq!(run.violations[0].kind, ViolationKind::Temporal);
         assert!(run.violations[0].name.is_none());
+    }
+
+    /// TLC 1.7.4's two lasso tails, trimmed from runs of a model with a Reopen use case.
+    const STUTTER: &str = r#"Error: Temporal properties were violated.
+
+Error: The following behavior constitutes a counter-example:
+
+State 1: <Initial predicate>
+/\ s = <<"pending", "pending">>
+
+State 2: <Place line 60, col 3 to line 62, col 51 of module M>
+/\ s = <<"shipped", "pending">>
+
+State 3: Stuttering
+Finished checking temporal properties in 00s at 2026-10-29 23:39:55
+"#;
+
+    const BACK: &str = r#"Error: Temporal properties were violated.
+
+Error: The following behavior constitutes a counter-example:
+
+State 1: <Initial predicate>
+/\ s = <<"pending", "pending">>
+
+State 2: <Cancel line 48, col 3 to line 51, col 51 of module M>
+/\ s = <<"cancelled", "pending">>
+
+State 3: <Reopen line 54, col 3 to line 57, col 51 of module M>
+/\ s = <<"pending", "pending">>
+
+Back to state 2: <Cancel line 48, col 3 to line 51, col 51 of module M>
+
+Finished checking temporal properties in 00s at 2026-10-29 23:39:55
+"#;
+
+    #[test]
+    fn a_stuttering_lasso_is_no_step() {
+        let run = TlcRun::parse(STUTTER);
+        let v = &run.violations[0];
+        assert_eq!(v.trace.len(), 2);
+        assert_eq!(v.trace[1].label, "Place");
+        assert_eq!(v.lasso, Some(Lasso::Stutter));
+        let s = summarize(&run, STUTTER);
+        assert!(s.ends_with("  State 3: Stuttering"), "{s}");
+    }
+
+    #[test]
+    fn a_back_edge_names_its_target_and_action() {
+        let run = TlcRun::parse(BACK);
+        let v = &run.violations[0];
+        let labels: Vec<&str> = v.trace.iter().map(|s| s.label.as_str()).collect();
+        assert_eq!(labels, ["Initial predicate", "Cancel", "Reopen"]);
+        assert_eq!(
+            v.lasso,
+            Some(Lasso::Back {
+                to: 2,
+                label: "Cancel".to_string()
+            })
+        );
+        assert_eq!(v.kind, ViolationKind::Temporal);
+        let s = summarize(&run, BACK);
+        assert!(s.ends_with("  Back to state 2: Cancel"), "{s}");
+    }
+
+    #[test]
+    fn a_safety_trace_has_no_lasso() {
+        assert!(TlcRun::parse(RUN)
+            .violations
+            .iter()
+            .all(|v| v.lasso.is_none()));
     }
 
     /// TLC 1.7.4's layout: an edge may name its target before the target's node line, an
