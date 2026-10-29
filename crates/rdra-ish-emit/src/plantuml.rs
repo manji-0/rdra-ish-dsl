@@ -2,11 +2,10 @@
 
 use crate::diagram_common::{
     business_actor_node_id, business_input_node_id, business_input_visible,
-    business_usecase_node_id, col_type_str, event_flow_buc_id, event_flow_event_id,
-    event_flow_extsystem_id, event_flow_state_id, event_flow_timer_id, event_flow_usecase_id,
-    graph_node_visible, is_entity_operation, lifecycle_start_states, node_id, node_label,
-    rdra_description_nodes, reachable_for_scope, render_relations, scoped_node_visible,
-    sequence_usecase_scope, technical_api_node_id, technical_entity_node_id, Syntax,
+    business_usecase_node_id, col_type_str, graph_node_visible, is_entity_operation,
+    lifecycle_start_states, node_id, node_label, rdra_description_nodes, reachable_for_scope,
+    render_event_flows, render_relations, scoped_node_visible, sequence_usecase_scope,
+    technical_api_node_id, technical_entity_node_id, Syntax,
 };
 use crate::{
     collect_object_graph_nodes, object_graph_layer, object_graph_rel_label, prefixed_label,
@@ -14,13 +13,10 @@ use crate::{
     OBJECT_GRAPH_LAYERS,
 };
 use rdra_ish_core::model::{
-    ActorKey, ApiKey, BucKey, EntityKey, ExtSystemKey, NodeRef, Raiser, RelKind, ScreenKey,
-    SemanticModel, StateKey, TimerKey, UseCaseKey,
+    ActorKey, ApiKey, EntityKey, NodeRef, RelKind, ScreenKey, SemanticModel, StateKey, UseCaseKey,
 };
 use rdra_ish_core::tx::infer_usecase_transactions;
-use rdra_ish_core::{
-    derive_actor_input_inferences, derive_system_boundaries, EventFlow, TimerFlow,
-};
+use rdra_ish_core::{derive_actor_input_inferences, derive_system_boundaries};
 use std::collections::{HashMap, HashSet};
 
 const SYNTAX: Syntax = Syntax::PlantUml;
@@ -1054,334 +1050,22 @@ fn push_tx_writes<'a>(
 
 pub struct EventFlowPlantUmlEmitter;
 
-fn declare_event_flow_extsystem(
-    out: &mut String,
-    declared: &mut HashSet<String>,
-    model: &SemanticModel,
-    extsystem: ExtSystemKey,
-) -> Option<String> {
-    let extsystem_model = model.ext_systems.get(extsystem)?;
-    let extsystem_id = event_flow_extsystem_id(&extsystem_model.id);
-    if declared.insert(extsystem_id.clone()) {
-        out.push_str(&format!(
-            "component \"{}\" as {}\n",
-            prefixed_label("🌐", &extsystem_model.label),
-            extsystem_id
-        ));
-    }
-    Some(extsystem_id)
-}
-
-fn declare_event_flow_timer(
-    out: &mut String,
-    declared: &mut HashSet<String>,
-    model: &SemanticModel,
-    timer: TimerKey,
-) -> Option<String> {
-    let timer_model = model.timers.get(timer)?;
-    let timer_id = event_flow_timer_id(&timer_model.id);
-    if declared.insert(timer_id.clone()) {
-        out.push_str(&format!(
-            "rectangle \"{}\" as {}\n",
-            prefixed_label("⏱️", &timer_model.label),
-            timer_id
-        ));
-    }
-    Some(timer_id)
-}
-
-fn declare_event_flow_event(
-    out: &mut String,
-    declared: &mut HashSet<String>,
-    model: &SemanticModel,
-    flow: &EventFlow,
-) -> Option<String> {
-    let event = model.events.get(flow.event)?;
-    let event_id = event_flow_event_id(&event.id);
-    if declared.insert(event_id.clone()) {
-        out.push_str(&format!(
-            "card \"{}\" as {}\n",
-            prefixed_label("⚡", &event.label),
-            event_id
-        ));
-    }
-    Some(event_id)
-}
-
-fn declare_event_flow_usecase(
-    out: &mut String,
-    declared: &mut HashSet<String>,
-    model: &SemanticModel,
-    usecase: UseCaseKey,
-) -> Option<String> {
-    let uc = model.use_cases.get(usecase)?;
-    let usecase_id = event_flow_usecase_id(&uc.id);
-    if declared.insert(usecase_id.clone()) {
-        out.push_str(&format!(
-            "usecase \"{}\" as {}\n",
-            prefixed_label("✅", &uc.label),
-            usecase_id
-        ));
-    }
-    Some(usecase_id)
-}
-
-fn declare_event_flow_buc(
-    out: &mut String,
-    declared: &mut HashSet<String>,
-    model: &SemanticModel,
-    buc: BucKey,
-) -> Option<String> {
-    let buc_model = model.bucs.get(buc)?;
-    let buc_id = event_flow_buc_id(&buc_model.id);
-    if declared.insert(buc_id.clone()) {
-        out.push_str(&format!(
-            "rectangle \"{}\" as {}\n",
-            prefixed_label("📦", &buc_model.label),
-            buc_id
-        ));
-    }
-    Some(buc_id)
-}
-
-fn declare_event_flow_state(
-    out: &mut String,
-    declared: &mut HashSet<String>,
-    model: &SemanticModel,
-    state: rdra_ish_core::model::StateKey,
-) -> Option<String> {
-    let state_model = model.states.get(state)?;
-    let state_id = event_flow_state_id(&state_model.id);
-    if declared.insert(state_id.clone()) {
-        out.push_str(&format!(
-            "state \"{}\" as {}\n",
-            prefixed_label("🔄", &state_model.label),
-            state_id
-        ));
-    }
-    Some(state_id)
-}
-
-fn render_event_flow(
-    out: &mut String,
-    declared: &mut HashSet<String>,
-    model: &SemanticModel,
-    reachable: &Option<HashSet<NodeRef>>,
-    flow: &EventFlow,
-) {
-    let event_node = NodeRef::Event(flow.event);
-    if !scoped_node_visible(reachable, &event_node) {
-        return;
-    }
-    let Some(event_id) = declare_event_flow_event(out, declared, model, flow) else {
-        return;
-    };
-
-    let mut raised_by = flow.raised_by.to_vec();
-    raised_by.sort_by_key(|raiser| match raiser {
-        Raiser::UseCase(usecase) => (
-            0,
-            model
-                .use_cases
-                .get(*usecase)
-                .map(|uc| uc.id.as_str())
-                .unwrap_or(""),
-        ),
-        Raiser::ExtSystem(extsystem) => (
-            1,
-            model
-                .ext_systems
-                .get(*extsystem)
-                .map(|x| x.id.as_str())
-                .unwrap_or(""),
-        ),
-    });
-    for raiser in raised_by {
-        let (node, declared_id) = match raiser {
-            Raiser::UseCase(usecase) => (
-                NodeRef::UseCase(usecase),
-                declare_event_flow_usecase(out, declared, model, usecase),
-            ),
-            Raiser::ExtSystem(extsystem) => (
-                NodeRef::ExtSystem(extsystem),
-                declare_event_flow_extsystem(out, declared, model, extsystem),
-            ),
-        };
-        if !scoped_node_visible(reachable, &node) {
-            continue;
-        }
-        if let Some(raiser_id) = declared_id {
-            out.push_str(&format!("{} ..> {} : raises\n", raiser_id, event_id));
-        }
-    }
-
-    let mut triggers = flow.triggers_ucs.to_vec();
-    triggers.sort_by_key(|&uk| {
-        model
-            .use_cases
-            .get(uk)
-            .map(|uc| uc.id.as_str())
-            .unwrap_or("")
-    });
-    for usecase in triggers {
-        let node = NodeRef::UseCase(usecase);
-        if !scoped_node_visible(reachable, &node) {
-            continue;
-        }
-        if let Some(usecase_id) = declare_event_flow_usecase(out, declared, model, usecase) {
-            out.push_str(&format!("{} ..> {} : triggers\n", event_id, usecase_id));
-        }
-    }
-
-    let mut triggered_bucs = flow.triggers_bucs.to_vec();
-    triggered_bucs.sort_by_key(|&bk| model.bucs.get(bk).map(|buc| buc.id.as_str()).unwrap_or(""));
-    for buc in triggered_bucs {
-        let node = NodeRef::Buc(buc);
-        if !scoped_node_visible(reachable, &node) {
-            continue;
-        }
-        if let Some(buc_id) = declare_event_flow_buc(out, declared, model, buc) {
-            out.push_str(&format!("{} ..> {} : triggers\n", event_id, buc_id));
-        }
-    }
-
-    let mut delivered_to = flow.delivered_to.to_vec();
-    delivered_to.sort_by_key(|&xk| {
-        model
-            .ext_systems
-            .get(xk)
-            .map(|x| x.id.as_str())
-            .unwrap_or("")
-    });
-    for extsystem in delivered_to {
-        let node = NodeRef::ExtSystem(extsystem);
-        if !scoped_node_visible(reachable, &node) {
-            continue;
-        }
-        if let Some(extsystem_id) = declare_event_flow_extsystem(out, declared, model, extsystem) {
-            out.push_str(&format!("{} ..> {} : delivers\n", event_id, extsystem_id));
-        }
-    }
-
-    let state_id_to_key: HashMap<String, StateKey> = model
-        .states
-        .iter()
-        .map(|(sk, s)| (s.id.clone(), sk))
-        .collect();
-    let resolved_transitions: Vec<(StateKey, StateKey)> = flow
-        .transitions
-        .iter()
-        .filter_map(|st| {
-            let entity_id = &model.entities.get(st.entity)?.id;
-            let from_sk = state_id_to_key
-                .get(&format!("{entity_id}_{}", st.from))
-                .copied()?;
-            let to_sk = state_id_to_key
-                .get(&format!("{entity_id}_{}", st.to))
-                .copied()?;
-            Some((from_sk, to_sk))
-        })
-        .collect();
-    let mut transitions = resolved_transitions;
-    transitions.sort_by_key(|(from, _)| {
-        model
-            .states
-            .get(*from)
-            .map(|state| state.id.clone())
-            .unwrap_or_default()
-    });
-    let event_label = model
-        .events
-        .get(flow.event)
-        .map(|event| prefixed_label("⚡", &event.label))
-        .unwrap_or_default();
-    for (from, to) in &transitions {
-        let Some(from_id) = declare_event_flow_state(out, declared, model, *from) else {
-            continue;
-        };
-        let Some(to_id) = declare_event_flow_state(out, declared, model, *to) else {
-            continue;
-        };
-        out.push_str(&format!("{} --> {} : {}\n", from_id, to_id, event_label));
-    }
-}
-
-fn render_timer_flow(
-    out: &mut String,
-    declared: &mut HashSet<String>,
-    model: &SemanticModel,
-    reachable: &Option<HashSet<NodeRef>>,
-    flow: &TimerFlow,
-) {
-    if !scoped_node_visible(reachable, &NodeRef::Timer(flow.timer)) {
-        return;
-    }
-    let Some(timer_id) = declare_event_flow_timer(out, declared, model, flow.timer) else {
-        return;
-    };
-
-    let mut usecases = flow.triggers_ucs.to_vec();
-    usecases.sort_by_key(|&uk| {
-        model
-            .use_cases
-            .get(uk)
-            .map(|uc| uc.id.as_str())
-            .unwrap_or("")
-    });
-    for usecase in usecases {
-        if !scoped_node_visible(reachable, &NodeRef::UseCase(usecase)) {
-            continue;
-        }
-        if let Some(usecase_id) = declare_event_flow_usecase(out, declared, model, usecase) {
-            out.push_str(&format!("{} ..> {} : triggers\n", timer_id, usecase_id));
-        }
-    }
-
-    let mut bucs = flow.triggers_bucs.to_vec();
-    bucs.sort_by_key(|&bk| model.bucs.get(bk).map(|buc| buc.id.as_str()).unwrap_or(""));
-    for buc in bucs {
-        if !scoped_node_visible(reachable, &NodeRef::Buc(buc)) {
-            continue;
-        }
-        if let Some(buc_id) = declare_event_flow_buc(out, declared, model, buc) {
-            out.push_str(&format!("{} ..> {} : triggers\n", timer_id, buc_id));
-        }
-    }
-}
-
 impl Emitter for EventFlowPlantUmlEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
-        let reachable: Option<HashSet<NodeRef>> = match &view.scope {
-            Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
-            Scope::Whole | Scope::UseCases(_) => None,
-        };
-        let flows = rdra_ish_core::collect_event_flows(model);
-
         let mut out = String::new();
         out.push_str("@startuml\n");
         out.push_str("!theme plain\n");
         out.push_str("left to right direction\n\n");
-
-        let mut declared: HashSet<String> = HashSet::new();
-
-        for flow in &flows {
-            render_event_flow(&mut out, &mut declared, model, &reachable, flow);
-        }
-        for timer_flow in rdra_ish_core::collect_timer_flows(model) {
-            render_timer_flow(&mut out, &mut declared, model, &reachable, &timer_flow);
-        }
-
+        render_event_flows(SYNTAX, &mut out, model, &view.scope);
         out.push_str("\n@enduml\n");
         Ok(out)
     }
 }
 
-// ── ヘルパー ──────────────────────────────────────────────────────────────────
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::diagram_common::model_from;
+    use crate::diagram_common::{model_from, render_event_flow};
     use rdra_ish_core::build_model;
     use rdra_ish_syntax::parse;
 
@@ -1904,8 +1588,8 @@ transitions(Claim.status, ReviewClaim, open -> reviewed)
         let mut out = String::new();
         let mut declared = HashSet::new();
 
-        render_event_flow(&mut out, &mut declared, &model, &None, flow);
-        render_event_flow(&mut out, &mut declared, &model, &None, flow);
+        render_event_flow(SYNTAX, &mut out, &mut declared, &model, &None, flow);
+        render_event_flow(SYNTAX, &mut out, &mut declared, &model, &None, flow);
 
         assert_eq!(out.matches("card \"⚡ Encounter Signed\"").count(), 1);
         assert!(out.contains("uc__SignEncounter ..> ev__EncounterSigned : raises"));
@@ -1929,12 +1613,7 @@ raises(SignEncounter, EncounterSigned)
         let mut declared = HashSet::new();
         let reachable = Some(HashSet::new());
 
-        assert_eq!(
-            event_flow_event_id("EncounterSigned"),
-            "ev__EncounterSigned"
-        );
-        assert_eq!(event_flow_usecase_id("SignEncounter"), "uc__SignEncounter");
-        render_event_flow(&mut out, &mut declared, &model, &reachable, &flow);
+        render_event_flow(SYNTAX, &mut out, &mut declared, &model, &reachable, &flow);
 
         assert!(out.is_empty());
         assert!(declared.is_empty());

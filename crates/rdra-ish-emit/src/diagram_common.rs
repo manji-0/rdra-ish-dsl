@@ -1,14 +1,16 @@
 //! Helpers the PlantUML and Mermaid emitters share.
 
 use crate::{
-    node_description, object_graph_rel_label, view_node_visible, view_relation_visible, Scope, View,
+    node_description, object_graph_rel_label, prefixed_label, view_node_visible,
+    view_relation_visible, Scope, View,
 };
 use rdra_ish_core::lifecycle::{Bounds, Scope as LifecycleScope, TransitionSystem};
 use rdra_ish_core::model::{
-    ApiKey, BucKey, ColumnType, EntityKey, NodeRef, RelKind, SemanticModel, StateKey, UseCaseKey,
+    ApiKey, BucKey, ColumnType, EntityKey, EventKey, ExtSystemKey, NodeRef, Raiser, RelKind,
+    SemanticModel, StateKey, TimerKey, UseCaseKey,
 };
-use rdra_ish_core::ActorInputInference;
-use std::collections::HashSet;
+use rdra_ish_core::{ActorInputInference, EventFlow, TimerFlow};
+use std::collections::{HashMap, HashSet};
 
 /// Start states of the lifecycle columns the visible transitions name, read from the
 /// transition system (the creation status, else the column's base), sorted by node id.
@@ -366,30 +368,6 @@ pub(crate) fn is_entity_operation(kind: &RelKind) -> bool {
     )
 }
 
-pub(crate) fn event_flow_event_id(id: &str) -> String {
-    format!("ev__{}", id)
-}
-
-pub(crate) fn event_flow_usecase_id(id: &str) -> String {
-    format!("uc__{}", id)
-}
-
-pub(crate) fn event_flow_buc_id(id: &str) -> String {
-    format!("buc__{}", id)
-}
-
-pub(crate) fn event_flow_state_id(id: &str) -> String {
-    format!("st__{}", id)
-}
-
-pub(crate) fn event_flow_extsystem_id(id: &str) -> String {
-    format!("xs__{}", id)
-}
-
-pub(crate) fn event_flow_timer_id(id: &str) -> String {
-    format!("tm__{}", id)
-}
-
 /// The text format a shared emitter writes. The two differ in how they quote a label and draw
 /// an edge, and in nothing else the shared code looks at.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -538,6 +516,316 @@ pub(crate) fn render_relations(
             if let Some(edge) = syntax.relation_edge(&relation.kind, from_id, to_id) {
                 out.push_str(&edge);
             }
+        }
+    }
+}
+
+/// A node the event-flow diagram declares.
+#[derive(Clone, Copy)]
+pub(crate) enum FlowNode {
+    Event(EventKey),
+    UseCase(UseCaseKey),
+    Buc(BucKey),
+    State(StateKey),
+    ExtSystem(ExtSystemKey),
+    Timer(TimerKey),
+}
+
+impl FlowNode {
+    fn node_ref(self) -> NodeRef {
+        match self {
+            FlowNode::Event(key) => NodeRef::Event(key),
+            FlowNode::UseCase(key) => NodeRef::UseCase(key),
+            FlowNode::Buc(key) => NodeRef::Buc(key),
+            FlowNode::State(key) => NodeRef::State(key),
+            FlowNode::ExtSystem(key) => NodeRef::ExtSystem(key),
+            FlowNode::Timer(key) => NodeRef::Timer(key),
+        }
+    }
+
+    fn id_prefix(self) -> &'static str {
+        match self {
+            FlowNode::Event(_) => "ev",
+            FlowNode::UseCase(_) => "uc",
+            FlowNode::Buc(_) => "buc",
+            FlowNode::State(_) => "st",
+            FlowNode::ExtSystem(_) => "xs",
+            FlowNode::Timer(_) => "tm",
+        }
+    }
+
+    fn icon(self) -> &'static str {
+        match self {
+            FlowNode::Event(_) => "⚡",
+            FlowNode::UseCase(_) => "✅",
+            FlowNode::Buc(_) => "📦",
+            FlowNode::State(_) => "🔄",
+            FlowNode::ExtSystem(_) => "🌐",
+            FlowNode::Timer(_) => "⏱️",
+        }
+    }
+}
+
+impl Syntax {
+    /// The statement that declares an event-flow node: a PlantUML element keyword, or a
+    /// Mermaid shape.
+    fn flow_node_declaration(self, node: FlowNode, id: &str, label: &str) -> String {
+        match self {
+            Syntax::PlantUml => {
+                let keyword = match node {
+                    FlowNode::Event(_) => "card",
+                    FlowNode::UseCase(_) => "usecase",
+                    FlowNode::Buc(_) | FlowNode::Timer(_) => "rectangle",
+                    FlowNode::State(_) => "state",
+                    FlowNode::ExtSystem(_) => "component",
+                };
+                format!("{keyword} \"{label}\" as {id}\n")
+            }
+            Syntax::Mermaid => {
+                let (open, close) = match node {
+                    FlowNode::Event(_) => ("{", "}"),
+                    FlowNode::UseCase(_) => ("([", "])"),
+                    FlowNode::Buc(_) => ("[[", "]]"),
+                    FlowNode::State(_) => ("(", ")"),
+                    FlowNode::ExtSystem(_) => ("[/", "/]"),
+                    FlowNode::Timer(_) => ("{{", "}}"),
+                };
+                format!("  {id}{open}\"{label}\"{close}\n")
+            }
+        }
+    }
+}
+
+/// Declare `node` once per diagram and return its diagram id, or `None` when the model no
+/// longer holds it.
+pub(crate) fn declare_flow_node(
+    syntax: Syntax,
+    out: &mut String,
+    declared: &mut HashSet<String>,
+    model: &SemanticModel,
+    node: FlowNode,
+) -> Option<String> {
+    let node_ref = node.node_ref();
+    let id = format!("{}__{}", node.id_prefix(), node_id(model, &node_ref)?);
+    if declared.insert(id.clone()) {
+        let label = prefixed_label(node.icon(), node_label(model, &node_ref)?);
+        out.push_str(&syntax.flow_node_declaration(node, &id, &label));
+    }
+    Some(id)
+}
+
+/// Every event flow and timer flow the scope shows.
+pub(crate) fn render_event_flows(
+    syntax: Syntax,
+    out: &mut String,
+    model: &SemanticModel,
+    scope: &Scope,
+) {
+    let reachable = reachable_for_scope(model, scope);
+    let mut declared: HashSet<String> = HashSet::new();
+    for flow in &rdra_ish_core::collect_event_flows(model) {
+        render_event_flow(syntax, out, &mut declared, model, &reachable, flow);
+    }
+    for timer_flow in rdra_ish_core::collect_timer_flows(model) {
+        render_timer_flow(syntax, out, &mut declared, model, &reachable, &timer_flow);
+    }
+}
+
+pub(crate) fn render_event_flow(
+    syntax: Syntax,
+    out: &mut String,
+    declared: &mut HashSet<String>,
+    model: &SemanticModel,
+    reachable: &Option<HashSet<NodeRef>>,
+    flow: &EventFlow,
+) {
+    let event_node = NodeRef::Event(flow.event);
+    if !scoped_node_visible(reachable, &event_node) {
+        return;
+    }
+    let Some(event_id) =
+        declare_flow_node(syntax, out, declared, model, FlowNode::Event(flow.event))
+    else {
+        return;
+    };
+
+    let mut raised_by = flow.raised_by.to_vec();
+    raised_by.sort_by_key(|raiser| match raiser {
+        Raiser::UseCase(usecase) => (
+            0,
+            model
+                .use_cases
+                .get(*usecase)
+                .map(|uc| uc.id.as_str())
+                .unwrap_or(""),
+        ),
+        Raiser::ExtSystem(extsystem) => (
+            1,
+            model
+                .ext_systems
+                .get(*extsystem)
+                .map(|x| x.id.as_str())
+                .unwrap_or(""),
+        ),
+    });
+    for raiser in raised_by {
+        let (node, flow_node) = match raiser {
+            Raiser::UseCase(usecase) => (NodeRef::UseCase(usecase), FlowNode::UseCase(usecase)),
+            Raiser::ExtSystem(extsystem) => (
+                NodeRef::ExtSystem(extsystem),
+                FlowNode::ExtSystem(extsystem),
+            ),
+        };
+        let declared_id = declare_flow_node(syntax, out, declared, model, flow_node);
+        if !scoped_node_visible(reachable, &node) {
+            continue;
+        }
+        if let Some(raiser_id) = declared_id {
+            out.push_str(&syntax.link(Link::Dotted("raises"), &raiser_id, &event_id));
+        }
+    }
+
+    let mut triggers = flow.triggers_ucs.to_vec();
+    triggers.sort_by_key(|&uk| {
+        model
+            .use_cases
+            .get(uk)
+            .map(|uc| uc.id.as_str())
+            .unwrap_or("")
+    });
+    for usecase in triggers {
+        let node = NodeRef::UseCase(usecase);
+        if !scoped_node_visible(reachable, &node) {
+            continue;
+        }
+        if let Some(usecase_id) =
+            declare_flow_node(syntax, out, declared, model, FlowNode::UseCase(usecase))
+        {
+            out.push_str(&syntax.link(Link::Dotted("triggers"), &event_id, &usecase_id));
+        }
+    }
+
+    let mut triggered_bucs = flow.triggers_bucs.to_vec();
+    triggered_bucs.sort_by_key(|&bk| model.bucs.get(bk).map(|buc| buc.id.as_str()).unwrap_or(""));
+    for buc in triggered_bucs {
+        let node = NodeRef::Buc(buc);
+        if !scoped_node_visible(reachable, &node) {
+            continue;
+        }
+        if let Some(buc_id) = declare_flow_node(syntax, out, declared, model, FlowNode::Buc(buc)) {
+            out.push_str(&syntax.link(Link::Dotted("triggers"), &event_id, &buc_id));
+        }
+    }
+
+    let mut delivered_to = flow.delivered_to.to_vec();
+    delivered_to.sort_by_key(|&xk| {
+        model
+            .ext_systems
+            .get(xk)
+            .map(|x| x.id.as_str())
+            .unwrap_or("")
+    });
+    for extsystem in delivered_to {
+        let node = NodeRef::ExtSystem(extsystem);
+        if !scoped_node_visible(reachable, &node) {
+            continue;
+        }
+        if let Some(extsystem_id) =
+            declare_flow_node(syntax, out, declared, model, FlowNode::ExtSystem(extsystem))
+        {
+            out.push_str(&syntax.link(Link::Dotted("delivers"), &event_id, &extsystem_id));
+        }
+    }
+
+    let state_id_to_key: HashMap<String, StateKey> = model
+        .states
+        .iter()
+        .map(|(sk, s)| (s.id.clone(), sk))
+        .collect();
+    let resolved_transitions: Vec<(StateKey, StateKey)> = flow
+        .transitions
+        .iter()
+        .filter_map(|st| {
+            let entity_id = &model.entities.get(st.entity)?.id;
+            let from_sk = state_id_to_key
+                .get(&format!("{entity_id}_{}", st.from))
+                .copied()?;
+            let to_sk = state_id_to_key
+                .get(&format!("{entity_id}_{}", st.to))
+                .copied()?;
+            Some((from_sk, to_sk))
+        })
+        .collect();
+    let mut transitions = resolved_transitions;
+    transitions.sort_by_key(|(from, _)| {
+        model
+            .states
+            .get(*from)
+            .map(|state| state.id.clone())
+            .unwrap_or_default()
+    });
+    let event_label = model
+        .events
+        .get(flow.event)
+        .map(|event| prefixed_label("⚡", &event.label))
+        .unwrap_or_default();
+    for (from, to) in &transitions {
+        let Some(from_id) = declare_flow_node(syntax, out, declared, model, FlowNode::State(*from))
+        else {
+            continue;
+        };
+        let Some(to_id) = declare_flow_node(syntax, out, declared, model, FlowNode::State(*to))
+        else {
+            continue;
+        };
+        out.push_str(&syntax.link(Link::Labeled(&event_label), &from_id, &to_id));
+    }
+}
+
+pub(crate) fn render_timer_flow(
+    syntax: Syntax,
+    out: &mut String,
+    declared: &mut HashSet<String>,
+    model: &SemanticModel,
+    reachable: &Option<HashSet<NodeRef>>,
+    flow: &TimerFlow,
+) {
+    if !scoped_node_visible(reachable, &NodeRef::Timer(flow.timer)) {
+        return;
+    }
+    let Some(timer_id) =
+        declare_flow_node(syntax, out, declared, model, FlowNode::Timer(flow.timer))
+    else {
+        return;
+    };
+
+    let mut usecases = flow.triggers_ucs.to_vec();
+    usecases.sort_by_key(|&uk| {
+        model
+            .use_cases
+            .get(uk)
+            .map(|uc| uc.id.as_str())
+            .unwrap_or("")
+    });
+    for usecase in usecases {
+        if !scoped_node_visible(reachable, &NodeRef::UseCase(usecase)) {
+            continue;
+        }
+        if let Some(usecase_id) =
+            declare_flow_node(syntax, out, declared, model, FlowNode::UseCase(usecase))
+        {
+            out.push_str(&syntax.link(Link::Dotted("triggers"), &timer_id, &usecase_id));
+        }
+    }
+
+    let mut bucs = flow.triggers_bucs.to_vec();
+    bucs.sort_by_key(|&bk| model.bucs.get(bk).map(|buc| buc.id.as_str()).unwrap_or(""));
+    for buc in bucs {
+        if !scoped_node_visible(reachable, &NodeRef::Buc(buc)) {
+            continue;
+        }
+        if let Some(buc_id) = declare_flow_node(syntax, out, declared, model, FlowNode::Buc(buc)) {
+            out.push_str(&syntax.link(Link::Dotted("triggers"), &timer_id, &buc_id));
         }
     }
 }
