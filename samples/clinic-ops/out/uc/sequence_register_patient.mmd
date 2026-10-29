@@ -1,6 +1,5 @@
 sequenceDiagram
   box System Value
-    actor Patient as 👤 Patient
     actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
@@ -12,8 +11,8 @@ sequenceDiagram
     participant PatientProfile as 🗄️ Patient Profile
   end
 
-  Note over Patient,PatientProfile: ✅ Register Patient
-  Patient->>PatientProfileScreen: ✅ Register Patient
+  Note over ReceptionClerk,PatientProfile: ✅ Register Patient
+  ReceptionClerk->>PatientProfileScreen: ✅ Register Patient
   PatientProfileScreen->>RegisterPatientApi: ✅ Register Patient
   activate RegisterPatientApi
   rect rgb(245,245,245)
@@ -22,5 +21,5 @@ sequenceDiagram
     RegisterPatientApi->>PatientProfile: create
   end
   RegisterPatientApi-->>PatientProfileScreen: 🖥️ Patient Profile Screen
-  PatientProfileScreen-->>Patient: 🖥️ Patient Profile Screen
+  PatientProfileScreen-->>ReceptionClerk: 🖥️ Patient Profile Screen
   deactivate RegisterPatientApi

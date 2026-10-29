@@ -3,9 +3,9 @@ module shared.access
 import shared.actors
 import shared.biz
 
-has_permission(Patient, PatientProfileRead)
 has_permission(Patient, ConsentCapture)
 has_permission(Patient, ScheduleRead)
+has_permission(Patient, ScheduleWrite)
 
 has_permission(ReceptionClerk, PatientProfileRead)
 has_permission(ReceptionClerk, PatientProfileWrite)
@@ -15,11 +15,11 @@ has_permission(ReceptionClerk, ScheduleRead)
 has_permission(ReceptionClerk, ScheduleWrite)
 has_permission(ReceptionClerk, VisitCheckIn)
 has_permission(ReceptionClerk, ReferralManage)
+has_permission(ReceptionClerk, PatientMessageSend)
 
 has_permission(AccountsClerk, BillCalculate)
 has_permission(AccountsClerk, PaymentCollect)
 
-has_permission(Nurse, VisitCheckIn)
 has_permission(Nurse, RoomAssign)
 has_permission(Nurse, EncounterOpen)
 has_permission(Nurse, VitalsRecord)
@@ -35,6 +35,7 @@ has_permission(Clinician, ClinicalOrderWrite)
 has_permission(Clinician, LabResultManage)
 has_permission(Clinician, PrescriptionWrite)
 has_permission(Clinician, ReferralManage)
+has_permission(Clinician, PatientMessageSend)
 
 // 代行入力 drafts an order; the 指示 is the physician's, who checks it before it is carried out
 // (mhlw-2020-dairi-nyuuryoku.txt:9, :15, :71-79).

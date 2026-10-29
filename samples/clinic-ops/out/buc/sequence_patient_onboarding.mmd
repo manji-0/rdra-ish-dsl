@@ -28,10 +28,10 @@ sequenceDiagram
   end
 
   Note over Patient,PatientProfile: ✅ Archive Patient
-  Patient->System: ✅ Archive Patient
+  ReceptionClerk->System: ✅ Archive Patient
   activate System
   System->>PatientAccount: update
-  System-->>Patient: 🖥️ Patient Profile Screen
+  System-->>ReceptionClerk: 🖥️ Patient Profile Screen
   deactivate System
 
   Note over Patient,PatientProfile: ✅ Capture Consent
@@ -51,21 +51,21 @@ sequenceDiagram
   deactivate System
 
   Note over Patient,PatientProfile: ✅ Expire Intake Forms
-  Patient->System: ✅ Expire Intake Forms
+  ReceptionClerk->System: ✅ Expire Intake Forms
   activate System
   System->>IntakePacket: update
-  System-->>Patient: 🖥️ Intake Portal Screen
+  System-->>ReceptionClerk: 🖥️ Intake Portal Screen
   deactivate System
 
   Note over Patient,PatientProfile: ✅ Merge Duplicate Patient
-  Patient->System: ✅ Merge Duplicate Patient
+  ReceptionClerk->System: ✅ Merge Duplicate Patient
   activate System
   System->>PatientAccount: update
-  System-->>Patient: 🖥️ Patient Profile Screen
+  System-->>ReceptionClerk: 🖥️ Patient Profile Screen
   deactivate System
 
   Note over Patient,PatientProfile: ✅ Register Patient
-  Patient->>PatientProfileScreen: ✅ Register Patient
+  ReceptionClerk->>PatientProfileScreen: ✅ Register Patient
   PatientProfileScreen->>RegisterPatientApi: ✅ Register Patient
   activate RegisterPatientApi
   rect rgb(245,245,245)
@@ -74,21 +74,21 @@ sequenceDiagram
     RegisterPatientApi->>PatientProfile: create
   end
   RegisterPatientApi-->>PatientProfileScreen: 🖥️ Patient Profile Screen
-  PatientProfileScreen-->>Patient: 🖥️ Patient Profile Screen
+  PatientProfileScreen-->>ReceptionClerk: 🖥️ Patient Profile Screen
   deactivate RegisterPatientApi
 
   Note over Patient,PatientProfile: ✅ Search Patient
-  Patient->>PatientSearchScreen: ✅ Search Patient
+  ReceptionClerk->>PatientSearchScreen: ✅ Search Patient
   PatientSearchScreen->>SearchPatientApi: ✅ Search Patient
   activate SearchPatientApi
   SearchPatientApi->>PatientAccount: read
   SearchPatientApi->>PatientProfile: read
   SearchPatientApi-->>PatientSearchScreen: 🖥️ Patient Search Screen
-  PatientSearchScreen-->>Patient: 🖥️ Patient Search Screen
+  PatientSearchScreen-->>ReceptionClerk: 🖥️ Patient Search Screen
   deactivate SearchPatientApi
 
   Note over Patient,PatientProfile: ✅ Send Intake Forms
-  Patient->>IntakePortalScreen: ✅ Send Intake Forms
+  ReceptionClerk->>IntakePortalScreen: ✅ Send Intake Forms
   IntakePortalScreen->>IntakeMessagingApi: ✅ Send Intake Forms
   activate IntakeMessagingApi
   rect rgb(245,245,245)
@@ -97,20 +97,20 @@ sequenceDiagram
     IntakeMessagingApi->>PatientMessage: create
   end
   IntakeMessagingApi-->>IntakePortalScreen: 🖥️ Intake Portal Screen
-  IntakePortalScreen-->>Patient: 🖥️ Intake Portal Screen
+  IntakePortalScreen-->>ReceptionClerk: 🖥️ Intake Portal Screen
   deactivate IntakeMessagingApi
 
   Note over Patient,PatientProfile: ✅ Update Demographics
-  Patient->>PatientProfileScreen: ✅ Update Demographics
+  ReceptionClerk->>PatientProfileScreen: ✅ Update Demographics
   PatientProfileScreen->>UpdateDemographicsApi: ✅ Update Demographics
   activate UpdateDemographicsApi
   UpdateDemographicsApi->>PatientProfile: update
   UpdateDemographicsApi-->>PatientProfileScreen: 🖥️ Patient Profile Screen
-  PatientProfileScreen-->>Patient: 🖥️ Patient Profile Screen
+  PatientProfileScreen-->>ReceptionClerk: 🖥️ Patient Profile Screen
   deactivate UpdateDemographicsApi
 
   Note over Patient,PatientProfile: ✅ 保険資格・限度額情報の登録（新患登録）
-  Patient->>InsuranceScreen: ✅ 保険資格・限度額情報の登録（新患登録）
+  ReceptionClerk->>InsuranceScreen: ✅ 保険資格・限度額情報の登録（新患登録）
   InsuranceScreen->>EligibilityApi: ✅ 保険資格・限度額情報の登録（新患登録）
   activate EligibilityApi
   EligibilityApi->>InsurancePolicy: read
@@ -120,5 +120,5 @@ sequenceDiagram
     EligibilityApi->>EligibilityCheck: create
   end
   EligibilityApi-->>InsuranceScreen: 🖥️ Insurance Verification Screen
-  InsuranceScreen-->>Patient: 🖥️ Insurance Verification Screen
+  InsuranceScreen-->>ReceptionClerk: 🖥️ Insurance Verification Screen
   deactivate EligibilityApi

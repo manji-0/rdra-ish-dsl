@@ -1,8 +1,6 @@
 flowchart LR
   subgraph layer_value[System Value]
     direction TB
-    Patient(["👤 Patient"])
-    ReceptionClerk(["👤 医事課 受付担当"])
   end
   subgraph layer_environment[External Environment]
     direction TB
@@ -53,24 +51,6 @@ flowchart LR
     PatientMessage[("🗄️ Patient Message")]
     PatientProfile[("🗄️ Patient Profile")]
   end
-  Patient -.->|has_permission| PatientProfileRead
-  Patient -.->|has_permission| ConsentCapture
-  Patient -->|performs| BucPatientOnboarding
-  Patient -->|performs| CaptureConsent
-  Patient -->|performs| CompleteIntakeForms
-  ReceptionClerk -.->|has_permission| PatientProfileRead
-  ReceptionClerk -.->|has_permission| PatientProfileWrite
-  ReceptionClerk -.->|has_permission| InsuranceVerify
-  ReceptionClerk -.->|has_permission| IntakeManage
-  ReceptionClerk -->|performs| BucPatientOnboarding
-  ReceptionClerk -->|performs| SearchPatient
-  ReceptionClerk -->|performs| RegisterPatient
-  ReceptionClerk -->|performs| UpdateDemographics
-  ReceptionClerk -->|performs| VerifyInsurance
-  ReceptionClerk -->|performs| SendIntakeForms
-  ReceptionClerk -->|performs| ExpireIntakeForms
-  ReceptionClerk -->|performs| MergeDuplicatePatient
-  ReceptionClerk -->|performs| ArchivePatient
   SearchPatientApi -.->|reads| PatientAccount
   SearchPatientApi -.->|reads| PatientProfile
   SearchPatientApi -.->|requires_permission| PatientProfileRead

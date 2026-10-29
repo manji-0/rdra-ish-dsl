@@ -1,6 +1,5 @@
 sequenceDiagram
   box System Value
-    actor Patient as 👤 Patient
     actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
@@ -11,9 +10,9 @@ sequenceDiagram
     participant PatientAccount as 🗄️ Patient Account
   end
 
-  Note over Patient,PatientAccount: ✅ Merge Duplicate Patient
-  Patient->System: ✅ Merge Duplicate Patient
+  Note over ReceptionClerk,PatientAccount: ✅ Merge Duplicate Patient
+  ReceptionClerk->System: ✅ Merge Duplicate Patient
   activate System
   System->>PatientAccount: update
-  System-->>Patient: 🖥️ Patient Profile Screen
+  System-->>ReceptionClerk: 🖥️ Patient Profile Screen
   deactivate System

@@ -39,7 +39,6 @@ api DispensingApi         "院内調剤 API"
 api ConfirmDispenseApi    "調剤結果 API"
 api PrescriptionInquiryApi "疑義照会 API"
 
-performs(Clinician, BucPrescriptionFulfillment)
 performs(Clinician, SearchMedication)
 performs(Clinician, DraftPrescription)
 performs(Clinician, IssueRefillPrescription)

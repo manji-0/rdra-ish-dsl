@@ -1,6 +1,5 @@
 sequenceDiagram
   box System Value
-    actor Nurse as 👤 看護師
     actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
@@ -15,8 +14,8 @@ sequenceDiagram
     participant PatientAccount as 🗄️ Patient Account
   end
 
-  Note over Nurse,PatientAccount: ✅ 受付（初診・再診）
-  Nurse->>CheckInScreen: ✅ 受付（初診・再診）
+  Note over ReceptionClerk,PatientAccount: ✅ 受付（初診・再診）
+  ReceptionClerk->>CheckInScreen: ✅ 受付（初診・再診）
   CheckInScreen->>CheckInPatientApi: ✅ 受付（初診・再診）
   activate CheckInPatientApi
   OnlineEligibilityApi->>InsurancePolicy: read
@@ -27,5 +26,5 @@ sequenceDiagram
   end
   OnlineEligibilityApi->>EligibilityCheck: create
   CheckInPatientApi-->>CheckInScreen: 🖥️ 受付画面
-  CheckInScreen-->>Nurse: 🖥️ 受付画面
+  CheckInScreen-->>ReceptionClerk: 🖥️ 受付画面
   deactivate CheckInPatientApi

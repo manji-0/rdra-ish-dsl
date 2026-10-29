@@ -23,7 +23,6 @@ api FollowUpScheduleApi "Follow-Up Schedule API"
 api NotifyPatientResultApi "Notify Patient Result API"
 
 performs(CareCoordinator, BucFollowupCare)
-performs(Patient, BucFollowupCare)
 performs(CareCoordinator, CreateCarePlan)
 performs(CareCoordinator, SendFollowUpMessage)
 performs(CareCoordinator, ReviewPatientResponse)

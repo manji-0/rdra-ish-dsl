@@ -1,8 +1,6 @@
 flowchart LR
   subgraph layer_value[System Value]
     direction TB
-    Nurse(["👤 看護師"])
-    ReceptionClerk(["👤 医事課 受付担当"])
     ClaimsReviewOrganization[/"🌐 審査支払機関（支払基金・国保連）"/]
     MessagingGateway[/"🌐 Messaging Gateway"/]
     OnlineEligibilitySystem[/"🌐 オンライン資格確認等システム"/]
@@ -287,50 +285,6 @@ flowchart LR
     TransferNotPossible{"🔀 振替・分割の対象外（負担割合の相違・公費）"}
     UnreferredFirstVisit{"🔀 紹介状なしの初診で、除外に当たらない"}
   end
-  ReceptionClerk -.->|has_permission| ReferralManage
-  ReceptionClerk -.->|has_permission| PatientProfileRead
-  ReceptionClerk -.->|has_permission| PatientProfileWrite
-  ReceptionClerk -.->|has_permission| InsuranceVerify
-  ReceptionClerk -.->|has_permission| IntakeManage
-  ReceptionClerk -.->|has_permission| ScheduleRead
-  ReceptionClerk -.->|has_permission| ScheduleWrite
-  ReceptionClerk -.->|has_permission| VisitCheckIn
-  ReceptionClerk -->|performs| BucPatientOnboarding
-  ReceptionClerk -->|performs| BucVisitCheckIn
-  ReceptionClerk -->|performs| SearchPatient
-  ReceptionClerk -->|performs| RegisterPatient
-  ReceptionClerk -->|performs| UpdateDemographics
-  ReceptionClerk -->|performs| VerifyInsurance
-  ReceptionClerk -->|performs| SendIntakeForms
-  ReceptionClerk -->|performs| ExpireIntakeForms
-  ReceptionClerk -->|performs| MergeDuplicatePatient
-  ReceptionClerk -->|performs| ArchivePatient
-  ReceptionClerk -->|performs| VerifyArrival
-  ReceptionClerk -->|performs| CheckInPatient
-  ReceptionClerk -->|performs| SendAppointmentNotice
-  ReceptionClerk -->|performs| RecheckEligibility
-  ReceptionClerk -->|performs| RecordEligibilityDeclaration
-  ReceptionClerk -->|performs| ConfirmEligibilityInOutageMode
-  ReceptionClerk -->|performs| ReceiveReferralLetter
-  Nurse -.->|has_permission| ProxyOrderEntry
-  Nurse -.->|has_permission| RoomAssign
-  Nurse -.->|has_permission| EncounterOpen
-  Nurse -.->|has_permission| VitalsRecord
-  Nurse -.->|has_permission| ClinicalOrderWrite
-  Nurse -.->|has_permission| LabResultManage
-  Nurse -.->|has_permission| VisitCheckIn
-  Nurse -->|performs| BucClinicalEncounter
-  Nurse -->|performs| BucOrdersResults
-  Nurse -->|performs| BucVisitCheckIn
-  Nurse -->|performs| OpenEncounter
-  Nurse -->|performs| RecordVitals
-  Nurse -->|performs| CompleteConsultation
-  Nurse -->|performs| PrintSpecimenLabel
-  Nurse -->|performs| CollectSpecimen
-  Nurse -->|performs| RegisterPerformedProcedure
-  Nurse -->|performs| ReceiveLabResult
-  Nurse -->|performs| AssignRoom
-  Nurse -->|performs| PrepareEncounter
   SubmitClaimApi -.->|requires_permission| BillingClaimWrite
   SubmitClaimApi -.->|updates| ClaimStatement
   ClaimResultApi -.->|requires_permission| BillingClaimWrite

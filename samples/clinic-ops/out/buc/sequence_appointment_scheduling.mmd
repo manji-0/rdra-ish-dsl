@@ -51,10 +51,10 @@ sequenceDiagram
   deactivate CancelAppointmentApi
 
   Note over Patient,ProviderSchedule: ✅ Mark No Show
-  Patient->System: ✅ Mark No Show
+  ReceptionClerk->System: ✅ Mark No Show
   activate System
   System->>Appointment: update
-  System-->>Patient: 🖥️ Appointment Screen
+  System-->>ReceptionClerk: 🖥️ Appointment Screen
   deactivate System
 
   Note over Patient,ProviderSchedule: ✅ Reschedule Appointment
@@ -95,7 +95,7 @@ sequenceDiagram
   deactivate SearchAvailabilityApi
 
   Note over Patient,ProviderSchedule: ✅ Send Appointment Notice
-  Patient->>AppointmentNoticeScreen: ✅ Send Appointment Notice
+  ReceptionClerk->>AppointmentNoticeScreen: ✅ Send Appointment Notice
   AppointmentNoticeScreen->>AppointmentNoticeApi: ✅ Send Appointment Notice
   activate AppointmentNoticeApi
   rect rgb(245,245,245)
@@ -104,5 +104,5 @@ sequenceDiagram
     AppointmentNoticeApi->>PatientMessage: create
   end
   AppointmentNoticeApi-->>AppointmentNoticeScreen: 🖥️ Appointment Notice Screen
-  AppointmentNoticeScreen-->>Patient: 🖥️ Appointment Notice Screen
+  AppointmentNoticeScreen-->>ReceptionClerk: 🖥️ Appointment Notice Screen
   deactivate AppointmentNoticeApi

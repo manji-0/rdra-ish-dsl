@@ -41,14 +41,16 @@ api ReferralLetterApi    "紹介状 API"
 api AssignRoomApi        "Assign Room API"
 api PrepareEncounterApi  "Prepare Encounter API"
 
-performs(ReceptionClerk, BucVisitCheckIn)
-performs(Nurse, BucVisitCheckIn)
 performs(ReceptionClerk, VerifyArrival)
 performs(ReceptionClerk, CheckInPatient)
 performs(ReceptionClerk, RecheckEligibility)
 performs(ReceptionClerk, RecordEligibilityDeclaration)
 performs(ReceptionClerk, ConfirmEligibilityInOutageMode)
 performs(ReceptionClerk, ReceiveReferralLetter)
+performs(ReceptionClerk, BatchVerifyEligibility)
+performs(ReceptionClerk, ReceiveEligibilityValid)
+performs(ReceptionClerk, ReceiveEligibilityInvalid)
+performs(ReceptionClerk, ReceiveEligibilityNoInfo)
 performs(Nurse, AssignRoom)
 performs(Nurse, PrepareEncounter)
 belongs(BucVisitCheckIn, PatientAccess)

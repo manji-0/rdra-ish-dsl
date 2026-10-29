@@ -71,7 +71,7 @@ sequenceDiagram
   deactivate IssueReferralLetterApi
 
   Note over Clinician,VitalSign: ✅ Open Encounter
-  Clinician->>EncounterWorkspaceScreen: ✅ Open Encounter
+  Nurse->>EncounterWorkspaceScreen: ✅ Open Encounter
   EncounterWorkspaceScreen->>OpenEncounterApi: ✅ Open Encounter
   activate OpenEncounterApi
   rect rgb(245,245,245)
@@ -80,11 +80,11 @@ sequenceDiagram
     OpenEncounterApi->>Encounter: create
   end
   OpenEncounterApi-->>EncounterWorkspaceScreen: 🖥️ Encounter Workspace
-  EncounterWorkspaceScreen-->>Clinician: 🖥️ Encounter Workspace
+  EncounterWorkspaceScreen-->>Nurse: 🖥️ Encounter Workspace
   deactivate OpenEncounterApi
 
   Note over Clinician,VitalSign: ✅ Record Vitals
-  Clinician->>VitalsScreen: ✅ Record Vitals
+  Nurse->>VitalsScreen: ✅ Record Vitals
   VitalsScreen->>RecordVitalsApi: ✅ Record Vitals
   activate RecordVitalsApi
   rect rgb(245,245,245)
@@ -93,7 +93,7 @@ sequenceDiagram
     RecordVitalsApi->>VitalSign: create
   end
   RecordVitalsApi-->>VitalsScreen: 🖥️ Vitals Screen
-  VitalsScreen-->>Clinician: 🖥️ Vitals Screen
+  VitalsScreen-->>Nurse: 🖥️ Vitals Screen
   deactivate RecordVitalsApi
 
   Note over Clinician,VitalSign: ✅ Sign Encounter

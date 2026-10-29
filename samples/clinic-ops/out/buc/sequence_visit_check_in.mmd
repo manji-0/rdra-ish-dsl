@@ -40,17 +40,17 @@ sequenceDiagram
   deactivate AssignRoomApi
 
   Note over Nurse,Room: ✅ 資格の一括照会
-  Nurse->>EligibilityScreen: ✅ 資格の一括照会
+  ReceptionClerk->>EligibilityScreen: ✅ 資格の一括照会
   EligibilityScreen->>OnlineEligibilityApi: ✅ 資格の一括照会
   activate OnlineEligibilityApi
   OnlineEligibilityApi->>InsurancePolicy: read
   OnlineEligibilityApi->>EligibilityCheck: create
   OnlineEligibilityApi-->>EligibilityScreen: 🖥️ 資格確認画面
-  EligibilityScreen-->>Nurse: 🖥️ 資格確認画面
+  EligibilityScreen-->>ReceptionClerk: 🖥️ 資格確認画面
   deactivate OnlineEligibilityApi
 
   Note over Nurse,Room: ✅ 受付（初診・再診）
-  Nurse->>CheckInScreen: ✅ 受付（初診・再診）
+  ReceptionClerk->>CheckInScreen: ✅ 受付（初診・再診）
   CheckInScreen->>CheckInPatientApi: ✅ 受付（初診・再診）
   activate CheckInPatientApi
   OnlineEligibilityApi->>InsurancePolicy: read
@@ -61,16 +61,16 @@ sequenceDiagram
   end
   OnlineEligibilityApi->>EligibilityCheck: create
   CheckInPatientApi-->>CheckInScreen: 🖥️ 受付画面
-  CheckInScreen-->>Nurse: 🖥️ 受付画面
+  CheckInScreen-->>ReceptionClerk: 🖥️ 受付画面
   deactivate CheckInPatientApi
 
   Note over Nurse,Room: ✅ システム障害時モードでの資格確認
-  Nurse->>EligibilityScreen: ✅ システム障害時モードでの資格確認
+  ReceptionClerk->>EligibilityScreen: ✅ システム障害時モードでの資格確認
   EligibilityScreen->>EligibilityResultApi: ✅ システム障害時モードでの資格確認
   activate EligibilityResultApi
   EligibilityResultApi->>EligibilityCheck: update
   EligibilityResultApi-->>EligibilityScreen: 🖥️ 資格確認画面
-  EligibilityScreen-->>Nurse: 🖥️ 資格確認画面
+  EligibilityScreen-->>ReceptionClerk: 🖥️ 資格確認画面
   deactivate EligibilityResultApi
 
   Note over Nurse,Room: ✅ Prepare Encounter
@@ -84,66 +84,66 @@ sequenceDiagram
   deactivate PrepareEncounterApi
 
   Note over Nurse,Room: ✅ 資格確認結果（無効）の取込
-  Nurse->>EligibilityScreen: ✅ 資格確認結果（無効）の取込
+  ReceptionClerk->>EligibilityScreen: ✅ 資格確認結果（無効）の取込
   EligibilityScreen->>EligibilityResultApi: ✅ 資格確認結果（無効）の取込
   activate EligibilityResultApi
   EligibilityResultApi->>EligibilityCheck: update
   EligibilityResultApi-->>EligibilityScreen: 🖥️ 資格確認画面
-  EligibilityScreen-->>Nurse: 🖥️ 資格確認画面
+  EligibilityScreen-->>ReceptionClerk: 🖥️ 資格確認画面
   deactivate EligibilityResultApi
 
   Note over Nurse,Room: ✅ 資格確認結果（該当資格なし）の取込
-  Nurse->>EligibilityScreen: ✅ 資格確認結果（該当資格なし）の取込
+  ReceptionClerk->>EligibilityScreen: ✅ 資格確認結果（該当資格なし）の取込
   EligibilityScreen->>EligibilityResultApi: ✅ 資格確認結果（該当資格なし）の取込
   activate EligibilityResultApi
   EligibilityResultApi->>EligibilityCheck: update
   EligibilityResultApi-->>EligibilityScreen: 🖥️ 資格確認画面
-  EligibilityScreen-->>Nurse: 🖥️ 資格確認画面
+  EligibilityScreen-->>ReceptionClerk: 🖥️ 資格確認画面
   deactivate EligibilityResultApi
 
   Note over Nurse,Room: ✅ 資格確認結果（有効）の取込
-  Nurse->>EligibilityScreen: ✅ 資格確認結果（有効）の取込
+  ReceptionClerk->>EligibilityScreen: ✅ 資格確認結果（有効）の取込
   EligibilityScreen->>EligibilityResultApi: ✅ 資格確認結果（有効）の取込
   activate EligibilityResultApi
   EligibilityResultApi->>EligibilityCheck: update
   EligibilityResultApi-->>EligibilityScreen: 🖥️ 資格確認画面
-  EligibilityScreen-->>Nurse: 🖥️ 資格確認画面
+  EligibilityScreen-->>ReceptionClerk: 🖥️ 資格確認画面
   deactivate EligibilityResultApi
 
   Note over Nurse,Room: ✅ 紹介状受付処理
-  Nurse->>ReferralScreen: ✅ 紹介状受付処理
+  ReceptionClerk->>ReferralScreen: ✅ 紹介状受付処理
   ReferralScreen->>ReferralLetterApi: ✅ 紹介状受付処理
   activate ReferralLetterApi
   ReferralLetterApi->>ReferralLetter: create
   ReferralLetterApi-->>ReferralScreen: 🖥️ 紹介状受付画面
-  ReferralScreen-->>Nurse: 🖥️ 紹介状受付画面
+  ReferralScreen-->>ReceptionClerk: 🖥️ 紹介状受付画面
   deactivate ReferralLetterApi
 
   Note over Nurse,Room: ✅ 資格の再確認
-  Nurse->>EligibilityScreen: ✅ 資格の再確認
+  ReceptionClerk->>EligibilityScreen: ✅ 資格の再確認
   EligibilityScreen->>EligibilityResultApi: ✅ 資格の再確認
   activate EligibilityResultApi
   EligibilityResultApi->>EligibilityCheck: update
   EligibilityResultApi-->>EligibilityScreen: 🖥️ 資格確認画面
-  EligibilityScreen-->>Nurse: 🖥️ 資格確認画面
+  EligibilityScreen-->>ReceptionClerk: 🖥️ 資格確認画面
   deactivate EligibilityResultApi
 
   Note over Nurse,Room: ✅ 被保険者資格申立書の受領
-  Nurse->>EligibilityScreen: ✅ 被保険者資格申立書の受領
+  ReceptionClerk->>EligibilityScreen: ✅ 被保険者資格申立書の受領
   EligibilityScreen->>EligibilityResultApi: ✅ 被保険者資格申立書の受領
   activate EligibilityResultApi
   EligibilityResultApi->>EligibilityCheck: update
   EligibilityResultApi-->>EligibilityScreen: 🖥️ 資格確認画面
-  EligibilityScreen-->>Nurse: 🖥️ 資格確認画面
+  EligibilityScreen-->>ReceptionClerk: 🖥️ 資格確認画面
   deactivate EligibilityResultApi
 
   Note over Nurse,Room: ✅ 予約票・診察券の確認
-  Nurse->>CheckInScreen: ✅ 予約票・診察券の確認
+  ReceptionClerk->>CheckInScreen: ✅ 予約票・診察券の確認
   CheckInScreen->>VerifyArrivalApi: ✅ 予約票・診察券の確認
   activate VerifyArrivalApi
   VerifyArrivalApi->>Appointment: read
   VerifyArrivalApi->>PatientAccount: read
   VerifyArrivalApi->>InsurancePolicy: read
   VerifyArrivalApi-->>CheckInScreen: 🖥️ 受付画面
-  CheckInScreen-->>Nurse: 🖥️ 受付画面
+  CheckInScreen-->>ReceptionClerk: 🖥️ 受付画面
   deactivate VerifyArrivalApi

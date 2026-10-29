@@ -48,30 +48,30 @@ sequenceDiagram
   deactivate System
 
   Note over Clinician,Prescription: ✅ 保険薬局での調剤結果の受信
-  Clinician->>PharmacyStatusScreen: ✅ 保険薬局での調剤結果の受信
+  System->>PharmacyStatusScreen: ✅ 保険薬局での調剤結果の受信
   PharmacyStatusScreen->>ConfirmDispenseApi: ✅ 保険薬局での調剤結果の受信
   activate ConfirmDispenseApi
   ConfirmDispenseApi->>Prescription: update
   ConfirmDispenseApi-->>PharmacyStatusScreen: 🖥️ 電子処方箋の状況画面
-  PharmacyStatusScreen-->>Clinician: 🖥️ 電子処方箋の状況画面
+  PharmacyStatusScreen-->>System: 🖥️ 電子処方箋の状況画面
   deactivate ConfirmDispenseApi
 
   Note over Clinician,Prescription: ✅ 服薬指導
-  Clinician->>DispensingScreen: ✅ 服薬指導
+  Pharmacist->>DispensingScreen: ✅ 服薬指導
   DispensingScreen->>DispensingApi: ✅ 服薬指導
   activate DispensingApi
   DispensingApi->>Prescription: update
   DispensingApi-->>DispensingScreen: 🖥️ 調剤・監査画面
-  DispensingScreen-->>Clinician: 🖥️ 調剤・監査画面
+  DispensingScreen-->>Pharmacist: 🖥️ 調剤・監査画面
   deactivate DispensingApi
 
   Note over Clinician,Prescription: ✅ 調剤・監査
-  Clinician->>DispensingScreen: ✅ 調剤・監査
+  Pharmacist->>DispensingScreen: ✅ 調剤・監査
   DispensingScreen->>DispensingApi: ✅ 調剤・監査
   activate DispensingApi
   DispensingApi->>Prescription: update
   DispensingApi-->>DispensingScreen: 🖥️ 調剤・監査画面
-  DispensingScreen-->>Clinician: 🖥️ 調剤・監査画面
+  DispensingScreen-->>Pharmacist: 🖥️ 調剤・監査画面
   deactivate DispensingApi
 
   Note over Clinician,Prescription: ✅ 処方オーダの登録
@@ -85,21 +85,21 @@ sequenceDiagram
   deactivate DraftPrescriptionApi
 
   Note over Clinician,Prescription: ✅ 処方箋の使用期間切れ
-  Clinician->>PharmacyStatusScreen: ✅ 処方箋の使用期間切れ
+  System->>PharmacyStatusScreen: ✅ 処方箋の使用期間切れ
   PharmacyStatusScreen->>ConfirmDispenseApi: ✅ 処方箋の使用期間切れ
   activate ConfirmDispenseApi
   ConfirmDispenseApi->>Prescription: update
   ConfirmDispenseApi-->>PharmacyStatusScreen: 🖥️ 電子処方箋の状況画面
-  PharmacyStatusScreen-->>Clinician: 🖥️ 電子処方箋の状況画面
+  PharmacyStatusScreen-->>System: 🖥️ 電子処方箋の状況画面
   deactivate ConfirmDispenseApi
 
   Note over Clinician,Prescription: ✅ 薬剤交付
-  Clinician->>DispensingScreen: ✅ 薬剤交付
+  Pharmacist->>DispensingScreen: ✅ 薬剤交付
   DispensingScreen->>DispensingApi: ✅ 薬剤交付
   activate DispensingApi
   DispensingApi->>Prescription: update
   DispensingApi-->>DispensingScreen: 🖥️ 調剤・監査画面
-  DispensingScreen-->>Clinician: 🖥️ 調剤・監査画面
+  DispensingScreen-->>Pharmacist: 🖥️ 調剤・監査画面
   deactivate DispensingApi
 
   Note over Clinician,Prescription: ✅ 院内処方用引換券の交付
@@ -131,12 +131,12 @@ sequenceDiagram
   deactivate DraftPrescriptionApi
 
   Note over Clinician,Prescription: ✅ 疑義照会
-  Clinician->>DispensingScreen: ✅ 疑義照会
+  Pharmacist->>DispensingScreen: ✅ 疑義照会
   DispensingScreen->>DispensingApi: ✅ 疑義照会
   activate DispensingApi
   DispensingApi->>Prescription: update
   DispensingApi-->>DispensingScreen: 🖥️ 調剤・監査画面
-  DispensingScreen-->>Clinician: 🖥️ 調剤・監査画面
+  DispensingScreen-->>Pharmacist: 🖥️ 調剤・監査画面
   deactivate DispensingApi
 
   Note over Clinician,Prescription: ✅ Search Medication

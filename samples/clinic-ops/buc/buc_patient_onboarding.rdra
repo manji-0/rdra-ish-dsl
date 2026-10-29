@@ -32,8 +32,6 @@ api EligibilityApi       "Eligibility API"
 api ConsentApi           "Consent API"
 api IntakeMessagingApi   "Intake Messaging API"
 
-performs(ReceptionClerk, BucPatientOnboarding)
-performs(Patient, BucPatientOnboarding)
 performs(ReceptionClerk, SearchPatient)
 performs(ReceptionClerk, RegisterPatient)
 performs(ReceptionClerk, UpdateDemographics)

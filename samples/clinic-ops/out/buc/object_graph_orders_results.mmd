@@ -1,7 +1,6 @@
 flowchart LR
   subgraph layer_value[System Value]
     direction TB
-    Nurse(["👤 看護師"])
     MessagingGateway[/"🌐 Messaging Gateway"/]
     OutsourcedLabSystem[/"🌐 外注検査システム"/]
   end
@@ -118,14 +117,6 @@ flowchart LR
     ProviderSchedule[("🗄️ Provider Schedule")]
     OrderConfirmedByPhysician{"🔀 医師が確定したオーダ"}
   end
-  Nurse -.->|has_permission| ProxyOrderEntry
-  Nurse -.->|has_permission| ClinicalOrderWrite
-  Nurse -.->|has_permission| LabResultManage
-  Nurse -->|performs| BucOrdersResults
-  Nurse -->|performs| PrintSpecimenLabel
-  Nurse -->|performs| CollectSpecimen
-  Nurse -->|performs| RegisterPerformedProcedure
-  Nurse -->|performs| ReceiveLabResult
   CreateCarePlanApi -.->|creates| CarePlan
   CreateCarePlanApi -.->|reads| Encounter
   CreateCarePlanApi -.->|requires_permission| FollowUpManage

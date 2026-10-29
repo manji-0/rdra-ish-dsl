@@ -1,7 +1,4 @@
 sequenceDiagram
-  box System Value
-    actor Clinician as 👤 医師
-  end
   box System Boundary
     participant PharmacyStatusScreen as 🖥️ 電子処方箋の状況画面
   end
@@ -10,11 +7,11 @@ sequenceDiagram
     participant Prescription as 🗄️ 処方箋
   end
 
-  Note over Clinician,Prescription: ✅ 保険薬局での調剤結果の受信
-  Clinician->>PharmacyStatusScreen: ✅ 保険薬局での調剤結果の受信
+  Note over System,Prescription: ✅ 保険薬局での調剤結果の受信
+  System->>PharmacyStatusScreen: ✅ 保険薬局での調剤結果の受信
   PharmacyStatusScreen->>ConfirmDispenseApi: ✅ 保険薬局での調剤結果の受信
   activate ConfirmDispenseApi
   ConfirmDispenseApi->>Prescription: update
   ConfirmDispenseApi-->>PharmacyStatusScreen: 🖥️ 電子処方箋の状況画面
-  PharmacyStatusScreen-->>Clinician: 🖥️ 電子処方箋の状況画面
+  PharmacyStatusScreen-->>System: 🖥️ 電子処方箋の状況画面
   deactivate ConfirmDispenseApi

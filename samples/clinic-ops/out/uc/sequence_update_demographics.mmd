@@ -1,6 +1,5 @@
 sequenceDiagram
   box System Value
-    actor Patient as 👤 Patient
     actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
@@ -11,11 +10,11 @@ sequenceDiagram
     participant PatientProfile as 🗄️ Patient Profile
   end
 
-  Note over Patient,PatientProfile: ✅ Update Demographics
-  Patient->>PatientProfileScreen: ✅ Update Demographics
+  Note over ReceptionClerk,PatientProfile: ✅ Update Demographics
+  ReceptionClerk->>PatientProfileScreen: ✅ Update Demographics
   PatientProfileScreen->>UpdateDemographicsApi: ✅ Update Demographics
   activate UpdateDemographicsApi
   UpdateDemographicsApi->>PatientProfile: update
   UpdateDemographicsApi-->>PatientProfileScreen: 🖥️ Patient Profile Screen
-  PatientProfileScreen-->>Patient: 🖥️ Patient Profile Screen
+  PatientProfileScreen-->>ReceptionClerk: 🖥️ Patient Profile Screen
   deactivate UpdateDemographicsApi

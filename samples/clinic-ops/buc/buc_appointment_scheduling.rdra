@@ -26,7 +26,6 @@ api CancelAppointmentApi     "Cancel Appointment API"
 api AppointmentNoticeApi     "Appointment Notice API"
 
 performs(ReceptionClerk, BucAppointmentScheduling)
-performs(Patient, BucAppointmentScheduling)
 performs(ReceptionClerk, SearchAvailability)
 performs(Patient, SearchAvailability)
 performs(ReceptionClerk, ReserveAppointment)

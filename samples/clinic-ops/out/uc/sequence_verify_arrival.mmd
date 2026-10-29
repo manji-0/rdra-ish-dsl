@@ -1,6 +1,5 @@
 sequenceDiagram
   box System Value
-    actor Nurse as 👤 看護師
     actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
@@ -13,13 +12,13 @@ sequenceDiagram
     participant PatientAccount as 🗄️ Patient Account
   end
 
-  Note over Nurse,PatientAccount: ✅ 予約票・診察券の確認
-  Nurse->>CheckInScreen: ✅ 予約票・診察券の確認
+  Note over ReceptionClerk,PatientAccount: ✅ 予約票・診察券の確認
+  ReceptionClerk->>CheckInScreen: ✅ 予約票・診察券の確認
   CheckInScreen->>VerifyArrivalApi: ✅ 予約票・診察券の確認
   activate VerifyArrivalApi
   VerifyArrivalApi->>Appointment: read
   VerifyArrivalApi->>PatientAccount: read
   VerifyArrivalApi->>InsurancePolicy: read
   VerifyArrivalApi-->>CheckInScreen: 🖥️ 受付画面
-  CheckInScreen-->>Nurse: 🖥️ 受付画面
+  CheckInScreen-->>ReceptionClerk: 🖥️ 受付画面
   deactivate VerifyArrivalApi

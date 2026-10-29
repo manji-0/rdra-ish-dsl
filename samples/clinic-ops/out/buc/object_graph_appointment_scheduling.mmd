@@ -1,7 +1,6 @@
 flowchart LR
   subgraph layer_value[System Value]
     direction TB
-    Patient(["👤 Patient"])
     ReceptionClerk(["👤 医事課 受付担当"])
     MessagingGateway[/"🌐 Messaging Gateway"/]
   end
@@ -81,26 +80,14 @@ flowchart LR
     Provider[("🗄️ Provider")]
     ProviderSchedule[("🗄️ Provider Schedule")]
   end
-  Patient -.->|has_permission| PatientProfileRead
-  Patient -.->|has_permission| ConsentCapture
-  Patient -.->|has_permission| ScheduleRead
-  Patient -->|performs| BucAppointmentScheduling
-  Patient -->|performs| BucPatientOnboarding
-  Patient -->|performs| SearchAvailability
-  Patient -->|performs| ReserveAppointment
-  Patient -->|performs| BookAppointment
-  Patient -->|performs| RescheduleAppointment
-  Patient -->|performs| CaptureConsent
-  Patient -->|performs| CompleteIntakeForms
-  Patient -->|performs| CancelAppointment
   ReceptionClerk -.->|has_permission| PatientProfileRead
+  ReceptionClerk -.->|has_permission| PatientMessageSend
   ReceptionClerk -.->|has_permission| PatientProfileWrite
   ReceptionClerk -.->|has_permission| InsuranceVerify
   ReceptionClerk -.->|has_permission| IntakeManage
   ReceptionClerk -.->|has_permission| ScheduleRead
   ReceptionClerk -.->|has_permission| ScheduleWrite
   ReceptionClerk -->|performs| BucAppointmentScheduling
-  ReceptionClerk -->|performs| BucPatientOnboarding
   ReceptionClerk -->|performs| SearchAvailability
   ReceptionClerk -->|performs| ReserveAppointment
   ReceptionClerk -->|performs| BookAppointment

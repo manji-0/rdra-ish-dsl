@@ -1,6 +1,5 @@
 sequenceDiagram
   box System Value
-    actor Patient as 👤 Patient
     actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
@@ -11,9 +10,9 @@ sequenceDiagram
     participant Appointment as 🗄️ Appointment
   end
 
-  Note over Patient,Appointment: ✅ Mark No Show
-  Patient->System: ✅ Mark No Show
+  Note over ReceptionClerk,Appointment: ✅ Mark No Show
+  ReceptionClerk->System: ✅ Mark No Show
   activate System
   System->>Appointment: update
-  System-->>Patient: 🖥️ Appointment Screen
+  System-->>ReceptionClerk: 🖥️ Appointment Screen
   deactivate System

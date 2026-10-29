@@ -1,6 +1,5 @@
 sequenceDiagram
   box System Value
-    actor Patient as 👤 Patient
     actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
@@ -11,9 +10,9 @@ sequenceDiagram
     participant IntakePacket as 🗄️ Intake Packet
   end
 
-  Note over Patient,IntakePacket: ✅ Expire Intake Forms
-  Patient->System: ✅ Expire Intake Forms
+  Note over ReceptionClerk,IntakePacket: ✅ Expire Intake Forms
+  ReceptionClerk->System: ✅ Expire Intake Forms
   activate System
   System->>IntakePacket: update
-  System-->>Patient: 🖥️ Intake Portal Screen
+  System-->>ReceptionClerk: 🖥️ Intake Portal Screen
   deactivate System

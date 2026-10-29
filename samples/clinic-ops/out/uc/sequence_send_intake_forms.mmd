@@ -1,6 +1,5 @@
 sequenceDiagram
   box System Value
-    actor Patient as 👤 Patient
     actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
@@ -12,8 +11,8 @@ sequenceDiagram
     participant PatientMessage as 🗄️ Patient Message
   end
 
-  Note over Patient,PatientMessage: ✅ Send Intake Forms
-  Patient->>IntakePortalScreen: ✅ Send Intake Forms
+  Note over ReceptionClerk,PatientMessage: ✅ Send Intake Forms
+  ReceptionClerk->>IntakePortalScreen: ✅ Send Intake Forms
   IntakePortalScreen->>IntakeMessagingApi: ✅ Send Intake Forms
   activate IntakeMessagingApi
   rect rgb(245,245,245)
@@ -22,5 +21,5 @@ sequenceDiagram
     IntakeMessagingApi->>PatientMessage: create
   end
   IntakeMessagingApi-->>IntakePortalScreen: 🖥️ Intake Portal Screen
-  IntakePortalScreen-->>Patient: 🖥️ Intake Portal Screen
+  IntakePortalScreen-->>ReceptionClerk: 🖥️ Intake Portal Screen
   deactivate IntakeMessagingApi

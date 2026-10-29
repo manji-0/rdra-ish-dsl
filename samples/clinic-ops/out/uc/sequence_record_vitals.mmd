@@ -1,6 +1,5 @@
 sequenceDiagram
   box System Value
-    actor Clinician as 👤 医師
     actor Nurse as 👤 看護師
   end
   box System Boundary
@@ -12,8 +11,8 @@ sequenceDiagram
     participant VitalSign as 🗄️ Vital Sign
   end
 
-  Note over Clinician,VitalSign: ✅ Record Vitals
-  Clinician->>VitalsScreen: ✅ Record Vitals
+  Note over Nurse,VitalSign: ✅ Record Vitals
+  Nurse->>VitalsScreen: ✅ Record Vitals
   VitalsScreen->>RecordVitalsApi: ✅ Record Vitals
   activate RecordVitalsApi
   rect rgb(245,245,245)
@@ -22,5 +21,5 @@ sequenceDiagram
     RecordVitalsApi->>VitalSign: create
   end
   RecordVitalsApi-->>VitalsScreen: 🖥️ Vitals Screen
-  VitalsScreen-->>Clinician: 🖥️ Vitals Screen
+  VitalsScreen-->>Nurse: 🖥️ Vitals Screen
   deactivate RecordVitalsApi

@@ -39,9 +39,9 @@ api ReceiveLabResultApi "Receive Lab Result API"
 api ResultReviewApi   "Result Review API"
 api CriticalNoticeApi "Critical Notice API"
 
-performs(Nurse, BucOrdersResults)
 performs(Clinician, PlaceLabOrder)
 performs(MedicalClerk, EnterProxyOrder)
+performs(Nurse, EnterProxyOrder)
 performs(Clinician, ConfirmProxyOrder)
 performs(Nurse, PrintSpecimenLabel)
 performs(Nurse, CollectSpecimen)

@@ -1,6 +1,5 @@
 sequenceDiagram
   box System Value
-    actor Patient as 👤 Patient
     actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
@@ -12,8 +11,8 @@ sequenceDiagram
     participant PatientMessage as 🗄️ Patient Message
   end
 
-  Note over Patient,PatientMessage: ✅ Send Appointment Notice
-  Patient->>AppointmentNoticeScreen: ✅ Send Appointment Notice
+  Note over ReceptionClerk,PatientMessage: ✅ Send Appointment Notice
+  ReceptionClerk->>AppointmentNoticeScreen: ✅ Send Appointment Notice
   AppointmentNoticeScreen->>AppointmentNoticeApi: ✅ Send Appointment Notice
   activate AppointmentNoticeApi
   rect rgb(245,245,245)
@@ -22,5 +21,5 @@ sequenceDiagram
     AppointmentNoticeApi->>PatientMessage: create
   end
   AppointmentNoticeApi-->>AppointmentNoticeScreen: 🖥️ Appointment Notice Screen
-  AppointmentNoticeScreen-->>Patient: 🖥️ Appointment Notice Screen
+  AppointmentNoticeScreen-->>ReceptionClerk: 🖥️ Appointment Notice Screen
   deactivate AppointmentNoticeApi

@@ -1,6 +1,5 @@
 sequenceDiagram
   box System Value
-    actor Patient as 👤 Patient
     actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
@@ -12,8 +11,8 @@ sequenceDiagram
     participant InsurancePolicy as 🗄️ 保険資格
   end
 
-  Note over Patient,InsurancePolicy: ✅ 保険資格・限度額情報の登録（新患登録）
-  Patient->>InsuranceScreen: ✅ 保険資格・限度額情報の登録（新患登録）
+  Note over ReceptionClerk,InsurancePolicy: ✅ 保険資格・限度額情報の登録（新患登録）
+  ReceptionClerk->>InsuranceScreen: ✅ 保険資格・限度額情報の登録（新患登録）
   InsuranceScreen->>EligibilityApi: ✅ 保険資格・限度額情報の登録（新患登録）
   activate EligibilityApi
   EligibilityApi->>InsurancePolicy: read
@@ -23,5 +22,5 @@ sequenceDiagram
     EligibilityApi->>EligibilityCheck: create
   end
   EligibilityApi-->>InsuranceScreen: 🖥️ Insurance Verification Screen
-  InsuranceScreen-->>Patient: 🖥️ Insurance Verification Screen
+  InsuranceScreen-->>ReceptionClerk: 🖥️ Insurance Verification Screen
   deactivate EligibilityApi

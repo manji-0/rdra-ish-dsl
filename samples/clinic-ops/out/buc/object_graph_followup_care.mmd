@@ -2,7 +2,6 @@ flowchart LR
   subgraph layer_value[System Value]
     direction TB
     CareCoordinator(["👤 Care Coordinator"])
-    Patient(["👤 Patient"])
     MessagingGateway[/"🌐 Messaging Gateway"/]
   end
   subgraph layer_environment[External Environment]
@@ -84,13 +83,6 @@ flowchart LR
     PatientProfile[("🗄️ Patient Profile")]
     ProviderSchedule[("🗄️ Provider Schedule")]
   end
-  Patient -.->|has_permission| PatientProfileRead
-  Patient -.->|has_permission| ConsentCapture
-  Patient -.->|has_permission| ScheduleRead
-  Patient -->|performs| BucFollowupCare
-  Patient -->|performs| BucPatientOnboarding
-  Patient -->|performs| CaptureConsent
-  Patient -->|performs| CompleteIntakeForms
   CareCoordinator -.->|has_permission| FollowUpManage
   CareCoordinator -.->|has_permission| PatientMessageSend
   CareCoordinator -.->|has_permission| ScheduleWrite

@@ -31,8 +31,6 @@ api AmendEncounterApi      "Amend Encounter API"
 api IssueReferralLetterApi "診療情報提供書 API"
 api CompleteConsultationApi "診察終了 API"
 
-performs(Nurse, BucClinicalEncounter)
-performs(Clinician, BucClinicalEncounter)
 performs(Nurse, OpenEncounter)
 performs(Nurse, RecordVitals)
 performs(Clinician, DocumentAssessment)
@@ -40,6 +38,7 @@ performs(Clinician, SignEncounter)
 performs(Clinician, AmendEncounter)
 performs(Clinician, IssueReferralLetter)
 performs(Nurse, CompleteConsultation)
+performs(Clinician, CompleteConsultation)
 belongs(BucClinicalEncounter, CareDelivery)
 
 contains(BucClinicalEncounter, OpenEncounter)

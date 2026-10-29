@@ -1,7 +1,6 @@
 flowchart LR
   subgraph layer_value[System Value]
     direction TB
-    Clinician(["👤 医師"])
     EPrescriptionService[/"🌐 電子処方箋管理サービス"/]
     InsurancePharmacy[/"🌐 保険薬局"/]
   end
@@ -62,16 +61,6 @@ flowchart LR
     Medication[("🗄️ Medication")]
     Prescription[("🗄️ 処方箋")]
   end
-  Clinician -.->|has_permission| PrescriptionWrite
-  Clinician -->|performs| BucPrescriptionFulfillment
-  Clinician -->|performs| SearchMedication
-  Clinician -->|performs| DraftPrescription
-  Clinician -->|performs| IssueRefillPrescription
-  Clinician -->|performs| IssueOutsidePrescription
-  Clinician -->|performs| IssueInhouseVoucher
-  Clinician -->|performs| AnswerPrescriptionInquiry
-  Clinician -->|performs| AnswerPharmacyInquiry
-  Clinician -->|performs| CancelPrescription
   MedicationCatalogApi -.->|reads| Medication
   MedicationCatalogApi -.->|requires_permission| PrescriptionWrite
   DraftPrescriptionApi -.->|creates| Prescription

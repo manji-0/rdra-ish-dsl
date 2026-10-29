@@ -1,6 +1,5 @@
 sequenceDiagram
   box System Value
-    actor Clinician as 👤 医師
     actor Pharmacist as 👤 薬剤師
   end
   box System Boundary
@@ -11,11 +10,11 @@ sequenceDiagram
     participant Prescription as 🗄️ 処方箋
   end
 
-  Note over Clinician,Prescription: ✅ 服薬指導
-  Clinician->>DispensingScreen: ✅ 服薬指導
+  Note over Pharmacist,Prescription: ✅ 服薬指導
+  Pharmacist->>DispensingScreen: ✅ 服薬指導
   DispensingScreen->>DispensingApi: ✅ 服薬指導
   activate DispensingApi
   DispensingApi->>Prescription: update
   DispensingApi-->>DispensingScreen: 🖥️ 調剤・監査画面
-  DispensingScreen-->>Clinician: 🖥️ 調剤・監査画面
+  DispensingScreen-->>Pharmacist: 🖥️ 調剤・監査画面
   deactivate DispensingApi
