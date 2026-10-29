@@ -4,6 +4,20 @@
 
 ### Breaking
 
+- Every lifecycle finding now prints its stable name after the severity:
+  `error[Deadlock_Order_status_paid]: deadlock: ...` instead of `error: deadlock: ...`, and
+  `warning[...]:` and `info[...]:` likewise, in `check`, `states`, `verify` (its BFS
+  findings and its rendering of each TLC counterexample), `export --kind tla`, and the
+  generator gates. The `deferred` lines under `not checked:` gain the same `[<Name>]`, and
+  `states --format table|json` print `[error][<Name>] ...` instead of `[error] ...`. The
+  message after the prefix is unchanged. Load and consistency diagnostics keep the unnamed
+  `error: ...` and `warning: ...`. A script that matches `^error: ` on lifecycle findings
+  must match `^error\[`.
+- In the `// expect` header grammar of `scripts/verify-samples.sh`, `fail` now needs at
+  least one name, and the script reads each name from `error[<Name>]:` instead of from the
+  message. An unnamed `error: ...` line in a run is a mismatch. `partial_scope.rdra` and the
+  `check` header of `after_assert_unmet.rdra` now name their errors
+  (`DerivedColumnRead_Audit_score`, `AfterAssert_DeliverOrder_0`).
 - `states --entity` derives only the named entities' views, each on its own cone, with the
   invariants and after-asserts that read them; before, it filtered the whole run's stdout.
   The stdout of a run is unchanged. The exit status now counts only the selected targets

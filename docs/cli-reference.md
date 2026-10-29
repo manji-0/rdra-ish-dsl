@@ -14,7 +14,10 @@ merges all reachable `.rdra` files into a single semantic model and resolves imp
 against include paths derived from the input layout (it walks up from each input so that,
 e.g., `shared/actors.rdra` resolves from a root containing both `shared/` and `buc/`).
 
-Diagnostics are written to stderr as `error: ...` or `warning: ...`.
+Diagnostics are written to stderr. A load or consistency diagnostic is `error: ...` or
+`warning: ...`. A lifecycle finding carries its stable name: `error[<Name>]: ...`,
+`warning[<Name>]: ...`, or `info[<Name>]: ...`. The names are listed in
+[Diagnostics](./state-derivation.md#diagnostics).
 
 - `check` and `lint` exit non-zero when semantic errors (or lint errors) are present.
 - Every generator subcommand refuses to emit when the model has parse or resolve errors.
@@ -52,7 +55,7 @@ run prints `OK: no errors within <bounds>` (for example `OK: no errors within 1 
 A violated constraint or `after` assertion prints once, with a shortest counterexample:
 
 ```
-error: invariant CrossForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order(status=cancelled); Payment(status=captured)
+error[CrossForbidden_Order_0]: invariant CrossForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order(status=cancelled); Payment(status=captured)
   rule: cross_order_payment_split.rdra:43:1
   counterexample (3 steps):
     1. Place [Order#1, Payment#1]                            cross_order_payment_split.rdra:16:1
@@ -76,7 +79,7 @@ A state of a state model (a `transitions` endpoint, or a value a creating use ca
 that no reachable state holds is one `error:` with each arm that would enter it:
 
 ```
-error: state Order.status = refunded has no reachability witness: no sequence of use cases from the start reaches it
+error[Witness_Order_status_refunded]: state Order.status = refunded has no reachability witness: no sequence of use cases from the start reaches it
   state model: Order.status, entered by Refund (shipped -> refunded)   unwitnessed_state.rdra:31:1
 ```
 
@@ -93,7 +96,7 @@ that holds in no reachable state, or, when each guard holds somewhere, a first l
 says they never hold together:
 
 ```
-warning: transaction 2 of Pay (Pay_2) can never run: in no reachable state do its guards hold
+warning[Runs_Pay_2]: transaction 2 of Pay (Pay_2) can never run: in no reachable state do its guards hold
   declared: transaction 2 of Pay (Pay_2)   never_runs.rdra:5:1
   guard: condition Settled                 never_runs.rdra:20:1
 ```
@@ -107,7 +110,7 @@ way out (a `transitions` arm, or a deletion) with what blocks it, read off the s
 instance stays stuck in, and a shortest path into the first such state:
 
 ```
-error: deadlock: Order#1 stays at status = paid forever, and paid is not an end state
+error[Deadlock_Order_status_paid]: deadlock: Order#1 stays at status = paid forever, and paid is not an end state
   leaves paid: Ship (paid -> shipped)   deadlock.rdra:29:1
     guard: condition Packed             deadlock.rdra:33:1
   reached by (2 steps):
@@ -118,7 +121,7 @@ error: deadlock: Order#1 stays at status = paid forever, and paid is not an end 
 ```
 
 When a way out lacks only a free slot of an entity it creates, the instance bound blocks
-it, not the model, and the line is `warning: deadlock at the bound: ...`. A capped cone
+it, not the model, and the line is `warning[Deadlock_<E>_<col>_<v>]: deadlock at the bound: ...`. A capped cone
 leaves each state with a way out undecided, listed under `not checked:` as `whether some
 E can get stuck at col = v is not decided: ...`. See [Deadlocks](./state-derivation.md#deadlocks).
 
@@ -154,7 +157,7 @@ $ rdra-ish check samples/formal-verification/partial_scope.rdra --entity Order
 bounds: 1 instance per entity, Int 0..5; 4096 states per cone; entities a check does not read are unbounded
 scope: --entity Order
 not checked: 1 entity view (Audit), 1 invariant (Forbidden_Audit_1), 0 after-asserts; 1 build error deferred; 1 finding not decided
-  deferred error: Audit: Audit.score is derived by arithmetic, which the lifecycle cannot evaluate; compare the columns it reads instead
+  deferred error[DerivedColumnRead_Audit_score]: Audit: Audit.score is derived by arithmetic, which the lifecycle cannot evaluate; compare the columns it reads instead
   whether Record can run is not decided: no cone of a selected entity keeps it
 OK: no errors in the selected scope, within 1 instance per entity, Int 0..5
 ```
@@ -523,7 +526,7 @@ Cone_CrossForbidden_Order_0 [CrossForbidden_Order_0]: counterexample (43 states)
 tlc_result: counterexample
 Error: TLC verification failed
 Cone_CrossForbidden_Order_0 (/tmp/rdra-ish-tlc-4242/Cone_CrossForbidden_Order_0.tla):
-error: invariant CrossForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order[1](status=cancelled); Payment[1](status=captured)
+error[CrossForbidden_Order_0]: invariant CrossForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order[1](status=cancelled); Payment[1](status=captured)
   rule: skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:43:1
   counterexample (3 steps, from TLC):
     1. Place [Order#1, Payment#1]                            skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:16:1

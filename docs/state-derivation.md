@@ -253,7 +253,7 @@ warning, as do Enum columns without a state model. For example, `untriggered_set
 ```
 $ rdra-ish check samples/formal-verification/unwitnessed_state.rdra
 bounds: 1 instance per entity, Int 0..5; 4096 states per cone; entities a check does not read are unbounded
-error: state Order.status = refunded has no reachability witness: no sequence of use cases from the start reaches it
+error[Witness_Order_status_refunded]: state Order.status = refunded has no reachability witness: no sequence of use cases from the start reaches it
   state model: Order.status, entered by Refund (shipped -> refunded)   skills/rdra-ish-verify/samples/unwitnessed_state.rdra:31:1
 ```
 
@@ -295,7 +295,7 @@ states of the cone for each check that `moves` makes, one check at a time:
 ```
 $ rdra-ish check samples/formal-verification/unwitnessed_state.rdra
 ...
-warning: use case Refund can never run: each of its guards holds in some reachable state, but never all of them in one
+warning[Runs_Refund]: use case Refund can never run: each of its guards holds in some reachable state, but never all of them in one
   declared: use case Refund   skills/rdra-ish-verify/samples/unwitnessed_state.rdra:16:1
 ```
 
@@ -333,7 +333,7 @@ instance stays stuck in, as `NeverRuns` reads them (see
 ```
 $ rdra-ish check samples/formal-verification/deadlock.rdra
 bounds: 1 instance per entity, Int 0..5; 4096 states per cone; entities a check does not read are unbounded
-error: deadlock: Order#1 stays at status = paid forever, and paid is not an end state
+error[Deadlock_Order_status_paid]: deadlock: Order#1 stays at status = paid forever, and paid is not an end state
   leaves paid: Ship (paid -> shipped)   skills/rdra-ish-verify/samples/deadlock.rdra:29:1
     guard: condition Packed             skills/rdra-ish-verify/samples/deadlock.rdra:33:1
   reached by (2 steps):
@@ -341,7 +341,7 @@ error: deadlock: Order#1 stays at status = paid forever, and paid is not an end 
          + Order#1 (status=pending)
     2. Pay [Order#1]                       skills/rdra-ish-verify/samples/deadlock.rdra:13:1
          Order#1.status: pending -> paid   skills/rdra-ish-verify/samples/deadlock.rdra:28:1
-warning: use case Ship can never run: each of its guards holds in some reachable state, but never all of them in one
+warning[Runs_Ship]: use case Ship can never run: each of its guards holds in some reachable state, but never all of them in one
   declared: use case Ship   skills/rdra-ish-verify/samples/deadlock.rdra:14:1
 ```
 
@@ -350,7 +350,7 @@ in every state the instance stays stuck in. That is the instance bound, not the 
 is a warning:
 
 ```
-warning: deadlock at the bound: Order#1 stays at status = awaiting_retry forever; RetryPayment needs a free Payment slot within the instance bound
+warning[Deadlock_Order_status_awaiting_retry]: deadlock at the bound: Order#1 stays at status = awaiting_retry forever; RetryPayment needs a free Payment slot within the instance bound
 ```
 
 A cone that stops at a cap, or a `--buc` run, decides no deadlock. Each state with a way out
@@ -447,40 +447,41 @@ syntax.
 `states`, `check`, `export --kind tla`, and `verify` share the severities. An error
 makes the command exit non-zero in every format, and the generators refuse to emit.
 
-Four diagnostics have a stable name (`StateDiag::name()`): `ConstraintViolated` is the
-invariant's name, `NoWitness` is `Witness_<entity>_<column>_<value>`, `NeverRuns` is
-`Runs_<action>`, and `Deadlock` is `Deadlock_<entity>_<column>_<value>`. The test
-`engine_equivalence` compares the BFS and TLC findings by these names, and the `// expect`
-headers of the samples list the names of the errors
-(see [Sample expectations](./formal-verification.md#sample-expectations)). The output prints
-the invariant's name. For the other three it prints the entity, column, value, or action
-that the name is built from.
+Every diagnostic has a stable name (`StateDiag::name`), and the commands print it after
+the severity: `error[Deadlock_Order_status_paid]: deadlock: ...`. `states --format table`
+and `--format json` print `[error][<name>] ...`. A violated rule or `after` assertion keeps
+the name of its TLA+ check, which TLC reports too. The other names join the variant, the
+ids of the entities whose view reports the finding (`<E>` in the table), and the key
+fields, so one finding on two entity views prints two names. A finding that names no
+entity has no `<E>` part. Any character outside `[A-Za-z0-9_]` becomes `_`. The test `engine_equivalence` compares the BFS and TLC findings by
+these names, and the `// expect` headers of the samples list the names of the errors
+(see [Sample expectations](./formal-verification.md#sample-expectations)).
 
-| Diagnostic | Severity | When |
-|---|---|---|
-| `UnreachableEnumVariant { column, variant }` | warning | No reachable pattern holds a declared Enum variant that is not a state of a state model. |
-| `NoWitness { entity, column, value, into }` | error | No reachable state holds a state of a state model: a `transitions` endpoint or a start value of a lifecycle column. Not raised when a cap stopped the cone or `--buc` drops use cases; those are listed under `not checked:`. |
-| `Deadlock { entity, column, value, at, exits, trace }` | error, or warning at the bound | A reachable state has a present instance at a state of a state model that is not an end state, and no path moves it: no edge changes its column or deletes it. Reported once per state, at the first such state, with a shortest path and each way out (`exits`, a `transitions` arm or a deletion) with what blocks it. A warning when some way out lacks only a free slot of an entity it creates. Not raised when a cap stopped the cone or `--buc` drops use cases; those are listed under `not checked:`. |
-| `NeverRuns { action, origin, site, why }` | warning | No edge of any entity cone that keeps the action carries it, self-loops included. `why` is `NoInstance`, `Apart` (the instances are never present at once), `Crowded` (the guards hold only where a created entity has no free slot), `Guards` (only the guards that hold in no reachable state, each with its site), or `Together`. Not raised when a cap stopped every such cone, `--buc` drops use cases, or `--entity` selects no cone that keeps the action; those are listed under `not checked:`. |
-| `UnwrittenConstrainedVar { column }` | warning | A constraint or a condition guard reads a column that no use case writes, so it checks only the start value. |
-| `NoCreationPath` | info | No use case creates the entity. It starts present. |
-| `MinCardNeedsCreate { usecase, child }` | info | A use case creates the parent of a `1..*` key and no child in the same transaction group, so `MinCard_*` fails after it unless the use case also creates a child. A child that the action links by update counts. |
-| `MinCardOfPreExistingParent { child }` | warning | The parent of a `1..*` key starts present but every child starts absent, so `MinCard_*` fails at the start. |
-| `PreExistingChildOfCreatedParent { parent }` | warning | No use case creates the entity, but some use case creates the parent of its mandatory `relate`. Each slot starts owned by a parent slot that is still `absent`. |
-| `ConflictingEffects { usecase, column }` | error | One use case assigns two values to one column. |
-| `DoubleModeledEnum { column, usecase }` | error | A use case that does not create the entity `sets` a lifecycle column that `transitions` drive. The creating use case's `sets` of the status is the start state and is not an error. |
-| `ContradictoryDrivenComparison { usecase, proposition, driven }` | error | A use case drives a comparison to one truth while its own Int `sets` make it the other. |
-| `IntLiteralOutOfBounds { value, max }` | error | An Int literal lies outside `0..max`. |
-| `UnsupportedComparison { comparison }` | error | A comparison has a non-numeric operand. |
-| `UnbindableScope { constraint }` | error | A multi-entity rule's `.along` names entities that no `relate` binds. |
-| `UnbindableCondition { condition, usecase }` | error | A condition body is applied to a use case that writes nothing. |
-| `UnresolvedPropertyAtom { property, column }` | error | A `property` atom names a column that no single entity owns. |
-| `DerivedColumnRead { column }` | error | A constraint, condition, assertion, or property reads an arithmetic `@derived` column, which the lifecycle cannot evaluate. |
-| `ConstraintViolated { name, ... }` | error | A reachable state breaks a `forbidden`, `invariant`, `required`, `exclusive`, `@check`, multi-entity, or quantifier rule. |
-| `AfterAssertViolated { anchor, ... }` | error | A step of the anchor use case ends in a state that fails the assertion. |
-| `AssertOnInertUseCase { anchor }` | error | `after(UC).assert` names a use case with no action. |
-| `PatternCapReached { cap, bound }` | error | An entity view exceeded `--max-patterns`. Raise the flag or narrow `--buc`. |
-| `StateCapReached { cap }` | error | A cone exceeded its joint state cap. |
+| Diagnostic | Name | Severity | When |
+|---|---|---|---|
+| `UnreachableEnumVariant { column, variant }` | `UnreachableEnumVariant_<E>_<column>_<variant>` | warning | No reachable pattern holds a declared Enum variant that is not a state of a state model. |
+| `NoWitness { entity, column, value, into }` | `Witness_<entity>_<column>_<value>` | error | No reachable state holds a state of a state model: a `transitions` endpoint or a start value of a lifecycle column. Not raised when a cap stopped the cone or `--buc` drops use cases; those are listed under `not checked:`. |
+| `Deadlock { entity, column, value, at, exits, trace }` | `Deadlock_<entity>_<column>_<value>` | error, or warning at the bound | A reachable state has a present instance at a state of a state model that is not an end state, and no path moves it: no edge changes its column or deletes it. Reported once per state, at the first such state, with a shortest path and each way out (`exits`, a `transitions` arm or a deletion) with what blocks it. A warning when some way out lacks only a free slot of an entity it creates. Not raised when a cap stopped the cone or `--buc` drops use cases; those are listed under `not checked:`. |
+| `NeverRuns { action, origin, site, why }` | `Runs_<action>` | warning | No edge of any entity cone that keeps the action carries it, self-loops included. `why` is `NoInstance`, `Apart` (the instances are never present at once), `Crowded` (the guards hold only where a created entity has no free slot), `Guards` (only the guards that hold in no reachable state, each with its site), or `Together`. Not raised when a cap stopped every such cone, `--buc` drops use cases, or `--entity` selects no cone that keeps the action; those are listed under `not checked:`. |
+| `UnwrittenConstrainedVar { column }` | `UnwrittenConstrainedVar_<E>_<column>` | warning | A constraint or a condition guard reads a column that no use case writes, so it checks only the start value. |
+| `NoCreationPath` | `NoCreationPath_<E>` | info | No use case creates the entity. It starts present. |
+| `MinCardNeedsCreate { usecase, child }` | `MinCardNeedsCreate_<E>_<usecase>_<child>` | info | A use case creates the parent of a `1..*` key and no child in the same transaction group, so `MinCard_*` fails after it unless the use case also creates a child. A child that the action links by update counts. |
+| `MinCardOfPreExistingParent { child }` | `MinCardOfPreExistingParent_<E>_<child>` | warning | The parent of a `1..*` key starts present but every child starts absent, so `MinCard_*` fails at the start. |
+| `PreExistingChildOfCreatedParent { parent }` | `PreExistingChildOfCreatedParent_<E>_<parent>` | warning | No use case creates the entity, but some use case creates the parent of its mandatory `relate`. Each slot starts owned by a parent slot that is still `absent`. |
+| `ConflictingEffects { usecase, column }` | `ConflictingEffects_<E>_<usecase>_<column>` | error | One use case assigns two values to one column. |
+| `DoubleModeledEnum { column, usecase }` | `DoubleModeledEnum_<E>_<usecase>_<column>` | error | A use case that does not create the entity `sets` a lifecycle column that `transitions` drive. The creating use case's `sets` of the status is the start state and is not an error. |
+| `ContradictoryDrivenComparison { usecase, proposition, driven }` | `ContradictoryDrivenComparison_<E>_<usecase>_<proposition>` | error | A use case drives a comparison to one truth while its own Int `sets` make it the other. |
+| `IntLiteralOutOfBounds { value, max }` | `IntLiteralOutOfBounds_<E>_<value>` | error | An Int literal lies outside `0..max`. |
+| `UnsupportedComparison { comparison }` | `UnsupportedComparison_<E>_<comparison>` | error | A comparison has a non-numeric operand. |
+| `UnbindableScope { constraint }` | `UnbindableScope_<E>_<constraint>` | error | A multi-entity rule's `.along` names entities that no `relate` binds. |
+| `UnbindableCondition { condition, usecase }` | `UnbindableCondition_<E>_<condition>_<usecase>` | error | A condition body is applied to a use case that writes nothing. |
+| `UnresolvedPropertyAtom { property, column }` | `UnresolvedPropertyAtom_<E>_<property>_<column>` | error | A `property` atom names a column that no single entity owns. |
+| `DerivedColumnRead { column }` | `DerivedColumnRead_<entity>_<column>` | error | A constraint, condition, assertion, or property reads an arithmetic `@derived` column, which the lifecycle cannot evaluate. |
+| `ConstraintViolated { name, ... }` | the rule's name, such as `Forbidden_Order_0` | error | A reachable state breaks a `forbidden`, `invariant`, `required`, `exclusive`, `@check`, multi-entity, or quantifier rule. |
+| `AfterAssertViolated { anchor, ... }` | `AfterAssert_<anchor>_<i>` | error | A step of the anchor use case ends in a state that fails the assertion. |
+| `AssertOnInertUseCase { anchor }` | `AssertOnInertUseCase_<E>_<anchor>` | error | `after(UC).assert` names a use case with no action. |
+| `PatternCapReached { cap, bound }` | `PatternCapReached_<E>` | error | An entity view exceeded `--max-patterns`. Raise the flag or narrow `--buc`. |
+| `StateCapReached { cap }` | `StateCapReached_<E>` | error | A cone exceeded its joint state cap. |
 
 ---
 

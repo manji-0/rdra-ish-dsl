@@ -177,7 +177,7 @@ scope: --entity Order
 cones: 1 for 1 invariant(s) and 0 after-assert(s)
 temporal properties: none, no whole-model run
 not checked: 1 entity view (Audit), 1 invariant (Forbidden_Audit_1), 0 after-asserts; 1 build error deferred; 1 finding not decided
-  deferred error: Audit: Audit.score is derived by arithmetic, which the lifecycle cannot evaluate; compare the columns it reads instead
+  deferred error[DerivedColumnRead_Audit_score]: Audit: Audit.score is derived by arithmetic, which the lifecycle cannot evaluate; compare the columns it reads instead
   whether Record can run is not decided: no cone of a selected entity keeps it
 state models (BFS on 1 entity cone): 1 state model, 2 states witnessed, 0 deadlocks, 0 use cases that never run
 Cone_Forbidden_Order_0 [Forbidden_Order_0]: ok (7 states)
@@ -313,8 +313,10 @@ fails the script. The grammar is:
 header       = "// expect " command [" " flags] ": " expectation
 command      = "check" | "verify"
 flags        = CLI words passed to the command as written, e.g. "--entity Order"
-check exp    = "ok" | "fail" { " " Name }
-verify exp   = "tlc=" ("ok" | "counterexample") [" fail" { " " Name }] | "fail" { " " Name }
+check exp    = "ok" | "fail" " " Name { " " Name }
+verify exp   = "tlc=" ("ok" | "counterexample") [" fail" " " Name { " " Name }]
+             | "fail" " " Name { " " Name }
+Name         = [A-Za-z0-9_]+
 ```
 
 - `fail` means exit status 1, and its absence exit status 0. Any other status, such as a
@@ -322,12 +324,16 @@ verify exp   = "tlc=" ("ok" | "counterexample") [" fail" { " " Name }] | "fail" 
 - `tlc=` must equal the `tlc_result:` line. A `verify` expectation without `tlc=` asserts
   that no `tlc_result:` line is printed: the run stops before TLC, as at a build error.
   `tlc=counterexample` also needs TLC's own `violated: Error: ... is violated.` line.
-- The names after `fail` must equal the set of names of the run's errors, not just be
-  part of it. A name is the invariant or `after` property name (`CrossForbidden_Order_0`,
+- `fail` needs at least one name. The names must equal the set of names of the run's
+  errors, not just be part of it. Every lifecycle error prints as `error[<Name>]: ...`, and
+  the script reads the name from there and from TLC's `violated:` line. A name is the
+  invariant or `after` property name (`CrossForbidden_Order_0`,
   `AfterAssert_DeliverOrder_0`), `Witness_<Entity>_<column>_<value>` for a state with no
-  witness, or `Deadlock_<Entity>_<column>_<value>` for a deadlock error. `check` prints no
-  name for a violated `after` assertion or a build error, so `fail` with no names expects
-  exit 1 and no named error.
+  witness, `Deadlock_<Entity>_<column>_<value>` for a deadlock error, or the build error's
+  name, such as `DerivedColumnRead_Audit_score` (the full list is in
+  [state-derivation.md](state-derivation.md#diagnostics)).
+- An `error: ...` line without a name, such as a load error, is a mismatch whatever the
+  header says.
 - Each `(command, flags)` pair runs once, and a pair may appear on one line only. A root
   with no `check` line expects `check: ok`, and one with no unflagged `verify` line expects
   `verify: tlc=ok`. A flagged line adds a run and replaces neither default.
@@ -338,8 +344,8 @@ verify exp   = "tlc=" ("ok" | "counterexample") [" fail" { " " Name }] | "fail" 
 // expect verify: tlc=ok fail Witness_Order_status_refunded Deadlock_Order_status_shipped
 
 // partial_scope.rdra: the build error stops both commands before TLC; --entity Order passes.
-// expect check: fail
-// expect verify: fail
+// expect check: fail DerivedColumnRead_Audit_score
+// expect verify: fail DerivedColumnRead_Audit_score
 // expect verify --entity Order: tlc=ok
 ```
 
