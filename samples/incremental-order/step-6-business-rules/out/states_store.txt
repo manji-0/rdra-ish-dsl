@@ -9,5 +9,5 @@ Entity: Store (Store)
 
   reachable: 3 / bound: 6
   diagnostics:
-    [info] no creates(...) found; seeded from column defaults
+    [info][NoCreationPath_Store] no creates(...) found; seeded from column defaults
 
