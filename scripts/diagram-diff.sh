@@ -6,17 +6,19 @@
 #   from the tree under test. Exits 1 when any cell differs.
 #
 # A cell is one `rdra-ish diagram` run. Per cell the dump holds the exit code, stdout and
-# stderr, and the written .puml/.mmd. Errors are cells too, so their text is pinned.
+# stderr, and the written .mmd. Errors are cells too, so their text is pinned.
 # Axes:
 #   roots    every samples.txt root plus every samples/incremental-order step
-#   kind     every `diagram --kind` (diff has its own axis below)
-#   format   puml and mermaid for every root; svg and png for ec-site (they render the puml)
+#   kind     every `diagram --kind` in KINDS (diff has its own axis below). Set KINDS to a
+#            space-separated subset to compare only those kinds, e.g. while a unit of work
+#            removes the others: KINDS="rdra er" scripts/diagram-diff.sh BASE HEAD
+#   format   mermaid only, passed explicitly
 #   scope    no scope, each --buc, the first two --buc together, each --usecase
 #            (sequence and business-area, the only kinds that take it)
 #   options  --show-description; each --view-preset, --node-kind and --edge-kind on the
 #            kinds that take them
 #   diff     --kind diff across consecutive incremental-order steps and two unrelated roots
-#   errors   every option the CLI rejects, per root
+#   errors   every option the CLI rejects, per root, and the removed --format values once
 set -uo pipefail
 
 base_bin="${1:?usage: scripts/diagram-diff.sh BASE_BIN HEAD_BIN}"
@@ -29,8 +31,14 @@ head_bin="$(cd "$(dirname "$head_bin")" && pwd)/$(basename "$head_bin")"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-kinds=(rdra boundaryless-graph er state sequence event-flow business-area technical-area)
-graph_kinds=(rdra boundaryless-graph)
+read -r -a kinds <<<"${KINDS:-rdra boundaryless-graph er state sequence event-flow business-area technical-area diff}"
+has_kind() { [[ " ${kinds[*]} " == *" $1 "* ]]; }
+only_kinds() { # kind...: those of the arguments that KINDS keeps
+  local kind
+  for kind in "$@"; do has_kind "$kind" && echo "$kind"; done
+}
+graph_kinds=($(only_kinds rdra boundaryless-graph))
+usecase_kinds=($(only_kinds sequence business-area))
 presets=(business system data api ui)
 steps=(samples/incremental-order/step-*/src)
 
@@ -72,47 +80,46 @@ dump() { # label bin: one file per cell under $work/LABEL, numbered in run order
     } | sed -e "s|$repo_root/||g" -e "s|$outdir|OUT|g" >"$out_file"
   }
 
-  local root fmt kind buc uc preset
+  local root kind buc uc preset fmt=mermaid
   for root in "${roots[@]}"; do
     local bucs=() ucs=()
     while IFS= read -r line; do [[ -n "$line" ]] && bucs+=("$line"); done < <(ids "$root" buc)
     while IFS= read -r line; do [[ -n "$line" ]] && ucs+=("$line"); done < <(ids "$root" usecase)
 
-    for fmt in puml mermaid; do
-      for kind in "${kinds[@]}"; do
-        cell "$root $kind $fmt" "$root" --kind "$kind" --format "$fmt"
-        cell "$root $kind $fmt show-description" "$root" --kind "$kind" --format "$fmt" --show-description
-        for buc in ${bucs[@]+"${bucs[@]}"}; do
-          cell "$root $kind $fmt buc=$buc" "$root" --kind "$kind" --format "$fmt" --buc "$buc"
-        done
-        if [[ ${#bucs[@]} -ge 2 ]]; then
-          cell "$root $kind $fmt buc=${bucs[0]},${bucs[1]}" "$root" --kind "$kind" --format "$fmt" \
-            --buc "${bucs[0]}" --buc "${bucs[1]}"
-        fi
+    for kind in "${kinds[@]}"; do
+      [[ "$kind" == diff ]] && continue
+      cell "$root $kind $fmt" "$root" --kind "$kind" --format "$fmt"
+      cell "$root $kind $fmt show-description" "$root" --kind "$kind" --format "$fmt" --show-description
+      for buc in ${bucs[@]+"${bucs[@]}"}; do
+        cell "$root $kind $fmt buc=$buc" "$root" --kind "$kind" --format "$fmt" --buc "$buc"
       done
-      for kind in "${graph_kinds[@]}"; do
-        for preset in "${presets[@]}"; do
-          cell "$root $kind $fmt preset=$preset" "$root" --kind "$kind" --format "$fmt" --view-preset "$preset"
-        done
-        cell "$root $kind $fmt node-kind" "$root" --kind "$kind" --format "$fmt" \
-          --node-kind usecase --node-kind entity
-        cell "$root $kind $fmt edge-kind" "$root" --kind "$kind" --format "$fmt" --edge-kind performs
-        cell "$root $kind $fmt node+edge-kind" "$root" --kind "$kind" --format "$fmt" \
-          --node-kind actor --node-kind usecase --edge-kind performs --edge-kind invokes
-        if [[ ${#bucs[@]} -ge 1 ]]; then
-          cell "$root $kind $fmt buc=${bucs[0]} preset=system" "$root" --kind "$kind" --format "$fmt" \
-            --buc "${bucs[0]}" --view-preset system
-        fi
+      if [[ ${#bucs[@]} -ge 2 ]]; then
+        cell "$root $kind $fmt buc=${bucs[0]},${bucs[1]}" "$root" --kind "$kind" --format "$fmt" \
+          --buc "${bucs[0]}" --buc "${bucs[1]}"
+      fi
+    done
+    for kind in ${graph_kinds[@]+"${graph_kinds[@]}"}; do
+      for preset in "${presets[@]}"; do
+        cell "$root $kind $fmt preset=$preset" "$root" --kind "$kind" --format "$fmt" --view-preset "$preset"
       done
-      for kind in sequence business-area; do
-        for uc in ${ucs[@]+"${ucs[@]}"}; do
-          cell "$root $kind $fmt usecase=$uc" "$root" --kind "$kind" --format "$fmt" --usecase "$uc"
-        done
-        if [[ ${#ucs[@]} -ge 2 ]]; then
-          cell "$root $kind $fmt usecase=${ucs[0]},${ucs[1]}" "$root" --kind "$kind" --format "$fmt" \
-            --usecase "${ucs[0]}" --usecase "${ucs[1]}"
-        fi
+      cell "$root $kind $fmt node-kind" "$root" --kind "$kind" --format "$fmt" \
+        --node-kind usecase --node-kind entity
+      cell "$root $kind $fmt edge-kind" "$root" --kind "$kind" --format "$fmt" --edge-kind performs
+      cell "$root $kind $fmt node+edge-kind" "$root" --kind "$kind" --format "$fmt" \
+        --node-kind actor --node-kind usecase --edge-kind performs --edge-kind invokes
+      if [[ ${#bucs[@]} -ge 1 ]]; then
+        cell "$root $kind $fmt buc=${bucs[0]} preset=system" "$root" --kind "$kind" --format "$fmt" \
+          --buc "${bucs[0]}" --view-preset system
+      fi
+    done
+    for kind in ${usecase_kinds[@]+"${usecase_kinds[@]}"}; do
+      for uc in ${ucs[@]+"${ucs[@]}"}; do
+        cell "$root $kind $fmt usecase=$uc" "$root" --kind "$kind" --format "$fmt" --usecase "$uc"
       done
+      if [[ ${#ucs[@]} -ge 2 ]]; then
+        cell "$root $kind $fmt usecase=${ucs[0]},${ucs[1]}" "$root" --kind "$kind" --format "$fmt" \
+          --usecase "${ucs[0]}" --usecase "${ucs[1]}"
+      fi
     done
 
     cell "$root error unknown-buc" "$root" --buc NoSuchBuc
@@ -128,10 +135,9 @@ dump() { # label bin: one file per cell under $work/LABEL, numbered in run order
     fi
   done
 
-  for kind in "${kinds[@]}"; do
-    for fmt in svg png; do
-      cell "samples/ec-site $kind $fmt" samples/ec-site --kind "$kind" --format "$fmt"
-    done
+  local removed
+  for removed in puml svg png; do
+    cell "samples/ec-site error format=$removed" samples/ec-site --format "$removed"
   done
 
   local pairs=() i
@@ -140,27 +146,26 @@ dump() { # label bin: one file per cell under $work/LABEL, numbered in run order
   done
   pairs+=("samples/ec-site|samples/personal-info" "samples/ec-site|samples/ec-site"
     "samples/clinic-ops|samples/ec-site")
-  local pair head_root base_root
-  for pair in "${pairs[@]}"; do
+  local pair head_root base_root fmt=mermaid
+  has_kind diff || pairs=()
+  for pair in ${pairs[@]+"${pairs[@]}"}; do
     head_root="${pair%%|*}"
     base_root="${pair##*|}"
     local bucs=()
     while IFS= read -r line; do [[ -n "$line" ]] && bucs+=("$line"); done < <(ids "$head_root" buc)
-    for fmt in puml mermaid; do
-      cell "diff $head_root vs $base_root $fmt" "$head_root" --kind diff --format "$fmt" --diff-base "$base_root"
-      cell "diff $head_root vs $base_root $fmt show-description" "$head_root" --kind diff --format "$fmt" \
-        --diff-base "$base_root" --show-description
-      for buc in ${bucs[@]+"${bucs[@]}"}; do
-        cell "diff $head_root vs $base_root $fmt buc=$buc" "$head_root" --kind diff --format "$fmt" \
-          --diff-base "$base_root" --buc "$buc"
-      done
-      for preset in "${presets[@]}"; do
-        cell "diff $head_root vs $base_root $fmt preset=$preset" "$head_root" --kind diff --format "$fmt" \
-          --diff-base "$base_root" --view-preset "$preset"
-      done
-      cell "diff $head_root vs $base_root $fmt node+edge-kind" "$head_root" --kind diff --format "$fmt" \
-        --diff-base "$base_root" --node-kind usecase --node-kind entity --edge-kind performs --edge-kind reads
+    cell "diff $head_root vs $base_root $fmt" "$head_root" --kind diff --format "$fmt" --diff-base "$base_root"
+    cell "diff $head_root vs $base_root $fmt show-description" "$head_root" --kind diff --format "$fmt" \
+      --diff-base "$base_root" --show-description
+    for buc in ${bucs[@]+"${bucs[@]}"}; do
+      cell "diff $head_root vs $base_root $fmt buc=$buc" "$head_root" --kind diff --format "$fmt" \
+        --diff-base "$base_root" --buc "$buc"
     done
+    for preset in "${presets[@]}"; do
+      cell "diff $head_root vs $base_root $fmt preset=$preset" "$head_root" --kind diff --format "$fmt" \
+        --diff-base "$base_root" --view-preset "$preset"
+    done
+    cell "diff $head_root vs $base_root $fmt node+edge-kind" "$head_root" --kind diff --format "$fmt" \
+      --diff-base "$base_root" --node-kind usecase --node-kind entity --edge-kind performs --edge-kind reads
   done
 }
 
