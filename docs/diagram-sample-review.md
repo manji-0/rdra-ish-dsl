@@ -112,76 +112,6 @@ Review points:
 - Does every required permission have a matching actor-side grant?
 - Are event-raising use cases paired with downstream flow or state review?
 
-## Sequence Diagram
-
-<!-- derived-from #rdra-layered-graph -->
-
-Generated from:
-
-```sh
-rdra-ish diagram samples/incremental-order/step-6-business-rules/src \
-  --kind sequence \
-  --format mermaid \
-  --buc BucStoreRestock \
-  --out samples/incremental-order/step-6-business-rules/out/sequence_buc_store_restock
-```
-
-```mermaid
-sequenceDiagram
-  box System Value
-    actor OpsStaff as 👤 Operations Staff
-  end
-  box System Boundary
-    participant StoreMaintenanceScreen as 🖥️ Store Maintenance
-  end
-  box System
-    participant System as 🧩 システム
-    participant OrganizationLookupApi as 🔌 Organization Lookup API
-    participant StoreAdminApi as 🔌 Store Admin API
-    participant Organization as 🗄️ Organization
-    participant Store as 🗄️ Store
-  end
-
-  Note over OpsStaff,Store: ✅ Block Scheduled Restock
-  OpsStaff->System: ✅ Block Scheduled Restock
-  activate System
-  System->>Store: update
-  System-->>OpsStaff: 🖥️ Store Maintenance
-  deactivate System
-
-  Note over OpsStaff,Store: ✅ Change Next Restock Date
-  OpsStaff->System: ✅ Change Next Restock Date
-  activate System
-  System->>Store: update
-  System-->>OpsStaff: 🖥️ Store Maintenance
-  deactivate System
-
-  Note over OpsStaff,Store: ✅ Change Store Parent Organization
-  OpsStaff->>StoreMaintenanceScreen: ✅ Change Store Parent Organization
-  StoreMaintenanceScreen->>StoreAdminApi: ✅ Change Store Parent Organization
-  activate StoreAdminApi
-  OrganizationLookupApi->>Organization: read
-  StoreAdminApi->>Store: update
-  StoreAdminApi-->>StoreMaintenanceScreen: 🖥️ Store Maintenance
-  StoreMaintenanceScreen-->>OpsStaff: 🖥️ Store Maintenance
-  deactivate StoreAdminApi
-```
-
-How to read it:
-
-- Each note marks a use-case slice; inspect one note at a time.
-- A direct actor-to-system call means the use case has no modeled screen/API hop.
-- API lanes show the transaction boundary implied by `invokes`.
-- Entity arrows distinguish reads from writes and make write grouping visible.
-
-Review points:
-
-- Are direct system writes acceptable for this refinement stage?
-- Does the use case that changes parent organization read the parent and update the
-  store in the intended order?
-- Should any read/write pair be split into a separate API or compensated flow?
-- Do sequence warnings indicate isolated writes inside a use-case transaction?
-
 ## ER Diagram
 
 <!-- derived-from #rdra-layered-graph -->
@@ -270,11 +200,11 @@ Review points:
 ## Summary
 
 <!-- derived-from #rdra-layered-graph -->
-<!-- derived-from #sequence-diagram -->
 <!-- derived-from #er-diagram -->
 <!-- derived-from #state-diagram -->
 
-Use the layered graph to confirm coverage, the sequence diagram to review interaction
-and transaction shape, the ER diagram to review logical data structure, and the state
-diagram to review lifecycle topology. A useful review usually walks them in that order:
-business value first, then interaction boundary, then data shape, then lifecycle rules.
+Use the layered graph to confirm coverage and interaction boundaries, the ER diagram
+to review logical data structure, and the state diagram to review lifecycle topology.
+A useful review usually walks them in that order: business value first, then data
+shape, then lifecycle rules. The transaction and API-boundary warnings come from
+`rdra-ish check`.

@@ -1,6 +1,6 @@
 # Formats and Output
 
-Use this reference when choosing diagram output, filtered/diff views, or
+Use this reference when choosing diagram output, filtered views, or
 machine-readable exports.
 
 ## Format Guide
@@ -48,7 +48,7 @@ bash scripts/check-sample-artifacts.sh
 ## Notes
 
 - `diagram` appends `.mmd` to `--out`.
-- Prefer filtered diagrams (`--buc` or `--usecase`) before rendering images.
+- Prefer filtered diagrams (`--buc`) before rendering images.
 - Use `--show-description` when descriptions should appear as notes/tooltips.
 - Use `--view-preset`, `--node-kind`, and `--edge-kind` before accepting a too-large
   diagram.

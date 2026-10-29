@@ -210,7 +210,7 @@ For staged work, also run the command that matches the current abstraction:
 - Any stage: `rdra-ish lint src/ --format table`
 - BUC skeleton: `rdra-ish diagram src/ --kind rdra --format mermaid --buc <BucId>`
 - Data touchpoints: `rdra-ish csv src/ --kind matrix`
-- Interaction boundary: `rdra-ish diagram src/ --kind sequence --format mermaid --buc <BucId>`
+- Interaction boundary: `rdra-ish diagram src/ --kind rdra --format mermaid --buc <BucId>` and `rdra-ish check src/` (transaction and API warnings)
 - Access: `rdra-ish csv src/ --kind screen-constraints`,
   `rdra-ish csv src/ --kind permission-callables`, and
   `rdra-ish csv src/ --kind actor-permission-audit`; review `missing` and `excess`

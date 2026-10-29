@@ -137,7 +137,7 @@ import shared.lifecycle.order
 | 0 | Biz intent | Scope sketch | What business area are we modeling? | `business`, rough `buc`, candidate `actor` | `list --kind buc`, `diagram --kind rdra` |
 | 1 | Biz value | BUC skeleton | Who gets value from each BUC? | `performs`, `belongs`, `contains`, rough `usecase` | `check`, BUC-scoped RDRA diagram |
 | 2 | Biz object touchpoints | Data touchpoints | Which data objects does each use case touch? | coarse `entity`, CRUD predicates | CRUD matrix, ER diagram |
-| 3 | Tech interaction boundary | Interaction boundary | What UI/API boundary mediates the work, and with which authority/media constraints? | `screen`, `displays`, `shows`, optional `api`/`invokes`, `permission`, `medium`, `has_permission`, `requires_*` | sequence diagram, screen-constraints CSV, actor-permission audit |
+| 3 | Tech interaction boundary | Interaction boundary | What UI/API boundary mediates the work, and with which authority/media constraints? | `screen`, `displays`, `shows`, optional `api`/`invokes`, `permission`, `medium`, `has_permission`, `requires_*` | RDRA graph, screen-constraints CSV, actor-permission audit |
 | 4 | Tech data design | Entity structure | What structure and ownership does the data need? | columns, `@pk`, `relate`, cardinality | ER diagram, sequence TX warnings |
 | 5 | Tech lifecycle design | Lifecycle | Which states and event-triggered BUC entries are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `transitions`, `raises`, `triggers`, `sets` | `check`, `states`, state diagram, event-flow |
 | 6A | Tech-enforced rules | Local guardrails | Which simple states or facts must never co-occur? | `forbidden`, `exclusive` over Enum / Bool / nullable axes | `states` diagnostics |
@@ -276,7 +276,7 @@ Validation:
 
 ```sh
 rdra-ish check src/
-rdra-ish diagram src/ --kind sequence --format mermaid --buc BucOrder
+rdra-ish diagram src/ --kind rdra --format mermaid --buc BucOrder
 rdra-ish list src/ --kind api --format table
 rdra-ish csv src/ --kind api-matrix
 rdra-ish csv src/ --kind screen-constraints
@@ -376,10 +376,9 @@ Validation:
 ```sh
 rdra-ish check src/
 rdra-ish diagram src/ --kind er --format mermaid
-rdra-ish diagram src/ --kind sequence --format mermaid --buc BucOrder
 ```
 
-Move on when FK relationships and transaction warnings match the intended persistence
+Move on when FK relationships and the transaction warnings of `check` match the intended persistence
 boundary.
 
 ## Stage 5: Lifecycle

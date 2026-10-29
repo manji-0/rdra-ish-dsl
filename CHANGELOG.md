@@ -18,11 +18,21 @@
   `boundaryless-graph` drew the `rdra` graph without its layers and API nodes; use
   `--kind rdra`, narrowed with `--node-kind` / `--edge-kind`. `business-area` drew the
   rows of `csv --kind business-inputs`, and `technical-area` the API x entity CRUD of
-  `csv --kind api-matrix`; use those tables. `--usecase` now applies to `sequence` only,
-  and `--node-kind`, `--edge-kind`, and `--view-preset` to `rdra` and `diff`. In
-  `rdra_ish_emit::mermaid`, `RdraMermaidEmitter` is now the `rdra` emitter (it was
-  `ObjectGraphMermaidEmitter`); the old boundaryless `RdraMermaidEmitter`,
-  `BusinessAreaMermaidEmitter`, and `TechnicalAreaMermaidEmitter` are gone.
+  `csv --kind api-matrix`; use those tables. In `rdra_ish_emit::mermaid`,
+  `RdraMermaidEmitter` is now the `rdra` emitter (it was `ObjectGraphMermaidEmitter`);
+  the old boundaryless `RdraMermaidEmitter`, `BusinessAreaMermaidEmitter`, and
+  `TechnicalAreaMermaidEmitter` are gone.
+- `diagram --kind sequence` and `diagram --kind diff` are removed, and each fails with a
+  message that names its replacement. The transaction, API, and system-boundary warnings
+  that `sequence` printed are `check`'s, which still prints them; `csv --kind
+  api-matrix` lists the entities each API writes. For a model diff, write `--kind rdra`
+  for both models and compare the two `.mmd` files with `diff` or `git diff`. The
+  `--diff-base` and `--usecase` options go with them (clap now rejects them as unknown
+  arguments), and `--node-kind`, `--edge-kind`, and `--view-preset` apply to `rdra` only.
+  The 109 sequence artifacts (`samples/clinic-ops/out/uc/`, the `sequence_*.mmd` files
+  under `samples/*/out/`) and the sequence sections of
+  `samples/clinic-ops/design-sample.md` are gone, as are `rdra_ish_emit::diff` and
+  `SequenceMermaidEmitter`.
 - `verify` checks each temporal property in its own TLC run, because TLC does not name the
   property a temporal counterexample violates. The runs use the module
   `<whole>_<Property>` (`RdraSpec_NeverShipped`), the same module text and fairness as the

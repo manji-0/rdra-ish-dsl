@@ -26,7 +26,7 @@ rdra-ish list src/ --kind system --format table
 rdra-ish list src/ --kind api --format table
 rdra-ish csv src/ --kind api-matrix
 rdra-ish export src/ --kind openapi --out out/openapi.json
-rdra-ish diagram src/ --kind sequence --format mermaid --buc <BucId>
+rdra-ish diagram src/ --kind rdra --format mermaid --buc <BucId>
 rdra-ish diagram src/ --kind er --format mermaid --buc <BucId>
 ```
 
@@ -41,7 +41,7 @@ rdra-ish diagram src/ --kind er --format mermaid --buc <BucId>
 | `ApiOperatesEntityOutsideOwner` warning | API CRUD conflicts with explicit ownership | Move API/system ownership or revise `owns` |
 | API has method/path but no DTO links | Contract is incomplete | Add `request`, `response`, or `error_response` DTOs |
 | One API touches unrelated consistency groups | API may be too broad | Split by atomic consistency boundary |
-| API matrix disagrees with sequence expectation | UC/API/entity path is wrong | Fix `invokes` or API CRUD |
+| API matrix disagrees with the intended UC/API path | UC/API/entity path is wrong | Fix `invokes` or API CRUD |
 | `CrossSystemEntityRelation` warning | `relate` crosses derived system entity sets | Add coordination or revisit ownership |
 | `CoordinationMissingApi` warning | Coordinating UC does not invoke API on one side | Add the missing `invokes` path |
 | `CoordinationNotCrossSystem` warning | `coordinates` is declared for a non-cross-system pair | Remove or retarget `coordinates` |

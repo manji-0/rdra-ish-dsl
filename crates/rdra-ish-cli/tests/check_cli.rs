@@ -365,3 +365,41 @@ fn an_unknown_scope_id_is_an_error() {
     assert_eq!(output.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&output.stderr).contains("unknown entity `Nope`"));
 }
+
+/// The transaction, API, and system-boundary warnings that `diagram --kind sequence` used to
+/// repeat are `check`'s: it prints each of them and still passes.
+#[test]
+fn check_warns_about_transactions_apis_and_system_boundaries() {
+    let dir = std::env::temp_dir().join(format!("rdra-boundaries-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("boundaries.rdra");
+    std::fs::write(
+        &file,
+        r#"entity Order "注文" { id: Int @pk }
+entity OrderLine "注文明細" { id: Int @pk }
+entity Cart "カート" { id: Int @pk }
+relate(OrderLine, Order, N:1)
+usecase PlaceOrder "注文を確定する"
+creates(PlaceOrder, Order)
+creates(PlaceOrder, OrderLine)
+updates(PlaceOrder, Cart)
+system Shop "Shop"
+system Back "Back office"
+api Lonely "Lonely"
+contains(Shop, Lonely)
+contains(Back, Lonely)
+"#,
+    )
+    .unwrap();
+    let output = run(&["check", file.to_str().unwrap()]);
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    for warning in [
+        "warning: usecase 'PlaceOrder' writes 'Cart' in its own transaction after the FK-grouped writes",
+        "warning: api 'Lonely' is declared but never invoked by any use case",
+        "warning: api 'Lonely' belongs to multiple systems (Back, Shop)",
+    ] {
+        assert!(stderr.contains(warning), "missing `{warning}` in:\n{stderr}");
+    }
+}

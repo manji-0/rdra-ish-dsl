@@ -43,10 +43,6 @@ def perms(uc):
     return out
 
 
-def snake(name):
-    return re.sub(r'(?<!^)(?=[A-Z])', '_', name).lower()
-
-
 def mermaid(rel):
     return '```mermaid\n' + (OUT / rel).read_text().rstrip('\n') + '\n```\n'
 
@@ -264,8 +260,6 @@ parts.append('''# Clinic Ops 設計書サンプル
 | 種別 | 生成先 | 用途 |
 |---|---|---|
 | BUC 別 RDRA Layered Graph 図 | `out/buc/object_graph_*.mmd` | 各 BUC の actor/usecase/entity/screen/event を確認する |
-| BUC 別 sequence 図 | `out/buc/sequence_*.mmd` | BUC 内 UC の画面、API、Entity 操作を確認する |
-| UC 別 sequence 図 | `out/uc/sequence_*.mmd` | 1 UC だけの actor/screen/API/entity を確認する |
 | API マトリクス | `out/api_matrix.csv` | API と Entity CRUD の棚卸し |
 | Screen 制約パターン | `out/screen_constraints.csv` | Screen に到達する UC/API ごとの権限・媒体制約を確認する |
 | Actor 権限割当監査 | `out/actor_permission_audit.csv` | Actor 側の権限付与が UC/API 要求と合っているかを確認する |
@@ -278,8 +272,6 @@ parts.append('''# Clinic Ops 設計書サンプル
 
 ```sh
 rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucClinicalEncounter --out samples/clinic-ops/out/buc/object_graph_clinical_encounter
-rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --buc BucClinicalEncounter --out samples/clinic-ops/out/buc/sequence_clinical_encounter
-rdra-ish diagram samples/clinic-ops --kind sequence --format mermaid --usecase SignEncounter --out samples/clinic-ops/out/uc/sequence_sign_encounter
 rdra-ish csv samples/clinic-ops --kind api-matrix --out samples/clinic-ops/out/api_matrix.csv
 rdra-ish csv samples/clinic-ops --kind screen-constraints --out samples/clinic-ops/out/screen_constraints.csv
 rdra-ish csv samples/clinic-ops --kind actor-permission-audit --out samples/clinic-ops/out/actor_permission_audit.csv
@@ -343,15 +335,10 @@ for i, b in enumerate(BUCS, 1):
     parts.append(f"#### {b['title']} RDRA Layered Graph 図\n\n")
     parts.append(gen_cmd(f"diagram samples/clinic-ops --kind rdra --format mermaid --buc {b['id']} --out samples/clinic-ops/out/buc/object_graph_{b['stem']}") + '\n')
     parts.append(mermaid(f"buc/object_graph_{b['stem']}.mmd") + '\n')
-    parts.append(f"#### {b['title']} sequence 図\n\n")
-    parts.append(gen_cmd(f"diagram samples/clinic-ops --kind sequence --format mermaid --buc {b['id']} --out samples/clinic-ops/out/buc/sequence_{b['stem']}") + '\n')
-    parts.append(mermaid(f"buc/sequence_{b['stem']}.mmd") + '\n')
 
 parts.append('''## 4. UC 単位のレビュー
 
-UC 単位の sequence は、1 UC の actor、screen、API、Entity 操作だけを本文に埋め込みます。BUC 図で責務境界を見たあと、論点のある UC だけを個別に確認します。
-
-actor は `performs(Actor, UseCase)` があれば UC 直結の actor を優先します。BUC には複数 actor がいても、UC sequence にはその UC の代表 actor だけを出し、主担当が未確定の UC だけ `performs(Actor, Buc)` へ fallback します。
+UC ごとの必要権限と確認点を表にまとめます。各 UC の画面、API、Entity 操作は BUC 別 RDRA Layered Graph 図と API マトリクスで確認します。
 
 ''')
 for i, b in enumerate(BUCS, 1):
@@ -360,10 +347,6 @@ for i, b in enumerate(BUCS, 1):
     for uc in ucs:
         parts.append(f"| `{uc}` | {code_list(perms(uc))} | {POINTS[uc]} |\n")
     parts.append('\n')
-    for uc in ucs:
-        parts.append(f"#### {uc}\n\n{uc_label[uc]}。{POINTS[uc]}\n\n")
-        parts.append(gen_cmd(f"diagram samples/clinic-ops --kind sequence --format mermaid --usecase {uc} --out samples/clinic-ops/out/uc/sequence_{snake(uc)}") + '\n')
-        parts.append(mermaid(f"uc/sequence_{snake(uc)}.mmd") + '\n')
 
 parts.append('''## 5. System/API 単位の設計
 
@@ -390,14 +373,14 @@ contains(ClinicOpsSystem, <EachApi>)
 
 | 方針 | 理由 |
 |---|---|
-| 書き込み UC は原則 UC 専用 API を持つ | sequence 図で責務境界が混ざらないようにする |
+| 書き込み UC は原則 UC 専用 API を持つ | API matrix で UC ごとの書き込み責務が混ざらないようにする |
 | read-only UC も必要に応じて API 化する | API matrix で参照責務を確認する |
 | direct CRUD は単純な状態更新に限定する | API 境界を置くほどの一貫性責務がない場合のみ使用する |
 | 作成 API と更新 API を分ける | 作成 API を呼ぶ UC は空きスロットを要するので、状態だけを動かす UC には更新 API を使う |
 
 ### 5.3 Event flow
 
-Event flow は BUC をまたぐ連鎖だけを見るための図です。sequence 図には BUC 外の triggered UC を混ぜません。
+Event flow は BUC をまたぐ連鎖だけを見るための図です。
 
 ''')
 parts.append(gen_cmd('diagram samples/clinic-ops --kind event-flow --format mermaid --out samples/clinic-ops/out/event_flow') + '\n')
@@ -591,15 +574,14 @@ actor が実行する UC/API パスに必要な権限と媒体が説明できる
 ## 8. レビュー手順
 
 1. BUC 単位の RDRA Layered Graph 図でスコープと actor/usecase を確認する。
-2. BUC 単位の sequence 図で、その BUC 内の UC と API 境界を確認する。
-3. 論点のある UC は UC 単位 sequence 図で個別に確認する。
-4. Event flow で BUC 間連鎖とタイマーを確認する。
-5. API matrix で API/Entity CRUD の責務を横断確認する。
-6. Screen 制約パターンで権限と媒体を横断確認する。
-7. Actor 権限割当監査で不足/過剰な actor 側権限を確認する。
-8. ER 図で最終データ構造を確認する。
-9. State 図と状態到達表で lifecycle と rule の不足を確認する。
-10. `.rdra` のコメントの出典で、各業務規則が一次資料に基づくことを確認する。
+2. 論点のある UC は UC 単位のレビュー表で確認点を確認する。
+3. Event flow で BUC 間連鎖とタイマーを確認する。
+4. API matrix で API/Entity CRUD の責務を横断確認する。
+5. Screen 制約パターンで権限と媒体を横断確認する。
+6. Actor 権限割当監査で不足/過剰な actor 側権限を確認する。
+7. ER 図で最終データ構造を確認する。
+8. State 図と状態到達表で lifecycle と rule の不足を確認する。
+9. `.rdra` のコメントの出典で、各業務規則が一次資料に基づくことを確認する。
 
 ## 9. 承認条件
 
@@ -609,7 +591,6 @@ actor が実行する UC/API パスに必要な権限と媒体が説明できる
 | UC | 各 UC の主要 CRUD、参照、イベントが説明できる |
 | API | API matrix 上で責務の広すぎる API がない |
 | Access | actor 権限、UC/API 要求、媒体制約が screen constraint 行と actor permission audit 行として説明できる |
-| Sequence | BUC/UC sequence に対象外の actor/API/System が出ない |
 | Event | BUC 間イベント連鎖とタイマーが Event flow で説明できる |
 | Data | ER と状態到達表で主要 lifecycle が確認できる |
 | 出典 | 業務規則ごとに一次資料の出典が `.rdra` のコメントにある |
@@ -622,7 +603,7 @@ actor が実行する UC/API パスに必要な権限と媒体が説明できる
 <!-- derived-from #6-最終データモデリング -->
 <!-- derived-from #7-権限モデルレビュー -->
 
-Clinic Ops の設計レビューは、巨大な全体図ではなく、BUC、UC、System/API、権限、データモデルの順に分割して進める。sequence 図は BUC/UC の対象内に閉じ、BUC をまたぐ連鎖は Event flow で別に確認する。権限と媒体は screen constraint CSV で UC/API パスごとに確認し、actor 側の不足/過剰付与は actor permission audit で確認する。
+Clinic Ops の設計レビューは、巨大な全体図ではなく、BUC、UC、System/API、権限、データモデルの順に分割して進める。BUC 別の図は BUC の対象内に閉じ、BUC をまたぐ連鎖は Event flow で別に確認する。権限と媒体は screen constraint CSV で UC/API パスごとに確認し、actor 側の不足/過剰付与は actor permission audit で確認する。
 ''')
 
 missing = [uc for uc in uc_label if uc not in POINTS]

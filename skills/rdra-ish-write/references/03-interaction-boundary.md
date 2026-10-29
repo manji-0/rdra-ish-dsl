@@ -79,7 +79,7 @@ has_permission(Customer, OrderWrite)
 ```sh
 rdra-ish check src/
 rdra-ish check src/ --strict   # permission gaps become errors
-rdra-ish diagram src/ --kind sequence --format mermaid --buc BucOrder
+rdra-ish diagram src/ --kind rdra --format mermaid --buc BucOrder
 rdra-ish list src/ --kind api --format table
 rdra-ish list src/ --kind field --format table
 rdra-ish csv src/ --kind api-matrix
@@ -92,7 +92,8 @@ rdra-ish export src/ --kind openapi --out out/openapi.json
 
 ## Achievement Conditions
 
-- Sequence output communicates the intended actor -> screen -> API -> entity path.
+- The RDRA graph shows the intended actor -> screen -> API -> entity path, and `check`
+  prints no unexpected transaction or API warning.
 - Field rows explain actor-entered vs system-derived screen items.
 - `maps_field` references real columns; leave a field unmapped until Step 4 when
   the target column is not yet modeled.

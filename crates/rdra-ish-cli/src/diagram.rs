@@ -5,11 +5,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use rdra_ish_core::SemanticModel;
 use rdra_ish_emit::{
-    diff::DiffMermaidEmitter,
-    mermaid::{
-        ErMermaidEmitter, EventFlowMermaidEmitter, RdraMermaidEmitter, SequenceMermaidEmitter,
-        StateMermaidEmitter,
-    },
+    mermaid::{ErMermaidEmitter, EventFlowMermaidEmitter, RdraMermaidEmitter, StateMermaidEmitter},
     unknown_diagram_filter_kinds, Emitter, Filter, Scope, View,
 };
 use std::fs;
@@ -22,8 +18,6 @@ pub struct DiagramRequest {
     pub inputs: Vec<PathBuf>,
     pub kind: DiagramKind,
     pub buc: Vec<String>,
-    pub usecase: Vec<String>,
-    pub diff_base: Vec<PathBuf>,
     pub show_description: bool,
     pub node_kind: Vec<String>,
     pub edge_kind: Vec<String>,
@@ -36,8 +30,6 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
         inputs,
         kind,
         buc,
-        usecase,
-        diff_base,
         show_description,
         node_kind,
         edge_kind,
@@ -58,23 +50,12 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
             anyhow::bail!("unknown buc `{buc_id}`");
         }
     }
-    for uc_id in &usecase {
-        if !model.use_cases.values().any(|u| u.id == *uc_id) {
-            anyhow::bail!("unknown usecase `{uc_id}`");
-        }
-    }
 
-    if !usecase.is_empty() && !matches!(kind, DiagramKind::Sequence) {
-        anyhow::bail!("--usecase is currently supported only for --kind sequence");
-    }
-    if !usecase.is_empty() && !buc.is_empty() {
-        anyhow::bail!("--buc and --usecase cannot be combined");
-    }
     if (!node_kind.is_empty() || !edge_kind.is_empty() || view_preset.is_some())
-        && !matches!(kind, DiagramKind::Rdra | DiagramKind::Diff)
+        && !matches!(kind, DiagramKind::Rdra)
     {
         anyhow::bail!(
-            "--node-kind, --edge-kind, and --view-preset are currently supported only for --kind rdra or --kind diff"
+            "--node-kind, --edge-kind, and --view-preset are currently supported only for --kind rdra"
         );
     }
     // Validate user-supplied kinds only (presets are authored from the known set).
@@ -91,16 +72,8 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
             anyhow::bail!("{}", parts.join("; "));
         }
     }
-    if matches!(kind, DiagramKind::Diff) && diff_base.is_empty() {
-        anyhow::bail!("--kind diff requires at least one --diff-base path");
-    }
-    if !matches!(kind, DiagramKind::Diff) && !diff_base.is_empty() {
-        anyhow::bail!("--diff-base is supported only with --kind diff");
-    }
 
-    let scope = if !usecase.is_empty() {
-        Scope::UseCases(usecase)
-    } else if buc.is_empty() {
+    let scope = if buc.is_empty() {
         Scope::Whole
     } else {
         Scope::Bucs(buc)
@@ -126,11 +99,7 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
             edge_kinds: Vec::new(),
         }
         .with_graph_filters(node_kinds, edge_kinds),
-        DiagramKind::Rdra
-        | DiagramKind::State
-        | DiagramKind::Sequence
-        | DiagramKind::EventFlow
-        | DiagramKind::Diff => View {
+        DiagramKind::Rdra | DiagramKind::State | DiagramKind::EventFlow => View {
             scope,
             filter: Filter::None,
             show_descriptions: show_description,
@@ -140,26 +109,13 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
         .with_graph_filters(node_kinds, edge_kinds),
     };
 
-    if matches!(kind, DiagramKind::Sequence) {
-        let txs = rdra_ish_core::infer_usecase_transactions(&model);
-        for diag in rdra_ish_core::tx_diagnostics(&model, &txs) {
-            eprintln!("warning: {}", diag.error);
-        }
-        for diag in rdra_ish_core::api_diagnostics(&model) {
-            eprintln!("warning: {}", diag.error);
-        }
-        for diag in rdra_ish_core::system_diagnostics(&model) {
-            eprintln!("warning: {}", diag.error);
-        }
-    }
-
     if matches!(kind, DiagramKind::EventFlow) {
         for diag in rdra_ish_core::event_diagnostics(&model) {
             eprintln!("warning: {}", diag.error);
         }
     }
 
-    let diagram_text = emit_diagram(&model, &kind, &view, &diff_base)?;
+    let diagram_text = emit_diagram(&model, &kind, &view)?;
     let out_path = out.with_extension("mmd");
     fs::write(&out_path, &diagram_text)
         .with_context(|| format!("failed to write {}", out_path.display()))?;
@@ -168,23 +124,11 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
     Ok(())
 }
 
-fn emit_diagram(
-    model: &SemanticModel,
-    kind: &DiagramKind,
-    view: &View,
-    diff_base: &[PathBuf],
-) -> Result<String> {
+fn emit_diagram(model: &SemanticModel, kind: &DiagramKind, view: &View) -> Result<String> {
     match kind {
         DiagramKind::Rdra => Ok(RdraMermaidEmitter.emit(model, view)?),
         DiagramKind::Er => Ok(ErMermaidEmitter.emit(model, view)?),
         DiagramKind::State => Ok(StateMermaidEmitter.emit(model, view)?),
-        DiagramKind::Sequence => Ok(SequenceMermaidEmitter.emit(model, view)?),
         DiagramKind::EventFlow => Ok(EventFlowMermaidEmitter.emit(model, view)?),
-        DiagramKind::Diff => {
-            let (program, base_model, diags) = load_model(diff_base)?;
-            reject_model_errors(&program, &diags)?;
-            reject_state_errors(&program, &base_model)?;
-            Ok(DiffMermaidEmitter { base: &base_model }.emit_diff(model, view)?)
-        }
     }
 }

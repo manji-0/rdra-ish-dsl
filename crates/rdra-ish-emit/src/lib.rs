@@ -4,7 +4,6 @@ pub mod asyncapi;
 pub mod csv;
 pub mod dbml;
 mod diagram_common;
-pub mod diff;
 pub mod json_schema;
 pub mod mermaid;
 pub mod openapi;

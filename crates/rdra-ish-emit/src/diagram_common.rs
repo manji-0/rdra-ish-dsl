@@ -3,7 +3,7 @@
 use crate::{node_description, prefixed_label, Scope};
 use rdra_ish_core::lifecycle::{Bounds, Scope as LifecycleScope, TransitionSystem};
 use rdra_ish_core::model::{
-    BucKey, ColumnType, EntityKey, EventKey, ExtSystemKey, NodeRef, Raiser, RelKind, SemanticModel,
+    BucKey, ColumnType, EntityKey, EventKey, ExtSystemKey, NodeRef, Raiser, SemanticModel,
     StateKey, TimerKey, UseCaseKey,
 };
 use rdra_ish_core::{EventFlow, TimerFlow};
@@ -111,49 +111,6 @@ pub(crate) fn col_type_str(model: &SemanticModel, ct: &ColumnType) -> String {
             .get(*key)
             .map(|v| v.id.clone())
             .unwrap_or_else(|| "Variation".to_string()),
-    }
-}
-
-pub(crate) fn sequence_usecase_scope(
-    model: &SemanticModel,
-    scope: &Scope,
-) -> Option<HashSet<UseCaseKey>> {
-    match scope {
-        Scope::Whole => None,
-        Scope::UseCases(usecase_ids) => {
-            let wanted: HashSet<&str> = usecase_ids.iter().map(String::as_str).collect();
-            Some(
-                model
-                    .use_cases
-                    .iter()
-                    .filter_map(|(key, uc)| wanted.contains(uc.id.as_str()).then_some(key))
-                    .collect(),
-            )
-        }
-        Scope::Bucs(buc_ids) => {
-            let wanted: HashSet<&str> = buc_ids.iter().map(String::as_str).collect();
-            let buc_keys: HashSet<BucKey> = model
-                .bucs
-                .iter()
-                .filter_map(|(key, buc)| wanted.contains(buc.id.as_str()).then_some(key))
-                .collect();
-            Some(
-                model
-                    .relations
-                    .iter()
-                    .filter_map(|rel| {
-                        if rel.kind == RelKind::Contains {
-                            if let (NodeRef::Buc(buc), NodeRef::UseCase(usecase)) =
-                                (&rel.from, &rel.to)
-                            {
-                                return buc_keys.contains(buc).then_some(*usecase);
-                            }
-                        }
-                        None
-                    })
-                    .collect(),
-            )
-        }
     }
 }
 

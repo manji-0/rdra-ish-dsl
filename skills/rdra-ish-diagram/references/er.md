@@ -34,7 +34,7 @@ rdra-ish export src/ --kind json-schema --out out/json-schema.json
   for the same relationship, or adopt yours with `.key(...)`.
 - `diagram --kind er`, `export --kind dbml`, and `export --kind json-schema` read only
   the data layer. They write their output when the lifecycle has errors and print a
-  `note:` on stderr. The state, sequence, and TypeScript outputs still refuse.
+  `note:` on stderr. The state and TypeScript outputs still refuse.
 
 ## Tips
 

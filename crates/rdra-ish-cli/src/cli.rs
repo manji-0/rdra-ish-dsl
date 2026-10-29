@@ -71,6 +71,14 @@ const REMOVED_DIAGRAM_KINDS: &[(&str, &str)] = &[
         "technical-area",
         "use `csv --kind api-matrix` for the API x entity CRUD, or `--kind rdra --node-kind system --node-kind api --node-kind entity`",
     ),
+    (
+        "sequence",
+        "run `check`, which prints the transaction, API, and system-boundary warnings this diagram printed; `csv --kind api-matrix` lists the entities each API writes",
+    ),
+    (
+        "diff",
+        "write `--kind rdra` for both models and compare the two `.mmd` files with `diff` or `git diff`",
+    ),
 ];
 
 const REMOVED_EXPORT_KINDS: &[(&str, &str)] =
@@ -135,7 +143,7 @@ pub(crate) enum Commands {
     Diagram {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Diagram kind: rdra, er, state, sequence, event-flow, or diff
+        /// Diagram kind: rdra, er, state, or event-flow
         #[arg(long, default_value = "rdra", value_parser = WithRemoved::<DiagramKind>::new(REMOVED_DIAGRAM_KINDS))]
         kind: DiagramKind,
         /// Output format: mermaid, the only one (writes <out>.mmd)
@@ -143,24 +151,18 @@ pub(crate) enum Commands {
         format: OutputFormat,
         /// Filter to one or more BUCs (by id); repeatable (e.g. --buc A --buc B).
         /// The union of scoped nodes across all specified BUCs is shown.
-        /// Applies to all diagram kinds. For sequence and business-area, only directly contained use cases are shown.
+        /// Applies to all diagram kinds.
         #[arg(long)]
         buc: Vec<String>,
-        /// Filter sequence and business-area diagrams to one or more use cases (by id); repeatable.
-        #[arg(long)]
-        usecase: Vec<String>,
-        /// Baseline inputs for --kind diff. Repeat for multiple files/directories.
-        #[arg(long = "diff-base")]
-        diff_base: Vec<PathBuf>,
         /// Render element descriptions as diagram notes or annotations when supported.
         #[arg(long)]
         show_description: bool,
         /// Filter graph diagrams to one or more node kinds; repeatable.
-        /// Applies to --kind rdra and --kind diff.
+        /// Applies to --kind rdra.
         #[arg(long = "node-kind", alias = "kind-filter")]
         node_kind: Vec<String>,
         /// Filter graph diagrams to one or more edge/relation kinds; repeatable.
-        /// Applies to --kind rdra and --kind diff.
+        /// Applies to --kind rdra.
         #[arg(long = "edge-kind", alias = "edge-filter")]
         edge_kind: Vec<String>,
         /// Apply a graph view preset: business, system, data, api, or ui.
@@ -290,12 +292,8 @@ pub(crate) enum DiagramKind {
     Rdra,
     Er,
     State,
-    /// Write-focused sequence diagram with FK-inferred transaction boundaries
-    Sequence,
     /// Event-flow diagram: UC --raises--> Event --triggers--> UC / --transitions--> State
     EventFlow,
-    /// Model graph diff between --diff-base and current inputs
-    Diff,
 }
 
 impl DiagramKind {
@@ -382,13 +380,11 @@ mod tests {
             "diagram",
             "sample.rdra",
             "--kind",
-            "sequence",
+            "rdra",
             "--format",
             "mermaid",
             "--buc",
             "BucScheduling",
-            "--usecase",
-            "BookAppointment",
             "--show-description",
             "--node-kind",
             "usecase",
@@ -407,8 +403,6 @@ mod tests {
                 kind,
                 format,
                 buc,
-                usecase,
-                diff_base,
                 show_description,
                 node_kind,
                 edge_kind,
@@ -416,45 +410,14 @@ mod tests {
                 out,
             } => {
                 assert_eq!(inputs, vec![PathBuf::from("sample.rdra")]);
-                assert!(matches!(kind, DiagramKind::Sequence));
+                assert!(matches!(kind, DiagramKind::Rdra));
                 assert!(matches!(format, OutputFormat::Mermaid));
                 assert_eq!(buc, vec!["BucScheduling"]);
-                assert_eq!(usecase, vec!["BookAppointment"]);
-                assert!(diff_base.is_empty());
                 assert!(show_description);
                 assert_eq!(node_kind, vec!["usecase"]);
                 assert_eq!(edge_kind, vec!["invokes"]);
                 assert!(matches!(view_preset, Some(DiagramViewPreset::Api)));
                 assert_eq!(out, PathBuf::from("out.mmd"));
-            }
-            _ => panic!("expected diagram command"),
-        }
-
-        let cli = Cli::try_parse_from([
-            "rdra-ish",
-            "diagram",
-            "target.rdra",
-            "--kind",
-            "diff",
-            "--diff-base",
-            "base.rdra",
-            "--format",
-            "mermaid",
-        ])
-        .unwrap();
-
-        match cli.command {
-            Commands::Diagram {
-                inputs,
-                kind,
-                format,
-                diff_base,
-                ..
-            } => {
-                assert_eq!(inputs, vec![PathBuf::from("target.rdra")]);
-                assert!(matches!(kind, DiagramKind::Diff));
-                assert!(matches!(format, OutputFormat::Mermaid));
-                assert_eq!(diff_base, vec![PathBuf::from("base.rdra")]);
             }
             _ => panic!("expected diagram command"),
         }
@@ -784,6 +747,8 @@ mod tests {
             ("boundaryless-graph", "`--kind rdra`"),
             ("business-area", "`csv --kind business-inputs`"),
             ("technical-area", "`csv --kind api-matrix`"),
+            ("sequence", "`check`"),
+            ("diff", "`git diff`"),
         ] {
             let message = parse_error(&["rdra-ish", "diagram", "m.rdra", "--kind", kind]);
             assert!(

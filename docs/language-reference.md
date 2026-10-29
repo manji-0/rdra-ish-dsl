@@ -139,14 +139,14 @@ descriptions as review annotations where supported.
 | `step` | A business flow step. A step is a business-language action that can cover a use case, API, or event while remaining distinct from implementation boundaries. | `lint` `step-no-cover`; RDRA diagram |
 | `timer` | An RDRA タイマー: a schedule that starts a use case, such as a nightly sweep. See [Timers](#timers). | `triggers(Timer, UseCase)`; RDRA diagram (external-environment layer) and event-flow diagram; `lint` `orphan-node` |
 | `medium` | A physical medium, device, terminal, or operation medium for Business-BUC context. | `requires_medium` in `csv --kind screen-constraints`; RDRA diagram node. `belongs(...).by(...)` records it, but no output reads that context yet. |
-| `actor` | A human actor who performs use cases. | `check` permission paths; sequence diagram participant; `csv --kind actor-permission-audit` |
+| `actor` | A human actor who performs use cases. | `check` permission paths; RDRA diagram; `csv --kind actor-permission-audit` |
 | `usecase` | A use case: a concrete interaction that reads and writes entities and displays screens. | `check`; `states`; all diagrams; `csv --kind matrix` |
-| `screen` | A screen (UI surface) displayed by use cases. | `lint` `screen-no-fields`; sequence diagram; `csv --kind screen-constraints` |
+| `screen` | A screen (UI surface) displayed by use cases. | `lint` `screen-no-fields`; RDRA diagram; `csv --kind screen-constraints` |
 | `field` | A screen field: a first-class UI input or output item. It can carry editability, requiredness, and actor or system source metadata, and can map to an entity column without becoming one. | `lint` `field-unmapped`, `field-unplaced`; `csv --kind business-inputs` |
 | `event` | A domain event, the interface between use cases and between use cases and external systems, and a `raises` and `triggers` endpoint. | `check` raised-but-unconsumed; `states`; event-flow diagram; `export --kind asyncapi`, `tla` |
 | `system` | An internal system boundary. It groups APIs; its entity set is derived from those APIs' CRUD targets. | `lint` `stage-readiness` (its `system-boundary` stage needs a `system` and an `api`); `check` boundary diagnostics; `csv --kind api-matrix` |
 | `extsystem` | An external system. It reaches use cases through events: `raises(ExtSystem, Event)` for inbound, `triggers(Event, ExtSystem)` for outbound. See [External systems](#external-systems). | RDRA diagram (system-value layer) and event-flow diagram; `export --kind asyncapi` (publisher or subscriber); `check` raised-but-unconsumed; `lint` `orphan-node` |
-| `api` | An API layer endpoint invoked by a use case. It operates entities on behalf of the use case, defines an atomic data operation boundary, and may carry HTTP contract metadata. | `lint` `api-unused`, `api-contract-missing`, `api-contract-incomplete`; sequence diagram; `csv --kind api-matrix`; `export --kind openapi` |
+| `api` | An API layer endpoint invoked by a use case. It operates entities on behalf of the use case, defines an atomic data operation boundary, and may carry HTTP contract metadata. | `lint` `api-unused`, `api-contract-missing`, `api-contract-incomplete`; `check` API diagnostics; `csv --kind api-matrix`; `export --kind openapi` |
 | `dto` | A request, response, or error payload shape used by API contracts. DTOs may carry a column-like field body but are kept separate from database entities. | `lint` `dto-unused`, `naming-dto-field`; `export --kind openapi`, `json-schema` |
 | `permission` | A permission or role-like authority assignable to actors. | `check` `requires_permission` against `has_permission`; `csv --kind actor-permission-audit` |
 | `entity` | A logical data model: a table-like persistent structure. | `check`; `states`; ER diagram; `csv --kind matrix`; `export --kind dbml`, `json-schema`, `tla`; `lint` `enum-attribute` |
@@ -164,7 +164,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | Predicate | Signature | Semantics |
 |---|---|---|
 | `performs` | `(Actor, UseCase \| Buc \| Step)` | The actor performs the given use case, BUC, or business step. |
-| `invokes` | `UseCase == Api` | The use case invokes the API layer. Drives the `Screen → Api → Entity` lane in the sequence diagram. |
+| `invokes` | `UseCase == Api` | The use case invokes the API layer. The API's writes form one transaction group of the use case. |
 | `request` | `Api == Dto` | The API accepts the DTO as a request payload. |
 | `response` | `Api == Dto` | The API returns the DTO as a successful response payload. |
 | `error_response` | `Api == Dto` | The API may return the DTO as an error payload. |
@@ -577,8 +577,8 @@ reach them from where.
 ### `api` and the API layer
 
 A use case's actors are its direct `performs(Actor, UseCase)` actors together with the
-actors of every BUC that contains it (`performs(Actor, Buc)`). Sequence diagrams draw
-all of them as participants, and the permission check requires each of them to hold the
+actors of every BUC that contains it (`performs(Actor, Buc)`). The permission check
+requires each of them to hold the
 use case's and its APIs' permissions. So `performs(Actor, Buc)` says the actor may run
 every use case of the BUC; an actor who runs only some of them performs those use cases
 directly instead.
@@ -599,17 +599,13 @@ creates(OrderApi, OrderLine)
 updates(PlaceOrder, Cart)   // direct write still allowed (mixed form)
 ```
 
-**Sequence diagram behaviour** (`--kind sequence`):
-- If a use case invokes at least one API, the sequence diagram renders
-  `Actor → Screen → Api → Entity` lanes with the API as the source of DB writes.
+**Transactions**:
+- The writes of an API a use case invokes form one atomic group, the API boundary.
+  Direct use-case writes group by FK connectivity, and a write with no FK link to the
+  others runs as its own transaction (`SeparateTxInferred` warning from `check`).
 - If an API is invoked by multiple use cases, the API's CRUD boundary applies to each
   invoking use case. Split read-only and write APIs when those operations have different
   consistency contracts.
-- If a use case has no `invokes` (legacy), the existing `System` participant is used
-  unchanged — full backward compatibility.
-- API write groups are rendered as `transaction (API atomic boundary)`. Direct
-  use-case writes still use FK-grouped transaction blocks
-  (`group transaction (inferred from FK)`).
 - FK-grouped direct writes use the full `relate` graph for connectivity. Two written
   sibling entities that share an unwritten parent entity are still grouped as one
   inferred transaction.
@@ -645,7 +641,7 @@ updates(PlaceOrder, Cart)   // direct write still allowed (mixed form)
 - `csv --kind api` — CSV file of api id and label.
 - `csv --kind api-matrix` — api × entity CRUD matrix.
 
-**Diagnostics** (emitted as warnings when running `diagram --kind sequence`):
+**Diagnostics** (emitted as warnings by `check`):
 - `ApiNeverInvoked` — an api is declared but no use case invokes it.
 - `ApiInvokedButNoEntity` — an api is invoked but operates no entity.
 - `ApiInMultipleSystems` — an api is assigned to multiple systems.

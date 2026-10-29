@@ -293,20 +293,18 @@ input files, each output block is prefixed by a `// <path>` marker.
 Generate a diagram as Mermaid text (`.mmd`).
 
 ```
-rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]... [--usecase <ID>]... [--diff-base <PATH>]... [--show-description] [--node-kind <KIND>]... [--edge-kind <KIND>]... [--view-preset <PRESET>] [-o <OUT>]
+rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]... [--show-description] [--node-kind <KIND>]... [--edge-kind <KIND>]... [--view-preset <PRESET>] [-o <OUT>]
 ```
 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `rdra` \| `er` \| `state` \| `sequence` \| `event-flow` \| `diff` | `rdra` | The diagram kind. `rdra` = RDRA layered graph mapped onto the original four-layer structure; `er` = entity-relationship diagram; `state` = state machine; `sequence` = write-focused sequence diagram with FK-inferred transaction boundaries; `event-flow` = event causality graph showing UC or ExtSystem->Event->UC/BUC/ExtSystem and Event->State chains, plus Timer->UC/BUC edges; `diff` = graph diff between `--diff-base` and current inputs. `boundaryless-graph`, `business-area`, and `technical-area` were removed and fail with a message that names the replacement: `rdra` (narrowed with `--node-kind` / `--edge-kind`), `csv --kind business-inputs`, and `csv --kind api-matrix`. |
+| `--kind` | `rdra` \| `er` \| `state` \| `event-flow` | `rdra` | The diagram kind. `rdra` = RDRA layered graph mapped onto the original four-layer structure; `er` = entity-relationship diagram; `state` = state machine; `event-flow` = event causality graph showing UC or ExtSystem->Event->UC/BUC/ExtSystem and Event->State chains, plus Timer->UC/BUC edges. `boundaryless-graph`, `business-area`, `technical-area`, `sequence`, and `diff` were removed and fail with a message that names the replacement: `rdra` (narrowed with `--node-kind` / `--edge-kind`), `csv --kind business-inputs`, `csv --kind api-matrix`, `check` (which prints the transaction, API, and system warnings `sequence` printed), and a text diff of two `rdra` `.mmd` files. |
 | `--format` | `mermaid` | `mermaid` | Output format. Mermaid text (`.mmd`) is the only one. `puml`, `svg`, and `png` were removed and fail with a message that names `--format mermaid`; to get an image, render the `.mmd` with `mmdc` or any Mermaid-aware tool. |
-| `--buc <id>` | string (repeatable) | — (whole model) | Filter to one or more BUCs by id. With multiple ids, the **union** of reachable nodes across the named BUCs is shown. Applies to all diagram kinds. For `sequence`, only use cases directly contained in the selected BUCs are shown; event-triggered use cases in other BUCs are left to `event-flow`. |
-| `--usecase <id>` | string (repeatable) | — (whole model) | Filter `sequence` diagrams to one or more use cases by id. Cannot be combined with `--buc`. |
-| `--diff-base <path>` | path (repeatable) | — | Baseline model inputs for `--kind diff`. The normal `<INPUTS...>` are treated as the target model. |
+| `--buc <id>` | string (repeatable) | — (whole model) | Filter to one or more BUCs by id. With multiple ids, the **union** of reachable nodes across the named BUCs is shown. Applies to all diagram kinds. |
 | `--show-description` | flag | off | Render element `description` metadata as diagram annotations where supported. Each description becomes a linked annotation node. Currently applies to the `rdra` diagram. |
-| `--node-kind <kind>` | string (repeatable) | — (all nodes) | Filter graph diagrams to specific node kinds. Applies to `rdra` and `diff`. Examples: `actor`, `buc`, `flow`, `step`, `usecase`, `api`, `entity`, `field`. Alias: `--kind-filter`. |
-| `--edge-kind <kind>` | string (repeatable) | — (all edges) | Filter graph diagrams to specific relation kinds. Applies to `rdra` and `diff`. Examples: `contains`, `invokes`, `reads`, `writes`, `creates`, `maps-field`, `owns`, `relate`. Alias: `--edge-filter`. |
+| `--node-kind <kind>` | string (repeatable) | — (all nodes) | Filter graph diagrams to specific node kinds. Applies to `rdra`. Examples: `actor`, `buc`, `flow`, `step`, `usecase`, `api`, `entity`, `field`. Alias: `--kind-filter`. |
+| `--edge-kind <kind>` | string (repeatable) | — (all edges) | Filter graph diagrams to specific relation kinds. Applies to `rdra`. Examples: `contains`, `invokes`, `reads`, `writes`, `creates`, `maps-field`, `owns`, `relate`. Alias: `--edge-filter`. |
 | `--view-preset <preset>` | `business` \| `system` \| `data` \| `api` \| `ui` | — | Apply a graph filter preset. Explicit `--node-kind` or `--edge-kind` values override the preset for that dimension. |
 | `-o`, `--out` | path | `out` | Output file path. The `.mmd` extension is added automatically. |
 
@@ -321,26 +319,12 @@ Notes:
   endpoints are hidden; they do not change the model or diagnostics. Use `--view-preset`
   for common slices, then override with explicit `--node-kind` or `--edge-kind` when a
   review needs a sharper lens.
-- For `--kind sequence`, the tool additionally runs FK-based transaction-boundary
-  inference and emits a `warning:` to stderr for any FK-isolated write within a use case
-  that also has an FK-connected write group. API diagnostics (`ApiNeverInvoked`,
-  `ApiInvokedButNoEntity`) are also run and reported as warnings.
-  FK connectivity is evaluated across the model's full `relate` graph, so sibling
-  writes that share an unwritten parent entity are treated as one inferred transaction
-  group rather than separate isolated writes.
 - For `--kind event-flow`, the tool runs event-integrity diagnostics and emits `warning:`
   lines for events that are never raised, raised but consume nothing, or trigger a use
   case belonging to no BUC. `outbox(Event)` suppresses the raised-but-unconsumed warning
   for events intentionally published outside the local model. Event targets may be either
   BUCs or use cases. Mermaid node IDs are prefixed (`ev__`, `uc__`, `buc__`, `st__`) to
   avoid collisions when model elements share the same DSL identifier.
-- For `--kind diff`, the command compares the graph induced by `--diff-base` against the
-  current `<INPUTS...>`. Added nodes/edges are marked with `+`, removed nodes/edges with
-  `-`, and label-only node changes with a changed style. The diagram includes only changed
-  nodes plus unchanged context nodes needed by changed edges.
-- For `--kind sequence`, participant lifelines are grouped into RDRA-style layer boxes:
-  system value (`actor`), system boundary (`screen`, `api`), and system (`system`,
-  `entity`). The use case itself remains the sequence section title.
 - For `--kind rdra`, model objects are placed into four RDRA-style layers:
   system value (`actor`, `extsystem`, `requirement`, `adr`, `nfr`), system external
   environment (`quality`, `constraint`, `business`, `buc`, `flow`, `step`, `timer`,

@@ -81,8 +81,8 @@ actions interleave: in each step the tool picks any enabled action and applies i
 - **k actions when the writes form k groups.** The groups that `tx.rs` infers bound
   atomicity: FK-connected or API-bounded groups, then each isolated write.
   `UsecaseTx::groups()` yields them in that order, each as a `TxGroup` of kind `Fk`,
-  `Api`, or `Isolated`. The lifecycle and the sequence diagrams read this one list, so a
-  diagram draws the transactions that `states` and `verify` run. The use case becomes
+  `Api`, or `Isolated`. The lifecycle and the `SeparateTxInferred` warning of `check`
+  read this one list. The use case becomes
   `<UC>_1` to `<UC>_k` in transaction order, and the actions interleave freely with
   every other action.
   [`cross_order_payment_split`](../samples/formal-verification/cross_order_payment_split.rdra)

@@ -1,6 +1,6 @@
 ---
 name: rdra-ish-diagram
-description: Choose the right RDRA-ish diagram, CSV review, diff, or export view for the modeling situation, then load focused references for commands and interpretation
+description: Choose the right RDRA-ish diagram, CSV review, or export view for the modeling situation, then load focused references for commands and interpretation
 license: MIT
 ---
 
@@ -18,14 +18,13 @@ the selected view.
 | Dense relationship inspection | `rdra` with `--node-kind` / `--edge-kind` | `references/rdra-graph.md` |
 | Business object/data touchpoint review | `rdra --buc <BucId>` plus CRUD matrix | `references/rdra-graph.md` |
 | Entity structure and relationships | `er`, optionally `--buc <BucId>` | `references/er.md` |
-| Actor-entered field review | `csv --kind business-inputs` | `references/sequence-and-access.md` |
-| System API/entity ownership review | `csv --kind api-matrix` | `references/sequence-and-access.md` |
-| Screen/API/system boundary review | `sequence --buc <BucId>` plus access CSVs | `references/sequence-and-access.md` |
+| Actor-entered field review | `csv --kind business-inputs` | `references/access-and-apis.md` |
+| System API/entity ownership review | `csv --kind api-matrix` | `references/access-and-apis.md` |
+| Screen/API/system boundary review | `rdra --buc <BucId>`, `check`, plus access CSVs | `references/access-and-apis.md` |
 | API contract or payload handoff | `export --kind openapi` plus API/DTO graph filter | `references/formats-and-output.md` |
 | Data contract handoff | `export --kind dbml` or `json-schema` plus ER | `references/formats-and-output.md` |
 | Event contract handoff | `export --kind asyncapi` plus `event-flow` | `references/lifecycle-and-events.md` |
-| Diagram size or review focus | view presets, node/edge filters, or diff diagram | `references/formats-and-output.md` |
-| One concrete use case flow | `sequence --usecase <UseCaseId>` | `references/sequence-and-access.md` |
+| Diagram size or review focus | view presets or node/edge filters | `references/formats-and-output.md` |
 | Lifecycle and event causality | `state --buc <BucId>` plus `event-flow` | `references/lifecycle-and-events.md` |
 | Business rules or state constraints | `check` (rule counterexamples, unreached and stuck states), then `states` | `references/lifecycle-and-events.md` |
 | Temporal `property` and rules that need two instances | Prefer skill `rdra-ish-verify` (`verify`) | `references/lifecycle-and-events.md` |
@@ -36,7 +35,7 @@ the selected view.
 1. Identify the current modeling stage and the question being asked.
 2. Pick one primary view from the routing guide.
 3. Load the matching reference file for commands, filters, and reading notes.
-4. Prefer `--buc` or `--usecase` filters before generating whole-model diagrams.
+4. Prefer `--buc` filters before generating whole-model diagrams.
 5. Use CSV views for access and matrix checks instead of trying to read those details
    from diagrams alone.
 
@@ -48,7 +47,8 @@ the selected view.
   for which use cases?"
 - Use `csv --kind api-matrix` when the question is "which APIs and entities sit inside
   each system?"
-- Use `sequence` when the question is "what actor/screen/API/entity path happens?"
+- Use `rdra --buc <BucId>` and `check` when the question is "what actor/screen/API/entity
+  path happens, and where are the transaction boundaries?"
 - Use `state` when the question is "what lifecycle states exist, and which use case
   moves each one?"
 - Use `event-flow` when the question is "what events, timers, and external systems
@@ -64,7 +64,7 @@ the selected view.
 
 - `references/rdra-graph.md` — RDRA layered graph and early-stage model inspection.
 - `references/er.md` — ER diagram commands and relationship reading.
-- `references/sequence-and-access.md` — sequence diagrams plus access/media CSV views.
+- `references/access-and-apis.md` — API boundaries plus access/media CSV views.
 - `references/lifecycle-and-events.md` — state diagrams, event-flow diagrams,
   `states`, and TLA+ export.
 - `references/formats-and-output.md` — Mermaid output and contract exports.

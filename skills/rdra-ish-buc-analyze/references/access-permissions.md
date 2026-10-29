@@ -15,7 +15,7 @@ path a user action takes:
 - `has_permission(Actor, Permission)` says which permissions the actor has.
 
 The actors of a use case are its direct `performs(Actor, UseCase)` actors together with
-the actors of every BUC that contains it (`performs(Actor, Buc)`). `check`, the sequence
+the actors of every BUC that contains it (`performs(Actor, Buc)`). `check`, the RDRA
 diagrams, and the audit all read that union, so `performs(Actor, Buc)` means the actor
 runs every use case of the BUC and must hold every permission they require. An actor
 who runs only some of them should perform those use cases directly.

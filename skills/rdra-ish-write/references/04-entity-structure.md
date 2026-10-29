@@ -98,7 +98,6 @@ owns(OrderSystem, Order)
 rdra-ish check src/
 rdra-ish lint src/
 rdra-ish diagram src/ --kind er --format mermaid --buc BucOrder
-rdra-ish diagram src/ --kind sequence --format mermaid --buc BucOrder
 rdra-ish csv src/ --kind api-matrix
 rdra-ish csv src/ --kind business-inputs
 rdra-ish csv src/ --kind actor-permission-audit
@@ -115,7 +114,8 @@ rdra-ish export src/ --kind json-schema --out out/json-schema.json
   metadata are visible in list/export output when modeled.
 - Cross-system relations are coordinated or explicitly marked as unresolved.
 - Explicit ownership warnings from `owns` are reviewed.
-- Sequence and API matrix still agree with the entity design.
+- The API matrix and the transaction warnings of `check` still agree with the entity
+  design.
 - `business-inputs` rows are plausible, or surprising fields are explained as derived by
   defaults, FK relations, APIs, events, or `sets`.
 

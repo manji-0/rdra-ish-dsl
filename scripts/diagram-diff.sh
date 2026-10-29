@@ -9,17 +9,14 @@
 # stderr, and the written .mmd. Errors are cells too, so their text is pinned.
 # Axes:
 #   roots    every samples.txt root plus every samples/incremental-order step
-#   kind     every `diagram --kind` in KINDS (diff has its own axis below). Set KINDS to a
-#            space-separated subset to compare only those kinds, e.g. while a unit of work
+#   kind     every `diagram --kind` in KINDS. Set KINDS to a space-separated subset to compare only those kinds, e.g. while a unit of work
 #            removes the others: KINDS="rdra er" scripts/diagram-diff.sh BASE HEAD
 #   format   mermaid only, passed explicitly
-#   scope    no scope, each --buc, the first two --buc together, each --usecase
-#            (sequence, the only kind that takes it)
+#   scope    no scope, each --buc, the first two --buc together
 #   options  --show-description; each --view-preset, --node-kind and --edge-kind on the
 #            kinds that take them
-#   diff     --kind diff across consecutive incremental-order steps and two unrelated roots
-#   errors   every option the CLI rejects, per root, and the removed --format and --kind
-#            values once
+#   errors   every option the CLI rejects, per root, and the removed --format, --kind, and
+#            option values once
 set -uo pipefail
 
 base_bin="${1:?usage: scripts/diagram-diff.sh BASE_BIN HEAD_BIN}"
@@ -32,14 +29,13 @@ head_bin="$(cd "$(dirname "$head_bin")" && pwd)/$(basename "$head_bin")"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-read -r -a kinds <<<"${KINDS:-rdra er state sequence event-flow diff}"
+read -r -a kinds <<<"${KINDS:-rdra er state event-flow}"
 has_kind() { [[ " ${kinds[*]} " == *" $1 "* ]]; }
 only_kinds() { # kind...: those of the arguments that KINDS keeps
   local kind
   for kind in "$@"; do has_kind "$kind" && echo "$kind"; done
 }
 graph_kinds=($(only_kinds rdra))
-usecase_kinds=($(only_kinds sequence))
 presets=(business system data api ui)
 steps=(samples/incremental-order/step-*/src)
 
@@ -81,14 +77,12 @@ dump() { # label bin: one file per cell under $work/LABEL, numbered in run order
     } | sed -e "s|$repo_root/||g" -e "s|$outdir|OUT|g" >"$out_file"
   }
 
-  local root kind buc uc preset fmt=mermaid
+  local root kind buc preset fmt=mermaid
   for root in "${roots[@]}"; do
-    local bucs=() ucs=()
+    local bucs=()
     while IFS= read -r line; do [[ -n "$line" ]] && bucs+=("$line"); done < <(ids "$root" buc)
-    while IFS= read -r line; do [[ -n "$line" ]] && ucs+=("$line"); done < <(ids "$root" usecase)
 
     for kind in "${kinds[@]}"; do
-      [[ "$kind" == diff ]] && continue
       cell "$root $kind $fmt" "$root" --kind "$kind" --format "$fmt"
       cell "$root $kind $fmt show-description" "$root" --kind "$kind" --format "$fmt" --show-description
       for buc in ${bucs[@]+"${bucs[@]}"}; do
@@ -113,64 +107,22 @@ dump() { # label bin: one file per cell under $work/LABEL, numbered in run order
           --buc "${bucs[0]}" --view-preset system
       fi
     done
-    for kind in ${usecase_kinds[@]+"${usecase_kinds[@]}"}; do
-      for uc in ${ucs[@]+"${ucs[@]}"}; do
-        cell "$root $kind $fmt usecase=$uc" "$root" --kind "$kind" --format "$fmt" --usecase "$uc"
-      done
-      if [[ ${#ucs[@]} -ge 2 ]]; then
-        cell "$root $kind $fmt usecase=${ucs[0]},${ucs[1]}" "$root" --kind "$kind" --format "$fmt" \
-          --usecase "${ucs[0]}" --usecase "${ucs[1]}"
-      fi
-    done
 
     cell "$root error unknown-buc" "$root" --buc NoSuchBuc
-    cell "$root error unknown-usecase" "$root" --kind sequence --usecase NoSuchUc
-    cell "$root error usecase-on-rdra" "$root" --kind rdra --usecase NoSuchUc
     cell "$root error unknown-node-kind" "$root" --node-kind bogus --edge-kind bogus
     cell "$root error filter-on-er" "$root" --kind er --node-kind usecase
     cell "$root error preset-on-state" "$root" --kind state --view-preset business
-    cell "$root error diff-without-base" "$root" --kind diff
-    cell "$root error diff-base-on-rdra" "$root" --diff-base samples/ec-site
-    if [[ ${#bucs[@]} -ge 1 && ${#ucs[@]} -ge 1 ]]; then
-      cell "$root error buc-with-usecase" "$root" --kind sequence --buc "${bucs[0]}" --usecase "${ucs[0]}"
-    fi
   done
 
   local removed
   for removed in puml svg png; do
     cell "samples/ec-site error format=$removed" samples/ec-site --format "$removed"
   done
-  for removed in boundaryless-graph business-area technical-area; do
+  for removed in boundaryless-graph business-area technical-area sequence diff; do
     cell "samples/ec-site error kind=$removed" samples/ec-site --kind "$removed"
   done
-
-  local pairs=() i
-  for ((i = 1; i < ${#steps[@]}; i++)); do
-    pairs+=("${steps[i]}|${steps[i - 1]}")
-  done
-  pairs+=("samples/ec-site|samples/personal-info" "samples/ec-site|samples/ec-site"
-    "samples/clinic-ops|samples/ec-site")
-  local pair head_root base_root fmt=mermaid
-  has_kind diff || pairs=()
-  for pair in ${pairs[@]+"${pairs[@]}"}; do
-    head_root="${pair%%|*}"
-    base_root="${pair##*|}"
-    local bucs=()
-    while IFS= read -r line; do [[ -n "$line" ]] && bucs+=("$line"); done < <(ids "$head_root" buc)
-    cell "diff $head_root vs $base_root $fmt" "$head_root" --kind diff --format "$fmt" --diff-base "$base_root"
-    cell "diff $head_root vs $base_root $fmt show-description" "$head_root" --kind diff --format "$fmt" \
-      --diff-base "$base_root" --show-description
-    for buc in ${bucs[@]+"${bucs[@]}"}; do
-      cell "diff $head_root vs $base_root $fmt buc=$buc" "$head_root" --kind diff --format "$fmt" \
-        --diff-base "$base_root" --buc "$buc"
-    done
-    for preset in "${presets[@]}"; do
-      cell "diff $head_root vs $base_root $fmt preset=$preset" "$head_root" --kind diff --format "$fmt" \
-        --diff-base "$base_root" --view-preset "$preset"
-    done
-    cell "diff $head_root vs $base_root $fmt node+edge-kind" "$head_root" --kind diff --format "$fmt" \
-      --diff-base "$base_root" --node-kind usecase --node-kind entity --edge-kind performs --edge-kind reads
-  done
+  cell "samples/ec-site error option=--usecase" samples/ec-site --usecase Capture
+  cell "samples/ec-site error option=--diff-base" samples/ec-site --diff-base samples/ec-site
 }
 
 dump base "$base_bin" &
