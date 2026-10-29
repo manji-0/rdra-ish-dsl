@@ -191,26 +191,37 @@ rdra-ish diagram samples/incremental-order/step-6-business-rules/src \
 ```
 
 ```mermaid
+%% rdra-ish diagram=state scope=whole model=samples/incremental-order/step-6-business-rules/src
+%% kinds: statemodel state usecase
+%% omitted: (none)
 stateDiagram-v2
-  [*] --> Store_normal
-  state "🔄 normal" as Store_normal
-  state "🔄 scheduled" as Store_scheduled
-  state "🔄 blocked" as Store_blocked
-  Store_normal --> Store_scheduled : ✅ Change Next Restock Date
-  Store_scheduled --> Store_blocked : ✅ Block Scheduled Restock
+  state "Store.restock_status" as statemodel__Store_restock_status {
+    [*] --> state__Store_normal
+    state "normal" as state__Store_normal
+    state "scheduled" as state__Store_scheduled
+    state "blocked" as state__Store_blocked
+    state__Store_normal --> state__Store_scheduled : usecase__ChangeNextRestockDate
+    state__Store_scheduled --> state__Store_blocked : usecase__BlockScheduledRestock
+    state__Store_blocked --> [*]
+  }
 ```
 
 How to read it:
 
-- The initial state comes from entity defaults.
-- Each edge is labelled with the use case that drives the transition, as the 遷移UC
-  column of an RDRA state sheet is.
+- Each state model (a lifecycle column) is one composite state,
+  `statemodel__Store_restock_status` labelled `Store.restock_status`.
+- `[*] -->` marks the start state, the value the lifecycle gives the column on creation
+  (or its default for an entity that starts present). `--> [*]` marks an end state, one
+  with no transition to another state.
+- Each edge is labelled with the id of the use case that drives the transition, as the
+  遷移UC column of an RDRA state sheet is; `usecase__BlockScheduledRestock` is the same
+  node in the layered graph.
 - This diagram shows lifecycle topology. Use `rdra-ish states` for rule satisfaction,
   reachable combinations, and diagnostics.
 
 Review points:
 
-- Is there an intended path out of `blocked`, or is it terminal by design?
+- `blocked` is an end state: is it terminal by design, or is a way out missing?
 - Are business rules such as `scheduled` requiring `next_restock_date` covered by
   state-pattern diagnostics?
 - Do events represent domain facts rather than UI button clicks?

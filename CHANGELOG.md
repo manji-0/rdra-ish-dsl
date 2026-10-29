@@ -52,6 +52,15 @@
   diagram with `--node-kind` and `--edge-kind`. `View::with_descriptions` and
   `View::show_descriptions` are replaced by `View::with_model_path` and
   `View::model_path`, the input paths the header prints.
+- `diagram --kind state` writes the encoding contract. It opens with the `%%` header
+  (`omitted:` names the `Enum` columns no `transitions` drive), and draws one composite
+  state per state model, `state "Order.status" as statemodel__Order_status { ... }`,
+  instead of every state at the top level. State ids are `state__<Entity>_<variant>`
+  (was `<Entity>_<variant>`), the same as in `rdra`, and follow the `Enum` order; labels
+  are the variant without the emoji prefix. A transition is labelled with the use case id
+  (`usecase__Capture`, was `✅ Capture Payment`), and `<state> --> [*]` marks each end
+  state, one with no transition to another state. `--buc` now draws each state model one
+  of the BUC's use cases moves; it drew an empty diagram before.
 - `verify` checks each temporal property in its own TLC run, because TLC does not name the
   property a temporal counterexample violates. The runs use the module
   `<whole>_<Property>` (`RdraSpec_NeverShipped`), the same module text and fairness as the

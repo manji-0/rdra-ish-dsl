@@ -231,3 +231,215 @@ fn an_element_has_one_id_in_every_scope() {
         }
     }
 }
+
+/// What a state diagram under the contract says: one composite state per state model, its
+/// states, its transitions labelled with use-case ids, and its start and end markers.
+#[derive(Default)]
+struct StateChart {
+    header_kinds: BTreeSet<String>,
+    /// `statemodel__<Entity>_<column>` to its label `<Entity>.<column>`.
+    models: Vec<(String, String)>,
+    /// State id to the state model that declares it.
+    states: HashMap<String, String>,
+    /// (state model, from, to, use case).
+    transitions: Vec<(String, String, String, String)>,
+    starts: Vec<String>,
+    ends: Vec<String>,
+}
+
+fn parse_state(text: &str) -> Result<StateChart, String> {
+    let mut lines = text.lines();
+    let first = lines.next().unwrap_or_default();
+    if !first.starts_with("%% rdra-ish diagram=state scope=") {
+        return Err(format!("first line is not the header: {first}"));
+    }
+    let mut chart = StateChart::default();
+    let mut seen_type = false;
+    let mut current: Option<String> = None;
+    for line in lines {
+        let trimmed = line.trim();
+        if let Some(kinds) = trimmed.strip_prefix("%% kinds: ") {
+            chart.header_kinds = kinds
+                .split(' ')
+                .filter(|kind| *kind != "(none)")
+                .map(str::to_string)
+                .collect();
+        } else if trimmed.starts_with("%% ") {
+        } else if trimmed == "stateDiagram-v2" {
+            seen_type = true;
+        } else if trimmed == "}" {
+            current = current
+                .take()
+                .map(|_| None)
+                .ok_or_else(|| format!("`}}` outside a state model: {line}"))?;
+        } else if let Some(rest) = trimmed
+            .strip_prefix("state \"")
+            .and_then(|rest| rest.strip_suffix(" {"))
+        {
+            let (label, id) = rest
+                .split_once("\" as ")
+                .ok_or_else(|| format!("unparsed state model: {line}"))?;
+            if current.is_some() {
+                return Err(format!("nested state model: {line}"));
+            }
+            chart.models.push((id.to_string(), label.to_string()));
+            current = Some(id.to_string());
+        } else {
+            let model = current
+                .clone()
+                .ok_or_else(|| format!("line outside a state model: {line}"))?;
+            if let Some(id) = trimmed.strip_prefix("[*] --> ") {
+                chart.starts.push(id.to_string());
+            } else if let Some(id) = trimmed.strip_suffix(" --> [*]") {
+                chart.ends.push(id.to_string());
+            } else if let Some(rest) = trimmed.strip_prefix("state \"") {
+                let (_, id) = rest
+                    .split_once("\" as ")
+                    .ok_or_else(|| format!("unparsed state: {line}"))?;
+                chart.states.insert(id.to_string(), model);
+            } else {
+                let (arm, usecase) = trimmed
+                    .split_once(" : ")
+                    .ok_or_else(|| format!("unparsed line: {line}"))?;
+                let (from, to) = arm
+                    .split_once(" --> ")
+                    .ok_or_else(|| format!("unparsed line: {line}"))?;
+                chart.transitions.push((
+                    model,
+                    from.to_string(),
+                    to.to_string(),
+                    usecase.to_string(),
+                ));
+            }
+        }
+    }
+    if !seen_type || current.is_some() {
+        return Err("no `stateDiagram-v2` line, or an unclosed state model".to_string());
+    }
+    Ok(chart)
+}
+
+fn check_state(chart: &StateChart) -> Result<(), String> {
+    let mut models = BTreeSet::new();
+    for (id, label) in &chart.models {
+        let expected = id
+            .strip_prefix("statemodel__")
+            .map(|rest| label.replacen('.', "_", 1) == rest);
+        if expected != Some(true) || !models.insert(id) {
+            return Err(format!(
+                "state model {id} \"{label}\" is not one per column"
+            ));
+        }
+    }
+    for (state, model) in &chart.states {
+        let label = &chart.models.iter().find(|(id, _)| id == model).unwrap().1;
+        let entity = label.split('.').next().unwrap_or_default();
+        if !state.starts_with(&format!("state__{entity}_")) {
+            return Err(format!("state {state} in {model}"));
+        }
+    }
+    for (model, from, to, usecase) in &chart.transitions {
+        for end in [from, to] {
+            if chart.states.get(end) != Some(model) {
+                return Err(format!("{from} --> {to}: {end} is not a state of {model}"));
+            }
+        }
+        if !usecase.starts_with("usecase__") {
+            return Err(format!("{from} --> {to} is labelled {usecase}"));
+        }
+    }
+    for state in chart.starts.iter().chain(&chart.ends) {
+        if !chart.states.contains_key(state) {
+            return Err(format!("start or end {state} is not declared"));
+        }
+    }
+    for state in chart.states.keys() {
+        let leaves = chart
+            .transitions
+            .iter()
+            .any(|(_, from, to, _)| from == state && to != state);
+        if leaves == chart.ends.contains(state) {
+            return Err(format!(
+                "{state}: an end state must be one with no transition out"
+            ));
+        }
+    }
+    let mut body_kinds = BTreeSet::new();
+    for (kind, present) in [
+        ("statemodel", !chart.models.is_empty()),
+        ("state", !chart.states.is_empty()),
+        ("usecase", !chart.transitions.is_empty()),
+    ] {
+        if present {
+            body_kinds.insert(kind.to_string());
+        }
+    }
+    if chart.header_kinds != body_kinds {
+        return Err(format!(
+            "header kinds {:?} but body kinds {body_kinds:?}",
+            chart.header_kinds
+        ));
+    }
+    Ok(())
+}
+
+#[test]
+fn every_state_diagram_of_every_sample_keeps_the_contract() {
+    let dir = scratch("diagram_contract_state");
+    let mut drawn = 0;
+    for root in roots() {
+        let scopes: Vec<Option<String>> = std::iter::once(None)
+            .chain(buc_ids(&root).into_iter().map(Some))
+            .collect();
+        for buc in scopes {
+            let text = diagram(&root, "state", buc.as_deref(), &dir.join("out"));
+            let chart = parse_state(&text)
+                .and_then(|chart| check_state(&chart).map(|()| chart))
+                .unwrap_or_else(|error| panic!("{root} {buc:?}: {error}\n{text}"));
+            drawn += usize::from(!chart.models.is_empty());
+        }
+    }
+    assert!(drawn > 10, "only {drawn} state diagrams draw a state model");
+}
+
+#[test]
+fn the_state_contract_check_rejects_a_broken_diagram() {
+    let good = "%% rdra-ish diagram=state scope=whole\n%% kinds: statemodel state usecase\nstateDiagram-v2\n  state \"Doc.status\" as statemodel__Doc_status {\n    [*] --> state__Doc_draft\n    state \"draft\" as state__Doc_draft\n    state \"done\" as state__Doc_done\n    state__Doc_draft --> state__Doc_done : usecase__Publish\n    state__Doc_done --> [*]\n  }\n";
+    assert!(check_state(&parse_state(good).unwrap()).is_ok());
+    for (broken, from, to) in [
+        ("missing end", "    state__Doc_done --> [*]\n", ""),
+        (
+            "end with a way out",
+            "    state__Doc_done --> [*]\n",
+            "    state__Doc_done --> [*]\n    state__Doc_draft --> [*]\n",
+        ),
+        ("label is not an id", ": usecase__Publish", ": Publish"),
+        ("emoji-era id", "as state__Doc_done", "as Doc_done"),
+        (
+            "header kinds",
+            "statemodel state usecase",
+            "statemodel state",
+        ),
+    ] {
+        let text = good.replace(from, to);
+        assert_ne!(text, good, "{broken}");
+        let result = parse_state(&text).and_then(|chart| check_state(&chart));
+        assert!(result.is_err(), "{broken} passed:\n{text}");
+    }
+}
+
+#[test]
+fn a_state_and_its_use_cases_have_the_ids_the_rdra_diagram_gives_them() {
+    let dir = scratch("diagram_contract_state_ids");
+    for root in roots() {
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
+        let state = parse_state(&diagram(&root, "state", None, &dir.join("s"))).unwrap();
+        let ids = state
+            .states
+            .keys()
+            .chain(state.transitions.iter().map(|(_, _, _, usecase)| usecase));
+        for id in ids {
+            assert!(rdra.nodes.contains_key(id), "{root}: {id} not in rdra");
+        }
+    }
+}

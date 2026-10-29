@@ -1,14 +1,21 @@
+%% rdra-ish diagram=state scope=whole model=samples/ec-site
+%% kinds: statemodel state usecase
+%% omitted: Payment.status (Enum without transitions)
 stateDiagram-v2
-  [*] --> Order_pending
-  state "🔄 awaiting_capture" as Order_awaiting_capture
-  state "🔄 cancelled" as Order_cancelled
-  state "🔄 paid" as Order_paid
-  state "🔄 shipped" as Order_shipped
-  state "🔄 pending" as Order_pending
-  state "🔄 delivered" as Order_delivered
-  Order_awaiting_capture --> Order_cancelled : ✅ Cancel Order
-  Order_awaiting_capture --> Order_paid : ✅ Capture Payment
-  Order_paid --> Order_shipped : ✅ Ship Order
-  Order_pending --> Order_awaiting_capture : ✅ Enter Payment Information
-  Order_pending --> Order_cancelled : ✅ Cancel Order
-  Order_shipped --> Order_delivered : ✅ Confirm Delivery
+  state "Order.status" as statemodel__Order_status {
+    [*] --> state__Order_pending
+    state "pending" as state__Order_pending
+    state "awaiting_capture" as state__Order_awaiting_capture
+    state "paid" as state__Order_paid
+    state "shipped" as state__Order_shipped
+    state "delivered" as state__Order_delivered
+    state "cancelled" as state__Order_cancelled
+    state__Order_pending --> state__Order_awaiting_capture : usecase__InputPaymentInfo
+    state__Order_pending --> state__Order_cancelled : usecase__Cancel
+    state__Order_awaiting_capture --> state__Order_paid : usecase__Capture
+    state__Order_awaiting_capture --> state__Order_cancelled : usecase__Cancel
+    state__Order_paid --> state__Order_shipped : usecase__ShipOrder
+    state__Order_shipped --> state__Order_delivered : usecase__DeliverOrder
+    state__Order_delivered --> [*]
+    state__Order_cancelled --> [*]
+  }

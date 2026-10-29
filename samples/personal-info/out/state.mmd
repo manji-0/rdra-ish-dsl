@@ -1,10 +1,16 @@
+%% rdra-ish diagram=state scope=whole model=samples/personal-info
+%% kinds: statemodel state usecase
+%% omitted: (none)
 stateDiagram-v2
-  [*] --> UserAccount_provisioned
-  state "🔄 active" as UserAccount_active
-  state "🔄 deleted" as UserAccount_deleted
-  state "🔄 suspended" as UserAccount_suspended
-  state "🔄 provisioned" as UserAccount_provisioned
-  UserAccount_active --> UserAccount_deleted : ✅ Delete Account
-  UserAccount_active --> UserAccount_suspended : ✅ Suspend Account
-  UserAccount_provisioned --> UserAccount_active : ✅ Set Initial Password
-  UserAccount_suspended --> UserAccount_active : ✅ Restore Account
+  state "UserAccount.status" as statemodel__UserAccount_status {
+    [*] --> state__UserAccount_provisioned
+    state "provisioned" as state__UserAccount_provisioned
+    state "active" as state__UserAccount_active
+    state "suspended" as state__UserAccount_suspended
+    state "deleted" as state__UserAccount_deleted
+    state__UserAccount_provisioned --> state__UserAccount_active : usecase__SetInitialPassword
+    state__UserAccount_active --> state__UserAccount_suspended : usecase__SuspendAccount
+    state__UserAccount_active --> state__UserAccount_deleted : usecase__DeleteAccount
+    state__UserAccount_suspended --> state__UserAccount_active : usecase__RestoreAccount
+    state__UserAccount_deleted --> [*]
+  }

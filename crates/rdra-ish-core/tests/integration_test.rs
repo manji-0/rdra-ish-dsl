@@ -194,8 +194,8 @@ fn test_state_diagram() {
     let mermaid = StateMermaidEmitter.emit(&model, &view).unwrap();
 
     assert!(
-        mermaid.starts_with("stateDiagram-v2\n"),
-        "should start with stateDiagram-v2:\n{mermaid}"
+        mermaid.contains("\nstateDiagram-v2\n"),
+        "should declare stateDiagram-v2 after the header:\n{mermaid}"
     );
     assert!(
         mermaid.contains("[*] -->"),

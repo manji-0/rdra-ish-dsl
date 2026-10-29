@@ -31,11 +31,19 @@ rdra-ish verify src/ --backend tlc -o out/
 
 ## Reading State Diagrams
 
-- Nodes are the Enum variants of the entity's lifecycle column, named `{Entity}_{variant}`.
-- Arrows are the `transitions` arms, labelled with the label of the use case that
-  drives each one (`Order_pending --> Order_paid : ✅ Capture Payment`).
-- `[*]` start edges come from the states a creating use case sets, or the start of a
-  pre-existing entity.
+- The header comes first (`%% rdra-ish diagram=state scope=... model=...`, `%% kinds:`);
+  `%% omitted:` names the Enum columns that have no `transitions` and so are not
+  state models.
+- Each state model (a lifecycle column) is one composite state,
+  `state "Order.status" as statemodel__Order_status { ... }`.
+- States are the Enum variants of that column, named `state__{Entity}_{variant}` (the
+  same id as in `--kind rdra`), in the Enum's order.
+- Arrows are the `transitions` arms, labelled with the id of the use case that drives
+  each one (`state__Order_pending --> state__Order_paid : usecase__Capture`).
+- `[*] -->` start edges come from the states a creating use case sets, or the start of a
+  pre-existing entity. `--> [*]` marks an end state: one with no transition to another
+  state.
+- `--buc <BucId>` draws each state model one of the BUC's use cases moves, whole.
 - The diagram draws the transitions, not reachability: run `check` to learn whether
   each state is reached (`Witness_*`) and left (`Deadlock_*`).
 

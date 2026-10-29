@@ -1,7 +1,13 @@
+%% rdra-ish diagram=state scope=whole model=samples/incremental-order/step-5-lifecycle/src
+%% kinds: statemodel state usecase
+%% omitted: (none)
 stateDiagram-v2
-  [*] --> Store_normal
-  state "🔄 normal" as Store_normal
-  state "🔄 scheduled" as Store_scheduled
-  state "🔄 blocked" as Store_blocked
-  Store_normal --> Store_scheduled : ✅ Change Next Restock Date
-  Store_scheduled --> Store_blocked : ✅ Block Scheduled Restock
+  state "Store.restock_status" as statemodel__Store_restock_status {
+    [*] --> state__Store_normal
+    state "normal" as state__Store_normal
+    state "scheduled" as state__Store_scheduled
+    state "blocked" as state__Store_blocked
+    state__Store_normal --> state__Store_scheduled : usecase__ChangeNextRestockDate
+    state__Store_scheduled --> state__Store_blocked : usecase__BlockScheduledRestock
+    state__Store_blocked --> [*]
+  }

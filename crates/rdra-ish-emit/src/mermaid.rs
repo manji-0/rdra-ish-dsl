@@ -6,11 +6,12 @@ use crate::diagram_common::{
 };
 use crate::{
     collect_object_graph_nodes, node_kind_filter_name, object_graph_layer, object_graph_rel_label,
-    prefixed_node_label, view_node_visible, view_relation_visible, EmitError, Emitter, Scope, View,
-    OBJECT_GRAPH_LAYERS,
+    view_node_visible, view_relation_visible, EmitError, Emitter, Scope, View, OBJECT_GRAPH_LAYERS,
 };
-use rdra_ish_core::model::{EntityKey, NodeRef, RelKind, SemanticModel, StateKey};
-use std::collections::{HashMap, HashSet};
+use rdra_ish_core::model::{
+    ColumnType, EntityKey, NodeRef, RelKind, SemanticModel, StateKey, StateTransition,
+};
+use std::collections::{BTreeMap, HashSet};
 
 // ── RDRA グラフ図エミッタ (Mermaid) ─────────────────────────────────────────
 
@@ -254,114 +255,186 @@ impl Emitter for RdraMermaidEmitter {
 
 pub struct StateMermaidEmitter;
 
+/// One state model: the transitions of one lifecycle column, its states in `Enum` order.
+struct StateModel<'a> {
+    entity: EntityKey,
+    entity_id: &'a str,
+    column: &'a str,
+    variants: Vec<&'a str>,
+    transitions: Vec<&'a StateTransition>,
+}
+
+impl StateModel<'_> {
+    fn position(&self, variant: &str) -> usize {
+        self.variants
+            .iter()
+            .position(|v| *v == variant)
+            .unwrap_or(usize::MAX)
+    }
+}
+
+/// Every state model with a transition in scope, sorted by entity and column.
+fn state_models<'a>(model: &'a SemanticModel, in_scope: &HashSet<NodeRef>) -> Vec<StateModel<'a>> {
+    let mut groups: BTreeMap<(&str, &str), StateModel<'a>> = BTreeMap::new();
+    for transition in &model.state_transitions {
+        let Some(entity) = model.entities.get(transition.entity) else {
+            continue;
+        };
+        let group = groups
+            .entry((entity.id.as_str(), transition.column.as_str()))
+            .or_insert_with(|| StateModel {
+                entity: transition.entity,
+                entity_id: &entity.id,
+                column: &transition.column,
+                variants: entity
+                    .columns
+                    .iter()
+                    .find(|c| c.name == transition.column)
+                    .and_then(|c| model.column_values(c))
+                    .map(|values| values.iter().map(String::as_str).collect())
+                    .unwrap_or_default(),
+                transitions: Vec::new(),
+            });
+        group.transitions.push(transition);
+    }
+    groups
+        .into_values()
+        .filter(|sm| {
+            sm.transitions
+                .iter()
+                .any(|t| in_scope.contains(&NodeRef::UseCase(t.usecase)))
+        })
+        .collect()
+}
+
 impl Emitter for StateMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
-        // BUCフィルタ
-        let reachable: Option<HashSet<NodeRef>> = match &view.scope {
-            Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
-            Scope::Whole | Scope::UseCases(_) => None,
+        // A BUC scope draws each state model one of its use cases moves, whole.
+        let in_scope: HashSet<NodeRef> = match &view.scope {
+            Scope::Bucs(buc_ids) => rdra_ish_core::reachable_from_bucs(model, buc_ids),
+            Scope::Whole | Scope::UseCases(_) => model
+                .use_cases
+                .keys()
+                .map(NodeRef::UseCase)
+                .chain(model.entities.keys().map(NodeRef::Entity))
+                .collect(),
         };
-
-        let is_visible = |nr: &NodeRef| -> bool {
-            match &reachable {
-                Some(set) => set.contains(nr),
-                None => true,
-            }
-        };
-
-        let state_id_to_key: HashMap<String, StateKey> = model
-            .states
-            .iter()
-            .map(|(sk, s)| (s.id.clone(), sk))
-            .collect();
-
-        let resolve_sk = |entity: EntityKey, variant: &str| -> Option<StateKey> {
-            let entity_id = &model.entities.get(entity)?.id;
-            let state_id = format!("{entity_id}_{variant}");
-            state_id_to_key.get(&state_id).copied()
-        };
-
-        let transitions: Vec<_> = model
-            .state_transitions
-            .iter()
-            .filter_map(|t| {
-                let from_sk = resolve_sk(t.entity, &t.from)?;
-                let to_sk = resolve_sk(t.entity, &t.to)?;
-                Some((from_sk, to_sk, t))
-            })
-            .filter(|(from_sk, to_sk, _)| {
-                is_visible(&NodeRef::State(*from_sk)) && is_visible(&NodeRef::State(*to_sk))
-            })
-            .collect();
-
-        if transitions.is_empty() {
-            return Ok("stateDiagram-v2\n".to_string());
-        }
-
-        // 初期状態 = 遷移系 (lifecycle) が作成時に与える開始値
-        let initial_states = lifecycle_start_states(
+        let models = state_models(model, &in_scope);
+        let starts = lifecycle_start_states(
             model,
-            transitions
-                .iter()
-                .map(|(_, _, t)| (t.entity, t.column.clone())),
-            resolve_sk,
+            models.iter().map(|sm| (sm.entity, sm.column.to_string())),
+            |entity, variant| state_key(model, entity, variant),
         );
 
-        let mut out = String::new();
-        out.push_str("stateDiagram-v2\n");
-
-        for initial in &initial_states {
-            if let Some(id) = node_id(model, &NodeRef::State(*initial)) {
-                out.push_str(&format!("  [*] --> {}\n", id));
+        let mut body = String::new();
+        let mut kinds: Vec<&'static str> = Vec::new();
+        let mut add_kind = |kind: &'static str| {
+            if !kinds.contains(&kind) {
+                kinds.push(kind);
             }
+        };
+        for sm in &models {
+            let state_id = |variant: &str| {
+                state_key(model, sm.entity, variant)
+                    .and_then(|sk| contract_id(model, &NodeRef::State(sk)))
+            };
+            let mut arms: Vec<(&str, &str, String)> = sm
+                .transitions
+                .iter()
+                .filter_map(|t| {
+                    let usecase = contract_id(model, &NodeRef::UseCase(t.usecase))?;
+                    Some((t.from.as_str(), t.to.as_str(), usecase))
+                })
+                .collect();
+            arms.sort_by(|a, b| {
+                (sm.position(a.0), sm.position(a.1), &a.2).cmp(&(
+                    sm.position(b.0),
+                    sm.position(b.1),
+                    &b.2,
+                ))
+            });
+            arms.dedup();
+            let start_variants: Vec<&str> = sm
+                .variants
+                .iter()
+                .copied()
+                .filter(|v| state_key(model, sm.entity, v).is_some_and(|sk| starts.contains(&sk)))
+                .collect();
+            let drawn: Vec<&str> = sm
+                .variants
+                .iter()
+                .copied()
+                .filter(|v| {
+                    start_variants.contains(v)
+                        || arms.iter().any(|(from, to, _)| from == v || to == v)
+                })
+                .collect();
+
+            add_kind("statemodel");
+            body.push_str(&format!(
+                "  state \"{}.{}\" as statemodel__{}_{} {{\n",
+                sm.entity_id, sm.column, sm.entity_id, sm.column
+            ));
+            for variant in &start_variants {
+                if let Some(id) = state_id(variant) {
+                    body.push_str(&format!("    [*] --> {id}\n"));
+                }
+            }
+            for variant in &drawn {
+                if let Some(id) = state_id(variant) {
+                    add_kind("state");
+                    body.push_str(&format!("    state \"{}\" as {id}\n", quote(variant)));
+                }
+            }
+            for (from, to, usecase) in &arms {
+                if let (Some(from), Some(to)) = (state_id(from), state_id(to)) {
+                    add_kind("usecase");
+                    body.push_str(&format!("    {from} --> {to} : {usecase}\n"));
+                }
+            }
+            // An end state has no transition to another state.
+            for variant in &drawn {
+                let leaves = arms
+                    .iter()
+                    .any(|(from, to, _)| from == variant && to != variant);
+                if let (false, Some(id)) = (leaves, state_id(variant)) {
+                    body.push_str(&format!("    {id} --> [*]\n"));
+                }
+            }
+            body.push_str("  }\n");
         }
 
-        let mut sorted: Vec<_> = transitions.iter().collect();
-        sorted.sort_by_key(|&&(from_sk, to_sk, t)| {
-            format!(
-                "{}{}{}",
-                node_id(model, &NodeRef::State(from_sk)).unwrap_or(""),
-                node_id(model, &NodeRef::State(to_sk)).unwrap_or(""),
-                node_id(model, &NodeRef::UseCase(t.usecase)).unwrap_or(""),
-            )
-        });
-
-        // ノード名ラベル（state "label" as id）を出力してから遷移を出力
-        let mut defined: HashSet<String> = HashSet::new();
-        for &&(from_sk, to_sk, _) in &sorted {
-            for sk in [from_sk, to_sk] {
-                let nr = NodeRef::State(sk);
-                if let (Some(id), Some(label)) = (node_id(model, &nr), node_label(model, &nr)) {
-                    if defined.insert(id.to_string()) {
-                        out.push_str(&format!(
-                            "  state \"{}\" as {}\n",
-                            prefixed_node_label(&nr, label),
-                            id
-                        ));
-                    }
+        let mut unmodeled: Vec<String> = Vec::new();
+        let mut entities: Vec<_> = model.entities.iter().collect();
+        entities.sort_by_key(|(_, e)| &e.id);
+        for (key, entity) in entities {
+            if !in_scope.contains(&NodeRef::Entity(key)) {
+                continue;
+            }
+            for column in &entity.columns {
+                if matches!(column.col_type, ColumnType::Enum(_))
+                    && !model.is_lifecycle_column(key, &column.name)
+                {
+                    unmodeled.push(format!("{}.{}", entity.id, column.name));
                 }
             }
         }
-
-        for &&(from_sk, to_sk, t) in &sorted {
-            let from_nr = NodeRef::State(from_sk);
-            let to_nr = NodeRef::State(to_sk);
-            let usecase_nr = NodeRef::UseCase(t.usecase);
-            if let (Some(from_id), Some(to_id), Some(uc_label)) = (
-                node_id(model, &from_nr),
-                node_id(model, &to_nr),
-                node_label(model, &usecase_nr),
-            ) {
-                out.push_str(&format!(
-                    "  {} --> {} : {}\n",
-                    from_id,
-                    to_id,
-                    prefixed_node_label(&usecase_nr, uc_label)
-                ));
-            }
-        }
-
-        Ok(out)
+        let omitted = if unmodeled.is_empty() {
+            Vec::new()
+        } else {
+            vec![format!(
+                "{} (Enum without transitions)",
+                unmodeled.join(" ")
+            )]
+        };
+        let header = Header {
+            diagram: "state",
+            view,
+            layers: None,
+            kinds,
+            omitted,
+        };
+        Ok(format!("{}stateDiagram-v2\n{body}", header.render()))
     }
 }
 
@@ -681,16 +754,102 @@ relate(Order, Customer, N:1)
 entity Doc "文書" {
   id: Int @pk
   status: Enum(draft, published) @default(draft)
+  kind: Enum(memo, report)
 }
 usecase Publish "公開する"
 transitions(Doc.status, Publish, draft -> published)
 "#;
         let model = model_from(src);
+        let result = StateMermaidEmitter
+            .emit(&model, &View::whole().with_model_path("m.rdra"))
+            .unwrap();
+        assert_eq!(
+            result,
+            "%% rdra-ish diagram=state scope=whole model=m.rdra\n\
+             %% kinds: statemodel state usecase\n\
+             %% omitted: Doc.kind (Enum without transitions)\n\
+             stateDiagram-v2\n  \
+               state \"Doc.status\" as statemodel__Doc_status {\n    \
+                 [*] --> state__Doc_draft\n    \
+                 state \"draft\" as state__Doc_draft\n    \
+                 state \"published\" as state__Doc_published\n    \
+                 state__Doc_draft --> state__Doc_published : usecase__Publish\n    \
+                 state__Doc_published --> [*]\n  \
+               }\n"
+        );
+    }
+
+    #[test]
+    fn test_state_mermaid_draws_one_composite_state_per_state_model() {
+        let src = r#"
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(open, paid, closed) @default(open)
+}
+entity Ticket "Ticket" {
+  id: Int @pk
+  phase: Enum(new, done) @default(new)
+}
+usecase Pay "Pay"
+usecase Close "Close"
+usecase Reopen "Reopen"
+usecase Finish "Finish"
+transitions(Order.status, Pay, open -> paid)
+transitions(Order.status, Close, paid -> closed)
+transitions(Order.status, Reopen, closed -> open)
+transitions(Ticket.phase, Finish, new -> done)
+"#;
+        let model = model_from(src);
         let result = StateMermaidEmitter.emit(&model, &View::whole()).unwrap();
-        assert!(result.contains("stateDiagram-v2"));
-        assert!(result.contains("[*] --> Doc_draft"));
-        assert!(result.contains("Doc_draft --> Doc_published"));
-        assert!(result.contains("公開する"));
+        assert_eq!(result.matches("as statemodel__").count(), 2, "{result}");
+        let order = result
+            .split("state \"Order.status\" as statemodel__Order_status {\n")
+            .nth(1)
+            .and_then(|rest| rest.split("  }\n").next())
+            .unwrap();
+        assert!(order.contains("state__Order_closed --> state__Order_open : usecase__Reopen"));
+        assert!(!order.contains("Ticket"), "{order}");
+        // Every Order state leaves, so none is an end state; Ticket ends at done.
+        assert!(!order.contains("--> [*]"), "{result}");
+        assert!(
+            result.contains("    state__Ticket_done --> [*]\n"),
+            "{result}"
+        );
+        assert!(!result.contains("state__Ticket_new --> [*]"), "{result}");
+    }
+
+    #[test]
+    fn test_state_mermaid_buc_scope_draws_the_state_models_its_use_cases_move() {
+        let src = r#"
+buc BucPay "Pay"
+buc BucShip "Ship"
+usecase Pay "Pay"
+usecase Ship "Ship"
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(open, paid, shipped) @default(open)
+}
+entity Parcel "Parcel" {
+  id: Int @pk
+  status: Enum(packed, sent) @default(packed)
+}
+contains(BucPay, Pay)
+contains(BucShip, Ship)
+transitions(Order.status, Pay, open -> paid)
+transitions(Order.status, Ship, paid -> shipped)
+transitions(Parcel.status, Ship, packed -> sent)
+"#;
+        let model = model_from(src);
+        let result = StateMermaidEmitter
+            .emit(&model, &View::bucs(vec!["BucPay".to_string()]))
+            .unwrap();
+        assert!(result.contains("scope=buc:BucPay"), "{result}");
+        assert!(result.contains("statemodel__Order_status {"), "{result}");
+        assert!(
+            result.contains("state__Order_paid --> state__Order_shipped : usecase__Ship"),
+            "{result}"
+        );
+        assert!(!result.contains("Parcel"), "{result}");
     }
 
     #[test]
@@ -710,8 +869,8 @@ transitions(Doc.status, Reopen, published -> review)
 "#;
         let model = model_from(src);
         let result = StateMermaidEmitter.emit(&model, &View::whole()).unwrap();
-        assert!(result.contains("[*] --> Doc_review"), "{result}");
-        assert!(!result.contains("[*] --> Doc_draft"), "{result}");
+        assert!(result.contains("[*] --> state__Doc_review"), "{result}");
+        assert!(!result.contains("[*] --> state__Doc_draft"), "{result}");
     }
 
     #[test]
@@ -728,8 +887,8 @@ transitions(Acct.status, Thaw, frozen -> active)
 "#;
         let model = model_from(src);
         let result = StateMermaidEmitter.emit(&model, &View::whole()).unwrap();
-        assert!(result.contains("[*] --> Acct_active"), "{result}");
-        assert!(!result.contains("[*] --> Acct_frozen"), "{result}");
+        assert!(result.contains("[*] --> state__Acct_active"), "{result}");
+        assert!(!result.contains("[*] --> state__Acct_frozen"), "{result}");
     }
 
     #[test]

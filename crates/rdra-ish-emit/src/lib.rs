@@ -441,40 +441,6 @@ pub(crate) fn node_description<'a>(model: &'a SemanticModel, node: &NodeRef) -> 
     }
 }
 
-pub(crate) fn node_emoji(node: &NodeRef) -> &'static str {
-    match node {
-        NodeRef::Actor(_) => "👤",
-        NodeRef::ExtSystem(_) => "🌐",
-        NodeRef::System(_) => "🧩",
-        NodeRef::Requirement(_) => "🎯",
-        NodeRef::Adr(_) => "📝",
-        NodeRef::Nfr(_) => "📈",
-        NodeRef::Quality(_) => "✨",
-        NodeRef::Constraint(_) => "⚖️",
-        NodeRef::Business(_) => "💼",
-        NodeRef::Buc(_) => "📦",
-        NodeRef::Flow(_) => "🧭",
-        NodeRef::Step(_) => "➡️",
-        NodeRef::UseCase(_) => "✅",
-        NodeRef::Screen(_) => "🖥️",
-        NodeRef::Field(_) => "🔤",
-        NodeRef::Event(_) => "⚡",
-        NodeRef::Entity(_) => "🗄️",
-        NodeRef::State(_) => "🔄",
-        NodeRef::Api(_) => "🔌",
-        NodeRef::Dto(_) => "📄",
-        NodeRef::Timer(_) => "⏱️",
-        NodeRef::Medium(_) => "📱",
-        NodeRef::Permission(_) => "🔑",
-        NodeRef::Variation(_) => "🎚️",
-        NodeRef::Condition(_) => "🔀",
-    }
-}
-
-pub(crate) fn prefixed_node_label(node: &NodeRef, label: &str) -> String {
-    format!("{} {}", node_emoji(node), label)
-}
-
 pub(crate) fn prefixed_label(emoji: &str, label: &str) -> String {
     format!("{} {}", emoji, label)
 }

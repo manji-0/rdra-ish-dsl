@@ -299,7 +299,7 @@ rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]...
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `rdra` \| `er` \| `state` \| `event-flow` | `rdra` | The diagram kind. `rdra` = RDRA layered graph mapped onto the original four-layer structure; `er` = entity-relationship diagram; `state` = state machine; `event-flow` = event causality graph showing UC or ExtSystem->Event->UC/BUC/ExtSystem and Event->State chains, plus Timer->UC/BUC edges. `boundaryless-graph`, `business-area`, `technical-area`, `sequence`, and `diff` were removed and fail with a message that names the replacement: `rdra` (narrowed with `--node-kind` / `--edge-kind`), `csv --kind business-inputs`, `csv --kind api-matrix`, `check` (which prints the transaction, API, and system warnings `sequence` printed), and a text diff of two `rdra` `.mmd` files. |
+| `--kind` | `rdra` \| `er` \| `state` \| `event-flow` | `rdra` | The diagram kind. `rdra` = RDRA layered graph mapped onto the original four-layer structure; `er` = entity-relationship diagram; `state` = one composite state per state model (lifecycle column), transitions labelled with use-case ids, start and end states; `event-flow` = event causality graph showing UC or ExtSystem->Event->UC/BUC/ExtSystem and Event->State chains, plus Timer->UC/BUC edges. `boundaryless-graph`, `business-area`, `technical-area`, `sequence`, and `diff` were removed and fail with a message that names the replacement: `rdra` (narrowed with `--node-kind` / `--edge-kind`), `csv --kind business-inputs`, `csv --kind api-matrix`, `check` (which prints the transaction, API, and system warnings `sequence` printed), and a text diff of two `rdra` `.mmd` files. |
 | `--format` | `mermaid` | `mermaid` | Output format. Mermaid text (`.mmd`) is the only one. `puml`, `svg`, and `png` were removed and fail with a message that names `--format mermaid`; to get an image, render the `.mmd` with `mmdc` or any Mermaid-aware tool. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Filter to one or more BUCs by id. With multiple ids, the **union** of reachable nodes across the named BUCs is shown. Applies to all diagram kinds. |
 | `--node-kind <kind>` | string (repeatable) | — (all nodes) | Filter graph diagrams to specific node kinds. Applies to `rdra`. Examples: `actor`, `buc`, `flow`, `step`, `usecase`, `api`, `entity`, `field`. Alias: `--kind-filter`. |
@@ -309,8 +309,8 @@ rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]...
 Notes:
 
 - The `.mmd` is written for a reader that redraws it (a person or an AI), so it carries
-  the RDRA meaning in text rather than in shapes. `--kind rdra` follows the encoding
-  contract below; `er`, `state`, and `event-flow` adopt it in later releases.
+  the RDRA meaning in text rather than in shapes. `--kind rdra` and `--kind state` follow
+  the encoding contract below; `er` and `event-flow` adopt it in later releases.
 - Graph filters are intentionally review-oriented. They hide nodes and any edges whose
   endpoints are hidden; they do not change the model or diagnostics. The header's
   `omitted:` line names the node kinds and relation kinds a filter hid.
@@ -371,6 +371,32 @@ flowchart LR
   derived from its `holds` body.
 - A node's `description` follows its declaration as `%% desc <id>: <text>`, its lines
   joined by a space.
+
+`--kind state` is a `stateDiagram-v2`, where `classDef` and layers do not apply, so the
+header and the id prefixes carry the kinds:
+
+```
+%% rdra-ish diagram=state scope=whole model=samples/ec-site
+%% kinds: statemodel state usecase
+%% omitted: Payment.status (Enum without transitions)
+stateDiagram-v2
+  state "Order.status" as statemodel__Order_status {
+    [*] --> state__Order_pending
+    state "pending" as state__Order_pending
+    ...
+    state__Order_awaiting_capture --> state__Order_paid : usecase__Capture
+    state__Order_delivered --> [*]
+  }
+```
+
+- Each state model, a column that `transitions` drive, is one composite state
+  `statemodel__<Entity>_<column>` labelled `<Entity>.<column>`. Its states follow the
+  column's `Enum` order, with the ids `--kind rdra` gives them.
+- Each transition is labelled with the id of the use case that drives it.
+- `[*] -->` marks the start state the lifecycle gives the column. `--> [*]` marks an end
+  state, one with no transition to another state.
+- `omitted:` names the `Enum` columns in scope that no `transitions` drive.
+- `--buc` draws each state model that one of the BUC's use cases moves, whole.
 
 ---
 
