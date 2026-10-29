@@ -68,7 +68,7 @@ fn refund_never_runs_once_with_its_name() {
         .filter(|x| matches!(x.diag, StateDiag::NeverRuns { .. }))
         .collect();
     assert_eq!(runs.len(), 1, "{runs:?}");
-    assert_eq!(runs[0].diag.name().as_deref(), Some("Runs_Refund"));
+    assert_eq!(runs[0].diag.name(&[]), "Runs_Refund");
     assert_eq!(runs[0].diag.severity(), Severity::Warning);
     assert_eq!(
         runs[0].diag.to_string(),
@@ -132,7 +132,7 @@ applies_to(Settled, Close)
         .filter(|x| matches!(x.diag, StateDiag::NeverRuns { .. }))
         .collect();
     assert_eq!(runs.len(), 1, "{runs:?}");
-    assert_eq!(runs[0].diag.name().as_deref(), Some("Runs_Close"));
+    assert_eq!(runs[0].diag.name(&[]), "Runs_Close");
     assert_eq!(runs[0].entities.len(), 2, "{:?}", runs[0].entities);
     for entity in ["Order", "Payment"] {
         assert!(

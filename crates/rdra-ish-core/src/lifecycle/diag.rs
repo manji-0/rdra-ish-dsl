@@ -80,6 +80,8 @@ pub enum StateDiag {
     /// A step of the anchor use case ends in a state that fails its `after(..).assert`. Each
     /// assert reports its first violation, with a shortest trace ending in that step.
     AfterAssertViolated {
+        /// `AfterAssert_<anchor>_<i>`, the property name TLC reports.
+        name: String,
         anchor: String,
         requireds: String,
         actual: String,
@@ -160,27 +162,92 @@ pub enum StateDiag {
 }
 
 impl StateDiag {
-    /// The stable name expectations and engine comparisons use: the invariant name, or
-    /// `Witness_<entity>_<column>_<value>`, `Runs_<action>`, or `Deadlock_<entity>_<column>_<value>`.
-    /// `None` for a diagnostic without one yet.
-    pub fn name(&self) -> Option<String> {
-        match self {
-            StateDiag::ConstraintViolated { name, .. } => Some(name.clone()),
+    /// The stable name findings print and expectations and engine comparisons match: the
+    /// check's own name for a violated invariant or assert, which TLC reports too;
+    /// `Witness_<entity>_<column>_<value>`, `Runs_<action>`, `Deadlock_<entity>_<column>_<value>`,
+    /// `DerivedColumnRead_<entity>_<column>`; otherwise `<Variant>_<entities>_<key fields>`.
+    /// `entities` are the ids the finding is reported under, so one finding on two entity
+    /// views keeps two names. Any character outside `[A-Za-z0-9_]` becomes `_`.
+    pub fn name(&self, entities: &[&str]) -> String {
+        let with = |variant: &str, keys: &[&str]| {
+            let mut parts = vec![variant];
+            parts.extend_from_slice(entities);
+            parts.extend_from_slice(keys);
+            parts.join("_")
+        };
+        let raw = match self {
+            StateDiag::ConstraintViolated { name, .. }
+            | StateDiag::AfterAssertViolated { name, .. } => name.clone(),
             StateDiag::NoWitness {
                 entity,
                 column,
                 value,
                 ..
-            } => Some(format!("Witness_{entity}_{column}_{value}")),
-            StateDiag::NeverRuns { action, .. } => Some(format!("Runs_{action}")),
+            } => format!("Witness_{entity}_{column}_{value}"),
+            StateDiag::NeverRuns { action, .. } => format!("Runs_{action}"),
             StateDiag::Deadlock {
                 entity,
                 column,
                 value,
                 ..
-            } => Some(format!("Deadlock_{entity}_{column}_{value}")),
-            _ => None,
-        }
+            } => format!("Deadlock_{entity}_{column}_{value}"),
+            // The column is already `<entity>.<column>`.
+            StateDiag::DerivedColumnRead { column, .. } => format!("DerivedColumnRead_{column}"),
+            StateDiag::UnreachableEnumVariant { column, variant } => {
+                with("UnreachableEnumVariant", &[column, variant])
+            }
+            StateDiag::ConflictingEffects {
+                usecase, column, ..
+            } => with("ConflictingEffects", &[usecase, column]),
+            StateDiag::DoubleModeledEnum {
+                column, usecase, ..
+            } => with("DoubleModeledEnum", &[usecase, column]),
+            StateDiag::NoCreationPath => with("NoCreationPath", &[]),
+            StateDiag::PreExistingChildOfCreatedParent { parent, .. } => {
+                with("PreExistingChildOfCreatedParent", &[parent])
+            }
+            StateDiag::MinCardOfPreExistingParent { child, .. } => {
+                with("MinCardOfPreExistingParent", &[child])
+            }
+            StateDiag::MinCardNeedsCreate { usecase, child, .. } => {
+                with("MinCardNeedsCreate", &[usecase, child])
+            }
+            StateDiag::PatternCapReached { .. } => with("PatternCapReached", &[]),
+            StateDiag::StateCapReached { .. } => with("StateCapReached", &[]),
+            StateDiag::AssertOnInertUseCase { anchor, .. } => {
+                with("AssertOnInertUseCase", &[anchor])
+            }
+            StateDiag::IntLiteralOutOfBounds { value, .. } => {
+                with("IntLiteralOutOfBounds", &[&value.to_string()])
+            }
+            StateDiag::UnbindableScope { constraint, .. } => with("UnbindableScope", &[constraint]),
+            StateDiag::UnbindableCondition {
+                condition, usecase, ..
+            } => with("UnbindableCondition", &[condition, usecase]),
+            StateDiag::ContradictoryDrivenComparison {
+                usecase,
+                proposition,
+                ..
+            } => with("ContradictoryDrivenComparison", &[usecase, proposition]),
+            StateDiag::UnwrittenConstrainedVar { column, .. } => {
+                with("UnwrittenConstrainedVar", &[column])
+            }
+            StateDiag::UnsupportedComparison { comparison, .. } => {
+                with("UnsupportedComparison", &[comparison])
+            }
+            StateDiag::UnresolvedPropertyAtom {
+                property, column, ..
+            } => with("UnresolvedPropertyAtom", &[property, column]),
+        };
+        raw.chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect()
     }
 
     /// The counterexample of a violated constraint or assert, or the path into a deadlock.

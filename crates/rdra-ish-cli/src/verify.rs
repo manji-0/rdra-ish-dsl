@@ -23,7 +23,7 @@ use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
 
 use crate::cli::VerifyBackend;
 use crate::export::{checked_system, tla_bounds};
-use crate::list_output::{render_violation, severity_word, TraceSource};
+use crate::list_output::{render_violation, Finding, TraceSource};
 use crate::tlc_env::{tlc_env, Heap};
 use crate::tlc_output::{summarize, Outcome, TlcRun};
 use crate::tlc_replay::explain_violation;
@@ -231,9 +231,14 @@ fn model_traces(
                 if let Some(trace) = diag.trace_mut() {
                     trace.over_bound = ts.over_bound(&cs.cone, trace);
                 }
-                let text = render_violation(program, model, &diag, TraceSource::Tlc)
+                let message = render_violation(program, model, &diag, TraceSource::Tlc)
                     .expect("explain returns a violation");
-                format!("error: {text}")
+                let finding = Finding {
+                    severity: Severity::Error,
+                    name: diag.name(&[]),
+                    message,
+                };
+                finding.to_string()
             }
             Err(why) => {
                 format!("error: {why}; BFS and TLC disagree (a tool bug). Raw TLC trace follows.")
@@ -421,9 +426,9 @@ fn state_models(
     let mut errors = 0;
     for d in run.verdicts() {
         if let Some(text) = render_violation(program, model, &d.diag, TraceSource::Bfs) {
-            let severity = d.diag.severity();
-            eprintln!("{}: {text}", severity_word(severity));
-            errors += usize::from(severity == Severity::Error);
+            let finding = Finding::new(&d.diag, &[], text);
+            eprintln!("{finding}");
+            errors += usize::from(finding.severity == Severity::Error);
         }
     }
     let t = run.tally();

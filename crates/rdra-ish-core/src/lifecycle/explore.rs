@@ -729,6 +729,7 @@ impl TransitionSystem {
                 Some(Diag {
                     entities,
                     diag: StateDiag::AfterAssertViolated {
+                        name: a.name.clone(),
                         anchor: a.anchor.clone(),
                         requireds: a.requireds.clone(),
                         actual: parts.join("; "),

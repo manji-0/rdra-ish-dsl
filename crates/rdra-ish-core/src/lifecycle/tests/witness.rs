@@ -144,10 +144,7 @@ fn a_state_no_use_case_reaches_has_no_witness() {
         .filter(|x| matches!(x, StateDiag::NoWitness { .. }))
         .collect();
     assert_eq!(missing.len(), 1, "{missing:?}");
-    assert_eq!(
-        missing[0].name().as_deref(),
-        Some("Witness_Order_status_refunded")
-    );
+    assert_eq!(missing[0].name(&[]), "Witness_Order_status_refunded");
     assert_eq!(missing[0].severity(), Severity::Error);
     let StateDiag::NoWitness { into, .. } = missing[0] else {
         unreachable!()

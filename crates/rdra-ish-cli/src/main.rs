@@ -18,8 +18,7 @@ use diagram::{run_diagram, DiagramRequest};
 use export::export_artifact;
 use fmt_cmd::run_fmt;
 use list_output::{
-    format_lint_issues, list_elements, note_state_errors, reject_state_errors, severity_word,
-    state_findings,
+    format_lint_issues, list_elements, note_state_errors, reject_state_errors, state_findings,
 };
 use load::{collect_rdra_files, eprint_diagnostic, load_model, reject_model_errors};
 use rdra_ish_core::lifecycle::{Scope, Severity};
@@ -79,11 +78,11 @@ fn main() -> Result<()> {
                 }
             }
 
-            for (severity, message) in lifecycle.findings {
-                if severity == Severity::Error {
+            for finding in lifecycle.findings {
+                if finding.severity == Severity::Error {
                     has_error = true;
                 }
-                eprintln!("{}: {}", severity_word(severity), message);
+                eprintln!("{finding}");
             }
             if let Some(block) = lifecycle.not_checked {
                 eprintln!("{block}");

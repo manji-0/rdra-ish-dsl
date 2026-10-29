@@ -38,6 +38,33 @@ fn check_cfg_names_each_invariant_and_explore_cfg_checks_nothing() {
     assert_eq!(explore, "SPECIFICATION Spec\nCHECK_DEADLOCK FALSE\n");
 }
 
+/// The name BFS gives a failed after-assert is the property TLC checks and reports.
+#[test]
+fn the_bfs_after_assert_name_is_the_tla_property_name() {
+    let src = sample("after_assert_unmet.rdra");
+    let (ast, _) = parse(&src);
+    let (model, _) = build_model(&ast);
+    let report = rdra_ish_core::lifecycle::derive_states(
+        &model,
+        &Scope::ALL,
+        rdra_ish_core::lifecycle::Caps::DEFAULT_PATTERNS,
+    );
+    let names: Vec<String> = report
+        .diags
+        .iter()
+        .filter(|d| {
+            matches!(
+                d.diag,
+                rdra_ish_core::lifecycle::StateDiag::AfterAssertViolated { .. }
+            )
+        })
+        .map(|d| d.diag.name(&[]))
+        .collect();
+    assert_eq!(names, ["AfterAssert_DeliverOrder_0"]);
+    let cfg = print(&system(&src), PrintMode::Check, "M").cfg;
+    assert!(cfg.contains(&format!("PROPERTY {}\n", names[0])), "{cfg}");
+}
+
 #[test]
 fn a_one_to_one_key_is_a_unique_invariant_over_two_binders() {
     let bundle = print(

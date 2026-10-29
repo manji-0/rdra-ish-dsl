@@ -128,7 +128,7 @@ fn a_tlc_counterexample_prints_in_model_terms() {
     assert_eq!(output.status.code(), Some(1), "{stderr}");
     let mut rest: &str = &stderr;
     for expected in [
-        "error: invariant CrossForbidden_Order_0 is violated: ",
+        "error[CrossForbidden_Order_0]: invariant CrossForbidden_Order_0 is violated: ",
         "  rule: ",
         "cross_order_payment_split.rdra:43:1",
         "  counterexample (3 steps, from TLC):",
@@ -187,13 +187,13 @@ fn an_unwitnessed_state_fails_verify_while_tlc_passes() {
     assert!(!stdout.contains("OK: no errors"), "{stdout}");
     assert!(
         stderr.contains(
-            "error: state Order.status = refunded has no reachability witness: no sequence of use cases from the start reaches it\n  state model: Order.status, entered by Refund (shipped -> refunded)"
+            "error[Witness_Order_status_refunded]: state Order.status = refunded has no reachability witness: no sequence of use cases from the start reaches it\n  state model: Order.status, entered by Refund (shipped -> refunded)"
         ),
         "{stderr}"
     );
     assert!(stderr.contains("unwitnessed_state.rdra:31:1"), "{stderr}");
     assert!(
-        stderr.contains("\nwarning: use case Refund can never run: each of its guards holds in some reachable state, but never all of them in one\n"),
+        stderr.contains("\nwarning[Runs_Refund]: use case Refund can never run: each of its guards holds in some reachable state, but never all of them in one\n"),
         "{stderr}"
     );
     assert!(
@@ -221,7 +221,7 @@ fn a_deadlock_fails_verify_while_tlc_passes() {
     assert!(!stdout.contains("OK: no errors"), "{stdout}");
     assert!(
         stderr.contains(
-            "error: deadlock: Order#1 stays at status = paid forever, and paid is not an end state\n  leaves paid: Ship (paid -> shipped)"
+            "error[Deadlock_Order_status_paid]: deadlock: Order#1 stays at status = paid forever, and paid is not an end state\n  leaves paid: Ship (paid -> shipped)"
         ),
         "{stderr}"
     );
@@ -257,7 +257,7 @@ fn an_entity_scope_verifies_part_of_a_model() {
     assert_eq!(lines[1], "scope: --entity Order", "{stdout}");
     assert!(
         stdout.contains(
-            "\nnot checked: 1 entity view (Audit), 1 invariant (Forbidden_Audit_1), 0 after-asserts; 1 build error deferred; 1 finding not decided\n  deferred error: Audit: Audit.score is derived by arithmetic"
+            "\nnot checked: 1 entity view (Audit), 1 invariant (Forbidden_Audit_1), 0 after-asserts; 1 build error deferred; 1 finding not decided\n  deferred error[DerivedColumnRead_Audit_score]: Audit: Audit.score is derived by arithmetic"
         ),
         "{stdout}"
     );

@@ -4,7 +4,7 @@ use crate::list_output::{
     format_lint_issues, list_elements, state_consistency_findings, state_diag_message,
 };
 use crate::load::load_model;
-use rdra_ish_core::lifecycle::{InvKind, InvText, ModelRef, Severity, Site, StateDiag, Trace};
+use rdra_ish_core::lifecycle::{InvKind, InvText, ModelRef, Site, StateDiag, Trace};
 use rdra_ish_core::{format_diagnostic_message, lint_issues, SemanticModel};
 use rdra_ish_emit::View;
 use std::path::PathBuf;
@@ -678,14 +678,13 @@ requires_permission(BookAppointment, ScheduleWrite)
     assert!(warnings
         .iter()
         .any(|warning| warning.contains("actor 'Staff' is missing permission 'ScheduleWrite'")));
-    assert!(state_findings.iter().any(|(severity, message)| {
-        *severity == Severity::Info
-            && message.contains("state derivation for entity 'Appointment': no creates path")
-    }));
-    assert!(state_findings.iter().any(|(severity, message)| {
-        *severity == Severity::Warning
-            && message.contains("enum variant 'status.booked' is unreachable")
-    }));
+    let printed: Vec<String> = state_findings.iter().map(ToString::to_string).collect();
+    assert!(printed.iter().any(|line| line.starts_with(
+        "info[NoCreationPath_Appointment]: state derivation for entity 'Appointment': no creates path"
+    )));
+    assert!(printed.iter().any(|line| line.starts_with(
+        "warning[UnreachableEnumVariant_Appointment_status_booked]: state derivation for entity 'Appointment': enum variant 'status.booked' is unreachable"
+    )));
 }
 
 #[test]
@@ -732,6 +731,7 @@ fn state_diag_message_formats_cross_invariant_violation() {
 #[test]
 fn state_diag_message_formats_temporal_assertion_violation() {
     let message = state_diag_message(&StateDiag::AfterAssertViolated {
+        name: "AfterAssert_ExecuteCertIssue_0".to_string(),
         anchor: "ExecuteCertIssue".to_string(),
         requireds: "CertificateOrder.status=executed".to_string(),
         actual: "CertificateOrder(status=pending)".to_string(),
@@ -781,7 +781,7 @@ fn clinic_ops_attribute_columns_are_variations_not_unreachable_states() {
     let findings = state_consistency_findings(&program, &model);
     let unreachable_method: Vec<_> = findings
         .iter()
-        .filter(|(_, message)| message.contains("'method'") && message.contains("unreachable"))
+        .filter(|f| f.message.contains("'method'") && f.message.contains("unreachable"))
         .collect();
     assert!(
         unreachable_method.is_empty(),

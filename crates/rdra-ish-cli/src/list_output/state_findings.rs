@@ -1,28 +1,53 @@
 //! State diagnostics as `check` and the generator gates print them, and the one renderer of
 //! counterexample traces.
 
+use std::fmt;
+
 use rdra_ish_core::lifecycle::{
     derive_states_built, ActionOrigin, Blocked, BoundsLine, Caps, Change, GuardWhy, InvKind,
     InvText, ModelRef, ParamRole, Scope, Severity, Site, StateDiag, Trace, TraceStep,
 };
 use rdra_ish_core::{format_location, ResolvedProgram, SemanticModel};
 
-/// The word `check` and `states` print before a diagnostic.
-pub(crate) fn severity_word(severity: Severity) -> &'static str {
-    match severity {
-        Severity::Info => "info",
-        Severity::Warning => "warning",
-        Severity::Error => "error",
+/// A lifecycle finding as `check`, `states`, `verify`, and the generator gates print it:
+/// `error[<name>]: <message>`, with `warning` or `info` for the other severities.
+#[derive(Debug)]
+pub(crate) struct Finding {
+    pub(crate) severity: Severity,
+    /// `StateDiag::name`.
+    pub(crate) name: String,
+    pub(crate) message: String,
+}
+
+impl Finding {
+    /// `diag` reported under the entity ids `entities`.
+    pub(crate) fn new(diag: &StateDiag, entities: &[&str], message: String) -> Self {
+        Finding {
+            severity: diag.severity(),
+            name: diag.name(entities),
+            message,
+        }
     }
 }
 
-/// Every diagnostic of the lifecycle views at the `states` defaults, with its severity: those
-/// on an entity view first, then each violated constraint or assert once with its
-/// counterexample and each unwitnessed state once, then those that name no entity.
+impl fmt::Display for Finding {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let word = match self.severity {
+            Severity::Info => "info",
+            Severity::Warning => "warning",
+            Severity::Error => "error",
+        };
+        write!(f, "{word}[{}]: {}", self.name, self.message)
+    }
+}
+
+/// Every diagnostic of the lifecycle views at the `states` defaults: those on an entity view
+/// first, then each violated constraint or assert once with its counterexample and each
+/// unwitnessed state once, then those that name no entity.
 pub(crate) fn state_consistency_findings(
     program: &ResolvedProgram,
     model: &SemanticModel,
-) -> Vec<(Severity, String)> {
+) -> Vec<Finding> {
     state_findings(program, model, &Scope::ALL).findings
 }
 
@@ -30,7 +55,7 @@ pub(crate) fn state_consistency_findings(
 /// `not checked:` block when the scope or a cap left something out.
 pub(crate) struct StateFindings {
     pub(crate) bounds: BoundsLine,
-    pub(crate) findings: Vec<(Severity, String)>,
+    pub(crate) findings: Vec<Finding>,
     pub(crate) not_checked: Option<String>,
 }
 
@@ -45,8 +70,9 @@ pub(crate) fn state_findings(
     let on_views = report.views.iter().flat_map(|result| {
         let diags = result.diagnostics.iter().filter(|d| !has_block(d));
         diags.map(move |diag| {
-            (
-                diag.severity(),
+            Finding::new(
+                diag,
+                &[&result.entity_id],
                 format!(
                     "state derivation for entity '{}': {}",
                     result.entity_id,
@@ -57,18 +83,19 @@ pub(crate) fn state_findings(
     });
     let violations = report.diags.iter().filter_map(|d| {
         let text = render_violation(program, model, &d.diag, TraceSource::Bfs)?;
-        Some((d.diag.severity(), text))
+        Some(Finding::new(&d.diag, &[], text))
     });
     let unattributed = report
         .unattributed()
         .filter(|d| !has_block(d))
-        .map(|diag| (diag.severity(), state_diag_message(diag)));
+        .map(|diag| Finding::new(diag, &[], state_diag_message(diag)));
     let outside = report
         .outside_views(model)
         .filter(|(_, diag)| !has_block(diag))
         .map(|(ids, diag)| {
-            (
-                diag.severity(),
+            Finding::new(
+                diag,
+                &ids,
                 format!(
                     "state derivation for entity '{}': {}",
                     ids.join("', '"),
@@ -447,9 +474,9 @@ pub(crate) fn reject_state_errors(
     model: &SemanticModel,
 ) -> anyhow::Result<()> {
     let mut has_error = false;
-    for (severity, message) in state_consistency_findings(program, model) {
-        if severity == Severity::Error {
-            eprintln!("error: {message}");
+    for finding in state_consistency_findings(program, model) {
+        if finding.severity == Severity::Error {
+            eprintln!("{finding}");
             has_error = true;
         }
     }
@@ -463,7 +490,7 @@ pub(crate) fn reject_state_errors(
 pub(crate) fn note_state_errors(program: &ResolvedProgram, model: &SemanticModel) {
     let errors = state_consistency_findings(program, model)
         .into_iter()
-        .filter(|(severity, _)| *severity == Severity::Error)
+        .filter(|finding| finding.severity == Severity::Error)
         .count();
     if errors > 0 {
         eprintln!(

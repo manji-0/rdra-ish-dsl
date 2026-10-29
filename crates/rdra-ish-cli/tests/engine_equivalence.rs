@@ -321,7 +321,7 @@ fn finding_names(ts: &TransitionSystem, f: &StateModelFindings) -> Vec<String> {
     let value = |var, v| format!("{} = {v:?}", ts.var_name(var));
     let witnesses = f.witnesses.iter().map(|w| match &w.witness {
         Witness::At(_) => format!("witnessed {}", value(w.var, w.value)),
-        Witness::Missing(d) => format!("{:?}", d.name()),
+        Witness::Missing(d) => d.name(&[]),
         Witness::NotDecided => format!("not decided {}", value(w.var, w.value)),
     });
     let runs = f.runs.iter().map(|r| match &r.runs {
@@ -331,7 +331,7 @@ fn finding_names(ts: &TransitionSystem, f: &StateModelFindings) -> Vec<String> {
     });
     let deadlocks = f.deadlocks.iter().map(|d| match &d.progress {
         Progress::Leaves => format!("leaves {}", value(d.var, d.value)),
-        Progress::Stuck { diag, .. } => format!("{:?} {:?}", diag.name(), diag.severity()),
+        Progress::Stuck { diag, .. } => format!("{} {:?}", diag.name(&[]), diag.severity()),
         Progress::NotDecided => format!("not decided {}", value(d.var, d.value)),
     });
     witnesses.chain(runs).chain(deadlocks).collect()

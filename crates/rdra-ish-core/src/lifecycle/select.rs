@@ -321,8 +321,9 @@ impl fmt::Display for NotChecked<'_> {
                 .collect();
             write!(
                 f,
-                "\n  deferred {}: {}: {}",
+                "\n  deferred {}[{}]: {}: {}",
                 d.diag.severity().as_label(),
+                d.diag.name(&ids),
                 ids.join(", "),
                 d.diag
             )?;

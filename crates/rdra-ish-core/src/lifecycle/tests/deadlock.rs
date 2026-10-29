@@ -24,7 +24,7 @@ fn only_the_explained_samples_deadlock() {
         let report =
             super::super::derive_states(&load(sample), &Scope::ALL, Caps::DEFAULT_PATTERNS);
         for d in deadlocks(&report.diags) {
-            found.push((*sample, d.name().unwrap(), d.severity()));
+            found.push((*sample, d.name(&[]), d.severity()));
         }
     }
     assert_eq!(
@@ -204,7 +204,7 @@ applies_to(Packed, Ship)
     assert!(moves.iter().all(|m| *m), "every reachable state has a move");
     let names: Vec<String> = deadlocks(run.verdicts())
         .iter()
-        .filter_map(|d| d.name())
+        .map(|d| d.name(&[]))
         .collect();
     assert_eq!(names, ["Deadlock_Order_status_paid"]);
 }

@@ -18,6 +18,7 @@ use rdra_ish_emit::{
 };
 
 use crate::cli::ExportKind;
+use crate::list_output::Finding;
 
 pub fn export_artifact(
     model: &SemanticModel,
@@ -74,21 +75,20 @@ pub fn tla_bundle(model: &SemanticModel, bounds: Bounds, module_name: &str) -> R
 pub fn checked_system(model: &SemanticModel, bounds: Bounds, scope: &Scope) -> Result<Built> {
     let built = TransitionSystem::build(model, bounds, scope);
     for d in &built.diags {
-        let level = match d.diag.severity() {
-            Severity::Info => continue,
-            Severity::Warning => "warning",
-            Severity::Error => "error",
-        };
+        if d.diag.severity() == Severity::Info {
+            continue;
+        }
         let ids: Vec<&str> = d
             .entities
             .iter()
             .map(|ek| model.entities[*ek].id.as_str())
             .collect();
-        if ids.is_empty() {
-            eprintln!("{level}: {}", d.diag);
+        let message = if ids.is_empty() {
+            d.diag.to_string()
         } else {
-            eprintln!("{level}: {}: {}", ids.join(", "), d.diag);
-        }
+            format!("{}: {}", ids.join(", "), d.diag)
+        };
+        eprintln!("{}", Finding::new(&d.diag, &ids, message));
     }
     if has_errors(&built.diags) {
         bail!("the lifecycle model has errors; no TLA+ written");

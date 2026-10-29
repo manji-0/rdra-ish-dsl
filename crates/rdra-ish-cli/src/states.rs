@@ -11,7 +11,7 @@ use rdra_ish_emit::{
 };
 
 use crate::cli::{ScopeArgs, StatesFormat};
-use crate::list_output::{severity_word, state_diag_message};
+use crate::list_output::{state_diag_message, Finding};
 use crate::load::{load_model, reject_model_errors};
 
 pub fn run_states(
@@ -28,15 +28,11 @@ pub fn run_states(
     let (report, ts) = derive_states_built(&model, &scope, max_patterns);
     eprintln!("{}", report.bounds_line(&model));
     for d in report.unattributed() {
-        eprintln!("{}: {}", severity_word(d.severity()), state_diag_message(d));
+        eprintln!("{}", Finding::new(d, &[], state_diag_message(d)));
     }
     for (ids, d) in report.outside_views(&model) {
-        eprintln!(
-            "{}: {}: {}",
-            severity_word(d.severity()),
-            ids.join(", "),
-            state_diag_message(d)
-        );
+        let message = format!("{}: {}", ids.join(", "), state_diag_message(d));
+        eprintln!("{}", Finding::new(d, &ids, message));
     }
     let not_checked = report.not_checked(&ts, &model);
     if !not_checked.is_empty() {

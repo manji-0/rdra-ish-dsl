@@ -28,7 +28,7 @@ fn check_prints_one_verdict_with_its_counterexample() {
     let expected = format!(
         "\
 bounds: 1 instance per entity, Int 0..5; 4096 states per cone; entities a check does not read are unbounded
-error: invariant CrossForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order(status=cancelled); Payment(status=captured)
+error[CrossForbidden_Order_0]: invariant CrossForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order(status=cancelled); Payment(status=captured)
   rule: {file}:43:1
   counterexample (3 steps):
     1. Place [Order#1, Payment#1]                            {file}:16:1
@@ -41,7 +41,7 @@ error: invariant CrossForbidden_Order_0 is violated: multi-entity forbidden stat
 "
     );
     assert_eq!(stderr, expected);
-    let verdicts = stderr.lines().filter(|l| l.starts_with("error:")).count();
+    let verdicts = stderr.lines().filter(|l| l.starts_with("error[")).count();
     assert_eq!(verdicts, 1, "a multi-entity rule prints once: {stderr}");
 }
 
@@ -119,9 +119,16 @@ applies_to(Settled, Pay)
     let _ = std::fs::remove_dir_all(&dir);
     let stderr = String::from_utf8_lossy(&output.stderr);
     let blocks: Vec<&str> = stderr
-        .split("\nwarning: ")
+        .split("\nwarning[")
         .skip(1)
-        .map(|b| b.split("\nerror: ").next().unwrap())
+        .map(|b| {
+            b.split_once("]: ")
+                .unwrap()
+                .1
+                .split("\nerror[")
+                .next()
+                .unwrap()
+        })
         .collect();
     assert_eq!(blocks.len(), 2, "{stderr}");
     let squash = |b: &str| {
@@ -147,7 +154,7 @@ guard: Order.status is paid (transitions of Refund) never_runs.rdra:18:1"
     );
     let warnings = stderr
         .lines()
-        .filter(|l| l.starts_with("warning: "))
+        .filter(|l| l.starts_with("warning[Runs_"))
         .count();
     assert_eq!(warnings, 2, "each action warns once: {stderr}");
 }
@@ -169,9 +176,9 @@ fn check_reports_a_state_no_use_case_reaches() {
         format!(
             "\
 {BOUNDS}
-error: state Order.status = refunded has no reachability witness: no sequence of use cases from the start reaches it
+error[Witness_Order_status_refunded]: state Order.status = refunded has no reachability witness: no sequence of use cases from the start reaches it
   state model: Order.status, entered by Refund (shipped -> refunded)   {file}:31:1
-error: deadlock: Order#1 stays at status = shipped forever, and shipped is not an end state
+error[Deadlock_Order_status_shipped]: deadlock: Order#1 stays at status = shipped forever, and shipped is not an end state
   leaves shipped: Refund (shipped -> refunded)   {file}:31:1
     guard: condition RefundWindow                {file}:36:1
   reached by (3 steps):
@@ -182,7 +189,7 @@ error: deadlock: Order#1 stays at status = shipped forever, and shipped is not a
     3. Ship [Order#1]                                  {file}:15:1
          Order#1.status: paid -> shipped               {file}:30:1
          Order#1.shipped_at: null -> present           {file}:33:1
-warning: use case Refund can never run: each of its guards holds in some reachable state, but never all of them in one
+warning[Runs_Refund]: use case Refund can never run: each of its guards holds in some reachable state, but never all of them in one
   declared: use case Refund   {file}:16:1
 "
         )
@@ -199,11 +206,11 @@ warning: use case Refund can never run: each of its guards holds in some reachab
         .contains("Order.status = refunded has no reachability witness"));
     assert_eq!(
         order["diagnostics"][1],
-        "[error] deadlock: Order#1 stays at status = shipped forever, and shipped is not an end state"
+        "[error][Deadlock_Order_status_shipped] deadlock: Order#1 stays at status = shipped forever, and shipped is not an end state"
     );
     assert_eq!(
         order["diagnostics"][2],
-        "[warn] Refund can never run: each of its guards holds in some reachable state, but never all of them in one"
+        "[warn][Runs_Refund] Refund can never run: each of its guards holds in some reachable state, but never all of them in one"
     );
     let shipped = order["patterns"]
         .as_array()
@@ -235,7 +242,7 @@ fn check_reports_an_instance_that_never_leaves_its_state() {
         format!(
             "\
 {BOUNDS}
-error: deadlock: Order#1 stays at status = paid forever, and paid is not an end state
+error[Deadlock_Order_status_paid]: deadlock: Order#1 stays at status = paid forever, and paid is not an end state
   leaves paid: Ship (paid -> shipped)   {file}:29:1
     guard: condition Packed             {file}:33:1
   reached by (2 steps):
@@ -243,7 +250,7 @@ error: deadlock: Order#1 stays at status = paid forever, and paid is not an end 
          + Order#1 (status=pending)
     2. Pay [Order#1]                       {file}:13:1
          Order#1.status: pending -> paid   {file}:28:1
-warning: use case Ship can never run: each of its guards holds in some reachable state, but never all of them in one
+warning[Runs_Ship]: use case Ship can never run: each of its guards holds in some reachable state, but never all of them in one
   declared: use case Ship   {file}:14:1
 "
         )
@@ -291,7 +298,7 @@ fn witness_sites_use_the_path_form_of_check() {
 const NOT_CHECKED_ORDER: &str = "\
 scope: --entity Order
 not checked: 1 entity view (Audit), 1 invariant (Forbidden_Audit_1), 0 after-asserts; 1 build error deferred; 1 finding not decided
-  deferred error: Audit: Audit.score is derived by arithmetic, which the lifecycle cannot evaluate; compare the columns it reads instead
+  deferred error[DerivedColumnRead_Audit_score]: Audit: Audit.score is derived by arithmetic, which the lifecycle cannot evaluate; compare the columns it reads instead
   whether Record can run is not decided: no cone of a selected entity keeps it
 ";
 
@@ -305,7 +312,7 @@ fn an_entity_scope_defers_an_error_outside_its_cones() {
     assert_eq!(whole.status.code(), Some(1), "{stderr}");
     assert!(
         stderr.contains(
-            "error: state derivation for entity 'Audit': Audit.score is derived by arithmetic"
+            "error[DerivedColumnRead_Audit_score]: state derivation for entity 'Audit': Audit.score is derived by arithmetic"
         ),
         "{stderr}"
     );

@@ -144,8 +144,8 @@ fn violation_message(kind: &InvKind, text: &InvText, p: &str) -> Option<String> 
     })
 }
 
-/// 診断メッセージを文字列化する（severity は `StateDiag::severity` と共有）
-fn diag_message(d: &StateDiag) -> String {
+/// 診断メッセージを文字列化する（severity は `StateDiag::severity`、名前は `StateDiag::name` と共有）
+fn diag_message(d: &StateDiag, entity: &str) -> String {
     let label = d.severity().as_label();
     let body = match d {
         StateDiag::UnreachableEnumVariant { column, variant } => {
@@ -205,7 +205,7 @@ fn diag_message(d: &StateDiag) -> String {
         | StateDiag::DerivedColumnRead { .. }
         | StateDiag::UnresolvedPropertyAtom { .. } => d.to_string(),
     };
-    format!("[{label}] {body}")
+    format!("[{label}][{}] {body}", d.name(&[entity]))
 }
 
 // ── Table エミッタ ────────────────────────────────────────────────────────────
@@ -357,7 +357,7 @@ pub fn render_table(results: &[EntityStateResult]) -> String {
         if !r.diagnostics.is_empty() {
             out.push_str("  diagnostics:\n");
             for d in &r.diagnostics {
-                out.push_str(&format!("    {}\n", diag_message(d)));
+                out.push_str(&format!("    {}\n", diag_message(d, &r.entity_id)));
             }
         }
 
@@ -604,7 +604,7 @@ fn entity_result_to_json(
     let diagnostics: Vec<serde_json::Value> = r
         .diagnostics
         .iter()
-        .map(|d| serde_json::json!(diag_message(d)))
+        .map(|d| serde_json::json!(diag_message(d, &r.entity_id)))
         .collect();
 
     serde_json::json!({
@@ -691,7 +691,7 @@ sets(usecase::DeliverOrder, Order, delivered_at == present)
 
     #[test]
     fn pattern_cap_reached_is_error() {
-        let msg = diag_message(&StateDiag::PatternCapReached { cap: 1, bound: 48 });
+        let msg = diag_message(&StateDiag::PatternCapReached { cap: 1, bound: 48 }, "Order");
         assert!(
             msg.starts_with("[error]"),
             "truncation must be fail-closed, got: {msg}"
