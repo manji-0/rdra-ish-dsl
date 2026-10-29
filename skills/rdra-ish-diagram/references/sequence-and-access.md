@@ -41,6 +41,8 @@ rdra-ish csv src/ --kind actor-permission-audit
 - Each use case block shows operations in order, including writes and screen returns;
   use CSV/list output for full field and contract audits.
 - Participant lifelines are grouped by layer: system value, system boundary, and system.
+  The actors of a use case are its direct performers plus the performers of every BUC
+  that contains it.
 - With `invokes`, the path renders as actor -> screen -> API -> entity; the API is the
   source of CRUD operations.
 - Without `invokes`, legacy direct use-case CRUD renders through the `System` lane.

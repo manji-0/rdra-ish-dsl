@@ -29,9 +29,14 @@ rdra-ish diagram src/ --kind rdra --format mermaid --node-kind flow --node-kind 
 ## Reading RDRA Layered Output
 
 - Four vertical layers = system value, external environment, system boundary, and system.
-- `flow` and `step` nodes show business order; `api`, `dto`, and `entity` nodes are
-  included in the system layer; screens, fields, events, and use cases stay in the
-  system boundary layer.
+- Actors, external systems, requirements, ADRs, and NFRs sit in the system value layer;
+  businesses, BUCs, flows, steps, timers, media, permissions, qualities, and constraints
+  in the external environment; use cases, screens, fields, and events in the system
+  boundary; systems, APIs, DTOs, entities, derived states, variations, and conditions in
+  the system layer.
+- `flow` and `step` nodes show business order. A condition draws edges to its variation,
+  its state model, and the use cases it applies to; a `--buc` view includes the
+  conditions applied to its use cases.
 - Object labels include kind prefixes such as actor, BUC, usecase, screen, API,
   DTO, field, entity, event, and state. DSL ids stay unchanged.
 - Dashed arrows show interaction, CRUD, event, lifecycle, and constraint relationships.

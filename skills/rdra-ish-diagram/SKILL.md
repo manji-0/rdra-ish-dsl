@@ -27,8 +27,8 @@ the selected view.
 | Diagram size or review focus | view presets, node/edge filters, or diff diagram | `references/formats-and-output.md` |
 | One concrete use case flow | `sequence --usecase <UseCaseId>` | `references/sequence-and-access.md` |
 | Lifecycle and event causality | `state --buc <BucId>` plus `event-flow` | `references/lifecycle-and-events.md` |
-| Business rules or state constraints | `states`, including cross-entity rule diagnostics | `references/lifecycle-and-events.md` |
-| Temporal `property` and rules that need two instances | Prefer skill `rdra-ish-verify`; else `export --kind tla` | `references/lifecycle-and-events.md` |
+| Business rules or state constraints | `check` (rule counterexamples, unreached and stuck states), then `states` | `references/lifecycle-and-events.md` |
+| Temporal `property` and rules that need two instances | Prefer skill `rdra-ish-verify` (`verify`) | `references/lifecycle-and-events.md` |
 | Output format/rendering choice | Mermaid by default; PlantUML/SVG/PNG only when requested | `references/formats-and-output.md` |
 
 ### Default Workflow
@@ -48,11 +48,13 @@ the selected view.
 - Use `business-area` when the question is "which actor inputs which fields for which use cases?"
 - Use `technical-area` when the question is "which APIs and entities sit inside each system?"
 - Use `sequence` when the question is "what actor/screen/API/entity path happens?"
-- Use `state` when the question is "what lifecycle states and transitions exist?"
-- Use `event-flow` when the question is "what events cause other work or transitions?"
+- Use `state` when the question is "what lifecycle states exist, and which use case
+  moves each one?"
+- Use `event-flow` when the question is "what events, timers, and external systems
+  start other work?"
 - Use `states` when the question is "which abstract patterns are reachable?"
-- Use `export --kind tla` when the question is "do Int/now/temporal/multi-entity
-  rules hold under TLC?"
+- Use `verify` (skill `rdra-ish-verify`) when the question is "do temporal or
+  two-instance rules hold under TLC?"
 - Use exports when the question is "what contract artifact can reviewers consume?"
 - Use `screen-constraints`, `permission-callables`, and `actor-permission-audit` when
   the question is about authority, medium, or actor grant coverage.

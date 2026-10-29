@@ -24,41 +24,50 @@ rdra-ish states src/ --entity <EntityId>
 rdra-ish states src/ --buc <BucId>
 rdra-ish states src/ --format json --entity <EntityId>
 
-# Formal verification (temporal / two-instance rules)
-rdra-ish export src/ --kind tla -o out/
+# Lifecycle findings, then formal verification (temporal / two-instance rules)
+rdra-ish check src/
 rdra-ish verify src/ --backend tlc -o out/
 ```
 
 ## Reading State Diagrams
 
 - Nodes are the Enum variants of the entity's lifecycle column, named `{Entity}_{variant}`.
-- Arrows are labelled with event display names.
-- `[*]` initial state is derived from creation paths.
+- Arrows are the `transitions` arms, labelled with the label of the use case that
+  drives each one (`Order_pending --> Order_paid : ✅ Capture Payment`).
+- `[*]` start edges come from the states a creating use case sets, or the start of a
+  pre-existing entity.
+- The diagram draws the transitions, not reachability: run `check` to learn whether
+  each state is reached (`Witness_*`) and left (`Deadlock_*`).
 
 ## Reading Event Flow
 
-- Use-case-to-event edges come from `raises`.
-- Event-to-use-case or event-to-BUC edges come from `triggers`.
-- Event-to-state edges are the `transitions(Entity.col, UseCase, from -> to)` of the
-  use cases the event triggers.
+- Use-case-to-event and external-system-to-event edges come from `raises`.
+- Event-to-use-case and event-to-BUC edges come from `triggers`; an event delivered to
+  an external system draws a `delivers` edge.
+- A timer draws its `triggers` edges to use cases and BUCs.
+- State-to-state edges, labelled with the event, are the
+  `transitions(Entity.col, UseCase, from -> to)` of the use cases the event triggers.
 - AsyncAPI export is useful when event payload/contract review is needed alongside
   event causality.
 - Warnings such as an event never being raised or consumed are part of the review
   signal; inspect stderr before trusting the diagram as complete.
 
-## When To Prefer `states`
+## When To Prefer `check` and `states`
 
-- Use `states` before diagram polish when reviewing entity constraints.
-- Treat multi-entity `forbidden` / `invariant` diagnostics as checks over every
+- Run `check` before diagram polish when reviewing entity constraints: it prints each
+  broken rule once with a counterexample of use case steps, and each state no use case
+  reaches or leaves.
+- Treat multi-entity `forbidden` / `invariant` findings as checks over every
   combination of the participating entities' instances; `.along(...)` restricts them to
   instances linked by a `relate` path, and `UnbindableScope` means no `relate` binds the path.
 - Use `states --entity <EntityId>` when a whole-model state table is too broad.
-- Use `states --format json` when checking truncation or exact reachable combinations.
+- Use `states --format json` for the exact reachable combinations and a witness path
+  per pattern.
 
 ## When To Prefer TLA+
 
-Prefer skill **`rdra-ish-verify`** for the full workflow. Short rule: use
-`export --kind tla` when rules involve temporal `property`, or quantifiers and
-`.along` that need two instances; `states` does not evaluate `property`. Export writes both `.tla` and `.cfg`.
-Prefer one FV sample/module at a time; standalone FV samples can collide on ids if
-checked as a whole directory.
+Prefer skill **`rdra-ish-verify`** for the full workflow. Short rule: run `verify` when
+rules involve a temporal `property`, or quantifiers, `.along`, and 1:1 keys that need
+two instances; `check` and `states` run one instance per entity and do not evaluate
+`property`. Check one formal-verification sample at a time; the bundled samples reuse
+ids and collide when checked as one directory.

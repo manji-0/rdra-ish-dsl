@@ -11,13 +11,19 @@ filtered/diff views, or machine-readable exports.
 | `puml` | `.puml` text | None |
 | `svg` | `.svg` file | `plantuml.jar` plus Java in `PATH`; set `PLANTUML_JAR=` |
 | `png` | `.png` file | Same as `svg` |
-| `openapi` | OpenAPI JSON/YAML | API method/path and DTO request/response/error links |
-| `asyncapi` | AsyncAPI JSON/YAML | events and event causality |
-| `dbml` | DBML schema text | logical entities and relationships |
-| `json-schema` | JSON Schema | DTOs or logical structures, depending on export scope |
-| `tla` | TLA+ `.tla` + `.cfg` | Int/`now`, multi-entity rules, quantifiers, temporal `property` |
+| `openapi` | OpenAPI 3.0 JSON | API method/path and DTO request/response/error links |
+| `asyncapi` | AsyncAPI 3.1 JSON | events, `raises`/`triggers`, and the external systems that publish or receive them |
+| `dbml` | DBML schema text | logical entities, variations, and `relate` keys |
+| `json-schema` | JSON Schema | DTOs and entities under `$defs` |
+| `tla` | TLA+ `.tla` + `.cfg` | the lifecycle transition system, for reading or a TLC run by hand |
 
 Default to `mermaid` unless the user asks for PlantUML or a rendered image.
+
+Outputs that print the lifecycle (`diagram` of every kind but `er`, `csv` of every kind
+but `entity`, `export --kind typescript-states`) refuse to write while `check` reports
+a lifecycle error. The data outputs (`diagram --kind er`, `csv --kind entity`, and the
+`dbml`, `json-schema`, `openapi`, `asyncapi`, and ER exports) still write and print one
+note.
 
 ## Commands
 
