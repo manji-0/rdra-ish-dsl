@@ -17,8 +17,9 @@ Every Markdown file under the skills dir is read, and five things are checked:
 - Untagged DSL. A bare ``` fence whose first line reads as DSL fails: tag it ```rdra.
 - Transcripts. A fence whose first line is `$ rdra-ish ...` is run in the skill's
   directory, and the lines after it must appear in its output (stdout and stderr as one
-  stream) in order and contiguously. A `...` line stands for any number of lines. Source sites print
-  as absolute paths, so the skill directory's prefix is cut from them before comparing.
+  stream) in order and contiguously. A `...` line stands for any number of lines. Source
+  sites print as absolute paths, so each `.rdra` path is made relative to the skill
+  directory before comparing.
   A `verify` transcript needs `tlc` or `tlc2` on PATH.
 - Command references. In code spans and fenced lines, every `rdra-ish <command>` must be
   a subcommand, every `--flag` one its `--help` lists, and every value of a flag with
@@ -212,7 +213,8 @@ class Checker:
         out = subprocess.run(
             [self.binary] + argv[1:], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=cwd
         )
-        actual = [l.replace(cwd + os.sep, "").rstrip() for l in out.stdout.splitlines()]
+        relative = lambda m: os.path.relpath(m.group(0), cwd)
+        actual = [re.sub(r"/[^\s:'\"()]+\.rdra", relative, l).rstrip() for l in out.stdout.splitlines()]
         segments, current = [], []
         for line in expected:
             if line.strip() == "...":
