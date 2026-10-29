@@ -576,10 +576,12 @@ reach them from where.
 
 ### `api` and the API layer
 
-For sequence diagrams, `performs(Actor, UseCase)` is more specific than
-`performs(Actor, Buc)`. If a use case has a direct actor, the sequence diagram uses
-that actor as the participant for the use-case flow. If no direct actor is declared,
-the emitter falls back to the actor on the containing BUC.
+A use case's actors are its direct `performs(Actor, UseCase)` actors together with the
+actors of every BUC that contains it (`performs(Actor, Buc)`). Sequence diagrams draw
+all of them as participants, and the permission check requires each of them to hold the
+use case's and its APIs' permissions. So `performs(Actor, Buc)` says the actor may run
+every use case of the BUC; an actor who runs only some of them performs those use cases
+directly instead.
 
 The `api` element models the backend API layer that sits between a screen and the
 entities it operates. Declare an api once per API endpoint or boundary:
