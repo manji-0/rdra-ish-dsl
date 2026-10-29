@@ -8,13 +8,13 @@ use crate::diagram_common::{
     business_usecase_node_id, col_type_str, event_flow_buc_id, event_flow_event_id,
     event_flow_extsystem_id, event_flow_state_id, event_flow_timer_id, event_flow_usecase_id,
     graph_node_visible, is_entity_operation, lifecycle_start_states, node_id, node_label,
-    rdra_description_nodes, reachable_for_scope, scoped_id, scoped_node_visible,
-    sequence_usecase_scope, technical_api_node_id, technical_entity_node_id,
+    rdra_description_nodes, reachable_for_scope, render_relations, scoped_id, scoped_node_visible,
+    sequence_usecase_scope, technical_api_node_id, technical_entity_node_id, Syntax,
 };
 use crate::{
-    collect_object_graph_nodes, node_description, object_graph_layer, object_graph_rel_label,
-    prefixed_label, prefixed_node_label, view_node_visible, view_relation_visible, EmitError,
-    Emitter, Scope, View, OBJECT_GRAPH_LAYERS,
+    collect_object_graph_nodes, object_graph_layer, object_graph_rel_label, prefixed_label,
+    prefixed_node_label, view_node_visible, view_relation_visible, EmitError, Emitter, Scope, View,
+    OBJECT_GRAPH_LAYERS,
 };
 use rdra_ish_core::model::{
     ActorKey, ApiKey, BucKey, EntityKey, ExtSystemKey, NodeRef, Raiser, RelKind, ScreenKey,
@@ -25,6 +25,8 @@ use rdra_ish_core::{
     derive_actor_input_inferences, derive_system_boundaries, EventFlow, TimerFlow,
 };
 use std::collections::{HashMap, HashSet};
+
+const SYNTAX: Syntax = Syntax::Mermaid;
 
 // ── RDRA全体図エミッタ (Mermaid) ──────────────────────────────────────────────
 
@@ -193,112 +195,19 @@ fn render_mermaid_rdra_node_declarations(
     }
 }
 
-fn mermaid_rdra_relation_arrow(kind: &RelKind, from_id: &str, to_id: &str) -> Option<String> {
-    let arrow = match kind {
-        RelKind::Performs => format!("  {} --> {}\n", from_id, to_id),
-        RelKind::Reads => format!("  {} -.->|reads| {}\n", from_id, to_id),
-        RelKind::Writes => format!("  {} -.->|writes| {}\n", from_id, to_id),
-        RelKind::Creates => format!("  {} -.->|creates| {}\n", from_id, to_id),
-        RelKind::Updates => format!("  {} -.->|updates| {}\n", from_id, to_id),
-        RelKind::Deletes => format!("  {} -.->|deletes| {}\n", from_id, to_id),
-        RelKind::Displays => format!("  {} -.->|displays| {}\n", from_id, to_id),
-        RelKind::Shows => format!("  {} -.->|shows| {}\n", from_id, to_id),
-        RelKind::Raises => format!("  {} -.->|raises| {}\n", from_id, to_id),
-        RelKind::Triggers => format!("  {} -.->|triggers| {}\n", from_id, to_id),
-        RelKind::Contains | RelKind::Belongs => format!("  {} --> {}\n", from_id, to_id),
-        RelKind::HasPermission => format!("  {} -.->|has_permission| {}\n", from_id, to_id),
-        RelKind::RequiresPermission => {
-            format!("  {} -.->|requires_permission| {}\n", from_id, to_id)
-        }
-        RelKind::RequiresMedium => format!("  {} -.->|requires_medium| {}\n", from_id, to_id),
-        RelKind::Motivates => format!("  {} -.->|motivates| {}\n", from_id, to_id),
-        RelKind::Decides => format!("  {} -.->|decides| {}\n", from_id, to_id),
-        RelKind::Precedes => format!("  {} -->|precedes| {}\n", from_id, to_id),
-        RelKind::Branches => format!("  {} -.->|branches| {}\n", from_id, to_id),
-        RelKind::Excepts => format!("  {} -.->|excepts| {}\n", from_id, to_id),
-        RelKind::Repeats => format!("  {} -.->|repeats| {}\n", from_id, to_id),
-        RelKind::Covers => format!("  {} -.->|covers| {}\n", from_id, to_id),
-        RelKind::Compensates => format!("  {} -.->|compensates| {}\n", from_id, to_id),
-        RelKind::Request => format!("  {} -.->|request| {}\n", from_id, to_id),
-        RelKind::Response => format!("  {} -.->|response| {}\n", from_id, to_id),
-        RelKind::ErrorResponse => format!("  {} -.->|error_response| {}\n", from_id, to_id),
-        RelKind::AppliesTo => format!("  {} -.->|applies_to| {}\n", from_id, to_id),
-        RelKind::Combines => format!("  {} -.->|combines| {}\n", from_id, to_id),
-        RelKind::Qualifies => format!("  {} -.->|qualifies| {}\n", from_id, to_id),
-        RelKind::Constrains => format!("  {} -.->|constrains| {}\n", from_id, to_id),
-        RelKind::MapsField => format!("  {} -.->|maps_field| {}\n", from_id, to_id),
-        RelKind::Owns => format!("  {} -->|owns| {}\n", from_id, to_id),
-        RelKind::Transitions | RelKind::Invokes => return None,
-        RelKind::RelateOneToOne
-        | RelKind::RelateOneToMany
-        | RelKind::RelateManyToOne
-        | RelKind::RelateManyToMany => format!("  {} --- {}\n", from_id, to_id),
-    };
-    Some(arrow)
-}
-
-fn render_mermaid_description_annotations(
-    out: &mut String,
-    model: &SemanticModel,
-    nodes: &[NodeRef],
-) {
-    for node in nodes {
-        let (Some(id), Some(description)) = (node_id(model, node), node_description(model, node))
-        else {
-            continue;
-        };
-        let description = description.trim();
-        if description.is_empty() {
-            continue;
-        }
-        let note_id = format!("{}_description", id);
-        let description = mermaid_label(description).replace('\n', "<br/>");
-        out.push_str(&format!("  {}[\"{}\"]\n", note_id, description));
-        out.push_str(&format!("  {} -. description .- {}\n", note_id, id));
-    }
-}
-
-fn render_mermaid_rdra_relations(
-    out: &mut String,
-    model: &SemanticModel,
-    reachable: &Option<HashSet<NodeRef>>,
-    view: &View,
-) {
-    let mut relations: Vec<_> = model.relations.iter().collect();
-    relations.sort_by_key(|relation| format!("{:?}{:?}", relation.from, relation.to));
-    for relation in &relations {
-        if !graph_node_visible(reachable, view, &relation.from)
-            || !graph_node_visible(reachable, view, &relation.to)
-            || !view_relation_visible(view, &relation.kind)
-        {
-            continue;
-        }
-        if matches!(&relation.from, NodeRef::Api(_)) || matches!(&relation.to, NodeRef::Api(_)) {
-            continue;
-        }
-        if let (Some(from_id), Some(to_id)) =
-            (node_id(model, &relation.from), node_id(model, &relation.to))
-        {
-            if let Some(arrow) = mermaid_rdra_relation_arrow(&relation.kind, from_id, to_id) {
-                out.push_str(&arrow);
-            }
-        }
-    }
-}
-
 impl Emitter for RdraMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         let reachable = reachable_for_scope(model, &view.scope);
         let mut out = String::new();
         out.push_str("graph TD\n");
         render_mermaid_rdra_node_declarations(&mut out, model, &reachable, view);
-        render_mermaid_rdra_relations(&mut out, model, &reachable, view);
+        render_relations(SYNTAX, &mut out, model, &reachable, view);
         if view.show_descriptions {
             let nodes: Vec<_> = rdra_description_nodes(model, &reachable)
                 .into_iter()
                 .filter(|node| view_node_visible(view, node))
                 .collect();
-            render_mermaid_description_annotations(&mut out, model, &nodes);
+            SYNTAX.render_descriptions(&mut out, model, &nodes);
         }
 
         while out.ends_with("\n\n") {
@@ -311,10 +220,6 @@ impl Emitter for RdraMermaidEmitter {
 // ── RDRA レイヤ図エミッタ (Mermaid) ─────────────────────────────────────────
 
 pub struct ObjectGraphMermaidEmitter;
-
-fn mermaid_label(label: &str) -> String {
-    label.replace('"', "#quot;")
-}
 
 impl Emitter for ObjectGraphMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
@@ -349,7 +254,7 @@ impl Emitter for ObjectGraphMermaidEmitter {
                 .filter(|nr| object_graph_layer(nr) == layer)
             {
                 if let (Some(id), Some(label)) = (node_id(model, nr), node_label(model, nr)) {
-                    let label = mermaid_label(&prefixed_node_label(nr, label));
+                    let label = SYNTAX.quote(&prefixed_node_label(nr, label));
                     let line = match nr {
                         NodeRef::Actor(_) => format!("    {}([\"{}\"])\n", id, label),
                         NodeRef::Requirement(_) => format!("    {}[\"{}\"]\n", id, label),
@@ -413,7 +318,7 @@ impl Emitter for ObjectGraphMermaidEmitter {
         }
 
         if view.show_descriptions {
-            render_mermaid_description_annotations(&mut out, model, &visible_nodes);
+            SYNTAX.render_descriptions(&mut out, model, &visible_nodes);
         }
 
         while out.ends_with("\n\n") {
@@ -443,7 +348,7 @@ impl Emitter for BusinessAreaMermaidEmitter {
             let actor_id = business_actor_node_id(model, &entry);
             let usecase_id = business_usecase_node_id(model, &entry);
             let input_id = business_input_node_id(model, &entry);
-            let input_label = mermaid_label(&format!(
+            let input_label = SYNTAX.quote(&format!(
                 "{}.{}, {}",
                 entity.id,
                 entry.column,
@@ -454,7 +359,7 @@ impl Emitter for BusinessAreaMermaidEmitter {
                 out.push_str(&format!(
                     "  {}([\"{}\"])\n",
                     actor_id,
-                    mermaid_label(&prefixed_label("Business Actor", &actor.label))
+                    SYNTAX.quote(&prefixed_label("Business Actor", &actor.label))
                 ));
             }
             if nodes.insert(input_id.clone()) {
@@ -464,7 +369,7 @@ impl Emitter for BusinessAreaMermaidEmitter {
                 out.push_str(&format!(
                     "  {}([\"{}\"])\n",
                     usecase_id,
-                    mermaid_label(&prefixed_label("UseCase", &usecase.label))
+                    SYNTAX.quote(&prefixed_label("UseCase", &usecase.label))
                 ));
             }
 
@@ -518,7 +423,7 @@ impl Emitter for TechnicalAreaMermaidEmitter {
             out.push_str(&format!(
                 "  subgraph {}[{}]\n",
                 system_id,
-                mermaid_label(&system.label)
+                SYNTAX.quote(&system.label)
             ));
             out.push_str("    direction TB\n");
             for api in &apis {
@@ -526,7 +431,7 @@ impl Emitter for TechnicalAreaMermaidEmitter {
                 out.push_str(&format!(
                     "    {}[\"{}\"]\n",
                     technical_api_node_id(model, boundary.system, *api),
-                    mermaid_label(&prefixed_label("API", &api_model.label))
+                    SYNTAX.quote(&prefixed_label("API", &api_model.label))
                 ));
             }
             for entity in &entities {
@@ -534,7 +439,7 @@ impl Emitter for TechnicalAreaMermaidEmitter {
                 out.push_str(&format!(
                     "    {}[(\"{}\")]\n",
                     technical_entity_node_id(model, boundary.system, *entity),
-                    mermaid_label(&prefixed_label("Entity", &entity_model.label))
+                    SYNTAX.quote(&prefixed_label("Entity", &entity_model.label))
                 ));
             }
             out.push_str("  end\n");
@@ -1460,45 +1365,59 @@ performs(Customer, Browse)
     #[test]
     fn test_mermaid_rdra_relation_arrow_labels_and_overview_skips() {
         assert_eq!(
-            mermaid_rdra_relation_arrow(&RelKind::Reads, "Browse", "Catalog").as_deref(),
+            SYNTAX
+                .relation_edge(&RelKind::Reads, "Browse", "Catalog")
+                .as_deref(),
             Some("  Browse -.->|reads| Catalog\n")
         );
         assert_eq!(
-            mermaid_rdra_relation_arrow(&RelKind::RelateManyToOne, "Order", "Customer").as_deref(),
+            SYNTAX
+                .relation_edge(&RelKind::RelateManyToOne, "Order", "Customer")
+                .as_deref(),
             Some("  Order --- Customer\n")
         );
         assert_eq!(
-            mermaid_rdra_relation_arrow(&RelKind::Precedes, "ReviewCart", "AuthorizePayment")
+            SYNTAX
+                .relation_edge(&RelKind::Precedes, "ReviewCart", "AuthorizePayment")
                 .as_deref(),
             Some("  ReviewCart -->|precedes| AuthorizePayment\n")
         );
         assert_eq!(
-            mermaid_rdra_relation_arrow(&RelKind::Branches, "ReviewCart", "PaymentFailed")
+            SYNTAX
+                .relation_edge(&RelKind::Branches, "ReviewCart", "PaymentFailed")
                 .as_deref(),
             Some("  ReviewCart -.->|branches| PaymentFailed\n")
         );
         assert_eq!(
-            mermaid_rdra_relation_arrow(&RelKind::Excepts, "AuthorizePayment", "PaymentFailed")
+            SYNTAX
+                .relation_edge(&RelKind::Excepts, "AuthorizePayment", "PaymentFailed")
                 .as_deref(),
             Some("  AuthorizePayment -.->|excepts| PaymentFailed\n")
         );
         assert_eq!(
-            mermaid_rdra_relation_arrow(&RelKind::Repeats, "PaymentFailed", "ReviewCart")
+            SYNTAX
+                .relation_edge(&RelKind::Repeats, "PaymentFailed", "ReviewCart")
                 .as_deref(),
             Some("  PaymentFailed -.->|repeats| ReviewCart\n")
         );
         assert_eq!(
-            mermaid_rdra_relation_arrow(&RelKind::Covers, "AuthorizePayment", "CapturePayment")
+            SYNTAX
+                .relation_edge(&RelKind::Covers, "AuthorizePayment", "CapturePayment")
                 .as_deref(),
             Some("  AuthorizePayment -.->|covers| CapturePayment\n")
         );
         assert_eq!(
-            mermaid_rdra_relation_arrow(&RelKind::Compensates, "RefundPayment", "CapturePayment")
+            SYNTAX
+                .relation_edge(&RelKind::Compensates, "RefundPayment", "CapturePayment")
                 .as_deref(),
             Some("  RefundPayment -.->|compensates| CapturePayment\n")
         );
-        assert!(mermaid_rdra_relation_arrow(&RelKind::Transitions, "Draft", "Published").is_none());
-        assert!(mermaid_rdra_relation_arrow(&RelKind::Invokes, "Browse", "BrowseApi").is_none());
+        assert!(SYNTAX
+            .relation_edge(&RelKind::Transitions, "Draft", "Published")
+            .is_none());
+        assert!(SYNTAX
+            .relation_edge(&RelKind::Invokes, "Browse", "BrowseApi")
+            .is_none());
     }
 
     #[test]
@@ -1527,7 +1446,7 @@ invokes(Browse, BrowseApi)
         assert!(!declarations.contains("BrowseApi"));
 
         let mut relations = String::new();
-        render_mermaid_rdra_relations(&mut relations, &model, &reachable, &View::whole());
+        render_relations(SYNTAX, &mut relations, &model, &reachable, &View::whole());
         assert!(relations.contains("Customer --> Browse"));
         assert!(relations.contains("Browse -.->|reads| Catalog"));
         assert!(!relations.contains("BrowseApi"));

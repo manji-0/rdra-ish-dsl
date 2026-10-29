@@ -1,6 +1,8 @@
 //! Helpers the PlantUML and Mermaid emitters share.
 
-use crate::{view_node_visible, Scope, View};
+use crate::{
+    node_description, object_graph_rel_label, view_node_visible, view_relation_visible, Scope, View,
+};
 use rdra_ish_core::lifecycle::{Bounds, Scope as LifecycleScope, TransitionSystem};
 use rdra_ish_core::model::{
     ApiKey, BucKey, ColumnType, EntityKey, NodeRef, RelKind, SemanticModel, StateKey, UseCaseKey,
@@ -386,6 +388,158 @@ pub(crate) fn event_flow_extsystem_id(id: &str) -> String {
 
 pub(crate) fn event_flow_timer_id(id: &str) -> String {
     format!("tm__{}", id)
+}
+
+/// The text format a shared emitter writes. The two differ in how they quote a label and draw
+/// an edge, and in nothing else the shared code looks at.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Syntax {
+    PlantUml,
+    Mermaid,
+}
+
+/// An edge, independent of syntax.
+pub(crate) enum Link<'a> {
+    /// Solid arrow, no label.
+    Arrow,
+    /// Solid arrow with a label.
+    Labeled(&'a str),
+    /// Dotted arrow with a label.
+    Dotted(&'a str),
+    /// Plain line.
+    Undirected,
+}
+
+impl Syntax {
+    /// `label` safe inside a double-quoted string.
+    pub(crate) fn quote(self, label: &str) -> String {
+        match self {
+            Syntax::PlantUml => label.replace('"', "\\\""),
+            Syntax::Mermaid => label.replace('"', "#quot;"),
+        }
+    }
+
+    /// One edge statement, newline included.
+    pub(crate) fn link(self, link: Link, from: &str, to: &str) -> String {
+        match (self, link) {
+            (Syntax::PlantUml, Link::Arrow) => format!("{from} --> {to}\n"),
+            (Syntax::PlantUml, Link::Labeled(label)) => format!("{from} --> {to} : {label}\n"),
+            (Syntax::PlantUml, Link::Dotted(label)) => format!("{from} ..> {to} : {label}\n"),
+            (Syntax::PlantUml, Link::Undirected) => format!("{from} -- {to}\n"),
+            (Syntax::Mermaid, Link::Arrow) => format!("  {from} --> {to}\n"),
+            (Syntax::Mermaid, Link::Labeled(label)) => format!("  {from} -->|{label}| {to}\n"),
+            (Syntax::Mermaid, Link::Dotted(label)) => format!("  {from} -.->|{label}| {to}\n"),
+            (Syntax::Mermaid, Link::Undirected) => format!("  {from} --- {to}\n"),
+        }
+    }
+
+    /// The edge the RDRA graph draws for a relation, or `None` for the kinds it leaves out.
+    pub(crate) fn relation_edge(self, kind: &RelKind, from: &str, to: &str) -> Option<String> {
+        let label = object_graph_rel_label(kind);
+        let link = match kind {
+            RelKind::Transitions | RelKind::Invokes => return None,
+            RelKind::Performs => Link::Arrow,
+            RelKind::Contains | RelKind::Belongs if self == Syntax::Mermaid => Link::Arrow,
+            RelKind::Precedes | RelKind::Owns => Link::Labeled(label),
+            RelKind::RelateOneToOne
+            | RelKind::RelateOneToMany
+            | RelKind::RelateManyToOne
+            | RelKind::RelateManyToMany => Link::Undirected,
+            RelKind::Reads
+            | RelKind::Writes
+            | RelKind::Creates
+            | RelKind::Updates
+            | RelKind::Deletes
+            | RelKind::Displays
+            | RelKind::Shows
+            | RelKind::Raises
+            | RelKind::Triggers
+            | RelKind::Contains
+            | RelKind::Belongs
+            | RelKind::HasPermission
+            | RelKind::RequiresPermission
+            | RelKind::RequiresMedium
+            | RelKind::Motivates
+            | RelKind::Decides
+            | RelKind::Branches
+            | RelKind::Excepts
+            | RelKind::Repeats
+            | RelKind::Covers
+            | RelKind::Compensates
+            | RelKind::Request
+            | RelKind::Response
+            | RelKind::ErrorResponse
+            | RelKind::AppliesTo
+            | RelKind::Combines
+            | RelKind::Qualifies
+            | RelKind::Constrains
+            | RelKind::MapsField => Link::Dotted(label),
+        };
+        Some(self.link(link, from, to))
+    }
+
+    /// A note per node that has a description, attached to the node.
+    pub(crate) fn render_descriptions(
+        self,
+        out: &mut String,
+        model: &SemanticModel,
+        nodes: &[NodeRef],
+    ) {
+        for node in nodes {
+            let (Some(id), Some(description)) =
+                (node_id(model, node), node_description(model, node))
+            else {
+                continue;
+            };
+            let description = description.trim();
+            if description.is_empty() {
+                continue;
+            }
+            match self {
+                Syntax::PlantUml => out.push_str(&format!(
+                    "note right of {}\n{}\nend note\n",
+                    id,
+                    self.quote(description)
+                )),
+                Syntax::Mermaid => {
+                    let note_id = format!("{}_description", id);
+                    let description = self.quote(description).replace('\n', "<br/>");
+                    out.push_str(&format!("  {}[\"{}\"]\n", note_id, description));
+                    out.push_str(&format!("  {} -. description .- {}\n", note_id, id));
+                }
+            }
+        }
+    }
+}
+
+/// The edges between the visible nodes of the RDRA graph, in a stable order.
+pub(crate) fn render_relations(
+    syntax: Syntax,
+    out: &mut String,
+    model: &SemanticModel,
+    reachable: &Option<HashSet<NodeRef>>,
+    view: &View,
+) {
+    let mut relations: Vec<_> = model.relations.iter().collect();
+    relations.sort_by_key(|relation| format!("{:?}{:?}", relation.from, relation.to));
+    for relation in &relations {
+        if !graph_node_visible(reachable, view, &relation.from)
+            || !graph_node_visible(reachable, view, &relation.to)
+            || !view_relation_visible(view, &relation.kind)
+        {
+            continue;
+        }
+        if matches!(&relation.from, NodeRef::Api(_)) || matches!(&relation.to, NodeRef::Api(_)) {
+            continue;
+        }
+        if let (Some(from_id), Some(to_id)) =
+            (node_id(model, &relation.from), node_id(model, &relation.to))
+        {
+            if let Some(edge) = syntax.relation_edge(&relation.kind, from_id, to_id) {
+                out.push_str(&edge);
+            }
+        }
+    }
 }
 
 #[cfg(test)]

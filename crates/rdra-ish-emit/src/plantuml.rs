@@ -5,13 +5,13 @@ use crate::diagram_common::{
     business_usecase_node_id, col_type_str, event_flow_buc_id, event_flow_event_id,
     event_flow_extsystem_id, event_flow_state_id, event_flow_timer_id, event_flow_usecase_id,
     graph_node_visible, is_entity_operation, lifecycle_start_states, node_id, node_label,
-    rdra_description_nodes, reachable_for_scope, scoped_node_visible, sequence_usecase_scope,
-    technical_api_node_id, technical_entity_node_id,
+    rdra_description_nodes, reachable_for_scope, render_relations, scoped_node_visible,
+    sequence_usecase_scope, technical_api_node_id, technical_entity_node_id, Syntax,
 };
 use crate::{
-    collect_object_graph_nodes, node_description, object_graph_layer, object_graph_rel_label,
-    prefixed_label, prefixed_node_label, view_node_visible, view_relation_visible, EmitError,
-    Emitter, Scope, View, OBJECT_GRAPH_LAYERS,
+    collect_object_graph_nodes, object_graph_layer, object_graph_rel_label, prefixed_label,
+    prefixed_node_label, view_node_visible, view_relation_visible, EmitError, Emitter, Scope, View,
+    OBJECT_GRAPH_LAYERS,
 };
 use rdra_ish_core::model::{
     ActorKey, ApiKey, BucKey, EntityKey, ExtSystemKey, NodeRef, Raiser, RelKind, ScreenKey,
@@ -22,6 +22,8 @@ use rdra_ish_core::{
     derive_actor_input_inferences, derive_system_boundaries, EventFlow, TimerFlow,
 };
 use std::collections::{HashMap, HashSet};
+
+const SYNTAX: Syntax = Syntax::PlantUml;
 
 // ── RDRA全体図エミッタ ────────────────────────────────────────────────────────
 
@@ -202,96 +204,6 @@ fn render_rdra_node_declarations(
     out.push('\n');
 }
 
-fn rdra_relation_arrow(kind: &RelKind, from_id: &str, to_id: &str) -> Option<String> {
-    let arrow = match kind {
-        RelKind::Performs => format!("{} --> {}", from_id, to_id),
-        RelKind::Reads => format!("{} ..> {} : reads", from_id, to_id),
-        RelKind::Writes => format!("{} ..> {} : writes", from_id, to_id),
-        RelKind::Creates => format!("{} ..> {} : creates", from_id, to_id),
-        RelKind::Updates => format!("{} ..> {} : updates", from_id, to_id),
-        RelKind::Deletes => format!("{} ..> {} : deletes", from_id, to_id),
-        RelKind::Displays => format!("{} ..> {} : displays", from_id, to_id),
-        RelKind::Shows => format!("{} ..> {} : shows", from_id, to_id),
-        RelKind::Raises => format!("{} ..> {} : raises", from_id, to_id),
-        RelKind::Triggers => format!("{} ..> {} : triggers", from_id, to_id),
-        RelKind::Contains => format!("{} ..> {} : contains", from_id, to_id),
-        RelKind::Belongs => format!("{} ..> {} : belongs", from_id, to_id),
-        RelKind::HasPermission => format!("{} ..> {} : has_permission", from_id, to_id),
-        RelKind::RequiresPermission => format!("{} ..> {} : requires_permission", from_id, to_id),
-        RelKind::RequiresMedium => format!("{} ..> {} : requires_medium", from_id, to_id),
-        RelKind::Motivates => format!("{} ..> {} : motivates", from_id, to_id),
-        RelKind::Decides => format!("{} ..> {} : decides", from_id, to_id),
-        RelKind::Precedes => format!("{} --> {} : precedes", from_id, to_id),
-        RelKind::Branches => format!("{} ..> {} : branches", from_id, to_id),
-        RelKind::Excepts => format!("{} ..> {} : excepts", from_id, to_id),
-        RelKind::Repeats => format!("{} ..> {} : repeats", from_id, to_id),
-        RelKind::Covers => format!("{} ..> {} : covers", from_id, to_id),
-        RelKind::Compensates => format!("{} ..> {} : compensates", from_id, to_id),
-        RelKind::Request => format!("{} ..> {} : request", from_id, to_id),
-        RelKind::Response => format!("{} ..> {} : response", from_id, to_id),
-        RelKind::ErrorResponse => format!("{} ..> {} : error_response", from_id, to_id),
-        RelKind::AppliesTo => format!("{} ..> {} : applies_to", from_id, to_id),
-        RelKind::Combines => format!("{} ..> {} : combines", from_id, to_id),
-        RelKind::Qualifies => format!("{} ..> {} : qualifies", from_id, to_id),
-        RelKind::Constrains => format!("{} ..> {} : constrains", from_id, to_id),
-        RelKind::MapsField => format!("{} ..> {} : maps_field", from_id, to_id),
-        RelKind::Owns => format!("{} --> {} : owns", from_id, to_id),
-        RelKind::Transitions | RelKind::Invokes => return None,
-        RelKind::RelateOneToOne
-        | RelKind::RelateOneToMany
-        | RelKind::RelateManyToOne
-        | RelKind::RelateManyToMany => format!("{} -- {}", from_id, to_id),
-    };
-    Some(arrow)
-}
-
-fn render_rdra_relations(
-    out: &mut String,
-    model: &SemanticModel,
-    reachable: &Option<HashSet<NodeRef>>,
-    view: &View,
-) {
-    let mut relations: Vec<_> = model.relations.iter().collect();
-    relations.sort_by_key(|relation| format!("{:?}{:?}", relation.from, relation.to));
-    for relation in &relations {
-        if !graph_node_visible(reachable, view, &relation.from)
-            || !graph_node_visible(reachable, view, &relation.to)
-            || !view_relation_visible(view, &relation.kind)
-        {
-            continue;
-        }
-        if matches!(&relation.from, NodeRef::Api(_)) || matches!(&relation.to, NodeRef::Api(_)) {
-            continue;
-        }
-        if let (Some(from_id), Some(to_id)) =
-            (node_id(model, &relation.from), node_id(model, &relation.to))
-        {
-            if let Some(arrow) = rdra_relation_arrow(&relation.kind, from_id, to_id) {
-                out.push_str(&arrow);
-                out.push('\n');
-            }
-        }
-    }
-}
-
-fn render_plantuml_description_notes(out: &mut String, model: &SemanticModel, nodes: &[NodeRef]) {
-    for node in nodes {
-        let (Some(id), Some(description)) = (node_id(model, node), node_description(model, node))
-        else {
-            continue;
-        };
-        let description = description.trim();
-        if description.is_empty() {
-            continue;
-        }
-        out.push_str(&format!(
-            "note right of {}\n{}\nend note\n",
-            id,
-            plantuml_label(description)
-        ));
-    }
-}
-
 impl Emitter for RdraPlantUmlEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         let reachable = reachable_for_scope(model, &view.scope);
@@ -300,13 +212,13 @@ impl Emitter for RdraPlantUmlEmitter {
         out.push_str("!theme plain\n");
         out.push('\n');
         render_rdra_node_declarations(&mut out, model, &reachable, view);
-        render_rdra_relations(&mut out, model, &reachable, view);
+        render_relations(SYNTAX, &mut out, model, &reachable, view);
         if view.show_descriptions {
             let nodes: Vec<_> = rdra_description_nodes(model, &reachable)
                 .into_iter()
                 .filter(|node| view_node_visible(view, node))
                 .collect();
-            render_plantuml_description_notes(&mut out, model, &nodes);
+            SYNTAX.render_descriptions(&mut out, model, &nodes);
         }
         out.push_str("@enduml\n");
         Ok(out)
@@ -411,7 +323,7 @@ impl Emitter for ObjectGraphPlantUmlEmitter {
         }
 
         if view.show_descriptions {
-            render_plantuml_description_notes(&mut out, model, &visible_nodes);
+            SYNTAX.render_descriptions(&mut out, model, &visible_nodes);
         }
 
         out.push_str("@enduml\n");
@@ -443,7 +355,7 @@ impl Emitter for BusinessAreaPlantUmlEmitter {
             let actor_id = business_actor_node_id(model, &entry);
             let usecase_id = business_usecase_node_id(model, &entry);
             let input_id = business_input_node_id(model, &entry);
-            let input_label = plantuml_label(&format!(
+            let input_label = SYNTAX.quote(&format!(
                 "{}.{}, {}",
                 entity.id,
                 entry.column,
@@ -453,7 +365,7 @@ impl Emitter for BusinessAreaPlantUmlEmitter {
             if nodes.insert(actor_id.clone()) {
                 out.push_str(&format!(
                     "actor \"{}\" as {}\n",
-                    plantuml_label(&prefixed_label("Business Actor", &actor.label)),
+                    SYNTAX.quote(&prefixed_label("Business Actor", &actor.label)),
                     actor_id
                 ));
             }
@@ -463,7 +375,7 @@ impl Emitter for BusinessAreaPlantUmlEmitter {
             if nodes.insert(usecase_id.clone()) {
                 out.push_str(&format!(
                     "usecase \"{}\" as {}\n",
-                    plantuml_label(&prefixed_label("UseCase", &usecase.label)),
+                    SYNTAX.quote(&prefixed_label("UseCase", &usecase.label)),
                     usecase_id
                 ));
             }
@@ -518,15 +430,12 @@ impl Emitter for TechnicalAreaPlantUmlEmitter {
                 continue;
             }
 
-            out.push_str(&format!(
-                "package \"{}\" {{\n",
-                plantuml_label(&system.label)
-            ));
+            out.push_str(&format!("package \"{}\" {{\n", SYNTAX.quote(&system.label)));
             for api in &apis {
                 let api_model = &model.apis[*api];
                 out.push_str(&format!(
                     "  control \"{}\" as {}\n",
-                    plantuml_label(&prefixed_label("API", &api_model.label)),
+                    SYNTAX.quote(&prefixed_label("API", &api_model.label)),
                     technical_api_node_id(model, boundary.system, *api)
                 ));
             }
@@ -534,7 +443,7 @@ impl Emitter for TechnicalAreaPlantUmlEmitter {
                 let entity_model = &model.entities[*entity];
                 out.push_str(&format!(
                     "  database \"{}\" as {}\n",
-                    plantuml_label(&prefixed_label("Entity", &entity_model.label)),
+                    SYNTAX.quote(&prefixed_label("Entity", &entity_model.label)),
                     technical_entity_node_id(model, boundary.system, *entity)
                 ));
             }
@@ -1469,10 +1378,6 @@ impl Emitter for EventFlowPlantUmlEmitter {
 
 // ── ヘルパー ──────────────────────────────────────────────────────────────────
 
-fn plantuml_label(label: &str) -> String {
-    label.replace('"', "\\\"")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1500,40 +1405,59 @@ performs(Customer, Browse)
     #[test]
     fn test_rdra_relation_arrow_labels_and_overview_skips() {
         assert_eq!(
-            rdra_relation_arrow(&RelKind::Reads, "Browse", "Catalog").as_deref(),
-            Some("Browse ..> Catalog : reads")
-        );
-        assert_eq!(
-            rdra_relation_arrow(&RelKind::RelateManyToOne, "Order", "Customer").as_deref(),
-            Some("Order -- Customer")
-        );
-        assert_eq!(
-            rdra_relation_arrow(&RelKind::Precedes, "ReviewCart", "AuthorizePayment").as_deref(),
-            Some("ReviewCart --> AuthorizePayment : precedes")
-        );
-        assert_eq!(
-            rdra_relation_arrow(&RelKind::Branches, "ReviewCart", "PaymentFailed").as_deref(),
-            Some("ReviewCart ..> PaymentFailed : branches")
-        );
-        assert_eq!(
-            rdra_relation_arrow(&RelKind::Excepts, "AuthorizePayment", "PaymentFailed").as_deref(),
-            Some("AuthorizePayment ..> PaymentFailed : excepts")
-        );
-        assert_eq!(
-            rdra_relation_arrow(&RelKind::Repeats, "PaymentFailed", "ReviewCart").as_deref(),
-            Some("PaymentFailed ..> ReviewCart : repeats")
-        );
-        assert_eq!(
-            rdra_relation_arrow(&RelKind::Covers, "AuthorizePayment", "CapturePayment").as_deref(),
-            Some("AuthorizePayment ..> CapturePayment : covers")
-        );
-        assert_eq!(
-            rdra_relation_arrow(&RelKind::Compensates, "RefundPayment", "CapturePayment")
+            SYNTAX
+                .relation_edge(&RelKind::Reads, "Browse", "Catalog")
                 .as_deref(),
-            Some("RefundPayment ..> CapturePayment : compensates")
+            Some("Browse ..> Catalog : reads\n")
         );
-        assert!(rdra_relation_arrow(&RelKind::Transitions, "Draft", "Published").is_none());
-        assert!(rdra_relation_arrow(&RelKind::Invokes, "Browse", "BrowseApi").is_none());
+        assert_eq!(
+            SYNTAX
+                .relation_edge(&RelKind::RelateManyToOne, "Order", "Customer")
+                .as_deref(),
+            Some("Order -- Customer\n")
+        );
+        assert_eq!(
+            SYNTAX
+                .relation_edge(&RelKind::Precedes, "ReviewCart", "AuthorizePayment")
+                .as_deref(),
+            Some("ReviewCart --> AuthorizePayment : precedes\n")
+        );
+        assert_eq!(
+            SYNTAX
+                .relation_edge(&RelKind::Branches, "ReviewCart", "PaymentFailed")
+                .as_deref(),
+            Some("ReviewCart ..> PaymentFailed : branches\n")
+        );
+        assert_eq!(
+            SYNTAX
+                .relation_edge(&RelKind::Excepts, "AuthorizePayment", "PaymentFailed")
+                .as_deref(),
+            Some("AuthorizePayment ..> PaymentFailed : excepts\n")
+        );
+        assert_eq!(
+            SYNTAX
+                .relation_edge(&RelKind::Repeats, "PaymentFailed", "ReviewCart")
+                .as_deref(),
+            Some("PaymentFailed ..> ReviewCart : repeats\n")
+        );
+        assert_eq!(
+            SYNTAX
+                .relation_edge(&RelKind::Covers, "AuthorizePayment", "CapturePayment")
+                .as_deref(),
+            Some("AuthorizePayment ..> CapturePayment : covers\n")
+        );
+        assert_eq!(
+            SYNTAX
+                .relation_edge(&RelKind::Compensates, "RefundPayment", "CapturePayment")
+                .as_deref(),
+            Some("RefundPayment ..> CapturePayment : compensates\n")
+        );
+        assert!(SYNTAX
+            .relation_edge(&RelKind::Transitions, "Draft", "Published")
+            .is_none());
+        assert!(SYNTAX
+            .relation_edge(&RelKind::Invokes, "Browse", "BrowseApi")
+            .is_none());
     }
 
     #[test]
@@ -1557,7 +1481,7 @@ invokes(Browse, BrowseApi)
         assert!(!declarations.contains("BrowseApi"));
 
         let mut relations = String::new();
-        render_rdra_relations(&mut relations, &model, &reachable, &View::whole());
+        render_relations(SYNTAX, &mut relations, &model, &reachable, &View::whole());
         assert!(relations.contains("Customer --> Browse"));
         assert!(relations.contains("Browse ..> Catalog : reads"));
         assert!(!relations.contains("BrowseApi"));
