@@ -28,6 +28,11 @@ jobs:
         run: cargo test --all -- --skip bfs_and_tlc_reach_the_same_states_and_verdicts
       - name: sample artifact snapshots
         run: bash scripts/check-sample-artifacts.sh
+      - name: skill snippets
+        # Debug binary; its verify transcripts need the devShell's tlc.
+        run: |
+          cargo build -p rdra-ish-cli
+          python3 -I scripts/check-skill-snippets.py target/debug/rdra-ish
 
   formal-verify:
     runs-on: ubuntu-latest
