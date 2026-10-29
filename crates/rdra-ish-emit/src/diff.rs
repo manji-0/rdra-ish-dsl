@@ -1,4 +1,4 @@
-use crate::plantuml::{node_id, node_label};
+use crate::diagram_common::{node_id, node_label};
 use crate::{
     collect_object_graph_nodes, node_kind_filter_name, object_graph_rel_label, view_node_visible,
     view_relation_visible, EmitError, Scope, View,

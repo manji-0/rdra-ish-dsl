@@ -3,7 +3,7 @@
 //! plantuml.rs と同じ3エミッタをMermaid記法で出力する。
 //! ヘルパー関数 (node_id / node_label / col_type_str) は plantuml モジュールから再利用。
 
-use crate::plantuml::{col_type_str, lifecycle_start_states, node_id, node_label};
+use crate::diagram_common::{col_type_str, lifecycle_start_states, node_id, node_label};
 use crate::{
     collect_object_graph_nodes, node_description, object_graph_layer, object_graph_rel_label,
     prefixed_label, prefixed_node_label, view_node_visible, view_relation_visible, EmitError,

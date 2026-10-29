@@ -605,7 +605,7 @@ fn bool_str(value: bool) -> &'static str {
 }
 
 fn col_type_to_str(model: &SemanticModel, ct: &ColumnType) -> String {
-    crate::plantuml::col_type_str(model, ct)
+    crate::diagram_common::col_type_str(model, ct)
 }
 
 fn bits_to_crud(bits: u8) -> String {
