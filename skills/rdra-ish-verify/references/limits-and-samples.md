@@ -41,9 +41,14 @@
 - **`after.assert`**: independent `[][(\A p : UC(p) => post')]_vars` PROPERTY named
   `AfterAssert_<UC>_<n>` (not injected into the effects).
 - **`WF_vars(Next)`**: fairness on whole `Next`, not per action.
+- **State models**: witnesses, deadlocks, and use cases that never run come from BFS on
+  each entity's cone, at the same bounds as TLC (capped at 2,097,152 states per cone).
+  TLC's own `CHECK_DEADLOCK` stays `FALSE`: every bounded model ends with no enabled
+  action, and TLC cannot see one instance stuck while others keep moving.
 - **Cones**: `verify` checks each invariant and `after` assertion on its cone of
   influence and the temporal properties on the whole model.
-- Nullable Money/Decimal used in arithmetic promote to Int variables (not Nullable).
+- Int, Money, Decimal, Date, and DateTime columns that something names are variables over
+  `IntRange`; a `@null` one adds `null`, and a comparison over a null operand passes.
 - `states` and `check` read the same system at one instance per entity, so Int and `now`
   columns that something names are `0..5` variables there too.
 - Error diagnostics of the system stop `export` and `verify`; warnings go to stderr.
@@ -68,31 +73,32 @@ In the `rdra-ish-dsl` repository, `samples/formal-verification/` and
 `samples/formal-verification-fail/` are symlinks to these same files.
 
 A sample that does not pass both commands states its result in `// expect` lines at the
-top, for example `// expect verify: tlc=counterexample fail Forbidden_Order_0`. The
-repository's `scripts/verify-samples.sh` runs `check` and `verify` on every sample and
-fails when a result differs. The grammar is in `docs/formal-verification.md`
-("Sample expectations").
+top, for example `// expect verify: tlc=counterexample fail Forbidden_Order_0`: the exit
+status, the `tlc_result:` line, and the exact set of error names. The repository's
+`scripts/verify-samples.sh` runs `check` and `verify` on every sample and fails when a
+result differs. The grammar is in `docs/formal-verification.md` ("Sample
+expectations"). The table repeats each header; "ok" means the command passes.
 
-| Skill path | TLC intent | Focus |
-|---|---|---|
-| `samples/order.rdra` | expected pass | Lifecycle + `after.assert` + temporal |
-| `samples/int_stock.rdra` | expected pass | Int arithmetic invariant / property |
-| `samples/now_coupon.rdra` | expected fail | `now` and `Tick`; no action pins `expired_at` |
-| `samples/cross_order_payment.rdra` | expected pass | Multi-instance + `.along` (atomic Pay) |
-| `samples/cross_order_payment_split.rdra` | expected fail | Pay through two APIs is two actions (in-between state) |
-| `samples/quantifier_none.rdra` | expected fail | `when(...).none` (interleaving) |
-| `samples/untriggered_sets.rdra` | expected fail | `sets` from a use case that drives no transition, next to `transitions` |
-| `samples/after_assert_unmet.rdra` | expected fail | `after(UC).assert` whose postcondition the use case does not set (fails, never vacuous) |
-| `samples/temporal_unmet.rdra` | expected fail (`check` passes) | An `always` and a `leads_to` property that both fail; Reopen lets an Order be cancelled and reopened forever, so the `leads_to` lasso loops back |
-| `samples/unwitnessed_state.rdra` | expected fail (TLC passes) | A `transitions` endpoint no use case reaches: `NoWitness` and `Deadlock` (shipped, whose only way out is Refund) fail `check` and `verify`; Refund warns `NeverRuns` (guards never hold together) |
-| `samples/deadlock.rdra` | expected fail (TLC passes) | A state with a way out that never opens: `Deadlock` (Order stays `paid`) fails `check` and `verify`; Ship warns `NeverRuns` |
-| `samples/partial_scope.rdra` | expected fail (TLC does not run); pass with `--entity Order` | Audit's `forbidden` reads an arithmetic `@derived` column: `DerivedColumnRead` stops `check` and `verify`. `--entity Order` defers it under `not checked:` and passes in the selected scope |
-| `samples/one_to_one_shared.rdra` | expected fail | `relate(.., 1:1)` is the invariant `Unique_<Child>_<role>`; two use cases link two children to one parent (`check` passes: one instance) |
-| `samples/min_card_unmet.rdra` | expected fail | `relate(.., 1..*:1)` is the invariant `MinCard_<Child>_<role>`; a use case creates the parent without a child (`check` exits 1 too) |
-| `samples/min_card_met.rdra` | expected pass | The same model with the parent and its first child created in one transaction; `check` warns AddLine never runs at one instance (no free child slot), `verify` runs it |
-| `samples/check_unmet.rdra` | expected fail | `@check(qty >= 1)` is the invariant `Check_CartLine_qty_0`; a use case sets `qty` to 0 (`check` exits 1 too) |
-| `samples/check_met.rdra` | expected pass | The same check kept by every use case; a `forbidden` reads a Bool `@derived` column |
-| `samples/fail/order.rdra` | expected fail | Negative TLC (`check` exits 1 too) |
+| Skill path | `check` | `verify` | Focus |
+|---|---|---|---|
+| `samples/order.rdra` | ok | `tlc=ok` | Lifecycle + `after.assert` + `leads_to` / `eventually` |
+| `samples/int_stock.rdra` | ok | `tlc=ok` | Int arithmetic invariant / property |
+| `samples/now_coupon.rdra` | fail `Forbidden_Coupon_0` | `tlc=counterexample` | `now` and `Tick`; no action pins `expired_at` |
+| `samples/cross_order_payment.rdra` | ok | `tlc=ok` | Multi-instance + `.along` (Pay is one atomic action; Cancel deletes the pending Payment) |
+| `samples/cross_order_payment_split.rdra` | fail `CrossForbidden_Order_0` | `tlc=counterexample` | Pay through two APIs is two actions, so Cancel runs between them |
+| `samples/quantifier_none.rdra` | fail `Quantifier_Cert_0` | `tlc=counterexample` | `when(...).none` (Revoke while an Assign stays active) |
+| `samples/untriggered_sets.rdra` | fail `Forbidden_Order_0` | `tlc=counterexample` | `sets` from a use case that drives no transition, next to `transitions` |
+| `samples/after_assert_unmet.rdra` | fail `AfterAssert_DeliverOrder_0` | `tlc=counterexample` | `after(UC).assert` whose postcondition the use case does not set |
+| `samples/temporal_unmet.rdra` | ok | `tlc=counterexample`, `NeverShipped` and `PendingLeadsToDelivered` | An `always` and a `leads_to` property that both fail; Reopen lets an Order be cancelled and reopened forever, so the `leads_to` lasso loops back |
+| `samples/unwitnessed_state.rdra` | fail `Witness_Order_status_refunded Deadlock_Order_status_shipped` | `tlc=ok`, fails on the same names | A `transitions` endpoint no use case reaches, and a shipped Order whose only way out is Refund; Refund warns `Runs_Refund` |
+| `samples/deadlock.rdra` | fail `Deadlock_Order_status_paid` | `tlc=ok`, fails on the same name | A way out that never opens: Ship's condition holds only while `pending`; Ship warns `Runs_Ship` |
+| `samples/partial_scope.rdra` | fail `DerivedColumnRead_Audit_score` | fails before TLC; `--entity Order` gives `tlc=ok` | Audit's `forbidden` reads an arithmetic `@derived` column; `--entity Order` defers it under `not checked:` |
+| `samples/one_to_one_shared.rdra` | ok | `tlc=counterexample`, `Unique_Shipment_Order` | Two use cases link two Shipments to one Order; one instance cannot show it |
+| `samples/min_card_unmet.rdra` | fail `MinCard_OrderLine_Order` | `tlc=counterexample` | `1..*:1`; Place creates an Order without a line |
+| `samples/min_card_met.rdra` | ok | `tlc=ok` | Place creates the Order and its first line in one transaction; `check` warns that AddLine never runs at one instance (no free OrderLine slot), `verify` runs it |
+| `samples/check_unmet.rdra` | fail `Check_CartLine_qty_0` | `tlc=counterexample` | `@check(qty >= 1)`; ClearQty sets `qty` to 0 |
+| `samples/check_met.rdra` | ok | `tlc=ok` | The same check kept by every use case; a `forbidden` reads a Bool `@derived` column |
+| `samples/fail/order.rdra` | fail `Inv_Order_0` | `tlc=counterexample` | DeliverOrder never sets `delivered_at` |
 
 ## Canonical Doc
 

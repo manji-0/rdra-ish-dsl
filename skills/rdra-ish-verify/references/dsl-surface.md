@@ -6,6 +6,16 @@
 ## Temporal Properties
 
 ```rdra
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(pending, paid, shipped, delivered, cancelled) @default(pending)
+}
+entity Item "Item" {
+  id: Int @pk
+  stock: Int @default(3)
+  selling: Int @default(1)
+}
+
 property PaidLeadsToShipped "paid eventually reaches shipped"
   leads_to(Order.status == paid, Order.status == shipped)
 
@@ -17,10 +27,14 @@ property EventuallyTerminal
 ```
 
 - Label string after the name is **optional**.
+- Each atom names its entity (`Order.status`); an atom whose column no single entity
+  owns is `UnresolvedPropertyAtom`.
 - Prefer `and` / `or` / `not` (`/\` `\/` `~` remain aliases).
 - Any `eventually` / `leads_to` causes `WF_vars(Next)` in the Spec.
-- Temporals are quantified over the present instances
-  (`[](\A i: …)`, `\A i: <>…`, `\A i: (p ~> q)`).
+- A property holds per present instance: `always x` is `[](present => x)`,
+  `eventually x` is `[](present => <>x)`, and `leads_to x y` is `(present /\ x) ~> y`.
+- Only `verify` evaluates properties, each in its own TLC run on the whole model;
+  `check` prints a `note:` that it did not.
 
 | Form | TLA+ |
 |---|---|
@@ -36,8 +50,10 @@ after(Sell).assert(Item.sold >= 1)
 ```
 
 - Equality and comparison forms become an independent TLA `PROPERTY`
-  `[][(\A p : UC(p) => post')]_vars` (not injected into the effects). `states` checks the
-  same predicate after each step of the use case.
+  `AfterAssert_<UC>_<n>`, `[][(\A p : UC(p) => post')]_vars` (not injected into the
+  effects). `check` and `states` check the same predicate after each step of the use
+  case, so a use case split into k transaction groups must satisfy it after each group.
+- An `after` on a use case that changes nothing is `AssertOnInertUseCase`.
 
 UC `precondition` / `postcondition` / `guard` strings are **review metadata only**
 (`list --kind usecase`); they are not checked by `states` or TLA. Use
@@ -46,12 +62,24 @@ UC `precondition` / `postcondition` / `guard` strings are **review metadata only
 ## Quantifiers
 
 ```rdra
+entity Cert "Certificate" {
+  id: Int @pk
+  status: Enum(active, revoked) @default(active)
+}
+entity Assign "Assignment" {
+  id: Int @pk
+  status: Enum(active, ended) @default(active)
+}
+relate(Assign, Cert, N:1)
+
 when(Cert, status == revoked).none(Assign.status == active)
 // equivalent: when(Cert.status == revoked).none(Assign.status == active)
 ```
 
-Prefer qualified columns. Scope uses entity-prefix collection for the first
-argument form.
+Prefer qualified columns. The check is `Quantifier_<Entity>_<n>` over the present
+instances; the `relate` links each Assign to its Cert, and without one the related side
+is independent. `check` sees one instance of each entity, so use `verify` when the rule
+is about several related rows (`samples/quantifier_none.rdra`).
 
 ## Multi-entity Rules
 
@@ -81,11 +109,13 @@ invariant(Order, Payment)
 ```rdra
 transitions(Order.status, SubmitOrder, draft -> submitted)
 sets(Restock, Item, stock == 3)
-sets(ReserveStock, Inventory, stock < selling, true)  # drives the comparison as a Bool
+sets(ReserveStock, Inventory, stock < selling, true)  // drives the comparison as a Bool
 ```
 
-Use Int / Money / Decimal columns + arithmetic rules when the quantity itself
-must be checked under TLC.
+Use Int / Money / Decimal columns and `sets(UC, E, col == N)` when the quantity itself
+must be checked; `check` and TLC both evaluate a comparison on the values over
+`0..--int-range-max`. Drive the comparison with the four-argument `sets` only when the
+model does not track the values.
 
 ## Variation columns
 
