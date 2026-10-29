@@ -115,7 +115,7 @@ rdra-ish verify samples/formal-verification/order.rdra --backend tlc -o /tmp/rdr
 ## Development
 
 The dev environment is a Nix flake. It provides the Rust toolchain, maturin, uv,
-Java, PlantUML, TLC, Node.js, and pre-commit.
+Java, TLC, Node.js, and pre-commit.
 
 ```sh
 nix develop          # or `direnv allow` with nix-direnv
@@ -139,8 +139,7 @@ uvx maturin publish
 crates/
   rdra-ish-syntax/   Lexer, parser, AST
   rdra-ish-core/     Semantic model, type checks, state derivation
-  rdra-ish-emit/     PlantUML/Mermaid/CSV/state emitters
-  rdra-ish-render/   plantuml.jar wrapper
+  rdra-ish-emit/     Mermaid/CSV/state emitters
   rdra-ish-cli/      rdra-ish command
 samples/
   clinic-ops/

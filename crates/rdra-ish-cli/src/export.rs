@@ -11,7 +11,6 @@ use rdra_ish_emit::{
     json_schema::JsonSchemaEmitter,
     mermaid::ErMermaidEmitter,
     openapi::OpenApiJsonEmitter,
-    plantuml::ErPlantUmlEmitter,
     tla::{self, PrintMode, TlaBundle},
     typescript::TypeScriptStateUnionEmitter,
     Emitter, View,
@@ -35,7 +34,6 @@ pub fn export_artifact(
             "entity-states.ts",
         )),
         ExportKind::MermaidEr => Ok((ErMermaidEmitter.emit(model, view)?, "er.mmd")),
-        ExportKind::PlantumlEr => Ok((ErPlantUmlEmitter.emit(model, view)?, "er.puml")),
         ExportKind::Tla => Ok((
             tla_bundle(model, Bounds::VERIFY, "RdraSpec")?.tla,
             "RdraSpec.tla",

@@ -26,7 +26,7 @@ Diagnostics are written to stderr. A load or consistency diagnostic is `error: .
   except `er`, `csv` of every kind except `entity`, `export --kind typescript-states`)
   is **fail-closed** and refuses. An output that reads only the data layer (`diagram
   --kind er`, `csv --kind entity`, and `export` of `dbml`, `json-schema`, `openapi`,
-  `asyncapi`, `mermaid-er`, and `plantuml-er`) is written, and the command prints one
+  `asyncapi`, and `mermaid-er`) is written, and the command prints one
   stderr note that gives the error count and points to `rdra-ish check`.
   `export --kind tla` and `verify` gate on parse errors plus the Error
   diagnostics of the lifecycle transition system they print (built at `--instance-count`
@@ -290,7 +290,7 @@ input files, each output block is prefixed by a `// <path>` marker.
 
 ## `diagram`
 
-Generate a diagram in PlantUML or Mermaid.
+Generate a diagram as Mermaid text (`.mmd`).
 
 ```
 rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]... [--usecase <ID>]... [--diff-base <PATH>]... [--show-description] [--node-kind <KIND>]... [--edge-kind <KIND>]... [--view-preset <PRESET>] [-o <OUT>]
@@ -300,15 +300,15 @@ rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]...
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--kind` | `rdra` \| `boundaryless-graph` \| `er` \| `state` \| `sequence` \| `event-flow` \| `diff` \| `business-area` \| `technical-area` | `rdra` | The diagram kind. `rdra` = RDRA layered graph mapped onto the original four-layer structure; `boundaryless-graph` = dense relationship graph without RDRA layer boundaries; `er` = entity-relationship diagram; `state` = state machine; `sequence` = write-focused sequence diagram with FK-inferred transaction boundaries; `event-flow` = event causality graph showing UC or ExtSystem->Event->UC/BUC/ExtSystem and Event->State chains, plus Timer->UC/BUC edges; `diff` = graph diff between `--diff-base` and current inputs; `business-area` = Actor -> input field -> UseCase; `technical-area` = System boxes containing only APIs and Entities. |
-| `--format` | `puml` \| `svg` \| `png` \| `mermaid` | `puml` | Output format. `puml` writes PlantUML text (`.puml`); `mermaid` writes Mermaid text (`.mmd`); `svg` / `png` render via plantuml.jar. |
+| `--format` | `mermaid` | `mermaid` | Output format. Mermaid text (`.mmd`) is the only one. `puml`, `svg`, and `png` were removed and fail with a message that names `--format mermaid`; to get an image, render the `.mmd` with `mmdc` or any Mermaid-aware tool. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Filter to one or more BUCs by id. With multiple ids, the **union** of reachable nodes across the named BUCs is shown. Applies to all diagram kinds. For `sequence` and `business-area`, only use cases directly contained in the selected BUCs are shown; event-triggered use cases in other BUCs are left to `event-flow`. |
 | `--usecase <id>` | string (repeatable) | — (whole model) | Filter `sequence` or `business-area` diagrams to one or more use cases by id. Cannot be combined with `--buc`. |
 | `--diff-base <path>` | path (repeatable) | — | Baseline model inputs for `--kind diff`. The normal `<INPUTS...>` are treated as the target model. |
-| `--show-description` | flag | off | Render element `description` metadata as diagram annotations where supported. Mermaid emits linked annotation nodes; PlantUML emits `note right of ...` notes. Currently applies to `rdra` and `boundaryless-graph` diagram emitters. |
+| `--show-description` | flag | off | Render element `description` metadata as diagram annotations where supported. Each description becomes a linked annotation node. Currently applies to `rdra` and `boundaryless-graph` diagram emitters. |
 | `--node-kind <kind>` | string (repeatable) | — (all nodes) | Filter graph diagrams to specific node kinds. Applies to `rdra`, `boundaryless-graph`, and `diff`. Examples: `actor`, `buc`, `flow`, `step`, `usecase`, `api`, `entity`, `field`. Alias: `--kind-filter`. |
 | `--edge-kind <kind>` | string (repeatable) | — (all edges) | Filter graph diagrams to specific relation kinds. Applies to `rdra`, `boundaryless-graph`, and `diff`. Examples: `contains`, `invokes`, `reads`, `writes`, `creates`, `maps-field`, `owns`, `relate`. Alias: `--edge-filter`. |
 | `--view-preset <preset>` | `business` \| `system` \| `data` \| `api` \| `ui` | — | Apply a graph filter preset. Explicit `--node-kind` or `--edge-kind` values override the preset for that dimension. |
-| `-o`, `--out` | path | `out` | Output file path. The extension is added automatically based on `--format` (`.puml`, `.mmd`, `.svg`, `.png`). |
+| `-o`, `--out` | path | `out` | Output file path. The `.mmd` extension is added automatically. |
 
 Notes:
 
@@ -356,9 +356,6 @@ Notes:
 - For `--kind boundaryless-graph`, the same relationships are rendered as one flat graph
   for dense link inspection. API nodes are omitted there so the graph stays focused on
   business and data relationships.
-- `--format svg` and `--format png` require plantuml.jar to be discoverable (see
-  [Environment Variables](#environment-variables)). If it cannot be found, the command
-  fails with an error.
 
 ---
 
@@ -370,7 +367,7 @@ Notes:
 holds the output path and the `rdra-ish` command that writes it. CI runs
 `scripts/check-sample-artifacts.sh` after the Rust snapshot tests. The script builds the
 binary once, runs every row, and fails if a tracked file changes. A generator change
-therefore shows up as a diff of Mermaid diagrams, PlantUML diagrams, CSV review tables,
+therefore shows up as a diff of Mermaid diagrams, CSV review tables,
 state-pattern output, and exports such as OpenAPI, AsyncAPI, DBML, and JSON Schema. After
 an intended change, run the script and commit the regenerated files.
 
@@ -416,8 +413,8 @@ rdra-ish export <INPUTS...> [--kind <KIND>] [-o <OUT>] [--instance-count <N>] [-
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `openapi` \| `asyncapi` \| `dbml` \| `json-schema` \| `typescript-states` \| `mermaid-er` \| `plantuml-er` \| `tla` | `openapi` | Export kind. `openapi` emits an OpenAPI 3.0 JSON document from API `method`/`path` metadata and DTO `request` / `response` / `error_response` relations. `asyncapi` emits an AsyncAPI 3.1 event catalog from `event`, `raises`, `triggers`, `transitions`, and `outbox`. `dbml` emits a DBML schema from logical `entity` declarations, indexes, unique constraints, generated FK columns, and `relate` options. `json-schema` emits JSON Schema Draft 2020-12 definitions for DTO and Entity structures. `mermaid-er` and `plantuml-er` emit textual ER review artifacts from the same logical data model projection used by `diagram --kind er`. `tla` emits a TLA+ module plus TLC config from entity lifecycles and state constraints (see [formal-verification.md](./formal-verification.md)). |
-| `-o`, `--out` | path | `out` | Output file path. If no extension is given, `openapi.json`, `asyncapi.json`, `schema.dbml`, `json-schema.json`, `er.mmd`, `er.puml`, or `RdraSpec.tla` (with sibling `.cfg`) is used. For `--kind tla`, a path ending in `.tla` uses that file stem as the TLA+ module name (sibling `.cfg`). |
+| `--kind` | `openapi` \| `asyncapi` \| `dbml` \| `json-schema` \| `typescript-states` \| `mermaid-er` \| `tla` | `openapi` | Export kind. `openapi` emits an OpenAPI 3.0 JSON document from API `method`/`path` metadata and DTO `request` / `response` / `error_response` relations. `asyncapi` emits an AsyncAPI 3.1 event catalog from `event`, `raises`, `triggers`, `transitions`, and `outbox`. `dbml` emits a DBML schema from logical `entity` declarations, indexes, unique constraints, generated FK columns, and `relate` options. `json-schema` emits JSON Schema Draft 2020-12 definitions for DTO and Entity structures. `mermaid-er` emits a textual ER review artifact from the same logical data model projection used by `diagram --kind er`. `tla` emits a TLA+ module plus TLC config from entity lifecycles and state constraints (see [formal-verification.md](./formal-verification.md)). |
+| `-o`, `--out` | path | `out` | Output file path. If no extension is given, `openapi.json`, `asyncapi.json`, `schema.dbml`, `json-schema.json`, `er.mmd`, or `RdraSpec.tla` (with sibling `.cfg`) is used. For `--kind tla`, a path ending in `.tla` uses that file stem as the TLA+ module name (sibling `.cfg`). |
 | `--instance-count` | unsigned integer | `2` | TLA+ only: multi-instance `InstanceCount` (`1..=255`). Value `1` is accepted with a warning (singleton ids cannot distinguish multi-entity instances). |
 | `--int-range-max` | unsigned integer | `5` | TLA+ only: upper bound for `IntRange == 0..N` (`1..=255`; `0` is rejected). |
 
@@ -452,9 +449,9 @@ shape is represented with JSON Schema keywords; RDRA-specific metadata such as P
 FK, indexes, checks, soft delete, history, tenant scope, and derived expressions is
 preserved with `x-rdra-ish-*` extensions.
 
-For Mermaid ER and PlantUML ER export, the output is intentionally the same text-level
-review artifact as `diagram --kind er --format mermaid` or
-`diagram --kind er --format puml`. Use `diagram` when choosing a diagram view during
+For Mermaid ER export, the output is intentionally the same text-level
+review artifact as `diagram --kind er`. `plantuml-er` was removed and fails with a
+message that names `mermaid-er`. Use `diagram` when choosing a diagram view during
 interactive review; use `export` when a downstream tool or CI job expects a named
 artifact kind.
 
@@ -618,14 +615,6 @@ each deadlock, and each use case the run does not decide (a capped cone, or `--b
 leaves use cases out). With `--format json`, each pattern
 carries a `witness`: a shortest path to the first state that holds it, as `start` and
 `steps` objects with sites (see [Output formats](./state-derivation.md#output-formats)).
-
----
-
-## Environment Variables
-
-| Variable | Description |
-|---|---|
-| `PLANTUML_JAR` | Path to `plantuml.jar`. Required when rendering `--format svg` or `--format png` with the `diagram` subcommand. The renderer discovers the jar from this variable; if it is unset or the jar is not found, SVG/PNG rendering fails with `failed to find plantuml.jar`. |
 
 ---
 

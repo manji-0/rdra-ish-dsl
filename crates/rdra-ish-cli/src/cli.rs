@@ -1,5 +1,65 @@
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::builder::{PossibleValue, TypedValueParser};
+use clap::error::ErrorKind;
+use clap::{Arg, Args, Command, Parser, Subcommand, ValueEnum};
+use std::ffi::OsStr;
+use std::marker::PhantomData;
 use std::path::PathBuf;
+
+/// Parses a `ValueEnum`, and answers a value the CLI no longer accepts with what to use
+/// instead rather than clap's generic "invalid value".
+#[derive(Clone)]
+pub(crate) struct WithRemoved<E> {
+    /// Each removed value with the hint that follows "is no longer supported;".
+    removed: &'static [(&'static str, &'static str)],
+    values: PhantomData<E>,
+}
+
+impl<E> WithRemoved<E> {
+    pub(crate) const fn new(removed: &'static [(&'static str, &'static str)]) -> Self {
+        Self {
+            removed,
+            values: PhantomData,
+        }
+    }
+}
+
+impl<E: ValueEnum + Clone + Send + Sync + 'static> TypedValueParser for WithRemoved<E> {
+    type Value = E;
+
+    fn parse_ref(&self, cmd: &Command, arg: Option<&Arg>, value: &OsStr) -> Result<E, clap::Error> {
+        let removed = value
+            .to_str()
+            .and_then(|value| self.removed.iter().find(|(name, _)| *name == value));
+        if let Some((name, hint)) = removed {
+            let flag = arg.and_then(Arg::get_long).unwrap_or_default();
+            return Err(clap::Error::raw(
+                ErrorKind::InvalidValue,
+                format!("`--{flag} {name}` is no longer supported; {hint}\n"),
+            )
+            .with_cmd(cmd));
+        }
+        clap::builder::EnumValueParser::<E>::new().parse_ref(cmd, arg, value)
+    }
+
+    fn possible_values(&self) -> Option<Box<dyn Iterator<Item = PossibleValue> + '_>> {
+        Some(Box::new(
+            E::value_variants()
+                .iter()
+                .filter_map(ValueEnum::to_possible_value),
+        ))
+    }
+}
+
+const MERMAID_ONLY: &str = "rdra-ish writes Mermaid only (`.mmd`). Drop `--format` (Mermaid is the default) or pass `--format mermaid`; to get an image, render the `.mmd` with `mmdc` or hand it to a tool that draws Mermaid";
+
+const REMOVED_FORMATS: &[(&str, &str)] = &[
+    ("puml", MERMAID_ONLY),
+    ("svg", MERMAID_ONLY),
+    ("png", MERMAID_ONLY),
+];
+
+const REMOVED_EXPORT_KINDS: &[(&str, &str)] =
+    &[("plantuml-er", "use `--kind mermaid-er` (writes `er.mmd`)")];
 
 #[derive(ValueEnum, Clone)]
 pub(crate) enum ListKind {
@@ -56,15 +116,15 @@ pub(crate) enum Commands {
         #[command(flatten)]
         scope: ScopeArgs,
     },
-    /// Generate diagram (PlantUML or Mermaid)
+    /// Generate a Mermaid diagram (.mmd)
     Diagram {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
         /// Diagram kind: rdra, boundaryless-graph, er, state, sequence, event-flow, diff, business-area, or technical-area
         #[arg(long, default_value = "rdra")]
         kind: DiagramKind,
-        /// Output format: puml, svg, png, or mermaid (mermaid outputs .mmd text only)
-        #[arg(long, default_value = "puml")]
+        /// Output format: mermaid, the only one (writes <out>.mmd)
+        #[arg(long, default_value = "mermaid", value_parser = WithRemoved::<OutputFormat>::new(REMOVED_FORMATS))]
         format: OutputFormat,
         /// Filter to one or more BUCs (by id); repeatable (e.g. --buc A --buc B).
         /// The union of scoped nodes across all specified BUCs is shown.
@@ -143,8 +203,8 @@ pub(crate) enum Commands {
     Export {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Export kind: openapi, asyncapi, dbml, json-schema, typescript-states, mermaid-er, plantuml-er, or tla
-        #[arg(long, default_value = "openapi")]
+        /// Export kind: openapi, asyncapi, dbml, json-schema, typescript-states, mermaid-er, or tla
+        #[arg(long, default_value = "openapi", value_parser = WithRemoved::<ExportKind>::new(REMOVED_EXPORT_KINDS))]
         kind: ExportKind,
         #[arg(short, long, default_value = "out")]
         out: PathBuf,
@@ -246,11 +306,8 @@ pub(crate) enum DiagramViewPreset {
     Ui,
 }
 
-#[derive(ValueEnum, Clone, PartialEq)]
+#[derive(ValueEnum, Clone)]
 pub(crate) enum OutputFormat {
-    Puml,
-    Svg,
-    Png,
     Mermaid,
 }
 
@@ -272,7 +329,6 @@ pub(crate) enum ExportKind {
     #[value(alias = "typescript-states")]
     TypeScriptStates,
     MermaidEr,
-    PlantumlEr,
     /// TLA+ / TLC specification (writes companion `.cfg` next to `.tla`)
     Tla,
 }
@@ -608,25 +664,6 @@ mod tests {
             "export",
             "sample.rdra",
             "--kind",
-            "plantuml-er",
-            "--out",
-            "er.puml",
-        ])
-        .unwrap();
-
-        match cli.command {
-            Commands::Export { kind, out, .. } => {
-                assert!(matches!(kind, ExportKind::PlantumlEr));
-                assert_eq!(out, PathBuf::from("er.puml"));
-            }
-            _ => panic!("expected export command"),
-        }
-
-        let cli = Cli::try_parse_from([
-            "rdra-ish",
-            "export",
-            "sample.rdra",
-            "--kind",
             "tla",
             "--out",
             "/tmp/rdra-tla",
@@ -705,5 +742,37 @@ mod tests {
             }
             _ => panic!("expected states command"),
         }
+    }
+
+    fn parse_error(args: &[&str]) -> String {
+        match Cli::try_parse_from(args) {
+            Ok(_) => panic!("{args:?} parsed"),
+            Err(error) => error.to_string(),
+        }
+    }
+
+    #[test]
+    fn removed_plantuml_values_name_their_replacement() {
+        for format in ["puml", "svg", "png"] {
+            let message = parse_error(&["rdra-ish", "diagram", "m.rdra", "--format", format]);
+            assert!(
+                message.contains(&format!("`--format {format}` is no longer supported"))
+                    && message.contains("`--format mermaid`"),
+                "{message}"
+            );
+        }
+        let message = parse_error(&["rdra-ish", "export", "m.rdra", "--kind", "plantuml-er"]);
+        assert!(
+            message.contains("`--kind plantuml-er` is no longer supported")
+                && message.contains("`--kind mermaid-er`"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn an_unknown_value_keeps_the_generic_error() {
+        let message = parse_error(&["rdra-ish", "diagram", "m.rdra", "--format", "gif"]);
+        assert!(message.contains("invalid value 'gif'"), "{message}");
+        assert!(message.contains("[possible values: mermaid]"), "{message}");
     }
 }

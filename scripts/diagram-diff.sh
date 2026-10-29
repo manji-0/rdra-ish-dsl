@@ -74,7 +74,7 @@ dump() { # label bin: one file per cell under $work/LABEL, numbered in run order
       echo "exit=$rc"
       printf '%s\n' "$text"
       local f
-      for f in "$outdir/out.puml" "$outdir/out.mmd"; do
+      for f in "$outdir/out.mmd"; do
         [[ -f "$f" ]] && { echo "--- ${f##*/}"; cat "$f"; }
       done
     } | sed -e "s|$repo_root/||g" -e "s|$outdir|OUT|g" >"$out_file"

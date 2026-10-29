@@ -4,6 +4,15 @@
 
 ### Breaking
 
+- `diagram` writes Mermaid text (`.mmd`) only, and `--format` defaults to `mermaid` (was
+  `puml`). `--format puml`, `--format svg`, and `--format png` are removed and fail with
+  a message that names `--format mermaid`; a `diagram` command without `--format` now
+  writes `<out>.mmd` instead of `<out>.puml`. To get an image, render the `.mmd` with
+  Mermaid CLI (`mmdc`) or another Mermaid-aware tool. `export --kind plantuml-er` is
+  removed and fails with a message that names `--kind mermaid-er`. The `rdra-ish-render`
+  crate, the `rdra_ish_emit::plantuml` module, `DiffPlantUmlEmitter`, the
+  `plantuml.jar` lookup, and `PLANTUML_JAR` are gone, as are the 15 `samples/*/out/*.puml`
+  artifacts. The dev shell no longer provides PlantUML or OpenSSL.
 - `verify` checks each temporal property in its own TLC run, because TLC does not name the
   property a temporal counterexample violates. The runs use the module
   `<whole>_<Property>` (`RdraSpec_NeverShipped`), the same module text and fairness as the

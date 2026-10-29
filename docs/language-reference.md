@@ -835,7 +835,7 @@ bin_shelf) > Bin.(site, shelf)`. JSON Schema marks each key column with
 `x-rdra-ish-foreign-key` and `x-rdra-ish-fk-target`, adds `x-rdra-ish-fk-target-column`
 to the columns of a composite key, `x-rdra-ish-fk-role` to a key with an explicit
 `.role`, and `x-rdra-ish-fk-min-children: 1` to the child column of a key whose card has
-a minimum of 1. The Mermaid and PlantUML ER diagrams draw that child end as one-or-more.
+a minimum of 1. The Mermaid ER diagram draws that child end as one-or-more.
 DBML and the entity CSVs have no notation for a minimum.
 
 ### Variations

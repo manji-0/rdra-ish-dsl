@@ -5,29 +5,23 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use rdra_ish_core::SemanticModel;
 use rdra_ish_emit::{
-    diff::{DiffMermaidEmitter, DiffPlantUmlEmitter},
+    diff::DiffMermaidEmitter,
     mermaid::{
         BusinessAreaMermaidEmitter, ErMermaidEmitter, EventFlowMermaidEmitter,
         ObjectGraphMermaidEmitter, RdraMermaidEmitter, SequenceMermaidEmitter, StateMermaidEmitter,
         TechnicalAreaMermaidEmitter,
     },
-    plantuml::{
-        BusinessAreaPlantUmlEmitter, ErPlantUmlEmitter, EventFlowPlantUmlEmitter,
-        ObjectGraphPlantUmlEmitter, RdraPlantUmlEmitter, SequenceDiagramEmitter,
-        StateDiagramEmitter, TechnicalAreaPlantUmlEmitter,
-    },
     unknown_diagram_filter_kinds, Emitter, Filter, Scope, View,
 };
 use std::fs;
 
-use crate::cli::{DiagramKind, DiagramViewPreset, OutputFormat};
+use crate::cli::{DiagramKind, DiagramViewPreset};
 use crate::list_output::{note_state_errors, reject_state_errors};
 use crate::load::{diagram_preset_filters, load_model, reject_model_errors};
 
 pub struct DiagramRequest {
     pub inputs: Vec<PathBuf>,
     pub kind: DiagramKind,
-    pub format: OutputFormat,
     pub buc: Vec<String>,
     pub usecase: Vec<String>,
     pub diff_base: Vec<PathBuf>,
@@ -42,7 +36,6 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
     let DiagramRequest {
         inputs,
         kind,
-        format,
         buc,
         usecase,
         diff_base,
@@ -175,40 +168,11 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
         }
     }
 
-    let diagram_text = emit_diagram(&model, &kind, &format, &view, &diff_base)?;
-
-    match format {
-        OutputFormat::Puml => {
-            let out_path = out.with_extension("puml");
-            fs::write(&out_path, &diagram_text)
-                .with_context(|| format!("failed to write {}", out_path.display()))?;
-            println!("wrote {}", out_path.display());
-        }
-        OutputFormat::Mermaid => {
-            let out_path = out.with_extension("mmd");
-            fs::write(&out_path, &diagram_text)
-                .with_context(|| format!("failed to write {}", out_path.display()))?;
-            println!("wrote {}", out_path.display());
-        }
-        OutputFormat::Svg => {
-            use rdra_ish_render::{render_to_file, PlantumlCliRenderer, RenderFormat};
-            let renderer =
-                PlantumlCliRenderer::discover().context("failed to find plantuml.jar")?;
-            let out_path = out.with_extension("svg");
-            render_to_file(&renderer, &diagram_text, &out_path, RenderFormat::Svg)
-                .context("plantuml rendering failed")?;
-            println!("wrote {}", out_path.display());
-        }
-        OutputFormat::Png => {
-            use rdra_ish_render::{render_to_file, PlantumlCliRenderer, RenderFormat};
-            let renderer =
-                PlantumlCliRenderer::discover().context("failed to find plantuml.jar")?;
-            let out_path = out.with_extension("png");
-            render_to_file(&renderer, &diagram_text, &out_path, RenderFormat::Png)
-                .context("plantuml rendering failed")?;
-            println!("wrote {}", out_path.display());
-        }
-    }
+    let diagram_text = emit_diagram(&model, &kind, &view, &diff_base)?;
+    let out_path = out.with_extension("mmd");
+    fs::write(&out_path, &diagram_text)
+        .with_context(|| format!("failed to write {}", out_path.display()))?;
+    println!("wrote {}", out_path.display());
 
     Ok(())
 }
@@ -216,42 +180,23 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
 fn emit_diagram(
     model: &SemanticModel,
     kind: &DiagramKind,
-    format: &OutputFormat,
     view: &View,
     diff_base: &[PathBuf],
 ) -> Result<String> {
-    match format {
-        OutputFormat::Mermaid => match kind {
-            DiagramKind::Rdra => Ok(ObjectGraphMermaidEmitter.emit(model, view)?),
-            DiagramKind::BoundarylessGraph => Ok(RdraMermaidEmitter.emit(model, view)?),
-            DiagramKind::Er => Ok(ErMermaidEmitter.emit(model, view)?),
-            DiagramKind::State => Ok(StateMermaidEmitter.emit(model, view)?),
-            DiagramKind::Sequence => Ok(SequenceMermaidEmitter.emit(model, view)?),
-            DiagramKind::EventFlow => Ok(EventFlowMermaidEmitter.emit(model, view)?),
-            DiagramKind::Diff => {
-                let (program, base_model, diags) = load_model(diff_base)?;
-                reject_model_errors(&program, &diags)?;
-                reject_state_errors(&program, &base_model)?;
-                Ok(DiffMermaidEmitter { base: &base_model }.emit_diff(model, view)?)
-            }
-            DiagramKind::BusinessArea => Ok(BusinessAreaMermaidEmitter.emit(model, view)?),
-            DiagramKind::TechnicalArea => Ok(TechnicalAreaMermaidEmitter.emit(model, view)?),
-        },
-        _ => match kind {
-            DiagramKind::Rdra => Ok(ObjectGraphPlantUmlEmitter.emit(model, view)?),
-            DiagramKind::BoundarylessGraph => Ok(RdraPlantUmlEmitter.emit(model, view)?),
-            DiagramKind::Er => Ok(ErPlantUmlEmitter.emit(model, view)?),
-            DiagramKind::State => Ok(StateDiagramEmitter.emit(model, view)?),
-            DiagramKind::Sequence => Ok(SequenceDiagramEmitter.emit(model, view)?),
-            DiagramKind::EventFlow => Ok(EventFlowPlantUmlEmitter.emit(model, view)?),
-            DiagramKind::Diff => {
-                let (program, base_model, diags) = load_model(diff_base)?;
-                reject_model_errors(&program, &diags)?;
-                reject_state_errors(&program, &base_model)?;
-                Ok(DiffPlantUmlEmitter { base: &base_model }.emit_diff(model, view)?)
-            }
-            DiagramKind::BusinessArea => Ok(BusinessAreaPlantUmlEmitter.emit(model, view)?),
-            DiagramKind::TechnicalArea => Ok(TechnicalAreaPlantUmlEmitter.emit(model, view)?),
-        },
+    match kind {
+        DiagramKind::Rdra => Ok(ObjectGraphMermaidEmitter.emit(model, view)?),
+        DiagramKind::BoundarylessGraph => Ok(RdraMermaidEmitter.emit(model, view)?),
+        DiagramKind::Er => Ok(ErMermaidEmitter.emit(model, view)?),
+        DiagramKind::State => Ok(StateMermaidEmitter.emit(model, view)?),
+        DiagramKind::Sequence => Ok(SequenceMermaidEmitter.emit(model, view)?),
+        DiagramKind::EventFlow => Ok(EventFlowMermaidEmitter.emit(model, view)?),
+        DiagramKind::Diff => {
+            let (program, base_model, diags) = load_model(diff_base)?;
+            reject_model_errors(&program, &diags)?;
+            reject_state_errors(&program, &base_model)?;
+            Ok(DiffMermaidEmitter { base: &base_model }.emit_diff(model, view)?)
+        }
+        DiagramKind::BusinessArea => Ok(BusinessAreaMermaidEmitter.emit(model, view)?),
+        DiagramKind::TechnicalArea => Ok(TechnicalAreaMermaidEmitter.emit(model, view)?),
     }
 }

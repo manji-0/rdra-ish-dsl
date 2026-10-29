@@ -1,7 +1,4 @@
-//! Mermaid emitters: RDRA全体図、ER図、状態遷移図。
-//!
-//! plantuml.rs と同じ3エミッタをMermaid記法で出力する。
-//! ヘルパー関数 (node_id / node_label / col_type_str) は plantuml モジュールから再利用。
+//! Mermaid emitters: RDRA全体図、ER図、状態遷移図、sequence図、event-flow図。
 
 use crate::diagram_common::{
     business_actor_node_id, business_input_node_id, business_input_visible,
@@ -1319,10 +1316,6 @@ relate(Order, Customer, N:1)
             "{mermaid}"
         );
         assert!(mermaid.contains("  Order ||--|{ Tag : \"\"\n"), "{mermaid}");
-        let puml = crate::plantuml::ErPlantUmlEmitter
-            .emit(&model, &View::er())
-            .unwrap();
-        assert!(puml.contains("Line }|--|| Order : \"\"\n"), "{puml}");
     }
 
     #[test]

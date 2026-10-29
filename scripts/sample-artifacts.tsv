@@ -131,26 +131,18 @@ samples/ec-site/out/actors.actor.csv	csv samples/ec-site --kind actor
 samples/ec-site/out/api_matrix.csv	csv samples/ec-site --kind api-matrix
 samples/ec-site/out/entities.entity.csv	csv samples/ec-site --kind entity
 samples/ec-site/out/er.mmd	diagram samples/ec-site --kind er --format mermaid
-samples/ec-site/out/er.puml	diagram samples/ec-site --kind er --format puml
 samples/ec-site/out/matrix.matrix.csv	csv samples/ec-site --kind matrix
 samples/ec-site/out/object_graph_buc_bucorder.mmd	diagram samples/ec-site --kind rdra --format mermaid --buc BucOrder
 samples/ec-site/out/rdra_buc_buccart.mmd	diagram samples/ec-site --kind rdra --format mermaid --buc BucCart
 samples/ec-site/out/rdra_buc_bucpayment.mmd	diagram samples/ec-site --kind rdra --format mermaid --buc BucPayment
-samples/ec-site/out/rdra_buc_cart.puml	diagram samples/ec-site --kind rdra --format puml --buc BucCart
-samples/ec-site/out/rdra_buc_order.puml	diagram samples/ec-site --kind rdra --format puml --buc BucOrder
-samples/ec-site/out/rdra_buc_payment.puml	diagram samples/ec-site --kind rdra --format puml --buc BucPayment
 samples/ec-site/out/rdra_whole.mmd	diagram samples/ec-site --kind rdra --format mermaid
-samples/ec-site/out/rdra_whole.puml	diagram samples/ec-site --kind rdra --format puml
-samples/ec-site/out/sequence.puml	diagram samples/ec-site --kind sequence --format puml
 samples/ec-site/out/sequence_buc_bucorder.mmd	diagram samples/ec-site --kind sequence --format mermaid --buc BucOrder
 samples/ec-site/out/state.mmd	diagram samples/ec-site --kind state --format mermaid
-samples/ec-site/out/state.puml	diagram samples/ec-site --kind state --format puml
 samples/ec-site/out/states.csv	states samples/ec-site --format csv
 samples/incremental-order/step-6-business-rules/out/actor_permission_audit.csv	csv samples/incremental-order/step-6-business-rules/src --kind actor-permission-audit
 samples/incremental-order/step-6-business-rules/out/api_matrix.csv	csv samples/incremental-order/step-6-business-rules/src --kind api-matrix
 samples/incremental-order/step-6-business-rules/out/asyncapi.json	export samples/incremental-order/step-6-business-rules/src --kind asyncapi
 samples/incremental-order/step-6-business-rules/out/er.mmd	diagram samples/incremental-order/step-6-business-rules/src --kind er --format mermaid
-samples/incremental-order/step-6-business-rules/out/er.puml	diagram samples/incremental-order/step-6-business-rules/src --kind er --format puml
 samples/incremental-order/step-6-business-rules/out/json-schema.json	export samples/incremental-order/step-6-business-rules/src --kind json-schema
 samples/incremental-order/step-6-business-rules/out/object_graph_buc_store_restock.mmd	diagram samples/incremental-order/step-6-business-rules/src --kind rdra --format mermaid --buc BucStoreRestock
 samples/incremental-order/step-6-business-rules/out/schema.dbml	export samples/incremental-order/step-6-business-rules/src --kind dbml
@@ -163,17 +155,10 @@ samples/personal-info/out/actors.actor.csv	csv samples/personal-info --kind acto
 samples/personal-info/out/api_matrix.csv	csv samples/personal-info --kind api-matrix
 samples/personal-info/out/entities.entity.csv	csv samples/personal-info --kind entity
 samples/personal-info/out/er.mmd	diagram samples/personal-info --kind er --format mermaid
-samples/personal-info/out/er.puml	diagram samples/personal-info --kind er --format puml
 samples/personal-info/out/matrix.matrix.csv	csv samples/personal-info --kind matrix
 samples/personal-info/out/rdra_buc_buccard.mmd	diagram samples/personal-info --kind rdra --format mermaid --buc BucCard
 samples/personal-info/out/rdra_buc_bucpassword.mmd	diagram samples/personal-info --kind rdra --format mermaid --buc BucPassword
 samples/personal-info/out/rdra_buc_bucprofile.mmd	diagram samples/personal-info --kind rdra --format mermaid --buc BucProfile
-samples/personal-info/out/rdra_buc_card.puml	diagram samples/personal-info --kind rdra --format puml --buc BucCard
-samples/personal-info/out/rdra_buc_password.puml	diagram samples/personal-info --kind rdra --format puml --buc BucPassword
-samples/personal-info/out/rdra_buc_profile.puml	diagram samples/personal-info --kind rdra --format puml --buc BucProfile
 samples/personal-info/out/rdra_whole.mmd	diagram samples/personal-info --kind rdra --format mermaid
-samples/personal-info/out/rdra_whole.puml	diagram samples/personal-info --kind rdra --format puml
-samples/personal-info/out/sequence.puml	diagram samples/personal-info --kind sequence --format puml
 samples/personal-info/out/state.mmd	diagram samples/personal-info --kind state --format mermaid
-samples/personal-info/out/state.puml	diagram samples/personal-info --kind state --format puml
 samples/personal-info/out/states.csv	states samples/personal-info --format csv

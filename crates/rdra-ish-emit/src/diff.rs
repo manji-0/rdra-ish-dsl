@@ -61,21 +61,10 @@ pub struct DiffMermaidEmitter<'a> {
     pub base: &'a SemanticModel,
 }
 
-pub struct DiffPlantUmlEmitter<'a> {
-    pub base: &'a SemanticModel,
-}
-
 impl DiffMermaidEmitter<'_> {
     pub fn emit_diff(&self, target: &SemanticModel, view: &View) -> Result<String, EmitError> {
         let diff = graph_diff(self.base, target, view);
         Ok(mermaid_document(&diff))
-    }
-}
-
-impl DiffPlantUmlEmitter<'_> {
-    pub fn emit_diff(&self, target: &SemanticModel, view: &View) -> Result<String, EmitError> {
-        let diff = graph_diff(self.base, target, view);
-        Ok(plantuml_document(&diff))
     }
 }
 
@@ -245,42 +234,6 @@ fn mermaid_document(diff: &GraphDiff) -> String {
     out
 }
 
-fn plantuml_document(diff: &GraphDiff) -> String {
-    let mut out = String::from("@startuml\n");
-    out.push_str("skinparam shadowing false\n");
-    out.push_str("skinparam defaultTextAlignment center\n");
-    if diff.nodes.is_empty() && diff.edges.is_empty() {
-        out.push_str("rectangle \"No model graph differences\" as no_changes #F8FAFC\n");
-    }
-    for node in &diff.nodes {
-        out.push_str(&format!(
-            "rectangle \"{}\" as {} {}\n",
-            plantuml_label(&node_label_text(&node.info)),
-            plantuml_node_id(&node.info.key),
-            plantuml_color(node.status)
-        ));
-    }
-    for edge in &diff.edges {
-        let marker = match edge.status {
-            DiffStatus::Added => "+",
-            DiffStatus::Removed => "-",
-            DiffStatus::Changed | DiffStatus::Context => "~",
-        };
-        out.push_str(&format!(
-            "{} ..> {} : {} {}\n",
-            plantuml_node_id(&edge.key.from),
-            plantuml_node_id(&edge.key.to),
-            marker,
-            edge.key.label
-        ));
-    }
-    out.push_str("legend right\n");
-    out.push_str("|<#dcfce7> added |<#fee2e2> removed |<#fef3c7> changed label |\n");
-    out.push_str("endlegend\n");
-    out.push_str("@enduml\n");
-    out
-}
-
 fn node_label_text(info: &NodeInfo) -> String {
     if info.label == info.key.id {
         format!("{}::{}", info.key.kind, info.key.id)
@@ -295,15 +248,6 @@ fn status_class(status: DiffStatus) -> &'static str {
         DiffStatus::Removed => "removed",
         DiffStatus::Changed => "changed",
         DiffStatus::Context => "context",
-    }
-}
-
-fn plantuml_color(status: DiffStatus) -> &'static str {
-    match status {
-        DiffStatus::Added => "#DCFCE7",
-        DiffStatus::Removed => "#FEE2E2",
-        DiffStatus::Changed => "#FEF3C7",
-        DiffStatus::Context => "#F8FAFC",
     }
 }
 
@@ -327,10 +271,6 @@ fn mermaid_node_id(key: &NodeKey) -> String {
     format!("n_{}", stable_ident(&format!("{}_{}", key.kind, key.id)))
 }
 
-fn plantuml_node_id(key: &NodeKey) -> String {
-    format!("N_{}", stable_ident(&format!("{}_{}", key.kind, key.id)))
-}
-
 fn stable_ident(value: &str) -> String {
     let mut ident = String::new();
     for ch in value.chars() {
@@ -352,10 +292,6 @@ fn mermaid_label(value: &str) -> String {
         .replace('"', "#quot;")
         .replace('\n', "<br/>")
         .replace('\\', " ")
-}
-
-fn plantuml_label(value: &str) -> String {
-    value.replace('"', "\\\"")
 }
 
 #[cfg(test)]
@@ -411,7 +347,7 @@ writes(Browse, Cart)
         let base = model_from(r#"actor Customer "Customer""#);
         let target = model_from(r#"actor Customer "Customer""#);
 
-        let out = DiffPlantUmlEmitter { base: &base }
+        let out = DiffMermaidEmitter { base: &base }
             .emit_diff(&target, &View::whole())
             .unwrap();
 

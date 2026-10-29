@@ -1,4 +1,4 @@
-//! rdra-emit: RDRA output emitters (PlantUML, CSV, Mermaid).
+//! rdra-emit: RDRA output emitters (Mermaid, CSV, and the contract exports).
 
 pub mod asyncapi;
 pub mod csv;
@@ -8,7 +8,6 @@ pub mod diff;
 pub mod json_schema;
 pub mod mermaid;
 pub mod openapi;
-pub mod plantuml;
 pub mod state_pattern;
 pub mod tla;
 pub mod typescript;
@@ -235,7 +234,7 @@ pub(crate) fn object_graph_rel_label(kind: &RelKind) -> &'static str {
     }
 }
 
-/// The crow's-foot edge Mermaid and PlantUML ER diagrams draw for a relate, `from` on the
+/// The crow's-foot edge the Mermaid ER diagram draws for a relate, `from` on the
 /// left. The child end is `o{` / `}o` (zero or more), or `|{` / `}|` under a child-side
 /// minimum (`1..*`); a 1:1 draws `||` on both ends either way.
 pub(crate) fn er_glyph(model: &SemanticModel, relation: usize) -> Option<&'static str> {

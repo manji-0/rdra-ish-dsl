@@ -18,10 +18,9 @@ bash scripts/check-sample-artifacts.sh
 The same command runs in CI, so intentional emitter or DSL changes should appear as a
 normal diff under `samples/incremental-order/step-6-business-rules/out/`.
 
-CI snapshots the text-level diagram artifacts (`.mmd` and `.puml`) rather than rendered
-PNG/SVG images. PNG/SVG rendering depends on external renderers such as Mermaid CLI or
-`plantuml.jar`; keep those outputs as local review conveniences until the renderer
-toolchain is pinned in CI.
+CI snapshots the Mermaid text (`.mmd`), the only diagram format `rdra-ish` writes.
+An image is a rendering of that text by an external tool such as Mermaid CLI (`mmdc`);
+keep rendered images as local review conveniences.
 
 ## RDRA Layered Graph
 

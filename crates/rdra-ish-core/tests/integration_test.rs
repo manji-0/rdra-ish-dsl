@@ -1,7 +1,7 @@
 use rdra_ish_core::{build_merged_model, resolve, RdraError};
 use rdra_ish_emit::{
     csv::{EntityListCsvEmitter, RelationMatrixCsvEmitter},
-    plantuml::{ErPlantUmlEmitter, RdraPlantUmlEmitter, StateDiagramEmitter},
+    mermaid::{ErMermaidEmitter, ObjectGraphMermaidEmitter, StateMermaidEmitter},
     Emitter, View,
 };
 use std::path::PathBuf;
@@ -93,22 +93,22 @@ fn test_buc_diagram() {
 
     // Purchase BUC に絞った図を生成
     let view = View::bucs(vec!["Purchase".to_string()]);
-    let puml = RdraPlantUmlEmitter.emit(&model, &view).unwrap();
+    let mermaid = ObjectGraphMermaidEmitter.emit(&model, &view).unwrap();
 
     // Purchase BUC に関連する Customer と Browse は含まれる
     assert!(
-        puml.contains("Customer"),
-        "Customer should be visible in Purchase BUC diagram:\n{puml}"
+        mermaid.contains("Customer"),
+        "Customer should be visible in Purchase BUC diagram:\n{mermaid}"
     );
     assert!(
-        puml.contains("Browse"),
-        "Browse should be visible in Purchase BUC diagram:\n{puml}"
+        mermaid.contains("Browse"),
+        "Browse should be visible in Purchase BUC diagram:\n{mermaid}"
     );
 
     // Staff は Purchase BUC に関連しないので含まれない
     assert!(
-        !puml.contains("Staff"),
-        "Staff should NOT be visible in Purchase BUC diagram:\n{puml}"
+        !mermaid.contains("Staff"),
+        "Staff should NOT be visible in Purchase BUC diagram:\n{mermaid}"
     );
 }
 
@@ -191,29 +191,28 @@ fn test_state_diagram() {
     );
 
     let view = View::whole();
-    let puml = StateDiagramEmitter.emit(&model, &view).unwrap();
+    let mermaid = StateMermaidEmitter.emit(&model, &view).unwrap();
 
     assert!(
-        puml.contains("@startuml"),
-        "should start with @startuml:\n{puml}"
+        mermaid.starts_with("stateDiagram-v2\n"),
+        "should start with stateDiagram-v2:\n{mermaid}"
     );
     assert!(
-        puml.contains("[*] -->"),
-        "should have initial state:\n{puml}"
+        mermaid.contains("[*] -->"),
+        "should have initial state:\n{mermaid}"
     );
     assert!(
-        puml.contains("Order_draft"),
-        "Order_draft state should appear:\n{puml}"
+        mermaid.contains("Order_draft"),
+        "Order_draft state should appear:\n{mermaid}"
     );
     assert!(
-        puml.contains("Order_paid"),
-        "Order_paid state should appear:\n{puml}"
+        mermaid.contains("Order_paid"),
+        "Order_paid state should appear:\n{mermaid}"
     );
     assert!(
-        puml.contains("Order_shipped"),
-        "Order_shipped state should appear:\n{puml}"
+        mermaid.contains("Order_shipped"),
+        "Order_shipped state should appear:\n{mermaid}"
     );
-    assert!(puml.contains("@enduml"), "should end with @enduml:\n{puml}");
 }
 
 #[test]
@@ -282,8 +281,8 @@ fn test_purchase_fixture_er_snapshot() {
     );
 
     let view = View::er();
-    let puml = ErPlantUmlEmitter.emit(&model, &view).unwrap();
-    insta::assert_snapshot!(puml);
+    let mermaid = ErMermaidEmitter.emit(&model, &view).unwrap();
+    insta::assert_snapshot!(mermaid);
 }
 
 #[test]

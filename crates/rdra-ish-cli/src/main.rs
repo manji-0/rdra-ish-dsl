@@ -105,7 +105,7 @@ fn main() -> Result<()> {
         Commands::Diagram {
             inputs,
             kind,
-            format,
+            format: _,
             buc,
             usecase,
             diff_base,
@@ -117,7 +117,6 @@ fn main() -> Result<()> {
         } => run_diagram(DiagramRequest {
             inputs,
             kind,
-            format,
             buc,
             usecase,
             diff_base,

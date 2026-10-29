@@ -66,18 +66,14 @@
               ];
             })
             pkgs.cargo-insta
-            # openssl-sys (rdra-ish-render `kroki` feature, built by --all-features)
-            pkgs.pkg-config
-            pkgs.openssl
 
             # Python packaging (maturin bin bindings, uv publish flow)
             pkgs.maturin
             pkgs.uv
             pkgs.python3
 
-            # Rendering and formal verification
+            # Formal verification (TLC)
             pkgs.jdk17_headless
-            pkgs.plantuml
             pkgs.tlaplus
 
             # VS Code extension (editors/vscode)
@@ -89,7 +85,6 @@
           ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.time ];
 
           JAVA_HOME = "${pkgs.jdk17_headless}";
-          PLANTUML_JAR = "${pkgs.plantuml}/lib/plantuml.jar";
         };
       });
 

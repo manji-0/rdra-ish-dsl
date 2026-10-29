@@ -29,7 +29,7 @@ the selected view.
 | Lifecycle and event causality | `state --buc <BucId>` plus `event-flow` | `references/lifecycle-and-events.md` |
 | Business rules or state constraints | `check` (rule counterexamples, unreached and stuck states), then `states` | `references/lifecycle-and-events.md` |
 | Temporal `property` and rules that need two instances | Prefer skill `rdra-ish-verify` (`verify`) | `references/lifecycle-and-events.md` |
-| Output format/rendering choice | Mermaid by default; PlantUML/SVG/PNG only when requested | `references/formats-and-output.md` |
+| Output format/rendering choice | Mermaid text only; render images from the `.mmd` outside rdra-ish | `references/formats-and-output.md` |
 
 ### Default Workflow
 
@@ -67,4 +67,4 @@ the selected view.
 - `references/sequence-and-access.md` — sequence diagrams plus access/media CSV views.
 - `references/lifecycle-and-events.md` — state diagrams, event-flow diagrams,
   `states`, and TLA+ export.
-- `references/formats-and-output.md` — Mermaid/PlantUML/SVG/PNG output choices.
+- `references/formats-and-output.md` — Mermaid output and contract exports.

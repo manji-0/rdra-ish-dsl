@@ -1,4 +1,4 @@
-//! Helpers the PlantUML and Mermaid emitters share.
+//! Helpers the Mermaid emitters share.
 
 use crate::{
     node_description, object_graph_rel_label, prefixed_label, view_node_visible,
@@ -368,11 +368,9 @@ pub(crate) fn is_entity_operation(kind: &RelKind) -> bool {
     )
 }
 
-/// The text format a shared emitter writes. The two differ in how they quote a label and draw
-/// an edge, and in nothing else the shared code looks at.
+/// The text format a shared emitter writes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Syntax {
-    PlantUml,
     Mermaid,
 }
 
@@ -392,7 +390,6 @@ impl Syntax {
     /// `label` safe inside a double-quoted string.
     pub(crate) fn quote(self, label: &str) -> String {
         match self {
-            Syntax::PlantUml => label.replace('"', "\\\""),
             Syntax::Mermaid => label.replace('"', "#quot;"),
         }
     }
@@ -400,10 +397,6 @@ impl Syntax {
     /// One edge statement, newline included.
     pub(crate) fn link(self, link: Link, from: &str, to: &str) -> String {
         match (self, link) {
-            (Syntax::PlantUml, Link::Arrow) => format!("{from} --> {to}\n"),
-            (Syntax::PlantUml, Link::Labeled(label)) => format!("{from} --> {to} : {label}\n"),
-            (Syntax::PlantUml, Link::Dotted(label)) => format!("{from} ..> {to} : {label}\n"),
-            (Syntax::PlantUml, Link::Undirected) => format!("{from} -- {to}\n"),
             (Syntax::Mermaid, Link::Arrow) => format!("  {from} --> {to}\n"),
             (Syntax::Mermaid, Link::Labeled(label)) => format!("  {from} -->|{label}| {to}\n"),
             (Syntax::Mermaid, Link::Dotted(label)) => format!("  {from} -.->|{label}| {to}\n"),
@@ -416,8 +409,7 @@ impl Syntax {
         let label = object_graph_rel_label(kind);
         let link = match kind {
             RelKind::Transitions | RelKind::Invokes => return None,
-            RelKind::Performs => Link::Arrow,
-            RelKind::Contains | RelKind::Belongs if self == Syntax::Mermaid => Link::Arrow,
+            RelKind::Performs | RelKind::Contains | RelKind::Belongs => Link::Arrow,
             RelKind::Precedes | RelKind::Owns => Link::Labeled(label),
             RelKind::RelateOneToOne
             | RelKind::RelateOneToMany
@@ -432,8 +424,6 @@ impl Syntax {
             | RelKind::Shows
             | RelKind::Raises
             | RelKind::Triggers
-            | RelKind::Contains
-            | RelKind::Belongs
             | RelKind::HasPermission
             | RelKind::RequiresPermission
             | RelKind::RequiresMedium
@@ -474,11 +464,6 @@ impl Syntax {
                 continue;
             }
             match self {
-                Syntax::PlantUml => out.push_str(&format!(
-                    "note right of {}\n{}\nend note\n",
-                    id,
-                    self.quote(description)
-                )),
                 Syntax::Mermaid => {
                     let note_id = format!("{}_description", id);
                     let description = self.quote(description).replace('\n', "<br/>");
@@ -567,20 +552,9 @@ impl FlowNode {
 }
 
 impl Syntax {
-    /// The statement that declares an event-flow node: a PlantUML element keyword, or a
-    /// Mermaid shape.
+    /// The statement that declares an event-flow node: a Mermaid shape.
     fn flow_node_declaration(self, node: FlowNode, id: &str, label: &str) -> String {
         match self {
-            Syntax::PlantUml => {
-                let keyword = match node {
-                    FlowNode::Event(_) => "card",
-                    FlowNode::UseCase(_) => "usecase",
-                    FlowNode::Buc(_) | FlowNode::Timer(_) => "rectangle",
-                    FlowNode::State(_) => "state",
-                    FlowNode::ExtSystem(_) => "component",
-                };
-                format!("{keyword} \"{label}\" as {id}\n")
-            }
             Syntax::Mermaid => {
                 let (open, close) = match node {
                     FlowNode::Event(_) => ("{", "}"),

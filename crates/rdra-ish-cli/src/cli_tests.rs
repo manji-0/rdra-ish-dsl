@@ -410,7 +410,7 @@ entity Order "Order" {
 }
 
 #[test]
-fn export_er_text_formats_project_logical_data_model() {
+fn export_mermaid_er_projects_logical_data_model() {
     use rdra_ish_core::build_model;
     use rdra_ish_syntax::parse;
 
@@ -426,15 +426,10 @@ relate(Order, Customer, N:1)
 
     let (mermaid, mermaid_ext) =
         export_artifact(&model, &ExportKind::MermaidEr, &View::whole()).unwrap();
-    let (plantuml, plantuml_ext) =
-        export_artifact(&model, &ExportKind::PlantumlEr, &View::whole()).unwrap();
 
     assert_eq!(mermaid_ext, "er.mmd");
     assert!(mermaid.contains("erDiagram"));
     assert!(mermaid.contains("Order }o--|| Customer"));
-    assert_eq!(plantuml_ext, "er.puml");
-    assert!(plantuml.contains("@startuml"));
-    assert!(plantuml.contains("Order }o--|| Customer"));
 }
 
 #[test]

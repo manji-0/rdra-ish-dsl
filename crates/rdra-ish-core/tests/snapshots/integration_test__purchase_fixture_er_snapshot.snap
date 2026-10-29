@@ -1,48 +1,39 @@
 ---
 source: crates/rdra-ish-core/tests/integration_test.rs
-expression: puml
+expression: mermaid
 ---
-@startuml
-!theme plain
-
-entity "🗄️ カテゴリ" as Category {
-  *id : Int <<PK>>
-  --
-  name : String
-}
-entity "🗄️ 顧客情報" as Customer_info {
-  *id : Int <<PK>>
-  --
-  name : String
-  email : String
-}
-entity "🗄️ 注文" as Order {
-  *id : Int <<PK>>
-  --
-  total : Money
-  ordered_at : DateTime
-  status : Enum
-  customer_info_id : Int <<FK>>
-}
-entity "🗄️ 注文明細" as OrderLine {
-  *id : Int <<PK>>
-  --
-  qty : Int
-  price : Money
-  order_id : Int <<FK>>
-  product_id : Int <<FK>>
-}
-entity "🗄️ 商品" as Product {
-  *id : Int <<PK>>
-  --
-  sku : String
-  name : String
-  price : Decimal
-  category_id : Int <<FK>>
-}
-
-Order }o--|| Customer_info : ""
-OrderLine }o--|| Order : ""
-OrderLine }o--|| Product : ""
-Product }o--|| Category : ""
-@enduml
+erDiagram
+  Category {
+    Int id PK
+    String name
+  }
+  Customer_info {
+    Int id PK
+    String name
+    String email
+  }
+  Order {
+    Int id PK
+    Money total
+    DateTime ordered_at
+    Enum status
+    Int customer_info_id FK
+  }
+  OrderLine {
+    Int id PK
+    Int qty
+    Money price
+    Int order_id FK
+    Int product_id FK
+  }
+  Product {
+    Int id PK
+    String sku
+    String name
+    Decimal price
+    Int category_id FK
+  }
+  Order }o--|| Customer_info : ""
+  OrderLine }o--|| Order : ""
+  OrderLine }o--|| Product : ""
+  Product }o--|| Category : ""

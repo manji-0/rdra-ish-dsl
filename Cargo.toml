@@ -4,7 +4,6 @@ members = [
     "crates/rdra-ish-syntax",
     "crates/rdra-ish-core",
     "crates/rdra-ish-emit",
-    "crates/rdra-ish-render",
     "crates/rdra-ish-cli",
     "crates/rdra-ish-lsp",
 ]
@@ -40,9 +39,6 @@ tokio        = { version = "1", features = ["macros", "rt-multi-thread", "io-std
 url          = "2"
 # file
 walkdir      = "2"
-# encoding / compression (optional, used by rdra-ish-render kroki feature)
-base64       = "0.22"
-flate2       = "1"
 # test
 insta        = { version = "1", features = ["toml"] }
 tempfile     = "3"

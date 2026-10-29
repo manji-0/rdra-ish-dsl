@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.8"
 license = "MIT"
 authors = [{ name = "rdra-ish-dsl contributors" }]
-keywords = ["rdra", "dsl", "requirements", "mermaid", "plantuml"]
+keywords = ["rdra", "dsl", "requirements", "mermaid"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",

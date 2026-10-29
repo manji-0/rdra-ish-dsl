@@ -17,7 +17,7 @@ pub enum WriteKind {
 }
 
 impl WriteKind {
-    /// PlantUML/Mermaid メッセージラベル用文字列。
+    /// Mermaid メッセージラベル用文字列。
     pub fn label(&self) -> &'static str {
         match self {
             WriteKind::Creates => "create",
