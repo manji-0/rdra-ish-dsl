@@ -22,8 +22,8 @@ gnu_time=false
 "$timer" -v true >/dev/null 2>&1 && gnu_time=true
 
 name_re='[A-Za-z0-9_]+'
-check_re="^(ok|fail( $name_re)*)$"
-verify_re="^(tlc=(ok|counterexample)( fail( $name_re)*)?|fail( $name_re)*)$"
+check_re="^(ok|fail( $name_re)+)$"
+verify_re="^(tlc=(ok|counterexample)( fail( $name_re)+)?|fail( $name_re)+)$"
 header_re='^// expect (check|verify)( [^:]*)?: (.*)$'
 
 # Runs "$@" with combined output in $work/out; sets status, wall (s), and rss (MB).
@@ -41,12 +41,10 @@ measure() {
   fi
 }
 
-# The stable names (`StateDiag::name()` and TLC check names) of the run's errors.
+# The names of the run's errors: each finding's `error[<name>]:` and TLC's own check names.
 error_names() {
   sed -nE \
-    -e 's/^error: invariant ([^ ]+) is violated.*/\1/p' \
-    -e 's/^error: state ([^ .]+)\.([^ ]+) = ([^ ]+) has no reachability witness.*/Witness_\1_\2_\3/p' \
-    -e 's/^error: deadlock: ([^ #]+)#[0-9]+ stays at ([^ ]+) = ([^ ]+) forever.*/Deadlock_\1_\2_\3/p' \
+    -e 's/^error\[([A-Za-z0-9_]+)\]:.*/\1/p' \
     -e 's/^violated: Error: (Invariant|Action property) ([^ ]+) is violated\..*/\2/p' \
     "$1" | sort -u | tr '\n' ' ' | sed 's/ $//'
 }
@@ -148,9 +146,11 @@ while IFS= read -r root; do
     if [[ "$want_tlc" == counterexample ]] && ! grep -q '^violated: Error: .* violated' "$work/out"; then
       native=false
     fi
+    # An error without a name cannot be matched against the header.
+    unnamed="$(grep -c '^error: ' "$work/out")"
 
     label="$cmd${flags:+ $flags}"
-    if [[ "$status" == "$want_exit" && "$got_tlc" == "$want_tlc" && "$got_names" == "$want_names" ]] && $native; then
+    if [[ "$status" == "$want_exit" && "$got_tlc" == "$want_tlc" && "$got_names" == "$want_names" && "$unnamed" == 0 ]] && $native; then
       verdict=ok
     else
       verdict=MISMATCH
@@ -161,6 +161,7 @@ while IFS= read -r root; do
       echo "  expected: exit=$want_exit tlc_result=$want_tlc errors=[$want_names]  ($exp)"
       echo "  actual:   exit=$status tlc_result=$got_tlc errors=[$got_names]"
       $native || echo "  no TLC 'violated: Error: ...' line for the counterexample"
+      [[ "$unnamed" == 0 ]] || echo "  $unnamed unnamed 'error: ...' line(s); every error must print error[<name>]:"
       tail -n 40 "$work/out" | sed 's/^/  | /'
     fi
   done

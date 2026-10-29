@@ -2,9 +2,8 @@
 // arithmetic `@derived` column score, which has no state var: a DerivedColumnRead build error
 // that fails check and verify on the whole model. Order's cone does not read Audit, so
 // `--entity Order` defers that error, lists it under `not checked:`, and passes.
-// The build error has no stable name, so the headers name none.
-// expect check: fail
-// expect verify: fail
+// expect check: fail DerivedColumnRead_Audit_score
+// expect verify: fail DerivedColumnRead_Audit_score
 // expect verify --entity Order: tlc=ok
 entity Order "注文" {
   id:     Int @pk

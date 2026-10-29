@@ -3,7 +3,7 @@
 // binds to that action and its delivered_at postcondition fails
 // (expected TLC fail / counterexample on the AfterAssert property, not a vacuous pass).
 // The invariant and forbidden of order.rdra are left out so the after property is the only check.
-// expect check: fail
+// expect check: fail AfterAssert_DeliverOrder_0
 // expect verify: tlc=counterexample fail AfterAssert_DeliverOrder_0
 entity Order "注文" {
   id:           Int @pk
