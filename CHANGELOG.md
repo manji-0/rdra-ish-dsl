@@ -4,6 +4,26 @@
 
 ### Breaking
 
+- `verify` checks each temporal property in its own TLC run, because TLC does not name the
+  property a temporal counterexample violates. The runs use the module
+  `<whole>_<Property>` (`RdraSpec_NeverShipped`), the same module text and fairness as the
+  whole-model module, and a `.cfg` with that one `PROPERTY`; they start after the cone runs,
+  at most two at a time. Stdout prints one `RdraSpec_<Property> [<Property>]: <result>`
+  line per property instead of one `RdraSpec [<P1>, <P2>]: <result>` line, and its
+  `temporal properties:` line now says `each checked in its own run on the whole model`.
+  `cones.txt` lists the property modules instead of `RdraSpec`. `-o` still writes the
+  whole-model `RdraSpec.tla` / `.cfg` (or `X.tla` / `X.cfg` for `-o X.tla`) with every
+  `PROPERTY`, which `verify` no longer runs; `export --kind tla` is unchanged.
+- A violated temporal property now prints in model terms, as
+  `error[<Property>]: property <Property> is violated: ...`, before TLC's raw trace: the
+  instance it fails for, the step that shows it, the lasso's steps with their use cases,
+  bound instances, changes, and sites, then `then loops back to step K` or `then nothing
+  changes forever`. Before, it printed only TLC's raw trace, and the name of the violated
+  property appeared nowhere. A lasso that does not replay or does not violate the property
+  prints the engine-disagreement line. The raw trace now also prints TLC's
+  `Back to state K: <action>` line, which it dropped before. New sample
+  `temporal_unmet.rdra` (`verify: tlc=counterexample fail NeverShipped
+  PendingLeadsToDelivered`).
 - Every lifecycle finding now prints its stable name after the severity:
   `error[Deadlock_Order_status_paid]: deadlock: ...` instead of `error: deadlock: ...`, and
   `warning[...]:` and `info[...]:` likewise, in `check`, `states`, `verify` (its BFS

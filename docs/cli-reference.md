@@ -475,7 +475,7 @@ rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [-
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--backend` | `tlc` | `tlc` | Verification backend. Requires `tlc` or `tlc2` on `PATH`. |
-| `-o`, `--out` | path | temp dir, deleted when every check passes and kept when one fails | Directory for the specs: one `Cone_<check>.tla` / `.cfg` pair per cone, named after the first invariant or after-assert that reads it, a whole-model `RdraSpec.tla` / `.cfg` when the model declares temporal properties, and `cones.txt` listing each module and the checks it answers. A path ending in `.tla` writes into its directory and names the whole-model module after its stem. |
+| `-o`, `--out` | path | temp dir, deleted when every check passes and kept when one fails | Directory for the specs: one `Cone_<check>.tla` / `.cfg` pair per cone, named after the first invariant or after-assert that reads it, one `RdraSpec_<Property>.tla` / `.cfg` pair per temporal property, `cones.txt` listing each module TLC runs and the checks it answers, and, when the model declares temporal properties, the whole-model `RdraSpec.tla` / `.cfg` with every `PROPERTY` for a run by hand (TLC does not run it). A path ending in `.tla` writes into its directory and names the whole-model module after its stem, and each property module `<stem>_<Property>`. |
 | `--instance-count` | unsigned integer | `2` | Multi-instance `InstanceCount` (`1..=255`; `1` warns). |
 | `--int-range-max` | unsigned integer | `5` | Upper bound for `IntRange == 0..N` (`1..=255`; `0` rejected). |
 | `--buc <id>` | string (repeatable) | — (whole model) | Keep only the use cases reachable from the BUC. See [Partial runs](#partial-runs). |
@@ -489,7 +489,9 @@ error stops `verify` before TLC runs. Each invariant and `after(..).assert` is c
 its own cone of influence, a restriction of the system whose reachable states are exactly
 the whole model's projected onto it, with the cones run in parallel. Temporal properties
 need fairness on the whole system, so they are checked on the whole model, and only when
-the model declares any. Stdout names the bounds, the cone count, and each run's result. Stdout or
+the model declares any, each in its own run after the cone runs, at most two at a time:
+TLC does not say which property a temporal counterexample violates. Stdout names the
+bounds, the cone count, and each run's result. Stdout or
 stderr carries one `tlc_result: ok|counterexample|tool_error` line. Exits non-zero when
 TLC is missing or reports a violation.
 
@@ -548,11 +550,21 @@ If a TLC step matches no move of the cone, the engines disagree. That is a tool 
 `verify` prints `error: TLC step <n> (label <action>) matches no move of the cone; BFS and
 TLC disagree (a tool bug). Raw TLC trace follows.` in place of the model-term block. The
 raw trace still follows, the result stays `counterexample`, and the exit status is 1.
-A temporal property's counterexample prints only TLC's raw trace.
+
+A violated temporal property prints in model terms the same way, as
+`error[<Property>]: property <Property> is violated: ...`, from the run of that property
+alone. The head names the instance and the step that shows the failure (for `leads_to`,
+the step after which the trigger holds). TLC's lasso ends in a stutter or a step back to
+an earlier state: the step back prints as the last numbered step, then `then loops back
+to step K` (the behavior repeats steps K through the last one forever), and a stutter
+ends with `then nothing changes forever`. A lasso that does not replay, or that does not
+violate the property, prints the same engine-disagreement line. TLC's raw trace follows
+with its `State N: Stuttering` or `Back to state K: <action>` line. An example is in
+[formal-verification.md](./formal-verification.md#what-verify-checks).
 
 | Environment variable | Effect |
 |---|---|
-| `RDRA_TLC_HEAP` | Heap of every TLC JVM, such as `4g`. Without it a cone gets `1g` and the temporal run `2g`. |
+| `RDRA_TLC_HEAP` | Heap of every TLC JVM, such as `4g`. Without it a cone gets `1g` and each temporal property run `2g`. |
 | `JAVA_TOOL_OPTIONS` | Appended after the options `verify` sets (`-Xmx`, `-Djava.io.tmpdir`), so a `-Xmx` here wins. |
 
 A run that runs out of memory is a `tool_error` whose message names both variables.

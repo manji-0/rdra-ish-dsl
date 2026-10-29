@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-/// The heap a run gets: a cone holds one restricted system, the temporal run the whole model.
+/// The heap a run gets: a cone holds one restricted system, a temporal property run the whole model.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Heap {
     Cone,

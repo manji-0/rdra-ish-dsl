@@ -22,7 +22,7 @@ rdra-ish verify <INPUTS...> --backend tlc [-o <OUT_DIR>] [--instance-count N] [-
 | Command | Role |
 |---|---|
 | `export --kind tla` | Write `RdraSpec.tla` **and** sibling `RdraSpec.cfg` for the whole model |
-| `verify --backend tlc` | Print one spec per cone of influence, then run `tlc` / `tlc2` from `PATH` |
+| `verify --backend tlc` | Print one spec per cone of influence and one per temporal property, then run `tlc` / `tlc2` from `PATH` |
 | `states`, `check` | BFS on the same system, with no TLC dependency |
 
 `--instance-count` (default `2`) sets `InstanceCount` (`1..=255`; `1` warns that
@@ -33,8 +33,10 @@ transition system they print, for example `IntLiteralOutOfBounds` or `DoubleMode
 If `-o` ends with `.tla`, the sibling `.cfg` is written next to it and the file stem is the
 module name. If `-o` is a directory (or has no extension), `export` writes
 `<dir>/RdraSpec.tla` and `<dir>/RdraSpec.cfg`. `verify -o <dir>` writes one
-`Cone_<first check>.tla` and `.cfg` pair per cone, the whole-model `RdraSpec` pair
-when the model has temporal properties, and `cones.txt`.
+`Cone_<first check>.tla` and `.cfg` pair per cone, one `RdraSpec_<Property>` pair per
+temporal property, and `cones.txt`, which lists each module TLC runs and the checks it
+answers. When the model has temporal properties it also writes the whole-model `RdraSpec`
+pair, whose `.cfg` names every property, for a run by hand; TLC does not run it.
 Without `-o`, `verify` writes them to a temp dir. It deletes the dir when every check
 passes, and keeps it and prints `specs: <dir>` when one fails. The TLC heap settings
 (`RDRA_TLC_HEAP`, `JAVA_TOOL_OPTIONS`) are in [cli-reference.md](./cli-reference.md#verify).
@@ -115,7 +117,12 @@ This keeps clinic-ops tractable: a whole-model run at `InstanceCount=2` took 62 
 11 GB on ec-site and did not finish in 300 s on clinic-ops.
 
 Temporal properties need fairness on the whole system, which does not restrict to a
-cone. `verify` checks them on the whole model, and only when the model declares any.
+cone. `verify` checks them on the whole model, and only when the model declares any. TLC
+reports a temporal violation as `Temporal properties were violated.` without naming the
+property, so `verify` runs each property alone: module `RdraSpec_<Property>`, the same
+module text and fairness as the whole-model `RdraSpec`, and a `.cfg` with that one
+`PROPERTY`. The property runs start after the cone runs, at most two at a time, and share
+the cores.
 
 Before TLC runs, `verify` explores each entity's cone with BFS at the same bounds, capped at
 2,097,152 states per cone (`Caps::VERIFY`, named in the `bounds:` line). Each state of a
@@ -139,10 +146,11 @@ states).
 $ rdra-ish verify samples/formal-verification/order.rdra --backend tlc
 bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 2097152 states per BFS cone; entities a check does not read are unbounded
 cones: 1 for 2 invariant(s) and 1 after-assert(s)
-temporal properties: 2, checked on the whole model (fairness does not restrict to a cone)
+temporal properties: 2, each checked in its own run on the whole model (fairness does not restrict to a cone)
 state models (BFS on 1 entity cone): 1 state model, 5 states witnessed, 0 deadlocks, 0 use cases that never run
 Cone_Forbidden_Order_0 [Forbidden_Order_0, Inv_Order_0, AfterAssert_DeliverOrder_0]: ok (31 states)
-RdraSpec [PaidLeadsToShipped, EventuallyTerminal]: ok (31 states)
+RdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: ok (31 states)
+RdraSpec_EventuallyTerminal [EventuallyTerminal]: ok (31 states)
 tlc_result: ok
 OK: no errors within 2 instances per entity, Int 0..5
 ```
@@ -156,8 +164,51 @@ TLC's own `violated: Error: ... is violated.` line and its trace follow, with on
 `name[slot] = value` line per variable and slot. The name is the constraint's name, so it
 points at the rule that broke. A step that no move of the cone explains is a tool bug, and
 `verify` says the engines disagree instead of printing the model-term block. The full
-output is in [cli-reference.md](./cli-reference.md#verify). A temporal property's
-counterexample prints only TLC's trace.
+output is in [cli-reference.md](./cli-reference.md#verify).
+
+A violated temporal property prints the same way, under `error[<Property>]`. TLC's
+counterexample is a lasso: a finite trace, then either `State N: Stuttering` (the last
+state repeats forever) or `Back to state K: <action>` (one more step returns to state K
+and the behavior repeats from there). `verify` replays the trace and the step back
+through the BFS step relation and prints the step back as the last numbered step,
+followed by `then loops back to step K`: the behavior repeats steps K through the last one
+forever. K is TLC's state number, since TLC's state K is the state step K starts from. A
+stutter ends with `then nothing changes forever`.
+
+The message head names the property, the instance it fails for, and the step that shows
+it: where an `always` condition is false, or where an `eventually` instance exists or a
+`leads_to` trigger holds and the goal never holds from then on. `verify` evaluates the
+property on the infinite behavior the way the module spells it, per instance of each
+binder: `always x` is `[](present => x)`, `eventually x` is `[](present => <>x)`, and
+`leads_to x y` is `(present /\ x) ~> y`. A lasso that does not replay, or that does not
+violate the property, is a tool bug and prints the engine-disagreement line. TLC picks the
+lasso, so two runs may print different steps. In this run of `temporal_unmet.rdra`, TLC
+ends with `Back to state 7: CancelOrder`, and Order#1 is cancelled and reopened forever:
+
+```
+error[PendingLeadsToDelivered]: property PendingLeadsToDelivered is violated: its leads_to trigger holds for Order#1 after step 1, and its goal never holds from then on
+  rule: skills/rdra-ish-verify/samples/temporal_unmet.rdra:48:1
+  counterexample (8 steps, from TLC):
+    1. PlaceOrder [Order#1]                              skills/rdra-ish-verify/samples/temporal_unmet.rdra:15:1
+         + Order#1 (status=pending, delivered_at=null)
+    2. PlaceOrder [Order#2]                              skills/rdra-ish-verify/samples/temporal_unmet.rdra:15:1
+         + Order#2 (status=pending, delivered_at=null)
+    3. CancelOrder [Order#1]                             skills/rdra-ish-verify/samples/temporal_unmet.rdra:19:1
+         Order#1.status: pending -> cancelled            skills/rdra-ish-verify/samples/temporal_unmet.rdra:40:1
+    4. CapturePay [Order#2]                              skills/rdra-ish-verify/samples/temporal_unmet.rdra:16:1
+         Order#2.status: pending -> paid                 skills/rdra-ish-verify/samples/temporal_unmet.rdra:37:1
+    5. ShipOrder [Order#2]                               skills/rdra-ish-verify/samples/temporal_unmet.rdra:17:1
+         Order#2.status: paid -> shipped                 skills/rdra-ish-verify/samples/temporal_unmet.rdra:38:1
+    6. DeliverOrder [Order#2]                            skills/rdra-ish-verify/samples/temporal_unmet.rdra:18:1
+         Order#2.status: shipped -> delivered            skills/rdra-ish-verify/samples/temporal_unmet.rdra:39:1
+         Order#2.delivered_at: null -> present           skills/rdra-ish-verify/samples/temporal_unmet.rdra:43:1
+    7. ReopenOrder [Order#1]                             skills/rdra-ish-verify/samples/temporal_unmet.rdra:20:1
+         Order#1.status: cancelled -> pending            skills/rdra-ish-verify/samples/temporal_unmet.rdra:41:1
+    8. CancelOrder [Order#1]                             skills/rdra-ish-verify/samples/temporal_unmet.rdra:19:1
+         Order#1.status: pending -> cancelled            skills/rdra-ish-verify/samples/temporal_unmet.rdra:40:1
+    then loops back to step 7
+violated: Error: Temporal properties were violated.
+```
 
 ### Part of a model
 
@@ -285,6 +336,7 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `quantifier_none.rdra` | fail, fail | `when(...).none` (Revoke while Assign stays active) |
 | `untriggered_sets.rdra` | fail, fail | `sets` from a use case that drives no transition (Flag then Ship reaches the forbidden state) |
 | `after_assert_unmet.rdra` | fail, fail | `after(DeliverOrder).assert` without the `sets` that makes it true |
+| `temporal_unmet.rdra` | pass, fail | `always(Order.status != shipped)` fails once an Order ships, and `leads_to(pending, delivered)` fails because ReopenOrder lets an Order be cancelled and reopened forever, so its lasso loops back. `check` does not model-check properties; each prints its lasso in model terms |
 | `one_to_one_shared.rdra` | pass, fail | `relate(.., 1:1)` adds `Unique_Shipment_Order`; Ship and Reship each link a Shipment to the same Order, which takes two instances |
 | `min_card_unmet.rdra` | fail, fail | `relate(OrderLine, Order, 1..*:1)` adds `MinCard_OrderLine_Order`; Place creates an Order without a line |
 | `min_card_met.rdra` | pass, pass | The same model with Place creating the Order and its first line in one transaction. At one instance `check` warns that AddLine never runs: an Order exists only with the one OrderLine slot taken. At two instances it runs |
@@ -323,12 +375,14 @@ Name         = [A-Za-z0-9_]+
   `tool_error` exit, is a mismatch.
 - `tlc=` must equal the `tlc_result:` line. A `verify` expectation without `tlc=` asserts
   that no `tlc_result:` line is printed: the run stops before TLC, as at a build error.
-  `tlc=counterexample` also needs TLC's own `violated: Error: ... is violated.` line.
+  `tlc=counterexample` also needs TLC's own `violated: Error: ... violated.` line.
 - `fail` needs at least one name. The names must equal the set of names of the run's
   errors, not just be part of it. Every lifecycle error prints as `error[<Name>]: ...`, and
   the script reads the name from there and from TLC's `violated:` line. A name is the
   invariant or `after` property name (`CrossForbidden_Order_0`,
-  `AfterAssert_DeliverOrder_0`), `Witness_<Entity>_<column>_<value>` for a state with no
+  `AfterAssert_DeliverOrder_0`), the temporal property's name (`NeverShipped`; TLC's
+  temporal line names none, so it comes from `error[<Name>]:` only),
+  `Witness_<Entity>_<column>_<value>` for a state with no
   witness, `Deadlock_<Entity>_<column>_<value>` for a deadlock error, or the build error's
   name, such as `DerivedColumnRead_Audit_score` (the full list is in
   [state-derivation.md](state-derivation.md#diagnostics)).
@@ -351,5 +405,5 @@ Name         = [A-Za-z0-9_]+
 
 The script prints one line per run with the verdict, the wall time, and the maximum RSS
 (GNU `time` on Linux, BSD `/usr/bin/time` on macOS), then the count of roots and runs.
-Locally (Apple silicon) the 45 runs of the 22 roots take about 56 s, and clinic-ops `verify`
-takes 35 s of that at about 830 MB, its TLC JVMs included. The CI step has 5 minutes.
+Locally (Apple silicon) the 47 runs of the 23 roots take about 50 s, and clinic-ops `verify`
+takes 34 s of that at about 800 MB, its TLC JVMs included. The CI step has 5 minutes.

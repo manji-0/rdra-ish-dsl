@@ -20,7 +20,7 @@ rdra-ish verify "$FILE" --backend tlc -o <OUT>
 | Command | Role |
 |---|---|
 | `export --kind tla` | Write `.tla` **and** sibling `.cfg` (module = file stem) |
-| `verify --backend tlc` | Print one spec per cone of influence, then run `tlc` / `tlc2` from `PATH` |
+| `verify --backend tlc` | Print one spec per cone of influence and one per temporal property, then run `tlc` / `tlc2` from `PATH` |
 | `states` | Local BFS (no TLC dependency) |
 
 ### Output Path Rules
@@ -28,8 +28,9 @@ rdra-ish verify "$FILE" --backend tlc -o <OUT>
 - `-o` ends with `.tla` → that basename is the module; sibling `.cfg` next to it
 - `-o` is a directory or has no extension → `<dir>/RdraSpec.tla` and
   `<dir>/RdraSpec.cfg`
-- `verify` writes one `Cone_<first check>.tla` / `.cfg` pair per cone, a whole-model
-  `RdraSpec` pair when the model has temporal properties, and `cones.txt` into the `-o`
+- `verify` writes one `Cone_<first check>.tla` / `.cfg` pair per cone, one
+  `RdraSpec_<Property>` pair per temporal property (TLC runs each alone), the whole-model
+  `RdraSpec` pair with every property for a run by hand, and `cones.txt` into the `-o`
   dir (or a temp dir), and runs TLC there
 - `verify` without `-o` uses a temp dir: deleted on success, kept on failure and named
   by the closing `specs: <dir> (kept because a check failed)` line
@@ -38,7 +39,7 @@ rdra-ish verify "$FILE" --backend tlc -o <OUT>
   `B`. Both list what they skip under `not checked:`; an error on an entity no selected
   cone reads is deferred there instead of stopping the run
 - `verify` reports `tool_error` with a memory hint when TLC runs out of heap: set
-  `RDRA_TLC_HEAP=4g` (default `1g` per cone, `2g` for the temporal run) or
+  `RDRA_TLC_HEAP=4g` (default `1g` per cone, `2g` per temporal property run) or
   `JAVA_TOOL_OPTIONS=-Xmx4g`, which wins
 
 ## Suggested Order
@@ -50,7 +51,9 @@ rdra-ish verify "$FILE" --backend tlc -o <OUT>
 5. `verify --backend tlc` and capture counterexamples. Each violated invariant or
    `after` assertion prints first in model terms (`counterexample (N steps, from TLC):`,
    one use case per step with its bound instances and `path:line:col`), then TLC's raw
-   trace. An `error: TLC step <n> ... BFS and TLC disagree` line is a tool bug to report,
+   trace. A violated temporal property prints the same way under `error[<Property>]`,
+   ending with `then loops back to step K` or `then nothing changes forever`. An
+   `error: ... BFS and TLC disagree` line is a tool bug to report,
    not a model defect.
 6. Read the result against the `bounds:` line, the first line of `check`, `states`, and
    `verify`: an `OK: no errors within ...` holds only inside those bounds. Before TLC,
