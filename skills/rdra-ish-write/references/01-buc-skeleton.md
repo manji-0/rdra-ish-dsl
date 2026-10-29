@@ -22,17 +22,20 @@ APIs, or lifecycle internals.
 
 1. Declare stable `actor` and `extsystem` vocabulary in `shared/actors.rdra`.
 2. In the BUC file, declare the `buc` and candidate `usecase` nodes.
-3. Add `performs(Actor, Buc)` for coarse BUC-level participation.
-4. Add `contains(Buc, UseCase)` for each visible action.
+3. Add `contains(Buc, UseCase)` for each visible action.
+4. Add `performs(Actor, Buc)` for an actor who takes part in every use case of the BUC.
+   A use case's actors are its direct performers plus the performers of each BUC that
+   contains it, and the permission check later holds each of them to the use case's
+   permissions. For an actor who runs only some use cases, write
+   `performs(Actor, UseCase)` for those instead.
 5. Add `flow` and `step` only when the business sequence itself must be reviewed.
    Connect BUC -> flow -> step with `contains`, then connect ordered steps with
-   `precedes`, `branches`, `excepts`, or `repeats`; use `covers(Step, UseCase|Api|Event)`
-   to bind flow steps to model behavior.
-6. Add `performs(Actor, UseCase)` only when the action-level actor differs or matters
-   for later access review.
-7. Add `precondition`, `guard`, `postcondition`, or compensation links only when the
-   business rule is already known and stable.
-8. Leave data CRUD, screens, APIs, permissions, and states for later steps.
+   `precedes`, `branches`, `excepts`, or `repeats`; use
+   `covers(Step, UseCase|Api|Event|Timer)` to bind flow steps to model behavior.
+6. Add `precondition`, `guard`, `postcondition`, or compensation links
+   (`compensates(UseCase, UseCase)`) only when the business rule is already known and
+   stable. The three clauses are review metadata; `check` does not evaluate them.
+7. Leave data CRUD, screens, APIs, permissions, and states for later steps.
 
 ## Minimal Pattern
 
@@ -40,6 +43,7 @@ APIs, or lifecycle internals.
 actor Customer "Customer"
 actor Staff "Staff"
 
+buc BucOrder "Process Order"
 usecase PlaceOrder "Place Order"
 usecase CancelOrder "Cancel Order"
 flow OrderFlow "Order Flow"
@@ -47,6 +51,7 @@ step ReviewCart "Review Cart"
 step SubmitOrder "Submit Order"
 
 performs(Customer, BucOrder)
+performs(Staff, CancelOrder)
 contains(BucOrder, PlaceOrder)
 contains(BucOrder, CancelOrder)
 contains(BucOrder, OrderFlow)
@@ -68,8 +73,9 @@ rdra-ish diagram src/ --kind rdra --format mermaid --buc BucOrder
 
 ## Achievement Conditions
 
-- Every important BUC has at least one performer or a documented reason for being
-  event-started later.
+- Every important use case has a performer, directly or through its BUC, or a
+  documented reason for being event-started later.
+- Each `performs(Actor, Buc)` holds for every use case of the BUC.
 - Every important use case belongs to exactly the intended BUC.
 - Business order is explicit with `flow`/`step` when order is part of the
   requirement.

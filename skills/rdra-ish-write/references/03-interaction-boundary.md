@@ -36,7 +36,9 @@ assignment.
 6. Move CRUD from the use case to the API when the API owns the entity operation.
 7. Use `contains(System, Api)` to group APIs into internal system boundaries.
 8. Add `requires_permission` and `requires_medium` to UC/API nodes.
-9. Add actor-side `has_permission` where the grant is expected.
+9. Add actor-side `has_permission` where the grant is expected. Every actor of a use
+   case needs it: the direct performers and the performers of each BUC that contains
+   the use case.
 10. Use `coordinates(UseCase, Entity, Entity)` only when a relation crosses derived
    system entity sets and the use case coordinates both sides.
 
@@ -76,6 +78,7 @@ has_permission(Customer, OrderWrite)
 
 ```sh
 rdra-ish check src/
+rdra-ish check src/ --strict   # permission gaps become errors
 rdra-ish diagram src/ --kind sequence --format mermaid --buc BucOrder
 rdra-ish list src/ --kind api --format table
 rdra-ish list src/ --kind field --format table

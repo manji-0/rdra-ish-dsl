@@ -28,8 +28,11 @@ boundaries established in Step 3.
    `@index(a, b)`, `@check(expr)`, `@null`, `@default(v)`, `@label("...")`,
    `@soft_delete`, `@history`, `@tenant`, and `@derived(expr)` where they
    reflect real constraints. Write `@check` and `@derived` unquoted: `@check(total >= 0)`,
-   `@derived(total - discount)`. `@check` becomes an invariant that `check` and `verify`
-   test. A composite `@pk(a, b)` is a valid `relate` target: the child gets one key
+   `@derived(total - discount)`. `@check` becomes the invariant
+   `Check_<Entity>_<column>_<n>` that `check` and `verify` test, so a created row must
+   satisfy it from the start (give the column a `@default` or a creating `sets`). A
+   `@derived` column is not stored state: a `sets` on it is an error, and a rule that
+   reads an arithmetic one is `DerivedColumnRead`. A composite `@pk(a, b)` is a valid `relate` target: the child gets one key
    column per parent key column (`{role}_{column}`).
 3. Type a column by a `variation` when an actor chooses its value (a payment method,
    a channel, a severity): declare `variation PaymentMethod "Payment Method" { cash
@@ -39,8 +42,11 @@ boundaries established in Step 3.
    `lint` `enum-attribute` flags an inline Enum that nothing moves.
 4. Add `relate(Child, Parent, N:1)`, `relate(A, B, 1:1)`, or the correct
    cardinality. Chain `.optional()`, `.on_delete(...)`, or `.on_update(...)`
-   when FK behavior matters. `relate(A, B, 1:1)` puts a unique key column on `A`.
-   Write `1..*:1` when every parent must have a child; the lifecycle checks it.
+   when FK behavior matters. `relate(A, B, 1:1)` puts a unique key column on `A`, and
+   the lifecycle checks it as `Unique_A_<role>` (at two instances, so `verify` finds a
+   second child linked to one parent). Write `1..*:1` when every parent must have a
+   child; the lifecycle checks it as `MinCard_<Child>_<role>`, so the use case that
+   creates the parent must create its first child in the same transaction.
    Chain `.role(name)` when two relates join one child to one parent. Chain
    `.key(col)` to adopt a column the child already declares. Do not hand-write
    a column that `relate` generates: it is `FkConflict` unless you adopt it with `.key`.

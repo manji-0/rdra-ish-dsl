@@ -42,28 +42,57 @@ linked by a declared `relate` path; each adjacent pair needs a `relate`, else th
 8. If a per-entity rule fails unexpectedly, inspect lifecycle inputs before weakening it:
    missing `sets`, missing transitions, or missing create/default paths are common.
 9. Add `when(...).none/has(...)` for to-many quantifiers (not `forbidden_when`).
-10. Add `property` / `after(...).assert(...)` when temporal or postcondition checks
-    matter; validate with skill `rdra-ish-verify` / `export --kind tla`
-    (`states` does not evaluate `property`).
+10. Add `after(...).assert(...)` for a postcondition (`check` evaluates it after each
+    step of the use case) and `property` for a temporal rule (only `verify` evaluates
+    it; see skill `rdra-ish-verify`).
 11. Keep implementation policy notes outside the DSL unless they can be expressed as
     state, effect, forbidden, invariant, required, exclusive, quantifier, property,
     or cross-entity predicates.
 
 ## Minimal Pattern
 
+The entities below exist only to make the rules readable; in a real model the
+lifecycle of Step 5 moves them.
+
 ```rdra
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(draft, submitted, paid, cancelled) @default(draft)
+  total: Money
+  submitted_at: DateTime @null
+  paid_at: DateTime @null
+  cancelled_at: DateTime @null
+}
+entity Payment "Payment" {
+  id: Int @pk
+  status: Enum(pending, captured) @default(pending)
+  amount: Money
+}
+entity Stock "Stock" {
+  id: Int @pk
+  stock: Int
+  selling: Int
+  reorder: Bool @default(false)
+}
+relate(Payment, Order, N:1)
+usecase SellOut "Sell Out"
+
+// 1. Local guardrails
 forbidden(Order, status == cancelled, paid_at == present)
+exclusive(Order, cancelled_at == present, paid_at == present)
 
-exclusive(Document, approved == true, rejected == true)
-
+// 2. Local obligations
 invariant(Order)
   .when(status == submitted)
   .then(submitted_at == present)
+required(Order, total >= 0)
 
-required(Account, active == true)
-
-sets(ReserveStock, Inventory, stock < selling, true)
-forbidden(Inventory, stock < selling)
+// 3. Comparisons, cross-entity rules, quantifiers, postconditions, properties
+sets(SellOut, Stock, stock < selling, true)
+sets(SellOut, Stock, reorder == true)
+invariant(Stock)
+  .when(stock < selling)
+  .then(reorder == true)
 
 forbidden(Order, Payment,
   Order.status == cancelled,
@@ -74,47 +103,69 @@ invariant(Order, Payment)
   .when(Order.status == paid)
   .then(Payment.status == captured)
 
-when(Cert, status == revoked).none(Assign.status == active)
+when(Order, status == cancelled).none(Payment.status == captured)
 
-property PaidLeadsToShipped
-  leads_to(Order.status == paid, Order.status == shipped)
+after(SellOut).assert(Stock.reorder == true)
 
-after(DeliverOrder).assert(Order.status == delivered)
+property PaidLeadsToCaptured
+  leads_to(Order.status == paid, Payment.status == captured)
 ```
 
 ## Validation
 
 ```sh
 rdra-ish check src/
+rdra-ish check src/ --entity Order   # only Order's view and the rules that read it
 rdra-ish lint src/ --format table
-rdra-ish states src/ --entity Order
 rdra-ish states src/ --format json --entity Order
-# temporal property / two-instance rules: use TLA+ (`states` does not evaluate `property`)
-rdra-ish export src/ --kind tla -o out/
-# optional if tlc is on PATH:
-# rdra-ish verify src/ --backend tlc -o out/
+# two instances per entity and temporal properties (needs tlc on PATH)
+rdra-ish verify src/ --backend tlc
+```
+
+A broken rule prints once, under its name, with a shortest counterexample in model
+terms: one line per use case step with the instances it binds and its `path:line:col`,
+and under each step the values it changed and the `transitions` arm or `sets` that
+wrote them. Read the trace before touching the rule: the fix is often a missing effect
+upstream. In this sample of skill `rdra-ish-verify`, DeliverOrder lacks
+`sets(DeliverOrder, Order, delivered_at == present)`, and the warning above the error
+says so:
+
+```text
+$ rdra-ish check ../rdra-ish-verify/samples/fail/order.rdra
+bounds: 1 instance per entity, Int 0..5; 4096 states per cone; entities a check does not read are unbounded
+warning[UnwrittenConstrainedVar_Order_delivered_at]: state derivation for entity 'Order': delivered_at is constrained but no use case writes it
+error[Inv_Order_0]: invariant Inv_Order_0 is violated: invariant violated: when status=delivered then delivered_at=present is broken by delivered_at=null, status=delivered
+  rule: ../rdra-ish-verify/samples/fail/order.rdra:21:1
+  counterexample (2 steps):
+    1. PlaceOrder [Order#1]                              ../rdra-ish-verify/samples/fail/order.rdra:10:1
+         + Order#1 (status=pending, delivered_at=null)
+    2. DeliverOrder [Order#1]                            ../rdra-ish-verify/samples/fail/order.rdra:11:1
+         Order#1.status: pending -> delivered            ../rdra-ish-verify/samples/fail/order.rdra:18:1
 ```
 
 ## Achievement Conditions
 
 - Rules are expressed as model predicates, not prose-only comments.
-- Per-entity violations from `states` are either fixed or intentionally listed as
-  open design items.
-- Cross-entity rules use `Entity.column`; if `states` reports `UnbindableScope`, declare
-  the `relate` that binds the `.along(...)` path.
+- `check` reports no `error[...]` for a rule, or each one is listed as an open design
+  item.
+- Cross-entity rules use `Entity.column`; an `UnbindableScope` error means a `.along(...)`
+  path that no `relate` binds, and `AmbiguousOwnerLink` means two keys join the pair,
+  so name one with `.by(role)`.
 - Temporal `property` rules, and rules that need two instances, are checked with
-  `export --kind tla` / `verify --backend tlc`, not by `states`.
+  `verify` (skill `rdra-ish-verify`); `check` runs one instance per entity and does not
+  evaluate properties.
 - Required lifecycle effects have corresponding `sets` or transitions.
-- Terminal, unreachable, and no-create warnings are reviewed instead of ignored.
+- `NoWitness`, `Deadlock`, `NeverRuns`, `UnwrittenConstrainedVar`, and `NoCreationPath`
+  findings are reviewed instead of ignored.
 - A comparison reads the Int values of its columns. Move them with `sets(UC, E, col == N)`,
   or drive the comparison with `sets(..., expr, true/false)`. A use case that drives it one
   way while its own Int `sets` make it the other is `ContradictoryDrivenComparison`, an
-  **`[error]`** under `states` (fail-closed).
+  error.
 - The final model can explain BUC scope, actor authority, API/system boundaries,
   entity structure, lifecycle, and rules as a single refinement chain.
 
 ## Completion
 
-When this step passes review, summarize remaining unresolved warnings from `check`,
-`actor-permission-audit`, `states`, and (when used) TLC rather than claiming the
-model is universally complete.
+When this step passes review, summarize remaining warnings from `check`,
+`actor-permission-audit`, `states`, and (when used) `verify`, with the `bounds:` line
+they hold under, rather than claiming the model is universally complete.

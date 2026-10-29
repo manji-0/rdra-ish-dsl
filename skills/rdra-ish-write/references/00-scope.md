@@ -34,13 +34,16 @@ module shared.biz
 
 business Commerce "Commerce"
 requirement ReqOrder "Order processing must be reliable"
-  priority high
+  priority "high"
   source "sales-ops"
   stakeholder "Order Desk"
   owner "Product"
-  status proposed
-  acceptance "Order can be submitted and audited."
+  status "proposed"
+  acceptance criteria "Order can be submitted and audited."
 ```
+
+Requirement metadata values are string literals. `source`, `stakeholder`, and
+`acceptance criteria` may repeat.
 
 ```rdra
 module buc.order
