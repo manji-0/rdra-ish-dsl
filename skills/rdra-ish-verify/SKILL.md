@@ -32,7 +32,8 @@ after `npx skills add` / `gh skill install`. In the `rdra-ish-dsl` repository,
 1. Work from the skill root (the directory that holds this `SKILL.md`). Check **one**
    sample file at a time: the samples reuse ids such as `Order`, so checking the whole
    `samples/` directory fails on duplicate declarations.
-2. Run `rdra-ish check <file>` first. It explores the same transition system as TLC by
+2. Run `rdra-ish check <file>` first. For a model split over several files, pass its
+   root directory (`rdra-ish check ec-site/`), not a list of files. It explores the same transition system as TLC by
    breadth-first search at one instance per entity, so it is the fast loop.
 3. Decide whether TLC is needed with `references/when-to-use.md`: temporal `property`,
    and rules that need two instances (quantifiers, `.along` over several rows, 1:1 keys).

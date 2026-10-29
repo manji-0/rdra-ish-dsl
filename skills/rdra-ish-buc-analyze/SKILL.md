@@ -35,7 +35,8 @@ reference file for the concrete analysis task.
    name, the `bounds:` line a lifecycle result holds under, and anything listed under
    `not checked:`. Paste the `bounds:` line and the last line of `check` exactly as
    printed; do not paraphrase them. If `check` printed no `Witness_*`, `Deadlock_*` or
-   `Runs_*` finding, say so.
+   `Runs_*` finding, say so. Give a row or finding count only after counting it in the
+   output (for a CSV, its data rows without the header).
 5. End with the next useful refinement question or the smallest concrete model change.
 
 ### Quick Command Palette
