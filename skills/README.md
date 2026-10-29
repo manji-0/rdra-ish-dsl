@@ -50,13 +50,20 @@ gh skill install OWNER/REPO rdra-ish-verify --agent cursor --scope user
 
 | Skill | Role |
 |---|---|
-| `rdra-ish-write` | Author DSL by refinement stage |
+| `rdra-ish-write` | Author DSL by refinement stage (step files 0 to 6) |
 | `rdra-ish-buc-create` | Create a BUC from requirements |
 | `rdra-ish-buc-update` | Extend an existing BUC |
-| `rdra-ish-buc-analyze` | Analyze coverage, access, state patterns |
+| `rdra-ish-buc-analyze` | Analyze coverage, access, API boundaries, and lifecycle findings |
 | `rdra-ish-diagram` | Choose diagram / CSV / export views |
-| `rdra-ish-review` | Lint-oriented model review checklist |
-| `rdra-ish-verify` | TLA+/TLC formal verification (+ bundled samples) |
+| `rdra-ish-review` | `check` / `lint`-oriented model review checklist |
+| `rdra-ish-verify` | TLA+/TLC formal verification with `verify` (+ bundled samples) |
+
+## Keeping the skills current
+
+`python3 -I scripts/check-skill-snippets.py target/release/rdra-ish` checks every skill
+against the binary: each `rdra` code block loads with `check`, each `$ rdra-ish ...`
+transcript still prints what the skill quotes, and each command, flag, and flag value
+exists. CI runs it in the `check` job. Its header describes the markers it reads.
 
 ## Formal-verification samples
 
