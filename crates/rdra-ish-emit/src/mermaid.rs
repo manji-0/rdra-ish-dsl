@@ -3,9 +3,9 @@
 use crate::diagram_common::{
     business_actor_node_id, business_input_node_id, business_input_visible,
     business_usecase_node_id, col_type_str, graph_node_visible, is_entity_operation,
-    lifecycle_start_states, node_id, node_label, rdra_description_nodes, reachable_for_scope,
-    render_event_flows, render_relations, scoped_id, scoped_node_visible, sequence_usecase_scope,
-    technical_api_node_id, technical_entity_node_id, Syntax,
+    lifecycle_start_states, node_id, node_label, quote, rdra_description_nodes,
+    reachable_for_scope, render_descriptions, render_event_flows, render_relations, scoped_id,
+    scoped_node_visible, sequence_usecase_scope, technical_api_node_id, technical_entity_node_id,
 };
 use crate::{
     collect_object_graph_nodes, object_graph_layer, object_graph_rel_label, prefixed_label,
@@ -18,8 +18,6 @@ use rdra_ish_core::model::{
 use rdra_ish_core::tx::infer_usecase_transactions;
 use rdra_ish_core::{derive_actor_input_inferences, derive_system_boundaries};
 use std::collections::{HashMap, HashSet};
-
-const SYNTAX: Syntax = Syntax::Mermaid;
 
 // ── RDRA全体図エミッタ (Mermaid) ──────────────────────────────────────────────
 
@@ -194,13 +192,13 @@ impl Emitter for RdraMermaidEmitter {
         let mut out = String::new();
         out.push_str("graph TD\n");
         render_mermaid_rdra_node_declarations(&mut out, model, &reachable, view);
-        render_relations(SYNTAX, &mut out, model, &reachable, view);
+        render_relations(&mut out, model, &reachable, view);
         if view.show_descriptions {
             let nodes: Vec<_> = rdra_description_nodes(model, &reachable)
                 .into_iter()
                 .filter(|node| view_node_visible(view, node))
                 .collect();
-            SYNTAX.render_descriptions(&mut out, model, &nodes);
+            render_descriptions(&mut out, model, &nodes);
         }
 
         while out.ends_with("\n\n") {
@@ -247,7 +245,7 @@ impl Emitter for ObjectGraphMermaidEmitter {
                 .filter(|nr| object_graph_layer(nr) == layer)
             {
                 if let (Some(id), Some(label)) = (node_id(model, nr), node_label(model, nr)) {
-                    let label = SYNTAX.quote(&prefixed_node_label(nr, label));
+                    let label = quote(&prefixed_node_label(nr, label));
                     let line = match nr {
                         NodeRef::Actor(_) => format!("    {}([\"{}\"])\n", id, label),
                         NodeRef::Requirement(_) => format!("    {}[\"{}\"]\n", id, label),
@@ -311,7 +309,7 @@ impl Emitter for ObjectGraphMermaidEmitter {
         }
 
         if view.show_descriptions {
-            SYNTAX.render_descriptions(&mut out, model, &visible_nodes);
+            render_descriptions(&mut out, model, &visible_nodes);
         }
 
         while out.ends_with("\n\n") {
@@ -341,7 +339,7 @@ impl Emitter for BusinessAreaMermaidEmitter {
             let actor_id = business_actor_node_id(model, &entry);
             let usecase_id = business_usecase_node_id(model, &entry);
             let input_id = business_input_node_id(model, &entry);
-            let input_label = SYNTAX.quote(&format!(
+            let input_label = quote(&format!(
                 "{}.{}, {}",
                 entity.id,
                 entry.column,
@@ -352,7 +350,7 @@ impl Emitter for BusinessAreaMermaidEmitter {
                 out.push_str(&format!(
                     "  {}([\"{}\"])\n",
                     actor_id,
-                    SYNTAX.quote(&prefixed_label("Business Actor", &actor.label))
+                    quote(&prefixed_label("Business Actor", &actor.label))
                 ));
             }
             if nodes.insert(input_id.clone()) {
@@ -362,7 +360,7 @@ impl Emitter for BusinessAreaMermaidEmitter {
                 out.push_str(&format!(
                     "  {}([\"{}\"])\n",
                     usecase_id,
-                    SYNTAX.quote(&prefixed_label("UseCase", &usecase.label))
+                    quote(&prefixed_label("UseCase", &usecase.label))
                 ));
             }
 
@@ -416,7 +414,7 @@ impl Emitter for TechnicalAreaMermaidEmitter {
             out.push_str(&format!(
                 "  subgraph {}[{}]\n",
                 system_id,
-                SYNTAX.quote(&system.label)
+                quote(&system.label)
             ));
             out.push_str("    direction TB\n");
             for api in &apis {
@@ -424,7 +422,7 @@ impl Emitter for TechnicalAreaMermaidEmitter {
                 out.push_str(&format!(
                     "    {}[\"{}\"]\n",
                     technical_api_node_id(model, boundary.system, *api),
-                    SYNTAX.quote(&prefixed_label("API", &api_model.label))
+                    quote(&prefixed_label("API", &api_model.label))
                 ));
             }
             for entity in &entities {
@@ -432,7 +430,7 @@ impl Emitter for TechnicalAreaMermaidEmitter {
                 out.push_str(&format!(
                     "    {}[(\"{}\")]\n",
                     technical_entity_node_id(model, boundary.system, *entity),
-                    SYNTAX.quote(&prefixed_label("Entity", &entity_model.label))
+                    quote(&prefixed_label("Entity", &entity_model.label))
                 ));
             }
             out.push_str("  end\n");
@@ -1018,7 +1016,7 @@ pub struct EventFlowMermaidEmitter;
 impl Emitter for EventFlowMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         let mut out = String::from("flowchart LR\n");
-        render_event_flows(SYNTAX, &mut out, model, &view.scope);
+        render_event_flows(&mut out, model, &view.scope);
         Ok(out)
     }
 }
@@ -1026,7 +1024,9 @@ impl Emitter for EventFlowMermaidEmitter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::diagram_common::{declare_flow_node, model_from, render_event_flow, FlowNode};
+    use crate::diagram_common::{
+        declare_flow_node, model_from, relation_edge, render_event_flow, FlowNode,
+    };
     use rdra_ish_core::build_model;
     use rdra_ish_syntax::parse;
 
@@ -1050,59 +1050,39 @@ performs(Customer, Browse)
     #[test]
     fn test_mermaid_rdra_relation_arrow_labels_and_overview_skips() {
         assert_eq!(
-            SYNTAX
-                .relation_edge(&RelKind::Reads, "Browse", "Catalog")
-                .as_deref(),
+            relation_edge(&RelKind::Reads, "Browse", "Catalog").as_deref(),
             Some("  Browse -.->|reads| Catalog\n")
         );
         assert_eq!(
-            SYNTAX
-                .relation_edge(&RelKind::RelateManyToOne, "Order", "Customer")
-                .as_deref(),
+            relation_edge(&RelKind::RelateManyToOne, "Order", "Customer").as_deref(),
             Some("  Order --- Customer\n")
         );
         assert_eq!(
-            SYNTAX
-                .relation_edge(&RelKind::Precedes, "ReviewCart", "AuthorizePayment")
-                .as_deref(),
+            relation_edge(&RelKind::Precedes, "ReviewCart", "AuthorizePayment").as_deref(),
             Some("  ReviewCart -->|precedes| AuthorizePayment\n")
         );
         assert_eq!(
-            SYNTAX
-                .relation_edge(&RelKind::Branches, "ReviewCart", "PaymentFailed")
-                .as_deref(),
+            relation_edge(&RelKind::Branches, "ReviewCart", "PaymentFailed").as_deref(),
             Some("  ReviewCart -.->|branches| PaymentFailed\n")
         );
         assert_eq!(
-            SYNTAX
-                .relation_edge(&RelKind::Excepts, "AuthorizePayment", "PaymentFailed")
-                .as_deref(),
+            relation_edge(&RelKind::Excepts, "AuthorizePayment", "PaymentFailed").as_deref(),
             Some("  AuthorizePayment -.->|excepts| PaymentFailed\n")
         );
         assert_eq!(
-            SYNTAX
-                .relation_edge(&RelKind::Repeats, "PaymentFailed", "ReviewCart")
-                .as_deref(),
+            relation_edge(&RelKind::Repeats, "PaymentFailed", "ReviewCart").as_deref(),
             Some("  PaymentFailed -.->|repeats| ReviewCart\n")
         );
         assert_eq!(
-            SYNTAX
-                .relation_edge(&RelKind::Covers, "AuthorizePayment", "CapturePayment")
-                .as_deref(),
+            relation_edge(&RelKind::Covers, "AuthorizePayment", "CapturePayment").as_deref(),
             Some("  AuthorizePayment -.->|covers| CapturePayment\n")
         );
         assert_eq!(
-            SYNTAX
-                .relation_edge(&RelKind::Compensates, "RefundPayment", "CapturePayment")
-                .as_deref(),
+            relation_edge(&RelKind::Compensates, "RefundPayment", "CapturePayment").as_deref(),
             Some("  RefundPayment -.->|compensates| CapturePayment\n")
         );
-        assert!(SYNTAX
-            .relation_edge(&RelKind::Transitions, "Draft", "Published")
-            .is_none());
-        assert!(SYNTAX
-            .relation_edge(&RelKind::Invokes, "Browse", "BrowseApi")
-            .is_none());
+        assert!(relation_edge(&RelKind::Transitions, "Draft", "Published").is_none());
+        assert!(relation_edge(&RelKind::Invokes, "Browse", "BrowseApi").is_none());
     }
 
     #[test]
@@ -1131,7 +1111,7 @@ invokes(Browse, BrowseApi)
         assert!(!declarations.contains("BrowseApi"));
 
         let mut relations = String::new();
-        render_relations(SYNTAX, &mut relations, &model, &reachable, &View::whole());
+        render_relations(&mut relations, &model, &reachable, &View::whole());
         assert!(relations.contains("Customer --> Browse"));
         assert!(relations.contains("Browse -.->|reads| Catalog"));
         assert!(!relations.contains("BrowseApi"));
@@ -1496,8 +1476,8 @@ transitions(Claim.status, ReviewClaim, open -> reviewed)
         let mut out = String::new();
         let mut declared = HashSet::new();
 
-        render_event_flow(SYNTAX, &mut out, &mut declared, &model, &None, flow);
-        render_event_flow(SYNTAX, &mut out, &mut declared, &model, &None, flow);
+        render_event_flow(&mut out, &mut declared, &model, &None, flow);
+        render_event_flow(&mut out, &mut declared, &model, &None, flow);
 
         assert_eq!(
             out.matches("ev__EncounterSigned{\"⚡ Encounter Signed\"}")
@@ -1549,41 +1529,21 @@ transitions(Encounter.status, SignEncounter, pending -> signed)
         let mut declared = HashSet::new();
 
         assert_eq!(
-            declare_flow_node(
-                SYNTAX,
-                &mut out,
-                &mut declared,
-                &model,
-                FlowNode::Event(flow.event)
-            )
-            .as_deref(),
+            declare_flow_node(&mut out, &mut declared, &model, FlowNode::Event(flow.event))
+                .as_deref(),
             Some("ev__EncounterSigned")
         );
         assert_eq!(
-            declare_flow_node(
-                SYNTAX,
-                &mut out,
-                &mut declared,
-                &model,
-                FlowNode::UseCase(usecase)
-            )
-            .as_deref(),
+            declare_flow_node(&mut out, &mut declared, &model, FlowNode::UseCase(usecase))
+                .as_deref(),
             Some("uc__SignEncounter")
         );
         assert_eq!(
-            declare_flow_node(SYNTAX, &mut out, &mut declared, &model, FlowNode::Buc(buc))
-                .as_deref(),
+            declare_flow_node(&mut out, &mut declared, &model, FlowNode::Buc(buc)).as_deref(),
             Some("buc__BucBillingClaims")
         );
         assert_eq!(
-            declare_flow_node(
-                SYNTAX,
-                &mut out,
-                &mut declared,
-                &model,
-                FlowNode::State(state)
-            )
-            .as_deref(),
+            declare_flow_node(&mut out, &mut declared, &model, FlowNode::State(state)).as_deref(),
             Some("st__Encounter_pending")
         );
 
@@ -1606,7 +1566,7 @@ raises(SignEncounter, EncounterSigned)
         let mut declared = HashSet::new();
         let reachable = Some(HashSet::new());
 
-        render_event_flow(SYNTAX, &mut out, &mut declared, &model, &reachable, &flow);
+        render_event_flow(&mut out, &mut declared, &model, &reachable, &flow);
 
         assert!(out.is_empty());
         assert!(declared.is_empty());

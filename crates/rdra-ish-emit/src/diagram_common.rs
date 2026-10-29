@@ -368,13 +368,7 @@ pub(crate) fn is_entity_operation(kind: &RelKind) -> bool {
     )
 }
 
-/// The text format a shared emitter writes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Syntax {
-    Mermaid,
-}
-
-/// An edge, independent of syntax.
+/// An edge the shared emitters draw.
 pub(crate) enum Link<'a> {
     /// Solid arrow, no label.
     Arrow,
@@ -386,98 +380,83 @@ pub(crate) enum Link<'a> {
     Undirected,
 }
 
-impl Syntax {
-    /// `label` safe inside a double-quoted string.
-    pub(crate) fn quote(self, label: &str) -> String {
-        match self {
-            Syntax::Mermaid => label.replace('"', "#quot;"),
-        }
-    }
+/// `label` safe inside a double-quoted string.
+pub(crate) fn quote(label: &str) -> String {
+    label.replace('"', "#quot;")
+}
 
-    /// One edge statement, newline included.
-    pub(crate) fn link(self, link: Link, from: &str, to: &str) -> String {
-        match (self, link) {
-            (Syntax::Mermaid, Link::Arrow) => format!("  {from} --> {to}\n"),
-            (Syntax::Mermaid, Link::Labeled(label)) => format!("  {from} -->|{label}| {to}\n"),
-            (Syntax::Mermaid, Link::Dotted(label)) => format!("  {from} -.->|{label}| {to}\n"),
-            (Syntax::Mermaid, Link::Undirected) => format!("  {from} --- {to}\n"),
-        }
+/// One edge statement, newline included.
+pub(crate) fn link_statement(link: Link, from: &str, to: &str) -> String {
+    match link {
+        Link::Arrow => format!("  {from} --> {to}\n"),
+        Link::Labeled(label) => format!("  {from} -->|{label}| {to}\n"),
+        Link::Dotted(label) => format!("  {from} -.->|{label}| {to}\n"),
+        Link::Undirected => format!("  {from} --- {to}\n"),
     }
+}
 
-    /// The edge the RDRA graph draws for a relation, or `None` for the kinds it leaves out.
-    pub(crate) fn relation_edge(self, kind: &RelKind, from: &str, to: &str) -> Option<String> {
-        let label = object_graph_rel_label(kind);
-        let link = match kind {
-            RelKind::Transitions | RelKind::Invokes => return None,
-            RelKind::Performs | RelKind::Contains | RelKind::Belongs => Link::Arrow,
-            RelKind::Precedes | RelKind::Owns => Link::Labeled(label),
-            RelKind::RelateOneToOne
-            | RelKind::RelateOneToMany
-            | RelKind::RelateManyToOne
-            | RelKind::RelateManyToMany => Link::Undirected,
-            RelKind::Reads
-            | RelKind::Writes
-            | RelKind::Creates
-            | RelKind::Updates
-            | RelKind::Deletes
-            | RelKind::Displays
-            | RelKind::Shows
-            | RelKind::Raises
-            | RelKind::Triggers
-            | RelKind::HasPermission
-            | RelKind::RequiresPermission
-            | RelKind::RequiresMedium
-            | RelKind::Motivates
-            | RelKind::Decides
-            | RelKind::Branches
-            | RelKind::Excepts
-            | RelKind::Repeats
-            | RelKind::Covers
-            | RelKind::Compensates
-            | RelKind::Request
-            | RelKind::Response
-            | RelKind::ErrorResponse
-            | RelKind::AppliesTo
-            | RelKind::Combines
-            | RelKind::Qualifies
-            | RelKind::Constrains
-            | RelKind::MapsField => Link::Dotted(label),
+/// The edge the RDRA graph draws for a relation, or `None` for the kinds it leaves out.
+pub(crate) fn relation_edge(kind: &RelKind, from: &str, to: &str) -> Option<String> {
+    let label = object_graph_rel_label(kind);
+    let link = match kind {
+        RelKind::Transitions | RelKind::Invokes => return None,
+        RelKind::Performs | RelKind::Contains | RelKind::Belongs => Link::Arrow,
+        RelKind::Precedes | RelKind::Owns => Link::Labeled(label),
+        RelKind::RelateOneToOne
+        | RelKind::RelateOneToMany
+        | RelKind::RelateManyToOne
+        | RelKind::RelateManyToMany => Link::Undirected,
+        RelKind::Reads
+        | RelKind::Writes
+        | RelKind::Creates
+        | RelKind::Updates
+        | RelKind::Deletes
+        | RelKind::Displays
+        | RelKind::Shows
+        | RelKind::Raises
+        | RelKind::Triggers
+        | RelKind::HasPermission
+        | RelKind::RequiresPermission
+        | RelKind::RequiresMedium
+        | RelKind::Motivates
+        | RelKind::Decides
+        | RelKind::Branches
+        | RelKind::Excepts
+        | RelKind::Repeats
+        | RelKind::Covers
+        | RelKind::Compensates
+        | RelKind::Request
+        | RelKind::Response
+        | RelKind::ErrorResponse
+        | RelKind::AppliesTo
+        | RelKind::Combines
+        | RelKind::Qualifies
+        | RelKind::Constrains
+        | RelKind::MapsField => Link::Dotted(label),
+    };
+    Some(link_statement(link, from, to))
+}
+
+/// A note per node that has a description, attached to the node.
+pub(crate) fn render_descriptions(out: &mut String, model: &SemanticModel, nodes: &[NodeRef]) {
+    for node in nodes {
+        let (Some(id), Some(description)) = (node_id(model, node), node_description(model, node))
+        else {
+            continue;
         };
-        Some(self.link(link, from, to))
-    }
-
-    /// A note per node that has a description, attached to the node.
-    pub(crate) fn render_descriptions(
-        self,
-        out: &mut String,
-        model: &SemanticModel,
-        nodes: &[NodeRef],
-    ) {
-        for node in nodes {
-            let (Some(id), Some(description)) =
-                (node_id(model, node), node_description(model, node))
-            else {
-                continue;
-            };
-            let description = description.trim();
-            if description.is_empty() {
-                continue;
-            }
-            match self {
-                Syntax::Mermaid => {
-                    let note_id = format!("{}_description", id);
-                    let description = self.quote(description).replace('\n', "<br/>");
-                    out.push_str(&format!("  {}[\"{}\"]\n", note_id, description));
-                    out.push_str(&format!("  {} -. description .- {}\n", note_id, id));
-                }
-            }
+        let description = description.trim();
+        if description.is_empty() {
+            continue;
         }
+        let note_id = format!("{}_description", id);
+        let description = quote(description).replace('\n', "<br/>");
+        out.push_str(&format!("  {}[\"{}\"]\n", note_id, description));
+        out.push_str(&format!("  {} -. description .- {}\n", note_id, id));
     }
 }
 
 /// The edges between the visible nodes of the RDRA graph, in a stable order.
 pub(crate) fn render_relations(
-    syntax: Syntax,
     out: &mut String,
     model: &SemanticModel,
     reachable: &Option<HashSet<NodeRef>>,
@@ -498,7 +477,7 @@ pub(crate) fn render_relations(
         if let (Some(from_id), Some(to_id)) =
             (node_id(model, &relation.from), node_id(model, &relation.to))
         {
-            if let Some(edge) = syntax.relation_edge(&relation.kind, from_id, to_id) {
+            if let Some(edge) = relation_edge(&relation.kind, from_id, to_id) {
                 out.push_str(&edge);
             }
         }
@@ -551,29 +530,22 @@ impl FlowNode {
     }
 }
 
-impl Syntax {
-    /// The statement that declares an event-flow node: a Mermaid shape.
-    fn flow_node_declaration(self, node: FlowNode, id: &str, label: &str) -> String {
-        match self {
-            Syntax::Mermaid => {
-                let (open, close) = match node {
-                    FlowNode::Event(_) => ("{", "}"),
-                    FlowNode::UseCase(_) => ("([", "])"),
-                    FlowNode::Buc(_) => ("[[", "]]"),
-                    FlowNode::State(_) => ("(", ")"),
-                    FlowNode::ExtSystem(_) => ("[/", "/]"),
-                    FlowNode::Timer(_) => ("{{", "}}"),
-                };
-                format!("  {id}{open}\"{label}\"{close}\n")
-            }
-        }
-    }
+/// The statement that declares an event-flow node: a Mermaid shape.
+fn flow_node_declaration(node: FlowNode, id: &str, label: &str) -> String {
+    let (open, close) = match node {
+        FlowNode::Event(_) => ("{", "}"),
+        FlowNode::UseCase(_) => ("([", "])"),
+        FlowNode::Buc(_) => ("[[", "]]"),
+        FlowNode::State(_) => ("(", ")"),
+        FlowNode::ExtSystem(_) => ("[/", "/]"),
+        FlowNode::Timer(_) => ("{{", "}}"),
+    };
+    format!("  {id}{open}\"{label}\"{close}\n")
 }
 
 /// Declare `node` once per diagram and return its diagram id, or `None` when the model no
 /// longer holds it.
 pub(crate) fn declare_flow_node(
-    syntax: Syntax,
     out: &mut String,
     declared: &mut HashSet<String>,
     model: &SemanticModel,
@@ -583,30 +555,24 @@ pub(crate) fn declare_flow_node(
     let id = format!("{}__{}", node.id_prefix(), node_id(model, &node_ref)?);
     if declared.insert(id.clone()) {
         let label = prefixed_label(node.icon(), node_label(model, &node_ref)?);
-        out.push_str(&syntax.flow_node_declaration(node, &id, &label));
+        out.push_str(&flow_node_declaration(node, &id, &label));
     }
     Some(id)
 }
 
 /// Every event flow and timer flow the scope shows.
-pub(crate) fn render_event_flows(
-    syntax: Syntax,
-    out: &mut String,
-    model: &SemanticModel,
-    scope: &Scope,
-) {
+pub(crate) fn render_event_flows(out: &mut String, model: &SemanticModel, scope: &Scope) {
     let reachable = reachable_for_scope(model, scope);
     let mut declared: HashSet<String> = HashSet::new();
     for flow in &rdra_ish_core::collect_event_flows(model) {
-        render_event_flow(syntax, out, &mut declared, model, &reachable, flow);
+        render_event_flow(out, &mut declared, model, &reachable, flow);
     }
     for timer_flow in rdra_ish_core::collect_timer_flows(model) {
-        render_timer_flow(syntax, out, &mut declared, model, &reachable, &timer_flow);
+        render_timer_flow(out, &mut declared, model, &reachable, &timer_flow);
     }
 }
 
 pub(crate) fn render_event_flow(
-    syntax: Syntax,
     out: &mut String,
     declared: &mut HashSet<String>,
     model: &SemanticModel,
@@ -617,8 +583,7 @@ pub(crate) fn render_event_flow(
     if !scoped_node_visible(reachable, &event_node) {
         return;
     }
-    let Some(event_id) =
-        declare_flow_node(syntax, out, declared, model, FlowNode::Event(flow.event))
+    let Some(event_id) = declare_flow_node(out, declared, model, FlowNode::Event(flow.event))
     else {
         return;
     };
@@ -650,12 +615,16 @@ pub(crate) fn render_event_flow(
                 FlowNode::ExtSystem(extsystem),
             ),
         };
-        let declared_id = declare_flow_node(syntax, out, declared, model, flow_node);
+        let declared_id = declare_flow_node(out, declared, model, flow_node);
         if !scoped_node_visible(reachable, &node) {
             continue;
         }
         if let Some(raiser_id) = declared_id {
-            out.push_str(&syntax.link(Link::Dotted("raises"), &raiser_id, &event_id));
+            out.push_str(&link_statement(
+                Link::Dotted("raises"),
+                &raiser_id,
+                &event_id,
+            ));
         }
     }
 
@@ -673,9 +642,13 @@ pub(crate) fn render_event_flow(
             continue;
         }
         if let Some(usecase_id) =
-            declare_flow_node(syntax, out, declared, model, FlowNode::UseCase(usecase))
+            declare_flow_node(out, declared, model, FlowNode::UseCase(usecase))
         {
-            out.push_str(&syntax.link(Link::Dotted("triggers"), &event_id, &usecase_id));
+            out.push_str(&link_statement(
+                Link::Dotted("triggers"),
+                &event_id,
+                &usecase_id,
+            ));
         }
     }
 
@@ -686,8 +659,12 @@ pub(crate) fn render_event_flow(
         if !scoped_node_visible(reachable, &node) {
             continue;
         }
-        if let Some(buc_id) = declare_flow_node(syntax, out, declared, model, FlowNode::Buc(buc)) {
-            out.push_str(&syntax.link(Link::Dotted("triggers"), &event_id, &buc_id));
+        if let Some(buc_id) = declare_flow_node(out, declared, model, FlowNode::Buc(buc)) {
+            out.push_str(&link_statement(
+                Link::Dotted("triggers"),
+                &event_id,
+                &buc_id,
+            ));
         }
     }
 
@@ -705,9 +682,13 @@ pub(crate) fn render_event_flow(
             continue;
         }
         if let Some(extsystem_id) =
-            declare_flow_node(syntax, out, declared, model, FlowNode::ExtSystem(extsystem))
+            declare_flow_node(out, declared, model, FlowNode::ExtSystem(extsystem))
         {
-            out.push_str(&syntax.link(Link::Dotted("delivers"), &event_id, &extsystem_id));
+            out.push_str(&link_statement(
+                Link::Dotted("delivers"),
+                &event_id,
+                &extsystem_id,
+            ));
         }
     }
 
@@ -744,20 +725,21 @@ pub(crate) fn render_event_flow(
         .map(|event| prefixed_label("⚡", &event.label))
         .unwrap_or_default();
     for (from, to) in &transitions {
-        let Some(from_id) = declare_flow_node(syntax, out, declared, model, FlowNode::State(*from))
-        else {
+        let Some(from_id) = declare_flow_node(out, declared, model, FlowNode::State(*from)) else {
             continue;
         };
-        let Some(to_id) = declare_flow_node(syntax, out, declared, model, FlowNode::State(*to))
-        else {
+        let Some(to_id) = declare_flow_node(out, declared, model, FlowNode::State(*to)) else {
             continue;
         };
-        out.push_str(&syntax.link(Link::Labeled(&event_label), &from_id, &to_id));
+        out.push_str(&link_statement(
+            Link::Labeled(&event_label),
+            &from_id,
+            &to_id,
+        ));
     }
 }
 
 pub(crate) fn render_timer_flow(
-    syntax: Syntax,
     out: &mut String,
     declared: &mut HashSet<String>,
     model: &SemanticModel,
@@ -767,8 +749,7 @@ pub(crate) fn render_timer_flow(
     if !scoped_node_visible(reachable, &NodeRef::Timer(flow.timer)) {
         return;
     }
-    let Some(timer_id) =
-        declare_flow_node(syntax, out, declared, model, FlowNode::Timer(flow.timer))
+    let Some(timer_id) = declare_flow_node(out, declared, model, FlowNode::Timer(flow.timer))
     else {
         return;
     };
@@ -786,9 +767,13 @@ pub(crate) fn render_timer_flow(
             continue;
         }
         if let Some(usecase_id) =
-            declare_flow_node(syntax, out, declared, model, FlowNode::UseCase(usecase))
+            declare_flow_node(out, declared, model, FlowNode::UseCase(usecase))
         {
-            out.push_str(&syntax.link(Link::Dotted("triggers"), &timer_id, &usecase_id));
+            out.push_str(&link_statement(
+                Link::Dotted("triggers"),
+                &timer_id,
+                &usecase_id,
+            ));
         }
     }
 
@@ -798,8 +783,12 @@ pub(crate) fn render_timer_flow(
         if !scoped_node_visible(reachable, &NodeRef::Buc(buc)) {
             continue;
         }
-        if let Some(buc_id) = declare_flow_node(syntax, out, declared, model, FlowNode::Buc(buc)) {
-            out.push_str(&syntax.link(Link::Dotted("triggers"), &timer_id, &buc_id));
+        if let Some(buc_id) = declare_flow_node(out, declared, model, FlowNode::Buc(buc)) {
+            out.push_str(&link_statement(
+                Link::Dotted("triggers"),
+                &timer_id,
+                &buc_id,
+            ));
         }
     }
 }
