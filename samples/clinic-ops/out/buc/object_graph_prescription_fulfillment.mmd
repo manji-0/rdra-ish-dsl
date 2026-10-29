@@ -1,185 +1,221 @@
+%% rdra-ish diagram=rdra scope=buc:BucPrescriptionFulfillment model=samples/clinic-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: extsystem business buc flow step timer medium permission usecase screen field event api entity state
+%% omitted: (none)
 flowchart LR
-  subgraph layer_value[System Value]
-    direction TB
-    EPrescriptionService[/"🌐 電子処方箋管理サービス"/]
-    InsurancePharmacy[/"🌐 保険薬局"/]
+  subgraph layer_value["システム価値"]
+    extsystem__EPrescriptionService["電子処方箋管理サービス"]:::extsystem
+    extsystem__InsurancePharmacy["保険薬局"]:::extsystem
   end
-  subgraph layer_environment[External Environment]
-    direction TB
-    CareDelivery["💼 Care Delivery"]
-    BucPrescriptionFulfillment["📦 処方"]
-    PrescriptionFlow["🧭 処方の流れ"]
-    CounselStep(["➡️ 服薬指導・薬剤交付"])
-    DispenseStep(["➡️ 調剤・監査"])
-    InhouseStep(["➡️ 院内処方（引換券）"])
-    InquiryStep(["➡️ 疑義照会"])
-    OrderStep(["➡️ 処方オーダ"])
-    OutsideStep(["➡️ 院外処方箋（電子処方箋管理サービス）"])
-    PharmacyStep(["➡️ 保険薬局での調剤"])
-    PrescriptionUsePeriodCheck["⏱️ 処方箋の使用期間切れ確認"]
-    ClinicalWorkstation[/"📱 Clinical Workstation"/]
-    PharmacyWorkstation[/"📱 薬剤部端末"/]
-    PrescriptionDispense["🔑 Prescription Dispense"]
-    PrescriptionWrite["🔑 Prescription Write"]
+  subgraph layer_environment["システム外部環境"]
+    business__CareDelivery["Care Delivery"]:::business
+    buc__BucPrescriptionFulfillment["処方"]:::buc
+    %% desc buc__BucPrescriptionFulfillment: 処方オーダ、院外処方箋の発行と電子処方箋管理サービスへの登録、院内処方の調剤・監査・服薬指導・交付、疑義照会。
+    flow__PrescriptionFlow["処方の流れ"]:::flow
+    step__CounselStep["服薬指導・薬剤交付"]:::step
+    step__DispenseStep["調剤・監査"]:::step
+    step__InhouseStep["院内処方（引換券）"]:::step
+    step__InquiryStep["疑義照会"]:::step
+    step__OrderStep["処方オーダ"]:::step
+    step__OutsideStep["院外処方箋（電子処方箋管理サービス）"]:::step
+    step__PharmacyStep["保険薬局での調剤"]:::step
+    timer__PrescriptionUsePeriodCheck["処方箋の使用期間切れ確認"]:::timer
+    medium__ClinicalWorkstation["Clinical Workstation"]:::medium
+    medium__PharmacyWorkstation["薬剤部端末"]:::medium
+    permission__PrescriptionDispense["Prescription Dispense"]:::permission
+    permission__PrescriptionWrite["Prescription Write"]:::permission
   end
-  subgraph layer_boundary[System Boundary]
-    direction TB
-    AnswerPharmacyInquiry(["✅ 保険薬局からの疑義照会への回答"])
-    AnswerPrescriptionInquiry(["✅ 疑義照会への回答"])
-    CancelPrescription(["✅ 処方の取消"])
-    ConfirmDispense(["✅ 保険薬局での調剤結果の受信"])
-    CounselMedication(["✅ 服薬指導"])
-    DispenseAndAudit(["✅ 調剤・監査"])
-    DraftPrescription(["✅ 処方オーダの登録"])
-    ExpirePrescription(["✅ 処方箋の使用期間切れ"])
-    HandOverMedication(["✅ 薬剤交付"])
-    IssueInhouseVoucher(["✅ 院内処方用引換券の交付"])
-    IssueOutsidePrescription(["✅ 院外処方箋の発行"])
-    IssueRefillPrescription(["✅ リフィル処方箋の処方オーダ"])
-    RaisePrescriptionInquiry(["✅ 疑義照会"])
-    SearchMedication(["✅ Search Medication"])
-    DispensingScreen[["🖥️ 調剤・監査画面"]]
-    MedicationSearchScreen[["🖥️ Medication Search Screen"]]
-    PharmacyStatusScreen[["🖥️ 電子処方箋の状況画面"]]
-    PrescriptionScreen[["🖥️ 処方画面"]]
-    DispensedAtField[["🔤 交付日時"]]
-    RefillLimitField[["🔤 リフィルの使用回数の上限"]]
-    UsePeriodField[["🔤 使用期間（日）"]]
-    EvPharmacyInquiry{"⚡ 保険薬局からの疑義照会"}
-    EvPrescriptionDispensed{"⚡ Prescription Dispensed"}
-    EvPrescriptionIssued{"⚡ 電子処方箋の登録"}
+  subgraph layer_boundary["システム境界"]
+    usecase__AnswerPharmacyInquiry["保険薬局からの疑義照会への回答"]:::usecase
+    usecase__AnswerPrescriptionInquiry["疑義照会への回答"]:::usecase
+    usecase__CancelPrescription["処方の取消"]:::usecase
+    usecase__ConfirmDispense["保険薬局での調剤結果の受信"]:::usecase
+    usecase__CounselMedication["服薬指導"]:::usecase
+    usecase__DispenseAndAudit["調剤・監査"]:::usecase
+    usecase__DraftPrescription["処方オーダの登録"]:::usecase
+    usecase__ExpirePrescription["処方箋の使用期間切れ"]:::usecase
+    usecase__HandOverMedication["薬剤交付"]:::usecase
+    usecase__IssueInhouseVoucher["院内処方用引換券の交付"]:::usecase
+    usecase__IssueOutsidePrescription["院外処方箋の発行"]:::usecase
+    usecase__IssueRefillPrescription["リフィル処方箋の処方オーダ"]:::usecase
+    usecase__RaisePrescriptionInquiry["疑義照会"]:::usecase
+    usecase__SearchMedication["Search Medication"]:::usecase
+    screen__DispensingScreen["調剤・監査画面"]:::screen
+    screen__MedicationSearchScreen["Medication Search Screen"]:::screen
+    screen__PharmacyStatusScreen["電子処方箋の状況画面"]:::screen
+    screen__PrescriptionScreen["処方画面"]:::screen
+    field__DispensedAtField["交付日時"]:::field
+    field__RefillLimitField["リフィルの使用回数の上限"]:::field
+    field__UsePeriodField["使用期間（日）"]:::field
+    event__EvPharmacyInquiry["保険薬局からの疑義照会"]:::event
+    event__EvPrescriptionDispensed["Prescription Dispensed"]:::event
+    event__EvPrescriptionIssued["電子処方箋の登録"]:::event
   end
-  subgraph layer_system[System]
-    direction TB
-    ConfirmDispenseApi["🔌 調剤結果 API"]
-    DispensingApi["🔌 院内調剤 API"]
-    DraftPrescriptionApi["🔌 処方オーダ API"]
-    IssuePrescriptionApi["🔌 処方箋発行 API"]
-    MedicationCatalogApi["🔌 Medication Catalog API"]
-    PrescriptionInquiryApi["🔌 疑義照会 API"]
-    Encounter[("🗄️ Encounter")]
-    Medication[("🗄️ Medication")]
-    Prescription[("🗄️ 処方箋")]
+  subgraph layer_system["システム"]
+    api__ConfirmDispenseApi["調剤結果 API"]:::api
+    api__DispensingApi["院内調剤 API"]:::api
+    api__DraftPrescriptionApi["処方オーダ API"]:::api
+    api__IssuePrescriptionApi["処方箋発行 API"]:::api
+    api__MedicationCatalogApi["Medication Catalog API"]:::api
+    api__PrescriptionInquiryApi["疑義照会 API"]:::api
+    entity__Encounter["Encounter"]:::entity
+    entity__Medication["Medication"]:::entity
+    entity__Prescription["処方箋"]:::entity
+    state__Prescription_rxaudited["rxaudited"]:::state
+    state__Prescription_rxcancelled["rxcancelled"]:::state
+    state__Prescription_rxcounseled["rxcounseled"]:::state
+    state__Prescription_rxdispensed["rxdispensed"]:::state
+    state__Prescription_rxdrafted["rxdrafted"]:::state
+    state__Prescription_rxexpired["rxexpired"]:::state
+    state__Prescription_rxinquiry["rxinquiry"]:::state
+    state__Prescription_rxissued["rxissued"]:::state
+    state__Prescription_rxvoucher["rxvoucher"]:::state
   end
-  MedicationCatalogApi -.->|reads| Medication
-  MedicationCatalogApi -.->|requires_permission| PrescriptionWrite
-  DraftPrescriptionApi -.->|creates| Prescription
-  DraftPrescriptionApi -.->|reads| Encounter
-  DraftPrescriptionApi -.->|requires_permission| PrescriptionWrite
-  IssuePrescriptionApi -.->|requires_permission| PrescriptionWrite
-  IssuePrescriptionApi -.->|updates| Prescription
-  DispensingApi -.->|requires_permission| PrescriptionDispense
-  DispensingApi -.->|updates| Prescription
-  ConfirmDispenseApi -.->|updates| Prescription
-  PrescriptionInquiryApi -.->|requires_permission| PrescriptionWrite
-  PrescriptionInquiryApi -.->|updates| Prescription
-  BucPrescriptionFulfillment -.->|belongs| CareDelivery
-  BucPrescriptionFulfillment -->|contains| PrescriptionFlow
-  BucPrescriptionFulfillment -->|contains| SearchMedication
-  BucPrescriptionFulfillment -->|contains| DraftPrescription
-  BucPrescriptionFulfillment -->|contains| IssueRefillPrescription
-  BucPrescriptionFulfillment -->|contains| IssueOutsidePrescription
-  BucPrescriptionFulfillment -->|contains| IssueInhouseVoucher
-  BucPrescriptionFulfillment -->|contains| DispenseAndAudit
-  BucPrescriptionFulfillment -->|contains| CounselMedication
-  BucPrescriptionFulfillment -->|contains| HandOverMedication
-  BucPrescriptionFulfillment -->|contains| RaisePrescriptionInquiry
-  BucPrescriptionFulfillment -->|contains| AnswerPrescriptionInquiry
-  BucPrescriptionFulfillment -->|contains| AnswerPharmacyInquiry
-  BucPrescriptionFulfillment -->|contains| ConfirmDispense
-  BucPrescriptionFulfillment -->|contains| ExpirePrescription
-  BucPrescriptionFulfillment -->|contains| CancelPrescription
-  Prescription ---|N:1| Encounter
-  Prescription ---|N:1| Medication
-  EvPharmacyInquiry -.->|triggers| AnswerPharmacyInquiry
-  EvPrescriptionIssued -.->|triggers| EPrescriptionService
-  EvPrescriptionDispensed -.->|triggers| ConfirmDispense
-  EPrescriptionService -.->|raises| EvPrescriptionDispensed
-  InsurancePharmacy -.->|raises| EvPharmacyInquiry
-  UsePeriodField -.->|maps_field| Prescription
-  RefillLimitField -.->|maps_field| Prescription
-  DispensedAtField -.->|maps_field| Prescription
-  PrescriptionFlow -->|contains| OrderStep
-  PrescriptionFlow -->|contains| OutsideStep
-  PrescriptionFlow -->|contains| InhouseStep
-  PrescriptionFlow -->|contains| DispenseStep
-  PrescriptionFlow -->|contains| InquiryStep
-  PrescriptionFlow -->|contains| CounselStep
-  PrescriptionFlow -->|contains| PharmacyStep
-  MedicationSearchScreen -.->|shows| Medication
-  PrescriptionScreen -->|contains| UsePeriodField
-  PrescriptionScreen -->|contains| RefillLimitField
-  DispensingScreen -->|contains| DispensedAtField
-  OrderStep -.->|branches| InhouseStep
-  OrderStep -.->|covers| DraftPrescription
-  OrderStep -.->|covers| IssueRefillPrescription
-  OrderStep -.->|precedes| OutsideStep
-  OutsideStep -.->|covers| IssueOutsidePrescription
-  OutsideStep -.->|precedes| PharmacyStep
-  InhouseStep -.->|covers| IssueInhouseVoucher
-  InhouseStep -.->|precedes| DispenseStep
-  DispenseStep -.->|covers| DispenseAndAudit
-  DispenseStep -.->|excepts| InquiryStep
-  DispenseStep -.->|precedes| CounselStep
-  InquiryStep -.->|covers| RaisePrescriptionInquiry
-  InquiryStep -.->|covers| AnswerPrescriptionInquiry
-  InquiryStep -.->|repeats| DispenseStep
-  CounselStep -.->|covers| CounselMedication
-  CounselStep -.->|covers| HandOverMedication
-  PharmacyStep -.->|covers| AnswerPharmacyInquiry
-  PharmacyStep -.->|covers| ConfirmDispense
-  PrescriptionUsePeriodCheck -.->|triggers| ExpirePrescription
-  SearchMedication -.->|displays| MedicationSearchScreen
-  SearchMedication -.->|invokes| MedicationCatalogApi
-  SearchMedication -.->|requires_medium| ClinicalWorkstation
-  SearchMedication -.->|requires_permission| PrescriptionWrite
-  DraftPrescription -.->|displays| PrescriptionScreen
-  DraftPrescription -.->|invokes| DraftPrescriptionApi
-  DraftPrescription -.->|requires_medium| ClinicalWorkstation
-  DraftPrescription -.->|requires_permission| PrescriptionWrite
-  IssueRefillPrescription -.->|displays| PrescriptionScreen
-  IssueRefillPrescription -.->|invokes| DraftPrescriptionApi
-  IssueRefillPrescription -.->|requires_medium| ClinicalWorkstation
-  IssueRefillPrescription -.->|requires_permission| PrescriptionWrite
-  IssueOutsidePrescription -.->|displays| PrescriptionScreen
-  IssueOutsidePrescription -.->|invokes| IssuePrescriptionApi
-  IssueOutsidePrescription -.->|raises| EvPrescriptionIssued
-  IssueOutsidePrescription -.->|requires_medium| ClinicalWorkstation
-  IssueOutsidePrescription -.->|requires_permission| PrescriptionWrite
-  IssueInhouseVoucher -.->|displays| PrescriptionScreen
-  IssueInhouseVoucher -.->|invokes| IssuePrescriptionApi
-  IssueInhouseVoucher -.->|requires_medium| ClinicalWorkstation
-  IssueInhouseVoucher -.->|requires_permission| PrescriptionWrite
-  DispenseAndAudit -.->|displays| DispensingScreen
-  DispenseAndAudit -.->|invokes| DispensingApi
-  DispenseAndAudit -.->|requires_medium| PharmacyWorkstation
-  DispenseAndAudit -.->|requires_permission| PrescriptionDispense
-  CounselMedication -.->|displays| DispensingScreen
-  CounselMedication -.->|invokes| DispensingApi
-  CounselMedication -.->|requires_medium| PharmacyWorkstation
-  CounselMedication -.->|requires_permission| PrescriptionDispense
-  HandOverMedication -.->|displays| DispensingScreen
-  HandOverMedication -.->|invokes| DispensingApi
-  HandOverMedication -.->|requires_medium| PharmacyWorkstation
-  HandOverMedication -.->|requires_permission| PrescriptionDispense
-  RaisePrescriptionInquiry -.->|displays| DispensingScreen
-  RaisePrescriptionInquiry -.->|invokes| DispensingApi
-  RaisePrescriptionInquiry -.->|requires_medium| PharmacyWorkstation
-  RaisePrescriptionInquiry -.->|requires_permission| PrescriptionDispense
-  AnswerPrescriptionInquiry -.->|displays| PrescriptionScreen
-  AnswerPrescriptionInquiry -.->|invokes| PrescriptionInquiryApi
-  AnswerPrescriptionInquiry -.->|requires_medium| ClinicalWorkstation
-  AnswerPrescriptionInquiry -.->|requires_permission| PrescriptionWrite
-  AnswerPharmacyInquiry -.->|displays| PrescriptionScreen
-  AnswerPharmacyInquiry -.->|invokes| PrescriptionInquiryApi
-  AnswerPharmacyInquiry -.->|requires_medium| ClinicalWorkstation
-  AnswerPharmacyInquiry -.->|requires_permission| PrescriptionWrite
-  ConfirmDispense -.->|displays| PharmacyStatusScreen
-  ConfirmDispense -.->|invokes| ConfirmDispenseApi
-  ConfirmDispense -.->|requires_medium| PharmacyWorkstation
-  ExpirePrescription -.->|displays| PharmacyStatusScreen
-  ExpirePrescription -.->|invokes| ConfirmDispenseApi
-  CancelPrescription -.->|displays| PrescriptionScreen
-  CancelPrescription -.->|requires_medium| ClinicalWorkstation
-  CancelPrescription -.->|requires_permission| PrescriptionWrite
-  CancelPrescription -.->|updates| Prescription
+  api__ConfirmDispenseApi -.->|updates| entity__Prescription
+  api__DispensingApi -.->|requires_permission| permission__PrescriptionDispense
+  api__DispensingApi -.->|updates| entity__Prescription
+  api__DraftPrescriptionApi -.->|creates| entity__Prescription
+  api__DraftPrescriptionApi -.->|reads| entity__Encounter
+  api__DraftPrescriptionApi -.->|requires_permission| permission__PrescriptionWrite
+  api__IssuePrescriptionApi -.->|requires_permission| permission__PrescriptionWrite
+  api__IssuePrescriptionApi -.->|updates| entity__Prescription
+  api__MedicationCatalogApi -.->|reads| entity__Medication
+  api__MedicationCatalogApi -.->|requires_permission| permission__PrescriptionWrite
+  api__PrescriptionInquiryApi -.->|requires_permission| permission__PrescriptionWrite
+  api__PrescriptionInquiryApi -.->|updates| entity__Prescription
+  buc__BucPrescriptionFulfillment -->|belongs| business__CareDelivery
+  buc__BucPrescriptionFulfillment -->|contains| flow__PrescriptionFlow
+  buc__BucPrescriptionFulfillment -->|contains| usecase__AnswerPharmacyInquiry
+  buc__BucPrescriptionFulfillment -->|contains| usecase__AnswerPrescriptionInquiry
+  buc__BucPrescriptionFulfillment -->|contains| usecase__CancelPrescription
+  buc__BucPrescriptionFulfillment -->|contains| usecase__ConfirmDispense
+  buc__BucPrescriptionFulfillment -->|contains| usecase__CounselMedication
+  buc__BucPrescriptionFulfillment -->|contains| usecase__DispenseAndAudit
+  buc__BucPrescriptionFulfillment -->|contains| usecase__DraftPrescription
+  buc__BucPrescriptionFulfillment -->|contains| usecase__ExpirePrescription
+  buc__BucPrescriptionFulfillment -->|contains| usecase__HandOverMedication
+  buc__BucPrescriptionFulfillment -->|contains| usecase__IssueInhouseVoucher
+  buc__BucPrescriptionFulfillment -->|contains| usecase__IssueOutsidePrescription
+  buc__BucPrescriptionFulfillment -->|contains| usecase__IssueRefillPrescription
+  buc__BucPrescriptionFulfillment -->|contains| usecase__RaisePrescriptionInquiry
+  buc__BucPrescriptionFulfillment -->|contains| usecase__SearchMedication
+  entity__Prescription ---|N:1| entity__Encounter
+  entity__Prescription ---|N:1| entity__Medication
+  event__EvPharmacyInquiry -.->|triggers| usecase__AnswerPharmacyInquiry
+  event__EvPrescriptionDispensed -.->|triggers| usecase__ConfirmDispense
+  event__EvPrescriptionIssued -.->|triggers| extsystem__EPrescriptionService
+  extsystem__EPrescriptionService -.->|raises| event__EvPrescriptionDispensed
+  extsystem__InsurancePharmacy -.->|raises| event__EvPharmacyInquiry
+  field__DispensedAtField -.->|maps_field| entity__Prescription
+  field__RefillLimitField -.->|maps_field| entity__Prescription
+  field__UsePeriodField -.->|maps_field| entity__Prescription
+  flow__PrescriptionFlow -->|contains| step__CounselStep
+  flow__PrescriptionFlow -->|contains| step__DispenseStep
+  flow__PrescriptionFlow -->|contains| step__InhouseStep
+  flow__PrescriptionFlow -->|contains| step__InquiryStep
+  flow__PrescriptionFlow -->|contains| step__OrderStep
+  flow__PrescriptionFlow -->|contains| step__OutsideStep
+  flow__PrescriptionFlow -->|contains| step__PharmacyStep
+  screen__DispensingScreen -->|contains| field__DispensedAtField
+  screen__MedicationSearchScreen -.->|shows| entity__Medication
+  screen__PrescriptionScreen -->|contains| field__RefillLimitField
+  screen__PrescriptionScreen -->|contains| field__UsePeriodField
+  step__CounselStep -.->|covers| usecase__CounselMedication
+  step__CounselStep -.->|covers| usecase__HandOverMedication
+  step__DispenseStep -.->|covers| usecase__DispenseAndAudit
+  step__DispenseStep -.->|excepts| step__InquiryStep
+  step__DispenseStep -->|precedes| step__CounselStep
+  step__InhouseStep -.->|covers| usecase__IssueInhouseVoucher
+  step__InhouseStep -->|precedes| step__DispenseStep
+  step__InquiryStep -.->|covers| usecase__AnswerPrescriptionInquiry
+  step__InquiryStep -.->|covers| usecase__RaisePrescriptionInquiry
+  step__InquiryStep -->|repeats| step__DispenseStep
+  step__OrderStep -->|branches| step__InhouseStep
+  step__OrderStep -.->|covers| usecase__DraftPrescription
+  step__OrderStep -.->|covers| usecase__IssueRefillPrescription
+  step__OrderStep -->|precedes| step__OutsideStep
+  step__OutsideStep -.->|covers| usecase__IssueOutsidePrescription
+  step__OutsideStep -->|precedes| step__PharmacyStep
+  step__PharmacyStep -.->|covers| usecase__AnswerPharmacyInquiry
+  step__PharmacyStep -.->|covers| usecase__ConfirmDispense
+  timer__PrescriptionUsePeriodCheck -.->|triggers| usecase__ExpirePrescription
+  usecase__AnswerPharmacyInquiry -.->|displays| screen__PrescriptionScreen
+  usecase__AnswerPharmacyInquiry -.->|invokes| api__PrescriptionInquiryApi
+  usecase__AnswerPharmacyInquiry -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__AnswerPharmacyInquiry -.->|requires_permission| permission__PrescriptionWrite
+  usecase__AnswerPharmacyInquiry -.->|transitions Prescription.status rxissued->rxissued| state__Prescription_rxissued
+  usecase__AnswerPrescriptionInquiry -.->|displays| screen__PrescriptionScreen
+  usecase__AnswerPrescriptionInquiry -.->|invokes| api__PrescriptionInquiryApi
+  usecase__AnswerPrescriptionInquiry -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__AnswerPrescriptionInquiry -.->|requires_permission| permission__PrescriptionWrite
+  usecase__AnswerPrescriptionInquiry -.->|transitions Prescription.status rxinquiry->rxvoucher| state__Prescription_rxvoucher
+  usecase__CancelPrescription -.->|displays| screen__PrescriptionScreen
+  usecase__CancelPrescription -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__CancelPrescription -.->|requires_permission| permission__PrescriptionWrite
+  usecase__CancelPrescription -.->|transitions Prescription.status rxdrafted->rxcancelled| state__Prescription_rxcancelled
+  usecase__CancelPrescription -.->|updates| entity__Prescription
+  usecase__ConfirmDispense -.->|displays| screen__PharmacyStatusScreen
+  usecase__ConfirmDispense -.->|invokes| api__ConfirmDispenseApi
+  usecase__ConfirmDispense -.->|requires_medium| medium__PharmacyWorkstation
+  usecase__ConfirmDispense -.->|transitions Prescription.status rxissued->rxdispensed| state__Prescription_rxdispensed
+  usecase__CounselMedication -.->|displays| screen__DispensingScreen
+  usecase__CounselMedication -.->|invokes| api__DispensingApi
+  usecase__CounselMedication -.->|requires_medium| medium__PharmacyWorkstation
+  usecase__CounselMedication -.->|requires_permission| permission__PrescriptionDispense
+  usecase__CounselMedication -.->|transitions Prescription.status rxaudited->rxcounseled| state__Prescription_rxcounseled
+  usecase__DispenseAndAudit -.->|displays| screen__DispensingScreen
+  usecase__DispenseAndAudit -.->|invokes| api__DispensingApi
+  usecase__DispenseAndAudit -.->|requires_medium| medium__PharmacyWorkstation
+  usecase__DispenseAndAudit -.->|requires_permission| permission__PrescriptionDispense
+  usecase__DispenseAndAudit -.->|transitions Prescription.status rxvoucher->rxaudited| state__Prescription_rxaudited
+  usecase__DraftPrescription -.->|displays| screen__PrescriptionScreen
+  usecase__DraftPrescription -.->|invokes| api__DraftPrescriptionApi
+  usecase__DraftPrescription -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__DraftPrescription -.->|requires_permission| permission__PrescriptionWrite
+  usecase__ExpirePrescription -.->|displays| screen__PharmacyStatusScreen
+  usecase__ExpirePrescription -.->|invokes| api__ConfirmDispenseApi
+  usecase__ExpirePrescription -.->|transitions Prescription.status rxissued->rxexpired| state__Prescription_rxexpired
+  usecase__HandOverMedication -.->|displays| screen__DispensingScreen
+  usecase__HandOverMedication -.->|invokes| api__DispensingApi
+  usecase__HandOverMedication -.->|requires_medium| medium__PharmacyWorkstation
+  usecase__HandOverMedication -.->|requires_permission| permission__PrescriptionDispense
+  usecase__HandOverMedication -.->|transitions Prescription.status rxcounseled->rxdispensed| state__Prescription_rxdispensed
+  usecase__IssueInhouseVoucher -.->|displays| screen__PrescriptionScreen
+  usecase__IssueInhouseVoucher -.->|invokes| api__IssuePrescriptionApi
+  usecase__IssueInhouseVoucher -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__IssueInhouseVoucher -.->|requires_permission| permission__PrescriptionWrite
+  usecase__IssueInhouseVoucher -.->|transitions Prescription.status rxdrafted->rxvoucher| state__Prescription_rxvoucher
+  usecase__IssueOutsidePrescription -.->|displays| screen__PrescriptionScreen
+  usecase__IssueOutsidePrescription -.->|invokes| api__IssuePrescriptionApi
+  usecase__IssueOutsidePrescription -.->|raises| event__EvPrescriptionIssued
+  usecase__IssueOutsidePrescription -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__IssueOutsidePrescription -.->|requires_permission| permission__PrescriptionWrite
+  usecase__IssueOutsidePrescription -.->|transitions Prescription.status rxdrafted->rxissued| state__Prescription_rxissued
+  usecase__IssueRefillPrescription -.->|displays| screen__PrescriptionScreen
+  usecase__IssueRefillPrescription -.->|invokes| api__DraftPrescriptionApi
+  usecase__IssueRefillPrescription -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__IssueRefillPrescription -.->|requires_permission| permission__PrescriptionWrite
+  usecase__RaisePrescriptionInquiry -.->|displays| screen__DispensingScreen
+  usecase__RaisePrescriptionInquiry -.->|invokes| api__DispensingApi
+  usecase__RaisePrescriptionInquiry -.->|requires_medium| medium__PharmacyWorkstation
+  usecase__RaisePrescriptionInquiry -.->|requires_permission| permission__PrescriptionDispense
+  usecase__RaisePrescriptionInquiry -.->|transitions Prescription.status rxvoucher->rxinquiry| state__Prescription_rxinquiry
+  usecase__SearchMedication -.->|displays| screen__MedicationSearchScreen
+  usecase__SearchMedication -.->|invokes| api__MedicationCatalogApi
+  usecase__SearchMedication -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__SearchMedication -.->|requires_permission| permission__PrescriptionWrite
+  classDef extsystem stroke:#333;
+  classDef business stroke:#333;
+  classDef buc stroke:#333;
+  classDef flow stroke:#333;
+  classDef step stroke:#333;
+  classDef timer stroke:#333;
+  classDef medium stroke:#333;
+  classDef permission stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef field stroke:#333;
+  classDef event stroke:#333;
+  classDef api stroke:#333;
+  classDef entity stroke:#333;
+  classDef state stroke:#333;

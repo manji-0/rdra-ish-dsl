@@ -1,50 +1,57 @@
+%% rdra-ish diagram=rdra scope=buc:BucCard model=samples/personal-info
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor business buc usecase screen api entity
+%% omitted: (none)
 flowchart LR
-  subgraph layer_value[System Value]
-    direction TB
-    User(["👤 User"])
+  subgraph layer_value["システム価値"]
+    actor__User["User"]:::actor
   end
-  subgraph layer_environment[External Environment]
-    direction TB
-    PersonalDataMgmt["💼 Personal Data Management Business"]
-    BucCard["📦 Manage Credit Cards"]
+  subgraph layer_environment["システム外部環境"]
+    business__PersonalDataMgmt["Personal Data Management Business"]:::business
+    buc__BucCard["Manage Credit Cards"]:::buc
   end
-  subgraph layer_boundary[System Boundary]
-    direction TB
-    DeleteCard(["✅ Delete Card"])
-    ListCards(["✅ List Cards"])
-    RegisterCard(["✅ Register Card"])
-    SetPrimaryCard(["✅ Set Primary Card"])
-    CardAddScreen[["🖥️ Card Registration Screen"]]
-    CardListScreen[["🖥️ Card List Screen"]]
+  subgraph layer_boundary["システム境界"]
+    usecase__DeleteCard["Delete Card"]:::usecase
+    usecase__ListCards["List Cards"]:::usecase
+    usecase__RegisterCard["Register Card"]:::usecase
+    usecase__SetPrimaryCard["Set Primary Card"]:::usecase
+    screen__CardAddScreen["Card Registration Screen"]:::screen
+    screen__CardListScreen["Card List Screen"]:::screen
   end
-  subgraph layer_system[System]
-    direction TB
-    DeleteCardApi["🔌 Delete Card API"]
-    ListCardsApi["🔌 List Cards API"]
-    RegisterCardApi["🔌 Register Card API"]
-    SetPrimaryCardApi["🔌 Set Primary Card API"]
-    AuditLog[("🗄️ Audit Log")]
-    CreditCard[("🗄️ Credit Card")]
+  subgraph layer_system["システム"]
+    api__DeleteCardApi["Delete Card API"]:::api
+    api__ListCardsApi["List Cards API"]:::api
+    api__RegisterCardApi["Register Card API"]:::api
+    api__SetPrimaryCardApi["Set Primary Card API"]:::api
+    entity__AuditLog["Audit Log"]:::entity
+    entity__CreditCard["Credit Card"]:::entity
   end
-  User -->|performs| BucCard
-  ListCardsApi -.->|reads| CreditCard
-  RegisterCardApi -.->|creates| CreditCard
-  RegisterCardApi -.->|creates| AuditLog
-  DeleteCardApi -.->|creates| AuditLog
-  DeleteCardApi -.->|deletes| CreditCard
-  SetPrimaryCardApi -.->|creates| AuditLog
-  SetPrimaryCardApi -.->|reads| CreditCard
-  SetPrimaryCardApi -.->|updates| CreditCard
-  BucCard -.->|belongs| PersonalDataMgmt
-  BucCard -->|contains| ListCards
-  BucCard -->|contains| RegisterCard
-  BucCard -->|contains| DeleteCard
-  BucCard -->|contains| SetPrimaryCard
-  ListCards -.->|displays| CardListScreen
-  ListCards -.->|invokes| ListCardsApi
-  RegisterCard -.->|displays| CardAddScreen
-  RegisterCard -.->|invokes| RegisterCardApi
-  DeleteCard -.->|displays| CardListScreen
-  DeleteCard -.->|invokes| DeleteCardApi
-  SetPrimaryCard -.->|displays| CardListScreen
-  SetPrimaryCard -.->|invokes| SetPrimaryCardApi
+  actor__User -.->|performs| buc__BucCard
+  api__DeleteCardApi -.->|creates| entity__AuditLog
+  api__DeleteCardApi -.->|deletes| entity__CreditCard
+  api__ListCardsApi -.->|reads| entity__CreditCard
+  api__RegisterCardApi -.->|creates| entity__AuditLog
+  api__RegisterCardApi -.->|creates| entity__CreditCard
+  api__SetPrimaryCardApi -.->|creates| entity__AuditLog
+  api__SetPrimaryCardApi -.->|reads| entity__CreditCard
+  api__SetPrimaryCardApi -.->|updates| entity__CreditCard
+  buc__BucCard -->|belongs| business__PersonalDataMgmt
+  buc__BucCard -->|contains| usecase__DeleteCard
+  buc__BucCard -->|contains| usecase__ListCards
+  buc__BucCard -->|contains| usecase__RegisterCard
+  buc__BucCard -->|contains| usecase__SetPrimaryCard
+  usecase__DeleteCard -.->|displays| screen__CardListScreen
+  usecase__DeleteCard -.->|invokes| api__DeleteCardApi
+  usecase__ListCards -.->|displays| screen__CardListScreen
+  usecase__ListCards -.->|invokes| api__ListCardsApi
+  usecase__RegisterCard -.->|displays| screen__CardAddScreen
+  usecase__RegisterCard -.->|invokes| api__RegisterCardApi
+  usecase__SetPrimaryCard -.->|displays| screen__CardListScreen
+  usecase__SetPrimaryCard -.->|invokes| api__SetPrimaryCardApi
+  classDef actor stroke:#333;
+  classDef business stroke:#333;
+  classDef buc stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef api stroke:#333;
+  classDef entity stroke:#333;

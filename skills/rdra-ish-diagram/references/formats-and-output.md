@@ -31,7 +31,6 @@ note.
 rdra-ish diagram src/ --kind rdra --format mermaid --out docs/rdra
 
 # Focused graph views
-rdra-ish diagram src/ --kind rdra --format mermaid --view-preset api
 rdra-ish diagram src/ --kind rdra --format mermaid --node-kind api --node-kind dto --edge-kind request
 
 # Contract exports
@@ -49,8 +48,8 @@ bash scripts/check-sample-artifacts.sh
 
 - `diagram` appends `.mmd` to `--out`.
 - Prefer filtered diagrams (`--buc`) before rendering images.
-- Use `--show-description` when descriptions should appear as notes/tooltips.
-- Use `--view-preset`, `--node-kind`, and `--edge-kind` before accepting a too-large
-  diagram.
+- `rdra` writes each description as a `%% desc <id>: <text>` comment line; there is no
+  flag for it.
+- Use `--node-kind` and `--edge-kind` before accepting a too-large diagram.
 - Use export output for downstream contract review rather than hand-copying diagram
   labels.

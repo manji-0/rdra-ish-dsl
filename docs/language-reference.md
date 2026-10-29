@@ -121,8 +121,8 @@ An instance may also carry an optional description:
 
 `description` is stored as element metadata for all instance kinds, including
 `business`, `buc`, `usecase`, `system`, and `api`. Diagram emitters use labels by
-default so diagrams stay compact. Use `rdra-ish diagram --show-description` to render
-descriptions as review annotations where supported.
+default so diagrams stay compact. `rdra-ish diagram --kind rdra` writes each description as
+a `%% desc <id>: <text>` comment line after the node.
 
 ### Kind index
 

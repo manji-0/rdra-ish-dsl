@@ -13,8 +13,7 @@
 #            removes the others: KINDS="rdra er" scripts/diagram-diff.sh BASE HEAD
 #   format   mermaid only, passed explicitly
 #   scope    no scope, each --buc, the first two --buc together
-#   options  --show-description; each --view-preset, --node-kind and --edge-kind on the
-#            kinds that take them
+#   options  --node-kind and --edge-kind on the kinds that take them
 #   errors   every option the CLI rejects, per root, and the removed --format, --kind, and
 #            option values once
 set -uo pipefail
@@ -36,7 +35,6 @@ only_kinds() { # kind...: those of the arguments that KINDS keeps
   for kind in "$@"; do has_kind "$kind" && echo "$kind"; done
 }
 graph_kinds=($(only_kinds rdra))
-presets=(business system data api ui)
 steps=(samples/incremental-order/step-*/src)
 
 roots=()
@@ -77,14 +75,13 @@ dump() { # label bin: one file per cell under $work/LABEL, numbered in run order
     } | sed -e "s|$repo_root/||g" -e "s|$outdir|OUT|g" >"$out_file"
   }
 
-  local root kind buc preset fmt=mermaid
+  local root kind buc fmt=mermaid
   for root in "${roots[@]}"; do
     local bucs=()
     while IFS= read -r line; do [[ -n "$line" ]] && bucs+=("$line"); done < <(ids "$root" buc)
 
     for kind in "${kinds[@]}"; do
       cell "$root $kind $fmt" "$root" --kind "$kind" --format "$fmt"
-      cell "$root $kind $fmt show-description" "$root" --kind "$kind" --format "$fmt" --show-description
       for buc in ${bucs[@]+"${bucs[@]}"}; do
         cell "$root $kind $fmt buc=$buc" "$root" --kind "$kind" --format "$fmt" --buc "$buc"
       done
@@ -94,24 +91,20 @@ dump() { # label bin: one file per cell under $work/LABEL, numbered in run order
       fi
     done
     for kind in ${graph_kinds[@]+"${graph_kinds[@]}"}; do
-      for preset in "${presets[@]}"; do
-        cell "$root $kind $fmt preset=$preset" "$root" --kind "$kind" --format "$fmt" --view-preset "$preset"
-      done
       cell "$root $kind $fmt node-kind" "$root" --kind "$kind" --format "$fmt" \
         --node-kind usecase --node-kind entity
       cell "$root $kind $fmt edge-kind" "$root" --kind "$kind" --format "$fmt" --edge-kind performs
       cell "$root $kind $fmt node+edge-kind" "$root" --kind "$kind" --format "$fmt" \
         --node-kind actor --node-kind usecase --edge-kind performs --edge-kind invokes
       if [[ ${#bucs[@]} -ge 1 ]]; then
-        cell "$root $kind $fmt buc=${bucs[0]} preset=system" "$root" --kind "$kind" --format "$fmt" \
-          --buc "${bucs[0]}" --view-preset system
+        cell "$root $kind $fmt buc=${bucs[0]} node-kind" "$root" --kind "$kind" --format "$fmt" \
+          --buc "${bucs[0]}" --node-kind usecase --node-kind entity --node-kind state
       fi
     done
 
     cell "$root error unknown-buc" "$root" --buc NoSuchBuc
     cell "$root error unknown-node-kind" "$root" --node-kind bogus --edge-kind bogus
     cell "$root error filter-on-er" "$root" --kind er --node-kind usecase
-    cell "$root error preset-on-state" "$root" --kind state --view-preset business
   done
 
   local removed
@@ -123,6 +116,8 @@ dump() { # label bin: one file per cell under $work/LABEL, numbered in run order
   done
   cell "samples/ec-site error option=--usecase" samples/ec-site --usecase Capture
   cell "samples/ec-site error option=--diff-base" samples/ec-site --diff-base samples/ec-site
+  cell "samples/ec-site error option=--show-description" samples/ec-site --show-description
+  cell "samples/ec-site error option=--view-preset" samples/ec-site --view-preset api
 }
 
 dump base "$base_bin" &

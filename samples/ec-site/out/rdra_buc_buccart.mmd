@@ -1,69 +1,76 @@
+%% rdra-ish diagram=rdra scope=buc:BucCart model=samples/ec-site
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor business buc usecase screen api entity
+%% omitted: (none)
 flowchart LR
-  subgraph layer_value[System Value]
-    direction TB
-    Customer(["👤 Customer"])
+  subgraph layer_value["システム価値"]
+    actor__Customer["Customer"]:::actor
   end
-  subgraph layer_environment[External Environment]
-    direction TB
-    EcShopping["💼 EC Shopping Business"]
-    BucCart["📦 Add Products to Cart"]
+  subgraph layer_environment["システム外部環境"]
+    business__EcShopping["EC Shopping Business"]:::business
+    buc__BucCart["Add Products to Cart"]:::buc
   end
-  subgraph layer_boundary[System Boundary]
-    direction TB
-    AddToCart(["✅ Add to Cart"])
-    RemoveCartItem(["✅ Remove from Cart"])
-    SearchProducts(["✅ Search Products"])
-    UpdateCartItem(["✅ Change Cart Item Quantity"])
-    ViewCart(["✅ View Cart"])
-    ViewProduct(["✅ View Product Details"])
-    CartScreen[["🖥️ Cart Screen"]]
-    ProductDetailScreen[["🖥️ Product Detail Screen"]]
-    ProductSearchScreen[["🖥️ Product Search Screen"]]
+  subgraph layer_boundary["システム境界"]
+    usecase__AddToCart["Add to Cart"]:::usecase
+    usecase__RemoveCartItem["Remove from Cart"]:::usecase
+    usecase__SearchProducts["Search Products"]:::usecase
+    usecase__UpdateCartItem["Change Cart Item Quantity"]:::usecase
+    usecase__ViewCart["View Cart"]:::usecase
+    usecase__ViewProduct["View Product Details"]:::usecase
+    screen__CartScreen["Cart Screen"]:::screen
+    screen__ProductDetailScreen["Product Detail Screen"]:::screen
+    screen__ProductSearchScreen["Product Search Screen"]:::screen
   end
-  subgraph layer_system[System]
-    direction TB
-    AddToCartApi["🔌 Add To Cart API"]
-    ProductDetailApi["🔌 Product Detail API"]
-    ProductSearchApi["🔌 Product Search API"]
-    RemoveCartItemApi["🔌 Remove Cart Item API"]
-    UpdateCartItemApi["🔌 Update Cart Item API"]
-    ViewCartApi["🔌 View Cart API"]
-    Cart[("🗄️ Cart")]
-    CartItem[("🗄️ Cart Item")]
-    Category[("🗄️ Category")]
-    Product[("🗄️ Product")]
+  subgraph layer_system["システム"]
+    api__AddToCartApi["Add To Cart API"]:::api
+    api__ProductDetailApi["Product Detail API"]:::api
+    api__ProductSearchApi["Product Search API"]:::api
+    api__RemoveCartItemApi["Remove Cart Item API"]:::api
+    api__UpdateCartItemApi["Update Cart Item API"]:::api
+    api__ViewCartApi["View Cart API"]:::api
+    entity__Cart["Cart"]:::entity
+    entity__CartItem["Cart Item"]:::entity
+    entity__Category["Category"]:::entity
+    entity__Product["Product"]:::entity
   end
-  Customer -->|performs| BucCart
-  ProductSearchApi -.->|reads| Category
-  ProductSearchApi -.->|reads| Product
-  ProductDetailApi -.->|reads| Product
-  AddToCartApi -.->|creates| CartItem
-  AddToCartApi -.->|reads| Product
-  AddToCartApi -.->|updates| Cart
-  UpdateCartItemApi -.->|updates| CartItem
-  RemoveCartItemApi -.->|deletes| CartItem
-  ViewCartApi -.->|reads| Product
-  ViewCartApi -.->|reads| Cart
-  ViewCartApi -.->|reads| CartItem
-  BucCart -.->|belongs| EcShopping
-  BucCart -->|contains| SearchProducts
-  BucCart -->|contains| ViewProduct
-  BucCart -->|contains| AddToCart
-  BucCart -->|contains| UpdateCartItem
-  BucCart -->|contains| RemoveCartItem
-  BucCart -->|contains| ViewCart
-  Product ---|N:1| Category
-  CartItem ---|N:1| Product
-  CartItem ---|N:1| Cart
-  SearchProducts -.->|displays| ProductSearchScreen
-  SearchProducts -.->|invokes| ProductSearchApi
-  ViewProduct -.->|displays| ProductDetailScreen
-  ViewProduct -.->|invokes| ProductDetailApi
-  AddToCart -.->|displays| CartScreen
-  AddToCart -.->|invokes| AddToCartApi
-  UpdateCartItem -.->|displays| CartScreen
-  UpdateCartItem -.->|invokes| UpdateCartItemApi
-  RemoveCartItem -.->|displays| CartScreen
-  RemoveCartItem -.->|invokes| RemoveCartItemApi
-  ViewCart -.->|displays| CartScreen
-  ViewCart -.->|invokes| ViewCartApi
+  actor__Customer -.->|performs| buc__BucCart
+  api__AddToCartApi -.->|creates| entity__CartItem
+  api__AddToCartApi -.->|reads| entity__Product
+  api__AddToCartApi -.->|updates| entity__Cart
+  api__ProductDetailApi -.->|reads| entity__Product
+  api__ProductSearchApi -.->|reads| entity__Category
+  api__ProductSearchApi -.->|reads| entity__Product
+  api__RemoveCartItemApi -.->|deletes| entity__CartItem
+  api__UpdateCartItemApi -.->|updates| entity__CartItem
+  api__ViewCartApi -.->|reads| entity__Cart
+  api__ViewCartApi -.->|reads| entity__CartItem
+  api__ViewCartApi -.->|reads| entity__Product
+  buc__BucCart -->|belongs| business__EcShopping
+  buc__BucCart -->|contains| usecase__AddToCart
+  buc__BucCart -->|contains| usecase__RemoveCartItem
+  buc__BucCart -->|contains| usecase__SearchProducts
+  buc__BucCart -->|contains| usecase__UpdateCartItem
+  buc__BucCart -->|contains| usecase__ViewCart
+  buc__BucCart -->|contains| usecase__ViewProduct
+  entity__CartItem ---|N:1| entity__Cart
+  entity__CartItem ---|N:1| entity__Product
+  entity__Product ---|N:1| entity__Category
+  usecase__AddToCart -.->|displays| screen__CartScreen
+  usecase__AddToCart -.->|invokes| api__AddToCartApi
+  usecase__RemoveCartItem -.->|displays| screen__CartScreen
+  usecase__RemoveCartItem -.->|invokes| api__RemoveCartItemApi
+  usecase__SearchProducts -.->|displays| screen__ProductSearchScreen
+  usecase__SearchProducts -.->|invokes| api__ProductSearchApi
+  usecase__UpdateCartItem -.->|displays| screen__CartScreen
+  usecase__UpdateCartItem -.->|invokes| api__UpdateCartItemApi
+  usecase__ViewCart -.->|displays| screen__CartScreen
+  usecase__ViewCart -.->|invokes| api__ViewCartApi
+  usecase__ViewProduct -.->|displays| screen__ProductDetailScreen
+  usecase__ViewProduct -.->|invokes| api__ProductDetailApi
+  classDef actor stroke:#333;
+  classDef business stroke:#333;
+  classDef buc stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef api stroke:#333;
+  classDef entity stroke:#333;

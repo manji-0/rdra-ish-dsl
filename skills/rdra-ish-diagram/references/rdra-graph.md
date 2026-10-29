@@ -16,13 +16,18 @@ rdra-ish diagram src/ --kind rdra --buc <BucId> --format mermaid
 rdra-ish diagram src/ --kind rdra --buc <BucA> --buc <BucB> --format mermaid
 
 # Focus a large graph
-rdra-ish diagram src/ --kind rdra --format mermaid --view-preset business
+rdra-ish diagram src/ --kind rdra --format mermaid --node-kind actor --node-kind buc --node-kind usecase
 rdra-ish diagram src/ --kind rdra --format mermaid --node-kind flow --node-kind step --edge-kind covers
 ```
 
 ## Reading RDRA Layered Output
 
-- Four vertical layers = system value, external environment, system boundary, and system.
+- The header comes first: `%% rdra-ish diagram=rdra scope=... model=...`, then
+  `%% layers:`, `%% kinds:` (the node kinds drawn), and `%% omitted:` (what a
+  `--node-kind` / `--edge-kind` filter hid).
+- Four subgraphs = the RDRA layers `layer_value["システム価値"]`,
+  `layer_environment["システム外部環境"]`, `layer_boundary["システム境界"]`, and
+  `layer_system["システム"]`.
 - Actors, external systems, requirements, ADRs, and NFRs sit in the system value layer;
   businesses, BUCs, flows, steps, timers, media, permissions, qualities, and constraints
   in the external environment; use cases, screens, fields, and events in the system
@@ -31,9 +36,16 @@ rdra-ish diagram src/ --kind rdra --format mermaid --node-kind flow --node-kind 
 - `flow` and `step` nodes show business order. A condition draws edges to its variation,
   its state model, and the use cases it applies to; a `--buc` view includes the
   conditions applied to its use cases.
-- Object labels include kind prefixes such as actor, BUC, usecase, screen, API,
-  DTO, field, entity, event, and state. DSL ids stay unchanged.
-- Dashed arrows show interaction, CRUD, event, lifecycle, and constraint relationships.
+- Each node id is `<kind>__<DSL id>` (`usecase__Capture`, `state__Order_paid`) and
+  carries `:::<kind>`; the label is the DSL label.
+- Edge labels are DSL predicate names. `-->` is hierarchy (`contains`, `belongs`,
+  `owns`) or flow order (`precedes`, `branches`, `repeats`), `---` is `relate`
+  (labelled with its cardinality), and `-.->` is every other association. A transition
+  runs from the use case to the state it enters, labelled
+  `transitions <Entity>.<column> <from>-><to>`.
+- `%% desc <id>: <text>` follows a node that has a description, and
+  `%% derived ...` follows an edge derived from another fact (a condition's
+  `combines` derived from its `holds`).
 
 ## When To Use
 

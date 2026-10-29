@@ -1,4 +1,4 @@
-//! Model loading and diagram preset helpers for the CLI.
+//! Model loading for the CLI.
 
 use anyhow::{bail, Result};
 use rdra_ish_core::{
@@ -8,8 +8,6 @@ use rdra_ish_core::{
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
-
-use crate::cli::DiagramViewPreset;
 
 pub(crate) fn collect_rdra_files(inputs: &[PathBuf]) -> Result<Vec<PathBuf>> {
     let mut files = vec![];
@@ -104,112 +102,4 @@ pub(crate) fn load_model(
     all_diags.extend(model_diags);
 
     Ok((program, model, all_diags))
-}
-
-pub(crate) fn diagram_preset_filters(
-    preset: &Option<DiagramViewPreset>,
-) -> (Vec<String>, Vec<String>) {
-    let Some(preset) = preset else {
-        return (Vec::new(), Vec::new());
-    };
-    let (nodes, edges): (&[&str], &[&str]) = match preset {
-        DiagramViewPreset::Business => (
-            &[
-                "actor",
-                "extsystem",
-                "requirement",
-                "nfr",
-                "business",
-                "buc",
-                "flow",
-                "step",
-                "usecase",
-                "event",
-                "timer",
-            ],
-            &[
-                "performs",
-                "motivates",
-                "belongs",
-                "contains",
-                "precedes",
-                "branches",
-                "excepts",
-                "repeats",
-                "covers",
-                "raises",
-                "triggers",
-                "compensates",
-            ],
-        ),
-        DiagramViewPreset::System => (
-            &[
-                "usecase",
-                "extsystem",
-                "screen",
-                "field",
-                "event",
-                "system",
-                "api",
-                "dto",
-                "entity",
-            ],
-            &[
-                "contains",
-                "invokes",
-                "request",
-                "response",
-                "error-response",
-                "reads",
-                "writes",
-                "creates",
-                "updates",
-                "deletes",
-                "displays",
-                "shows",
-                "maps-field",
-                "raises",
-                "triggers",
-                "owns",
-            ],
-        ),
-        DiagramViewPreset::Data => (
-            &["entity", "state"],
-            &["contains", "relate", "transitions", "owns"],
-        ),
-        DiagramViewPreset::Api => (
-            &[
-                "usecase",
-                "system",
-                "api",
-                "dto",
-                "entity",
-                "permission",
-                "medium",
-            ],
-            &[
-                "contains",
-                "invokes",
-                "request",
-                "response",
-                "error-response",
-                "reads",
-                "writes",
-                "creates",
-                "updates",
-                "deletes",
-                "requires-permission",
-                "requires-medium",
-                "owns",
-            ],
-        ),
-        DiagramViewPreset::Ui => (
-            &["actor", "buc", "usecase", "screen", "field", "entity"],
-            &["performs", "contains", "displays", "shows", "maps-field"],
-        ),
-    };
-    (
-        nodes.iter().map(|value| (*value).to_string()).collect(),
-        edges.iter().map(|value| (*value).to_string()).collect(),
-    )
 }

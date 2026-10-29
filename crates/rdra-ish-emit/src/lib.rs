@@ -45,7 +45,8 @@ pub enum Filter {
 pub struct View {
     pub scope: Scope,
     pub filter: Filter,
-    pub show_descriptions: bool,
+    /// The input paths as the user gave them, printed in the diagram header.
+    pub model_path: Option<String>,
     pub node_kinds: Vec<String>,
     pub edge_kinds: Vec<String>,
 }
@@ -55,7 +56,7 @@ impl View {
         Self {
             scope: Scope::Whole,
             filter: Filter::None,
-            show_descriptions: false,
+            model_path: None,
             node_kinds: Vec::new(),
             edge_kinds: Vec::new(),
         }
@@ -65,7 +66,7 @@ impl View {
         Self {
             scope: Scope::Whole,
             filter: Filter::Er,
-            show_descriptions: false,
+            model_path: None,
             node_kinds: Vec::new(),
             edge_kinds: Vec::new(),
         }
@@ -82,7 +83,7 @@ impl View {
         Self {
             scope,
             filter: Filter::None,
-            show_descriptions: false,
+            model_path: None,
             node_kinds: Vec::new(),
             edge_kinds: Vec::new(),
         }
@@ -98,14 +99,14 @@ impl View {
         Self {
             scope,
             filter: Filter::None,
-            show_descriptions: false,
+            model_path: None,
             node_kinds: Vec::new(),
             edge_kinds: Vec::new(),
         }
     }
 
-    pub fn with_descriptions(mut self, show_descriptions: bool) -> Self {
-        self.show_descriptions = show_descriptions;
+    pub fn with_model_path(mut self, model_path: impl Into<String>) -> Self {
+        self.model_path = Some(model_path.into());
         self
     }
 
@@ -135,21 +136,23 @@ pub(crate) enum ObjectGraphLayer {
 }
 
 impl ObjectGraphLayer {
-    pub(crate) fn mermaid_id(self) -> &'static str {
+    /// The token in the header's `layers:` line and in the subgraph id `layer_<token>`.
+    pub(crate) fn token(self) -> &'static str {
         match self {
-            ObjectGraphLayer::SystemValue => "layer_value",
-            ObjectGraphLayer::ExternalEnvironment => "layer_environment",
-            ObjectGraphLayer::SystemBoundary => "layer_boundary",
-            ObjectGraphLayer::System => "layer_system",
+            ObjectGraphLayer::SystemValue => "value",
+            ObjectGraphLayer::ExternalEnvironment => "environment",
+            ObjectGraphLayer::SystemBoundary => "boundary",
+            ObjectGraphLayer::System => "system",
         }
     }
 
+    /// The RDRA 3.0 name of the layer.
     pub(crate) fn label(self) -> &'static str {
         match self {
-            ObjectGraphLayer::SystemValue => "System Value",
-            ObjectGraphLayer::ExternalEnvironment => "External Environment",
-            ObjectGraphLayer::SystemBoundary => "System Boundary",
-            ObjectGraphLayer::System => "System",
+            ObjectGraphLayer::SystemValue => "システム価値",
+            ObjectGraphLayer::ExternalEnvironment => "システム外部環境",
+            ObjectGraphLayer::SystemBoundary => "システム境界",
+            ObjectGraphLayer::System => "システム",
         }
     }
 }

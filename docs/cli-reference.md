@@ -293,7 +293,7 @@ input files, each output block is prefixed by a `// <path>` marker.
 Generate a diagram as Mermaid text (`.mmd`).
 
 ```
-rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]... [--show-description] [--node-kind <KIND>]... [--edge-kind <KIND>]... [--view-preset <PRESET>] [-o <OUT>]
+rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]... [--node-kind <KIND>]... [--edge-kind <KIND>]... [-o <OUT>]
 ```
 
 | Option | Type | Default | Description |
@@ -302,34 +302,75 @@ rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]...
 | `--kind` | `rdra` \| `er` \| `state` \| `event-flow` | `rdra` | The diagram kind. `rdra` = RDRA layered graph mapped onto the original four-layer structure; `er` = entity-relationship diagram; `state` = state machine; `event-flow` = event causality graph showing UC or ExtSystem->Event->UC/BUC/ExtSystem and Event->State chains, plus Timer->UC/BUC edges. `boundaryless-graph`, `business-area`, `technical-area`, `sequence`, and `diff` were removed and fail with a message that names the replacement: `rdra` (narrowed with `--node-kind` / `--edge-kind`), `csv --kind business-inputs`, `csv --kind api-matrix`, `check` (which prints the transaction, API, and system warnings `sequence` printed), and a text diff of two `rdra` `.mmd` files. |
 | `--format` | `mermaid` | `mermaid` | Output format. Mermaid text (`.mmd`) is the only one. `puml`, `svg`, and `png` were removed and fail with a message that names `--format mermaid`; to get an image, render the `.mmd` with `mmdc` or any Mermaid-aware tool. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Filter to one or more BUCs by id. With multiple ids, the **union** of reachable nodes across the named BUCs is shown. Applies to all diagram kinds. |
-| `--show-description` | flag | off | Render element `description` metadata as diagram annotations where supported. Each description becomes a linked annotation node. Currently applies to the `rdra` diagram. |
 | `--node-kind <kind>` | string (repeatable) | — (all nodes) | Filter graph diagrams to specific node kinds. Applies to `rdra`. Examples: `actor`, `buc`, `flow`, `step`, `usecase`, `api`, `entity`, `field`. Alias: `--kind-filter`. |
 | `--edge-kind <kind>` | string (repeatable) | — (all edges) | Filter graph diagrams to specific relation kinds. Applies to `rdra`. Examples: `contains`, `invokes`, `reads`, `writes`, `creates`, `maps-field`, `owns`, `relate`. Alias: `--edge-filter`. |
-| `--view-preset <preset>` | `business` \| `system` \| `data` \| `api` \| `ui` | — | Apply a graph filter preset. Explicit `--node-kind` or `--edge-kind` values override the preset for that dimension. |
 | `-o`, `--out` | path | `out` | Output file path. The `.mmd` extension is added automatically. |
 
 Notes:
 
-- Diagram object labels include kind prefixes (`👤 actor`, `📦 BUC`, `✅ usecase`,
-  `🖥️ screen`, `🔌 api`, `🗄️ entity`, `⚡ event`, `🔄 state`) while keeping DSL ids
-  unchanged for edges and references.
-- Descriptions stay out of normal node labels. Use `--show-description` when the review
-  needs explanatory notes without changing the model's primary names.
+- The `.mmd` is written for a reader that redraws it (a person or an AI), so it carries
+  the RDRA meaning in text rather than in shapes. `--kind rdra` follows the encoding
+  contract below; `er`, `state`, and `event-flow` adopt it in later releases.
 - Graph filters are intentionally review-oriented. They hide nodes and any edges whose
-  endpoints are hidden; they do not change the model or diagnostics. Use `--view-preset`
-  for common slices, then override with explicit `--node-kind` or `--edge-kind` when a
-  review needs a sharper lens.
+  endpoints are hidden; they do not change the model or diagnostics. The header's
+  `omitted:` line names the node kinds and relation kinds a filter hid.
+- `--show-description` and `--view-preset` were removed. Descriptions are always
+  written as `%% desc` comment lines; narrow a diagram with `--node-kind` and
+  `--edge-kind`.
 - For `--kind event-flow`, the tool runs event-integrity diagnostics and emits `warning:`
   lines for events that are never raised, raised but consume nothing, or trigger a use
   case belonging to no BUC. `outbox(Event)` suppresses the raised-but-unconsumed warning
   for events intentionally published outside the local model. Event targets may be either
   BUCs or use cases. Mermaid node IDs are prefixed (`ev__`, `uc__`, `buc__`, `st__`) to
   avoid collisions when model elements share the same DSL identifier.
-- For `--kind rdra`, model objects are placed into four RDRA-style layers:
-  system value (`actor`, `extsystem`, `requirement`, `adr`, `nfr`), system external
-  environment (`quality`, `constraint`, `business`, `buc`, `flow`, `step`, `timer`,
-  `medium`, `permission`), system boundary (`usecase`, `screen`, `field`, `event`), and
-  system (`system`, `api`, `dto`, `entity`, `state`).
+- For `--kind rdra`, model objects are placed into the four RDRA layers:
+  システム価値 (`actor`, `extsystem`, `requirement`, `adr`, `nfr`), システム外部環境
+  (`quality`, `constraint`, `business`, `buc`, `flow`, `step`, `timer`, `medium`,
+  `permission`), システム境界 (`usecase`, `screen`, `field`, `event`), and システム
+  (`system`, `api`, `dto`, `entity`, `state`, `variation`, `condition`). A `--buc`
+  scope also holds the states its use cases move between.
+
+### Encoding contract
+
+The `rdra` diagram is written so that every RDRA fact can be read back from the text:
+
+```
+%% rdra-ish diagram=rdra scope=buc:BucPayment model=samples/ec-site
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor extsystem business buc usecase screen event api entity state
+%% omitted: (none)
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__Customer["Customer"]:::actor
+  end
+  ...
+  actor__Customer -.->|performs| buc__BucPayment
+  buc__BucPayment -->|contains| usecase__Capture
+  usecase__Capture -.->|transitions Order.status awaiting_capture->paid| state__Order_paid
+  classDef actor stroke:#333;
+```
+
+- The header comes first. `scope` is `whole` or `buc:<id>[,<id>]`; `model` is the input
+  paths as given. `layers:` and `kinds:` list only what the body draws. `omitted:`
+  names what a `--node-kind` or `--edge-kind` filter hid, or `(none)`.
+- Each node id is `<kind>__<DSL id>`, with the kind tokens of `--node-kind`. A state is
+  `state__<Entity>_<variant>`. The label is the DSL label, unchanged.
+- Each node carries `:::<kind>`, and one `classDef <kind>` per kind closes the diagram.
+  The style is a placeholder Mermaid needs; it carries no meaning.
+- Each layer is `subgraph layer_<token>["<RDRA name>"]`.
+- Each edge label is the DSL predicate name; a relate edge is labelled with its
+  cardinality (`N:1`). A transition is drawn from the use case to the state it enters,
+  labelled `transitions <Entity>.<column> <from>-><to>`. The direction is from the
+  predicate's first argument to its second.
+- The line style is the RDRAGraph relation kind: `-->` for hierarchy (`contains`,
+  `belongs`, `owns`) and flow order (`precedes`, `branches`, `repeats`), `---` for
+  `relate`, and `-.->` for every other association.
+- A fact drawn more than once in the model is drawn once.
+- An edge rdra-ish derived rather than read from a declaration is followed by
+  `%% derived <from> -> <to> <source>`. Today that is a condition's `combines` link
+  derived from its `holds` body.
+- A node's `description` follows its declaration as `%% desc <id>: <text>`, its lines
+  joined by a space.
 
 ---
 

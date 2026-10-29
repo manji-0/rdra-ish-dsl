@@ -1,196 +1,214 @@
+%% rdra-ish diagram=rdra scope=whole model=samples/ec-site
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor extsystem business buc usecase screen event api system entity state variation
+%% omitted: (none)
 flowchart LR
-  subgraph layer_value[System Value]
-    direction TB
-    Admin(["👤 Administrator"])
-    Customer(["👤 Customer"])
-    PaymentGW[/"🌐 Payment Gateway"/]
-    ShippingSvc[/"🌐 Shipping Service"/]
+  subgraph layer_value["システム価値"]
+    actor__Admin["Administrator"]:::actor
+    actor__Customer["Customer"]:::actor
+    extsystem__PaymentGW["Payment Gateway"]:::extsystem
+    extsystem__ShippingSvc["Shipping Service"]:::extsystem
   end
-  subgraph layer_environment[External Environment]
-    direction TB
-    EcShopping["💼 EC Shopping Business"]
-    BucCart["📦 Add Products to Cart"]
-    BucOrder["📦 Process Order"]
-    BucPayment["📦 Make Payment"]
+  subgraph layer_environment["システム外部環境"]
+    business__EcShopping["EC Shopping Business"]:::business
+    buc__BucCart["Add Products to Cart"]:::buc
+    buc__BucOrder["Process Order"]:::buc
+    buc__BucPayment["Make Payment"]:::buc
   end
-  subgraph layer_boundary[System Boundary]
-    direction TB
-    AddToCart(["✅ Add to Cart"])
-    AuthorizePayment(["✅ Authorize Payment"])
-    Cancel(["✅ Cancel Order"])
-    Capture(["✅ Capture Payment"])
-    ConfirmOrder(["✅ Confirm Order Details"])
-    DeliverOrder(["✅ Confirm Delivery"])
-    InputPaymentInfo(["✅ Enter Payment Information"])
-    PlaceOrder(["✅ Place Order"])
-    RefundPayment(["✅ Refund Payment"])
-    RemoveCartItem(["✅ Remove from Cart"])
-    SearchProducts(["✅ Search Products"])
-    SelectAddress(["✅ Select Shipping Address"])
-    ShipOrder(["✅ Ship Order"])
-    UpdateCartItem(["✅ Change Cart Item Quantity"])
-    ViewCart(["✅ View Cart"])
-    ViewOrderHistory(["✅ View Order History"])
-    ViewProduct(["✅ View Product Details"])
-    AddressSelectScreen[["🖥️ Address Selection Screen"]]
-    CartScreen[["🖥️ Cart Screen"]]
-    OrderCompleteScreen[["🖥️ Order Complete Screen"]]
-    OrderConfirmScreen[["🖥️ Order Confirmation Screen"]]
-    OrderHistoryScreen[["🖥️ Order History Screen"]]
-    PaymentInputScreen[["🖥️ Payment Information Screen"]]
-    PaymentResultScreen[["🖥️ Payment Result Screen"]]
-    ProductDetailScreen[["🖥️ Product Detail Screen"]]
-    ProductSearchScreen[["🖥️ Product Search Screen"]]
-    EvOrderShipped{"⚡ Order Shipped"}
-    EvPaymentAuthorized{"⚡ Payment Authorized"}
+  subgraph layer_boundary["システム境界"]
+    usecase__AddToCart["Add to Cart"]:::usecase
+    usecase__AuthorizePayment["Authorize Payment"]:::usecase
+    usecase__Cancel["Cancel Order"]:::usecase
+    usecase__Capture["Capture Payment"]:::usecase
+    usecase__ConfirmOrder["Confirm Order Details"]:::usecase
+    usecase__DeliverOrder["Confirm Delivery"]:::usecase
+    usecase__InputPaymentInfo["Enter Payment Information"]:::usecase
+    usecase__PlaceOrder["Place Order"]:::usecase
+    usecase__RefundPayment["Refund Payment"]:::usecase
+    usecase__RemoveCartItem["Remove from Cart"]:::usecase
+    usecase__SearchProducts["Search Products"]:::usecase
+    usecase__SelectAddress["Select Shipping Address"]:::usecase
+    usecase__ShipOrder["Ship Order"]:::usecase
+    usecase__UpdateCartItem["Change Cart Item Quantity"]:::usecase
+    usecase__ViewCart["View Cart"]:::usecase
+    usecase__ViewOrderHistory["View Order History"]:::usecase
+    usecase__ViewProduct["View Product Details"]:::usecase
+    screen__AddressSelectScreen["Address Selection Screen"]:::screen
+    screen__CartScreen["Cart Screen"]:::screen
+    screen__OrderCompleteScreen["Order Complete Screen"]:::screen
+    screen__OrderConfirmScreen["Order Confirmation Screen"]:::screen
+    screen__OrderHistoryScreen["Order History Screen"]:::screen
+    screen__PaymentInputScreen["Payment Information Screen"]:::screen
+    screen__PaymentResultScreen["Payment Result Screen"]:::screen
+    screen__ProductDetailScreen["Product Detail Screen"]:::screen
+    screen__ProductSearchScreen["Product Search Screen"]:::screen
+    event__EvOrderShipped["Order Shipped"]:::event
+    event__EvPaymentAuthorized["Payment Authorized"]:::event
   end
-  subgraph layer_system[System]
-    direction TB
-    AddToCartApi["🔌 Add To Cart API"]
-    CancelOrderApi["🔌 Cancel Order API"]
-    ConfirmOrderApi["🔌 Confirm Order API"]
-    OrderHistoryApi["🔌 Order History API"]
-    PaymentAuthorizationApi["🔌 Payment Authorization API"]
-    PaymentCaptureApi["🔌 Payment Capture API"]
-    PaymentInputApi["🔌 Payment Input API"]
-    PaymentRefundApi["🔌 Payment Refund API"]
-    PlaceOrderApi["🔌 Place Order API"]
-    ProductDetailApi["🔌 Product Detail API"]
-    ProductSearchApi["🔌 Product Search API"]
-    RemoveCartItemApi["🔌 Remove Cart Item API"]
-    SelectAddressApi["🔌 Select Address API"]
-    UpdateCartItemApi["🔌 Update Cart Item API"]
-    ViewCartApi["🔌 View Cart API"]
-    CommerceSystem["🧩 Commerce System"]
-    Cart[("🗄️ Cart")]
-    CartItem[("🗄️ Cart Item")]
-    Category[("🗄️ Category")]
-    CustomerAccount[("🗄️ Customer Account")]
-    Order[("🗄️ Order")]
-    OrderLine[("🗄️ Order Line")]
-    Payment[("🗄️ Payment")]
-    Product[("🗄️ Product")]
-    ShippingAddress[("🗄️ Shipping Address")]
-    Order_awaiting_capture("🔄 awaiting_capture")
-    Order_cancelled("🔄 cancelled")
-    Order_delivered("🔄 delivered")
-    Order_paid("🔄 paid")
-    Order_pending("🔄 pending")
-    Order_shipped("🔄 shipped")
-    PaymentMethod["🎚️ Payment Method"]
+  subgraph layer_system["システム"]
+    api__AddToCartApi["Add To Cart API"]:::api
+    api__CancelOrderApi["Cancel Order API"]:::api
+    api__ConfirmOrderApi["Confirm Order API"]:::api
+    api__OrderHistoryApi["Order History API"]:::api
+    api__PaymentAuthorizationApi["Payment Authorization API"]:::api
+    api__PaymentCaptureApi["Payment Capture API"]:::api
+    api__PaymentInputApi["Payment Input API"]:::api
+    api__PaymentRefundApi["Payment Refund API"]:::api
+    api__PlaceOrderApi["Place Order API"]:::api
+    api__ProductDetailApi["Product Detail API"]:::api
+    api__ProductSearchApi["Product Search API"]:::api
+    api__RemoveCartItemApi["Remove Cart Item API"]:::api
+    api__SelectAddressApi["Select Address API"]:::api
+    api__UpdateCartItemApi["Update Cart Item API"]:::api
+    api__ViewCartApi["View Cart API"]:::api
+    system__CommerceSystem["Commerce System"]:::system
+    entity__Cart["Cart"]:::entity
+    entity__CartItem["Cart Item"]:::entity
+    entity__Category["Category"]:::entity
+    entity__CustomerAccount["Customer Account"]:::entity
+    entity__Order["Order"]:::entity
+    entity__OrderLine["Order Line"]:::entity
+    entity__Payment["Payment"]:::entity
+    entity__Product["Product"]:::entity
+    entity__ShippingAddress["Shipping Address"]:::entity
+    state__Order_awaiting_capture["awaiting_capture"]:::state
+    state__Order_cancelled["cancelled"]:::state
+    state__Order_delivered["delivered"]:::state
+    state__Order_paid["paid"]:::state
+    state__Order_pending["pending"]:::state
+    state__Order_shipped["shipped"]:::state
+    variation__PaymentMethod["Payment Method"]:::variation
   end
-  Customer -->|performs| BucCart
-  Customer -->|performs| BucOrder
-  Customer -->|performs| BucPayment
-  Admin -->|performs| ShipOrder
-  Admin -->|performs| DeliverOrder
-  OrderHistoryApi -.->|reads| Order
-  OrderHistoryApi -.->|reads| OrderLine
-  CancelOrderApi -.->|updates| Order
-  PaymentInputApi -.->|creates| Payment
-  PaymentInputApi -.->|updates| Order
-  PaymentAuthorizationApi -.->|updates| Payment
-  PaymentCaptureApi -.->|updates| Order
-  PaymentCaptureApi -.->|updates| Payment
-  PaymentRefundApi -.->|updates| Order
-  PaymentRefundApi -.->|updates| Payment
-  ProductSearchApi -.->|reads| Category
-  ProductSearchApi -.->|reads| Product
-  ProductDetailApi -.->|reads| Product
-  AddToCartApi -.->|creates| CartItem
-  AddToCartApi -.->|reads| Product
-  AddToCartApi -.->|updates| Cart
-  UpdateCartItemApi -.->|updates| CartItem
-  RemoveCartItemApi -.->|deletes| CartItem
-  ViewCartApi -.->|reads| Product
-  ViewCartApi -.->|reads| Cart
-  ViewCartApi -.->|reads| CartItem
-  SelectAddressApi -.->|reads| ShippingAddress
-  ConfirmOrderApi -.->|reads| ShippingAddress
-  ConfirmOrderApi -.->|reads| Cart
-  ConfirmOrderApi -.->|reads| CartItem
-  PlaceOrderApi -.->|creates| Order
-  PlaceOrderApi -.->|creates| OrderLine
-  PlaceOrderApi -.->|reads| CustomerAccount
-  PlaceOrderApi -.->|updates| Cart
-  BucCart -.->|belongs| EcShopping
-  BucCart -->|contains| SearchProducts
-  BucCart -->|contains| ViewProduct
-  BucCart -->|contains| AddToCart
-  BucCart -->|contains| UpdateCartItem
-  BucCart -->|contains| RemoveCartItem
-  BucCart -->|contains| ViewCart
-  BucOrder -.->|belongs| EcShopping
-  BucOrder -->|contains| ViewOrderHistory
-  BucOrder -->|contains| Cancel
-  BucOrder -->|contains| ShipOrder
-  BucOrder -->|contains| DeliverOrder
-  BucOrder -->|contains| SelectAddress
-  BucOrder -->|contains| ConfirmOrder
-  BucOrder -->|contains| PlaceOrder
-  BucPayment -.->|belongs| EcShopping
-  BucPayment -->|contains| InputPaymentInfo
-  BucPayment -->|contains| AuthorizePayment
-  BucPayment -->|contains| Capture
-  BucPayment -->|contains| RefundPayment
-  Product ---|N:1| Category
-  ShippingAddress ---|N:1| CustomerAccount
-  Cart ---|N:1| CustomerAccount
-  CartItem ---|N:1| Product
-  CartItem ---|N:1| Cart
-  Order ---|N:1| CustomerAccount
-  Order ---|N:1| ShippingAddress
-  OrderLine ---|N:1| Product
-  OrderLine ---|N:1| Order
-  Payment ---|1:1| Order
-  EvOrderShipped -.->|triggers| ShippingSvc
-  EvPaymentAuthorized -.->|triggers| Capture
-  PaymentGW -.->|raises| EvPaymentAuthorized
-  CommerceSystem -->|contains| OrderHistoryApi
-  CommerceSystem -->|contains| CancelOrderApi
-  CommerceSystem -->|contains| PaymentInputApi
-  CommerceSystem -->|contains| PaymentAuthorizationApi
-  CommerceSystem -->|contains| PaymentCaptureApi
-  CommerceSystem -->|contains| PaymentRefundApi
-  CommerceSystem -->|contains| ProductSearchApi
-  CommerceSystem -->|contains| ProductDetailApi
-  CommerceSystem -->|contains| AddToCartApi
-  CommerceSystem -->|contains| UpdateCartItemApi
-  CommerceSystem -->|contains| RemoveCartItemApi
-  CommerceSystem -->|contains| ViewCartApi
-  CommerceSystem -->|contains| SelectAddressApi
-  CommerceSystem -->|contains| ConfirmOrderApi
-  CommerceSystem -->|contains| PlaceOrderApi
-  ViewOrderHistory -.->|displays| OrderHistoryScreen
-  ViewOrderHistory -.->|invokes| OrderHistoryApi
-  Cancel -.->|displays| OrderHistoryScreen
-  Cancel -.->|invokes| CancelOrderApi
-  ShipOrder -.->|raises| EvOrderShipped
-  ShipOrder -.->|updates| Order
-  DeliverOrder -.->|updates| Order
-  InputPaymentInfo -.->|displays| PaymentInputScreen
-  InputPaymentInfo -.->|invokes| PaymentInputApi
-  AuthorizePayment -.->|displays| PaymentResultScreen
-  AuthorizePayment -.->|invokes| PaymentAuthorizationApi
-  Capture -.->|displays| PaymentResultScreen
-  Capture -.->|invokes| PaymentCaptureApi
-  RefundPayment -.->|displays| PaymentResultScreen
-  RefundPayment -.->|invokes| PaymentRefundApi
-  SearchProducts -.->|displays| ProductSearchScreen
-  SearchProducts -.->|invokes| ProductSearchApi
-  ViewProduct -.->|displays| ProductDetailScreen
-  ViewProduct -.->|invokes| ProductDetailApi
-  AddToCart -.->|displays| CartScreen
-  AddToCart -.->|invokes| AddToCartApi
-  UpdateCartItem -.->|displays| CartScreen
-  UpdateCartItem -.->|invokes| UpdateCartItemApi
-  RemoveCartItem -.->|displays| CartScreen
-  RemoveCartItem -.->|invokes| RemoveCartItemApi
-  ViewCart -.->|displays| CartScreen
-  ViewCart -.->|invokes| ViewCartApi
-  SelectAddress -.->|displays| AddressSelectScreen
-  SelectAddress -.->|invokes| SelectAddressApi
-  ConfirmOrder -.->|displays| OrderConfirmScreen
-  ConfirmOrder -.->|invokes| ConfirmOrderApi
-  PlaceOrder -.->|displays| OrderCompleteScreen
-  PlaceOrder -.->|invokes| PlaceOrderApi
+  actor__Admin -.->|performs| usecase__DeliverOrder
+  actor__Admin -.->|performs| usecase__ShipOrder
+  actor__Customer -.->|performs| buc__BucCart
+  actor__Customer -.->|performs| buc__BucOrder
+  actor__Customer -.->|performs| buc__BucPayment
+  api__AddToCartApi -.->|creates| entity__CartItem
+  api__AddToCartApi -.->|reads| entity__Product
+  api__AddToCartApi -.->|updates| entity__Cart
+  api__CancelOrderApi -.->|updates| entity__Order
+  api__ConfirmOrderApi -.->|reads| entity__Cart
+  api__ConfirmOrderApi -.->|reads| entity__CartItem
+  api__ConfirmOrderApi -.->|reads| entity__ShippingAddress
+  api__OrderHistoryApi -.->|reads| entity__Order
+  api__OrderHistoryApi -.->|reads| entity__OrderLine
+  api__PaymentAuthorizationApi -.->|updates| entity__Payment
+  api__PaymentCaptureApi -.->|updates| entity__Order
+  api__PaymentCaptureApi -.->|updates| entity__Payment
+  api__PaymentInputApi -.->|creates| entity__Payment
+  api__PaymentInputApi -.->|updates| entity__Order
+  api__PaymentRefundApi -.->|updates| entity__Order
+  api__PaymentRefundApi -.->|updates| entity__Payment
+  api__PlaceOrderApi -.->|creates| entity__Order
+  api__PlaceOrderApi -.->|creates| entity__OrderLine
+  api__PlaceOrderApi -.->|reads| entity__CustomerAccount
+  api__PlaceOrderApi -.->|updates| entity__Cart
+  api__ProductDetailApi -.->|reads| entity__Product
+  api__ProductSearchApi -.->|reads| entity__Category
+  api__ProductSearchApi -.->|reads| entity__Product
+  api__RemoveCartItemApi -.->|deletes| entity__CartItem
+  api__SelectAddressApi -.->|reads| entity__ShippingAddress
+  api__UpdateCartItemApi -.->|updates| entity__CartItem
+  api__ViewCartApi -.->|reads| entity__Cart
+  api__ViewCartApi -.->|reads| entity__CartItem
+  api__ViewCartApi -.->|reads| entity__Product
+  buc__BucCart -->|belongs| business__EcShopping
+  buc__BucCart -->|contains| usecase__AddToCart
+  buc__BucCart -->|contains| usecase__RemoveCartItem
+  buc__BucCart -->|contains| usecase__SearchProducts
+  buc__BucCart -->|contains| usecase__UpdateCartItem
+  buc__BucCart -->|contains| usecase__ViewCart
+  buc__BucCart -->|contains| usecase__ViewProduct
+  buc__BucOrder -->|belongs| business__EcShopping
+  buc__BucOrder -->|contains| usecase__Cancel
+  buc__BucOrder -->|contains| usecase__ConfirmOrder
+  buc__BucOrder -->|contains| usecase__DeliverOrder
+  buc__BucOrder -->|contains| usecase__PlaceOrder
+  buc__BucOrder -->|contains| usecase__SelectAddress
+  buc__BucOrder -->|contains| usecase__ShipOrder
+  buc__BucOrder -->|contains| usecase__ViewOrderHistory
+  buc__BucPayment -->|belongs| business__EcShopping
+  buc__BucPayment -->|contains| usecase__AuthorizePayment
+  buc__BucPayment -->|contains| usecase__Capture
+  buc__BucPayment -->|contains| usecase__InputPaymentInfo
+  buc__BucPayment -->|contains| usecase__RefundPayment
+  entity__Cart ---|N:1| entity__CustomerAccount
+  entity__CartItem ---|N:1| entity__Cart
+  entity__CartItem ---|N:1| entity__Product
+  entity__Order ---|N:1| entity__CustomerAccount
+  entity__Order ---|N:1| entity__ShippingAddress
+  entity__OrderLine ---|N:1| entity__Order
+  entity__OrderLine ---|N:1| entity__Product
+  entity__Payment ---|1:1| entity__Order
+  entity__Product ---|N:1| entity__Category
+  entity__ShippingAddress ---|N:1| entity__CustomerAccount
+  event__EvOrderShipped -.->|triggers| extsystem__ShippingSvc
+  event__EvPaymentAuthorized -.->|triggers| usecase__Capture
+  extsystem__PaymentGW -.->|raises| event__EvPaymentAuthorized
+  system__CommerceSystem -->|contains| api__AddToCartApi
+  system__CommerceSystem -->|contains| api__CancelOrderApi
+  system__CommerceSystem -->|contains| api__ConfirmOrderApi
+  system__CommerceSystem -->|contains| api__OrderHistoryApi
+  system__CommerceSystem -->|contains| api__PaymentAuthorizationApi
+  system__CommerceSystem -->|contains| api__PaymentCaptureApi
+  system__CommerceSystem -->|contains| api__PaymentInputApi
+  system__CommerceSystem -->|contains| api__PaymentRefundApi
+  system__CommerceSystem -->|contains| api__PlaceOrderApi
+  system__CommerceSystem -->|contains| api__ProductDetailApi
+  system__CommerceSystem -->|contains| api__ProductSearchApi
+  system__CommerceSystem -->|contains| api__RemoveCartItemApi
+  system__CommerceSystem -->|contains| api__SelectAddressApi
+  system__CommerceSystem -->|contains| api__UpdateCartItemApi
+  system__CommerceSystem -->|contains| api__ViewCartApi
+  usecase__AddToCart -.->|displays| screen__CartScreen
+  usecase__AddToCart -.->|invokes| api__AddToCartApi
+  usecase__AuthorizePayment -.->|displays| screen__PaymentResultScreen
+  usecase__AuthorizePayment -.->|invokes| api__PaymentAuthorizationApi
+  usecase__Cancel -.->|displays| screen__OrderHistoryScreen
+  usecase__Cancel -.->|invokes| api__CancelOrderApi
+  usecase__Cancel -.->|transitions Order.status awaiting_capture->cancelled| state__Order_cancelled
+  usecase__Cancel -.->|transitions Order.status pending->cancelled| state__Order_cancelled
+  usecase__Capture -.->|displays| screen__PaymentResultScreen
+  usecase__Capture -.->|invokes| api__PaymentCaptureApi
+  usecase__Capture -.->|transitions Order.status awaiting_capture->paid| state__Order_paid
+  usecase__ConfirmOrder -.->|displays| screen__OrderConfirmScreen
+  usecase__ConfirmOrder -.->|invokes| api__ConfirmOrderApi
+  usecase__DeliverOrder -.->|transitions Order.status shipped->delivered| state__Order_delivered
+  usecase__DeliverOrder -.->|updates| entity__Order
+  usecase__InputPaymentInfo -.->|displays| screen__PaymentInputScreen
+  usecase__InputPaymentInfo -.->|invokes| api__PaymentInputApi
+  usecase__InputPaymentInfo -.->|transitions Order.status pending->awaiting_capture| state__Order_awaiting_capture
+  usecase__PlaceOrder -.->|displays| screen__OrderCompleteScreen
+  usecase__PlaceOrder -.->|invokes| api__PlaceOrderApi
+  usecase__RefundPayment -.->|displays| screen__PaymentResultScreen
+  usecase__RefundPayment -.->|invokes| api__PaymentRefundApi
+  usecase__RemoveCartItem -.->|displays| screen__CartScreen
+  usecase__RemoveCartItem -.->|invokes| api__RemoveCartItemApi
+  usecase__SearchProducts -.->|displays| screen__ProductSearchScreen
+  usecase__SearchProducts -.->|invokes| api__ProductSearchApi
+  usecase__SelectAddress -.->|displays| screen__AddressSelectScreen
+  usecase__SelectAddress -.->|invokes| api__SelectAddressApi
+  usecase__ShipOrder -.->|raises| event__EvOrderShipped
+  usecase__ShipOrder -.->|transitions Order.status paid->shipped| state__Order_shipped
+  usecase__ShipOrder -.->|updates| entity__Order
+  usecase__UpdateCartItem -.->|displays| screen__CartScreen
+  usecase__UpdateCartItem -.->|invokes| api__UpdateCartItemApi
+  usecase__ViewCart -.->|displays| screen__CartScreen
+  usecase__ViewCart -.->|invokes| api__ViewCartApi
+  usecase__ViewOrderHistory -.->|displays| screen__OrderHistoryScreen
+  usecase__ViewOrderHistory -.->|invokes| api__OrderHistoryApi
+  usecase__ViewProduct -.->|displays| screen__ProductDetailScreen
+  usecase__ViewProduct -.->|invokes| api__ProductDetailApi
+  classDef actor stroke:#333;
+  classDef extsystem stroke:#333;
+  classDef business stroke:#333;
+  classDef buc stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef event stroke:#333;
+  classDef api stroke:#333;
+  classDef system stroke:#333;
+  classDef entity stroke:#333;
+  classDef state stroke:#333;
+  classDef variation stroke:#333;

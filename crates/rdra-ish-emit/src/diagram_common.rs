@@ -1,6 +1,8 @@
 //! Helpers the Mermaid emitters share.
 
-use crate::{node_description, prefixed_label, Scope};
+use crate::{
+    node_description, node_kind_filter_name, prefixed_label, ObjectGraphLayer, Scope, View,
+};
 use rdra_ish_core::lifecycle::{Bounds, Scope as LifecycleScope, TransitionSystem};
 use rdra_ish_core::model::{
     BucKey, ColumnType, EntityKey, EventKey, ExtSystemKey, NodeRef, Raiser, SemanticModel,
@@ -152,22 +154,79 @@ pub(crate) fn link_statement(link: Link, from: &str, to: &str) -> String {
     }
 }
 
-/// A note per node that has a description, attached to the node.
-pub(crate) fn render_descriptions(out: &mut String, model: &SemanticModel, nodes: &[NodeRef]) {
-    for node in nodes {
-        let (Some(id), Some(description)) = (node_id(model, node), node_description(model, node))
-        else {
-            continue;
+/// The node id of the encoding contract, `<kind token>__<DSL id>`, the same in every kind.
+pub(crate) fn contract_id(model: &SemanticModel, node: &NodeRef) -> Option<String> {
+    Some(format!(
+        "{}__{}",
+        node_kind_filter_name(node),
+        node_id(model, node)?
+    ))
+}
+
+/// The `%%` lines that open every diagram: kind, scope, and the vocabulary the body uses.
+pub(crate) struct Header<'a> {
+    pub(crate) diagram: &'a str,
+    pub(crate) view: &'a View,
+    /// `None` for a kind without RDRA layers: the `layers:` line is left out.
+    pub(crate) layers: Option<Vec<ObjectGraphLayer>>,
+    pub(crate) kinds: Vec<&'static str>,
+    pub(crate) omitted: Vec<String>,
+}
+
+impl Header<'_> {
+    pub(crate) fn render(&self) -> String {
+        let scope = match &self.view.scope {
+            Scope::Whole => "whole".to_string(),
+            Scope::Bucs(ids) => format!("buc:{}", ids.join(",")),
+            Scope::UseCases(ids) => format!("usecase:{}", ids.join(",")),
         };
-        let description = description.trim();
-        if description.is_empty() {
-            continue;
+        let mut out = format!("%% rdra-ish diagram={} scope={scope}", self.diagram);
+        if let Some(model_path) = &self.view.model_path {
+            out.push_str(&format!(" model={model_path}"));
         }
-        let note_id = format!("{}_description", id);
-        let description = quote(description).replace('\n', "<br/>");
-        out.push_str(&format!("  {}[\"{}\"]\n", note_id, description));
-        out.push_str(&format!("  {} -. description .- {}\n", note_id, id));
+        out.push('\n');
+        if let Some(layers) = &self.layers {
+            let layers: Vec<String> = layers
+                .iter()
+                .map(|layer| format!("{}={}", layer.token(), layer.label()))
+                .collect();
+            out.push_str(&format!("%% layers: {}\n", or_none(&layers.join(" "))));
+        }
+        out.push_str(&format!("%% kinds: {}\n", or_none(&self.kinds.join(" "))));
+        out.push_str(&format!(
+            "%% omitted: {}\n",
+            or_none(&self.omitted.join(" "))
+        ));
+        out
     }
+}
+
+fn or_none(list: &str) -> &str {
+    if list.is_empty() {
+        "(none)"
+    } else {
+        list
+    }
+}
+
+/// `%% desc <id>: <text>` for a node that has a description, its lines joined by a space.
+pub(crate) fn desc_line(model: &SemanticModel, node: &NodeRef, id: &str) -> Option<String> {
+    let text = node_description(model, node)?
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    (!text.is_empty()).then(|| format!("%% desc {id}: {text}"))
+}
+
+/// One `classDef` per kind, so Mermaid accepts the `:::<kind>` on each node. The style
+/// carries no meaning.
+pub(crate) fn class_defs(kinds: &[&str]) -> String {
+    kinds
+        .iter()
+        .map(|kind| format!("  classDef {kind} stroke:#333;\n"))
+        .collect()
 }
 
 /// A node the event-flow diagram declares.

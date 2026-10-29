@@ -28,11 +28,30 @@
   api-matrix` lists the entities each API writes. For a model diff, write `--kind rdra`
   for both models and compare the two `.mmd` files with `diff` or `git diff`. The
   `--diff-base` and `--usecase` options go with them (clap now rejects them as unknown
-  arguments), and `--node-kind`, `--edge-kind`, and `--view-preset` apply to `rdra` only.
+  arguments), and `--node-kind` and `--edge-kind` apply to `rdra` only.
   The 109 sequence artifacts (`samples/clinic-ops/out/uc/`, the `sequence_*.mmd` files
   under `samples/*/out/`) and the sequence sections of
   `samples/clinic-ops/design-sample.md` are gone, as are `rdra_ish_emit::diff` and
   `SequenceMermaidEmitter`.
+- `diagram --kind rdra` writes the diagram encoding contract (`docs/cli-reference.md`,
+  "Encoding contract"), so anything that parsed the old `.mmd` breaks. The file opens with
+  `%%` header lines (`rdra-ish diagram=rdra scope=... model=...`, `layers:`, `kinds:`,
+  `omitted:`); node ids are `<kind>__<DSL id>` (`usecase__Capture`, was `Capture`); labels
+  are the DSL labels without the emoji prefix, and every node is `["..."]` tagged
+  `:::<kind>`, with one `classDef` per kind at the end; the layers are
+  `subgraph layer_value["システム価値"]` and so on, without `direction TB`. Edge labels stay
+  the DSL predicate names, but the line style now follows the RDRAGraph relation kind:
+  `performs` is `-.->` (was `-->`), and `belongs` and the flow order `precedes`,
+  `branches`, and `repeats` are `-->` (were `-.->`). A fact declared twice is drawn once.
+  Use cases now draw `transitions <Entity>.<column> <from>-><to>` edges to the state they
+  enter, and a `--buc` scope holds those states. A `combines` edge derived from a
+  condition's `holds` is followed by a `%% derived` line.
+- `diagram --show-description` and `--view-preset` are removed (clap rejects them as
+  unexpected arguments). `rdra` always writes each description as a
+  `%% desc <id>: <text>` line after its node, instead of a linked note node; narrow a
+  diagram with `--node-kind` and `--edge-kind`. `View::with_descriptions` and
+  `View::show_descriptions` are replaced by `View::with_model_path` and
+  `View::model_path`, the input paths the header prints.
 - `verify` checks each temporal property in its own TLC run, because TLC does not name the
   property a temporal counterexample violates. The runs use the module
   `<whole>_<Property>` (`RdraSpec_NeverShipped`), the same module text and fairness as the

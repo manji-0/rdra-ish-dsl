@@ -1,179 +1,193 @@
+%% rdra-ish diagram=rdra scope=whole model=samples/personal-info
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor business buc usecase screen api system entity state variation
+%% omitted: (none)
 flowchart LR
-  subgraph layer_value[System Value]
-    direction TB
-    SysAdmin(["👤 System Administrator"])
-    User(["👤 User"])
+  subgraph layer_value["システム価値"]
+    actor__SysAdmin["System Administrator"]:::actor
+    actor__User["User"]:::actor
   end
-  subgraph layer_environment[External Environment]
-    direction TB
-    PersonalDataMgmt["💼 Personal Data Management Business"]
-    BucCard["📦 Manage Credit Cards"]
-    BucPassword["📦 Manage Password"]
-    BucProfile["📦 Manage Personal Information"]
+  subgraph layer_environment["システム外部環境"]
+    business__PersonalDataMgmt["Personal Data Management Business"]:::business
+    buc__BucCard["Manage Credit Cards"]:::buc
+    buc__BucPassword["Manage Password"]:::buc
+    buc__BucProfile["Manage Personal Information"]:::buc
   end
-  subgraph layer_boundary[System Boundary]
-    direction TB
-    ChangePassword(["✅ Change Password"])
-    DeleteAccount(["✅ Delete Account"])
-    DeleteAddress(["✅ Delete Address"])
-    DeleteCard(["✅ Delete Card"])
-    ListCards(["✅ List Cards"])
-    RegisterAddress(["✅ Register Address"])
-    RegisterCard(["✅ Register Card"])
-    RequestPasswordReset(["✅ Request Password Reset"])
-    ResetPassword(["✅ Reset Password"])
-    RestoreAccount(["✅ Restore Account"])
-    SetInitialPassword(["✅ Set Initial Password"])
-    SetPrimaryAddress(["✅ Set Primary Address"])
-    SetPrimaryCard(["✅ Set Primary Card"])
-    SuspendAccount(["✅ Suspend Account"])
-    UpdateAddress(["✅ Update Address"])
-    UpdateProfile(["✅ Update Personal Information"])
-    ViewProfile(["✅ View Personal Information"])
-    AddressEditScreen[["🖥️ Address Edit Screen"]]
-    AddressListScreen[["🖥️ Address List Screen"]]
-    CardAddScreen[["🖥️ Card Registration Screen"]]
-    CardListScreen[["🖥️ Card List Screen"]]
-    PasswordChangeScreen[["🖥️ Password Change Screen"]]
-    PasswordResetScreen[["🖥️ Password Reset Screen"]]
-    PasswordSetScreen[["🖥️ Password Setup Screen"]]
-    ProfileScreen[["🖥️ Personal Information Screen"]]
+  subgraph layer_boundary["システム境界"]
+    usecase__ChangePassword["Change Password"]:::usecase
+    usecase__DeleteAccount["Delete Account"]:::usecase
+    usecase__DeleteAddress["Delete Address"]:::usecase
+    usecase__DeleteCard["Delete Card"]:::usecase
+    usecase__ListCards["List Cards"]:::usecase
+    usecase__RegisterAddress["Register Address"]:::usecase
+    usecase__RegisterCard["Register Card"]:::usecase
+    usecase__RequestPasswordReset["Request Password Reset"]:::usecase
+    usecase__ResetPassword["Reset Password"]:::usecase
+    usecase__RestoreAccount["Restore Account"]:::usecase
+    usecase__SetInitialPassword["Set Initial Password"]:::usecase
+    usecase__SetPrimaryAddress["Set Primary Address"]:::usecase
+    usecase__SetPrimaryCard["Set Primary Card"]:::usecase
+    usecase__SuspendAccount["Suspend Account"]:::usecase
+    usecase__UpdateAddress["Update Address"]:::usecase
+    usecase__UpdateProfile["Update Personal Information"]:::usecase
+    usecase__ViewProfile["View Personal Information"]:::usecase
+    screen__AddressEditScreen["Address Edit Screen"]:::screen
+    screen__AddressListScreen["Address List Screen"]:::screen
+    screen__CardAddScreen["Card Registration Screen"]:::screen
+    screen__CardListScreen["Card List Screen"]:::screen
+    screen__PasswordChangeScreen["Password Change Screen"]:::screen
+    screen__PasswordResetScreen["Password Reset Screen"]:::screen
+    screen__PasswordSetScreen["Password Setup Screen"]:::screen
+    screen__ProfileScreen["Personal Information Screen"]:::screen
   end
-  subgraph layer_system[System]
-    direction TB
-    ChangePasswordApi["🔌 Change Password API"]
-    DeleteAddressApi["🔌 Delete Address API"]
-    DeleteCardApi["🔌 Delete Card API"]
-    ListCardsApi["🔌 List Cards API"]
-    RegisterAddressApi["🔌 Register Address API"]
-    RegisterCardApi["🔌 Register Card API"]
-    RequestPasswordResetApi["🔌 Request Password Reset API"]
-    ResetPasswordApi["🔌 Reset Password API"]
-    SetInitialPasswordApi["🔌 Set Initial Password API"]
-    SetPrimaryAddressApi["🔌 Set Primary Address API"]
-    SetPrimaryCardApi["🔌 Set Primary Card API"]
-    UpdateAddressApi["🔌 Update Address API"]
-    UpdateProfileApi["🔌 Update Profile API"]
-    ViewProfileApi["🔌 View Profile API"]
-    PersonalDataSystem["🧩 Personal Data System"]
-    AuditLog[("🗄️ Audit Log")]
-    CreditCard[("🗄️ Credit Card")]
-    PasswordCredential[("🗄️ Password Credential")]
-    PersonalInfo[("🗄️ Personal Information")]
-    PostalAddress[("🗄️ Postal Address")]
-    UserAccount[("🗄️ User Account")]
-    UserAccount_active("🔄 active")
-    UserAccount_deleted("🔄 deleted")
-    UserAccount_provisioned("🔄 provisioned")
-    UserAccount_suspended("🔄 suspended")
-    CardBrand["🎚️ Card Brand"]
+  subgraph layer_system["システム"]
+    api__ChangePasswordApi["Change Password API"]:::api
+    api__DeleteAddressApi["Delete Address API"]:::api
+    api__DeleteCardApi["Delete Card API"]:::api
+    api__ListCardsApi["List Cards API"]:::api
+    api__RegisterAddressApi["Register Address API"]:::api
+    api__RegisterCardApi["Register Card API"]:::api
+    api__RequestPasswordResetApi["Request Password Reset API"]:::api
+    api__ResetPasswordApi["Reset Password API"]:::api
+    api__SetInitialPasswordApi["Set Initial Password API"]:::api
+    api__SetPrimaryAddressApi["Set Primary Address API"]:::api
+    api__SetPrimaryCardApi["Set Primary Card API"]:::api
+    api__UpdateAddressApi["Update Address API"]:::api
+    api__UpdateProfileApi["Update Profile API"]:::api
+    api__ViewProfileApi["View Profile API"]:::api
+    system__PersonalDataSystem["Personal Data System"]:::system
+    entity__AuditLog["Audit Log"]:::entity
+    entity__CreditCard["Credit Card"]:::entity
+    entity__PasswordCredential["Password Credential"]:::entity
+    entity__PersonalInfo["Personal Information"]:::entity
+    entity__PostalAddress["Postal Address"]:::entity
+    entity__UserAccount["User Account"]:::entity
+    state__UserAccount_active["active"]:::state
+    state__UserAccount_deleted["deleted"]:::state
+    state__UserAccount_provisioned["provisioned"]:::state
+    state__UserAccount_suspended["suspended"]:::state
+    variation__CardBrand["Card Brand"]:::variation
   end
-  User -->|performs| BucCard
-  User -->|performs| BucPassword
-  User -->|performs| BucProfile
-  SysAdmin -->|performs| SuspendAccount
-  SysAdmin -->|performs| RestoreAccount
-  SysAdmin -->|performs| DeleteAccount
-  UpdateProfileApi -.->|creates| AuditLog
-  UpdateProfileApi -.->|reads| PersonalInfo
-  UpdateProfileApi -.->|updates| PersonalInfo
-  RegisterAddressApi -.->|creates| PostalAddress
-  RegisterAddressApi -.->|creates| AuditLog
-  UpdateAddressApi -.->|creates| AuditLog
-  UpdateAddressApi -.->|reads| PostalAddress
-  UpdateAddressApi -.->|updates| PostalAddress
-  DeleteAddressApi -.->|creates| AuditLog
-  DeleteAddressApi -.->|deletes| PostalAddress
-  SetPrimaryAddressApi -.->|creates| AuditLog
-  SetPrimaryAddressApi -.->|reads| PostalAddress
-  SetPrimaryAddressApi -.->|updates| PostalAddress
-  ListCardsApi -.->|reads| CreditCard
-  RegisterCardApi -.->|creates| CreditCard
-  RegisterCardApi -.->|creates| AuditLog
-  DeleteCardApi -.->|creates| AuditLog
-  DeleteCardApi -.->|deletes| CreditCard
-  SetPrimaryCardApi -.->|creates| AuditLog
-  SetPrimaryCardApi -.->|reads| CreditCard
-  SetPrimaryCardApi -.->|updates| CreditCard
-  SetInitialPasswordApi -.->|creates| PasswordCredential
-  SetInitialPasswordApi -.->|creates| AuditLog
-  SetInitialPasswordApi -.->|updates| UserAccount
-  ChangePasswordApi -.->|creates| AuditLog
-  ChangePasswordApi -.->|reads| PasswordCredential
-  ChangePasswordApi -.->|updates| PasswordCredential
-  RequestPasswordResetApi -.->|creates| AuditLog
-  RequestPasswordResetApi -.->|reads| UserAccount
-  ResetPasswordApi -.->|creates| AuditLog
-  ResetPasswordApi -.->|updates| PasswordCredential
-  ViewProfileApi -.->|reads| UserAccount
-  ViewProfileApi -.->|reads| PersonalInfo
-  BucCard -.->|belongs| PersonalDataMgmt
-  BucCard -->|contains| ListCards
-  BucCard -->|contains| RegisterCard
-  BucCard -->|contains| DeleteCard
-  BucCard -->|contains| SetPrimaryCard
-  BucPassword -.->|belongs| PersonalDataMgmt
-  BucPassword -->|contains| SetInitialPassword
-  BucPassword -->|contains| ChangePassword
-  BucPassword -->|contains| RequestPasswordReset
-  BucPassword -->|contains| ResetPassword
-  BucProfile -.->|belongs| PersonalDataMgmt
-  BucProfile -->|contains| UpdateProfile
-  BucProfile -->|contains| RegisterAddress
-  BucProfile -->|contains| UpdateAddress
-  BucProfile -->|contains| DeleteAddress
-  BucProfile -->|contains| SetPrimaryAddress
-  BucProfile -->|contains| SuspendAccount
-  BucProfile -->|contains| RestoreAccount
-  BucProfile -->|contains| DeleteAccount
-  BucProfile -->|contains| ViewProfile
-  PersonalInfo ---|1:1| UserAccount
-  PostalAddress ---|N:1| UserAccount
-  CreditCard ---|N:1| UserAccount
-  PasswordCredential ---|1:1| UserAccount
-  AuditLog ---|N:1| UserAccount
-  PersonalDataSystem -->|contains| UpdateProfileApi
-  PersonalDataSystem -->|contains| RegisterAddressApi
-  PersonalDataSystem -->|contains| UpdateAddressApi
-  PersonalDataSystem -->|contains| DeleteAddressApi
-  PersonalDataSystem -->|contains| SetPrimaryAddressApi
-  PersonalDataSystem -->|contains| ListCardsApi
-  PersonalDataSystem -->|contains| RegisterCardApi
-  PersonalDataSystem -->|contains| DeleteCardApi
-  PersonalDataSystem -->|contains| SetPrimaryCardApi
-  PersonalDataSystem -->|contains| SetInitialPasswordApi
-  PersonalDataSystem -->|contains| ChangePasswordApi
-  PersonalDataSystem -->|contains| RequestPasswordResetApi
-  PersonalDataSystem -->|contains| ResetPasswordApi
-  PersonalDataSystem -->|contains| ViewProfileApi
-  UpdateProfile -.->|displays| ProfileScreen
-  UpdateProfile -.->|invokes| UpdateProfileApi
-  RegisterAddress -.->|displays| AddressEditScreen
-  RegisterAddress -.->|invokes| RegisterAddressApi
-  UpdateAddress -.->|displays| AddressEditScreen
-  UpdateAddress -.->|invokes| UpdateAddressApi
-  DeleteAddress -.->|displays| AddressListScreen
-  DeleteAddress -.->|invokes| DeleteAddressApi
-  SetPrimaryAddress -.->|displays| AddressListScreen
-  SetPrimaryAddress -.->|invokes| SetPrimaryAddressApi
-  SuspendAccount -.->|updates| UserAccount
-  RestoreAccount -.->|updates| UserAccount
-  DeleteAccount -.->|updates| UserAccount
-  ListCards -.->|displays| CardListScreen
-  ListCards -.->|invokes| ListCardsApi
-  RegisterCard -.->|displays| CardAddScreen
-  RegisterCard -.->|invokes| RegisterCardApi
-  DeleteCard -.->|displays| CardListScreen
-  DeleteCard -.->|invokes| DeleteCardApi
-  SetPrimaryCard -.->|displays| CardListScreen
-  SetPrimaryCard -.->|invokes| SetPrimaryCardApi
-  SetInitialPassword -.->|displays| PasswordSetScreen
-  SetInitialPassword -.->|invokes| SetInitialPasswordApi
-  ChangePassword -.->|displays| PasswordChangeScreen
-  ChangePassword -.->|invokes| ChangePasswordApi
-  RequestPasswordReset -.->|displays| PasswordResetScreen
-  RequestPasswordReset -.->|invokes| RequestPasswordResetApi
-  ResetPassword -.->|displays| PasswordResetScreen
-  ResetPassword -.->|invokes| ResetPasswordApi
-  ViewProfile -.->|displays| ProfileScreen
-  ViewProfile -.->|invokes| ViewProfileApi
+  actor__SysAdmin -.->|performs| usecase__DeleteAccount
+  actor__SysAdmin -.->|performs| usecase__RestoreAccount
+  actor__SysAdmin -.->|performs| usecase__SuspendAccount
+  actor__User -.->|performs| buc__BucCard
+  actor__User -.->|performs| buc__BucPassword
+  actor__User -.->|performs| buc__BucProfile
+  api__ChangePasswordApi -.->|creates| entity__AuditLog
+  api__ChangePasswordApi -.->|reads| entity__PasswordCredential
+  api__ChangePasswordApi -.->|updates| entity__PasswordCredential
+  api__DeleteAddressApi -.->|creates| entity__AuditLog
+  api__DeleteAddressApi -.->|deletes| entity__PostalAddress
+  api__DeleteCardApi -.->|creates| entity__AuditLog
+  api__DeleteCardApi -.->|deletes| entity__CreditCard
+  api__ListCardsApi -.->|reads| entity__CreditCard
+  api__RegisterAddressApi -.->|creates| entity__AuditLog
+  api__RegisterAddressApi -.->|creates| entity__PostalAddress
+  api__RegisterCardApi -.->|creates| entity__AuditLog
+  api__RegisterCardApi -.->|creates| entity__CreditCard
+  api__RequestPasswordResetApi -.->|creates| entity__AuditLog
+  api__RequestPasswordResetApi -.->|reads| entity__UserAccount
+  api__ResetPasswordApi -.->|creates| entity__AuditLog
+  api__ResetPasswordApi -.->|updates| entity__PasswordCredential
+  api__SetInitialPasswordApi -.->|creates| entity__AuditLog
+  api__SetInitialPasswordApi -.->|creates| entity__PasswordCredential
+  api__SetInitialPasswordApi -.->|updates| entity__UserAccount
+  api__SetPrimaryAddressApi -.->|creates| entity__AuditLog
+  api__SetPrimaryAddressApi -.->|reads| entity__PostalAddress
+  api__SetPrimaryAddressApi -.->|updates| entity__PostalAddress
+  api__SetPrimaryCardApi -.->|creates| entity__AuditLog
+  api__SetPrimaryCardApi -.->|reads| entity__CreditCard
+  api__SetPrimaryCardApi -.->|updates| entity__CreditCard
+  api__UpdateAddressApi -.->|creates| entity__AuditLog
+  api__UpdateAddressApi -.->|reads| entity__PostalAddress
+  api__UpdateAddressApi -.->|updates| entity__PostalAddress
+  api__UpdateProfileApi -.->|creates| entity__AuditLog
+  api__UpdateProfileApi -.->|reads| entity__PersonalInfo
+  api__UpdateProfileApi -.->|updates| entity__PersonalInfo
+  api__ViewProfileApi -.->|reads| entity__PersonalInfo
+  api__ViewProfileApi -.->|reads| entity__UserAccount
+  buc__BucCard -->|belongs| business__PersonalDataMgmt
+  buc__BucCard -->|contains| usecase__DeleteCard
+  buc__BucCard -->|contains| usecase__ListCards
+  buc__BucCard -->|contains| usecase__RegisterCard
+  buc__BucCard -->|contains| usecase__SetPrimaryCard
+  buc__BucPassword -->|belongs| business__PersonalDataMgmt
+  buc__BucPassword -->|contains| usecase__ChangePassword
+  buc__BucPassword -->|contains| usecase__RequestPasswordReset
+  buc__BucPassword -->|contains| usecase__ResetPassword
+  buc__BucPassword -->|contains| usecase__SetInitialPassword
+  buc__BucProfile -->|belongs| business__PersonalDataMgmt
+  buc__BucProfile -->|contains| usecase__DeleteAccount
+  buc__BucProfile -->|contains| usecase__DeleteAddress
+  buc__BucProfile -->|contains| usecase__RegisterAddress
+  buc__BucProfile -->|contains| usecase__RestoreAccount
+  buc__BucProfile -->|contains| usecase__SetPrimaryAddress
+  buc__BucProfile -->|contains| usecase__SuspendAccount
+  buc__BucProfile -->|contains| usecase__UpdateAddress
+  buc__BucProfile -->|contains| usecase__UpdateProfile
+  buc__BucProfile -->|contains| usecase__ViewProfile
+  entity__AuditLog ---|N:1| entity__UserAccount
+  entity__CreditCard ---|N:1| entity__UserAccount
+  entity__PasswordCredential ---|1:1| entity__UserAccount
+  entity__PersonalInfo ---|1:1| entity__UserAccount
+  entity__PostalAddress ---|N:1| entity__UserAccount
+  system__PersonalDataSystem -->|contains| api__ChangePasswordApi
+  system__PersonalDataSystem -->|contains| api__DeleteAddressApi
+  system__PersonalDataSystem -->|contains| api__DeleteCardApi
+  system__PersonalDataSystem -->|contains| api__ListCardsApi
+  system__PersonalDataSystem -->|contains| api__RegisterAddressApi
+  system__PersonalDataSystem -->|contains| api__RegisterCardApi
+  system__PersonalDataSystem -->|contains| api__RequestPasswordResetApi
+  system__PersonalDataSystem -->|contains| api__ResetPasswordApi
+  system__PersonalDataSystem -->|contains| api__SetInitialPasswordApi
+  system__PersonalDataSystem -->|contains| api__SetPrimaryAddressApi
+  system__PersonalDataSystem -->|contains| api__SetPrimaryCardApi
+  system__PersonalDataSystem -->|contains| api__UpdateAddressApi
+  system__PersonalDataSystem -->|contains| api__UpdateProfileApi
+  system__PersonalDataSystem -->|contains| api__ViewProfileApi
+  usecase__ChangePassword -.->|displays| screen__PasswordChangeScreen
+  usecase__ChangePassword -.->|invokes| api__ChangePasswordApi
+  usecase__DeleteAccount -.->|transitions UserAccount.status active->deleted| state__UserAccount_deleted
+  usecase__DeleteAccount -.->|updates| entity__UserAccount
+  usecase__DeleteAddress -.->|displays| screen__AddressListScreen
+  usecase__DeleteAddress -.->|invokes| api__DeleteAddressApi
+  usecase__DeleteCard -.->|displays| screen__CardListScreen
+  usecase__DeleteCard -.->|invokes| api__DeleteCardApi
+  usecase__ListCards -.->|displays| screen__CardListScreen
+  usecase__ListCards -.->|invokes| api__ListCardsApi
+  usecase__RegisterAddress -.->|displays| screen__AddressEditScreen
+  usecase__RegisterAddress -.->|invokes| api__RegisterAddressApi
+  usecase__RegisterCard -.->|displays| screen__CardAddScreen
+  usecase__RegisterCard -.->|invokes| api__RegisterCardApi
+  usecase__RequestPasswordReset -.->|displays| screen__PasswordResetScreen
+  usecase__RequestPasswordReset -.->|invokes| api__RequestPasswordResetApi
+  usecase__ResetPassword -.->|displays| screen__PasswordResetScreen
+  usecase__ResetPassword -.->|invokes| api__ResetPasswordApi
+  usecase__RestoreAccount -.->|transitions UserAccount.status suspended->active| state__UserAccount_active
+  usecase__RestoreAccount -.->|updates| entity__UserAccount
+  usecase__SetInitialPassword -.->|displays| screen__PasswordSetScreen
+  usecase__SetInitialPassword -.->|invokes| api__SetInitialPasswordApi
+  usecase__SetInitialPassword -.->|transitions UserAccount.status provisioned->active| state__UserAccount_active
+  usecase__SetPrimaryAddress -.->|displays| screen__AddressListScreen
+  usecase__SetPrimaryAddress -.->|invokes| api__SetPrimaryAddressApi
+  usecase__SetPrimaryCard -.->|displays| screen__CardListScreen
+  usecase__SetPrimaryCard -.->|invokes| api__SetPrimaryCardApi
+  usecase__SuspendAccount -.->|transitions UserAccount.status active->suspended| state__UserAccount_suspended
+  usecase__SuspendAccount -.->|updates| entity__UserAccount
+  usecase__UpdateAddress -.->|displays| screen__AddressEditScreen
+  usecase__UpdateAddress -.->|invokes| api__UpdateAddressApi
+  usecase__UpdateProfile -.->|displays| screen__ProfileScreen
+  usecase__UpdateProfile -.->|invokes| api__UpdateProfileApi
+  usecase__ViewProfile -.->|displays| screen__ProfileScreen
+  usecase__ViewProfile -.->|invokes| api__ViewProfileApi
+  classDef actor stroke:#333;
+  classDef business stroke:#333;
+  classDef buc stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef api stroke:#333;
+  classDef system stroke:#333;
+  classDef entity stroke:#333;
+  classDef state stroke:#333;
+  classDef variation stroke:#333;

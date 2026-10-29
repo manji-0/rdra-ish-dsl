@@ -1,12 +1,13 @@
 //! Mermaid emitters: RDRA全体図、ER図、状態遷移図、event-flow図。
 
 use crate::diagram_common::{
-    col_type_str, lifecycle_start_states, node_id, node_label, quote, render_descriptions,
-    render_event_flows,
+    class_defs, col_type_str, contract_id, desc_line, lifecycle_start_states, node_id, node_label,
+    quote, render_event_flows, Header,
 };
 use crate::{
-    collect_object_graph_nodes, object_graph_layer, object_graph_rel_label, prefixed_node_label,
-    view_node_visible, view_relation_visible, EmitError, Emitter, Scope, View, OBJECT_GRAPH_LAYERS,
+    collect_object_graph_nodes, node_kind_filter_name, object_graph_layer, object_graph_rel_label,
+    prefixed_node_label, view_node_visible, view_relation_visible, EmitError, Emitter, Scope, View,
+    OBJECT_GRAPH_LAYERS,
 };
 use rdra_ish_core::model::{EntityKey, NodeRef, RelKind, SemanticModel, StateKey};
 use std::collections::{HashMap, HashSet};
@@ -15,110 +16,237 @@ use std::collections::{HashMap, HashSet};
 
 pub struct RdraMermaidEmitter;
 
+/// One edge of the RDRA graph before it is written.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+struct GraphEdge {
+    from: String,
+    label: String,
+    to: String,
+    arrow: &'static str,
+    /// What the edge was derived from, written as a `%% derived` line after it.
+    derived: Option<&'static str>,
+}
+
+/// The line style of the RDRAGraph relation kind: hierarchy and flow order `-->`,
+/// relate `---`, every other association `-.->`.
+fn rdra_arrow(kind: &RelKind) -> &'static str {
+    match kind {
+        RelKind::Contains
+        | RelKind::Belongs
+        | RelKind::Owns
+        | RelKind::Precedes
+        | RelKind::Branches
+        | RelKind::Repeats => "-->",
+        RelKind::RelateOneToOne
+        | RelKind::RelateOneToMany
+        | RelKind::RelateManyToOne
+        | RelKind::RelateManyToMany => "---",
+        _ => "-.->",
+    }
+}
+
+/// The token `--edge-kind` and the header's `omitted:` line use for a relation kind.
+fn edge_kind_token(kind: &RelKind) -> &'static str {
+    match kind {
+        RelKind::RelateOneToOne
+        | RelKind::RelateOneToMany
+        | RelKind::RelateManyToOne
+        | RelKind::RelateManyToMany => "relate",
+        _ => object_graph_rel_label(kind),
+    }
+}
+
+/// Node kinds of `nodes` in layer order, each once.
+fn kinds_by_layer(nodes: &[NodeRef]) -> Vec<&'static str> {
+    let mut kinds = Vec::new();
+    for layer in OBJECT_GRAPH_LAYERS {
+        for node in nodes.iter().filter(|nr| object_graph_layer(nr) == layer) {
+            let kind = node_kind_filter_name(node);
+            if !kinds.contains(&kind) {
+                kinds.push(kind);
+            }
+        }
+    }
+    kinds
+}
+
+/// Every relation between two visible nodes, with `transitions` drawn from the use case to
+/// the state it enters. Each comes with its kind, so the caller can apply `--edge-kind`.
+fn graph_edges(model: &SemanticModel, visible: &HashSet<NodeRef>) -> Vec<(RelKind, GraphEdge)> {
+    let mut edges = Vec::new();
+    for rel in &model.relations {
+        if !visible.contains(&rel.from) || !visible.contains(&rel.to) {
+            continue;
+        }
+        let (Some(from), Some(to)) = (contract_id(model, &rel.from), contract_id(model, &rel.to))
+        else {
+            continue;
+        };
+        let derived = match rel.from {
+            NodeRef::Condition(condition)
+                if rel.kind == RelKind::Combines
+                    && model
+                        .conditions
+                        .get(condition)
+                        .is_some_and(|c| c.body.is_some()) =>
+            {
+                Some("from holds")
+            }
+            _ => None,
+        };
+        edges.push((
+            rel.kind.clone(),
+            GraphEdge {
+                from,
+                label: object_graph_rel_label(&rel.kind).to_string(),
+                to,
+                arrow: rdra_arrow(&rel.kind),
+                derived,
+            },
+        ));
+    }
+
+    for transition in &model.state_transitions {
+        let Some(entity) = model.entities.get(transition.entity) else {
+            continue;
+        };
+        let Some(state) = state_key(model, transition.entity, &transition.to) else {
+            continue;
+        };
+        let (usecase, state) = (NodeRef::UseCase(transition.usecase), NodeRef::State(state));
+        if !visible.contains(&usecase) || !visible.contains(&state) {
+            continue;
+        }
+        let (Some(from), Some(to)) = (contract_id(model, &usecase), contract_id(model, &state))
+        else {
+            continue;
+        };
+        edges.push((
+            RelKind::Transitions,
+            GraphEdge {
+                from,
+                label: format!(
+                    "transitions {}.{} {}->{}",
+                    entity.id, transition.column, transition.from, transition.to
+                ),
+                to,
+                arrow: "-.->",
+                derived: None,
+            },
+        ));
+    }
+    edges
+}
+
+/// The state node of `variant` on `entity`'s lifecycle column.
+fn state_key(model: &SemanticModel, entity: EntityKey, variant: &str) -> Option<StateKey> {
+    let id = format!("{}_{variant}", model.entities.get(entity)?.id);
+    model
+        .states
+        .iter()
+        .find(|(_, state)| state.id == id)
+        .map(|(key, _)| key)
+}
+
 impl Emitter for RdraMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
+        // A BUC scope also holds the states its use cases move between.
         let reachable: Option<HashSet<NodeRef>> = match &view.scope {
-            Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
+            Scope::Bucs(buc_ids) => {
+                let mut set = rdra_ish_core::reachable_from_bucs(model, buc_ids);
+                let states: Vec<NodeRef> = model
+                    .state_transitions
+                    .iter()
+                    .filter(|t| set.contains(&NodeRef::UseCase(t.usecase)))
+                    .flat_map(|t| [&t.from, &t.to].map(|v| state_key(model, t.entity, v)))
+                    .flatten()
+                    .map(NodeRef::State)
+                    .collect();
+                set.extend(states);
+                Some(set)
+            }
             Scope::Whole | Scope::UseCases(_) => None,
         };
-
-        let is_visible = |nr: &NodeRef| -> bool {
-            let scoped = match &reachable {
-                Some(set) => set.contains(nr),
-                None => true,
-            };
-            scoped && view_node_visible(view, nr)
-        };
-
-        let visible_nodes = collect_object_graph_nodes(model, &is_visible);
+        let in_scope = |nr: &NodeRef| reachable.as_ref().is_none_or(|set| set.contains(nr));
+        let scoped_nodes = collect_object_graph_nodes(model, &in_scope);
+        let visible_nodes: Vec<NodeRef> = scoped_nodes
+            .iter()
+            .filter(|nr| view_node_visible(view, nr))
+            .cloned()
+            .collect();
         let visible_set: HashSet<NodeRef> = visible_nodes.iter().cloned().collect();
 
-        let mut out = String::new();
-        out.push_str("flowchart LR\n");
-
+        let mut body = String::new();
+        let mut layers = Vec::new();
         for layer in OBJECT_GRAPH_LAYERS {
-            out.push_str(&format!(
-                "  subgraph {}[{}]\n",
-                layer.mermaid_id(),
-                layer.label()
-            ));
-            out.push_str("    direction TB\n");
-            for nr in visible_nodes
+            let nodes: Vec<(&NodeRef, String, &str)> = visible_nodes
                 .iter()
                 .filter(|nr| object_graph_layer(nr) == layer)
-            {
-                if let (Some(id), Some(label)) = (node_id(model, nr), node_label(model, nr)) {
-                    let label = quote(&prefixed_node_label(nr, label));
-                    let line = match nr {
-                        NodeRef::Actor(_) => format!("    {}([\"{}\"])\n", id, label),
-                        NodeRef::Requirement(_) => format!("    {}[\"{}\"]\n", id, label),
-                        NodeRef::Adr(_) => format!("    {}[\"{}\"]\n", id, label),
-                        NodeRef::Nfr(_) => format!("    {}[\"{}\"]\n", id, label),
-                        NodeRef::ExtSystem(_) => format!("    {}[/\"{}\"/]\n", id, label),
-                        NodeRef::Quality(_) => format!("    {}[\"{}\"]\n", id, label),
-                        NodeRef::Constraint(_) => format!("    {}[\"{}\"]\n", id, label),
-                        NodeRef::Business(_) => format!("    {}[\"{}\"]\n", id, label),
-                        NodeRef::Buc(_) => format!("    {}[\"{}\"]\n", id, label),
-                        NodeRef::Flow(_) => format!("    {}[\"{}\"]\n", id, label),
-                        NodeRef::Step(_) => format!("    {}([\"{}\"])\n", id, label),
-                        NodeRef::Timer(_) => format!("    {}[\"{}\"]\n", id, label),
-                        NodeRef::Medium(_) => format!("    {}[/\"{}\"/]\n", id, label),
-                        NodeRef::Permission(_) => format!("    {}[\"{}\"]\n", id, label),
-                        NodeRef::Variation(_) => format!("    {}[\"{}\"]\n", id, label),
-                        NodeRef::Condition(_) => format!("    {}{{\"{}\"}}\n", id, label),
-                        NodeRef::UseCase(_) => format!("    {}([\"{}\"])\n", id, label),
-                        NodeRef::Screen(_) => format!("    {}[[\"{}\"]]\n", id, label),
-                        NodeRef::Field(_) => format!("    {}[[\"{}\"]]\n", id, label),
-                        NodeRef::Event(_) => format!("    {}{{\"{}\"}}\n", id, label),
-                        NodeRef::Api(_) => format!("    {}[\"{}\"]\n", id, label),
-                        NodeRef::Dto(_) => format!("    {}[[\"{}\"]]\n", id, label),
-                        NodeRef::System(_) => format!("    {}[\"{}\"]\n", id, label),
-                        NodeRef::Entity(_) => format!("    {}[(\"{}\")]\n", id, label),
-                        NodeRef::State(_) => format!("    {}(\"{}\")\n", id, label),
-                    };
-                    out.push_str(&line);
+                .filter_map(|nr| Some((nr, contract_id(model, nr)?, node_label(model, nr)?)))
+                .collect();
+            if nodes.is_empty() {
+                continue;
+            }
+            layers.push(layer);
+            body.push_str(&format!(
+                "  subgraph layer_{}[\"{}\"]\n",
+                layer.token(),
+                layer.label()
+            ));
+            for (nr, id, label) in nodes {
+                body.push_str(&format!(
+                    "    {id}[\"{}\"]:::{}\n",
+                    quote(label),
+                    node_kind_filter_name(nr)
+                ));
+                if let Some(desc) = desc_line(model, nr, &id) {
+                    body.push_str(&format!("    {desc}\n"));
                 }
             }
-            out.push_str("  end\n");
+            body.push_str("  end\n");
         }
 
-        let mut relations: Vec<_> = model.relations.iter().collect();
-        relations.sort_by_key(|r| format!("{:?}{:?}{:?}", r.from, r.kind, r.to));
-        for rel in relations {
-            if !visible_set.contains(&rel.from) || !visible_set.contains(&rel.to) {
-                continue;
+        let mut omitted_edges: Vec<&'static str> = Vec::new();
+        let mut edges: Vec<GraphEdge> = Vec::new();
+        for (kind, edge) in graph_edges(model, &visible_set) {
+            if view_relation_visible(view, &kind) {
+                edges.push(edge);
+            } else if !omitted_edges.contains(&edge_kind_token(&kind)) {
+                omitted_edges.push(edge_kind_token(&kind));
             }
-            if !view_relation_visible(view, &rel.kind) {
-                continue;
-            }
-            if let (Some(from_id), Some(to_id)) =
-                (node_id(model, &rel.from), node_id(model, &rel.to))
-            {
-                let label = object_graph_rel_label(&rel.kind);
-                let line = match rel.kind {
-                    RelKind::Performs | RelKind::Contains | RelKind::Owns => {
-                        format!("  {} -->|{}| {}\n", from_id, label, to_id)
-                    }
-                    RelKind::RelateOneToOne
-                    | RelKind::RelateOneToMany
-                    | RelKind::RelateManyToOne
-                    | RelKind::RelateManyToMany => {
-                        format!("  {} ---|{}| {}\n", from_id, label, to_id)
-                    }
-                    _ => format!("  {} -.->|{}| {}\n", from_id, label, to_id),
-                };
-                out.push_str(&line);
+        }
+        edges.sort();
+        edges.dedup();
+        for edge in &edges {
+            body.push_str(&format!(
+                "  {} {}|{}| {}\n",
+                edge.from, edge.arrow, edge.label, edge.to
+            ));
+            if let Some(derived) = edge.derived {
+                body.push_str(&format!(
+                    "  %% derived {} -> {} {derived}\n",
+                    edge.from, edge.to
+                ));
             }
         }
 
-        if view.show_descriptions {
-            render_descriptions(&mut out, model, &visible_nodes);
-        }
-
-        while out.ends_with("\n\n") {
-            out.pop();
-        }
-        Ok(out)
+        let kinds = kinds_by_layer(&visible_nodes);
+        omitted_edges.sort();
+        let omitted = kinds_by_layer(&scoped_nodes)
+            .into_iter()
+            .filter(|kind| !kinds.contains(kind))
+            .chain(omitted_edges)
+            .map(str::to_string)
+            .collect();
+        body.push_str(&class_defs(&kinds));
+        let header = Header {
+            diagram: "rdra",
+            view,
+            layers: Some(layers),
+            kinds,
+            omitted,
+        };
+        Ok(format!("{}flowchart LR\n{body}", header.render()))
     }
 }
 
@@ -353,29 +481,48 @@ invokes(PlaceOrder, OrderApi)
 creates(OrderApi, Order)
 "#;
         let model = model_from(src);
-        let result = RdraMermaidEmitter.emit(&model, &View::whole()).unwrap();
-        assert!(result.contains("flowchart LR"));
-        assert!(result.contains("subgraph layer_value[System Value]"));
-        assert!(result.contains("subgraph layer_environment[External Environment]"));
-        assert!(result.contains("subgraph layer_boundary[System Boundary]"));
-        assert!(result.contains("subgraph layer_system[System]"));
-        assert!(result.contains("Customer([\"👤 顧客\"])"));
-        assert!(result.contains("BucOrder[\"📦 注文業務\"]"));
-        assert!(result.contains("OrderScreen[[\"🖥️ 注文画面\"]]"));
-        assert!(result.contains("OrderApi[\"🔌 注文API\"]"));
-        assert!(result.contains("Order[(\"🗄️ 注文\")]"));
-        let boundary_pos = result
-            .find("subgraph layer_boundary[System Boundary]")
+        let result = RdraMermaidEmitter
+            .emit(&model, &View::whole().with_model_path("m.rdra"))
             .unwrap();
-        let system_pos = result.find("subgraph layer_system[System]").unwrap();
-        let screen_pos = result.find("OrderScreen[[\"🖥️ 注文画面\"]]").unwrap();
-        let api_pos = result.find("OrderApi[\"🔌 注文API\"]").unwrap();
-        assert!(boundary_pos < screen_pos);
-        assert!(screen_pos < system_pos);
+        assert!(
+            result.starts_with(
+                "%% rdra-ish diagram=rdra scope=whole model=m.rdra\n\
+                 %% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム\n\
+                 %% kinds: actor buc usecase screen api entity\n\
+                 %% omitted: (none)\n\
+                 flowchart LR\n"
+            ),
+            "{result}"
+        );
+        let value_pos = result
+            .find("  subgraph layer_value[\"システム価値\"]\n")
+            .unwrap();
+        let boundary_pos = result
+            .find("  subgraph layer_boundary[\"システム境界\"]\n")
+            .unwrap();
+        let system_pos = result
+            .find("  subgraph layer_system[\"システム\"]\n")
+            .unwrap();
+        let actor_pos = result
+            .find("    actor__Customer[\"顧客\"]:::actor\n")
+            .unwrap();
+        let screen_pos = result
+            .find("    screen__OrderScreen[\"注文画面\"]:::screen\n")
+            .unwrap();
+        let api_pos = result
+            .find("    api__OrderApi[\"注文API\"]:::api\n")
+            .unwrap();
+        assert!(value_pos < actor_pos && actor_pos < boundary_pos);
+        assert!(boundary_pos < screen_pos && screen_pos < system_pos);
         assert!(system_pos < api_pos);
-        assert!(result.contains("Customer -->|performs| BucOrder"));
-        assert!(result.contains("PlaceOrder -.->|invokes| OrderApi"));
-        assert!(result.contains("OrderApi -.->|creates| Order"));
+        assert!(result.contains("    buc__BucOrder[\"注文業務\"]:::buc\n"));
+        assert!(result.contains("    entity__Order[\"注文\"]:::entity\n"));
+        assert!(result.contains("  actor__Customer -.->|performs| buc__BucOrder\n"));
+        assert!(result.contains("  buc__BucOrder -->|contains| usecase__PlaceOrder\n"));
+        assert!(result.contains("  usecase__PlaceOrder -.->|invokes| api__OrderApi\n"));
+        assert!(result.contains("  api__OrderApi -.->|creates| entity__Order\n"));
+        assert!(result.ends_with("  classDef api stroke:#333;\n  classDef entity stroke:#333;\n"));
+        assert!(!result.contains("direction TB"), "{result}");
     }
 
     #[test]
@@ -388,24 +535,103 @@ entity Order "Order" { id: Int @pk }
 performs(Customer, PlaceOrder)
 invokes(PlaceOrder, OrderApi)
 creates(OrderApi, Order)
+displays(PlaceOrder, Order)
 "#;
         let model = model_from(src);
         let view = View::whole().with_graph_filters(
-            vec!["usecase".to_string(), "api".to_string()],
-            vec!["invokes".to_string()],
+            vec![
+                "usecase".to_string(),
+                "api".to_string(),
+                "entity".to_string(),
+            ],
+            vec!["invokes".to_string(), "creates".to_string()],
         );
 
         let result = RdraMermaidEmitter.emit(&model, &view).unwrap();
 
-        assert!(result.contains("PlaceOrder([\"✅ Place order\"])"));
-        assert!(result.contains("OrderApi[\"🔌 Order API\"]"));
-        assert!(result.contains("PlaceOrder -.->|invokes| OrderApi"));
-        assert!(!result.contains("Customer(["));
-        assert!(!result.contains("Order[(\""));
-        assert!(!result.contains("performs"));
-        assert!(!result.contains("creates"));
+        assert!(result.contains("usecase__PlaceOrder[\"Place order\"]:::usecase"));
+        assert!(result.contains("api__OrderApi[\"Order API\"]:::api"));
+        assert!(result.contains("usecase__PlaceOrder -.->|invokes| api__OrderApi"));
+        assert!(!result.contains("actor__Customer"), "{result}");
+        assert!(!result.contains("performs"), "{result}");
+        assert!(
+            result.contains("%% kinds: usecase api entity\n"),
+            "{result}"
+        );
+        // The header names what the filters hid: the actor, and the displays edge whose
+        // ends are both drawn.
+        assert!(result.contains("%% omitted: actor displays\n"), "{result}");
     }
 
+    #[test]
+    fn test_rdra_mermaid_draws_one_edge_per_fact() {
+        let src = r#"
+screen StoreScreen "Store"
+entity Store "Store" { id: Int @pk }
+shows(StoreScreen, Store)
+shows(StoreScreen, Store)
+"#;
+        let model = model_from(src);
+        let result = RdraMermaidEmitter.emit(&model, &View::whole()).unwrap();
+        let shows = result
+            .lines()
+            .filter(|line| line.contains("|shows|"))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            shows,
+            vec!["  screen__StoreScreen -.->|shows| entity__Store"],
+            "{result}"
+        );
+    }
+
+    #[test]
+    fn test_rdra_mermaid_draws_a_transition_from_its_use_case() {
+        let src = r#"
+buc BucPay "Pay"
+usecase Capture "Capture"
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(awaiting, paid) @default(awaiting)
+}
+contains(BucPay, Capture)
+transitions(Order.status, Capture, awaiting -> paid)
+"#;
+        let model = model_from(src);
+        for view in [View::whole(), View::bucs(vec!["BucPay".to_string()])] {
+            let result = RdraMermaidEmitter.emit(&model, &view).unwrap();
+            assert!(
+                result.contains(
+                    "  usecase__Capture -.->|transitions Order.status awaiting->paid| state__Order_paid\n"
+                ),
+                "{result}"
+            );
+            assert!(result.contains("    state__Order_awaiting[\"awaiting\"]:::state\n"));
+        }
+        let view = View::whole().with_graph_filters(Vec::new(), vec!["contains".to_string()]);
+        let result = RdraMermaidEmitter.emit(&model, &view).unwrap();
+        assert!(!result.contains("|transitions"), "{result}");
+        assert!(result.contains("%% omitted: transitions\n"), "{result}");
+    }
+
+    #[test]
+    fn test_rdra_mermaid_writes_descriptions_as_comments() {
+        let src = r#"
+actor Customer "Customer" description "Places orders"
+usecase Browse "Browse" description "Finds products"
+performs(Customer, Browse)
+"#;
+        let model = model_from(src);
+        let result = RdraMermaidEmitter.emit(&model, &View::whole()).unwrap();
+
+        assert!(
+            result.contains(
+                "    actor__Customer[\"Customer\"]:::actor\n    %% desc actor__Customer: Places orders\n"
+            ),
+            "{result}"
+        );
+        assert!(result.contains("    %% desc usecase__Browse: Finds products\n"));
+        assert!(!result.contains("_description"), "{result}");
+    }
     #[test]
     fn test_er_mermaid_emit() {
         let src = r#"
@@ -526,14 +752,51 @@ applies_to(Insured, Collect)
 "#;
         let model = model_from(src);
         let result = RdraMermaidEmitter.emit(&model, &View::whole()).unwrap();
-        assert!(result.contains("Insured{\"🔀 Insured\"}"), "{result}");
-        assert!(result.contains("Method[\"🎚️ Method\"]"), "{result}");
-        assert!(result.contains("Insured -.->|combines| Method"), "{result}");
-        assert!(result.contains("Insured -.->|combines| Pay"), "{result}");
         assert!(
-            result.contains("Insured -.->|applies_to| Collect"),
+            result.contains("condition__Insured[\"Insured\"]:::condition"),
             "{result}"
         );
+        assert!(
+            result.contains("variation__Method[\"Method\"]:::variation"),
+            "{result}"
+        );
+        assert!(
+            result.contains(
+                "  condition__Insured -.->|combines| variation__Method\n  \
+                 %% derived condition__Insured -> variation__Method from holds\n"
+            ),
+            "{result}"
+        );
+        assert!(
+            result.contains(
+                "  condition__Insured -.->|combines| entity__Pay\n  \
+                 %% derived condition__Insured -> entity__Pay from holds\n"
+            ),
+            "{result}"
+        );
+        assert!(
+            result.contains("condition__Insured -.->|applies_to| usecase__Collect"),
+            "{result}"
+        );
+    }
+
+    #[test]
+    fn test_rdra_mermaid_draws_a_declared_combines_without_derived() {
+        let src = r#"
+variation Method "Method" {
+  cash
+  card
+}
+condition ByMethod "By method"
+combines(ByMethod, Method)
+"#;
+        let model = model_from(src);
+        let result = RdraMermaidEmitter.emit(&model, &View::whole()).unwrap();
+        assert!(
+            result.contains("condition__ByMethod -.->|combines| variation__Method"),
+            "{result}"
+        );
+        assert!(!result.contains("%% derived"), "{result}");
     }
 
     #[test]
@@ -735,30 +998,12 @@ reads(UcA, EntityA)
         let view = View {
             scope: crate::Scope::Bucs(vec!["BucA".to_string()]),
             filter: crate::Filter::Er,
-            show_descriptions: false,
+            model_path: None,
             node_kinds: Vec::new(),
             edge_kinds: Vec::new(),
         };
         let result = ErMermaidEmitter.emit(&model, &view).unwrap();
         assert!(result.contains("EntityA"), "EntityA should be included");
         assert!(!result.contains("EntityB"), "EntityB should be excluded");
-    }
-
-    #[test]
-    fn test_mermaid_show_description_renders_annotations() {
-        let src = r#"
-actor Customer "Customer" description "Places orders"
-usecase Browse "Browse" description "Finds products"
-performs(Customer, Browse)
-"#;
-        let model = model_from(src);
-        let view = View::whole().with_descriptions(true);
-
-        let result = RdraMermaidEmitter.emit(&model, &view).unwrap();
-
-        assert!(result.contains("Customer_description[\"Places orders\"]"));
-        assert!(result.contains("Customer_description -. description .- Customer"));
-        assert!(result.contains("Browse_description[\"Finds products\"]"));
-        assert!(result.contains("Browse_description -. description .- Browse"));
     }
 }

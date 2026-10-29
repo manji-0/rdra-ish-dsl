@@ -119,138 +119,158 @@ rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucPatien
 ```
 
 ```mermaid
+%% rdra-ish diagram=rdra scope=buc:BucPatientOnboarding model=samples/clinic-ops
+%% layers: environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: business buc timer medium permission usecase screen event api entity state
+%% omitted: (none)
 flowchart LR
-  subgraph layer_value[System Value]
-    direction TB
+  subgraph layer_environment["システム外部環境"]
+    business__PatientAccess["Patient Access"]:::business
+    %% desc business__PatientAccess: Patient-facing access workflows from onboarding through appointments.
+    buc__BucPatientOnboarding["Onboard and Maintain Patient"]:::buc
+    timer__IntakeExpiryCheck["Nightly intake expiry check"]:::timer
+    medium__FrontDeskTerminal["Front Desk Terminal"]:::medium
+    medium__PatientMobile["Patient Mobile"]:::medium
+    permission__ConsentCapture["Consent Capture"]:::permission
+    permission__InsuranceVerify["Insurance Verify"]:::permission
+    permission__IntakeManage["Intake Manage"]:::permission
+    permission__PatientMessageSend["Patient Message Send"]:::permission
+    permission__PatientProfileRead["Patient Profile Read"]:::permission
+    permission__PatientProfileWrite["Patient Profile Write"]:::permission
   end
-  subgraph layer_environment[External Environment]
-    direction TB
-    PatientAccess["💼 Patient Access"]
-    BucPatientOnboarding["📦 Onboard and Maintain Patient"]
-    IntakeExpiryCheck["⏱️ Nightly intake expiry check"]
-    FrontDeskTerminal[/"📱 Front Desk Terminal"/]
-    PatientMobile[/"📱 Patient Mobile"/]
-    ConsentCapture["🔑 Consent Capture"]
-    InsuranceVerify["🔑 Insurance Verify"]
-    IntakeManage["🔑 Intake Manage"]
-    PatientMessageSend["🔑 Patient Message Send"]
-    PatientProfileRead["🔑 Patient Profile Read"]
-    PatientProfileWrite["🔑 Patient Profile Write"]
+  subgraph layer_boundary["システム境界"]
+    usecase__ArchivePatient["Archive Patient"]:::usecase
+    usecase__CaptureConsent["Capture Consent"]:::usecase
+    usecase__CompleteIntakeForms["Complete Intake Forms"]:::usecase
+    usecase__ExpireIntakeForms["Expire Intake Forms"]:::usecase
+    usecase__MergeDuplicatePatient["Merge Duplicate Patient"]:::usecase
+    usecase__RegisterPatient["Register Patient"]:::usecase
+    usecase__SearchPatient["Search Patient"]:::usecase
+    usecase__SendIntakeForms["Send Intake Forms"]:::usecase
+    usecase__UpdateDemographics["Update Demographics"]:::usecase
+    usecase__VerifyInsurance["保険資格・限度額情報の登録（新患登録）"]:::usecase
+    screen__ConsentScreen["Consent Capture Screen"]:::screen
+    screen__InsuranceScreen["Insurance Verification Screen"]:::screen
+    screen__IntakePortalScreen["Intake Portal Screen"]:::screen
+    screen__PatientProfileScreen["Patient Profile Screen"]:::screen
+    screen__PatientSearchScreen["Patient Search Screen"]:::screen
+    event__EvAppointmentScheduled["Appointment Scheduled"]:::event
   end
-  subgraph layer_boundary[System Boundary]
-    direction TB
-    ArchivePatient(["✅ Archive Patient"])
-    CaptureConsent(["✅ Capture Consent"])
-    CompleteIntakeForms(["✅ Complete Intake Forms"])
-    ExpireIntakeForms(["✅ Expire Intake Forms"])
-    MergeDuplicatePatient(["✅ Merge Duplicate Patient"])
-    RegisterPatient(["✅ Register Patient"])
-    SearchPatient(["✅ Search Patient"])
-    SendIntakeForms(["✅ Send Intake Forms"])
-    UpdateDemographics(["✅ Update Demographics"])
-    VerifyInsurance(["✅ 保険資格・限度額情報の登録（新患登録）"])
-    ConsentScreen[["🖥️ Consent Capture Screen"]]
-    InsuranceScreen[["🖥️ Insurance Verification Screen"]]
-    IntakePortalScreen[["🖥️ Intake Portal Screen"]]
-    PatientProfileScreen[["🖥️ Patient Profile Screen"]]
-    PatientSearchScreen[["🖥️ Patient Search Screen"]]
-    EvAppointmentScheduled{"⚡ Appointment Scheduled"}
+  subgraph layer_system["システム"]
+    api__ConsentApi["Consent API"]:::api
+    api__EligibilityApi["Eligibility API"]:::api
+    api__IntakeMessagingApi["Intake Messaging API"]:::api
+    api__RegisterPatientApi["Register Patient API"]:::api
+    api__SearchPatientApi["Search Patient API"]:::api
+    api__UpdateDemographicsApi["Update Demographics API"]:::api
+    entity__ConsentRecord["Consent Record"]:::entity
+    entity__EligibilityCheck["資格確認"]:::entity
+    entity__InsurancePolicy["保険資格"]:::entity
+    entity__IntakePacket["Intake Packet"]:::entity
+    entity__PatientAccount["Patient Account"]:::entity
+    entity__PatientMessage["Patient Message"]:::entity
+    entity__PatientProfile["Patient Profile"]:::entity
+    state__IntakePacket_intakecompleted["intakecompleted"]:::state
+    state__IntakePacket_intakeexpired["intakeexpired"]:::state
+    state__IntakePacket_intakesent["intakesent"]:::state
+    state__PatientAccount_patientactive["patientactive"]:::state
+    state__PatientAccount_patientinactive["patientinactive"]:::state
+    state__PatientAccount_patientmerged["patientmerged"]:::state
   end
-  subgraph layer_system[System]
-    direction TB
-    ConsentApi["🔌 Consent API"]
-    EligibilityApi["🔌 Eligibility API"]
-    IntakeMessagingApi["🔌 Intake Messaging API"]
-    RegisterPatientApi["🔌 Register Patient API"]
-    SearchPatientApi["🔌 Search Patient API"]
-    UpdateDemographicsApi["🔌 Update Demographics API"]
-    ConsentRecord[("🗄️ Consent Record")]
-    EligibilityCheck[("🗄️ 資格確認")]
-    InsurancePolicy[("🗄️ 保険資格")]
-    IntakePacket[("🗄️ Intake Packet")]
-    PatientAccount[("🗄️ Patient Account")]
-    PatientMessage[("🗄️ Patient Message")]
-    PatientProfile[("🗄️ Patient Profile")]
-  end
-  SearchPatientApi -.->|reads| PatientAccount
-  SearchPatientApi -.->|reads| PatientProfile
-  SearchPatientApi -.->|requires_permission| PatientProfileRead
-  RegisterPatientApi -.->|creates| PatientAccount
-  RegisterPatientApi -.->|creates| PatientProfile
-  RegisterPatientApi -.->|requires_permission| PatientProfileWrite
-  UpdateDemographicsApi -.->|requires_permission| PatientProfileWrite
-  UpdateDemographicsApi -.->|updates| PatientProfile
-  EligibilityApi -.->|creates| EligibilityCheck
-  EligibilityApi -.->|reads| InsurancePolicy
-  EligibilityApi -.->|requires_permission| InsuranceVerify
-  EligibilityApi -.->|updates| InsurancePolicy
-  ConsentApi -.->|creates| ConsentRecord
-  ConsentApi -.->|requires_permission| ConsentCapture
-  IntakeMessagingApi -.->|creates| PatientMessage
-  IntakeMessagingApi -.->|creates| IntakePacket
-  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
-  BucPatientOnboarding -.->|belongs| PatientAccess
-  BucPatientOnboarding -->|contains| SearchPatient
-  BucPatientOnboarding -->|contains| RegisterPatient
-  BucPatientOnboarding -->|contains| UpdateDemographics
-  BucPatientOnboarding -->|contains| VerifyInsurance
-  BucPatientOnboarding -->|contains| CaptureConsent
-  BucPatientOnboarding -->|contains| SendIntakeForms
-  BucPatientOnboarding -->|contains| CompleteIntakeForms
-  BucPatientOnboarding -->|contains| ExpireIntakeForms
-  BucPatientOnboarding -->|contains| MergeDuplicatePatient
-  BucPatientOnboarding -->|contains| ArchivePatient
-  PatientMessage ---|N:1| PatientAccount
-  PatientProfile ---|1:1| PatientAccount
-  InsurancePolicy ---|N:1| PatientAccount
-  EligibilityCheck ---|N:1| InsurancePolicy
-  ConsentRecord ---|N:1| PatientAccount
-  IntakePacket ---|N:1| PatientAccount
-  EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
-  EvAppointmentScheduled -.->|triggers| SendIntakeForms
-  PatientSearchScreen -.->|shows| PatientAccount
-  PatientProfileScreen -.->|shows| PatientProfile
-  IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
-  SearchPatient -.->|displays| PatientSearchScreen
-  SearchPatient -.->|invokes| SearchPatientApi
-  SearchPatient -.->|requires_medium| FrontDeskTerminal
-  SearchPatient -.->|requires_permission| PatientProfileRead
-  RegisterPatient -.->|displays| PatientProfileScreen
-  RegisterPatient -.->|invokes| RegisterPatientApi
-  RegisterPatient -.->|requires_medium| FrontDeskTerminal
-  RegisterPatient -.->|requires_permission| PatientProfileWrite
-  UpdateDemographics -.->|displays| PatientProfileScreen
-  UpdateDemographics -.->|invokes| UpdateDemographicsApi
-  UpdateDemographics -.->|requires_medium| FrontDeskTerminal
-  UpdateDemographics -.->|requires_permission| PatientProfileWrite
-  VerifyInsurance -.->|displays| InsuranceScreen
-  VerifyInsurance -.->|invokes| EligibilityApi
-  VerifyInsurance -.->|requires_medium| FrontDeskTerminal
-  VerifyInsurance -.->|requires_permission| InsuranceVerify
-  CaptureConsent -.->|displays| ConsentScreen
-  CaptureConsent -.->|invokes| ConsentApi
-  CaptureConsent -.->|requires_medium| PatientMobile
-  CaptureConsent -.->|requires_permission| ConsentCapture
-  SendIntakeForms -.->|displays| IntakePortalScreen
-  SendIntakeForms -.->|invokes| IntakeMessagingApi
-  SendIntakeForms -.->|requires_medium| FrontDeskTerminal
-  SendIntakeForms -.->|requires_permission| IntakeManage
-  CompleteIntakeForms -.->|displays| IntakePortalScreen
-  CompleteIntakeForms -.->|requires_medium| PatientMobile
-  CompleteIntakeForms -.->|requires_permission| ConsentCapture
-  CompleteIntakeForms -.->|updates| IntakePacket
-  ExpireIntakeForms -.->|displays| IntakePortalScreen
-  ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
-  ExpireIntakeForms -.->|requires_permission| IntakeManage
-  ExpireIntakeForms -.->|updates| IntakePacket
-  MergeDuplicatePatient -.->|displays| PatientProfileScreen
-  MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
-  MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
-  MergeDuplicatePatient -.->|updates| PatientAccount
-  ArchivePatient -.->|displays| PatientProfileScreen
-  ArchivePatient -.->|requires_medium| FrontDeskTerminal
-  ArchivePatient -.->|requires_permission| PatientProfileWrite
-  ArchivePatient -.->|updates| PatientAccount
+  api__ConsentApi -.->|creates| entity__ConsentRecord
+  api__ConsentApi -.->|requires_permission| permission__ConsentCapture
+  api__EligibilityApi -.->|creates| entity__EligibilityCheck
+  api__EligibilityApi -.->|reads| entity__InsurancePolicy
+  api__EligibilityApi -.->|requires_permission| permission__InsuranceVerify
+  api__EligibilityApi -.->|updates| entity__InsurancePolicy
+  api__IntakeMessagingApi -.->|creates| entity__IntakePacket
+  api__IntakeMessagingApi -.->|creates| entity__PatientMessage
+  api__IntakeMessagingApi -.->|requires_permission| permission__PatientMessageSend
+  api__RegisterPatientApi -.->|creates| entity__PatientAccount
+  api__RegisterPatientApi -.->|creates| entity__PatientProfile
+  api__RegisterPatientApi -.->|requires_permission| permission__PatientProfileWrite
+  api__SearchPatientApi -.->|reads| entity__PatientAccount
+  api__SearchPatientApi -.->|reads| entity__PatientProfile
+  api__SearchPatientApi -.->|requires_permission| permission__PatientProfileRead
+  api__UpdateDemographicsApi -.->|requires_permission| permission__PatientProfileWrite
+  api__UpdateDemographicsApi -.->|updates| entity__PatientProfile
+  buc__BucPatientOnboarding -->|belongs| business__PatientAccess
+  buc__BucPatientOnboarding -->|contains| usecase__ArchivePatient
+  buc__BucPatientOnboarding -->|contains| usecase__CaptureConsent
+  buc__BucPatientOnboarding -->|contains| usecase__CompleteIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__ExpireIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__MergeDuplicatePatient
+  buc__BucPatientOnboarding -->|contains| usecase__RegisterPatient
+  buc__BucPatientOnboarding -->|contains| usecase__SearchPatient
+  buc__BucPatientOnboarding -->|contains| usecase__SendIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__UpdateDemographics
+  buc__BucPatientOnboarding -->|contains| usecase__VerifyInsurance
+  entity__ConsentRecord ---|N:1| entity__PatientAccount
+  entity__EligibilityCheck ---|N:1| entity__InsurancePolicy
+  entity__InsurancePolicy ---|N:1| entity__PatientAccount
+  entity__IntakePacket ---|N:1| entity__PatientAccount
+  entity__PatientMessage ---|N:1| entity__PatientAccount
+  entity__PatientProfile ---|1:1| entity__PatientAccount
+  event__EvAppointmentScheduled -.->|triggers| buc__BucPatientOnboarding
+  event__EvAppointmentScheduled -.->|triggers| usecase__SendIntakeForms
+  screen__PatientProfileScreen -.->|shows| entity__PatientProfile
+  screen__PatientSearchScreen -.->|shows| entity__PatientAccount
+  timer__IntakeExpiryCheck -.->|triggers| usecase__ExpireIntakeForms
+  usecase__ArchivePatient -.->|displays| screen__PatientProfileScreen
+  usecase__ArchivePatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__ArchivePatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__ArchivePatient -.->|transitions PatientAccount.status patientactive->patientinactive| state__PatientAccount_patientinactive
+  usecase__ArchivePatient -.->|updates| entity__PatientAccount
+  usecase__CaptureConsent -.->|displays| screen__ConsentScreen
+  usecase__CaptureConsent -.->|invokes| api__ConsentApi
+  usecase__CaptureConsent -.->|requires_medium| medium__PatientMobile
+  usecase__CaptureConsent -.->|requires_permission| permission__ConsentCapture
+  usecase__CompleteIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__CompleteIntakeForms -.->|requires_medium| medium__PatientMobile
+  usecase__CompleteIntakeForms -.->|requires_permission| permission__ConsentCapture
+  usecase__CompleteIntakeForms -.->|transitions IntakePacket.status intakesent->intakecompleted| state__IntakePacket_intakecompleted
+  usecase__CompleteIntakeForms -.->|updates| entity__IntakePacket
+  usecase__ExpireIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__ExpireIntakeForms -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__ExpireIntakeForms -.->|requires_permission| permission__IntakeManage
+  usecase__ExpireIntakeForms -.->|transitions IntakePacket.status intakesent->intakeexpired| state__IntakePacket_intakeexpired
+  usecase__ExpireIntakeForms -.->|updates| entity__IntakePacket
+  usecase__MergeDuplicatePatient -.->|displays| screen__PatientProfileScreen
+  usecase__MergeDuplicatePatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__MergeDuplicatePatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__MergeDuplicatePatient -.->|transitions PatientAccount.status patientactive->patientmerged| state__PatientAccount_patientmerged
+  usecase__MergeDuplicatePatient -.->|updates| entity__PatientAccount
+  usecase__RegisterPatient -.->|displays| screen__PatientProfileScreen
+  usecase__RegisterPatient -.->|invokes| api__RegisterPatientApi
+  usecase__RegisterPatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__RegisterPatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__SearchPatient -.->|displays| screen__PatientSearchScreen
+  usecase__SearchPatient -.->|invokes| api__SearchPatientApi
+  usecase__SearchPatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SearchPatient -.->|requires_permission| permission__PatientProfileRead
+  usecase__SendIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__SendIntakeForms -.->|invokes| api__IntakeMessagingApi
+  usecase__SendIntakeForms -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SendIntakeForms -.->|requires_permission| permission__IntakeManage
+  usecase__UpdateDemographics -.->|displays| screen__PatientProfileScreen
+  usecase__UpdateDemographics -.->|invokes| api__UpdateDemographicsApi
+  usecase__UpdateDemographics -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__UpdateDemographics -.->|requires_permission| permission__PatientProfileWrite
+  usecase__VerifyInsurance -.->|displays| screen__InsuranceScreen
+  usecase__VerifyInsurance -.->|invokes| api__EligibilityApi
+  usecase__VerifyInsurance -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__VerifyInsurance -.->|requires_permission| permission__InsuranceVerify
+  classDef business stroke:#333;
+  classDef buc stroke:#333;
+  classDef timer stroke:#333;
+  classDef medium stroke:#333;
+  classDef permission stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef event stroke:#333;
+  classDef api stroke:#333;
+  classDef entity stroke:#333;
+  classDef state stroke:#333;
 ```
 
 ### 3.2 Appointment Scheduling
@@ -280,266 +300,300 @@ rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucAppoin
 ```
 
 ```mermaid
+%% rdra-ish diagram=rdra scope=buc:BucAppointmentScheduling model=samples/clinic-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor extsystem business buc timer medium permission usecase screen event api entity state
+%% omitted: (none)
 flowchart LR
-  subgraph layer_value[System Value]
-    direction TB
-    ReceptionClerk(["👤 医事課 受付担当"])
-    MessagingGateway[/"🌐 Messaging Gateway"/]
+  subgraph layer_value["システム価値"]
+    actor__ReceptionClerk["医事課 受付担当"]:::actor
+    %% desc actor__ReceptionClerk: 初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。
+    extsystem__MessagingGateway["Messaging Gateway"]:::extsystem
   end
-  subgraph layer_environment[External Environment]
-    direction TB
-    PatientAccess["💼 Patient Access"]
-    BucAppointmentScheduling["📦 Schedule Appointments"]
-    BucPatientOnboarding["📦 Onboard and Maintain Patient"]
-    IntakeExpiryCheck["⏱️ Nightly intake expiry check"]
-    NoShowSweep["⏱️ Nightly no-show sweep"]
-    FrontDeskTerminal[/"📱 Front Desk Terminal"/]
-    PatientMobile[/"📱 Patient Mobile"/]
-    ConsentCapture["🔑 Consent Capture"]
-    InsuranceVerify["🔑 Insurance Verify"]
-    IntakeManage["🔑 Intake Manage"]
-    PatientMessageSend["🔑 Patient Message Send"]
-    PatientProfileRead["🔑 Patient Profile Read"]
-    PatientProfileWrite["🔑 Patient Profile Write"]
-    ScheduleRead["🔑 Schedule Read"]
-    ScheduleWrite["🔑 Schedule Write"]
+  subgraph layer_environment["システム外部環境"]
+    business__PatientAccess["Patient Access"]:::business
+    %% desc business__PatientAccess: Patient-facing access workflows from onboarding through appointments.
+    buc__BucAppointmentScheduling["Schedule Appointments"]:::buc
+    %% desc buc__BucAppointmentScheduling: Find, reserve, book, change, and notify appointment slots.
+    buc__BucPatientOnboarding["Onboard and Maintain Patient"]:::buc
+    timer__IntakeExpiryCheck["Nightly intake expiry check"]:::timer
+    timer__NoShowSweep["Nightly no-show sweep"]:::timer
+    medium__FrontDeskTerminal["Front Desk Terminal"]:::medium
+    medium__PatientMobile["Patient Mobile"]:::medium
+    permission__ConsentCapture["Consent Capture"]:::permission
+    permission__InsuranceVerify["Insurance Verify"]:::permission
+    permission__IntakeManage["Intake Manage"]:::permission
+    permission__PatientMessageSend["Patient Message Send"]:::permission
+    permission__PatientProfileRead["Patient Profile Read"]:::permission
+    permission__PatientProfileWrite["Patient Profile Write"]:::permission
+    permission__ScheduleRead["Schedule Read"]:::permission
+    permission__ScheduleWrite["Schedule Write"]:::permission
   end
-  subgraph layer_boundary[System Boundary]
-    direction TB
-    ArchivePatient(["✅ Archive Patient"])
-    BookAppointment(["✅ Book Appointment"])
-    CancelAppointment(["✅ Cancel Appointment"])
-    CaptureConsent(["✅ Capture Consent"])
-    CompleteIntakeForms(["✅ Complete Intake Forms"])
-    ExpireIntakeForms(["✅ Expire Intake Forms"])
-    MarkNoShow(["✅ Mark No Show"])
-    MergeDuplicatePatient(["✅ Merge Duplicate Patient"])
-    RegisterPatient(["✅ Register Patient"])
-    RescheduleAppointment(["✅ Reschedule Appointment"])
-    ReserveAppointment(["✅ Reserve Appointment"])
-    SearchAvailability(["✅ Search Availability"])
-    SearchPatient(["✅ Search Patient"])
-    SendAppointmentNotice(["✅ Send Appointment Notice"])
-    SendIntakeForms(["✅ Send Intake Forms"])
-    UpdateDemographics(["✅ Update Demographics"])
-    VerifyInsurance(["✅ 保険資格・限度額情報の登録（新患登録）"])
-    AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
-    AppointmentScreen[["🖥️ Appointment Screen"]]
-    ConsentScreen[["🖥️ Consent Capture Screen"]]
-    InsuranceScreen[["🖥️ Insurance Verification Screen"]]
-    IntakePortalScreen[["🖥️ Intake Portal Screen"]]
-    PatientProfileScreen[["🖥️ Patient Profile Screen"]]
-    PatientSearchScreen[["🖥️ Patient Search Screen"]]
-    ScheduleSearchScreen[["🖥️ Schedule Search Screen"]]
-    EvAppointmentCancelled{"⚡ Appointment Cancelled"}
-    EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
-    EvAppointmentScheduled{"⚡ Appointment Scheduled"}
+  subgraph layer_boundary["システム境界"]
+    usecase__ArchivePatient["Archive Patient"]:::usecase
+    usecase__BookAppointment["Book Appointment"]:::usecase
+    usecase__CancelAppointment["Cancel Appointment"]:::usecase
+    usecase__CaptureConsent["Capture Consent"]:::usecase
+    usecase__CompleteIntakeForms["Complete Intake Forms"]:::usecase
+    usecase__ExpireIntakeForms["Expire Intake Forms"]:::usecase
+    usecase__MarkNoShow["Mark No Show"]:::usecase
+    usecase__MergeDuplicatePatient["Merge Duplicate Patient"]:::usecase
+    usecase__RegisterPatient["Register Patient"]:::usecase
+    usecase__RescheduleAppointment["Reschedule Appointment"]:::usecase
+    usecase__ReserveAppointment["Reserve Appointment"]:::usecase
+    usecase__SearchAvailability["Search Availability"]:::usecase
+    usecase__SearchPatient["Search Patient"]:::usecase
+    usecase__SendAppointmentNotice["Send Appointment Notice"]:::usecase
+    usecase__SendIntakeForms["Send Intake Forms"]:::usecase
+    usecase__UpdateDemographics["Update Demographics"]:::usecase
+    usecase__VerifyInsurance["保険資格・限度額情報の登録（新患登録）"]:::usecase
+    screen__AppointmentNoticeScreen["Appointment Notice Screen"]:::screen
+    screen__AppointmentScreen["Appointment Screen"]:::screen
+    screen__ConsentScreen["Consent Capture Screen"]:::screen
+    screen__InsuranceScreen["Insurance Verification Screen"]:::screen
+    screen__IntakePortalScreen["Intake Portal Screen"]:::screen
+    screen__PatientProfileScreen["Patient Profile Screen"]:::screen
+    screen__PatientSearchScreen["Patient Search Screen"]:::screen
+    screen__ScheduleSearchScreen["Schedule Search Screen"]:::screen
+    event__EvAppointmentCancelled["Appointment Cancelled"]:::event
+    event__EvAppointmentRescheduled["Appointment Rescheduled"]:::event
+    event__EvAppointmentScheduled["Appointment Scheduled"]:::event
   end
-  subgraph layer_system[System]
-    direction TB
-    AppointmentNoticeApi["🔌 Appointment Notice API"]
-    BookAppointmentApi["🔌 Book Appointment API"]
-    CancelAppointmentApi["🔌 Cancel Appointment API"]
-    ConsentApi["🔌 Consent API"]
-    EligibilityApi["🔌 Eligibility API"]
-    IntakeMessagingApi["🔌 Intake Messaging API"]
-    RegisterPatientApi["🔌 Register Patient API"]
-    RescheduleAppointmentApi["🔌 Reschedule Appointment API"]
-    ReserveAppointmentApi["🔌 Reserve Appointment API"]
-    SearchAvailabilityApi["🔌 Search Availability API"]
-    SearchPatientApi["🔌 Search Patient API"]
-    UpdateDemographicsApi["🔌 Update Demographics API"]
-    Appointment[("🗄️ Appointment")]
-    ClinicLocation[("🗄️ Clinic Location")]
-    ConsentRecord[("🗄️ Consent Record")]
-    EligibilityCheck[("🗄️ 資格確認")]
-    InsurancePolicy[("🗄️ 保険資格")]
-    IntakePacket[("🗄️ Intake Packet")]
-    Notification[("🗄️ Notification")]
-    PatientAccount[("🗄️ Patient Account")]
-    PatientMessage[("🗄️ Patient Message")]
-    PatientProfile[("🗄️ Patient Profile")]
-    Provider[("🗄️ Provider")]
-    ProviderSchedule[("🗄️ Provider Schedule")]
+  subgraph layer_system["システム"]
+    api__AppointmentNoticeApi["Appointment Notice API"]:::api
+    api__BookAppointmentApi["Book Appointment API"]:::api
+    api__CancelAppointmentApi["Cancel Appointment API"]:::api
+    api__ConsentApi["Consent API"]:::api
+    api__EligibilityApi["Eligibility API"]:::api
+    api__IntakeMessagingApi["Intake Messaging API"]:::api
+    api__RegisterPatientApi["Register Patient API"]:::api
+    api__RescheduleAppointmentApi["Reschedule Appointment API"]:::api
+    api__ReserveAppointmentApi["Reserve Appointment API"]:::api
+    api__SearchAvailabilityApi["Search Availability API"]:::api
+    api__SearchPatientApi["Search Patient API"]:::api
+    api__UpdateDemographicsApi["Update Demographics API"]:::api
+    entity__Appointment["Appointment"]:::entity
+    entity__ClinicLocation["Clinic Location"]:::entity
+    entity__ConsentRecord["Consent Record"]:::entity
+    entity__EligibilityCheck["資格確認"]:::entity
+    entity__InsurancePolicy["保険資格"]:::entity
+    entity__IntakePacket["Intake Packet"]:::entity
+    entity__Notification["Notification"]:::entity
+    entity__PatientAccount["Patient Account"]:::entity
+    entity__PatientMessage["Patient Message"]:::entity
+    entity__PatientProfile["Patient Profile"]:::entity
+    entity__Provider["Provider"]:::entity
+    entity__ProviderSchedule["Provider Schedule"]:::entity
+    state__Appointment_apptcancelled["apptcancelled"]:::state
+    state__Appointment_apptnoshow["apptnoshow"]:::state
+    state__Appointment_apptrequested["apptrequested"]:::state
+    state__Appointment_apptscheduled["apptscheduled"]:::state
+    state__IntakePacket_intakecompleted["intakecompleted"]:::state
+    state__IntakePacket_intakeexpired["intakeexpired"]:::state
+    state__IntakePacket_intakesent["intakesent"]:::state
+    state__PatientAccount_patientactive["patientactive"]:::state
+    state__PatientAccount_patientinactive["patientinactive"]:::state
+    state__PatientAccount_patientmerged["patientmerged"]:::state
   end
-  ReceptionClerk -.->|has_permission| PatientProfileRead
-  ReceptionClerk -.->|has_permission| PatientMessageSend
-  ReceptionClerk -.->|has_permission| PatientProfileWrite
-  ReceptionClerk -.->|has_permission| InsuranceVerify
-  ReceptionClerk -.->|has_permission| IntakeManage
-  ReceptionClerk -.->|has_permission| ScheduleRead
-  ReceptionClerk -.->|has_permission| ScheduleWrite
-  ReceptionClerk -->|performs| BucAppointmentScheduling
-  ReceptionClerk -->|performs| SearchAvailability
-  ReceptionClerk -->|performs| ReserveAppointment
-  ReceptionClerk -->|performs| BookAppointment
-  ReceptionClerk -->|performs| SearchPatient
-  ReceptionClerk -->|performs| RegisterPatient
-  ReceptionClerk -->|performs| RescheduleAppointment
-  ReceptionClerk -->|performs| UpdateDemographics
-  ReceptionClerk -->|performs| VerifyInsurance
-  ReceptionClerk -->|performs| SendIntakeForms
-  ReceptionClerk -->|performs| ExpireIntakeForms
-  ReceptionClerk -->|performs| MergeDuplicatePatient
-  ReceptionClerk -->|performs| ArchivePatient
-  ReceptionClerk -->|performs| CancelAppointment
-  ReceptionClerk -->|performs| MarkNoShow
-  ReceptionClerk -->|performs| SendAppointmentNotice
-  SearchAvailabilityApi -.->|reads| ProviderSchedule
-  SearchAvailabilityApi -.->|reads| Provider
-  SearchAvailabilityApi -.->|reads| ClinicLocation
-  SearchAvailabilityApi -.->|requires_permission| ScheduleRead
-  ReserveAppointmentApi -.->|creates| Appointment
-  ReserveAppointmentApi -.->|requires_permission| ScheduleWrite
-  ReserveAppointmentApi -.->|updates| ProviderSchedule
-  SearchPatientApi -.->|reads| PatientAccount
-  SearchPatientApi -.->|reads| PatientProfile
-  SearchPatientApi -.->|requires_permission| PatientProfileRead
-  RegisterPatientApi -.->|creates| PatientAccount
-  RegisterPatientApi -.->|creates| PatientProfile
-  RegisterPatientApi -.->|requires_permission| PatientProfileWrite
-  UpdateDemographicsApi -.->|requires_permission| PatientProfileWrite
-  UpdateDemographicsApi -.->|updates| PatientProfile
-  EligibilityApi -.->|creates| EligibilityCheck
-  EligibilityApi -.->|reads| InsurancePolicy
-  EligibilityApi -.->|requires_permission| InsuranceVerify
-  EligibilityApi -.->|updates| InsurancePolicy
-  ConsentApi -.->|creates| ConsentRecord
-  ConsentApi -.->|requires_permission| ConsentCapture
-  IntakeMessagingApi -.->|creates| PatientMessage
-  IntakeMessagingApi -.->|creates| IntakePacket
-  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
-  BookAppointmentApi -.->|requires_permission| ScheduleWrite
-  BookAppointmentApi -.->|updates| ProviderSchedule
-  BookAppointmentApi -.->|updates| Appointment
-  RescheduleAppointmentApi -.->|requires_permission| ScheduleWrite
-  RescheduleAppointmentApi -.->|updates| ProviderSchedule
-  RescheduleAppointmentApi -.->|updates| Appointment
-  CancelAppointmentApi -.->|requires_permission| ScheduleWrite
-  CancelAppointmentApi -.->|updates| ProviderSchedule
-  CancelAppointmentApi -.->|updates| Appointment
-  AppointmentNoticeApi -.->|creates| PatientMessage
-  AppointmentNoticeApi -.->|creates| Notification
-  BucAppointmentScheduling -.->|belongs| PatientAccess
-  BucAppointmentScheduling -->|contains| SearchAvailability
-  BucAppointmentScheduling -->|contains| ReserveAppointment
-  BucAppointmentScheduling -->|contains| BookAppointment
-  BucAppointmentScheduling -->|contains| RescheduleAppointment
-  BucAppointmentScheduling -->|contains| CancelAppointment
-  BucAppointmentScheduling -->|contains| MarkNoShow
-  BucAppointmentScheduling -->|contains| SendAppointmentNotice
-  BucPatientOnboarding -.->|belongs| PatientAccess
-  BucPatientOnboarding -->|contains| SearchPatient
-  BucPatientOnboarding -->|contains| RegisterPatient
-  BucPatientOnboarding -->|contains| UpdateDemographics
-  BucPatientOnboarding -->|contains| VerifyInsurance
-  BucPatientOnboarding -->|contains| CaptureConsent
-  BucPatientOnboarding -->|contains| SendIntakeForms
-  BucPatientOnboarding -->|contains| CompleteIntakeForms
-  BucPatientOnboarding -->|contains| ExpireIntakeForms
-  BucPatientOnboarding -->|contains| MergeDuplicatePatient
-  BucPatientOnboarding -->|contains| ArchivePatient
-  ProviderSchedule ---|N:1| Provider
-  ProviderSchedule ---|N:1| ClinicLocation
-  Appointment ---|N:1| PatientAccount
-  Appointment ---|N:1| Provider
-  Appointment ---|N:1| ClinicLocation
-  PatientMessage ---|N:1| PatientAccount
-  Notification ---|N:1| PatientAccount
-  PatientProfile ---|1:1| PatientAccount
-  InsurancePolicy ---|N:1| PatientAccount
-  EligibilityCheck ---|N:1| InsurancePolicy
-  ConsentRecord ---|N:1| PatientAccount
-  IntakePacket ---|N:1| PatientAccount
-  EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
-  EvAppointmentScheduled -.->|triggers| MessagingGateway
-  EvAppointmentScheduled -.->|triggers| SendIntakeForms
-  EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
-  EvAppointmentRescheduled -.->|triggers| MessagingGateway
-  EvAppointmentRescheduled -.->|triggers| SendAppointmentNotice
-  EvAppointmentCancelled -.->|triggers| MessagingGateway
-  EvAppointmentCancelled -.->|triggers| SendAppointmentNotice
-  PatientSearchScreen -.->|shows| PatientAccount
-  ScheduleSearchScreen -.->|shows| ProviderSchedule
-  PatientProfileScreen -.->|shows| PatientProfile
-  IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
-  NoShowSweep -.->|triggers| MarkNoShow
-  SearchAvailability -.->|displays| ScheduleSearchScreen
-  SearchAvailability -.->|invokes| SearchAvailabilityApi
-  SearchAvailability -.->|requires_medium| FrontDeskTerminal
-  SearchAvailability -.->|requires_medium| PatientMobile
-  SearchAvailability -.->|requires_permission| ScheduleRead
-  ReserveAppointment -.->|displays| AppointmentScreen
-  ReserveAppointment -.->|invokes| ReserveAppointmentApi
-  ReserveAppointment -.->|requires_medium| FrontDeskTerminal
-  ReserveAppointment -.->|requires_medium| PatientMobile
-  ReserveAppointment -.->|requires_permission| ScheduleWrite
-  BookAppointment -.->|displays| AppointmentScreen
-  BookAppointment -.->|invokes| BookAppointmentApi
-  BookAppointment -.->|raises| EvAppointmentScheduled
-  BookAppointment -.->|requires_medium| FrontDeskTerminal
-  BookAppointment -.->|requires_medium| PatientMobile
-  BookAppointment -.->|requires_permission| ScheduleWrite
-  SearchPatient -.->|displays| PatientSearchScreen
-  SearchPatient -.->|invokes| SearchPatientApi
-  SearchPatient -.->|requires_medium| FrontDeskTerminal
-  SearchPatient -.->|requires_permission| PatientProfileRead
-  RegisterPatient -.->|displays| PatientProfileScreen
-  RegisterPatient -.->|invokes| RegisterPatientApi
-  RegisterPatient -.->|requires_medium| FrontDeskTerminal
-  RegisterPatient -.->|requires_permission| PatientProfileWrite
-  RescheduleAppointment -.->|displays| AppointmentScreen
-  RescheduleAppointment -.->|invokes| RescheduleAppointmentApi
-  RescheduleAppointment -.->|raises| EvAppointmentRescheduled
-  RescheduleAppointment -.->|requires_medium| FrontDeskTerminal
-  RescheduleAppointment -.->|requires_medium| PatientMobile
-  RescheduleAppointment -.->|requires_permission| ScheduleWrite
-  UpdateDemographics -.->|displays| PatientProfileScreen
-  UpdateDemographics -.->|invokes| UpdateDemographicsApi
-  UpdateDemographics -.->|requires_medium| FrontDeskTerminal
-  UpdateDemographics -.->|requires_permission| PatientProfileWrite
-  VerifyInsurance -.->|displays| InsuranceScreen
-  VerifyInsurance -.->|invokes| EligibilityApi
-  VerifyInsurance -.->|requires_medium| FrontDeskTerminal
-  VerifyInsurance -.->|requires_permission| InsuranceVerify
-  CaptureConsent -.->|displays| ConsentScreen
-  CaptureConsent -.->|invokes| ConsentApi
-  CaptureConsent -.->|requires_medium| PatientMobile
-  CaptureConsent -.->|requires_permission| ConsentCapture
-  SendIntakeForms -.->|displays| IntakePortalScreen
-  SendIntakeForms -.->|invokes| IntakeMessagingApi
-  SendIntakeForms -.->|requires_medium| FrontDeskTerminal
-  SendIntakeForms -.->|requires_permission| IntakeManage
-  CompleteIntakeForms -.->|displays| IntakePortalScreen
-  CompleteIntakeForms -.->|requires_medium| PatientMobile
-  CompleteIntakeForms -.->|requires_permission| ConsentCapture
-  CompleteIntakeForms -.->|updates| IntakePacket
-  ExpireIntakeForms -.->|displays| IntakePortalScreen
-  ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
-  ExpireIntakeForms -.->|requires_permission| IntakeManage
-  ExpireIntakeForms -.->|updates| IntakePacket
-  MergeDuplicatePatient -.->|displays| PatientProfileScreen
-  MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
-  MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
-  MergeDuplicatePatient -.->|updates| PatientAccount
-  ArchivePatient -.->|displays| PatientProfileScreen
-  ArchivePatient -.->|requires_medium| FrontDeskTerminal
-  ArchivePatient -.->|requires_permission| PatientProfileWrite
-  ArchivePatient -.->|updates| PatientAccount
-  CancelAppointment -.->|displays| AppointmentScreen
-  CancelAppointment -.->|invokes| CancelAppointmentApi
-  CancelAppointment -.->|raises| EvAppointmentCancelled
-  CancelAppointment -.->|requires_medium| FrontDeskTerminal
-  CancelAppointment -.->|requires_medium| PatientMobile
-  CancelAppointment -.->|requires_permission| ScheduleWrite
-  MarkNoShow -.->|displays| AppointmentScreen
-  MarkNoShow -.->|requires_medium| FrontDeskTerminal
-  MarkNoShow -.->|requires_permission| ScheduleWrite
-  MarkNoShow -.->|updates| Appointment
-  SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
-  SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
-  SendAppointmentNotice -.->|requires_medium| FrontDeskTerminal
-  SendAppointmentNotice -.->|requires_permission| ScheduleRead
+  actor__ReceptionClerk -.->|has_permission| permission__InsuranceVerify
+  actor__ReceptionClerk -.->|has_permission| permission__IntakeManage
+  actor__ReceptionClerk -.->|has_permission| permission__PatientMessageSend
+  actor__ReceptionClerk -.->|has_permission| permission__PatientProfileRead
+  actor__ReceptionClerk -.->|has_permission| permission__PatientProfileWrite
+  actor__ReceptionClerk -.->|has_permission| permission__ScheduleRead
+  actor__ReceptionClerk -.->|has_permission| permission__ScheduleWrite
+  actor__ReceptionClerk -.->|performs| buc__BucAppointmentScheduling
+  actor__ReceptionClerk -.->|performs| usecase__ArchivePatient
+  actor__ReceptionClerk -.->|performs| usecase__BookAppointment
+  actor__ReceptionClerk -.->|performs| usecase__CancelAppointment
+  actor__ReceptionClerk -.->|performs| usecase__ExpireIntakeForms
+  actor__ReceptionClerk -.->|performs| usecase__MarkNoShow
+  actor__ReceptionClerk -.->|performs| usecase__MergeDuplicatePatient
+  actor__ReceptionClerk -.->|performs| usecase__RegisterPatient
+  actor__ReceptionClerk -.->|performs| usecase__RescheduleAppointment
+  actor__ReceptionClerk -.->|performs| usecase__ReserveAppointment
+  actor__ReceptionClerk -.->|performs| usecase__SearchAvailability
+  actor__ReceptionClerk -.->|performs| usecase__SearchPatient
+  actor__ReceptionClerk -.->|performs| usecase__SendAppointmentNotice
+  actor__ReceptionClerk -.->|performs| usecase__SendIntakeForms
+  actor__ReceptionClerk -.->|performs| usecase__UpdateDemographics
+  actor__ReceptionClerk -.->|performs| usecase__VerifyInsurance
+  api__AppointmentNoticeApi -.->|creates| entity__Notification
+  api__AppointmentNoticeApi -.->|creates| entity__PatientMessage
+  api__BookAppointmentApi -.->|requires_permission| permission__ScheduleWrite
+  api__BookAppointmentApi -.->|updates| entity__Appointment
+  api__BookAppointmentApi -.->|updates| entity__ProviderSchedule
+  api__CancelAppointmentApi -.->|requires_permission| permission__ScheduleWrite
+  api__CancelAppointmentApi -.->|updates| entity__Appointment
+  api__CancelAppointmentApi -.->|updates| entity__ProviderSchedule
+  api__ConsentApi -.->|creates| entity__ConsentRecord
+  api__ConsentApi -.->|requires_permission| permission__ConsentCapture
+  api__EligibilityApi -.->|creates| entity__EligibilityCheck
+  api__EligibilityApi -.->|reads| entity__InsurancePolicy
+  api__EligibilityApi -.->|requires_permission| permission__InsuranceVerify
+  api__EligibilityApi -.->|updates| entity__InsurancePolicy
+  api__IntakeMessagingApi -.->|creates| entity__IntakePacket
+  api__IntakeMessagingApi -.->|creates| entity__PatientMessage
+  api__IntakeMessagingApi -.->|requires_permission| permission__PatientMessageSend
+  api__RegisterPatientApi -.->|creates| entity__PatientAccount
+  api__RegisterPatientApi -.->|creates| entity__PatientProfile
+  api__RegisterPatientApi -.->|requires_permission| permission__PatientProfileWrite
+  api__RescheduleAppointmentApi -.->|requires_permission| permission__ScheduleWrite
+  api__RescheduleAppointmentApi -.->|updates| entity__Appointment
+  api__RescheduleAppointmentApi -.->|updates| entity__ProviderSchedule
+  api__ReserveAppointmentApi -.->|creates| entity__Appointment
+  api__ReserveAppointmentApi -.->|requires_permission| permission__ScheduleWrite
+  api__ReserveAppointmentApi -.->|updates| entity__ProviderSchedule
+  api__SearchAvailabilityApi -.->|reads| entity__ClinicLocation
+  api__SearchAvailabilityApi -.->|reads| entity__Provider
+  api__SearchAvailabilityApi -.->|reads| entity__ProviderSchedule
+  api__SearchAvailabilityApi -.->|requires_permission| permission__ScheduleRead
+  api__SearchPatientApi -.->|reads| entity__PatientAccount
+  api__SearchPatientApi -.->|reads| entity__PatientProfile
+  api__SearchPatientApi -.->|requires_permission| permission__PatientProfileRead
+  api__UpdateDemographicsApi -.->|requires_permission| permission__PatientProfileWrite
+  api__UpdateDemographicsApi -.->|updates| entity__PatientProfile
+  buc__BucAppointmentScheduling -->|belongs| business__PatientAccess
+  buc__BucAppointmentScheduling -->|contains| usecase__BookAppointment
+  buc__BucAppointmentScheduling -->|contains| usecase__CancelAppointment
+  buc__BucAppointmentScheduling -->|contains| usecase__MarkNoShow
+  buc__BucAppointmentScheduling -->|contains| usecase__RescheduleAppointment
+  buc__BucAppointmentScheduling -->|contains| usecase__ReserveAppointment
+  buc__BucAppointmentScheduling -->|contains| usecase__SearchAvailability
+  buc__BucAppointmentScheduling -->|contains| usecase__SendAppointmentNotice
+  buc__BucPatientOnboarding -->|belongs| business__PatientAccess
+  buc__BucPatientOnboarding -->|contains| usecase__ArchivePatient
+  buc__BucPatientOnboarding -->|contains| usecase__CaptureConsent
+  buc__BucPatientOnboarding -->|contains| usecase__CompleteIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__ExpireIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__MergeDuplicatePatient
+  buc__BucPatientOnboarding -->|contains| usecase__RegisterPatient
+  buc__BucPatientOnboarding -->|contains| usecase__SearchPatient
+  buc__BucPatientOnboarding -->|contains| usecase__SendIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__UpdateDemographics
+  buc__BucPatientOnboarding -->|contains| usecase__VerifyInsurance
+  entity__Appointment ---|N:1| entity__ClinicLocation
+  entity__Appointment ---|N:1| entity__PatientAccount
+  entity__Appointment ---|N:1| entity__Provider
+  entity__ConsentRecord ---|N:1| entity__PatientAccount
+  entity__EligibilityCheck ---|N:1| entity__InsurancePolicy
+  entity__InsurancePolicy ---|N:1| entity__PatientAccount
+  entity__IntakePacket ---|N:1| entity__PatientAccount
+  entity__Notification ---|N:1| entity__PatientAccount
+  entity__PatientMessage ---|N:1| entity__PatientAccount
+  entity__PatientProfile ---|1:1| entity__PatientAccount
+  entity__ProviderSchedule ---|N:1| entity__ClinicLocation
+  entity__ProviderSchedule ---|N:1| entity__Provider
+  event__EvAppointmentCancelled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentCancelled -.->|triggers| usecase__SendAppointmentNotice
+  event__EvAppointmentRescheduled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentRescheduled -.->|triggers| usecase__SendAppointmentNotice
+  event__EvAppointmentScheduled -.->|triggers| buc__BucPatientOnboarding
+  event__EvAppointmentScheduled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentScheduled -.->|triggers| usecase__SendAppointmentNotice
+  event__EvAppointmentScheduled -.->|triggers| usecase__SendIntakeForms
+  screen__PatientProfileScreen -.->|shows| entity__PatientProfile
+  screen__PatientSearchScreen -.->|shows| entity__PatientAccount
+  screen__ScheduleSearchScreen -.->|shows| entity__ProviderSchedule
+  timer__IntakeExpiryCheck -.->|triggers| usecase__ExpireIntakeForms
+  timer__NoShowSweep -.->|triggers| usecase__MarkNoShow
+  usecase__ArchivePatient -.->|displays| screen__PatientProfileScreen
+  usecase__ArchivePatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__ArchivePatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__ArchivePatient -.->|transitions PatientAccount.status patientactive->patientinactive| state__PatientAccount_patientinactive
+  usecase__ArchivePatient -.->|updates| entity__PatientAccount
+  usecase__BookAppointment -.->|displays| screen__AppointmentScreen
+  usecase__BookAppointment -.->|invokes| api__BookAppointmentApi
+  usecase__BookAppointment -.->|raises| event__EvAppointmentScheduled
+  usecase__BookAppointment -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__BookAppointment -.->|requires_medium| medium__PatientMobile
+  usecase__BookAppointment -.->|requires_permission| permission__ScheduleWrite
+  usecase__BookAppointment -.->|transitions Appointment.status apptrequested->apptscheduled| state__Appointment_apptscheduled
+  usecase__CancelAppointment -.->|displays| screen__AppointmentScreen
+  usecase__CancelAppointment -.->|invokes| api__CancelAppointmentApi
+  usecase__CancelAppointment -.->|raises| event__EvAppointmentCancelled
+  usecase__CancelAppointment -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__CancelAppointment -.->|requires_medium| medium__PatientMobile
+  usecase__CancelAppointment -.->|requires_permission| permission__ScheduleWrite
+  usecase__CancelAppointment -.->|transitions Appointment.status apptscheduled->apptcancelled| state__Appointment_apptcancelled
+  usecase__CaptureConsent -.->|displays| screen__ConsentScreen
+  usecase__CaptureConsent -.->|invokes| api__ConsentApi
+  usecase__CaptureConsent -.->|requires_medium| medium__PatientMobile
+  usecase__CaptureConsent -.->|requires_permission| permission__ConsentCapture
+  usecase__CompleteIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__CompleteIntakeForms -.->|requires_medium| medium__PatientMobile
+  usecase__CompleteIntakeForms -.->|requires_permission| permission__ConsentCapture
+  usecase__CompleteIntakeForms -.->|transitions IntakePacket.status intakesent->intakecompleted| state__IntakePacket_intakecompleted
+  usecase__CompleteIntakeForms -.->|updates| entity__IntakePacket
+  usecase__ExpireIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__ExpireIntakeForms -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__ExpireIntakeForms -.->|requires_permission| permission__IntakeManage
+  usecase__ExpireIntakeForms -.->|transitions IntakePacket.status intakesent->intakeexpired| state__IntakePacket_intakeexpired
+  usecase__ExpireIntakeForms -.->|updates| entity__IntakePacket
+  usecase__MarkNoShow -.->|displays| screen__AppointmentScreen
+  usecase__MarkNoShow -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__MarkNoShow -.->|requires_permission| permission__ScheduleWrite
+  usecase__MarkNoShow -.->|transitions Appointment.status apptscheduled->apptnoshow| state__Appointment_apptnoshow
+  usecase__MarkNoShow -.->|updates| entity__Appointment
+  usecase__MergeDuplicatePatient -.->|displays| screen__PatientProfileScreen
+  usecase__MergeDuplicatePatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__MergeDuplicatePatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__MergeDuplicatePatient -.->|transitions PatientAccount.status patientactive->patientmerged| state__PatientAccount_patientmerged
+  usecase__MergeDuplicatePatient -.->|updates| entity__PatientAccount
+  usecase__RegisterPatient -.->|displays| screen__PatientProfileScreen
+  usecase__RegisterPatient -.->|invokes| api__RegisterPatientApi
+  usecase__RegisterPatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__RegisterPatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__RescheduleAppointment -.->|displays| screen__AppointmentScreen
+  usecase__RescheduleAppointment -.->|invokes| api__RescheduleAppointmentApi
+  usecase__RescheduleAppointment -.->|raises| event__EvAppointmentRescheduled
+  usecase__RescheduleAppointment -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__RescheduleAppointment -.->|requires_medium| medium__PatientMobile
+  usecase__RescheduleAppointment -.->|requires_permission| permission__ScheduleWrite
+  usecase__RescheduleAppointment -.->|transitions Appointment.status apptscheduled->apptscheduled| state__Appointment_apptscheduled
+  usecase__ReserveAppointment -.->|displays| screen__AppointmentScreen
+  usecase__ReserveAppointment -.->|invokes| api__ReserveAppointmentApi
+  usecase__ReserveAppointment -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__ReserveAppointment -.->|requires_medium| medium__PatientMobile
+  usecase__ReserveAppointment -.->|requires_permission| permission__ScheduleWrite
+  usecase__SearchAvailability -.->|displays| screen__ScheduleSearchScreen
+  usecase__SearchAvailability -.->|invokes| api__SearchAvailabilityApi
+  usecase__SearchAvailability -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SearchAvailability -.->|requires_medium| medium__PatientMobile
+  usecase__SearchAvailability -.->|requires_permission| permission__ScheduleRead
+  usecase__SearchPatient -.->|displays| screen__PatientSearchScreen
+  usecase__SearchPatient -.->|invokes| api__SearchPatientApi
+  usecase__SearchPatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SearchPatient -.->|requires_permission| permission__PatientProfileRead
+  usecase__SendAppointmentNotice -.->|displays| screen__AppointmentNoticeScreen
+  usecase__SendAppointmentNotice -.->|invokes| api__AppointmentNoticeApi
+  usecase__SendAppointmentNotice -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SendAppointmentNotice -.->|requires_permission| permission__ScheduleRead
+  usecase__SendIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__SendIntakeForms -.->|invokes| api__IntakeMessagingApi
+  usecase__SendIntakeForms -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SendIntakeForms -.->|requires_permission| permission__IntakeManage
+  usecase__UpdateDemographics -.->|displays| screen__PatientProfileScreen
+  usecase__UpdateDemographics -.->|invokes| api__UpdateDemographicsApi
+  usecase__UpdateDemographics -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__UpdateDemographics -.->|requires_permission| permission__PatientProfileWrite
+  usecase__VerifyInsurance -.->|displays| screen__InsuranceScreen
+  usecase__VerifyInsurance -.->|invokes| api__EligibilityApi
+  usecase__VerifyInsurance -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__VerifyInsurance -.->|requires_permission| permission__InsuranceVerify
+  classDef actor stroke:#333;
+  classDef extsystem stroke:#333;
+  classDef business stroke:#333;
+  classDef buc stroke:#333;
+  classDef timer stroke:#333;
+  classDef medium stroke:#333;
+  classDef permission stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef event stroke:#333;
+  classDef api stroke:#333;
+  classDef entity stroke:#333;
+  classDef state stroke:#333;
 ```
 
 ### 3.3 受付（初診・再診）
@@ -569,953 +623,1062 @@ rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucVisitC
 ```
 
 ```mermaid
+%% rdra-ish diagram=rdra scope=buc:BucVisitCheckIn model=samples/clinic-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: extsystem business buc flow step timer medium permission usecase screen field event api entity state variation condition
+%% omitted: (none)
 flowchart LR
-  subgraph layer_value[System Value]
-    direction TB
-    ClaimsReviewOrganization[/"🌐 審査支払機関（支払基金・国保連）"/]
-    MessagingGateway[/"🌐 Messaging Gateway"/]
-    OnlineEligibilitySystem[/"🌐 オンライン資格確認等システム"/]
-    OutsourcedLabSystem[/"🌐 外注検査システム"/]
-    PaymentGateway[/"🌐 自動精算機・クレジット決済"/]
+  subgraph layer_value["システム価値"]
+    extsystem__ClaimsReviewOrganization["審査支払機関（支払基金・国保連）"]:::extsystem
+    extsystem__MessagingGateway["Messaging Gateway"]:::extsystem
+    extsystem__OnlineEligibilitySystem["オンライン資格確認等システム"]:::extsystem
+    extsystem__OutsourcedLabSystem["外注検査システム"]:::extsystem
+    extsystem__PaymentGateway["自動精算機・クレジット決済"]:::extsystem
   end
-  subgraph layer_environment[External Environment]
-    direction TB
-    CareDelivery["💼 Care Delivery"]
-    PatientAccess["💼 Patient Access"]
-    RevenueCycle["💼 Revenue Cycle"]
-    BucBillingClaims["📦 レセプト作成・請求"]
-    BucClinicalEncounter["📦 Conduct Clinical Encounter"]
-    BucFollowupCare["📦 Coordinate Follow-Up Care"]
-    BucOrdersResults["📦 Manage Orders and Results"]
-    BucPatientOnboarding["📦 Onboard and Maintain Patient"]
-    BucVisitCheckIn["📦 受付（初診・再診）"]
-    BucVisitPayment["📦 計算・会計"]
-    ClaimCycleFlow["🧭 レセプトの月次サイクル"]
-    VisitCheckInFlow["🧭 受付の流れ"]
-    VisitPaymentFlow["🧭 計算・会計の流れ"]
-    ArrivalStep(["➡️ 到着・予約票の確認"])
-    AssessStep(["➡️ 査定と再審査請求"])
-    CalculationStep(["➡️ 計算受付・会計計算入力"])
-    CallStep(["➡️ 会計の呼出"])
-    CreateStatementStep(["➡️ レセプト作成（月初）"])
-    DeclarationStep(["➡️ 資格を確認できない（申立書・障害時モード）"])
-    EligibilityStep(["➡️ 資格確認"])
-    HoldStep(["➡️ 保留（月遅れ）"])
-    InspectStep(["➡️ 院内点検"])
-    KioskStep(["➡️ 自動精算機で精算"])
-    PaidStep(["➡️ 支払（診療翌々月）"])
-    ReceiptErrorStep(["➡️ 受付不能・要確認の再送（11日・12日）"])
-    ReceiptStep(["➡️ 領収証・明細書の交付"])
-    ReferralStep(["➡️ 紹介状あり（初診）"])
-    ReturnStep(["➡️ 返戻と再請求"])
-    ReviewStep(["➡️ 審査"])
-    RoomingStep(["➡️ 診察室への案内"])
-    SubmitStep(["➡️ 請求（5日～10日）"])
-    WindowStep(["➡️ 会計窓口で精算"])
-    EligibilityBatchInquiry["⏱️ 予約患者の資格の一括照会（来院前）"]
-    ErrorResendWindow["⏱️ エラー分レセプトの再送（毎月11日・12日）"]
-    IntakeExpiryCheck["⏱️ Nightly intake expiry check"]
-    MonthlyClaimCreation["⏱️ 前月分レセプトの作成（月初）"]
-    MonthlyClaimDeadline["⏱️ 前月分レセプトの請求（毎月5日～10日）"]
-    ReceivablesMonthlyReview["⏱️ 未収金管理台帳の作成（毎月）"]
-    ReturnDownloadCheck["⏱️ 返戻レセプトの取得（3か月以内）"]
-    AccountsWindow[/"📱 会計窓口"/]
-    BillingWorkstation[/"📱 Billing Workstation"/]
-    CareCoordinationConsole[/"📱 Care Coordination Console"/]
-    ClinicalWorkstation[/"📱 Clinical Workstation"/]
-    FrontDeskTerminal[/"📱 Front Desk Terminal"/]
-    NurseStation[/"📱 Nurse Station"/]
-    OnlineClaimTerminal[/"📱 オンライン請求用端末"/]
-    PatientMobile[/"📱 Patient Mobile"/]
-    PaymentKiosk[/"📱 自動精算機"/]
-    BillCalculate["🔑 会計計算"]
-    BillingClaimWrite["🔑 レセプト業務"]
-    ClinicalDocument["🔑 Clinical Document"]
-    ClinicalOrderWrite["🔑 Clinical Order Write"]
-    ConsentCapture["🔑 Consent Capture"]
-    EncounterOpen["🔑 Encounter Open"]
-    EncounterSign["🔑 Encounter Sign"]
-    FollowUpManage["🔑 Follow-Up Manage"]
-    InsuranceVerify["🔑 Insurance Verify"]
-    IntakeManage["🔑 Intake Manage"]
-    LabResultManage["🔑 Lab Result Manage"]
-    PatientMessageSend["🔑 Patient Message Send"]
-    PatientProfileRead["🔑 Patient Profile Read"]
-    PatientProfileWrite["🔑 Patient Profile Write"]
-    PaymentCollect["🔑 窓口収納"]
-    PaymentPost["🔑 Payment Post"]
-    ProxyOrderEntry["🔑 代行入力"]
-    ReferralManage["🔑 紹介状管理"]
-    RoomAssign["🔑 Room Assign"]
-    ScheduleRead["🔑 Schedule Read"]
-    ScheduleWrite["🔑 Schedule Write"]
-    VisitCheckIn["🔑 Visit Check-In"]
-    VitalsRecord["🔑 Vitals Record"]
+  subgraph layer_environment["システム外部環境"]
+    business__CareDelivery["Care Delivery"]:::business
+    business__PatientAccess["Patient Access"]:::business
+    %% desc business__PatientAccess: Patient-facing access workflows from onboarding through appointments.
+    business__RevenueCycle["Revenue Cycle"]:::business
+    buc__BucBillingClaims["レセプト作成・請求"]:::buc
+    %% desc buc__BucBillingClaims: 月ごとのレセプトの作成・院内点検・請求と、審査支払機関からの受付不能・返戻・査定・支払への対応。
+    buc__BucClinicalEncounter["Conduct Clinical Encounter"]:::buc
+    buc__BucFollowupCare["Coordinate Follow-Up Care"]:::buc
+    buc__BucOrdersResults["Manage Orders and Results"]:::buc
+    buc__BucPatientOnboarding["Onboard and Maintain Patient"]:::buc
+    buc__BucVisitCheckIn["受付（初診・再診）"]:::buc
+    %% desc buc__BucVisitCheckIn: 到着確認、資格確認、紹介状の受付、診察室への案内。会計は診察の後に行う。
+    buc__BucVisitPayment["計算・会計"]:::buc
+    %% desc buc__BucVisitPayment: 診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。
+    flow__ClaimCycleFlow["レセプトの月次サイクル"]:::flow
+    flow__VisitCheckInFlow["受付の流れ"]:::flow
+    flow__VisitPaymentFlow["計算・会計の流れ"]:::flow
+    step__ArrivalStep["到着・予約票の確認"]:::step
+    step__AssessStep["査定と再審査請求"]:::step
+    step__CalculationStep["計算受付・会計計算入力"]:::step
+    step__CallStep["会計の呼出"]:::step
+    step__CreateStatementStep["レセプト作成（月初）"]:::step
+    step__DeclarationStep["資格を確認できない（申立書・障害時モード）"]:::step
+    step__EligibilityStep["資格確認"]:::step
+    step__HoldStep["保留（月遅れ）"]:::step
+    step__InspectStep["院内点検"]:::step
+    step__KioskStep["自動精算機で精算"]:::step
+    step__PaidStep["支払（診療翌々月）"]:::step
+    step__ReceiptErrorStep["受付不能・要確認の再送（11日・12日）"]:::step
+    step__ReceiptStep["領収証・明細書の交付"]:::step
+    step__ReferralStep["紹介状あり（初診）"]:::step
+    step__ReturnStep["返戻と再請求"]:::step
+    step__ReviewStep["審査"]:::step
+    step__RoomingStep["診察室への案内"]:::step
+    step__SubmitStep["請求（5日～10日）"]:::step
+    step__WindowStep["会計窓口で精算"]:::step
+    timer__EligibilityBatchInquiry["予約患者の資格の一括照会（来院前）"]:::timer
+    timer__ErrorResendWindow["エラー分レセプトの再送（毎月11日・12日）"]:::timer
+    timer__IntakeExpiryCheck["Nightly intake expiry check"]:::timer
+    timer__MonthlyClaimCreation["前月分レセプトの作成（月初）"]:::timer
+    timer__MonthlyClaimDeadline["前月分レセプトの請求（毎月5日～10日）"]:::timer
+    timer__ReceivablesMonthlyReview["未収金管理台帳の作成（毎月）"]:::timer
+    timer__ReturnDownloadCheck["返戻レセプトの取得（3か月以内）"]:::timer
+    medium__AccountsWindow["会計窓口"]:::medium
+    medium__BillingWorkstation["Billing Workstation"]:::medium
+    medium__CareCoordinationConsole["Care Coordination Console"]:::medium
+    medium__ClinicalWorkstation["Clinical Workstation"]:::medium
+    medium__FrontDeskTerminal["Front Desk Terminal"]:::medium
+    medium__NurseStation["Nurse Station"]:::medium
+    medium__OnlineClaimTerminal["オンライン請求用端末"]:::medium
+    medium__PatientMobile["Patient Mobile"]:::medium
+    medium__PaymentKiosk["自動精算機"]:::medium
+    permission__BillCalculate["会計計算"]:::permission
+    permission__BillingClaimWrite["レセプト業務"]:::permission
+    permission__ClinicalDocument["Clinical Document"]:::permission
+    permission__ClinicalOrderWrite["Clinical Order Write"]:::permission
+    permission__ConsentCapture["Consent Capture"]:::permission
+    permission__EncounterOpen["Encounter Open"]:::permission
+    permission__EncounterSign["Encounter Sign"]:::permission
+    permission__FollowUpManage["Follow-Up Manage"]:::permission
+    permission__InsuranceVerify["Insurance Verify"]:::permission
+    permission__IntakeManage["Intake Manage"]:::permission
+    permission__LabResultManage["Lab Result Manage"]:::permission
+    permission__PatientMessageSend["Patient Message Send"]:::permission
+    permission__PatientProfileRead["Patient Profile Read"]:::permission
+    permission__PatientProfileWrite["Patient Profile Write"]:::permission
+    permission__PaymentCollect["窓口収納"]:::permission
+    permission__PaymentPost["Payment Post"]:::permission
+    permission__ProxyOrderEntry["代行入力"]:::permission
+    permission__ReferralManage["紹介状管理"]:::permission
+    permission__RoomAssign["Room Assign"]:::permission
+    permission__ScheduleRead["Schedule Read"]:::permission
+    permission__ScheduleWrite["Schedule Write"]:::permission
+    permission__VisitCheckIn["Visit Check-In"]:::permission
+    permission__VitalsRecord["Vitals Record"]:::permission
   end
-  subgraph layer_boundary[System Boundary]
-    direction TB
-    AmendEncounter(["✅ Amend Signed Encounter"])
-    ApplySelectedTreatmentFee(["✅ 選定療養費の算定"])
-    ArchivePatient(["✅ Archive Patient"])
-    AssignRoom(["✅ Assign Room"])
-    BatchVerifyEligibility(["✅ 資格の一括照会"])
-    CalculateVisitBill(["✅ 会計計算入力"])
-    CallPatientForPayment(["✅ 会計の呼出"])
-    CancelClinicalOrder(["✅ Cancel Clinical Order"])
-    CaptureConsent(["✅ Capture Consent"])
-    CheckInPatient(["✅ 受付（初診・再診）"])
-    CloseCarePlan(["✅ Close Care Plan"])
-    CollectSpecimen(["✅ Collect Specimen"])
-    CompleteConsultation(["✅ 診察終了"])
-    CompleteIntakeForms(["✅ Complete Intake Forms"])
-    ConfirmEligibilityInOutageMode(["✅ システム障害時モードでの資格確認"])
-    ConfirmProxyOrder(["✅ 代行入力オーダの確定"])
-    CorrectReturnedStatement(["✅ 返戻レセプトの訂正（再請求）"])
-    CreateCarePlan(["✅ Create Care Plan"])
-    CreateCharge(["✅ コスト情報の登録"])
-    DocumentAssessment(["✅ Document Assessment"])
-    EnterProxyOrder(["✅ 検体検査オーダの代行入力"])
-    ExpireIntakeForms(["✅ Expire Intake Forms"])
-    GenerateClaimStatement(["✅ レセプト作成"])
-    HoldClaimStatement(["✅ レセプトの保留（月遅れ）"])
-    InspectClaimStatement(["✅ レセプトの院内点検"])
-    IssueReceipt(["✅ 領収証・明細書の交付"])
-    IssueReferralLetter(["✅ 診療情報提供書の作成・送信"])
-    MergeDuplicatePatient(["✅ Merge Duplicate Patient"])
-    NotifyCriticalResult(["✅ Notify Critical Result"])
-    NotifyPatientResult(["✅ Notify Patient Result"])
-    OpenEncounter(["✅ Open Encounter"])
-    PlaceLabOrder(["✅ Place Lab Order"])
-    PostPayment(["✅ 診療報酬の入金"])
-    PrepareEncounter(["✅ Prepare Encounter"])
-    PrintSpecimenLabel(["✅ 採血管ラベル発行・貼付"])
-    ReceiveClaimAccepted(["✅ レセプト受付（審査へ）"])
-    ReceiveEligibilityInvalid(["✅ 資格確認結果（無効）の取込"])
-    ReceiveEligibilityNoInfo(["✅ 資格確認結果（該当資格なし）の取込"])
-    ReceiveEligibilityValid(["✅ 資格確認結果（有効）の取込"])
-    ReceiveLabResult(["✅ Receive Lab Result"])
-    ReceiveReferralLetter(["✅ 紹介状受付処理"])
-    RecheckEligibility(["✅ 資格の再確認"])
-    ReconcileBalance(["✅ 未収金管理台帳の作成"])
-    RecordClaimAssessment(["✅ 査定の取込"])
-    RecordClaimReturn(["✅ 返戻レセプトの取込"])
-    RecordEligibilityDeclaration(["✅ 被保険者資格申立書の受領"])
-    RecordReceiptError(["✅ 受付不能・要確認の確認"])
-    RecordVitals(["✅ Record Vitals"])
-    RegisterPatient(["✅ Register Patient"])
-    RegisterPerformedProcedure(["✅ 実施内容（コスト）の登録"])
-    ReleaseHeldStatement(["✅ 保留レセプトの再提出準備"])
-    RequestReexamination(["✅ 再審査請求"])
-    ResendErroredStatement(["✅ エラー分レセプトの再送"])
-    ReviewClaimTransfer(["✅ 資格の振替・分割の確認"])
-    ReviewLabResult(["✅ Review Lab Result"])
-    ReviewPatientResponse(["✅ Review Patient Response"])
-    ScheduleFollowUpVisit(["✅ Schedule Follow-Up Visit"])
-    SearchPatient(["✅ Search Patient"])
-    SendAppointmentNotice(["✅ Send Appointment Notice"])
-    SendFollowUpMessage(["✅ Send Follow-Up Message"])
-    SendIntakeForms(["✅ Send Intake Forms"])
-    SettleAtKiosk(["✅ 自動精算機での精算"])
-    SettleAtWindow(["✅ 会計窓口での精算"])
-    SignEncounter(["✅ Sign Encounter"])
-    SubmitClaimStatements(["✅ レセプト請求"])
-    UpdateDemographics(["✅ Update Demographics"])
-    VerifyArrival(["✅ 予約票・診察券の確認"])
-    VerifyInsurance(["✅ 保険資格・限度額情報の登録（新患登録）"])
-    VoidCharge(["✅ コストの取消"])
-    AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
-    BalanceScreen[["🖥️ 未収金画面"]]
-    BillCalculationScreen[["🖥️ 会計計算画面"]]
-    CarePlanScreen[["🖥️ Care Plan Screen"]]
-    ChargeWorklistScreen[["🖥️ Charge Worklist Screen"]]
-    CheckInScreen[["🖥️ 受付画面"]]
-    ClaimScreen[["🖥️ レセプト画面"]]
-    ConsentScreen[["🖥️ Consent Capture Screen"]]
-    CriticalNoticeScreen[["🖥️ Critical Result Notice Screen"]]
-    DiagnosisScreen[["🖥️ Diagnosis Screen"]]
-    EligibilityScreen[["🖥️ 資格確認画面"]]
-    EncounterWorkspaceScreen[["🖥️ Encounter Workspace"]]
-    FollowUpScheduleScreen[["🖥️ Follow-Up Schedule Screen"]]
-    InsuranceScreen[["🖥️ Insurance Verification Screen"]]
-    IntakePortalScreen[["🖥️ Intake Portal Screen"]]
-    KioskScreen[["🖥️ 自動精算機画面"]]
-    OrderEntryScreen[["🖥️ Order Entry Screen"]]
-    PatientMessageScreen[["🖥️ Patient Message Screen"]]
-    PatientProfileScreen[["🖥️ Patient Profile Screen"]]
-    PatientSearchScreen[["🖥️ Patient Search Screen"]]
-    PaymentPostingScreen[["🖥️ 入金画面"]]
-    PaymentWindowScreen[["🖥️ 会計窓口画面"]]
-    ReferralLetterScreen[["🖥️ 診療情報提供書画面"]]
-    ReferralScreen[["🖥️ 紹介状受付画面"]]
-    ResultReviewScreen[["🖥️ Result Review Screen"]]
-    RoomBoardScreen[["🖥️ Room Board Screen"]]
-    SpecimenScreen[["🖥️ Specimen Collection Screen"]]
-    VitalsScreen[["🖥️ Vitals Screen"]]
-    ArrivalTimeField[["🔤 受付時刻"]]
-    ChargeCodeField[["🔤 診療行為"]]
-    EligibilityResultField[["🔤 資格確認結果"]]
-    KioskReferenceField[["🔤 精算機の取引番号"]]
-    PaymentAmountField[["🔤 お支払額"]]
-    ReferralDirectionField[["🔤 紹介の向き"]]
-    ReferralReceivedField[["🔤 紹介状の受領日時"]]
-    EvAppointmentCancelled{"⚡ Appointment Cancelled"}
-    EvAppointmentCheckedIn{"⚡ Appointment Checked In"}
-    EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
-    EvAppointmentScheduled{"⚡ Appointment Scheduled"}
-    EvBillCalculated{"⚡ 会計計算完了"}
-    EvClaimAccepted{"⚡ レセプト受付"}
-    EvClaimAssessed{"⚡ 査定"}
-    EvClaimReceiptError{"⚡ 受付不能・要確認"}
-    EvClaimReturned{"⚡ 返戻"}
-    EvClaimStatementsSubmitted{"⚡ レセプト請求"}
-    EvClaimTransferred{"⚡ 資格の振替・分割"}
-    EvClinicalOrderReviewed{"⚡ Clinical Result Reviewed"}
-    EvEligibilityChecked{"⚡ 資格確認結果"}
-    EvEncounterSigned{"⚡ Encounter Signed"}
-    EvLabResultReceived{"⚡ Lab Result Received"}
-    EvPaymentSettled{"⚡ 自動精算機での精算完了"}
-    EvRemittance{"⚡ 診療報酬の支払"}
+  subgraph layer_boundary["システム境界"]
+    usecase__AmendEncounter["Amend Signed Encounter"]:::usecase
+    usecase__ApplySelectedTreatmentFee["選定療養費の算定"]:::usecase
+    usecase__ArchivePatient["Archive Patient"]:::usecase
+    usecase__AssignRoom["Assign Room"]:::usecase
+    usecase__BatchVerifyEligibility["資格の一括照会"]:::usecase
+    usecase__CalculateVisitBill["会計計算入力"]:::usecase
+    usecase__CallPatientForPayment["会計の呼出"]:::usecase
+    usecase__CancelClinicalOrder["Cancel Clinical Order"]:::usecase
+    usecase__CaptureConsent["Capture Consent"]:::usecase
+    usecase__CheckInPatient["受付（初診・再診）"]:::usecase
+    usecase__CloseCarePlan["Close Care Plan"]:::usecase
+    usecase__CollectSpecimen["Collect Specimen"]:::usecase
+    usecase__CompleteConsultation["診察終了"]:::usecase
+    usecase__CompleteIntakeForms["Complete Intake Forms"]:::usecase
+    usecase__ConfirmEligibilityInOutageMode["システム障害時モードでの資格確認"]:::usecase
+    usecase__ConfirmProxyOrder["代行入力オーダの確定"]:::usecase
+    usecase__CorrectReturnedStatement["返戻レセプトの訂正（再請求）"]:::usecase
+    usecase__CreateCarePlan["Create Care Plan"]:::usecase
+    usecase__CreateCharge["コスト情報の登録"]:::usecase
+    usecase__DocumentAssessment["Document Assessment"]:::usecase
+    usecase__EnterProxyOrder["検体検査オーダの代行入力"]:::usecase
+    usecase__ExpireIntakeForms["Expire Intake Forms"]:::usecase
+    usecase__GenerateClaimStatement["レセプト作成"]:::usecase
+    usecase__HoldClaimStatement["レセプトの保留（月遅れ）"]:::usecase
+    usecase__InspectClaimStatement["レセプトの院内点検"]:::usecase
+    usecase__IssueReceipt["領収証・明細書の交付"]:::usecase
+    usecase__IssueReferralLetter["診療情報提供書の作成・送信"]:::usecase
+    usecase__MergeDuplicatePatient["Merge Duplicate Patient"]:::usecase
+    usecase__NotifyCriticalResult["Notify Critical Result"]:::usecase
+    usecase__NotifyPatientResult["Notify Patient Result"]:::usecase
+    usecase__OpenEncounter["Open Encounter"]:::usecase
+    usecase__PlaceLabOrder["Place Lab Order"]:::usecase
+    usecase__PostPayment["診療報酬の入金"]:::usecase
+    usecase__PrepareEncounter["Prepare Encounter"]:::usecase
+    usecase__PrintSpecimenLabel["採血管ラベル発行・貼付"]:::usecase
+    usecase__ReceiveClaimAccepted["レセプト受付（審査へ）"]:::usecase
+    usecase__ReceiveEligibilityInvalid["資格確認結果（無効）の取込"]:::usecase
+    usecase__ReceiveEligibilityNoInfo["資格確認結果（該当資格なし）の取込"]:::usecase
+    usecase__ReceiveEligibilityValid["資格確認結果（有効）の取込"]:::usecase
+    usecase__ReceiveLabResult["Receive Lab Result"]:::usecase
+    usecase__ReceiveReferralLetter["紹介状受付処理"]:::usecase
+    usecase__RecheckEligibility["資格の再確認"]:::usecase
+    usecase__ReconcileBalance["未収金管理台帳の作成"]:::usecase
+    usecase__RecordClaimAssessment["査定の取込"]:::usecase
+    usecase__RecordClaimReturn["返戻レセプトの取込"]:::usecase
+    usecase__RecordEligibilityDeclaration["被保険者資格申立書の受領"]:::usecase
+    usecase__RecordReceiptError["受付不能・要確認の確認"]:::usecase
+    usecase__RecordVitals["Record Vitals"]:::usecase
+    usecase__RegisterPatient["Register Patient"]:::usecase
+    usecase__RegisterPerformedProcedure["実施内容（コスト）の登録"]:::usecase
+    usecase__ReleaseHeldStatement["保留レセプトの再提出準備"]:::usecase
+    usecase__RequestReexamination["再審査請求"]:::usecase
+    usecase__ResendErroredStatement["エラー分レセプトの再送"]:::usecase
+    usecase__ReviewClaimTransfer["資格の振替・分割の確認"]:::usecase
+    usecase__ReviewLabResult["Review Lab Result"]:::usecase
+    usecase__ReviewPatientResponse["Review Patient Response"]:::usecase
+    usecase__ScheduleFollowUpVisit["Schedule Follow-Up Visit"]:::usecase
+    usecase__SearchPatient["Search Patient"]:::usecase
+    usecase__SendAppointmentNotice["Send Appointment Notice"]:::usecase
+    usecase__SendFollowUpMessage["Send Follow-Up Message"]:::usecase
+    usecase__SendIntakeForms["Send Intake Forms"]:::usecase
+    usecase__SettleAtKiosk["自動精算機での精算"]:::usecase
+    usecase__SettleAtWindow["会計窓口での精算"]:::usecase
+    usecase__SignEncounter["Sign Encounter"]:::usecase
+    usecase__SubmitClaimStatements["レセプト請求"]:::usecase
+    usecase__UpdateDemographics["Update Demographics"]:::usecase
+    usecase__VerifyArrival["予約票・診察券の確認"]:::usecase
+    usecase__VerifyInsurance["保険資格・限度額情報の登録（新患登録）"]:::usecase
+    usecase__VoidCharge["コストの取消"]:::usecase
+    screen__AppointmentNoticeScreen["Appointment Notice Screen"]:::screen
+    screen__BalanceScreen["未収金画面"]:::screen
+    screen__BillCalculationScreen["会計計算画面"]:::screen
+    screen__CarePlanScreen["Care Plan Screen"]:::screen
+    screen__ChargeWorklistScreen["Charge Worklist Screen"]:::screen
+    screen__CheckInScreen["受付画面"]:::screen
+    screen__ClaimScreen["レセプト画面"]:::screen
+    screen__ConsentScreen["Consent Capture Screen"]:::screen
+    screen__CriticalNoticeScreen["Critical Result Notice Screen"]:::screen
+    screen__DiagnosisScreen["Diagnosis Screen"]:::screen
+    screen__EligibilityScreen["資格確認画面"]:::screen
+    screen__EncounterWorkspaceScreen["Encounter Workspace"]:::screen
+    screen__FollowUpScheduleScreen["Follow-Up Schedule Screen"]:::screen
+    screen__InsuranceScreen["Insurance Verification Screen"]:::screen
+    screen__IntakePortalScreen["Intake Portal Screen"]:::screen
+    screen__KioskScreen["自動精算機画面"]:::screen
+    screen__OrderEntryScreen["Order Entry Screen"]:::screen
+    screen__PatientMessageScreen["Patient Message Screen"]:::screen
+    screen__PatientProfileScreen["Patient Profile Screen"]:::screen
+    screen__PatientSearchScreen["Patient Search Screen"]:::screen
+    screen__PaymentPostingScreen["入金画面"]:::screen
+    screen__PaymentWindowScreen["会計窓口画面"]:::screen
+    screen__ReferralLetterScreen["診療情報提供書画面"]:::screen
+    screen__ReferralScreen["紹介状受付画面"]:::screen
+    screen__ResultReviewScreen["Result Review Screen"]:::screen
+    screen__RoomBoardScreen["Room Board Screen"]:::screen
+    screen__SpecimenScreen["Specimen Collection Screen"]:::screen
+    screen__VitalsScreen["Vitals Screen"]:::screen
+    field__ArrivalTimeField["受付時刻"]:::field
+    field__ChargeCodeField["診療行為"]:::field
+    field__EligibilityResultField["資格確認結果"]:::field
+    field__KioskReferenceField["精算機の取引番号"]:::field
+    field__PaymentAmountField["お支払額"]:::field
+    field__ReferralDirectionField["紹介の向き"]:::field
+    field__ReferralReceivedField["紹介状の受領日時"]:::field
+    event__EvAppointmentCancelled["Appointment Cancelled"]:::event
+    event__EvAppointmentCheckedIn["Appointment Checked In"]:::event
+    event__EvAppointmentRescheduled["Appointment Rescheduled"]:::event
+    event__EvAppointmentScheduled["Appointment Scheduled"]:::event
+    event__EvBillCalculated["会計計算完了"]:::event
+    event__EvClaimAccepted["レセプト受付"]:::event
+    event__EvClaimAssessed["査定"]:::event
+    event__EvClaimReceiptError["受付不能・要確認"]:::event
+    event__EvClaimReturned["返戻"]:::event
+    event__EvClaimStatementsSubmitted["レセプト請求"]:::event
+    event__EvClaimTransferred["資格の振替・分割"]:::event
+    event__EvClinicalOrderReviewed["Clinical Result Reviewed"]:::event
+    event__EvEligibilityChecked["資格確認結果"]:::event
+    event__EvEncounterSigned["Encounter Signed"]:::event
+    event__EvLabResultReceived["Lab Result Received"]:::event
+    event__EvPaymentSettled["自動精算機での精算完了"]:::event
+    event__EvRemittance["診療報酬の支払"]:::event
   end
-  subgraph layer_system[System]
-    direction TB
-    AmendEncounterApi["🔌 Amend Encounter API"]
-    AppointmentNoticeApi["🔌 Appointment Notice API"]
-    AssignRoomApi["🔌 Assign Room API"]
-    BalanceApi["🔌 未収金 API"]
-    CalculateVisitBillApi["🔌 会計計算 API"]
-    CheckInPatientApi["🔌 Check-In Patient API"]
-    ClaimEditApi["🔌 レセプト点検・訂正 API"]
-    ClaimResultApi["🔌 審査結果 API"]
-    CollectSpecimenApi["🔌 Collect Specimen API"]
-    CompleteConsultationApi["🔌 診察終了 API"]
-    ConfirmOrderApi["🔌 オーダ確定 API"]
-    ConsentApi["🔌 Consent API"]
-    CreateCarePlanApi["🔌 Create Care Plan API"]
-    CreateChargeApi["🔌 Create Charge API"]
-    CriticalNoticeApi["🔌 Critical Notice API"]
-    DocumentAssessmentApi["🔌 Document Assessment API"]
-    EligibilityApi["🔌 Eligibility API"]
-    EligibilityResultApi["🔌 資格確認結果 API"]
-    FollowUpScheduleApi["🔌 Follow-Up Schedule API"]
-    GenerateClaimApi["🔌 レセプト作成 API"]
-    IntakeMessagingApi["🔌 Intake Messaging API"]
-    IssueReferralLetterApi["🔌 診療情報提供書 API"]
-    NotifyPatientResultApi["🔌 Notify Patient Result API"]
-    OnlineEligibilityApi["🔌 オンライン資格確認 API"]
-    OpenEncounterApi["🔌 Open Encounter API"]
-    OrderEntryApi["🔌 Order Entry API"]
-    PaymentPostApi["🔌 入金 API"]
-    PerformedProcedureApi["🔌 実施登録 API"]
-    PrepareEncounterApi["🔌 Prepare Encounter API"]
-    ProxyOrderApi["🔌 代行入力 API"]
-    ReceiptApi["🔌 領収証 API"]
-    ReceiveLabResultApi["🔌 Receive Lab Result API"]
-    RecordVitalsApi["🔌 Record Vitals API"]
-    ReferralLetterApi["🔌 紹介状 API"]
-    RegisterPatientApi["🔌 Register Patient API"]
-    ResultReviewApi["🔌 Result Review API"]
-    SearchPatientApi["🔌 Search Patient API"]
-    SelectedFeeApi["🔌 選定療養費 API"]
-    SendFollowUpMessageApi["🔌 Send Follow-Up Message API"]
-    SettlementApi["🔌 精算 API"]
-    SignEncounterApi["🔌 Sign Encounter API"]
-    SubmitClaimApi["🔌 オンライン請求 API"]
-    UpdateDemographicsApi["🔌 Update Demographics API"]
-    VerifyArrivalApi["🔌 Verify Arrival API"]
-    AccountBalance[("🗄️ 未収金残高")]
-    Appointment[("🗄️ Appointment")]
-    CarePlan[("🗄️ Care Plan")]
-    Charge[("🗄️ Charge")]
-    ClaimStatement[("🗄️ レセプト")]
-    ClinicalOrder[("🗄️ Clinical Order")]
-    ConsentRecord[("🗄️ Consent Record")]
-    Diagnosis[("🗄️ Diagnosis")]
-    EligibilityCheck[("🗄️ 資格確認")]
-    Encounter[("🗄️ Encounter")]
-    InsurancePolicy[("🗄️ 保険資格")]
-    IntakePacket[("🗄️ Intake Packet")]
-    LabResult[("🗄️ Lab Result")]
-    Notification[("🗄️ Notification")]
-    PatientAccount[("🗄️ Patient Account")]
-    PatientMessage[("🗄️ Patient Message")]
-    PatientProfile[("🗄️ Patient Profile")]
-    PaymentTransaction[("🗄️ Payment Transaction")]
-    ProviderSchedule[("🗄️ Provider Schedule")]
-    ReferralLetter[("🗄️ 紹介状・診療情報提供書")]
-    Room[("🗄️ Room")]
-    SelectedTreatmentFeeSetting[("🗄️ 選定療養費の設定")]
-    VitalSign[("🗄️ Vital Sign")]
-    BurdenRatio["🎚️ 負担割合"]
-    ChargeKind["🎚️ 診療費の種類"]
-    LimitCategory["🎚️ 限度額適用区分"]
-    PayerChange["🎚️ 資格変更の種類"]
-    ReferralCategory["🎚️ 紹介の有無"]
-    BookedPatient{"🔀 予約済みの患者"}
-    CopayCappedAtLimit{"🔀 窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"}
-    OrderConfirmedByPhysician{"🔀 医師が確定したオーダ"}
-    TransferNotPossible{"🔀 振替・分割の対象外（負担割合の相違・公費）"}
-    UnreferredFirstVisit{"🔀 紹介状なしの初診で、除外に当たらない"}
+  subgraph layer_system["システム"]
+    api__AmendEncounterApi["Amend Encounter API"]:::api
+    api__AppointmentNoticeApi["Appointment Notice API"]:::api
+    api__AssignRoomApi["Assign Room API"]:::api
+    api__BalanceApi["未収金 API"]:::api
+    api__CalculateVisitBillApi["会計計算 API"]:::api
+    api__CheckInPatientApi["Check-In Patient API"]:::api
+    api__ClaimEditApi["レセプト点検・訂正 API"]:::api
+    api__ClaimResultApi["審査結果 API"]:::api
+    api__CollectSpecimenApi["Collect Specimen API"]:::api
+    api__CompleteConsultationApi["診察終了 API"]:::api
+    api__ConfirmOrderApi["オーダ確定 API"]:::api
+    api__ConsentApi["Consent API"]:::api
+    api__CreateCarePlanApi["Create Care Plan API"]:::api
+    api__CreateChargeApi["Create Charge API"]:::api
+    api__CriticalNoticeApi["Critical Notice API"]:::api
+    api__DocumentAssessmentApi["Document Assessment API"]:::api
+    api__EligibilityApi["Eligibility API"]:::api
+    api__EligibilityResultApi["資格確認結果 API"]:::api
+    api__FollowUpScheduleApi["Follow-Up Schedule API"]:::api
+    api__GenerateClaimApi["レセプト作成 API"]:::api
+    api__IntakeMessagingApi["Intake Messaging API"]:::api
+    api__IssueReferralLetterApi["診療情報提供書 API"]:::api
+    api__NotifyPatientResultApi["Notify Patient Result API"]:::api
+    api__OnlineEligibilityApi["オンライン資格確認 API"]:::api
+    api__OpenEncounterApi["Open Encounter API"]:::api
+    api__OrderEntryApi["Order Entry API"]:::api
+    api__PaymentPostApi["入金 API"]:::api
+    api__PerformedProcedureApi["実施登録 API"]:::api
+    api__PrepareEncounterApi["Prepare Encounter API"]:::api
+    api__ProxyOrderApi["代行入力 API"]:::api
+    api__ReceiptApi["領収証 API"]:::api
+    api__ReceiveLabResultApi["Receive Lab Result API"]:::api
+    api__RecordVitalsApi["Record Vitals API"]:::api
+    api__ReferralLetterApi["紹介状 API"]:::api
+    api__RegisterPatientApi["Register Patient API"]:::api
+    api__ResultReviewApi["Result Review API"]:::api
+    api__SearchPatientApi["Search Patient API"]:::api
+    api__SelectedFeeApi["選定療養費 API"]:::api
+    api__SendFollowUpMessageApi["Send Follow-Up Message API"]:::api
+    api__SettlementApi["精算 API"]:::api
+    api__SignEncounterApi["Sign Encounter API"]:::api
+    api__SubmitClaimApi["オンライン請求 API"]:::api
+    api__UpdateDemographicsApi["Update Demographics API"]:::api
+    api__VerifyArrivalApi["Verify Arrival API"]:::api
+    entity__AccountBalance["未収金残高"]:::entity
+    entity__Appointment["Appointment"]:::entity
+    entity__CarePlan["Care Plan"]:::entity
+    entity__Charge["Charge"]:::entity
+    entity__ClaimStatement["レセプト"]:::entity
+    entity__ClinicalOrder["Clinical Order"]:::entity
+    entity__ConsentRecord["Consent Record"]:::entity
+    entity__Diagnosis["Diagnosis"]:::entity
+    entity__EligibilityCheck["資格確認"]:::entity
+    entity__Encounter["Encounter"]:::entity
+    entity__InsurancePolicy["保険資格"]:::entity
+    entity__IntakePacket["Intake Packet"]:::entity
+    entity__LabResult["Lab Result"]:::entity
+    entity__Notification["Notification"]:::entity
+    entity__PatientAccount["Patient Account"]:::entity
+    entity__PatientMessage["Patient Message"]:::entity
+    entity__PatientProfile["Patient Profile"]:::entity
+    entity__PaymentTransaction["Payment Transaction"]:::entity
+    entity__ProviderSchedule["Provider Schedule"]:::entity
+    entity__ReferralLetter["紹介状・診療情報提供書"]:::entity
+    entity__Room["Room"]:::entity
+    entity__SelectedTreatmentFeeSetting["選定療養費の設定"]:::entity
+    entity__VitalSign["Vital Sign"]:::entity
+    state__Appointment_apptawaitingcalc["apptawaitingcalc"]:::state
+    state__Appointment_apptawaitingpay["apptawaitingpay"]:::state
+    state__Appointment_apptcheckedin["apptcheckedin"]:::state
+    state__Appointment_apptcompleted["apptcompleted"]:::state
+    state__Appointment_apptinconsult["apptinconsult"]:::state
+    state__Appointment_apptrequested["apptrequested"]:::state
+    state__Appointment_apptscheduled["apptscheduled"]:::state
+    state__Appointment_apptsettled["apptsettled"]:::state
+    state__CarePlan_careclosed["careclosed"]:::state
+    state__CarePlan_caremonitoring["caremonitoring"]:::state
+    state__CarePlan_careopen["careopen"]:::state
+    state__ClaimStatement_stmtassessed["stmtassessed"]:::state
+    state__ClaimStatement_stmtdrafting["stmtdrafting"]:::state
+    state__ClaimStatement_stmtinspecting["stmtinspecting"]:::state
+    state__ClaimStatement_stmtonhold["stmtonhold"]:::state
+    state__ClaimStatement_stmtpaid["stmtpaid"]:::state
+    state__ClaimStatement_stmtreceipterror["stmtreceipterror"]:::state
+    state__ClaimStatement_stmtrereview["stmtrereview"]:::state
+    state__ClaimStatement_stmtreturned["stmtreturned"]:::state
+    state__ClaimStatement_stmtsubmitted["stmtsubmitted"]:::state
+    state__ClaimStatement_stmtunderreview["stmtunderreview"]:::state
+    state__ClinicalOrder_clcancelled["clcancelled"]:::state
+    state__ClinicalOrder_clcollected["clcollected"]:::state
+    state__ClinicalOrder_clordered["clordered"]:::state
+    state__ClinicalOrder_clresulted["clresulted"]:::state
+    state__ClinicalOrder_clreviewed["clreviewed"]:::state
+    state__EligibilityCheck_eligdeclared["eligdeclared"]:::state
+    state__EligibilityCheck_eliginvalid["eliginvalid"]:::state
+    state__EligibilityCheck_elignoinfo["elignoinfo"]:::state
+    state__EligibilityCheck_eligpending["eligpending"]:::state
+    state__EligibilityCheck_eligvalid["eligvalid"]:::state
+    state__Encounter_encamended["encamended"]:::state
+    state__Encounter_encdocumented["encdocumented"]:::state
+    state__Encounter_encopen["encopen"]:::state
+    state__Encounter_encsigned["encsigned"]:::state
+    state__IntakePacket_intakecompleted["intakecompleted"]:::state
+    state__IntakePacket_intakeexpired["intakeexpired"]:::state
+    state__IntakePacket_intakesent["intakesent"]:::state
+    state__PatientAccount_patientactive["patientactive"]:::state
+    state__PatientAccount_patientinactive["patientinactive"]:::state
+    state__PatientAccount_patientmerged["patientmerged"]:::state
+    variation__BurdenRatio["負担割合"]:::variation
+    variation__ChargeKind["診療費の種類"]:::variation
+    variation__LimitCategory["限度額適用区分"]:::variation
+    variation__PayerChange["資格変更の種類"]:::variation
+    variation__ReferralCategory["紹介の有無"]:::variation
+    condition__BookedPatient["予約済みの患者"]:::condition
+    condition__CopayCappedAtLimit["窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"]:::condition
+    condition__OrderConfirmedByPhysician["医師が確定したオーダ"]:::condition
+    condition__TransferNotPossible["振替・分割の対象外（負担割合の相違・公費）"]:::condition
+    condition__UnreferredFirstVisit["紹介状なしの初診で、除外に当たらない"]:::condition
   end
-  SubmitClaimApi -.->|requires_permission| BillingClaimWrite
-  SubmitClaimApi -.->|updates| ClaimStatement
-  ClaimResultApi -.->|requires_permission| BillingClaimWrite
-  ClaimResultApi -.->|updates| ClaimStatement
-  PaymentPostApi -.->|requires_permission| PaymentPost
-  PaymentPostApi -.->|updates| ClaimStatement
-  BalanceApi -.->|reads| PaymentTransaction
-  BalanceApi -.->|requires_permission| PaymentPost
-  BalanceApi -.->|updates| AccountBalance
-  OpenEncounterApi -.->|creates| Encounter
-  OpenEncounterApi -.->|requires_permission| EncounterOpen
-  OpenEncounterApi -.->|updates| Appointment
-  RecordVitalsApi -.->|creates| VitalSign
-  RecordVitalsApi -.->|requires_permission| VitalsRecord
-  RecordVitalsApi -.->|updates| Encounter
-  DocumentAssessmentApi -.->|creates| Diagnosis
-  DocumentAssessmentApi -.->|requires_permission| ClinicalDocument
-  DocumentAssessmentApi -.->|updates| Encounter
-  SignEncounterApi -.->|requires_permission| EncounterSign
-  SignEncounterApi -.->|updates| Encounter
-  AmendEncounterApi -.->|requires_permission| EncounterSign
-  AmendEncounterApi -.->|updates| Encounter
-  IssueReferralLetterApi -.->|creates| ReferralLetter
-  IssueReferralLetterApi -.->|reads| Encounter
-  IssueReferralLetterApi -.->|requires_permission| ReferralManage
-  CompleteConsultationApi -.->|requires_permission| EncounterOpen
-  CompleteConsultationApi -.->|updates| Appointment
-  CompleteConsultationApi -.->|updates| Room
-  CreateCarePlanApi -.->|creates| CarePlan
-  CreateCarePlanApi -.->|reads| Encounter
-  CreateCarePlanApi -.->|requires_permission| FollowUpManage
-  SendFollowUpMessageApi -.->|creates| PatientMessage
-  SendFollowUpMessageApi -.->|requires_permission| PatientMessageSend
-  FollowUpScheduleApi -.->|creates| Appointment
-  FollowUpScheduleApi -.->|requires_permission| ScheduleWrite
-  FollowUpScheduleApi -.->|updates| ProviderSchedule
-  NotifyPatientResultApi -.->|creates| Notification
-  NotifyPatientResultApi -.->|requires_permission| PatientMessageSend
-  OrderEntryApi -.->|creates| ClinicalOrder
-  OrderEntryApi -.->|reads| Encounter
-  OrderEntryApi -.->|requires_permission| ClinicalOrderWrite
-  ProxyOrderApi -.->|creates| ClinicalOrder
-  ProxyOrderApi -.->|reads| Encounter
-  ProxyOrderApi -.->|requires_permission| ProxyOrderEntry
-  ConfirmOrderApi -.->|requires_permission| ClinicalOrderWrite
-  ConfirmOrderApi -.->|updates| ClinicalOrder
-  PerformedProcedureApi -.->|creates| Charge
-  PerformedProcedureApi -.->|reads| Encounter
-  PerformedProcedureApi -.->|reads| ClinicalOrder
-  PerformedProcedureApi -.->|requires_permission| ClinicalOrderWrite
-  CollectSpecimenApi -.->|requires_permission| ClinicalOrderWrite
-  CollectSpecimenApi -.->|updates| ClinicalOrder
-  ReceiveLabResultApi -.->|creates| LabResult
-  ReceiveLabResultApi -.->|requires_permission| LabResultManage
-  ReceiveLabResultApi -.->|updates| ClinicalOrder
-  ResultReviewApi -.->|requires_permission| LabResultManage
-  ResultReviewApi -.->|updates| ClinicalOrder
-  ResultReviewApi -.->|updates| LabResult
-  CriticalNoticeApi -.->|creates| PatientMessage
-  CriticalNoticeApi -.->|creates| Notification
-  CriticalNoticeApi -.->|requires_permission| PatientMessageSend
-  SearchPatientApi -.->|reads| PatientAccount
-  SearchPatientApi -.->|reads| PatientProfile
-  SearchPatientApi -.->|requires_permission| PatientProfileRead
-  RegisterPatientApi -.->|creates| PatientAccount
-  RegisterPatientApi -.->|creates| PatientProfile
-  RegisterPatientApi -.->|requires_permission| PatientProfileWrite
-  UpdateDemographicsApi -.->|requires_permission| PatientProfileWrite
-  UpdateDemographicsApi -.->|updates| PatientProfile
-  EligibilityApi -.->|creates| EligibilityCheck
-  EligibilityApi -.->|reads| InsurancePolicy
-  EligibilityApi -.->|requires_permission| InsuranceVerify
-  EligibilityApi -.->|updates| InsurancePolicy
-  ConsentApi -.->|creates| ConsentRecord
-  ConsentApi -.->|requires_permission| ConsentCapture
-  IntakeMessagingApi -.->|creates| PatientMessage
-  IntakeMessagingApi -.->|creates| IntakePacket
-  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
-  VerifyArrivalApi -.->|reads| Appointment
-  VerifyArrivalApi -.->|reads| PatientAccount
-  VerifyArrivalApi -.->|reads| InsurancePolicy
-  VerifyArrivalApi -.->|requires_permission| VisitCheckIn
-  CheckInPatientApi -.->|requires_permission| VisitCheckIn
-  CheckInPatientApi -.->|updates| Appointment
-  CheckInPatientApi -.->|updates| PatientAccount
-  OnlineEligibilityApi -.->|creates| EligibilityCheck
-  OnlineEligibilityApi -.->|reads| InsurancePolicy
-  OnlineEligibilityApi -.->|requires_permission| InsuranceVerify
-  EligibilityResultApi -.->|updates| EligibilityCheck
-  ReferralLetterApi -.->|creates| ReferralLetter
-  ReferralLetterApi -.->|requires_permission| ReferralManage
-  AssignRoomApi -.->|requires_permission| RoomAssign
-  AssignRoomApi -.->|updates| Appointment
-  AssignRoomApi -.->|updates| Room
-  PrepareEncounterApi -.->|reads| Appointment
-  PrepareEncounterApi -.->|reads| PatientProfile
-  PrepareEncounterApi -.->|requires_permission| EncounterOpen
-  CalculateVisitBillApi -.->|reads| Charge
-  CalculateVisitBillApi -.->|reads| InsurancePolicy
-  CalculateVisitBillApi -.->|requires_permission| BillCalculate
-  CalculateVisitBillApi -.->|updates| Appointment
-  SelectedFeeApi -.->|creates| Charge
-  SelectedFeeApi -.->|reads| Encounter
-  SelectedFeeApi -.->|reads| SelectedTreatmentFeeSetting
-  SelectedFeeApi -.->|requires_permission| BillCalculate
-  SettlementApi -.->|creates| PaymentTransaction
-  SettlementApi -.->|requires_permission| PaymentCollect
-  SettlementApi -.->|updates| Appointment
-  SettlementApi -.->|updates| AccountBalance
-  ReceiptApi -.->|reads| Charge
-  ReceiptApi -.->|reads| PaymentTransaction
-  ReceiptApi -.->|requires_permission| PaymentCollect
-  ReceiptApi -.->|updates| Appointment
-  AppointmentNoticeApi -.->|creates| PatientMessage
-  AppointmentNoticeApi -.->|creates| Notification
-  CreateChargeApi -.->|creates| Charge
-  CreateChargeApi -.->|reads| Encounter
-  GenerateClaimApi -.->|creates| ClaimStatement
-  GenerateClaimApi -.->|reads| Charge
-  GenerateClaimApi -.->|reads| InsurancePolicy
-  GenerateClaimApi -.->|requires_permission| BillingClaimWrite
-  ClaimEditApi -.->|requires_permission| BillingClaimWrite
-  ClaimEditApi -.->|updates| ClaimStatement
-  BucVisitPayment -.->|belongs| RevenueCycle
-  BucVisitPayment -->|contains| VisitPaymentFlow
-  BucVisitPayment -->|contains| CalculateVisitBill
-  BucVisitPayment -->|contains| ApplySelectedTreatmentFee
-  BucVisitPayment -->|contains| CallPatientForPayment
-  BucVisitPayment -->|contains| SettleAtWindow
-  BucVisitPayment -->|contains| SettleAtKiosk
-  BucVisitPayment -->|contains| IssueReceipt
-  BucBillingClaims -.->|belongs| RevenueCycle
-  BucBillingClaims -->|contains| ClaimCycleFlow
-  BucBillingClaims -->|contains| InspectClaimStatement
-  BucBillingClaims -->|contains| HoldClaimStatement
-  BucBillingClaims -->|contains| ReleaseHeldStatement
-  BucBillingClaims -->|contains| SubmitClaimStatements
-  BucBillingClaims -->|contains| RecordReceiptError
-  BucBillingClaims -->|contains| ResendErroredStatement
-  BucBillingClaims -->|contains| ReceiveClaimAccepted
-  BucBillingClaims -->|contains| ReviewClaimTransfer
-  BucBillingClaims -->|contains| RecordClaimReturn
-  BucBillingClaims -->|contains| CorrectReturnedStatement
-  BucBillingClaims -->|contains| RecordClaimAssessment
-  BucBillingClaims -->|contains| RequestReexamination
-  BucBillingClaims -->|contains| PostPayment
-  BucBillingClaims -->|contains| ReconcileBalance
-  BucBillingClaims -->|contains| VoidCharge
-  BucBillingClaims -->|contains| CreateCharge
-  BucBillingClaims -->|contains| GenerateClaimStatement
-  BucClinicalEncounter -.->|belongs| CareDelivery
-  BucClinicalEncounter -->|contains| OpenEncounter
-  BucClinicalEncounter -->|contains| RecordVitals
-  BucClinicalEncounter -->|contains| DocumentAssessment
-  BucClinicalEncounter -->|contains| SignEncounter
-  BucClinicalEncounter -->|contains| AmendEncounter
-  BucClinicalEncounter -->|contains| IssueReferralLetter
-  BucClinicalEncounter -->|contains| CompleteConsultation
-  BucFollowupCare -.->|belongs| PatientAccess
-  BucFollowupCare -->|contains| CreateCarePlan
-  BucFollowupCare -->|contains| SendFollowUpMessage
-  BucFollowupCare -->|contains| ReviewPatientResponse
-  BucFollowupCare -->|contains| ScheduleFollowUpVisit
-  BucFollowupCare -->|contains| CloseCarePlan
-  BucFollowupCare -->|contains| NotifyPatientResult
-  BucOrdersResults -.->|belongs| CareDelivery
-  BucOrdersResults -->|contains| PlaceLabOrder
-  BucOrdersResults -->|contains| EnterProxyOrder
-  BucOrdersResults -->|contains| ConfirmProxyOrder
-  BucOrdersResults -->|contains| PrintSpecimenLabel
-  BucOrdersResults -->|contains| CollectSpecimen
-  BucOrdersResults -->|contains| RegisterPerformedProcedure
-  BucOrdersResults -->|contains| ReceiveLabResult
-  BucOrdersResults -->|contains| ReviewLabResult
-  BucOrdersResults -->|contains| NotifyCriticalResult
-  BucOrdersResults -->|contains| CancelClinicalOrder
-  BucPatientOnboarding -.->|belongs| PatientAccess
-  BucPatientOnboarding -->|contains| SearchPatient
-  BucPatientOnboarding -->|contains| RegisterPatient
-  BucPatientOnboarding -->|contains| UpdateDemographics
-  BucPatientOnboarding -->|contains| VerifyInsurance
-  BucPatientOnboarding -->|contains| CaptureConsent
-  BucPatientOnboarding -->|contains| SendIntakeForms
-  BucPatientOnboarding -->|contains| CompleteIntakeForms
-  BucPatientOnboarding -->|contains| ExpireIntakeForms
-  BucPatientOnboarding -->|contains| MergeDuplicatePatient
-  BucPatientOnboarding -->|contains| ArchivePatient
-  BucVisitCheckIn -.->|belongs| PatientAccess
-  BucVisitCheckIn -->|contains| VisitCheckInFlow
-  BucVisitCheckIn -->|contains| VerifyArrival
-  BucVisitCheckIn -->|contains| CheckInPatient
-  BucVisitCheckIn -->|contains| BatchVerifyEligibility
-  BucVisitCheckIn -->|contains| ReceiveEligibilityValid
-  BucVisitCheckIn -->|contains| ReceiveEligibilityInvalid
-  BucVisitCheckIn -->|contains| ReceiveEligibilityNoInfo
-  BucVisitCheckIn -->|contains| RecheckEligibility
-  BucVisitCheckIn -->|contains| RecordEligibilityDeclaration
-  BucVisitCheckIn -->|contains| ConfirmEligibilityInOutageMode
-  BucVisitCheckIn -->|contains| ReceiveReferralLetter
-  BucVisitCheckIn -->|contains| AssignRoom
-  BucVisitCheckIn -->|contains| PrepareEncounter
-  TransferNotPossible -.->|applies_to| RecordClaimReturn
-  TransferNotPossible -.->|combines| ClaimStatement
-  TransferNotPossible -.->|combines| PayerChange
-  OrderConfirmedByPhysician -.->|applies_to| CollectSpecimen
-  OrderConfirmedByPhysician -.->|combines| ClinicalOrder
-  BookedPatient -.->|applies_to| BatchVerifyEligibility
-  BookedPatient -.->|combines| Appointment
-  CopayCappedAtLimit -.->|applies_to| CalculateVisitBill
-  CopayCappedAtLimit -.->|combines| Appointment
-  CopayCappedAtLimit -.->|combines| BurdenRatio
-  CopayCappedAtLimit -.->|combines| LimitCategory
-  UnreferredFirstVisit -.->|applies_to| ApplySelectedTreatmentFee
-  UnreferredFirstVisit -.->|combines| ReferralCategory
-  UnreferredFirstVisit -.->|combines| ChargeKind
-  Appointment ---|N:1| PatientAccount
-  Appointment ---|N:1| Room
-  Encounter ---|N:1| PatientAccount
-  Encounter ---|1:1| Appointment
-  VitalSign ---|N:1| Encounter
-  Diagnosis ---|N:1| Encounter
-  ClinicalOrder ---|N:1| Encounter
-  LabResult ---|1:1| ClinicalOrder
-  Charge ---|N:1| Encounter
-  Charge ---|N:1| ClaimStatement
-  ClaimStatement ---|N:1| PatientAccount
-  ClaimStatement ---|N:1| InsurancePolicy
-  PaymentTransaction ---|N:1| Appointment
-  AccountBalance ---|1:1| PatientAccount
-  ReferralLetter ---|N:1| PatientAccount
-  CarePlan ---|N:1| Encounter
-  CarePlan ---|N:1| PatientAccount
-  PatientMessage ---|N:1| PatientAccount
-  Notification ---|N:1| PatientAccount
-  PatientProfile ---|1:1| PatientAccount
-  InsurancePolicy ---|N:1| PatientAccount
-  EligibilityCheck ---|N:1| InsurancePolicy
-  ConsentRecord ---|N:1| PatientAccount
-  IntakePacket ---|N:1| PatientAccount
-  EvPaymentSettled -.->|triggers| SettleAtKiosk
-  EvBillCalculated -.->|triggers| PaymentGateway
-  EvBillCalculated -.->|triggers| CallPatientForPayment
-  EvClaimStatementsSubmitted -.->|triggers| ClaimsReviewOrganization
-  EvClaimReceiptError -.->|triggers| RecordReceiptError
-  EvClaimAccepted -.->|triggers| ReceiveClaimAccepted
-  EvClaimReturned -.->|triggers| RecordClaimReturn
-  EvClaimAssessed -.->|triggers| RecordClaimAssessment
-  EvClaimTransferred -.->|triggers| ReviewClaimTransfer
-  EvRemittance -.->|triggers| PostPayment
-  EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
-  EvAppointmentScheduled -.->|triggers| MessagingGateway
-  EvAppointmentScheduled -.->|triggers| SendIntakeForms
-  EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
-  EvAppointmentRescheduled -.->|triggers| MessagingGateway
-  EvAppointmentRescheduled -.->|triggers| SendAppointmentNotice
-  EvAppointmentCheckedIn -.->|triggers| BucClinicalEncounter
-  EvAppointmentCheckedIn -.->|triggers| OnlineEligibilitySystem
-  EvAppointmentCheckedIn -.->|triggers| OpenEncounter
-  EvAppointmentCheckedIn -.->|triggers| PrepareEncounter
-  EvAppointmentCancelled -.->|triggers| MessagingGateway
-  EvAppointmentCancelled -.->|triggers| SendAppointmentNotice
-  EvEncounterSigned -.->|triggers| BucVisitPayment
-  EvEncounterSigned -.->|triggers| BucBillingClaims
-  EvEncounterSigned -.->|triggers| BucFollowupCare
-  EvEncounterSigned -.->|triggers| BucOrdersResults
-  EvEncounterSigned -.->|triggers| CompleteConsultation
-  EvEncounterSigned -.->|triggers| CreateCarePlan
-  EvEncounterSigned -.->|triggers| PlaceLabOrder
-  EvEncounterSigned -.->|triggers| CreateCharge
-  EvClinicalOrderReviewed -.->|triggers| BucFollowupCare
-  EvClinicalOrderReviewed -.->|triggers| NotifyPatientResult
-  EvClinicalOrderReviewed -.->|triggers| NotifyCriticalResult
-  EvLabResultReceived -.->|triggers| ReceiveLabResult
-  EvEligibilityChecked -.->|triggers| ReceiveEligibilityValid
-  EvEligibilityChecked -.->|triggers| ReceiveEligibilityInvalid
-  EvEligibilityChecked -.->|triggers| ReceiveEligibilityNoInfo
-  OnlineEligibilitySystem -.->|raises| EvEligibilityChecked
-  PaymentGateway -.->|raises| EvPaymentSettled
-  OutsourcedLabSystem -.->|raises| EvLabResultReceived
-  ClaimsReviewOrganization -.->|raises| EvClaimReceiptError
-  ClaimsReviewOrganization -.->|raises| EvClaimAccepted
-  ClaimsReviewOrganization -.->|raises| EvClaimReturned
-  ClaimsReviewOrganization -.->|raises| EvClaimAssessed
-  ClaimsReviewOrganization -.->|raises| EvClaimTransferred
-  ClaimsReviewOrganization -.->|raises| EvRemittance
-  KioskReferenceField -.->|maps_field| PaymentTransaction
-  ReferralDirectionField -.->|maps_field| ReferralLetter
-  ArrivalTimeField -.->|maps_field| Appointment
-  EligibilityResultField -.->|maps_field| EligibilityCheck
-  ReferralReceivedField -.->|maps_field| ReferralLetter
-  PaymentAmountField -.->|maps_field| PaymentTransaction
-  ChargeCodeField -.->|maps_field| Charge
-  ClaimCycleFlow -->|contains| CreateStatementStep
-  ClaimCycleFlow -->|contains| InspectStep
-  ClaimCycleFlow -->|contains| HoldStep
-  ClaimCycleFlow -->|contains| SubmitStep
-  ClaimCycleFlow -->|contains| ReceiptErrorStep
-  ClaimCycleFlow -->|contains| ReviewStep
-  ClaimCycleFlow -->|contains| ReturnStep
-  ClaimCycleFlow -->|contains| AssessStep
-  ClaimCycleFlow -->|contains| PaidStep
-  VisitCheckInFlow -->|contains| ArrivalStep
-  VisitCheckInFlow -->|contains| EligibilityStep
-  VisitCheckInFlow -->|contains| DeclarationStep
-  VisitCheckInFlow -->|contains| ReferralStep
-  VisitCheckInFlow -->|contains| RoomingStep
-  VisitPaymentFlow -->|contains| CalculationStep
-  VisitPaymentFlow -->|contains| CallStep
-  VisitPaymentFlow -->|contains| WindowStep
-  VisitPaymentFlow -->|contains| KioskStep
-  VisitPaymentFlow -->|contains| ReceiptStep
-  ReferralLetterScreen -->|contains| ReferralDirectionField
-  PatientSearchScreen -.->|shows| PatientAccount
-  PatientProfileScreen -.->|shows| PatientProfile
-  CheckInScreen -->|contains| ArrivalTimeField
-  CheckInScreen -.->|shows| Appointment
-  EligibilityScreen -->|contains| EligibilityResultField
-  ReferralScreen -->|contains| ReferralReceivedField
-  BillCalculationScreen -->|contains| ChargeCodeField
-  PaymentWindowScreen -->|contains| PaymentAmountField
-  KioskScreen -->|contains| KioskReferenceField
-  ArrivalStep -.->|covers| VerifyArrival
-  ArrivalStep -.->|precedes| EligibilityStep
-  EligibilityStep -.->|branches| ReferralStep
-  EligibilityStep -.->|covers| CheckInPatient
-  EligibilityStep -.->|covers| ReceiveEligibilityValid
-  EligibilityStep -.->|covers| ReceiveEligibilityInvalid
-  EligibilityStep -.->|covers| ReceiveEligibilityNoInfo
-  EligibilityStep -.->|covers| RecheckEligibility
-  EligibilityStep -.->|excepts| DeclarationStep
-  EligibilityStep -.->|precedes| RoomingStep
-  DeclarationStep -.->|covers| RecordEligibilityDeclaration
-  DeclarationStep -.->|covers| ConfirmEligibilityInOutageMode
-  DeclarationStep -.->|precedes| RoomingStep
-  CreateStatementStep -.->|covers| MonthlyClaimCreation
-  CreateStatementStep -.->|covers| GenerateClaimStatement
-  CreateStatementStep -.->|precedes| InspectStep
-  ReferralStep -.->|covers| ReceiveReferralLetter
-  ReferralStep -.->|precedes| RoomingStep
-  RoomingStep -.->|covers| AssignRoom
-  CalculationStep -.->|covers| CalculateVisitBill
-  CalculationStep -.->|covers| ApplySelectedTreatmentFee
-  CalculationStep -.->|precedes| CallStep
-  CallStep -.->|branches| KioskStep
-  CallStep -.->|covers| CallPatientForPayment
-  CallStep -.->|precedes| WindowStep
-  WindowStep -.->|covers| SettleAtWindow
-  WindowStep -.->|precedes| ReceiptStep
-  KioskStep -.->|covers| EvPaymentSettled
-  KioskStep -.->|covers| SettleAtKiosk
-  KioskStep -.->|precedes| ReceiptStep
-  ReceiptStep -.->|covers| IssueReceipt
-  InspectStep -.->|branches| HoldStep
-  InspectStep -.->|covers| InspectClaimStatement
-  InspectStep -.->|precedes| SubmitStep
-  HoldStep -.->|covers| HoldClaimStatement
-  HoldStep -.->|covers| ReleaseHeldStatement
-  HoldStep -.->|repeats| InspectStep
-  SubmitStep -.->|covers| MonthlyClaimDeadline
-  SubmitStep -.->|covers| SubmitClaimStatements
-  SubmitStep -.->|excepts| ReceiptErrorStep
-  SubmitStep -.->|precedes| ReviewStep
-  ReceiptErrorStep -.->|covers| ErrorResendWindow
-  ReceiptErrorStep -.->|covers| RecordReceiptError
-  ReceiptErrorStep -.->|covers| ResendErroredStatement
-  ReceiptErrorStep -.->|repeats| SubmitStep
-  ReviewStep -.->|branches| AssessStep
-  ReviewStep -.->|covers| ReceiveClaimAccepted
-  ReviewStep -.->|covers| ReviewClaimTransfer
-  ReviewStep -.->|excepts| ReturnStep
-  ReviewStep -.->|precedes| PaidStep
-  ReturnStep -.->|covers| RecordClaimReturn
-  ReturnStep -.->|covers| CorrectReturnedStatement
-  ReturnStep -.->|repeats| InspectStep
-  AssessStep -.->|covers| RecordClaimAssessment
-  AssessStep -.->|covers| RequestReexamination
-  AssessStep -.->|precedes| PaidStep
-  PaidStep -.->|covers| PostPayment
-  IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
-  EligibilityBatchInquiry -.->|triggers| BatchVerifyEligibility
-  MonthlyClaimCreation -.->|triggers| GenerateClaimStatement
-  MonthlyClaimDeadline -.->|triggers| SubmitClaimStatements
-  ErrorResendWindow -.->|triggers| ResendErroredStatement
-  ReturnDownloadCheck -.->|triggers| RecordClaimReturn
-  ReceivablesMonthlyReview -.->|triggers| ReconcileBalance
-  InspectClaimStatement -.->|displays| ClaimScreen
-  InspectClaimStatement -.->|invokes| ClaimEditApi
-  InspectClaimStatement -.->|requires_medium| BillingWorkstation
-  InspectClaimStatement -.->|requires_permission| BillingClaimWrite
-  HoldClaimStatement -.->|displays| ClaimScreen
-  HoldClaimStatement -.->|invokes| ClaimEditApi
-  HoldClaimStatement -.->|requires_medium| BillingWorkstation
-  HoldClaimStatement -.->|requires_permission| BillingClaimWrite
-  ReleaseHeldStatement -.->|displays| ClaimScreen
-  ReleaseHeldStatement -.->|invokes| ClaimEditApi
-  ReleaseHeldStatement -.->|requires_medium| BillingWorkstation
-  ReleaseHeldStatement -.->|requires_permission| BillingClaimWrite
-  SubmitClaimStatements -.->|displays| ClaimScreen
-  SubmitClaimStatements -.->|invokes| SubmitClaimApi
-  SubmitClaimStatements -.->|raises| EvClaimStatementsSubmitted
-  SubmitClaimStatements -.->|requires_medium| OnlineClaimTerminal
-  SubmitClaimStatements -.->|requires_permission| BillingClaimWrite
-  RecordReceiptError -.->|displays| ClaimScreen
-  RecordReceiptError -.->|invokes| ClaimResultApi
-  RecordReceiptError -.->|requires_medium| OnlineClaimTerminal
-  RecordReceiptError -.->|requires_permission| BillingClaimWrite
-  ResendErroredStatement -.->|displays| ClaimScreen
-  ResendErroredStatement -.->|invokes| SubmitClaimApi
-  ResendErroredStatement -.->|requires_medium| OnlineClaimTerminal
-  ResendErroredStatement -.->|requires_permission| BillingClaimWrite
-  ReceiveClaimAccepted -.->|displays| ClaimScreen
-  ReceiveClaimAccepted -.->|invokes| ClaimResultApi
-  ReceiveClaimAccepted -.->|requires_medium| OnlineClaimTerminal
-  ReceiveClaimAccepted -.->|requires_permission| BillingClaimWrite
-  ReviewClaimTransfer -.->|displays| ClaimScreen
-  ReviewClaimTransfer -.->|reads| ClaimStatement
-  ReviewClaimTransfer -.->|requires_medium| OnlineClaimTerminal
-  ReviewClaimTransfer -.->|requires_permission| BillingClaimWrite
-  RecordClaimReturn -.->|displays| ClaimScreen
-  RecordClaimReturn -.->|invokes| ClaimResultApi
-  RecordClaimReturn -.->|requires_medium| OnlineClaimTerminal
-  RecordClaimReturn -.->|requires_permission| BillingClaimWrite
-  CorrectReturnedStatement -.->|displays| ClaimScreen
-  CorrectReturnedStatement -.->|invokes| ClaimEditApi
-  CorrectReturnedStatement -.->|requires_medium| BillingWorkstation
-  CorrectReturnedStatement -.->|requires_permission| BillingClaimWrite
-  RecordClaimAssessment -.->|displays| ClaimScreen
-  RecordClaimAssessment -.->|invokes| ClaimResultApi
-  RecordClaimAssessment -.->|requires_medium| OnlineClaimTerminal
-  RecordClaimAssessment -.->|requires_permission| BillingClaimWrite
-  RequestReexamination -.->|displays| ClaimScreen
-  RequestReexamination -.->|invokes| SubmitClaimApi
-  RequestReexamination -.->|requires_medium| OnlineClaimTerminal
-  RequestReexamination -.->|requires_permission| BillingClaimWrite
-  PostPayment -.->|displays| PaymentPostingScreen
-  PostPayment -.->|invokes| PaymentPostApi
-  PostPayment -.->|requires_medium| BillingWorkstation
-  PostPayment -.->|requires_permission| PaymentPost
-  ReconcileBalance -.->|displays| BalanceScreen
-  ReconcileBalance -.->|invokes| BalanceApi
-  ReconcileBalance -.->|requires_medium| BillingWorkstation
-  ReconcileBalance -.->|requires_permission| PaymentPost
-  VoidCharge -.->|displays| ChargeWorklistScreen
-  VoidCharge -.->|requires_medium| BillingWorkstation
-  VoidCharge -.->|requires_permission| BillingClaimWrite
-  VoidCharge -.->|updates| Charge
-  OpenEncounter -.->|displays| EncounterWorkspaceScreen
-  OpenEncounter -.->|invokes| OpenEncounterApi
-  OpenEncounter -.->|requires_medium| NurseStation
-  OpenEncounter -.->|requires_permission| EncounterOpen
-  RecordVitals -.->|displays| VitalsScreen
-  RecordVitals -.->|invokes| RecordVitalsApi
-  RecordVitals -.->|requires_medium| NurseStation
-  RecordVitals -.->|requires_permission| VitalsRecord
-  DocumentAssessment -.->|displays| DiagnosisScreen
-  DocumentAssessment -.->|invokes| DocumentAssessmentApi
-  DocumentAssessment -.->|requires_medium| ClinicalWorkstation
-  DocumentAssessment -.->|requires_permission| ClinicalDocument
-  SignEncounter -.->|displays| EncounterWorkspaceScreen
-  SignEncounter -.->|invokes| SignEncounterApi
-  SignEncounter -.->|raises| EvEncounterSigned
-  SignEncounter -.->|requires_medium| ClinicalWorkstation
-  SignEncounter -.->|requires_permission| EncounterSign
-  AmendEncounter -.->|displays| EncounterWorkspaceScreen
-  AmendEncounter -.->|invokes| AmendEncounterApi
-  AmendEncounter -.->|requires_medium| ClinicalWorkstation
-  AmendEncounter -.->|requires_permission| EncounterSign
-  IssueReferralLetter -.->|displays| ReferralLetterScreen
-  IssueReferralLetter -.->|invokes| IssueReferralLetterApi
-  IssueReferralLetter -.->|requires_medium| ClinicalWorkstation
-  IssueReferralLetter -.->|requires_permission| ReferralManage
-  CompleteConsultation -.->|displays| EncounterWorkspaceScreen
-  CompleteConsultation -.->|invokes| CompleteConsultationApi
-  CompleteConsultation -.->|requires_medium| NurseStation
-  CompleteConsultation -.->|requires_permission| EncounterOpen
-  CreateCarePlan -.->|displays| CarePlanScreen
-  CreateCarePlan -.->|invokes| CreateCarePlanApi
-  CreateCarePlan -.->|requires_medium| CareCoordinationConsole
-  CreateCarePlan -.->|requires_permission| FollowUpManage
-  SendFollowUpMessage -.->|displays| PatientMessageScreen
-  SendFollowUpMessage -.->|invokes| SendFollowUpMessageApi
-  SendFollowUpMessage -.->|requires_medium| CareCoordinationConsole
-  SendFollowUpMessage -.->|requires_permission| PatientMessageSend
-  ReviewPatientResponse -.->|displays| CarePlanScreen
-  ReviewPatientResponse -.->|requires_medium| CareCoordinationConsole
-  ReviewPatientResponse -.->|requires_permission| FollowUpManage
-  ReviewPatientResponse -.->|updates| CarePlan
-  ReviewPatientResponse -.->|updates| PatientMessage
-  ScheduleFollowUpVisit -.->|displays| FollowUpScheduleScreen
-  ScheduleFollowUpVisit -.->|invokes| FollowUpScheduleApi
-  ScheduleFollowUpVisit -.->|raises| EvAppointmentScheduled
-  ScheduleFollowUpVisit -.->|requires_medium| CareCoordinationConsole
-  ScheduleFollowUpVisit -.->|requires_permission| FollowUpManage
-  ScheduleFollowUpVisit -.->|requires_permission| ScheduleWrite
-  CloseCarePlan -.->|displays| CarePlanScreen
-  CloseCarePlan -.->|requires_medium| CareCoordinationConsole
-  CloseCarePlan -.->|requires_permission| FollowUpManage
-  CloseCarePlan -.->|updates| CarePlan
-  NotifyPatientResult -.->|displays| PatientMessageScreen
-  NotifyPatientResult -.->|invokes| NotifyPatientResultApi
-  NotifyPatientResult -.->|requires_medium| CareCoordinationConsole
-  NotifyPatientResult -.->|requires_permission| PatientMessageSend
-  PlaceLabOrder -.->|displays| OrderEntryScreen
-  PlaceLabOrder -.->|invokes| OrderEntryApi
-  PlaceLabOrder -.->|requires_medium| ClinicalWorkstation
-  PlaceLabOrder -.->|requires_permission| ClinicalOrderWrite
-  EnterProxyOrder -.->|displays| OrderEntryScreen
-  EnterProxyOrder -.->|invokes| ProxyOrderApi
-  EnterProxyOrder -.->|requires_medium| ClinicalWorkstation
-  EnterProxyOrder -.->|requires_permission| ProxyOrderEntry
-  ConfirmProxyOrder -.->|displays| OrderEntryScreen
-  ConfirmProxyOrder -.->|invokes| ConfirmOrderApi
-  ConfirmProxyOrder -.->|requires_medium| ClinicalWorkstation
-  ConfirmProxyOrder -.->|requires_permission| ClinicalOrderWrite
-  PrintSpecimenLabel -.->|displays| SpecimenScreen
-  PrintSpecimenLabel -.->|reads| ClinicalOrder
-  PrintSpecimenLabel -.->|requires_medium| NurseStation
-  PrintSpecimenLabel -.->|requires_permission| ClinicalOrderWrite
-  CollectSpecimen -.->|displays| SpecimenScreen
-  CollectSpecimen -.->|invokes| CollectSpecimenApi
-  CollectSpecimen -.->|requires_medium| NurseStation
-  CollectSpecimen -.->|requires_permission| ClinicalOrderWrite
-  RegisterPerformedProcedure -.->|displays| SpecimenScreen
-  RegisterPerformedProcedure -.->|invokes| PerformedProcedureApi
-  RegisterPerformedProcedure -.->|requires_medium| NurseStation
-  RegisterPerformedProcedure -.->|requires_permission| ClinicalOrderWrite
-  ReceiveLabResult -.->|displays| ResultReviewScreen
-  ReceiveLabResult -.->|invokes| ReceiveLabResultApi
-  ReceiveLabResult -.->|requires_medium| NurseStation
-  ReceiveLabResult -.->|requires_permission| LabResultManage
-  ReviewLabResult -.->|displays| ResultReviewScreen
-  ReviewLabResult -.->|invokes| ResultReviewApi
-  ReviewLabResult -.->|raises| EvClinicalOrderReviewed
-  ReviewLabResult -.->|requires_medium| ClinicalWorkstation
-  ReviewLabResult -.->|requires_permission| LabResultManage
-  NotifyCriticalResult -.->|displays| CriticalNoticeScreen
-  NotifyCriticalResult -.->|invokes| CriticalNoticeApi
-  NotifyCriticalResult -.->|requires_medium| ClinicalWorkstation
-  NotifyCriticalResult -.->|requires_permission| LabResultManage
-  NotifyCriticalResult -.->|requires_permission| PatientMessageSend
-  CancelClinicalOrder -.->|displays| OrderEntryScreen
-  CancelClinicalOrder -.->|requires_medium| ClinicalWorkstation
-  CancelClinicalOrder -.->|requires_permission| ClinicalOrderWrite
-  CancelClinicalOrder -.->|updates| ClinicalOrder
-  SearchPatient -.->|displays| PatientSearchScreen
-  SearchPatient -.->|invokes| SearchPatientApi
-  SearchPatient -.->|requires_medium| FrontDeskTerminal
-  SearchPatient -.->|requires_permission| PatientProfileRead
-  RegisterPatient -.->|displays| PatientProfileScreen
-  RegisterPatient -.->|invokes| RegisterPatientApi
-  RegisterPatient -.->|requires_medium| FrontDeskTerminal
-  RegisterPatient -.->|requires_permission| PatientProfileWrite
-  UpdateDemographics -.->|displays| PatientProfileScreen
-  UpdateDemographics -.->|invokes| UpdateDemographicsApi
-  UpdateDemographics -.->|requires_medium| FrontDeskTerminal
-  UpdateDemographics -.->|requires_permission| PatientProfileWrite
-  VerifyInsurance -.->|displays| InsuranceScreen
-  VerifyInsurance -.->|invokes| EligibilityApi
-  VerifyInsurance -.->|requires_medium| FrontDeskTerminal
-  VerifyInsurance -.->|requires_permission| InsuranceVerify
-  CaptureConsent -.->|displays| ConsentScreen
-  CaptureConsent -.->|invokes| ConsentApi
-  CaptureConsent -.->|requires_medium| PatientMobile
-  CaptureConsent -.->|requires_permission| ConsentCapture
-  SendIntakeForms -.->|displays| IntakePortalScreen
-  SendIntakeForms -.->|invokes| IntakeMessagingApi
-  SendIntakeForms -.->|requires_medium| FrontDeskTerminal
-  SendIntakeForms -.->|requires_permission| IntakeManage
-  CompleteIntakeForms -.->|displays| IntakePortalScreen
-  CompleteIntakeForms -.->|requires_medium| PatientMobile
-  CompleteIntakeForms -.->|requires_permission| ConsentCapture
-  CompleteIntakeForms -.->|updates| IntakePacket
-  ExpireIntakeForms -.->|displays| IntakePortalScreen
-  ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
-  ExpireIntakeForms -.->|requires_permission| IntakeManage
-  ExpireIntakeForms -.->|updates| IntakePacket
-  MergeDuplicatePatient -.->|displays| PatientProfileScreen
-  MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
-  MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
-  MergeDuplicatePatient -.->|updates| PatientAccount
-  ArchivePatient -.->|displays| PatientProfileScreen
-  ArchivePatient -.->|requires_medium| FrontDeskTerminal
-  ArchivePatient -.->|requires_permission| PatientProfileWrite
-  ArchivePatient -.->|updates| PatientAccount
-  VerifyArrival -.->|displays| CheckInScreen
-  VerifyArrival -.->|invokes| VerifyArrivalApi
-  VerifyArrival -.->|requires_medium| FrontDeskTerminal
-  VerifyArrival -.->|requires_permission| VisitCheckIn
-  CheckInPatient -.->|displays| CheckInScreen
-  CheckInPatient -.->|invokes| CheckInPatientApi
-  CheckInPatient -.->|invokes| OnlineEligibilityApi
-  CheckInPatient -.->|raises| EvAppointmentCheckedIn
-  CheckInPatient -.->|requires_medium| FrontDeskTerminal
-  CheckInPatient -.->|requires_permission| VisitCheckIn
-  SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
-  SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
-  SendAppointmentNotice -.->|requires_medium| FrontDeskTerminal
-  SendAppointmentNotice -.->|requires_permission| ScheduleRead
-  BatchVerifyEligibility -.->|displays| EligibilityScreen
-  BatchVerifyEligibility -.->|invokes| OnlineEligibilityApi
-  ReceiveEligibilityValid -.->|displays| EligibilityScreen
-  ReceiveEligibilityValid -.->|invokes| EligibilityResultApi
-  ReceiveEligibilityInvalid -.->|displays| EligibilityScreen
-  ReceiveEligibilityInvalid -.->|invokes| EligibilityResultApi
-  ReceiveEligibilityNoInfo -.->|displays| EligibilityScreen
-  ReceiveEligibilityNoInfo -.->|invokes| EligibilityResultApi
-  RecheckEligibility -.->|displays| EligibilityScreen
-  RecheckEligibility -.->|invokes| EligibilityResultApi
-  RecheckEligibility -.->|requires_medium| FrontDeskTerminal
-  RecheckEligibility -.->|requires_permission| InsuranceVerify
-  RecordEligibilityDeclaration -.->|displays| EligibilityScreen
-  RecordEligibilityDeclaration -.->|invokes| EligibilityResultApi
-  RecordEligibilityDeclaration -.->|requires_medium| FrontDeskTerminal
-  RecordEligibilityDeclaration -.->|requires_permission| InsuranceVerify
-  ConfirmEligibilityInOutageMode -.->|displays| EligibilityScreen
-  ConfirmEligibilityInOutageMode -.->|invokes| EligibilityResultApi
-  ConfirmEligibilityInOutageMode -.->|requires_medium| FrontDeskTerminal
-  ConfirmEligibilityInOutageMode -.->|requires_permission| InsuranceVerify
-  ReceiveReferralLetter -.->|displays| ReferralScreen
-  ReceiveReferralLetter -.->|invokes| ReferralLetterApi
-  ReceiveReferralLetter -.->|requires_medium| FrontDeskTerminal
-  ReceiveReferralLetter -.->|requires_permission| ReferralManage
-  AssignRoom -.->|displays| RoomBoardScreen
-  AssignRoom -.->|invokes| AssignRoomApi
-  AssignRoom -.->|requires_medium| NurseStation
-  AssignRoom -.->|requires_permission| RoomAssign
-  PrepareEncounter -.->|displays| CheckInScreen
-  PrepareEncounter -.->|invokes| PrepareEncounterApi
-  PrepareEncounter -.->|requires_medium| NurseStation
-  PrepareEncounter -.->|requires_permission| EncounterOpen
-  CreateCharge -.->|displays| ChargeWorklistScreen
-  CreateCharge -.->|invokes| CreateChargeApi
-  CreateCharge -.->|requires_medium| ClinicalWorkstation
-  CalculateVisitBill -.->|displays| BillCalculationScreen
-  CalculateVisitBill -.->|invokes| CalculateVisitBillApi
-  CalculateVisitBill -.->|raises| EvBillCalculated
-  CalculateVisitBill -.->|requires_medium| BillingWorkstation
-  CalculateVisitBill -.->|requires_permission| BillCalculate
-  ApplySelectedTreatmentFee -.->|displays| BillCalculationScreen
-  ApplySelectedTreatmentFee -.->|invokes| SelectedFeeApi
-  ApplySelectedTreatmentFee -.->|requires_medium| BillingWorkstation
-  ApplySelectedTreatmentFee -.->|requires_permission| BillCalculate
-  CallPatientForPayment -.->|displays| PaymentWindowScreen
-  CallPatientForPayment -.->|reads| Appointment
-  CallPatientForPayment -.->|requires_medium| AccountsWindow
-  SettleAtWindow -.->|displays| PaymentWindowScreen
-  SettleAtWindow -.->|invokes| SettlementApi
-  SettleAtWindow -.->|requires_medium| AccountsWindow
-  SettleAtWindow -.->|requires_permission| PaymentCollect
-  SettleAtKiosk -.->|displays| KioskScreen
-  SettleAtKiosk -.->|invokes| SettlementApi
-  SettleAtKiosk -.->|requires_medium| PaymentKiosk
-  IssueReceipt -.->|displays| PaymentWindowScreen
-  IssueReceipt -.->|invokes| ReceiptApi
-  IssueReceipt -.->|requires_medium| AccountsWindow
-  IssueReceipt -.->|requires_permission| PaymentCollect
-  GenerateClaimStatement -.->|displays| ClaimScreen
-  GenerateClaimStatement -.->|invokes| GenerateClaimApi
-  GenerateClaimStatement -.->|requires_medium| BillingWorkstation
-  GenerateClaimStatement -.->|requires_permission| BillingClaimWrite
+  api__AmendEncounterApi -.->|requires_permission| permission__EncounterSign
+  api__AmendEncounterApi -.->|updates| entity__Encounter
+  api__AppointmentNoticeApi -.->|creates| entity__Notification
+  api__AppointmentNoticeApi -.->|creates| entity__PatientMessage
+  api__AssignRoomApi -.->|requires_permission| permission__RoomAssign
+  api__AssignRoomApi -.->|updates| entity__Appointment
+  api__AssignRoomApi -.->|updates| entity__Room
+  api__BalanceApi -.->|reads| entity__PaymentTransaction
+  api__BalanceApi -.->|requires_permission| permission__PaymentPost
+  api__BalanceApi -.->|updates| entity__AccountBalance
+  api__CalculateVisitBillApi -.->|reads| entity__Charge
+  api__CalculateVisitBillApi -.->|reads| entity__InsurancePolicy
+  api__CalculateVisitBillApi -.->|requires_permission| permission__BillCalculate
+  api__CalculateVisitBillApi -.->|updates| entity__Appointment
+  api__CheckInPatientApi -.->|requires_permission| permission__VisitCheckIn
+  api__CheckInPatientApi -.->|updates| entity__Appointment
+  api__CheckInPatientApi -.->|updates| entity__PatientAccount
+  api__ClaimEditApi -.->|requires_permission| permission__BillingClaimWrite
+  api__ClaimEditApi -.->|updates| entity__ClaimStatement
+  api__ClaimResultApi -.->|requires_permission| permission__BillingClaimWrite
+  api__ClaimResultApi -.->|updates| entity__ClaimStatement
+  api__CollectSpecimenApi -.->|requires_permission| permission__ClinicalOrderWrite
+  api__CollectSpecimenApi -.->|updates| entity__ClinicalOrder
+  api__CompleteConsultationApi -.->|requires_permission| permission__EncounterOpen
+  api__CompleteConsultationApi -.->|updates| entity__Appointment
+  api__CompleteConsultationApi -.->|updates| entity__Room
+  api__ConfirmOrderApi -.->|requires_permission| permission__ClinicalOrderWrite
+  api__ConfirmOrderApi -.->|updates| entity__ClinicalOrder
+  api__ConsentApi -.->|creates| entity__ConsentRecord
+  api__ConsentApi -.->|requires_permission| permission__ConsentCapture
+  api__CreateCarePlanApi -.->|creates| entity__CarePlan
+  api__CreateCarePlanApi -.->|reads| entity__Encounter
+  api__CreateCarePlanApi -.->|requires_permission| permission__FollowUpManage
+  api__CreateChargeApi -.->|creates| entity__Charge
+  api__CreateChargeApi -.->|reads| entity__Encounter
+  api__CriticalNoticeApi -.->|creates| entity__Notification
+  api__CriticalNoticeApi -.->|creates| entity__PatientMessage
+  api__CriticalNoticeApi -.->|requires_permission| permission__PatientMessageSend
+  api__DocumentAssessmentApi -.->|creates| entity__Diagnosis
+  api__DocumentAssessmentApi -.->|requires_permission| permission__ClinicalDocument
+  api__DocumentAssessmentApi -.->|updates| entity__Encounter
+  api__EligibilityApi -.->|creates| entity__EligibilityCheck
+  api__EligibilityApi -.->|reads| entity__InsurancePolicy
+  api__EligibilityApi -.->|requires_permission| permission__InsuranceVerify
+  api__EligibilityApi -.->|updates| entity__InsurancePolicy
+  api__EligibilityResultApi -.->|updates| entity__EligibilityCheck
+  api__FollowUpScheduleApi -.->|creates| entity__Appointment
+  api__FollowUpScheduleApi -.->|requires_permission| permission__ScheduleWrite
+  api__FollowUpScheduleApi -.->|updates| entity__ProviderSchedule
+  api__GenerateClaimApi -.->|creates| entity__ClaimStatement
+  api__GenerateClaimApi -.->|reads| entity__Charge
+  api__GenerateClaimApi -.->|reads| entity__InsurancePolicy
+  api__GenerateClaimApi -.->|requires_permission| permission__BillingClaimWrite
+  api__IntakeMessagingApi -.->|creates| entity__IntakePacket
+  api__IntakeMessagingApi -.->|creates| entity__PatientMessage
+  api__IntakeMessagingApi -.->|requires_permission| permission__PatientMessageSend
+  api__IssueReferralLetterApi -.->|creates| entity__ReferralLetter
+  api__IssueReferralLetterApi -.->|reads| entity__Encounter
+  api__IssueReferralLetterApi -.->|requires_permission| permission__ReferralManage
+  api__NotifyPatientResultApi -.->|creates| entity__Notification
+  api__NotifyPatientResultApi -.->|requires_permission| permission__PatientMessageSend
+  api__OnlineEligibilityApi -.->|creates| entity__EligibilityCheck
+  api__OnlineEligibilityApi -.->|reads| entity__InsurancePolicy
+  api__OnlineEligibilityApi -.->|requires_permission| permission__InsuranceVerify
+  api__OpenEncounterApi -.->|creates| entity__Encounter
+  api__OpenEncounterApi -.->|requires_permission| permission__EncounterOpen
+  api__OpenEncounterApi -.->|updates| entity__Appointment
+  api__OrderEntryApi -.->|creates| entity__ClinicalOrder
+  api__OrderEntryApi -.->|reads| entity__Encounter
+  api__OrderEntryApi -.->|requires_permission| permission__ClinicalOrderWrite
+  api__PaymentPostApi -.->|requires_permission| permission__PaymentPost
+  api__PaymentPostApi -.->|updates| entity__ClaimStatement
+  api__PerformedProcedureApi -.->|creates| entity__Charge
+  api__PerformedProcedureApi -.->|reads| entity__ClinicalOrder
+  api__PerformedProcedureApi -.->|reads| entity__Encounter
+  api__PerformedProcedureApi -.->|requires_permission| permission__ClinicalOrderWrite
+  api__PrepareEncounterApi -.->|reads| entity__Appointment
+  api__PrepareEncounterApi -.->|reads| entity__PatientProfile
+  api__PrepareEncounterApi -.->|requires_permission| permission__EncounterOpen
+  api__ProxyOrderApi -.->|creates| entity__ClinicalOrder
+  api__ProxyOrderApi -.->|reads| entity__Encounter
+  api__ProxyOrderApi -.->|requires_permission| permission__ProxyOrderEntry
+  api__ReceiptApi -.->|reads| entity__Charge
+  api__ReceiptApi -.->|reads| entity__PaymentTransaction
+  api__ReceiptApi -.->|requires_permission| permission__PaymentCollect
+  api__ReceiptApi -.->|updates| entity__Appointment
+  api__ReceiveLabResultApi -.->|creates| entity__LabResult
+  api__ReceiveLabResultApi -.->|requires_permission| permission__LabResultManage
+  api__ReceiveLabResultApi -.->|updates| entity__ClinicalOrder
+  api__RecordVitalsApi -.->|creates| entity__VitalSign
+  api__RecordVitalsApi -.->|requires_permission| permission__VitalsRecord
+  api__RecordVitalsApi -.->|updates| entity__Encounter
+  api__ReferralLetterApi -.->|creates| entity__ReferralLetter
+  api__ReferralLetterApi -.->|requires_permission| permission__ReferralManage
+  api__RegisterPatientApi -.->|creates| entity__PatientAccount
+  api__RegisterPatientApi -.->|creates| entity__PatientProfile
+  api__RegisterPatientApi -.->|requires_permission| permission__PatientProfileWrite
+  api__ResultReviewApi -.->|requires_permission| permission__LabResultManage
+  api__ResultReviewApi -.->|updates| entity__ClinicalOrder
+  api__ResultReviewApi -.->|updates| entity__LabResult
+  api__SearchPatientApi -.->|reads| entity__PatientAccount
+  api__SearchPatientApi -.->|reads| entity__PatientProfile
+  api__SearchPatientApi -.->|requires_permission| permission__PatientProfileRead
+  api__SelectedFeeApi -.->|creates| entity__Charge
+  api__SelectedFeeApi -.->|reads| entity__Encounter
+  api__SelectedFeeApi -.->|reads| entity__SelectedTreatmentFeeSetting
+  api__SelectedFeeApi -.->|requires_permission| permission__BillCalculate
+  api__SendFollowUpMessageApi -.->|creates| entity__PatientMessage
+  api__SendFollowUpMessageApi -.->|requires_permission| permission__PatientMessageSend
+  api__SettlementApi -.->|creates| entity__PaymentTransaction
+  api__SettlementApi -.->|requires_permission| permission__PaymentCollect
+  api__SettlementApi -.->|updates| entity__AccountBalance
+  api__SettlementApi -.->|updates| entity__Appointment
+  api__SignEncounterApi -.->|requires_permission| permission__EncounterSign
+  api__SignEncounterApi -.->|updates| entity__Encounter
+  api__SubmitClaimApi -.->|requires_permission| permission__BillingClaimWrite
+  api__SubmitClaimApi -.->|updates| entity__ClaimStatement
+  api__UpdateDemographicsApi -.->|requires_permission| permission__PatientProfileWrite
+  api__UpdateDemographicsApi -.->|updates| entity__PatientProfile
+  api__VerifyArrivalApi -.->|reads| entity__Appointment
+  api__VerifyArrivalApi -.->|reads| entity__InsurancePolicy
+  api__VerifyArrivalApi -.->|reads| entity__PatientAccount
+  api__VerifyArrivalApi -.->|requires_permission| permission__VisitCheckIn
+  buc__BucBillingClaims -->|belongs| business__RevenueCycle
+  buc__BucBillingClaims -->|contains| flow__ClaimCycleFlow
+  buc__BucBillingClaims -->|contains| usecase__CorrectReturnedStatement
+  buc__BucBillingClaims -->|contains| usecase__CreateCharge
+  buc__BucBillingClaims -->|contains| usecase__GenerateClaimStatement
+  buc__BucBillingClaims -->|contains| usecase__HoldClaimStatement
+  buc__BucBillingClaims -->|contains| usecase__InspectClaimStatement
+  buc__BucBillingClaims -->|contains| usecase__PostPayment
+  buc__BucBillingClaims -->|contains| usecase__ReceiveClaimAccepted
+  buc__BucBillingClaims -->|contains| usecase__ReconcileBalance
+  buc__BucBillingClaims -->|contains| usecase__RecordClaimAssessment
+  buc__BucBillingClaims -->|contains| usecase__RecordClaimReturn
+  buc__BucBillingClaims -->|contains| usecase__RecordReceiptError
+  buc__BucBillingClaims -->|contains| usecase__ReleaseHeldStatement
+  buc__BucBillingClaims -->|contains| usecase__RequestReexamination
+  buc__BucBillingClaims -->|contains| usecase__ResendErroredStatement
+  buc__BucBillingClaims -->|contains| usecase__ReviewClaimTransfer
+  buc__BucBillingClaims -->|contains| usecase__SubmitClaimStatements
+  buc__BucBillingClaims -->|contains| usecase__VoidCharge
+  buc__BucClinicalEncounter -->|belongs| business__CareDelivery
+  buc__BucClinicalEncounter -->|contains| usecase__AmendEncounter
+  buc__BucClinicalEncounter -->|contains| usecase__CompleteConsultation
+  buc__BucClinicalEncounter -->|contains| usecase__DocumentAssessment
+  buc__BucClinicalEncounter -->|contains| usecase__IssueReferralLetter
+  buc__BucClinicalEncounter -->|contains| usecase__OpenEncounter
+  buc__BucClinicalEncounter -->|contains| usecase__RecordVitals
+  buc__BucClinicalEncounter -->|contains| usecase__SignEncounter
+  buc__BucFollowupCare -->|belongs| business__PatientAccess
+  buc__BucFollowupCare -->|contains| usecase__CloseCarePlan
+  buc__BucFollowupCare -->|contains| usecase__CreateCarePlan
+  buc__BucFollowupCare -->|contains| usecase__NotifyPatientResult
+  buc__BucFollowupCare -->|contains| usecase__ReviewPatientResponse
+  buc__BucFollowupCare -->|contains| usecase__ScheduleFollowUpVisit
+  buc__BucFollowupCare -->|contains| usecase__SendFollowUpMessage
+  buc__BucOrdersResults -->|belongs| business__CareDelivery
+  buc__BucOrdersResults -->|contains| usecase__CancelClinicalOrder
+  buc__BucOrdersResults -->|contains| usecase__CollectSpecimen
+  buc__BucOrdersResults -->|contains| usecase__ConfirmProxyOrder
+  buc__BucOrdersResults -->|contains| usecase__EnterProxyOrder
+  buc__BucOrdersResults -->|contains| usecase__NotifyCriticalResult
+  buc__BucOrdersResults -->|contains| usecase__PlaceLabOrder
+  buc__BucOrdersResults -->|contains| usecase__PrintSpecimenLabel
+  buc__BucOrdersResults -->|contains| usecase__ReceiveLabResult
+  buc__BucOrdersResults -->|contains| usecase__RegisterPerformedProcedure
+  buc__BucOrdersResults -->|contains| usecase__ReviewLabResult
+  buc__BucPatientOnboarding -->|belongs| business__PatientAccess
+  buc__BucPatientOnboarding -->|contains| usecase__ArchivePatient
+  buc__BucPatientOnboarding -->|contains| usecase__CaptureConsent
+  buc__BucPatientOnboarding -->|contains| usecase__CompleteIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__ExpireIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__MergeDuplicatePatient
+  buc__BucPatientOnboarding -->|contains| usecase__RegisterPatient
+  buc__BucPatientOnboarding -->|contains| usecase__SearchPatient
+  buc__BucPatientOnboarding -->|contains| usecase__SendIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__UpdateDemographics
+  buc__BucPatientOnboarding -->|contains| usecase__VerifyInsurance
+  buc__BucVisitCheckIn -->|belongs| business__PatientAccess
+  buc__BucVisitCheckIn -->|contains| flow__VisitCheckInFlow
+  buc__BucVisitCheckIn -->|contains| usecase__AssignRoom
+  buc__BucVisitCheckIn -->|contains| usecase__BatchVerifyEligibility
+  buc__BucVisitCheckIn -->|contains| usecase__CheckInPatient
+  buc__BucVisitCheckIn -->|contains| usecase__ConfirmEligibilityInOutageMode
+  buc__BucVisitCheckIn -->|contains| usecase__PrepareEncounter
+  buc__BucVisitCheckIn -->|contains| usecase__ReceiveEligibilityInvalid
+  buc__BucVisitCheckIn -->|contains| usecase__ReceiveEligibilityNoInfo
+  buc__BucVisitCheckIn -->|contains| usecase__ReceiveEligibilityValid
+  buc__BucVisitCheckIn -->|contains| usecase__ReceiveReferralLetter
+  buc__BucVisitCheckIn -->|contains| usecase__RecheckEligibility
+  buc__BucVisitCheckIn -->|contains| usecase__RecordEligibilityDeclaration
+  buc__BucVisitCheckIn -->|contains| usecase__VerifyArrival
+  buc__BucVisitPayment -->|belongs| business__RevenueCycle
+  buc__BucVisitPayment -->|contains| flow__VisitPaymentFlow
+  buc__BucVisitPayment -->|contains| usecase__ApplySelectedTreatmentFee
+  buc__BucVisitPayment -->|contains| usecase__CalculateVisitBill
+  buc__BucVisitPayment -->|contains| usecase__CallPatientForPayment
+  buc__BucVisitPayment -->|contains| usecase__IssueReceipt
+  buc__BucVisitPayment -->|contains| usecase__SettleAtKiosk
+  buc__BucVisitPayment -->|contains| usecase__SettleAtWindow
+  condition__BookedPatient -.->|applies_to| usecase__BatchVerifyEligibility
+  condition__BookedPatient -.->|combines| entity__Appointment
+  %% derived condition__BookedPatient -> entity__Appointment from holds
+  condition__CopayCappedAtLimit -.->|applies_to| usecase__CalculateVisitBill
+  condition__CopayCappedAtLimit -.->|combines| entity__Appointment
+  condition__CopayCappedAtLimit -.->|combines| variation__BurdenRatio
+  condition__CopayCappedAtLimit -.->|combines| variation__LimitCategory
+  condition__OrderConfirmedByPhysician -.->|applies_to| usecase__CollectSpecimen
+  condition__OrderConfirmedByPhysician -.->|combines| entity__ClinicalOrder
+  %% derived condition__OrderConfirmedByPhysician -> entity__ClinicalOrder from holds
+  condition__TransferNotPossible -.->|applies_to| usecase__RecordClaimReturn
+  condition__TransferNotPossible -.->|combines| entity__ClaimStatement
+  condition__TransferNotPossible -.->|combines| variation__PayerChange
+  condition__UnreferredFirstVisit -.->|applies_to| usecase__ApplySelectedTreatmentFee
+  condition__UnreferredFirstVisit -.->|combines| variation__ChargeKind
+  %% derived condition__UnreferredFirstVisit -> variation__ChargeKind from holds
+  condition__UnreferredFirstVisit -.->|combines| variation__ReferralCategory
+  %% derived condition__UnreferredFirstVisit -> variation__ReferralCategory from holds
+  entity__AccountBalance ---|1:1| entity__PatientAccount
+  entity__Appointment ---|N:1| entity__PatientAccount
+  entity__Appointment ---|N:1| entity__Room
+  entity__CarePlan ---|N:1| entity__Encounter
+  entity__CarePlan ---|N:1| entity__PatientAccount
+  entity__Charge ---|N:1| entity__ClaimStatement
+  entity__Charge ---|N:1| entity__Encounter
+  entity__ClaimStatement ---|N:1| entity__InsurancePolicy
+  entity__ClaimStatement ---|N:1| entity__PatientAccount
+  entity__ClinicalOrder ---|N:1| entity__Encounter
+  entity__ConsentRecord ---|N:1| entity__PatientAccount
+  entity__Diagnosis ---|N:1| entity__Encounter
+  entity__EligibilityCheck ---|N:1| entity__InsurancePolicy
+  entity__Encounter ---|1:1| entity__Appointment
+  entity__Encounter ---|N:1| entity__PatientAccount
+  entity__InsurancePolicy ---|N:1| entity__PatientAccount
+  entity__IntakePacket ---|N:1| entity__PatientAccount
+  entity__LabResult ---|1:1| entity__ClinicalOrder
+  entity__Notification ---|N:1| entity__PatientAccount
+  entity__PatientMessage ---|N:1| entity__PatientAccount
+  entity__PatientProfile ---|1:1| entity__PatientAccount
+  entity__PaymentTransaction ---|N:1| entity__Appointment
+  entity__ReferralLetter ---|N:1| entity__PatientAccount
+  entity__VitalSign ---|N:1| entity__Encounter
+  event__EvAppointmentCancelled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentCancelled -.->|triggers| usecase__SendAppointmentNotice
+  event__EvAppointmentCheckedIn -.->|triggers| buc__BucClinicalEncounter
+  event__EvAppointmentCheckedIn -.->|triggers| extsystem__OnlineEligibilitySystem
+  event__EvAppointmentCheckedIn -.->|triggers| usecase__OpenEncounter
+  event__EvAppointmentCheckedIn -.->|triggers| usecase__PrepareEncounter
+  event__EvAppointmentRescheduled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentRescheduled -.->|triggers| usecase__SendAppointmentNotice
+  event__EvAppointmentScheduled -.->|triggers| buc__BucPatientOnboarding
+  event__EvAppointmentScheduled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentScheduled -.->|triggers| usecase__SendAppointmentNotice
+  event__EvAppointmentScheduled -.->|triggers| usecase__SendIntakeForms
+  event__EvBillCalculated -.->|triggers| extsystem__PaymentGateway
+  event__EvBillCalculated -.->|triggers| usecase__CallPatientForPayment
+  event__EvClaimAccepted -.->|triggers| usecase__ReceiveClaimAccepted
+  event__EvClaimAssessed -.->|triggers| usecase__RecordClaimAssessment
+  event__EvClaimReceiptError -.->|triggers| usecase__RecordReceiptError
+  event__EvClaimReturned -.->|triggers| usecase__RecordClaimReturn
+  event__EvClaimStatementsSubmitted -.->|triggers| extsystem__ClaimsReviewOrganization
+  event__EvClaimTransferred -.->|triggers| usecase__ReviewClaimTransfer
+  event__EvClinicalOrderReviewed -.->|triggers| buc__BucFollowupCare
+  event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyCriticalResult
+  event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyPatientResult
+  event__EvEligibilityChecked -.->|triggers| usecase__ReceiveEligibilityInvalid
+  event__EvEligibilityChecked -.->|triggers| usecase__ReceiveEligibilityNoInfo
+  event__EvEligibilityChecked -.->|triggers| usecase__ReceiveEligibilityValid
+  event__EvEncounterSigned -.->|triggers| buc__BucBillingClaims
+  event__EvEncounterSigned -.->|triggers| buc__BucFollowupCare
+  event__EvEncounterSigned -.->|triggers| buc__BucOrdersResults
+  event__EvEncounterSigned -.->|triggers| buc__BucVisitPayment
+  event__EvEncounterSigned -.->|triggers| usecase__CompleteConsultation
+  event__EvEncounterSigned -.->|triggers| usecase__CreateCarePlan
+  event__EvEncounterSigned -.->|triggers| usecase__CreateCharge
+  event__EvEncounterSigned -.->|triggers| usecase__PlaceLabOrder
+  event__EvLabResultReceived -.->|triggers| usecase__ReceiveLabResult
+  event__EvPaymentSettled -.->|triggers| usecase__SettleAtKiosk
+  event__EvRemittance -.->|triggers| usecase__PostPayment
+  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimAccepted
+  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimAssessed
+  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimReceiptError
+  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimReturned
+  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimTransferred
+  extsystem__ClaimsReviewOrganization -.->|raises| event__EvRemittance
+  extsystem__OnlineEligibilitySystem -.->|raises| event__EvEligibilityChecked
+  extsystem__OutsourcedLabSystem -.->|raises| event__EvLabResultReceived
+  extsystem__PaymentGateway -.->|raises| event__EvPaymentSettled
+  field__ArrivalTimeField -.->|maps_field| entity__Appointment
+  field__ChargeCodeField -.->|maps_field| entity__Charge
+  field__EligibilityResultField -.->|maps_field| entity__EligibilityCheck
+  field__KioskReferenceField -.->|maps_field| entity__PaymentTransaction
+  field__PaymentAmountField -.->|maps_field| entity__PaymentTransaction
+  field__ReferralDirectionField -.->|maps_field| entity__ReferralLetter
+  field__ReferralReceivedField -.->|maps_field| entity__ReferralLetter
+  flow__ClaimCycleFlow -->|contains| step__AssessStep
+  flow__ClaimCycleFlow -->|contains| step__CreateStatementStep
+  flow__ClaimCycleFlow -->|contains| step__HoldStep
+  flow__ClaimCycleFlow -->|contains| step__InspectStep
+  flow__ClaimCycleFlow -->|contains| step__PaidStep
+  flow__ClaimCycleFlow -->|contains| step__ReceiptErrorStep
+  flow__ClaimCycleFlow -->|contains| step__ReturnStep
+  flow__ClaimCycleFlow -->|contains| step__ReviewStep
+  flow__ClaimCycleFlow -->|contains| step__SubmitStep
+  flow__VisitCheckInFlow -->|contains| step__ArrivalStep
+  flow__VisitCheckInFlow -->|contains| step__DeclarationStep
+  flow__VisitCheckInFlow -->|contains| step__EligibilityStep
+  flow__VisitCheckInFlow -->|contains| step__ReferralStep
+  flow__VisitCheckInFlow -->|contains| step__RoomingStep
+  flow__VisitPaymentFlow -->|contains| step__CalculationStep
+  flow__VisitPaymentFlow -->|contains| step__CallStep
+  flow__VisitPaymentFlow -->|contains| step__KioskStep
+  flow__VisitPaymentFlow -->|contains| step__ReceiptStep
+  flow__VisitPaymentFlow -->|contains| step__WindowStep
+  screen__BillCalculationScreen -->|contains| field__ChargeCodeField
+  screen__CheckInScreen -->|contains| field__ArrivalTimeField
+  screen__CheckInScreen -.->|shows| entity__Appointment
+  screen__EligibilityScreen -->|contains| field__EligibilityResultField
+  screen__KioskScreen -->|contains| field__KioskReferenceField
+  screen__PatientProfileScreen -.->|shows| entity__PatientProfile
+  screen__PatientSearchScreen -.->|shows| entity__PatientAccount
+  screen__PaymentWindowScreen -->|contains| field__PaymentAmountField
+  screen__ReferralLetterScreen -->|contains| field__ReferralDirectionField
+  screen__ReferralScreen -->|contains| field__ReferralReceivedField
+  step__ArrivalStep -.->|covers| usecase__VerifyArrival
+  step__ArrivalStep -->|precedes| step__EligibilityStep
+  step__AssessStep -.->|covers| usecase__RecordClaimAssessment
+  step__AssessStep -.->|covers| usecase__RequestReexamination
+  step__AssessStep -->|precedes| step__PaidStep
+  step__CalculationStep -.->|covers| usecase__ApplySelectedTreatmentFee
+  step__CalculationStep -.->|covers| usecase__CalculateVisitBill
+  step__CalculationStep -->|precedes| step__CallStep
+  step__CallStep -->|branches| step__KioskStep
+  step__CallStep -.->|covers| usecase__CallPatientForPayment
+  step__CallStep -->|precedes| step__WindowStep
+  step__CreateStatementStep -.->|covers| timer__MonthlyClaimCreation
+  step__CreateStatementStep -.->|covers| usecase__GenerateClaimStatement
+  step__CreateStatementStep -->|precedes| step__InspectStep
+  step__DeclarationStep -.->|covers| usecase__ConfirmEligibilityInOutageMode
+  step__DeclarationStep -.->|covers| usecase__RecordEligibilityDeclaration
+  step__DeclarationStep -->|precedes| step__RoomingStep
+  step__EligibilityStep -->|branches| step__ReferralStep
+  step__EligibilityStep -.->|covers| usecase__CheckInPatient
+  step__EligibilityStep -.->|covers| usecase__ReceiveEligibilityInvalid
+  step__EligibilityStep -.->|covers| usecase__ReceiveEligibilityNoInfo
+  step__EligibilityStep -.->|covers| usecase__ReceiveEligibilityValid
+  step__EligibilityStep -.->|covers| usecase__RecheckEligibility
+  step__EligibilityStep -.->|excepts| step__DeclarationStep
+  step__EligibilityStep -->|precedes| step__RoomingStep
+  step__HoldStep -.->|covers| usecase__HoldClaimStatement
+  step__HoldStep -.->|covers| usecase__ReleaseHeldStatement
+  step__HoldStep -->|repeats| step__InspectStep
+  step__InspectStep -->|branches| step__HoldStep
+  step__InspectStep -.->|covers| usecase__InspectClaimStatement
+  step__InspectStep -->|precedes| step__SubmitStep
+  step__KioskStep -.->|covers| event__EvPaymentSettled
+  step__KioskStep -.->|covers| usecase__SettleAtKiosk
+  step__KioskStep -->|precedes| step__ReceiptStep
+  step__PaidStep -.->|covers| usecase__PostPayment
+  step__ReceiptErrorStep -.->|covers| timer__ErrorResendWindow
+  step__ReceiptErrorStep -.->|covers| usecase__RecordReceiptError
+  step__ReceiptErrorStep -.->|covers| usecase__ResendErroredStatement
+  step__ReceiptErrorStep -->|repeats| step__SubmitStep
+  step__ReceiptStep -.->|covers| usecase__IssueReceipt
+  step__ReferralStep -.->|covers| usecase__ReceiveReferralLetter
+  step__ReferralStep -->|precedes| step__RoomingStep
+  step__ReturnStep -.->|covers| usecase__CorrectReturnedStatement
+  step__ReturnStep -.->|covers| usecase__RecordClaimReturn
+  step__ReturnStep -->|repeats| step__InspectStep
+  step__ReviewStep -->|branches| step__AssessStep
+  step__ReviewStep -.->|covers| usecase__ReceiveClaimAccepted
+  step__ReviewStep -.->|covers| usecase__ReviewClaimTransfer
+  step__ReviewStep -.->|excepts| step__ReturnStep
+  step__ReviewStep -->|precedes| step__PaidStep
+  step__RoomingStep -.->|covers| usecase__AssignRoom
+  step__SubmitStep -.->|covers| timer__MonthlyClaimDeadline
+  step__SubmitStep -.->|covers| usecase__SubmitClaimStatements
+  step__SubmitStep -.->|excepts| step__ReceiptErrorStep
+  step__SubmitStep -->|precedes| step__ReviewStep
+  step__WindowStep -.->|covers| usecase__SettleAtWindow
+  step__WindowStep -->|precedes| step__ReceiptStep
+  timer__EligibilityBatchInquiry -.->|triggers| usecase__BatchVerifyEligibility
+  timer__ErrorResendWindow -.->|triggers| usecase__ResendErroredStatement
+  timer__IntakeExpiryCheck -.->|triggers| usecase__ExpireIntakeForms
+  timer__MonthlyClaimCreation -.->|triggers| usecase__GenerateClaimStatement
+  timer__MonthlyClaimDeadline -.->|triggers| usecase__SubmitClaimStatements
+  timer__ReceivablesMonthlyReview -.->|triggers| usecase__ReconcileBalance
+  timer__ReturnDownloadCheck -.->|triggers| usecase__RecordClaimReturn
+  usecase__AmendEncounter -.->|displays| screen__EncounterWorkspaceScreen
+  usecase__AmendEncounter -.->|invokes| api__AmendEncounterApi
+  usecase__AmendEncounter -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__AmendEncounter -.->|requires_permission| permission__EncounterSign
+  usecase__AmendEncounter -.->|transitions Encounter.status encsigned->encamended| state__Encounter_encamended
+  usecase__ApplySelectedTreatmentFee -.->|displays| screen__BillCalculationScreen
+  usecase__ApplySelectedTreatmentFee -.->|invokes| api__SelectedFeeApi
+  usecase__ApplySelectedTreatmentFee -.->|requires_medium| medium__BillingWorkstation
+  usecase__ApplySelectedTreatmentFee -.->|requires_permission| permission__BillCalculate
+  usecase__ArchivePatient -.->|displays| screen__PatientProfileScreen
+  usecase__ArchivePatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__ArchivePatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__ArchivePatient -.->|transitions PatientAccount.status patientactive->patientinactive| state__PatientAccount_patientinactive
+  usecase__ArchivePatient -.->|updates| entity__PatientAccount
+  usecase__AssignRoom -.->|displays| screen__RoomBoardScreen
+  usecase__AssignRoom -.->|invokes| api__AssignRoomApi
+  usecase__AssignRoom -.->|requires_medium| medium__NurseStation
+  usecase__AssignRoom -.->|requires_permission| permission__RoomAssign
+  usecase__BatchVerifyEligibility -.->|displays| screen__EligibilityScreen
+  usecase__BatchVerifyEligibility -.->|invokes| api__OnlineEligibilityApi
+  usecase__CalculateVisitBill -.->|displays| screen__BillCalculationScreen
+  usecase__CalculateVisitBill -.->|invokes| api__CalculateVisitBillApi
+  usecase__CalculateVisitBill -.->|raises| event__EvBillCalculated
+  usecase__CalculateVisitBill -.->|requires_medium| medium__BillingWorkstation
+  usecase__CalculateVisitBill -.->|requires_permission| permission__BillCalculate
+  usecase__CalculateVisitBill -.->|transitions Appointment.status apptawaitingcalc->apptawaitingpay| state__Appointment_apptawaitingpay
+  usecase__CallPatientForPayment -.->|displays| screen__PaymentWindowScreen
+  usecase__CallPatientForPayment -.->|reads| entity__Appointment
+  usecase__CallPatientForPayment -.->|requires_medium| medium__AccountsWindow
+  usecase__CancelClinicalOrder -.->|displays| screen__OrderEntryScreen
+  usecase__CancelClinicalOrder -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__CancelClinicalOrder -.->|requires_permission| permission__ClinicalOrderWrite
+  usecase__CancelClinicalOrder -.->|transitions ClinicalOrder.status clordered->clcancelled| state__ClinicalOrder_clcancelled
+  usecase__CancelClinicalOrder -.->|updates| entity__ClinicalOrder
+  usecase__CaptureConsent -.->|displays| screen__ConsentScreen
+  usecase__CaptureConsent -.->|invokes| api__ConsentApi
+  usecase__CaptureConsent -.->|requires_medium| medium__PatientMobile
+  usecase__CaptureConsent -.->|requires_permission| permission__ConsentCapture
+  usecase__CheckInPatient -.->|displays| screen__CheckInScreen
+  usecase__CheckInPatient -.->|invokes| api__CheckInPatientApi
+  usecase__CheckInPatient -.->|invokes| api__OnlineEligibilityApi
+  usecase__CheckInPatient -.->|raises| event__EvAppointmentCheckedIn
+  usecase__CheckInPatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__CheckInPatient -.->|requires_permission| permission__VisitCheckIn
+  usecase__CheckInPatient -.->|transitions Appointment.status apptscheduled->apptcheckedin| state__Appointment_apptcheckedin
+  usecase__CloseCarePlan -.->|displays| screen__CarePlanScreen
+  usecase__CloseCarePlan -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__CloseCarePlan -.->|requires_permission| permission__FollowUpManage
+  usecase__CloseCarePlan -.->|transitions CarePlan.status caremonitoring->careclosed| state__CarePlan_careclosed
+  usecase__CloseCarePlan -.->|updates| entity__CarePlan
+  usecase__CollectSpecimen -.->|displays| screen__SpecimenScreen
+  usecase__CollectSpecimen -.->|invokes| api__CollectSpecimenApi
+  usecase__CollectSpecimen -.->|requires_medium| medium__NurseStation
+  usecase__CollectSpecimen -.->|requires_permission| permission__ClinicalOrderWrite
+  usecase__CollectSpecimen -.->|transitions ClinicalOrder.status clordered->clcollected| state__ClinicalOrder_clcollected
+  usecase__CompleteConsultation -.->|displays| screen__EncounterWorkspaceScreen
+  usecase__CompleteConsultation -.->|invokes| api__CompleteConsultationApi
+  usecase__CompleteConsultation -.->|requires_medium| medium__NurseStation
+  usecase__CompleteConsultation -.->|requires_permission| permission__EncounterOpen
+  usecase__CompleteConsultation -.->|transitions Appointment.status apptinconsult->apptawaitingcalc| state__Appointment_apptawaitingcalc
+  usecase__CompleteIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__CompleteIntakeForms -.->|requires_medium| medium__PatientMobile
+  usecase__CompleteIntakeForms -.->|requires_permission| permission__ConsentCapture
+  usecase__CompleteIntakeForms -.->|transitions IntakePacket.status intakesent->intakecompleted| state__IntakePacket_intakecompleted
+  usecase__CompleteIntakeForms -.->|updates| entity__IntakePacket
+  usecase__ConfirmEligibilityInOutageMode -.->|displays| screen__EligibilityScreen
+  usecase__ConfirmEligibilityInOutageMode -.->|invokes| api__EligibilityResultApi
+  usecase__ConfirmEligibilityInOutageMode -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__ConfirmEligibilityInOutageMode -.->|requires_permission| permission__InsuranceVerify
+  usecase__ConfirmEligibilityInOutageMode -.->|transitions EligibilityCheck.result eligpending->eligvalid| state__EligibilityCheck_eligvalid
+  usecase__ConfirmProxyOrder -.->|displays| screen__OrderEntryScreen
+  usecase__ConfirmProxyOrder -.->|invokes| api__ConfirmOrderApi
+  usecase__ConfirmProxyOrder -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__ConfirmProxyOrder -.->|requires_permission| permission__ClinicalOrderWrite
+  usecase__ConfirmProxyOrder -.->|transitions ClinicalOrder.status clordered->clordered| state__ClinicalOrder_clordered
+  usecase__CorrectReturnedStatement -.->|displays| screen__ClaimScreen
+  usecase__CorrectReturnedStatement -.->|invokes| api__ClaimEditApi
+  usecase__CorrectReturnedStatement -.->|requires_medium| medium__BillingWorkstation
+  usecase__CorrectReturnedStatement -.->|requires_permission| permission__BillingClaimWrite
+  usecase__CorrectReturnedStatement -.->|transitions ClaimStatement.status stmtreturned->stmtinspecting| state__ClaimStatement_stmtinspecting
+  usecase__CreateCarePlan -.->|displays| screen__CarePlanScreen
+  usecase__CreateCarePlan -.->|invokes| api__CreateCarePlanApi
+  usecase__CreateCarePlan -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__CreateCarePlan -.->|requires_permission| permission__FollowUpManage
+  usecase__CreateCharge -.->|displays| screen__ChargeWorklistScreen
+  usecase__CreateCharge -.->|invokes| api__CreateChargeApi
+  usecase__CreateCharge -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__DocumentAssessment -.->|displays| screen__DiagnosisScreen
+  usecase__DocumentAssessment -.->|invokes| api__DocumentAssessmentApi
+  usecase__DocumentAssessment -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__DocumentAssessment -.->|requires_permission| permission__ClinicalDocument
+  usecase__DocumentAssessment -.->|transitions Encounter.status encopen->encdocumented| state__Encounter_encdocumented
+  usecase__EnterProxyOrder -.->|displays| screen__OrderEntryScreen
+  usecase__EnterProxyOrder -.->|invokes| api__ProxyOrderApi
+  usecase__EnterProxyOrder -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__EnterProxyOrder -.->|requires_permission| permission__ProxyOrderEntry
+  usecase__ExpireIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__ExpireIntakeForms -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__ExpireIntakeForms -.->|requires_permission| permission__IntakeManage
+  usecase__ExpireIntakeForms -.->|transitions IntakePacket.status intakesent->intakeexpired| state__IntakePacket_intakeexpired
+  usecase__ExpireIntakeForms -.->|updates| entity__IntakePacket
+  usecase__GenerateClaimStatement -.->|displays| screen__ClaimScreen
+  usecase__GenerateClaimStatement -.->|invokes| api__GenerateClaimApi
+  usecase__GenerateClaimStatement -.->|requires_medium| medium__BillingWorkstation
+  usecase__GenerateClaimStatement -.->|requires_permission| permission__BillingClaimWrite
+  usecase__HoldClaimStatement -.->|displays| screen__ClaimScreen
+  usecase__HoldClaimStatement -.->|invokes| api__ClaimEditApi
+  usecase__HoldClaimStatement -.->|requires_medium| medium__BillingWorkstation
+  usecase__HoldClaimStatement -.->|requires_permission| permission__BillingClaimWrite
+  usecase__HoldClaimStatement -.->|transitions ClaimStatement.status stmtinspecting->stmtonhold| state__ClaimStatement_stmtonhold
+  usecase__InspectClaimStatement -.->|displays| screen__ClaimScreen
+  usecase__InspectClaimStatement -.->|invokes| api__ClaimEditApi
+  usecase__InspectClaimStatement -.->|requires_medium| medium__BillingWorkstation
+  usecase__InspectClaimStatement -.->|requires_permission| permission__BillingClaimWrite
+  usecase__InspectClaimStatement -.->|transitions ClaimStatement.status stmtdrafting->stmtinspecting| state__ClaimStatement_stmtinspecting
+  usecase__IssueReceipt -.->|displays| screen__PaymentWindowScreen
+  usecase__IssueReceipt -.->|invokes| api__ReceiptApi
+  usecase__IssueReceipt -.->|requires_medium| medium__AccountsWindow
+  usecase__IssueReceipt -.->|requires_permission| permission__PaymentCollect
+  usecase__IssueReceipt -.->|transitions Appointment.status apptsettled->apptcompleted| state__Appointment_apptcompleted
+  usecase__IssueReferralLetter -.->|displays| screen__ReferralLetterScreen
+  usecase__IssueReferralLetter -.->|invokes| api__IssueReferralLetterApi
+  usecase__IssueReferralLetter -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__IssueReferralLetter -.->|requires_permission| permission__ReferralManage
+  usecase__MergeDuplicatePatient -.->|displays| screen__PatientProfileScreen
+  usecase__MergeDuplicatePatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__MergeDuplicatePatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__MergeDuplicatePatient -.->|transitions PatientAccount.status patientactive->patientmerged| state__PatientAccount_patientmerged
+  usecase__MergeDuplicatePatient -.->|updates| entity__PatientAccount
+  usecase__NotifyCriticalResult -.->|displays| screen__CriticalNoticeScreen
+  usecase__NotifyCriticalResult -.->|invokes| api__CriticalNoticeApi
+  usecase__NotifyCriticalResult -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__NotifyCriticalResult -.->|requires_permission| permission__LabResultManage
+  usecase__NotifyCriticalResult -.->|requires_permission| permission__PatientMessageSend
+  usecase__NotifyPatientResult -.->|displays| screen__PatientMessageScreen
+  usecase__NotifyPatientResult -.->|invokes| api__NotifyPatientResultApi
+  usecase__NotifyPatientResult -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__NotifyPatientResult -.->|requires_permission| permission__PatientMessageSend
+  usecase__OpenEncounter -.->|displays| screen__EncounterWorkspaceScreen
+  usecase__OpenEncounter -.->|invokes| api__OpenEncounterApi
+  usecase__OpenEncounter -.->|requires_medium| medium__NurseStation
+  usecase__OpenEncounter -.->|requires_permission| permission__EncounterOpen
+  usecase__OpenEncounter -.->|transitions Appointment.status apptcheckedin->apptinconsult| state__Appointment_apptinconsult
+  usecase__PlaceLabOrder -.->|displays| screen__OrderEntryScreen
+  usecase__PlaceLabOrder -.->|invokes| api__OrderEntryApi
+  usecase__PlaceLabOrder -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__PlaceLabOrder -.->|requires_permission| permission__ClinicalOrderWrite
+  usecase__PostPayment -.->|displays| screen__PaymentPostingScreen
+  usecase__PostPayment -.->|invokes| api__PaymentPostApi
+  usecase__PostPayment -.->|requires_medium| medium__BillingWorkstation
+  usecase__PostPayment -.->|requires_permission| permission__PaymentPost
+  usecase__PostPayment -.->|transitions ClaimStatement.status stmtassessed->stmtpaid| state__ClaimStatement_stmtpaid
+  usecase__PostPayment -.->|transitions ClaimStatement.status stmtrereview->stmtpaid| state__ClaimStatement_stmtpaid
+  usecase__PostPayment -.->|transitions ClaimStatement.status stmtunderreview->stmtpaid| state__ClaimStatement_stmtpaid
+  usecase__PrepareEncounter -.->|displays| screen__CheckInScreen
+  usecase__PrepareEncounter -.->|invokes| api__PrepareEncounterApi
+  usecase__PrepareEncounter -.->|requires_medium| medium__NurseStation
+  usecase__PrepareEncounter -.->|requires_permission| permission__EncounterOpen
+  usecase__PrintSpecimenLabel -.->|displays| screen__SpecimenScreen
+  usecase__PrintSpecimenLabel -.->|reads| entity__ClinicalOrder
+  usecase__PrintSpecimenLabel -.->|requires_medium| medium__NurseStation
+  usecase__PrintSpecimenLabel -.->|requires_permission| permission__ClinicalOrderWrite
+  usecase__ReceiveClaimAccepted -.->|displays| screen__ClaimScreen
+  usecase__ReceiveClaimAccepted -.->|invokes| api__ClaimResultApi
+  usecase__ReceiveClaimAccepted -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__ReceiveClaimAccepted -.->|requires_permission| permission__BillingClaimWrite
+  usecase__ReceiveClaimAccepted -.->|transitions ClaimStatement.status stmtsubmitted->stmtunderreview| state__ClaimStatement_stmtunderreview
+  usecase__ReceiveEligibilityInvalid -.->|displays| screen__EligibilityScreen
+  usecase__ReceiveEligibilityInvalid -.->|invokes| api__EligibilityResultApi
+  usecase__ReceiveEligibilityInvalid -.->|transitions EligibilityCheck.result eligpending->eliginvalid| state__EligibilityCheck_eliginvalid
+  usecase__ReceiveEligibilityNoInfo -.->|displays| screen__EligibilityScreen
+  usecase__ReceiveEligibilityNoInfo -.->|invokes| api__EligibilityResultApi
+  usecase__ReceiveEligibilityNoInfo -.->|transitions EligibilityCheck.result eligpending->elignoinfo| state__EligibilityCheck_elignoinfo
+  usecase__ReceiveEligibilityValid -.->|displays| screen__EligibilityScreen
+  usecase__ReceiveEligibilityValid -.->|invokes| api__EligibilityResultApi
+  usecase__ReceiveEligibilityValid -.->|transitions EligibilityCheck.result eligpending->eligvalid| state__EligibilityCheck_eligvalid
+  usecase__ReceiveLabResult -.->|displays| screen__ResultReviewScreen
+  usecase__ReceiveLabResult -.->|invokes| api__ReceiveLabResultApi
+  usecase__ReceiveLabResult -.->|requires_medium| medium__NurseStation
+  usecase__ReceiveLabResult -.->|requires_permission| permission__LabResultManage
+  usecase__ReceiveLabResult -.->|transitions ClinicalOrder.status clcollected->clresulted| state__ClinicalOrder_clresulted
+  usecase__ReceiveReferralLetter -.->|displays| screen__ReferralScreen
+  usecase__ReceiveReferralLetter -.->|invokes| api__ReferralLetterApi
+  usecase__ReceiveReferralLetter -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__ReceiveReferralLetter -.->|requires_permission| permission__ReferralManage
+  usecase__RecheckEligibility -.->|displays| screen__EligibilityScreen
+  usecase__RecheckEligibility -.->|invokes| api__EligibilityResultApi
+  usecase__RecheckEligibility -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__RecheckEligibility -.->|requires_permission| permission__InsuranceVerify
+  usecase__RecheckEligibility -.->|transitions EligibilityCheck.result eliginvalid->eligpending| state__EligibilityCheck_eligpending
+  usecase__RecheckEligibility -.->|transitions EligibilityCheck.result elignoinfo->eligpending| state__EligibilityCheck_eligpending
+  usecase__ReconcileBalance -.->|displays| screen__BalanceScreen
+  usecase__ReconcileBalance -.->|invokes| api__BalanceApi
+  usecase__ReconcileBalance -.->|requires_medium| medium__BillingWorkstation
+  usecase__ReconcileBalance -.->|requires_permission| permission__PaymentPost
+  usecase__RecordClaimAssessment -.->|displays| screen__ClaimScreen
+  usecase__RecordClaimAssessment -.->|invokes| api__ClaimResultApi
+  usecase__RecordClaimAssessment -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__RecordClaimAssessment -.->|requires_permission| permission__BillingClaimWrite
+  usecase__RecordClaimAssessment -.->|transitions ClaimStatement.status stmtunderreview->stmtassessed| state__ClaimStatement_stmtassessed
+  usecase__RecordClaimReturn -.->|displays| screen__ClaimScreen
+  usecase__RecordClaimReturn -.->|invokes| api__ClaimResultApi
+  usecase__RecordClaimReturn -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__RecordClaimReturn -.->|requires_permission| permission__BillingClaimWrite
+  usecase__RecordClaimReturn -.->|transitions ClaimStatement.status stmtunderreview->stmtreturned| state__ClaimStatement_stmtreturned
+  usecase__RecordEligibilityDeclaration -.->|displays| screen__EligibilityScreen
+  usecase__RecordEligibilityDeclaration -.->|invokes| api__EligibilityResultApi
+  usecase__RecordEligibilityDeclaration -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__RecordEligibilityDeclaration -.->|requires_permission| permission__InsuranceVerify
+  usecase__RecordEligibilityDeclaration -.->|transitions EligibilityCheck.result eligpending->eligdeclared| state__EligibilityCheck_eligdeclared
+  usecase__RecordReceiptError -.->|displays| screen__ClaimScreen
+  usecase__RecordReceiptError -.->|invokes| api__ClaimResultApi
+  usecase__RecordReceiptError -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__RecordReceiptError -.->|requires_permission| permission__BillingClaimWrite
+  usecase__RecordReceiptError -.->|transitions ClaimStatement.status stmtsubmitted->stmtreceipterror| state__ClaimStatement_stmtreceipterror
+  usecase__RecordVitals -.->|displays| screen__VitalsScreen
+  usecase__RecordVitals -.->|invokes| api__RecordVitalsApi
+  usecase__RecordVitals -.->|requires_medium| medium__NurseStation
+  usecase__RecordVitals -.->|requires_permission| permission__VitalsRecord
+  usecase__RegisterPatient -.->|displays| screen__PatientProfileScreen
+  usecase__RegisterPatient -.->|invokes| api__RegisterPatientApi
+  usecase__RegisterPatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__RegisterPatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__RegisterPerformedProcedure -.->|displays| screen__SpecimenScreen
+  usecase__RegisterPerformedProcedure -.->|invokes| api__PerformedProcedureApi
+  usecase__RegisterPerformedProcedure -.->|requires_medium| medium__NurseStation
+  usecase__RegisterPerformedProcedure -.->|requires_permission| permission__ClinicalOrderWrite
+  usecase__ReleaseHeldStatement -.->|displays| screen__ClaimScreen
+  usecase__ReleaseHeldStatement -.->|invokes| api__ClaimEditApi
+  usecase__ReleaseHeldStatement -.->|requires_medium| medium__BillingWorkstation
+  usecase__ReleaseHeldStatement -.->|requires_permission| permission__BillingClaimWrite
+  usecase__ReleaseHeldStatement -.->|transitions ClaimStatement.status stmtonhold->stmtinspecting| state__ClaimStatement_stmtinspecting
+  usecase__RequestReexamination -.->|displays| screen__ClaimScreen
+  usecase__RequestReexamination -.->|invokes| api__SubmitClaimApi
+  usecase__RequestReexamination -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__RequestReexamination -.->|requires_permission| permission__BillingClaimWrite
+  usecase__RequestReexamination -.->|transitions ClaimStatement.status stmtassessed->stmtrereview| state__ClaimStatement_stmtrereview
+  usecase__ResendErroredStatement -.->|displays| screen__ClaimScreen
+  usecase__ResendErroredStatement -.->|invokes| api__SubmitClaimApi
+  usecase__ResendErroredStatement -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__ResendErroredStatement -.->|requires_permission| permission__BillingClaimWrite
+  usecase__ResendErroredStatement -.->|transitions ClaimStatement.status stmtreceipterror->stmtsubmitted| state__ClaimStatement_stmtsubmitted
+  usecase__ReviewClaimTransfer -.->|displays| screen__ClaimScreen
+  usecase__ReviewClaimTransfer -.->|reads| entity__ClaimStatement
+  usecase__ReviewClaimTransfer -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__ReviewClaimTransfer -.->|requires_permission| permission__BillingClaimWrite
+  usecase__ReviewLabResult -.->|displays| screen__ResultReviewScreen
+  usecase__ReviewLabResult -.->|invokes| api__ResultReviewApi
+  usecase__ReviewLabResult -.->|raises| event__EvClinicalOrderReviewed
+  usecase__ReviewLabResult -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__ReviewLabResult -.->|requires_permission| permission__LabResultManage
+  usecase__ReviewLabResult -.->|transitions ClinicalOrder.status clresulted->clreviewed| state__ClinicalOrder_clreviewed
+  usecase__ReviewPatientResponse -.->|displays| screen__CarePlanScreen
+  usecase__ReviewPatientResponse -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__ReviewPatientResponse -.->|requires_permission| permission__FollowUpManage
+  usecase__ReviewPatientResponse -.->|transitions CarePlan.status careopen->caremonitoring| state__CarePlan_caremonitoring
+  usecase__ReviewPatientResponse -.->|updates| entity__CarePlan
+  usecase__ReviewPatientResponse -.->|updates| entity__PatientMessage
+  usecase__ScheduleFollowUpVisit -.->|displays| screen__FollowUpScheduleScreen
+  usecase__ScheduleFollowUpVisit -.->|invokes| api__FollowUpScheduleApi
+  usecase__ScheduleFollowUpVisit -.->|raises| event__EvAppointmentScheduled
+  usecase__ScheduleFollowUpVisit -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__ScheduleFollowUpVisit -.->|requires_permission| permission__FollowUpManage
+  usecase__ScheduleFollowUpVisit -.->|requires_permission| permission__ScheduleWrite
+  usecase__ScheduleFollowUpVisit -.->|transitions Appointment.status apptrequested->apptscheduled| state__Appointment_apptscheduled
+  usecase__SearchPatient -.->|displays| screen__PatientSearchScreen
+  usecase__SearchPatient -.->|invokes| api__SearchPatientApi
+  usecase__SearchPatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SearchPatient -.->|requires_permission| permission__PatientProfileRead
+  usecase__SendAppointmentNotice -.->|displays| screen__AppointmentNoticeScreen
+  usecase__SendAppointmentNotice -.->|invokes| api__AppointmentNoticeApi
+  usecase__SendAppointmentNotice -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SendAppointmentNotice -.->|requires_permission| permission__ScheduleRead
+  usecase__SendFollowUpMessage -.->|displays| screen__PatientMessageScreen
+  usecase__SendFollowUpMessage -.->|invokes| api__SendFollowUpMessageApi
+  usecase__SendFollowUpMessage -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__SendFollowUpMessage -.->|requires_permission| permission__PatientMessageSend
+  usecase__SendIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__SendIntakeForms -.->|invokes| api__IntakeMessagingApi
+  usecase__SendIntakeForms -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SendIntakeForms -.->|requires_permission| permission__IntakeManage
+  usecase__SettleAtKiosk -.->|displays| screen__KioskScreen
+  usecase__SettleAtKiosk -.->|invokes| api__SettlementApi
+  usecase__SettleAtKiosk -.->|requires_medium| medium__PaymentKiosk
+  usecase__SettleAtKiosk -.->|transitions Appointment.status apptawaitingpay->apptsettled| state__Appointment_apptsettled
+  usecase__SettleAtWindow -.->|displays| screen__PaymentWindowScreen
+  usecase__SettleAtWindow -.->|invokes| api__SettlementApi
+  usecase__SettleAtWindow -.->|requires_medium| medium__AccountsWindow
+  usecase__SettleAtWindow -.->|requires_permission| permission__PaymentCollect
+  usecase__SettleAtWindow -.->|transitions Appointment.status apptawaitingpay->apptsettled| state__Appointment_apptsettled
+  usecase__SignEncounter -.->|displays| screen__EncounterWorkspaceScreen
+  usecase__SignEncounter -.->|invokes| api__SignEncounterApi
+  usecase__SignEncounter -.->|raises| event__EvEncounterSigned
+  usecase__SignEncounter -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__SignEncounter -.->|requires_permission| permission__EncounterSign
+  usecase__SignEncounter -.->|transitions Encounter.status encdocumented->encsigned| state__Encounter_encsigned
+  usecase__SubmitClaimStatements -.->|displays| screen__ClaimScreen
+  usecase__SubmitClaimStatements -.->|invokes| api__SubmitClaimApi
+  usecase__SubmitClaimStatements -.->|raises| event__EvClaimStatementsSubmitted
+  usecase__SubmitClaimStatements -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__SubmitClaimStatements -.->|requires_permission| permission__BillingClaimWrite
+  usecase__SubmitClaimStatements -.->|transitions ClaimStatement.status stmtinspecting->stmtsubmitted| state__ClaimStatement_stmtsubmitted
+  usecase__UpdateDemographics -.->|displays| screen__PatientProfileScreen
+  usecase__UpdateDemographics -.->|invokes| api__UpdateDemographicsApi
+  usecase__UpdateDemographics -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__UpdateDemographics -.->|requires_permission| permission__PatientProfileWrite
+  usecase__VerifyArrival -.->|displays| screen__CheckInScreen
+  usecase__VerifyArrival -.->|invokes| api__VerifyArrivalApi
+  usecase__VerifyArrival -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__VerifyArrival -.->|requires_permission| permission__VisitCheckIn
+  usecase__VerifyInsurance -.->|displays| screen__InsuranceScreen
+  usecase__VerifyInsurance -.->|invokes| api__EligibilityApi
+  usecase__VerifyInsurance -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__VerifyInsurance -.->|requires_permission| permission__InsuranceVerify
+  usecase__VoidCharge -.->|displays| screen__ChargeWorklistScreen
+  usecase__VoidCharge -.->|requires_medium| medium__BillingWorkstation
+  usecase__VoidCharge -.->|requires_permission| permission__BillingClaimWrite
+  usecase__VoidCharge -.->|updates| entity__Charge
+  classDef extsystem stroke:#333;
+  classDef business stroke:#333;
+  classDef buc stroke:#333;
+  classDef flow stroke:#333;
+  classDef step stroke:#333;
+  classDef timer stroke:#333;
+  classDef medium stroke:#333;
+  classDef permission stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef field stroke:#333;
+  classDef event stroke:#333;
+  classDef api stroke:#333;
+  classDef entity stroke:#333;
+  classDef state stroke:#333;
+  classDef variation stroke:#333;
+  classDef condition stroke:#333;
 ```
 
 ### 3.4 Clinical Encounter
@@ -1545,802 +1708,896 @@ rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucClinic
 ```
 
 ```mermaid
+%% rdra-ish diagram=rdra scope=buc:BucClinicalEncounter model=samples/clinic-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: extsystem business buc flow step timer medium permission usecase screen field event api entity state variation condition
+%% omitted: (none)
 flowchart LR
-  subgraph layer_value[System Value]
-    direction TB
-    ClaimsReviewOrganization[/"🌐 審査支払機関（支払基金・国保連）"/]
-    MessagingGateway[/"🌐 Messaging Gateway"/]
-    OutsourcedLabSystem[/"🌐 外注検査システム"/]
-    PaymentGateway[/"🌐 自動精算機・クレジット決済"/]
+  subgraph layer_value["システム価値"]
+    extsystem__ClaimsReviewOrganization["審査支払機関（支払基金・国保連）"]:::extsystem
+    extsystem__MessagingGateway["Messaging Gateway"]:::extsystem
+    extsystem__OutsourcedLabSystem["外注検査システム"]:::extsystem
+    extsystem__PaymentGateway["自動精算機・クレジット決済"]:::extsystem
   end
-  subgraph layer_environment[External Environment]
-    direction TB
-    CareDelivery["💼 Care Delivery"]
-    PatientAccess["💼 Patient Access"]
-    RevenueCycle["💼 Revenue Cycle"]
-    BucBillingClaims["📦 レセプト作成・請求"]
-    BucClinicalEncounter["📦 Conduct Clinical Encounter"]
-    BucFollowupCare["📦 Coordinate Follow-Up Care"]
-    BucOrdersResults["📦 Manage Orders and Results"]
-    BucPatientOnboarding["📦 Onboard and Maintain Patient"]
-    BucVisitPayment["📦 計算・会計"]
-    ClaimCycleFlow["🧭 レセプトの月次サイクル"]
-    VisitPaymentFlow["🧭 計算・会計の流れ"]
-    AssessStep(["➡️ 査定と再審査請求"])
-    CalculationStep(["➡️ 計算受付・会計計算入力"])
-    CallStep(["➡️ 会計の呼出"])
-    CreateStatementStep(["➡️ レセプト作成（月初）"])
-    HoldStep(["➡️ 保留（月遅れ）"])
-    InspectStep(["➡️ 院内点検"])
-    KioskStep(["➡️ 自動精算機で精算"])
-    PaidStep(["➡️ 支払（診療翌々月）"])
-    ReceiptErrorStep(["➡️ 受付不能・要確認の再送（11日・12日）"])
-    ReceiptStep(["➡️ 領収証・明細書の交付"])
-    ReturnStep(["➡️ 返戻と再請求"])
-    ReviewStep(["➡️ 審査"])
-    SubmitStep(["➡️ 請求（5日～10日）"])
-    WindowStep(["➡️ 会計窓口で精算"])
-    ErrorResendWindow["⏱️ エラー分レセプトの再送（毎月11日・12日）"]
-    IntakeExpiryCheck["⏱️ Nightly intake expiry check"]
-    MonthlyClaimCreation["⏱️ 前月分レセプトの作成（月初）"]
-    MonthlyClaimDeadline["⏱️ 前月分レセプトの請求（毎月5日～10日）"]
-    ReceivablesMonthlyReview["⏱️ 未収金管理台帳の作成（毎月）"]
-    ReturnDownloadCheck["⏱️ 返戻レセプトの取得（3か月以内）"]
-    AccountsWindow[/"📱 会計窓口"/]
-    BillingWorkstation[/"📱 Billing Workstation"/]
-    CareCoordinationConsole[/"📱 Care Coordination Console"/]
-    ClinicalWorkstation[/"📱 Clinical Workstation"/]
-    FrontDeskTerminal[/"📱 Front Desk Terminal"/]
-    NurseStation[/"📱 Nurse Station"/]
-    OnlineClaimTerminal[/"📱 オンライン請求用端末"/]
-    PatientMobile[/"📱 Patient Mobile"/]
-    PaymentKiosk[/"📱 自動精算機"/]
-    BillCalculate["🔑 会計計算"]
-    BillingClaimWrite["🔑 レセプト業務"]
-    ClinicalDocument["🔑 Clinical Document"]
-    ClinicalOrderWrite["🔑 Clinical Order Write"]
-    ConsentCapture["🔑 Consent Capture"]
-    EncounterOpen["🔑 Encounter Open"]
-    EncounterSign["🔑 Encounter Sign"]
-    FollowUpManage["🔑 Follow-Up Manage"]
-    InsuranceVerify["🔑 Insurance Verify"]
-    IntakeManage["🔑 Intake Manage"]
-    LabResultManage["🔑 Lab Result Manage"]
-    PatientMessageSend["🔑 Patient Message Send"]
-    PatientProfileRead["🔑 Patient Profile Read"]
-    PatientProfileWrite["🔑 Patient Profile Write"]
-    PaymentCollect["🔑 窓口収納"]
-    PaymentPost["🔑 Payment Post"]
-    ProxyOrderEntry["🔑 代行入力"]
-    ReferralManage["🔑 紹介状管理"]
-    ScheduleRead["🔑 Schedule Read"]
-    ScheduleWrite["🔑 Schedule Write"]
-    VitalsRecord["🔑 Vitals Record"]
+  subgraph layer_environment["システム外部環境"]
+    business__CareDelivery["Care Delivery"]:::business
+    business__PatientAccess["Patient Access"]:::business
+    %% desc business__PatientAccess: Patient-facing access workflows from onboarding through appointments.
+    business__RevenueCycle["Revenue Cycle"]:::business
+    buc__BucBillingClaims["レセプト作成・請求"]:::buc
+    %% desc buc__BucBillingClaims: 月ごとのレセプトの作成・院内点検・請求と、審査支払機関からの受付不能・返戻・査定・支払への対応。
+    buc__BucClinicalEncounter["Conduct Clinical Encounter"]:::buc
+    buc__BucFollowupCare["Coordinate Follow-Up Care"]:::buc
+    buc__BucOrdersResults["Manage Orders and Results"]:::buc
+    buc__BucPatientOnboarding["Onboard and Maintain Patient"]:::buc
+    buc__BucVisitPayment["計算・会計"]:::buc
+    %% desc buc__BucVisitPayment: 診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。
+    flow__ClaimCycleFlow["レセプトの月次サイクル"]:::flow
+    flow__VisitPaymentFlow["計算・会計の流れ"]:::flow
+    step__AssessStep["査定と再審査請求"]:::step
+    step__CalculationStep["計算受付・会計計算入力"]:::step
+    step__CallStep["会計の呼出"]:::step
+    step__CreateStatementStep["レセプト作成（月初）"]:::step
+    step__HoldStep["保留（月遅れ）"]:::step
+    step__InspectStep["院内点検"]:::step
+    step__KioskStep["自動精算機で精算"]:::step
+    step__PaidStep["支払（診療翌々月）"]:::step
+    step__ReceiptErrorStep["受付不能・要確認の再送（11日・12日）"]:::step
+    step__ReceiptStep["領収証・明細書の交付"]:::step
+    step__ReturnStep["返戻と再請求"]:::step
+    step__ReviewStep["審査"]:::step
+    step__SubmitStep["請求（5日～10日）"]:::step
+    step__WindowStep["会計窓口で精算"]:::step
+    timer__ErrorResendWindow["エラー分レセプトの再送（毎月11日・12日）"]:::timer
+    timer__IntakeExpiryCheck["Nightly intake expiry check"]:::timer
+    timer__MonthlyClaimCreation["前月分レセプトの作成（月初）"]:::timer
+    timer__MonthlyClaimDeadline["前月分レセプトの請求（毎月5日～10日）"]:::timer
+    timer__ReceivablesMonthlyReview["未収金管理台帳の作成（毎月）"]:::timer
+    timer__ReturnDownloadCheck["返戻レセプトの取得（3か月以内）"]:::timer
+    medium__AccountsWindow["会計窓口"]:::medium
+    medium__BillingWorkstation["Billing Workstation"]:::medium
+    medium__CareCoordinationConsole["Care Coordination Console"]:::medium
+    medium__ClinicalWorkstation["Clinical Workstation"]:::medium
+    medium__FrontDeskTerminal["Front Desk Terminal"]:::medium
+    medium__NurseStation["Nurse Station"]:::medium
+    medium__OnlineClaimTerminal["オンライン請求用端末"]:::medium
+    medium__PatientMobile["Patient Mobile"]:::medium
+    medium__PaymentKiosk["自動精算機"]:::medium
+    permission__BillCalculate["会計計算"]:::permission
+    permission__BillingClaimWrite["レセプト業務"]:::permission
+    permission__ClinicalDocument["Clinical Document"]:::permission
+    permission__ClinicalOrderWrite["Clinical Order Write"]:::permission
+    permission__ConsentCapture["Consent Capture"]:::permission
+    permission__EncounterOpen["Encounter Open"]:::permission
+    permission__EncounterSign["Encounter Sign"]:::permission
+    permission__FollowUpManage["Follow-Up Manage"]:::permission
+    permission__InsuranceVerify["Insurance Verify"]:::permission
+    permission__IntakeManage["Intake Manage"]:::permission
+    permission__LabResultManage["Lab Result Manage"]:::permission
+    permission__PatientMessageSend["Patient Message Send"]:::permission
+    permission__PatientProfileRead["Patient Profile Read"]:::permission
+    permission__PatientProfileWrite["Patient Profile Write"]:::permission
+    permission__PaymentCollect["窓口収納"]:::permission
+    permission__PaymentPost["Payment Post"]:::permission
+    permission__ProxyOrderEntry["代行入力"]:::permission
+    permission__ReferralManage["紹介状管理"]:::permission
+    permission__ScheduleRead["Schedule Read"]:::permission
+    permission__ScheduleWrite["Schedule Write"]:::permission
+    permission__VitalsRecord["Vitals Record"]:::permission
   end
-  subgraph layer_boundary[System Boundary]
-    direction TB
-    AmendEncounter(["✅ Amend Signed Encounter"])
-    ApplySelectedTreatmentFee(["✅ 選定療養費の算定"])
-    ArchivePatient(["✅ Archive Patient"])
-    CalculateVisitBill(["✅ 会計計算入力"])
-    CallPatientForPayment(["✅ 会計の呼出"])
-    CancelClinicalOrder(["✅ Cancel Clinical Order"])
-    CaptureConsent(["✅ Capture Consent"])
-    CloseCarePlan(["✅ Close Care Plan"])
-    CollectSpecimen(["✅ Collect Specimen"])
-    CompleteConsultation(["✅ 診察終了"])
-    CompleteIntakeForms(["✅ Complete Intake Forms"])
-    ConfirmProxyOrder(["✅ 代行入力オーダの確定"])
-    CorrectReturnedStatement(["✅ 返戻レセプトの訂正（再請求）"])
-    CreateCarePlan(["✅ Create Care Plan"])
-    CreateCharge(["✅ コスト情報の登録"])
-    DocumentAssessment(["✅ Document Assessment"])
-    EnterProxyOrder(["✅ 検体検査オーダの代行入力"])
-    ExpireIntakeForms(["✅ Expire Intake Forms"])
-    GenerateClaimStatement(["✅ レセプト作成"])
-    HoldClaimStatement(["✅ レセプトの保留（月遅れ）"])
-    InspectClaimStatement(["✅ レセプトの院内点検"])
-    IssueReceipt(["✅ 領収証・明細書の交付"])
-    IssueReferralLetter(["✅ 診療情報提供書の作成・送信"])
-    MergeDuplicatePatient(["✅ Merge Duplicate Patient"])
-    NotifyCriticalResult(["✅ Notify Critical Result"])
-    NotifyPatientResult(["✅ Notify Patient Result"])
-    OpenEncounter(["✅ Open Encounter"])
-    PlaceLabOrder(["✅ Place Lab Order"])
-    PostPayment(["✅ 診療報酬の入金"])
-    PrintSpecimenLabel(["✅ 採血管ラベル発行・貼付"])
-    ReceiveClaimAccepted(["✅ レセプト受付（審査へ）"])
-    ReceiveLabResult(["✅ Receive Lab Result"])
-    ReconcileBalance(["✅ 未収金管理台帳の作成"])
-    RecordClaimAssessment(["✅ 査定の取込"])
-    RecordClaimReturn(["✅ 返戻レセプトの取込"])
-    RecordReceiptError(["✅ 受付不能・要確認の確認"])
-    RecordVitals(["✅ Record Vitals"])
-    RegisterPatient(["✅ Register Patient"])
-    RegisterPerformedProcedure(["✅ 実施内容（コスト）の登録"])
-    ReleaseHeldStatement(["✅ 保留レセプトの再提出準備"])
-    RequestReexamination(["✅ 再審査請求"])
-    ResendErroredStatement(["✅ エラー分レセプトの再送"])
-    ReviewClaimTransfer(["✅ 資格の振替・分割の確認"])
-    ReviewLabResult(["✅ Review Lab Result"])
-    ReviewPatientResponse(["✅ Review Patient Response"])
-    ScheduleFollowUpVisit(["✅ Schedule Follow-Up Visit"])
-    SearchPatient(["✅ Search Patient"])
-    SendAppointmentNotice(["✅ Send Appointment Notice"])
-    SendFollowUpMessage(["✅ Send Follow-Up Message"])
-    SendIntakeForms(["✅ Send Intake Forms"])
-    SettleAtKiosk(["✅ 自動精算機での精算"])
-    SettleAtWindow(["✅ 会計窓口での精算"])
-    SignEncounter(["✅ Sign Encounter"])
-    SubmitClaimStatements(["✅ レセプト請求"])
-    UpdateDemographics(["✅ Update Demographics"])
-    VerifyInsurance(["✅ 保険資格・限度額情報の登録（新患登録）"])
-    VoidCharge(["✅ コストの取消"])
-    AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
-    BalanceScreen[["🖥️ 未収金画面"]]
-    BillCalculationScreen[["🖥️ 会計計算画面"]]
-    CarePlanScreen[["🖥️ Care Plan Screen"]]
-    ChargeWorklistScreen[["🖥️ Charge Worklist Screen"]]
-    ClaimScreen[["🖥️ レセプト画面"]]
-    ConsentScreen[["🖥️ Consent Capture Screen"]]
-    CriticalNoticeScreen[["🖥️ Critical Result Notice Screen"]]
-    DiagnosisScreen[["🖥️ Diagnosis Screen"]]
-    EncounterWorkspaceScreen[["🖥️ Encounter Workspace"]]
-    FollowUpScheduleScreen[["🖥️ Follow-Up Schedule Screen"]]
-    InsuranceScreen[["🖥️ Insurance Verification Screen"]]
-    IntakePortalScreen[["🖥️ Intake Portal Screen"]]
-    KioskScreen[["🖥️ 自動精算機画面"]]
-    OrderEntryScreen[["🖥️ Order Entry Screen"]]
-    PatientMessageScreen[["🖥️ Patient Message Screen"]]
-    PatientProfileScreen[["🖥️ Patient Profile Screen"]]
-    PatientSearchScreen[["🖥️ Patient Search Screen"]]
-    PaymentPostingScreen[["🖥️ 入金画面"]]
-    PaymentWindowScreen[["🖥️ 会計窓口画面"]]
-    ReferralLetterScreen[["🖥️ 診療情報提供書画面"]]
-    ResultReviewScreen[["🖥️ Result Review Screen"]]
-    SpecimenScreen[["🖥️ Specimen Collection Screen"]]
-    VitalsScreen[["🖥️ Vitals Screen"]]
-    ChargeCodeField[["🔤 診療行為"]]
-    KioskReferenceField[["🔤 精算機の取引番号"]]
-    PaymentAmountField[["🔤 お支払額"]]
-    ReferralDirectionField[["🔤 紹介の向き"]]
-    EvAppointmentCancelled{"⚡ Appointment Cancelled"}
-    EvAppointmentCheckedIn{"⚡ Appointment Checked In"}
-    EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
-    EvAppointmentScheduled{"⚡ Appointment Scheduled"}
-    EvBillCalculated{"⚡ 会計計算完了"}
-    EvClaimAccepted{"⚡ レセプト受付"}
-    EvClaimAssessed{"⚡ 査定"}
-    EvClaimReceiptError{"⚡ 受付不能・要確認"}
-    EvClaimReturned{"⚡ 返戻"}
-    EvClaimStatementsSubmitted{"⚡ レセプト請求"}
-    EvClaimTransferred{"⚡ 資格の振替・分割"}
-    EvClinicalOrderReviewed{"⚡ Clinical Result Reviewed"}
-    EvEncounterSigned{"⚡ Encounter Signed"}
-    EvLabResultReceived{"⚡ Lab Result Received"}
-    EvPaymentSettled{"⚡ 自動精算機での精算完了"}
-    EvRemittance{"⚡ 診療報酬の支払"}
+  subgraph layer_boundary["システム境界"]
+    usecase__AmendEncounter["Amend Signed Encounter"]:::usecase
+    usecase__ApplySelectedTreatmentFee["選定療養費の算定"]:::usecase
+    usecase__ArchivePatient["Archive Patient"]:::usecase
+    usecase__CalculateVisitBill["会計計算入力"]:::usecase
+    usecase__CallPatientForPayment["会計の呼出"]:::usecase
+    usecase__CancelClinicalOrder["Cancel Clinical Order"]:::usecase
+    usecase__CaptureConsent["Capture Consent"]:::usecase
+    usecase__CloseCarePlan["Close Care Plan"]:::usecase
+    usecase__CollectSpecimen["Collect Specimen"]:::usecase
+    usecase__CompleteConsultation["診察終了"]:::usecase
+    usecase__CompleteIntakeForms["Complete Intake Forms"]:::usecase
+    usecase__ConfirmProxyOrder["代行入力オーダの確定"]:::usecase
+    usecase__CorrectReturnedStatement["返戻レセプトの訂正（再請求）"]:::usecase
+    usecase__CreateCarePlan["Create Care Plan"]:::usecase
+    usecase__CreateCharge["コスト情報の登録"]:::usecase
+    usecase__DocumentAssessment["Document Assessment"]:::usecase
+    usecase__EnterProxyOrder["検体検査オーダの代行入力"]:::usecase
+    usecase__ExpireIntakeForms["Expire Intake Forms"]:::usecase
+    usecase__GenerateClaimStatement["レセプト作成"]:::usecase
+    usecase__HoldClaimStatement["レセプトの保留（月遅れ）"]:::usecase
+    usecase__InspectClaimStatement["レセプトの院内点検"]:::usecase
+    usecase__IssueReceipt["領収証・明細書の交付"]:::usecase
+    usecase__IssueReferralLetter["診療情報提供書の作成・送信"]:::usecase
+    usecase__MergeDuplicatePatient["Merge Duplicate Patient"]:::usecase
+    usecase__NotifyCriticalResult["Notify Critical Result"]:::usecase
+    usecase__NotifyPatientResult["Notify Patient Result"]:::usecase
+    usecase__OpenEncounter["Open Encounter"]:::usecase
+    usecase__PlaceLabOrder["Place Lab Order"]:::usecase
+    usecase__PostPayment["診療報酬の入金"]:::usecase
+    usecase__PrintSpecimenLabel["採血管ラベル発行・貼付"]:::usecase
+    usecase__ReceiveClaimAccepted["レセプト受付（審査へ）"]:::usecase
+    usecase__ReceiveLabResult["Receive Lab Result"]:::usecase
+    usecase__ReconcileBalance["未収金管理台帳の作成"]:::usecase
+    usecase__RecordClaimAssessment["査定の取込"]:::usecase
+    usecase__RecordClaimReturn["返戻レセプトの取込"]:::usecase
+    usecase__RecordReceiptError["受付不能・要確認の確認"]:::usecase
+    usecase__RecordVitals["Record Vitals"]:::usecase
+    usecase__RegisterPatient["Register Patient"]:::usecase
+    usecase__RegisterPerformedProcedure["実施内容（コスト）の登録"]:::usecase
+    usecase__ReleaseHeldStatement["保留レセプトの再提出準備"]:::usecase
+    usecase__RequestReexamination["再審査請求"]:::usecase
+    usecase__ResendErroredStatement["エラー分レセプトの再送"]:::usecase
+    usecase__ReviewClaimTransfer["資格の振替・分割の確認"]:::usecase
+    usecase__ReviewLabResult["Review Lab Result"]:::usecase
+    usecase__ReviewPatientResponse["Review Patient Response"]:::usecase
+    usecase__ScheduleFollowUpVisit["Schedule Follow-Up Visit"]:::usecase
+    usecase__SearchPatient["Search Patient"]:::usecase
+    usecase__SendAppointmentNotice["Send Appointment Notice"]:::usecase
+    usecase__SendFollowUpMessage["Send Follow-Up Message"]:::usecase
+    usecase__SendIntakeForms["Send Intake Forms"]:::usecase
+    usecase__SettleAtKiosk["自動精算機での精算"]:::usecase
+    usecase__SettleAtWindow["会計窓口での精算"]:::usecase
+    usecase__SignEncounter["Sign Encounter"]:::usecase
+    usecase__SubmitClaimStatements["レセプト請求"]:::usecase
+    usecase__UpdateDemographics["Update Demographics"]:::usecase
+    usecase__VerifyInsurance["保険資格・限度額情報の登録（新患登録）"]:::usecase
+    usecase__VoidCharge["コストの取消"]:::usecase
+    screen__AppointmentNoticeScreen["Appointment Notice Screen"]:::screen
+    screen__BalanceScreen["未収金画面"]:::screen
+    screen__BillCalculationScreen["会計計算画面"]:::screen
+    screen__CarePlanScreen["Care Plan Screen"]:::screen
+    screen__ChargeWorklistScreen["Charge Worklist Screen"]:::screen
+    screen__ClaimScreen["レセプト画面"]:::screen
+    screen__ConsentScreen["Consent Capture Screen"]:::screen
+    screen__CriticalNoticeScreen["Critical Result Notice Screen"]:::screen
+    screen__DiagnosisScreen["Diagnosis Screen"]:::screen
+    screen__EncounterWorkspaceScreen["Encounter Workspace"]:::screen
+    screen__FollowUpScheduleScreen["Follow-Up Schedule Screen"]:::screen
+    screen__InsuranceScreen["Insurance Verification Screen"]:::screen
+    screen__IntakePortalScreen["Intake Portal Screen"]:::screen
+    screen__KioskScreen["自動精算機画面"]:::screen
+    screen__OrderEntryScreen["Order Entry Screen"]:::screen
+    screen__PatientMessageScreen["Patient Message Screen"]:::screen
+    screen__PatientProfileScreen["Patient Profile Screen"]:::screen
+    screen__PatientSearchScreen["Patient Search Screen"]:::screen
+    screen__PaymentPostingScreen["入金画面"]:::screen
+    screen__PaymentWindowScreen["会計窓口画面"]:::screen
+    screen__ReferralLetterScreen["診療情報提供書画面"]:::screen
+    screen__ResultReviewScreen["Result Review Screen"]:::screen
+    screen__SpecimenScreen["Specimen Collection Screen"]:::screen
+    screen__VitalsScreen["Vitals Screen"]:::screen
+    field__ChargeCodeField["診療行為"]:::field
+    field__KioskReferenceField["精算機の取引番号"]:::field
+    field__PaymentAmountField["お支払額"]:::field
+    field__ReferralDirectionField["紹介の向き"]:::field
+    event__EvAppointmentCancelled["Appointment Cancelled"]:::event
+    event__EvAppointmentCheckedIn["Appointment Checked In"]:::event
+    event__EvAppointmentRescheduled["Appointment Rescheduled"]:::event
+    event__EvAppointmentScheduled["Appointment Scheduled"]:::event
+    event__EvBillCalculated["会計計算完了"]:::event
+    event__EvClaimAccepted["レセプト受付"]:::event
+    event__EvClaimAssessed["査定"]:::event
+    event__EvClaimReceiptError["受付不能・要確認"]:::event
+    event__EvClaimReturned["返戻"]:::event
+    event__EvClaimStatementsSubmitted["レセプト請求"]:::event
+    event__EvClaimTransferred["資格の振替・分割"]:::event
+    event__EvClinicalOrderReviewed["Clinical Result Reviewed"]:::event
+    event__EvEncounterSigned["Encounter Signed"]:::event
+    event__EvLabResultReceived["Lab Result Received"]:::event
+    event__EvPaymentSettled["自動精算機での精算完了"]:::event
+    event__EvRemittance["診療報酬の支払"]:::event
   end
-  subgraph layer_system[System]
-    direction TB
-    AmendEncounterApi["🔌 Amend Encounter API"]
-    AppointmentNoticeApi["🔌 Appointment Notice API"]
-    BalanceApi["🔌 未収金 API"]
-    CalculateVisitBillApi["🔌 会計計算 API"]
-    ClaimEditApi["🔌 レセプト点検・訂正 API"]
-    ClaimResultApi["🔌 審査結果 API"]
-    CollectSpecimenApi["🔌 Collect Specimen API"]
-    CompleteConsultationApi["🔌 診察終了 API"]
-    ConfirmOrderApi["🔌 オーダ確定 API"]
-    ConsentApi["🔌 Consent API"]
-    CreateCarePlanApi["🔌 Create Care Plan API"]
-    CreateChargeApi["🔌 Create Charge API"]
-    CriticalNoticeApi["🔌 Critical Notice API"]
-    DocumentAssessmentApi["🔌 Document Assessment API"]
-    EligibilityApi["🔌 Eligibility API"]
-    FollowUpScheduleApi["🔌 Follow-Up Schedule API"]
-    GenerateClaimApi["🔌 レセプト作成 API"]
-    IntakeMessagingApi["🔌 Intake Messaging API"]
-    IssueReferralLetterApi["🔌 診療情報提供書 API"]
-    NotifyPatientResultApi["🔌 Notify Patient Result API"]
-    OpenEncounterApi["🔌 Open Encounter API"]
-    OrderEntryApi["🔌 Order Entry API"]
-    PaymentPostApi["🔌 入金 API"]
-    PerformedProcedureApi["🔌 実施登録 API"]
-    ProxyOrderApi["🔌 代行入力 API"]
-    ReceiptApi["🔌 領収証 API"]
-    ReceiveLabResultApi["🔌 Receive Lab Result API"]
-    RecordVitalsApi["🔌 Record Vitals API"]
-    RegisterPatientApi["🔌 Register Patient API"]
-    ResultReviewApi["🔌 Result Review API"]
-    SearchPatientApi["🔌 Search Patient API"]
-    SelectedFeeApi["🔌 選定療養費 API"]
-    SendFollowUpMessageApi["🔌 Send Follow-Up Message API"]
-    SettlementApi["🔌 精算 API"]
-    SignEncounterApi["🔌 Sign Encounter API"]
-    SubmitClaimApi["🔌 オンライン請求 API"]
-    UpdateDemographicsApi["🔌 Update Demographics API"]
-    AccountBalance[("🗄️ 未収金残高")]
-    Appointment[("🗄️ Appointment")]
-    CarePlan[("🗄️ Care Plan")]
-    Charge[("🗄️ Charge")]
-    ClaimStatement[("🗄️ レセプト")]
-    ClinicalOrder[("🗄️ Clinical Order")]
-    ConsentRecord[("🗄️ Consent Record")]
-    Diagnosis[("🗄️ Diagnosis")]
-    EligibilityCheck[("🗄️ 資格確認")]
-    Encounter[("🗄️ Encounter")]
-    InsurancePolicy[("🗄️ 保険資格")]
-    IntakePacket[("🗄️ Intake Packet")]
-    LabResult[("🗄️ Lab Result")]
-    Notification[("🗄️ Notification")]
-    PatientAccount[("🗄️ Patient Account")]
-    PatientMessage[("🗄️ Patient Message")]
-    PatientProfile[("🗄️ Patient Profile")]
-    PaymentTransaction[("🗄️ Payment Transaction")]
-    ProviderSchedule[("🗄️ Provider Schedule")]
-    ReferralLetter[("🗄️ 紹介状・診療情報提供書")]
-    Room[("🗄️ Room")]
-    SelectedTreatmentFeeSetting[("🗄️ 選定療養費の設定")]
-    VitalSign[("🗄️ Vital Sign")]
-    BurdenRatio["🎚️ 負担割合"]
-    ChargeKind["🎚️ 診療費の種類"]
-    LimitCategory["🎚️ 限度額適用区分"]
-    PayerChange["🎚️ 資格変更の種類"]
-    ReferralCategory["🎚️ 紹介の有無"]
-    CopayCappedAtLimit{"🔀 窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"}
-    OrderConfirmedByPhysician{"🔀 医師が確定したオーダ"}
-    TransferNotPossible{"🔀 振替・分割の対象外（負担割合の相違・公費）"}
-    UnreferredFirstVisit{"🔀 紹介状なしの初診で、除外に当たらない"}
+  subgraph layer_system["システム"]
+    api__AmendEncounterApi["Amend Encounter API"]:::api
+    api__AppointmentNoticeApi["Appointment Notice API"]:::api
+    api__BalanceApi["未収金 API"]:::api
+    api__CalculateVisitBillApi["会計計算 API"]:::api
+    api__ClaimEditApi["レセプト点検・訂正 API"]:::api
+    api__ClaimResultApi["審査結果 API"]:::api
+    api__CollectSpecimenApi["Collect Specimen API"]:::api
+    api__CompleteConsultationApi["診察終了 API"]:::api
+    api__ConfirmOrderApi["オーダ確定 API"]:::api
+    api__ConsentApi["Consent API"]:::api
+    api__CreateCarePlanApi["Create Care Plan API"]:::api
+    api__CreateChargeApi["Create Charge API"]:::api
+    api__CriticalNoticeApi["Critical Notice API"]:::api
+    api__DocumentAssessmentApi["Document Assessment API"]:::api
+    api__EligibilityApi["Eligibility API"]:::api
+    api__FollowUpScheduleApi["Follow-Up Schedule API"]:::api
+    api__GenerateClaimApi["レセプト作成 API"]:::api
+    api__IntakeMessagingApi["Intake Messaging API"]:::api
+    api__IssueReferralLetterApi["診療情報提供書 API"]:::api
+    api__NotifyPatientResultApi["Notify Patient Result API"]:::api
+    api__OpenEncounterApi["Open Encounter API"]:::api
+    api__OrderEntryApi["Order Entry API"]:::api
+    api__PaymentPostApi["入金 API"]:::api
+    api__PerformedProcedureApi["実施登録 API"]:::api
+    api__ProxyOrderApi["代行入力 API"]:::api
+    api__ReceiptApi["領収証 API"]:::api
+    api__ReceiveLabResultApi["Receive Lab Result API"]:::api
+    api__RecordVitalsApi["Record Vitals API"]:::api
+    api__RegisterPatientApi["Register Patient API"]:::api
+    api__ResultReviewApi["Result Review API"]:::api
+    api__SearchPatientApi["Search Patient API"]:::api
+    api__SelectedFeeApi["選定療養費 API"]:::api
+    api__SendFollowUpMessageApi["Send Follow-Up Message API"]:::api
+    api__SettlementApi["精算 API"]:::api
+    api__SignEncounterApi["Sign Encounter API"]:::api
+    api__SubmitClaimApi["オンライン請求 API"]:::api
+    api__UpdateDemographicsApi["Update Demographics API"]:::api
+    entity__AccountBalance["未収金残高"]:::entity
+    entity__Appointment["Appointment"]:::entity
+    entity__CarePlan["Care Plan"]:::entity
+    entity__Charge["Charge"]:::entity
+    entity__ClaimStatement["レセプト"]:::entity
+    entity__ClinicalOrder["Clinical Order"]:::entity
+    entity__ConsentRecord["Consent Record"]:::entity
+    entity__Diagnosis["Diagnosis"]:::entity
+    entity__EligibilityCheck["資格確認"]:::entity
+    entity__Encounter["Encounter"]:::entity
+    entity__InsurancePolicy["保険資格"]:::entity
+    entity__IntakePacket["Intake Packet"]:::entity
+    entity__LabResult["Lab Result"]:::entity
+    entity__Notification["Notification"]:::entity
+    entity__PatientAccount["Patient Account"]:::entity
+    entity__PatientMessage["Patient Message"]:::entity
+    entity__PatientProfile["Patient Profile"]:::entity
+    entity__PaymentTransaction["Payment Transaction"]:::entity
+    entity__ProviderSchedule["Provider Schedule"]:::entity
+    entity__ReferralLetter["紹介状・診療情報提供書"]:::entity
+    entity__Room["Room"]:::entity
+    entity__SelectedTreatmentFeeSetting["選定療養費の設定"]:::entity
+    entity__VitalSign["Vital Sign"]:::entity
+    state__Appointment_apptawaitingcalc["apptawaitingcalc"]:::state
+    state__Appointment_apptawaitingpay["apptawaitingpay"]:::state
+    state__Appointment_apptcheckedin["apptcheckedin"]:::state
+    state__Appointment_apptcompleted["apptcompleted"]:::state
+    state__Appointment_apptinconsult["apptinconsult"]:::state
+    state__Appointment_apptrequested["apptrequested"]:::state
+    state__Appointment_apptscheduled["apptscheduled"]:::state
+    state__Appointment_apptsettled["apptsettled"]:::state
+    state__CarePlan_careclosed["careclosed"]:::state
+    state__CarePlan_caremonitoring["caremonitoring"]:::state
+    state__CarePlan_careopen["careopen"]:::state
+    state__ClaimStatement_stmtassessed["stmtassessed"]:::state
+    state__ClaimStatement_stmtdrafting["stmtdrafting"]:::state
+    state__ClaimStatement_stmtinspecting["stmtinspecting"]:::state
+    state__ClaimStatement_stmtonhold["stmtonhold"]:::state
+    state__ClaimStatement_stmtpaid["stmtpaid"]:::state
+    state__ClaimStatement_stmtreceipterror["stmtreceipterror"]:::state
+    state__ClaimStatement_stmtrereview["stmtrereview"]:::state
+    state__ClaimStatement_stmtreturned["stmtreturned"]:::state
+    state__ClaimStatement_stmtsubmitted["stmtsubmitted"]:::state
+    state__ClaimStatement_stmtunderreview["stmtunderreview"]:::state
+    state__ClinicalOrder_clcancelled["clcancelled"]:::state
+    state__ClinicalOrder_clcollected["clcollected"]:::state
+    state__ClinicalOrder_clordered["clordered"]:::state
+    state__ClinicalOrder_clresulted["clresulted"]:::state
+    state__ClinicalOrder_clreviewed["clreviewed"]:::state
+    state__Encounter_encamended["encamended"]:::state
+    state__Encounter_encdocumented["encdocumented"]:::state
+    state__Encounter_encopen["encopen"]:::state
+    state__Encounter_encsigned["encsigned"]:::state
+    state__IntakePacket_intakecompleted["intakecompleted"]:::state
+    state__IntakePacket_intakeexpired["intakeexpired"]:::state
+    state__IntakePacket_intakesent["intakesent"]:::state
+    state__PatientAccount_patientactive["patientactive"]:::state
+    state__PatientAccount_patientinactive["patientinactive"]:::state
+    state__PatientAccount_patientmerged["patientmerged"]:::state
+    variation__BurdenRatio["負担割合"]:::variation
+    variation__ChargeKind["診療費の種類"]:::variation
+    variation__LimitCategory["限度額適用区分"]:::variation
+    variation__PayerChange["資格変更の種類"]:::variation
+    variation__ReferralCategory["紹介の有無"]:::variation
+    condition__CopayCappedAtLimit["窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"]:::condition
+    condition__OrderConfirmedByPhysician["医師が確定したオーダ"]:::condition
+    condition__TransferNotPossible["振替・分割の対象外（負担割合の相違・公費）"]:::condition
+    condition__UnreferredFirstVisit["紹介状なしの初診で、除外に当たらない"]:::condition
   end
-  SubmitClaimApi -.->|requires_permission| BillingClaimWrite
-  SubmitClaimApi -.->|updates| ClaimStatement
-  ClaimResultApi -.->|requires_permission| BillingClaimWrite
-  ClaimResultApi -.->|updates| ClaimStatement
-  PaymentPostApi -.->|requires_permission| PaymentPost
-  PaymentPostApi -.->|updates| ClaimStatement
-  BalanceApi -.->|reads| PaymentTransaction
-  BalanceApi -.->|requires_permission| PaymentPost
-  BalanceApi -.->|updates| AccountBalance
-  OpenEncounterApi -.->|creates| Encounter
-  OpenEncounterApi -.->|requires_permission| EncounterOpen
-  OpenEncounterApi -.->|updates| Appointment
-  RecordVitalsApi -.->|creates| VitalSign
-  RecordVitalsApi -.->|requires_permission| VitalsRecord
-  RecordVitalsApi -.->|updates| Encounter
-  DocumentAssessmentApi -.->|creates| Diagnosis
-  DocumentAssessmentApi -.->|requires_permission| ClinicalDocument
-  DocumentAssessmentApi -.->|updates| Encounter
-  SignEncounterApi -.->|requires_permission| EncounterSign
-  SignEncounterApi -.->|updates| Encounter
-  AmendEncounterApi -.->|requires_permission| EncounterSign
-  AmendEncounterApi -.->|updates| Encounter
-  IssueReferralLetterApi -.->|creates| ReferralLetter
-  IssueReferralLetterApi -.->|reads| Encounter
-  IssueReferralLetterApi -.->|requires_permission| ReferralManage
-  CompleteConsultationApi -.->|requires_permission| EncounterOpen
-  CompleteConsultationApi -.->|updates| Appointment
-  CompleteConsultationApi -.->|updates| Room
-  CreateCarePlanApi -.->|creates| CarePlan
-  CreateCarePlanApi -.->|reads| Encounter
-  CreateCarePlanApi -.->|requires_permission| FollowUpManage
-  SendFollowUpMessageApi -.->|creates| PatientMessage
-  SendFollowUpMessageApi -.->|requires_permission| PatientMessageSend
-  FollowUpScheduleApi -.->|creates| Appointment
-  FollowUpScheduleApi -.->|requires_permission| ScheduleWrite
-  FollowUpScheduleApi -.->|updates| ProviderSchedule
-  NotifyPatientResultApi -.->|creates| Notification
-  NotifyPatientResultApi -.->|requires_permission| PatientMessageSend
-  OrderEntryApi -.->|creates| ClinicalOrder
-  OrderEntryApi -.->|reads| Encounter
-  OrderEntryApi -.->|requires_permission| ClinicalOrderWrite
-  ProxyOrderApi -.->|creates| ClinicalOrder
-  ProxyOrderApi -.->|reads| Encounter
-  ProxyOrderApi -.->|requires_permission| ProxyOrderEntry
-  ConfirmOrderApi -.->|requires_permission| ClinicalOrderWrite
-  ConfirmOrderApi -.->|updates| ClinicalOrder
-  PerformedProcedureApi -.->|creates| Charge
-  PerformedProcedureApi -.->|reads| Encounter
-  PerformedProcedureApi -.->|reads| ClinicalOrder
-  PerformedProcedureApi -.->|requires_permission| ClinicalOrderWrite
-  CollectSpecimenApi -.->|requires_permission| ClinicalOrderWrite
-  CollectSpecimenApi -.->|updates| ClinicalOrder
-  ReceiveLabResultApi -.->|creates| LabResult
-  ReceiveLabResultApi -.->|requires_permission| LabResultManage
-  ReceiveLabResultApi -.->|updates| ClinicalOrder
-  ResultReviewApi -.->|requires_permission| LabResultManage
-  ResultReviewApi -.->|updates| ClinicalOrder
-  ResultReviewApi -.->|updates| LabResult
-  CriticalNoticeApi -.->|creates| PatientMessage
-  CriticalNoticeApi -.->|creates| Notification
-  CriticalNoticeApi -.->|requires_permission| PatientMessageSend
-  SearchPatientApi -.->|reads| PatientAccount
-  SearchPatientApi -.->|reads| PatientProfile
-  SearchPatientApi -.->|requires_permission| PatientProfileRead
-  RegisterPatientApi -.->|creates| PatientAccount
-  RegisterPatientApi -.->|creates| PatientProfile
-  RegisterPatientApi -.->|requires_permission| PatientProfileWrite
-  UpdateDemographicsApi -.->|requires_permission| PatientProfileWrite
-  UpdateDemographicsApi -.->|updates| PatientProfile
-  EligibilityApi -.->|creates| EligibilityCheck
-  EligibilityApi -.->|reads| InsurancePolicy
-  EligibilityApi -.->|requires_permission| InsuranceVerify
-  EligibilityApi -.->|updates| InsurancePolicy
-  ConsentApi -.->|creates| ConsentRecord
-  ConsentApi -.->|requires_permission| ConsentCapture
-  IntakeMessagingApi -.->|creates| PatientMessage
-  IntakeMessagingApi -.->|creates| IntakePacket
-  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
-  CalculateVisitBillApi -.->|reads| Charge
-  CalculateVisitBillApi -.->|reads| InsurancePolicy
-  CalculateVisitBillApi -.->|requires_permission| BillCalculate
-  CalculateVisitBillApi -.->|updates| Appointment
-  SelectedFeeApi -.->|creates| Charge
-  SelectedFeeApi -.->|reads| Encounter
-  SelectedFeeApi -.->|reads| SelectedTreatmentFeeSetting
-  SelectedFeeApi -.->|requires_permission| BillCalculate
-  SettlementApi -.->|creates| PaymentTransaction
-  SettlementApi -.->|requires_permission| PaymentCollect
-  SettlementApi -.->|updates| Appointment
-  SettlementApi -.->|updates| AccountBalance
-  ReceiptApi -.->|reads| Charge
-  ReceiptApi -.->|reads| PaymentTransaction
-  ReceiptApi -.->|requires_permission| PaymentCollect
-  ReceiptApi -.->|updates| Appointment
-  AppointmentNoticeApi -.->|creates| PatientMessage
-  AppointmentNoticeApi -.->|creates| Notification
-  CreateChargeApi -.->|creates| Charge
-  CreateChargeApi -.->|reads| Encounter
-  GenerateClaimApi -.->|creates| ClaimStatement
-  GenerateClaimApi -.->|reads| Charge
-  GenerateClaimApi -.->|reads| InsurancePolicy
-  GenerateClaimApi -.->|requires_permission| BillingClaimWrite
-  ClaimEditApi -.->|requires_permission| BillingClaimWrite
-  ClaimEditApi -.->|updates| ClaimStatement
-  BucVisitPayment -.->|belongs| RevenueCycle
-  BucVisitPayment -->|contains| VisitPaymentFlow
-  BucVisitPayment -->|contains| CalculateVisitBill
-  BucVisitPayment -->|contains| ApplySelectedTreatmentFee
-  BucVisitPayment -->|contains| CallPatientForPayment
-  BucVisitPayment -->|contains| SettleAtWindow
-  BucVisitPayment -->|contains| SettleAtKiosk
-  BucVisitPayment -->|contains| IssueReceipt
-  BucBillingClaims -.->|belongs| RevenueCycle
-  BucBillingClaims -->|contains| ClaimCycleFlow
-  BucBillingClaims -->|contains| InspectClaimStatement
-  BucBillingClaims -->|contains| HoldClaimStatement
-  BucBillingClaims -->|contains| ReleaseHeldStatement
-  BucBillingClaims -->|contains| SubmitClaimStatements
-  BucBillingClaims -->|contains| RecordReceiptError
-  BucBillingClaims -->|contains| ResendErroredStatement
-  BucBillingClaims -->|contains| ReceiveClaimAccepted
-  BucBillingClaims -->|contains| ReviewClaimTransfer
-  BucBillingClaims -->|contains| RecordClaimReturn
-  BucBillingClaims -->|contains| CorrectReturnedStatement
-  BucBillingClaims -->|contains| RecordClaimAssessment
-  BucBillingClaims -->|contains| RequestReexamination
-  BucBillingClaims -->|contains| PostPayment
-  BucBillingClaims -->|contains| ReconcileBalance
-  BucBillingClaims -->|contains| VoidCharge
-  BucBillingClaims -->|contains| CreateCharge
-  BucBillingClaims -->|contains| GenerateClaimStatement
-  BucClinicalEncounter -.->|belongs| CareDelivery
-  BucClinicalEncounter -->|contains| OpenEncounter
-  BucClinicalEncounter -->|contains| RecordVitals
-  BucClinicalEncounter -->|contains| DocumentAssessment
-  BucClinicalEncounter -->|contains| SignEncounter
-  BucClinicalEncounter -->|contains| AmendEncounter
-  BucClinicalEncounter -->|contains| IssueReferralLetter
-  BucClinicalEncounter -->|contains| CompleteConsultation
-  BucFollowupCare -.->|belongs| PatientAccess
-  BucFollowupCare -->|contains| CreateCarePlan
-  BucFollowupCare -->|contains| SendFollowUpMessage
-  BucFollowupCare -->|contains| ReviewPatientResponse
-  BucFollowupCare -->|contains| ScheduleFollowUpVisit
-  BucFollowupCare -->|contains| CloseCarePlan
-  BucFollowupCare -->|contains| NotifyPatientResult
-  BucOrdersResults -.->|belongs| CareDelivery
-  BucOrdersResults -->|contains| PlaceLabOrder
-  BucOrdersResults -->|contains| EnterProxyOrder
-  BucOrdersResults -->|contains| ConfirmProxyOrder
-  BucOrdersResults -->|contains| PrintSpecimenLabel
-  BucOrdersResults -->|contains| CollectSpecimen
-  BucOrdersResults -->|contains| RegisterPerformedProcedure
-  BucOrdersResults -->|contains| ReceiveLabResult
-  BucOrdersResults -->|contains| ReviewLabResult
-  BucOrdersResults -->|contains| NotifyCriticalResult
-  BucOrdersResults -->|contains| CancelClinicalOrder
-  BucPatientOnboarding -.->|belongs| PatientAccess
-  BucPatientOnboarding -->|contains| SearchPatient
-  BucPatientOnboarding -->|contains| RegisterPatient
-  BucPatientOnboarding -->|contains| UpdateDemographics
-  BucPatientOnboarding -->|contains| VerifyInsurance
-  BucPatientOnboarding -->|contains| CaptureConsent
-  BucPatientOnboarding -->|contains| SendIntakeForms
-  BucPatientOnboarding -->|contains| CompleteIntakeForms
-  BucPatientOnboarding -->|contains| ExpireIntakeForms
-  BucPatientOnboarding -->|contains| MergeDuplicatePatient
-  BucPatientOnboarding -->|contains| ArchivePatient
-  TransferNotPossible -.->|applies_to| RecordClaimReturn
-  TransferNotPossible -.->|combines| ClaimStatement
-  TransferNotPossible -.->|combines| PayerChange
-  OrderConfirmedByPhysician -.->|applies_to| CollectSpecimen
-  OrderConfirmedByPhysician -.->|combines| ClinicalOrder
-  CopayCappedAtLimit -.->|applies_to| CalculateVisitBill
-  CopayCappedAtLimit -.->|combines| Appointment
-  CopayCappedAtLimit -.->|combines| BurdenRatio
-  CopayCappedAtLimit -.->|combines| LimitCategory
-  UnreferredFirstVisit -.->|applies_to| ApplySelectedTreatmentFee
-  UnreferredFirstVisit -.->|combines| ReferralCategory
-  UnreferredFirstVisit -.->|combines| ChargeKind
-  Appointment ---|N:1| PatientAccount
-  Appointment ---|N:1| Room
-  Encounter ---|N:1| PatientAccount
-  Encounter ---|1:1| Appointment
-  VitalSign ---|N:1| Encounter
-  Diagnosis ---|N:1| Encounter
-  ClinicalOrder ---|N:1| Encounter
-  LabResult ---|1:1| ClinicalOrder
-  Charge ---|N:1| Encounter
-  Charge ---|N:1| ClaimStatement
-  ClaimStatement ---|N:1| PatientAccount
-  ClaimStatement ---|N:1| InsurancePolicy
-  PaymentTransaction ---|N:1| Appointment
-  AccountBalance ---|1:1| PatientAccount
-  ReferralLetter ---|N:1| PatientAccount
-  CarePlan ---|N:1| Encounter
-  CarePlan ---|N:1| PatientAccount
-  PatientMessage ---|N:1| PatientAccount
-  Notification ---|N:1| PatientAccount
-  PatientProfile ---|1:1| PatientAccount
-  InsurancePolicy ---|N:1| PatientAccount
-  EligibilityCheck ---|N:1| InsurancePolicy
-  ConsentRecord ---|N:1| PatientAccount
-  IntakePacket ---|N:1| PatientAccount
-  EvPaymentSettled -.->|triggers| SettleAtKiosk
-  EvBillCalculated -.->|triggers| PaymentGateway
-  EvBillCalculated -.->|triggers| CallPatientForPayment
-  EvClaimStatementsSubmitted -.->|triggers| ClaimsReviewOrganization
-  EvClaimReceiptError -.->|triggers| RecordReceiptError
-  EvClaimAccepted -.->|triggers| ReceiveClaimAccepted
-  EvClaimReturned -.->|triggers| RecordClaimReturn
-  EvClaimAssessed -.->|triggers| RecordClaimAssessment
-  EvClaimTransferred -.->|triggers| ReviewClaimTransfer
-  EvRemittance -.->|triggers| PostPayment
-  EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
-  EvAppointmentScheduled -.->|triggers| MessagingGateway
-  EvAppointmentScheduled -.->|triggers| SendIntakeForms
-  EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
-  EvAppointmentRescheduled -.->|triggers| MessagingGateway
-  EvAppointmentRescheduled -.->|triggers| SendAppointmentNotice
-  EvAppointmentCheckedIn -.->|triggers| BucClinicalEncounter
-  EvAppointmentCheckedIn -.->|triggers| OpenEncounter
-  EvAppointmentCancelled -.->|triggers| MessagingGateway
-  EvAppointmentCancelled -.->|triggers| SendAppointmentNotice
-  EvEncounterSigned -.->|triggers| BucVisitPayment
-  EvEncounterSigned -.->|triggers| BucBillingClaims
-  EvEncounterSigned -.->|triggers| BucFollowupCare
-  EvEncounterSigned -.->|triggers| BucOrdersResults
-  EvEncounterSigned -.->|triggers| CompleteConsultation
-  EvEncounterSigned -.->|triggers| CreateCarePlan
-  EvEncounterSigned -.->|triggers| PlaceLabOrder
-  EvEncounterSigned -.->|triggers| CreateCharge
-  EvClinicalOrderReviewed -.->|triggers| BucFollowupCare
-  EvClinicalOrderReviewed -.->|triggers| NotifyPatientResult
-  EvClinicalOrderReviewed -.->|triggers| NotifyCriticalResult
-  EvLabResultReceived -.->|triggers| ReceiveLabResult
-  PaymentGateway -.->|raises| EvPaymentSettled
-  OutsourcedLabSystem -.->|raises| EvLabResultReceived
-  ClaimsReviewOrganization -.->|raises| EvClaimReceiptError
-  ClaimsReviewOrganization -.->|raises| EvClaimAccepted
-  ClaimsReviewOrganization -.->|raises| EvClaimReturned
-  ClaimsReviewOrganization -.->|raises| EvClaimAssessed
-  ClaimsReviewOrganization -.->|raises| EvClaimTransferred
-  ClaimsReviewOrganization -.->|raises| EvRemittance
-  KioskReferenceField -.->|maps_field| PaymentTransaction
-  ReferralDirectionField -.->|maps_field| ReferralLetter
-  PaymentAmountField -.->|maps_field| PaymentTransaction
-  ChargeCodeField -.->|maps_field| Charge
-  ClaimCycleFlow -->|contains| CreateStatementStep
-  ClaimCycleFlow -->|contains| InspectStep
-  ClaimCycleFlow -->|contains| HoldStep
-  ClaimCycleFlow -->|contains| SubmitStep
-  ClaimCycleFlow -->|contains| ReceiptErrorStep
-  ClaimCycleFlow -->|contains| ReviewStep
-  ClaimCycleFlow -->|contains| ReturnStep
-  ClaimCycleFlow -->|contains| AssessStep
-  ClaimCycleFlow -->|contains| PaidStep
-  VisitPaymentFlow -->|contains| CalculationStep
-  VisitPaymentFlow -->|contains| CallStep
-  VisitPaymentFlow -->|contains| WindowStep
-  VisitPaymentFlow -->|contains| KioskStep
-  VisitPaymentFlow -->|contains| ReceiptStep
-  ReferralLetterScreen -->|contains| ReferralDirectionField
-  PatientSearchScreen -.->|shows| PatientAccount
-  PatientProfileScreen -.->|shows| PatientProfile
-  BillCalculationScreen -->|contains| ChargeCodeField
-  PaymentWindowScreen -->|contains| PaymentAmountField
-  KioskScreen -->|contains| KioskReferenceField
-  CreateStatementStep -.->|covers| MonthlyClaimCreation
-  CreateStatementStep -.->|covers| GenerateClaimStatement
-  CreateStatementStep -.->|precedes| InspectStep
-  CalculationStep -.->|covers| CalculateVisitBill
-  CalculationStep -.->|covers| ApplySelectedTreatmentFee
-  CalculationStep -.->|precedes| CallStep
-  CallStep -.->|branches| KioskStep
-  CallStep -.->|covers| CallPatientForPayment
-  CallStep -.->|precedes| WindowStep
-  WindowStep -.->|covers| SettleAtWindow
-  WindowStep -.->|precedes| ReceiptStep
-  KioskStep -.->|covers| EvPaymentSettled
-  KioskStep -.->|covers| SettleAtKiosk
-  KioskStep -.->|precedes| ReceiptStep
-  ReceiptStep -.->|covers| IssueReceipt
-  InspectStep -.->|branches| HoldStep
-  InspectStep -.->|covers| InspectClaimStatement
-  InspectStep -.->|precedes| SubmitStep
-  HoldStep -.->|covers| HoldClaimStatement
-  HoldStep -.->|covers| ReleaseHeldStatement
-  HoldStep -.->|repeats| InspectStep
-  SubmitStep -.->|covers| MonthlyClaimDeadline
-  SubmitStep -.->|covers| SubmitClaimStatements
-  SubmitStep -.->|excepts| ReceiptErrorStep
-  SubmitStep -.->|precedes| ReviewStep
-  ReceiptErrorStep -.->|covers| ErrorResendWindow
-  ReceiptErrorStep -.->|covers| RecordReceiptError
-  ReceiptErrorStep -.->|covers| ResendErroredStatement
-  ReceiptErrorStep -.->|repeats| SubmitStep
-  ReviewStep -.->|branches| AssessStep
-  ReviewStep -.->|covers| ReceiveClaimAccepted
-  ReviewStep -.->|covers| ReviewClaimTransfer
-  ReviewStep -.->|excepts| ReturnStep
-  ReviewStep -.->|precedes| PaidStep
-  ReturnStep -.->|covers| RecordClaimReturn
-  ReturnStep -.->|covers| CorrectReturnedStatement
-  ReturnStep -.->|repeats| InspectStep
-  AssessStep -.->|covers| RecordClaimAssessment
-  AssessStep -.->|covers| RequestReexamination
-  AssessStep -.->|precedes| PaidStep
-  PaidStep -.->|covers| PostPayment
-  IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
-  MonthlyClaimCreation -.->|triggers| GenerateClaimStatement
-  MonthlyClaimDeadline -.->|triggers| SubmitClaimStatements
-  ErrorResendWindow -.->|triggers| ResendErroredStatement
-  ReturnDownloadCheck -.->|triggers| RecordClaimReturn
-  ReceivablesMonthlyReview -.->|triggers| ReconcileBalance
-  InspectClaimStatement -.->|displays| ClaimScreen
-  InspectClaimStatement -.->|invokes| ClaimEditApi
-  InspectClaimStatement -.->|requires_medium| BillingWorkstation
-  InspectClaimStatement -.->|requires_permission| BillingClaimWrite
-  HoldClaimStatement -.->|displays| ClaimScreen
-  HoldClaimStatement -.->|invokes| ClaimEditApi
-  HoldClaimStatement -.->|requires_medium| BillingWorkstation
-  HoldClaimStatement -.->|requires_permission| BillingClaimWrite
-  ReleaseHeldStatement -.->|displays| ClaimScreen
-  ReleaseHeldStatement -.->|invokes| ClaimEditApi
-  ReleaseHeldStatement -.->|requires_medium| BillingWorkstation
-  ReleaseHeldStatement -.->|requires_permission| BillingClaimWrite
-  SubmitClaimStatements -.->|displays| ClaimScreen
-  SubmitClaimStatements -.->|invokes| SubmitClaimApi
-  SubmitClaimStatements -.->|raises| EvClaimStatementsSubmitted
-  SubmitClaimStatements -.->|requires_medium| OnlineClaimTerminal
-  SubmitClaimStatements -.->|requires_permission| BillingClaimWrite
-  RecordReceiptError -.->|displays| ClaimScreen
-  RecordReceiptError -.->|invokes| ClaimResultApi
-  RecordReceiptError -.->|requires_medium| OnlineClaimTerminal
-  RecordReceiptError -.->|requires_permission| BillingClaimWrite
-  ResendErroredStatement -.->|displays| ClaimScreen
-  ResendErroredStatement -.->|invokes| SubmitClaimApi
-  ResendErroredStatement -.->|requires_medium| OnlineClaimTerminal
-  ResendErroredStatement -.->|requires_permission| BillingClaimWrite
-  ReceiveClaimAccepted -.->|displays| ClaimScreen
-  ReceiveClaimAccepted -.->|invokes| ClaimResultApi
-  ReceiveClaimAccepted -.->|requires_medium| OnlineClaimTerminal
-  ReceiveClaimAccepted -.->|requires_permission| BillingClaimWrite
-  ReviewClaimTransfer -.->|displays| ClaimScreen
-  ReviewClaimTransfer -.->|reads| ClaimStatement
-  ReviewClaimTransfer -.->|requires_medium| OnlineClaimTerminal
-  ReviewClaimTransfer -.->|requires_permission| BillingClaimWrite
-  RecordClaimReturn -.->|displays| ClaimScreen
-  RecordClaimReturn -.->|invokes| ClaimResultApi
-  RecordClaimReturn -.->|requires_medium| OnlineClaimTerminal
-  RecordClaimReturn -.->|requires_permission| BillingClaimWrite
-  CorrectReturnedStatement -.->|displays| ClaimScreen
-  CorrectReturnedStatement -.->|invokes| ClaimEditApi
-  CorrectReturnedStatement -.->|requires_medium| BillingWorkstation
-  CorrectReturnedStatement -.->|requires_permission| BillingClaimWrite
-  RecordClaimAssessment -.->|displays| ClaimScreen
-  RecordClaimAssessment -.->|invokes| ClaimResultApi
-  RecordClaimAssessment -.->|requires_medium| OnlineClaimTerminal
-  RecordClaimAssessment -.->|requires_permission| BillingClaimWrite
-  RequestReexamination -.->|displays| ClaimScreen
-  RequestReexamination -.->|invokes| SubmitClaimApi
-  RequestReexamination -.->|requires_medium| OnlineClaimTerminal
-  RequestReexamination -.->|requires_permission| BillingClaimWrite
-  PostPayment -.->|displays| PaymentPostingScreen
-  PostPayment -.->|invokes| PaymentPostApi
-  PostPayment -.->|requires_medium| BillingWorkstation
-  PostPayment -.->|requires_permission| PaymentPost
-  ReconcileBalance -.->|displays| BalanceScreen
-  ReconcileBalance -.->|invokes| BalanceApi
-  ReconcileBalance -.->|requires_medium| BillingWorkstation
-  ReconcileBalance -.->|requires_permission| PaymentPost
-  VoidCharge -.->|displays| ChargeWorklistScreen
-  VoidCharge -.->|requires_medium| BillingWorkstation
-  VoidCharge -.->|requires_permission| BillingClaimWrite
-  VoidCharge -.->|updates| Charge
-  OpenEncounter -.->|displays| EncounterWorkspaceScreen
-  OpenEncounter -.->|invokes| OpenEncounterApi
-  OpenEncounter -.->|requires_medium| NurseStation
-  OpenEncounter -.->|requires_permission| EncounterOpen
-  RecordVitals -.->|displays| VitalsScreen
-  RecordVitals -.->|invokes| RecordVitalsApi
-  RecordVitals -.->|requires_medium| NurseStation
-  RecordVitals -.->|requires_permission| VitalsRecord
-  DocumentAssessment -.->|displays| DiagnosisScreen
-  DocumentAssessment -.->|invokes| DocumentAssessmentApi
-  DocumentAssessment -.->|requires_medium| ClinicalWorkstation
-  DocumentAssessment -.->|requires_permission| ClinicalDocument
-  SignEncounter -.->|displays| EncounterWorkspaceScreen
-  SignEncounter -.->|invokes| SignEncounterApi
-  SignEncounter -.->|raises| EvEncounterSigned
-  SignEncounter -.->|requires_medium| ClinicalWorkstation
-  SignEncounter -.->|requires_permission| EncounterSign
-  AmendEncounter -.->|displays| EncounterWorkspaceScreen
-  AmendEncounter -.->|invokes| AmendEncounterApi
-  AmendEncounter -.->|requires_medium| ClinicalWorkstation
-  AmendEncounter -.->|requires_permission| EncounterSign
-  IssueReferralLetter -.->|displays| ReferralLetterScreen
-  IssueReferralLetter -.->|invokes| IssueReferralLetterApi
-  IssueReferralLetter -.->|requires_medium| ClinicalWorkstation
-  IssueReferralLetter -.->|requires_permission| ReferralManage
-  CompleteConsultation -.->|displays| EncounterWorkspaceScreen
-  CompleteConsultation -.->|invokes| CompleteConsultationApi
-  CompleteConsultation -.->|requires_medium| NurseStation
-  CompleteConsultation -.->|requires_permission| EncounterOpen
-  CreateCarePlan -.->|displays| CarePlanScreen
-  CreateCarePlan -.->|invokes| CreateCarePlanApi
-  CreateCarePlan -.->|requires_medium| CareCoordinationConsole
-  CreateCarePlan -.->|requires_permission| FollowUpManage
-  SendFollowUpMessage -.->|displays| PatientMessageScreen
-  SendFollowUpMessage -.->|invokes| SendFollowUpMessageApi
-  SendFollowUpMessage -.->|requires_medium| CareCoordinationConsole
-  SendFollowUpMessage -.->|requires_permission| PatientMessageSend
-  ReviewPatientResponse -.->|displays| CarePlanScreen
-  ReviewPatientResponse -.->|requires_medium| CareCoordinationConsole
-  ReviewPatientResponse -.->|requires_permission| FollowUpManage
-  ReviewPatientResponse -.->|updates| CarePlan
-  ReviewPatientResponse -.->|updates| PatientMessage
-  ScheduleFollowUpVisit -.->|displays| FollowUpScheduleScreen
-  ScheduleFollowUpVisit -.->|invokes| FollowUpScheduleApi
-  ScheduleFollowUpVisit -.->|raises| EvAppointmentScheduled
-  ScheduleFollowUpVisit -.->|requires_medium| CareCoordinationConsole
-  ScheduleFollowUpVisit -.->|requires_permission| FollowUpManage
-  ScheduleFollowUpVisit -.->|requires_permission| ScheduleWrite
-  CloseCarePlan -.->|displays| CarePlanScreen
-  CloseCarePlan -.->|requires_medium| CareCoordinationConsole
-  CloseCarePlan -.->|requires_permission| FollowUpManage
-  CloseCarePlan -.->|updates| CarePlan
-  NotifyPatientResult -.->|displays| PatientMessageScreen
-  NotifyPatientResult -.->|invokes| NotifyPatientResultApi
-  NotifyPatientResult -.->|requires_medium| CareCoordinationConsole
-  NotifyPatientResult -.->|requires_permission| PatientMessageSend
-  PlaceLabOrder -.->|displays| OrderEntryScreen
-  PlaceLabOrder -.->|invokes| OrderEntryApi
-  PlaceLabOrder -.->|requires_medium| ClinicalWorkstation
-  PlaceLabOrder -.->|requires_permission| ClinicalOrderWrite
-  EnterProxyOrder -.->|displays| OrderEntryScreen
-  EnterProxyOrder -.->|invokes| ProxyOrderApi
-  EnterProxyOrder -.->|requires_medium| ClinicalWorkstation
-  EnterProxyOrder -.->|requires_permission| ProxyOrderEntry
-  ConfirmProxyOrder -.->|displays| OrderEntryScreen
-  ConfirmProxyOrder -.->|invokes| ConfirmOrderApi
-  ConfirmProxyOrder -.->|requires_medium| ClinicalWorkstation
-  ConfirmProxyOrder -.->|requires_permission| ClinicalOrderWrite
-  PrintSpecimenLabel -.->|displays| SpecimenScreen
-  PrintSpecimenLabel -.->|reads| ClinicalOrder
-  PrintSpecimenLabel -.->|requires_medium| NurseStation
-  PrintSpecimenLabel -.->|requires_permission| ClinicalOrderWrite
-  CollectSpecimen -.->|displays| SpecimenScreen
-  CollectSpecimen -.->|invokes| CollectSpecimenApi
-  CollectSpecimen -.->|requires_medium| NurseStation
-  CollectSpecimen -.->|requires_permission| ClinicalOrderWrite
-  RegisterPerformedProcedure -.->|displays| SpecimenScreen
-  RegisterPerformedProcedure -.->|invokes| PerformedProcedureApi
-  RegisterPerformedProcedure -.->|requires_medium| NurseStation
-  RegisterPerformedProcedure -.->|requires_permission| ClinicalOrderWrite
-  ReceiveLabResult -.->|displays| ResultReviewScreen
-  ReceiveLabResult -.->|invokes| ReceiveLabResultApi
-  ReceiveLabResult -.->|requires_medium| NurseStation
-  ReceiveLabResult -.->|requires_permission| LabResultManage
-  ReviewLabResult -.->|displays| ResultReviewScreen
-  ReviewLabResult -.->|invokes| ResultReviewApi
-  ReviewLabResult -.->|raises| EvClinicalOrderReviewed
-  ReviewLabResult -.->|requires_medium| ClinicalWorkstation
-  ReviewLabResult -.->|requires_permission| LabResultManage
-  NotifyCriticalResult -.->|displays| CriticalNoticeScreen
-  NotifyCriticalResult -.->|invokes| CriticalNoticeApi
-  NotifyCriticalResult -.->|requires_medium| ClinicalWorkstation
-  NotifyCriticalResult -.->|requires_permission| LabResultManage
-  NotifyCriticalResult -.->|requires_permission| PatientMessageSend
-  CancelClinicalOrder -.->|displays| OrderEntryScreen
-  CancelClinicalOrder -.->|requires_medium| ClinicalWorkstation
-  CancelClinicalOrder -.->|requires_permission| ClinicalOrderWrite
-  CancelClinicalOrder -.->|updates| ClinicalOrder
-  SearchPatient -.->|displays| PatientSearchScreen
-  SearchPatient -.->|invokes| SearchPatientApi
-  SearchPatient -.->|requires_medium| FrontDeskTerminal
-  SearchPatient -.->|requires_permission| PatientProfileRead
-  RegisterPatient -.->|displays| PatientProfileScreen
-  RegisterPatient -.->|invokes| RegisterPatientApi
-  RegisterPatient -.->|requires_medium| FrontDeskTerminal
-  RegisterPatient -.->|requires_permission| PatientProfileWrite
-  UpdateDemographics -.->|displays| PatientProfileScreen
-  UpdateDemographics -.->|invokes| UpdateDemographicsApi
-  UpdateDemographics -.->|requires_medium| FrontDeskTerminal
-  UpdateDemographics -.->|requires_permission| PatientProfileWrite
-  VerifyInsurance -.->|displays| InsuranceScreen
-  VerifyInsurance -.->|invokes| EligibilityApi
-  VerifyInsurance -.->|requires_medium| FrontDeskTerminal
-  VerifyInsurance -.->|requires_permission| InsuranceVerify
-  CaptureConsent -.->|displays| ConsentScreen
-  CaptureConsent -.->|invokes| ConsentApi
-  CaptureConsent -.->|requires_medium| PatientMobile
-  CaptureConsent -.->|requires_permission| ConsentCapture
-  SendIntakeForms -.->|displays| IntakePortalScreen
-  SendIntakeForms -.->|invokes| IntakeMessagingApi
-  SendIntakeForms -.->|requires_medium| FrontDeskTerminal
-  SendIntakeForms -.->|requires_permission| IntakeManage
-  CompleteIntakeForms -.->|displays| IntakePortalScreen
-  CompleteIntakeForms -.->|requires_medium| PatientMobile
-  CompleteIntakeForms -.->|requires_permission| ConsentCapture
-  CompleteIntakeForms -.->|updates| IntakePacket
-  ExpireIntakeForms -.->|displays| IntakePortalScreen
-  ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
-  ExpireIntakeForms -.->|requires_permission| IntakeManage
-  ExpireIntakeForms -.->|updates| IntakePacket
-  MergeDuplicatePatient -.->|displays| PatientProfileScreen
-  MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
-  MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
-  MergeDuplicatePatient -.->|updates| PatientAccount
-  ArchivePatient -.->|displays| PatientProfileScreen
-  ArchivePatient -.->|requires_medium| FrontDeskTerminal
-  ArchivePatient -.->|requires_permission| PatientProfileWrite
-  ArchivePatient -.->|updates| PatientAccount
-  SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
-  SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
-  SendAppointmentNotice -.->|requires_medium| FrontDeskTerminal
-  SendAppointmentNotice -.->|requires_permission| ScheduleRead
-  CreateCharge -.->|displays| ChargeWorklistScreen
-  CreateCharge -.->|invokes| CreateChargeApi
-  CreateCharge -.->|requires_medium| ClinicalWorkstation
-  CalculateVisitBill -.->|displays| BillCalculationScreen
-  CalculateVisitBill -.->|invokes| CalculateVisitBillApi
-  CalculateVisitBill -.->|raises| EvBillCalculated
-  CalculateVisitBill -.->|requires_medium| BillingWorkstation
-  CalculateVisitBill -.->|requires_permission| BillCalculate
-  ApplySelectedTreatmentFee -.->|displays| BillCalculationScreen
-  ApplySelectedTreatmentFee -.->|invokes| SelectedFeeApi
-  ApplySelectedTreatmentFee -.->|requires_medium| BillingWorkstation
-  ApplySelectedTreatmentFee -.->|requires_permission| BillCalculate
-  CallPatientForPayment -.->|displays| PaymentWindowScreen
-  CallPatientForPayment -.->|reads| Appointment
-  CallPatientForPayment -.->|requires_medium| AccountsWindow
-  SettleAtWindow -.->|displays| PaymentWindowScreen
-  SettleAtWindow -.->|invokes| SettlementApi
-  SettleAtWindow -.->|requires_medium| AccountsWindow
-  SettleAtWindow -.->|requires_permission| PaymentCollect
-  SettleAtKiosk -.->|displays| KioskScreen
-  SettleAtKiosk -.->|invokes| SettlementApi
-  SettleAtKiosk -.->|requires_medium| PaymentKiosk
-  IssueReceipt -.->|displays| PaymentWindowScreen
-  IssueReceipt -.->|invokes| ReceiptApi
-  IssueReceipt -.->|requires_medium| AccountsWindow
-  IssueReceipt -.->|requires_permission| PaymentCollect
-  GenerateClaimStatement -.->|displays| ClaimScreen
-  GenerateClaimStatement -.->|invokes| GenerateClaimApi
-  GenerateClaimStatement -.->|requires_medium| BillingWorkstation
-  GenerateClaimStatement -.->|requires_permission| BillingClaimWrite
+  api__AmendEncounterApi -.->|requires_permission| permission__EncounterSign
+  api__AmendEncounterApi -.->|updates| entity__Encounter
+  api__AppointmentNoticeApi -.->|creates| entity__Notification
+  api__AppointmentNoticeApi -.->|creates| entity__PatientMessage
+  api__BalanceApi -.->|reads| entity__PaymentTransaction
+  api__BalanceApi -.->|requires_permission| permission__PaymentPost
+  api__BalanceApi -.->|updates| entity__AccountBalance
+  api__CalculateVisitBillApi -.->|reads| entity__Charge
+  api__CalculateVisitBillApi -.->|reads| entity__InsurancePolicy
+  api__CalculateVisitBillApi -.->|requires_permission| permission__BillCalculate
+  api__CalculateVisitBillApi -.->|updates| entity__Appointment
+  api__ClaimEditApi -.->|requires_permission| permission__BillingClaimWrite
+  api__ClaimEditApi -.->|updates| entity__ClaimStatement
+  api__ClaimResultApi -.->|requires_permission| permission__BillingClaimWrite
+  api__ClaimResultApi -.->|updates| entity__ClaimStatement
+  api__CollectSpecimenApi -.->|requires_permission| permission__ClinicalOrderWrite
+  api__CollectSpecimenApi -.->|updates| entity__ClinicalOrder
+  api__CompleteConsultationApi -.->|requires_permission| permission__EncounterOpen
+  api__CompleteConsultationApi -.->|updates| entity__Appointment
+  api__CompleteConsultationApi -.->|updates| entity__Room
+  api__ConfirmOrderApi -.->|requires_permission| permission__ClinicalOrderWrite
+  api__ConfirmOrderApi -.->|updates| entity__ClinicalOrder
+  api__ConsentApi -.->|creates| entity__ConsentRecord
+  api__ConsentApi -.->|requires_permission| permission__ConsentCapture
+  api__CreateCarePlanApi -.->|creates| entity__CarePlan
+  api__CreateCarePlanApi -.->|reads| entity__Encounter
+  api__CreateCarePlanApi -.->|requires_permission| permission__FollowUpManage
+  api__CreateChargeApi -.->|creates| entity__Charge
+  api__CreateChargeApi -.->|reads| entity__Encounter
+  api__CriticalNoticeApi -.->|creates| entity__Notification
+  api__CriticalNoticeApi -.->|creates| entity__PatientMessage
+  api__CriticalNoticeApi -.->|requires_permission| permission__PatientMessageSend
+  api__DocumentAssessmentApi -.->|creates| entity__Diagnosis
+  api__DocumentAssessmentApi -.->|requires_permission| permission__ClinicalDocument
+  api__DocumentAssessmentApi -.->|updates| entity__Encounter
+  api__EligibilityApi -.->|creates| entity__EligibilityCheck
+  api__EligibilityApi -.->|reads| entity__InsurancePolicy
+  api__EligibilityApi -.->|requires_permission| permission__InsuranceVerify
+  api__EligibilityApi -.->|updates| entity__InsurancePolicy
+  api__FollowUpScheduleApi -.->|creates| entity__Appointment
+  api__FollowUpScheduleApi -.->|requires_permission| permission__ScheduleWrite
+  api__FollowUpScheduleApi -.->|updates| entity__ProviderSchedule
+  api__GenerateClaimApi -.->|creates| entity__ClaimStatement
+  api__GenerateClaimApi -.->|reads| entity__Charge
+  api__GenerateClaimApi -.->|reads| entity__InsurancePolicy
+  api__GenerateClaimApi -.->|requires_permission| permission__BillingClaimWrite
+  api__IntakeMessagingApi -.->|creates| entity__IntakePacket
+  api__IntakeMessagingApi -.->|creates| entity__PatientMessage
+  api__IntakeMessagingApi -.->|requires_permission| permission__PatientMessageSend
+  api__IssueReferralLetterApi -.->|creates| entity__ReferralLetter
+  api__IssueReferralLetterApi -.->|reads| entity__Encounter
+  api__IssueReferralLetterApi -.->|requires_permission| permission__ReferralManage
+  api__NotifyPatientResultApi -.->|creates| entity__Notification
+  api__NotifyPatientResultApi -.->|requires_permission| permission__PatientMessageSend
+  api__OpenEncounterApi -.->|creates| entity__Encounter
+  api__OpenEncounterApi -.->|requires_permission| permission__EncounterOpen
+  api__OpenEncounterApi -.->|updates| entity__Appointment
+  api__OrderEntryApi -.->|creates| entity__ClinicalOrder
+  api__OrderEntryApi -.->|reads| entity__Encounter
+  api__OrderEntryApi -.->|requires_permission| permission__ClinicalOrderWrite
+  api__PaymentPostApi -.->|requires_permission| permission__PaymentPost
+  api__PaymentPostApi -.->|updates| entity__ClaimStatement
+  api__PerformedProcedureApi -.->|creates| entity__Charge
+  api__PerformedProcedureApi -.->|reads| entity__ClinicalOrder
+  api__PerformedProcedureApi -.->|reads| entity__Encounter
+  api__PerformedProcedureApi -.->|requires_permission| permission__ClinicalOrderWrite
+  api__ProxyOrderApi -.->|creates| entity__ClinicalOrder
+  api__ProxyOrderApi -.->|reads| entity__Encounter
+  api__ProxyOrderApi -.->|requires_permission| permission__ProxyOrderEntry
+  api__ReceiptApi -.->|reads| entity__Charge
+  api__ReceiptApi -.->|reads| entity__PaymentTransaction
+  api__ReceiptApi -.->|requires_permission| permission__PaymentCollect
+  api__ReceiptApi -.->|updates| entity__Appointment
+  api__ReceiveLabResultApi -.->|creates| entity__LabResult
+  api__ReceiveLabResultApi -.->|requires_permission| permission__LabResultManage
+  api__ReceiveLabResultApi -.->|updates| entity__ClinicalOrder
+  api__RecordVitalsApi -.->|creates| entity__VitalSign
+  api__RecordVitalsApi -.->|requires_permission| permission__VitalsRecord
+  api__RecordVitalsApi -.->|updates| entity__Encounter
+  api__RegisterPatientApi -.->|creates| entity__PatientAccount
+  api__RegisterPatientApi -.->|creates| entity__PatientProfile
+  api__RegisterPatientApi -.->|requires_permission| permission__PatientProfileWrite
+  api__ResultReviewApi -.->|requires_permission| permission__LabResultManage
+  api__ResultReviewApi -.->|updates| entity__ClinicalOrder
+  api__ResultReviewApi -.->|updates| entity__LabResult
+  api__SearchPatientApi -.->|reads| entity__PatientAccount
+  api__SearchPatientApi -.->|reads| entity__PatientProfile
+  api__SearchPatientApi -.->|requires_permission| permission__PatientProfileRead
+  api__SelectedFeeApi -.->|creates| entity__Charge
+  api__SelectedFeeApi -.->|reads| entity__Encounter
+  api__SelectedFeeApi -.->|reads| entity__SelectedTreatmentFeeSetting
+  api__SelectedFeeApi -.->|requires_permission| permission__BillCalculate
+  api__SendFollowUpMessageApi -.->|creates| entity__PatientMessage
+  api__SendFollowUpMessageApi -.->|requires_permission| permission__PatientMessageSend
+  api__SettlementApi -.->|creates| entity__PaymentTransaction
+  api__SettlementApi -.->|requires_permission| permission__PaymentCollect
+  api__SettlementApi -.->|updates| entity__AccountBalance
+  api__SettlementApi -.->|updates| entity__Appointment
+  api__SignEncounterApi -.->|requires_permission| permission__EncounterSign
+  api__SignEncounterApi -.->|updates| entity__Encounter
+  api__SubmitClaimApi -.->|requires_permission| permission__BillingClaimWrite
+  api__SubmitClaimApi -.->|updates| entity__ClaimStatement
+  api__UpdateDemographicsApi -.->|requires_permission| permission__PatientProfileWrite
+  api__UpdateDemographicsApi -.->|updates| entity__PatientProfile
+  buc__BucBillingClaims -->|belongs| business__RevenueCycle
+  buc__BucBillingClaims -->|contains| flow__ClaimCycleFlow
+  buc__BucBillingClaims -->|contains| usecase__CorrectReturnedStatement
+  buc__BucBillingClaims -->|contains| usecase__CreateCharge
+  buc__BucBillingClaims -->|contains| usecase__GenerateClaimStatement
+  buc__BucBillingClaims -->|contains| usecase__HoldClaimStatement
+  buc__BucBillingClaims -->|contains| usecase__InspectClaimStatement
+  buc__BucBillingClaims -->|contains| usecase__PostPayment
+  buc__BucBillingClaims -->|contains| usecase__ReceiveClaimAccepted
+  buc__BucBillingClaims -->|contains| usecase__ReconcileBalance
+  buc__BucBillingClaims -->|contains| usecase__RecordClaimAssessment
+  buc__BucBillingClaims -->|contains| usecase__RecordClaimReturn
+  buc__BucBillingClaims -->|contains| usecase__RecordReceiptError
+  buc__BucBillingClaims -->|contains| usecase__ReleaseHeldStatement
+  buc__BucBillingClaims -->|contains| usecase__RequestReexamination
+  buc__BucBillingClaims -->|contains| usecase__ResendErroredStatement
+  buc__BucBillingClaims -->|contains| usecase__ReviewClaimTransfer
+  buc__BucBillingClaims -->|contains| usecase__SubmitClaimStatements
+  buc__BucBillingClaims -->|contains| usecase__VoidCharge
+  buc__BucClinicalEncounter -->|belongs| business__CareDelivery
+  buc__BucClinicalEncounter -->|contains| usecase__AmendEncounter
+  buc__BucClinicalEncounter -->|contains| usecase__CompleteConsultation
+  buc__BucClinicalEncounter -->|contains| usecase__DocumentAssessment
+  buc__BucClinicalEncounter -->|contains| usecase__IssueReferralLetter
+  buc__BucClinicalEncounter -->|contains| usecase__OpenEncounter
+  buc__BucClinicalEncounter -->|contains| usecase__RecordVitals
+  buc__BucClinicalEncounter -->|contains| usecase__SignEncounter
+  buc__BucFollowupCare -->|belongs| business__PatientAccess
+  buc__BucFollowupCare -->|contains| usecase__CloseCarePlan
+  buc__BucFollowupCare -->|contains| usecase__CreateCarePlan
+  buc__BucFollowupCare -->|contains| usecase__NotifyPatientResult
+  buc__BucFollowupCare -->|contains| usecase__ReviewPatientResponse
+  buc__BucFollowupCare -->|contains| usecase__ScheduleFollowUpVisit
+  buc__BucFollowupCare -->|contains| usecase__SendFollowUpMessage
+  buc__BucOrdersResults -->|belongs| business__CareDelivery
+  buc__BucOrdersResults -->|contains| usecase__CancelClinicalOrder
+  buc__BucOrdersResults -->|contains| usecase__CollectSpecimen
+  buc__BucOrdersResults -->|contains| usecase__ConfirmProxyOrder
+  buc__BucOrdersResults -->|contains| usecase__EnterProxyOrder
+  buc__BucOrdersResults -->|contains| usecase__NotifyCriticalResult
+  buc__BucOrdersResults -->|contains| usecase__PlaceLabOrder
+  buc__BucOrdersResults -->|contains| usecase__PrintSpecimenLabel
+  buc__BucOrdersResults -->|contains| usecase__ReceiveLabResult
+  buc__BucOrdersResults -->|contains| usecase__RegisterPerformedProcedure
+  buc__BucOrdersResults -->|contains| usecase__ReviewLabResult
+  buc__BucPatientOnboarding -->|belongs| business__PatientAccess
+  buc__BucPatientOnboarding -->|contains| usecase__ArchivePatient
+  buc__BucPatientOnboarding -->|contains| usecase__CaptureConsent
+  buc__BucPatientOnboarding -->|contains| usecase__CompleteIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__ExpireIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__MergeDuplicatePatient
+  buc__BucPatientOnboarding -->|contains| usecase__RegisterPatient
+  buc__BucPatientOnboarding -->|contains| usecase__SearchPatient
+  buc__BucPatientOnboarding -->|contains| usecase__SendIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__UpdateDemographics
+  buc__BucPatientOnboarding -->|contains| usecase__VerifyInsurance
+  buc__BucVisitPayment -->|belongs| business__RevenueCycle
+  buc__BucVisitPayment -->|contains| flow__VisitPaymentFlow
+  buc__BucVisitPayment -->|contains| usecase__ApplySelectedTreatmentFee
+  buc__BucVisitPayment -->|contains| usecase__CalculateVisitBill
+  buc__BucVisitPayment -->|contains| usecase__CallPatientForPayment
+  buc__BucVisitPayment -->|contains| usecase__IssueReceipt
+  buc__BucVisitPayment -->|contains| usecase__SettleAtKiosk
+  buc__BucVisitPayment -->|contains| usecase__SettleAtWindow
+  condition__CopayCappedAtLimit -.->|applies_to| usecase__CalculateVisitBill
+  condition__CopayCappedAtLimit -.->|combines| entity__Appointment
+  condition__CopayCappedAtLimit -.->|combines| variation__BurdenRatio
+  condition__CopayCappedAtLimit -.->|combines| variation__LimitCategory
+  condition__OrderConfirmedByPhysician -.->|applies_to| usecase__CollectSpecimen
+  condition__OrderConfirmedByPhysician -.->|combines| entity__ClinicalOrder
+  %% derived condition__OrderConfirmedByPhysician -> entity__ClinicalOrder from holds
+  condition__TransferNotPossible -.->|applies_to| usecase__RecordClaimReturn
+  condition__TransferNotPossible -.->|combines| entity__ClaimStatement
+  condition__TransferNotPossible -.->|combines| variation__PayerChange
+  condition__UnreferredFirstVisit -.->|applies_to| usecase__ApplySelectedTreatmentFee
+  condition__UnreferredFirstVisit -.->|combines| variation__ChargeKind
+  %% derived condition__UnreferredFirstVisit -> variation__ChargeKind from holds
+  condition__UnreferredFirstVisit -.->|combines| variation__ReferralCategory
+  %% derived condition__UnreferredFirstVisit -> variation__ReferralCategory from holds
+  entity__AccountBalance ---|1:1| entity__PatientAccount
+  entity__Appointment ---|N:1| entity__PatientAccount
+  entity__Appointment ---|N:1| entity__Room
+  entity__CarePlan ---|N:1| entity__Encounter
+  entity__CarePlan ---|N:1| entity__PatientAccount
+  entity__Charge ---|N:1| entity__ClaimStatement
+  entity__Charge ---|N:1| entity__Encounter
+  entity__ClaimStatement ---|N:1| entity__InsurancePolicy
+  entity__ClaimStatement ---|N:1| entity__PatientAccount
+  entity__ClinicalOrder ---|N:1| entity__Encounter
+  entity__ConsentRecord ---|N:1| entity__PatientAccount
+  entity__Diagnosis ---|N:1| entity__Encounter
+  entity__EligibilityCheck ---|N:1| entity__InsurancePolicy
+  entity__Encounter ---|1:1| entity__Appointment
+  entity__Encounter ---|N:1| entity__PatientAccount
+  entity__InsurancePolicy ---|N:1| entity__PatientAccount
+  entity__IntakePacket ---|N:1| entity__PatientAccount
+  entity__LabResult ---|1:1| entity__ClinicalOrder
+  entity__Notification ---|N:1| entity__PatientAccount
+  entity__PatientMessage ---|N:1| entity__PatientAccount
+  entity__PatientProfile ---|1:1| entity__PatientAccount
+  entity__PaymentTransaction ---|N:1| entity__Appointment
+  entity__ReferralLetter ---|N:1| entity__PatientAccount
+  entity__VitalSign ---|N:1| entity__Encounter
+  event__EvAppointmentCancelled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentCancelled -.->|triggers| usecase__SendAppointmentNotice
+  event__EvAppointmentCheckedIn -.->|triggers| buc__BucClinicalEncounter
+  event__EvAppointmentCheckedIn -.->|triggers| usecase__OpenEncounter
+  event__EvAppointmentRescheduled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentRescheduled -.->|triggers| usecase__SendAppointmentNotice
+  event__EvAppointmentScheduled -.->|triggers| buc__BucPatientOnboarding
+  event__EvAppointmentScheduled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentScheduled -.->|triggers| usecase__SendAppointmentNotice
+  event__EvAppointmentScheduled -.->|triggers| usecase__SendIntakeForms
+  event__EvBillCalculated -.->|triggers| extsystem__PaymentGateway
+  event__EvBillCalculated -.->|triggers| usecase__CallPatientForPayment
+  event__EvClaimAccepted -.->|triggers| usecase__ReceiveClaimAccepted
+  event__EvClaimAssessed -.->|triggers| usecase__RecordClaimAssessment
+  event__EvClaimReceiptError -.->|triggers| usecase__RecordReceiptError
+  event__EvClaimReturned -.->|triggers| usecase__RecordClaimReturn
+  event__EvClaimStatementsSubmitted -.->|triggers| extsystem__ClaimsReviewOrganization
+  event__EvClaimTransferred -.->|triggers| usecase__ReviewClaimTransfer
+  event__EvClinicalOrderReviewed -.->|triggers| buc__BucFollowupCare
+  event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyCriticalResult
+  event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyPatientResult
+  event__EvEncounterSigned -.->|triggers| buc__BucBillingClaims
+  event__EvEncounterSigned -.->|triggers| buc__BucFollowupCare
+  event__EvEncounterSigned -.->|triggers| buc__BucOrdersResults
+  event__EvEncounterSigned -.->|triggers| buc__BucVisitPayment
+  event__EvEncounterSigned -.->|triggers| usecase__CompleteConsultation
+  event__EvEncounterSigned -.->|triggers| usecase__CreateCarePlan
+  event__EvEncounterSigned -.->|triggers| usecase__CreateCharge
+  event__EvEncounterSigned -.->|triggers| usecase__PlaceLabOrder
+  event__EvLabResultReceived -.->|triggers| usecase__ReceiveLabResult
+  event__EvPaymentSettled -.->|triggers| usecase__SettleAtKiosk
+  event__EvRemittance -.->|triggers| usecase__PostPayment
+  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimAccepted
+  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimAssessed
+  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimReceiptError
+  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimReturned
+  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimTransferred
+  extsystem__ClaimsReviewOrganization -.->|raises| event__EvRemittance
+  extsystem__OutsourcedLabSystem -.->|raises| event__EvLabResultReceived
+  extsystem__PaymentGateway -.->|raises| event__EvPaymentSettled
+  field__ChargeCodeField -.->|maps_field| entity__Charge
+  field__KioskReferenceField -.->|maps_field| entity__PaymentTransaction
+  field__PaymentAmountField -.->|maps_field| entity__PaymentTransaction
+  field__ReferralDirectionField -.->|maps_field| entity__ReferralLetter
+  flow__ClaimCycleFlow -->|contains| step__AssessStep
+  flow__ClaimCycleFlow -->|contains| step__CreateStatementStep
+  flow__ClaimCycleFlow -->|contains| step__HoldStep
+  flow__ClaimCycleFlow -->|contains| step__InspectStep
+  flow__ClaimCycleFlow -->|contains| step__PaidStep
+  flow__ClaimCycleFlow -->|contains| step__ReceiptErrorStep
+  flow__ClaimCycleFlow -->|contains| step__ReturnStep
+  flow__ClaimCycleFlow -->|contains| step__ReviewStep
+  flow__ClaimCycleFlow -->|contains| step__SubmitStep
+  flow__VisitPaymentFlow -->|contains| step__CalculationStep
+  flow__VisitPaymentFlow -->|contains| step__CallStep
+  flow__VisitPaymentFlow -->|contains| step__KioskStep
+  flow__VisitPaymentFlow -->|contains| step__ReceiptStep
+  flow__VisitPaymentFlow -->|contains| step__WindowStep
+  screen__BillCalculationScreen -->|contains| field__ChargeCodeField
+  screen__KioskScreen -->|contains| field__KioskReferenceField
+  screen__PatientProfileScreen -.->|shows| entity__PatientProfile
+  screen__PatientSearchScreen -.->|shows| entity__PatientAccount
+  screen__PaymentWindowScreen -->|contains| field__PaymentAmountField
+  screen__ReferralLetterScreen -->|contains| field__ReferralDirectionField
+  step__AssessStep -.->|covers| usecase__RecordClaimAssessment
+  step__AssessStep -.->|covers| usecase__RequestReexamination
+  step__AssessStep -->|precedes| step__PaidStep
+  step__CalculationStep -.->|covers| usecase__ApplySelectedTreatmentFee
+  step__CalculationStep -.->|covers| usecase__CalculateVisitBill
+  step__CalculationStep -->|precedes| step__CallStep
+  step__CallStep -->|branches| step__KioskStep
+  step__CallStep -.->|covers| usecase__CallPatientForPayment
+  step__CallStep -->|precedes| step__WindowStep
+  step__CreateStatementStep -.->|covers| timer__MonthlyClaimCreation
+  step__CreateStatementStep -.->|covers| usecase__GenerateClaimStatement
+  step__CreateStatementStep -->|precedes| step__InspectStep
+  step__HoldStep -.->|covers| usecase__HoldClaimStatement
+  step__HoldStep -.->|covers| usecase__ReleaseHeldStatement
+  step__HoldStep -->|repeats| step__InspectStep
+  step__InspectStep -->|branches| step__HoldStep
+  step__InspectStep -.->|covers| usecase__InspectClaimStatement
+  step__InspectStep -->|precedes| step__SubmitStep
+  step__KioskStep -.->|covers| event__EvPaymentSettled
+  step__KioskStep -.->|covers| usecase__SettleAtKiosk
+  step__KioskStep -->|precedes| step__ReceiptStep
+  step__PaidStep -.->|covers| usecase__PostPayment
+  step__ReceiptErrorStep -.->|covers| timer__ErrorResendWindow
+  step__ReceiptErrorStep -.->|covers| usecase__RecordReceiptError
+  step__ReceiptErrorStep -.->|covers| usecase__ResendErroredStatement
+  step__ReceiptErrorStep -->|repeats| step__SubmitStep
+  step__ReceiptStep -.->|covers| usecase__IssueReceipt
+  step__ReturnStep -.->|covers| usecase__CorrectReturnedStatement
+  step__ReturnStep -.->|covers| usecase__RecordClaimReturn
+  step__ReturnStep -->|repeats| step__InspectStep
+  step__ReviewStep -->|branches| step__AssessStep
+  step__ReviewStep -.->|covers| usecase__ReceiveClaimAccepted
+  step__ReviewStep -.->|covers| usecase__ReviewClaimTransfer
+  step__ReviewStep -.->|excepts| step__ReturnStep
+  step__ReviewStep -->|precedes| step__PaidStep
+  step__SubmitStep -.->|covers| timer__MonthlyClaimDeadline
+  step__SubmitStep -.->|covers| usecase__SubmitClaimStatements
+  step__SubmitStep -.->|excepts| step__ReceiptErrorStep
+  step__SubmitStep -->|precedes| step__ReviewStep
+  step__WindowStep -.->|covers| usecase__SettleAtWindow
+  step__WindowStep -->|precedes| step__ReceiptStep
+  timer__ErrorResendWindow -.->|triggers| usecase__ResendErroredStatement
+  timer__IntakeExpiryCheck -.->|triggers| usecase__ExpireIntakeForms
+  timer__MonthlyClaimCreation -.->|triggers| usecase__GenerateClaimStatement
+  timer__MonthlyClaimDeadline -.->|triggers| usecase__SubmitClaimStatements
+  timer__ReceivablesMonthlyReview -.->|triggers| usecase__ReconcileBalance
+  timer__ReturnDownloadCheck -.->|triggers| usecase__RecordClaimReturn
+  usecase__AmendEncounter -.->|displays| screen__EncounterWorkspaceScreen
+  usecase__AmendEncounter -.->|invokes| api__AmendEncounterApi
+  usecase__AmendEncounter -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__AmendEncounter -.->|requires_permission| permission__EncounterSign
+  usecase__AmendEncounter -.->|transitions Encounter.status encsigned->encamended| state__Encounter_encamended
+  usecase__ApplySelectedTreatmentFee -.->|displays| screen__BillCalculationScreen
+  usecase__ApplySelectedTreatmentFee -.->|invokes| api__SelectedFeeApi
+  usecase__ApplySelectedTreatmentFee -.->|requires_medium| medium__BillingWorkstation
+  usecase__ApplySelectedTreatmentFee -.->|requires_permission| permission__BillCalculate
+  usecase__ArchivePatient -.->|displays| screen__PatientProfileScreen
+  usecase__ArchivePatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__ArchivePatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__ArchivePatient -.->|transitions PatientAccount.status patientactive->patientinactive| state__PatientAccount_patientinactive
+  usecase__ArchivePatient -.->|updates| entity__PatientAccount
+  usecase__CalculateVisitBill -.->|displays| screen__BillCalculationScreen
+  usecase__CalculateVisitBill -.->|invokes| api__CalculateVisitBillApi
+  usecase__CalculateVisitBill -.->|raises| event__EvBillCalculated
+  usecase__CalculateVisitBill -.->|requires_medium| medium__BillingWorkstation
+  usecase__CalculateVisitBill -.->|requires_permission| permission__BillCalculate
+  usecase__CalculateVisitBill -.->|transitions Appointment.status apptawaitingcalc->apptawaitingpay| state__Appointment_apptawaitingpay
+  usecase__CallPatientForPayment -.->|displays| screen__PaymentWindowScreen
+  usecase__CallPatientForPayment -.->|reads| entity__Appointment
+  usecase__CallPatientForPayment -.->|requires_medium| medium__AccountsWindow
+  usecase__CancelClinicalOrder -.->|displays| screen__OrderEntryScreen
+  usecase__CancelClinicalOrder -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__CancelClinicalOrder -.->|requires_permission| permission__ClinicalOrderWrite
+  usecase__CancelClinicalOrder -.->|transitions ClinicalOrder.status clordered->clcancelled| state__ClinicalOrder_clcancelled
+  usecase__CancelClinicalOrder -.->|updates| entity__ClinicalOrder
+  usecase__CaptureConsent -.->|displays| screen__ConsentScreen
+  usecase__CaptureConsent -.->|invokes| api__ConsentApi
+  usecase__CaptureConsent -.->|requires_medium| medium__PatientMobile
+  usecase__CaptureConsent -.->|requires_permission| permission__ConsentCapture
+  usecase__CloseCarePlan -.->|displays| screen__CarePlanScreen
+  usecase__CloseCarePlan -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__CloseCarePlan -.->|requires_permission| permission__FollowUpManage
+  usecase__CloseCarePlan -.->|transitions CarePlan.status caremonitoring->careclosed| state__CarePlan_careclosed
+  usecase__CloseCarePlan -.->|updates| entity__CarePlan
+  usecase__CollectSpecimen -.->|displays| screen__SpecimenScreen
+  usecase__CollectSpecimen -.->|invokes| api__CollectSpecimenApi
+  usecase__CollectSpecimen -.->|requires_medium| medium__NurseStation
+  usecase__CollectSpecimen -.->|requires_permission| permission__ClinicalOrderWrite
+  usecase__CollectSpecimen -.->|transitions ClinicalOrder.status clordered->clcollected| state__ClinicalOrder_clcollected
+  usecase__CompleteConsultation -.->|displays| screen__EncounterWorkspaceScreen
+  usecase__CompleteConsultation -.->|invokes| api__CompleteConsultationApi
+  usecase__CompleteConsultation -.->|requires_medium| medium__NurseStation
+  usecase__CompleteConsultation -.->|requires_permission| permission__EncounterOpen
+  usecase__CompleteConsultation -.->|transitions Appointment.status apptinconsult->apptawaitingcalc| state__Appointment_apptawaitingcalc
+  usecase__CompleteIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__CompleteIntakeForms -.->|requires_medium| medium__PatientMobile
+  usecase__CompleteIntakeForms -.->|requires_permission| permission__ConsentCapture
+  usecase__CompleteIntakeForms -.->|transitions IntakePacket.status intakesent->intakecompleted| state__IntakePacket_intakecompleted
+  usecase__CompleteIntakeForms -.->|updates| entity__IntakePacket
+  usecase__ConfirmProxyOrder -.->|displays| screen__OrderEntryScreen
+  usecase__ConfirmProxyOrder -.->|invokes| api__ConfirmOrderApi
+  usecase__ConfirmProxyOrder -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__ConfirmProxyOrder -.->|requires_permission| permission__ClinicalOrderWrite
+  usecase__ConfirmProxyOrder -.->|transitions ClinicalOrder.status clordered->clordered| state__ClinicalOrder_clordered
+  usecase__CorrectReturnedStatement -.->|displays| screen__ClaimScreen
+  usecase__CorrectReturnedStatement -.->|invokes| api__ClaimEditApi
+  usecase__CorrectReturnedStatement -.->|requires_medium| medium__BillingWorkstation
+  usecase__CorrectReturnedStatement -.->|requires_permission| permission__BillingClaimWrite
+  usecase__CorrectReturnedStatement -.->|transitions ClaimStatement.status stmtreturned->stmtinspecting| state__ClaimStatement_stmtinspecting
+  usecase__CreateCarePlan -.->|displays| screen__CarePlanScreen
+  usecase__CreateCarePlan -.->|invokes| api__CreateCarePlanApi
+  usecase__CreateCarePlan -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__CreateCarePlan -.->|requires_permission| permission__FollowUpManage
+  usecase__CreateCharge -.->|displays| screen__ChargeWorklistScreen
+  usecase__CreateCharge -.->|invokes| api__CreateChargeApi
+  usecase__CreateCharge -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__DocumentAssessment -.->|displays| screen__DiagnosisScreen
+  usecase__DocumentAssessment -.->|invokes| api__DocumentAssessmentApi
+  usecase__DocumentAssessment -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__DocumentAssessment -.->|requires_permission| permission__ClinicalDocument
+  usecase__DocumentAssessment -.->|transitions Encounter.status encopen->encdocumented| state__Encounter_encdocumented
+  usecase__EnterProxyOrder -.->|displays| screen__OrderEntryScreen
+  usecase__EnterProxyOrder -.->|invokes| api__ProxyOrderApi
+  usecase__EnterProxyOrder -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__EnterProxyOrder -.->|requires_permission| permission__ProxyOrderEntry
+  usecase__ExpireIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__ExpireIntakeForms -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__ExpireIntakeForms -.->|requires_permission| permission__IntakeManage
+  usecase__ExpireIntakeForms -.->|transitions IntakePacket.status intakesent->intakeexpired| state__IntakePacket_intakeexpired
+  usecase__ExpireIntakeForms -.->|updates| entity__IntakePacket
+  usecase__GenerateClaimStatement -.->|displays| screen__ClaimScreen
+  usecase__GenerateClaimStatement -.->|invokes| api__GenerateClaimApi
+  usecase__GenerateClaimStatement -.->|requires_medium| medium__BillingWorkstation
+  usecase__GenerateClaimStatement -.->|requires_permission| permission__BillingClaimWrite
+  usecase__HoldClaimStatement -.->|displays| screen__ClaimScreen
+  usecase__HoldClaimStatement -.->|invokes| api__ClaimEditApi
+  usecase__HoldClaimStatement -.->|requires_medium| medium__BillingWorkstation
+  usecase__HoldClaimStatement -.->|requires_permission| permission__BillingClaimWrite
+  usecase__HoldClaimStatement -.->|transitions ClaimStatement.status stmtinspecting->stmtonhold| state__ClaimStatement_stmtonhold
+  usecase__InspectClaimStatement -.->|displays| screen__ClaimScreen
+  usecase__InspectClaimStatement -.->|invokes| api__ClaimEditApi
+  usecase__InspectClaimStatement -.->|requires_medium| medium__BillingWorkstation
+  usecase__InspectClaimStatement -.->|requires_permission| permission__BillingClaimWrite
+  usecase__InspectClaimStatement -.->|transitions ClaimStatement.status stmtdrafting->stmtinspecting| state__ClaimStatement_stmtinspecting
+  usecase__IssueReceipt -.->|displays| screen__PaymentWindowScreen
+  usecase__IssueReceipt -.->|invokes| api__ReceiptApi
+  usecase__IssueReceipt -.->|requires_medium| medium__AccountsWindow
+  usecase__IssueReceipt -.->|requires_permission| permission__PaymentCollect
+  usecase__IssueReceipt -.->|transitions Appointment.status apptsettled->apptcompleted| state__Appointment_apptcompleted
+  usecase__IssueReferralLetter -.->|displays| screen__ReferralLetterScreen
+  usecase__IssueReferralLetter -.->|invokes| api__IssueReferralLetterApi
+  usecase__IssueReferralLetter -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__IssueReferralLetter -.->|requires_permission| permission__ReferralManage
+  usecase__MergeDuplicatePatient -.->|displays| screen__PatientProfileScreen
+  usecase__MergeDuplicatePatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__MergeDuplicatePatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__MergeDuplicatePatient -.->|transitions PatientAccount.status patientactive->patientmerged| state__PatientAccount_patientmerged
+  usecase__MergeDuplicatePatient -.->|updates| entity__PatientAccount
+  usecase__NotifyCriticalResult -.->|displays| screen__CriticalNoticeScreen
+  usecase__NotifyCriticalResult -.->|invokes| api__CriticalNoticeApi
+  usecase__NotifyCriticalResult -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__NotifyCriticalResult -.->|requires_permission| permission__LabResultManage
+  usecase__NotifyCriticalResult -.->|requires_permission| permission__PatientMessageSend
+  usecase__NotifyPatientResult -.->|displays| screen__PatientMessageScreen
+  usecase__NotifyPatientResult -.->|invokes| api__NotifyPatientResultApi
+  usecase__NotifyPatientResult -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__NotifyPatientResult -.->|requires_permission| permission__PatientMessageSend
+  usecase__OpenEncounter -.->|displays| screen__EncounterWorkspaceScreen
+  usecase__OpenEncounter -.->|invokes| api__OpenEncounterApi
+  usecase__OpenEncounter -.->|requires_medium| medium__NurseStation
+  usecase__OpenEncounter -.->|requires_permission| permission__EncounterOpen
+  usecase__OpenEncounter -.->|transitions Appointment.status apptcheckedin->apptinconsult| state__Appointment_apptinconsult
+  usecase__PlaceLabOrder -.->|displays| screen__OrderEntryScreen
+  usecase__PlaceLabOrder -.->|invokes| api__OrderEntryApi
+  usecase__PlaceLabOrder -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__PlaceLabOrder -.->|requires_permission| permission__ClinicalOrderWrite
+  usecase__PostPayment -.->|displays| screen__PaymentPostingScreen
+  usecase__PostPayment -.->|invokes| api__PaymentPostApi
+  usecase__PostPayment -.->|requires_medium| medium__BillingWorkstation
+  usecase__PostPayment -.->|requires_permission| permission__PaymentPost
+  usecase__PostPayment -.->|transitions ClaimStatement.status stmtassessed->stmtpaid| state__ClaimStatement_stmtpaid
+  usecase__PostPayment -.->|transitions ClaimStatement.status stmtrereview->stmtpaid| state__ClaimStatement_stmtpaid
+  usecase__PostPayment -.->|transitions ClaimStatement.status stmtunderreview->stmtpaid| state__ClaimStatement_stmtpaid
+  usecase__PrintSpecimenLabel -.->|displays| screen__SpecimenScreen
+  usecase__PrintSpecimenLabel -.->|reads| entity__ClinicalOrder
+  usecase__PrintSpecimenLabel -.->|requires_medium| medium__NurseStation
+  usecase__PrintSpecimenLabel -.->|requires_permission| permission__ClinicalOrderWrite
+  usecase__ReceiveClaimAccepted -.->|displays| screen__ClaimScreen
+  usecase__ReceiveClaimAccepted -.->|invokes| api__ClaimResultApi
+  usecase__ReceiveClaimAccepted -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__ReceiveClaimAccepted -.->|requires_permission| permission__BillingClaimWrite
+  usecase__ReceiveClaimAccepted -.->|transitions ClaimStatement.status stmtsubmitted->stmtunderreview| state__ClaimStatement_stmtunderreview
+  usecase__ReceiveLabResult -.->|displays| screen__ResultReviewScreen
+  usecase__ReceiveLabResult -.->|invokes| api__ReceiveLabResultApi
+  usecase__ReceiveLabResult -.->|requires_medium| medium__NurseStation
+  usecase__ReceiveLabResult -.->|requires_permission| permission__LabResultManage
+  usecase__ReceiveLabResult -.->|transitions ClinicalOrder.status clcollected->clresulted| state__ClinicalOrder_clresulted
+  usecase__ReconcileBalance -.->|displays| screen__BalanceScreen
+  usecase__ReconcileBalance -.->|invokes| api__BalanceApi
+  usecase__ReconcileBalance -.->|requires_medium| medium__BillingWorkstation
+  usecase__ReconcileBalance -.->|requires_permission| permission__PaymentPost
+  usecase__RecordClaimAssessment -.->|displays| screen__ClaimScreen
+  usecase__RecordClaimAssessment -.->|invokes| api__ClaimResultApi
+  usecase__RecordClaimAssessment -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__RecordClaimAssessment -.->|requires_permission| permission__BillingClaimWrite
+  usecase__RecordClaimAssessment -.->|transitions ClaimStatement.status stmtunderreview->stmtassessed| state__ClaimStatement_stmtassessed
+  usecase__RecordClaimReturn -.->|displays| screen__ClaimScreen
+  usecase__RecordClaimReturn -.->|invokes| api__ClaimResultApi
+  usecase__RecordClaimReturn -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__RecordClaimReturn -.->|requires_permission| permission__BillingClaimWrite
+  usecase__RecordClaimReturn -.->|transitions ClaimStatement.status stmtunderreview->stmtreturned| state__ClaimStatement_stmtreturned
+  usecase__RecordReceiptError -.->|displays| screen__ClaimScreen
+  usecase__RecordReceiptError -.->|invokes| api__ClaimResultApi
+  usecase__RecordReceiptError -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__RecordReceiptError -.->|requires_permission| permission__BillingClaimWrite
+  usecase__RecordReceiptError -.->|transitions ClaimStatement.status stmtsubmitted->stmtreceipterror| state__ClaimStatement_stmtreceipterror
+  usecase__RecordVitals -.->|displays| screen__VitalsScreen
+  usecase__RecordVitals -.->|invokes| api__RecordVitalsApi
+  usecase__RecordVitals -.->|requires_medium| medium__NurseStation
+  usecase__RecordVitals -.->|requires_permission| permission__VitalsRecord
+  usecase__RegisterPatient -.->|displays| screen__PatientProfileScreen
+  usecase__RegisterPatient -.->|invokes| api__RegisterPatientApi
+  usecase__RegisterPatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__RegisterPatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__RegisterPerformedProcedure -.->|displays| screen__SpecimenScreen
+  usecase__RegisterPerformedProcedure -.->|invokes| api__PerformedProcedureApi
+  usecase__RegisterPerformedProcedure -.->|requires_medium| medium__NurseStation
+  usecase__RegisterPerformedProcedure -.->|requires_permission| permission__ClinicalOrderWrite
+  usecase__ReleaseHeldStatement -.->|displays| screen__ClaimScreen
+  usecase__ReleaseHeldStatement -.->|invokes| api__ClaimEditApi
+  usecase__ReleaseHeldStatement -.->|requires_medium| medium__BillingWorkstation
+  usecase__ReleaseHeldStatement -.->|requires_permission| permission__BillingClaimWrite
+  usecase__ReleaseHeldStatement -.->|transitions ClaimStatement.status stmtonhold->stmtinspecting| state__ClaimStatement_stmtinspecting
+  usecase__RequestReexamination -.->|displays| screen__ClaimScreen
+  usecase__RequestReexamination -.->|invokes| api__SubmitClaimApi
+  usecase__RequestReexamination -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__RequestReexamination -.->|requires_permission| permission__BillingClaimWrite
+  usecase__RequestReexamination -.->|transitions ClaimStatement.status stmtassessed->stmtrereview| state__ClaimStatement_stmtrereview
+  usecase__ResendErroredStatement -.->|displays| screen__ClaimScreen
+  usecase__ResendErroredStatement -.->|invokes| api__SubmitClaimApi
+  usecase__ResendErroredStatement -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__ResendErroredStatement -.->|requires_permission| permission__BillingClaimWrite
+  usecase__ResendErroredStatement -.->|transitions ClaimStatement.status stmtreceipterror->stmtsubmitted| state__ClaimStatement_stmtsubmitted
+  usecase__ReviewClaimTransfer -.->|displays| screen__ClaimScreen
+  usecase__ReviewClaimTransfer -.->|reads| entity__ClaimStatement
+  usecase__ReviewClaimTransfer -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__ReviewClaimTransfer -.->|requires_permission| permission__BillingClaimWrite
+  usecase__ReviewLabResult -.->|displays| screen__ResultReviewScreen
+  usecase__ReviewLabResult -.->|invokes| api__ResultReviewApi
+  usecase__ReviewLabResult -.->|raises| event__EvClinicalOrderReviewed
+  usecase__ReviewLabResult -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__ReviewLabResult -.->|requires_permission| permission__LabResultManage
+  usecase__ReviewLabResult -.->|transitions ClinicalOrder.status clresulted->clreviewed| state__ClinicalOrder_clreviewed
+  usecase__ReviewPatientResponse -.->|displays| screen__CarePlanScreen
+  usecase__ReviewPatientResponse -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__ReviewPatientResponse -.->|requires_permission| permission__FollowUpManage
+  usecase__ReviewPatientResponse -.->|transitions CarePlan.status careopen->caremonitoring| state__CarePlan_caremonitoring
+  usecase__ReviewPatientResponse -.->|updates| entity__CarePlan
+  usecase__ReviewPatientResponse -.->|updates| entity__PatientMessage
+  usecase__ScheduleFollowUpVisit -.->|displays| screen__FollowUpScheduleScreen
+  usecase__ScheduleFollowUpVisit -.->|invokes| api__FollowUpScheduleApi
+  usecase__ScheduleFollowUpVisit -.->|raises| event__EvAppointmentScheduled
+  usecase__ScheduleFollowUpVisit -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__ScheduleFollowUpVisit -.->|requires_permission| permission__FollowUpManage
+  usecase__ScheduleFollowUpVisit -.->|requires_permission| permission__ScheduleWrite
+  usecase__ScheduleFollowUpVisit -.->|transitions Appointment.status apptrequested->apptscheduled| state__Appointment_apptscheduled
+  usecase__SearchPatient -.->|displays| screen__PatientSearchScreen
+  usecase__SearchPatient -.->|invokes| api__SearchPatientApi
+  usecase__SearchPatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SearchPatient -.->|requires_permission| permission__PatientProfileRead
+  usecase__SendAppointmentNotice -.->|displays| screen__AppointmentNoticeScreen
+  usecase__SendAppointmentNotice -.->|invokes| api__AppointmentNoticeApi
+  usecase__SendAppointmentNotice -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SendAppointmentNotice -.->|requires_permission| permission__ScheduleRead
+  usecase__SendFollowUpMessage -.->|displays| screen__PatientMessageScreen
+  usecase__SendFollowUpMessage -.->|invokes| api__SendFollowUpMessageApi
+  usecase__SendFollowUpMessage -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__SendFollowUpMessage -.->|requires_permission| permission__PatientMessageSend
+  usecase__SendIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__SendIntakeForms -.->|invokes| api__IntakeMessagingApi
+  usecase__SendIntakeForms -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SendIntakeForms -.->|requires_permission| permission__IntakeManage
+  usecase__SettleAtKiosk -.->|displays| screen__KioskScreen
+  usecase__SettleAtKiosk -.->|invokes| api__SettlementApi
+  usecase__SettleAtKiosk -.->|requires_medium| medium__PaymentKiosk
+  usecase__SettleAtKiosk -.->|transitions Appointment.status apptawaitingpay->apptsettled| state__Appointment_apptsettled
+  usecase__SettleAtWindow -.->|displays| screen__PaymentWindowScreen
+  usecase__SettleAtWindow -.->|invokes| api__SettlementApi
+  usecase__SettleAtWindow -.->|requires_medium| medium__AccountsWindow
+  usecase__SettleAtWindow -.->|requires_permission| permission__PaymentCollect
+  usecase__SettleAtWindow -.->|transitions Appointment.status apptawaitingpay->apptsettled| state__Appointment_apptsettled
+  usecase__SignEncounter -.->|displays| screen__EncounterWorkspaceScreen
+  usecase__SignEncounter -.->|invokes| api__SignEncounterApi
+  usecase__SignEncounter -.->|raises| event__EvEncounterSigned
+  usecase__SignEncounter -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__SignEncounter -.->|requires_permission| permission__EncounterSign
+  usecase__SignEncounter -.->|transitions Encounter.status encdocumented->encsigned| state__Encounter_encsigned
+  usecase__SubmitClaimStatements -.->|displays| screen__ClaimScreen
+  usecase__SubmitClaimStatements -.->|invokes| api__SubmitClaimApi
+  usecase__SubmitClaimStatements -.->|raises| event__EvClaimStatementsSubmitted
+  usecase__SubmitClaimStatements -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__SubmitClaimStatements -.->|requires_permission| permission__BillingClaimWrite
+  usecase__SubmitClaimStatements -.->|transitions ClaimStatement.status stmtinspecting->stmtsubmitted| state__ClaimStatement_stmtsubmitted
+  usecase__UpdateDemographics -.->|displays| screen__PatientProfileScreen
+  usecase__UpdateDemographics -.->|invokes| api__UpdateDemographicsApi
+  usecase__UpdateDemographics -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__UpdateDemographics -.->|requires_permission| permission__PatientProfileWrite
+  usecase__VerifyInsurance -.->|displays| screen__InsuranceScreen
+  usecase__VerifyInsurance -.->|invokes| api__EligibilityApi
+  usecase__VerifyInsurance -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__VerifyInsurance -.->|requires_permission| permission__InsuranceVerify
+  usecase__VoidCharge -.->|displays| screen__ChargeWorklistScreen
+  usecase__VoidCharge -.->|requires_medium| medium__BillingWorkstation
+  usecase__VoidCharge -.->|requires_permission| permission__BillingClaimWrite
+  usecase__VoidCharge -.->|updates| entity__Charge
+  classDef extsystem stroke:#333;
+  classDef business stroke:#333;
+  classDef buc stroke:#333;
+  classDef flow stroke:#333;
+  classDef step stroke:#333;
+  classDef timer stroke:#333;
+  classDef medium stroke:#333;
+  classDef permission stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef field stroke:#333;
+  classDef event stroke:#333;
+  classDef api stroke:#333;
+  classDef entity stroke:#333;
+  classDef state stroke:#333;
+  classDef variation stroke:#333;
+  classDef condition stroke:#333;
 ```
 
 ### 3.5 Orders and Results
@@ -2370,356 +2627,399 @@ rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucOrders
 ```
 
 ```mermaid
+%% rdra-ish diagram=rdra scope=buc:BucOrdersResults model=samples/clinic-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: extsystem business buc timer medium permission usecase screen event api entity state condition
+%% omitted: (none)
 flowchart LR
-  subgraph layer_value[System Value]
-    direction TB
-    MessagingGateway[/"🌐 Messaging Gateway"/]
-    OutsourcedLabSystem[/"🌐 外注検査システム"/]
+  subgraph layer_value["システム価値"]
+    extsystem__MessagingGateway["Messaging Gateway"]:::extsystem
+    extsystem__OutsourcedLabSystem["外注検査システム"]:::extsystem
   end
-  subgraph layer_environment[External Environment]
-    direction TB
-    CareDelivery["💼 Care Delivery"]
-    PatientAccess["💼 Patient Access"]
-    BucFollowupCare["📦 Coordinate Follow-Up Care"]
-    BucOrdersResults["📦 Manage Orders and Results"]
-    BucPatientOnboarding["📦 Onboard and Maintain Patient"]
-    IntakeExpiryCheck["⏱️ Nightly intake expiry check"]
-    CareCoordinationConsole[/"📱 Care Coordination Console"/]
-    ClinicalWorkstation[/"📱 Clinical Workstation"/]
-    FrontDeskTerminal[/"📱 Front Desk Terminal"/]
-    NurseStation[/"📱 Nurse Station"/]
-    PatientMobile[/"📱 Patient Mobile"/]
-    ClinicalOrderWrite["🔑 Clinical Order Write"]
-    ConsentCapture["🔑 Consent Capture"]
-    FollowUpManage["🔑 Follow-Up Manage"]
-    InsuranceVerify["🔑 Insurance Verify"]
-    IntakeManage["🔑 Intake Manage"]
-    LabResultManage["🔑 Lab Result Manage"]
-    PatientMessageSend["🔑 Patient Message Send"]
-    PatientProfileRead["🔑 Patient Profile Read"]
-    PatientProfileWrite["🔑 Patient Profile Write"]
-    ProxyOrderEntry["🔑 代行入力"]
-    ScheduleRead["🔑 Schedule Read"]
-    ScheduleWrite["🔑 Schedule Write"]
+  subgraph layer_environment["システム外部環境"]
+    business__CareDelivery["Care Delivery"]:::business
+    business__PatientAccess["Patient Access"]:::business
+    %% desc business__PatientAccess: Patient-facing access workflows from onboarding through appointments.
+    buc__BucFollowupCare["Coordinate Follow-Up Care"]:::buc
+    buc__BucOrdersResults["Manage Orders and Results"]:::buc
+    buc__BucPatientOnboarding["Onboard and Maintain Patient"]:::buc
+    timer__IntakeExpiryCheck["Nightly intake expiry check"]:::timer
+    medium__CareCoordinationConsole["Care Coordination Console"]:::medium
+    medium__ClinicalWorkstation["Clinical Workstation"]:::medium
+    medium__FrontDeskTerminal["Front Desk Terminal"]:::medium
+    medium__NurseStation["Nurse Station"]:::medium
+    medium__PatientMobile["Patient Mobile"]:::medium
+    permission__ClinicalOrderWrite["Clinical Order Write"]:::permission
+    permission__ConsentCapture["Consent Capture"]:::permission
+    permission__FollowUpManage["Follow-Up Manage"]:::permission
+    permission__InsuranceVerify["Insurance Verify"]:::permission
+    permission__IntakeManage["Intake Manage"]:::permission
+    permission__LabResultManage["Lab Result Manage"]:::permission
+    permission__PatientMessageSend["Patient Message Send"]:::permission
+    permission__PatientProfileRead["Patient Profile Read"]:::permission
+    permission__PatientProfileWrite["Patient Profile Write"]:::permission
+    permission__ProxyOrderEntry["代行入力"]:::permission
+    permission__ScheduleRead["Schedule Read"]:::permission
+    permission__ScheduleWrite["Schedule Write"]:::permission
   end
-  subgraph layer_boundary[System Boundary]
-    direction TB
-    ArchivePatient(["✅ Archive Patient"])
-    CancelClinicalOrder(["✅ Cancel Clinical Order"])
-    CaptureConsent(["✅ Capture Consent"])
-    CloseCarePlan(["✅ Close Care Plan"])
-    CollectSpecimen(["✅ Collect Specimen"])
-    CompleteIntakeForms(["✅ Complete Intake Forms"])
-    ConfirmProxyOrder(["✅ 代行入力オーダの確定"])
-    CreateCarePlan(["✅ Create Care Plan"])
-    EnterProxyOrder(["✅ 検体検査オーダの代行入力"])
-    ExpireIntakeForms(["✅ Expire Intake Forms"])
-    MergeDuplicatePatient(["✅ Merge Duplicate Patient"])
-    NotifyCriticalResult(["✅ Notify Critical Result"])
-    NotifyPatientResult(["✅ Notify Patient Result"])
-    PlaceLabOrder(["✅ Place Lab Order"])
-    PrintSpecimenLabel(["✅ 採血管ラベル発行・貼付"])
-    ReceiveLabResult(["✅ Receive Lab Result"])
-    RegisterPatient(["✅ Register Patient"])
-    RegisterPerformedProcedure(["✅ 実施内容（コスト）の登録"])
-    ReviewLabResult(["✅ Review Lab Result"])
-    ReviewPatientResponse(["✅ Review Patient Response"])
-    ScheduleFollowUpVisit(["✅ Schedule Follow-Up Visit"])
-    SearchPatient(["✅ Search Patient"])
-    SendAppointmentNotice(["✅ Send Appointment Notice"])
-    SendFollowUpMessage(["✅ Send Follow-Up Message"])
-    SendIntakeForms(["✅ Send Intake Forms"])
-    UpdateDemographics(["✅ Update Demographics"])
-    VerifyInsurance(["✅ 保険資格・限度額情報の登録（新患登録）"])
-    AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
-    CarePlanScreen[["🖥️ Care Plan Screen"]]
-    ConsentScreen[["🖥️ Consent Capture Screen"]]
-    CriticalNoticeScreen[["🖥️ Critical Result Notice Screen"]]
-    FollowUpScheduleScreen[["🖥️ Follow-Up Schedule Screen"]]
-    InsuranceScreen[["🖥️ Insurance Verification Screen"]]
-    IntakePortalScreen[["🖥️ Intake Portal Screen"]]
-    OrderEntryScreen[["🖥️ Order Entry Screen"]]
-    PatientMessageScreen[["🖥️ Patient Message Screen"]]
-    PatientProfileScreen[["🖥️ Patient Profile Screen"]]
-    PatientSearchScreen[["🖥️ Patient Search Screen"]]
-    ResultReviewScreen[["🖥️ Result Review Screen"]]
-    SpecimenScreen[["🖥️ Specimen Collection Screen"]]
-    EvAppointmentCancelled{"⚡ Appointment Cancelled"}
-    EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
-    EvAppointmentScheduled{"⚡ Appointment Scheduled"}
-    EvClinicalOrderReviewed{"⚡ Clinical Result Reviewed"}
-    EvEncounterSigned{"⚡ Encounter Signed"}
-    EvLabResultReceived{"⚡ Lab Result Received"}
+  subgraph layer_boundary["システム境界"]
+    usecase__ArchivePatient["Archive Patient"]:::usecase
+    usecase__CancelClinicalOrder["Cancel Clinical Order"]:::usecase
+    usecase__CaptureConsent["Capture Consent"]:::usecase
+    usecase__CloseCarePlan["Close Care Plan"]:::usecase
+    usecase__CollectSpecimen["Collect Specimen"]:::usecase
+    usecase__CompleteIntakeForms["Complete Intake Forms"]:::usecase
+    usecase__ConfirmProxyOrder["代行入力オーダの確定"]:::usecase
+    usecase__CreateCarePlan["Create Care Plan"]:::usecase
+    usecase__EnterProxyOrder["検体検査オーダの代行入力"]:::usecase
+    usecase__ExpireIntakeForms["Expire Intake Forms"]:::usecase
+    usecase__MergeDuplicatePatient["Merge Duplicate Patient"]:::usecase
+    usecase__NotifyCriticalResult["Notify Critical Result"]:::usecase
+    usecase__NotifyPatientResult["Notify Patient Result"]:::usecase
+    usecase__PlaceLabOrder["Place Lab Order"]:::usecase
+    usecase__PrintSpecimenLabel["採血管ラベル発行・貼付"]:::usecase
+    usecase__ReceiveLabResult["Receive Lab Result"]:::usecase
+    usecase__RegisterPatient["Register Patient"]:::usecase
+    usecase__RegisterPerformedProcedure["実施内容（コスト）の登録"]:::usecase
+    usecase__ReviewLabResult["Review Lab Result"]:::usecase
+    usecase__ReviewPatientResponse["Review Patient Response"]:::usecase
+    usecase__ScheduleFollowUpVisit["Schedule Follow-Up Visit"]:::usecase
+    usecase__SearchPatient["Search Patient"]:::usecase
+    usecase__SendAppointmentNotice["Send Appointment Notice"]:::usecase
+    usecase__SendFollowUpMessage["Send Follow-Up Message"]:::usecase
+    usecase__SendIntakeForms["Send Intake Forms"]:::usecase
+    usecase__UpdateDemographics["Update Demographics"]:::usecase
+    usecase__VerifyInsurance["保険資格・限度額情報の登録（新患登録）"]:::usecase
+    screen__AppointmentNoticeScreen["Appointment Notice Screen"]:::screen
+    screen__CarePlanScreen["Care Plan Screen"]:::screen
+    screen__ConsentScreen["Consent Capture Screen"]:::screen
+    screen__CriticalNoticeScreen["Critical Result Notice Screen"]:::screen
+    screen__FollowUpScheduleScreen["Follow-Up Schedule Screen"]:::screen
+    screen__InsuranceScreen["Insurance Verification Screen"]:::screen
+    screen__IntakePortalScreen["Intake Portal Screen"]:::screen
+    screen__OrderEntryScreen["Order Entry Screen"]:::screen
+    screen__PatientMessageScreen["Patient Message Screen"]:::screen
+    screen__PatientProfileScreen["Patient Profile Screen"]:::screen
+    screen__PatientSearchScreen["Patient Search Screen"]:::screen
+    screen__ResultReviewScreen["Result Review Screen"]:::screen
+    screen__SpecimenScreen["Specimen Collection Screen"]:::screen
+    event__EvAppointmentCancelled["Appointment Cancelled"]:::event
+    event__EvAppointmentRescheduled["Appointment Rescheduled"]:::event
+    event__EvAppointmentScheduled["Appointment Scheduled"]:::event
+    event__EvClinicalOrderReviewed["Clinical Result Reviewed"]:::event
+    event__EvEncounterSigned["Encounter Signed"]:::event
+    event__EvLabResultReceived["Lab Result Received"]:::event
   end
-  subgraph layer_system[System]
-    direction TB
-    AppointmentNoticeApi["🔌 Appointment Notice API"]
-    CollectSpecimenApi["🔌 Collect Specimen API"]
-    ConfirmOrderApi["🔌 オーダ確定 API"]
-    ConsentApi["🔌 Consent API"]
-    CreateCarePlanApi["🔌 Create Care Plan API"]
-    CriticalNoticeApi["🔌 Critical Notice API"]
-    EligibilityApi["🔌 Eligibility API"]
-    FollowUpScheduleApi["🔌 Follow-Up Schedule API"]
-    IntakeMessagingApi["🔌 Intake Messaging API"]
-    NotifyPatientResultApi["🔌 Notify Patient Result API"]
-    OrderEntryApi["🔌 Order Entry API"]
-    PerformedProcedureApi["🔌 実施登録 API"]
-    ProxyOrderApi["🔌 代行入力 API"]
-    ReceiveLabResultApi["🔌 Receive Lab Result API"]
-    RegisterPatientApi["🔌 Register Patient API"]
-    ResultReviewApi["🔌 Result Review API"]
-    SearchPatientApi["🔌 Search Patient API"]
-    SendFollowUpMessageApi["🔌 Send Follow-Up Message API"]
-    UpdateDemographicsApi["🔌 Update Demographics API"]
-    Appointment[("🗄️ Appointment")]
-    CarePlan[("🗄️ Care Plan")]
-    Charge[("🗄️ Charge")]
-    ClinicalOrder[("🗄️ Clinical Order")]
-    ConsentRecord[("🗄️ Consent Record")]
-    EligibilityCheck[("🗄️ 資格確認")]
-    Encounter[("🗄️ Encounter")]
-    InsurancePolicy[("🗄️ 保険資格")]
-    IntakePacket[("🗄️ Intake Packet")]
-    LabResult[("🗄️ Lab Result")]
-    Notification[("🗄️ Notification")]
-    PatientAccount[("🗄️ Patient Account")]
-    PatientMessage[("🗄️ Patient Message")]
-    PatientProfile[("🗄️ Patient Profile")]
-    ProviderSchedule[("🗄️ Provider Schedule")]
-    OrderConfirmedByPhysician{"🔀 医師が確定したオーダ"}
+  subgraph layer_system["システム"]
+    api__AppointmentNoticeApi["Appointment Notice API"]:::api
+    api__CollectSpecimenApi["Collect Specimen API"]:::api
+    api__ConfirmOrderApi["オーダ確定 API"]:::api
+    api__ConsentApi["Consent API"]:::api
+    api__CreateCarePlanApi["Create Care Plan API"]:::api
+    api__CriticalNoticeApi["Critical Notice API"]:::api
+    api__EligibilityApi["Eligibility API"]:::api
+    api__FollowUpScheduleApi["Follow-Up Schedule API"]:::api
+    api__IntakeMessagingApi["Intake Messaging API"]:::api
+    api__NotifyPatientResultApi["Notify Patient Result API"]:::api
+    api__OrderEntryApi["Order Entry API"]:::api
+    api__PerformedProcedureApi["実施登録 API"]:::api
+    api__ProxyOrderApi["代行入力 API"]:::api
+    api__ReceiveLabResultApi["Receive Lab Result API"]:::api
+    api__RegisterPatientApi["Register Patient API"]:::api
+    api__ResultReviewApi["Result Review API"]:::api
+    api__SearchPatientApi["Search Patient API"]:::api
+    api__SendFollowUpMessageApi["Send Follow-Up Message API"]:::api
+    api__UpdateDemographicsApi["Update Demographics API"]:::api
+    entity__Appointment["Appointment"]:::entity
+    entity__CarePlan["Care Plan"]:::entity
+    entity__Charge["Charge"]:::entity
+    entity__ClinicalOrder["Clinical Order"]:::entity
+    entity__ConsentRecord["Consent Record"]:::entity
+    entity__EligibilityCheck["資格確認"]:::entity
+    entity__Encounter["Encounter"]:::entity
+    entity__InsurancePolicy["保険資格"]:::entity
+    entity__IntakePacket["Intake Packet"]:::entity
+    entity__LabResult["Lab Result"]:::entity
+    entity__Notification["Notification"]:::entity
+    entity__PatientAccount["Patient Account"]:::entity
+    entity__PatientMessage["Patient Message"]:::entity
+    entity__PatientProfile["Patient Profile"]:::entity
+    entity__ProviderSchedule["Provider Schedule"]:::entity
+    state__Appointment_apptrequested["apptrequested"]:::state
+    state__Appointment_apptscheduled["apptscheduled"]:::state
+    state__CarePlan_careclosed["careclosed"]:::state
+    state__CarePlan_caremonitoring["caremonitoring"]:::state
+    state__CarePlan_careopen["careopen"]:::state
+    state__ClinicalOrder_clcancelled["clcancelled"]:::state
+    state__ClinicalOrder_clcollected["clcollected"]:::state
+    state__ClinicalOrder_clordered["clordered"]:::state
+    state__ClinicalOrder_clresulted["clresulted"]:::state
+    state__ClinicalOrder_clreviewed["clreviewed"]:::state
+    state__IntakePacket_intakecompleted["intakecompleted"]:::state
+    state__IntakePacket_intakeexpired["intakeexpired"]:::state
+    state__IntakePacket_intakesent["intakesent"]:::state
+    state__PatientAccount_patientactive["patientactive"]:::state
+    state__PatientAccount_patientinactive["patientinactive"]:::state
+    state__PatientAccount_patientmerged["patientmerged"]:::state
+    condition__OrderConfirmedByPhysician["医師が確定したオーダ"]:::condition
   end
-  CreateCarePlanApi -.->|creates| CarePlan
-  CreateCarePlanApi -.->|reads| Encounter
-  CreateCarePlanApi -.->|requires_permission| FollowUpManage
-  SendFollowUpMessageApi -.->|creates| PatientMessage
-  SendFollowUpMessageApi -.->|requires_permission| PatientMessageSend
-  FollowUpScheduleApi -.->|creates| Appointment
-  FollowUpScheduleApi -.->|requires_permission| ScheduleWrite
-  FollowUpScheduleApi -.->|updates| ProviderSchedule
-  NotifyPatientResultApi -.->|creates| Notification
-  NotifyPatientResultApi -.->|requires_permission| PatientMessageSend
-  OrderEntryApi -.->|creates| ClinicalOrder
-  OrderEntryApi -.->|reads| Encounter
-  OrderEntryApi -.->|requires_permission| ClinicalOrderWrite
-  ProxyOrderApi -.->|creates| ClinicalOrder
-  ProxyOrderApi -.->|reads| Encounter
-  ProxyOrderApi -.->|requires_permission| ProxyOrderEntry
-  ConfirmOrderApi -.->|requires_permission| ClinicalOrderWrite
-  ConfirmOrderApi -.->|updates| ClinicalOrder
-  PerformedProcedureApi -.->|creates| Charge
-  PerformedProcedureApi -.->|reads| Encounter
-  PerformedProcedureApi -.->|reads| ClinicalOrder
-  PerformedProcedureApi -.->|requires_permission| ClinicalOrderWrite
-  CollectSpecimenApi -.->|requires_permission| ClinicalOrderWrite
-  CollectSpecimenApi -.->|updates| ClinicalOrder
-  ReceiveLabResultApi -.->|creates| LabResult
-  ReceiveLabResultApi -.->|requires_permission| LabResultManage
-  ReceiveLabResultApi -.->|updates| ClinicalOrder
-  ResultReviewApi -.->|requires_permission| LabResultManage
-  ResultReviewApi -.->|updates| ClinicalOrder
-  ResultReviewApi -.->|updates| LabResult
-  CriticalNoticeApi -.->|creates| PatientMessage
-  CriticalNoticeApi -.->|creates| Notification
-  CriticalNoticeApi -.->|requires_permission| PatientMessageSend
-  SearchPatientApi -.->|reads| PatientAccount
-  SearchPatientApi -.->|reads| PatientProfile
-  SearchPatientApi -.->|requires_permission| PatientProfileRead
-  RegisterPatientApi -.->|creates| PatientAccount
-  RegisterPatientApi -.->|creates| PatientProfile
-  RegisterPatientApi -.->|requires_permission| PatientProfileWrite
-  UpdateDemographicsApi -.->|requires_permission| PatientProfileWrite
-  UpdateDemographicsApi -.->|updates| PatientProfile
-  EligibilityApi -.->|creates| EligibilityCheck
-  EligibilityApi -.->|reads| InsurancePolicy
-  EligibilityApi -.->|requires_permission| InsuranceVerify
-  EligibilityApi -.->|updates| InsurancePolicy
-  ConsentApi -.->|creates| ConsentRecord
-  ConsentApi -.->|requires_permission| ConsentCapture
-  IntakeMessagingApi -.->|creates| PatientMessage
-  IntakeMessagingApi -.->|creates| IntakePacket
-  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
-  AppointmentNoticeApi -.->|creates| PatientMessage
-  AppointmentNoticeApi -.->|creates| Notification
-  BucFollowupCare -.->|belongs| PatientAccess
-  BucFollowupCare -->|contains| CreateCarePlan
-  BucFollowupCare -->|contains| SendFollowUpMessage
-  BucFollowupCare -->|contains| ReviewPatientResponse
-  BucFollowupCare -->|contains| ScheduleFollowUpVisit
-  BucFollowupCare -->|contains| CloseCarePlan
-  BucFollowupCare -->|contains| NotifyPatientResult
-  BucOrdersResults -.->|belongs| CareDelivery
-  BucOrdersResults -->|contains| PlaceLabOrder
-  BucOrdersResults -->|contains| EnterProxyOrder
-  BucOrdersResults -->|contains| ConfirmProxyOrder
-  BucOrdersResults -->|contains| PrintSpecimenLabel
-  BucOrdersResults -->|contains| CollectSpecimen
-  BucOrdersResults -->|contains| RegisterPerformedProcedure
-  BucOrdersResults -->|contains| ReceiveLabResult
-  BucOrdersResults -->|contains| ReviewLabResult
-  BucOrdersResults -->|contains| NotifyCriticalResult
-  BucOrdersResults -->|contains| CancelClinicalOrder
-  BucPatientOnboarding -.->|belongs| PatientAccess
-  BucPatientOnboarding -->|contains| SearchPatient
-  BucPatientOnboarding -->|contains| RegisterPatient
-  BucPatientOnboarding -->|contains| UpdateDemographics
-  BucPatientOnboarding -->|contains| VerifyInsurance
-  BucPatientOnboarding -->|contains| CaptureConsent
-  BucPatientOnboarding -->|contains| SendIntakeForms
-  BucPatientOnboarding -->|contains| CompleteIntakeForms
-  BucPatientOnboarding -->|contains| ExpireIntakeForms
-  BucPatientOnboarding -->|contains| MergeDuplicatePatient
-  BucPatientOnboarding -->|contains| ArchivePatient
-  OrderConfirmedByPhysician -.->|applies_to| CollectSpecimen
-  OrderConfirmedByPhysician -.->|combines| ClinicalOrder
-  Appointment ---|N:1| PatientAccount
-  Encounter ---|N:1| PatientAccount
-  Encounter ---|1:1| Appointment
-  ClinicalOrder ---|N:1| Encounter
-  LabResult ---|1:1| ClinicalOrder
-  Charge ---|N:1| Encounter
-  CarePlan ---|N:1| Encounter
-  CarePlan ---|N:1| PatientAccount
-  PatientMessage ---|N:1| PatientAccount
-  Notification ---|N:1| PatientAccount
-  PatientProfile ---|1:1| PatientAccount
-  InsurancePolicy ---|N:1| PatientAccount
-  EligibilityCheck ---|N:1| InsurancePolicy
-  ConsentRecord ---|N:1| PatientAccount
-  IntakePacket ---|N:1| PatientAccount
-  EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
-  EvAppointmentScheduled -.->|triggers| MessagingGateway
-  EvAppointmentScheduled -.->|triggers| SendIntakeForms
-  EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
-  EvAppointmentRescheduled -.->|triggers| MessagingGateway
-  EvAppointmentRescheduled -.->|triggers| SendAppointmentNotice
-  EvAppointmentCancelled -.->|triggers| MessagingGateway
-  EvAppointmentCancelled -.->|triggers| SendAppointmentNotice
-  EvEncounterSigned -.->|triggers| BucFollowupCare
-  EvEncounterSigned -.->|triggers| BucOrdersResults
-  EvEncounterSigned -.->|triggers| CreateCarePlan
-  EvEncounterSigned -.->|triggers| PlaceLabOrder
-  EvClinicalOrderReviewed -.->|triggers| BucFollowupCare
-  EvClinicalOrderReviewed -.->|triggers| NotifyPatientResult
-  EvClinicalOrderReviewed -.->|triggers| NotifyCriticalResult
-  EvLabResultReceived -.->|triggers| ReceiveLabResult
-  OutsourcedLabSystem -.->|raises| EvLabResultReceived
-  PatientSearchScreen -.->|shows| PatientAccount
-  PatientProfileScreen -.->|shows| PatientProfile
-  IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
-  CreateCarePlan -.->|displays| CarePlanScreen
-  CreateCarePlan -.->|invokes| CreateCarePlanApi
-  CreateCarePlan -.->|requires_medium| CareCoordinationConsole
-  CreateCarePlan -.->|requires_permission| FollowUpManage
-  SendFollowUpMessage -.->|displays| PatientMessageScreen
-  SendFollowUpMessage -.->|invokes| SendFollowUpMessageApi
-  SendFollowUpMessage -.->|requires_medium| CareCoordinationConsole
-  SendFollowUpMessage -.->|requires_permission| PatientMessageSend
-  ReviewPatientResponse -.->|displays| CarePlanScreen
-  ReviewPatientResponse -.->|requires_medium| CareCoordinationConsole
-  ReviewPatientResponse -.->|requires_permission| FollowUpManage
-  ReviewPatientResponse -.->|updates| CarePlan
-  ReviewPatientResponse -.->|updates| PatientMessage
-  ScheduleFollowUpVisit -.->|displays| FollowUpScheduleScreen
-  ScheduleFollowUpVisit -.->|invokes| FollowUpScheduleApi
-  ScheduleFollowUpVisit -.->|raises| EvAppointmentScheduled
-  ScheduleFollowUpVisit -.->|requires_medium| CareCoordinationConsole
-  ScheduleFollowUpVisit -.->|requires_permission| FollowUpManage
-  ScheduleFollowUpVisit -.->|requires_permission| ScheduleWrite
-  CloseCarePlan -.->|displays| CarePlanScreen
-  CloseCarePlan -.->|requires_medium| CareCoordinationConsole
-  CloseCarePlan -.->|requires_permission| FollowUpManage
-  CloseCarePlan -.->|updates| CarePlan
-  NotifyPatientResult -.->|displays| PatientMessageScreen
-  NotifyPatientResult -.->|invokes| NotifyPatientResultApi
-  NotifyPatientResult -.->|requires_medium| CareCoordinationConsole
-  NotifyPatientResult -.->|requires_permission| PatientMessageSend
-  PlaceLabOrder -.->|displays| OrderEntryScreen
-  PlaceLabOrder -.->|invokes| OrderEntryApi
-  PlaceLabOrder -.->|requires_medium| ClinicalWorkstation
-  PlaceLabOrder -.->|requires_permission| ClinicalOrderWrite
-  EnterProxyOrder -.->|displays| OrderEntryScreen
-  EnterProxyOrder -.->|invokes| ProxyOrderApi
-  EnterProxyOrder -.->|requires_medium| ClinicalWorkstation
-  EnterProxyOrder -.->|requires_permission| ProxyOrderEntry
-  ConfirmProxyOrder -.->|displays| OrderEntryScreen
-  ConfirmProxyOrder -.->|invokes| ConfirmOrderApi
-  ConfirmProxyOrder -.->|requires_medium| ClinicalWorkstation
-  ConfirmProxyOrder -.->|requires_permission| ClinicalOrderWrite
-  PrintSpecimenLabel -.->|displays| SpecimenScreen
-  PrintSpecimenLabel -.->|reads| ClinicalOrder
-  PrintSpecimenLabel -.->|requires_medium| NurseStation
-  PrintSpecimenLabel -.->|requires_permission| ClinicalOrderWrite
-  CollectSpecimen -.->|displays| SpecimenScreen
-  CollectSpecimen -.->|invokes| CollectSpecimenApi
-  CollectSpecimen -.->|requires_medium| NurseStation
-  CollectSpecimen -.->|requires_permission| ClinicalOrderWrite
-  RegisterPerformedProcedure -.->|displays| SpecimenScreen
-  RegisterPerformedProcedure -.->|invokes| PerformedProcedureApi
-  RegisterPerformedProcedure -.->|requires_medium| NurseStation
-  RegisterPerformedProcedure -.->|requires_permission| ClinicalOrderWrite
-  ReceiveLabResult -.->|displays| ResultReviewScreen
-  ReceiveLabResult -.->|invokes| ReceiveLabResultApi
-  ReceiveLabResult -.->|requires_medium| NurseStation
-  ReceiveLabResult -.->|requires_permission| LabResultManage
-  ReviewLabResult -.->|displays| ResultReviewScreen
-  ReviewLabResult -.->|invokes| ResultReviewApi
-  ReviewLabResult -.->|raises| EvClinicalOrderReviewed
-  ReviewLabResult -.->|requires_medium| ClinicalWorkstation
-  ReviewLabResult -.->|requires_permission| LabResultManage
-  NotifyCriticalResult -.->|displays| CriticalNoticeScreen
-  NotifyCriticalResult -.->|invokes| CriticalNoticeApi
-  NotifyCriticalResult -.->|requires_medium| ClinicalWorkstation
-  NotifyCriticalResult -.->|requires_permission| LabResultManage
-  NotifyCriticalResult -.->|requires_permission| PatientMessageSend
-  CancelClinicalOrder -.->|displays| OrderEntryScreen
-  CancelClinicalOrder -.->|requires_medium| ClinicalWorkstation
-  CancelClinicalOrder -.->|requires_permission| ClinicalOrderWrite
-  CancelClinicalOrder -.->|updates| ClinicalOrder
-  SearchPatient -.->|displays| PatientSearchScreen
-  SearchPatient -.->|invokes| SearchPatientApi
-  SearchPatient -.->|requires_medium| FrontDeskTerminal
-  SearchPatient -.->|requires_permission| PatientProfileRead
-  RegisterPatient -.->|displays| PatientProfileScreen
-  RegisterPatient -.->|invokes| RegisterPatientApi
-  RegisterPatient -.->|requires_medium| FrontDeskTerminal
-  RegisterPatient -.->|requires_permission| PatientProfileWrite
-  UpdateDemographics -.->|displays| PatientProfileScreen
-  UpdateDemographics -.->|invokes| UpdateDemographicsApi
-  UpdateDemographics -.->|requires_medium| FrontDeskTerminal
-  UpdateDemographics -.->|requires_permission| PatientProfileWrite
-  VerifyInsurance -.->|displays| InsuranceScreen
-  VerifyInsurance -.->|invokes| EligibilityApi
-  VerifyInsurance -.->|requires_medium| FrontDeskTerminal
-  VerifyInsurance -.->|requires_permission| InsuranceVerify
-  CaptureConsent -.->|displays| ConsentScreen
-  CaptureConsent -.->|invokes| ConsentApi
-  CaptureConsent -.->|requires_medium| PatientMobile
-  CaptureConsent -.->|requires_permission| ConsentCapture
-  SendIntakeForms -.->|displays| IntakePortalScreen
-  SendIntakeForms -.->|invokes| IntakeMessagingApi
-  SendIntakeForms -.->|requires_medium| FrontDeskTerminal
-  SendIntakeForms -.->|requires_permission| IntakeManage
-  CompleteIntakeForms -.->|displays| IntakePortalScreen
-  CompleteIntakeForms -.->|requires_medium| PatientMobile
-  CompleteIntakeForms -.->|requires_permission| ConsentCapture
-  CompleteIntakeForms -.->|updates| IntakePacket
-  ExpireIntakeForms -.->|displays| IntakePortalScreen
-  ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
-  ExpireIntakeForms -.->|requires_permission| IntakeManage
-  ExpireIntakeForms -.->|updates| IntakePacket
-  MergeDuplicatePatient -.->|displays| PatientProfileScreen
-  MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
-  MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
-  MergeDuplicatePatient -.->|updates| PatientAccount
-  ArchivePatient -.->|displays| PatientProfileScreen
-  ArchivePatient -.->|requires_medium| FrontDeskTerminal
-  ArchivePatient -.->|requires_permission| PatientProfileWrite
-  ArchivePatient -.->|updates| PatientAccount
-  SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
-  SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
-  SendAppointmentNotice -.->|requires_medium| FrontDeskTerminal
-  SendAppointmentNotice -.->|requires_permission| ScheduleRead
+  api__AppointmentNoticeApi -.->|creates| entity__Notification
+  api__AppointmentNoticeApi -.->|creates| entity__PatientMessage
+  api__CollectSpecimenApi -.->|requires_permission| permission__ClinicalOrderWrite
+  api__CollectSpecimenApi -.->|updates| entity__ClinicalOrder
+  api__ConfirmOrderApi -.->|requires_permission| permission__ClinicalOrderWrite
+  api__ConfirmOrderApi -.->|updates| entity__ClinicalOrder
+  api__ConsentApi -.->|creates| entity__ConsentRecord
+  api__ConsentApi -.->|requires_permission| permission__ConsentCapture
+  api__CreateCarePlanApi -.->|creates| entity__CarePlan
+  api__CreateCarePlanApi -.->|reads| entity__Encounter
+  api__CreateCarePlanApi -.->|requires_permission| permission__FollowUpManage
+  api__CriticalNoticeApi -.->|creates| entity__Notification
+  api__CriticalNoticeApi -.->|creates| entity__PatientMessage
+  api__CriticalNoticeApi -.->|requires_permission| permission__PatientMessageSend
+  api__EligibilityApi -.->|creates| entity__EligibilityCheck
+  api__EligibilityApi -.->|reads| entity__InsurancePolicy
+  api__EligibilityApi -.->|requires_permission| permission__InsuranceVerify
+  api__EligibilityApi -.->|updates| entity__InsurancePolicy
+  api__FollowUpScheduleApi -.->|creates| entity__Appointment
+  api__FollowUpScheduleApi -.->|requires_permission| permission__ScheduleWrite
+  api__FollowUpScheduleApi -.->|updates| entity__ProviderSchedule
+  api__IntakeMessagingApi -.->|creates| entity__IntakePacket
+  api__IntakeMessagingApi -.->|creates| entity__PatientMessage
+  api__IntakeMessagingApi -.->|requires_permission| permission__PatientMessageSend
+  api__NotifyPatientResultApi -.->|creates| entity__Notification
+  api__NotifyPatientResultApi -.->|requires_permission| permission__PatientMessageSend
+  api__OrderEntryApi -.->|creates| entity__ClinicalOrder
+  api__OrderEntryApi -.->|reads| entity__Encounter
+  api__OrderEntryApi -.->|requires_permission| permission__ClinicalOrderWrite
+  api__PerformedProcedureApi -.->|creates| entity__Charge
+  api__PerformedProcedureApi -.->|reads| entity__ClinicalOrder
+  api__PerformedProcedureApi -.->|reads| entity__Encounter
+  api__PerformedProcedureApi -.->|requires_permission| permission__ClinicalOrderWrite
+  api__ProxyOrderApi -.->|creates| entity__ClinicalOrder
+  api__ProxyOrderApi -.->|reads| entity__Encounter
+  api__ProxyOrderApi -.->|requires_permission| permission__ProxyOrderEntry
+  api__ReceiveLabResultApi -.->|creates| entity__LabResult
+  api__ReceiveLabResultApi -.->|requires_permission| permission__LabResultManage
+  api__ReceiveLabResultApi -.->|updates| entity__ClinicalOrder
+  api__RegisterPatientApi -.->|creates| entity__PatientAccount
+  api__RegisterPatientApi -.->|creates| entity__PatientProfile
+  api__RegisterPatientApi -.->|requires_permission| permission__PatientProfileWrite
+  api__ResultReviewApi -.->|requires_permission| permission__LabResultManage
+  api__ResultReviewApi -.->|updates| entity__ClinicalOrder
+  api__ResultReviewApi -.->|updates| entity__LabResult
+  api__SearchPatientApi -.->|reads| entity__PatientAccount
+  api__SearchPatientApi -.->|reads| entity__PatientProfile
+  api__SearchPatientApi -.->|requires_permission| permission__PatientProfileRead
+  api__SendFollowUpMessageApi -.->|creates| entity__PatientMessage
+  api__SendFollowUpMessageApi -.->|requires_permission| permission__PatientMessageSend
+  api__UpdateDemographicsApi -.->|requires_permission| permission__PatientProfileWrite
+  api__UpdateDemographicsApi -.->|updates| entity__PatientProfile
+  buc__BucFollowupCare -->|belongs| business__PatientAccess
+  buc__BucFollowupCare -->|contains| usecase__CloseCarePlan
+  buc__BucFollowupCare -->|contains| usecase__CreateCarePlan
+  buc__BucFollowupCare -->|contains| usecase__NotifyPatientResult
+  buc__BucFollowupCare -->|contains| usecase__ReviewPatientResponse
+  buc__BucFollowupCare -->|contains| usecase__ScheduleFollowUpVisit
+  buc__BucFollowupCare -->|contains| usecase__SendFollowUpMessage
+  buc__BucOrdersResults -->|belongs| business__CareDelivery
+  buc__BucOrdersResults -->|contains| usecase__CancelClinicalOrder
+  buc__BucOrdersResults -->|contains| usecase__CollectSpecimen
+  buc__BucOrdersResults -->|contains| usecase__ConfirmProxyOrder
+  buc__BucOrdersResults -->|contains| usecase__EnterProxyOrder
+  buc__BucOrdersResults -->|contains| usecase__NotifyCriticalResult
+  buc__BucOrdersResults -->|contains| usecase__PlaceLabOrder
+  buc__BucOrdersResults -->|contains| usecase__PrintSpecimenLabel
+  buc__BucOrdersResults -->|contains| usecase__ReceiveLabResult
+  buc__BucOrdersResults -->|contains| usecase__RegisterPerformedProcedure
+  buc__BucOrdersResults -->|contains| usecase__ReviewLabResult
+  buc__BucPatientOnboarding -->|belongs| business__PatientAccess
+  buc__BucPatientOnboarding -->|contains| usecase__ArchivePatient
+  buc__BucPatientOnboarding -->|contains| usecase__CaptureConsent
+  buc__BucPatientOnboarding -->|contains| usecase__CompleteIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__ExpireIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__MergeDuplicatePatient
+  buc__BucPatientOnboarding -->|contains| usecase__RegisterPatient
+  buc__BucPatientOnboarding -->|contains| usecase__SearchPatient
+  buc__BucPatientOnboarding -->|contains| usecase__SendIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__UpdateDemographics
+  buc__BucPatientOnboarding -->|contains| usecase__VerifyInsurance
+  condition__OrderConfirmedByPhysician -.->|applies_to| usecase__CollectSpecimen
+  condition__OrderConfirmedByPhysician -.->|combines| entity__ClinicalOrder
+  %% derived condition__OrderConfirmedByPhysician -> entity__ClinicalOrder from holds
+  entity__Appointment ---|N:1| entity__PatientAccount
+  entity__CarePlan ---|N:1| entity__Encounter
+  entity__CarePlan ---|N:1| entity__PatientAccount
+  entity__Charge ---|N:1| entity__Encounter
+  entity__ClinicalOrder ---|N:1| entity__Encounter
+  entity__ConsentRecord ---|N:1| entity__PatientAccount
+  entity__EligibilityCheck ---|N:1| entity__InsurancePolicy
+  entity__Encounter ---|1:1| entity__Appointment
+  entity__Encounter ---|N:1| entity__PatientAccount
+  entity__InsurancePolicy ---|N:1| entity__PatientAccount
+  entity__IntakePacket ---|N:1| entity__PatientAccount
+  entity__LabResult ---|1:1| entity__ClinicalOrder
+  entity__Notification ---|N:1| entity__PatientAccount
+  entity__PatientMessage ---|N:1| entity__PatientAccount
+  entity__PatientProfile ---|1:1| entity__PatientAccount
+  event__EvAppointmentCancelled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentCancelled -.->|triggers| usecase__SendAppointmentNotice
+  event__EvAppointmentRescheduled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentRescheduled -.->|triggers| usecase__SendAppointmentNotice
+  event__EvAppointmentScheduled -.->|triggers| buc__BucPatientOnboarding
+  event__EvAppointmentScheduled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentScheduled -.->|triggers| usecase__SendAppointmentNotice
+  event__EvAppointmentScheduled -.->|triggers| usecase__SendIntakeForms
+  event__EvClinicalOrderReviewed -.->|triggers| buc__BucFollowupCare
+  event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyCriticalResult
+  event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyPatientResult
+  event__EvEncounterSigned -.->|triggers| buc__BucFollowupCare
+  event__EvEncounterSigned -.->|triggers| buc__BucOrdersResults
+  event__EvEncounterSigned -.->|triggers| usecase__CreateCarePlan
+  event__EvEncounterSigned -.->|triggers| usecase__PlaceLabOrder
+  event__EvLabResultReceived -.->|triggers| usecase__ReceiveLabResult
+  extsystem__OutsourcedLabSystem -.->|raises| event__EvLabResultReceived
+  screen__PatientProfileScreen -.->|shows| entity__PatientProfile
+  screen__PatientSearchScreen -.->|shows| entity__PatientAccount
+  timer__IntakeExpiryCheck -.->|triggers| usecase__ExpireIntakeForms
+  usecase__ArchivePatient -.->|displays| screen__PatientProfileScreen
+  usecase__ArchivePatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__ArchivePatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__ArchivePatient -.->|transitions PatientAccount.status patientactive->patientinactive| state__PatientAccount_patientinactive
+  usecase__ArchivePatient -.->|updates| entity__PatientAccount
+  usecase__CancelClinicalOrder -.->|displays| screen__OrderEntryScreen
+  usecase__CancelClinicalOrder -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__CancelClinicalOrder -.->|requires_permission| permission__ClinicalOrderWrite
+  usecase__CancelClinicalOrder -.->|transitions ClinicalOrder.status clordered->clcancelled| state__ClinicalOrder_clcancelled
+  usecase__CancelClinicalOrder -.->|updates| entity__ClinicalOrder
+  usecase__CaptureConsent -.->|displays| screen__ConsentScreen
+  usecase__CaptureConsent -.->|invokes| api__ConsentApi
+  usecase__CaptureConsent -.->|requires_medium| medium__PatientMobile
+  usecase__CaptureConsent -.->|requires_permission| permission__ConsentCapture
+  usecase__CloseCarePlan -.->|displays| screen__CarePlanScreen
+  usecase__CloseCarePlan -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__CloseCarePlan -.->|requires_permission| permission__FollowUpManage
+  usecase__CloseCarePlan -.->|transitions CarePlan.status caremonitoring->careclosed| state__CarePlan_careclosed
+  usecase__CloseCarePlan -.->|updates| entity__CarePlan
+  usecase__CollectSpecimen -.->|displays| screen__SpecimenScreen
+  usecase__CollectSpecimen -.->|invokes| api__CollectSpecimenApi
+  usecase__CollectSpecimen -.->|requires_medium| medium__NurseStation
+  usecase__CollectSpecimen -.->|requires_permission| permission__ClinicalOrderWrite
+  usecase__CollectSpecimen -.->|transitions ClinicalOrder.status clordered->clcollected| state__ClinicalOrder_clcollected
+  usecase__CompleteIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__CompleteIntakeForms -.->|requires_medium| medium__PatientMobile
+  usecase__CompleteIntakeForms -.->|requires_permission| permission__ConsentCapture
+  usecase__CompleteIntakeForms -.->|transitions IntakePacket.status intakesent->intakecompleted| state__IntakePacket_intakecompleted
+  usecase__CompleteIntakeForms -.->|updates| entity__IntakePacket
+  usecase__ConfirmProxyOrder -.->|displays| screen__OrderEntryScreen
+  usecase__ConfirmProxyOrder -.->|invokes| api__ConfirmOrderApi
+  usecase__ConfirmProxyOrder -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__ConfirmProxyOrder -.->|requires_permission| permission__ClinicalOrderWrite
+  usecase__ConfirmProxyOrder -.->|transitions ClinicalOrder.status clordered->clordered| state__ClinicalOrder_clordered
+  usecase__CreateCarePlan -.->|displays| screen__CarePlanScreen
+  usecase__CreateCarePlan -.->|invokes| api__CreateCarePlanApi
+  usecase__CreateCarePlan -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__CreateCarePlan -.->|requires_permission| permission__FollowUpManage
+  usecase__EnterProxyOrder -.->|displays| screen__OrderEntryScreen
+  usecase__EnterProxyOrder -.->|invokes| api__ProxyOrderApi
+  usecase__EnterProxyOrder -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__EnterProxyOrder -.->|requires_permission| permission__ProxyOrderEntry
+  usecase__ExpireIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__ExpireIntakeForms -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__ExpireIntakeForms -.->|requires_permission| permission__IntakeManage
+  usecase__ExpireIntakeForms -.->|transitions IntakePacket.status intakesent->intakeexpired| state__IntakePacket_intakeexpired
+  usecase__ExpireIntakeForms -.->|updates| entity__IntakePacket
+  usecase__MergeDuplicatePatient -.->|displays| screen__PatientProfileScreen
+  usecase__MergeDuplicatePatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__MergeDuplicatePatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__MergeDuplicatePatient -.->|transitions PatientAccount.status patientactive->patientmerged| state__PatientAccount_patientmerged
+  usecase__MergeDuplicatePatient -.->|updates| entity__PatientAccount
+  usecase__NotifyCriticalResult -.->|displays| screen__CriticalNoticeScreen
+  usecase__NotifyCriticalResult -.->|invokes| api__CriticalNoticeApi
+  usecase__NotifyCriticalResult -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__NotifyCriticalResult -.->|requires_permission| permission__LabResultManage
+  usecase__NotifyCriticalResult -.->|requires_permission| permission__PatientMessageSend
+  usecase__NotifyPatientResult -.->|displays| screen__PatientMessageScreen
+  usecase__NotifyPatientResult -.->|invokes| api__NotifyPatientResultApi
+  usecase__NotifyPatientResult -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__NotifyPatientResult -.->|requires_permission| permission__PatientMessageSend
+  usecase__PlaceLabOrder -.->|displays| screen__OrderEntryScreen
+  usecase__PlaceLabOrder -.->|invokes| api__OrderEntryApi
+  usecase__PlaceLabOrder -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__PlaceLabOrder -.->|requires_permission| permission__ClinicalOrderWrite
+  usecase__PrintSpecimenLabel -.->|displays| screen__SpecimenScreen
+  usecase__PrintSpecimenLabel -.->|reads| entity__ClinicalOrder
+  usecase__PrintSpecimenLabel -.->|requires_medium| medium__NurseStation
+  usecase__PrintSpecimenLabel -.->|requires_permission| permission__ClinicalOrderWrite
+  usecase__ReceiveLabResult -.->|displays| screen__ResultReviewScreen
+  usecase__ReceiveLabResult -.->|invokes| api__ReceiveLabResultApi
+  usecase__ReceiveLabResult -.->|requires_medium| medium__NurseStation
+  usecase__ReceiveLabResult -.->|requires_permission| permission__LabResultManage
+  usecase__ReceiveLabResult -.->|transitions ClinicalOrder.status clcollected->clresulted| state__ClinicalOrder_clresulted
+  usecase__RegisterPatient -.->|displays| screen__PatientProfileScreen
+  usecase__RegisterPatient -.->|invokes| api__RegisterPatientApi
+  usecase__RegisterPatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__RegisterPatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__RegisterPerformedProcedure -.->|displays| screen__SpecimenScreen
+  usecase__RegisterPerformedProcedure -.->|invokes| api__PerformedProcedureApi
+  usecase__RegisterPerformedProcedure -.->|requires_medium| medium__NurseStation
+  usecase__RegisterPerformedProcedure -.->|requires_permission| permission__ClinicalOrderWrite
+  usecase__ReviewLabResult -.->|displays| screen__ResultReviewScreen
+  usecase__ReviewLabResult -.->|invokes| api__ResultReviewApi
+  usecase__ReviewLabResult -.->|raises| event__EvClinicalOrderReviewed
+  usecase__ReviewLabResult -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__ReviewLabResult -.->|requires_permission| permission__LabResultManage
+  usecase__ReviewLabResult -.->|transitions ClinicalOrder.status clresulted->clreviewed| state__ClinicalOrder_clreviewed
+  usecase__ReviewPatientResponse -.->|displays| screen__CarePlanScreen
+  usecase__ReviewPatientResponse -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__ReviewPatientResponse -.->|requires_permission| permission__FollowUpManage
+  usecase__ReviewPatientResponse -.->|transitions CarePlan.status careopen->caremonitoring| state__CarePlan_caremonitoring
+  usecase__ReviewPatientResponse -.->|updates| entity__CarePlan
+  usecase__ReviewPatientResponse -.->|updates| entity__PatientMessage
+  usecase__ScheduleFollowUpVisit -.->|displays| screen__FollowUpScheduleScreen
+  usecase__ScheduleFollowUpVisit -.->|invokes| api__FollowUpScheduleApi
+  usecase__ScheduleFollowUpVisit -.->|raises| event__EvAppointmentScheduled
+  usecase__ScheduleFollowUpVisit -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__ScheduleFollowUpVisit -.->|requires_permission| permission__FollowUpManage
+  usecase__ScheduleFollowUpVisit -.->|requires_permission| permission__ScheduleWrite
+  usecase__ScheduleFollowUpVisit -.->|transitions Appointment.status apptrequested->apptscheduled| state__Appointment_apptscheduled
+  usecase__SearchPatient -.->|displays| screen__PatientSearchScreen
+  usecase__SearchPatient -.->|invokes| api__SearchPatientApi
+  usecase__SearchPatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SearchPatient -.->|requires_permission| permission__PatientProfileRead
+  usecase__SendAppointmentNotice -.->|displays| screen__AppointmentNoticeScreen
+  usecase__SendAppointmentNotice -.->|invokes| api__AppointmentNoticeApi
+  usecase__SendAppointmentNotice -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SendAppointmentNotice -.->|requires_permission| permission__ScheduleRead
+  usecase__SendFollowUpMessage -.->|displays| screen__PatientMessageScreen
+  usecase__SendFollowUpMessage -.->|invokes| api__SendFollowUpMessageApi
+  usecase__SendFollowUpMessage -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__SendFollowUpMessage -.->|requires_permission| permission__PatientMessageSend
+  usecase__SendIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__SendIntakeForms -.->|invokes| api__IntakeMessagingApi
+  usecase__SendIntakeForms -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SendIntakeForms -.->|requires_permission| permission__IntakeManage
+  usecase__UpdateDemographics -.->|displays| screen__PatientProfileScreen
+  usecase__UpdateDemographics -.->|invokes| api__UpdateDemographicsApi
+  usecase__UpdateDemographics -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__UpdateDemographics -.->|requires_permission| permission__PatientProfileWrite
+  usecase__VerifyInsurance -.->|displays| screen__InsuranceScreen
+  usecase__VerifyInsurance -.->|invokes| api__EligibilityApi
+  usecase__VerifyInsurance -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__VerifyInsurance -.->|requires_permission| permission__InsuranceVerify
+  classDef extsystem stroke:#333;
+  classDef business stroke:#333;
+  classDef buc stroke:#333;
+  classDef timer stroke:#333;
+  classDef medium stroke:#333;
+  classDef permission stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef event stroke:#333;
+  classDef api stroke:#333;
+  classDef entity stroke:#333;
+  classDef state stroke:#333;
+  classDef condition stroke:#333;
 ```
 
 ### 3.6 処方
@@ -2749,191 +3049,227 @@ rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucPrescr
 ```
 
 ```mermaid
+%% rdra-ish diagram=rdra scope=buc:BucPrescriptionFulfillment model=samples/clinic-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: extsystem business buc flow step timer medium permission usecase screen field event api entity state
+%% omitted: (none)
 flowchart LR
-  subgraph layer_value[System Value]
-    direction TB
-    EPrescriptionService[/"🌐 電子処方箋管理サービス"/]
-    InsurancePharmacy[/"🌐 保険薬局"/]
+  subgraph layer_value["システム価値"]
+    extsystem__EPrescriptionService["電子処方箋管理サービス"]:::extsystem
+    extsystem__InsurancePharmacy["保険薬局"]:::extsystem
   end
-  subgraph layer_environment[External Environment]
-    direction TB
-    CareDelivery["💼 Care Delivery"]
-    BucPrescriptionFulfillment["📦 処方"]
-    PrescriptionFlow["🧭 処方の流れ"]
-    CounselStep(["➡️ 服薬指導・薬剤交付"])
-    DispenseStep(["➡️ 調剤・監査"])
-    InhouseStep(["➡️ 院内処方（引換券）"])
-    InquiryStep(["➡️ 疑義照会"])
-    OrderStep(["➡️ 処方オーダ"])
-    OutsideStep(["➡️ 院外処方箋（電子処方箋管理サービス）"])
-    PharmacyStep(["➡️ 保険薬局での調剤"])
-    PrescriptionUsePeriodCheck["⏱️ 処方箋の使用期間切れ確認"]
-    ClinicalWorkstation[/"📱 Clinical Workstation"/]
-    PharmacyWorkstation[/"📱 薬剤部端末"/]
-    PrescriptionDispense["🔑 Prescription Dispense"]
-    PrescriptionWrite["🔑 Prescription Write"]
+  subgraph layer_environment["システム外部環境"]
+    business__CareDelivery["Care Delivery"]:::business
+    buc__BucPrescriptionFulfillment["処方"]:::buc
+    %% desc buc__BucPrescriptionFulfillment: 処方オーダ、院外処方箋の発行と電子処方箋管理サービスへの登録、院内処方の調剤・監査・服薬指導・交付、疑義照会。
+    flow__PrescriptionFlow["処方の流れ"]:::flow
+    step__CounselStep["服薬指導・薬剤交付"]:::step
+    step__DispenseStep["調剤・監査"]:::step
+    step__InhouseStep["院内処方（引換券）"]:::step
+    step__InquiryStep["疑義照会"]:::step
+    step__OrderStep["処方オーダ"]:::step
+    step__OutsideStep["院外処方箋（電子処方箋管理サービス）"]:::step
+    step__PharmacyStep["保険薬局での調剤"]:::step
+    timer__PrescriptionUsePeriodCheck["処方箋の使用期間切れ確認"]:::timer
+    medium__ClinicalWorkstation["Clinical Workstation"]:::medium
+    medium__PharmacyWorkstation["薬剤部端末"]:::medium
+    permission__PrescriptionDispense["Prescription Dispense"]:::permission
+    permission__PrescriptionWrite["Prescription Write"]:::permission
   end
-  subgraph layer_boundary[System Boundary]
-    direction TB
-    AnswerPharmacyInquiry(["✅ 保険薬局からの疑義照会への回答"])
-    AnswerPrescriptionInquiry(["✅ 疑義照会への回答"])
-    CancelPrescription(["✅ 処方の取消"])
-    ConfirmDispense(["✅ 保険薬局での調剤結果の受信"])
-    CounselMedication(["✅ 服薬指導"])
-    DispenseAndAudit(["✅ 調剤・監査"])
-    DraftPrescription(["✅ 処方オーダの登録"])
-    ExpirePrescription(["✅ 処方箋の使用期間切れ"])
-    HandOverMedication(["✅ 薬剤交付"])
-    IssueInhouseVoucher(["✅ 院内処方用引換券の交付"])
-    IssueOutsidePrescription(["✅ 院外処方箋の発行"])
-    IssueRefillPrescription(["✅ リフィル処方箋の処方オーダ"])
-    RaisePrescriptionInquiry(["✅ 疑義照会"])
-    SearchMedication(["✅ Search Medication"])
-    DispensingScreen[["🖥️ 調剤・監査画面"]]
-    MedicationSearchScreen[["🖥️ Medication Search Screen"]]
-    PharmacyStatusScreen[["🖥️ 電子処方箋の状況画面"]]
-    PrescriptionScreen[["🖥️ 処方画面"]]
-    DispensedAtField[["🔤 交付日時"]]
-    RefillLimitField[["🔤 リフィルの使用回数の上限"]]
-    UsePeriodField[["🔤 使用期間（日）"]]
-    EvPharmacyInquiry{"⚡ 保険薬局からの疑義照会"}
-    EvPrescriptionDispensed{"⚡ Prescription Dispensed"}
-    EvPrescriptionIssued{"⚡ 電子処方箋の登録"}
+  subgraph layer_boundary["システム境界"]
+    usecase__AnswerPharmacyInquiry["保険薬局からの疑義照会への回答"]:::usecase
+    usecase__AnswerPrescriptionInquiry["疑義照会への回答"]:::usecase
+    usecase__CancelPrescription["処方の取消"]:::usecase
+    usecase__ConfirmDispense["保険薬局での調剤結果の受信"]:::usecase
+    usecase__CounselMedication["服薬指導"]:::usecase
+    usecase__DispenseAndAudit["調剤・監査"]:::usecase
+    usecase__DraftPrescription["処方オーダの登録"]:::usecase
+    usecase__ExpirePrescription["処方箋の使用期間切れ"]:::usecase
+    usecase__HandOverMedication["薬剤交付"]:::usecase
+    usecase__IssueInhouseVoucher["院内処方用引換券の交付"]:::usecase
+    usecase__IssueOutsidePrescription["院外処方箋の発行"]:::usecase
+    usecase__IssueRefillPrescription["リフィル処方箋の処方オーダ"]:::usecase
+    usecase__RaisePrescriptionInquiry["疑義照会"]:::usecase
+    usecase__SearchMedication["Search Medication"]:::usecase
+    screen__DispensingScreen["調剤・監査画面"]:::screen
+    screen__MedicationSearchScreen["Medication Search Screen"]:::screen
+    screen__PharmacyStatusScreen["電子処方箋の状況画面"]:::screen
+    screen__PrescriptionScreen["処方画面"]:::screen
+    field__DispensedAtField["交付日時"]:::field
+    field__RefillLimitField["リフィルの使用回数の上限"]:::field
+    field__UsePeriodField["使用期間（日）"]:::field
+    event__EvPharmacyInquiry["保険薬局からの疑義照会"]:::event
+    event__EvPrescriptionDispensed["Prescription Dispensed"]:::event
+    event__EvPrescriptionIssued["電子処方箋の登録"]:::event
   end
-  subgraph layer_system[System]
-    direction TB
-    ConfirmDispenseApi["🔌 調剤結果 API"]
-    DispensingApi["🔌 院内調剤 API"]
-    DraftPrescriptionApi["🔌 処方オーダ API"]
-    IssuePrescriptionApi["🔌 処方箋発行 API"]
-    MedicationCatalogApi["🔌 Medication Catalog API"]
-    PrescriptionInquiryApi["🔌 疑義照会 API"]
-    Encounter[("🗄️ Encounter")]
-    Medication[("🗄️ Medication")]
-    Prescription[("🗄️ 処方箋")]
+  subgraph layer_system["システム"]
+    api__ConfirmDispenseApi["調剤結果 API"]:::api
+    api__DispensingApi["院内調剤 API"]:::api
+    api__DraftPrescriptionApi["処方オーダ API"]:::api
+    api__IssuePrescriptionApi["処方箋発行 API"]:::api
+    api__MedicationCatalogApi["Medication Catalog API"]:::api
+    api__PrescriptionInquiryApi["疑義照会 API"]:::api
+    entity__Encounter["Encounter"]:::entity
+    entity__Medication["Medication"]:::entity
+    entity__Prescription["処方箋"]:::entity
+    state__Prescription_rxaudited["rxaudited"]:::state
+    state__Prescription_rxcancelled["rxcancelled"]:::state
+    state__Prescription_rxcounseled["rxcounseled"]:::state
+    state__Prescription_rxdispensed["rxdispensed"]:::state
+    state__Prescription_rxdrafted["rxdrafted"]:::state
+    state__Prescription_rxexpired["rxexpired"]:::state
+    state__Prescription_rxinquiry["rxinquiry"]:::state
+    state__Prescription_rxissued["rxissued"]:::state
+    state__Prescription_rxvoucher["rxvoucher"]:::state
   end
-  MedicationCatalogApi -.->|reads| Medication
-  MedicationCatalogApi -.->|requires_permission| PrescriptionWrite
-  DraftPrescriptionApi -.->|creates| Prescription
-  DraftPrescriptionApi -.->|reads| Encounter
-  DraftPrescriptionApi -.->|requires_permission| PrescriptionWrite
-  IssuePrescriptionApi -.->|requires_permission| PrescriptionWrite
-  IssuePrescriptionApi -.->|updates| Prescription
-  DispensingApi -.->|requires_permission| PrescriptionDispense
-  DispensingApi -.->|updates| Prescription
-  ConfirmDispenseApi -.->|updates| Prescription
-  PrescriptionInquiryApi -.->|requires_permission| PrescriptionWrite
-  PrescriptionInquiryApi -.->|updates| Prescription
-  BucPrescriptionFulfillment -.->|belongs| CareDelivery
-  BucPrescriptionFulfillment -->|contains| PrescriptionFlow
-  BucPrescriptionFulfillment -->|contains| SearchMedication
-  BucPrescriptionFulfillment -->|contains| DraftPrescription
-  BucPrescriptionFulfillment -->|contains| IssueRefillPrescription
-  BucPrescriptionFulfillment -->|contains| IssueOutsidePrescription
-  BucPrescriptionFulfillment -->|contains| IssueInhouseVoucher
-  BucPrescriptionFulfillment -->|contains| DispenseAndAudit
-  BucPrescriptionFulfillment -->|contains| CounselMedication
-  BucPrescriptionFulfillment -->|contains| HandOverMedication
-  BucPrescriptionFulfillment -->|contains| RaisePrescriptionInquiry
-  BucPrescriptionFulfillment -->|contains| AnswerPrescriptionInquiry
-  BucPrescriptionFulfillment -->|contains| AnswerPharmacyInquiry
-  BucPrescriptionFulfillment -->|contains| ConfirmDispense
-  BucPrescriptionFulfillment -->|contains| ExpirePrescription
-  BucPrescriptionFulfillment -->|contains| CancelPrescription
-  Prescription ---|N:1| Encounter
-  Prescription ---|N:1| Medication
-  EvPharmacyInquiry -.->|triggers| AnswerPharmacyInquiry
-  EvPrescriptionIssued -.->|triggers| EPrescriptionService
-  EvPrescriptionDispensed -.->|triggers| ConfirmDispense
-  EPrescriptionService -.->|raises| EvPrescriptionDispensed
-  InsurancePharmacy -.->|raises| EvPharmacyInquiry
-  UsePeriodField -.->|maps_field| Prescription
-  RefillLimitField -.->|maps_field| Prescription
-  DispensedAtField -.->|maps_field| Prescription
-  PrescriptionFlow -->|contains| OrderStep
-  PrescriptionFlow -->|contains| OutsideStep
-  PrescriptionFlow -->|contains| InhouseStep
-  PrescriptionFlow -->|contains| DispenseStep
-  PrescriptionFlow -->|contains| InquiryStep
-  PrescriptionFlow -->|contains| CounselStep
-  PrescriptionFlow -->|contains| PharmacyStep
-  MedicationSearchScreen -.->|shows| Medication
-  PrescriptionScreen -->|contains| UsePeriodField
-  PrescriptionScreen -->|contains| RefillLimitField
-  DispensingScreen -->|contains| DispensedAtField
-  OrderStep -.->|branches| InhouseStep
-  OrderStep -.->|covers| DraftPrescription
-  OrderStep -.->|covers| IssueRefillPrescription
-  OrderStep -.->|precedes| OutsideStep
-  OutsideStep -.->|covers| IssueOutsidePrescription
-  OutsideStep -.->|precedes| PharmacyStep
-  InhouseStep -.->|covers| IssueInhouseVoucher
-  InhouseStep -.->|precedes| DispenseStep
-  DispenseStep -.->|covers| DispenseAndAudit
-  DispenseStep -.->|excepts| InquiryStep
-  DispenseStep -.->|precedes| CounselStep
-  InquiryStep -.->|covers| RaisePrescriptionInquiry
-  InquiryStep -.->|covers| AnswerPrescriptionInquiry
-  InquiryStep -.->|repeats| DispenseStep
-  CounselStep -.->|covers| CounselMedication
-  CounselStep -.->|covers| HandOverMedication
-  PharmacyStep -.->|covers| AnswerPharmacyInquiry
-  PharmacyStep -.->|covers| ConfirmDispense
-  PrescriptionUsePeriodCheck -.->|triggers| ExpirePrescription
-  SearchMedication -.->|displays| MedicationSearchScreen
-  SearchMedication -.->|invokes| MedicationCatalogApi
-  SearchMedication -.->|requires_medium| ClinicalWorkstation
-  SearchMedication -.->|requires_permission| PrescriptionWrite
-  DraftPrescription -.->|displays| PrescriptionScreen
-  DraftPrescription -.->|invokes| DraftPrescriptionApi
-  DraftPrescription -.->|requires_medium| ClinicalWorkstation
-  DraftPrescription -.->|requires_permission| PrescriptionWrite
-  IssueRefillPrescription -.->|displays| PrescriptionScreen
-  IssueRefillPrescription -.->|invokes| DraftPrescriptionApi
-  IssueRefillPrescription -.->|requires_medium| ClinicalWorkstation
-  IssueRefillPrescription -.->|requires_permission| PrescriptionWrite
-  IssueOutsidePrescription -.->|displays| PrescriptionScreen
-  IssueOutsidePrescription -.->|invokes| IssuePrescriptionApi
-  IssueOutsidePrescription -.->|raises| EvPrescriptionIssued
-  IssueOutsidePrescription -.->|requires_medium| ClinicalWorkstation
-  IssueOutsidePrescription -.->|requires_permission| PrescriptionWrite
-  IssueInhouseVoucher -.->|displays| PrescriptionScreen
-  IssueInhouseVoucher -.->|invokes| IssuePrescriptionApi
-  IssueInhouseVoucher -.->|requires_medium| ClinicalWorkstation
-  IssueInhouseVoucher -.->|requires_permission| PrescriptionWrite
-  DispenseAndAudit -.->|displays| DispensingScreen
-  DispenseAndAudit -.->|invokes| DispensingApi
-  DispenseAndAudit -.->|requires_medium| PharmacyWorkstation
-  DispenseAndAudit -.->|requires_permission| PrescriptionDispense
-  CounselMedication -.->|displays| DispensingScreen
-  CounselMedication -.->|invokes| DispensingApi
-  CounselMedication -.->|requires_medium| PharmacyWorkstation
-  CounselMedication -.->|requires_permission| PrescriptionDispense
-  HandOverMedication -.->|displays| DispensingScreen
-  HandOverMedication -.->|invokes| DispensingApi
-  HandOverMedication -.->|requires_medium| PharmacyWorkstation
-  HandOverMedication -.->|requires_permission| PrescriptionDispense
-  RaisePrescriptionInquiry -.->|displays| DispensingScreen
-  RaisePrescriptionInquiry -.->|invokes| DispensingApi
-  RaisePrescriptionInquiry -.->|requires_medium| PharmacyWorkstation
-  RaisePrescriptionInquiry -.->|requires_permission| PrescriptionDispense
-  AnswerPrescriptionInquiry -.->|displays| PrescriptionScreen
-  AnswerPrescriptionInquiry -.->|invokes| PrescriptionInquiryApi
-  AnswerPrescriptionInquiry -.->|requires_medium| ClinicalWorkstation
-  AnswerPrescriptionInquiry -.->|requires_permission| PrescriptionWrite
-  AnswerPharmacyInquiry -.->|displays| PrescriptionScreen
-  AnswerPharmacyInquiry -.->|invokes| PrescriptionInquiryApi
-  AnswerPharmacyInquiry -.->|requires_medium| ClinicalWorkstation
-  AnswerPharmacyInquiry -.->|requires_permission| PrescriptionWrite
-  ConfirmDispense -.->|displays| PharmacyStatusScreen
-  ConfirmDispense -.->|invokes| ConfirmDispenseApi
-  ConfirmDispense -.->|requires_medium| PharmacyWorkstation
-  ExpirePrescription -.->|displays| PharmacyStatusScreen
-  ExpirePrescription -.->|invokes| ConfirmDispenseApi
-  CancelPrescription -.->|displays| PrescriptionScreen
-  CancelPrescription -.->|requires_medium| ClinicalWorkstation
-  CancelPrescription -.->|requires_permission| PrescriptionWrite
-  CancelPrescription -.->|updates| Prescription
+  api__ConfirmDispenseApi -.->|updates| entity__Prescription
+  api__DispensingApi -.->|requires_permission| permission__PrescriptionDispense
+  api__DispensingApi -.->|updates| entity__Prescription
+  api__DraftPrescriptionApi -.->|creates| entity__Prescription
+  api__DraftPrescriptionApi -.->|reads| entity__Encounter
+  api__DraftPrescriptionApi -.->|requires_permission| permission__PrescriptionWrite
+  api__IssuePrescriptionApi -.->|requires_permission| permission__PrescriptionWrite
+  api__IssuePrescriptionApi -.->|updates| entity__Prescription
+  api__MedicationCatalogApi -.->|reads| entity__Medication
+  api__MedicationCatalogApi -.->|requires_permission| permission__PrescriptionWrite
+  api__PrescriptionInquiryApi -.->|requires_permission| permission__PrescriptionWrite
+  api__PrescriptionInquiryApi -.->|updates| entity__Prescription
+  buc__BucPrescriptionFulfillment -->|belongs| business__CareDelivery
+  buc__BucPrescriptionFulfillment -->|contains| flow__PrescriptionFlow
+  buc__BucPrescriptionFulfillment -->|contains| usecase__AnswerPharmacyInquiry
+  buc__BucPrescriptionFulfillment -->|contains| usecase__AnswerPrescriptionInquiry
+  buc__BucPrescriptionFulfillment -->|contains| usecase__CancelPrescription
+  buc__BucPrescriptionFulfillment -->|contains| usecase__ConfirmDispense
+  buc__BucPrescriptionFulfillment -->|contains| usecase__CounselMedication
+  buc__BucPrescriptionFulfillment -->|contains| usecase__DispenseAndAudit
+  buc__BucPrescriptionFulfillment -->|contains| usecase__DraftPrescription
+  buc__BucPrescriptionFulfillment -->|contains| usecase__ExpirePrescription
+  buc__BucPrescriptionFulfillment -->|contains| usecase__HandOverMedication
+  buc__BucPrescriptionFulfillment -->|contains| usecase__IssueInhouseVoucher
+  buc__BucPrescriptionFulfillment -->|contains| usecase__IssueOutsidePrescription
+  buc__BucPrescriptionFulfillment -->|contains| usecase__IssueRefillPrescription
+  buc__BucPrescriptionFulfillment -->|contains| usecase__RaisePrescriptionInquiry
+  buc__BucPrescriptionFulfillment -->|contains| usecase__SearchMedication
+  entity__Prescription ---|N:1| entity__Encounter
+  entity__Prescription ---|N:1| entity__Medication
+  event__EvPharmacyInquiry -.->|triggers| usecase__AnswerPharmacyInquiry
+  event__EvPrescriptionDispensed -.->|triggers| usecase__ConfirmDispense
+  event__EvPrescriptionIssued -.->|triggers| extsystem__EPrescriptionService
+  extsystem__EPrescriptionService -.->|raises| event__EvPrescriptionDispensed
+  extsystem__InsurancePharmacy -.->|raises| event__EvPharmacyInquiry
+  field__DispensedAtField -.->|maps_field| entity__Prescription
+  field__RefillLimitField -.->|maps_field| entity__Prescription
+  field__UsePeriodField -.->|maps_field| entity__Prescription
+  flow__PrescriptionFlow -->|contains| step__CounselStep
+  flow__PrescriptionFlow -->|contains| step__DispenseStep
+  flow__PrescriptionFlow -->|contains| step__InhouseStep
+  flow__PrescriptionFlow -->|contains| step__InquiryStep
+  flow__PrescriptionFlow -->|contains| step__OrderStep
+  flow__PrescriptionFlow -->|contains| step__OutsideStep
+  flow__PrescriptionFlow -->|contains| step__PharmacyStep
+  screen__DispensingScreen -->|contains| field__DispensedAtField
+  screen__MedicationSearchScreen -.->|shows| entity__Medication
+  screen__PrescriptionScreen -->|contains| field__RefillLimitField
+  screen__PrescriptionScreen -->|contains| field__UsePeriodField
+  step__CounselStep -.->|covers| usecase__CounselMedication
+  step__CounselStep -.->|covers| usecase__HandOverMedication
+  step__DispenseStep -.->|covers| usecase__DispenseAndAudit
+  step__DispenseStep -.->|excepts| step__InquiryStep
+  step__DispenseStep -->|precedes| step__CounselStep
+  step__InhouseStep -.->|covers| usecase__IssueInhouseVoucher
+  step__InhouseStep -->|precedes| step__DispenseStep
+  step__InquiryStep -.->|covers| usecase__AnswerPrescriptionInquiry
+  step__InquiryStep -.->|covers| usecase__RaisePrescriptionInquiry
+  step__InquiryStep -->|repeats| step__DispenseStep
+  step__OrderStep -->|branches| step__InhouseStep
+  step__OrderStep -.->|covers| usecase__DraftPrescription
+  step__OrderStep -.->|covers| usecase__IssueRefillPrescription
+  step__OrderStep -->|precedes| step__OutsideStep
+  step__OutsideStep -.->|covers| usecase__IssueOutsidePrescription
+  step__OutsideStep -->|precedes| step__PharmacyStep
+  step__PharmacyStep -.->|covers| usecase__AnswerPharmacyInquiry
+  step__PharmacyStep -.->|covers| usecase__ConfirmDispense
+  timer__PrescriptionUsePeriodCheck -.->|triggers| usecase__ExpirePrescription
+  usecase__AnswerPharmacyInquiry -.->|displays| screen__PrescriptionScreen
+  usecase__AnswerPharmacyInquiry -.->|invokes| api__PrescriptionInquiryApi
+  usecase__AnswerPharmacyInquiry -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__AnswerPharmacyInquiry -.->|requires_permission| permission__PrescriptionWrite
+  usecase__AnswerPharmacyInquiry -.->|transitions Prescription.status rxissued->rxissued| state__Prescription_rxissued
+  usecase__AnswerPrescriptionInquiry -.->|displays| screen__PrescriptionScreen
+  usecase__AnswerPrescriptionInquiry -.->|invokes| api__PrescriptionInquiryApi
+  usecase__AnswerPrescriptionInquiry -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__AnswerPrescriptionInquiry -.->|requires_permission| permission__PrescriptionWrite
+  usecase__AnswerPrescriptionInquiry -.->|transitions Prescription.status rxinquiry->rxvoucher| state__Prescription_rxvoucher
+  usecase__CancelPrescription -.->|displays| screen__PrescriptionScreen
+  usecase__CancelPrescription -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__CancelPrescription -.->|requires_permission| permission__PrescriptionWrite
+  usecase__CancelPrescription -.->|transitions Prescription.status rxdrafted->rxcancelled| state__Prescription_rxcancelled
+  usecase__CancelPrescription -.->|updates| entity__Prescription
+  usecase__ConfirmDispense -.->|displays| screen__PharmacyStatusScreen
+  usecase__ConfirmDispense -.->|invokes| api__ConfirmDispenseApi
+  usecase__ConfirmDispense -.->|requires_medium| medium__PharmacyWorkstation
+  usecase__ConfirmDispense -.->|transitions Prescription.status rxissued->rxdispensed| state__Prescription_rxdispensed
+  usecase__CounselMedication -.->|displays| screen__DispensingScreen
+  usecase__CounselMedication -.->|invokes| api__DispensingApi
+  usecase__CounselMedication -.->|requires_medium| medium__PharmacyWorkstation
+  usecase__CounselMedication -.->|requires_permission| permission__PrescriptionDispense
+  usecase__CounselMedication -.->|transitions Prescription.status rxaudited->rxcounseled| state__Prescription_rxcounseled
+  usecase__DispenseAndAudit -.->|displays| screen__DispensingScreen
+  usecase__DispenseAndAudit -.->|invokes| api__DispensingApi
+  usecase__DispenseAndAudit -.->|requires_medium| medium__PharmacyWorkstation
+  usecase__DispenseAndAudit -.->|requires_permission| permission__PrescriptionDispense
+  usecase__DispenseAndAudit -.->|transitions Prescription.status rxvoucher->rxaudited| state__Prescription_rxaudited
+  usecase__DraftPrescription -.->|displays| screen__PrescriptionScreen
+  usecase__DraftPrescription -.->|invokes| api__DraftPrescriptionApi
+  usecase__DraftPrescription -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__DraftPrescription -.->|requires_permission| permission__PrescriptionWrite
+  usecase__ExpirePrescription -.->|displays| screen__PharmacyStatusScreen
+  usecase__ExpirePrescription -.->|invokes| api__ConfirmDispenseApi
+  usecase__ExpirePrescription -.->|transitions Prescription.status rxissued->rxexpired| state__Prescription_rxexpired
+  usecase__HandOverMedication -.->|displays| screen__DispensingScreen
+  usecase__HandOverMedication -.->|invokes| api__DispensingApi
+  usecase__HandOverMedication -.->|requires_medium| medium__PharmacyWorkstation
+  usecase__HandOverMedication -.->|requires_permission| permission__PrescriptionDispense
+  usecase__HandOverMedication -.->|transitions Prescription.status rxcounseled->rxdispensed| state__Prescription_rxdispensed
+  usecase__IssueInhouseVoucher -.->|displays| screen__PrescriptionScreen
+  usecase__IssueInhouseVoucher -.->|invokes| api__IssuePrescriptionApi
+  usecase__IssueInhouseVoucher -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__IssueInhouseVoucher -.->|requires_permission| permission__PrescriptionWrite
+  usecase__IssueInhouseVoucher -.->|transitions Prescription.status rxdrafted->rxvoucher| state__Prescription_rxvoucher
+  usecase__IssueOutsidePrescription -.->|displays| screen__PrescriptionScreen
+  usecase__IssueOutsidePrescription -.->|invokes| api__IssuePrescriptionApi
+  usecase__IssueOutsidePrescription -.->|raises| event__EvPrescriptionIssued
+  usecase__IssueOutsidePrescription -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__IssueOutsidePrescription -.->|requires_permission| permission__PrescriptionWrite
+  usecase__IssueOutsidePrescription -.->|transitions Prescription.status rxdrafted->rxissued| state__Prescription_rxissued
+  usecase__IssueRefillPrescription -.->|displays| screen__PrescriptionScreen
+  usecase__IssueRefillPrescription -.->|invokes| api__DraftPrescriptionApi
+  usecase__IssueRefillPrescription -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__IssueRefillPrescription -.->|requires_permission| permission__PrescriptionWrite
+  usecase__RaisePrescriptionInquiry -.->|displays| screen__DispensingScreen
+  usecase__RaisePrescriptionInquiry -.->|invokes| api__DispensingApi
+  usecase__RaisePrescriptionInquiry -.->|requires_medium| medium__PharmacyWorkstation
+  usecase__RaisePrescriptionInquiry -.->|requires_permission| permission__PrescriptionDispense
+  usecase__RaisePrescriptionInquiry -.->|transitions Prescription.status rxvoucher->rxinquiry| state__Prescription_rxinquiry
+  usecase__SearchMedication -.->|displays| screen__MedicationSearchScreen
+  usecase__SearchMedication -.->|invokes| api__MedicationCatalogApi
+  usecase__SearchMedication -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__SearchMedication -.->|requires_permission| permission__PrescriptionWrite
+  classDef extsystem stroke:#333;
+  classDef business stroke:#333;
+  classDef buc stroke:#333;
+  classDef flow stroke:#333;
+  classDef step stroke:#333;
+  classDef timer stroke:#333;
+  classDef medium stroke:#333;
+  classDef permission stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef field stroke:#333;
+  classDef event stroke:#333;
+  classDef api stroke:#333;
+  classDef entity stroke:#333;
+  classDef state stroke:#333;
 ```
 
 ### 3.7 計算・会計
@@ -2963,159 +3299,188 @@ rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucVisitP
 ```
 
 ```mermaid
+%% rdra-ish diagram=rdra scope=buc:BucVisitPayment model=samples/clinic-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor extsystem business buc flow step medium permission usecase screen field event api entity state variation condition
+%% omitted: (none)
 flowchart LR
-  subgraph layer_value[System Value]
-    direction TB
-    AccountsClerk(["👤 医事課 会計担当"])
-    PaymentGateway[/"🌐 自動精算機・クレジット決済"/]
+  subgraph layer_value["システム価値"]
+    actor__AccountsClerk["医事課 会計担当"]:::actor
+    %% desc actor__AccountsClerk: 会計計算入力、患者の呼出、窓口精算、領収証・明細書の交付を行う事務職員。
+    extsystem__PaymentGateway["自動精算機・クレジット決済"]:::extsystem
   end
-  subgraph layer_environment[External Environment]
-    direction TB
-    RevenueCycle["💼 Revenue Cycle"]
-    BucVisitPayment["📦 計算・会計"]
-    VisitPaymentFlow["🧭 計算・会計の流れ"]
-    CalculationStep(["➡️ 計算受付・会計計算入力"])
-    CallStep(["➡️ 会計の呼出"])
-    KioskStep(["➡️ 自動精算機で精算"])
-    ReceiptStep(["➡️ 領収証・明細書の交付"])
-    WindowStep(["➡️ 会計窓口で精算"])
-    AccountsWindow[/"📱 会計窓口"/]
-    BillingWorkstation[/"📱 Billing Workstation"/]
-    PaymentKiosk[/"📱 自動精算機"/]
-    BillCalculate["🔑 会計計算"]
-    PaymentCollect["🔑 窓口収納"]
+  subgraph layer_environment["システム外部環境"]
+    business__RevenueCycle["Revenue Cycle"]:::business
+    buc__BucVisitPayment["計算・会計"]:::buc
+    %% desc buc__BucVisitPayment: 診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。
+    flow__VisitPaymentFlow["計算・会計の流れ"]:::flow
+    step__CalculationStep["計算受付・会計計算入力"]:::step
+    step__CallStep["会計の呼出"]:::step
+    step__KioskStep["自動精算機で精算"]:::step
+    step__ReceiptStep["領収証・明細書の交付"]:::step
+    step__WindowStep["会計窓口で精算"]:::step
+    medium__AccountsWindow["会計窓口"]:::medium
+    medium__BillingWorkstation["Billing Workstation"]:::medium
+    medium__PaymentKiosk["自動精算機"]:::medium
+    permission__BillCalculate["会計計算"]:::permission
+    permission__PaymentCollect["窓口収納"]:::permission
   end
-  subgraph layer_boundary[System Boundary]
-    direction TB
-    ApplySelectedTreatmentFee(["✅ 選定療養費の算定"])
-    CalculateVisitBill(["✅ 会計計算入力"])
-    CallPatientForPayment(["✅ 会計の呼出"])
-    IssueReceipt(["✅ 領収証・明細書の交付"])
-    SettleAtKiosk(["✅ 自動精算機での精算"])
-    SettleAtWindow(["✅ 会計窓口での精算"])
-    BillCalculationScreen[["🖥️ 会計計算画面"]]
-    KioskScreen[["🖥️ 自動精算機画面"]]
-    PaymentWindowScreen[["🖥️ 会計窓口画面"]]
-    ChargeCodeField[["🔤 診療行為"]]
-    KioskReferenceField[["🔤 精算機の取引番号"]]
-    PaymentAmountField[["🔤 お支払額"]]
-    EvBillCalculated{"⚡ 会計計算完了"}
-    EvEncounterSigned{"⚡ Encounter Signed"}
-    EvPaymentSettled{"⚡ 自動精算機での精算完了"}
+  subgraph layer_boundary["システム境界"]
+    usecase__ApplySelectedTreatmentFee["選定療養費の算定"]:::usecase
+    usecase__CalculateVisitBill["会計計算入力"]:::usecase
+    usecase__CallPatientForPayment["会計の呼出"]:::usecase
+    usecase__IssueReceipt["領収証・明細書の交付"]:::usecase
+    usecase__SettleAtKiosk["自動精算機での精算"]:::usecase
+    usecase__SettleAtWindow["会計窓口での精算"]:::usecase
+    screen__BillCalculationScreen["会計計算画面"]:::screen
+    screen__KioskScreen["自動精算機画面"]:::screen
+    screen__PaymentWindowScreen["会計窓口画面"]:::screen
+    field__ChargeCodeField["診療行為"]:::field
+    field__KioskReferenceField["精算機の取引番号"]:::field
+    field__PaymentAmountField["お支払額"]:::field
+    event__EvBillCalculated["会計計算完了"]:::event
+    event__EvEncounterSigned["Encounter Signed"]:::event
+    event__EvPaymentSettled["自動精算機での精算完了"]:::event
   end
-  subgraph layer_system[System]
-    direction TB
-    CalculateVisitBillApi["🔌 会計計算 API"]
-    ReceiptApi["🔌 領収証 API"]
-    SelectedFeeApi["🔌 選定療養費 API"]
-    SettlementApi["🔌 精算 API"]
-    AccountBalance[("🗄️ 未収金残高")]
-    Appointment[("🗄️ Appointment")]
-    Charge[("🗄️ Charge")]
-    Encounter[("🗄️ Encounter")]
-    InsurancePolicy[("🗄️ 保険資格")]
-    PaymentTransaction[("🗄️ Payment Transaction")]
-    SelectedTreatmentFeeSetting[("🗄️ 選定療養費の設定")]
-    BurdenRatio["🎚️ 負担割合"]
-    ChargeKind["🎚️ 診療費の種類"]
-    LimitCategory["🎚️ 限度額適用区分"]
-    ReferralCategory["🎚️ 紹介の有無"]
-    CopayCappedAtLimit{"🔀 窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"}
-    UnreferredFirstVisit{"🔀 紹介状なしの初診で、除外に当たらない"}
+  subgraph layer_system["システム"]
+    api__CalculateVisitBillApi["会計計算 API"]:::api
+    api__ReceiptApi["領収証 API"]:::api
+    api__SelectedFeeApi["選定療養費 API"]:::api
+    api__SettlementApi["精算 API"]:::api
+    entity__AccountBalance["未収金残高"]:::entity
+    entity__Appointment["Appointment"]:::entity
+    entity__Charge["Charge"]:::entity
+    entity__Encounter["Encounter"]:::entity
+    entity__InsurancePolicy["保険資格"]:::entity
+    entity__PaymentTransaction["Payment Transaction"]:::entity
+    entity__SelectedTreatmentFeeSetting["選定療養費の設定"]:::entity
+    state__Appointment_apptawaitingcalc["apptawaitingcalc"]:::state
+    state__Appointment_apptawaitingpay["apptawaitingpay"]:::state
+    state__Appointment_apptcompleted["apptcompleted"]:::state
+    state__Appointment_apptsettled["apptsettled"]:::state
+    variation__BurdenRatio["負担割合"]:::variation
+    variation__ChargeKind["診療費の種類"]:::variation
+    variation__LimitCategory["限度額適用区分"]:::variation
+    variation__ReferralCategory["紹介の有無"]:::variation
+    condition__CopayCappedAtLimit["窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"]:::condition
+    condition__UnreferredFirstVisit["紹介状なしの初診で、除外に当たらない"]:::condition
   end
-  AccountsClerk -.->|has_permission| BillCalculate
-  AccountsClerk -.->|has_permission| PaymentCollect
-  AccountsClerk -->|performs| BucVisitPayment
-  AccountsClerk -->|performs| CalculateVisitBill
-  AccountsClerk -->|performs| ApplySelectedTreatmentFee
-  AccountsClerk -->|performs| CallPatientForPayment
-  AccountsClerk -->|performs| SettleAtWindow
-  AccountsClerk -->|performs| IssueReceipt
-  CalculateVisitBillApi -.->|reads| Charge
-  CalculateVisitBillApi -.->|reads| InsurancePolicy
-  CalculateVisitBillApi -.->|requires_permission| BillCalculate
-  CalculateVisitBillApi -.->|updates| Appointment
-  SelectedFeeApi -.->|creates| Charge
-  SelectedFeeApi -.->|reads| Encounter
-  SelectedFeeApi -.->|reads| SelectedTreatmentFeeSetting
-  SelectedFeeApi -.->|requires_permission| BillCalculate
-  SettlementApi -.->|creates| PaymentTransaction
-  SettlementApi -.->|requires_permission| PaymentCollect
-  SettlementApi -.->|updates| Appointment
-  SettlementApi -.->|updates| AccountBalance
-  ReceiptApi -.->|reads| Charge
-  ReceiptApi -.->|reads| PaymentTransaction
-  ReceiptApi -.->|requires_permission| PaymentCollect
-  ReceiptApi -.->|updates| Appointment
-  BucVisitPayment -.->|belongs| RevenueCycle
-  BucVisitPayment -->|contains| VisitPaymentFlow
-  BucVisitPayment -->|contains| CalculateVisitBill
-  BucVisitPayment -->|contains| ApplySelectedTreatmentFee
-  BucVisitPayment -->|contains| CallPatientForPayment
-  BucVisitPayment -->|contains| SettleAtWindow
-  BucVisitPayment -->|contains| SettleAtKiosk
-  BucVisitPayment -->|contains| IssueReceipt
-  CopayCappedAtLimit -.->|applies_to| CalculateVisitBill
-  CopayCappedAtLimit -.->|combines| Appointment
-  CopayCappedAtLimit -.->|combines| BurdenRatio
-  CopayCappedAtLimit -.->|combines| LimitCategory
-  UnreferredFirstVisit -.->|applies_to| ApplySelectedTreatmentFee
-  UnreferredFirstVisit -.->|combines| ReferralCategory
-  UnreferredFirstVisit -.->|combines| ChargeKind
-  Encounter ---|1:1| Appointment
-  Charge ---|N:1| Encounter
-  PaymentTransaction ---|N:1| Appointment
-  EvPaymentSettled -.->|triggers| SettleAtKiosk
-  EvBillCalculated -.->|triggers| PaymentGateway
-  EvBillCalculated -.->|triggers| CallPatientForPayment
-  EvEncounterSigned -.->|triggers| BucVisitPayment
-  PaymentGateway -.->|raises| EvPaymentSettled
-  KioskReferenceField -.->|maps_field| PaymentTransaction
-  PaymentAmountField -.->|maps_field| PaymentTransaction
-  ChargeCodeField -.->|maps_field| Charge
-  VisitPaymentFlow -->|contains| CalculationStep
-  VisitPaymentFlow -->|contains| CallStep
-  VisitPaymentFlow -->|contains| WindowStep
-  VisitPaymentFlow -->|contains| KioskStep
-  VisitPaymentFlow -->|contains| ReceiptStep
-  BillCalculationScreen -->|contains| ChargeCodeField
-  PaymentWindowScreen -->|contains| PaymentAmountField
-  KioskScreen -->|contains| KioskReferenceField
-  CalculationStep -.->|covers| CalculateVisitBill
-  CalculationStep -.->|covers| ApplySelectedTreatmentFee
-  CalculationStep -.->|precedes| CallStep
-  CallStep -.->|branches| KioskStep
-  CallStep -.->|covers| CallPatientForPayment
-  CallStep -.->|precedes| WindowStep
-  WindowStep -.->|covers| SettleAtWindow
-  WindowStep -.->|precedes| ReceiptStep
-  KioskStep -.->|covers| EvPaymentSettled
-  KioskStep -.->|covers| SettleAtKiosk
-  KioskStep -.->|precedes| ReceiptStep
-  ReceiptStep -.->|covers| IssueReceipt
-  CalculateVisitBill -.->|displays| BillCalculationScreen
-  CalculateVisitBill -.->|invokes| CalculateVisitBillApi
-  CalculateVisitBill -.->|raises| EvBillCalculated
-  CalculateVisitBill -.->|requires_medium| BillingWorkstation
-  CalculateVisitBill -.->|requires_permission| BillCalculate
-  ApplySelectedTreatmentFee -.->|displays| BillCalculationScreen
-  ApplySelectedTreatmentFee -.->|invokes| SelectedFeeApi
-  ApplySelectedTreatmentFee -.->|requires_medium| BillingWorkstation
-  ApplySelectedTreatmentFee -.->|requires_permission| BillCalculate
-  CallPatientForPayment -.->|displays| PaymentWindowScreen
-  CallPatientForPayment -.->|reads| Appointment
-  CallPatientForPayment -.->|requires_medium| AccountsWindow
-  SettleAtWindow -.->|displays| PaymentWindowScreen
-  SettleAtWindow -.->|invokes| SettlementApi
-  SettleAtWindow -.->|requires_medium| AccountsWindow
-  SettleAtWindow -.->|requires_permission| PaymentCollect
-  SettleAtKiosk -.->|displays| KioskScreen
-  SettleAtKiosk -.->|invokes| SettlementApi
-  SettleAtKiosk -.->|requires_medium| PaymentKiosk
-  IssueReceipt -.->|displays| PaymentWindowScreen
-  IssueReceipt -.->|invokes| ReceiptApi
-  IssueReceipt -.->|requires_medium| AccountsWindow
-  IssueReceipt -.->|requires_permission| PaymentCollect
+  actor__AccountsClerk -.->|has_permission| permission__BillCalculate
+  actor__AccountsClerk -.->|has_permission| permission__PaymentCollect
+  actor__AccountsClerk -.->|performs| buc__BucVisitPayment
+  actor__AccountsClerk -.->|performs| usecase__ApplySelectedTreatmentFee
+  actor__AccountsClerk -.->|performs| usecase__CalculateVisitBill
+  actor__AccountsClerk -.->|performs| usecase__CallPatientForPayment
+  actor__AccountsClerk -.->|performs| usecase__IssueReceipt
+  actor__AccountsClerk -.->|performs| usecase__SettleAtWindow
+  api__CalculateVisitBillApi -.->|reads| entity__Charge
+  api__CalculateVisitBillApi -.->|reads| entity__InsurancePolicy
+  api__CalculateVisitBillApi -.->|requires_permission| permission__BillCalculate
+  api__CalculateVisitBillApi -.->|updates| entity__Appointment
+  api__ReceiptApi -.->|reads| entity__Charge
+  api__ReceiptApi -.->|reads| entity__PaymentTransaction
+  api__ReceiptApi -.->|requires_permission| permission__PaymentCollect
+  api__ReceiptApi -.->|updates| entity__Appointment
+  api__SelectedFeeApi -.->|creates| entity__Charge
+  api__SelectedFeeApi -.->|reads| entity__Encounter
+  api__SelectedFeeApi -.->|reads| entity__SelectedTreatmentFeeSetting
+  api__SelectedFeeApi -.->|requires_permission| permission__BillCalculate
+  api__SettlementApi -.->|creates| entity__PaymentTransaction
+  api__SettlementApi -.->|requires_permission| permission__PaymentCollect
+  api__SettlementApi -.->|updates| entity__AccountBalance
+  api__SettlementApi -.->|updates| entity__Appointment
+  buc__BucVisitPayment -->|belongs| business__RevenueCycle
+  buc__BucVisitPayment -->|contains| flow__VisitPaymentFlow
+  buc__BucVisitPayment -->|contains| usecase__ApplySelectedTreatmentFee
+  buc__BucVisitPayment -->|contains| usecase__CalculateVisitBill
+  buc__BucVisitPayment -->|contains| usecase__CallPatientForPayment
+  buc__BucVisitPayment -->|contains| usecase__IssueReceipt
+  buc__BucVisitPayment -->|contains| usecase__SettleAtKiosk
+  buc__BucVisitPayment -->|contains| usecase__SettleAtWindow
+  condition__CopayCappedAtLimit -.->|applies_to| usecase__CalculateVisitBill
+  condition__CopayCappedAtLimit -.->|combines| entity__Appointment
+  condition__CopayCappedAtLimit -.->|combines| variation__BurdenRatio
+  condition__CopayCappedAtLimit -.->|combines| variation__LimitCategory
+  condition__UnreferredFirstVisit -.->|applies_to| usecase__ApplySelectedTreatmentFee
+  condition__UnreferredFirstVisit -.->|combines| variation__ChargeKind
+  %% derived condition__UnreferredFirstVisit -> variation__ChargeKind from holds
+  condition__UnreferredFirstVisit -.->|combines| variation__ReferralCategory
+  %% derived condition__UnreferredFirstVisit -> variation__ReferralCategory from holds
+  entity__Charge ---|N:1| entity__Encounter
+  entity__Encounter ---|1:1| entity__Appointment
+  entity__PaymentTransaction ---|N:1| entity__Appointment
+  event__EvBillCalculated -.->|triggers| extsystem__PaymentGateway
+  event__EvBillCalculated -.->|triggers| usecase__CallPatientForPayment
+  event__EvEncounterSigned -.->|triggers| buc__BucVisitPayment
+  event__EvPaymentSettled -.->|triggers| usecase__SettleAtKiosk
+  extsystem__PaymentGateway -.->|raises| event__EvPaymentSettled
+  field__ChargeCodeField -.->|maps_field| entity__Charge
+  field__KioskReferenceField -.->|maps_field| entity__PaymentTransaction
+  field__PaymentAmountField -.->|maps_field| entity__PaymentTransaction
+  flow__VisitPaymentFlow -->|contains| step__CalculationStep
+  flow__VisitPaymentFlow -->|contains| step__CallStep
+  flow__VisitPaymentFlow -->|contains| step__KioskStep
+  flow__VisitPaymentFlow -->|contains| step__ReceiptStep
+  flow__VisitPaymentFlow -->|contains| step__WindowStep
+  screen__BillCalculationScreen -->|contains| field__ChargeCodeField
+  screen__KioskScreen -->|contains| field__KioskReferenceField
+  screen__PaymentWindowScreen -->|contains| field__PaymentAmountField
+  step__CalculationStep -.->|covers| usecase__ApplySelectedTreatmentFee
+  step__CalculationStep -.->|covers| usecase__CalculateVisitBill
+  step__CalculationStep -->|precedes| step__CallStep
+  step__CallStep -->|branches| step__KioskStep
+  step__CallStep -.->|covers| usecase__CallPatientForPayment
+  step__CallStep -->|precedes| step__WindowStep
+  step__KioskStep -.->|covers| event__EvPaymentSettled
+  step__KioskStep -.->|covers| usecase__SettleAtKiosk
+  step__KioskStep -->|precedes| step__ReceiptStep
+  step__ReceiptStep -.->|covers| usecase__IssueReceipt
+  step__WindowStep -.->|covers| usecase__SettleAtWindow
+  step__WindowStep -->|precedes| step__ReceiptStep
+  usecase__ApplySelectedTreatmentFee -.->|displays| screen__BillCalculationScreen
+  usecase__ApplySelectedTreatmentFee -.->|invokes| api__SelectedFeeApi
+  usecase__ApplySelectedTreatmentFee -.->|requires_medium| medium__BillingWorkstation
+  usecase__ApplySelectedTreatmentFee -.->|requires_permission| permission__BillCalculate
+  usecase__CalculateVisitBill -.->|displays| screen__BillCalculationScreen
+  usecase__CalculateVisitBill -.->|invokes| api__CalculateVisitBillApi
+  usecase__CalculateVisitBill -.->|raises| event__EvBillCalculated
+  usecase__CalculateVisitBill -.->|requires_medium| medium__BillingWorkstation
+  usecase__CalculateVisitBill -.->|requires_permission| permission__BillCalculate
+  usecase__CalculateVisitBill -.->|transitions Appointment.status apptawaitingcalc->apptawaitingpay| state__Appointment_apptawaitingpay
+  usecase__CallPatientForPayment -.->|displays| screen__PaymentWindowScreen
+  usecase__CallPatientForPayment -.->|reads| entity__Appointment
+  usecase__CallPatientForPayment -.->|requires_medium| medium__AccountsWindow
+  usecase__IssueReceipt -.->|displays| screen__PaymentWindowScreen
+  usecase__IssueReceipt -.->|invokes| api__ReceiptApi
+  usecase__IssueReceipt -.->|requires_medium| medium__AccountsWindow
+  usecase__IssueReceipt -.->|requires_permission| permission__PaymentCollect
+  usecase__IssueReceipt -.->|transitions Appointment.status apptsettled->apptcompleted| state__Appointment_apptcompleted
+  usecase__SettleAtKiosk -.->|displays| screen__KioskScreen
+  usecase__SettleAtKiosk -.->|invokes| api__SettlementApi
+  usecase__SettleAtKiosk -.->|requires_medium| medium__PaymentKiosk
+  usecase__SettleAtKiosk -.->|transitions Appointment.status apptawaitingpay->apptsettled| state__Appointment_apptsettled
+  usecase__SettleAtWindow -.->|displays| screen__PaymentWindowScreen
+  usecase__SettleAtWindow -.->|invokes| api__SettlementApi
+  usecase__SettleAtWindow -.->|requires_medium| medium__AccountsWindow
+  usecase__SettleAtWindow -.->|requires_permission| permission__PaymentCollect
+  usecase__SettleAtWindow -.->|transitions Appointment.status apptawaitingpay->apptsettled| state__Appointment_apptsettled
+  classDef actor stroke:#333;
+  classDef extsystem stroke:#333;
+  classDef business stroke:#333;
+  classDef buc stroke:#333;
+  classDef flow stroke:#333;
+  classDef step stroke:#333;
+  classDef medium stroke:#333;
+  classDef permission stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef field stroke:#333;
+  classDef event stroke:#333;
+  classDef api stroke:#333;
+  classDef entity stroke:#333;
+  classDef state stroke:#333;
+  classDef variation stroke:#333;
+  classDef condition stroke:#333;
 ```
 
 ### 3.8 レセプト作成・請求
@@ -3145,265 +3510,308 @@ rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucBillin
 ```
 
 ```mermaid
+%% rdra-ish diagram=rdra scope=buc:BucBillingClaims model=samples/clinic-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor extsystem business buc flow step timer medium permission usecase screen event api entity state variation condition
+%% omitted: (none)
 flowchart LR
-  subgraph layer_value[System Value]
-    direction TB
-    ClaimsClerk(["👤 医事課 レセプト担当"])
-    ClaimsReviewOrganization[/"🌐 審査支払機関（支払基金・国保連）"/]
+  subgraph layer_value["システム価値"]
+    actor__ClaimsClerk["医事課 レセプト担当"]:::actor
+    %% desc actor__ClaimsClerk: レセプトの作成・院内点検・請求と、返戻・査定への対応を行う事務職員。
+    extsystem__ClaimsReviewOrganization["審査支払機関（支払基金・国保連）"]:::extsystem
   end
-  subgraph layer_environment[External Environment]
-    direction TB
-    RevenueCycle["💼 Revenue Cycle"]
-    BucBillingClaims["📦 レセプト作成・請求"]
-    ClaimCycleFlow["🧭 レセプトの月次サイクル"]
-    AssessStep(["➡️ 査定と再審査請求"])
-    CreateStatementStep(["➡️ レセプト作成（月初）"])
-    HoldStep(["➡️ 保留（月遅れ）"])
-    InspectStep(["➡️ 院内点検"])
-    PaidStep(["➡️ 支払（診療翌々月）"])
-    ReceiptErrorStep(["➡️ 受付不能・要確認の再送（11日・12日）"])
-    ReturnStep(["➡️ 返戻と再請求"])
-    ReviewStep(["➡️ 審査"])
-    SubmitStep(["➡️ 請求（5日～10日）"])
-    ErrorResendWindow["⏱️ エラー分レセプトの再送（毎月11日・12日）"]
-    MonthlyClaimCreation["⏱️ 前月分レセプトの作成（月初）"]
-    MonthlyClaimDeadline["⏱️ 前月分レセプトの請求（毎月5日～10日）"]
-    ReceivablesMonthlyReview["⏱️ 未収金管理台帳の作成（毎月）"]
-    ReturnDownloadCheck["⏱️ 返戻レセプトの取得（3か月以内）"]
-    BillingWorkstation[/"📱 Billing Workstation"/]
-    ClinicalWorkstation[/"📱 Clinical Workstation"/]
-    OnlineClaimTerminal[/"📱 オンライン請求用端末"/]
-    BillingClaimWrite["🔑 レセプト業務"]
-    PaymentPost["🔑 Payment Post"]
+  subgraph layer_environment["システム外部環境"]
+    business__RevenueCycle["Revenue Cycle"]:::business
+    buc__BucBillingClaims["レセプト作成・請求"]:::buc
+    %% desc buc__BucBillingClaims: 月ごとのレセプトの作成・院内点検・請求と、審査支払機関からの受付不能・返戻・査定・支払への対応。
+    flow__ClaimCycleFlow["レセプトの月次サイクル"]:::flow
+    step__AssessStep["査定と再審査請求"]:::step
+    step__CreateStatementStep["レセプト作成（月初）"]:::step
+    step__HoldStep["保留（月遅れ）"]:::step
+    step__InspectStep["院内点検"]:::step
+    step__PaidStep["支払（診療翌々月）"]:::step
+    step__ReceiptErrorStep["受付不能・要確認の再送（11日・12日）"]:::step
+    step__ReturnStep["返戻と再請求"]:::step
+    step__ReviewStep["審査"]:::step
+    step__SubmitStep["請求（5日～10日）"]:::step
+    timer__ErrorResendWindow["エラー分レセプトの再送（毎月11日・12日）"]:::timer
+    timer__MonthlyClaimCreation["前月分レセプトの作成（月初）"]:::timer
+    timer__MonthlyClaimDeadline["前月分レセプトの請求（毎月5日～10日）"]:::timer
+    timer__ReceivablesMonthlyReview["未収金管理台帳の作成（毎月）"]:::timer
+    timer__ReturnDownloadCheck["返戻レセプトの取得（3か月以内）"]:::timer
+    medium__BillingWorkstation["Billing Workstation"]:::medium
+    medium__ClinicalWorkstation["Clinical Workstation"]:::medium
+    medium__OnlineClaimTerminal["オンライン請求用端末"]:::medium
+    permission__BillingClaimWrite["レセプト業務"]:::permission
+    permission__PaymentPost["Payment Post"]:::permission
   end
-  subgraph layer_boundary[System Boundary]
-    direction TB
-    CorrectReturnedStatement(["✅ 返戻レセプトの訂正（再請求）"])
-    CreateCharge(["✅ コスト情報の登録"])
-    GenerateClaimStatement(["✅ レセプト作成"])
-    HoldClaimStatement(["✅ レセプトの保留（月遅れ）"])
-    InspectClaimStatement(["✅ レセプトの院内点検"])
-    PostPayment(["✅ 診療報酬の入金"])
-    ReceiveClaimAccepted(["✅ レセプト受付（審査へ）"])
-    ReconcileBalance(["✅ 未収金管理台帳の作成"])
-    RecordClaimAssessment(["✅ 査定の取込"])
-    RecordClaimReturn(["✅ 返戻レセプトの取込"])
-    RecordReceiptError(["✅ 受付不能・要確認の確認"])
-    ReleaseHeldStatement(["✅ 保留レセプトの再提出準備"])
-    RequestReexamination(["✅ 再審査請求"])
-    ResendErroredStatement(["✅ エラー分レセプトの再送"])
-    ReviewClaimTransfer(["✅ 資格の振替・分割の確認"])
-    SubmitClaimStatements(["✅ レセプト請求"])
-    VoidCharge(["✅ コストの取消"])
-    BalanceScreen[["🖥️ 未収金画面"]]
-    ChargeWorklistScreen[["🖥️ Charge Worklist Screen"]]
-    ClaimScreen[["🖥️ レセプト画面"]]
-    PaymentPostingScreen[["🖥️ 入金画面"]]
-    EvClaimAccepted{"⚡ レセプト受付"}
-    EvClaimAssessed{"⚡ 査定"}
-    EvClaimReceiptError{"⚡ 受付不能・要確認"}
-    EvClaimReturned{"⚡ 返戻"}
-    EvClaimStatementsSubmitted{"⚡ レセプト請求"}
-    EvClaimTransferred{"⚡ 資格の振替・分割"}
-    EvEncounterSigned{"⚡ Encounter Signed"}
-    EvRemittance{"⚡ 診療報酬の支払"}
+  subgraph layer_boundary["システム境界"]
+    usecase__CorrectReturnedStatement["返戻レセプトの訂正（再請求）"]:::usecase
+    usecase__CreateCharge["コスト情報の登録"]:::usecase
+    usecase__GenerateClaimStatement["レセプト作成"]:::usecase
+    usecase__HoldClaimStatement["レセプトの保留（月遅れ）"]:::usecase
+    usecase__InspectClaimStatement["レセプトの院内点検"]:::usecase
+    usecase__PostPayment["診療報酬の入金"]:::usecase
+    usecase__ReceiveClaimAccepted["レセプト受付（審査へ）"]:::usecase
+    usecase__ReconcileBalance["未収金管理台帳の作成"]:::usecase
+    usecase__RecordClaimAssessment["査定の取込"]:::usecase
+    usecase__RecordClaimReturn["返戻レセプトの取込"]:::usecase
+    usecase__RecordReceiptError["受付不能・要確認の確認"]:::usecase
+    usecase__ReleaseHeldStatement["保留レセプトの再提出準備"]:::usecase
+    usecase__RequestReexamination["再審査請求"]:::usecase
+    usecase__ResendErroredStatement["エラー分レセプトの再送"]:::usecase
+    usecase__ReviewClaimTransfer["資格の振替・分割の確認"]:::usecase
+    usecase__SubmitClaimStatements["レセプト請求"]:::usecase
+    usecase__VoidCharge["コストの取消"]:::usecase
+    screen__BalanceScreen["未収金画面"]:::screen
+    screen__ChargeWorklistScreen["Charge Worklist Screen"]:::screen
+    screen__ClaimScreen["レセプト画面"]:::screen
+    screen__PaymentPostingScreen["入金画面"]:::screen
+    event__EvClaimAccepted["レセプト受付"]:::event
+    event__EvClaimAssessed["査定"]:::event
+    event__EvClaimReceiptError["受付不能・要確認"]:::event
+    event__EvClaimReturned["返戻"]:::event
+    event__EvClaimStatementsSubmitted["レセプト請求"]:::event
+    event__EvClaimTransferred["資格の振替・分割"]:::event
+    event__EvEncounterSigned["Encounter Signed"]:::event
+    event__EvRemittance["診療報酬の支払"]:::event
   end
-  subgraph layer_system[System]
-    direction TB
-    BalanceApi["🔌 未収金 API"]
-    ClaimEditApi["🔌 レセプト点検・訂正 API"]
-    ClaimResultApi["🔌 審査結果 API"]
-    CreateChargeApi["🔌 Create Charge API"]
-    GenerateClaimApi["🔌 レセプト作成 API"]
-    PaymentPostApi["🔌 入金 API"]
-    SubmitClaimApi["🔌 オンライン請求 API"]
-    AccountBalance[("🗄️ 未収金残高")]
-    Charge[("🗄️ Charge")]
-    ClaimStatement[("🗄️ レセプト")]
-    Encounter[("🗄️ Encounter")]
-    InsurancePolicy[("🗄️ 保険資格")]
-    PaymentTransaction[("🗄️ Payment Transaction")]
-    PayerChange["🎚️ 資格変更の種類"]
-    TransferNotPossible{"🔀 振替・分割の対象外（負担割合の相違・公費）"}
+  subgraph layer_system["システム"]
+    api__BalanceApi["未収金 API"]:::api
+    api__ClaimEditApi["レセプト点検・訂正 API"]:::api
+    api__ClaimResultApi["審査結果 API"]:::api
+    api__CreateChargeApi["Create Charge API"]:::api
+    api__GenerateClaimApi["レセプト作成 API"]:::api
+    api__PaymentPostApi["入金 API"]:::api
+    api__SubmitClaimApi["オンライン請求 API"]:::api
+    entity__AccountBalance["未収金残高"]:::entity
+    entity__Charge["Charge"]:::entity
+    entity__ClaimStatement["レセプト"]:::entity
+    entity__Encounter["Encounter"]:::entity
+    entity__InsurancePolicy["保険資格"]:::entity
+    entity__PaymentTransaction["Payment Transaction"]:::entity
+    state__ClaimStatement_stmtassessed["stmtassessed"]:::state
+    state__ClaimStatement_stmtdrafting["stmtdrafting"]:::state
+    state__ClaimStatement_stmtinspecting["stmtinspecting"]:::state
+    state__ClaimStatement_stmtonhold["stmtonhold"]:::state
+    state__ClaimStatement_stmtpaid["stmtpaid"]:::state
+    state__ClaimStatement_stmtreceipterror["stmtreceipterror"]:::state
+    state__ClaimStatement_stmtrereview["stmtrereview"]:::state
+    state__ClaimStatement_stmtreturned["stmtreturned"]:::state
+    state__ClaimStatement_stmtsubmitted["stmtsubmitted"]:::state
+    state__ClaimStatement_stmtunderreview["stmtunderreview"]:::state
+    variation__PayerChange["資格変更の種類"]:::variation
+    condition__TransferNotPossible["振替・分割の対象外（負担割合の相違・公費）"]:::condition
   end
-  ClaimsClerk -.->|has_permission| BillingClaimWrite
-  ClaimsClerk -.->|has_permission| PaymentPost
-  ClaimsClerk -->|performs| BucBillingClaims
-  ClaimsClerk -->|performs| InspectClaimStatement
-  ClaimsClerk -->|performs| HoldClaimStatement
-  ClaimsClerk -->|performs| ReleaseHeldStatement
-  ClaimsClerk -->|performs| CorrectReturnedStatement
-  ClaimsClerk -->|performs| RequestReexamination
-  ClaimsClerk -->|performs| ReconcileBalance
-  ClaimsClerk -->|performs| VoidCharge
-  SubmitClaimApi -.->|requires_permission| BillingClaimWrite
-  SubmitClaimApi -.->|updates| ClaimStatement
-  ClaimResultApi -.->|requires_permission| BillingClaimWrite
-  ClaimResultApi -.->|updates| ClaimStatement
-  PaymentPostApi -.->|requires_permission| PaymentPost
-  PaymentPostApi -.->|updates| ClaimStatement
-  BalanceApi -.->|reads| PaymentTransaction
-  BalanceApi -.->|requires_permission| PaymentPost
-  BalanceApi -.->|updates| AccountBalance
-  CreateChargeApi -.->|creates| Charge
-  CreateChargeApi -.->|reads| Encounter
-  GenerateClaimApi -.->|creates| ClaimStatement
-  GenerateClaimApi -.->|reads| Charge
-  GenerateClaimApi -.->|reads| InsurancePolicy
-  GenerateClaimApi -.->|requires_permission| BillingClaimWrite
-  ClaimEditApi -.->|requires_permission| BillingClaimWrite
-  ClaimEditApi -.->|updates| ClaimStatement
-  BucBillingClaims -.->|belongs| RevenueCycle
-  BucBillingClaims -->|contains| ClaimCycleFlow
-  BucBillingClaims -->|contains| InspectClaimStatement
-  BucBillingClaims -->|contains| HoldClaimStatement
-  BucBillingClaims -->|contains| ReleaseHeldStatement
-  BucBillingClaims -->|contains| SubmitClaimStatements
-  BucBillingClaims -->|contains| RecordReceiptError
-  BucBillingClaims -->|contains| ResendErroredStatement
-  BucBillingClaims -->|contains| ReceiveClaimAccepted
-  BucBillingClaims -->|contains| ReviewClaimTransfer
-  BucBillingClaims -->|contains| RecordClaimReturn
-  BucBillingClaims -->|contains| CorrectReturnedStatement
-  BucBillingClaims -->|contains| RecordClaimAssessment
-  BucBillingClaims -->|contains| RequestReexamination
-  BucBillingClaims -->|contains| PostPayment
-  BucBillingClaims -->|contains| ReconcileBalance
-  BucBillingClaims -->|contains| VoidCharge
-  BucBillingClaims -->|contains| CreateCharge
-  BucBillingClaims -->|contains| GenerateClaimStatement
-  TransferNotPossible -.->|applies_to| RecordClaimReturn
-  TransferNotPossible -.->|combines| ClaimStatement
-  TransferNotPossible -.->|combines| PayerChange
-  Charge ---|N:1| Encounter
-  Charge ---|N:1| ClaimStatement
-  ClaimStatement ---|N:1| InsurancePolicy
-  EvClaimStatementsSubmitted -.->|triggers| ClaimsReviewOrganization
-  EvClaimReceiptError -.->|triggers| RecordReceiptError
-  EvClaimAccepted -.->|triggers| ReceiveClaimAccepted
-  EvClaimReturned -.->|triggers| RecordClaimReturn
-  EvClaimAssessed -.->|triggers| RecordClaimAssessment
-  EvClaimTransferred -.->|triggers| ReviewClaimTransfer
-  EvRemittance -.->|triggers| PostPayment
-  EvEncounterSigned -.->|triggers| BucBillingClaims
-  EvEncounterSigned -.->|triggers| CreateCharge
-  ClaimsReviewOrganization -.->|raises| EvClaimReceiptError
-  ClaimsReviewOrganization -.->|raises| EvClaimAccepted
-  ClaimsReviewOrganization -.->|raises| EvClaimReturned
-  ClaimsReviewOrganization -.->|raises| EvClaimAssessed
-  ClaimsReviewOrganization -.->|raises| EvClaimTransferred
-  ClaimsReviewOrganization -.->|raises| EvRemittance
-  ClaimCycleFlow -->|contains| CreateStatementStep
-  ClaimCycleFlow -->|contains| InspectStep
-  ClaimCycleFlow -->|contains| HoldStep
-  ClaimCycleFlow -->|contains| SubmitStep
-  ClaimCycleFlow -->|contains| ReceiptErrorStep
-  ClaimCycleFlow -->|contains| ReviewStep
-  ClaimCycleFlow -->|contains| ReturnStep
-  ClaimCycleFlow -->|contains| AssessStep
-  ClaimCycleFlow -->|contains| PaidStep
-  CreateStatementStep -.->|covers| MonthlyClaimCreation
-  CreateStatementStep -.->|covers| GenerateClaimStatement
-  CreateStatementStep -.->|precedes| InspectStep
-  InspectStep -.->|branches| HoldStep
-  InspectStep -.->|covers| InspectClaimStatement
-  InspectStep -.->|precedes| SubmitStep
-  HoldStep -.->|covers| HoldClaimStatement
-  HoldStep -.->|covers| ReleaseHeldStatement
-  HoldStep -.->|repeats| InspectStep
-  SubmitStep -.->|covers| MonthlyClaimDeadline
-  SubmitStep -.->|covers| SubmitClaimStatements
-  SubmitStep -.->|excepts| ReceiptErrorStep
-  SubmitStep -.->|precedes| ReviewStep
-  ReceiptErrorStep -.->|covers| ErrorResendWindow
-  ReceiptErrorStep -.->|covers| RecordReceiptError
-  ReceiptErrorStep -.->|covers| ResendErroredStatement
-  ReceiptErrorStep -.->|repeats| SubmitStep
-  ReviewStep -.->|branches| AssessStep
-  ReviewStep -.->|covers| ReceiveClaimAccepted
-  ReviewStep -.->|covers| ReviewClaimTransfer
-  ReviewStep -.->|excepts| ReturnStep
-  ReviewStep -.->|precedes| PaidStep
-  ReturnStep -.->|covers| RecordClaimReturn
-  ReturnStep -.->|covers| CorrectReturnedStatement
-  ReturnStep -.->|repeats| InspectStep
-  AssessStep -.->|covers| RecordClaimAssessment
-  AssessStep -.->|covers| RequestReexamination
-  AssessStep -.->|precedes| PaidStep
-  PaidStep -.->|covers| PostPayment
-  MonthlyClaimCreation -.->|triggers| GenerateClaimStatement
-  MonthlyClaimDeadline -.->|triggers| SubmitClaimStatements
-  ErrorResendWindow -.->|triggers| ResendErroredStatement
-  ReturnDownloadCheck -.->|triggers| RecordClaimReturn
-  ReceivablesMonthlyReview -.->|triggers| ReconcileBalance
-  InspectClaimStatement -.->|displays| ClaimScreen
-  InspectClaimStatement -.->|invokes| ClaimEditApi
-  InspectClaimStatement -.->|requires_medium| BillingWorkstation
-  InspectClaimStatement -.->|requires_permission| BillingClaimWrite
-  HoldClaimStatement -.->|displays| ClaimScreen
-  HoldClaimStatement -.->|invokes| ClaimEditApi
-  HoldClaimStatement -.->|requires_medium| BillingWorkstation
-  HoldClaimStatement -.->|requires_permission| BillingClaimWrite
-  ReleaseHeldStatement -.->|displays| ClaimScreen
-  ReleaseHeldStatement -.->|invokes| ClaimEditApi
-  ReleaseHeldStatement -.->|requires_medium| BillingWorkstation
-  ReleaseHeldStatement -.->|requires_permission| BillingClaimWrite
-  SubmitClaimStatements -.->|displays| ClaimScreen
-  SubmitClaimStatements -.->|invokes| SubmitClaimApi
-  SubmitClaimStatements -.->|raises| EvClaimStatementsSubmitted
-  SubmitClaimStatements -.->|requires_medium| OnlineClaimTerminal
-  SubmitClaimStatements -.->|requires_permission| BillingClaimWrite
-  RecordReceiptError -.->|displays| ClaimScreen
-  RecordReceiptError -.->|invokes| ClaimResultApi
-  RecordReceiptError -.->|requires_medium| OnlineClaimTerminal
-  RecordReceiptError -.->|requires_permission| BillingClaimWrite
-  ResendErroredStatement -.->|displays| ClaimScreen
-  ResendErroredStatement -.->|invokes| SubmitClaimApi
-  ResendErroredStatement -.->|requires_medium| OnlineClaimTerminal
-  ResendErroredStatement -.->|requires_permission| BillingClaimWrite
-  ReceiveClaimAccepted -.->|displays| ClaimScreen
-  ReceiveClaimAccepted -.->|invokes| ClaimResultApi
-  ReceiveClaimAccepted -.->|requires_medium| OnlineClaimTerminal
-  ReceiveClaimAccepted -.->|requires_permission| BillingClaimWrite
-  ReviewClaimTransfer -.->|displays| ClaimScreen
-  ReviewClaimTransfer -.->|reads| ClaimStatement
-  ReviewClaimTransfer -.->|requires_medium| OnlineClaimTerminal
-  ReviewClaimTransfer -.->|requires_permission| BillingClaimWrite
-  RecordClaimReturn -.->|displays| ClaimScreen
-  RecordClaimReturn -.->|invokes| ClaimResultApi
-  RecordClaimReturn -.->|requires_medium| OnlineClaimTerminal
-  RecordClaimReturn -.->|requires_permission| BillingClaimWrite
-  CorrectReturnedStatement -.->|displays| ClaimScreen
-  CorrectReturnedStatement -.->|invokes| ClaimEditApi
-  CorrectReturnedStatement -.->|requires_medium| BillingWorkstation
-  CorrectReturnedStatement -.->|requires_permission| BillingClaimWrite
-  RecordClaimAssessment -.->|displays| ClaimScreen
-  RecordClaimAssessment -.->|invokes| ClaimResultApi
-  RecordClaimAssessment -.->|requires_medium| OnlineClaimTerminal
-  RecordClaimAssessment -.->|requires_permission| BillingClaimWrite
-  RequestReexamination -.->|displays| ClaimScreen
-  RequestReexamination -.->|invokes| SubmitClaimApi
-  RequestReexamination -.->|requires_medium| OnlineClaimTerminal
-  RequestReexamination -.->|requires_permission| BillingClaimWrite
-  PostPayment -.->|displays| PaymentPostingScreen
-  PostPayment -.->|invokes| PaymentPostApi
-  PostPayment -.->|requires_medium| BillingWorkstation
-  PostPayment -.->|requires_permission| PaymentPost
-  ReconcileBalance -.->|displays| BalanceScreen
-  ReconcileBalance -.->|invokes| BalanceApi
-  ReconcileBalance -.->|requires_medium| BillingWorkstation
-  ReconcileBalance -.->|requires_permission| PaymentPost
-  VoidCharge -.->|displays| ChargeWorklistScreen
-  VoidCharge -.->|requires_medium| BillingWorkstation
-  VoidCharge -.->|requires_permission| BillingClaimWrite
-  VoidCharge -.->|updates| Charge
-  CreateCharge -.->|displays| ChargeWorklistScreen
-  CreateCharge -.->|invokes| CreateChargeApi
-  CreateCharge -.->|requires_medium| ClinicalWorkstation
-  GenerateClaimStatement -.->|displays| ClaimScreen
-  GenerateClaimStatement -.->|invokes| GenerateClaimApi
-  GenerateClaimStatement -.->|requires_medium| BillingWorkstation
-  GenerateClaimStatement -.->|requires_permission| BillingClaimWrite
+  actor__ClaimsClerk -.->|has_permission| permission__BillingClaimWrite
+  actor__ClaimsClerk -.->|has_permission| permission__PaymentPost
+  actor__ClaimsClerk -.->|performs| buc__BucBillingClaims
+  actor__ClaimsClerk -.->|performs| usecase__CorrectReturnedStatement
+  actor__ClaimsClerk -.->|performs| usecase__HoldClaimStatement
+  actor__ClaimsClerk -.->|performs| usecase__InspectClaimStatement
+  actor__ClaimsClerk -.->|performs| usecase__ReconcileBalance
+  actor__ClaimsClerk -.->|performs| usecase__ReleaseHeldStatement
+  actor__ClaimsClerk -.->|performs| usecase__RequestReexamination
+  actor__ClaimsClerk -.->|performs| usecase__VoidCharge
+  api__BalanceApi -.->|reads| entity__PaymentTransaction
+  api__BalanceApi -.->|requires_permission| permission__PaymentPost
+  api__BalanceApi -.->|updates| entity__AccountBalance
+  api__ClaimEditApi -.->|requires_permission| permission__BillingClaimWrite
+  api__ClaimEditApi -.->|updates| entity__ClaimStatement
+  api__ClaimResultApi -.->|requires_permission| permission__BillingClaimWrite
+  api__ClaimResultApi -.->|updates| entity__ClaimStatement
+  api__CreateChargeApi -.->|creates| entity__Charge
+  api__CreateChargeApi -.->|reads| entity__Encounter
+  api__GenerateClaimApi -.->|creates| entity__ClaimStatement
+  api__GenerateClaimApi -.->|reads| entity__Charge
+  api__GenerateClaimApi -.->|reads| entity__InsurancePolicy
+  api__GenerateClaimApi -.->|requires_permission| permission__BillingClaimWrite
+  api__PaymentPostApi -.->|requires_permission| permission__PaymentPost
+  api__PaymentPostApi -.->|updates| entity__ClaimStatement
+  api__SubmitClaimApi -.->|requires_permission| permission__BillingClaimWrite
+  api__SubmitClaimApi -.->|updates| entity__ClaimStatement
+  buc__BucBillingClaims -->|belongs| business__RevenueCycle
+  buc__BucBillingClaims -->|contains| flow__ClaimCycleFlow
+  buc__BucBillingClaims -->|contains| usecase__CorrectReturnedStatement
+  buc__BucBillingClaims -->|contains| usecase__CreateCharge
+  buc__BucBillingClaims -->|contains| usecase__GenerateClaimStatement
+  buc__BucBillingClaims -->|contains| usecase__HoldClaimStatement
+  buc__BucBillingClaims -->|contains| usecase__InspectClaimStatement
+  buc__BucBillingClaims -->|contains| usecase__PostPayment
+  buc__BucBillingClaims -->|contains| usecase__ReceiveClaimAccepted
+  buc__BucBillingClaims -->|contains| usecase__ReconcileBalance
+  buc__BucBillingClaims -->|contains| usecase__RecordClaimAssessment
+  buc__BucBillingClaims -->|contains| usecase__RecordClaimReturn
+  buc__BucBillingClaims -->|contains| usecase__RecordReceiptError
+  buc__BucBillingClaims -->|contains| usecase__ReleaseHeldStatement
+  buc__BucBillingClaims -->|contains| usecase__RequestReexamination
+  buc__BucBillingClaims -->|contains| usecase__ResendErroredStatement
+  buc__BucBillingClaims -->|contains| usecase__ReviewClaimTransfer
+  buc__BucBillingClaims -->|contains| usecase__SubmitClaimStatements
+  buc__BucBillingClaims -->|contains| usecase__VoidCharge
+  condition__TransferNotPossible -.->|applies_to| usecase__RecordClaimReturn
+  condition__TransferNotPossible -.->|combines| entity__ClaimStatement
+  condition__TransferNotPossible -.->|combines| variation__PayerChange
+  entity__Charge ---|N:1| entity__ClaimStatement
+  entity__Charge ---|N:1| entity__Encounter
+  entity__ClaimStatement ---|N:1| entity__InsurancePolicy
+  event__EvClaimAccepted -.->|triggers| usecase__ReceiveClaimAccepted
+  event__EvClaimAssessed -.->|triggers| usecase__RecordClaimAssessment
+  event__EvClaimReceiptError -.->|triggers| usecase__RecordReceiptError
+  event__EvClaimReturned -.->|triggers| usecase__RecordClaimReturn
+  event__EvClaimStatementsSubmitted -.->|triggers| extsystem__ClaimsReviewOrganization
+  event__EvClaimTransferred -.->|triggers| usecase__ReviewClaimTransfer
+  event__EvEncounterSigned -.->|triggers| buc__BucBillingClaims
+  event__EvEncounterSigned -.->|triggers| usecase__CreateCharge
+  event__EvRemittance -.->|triggers| usecase__PostPayment
+  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimAccepted
+  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimAssessed
+  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimReceiptError
+  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimReturned
+  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimTransferred
+  extsystem__ClaimsReviewOrganization -.->|raises| event__EvRemittance
+  flow__ClaimCycleFlow -->|contains| step__AssessStep
+  flow__ClaimCycleFlow -->|contains| step__CreateStatementStep
+  flow__ClaimCycleFlow -->|contains| step__HoldStep
+  flow__ClaimCycleFlow -->|contains| step__InspectStep
+  flow__ClaimCycleFlow -->|contains| step__PaidStep
+  flow__ClaimCycleFlow -->|contains| step__ReceiptErrorStep
+  flow__ClaimCycleFlow -->|contains| step__ReturnStep
+  flow__ClaimCycleFlow -->|contains| step__ReviewStep
+  flow__ClaimCycleFlow -->|contains| step__SubmitStep
+  step__AssessStep -.->|covers| usecase__RecordClaimAssessment
+  step__AssessStep -.->|covers| usecase__RequestReexamination
+  step__AssessStep -->|precedes| step__PaidStep
+  step__CreateStatementStep -.->|covers| timer__MonthlyClaimCreation
+  step__CreateStatementStep -.->|covers| usecase__GenerateClaimStatement
+  step__CreateStatementStep -->|precedes| step__InspectStep
+  step__HoldStep -.->|covers| usecase__HoldClaimStatement
+  step__HoldStep -.->|covers| usecase__ReleaseHeldStatement
+  step__HoldStep -->|repeats| step__InspectStep
+  step__InspectStep -->|branches| step__HoldStep
+  step__InspectStep -.->|covers| usecase__InspectClaimStatement
+  step__InspectStep -->|precedes| step__SubmitStep
+  step__PaidStep -.->|covers| usecase__PostPayment
+  step__ReceiptErrorStep -.->|covers| timer__ErrorResendWindow
+  step__ReceiptErrorStep -.->|covers| usecase__RecordReceiptError
+  step__ReceiptErrorStep -.->|covers| usecase__ResendErroredStatement
+  step__ReceiptErrorStep -->|repeats| step__SubmitStep
+  step__ReturnStep -.->|covers| usecase__CorrectReturnedStatement
+  step__ReturnStep -.->|covers| usecase__RecordClaimReturn
+  step__ReturnStep -->|repeats| step__InspectStep
+  step__ReviewStep -->|branches| step__AssessStep
+  step__ReviewStep -.->|covers| usecase__ReceiveClaimAccepted
+  step__ReviewStep -.->|covers| usecase__ReviewClaimTransfer
+  step__ReviewStep -.->|excepts| step__ReturnStep
+  step__ReviewStep -->|precedes| step__PaidStep
+  step__SubmitStep -.->|covers| timer__MonthlyClaimDeadline
+  step__SubmitStep -.->|covers| usecase__SubmitClaimStatements
+  step__SubmitStep -.->|excepts| step__ReceiptErrorStep
+  step__SubmitStep -->|precedes| step__ReviewStep
+  timer__ErrorResendWindow -.->|triggers| usecase__ResendErroredStatement
+  timer__MonthlyClaimCreation -.->|triggers| usecase__GenerateClaimStatement
+  timer__MonthlyClaimDeadline -.->|triggers| usecase__SubmitClaimStatements
+  timer__ReceivablesMonthlyReview -.->|triggers| usecase__ReconcileBalance
+  timer__ReturnDownloadCheck -.->|triggers| usecase__RecordClaimReturn
+  usecase__CorrectReturnedStatement -.->|displays| screen__ClaimScreen
+  usecase__CorrectReturnedStatement -.->|invokes| api__ClaimEditApi
+  usecase__CorrectReturnedStatement -.->|requires_medium| medium__BillingWorkstation
+  usecase__CorrectReturnedStatement -.->|requires_permission| permission__BillingClaimWrite
+  usecase__CorrectReturnedStatement -.->|transitions ClaimStatement.status stmtreturned->stmtinspecting| state__ClaimStatement_stmtinspecting
+  usecase__CreateCharge -.->|displays| screen__ChargeWorklistScreen
+  usecase__CreateCharge -.->|invokes| api__CreateChargeApi
+  usecase__CreateCharge -.->|requires_medium| medium__ClinicalWorkstation
+  usecase__GenerateClaimStatement -.->|displays| screen__ClaimScreen
+  usecase__GenerateClaimStatement -.->|invokes| api__GenerateClaimApi
+  usecase__GenerateClaimStatement -.->|requires_medium| medium__BillingWorkstation
+  usecase__GenerateClaimStatement -.->|requires_permission| permission__BillingClaimWrite
+  usecase__HoldClaimStatement -.->|displays| screen__ClaimScreen
+  usecase__HoldClaimStatement -.->|invokes| api__ClaimEditApi
+  usecase__HoldClaimStatement -.->|requires_medium| medium__BillingWorkstation
+  usecase__HoldClaimStatement -.->|requires_permission| permission__BillingClaimWrite
+  usecase__HoldClaimStatement -.->|transitions ClaimStatement.status stmtinspecting->stmtonhold| state__ClaimStatement_stmtonhold
+  usecase__InspectClaimStatement -.->|displays| screen__ClaimScreen
+  usecase__InspectClaimStatement -.->|invokes| api__ClaimEditApi
+  usecase__InspectClaimStatement -.->|requires_medium| medium__BillingWorkstation
+  usecase__InspectClaimStatement -.->|requires_permission| permission__BillingClaimWrite
+  usecase__InspectClaimStatement -.->|transitions ClaimStatement.status stmtdrafting->stmtinspecting| state__ClaimStatement_stmtinspecting
+  usecase__PostPayment -.->|displays| screen__PaymentPostingScreen
+  usecase__PostPayment -.->|invokes| api__PaymentPostApi
+  usecase__PostPayment -.->|requires_medium| medium__BillingWorkstation
+  usecase__PostPayment -.->|requires_permission| permission__PaymentPost
+  usecase__PostPayment -.->|transitions ClaimStatement.status stmtassessed->stmtpaid| state__ClaimStatement_stmtpaid
+  usecase__PostPayment -.->|transitions ClaimStatement.status stmtrereview->stmtpaid| state__ClaimStatement_stmtpaid
+  usecase__PostPayment -.->|transitions ClaimStatement.status stmtunderreview->stmtpaid| state__ClaimStatement_stmtpaid
+  usecase__ReceiveClaimAccepted -.->|displays| screen__ClaimScreen
+  usecase__ReceiveClaimAccepted -.->|invokes| api__ClaimResultApi
+  usecase__ReceiveClaimAccepted -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__ReceiveClaimAccepted -.->|requires_permission| permission__BillingClaimWrite
+  usecase__ReceiveClaimAccepted -.->|transitions ClaimStatement.status stmtsubmitted->stmtunderreview| state__ClaimStatement_stmtunderreview
+  usecase__ReconcileBalance -.->|displays| screen__BalanceScreen
+  usecase__ReconcileBalance -.->|invokes| api__BalanceApi
+  usecase__ReconcileBalance -.->|requires_medium| medium__BillingWorkstation
+  usecase__ReconcileBalance -.->|requires_permission| permission__PaymentPost
+  usecase__RecordClaimAssessment -.->|displays| screen__ClaimScreen
+  usecase__RecordClaimAssessment -.->|invokes| api__ClaimResultApi
+  usecase__RecordClaimAssessment -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__RecordClaimAssessment -.->|requires_permission| permission__BillingClaimWrite
+  usecase__RecordClaimAssessment -.->|transitions ClaimStatement.status stmtunderreview->stmtassessed| state__ClaimStatement_stmtassessed
+  usecase__RecordClaimReturn -.->|displays| screen__ClaimScreen
+  usecase__RecordClaimReturn -.->|invokes| api__ClaimResultApi
+  usecase__RecordClaimReturn -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__RecordClaimReturn -.->|requires_permission| permission__BillingClaimWrite
+  usecase__RecordClaimReturn -.->|transitions ClaimStatement.status stmtunderreview->stmtreturned| state__ClaimStatement_stmtreturned
+  usecase__RecordReceiptError -.->|displays| screen__ClaimScreen
+  usecase__RecordReceiptError -.->|invokes| api__ClaimResultApi
+  usecase__RecordReceiptError -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__RecordReceiptError -.->|requires_permission| permission__BillingClaimWrite
+  usecase__RecordReceiptError -.->|transitions ClaimStatement.status stmtsubmitted->stmtreceipterror| state__ClaimStatement_stmtreceipterror
+  usecase__ReleaseHeldStatement -.->|displays| screen__ClaimScreen
+  usecase__ReleaseHeldStatement -.->|invokes| api__ClaimEditApi
+  usecase__ReleaseHeldStatement -.->|requires_medium| medium__BillingWorkstation
+  usecase__ReleaseHeldStatement -.->|requires_permission| permission__BillingClaimWrite
+  usecase__ReleaseHeldStatement -.->|transitions ClaimStatement.status stmtonhold->stmtinspecting| state__ClaimStatement_stmtinspecting
+  usecase__RequestReexamination -.->|displays| screen__ClaimScreen
+  usecase__RequestReexamination -.->|invokes| api__SubmitClaimApi
+  usecase__RequestReexamination -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__RequestReexamination -.->|requires_permission| permission__BillingClaimWrite
+  usecase__RequestReexamination -.->|transitions ClaimStatement.status stmtassessed->stmtrereview| state__ClaimStatement_stmtrereview
+  usecase__ResendErroredStatement -.->|displays| screen__ClaimScreen
+  usecase__ResendErroredStatement -.->|invokes| api__SubmitClaimApi
+  usecase__ResendErroredStatement -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__ResendErroredStatement -.->|requires_permission| permission__BillingClaimWrite
+  usecase__ResendErroredStatement -.->|transitions ClaimStatement.status stmtreceipterror->stmtsubmitted| state__ClaimStatement_stmtsubmitted
+  usecase__ReviewClaimTransfer -.->|displays| screen__ClaimScreen
+  usecase__ReviewClaimTransfer -.->|reads| entity__ClaimStatement
+  usecase__ReviewClaimTransfer -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__ReviewClaimTransfer -.->|requires_permission| permission__BillingClaimWrite
+  usecase__SubmitClaimStatements -.->|displays| screen__ClaimScreen
+  usecase__SubmitClaimStatements -.->|invokes| api__SubmitClaimApi
+  usecase__SubmitClaimStatements -.->|raises| event__EvClaimStatementsSubmitted
+  usecase__SubmitClaimStatements -.->|requires_medium| medium__OnlineClaimTerminal
+  usecase__SubmitClaimStatements -.->|requires_permission| permission__BillingClaimWrite
+  usecase__SubmitClaimStatements -.->|transitions ClaimStatement.status stmtinspecting->stmtsubmitted| state__ClaimStatement_stmtsubmitted
+  usecase__VoidCharge -.->|displays| screen__ChargeWorklistScreen
+  usecase__VoidCharge -.->|requires_medium| medium__BillingWorkstation
+  usecase__VoidCharge -.->|requires_permission| permission__BillingClaimWrite
+  usecase__VoidCharge -.->|updates| entity__Charge
+  classDef actor stroke:#333;
+  classDef extsystem stroke:#333;
+  classDef business stroke:#333;
+  classDef buc stroke:#333;
+  classDef flow stroke:#333;
+  classDef step stroke:#333;
+  classDef timer stroke:#333;
+  classDef medium stroke:#333;
+  classDef permission stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef event stroke:#333;
+  classDef api stroke:#333;
+  classDef entity stroke:#333;
+  classDef state stroke:#333;
+  classDef variation stroke:#333;
+  classDef condition stroke:#333;
 ```
 
 ### 3.9 Follow-Up Care
@@ -3432,246 +3840,278 @@ rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucFollow
 ```
 
 ```mermaid
+%% rdra-ish diagram=rdra scope=buc:BucFollowupCare model=samples/clinic-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor extsystem business buc timer medium permission usecase screen event api entity state
+%% omitted: (none)
 flowchart LR
-  subgraph layer_value[System Value]
-    direction TB
-    CareCoordinator(["👤 Care Coordinator"])
-    MessagingGateway[/"🌐 Messaging Gateway"/]
+  subgraph layer_value["システム価値"]
+    actor__CareCoordinator["Care Coordinator"]:::actor
+    extsystem__MessagingGateway["Messaging Gateway"]:::extsystem
   end
-  subgraph layer_environment[External Environment]
-    direction TB
-    PatientAccess["💼 Patient Access"]
-    BucFollowupCare["📦 Coordinate Follow-Up Care"]
-    BucPatientOnboarding["📦 Onboard and Maintain Patient"]
-    IntakeExpiryCheck["⏱️ Nightly intake expiry check"]
-    CareCoordinationConsole[/"📱 Care Coordination Console"/]
-    FrontDeskTerminal[/"📱 Front Desk Terminal"/]
-    PatientMobile[/"📱 Patient Mobile"/]
-    ConsentCapture["🔑 Consent Capture"]
-    FollowUpManage["🔑 Follow-Up Manage"]
-    InsuranceVerify["🔑 Insurance Verify"]
-    IntakeManage["🔑 Intake Manage"]
-    PatientMessageSend["🔑 Patient Message Send"]
-    PatientProfileRead["🔑 Patient Profile Read"]
-    PatientProfileWrite["🔑 Patient Profile Write"]
-    ScheduleRead["🔑 Schedule Read"]
-    ScheduleWrite["🔑 Schedule Write"]
+  subgraph layer_environment["システム外部環境"]
+    business__PatientAccess["Patient Access"]:::business
+    %% desc business__PatientAccess: Patient-facing access workflows from onboarding through appointments.
+    buc__BucFollowupCare["Coordinate Follow-Up Care"]:::buc
+    buc__BucPatientOnboarding["Onboard and Maintain Patient"]:::buc
+    timer__IntakeExpiryCheck["Nightly intake expiry check"]:::timer
+    medium__CareCoordinationConsole["Care Coordination Console"]:::medium
+    medium__FrontDeskTerminal["Front Desk Terminal"]:::medium
+    medium__PatientMobile["Patient Mobile"]:::medium
+    permission__ConsentCapture["Consent Capture"]:::permission
+    permission__FollowUpManage["Follow-Up Manage"]:::permission
+    permission__InsuranceVerify["Insurance Verify"]:::permission
+    permission__IntakeManage["Intake Manage"]:::permission
+    permission__PatientMessageSend["Patient Message Send"]:::permission
+    permission__PatientProfileRead["Patient Profile Read"]:::permission
+    permission__PatientProfileWrite["Patient Profile Write"]:::permission
+    permission__ScheduleRead["Schedule Read"]:::permission
+    permission__ScheduleWrite["Schedule Write"]:::permission
   end
-  subgraph layer_boundary[System Boundary]
-    direction TB
-    ArchivePatient(["✅ Archive Patient"])
-    CaptureConsent(["✅ Capture Consent"])
-    CloseCarePlan(["✅ Close Care Plan"])
-    CompleteIntakeForms(["✅ Complete Intake Forms"])
-    CreateCarePlan(["✅ Create Care Plan"])
-    ExpireIntakeForms(["✅ Expire Intake Forms"])
-    MergeDuplicatePatient(["✅ Merge Duplicate Patient"])
-    NotifyPatientResult(["✅ Notify Patient Result"])
-    RegisterPatient(["✅ Register Patient"])
-    ReviewPatientResponse(["✅ Review Patient Response"])
-    ScheduleFollowUpVisit(["✅ Schedule Follow-Up Visit"])
-    SearchPatient(["✅ Search Patient"])
-    SendAppointmentNotice(["✅ Send Appointment Notice"])
-    SendFollowUpMessage(["✅ Send Follow-Up Message"])
-    SendIntakeForms(["✅ Send Intake Forms"])
-    UpdateDemographics(["✅ Update Demographics"])
-    VerifyInsurance(["✅ 保険資格・限度額情報の登録（新患登録）"])
-    AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
-    CarePlanScreen[["🖥️ Care Plan Screen"]]
-    ConsentScreen[["🖥️ Consent Capture Screen"]]
-    FollowUpScheduleScreen[["🖥️ Follow-Up Schedule Screen"]]
-    InsuranceScreen[["🖥️ Insurance Verification Screen"]]
-    IntakePortalScreen[["🖥️ Intake Portal Screen"]]
-    PatientMessageScreen[["🖥️ Patient Message Screen"]]
-    PatientProfileScreen[["🖥️ Patient Profile Screen"]]
-    PatientSearchScreen[["🖥️ Patient Search Screen"]]
-    EvAppointmentCancelled{"⚡ Appointment Cancelled"}
-    EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
-    EvAppointmentScheduled{"⚡ Appointment Scheduled"}
-    EvClinicalOrderReviewed{"⚡ Clinical Result Reviewed"}
-    EvEncounterSigned{"⚡ Encounter Signed"}
+  subgraph layer_boundary["システム境界"]
+    usecase__ArchivePatient["Archive Patient"]:::usecase
+    usecase__CaptureConsent["Capture Consent"]:::usecase
+    usecase__CloseCarePlan["Close Care Plan"]:::usecase
+    usecase__CompleteIntakeForms["Complete Intake Forms"]:::usecase
+    usecase__CreateCarePlan["Create Care Plan"]:::usecase
+    usecase__ExpireIntakeForms["Expire Intake Forms"]:::usecase
+    usecase__MergeDuplicatePatient["Merge Duplicate Patient"]:::usecase
+    usecase__NotifyPatientResult["Notify Patient Result"]:::usecase
+    usecase__RegisterPatient["Register Patient"]:::usecase
+    usecase__ReviewPatientResponse["Review Patient Response"]:::usecase
+    usecase__ScheduleFollowUpVisit["Schedule Follow-Up Visit"]:::usecase
+    usecase__SearchPatient["Search Patient"]:::usecase
+    usecase__SendAppointmentNotice["Send Appointment Notice"]:::usecase
+    usecase__SendFollowUpMessage["Send Follow-Up Message"]:::usecase
+    usecase__SendIntakeForms["Send Intake Forms"]:::usecase
+    usecase__UpdateDemographics["Update Demographics"]:::usecase
+    usecase__VerifyInsurance["保険資格・限度額情報の登録（新患登録）"]:::usecase
+    screen__AppointmentNoticeScreen["Appointment Notice Screen"]:::screen
+    screen__CarePlanScreen["Care Plan Screen"]:::screen
+    screen__ConsentScreen["Consent Capture Screen"]:::screen
+    screen__FollowUpScheduleScreen["Follow-Up Schedule Screen"]:::screen
+    screen__InsuranceScreen["Insurance Verification Screen"]:::screen
+    screen__IntakePortalScreen["Intake Portal Screen"]:::screen
+    screen__PatientMessageScreen["Patient Message Screen"]:::screen
+    screen__PatientProfileScreen["Patient Profile Screen"]:::screen
+    screen__PatientSearchScreen["Patient Search Screen"]:::screen
+    event__EvAppointmentCancelled["Appointment Cancelled"]:::event
+    event__EvAppointmentRescheduled["Appointment Rescheduled"]:::event
+    event__EvAppointmentScheduled["Appointment Scheduled"]:::event
+    event__EvClinicalOrderReviewed["Clinical Result Reviewed"]:::event
+    event__EvEncounterSigned["Encounter Signed"]:::event
   end
-  subgraph layer_system[System]
-    direction TB
-    AppointmentNoticeApi["🔌 Appointment Notice API"]
-    ConsentApi["🔌 Consent API"]
-    CreateCarePlanApi["🔌 Create Care Plan API"]
-    EligibilityApi["🔌 Eligibility API"]
-    FollowUpScheduleApi["🔌 Follow-Up Schedule API"]
-    IntakeMessagingApi["🔌 Intake Messaging API"]
-    NotifyPatientResultApi["🔌 Notify Patient Result API"]
-    RegisterPatientApi["🔌 Register Patient API"]
-    SearchPatientApi["🔌 Search Patient API"]
-    SendFollowUpMessageApi["🔌 Send Follow-Up Message API"]
-    UpdateDemographicsApi["🔌 Update Demographics API"]
-    Appointment[("🗄️ Appointment")]
-    CarePlan[("🗄️ Care Plan")]
-    ConsentRecord[("🗄️ Consent Record")]
-    EligibilityCheck[("🗄️ 資格確認")]
-    Encounter[("🗄️ Encounter")]
-    InsurancePolicy[("🗄️ 保険資格")]
-    IntakePacket[("🗄️ Intake Packet")]
-    Notification[("🗄️ Notification")]
-    PatientAccount[("🗄️ Patient Account")]
-    PatientMessage[("🗄️ Patient Message")]
-    PatientProfile[("🗄️ Patient Profile")]
-    ProviderSchedule[("🗄️ Provider Schedule")]
+  subgraph layer_system["システム"]
+    api__AppointmentNoticeApi["Appointment Notice API"]:::api
+    api__ConsentApi["Consent API"]:::api
+    api__CreateCarePlanApi["Create Care Plan API"]:::api
+    api__EligibilityApi["Eligibility API"]:::api
+    api__FollowUpScheduleApi["Follow-Up Schedule API"]:::api
+    api__IntakeMessagingApi["Intake Messaging API"]:::api
+    api__NotifyPatientResultApi["Notify Patient Result API"]:::api
+    api__RegisterPatientApi["Register Patient API"]:::api
+    api__SearchPatientApi["Search Patient API"]:::api
+    api__SendFollowUpMessageApi["Send Follow-Up Message API"]:::api
+    api__UpdateDemographicsApi["Update Demographics API"]:::api
+    entity__Appointment["Appointment"]:::entity
+    entity__CarePlan["Care Plan"]:::entity
+    entity__ConsentRecord["Consent Record"]:::entity
+    entity__EligibilityCheck["資格確認"]:::entity
+    entity__Encounter["Encounter"]:::entity
+    entity__InsurancePolicy["保険資格"]:::entity
+    entity__IntakePacket["Intake Packet"]:::entity
+    entity__Notification["Notification"]:::entity
+    entity__PatientAccount["Patient Account"]:::entity
+    entity__PatientMessage["Patient Message"]:::entity
+    entity__PatientProfile["Patient Profile"]:::entity
+    entity__ProviderSchedule["Provider Schedule"]:::entity
+    state__Appointment_apptrequested["apptrequested"]:::state
+    state__Appointment_apptscheduled["apptscheduled"]:::state
+    state__CarePlan_careclosed["careclosed"]:::state
+    state__CarePlan_caremonitoring["caremonitoring"]:::state
+    state__CarePlan_careopen["careopen"]:::state
+    state__IntakePacket_intakecompleted["intakecompleted"]:::state
+    state__IntakePacket_intakeexpired["intakeexpired"]:::state
+    state__IntakePacket_intakesent["intakesent"]:::state
+    state__PatientAccount_patientactive["patientactive"]:::state
+    state__PatientAccount_patientinactive["patientinactive"]:::state
+    state__PatientAccount_patientmerged["patientmerged"]:::state
   end
-  CareCoordinator -.->|has_permission| FollowUpManage
-  CareCoordinator -.->|has_permission| PatientMessageSend
-  CareCoordinator -.->|has_permission| ScheduleWrite
-  CareCoordinator -->|performs| BucFollowupCare
-  CareCoordinator -->|performs| CreateCarePlan
-  CareCoordinator -->|performs| SendFollowUpMessage
-  CareCoordinator -->|performs| ReviewPatientResponse
-  CareCoordinator -->|performs| ScheduleFollowUpVisit
-  CareCoordinator -->|performs| CloseCarePlan
-  CareCoordinator -->|performs| NotifyPatientResult
-  CreateCarePlanApi -.->|creates| CarePlan
-  CreateCarePlanApi -.->|reads| Encounter
-  CreateCarePlanApi -.->|requires_permission| FollowUpManage
-  SendFollowUpMessageApi -.->|creates| PatientMessage
-  SendFollowUpMessageApi -.->|requires_permission| PatientMessageSend
-  FollowUpScheduleApi -.->|creates| Appointment
-  FollowUpScheduleApi -.->|requires_permission| ScheduleWrite
-  FollowUpScheduleApi -.->|updates| ProviderSchedule
-  NotifyPatientResultApi -.->|creates| Notification
-  NotifyPatientResultApi -.->|requires_permission| PatientMessageSend
-  SearchPatientApi -.->|reads| PatientAccount
-  SearchPatientApi -.->|reads| PatientProfile
-  SearchPatientApi -.->|requires_permission| PatientProfileRead
-  RegisterPatientApi -.->|creates| PatientAccount
-  RegisterPatientApi -.->|creates| PatientProfile
-  RegisterPatientApi -.->|requires_permission| PatientProfileWrite
-  UpdateDemographicsApi -.->|requires_permission| PatientProfileWrite
-  UpdateDemographicsApi -.->|updates| PatientProfile
-  EligibilityApi -.->|creates| EligibilityCheck
-  EligibilityApi -.->|reads| InsurancePolicy
-  EligibilityApi -.->|requires_permission| InsuranceVerify
-  EligibilityApi -.->|updates| InsurancePolicy
-  ConsentApi -.->|creates| ConsentRecord
-  ConsentApi -.->|requires_permission| ConsentCapture
-  IntakeMessagingApi -.->|creates| PatientMessage
-  IntakeMessagingApi -.->|creates| IntakePacket
-  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
-  AppointmentNoticeApi -.->|creates| PatientMessage
-  AppointmentNoticeApi -.->|creates| Notification
-  BucFollowupCare -.->|belongs| PatientAccess
-  BucFollowupCare -->|contains| CreateCarePlan
-  BucFollowupCare -->|contains| SendFollowUpMessage
-  BucFollowupCare -->|contains| ReviewPatientResponse
-  BucFollowupCare -->|contains| ScheduleFollowUpVisit
-  BucFollowupCare -->|contains| CloseCarePlan
-  BucFollowupCare -->|contains| NotifyPatientResult
-  BucPatientOnboarding -.->|belongs| PatientAccess
-  BucPatientOnboarding -->|contains| SearchPatient
-  BucPatientOnboarding -->|contains| RegisterPatient
-  BucPatientOnboarding -->|contains| UpdateDemographics
-  BucPatientOnboarding -->|contains| VerifyInsurance
-  BucPatientOnboarding -->|contains| CaptureConsent
-  BucPatientOnboarding -->|contains| SendIntakeForms
-  BucPatientOnboarding -->|contains| CompleteIntakeForms
-  BucPatientOnboarding -->|contains| ExpireIntakeForms
-  BucPatientOnboarding -->|contains| MergeDuplicatePatient
-  BucPatientOnboarding -->|contains| ArchivePatient
-  Appointment ---|N:1| PatientAccount
-  Encounter ---|N:1| PatientAccount
-  Encounter ---|1:1| Appointment
-  CarePlan ---|N:1| Encounter
-  CarePlan ---|N:1| PatientAccount
-  PatientMessage ---|N:1| PatientAccount
-  Notification ---|N:1| PatientAccount
-  PatientProfile ---|1:1| PatientAccount
-  InsurancePolicy ---|N:1| PatientAccount
-  EligibilityCheck ---|N:1| InsurancePolicy
-  ConsentRecord ---|N:1| PatientAccount
-  IntakePacket ---|N:1| PatientAccount
-  EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
-  EvAppointmentScheduled -.->|triggers| MessagingGateway
-  EvAppointmentScheduled -.->|triggers| SendIntakeForms
-  EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
-  EvAppointmentRescheduled -.->|triggers| MessagingGateway
-  EvAppointmentRescheduled -.->|triggers| SendAppointmentNotice
-  EvAppointmentCancelled -.->|triggers| MessagingGateway
-  EvAppointmentCancelled -.->|triggers| SendAppointmentNotice
-  EvEncounterSigned -.->|triggers| BucFollowupCare
-  EvEncounterSigned -.->|triggers| CreateCarePlan
-  EvClinicalOrderReviewed -.->|triggers| BucFollowupCare
-  EvClinicalOrderReviewed -.->|triggers| NotifyPatientResult
-  PatientSearchScreen -.->|shows| PatientAccount
-  PatientProfileScreen -.->|shows| PatientProfile
-  IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
-  CreateCarePlan -.->|displays| CarePlanScreen
-  CreateCarePlan -.->|invokes| CreateCarePlanApi
-  CreateCarePlan -.->|requires_medium| CareCoordinationConsole
-  CreateCarePlan -.->|requires_permission| FollowUpManage
-  SendFollowUpMessage -.->|displays| PatientMessageScreen
-  SendFollowUpMessage -.->|invokes| SendFollowUpMessageApi
-  SendFollowUpMessage -.->|requires_medium| CareCoordinationConsole
-  SendFollowUpMessage -.->|requires_permission| PatientMessageSend
-  ReviewPatientResponse -.->|displays| CarePlanScreen
-  ReviewPatientResponse -.->|requires_medium| CareCoordinationConsole
-  ReviewPatientResponse -.->|requires_permission| FollowUpManage
-  ReviewPatientResponse -.->|updates| CarePlan
-  ReviewPatientResponse -.->|updates| PatientMessage
-  ScheduleFollowUpVisit -.->|displays| FollowUpScheduleScreen
-  ScheduleFollowUpVisit -.->|invokes| FollowUpScheduleApi
-  ScheduleFollowUpVisit -.->|raises| EvAppointmentScheduled
-  ScheduleFollowUpVisit -.->|requires_medium| CareCoordinationConsole
-  ScheduleFollowUpVisit -.->|requires_permission| FollowUpManage
-  ScheduleFollowUpVisit -.->|requires_permission| ScheduleWrite
-  CloseCarePlan -.->|displays| CarePlanScreen
-  CloseCarePlan -.->|requires_medium| CareCoordinationConsole
-  CloseCarePlan -.->|requires_permission| FollowUpManage
-  CloseCarePlan -.->|updates| CarePlan
-  NotifyPatientResult -.->|displays| PatientMessageScreen
-  NotifyPatientResult -.->|invokes| NotifyPatientResultApi
-  NotifyPatientResult -.->|requires_medium| CareCoordinationConsole
-  NotifyPatientResult -.->|requires_permission| PatientMessageSend
-  SearchPatient -.->|displays| PatientSearchScreen
-  SearchPatient -.->|invokes| SearchPatientApi
-  SearchPatient -.->|requires_medium| FrontDeskTerminal
-  SearchPatient -.->|requires_permission| PatientProfileRead
-  RegisterPatient -.->|displays| PatientProfileScreen
-  RegisterPatient -.->|invokes| RegisterPatientApi
-  RegisterPatient -.->|requires_medium| FrontDeskTerminal
-  RegisterPatient -.->|requires_permission| PatientProfileWrite
-  UpdateDemographics -.->|displays| PatientProfileScreen
-  UpdateDemographics -.->|invokes| UpdateDemographicsApi
-  UpdateDemographics -.->|requires_medium| FrontDeskTerminal
-  UpdateDemographics -.->|requires_permission| PatientProfileWrite
-  VerifyInsurance -.->|displays| InsuranceScreen
-  VerifyInsurance -.->|invokes| EligibilityApi
-  VerifyInsurance -.->|requires_medium| FrontDeskTerminal
-  VerifyInsurance -.->|requires_permission| InsuranceVerify
-  CaptureConsent -.->|displays| ConsentScreen
-  CaptureConsent -.->|invokes| ConsentApi
-  CaptureConsent -.->|requires_medium| PatientMobile
-  CaptureConsent -.->|requires_permission| ConsentCapture
-  SendIntakeForms -.->|displays| IntakePortalScreen
-  SendIntakeForms -.->|invokes| IntakeMessagingApi
-  SendIntakeForms -.->|requires_medium| FrontDeskTerminal
-  SendIntakeForms -.->|requires_permission| IntakeManage
-  CompleteIntakeForms -.->|displays| IntakePortalScreen
-  CompleteIntakeForms -.->|requires_medium| PatientMobile
-  CompleteIntakeForms -.->|requires_permission| ConsentCapture
-  CompleteIntakeForms -.->|updates| IntakePacket
-  ExpireIntakeForms -.->|displays| IntakePortalScreen
-  ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
-  ExpireIntakeForms -.->|requires_permission| IntakeManage
-  ExpireIntakeForms -.->|updates| IntakePacket
-  MergeDuplicatePatient -.->|displays| PatientProfileScreen
-  MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
-  MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
-  MergeDuplicatePatient -.->|updates| PatientAccount
-  ArchivePatient -.->|displays| PatientProfileScreen
-  ArchivePatient -.->|requires_medium| FrontDeskTerminal
-  ArchivePatient -.->|requires_permission| PatientProfileWrite
-  ArchivePatient -.->|updates| PatientAccount
-  SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
-  SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
-  SendAppointmentNotice -.->|requires_medium| FrontDeskTerminal
-  SendAppointmentNotice -.->|requires_permission| ScheduleRead
+  actor__CareCoordinator -.->|has_permission| permission__FollowUpManage
+  actor__CareCoordinator -.->|has_permission| permission__PatientMessageSend
+  actor__CareCoordinator -.->|has_permission| permission__ScheduleWrite
+  actor__CareCoordinator -.->|performs| buc__BucFollowupCare
+  actor__CareCoordinator -.->|performs| usecase__CloseCarePlan
+  actor__CareCoordinator -.->|performs| usecase__CreateCarePlan
+  actor__CareCoordinator -.->|performs| usecase__NotifyPatientResult
+  actor__CareCoordinator -.->|performs| usecase__ReviewPatientResponse
+  actor__CareCoordinator -.->|performs| usecase__ScheduleFollowUpVisit
+  actor__CareCoordinator -.->|performs| usecase__SendFollowUpMessage
+  api__AppointmentNoticeApi -.->|creates| entity__Notification
+  api__AppointmentNoticeApi -.->|creates| entity__PatientMessage
+  api__ConsentApi -.->|creates| entity__ConsentRecord
+  api__ConsentApi -.->|requires_permission| permission__ConsentCapture
+  api__CreateCarePlanApi -.->|creates| entity__CarePlan
+  api__CreateCarePlanApi -.->|reads| entity__Encounter
+  api__CreateCarePlanApi -.->|requires_permission| permission__FollowUpManage
+  api__EligibilityApi -.->|creates| entity__EligibilityCheck
+  api__EligibilityApi -.->|reads| entity__InsurancePolicy
+  api__EligibilityApi -.->|requires_permission| permission__InsuranceVerify
+  api__EligibilityApi -.->|updates| entity__InsurancePolicy
+  api__FollowUpScheduleApi -.->|creates| entity__Appointment
+  api__FollowUpScheduleApi -.->|requires_permission| permission__ScheduleWrite
+  api__FollowUpScheduleApi -.->|updates| entity__ProviderSchedule
+  api__IntakeMessagingApi -.->|creates| entity__IntakePacket
+  api__IntakeMessagingApi -.->|creates| entity__PatientMessage
+  api__IntakeMessagingApi -.->|requires_permission| permission__PatientMessageSend
+  api__NotifyPatientResultApi -.->|creates| entity__Notification
+  api__NotifyPatientResultApi -.->|requires_permission| permission__PatientMessageSend
+  api__RegisterPatientApi -.->|creates| entity__PatientAccount
+  api__RegisterPatientApi -.->|creates| entity__PatientProfile
+  api__RegisterPatientApi -.->|requires_permission| permission__PatientProfileWrite
+  api__SearchPatientApi -.->|reads| entity__PatientAccount
+  api__SearchPatientApi -.->|reads| entity__PatientProfile
+  api__SearchPatientApi -.->|requires_permission| permission__PatientProfileRead
+  api__SendFollowUpMessageApi -.->|creates| entity__PatientMessage
+  api__SendFollowUpMessageApi -.->|requires_permission| permission__PatientMessageSend
+  api__UpdateDemographicsApi -.->|requires_permission| permission__PatientProfileWrite
+  api__UpdateDemographicsApi -.->|updates| entity__PatientProfile
+  buc__BucFollowupCare -->|belongs| business__PatientAccess
+  buc__BucFollowupCare -->|contains| usecase__CloseCarePlan
+  buc__BucFollowupCare -->|contains| usecase__CreateCarePlan
+  buc__BucFollowupCare -->|contains| usecase__NotifyPatientResult
+  buc__BucFollowupCare -->|contains| usecase__ReviewPatientResponse
+  buc__BucFollowupCare -->|contains| usecase__ScheduleFollowUpVisit
+  buc__BucFollowupCare -->|contains| usecase__SendFollowUpMessage
+  buc__BucPatientOnboarding -->|belongs| business__PatientAccess
+  buc__BucPatientOnboarding -->|contains| usecase__ArchivePatient
+  buc__BucPatientOnboarding -->|contains| usecase__CaptureConsent
+  buc__BucPatientOnboarding -->|contains| usecase__CompleteIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__ExpireIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__MergeDuplicatePatient
+  buc__BucPatientOnboarding -->|contains| usecase__RegisterPatient
+  buc__BucPatientOnboarding -->|contains| usecase__SearchPatient
+  buc__BucPatientOnboarding -->|contains| usecase__SendIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__UpdateDemographics
+  buc__BucPatientOnboarding -->|contains| usecase__VerifyInsurance
+  entity__Appointment ---|N:1| entity__PatientAccount
+  entity__CarePlan ---|N:1| entity__Encounter
+  entity__CarePlan ---|N:1| entity__PatientAccount
+  entity__ConsentRecord ---|N:1| entity__PatientAccount
+  entity__EligibilityCheck ---|N:1| entity__InsurancePolicy
+  entity__Encounter ---|1:1| entity__Appointment
+  entity__Encounter ---|N:1| entity__PatientAccount
+  entity__InsurancePolicy ---|N:1| entity__PatientAccount
+  entity__IntakePacket ---|N:1| entity__PatientAccount
+  entity__Notification ---|N:1| entity__PatientAccount
+  entity__PatientMessage ---|N:1| entity__PatientAccount
+  entity__PatientProfile ---|1:1| entity__PatientAccount
+  event__EvAppointmentCancelled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentCancelled -.->|triggers| usecase__SendAppointmentNotice
+  event__EvAppointmentRescheduled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentRescheduled -.->|triggers| usecase__SendAppointmentNotice
+  event__EvAppointmentScheduled -.->|triggers| buc__BucPatientOnboarding
+  event__EvAppointmentScheduled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentScheduled -.->|triggers| usecase__SendAppointmentNotice
+  event__EvAppointmentScheduled -.->|triggers| usecase__SendIntakeForms
+  event__EvClinicalOrderReviewed -.->|triggers| buc__BucFollowupCare
+  event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyPatientResult
+  event__EvEncounterSigned -.->|triggers| buc__BucFollowupCare
+  event__EvEncounterSigned -.->|triggers| usecase__CreateCarePlan
+  screen__PatientProfileScreen -.->|shows| entity__PatientProfile
+  screen__PatientSearchScreen -.->|shows| entity__PatientAccount
+  timer__IntakeExpiryCheck -.->|triggers| usecase__ExpireIntakeForms
+  usecase__ArchivePatient -.->|displays| screen__PatientProfileScreen
+  usecase__ArchivePatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__ArchivePatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__ArchivePatient -.->|transitions PatientAccount.status patientactive->patientinactive| state__PatientAccount_patientinactive
+  usecase__ArchivePatient -.->|updates| entity__PatientAccount
+  usecase__CaptureConsent -.->|displays| screen__ConsentScreen
+  usecase__CaptureConsent -.->|invokes| api__ConsentApi
+  usecase__CaptureConsent -.->|requires_medium| medium__PatientMobile
+  usecase__CaptureConsent -.->|requires_permission| permission__ConsentCapture
+  usecase__CloseCarePlan -.->|displays| screen__CarePlanScreen
+  usecase__CloseCarePlan -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__CloseCarePlan -.->|requires_permission| permission__FollowUpManage
+  usecase__CloseCarePlan -.->|transitions CarePlan.status caremonitoring->careclosed| state__CarePlan_careclosed
+  usecase__CloseCarePlan -.->|updates| entity__CarePlan
+  usecase__CompleteIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__CompleteIntakeForms -.->|requires_medium| medium__PatientMobile
+  usecase__CompleteIntakeForms -.->|requires_permission| permission__ConsentCapture
+  usecase__CompleteIntakeForms -.->|transitions IntakePacket.status intakesent->intakecompleted| state__IntakePacket_intakecompleted
+  usecase__CompleteIntakeForms -.->|updates| entity__IntakePacket
+  usecase__CreateCarePlan -.->|displays| screen__CarePlanScreen
+  usecase__CreateCarePlan -.->|invokes| api__CreateCarePlanApi
+  usecase__CreateCarePlan -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__CreateCarePlan -.->|requires_permission| permission__FollowUpManage
+  usecase__ExpireIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__ExpireIntakeForms -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__ExpireIntakeForms -.->|requires_permission| permission__IntakeManage
+  usecase__ExpireIntakeForms -.->|transitions IntakePacket.status intakesent->intakeexpired| state__IntakePacket_intakeexpired
+  usecase__ExpireIntakeForms -.->|updates| entity__IntakePacket
+  usecase__MergeDuplicatePatient -.->|displays| screen__PatientProfileScreen
+  usecase__MergeDuplicatePatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__MergeDuplicatePatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__MergeDuplicatePatient -.->|transitions PatientAccount.status patientactive->patientmerged| state__PatientAccount_patientmerged
+  usecase__MergeDuplicatePatient -.->|updates| entity__PatientAccount
+  usecase__NotifyPatientResult -.->|displays| screen__PatientMessageScreen
+  usecase__NotifyPatientResult -.->|invokes| api__NotifyPatientResultApi
+  usecase__NotifyPatientResult -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__NotifyPatientResult -.->|requires_permission| permission__PatientMessageSend
+  usecase__RegisterPatient -.->|displays| screen__PatientProfileScreen
+  usecase__RegisterPatient -.->|invokes| api__RegisterPatientApi
+  usecase__RegisterPatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__RegisterPatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__ReviewPatientResponse -.->|displays| screen__CarePlanScreen
+  usecase__ReviewPatientResponse -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__ReviewPatientResponse -.->|requires_permission| permission__FollowUpManage
+  usecase__ReviewPatientResponse -.->|transitions CarePlan.status careopen->caremonitoring| state__CarePlan_caremonitoring
+  usecase__ReviewPatientResponse -.->|updates| entity__CarePlan
+  usecase__ReviewPatientResponse -.->|updates| entity__PatientMessage
+  usecase__ScheduleFollowUpVisit -.->|displays| screen__FollowUpScheduleScreen
+  usecase__ScheduleFollowUpVisit -.->|invokes| api__FollowUpScheduleApi
+  usecase__ScheduleFollowUpVisit -.->|raises| event__EvAppointmentScheduled
+  usecase__ScheduleFollowUpVisit -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__ScheduleFollowUpVisit -.->|requires_permission| permission__FollowUpManage
+  usecase__ScheduleFollowUpVisit -.->|requires_permission| permission__ScheduleWrite
+  usecase__ScheduleFollowUpVisit -.->|transitions Appointment.status apptrequested->apptscheduled| state__Appointment_apptscheduled
+  usecase__SearchPatient -.->|displays| screen__PatientSearchScreen
+  usecase__SearchPatient -.->|invokes| api__SearchPatientApi
+  usecase__SearchPatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SearchPatient -.->|requires_permission| permission__PatientProfileRead
+  usecase__SendAppointmentNotice -.->|displays| screen__AppointmentNoticeScreen
+  usecase__SendAppointmentNotice -.->|invokes| api__AppointmentNoticeApi
+  usecase__SendAppointmentNotice -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SendAppointmentNotice -.->|requires_permission| permission__ScheduleRead
+  usecase__SendFollowUpMessage -.->|displays| screen__PatientMessageScreen
+  usecase__SendFollowUpMessage -.->|invokes| api__SendFollowUpMessageApi
+  usecase__SendFollowUpMessage -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__SendFollowUpMessage -.->|requires_permission| permission__PatientMessageSend
+  usecase__SendIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__SendIntakeForms -.->|invokes| api__IntakeMessagingApi
+  usecase__SendIntakeForms -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SendIntakeForms -.->|requires_permission| permission__IntakeManage
+  usecase__UpdateDemographics -.->|displays| screen__PatientProfileScreen
+  usecase__UpdateDemographics -.->|invokes| api__UpdateDemographicsApi
+  usecase__UpdateDemographics -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__UpdateDemographics -.->|requires_permission| permission__PatientProfileWrite
+  usecase__VerifyInsurance -.->|displays| screen__InsuranceScreen
+  usecase__VerifyInsurance -.->|invokes| api__EligibilityApi
+  usecase__VerifyInsurance -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__VerifyInsurance -.->|requires_permission| permission__InsuranceVerify
+  classDef actor stroke:#333;
+  classDef extsystem stroke:#333;
+  classDef business stroke:#333;
+  classDef buc stroke:#333;
+  classDef timer stroke:#333;
+  classDef medium stroke:#333;
+  classDef permission stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef event stroke:#333;
+  classDef api stroke:#333;
+  classDef entity stroke:#333;
+  classDef state stroke:#333;
 ```
 
 ### 3.10 Staff Administration
@@ -3700,96 +4140,105 @@ rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucStaffA
 ```
 
 ```mermaid
+%% rdra-ish diagram=rdra scope=buc:BucStaffAdministration model=samples/clinic-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor business buc medium permission usecase screen api entity
+%% omitted: (none)
 flowchart LR
-  subgraph layer_value[System Value]
-    direction TB
-    ClinicAdmin(["👤 Clinic Administrator"])
+  subgraph layer_value["システム価値"]
+    actor__ClinicAdmin["Clinic Administrator"]:::actor
   end
-  subgraph layer_environment[External Environment]
-    direction TB
-    ClinicAdministration["💼 Clinic Administration"]
-    BucStaffAdministration["📦 Administer Clinic Operations"]
-    AdminConsole[/"📱 Admin Console"/]
-    AuditRead["🔑 Audit Read"]
-    AuditResolve["🔑 Audit Resolve"]
-    ProviderScheduleAdmin["🔑 Provider Schedule Admin"]
-    RoomAdmin["🔑 Room Admin"]
+  subgraph layer_environment["システム外部環境"]
+    business__ClinicAdministration["Clinic Administration"]:::business
+    buc__BucStaffAdministration["Administer Clinic Operations"]:::buc
+    medium__AdminConsole["Admin Console"]:::medium
+    permission__AuditRead["Audit Read"]:::permission
+    permission__AuditResolve["Audit Resolve"]:::permission
+    permission__ProviderScheduleAdmin["Provider Schedule Admin"]:::permission
+    permission__RoomAdmin["Room Admin"]:::permission
   end
-  subgraph layer_boundary[System Boundary]
-    direction TB
-    BlockScheduleSlot(["✅ Block Schedule Slot"])
-    ConfigureRoom(["✅ Configure Room"])
-    ManageProviderSchedule(["✅ Manage Provider Schedule"])
-    ReleaseRoom(["✅ Release Room"])
-    ResolveAuditFinding(["✅ Resolve Audit Finding"])
-    ReviewAuditEvents(["✅ Review Audit Events"])
-    AuditReviewScreen[["🖥️ Audit Review Screen"]]
-    RoomAdminScreen[["🖥️ Room Admin Screen"]]
-    ScheduleAdminScreen[["🖥️ Schedule Admin Screen"]]
+  subgraph layer_boundary["システム境界"]
+    usecase__BlockScheduleSlot["Block Schedule Slot"]:::usecase
+    usecase__ConfigureRoom["Configure Room"]:::usecase
+    usecase__ManageProviderSchedule["Manage Provider Schedule"]:::usecase
+    usecase__ReleaseRoom["Release Room"]:::usecase
+    usecase__ResolveAuditFinding["Resolve Audit Finding"]:::usecase
+    usecase__ReviewAuditEvents["Review Audit Events"]:::usecase
+    screen__AuditReviewScreen["Audit Review Screen"]:::screen
+    screen__RoomAdminScreen["Room Admin Screen"]:::screen
+    screen__ScheduleAdminScreen["Schedule Admin Screen"]:::screen
   end
-  subgraph layer_system[System]
-    direction TB
-    AuditApi["🔌 Audit API"]
-    BlockScheduleSlotApi["🔌 Block Schedule Slot API"]
-    ManageProviderScheduleApi["🔌 Manage Provider Schedule API"]
-    RoomAdminApi["🔌 Room Admin API"]
-    AuditEvent[("🗄️ Audit Event")]
-    PatientAccount[("🗄️ Patient Account")]
-    Provider[("🗄️ Provider")]
-    ProviderSchedule[("🗄️ Provider Schedule")]
-    Room[("🗄️ Room")]
+  subgraph layer_system["システム"]
+    api__AuditApi["Audit API"]:::api
+    api__BlockScheduleSlotApi["Block Schedule Slot API"]:::api
+    api__ManageProviderScheduleApi["Manage Provider Schedule API"]:::api
+    api__RoomAdminApi["Room Admin API"]:::api
+    entity__AuditEvent["Audit Event"]:::entity
+    entity__PatientAccount["Patient Account"]:::entity
+    entity__Provider["Provider"]:::entity
+    entity__ProviderSchedule["Provider Schedule"]:::entity
+    entity__Room["Room"]:::entity
   end
-  ClinicAdmin -.->|has_permission| ProviderScheduleAdmin
-  ClinicAdmin -.->|has_permission| RoomAdmin
-  ClinicAdmin -.->|has_permission| AuditRead
-  ClinicAdmin -.->|has_permission| AuditResolve
-  ClinicAdmin -->|performs| BucStaffAdministration
-  ManageProviderScheduleApi -.->|creates| ProviderSchedule
-  ManageProviderScheduleApi -.->|requires_permission| ProviderScheduleAdmin
-  ManageProviderScheduleApi -.->|updates| ProviderSchedule
-  ManageProviderScheduleApi -.->|updates| Provider
-  BlockScheduleSlotApi -.->|requires_permission| ProviderScheduleAdmin
-  BlockScheduleSlotApi -.->|updates| ProviderSchedule
-  RoomAdminApi -.->|creates| Room
-  RoomAdminApi -.->|requires_permission| RoomAdmin
-  RoomAdminApi -.->|updates| Room
-  AuditApi -.->|reads| PatientAccount
-  AuditApi -.->|reads| AuditEvent
-  AuditApi -.->|requires_permission| AuditRead
-  BucStaffAdministration -.->|belongs| ClinicAdministration
-  BucStaffAdministration -->|contains| ManageProviderSchedule
-  BucStaffAdministration -->|contains| BlockScheduleSlot
-  BucStaffAdministration -->|contains| ConfigureRoom
-  BucStaffAdministration -->|contains| ReleaseRoom
-  BucStaffAdministration -->|contains| ReviewAuditEvents
-  BucStaffAdministration -->|contains| ResolveAuditFinding
-  ProviderSchedule ---|N:1| Provider
-  AuditEvent ---|N:1| PatientAccount
-  AuditReviewScreen -.->|shows| AuditEvent
-  ManageProviderSchedule -.->|displays| ScheduleAdminScreen
-  ManageProviderSchedule -.->|invokes| ManageProviderScheduleApi
-  ManageProviderSchedule -.->|requires_medium| AdminConsole
-  ManageProviderSchedule -.->|requires_permission| ProviderScheduleAdmin
-  BlockScheduleSlot -.->|displays| ScheduleAdminScreen
-  BlockScheduleSlot -.->|invokes| BlockScheduleSlotApi
-  BlockScheduleSlot -.->|requires_medium| AdminConsole
-  BlockScheduleSlot -.->|requires_permission| ProviderScheduleAdmin
-  ConfigureRoom -.->|displays| RoomAdminScreen
-  ConfigureRoom -.->|invokes| RoomAdminApi
-  ConfigureRoom -.->|requires_medium| AdminConsole
-  ConfigureRoom -.->|requires_permission| RoomAdmin
-  ReleaseRoom -.->|displays| RoomAdminScreen
-  ReleaseRoom -.->|requires_medium| AdminConsole
-  ReleaseRoom -.->|requires_permission| RoomAdmin
-  ReleaseRoom -.->|updates| Room
-  ReviewAuditEvents -.->|displays| AuditReviewScreen
-  ReviewAuditEvents -.->|invokes| AuditApi
-  ReviewAuditEvents -.->|requires_medium| AdminConsole
-  ReviewAuditEvents -.->|requires_permission| AuditRead
-  ResolveAuditFinding -.->|displays| AuditReviewScreen
-  ResolveAuditFinding -.->|requires_medium| AdminConsole
-  ResolveAuditFinding -.->|requires_permission| AuditResolve
-  ResolveAuditFinding -.->|updates| AuditEvent
+  actor__ClinicAdmin -.->|has_permission| permission__AuditRead
+  actor__ClinicAdmin -.->|has_permission| permission__AuditResolve
+  actor__ClinicAdmin -.->|has_permission| permission__ProviderScheduleAdmin
+  actor__ClinicAdmin -.->|has_permission| permission__RoomAdmin
+  actor__ClinicAdmin -.->|performs| buc__BucStaffAdministration
+  api__AuditApi -.->|reads| entity__AuditEvent
+  api__AuditApi -.->|reads| entity__PatientAccount
+  api__AuditApi -.->|requires_permission| permission__AuditRead
+  api__BlockScheduleSlotApi -.->|requires_permission| permission__ProviderScheduleAdmin
+  api__BlockScheduleSlotApi -.->|updates| entity__ProviderSchedule
+  api__ManageProviderScheduleApi -.->|creates| entity__ProviderSchedule
+  api__ManageProviderScheduleApi -.->|requires_permission| permission__ProviderScheduleAdmin
+  api__ManageProviderScheduleApi -.->|updates| entity__Provider
+  api__ManageProviderScheduleApi -.->|updates| entity__ProviderSchedule
+  api__RoomAdminApi -.->|creates| entity__Room
+  api__RoomAdminApi -.->|requires_permission| permission__RoomAdmin
+  api__RoomAdminApi -.->|updates| entity__Room
+  buc__BucStaffAdministration -->|belongs| business__ClinicAdministration
+  buc__BucStaffAdministration -->|contains| usecase__BlockScheduleSlot
+  buc__BucStaffAdministration -->|contains| usecase__ConfigureRoom
+  buc__BucStaffAdministration -->|contains| usecase__ManageProviderSchedule
+  buc__BucStaffAdministration -->|contains| usecase__ReleaseRoom
+  buc__BucStaffAdministration -->|contains| usecase__ResolveAuditFinding
+  buc__BucStaffAdministration -->|contains| usecase__ReviewAuditEvents
+  entity__AuditEvent ---|N:1| entity__PatientAccount
+  entity__ProviderSchedule ---|N:1| entity__Provider
+  screen__AuditReviewScreen -.->|shows| entity__AuditEvent
+  usecase__BlockScheduleSlot -.->|displays| screen__ScheduleAdminScreen
+  usecase__BlockScheduleSlot -.->|invokes| api__BlockScheduleSlotApi
+  usecase__BlockScheduleSlot -.->|requires_medium| medium__AdminConsole
+  usecase__BlockScheduleSlot -.->|requires_permission| permission__ProviderScheduleAdmin
+  usecase__ConfigureRoom -.->|displays| screen__RoomAdminScreen
+  usecase__ConfigureRoom -.->|invokes| api__RoomAdminApi
+  usecase__ConfigureRoom -.->|requires_medium| medium__AdminConsole
+  usecase__ConfigureRoom -.->|requires_permission| permission__RoomAdmin
+  usecase__ManageProviderSchedule -.->|displays| screen__ScheduleAdminScreen
+  usecase__ManageProviderSchedule -.->|invokes| api__ManageProviderScheduleApi
+  usecase__ManageProviderSchedule -.->|requires_medium| medium__AdminConsole
+  usecase__ManageProviderSchedule -.->|requires_permission| permission__ProviderScheduleAdmin
+  usecase__ReleaseRoom -.->|displays| screen__RoomAdminScreen
+  usecase__ReleaseRoom -.->|requires_medium| medium__AdminConsole
+  usecase__ReleaseRoom -.->|requires_permission| permission__RoomAdmin
+  usecase__ReleaseRoom -.->|updates| entity__Room
+  usecase__ResolveAuditFinding -.->|displays| screen__AuditReviewScreen
+  usecase__ResolveAuditFinding -.->|requires_medium| medium__AdminConsole
+  usecase__ResolveAuditFinding -.->|requires_permission| permission__AuditResolve
+  usecase__ResolveAuditFinding -.->|updates| entity__AuditEvent
+  usecase__ReviewAuditEvents -.->|displays| screen__AuditReviewScreen
+  usecase__ReviewAuditEvents -.->|invokes| api__AuditApi
+  usecase__ReviewAuditEvents -.->|requires_medium| medium__AdminConsole
+  usecase__ReviewAuditEvents -.->|requires_permission| permission__AuditRead
+  classDef actor stroke:#333;
+  classDef business stroke:#333;
+  classDef buc stroke:#333;
+  classDef medium stroke:#333;
+  classDef permission stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef api stroke:#333;
+  classDef entity stroke:#333;
 ```
 
 ## 4. UC 単位のレビュー

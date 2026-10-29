@@ -1,260 +1,294 @@
+%% rdra-ish diagram=rdra scope=buc:BucAppointmentScheduling model=samples/clinic-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor extsystem business buc timer medium permission usecase screen event api entity state
+%% omitted: (none)
 flowchart LR
-  subgraph layer_value[System Value]
-    direction TB
-    ReceptionClerk(["👤 医事課 受付担当"])
-    MessagingGateway[/"🌐 Messaging Gateway"/]
+  subgraph layer_value["システム価値"]
+    actor__ReceptionClerk["医事課 受付担当"]:::actor
+    %% desc actor__ReceptionClerk: 初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。
+    extsystem__MessagingGateway["Messaging Gateway"]:::extsystem
   end
-  subgraph layer_environment[External Environment]
-    direction TB
-    PatientAccess["💼 Patient Access"]
-    BucAppointmentScheduling["📦 Schedule Appointments"]
-    BucPatientOnboarding["📦 Onboard and Maintain Patient"]
-    IntakeExpiryCheck["⏱️ Nightly intake expiry check"]
-    NoShowSweep["⏱️ Nightly no-show sweep"]
-    FrontDeskTerminal[/"📱 Front Desk Terminal"/]
-    PatientMobile[/"📱 Patient Mobile"/]
-    ConsentCapture["🔑 Consent Capture"]
-    InsuranceVerify["🔑 Insurance Verify"]
-    IntakeManage["🔑 Intake Manage"]
-    PatientMessageSend["🔑 Patient Message Send"]
-    PatientProfileRead["🔑 Patient Profile Read"]
-    PatientProfileWrite["🔑 Patient Profile Write"]
-    ScheduleRead["🔑 Schedule Read"]
-    ScheduleWrite["🔑 Schedule Write"]
+  subgraph layer_environment["システム外部環境"]
+    business__PatientAccess["Patient Access"]:::business
+    %% desc business__PatientAccess: Patient-facing access workflows from onboarding through appointments.
+    buc__BucAppointmentScheduling["Schedule Appointments"]:::buc
+    %% desc buc__BucAppointmentScheduling: Find, reserve, book, change, and notify appointment slots.
+    buc__BucPatientOnboarding["Onboard and Maintain Patient"]:::buc
+    timer__IntakeExpiryCheck["Nightly intake expiry check"]:::timer
+    timer__NoShowSweep["Nightly no-show sweep"]:::timer
+    medium__FrontDeskTerminal["Front Desk Terminal"]:::medium
+    medium__PatientMobile["Patient Mobile"]:::medium
+    permission__ConsentCapture["Consent Capture"]:::permission
+    permission__InsuranceVerify["Insurance Verify"]:::permission
+    permission__IntakeManage["Intake Manage"]:::permission
+    permission__PatientMessageSend["Patient Message Send"]:::permission
+    permission__PatientProfileRead["Patient Profile Read"]:::permission
+    permission__PatientProfileWrite["Patient Profile Write"]:::permission
+    permission__ScheduleRead["Schedule Read"]:::permission
+    permission__ScheduleWrite["Schedule Write"]:::permission
   end
-  subgraph layer_boundary[System Boundary]
-    direction TB
-    ArchivePatient(["✅ Archive Patient"])
-    BookAppointment(["✅ Book Appointment"])
-    CancelAppointment(["✅ Cancel Appointment"])
-    CaptureConsent(["✅ Capture Consent"])
-    CompleteIntakeForms(["✅ Complete Intake Forms"])
-    ExpireIntakeForms(["✅ Expire Intake Forms"])
-    MarkNoShow(["✅ Mark No Show"])
-    MergeDuplicatePatient(["✅ Merge Duplicate Patient"])
-    RegisterPatient(["✅ Register Patient"])
-    RescheduleAppointment(["✅ Reschedule Appointment"])
-    ReserveAppointment(["✅ Reserve Appointment"])
-    SearchAvailability(["✅ Search Availability"])
-    SearchPatient(["✅ Search Patient"])
-    SendAppointmentNotice(["✅ Send Appointment Notice"])
-    SendIntakeForms(["✅ Send Intake Forms"])
-    UpdateDemographics(["✅ Update Demographics"])
-    VerifyInsurance(["✅ 保険資格・限度額情報の登録（新患登録）"])
-    AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
-    AppointmentScreen[["🖥️ Appointment Screen"]]
-    ConsentScreen[["🖥️ Consent Capture Screen"]]
-    InsuranceScreen[["🖥️ Insurance Verification Screen"]]
-    IntakePortalScreen[["🖥️ Intake Portal Screen"]]
-    PatientProfileScreen[["🖥️ Patient Profile Screen"]]
-    PatientSearchScreen[["🖥️ Patient Search Screen"]]
-    ScheduleSearchScreen[["🖥️ Schedule Search Screen"]]
-    EvAppointmentCancelled{"⚡ Appointment Cancelled"}
-    EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
-    EvAppointmentScheduled{"⚡ Appointment Scheduled"}
+  subgraph layer_boundary["システム境界"]
+    usecase__ArchivePatient["Archive Patient"]:::usecase
+    usecase__BookAppointment["Book Appointment"]:::usecase
+    usecase__CancelAppointment["Cancel Appointment"]:::usecase
+    usecase__CaptureConsent["Capture Consent"]:::usecase
+    usecase__CompleteIntakeForms["Complete Intake Forms"]:::usecase
+    usecase__ExpireIntakeForms["Expire Intake Forms"]:::usecase
+    usecase__MarkNoShow["Mark No Show"]:::usecase
+    usecase__MergeDuplicatePatient["Merge Duplicate Patient"]:::usecase
+    usecase__RegisterPatient["Register Patient"]:::usecase
+    usecase__RescheduleAppointment["Reschedule Appointment"]:::usecase
+    usecase__ReserveAppointment["Reserve Appointment"]:::usecase
+    usecase__SearchAvailability["Search Availability"]:::usecase
+    usecase__SearchPatient["Search Patient"]:::usecase
+    usecase__SendAppointmentNotice["Send Appointment Notice"]:::usecase
+    usecase__SendIntakeForms["Send Intake Forms"]:::usecase
+    usecase__UpdateDemographics["Update Demographics"]:::usecase
+    usecase__VerifyInsurance["保険資格・限度額情報の登録（新患登録）"]:::usecase
+    screen__AppointmentNoticeScreen["Appointment Notice Screen"]:::screen
+    screen__AppointmentScreen["Appointment Screen"]:::screen
+    screen__ConsentScreen["Consent Capture Screen"]:::screen
+    screen__InsuranceScreen["Insurance Verification Screen"]:::screen
+    screen__IntakePortalScreen["Intake Portal Screen"]:::screen
+    screen__PatientProfileScreen["Patient Profile Screen"]:::screen
+    screen__PatientSearchScreen["Patient Search Screen"]:::screen
+    screen__ScheduleSearchScreen["Schedule Search Screen"]:::screen
+    event__EvAppointmentCancelled["Appointment Cancelled"]:::event
+    event__EvAppointmentRescheduled["Appointment Rescheduled"]:::event
+    event__EvAppointmentScheduled["Appointment Scheduled"]:::event
   end
-  subgraph layer_system[System]
-    direction TB
-    AppointmentNoticeApi["🔌 Appointment Notice API"]
-    BookAppointmentApi["🔌 Book Appointment API"]
-    CancelAppointmentApi["🔌 Cancel Appointment API"]
-    ConsentApi["🔌 Consent API"]
-    EligibilityApi["🔌 Eligibility API"]
-    IntakeMessagingApi["🔌 Intake Messaging API"]
-    RegisterPatientApi["🔌 Register Patient API"]
-    RescheduleAppointmentApi["🔌 Reschedule Appointment API"]
-    ReserveAppointmentApi["🔌 Reserve Appointment API"]
-    SearchAvailabilityApi["🔌 Search Availability API"]
-    SearchPatientApi["🔌 Search Patient API"]
-    UpdateDemographicsApi["🔌 Update Demographics API"]
-    Appointment[("🗄️ Appointment")]
-    ClinicLocation[("🗄️ Clinic Location")]
-    ConsentRecord[("🗄️ Consent Record")]
-    EligibilityCheck[("🗄️ 資格確認")]
-    InsurancePolicy[("🗄️ 保険資格")]
-    IntakePacket[("🗄️ Intake Packet")]
-    Notification[("🗄️ Notification")]
-    PatientAccount[("🗄️ Patient Account")]
-    PatientMessage[("🗄️ Patient Message")]
-    PatientProfile[("🗄️ Patient Profile")]
-    Provider[("🗄️ Provider")]
-    ProviderSchedule[("🗄️ Provider Schedule")]
+  subgraph layer_system["システム"]
+    api__AppointmentNoticeApi["Appointment Notice API"]:::api
+    api__BookAppointmentApi["Book Appointment API"]:::api
+    api__CancelAppointmentApi["Cancel Appointment API"]:::api
+    api__ConsentApi["Consent API"]:::api
+    api__EligibilityApi["Eligibility API"]:::api
+    api__IntakeMessagingApi["Intake Messaging API"]:::api
+    api__RegisterPatientApi["Register Patient API"]:::api
+    api__RescheduleAppointmentApi["Reschedule Appointment API"]:::api
+    api__ReserveAppointmentApi["Reserve Appointment API"]:::api
+    api__SearchAvailabilityApi["Search Availability API"]:::api
+    api__SearchPatientApi["Search Patient API"]:::api
+    api__UpdateDemographicsApi["Update Demographics API"]:::api
+    entity__Appointment["Appointment"]:::entity
+    entity__ClinicLocation["Clinic Location"]:::entity
+    entity__ConsentRecord["Consent Record"]:::entity
+    entity__EligibilityCheck["資格確認"]:::entity
+    entity__InsurancePolicy["保険資格"]:::entity
+    entity__IntakePacket["Intake Packet"]:::entity
+    entity__Notification["Notification"]:::entity
+    entity__PatientAccount["Patient Account"]:::entity
+    entity__PatientMessage["Patient Message"]:::entity
+    entity__PatientProfile["Patient Profile"]:::entity
+    entity__Provider["Provider"]:::entity
+    entity__ProviderSchedule["Provider Schedule"]:::entity
+    state__Appointment_apptcancelled["apptcancelled"]:::state
+    state__Appointment_apptnoshow["apptnoshow"]:::state
+    state__Appointment_apptrequested["apptrequested"]:::state
+    state__Appointment_apptscheduled["apptscheduled"]:::state
+    state__IntakePacket_intakecompleted["intakecompleted"]:::state
+    state__IntakePacket_intakeexpired["intakeexpired"]:::state
+    state__IntakePacket_intakesent["intakesent"]:::state
+    state__PatientAccount_patientactive["patientactive"]:::state
+    state__PatientAccount_patientinactive["patientinactive"]:::state
+    state__PatientAccount_patientmerged["patientmerged"]:::state
   end
-  ReceptionClerk -.->|has_permission| PatientProfileRead
-  ReceptionClerk -.->|has_permission| PatientMessageSend
-  ReceptionClerk -.->|has_permission| PatientProfileWrite
-  ReceptionClerk -.->|has_permission| InsuranceVerify
-  ReceptionClerk -.->|has_permission| IntakeManage
-  ReceptionClerk -.->|has_permission| ScheduleRead
-  ReceptionClerk -.->|has_permission| ScheduleWrite
-  ReceptionClerk -->|performs| BucAppointmentScheduling
-  ReceptionClerk -->|performs| SearchAvailability
-  ReceptionClerk -->|performs| ReserveAppointment
-  ReceptionClerk -->|performs| BookAppointment
-  ReceptionClerk -->|performs| SearchPatient
-  ReceptionClerk -->|performs| RegisterPatient
-  ReceptionClerk -->|performs| RescheduleAppointment
-  ReceptionClerk -->|performs| UpdateDemographics
-  ReceptionClerk -->|performs| VerifyInsurance
-  ReceptionClerk -->|performs| SendIntakeForms
-  ReceptionClerk -->|performs| ExpireIntakeForms
-  ReceptionClerk -->|performs| MergeDuplicatePatient
-  ReceptionClerk -->|performs| ArchivePatient
-  ReceptionClerk -->|performs| CancelAppointment
-  ReceptionClerk -->|performs| MarkNoShow
-  ReceptionClerk -->|performs| SendAppointmentNotice
-  SearchAvailabilityApi -.->|reads| ProviderSchedule
-  SearchAvailabilityApi -.->|reads| Provider
-  SearchAvailabilityApi -.->|reads| ClinicLocation
-  SearchAvailabilityApi -.->|requires_permission| ScheduleRead
-  ReserveAppointmentApi -.->|creates| Appointment
-  ReserveAppointmentApi -.->|requires_permission| ScheduleWrite
-  ReserveAppointmentApi -.->|updates| ProviderSchedule
-  SearchPatientApi -.->|reads| PatientAccount
-  SearchPatientApi -.->|reads| PatientProfile
-  SearchPatientApi -.->|requires_permission| PatientProfileRead
-  RegisterPatientApi -.->|creates| PatientAccount
-  RegisterPatientApi -.->|creates| PatientProfile
-  RegisterPatientApi -.->|requires_permission| PatientProfileWrite
-  UpdateDemographicsApi -.->|requires_permission| PatientProfileWrite
-  UpdateDemographicsApi -.->|updates| PatientProfile
-  EligibilityApi -.->|creates| EligibilityCheck
-  EligibilityApi -.->|reads| InsurancePolicy
-  EligibilityApi -.->|requires_permission| InsuranceVerify
-  EligibilityApi -.->|updates| InsurancePolicy
-  ConsentApi -.->|creates| ConsentRecord
-  ConsentApi -.->|requires_permission| ConsentCapture
-  IntakeMessagingApi -.->|creates| PatientMessage
-  IntakeMessagingApi -.->|creates| IntakePacket
-  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
-  BookAppointmentApi -.->|requires_permission| ScheduleWrite
-  BookAppointmentApi -.->|updates| ProviderSchedule
-  BookAppointmentApi -.->|updates| Appointment
-  RescheduleAppointmentApi -.->|requires_permission| ScheduleWrite
-  RescheduleAppointmentApi -.->|updates| ProviderSchedule
-  RescheduleAppointmentApi -.->|updates| Appointment
-  CancelAppointmentApi -.->|requires_permission| ScheduleWrite
-  CancelAppointmentApi -.->|updates| ProviderSchedule
-  CancelAppointmentApi -.->|updates| Appointment
-  AppointmentNoticeApi -.->|creates| PatientMessage
-  AppointmentNoticeApi -.->|creates| Notification
-  BucAppointmentScheduling -.->|belongs| PatientAccess
-  BucAppointmentScheduling -->|contains| SearchAvailability
-  BucAppointmentScheduling -->|contains| ReserveAppointment
-  BucAppointmentScheduling -->|contains| BookAppointment
-  BucAppointmentScheduling -->|contains| RescheduleAppointment
-  BucAppointmentScheduling -->|contains| CancelAppointment
-  BucAppointmentScheduling -->|contains| MarkNoShow
-  BucAppointmentScheduling -->|contains| SendAppointmentNotice
-  BucPatientOnboarding -.->|belongs| PatientAccess
-  BucPatientOnboarding -->|contains| SearchPatient
-  BucPatientOnboarding -->|contains| RegisterPatient
-  BucPatientOnboarding -->|contains| UpdateDemographics
-  BucPatientOnboarding -->|contains| VerifyInsurance
-  BucPatientOnboarding -->|contains| CaptureConsent
-  BucPatientOnboarding -->|contains| SendIntakeForms
-  BucPatientOnboarding -->|contains| CompleteIntakeForms
-  BucPatientOnboarding -->|contains| ExpireIntakeForms
-  BucPatientOnboarding -->|contains| MergeDuplicatePatient
-  BucPatientOnboarding -->|contains| ArchivePatient
-  ProviderSchedule ---|N:1| Provider
-  ProviderSchedule ---|N:1| ClinicLocation
-  Appointment ---|N:1| PatientAccount
-  Appointment ---|N:1| Provider
-  Appointment ---|N:1| ClinicLocation
-  PatientMessage ---|N:1| PatientAccount
-  Notification ---|N:1| PatientAccount
-  PatientProfile ---|1:1| PatientAccount
-  InsurancePolicy ---|N:1| PatientAccount
-  EligibilityCheck ---|N:1| InsurancePolicy
-  ConsentRecord ---|N:1| PatientAccount
-  IntakePacket ---|N:1| PatientAccount
-  EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
-  EvAppointmentScheduled -.->|triggers| MessagingGateway
-  EvAppointmentScheduled -.->|triggers| SendIntakeForms
-  EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
-  EvAppointmentRescheduled -.->|triggers| MessagingGateway
-  EvAppointmentRescheduled -.->|triggers| SendAppointmentNotice
-  EvAppointmentCancelled -.->|triggers| MessagingGateway
-  EvAppointmentCancelled -.->|triggers| SendAppointmentNotice
-  PatientSearchScreen -.->|shows| PatientAccount
-  ScheduleSearchScreen -.->|shows| ProviderSchedule
-  PatientProfileScreen -.->|shows| PatientProfile
-  IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
-  NoShowSweep -.->|triggers| MarkNoShow
-  SearchAvailability -.->|displays| ScheduleSearchScreen
-  SearchAvailability -.->|invokes| SearchAvailabilityApi
-  SearchAvailability -.->|requires_medium| FrontDeskTerminal
-  SearchAvailability -.->|requires_medium| PatientMobile
-  SearchAvailability -.->|requires_permission| ScheduleRead
-  ReserveAppointment -.->|displays| AppointmentScreen
-  ReserveAppointment -.->|invokes| ReserveAppointmentApi
-  ReserveAppointment -.->|requires_medium| FrontDeskTerminal
-  ReserveAppointment -.->|requires_medium| PatientMobile
-  ReserveAppointment -.->|requires_permission| ScheduleWrite
-  BookAppointment -.->|displays| AppointmentScreen
-  BookAppointment -.->|invokes| BookAppointmentApi
-  BookAppointment -.->|raises| EvAppointmentScheduled
-  BookAppointment -.->|requires_medium| FrontDeskTerminal
-  BookAppointment -.->|requires_medium| PatientMobile
-  BookAppointment -.->|requires_permission| ScheduleWrite
-  SearchPatient -.->|displays| PatientSearchScreen
-  SearchPatient -.->|invokes| SearchPatientApi
-  SearchPatient -.->|requires_medium| FrontDeskTerminal
-  SearchPatient -.->|requires_permission| PatientProfileRead
-  RegisterPatient -.->|displays| PatientProfileScreen
-  RegisterPatient -.->|invokes| RegisterPatientApi
-  RegisterPatient -.->|requires_medium| FrontDeskTerminal
-  RegisterPatient -.->|requires_permission| PatientProfileWrite
-  RescheduleAppointment -.->|displays| AppointmentScreen
-  RescheduleAppointment -.->|invokes| RescheduleAppointmentApi
-  RescheduleAppointment -.->|raises| EvAppointmentRescheduled
-  RescheduleAppointment -.->|requires_medium| FrontDeskTerminal
-  RescheduleAppointment -.->|requires_medium| PatientMobile
-  RescheduleAppointment -.->|requires_permission| ScheduleWrite
-  UpdateDemographics -.->|displays| PatientProfileScreen
-  UpdateDemographics -.->|invokes| UpdateDemographicsApi
-  UpdateDemographics -.->|requires_medium| FrontDeskTerminal
-  UpdateDemographics -.->|requires_permission| PatientProfileWrite
-  VerifyInsurance -.->|displays| InsuranceScreen
-  VerifyInsurance -.->|invokes| EligibilityApi
-  VerifyInsurance -.->|requires_medium| FrontDeskTerminal
-  VerifyInsurance -.->|requires_permission| InsuranceVerify
-  CaptureConsent -.->|displays| ConsentScreen
-  CaptureConsent -.->|invokes| ConsentApi
-  CaptureConsent -.->|requires_medium| PatientMobile
-  CaptureConsent -.->|requires_permission| ConsentCapture
-  SendIntakeForms -.->|displays| IntakePortalScreen
-  SendIntakeForms -.->|invokes| IntakeMessagingApi
-  SendIntakeForms -.->|requires_medium| FrontDeskTerminal
-  SendIntakeForms -.->|requires_permission| IntakeManage
-  CompleteIntakeForms -.->|displays| IntakePortalScreen
-  CompleteIntakeForms -.->|requires_medium| PatientMobile
-  CompleteIntakeForms -.->|requires_permission| ConsentCapture
-  CompleteIntakeForms -.->|updates| IntakePacket
-  ExpireIntakeForms -.->|displays| IntakePortalScreen
-  ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
-  ExpireIntakeForms -.->|requires_permission| IntakeManage
-  ExpireIntakeForms -.->|updates| IntakePacket
-  MergeDuplicatePatient -.->|displays| PatientProfileScreen
-  MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
-  MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
-  MergeDuplicatePatient -.->|updates| PatientAccount
-  ArchivePatient -.->|displays| PatientProfileScreen
-  ArchivePatient -.->|requires_medium| FrontDeskTerminal
-  ArchivePatient -.->|requires_permission| PatientProfileWrite
-  ArchivePatient -.->|updates| PatientAccount
-  CancelAppointment -.->|displays| AppointmentScreen
-  CancelAppointment -.->|invokes| CancelAppointmentApi
-  CancelAppointment -.->|raises| EvAppointmentCancelled
-  CancelAppointment -.->|requires_medium| FrontDeskTerminal
-  CancelAppointment -.->|requires_medium| PatientMobile
-  CancelAppointment -.->|requires_permission| ScheduleWrite
-  MarkNoShow -.->|displays| AppointmentScreen
-  MarkNoShow -.->|requires_medium| FrontDeskTerminal
-  MarkNoShow -.->|requires_permission| ScheduleWrite
-  MarkNoShow -.->|updates| Appointment
-  SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
-  SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
-  SendAppointmentNotice -.->|requires_medium| FrontDeskTerminal
-  SendAppointmentNotice -.->|requires_permission| ScheduleRead
+  actor__ReceptionClerk -.->|has_permission| permission__InsuranceVerify
+  actor__ReceptionClerk -.->|has_permission| permission__IntakeManage
+  actor__ReceptionClerk -.->|has_permission| permission__PatientMessageSend
+  actor__ReceptionClerk -.->|has_permission| permission__PatientProfileRead
+  actor__ReceptionClerk -.->|has_permission| permission__PatientProfileWrite
+  actor__ReceptionClerk -.->|has_permission| permission__ScheduleRead
+  actor__ReceptionClerk -.->|has_permission| permission__ScheduleWrite
+  actor__ReceptionClerk -.->|performs| buc__BucAppointmentScheduling
+  actor__ReceptionClerk -.->|performs| usecase__ArchivePatient
+  actor__ReceptionClerk -.->|performs| usecase__BookAppointment
+  actor__ReceptionClerk -.->|performs| usecase__CancelAppointment
+  actor__ReceptionClerk -.->|performs| usecase__ExpireIntakeForms
+  actor__ReceptionClerk -.->|performs| usecase__MarkNoShow
+  actor__ReceptionClerk -.->|performs| usecase__MergeDuplicatePatient
+  actor__ReceptionClerk -.->|performs| usecase__RegisterPatient
+  actor__ReceptionClerk -.->|performs| usecase__RescheduleAppointment
+  actor__ReceptionClerk -.->|performs| usecase__ReserveAppointment
+  actor__ReceptionClerk -.->|performs| usecase__SearchAvailability
+  actor__ReceptionClerk -.->|performs| usecase__SearchPatient
+  actor__ReceptionClerk -.->|performs| usecase__SendAppointmentNotice
+  actor__ReceptionClerk -.->|performs| usecase__SendIntakeForms
+  actor__ReceptionClerk -.->|performs| usecase__UpdateDemographics
+  actor__ReceptionClerk -.->|performs| usecase__VerifyInsurance
+  api__AppointmentNoticeApi -.->|creates| entity__Notification
+  api__AppointmentNoticeApi -.->|creates| entity__PatientMessage
+  api__BookAppointmentApi -.->|requires_permission| permission__ScheduleWrite
+  api__BookAppointmentApi -.->|updates| entity__Appointment
+  api__BookAppointmentApi -.->|updates| entity__ProviderSchedule
+  api__CancelAppointmentApi -.->|requires_permission| permission__ScheduleWrite
+  api__CancelAppointmentApi -.->|updates| entity__Appointment
+  api__CancelAppointmentApi -.->|updates| entity__ProviderSchedule
+  api__ConsentApi -.->|creates| entity__ConsentRecord
+  api__ConsentApi -.->|requires_permission| permission__ConsentCapture
+  api__EligibilityApi -.->|creates| entity__EligibilityCheck
+  api__EligibilityApi -.->|reads| entity__InsurancePolicy
+  api__EligibilityApi -.->|requires_permission| permission__InsuranceVerify
+  api__EligibilityApi -.->|updates| entity__InsurancePolicy
+  api__IntakeMessagingApi -.->|creates| entity__IntakePacket
+  api__IntakeMessagingApi -.->|creates| entity__PatientMessage
+  api__IntakeMessagingApi -.->|requires_permission| permission__PatientMessageSend
+  api__RegisterPatientApi -.->|creates| entity__PatientAccount
+  api__RegisterPatientApi -.->|creates| entity__PatientProfile
+  api__RegisterPatientApi -.->|requires_permission| permission__PatientProfileWrite
+  api__RescheduleAppointmentApi -.->|requires_permission| permission__ScheduleWrite
+  api__RescheduleAppointmentApi -.->|updates| entity__Appointment
+  api__RescheduleAppointmentApi -.->|updates| entity__ProviderSchedule
+  api__ReserveAppointmentApi -.->|creates| entity__Appointment
+  api__ReserveAppointmentApi -.->|requires_permission| permission__ScheduleWrite
+  api__ReserveAppointmentApi -.->|updates| entity__ProviderSchedule
+  api__SearchAvailabilityApi -.->|reads| entity__ClinicLocation
+  api__SearchAvailabilityApi -.->|reads| entity__Provider
+  api__SearchAvailabilityApi -.->|reads| entity__ProviderSchedule
+  api__SearchAvailabilityApi -.->|requires_permission| permission__ScheduleRead
+  api__SearchPatientApi -.->|reads| entity__PatientAccount
+  api__SearchPatientApi -.->|reads| entity__PatientProfile
+  api__SearchPatientApi -.->|requires_permission| permission__PatientProfileRead
+  api__UpdateDemographicsApi -.->|requires_permission| permission__PatientProfileWrite
+  api__UpdateDemographicsApi -.->|updates| entity__PatientProfile
+  buc__BucAppointmentScheduling -->|belongs| business__PatientAccess
+  buc__BucAppointmentScheduling -->|contains| usecase__BookAppointment
+  buc__BucAppointmentScheduling -->|contains| usecase__CancelAppointment
+  buc__BucAppointmentScheduling -->|contains| usecase__MarkNoShow
+  buc__BucAppointmentScheduling -->|contains| usecase__RescheduleAppointment
+  buc__BucAppointmentScheduling -->|contains| usecase__ReserveAppointment
+  buc__BucAppointmentScheduling -->|contains| usecase__SearchAvailability
+  buc__BucAppointmentScheduling -->|contains| usecase__SendAppointmentNotice
+  buc__BucPatientOnboarding -->|belongs| business__PatientAccess
+  buc__BucPatientOnboarding -->|contains| usecase__ArchivePatient
+  buc__BucPatientOnboarding -->|contains| usecase__CaptureConsent
+  buc__BucPatientOnboarding -->|contains| usecase__CompleteIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__ExpireIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__MergeDuplicatePatient
+  buc__BucPatientOnboarding -->|contains| usecase__RegisterPatient
+  buc__BucPatientOnboarding -->|contains| usecase__SearchPatient
+  buc__BucPatientOnboarding -->|contains| usecase__SendIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__UpdateDemographics
+  buc__BucPatientOnboarding -->|contains| usecase__VerifyInsurance
+  entity__Appointment ---|N:1| entity__ClinicLocation
+  entity__Appointment ---|N:1| entity__PatientAccount
+  entity__Appointment ---|N:1| entity__Provider
+  entity__ConsentRecord ---|N:1| entity__PatientAccount
+  entity__EligibilityCheck ---|N:1| entity__InsurancePolicy
+  entity__InsurancePolicy ---|N:1| entity__PatientAccount
+  entity__IntakePacket ---|N:1| entity__PatientAccount
+  entity__Notification ---|N:1| entity__PatientAccount
+  entity__PatientMessage ---|N:1| entity__PatientAccount
+  entity__PatientProfile ---|1:1| entity__PatientAccount
+  entity__ProviderSchedule ---|N:1| entity__ClinicLocation
+  entity__ProviderSchedule ---|N:1| entity__Provider
+  event__EvAppointmentCancelled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentCancelled -.->|triggers| usecase__SendAppointmentNotice
+  event__EvAppointmentRescheduled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentRescheduled -.->|triggers| usecase__SendAppointmentNotice
+  event__EvAppointmentScheduled -.->|triggers| buc__BucPatientOnboarding
+  event__EvAppointmentScheduled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentScheduled -.->|triggers| usecase__SendAppointmentNotice
+  event__EvAppointmentScheduled -.->|triggers| usecase__SendIntakeForms
+  screen__PatientProfileScreen -.->|shows| entity__PatientProfile
+  screen__PatientSearchScreen -.->|shows| entity__PatientAccount
+  screen__ScheduleSearchScreen -.->|shows| entity__ProviderSchedule
+  timer__IntakeExpiryCheck -.->|triggers| usecase__ExpireIntakeForms
+  timer__NoShowSweep -.->|triggers| usecase__MarkNoShow
+  usecase__ArchivePatient -.->|displays| screen__PatientProfileScreen
+  usecase__ArchivePatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__ArchivePatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__ArchivePatient -.->|transitions PatientAccount.status patientactive->patientinactive| state__PatientAccount_patientinactive
+  usecase__ArchivePatient -.->|updates| entity__PatientAccount
+  usecase__BookAppointment -.->|displays| screen__AppointmentScreen
+  usecase__BookAppointment -.->|invokes| api__BookAppointmentApi
+  usecase__BookAppointment -.->|raises| event__EvAppointmentScheduled
+  usecase__BookAppointment -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__BookAppointment -.->|requires_medium| medium__PatientMobile
+  usecase__BookAppointment -.->|requires_permission| permission__ScheduleWrite
+  usecase__BookAppointment -.->|transitions Appointment.status apptrequested->apptscheduled| state__Appointment_apptscheduled
+  usecase__CancelAppointment -.->|displays| screen__AppointmentScreen
+  usecase__CancelAppointment -.->|invokes| api__CancelAppointmentApi
+  usecase__CancelAppointment -.->|raises| event__EvAppointmentCancelled
+  usecase__CancelAppointment -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__CancelAppointment -.->|requires_medium| medium__PatientMobile
+  usecase__CancelAppointment -.->|requires_permission| permission__ScheduleWrite
+  usecase__CancelAppointment -.->|transitions Appointment.status apptscheduled->apptcancelled| state__Appointment_apptcancelled
+  usecase__CaptureConsent -.->|displays| screen__ConsentScreen
+  usecase__CaptureConsent -.->|invokes| api__ConsentApi
+  usecase__CaptureConsent -.->|requires_medium| medium__PatientMobile
+  usecase__CaptureConsent -.->|requires_permission| permission__ConsentCapture
+  usecase__CompleteIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__CompleteIntakeForms -.->|requires_medium| medium__PatientMobile
+  usecase__CompleteIntakeForms -.->|requires_permission| permission__ConsentCapture
+  usecase__CompleteIntakeForms -.->|transitions IntakePacket.status intakesent->intakecompleted| state__IntakePacket_intakecompleted
+  usecase__CompleteIntakeForms -.->|updates| entity__IntakePacket
+  usecase__ExpireIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__ExpireIntakeForms -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__ExpireIntakeForms -.->|requires_permission| permission__IntakeManage
+  usecase__ExpireIntakeForms -.->|transitions IntakePacket.status intakesent->intakeexpired| state__IntakePacket_intakeexpired
+  usecase__ExpireIntakeForms -.->|updates| entity__IntakePacket
+  usecase__MarkNoShow -.->|displays| screen__AppointmentScreen
+  usecase__MarkNoShow -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__MarkNoShow -.->|requires_permission| permission__ScheduleWrite
+  usecase__MarkNoShow -.->|transitions Appointment.status apptscheduled->apptnoshow| state__Appointment_apptnoshow
+  usecase__MarkNoShow -.->|updates| entity__Appointment
+  usecase__MergeDuplicatePatient -.->|displays| screen__PatientProfileScreen
+  usecase__MergeDuplicatePatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__MergeDuplicatePatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__MergeDuplicatePatient -.->|transitions PatientAccount.status patientactive->patientmerged| state__PatientAccount_patientmerged
+  usecase__MergeDuplicatePatient -.->|updates| entity__PatientAccount
+  usecase__RegisterPatient -.->|displays| screen__PatientProfileScreen
+  usecase__RegisterPatient -.->|invokes| api__RegisterPatientApi
+  usecase__RegisterPatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__RegisterPatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__RescheduleAppointment -.->|displays| screen__AppointmentScreen
+  usecase__RescheduleAppointment -.->|invokes| api__RescheduleAppointmentApi
+  usecase__RescheduleAppointment -.->|raises| event__EvAppointmentRescheduled
+  usecase__RescheduleAppointment -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__RescheduleAppointment -.->|requires_medium| medium__PatientMobile
+  usecase__RescheduleAppointment -.->|requires_permission| permission__ScheduleWrite
+  usecase__RescheduleAppointment -.->|transitions Appointment.status apptscheduled->apptscheduled| state__Appointment_apptscheduled
+  usecase__ReserveAppointment -.->|displays| screen__AppointmentScreen
+  usecase__ReserveAppointment -.->|invokes| api__ReserveAppointmentApi
+  usecase__ReserveAppointment -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__ReserveAppointment -.->|requires_medium| medium__PatientMobile
+  usecase__ReserveAppointment -.->|requires_permission| permission__ScheduleWrite
+  usecase__SearchAvailability -.->|displays| screen__ScheduleSearchScreen
+  usecase__SearchAvailability -.->|invokes| api__SearchAvailabilityApi
+  usecase__SearchAvailability -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SearchAvailability -.->|requires_medium| medium__PatientMobile
+  usecase__SearchAvailability -.->|requires_permission| permission__ScheduleRead
+  usecase__SearchPatient -.->|displays| screen__PatientSearchScreen
+  usecase__SearchPatient -.->|invokes| api__SearchPatientApi
+  usecase__SearchPatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SearchPatient -.->|requires_permission| permission__PatientProfileRead
+  usecase__SendAppointmentNotice -.->|displays| screen__AppointmentNoticeScreen
+  usecase__SendAppointmentNotice -.->|invokes| api__AppointmentNoticeApi
+  usecase__SendAppointmentNotice -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SendAppointmentNotice -.->|requires_permission| permission__ScheduleRead
+  usecase__SendIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__SendIntakeForms -.->|invokes| api__IntakeMessagingApi
+  usecase__SendIntakeForms -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SendIntakeForms -.->|requires_permission| permission__IntakeManage
+  usecase__UpdateDemographics -.->|displays| screen__PatientProfileScreen
+  usecase__UpdateDemographics -.->|invokes| api__UpdateDemographicsApi
+  usecase__UpdateDemographics -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__UpdateDemographics -.->|requires_permission| permission__PatientProfileWrite
+  usecase__VerifyInsurance -.->|displays| screen__InsuranceScreen
+  usecase__VerifyInsurance -.->|invokes| api__EligibilityApi
+  usecase__VerifyInsurance -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__VerifyInsurance -.->|requires_permission| permission__InsuranceVerify
+  classDef actor stroke:#333;
+  classDef extsystem stroke:#333;
+  classDef business stroke:#333;
+  classDef buc stroke:#333;
+  classDef timer stroke:#333;
+  classDef medium stroke:#333;
+  classDef permission stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef event stroke:#333;
+  classDef api stroke:#333;
+  classDef entity stroke:#333;
+  classDef state stroke:#333;

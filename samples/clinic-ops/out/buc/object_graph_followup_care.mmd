@@ -1,240 +1,272 @@
+%% rdra-ish diagram=rdra scope=buc:BucFollowupCare model=samples/clinic-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor extsystem business buc timer medium permission usecase screen event api entity state
+%% omitted: (none)
 flowchart LR
-  subgraph layer_value[System Value]
-    direction TB
-    CareCoordinator(["👤 Care Coordinator"])
-    MessagingGateway[/"🌐 Messaging Gateway"/]
+  subgraph layer_value["システム価値"]
+    actor__CareCoordinator["Care Coordinator"]:::actor
+    extsystem__MessagingGateway["Messaging Gateway"]:::extsystem
   end
-  subgraph layer_environment[External Environment]
-    direction TB
-    PatientAccess["💼 Patient Access"]
-    BucFollowupCare["📦 Coordinate Follow-Up Care"]
-    BucPatientOnboarding["📦 Onboard and Maintain Patient"]
-    IntakeExpiryCheck["⏱️ Nightly intake expiry check"]
-    CareCoordinationConsole[/"📱 Care Coordination Console"/]
-    FrontDeskTerminal[/"📱 Front Desk Terminal"/]
-    PatientMobile[/"📱 Patient Mobile"/]
-    ConsentCapture["🔑 Consent Capture"]
-    FollowUpManage["🔑 Follow-Up Manage"]
-    InsuranceVerify["🔑 Insurance Verify"]
-    IntakeManage["🔑 Intake Manage"]
-    PatientMessageSend["🔑 Patient Message Send"]
-    PatientProfileRead["🔑 Patient Profile Read"]
-    PatientProfileWrite["🔑 Patient Profile Write"]
-    ScheduleRead["🔑 Schedule Read"]
-    ScheduleWrite["🔑 Schedule Write"]
+  subgraph layer_environment["システム外部環境"]
+    business__PatientAccess["Patient Access"]:::business
+    %% desc business__PatientAccess: Patient-facing access workflows from onboarding through appointments.
+    buc__BucFollowupCare["Coordinate Follow-Up Care"]:::buc
+    buc__BucPatientOnboarding["Onboard and Maintain Patient"]:::buc
+    timer__IntakeExpiryCheck["Nightly intake expiry check"]:::timer
+    medium__CareCoordinationConsole["Care Coordination Console"]:::medium
+    medium__FrontDeskTerminal["Front Desk Terminal"]:::medium
+    medium__PatientMobile["Patient Mobile"]:::medium
+    permission__ConsentCapture["Consent Capture"]:::permission
+    permission__FollowUpManage["Follow-Up Manage"]:::permission
+    permission__InsuranceVerify["Insurance Verify"]:::permission
+    permission__IntakeManage["Intake Manage"]:::permission
+    permission__PatientMessageSend["Patient Message Send"]:::permission
+    permission__PatientProfileRead["Patient Profile Read"]:::permission
+    permission__PatientProfileWrite["Patient Profile Write"]:::permission
+    permission__ScheduleRead["Schedule Read"]:::permission
+    permission__ScheduleWrite["Schedule Write"]:::permission
   end
-  subgraph layer_boundary[System Boundary]
-    direction TB
-    ArchivePatient(["✅ Archive Patient"])
-    CaptureConsent(["✅ Capture Consent"])
-    CloseCarePlan(["✅ Close Care Plan"])
-    CompleteIntakeForms(["✅ Complete Intake Forms"])
-    CreateCarePlan(["✅ Create Care Plan"])
-    ExpireIntakeForms(["✅ Expire Intake Forms"])
-    MergeDuplicatePatient(["✅ Merge Duplicate Patient"])
-    NotifyPatientResult(["✅ Notify Patient Result"])
-    RegisterPatient(["✅ Register Patient"])
-    ReviewPatientResponse(["✅ Review Patient Response"])
-    ScheduleFollowUpVisit(["✅ Schedule Follow-Up Visit"])
-    SearchPatient(["✅ Search Patient"])
-    SendAppointmentNotice(["✅ Send Appointment Notice"])
-    SendFollowUpMessage(["✅ Send Follow-Up Message"])
-    SendIntakeForms(["✅ Send Intake Forms"])
-    UpdateDemographics(["✅ Update Demographics"])
-    VerifyInsurance(["✅ 保険資格・限度額情報の登録（新患登録）"])
-    AppointmentNoticeScreen[["🖥️ Appointment Notice Screen"]]
-    CarePlanScreen[["🖥️ Care Plan Screen"]]
-    ConsentScreen[["🖥️ Consent Capture Screen"]]
-    FollowUpScheduleScreen[["🖥️ Follow-Up Schedule Screen"]]
-    InsuranceScreen[["🖥️ Insurance Verification Screen"]]
-    IntakePortalScreen[["🖥️ Intake Portal Screen"]]
-    PatientMessageScreen[["🖥️ Patient Message Screen"]]
-    PatientProfileScreen[["🖥️ Patient Profile Screen"]]
-    PatientSearchScreen[["🖥️ Patient Search Screen"]]
-    EvAppointmentCancelled{"⚡ Appointment Cancelled"}
-    EvAppointmentRescheduled{"⚡ Appointment Rescheduled"}
-    EvAppointmentScheduled{"⚡ Appointment Scheduled"}
-    EvClinicalOrderReviewed{"⚡ Clinical Result Reviewed"}
-    EvEncounterSigned{"⚡ Encounter Signed"}
+  subgraph layer_boundary["システム境界"]
+    usecase__ArchivePatient["Archive Patient"]:::usecase
+    usecase__CaptureConsent["Capture Consent"]:::usecase
+    usecase__CloseCarePlan["Close Care Plan"]:::usecase
+    usecase__CompleteIntakeForms["Complete Intake Forms"]:::usecase
+    usecase__CreateCarePlan["Create Care Plan"]:::usecase
+    usecase__ExpireIntakeForms["Expire Intake Forms"]:::usecase
+    usecase__MergeDuplicatePatient["Merge Duplicate Patient"]:::usecase
+    usecase__NotifyPatientResult["Notify Patient Result"]:::usecase
+    usecase__RegisterPatient["Register Patient"]:::usecase
+    usecase__ReviewPatientResponse["Review Patient Response"]:::usecase
+    usecase__ScheduleFollowUpVisit["Schedule Follow-Up Visit"]:::usecase
+    usecase__SearchPatient["Search Patient"]:::usecase
+    usecase__SendAppointmentNotice["Send Appointment Notice"]:::usecase
+    usecase__SendFollowUpMessage["Send Follow-Up Message"]:::usecase
+    usecase__SendIntakeForms["Send Intake Forms"]:::usecase
+    usecase__UpdateDemographics["Update Demographics"]:::usecase
+    usecase__VerifyInsurance["保険資格・限度額情報の登録（新患登録）"]:::usecase
+    screen__AppointmentNoticeScreen["Appointment Notice Screen"]:::screen
+    screen__CarePlanScreen["Care Plan Screen"]:::screen
+    screen__ConsentScreen["Consent Capture Screen"]:::screen
+    screen__FollowUpScheduleScreen["Follow-Up Schedule Screen"]:::screen
+    screen__InsuranceScreen["Insurance Verification Screen"]:::screen
+    screen__IntakePortalScreen["Intake Portal Screen"]:::screen
+    screen__PatientMessageScreen["Patient Message Screen"]:::screen
+    screen__PatientProfileScreen["Patient Profile Screen"]:::screen
+    screen__PatientSearchScreen["Patient Search Screen"]:::screen
+    event__EvAppointmentCancelled["Appointment Cancelled"]:::event
+    event__EvAppointmentRescheduled["Appointment Rescheduled"]:::event
+    event__EvAppointmentScheduled["Appointment Scheduled"]:::event
+    event__EvClinicalOrderReviewed["Clinical Result Reviewed"]:::event
+    event__EvEncounterSigned["Encounter Signed"]:::event
   end
-  subgraph layer_system[System]
-    direction TB
-    AppointmentNoticeApi["🔌 Appointment Notice API"]
-    ConsentApi["🔌 Consent API"]
-    CreateCarePlanApi["🔌 Create Care Plan API"]
-    EligibilityApi["🔌 Eligibility API"]
-    FollowUpScheduleApi["🔌 Follow-Up Schedule API"]
-    IntakeMessagingApi["🔌 Intake Messaging API"]
-    NotifyPatientResultApi["🔌 Notify Patient Result API"]
-    RegisterPatientApi["🔌 Register Patient API"]
-    SearchPatientApi["🔌 Search Patient API"]
-    SendFollowUpMessageApi["🔌 Send Follow-Up Message API"]
-    UpdateDemographicsApi["🔌 Update Demographics API"]
-    Appointment[("🗄️ Appointment")]
-    CarePlan[("🗄️ Care Plan")]
-    ConsentRecord[("🗄️ Consent Record")]
-    EligibilityCheck[("🗄️ 資格確認")]
-    Encounter[("🗄️ Encounter")]
-    InsurancePolicy[("🗄️ 保険資格")]
-    IntakePacket[("🗄️ Intake Packet")]
-    Notification[("🗄️ Notification")]
-    PatientAccount[("🗄️ Patient Account")]
-    PatientMessage[("🗄️ Patient Message")]
-    PatientProfile[("🗄️ Patient Profile")]
-    ProviderSchedule[("🗄️ Provider Schedule")]
+  subgraph layer_system["システム"]
+    api__AppointmentNoticeApi["Appointment Notice API"]:::api
+    api__ConsentApi["Consent API"]:::api
+    api__CreateCarePlanApi["Create Care Plan API"]:::api
+    api__EligibilityApi["Eligibility API"]:::api
+    api__FollowUpScheduleApi["Follow-Up Schedule API"]:::api
+    api__IntakeMessagingApi["Intake Messaging API"]:::api
+    api__NotifyPatientResultApi["Notify Patient Result API"]:::api
+    api__RegisterPatientApi["Register Patient API"]:::api
+    api__SearchPatientApi["Search Patient API"]:::api
+    api__SendFollowUpMessageApi["Send Follow-Up Message API"]:::api
+    api__UpdateDemographicsApi["Update Demographics API"]:::api
+    entity__Appointment["Appointment"]:::entity
+    entity__CarePlan["Care Plan"]:::entity
+    entity__ConsentRecord["Consent Record"]:::entity
+    entity__EligibilityCheck["資格確認"]:::entity
+    entity__Encounter["Encounter"]:::entity
+    entity__InsurancePolicy["保険資格"]:::entity
+    entity__IntakePacket["Intake Packet"]:::entity
+    entity__Notification["Notification"]:::entity
+    entity__PatientAccount["Patient Account"]:::entity
+    entity__PatientMessage["Patient Message"]:::entity
+    entity__PatientProfile["Patient Profile"]:::entity
+    entity__ProviderSchedule["Provider Schedule"]:::entity
+    state__Appointment_apptrequested["apptrequested"]:::state
+    state__Appointment_apptscheduled["apptscheduled"]:::state
+    state__CarePlan_careclosed["careclosed"]:::state
+    state__CarePlan_caremonitoring["caremonitoring"]:::state
+    state__CarePlan_careopen["careopen"]:::state
+    state__IntakePacket_intakecompleted["intakecompleted"]:::state
+    state__IntakePacket_intakeexpired["intakeexpired"]:::state
+    state__IntakePacket_intakesent["intakesent"]:::state
+    state__PatientAccount_patientactive["patientactive"]:::state
+    state__PatientAccount_patientinactive["patientinactive"]:::state
+    state__PatientAccount_patientmerged["patientmerged"]:::state
   end
-  CareCoordinator -.->|has_permission| FollowUpManage
-  CareCoordinator -.->|has_permission| PatientMessageSend
-  CareCoordinator -.->|has_permission| ScheduleWrite
-  CareCoordinator -->|performs| BucFollowupCare
-  CareCoordinator -->|performs| CreateCarePlan
-  CareCoordinator -->|performs| SendFollowUpMessage
-  CareCoordinator -->|performs| ReviewPatientResponse
-  CareCoordinator -->|performs| ScheduleFollowUpVisit
-  CareCoordinator -->|performs| CloseCarePlan
-  CareCoordinator -->|performs| NotifyPatientResult
-  CreateCarePlanApi -.->|creates| CarePlan
-  CreateCarePlanApi -.->|reads| Encounter
-  CreateCarePlanApi -.->|requires_permission| FollowUpManage
-  SendFollowUpMessageApi -.->|creates| PatientMessage
-  SendFollowUpMessageApi -.->|requires_permission| PatientMessageSend
-  FollowUpScheduleApi -.->|creates| Appointment
-  FollowUpScheduleApi -.->|requires_permission| ScheduleWrite
-  FollowUpScheduleApi -.->|updates| ProviderSchedule
-  NotifyPatientResultApi -.->|creates| Notification
-  NotifyPatientResultApi -.->|requires_permission| PatientMessageSend
-  SearchPatientApi -.->|reads| PatientAccount
-  SearchPatientApi -.->|reads| PatientProfile
-  SearchPatientApi -.->|requires_permission| PatientProfileRead
-  RegisterPatientApi -.->|creates| PatientAccount
-  RegisterPatientApi -.->|creates| PatientProfile
-  RegisterPatientApi -.->|requires_permission| PatientProfileWrite
-  UpdateDemographicsApi -.->|requires_permission| PatientProfileWrite
-  UpdateDemographicsApi -.->|updates| PatientProfile
-  EligibilityApi -.->|creates| EligibilityCheck
-  EligibilityApi -.->|reads| InsurancePolicy
-  EligibilityApi -.->|requires_permission| InsuranceVerify
-  EligibilityApi -.->|updates| InsurancePolicy
-  ConsentApi -.->|creates| ConsentRecord
-  ConsentApi -.->|requires_permission| ConsentCapture
-  IntakeMessagingApi -.->|creates| PatientMessage
-  IntakeMessagingApi -.->|creates| IntakePacket
-  IntakeMessagingApi -.->|requires_permission| PatientMessageSend
-  AppointmentNoticeApi -.->|creates| PatientMessage
-  AppointmentNoticeApi -.->|creates| Notification
-  BucFollowupCare -.->|belongs| PatientAccess
-  BucFollowupCare -->|contains| CreateCarePlan
-  BucFollowupCare -->|contains| SendFollowUpMessage
-  BucFollowupCare -->|contains| ReviewPatientResponse
-  BucFollowupCare -->|contains| ScheduleFollowUpVisit
-  BucFollowupCare -->|contains| CloseCarePlan
-  BucFollowupCare -->|contains| NotifyPatientResult
-  BucPatientOnboarding -.->|belongs| PatientAccess
-  BucPatientOnboarding -->|contains| SearchPatient
-  BucPatientOnboarding -->|contains| RegisterPatient
-  BucPatientOnboarding -->|contains| UpdateDemographics
-  BucPatientOnboarding -->|contains| VerifyInsurance
-  BucPatientOnboarding -->|contains| CaptureConsent
-  BucPatientOnboarding -->|contains| SendIntakeForms
-  BucPatientOnboarding -->|contains| CompleteIntakeForms
-  BucPatientOnboarding -->|contains| ExpireIntakeForms
-  BucPatientOnboarding -->|contains| MergeDuplicatePatient
-  BucPatientOnboarding -->|contains| ArchivePatient
-  Appointment ---|N:1| PatientAccount
-  Encounter ---|N:1| PatientAccount
-  Encounter ---|1:1| Appointment
-  CarePlan ---|N:1| Encounter
-  CarePlan ---|N:1| PatientAccount
-  PatientMessage ---|N:1| PatientAccount
-  Notification ---|N:1| PatientAccount
-  PatientProfile ---|1:1| PatientAccount
-  InsurancePolicy ---|N:1| PatientAccount
-  EligibilityCheck ---|N:1| InsurancePolicy
-  ConsentRecord ---|N:1| PatientAccount
-  IntakePacket ---|N:1| PatientAccount
-  EvAppointmentScheduled -.->|triggers| BucPatientOnboarding
-  EvAppointmentScheduled -.->|triggers| MessagingGateway
-  EvAppointmentScheduled -.->|triggers| SendIntakeForms
-  EvAppointmentScheduled -.->|triggers| SendAppointmentNotice
-  EvAppointmentRescheduled -.->|triggers| MessagingGateway
-  EvAppointmentRescheduled -.->|triggers| SendAppointmentNotice
-  EvAppointmentCancelled -.->|triggers| MessagingGateway
-  EvAppointmentCancelled -.->|triggers| SendAppointmentNotice
-  EvEncounterSigned -.->|triggers| BucFollowupCare
-  EvEncounterSigned -.->|triggers| CreateCarePlan
-  EvClinicalOrderReviewed -.->|triggers| BucFollowupCare
-  EvClinicalOrderReviewed -.->|triggers| NotifyPatientResult
-  PatientSearchScreen -.->|shows| PatientAccount
-  PatientProfileScreen -.->|shows| PatientProfile
-  IntakeExpiryCheck -.->|triggers| ExpireIntakeForms
-  CreateCarePlan -.->|displays| CarePlanScreen
-  CreateCarePlan -.->|invokes| CreateCarePlanApi
-  CreateCarePlan -.->|requires_medium| CareCoordinationConsole
-  CreateCarePlan -.->|requires_permission| FollowUpManage
-  SendFollowUpMessage -.->|displays| PatientMessageScreen
-  SendFollowUpMessage -.->|invokes| SendFollowUpMessageApi
-  SendFollowUpMessage -.->|requires_medium| CareCoordinationConsole
-  SendFollowUpMessage -.->|requires_permission| PatientMessageSend
-  ReviewPatientResponse -.->|displays| CarePlanScreen
-  ReviewPatientResponse -.->|requires_medium| CareCoordinationConsole
-  ReviewPatientResponse -.->|requires_permission| FollowUpManage
-  ReviewPatientResponse -.->|updates| CarePlan
-  ReviewPatientResponse -.->|updates| PatientMessage
-  ScheduleFollowUpVisit -.->|displays| FollowUpScheduleScreen
-  ScheduleFollowUpVisit -.->|invokes| FollowUpScheduleApi
-  ScheduleFollowUpVisit -.->|raises| EvAppointmentScheduled
-  ScheduleFollowUpVisit -.->|requires_medium| CareCoordinationConsole
-  ScheduleFollowUpVisit -.->|requires_permission| FollowUpManage
-  ScheduleFollowUpVisit -.->|requires_permission| ScheduleWrite
-  CloseCarePlan -.->|displays| CarePlanScreen
-  CloseCarePlan -.->|requires_medium| CareCoordinationConsole
-  CloseCarePlan -.->|requires_permission| FollowUpManage
-  CloseCarePlan -.->|updates| CarePlan
-  NotifyPatientResult -.->|displays| PatientMessageScreen
-  NotifyPatientResult -.->|invokes| NotifyPatientResultApi
-  NotifyPatientResult -.->|requires_medium| CareCoordinationConsole
-  NotifyPatientResult -.->|requires_permission| PatientMessageSend
-  SearchPatient -.->|displays| PatientSearchScreen
-  SearchPatient -.->|invokes| SearchPatientApi
-  SearchPatient -.->|requires_medium| FrontDeskTerminal
-  SearchPatient -.->|requires_permission| PatientProfileRead
-  RegisterPatient -.->|displays| PatientProfileScreen
-  RegisterPatient -.->|invokes| RegisterPatientApi
-  RegisterPatient -.->|requires_medium| FrontDeskTerminal
-  RegisterPatient -.->|requires_permission| PatientProfileWrite
-  UpdateDemographics -.->|displays| PatientProfileScreen
-  UpdateDemographics -.->|invokes| UpdateDemographicsApi
-  UpdateDemographics -.->|requires_medium| FrontDeskTerminal
-  UpdateDemographics -.->|requires_permission| PatientProfileWrite
-  VerifyInsurance -.->|displays| InsuranceScreen
-  VerifyInsurance -.->|invokes| EligibilityApi
-  VerifyInsurance -.->|requires_medium| FrontDeskTerminal
-  VerifyInsurance -.->|requires_permission| InsuranceVerify
-  CaptureConsent -.->|displays| ConsentScreen
-  CaptureConsent -.->|invokes| ConsentApi
-  CaptureConsent -.->|requires_medium| PatientMobile
-  CaptureConsent -.->|requires_permission| ConsentCapture
-  SendIntakeForms -.->|displays| IntakePortalScreen
-  SendIntakeForms -.->|invokes| IntakeMessagingApi
-  SendIntakeForms -.->|requires_medium| FrontDeskTerminal
-  SendIntakeForms -.->|requires_permission| IntakeManage
-  CompleteIntakeForms -.->|displays| IntakePortalScreen
-  CompleteIntakeForms -.->|requires_medium| PatientMobile
-  CompleteIntakeForms -.->|requires_permission| ConsentCapture
-  CompleteIntakeForms -.->|updates| IntakePacket
-  ExpireIntakeForms -.->|displays| IntakePortalScreen
-  ExpireIntakeForms -.->|requires_medium| FrontDeskTerminal
-  ExpireIntakeForms -.->|requires_permission| IntakeManage
-  ExpireIntakeForms -.->|updates| IntakePacket
-  MergeDuplicatePatient -.->|displays| PatientProfileScreen
-  MergeDuplicatePatient -.->|requires_medium| FrontDeskTerminal
-  MergeDuplicatePatient -.->|requires_permission| PatientProfileWrite
-  MergeDuplicatePatient -.->|updates| PatientAccount
-  ArchivePatient -.->|displays| PatientProfileScreen
-  ArchivePatient -.->|requires_medium| FrontDeskTerminal
-  ArchivePatient -.->|requires_permission| PatientProfileWrite
-  ArchivePatient -.->|updates| PatientAccount
-  SendAppointmentNotice -.->|displays| AppointmentNoticeScreen
-  SendAppointmentNotice -.->|invokes| AppointmentNoticeApi
-  SendAppointmentNotice -.->|requires_medium| FrontDeskTerminal
-  SendAppointmentNotice -.->|requires_permission| ScheduleRead
+  actor__CareCoordinator -.->|has_permission| permission__FollowUpManage
+  actor__CareCoordinator -.->|has_permission| permission__PatientMessageSend
+  actor__CareCoordinator -.->|has_permission| permission__ScheduleWrite
+  actor__CareCoordinator -.->|performs| buc__BucFollowupCare
+  actor__CareCoordinator -.->|performs| usecase__CloseCarePlan
+  actor__CareCoordinator -.->|performs| usecase__CreateCarePlan
+  actor__CareCoordinator -.->|performs| usecase__NotifyPatientResult
+  actor__CareCoordinator -.->|performs| usecase__ReviewPatientResponse
+  actor__CareCoordinator -.->|performs| usecase__ScheduleFollowUpVisit
+  actor__CareCoordinator -.->|performs| usecase__SendFollowUpMessage
+  api__AppointmentNoticeApi -.->|creates| entity__Notification
+  api__AppointmentNoticeApi -.->|creates| entity__PatientMessage
+  api__ConsentApi -.->|creates| entity__ConsentRecord
+  api__ConsentApi -.->|requires_permission| permission__ConsentCapture
+  api__CreateCarePlanApi -.->|creates| entity__CarePlan
+  api__CreateCarePlanApi -.->|reads| entity__Encounter
+  api__CreateCarePlanApi -.->|requires_permission| permission__FollowUpManage
+  api__EligibilityApi -.->|creates| entity__EligibilityCheck
+  api__EligibilityApi -.->|reads| entity__InsurancePolicy
+  api__EligibilityApi -.->|requires_permission| permission__InsuranceVerify
+  api__EligibilityApi -.->|updates| entity__InsurancePolicy
+  api__FollowUpScheduleApi -.->|creates| entity__Appointment
+  api__FollowUpScheduleApi -.->|requires_permission| permission__ScheduleWrite
+  api__FollowUpScheduleApi -.->|updates| entity__ProviderSchedule
+  api__IntakeMessagingApi -.->|creates| entity__IntakePacket
+  api__IntakeMessagingApi -.->|creates| entity__PatientMessage
+  api__IntakeMessagingApi -.->|requires_permission| permission__PatientMessageSend
+  api__NotifyPatientResultApi -.->|creates| entity__Notification
+  api__NotifyPatientResultApi -.->|requires_permission| permission__PatientMessageSend
+  api__RegisterPatientApi -.->|creates| entity__PatientAccount
+  api__RegisterPatientApi -.->|creates| entity__PatientProfile
+  api__RegisterPatientApi -.->|requires_permission| permission__PatientProfileWrite
+  api__SearchPatientApi -.->|reads| entity__PatientAccount
+  api__SearchPatientApi -.->|reads| entity__PatientProfile
+  api__SearchPatientApi -.->|requires_permission| permission__PatientProfileRead
+  api__SendFollowUpMessageApi -.->|creates| entity__PatientMessage
+  api__SendFollowUpMessageApi -.->|requires_permission| permission__PatientMessageSend
+  api__UpdateDemographicsApi -.->|requires_permission| permission__PatientProfileWrite
+  api__UpdateDemographicsApi -.->|updates| entity__PatientProfile
+  buc__BucFollowupCare -->|belongs| business__PatientAccess
+  buc__BucFollowupCare -->|contains| usecase__CloseCarePlan
+  buc__BucFollowupCare -->|contains| usecase__CreateCarePlan
+  buc__BucFollowupCare -->|contains| usecase__NotifyPatientResult
+  buc__BucFollowupCare -->|contains| usecase__ReviewPatientResponse
+  buc__BucFollowupCare -->|contains| usecase__ScheduleFollowUpVisit
+  buc__BucFollowupCare -->|contains| usecase__SendFollowUpMessage
+  buc__BucPatientOnboarding -->|belongs| business__PatientAccess
+  buc__BucPatientOnboarding -->|contains| usecase__ArchivePatient
+  buc__BucPatientOnboarding -->|contains| usecase__CaptureConsent
+  buc__BucPatientOnboarding -->|contains| usecase__CompleteIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__ExpireIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__MergeDuplicatePatient
+  buc__BucPatientOnboarding -->|contains| usecase__RegisterPatient
+  buc__BucPatientOnboarding -->|contains| usecase__SearchPatient
+  buc__BucPatientOnboarding -->|contains| usecase__SendIntakeForms
+  buc__BucPatientOnboarding -->|contains| usecase__UpdateDemographics
+  buc__BucPatientOnboarding -->|contains| usecase__VerifyInsurance
+  entity__Appointment ---|N:1| entity__PatientAccount
+  entity__CarePlan ---|N:1| entity__Encounter
+  entity__CarePlan ---|N:1| entity__PatientAccount
+  entity__ConsentRecord ---|N:1| entity__PatientAccount
+  entity__EligibilityCheck ---|N:1| entity__InsurancePolicy
+  entity__Encounter ---|1:1| entity__Appointment
+  entity__Encounter ---|N:1| entity__PatientAccount
+  entity__InsurancePolicy ---|N:1| entity__PatientAccount
+  entity__IntakePacket ---|N:1| entity__PatientAccount
+  entity__Notification ---|N:1| entity__PatientAccount
+  entity__PatientMessage ---|N:1| entity__PatientAccount
+  entity__PatientProfile ---|1:1| entity__PatientAccount
+  event__EvAppointmentCancelled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentCancelled -.->|triggers| usecase__SendAppointmentNotice
+  event__EvAppointmentRescheduled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentRescheduled -.->|triggers| usecase__SendAppointmentNotice
+  event__EvAppointmentScheduled -.->|triggers| buc__BucPatientOnboarding
+  event__EvAppointmentScheduled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentScheduled -.->|triggers| usecase__SendAppointmentNotice
+  event__EvAppointmentScheduled -.->|triggers| usecase__SendIntakeForms
+  event__EvClinicalOrderReviewed -.->|triggers| buc__BucFollowupCare
+  event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyPatientResult
+  event__EvEncounterSigned -.->|triggers| buc__BucFollowupCare
+  event__EvEncounterSigned -.->|triggers| usecase__CreateCarePlan
+  screen__PatientProfileScreen -.->|shows| entity__PatientProfile
+  screen__PatientSearchScreen -.->|shows| entity__PatientAccount
+  timer__IntakeExpiryCheck -.->|triggers| usecase__ExpireIntakeForms
+  usecase__ArchivePatient -.->|displays| screen__PatientProfileScreen
+  usecase__ArchivePatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__ArchivePatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__ArchivePatient -.->|transitions PatientAccount.status patientactive->patientinactive| state__PatientAccount_patientinactive
+  usecase__ArchivePatient -.->|updates| entity__PatientAccount
+  usecase__CaptureConsent -.->|displays| screen__ConsentScreen
+  usecase__CaptureConsent -.->|invokes| api__ConsentApi
+  usecase__CaptureConsent -.->|requires_medium| medium__PatientMobile
+  usecase__CaptureConsent -.->|requires_permission| permission__ConsentCapture
+  usecase__CloseCarePlan -.->|displays| screen__CarePlanScreen
+  usecase__CloseCarePlan -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__CloseCarePlan -.->|requires_permission| permission__FollowUpManage
+  usecase__CloseCarePlan -.->|transitions CarePlan.status caremonitoring->careclosed| state__CarePlan_careclosed
+  usecase__CloseCarePlan -.->|updates| entity__CarePlan
+  usecase__CompleteIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__CompleteIntakeForms -.->|requires_medium| medium__PatientMobile
+  usecase__CompleteIntakeForms -.->|requires_permission| permission__ConsentCapture
+  usecase__CompleteIntakeForms -.->|transitions IntakePacket.status intakesent->intakecompleted| state__IntakePacket_intakecompleted
+  usecase__CompleteIntakeForms -.->|updates| entity__IntakePacket
+  usecase__CreateCarePlan -.->|displays| screen__CarePlanScreen
+  usecase__CreateCarePlan -.->|invokes| api__CreateCarePlanApi
+  usecase__CreateCarePlan -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__CreateCarePlan -.->|requires_permission| permission__FollowUpManage
+  usecase__ExpireIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__ExpireIntakeForms -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__ExpireIntakeForms -.->|requires_permission| permission__IntakeManage
+  usecase__ExpireIntakeForms -.->|transitions IntakePacket.status intakesent->intakeexpired| state__IntakePacket_intakeexpired
+  usecase__ExpireIntakeForms -.->|updates| entity__IntakePacket
+  usecase__MergeDuplicatePatient -.->|displays| screen__PatientProfileScreen
+  usecase__MergeDuplicatePatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__MergeDuplicatePatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__MergeDuplicatePatient -.->|transitions PatientAccount.status patientactive->patientmerged| state__PatientAccount_patientmerged
+  usecase__MergeDuplicatePatient -.->|updates| entity__PatientAccount
+  usecase__NotifyPatientResult -.->|displays| screen__PatientMessageScreen
+  usecase__NotifyPatientResult -.->|invokes| api__NotifyPatientResultApi
+  usecase__NotifyPatientResult -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__NotifyPatientResult -.->|requires_permission| permission__PatientMessageSend
+  usecase__RegisterPatient -.->|displays| screen__PatientProfileScreen
+  usecase__RegisterPatient -.->|invokes| api__RegisterPatientApi
+  usecase__RegisterPatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__RegisterPatient -.->|requires_permission| permission__PatientProfileWrite
+  usecase__ReviewPatientResponse -.->|displays| screen__CarePlanScreen
+  usecase__ReviewPatientResponse -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__ReviewPatientResponse -.->|requires_permission| permission__FollowUpManage
+  usecase__ReviewPatientResponse -.->|transitions CarePlan.status careopen->caremonitoring| state__CarePlan_caremonitoring
+  usecase__ReviewPatientResponse -.->|updates| entity__CarePlan
+  usecase__ReviewPatientResponse -.->|updates| entity__PatientMessage
+  usecase__ScheduleFollowUpVisit -.->|displays| screen__FollowUpScheduleScreen
+  usecase__ScheduleFollowUpVisit -.->|invokes| api__FollowUpScheduleApi
+  usecase__ScheduleFollowUpVisit -.->|raises| event__EvAppointmentScheduled
+  usecase__ScheduleFollowUpVisit -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__ScheduleFollowUpVisit -.->|requires_permission| permission__FollowUpManage
+  usecase__ScheduleFollowUpVisit -.->|requires_permission| permission__ScheduleWrite
+  usecase__ScheduleFollowUpVisit -.->|transitions Appointment.status apptrequested->apptscheduled| state__Appointment_apptscheduled
+  usecase__SearchPatient -.->|displays| screen__PatientSearchScreen
+  usecase__SearchPatient -.->|invokes| api__SearchPatientApi
+  usecase__SearchPatient -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SearchPatient -.->|requires_permission| permission__PatientProfileRead
+  usecase__SendAppointmentNotice -.->|displays| screen__AppointmentNoticeScreen
+  usecase__SendAppointmentNotice -.->|invokes| api__AppointmentNoticeApi
+  usecase__SendAppointmentNotice -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SendAppointmentNotice -.->|requires_permission| permission__ScheduleRead
+  usecase__SendFollowUpMessage -.->|displays| screen__PatientMessageScreen
+  usecase__SendFollowUpMessage -.->|invokes| api__SendFollowUpMessageApi
+  usecase__SendFollowUpMessage -.->|requires_medium| medium__CareCoordinationConsole
+  usecase__SendFollowUpMessage -.->|requires_permission| permission__PatientMessageSend
+  usecase__SendIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__SendIntakeForms -.->|invokes| api__IntakeMessagingApi
+  usecase__SendIntakeForms -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__SendIntakeForms -.->|requires_permission| permission__IntakeManage
+  usecase__UpdateDemographics -.->|displays| screen__PatientProfileScreen
+  usecase__UpdateDemographics -.->|invokes| api__UpdateDemographicsApi
+  usecase__UpdateDemographics -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__UpdateDemographics -.->|requires_permission| permission__PatientProfileWrite
+  usecase__VerifyInsurance -.->|displays| screen__InsuranceScreen
+  usecase__VerifyInsurance -.->|invokes| api__EligibilityApi
+  usecase__VerifyInsurance -.->|requires_medium| medium__FrontDeskTerminal
+  usecase__VerifyInsurance -.->|requires_permission| permission__InsuranceVerify
+  classDef actor stroke:#333;
+  classDef extsystem stroke:#333;
+  classDef business stroke:#333;
+  classDef buc stroke:#333;
+  classDef timer stroke:#333;
+  classDef medium stroke:#333;
+  classDef permission stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef event stroke:#333;
+  classDef api stroke:#333;
+  classDef entity stroke:#333;
+  classDef state stroke:#333;

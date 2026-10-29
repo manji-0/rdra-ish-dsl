@@ -154,9 +154,6 @@ pub(crate) enum Commands {
         /// Applies to all diagram kinds.
         #[arg(long)]
         buc: Vec<String>,
-        /// Render element descriptions as diagram notes or annotations when supported.
-        #[arg(long)]
-        show_description: bool,
         /// Filter graph diagrams to one or more node kinds; repeatable.
         /// Applies to --kind rdra.
         #[arg(long = "node-kind", alias = "kind-filter")]
@@ -165,9 +162,6 @@ pub(crate) enum Commands {
         /// Applies to --kind rdra.
         #[arg(long = "edge-kind", alias = "edge-filter")]
         edge_kind: Vec<String>,
-        /// Apply a graph view preset: business, system, data, api, or ui.
-        #[arg(long)]
-        view_preset: Option<DiagramViewPreset>,
         #[arg(short, long, default_value = "out")]
         out: PathBuf,
     },
@@ -305,15 +299,6 @@ impl DiagramKind {
 }
 
 #[derive(ValueEnum, Clone)]
-pub(crate) enum DiagramViewPreset {
-    Business,
-    System,
-    Data,
-    Api,
-    Ui,
-}
-
-#[derive(ValueEnum, Clone)]
 pub(crate) enum OutputFormat {
     Mermaid,
 }
@@ -385,13 +370,10 @@ mod tests {
             "mermaid",
             "--buc",
             "BucScheduling",
-            "--show-description",
             "--node-kind",
             "usecase",
             "--edge-kind",
             "invokes",
-            "--view-preset",
-            "api",
             "--out",
             "out.mmd",
         ])
@@ -403,20 +385,16 @@ mod tests {
                 kind,
                 format,
                 buc,
-                show_description,
                 node_kind,
                 edge_kind,
-                view_preset,
                 out,
             } => {
                 assert_eq!(inputs, vec![PathBuf::from("sample.rdra")]);
                 assert!(matches!(kind, DiagramKind::Rdra));
                 assert!(matches!(format, OutputFormat::Mermaid));
                 assert_eq!(buc, vec!["BucScheduling"]);
-                assert!(show_description);
                 assert_eq!(node_kind, vec!["usecase"]);
                 assert_eq!(edge_kind, vec!["invokes"]);
-                assert!(matches!(view_preset, Some(DiagramViewPreset::Api)));
                 assert_eq!(out, PathBuf::from("out.mmd"));
             }
             _ => panic!("expected diagram command"),

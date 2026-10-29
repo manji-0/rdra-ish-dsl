@@ -10,18 +10,16 @@ use rdra_ish_emit::{
 };
 use std::fs;
 
-use crate::cli::{DiagramKind, DiagramViewPreset};
+use crate::cli::DiagramKind;
 use crate::list_output::{note_state_errors, reject_state_errors};
-use crate::load::{diagram_preset_filters, load_model, reject_model_errors};
+use crate::load::{load_model, reject_model_errors};
 
 pub struct DiagramRequest {
     pub inputs: Vec<PathBuf>,
     pub kind: DiagramKind,
     pub buc: Vec<String>,
-    pub show_description: bool,
     pub node_kind: Vec<String>,
     pub edge_kind: Vec<String>,
-    pub view_preset: Option<DiagramViewPreset>,
     pub out: PathBuf,
 }
 
@@ -30,10 +28,8 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
         inputs,
         kind,
         buc,
-        show_description,
         node_kind,
         edge_kind,
-        view_preset,
         out,
     } = request;
     let inputs = inputs.as_slice();
@@ -51,14 +47,9 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
         }
     }
 
-    if (!node_kind.is_empty() || !edge_kind.is_empty() || view_preset.is_some())
-        && !matches!(kind, DiagramKind::Rdra)
-    {
-        anyhow::bail!(
-            "--node-kind, --edge-kind, and --view-preset are currently supported only for --kind rdra"
-        );
+    if (!node_kind.is_empty() || !edge_kind.is_empty()) && !matches!(kind, DiagramKind::Rdra) {
+        anyhow::bail!("--node-kind and --edge-kind are currently supported only for --kind rdra");
     }
-    // Validate user-supplied kinds only (presets are authored from the known set).
     if !node_kind.is_empty() || !edge_kind.is_empty() {
         let (unknown_nodes, unknown_edges) = unknown_diagram_filter_kinds(&node_kind, &edge_kind);
         if !unknown_nodes.is_empty() || !unknown_edges.is_empty() {
@@ -78,36 +69,22 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
     } else {
         Scope::Bucs(buc)
     };
-    let (preset_node_kinds, preset_edge_kinds) = diagram_preset_filters(&view_preset);
-    let node_kinds = if node_kind.is_empty() {
-        preset_node_kinds
-    } else {
-        node_kind
-    };
-    let edge_kinds = if edge_kind.is_empty() {
-        preset_edge_kinds
-    } else {
-        edge_kind
-    };
-
-    let view = match &kind {
-        DiagramKind::Er => View {
-            scope,
-            filter: Filter::Er,
-            show_descriptions: show_description,
-            node_kinds: Vec::new(),
-            edge_kinds: Vec::new(),
-        }
-        .with_graph_filters(node_kinds, edge_kinds),
-        DiagramKind::Rdra | DiagramKind::State | DiagramKind::EventFlow => View {
-            scope,
-            filter: Filter::None,
-            show_descriptions: show_description,
-            node_kinds: Vec::new(),
-            edge_kinds: Vec::new(),
-        }
-        .with_graph_filters(node_kinds, edge_kinds),
-    };
+    let model_path = inputs
+        .iter()
+        .map(|input| input.display().to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    let view = View {
+        scope,
+        filter: match kind {
+            DiagramKind::Er => Filter::Er,
+            DiagramKind::Rdra | DiagramKind::State | DiagramKind::EventFlow => Filter::None,
+        },
+        model_path: Some(model_path),
+        node_kinds: Vec::new(),
+        edge_kinds: Vec::new(),
+    }
+    .with_graph_filters(node_kind, edge_kind);
 
     if matches!(kind, DiagramKind::EventFlow) {
         for diag in rdra_ish_core::event_diagnostics(&model) {
