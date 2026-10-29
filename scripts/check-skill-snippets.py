@@ -207,7 +207,7 @@ class Checker:
         self.counts["transcripts"] += 1
         argv = shlex.split(command)
         if len(argv) > 1 and argv[1] == "verify" and not (shutil.which("tlc") or shutil.which("tlc2")):
-            self.fail(where, "verify transcript needs tlc or tlc2 on PATH")
+            self.fail(where, "verify transcript needs tlc or tlc2 on PATH (the repo's `nix develop` shell provides it)")
             return
         cwd = os.path.realpath(self.skill_dir(path))
         out = subprocess.run(
