@@ -14,12 +14,19 @@ path a user action takes:
 - `requires_medium(UseCase|Api, Medium)` says which operation medium is required.
 - `has_permission(Actor, Permission)` says which permissions the actor has.
 
+The actors of a use case are its direct `performs(Actor, UseCase)` actors together with
+the actors of every BUC that contains it (`performs(Actor, Buc)`). `check`, the sequence
+diagrams, and the audit all read that union, so `performs(Actor, Buc)` means the actor
+runs every use case of the BUC and must hold every permission they require. An actor
+who runs only some of them should perform those use cases directly.
+
 The three access CSVs answer different questions. Use them together.
 
 ## Commands
 
 ```sh
 rdra-ish check src/
+rdra-ish check src/ --strict   # permission and access gaps fail the run
 rdra-ish csv src/ --kind screen-constraints
 rdra-ish csv src/ --kind permission-callables
 rdra-ish csv src/ --kind actor-permission-audit
@@ -51,6 +58,7 @@ meanings:
 | Signal | Interpretation | Next action |
 |---|---|---|
 | `missing` audit row | Required operation lacks actor grant | Add `has_permission` or reconsider who performs the UC |
+| `missing` row for an actor who only performs the BUC | `performs(Actor, Buc)` made the actor a performer of every use case | Move the actor to direct `performs` on the use cases it runs, or grant the permission |
 | `excess` audit row | Actor grant is unused by modeled paths | Remove it, add missing operation requirements, or mark as out-of-model grant |
 | Permission enables too many callables | Requirement is too broad | Move `requires_permission` from UC to API or split permission |
 | API requires permission but no UC invokes it | Boundary is disconnected | Add `invokes` or remove the API |
@@ -70,4 +78,6 @@ Prefer precise authority:
 
 Always report which view produced the finding. "Actor lacks permission" is less useful
 than "`actor-permission-audit` reports `missing` for Actor X / Permission Y via
-UseCase Z".
+UseCase Z". `check` prints the same gap as
+`warning: actor 'Clerk' is missing permission 'OrderWrite' required by usecase 'CancelOrder'`,
+and as `error:` (exit 1) under `--strict`.

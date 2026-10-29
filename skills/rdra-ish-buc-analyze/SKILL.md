@@ -18,8 +18,8 @@ reference file for the concrete analysis task.
 | "What is incomplete in this BUC/model?" | BUC, actor, use-case, flow, field, CRUD, inferred actor inputs, requirement/NFR scope, and layout gaps | `references/coverage-gaps.md` |
 | "Are permissions/media correct?" | screen/access paths, permission callables, actor grants | `references/access-permissions.md` |
 | "Are API/system boundaries sound?" | API ownership, API CRUD, cross-system relations, coordination | `references/api-system-boundaries.md` |
-| "Are lifecycle states/rules valid?" | reachable state patterns, terminals, truncation, per-entity rule diagnostics, and cross-entity rule inventory | `references/state-patterns.md` |
-| "Do temporal `property` rules or two-instance rules hold?" | Prefer skill `rdra-ish-verify` (TLA+/TLC); else TLA export notes here | `references/state-patterns.md` |
+| "Are lifecycle states/rules valid?" | reachable state patterns, states with no witness, deadlocks, use cases that never run, rule counterexamples, and `not checked:` | `references/state-patterns.md` |
+| "Do temporal `property` rules or two-instance rules hold?" | Prefer skill `rdra-ish-verify` (TLA+/TLC) | `references/state-patterns.md` |
 | "Summarize findings for review" | severity, evidence, next questions, and concrete recommendations | `references/reporting.md` |
 
 ### Default Workflow
@@ -31,13 +31,17 @@ reference file for the concrete analysis task.
    rules.
 3. Load one reference file from the routing guide and run only the commands needed for
    that analysis.
-4. Report evidence with command output signals, not just intuition.
+4. Report evidence with command output signals, not just intuition: the diagnostic
+   name, the `bounds:` line a lifecycle result holds under, and anything listed under
+   `not checked:`.
 5. End with the next useful refinement question or the smallest concrete model change.
 
 ### Quick Command Palette
 
 ```sh
 rdra-ish check src/
+rdra-ish check src/ --strict
+rdra-ish check src/ --entity <EntityId>
 rdra-ish lint src/ --format table
 rdra-ish list src/ --kind buc --format table
 rdra-ish list src/ --kind usecase --format table
@@ -58,7 +62,7 @@ rdra-ish csv src/ --kind actor-permission-audit
 rdra-ish states src/
 rdra-ish states src/ --buc <BucId>
 rdra-ish states src/ --entity <EntityId>
-rdra-ish export src/ --kind tla -o out/
+rdra-ish verify src/
 rdra-ish export src/ --kind openapi --out out/openapi.json
 rdra-ish export src/ --kind dbml --out out/schema.dbml
 ```
@@ -73,8 +77,8 @@ rdra-ish export src/ --kind dbml --out out/schema.dbml
   grant coverage with the three access CSVs.
 - `references/api-system-boundaries.md` — review API invocation, system ownership,
   API/entity matrices, and cross-system coordination.
-- `references/state-patterns.md` — interpret `states`, lifecycle warnings,
-  terminal/unreachable patterns, truncation, and rule diagnostics. For full
-  TLA+/TLC workflow, load skill `rdra-ish-verify` instead.
+- `references/state-patterns.md` — interpret `states` and the lifecycle findings of
+  `check`: witnesses, deadlocks, use cases that never run, rule counterexamples, and
+  caps. For the TLA+/TLC workflow, load skill `rdra-ish-verify` instead.
 - `references/reporting.md` — structure analysis output with severity, evidence, and
   recommendations.

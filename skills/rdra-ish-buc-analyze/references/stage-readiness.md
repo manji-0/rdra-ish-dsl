@@ -51,10 +51,12 @@ stage.
 | APIs have method/path metadata | Contract boundary | Which request/response/error DTOs are part of the contract? |
 | Entities have columns, keys, and `relate` | Entity structure | Which fields represent lifecycle state or cross-system coordination? |
 | `business-inputs` has surprising or missing field rows | Entity structure | Which fields are actor-entered versus derived by defaults, FK relations, APIs, events, or `sets`? |
-| Enum/Bool/nullable columns exist without lifecycle effects | Entity structure | Which events, transitions, or `sets` effects change them? |
-| `states` has reviewed reachable patterns | Lifecycle | Which local guardrails (`forbidden`, `exclusive`) should be checked first? |
+| Inline `Enum` columns that nothing moves (`lint` `enum-attribute`) | Entity structure | Does an actor choose this value? Then type it by a `variation` |
+| Enum/Bool/nullable columns exist without lifecycle effects | Entity structure | Which use case moves each one (`transitions`), or sets it (`sets`)? |
+| `check` reports `Witness_*`, `Deadlock_*`, or `Runs_*` | Lifecycle | Which use case enters, leaves, or unblocks that state? |
+| `check` passes and `states` has reviewed reachable patterns | Lifecycle | Which local guardrails (`forbidden`, `exclusive`) should be checked first? |
 | local guardrails exist and are stable | Business rules | Which local obligations need `invariant`, and are any `required` facts truly global? |
-| `invariant`, `required`, comparison propositions, or multi-entity `forbidden` / `invariant` exists | Business rules | Are violations fixed, intentionally accepted, truncated by caps, unbindable (`UnbindableScope`), or still unresolved requirements? |
+| `invariant`, `required`, comparison propositions, or multi-entity `forbidden` / `invariant` exists | Business rules | Are violations fixed, intentionally accepted, left under `not checked:` by a cap, unbindable (`UnbindableScope`), or still unresolved requirements? |
 | NFR/quality/constraint or ADR nodes exist | Traceability overlay | Which model elements do they apply to or decide? |
 
 ## How To Analyze

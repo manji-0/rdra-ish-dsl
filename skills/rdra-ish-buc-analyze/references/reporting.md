@@ -51,16 +51,22 @@ A good RDRA-ish analysis report does three things:
 
 ## Evidence Rules
 
-- Cite the command or diagnostic that produced each finding.
+- Cite the command or diagnostic that produced each finding. A lifecycle finding has a
+  stable name after its severity (`error[Deadlock_Order_status_paid]`,
+  `warning[Runs_Refund]`); quote it.
 - Use exact ids for BUCs, use cases, APIs, entities, permissions, and states.
+- State the `bounds:` line a lifecycle result holds under (`check`: one instance per
+  entity, Int `0..5`).
 - If the model is not deep enough for a check, say so rather than pretending the check
-  passed.
-- When `states` output is truncated, mention the cap and narrow the analysis before
-  drawing strong conclusions.
+  passed. Report everything under `not checked:` (a `--buc` or `--entity` scope, or a
+  cap) as not checked.
+- When a cap stops the exploration (`PatternCapReached`, `StateCapReached`), say so and
+  narrow the analysis before drawing strong conclusions.
 
 ## Recommendation Patterns
 
-- Missing BUC actor: add `performs(<Actor>, <BucOrUseCase>)` or ask who performs it.
+- Missing actor: add `performs(<Actor>, <UseCase>)`, or `performs(<Actor>, <Buc>)` when
+  the actor runs every use case of the BUC, or ask who performs it.
 - Missing business ownership: add `belongs(<Buc>, <Business>)`.
 - Empty CRUD row: ask which entity the use case touches, then add the correct CRUD
   predicate.

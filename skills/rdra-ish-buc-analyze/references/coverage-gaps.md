@@ -6,7 +6,8 @@ whole model before getting into access, API boundaries, or lifecycle details.
 ## Concept
 
 Coverage analysis asks whether the business story is connected enough to review:
-actors perform BUCs or use cases, BUCs belong to a business domain, requirements
+actors perform use cases (directly, or every use case of a BUC through
+`performs(Actor, Buc)`), BUCs belong to a business domain, requirements
 motivate BUCs, flow steps cover behavior, use cases belong to BUCs, fields belong to
 screens, and use cases touch the business objects they are responsible for. Missing
 coverage is often a modeling gap, but the severity depends on the current stage.
@@ -19,6 +20,7 @@ each actor is expected to supply once entities have reviewable columns.
 
 ```sh
 rdra-ish check src/
+rdra-ish lint src/ --format table
 rdra-ish list src/ --kind buc --format table
 rdra-ish list src/ --kind usecase --format table
 rdra-ish list src/ --kind actor --format table
@@ -38,7 +40,9 @@ rdra-ish diagram src/ --kind rdra --format mermaid --buc <BucId>
 
 | Signal | Likely cause | Action |
 |---|---|---|
-| BUC has no `performs` path | Actor assignment is missing | Add `performs(Actor, Buc)` or `performs(Actor, UseCase)` when known |
+| Use case has no performer, directly or through its BUC, and no triggering event or timer | Actor assignment is missing | Add `performs(Actor, UseCase)`, or `performs(Actor, Buc)` only when the actor runs every use case of the BUC |
+| `lint` `rdra-actor-no-buc`, `rdra-extsystem-no-buc`, `rdra-entity-no-buc`, `rdra-condition-no-buc`, `rdra-variation-no-buc`, `rdra-timer-no-buc` | The element is declared but no BUC reaches it (an RDRA 不整合 column) | Connect it (`performs`, an event, CRUD through a use case, `applies_to`, a column type, `triggers`) or delete it |
+| `lint` `rdra-transition-uc-no-buc` | A use case that `transitions` names belongs to no BUC | Add `contains(Buc, UseCase)` |
 | BUC has no `belongs` | Business domain is unclear | Add `business` and `belongs(Buc, Business)` |
 | Use case has no `contains` | UC is orphaned | Attach it to the owning BUC or remove it |
 | Flow step has no `covers` | Business flow is not connected to model behavior | Link the step to a UC/API/event or remove it |

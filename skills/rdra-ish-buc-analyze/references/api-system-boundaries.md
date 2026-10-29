@@ -53,9 +53,9 @@ When two related entities belong to different derived systems and one use case k
 them consistent:
 
 ```rdra
-coordinates(<UC>, <EntityA>, <EntityB>)
-invokes(<UC>, <ApiForEntityA>)
-invokes(<UC>, <ApiForEntityB>)
+coordinates(ChangeCustomer, Order, CustomerAccount)
+invokes(ChangeCustomer, OrderApi)
+invokes(ChangeCustomer, CustomerApi)
 ```
 
 Each invoked API should operate the corresponding entity. If the use case only invokes
