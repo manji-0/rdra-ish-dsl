@@ -12,6 +12,7 @@ mod diag;
 mod explore;
 mod expr;
 mod findings;
+mod lasso;
 mod restrict;
 mod select;
 mod starts;
@@ -31,6 +32,7 @@ pub use expr::State;
 pub use findings::{
     ActionRuns, Progress, Runs, StateModelFindings, ValueProgress, ValueWitness, Witness,
 };
+pub use lasso::{LassoReplay, Loop};
 pub use restrict::Component;
 pub use select::{NotChecked, Scope, Selection, UnknownId};
 pub use states::{derive_states, derive_states_built, BoundsLine, StatesReport};
@@ -38,7 +40,7 @@ pub use targets::{ConeRun, Subject, Tally, TargetExploration, Undecided, Undecid
 pub use trace::{Change, Inst, Replay, ReplayError, Trace, TraceStep};
 pub use types::{
     ActId, Action, ActionOrigin, AfterAssert, AfterStep, At, Birth, Bounds, CmpOp, Domain, Effect,
-    EntId, EntityDecl, Guard, GuardWhy, InvKind, InvText, Invariant, Ltl, ModelRef, Param,
+    EntId, EntityDecl, Guard, GuardWhy, InvKind, InvText, Invariant, Ltl, LtlKind, ModelRef, Param,
     ParamRole, Pred, Property, Rhs, Site, Start, Term, Value, VarDecl, VarId, VarKind,
 };
 pub use view::{

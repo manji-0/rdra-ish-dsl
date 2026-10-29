@@ -2,8 +2,9 @@
 
 use std::fmt;
 
+use super::lasso::Loop;
 use super::trace::{Inst, Trace};
-use super::types::{ActionOrigin, GuardWhy, InvKind, InvText, ParamRole, Site};
+use super::types::{ActionOrigin, GuardWhy, InvKind, InvText, LtlKind, ParamRole, Site};
 use crate::model::EntityKey;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -85,6 +86,22 @@ pub enum StateDiag {
         anchor: String,
         requireds: String,
         actual: String,
+        site: Site,
+        trace: Trace,
+    },
+    /// A temporal property fails on the infinite behavior of a lasso: `trace`, then `lasso`.
+    /// Only a replayed TLC counterexample builds it; BFS does not check properties.
+    PropertyViolated {
+        /// The property's name, which is the PROPERTY TLC checks.
+        name: String,
+        kind: LtlKind,
+        /// The instance of each binder the formula fails for, outermost first.
+        instance: Vec<Inst>,
+        /// The state that shows it, 0 for the start and k for the state after step k: where
+        /// `always` is false, or where the instance is present (and the `leads_to` trigger
+        /// holds) and the goal never holds from then on.
+        witness: usize,
+        lasso: Loop,
         site: Site,
         trace: Trace,
     },
@@ -177,7 +194,8 @@ impl StateDiag {
         };
         let raw = match self {
             StateDiag::ConstraintViolated { name, .. }
-            | StateDiag::AfterAssertViolated { name, .. } => name.clone(),
+            | StateDiag::AfterAssertViolated { name, .. }
+            | StateDiag::PropertyViolated { name, .. } => name.clone(),
             StateDiag::NoWitness {
                 entity,
                 column,
@@ -250,11 +268,13 @@ impl StateDiag {
             .collect()
     }
 
-    /// The counterexample of a violated constraint or assert, or the path into a deadlock.
+    /// The counterexample of a violated constraint, assert, or property (for a property, the
+    /// finite part of its lasso), or the path into a deadlock.
     pub fn trace(&self) -> Option<&Trace> {
         match self {
             StateDiag::ConstraintViolated { trace, .. }
             | StateDiag::AfterAssertViolated { trace, .. }
+            | StateDiag::PropertyViolated { trace, .. }
             | StateDiag::Deadlock { trace, .. } => Some(trace),
             _ => None,
         }
@@ -264,6 +284,7 @@ impl StateDiag {
         match self {
             StateDiag::ConstraintViolated { trace, .. }
             | StateDiag::AfterAssertViolated { trace, .. }
+            | StateDiag::PropertyViolated { trace, .. }
             | StateDiag::Deadlock { trace, .. } => Some(trace),
             _ => None,
         }
@@ -289,6 +310,7 @@ impl StateDiag {
             | StateDiag::StateCapReached { .. }
             | StateDiag::ConstraintViolated { .. }
             | StateDiag::AfterAssertViolated { .. }
+            | StateDiag::PropertyViolated { .. }
             | StateDiag::NoWitness { .. }
             | StateDiag::Deadlock { .. }
             | StateDiag::AssertOnInertUseCase { .. }
@@ -407,6 +429,35 @@ impl fmt::Display for StateDiag {
                 actual,
                 ..
             } => write!(f, "after({anchor}).assert({requireds}) fails: {actual}"),
+            StateDiag::PropertyViolated {
+                name,
+                kind,
+                instance,
+                witness,
+                ..
+            } => {
+                let inst = instance
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let at = match witness {
+                    0 => "at the start".to_string(),
+                    k => format!("after step {k}"),
+                };
+                write!(f, "property {name} is violated: ")?;
+                match kind {
+                    LtlKind::Always => write!(f, "its always condition is false for {inst} {at}"),
+                    LtlKind::Eventually => write!(
+                        f,
+                        "{inst} exists {at}, and its eventually condition never holds from then on"
+                    ),
+                    LtlKind::LeadsTo => write!(
+                        f,
+                        "its leads_to trigger holds for {inst} {at}, and its goal never holds from then on"
+                    ),
+                }
+            }
             StateDiag::NoWitness {
                 entity,
                 column,

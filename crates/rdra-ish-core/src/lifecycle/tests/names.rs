@@ -1,8 +1,8 @@
 //! Every finding has a name that `error[<name>]:` can carry and the sample headers can match.
 
 use crate::lifecycle::trace::{Inst, Trace};
-use crate::lifecycle::types::{ActionOrigin, InvKind, InvText, ModelRef, Site};
-use crate::lifecycle::{Blocked, Exit, StateDiag};
+use crate::lifecycle::types::{ActionOrigin, InvKind, InvText, LtlKind, ModelRef, Site};
+use crate::lifecycle::{Blocked, Exit, Loop, StateDiag};
 
 /// One value of each variant, with key fields that hold characters a name cannot.
 fn one_of_each() -> Vec<StateDiag> {
@@ -51,6 +51,18 @@ fn one_of_each() -> Vec<StateDiag> {
             anchor: "Pay".into(),
             requireds: "Order.status=paid".into(),
             actual: "Order(status=pending)".into(),
+            site: site(),
+            trace: Trace::default(),
+        },
+        StateDiag::PropertyViolated {
+            name: "NeverShipped".into(),
+            kind: LtlKind::Always,
+            instance: vec![Inst {
+                entity: "Order".into(),
+                slot: 1,
+            }],
+            witness: 3,
+            lasso: Loop::Stutter,
             site: site(),
             trace: Trace::default(),
         },
@@ -142,6 +154,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::StateCapReached { .. }
             | StateDiag::ConstraintViolated { .. }
             | StateDiag::AfterAssertViolated { .. }
+            | StateDiag::PropertyViolated { .. }
             | StateDiag::NoWitness { .. }
             | StateDiag::NeverRuns { .. }
             | StateDiag::Deadlock { .. }
@@ -179,6 +192,7 @@ fn names_keep_the_checks_own_names() {
     for kept in [
         "Forbidden_Order_0",
         "AfterAssert_Pay_0",
+        "NeverShipped",
         "Witness_Order_status_paid",
         "Runs_Pay_2",
         "Deadlock_Order_status_paid",

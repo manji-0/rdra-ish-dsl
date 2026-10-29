@@ -620,6 +620,7 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
         | StateDiag::MinCardNeedsCreate { .. }
         | StateDiag::UnsupportedComparison { .. }
         | StateDiag::DerivedColumnRead { .. }
+        | StateDiag::PropertyViolated { .. }
         | StateDiag::UnresolvedPropertyAtom { .. } => diag.to_string(),
     }
 }

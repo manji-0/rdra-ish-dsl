@@ -203,6 +203,7 @@ fn diag_message(d: &StateDiag, entity: &str) -> String {
         | StateDiag::MinCardNeedsCreate { .. }
         | StateDiag::UnsupportedComparison { .. }
         | StateDiag::DerivedColumnRead { .. }
+        | StateDiag::PropertyViolated { .. }
         | StateDiag::UnresolvedPropertyAtom { .. } => d.to_string(),
     };
     format!("[{label}][{}] {body}", d.name(&[entity]))

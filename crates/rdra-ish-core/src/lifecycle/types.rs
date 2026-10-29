@@ -543,7 +543,8 @@ pub struct AfterStep {
     pub post: Pred,
 }
 
-/// A temporal property. Data only: the explorer does not evaluate it.
+/// A temporal property. The explorer does not check it; `explain_property` evaluates it on a
+/// lasso another engine found.
 #[derive(Clone, Debug)]
 pub struct Property {
     pub name: String,
@@ -558,4 +559,21 @@ pub enum Ltl {
     Always(Pred),
     Eventually(Pred),
     LeadsTo(Pred, Pred),
+}
+
+impl Ltl {
+    pub fn kind(&self) -> LtlKind {
+        match self {
+            Ltl::Always(_) => LtlKind::Always,
+            Ltl::Eventually(_) => LtlKind::Eventually,
+            Ltl::LeadsTo(..) => LtlKind::LeadsTo,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LtlKind {
+    Always,
+    Eventually,
+    LeadsTo,
 }

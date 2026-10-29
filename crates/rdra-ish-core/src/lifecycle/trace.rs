@@ -17,8 +17,8 @@ use super::TransitionSystem;
 /// uses: its states and the move each step took.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Replay {
-    states: Vec<State>,
-    moves: Vec<(ActId, Box<[u8]>)>,
+    pub(super) states: Vec<State>,
+    pub(super) moves: Vec<(ActId, Box<[u8]>)>,
 }
 
 /// Where a trace leaves the step relation. `state` counts from 1, as TLC numbers its states.
@@ -32,6 +32,12 @@ pub enum ReplayError {
     /// No move of `action` reaches `states[state - 1]` from the state before it.
     NoMove {
         state: usize,
+        action: ActId,
+    },
+    /// A lasso's back edge: no move of `action` takes the last state to state `to`, or the
+    /// trace has no state `to`.
+    NoBackMove {
+        to: usize,
         action: ActId,
     },
 }
