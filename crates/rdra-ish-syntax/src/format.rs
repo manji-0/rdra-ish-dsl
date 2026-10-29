@@ -22,27 +22,183 @@ pub fn format_source(src: &str) -> Result<String, FormatError> {
     Ok(format_ast(&ast))
 }
 
-/// Pretty-print an already-parsed AST.
+/// Pretty-print an already-parsed AST, with its comments.
 pub fn format_ast(ast: &Ast) -> String {
+    let mut items: Vec<Vec<Line>> = ast.items.iter().map(item_lines).collect();
+    let mut end_of_file = Vec::new();
+    for comment in &ast.comments {
+        place_comment(ast, comment, &mut items, &mut end_of_file);
+    }
+
     let mut out = String::new();
-    for (index, item) in ast.items.iter().enumerate() {
+    for (index, lines) in items.iter().enumerate() {
         if index > 0 {
             out.push('\n');
         }
-        out.push_str(&format_item(item));
+        for line in lines {
+            for above in &line.above {
+                out.push_str(line.comment_indent);
+                push_comment_line(&mut out, above);
+            }
+            out.push_str(&line.text);
+            for comment in &line.trailing {
+                out.push(' ');
+                out.push_str(comment);
+            }
+            out.push('\n');
+        }
+    }
+    if !end_of_file.is_empty() && !items.is_empty() {
+        out.push('\n');
+    }
+    if let Some((last, rest)) = end_of_file.split_last() {
+        for comment in rest {
+            push_comment_line(&mut out, comment);
+        }
+        out.push_str(&last.text);
         out.push('\n');
     }
     out
 }
 
-fn format_item(item: &Item) -> String {
+/// One output line of an item.
+struct Line {
+    text: String,
+    /// Source offset of the node this line prints. Comments attach only to anchored lines;
+    /// lines without a span of their own (metadata, a property's formula) have none.
+    anchor: Option<usize>,
+    /// Indentation of a comment on its own line above this one.
+    comment_indent: &'static str,
+    above: Vec<OwnLineComment>,
+    trailing: Vec<String>,
+}
+
+impl Line {
+    fn new(text: String, anchor: Option<usize>, comment_indent: &'static str) -> Self {
+        Line {
+            text,
+            anchor,
+            comment_indent,
+            above: Vec::new(),
+            trailing: Vec::new(),
+        }
+    }
+}
+
+struct OwnLineComment {
+    text: String,
+    /// The source has a blank line after the comment. Kept only between top-level items.
+    blank_after: bool,
+}
+
+fn push_comment_line(out: &mut String, comment: &OwnLineComment) {
+    out.push_str(&comment.text);
+    out.push('\n');
+    if comment.blank_after {
+        out.push('\n');
+    }
+}
+
+/// Attach `comment` to the output line it annotates.
+///
+/// A trailing comment stays at the end of the line that prints the node it follows on the
+/// same source line. Any other comment goes on its own line above the next anchored line
+/// of the item that contains it, or above the item when that item has no later anchored
+/// line (its metadata lines carry no spans). Between items it goes above the next item,
+/// and after the last item to the end of the file. Each placement reads back to itself,
+/// so a second `fmt` changes nothing.
+fn place_comment(
+    ast: &Ast,
+    comment: &Comment,
+    items: &mut [Vec<Line>],
+    end_of_file: &mut Vec<OwnLineComment>,
+) {
+    let src = &ast.source;
+    let start = comment.span.start;
+    let text = src[comment.span.clone()].trim_end().to_string();
+    let same_line = |anchor: usize| !src[anchor..start].contains('\n');
+
+    if comment.trailing {
+        let preceding = anchored(items)
+            .filter(|&(_, _, anchor)| anchor <= start)
+            .last();
+        if let Some((item, line, anchor)) = preceding {
+            // Only comments from the anchor's own source line trail it, in source order, so
+            // a `//` comment is always the last on its line.
+            if same_line(anchor) {
+                items[item][line].trailing.push(text);
+            } else {
+                items[item][0].above.push(OwnLineComment {
+                    text,
+                    blank_after: false,
+                });
+            }
+            return;
+        }
+    }
+
+    let container = ast
+        .items
+        .iter()
+        .position(|item| item_span(item).contains(&start));
+    let following = anchored(items).find(|&(_, _, anchor)| anchor > start);
+    let (item, line) = match (container, following) {
+        (Some(item), Some((next, line, _))) if next == item => (item, line),
+        (Some(item), _) => (item, 0),
+        (None, Some((item, line, _))) => (item, line),
+        (None, None) => {
+            let blank_after = blank_line_follows(src, comment.span.end);
+            end_of_file.push(OwnLineComment { text, blank_after });
+            return;
+        }
+    };
+    let blank_after = container.is_none() && blank_line_follows(src, comment.span.end);
+    items[item][line]
+        .above
+        .push(OwnLineComment { text, blank_after });
+}
+
+/// Every anchored line as `(item index, line index, anchor)`, in output order.
+fn anchored(items: &[Vec<Line>]) -> impl Iterator<Item = (usize, usize, usize)> + '_ {
+    items.iter().enumerate().flat_map(|(item, lines)| {
+        lines
+            .iter()
+            .enumerate()
+            .filter_map(move |(line, l)| l.anchor.map(|anchor| (item, line, anchor)))
+    })
+}
+
+fn blank_line_follows(src: &str, end: usize) -> bool {
+    let rest = &src[end..];
+    let gap = &rest[..rest.len() - rest.trim_start().len()];
+    gap.matches('\n').count() >= 2
+}
+
+fn item_span(item: &Item) -> &Span {
     match item {
+        Item::Module(_, span) => span,
+        Item::Import(import) => &import.span,
+        Item::Instance(instance) => &instance.span,
+        Item::Predicate(predicate) => &predicate.span,
+        Item::Property(prop) => &prop.span,
+    }
+}
+
+/// The lines of `item`. The first line is anchored at the item; an instance also anchors
+/// each column or variation value line and its closing brace.
+fn item_lines(item: &Item) -> Vec<Line> {
+    let text = match item {
+        Item::Instance(instance) => return instance_lines(instance),
         Item::Module(name, _) => format!("module {}", format_dotted_name(name)),
         Item::Import(import) => format_import(import),
-        Item::Instance(instance) => format_instance(instance),
         Item::Predicate(predicate) => format_predicate(predicate),
         Item::Property(prop) => format_property(prop),
-    }
+    };
+    let start = item_span(item).start;
+    text.lines()
+        .enumerate()
+        .map(|(index, line)| Line::new(line.to_string(), (index == 0).then_some(start), ""))
+        .collect()
 }
 
 fn format_property(prop: &PropertyDecl) -> String {
@@ -92,45 +248,58 @@ fn format_import(import: &ImportDecl) -> String {
     }
 }
 
-fn format_instance(instance: &InstanceDecl) -> String {
-    let mut lines = vec![format!(
+fn instance_lines(instance: &InstanceDecl) -> Vec<Line> {
+    let header = format!(
         "{} {} {}",
         instance.kind.name(),
         instance.id,
         quote_string(&instance.label)
-    )];
-
+    );
+    let mut metadata = Vec::new();
     if let Some(description) = &instance.description {
-        lines.push(format!("  description {}", quote_string(description)));
+        metadata.push(format!("  description {}", quote_string(description)));
     }
+    metadata.extend(format_requirement_metadata(instance));
+    metadata.extend(format_adr_metadata(instance));
+    metadata.extend(format_api_metadata(instance));
+    metadata.extend(format_nfr_metadata(instance));
+    metadata.extend(format_field_metadata(instance));
+    metadata.extend(format_usecase_metadata(instance));
 
-    lines.extend(format_requirement_metadata(instance));
-    lines.extend(format_adr_metadata(instance));
-    lines.extend(format_api_metadata(instance));
-    lines.extend(format_nfr_metadata(instance));
-    lines.extend(format_field_metadata(instance));
-    lines.extend(format_usecase_metadata(instance));
+    let mut lines = vec![Line::new(header, Some(instance.span.start), "")];
+    lines.extend(metadata.into_iter().map(|text| Line::new(text, None, "")));
 
-    if !instance.columns.is_empty() {
-        lines[0].push_str(" {");
-        for column in &instance.columns {
-            lines.push(format!("  {}", format_column(column)));
+    let body: Vec<(String, usize)> = if !instance.columns.is_empty() {
+        instance
+            .columns
+            .iter()
+            .map(|column| (format_column(column), column.span.start))
+            .collect()
+    } else {
+        instance
+            .variation_values
+            .iter()
+            .map(|value| {
+                let text = match &value.label {
+                    Some(label) => format!("{} {}", value.value, quote_string(label)),
+                    None => value.value.clone(),
+                };
+                (text, value.span.start)
+            })
+            .collect()
+    };
+    if !body.is_empty() {
+        lines[0].text.push_str(" {");
+        for (text, anchor) in body {
+            lines.push(Line::new(format!("  {text}"), Some(anchor), "  "));
         }
-        lines.push("}".to_string());
+        lines.push(Line::new(
+            "}".to_string(),
+            Some(instance.span.end - 1),
+            "  ",
+        ));
     }
-
-    if !instance.variation_values.is_empty() {
-        lines[0].push_str(" {");
-        for value in &instance.variation_values {
-            lines.push(match &value.label {
-                Some(label) => format!("  {} {}", value.value, quote_string(label)),
-                None => format!("  {}", value.value),
-            });
-        }
-        lines.push("}".to_string());
-    }
-
-    lines.join("\n")
+    lines
 }
 
 fn format_requirement_metadata(instance: &InstanceDecl) -> Vec<String> {
@@ -437,6 +606,102 @@ fn is_identish(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `src` formats to `expected`, and formatting `expected` again changes nothing.
+    fn assert_formats_to(src: &str, expected: &str) {
+        let formatted = format_source(src).unwrap();
+        assert_eq!(formatted, expected);
+        assert_eq!(
+            format_source(&formatted).unwrap(),
+            formatted,
+            "not idempotent"
+        );
+    }
+
+    #[test]
+    fn keeps_an_own_line_comment_above_the_item_it_precedes() {
+        assert_formats_to(
+            "module a\n// heading comment\nactor A \"a\"\n",
+            "module a\n\n// heading comment\nactor A \"a\"\n",
+        );
+    }
+
+    #[test]
+    fn keeps_a_trailing_comment_on_the_line_it_ends() {
+        assert_formats_to(
+            "module a // the module\nactor A \"a\"   // trailing  \n",
+            "module a // the module\n\nactor A \"a\" // trailing\n",
+        );
+    }
+
+    #[test]
+    fn keeps_block_comments_inline_and_on_their_own_lines() {
+        assert_formats_to(
+            "/* file\n   header */\nactor A \"a\" /* inline */\nactor B \"b\" /* both */ // kinds\n",
+            "/* file\n   header */\nactor A \"a\" /* inline */\n\nactor B \"b\" /* both */ // kinds\n",
+        );
+    }
+
+    #[test]
+    fn keeps_comments_between_predicates() {
+        assert_formats_to(
+            "performs(A, U1)\n// sources/a.txt:12\nperforms(A, U2) // sources/b.txt:3\n// sources/c.txt:4\nperforms(A, U3)\n",
+            "performs(A, U1)\n\n// sources/a.txt:12\nperforms(A, U2) // sources/b.txt:3\n\n// sources/c.txt:4\nperforms(A, U3)\n",
+        );
+    }
+
+    #[test]
+    fn keeps_comments_at_the_end_of_the_file() {
+        assert_formats_to(
+            "actor A \"a\"\n// footer one\n\n// footer two",
+            "actor A \"a\"\n\n// footer one\n\n// footer two\n",
+        );
+    }
+
+    #[test]
+    fn keeps_a_file_of_only_comments() {
+        assert_formats_to("// nothing yet\n", "// nothing yet\n");
+    }
+
+    #[test]
+    fn keeps_comments_inside_an_entity_body() {
+        assert_formats_to(
+            "entity E \"e\" { // columns\n  id: Int @pk // key\n// a status\n  status: Enum(a, b)\n  // closing note\n} // end\n",
+            "entity E \"e\" { // columns\n  id: Int @pk // key\n  // a status\n  status: Enum(a, b)\n  // closing note\n} // end\n",
+        );
+    }
+
+    #[test]
+    fn keeps_comments_between_variation_values() {
+        assert_formats_to(
+            "variation V \"v\" {\n  a \"A\"\n  // why b\n  b \"B\" // b note\n}\n",
+            "variation V \"v\" {\n  a \"A\"\n  // why b\n  b \"B\" // b note\n}\n",
+        );
+    }
+
+    #[test]
+    fn keeps_the_blank_line_between_a_detached_comment_and_the_next_item() {
+        assert_formats_to(
+            "// section\n\nactor A \"a\"\n\n// group\n// of two\n\n\nactor B \"b\"\n",
+            "// section\n\nactor A \"a\"\n\n// group\n// of two\n\nactor B \"b\"\n",
+        );
+    }
+
+    #[test]
+    fn moves_a_comment_from_a_line_without_its_own_anchor_above_its_item() {
+        assert_formats_to(
+            "requirement R \"r\"\n  priority \"must\"\n  // why the source\n  source \"Interview\" // who said it\n\ninvariant(Order)\n  // only when paid\n  .when(status == paid).then(total > 0) // wrapped call\n",
+            "// why the source\n// who said it\nrequirement R \"r\"\n  priority \"must\"\n  source \"Interview\"\n\n// only when paid\n// wrapped call\ninvariant(Order).when(status == paid).then(total > 0)\n",
+        );
+    }
+
+    #[test]
+    fn does_not_read_a_slash_pair_inside_a_string_as_a_comment() {
+        assert_formats_to(
+            "actor A \"see http://x /* y */\"\n",
+            "actor A \"see http://x /* y */\"\n",
+        );
+    }
 
     #[test]
     fn formats_check_and_derived_unquoted() {

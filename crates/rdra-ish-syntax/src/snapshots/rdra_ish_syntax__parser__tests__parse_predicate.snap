@@ -32,5 +32,6 @@ Ast {
             },
         ),
     ],
+    comments: [],
     source: "performs(Customer, Browse)",
 }

@@ -7,6 +7,7 @@ use crate::token::Token;
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
+            Token::Comment => "comment",
             Token::Module => "module",
             Token::Import => "import",
             Token::As => "as",

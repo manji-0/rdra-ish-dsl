@@ -68,5 +68,6 @@ Ast {
             },
         ),
     ],
+    comments: [],
     source: "actor Customer \"顧客\" description \"商品を購入する顧客\"",
 }

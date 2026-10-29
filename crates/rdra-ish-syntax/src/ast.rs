@@ -452,8 +452,18 @@ pub enum Item {
 
 // ── Full AST ─────────────────────────────────────────────────────────────────
 
+/// A `//` or `/* */` comment, in source order. The parser skips comments; the formatter
+/// puts each one back next to the line it annotated.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Comment {
+    pub span: Span,
+    /// Code precedes the comment on its line (`actor A "a" // note`).
+    pub trailing: bool,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ast {
     pub items: Vec<Item>,
+    pub comments: Vec<Comment>,
     pub source: std::string::String,
 }

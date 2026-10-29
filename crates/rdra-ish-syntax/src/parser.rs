@@ -12,20 +12,36 @@ use crate::token::Token;
 
 // ── Lexer bridge ─────────────────────────────────────────────────────────────
 
+/// The output of [`lex`]: the tokens the grammar reads, the comments it skips, and the
+/// source spans of any characters that did not match a token (fail-closed: callers must
+/// treat these as errors).
+pub struct Lexed {
+    pub tokens: Vec<Spanned<Token>>,
+    pub comments: Vec<Comment>,
+    pub errors: Vec<Span>,
+}
+
 /// Run the logos lexer.
-///
-/// Returns successfully lexed tokens and the source spans of any characters
-/// that did not match a token (fail-closed: callers must treat these as errors).
-pub fn lex(src: &str) -> (Vec<Spanned<Token>>, Vec<std::ops::Range<usize>>) {
-    let mut tokens = Vec::new();
-    let mut errors = Vec::new();
+pub fn lex(src: &str) -> Lexed {
+    let mut lexed = Lexed {
+        tokens: Vec::new(),
+        comments: Vec::new(),
+        errors: Vec::new(),
+    };
     for (tok, span) in Token::lexer(src).spanned() {
         match tok {
-            Ok(t) => tokens.push((t, span)),
-            Err(()) => errors.push(span),
+            Ok(Token::Comment) => {
+                let trailing = lexed
+                    .tokens
+                    .last()
+                    .is_some_and(|(_, code)| !src[code.end..span.start].contains('\n'));
+                lexed.comments.push(Comment { span, trailing });
+            }
+            Ok(t) => lexed.tokens.push((t, span)),
+            Err(()) => lexed.errors.push(span),
         }
     }
-    (tokens, errors)
+    lexed
 }
 
 // ── Parser helpers ────────────────────────────────────────────────────────────
@@ -1172,7 +1188,11 @@ fn root_parser() -> impl Parser<Token, Vec<Item>, Error = Simple<Token>> {
 
 /// Lex and parse `src`. Returns the best-effort AST and any lex/parse errors.
 pub fn parse(src: &str) -> (Ast, Vec<Simple<Token>>) {
-    let (tokens, lex_errors) = lex(src);
+    let Lexed {
+        tokens,
+        comments,
+        errors: lex_errors,
+    } = lex(src);
     let len = src.len();
 
     let stream = Stream::from_iter(len..len + 1, tokens.into_iter());
@@ -1188,6 +1208,7 @@ pub fn parse(src: &str) -> (Ast, Vec<Simple<Token>>) {
 
     let ast = Ast {
         items: items.unwrap_or_default(),
+        comments,
         source: src.to_string(),
     };
     (ast, errors)

@@ -3,9 +3,13 @@ use logos::Logos;
 /// All tokens for the RDRA DSL.
 #[derive(Logos, Debug, Clone, PartialEq, Eq, Hash)]
 #[logos(skip r"[ \t\r\n]+")] // whitespace
-#[logos(skip r"//[^\n]*")] // line comments
-#[logos(skip r"/\*([^*]|\*[^/])*\*/")] // block comments
 pub enum Token {
+    /// A `//` or `/* */` comment. `parser::lex` moves it out of the token stream into
+    /// `Ast::comments`, so the grammar never sees it and the formatter can re-emit it.
+    #[regex(r"//[^\n]*")]
+    #[regex(r"/\*([^*]|\*[^/])*\*/")]
+    Comment,
+
     // ── Keywords ────────────────────────────────────────────────────
     #[token("module")]
     Module,

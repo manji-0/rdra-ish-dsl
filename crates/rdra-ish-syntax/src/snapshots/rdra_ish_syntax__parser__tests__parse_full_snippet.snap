@@ -287,5 +287,11 @@ Ast {
             },
         ),
     ],
+    comments: [
+        Comment {
+            span: 1..16,
+            trailing: false,
+        },
+    ],
     source: "\n// コメント\nmodule shared.actors\n\nimport shared.entities\n\nactor   Customer \"顧客\"\nusecase Browse   \"商品を探す\"\n\nentity  Order \"注文\" {\n  id: Int @pk\n  total: Money\n  ordered_at: DateTime\n}\n\nperforms(Customer, Browse)\nrelate(Order, Customer, N:1)\n",
 }

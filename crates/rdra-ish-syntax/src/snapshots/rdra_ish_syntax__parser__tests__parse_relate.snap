@@ -1,6 +1,5 @@
 ---
 source: crates/rdra-ish-syntax/src/parser.rs
-assertion_line: 1391
 expression: ast
 ---
 Ast {
@@ -72,5 +71,6 @@ Ast {
             },
         ),
     ],
+    comments: [],
     source: "relate(Order, Customer, N:1).optional().on_delete(set_null).on_update(cascade)",
 }

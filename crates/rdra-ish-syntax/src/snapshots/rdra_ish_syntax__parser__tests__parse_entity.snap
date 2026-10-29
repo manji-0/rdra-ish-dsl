@@ -205,5 +205,6 @@ Ast {
             },
         ),
     ],
+    comments: [],
     source: "\nentity Product \"商品\" {\n  id:  Int    @pk\n  sku: String @unique @index\n  name: String @label(\"商品名\")\n  price: Decimal @check(price >= 0)\n  store_id: Int @index(status, store_id) @unique(sku, store_id)\n  status: Enum(active, discontinued) @default(active)\n  note: String @null\n  tenant_id: Int @tenant\n  deleted_at: DateTime @null @soft_delete\n  valid_from: DateTime @history\n  display_price: Money @derived(price * tax_rate)\n}\n",
 }
