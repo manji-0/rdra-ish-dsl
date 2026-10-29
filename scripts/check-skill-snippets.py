@@ -259,7 +259,9 @@ class Checker:
                 values = options[flag.group(1)]
                 value = word.split("=", 1)[1] if "=" in word else (words[k + 1] if k + 1 < len(words) else "")
                 value = value.strip("`'\",.;:)")
-                if values and value and not value.startswith(("<", "$", "-")) and value not in values:
+                # clap lists `type-script-states` for the documented `typescript-states` alias.
+                known = {v.replace("-", "") for v in values or ()}
+                if values and value and not value.startswith(("<", "$", "-")) and value.replace("-", "") not in known:
                     self.fail(where, f"`{command} {flag.group(1)}` has no value {value!r}")
 
     def check_path(self, path, where, span):
