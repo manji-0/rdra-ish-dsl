@@ -16,13 +16,8 @@ rdra-ish diagram src/ --kind sequence --buc <BucId> --format mermaid
 # Sequence diagram — scoped to one or more use cases
 rdra-ish diagram src/ --kind sequence --usecase <UseCaseId> --format mermaid
 
-# Business area — actor-entered fields to use cases
-rdra-ish diagram src/ --kind business-area --buc <BucId> --format mermaid
-rdra-ish diagram src/ --kind business-area --usecase <UseCaseId> --format mermaid
+# Actor-entered fields per use case
 rdra-ish csv src/ --kind business-inputs
-
-# Technical area — systems containing APIs and operated entities
-rdra-ish diagram src/ --kind technical-area --buc <BucId> --format mermaid
 
 # API list and API × Entity CRUD matrix
 rdra-ish list src/ --kind api --format table
@@ -53,14 +48,13 @@ rdra-ish csv src/ --kind actor-permission-audit
 - `Note right of ...: FK非連結` means entities are written outside a common FK chain;
   consider modeling the consistency boundary through an API.
 
-## Reading Business/Technical Area Output
+## Reading Business Inputs and the API Matrix
 
-- `business-area` shows Actor -> input field -> UseCase paths. Input nodes come from
-  modeled `field`/`maps_field` and inferred `business-inputs`, so missing rows usually
-  mean no actor path, no C/U/W operation, no mapping, or fields are modeled as derived.
-- `technical-area` shows each System as a container with only its APIs and the entities
-  those APIs operate. Pair it with `api-matrix` and explicit `owns` diagnostics when
-  checking CRUD coverage and intended ownership.
+- `business-inputs` lists actor -> input field -> use case rows. Rows come from modeled
+  `field`/`maps_field` and inferred CRUD, so a missing row usually means no actor path,
+  no C/U/W operation, no mapping, or a field modeled as derived.
+- `api-matrix` shows which entities each API operates. Pair it with explicit `owns`
+  diagnostics when checking CRUD coverage and intended system ownership.
 
 ## Reading Access CSVs
 

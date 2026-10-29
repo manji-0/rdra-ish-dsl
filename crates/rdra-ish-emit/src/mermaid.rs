@@ -1,11 +1,8 @@
 //! Mermaid emitters: RDRA全体図、ER図、状態遷移図、sequence図、event-flow図。
 
 use crate::diagram_common::{
-    business_actor_node_id, business_input_node_id, business_input_visible,
-    business_usecase_node_id, col_type_str, graph_node_visible, is_entity_operation,
-    lifecycle_start_states, node_id, node_label, quote, rdra_description_nodes,
-    reachable_for_scope, render_descriptions, render_event_flows, render_relations, scoped_id,
-    scoped_node_visible, sequence_usecase_scope, technical_api_node_id, technical_entity_node_id,
+    col_type_str, lifecycle_start_states, node_id, node_label, quote, render_descriptions,
+    render_event_flows, sequence_usecase_scope,
 };
 use crate::{
     collect_object_graph_nodes, object_graph_layer, object_graph_rel_label, prefixed_label,
@@ -16,203 +13,13 @@ use rdra_ish_core::model::{
     ActorKey, ApiKey, EntityKey, NodeRef, RelKind, ScreenKey, SemanticModel, StateKey, UseCaseKey,
 };
 use rdra_ish_core::tx::infer_usecase_transactions;
-use rdra_ish_core::{derive_actor_input_inferences, derive_system_boundaries};
 use std::collections::{HashMap, HashSet};
 
-// ── RDRA全体図エミッタ (Mermaid) ──────────────────────────────────────────────
+// ── RDRA グラフ図エミッタ (Mermaid) ─────────────────────────────────────────
 
 pub struct RdraMermaidEmitter;
 
-fn render_mermaid_rdra_node_declarations(
-    out: &mut String,
-    model: &SemanticModel,
-    reachable: &Option<HashSet<NodeRef>>,
-    view: &View,
-) {
-    let mut actors: Vec<_> = model.actors.iter().collect();
-    actors.sort_by_key(|(_, actor)| &actor.id);
-    for (key, actor) in &actors {
-        let node = NodeRef::Actor(*key);
-        if graph_node_visible(reachable, view, &node) {
-            out.push_str(&format!(
-                "  {}([\"{}\"])\n",
-                actor.id,
-                prefixed_node_label(&node, &actor.label)
-            ));
-        }
-    }
-
-    let mut usecases: Vec<_> = model.use_cases.iter().collect();
-    usecases.sort_by_key(|(_, usecase)| &usecase.id);
-    for (key, usecase) in &usecases {
-        let node = NodeRef::UseCase(*key);
-        if graph_node_visible(reachable, view, &node) {
-            out.push_str(&format!(
-                "  {}([\"{}\"])\n",
-                usecase.id,
-                prefixed_node_label(&node, &usecase.label)
-            ));
-        }
-    }
-
-    let mut bucs: Vec<_> = model.bucs.iter().collect();
-    bucs.sort_by_key(|(_, buc)| &buc.id);
-    for (key, buc) in &bucs {
-        let node = NodeRef::Buc(*key);
-        if graph_node_visible(reachable, view, &node) {
-            out.push_str(&format!(
-                "  {}[\"{}\"]\n",
-                buc.id,
-                prefixed_node_label(&node, &buc.label)
-            ));
-        }
-    }
-
-    let mut flows: Vec<_> = model.flows.iter().collect();
-    flows.sort_by_key(|(_, flow)| &flow.id);
-    for (key, flow) in &flows {
-        let node = NodeRef::Flow(*key);
-        if graph_node_visible(reachable, view, &node) {
-            out.push_str(&format!(
-                "  {}[\"{}\"]\n",
-                flow.id,
-                prefixed_node_label(&node, &flow.label)
-            ));
-        }
-    }
-
-    let mut steps: Vec<_> = model.steps.iter().collect();
-    steps.sort_by_key(|(_, step)| &step.id);
-    for (key, step) in &steps {
-        let node = NodeRef::Step(*key);
-        if graph_node_visible(reachable, view, &node) {
-            out.push_str(&format!(
-                "  {}([\"{}\"])\n",
-                step.id,
-                prefixed_node_label(&node, &step.label)
-            ));
-        }
-    }
-
-    let mut systems: Vec<_> = model.systems.iter().collect();
-    systems.sort_by_key(|(_, system)| &system.id);
-    for (key, system) in &systems {
-        let node = NodeRef::System(*key);
-        if graph_node_visible(reachable, view, &node) {
-            out.push_str(&format!(
-                "  {}[\"{}\"]\n",
-                system.id,
-                prefixed_node_label(&node, &system.label)
-            ));
-        }
-    }
-
-    let mut ext_systems: Vec<_> = model.ext_systems.iter().collect();
-    ext_systems.sort_by_key(|(_, ext_system)| &ext_system.id);
-    for (key, ext_system) in &ext_systems {
-        let node = NodeRef::ExtSystem(*key);
-        if graph_node_visible(reachable, view, &node) {
-            out.push_str(&format!(
-                "  {}[/\"{}\"/]\n",
-                ext_system.id,
-                prefixed_node_label(&node, &ext_system.label)
-            ));
-        }
-    }
-
-    let mut entities: Vec<_> = model.entities.iter().collect();
-    entities.sort_by_key(|(_, entity)| &entity.id);
-    for (key, entity) in &entities {
-        let node = NodeRef::Entity(*key);
-        if graph_node_visible(reachable, view, &node) {
-            out.push_str(&format!(
-                "  {}[(\"{}\")]\n",
-                entity.id,
-                prefixed_node_label(&node, &entity.label)
-            ));
-        }
-    }
-
-    let mut screens: Vec<_> = model.screens.iter().collect();
-    screens.sort_by_key(|(_, screen)| &screen.id);
-    for (key, screen) in &screens {
-        let node = NodeRef::Screen(*key);
-        if graph_node_visible(reachable, view, &node) {
-            out.push_str(&format!(
-                "  {}[[\"{}\"]]\n",
-                screen.id,
-                prefixed_node_label(&node, &screen.label)
-            ));
-        }
-    }
-
-    let mut fields: Vec<_> = model.fields.iter().collect();
-    fields.sort_by_key(|(_, field)| &field.id);
-    for (key, field) in &fields {
-        let node = NodeRef::Field(*key);
-        if graph_node_visible(reachable, view, &node) {
-            out.push_str(&format!(
-                "  {}[[\"{}\"]]\n",
-                field.id,
-                prefixed_node_label(&node, &field.label)
-            ));
-        }
-    }
-
-    let mut events: Vec<_> = model.events.iter().collect();
-    events.sort_by_key(|(_, event)| &event.id);
-    for (key, event) in &events {
-        let node = NodeRef::Event(*key);
-        if graph_node_visible(reachable, view, &node) {
-            out.push_str(&format!(
-                "  {}{{\"{}\"}}\n",
-                event.id,
-                prefixed_node_label(&node, &event.label)
-            ));
-        }
-    }
-
-    let mut states: Vec<_> = model.states.iter().collect();
-    states.sort_by_key(|(_, state)| &state.id);
-    for (key, state) in &states {
-        let node = NodeRef::State(*key);
-        if graph_node_visible(reachable, view, &node) {
-            out.push_str(&format!(
-                "  {}(\"{}\")  \n",
-                state.id,
-                prefixed_node_label(&node, &state.label)
-            ));
-        }
-    }
-}
-
 impl Emitter for RdraMermaidEmitter {
-    fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
-        let reachable = reachable_for_scope(model, &view.scope);
-        let mut out = String::new();
-        out.push_str("graph TD\n");
-        render_mermaid_rdra_node_declarations(&mut out, model, &reachable, view);
-        render_relations(&mut out, model, &reachable, view);
-        if view.show_descriptions {
-            let nodes: Vec<_> = rdra_description_nodes(model, &reachable)
-                .into_iter()
-                .filter(|node| view_node_visible(view, node))
-                .collect();
-            render_descriptions(&mut out, model, &nodes);
-        }
-
-        while out.ends_with("\n\n") {
-            out.pop();
-        }
-        Ok(out)
-    }
-}
-
-// ── RDRA レイヤ図エミッタ (Mermaid) ─────────────────────────────────────────
-
-pub struct ObjectGraphMermaidEmitter;
-
-impl Emitter for ObjectGraphMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         let reachable: Option<HashSet<NodeRef>> = match &view.scope {
             Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
@@ -315,146 +122,6 @@ impl Emitter for ObjectGraphMermaidEmitter {
         while out.ends_with("\n\n") {
             out.pop();
         }
-        Ok(out)
-    }
-}
-
-// ── Business area diagram (Mermaid) ──────────────────────────────────────────
-
-pub struct BusinessAreaMermaidEmitter;
-
-impl Emitter for BusinessAreaMermaidEmitter {
-    fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
-        let mut out = String::from("flowchart LR\n");
-        let mut nodes = HashSet::new();
-        let mut edges = HashSet::new();
-
-        for entry in derive_actor_input_inferences(model)
-            .into_iter()
-            .filter(|entry| business_input_visible(model, view, entry))
-        {
-            let actor = &model.actors[entry.actor];
-            let usecase = &model.use_cases[entry.usecase];
-            let entity = &model.entities[entry.entity];
-            let actor_id = business_actor_node_id(model, &entry);
-            let usecase_id = business_usecase_node_id(model, &entry);
-            let input_id = business_input_node_id(model, &entry);
-            let input_label = quote(&format!(
-                "{}.{}, {}",
-                entity.id,
-                entry.column,
-                entry.operation.as_str()
-            ));
-
-            if nodes.insert(actor_id.clone()) {
-                out.push_str(&format!(
-                    "  {}([\"{}\"])\n",
-                    actor_id,
-                    quote(&prefixed_label("Business Actor", &actor.label))
-                ));
-            }
-            if nodes.insert(input_id.clone()) {
-                out.push_str(&format!("  {}[\"{}\"]\n", input_id, input_label));
-            }
-            if nodes.insert(usecase_id.clone()) {
-                out.push_str(&format!(
-                    "  {}([\"{}\"])\n",
-                    usecase_id,
-                    quote(&prefixed_label("UseCase", &usecase.label))
-                ));
-            }
-
-            let actor_edge = format!("  {} --> {}\n", actor_id, input_id);
-            if edges.insert(actor_edge.clone()) {
-                out.push_str(&actor_edge);
-            }
-            let uc_edge = format!(
-                "  {} -->|{}| {}\n",
-                input_id,
-                entry.operation.as_str(),
-                usecase_id
-            );
-            if edges.insert(uc_edge.clone()) {
-                out.push_str(&uc_edge);
-            }
-        }
-
-        Ok(out)
-    }
-}
-
-// ── Technical area diagram (Mermaid) ─────────────────────────────────────────
-
-pub struct TechnicalAreaMermaidEmitter;
-
-impl Emitter for TechnicalAreaMermaidEmitter {
-    fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
-        let reachable = reachable_for_scope(model, &view.scope);
-        let mut out = String::from("flowchart LR\n");
-
-        for boundary in derive_system_boundaries(model) {
-            let system = &model.systems[boundary.system];
-            let apis: Vec<_> = boundary
-                .apis
-                .iter()
-                .copied()
-                .filter(|api| scoped_node_visible(&reachable, &NodeRef::Api(*api)))
-                .collect();
-            let entities: Vec<_> = boundary
-                .entities
-                .iter()
-                .copied()
-                .filter(|entity| scoped_node_visible(&reachable, &NodeRef::Entity(*entity)))
-                .collect();
-            if apis.is_empty() && entities.is_empty() {
-                continue;
-            }
-
-            let system_id = scoped_id("system", &system.id);
-            out.push_str(&format!(
-                "  subgraph {}[{}]\n",
-                system_id,
-                quote(&system.label)
-            ));
-            out.push_str("    direction TB\n");
-            for api in &apis {
-                let api_model = &model.apis[*api];
-                out.push_str(&format!(
-                    "    {}[\"{}\"]\n",
-                    technical_api_node_id(model, boundary.system, *api),
-                    quote(&prefixed_label("API", &api_model.label))
-                ));
-            }
-            for entity in &entities {
-                let entity_model = &model.entities[*entity];
-                out.push_str(&format!(
-                    "    {}[(\"{}\")]\n",
-                    technical_entity_node_id(model, boundary.system, *entity),
-                    quote(&prefixed_label("Entity", &entity_model.label))
-                ));
-            }
-            out.push_str("  end\n");
-
-            let entity_set: HashSet<_> = entities.iter().copied().collect();
-            for rel in &model.relations {
-                let (NodeRef::Api(api), NodeRef::Entity(entity)) = (&rel.from, &rel.to) else {
-                    continue;
-                };
-                if !apis.contains(api)
-                    || !entity_set.contains(entity)
-                    || !is_entity_operation(&rel.kind)
-                {
-                    continue;
-                }
-                out.push_str(&format!(
-                    "  {} -.->|{}| {}\n",
-                    technical_api_node_id(model, boundary.system, *api),
-                    object_graph_rel_label(&rel.kind),
-                    technical_entity_node_id(model, boundary.system, *entity)
-                ));
-            }
-        }
-
         Ok(out)
     }
 }
@@ -1024,168 +691,12 @@ impl Emitter for EventFlowMermaidEmitter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::diagram_common::{
-        declare_flow_node, model_from, relation_edge, render_event_flow, FlowNode,
-    };
+    use crate::diagram_common::{declare_flow_node, model_from, render_event_flow, FlowNode};
     use rdra_ish_core::build_model;
     use rdra_ish_syntax::parse;
 
     #[test]
-    fn test_rdra_mermaid_emit() {
-        let src = r#"
-actor Customer "顧客"
-usecase Browse "商品を探す"
-performs(Customer, Browse)
-"#;
-        let model = model_from(src);
-        let result = RdraMermaidEmitter.emit(&model, &View::whole()).unwrap();
-        assert!(result.contains("graph TD"));
-        assert!(result.contains("Customer"));
-        assert!(result.contains("顧客"));
-        assert!(result.contains("Browse"));
-        assert!(result.contains("商品を探す"));
-        assert!(result.contains("Customer --> Browse"));
-    }
-
-    #[test]
-    fn test_mermaid_rdra_relation_arrow_labels_and_overview_skips() {
-        assert_eq!(
-            relation_edge(&RelKind::Reads, "Browse", "Catalog").as_deref(),
-            Some("  Browse -.->|reads| Catalog\n")
-        );
-        assert_eq!(
-            relation_edge(&RelKind::RelateManyToOne, "Order", "Customer").as_deref(),
-            Some("  Order --- Customer\n")
-        );
-        assert_eq!(
-            relation_edge(&RelKind::Precedes, "ReviewCart", "AuthorizePayment").as_deref(),
-            Some("  ReviewCart -->|precedes| AuthorizePayment\n")
-        );
-        assert_eq!(
-            relation_edge(&RelKind::Branches, "ReviewCart", "PaymentFailed").as_deref(),
-            Some("  ReviewCart -.->|branches| PaymentFailed\n")
-        );
-        assert_eq!(
-            relation_edge(&RelKind::Excepts, "AuthorizePayment", "PaymentFailed").as_deref(),
-            Some("  AuthorizePayment -.->|excepts| PaymentFailed\n")
-        );
-        assert_eq!(
-            relation_edge(&RelKind::Repeats, "PaymentFailed", "ReviewCart").as_deref(),
-            Some("  PaymentFailed -.->|repeats| ReviewCart\n")
-        );
-        assert_eq!(
-            relation_edge(&RelKind::Covers, "AuthorizePayment", "CapturePayment").as_deref(),
-            Some("  AuthorizePayment -.->|covers| CapturePayment\n")
-        );
-        assert_eq!(
-            relation_edge(&RelKind::Compensates, "RefundPayment", "CapturePayment").as_deref(),
-            Some("  RefundPayment -.->|compensates| CapturePayment\n")
-        );
-        assert!(relation_edge(&RelKind::Transitions, "Draft", "Published").is_none());
-        assert!(relation_edge(&RelKind::Invokes, "Browse", "BrowseApi").is_none());
-    }
-
-    #[test]
-    fn test_mermaid_rdra_render_helpers_keep_nodes_relations_and_api_out_of_overview() {
-        let src = r#"
-actor Customer "顧客"
-usecase Browse "商品を探す"
-api BrowseApi "商品API"
-entity Catalog "商品台帳" { id: Int @pk }
-performs(Customer, Browse)
-reads(Browse, Catalog)
-invokes(Browse, BrowseApi)
-"#;
-        let model = model_from(src);
-        let reachable = None;
-        let mut declarations = String::new();
-        render_mermaid_rdra_node_declarations(
-            &mut declarations,
-            &model,
-            &reachable,
-            &View::whole(),
-        );
-        assert!(declarations.contains("Customer([\"👤 顧客\"])"));
-        assert!(declarations.contains("Browse([\"✅ 商品を探す\"])"));
-        assert!(declarations.contains("Catalog[(\"🗄️ 商品台帳\")]"));
-        assert!(!declarations.contains("BrowseApi"));
-
-        let mut relations = String::new();
-        render_relations(&mut relations, &model, &reachable, &View::whole());
-        assert!(relations.contains("Customer --> Browse"));
-        assert!(relations.contains("Browse -.->|reads| Catalog"));
-        assert!(!relations.contains("BrowseApi"));
-    }
-
-    #[test]
-    fn test_business_area_mermaid_emit() {
-        let src = r#"
-actor Staff "Staff"
-buc BucScheduling "Scheduling"
-usecase BookAppointment "Book Appointment"
-entity Appointment "Appointment" { id: Int @pk  patient_name: String }
-performs(Staff, BucScheduling)
-contains(BucScheduling, BookAppointment)
-creates(BookAppointment, Appointment)
-"#;
-        let model = model_from(src);
-        let result = BusinessAreaMermaidEmitter
-            .emit(&model, &View::whole())
-            .unwrap();
-        assert!(result.contains("flowchart LR"));
-        assert!(result.contains("Business Actor Staff"));
-        assert!(result.contains("Appointment.patient_name, create"));
-        assert!(result.contains("-->|create| usecase__BookAppointment"));
-        assert!(!result.contains("BucScheduling["));
-    }
-
-    #[test]
-    fn test_business_area_mermaid_disambiguates_actor_and_usecase_ids() {
-        let src = r#"
-actor Same "Actor Same"
-buc BucA "BUC A"
-usecase Same "UseCase Same"
-entity Thing "Thing" { id: Int @pk  name: String }
-performs(actor::Same, BucA)
-contains(BucA, usecase::Same)
-creates(usecase::Same, Thing)
-"#;
-        let model = model_from(src);
-        let entries = derive_actor_input_inferences(&model);
-        let entry = entries.first().unwrap();
-        assert_eq!(business_actor_node_id(&model, entry), "actor__Same");
-        assert_eq!(business_usecase_node_id(&model, entry), "usecase__Same");
-
-        let result = BusinessAreaMermaidEmitter
-            .emit(&model, &View::whole())
-            .unwrap();
-        assert!(result.contains("actor__Same([\"Business Actor Actor Same\"]"));
-        assert!(result.contains("usecase__Same([\"UseCase UseCase Same\"]"));
-        assert!(result.contains("actor__Same --> input__Same_Same_Thing_name"));
-        assert!(result.contains("input__Same_Same_Thing_name -->|create| usecase__Same"));
-    }
-
-    #[test]
-    fn test_technical_area_mermaid_emit() {
-        let src = r#"
-system SchedulingSystem "Scheduling System"
-api BookingApi "Booking API"
-entity Appointment "Appointment" { id: Int @pk }
-contains(SchedulingSystem, BookingApi)
-creates(BookingApi, Appointment)
-"#;
-        let model = model_from(src);
-        let result = TechnicalAreaMermaidEmitter
-            .emit(&model, &View::whole())
-            .unwrap();
-        assert!(result.contains("subgraph system__SchedulingSystem[Scheduling System]"));
-        assert!(result.contains("API Booking API"));
-        assert!(result.contains("Entity Appointment"));
-        assert!(result.contains("-.->|creates|"));
-    }
-
-    #[test]
-    fn test_object_graph_mermaid_layers() {
+    fn test_rdra_mermaid_layers() {
         let src = r#"
 actor Customer "顧客"
 buc BucOrder "注文業務"
@@ -1200,9 +711,7 @@ invokes(PlaceOrder, OrderApi)
 creates(OrderApi, Order)
 "#;
         let model = model_from(src);
-        let result = ObjectGraphMermaidEmitter
-            .emit(&model, &View::whole())
-            .unwrap();
+        let result = RdraMermaidEmitter.emit(&model, &View::whole()).unwrap();
         assert!(result.contains("flowchart LR"));
         assert!(result.contains("subgraph layer_value[System Value]"));
         assert!(result.contains("subgraph layer_environment[External Environment]"));
@@ -1228,7 +737,7 @@ creates(OrderApi, Order)
     }
 
     #[test]
-    fn test_object_graph_mermaid_applies_node_and_edge_filters() {
+    fn test_rdra_mermaid_applies_node_and_edge_filters() {
         let src = r#"
 actor Customer "Customer"
 usecase PlaceOrder "Place order"
@@ -1244,7 +753,7 @@ creates(OrderApi, Order)
             vec!["invokes".to_string()],
         );
 
-        let result = ObjectGraphMermaidEmitter.emit(&model, &view).unwrap();
+        let result = RdraMermaidEmitter.emit(&model, &view).unwrap();
 
         assert!(result.contains("PlaceOrder([\"✅ Place order\"])"));
         assert!(result.contains("OrderApi[\"🔌 Order API\"]"));
@@ -1356,7 +865,7 @@ transitions(Acct.status, Thaw, frozen -> active)
     }
 
     #[test]
-    fn test_object_graph_mermaid_draws_a_condition_with_its_derived_links() {
+    fn test_rdra_mermaid_draws_a_condition_with_its_derived_links() {
         let src = r#"
 variation Method "Method" {
   cash
@@ -1374,9 +883,7 @@ holds(Insured, Pay.method == card, Pay.status == paid)
 applies_to(Insured, Collect)
 "#;
         let model = model_from(src);
-        let result = ObjectGraphMermaidEmitter
-            .emit(&model, &View::whole())
-            .unwrap();
+        let result = RdraMermaidEmitter.emit(&model, &View::whole()).unwrap();
         assert!(result.contains("Insured{\"🔀 Insured\"}"), "{result}");
         assert!(result.contains("Method[\"🎚️ Method\"]"), "{result}");
         assert!(result.contains("Insured -.->|combines| Method"), "{result}");

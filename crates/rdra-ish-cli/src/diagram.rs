@@ -7,9 +7,8 @@ use rdra_ish_core::SemanticModel;
 use rdra_ish_emit::{
     diff::DiffMermaidEmitter,
     mermaid::{
-        BusinessAreaMermaidEmitter, ErMermaidEmitter, EventFlowMermaidEmitter,
-        ObjectGraphMermaidEmitter, RdraMermaidEmitter, SequenceMermaidEmitter, StateMermaidEmitter,
-        TechnicalAreaMermaidEmitter,
+        ErMermaidEmitter, EventFlowMermaidEmitter, RdraMermaidEmitter, SequenceMermaidEmitter,
+        StateMermaidEmitter,
     },
     unknown_diagram_filter_kinds, Emitter, Filter, Scope, View,
 };
@@ -65,22 +64,17 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
         }
     }
 
-    if !usecase.is_empty() && !matches!(kind, DiagramKind::Sequence | DiagramKind::BusinessArea) {
-        anyhow::bail!(
-            "--usecase is currently supported only for --kind sequence and --kind business-area"
-        );
+    if !usecase.is_empty() && !matches!(kind, DiagramKind::Sequence) {
+        anyhow::bail!("--usecase is currently supported only for --kind sequence");
     }
     if !usecase.is_empty() && !buc.is_empty() {
         anyhow::bail!("--buc and --usecase cannot be combined");
     }
     if (!node_kind.is_empty() || !edge_kind.is_empty() || view_preset.is_some())
-        && !matches!(
-            kind,
-            DiagramKind::Rdra | DiagramKind::BoundarylessGraph | DiagramKind::Diff
-        )
+        && !matches!(kind, DiagramKind::Rdra | DiagramKind::Diff)
     {
         anyhow::bail!(
-            "--node-kind, --edge-kind, and --view-preset are currently supported only for --kind rdra, --kind boundaryless-graph, or --kind diff"
+            "--node-kind, --edge-kind, and --view-preset are currently supported only for --kind rdra or --kind diff"
         );
     }
     // Validate user-supplied kinds only (presets are authored from the known set).
@@ -133,13 +127,10 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
         }
         .with_graph_filters(node_kinds, edge_kinds),
         DiagramKind::Rdra
-        | DiagramKind::BoundarylessGraph
         | DiagramKind::State
         | DiagramKind::Sequence
         | DiagramKind::EventFlow
-        | DiagramKind::Diff
-        | DiagramKind::BusinessArea
-        | DiagramKind::TechnicalArea => View {
+        | DiagramKind::Diff => View {
             scope,
             filter: Filter::None,
             show_descriptions: show_description,
@@ -184,8 +175,7 @@ fn emit_diagram(
     diff_base: &[PathBuf],
 ) -> Result<String> {
     match kind {
-        DiagramKind::Rdra => Ok(ObjectGraphMermaidEmitter.emit(model, view)?),
-        DiagramKind::BoundarylessGraph => Ok(RdraMermaidEmitter.emit(model, view)?),
+        DiagramKind::Rdra => Ok(RdraMermaidEmitter.emit(model, view)?),
         DiagramKind::Er => Ok(ErMermaidEmitter.emit(model, view)?),
         DiagramKind::State => Ok(StateMermaidEmitter.emit(model, view)?),
         DiagramKind::Sequence => Ok(SequenceMermaidEmitter.emit(model, view)?),
@@ -196,7 +186,5 @@ fn emit_diagram(
             reject_state_errors(&program, &base_model)?;
             Ok(DiffMermaidEmitter { base: &base_model }.emit_diff(model, view)?)
         }
-        DiagramKind::BusinessArea => Ok(BusinessAreaMermaidEmitter.emit(model, view)?),
-        DiagramKind::TechnicalArea => Ok(TechnicalAreaMermaidEmitter.emit(model, view)?),
     }
 }

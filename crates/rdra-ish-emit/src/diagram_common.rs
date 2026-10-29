@@ -1,15 +1,12 @@
 //! Helpers the Mermaid emitters share.
 
-use crate::{
-    node_description, object_graph_rel_label, prefixed_label, view_node_visible,
-    view_relation_visible, Scope, View,
-};
+use crate::{node_description, prefixed_label, Scope};
 use rdra_ish_core::lifecycle::{Bounds, Scope as LifecycleScope, TransitionSystem};
 use rdra_ish_core::model::{
-    ApiKey, BucKey, ColumnType, EntityKey, EventKey, ExtSystemKey, NodeRef, Raiser, RelKind,
-    SemanticModel, StateKey, TimerKey, UseCaseKey,
+    BucKey, ColumnType, EntityKey, EventKey, ExtSystemKey, NodeRef, Raiser, RelKind, SemanticModel,
+    StateKey, TimerKey, UseCaseKey,
 };
-use rdra_ish_core::{ActorInputInference, EventFlow, TimerFlow};
+use rdra_ish_core::{EventFlow, TimerFlow};
 use std::collections::{HashMap, HashSet};
 
 /// Start states of the lifecycle columns the visible transitions name, read from the
@@ -117,114 +114,6 @@ pub(crate) fn col_type_str(model: &SemanticModel, ct: &ColumnType) -> String {
     }
 }
 
-pub(crate) fn graph_node_visible(
-    reachable: &Option<HashSet<NodeRef>>,
-    view: &View,
-    node: &NodeRef,
-) -> bool {
-    scoped_node_visible(reachable, node) && view_node_visible(view, node)
-}
-
-pub(crate) fn rdra_description_nodes(
-    model: &SemanticModel,
-    reachable: &Option<HashSet<NodeRef>>,
-) -> Vec<NodeRef> {
-    let mut nodes = Vec::new();
-    nodes.extend(
-        model
-            .actors
-            .iter()
-            .map(|(key, _)| NodeRef::Actor(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .adrs
-            .iter()
-            .map(|(key, _)| NodeRef::Adr(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .use_cases
-            .iter()
-            .map(|(key, _)| NodeRef::UseCase(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .bucs
-            .iter()
-            .map(|(key, _)| NodeRef::Buc(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .flows
-            .iter()
-            .map(|(key, _)| NodeRef::Flow(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .steps
-            .iter()
-            .map(|(key, _)| NodeRef::Step(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .systems
-            .iter()
-            .map(|(key, _)| NodeRef::System(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .ext_systems
-            .iter()
-            .map(|(key, _)| NodeRef::ExtSystem(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .entities
-            .iter()
-            .map(|(key, _)| NodeRef::Entity(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .screens
-            .iter()
-            .map(|(key, _)| NodeRef::Screen(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .fields
-            .iter()
-            .map(|(key, _)| NodeRef::Field(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .events
-            .iter()
-            .map(|(key, _)| NodeRef::Event(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.extend(
-        model
-            .states
-            .iter()
-            .map(|(key, _)| NodeRef::State(key))
-            .filter(|node| scoped_node_visible(reachable, node)),
-    );
-    nodes.sort_by_key(|node| node_id(model, node).unwrap_or_default().to_string());
-    nodes
-}
-
 pub(crate) fn sequence_usecase_scope(
     model: &SemanticModel,
     scope: &Scope,
@@ -268,82 +157,6 @@ pub(crate) fn sequence_usecase_scope(
     }
 }
 
-pub(crate) fn business_input_visible(
-    model: &SemanticModel,
-    view: &View,
-    entry: &ActorInputInference,
-) -> bool {
-    match &view.scope {
-        Scope::Whole => true,
-        Scope::UseCases(usecase_ids) => usecase_ids
-            .iter()
-            .any(|id| id == &model.use_cases[entry.usecase].id),
-        Scope::Bucs(buc_ids) => entry
-            .buc
-            .is_some_and(|buc| buc_ids.iter().any(|id| id == &model.bucs[buc].id)),
-    }
-}
-
-pub(crate) fn business_input_node_id(model: &SemanticModel, entry: &ActorInputInference) -> String {
-    scoped_id(
-        "input",
-        &format!(
-            "{}_{}_{}_{}",
-            model.actors[entry.actor].id,
-            model.use_cases[entry.usecase].id,
-            model.entities[entry.entity].id,
-            entry.column
-        ),
-    )
-}
-
-pub(crate) fn business_actor_node_id(model: &SemanticModel, entry: &ActorInputInference) -> String {
-    scoped_id("actor", &model.actors[entry.actor].id)
-}
-
-pub(crate) fn business_usecase_node_id(
-    model: &SemanticModel,
-    entry: &ActorInputInference,
-) -> String {
-    scoped_id("usecase", &model.use_cases[entry.usecase].id)
-}
-
-pub(crate) fn technical_api_node_id(
-    model: &SemanticModel,
-    system: rdra_ish_core::SystemKey,
-    api: ApiKey,
-) -> String {
-    scoped_id(
-        "api",
-        &format!("{}_{}", model.systems[system].id, model.apis[api].id),
-    )
-}
-
-pub(crate) fn technical_entity_node_id(
-    model: &SemanticModel,
-    system: rdra_ish_core::SystemKey,
-    entity: EntityKey,
-) -> String {
-    scoped_id(
-        "entity",
-        &format!("{}_{}", model.systems[system].id, model.entities[entity].id),
-    )
-}
-
-pub(crate) fn scoped_id(prefix: &str, raw: &str) -> String {
-    let safe: String = raw
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() || ch == '_' {
-                ch
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    format!("{}__{}", prefix, safe)
-}
-
 pub(crate) fn reachable_for_scope(
     model: &SemanticModel,
     scope: &Scope,
@@ -361,23 +174,12 @@ pub(crate) fn scoped_node_visible(reachable: &Option<HashSet<NodeRef>>, node: &N
     }
 }
 
-pub(crate) fn is_entity_operation(kind: &RelKind) -> bool {
-    matches!(
-        kind,
-        RelKind::Reads | RelKind::Writes | RelKind::Creates | RelKind::Updates | RelKind::Deletes
-    )
-}
-
 /// An edge the shared emitters draw.
 pub(crate) enum Link<'a> {
-    /// Solid arrow, no label.
-    Arrow,
     /// Solid arrow with a label.
     Labeled(&'a str),
     /// Dotted arrow with a label.
     Dotted(&'a str),
-    /// Plain line.
-    Undirected,
 }
 
 /// `label` safe inside a double-quoted string.
@@ -388,53 +190,9 @@ pub(crate) fn quote(label: &str) -> String {
 /// One edge statement, newline included.
 pub(crate) fn link_statement(link: Link, from: &str, to: &str) -> String {
     match link {
-        Link::Arrow => format!("  {from} --> {to}\n"),
         Link::Labeled(label) => format!("  {from} -->|{label}| {to}\n"),
         Link::Dotted(label) => format!("  {from} -.->|{label}| {to}\n"),
-        Link::Undirected => format!("  {from} --- {to}\n"),
     }
-}
-
-/// The edge the RDRA graph draws for a relation, or `None` for the kinds it leaves out.
-pub(crate) fn relation_edge(kind: &RelKind, from: &str, to: &str) -> Option<String> {
-    let label = object_graph_rel_label(kind);
-    let link = match kind {
-        RelKind::Transitions | RelKind::Invokes => return None,
-        RelKind::Performs | RelKind::Contains | RelKind::Belongs => Link::Arrow,
-        RelKind::Precedes | RelKind::Owns => Link::Labeled(label),
-        RelKind::RelateOneToOne
-        | RelKind::RelateOneToMany
-        | RelKind::RelateManyToOne
-        | RelKind::RelateManyToMany => Link::Undirected,
-        RelKind::Reads
-        | RelKind::Writes
-        | RelKind::Creates
-        | RelKind::Updates
-        | RelKind::Deletes
-        | RelKind::Displays
-        | RelKind::Shows
-        | RelKind::Raises
-        | RelKind::Triggers
-        | RelKind::HasPermission
-        | RelKind::RequiresPermission
-        | RelKind::RequiresMedium
-        | RelKind::Motivates
-        | RelKind::Decides
-        | RelKind::Branches
-        | RelKind::Excepts
-        | RelKind::Repeats
-        | RelKind::Covers
-        | RelKind::Compensates
-        | RelKind::Request
-        | RelKind::Response
-        | RelKind::ErrorResponse
-        | RelKind::AppliesTo
-        | RelKind::Combines
-        | RelKind::Qualifies
-        | RelKind::Constrains
-        | RelKind::MapsField => Link::Dotted(label),
-    };
-    Some(link_statement(link, from, to))
 }
 
 /// A note per node that has a description, attached to the node.
@@ -452,35 +210,6 @@ pub(crate) fn render_descriptions(out: &mut String, model: &SemanticModel, nodes
         let description = quote(description).replace('\n', "<br/>");
         out.push_str(&format!("  {}[\"{}\"]\n", note_id, description));
         out.push_str(&format!("  {} -. description .- {}\n", note_id, id));
-    }
-}
-
-/// The edges between the visible nodes of the RDRA graph, in a stable order.
-pub(crate) fn render_relations(
-    out: &mut String,
-    model: &SemanticModel,
-    reachable: &Option<HashSet<NodeRef>>,
-    view: &View,
-) {
-    let mut relations: Vec<_> = model.relations.iter().collect();
-    relations.sort_by_key(|relation| format!("{:?}{:?}", relation.from, relation.to));
-    for relation in &relations {
-        if !graph_node_visible(reachable, view, &relation.from)
-            || !graph_node_visible(reachable, view, &relation.to)
-            || !view_relation_visible(view, &relation.kind)
-        {
-            continue;
-        }
-        if matches!(&relation.from, NodeRef::Api(_)) || matches!(&relation.to, NodeRef::Api(_)) {
-            continue;
-        }
-        if let (Some(from_id), Some(to_id)) =
-            (node_id(model, &relation.from), node_id(model, &relation.to))
-        {
-            if let Some(edge) = relation_edge(&relation.kind, from_id, to_id) {
-                out.push_str(&edge);
-            }
-        }
     }
 }
 

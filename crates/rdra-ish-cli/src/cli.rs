@@ -58,6 +58,21 @@ const REMOVED_FORMATS: &[(&str, &str)] = &[
     ("png", MERMAID_ONLY),
 ];
 
+const REMOVED_DIAGRAM_KINDS: &[(&str, &str)] = &[
+    (
+        "boundaryless-graph",
+        "use `--kind rdra`, which draws the same elements and relations in the RDRA layers; narrow it with `--node-kind` / `--edge-kind`",
+    ),
+    (
+        "business-area",
+        "use `csv --kind business-inputs`, which lists the same inferred actor input fields per use case",
+    ),
+    (
+        "technical-area",
+        "use `csv --kind api-matrix` for the API x entity CRUD, or `--kind rdra --node-kind system --node-kind api --node-kind entity`",
+    ),
+];
+
 const REMOVED_EXPORT_KINDS: &[(&str, &str)] =
     &[("plantuml-er", "use `--kind mermaid-er` (writes `er.mmd`)")];
 
@@ -120,8 +135,8 @@ pub(crate) enum Commands {
     Diagram {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Diagram kind: rdra, boundaryless-graph, er, state, sequence, event-flow, diff, business-area, or technical-area
-        #[arg(long, default_value = "rdra")]
+        /// Diagram kind: rdra, er, state, sequence, event-flow, or diff
+        #[arg(long, default_value = "rdra", value_parser = WithRemoved::<DiagramKind>::new(REMOVED_DIAGRAM_KINDS))]
         kind: DiagramKind,
         /// Output format: mermaid, the only one (writes <out>.mmd)
         #[arg(long, default_value = "mermaid", value_parser = WithRemoved::<OutputFormat>::new(REMOVED_FORMATS))]
@@ -141,11 +156,11 @@ pub(crate) enum Commands {
         #[arg(long)]
         show_description: bool,
         /// Filter graph diagrams to one or more node kinds; repeatable.
-        /// Applies to --kind rdra, --kind boundaryless-graph, and --kind diff.
+        /// Applies to --kind rdra and --kind diff.
         #[arg(long = "node-kind", alias = "kind-filter")]
         node_kind: Vec<String>,
         /// Filter graph diagrams to one or more edge/relation kinds; repeatable.
-        /// Applies to --kind rdra, --kind boundaryless-graph, and --kind diff.
+        /// Applies to --kind rdra and --kind diff.
         #[arg(long = "edge-kind", alias = "edge-filter")]
         edge_kind: Vec<String>,
         /// Apply a graph view preset: business, system, data, api, or ui.
@@ -273,8 +288,6 @@ pub(crate) enum VerifyBackend {
 pub(crate) enum DiagramKind {
     /// RDRA layered graph mapped onto the original RDRA-style structure
     Rdra,
-    /// Boundaryless relationship graph kept for dense link inspection
-    BoundarylessGraph,
     Er,
     State,
     /// Write-focused sequence diagram with FK-inferred transaction boundaries
@@ -283,10 +296,6 @@ pub(crate) enum DiagramKind {
     EventFlow,
     /// Model graph diff between --diff-base and current inputs
     Diff,
-    /// Business area diagram: Actor -> input field -> UseCase
-    BusinessArea,
-    /// Technical area diagram: System boxes containing only APIs and Entities
-    TechnicalArea,
 }
 
 impl DiagramKind {
@@ -373,7 +382,7 @@ mod tests {
             "diagram",
             "sample.rdra",
             "--kind",
-            "business-area",
+            "sequence",
             "--format",
             "mermaid",
             "--buc",
@@ -407,7 +416,7 @@ mod tests {
                 out,
             } => {
                 assert_eq!(inputs, vec![PathBuf::from("sample.rdra")]);
-                assert!(matches!(kind, DiagramKind::BusinessArea));
+                assert!(matches!(kind, DiagramKind::Sequence));
                 assert!(matches!(format, OutputFormat::Mermaid));
                 assert_eq!(buc, vec!["BucScheduling"]);
                 assert_eq!(usecase, vec!["BookAppointment"]);
@@ -758,6 +767,28 @@ mod tests {
             assert!(
                 message.contains(&format!("`--format {format}` is no longer supported"))
                     && message.contains("`--format mermaid`"),
+                "{message}"
+            );
+        }
+        let message = parse_error(&["rdra-ish", "export", "m.rdra", "--kind", "plantuml-er"]);
+        assert!(
+            message.contains("`--kind plantuml-er` is no longer supported")
+                && message.contains("`--kind mermaid-er`"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn removed_diagram_kinds_name_their_replacement() {
+        for (kind, replacement) in [
+            ("boundaryless-graph", "`--kind rdra`"),
+            ("business-area", "`csv --kind business-inputs`"),
+            ("technical-area", "`csv --kind api-matrix`"),
+        ] {
+            let message = parse_error(&["rdra-ish", "diagram", "m.rdra", "--kind", kind]);
+            assert!(
+                message.contains(&format!("`--kind {kind}` is no longer supported"))
+                    && message.contains(replacement),
                 "{message}"
             );
         }

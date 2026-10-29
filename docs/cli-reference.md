@@ -299,14 +299,14 @@ rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]...
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `rdra` \| `boundaryless-graph` \| `er` \| `state` \| `sequence` \| `event-flow` \| `diff` \| `business-area` \| `technical-area` | `rdra` | The diagram kind. `rdra` = RDRA layered graph mapped onto the original four-layer structure; `boundaryless-graph` = dense relationship graph without RDRA layer boundaries; `er` = entity-relationship diagram; `state` = state machine; `sequence` = write-focused sequence diagram with FK-inferred transaction boundaries; `event-flow` = event causality graph showing UC or ExtSystem->Event->UC/BUC/ExtSystem and Event->State chains, plus Timer->UC/BUC edges; `diff` = graph diff between `--diff-base` and current inputs; `business-area` = Actor -> input field -> UseCase; `technical-area` = System boxes containing only APIs and Entities. |
+| `--kind` | `rdra` \| `er` \| `state` \| `sequence` \| `event-flow` \| `diff` | `rdra` | The diagram kind. `rdra` = RDRA layered graph mapped onto the original four-layer structure; `er` = entity-relationship diagram; `state` = state machine; `sequence` = write-focused sequence diagram with FK-inferred transaction boundaries; `event-flow` = event causality graph showing UC or ExtSystem->Event->UC/BUC/ExtSystem and Event->State chains, plus Timer->UC/BUC edges; `diff` = graph diff between `--diff-base` and current inputs. `boundaryless-graph`, `business-area`, and `technical-area` were removed and fail with a message that names the replacement: `rdra` (narrowed with `--node-kind` / `--edge-kind`), `csv --kind business-inputs`, and `csv --kind api-matrix`. |
 | `--format` | `mermaid` | `mermaid` | Output format. Mermaid text (`.mmd`) is the only one. `puml`, `svg`, and `png` were removed and fail with a message that names `--format mermaid`; to get an image, render the `.mmd` with `mmdc` or any Mermaid-aware tool. |
-| `--buc <id>` | string (repeatable) | — (whole model) | Filter to one or more BUCs by id. With multiple ids, the **union** of reachable nodes across the named BUCs is shown. Applies to all diagram kinds. For `sequence` and `business-area`, only use cases directly contained in the selected BUCs are shown; event-triggered use cases in other BUCs are left to `event-flow`. |
-| `--usecase <id>` | string (repeatable) | — (whole model) | Filter `sequence` or `business-area` diagrams to one or more use cases by id. Cannot be combined with `--buc`. |
+| `--buc <id>` | string (repeatable) | — (whole model) | Filter to one or more BUCs by id. With multiple ids, the **union** of reachable nodes across the named BUCs is shown. Applies to all diagram kinds. For `sequence`, only use cases directly contained in the selected BUCs are shown; event-triggered use cases in other BUCs are left to `event-flow`. |
+| `--usecase <id>` | string (repeatable) | — (whole model) | Filter `sequence` diagrams to one or more use cases by id. Cannot be combined with `--buc`. |
 | `--diff-base <path>` | path (repeatable) | — | Baseline model inputs for `--kind diff`. The normal `<INPUTS...>` are treated as the target model. |
-| `--show-description` | flag | off | Render element `description` metadata as diagram annotations where supported. Each description becomes a linked annotation node. Currently applies to `rdra` and `boundaryless-graph` diagram emitters. |
-| `--node-kind <kind>` | string (repeatable) | — (all nodes) | Filter graph diagrams to specific node kinds. Applies to `rdra`, `boundaryless-graph`, and `diff`. Examples: `actor`, `buc`, `flow`, `step`, `usecase`, `api`, `entity`, `field`. Alias: `--kind-filter`. |
-| `--edge-kind <kind>` | string (repeatable) | — (all edges) | Filter graph diagrams to specific relation kinds. Applies to `rdra`, `boundaryless-graph`, and `diff`. Examples: `contains`, `invokes`, `reads`, `writes`, `creates`, `maps-field`, `owns`, `relate`. Alias: `--edge-filter`. |
+| `--show-description` | flag | off | Render element `description` metadata as diagram annotations where supported. Each description becomes a linked annotation node. Currently applies to the `rdra` diagram. |
+| `--node-kind <kind>` | string (repeatable) | — (all nodes) | Filter graph diagrams to specific node kinds. Applies to `rdra` and `diff`. Examples: `actor`, `buc`, `flow`, `step`, `usecase`, `api`, `entity`, `field`. Alias: `--kind-filter`. |
+| `--edge-kind <kind>` | string (repeatable) | — (all edges) | Filter graph diagrams to specific relation kinds. Applies to `rdra` and `diff`. Examples: `contains`, `invokes`, `reads`, `writes`, `creates`, `maps-field`, `owns`, `relate`. Alias: `--edge-filter`. |
 | `--view-preset <preset>` | `business` \| `system` \| `data` \| `api` \| `ui` | — | Apply a graph filter preset. Explicit `--node-kind` or `--edge-kind` values override the preset for that dimension. |
 | `-o`, `--out` | path | `out` | Output file path. The `.mmd` extension is added automatically. |
 
@@ -321,9 +321,6 @@ Notes:
   endpoints are hidden; they do not change the model or diagnostics. Use `--view-preset`
   for common slices, then override with explicit `--node-kind` or `--edge-kind` when a
   review needs a sharper lens.
-- `boundaryless-graph` keeps its existing business/data focus and omits API nodes even
-  when graph filters are present. Use `--kind rdra --view-preset api` when API-contract
-  nodes should be part of the slice.
 - For `--kind sequence`, the tool additionally runs FK-based transaction-boundary
   inference and emits a `warning:` to stderr for any FK-isolated write within a use case
   that also has an FK-connected write group. API diagnostics (`ApiNeverInvoked`,
@@ -349,13 +346,6 @@ Notes:
   environment (`quality`, `constraint`, `business`, `buc`, `flow`, `step`, `timer`,
   `medium`, `permission`), system boundary (`usecase`, `screen`, `field`, `event`), and
   system (`system`, `api`, `dto`, `entity`, `state`).
-- For `--kind business-area`, the diagram shows only business actors, inferred input
-  fields, and use cases. The input nodes are derived from `business-inputs`.
-- For `--kind technical-area`, each system is rendered as a container holding only its
-  APIs and the entities those APIs operate through CRUD predicates.
-- For `--kind boundaryless-graph`, the same relationships are rendered as one flat graph
-  for dense link inspection. API nodes are omitted there so the graph stays focused on
-  business and data relationships.
 
 ---
 

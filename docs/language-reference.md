@@ -142,9 +142,9 @@ descriptions as review annotations where supported.
 | `actor` | A human actor who performs use cases. | `check` permission paths; sequence diagram participant; `csv --kind actor-permission-audit` |
 | `usecase` | A use case: a concrete interaction that reads and writes entities and displays screens. | `check`; `states`; all diagrams; `csv --kind matrix` |
 | `screen` | A screen (UI surface) displayed by use cases. | `lint` `screen-no-fields`; sequence diagram; `csv --kind screen-constraints` |
-| `field` | A screen field: a first-class UI input or output item. It can carry editability, requiredness, and actor or system source metadata, and can map to an entity column without becoming one. | `lint` `field-unmapped`, `field-unplaced`; business-area diagram |
+| `field` | A screen field: a first-class UI input or output item. It can carry editability, requiredness, and actor or system source metadata, and can map to an entity column without becoming one. | `lint` `field-unmapped`, `field-unplaced`; `csv --kind business-inputs` |
 | `event` | A domain event, the interface between use cases and between use cases and external systems, and a `raises` and `triggers` endpoint. | `check` raised-but-unconsumed; `states`; event-flow diagram; `export --kind asyncapi`, `tla` |
-| `system` | An internal system boundary. It groups APIs; its entity set is derived from those APIs' CRUD targets. | `lint` `stage-readiness` (its `system-boundary` stage needs a `system` and an `api`); `check` boundary diagnostics; technical-area diagram |
+| `system` | An internal system boundary. It groups APIs; its entity set is derived from those APIs' CRUD targets. | `lint` `stage-readiness` (its `system-boundary` stage needs a `system` and an `api`); `check` boundary diagnostics; `csv --kind api-matrix` |
 | `extsystem` | An external system. It reaches use cases through events: `raises(ExtSystem, Event)` for inbound, `triggers(Event, ExtSystem)` for outbound. See [External systems](#external-systems). | RDRA diagram (system-value layer) and event-flow diagram; `export --kind asyncapi` (publisher or subscriber); `check` raised-but-unconsumed; `lint` `orphan-node` |
 | `api` | An API layer endpoint invoked by a use case. It operates entities on behalf of the use case, defines an atomic data operation boundary, and may carry HTTP contract metadata. | `lint` `api-unused`, `api-contract-missing`, `api-contract-incomplete`; sequence diagram; `csv --kind api-matrix`; `export --kind openapi` |
 | `dto` | A request, response, or error payload shape used by API contracts. DTOs may carry a column-like field body but are kept separate from database entities. | `lint` `dto-unused`, `naming-dto-field`; `export --kind openapi`, `json-schema` |
@@ -636,8 +636,6 @@ updates(PlaceOrder, Cart)   // direct write still allowed (mixed form)
 **Other diagrams**:
 - `api` nodes are included in the RDRA layered graph (`--kind rdra`), where they appear
   in the system layer.
-- `api` nodes are intentionally omitted from the boundaryless relationship graph
-  (`--kind boundaryless-graph`) to keep that view focused on business and data links.
 - `api` nodes are also omitted from the event-flow diagram (`--kind event-flow`),
   because an API is not a participant in the raises/triggers/transitions causal chain.
 

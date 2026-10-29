@@ -13,6 +13,16 @@
   crate, the `rdra_ish_emit::plantuml` module, `DiffPlantUmlEmitter`, the
   `plantuml.jar` lookup, and `PLANTUML_JAR` are gone, as are the 15 `samples/*/out/*.puml`
   artifacts. The dev shell no longer provides PlantUML or OpenSSL.
+- `diagram --kind boundaryless-graph`, `--kind business-area`, and `--kind technical-area`
+  are removed, and each fails with a message that names its replacement.
+  `boundaryless-graph` drew the `rdra` graph without its layers and API nodes; use
+  `--kind rdra`, narrowed with `--node-kind` / `--edge-kind`. `business-area` drew the
+  rows of `csv --kind business-inputs`, and `technical-area` the API x entity CRUD of
+  `csv --kind api-matrix`; use those tables. `--usecase` now applies to `sequence` only,
+  and `--node-kind`, `--edge-kind`, and `--view-preset` to `rdra` and `diff`. In
+  `rdra_ish_emit::mermaid`, `RdraMermaidEmitter` is now the `rdra` emitter (it was
+  `ObjectGraphMermaidEmitter`); the old boundaryless `RdraMermaidEmitter`,
+  `BusinessAreaMermaidEmitter`, and `TechnicalAreaMermaidEmitter` are gone.
 - `verify` checks each temporal property in its own TLC run, because TLC does not name the
   property a temporal counterexample violates. The runs use the module
   `<whole>_<Property>` (`RdraSpec_NeverShipped`), the same module text and fairness as the

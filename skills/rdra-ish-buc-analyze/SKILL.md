@@ -57,8 +57,6 @@ rdra-ish list src/ --kind adr --format table
 rdra-ish csv src/ --kind matrix
 rdra-ish csv src/ --kind business-inputs
 rdra-ish csv src/ --kind api-matrix
-rdra-ish diagram src/ --kind business-area --format mermaid
-rdra-ish diagram src/ --kind technical-area --format mermaid
 rdra-ish csv src/ --kind screen-constraints
 rdra-ish csv src/ --kind permission-callables
 rdra-ish csv src/ --kind actor-permission-audit

@@ -99,8 +99,6 @@ rdra-ish check src/
 rdra-ish lint src/
 rdra-ish diagram src/ --kind er --format mermaid --buc BucOrder
 rdra-ish diagram src/ --kind sequence --format mermaid --buc BucOrder
-rdra-ish diagram src/ --kind business-area --format mermaid --buc BucOrder
-rdra-ish diagram src/ --kind technical-area --format mermaid --buc BucOrder
 rdra-ish csv src/ --kind api-matrix
 rdra-ish csv src/ --kind business-inputs
 rdra-ish csv src/ --kind actor-permission-audit

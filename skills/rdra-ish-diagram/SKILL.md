@@ -14,12 +14,12 @@ the selected view.
 
 | Situation | Use first | Load |
 |---|---|---|
-| Scope or BUC skeleton review | `rdra --buc <BucId>` | `references/layered-and-boundaryless.md` |
-| Dense relationship inspection | `boundaryless-graph` | `references/layered-and-boundaryless.md` |
-| Business object/data touchpoint review | `rdra --buc <BucId>` plus CRUD matrix | `references/layered-and-boundaryless.md` |
+| Scope or BUC skeleton review | `rdra --buc <BucId>` | `references/rdra-graph.md` |
+| Dense relationship inspection | `rdra` with `--node-kind` / `--edge-kind` | `references/rdra-graph.md` |
+| Business object/data touchpoint review | `rdra --buc <BucId>` plus CRUD matrix | `references/rdra-graph.md` |
 | Entity structure and relationships | `er`, optionally `--buc <BucId>` | `references/er.md` |
-| Actor-entered field review | `business-area --buc <BucId>` plus `business-inputs` | `references/sequence-and-access.md` |
-| System API/entity ownership review | `technical-area --buc <BucId>` plus API matrix | `references/sequence-and-access.md` |
+| Actor-entered field review | `csv --kind business-inputs` | `references/sequence-and-access.md` |
+| System API/entity ownership review | `csv --kind api-matrix` | `references/sequence-and-access.md` |
 | Screen/API/system boundary review | `sequence --buc <BucId>` plus access CSVs | `references/sequence-and-access.md` |
 | API contract or payload handoff | `export --kind openapi` plus API/DTO graph filter | `references/formats-and-output.md` |
 | Data contract handoff | `export --kind dbml` or `json-schema` plus ER | `references/formats-and-output.md` |
@@ -43,10 +43,11 @@ the selected view.
 ### Quick Choices
 
 - Use `rdra` when the question is "what business value/use cases are covered?"
-- Use `boundaryless-graph` when layered placement hides dense relationships.
 - Use `er` when the question is "what entities, columns, and relationships exist?"
-- Use `business-area` when the question is "which actor inputs which fields for which use cases?"
-- Use `technical-area` when the question is "which APIs and entities sit inside each system?"
+- Use `csv --kind business-inputs` when the question is "which actor inputs which fields
+  for which use cases?"
+- Use `csv --kind api-matrix` when the question is "which APIs and entities sit inside
+  each system?"
 - Use `sequence` when the question is "what actor/screen/API/entity path happens?"
 - Use `state` when the question is "what lifecycle states exist, and which use case
   moves each one?"
@@ -61,8 +62,7 @@ the selected view.
 
 ### Reference Files
 
-- `references/layered-and-boundaryless.md` — RDRA layered graph, boundaryless graph,
-  and early-stage model inspection.
+- `references/rdra-graph.md` — RDRA layered graph and early-stage model inspection.
 - `references/er.md` — ER diagram commands and relationship reading.
 - `references/sequence-and-access.md` — sequence diagrams plus access/media CSV views.
 - `references/lifecycle-and-events.md` — state diagrams, event-flow diagrams,

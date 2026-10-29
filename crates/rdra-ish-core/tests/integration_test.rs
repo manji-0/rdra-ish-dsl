@@ -1,7 +1,7 @@
 use rdra_ish_core::{build_merged_model, resolve, RdraError};
 use rdra_ish_emit::{
     csv::{EntityListCsvEmitter, RelationMatrixCsvEmitter},
-    mermaid::{ErMermaidEmitter, ObjectGraphMermaidEmitter, StateMermaidEmitter},
+    mermaid::{ErMermaidEmitter, RdraMermaidEmitter, StateMermaidEmitter},
     Emitter, View,
 };
 use std::path::PathBuf;
@@ -93,7 +93,7 @@ fn test_buc_diagram() {
 
     // Purchase BUC に絞った図を生成
     let view = View::bucs(vec!["Purchase".to_string()]);
-    let mermaid = ObjectGraphMermaidEmitter.emit(&model, &view).unwrap();
+    let mermaid = RdraMermaidEmitter.emit(&model, &view).unwrap();
 
     // Purchase BUC に関連する Customer と Browse は含まれる
     assert!(

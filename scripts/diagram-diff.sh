@@ -14,11 +14,12 @@
 #            removes the others: KINDS="rdra er" scripts/diagram-diff.sh BASE HEAD
 #   format   mermaid only, passed explicitly
 #   scope    no scope, each --buc, the first two --buc together, each --usecase
-#            (sequence and business-area, the only kinds that take it)
+#            (sequence, the only kind that takes it)
 #   options  --show-description; each --view-preset, --node-kind and --edge-kind on the
 #            kinds that take them
 #   diff     --kind diff across consecutive incremental-order steps and two unrelated roots
-#   errors   every option the CLI rejects, per root, and the removed --format values once
+#   errors   every option the CLI rejects, per root, and the removed --format and --kind
+#            values once
 set -uo pipefail
 
 base_bin="${1:?usage: scripts/diagram-diff.sh BASE_BIN HEAD_BIN}"
@@ -31,14 +32,14 @@ head_bin="$(cd "$(dirname "$head_bin")" && pwd)/$(basename "$head_bin")"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-read -r -a kinds <<<"${KINDS:-rdra boundaryless-graph er state sequence event-flow business-area technical-area diff}"
+read -r -a kinds <<<"${KINDS:-rdra er state sequence event-flow diff}"
 has_kind() { [[ " ${kinds[*]} " == *" $1 "* ]]; }
 only_kinds() { # kind...: those of the arguments that KINDS keeps
   local kind
   for kind in "$@"; do has_kind "$kind" && echo "$kind"; done
 }
-graph_kinds=($(only_kinds rdra boundaryless-graph))
-usecase_kinds=($(only_kinds sequence business-area))
+graph_kinds=($(only_kinds rdra))
+usecase_kinds=($(only_kinds sequence))
 presets=(business system data api ui)
 steps=(samples/incremental-order/step-*/src)
 
@@ -139,6 +140,9 @@ dump() { # label bin: one file per cell under $work/LABEL, numbered in run order
   for removed in puml svg png; do
     cell "samples/ec-site error format=$removed" samples/ec-site --format "$removed"
   done
+  for removed in boundaryless-graph business-area technical-area; do
+    cell "samples/ec-site error kind=$removed" samples/ec-site --kind "$removed"
+  done
 
   local pairs=() i
   for ((i = 1; i < ${#steps[@]}; i++)); do
@@ -177,6 +181,8 @@ cells="$(find "$work/head" -type f | wc -l | tr -d ' ')"
 differ="$(diff -rq "$work/base" "$work/head" | wc -l | tr -d ' ')"
 if [[ "$differ" -ne 0 ]]; then
   diff -r "$work/base" "$work/head" | head -200
+  echo "differing cells:"
+  diff -rq "$work/base" "$work/head" | awk '{print $4}' | while IFS= read -r f; do head -1 "$f"; done
 fi
 ok_cells="$(grep -lx "exit=0" "$work"/head/* | wc -l | tr -d " ")"
 echo "diagram-diff: $cells cells ($ok_cells exit 0, the rest pin error text)" >&2
