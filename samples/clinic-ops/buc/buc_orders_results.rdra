@@ -48,6 +48,9 @@ performs(Nurse, CollectSpecimen)
 performs(Nurse, RegisterPerformedProcedure)
 performs(Nurse, ReceiveLabResult)
 performs(Clinician, ReviewLabResult)
+// The lab reports a panic value to the ordering physician (medsafe-teigen20-panic.txt:74), who
+// checks the patient once they are reached (:714-715). No source names who places the call:
+// the physician is the model's assumption.
 performs(Clinician, NotifyCriticalResult)
 performs(Clinician, CancelClinicalOrder)
 belongs(BucOrdersResults, CareDelivery)

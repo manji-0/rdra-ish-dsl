@@ -84,30 +84,30 @@ sequenceDiagram
   deactivate PrepareEncounterApi
 
   Note over Nurse,Room: ✅ 資格確認結果（無効）の取込
-  ReceptionClerk->>EligibilityScreen: ✅ 資格確認結果（無効）の取込
+  System->>EligibilityScreen: ✅ 資格確認結果（無効）の取込
   EligibilityScreen->>EligibilityResultApi: ✅ 資格確認結果（無効）の取込
   activate EligibilityResultApi
   EligibilityResultApi->>EligibilityCheck: update
   EligibilityResultApi-->>EligibilityScreen: 🖥️ 資格確認画面
-  EligibilityScreen-->>ReceptionClerk: 🖥️ 資格確認画面
+  EligibilityScreen-->>System: 🖥️ 資格確認画面
   deactivate EligibilityResultApi
 
   Note over Nurse,Room: ✅ 資格確認結果（該当資格なし）の取込
-  ReceptionClerk->>EligibilityScreen: ✅ 資格確認結果（該当資格なし）の取込
+  System->>EligibilityScreen: ✅ 資格確認結果（該当資格なし）の取込
   EligibilityScreen->>EligibilityResultApi: ✅ 資格確認結果（該当資格なし）の取込
   activate EligibilityResultApi
   EligibilityResultApi->>EligibilityCheck: update
   EligibilityResultApi-->>EligibilityScreen: 🖥️ 資格確認画面
-  EligibilityScreen-->>ReceptionClerk: 🖥️ 資格確認画面
+  EligibilityScreen-->>System: 🖥️ 資格確認画面
   deactivate EligibilityResultApi
 
   Note over Nurse,Room: ✅ 資格確認結果（有効）の取込
-  ReceptionClerk->>EligibilityScreen: ✅ 資格確認結果（有効）の取込
+  System->>EligibilityScreen: ✅ 資格確認結果（有効）の取込
   EligibilityScreen->>EligibilityResultApi: ✅ 資格確認結果（有効）の取込
   activate EligibilityResultApi
   EligibilityResultApi->>EligibilityCheck: update
   EligibilityResultApi-->>EligibilityScreen: 🖥️ 資格確認画面
-  EligibilityScreen-->>ReceptionClerk: 🖥️ 資格確認画面
+  EligibilityScreen-->>System: 🖥️ 資格確認画面
   deactivate EligibilityResultApi
 
   Note over Nurse,Room: ✅ 紹介状受付処理

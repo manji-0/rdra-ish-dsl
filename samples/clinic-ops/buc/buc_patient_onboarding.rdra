@@ -37,6 +37,9 @@ performs(ReceptionClerk, RegisterPatient)
 performs(ReceptionClerk, UpdateDemographics)
 performs(ReceptionClerk, VerifyInsurance)
 performs(Patient, CaptureConsent)
+// Reception explains and hands out the 問診票 (yokohama-cu-f24036-shiyousyo.txt:779, :807); one
+// hospital mails it home (osaka-u-kokoro-booking.txt:46). No source names who sends it: the
+// reception clerk is the model's assumption.
 performs(ReceptionClerk, SendIntakeForms)
 performs(Patient, CompleteIntakeForms)
 performs(ReceptionClerk, ExpireIntakeForms)

@@ -47,10 +47,10 @@ performs(ReceptionClerk, RecheckEligibility)
 performs(ReceptionClerk, RecordEligibilityDeclaration)
 performs(ReceptionClerk, ConfirmEligibilityInOutageMode)
 performs(ReceptionClerk, ReceiveReferralLetter)
+// In the batch-inquiry flow the 事務 lane makes the list and checks the result, and the
+// in-house system imports it (mhlw-001024240.txt:2915-2916, :2968-2973, :2988-2989, figure p20).
+// That figure is for home-visit care; no outpatient source names the role.
 performs(ReceptionClerk, BatchVerifyEligibility)
-performs(ReceptionClerk, ReceiveEligibilityValid)
-performs(ReceptionClerk, ReceiveEligibilityInvalid)
-performs(ReceptionClerk, ReceiveEligibilityNoInfo)
 performs(Nurse, AssignRoom)
 performs(Nurse, PrepareEncounter)
 belongs(BucVisitCheckIn, PatientAccess)
@@ -171,7 +171,6 @@ requires_permission(OnlineEligibilityApi, InsuranceVerify)
 
 requires_permission(RecheckEligibility, InsuranceVerify)
 requires_medium(RecheckEligibility, FrontDeskTerminal)
-requires_permission(EligibilityResultApi, InsuranceVerify)
 
 requires_permission(RecordEligibilityDeclaration, InsuranceVerify)
 requires_medium(RecordEligibilityDeclaration, FrontDeskTerminal)

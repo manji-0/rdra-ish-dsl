@@ -1,6 +1,5 @@
 sequenceDiagram
   box System Value
-    actor Patient as 👤 Patient
     actor ReceptionClerk as 👤 医事課 受付担当
   end
   box System Boundary
@@ -12,8 +11,8 @@ sequenceDiagram
     participant ProviderSchedule as 🗄️ Provider Schedule
   end
 
-  Note over Patient,ProviderSchedule: ✅ Book Appointment
-  Patient->>AppointmentScreen: ✅ Book Appointment
+  Note over ReceptionClerk,ProviderSchedule: ✅ Book Appointment
+  ReceptionClerk->>AppointmentScreen: ✅ Book Appointment
   AppointmentScreen->>BookAppointmentApi: ✅ Book Appointment
   activate BookAppointmentApi
   rect rgb(245,245,245)
@@ -22,5 +21,5 @@ sequenceDiagram
     BookAppointmentApi->>ProviderSchedule: update
   end
   BookAppointmentApi-->>AppointmentScreen: 🖥️ Appointment Screen
-  AppointmentScreen-->>Patient: 🖥️ Appointment Screen
+  AppointmentScreen-->>ReceptionClerk: 🖥️ Appointment Screen
   deactivate BookAppointmentApi

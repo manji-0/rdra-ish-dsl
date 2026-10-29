@@ -5,7 +5,6 @@ import shared.biz
 
 has_permission(Patient, ConsentCapture)
 has_permission(Patient, ScheduleRead)
-has_permission(Patient, ScheduleWrite)
 
 has_permission(ReceptionClerk, PatientProfileRead)
 has_permission(ReceptionClerk, PatientProfileWrite)

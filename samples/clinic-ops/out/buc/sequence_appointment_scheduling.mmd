@@ -25,7 +25,7 @@ sequenceDiagram
   end
 
   Note over Patient,ProviderSchedule: ✅ Book Appointment
-  Patient->>AppointmentScreen: ✅ Book Appointment
+  ReceptionClerk->>AppointmentScreen: ✅ Book Appointment
   AppointmentScreen->>BookAppointmentApi: ✅ Book Appointment
   activate BookAppointmentApi
   rect rgb(245,245,245)
@@ -34,11 +34,11 @@ sequenceDiagram
     BookAppointmentApi->>ProviderSchedule: update
   end
   BookAppointmentApi-->>AppointmentScreen: 🖥️ Appointment Screen
-  AppointmentScreen-->>Patient: 🖥️ Appointment Screen
+  AppointmentScreen-->>ReceptionClerk: 🖥️ Appointment Screen
   deactivate BookAppointmentApi
 
   Note over Patient,ProviderSchedule: ✅ Cancel Appointment
-  Patient->>AppointmentScreen: ✅ Cancel Appointment
+  ReceptionClerk->>AppointmentScreen: ✅ Cancel Appointment
   AppointmentScreen->>CancelAppointmentApi: ✅ Cancel Appointment
   activate CancelAppointmentApi
   rect rgb(245,245,245)
@@ -47,7 +47,7 @@ sequenceDiagram
     CancelAppointmentApi->>ProviderSchedule: update
   end
   CancelAppointmentApi-->>AppointmentScreen: 🖥️ Appointment Screen
-  AppointmentScreen-->>Patient: 🖥️ Appointment Screen
+  AppointmentScreen-->>ReceptionClerk: 🖥️ Appointment Screen
   deactivate CancelAppointmentApi
 
   Note over Patient,ProviderSchedule: ✅ Mark No Show
@@ -58,7 +58,7 @@ sequenceDiagram
   deactivate System
 
   Note over Patient,ProviderSchedule: ✅ Reschedule Appointment
-  Patient->>AppointmentScreen: ✅ Reschedule Appointment
+  ReceptionClerk->>AppointmentScreen: ✅ Reschedule Appointment
   AppointmentScreen->>RescheduleAppointmentApi: ✅ Reschedule Appointment
   activate RescheduleAppointmentApi
   rect rgb(245,245,245)
@@ -67,11 +67,11 @@ sequenceDiagram
     RescheduleAppointmentApi->>ProviderSchedule: update
   end
   RescheduleAppointmentApi-->>AppointmentScreen: 🖥️ Appointment Screen
-  AppointmentScreen-->>Patient: 🖥️ Appointment Screen
+  AppointmentScreen-->>ReceptionClerk: 🖥️ Appointment Screen
   deactivate RescheduleAppointmentApi
 
   Note over Patient,ProviderSchedule: ✅ Reserve Appointment
-  Patient->>AppointmentScreen: ✅ Reserve Appointment
+  ReceptionClerk->>AppointmentScreen: ✅ Reserve Appointment
   AppointmentScreen->>ReserveAppointmentApi: ✅ Reserve Appointment
   activate ReserveAppointmentApi
   rect rgb(245,245,245)
@@ -80,7 +80,7 @@ sequenceDiagram
     ReserveAppointmentApi->>ProviderSchedule: update
   end
   ReserveAppointmentApi-->>AppointmentScreen: 🖥️ Appointment Screen
-  AppointmentScreen-->>Patient: 🖥️ Appointment Screen
+  AppointmentScreen-->>ReceptionClerk: 🖥️ Appointment Screen
   deactivate ReserveAppointmentApi
 
   Note over Patient,ProviderSchedule: ✅ Search Availability

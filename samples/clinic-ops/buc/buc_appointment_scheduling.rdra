@@ -28,14 +28,13 @@ api AppointmentNoticeApi     "Appointment Notice API"
 performs(ReceptionClerk, BucAppointmentScheduling)
 performs(ReceptionClerk, SearchAvailability)
 performs(Patient, SearchAvailability)
+// The patient asks by phone or at the counter (sapporo-city-hosp-yoyaku.md:102, :118); the
+// reception or contracted staff take the call and enter the change at the ordering terminal
+// (yokohama-cu-urahp-c16010-shiyousyo.txt:196-197, yokohama-cu-f24036-shiyousyo.txt:803).
 performs(ReceptionClerk, ReserveAppointment)
-performs(Patient, ReserveAppointment)
 performs(ReceptionClerk, BookAppointment)
-performs(Patient, BookAppointment)
 performs(ReceptionClerk, RescheduleAppointment)
-performs(Patient, RescheduleAppointment)
 performs(ReceptionClerk, CancelAppointment)
-performs(Patient, CancelAppointment)
 performs(ReceptionClerk, MarkNoShow)
 performs(ReceptionClerk, SendAppointmentNotice)
 belongs(BucAppointmentScheduling, PatientAccess)

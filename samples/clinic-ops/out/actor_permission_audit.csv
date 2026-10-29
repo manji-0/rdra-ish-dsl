@@ -20,16 +20,15 @@ Clinician,医師,PrescriptionWrite,Prescription Write,true,true,ok,AnswerPharmac
 Clinician,医師,ReferralManage,紹介状管理,true,true,ok,IssueReferralLetter,IssueReferralLetter->IssueReferralLetterApi
 MedicalClerk,医師事務作業補助者,ProxyOrderEntry,代行入力,true,true,ok,EnterProxyOrder,EnterProxyOrder->ProxyOrderApi
 Nurse,看護師,ClinicalOrderWrite,Clinical Order Write,true,true,ok,CollectSpecimen|PrintSpecimenLabel|RegisterPerformedProcedure,CollectSpecimen->CollectSpecimenApi|RegisterPerformedProcedure->PerformedProcedureApi
-Nurse,看護師,EncounterOpen,Encounter Open,true,true,ok,CompleteConsultation|OpenEncounter|PrepareEncounter,CompleteConsultation->CompleteConsultationApi|OpenEncounter->OpenEncounterApi|PrepareEncounter->PrepareEncounterApi
+Nurse,看護師,EncounterOpen,Encounter Open,true,true,ok,OpenEncounter|PrepareEncounter,OpenEncounter->OpenEncounterApi|PrepareEncounter->PrepareEncounterApi
 Nurse,看護師,LabResultManage,Lab Result Manage,true,true,ok,ReceiveLabResult,ReceiveLabResult->ReceiveLabResultApi
 Nurse,看護師,ProxyOrderEntry,代行入力,true,true,ok,EnterProxyOrder,EnterProxyOrder->ProxyOrderApi
 Nurse,看護師,RoomAssign,Room Assign,true,true,ok,AssignRoom,AssignRoom->AssignRoomApi
 Nurse,看護師,VitalsRecord,Vitals Record,true,true,ok,RecordVitals,RecordVitals->RecordVitalsApi
 Patient,Patient,ConsentCapture,Consent Capture,true,true,ok,CaptureConsent|CompleteIntakeForms,CaptureConsent->ConsentApi
 Patient,Patient,ScheduleRead,Schedule Read,true,true,ok,SearchAvailability,SearchAvailability->SearchAvailabilityApi
-Patient,Patient,ScheduleWrite,Schedule Write,true,true,ok,BookAppointment|CancelAppointment|RescheduleAppointment|ReserveAppointment,BookAppointment->BookAppointmentApi|CancelAppointment->CancelAppointmentApi|RescheduleAppointment->RescheduleAppointmentApi|ReserveAppointment->ReserveAppointmentApi
 Pharmacist,薬剤師,PrescriptionDispense,Prescription Dispense,true,true,ok,CounselMedication|DispenseAndAudit|HandOverMedication|RaisePrescriptionInquiry,CounselMedication->DispensingApi|DispenseAndAudit->DispensingApi|HandOverMedication->DispensingApi|RaisePrescriptionInquiry->DispensingApi
-ReceptionClerk,医事課 受付担当,InsuranceVerify,Insurance Verify,true,true,ok,ConfirmEligibilityInOutageMode|RecheckEligibility|RecordEligibilityDeclaration|VerifyInsurance,BatchVerifyEligibility->OnlineEligibilityApi|CheckInPatient->OnlineEligibilityApi|ConfirmEligibilityInOutageMode->EligibilityResultApi|ReceiveEligibilityInvalid->EligibilityResultApi|ReceiveEligibilityNoInfo->EligibilityResultApi|ReceiveEligibilityValid->EligibilityResultApi|RecheckEligibility->EligibilityResultApi|RecordEligibilityDeclaration->EligibilityResultApi|VerifyInsurance->EligibilityApi
+ReceptionClerk,医事課 受付担当,InsuranceVerify,Insurance Verify,true,true,ok,ConfirmEligibilityInOutageMode|RecheckEligibility|RecordEligibilityDeclaration|VerifyInsurance,BatchVerifyEligibility->OnlineEligibilityApi|CheckInPatient->OnlineEligibilityApi|VerifyInsurance->EligibilityApi
 ReceptionClerk,医事課 受付担当,IntakeManage,Intake Manage,true,true,ok,ExpireIntakeForms|SendIntakeForms,
 ReceptionClerk,医事課 受付担当,PatientMessageSend,Patient Message Send,true,true,ok,,SendIntakeForms->IntakeMessagingApi
 ReceptionClerk,医事課 受付担当,PatientProfileRead,Patient Profile Read,true,true,ok,SearchPatient,SearchPatient->SearchPatientApi

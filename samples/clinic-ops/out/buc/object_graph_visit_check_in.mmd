@@ -373,7 +373,6 @@ flowchart LR
   OnlineEligibilityApi -.->|creates| EligibilityCheck
   OnlineEligibilityApi -.->|reads| InsurancePolicy
   OnlineEligibilityApi -.->|requires_permission| InsuranceVerify
-  EligibilityResultApi -.->|requires_permission| InsuranceVerify
   EligibilityResultApi -.->|updates| EligibilityCheck
   ReferralLetterApi -.->|creates| ReferralLetter
   ReferralLetterApi -.->|requires_permission| ReferralManage

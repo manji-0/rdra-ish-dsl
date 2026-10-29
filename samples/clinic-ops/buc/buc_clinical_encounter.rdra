@@ -37,7 +37,7 @@ performs(Clinician, DocumentAssessment)
 performs(Clinician, SignEncounter)
 performs(Clinician, AmendEncounter)
 performs(Clinician, IssueReferralLetter)
-performs(Nurse, CompleteConsultation)
+// 診察終了 sits in the physician's lane of the outpatient flow (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:1103-1104, figure p12).
 performs(Clinician, CompleteConsultation)
 belongs(BucClinicalEncounter, CareDelivery)
 
