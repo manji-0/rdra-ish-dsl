@@ -447,6 +447,14 @@
 
 ### Fixed
 
+- `fmt` deleted every `//` and `/* */` comment, and `fmt --write` wrote the file back
+  without them, because the lexer skipped comments before the formatter saw the source.
+  The lexer now keeps each comment with its span, and `fmt` prints it where it was: a
+  comment after code stays at the end of that line, and a comment on its own line stays
+  above the item, column, or variation value that follows it, with a blank line after it
+  kept between items. A comment between the metadata lines of an element or inside a
+  wrapped predicate call moves to its own line above that element. A second `fmt` changes
+  nothing. All 437 comments in the `.rdra` files under `samples/` and `skills/` survive.
 - A use case that never runs because, once its guards hold, the instance bound leaves no
   free slot for an entity it creates now says so (`needs: a free Payment slot within the
   instance bound`). Before, it listed a guard that failed only in the states where a slot
