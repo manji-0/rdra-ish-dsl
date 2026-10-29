@@ -37,6 +37,8 @@ validation, then advance one level.
 5. Run the validation commands from the step file. `check` prints a `bounds:` line first
    and ends with `OK: no errors within 1 instance per entity, Int 0..5` on success.
 6. Stop when the step's achievement conditions are met, or report the remaining open items.
+   In the report, paste the `bounds:` line and the last line of `check` exactly as
+   printed, in a code block. Do not paraphrase them as "OK" or "no errors".
 
 ### File Layout
 

@@ -195,7 +195,8 @@ sets (a payment method, a channel) is not a state: type that column by a `variat
 rdra-ish check src/
 ```
 
-Fix every reported error. Common errors:
+Fix every reported error. In the report, paste the `bounds:` line and the last line of
+`check` exactly as printed, in a code block; do not paraphrase them. Common errors:
 
 - Wrong predicate argument order
 - Missing `import` for a symbol used across files

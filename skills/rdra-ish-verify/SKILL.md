@@ -40,7 +40,9 @@ after `npx skills add` / `gh skill install`. In the `rdra-ish-dsl` repository,
    `rdra-ish verify <file>`. `--backend tlc` is the default.
 5. Report each failure by the name after its severity (`error[CrossForbidden_Order_0]`,
    `error[Deadlock_Order_status_paid]`, `error[NeverShipped]`) and its model-term
-   counterexample, together with the `bounds:` line the result holds under.
+   counterexample, together with the `bounds:` line the result holds under. Paste the
+   `bounds:` line (with its BFS state cap), `tlc_result:` and the last line exactly as
+   printed, in a code block; do not paraphrase them.
 
 A passing run names its bounds first and last:
 

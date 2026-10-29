@@ -22,7 +22,8 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    diagnostic prints as `error: path:line:col: ...` or `warning: ...`; a lifecycle
    finding carries its stable name, `error[<Name>]: ...` or `warning[<Name>]: ...`. The
    first line, `bounds:`, names the bounds every lifecycle verdict holds under, and a
-   clean run ends with `OK: no errors within 1 instance per entity, Int 0..5`.
+   clean run ends with `OK: no errors within 1 instance per entity, Int 0..5`. Paste
+   the `bounds:` line and the last line exactly as printed; do not paraphrase them.
 
 2. **Run `rdra-ish lint <src-dir>/ --format table`** for review readiness.
    Treat orphan nodes, unused elements, ownership drift, flow coverage gaps,
@@ -222,6 +223,12 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 ## Suggestions
 - (optional: proposals to make the model more accurate or complete)
 ```
+
+Mark where each item comes from. An item a command printed names the command and the
+finding (`check: error[Deadlock_Order_status_paid]`, `lint: api-contract-missing`), and
+any count you give matches that output. An item you concluded from reading the model
+yourself is marked `(review)`. Never present a `(review)` item as something `check` or
+`lint` reported.
 
 ### Predicate signatures quick reference
 

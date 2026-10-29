@@ -303,3 +303,6 @@ rdra-ish lint src/ --format table
 
 Fix every reported error before declaring the update done, and compare the findings
 with the ones from Step 1: a new `error[...]` or `warning[...]` is the change's.
+In the report, paste the `bounds:` line and the last line of each `check` or `verify`
+run exactly as printed, in a code block (for `verify`, also the `tlc_result:` line). Do
+not paraphrase them as "OK" or "no errors".
