@@ -146,6 +146,78 @@ fn a_tlc_counterexample_prints_in_model_terms() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+/// Each temporal property runs in its own module and its lasso prints in model terms, named
+/// after the property. TLC picks the lasso, so only its shape is fixed: a leads_to that an
+/// endless cancel and reopen breaks loops back; an always may stutter or loop.
+#[test]
+fn a_temporal_counterexample_prints_its_lasso_in_model_terms() {
+    if !have_tlc() {
+        return;
+    }
+    let tmp = scratch("verify_cli_temporal");
+    let sample = repo().join("samples/formal-verification/temporal_unmet.rdra");
+    let out = tmp.join("M.tla");
+    let output = verify(
+        &repo(),
+        &tmp,
+        &[sample.to_str().unwrap(), "-o", out.to_str().unwrap()],
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
+    for (module, property) in [
+        ("M_NeverShipped", "NeverShipped"),
+        ("M_PendingLeadsToDelivered", "PendingLeadsToDelivered"),
+    ] {
+        assert!(
+            stdout.contains(&format!("\n{module} [{property}]: counterexample")),
+            "{stdout}"
+        );
+        let cfg = std::fs::read_to_string(tmp.join(format!("{module}.cfg"))).unwrap();
+        assert_eq!(cfg.matches("PROPERTY ").count(), 1, "{cfg}");
+        assert!(cfg.contains(&format!("PROPERTY {property}\n")), "{cfg}");
+    }
+    let whole = std::fs::read_to_string(tmp.join("M.cfg")).expect("the whole-model cfg");
+    assert_eq!(whole.matches("PROPERTY ").count(), 2, "{whole}");
+    let index = std::fs::read_to_string(tmp.join("cones.txt")).unwrap();
+    assert_eq!(
+        index,
+        "M_NeverShipped.tla: NeverShipped\nM_PendingLeadsToDelivered.tla: PendingLeadsToDelivered\n"
+    );
+
+    let block = |name: &str| -> &str {
+        let head = format!("error[{name}]: property {name} is violated: ");
+        let at = stderr
+            .find(&head)
+            .unwrap_or_else(|| panic!("no {head:?}\n{stderr}"));
+        let rest = &stderr[at..];
+        &rest[..rest.find("\nviolated: ").unwrap_or(rest.len())]
+    };
+    let always = block("NeverShipped");
+    assert!(
+        always.contains("its always condition is false for Order#"),
+        "{always}"
+    );
+    assert!(always.contains(", from TLC):"), "{always}");
+    assert!(
+        always.ends_with("\n    then nothing changes forever")
+            || always.contains("\n    then loops back to step "),
+        "{always}"
+    );
+    let leads_to = block("PendingLeadsToDelivered");
+    assert!(
+        leads_to.contains("its leads_to trigger holds for Order#"),
+        "{leads_to}"
+    );
+    assert!(leads_to.contains("ReopenOrder [Order#"), "{leads_to}");
+    assert!(
+        leads_to.contains("\n    then loops back to step "),
+        "{leads_to}"
+    );
+    assert!(!stderr.contains("BFS and TLC disagree"), "{stderr}");
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 /// `verify` states the bounds first, and a passing run ends with them in its `OK:` line.
 #[test]
 fn verify_prints_the_bounds_line_and_an_ok_line_that_repeats_them() {

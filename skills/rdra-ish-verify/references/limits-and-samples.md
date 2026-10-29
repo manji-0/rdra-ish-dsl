@@ -35,7 +35,9 @@
   operand leaves a comparison unknown, which passes (SQL semantics). A `@derived` column
   is never a state var: a Bool one is read as its expression, and an arithmetic one
   cannot be read (`DerivedColumnRead`).
-- **Temporal `property`**: one lowering path; all names are listed in `.cfg` `PROPERTY`.
+- **Temporal `property`**: one lowering path. `export` lists every name in one `.cfg`; `verify`
+  runs each property in its own module `<whole>_<Property>`, because TLC does not name the
+  property its counterexample violates, and prints the lasso in model terms.
 - **`after.assert`**: independent `[][(\A p : UC(p) => post')]_vars` PROPERTY named
   `AfterAssert_<UC>_<n>` (not injected into the effects).
 - **`WF_vars(Next)`**: fairness on whole `Next`, not per action.
@@ -81,6 +83,7 @@ fails when a result differs. The grammar is in `docs/formal-verification.md`
 | `samples/quantifier_none.rdra` | expected fail | `when(...).none` (interleaving) |
 | `samples/untriggered_sets.rdra` | expected fail | `sets` from a use case that drives no transition, next to `transitions` |
 | `samples/after_assert_unmet.rdra` | expected fail | `after(UC).assert` whose postcondition the use case does not set (fails, never vacuous) |
+| `samples/temporal_unmet.rdra` | expected fail (`check` passes) | An `always` and a `leads_to` property that both fail; Reopen lets an Order be cancelled and reopened forever, so the `leads_to` lasso loops back |
 | `samples/unwitnessed_state.rdra` | expected fail (TLC passes) | A `transitions` endpoint no use case reaches: `NoWitness` and `Deadlock` (shipped, whose only way out is Refund) fail `check` and `verify`; Refund warns `NeverRuns` (guards never hold together) |
 | `samples/deadlock.rdra` | expected fail (TLC passes) | A state with a way out that never opens: `Deadlock` (Order stays `paid`) fails `check` and `verify`; Ship warns `NeverRuns` |
 | `samples/partial_scope.rdra` | expected fail (TLC does not run); pass with `--entity Order` | Audit's `forbidden` reads an arithmetic `@derived` column: `DerivedColumnRead` stops `check` and `verify`. `--entity Order` defers it under `not checked:` and passes in the selected scope |

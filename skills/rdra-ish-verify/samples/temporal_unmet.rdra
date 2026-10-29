@@ -1,0 +1,49 @@
+// order.rdra's lifecycle with a Reopen use case and two temporal properties that fail.
+// NeverShipped is false as soon as an Order ships. PendingLeadsToDelivered fails only on an
+// infinite behavior: under weak fairness an Order can be cancelled and reopened forever, so
+// its TLC counterexample is a lasso that loops back (`Back to state K`), never a stutter.
+// `check` does not model-check temporal properties; `verify` runs each property alone and
+// prints its lasso in model terms.
+// expect check: ok
+// expect verify: tlc=counterexample fail NeverShipped PendingLeadsToDelivered
+entity Order "注文" {
+  id:           Int @pk
+  status:       Enum(pending, paid, shipped, delivered, cancelled) @default(pending)
+  delivered_at: DateTime @null
+}
+
+usecase PlaceOrder   "注文確定"
+usecase CapturePay   "決済確定"
+usecase ShipOrder    "発送"
+usecase DeliverOrder "配達確認"
+usecase CancelOrder  "注文キャンセル"
+usecase ReopenOrder  "注文再開"
+
+buc BucOrderLifecycle "Order lifecycle"
+contains(BucOrderLifecycle, PlaceOrder)
+contains(BucOrderLifecycle, CapturePay)
+contains(BucOrderLifecycle, ShipOrder)
+contains(BucOrderLifecycle, DeliverOrder)
+contains(BucOrderLifecycle, CancelOrder)
+contains(BucOrderLifecycle, ReopenOrder)
+
+creates(PlaceOrder, Order)
+updates(CapturePay, Order)
+updates(ShipOrder, Order)
+updates(DeliverOrder, Order)
+updates(CancelOrder, Order)
+updates(ReopenOrder, Order)
+
+transitions(Order.status, CapturePay, pending -> paid)
+transitions(Order.status, ShipOrder, paid -> shipped)
+transitions(Order.status, DeliverOrder, shipped -> delivered)
+transitions(Order.status, CancelOrder, pending -> cancelled)
+transitions(Order.status, ReopenOrder, cancelled -> pending)
+
+sets(usecase::DeliverOrder, Order, delivered_at == present)
+
+property NeverShipped "an order never ships"
+  always(Order.status != shipped)
+
+property PendingLeadsToDelivered "a pending order is eventually delivered"
+  leads_to(Order.status == pending, Order.status == delivered)
