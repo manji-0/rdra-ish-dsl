@@ -109,6 +109,50 @@ fn a_published_write_joins_the_use_cases_one_internal_group_and_leaves_the_lifec
 }
 
 #[test]
+fn a_published_write_through_its_own_api_is_that_apis_group() {
+    let (ast, _) = rdra_ish_syntax::parse(
+        r#"
+system Auth "Auth"
+entity Session "Session" { id: Int @pk }
+entity SessionView "Session (published)" { id: Int @pk }
+usecase Login "Login"
+api SessionApi "Session API" method POST path "/sessions"
+api ViewApi "View API" method PUT path "/session-views"
+contains(Auth, SessionApi)
+contains(Auth, ViewApi)
+invokes(Login, SessionApi)
+invokes(Login, ViewApi)
+creates(SessionApi, Session)
+creates(ViewApi, SessionView)
+exposes(Auth, SessionView).upsert()
+"#,
+    );
+    let (model, diags) = crate::analysis::build_model(&ast);
+    let errors: Vec<String> = diags
+        .iter()
+        .filter(|d| !d.is_warning)
+        .map(|d| d.error.to_string())
+        .collect();
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(
+        errors[0].starts_with("PublishedNotInSourceTx:"),
+        "{}",
+        errors[0]
+    );
+    let txs = crate::tx::infer_usecase_transactions(&model);
+    let groups: Vec<Vec<String>> = txs[0]
+        .groups()
+        .map(|g| {
+            g.ordered_writes
+                .iter()
+                .map(|w| model.entities[w.entity].id.clone())
+                .collect()
+        })
+        .collect();
+    assert_eq!(groups, vec![vec!["Session"], vec!["SessionView"]]);
+}
+
+#[test]
 fn provenance_names_the_use_case_not_the_group_step() {
     let d = derive_src(&split_pay(""));
     let via: Vec<String> = d

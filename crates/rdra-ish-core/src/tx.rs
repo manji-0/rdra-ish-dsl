@@ -49,11 +49,16 @@ pub struct UcWrite {
 /// Why a group's writes commit together.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TxKind {
-    /// Two or more direct writes connected through foreign keys: inferred as one transaction.
+    /// Two or more direct writes connected through foreign keys, inferred as one transaction.
+    /// When it is the use case's only internal transaction, the published rows the use case
+    /// writes directly join it without a key.
     Fk,
-    /// Two or more writes of one invoked API: its explicit atomic boundary.
+    /// The writes of one invoked API: its explicit atomic boundary.
     Api,
-    /// One internal write on its own, with the published rows it reports.
+    /// One write on its own: an internal write, with the published rows that join it when it
+    /// is the use case's only internal transaction, or a published write with no internal
+    /// transaction to join, which `publication_diagnostics` reports as
+    /// `PublishedNotInSourceTx`.
     Isolated,
 }
 
@@ -121,10 +126,11 @@ impl UsecaseTx {
 /// 2. 直接 usecase に付いた書き込みはレガシー形式として収集し、API 経由の同一 entity
 ///    書き込みがあれば API 側を優先する。
 /// 3. 直接書き込みは FK 連結成分から transaction 境界を推論する。
-/// 4. A write to a published entity (`exposes(System, E).append() | .upsert()`) that no
-///    internal write shares an API with joins the use case's one internal transaction.
-///    With no or several internal transactions it stays on its own, and
-///    `PublishedNotInSourceTx` reports it.
+/// 4. A direct write to a published entity (`exposes(System, E).append() | .upsert()`)
+///    joins the use case's one internal transaction. With no or several internal
+///    transactions it stays on its own, and `PublishedNotInSourceTx` reports it. A write
+///    through an API stays in that API's transaction (rule 1), so an API that writes only
+///    published entities is reported the same way.
 pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
     let mut result = Vec::new();
     let published = |w: &UcWrite| model.publication.is_published(w.entity);
@@ -171,9 +177,7 @@ pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
                 }
             }
             dedup_writes(&mut api_writes, model);
-            if api_writes.iter().all(published) {
-                floating.extend(api_writes);
-            } else if api_writes.len() >= 2 {
+            if api_writes.len() >= 2 {
                 grouped.push(TxGroup {
                     kind: TxKind::Api,
                     ordered_writes: topological_sort_writes(

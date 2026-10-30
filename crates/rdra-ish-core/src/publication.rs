@@ -387,11 +387,25 @@ pub fn publication_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
                             .find(|e| e.origin == utx.usecase && e.entity == w.entity)
                             .and_then(|e| e.site.clone())
                     });
+                let usecase = model.use_cases[utx.usecase].id.clone();
+                let entity = entity_id(w.entity);
+                let hint = match (w.via_api, internal) {
+                    (Some(api), _) => format!(
+                        "'{usecase}' writes '{entity}' through API '{}', which is its own transaction; route the internal change and '{entity}' through one API",
+                        model.apis[api].id
+                    ),
+                    (None, 0) => format!(
+                        "'{usecase}' makes no internal change; write '{entity}' from the use case that makes the change it reports"
+                    ),
+                    (None, n) => format!(
+                        "'{usecase}' has {n} internal transactions, so '{entity}' has no one transaction to join; write it from a use case that makes exactly one internal change, or route both writes through one API"
+                    ),
+                };
                 diags.push(at(
                     RdraError::PublishedNotInSourceTx {
-                        usecase: model.use_cases[utx.usecase].id.clone(),
-                        entity: entity_id(w.entity),
-                        internal,
+                        usecase,
+                        entity,
+                        hint,
                     },
                     &site,
                     false,

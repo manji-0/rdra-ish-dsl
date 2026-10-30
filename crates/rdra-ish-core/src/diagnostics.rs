@@ -457,11 +457,11 @@ pub enum RdraError {
     #[error("PublishedEntityKeysInternal: `relate` joins published entity '{entity}' to internal entity '{other}'\n  hint: a published entity keys only to another published entity; publish '{other}' as well, or drop the relate")]
     PublishedEntityKeysInternal { entity: String, other: String },
 
-    #[error("PublishedNotInSourceTx: '{usecase}' writes published entity '{entity}' outside the transaction of an internal change\n  hint: a published row is written in the transaction of the internal change it reports; '{usecase}' has {internal} internal transaction(s), so write '{entity}' from a use case that makes exactly one internal change, or route both writes through one API")]
+    #[error("PublishedNotInSourceTx: '{usecase}' writes published entity '{entity}' outside the transaction of an internal change\n  hint: a published row is written in the transaction of the internal change it reports; {hint}")]
     PublishedNotInSourceTx {
         usecase: String,
         entity: String,
-        internal: usize,
+        hint: String,
     },
 
     #[error("InternalEntityExposed: entity '{entity}' is exposed without a publish mode\n  hint: an internal entity is never exposed; publish a projection instead: `entity {entity}View \"...\" {{ ... }}` written by the owner, then `exposes({system}, {entity}View).upsert()` or `.append()`")]

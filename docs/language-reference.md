@@ -634,7 +634,7 @@ these rules:
 | `PublishedEntityMutated` | an `append` entity gets `updates` or `writes`, or any published entity gets `deletes` or `transitions` |
 | `PublishedEntityReadByOwner` | the owner reads a published entity: `reads`, `shows`, `maps_field`, a `holds` body, `combines`, or a constraint (`forbidden`, `invariant`, `required`, `exclusive`, `when`, `after`) |
 | `PublishedEntityKeysInternal` | a `relate` joins a published entity to an internal one, in either direction |
-| `PublishedNotInSourceTx` | a use case writes a published entity but makes no internal change, or makes several internal transactions, so the published row has no one transaction to join |
+| `PublishedNotInSourceTx` | a use case writes a published entity but makes no internal change, or makes several internal transactions, so the published row has no one transaction to join; or it writes the published entity through an API that makes no internal change, because each API is its own transaction |
 | `InternalEntityExposed` | `exposes(System, Entity)` without `.append()` or `.upsert()`; publish a projection instead |
 | `PublishedEntityNeverWritten` (warning) | no use case writes the published entity |
 | `DuplicateExposure` | a second `exposes` line for an element that is already exposed; the first line stays, the second is the error |
@@ -642,11 +642,14 @@ these rules:
 | `ExposesChainInvalid` | a chain method on the wrong kind, such as `.append()` on a use case or `.caller(...)` on an entity |
 | `ExposesCallerInvalid` | `.caller(...)` with an argument other than `actor`, `system`, or `any` |
 
-A published row is written in the transaction of the internal change it reports. A write
-to a published entity therefore joins the writing use case's one internal transaction
-group, whether or not a key links them, and `SeparateTxInferred` never fires for it. In
-the example, `Revoke` moves `Session` and writes `SessionView` in one action, where two
-unrelated writes would otherwise be `Revoke_1` and `Revoke_2`. The owner's lifecycle
+A published row is written in the transaction of the internal change it reports. A direct
+write to a published entity therefore joins the writing use case's one internal
+transaction group, whether or not a key links them, and `SeparateTxInferred` never fires
+for it. In the example, `Revoke` moves `Session` and writes `SessionView` in one action,
+where two unrelated writes would otherwise be `Revoke_1` and `Revoke_2`. A write made
+through an API stays in that API's transaction, because each API is its own atomic
+boundary, so a published write through an API of its own is `PublishedNotInSourceTx`;
+route the internal change and the published write through one API. The owner's lifecycle
 (`states`, `check`, `export --kind tla`) skips published entities: they hold no state of
 their own, only what the owner wrote.
 

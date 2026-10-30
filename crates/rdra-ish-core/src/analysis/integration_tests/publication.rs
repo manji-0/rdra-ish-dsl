@@ -193,10 +193,45 @@ fn a_published_write_outside_an_internal_change_is_reported() {
         .find(|d| matches!(d.error, RdraError::PublishedNotInSourceTx { .. }))
         .map(|d| d.error.to_string())
         .expect("reported");
+    assert!(msg.contains("'Split' has 2 internal transactions"), "{msg}");
+}
+
+#[test]
+fn a_published_write_through_its_own_api_stays_in_that_apis_transaction() {
+    let src = r#"
+system Auth "Auth"
+actor User "User"
+usecase Login "Log in"
+performs(User, Login)
+api SessionApi "Session API" method POST path "/sessions"
+api ViewApi "View API" method PUT path "/session-views"
+contains(Auth, SessionApi)
+contains(Auth, ViewApi)
+invokes(Login, SessionApi)
+invokes(Login, ViewApi)
+entity Session "Session" { id: Int @pk  status: Enum(active, revoked) @default(active) }
+entity SessionView "Session (published)" { id: Int @pk  status: Enum(active, ended) }
+creates(SessionApi, Session)
+creates(ViewApi, SessionView)
+sets(Login, SessionView, status == active)
+exposes(Auth, SessionView).upsert()
+"#;
+    let msgs: Vec<String> = diagnostics(src)
+        .iter()
+        .filter(|d| matches!(d.error, RdraError::PublishedNotInSourceTx { .. }))
+        .map(|d| d.error.to_string())
+        .collect();
+    assert_eq!(msgs.len(), 1, "{msgs:?}");
     assert!(
-        msg.contains("'Split' has 2 internal transaction(s)"),
-        "{msg}"
+        msgs[0].contains("through API 'ViewApi', which is its own transaction"),
+        "{}",
+        msgs[0]
     );
+    let one_api = src.replace(
+        "creates(ViewApi, SessionView)",
+        "creates(SessionApi, SessionView)",
+    );
+    assert!(publication_names(&one_api).is_empty());
 }
 
 #[test]

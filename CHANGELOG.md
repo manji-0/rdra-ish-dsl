@@ -12,10 +12,11 @@
   rules (`PublishedEntityMutated`, `PublishedEntityReadByOwner`,
   `PublishedEntityKeysInternal`, `PublishedNotInSourceTx`, `InternalEntityExposed`,
   `PublishedEntityNeverWritten`, `DuplicateExposure`, `SharedEntityAlsoExposed`,
-  `ExposesChainInvalid`, `ExposesCallerInvalid`). A write to a published entity
+  `ExposesChainInvalid`, `ExposesCallerInvalid`). A direct write to a published entity
   joins the use case's one internal transaction, so the lifecycle and the TLA+ export run
   it in the same action as the internal change (one `Login`, not `Login_1` and `Login_2`),
-  and `SeparateTxInferred` never fires for it. Published entities leave the owner's
+  and `SeparateTxInferred` never fires for it; a write through an API stays in that API's
+  transaction. Published entities leave the owner's
   lifecycle, and a use case exposed with `.caller(system)` or `.caller(any)` is not
   reported as having no actor. `rdra-ish list <model> --kind surface` prints the
   published surface as canonical text, sorted by kind and id. A model without `exposes`
