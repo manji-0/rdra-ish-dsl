@@ -1,7 +1,4 @@
-//! The stage order: the only place it lives. Numbers and doc anchors derive from it.
-//!
-//! Reordering is editing `ORDER`, blessing the generated doc blocks, and moving the
-//! hand-written prose sections of `docs/incremental-modeling.md` to match.
+//! The stage order. Numbers and doc anchors derive from it.
 
 use super::{spec, StageId};
 

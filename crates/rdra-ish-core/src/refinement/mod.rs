@@ -1,9 +1,4 @@
 //! Where each BUC stands on the incremental modeling stage map, and what the next stage asks.
-//!
-//! The stages are the ones `docs/incremental-modeling.md` describes. `stages` holds one
-//! `StageSpec` per stage: its text and the checks of its gate, side by side. `order::ORDER`
-//! is the only place the stage order lives; numbers and doc anchors derive from it. A verdict
-//! is derived from the checks and never stored, so nothing can disagree with the gaps.
 
 #[cfg(test)]
 mod docs;
@@ -86,7 +81,6 @@ pub struct StageSpec {
     pub review: &'static [&'static str],
     pub requirement: Requirement,
     pub(crate) checks: &'static [Check],
-    /// What the gate counted, such as `2/3 use cases touch an entity`.
     pub(crate) evidence: fn(&BucFacts) -> String,
 }
 
@@ -128,15 +122,9 @@ pub enum Requirement {
     Optional,
 }
 
-/// One clause of a gate. A check reads only `BucFacts`, never another stage's verdict, so
-/// a gate means the same thing in any order.
 pub(crate) struct Check {
-    /// The clause as the gate table of `docs/cli-reference.md#next` prints it.
     pub passes_when: &'static str,
     pub weight: Weight,
-    /// `Ok` when the clause passes; `Err` names the elements that fail it. A clause over an
-    /// empty set (no use case yet, no touched entity yet) fails with no element to name, so
-    /// a stage is not ticked on the strength of nothing to check.
     pub eval: fn(&BucFacts) -> Result<(), Vec<Gap>>,
 }
 
@@ -149,8 +137,7 @@ pub enum Weight {
     Advisory,
 }
 
-/// The stage's text and checks. An exhaustive match: a new stage does not compile until it
-/// has a spec.
+/// The stage's text and checks.
 pub fn spec(id: StageId) -> &'static StageSpec {
     match id {
         StageId::Scope => &stages::SCOPE,
@@ -196,8 +183,7 @@ impl SubjectKind {
     }
 }
 
-/// A lifecycle finding as `check` names it. Core renders no message or trace: the CLI has
-/// one renderer of those, and `next` points at `rdra-ish check`.
+/// A lifecycle finding as `check` names it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FindingRef {
     /// `StateDiag::name`, such as `Witness_Order_status_pending`.
@@ -258,7 +244,6 @@ impl StageView {
         }
     }
 
-    /// Derived, never stored.
     pub fn verdict(&self) -> Verdict {
         if self.open {
             Verdict::Open
@@ -278,8 +263,7 @@ impl StageView {
     }
 }
 
-/// Where one BUC stands: one view per stage, in order. There is no stored current stage;
-/// `reached` and `next` derive from the views.
+/// Where one BUC stands: one view per stage, in order.
 #[derive(Debug, Clone)]
 pub struct BucStanding {
     pub id: String,
@@ -314,8 +298,7 @@ impl BucStanding {
             .map(|view| view.id)
     }
 
-    /// The stage is inside the met prefix of required stages. Lint reads this to call a
-    /// finding of a later stage premature.
+    /// The stage is inside the met prefix of required stages.
     pub fn has_passed(&self, stage: StageId) -> bool {
         self.required()
             .take_while(|view| view.verdict() == Verdict::Met)
@@ -350,8 +333,7 @@ impl BucStanding {
 /// Where every BUC of a model stands, in declaration order.
 pub struct Assessment {
     pub bucs: Vec<BucStanding>,
-    /// Findings of `check` that no BUC owns, at `Depth::Lifecycle`. `next` prints them
-    /// first, because `check` fails on them whatever stage a BUC is at.
+    /// Findings of `check` that no BUC owns, at `Depth::Lifecycle`.
     pub unowned_findings: Vec<FindingRef>,
     pub depth: Depth,
 }
@@ -361,8 +343,6 @@ pub fn assess(model: &SemanticModel, depth: Depth) -> Assessment {
     assess_with(model, depth, order::ORDER)
 }
 
-/// `assess` under a given stage order. Checks read only `BucFacts`, so a verdict is the same
-/// under any order; only positions move.
 fn assess_with(model: &SemanticModel, depth: Depth, order: &[StageId]) -> Assessment {
     let facts: Vec<BucFacts> = model
         .bucs
@@ -469,8 +449,6 @@ contains(BucOrder, PlaceOrder)
         assert!(all.iter().all(|id| order.contains(id)));
     }
 
-    /// docs/vision.md proposes data and lifecycle before use cases. Under that order every
-    /// stage keeps its verdict; only the positions move.
     #[test]
     fn verdicts_are_independent_of_order() {
         let src = format!(
@@ -528,7 +506,6 @@ forbidden(Order, status == paid, paid_at == null)
 
     #[test]
     fn the_stage_is_the_last_gate_of_the_passing_prefix() {
-        // Entity structure is met, but the use case has no boundary yet.
         let src = format!(
             "{SKELETON}
 entity Order \"Order\" {{

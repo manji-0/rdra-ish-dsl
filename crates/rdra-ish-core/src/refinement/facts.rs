@@ -1,4 +1,4 @@
-//! What one BUC holds, read once from the model relations. Checks are pure functions of it.
+//! What one BUC holds, read once from the model relations.
 
 use std::collections::BTreeSet;
 
@@ -7,21 +7,11 @@ use crate::model::{BucKey, ColumnType, EntityKey, NodeRef, RelKind, SemanticMode
 pub(crate) struct BucFacts<'m> {
     pub model: &'m SemanticModel,
     pub buc: BucKey,
-    /// Businesses the BUC `belongs` to.
     pub businesses: Vec<String>,
-    /// `performs` and event or timer `triggers` that start the BUC or one of its use cases.
-    pub starters: usize,
-    /// Events and timers that `triggers` the BUC itself: an event-started BUC whose entry use
-    /// case is not known yet.
+    pub performs_or_triggers: usize,
     pub buc_triggers: Vec<String>,
-    /// The use cases the BUC `contains`, and those its flows hold through `contains` and
-    /// `covers`, in first-reached order.
     pub use_cases: Vec<UseCaseKey>,
-    /// Entities the BUC's use cases create, read, update, or delete, directly or through an
-    /// invoked API, in first-touch order.
     pub entities: Vec<EntityKey>,
-    /// Columns some use case of the BUC moves with `transitions` or `sets`, in first-move
-    /// order.
     pub moved: Vec<MovedColumn>,
 }
 
@@ -34,11 +24,8 @@ pub(crate) struct MovedColumn {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Axis {
-    /// An Enum or Bool column: a lifecycle state axis.
     State,
-    /// A presence (`@null`), Int, or comparison operand: moves together with a lifecycle,
-    /// but is not one.
-    Companion,
+    NonState,
 }
 
 impl<'m> BucFacts<'m> {
@@ -59,7 +46,7 @@ impl<'m> BucFacts<'m> {
             if state {
                 Axis::State
             } else {
-                Axis::Companion
+                Axis::NonState
             }
         };
         let mut moved: Vec<MovedColumn> = Vec::new();
@@ -82,7 +69,7 @@ impl<'m> BucFacts<'m> {
             }
             columns
                 .into_iter()
-                .map(move |column| (e.origin, e.entity, column, Axis::Companion))
+                .map(move |column| (e.origin, e.entity, column, Axis::NonState))
         });
         for (uc, entity, column, axis) in transitions.chain(effects).chain(propositions) {
             if !use_cases.contains(&uc) {
@@ -121,7 +108,7 @@ impl<'m> BucFacts<'m> {
             rel.kind == RelKind::Triggers
                 && matches!(rel.from, NodeRef::Event(_) | NodeRef::Timer(_))
         };
-        let starters = model
+        let performs_or_triggers = model
             .relations
             .iter()
             .filter(|rel| match rel.kind {
@@ -144,7 +131,7 @@ impl<'m> BucFacts<'m> {
             model,
             buc,
             businesses,
-            starters,
+            performs_or_triggers,
             buc_triggers,
             use_cases,
             entities,
@@ -164,12 +151,10 @@ impl<'m> BucFacts<'m> {
         &self.model.entities[entity].id
     }
 
-    /// The use case has a CRUD touchpoint, directly or through an invoked API.
     pub fn touches(&self, uc: UseCaseKey) -> bool {
         !use_case_entities(self.model, uc).is_empty()
     }
 
-    /// The use case works through a screen or an API, or an event or timer runs it.
     pub fn has_boundary(&self, uc: UseCaseKey) -> bool {
         let node = NodeRef::UseCase(uc);
         self.model.relations.iter().any(|rel| match rel.kind {
@@ -179,12 +164,10 @@ impl<'m> BucFacts<'m> {
         })
     }
 
-    /// The model declares a `permission` or a `medium`, so access constraints are in play.
     pub fn has_access_vocabulary(&self) -> bool {
         !self.model.permissions.is_empty() || !self.model.media.is_empty()
     }
 
-    /// The use case, or an API it invokes, `requires_permission` or `requires_medium`.
     pub fn requires_access(&self, uc: UseCaseKey) -> bool {
         let node = NodeRef::UseCase(uc);
         let apis: Vec<&NodeRef> = self
@@ -202,7 +185,6 @@ impl<'m> BucFacts<'m> {
         })
     }
 
-    /// The entity has an authored column that is neither its primary key nor a foreign key.
     pub fn has_attribute(&self, entity: EntityKey) -> bool {
         self.model.entities[entity]
             .columns
@@ -210,7 +192,6 @@ impl<'m> BucFacts<'m> {
             .any(|col| !col.is_pk && self.model.column_fk(entity, &col.name).is_none())
     }
 
-    /// A `relate` links the entity to another entity this BUC touches.
     pub fn related_to_touched(&self, entity: EntityKey) -> bool {
         self.model.foreign_keys().any(|(_, fk)| {
             (fk.child == entity && fk.parent != entity && self.entities.contains(&fk.parent))
@@ -218,7 +199,6 @@ impl<'m> BucFacts<'m> {
         })
     }
 
-    /// Ids of the entities whose columns the BUC moves, in first-move order.
     pub fn moved_entities(&self) -> Vec<EntityKey> {
         let mut entities = Vec::new();
         for m in &self.moved {
@@ -229,7 +209,6 @@ impl<'m> BucFacts<'m> {
         entities
     }
 
-    /// `(entity, column)` of every column the BUC moves.
     pub fn moved_columns(&self) -> BTreeSet<(EntityKey, String)> {
         self.moved
             .iter()
@@ -237,7 +216,6 @@ impl<'m> BucFacts<'m> {
             .collect()
     }
 
-    /// `Order.status`.
     pub fn column_label(&self, entity: EntityKey, column: &str) -> String {
         format!("{}.{column}", self.entity_id(entity))
     }
@@ -269,7 +247,6 @@ fn buc_use_cases(model: &SemanticModel, buc: BucKey) -> Vec<UseCaseKey> {
     use_cases
 }
 
-/// Entities a use case creates, reads, updates, or deletes, directly or through an invoked API.
 fn use_case_entities(model: &SemanticModel, uc: UseCaseKey) -> Vec<EntityKey> {
     let node = NodeRef::UseCase(uc);
     let apis: Vec<NodeRef> = model

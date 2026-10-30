@@ -1,34 +1,23 @@
 //! The generated blocks of the docs and skills, rendered from the stage specs.
-//!
-//! A block sits between `<!-- stage-spec: <block> -->` and `<!-- /stage-spec -->`. The
-//! `stage_docs_are_in_sync` test compares each block with its rendering and, with
-//! `RDRA_ISH_BLESS=1`, rewrites it. The hand-written prose around a block stays.
 
 use std::fmt::Write as _;
 
 use super::{spec, stages, Requirement, StageId, Weight};
 
-/// Placeholders the docs fill the review templates with.
 const DOC_SRC: &str = "src/";
 const DOC_BUC: &str = "BucOrder";
 const DOC_ENTITY: &str = "Order";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Block {
-    /// The Stage Map table of `docs/incremental-modeling.md`.
     Map,
-    /// The `## Stage N: Name` heading of one stage section, so the anchor derives.
     Heading(StageId),
-    /// The "Ask the user" list and the "Validation" commands of one stage section.
     Ask(StageId),
-    /// The gate table of `docs/cli-reference.md#next`.
     Gates,
-    /// The stage table of a skill: number, concern, question, and what the stage adds.
     SkillTable,
 }
 
 impl Block {
-    /// The marker text after `stage-spec:`.
     pub(crate) fn parse(label: &str) -> Option<Block> {
         let stage = |slug: &str| stages().find(|id| id.slug() == slug);
         match label.split_once(' ') {
@@ -126,8 +115,6 @@ pub(crate) fn render(block: Block) -> String {
     out
 }
 
-/// A review template as the Stage Map's Validate column abbreviates it: without the binary,
-/// the inputs, the placeholder flags, and the default `--format mermaid`.
 fn short_command(template: &str) -> String {
     let words: Vec<&str> = template.split(' ').collect();
     let mut kept = Vec::new();
@@ -173,8 +160,6 @@ mod tests {
         }
     }
 
-    /// The generated blocks of one file: `(label, body)`, and the text with each body
-    /// replaced by its rendering.
     fn sync_blocks(text: &str, failures: &mut Vec<String>, where_: &str) -> (Vec<Block>, String) {
         let mut blocks = Vec::new();
         let mut rewritten = String::new();

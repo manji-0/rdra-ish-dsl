@@ -1,5 +1,4 @@
-//! One `StageSpec` per stage: the text the docs and skills show, beside the checks of its
-//! gate. The docs hold generated renderings of this text; editing it here is the only edit.
+//! One `StageSpec` per stage: the text the docs and skills show, beside the checks of its gate.
 
 use std::collections::BTreeSet;
 
@@ -26,8 +25,7 @@ fn failing(gaps: Vec<Gap>) -> Result<(), Vec<Gap>> {
     }
 }
 
-/// A clause over every use case or entity: fails with no element to name when there is none.
-fn all_of(total: usize, gaps: Vec<Gap>) -> Result<(), Vec<Gap>> {
+fn all_of_nonempty(total: usize, gaps: Vec<Gap>) -> Result<(), Vec<Gap>> {
     if total == 0 {
         Err(Vec::new())
     } else {
@@ -106,7 +104,7 @@ pub(super) const SKELETON: StageSpec = StageSpec {
             passes_when: "an actor `performs` it or one of its use cases, or an event or timer `triggers` one",
             weight: Weight::Blocking,
             eval: |f| {
-                if f.starters == 0 {
+                if f.performs_or_triggers == 0 {
                     let id = f.buc_id();
                     Err(vec![gap(
                         SubjectKind::Buc,
@@ -143,7 +141,7 @@ pub(super) const SKELETON: StageSpec = StageSpec {
         format!(
             "{}, {} `performs` / `triggers` starting them",
             count(f.use_cases.len(), "use case"),
-            f.starters
+            f.performs_or_triggers
         )
     },
 };
@@ -274,7 +272,7 @@ pub(super) const INTERACTION_BOUNDARY: StageSpec = StageSpec {
                         )
                     })
                     .collect();
-                all_of(f.use_cases.len(), gaps)
+                all_of_nonempty(f.use_cases.len(), gaps)
             },
         },
         Check {
@@ -345,7 +343,7 @@ pub(super) const ENTITY_STRUCTURE: StageSpec = StageSpec {
                         )
                     })
                     .collect();
-                all_of(f.entities.len(), gaps)
+                all_of_nonempty(f.entities.len(), gaps)
             },
         },
         Check {
@@ -492,19 +490,13 @@ pub(super) const LIFECYCLE: StageSpec = StageSpec {
     },
 };
 
-/// Which state rules a rules stage counts. Every rule belongs to exactly one tier, so a
-/// comparison `forbidden` is Advanced and never also a guardrail.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum RuleTier {
-    /// `forbidden` / `exclusive` over plain facts.
     Guardrail,
-    /// `invariant` / `required` over plain facts.
     Obligation,
-    /// A comparison proposition in any rule, or a rule over more than one entity.
     Advanced,
 }
 
-/// One state rule of the model.
 pub(super) enum Rule<'m> {
     Forbidden(&'m crate::model::ForbiddenConstraint),
     Exclusive(&'m crate::model::ExclusiveConstraint),
@@ -554,8 +546,6 @@ impl<'m> Rule<'m> {
         }
     }
 
-    /// `(entity, column)` of every column the rule reads: its conditions, guards, requireds,
-    /// and both operands of each comparison.
     fn columns(&self) -> BTreeSet<(EntityKey, String)> {
         let mut columns = BTreeSet::new();
         match self {
@@ -621,7 +611,6 @@ fn cross_columns(columns: &mut BTreeSet<(EntityKey, String)>, conditions: &[Cros
 }
 
 impl RuleTier {
-    /// The stage a rule of the tier meets, and a violation of it blocks.
     pub(super) fn stage(self) -> StageId {
         match self {
             RuleTier::Guardrail => StageId::LocalGuardrails,
@@ -652,7 +641,6 @@ impl RuleTier {
         }
     }
 
-    /// The columns this BUC moves that a rule of the tier reads, as `Order.status`.
     fn credited(self, f: &BucFacts) -> BTreeSet<String> {
         let moved = f.moved_columns();
         Rule::all(f.model)
