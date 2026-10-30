@@ -4,18 +4,43 @@
 
 ### Added
 
-- `rdra-ish next` places each BUC on the incremental modeling stage map (0 to 6C) and
-  prints the next stage: its main question, the elements that fail its gate (such as a
-  use case with no CRUD or an entity with only its key), the questions to ask, and the
-  commands that review it. `--buc` narrows it to some BUCs, and `--format json` lists
-  every gap. Each step of `samples/incremental-order` reports its own stage.
+- `rdra-ish next` places each BUC on the incremental modeling stage map and prints the
+  next stage: its main question, the elements that fail its gate (such as a use case with
+  no CRUD or an entity with only its key), the review notes, the `check` findings the
+  stage owns, the questions to ask, and the commands that review it. A gate clause is
+  blocking or advisory: a failed advisory clause (a use case with no touchpoint once
+  another has one, a use case with no `requires_*` when the model declares permissions or
+  media, a touched entity with no `relate`, a `sets` on a non-Enum column) is a note that
+  never holds a BUC back. A stage whose clauses pass but which owns a `check` error (a
+  `Witness_`, `Deadlock_`, or violated rule on an entity the BUC touches) reads `[!]`
+  blocked. The rule stages 6A to 6C are optional: a BUC with a lifecycle is complete, and
+  `next` offers them. An event-started BUC (`triggers(Event, Buc)`, no use case yet)
+  passes the skeleton and is asked for its entry use case; a rule counts for a BUC through
+  a column the BUC moves and belongs to exactly one tier, so a comparison `forbidden` is an
+  advanced rule only. `--buc` narrows it to some BUCs; `--format json` adds a stable `slug`
+  per stage, `required_complete`, `verdict`, `notes`, and `findings`, and `next.kind` is
+  `required` or `optional`.
+- The Stage Map, the "Ask the user" and "Validation" of each stage in
+  `docs/incremental-modeling.md`, the gate table of the CLI reference, and the stage
+  tables of the `rdra-ish-write`, `rdra-ish-buc-create`, and `rdra-ish-buc-update` skills
+  are generated from one stage spec in `rdra-ish-core`; a test fails when they drift, and
+  `RDRA_ISH_BLESS=1 cargo test -p rdra-ish-core stage_docs` rewrites them. The texts are
+  reconciled: `belongs` is a stage-0 addition, stage 5 asks whether the Enum variants are
+  the states to see, and lifecycle and rule review runs `check src/` and
+  `states src/ --entity <Entity>` instead of `states --buc`, which leaves `Witness_`,
+  `Deadlock_`, and `Runs_` undecided. The 6C section is titled "Advanced Rules"
+  (anchor `#stage-6c-advanced-rules`).
 
 ### Changed
 
 - The `lint` `stage-readiness` row gives the stage of each BUC and the stage after it,
-  from the same gates as `next` (`BucOrder stage 2 (next 3)`), instead of which of six
-  layers have any element. `coverage-score` calls those six layers and still subtracts 8
-  for each one with no element; its message says `missing layers` (was `missing stages`).
+  from the same gates as `next` (`BucOrder stage 2 (next 3)`; `required stages complete`
+  once stage 5 is met), instead of which of six layers have any element. `coverage-score`
+  calls those six layers and still subtracts 8 for each one with no element; its message
+  says `missing layers` (was `missing stages`).
+- `lint` reports `buc-empty` as `info`, not `warning`, on a BUC that has not passed the
+  skeleton stage, with `expected before stage 1 BUC skeleton` in its hint; the LSP no
+  longer publishes it, so a correct stage-0 model has no editor warning.
 
 ## v0.3.0 - 2026-10-30
 

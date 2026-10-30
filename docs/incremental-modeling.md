@@ -155,15 +155,20 @@ rdra-ish next src/
 rdra-ish next src/ --buc BucOrder
 ```
 
-Each stage has a gate that names the elements that block it, such as a use case with no
-CRUD or an entity with only its key. A BUC is at the highest stage whose gate it passes
-together with every earlier gate. For the first failed gate, `next` prints the stage's
-main question, those gaps, the questions to ask the user, and the validation commands of
-the stage section below. The gates are listed in the
+Each stage has a gate whose clauses name the elements that fail them, such as a use case
+with no CRUD or an entity with only its key. A blocking clause that fails is a gap and
+leaves the stage open; an advisory clause that fails is a review note, which never holds a
+BUC back, so a use case that is data-free on purpose or an entity that stands alone is a
+question, not a blocker. A stage whose clauses pass but which owns an error of `check` is
+blocked until the model is fixed. A BUC is at the last met stage of the required prefix,
+0 to 5. Stages 6A to 6C are optional: a BUC with a lifecycle and no rule is complete, and
+`next` offers the rule stages with their questions. For the next stage, `next` prints its
+main question, the gaps, notes and findings, the questions to ask the user, and the
+validation commands of the stage section below. The gates are listed in the
 [CLI Reference](./cli-reference.md#next).
 
 Different BUCs can be at different stages. Refine one BUC at a time, and run `next`
-again after each stage to see what is left and what the next question is. A passed gate
+again after each stage to see what is left and what the next question is. A met gate
 means the elements exist; whether the stage is stable enough to move on is still a
 review decision, as each stage's "Move on when" says.
 
