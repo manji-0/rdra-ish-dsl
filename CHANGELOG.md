@@ -20,7 +20,8 @@
   lifecycle, and a use case exposed with `.caller(system)` or `.caller(any)` is not
   reported as having no actor. `rdra-ish list <model> --kind surface` prints the
   published surface as canonical text, sorted by kind and id. A model without `exposes`
-  keeps every output unchanged.
+  keeps every output unchanged; the one grammar change is that `.caller(actor)` and
+  `.caller(system)` parse, where `actor` and `system` were keywords only.
 - One project loader in `rdra-ish-core` (`load_project`) now serves the CLI, the LSP, and the
   tests. It looks for an `rdra.toml` manifest above the inputs and parses it, but nothing
   reads it yet. The CLI loads and prints a model without a manifest as before. A malformed

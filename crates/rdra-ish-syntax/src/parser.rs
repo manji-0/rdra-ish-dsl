@@ -1109,8 +1109,6 @@ fn predicate_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + 
         .or(predicate_atom())
 }
 
-/// `actor` or `system` as a chain argument, as in `exposes(S, U).caller(system)`. Both are
-/// kind keywords, so only a chain call reads them as a bare word.
 fn kind_word_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + Clone {
     select! {
         Token::Actor => "actor".to_string(),
@@ -1125,19 +1123,30 @@ fn kind_word_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + 
     })
 }
 
-/// `.method(args...)` のチェーン呼び出し1件。
+/// `.method(args...)` のチェーン呼び出し1件。`.caller(...)` alone also takes the kind keywords
+/// `actor` and `system` as bare words.
 fn chain_call() -> impl Parser<Token, ChainCall, Error = Simple<Token>> + Clone {
     just(Token::Dot)
         .ignore_then(ident())
         .then_ignore(just(Token::LParen))
         .then(
-            kind_word_arg()
-                .or(predicate_arg())
+            predicate_arg()
+                .map(|arg| (arg, false))
+                .or(kind_word_arg().map(|arg| (arg, true)))
                 .separated_by(just(Token::Comma))
                 .allow_trailing(),
         )
         .then_ignore(just(Token::RParen))
-        .map_with_span(|(name, args), span| ChainCall { name, args, span })
+        .try_map(|(name, args), span| {
+            if name != "caller" && args.iter().any(|(_, bare)| *bare) {
+                return Err(Simple::custom(
+                    span,
+                    "`actor` and `system` are bare words only in `.caller(...)`",
+                ));
+            }
+            let args = args.into_iter().map(|(arg, _)| arg).collect();
+            Ok(ChainCall { name, args, span })
+        })
 }
 
 fn predicate_call() -> impl Parser<Token, PredicateCall, Error = Simple<Token>> + Clone {
@@ -1710,6 +1719,44 @@ performs(Customer, Browse) /* predicate comment */
             })
             .collect();
         assert_eq!(words, ["system", "actor"]);
+    }
+
+    #[test]
+    fn a_kind_qualified_ref_in_a_chain_argument_still_parses() {
+        for (src, kind, id) in [
+            (
+                "forbidden(Order, status == b).by(actor::Customer)",
+                Kind::Actor,
+                "Customer",
+            ),
+            (
+                "relate(Line, Order, N:1).via(system::Shop)",
+                Kind::System,
+                "Shop",
+            ),
+        ] {
+            let ast = parse_ok(src);
+            let Item::Predicate(pred) = &ast.items[0] else {
+                panic!("{src}")
+            };
+            let PredicateArg::Ref(q) = &pred.chain[0].args[0] else {
+                panic!("{src}: {:?}", pred.chain[0].args)
+            };
+            assert_eq!(q.kind_qualifier, Some(kind), "{src}");
+            assert_eq!(q.parts, [id], "{src}");
+        }
+    }
+
+    #[test]
+    fn a_bare_kind_word_outside_caller_is_a_syntax_error() {
+        for src in [
+            "relate(Line, Order, N:1).role(actor)",
+            "forbidden(Order, status == b).by(system)",
+            "performs(actor, U)",
+        ] {
+            let (_, errors) = parse(src);
+            assert!(!errors.is_empty(), "must reject: {src}");
+        }
     }
 
     #[test]
