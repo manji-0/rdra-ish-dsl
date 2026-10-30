@@ -19,6 +19,7 @@ the selected view.
 | Dense relationship inspection | `rdra` with `--node-kind` / `--edge-kind` | `references/rdra-graph.md` |
 | Business object/data touchpoint review | `rdra --buc <BucId>` plus CRUD matrix | `references/rdra-graph.md` |
 | Use case inputs and outputs (UC複合図) | `usecase --buc <BucId>` or `usecase --usecase <UcId>` | `references/rdra-graph.md` |
+| Business flow: step order, branches, and what each step covers | `flow --buc <BucId>` | `references/rdra-graph.md` |
 | Information, state models, and variations | `information`, optionally `--buc <BucId>` | `references/er.md` |
 | Variations with their values, and conditions | `condition`, optionally `--buc <BucId>` | `references/er.md` |
 | Entity structure and relationships | `er`, optionally `--buc <BucId>` | `references/er.md` |

@@ -3,6 +3,10 @@
 samples/api-contract/out/openapi.json	export samples/api-contract/src --kind openapi
 samples/clinic-ops/out/actor_permission_audit.csv	csv samples/clinic-ops --kind actor-permission-audit
 samples/clinic-ops/out/api_matrix.csv	csv samples/clinic-ops --kind api-matrix
+samples/clinic-ops/out/buc/flow_billing_claims.mmd	diagram samples/clinic-ops --kind flow --format mermaid --buc BucBillingClaims
+samples/clinic-ops/out/buc/flow_prescription_fulfillment.mmd	diagram samples/clinic-ops --kind flow --format mermaid --buc BucPrescriptionFulfillment
+samples/clinic-ops/out/buc/flow_visit_check_in.mmd	diagram samples/clinic-ops --kind flow --format mermaid --buc BucVisitCheckIn
+samples/clinic-ops/out/buc/flow_visit_payment.mmd	diagram samples/clinic-ops --kind flow --format mermaid --buc BucVisitPayment
 samples/clinic-ops/out/buc/usecase_appointment_scheduling.mmd	diagram samples/clinic-ops --kind usecase --format mermaid --buc BucAppointmentScheduling
 samples/clinic-ops/out/buc/usecase_billing_claims.mmd	diagram samples/clinic-ops --kind usecase --format mermaid --buc BucBillingClaims
 samples/clinic-ops/out/buc/usecase_clinical_encounter.mmd	diagram samples/clinic-ops --kind usecase --format mermaid --buc BucClinicalEncounter

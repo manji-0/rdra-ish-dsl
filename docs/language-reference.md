@@ -135,8 +135,8 @@ a `%% desc <id>: <text>` comment line after the node.
 | `constraint` | A non-functional guardrail or compliance constraint, commonly used for audit, logging, retention, privacy, or operational restrictions. | `lint` `constraint-unscoped`; RDRA diagram |
 | `business` | A business (a coarse-grained area of activity) that BUCs belong to. | RDRA and business diagrams |
 | `buc` | A business use case: a unit of business value composed of use cases. | `lint` `buc-empty`; RDRA, business, usecase, ER, state, and event diagrams (`--buc` filter) |
-| `flow` | A business flow: an ordered business narrative inside a BUC. A flow is composed of steps and can make UC and event ordering explicit without turning the diagram into the only source of truth. | `lint` `flow-empty`, `flow-cycle`; RDRA diagram |
-| `step` | A business flow step. A step is a business-language action that can cover a use case, API, or event while remaining distinct from implementation boundaries. | `lint` `step-no-cover`; RDRA diagram |
+| `flow` | A business flow: an ordered business narrative inside a BUC. A flow is composed of steps and can make UC and event ordering explicit without turning the diagram into the only source of truth. | `lint` `flow-empty`, `flow-cycle`; RDRA and flow diagrams |
+| `step` | A business flow step. A step is a business-language action that can cover a use case, API, or event while remaining distinct from implementation boundaries. | `lint` `step-no-cover`; RDRA and flow diagrams (a lane per actor that `performs` steps) |
 | `timer` | An RDRA タイマー: a schedule that starts a use case, such as a nightly sweep. See [Timers](#timers). | `triggers(Timer, UseCase)`; RDRA diagram (external-environment layer) and event diagram; `lint` `orphan-node` |
 | `medium` | A physical medium, device, terminal, or operation medium for Business-BUC context. | `requires_medium` in `csv --kind screen-constraints`; RDRA diagram node. `belongs(...).by(...)` records it, but no output reads that context yet. |
 | `actor` | A human actor who performs use cases. | `check` permission paths; RDRA diagram; `csv --kind actor-permission-audit` |

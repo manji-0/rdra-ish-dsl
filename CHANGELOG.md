@@ -333,6 +333,14 @@
 
 ### Added
 
+- `diagram --kind flow` draws the RDRA business flow under the encoding contract, as
+  `flowchart TD`: each flow as `subgraph flow__<id>` holding its steps, the declared
+  `precedes`, `branches`, `excepts`, and `repeats` edges between steps, and `covers`
+  edges from a step to the use cases, APIs, events, and timers it covers. A step one
+  actor performs sits in a `subgraph lane__<Flow>__<Actor>` swimlane; a step several
+  actors perform has a `performs` edge from each. clinic-ops gains
+  `out/buc/flow_<buc>.mmd` for its four BUCs with a flow.
+
 - `diagram --kind condition` draws the RDRA variations and conditions under the
   encoding contract: each condition with an `-.->|combines|` edge to each variation and
   state model (`statemodel__<Entity>_<column>`) it combines, a `%% holds` line for its

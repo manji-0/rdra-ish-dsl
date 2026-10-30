@@ -1,0 +1,45 @@
+%% rdra-ish diagram=flow scope=buc:BucPrescriptionFulfillment model=samples/clinic-ops
+%% kinds: flow step usecase
+%% omitted: buc
+flowchart TD
+  subgraph flow__PrescriptionFlow["処方の流れ"]
+    step__CounselStep["服薬指導・薬剤交付"]:::step
+    step__DispenseStep["調剤・監査"]:::step
+    step__InhouseStep["院内処方（引換券）"]:::step
+    step__InquiryStep["疑義照会"]:::step
+    step__OrderStep["処方オーダ"]:::step
+    step__OutsideStep["院外処方箋（電子処方箋管理サービス）"]:::step
+    step__PharmacyStep["保険薬局での調剤"]:::step
+  end
+  usecase__AnswerPharmacyInquiry["保険薬局からの疑義照会への回答"]:::usecase
+  usecase__AnswerPrescriptionInquiry["疑義照会への回答"]:::usecase
+  usecase__ConfirmDispense["保険薬局での調剤結果の受信"]:::usecase
+  usecase__CounselMedication["服薬指導"]:::usecase
+  usecase__DispenseAndAudit["調剤・監査"]:::usecase
+  usecase__DraftPrescription["処方オーダの登録"]:::usecase
+  usecase__HandOverMedication["薬剤交付"]:::usecase
+  usecase__IssueInhouseVoucher["院内処方用引換券の交付"]:::usecase
+  usecase__IssueOutsidePrescription["院外処方箋の発行"]:::usecase
+  usecase__IssueRefillPrescription["リフィル処方箋の処方オーダ"]:::usecase
+  usecase__RaisePrescriptionInquiry["疑義照会"]:::usecase
+  step__CounselStep -.->|covers| usecase__CounselMedication
+  step__CounselStep -.->|covers| usecase__HandOverMedication
+  step__DispenseStep -.->|covers| usecase__DispenseAndAudit
+  step__DispenseStep -.->|excepts| step__InquiryStep
+  step__DispenseStep -->|precedes| step__CounselStep
+  step__InhouseStep -.->|covers| usecase__IssueInhouseVoucher
+  step__InhouseStep -->|precedes| step__DispenseStep
+  step__InquiryStep -.->|covers| usecase__AnswerPrescriptionInquiry
+  step__InquiryStep -.->|covers| usecase__RaisePrescriptionInquiry
+  step__InquiryStep -->|repeats| step__DispenseStep
+  step__OrderStep -->|branches| step__InhouseStep
+  step__OrderStep -.->|covers| usecase__DraftPrescription
+  step__OrderStep -.->|covers| usecase__IssueRefillPrescription
+  step__OrderStep -->|precedes| step__OutsideStep
+  step__OutsideStep -.->|covers| usecase__IssueOutsidePrescription
+  step__OutsideStep -->|precedes| step__PharmacyStep
+  step__PharmacyStep -.->|covers| usecase__AnswerPharmacyInquiry
+  step__PharmacyStep -.->|covers| usecase__ConfirmDispense
+  classDef flow stroke:#333;
+  classDef step stroke:#333;
+  classDef usecase stroke:#333;

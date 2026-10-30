@@ -1,0 +1,65 @@
+%% rdra-ish diagram=flow scope=buc:BucBillingClaims model=samples/clinic-ops
+%% kinds: flow step timer usecase
+%% omitted: buc
+flowchart TD
+  subgraph flow__ClaimCycleFlow["レセプトの月次サイクル"]
+    step__AssessStep["査定と再審査請求"]:::step
+    step__CreateStatementStep["レセプト作成（月初）"]:::step
+    step__HoldStep["保留（月遅れ）"]:::step
+    step__InspectStep["院内点検"]:::step
+    step__PaidStep["支払（診療翌々月）"]:::step
+    step__ReceiptErrorStep["受付不能・要確認の再送（11日・12日）"]:::step
+    step__ReturnStep["返戻と再請求"]:::step
+    step__ReviewStep["審査"]:::step
+    step__SubmitStep["請求（5日～10日）"]:::step
+  end
+  timer__ErrorResendWindow["エラー分レセプトの再送（毎月11日・12日）"]:::timer
+  timer__MonthlyClaimCreation["前月分レセプトの作成（月初）"]:::timer
+  timer__MonthlyClaimDeadline["前月分レセプトの請求（毎月5日～10日）"]:::timer
+  usecase__CorrectReturnedStatement["返戻レセプトの訂正（再請求）"]:::usecase
+  usecase__GenerateClaimStatement["レセプト作成"]:::usecase
+  usecase__HoldClaimStatement["レセプトの保留（月遅れ）"]:::usecase
+  usecase__InspectClaimStatement["レセプトの院内点検"]:::usecase
+  usecase__PostPayment["診療報酬の入金"]:::usecase
+  usecase__ReceiveClaimAccepted["レセプト受付（審査へ）"]:::usecase
+  usecase__RecordClaimAssessment["査定の取込"]:::usecase
+  usecase__RecordClaimReturn["返戻レセプトの取込"]:::usecase
+  usecase__RecordReceiptError["受付不能・要確認の確認"]:::usecase
+  usecase__ReleaseHeldStatement["保留レセプトの再提出準備"]:::usecase
+  usecase__RequestReexamination["再審査請求"]:::usecase
+  usecase__ResendErroredStatement["エラー分レセプトの再送"]:::usecase
+  usecase__ReviewClaimTransfer["資格の振替・分割の確認"]:::usecase
+  usecase__SubmitClaimStatements["レセプト請求"]:::usecase
+  step__AssessStep -.->|covers| usecase__RecordClaimAssessment
+  step__AssessStep -.->|covers| usecase__RequestReexamination
+  step__AssessStep -->|precedes| step__PaidStep
+  step__CreateStatementStep -.->|covers| timer__MonthlyClaimCreation
+  step__CreateStatementStep -.->|covers| usecase__GenerateClaimStatement
+  step__CreateStatementStep -->|precedes| step__InspectStep
+  step__HoldStep -.->|covers| usecase__HoldClaimStatement
+  step__HoldStep -.->|covers| usecase__ReleaseHeldStatement
+  step__HoldStep -->|repeats| step__InspectStep
+  step__InspectStep -->|branches| step__HoldStep
+  step__InspectStep -.->|covers| usecase__InspectClaimStatement
+  step__InspectStep -->|precedes| step__SubmitStep
+  step__PaidStep -.->|covers| usecase__PostPayment
+  step__ReceiptErrorStep -.->|covers| timer__ErrorResendWindow
+  step__ReceiptErrorStep -.->|covers| usecase__RecordReceiptError
+  step__ReceiptErrorStep -.->|covers| usecase__ResendErroredStatement
+  step__ReceiptErrorStep -->|repeats| step__SubmitStep
+  step__ReturnStep -.->|covers| usecase__CorrectReturnedStatement
+  step__ReturnStep -.->|covers| usecase__RecordClaimReturn
+  step__ReturnStep -->|repeats| step__InspectStep
+  step__ReviewStep -->|branches| step__AssessStep
+  step__ReviewStep -.->|covers| usecase__ReceiveClaimAccepted
+  step__ReviewStep -.->|covers| usecase__ReviewClaimTransfer
+  step__ReviewStep -.->|excepts| step__ReturnStep
+  step__ReviewStep -->|precedes| step__PaidStep
+  step__SubmitStep -.->|covers| timer__MonthlyClaimDeadline
+  step__SubmitStep -.->|covers| usecase__SubmitClaimStatements
+  step__SubmitStep -.->|excepts| step__ReceiptErrorStep
+  step__SubmitStep -->|precedes| step__ReviewStep
+  classDef flow stroke:#333;
+  classDef step stroke:#333;
+  classDef timer stroke:#333;
+  classDef usecase stroke:#333;

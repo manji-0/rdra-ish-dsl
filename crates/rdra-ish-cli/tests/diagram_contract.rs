@@ -147,7 +147,7 @@ fn parse_flowchart(diagram: &str, text: &str) -> Result<Flowchart, String> {
                 _ => return Err(format!("`%% derived` after another edge: {line}")),
             }
         } else if trimmed.starts_with("%% ") {
-        } else if trimmed == "flowchart LR" {
+        } else if trimmed == "flowchart LR" || trimmed == "flowchart TD" {
             seen_type = true;
         } else if trimmed == "end"
             || (trimmed.starts_with("subgraph layer_") && trimmed.ends_with("\"]"))
@@ -191,7 +191,7 @@ fn parse_flowchart(diagram: &str, text: &str) -> Result<Flowchart, String> {
         }
     }
     if !seen_type {
-        return Err("no `flowchart LR` line".to_string());
+        return Err("no `flowchart LR` or `flowchart TD` line".to_string());
     }
     Ok(chart)
 }
@@ -901,5 +901,159 @@ fn a_condition_diagram_node_has_the_id_the_rdra_and_state_diagrams_give_it() {
                 "{root}: {edge:?} derived in one diagram only"
             );
         }
+    }
+}
+
+/// A flow model with lanes, which no sample declares: `performs(Actor, Step)`.
+const LANES: &str = r#"
+actor Clerk "Clerk"
+actor Courier "Courier"
+actor Manager "Manager"
+buc BucShip "Ship"
+flow ShipFlow "Ship flow"
+flow ReturnFlow "Return flow"
+step Pick "Pick"
+step Pack "Pack"
+step Handover "Handover"
+step Receive "Receive"
+usecase PickItems "Pick items"
+contains(BucShip, ShipFlow)
+contains(BucShip, ReturnFlow)
+contains(ShipFlow, Pick)
+contains(ShipFlow, Pack)
+contains(ShipFlow, Handover)
+contains(ReturnFlow, Receive)
+precedes(Pick, Pack)
+precedes(Pack, Handover)
+covers(Pick, PickItems)
+performs(Clerk, Pick)
+performs(Clerk, Pack)
+performs(Clerk, Receive)
+performs(Courier, Handover)
+performs(Manager, Handover)
+"#;
+
+/// The flow contract on one parsed flow diagram: ordering edges between steps, `covers`
+/// from a step to a use case, API, event, or timer, `performs` from an actor to a step, and
+/// each lane `lane__<Flow>__<Actor>` inside a drawn flow.
+fn check_flow(chart: &Flowchart) -> Result<(), String> {
+    for (from, label, to) in &chart.edges {
+        let fits = match label.as_str() {
+            "precedes" | "branches" | "excepts" | "repeats" => {
+                from.starts_with("step__") && to.starts_with("step__")
+            }
+            "covers" => {
+                from.starts_with("step__")
+                    && ["usecase__", "api__", "event__", "timer__"]
+                        .iter()
+                        .any(|kind| to.starts_with(kind))
+            }
+            "performs" => from.starts_with("actor__") && to.starts_with("step__"),
+            _ => false,
+        };
+        if !fits {
+            return Err(format!("{from} -{label}-> {to}"));
+        }
+    }
+    for (id, kind) in &chart.nodes {
+        if ![
+            "flow", "step", "lane", "actor", "usecase", "api", "event", "timer",
+        ]
+        .contains(&kind.as_str())
+        {
+            return Err(format!("a {kind} node {id}"));
+        }
+        if kind == "lane" {
+            let flow = id
+                .strip_prefix("lane__")
+                .and_then(|rest| rest.split_once("__"))
+                .map(|(flow, _)| format!("flow__{flow}"));
+            if !flow.is_some_and(|flow| chart.nodes.contains_key(&flow)) {
+                return Err(format!("lane {id} outside a drawn flow"));
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn every_flow_diagram_of_every_sample_keeps_the_contract() {
+    let dir = scratch("diagram_contract_flow");
+    let (mut drawn, mut orders) = (0, BTreeSet::new());
+    for root in roots() {
+        for scope in scopes(&root) {
+            let args: Vec<&str> = scope.iter().map(String::as_str).collect();
+            let text = diagram_with(&root, "flow", &args, &dir.join("out"));
+            let chart = checked("flow", &text, &format!("{root} {scope:?}"));
+            check_flow(&chart).unwrap_or_else(|error| panic!("{root} {scope:?}: {error}\n{text}"));
+            drawn += usize::from(chart.nodes.values().any(|kind| kind == "flow"));
+            orders.extend(chart.edges.iter().map(|(_, label, to)| {
+                let kind = to.split_once("__").map_or("", |(kind, _)| kind);
+                format!("{label} {kind}")
+            }));
+        }
+    }
+    assert!(drawn >= 5, "only {drawn} flow diagrams draw a flow");
+    for edge in [
+        "precedes step",
+        "branches step",
+        "excepts step",
+        "repeats step",
+        "covers usecase",
+        "covers event",
+        "covers timer",
+    ] {
+        assert!(orders.contains(edge), "no `{edge}` edge in any sample");
+    }
+}
+
+#[test]
+fn a_flow_diagram_with_lanes_keeps_the_contract() {
+    let dir = scratch("diagram_contract_flow_lanes");
+    let model = dir.join("lanes.rdra");
+    std::fs::write(&model, LANES).unwrap();
+    let root = model.to_str().unwrap();
+    let text = diagram(root, "flow", None, &dir.join("out"));
+    let chart = checked("flow", &text, "lanes");
+    check_flow(&chart).unwrap_or_else(|error| panic!("{error}\n{text}"));
+    let lanes: BTreeSet<&str> = chart
+        .nodes
+        .iter()
+        .filter(|(_, kind)| *kind == "lane")
+        .map(|(id, _)| id.as_str())
+        .collect();
+    assert_eq!(
+        lanes,
+        BTreeSet::from(["lane__ReturnFlow__Clerk", "lane__ShipFlow__Clerk"]),
+        "{text}"
+    );
+    assert!(
+        text.contains("    subgraph lane__ShipFlow__Clerk[\"Clerk\"]\n      %% lane lane__ShipFlow__Clerk: actor__Clerk\n"),
+        "{text}"
+    );
+    let rdra = parse_flowchart("rdra", &diagram(root, "rdra", None, &dir.join("r"))).unwrap();
+    for edge in &chart.edges {
+        assert!(rdra.edges.contains(edge), "{edge:?} not in rdra");
+    }
+    for broken in ["lane__NoFlow__Clerk", "lane__ShipFlow"] {
+        let text = text.replace("lane__ShipFlow__Clerk[", &format!("{broken}["));
+        let result = parse_flowchart("flow", &text).and_then(|chart| check_flow(&chart));
+        assert!(result.is_err(), "{broken} passed:\n{text}");
+    }
+}
+
+#[test]
+fn a_flow_diagram_draws_what_the_rdra_diagram_declares() {
+    let dir = scratch("diagram_contract_flow_ids");
+    for root in roots() {
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
+        let flow = parse_flowchart("flow", &diagram(&root, "flow", None, &dir.join("f"))).unwrap();
+        for (id, kind) in flow.nodes.iter().filter(|(_, kind)| *kind != "lane") {
+            assert_eq!(rdra.nodes.get(id), Some(kind), "{root}: {id}");
+        }
+        for edge in &flow.edges {
+            assert!(rdra.edges.contains(edge), "{root}: {edge:?} not in rdra");
+        }
+        assert!(flow.derived.is_empty(), "{root}: a derived edge");
     }
 }
