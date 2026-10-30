@@ -1,0 +1,40 @@
+module shared.entities
+
+entity Customer_info "顧客情報" {
+  id: Int @pk
+  name: String
+  email: String @null
+}
+
+entity Order "注文" {
+  id: Int @pk
+  total: Money
+  ordered_at: DateTime
+  status: Enum(draft, paid, shipped) @default(draft)
+}
+
+entity OrderLine "注文明細" {
+  id: Int @pk
+  qty: Int
+  price: Money
+}
+
+entity Product "商品" {
+  id: Int @pk
+  sku: String @unique
+  name: String
+  price: Decimal
+}
+
+entity Category "カテゴリ" {
+  id: Int @pk
+  name: String
+}
+
+relate(Order, Customer_info, N:1)
+
+relate(OrderLine, Order, N:1)
+
+relate(OrderLine, Product, N:1)
+
+relate(Product, Category, N:1)

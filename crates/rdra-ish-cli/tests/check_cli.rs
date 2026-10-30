@@ -400,3 +400,74 @@ contains(Back, Lonely)
         assert!(stderr.contains(warning), "missing `{warning}` in:\n{stderr}");
     }
 }
+
+fn copy_dir(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap().flatten() {
+        let target = to.join(entry.file_name());
+        if entry.path().is_dir() {
+            copy_dir(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), target).unwrap();
+        }
+    }
+}
+
+fn run_check(dir: &Path) -> (Option<i32>, String, String) {
+    let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .args(["check"])
+        .arg(dir.join("src"))
+        .output()
+        .expect("rdra-ish runs");
+    (
+        output.status.code(),
+        common::relative_to(&String::from_utf8_lossy(&output.stdout), dir),
+        common::relative_to(&String::from_utf8_lossy(&output.stderr), dir),
+    )
+}
+
+fn scratch_with_manifest(name: &str) -> PathBuf {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
+    let _ = std::fs::remove_dir_all(&dir);
+    copy_dir(&repo().join("tests/fixtures/xsys/manifest-above"), &dir);
+    std::fs::create_dir_all(dir.join(".git")).unwrap();
+    dir
+}
+
+#[test]
+fn check_prints_the_same_with_and_without_a_manifest() {
+    let with = scratch_with_manifest("check_cli_manifest_with");
+    let without = scratch_with_manifest("check_cli_manifest_without");
+    std::fs::remove_file(without.join("rdra.toml")).unwrap();
+
+    assert!(with.join("rdra.toml").is_file());
+    assert_eq!(run_check(&with), run_check(&without));
+}
+
+#[test]
+fn check_rejects_a_malformed_manifest_at_its_line() {
+    let dir = scratch_with_manifest("check_cli_manifest_bad");
+    std::fs::write(
+        dir.join("rdra.toml"),
+        "[model]\nname = \"m\"\nbroken = = 1\n",
+    )
+    .unwrap();
+
+    let (code, _, stderr) = run_check(&dir);
+
+    assert_eq!(code, Some(1));
+    assert!(stderr.contains("rdra.toml:3:"), "{stderr}");
+    assert!(!stderr.contains("panicked"), "{stderr}");
+}
+
+#[test]
+fn check_rejects_a_manifest_without_a_model_name() {
+    let dir = scratch_with_manifest("check_cli_manifest_noname");
+    std::fs::write(dir.join("rdra.toml"), "[model]\n").unwrap();
+
+    let (code, _, stderr) = run_check(&dir);
+
+    assert_eq!(code, Some(1));
+    assert!(stderr.contains("rdra.toml:"), "{stderr}");
+    assert!(!stderr.contains("panicked"), "{stderr}");
+}
