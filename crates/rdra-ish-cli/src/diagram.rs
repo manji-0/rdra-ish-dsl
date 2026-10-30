@@ -6,8 +6,8 @@ use anyhow::{Context, Result};
 use rdra_ish_core::SemanticModel;
 use rdra_ish_emit::{
     mermaid::{
-        BusinessMermaidEmitter, ErMermaidEmitter, EventMermaidEmitter, RdraMermaidEmitter,
-        StateMermaidEmitter, UsecaseMermaidEmitter,
+        BusinessMermaidEmitter, ErMermaidEmitter, EventMermaidEmitter, InformationMermaidEmitter,
+        RdraMermaidEmitter, StateMermaidEmitter, UsecaseMermaidEmitter,
     },
     unknown_diagram_filter_kinds, Emitter, Filter, Scope, View,
 };
@@ -102,6 +102,7 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
             DiagramKind::Rdra
             | DiagramKind::Business
             | DiagramKind::Usecase
+            | DiagramKind::Information
             | DiagramKind::State
             | DiagramKind::Event => Filter::None,
         },
@@ -131,6 +132,7 @@ fn emit_diagram(model: &SemanticModel, kind: &DiagramKind, view: &View) -> Resul
         DiagramKind::Rdra => Ok(RdraMermaidEmitter.emit(model, view)?),
         DiagramKind::Business => Ok(BusinessMermaidEmitter.emit(model, view)?),
         DiagramKind::Usecase => Ok(UsecaseMermaidEmitter.emit(model, view)?),
+        DiagramKind::Information => Ok(InformationMermaidEmitter.emit(model, view)?),
         DiagramKind::Er => Ok(ErMermaidEmitter.emit(model, view)?),
         DiagramKind::State => Ok(StateMermaidEmitter.emit(model, view)?),
         DiagramKind::Event => Ok(EventMermaidEmitter.emit(model, view)?),

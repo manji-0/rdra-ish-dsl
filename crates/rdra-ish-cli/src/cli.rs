@@ -147,7 +147,7 @@ pub(crate) enum Commands {
     Diagram {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Diagram kind: rdra, business, usecase, er, state, or event
+        /// Diagram kind: rdra, business, usecase, information, er, state, or event
         #[arg(long, default_value = "rdra", value_parser = WithRemoved::<DiagramKind>::new(REMOVED_DIAGRAM_KINDS))]
         kind: DiagramKind,
         /// Output format: mermaid, the only one (writes <out>.mmd)
@@ -298,6 +298,9 @@ pub(crate) enum DiagramKind {
     /// UC複合図: each use case with its actors, screens, information, events, external
     /// systems, timers, conditions, and state transitions
     Usecase,
+    /// 情報モデル: the entities with their relate links, state models, and variations,
+    /// without columns
+    Information,
     Er,
     State,
     /// System-to-system event links: UC / ExtSystem --raises--> Event --triggers--> UC / BUC /

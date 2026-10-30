@@ -689,3 +689,120 @@ fn an_element_subgraph_is_a_node_of_its_kind() {
         );
     }
 }
+
+#[test]
+fn every_information_diagram_of_every_sample_keeps_the_contract() {
+    let dir = scratch("diagram_contract_information");
+    let mut drawn = 0;
+    for root in roots() {
+        for scope in scopes(&root) {
+            let args: Vec<&str> = scope.iter().map(String::as_str).collect();
+            let text = diagram_with(&root, "information", &args, &dir.join("out"));
+            let chart = checked("information", &text, &format!("{root} {scope:?}"));
+            for (from, label, to) in &chart.edges {
+                let fits = match label.as_str() {
+                    "1:1" | "1:N" | "N:1" | "N:M" => to.starts_with("entity__"),
+                    "statemodel" => to.starts_with("statemodel__"),
+                    _ => label.starts_with("variation ") && to.starts_with("variation__"),
+                };
+                assert!(
+                    fits && from.starts_with("entity__"),
+                    "{root} {scope:?}: {from} -{label}-> {to}"
+                );
+            }
+            drawn += usize::from(!chart.edges.is_empty());
+        }
+    }
+    assert!(drawn > 20, "only {drawn} information diagrams draw an edge");
+}
+
+/// `(child, cardinality, parent)` for each relationship line of an `erDiagram`.
+fn er_relates(text: &str) -> BTreeSet<(String, String, String)> {
+    text.lines()
+        .filter_map(|line| {
+            let mut parts = line.trim().split(' ');
+            let (from, glyph, to) = (parts.next()?, parts.next()?, parts.next()?);
+            let card = match glyph {
+                "||--||" => "1:1",
+                "||--o{" | "||--|{" => "1:N",
+                "}o--||" | "}|--||" => "N:1",
+                "}o--o{" => "N:M",
+                _ => return None,
+            };
+            Some((
+                format!("entity__{from}"),
+                card.to_string(),
+                format!("entity__{to}"),
+            ))
+        })
+        .collect()
+}
+
+#[test]
+fn an_information_diagram_draws_the_relates_of_the_er_diagram() {
+    let dir = scratch("diagram_contract_information_er");
+    let mut relates = 0;
+    for root in roots() {
+        for scope in scopes(&root) {
+            let args: Vec<&str> = scope.iter().map(String::as_str).collect();
+            let info = parse_flowchart(
+                "information",
+                &diagram_with(&root, "information", &args, &dir.join("i")),
+            )
+            .unwrap();
+            let er = er_relates(&diagram_with(&root, "er", &args, &dir.join("e")));
+            let drawn: BTreeSet<(String, String, String)> = info
+                .edges
+                .iter()
+                .filter(|(_, label, _)| ["1:1", "1:N", "N:1", "N:M"].contains(&label.as_str()))
+                .cloned()
+                .collect();
+            assert_eq!(drawn, er, "{root} {scope:?}");
+            let entities: BTreeSet<&String> = info
+                .nodes
+                .iter()
+                .filter(|(_, kind)| *kind == "entity")
+                .map(|(id, _)| id)
+                .collect();
+            assert!(
+                er.iter()
+                    .all(|(from, _, to)| entities.contains(from) && entities.contains(to)),
+                "{root} {scope:?}"
+            );
+            relates += drawn.len();
+        }
+    }
+    assert!(relates > 50, "only {relates} relates compared");
+}
+
+#[test]
+fn an_information_diagram_node_has_the_id_the_rdra_and_state_diagrams_give_it() {
+    let dir = scratch("diagram_contract_information_ids");
+    for root in lifecycle_roots() {
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
+        let state = parse_state(&diagram(&root, "state", None, &dir.join("s"))).unwrap();
+        let info = parse_flowchart(
+            "information",
+            &diagram(&root, "information", None, &dir.join("i")),
+        )
+        .unwrap();
+        let state_models: BTreeSet<&String> = state.models.iter().map(|(id, _)| id).collect();
+        let info_models: BTreeSet<&String> = info
+            .nodes
+            .iter()
+            .filter(|(_, kind)| *kind == "statemodel")
+            .map(|(id, _)| id)
+            .collect();
+        assert_eq!(info_models, state_models, "{root}");
+        for (id, kind) in info.nodes.iter().filter(|(_, kind)| *kind != "statemodel") {
+            assert_eq!(rdra.nodes.get(id), Some(kind), "{root}: {id}");
+        }
+        for edge in info
+            .edges
+            .iter()
+            .filter(|(_, _, to)| to.starts_with("entity__"))
+        {
+            assert!(rdra.edges.contains(edge), "{root}: {edge:?} not in rdra");
+        }
+    }
+}

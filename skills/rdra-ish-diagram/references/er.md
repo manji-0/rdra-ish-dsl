@@ -1,12 +1,16 @@
-# ER Diagrams
+# Information Model and ER Diagrams
 
-Use this reference when the model has reached entity-structure work: logical
-entities, columns, indexes, constraints, generated foreign keys, `relate`
-and cardinality/options.
+Use this reference when the model has reached data work: the information model
+(entities, their `relate` links, state models, and variations), then entity structure
+(columns, indexes, constraints, generated foreign keys, and `relate` options).
 
 ## Commands
 
 ```sh
+# Information model — entities, relates, state models, and variations, without columns
+rdra-ish diagram src/ --kind information --format mermaid
+rdra-ish diagram src/ --kind information --buc <BucId> --format mermaid
+
 # ER diagram — whole model
 rdra-ish diagram src/ --kind er --format mermaid
 
@@ -21,7 +25,20 @@ rdra-ish export src/ --kind dbml --out out/schema.dbml
 rdra-ish export src/ --kind json-schema --out out/json-schema.json
 ```
 
-## Reading The Output
+## Reading The Information Model
+
+- The `%%` header comes first. There are no layers; every node is `entity__<Id>`,
+  `statemodel__<Entity>_<column>`, or `variation__<Id>`.
+- `entity__<Child> ---|N:1| entity__<Parent>` is a `relate` with its DSL cardinality, the
+  same relates `er` draws.
+- `-.->|statemodel|` links an entity to each column that `transitions` drive (the
+  composite state of `--kind state`); an `Enum` column without `transitions` is none.
+- `-.->|variation <column>|` links an entity to the variation that column takes.
+
+## Reading The ER Output
+
+- The `%%` header comes first (`%% rdra-ish diagram=er ...`, `%% kinds: entity`); entity
+  names in the body are the DSL ids.
 
 - Each entity box lists columns with PK/FK markers.
 - Column annotations such as indexes, composite uniques, checks, tenant/history,

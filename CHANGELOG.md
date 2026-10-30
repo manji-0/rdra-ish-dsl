@@ -333,6 +333,14 @@
 
 ### Added
 
+- `diagram --kind information` draws the RDRA information model under the encoding
+  contract: every entity of the scope, each `relate` as `---|<card>|` from its left
+  end (the relates `--kind er` draws), each state model (a column that `transitions`
+  drive) as `statemodel__<Entity>_<column>` linked `-.->|statemodel|`, and each
+  variation a column takes linked `-.->|variation <column>|`. Columns are left to `er`.
+  ec-site, clinic-ops, personal-info, and incremental-order step 6 gain
+  `out/information.mmd`.
+
 - `diagram --kind business` draws the RDRA business context and business use cases
   under the encoding contract: each business as `subgraph business__<id>` in the
   システム外部環境 layer holding its BUCs, and the actors and external systems of the

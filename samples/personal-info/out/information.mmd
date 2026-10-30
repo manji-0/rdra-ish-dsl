@@ -1,0 +1,22 @@
+%% rdra-ish diagram=information scope=whole model=samples/personal-info
+%% kinds: entity statemodel variation
+%% omitted: columns usecase api
+flowchart LR
+  entity__AuditLog["Audit Log"]:::entity
+  entity__CreditCard["Credit Card"]:::entity
+  entity__PasswordCredential["Password Credential"]:::entity
+  entity__PersonalInfo["Personal Information"]:::entity
+  entity__PostalAddress["Postal Address"]:::entity
+  entity__UserAccount["User Account"]:::entity
+  statemodel__UserAccount_status["UserAccount.status"]:::statemodel
+  variation__CardBrand["Card Brand"]:::variation
+  entity__AuditLog ---|N:1| entity__UserAccount
+  entity__CreditCard ---|N:1| entity__UserAccount
+  entity__CreditCard -.->|variation brand| variation__CardBrand
+  entity__PasswordCredential ---|1:1| entity__UserAccount
+  entity__PersonalInfo ---|1:1| entity__UserAccount
+  entity__PostalAddress ---|N:1| entity__UserAccount
+  entity__UserAccount -.->|statemodel| statemodel__UserAccount_status
+  classDef entity stroke:#333;
+  classDef statemodel stroke:#333;
+  classDef variation stroke:#333;

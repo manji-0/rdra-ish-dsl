@@ -16,6 +16,7 @@ samples/clinic-ops/out/buc/usecase_visit_payment.mmd	diagram samples/clinic-ops 
 samples/clinic-ops/out/business.mmd	diagram samples/clinic-ops --kind business --format mermaid
 samples/clinic-ops/out/er_care_to_billing.mmd	diagram samples/clinic-ops --kind er --format mermaid --buc BucFollowupCare --buc BucBillingClaims
 samples/clinic-ops/out/event_flow.mmd	diagram samples/clinic-ops --kind event --format mermaid
+samples/clinic-ops/out/information.mmd	diagram samples/clinic-ops --kind information --format mermaid
 samples/clinic-ops/out/rdra_buc_clinical_encounter.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucClinicalEncounter
 samples/clinic-ops/out/screen_constraints.csv	csv samples/clinic-ops --kind screen-constraints
 samples/clinic-ops/out/state_whole.mmd	diagram samples/clinic-ops --kind state --format mermaid
@@ -26,6 +27,7 @@ samples/ec-site/out/api_matrix.csv	csv samples/ec-site --kind api-matrix
 samples/ec-site/out/business.mmd	diagram samples/ec-site --kind business --format mermaid
 samples/ec-site/out/entities.entity.csv	csv samples/ec-site --kind entity
 samples/ec-site/out/er.mmd	diagram samples/ec-site --kind er --format mermaid
+samples/ec-site/out/information.mmd	diagram samples/ec-site --kind information --format mermaid
 samples/ec-site/out/matrix.matrix.csv	csv samples/ec-site --kind matrix
 samples/ec-site/out/object_graph_buc_bucorder.mmd	diagram samples/ec-site --kind rdra --format mermaid --buc BucOrder
 samples/ec-site/out/rdra_buc_buccart.mmd	diagram samples/ec-site --kind rdra --format mermaid --buc BucCart
@@ -78,6 +80,7 @@ samples/incremental-order/step-6-business-rules/out/api_matrix.csv	csv samples/i
 samples/incremental-order/step-6-business-rules/out/asyncapi.json	export samples/incremental-order/step-6-business-rules/src --kind asyncapi
 samples/incremental-order/step-6-business-rules/out/business.mmd	diagram samples/incremental-order/step-6-business-rules/src --kind business --format mermaid
 samples/incremental-order/step-6-business-rules/out/er.mmd	diagram samples/incremental-order/step-6-business-rules/src --kind er --format mermaid
+samples/incremental-order/step-6-business-rules/out/information.mmd	diagram samples/incremental-order/step-6-business-rules/src --kind information --format mermaid
 samples/incremental-order/step-6-business-rules/out/json-schema.json	export samples/incremental-order/step-6-business-rules/src --kind json-schema
 samples/incremental-order/step-6-business-rules/out/object_graph_buc_store_restock.mmd	diagram samples/incremental-order/step-6-business-rules/src --kind rdra --format mermaid --buc BucStoreRestock
 samples/incremental-order/step-6-business-rules/out/schema.dbml	export samples/incremental-order/step-6-business-rules/src --kind dbml
@@ -90,6 +93,7 @@ samples/personal-info/out/api_matrix.csv	csv samples/personal-info --kind api-ma
 samples/personal-info/out/business.mmd	diagram samples/personal-info --kind business --format mermaid
 samples/personal-info/out/entities.entity.csv	csv samples/personal-info --kind entity
 samples/personal-info/out/er.mmd	diagram samples/personal-info --kind er --format mermaid
+samples/personal-info/out/information.mmd	diagram samples/personal-info --kind information --format mermaid
 samples/personal-info/out/matrix.matrix.csv	csv samples/personal-info --kind matrix
 samples/personal-info/out/rdra_buc_buccard.mmd	diagram samples/personal-info --kind rdra --format mermaid --buc BucCard
 samples/personal-info/out/rdra_buc_bucpassword.mmd	diagram samples/personal-info --kind rdra --format mermaid --buc BucPassword

@@ -1,9 +1,11 @@
-//! Mermaid emitters: RDRA全体図、UC複合図、ER図、状態遷移図、イベント図。
+//! Mermaid emitters: RDRA全体図、ビジネスコンテキスト、UC複合図、情報モデル、ER図、状態遷移図、イベント図。
 
 mod business;
+mod information;
 mod usecase;
 
 pub use business::BusinessMermaidEmitter;
+pub use information::InformationMermaidEmitter;
 pub use usecase::UsecaseMermaidEmitter;
 
 use crate::diagram_common::{

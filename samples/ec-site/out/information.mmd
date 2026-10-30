@@ -1,0 +1,30 @@
+%% rdra-ish diagram=information scope=whole model=samples/ec-site
+%% kinds: entity statemodel variation
+%% omitted: columns usecase api
+flowchart LR
+  entity__Cart["Cart"]:::entity
+  entity__CartItem["Cart Item"]:::entity
+  entity__Category["Category"]:::entity
+  entity__CustomerAccount["Customer Account"]:::entity
+  entity__Order["Order"]:::entity
+  entity__OrderLine["Order Line"]:::entity
+  entity__Payment["Payment"]:::entity
+  entity__Product["Product"]:::entity
+  entity__ShippingAddress["Shipping Address"]:::entity
+  statemodel__Order_status["Order.status"]:::statemodel
+  variation__PaymentMethod["Payment Method"]:::variation
+  entity__Cart ---|N:1| entity__CustomerAccount
+  entity__CartItem ---|N:1| entity__Cart
+  entity__CartItem ---|N:1| entity__Product
+  entity__Order ---|N:1| entity__CustomerAccount
+  entity__Order ---|N:1| entity__ShippingAddress
+  entity__Order -.->|statemodel| statemodel__Order_status
+  entity__OrderLine ---|N:1| entity__Order
+  entity__OrderLine ---|N:1| entity__Product
+  entity__Payment ---|1:1| entity__Order
+  entity__Payment -.->|variation method| variation__PaymentMethod
+  entity__Product ---|N:1| entity__Category
+  entity__ShippingAddress ---|N:1| entity__CustomerAccount
+  classDef entity stroke:#333;
+  classDef statemodel stroke:#333;
+  classDef variation stroke:#333;

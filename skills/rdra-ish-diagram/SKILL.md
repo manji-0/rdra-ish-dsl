@@ -19,6 +19,7 @@ the selected view.
 | Dense relationship inspection | `rdra` with `--node-kind` / `--edge-kind` | `references/rdra-graph.md` |
 | Business object/data touchpoint review | `rdra --buc <BucId>` plus CRUD matrix | `references/rdra-graph.md` |
 | Use case inputs and outputs (UC複合図) | `usecase --buc <BucId>` or `usecase --usecase <UcId>` | `references/rdra-graph.md` |
+| Information, state models, and variations | `information`, optionally `--buc <BucId>` | `references/er.md` |
 | Entity structure and relationships | `er`, optionally `--buc <BucId>` | `references/er.md` |
 | Actor-entered field review | `csv --kind business-inputs` | `references/access-and-apis.md` |
 | System API/entity ownership review | `csv --kind api-matrix` | `references/access-and-apis.md` |
@@ -48,6 +49,8 @@ the selected view.
   actors and external systems take part in each?"
 - Use `usecase` when the question is "what does each use case show, read, write, raise,
   and move, and who performs it?"
+- Use `information` when the question is "how do the entities relate, and which hold a
+  state model or a variation?"
 - Use `er` when the question is "what entities, columns, and relationships exist?"
 - Use `csv --kind business-inputs` when the question is "which actor inputs which fields
   for which use cases?"
@@ -70,7 +73,8 @@ the selected view.
 
 - `references/rdra-graph.md` — RDRA layered graph, the business and BUC diagram, the
   UC複合図, and early-stage model inspection.
-- `references/er.md` — ER diagram commands and relationship reading.
+- `references/er.md` — information model and ER diagram commands and relationship
+  reading.
 - `references/access-and-apis.md` — API boundaries plus access/media CSV views.
 - `references/lifecycle-and-events.md` — state diagrams, event diagrams,
   `states`, and TLA+ export.

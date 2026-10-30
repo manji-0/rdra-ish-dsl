@@ -1,0 +1,11 @@
+%% rdra-ish diagram=information scope=whole model=samples/incremental-order/step-6-business-rules/src
+%% kinds: entity statemodel
+%% omitted: columns usecase screen api
+flowchart LR
+  entity__Organization["Organization"]:::entity
+  entity__Store["Store"]:::entity
+  statemodel__Store_restock_status["Store.restock_status"]:::statemodel
+  entity__Store ---|N:1| entity__Organization
+  entity__Store -.->|statemodel| statemodel__Store_restock_status
+  classDef entity stroke:#333;
+  classDef statemodel stroke:#333;
