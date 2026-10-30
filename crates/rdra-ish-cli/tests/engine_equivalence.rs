@@ -563,6 +563,37 @@ fn bfs_and_tlc_agree_on_split_use_cases() {
     check_fixture("split_use_case", SPLIT_USE_CASE);
 }
 
+/// A published row written with the internal change it reports: Login creates Session and
+/// the published LoginRecord in one action, Revoke ends the Session and the published view
+/// in one action, and the published entities never enter the lifecycle.
+const PUBLISHED_OUTBOX: &str = r#"
+system Auth "Auth"
+actor User "User"
+usecase Login "Log in"
+usecase Revoke "Revoke"
+performs(User, Login)
+performs(User, Revoke)
+entity Session "Session" { id: Int @pk  status: Enum(active, revoked) @default(active) }
+entity SessionView "Session (published)" { view_id: Int @pk  status: Enum(active, ended) }
+entity LoginRecord "Login record" { id: Int @pk  result: Enum(succeeded, failed) }
+creates(Login, Session)
+creates(Login, LoginRecord)
+sets(Login, LoginRecord, result == succeeded)
+writes(Login, SessionView)
+sets(Login, SessionView, status == active)
+transitions(Session.status, Revoke, active -> revoked)
+writes(Revoke, SessionView)
+sets(Revoke, SessionView, status == ended)
+exposes(Auth, Login)
+exposes(Auth, SessionView).upsert()
+exposes(Auth, LoginRecord).append()
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_a_published_outbox() {
+    check_fixture("published_outbox", PUBLISHED_OUTBOX);
+}
+
 /// A created parent links an updated child: the optional charge only while unlinked, so each
 /// claim keeps its charge; the mandatory bed always moves, which empties its first ward at two
 /// slots.

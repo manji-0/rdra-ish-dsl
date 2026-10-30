@@ -53,7 +53,7 @@ pub enum TxKind {
     Fk,
     /// Two or more writes of one invoked API: its explicit atomic boundary.
     Api,
-    /// One write on its own.
+    /// One internal write on its own, with the published rows it reports.
     Isolated,
 }
 
@@ -121,12 +121,18 @@ impl UsecaseTx {
 /// 2. 直接 usecase に付いた書き込みはレガシー形式として収集し、API 経由の同一 entity
 ///    書き込みがあれば API 側を優先する。
 /// 3. 直接書き込みは FK 連結成分から transaction 境界を推論する。
+/// 4. A write to a published entity (`exposes(System, E).append() | .upsert()`) that no
+///    internal write shares an API with joins the use case's one internal transaction.
+///    With no or several internal transactions it stays on its own, and
+///    `PublishedNotInSourceTx` reports it.
 pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
     let mut result = Vec::new();
+    let published = |w: &UcWrite| model.publication.is_published(w.entity);
 
     for (uc_key, _uc) in model.use_cases.iter() {
         let mut grouped: Vec<TxGroup> = Vec::new();
         let mut isolated: Vec<TxGroup> = Vec::new();
+        let mut floating: Vec<UcWrite> = Vec::new();
         let mut api_written_entities: HashSet<EntityKey> = HashSet::new();
 
         let mut invoked_apis: Vec<ApiKey> = Vec::new();
@@ -165,7 +171,9 @@ pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
                 }
             }
             dedup_writes(&mut api_writes, model);
-            if api_writes.len() >= 2 {
+            if api_writes.iter().all(published) {
+                floating.extend(api_writes);
+            } else if api_writes.len() >= 2 {
                 grouped.push(TxGroup {
                     kind: TxKind::Api,
                     ordered_writes: topological_sort_writes(
@@ -208,9 +216,19 @@ pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
                 via_api: None,
             });
         }
+        floating.extend(direct_writes.iter().filter(|w| published(w)).cloned());
+        direct_writes.retain(|w| !published(w));
         let (fk, singles) = infer_fk_transactions_for_writes(direct_writes, model);
         grouped.extend(fk);
         isolated.extend(singles);
+
+        dedup_writes(&mut floating, model);
+        if grouped.len() + isolated.len() == 1 {
+            let only = grouped.first_mut().or(isolated.first_mut());
+            only.unwrap().ordered_writes.extend(floating);
+        } else {
+            isolated.extend(floating.into_iter().map(isolated_group));
+        }
 
         if grouped.is_empty() && isolated.is_empty() {
             continue;
@@ -269,7 +287,8 @@ fn effect_entities(model: &SemanticModel, uc: UseCaseKey) -> Vec<EntityKey> {
 }
 
 /// FK孤立書き込みに対する診断ヒントを生成する: [`UsecaseTx::separate_writes`] ごとに
-/// `SeparateTxInferred` warning を返す。
+/// `SeparateTxInferred` warning を返す。A published entity gets `PublishedNotInSourceTx`
+/// from `publication_diagnostics` instead.
 pub fn tx_diagnostics(model: &SemanticModel, txs: &[UsecaseTx]) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
     for utx in txs {
@@ -279,6 +298,9 @@ pub fn tx_diagnostics(model: &SemanticModel, txs: &[UsecaseTx]) -> Vec<Diagnosti
             .map(|u| u.id.clone())
             .unwrap_or_else(|| "?".to_string());
         for ek in utx.separate_writes() {
+            if model.publication.is_published(ek) {
+                continue;
+            }
             let entity_id = model
                 .entities
                 .get(ek)

@@ -65,6 +65,49 @@ fn a_use_case_spanning_two_groups_is_one_action_per_group_in_tx_order() {
     }
 }
 
+/// Logout moves Session and writes the published SessionView. Today they have no key between
+/// them, so they would be two groups; the published row joins the internal change instead.
+const PUBLISHED_WRITE: &str = r#"
+system Auth "Auth"
+entity Session "Session" { id: Int @pk  status: Enum(active, ended) @default(active) }
+entity SessionView "Session (published)" { id: Int @pk  status: Enum(active, ended) }
+usecase Open "Open"
+usecase Logout "Logout"
+creates(Open, Session)
+creates(Open, SessionView)
+transitions(Session.status, Logout, active -> ended)
+writes(Logout, SessionView)
+sets(Logout, SessionView, status == ended)
+exposes(Auth, SessionView).upsert()
+"#;
+
+#[test]
+fn a_published_write_joins_the_use_cases_one_internal_group_and_leaves_the_lifecycle() {
+    let model = model_from(PUBLISHED_WRITE);
+    let txs = crate::tx::infer_usecase_transactions(&model);
+    let logout = txs
+        .iter()
+        .find(|t| model.use_cases[t.usecase].id == "Logout")
+        .unwrap();
+    let groups: Vec<Vec<String>> = logout
+        .groups()
+        .map(|g| {
+            g.ordered_writes
+                .iter()
+                .map(|w| model.entities[w.entity].id.clone())
+                .collect()
+        })
+        .collect();
+    assert_eq!(groups, vec![vec!["Session", "SessionView"]]);
+    assert!(crate::tx::tx_diagnostics(&model, &txs).is_empty());
+
+    let ts = built(PUBLISHED_WRITE);
+    assert_eq!(action_names(&ts), vec!["Logout", "Open"]);
+    assert_eq!(bound(&ts, "Logout"), vec!["Session"]);
+    let entities: Vec<&str> = ts.entities.iter().map(|e| e.id.as_str()).collect();
+    assert_eq!(entities, vec!["Session"]);
+}
+
 #[test]
 fn provenance_names_the_use_case_not_the_group_step() {
     let d = derive_src(&split_pay(""));
