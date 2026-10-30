@@ -219,4 +219,16 @@ transitions(Order.status, Capture, pending -> paid)
         assert!(result.contains("entity__Payment["), "{result}");
         assert!(!result.contains("entity__Audit"), "{result}");
     }
+
+    #[test]
+    fn an_adr_on_an_entity_is_named_omitted() {
+        let src = format!("{SHOP}\nadr AdrAudit \"Keep an audit\"\ndecides(AdrAudit, Audit)\n");
+        let result = InformationMermaidEmitter
+            .emit(&model_from(&src), &View::whole())
+            .unwrap();
+        assert!(
+            result.contains("%% omitted: columns adr usecase\n"),
+            "{result}"
+        );
+    }
 }

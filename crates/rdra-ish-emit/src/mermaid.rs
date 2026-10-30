@@ -185,13 +185,20 @@ fn omitted_linked_kinds(
         })
         .filter(|nr| !drawn.contains(nr))
         .collect();
-    kinds_by_layer(&collect_object_graph_nodes(model, &|nr| {
-        linked.contains(nr)
-    }))
-    .into_iter()
-    .filter(|kind| !kinds.contains(kind))
-    .map(str::to_string)
-    .collect()
+    // No diagram draws an ADR, so `collect_object_graph_nodes` leaves them out.
+    let mut nodes = collect_object_graph_nodes(model, &|nr| linked.contains(nr));
+    nodes.extend(
+        model
+            .adrs
+            .keys()
+            .map(NodeRef::Adr)
+            .filter(|nr| linked.contains(nr)),
+    );
+    kinds_by_layer(&nodes)
+        .into_iter()
+        .filter(|kind| !kinds.contains(kind))
+        .map(str::to_string)
+        .collect()
 }
 
 /// Sort `edges`, draw each once, and follow a derived one with its `%% derived` line.
