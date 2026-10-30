@@ -4,6 +4,7 @@
       "gates": [
         {
           "evidence": "belongs to StoreOperations",
+          "findings": [],
           "gaps": 0,
           "notes": 0,
           "passed": true,
@@ -14,6 +15,7 @@
         },
         {
           "evidence": "2 use cases, 1 `performs` / `triggers` starting them",
+          "findings": [],
           "gaps": 0,
           "notes": 0,
           "passed": true,
@@ -24,6 +26,7 @@
         },
         {
           "evidence": "2/2 use cases touch an entity",
+          "findings": [],
           "gaps": 0,
           "notes": 0,
           "passed": true,
@@ -34,6 +37,7 @@
         },
         {
           "evidence": "2/2 use cases display a screen, invoke an API, or run on a trigger",
+          "findings": [],
           "gaps": 0,
           "notes": 0,
           "passed": true,
@@ -44,6 +48,7 @@
         },
         {
           "evidence": "0/2 entities have a column beyond their keys",
+          "findings": [],
           "gaps": 2,
           "notes": 2,
           "passed": false,
@@ -54,6 +59,16 @@
         },
         {
           "evidence": "no use case moves an entity column",
+          "findings": [
+            {
+              "name": "NoCreationPath_Organization",
+              "severity": "info"
+            },
+            {
+              "name": "NoCreationPath_Store",
+              "severity": "info"
+            }
+          ],
           "gaps": 1,
           "notes": 0,
           "passed": false,
@@ -64,6 +79,7 @@
         },
         {
           "evidence": "no `forbidden` / `exclusive` reads a column this BUC moves",
+          "findings": [],
           "gaps": 0,
           "notes": 0,
           "passed": false,
@@ -74,6 +90,7 @@
         },
         {
           "evidence": "no `invariant` / `required` reads a column this BUC moves",
+          "findings": [],
           "gaps": 0,
           "notes": 0,
           "passed": false,
@@ -84,6 +101,7 @@
         },
         {
           "evidence": "no comparison or cross-entity rule reads a column this BUC moves",
+          "findings": [],
           "gaps": 0,
           "notes": 0,
           "passed": false,
@@ -103,6 +121,7 @@
           "Does a use case need one transaction across related entities?"
         ],
         "doc": "docs/incremental-modeling.md#stage-4-entity-structure",
+        "findings": [],
         "gaps": [
           {
             "id": "Store",
@@ -143,5 +162,6 @@
       "stage": "3",
       "stage_name": "Interaction boundary"
     }
-  ]
+  ],
+  "unowned_findings": []
 }

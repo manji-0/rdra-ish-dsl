@@ -4,6 +4,7 @@
       "gates": [
         {
           "evidence": "belongs to StoreOperations",
+          "findings": [],
           "gaps": 0,
           "notes": 0,
           "passed": true,
@@ -14,6 +15,7 @@
         },
         {
           "evidence": "0 use cases, 0 `performs` / `triggers` starting them",
+          "findings": [],
           "gaps": 2,
           "notes": 0,
           "passed": false,
@@ -24,6 +26,7 @@
         },
         {
           "evidence": "0/0 use cases touch an entity",
+          "findings": [],
           "gaps": 1,
           "notes": 0,
           "passed": false,
@@ -34,6 +37,7 @@
         },
         {
           "evidence": "0/0 use cases display a screen, invoke an API, or run on a trigger",
+          "findings": [],
           "gaps": 0,
           "notes": 0,
           "passed": false,
@@ -44,6 +48,7 @@
         },
         {
           "evidence": "0/0 entities have a column beyond their keys",
+          "findings": [],
           "gaps": 0,
           "notes": 0,
           "passed": false,
@@ -54,6 +59,7 @@
         },
         {
           "evidence": "no use case moves an entity column",
+          "findings": [],
           "gaps": 1,
           "notes": 0,
           "passed": false,
@@ -64,6 +70,7 @@
         },
         {
           "evidence": "no `forbidden` / `exclusive` reads a column this BUC moves",
+          "findings": [],
           "gaps": 0,
           "notes": 0,
           "passed": false,
@@ -74,6 +81,7 @@
         },
         {
           "evidence": "no `invariant` / `required` reads a column this BUC moves",
+          "findings": [],
           "gaps": 0,
           "notes": 0,
           "passed": false,
@@ -84,6 +92,7 @@
         },
         {
           "evidence": "no comparison or cross-entity rule reads a column this BUC moves",
+          "findings": [],
           "gaps": 0,
           "notes": 0,
           "passed": false,
@@ -102,6 +111,7 @@
           "Are any use cases triggered by a system event rather than a human actor?"
         ],
         "doc": "docs/incremental-modeling.md#stage-1-buc-skeleton",
+        "findings": [],
         "gaps": [
           {
             "id": "BucStoreRestock",
@@ -131,5 +141,6 @@
       "stage": "0",
       "stage_name": "Scope sketch"
     }
-  ]
+  ],
+  "unowned_findings": []
 }

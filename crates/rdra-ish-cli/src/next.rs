@@ -4,7 +4,10 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use anyhow::{bail, Result};
-use rdra_ish_core::refinement::{assess, BucStanding, Gap, Next, StageId, StageView, Verdict};
+use rdra_ish_core::lifecycle::Severity;
+use rdra_ish_core::refinement::{
+    assess, BucStanding, Depth, FindingRef, Gap, Next, StageId, StageView, Verdict,
+};
 use serde_json::{json, Value};
 
 use crate::cli::NextFormat;
@@ -17,7 +20,8 @@ pub(crate) fn run_next(inputs: &[PathBuf], bucs: &[String], format: NextFormat) 
     let (program, model, diags) = load_model(inputs)?;
     reject_model_errors(&program, &diags)?;
 
-    let mut standings = assess(&model).bucs;
+    let assessment = assess(&model, Depth::Lifecycle);
+    let mut standings = assessment.bucs;
     if !bucs.is_empty() {
         for id in bucs {
             if !standings.iter().any(|p| &p.id == id) {
@@ -32,10 +36,11 @@ pub(crate) fn run_next(inputs: &[PathBuf], bucs: &[String], format: NextFormat) 
         .map(|input| shell_word(&input.display().to_string()))
         .collect::<Vec<_>>()
         .join(" ");
+    let unowned = &assessment.unowned_findings;
     let output = match format {
-        NextFormat::Text => render_text(&standings, &src),
+        NextFormat::Text => render_text(&standings, unowned, &src),
         NextFormat::Json => {
-            let mut text = serde_json::to_string_pretty(&render_json(&standings, &src))?;
+            let mut text = serde_json::to_string_pretty(&render_json(&standings, unowned, &src))?;
             text.push('\n');
             text
         }
@@ -44,16 +49,39 @@ pub(crate) fn run_next(inputs: &[PathBuf], bucs: &[String], format: NextFormat) 
     Ok(())
 }
 
-fn render_text(standings: &[BucStanding], src: &str) -> String {
+fn render_text(standings: &[BucStanding], unowned: &[FindingRef], src: &str) -> String {
     let mut out = String::new();
+    if !unowned.is_empty() {
+        let _ = writeln!(
+            out,
+            "check reports findings no BUC owns (run `rdra-ish check {src}` for the traces):"
+        );
+        for finding in unowned {
+            let _ = writeln!(out, "  - {}", finding_label(finding));
+        }
+        out.push('\n');
+    }
     if standings.is_empty() {
-        let _ = writeln!(out, "No BUC yet: the model is before stage 0.\n");
-        write_stage(&mut out, "Next", StageId::Scope, src, "<Buc>", &[], |out| {
-            let _ = writeln!(
-                out,
-                "  Gaps:\n    - add a `business` and a `buc`, and `belongs(Buc, Business)`"
-            );
-        });
+        let spec = StageId::Scope.spec();
+        let _ = writeln!(
+            out,
+            "No BUC yet: the model is before stage 0.\n\nNext: stage {} {}\n  {}\n  Gaps:\n    - add a `business` and a `buc`, and `belongs(Buc, Business)`\n  Ask:",
+            StageId::Scope.number(),
+            spec.name,
+            spec.question
+        );
+        for ask in spec.asks {
+            let _ = writeln!(out, "    - {ask}");
+        }
+        let _ = writeln!(out, "  Then review with:");
+        for command in spec.review_commands(src, "<Buc>", &[]) {
+            let _ = writeln!(out, "    {command}");
+        }
+        let _ = writeln!(
+            out,
+            "  See docs/incremental-modeling.md#{}",
+            StageId::Scope.doc_anchor()
+        );
         return out;
     }
 
@@ -92,28 +120,22 @@ fn render_text(standings: &[BucStanding], src: &str) -> String {
             let mark = match view.verdict() {
                 Verdict::Met => "x",
                 Verdict::Open => " ",
-            };
-            let notes = match view.notes.len() {
-                0 => String::new(),
-                1 => " (1 note)".to_string(),
-                n => format!(" ({n} notes)"),
+                Verdict::Blocked => "!",
             };
             let _ = writeln!(
                 out,
-                "  [{mark}] {:2} {:21} {}{notes}",
+                "  [{mark}] {:2} {:21} {}{}",
                 view.id.number(),
                 view.spec().name,
-                view.evidence
+                view.evidence,
+                aside(view)
             );
         }
         out.push('\n');
         let moved: Vec<&str> = p.moved.iter().map(String::as_str).collect();
         match p.next() {
             Next::Required(view) => {
-                write_stage(&mut out, "Next", view.id, src, &p.id, &moved, |out| {
-                    write_list(out, "Gaps", &view.gaps);
-                    write_list(out, "Notes", &view.notes);
-                });
+                write_stage(&mut out, "Next", view, src, &p.id, &moved);
             }
             Next::Optional(views) => {
                 let _ = writeln!(
@@ -131,9 +153,7 @@ fn render_text(standings: &[BucStanding], src: &str) -> String {
                         );
                         continue;
                     }
-                    write_stage(&mut out, "Optional", view.id, src, &p.id, &moved, |out| {
-                        write_list(out, "Gaps", &view.gaps);
-                    });
+                    write_stage(&mut out, "Optional", view, src, &p.id, &moved);
                 }
             }
         }
@@ -160,26 +180,82 @@ fn next_label(p: &BucStanding) -> String {
     }
 }
 
-/// A stage to work on: its question, then what `lists` writes, the questions to ask, and
+/// The counts a stage line ends with: notes, and findings of `check` the stage owns.
+fn aside(view: &StageView) -> String {
+    let mut parts = Vec::new();
+    let plural = |n: usize, one: &str, many: &str| match n {
+        0 => None,
+        1 => Some(format!("1 {one}")),
+        n => Some(format!("{n} {many}")),
+    };
+    parts.extend(plural(view.notes.len(), "note", "notes"));
+    for (severity, one, many) in [
+        (Severity::Error, "error from check", "errors from check"),
+        (
+            Severity::Warning,
+            "warning from check",
+            "warnings from check",
+        ),
+        (Severity::Info, "info from check", "infos from check"),
+    ] {
+        let n = view
+            .findings
+            .iter()
+            .filter(|f| f.severity == severity)
+            .count();
+        parts.extend(plural(n, one, many));
+    }
+    if parts.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", parts.join(", "))
+    }
+}
+
+fn finding_label(finding: &FindingRef) -> String {
+    let word = match finding.severity {
+        Severity::Info => "info",
+        Severity::Warning => "warning",
+        Severity::Error => "error",
+    };
+    format!("{word}[{}]", finding.name)
+}
+
+/// A stage to work on: its question, its gaps, notes and findings, the questions to ask, and
 /// the commands that review the stage.
 fn write_stage(
     out: &mut String,
     word: &str,
-    stage: StageId,
+    view: &StageView,
     src: &str,
     buc: &str,
     entities: &[&str],
-    lists: impl FnOnce(&mut String),
 ) {
+    let stage = view.id;
     let spec = stage.spec();
+    let blocked = if view.verdict() == Verdict::Blocked {
+        " is blocked: the elements exist, but check rejects them"
+    } else {
+        ""
+    };
     let _ = writeln!(
         out,
-        "{word}: stage {} {}\n  {}",
+        "{word}: stage {} {}{blocked}\n  {}",
         stage.number(),
         spec.name,
         spec.question,
     );
-    lists(out);
+    write_list(out, "Gaps", &view.gaps);
+    write_list(out, "Notes", &view.notes);
+    if !view.findings.is_empty() {
+        let _ = writeln!(
+            out,
+            "  Findings (run `rdra-ish check {src}` for the traces):"
+        );
+        for finding in &view.findings {
+            let _ = writeln!(out, "    - {}", finding_label(finding));
+        }
+    }
     let _ = writeln!(out, "  Ask:");
     for ask in spec.asks {
         let _ = writeln!(out, "    - {ask}");
@@ -218,7 +294,7 @@ fn write_list(out: &mut String, title: &str, items: &[Gap]) {
     }
 }
 
-fn render_json(standings: &[BucStanding], src: &str) -> Value {
+fn render_json(standings: &[BucStanding], unowned: &[FindingRef], src: &str) -> Value {
     let bucs: Vec<Value> = standings
         .iter()
         .map(|p| {
@@ -237,6 +313,7 @@ fn render_json(standings: &[BucStanding], src: &str) -> Value {
                     "validate": spec.review_commands(src, &p.id, &moved),
                     "gaps": view.gaps.iter().map(gap_json).collect::<Vec<_>>(),
                     "notes": view.notes.iter().map(gap_json).collect::<Vec<_>>(),
+                    "findings": view.findings.iter().map(finding_json).collect::<Vec<_>>(),
                 })
             };
             let next = match p.next() {
@@ -262,7 +339,10 @@ fn render_json(standings: &[BucStanding], src: &str) -> Value {
             })
         })
         .collect();
-    json!({ "bucs": bucs })
+    json!({
+        "bucs": bucs,
+        "unowned_findings": unowned.iter().map(finding_json).collect::<Vec<_>>(),
+    })
 }
 
 fn gate_json(view: &StageView) -> Value {
@@ -275,6 +355,14 @@ fn gate_json(view: &StageView) -> Value {
         "evidence": view.evidence,
         "gaps": view.gaps.len(),
         "notes": view.notes.len(),
+        "findings": view.findings.iter().map(finding_json).collect::<Vec<_>>(),
+    })
+}
+
+fn finding_json(finding: &FindingRef) -> Value {
+    json!({
+        "name": finding.name,
+        "severity": finding.severity.as_label(),
     })
 }
 
@@ -290,6 +378,7 @@ fn verdict_json(verdict: Verdict) -> &'static str {
     match verdict {
         Verdict::Met => "met",
         Verdict::Open => "open",
+        Verdict::Blocked => "blocked",
     }
 }
 

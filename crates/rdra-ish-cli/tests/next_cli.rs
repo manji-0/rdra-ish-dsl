@@ -189,6 +189,25 @@ contains(BucOrder, PlaceOrder)
 displays(PlaceOrder, Checkout)
 "#;
 
+/// `ORDER_SKELETON` with a second use case to drive the lifecycle, so `check` passes.
+const PAID_ORDER: &str = r#"
+business Commerce "Commerce"
+buc BucOrder "Process Order"
+actor Customer "Customer"
+usecase PlaceOrder "Place Order"
+usecase PayOrder "Pay Order"
+screen Checkout "Checkout"
+belongs(BucOrder, Commerce)
+performs(Customer, BucOrder)
+contains(BucOrder, PlaceOrder)
+contains(BucOrder, PayOrder)
+displays(PlaceOrder, Checkout)
+displays(PayOrder, Checkout)
+creates(PlaceOrder, Order)
+updates(PayOrder, Order)
+transitions(Order.status, PayOrder, pending -> paid)
+"#;
+
 fn gate<'a>(buc: &'a serde_json::Value, stage: &str) -> &'a serde_json::Value {
     buc["gates"]
         .as_array()
@@ -396,14 +415,12 @@ fn a_rule_counts_for_a_buc_only_through_a_column_it_moves() {
     let src = model(
         "rule_scope",
         &format!(
-            "{ORDER_SKELETON}
+            "{PAID_ORDER}
 entity Order \"Order\" {{
   id: Int @pk
   status: Enum(pending, paid) @default(pending)
   flagged: Bool @default(false)
 }}
-creates(PlaceOrder, Order)
-transitions(Order.status, PlaceOrder, pending -> paid)
 forbidden(Order, flagged == true)
 "
         ),
@@ -422,26 +439,115 @@ fn a_comparison_forbidden_is_an_advanced_rule_and_not_a_guardrail() {
     let src = model(
         "comparison",
         &format!(
-            "{ORDER_SKELETON}
+            "{PAID_ORDER}
 entity Order \"Order\" {{
   id: Int @pk
   status: Enum(pending, paid) @default(pending)
   qty: Int
   stock: Int
 }}
-creates(PlaceOrder, Order)
-transitions(Order.status, PlaceOrder, pending -> paid)
 sets(PlaceOrder, Order, qty > stock, false)
 forbidden(Order, qty > stock)
 "
         ),
     );
     let buc = &json(&[&src])["bucs"][0];
+    assert_eq!(buc["required_complete"], true);
     assert_eq!(gate(buc, "6A")["verdict"], "open");
     assert_eq!(gate(buc, "6B")["verdict"], "open");
     assert_eq!(gate(buc, "6C")["verdict"], "met");
     assert_eq!(
         gate(buc, "6C")["evidence"],
         "comparison or cross-entity rule reads Order.qty, Order.stock"
+    );
+}
+
+/// Problem 10 of the design: `check` rejects the lifecycle while `next` ticked stage 5.
+#[test]
+fn a_lifecycle_check_rejects_blocks_the_stage() {
+    let src = model(
+        "witness",
+        r#"
+business Commerce "Commerce"
+buc BucOrder "Order"
+actor Customer "Customer"
+usecase PlaceOrder "Place"
+screen S "S"
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(pending, paid, refunded) @default(pending)
+}
+belongs(BucOrder, Commerce)
+performs(Customer, BucOrder)
+contains(BucOrder, PlaceOrder)
+displays(PlaceOrder, S)
+creates(PlaceOrder, Order)
+transitions(Order.status, PlaceOrder, pending -> paid)
+"#,
+    );
+    let buc = &json(&[&src])["bucs"][0];
+    assert_eq!(buc["stage"], "4");
+    assert_eq!(buc["required_complete"], false);
+    assert_eq!(gate(buc, "5")["verdict"], "blocked");
+    let next = &buc["next"];
+    assert_eq!(next["stage"], "5");
+    assert_eq!(next["verdict"], "blocked");
+    assert_eq!(next["gaps"].as_array().unwrap().len(), 0);
+    let findings: Vec<(&str, &str)> = next["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| (f["severity"].as_str().unwrap(), f["name"].as_str().unwrap()))
+        .collect();
+    assert!(
+        findings.contains(&("error", "Witness_Order_status_pending")),
+        "{findings:?}"
+    );
+
+    let text = next_text(&src);
+    assert!(
+        text.contains("  [!] 5  Lifecycle             use cases move Order.status (1 error from check, 1 warning from check)\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            "\nNext: stage 5 Lifecycle is blocked: the elements exist, but check rejects them\n"
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains("    - error[Witness_Order_status_pending]\n"),
+        "{text}"
+    );
+}
+
+/// Problem 1 of the design: `buc-empty` warned on a correct stage-0 model.
+#[test]
+fn lint_calls_buc_empty_info_before_the_skeleton_stage() {
+    let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .current_dir(repo())
+        .args([
+            "lint",
+            "samples/incremental-order/step-0-scope/src",
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("rdra-ish runs");
+    assert!(output.status.success(), "{output:?}");
+    let issues: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let buc_empty = issues
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|issue| issue["rule"] == "buc-empty")
+        .unwrap();
+    assert_eq!(buc_empty["severity"], "info");
+    assert!(
+        buc_empty["hint"]
+            .as_str()
+            .unwrap()
+            .starts_with("expected before stage 1 BUC skeleton; "),
+        "{buc_empty}"
     );
 }
