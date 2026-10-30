@@ -11,7 +11,8 @@
   the cost of a `SharedInternalEntity` warning. `check` enforces the published-entity
   rules (`PublishedEntityMutated`, `PublishedEntityReadByOwner`,
   `PublishedEntityKeysInternal`, `PublishedNotInSourceTx`, `InternalEntityExposed`,
-  `PublishedEntityNeverWritten`, `ExposesChainInvalid`). A write to a published entity
+  `PublishedEntityNeverWritten`, `DuplicateExposure`, `SharedEntityAlsoExposed`,
+  `ExposesChainInvalid`, `ExposesCallerInvalid`). A write to a published entity
   joins the use case's one internal transaction, so the lifecycle and the TLA+ export run
   it in the same action as the internal change (one `Login`, not `Login_1` and `Login_2`),
   and `SeparateTxInferred` never fires for it. Published entities leave the owner's

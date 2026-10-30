@@ -77,7 +77,7 @@ impl CallerKind {
     }
 }
 
-/// The element one `exposes` line publishes. An entity without a mode is `InternalEntityExposed`.
+/// The element one `exposes` line publishes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Exposed {
     UseCase {
@@ -87,8 +87,18 @@ pub enum Exposed {
     Event(EventKey),
     Entity {
         entity: EntityKey,
-        mode: Option<PublishMode>,
+        mode: PublishMode,
     },
+}
+
+impl Exposed {
+    pub fn target(&self) -> NodeRef {
+        match self {
+            Exposed::UseCase { usecase, .. } => NodeRef::UseCase(*usecase),
+            Exposed::Event(event) => NodeRef::Event(*event),
+            Exposed::Entity { entity, .. } => NodeRef::Entity(*entity),
+        }
+    }
 }
 
 /// One `exposes(System, X)` line.
@@ -107,7 +117,8 @@ pub struct Share {
     pub site: Option<crate::location::LocatedSpan>,
 }
 
-/// The published surface of a model, in declaration order.
+/// The published surface of a model, in declaration order. Each element is exposed at most
+/// once and each entity shared at most once; `DuplicateExposure` rejects a second line.
 #[derive(Debug, Default)]
 pub struct Publication {
     pub exposures: Vec<Exposure>,
@@ -119,13 +130,14 @@ impl Publication {
         self.exposures.is_empty() && self.shares.is_empty()
     }
 
+    pub fn exposes(&self, target: &NodeRef) -> bool {
+        self.exposures.iter().any(|x| x.item.target() == *target)
+    }
+
     /// The publish mode of an entity, or `None` for an internal one.
     pub fn mode_of(&self, entity: EntityKey) -> Option<PublishMode> {
         self.exposures.iter().find_map(|x| match x.item {
-            Exposed::Entity {
-                entity: e,
-                mode: Some(mode),
-            } if e == entity => Some(mode),
+            Exposed::Entity { entity: e, mode } if e == entity => Some(mode),
             _ => None,
         })
     }

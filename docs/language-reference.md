@@ -637,7 +637,10 @@ these rules:
 | `PublishedNotInSourceTx` | a use case writes a published entity but makes no internal change, or makes several internal transactions, so the published row has no one transaction to join |
 | `InternalEntityExposed` | `exposes(System, Entity)` without `.append()` or `.upsert()`; publish a projection instead |
 | `PublishedEntityNeverWritten` (warning) | no use case writes the published entity |
+| `DuplicateExposure` | a second `exposes` line for an element that is already exposed; the first line stays, the second is the error |
+| `SharedEntityAlsoExposed` | `shares(System, Entity)` on a published entity; an entity has one role |
 | `ExposesChainInvalid` | a chain method on the wrong kind, such as `.append()` on a use case or `.caller(...)` on an entity |
+| `ExposesCallerInvalid` | `.caller(...)` with an argument other than `actor`, `system`, or `any` |
 
 A published row is written in the transaction of the internal change it reports. A write
 to a published entity therefore joins the writing use case's one internal transaction
@@ -648,7 +651,8 @@ unrelated writes would otherwise be `Revoke_1` and `Revoke_2`. The owner's lifec
 their own, only what the owner wrote.
 
 `shares(System, Entity)` lets other models name an internal entity directly, at the cost
-of a `SharedInternalEntity` warning on every `check` for as long as the line stays.
+of a `SharedInternalEntity` warning on every `check` for as long as the line stays. A
+second `shares` of the same entity adds nothing and no second warning.
 
 `rdra-ish list <model> --kind surface` prints the published surface as canonical text,
 one line per exposed use case, exposed event, published entity, writer of a published

@@ -12,16 +12,20 @@ use crate::model::{
 };
 use crate::tx::infer_usecase_transactions;
 
-/// A chain call that does not fit the exposed element.
-pub struct ChainMisuse {
-    pub chain: String,
-    pub hint: String,
+/// Why an `exposes` line publishes nothing.
+pub enum ExposeError {
+    /// A chain method that does not fit the exposed kind.
+    WrongKind { chain: String, hint: String },
+    /// `.caller(...)` with an argument that is not `actor`, `system`, or `any`.
+    BadCaller { args: Vec<PredicateArg> },
+    /// An entity without `.append()` or `.upsert()`.
+    NoMode,
 }
 
 /// What `exposes(System, target)` with `chain` publishes. `None` for a target kind the
 /// signature already rejected.
-pub fn exposed_item(target: &NodeRef, chain: &[ChainCall]) -> Option<Result<Exposed, ChainMisuse>> {
-    let misuse = |cc: &ChainCall, hint: &str| ChainMisuse {
+pub fn exposed_item(target: &NodeRef, chain: &[ChainCall]) -> Option<Result<Exposed, ExposeError>> {
+    let wrong_kind = |cc: &ChainCall, hint: &str| ExposeError::WrongKind {
         chain: cc.name.clone(),
         hint: hint.to_string(),
     };
@@ -30,7 +34,7 @@ pub fn exposed_item(target: &NodeRef, chain: &[ChainCall]) -> Option<Result<Expo
             let mut caller = CallerKind::default();
             for cc in chain {
                 if cc.name != "caller" {
-                    return Some(Err(misuse(
+                    return Some(Err(wrong_kind(
                         cc,
                         "`.append()` and `.upsert()` publish an entity",
                     )));
@@ -40,9 +44,17 @@ pub fn exposed_item(target: &NodeRef, chain: &[ChainCall]) -> Option<Result<Expo
                         "actor" => CallerKind::Actor,
                         "system" => CallerKind::System,
                         "any" => CallerKind::Any,
-                        _ => return Some(Err(misuse(cc, "write `.caller(actor | system | any)`"))),
+                        _ => {
+                            return Some(Err(ExposeError::BadCaller {
+                                args: cc.args.clone(),
+                            }))
+                        }
                     },
-                    _ => return Some(Err(misuse(cc, "write `.caller(actor | system | any)`"))),
+                    _ => {
+                        return Some(Err(ExposeError::BadCaller {
+                            args: cc.args.clone(),
+                        }))
+                    }
                 };
             }
             Exposed::UseCase {
@@ -52,7 +64,10 @@ pub fn exposed_item(target: &NodeRef, chain: &[ChainCall]) -> Option<Result<Expo
         }
         NodeRef::Event(event) => {
             if let Some(cc) = chain.first() {
-                return Some(Err(misuse(cc, "an exposed event takes no chain method")));
+                return Some(Err(wrong_kind(
+                    cc,
+                    "an exposed event takes no chain method",
+                )));
             }
             Exposed::Event(*event)
         }
@@ -63,23 +78,29 @@ pub fn exposed_item(target: &NodeRef, chain: &[ChainCall]) -> Option<Result<Expo
                     "append" => PublishMode::Append,
                     "upsert" => PublishMode::Upsert,
                     _ => {
-                        return Some(Err(misuse(
+                        return Some(Err(wrong_kind(
                             cc,
                             "`.caller(...)` applies to an exposed use case",
                         )))
                     }
                 };
                 if !cc.args.is_empty() {
-                    return Some(Err(misuse(
+                    return Some(Err(wrong_kind(
                         cc,
                         "`.append()` and `.upsert()` take no argument",
                     )));
                 }
                 if mode.is_some() {
-                    return Some(Err(misuse(cc, "choose one of `.append()` or `.upsert()`")));
+                    return Some(Err(wrong_kind(
+                        cc,
+                        "choose one of `.append()` or `.upsert()`",
+                    )));
                 }
                 mode = Some(next);
             }
+            let Some(mode) = mode else {
+                return Some(Err(ExposeError::NoMode));
+            };
             Exposed::Entity {
                 entity: *entity,
                 mode,
@@ -247,7 +268,7 @@ fn mutated(
     }
 }
 
-/// The published-entity rules, `InternalEntityExposed`, and the `SharedInternalEntity` warning.
+/// The published-entity rules, `SharedEntityAlsoExposed`, and the `SharedInternalEntity` warning.
 pub fn publication_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
     let publication = &model.publication;
     if publication.is_empty() {
@@ -257,27 +278,27 @@ pub fn publication_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
     let entity_id = |entity: EntityKey| model.entities[entity].id.clone();
     let system_id = |system| model.systems[system].id.clone();
 
-    for x in &publication.exposures {
-        if let Exposed::Entity { entity, mode: None } = x.item {
-            diags.push(at(
-                RdraError::InternalEntityExposed {
-                    system: system_id(x.system),
-                    entity: entity_id(entity),
-                },
-                &x.site,
-                false,
-            ));
-        }
-    }
     for s in &publication.shares {
-        diags.push(at(
-            RdraError::SharedInternalEntity {
-                system: system_id(s.system),
-                entity: entity_id(s.entity),
-            },
-            &s.site,
-            true,
-        ));
+        let diag = match publication.mode_of(s.entity) {
+            Some(mode) => at(
+                RdraError::SharedEntityAlsoExposed {
+                    system: system_id(s.system),
+                    entity: entity_id(s.entity),
+                    mode: mode.as_str().to_string(),
+                },
+                &s.site,
+                false,
+            ),
+            None => at(
+                RdraError::SharedInternalEntity {
+                    system: system_id(s.system),
+                    entity: entity_id(s.entity),
+                },
+                &s.site,
+                true,
+            ),
+        };
+        diags.push(diag);
     }
 
     let mut written: HashSet<EntityKey> = HashSet::new();
@@ -316,16 +337,11 @@ pub fn publication_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
         diags.push(at(err, &u.site, false));
     }
 
-    let mut seen: HashSet<EntityKey> = HashSet::new();
     for x in &publication.exposures {
-        let Exposed::Entity {
-            entity,
-            mode: Some(_),
-        } = x.item
-        else {
+        let Exposed::Entity { entity, .. } = x.item else {
             continue;
         };
-        if written.contains(&entity) || !seen.insert(entity) {
+        if written.contains(&entity) {
             continue;
         }
         diags.push(at(

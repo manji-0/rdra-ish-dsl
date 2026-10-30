@@ -52,7 +52,10 @@ fn publication_names(src: &str) -> Vec<(&'static str, bool)> {
                 RdraError::InternalEntityExposed { .. } => "InternalEntityExposed",
                 RdraError::PublishedEntityNeverWritten { .. } => "PublishedEntityNeverWritten",
                 RdraError::SharedInternalEntity { .. } => "SharedInternalEntity",
+                RdraError::SharedEntityAlsoExposed { .. } => "SharedEntityAlsoExposed",
                 RdraError::ExposesChainInvalid { .. } => "ExposesChainInvalid",
+                RdraError::ExposesCallerInvalid { .. } => "ExposesCallerInvalid",
+                RdraError::DuplicateExposure { .. } => "DuplicateExposure",
                 _ => return None,
             };
             Some((name, d.is_warning))
@@ -219,18 +222,115 @@ fn shares_is_a_warning_on_the_owner() {
 }
 
 #[test]
+fn an_entity_shared_twice_warns_once_and_a_published_entity_is_not_shared() {
+    assert_eq!(
+        publication_names(&owner("shares(Auth, Session)\nshares(Auth, Session)")),
+        [("SharedInternalEntity", true)]
+    );
+    let diags = diagnostics(&owner("shares(Auth, SessionView)"));
+    let shared: Vec<String> = diags
+        .iter()
+        .filter(|d| {
+            matches!(
+                d.error,
+                RdraError::SharedEntityAlsoExposed { .. } | RdraError::SharedInternalEntity { .. }
+            )
+        })
+        .map(|d| d.error.to_string())
+        .collect();
+    assert_eq!(shared.len(), 1, "{shared:?}");
+    assert!(
+        shared[0].starts_with(
+            "SharedEntityAlsoExposed: 'Auth' shares entity 'SessionView', which is already published upsert"
+        ),
+        "{}",
+        shared[0]
+    );
+    assert!(
+        !diags
+            .iter()
+            .find(|d| matches!(d.error, RdraError::SharedEntityAlsoExposed { .. }))
+            .unwrap()
+            .is_warning
+    );
+}
+
+#[test]
+fn a_second_exposes_of_one_element_is_an_error_and_the_first_line_stays() {
+    for (line, kind) in [
+        ("exposes(Auth, SessionView).append()", "entity"),
+        ("exposes(Auth, Login).caller(system)", "usecase"),
+        ("exposes(Auth, Login)", "usecase"),
+    ] {
+        let diags = diagnostics(&owner(line));
+        let dup: Vec<String> = diags
+            .iter()
+            .filter(|d| matches!(d.error, RdraError::DuplicateExposure { .. }))
+            .map(|d| d.error.to_string())
+            .collect();
+        assert_eq!(dup.len(), 1, "{line}: {dup:?}");
+        assert!(
+            dup[0].starts_with(&format!("DuplicateExposure: {kind} '")),
+            "{}",
+            dup[0]
+        );
+    }
+    let (ast, _) = parse(&owner("exposes(Auth, SessionView).append()"));
+    let (model, _) = build_model(&ast);
+    let view = model
+        .entities
+        .iter()
+        .find(|(_, e)| e.id == "SessionView")
+        .unwrap()
+        .0;
+    assert_eq!(model.publication.mode_of(view), Some(PublishMode::Upsert));
+    assert_eq!(
+        model
+            .publication
+            .exposures
+            .iter()
+            .filter(|x| x.item.target() == crate::model::NodeRef::Entity(view))
+            .count(),
+        1
+    );
+}
+
+#[test]
 fn a_chain_on_the_wrong_exposed_kind_is_an_error() {
     for line in [
         "exposes(Auth, Revoke).append()",
         "exposes(Auth, LoginLog).caller(system)",
         "exposes(Auth, LoginLog).append().upsert()",
-        "exposes(Auth, Revoke).caller(robot)",
         "event EvX \"X\"\nraises(Login, EvX)\noutbox(EvX)\nexposes(Auth, EvX).caller(any)",
     ] {
         let names = publication_names(&owner(line));
         assert!(
             names.contains(&("ExposesChainInvalid", false)),
             "{line}: {names:?}"
+        );
+    }
+}
+
+#[test]
+fn a_caller_that_is_not_a_caller_kind_names_the_argument() {
+    for (line, shown) in [
+        ("exposes(Auth, Revoke).caller(robot)", "`.caller(robot)`"),
+        ("exposes(Auth, Revoke).caller()", "`.caller()`"),
+        (
+            "exposes(Auth, Revoke).caller(actor, any)",
+            "`.caller(actor, any)`",
+        ),
+    ] {
+        let msg = diagnostics(&owner(line))
+            .iter()
+            .find(|d| matches!(d.error, RdraError::ExposesCallerInvalid { .. }))
+            .map(|d| d.error.to_string())
+            .unwrap_or_else(|| panic!("{line}: no ExposesCallerInvalid"));
+        assert!(msg.contains(shown), "{msg}");
+        assert!(msg.contains("'Revoke'"), "{msg}");
+        assert!(
+            msg.contains("`.caller(actor)`, `.caller(system)`, or `.caller(any)`"),
+            "{msg}"
         );
     }
 }

@@ -55,10 +55,7 @@ impl Surface {
                         format!("event {} {}", ev.id, quoted(&ev.label)),
                     );
                 }
-                Exposed::Entity {
-                    entity,
-                    mode: Some(mode),
-                } => {
+                Exposed::Entity { entity, mode } => {
                     let e = &model.entities[entity];
                     entities.insert(
                         e.id.clone(),
@@ -74,7 +71,6 @@ impl Surface {
                         ),
                     );
                 }
-                Exposed::Entity { mode: None, .. } => {}
             }
         }
 

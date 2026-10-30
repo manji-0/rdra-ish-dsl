@@ -466,30 +466,47 @@ fn process_exposes_predicate(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
+    use crate::publication::ExposeError;
     let (Some(Some(NodeRef::System(system))), Some(Some(target))) =
         (resolved.first(), resolved.get(1))
     else {
         return;
     };
-    match crate::publication::exposed_item(target, &pred.chain) {
-        Some(Ok(item)) => model.publication.exposures.push(Exposure {
-            system: *system,
-            item,
-            site: Some(ctx.locate(pred.span.clone())),
-        }),
-        Some(Err(misuse)) => push_error(
-            ctx,
-            diags,
-            pred.span.clone(),
-            RdraError::ExposesChainInvalid {
-                chain: misuse.chain,
-                kind: node_kind_tag_str(target).to_string(),
-                id: predicate_arg_display(&pred.args[1]),
-                hint: misuse.hint,
-            },
-        ),
-        None => {}
-    }
+    let Some(item) = crate::publication::exposed_item(target, &pred.chain) else {
+        return;
+    };
+    let kind = node_kind_tag_str(target).to_string();
+    let id = predicate_arg_display(&pred.args[1]);
+    let error = match item {
+        Ok(_) if model.publication.exposes(target) => RdraError::DuplicateExposure { kind, id },
+        Ok(item) => {
+            model.publication.exposures.push(Exposure {
+                system: *system,
+                item,
+                site: Some(ctx.locate(pred.span.clone())),
+            });
+            return;
+        }
+        Err(ExposeError::WrongKind { chain, hint }) => RdraError::ExposesChainInvalid {
+            chain,
+            kind,
+            id,
+            hint,
+        },
+        Err(ExposeError::BadCaller { args }) => RdraError::ExposesCallerInvalid {
+            usecase: id,
+            args: args
+                .iter()
+                .map(predicate_arg_display)
+                .collect::<Vec<_>>()
+                .join(", "),
+        },
+        Err(ExposeError::NoMode) => RdraError::InternalEntityExposed {
+            system: model.systems[*system].id.clone(),
+            entity: id,
+        },
+    };
+    push_error(ctx, diags, pred.span.clone(), error);
 }
 
 fn process_shares_predicate(
@@ -501,6 +518,9 @@ fn process_shares_predicate(
     if let (Some(Some(NodeRef::System(system))), Some(Some(NodeRef::Entity(entity)))) =
         (resolved.first(), resolved.get(1))
     {
+        if model.publication.is_shared(*entity) {
+            return;
+        }
         model.publication.shares.push(Share {
             system: *system,
             entity: *entity,

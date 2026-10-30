@@ -437,6 +437,12 @@ pub enum RdraError {
         hint: String,
     },
 
+    #[error("ExposesCallerInvalid: `.caller({args})` on use case '{usecase}' names no caller kind\n  hint: write `.caller(actor)`, `.caller(system)`, or `.caller(any)`")]
+    ExposesCallerInvalid { usecase: String, args: String },
+
+    #[error("DuplicateExposure: {kind} '{id}' is already exposed\n  hint: one `exposes` line per element; put its chain methods on the first line and delete this one")]
+    DuplicateExposure { kind: String, id: String },
+
     #[error("PublishedEntityMutated: '{entity}' is published {mode}, so `{predicate}` is not allowed on it\n  hint: {hint}")]
     PublishedEntityMutated {
         entity: String,
@@ -463,6 +469,13 @@ pub enum RdraError {
 
     #[error("PublishedEntityNeverWritten: no use case writes published entity '{entity}'\n  hint: add `creates`, `writes`, or `sets` on '{entity}' from the use case whose internal change it reports")]
     PublishedEntityNeverWritten { entity: String },
+
+    #[error("SharedEntityAlsoExposed: '{system}' shares entity '{entity}', which is already published {mode}\n  hint: an entity has one role; other models reference '{entity}' through its `exposes` line, so delete this `shares` line")]
+    SharedEntityAlsoExposed {
+        system: String,
+        entity: String,
+        mode: String,
+    },
 
     #[error("SharedInternalEntity: '{system}' shares internal entity '{entity}' with other models\n  hint: every use of '{entity}' in another model is a `DirectEntityReference` warning there; publish a projection with `exposes({system}, ...).upsert()` when you can, then delete this line")]
     SharedInternalEntity { system: String, entity: String },

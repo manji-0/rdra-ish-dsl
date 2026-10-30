@@ -194,6 +194,7 @@ fn is_consistency_diag(err: &RdraError) -> bool {
             | RdraError::InternalEntityExposed { .. }
             | RdraError::PublishedEntityNeverWritten { .. }
             | RdraError::SharedInternalEntity { .. }
+            | RdraError::SharedEntityAlsoExposed { .. }
     )
 }
 
