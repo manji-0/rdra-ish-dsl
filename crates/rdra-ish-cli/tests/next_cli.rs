@@ -86,3 +86,31 @@ fn buc_filter_keeps_the_named_bucs_and_rejects_unknown_ids() {
     assert_eq!(output.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&output.stderr).contains("unknown BUC `BucNope`"));
 }
+
+/// `--format json` on each step, compared with `tests/next_snapshots/<step>.json`.
+/// `RDRA_ISH_BLESS=1` rewrites the snapshots.
+#[test]
+fn json_output_matches_the_snapshots() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/next_snapshots");
+    let mut stale = Vec::new();
+    for entry in std::fs::read_dir(&dir).expect("snapshot dir") {
+        let path = entry.unwrap().path();
+        let step = path.file_stem().unwrap().to_str().unwrap().to_string();
+        let src = format!("samples/incremental-order/{step}/src");
+        let output = next(&[&src, "--format", "json"]);
+        assert!(output.status.success(), "{output:?}");
+        let actual = String::from_utf8(output.stdout).unwrap();
+        let expected = std::fs::read_to_string(&path).unwrap();
+        if actual != expected {
+            if std::env::var_os("RDRA_ISH_BLESS").is_some() {
+                std::fs::write(&path, actual).unwrap();
+            } else {
+                stale.push(step);
+            }
+        }
+    }
+    assert!(
+        stale.is_empty(),
+        "stale snapshots {stale:?}; run with RDRA_ISH_BLESS=1 to rewrite"
+    );
+}

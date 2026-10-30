@@ -1,0 +1,103 @@
+{
+  "bucs": [
+    {
+      "gates": [
+        {
+          "evidence": "belongs to StoreOperations",
+          "gaps": 0,
+          "passed": true,
+          "stage": "0",
+          "stage_name": "Scope sketch"
+        },
+        {
+          "evidence": "2 use cases, 1 `performs` / `triggers` starting them",
+          "gaps": 0,
+          "passed": true,
+          "stage": "1",
+          "stage_name": "BUC skeleton"
+        },
+        {
+          "evidence": "0/2 use cases touch an entity",
+          "gaps": 2,
+          "passed": false,
+          "stage": "2",
+          "stage_name": "Data touchpoints"
+        },
+        {
+          "evidence": "0/2 use cases display a screen, invoke an API, or run on a trigger",
+          "gaps": 2,
+          "passed": false,
+          "stage": "3",
+          "stage_name": "Interaction boundary"
+        },
+        {
+          "evidence": "0/0 entities have a column beyond their keys",
+          "gaps": 0,
+          "passed": false,
+          "stage": "4",
+          "stage_name": "Entity structure"
+        },
+        {
+          "evidence": "no use case moves an entity state",
+          "gaps": 1,
+          "passed": false,
+          "stage": "5",
+          "stage_name": "Lifecycle"
+        },
+        {
+          "evidence": "no `forbidden` / `exclusive` on an entity this BUC moves",
+          "gaps": 0,
+          "passed": false,
+          "stage": "6A",
+          "stage_name": "Local guardrails"
+        },
+        {
+          "evidence": "no `invariant` / `required` on an entity this BUC moves",
+          "gaps": 0,
+          "passed": false,
+          "stage": "6B",
+          "stage_name": "Local obligations"
+        },
+        {
+          "evidence": "no comparison or cross-entity rule on an entity this BUC moves",
+          "gaps": 0,
+          "passed": false,
+          "stage": "6C",
+          "stage_name": "Advanced rules"
+        }
+      ],
+      "id": "BucStoreRestock",
+      "label": "Maintain Store Restock",
+      "next": {
+        "asks": [
+          "Which business objects are created, read, updated, or deleted by each use case?",
+          "Are any entities only conceptual at this stage?",
+          "Which entities should be shared across multiple BUCs?"
+        ],
+        "doc": "docs/incremental-modeling.md#stage-2-data-touchpoints",
+        "gaps": [
+          {
+            "id": "ChangeNextRestockDate",
+            "kind": "usecase",
+            "message": "add `creates` / `reads` / `updates` / `deletes(ChangeNextRestockDate, Entity)` for the data it touches"
+          },
+          {
+            "id": "ChangeStoreParentOrganization",
+            "kind": "usecase",
+            "message": "add `creates` / `reads` / `updates` / `deletes(ChangeStoreParentOrganization, Entity)` for the data it touches"
+          }
+        ],
+        "question": "Which data objects does each use case touch?",
+        "stage": "2",
+        "stage_name": "Data touchpoints",
+        "validate": [
+          "rdra-ish check samples/incremental-order/step-1-buc-skeleton/src",
+          "rdra-ish csv samples/incremental-order/step-1-buc-skeleton/src --kind matrix",
+          "rdra-ish diagram samples/incremental-order/step-1-buc-skeleton/src --kind er --buc BucStoreRestock"
+        ]
+      },
+      "stage": "1",
+      "stage_name": "BUC skeleton"
+    }
+  ]
+}

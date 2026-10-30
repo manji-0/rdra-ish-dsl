@@ -1,0 +1,106 @@
+{
+  "bucs": [
+    {
+      "gates": [
+        {
+          "evidence": "belongs to StoreOperations",
+          "gaps": 0,
+          "passed": true,
+          "stage": "0",
+          "stage_name": "Scope sketch"
+        },
+        {
+          "evidence": "2 use cases, 1 `performs` / `triggers` starting them",
+          "gaps": 0,
+          "passed": true,
+          "stage": "1",
+          "stage_name": "BUC skeleton"
+        },
+        {
+          "evidence": "2/2 use cases touch an entity",
+          "gaps": 0,
+          "passed": true,
+          "stage": "2",
+          "stage_name": "Data touchpoints"
+        },
+        {
+          "evidence": "0/2 use cases display a screen, invoke an API, or run on a trigger",
+          "gaps": 2,
+          "passed": false,
+          "stage": "3",
+          "stage_name": "Interaction boundary"
+        },
+        {
+          "evidence": "0/2 entities have a column beyond their keys",
+          "gaps": 2,
+          "passed": false,
+          "stage": "4",
+          "stage_name": "Entity structure"
+        },
+        {
+          "evidence": "no use case moves an entity state",
+          "gaps": 1,
+          "passed": false,
+          "stage": "5",
+          "stage_name": "Lifecycle"
+        },
+        {
+          "evidence": "no `forbidden` / `exclusive` on an entity this BUC moves",
+          "gaps": 0,
+          "passed": false,
+          "stage": "6A",
+          "stage_name": "Local guardrails"
+        },
+        {
+          "evidence": "no `invariant` / `required` on an entity this BUC moves",
+          "gaps": 0,
+          "passed": false,
+          "stage": "6B",
+          "stage_name": "Local obligations"
+        },
+        {
+          "evidence": "no comparison or cross-entity rule on an entity this BUC moves",
+          "gaps": 0,
+          "passed": false,
+          "stage": "6C",
+          "stage_name": "Advanced rules"
+        }
+      ],
+      "id": "BucStoreRestock",
+      "label": "Maintain Store Restock",
+      "next": {
+        "asks": [
+          "Which screen or external interface does each use case expose?",
+          "Does the use case write data directly, or through an API boundary?",
+          "Is the API a reusable boundary or local to this BUC?",
+          "Which actor permission and physical/device medium are required for the use case or API?"
+        ],
+        "doc": "docs/incremental-modeling.md#stage-3-interaction-boundary",
+        "gaps": [
+          {
+            "id": "ChangeNextRestockDate",
+            "kind": "usecase",
+            "message": "add `displays(ChangeNextRestockDate, Screen)` or `invokes(ChangeNextRestockDate, Api)` for the boundary it works through"
+          },
+          {
+            "id": "ChangeStoreParentOrganization",
+            "kind": "usecase",
+            "message": "add `displays(ChangeStoreParentOrganization, Screen)` or `invokes(ChangeStoreParentOrganization, Api)` for the boundary it works through"
+          }
+        ],
+        "question": "What UI/API boundary mediates the work, and with which authority/media constraints?",
+        "stage": "3",
+        "stage_name": "Interaction boundary",
+        "validate": [
+          "rdra-ish check samples/incremental-order/step-2-data-touchpoints/src",
+          "rdra-ish diagram samples/incremental-order/step-2-data-touchpoints/src --kind rdra --buc BucStoreRestock",
+          "rdra-ish csv samples/incremental-order/step-2-data-touchpoints/src --kind api-matrix",
+          "rdra-ish csv samples/incremental-order/step-2-data-touchpoints/src --kind screen-constraints",
+          "rdra-ish csv samples/incremental-order/step-2-data-touchpoints/src --kind actor-permission-audit"
+        ]
+      },
+      "stage": "2",
+      "stage_name": "Data touchpoints"
+    }
+  ]
+}

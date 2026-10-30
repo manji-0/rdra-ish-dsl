@@ -735,19 +735,20 @@ fn coverage_score_issue(model: &SemanticModel, findings: &[LintIssue]) -> LintIs
 }
 
 fn stage_readiness_issue(model: &SemanticModel) -> LintIssue {
-    let progress = crate::refinement::refinement_progress(model);
-    let message = if progress.is_empty() {
+    use crate::refinement::{assess, Next};
+    let standings = assess(model).bucs;
+    let message = if standings.is_empty() {
         "no BUC yet; next stage: 0 Scope sketch".to_string()
     } else {
-        progress
+        standings
             .iter()
             .map(|p| {
-                let stage = p.stage().map_or("-", |stage| stage.number());
-                match p.next_gate() {
-                    Some(gate) => {
-                        format!("{} stage {stage} (next {})", p.buc_id, gate.stage.number())
+                let stage = p.reached().map_or("-".to_string(), |stage| stage.number());
+                match p.next() {
+                    Next::Required(view) => {
+                        format!("{} stage {stage} (next {})", p.id, view.id.number())
                     }
-                    None => format!("{} stage {stage} (every gate passes)", p.buc_id),
+                    Next::Optional(_) => format!("{} stage {stage} (every gate passes)", p.id),
                 }
             })
             .collect::<Vec<_>>()

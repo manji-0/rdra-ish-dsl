@@ -511,7 +511,7 @@ rdra-ish states src/ --entity Order --format json
 Move on when obligation diagnostics match the intended lifecycle. If `required` reports
 too many violations, prefer narrowing it into an `invariant` before adding more rules.
 
-## Stage 6C: Comparison and Cross-Entity Rules
+## Stage 6C: Advanced Rules
 
 Add comparison propositions and cross-entity constraints last. These rules are powerful
 but carry more modeling obligations: a comparison needs `sets` that move its columns (or

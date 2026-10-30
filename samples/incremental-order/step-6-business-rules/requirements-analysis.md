@@ -2,7 +2,7 @@
 
 <!-- constrained-by ../../../docs/incremental-modeling.md#stage-6a-local-guardrails -->
 <!-- constrained-by ../../../docs/incremental-modeling.md#stage-6b-local-obligations -->
-<!-- constrained-by ../../../docs/incremental-modeling.md#stage-6c-comparison-and-cross-entity-rules -->
+<!-- constrained-by ../../../docs/incremental-modeling.md#stage-6c-advanced-rules -->
 <!-- derived-from ../step-5-lifecycle/requirements-analysis.md -->
 
 この文書は Step 6 時点の要求分析サンプルです。抽象度を保ったまま、次に具体化する対象だけをレビューできる粒度にしています。
