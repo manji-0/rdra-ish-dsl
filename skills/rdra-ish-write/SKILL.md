@@ -14,15 +14,24 @@ This file is the routing layer. Load only the step file for the model's current
 abstraction level. If the level is unclear, read the previous, current, and next step
 files, classify the model, then continue with the single most relevant step.
 
-| Step | Concern | Load | Main output |
+<!-- stage-spec: skill-table -->
+| Stage | Concern | Main question | Add |
 |---|---|---|---|
-| 0 | Scope sketch | `references/00-scope.md` | `business`, candidate `buc`, early `requirement` metadata |
-| 1 | BUC skeleton | `references/01-buc-skeleton.md` | actors, BUC ownership, contained use cases, optional `flow`/`step` order |
-| 2 | Data touchpoints | `references/02-data-touchpoints.md` | coarse entities, UC CRUD |
-| 3 | Interaction boundary | `references/03-interaction-boundary.md` | screens, fields, APIs/DTO contracts, systems, media, permissions |
-| 4 | Entity structure | `references/04-entity-structure.md` | columns, variations, keys, relations, ownership, coordination |
-| 5 | Lifecycle | `references/05-lifecycle.md` | transitions driven by use cases, events between use cases, timers, conditions, effects |
-| 6 | Rules | `references/06-rules.md` | local guardrails, local obligations, then comparison/cross-entity constraints |
+| 0 Scope sketch | Biz intent | What business area are we modeling? | `business`, rough `buc`, `belongs`, candidate `actor`, optional `requirement` and `motivates` |
+| 1 BUC skeleton | Biz value | Who gets value from each BUC? | `performs`, `contains`, rough `usecase`, `flow` / `step` when order matters |
+| 2 Data touchpoints | Biz object touchpoints | Which data objects does each use case touch? | coarse `entity`, CRUD predicates (`creates`, `reads`, `updates`, `deletes`) |
+| 3 Interaction boundary | Tech interaction boundary | What UI/API boundary mediates the work, and with which authority/media constraints? | `screen`, `displays`, `shows`, `field`, optional `api` / `invokes`, `dto`, `system`, `permission`, `medium`, `has_permission`, `requires_*` |
+| 4 Entity structure | Tech data design | What structure and ownership does the data need? | columns, `@pk`, `variation`, `relate`, cardinality, optional `owns` / `coordinates` |
+| 5 Lifecycle | Tech lifecycle design | Which states and event-triggered BUC entries are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `transitions`, `raises`, `triggers`, `timer`, `sets`, `condition` |
+| 6A Local guardrails | Tech-enforced rules | Which simple states or facts must never co-occur? | `forbidden`, `exclusive` over Enum / Bool / nullable axes |
+| 6B Local obligations | Tech-enforced rules | Which reachable states imply or require other facts? | `invariant`, narrow `required` |
+| 6C Advanced rules | Tech-enforced rules | Which comparison or cross-entity facts are reviewable from the abstract state space? | comparison propositions, multi-entity `forbidden` / `invariant` |
+<!-- /stage-spec -->
+
+The step files are `references/00-scope.md` for stage 0, `references/01-buc-skeleton.md`
+for 1, `references/02-data-touchpoints.md` for 2, `references/03-interaction-boundary.md`
+for 3, `references/04-entity-structure.md` for 4, `references/05-lifecycle.md` for 5, and
+`references/06-rules.md` for 6A to 6C.
 
 Do not skip ahead because a downstream detail is tempting: a guessed column or state
 machine reads as a commitment to reviewers. Model the smallest useful increment, run
@@ -31,7 +40,9 @@ validation, then advance one level.
 ### Core Workflow
 
 1. Locate the existing model root and current abstraction level. `rdra-ish next src/`
-   prints the stage of each BUC and the gaps that block the next one.
+   prints the stage of each BUC and the gaps that block the next one;
+   `rdra-ish next src/ --buc <BucId> --format json` gives the next stage's `asks` and
+   `gaps` to work from.
 2. Load the matching step file from `references/`.
 3. Ask only for information required by that step, unless the codebase already answers it.
 4. Edit the smallest set of `.rdra` files needed for the step.

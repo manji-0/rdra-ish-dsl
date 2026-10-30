@@ -86,7 +86,8 @@
         "stage": "6C",
         "stage_name": "Advanced rules",
         "validate": [
-          "rdra-ish states samples/incremental-order/step-6-business-rules/src --buc BucStoreRestock"
+          "rdra-ish check samples/incremental-order/step-6-business-rules/src",
+          "rdra-ish states samples/incremental-order/step-6-business-rules/src --entity Store"
         ]
       },
       "stage": "6B",

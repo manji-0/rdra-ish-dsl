@@ -132,17 +132,19 @@ import shared.lifecycle.order
 
 <!-- derived-from ./language-reference.md#entity-state-constraints -->
 
+<!-- stage-spec: map -->
 | Stage | Concern | Abstraction | Main question | Add | Validate |
 |---|---|---|---|---|---|
-| 0 | Biz intent | Scope sketch | What business area are we modeling? | `business`, rough `buc`, candidate `actor` | `list --kind buc`, `diagram --kind rdra` |
-| 1 | Biz value | BUC skeleton | Who gets value from each BUC? | `performs`, `belongs`, `contains`, rough `usecase` | `check`, BUC-scoped RDRA diagram |
-| 2 | Biz object touchpoints | Data touchpoints | Which data objects does each use case touch? | coarse `entity`, CRUD predicates | CRUD matrix, ER diagram |
-| 3 | Tech interaction boundary | Interaction boundary | What UI/API boundary mediates the work, and with which authority/media constraints? | `screen`, `displays`, `shows`, optional `api`/`invokes`, `permission`, `medium`, `has_permission`, `requires_*` | RDRA graph, screen-constraints CSV, actor-permission audit |
-| 4 | Tech data design | Entity structure | What structure and ownership does the data need? | columns, `@pk`, `relate`, cardinality | ER diagram, `check` transaction warnings |
-| 5 | Tech lifecycle design | Lifecycle | Which states and event-triggered BUC entries are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `transitions`, `raises`, `triggers`, `sets` | `check`, `states`, state diagram, event diagram |
-| 6A | Tech-enforced rules | Local guardrails | Which simple states or facts must never co-occur? | `forbidden`, `exclusive` over Enum / Bool / nullable axes | `states` diagnostics |
-| 6B | Tech-enforced rules | Local obligations | Which reachable states imply or require other facts? | `invariant`, narrow `required` | `states` diagnostics |
-| 6C | Tech-enforced rules | Advanced rules | Which comparison or cross-entity facts are reviewable from the abstract state space? | comparison propositions, multi-entity `forbidden` / `invariant` | `states` diagnostics |
+| 0 | Biz intent | Scope sketch | What business area are we modeling? | `business`, rough `buc`, `belongs`, candidate `actor`, optional `requirement` and `motivates` | `check`, `list --kind buc --format table`, `diagram --kind rdra` |
+| 1 | Biz value | BUC skeleton | Who gets value from each BUC? | `performs`, `contains`, rough `usecase`, `flow` / `step` when order matters | `check`, `diagram --kind rdra` |
+| 2 | Biz object touchpoints | Data touchpoints | Which data objects does each use case touch? | coarse `entity`, CRUD predicates (`creates`, `reads`, `updates`, `deletes`) | `check`, `csv --kind matrix`, `diagram --kind er` |
+| 3 | Tech interaction boundary | Interaction boundary | What UI/API boundary mediates the work, and with which authority/media constraints? | `screen`, `displays`, `shows`, `field`, optional `api` / `invokes`, `dto`, `system`, `permission`, `medium`, `has_permission`, `requires_*` | `check`, `diagram --kind rdra`, `list --kind api --format table`, `csv --kind api-matrix`, `csv --kind screen-constraints`, `csv --kind actor-permission-audit` |
+| 4 | Tech data design | Entity structure | What structure and ownership does the data need? | columns, `@pk`, `variation`, `relate`, cardinality, optional `owns` / `coordinates` | `check`, `diagram --kind er` |
+| 5 | Tech lifecycle design | Lifecycle | Which states and event-triggered BUC entries are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `transitions`, `raises`, `triggers`, `timer`, `sets`, `condition` | `check`, `states`, `diagram --kind state`, `diagram --kind event` |
+| 6A | Tech-enforced rules | Local guardrails | Which simple states or facts must never co-occur? | `forbidden`, `exclusive` over Enum / Bool / nullable axes | `check`, `states` |
+| 6B | Tech-enforced rules | Local obligations | Which reachable states imply or require other facts? | `invariant`, narrow `required` | `check`, `states` |
+| 6C | Tech-enforced rules | Advanced rules | Which comparison or cross-entity facts are reviewable from the abstract state space? | comparison propositions, multi-entity `forbidden` / `invariant` | `check`, `states` |
+<!-- /stage-spec -->
 
 ## Finding the Current Stage
 
@@ -165,7 +167,9 @@ again after each stage to see what is left and what the next question is. A pass
 means the elements exist; whether the stage is stable enough to move on is still a
 review decision, as each stage's "Move on when" says.
 
-## Stage 0: Scope Sketch
+<!-- stage-spec: heading scope -->
+## Stage 0: Scope sketch
+<!-- /stage-spec -->
 
 Create only enough to name the business area and candidate BUCs.
 
@@ -184,6 +188,7 @@ buc BucOrder "Process Order"
 belongs(BucOrder, Commerce)
 ```
 
+<!-- stage-spec: ask scope -->
 Ask the user:
 
 - Which business area or value stream is in scope?
@@ -197,10 +202,13 @@ rdra-ish check src/
 rdra-ish list src/ --kind buc --format table
 rdra-ish diagram src/ --kind rdra --format mermaid --buc BucOrder
 ```
+<!-- /stage-spec -->
 
 Move on when BUC names and business ownership look stable enough for review.
 
-## Stage 1: BUC Skeleton
+<!-- stage-spec: heading skeleton -->
+## Stage 1: BUC skeleton
+<!-- /stage-spec -->
 
 Add actors and use cases, but do not require entities or screens yet.
 
@@ -215,6 +223,7 @@ contains(BucOrder, PlaceOrder)
 contains(BucOrder, CancelOrder)
 ```
 
+<!-- stage-spec: ask skeleton -->
 Ask the user:
 
 - Who initiates or receives value from this BUC?
@@ -227,11 +236,14 @@ Validation:
 rdra-ish check src/
 rdra-ish diagram src/ --kind rdra --format mermaid --buc BucOrder
 ```
+<!-- /stage-spec -->
 
 Move on when every important action is represented as a use case and each use case
 belongs to the intended BUC.
 
-## Stage 2: Data Touchpoints
+<!-- stage-spec: heading data-touchpoints -->
+## Stage 2: Data touchpoints
+<!-- /stage-spec -->
 
 Add coarse entities and CRUD predicates. At this stage, entities may have only `id`
 columns; detailed attributes can wait.
@@ -250,6 +262,7 @@ updates(PlaceOrder, Cart)
 updates(CancelOrder, Order)
 ```
 
+<!-- stage-spec: ask data-touchpoints -->
 Ask the user:
 
 - Which business objects are created, read, updated, or deleted by each use case?
@@ -263,11 +276,14 @@ rdra-ish check src/
 rdra-ish csv src/ --kind matrix
 rdra-ish diagram src/ --kind er --format mermaid --buc BucOrder
 ```
+<!-- /stage-spec -->
 
 Move on when the CRUD matrix tells a plausible story, even if entity columns are still
 coarse.
 
-## Stage 3: Interaction Boundary
+<!-- stage-spec: heading interaction-boundary -->
+## Stage 3: Interaction boundary
+<!-- /stage-spec -->
 
 Add screens, optional APIs, and access/media constraints once the use-case/data
 relationship is clear.
@@ -286,6 +302,7 @@ requires_permission(PlaceOrder, OrderWrite)
 requires_medium(PlaceOrder, CustomerDevice)
 ```
 
+<!-- stage-spec: ask interaction-boundary -->
 Ask the user:
 
 - Which screen or external interface does each use case expose?
@@ -303,6 +320,7 @@ rdra-ish csv src/ --kind api-matrix
 rdra-ish csv src/ --kind screen-constraints
 rdra-ish csv src/ --kind actor-permission-audit
 ```
+<!-- /stage-spec -->
 
 Move on when the RDRA graph and the API matrix show the intended actor/screen/API/entity
 path and the screen-constraints plus actor-permission audit CSVs show the expected
@@ -371,7 +389,9 @@ invoke `StoreParentOrgApi` rather than duplicating the CRUD predicates on each u
 case. If another store operation updates only ordinary store attributes, keep it direct
 or give it a separate API only when it has its own transaction or reference contract.
 
-## Stage 4: Entity Structure
+<!-- stage-spec: heading entity-structure -->
+## Stage 4: Entity structure
+<!-- /stage-spec -->
 
 Refine entities with columns, primary keys, relationships, and cardinality.
 
@@ -385,6 +405,7 @@ entity OrderLine "Order Line" {
 relate(OrderLine, Order, N:1)
 ```
 
+<!-- stage-spec: ask entity-structure -->
 Ask the user:
 
 - What fields identify each entity?
@@ -396,13 +417,16 @@ Validation:
 
 ```sh
 rdra-ish check src/
-rdra-ish diagram src/ --kind er --format mermaid
+rdra-ish diagram src/ --kind er --format mermaid --buc BucOrder
 ```
+<!-- /stage-spec -->
 
 Move on when FK relationships and the transaction warnings of `check` match the intended persistence
 boundary.
 
+<!-- stage-spec: heading lifecycle -->
 ## Stage 5: Lifecycle
+<!-- /stage-spec -->
 
 Add lifecycle axes and events after the structural model is stable.
 
@@ -429,6 +453,7 @@ Each transition names the use case that moves the state, as the 遷移UC column 
 state sheet does. Declare an `event` only when something consumes it: another BUC or use
 case it `triggers`, or an `outbox` publication.
 
+<!-- stage-spec: ask lifecycle -->
 Ask the user:
 
 - Which Enum column and variants represent lifecycle state?
@@ -440,18 +465,21 @@ Ask the user:
 Validation:
 
 ```sh
+rdra-ish check src/
 rdra-ish states src/ --entity Order
 rdra-ish diagram src/ --kind state --format mermaid --buc BucOrder
 rdra-ish diagram src/ --kind event --format mermaid
-rdra-ish check src/
 ```
+<!-- /stage-spec -->
 
 Move on when reachable patterns explain the expected lifecycle and unexpected terminal
 or unreachable states have been reviewed. Model an event-triggered BUC first with
 `triggers(Event, TargetBuc)`. When the entry action is clear, add
 `contains(TargetBuc, EntryUseCase)` and optionally `triggers(Event, EntryUseCase)`.
 
-## Stage 6A: Local Guardrails
+<!-- stage-spec: heading local-guardrails -->
+## Stage 6A: Local guardrails
+<!-- /stage-spec -->
 
 Add low-risk constraints only after there is enough lifecycle behavior to evaluate them.
 Start with rules that are easy to read as invalid local states: forbidden combinations
@@ -463,6 +491,7 @@ forbidden(Order, status == paid, paid_at == null)
 exclusive(Document, approved == true, rejected == true)
 ```
 
+<!-- stage-spec: ask local-guardrails -->
 Ask the user:
 
 - Which combinations must never be reachable?
@@ -472,15 +501,18 @@ Ask the user:
 Validation:
 
 ```sh
-rdra-ish states src/
-rdra-ish states src/ --entity Order --format json
+rdra-ish check src/
+rdra-ish states src/ --entity Order
 ```
+<!-- /stage-spec -->
 
 Move on when diagnostics either disappear or are accepted as known modeling gaps. Keep
 the first guardrail pass small; it should catch obviously impossible states without
 requiring a complete business rule catalogue.
 
-## Stage 6B: Local Obligations
+<!-- stage-spec: heading local-obligations -->
+## Stage 6B: Local obligations
+<!-- /stage-spec -->
 
 Add implication-style rules after local guardrails are stable. Use `invariant` for
 conditional co-occurrence, and use `required` only for facts that truly must hold in
@@ -494,24 +526,27 @@ invariant(Order)
 required(Account, active == true)
 ```
 
+<!-- stage-spec: ask local-obligations -->
 Ask the user:
 
 - Which values must co-occur once a condition is true?
 - Which facts must be true in every reachable state?
-- Is the rule too broad, or should it be an `invariant` with a guard instead of
-  `required`?
+- Is the rule too broad, or should it be an `invariant` with a guard instead of `required`?
 
 Validation:
 
 ```sh
-rdra-ish states src/
-rdra-ish states src/ --entity Order --format json
+rdra-ish check src/
+rdra-ish states src/ --entity Order
 ```
+<!-- /stage-spec -->
 
 Move on when obligation diagnostics match the intended lifecycle. If `required` reports
 too many violations, prefer narrowing it into an `invariant` before adding more rules.
 
-## Stage 6C: Advanced Rules
+<!-- stage-spec: heading advanced-rules -->
+## Stage 6C: Advanced rules
+<!-- /stage-spec -->
 
 Add comparison propositions and cross-entity constraints last. These rules are powerful
 but carry more modeling obligations: a comparison needs `sets` that move its columns (or
@@ -528,23 +563,23 @@ forbidden(Order, Payment,
 
 invariant(Order, Payment)
   .when(Order.status == paid)
-  .then(Payment.status == captured
+  .then(Payment.status == captured)
 ```
 
+<!-- stage-spec: ask advanced-rules -->
 Ask the user:
 
-- Which comparisons matter, and which use cases move the numeric or date values they
-  read?
+- Which comparisons matter, and which use cases move the numeric or date values they read?
 - Which rules really mention more than one entity?
-- Is a cross-entity rule a global cross-product rule, or only intended along a declared
-  relation path?
+- Is a cross-entity rule a global cross-product rule, or only intended along a declared relation path?
 
 Validation:
 
 ```sh
-rdra-ish states src/
-rdra-ish states src/ --entity Order --format json
+rdra-ish check src/
+rdra-ish states src/ --entity Order
 ```
+<!-- /stage-spec -->
 
 Move on when advanced diagnostics either disappear or are accepted as known modeling gaps.
 

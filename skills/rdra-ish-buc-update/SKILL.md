@@ -66,17 +66,23 @@ If the model still uses the small layout, keep using it unless the change makes 
 shared file hard to review. If shared files are already split, place new shared
 definitions near their owning area and mirror path/module names.
 
-Also classify the abstraction transition:
+Also classify the abstraction transition. `rdra-ish next src/ --buc <BucId> --format json`
+names the stage the BUC is at and, in `next.asks` and `next.gaps`, what the next stage
+needs. Ask only for that stage's Add column:
 
-| Current state | Concern | Next useful update | Ask the user for |
-|---------------|---------|--------------------|------------------|
-| BUC exists but no actors | Biz intent/value | actor coverage | who performs or receives value from each use case |
-| Actors/use cases exist but no CRUD | Biz object touchpoints | data touchpoints | entities and CRUD intent per use case |
-| CRUD exists but no screens/API | Tech interaction boundary | interaction boundary | screens, external interfaces, API endpoints, owning systems, access/media constraints |
-| Entities have only `id` | Tech data design | entity structure | fields, keys, relationships, cardinality, chosen values |
-| Structured entities have lifecycle fields | Tech lifecycle design | lifecycle | which use case moves which state, events, use-case effects |
-| `check` passes on the lifecycle | Tech-enforced rules | local guardrails | invalid or mutually exclusive state facts via `forbidden` / `exclusive` |
-| Local guardrails are stable | Tech-enforced rules | obligations and advanced rules | `invariant`, narrow `required`, comparison propositions, or cross-entity rules when needed |
+<!-- stage-spec: skill-table -->
+| Stage | Concern | Main question | Add |
+|---|---|---|---|
+| 0 Scope sketch | Biz intent | What business area are we modeling? | `business`, rough `buc`, `belongs`, candidate `actor`, optional `requirement` and `motivates` |
+| 1 BUC skeleton | Biz value | Who gets value from each BUC? | `performs`, `contains`, rough `usecase`, `flow` / `step` when order matters |
+| 2 Data touchpoints | Biz object touchpoints | Which data objects does each use case touch? | coarse `entity`, CRUD predicates (`creates`, `reads`, `updates`, `deletes`) |
+| 3 Interaction boundary | Tech interaction boundary | What UI/API boundary mediates the work, and with which authority/media constraints? | `screen`, `displays`, `shows`, `field`, optional `api` / `invokes`, `dto`, `system`, `permission`, `medium`, `has_permission`, `requires_*` |
+| 4 Entity structure | Tech data design | What structure and ownership does the data need? | columns, `@pk`, `variation`, `relate`, cardinality, optional `owns` / `coordinates` |
+| 5 Lifecycle | Tech lifecycle design | Which states and event-triggered BUC entries are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `transitions`, `raises`, `triggers`, `timer`, `sets`, `condition` |
+| 6A Local guardrails | Tech-enforced rules | Which simple states or facts must never co-occur? | `forbidden`, `exclusive` over Enum / Bool / nullable axes |
+| 6B Local obligations | Tech-enforced rules | Which reachable states imply or require other facts? | `invariant`, narrow `required` |
+| 6C Advanced rules | Tech-enforced rules | Which comparison or cross-entity facts are reviewable from the abstract state space? | comparison propositions, multi-entity `forbidden` / `invariant` |
+<!-- /stage-spec -->
 
 ### Step 3 — Apply the minimal diff
 

@@ -93,7 +93,7 @@
         "stage_name": "Entity structure",
         "validate": [
           "rdra-ish check samples/incremental-order/step-3-interaction-boundary/src",
-          "rdra-ish diagram samples/incremental-order/step-3-interaction-boundary/src --kind er --buc BucStoreRestock"
+          "rdra-ish diagram samples/incremental-order/step-3-interaction-boundary/src --kind er --format mermaid --buc BucStoreRestock"
         ]
       },
       "stage": "3",

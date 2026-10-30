@@ -260,10 +260,11 @@ rdra-ish next <INPUTS...> [--buc <ID>]... [--format <FORMAT>]
 stage has a gate, and a BUC is at the highest stage whose gate it passes together with
 every earlier gate:
 
+<!-- stage-spec: gates -->
 | Stage | The gate passes when |
 |---|---|
 | 0 Scope sketch | the BUC `belongs` to a business |
-| 1 BUC skeleton | it holds a use case (by `contains`, or through a flow's steps and `covers`), and an actor `performs` it or one of its use cases, or an event or timer `triggers` one |
+| 1 BUC skeleton | an actor `performs` it or one of its use cases, or an event or timer `triggers` one; and it holds a use case (by `contains`, or through a flow's steps and `covers`) |
 | 2 Data touchpoints | every use case creates, reads, updates, or deletes an entity, directly or through an API it `invokes` |
 | 3 Interaction boundary | every use case `displays` a screen or `invokes` an API, or an event or timer `triggers` it |
 | 4 Entity structure | every entity of stage 2 has a column that is neither a primary key nor a foreign key |
@@ -271,6 +272,7 @@ every earlier gate:
 | 6A Local guardrails | a `forbidden` or `exclusive` names an entity of stage 5 |
 | 6B Local obligations | an `invariant` or `required` names an entity of stage 5 |
 | 6C Advanced rules | a rule on an entity of stage 5 holds a comparison or names more than one entity |
+<!-- /stage-spec -->
 
 A gate passing is evidence, not a verdict. The stage sections of
 [Incremental Modeling Flow](./incremental-modeling.md) say when a stage is stable enough
