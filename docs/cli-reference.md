@@ -904,13 +904,17 @@ rdra-ish list <INPUTS...> [--kind <KIND>] [--format <FORMAT>]
 Output is written to stdout.
 
 For `--format table`, an empty result is explicit rather than silent, for example
-`No APIs found.`. CSV still prints only the header row and JSON prints `[]`.
+`No APIs found.`, except for `--kind surface` (see below). CSV still prints only the
+header row and JSON prints `[]`.
 
 ### Surface text
 
 `--kind surface` prints one line per published element, sorted by kind and then id, so
-declaration order cannot change the text. A model that publishes nothing prints nothing.
-The format is frozen: a consumer's lock records this text.
+declaration order cannot change the text. The kinds come in a fixed order: `usecase`,
+`event`, `entity`, `writer`, then `shared`. A model that publishes nothing prints nothing;
+the surface is the one `--format table` result with no empty-result line, because the
+text is the contract and an empty contract is empty. The format is frozen: a consumer's
+lock records this text.
 
 ```text
 usecase Login "Log in" caller(actor) requires(CanLogin) raises(EvLoggedIn)
@@ -924,11 +928,17 @@ writer SessionView (unexposed): status == ended
 - `event <Id> "<label>"` per exposed event.
 - `entity <Id> "<label>" <append | upsert> { <columns> }`. Each column is
   `name: Type`, then `@pk`, `@unique`, and `@null` flags; two spaces separate columns.
-- `writer <Entity> <UseCase>: <col == val, ...>` per exposed use case that writes the
-  entity, with its `sets` effects sorted. The writers that are not exposed collapse into
-  one `writer <Entity> (unexposed)` line that holds the union of their effects, so
-  internal use case names never leak. A writer with no `sets` has no colon.
+- `writer <Entity> <UseCase>: <effect, ...>` per exposed use case that writes the
+  entity, grouped per entity in entity order, with the use cases sorted by id. A `sets`
+  on a column is `col == val`; a `sets` on a proposition is `<prop> == true` or
+  `<prop> == false`; the effects are sorted. The writers that are not exposed collapse
+  into one `writer <Entity> (unexposed)` line, last in the entity's group, that holds
+  the union of their effects, so internal use case names never leak. A writer with no
+  `sets` has no colon.
 - `shared <Id> "<label>" { <columns> }` per `shares` line.
+- A `<label>` is the declared label between double quotes, with a backslash written as
+  `\\`, a double quote as `\"`, a newline as `\n`, and a carriage return as `\r`.
+  Ids, column names, types, and values never need escaping.
 
 ---
 

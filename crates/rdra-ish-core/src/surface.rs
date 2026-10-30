@@ -26,9 +26,9 @@ impl Surface {
                 Exposed::UseCase { usecase, caller } => {
                     let uc = &model.use_cases[usecase];
                     let mut line = format!(
-                        "usecase {} \"{}\" caller({})",
+                        "usecase {} {} caller({})",
                         uc.id,
-                        uc.label,
+                        quoted(&uc.label),
                         caller.as_str()
                     );
                     let requires =
@@ -50,7 +50,10 @@ impl Surface {
                 }
                 Exposed::Event(event) => {
                     let ev = &model.events[event];
-                    events.insert(ev.id.clone(), format!("event {} \"{}\"", ev.id, ev.label));
+                    events.insert(
+                        ev.id.clone(),
+                        format!("event {} {}", ev.id, quoted(&ev.label)),
+                    );
                 }
                 Exposed::Entity {
                     entity,
@@ -62,9 +65,9 @@ impl Surface {
                         (
                             entity,
                             format!(
-                                "entity {} \"{}\" {} {}",
+                                "entity {} {} {} {}",
                                 e.id,
-                                e.label,
+                                quoted(&e.label),
                                 mode.as_str(),
                                 columns_text(model, &e.columns)
                             ),
@@ -105,9 +108,9 @@ impl Surface {
             shared.insert(
                 e.id.clone(),
                 format!(
-                    "shared {} \"{}\" {}",
+                    "shared {} {} {}",
                     e.id,
-                    e.label,
+                    quoted(&e.label),
                     columns_text(model, &e.columns)
                 ),
             );
@@ -145,6 +148,23 @@ fn targets(
     ids.sort();
     ids.dedup();
     ids
+}
+
+/// A label between double quotes, escaped so every element stays on one line.
+fn quoted(label: &str) -> String {
+    let mut out = String::with_capacity(label.len() + 2);
+    out.push('"');
+    for ch in label.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            _ => out.push(ch),
+        }
+    }
+    out.push('"');
+    out
 }
 
 fn writer_line(entity: &str, writer: &str, mut effects: Vec<String>) -> String {
@@ -194,7 +214,7 @@ fn columns_text(model: &SemanticModel, columns: &[ModelColumn]) -> String {
                 text.push_str(" @unique");
             }
             if c.is_nullable {
-                text.push_str(" @nullable");
+                text.push_str(" @null");
             }
             text
         })
@@ -300,10 +320,22 @@ shares(S, Log)
             text,
             "usecase Ping \"Ping\" caller(system) raises(EvPing)\n\
              event EvPing \"Pinged\"\n\
-             entity Log \"Log\" append { id: Int @pk  note: String @nullable }\n\
+             entity Log \"Log\" append { id: Int @pk  note: String @null }\n\
              writer Log Ping\n\
-             shared Log \"Log\" { id: Int @pk  note: String @nullable }\n"
+             shared Log \"Log\" { id: Int @pk  note: String @null }\n"
         );
+    }
+
+    #[test]
+    fn a_label_with_a_newline_backslash_or_quote_stays_on_one_line() {
+        let text = surface(
+            "system S \"S\"\nevent EvPing \"Pinged, with\nnewline \\\\ and 'quote'\"\nusecase Ping \"Ping\"\nraises(Ping, EvPing)\noutbox(EvPing)\nexposes(S, EvPing)",
+        );
+        assert_eq!(
+            text,
+            "event EvPing \"Pinged, with\\nnewline \\\\\\\\ and 'quote'\"\n"
+        );
+        assert_eq!(quoted("say \"hi\"\r\n"), "\"say \\\"hi\\\"\\r\\n\"");
     }
 
     #[test]
