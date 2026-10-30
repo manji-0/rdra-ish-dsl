@@ -451,7 +451,7 @@ pub enum RdraError {
         hint: String,
     },
 
-    #[error("PublishedEntityReadByOwner: `{predicate}` reads published entity '{entity}'; its owner only writes it\n  hint: read the internal entity it projects, and write '{entity}' from the use case that changes it")]
+    #[error("PublishedEntityReadByOwner: the owner reads published entity '{entity}' through `{predicate}`; it only writes what it publishes\n  hint: read the internal entity it projects, and write '{entity}' from the use case that changes it")]
     PublishedEntityReadByOwner { entity: String, predicate: String },
 
     #[error("PublishedEntityKeysInternal: `relate` joins published entity '{entity}' to internal entity '{other}'\n  hint: a published entity keys only to another published entity; publish '{other}' as well, or drop the relate")]
