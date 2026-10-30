@@ -3,15 +3,15 @@ use crate::export::export_artifact;
 use crate::list_output::{
     format_lint_issues, list_elements, state_consistency_findings, state_diag_message,
 };
-use crate::load::load_model;
 use rdra_ish_core::lifecycle::{InvKind, InvText, ModelRef, Site, StateDiag, Trace};
 use rdra_ish_core::{format_diagnostic_message, lint_issues, SemanticModel};
+use rdra_ish_core::{load_project, Project};
 use rdra_ish_emit::View;
 use std::path::PathBuf;
 
 #[test]
-fn load_model_rejects_missing_input_paths() {
-    let err = load_model(&[PathBuf::from("missing-input")]).unwrap_err();
+fn load_project_rejects_missing_input_paths() {
+    let err = load_project(&[PathBuf::from("missing-input")], None).unwrap_err();
 
     assert!(
         err.to_string().contains("not found"),
@@ -31,7 +31,7 @@ fn errors_fixture(path: &str) -> PathBuf {
 #[test]
 fn check_command_includes_source_location() {
     let inputs = vec![errors_fixture("tests/fixtures/errors/type_mismatch.rdra")];
-    let (program, _, diags) = load_model(&inputs).expect("load model");
+    let Project { program, diags, .. } = load_project(&inputs, None).expect("load model");
     let mismatch = diags
         .iter()
         .find(|d| matches!(&d.error, rdra_ish_core::RdraError::TypeMismatch { .. }))
@@ -661,7 +661,12 @@ requires_permission(BookAppointment, ScheduleWrite)
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("consistency.rdra");
     std::fs::write(&file, src).unwrap();
-    let (program, model, diags) = load_model(&[file]).expect("load model");
+    let Project {
+        program,
+        model,
+        diags,
+        ..
+    } = load_project(&[file], None).expect("load model");
     assert!(diags.iter().all(|diag| diag.is_warning));
 
     let warnings: Vec<_> = consistency_diagnostics(&model)
@@ -767,7 +772,12 @@ fn state_diag_message_formats_quantifier_violation() {
 #[test]
 fn clinic_ops_attribute_columns_are_variations_not_unreachable_states() {
     let inputs = vec![errors_fixture("samples/clinic-ops")];
-    let (program, model, diags) = load_model(&inputs).expect("load clinic-ops");
+    let Project {
+        program,
+        model,
+        diags,
+        ..
+    } = load_project(&inputs, None).expect("load clinic-ops");
     assert!(
         diags.iter().all(|d| d.is_warning),
         "clinic-ops must load without errors: {diags:?}"
@@ -795,7 +805,7 @@ fn clinic_ops_attribute_columns_are_variations_not_unreachable_states() {
 #[test]
 fn clinic_ops_conditions_list_their_body_and_derived_links() {
     let inputs = vec![errors_fixture("samples/clinic-ops")];
-    let (_, model, diags) = load_model(&inputs).expect("load clinic-ops");
+    let Project { model, diags, .. } = load_project(&inputs, None).expect("load clinic-ops");
     assert!(diags.iter().all(|d| d.is_warning), "{diags:?}");
 
     let csv = list_elements(&model, &ListKind::Condition, &ListFormat::Csv).unwrap();

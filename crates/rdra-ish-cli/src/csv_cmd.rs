@@ -15,10 +15,16 @@ use std::fs;
 
 use crate::cli::CsvKind;
 use crate::list_output::{note_state_errors, reject_state_errors};
-use crate::load::{load_model, reject_model_errors};
+use crate::load::reject_model_errors;
+use rdra_ish_core::{load_project, Project};
 
 pub fn run_csv(inputs: &[PathBuf], kind: CsvKind, out: PathBuf) -> Result<()> {
-    let (program, model, diags) = load_model(inputs)?;
+    let Project {
+        program,
+        model,
+        diags,
+        ..
+    } = load_project(inputs, None)?;
     reject_model_errors(&program, &diags)?;
     // The entity list is the data layer; the other CSVs keep the lifecycle gate.
     if matches!(kind, CsvKind::Entity) {

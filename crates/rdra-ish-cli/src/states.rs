@@ -12,7 +12,8 @@ use rdra_ish_emit::{
 
 use crate::cli::{ScopeArgs, StatesFormat};
 use crate::list_output::{state_diag_message, Finding};
-use crate::load::{load_model, reject_model_errors};
+use crate::load::reject_model_errors;
+use rdra_ish_core::{load_project, Project};
 
 pub fn run_states(
     inputs: &[PathBuf],
@@ -20,7 +21,12 @@ pub fn run_states(
     max_patterns: usize,
     scope: &ScopeArgs,
 ) -> Result<()> {
-    let (program, model, diags) = load_model(inputs)?;
+    let Project {
+        program,
+        model,
+        diags,
+        ..
+    } = load_project(inputs, None)?;
     reject_model_errors(&program, &diags)?;
     let scope = Scope::parse(&model, &scope.buc, &scope.entity)?;
 

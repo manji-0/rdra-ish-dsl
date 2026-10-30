@@ -1,62 +1,7 @@
 //! Model loading for the CLI.
 
 use anyhow::{bail, Result};
-use rdra_ish_core::{
-    build_merged_model, format_diagnostic_message, resolve, Diagnostic, ResolvedProgram,
-    SemanticModel,
-};
-use std::collections::HashSet;
-use std::path::PathBuf;
-
-pub(crate) fn collect_rdra_files(inputs: &[PathBuf]) -> Result<Vec<PathBuf>> {
-    let mut files = vec![];
-    let mut missing = Vec::new();
-    for input in inputs {
-        if input.is_file() {
-            files.push(input.clone());
-        } else if input.is_dir() {
-            for entry in walkdir::WalkDir::new(input)
-                .sort_by_file_name()
-                .into_iter()
-                .flatten()
-            {
-                if entry.path().extension().is_some_and(|e| e == "rdra") {
-                    files.push(entry.path().to_owned());
-                }
-            }
-        } else {
-            missing.push(input.display().to_string());
-        }
-    }
-    if !missing.is_empty() {
-        bail!("input path(s) not found: {}", missing.join(", "));
-    }
-    Ok(files)
-}
-
-/// Compute the set of include paths by going up one level from any directories
-/// that contain the entry files.  This ensures `shared/actors.rdra` resolves
-/// from a root that contains both `shared/` and `buc/`.
-fn root_include_paths(files: &[PathBuf]) -> Vec<PathBuf> {
-    let mut seen: HashSet<PathBuf> = HashSet::new();
-    let mut paths = vec![];
-    for f in files {
-        // Canonicalize so relative paths work.
-        let canon = dunce::canonicalize(f).unwrap_or_else(|_| f.clone());
-        // For a file like /root/buc/buc_purchase.rdra we want /root as include path.
-        // Walk up from the file's parent until we can't go further.
-        if let Some(parent) = canon.parent() {
-            // Try parent and grandparent.
-            for ancestor in [parent, parent.parent().unwrap_or(parent)] {
-                let ap = ancestor.to_path_buf();
-                if seen.insert(ap.clone()) {
-                    paths.push(ap);
-                }
-            }
-        }
-    }
-    paths
-}
+use rdra_ish_core::{format_diagnostic_message, Diagnostic, ResolvedProgram};
 
 pub(crate) fn eprint_diagnostic(program: &ResolvedProgram, diag: &Diagnostic) {
     let message = format_diagnostic_message(
@@ -81,24 +26,4 @@ pub(crate) fn reject_model_errors(program: &ResolvedProgram, diags: &[Diagnostic
         bail!("model has errors; refusing to continue");
     }
     Ok(())
-}
-
-pub(crate) fn load_model(
-    inputs: &[PathBuf],
-) -> Result<(ResolvedProgram, SemanticModel, Vec<Diagnostic>)> {
-    let entry_files = collect_rdra_files(inputs)?;
-    if entry_files.is_empty() {
-        anyhow::bail!("no .rdra files found in the given inputs");
-    }
-
-    let include_paths = root_include_paths(&entry_files);
-
-    let (program, resolve_diags) = resolve(&entry_files, &include_paths);
-
-    let (model, model_diags) = build_merged_model(&program, &include_paths);
-
-    let mut all_diags = resolve_diags;
-    all_diags.extend(model_diags);
-
-    Ok((program, model, all_diags))
 }

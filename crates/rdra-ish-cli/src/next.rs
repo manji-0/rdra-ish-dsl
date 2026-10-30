@@ -11,12 +11,18 @@ use rdra_ish_core::refinement::{
 use serde_json::{json, Value};
 
 use crate::cli::NextFormat;
-use crate::load::{load_model, reject_model_errors};
+use crate::load::reject_model_errors;
+use rdra_ish_core::{load_project, Project};
 
 const TEXT_ITEM_LIMIT: usize = 8;
 
 pub(crate) fn run_next(inputs: &[PathBuf], bucs: &[String], format: NextFormat) -> Result<()> {
-    let (program, model, diags) = load_model(inputs)?;
+    let Project {
+        program,
+        model,
+        diags,
+        ..
+    } = load_project(inputs, None)?;
     reject_model_errors(&program, &diags)?;
 
     let assessment = assess(&model, Depth::Lifecycle);
