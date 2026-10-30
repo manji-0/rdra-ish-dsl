@@ -115,6 +115,8 @@ pub(crate) enum ListKind {
     /// Business-side input candidates inferred from BUC/use-case CRUD and API paths
     #[value(alias = "actor-inputs")]
     BusinessInputs,
+    /// The published surface (`exposes` and `shares`) as canonical text; `--format table` only
+    Surface,
 }
 
 #[derive(ValueEnum, Clone, Copy)]
