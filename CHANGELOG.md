@@ -333,6 +333,15 @@
 
 ### Added
 
+- `diagram --kind condition` draws the RDRA variations and conditions under the
+  encoding contract: each condition with an `-.->|combines|` edge to each variation and
+  state model (`statemodel__<Entity>_<column>`) it combines, a `%% holds` line for its
+  body, and `%% derived ... from holds` after a link read from that body; its
+  `applies_to` edges to use cases, APIs, and systems; and each variation as
+  `subgraph variation__<id>` holding its values as `variation__<Variation>__<value>`
+  nodes tagged `:::value`. The whole model draws every variation. clinic-ops and
+  ec-site gain `out/condition.mmd`.
+
 - `diagram --kind information` draws the RDRA information model under the encoding
   contract: every entity of the scope, each `relate` as `---|<card>|` from its left
   end (the relates `--kind er` draws), each state model (a column that `transitions`

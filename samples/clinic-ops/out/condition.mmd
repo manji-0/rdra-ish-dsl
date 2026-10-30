@@ -1,0 +1,96 @@
+%% rdra-ish diagram=condition scope=whole model=samples/clinic-ops
+%% kinds: condition statemodel variation value usecase
+%% omitted: (none)
+flowchart LR
+  condition__BookedPatient["予約済みの患者"]:::condition
+  %% holds condition__BookedPatient: Appointment.status == apptscheduled
+  condition__CopayCappedAtLimit["窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"]:::condition
+  condition__OrderConfirmedByPhysician["医師が確定したオーダ"]:::condition
+  %% holds condition__OrderConfirmedByPhysician: ClinicalOrder.physician_confirmed == true, ClinicalOrder.status == clordered
+  condition__TransferNotPossible["振替・分割の対象外（負担割合の相違・公費）"]:::condition
+  condition__UnreferredFirstVisit["紹介状なしの初診で、除外に当たらない"]:::condition
+  %% holds condition__UnreferredFirstVisit: Charge.kind == selectedtreatment, Appointment.referral == unreferred
+  statemodel__Appointment_status["Appointment.status"]:::statemodel
+  statemodel__ClaimStatement_status["ClaimStatement.status"]:::statemodel
+  statemodel__ClinicalOrder_status["ClinicalOrder.status"]:::statemodel
+  subgraph variation__AuditSeverity["Audit Severity"]
+    variation__AuditSeverity__low["Low"]:::value
+    variation__AuditSeverity__moderate["Moderate"]:::value
+    variation__AuditSeverity__high["High"]:::value
+  end
+  subgraph variation__BurdenRatio["負担割合"]
+    variation__BurdenRatio__thirty["3割"]:::value
+    variation__BurdenRatio__twenty["2割"]:::value
+  end
+  subgraph variation__ChargeKind["診療費の種類"]
+    variation__ChargeKind__insured["保険診療"]:::value
+    variation__ChargeKind__selectedtreatment["選定療養（自費）"]:::value
+  end
+  subgraph variation__ConsentType["Consent Type"]
+    variation__ConsentType__treatment["Treatment"]:::value
+    variation__ConsentType__privacy["Privacy"]:::value
+    variation__ConsentType__billing["Billing"]:::value
+  end
+  subgraph variation__LimitCategory["限度額適用区分"]
+    variation__LimitCategory__notobtained["限度額情報なし"]:::value
+    variation__LimitCategory__obtained["適用区分を取得済"]:::value
+  end
+  subgraph variation__MessageChannel["Message Channel"]
+    variation__MessageChannel__email["Email"]:::value
+    variation__MessageChannel__sms["SMS"]:::value
+    variation__MessageChannel__portal["Patient portal"]:::value
+  end
+  subgraph variation__OrderType["Order Type"]
+    variation__OrderType__lab["Lab"]:::value
+    variation__OrderType__imaging["Imaging"]:::value
+    variation__OrderType__referral["Referral"]:::value
+  end
+  subgraph variation__PayerChange["資格変更の種類"]
+    variation__PayerChange__nochange["資格変更なし"]:::value
+    variation__PayerChange__sameratio["負担割合が同じ資格への変更"]:::value
+    variation__PayerChange__ratiochanged["負担割合が異なる資格への変更"]:::value
+    variation__PayerChange__publicexpense["公費が関わる変更"]:::value
+  end
+  subgraph variation__PaymentMethod["Payment Method"]
+    variation__PaymentMethod__cash["現金"]:::value
+    variation__PaymentMethod__card["クレジットカード"]:::value
+    variation__PaymentMethod__adjustment["還付・追加徴収"]:::value
+  end
+  subgraph variation__ReferralCategory["紹介の有無"]
+    variation__ReferralCategory__revisit["再診"]:::value
+    variation__ReferralCategory__referred["紹介状あり初診"]:::value
+    variation__ReferralCategory__unreferred["紹介状なし初診"]:::value
+    variation__ReferralCategory__exempt["紹介状なし初診（救急搬送等の除外）"]:::value
+  end
+  subgraph variation__ReferralDirection["紹介の向き"]
+    variation__ReferralDirection__inbound["紹介元から受領"]:::value
+    variation__ReferralDirection__outbound["紹介先へ送付"]:::value
+  end
+  usecase__ApplySelectedTreatmentFee["選定療養費の算定"]:::usecase
+  usecase__BatchVerifyEligibility["資格の一括照会"]:::usecase
+  usecase__CalculateVisitBill["会計計算入力"]:::usecase
+  usecase__CollectSpecimen["Collect Specimen"]:::usecase
+  usecase__RecordClaimReturn["返戻レセプトの取込"]:::usecase
+  condition__BookedPatient -.->|applies_to| usecase__BatchVerifyEligibility
+  condition__BookedPatient -.->|combines| statemodel__Appointment_status
+  %% derived condition__BookedPatient -> statemodel__Appointment_status from holds
+  condition__CopayCappedAtLimit -.->|applies_to| usecase__CalculateVisitBill
+  condition__CopayCappedAtLimit -.->|combines| statemodel__Appointment_status
+  condition__CopayCappedAtLimit -.->|combines| variation__BurdenRatio
+  condition__CopayCappedAtLimit -.->|combines| variation__LimitCategory
+  condition__OrderConfirmedByPhysician -.->|applies_to| usecase__CollectSpecimen
+  condition__OrderConfirmedByPhysician -.->|combines| statemodel__ClinicalOrder_status
+  %% derived condition__OrderConfirmedByPhysician -> statemodel__ClinicalOrder_status from holds
+  condition__TransferNotPossible -.->|applies_to| usecase__RecordClaimReturn
+  condition__TransferNotPossible -.->|combines| statemodel__ClaimStatement_status
+  condition__TransferNotPossible -.->|combines| variation__PayerChange
+  condition__UnreferredFirstVisit -.->|applies_to| usecase__ApplySelectedTreatmentFee
+  condition__UnreferredFirstVisit -.->|combines| variation__ChargeKind
+  %% derived condition__UnreferredFirstVisit -> variation__ChargeKind from holds
+  condition__UnreferredFirstVisit -.->|combines| variation__ReferralCategory
+  %% derived condition__UnreferredFirstVisit -> variation__ReferralCategory from holds
+  classDef condition stroke:#333;
+  classDef statemodel stroke:#333;
+  classDef variation stroke:#333;
+  classDef value stroke:#333;
+  classDef usecase stroke:#333;

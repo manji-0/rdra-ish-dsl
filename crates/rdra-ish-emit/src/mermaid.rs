@@ -1,10 +1,12 @@
-//! Mermaid emitters: RDRA全体図、ビジネスコンテキスト、UC複合図、情報モデル、ER図、状態遷移図、イベント図。
+//! Mermaid emitters: RDRA全体図、ビジネスコンテキスト、UC複合図、情報モデル、バリエーション・条件、ER図、状態遷移図、イベント図。
 
 mod business;
+mod condition;
 mod information;
 mod usecase;
 
 pub use business::BusinessMermaidEmitter;
+pub use condition::ConditionMermaidEmitter;
 pub use information::InformationMermaidEmitter;
 pub use usecase::UsecaseMermaidEmitter;
 
@@ -73,6 +75,18 @@ fn render_layered_nodes(
         out.push_str("  end\n");
     }
     layers
+}
+
+/// `node` with its `:::<kind>` and its `%% desc` line, at `indent`.
+fn declare(out: &mut String, model: &SemanticModel, node: &NodeRef, indent: &str) {
+    let (Some(id), Some(label)) = (contract_id(model, node), node_label(model, node)) else {
+        return;
+    };
+    let kind = node_kind_filter_name(node);
+    out.push_str(&format!("{indent}{id}[\"{}\"]:::{kind}\n", quote(label)));
+    if let Some(desc) = desc_line(model, node, &id) {
+        out.push_str(&format!("{indent}{desc}\n"));
+    }
 }
 
 type EdgeKey = (String, String, String);

@@ -299,7 +299,7 @@ rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]...
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `rdra` \| `business` \| `usecase` \| `information` \| `er` \| `state` \| `event` | `rdra` | The diagram kind. `rdra` = RDRA layered graph mapped onto the original four-layer structure; `business` = the business context and business use cases: each business with its BUCs, and the actors and external systems each BUC involves; `usecase` = the UC複合図: each use case with the actors who perform it, its screens and what they show, the entities it reads and writes (an invoked API's CRUD folded into it), its events with their external systems, its timers, the conditions that apply to it, and its transitions; `information` = the information model: the entities with their `relate` links, each state model, and the variations their columns take, without columns; `er` = entity-relationship diagram; `state` = one composite state per state model (lifecycle column), transitions labelled with use-case ids, start and end states; `event` = system-to-system event links: UC or ExtSystem `raises` Event, Event `triggers` UC/BUC/ExtSystem, and Timer `triggers` UC/BUC. `boundaryless-graph`, `business-area`, `technical-area`, `sequence`, `diff`, and `event-flow` were removed and fail with a message that names the replacement: `rdra` (narrowed with `--node-kind` / `--edge-kind`), `csv --kind business-inputs`, `csv --kind api-matrix`, `--kind usecase` and `check` (which prints the transaction, API, and system warnings `sequence` printed), a text diff of two `rdra` `.mmd` files, and `--kind event`. |
+| `--kind` | `rdra` \| `business` \| `usecase` \| `information` \| `condition` \| `er` \| `state` \| `event` | `rdra` | The diagram kind. `rdra` = RDRA layered graph mapped onto the original four-layer structure; `business` = the business context and business use cases: each business with its BUCs, and the actors and external systems each BUC involves; `usecase` = the UC複合図: each use case with the actors who perform it, its screens and what they show, the entities it reads and writes (an invoked API's CRUD folded into it), its events with their external systems, its timers, the conditions that apply to it, and its transitions; `information` = the information model: the entities with their `relate` links, each state model, and the variations their columns take, without columns; `condition` = the variations and conditions: each condition with the variations and state models it combines and what it applies to, and each variation with its values; `er` = entity-relationship diagram; `state` = one composite state per state model (lifecycle column), transitions labelled with use-case ids, start and end states; `event` = system-to-system event links: UC or ExtSystem `raises` Event, Event `triggers` UC/BUC/ExtSystem, and Timer `triggers` UC/BUC. `boundaryless-graph`, `business-area`, `technical-area`, `sequence`, `diff`, and `event-flow` were removed and fail with a message that names the replacement: `rdra` (narrowed with `--node-kind` / `--edge-kind`), `csv --kind business-inputs`, `csv --kind api-matrix`, `--kind usecase` and `check` (which prints the transaction, API, and system warnings `sequence` printed), a text diff of two `rdra` `.mmd` files, and `--kind event`. |
 | `--format` | `mermaid` | `mermaid` | Output format. Mermaid text (`.mmd`) is the only one. `puml`, `svg`, and `png` were removed and fail with a message that names `--format mermaid`; to get an image, render the `.mmd` with `mmdc` or any Mermaid-aware tool. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Filter to one or more BUCs by id. With multiple ids, the **union** of reachable nodes across the named BUCs is shown. Applies to all diagram kinds. For `usecase`, the use cases each BUC contains, directly or through a step of one of its flows. |
 | `--usecase <id>` | string (repeatable) | — (whole model) | Draw only the named use cases. Applies to `usecase` only, and not together with `--buc`; an unknown id is an error. |
@@ -347,6 +347,19 @@ Notes:
   `--kind state`) with an `-.->|statemodel|` edge, and each variation a column takes
   with an `-.->|variation <column>|` edge. An `Enum` column no `transitions` drive is no
   state model. `omitted:` starts with `columns`, which `er` draws.
+- For `--kind condition`, there are no layers. Each condition is drawn with a
+  `%% holds <id>: <body>` line under it when it has a `holds` body, and an
+  `-.->|combines|` edge to each variation and state model it combines
+  (`statemodel__<Entity>_<column>`, the composite state id of `--kind state`). A link
+  read from the `holds` body rather than a `combines` declaration is followed by
+  `%% derived <from> -> <to> from holds`, as in `rdra`. `-.->|applies_to|` edges go to
+  the use cases, APIs, and systems it applies to. Each variation is
+  `subgraph variation__<id>["<label>"]` holding one
+  `variation__<Variation>__<value>["<value label>"]:::value` node per value, its label
+  the value's label or else its name. The whole model draws every variation, a
+  condition's or not (the RDRA variation sheet); `--buc` draws the conditions that
+  apply to a use case of the BUC (one `--kind usecase --buc` draws) or to an API such a
+  use case invokes, and the variations and state models they combine.
 - For `--kind usecase`, the use cases and what they touch sit in the `rdra` layers with
   the `rdra` ids, so a node matches its `rdra` node. An edge `rdra` does not draw is
   derived and followed by its `%% derived` line: an API's CRUD drawn from the use case
@@ -399,7 +412,8 @@ flowchart LR
 - A fact drawn more than once in the model is drawn once.
 - An edge rdra-ish derived rather than read from a declaration is followed by
   `%% derived <from> -> <to> <source>`: in `rdra`, a condition's `combines` link derived
-  from its `holds` body (`from holds`); in `usecase` and `business`, the links `via` the node they go through.
+  from its `holds` body (`from holds`), and the same in `condition`; in `usecase` and
+  `business`, the links `via` the node they go through.
 - A node's `description` follows its declaration as `%% desc <id>: <text>`, its lines
   joined by a space.
 

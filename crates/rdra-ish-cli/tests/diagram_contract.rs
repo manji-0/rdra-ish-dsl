@@ -1,6 +1,7 @@
 //! The diagram encoding contract, checked on every sample for each kind:
 //! each `.mmd` opens with the `%%` header, names each node `<kind>__<DSL id>` (the same id in
-//! every kind), tags a flowchart node `:::<kind>`, draws edges only between declared nodes,
+//! every kind; a variation's value is `variation__<Variation>__<value>`), tags a flowchart
+//! node `:::<kind>`, draws edges only between declared nodes,
 //! and lists in `kinds:` exactly the kinds its body draws.
 
 use std::collections::{BTreeSet, HashMap};
@@ -201,6 +202,13 @@ fn check_flowchart(chart: &Flowchart) -> Result<(), String> {
         let (kind, dsl_id) = id
             .split_once("__")
             .ok_or_else(|| format!("node id without `<kind>__`: {id}"))?;
+        // A variation's value is `variation__<Variation>__<value>`, tagged `:::value`.
+        let (kind, dsl_id) = match (class.as_str(), dsl_id.split_once("__")) {
+            ("value", Some((variation, value))) if kind == "variation" && !variation.is_empty() => {
+                ("value", value)
+            }
+            _ => (kind, dsl_id),
+        };
         if kind != class || dsl_id.is_empty() {
             return Err(format!("node {id} is tagged `:::{class}`"));
         }
@@ -803,6 +811,95 @@ fn an_information_diagram_node_has_the_id_the_rdra_and_state_diagrams_give_it() 
             .filter(|(_, _, to)| to.starts_with("entity__"))
         {
             assert!(rdra.edges.contains(edge), "{root}: {edge:?} not in rdra");
+        }
+    }
+}
+
+#[test]
+fn every_condition_diagram_of_every_sample_keeps_the_contract() {
+    let dir = scratch("diagram_contract_condition");
+    let (mut derived, mut values) = (0, 0);
+    for root in roots() {
+        for scope in scopes(&root) {
+            let args: Vec<&str> = scope.iter().map(String::as_str).collect();
+            let text = diagram_with(&root, "condition", &args, &dir.join("out"));
+            let chart = checked("condition", &text, &format!("{root} {scope:?}"));
+            for (from, label, to) in &chart.edges {
+                let fits = match label.as_str() {
+                    "combines" => to.starts_with("variation__") || to.starts_with("statemodel__"),
+                    "applies_to" => ["usecase__", "api__", "system__"]
+                        .iter()
+                        .any(|kind| to.starts_with(kind)),
+                    _ => false,
+                };
+                assert!(
+                    fits && from.starts_with("condition__"),
+                    "{root} {scope:?}: {from} -{label}-> {to}"
+                );
+            }
+            for (id, kind) in &chart.nodes {
+                let variation = id.rsplit_once("__").map(|(variation, _)| variation);
+                assert!(
+                    kind != "value" || variation.is_some_and(|v| chart.nodes.contains_key(v)),
+                    "{root} {scope:?}: value {id} outside its variation"
+                );
+            }
+            derived += chart.derived.len();
+            values += chart.nodes.values().filter(|kind| *kind == "value").count();
+        }
+    }
+    assert!(derived >= 8, "only {derived} combines read from holds");
+    assert!(values > 40, "only {values} values drawn");
+}
+
+#[test]
+fn the_contract_check_rejects_a_misplaced_value() {
+    let good = "%% rdra-ish diagram=condition scope=whole\n%% kinds: variation value\nflowchart LR\n  subgraph variation__V[\"V\"]\n    variation__V__a[\"A\"]:::value\n  end\n  classDef variation stroke:#333;\n  classDef value stroke:#333;\n";
+    assert!(check_flowchart(&parse_flowchart("condition", good).unwrap()).is_ok());
+    for (broken, from, to) in [
+        ("no variation", "variation__V__a[", "variation__a["),
+        ("another kind", "variation__V__a[", "condition__V__a["),
+        ("untagged value", "\"]:::value", "\"]:::variation"),
+    ] {
+        let text = good.replace(from, to);
+        assert_ne!(text, good, "{broken}");
+        let result = parse_flowchart("condition", &text).and_then(|chart| check_flowchart(&chart));
+        assert!(result.is_err(), "{broken} passed:\n{text}");
+    }
+}
+
+#[test]
+fn a_condition_diagram_node_has_the_id_the_rdra_and_state_diagrams_give_it() {
+    let dir = scratch("diagram_contract_condition_ids");
+    for root in lifecycle_roots() {
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
+        let state = parse_state(&diagram(&root, "state", None, &dir.join("s"))).unwrap();
+        let condition = parse_flowchart(
+            "condition",
+            &diagram(&root, "condition", None, &dir.join("c")),
+        )
+        .unwrap();
+        for (id, kind) in &condition.nodes {
+            match kind.as_str() {
+                "statemodel" => assert!(
+                    state.models.iter().any(|(model, _)| model == id),
+                    "{root}: {id} not in state"
+                ),
+                "value" => {}
+                _ => assert_eq!(rdra.nodes.get(id), Some(kind), "{root}: {id}"),
+            }
+        }
+        for edge in condition
+            .edges
+            .iter()
+            .filter(|(_, _, to)| !to.starts_with("statemodel__"))
+        {
+            assert!(rdra.edges.contains(edge), "{root}: {edge:?} not in rdra");
+            assert_eq!(
+                condition.derived.contains(edge),
+                rdra.derived.contains(edge),
+                "{root}: {edge:?} derived in one diagram only"
+            );
         }
     }
 }

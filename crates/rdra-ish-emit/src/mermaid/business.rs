@@ -1,14 +1,11 @@
 //! The business context and business use case diagram (`--kind business`): each business with
 //! its BUCs, and the actors and external systems each BUC involves.
 
-use super::{buc_members, kinds_by_layer, omitted_linked_kinds, render_edges, EdgeSet};
+use super::{buc_members, declare, kinds_by_layer, omitted_linked_kinds, render_edges, EdgeSet};
 use crate::diagram_common::{
     class_defs, contract_id, desc_line, node_id, node_label, quote, Header,
 };
-use crate::{
-    collect_object_graph_nodes, node_kind_filter_name, EmitError, Emitter, ObjectGraphLayer, Scope,
-    View,
-};
+use crate::{collect_object_graph_nodes, EmitError, Emitter, ObjectGraphLayer, Scope, View};
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
 use std::collections::HashSet;
 
@@ -89,18 +86,6 @@ fn businesses_of(model: &SemanticModel, buc: &NodeRef) -> Vec<NodeRef> {
         .filter(|rel| rel.kind == RelKind::Belongs && rel.from == *buc)
         .map(|rel| rel.to.clone())
         .collect()
-}
-
-/// `node` with its `:::<kind>` and its `%% desc` line, at `indent`.
-fn declare(out: &mut String, model: &SemanticModel, node: &NodeRef, indent: &str) {
-    let (Some(id), Some(label)) = (contract_id(model, node), node_label(model, node)) else {
-        return;
-    };
-    let kind = node_kind_filter_name(node);
-    out.push_str(&format!("{indent}{id}[\"{}\"]:::{kind}\n", quote(label)));
-    if let Some(desc) = desc_line(model, node, &id) {
-        out.push_str(&format!("{indent}{desc}\n"));
-    }
 }
 
 impl Emitter for BusinessMermaidEmitter {

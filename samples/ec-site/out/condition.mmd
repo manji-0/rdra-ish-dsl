@@ -1,0 +1,11 @@
+%% rdra-ish diagram=condition scope=whole model=samples/ec-site
+%% kinds: variation value
+%% omitted: (none)
+flowchart LR
+  subgraph variation__PaymentMethod["Payment Method"]
+    variation__PaymentMethod__credit_card["Credit card"]:::value
+    variation__PaymentMethod__bank_transfer["Bank transfer"]:::value
+    variation__PaymentMethod__convenience["Convenience store"]:::value
+  end
+  classDef variation stroke:#333;
+  classDef value stroke:#333;

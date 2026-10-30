@@ -20,6 +20,7 @@ the selected view.
 | Business object/data touchpoint review | `rdra --buc <BucId>` plus CRUD matrix | `references/rdra-graph.md` |
 | Use case inputs and outputs (UC複合図) | `usecase --buc <BucId>` or `usecase --usecase <UcId>` | `references/rdra-graph.md` |
 | Information, state models, and variations | `information`, optionally `--buc <BucId>` | `references/er.md` |
+| Variations with their values, and conditions | `condition`, optionally `--buc <BucId>` | `references/er.md` |
 | Entity structure and relationships | `er`, optionally `--buc <BucId>` | `references/er.md` |
 | Actor-entered field review | `csv --kind business-inputs` | `references/access-and-apis.md` |
 | System API/entity ownership review | `csv --kind api-matrix` | `references/access-and-apis.md` |
