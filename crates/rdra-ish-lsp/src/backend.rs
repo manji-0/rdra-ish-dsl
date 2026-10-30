@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -29,6 +29,8 @@ struct ServerState {
     documents: HashMap<PathBuf, String>,
     workspace_roots: Vec<PathBuf>,
     analysis: Option<WorkspaceAnalysis>,
+    published: HashSet<Url>,
+    manifest_error: Option<String>,
 }
 
 pub struct Backend {
@@ -68,7 +70,7 @@ impl Backend {
             Ok(project) => project,
             Err(ProjectError::NoRdraFiles) => return,
             Err(err) => {
-                self.client.log_message(MessageType::ERROR, err).await;
+                self.report_load_error(&err, &overlays).await;
                 return;
             }
         };
@@ -77,6 +79,47 @@ impl Backend {
 
         let mut state = self.state.write().await;
         state.analysis = Some(analysis);
+        state.manifest_error = None;
+    }
+
+    async fn report_load_error(&self, err: &ProjectError, overlays: &HashMap<PathBuf, String>) {
+        let message = err.to_string();
+        self.client.log_message(MessageType::ERROR, &message).await;
+
+        let mut state = self.state.write().await;
+        state.analysis = None;
+        let stale = std::mem::take(&mut state.published);
+        let announce = state.manifest_error.as_deref() != Some(message.as_str());
+        state.manifest_error = Some(message.clone());
+        drop(state);
+
+        for uri in stale {
+            self.client.publish_diagnostics(uri, vec![], None).await;
+        }
+        if !matches!(err, ProjectError::Manifest { .. }) {
+            return;
+        }
+        if announce {
+            self.client.show_message(MessageType::ERROR, &message).await;
+        }
+        let first_open = overlays
+            .keys()
+            .filter(|path| has_rdra_extension(path))
+            .min()
+            .and_then(|path| path_to_uri(path).ok());
+        if let Some(uri) = first_open {
+            let diagnostic = tower_lsp::lsp_types::Diagnostic {
+                range: Range::default(),
+                severity: Some(DiagnosticSeverity::ERROR),
+                source: Some("rdra-ish".to_string()),
+                message,
+                ..Default::default()
+            };
+            self.client
+                .publish_diagnostics(uri.clone(), vec![diagnostic], None)
+                .await;
+            self.state.write().await.published.insert(uri);
+        }
     }
 
     async fn publish_diagnostics(&self, analysis: &WorkspaceAnalysis) {
@@ -87,6 +130,7 @@ impl Backend {
             }
         }
 
+        let mut published = HashSet::new();
         for (source_id, (path, text, _)) in analysis.program.sources.iter().enumerate() {
             let uri = match path_to_uri(path) {
                 Ok(uri) => uri,
@@ -97,8 +141,12 @@ impl Backend {
                 .iter()
                 .map(|diag| to_lsp_diagnostic(diag, text))
                 .collect();
-            self.client.publish_diagnostics(uri, diags, None).await;
+            self.client
+                .publish_diagnostics(uri.clone(), diags, None)
+                .await;
+            published.insert(uri);
         }
+        self.state.write().await.published = published;
     }
 }
 
