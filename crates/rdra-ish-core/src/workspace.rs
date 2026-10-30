@@ -3,10 +3,10 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use crate::project::{build_project, Project};
 use crate::{
-    api_diagnostics, build_merged_model, event_diagnostics, infer_usecase_transactions,
-    permission_diagnostics, resolve_overlaid, system_diagnostics, tx_diagnostics, Diagnostic,
-    ResolvedProgram, SemanticModel,
+    api_diagnostics, event_diagnostics, infer_usecase_transactions, permission_diagnostics,
+    system_diagnostics, tx_diagnostics, Diagnostic, ResolvedProgram, SemanticModel,
 };
 
 /// Result of analyzing a multi-file workspace.
@@ -28,18 +28,29 @@ pub fn analyze_workspace(
     } else {
         Some(overlays)
     };
-    let (program, resolve_diags) = resolve_overlaid(entry_paths, include_paths, overlays_opt);
-    let (model, model_diags) = build_merged_model(&program, include_paths);
+    analyze_project(build_project(
+        entry_paths.to_vec(),
+        include_paths.to_vec(),
+        overlays_opt,
+        None,
+    ))
+}
 
-    let mut diagnostics = resolve_diags;
-    diagnostics.extend(model_diags);
-    diagnostics.extend(consistency_diagnostics(&model));
-    diagnostics.extend(crate::lint::lint_review_diagnostics(&model));
+/// Add the consistency and lint-review layers to a loaded project.
+pub fn analyze_project(project: Project) -> WorkspaceAnalysis {
+    let Project {
+        program,
+        model,
+        mut diags,
+        ..
+    } = project;
+    diags.extend(consistency_diagnostics(&model));
+    diags.extend(crate::lint::lint_review_diagnostics(&model));
 
     WorkspaceAnalysis {
         program,
         model,
-        diagnostics,
+        diagnostics: diags,
     }
 }
 
