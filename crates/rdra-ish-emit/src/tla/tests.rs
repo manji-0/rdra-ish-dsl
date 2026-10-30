@@ -25,8 +25,6 @@ fn tla_order_snapshot() {
     insta::assert_snapshot!("order_cfg", bundle.cfg);
 }
 
-/// Login creates Session and the published LoginRecord, which share no key. Without
-/// `exposes` that is `Login_1` and `Login_2`; the published write joins the internal one.
 const PUBLISHED_OUTBOX: &str = r#"
 system Auth "Auth"
 actor User "User"

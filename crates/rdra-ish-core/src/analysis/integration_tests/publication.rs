@@ -3,8 +3,6 @@ use crate::diagnostics::{Diagnostic, RdraError};
 use crate::model::{CallerKind, Exposed, PublishMode};
 use rdra_ish_syntax::parse;
 
-/// An owner model with one published upsert entity, one published append entity, and one
-/// internal entity. `{extra}` adds the line under test.
 fn owner(extra: &str) -> String {
     format!(
         r#"
@@ -39,7 +37,6 @@ fn diagnostics(src: &str) -> Vec<Diagnostic> {
     build_model(&ast).1
 }
 
-/// The names of the publication diagnostics, each with its severity.
 fn publication_names(src: &str) -> Vec<(&'static str, bool)> {
     diagnostics(src)
         .iter()

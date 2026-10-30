@@ -14,11 +14,8 @@ use crate::tx::infer_usecase_transactions;
 
 /// Why an `exposes` line publishes nothing.
 pub enum ExposeError {
-    /// A chain method that does not fit the exposed kind.
     WrongKind { chain: String, hint: String },
-    /// `.caller(...)` with an argument that is not `actor`, `system`, or `any`.
     BadCaller { args: Vec<PredicateArg> },
-    /// An entity without `.append()` or `.upsert()`.
     NoMode,
 }
 
@@ -111,7 +108,6 @@ pub fn exposed_item(target: &NodeRef, chain: &[ChainCall]) -> Option<Result<Expo
     Some(Ok(item))
 }
 
-/// One way the owner model touches an entity. The predicate name is what the message quotes.
 enum Use {
     Read(&'static str),
     Create,
@@ -119,7 +115,6 @@ enum Use {
     Set,
     Delete,
     Transition,
-    /// A `relate` to `other`.
     Key(EntityKey),
 }
 
@@ -129,7 +124,6 @@ struct EntityUse {
     site: Option<LocatedSpan>,
 }
 
-/// The entities a cross-entity constraint names, each once.
 fn distinct<'a>(
     scope: &[EntityKey],
     conds: impl Iterator<Item = &'a CrossEntityCondition>,
@@ -154,7 +148,6 @@ fn cond_entities(cond: &CrossEntityCondition) -> Vec<EntityKey> {
     }
 }
 
-/// Every entity use in the model, in a fixed walk order.
 fn entity_uses(model: &SemanticModel) -> Vec<EntityUse> {
     let mut uses = Vec::new();
     let mut push = |entity: EntityKey, what: Use, site: &Option<LocatedSpan>| {

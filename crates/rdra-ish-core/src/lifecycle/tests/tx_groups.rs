@@ -65,8 +65,6 @@ fn a_use_case_spanning_two_groups_is_one_action_per_group_in_tx_order() {
     }
 }
 
-/// Logout moves Session and writes the published SessionView. Today they have no key between
-/// them, so they would be two groups; the published row joins the internal change instead.
 const PUBLISHED_WRITE: &str = r#"
 system Auth "Auth"
 entity Session "Session" { id: Int @pk  status: Enum(active, ended) @default(active) }

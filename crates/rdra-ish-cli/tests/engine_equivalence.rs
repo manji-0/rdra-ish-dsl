@@ -563,9 +563,6 @@ fn bfs_and_tlc_agree_on_split_use_cases() {
     check_fixture("split_use_case", SPLIT_USE_CASE);
 }
 
-/// A published row written with the internal change it reports: Login creates Session and
-/// the published LoginRecord in one action, Revoke ends the Session and the published view
-/// in one action, and the published entities never enter the lifecycle.
 const PUBLISHED_OUTBOX: &str = r#"
 system Auth "Auth"
 actor User "User"

@@ -128,7 +128,6 @@ impl Surface {
     }
 }
 
-/// Sorted ids of the `kind` targets of `usecase`.
 fn targets(
     model: &SemanticModel,
     usecase: UseCaseKey,
@@ -173,7 +172,6 @@ fn writer_line(entity: &str, writer: &str, mut effects: Vec<String>) -> String {
     }
 }
 
-/// `col == val` for every `sets` of `usecase` on `entity`.
 fn effects_text(model: &SemanticModel, usecase: UseCaseKey, entity: EntityKey) -> Vec<String> {
     let columns = model
         .column_effects

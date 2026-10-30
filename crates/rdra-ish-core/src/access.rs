@@ -464,8 +464,6 @@ pub fn permission_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
     diags
 }
 
-/// A use case exposed with `.caller(system)` or `.caller(any)` runs for another model's
-/// service, so it needs no actor of its own.
 fn system_may_call(model: &SemanticModel, usecase: UseCaseKey) -> bool {
     matches!(
         model.publication.caller_of(usecase),

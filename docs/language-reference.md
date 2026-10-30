@@ -618,8 +618,9 @@ exposes(AuthSystem, SessionView).upsert()
 `exposes(System, UseCase)` publishes a use case. `.caller(actor)`, the default, means
 another model calls it on behalf of a human actor; `.caller(system)` means only a service
 identity may call it; `.caller(any)` allows both. A use case exposed with `.caller(system)`
-or `.caller(any)` is not reported as having no actor (`UseCasePermissionNoActor`), because
-its caller is the other model's service.
+or `.caller(any)` is not reported as having no actor, neither for its own permissions
+(`UseCasePermissionNoActor`) nor for those of the APIs it invokes
+(`ApiPermissionNoActor`), because its caller is the other model's service.
 
 `exposes(System, Event)` publishes an event another model may react to.
 
