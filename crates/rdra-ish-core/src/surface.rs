@@ -307,7 +307,7 @@ creates(Ping, Log)
 exposes(S, EvPing)
 exposes(S, Ping).caller(system)
 exposes(S, Log).append()
-shares(S, Log)
+shares(S, Beat)
 "#,
         );
         assert_eq!(
@@ -316,7 +316,7 @@ shares(S, Log)
              event EvPing \"Pinged\"\n\
              entity Log \"Log\" append { id: Int @pk  note: String @null }\n\
              writer Log Ping\n\
-             shared Log \"Log\" { id: Int @pk  note: String @null }\n"
+             shared Beat \"Beat\" { id: Int @pk }\n"
         );
     }
 
