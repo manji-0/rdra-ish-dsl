@@ -36,6 +36,7 @@ rdra-ish diagram samples/incremental-order/step-6-business-rules/src \
   --out samples/incremental-order/step-6-business-rules/out/object_graph_buc_store_restock
 ```
 
+<!-- embed: ../samples/incremental-order/step-6-business-rules/out/object_graph_buc_store_restock.mmd -->
 ```mermaid
 %% rdra-ish diagram=rdra scope=buc:BucStoreRestock model=samples/incremental-order/step-6-business-rules/src
 %% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
@@ -144,7 +145,11 @@ rdra-ish diagram samples/incremental-order/step-6-business-rules/src \
   --out samples/incremental-order/step-6-business-rules/out/er
 ```
 
+<!-- embed: ../samples/incremental-order/step-6-business-rules/out/er.mmd -->
 ```mermaid
+%% rdra-ish diagram=er scope=whole model=samples/incremental-order/step-6-business-rules/src
+%% kinds: entity
+%% omitted: (none)
 erDiagram
   Organization {
     Int id PK
@@ -190,6 +195,7 @@ rdra-ish diagram samples/incremental-order/step-6-business-rules/src \
   --out samples/incremental-order/step-6-business-rules/out/state
 ```
 
+<!-- embed: ../samples/incremental-order/step-6-business-rules/out/state.mmd -->
 ```mermaid
 %% rdra-ish diagram=state scope=whole model=samples/incremental-order/step-6-business-rules/src
 %% kinds: statemodel state usecase

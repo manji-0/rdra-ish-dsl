@@ -4665,6 +4665,9 @@ rdra-ish diagram samples/clinic-ops --kind er --format mermaid --buc BucFollowup
 ```
 
 ```mermaid
+%% rdra-ish diagram=er scope=buc:BucFollowupCare,BucBillingClaims model=samples/clinic-ops
+%% kinds: entity
+%% omitted: (none)
 erDiagram
   AccountBalance {
     Int id PK

@@ -1,8 +1,10 @@
 ---
-source: crates/rdra-emit/src/mermaid.rs
-assertion_line: 412
+source: crates/rdra-ish-emit/src/mermaid.rs
 expression: result
 ---
+%% rdra-ish diagram=er scope=whole
+%% kinds: entity
+%% omitted: (none)
 erDiagram
   Customer {
     Int id PK

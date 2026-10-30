@@ -457,12 +457,22 @@ impl Emitter for ErMermaidEmitter {
             }
         };
 
-        let mut out = String::new();
-        out.push_str("erDiagram\n");
-
-        // entities
         let mut ents: Vec<_> = model.entities.iter().collect();
         ents.sort_by_key(|(_, e)| &e.id);
+
+        let header = Header {
+            diagram: "er",
+            view,
+            layers: None,
+            kinds: if ents.iter().any(|(k, _)| is_visible(&NodeRef::Entity(*k))) {
+                vec!["entity"]
+            } else {
+                Vec::new()
+            },
+            omitted: Vec::new(),
+        };
+        let mut out = header.render();
+        out.push_str("erDiagram\n");
 
         for (k, ent) in &ents {
             if !is_visible(&NodeRef::Entity(*k)) {
@@ -741,6 +751,29 @@ relate(Order, Customer, N:1)
         assert!(result.contains("Customer {"));
         assert!(result.contains("Int id PK"));
         assert!(result.contains("}}o--||") || result.contains("}o--||"));
+    }
+
+    #[test]
+    fn test_er_mermaid_opens_with_the_header() {
+        let model = model_from("entity Order \"O\" { id: Int @pk }\n");
+        let view = View::er().with_model_path("m.rdra");
+        let result = ErMermaidEmitter.emit(&model, &view).unwrap();
+        assert!(
+            result.starts_with(
+                "%% rdra-ish diagram=er scope=whole model=m.rdra\n\
+                 %% kinds: entity\n\
+                 %% omitted: (none)\n\
+                 erDiagram\n  Order {\n"
+            ),
+            "{result}"
+        );
+        let empty = ErMermaidEmitter
+            .emit(&model_from("actor A \"A\"\n"), &View::er())
+            .unwrap();
+        assert_eq!(
+            empty,
+            "%% rdra-ish diagram=er scope=whole\n%% kinds: (none)\n%% omitted: (none)\nerDiagram\n"
+        );
     }
 
     #[test]

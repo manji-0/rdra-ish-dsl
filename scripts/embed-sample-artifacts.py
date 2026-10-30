@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Copy committed sample artifacts into the Markdown documents that embed them.
 
-A fenced block preceded by a line `<!-- embed: out/<file> -->` is rewritten to hold that file,
-read relative to the document's directory. Every `rdra-ish` command a document prints in a
+A fenced block preceded by a line `<!-- embed: <path> -->` is rewritten to hold that file,
+the path relative to the document's directory. Every `rdra-ish` command a document prints in a
 `sh` block, other than `check`, must be a row of scripts/sample-artifacts.tsv that writes the
 path its `--out` names, so the printed commands are the ones scripts/check-sample-artifacts.sh
 runs.
@@ -16,7 +16,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DOCS = sorted(ROOT.glob('samples/incremental-order/step-*/design.md'))
+DOCS = sorted(ROOT.glob('samples/incremental-order/step-*/design.md')) + [
+    ROOT / 'docs/diagram-sample-review.md'
+]
 MARKER = re.compile(r'^<!-- embed: (\S+) -->$')
 EXTENSION = {'diagram': '.mmd'}
 
@@ -50,15 +52,28 @@ def embed(doc, lines):
     return out
 
 
-def check_commands(doc, lines, rows):
-    errors = []
-    in_sh = False
+def sh_commands(lines):
+    """The `rdra-ish` commands of the `sh` blocks, each continuation line joined."""
+    commands, in_sh, current = [], False, ''
     for line in lines:
         if line.startswith('```'):
             in_sh = line == '```sh'
             continue
-        if not in_sh or not line.startswith('rdra-ish '):
+        if not in_sh:
             continue
+        current += line.strip()
+        if current.endswith('\\'):
+            current = current[:-1]
+            continue
+        if current.startswith('rdra-ish '):
+            commands.append(current)
+        current = ''
+    return commands
+
+
+def check_commands(doc, lines, rows):
+    errors = []
+    for line in sh_commands(lines):
         args = shlex.split(line)[1:]
         if args[0] == 'check':
             continue

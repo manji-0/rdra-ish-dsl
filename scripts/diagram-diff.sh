@@ -16,6 +16,8 @@
 #   options  --node-kind and --edge-kind on the kinds that take them
 #   errors   every option the CLI rejects, per root, and the removed --format, --kind, and
 #            option values once
+# Set STRIP_COMMENTS=1 to drop the `%%` lines of each .mmd before comparing, to prove a change
+# touched only a diagram's header and comments.
 set -uo pipefail
 
 base_bin="${1:?usage: scripts/diagram-diff.sh BASE_BIN HEAD_BIN}"
@@ -28,6 +30,8 @@ head_bin="$(cd "$(dirname "$head_bin")" && pwd)/$(basename "$head_bin")"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
+strip=()
+[[ -n "${STRIP_COMMENTS:-}" ]] && strip=(-e '/^%%/d')
 read -r -a kinds <<<"${KINDS:-rdra er state event}"
 has_kind() { [[ " ${kinds[*]} " == *" $1 "* ]]; }
 only_kinds() { # kind...: those of the arguments that KINDS keeps
@@ -72,7 +76,7 @@ dump() { # label bin: one file per cell under $work/LABEL, numbered in run order
       for f in "$outdir/out.mmd"; do
         [[ -f "$f" ]] && { echo "--- ${f##*/}"; cat "$f"; }
       done
-    } | sed -e "s|$repo_root/||g" -e "s|$outdir|OUT|g" >"$out_file"
+    } | sed -e "s|$repo_root/||g" -e "s|$outdir|OUT|g" ${strip[@]+"${strip[@]}"} >"$out_file"
   }
 
   local root kind buc fmt=mermaid

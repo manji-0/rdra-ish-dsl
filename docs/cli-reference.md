@@ -309,8 +309,11 @@ rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]...
 Notes:
 
 - The `.mmd` is written for a reader that redraws it (a person or an AI), so it carries
-  the RDRA meaning in text rather than in shapes. `--kind rdra`, `--kind state`, and
-  `--kind event` follow the encoding contract below; `er` adopts it in a later release.
+  the RDRA meaning in text rather than in shapes. Every kind follows the encoding
+  contract below. `--kind er` takes only its header: the body is the `erDiagram`, whose
+  entity names stay the DSL ids (a `__` prefix would read as part of a column), and the
+  diagram type says each node is an entity. `export --kind mermaid-er` writes the same
+  text, its header without `model=`.
 - Graph filters are intentionally review-oriented. They hide nodes and any edges whose
   endpoints are hidden; they do not change the model or diagnostics. The header's
   `omitted:` line names the node kinds and relation kinds a filter hid.
@@ -406,11 +409,15 @@ stateDiagram-v2
 ## Sample Artifact Snapshots
 
 `scripts/sample-artifacts.tsv` lists every committed `out/` file of `samples/ec-site`,
-`samples/clinic-ops`, `samples/personal-info`,
-`samples/incremental-order/step-6-business-rules`, and `samples/api-contract`. Each row
-holds the output path and the `rdra-ish` command that writes it. CI runs
-`scripts/check-sample-artifacts.sh` after the Rust snapshot tests. The script builds the
-binary once, runs every row, and fails if a tracked file changes. A generator change
+`samples/clinic-ops`, `samples/personal-info`, each `samples/incremental-order` step, and
+`samples/api-contract`. Each row holds the output path and the `rdra-ish` command that
+writes it. CI runs `scripts/check-sample-artifacts.sh` after the Rust snapshot tests. The
+script builds the binary once and runs every row. It then rewrites the documents that
+embed the artifacts: `scripts/embed-sample-artifacts.py` copies each file into the fenced
+block under its `<!-- embed: <path> -->` line in the step `design.md` files and
+`docs/diagram-sample-review.md`, and fails when a command those documents print is not
+the manifest row for its `--out`; `scripts/gen-clinic-ops-design-sample.py` writes
+`samples/clinic-ops/design-sample.md`. The script fails if a tracked file changes. A generator change
 therefore shows up as a diff of Mermaid diagrams, CSV review tables,
 state-pattern output, and exports such as OpenAPI, AsyncAPI, DBML, and JSON Schema. After
 an intended change, run the script and commit the regenerated files.

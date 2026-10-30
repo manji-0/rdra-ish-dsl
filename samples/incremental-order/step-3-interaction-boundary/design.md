@@ -136,6 +136,9 @@ rdra-ish diagram samples/incremental-order/step-3-interaction-boundary/src --kin
 
 <!-- embed: out/er.mmd -->
 ```mermaid
+%% rdra-ish diagram=er scope=whole model=samples/incremental-order/step-3-interaction-boundary/src
+%% kinds: entity
+%% omitted: (none)
 erDiagram
   Organization {
     Int id PK

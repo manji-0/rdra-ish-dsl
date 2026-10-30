@@ -92,6 +92,9 @@ rdra-ish diagram samples/incremental-order/step-2-data-touchpoints/src --kind er
 
 <!-- embed: out/er.mmd -->
 ```mermaid
+%% rdra-ish diagram=er scope=whole model=samples/incremental-order/step-2-data-touchpoints/src
+%% kinds: entity
+%% omitted: (none)
 erDiagram
   Organization {
     Int id PK

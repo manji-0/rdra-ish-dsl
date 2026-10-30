@@ -72,6 +72,10 @@
   event's raiser outside a `--buc` scope is no longer declared as a node without an edge.
   `rdra_ish_emit::mermaid::EventFlowMermaidEmitter` is now `EventMermaidEmitter`. The
   artifact keeps its name, `samples/clinic-ops/out/event_flow.mmd`.
+- `diagram --kind er` and `export --kind mermaid-er` open with the encoding contract's
+  `%%` header (`%% rdra-ish diagram=er scope=... model=...`, `%% kinds: entity`,
+  `%% omitted: (none)`; the export's header has no `model=`). The `erDiagram` body is
+  unchanged, entity names included.
 - `verify` checks each temporal property in its own TLC run, because TLC does not name the
   property a temporal counterexample violates. The runs use the module
   `<whole>_<Property>` (`RdraSpec_NeverShipped`), the same module text and fairness as the
@@ -561,6 +565,14 @@
   lifecycle and still refuses. The note now ends `this output does not read the
   lifecycle` (was `the data layer does not depend on them`) for every output that prints
   it.
+- `scripts/check-sample-artifacts.sh` also checks the documents that embed the
+  artifacts. Every `samples/incremental-order` step artifact is in
+  `scripts/sample-artifacts.tsv`; `scripts/embed-sample-artifacts.py` copies each into the
+  block under its `<!-- embed: <path> -->` line in the step `design.md` files and
+  `docs/diagram-sample-review.md`, and fails when a command those documents print is not
+  the manifest row for its `--out`. The script then runs
+  `scripts/gen-clinic-ops-design-sample.py`, and a diff in any of these documents fails
+  it. The step 0-5 `sequence_buc_store_restock.mmd` files are gone.
 - CI checks and verifies every `samples.txt` root, clinic-ops included, in one
   `formal-verify` step that runs `scripts/verify-samples.sh` on the release binary
   (`timeout-minutes: 5`, job `timeout-minutes: 15`). It replaces the `check` job's sample

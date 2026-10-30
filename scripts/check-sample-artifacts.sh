@@ -29,7 +29,8 @@ done <"$manifest"
 # The documents that embed the artifacts above.
 python3 -I scripts/embed-sample-artifacts.py
 python3 -I scripts/gen-clinic-ops-design-sample.py
-outputs+=(samples/incremental-order/step-*/design.md samples/clinic-ops/design-sample.md)
+outputs+=(samples/incremental-order/step-*/design.md samples/clinic-ops/design-sample.md
+  docs/diagram-sample-review.md)
 
 if ! git diff --quiet -- "${outputs[@]}"; then
   echo "sample artifacts changed; review and commit the generated diff if intentional" >&2

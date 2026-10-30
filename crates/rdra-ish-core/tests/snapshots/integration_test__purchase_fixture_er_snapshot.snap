@@ -2,6 +2,9 @@
 source: crates/rdra-ish-core/tests/integration_test.rs
 expression: mermaid
 ---
+%% rdra-ish diagram=er scope=whole
+%% kinds: entity
+%% omitted: (none)
 erDiagram
   Category {
     Int id PK

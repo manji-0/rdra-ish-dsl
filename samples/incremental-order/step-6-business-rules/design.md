@@ -130,6 +130,9 @@ rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind er -
 
 <!-- embed: out/er.mmd -->
 ```mermaid
+%% rdra-ish diagram=er scope=whole model=samples/incremental-order/step-6-business-rules/src
+%% kinds: entity
+%% omitted: (none)
 erDiagram
   Organization {
     Int id PK

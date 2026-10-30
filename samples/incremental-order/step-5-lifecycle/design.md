@@ -128,6 +128,9 @@ rdra-ish diagram samples/incremental-order/step-5-lifecycle/src --kind er --form
 
 <!-- embed: out/er.mmd -->
 ```mermaid
+%% rdra-ish diagram=er scope=whole model=samples/incremental-order/step-5-lifecycle/src
+%% kinds: entity
+%% omitted: (none)
 erDiagram
   Organization {
     Int id PK
