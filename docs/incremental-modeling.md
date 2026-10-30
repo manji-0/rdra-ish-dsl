@@ -27,7 +27,7 @@ The terms BUC, business flow, and UC are used in the RDRA-ish sense described in
 [RDRA-ish Interpretation](./rdra-ish-interpretation.md): BUCs are business-value
 review containers, business flow is the concrete realization of a BUC through UCs and
 events, and UCs are effect-bearing interactions. The flow is reviewed through prose
-plus generated sequence, event, CRUD, ER, and state views.
+plus generated RDRA, event, CRUD, ER, and state views.
 
 The model can stay intentionally incomplete while it is being explored:
 
@@ -138,7 +138,7 @@ import shared.lifecycle.order
 | 1 | Biz value | BUC skeleton | Who gets value from each BUC? | `performs`, `belongs`, `contains`, rough `usecase` | `check`, BUC-scoped RDRA diagram |
 | 2 | Biz object touchpoints | Data touchpoints | Which data objects does each use case touch? | coarse `entity`, CRUD predicates | CRUD matrix, ER diagram |
 | 3 | Tech interaction boundary | Interaction boundary | What UI/API boundary mediates the work, and with which authority/media constraints? | `screen`, `displays`, `shows`, optional `api`/`invokes`, `permission`, `medium`, `has_permission`, `requires_*` | RDRA graph, screen-constraints CSV, actor-permission audit |
-| 4 | Tech data design | Entity structure | What structure and ownership does the data need? | columns, `@pk`, `relate`, cardinality | ER diagram, sequence TX warnings |
+| 4 | Tech data design | Entity structure | What structure and ownership does the data need? | columns, `@pk`, `relate`, cardinality | ER diagram, `check` transaction warnings |
 | 5 | Tech lifecycle design | Lifecycle | Which states and event-triggered BUC entries are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `transitions`, `raises`, `triggers`, `sets` | `check`, `states`, state diagram, event diagram |
 | 6A | Tech-enforced rules | Local guardrails | Which simple states or facts must never co-occur? | `forbidden`, `exclusive` over Enum / Bool / nullable axes | `states` diagnostics |
 | 6B | Tech-enforced rules | Local obligations | Which reachable states imply or require other facts? | `invariant`, narrow `required` | `states` diagnostics |
@@ -283,8 +283,8 @@ rdra-ish csv src/ --kind screen-constraints
 rdra-ish csv src/ --kind actor-permission-audit
 ```
 
-Move on when sequence output communicates the intended actor/screen/API/entity path
-and the screen-constraints plus actor-permission audit CSVs show the expected
+Move on when the RDRA graph and the API matrix show the intended actor/screen/API/entity
+path and the screen-constraints plus actor-permission audit CSVs show the expected
 permission/media paths and actor-side assignments.
 
 ### BUC Context and Access Rules

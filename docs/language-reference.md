@@ -134,7 +134,7 @@ a `%% desc <id>: <text>` comment line after the node.
 | `quality` | A quality attribute category such as performance, availability, resilience, auditability, observability, or privacy. | RDRA diagram (`qualifies`) |
 | `constraint` | A non-functional guardrail or compliance constraint, commonly used for audit, logging, retention, privacy, or operational restrictions. | `lint` `constraint-unscoped`; RDRA diagram |
 | `business` | A business (a coarse-grained area of activity) that BUCs belong to. | RDRA diagram |
-| `buc` | A business use case: a unit of business value composed of use cases. | `lint` `buc-empty`; RDRA, sequence, and event diagrams (`--buc` filter) |
+| `buc` | A business use case: a unit of business value composed of use cases. | `lint` `buc-empty`; RDRA, ER, state, and event diagrams (`--buc` filter) |
 | `flow` | A business flow: an ordered business narrative inside a BUC. A flow is composed of steps and can make UC and event ordering explicit without turning the diagram into the only source of truth. | `lint` `flow-empty`, `flow-cycle`; RDRA diagram |
 | `step` | A business flow step. A step is a business-language action that can cover a use case, API, or event while remaining distinct from implementation boundaries. | `lint` `step-no-cover`; RDRA diagram |
 | `timer` | An RDRA タイマー: a schedule that starts a use case, such as a nightly sweep. See [Timers](#timers). | `triggers(Timer, UseCase)`; RDRA diagram (external-environment layer) and event diagram; `lint` `orphan-node` |
@@ -610,10 +610,9 @@ updates(PlaceOrder, Cart)   // direct write still allowed (mixed form)
 - FK-grouped direct writes use the full `relate` graph for connectivity. Two written
   sibling entities that share an unwritten parent entity are still grouped as one
   inferred transaction.
-- The diagram draws the transactions that `states` and `verify` run
-  (`UsecaseTx::groups()`). A `writes(..)` edge, and an entity a use case only `sets` or
-  transitions, both draw as an update. An entity written in its own transaction after
-  an FK group draws a note and raises `SeparateTxInferred`.
+- `states` and `verify` run these transactions (`UsecaseTx::groups()`). A `writes(..)`
+  edge, and an entity a use case only `sets` or transitions, both count as an update. An
+  entity written in its own transaction after an FK group raises `SeparateTxInferred`.
 
 **System boundary behaviour**:
 - `contains(System, Api)` assigns an API to an internal system boundary.
@@ -1480,7 +1479,7 @@ to load with a message naming the replacement:
 | `timing` | `timer`. `belongs(...).when(...)` was removed; connect the timer with `triggers(Timer, UseCase)`. |
 | `uses` | Connect an external system through events: `raises(ExtSystem, Event)` inbound, `triggers(Event, ExtSystem)` outbound. |
 | `location` | Deleted with the `.where(...)` clause of `belongs`; use `medium` / `.by(...)` for Business-BUC context. |
-| `state` | Delete the declaration. States are the variants of the lifecycle Enum column named in `transitions(Entity.col, UseCase, from -> to)`; the analyzer derives one `{Entity}_{variant}` state per variant for the state diagram and `lint`. |
+| `state` | Delete the declaration. States are the variants of the lifecycle Enum column named in `transitions(Entity.col, UseCase, from -> to)`; the analyzer derives one `{Entity}_{variant}` state per variant for `lint` and the diagrams, which name it `state__{Entity}_{variant}`. |
 | `concept`, `domain_object`, `aggregate`, `value_object` / `valueobject`, and `maps_to` | `entity` for persistent structure, `dto` for payload shapes. |
 
 ---

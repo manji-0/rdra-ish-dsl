@@ -176,7 +176,7 @@ the temporal properties: a scoped run has no whole model to check them on.
 - API invocation and API entity-operation gaps;
 - system boundary derivation and cross-system entity coordination gaps;
 - FK/API transaction-boundary warnings;
-- event-flow gaps, including events that are never raised, raised events that trigger
+- event link gaps, including events that are never raised, raised events that trigger
   no transition/use case/BUC, or triggered use cases with no containing BUC. Mark
   intentional external publications with `outbox(Event)` to suppress only the
   raised-but-unconsumed warning;
