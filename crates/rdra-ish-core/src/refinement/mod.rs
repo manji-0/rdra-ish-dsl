@@ -8,12 +8,26 @@
 #[cfg(test)]
 mod docs;
 mod facts;
+mod findings;
 mod order;
 mod stages;
 
+use crate::lifecycle::Severity;
 use crate::model::SemanticModel;
 
 pub(crate) use facts::BucFacts;
+
+/// How much evidence `assess` gathers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Depth {
+    /// Model relations only: cheap enough for lint and the LSP on every edit. No stage is
+    /// `Blocked`, because no finding is looked for.
+    Structure,
+    /// Also runs state derivation once over the whole model, as `check` does, and attributes
+    /// each finding to the BUCs that touch its entity and the stage that owns it. What
+    /// `rdra-ish next` uses.
+    Lifecycle,
+}
 
 /// One stage of the incremental modeling flow. Identity only: the order is `order::ORDER`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -182,7 +196,16 @@ impl SubjectKind {
     }
 }
 
-/// One stage for one BUC: what each check found.
+/// A lifecycle finding as `check` names it. Core renders no message or trace: the CLI has
+/// one renderer of those, and `next` points at `rdra-ish check`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FindingRef {
+    /// `StateDiag::name`, such as `Witness_Order_status_pending`.
+    pub name: String,
+    pub severity: Severity,
+}
+
+/// One stage for one BUC: what each check found, and the findings the stage owns.
 #[derive(Debug, Clone)]
 pub struct StageView {
     pub id: StageId,
@@ -191,15 +214,21 @@ pub struct StageView {
     pub gaps: Vec<Gap>,
     /// Elements that fail an advisory check: review prompts that never block.
     pub notes: Vec<Gap>,
+    /// Findings of `check` the stage owns, at `Depth::Lifecycle`; empty at
+    /// `Depth::Structure`.
+    pub findings: Vec<FindingRef>,
     open: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Verdict {
-    /// Every blocking check passes.
+    /// Every blocking check passes and no error finding is owned by the stage.
     Met,
     /// A blocking check fails: `gaps` says what to add.
     Open,
+    /// The checks pass, but `check` reports an error the stage owns: fix the model before
+    /// adding the next stage's detail.
+    Blocked,
 }
 
 impl StageView {
@@ -224,6 +253,7 @@ impl StageView {
             evidence: (spec.evidence)(facts),
             gaps,
             notes,
+            findings: Vec::new(),
             open,
         }
     }
@@ -232,6 +262,12 @@ impl StageView {
     pub fn verdict(&self) -> Verdict {
         if self.open {
             Verdict::Open
+        } else if self
+            .findings
+            .iter()
+            .any(|finding| finding.severity == Severity::Error)
+        {
+            Verdict::Blocked
         } else {
             Verdict::Met
         }
@@ -278,6 +314,14 @@ impl BucStanding {
             .map(|view| view.id)
     }
 
+    /// The stage is inside the met prefix of required stages. Lint reads this to call a
+    /// finding of a later stage premature.
+    pub fn has_passed(&self, stage: StageId) -> bool {
+        self.required()
+            .take_while(|view| view.verdict() == Verdict::Met)
+            .any(|view| view.id == stage)
+    }
+
     /// Every required stage is met.
     pub fn required_complete(&self) -> bool {
         self.required().all(|view| view.verdict() == Verdict::Met)
@@ -306,28 +350,60 @@ impl BucStanding {
 /// Where every BUC of a model stands, in declaration order.
 pub struct Assessment {
     pub bucs: Vec<BucStanding>,
+    /// Findings of `check` that no BUC owns, at `Depth::Lifecycle`. `next` prints them
+    /// first, because `check` fails on them whatever stage a BUC is at.
+    pub unowned_findings: Vec<FindingRef>,
+    pub depth: Depth,
 }
 
-/// A pure function of the model: running it twice gives the same value.
-pub fn assess(model: &SemanticModel) -> Assessment {
+/// A pure function of the model and the depth: running it twice gives the same value.
+pub fn assess(model: &SemanticModel, depth: Depth) -> Assessment {
+    assess_with(model, depth, order::ORDER)
+}
+
+/// `assess` under a given stage order. Checks read only `BucFacts`, so a verdict is the same
+/// under any order; only positions move.
+fn assess_with(model: &SemanticModel, depth: Depth, order: &[StageId]) -> Assessment {
+    let facts: Vec<BucFacts> = model
+        .bucs
+        .keys()
+        .map(|key| BucFacts::collect(model, key))
+        .collect();
+    let mut findings = match depth {
+        Depth::Structure => None,
+        Depth::Lifecycle => Some(findings::attribute(model, &facts)),
+    };
+    let bucs = facts
+        .iter()
+        .enumerate()
+        .map(|(i, facts)| {
+            let buc = &model.bucs[facts.buc];
+            let stages = order
+                .iter()
+                .map(|&id| {
+                    let mut view = StageView::evaluate(id, facts);
+                    if let Some(found) = findings.as_mut() {
+                        view.findings = found.owned.remove(&(i, id)).unwrap_or_default();
+                    }
+                    view
+                })
+                .collect();
+            BucStanding {
+                id: buc.id.clone(),
+                label: buc.label.clone(),
+                moved: facts
+                    .moved_entities()
+                    .into_iter()
+                    .map(|entity| facts.entity_id(entity).to_string())
+                    .collect(),
+                stages,
+            }
+        })
+        .collect();
     Assessment {
-        bucs: model
-            .bucs
-            .iter()
-            .map(|(key, buc)| {
-                let facts = BucFacts::collect(model, key);
-                BucStanding {
-                    id: buc.id.clone(),
-                    label: buc.label.clone(),
-                    moved: facts
-                        .moved_entities()
-                        .into_iter()
-                        .map(|entity| facts.entity_id(entity).to_string())
-                        .collect(),
-                    stages: stages().map(|id| StageView::evaluate(id, &facts)).collect(),
-                }
-            })
-            .collect(),
+        bucs,
+        unowned_findings: findings.map(|found| found.unowned).unwrap_or_default(),
+        depth,
     }
 }
 
@@ -343,7 +419,7 @@ mod tests {
         let (model, diags) = build_model(&ast);
         let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
         assert!(errors.is_empty(), "unexpected errors: {errors:?}");
-        assess(&model).bucs
+        assess(&model, Depth::Structure).bucs
     }
 
     fn next_required(p: &BucStanding) -> &StageView {
@@ -372,6 +448,73 @@ contains(BucOrder, PlaceOrder)
             StageId::AdvancedRules.doc_anchor(),
             "stage-6c-advanced-rules"
         );
+    }
+
+    #[test]
+    fn the_order_holds_every_stage_once() {
+        let all = [
+            StageId::Scope,
+            StageId::Skeleton,
+            StageId::DataTouchpoints,
+            StageId::InteractionBoundary,
+            StageId::EntityStructure,
+            StageId::Lifecycle,
+            StageId::LocalGuardrails,
+            StageId::LocalObligations,
+            StageId::AdvancedRules,
+        ];
+        let mut order: Vec<StageId> = stages().collect();
+        assert_eq!(order.len(), all.len());
+        order.dedup();
+        assert!(all.iter().all(|id| order.contains(id)));
+    }
+
+    /// docs/vision.md proposes data and lifecycle before use cases. Under that order every
+    /// stage keeps its verdict; only the positions move.
+    #[test]
+    fn verdicts_are_independent_of_order() {
+        let src = format!(
+            "{SKELETON}
+screen Checkout \"Checkout\"
+entity Order \"Order\" {{
+  id: Int @pk
+  status: Enum(pending, paid) @default(pending)
+  paid_at: DateTime @null
+}}
+displays(PlaceOrder, Checkout)
+creates(PlaceOrder, Order)
+transitions(Order.status, PlaceOrder, pending -> paid)
+forbidden(Order, status == paid, paid_at == null)
+"
+        );
+        let (ast, _) = parse(&src);
+        let (model, _) = build_model(&ast);
+        let vision = [
+            StageId::Scope,
+            StageId::DataTouchpoints,
+            StageId::EntityStructure,
+            StageId::Lifecycle,
+            StageId::Skeleton,
+            StageId::InteractionBoundary,
+            StageId::LocalGuardrails,
+            StageId::LocalObligations,
+            StageId::AdvancedRules,
+        ];
+        let under = |order: &[StageId]| {
+            let mut verdicts: Vec<(StageId, Verdict)> =
+                assess_with(&model, Depth::Structure, order).bucs[0]
+                    .stages
+                    .iter()
+                    .map(|view| (view.id, view.verdict()))
+                    .collect();
+            verdicts.sort_by_key(|(id, _)| id.slug());
+            verdicts
+        };
+        let order: Vec<StageId> = stages().collect();
+        assert_eq!(under(&order), under(&vision));
+        assert!(under(&order)
+            .iter()
+            .any(|(id, verdict)| *id == StageId::LocalGuardrails && *verdict == Verdict::Met));
     }
 
     #[test]

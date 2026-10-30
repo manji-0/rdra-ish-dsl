@@ -495,7 +495,7 @@ pub(super) const LIFECYCLE: StageSpec = StageSpec {
 /// Which state rules a rules stage counts. Every rule belongs to exactly one tier, so a
 /// comparison `forbidden` is Advanced and never also a guardrail.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum RuleTier {
+pub(super) enum RuleTier {
     /// `forbidden` / `exclusive` over plain facts.
     Guardrail,
     /// `invariant` / `required` over plain facts.
@@ -505,7 +505,7 @@ enum RuleTier {
 }
 
 /// One state rule of the model.
-enum Rule<'m> {
+pub(super) enum Rule<'m> {
     Forbidden(&'m crate::model::ForbiddenConstraint),
     Exclusive(&'m crate::model::ExclusiveConstraint),
     Invariant(&'m crate::model::EntityInvariant),
@@ -536,7 +536,7 @@ impl<'m> Rule<'m> {
         rules
     }
 
-    fn tier(&self) -> RuleTier {
+    pub(super) fn tier(&self) -> RuleTier {
         let has_comparison = match self {
             Rule::Forbidden(c) => !c.comparisons.is_empty(),
             Rule::Exclusive(c) => !c.comparisons.is_empty(),
@@ -621,6 +621,15 @@ fn cross_columns(columns: &mut BTreeSet<(EntityKey, String)>, conditions: &[Cros
 }
 
 impl RuleTier {
+    /// The stage a rule of the tier meets, and a violation of it blocks.
+    pub(super) fn stage(self) -> StageId {
+        match self {
+            RuleTier::Guardrail => StageId::LocalGuardrails,
+            RuleTier::Obligation => StageId::LocalObligations,
+            RuleTier::Advanced => StageId::AdvancedRules,
+        }
+    }
+
     fn kinds(self) -> &'static str {
         match self {
             RuleTier::Guardrail => "`forbidden` / `exclusive`",

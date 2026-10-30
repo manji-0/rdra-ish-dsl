@@ -6,6 +6,7 @@ use crate::diagnostics::{Diagnostic, RdraError};
 use crate::location::LocatedSpan;
 use crate::model::{node_ref_kind, ColumnType, NodeRef, RelKind, SemanticModel, StateKey, StepKey};
 use crate::rdra_rules::{owned_by_registry, rdra_findings};
+use crate::refinement::{assess, Assessment, Depth, Next, StageId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LintSeverity {
@@ -77,11 +78,43 @@ impl LintSeverity {
 }
 
 /// Collect review findings that are not already emitted as semantic/consistency diagnostics.
+/// `Info` findings are left out: `Diagnostic` has no info level, and a premature finding is
+/// not a warning.
 pub fn lint_review_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
     collect_findings(model)
         .into_iter()
+        .filter(|issue| issue.severity != LintSeverity::Info)
         .map(|issue| issue.to_diagnostic())
         .collect()
+}
+
+/// Lint rules that are review signals of one stage: a finding on a BUC that has not passed
+/// the stage is expected, not a warning.
+const STAGED_RULES: &[(&str, StageId)] = &[("buc-empty", StageId::Skeleton)];
+
+/// Turns a staged finding on a BUC that has not passed the rule's stage into `Info`, with the
+/// stage named in its hint. Other findings are untouched.
+fn demote_premature(issues: &mut [LintIssue], assessment: &Assessment) {
+    for issue in issues {
+        let Some((_, stage)) = STAGED_RULES.iter().find(|(rule, _)| *rule == issue.rule) else {
+            continue;
+        };
+        let premature = issue.subject_kind == "buc"
+            && assessment
+                .bucs
+                .iter()
+                .find(|buc| buc.id == issue.subject_id)
+                .is_some_and(|buc| !buc.has_passed(*stage));
+        if premature {
+            issue.severity = LintSeverity::Info;
+            issue.hint = format!(
+                "expected before stage {} {}; {}",
+                stage.number(),
+                stage.spec().name,
+                issue.hint
+            );
+        }
+    }
 }
 
 /// Full lint report for `rdra-ish lint`, including semantic and consistency diagnostics.
@@ -207,6 +240,7 @@ fn collect_findings(model: &SemanticModel) -> Vec<LintIssue> {
     lint_enum_attributes(model, &mut findings);
     lint_condition_anchors(model, &mut findings);
     findings.extend(rdra_findings(model));
+    demote_premature(&mut findings, &assess(model, Depth::Structure));
     findings
 }
 
@@ -735,8 +769,7 @@ fn coverage_score_issue(model: &SemanticModel, findings: &[LintIssue]) -> LintIs
 }
 
 fn stage_readiness_issue(model: &SemanticModel) -> LintIssue {
-    use crate::refinement::{assess, Next};
-    let standings = assess(model).bucs;
+    let standings = assess(model, Depth::Structure).bucs;
     let message = if standings.is_empty() {
         "no BUC yet; next stage: 0 Scope sketch".to_string()
     } else {
@@ -1040,6 +1073,55 @@ mod tests {
         let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
         assert!(errors.is_empty(), "unexpected errors: {errors:?}");
         model
+    }
+
+    #[test]
+    fn a_premature_buc_empty_is_info_and_not_published_to_the_editor() {
+        let model = model_from(
+            r#"
+business Commerce "Commerce"
+buc BucOrder "Process Order"
+belongs(BucOrder, Commerce)
+"#,
+        );
+        let issue = collect_findings(&model)
+            .into_iter()
+            .find(|issue| issue.rule == "buc-empty")
+            .unwrap();
+        assert_eq!(issue.severity, LintSeverity::Info);
+        assert!(
+            issue
+                .hint
+                .starts_with("expected before stage 1 BUC skeleton; "),
+            "{}",
+            issue.hint
+        );
+        let published: Vec<String> = lint_review_diagnostics(&model)
+            .iter()
+            .map(|d| d.error.to_string())
+            .collect();
+        assert!(
+            published.iter().all(|m| !m.contains("buc-empty")),
+            "{published:?}"
+        );
+    }
+
+    #[test]
+    fn buc_empty_on_an_event_started_buc_stays_a_warning() {
+        let model = model_from(
+            r#"
+business Commerce "Commerce"
+buc BucShip "Ship"
+event OrderPaid "Order paid"
+belongs(BucShip, Commerce)
+triggers(OrderPaid, BucShip)
+"#,
+        );
+        let issue = collect_findings(&model)
+            .into_iter()
+            .find(|issue| issue.rule == "buc-empty")
+            .unwrap();
+        assert_eq!(issue.severity, LintSeverity::Warning);
     }
 
     #[test]

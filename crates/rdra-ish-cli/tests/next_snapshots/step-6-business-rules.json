@@ -4,6 +4,7 @@
       "gates": [
         {
           "evidence": "belongs to StoreOperations",
+          "findings": [],
           "gaps": 0,
           "notes": 0,
           "passed": true,
@@ -14,6 +15,7 @@
         },
         {
           "evidence": "3 use cases, 1 `performs` / `triggers` starting them",
+          "findings": [],
           "gaps": 0,
           "notes": 0,
           "passed": true,
@@ -24,6 +26,7 @@
         },
         {
           "evidence": "3/3 use cases touch an entity",
+          "findings": [],
           "gaps": 0,
           "notes": 0,
           "passed": true,
@@ -34,6 +37,7 @@
         },
         {
           "evidence": "3/3 use cases display a screen, invoke an API, or run on a trigger",
+          "findings": [],
           "gaps": 0,
           "notes": 0,
           "passed": true,
@@ -44,6 +48,7 @@
         },
         {
           "evidence": "2/2 entities have a column beyond their keys",
+          "findings": [],
           "gaps": 0,
           "notes": 0,
           "passed": true,
@@ -54,6 +59,16 @@
         },
         {
           "evidence": "use cases move Store.restock_status, Store.next_restock_date",
+          "findings": [
+            {
+              "name": "NoCreationPath_Store",
+              "severity": "info"
+            },
+            {
+              "name": "NoCreationPath_Organization",
+              "severity": "info"
+            }
+          ],
           "gaps": 0,
           "notes": 0,
           "passed": true,
@@ -64,6 +79,7 @@
         },
         {
           "evidence": "`forbidden` / `exclusive` reads Store.next_restock_date, Store.restock_status",
+          "findings": [],
           "gaps": 0,
           "notes": 0,
           "passed": true,
@@ -74,6 +90,7 @@
         },
         {
           "evidence": "`invariant` / `required` reads Store.next_restock_date, Store.restock_status",
+          "findings": [],
           "gaps": 0,
           "notes": 0,
           "passed": true,
@@ -84,6 +101,7 @@
         },
         {
           "evidence": "no comparison or cross-entity rule reads a column this BUC moves",
+          "findings": [],
           "gaps": 1,
           "notes": 0,
           "passed": false,
@@ -105,6 +123,7 @@
               "Are these facts already represented as Enum, Bool, or nullable state axes?"
             ],
             "doc": "docs/incremental-modeling.md#stage-6a-local-guardrails",
+            "findings": [],
             "gaps": [],
             "notes": [],
             "question": "Which simple states or facts must never co-occur?",
@@ -124,6 +143,7 @@
               "Is the rule too broad, or should it be an `invariant` with a guard instead of `required`?"
             ],
             "doc": "docs/incremental-modeling.md#stage-6b-local-obligations",
+            "findings": [],
             "gaps": [],
             "notes": [],
             "question": "Which reachable states imply or require other facts?",
@@ -143,6 +163,7 @@
               "Is a cross-entity rule a global cross-product rule, or only intended along a declared relation path?"
             ],
             "doc": "docs/incremental-modeling.md#stage-6c-advanced-rules",
+            "findings": [],
             "gaps": [
               {
                 "id": "Store",
@@ -168,5 +189,6 @@
       "stage": "5",
       "stage_name": "Lifecycle"
     }
-  ]
+  ],
+  "unowned_findings": []
 }
