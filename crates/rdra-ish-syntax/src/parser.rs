@@ -1109,13 +1109,30 @@ fn predicate_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + 
         .or(predicate_atom())
 }
 
+/// `actor` or `system` as a chain argument, as in `exposes(S, U).caller(system)`. Both are
+/// kind keywords, so only a chain call reads them as a bare word.
+fn kind_word_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + Clone {
+    select! {
+        Token::Actor => "actor".to_string(),
+        Token::System => "system".to_string(),
+    }
+    .map_with_span(|word, span| {
+        PredicateArg::Ref(QRef {
+            kind_qualifier: None,
+            parts: vec![word],
+            span,
+        })
+    })
+}
+
 /// `.method(args...)` のチェーン呼び出し1件。
 fn chain_call() -> impl Parser<Token, ChainCall, Error = Simple<Token>> + Clone {
     just(Token::Dot)
         .ignore_then(ident())
         .then_ignore(just(Token::LParen))
         .then(
-            predicate_arg()
+            kind_word_arg()
+                .or(predicate_arg())
                 .separated_by(just(Token::Comma))
                 .allow_trailing(),
         )
@@ -1673,6 +1690,26 @@ performs(Customer, Browse) /* predicate comment */
         assert_eq!(pred.args.len(), 2);
         assert!(matches!(&pred.args[1], PredicateArg::Expr(Expr::Cmp(_))));
         assert!(pred.chain.is_empty());
+    }
+
+    #[test]
+    fn a_chain_call_reads_actor_and_system_as_bare_words() {
+        let ast = parse_ok("exposes(S, U).caller(system)\nexposes(S, V).caller(actor).append()");
+        let words: Vec<String> = ast
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                Item::Predicate(p) => Some(p),
+                _ => None,
+            })
+            .flat_map(|p| p.chain.iter())
+            .filter(|c| c.name == "caller")
+            .map(|c| match &c.args[0] {
+                PredicateArg::Ref(q) => q.parts.join("."),
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        assert_eq!(words, ["system", "actor"]);
     }
 
     #[test]
