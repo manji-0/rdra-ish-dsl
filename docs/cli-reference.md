@@ -211,10 +211,11 @@ API method/path contracts, and naming convention warnings.
 It also emits two `info` rows:
 
 - `coverage-score` is a lightweight 0-100 readiness signal. Empty models score `0`.
-  Finding penalties are scaled by model size (`×25/elements`); missing refinement
-  stages subtract 8 each (floor 0). Use together with `stage-readiness`.
-- `stage-readiness` reports which refinement stages are present: `scope`,
-  `business-flow`, `data`, `interaction`, `system-boundary`, and `rules`.
+  Finding penalties are scaled by model size (`×25/elements`); each model layer with no
+  element (`scope`, `business-flow`, `data`, `interaction`, `system-boundary`, `rules`)
+  subtracts 8 (floor 0).
+- `stage-readiness` gives the stage of each BUC and the stage after it, as
+  [`next`](#next) decides them: `BucOrder stage 2 (next 3); BucPayment stage 5 (next 6A)`.
 
 These rules are `warning` rows:
 
@@ -239,6 +240,80 @@ Lint warnings do not fail the command. Existing parse/model errors are emitted a
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--format` | `table` \| `json` \| `csv` | `table` | Output format. |
+
+---
+
+## `next`
+
+Show the incremental modeling stage of each BUC, and what the next stage asks for.
+
+```
+rdra-ish next <INPUTS...> [--buc <ID>]... [--format <FORMAT>]
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `--buc <ID>` | every BUC | Show only these BUCs; repeatable. An unknown id is an error |
+| `--format <FORMAT>` | `text` | `text` or `json` |
+
+`next` places each BUC on the [stage map](./incremental-modeling.md#stage-map). Every
+stage has a gate, and a BUC is at the highest stage whose gate it passes together with
+every earlier gate:
+
+| Stage | The gate passes when |
+|---|---|
+| 0 Scope sketch | the BUC `belongs` to a business |
+| 1 BUC skeleton | it holds a use case (by `contains`, or through a flow's steps and `covers`), and an actor `performs` it or one of its use cases, or an event or timer `triggers` one |
+| 2 Data touchpoints | every use case creates, reads, updates, or deletes an entity, directly or through an API it `invokes` |
+| 3 Interaction boundary | every use case `displays` a screen or `invokes` an API, or an event or timer `triggers` it |
+| 4 Entity structure | every entity of stage 2 has a column that is neither a primary key nor a foreign key |
+| 5 Lifecycle | a use case moves an entity with `transitions` or `sets` |
+| 6A Local guardrails | a `forbidden` or `exclusive` names an entity of stage 5 |
+| 6B Local obligations | an `invariant` or `required` names an entity of stage 5 |
+| 6C Advanced rules | a rule on an entity of stage 5 holds a comparison or names more than one entity |
+
+A gate passing is evidence, not a verdict. The stage sections of
+[Incremental Modeling Flow](./incremental-modeling.md) say when a stage is stable enough
+to move on; `next` shows where the model stands, so you only need to ask the next stage's
+questions.
+
+The text output prints one block per BUC, after a summary table when there is more than
+one: the gate of each stage with what it counted, then the first failed gate as the next
+stage, with its main question, the elements that fail the gate (`Gaps:`, at most 8;
+`--format json` lists every gap), the questions to ask, the commands that review the
+stage once it is added, and its section in the modeling guide:
+
+```text
+BucStoreRestock "Maintain Store Restock": stage 2 Data touchpoints
+  [x] 0  Scope sketch          belongs to StoreOperations
+  [x] 1  BUC skeleton          2 use cases, 1 `performs` / `triggers` starting them
+  [x] 2  Data touchpoints      2/2 use cases touch an entity
+  [ ] 3  Interaction boundary  0/2 use cases display a screen, invoke an API, or run on a trigger
+  ...
+
+Next: stage 3 Interaction boundary
+  What UI/API boundary mediates the work, and with which authority/media constraints?
+  Gaps:
+    - usecase ChangeNextRestockDate: add `displays(ChangeNextRestockDate, Screen)` or `invokes(ChangeNextRestockDate, Api)` for the boundary it works through
+    ...
+  Ask:
+    - Which screen or external interface does each use case expose?
+    ...
+  Then review with:
+    rdra-ish check src
+    rdra-ish diagram src --kind rdra --buc BucStoreRestock
+    ...
+  See docs/incremental-modeling.md#stage-3-interaction-boundary
+```
+
+`--format json` writes `{"bucs": [...]}`. Each BUC has `id`, `label`, `stage` (`"2"`,
+`"6A"`, or `null` before stage 0), `stage_name`, `gates` (`stage`, `stage_name`,
+`passed`, `evidence`, and the gap count `gaps`), and `next`: `null` once every gate
+passes, otherwise `stage`, `stage_name`, `question`, `doc`, `asks`, `validate`, and
+`gaps` (`kind`, `id`, `message`).
+
+`next` refuses a model with parse or model errors, as the generators do; run `check`
+first. It exits 0 at every stage.
 
 ---
 

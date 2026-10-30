@@ -7,6 +7,7 @@ mod export;
 mod fmt_cmd;
 mod list_output;
 mod load;
+mod next;
 mod states;
 mod tlc_env;
 mod tlc_output;
@@ -150,6 +151,12 @@ fn main() -> Result<()> {
                 std::process::exit(1);
             }
         }
+
+        Commands::Next {
+            inputs,
+            buc,
+            format,
+        } => next::run_next(&inputs, &buc, format)?,
 
         Commands::Files { inputs } => {
             let files = collect_rdra_files(&inputs)?;

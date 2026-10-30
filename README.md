@@ -32,6 +32,7 @@ same way, and every kind in the language names the check or output that reviews 
 | Command | Reviews |
 |---|---|
 | `check`, `lint` | Type errors, unresolved references, and gaps between layers |
+| `next` | The refinement stage of each BUC, the gaps that block the next stage, and its questions |
 | `diagram` | The RDRA 3.0 diagrams as Mermaid text for a reader that redraws them: system context, requirements, business, UC複合図, business flow, information, conditions, state, events, ER, and the whole RDRA graph |
 | `csv`, `list` | CRUD matrix, permission audit, and element metadata |
 | `states` | Reachable entity states and state rule violations |
@@ -42,7 +43,8 @@ same way, and every kind in the language names the check or output that reviews 
 Refine the model in small stages instead of filling every layer at once. After each
 stage, run `rdra-ish check` on the current `src/` tree and use diagrams or CSV output
 to review only the concern you just added (scope, data touchpoints, boundaries,
-structure, lifecycle, rules).
+structure, lifecycle, rules). `rdra-ish next src/` tells you which stage each BUC has
+reached, which elements block the next stage, and which questions to ask next.
 
 See [Incremental Modeling Flow](./docs/incremental-modeling.md) for stage goals,
 placement rules, and validation commands. For a worked example across seven steps, use
@@ -58,8 +60,9 @@ rdra-ish --help
 ## Quick Start
 
 ```sh
-# 1) Validate model consistency
+# 1) Validate model consistency, and see the next refinement stage of each BUC
 rdra-ish check samples/ec-site
+rdra-ish next samples/ec-site
 
 # 2) Generate diagrams for review
 rdra-ish diagram samples/ec-site --kind context --format mermaid

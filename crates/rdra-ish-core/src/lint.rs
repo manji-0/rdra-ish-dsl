@@ -649,7 +649,9 @@ fn lint_condition_anchors(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
     }
 }
 
-fn refinement_stages(model: &SemanticModel) -> [(&'static str, bool); 6] {
+/// Whether any element of each model layer exists. The coverage score subtracts the missing
+/// ones; `refinement` decides the stage of each BUC.
+fn model_layers(model: &SemanticModel) -> [(&'static str, bool); 6] {
     [
         (
             "scope",
@@ -692,7 +694,7 @@ fn coverage_score_issue(model: &SemanticModel, findings: &[LintIssue]) -> LintIs
             "model",
             "",
             "coverage score: 0/100 across 0 model elements and 0 findings (empty model)",
-            "add actors/BUCs/entities before treating the score as a readiness signal; see stage-readiness",
+            "add actors/BUCs/entities before treating the score as a readiness signal; run `rdra-ish next` for the first stage",
         );
     }
 
@@ -710,60 +712,54 @@ fn coverage_score_issue(model: &SemanticModel, findings: &[LintIssue]) -> LintIs
             LintSeverity::Info => 0,
         })
         .sum();
-    let missing_stages = refinement_stages(model)
-        .iter()
-        .filter(|(_, ok)| !*ok)
-        .count() as i32;
-    let stage_penalty = missing_stages.saturating_mul(8);
+    let missing_layers = model_layers(model).iter().filter(|(_, ok)| !*ok).count() as i32;
+    let layer_penalty = missing_layers.saturating_mul(8);
     // Scale absolute finding penalties by model size so large models are not
     // pinned at 0 while tiny stubs score near 100 for the same density.
     let scaled_finding = (finding_penalty * 25) / elements.max(1) as i32;
-    let score = (100 - scaled_finding - stage_penalty).max(0);
+    let score = (100 - scaled_finding - layer_penalty).max(0);
     LintIssue::new(
         LintSeverity::Info,
         "coverage-score",
         "model",
         "",
         format!(
-            "coverage score: {}/100 across {} model elements and {} findings (finding penalty scaled ×25/elements; {} missing stages × -8)",
+            "coverage score: {}/100 across {} model elements and {} findings (finding penalty scaled ×25/elements; {} missing layers × -8)",
             score,
             elements,
             findings.len(),
-            missing_stages
+            missing_layers
         ),
-        "use warning rows and stage-readiness missing stages as the review backlog; the score is a size-normalized readiness signal",
+        "use warning rows as the review backlog and `rdra-ish next` for each BUC's next stage; the score is a size-normalized readiness signal",
     )
 }
 
 fn stage_readiness_issue(model: &SemanticModel) -> LintIssue {
-    let stages = refinement_stages(model);
-    let ready: Vec<_> = stages
-        .iter()
-        .filter_map(|(stage, ok)| ok.then_some(*stage))
-        .collect();
-    let missing: Vec<_> = stages
-        .iter()
-        .filter_map(|(stage, ok)| (!ok).then_some(*stage))
-        .collect();
+    let progress = crate::refinement::refinement_progress(model);
+    let message = if progress.is_empty() {
+        "no BUC yet; next stage: 0 Scope sketch".to_string()
+    } else {
+        progress
+            .iter()
+            .map(|p| {
+                let stage = p.stage().map_or("-", |stage| stage.number());
+                match p.next_gate() {
+                    Some(gate) => {
+                        format!("{} stage {stage} (next {})", p.buc_id, gate.stage.number())
+                    }
+                    None => format!("{} stage {stage} (every gate passes)", p.buc_id),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("; ")
+    };
     LintIssue::new(
         LintSeverity::Info,
         "stage-readiness",
         "model",
         "",
-        format!(
-            "ready stages: {}; missing stages: {}",
-            if ready.is_empty() {
-                "none".to_string()
-            } else {
-                ready.join("|")
-            },
-            if missing.is_empty() {
-                "none".to_string()
-            } else {
-                missing.join("|")
-            }
-        ),
-        "use missing stages to decide the next modeling refinement pass",
+        message,
+        "run `rdra-ish next` for each BUC's gaps, the questions to ask, and the commands that review the next stage",
     )
 }
 
@@ -1133,14 +1129,14 @@ entity Order "Order" {
     }
 
     #[test]
-    fn coverage_score_penalizes_missing_stages_for_tiny_models() {
+    fn coverage_score_penalizes_missing_layers_for_tiny_models() {
         let model = model_from(r#"actor Solo "Solo""#);
         let issues = lint_issues(&model, &[]);
         let score = issues
             .iter()
             .find(|i| i.rule == "coverage-score")
             .expect("coverage-score");
-        // orphan warning scaled by elements + 6 missing stages × -8 = large penalty
+        // orphan warning scaled by elements + 6 missing layers × -8 = large penalty
         let numeric: i32 = score
             .message
             .strip_prefix("coverage score: ")
@@ -1153,7 +1149,7 @@ entity Order "Order" {
             numeric,
             score.message
         );
-        assert!(score.message.contains("missing stages"));
+        assert!(score.message.contains("missing layers"));
         assert!(score.message.contains("scaled"));
     }
 

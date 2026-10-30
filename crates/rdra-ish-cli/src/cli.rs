@@ -117,6 +117,12 @@ pub(crate) enum ListKind {
     BusinessInputs,
 }
 
+#[derive(ValueEnum, Clone, Copy)]
+pub(crate) enum NextFormat {
+    Text,
+    Json,
+}
+
 #[derive(ValueEnum, Clone)]
 pub(crate) enum ListFormat {
     Table,
@@ -202,6 +208,17 @@ pub(crate) enum Commands {
         /// Output format: table, json, csv
         #[arg(long, default_value = "table")]
         format: ListFormat,
+    },
+    /// Show the incremental modeling stage of each BUC, and what the next stage asks for
+    Next {
+        #[arg(required = true)]
+        inputs: Vec<PathBuf>,
+        /// Show only these BUCs (by id); repeatable
+        #[arg(long)]
+        buc: Vec<String>,
+        /// Output format: text or json
+        #[arg(long, default_value = "text")]
+        format: NextFormat,
     },
     /// Print the .rdra files the inputs load, one per line, in load order
     Files {
