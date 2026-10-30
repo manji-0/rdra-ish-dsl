@@ -1,6 +1,6 @@
 # Proposal: referencing another system's model
 
-Status: draft for review, revision 2. Nothing here is implemented.
+Status: accepted design, revision 3. Nothing here is implemented yet.
 
 <!-- constrained-by ../language-reference.md#modules-and-imports -->
 <!-- constrained-by ../rdra-ish-interpretation.md -->
@@ -162,6 +162,7 @@ Mistakes get a diagnostic that names the fix:
 | `invokes(X, Auth.Login).as_service(ShopBackend)` | `CallerKindRejected` |
 | a call whose principal lacks the permission | `MissingPermission`, naming the call and its principal |
 | `holds(X, Auth.SessionView.status == expired)` | `UnreachableForeignValue` |
+| `reads(X, Auth.Session)` after the owner wrote `shares(AuthSystem, Session)` | `DirectEntityReference` (warning) |
 
 ### Git, offline, and CI
 
@@ -178,6 +179,7 @@ rdra-ish check .              # never uses the network
 |---|---|---|
 | Unit of foreignness | A model is a directory with `rdra.toml`, found by walking up from the inputs. Without a manifest the tool behaves as today. | A module is one file and too small. |
 | What a reference may read | Exposed use cases and events, and published entities. Internal entities are never visible. | The user's rule. A product learns foreign state from events and published entities. |
+| Shared internal entities | Only with the owner's `shares(System, Entity)`, at the cost of warnings on both sides, columns pinned in the lock, and havoc in the product's lifecycle. | The user's rule: direct references are basically forbidden and allowed through special vocabulary. The owner decides. |
 | Published entities | `exposes(System, Entity).append()` allows `creates` and `sets`. `.upsert()` also allows `updates` and `writes`. `deletes` and `transitions` are errors. The owner never reads one. A published row is written in the transaction of the internal change it reports. | Today a write to an entity that has no key to the changed entity lands in a separate lifecycle action (`Login_1`, `Login_2`), so the published row could disagree with the internal state. The rule keeps them in one action. |
 | Binding | `extsystem Auth "..." from auth.AuthSystem`. Their `system` is our external system. | No new kind. The closure, the diagrams, AsyncAPI, and the extsystem lint rules already treat an extsystem as the environment. |
 | Calls | `invokes(UseCase, Auth.Login)`. Inbound reactions use `triggers(Auth.Event, UseCase)`. A call is a product step with no product write: it may have no effect in the product's own state. | `tx.rs` groups only `invokes` whose target is an `api`, so the widened form adds no atomic write. A remote call is not atomic with local writes. |
@@ -206,7 +208,7 @@ Each PR is useful on its own and verified through the CLI.
 1. One loader: `core::project`, the manifest walk-up, CLI and LSP through it. Every sample
    gives byte-identical output.
 2. Publish (the owner can adopt this alone): `exposes` with `.append()`, `.upsert()`, and
-   `.caller()`; the published-entity rules; the same-transaction rule (today's `Login_1` and
+   `.caller()`; `shares`; the published-entity rules; the same-transaction rule (today's `Login_1` and
    `Login_2` become one TLA+ action); `list --kind surface`.
 3. Path dependency, binding, and references: `extsystem ... from`, the partitioned stubs, the
    two new grammar forms, the reference diagnostics, `ForeignWrite`, widened `invokes`, the
@@ -224,17 +226,21 @@ Each PR is useful on its own and verified through the CLI.
 Later: LSP navigation into the owner's files, fairness promises from an owner, column subsets
 of a published entity.
 
-## Open questions
+## Decided after review
 
-1. Should there be a way to reference an internal entity directly? Options: none (publish a
-   projection instead), a consumer-side `unpublished(Auth.Session)` with a permanent warning,
-   or an owner-side `shares(AuthSystem, Session)` that the owner must consent to.
-2. Should the owner state who may call per use case (`.caller(...)`) or per permission
-   (`holder actor | service`)?
-3. Should a published upsert entity also publish its state edges, so a product can rely on
-   "an ended session never becomes active again", or stay writer-only (sound, with more false
-   alarms)?
-4. Should environment pacing of event-started use cases also apply to external systems
-   without `from`? That changes some existing sample results.
-5. May `rev` name a branch, or only a tag or a commit?
-6. Should any surface change fail `check`, or only a change to the lines the product uses?
+1. A product references an internal entity only when its owner consents with
+   `shares(AuthSystem, Session)`. The owner's `check` reports `SharedInternalEntity` (warning)
+   for as long as the line stays. Every product use of a shared entity reports
+   `DirectEntityReference` (warning), the entity's columns enter the surface and so the lock,
+   and the product's lifecycle treats every value of a shared column as reachable at any time.
+   A product cannot key to a shared entity. Without `shares`, `Auth.Session` stays `NotExposed`.
+2. The owner states who may call per use case with `.caller(actor | system | any)`, default
+   `actor`.
+3. A published upsert entity publishes its writers only, not state edges. Safety results stay
+   sound and may report more alarms than the owner's real behaviour allows.
+4. Environment pacing of event-started use cases applies only to external systems bound with
+   `from`. Existing samples keep their results.
+5. A git `rev` names a tag or a commit. A branch is `GitRevIsBranch` (error), with the hint to
+   pin a tag or a commit.
+6. Any change to a dependency's surface fails `check`. The diff marks the lines the product
+   uses.
