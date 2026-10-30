@@ -31,7 +31,6 @@
 ```sh
 rdra-ish check samples/incremental-order/step-0-scope/src
 rdra-ish diagram samples/incremental-order/step-0-scope/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-0-scope/out/object_graph_buc_store_restock
-rdra-ish diagram samples/incremental-order/step-0-scope/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-0-scope/out/sequence_buc_store_restock
 rdra-ish csv samples/incremental-order/step-0-scope/src --kind matrix --out samples/incremental-order/step-0-scope/out/usecase_matrix.csv
 ```
 
@@ -43,6 +42,7 @@ rdra-ish csv samples/incremental-order/step-0-scope/src --kind matrix --out samp
 rdra-ish diagram samples/incremental-order/step-0-scope/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-0-scope/out/object_graph_buc_store_restock
 ```
 
+<!-- embed: out/object_graph_buc_store_restock.mmd -->
 ```mermaid
 %% rdra-ish diagram=rdra scope=buc:BucStoreRestock model=samples/incremental-order/step-0-scope/src
 %% layers: environment=システム外部環境

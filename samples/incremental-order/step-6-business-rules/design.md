@@ -35,7 +35,6 @@ forbidden と invariant で状態制約を追加する。
 ```sh
 rdra-ish check samples/incremental-order/step-6-business-rules/src
 rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-6-business-rules/out/object_graph_buc_store_restock
-rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-6-business-rules/out/sequence_buc_store_restock
 rdra-ish csv samples/incremental-order/step-6-business-rules/src --kind matrix --out samples/incremental-order/step-6-business-rules/out/usecase_matrix.csv
 rdra-ish csv samples/incremental-order/step-6-business-rules/src --kind screen-constraints --out samples/incremental-order/step-6-business-rules/out/screen_constraints.csv
 rdra-ish csv samples/incremental-order/step-6-business-rules/src --kind actor-permission-audit --out samples/incremental-order/step-6-business-rules/out/actor_permission_audit.csv
@@ -49,6 +48,7 @@ rdra-ish csv samples/incremental-order/step-6-business-rules/src --kind actor-pe
 rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-6-business-rules/out/object_graph_buc_store_restock
 ```
 
+<!-- embed: out/object_graph_buc_store_restock.mmd -->
 ```mermaid
 %% rdra-ish diagram=rdra scope=buc:BucStoreRestock model=samples/incremental-order/step-6-business-rules/src
 %% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
@@ -120,55 +120,6 @@ flowchart LR
   classDef state stroke:#333;
 ```
 
-### 4.2 Sequence 図
-
-生成コマンド:
-
-```sh
-rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-6-business-rules/out/sequence_buc_store_restock
-```
-
-```mermaid
-sequenceDiagram
-  box System Value
-    actor OpsStaff as 👤 Operations Staff
-  end
-  box System Boundary
-    participant StoreMaintenanceScreen as 🖥️ Store Maintenance
-  end
-  box System
-    participant System as 🧩 システム
-    participant OrganizationLookupApi as 🔌 Organization Lookup API
-    participant StoreAdminApi as 🔌 Store Admin API
-    participant Organization as 🗄️ Organization
-    participant Store as 🗄️ Store
-  end
-
-  Note over OpsStaff,Store: ✅ Block Scheduled Restock
-  OpsStaff->System: ✅ Block Scheduled Restock
-  activate System
-  System->>Store: update
-  System-->>OpsStaff: 🖥️ Store Maintenance
-  deactivate System
-
-  Note over OpsStaff,Store: ✅ Change Next Restock Date
-  OpsStaff->System: ✅ Change Next Restock Date
-  activate System
-  System->>Store: update
-  System-->>OpsStaff: 🖥️ Store Maintenance
-  deactivate System
-
-  Note over OpsStaff,Store: ✅ Change Store Parent Organization
-  OpsStaff->>StoreMaintenanceScreen: ✅ Change Store Parent Organization
-  StoreMaintenanceScreen->>StoreAdminApi: ✅ Change Store Parent Organization
-  activate StoreAdminApi
-  OrganizationLookupApi->>Organization: read
-  StoreAdminApi->>Store: update
-  StoreAdminApi-->>StoreMaintenanceScreen: 🖥️ Store Maintenance
-  StoreMaintenanceScreen-->>OpsStaff: 🖥️ Store Maintenance
-  deactivate StoreAdminApi
-```
-
 ### 4.3 ER 図
 
 生成コマンド:
@@ -177,6 +128,7 @@ sequenceDiagram
 rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind er --format mermaid --out samples/incremental-order/step-6-business-rules/out/er
 ```
 
+<!-- embed: out/er.mmd -->
 ```mermaid
 erDiagram
   Organization {
@@ -203,6 +155,7 @@ erDiagram
 rdra-ish diagram samples/incremental-order/step-6-business-rules/src --kind state --format mermaid --out samples/incremental-order/step-6-business-rules/out/state
 ```
 
+<!-- embed: out/state.mmd -->
 ```mermaid
 %% rdra-ish diagram=state scope=whole model=samples/incremental-order/step-6-business-rules/src
 %% kinds: statemodel state usecase
@@ -221,6 +174,7 @@ stateDiagram-v2
 
 ### 4.5 Usecase CRUD matrix
 
+<!-- embed: out/usecase_matrix.csv -->
 ```csv
 UseCase,Organization,Store
 BlockScheduledRestock,,U
@@ -230,6 +184,7 @@ ChangeStoreParentOrganization,,
 
 ### 4.6 API CRUD matrix
 
+<!-- embed: out/api_matrix.csv -->
 ```csv
 Api,Organization,Store
 OrganizationLookupApi,R,
@@ -238,19 +193,20 @@ StoreAdminApi,,U
 
 ### 4.7 Store 状態到達表
 
+<!-- embed: out/states_store.txt -->
 ```text
 Entity: Store (Store)
-  axes: restock_status[normal|scheduled|blocked], next_restock_date[null|present:timestamptz]
+  axes: restock_status[normal|scheduled|blocked], next_restock_date[null|present]
 
-  RESTOCK_STATUS  NEXT_RESTOCK_DATE    INITIAL  TERMINAL  VIA
-  ──────────────  ───────────────────  ───────  ────────  ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  normal          null                 yes      no        BucStoreRestock/ChangeStoreParentOrganization
-  scheduled       present:timestamptz  no       no        BucStoreRestock/ChangeNextRestockDate, BucStoreRestock/ChangeStoreParentOrganization
-  blocked         null                 no       yes       BucStoreRestock/BlockScheduledRestock, BucStoreRestock/ChangeNextRestockDate, BucStoreRestock/ChangeStoreParentOrganization
+  RESTOCK_STATUS  NEXT_RESTOCK_DATE  INITIAL  TERMINAL  VIA
+  ──────────────  ─────────────────  ───────  ────────  ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  normal          null               yes      no        BucStoreRestock/ChangeStoreParentOrganization
+  scheduled       present            no       no        BucStoreRestock/ChangeNextRestockDate, BucStoreRestock/ChangeStoreParentOrganization
+  blocked         null               no       yes       BucStoreRestock/BlockScheduledRestock, BucStoreRestock/ChangeNextRestockDate, BucStoreRestock/ChangeStoreParentOrganization
 
   reachable: 3 / bound: 6
   diagnostics:
-    [info] no creates(...) found; seeded from column defaults
+    [info][NoCreationPath_Store] no creates(...) found; seeded from column defaults
 ```
 
 ## 5. レビュー観点

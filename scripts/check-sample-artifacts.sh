@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Regenerate every committed sample artifact listed in scripts/sample-artifacts.tsv
-# and fail when the result differs from what is committed.
+# Regenerate every committed sample artifact listed in scripts/sample-artifacts.tsv, and the
+# sample documents that embed them, and fail when the result differs from what is committed.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -25,6 +25,11 @@ while IFS=$'\t' read -r out cmd; do
     *) "$bin" "${args[@]}" --out "$out" ;;
   esac
 done <"$manifest"
+
+# The documents that embed the artifacts above.
+python3 -I scripts/embed-sample-artifacts.py
+python3 -I scripts/gen-clinic-ops-design-sample.py
+outputs+=(samples/incremental-order/step-*/design.md samples/clinic-ops/design-sample.md)
 
 if ! git diff --quiet -- "${outputs[@]}"; then
   echo "sample artifacts changed; review and commit the generated diff if intentional" >&2

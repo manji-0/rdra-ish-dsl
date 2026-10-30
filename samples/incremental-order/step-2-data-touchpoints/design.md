@@ -33,7 +33,6 @@
 ```sh
 rdra-ish check samples/incremental-order/step-2-data-touchpoints/src
 rdra-ish diagram samples/incremental-order/step-2-data-touchpoints/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-2-data-touchpoints/out/object_graph_buc_store_restock
-rdra-ish diagram samples/incremental-order/step-2-data-touchpoints/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-2-data-touchpoints/out/sequence_buc_store_restock
 rdra-ish csv samples/incremental-order/step-2-data-touchpoints/src --kind matrix --out samples/incremental-order/step-2-data-touchpoints/out/usecase_matrix.csv
 ```
 
@@ -45,6 +44,7 @@ rdra-ish csv samples/incremental-order/step-2-data-touchpoints/src --kind matrix
 rdra-ish diagram samples/incremental-order/step-2-data-touchpoints/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-2-data-touchpoints/out/object_graph_buc_store_restock
 ```
 
+<!-- embed: out/object_graph_buc_store_restock.mmd -->
 ```mermaid
 %% rdra-ish diagram=rdra scope=buc:BucStoreRestock model=samples/incremental-order/step-2-data-touchpoints/src
 %% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
@@ -82,39 +82,6 @@ flowchart LR
   classDef entity stroke:#333;
 ```
 
-### 4.2 Sequence 図
-
-生成コマンド:
-
-```sh
-rdra-ish diagram samples/incremental-order/step-2-data-touchpoints/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-2-data-touchpoints/out/sequence_buc_store_restock
-```
-
-```mermaid
-sequenceDiagram
-  box System Value
-    actor OpsStaff as 👤 Operations Staff
-  end
-  box System
-    participant System as 🧩 システム
-    participant Organization as 🗄️ Organization
-    participant Store as 🗄️ Store
-  end
-
-  Note over OpsStaff,Store: ✅ Change Next Restock Date
-  OpsStaff->System: ✅ Change Next Restock Date
-  activate System
-  System->>Store: update
-  deactivate System
-
-  Note over OpsStaff,Store: ✅ Change Store Parent Organization
-  OpsStaff->System: ✅ Change Store Parent Organization
-  activate System
-  System->>Organization: read
-  System->>Store: update
-  deactivate System
-```
-
 ### 4.3 ER 図
 
 生成コマンド:
@@ -123,6 +90,7 @@ sequenceDiagram
 rdra-ish diagram samples/incremental-order/step-2-data-touchpoints/src --kind er --format mermaid --out samples/incremental-order/step-2-data-touchpoints/out/er
 ```
 
+<!-- embed: out/er.mmd -->
 ```mermaid
 erDiagram
   Organization {
@@ -135,6 +103,7 @@ erDiagram
 
 ### 4.5 Usecase CRUD matrix
 
+<!-- embed: out/usecase_matrix.csv -->
 ```csv
 UseCase,Organization,Store
 ChangeNextRestockDate,,U
@@ -143,6 +112,7 @@ ChangeStoreParentOrganization,R,U
 
 ### 4.7 Store 状態到達表
 
+<!-- embed: out/states_store.txt -->
 ```text
 Entity: Store (Store)
   (no state axes)

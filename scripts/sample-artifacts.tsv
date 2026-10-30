@@ -31,6 +31,42 @@ samples/ec-site/out/rdra_buc_bucpayment.mmd	diagram samples/ec-site --kind rdra 
 samples/ec-site/out/rdra_whole.mmd	diagram samples/ec-site --kind rdra --format mermaid
 samples/ec-site/out/state.mmd	diagram samples/ec-site --kind state --format mermaid
 samples/ec-site/out/states.csv	states samples/ec-site --format csv
+samples/incremental-order/step-0-scope/out/api_matrix.csv	csv samples/incremental-order/step-0-scope/src --kind api-matrix
+samples/incremental-order/step-0-scope/out/object_graph_buc_store_restock.mmd	diagram samples/incremental-order/step-0-scope/src --kind rdra --format mermaid --buc BucStoreRestock
+samples/incremental-order/step-0-scope/out/screen_constraints.csv	csv samples/incremental-order/step-0-scope/src --kind screen-constraints
+samples/incremental-order/step-0-scope/out/usecase_matrix.csv	csv samples/incremental-order/step-0-scope/src --kind matrix
+samples/incremental-order/step-1-buc-skeleton/out/api_matrix.csv	csv samples/incremental-order/step-1-buc-skeleton/src --kind api-matrix
+samples/incremental-order/step-1-buc-skeleton/out/object_graph_buc_store_restock.mmd	diagram samples/incremental-order/step-1-buc-skeleton/src --kind rdra --format mermaid --buc BucStoreRestock
+samples/incremental-order/step-1-buc-skeleton/out/screen_constraints.csv	csv samples/incremental-order/step-1-buc-skeleton/src --kind screen-constraints
+samples/incremental-order/step-1-buc-skeleton/out/usecase_matrix.csv	csv samples/incremental-order/step-1-buc-skeleton/src --kind matrix
+samples/incremental-order/step-2-data-touchpoints/out/api_matrix.csv	csv samples/incremental-order/step-2-data-touchpoints/src --kind api-matrix
+samples/incremental-order/step-2-data-touchpoints/out/er.mmd	diagram samples/incremental-order/step-2-data-touchpoints/src --kind er --format mermaid
+samples/incremental-order/step-2-data-touchpoints/out/object_graph_buc_store_restock.mmd	diagram samples/incremental-order/step-2-data-touchpoints/src --kind rdra --format mermaid --buc BucStoreRestock
+samples/incremental-order/step-2-data-touchpoints/out/screen_constraints.csv	csv samples/incremental-order/step-2-data-touchpoints/src --kind screen-constraints
+samples/incremental-order/step-2-data-touchpoints/out/states_store.txt	states samples/incremental-order/step-2-data-touchpoints/src --format table --entity Store
+samples/incremental-order/step-2-data-touchpoints/out/usecase_matrix.csv	csv samples/incremental-order/step-2-data-touchpoints/src --kind matrix
+samples/incremental-order/step-3-interaction-boundary/out/actor_permission_audit.csv	csv samples/incremental-order/step-3-interaction-boundary/src --kind actor-permission-audit
+samples/incremental-order/step-3-interaction-boundary/out/api_matrix.csv	csv samples/incremental-order/step-3-interaction-boundary/src --kind api-matrix
+samples/incremental-order/step-3-interaction-boundary/out/er.mmd	diagram samples/incremental-order/step-3-interaction-boundary/src --kind er --format mermaid
+samples/incremental-order/step-3-interaction-boundary/out/object_graph_buc_store_restock.mmd	diagram samples/incremental-order/step-3-interaction-boundary/src --kind rdra --format mermaid --buc BucStoreRestock
+samples/incremental-order/step-3-interaction-boundary/out/screen_constraints.csv	csv samples/incremental-order/step-3-interaction-boundary/src --kind screen-constraints
+samples/incremental-order/step-3-interaction-boundary/out/states_store.txt	states samples/incremental-order/step-3-interaction-boundary/src --format table --entity Store
+samples/incremental-order/step-3-interaction-boundary/out/usecase_matrix.csv	csv samples/incremental-order/step-3-interaction-boundary/src --kind matrix
+samples/incremental-order/step-4-entity-structure/out/actor_permission_audit.csv	csv samples/incremental-order/step-4-entity-structure/src --kind actor-permission-audit
+samples/incremental-order/step-4-entity-structure/out/api_matrix.csv	csv samples/incremental-order/step-4-entity-structure/src --kind api-matrix
+samples/incremental-order/step-4-entity-structure/out/er.mmd	diagram samples/incremental-order/step-4-entity-structure/src --kind er --format mermaid
+samples/incremental-order/step-4-entity-structure/out/object_graph_buc_store_restock.mmd	diagram samples/incremental-order/step-4-entity-structure/src --kind rdra --format mermaid --buc BucStoreRestock
+samples/incremental-order/step-4-entity-structure/out/screen_constraints.csv	csv samples/incremental-order/step-4-entity-structure/src --kind screen-constraints
+samples/incremental-order/step-4-entity-structure/out/states_store.txt	states samples/incremental-order/step-4-entity-structure/src --format table --entity Store
+samples/incremental-order/step-4-entity-structure/out/usecase_matrix.csv	csv samples/incremental-order/step-4-entity-structure/src --kind matrix
+samples/incremental-order/step-5-lifecycle/out/actor_permission_audit.csv	csv samples/incremental-order/step-5-lifecycle/src --kind actor-permission-audit
+samples/incremental-order/step-5-lifecycle/out/api_matrix.csv	csv samples/incremental-order/step-5-lifecycle/src --kind api-matrix
+samples/incremental-order/step-5-lifecycle/out/er.mmd	diagram samples/incremental-order/step-5-lifecycle/src --kind er --format mermaid
+samples/incremental-order/step-5-lifecycle/out/object_graph_buc_store_restock.mmd	diagram samples/incremental-order/step-5-lifecycle/src --kind rdra --format mermaid --buc BucStoreRestock
+samples/incremental-order/step-5-lifecycle/out/screen_constraints.csv	csv samples/incremental-order/step-5-lifecycle/src --kind screen-constraints
+samples/incremental-order/step-5-lifecycle/out/state.mmd	diagram samples/incremental-order/step-5-lifecycle/src --kind state --format mermaid
+samples/incremental-order/step-5-lifecycle/out/states_store.txt	states samples/incremental-order/step-5-lifecycle/src --format table --entity Store
+samples/incremental-order/step-5-lifecycle/out/usecase_matrix.csv	csv samples/incremental-order/step-5-lifecycle/src --kind matrix
 samples/incremental-order/step-6-business-rules/out/actor_permission_audit.csv	csv samples/incremental-order/step-6-business-rules/src --kind actor-permission-audit
 samples/incremental-order/step-6-business-rules/out/api_matrix.csv	csv samples/incremental-order/step-6-business-rules/src --kind api-matrix
 samples/incremental-order/step-6-business-rules/out/asyncapi.json	export samples/incremental-order/step-6-business-rules/src --kind asyncapi

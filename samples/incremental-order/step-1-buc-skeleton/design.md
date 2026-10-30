@@ -32,7 +32,6 @@ actor と user-visible usecase を追加する。
 ```sh
 rdra-ish check samples/incremental-order/step-1-buc-skeleton/src
 rdra-ish diagram samples/incremental-order/step-1-buc-skeleton/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-1-buc-skeleton/out/object_graph_buc_store_restock
-rdra-ish diagram samples/incremental-order/step-1-buc-skeleton/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-1-buc-skeleton/out/sequence_buc_store_restock
 rdra-ish csv samples/incremental-order/step-1-buc-skeleton/src --kind matrix --out samples/incremental-order/step-1-buc-skeleton/out/usecase_matrix.csv
 ```
 
@@ -44,6 +43,7 @@ rdra-ish csv samples/incremental-order/step-1-buc-skeleton/src --kind matrix --o
 rdra-ish diagram samples/incremental-order/step-1-buc-skeleton/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-1-buc-skeleton/out/object_graph_buc_store_restock
 ```
 
+<!-- embed: out/object_graph_buc_store_restock.mmd -->
 ```mermaid
 %% rdra-ish diagram=rdra scope=buc:BucStoreRestock model=samples/incremental-order/step-1-buc-skeleton/src
 %% layers: value=システム価値 environment=システム外部環境 boundary=システム境界

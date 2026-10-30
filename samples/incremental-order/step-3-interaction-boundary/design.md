@@ -26,7 +26,7 @@
 |---|---|
 | ChangeNextRestockDate は direct CRUD のまま残す | 店舗単体更新であり、独立 API を導入するほどの整合性境界がまだない |
 | ChangeStoreParentOrganization は invokes を使う | 組織参照と店舗更新が関わり、後続で system 境界診断の対象になるため |
-| read-only API を API matrix で確認する | sequence と matrix の両方で境界をレビューするため |
+| read-only API を API matrix で確認する | API ごとの CRUD と、`check` が出す境界診断で境界をレビューするため |
 | Screen 制約は直接書かない | `displays` と `invokes` から UC/API の `requires_*` を導出できるため |
 
 ## 4. 生成成果物
@@ -36,7 +36,6 @@
 ```sh
 rdra-ish check samples/incremental-order/step-3-interaction-boundary/src
 rdra-ish diagram samples/incremental-order/step-3-interaction-boundary/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-3-interaction-boundary/out/object_graph_buc_store_restock
-rdra-ish diagram samples/incremental-order/step-3-interaction-boundary/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-3-interaction-boundary/out/sequence_buc_store_restock
 rdra-ish csv samples/incremental-order/step-3-interaction-boundary/src --kind matrix --out samples/incremental-order/step-3-interaction-boundary/out/usecase_matrix.csv
 rdra-ish csv samples/incremental-order/step-3-interaction-boundary/src --kind screen-constraints --out samples/incremental-order/step-3-interaction-boundary/out/screen_constraints.csv
 rdra-ish csv samples/incremental-order/step-3-interaction-boundary/src --kind actor-permission-audit --out samples/incremental-order/step-3-interaction-boundary/out/actor_permission_audit.csv
@@ -44,6 +43,7 @@ rdra-ish csv samples/incremental-order/step-3-interaction-boundary/src --kind ac
 
 ### 4.0 Screen 制約パターン
 
+<!-- embed: out/screen_constraints.csv -->
 ```csv
 screen_id,usecase_id,api_id,required_permissions,required_media
 StoreMaintenanceScreen,ChangeNextRestockDate,,StoreMaintenanceWrite,OpsConsole
@@ -53,6 +53,7 @@ StoreMaintenanceScreen,ChangeStoreParentOrganization,StoreAdminApi,StoreMaintena
 
 ### 4.1 Actor 権限割当監査
 
+<!-- embed: out/actor_permission_audit.csv -->
 ```csv
 actor_id,actor_label,permission_id,permission_label,assigned,required,status,required_usecase_ids,required_api_paths
 OpsStaff,Operations Staff,StoreMaintenanceWrite,Store Maintenance Write,true,true,ok,ChangeNextRestockDate|ChangeStoreParentOrganization,ChangeStoreParentOrganization->StoreAdminApi
@@ -66,6 +67,7 @@ OpsStaff,Operations Staff,StoreMaintenanceWrite,Store Maintenance Write,true,tru
 rdra-ish diagram samples/incremental-order/step-3-interaction-boundary/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-3-interaction-boundary/out/object_graph_buc_store_restock
 ```
 
+<!-- embed: out/object_graph_buc_store_restock.mmd -->
 ```mermaid
 %% rdra-ish diagram=rdra scope=buc:BucStoreRestock model=samples/incremental-order/step-3-interaction-boundary/src
 %% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
@@ -124,48 +126,6 @@ flowchart LR
   classDef entity stroke:#333;
 ```
 
-### 4.3 Sequence 図
-
-生成コマンド:
-
-```sh
-rdra-ish diagram samples/incremental-order/step-3-interaction-boundary/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-3-interaction-boundary/out/sequence_buc_store_restock
-```
-
-```mermaid
-sequenceDiagram
-  box System Value
-    actor OpsStaff as 👤 Operations Staff
-  end
-  box System Boundary
-    participant StoreMaintenanceScreen as 🖥️ Store Maintenance
-  end
-  box System
-    participant System as 🧩 システム
-    participant OrganizationLookupApi as 🔌 Organization Lookup API
-    participant StoreAdminApi as 🔌 Store Admin API
-    participant Organization as 🗄️ Organization
-    participant Store as 🗄️ Store
-  end
-
-  Note over OpsStaff,Store: ✅ Change Next Restock Date
-  OpsStaff->System: ✅ Change Next Restock Date
-  activate System
-  System->>Store: update
-  System-->>OpsStaff: 🖥️ Store Maintenance
-  deactivate System
-
-  Note over OpsStaff,Store: ✅ Change Store Parent Organization
-  OpsStaff->>StoreMaintenanceScreen: ✅ Change Store Parent Organization
-  StoreMaintenanceScreen->>StoreAdminApi: ✅ Change Store Parent Organization
-  activate StoreAdminApi
-  OrganizationLookupApi->>Organization: read
-  StoreAdminApi->>Store: update
-  StoreAdminApi-->>StoreMaintenanceScreen: 🖥️ Store Maintenance
-  StoreMaintenanceScreen-->>OpsStaff: 🖥️ Store Maintenance
-  deactivate StoreAdminApi
-```
-
 ### 4.4 ER 図
 
 生成コマンド:
@@ -174,6 +134,7 @@ sequenceDiagram
 rdra-ish diagram samples/incremental-order/step-3-interaction-boundary/src --kind er --format mermaid --out samples/incremental-order/step-3-interaction-boundary/out/er
 ```
 
+<!-- embed: out/er.mmd -->
 ```mermaid
 erDiagram
   Organization {
@@ -186,6 +147,7 @@ erDiagram
 
 ### 4.5 Usecase CRUD matrix
 
+<!-- embed: out/usecase_matrix.csv -->
 ```csv
 UseCase,Organization,Store
 ChangeNextRestockDate,,U
@@ -194,6 +156,7 @@ ChangeStoreParentOrganization,,
 
 ### 4.6 API CRUD matrix
 
+<!-- embed: out/api_matrix.csv -->
 ```csv
 Api,Organization,Store
 OrganizationLookupApi,R,
@@ -202,6 +165,7 @@ StoreAdminApi,,U
 
 ### 4.7 Store 状態到達表
 
+<!-- embed: out/states_store.txt -->
 ```text
 Entity: Store (Store)
   (no state axes)

@@ -33,7 +33,6 @@ columns、ER、境界越え coordination を追加する。
 ```sh
 rdra-ish check samples/incremental-order/step-4-entity-structure/src
 rdra-ish diagram samples/incremental-order/step-4-entity-structure/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-4-entity-structure/out/object_graph_buc_store_restock
-rdra-ish diagram samples/incremental-order/step-4-entity-structure/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-4-entity-structure/out/sequence_buc_store_restock
 rdra-ish csv samples/incremental-order/step-4-entity-structure/src --kind matrix --out samples/incremental-order/step-4-entity-structure/out/usecase_matrix.csv
 rdra-ish csv samples/incremental-order/step-4-entity-structure/src --kind screen-constraints --out samples/incremental-order/step-4-entity-structure/out/screen_constraints.csv
 rdra-ish csv samples/incremental-order/step-4-entity-structure/src --kind actor-permission-audit --out samples/incremental-order/step-4-entity-structure/out/actor_permission_audit.csv
@@ -47,6 +46,7 @@ rdra-ish csv samples/incremental-order/step-4-entity-structure/src --kind actor-
 rdra-ish diagram samples/incremental-order/step-4-entity-structure/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-4-entity-structure/out/object_graph_buc_store_restock
 ```
 
+<!-- embed: out/object_graph_buc_store_restock.mmd -->
 ```mermaid
 %% rdra-ish diagram=rdra scope=buc:BucStoreRestock model=samples/incremental-order/step-4-entity-structure/src
 %% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
@@ -106,48 +106,6 @@ flowchart LR
   classDef entity stroke:#333;
 ```
 
-### 4.2 Sequence 図
-
-生成コマンド:
-
-```sh
-rdra-ish diagram samples/incremental-order/step-4-entity-structure/src --kind sequence --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-4-entity-structure/out/sequence_buc_store_restock
-```
-
-```mermaid
-sequenceDiagram
-  box System Value
-    actor OpsStaff as 👤 Operations Staff
-  end
-  box System Boundary
-    participant StoreMaintenanceScreen as 🖥️ Store Maintenance
-  end
-  box System
-    participant System as 🧩 システム
-    participant OrganizationLookupApi as 🔌 Organization Lookup API
-    participant StoreAdminApi as 🔌 Store Admin API
-    participant Organization as 🗄️ Organization
-    participant Store as 🗄️ Store
-  end
-
-  Note over OpsStaff,Store: ✅ Change Next Restock Date
-  OpsStaff->System: ✅ Change Next Restock Date
-  activate System
-  System->>Store: update
-  System-->>OpsStaff: 🖥️ Store Maintenance
-  deactivate System
-
-  Note over OpsStaff,Store: ✅ Change Store Parent Organization
-  OpsStaff->>StoreMaintenanceScreen: ✅ Change Store Parent Organization
-  StoreMaintenanceScreen->>StoreAdminApi: ✅ Change Store Parent Organization
-  activate StoreAdminApi
-  OrganizationLookupApi->>Organization: read
-  StoreAdminApi->>Store: update
-  StoreAdminApi-->>StoreMaintenanceScreen: 🖥️ Store Maintenance
-  StoreMaintenanceScreen-->>OpsStaff: 🖥️ Store Maintenance
-  deactivate StoreAdminApi
-```
-
 ### 4.3 ER 図
 
 生成コマンド:
@@ -156,6 +114,7 @@ sequenceDiagram
 rdra-ish diagram samples/incremental-order/step-4-entity-structure/src --kind er --format mermaid --out samples/incremental-order/step-4-entity-structure/out/er
 ```
 
+<!-- embed: out/er.mmd -->
 ```mermaid
 erDiagram
   Organization {
@@ -174,6 +133,7 @@ erDiagram
 
 ### 4.5 Usecase CRUD matrix
 
+<!-- embed: out/usecase_matrix.csv -->
 ```csv
 UseCase,Organization,Store
 ChangeNextRestockDate,,U
@@ -182,6 +142,7 @@ ChangeStoreParentOrganization,,
 
 ### 4.6 API CRUD matrix
 
+<!-- embed: out/api_matrix.csv -->
 ```csv
 Api,Organization,Store
 OrganizationLookupApi,R,
@@ -190,6 +151,7 @@ StoreAdminApi,,U
 
 ### 4.7 Store 状態到達表
 
+<!-- embed: out/states_store.txt -->
 ```text
 Entity: Store (Store)
   (no state axes)
