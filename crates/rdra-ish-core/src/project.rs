@@ -1,7 +1,4 @@
 //! The project loader the CLI, the LSP, and the tests share.
-//!
-//! A project is the entry files a command was given, the include paths those files imply, the
-//! resolved program and merged model, and the `rdra.toml` manifest found above the inputs.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
@@ -13,7 +10,6 @@ use crate::{build_merged_model, resolve_overlaid, Diagnostic, ResolvedProgram, S
 
 pub const MANIFEST_FILE: &str = "rdra.toml";
 
-/// The parsed `rdra.toml`. Nothing reads `dependencies` yet.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Manifest {
     #[serde(skip)]
@@ -102,8 +98,7 @@ pub fn collect_rdra_files(
     Ok(files)
 }
 
-/// Include paths: the parent and the grandparent of each canonical entry file. This lets
-/// `shared/actors.rdra` resolve from a root that holds both `shared/` and `buc/`.
+/// Include paths: the parent and the grandparent of each canonical entry file.
 pub fn root_include_paths(files: &[PathBuf]) -> Vec<PathBuf> {
     let mut seen: HashSet<PathBuf> = HashSet::new();
     let mut paths = vec![];
@@ -124,30 +119,39 @@ pub fn root_include_paths(files: &[PathBuf]) -> Vec<PathBuf> {
 /// Find the manifest for `inputs`. Each input is made absolute without resolving symlinks,
 /// and the search walks up from its directory. It stops at the first directory that holds
 /// `.git` (that directory is still searched) or at the filesystem root, so a stray
-/// `rdra.toml` above a repository never applies. The first input with a manifest wins.
+/// `rdra.toml` above a repository never applies. Every input's manifest is parsed, so a
+/// malformed one fails whatever the input order. The first input's manifest is the project's.
 pub fn discover(inputs: &[PathBuf]) -> Result<Option<Manifest>, ProjectError> {
+    let mut found = None;
     for input in inputs {
-        let Ok(absolute) = std::path::absolute(input) else {
+        let Some(path) = manifest_path_above(input) else {
             continue;
         };
-        let start = if absolute.is_dir() {
-            lexically_normalized(&absolute)
-        } else {
-            let mut dir = lexically_normalized(&absolute);
-            dir.pop();
-            dir
-        };
-        for dir in start.ancestors() {
-            let candidate = dir.join(MANIFEST_FILE);
-            if candidate.is_file() {
-                return parse_manifest(&candidate).map(Some);
-            }
-            if dir.join(".git").exists() {
-                break;
-            }
+        let manifest = parse_manifest(&path)?;
+        found.get_or_insert(manifest);
+    }
+    Ok(found)
+}
+
+fn manifest_path_above(input: &Path) -> Option<PathBuf> {
+    let absolute = std::path::absolute(input).ok()?;
+    let start = if absolute.is_dir() {
+        lexically_normalized(&absolute)
+    } else {
+        let mut dir = lexically_normalized(&absolute);
+        dir.pop();
+        dir
+    };
+    for dir in start.ancestors() {
+        let candidate = dir.join(MANIFEST_FILE);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+        if dir.join(".git").exists() {
+            break;
         }
     }
-    Ok(None)
+    None
 }
 
 fn lexically_normalized(path: &Path) -> PathBuf {
@@ -183,7 +187,6 @@ fn parse_manifest(path: &Path) -> Result<Manifest, ProjectError> {
     Ok(manifest)
 }
 
-/// Resolve and build one project from entry files and include paths already chosen.
 pub(crate) fn build_project(
     entry_files: Vec<PathBuf>,
     include_paths: Vec<PathBuf>,
@@ -333,6 +336,41 @@ mod tests {
         let err = load_project(&[src], None).unwrap_err().to_string();
 
         assert!(err.contains("rdra.toml:3:"), "{err}");
+    }
+
+    #[test]
+    fn a_malformed_manifest_fails_whatever_the_input_order() {
+        let good = repo();
+        write(&good.path().join("rdra.toml"), MANIFEST);
+        let good_src = layout(good.path());
+        let bad = repo();
+        write(&bad.path().join("rdra.toml"), "[model]\nbroken = = 1\n");
+        let bad_src = layout(bad.path());
+
+        for inputs in [
+            [good_src.clone(), bad_src.clone()],
+            [bad_src.clone(), good_src.clone()],
+        ] {
+            let err = discover(&inputs).unwrap_err().to_string();
+            assert!(err.contains("rdra.toml:2:"), "{err}");
+        }
+    }
+
+    #[test]
+    fn the_first_inputs_manifest_is_the_projects() {
+        let first = repo();
+        write(&first.path().join("rdra.toml"), MANIFEST);
+        let first_src = layout(first.path());
+        let second = repo();
+        write(
+            &second.path().join("rdra.toml"),
+            "[model]\nname = \"other\"\n",
+        );
+        let second_src = layout(second.path());
+
+        let manifest = discover(&[first_src, second_src]).unwrap().unwrap();
+
+        assert_eq!(manifest.model.name, "shop");
     }
 
     #[test]

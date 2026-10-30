@@ -387,10 +387,16 @@ A loading command finds the manifest like this:
    `rdra.toml` there, then in each parent.
 3. Stop after the first directory that holds `.git`, which is searched too, or at the
    filesystem root. A stray `rdra.toml` above a repository never applies.
-4. With several inputs, the first input that has a manifest decides.
+4. With several inputs, every input's manifest is read, so a malformed one fails the command
+   whatever the input order. When all are valid, the first input's manifest is the project's.
+   A later change will tighten how inputs from different models combine.
 
 The LSP loads a workspace the same way. It lists every `.rdra` file under the workspace roots,
 adds the open buffers, and derives the include paths from those files exactly as the CLI does.
+The workspace roots are no longer include paths of their own, so `import m.a.shared` from
+`m/a/b/c.rdra` reports "module file not found in include paths" in the editor, as `check` does.
+A malformed `rdra.toml` clears the LSP's diagnostics and shows the error in a message, and in
+a diagnostic on an open `.rdra` file.
 
 ---
 
