@@ -383,7 +383,7 @@ contains(ClinicOpsSystem, <EachApi>)
 Event flow は BUC をまたぐ連鎖だけを見るための図です。
 
 ''')
-parts.append(gen_cmd('diagram samples/clinic-ops --kind event-flow --format mermaid --out samples/clinic-ops/out/event_flow') + '\n')
+parts.append(gen_cmd('diagram samples/clinic-ops --kind event --format mermaid --out samples/clinic-ops/out/event_flow') + '\n')
 parts.append(mermaid('event_flow.mmd') + '\n')
 parts.append('''主要イベントと起動先:
 

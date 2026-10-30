@@ -28,7 +28,7 @@ head_bin="$(cd "$(dirname "$head_bin")" && pwd)/$(basename "$head_bin")"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-read -r -a kinds <<<"${KINDS:-rdra er state event-flow}"
+read -r -a kinds <<<"${KINDS:-rdra er state event}"
 has_kind() { [[ " ${kinds[*]} " == *" $1 "* ]]; }
 only_kinds() { # kind...: those of the arguments that KINDS keeps
   local kind
@@ -111,7 +111,7 @@ dump() { # label bin: one file per cell under $work/LABEL, numbered in run order
   for removed in puml svg png; do
     cell "samples/ec-site error format=$removed" samples/ec-site --format "$removed"
   done
-  for removed in boundaryless-graph business-area technical-area sequence diff; do
+  for removed in boundaryless-graph business-area technical-area sequence diff event-flow; do
     cell "samples/ec-site error kind=$removed" samples/ec-site --kind "$removed"
   done
   cell "samples/ec-site error option=--usecase" samples/ec-site --usecase Capture

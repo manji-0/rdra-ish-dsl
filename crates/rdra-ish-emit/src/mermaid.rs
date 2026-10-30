@@ -1,4 +1,4 @@
-//! Mermaid emitters: RDRA全体図、ER図、状態遷移図、event-flow図。
+//! Mermaid emitters: RDRA全体図、ER図、状態遷移図、イベント図。
 
 use crate::diagram_common::{
     class_defs, col_type_str, contract_id, desc_line, lifecycle_start_states, node_id, node_label,
@@ -519,22 +519,43 @@ impl Emitter for ErMermaidEmitter {
     }
 }
 
-// ── イベントフロー図エミッタ (Mermaid) ───────────────────────────────────────
+// ── イベント図エミッタ (Mermaid) ─────────────────────────────────────────────
 
-pub struct EventFlowMermaidEmitter;
+/// The system-to-system event links: `raises` into each event and `triggers` out of it, and
+/// each timer's `triggers`. The transitions a triggered use case drives are the state
+/// diagram's.
+pub struct EventMermaidEmitter;
 
-impl Emitter for EventFlowMermaidEmitter {
+impl Emitter for EventMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
-        let mut out = String::from("flowchart LR\n");
-        render_event_flows(&mut out, model, &view.scope);
-        Ok(out)
+        let mut body = String::new();
+        let declared = render_event_flows(&mut body, model, &view.scope);
+        body.push_str(&class_defs(&declared.kinds));
+        let drops_transitions = model.state_transitions.iter().any(|t| {
+            contract_id(model, &NodeRef::UseCase(t.usecase))
+                .is_some_and(|id| declared.ids.contains(&id))
+        });
+        let header = Header {
+            diagram: "event",
+            view,
+            layers: None,
+            kinds: declared.kinds,
+            omitted: if drops_transitions {
+                vec!["state transitions".to_string()]
+            } else {
+                Vec::new()
+            },
+        };
+        Ok(format!("{}flowchart LR\n{body}", header.render()))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::diagram_common::{declare_flow_node, model_from, render_event_flow, FlowNode};
+    use crate::diagram_common::{
+        declare_flow_node, model_from, render_event_flow, Declared, FlowNode,
+    };
     use rdra_ish_core::build_model;
     use rdra_ish_syntax::parse;
 
@@ -959,7 +980,7 @@ combines(ByMethod, Method)
     }
 
     #[test]
-    fn test_event_flow_mermaid_renders_timers_and_extsystems() {
+    fn test_event_mermaid_renders_timers_and_extsystems() {
         let src = r#"
 usecase Book "Book"
 usecase Receive "Receive"
@@ -976,25 +997,40 @@ triggers(EvResult, Receive)
 triggers(Nightly, Sweep)
 "#;
         let model = model_from(src);
-        let result = EventFlowMermaidEmitter
-            .emit(&model, &View::whole())
+        let result = EventMermaidEmitter
+            .emit(&model, &View::whole().with_model_path("m.rdra"))
             .unwrap();
         assert!(
-            result.contains("xs__Lab -.->|raises| ev__EvResult"),
+            result.starts_with(
+                "%% rdra-ish diagram=event scope=whole model=m.rdra\n\
+                 %% kinds: event usecase extsystem timer\n\
+                 %% omitted: (none)\n\
+                 flowchart LR\n"
+            ),
             "{result}"
         );
         assert!(
-            result.contains("ev__EvBooked -.->|delivers| xs__Gateway"),
+            result.contains("  extsystem__Lab -.->|raises| event__EvResult\n"),
+            "{result}"
+        );
+        // An event delivered to an external system is the DSL's `triggers`.
+        assert!(
+            result.contains("  event__EvBooked -.->|triggers| extsystem__Gateway\n"),
             "{result}"
         );
         assert!(
-            result.contains("tm__Nightly -.->|triggers| uc__Sweep"),
+            result.contains("  timer__Nightly -.->|triggers| usecase__Sweep\n"),
+            "{result}"
+        );
+        assert!(result.contains("  timer__Nightly[\"Nightly\"]:::timer\n"));
+        assert!(
+            result.ends_with("  classDef timer stroke:#333;\n"),
             "{result}"
         );
     }
 
     #[test]
-    fn test_event_flow_mermaid_renders_triggered_buc() {
+    fn test_event_mermaid_renders_triggered_buc() {
         let src = r#"
 buc BucBillingClaims "Billing Claims"
 usecase SignEncounter "Sign Encounter"
@@ -1003,16 +1039,17 @@ raises(SignEncounter, EncounterSigned)
 triggers(EncounterSigned, BucBillingClaims)
 "#;
         let model = model_from(src);
-        let result = EventFlowMermaidEmitter
-            .emit(&model, &View::whole())
-            .unwrap();
+        let result = EventMermaidEmitter.emit(&model, &View::whole()).unwrap();
 
-        assert!(result.contains("ev__EncounterSigned -.->|triggers| buc__BucBillingClaims"));
-        assert!(result.contains("buc__BucBillingClaims[[\"📦 Billing Claims\"]]"));
+        assert!(
+            result.contains("event__EncounterSigned -.->|triggers| buc__BucBillingClaims"),
+            "{result}"
+        );
+        assert!(result.contains("  buc__BucBillingClaims[\"Billing Claims\"]:::buc\n"));
     }
 
     #[test]
-    fn test_event_flow_helpers_deduplicate_declarations_and_render_transitions() {
+    fn test_event_mermaid_declares_each_node_once_and_draws_no_states() {
         let src = r#"
 usecase SignEncounter "Sign Encounter"
 usecase ReviewClaim "Review Claim"
@@ -1025,7 +1062,7 @@ entity Claim "Claim" {
   id: Int @pk
   status: Enum(open, reviewed) @default(open)
 }
-event EncounterSigned "Encounter Signed"
+event EncounterSigned "Encounter Signed" description "The doctor signed the record"
 raises(SignEncounter, EncounterSigned)
 triggers(EncounterSigned, ReviewClaim)
 triggers(EncounterSigned, BucBillingClaims)
@@ -1033,99 +1070,71 @@ transitions(Encounter.status, SignEncounter, pending -> signed)
 transitions(Claim.status, ReviewClaim, open -> reviewed)
 "#;
         let model = model_from(src);
-        let flows = rdra_ish_core::collect_event_flows(&model);
-        let flow = flows
-            .iter()
-            .find(|flow| {
-                model
-                    .events
-                    .get(flow.event)
-                    .map(|event| event.id == "EncounterSigned")
-                    .unwrap_or(false)
-            })
-            .unwrap();
+        let flow = rdra_ish_core::collect_event_flows(&model).pop().unwrap();
         let mut out = String::new();
-        let mut declared = HashSet::new();
+        let mut declared = Declared::default();
 
-        render_event_flow(&mut out, &mut declared, &model, &None, flow);
-        render_event_flow(&mut out, &mut declared, &model, &None, flow);
+        render_event_flow(&mut out, &mut declared, &model, &None, &flow);
+        render_event_flow(&mut out, &mut declared, &model, &None, &flow);
 
         assert_eq!(
-            out.matches("ev__EncounterSigned{\"⚡ Encounter Signed\"}")
+            out.matches("  event__EncounterSigned[\"Encounter Signed\"]:::event\n")
                 .count(),
-            1
+            1,
+            "{out}"
         );
-        assert!(out.contains("uc__SignEncounter -.->|raises| ev__EncounterSigned"));
-        assert!(out.contains("ev__EncounterSigned -.->|triggers| uc__ReviewClaim"));
-        assert!(out.contains("ev__EncounterSigned -.->|triggers| buc__BucBillingClaims"));
-        // The event leads to the transition its triggered use case drives, not to its raiser's.
-        assert!(out.contains("st__Claim_open -->|⚡ Encounter Signed| st__Claim_reviewed"));
-        assert!(!out.contains("st__Encounter_pending -->"));
+        assert!(out.contains("  %% desc event__EncounterSigned: The doctor signed the record\n"));
+        assert!(out.contains("usecase__SignEncounter -.->|raises| event__EncounterSigned"));
+        assert!(out.contains("event__EncounterSigned -.->|triggers| usecase__ReviewClaim"));
+        assert!(out.contains("event__EncounterSigned -.->|triggers| buc__BucBillingClaims"));
+        assert!(!out.contains("state"), "{out}");
+        assert_eq!(declared.kinds, vec!["event", "usecase", "buc"]);
+
+        let result = EventMermaidEmitter.emit(&model, &View::whole()).unwrap();
+        assert!(
+            result.contains("%% omitted: state transitions\n"),
+            "{result}"
+        );
     }
 
     #[test]
-    fn test_event_flow_declare_helpers_emit_prefixed_nodes_once() {
+    fn test_event_mermaid_ids_follow_the_contract() {
         let src = r#"
 usecase SignEncounter "Sign Encounter"
 buc BucBillingClaims "Billing Claims"
+extsystem Lab "Lab"
+timer Nightly "Nightly"
 event EncounterSigned "Encounter Signed"
-entity Encounter "Encounter" {
-  id: Int @pk
-  status: Enum(pending, signed) @default(pending)
-}
-raises(SignEncounter, EncounterSigned)
-transitions(Encounter.status, SignEncounter, pending -> signed)
 "#;
         let model = model_from(src);
-        let flow = rdra_ish_core::collect_event_flows(&model).pop().unwrap();
-        let usecase = model
-            .use_cases
-            .iter()
-            .find(|(_, usecase)| usecase.id == "SignEncounter")
-            .map(|(key, _)| key)
-            .unwrap();
-        let buc = model
-            .bucs
-            .iter()
-            .find(|(_, buc)| buc.id == "BucBillingClaims")
-            .map(|(key, _)| key)
-            .unwrap();
-        let state = model
-            .states
-            .iter()
-            .find(|(_, state)| state.id == "Encounter_pending")
-            .map(|(key, _)| key)
-            .unwrap();
+        let key = |id: &str| model.symbols.get(id).cloned().unwrap();
         let mut out = String::new();
-        let mut declared = HashSet::new();
-
-        assert_eq!(
-            declare_flow_node(&mut out, &mut declared, &model, FlowNode::Event(flow.event))
-                .as_deref(),
-            Some("ev__EncounterSigned")
-        );
-        assert_eq!(
-            declare_flow_node(&mut out, &mut declared, &model, FlowNode::UseCase(usecase))
-                .as_deref(),
-            Some("uc__SignEncounter")
-        );
-        assert_eq!(
-            declare_flow_node(&mut out, &mut declared, &model, FlowNode::Buc(buc)).as_deref(),
-            Some("buc__BucBillingClaims")
-        );
-        assert_eq!(
-            declare_flow_node(&mut out, &mut declared, &model, FlowNode::State(state)).as_deref(),
-            Some("st__Encounter_pending")
-        );
-
-        assert!(out.contains("ev__EncounterSigned{\"⚡ Encounter Signed\"}"));
-        assert!(out.contains("uc__SignEncounter([\"✅ Sign Encounter\"])"));
-        assert!(out.contains("buc__BucBillingClaims[[\"📦 Billing Claims\"]]"));
-        assert!(out.contains("st__Encounter_pending(\"🔄 pending\")"));
+        let mut declared = Declared::default();
+        for (node, id) in [
+            (key("EncounterSigned"), "event__EncounterSigned"),
+            (key("SignEncounter"), "usecase__SignEncounter"),
+            (key("BucBillingClaims"), "buc__BucBillingClaims"),
+            (key("Lab"), "extsystem__Lab"),
+            (key("Nightly"), "timer__Nightly"),
+        ] {
+            let flow_node = match node {
+                NodeRef::Event(k) => FlowNode::Event(k),
+                NodeRef::UseCase(k) => FlowNode::UseCase(k),
+                NodeRef::Buc(k) => FlowNode::Buc(k),
+                NodeRef::ExtSystem(k) => FlowNode::ExtSystem(k),
+                NodeRef::Timer(k) => FlowNode::Timer(k),
+                other => panic!("{other:?}"),
+            };
+            assert_eq!(
+                declare_flow_node(&mut out, &mut declared, &model, flow_node).as_deref(),
+                Some(id)
+            );
+            assert_eq!(contract_id(&model, &node).as_deref(), Some(id));
+        }
     }
 
     #[test]
-    fn test_event_flow_visibility_skips_hidden_event_scope() {
+    fn test_event_mermaid_visibility_skips_hidden_event_scope() {
         let src = r#"
 usecase SignEncounter "Sign Encounter"
 event EncounterSigned "Encounter Signed"
@@ -1134,13 +1143,13 @@ raises(SignEncounter, EncounterSigned)
         let model = model_from(src);
         let flow = rdra_ish_core::collect_event_flows(&model).pop().unwrap();
         let mut out = String::new();
-        let mut declared = HashSet::new();
+        let mut declared = Declared::default();
         let reachable = Some(HashSet::new());
 
         render_event_flow(&mut out, &mut declared, &model, &reachable, &flow);
 
         assert!(out.is_empty());
-        assert!(declared.is_empty());
+        assert!(declared.ids.is_empty());
     }
 
     #[test]

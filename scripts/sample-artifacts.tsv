@@ -14,7 +14,7 @@ samples/clinic-ops/out/buc/object_graph_staff_administration.mmd	diagram samples
 samples/clinic-ops/out/buc/object_graph_visit_check_in.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucVisitCheckIn
 samples/clinic-ops/out/buc/object_graph_visit_payment.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucVisitPayment
 samples/clinic-ops/out/er_care_to_billing.mmd	diagram samples/clinic-ops --kind er --format mermaid --buc BucFollowupCare --buc BucBillingClaims
-samples/clinic-ops/out/event_flow.mmd	diagram samples/clinic-ops --kind event-flow --format mermaid
+samples/clinic-ops/out/event_flow.mmd	diagram samples/clinic-ops --kind event --format mermaid
 samples/clinic-ops/out/rdra_buc_clinical_encounter.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucClinicalEncounter
 samples/clinic-ops/out/screen_constraints.csv	csv samples/clinic-ops --kind screen-constraints
 samples/clinic-ops/out/state_whole.mmd	diagram samples/clinic-ops --kind state --format mermaid

@@ -134,18 +134,18 @@ a `%% desc <id>: <text>` comment line after the node.
 | `quality` | A quality attribute category such as performance, availability, resilience, auditability, observability, or privacy. | RDRA diagram (`qualifies`) |
 | `constraint` | A non-functional guardrail or compliance constraint, commonly used for audit, logging, retention, privacy, or operational restrictions. | `lint` `constraint-unscoped`; RDRA diagram |
 | `business` | A business (a coarse-grained area of activity) that BUCs belong to. | RDRA diagram |
-| `buc` | A business use case: a unit of business value composed of use cases. | `lint` `buc-empty`; RDRA, sequence, and event-flow diagrams (`--buc` filter) |
+| `buc` | A business use case: a unit of business value composed of use cases. | `lint` `buc-empty`; RDRA, sequence, and event diagrams (`--buc` filter) |
 | `flow` | A business flow: an ordered business narrative inside a BUC. A flow is composed of steps and can make UC and event ordering explicit without turning the diagram into the only source of truth. | `lint` `flow-empty`, `flow-cycle`; RDRA diagram |
 | `step` | A business flow step. A step is a business-language action that can cover a use case, API, or event while remaining distinct from implementation boundaries. | `lint` `step-no-cover`; RDRA diagram |
-| `timer` | An RDRA タイマー: a schedule that starts a use case, such as a nightly sweep. See [Timers](#timers). | `triggers(Timer, UseCase)`; RDRA diagram (external-environment layer) and event-flow diagram; `lint` `orphan-node` |
+| `timer` | An RDRA タイマー: a schedule that starts a use case, such as a nightly sweep. See [Timers](#timers). | `triggers(Timer, UseCase)`; RDRA diagram (external-environment layer) and event diagram; `lint` `orphan-node` |
 | `medium` | A physical medium, device, terminal, or operation medium for Business-BUC context. | `requires_medium` in `csv --kind screen-constraints`; RDRA diagram node. `belongs(...).by(...)` records it, but no output reads that context yet. |
 | `actor` | A human actor who performs use cases. | `check` permission paths; RDRA diagram; `csv --kind actor-permission-audit` |
 | `usecase` | A use case: a concrete interaction that reads and writes entities and displays screens. | `check`; `states`; all diagrams; `csv --kind matrix` |
 | `screen` | A screen (UI surface) displayed by use cases. | `lint` `screen-no-fields`; RDRA diagram; `csv --kind screen-constraints` |
 | `field` | A screen field: a first-class UI input or output item. It can carry editability, requiredness, and actor or system source metadata, and can map to an entity column without becoming one. | `lint` `field-unmapped`, `field-unplaced`; `csv --kind business-inputs` |
-| `event` | A domain event, the interface between use cases and between use cases and external systems, and a `raises` and `triggers` endpoint. | `check` raised-but-unconsumed; `states`; event-flow diagram; `export --kind asyncapi`, `tla` |
+| `event` | A domain event, the interface between use cases and between use cases and external systems, and a `raises` and `triggers` endpoint. | `check` raised-but-unconsumed; `states`; event diagram; `export --kind asyncapi`, `tla` |
 | `system` | An internal system boundary. It groups APIs; its entity set is derived from those APIs' CRUD targets. | `lint` `stage-readiness` (its `system-boundary` stage needs a `system` and an `api`); `check` boundary diagnostics; `csv --kind api-matrix` |
-| `extsystem` | An external system. It reaches use cases through events: `raises(ExtSystem, Event)` for inbound, `triggers(Event, ExtSystem)` for outbound. See [External systems](#external-systems). | RDRA diagram (system-value layer) and event-flow diagram; `export --kind asyncapi` (publisher or subscriber); `check` raised-but-unconsumed; `lint` `orphan-node` |
+| `extsystem` | An external system. It reaches use cases through events: `raises(ExtSystem, Event)` for inbound, `triggers(Event, ExtSystem)` for outbound. See [External systems](#external-systems). | RDRA diagram (system-value layer) and event diagram; `export --kind asyncapi` (publisher or subscriber); `check` raised-but-unconsumed; `lint` `orphan-node` |
 | `api` | An API layer endpoint invoked by a use case. It operates entities on behalf of the use case, defines an atomic data operation boundary, and may carry HTTP contract metadata. | `lint` `api-unused`, `api-contract-missing`, `api-contract-incomplete`; `check` API diagnostics; `csv --kind api-matrix`; `export --kind openapi` |
 | `dto` | A request, response, or error payload shape used by API contracts. DTOs may carry a column-like field body but are kept separate from database entities. | `lint` `dto-unused`, `naming-dto-field`; `export --kind openapi`, `json-schema` |
 | `permission` | A permission or role-like authority assignable to actors. | `check` `requires_permission` against `has_permission`; `csv --kind actor-permission-audit` |
@@ -400,7 +400,7 @@ triggers(IntakeExpiryCheck, ExpireIntakeForms)
 A timer triggers only use cases and BUCs, never an external system. A use case that a
 timer triggers and that belongs to no BUC is reported like an event-triggered one. A
 `step` may anchor the timer with `covers(Step, Timer)`. A timer sits in the
-external-environment layer of the RDRA diagram, and the event-flow diagram draws it
+external-environment layer of the RDRA diagram, and the event diagram draws it
 with its `triggers` edges.
 
 ### Business flows
@@ -535,8 +535,9 @@ event-initiated without reshaping the BUC itself.
 `triggers(event::E, usecase::UC)` declares that an event causes a concrete downstream
 use case to execute. This is the refined form when the entry action is known. The tool
 validates that a triggered use case belongs to at least one BUC via `contains`; a warning
-is emitted otherwise. Use `diagram --kind event-flow` to visualise the full
-`raises -> Event -> triggers` chain alongside state transitions. The order of `raises`
+is emitted otherwise. Use `diagram --kind event` to visualise the full
+`raises -> Event -> triggers` chain, and `diagram --kind state` for the transitions the
+triggered use cases drive. The order of `raises`
 and `triggers` between use cases adds no guard to state derivation: a use case is limited
 only by the states it requires and by the guards of its linked conditions.
 
@@ -566,8 +567,8 @@ triggers(EvAppointmentScheduled, MessagingGateway)   // outbound: the event is d
 
 An event delivered to an external system counts as consumed, so the raised-but-unconsumed
 warning stays quiet. `export --kind asyncapi` lists the raising systems as the channel's
-`x-publisher` and the receiving ones as `x-subscriber`. The event-flow diagram draws the
-systems and a `delivers` edge. `lint` `rdra-extsystem-no-buc` names an external system that no
+`x-publisher` and the receiving ones as `x-subscriber`. The event diagram draws the
+systems and a `triggers` edge from the event to each. `lint` `rdra-extsystem-no-buc` names an external system that no
 event in a BUC reaches.
 
 APIs are the operation boundary between a use case and the data it changes. Systems
@@ -632,8 +633,8 @@ updates(PlaceOrder, Cart)   // direct write still allowed (mixed form)
 **Other diagrams**:
 - `api` nodes are included in the RDRA layered graph (`--kind rdra`), where they appear
   in the system layer.
-- `api` nodes are also omitted from the event-flow diagram (`--kind event-flow`),
-  because an API is not a participant in the raises/triggers/transitions causal chain.
+- `api` nodes are also omitted from the event diagram (`--kind event`),
+  because an API is not a participant in the raises/triggers causal chain.
 
 **CSV/list output**:
 - `list --kind api` — id/label table of all declared apis.
@@ -1489,4 +1490,4 @@ to load with a message naming the replacement:
 - [state-derivation.md](./state-derivation.md) — how reachable states are explored,
   how predicates become actions and guards, and how entity constraints are checked.
 - [cli-reference.md](./cli-reference.md) — the `rdra-ish` command-line interface,
-  including the `diagram --kind event-flow` command for event causality visualisation.
+  including the `diagram --kind event` command for event causality visualisation.

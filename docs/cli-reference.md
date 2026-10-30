@@ -299,7 +299,7 @@ rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]...
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `rdra` \| `er` \| `state` \| `event-flow` | `rdra` | The diagram kind. `rdra` = RDRA layered graph mapped onto the original four-layer structure; `er` = entity-relationship diagram; `state` = one composite state per state model (lifecycle column), transitions labelled with use-case ids, start and end states; `event-flow` = event causality graph showing UC or ExtSystem->Event->UC/BUC/ExtSystem and Event->State chains, plus Timer->UC/BUC edges. `boundaryless-graph`, `business-area`, `technical-area`, `sequence`, and `diff` were removed and fail with a message that names the replacement: `rdra` (narrowed with `--node-kind` / `--edge-kind`), `csv --kind business-inputs`, `csv --kind api-matrix`, `check` (which prints the transaction, API, and system warnings `sequence` printed), and a text diff of two `rdra` `.mmd` files. |
+| `--kind` | `rdra` \| `er` \| `state` \| `event` | `rdra` | The diagram kind. `rdra` = RDRA layered graph mapped onto the original four-layer structure; `er` = entity-relationship diagram; `state` = one composite state per state model (lifecycle column), transitions labelled with use-case ids, start and end states; `event` = system-to-system event links: UC or ExtSystem `raises` Event, Event `triggers` UC/BUC/ExtSystem, and Timer `triggers` UC/BUC. `boundaryless-graph`, `business-area`, `technical-area`, `sequence`, `diff`, and `event-flow` were removed and fail with a message that names the replacement: `rdra` (narrowed with `--node-kind` / `--edge-kind`), `csv --kind business-inputs`, `csv --kind api-matrix`, `check` (which prints the transaction, API, and system warnings `sequence` printed), a text diff of two `rdra` `.mmd` files, and `--kind event`. |
 | `--format` | `mermaid` | `mermaid` | Output format. Mermaid text (`.mmd`) is the only one. `puml`, `svg`, and `png` were removed and fail with a message that names `--format mermaid`; to get an image, render the `.mmd` with `mmdc` or any Mermaid-aware tool. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Filter to one or more BUCs by id. With multiple ids, the **union** of reachable nodes across the named BUCs is shown. Applies to all diagram kinds. |
 | `--node-kind <kind>` | string (repeatable) | — (all nodes) | Filter graph diagrams to specific node kinds. Applies to `rdra`. Examples: `actor`, `buc`, `flow`, `step`, `usecase`, `api`, `entity`, `field`. Alias: `--kind-filter`. |
@@ -309,20 +309,23 @@ rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]...
 Notes:
 
 - The `.mmd` is written for a reader that redraws it (a person or an AI), so it carries
-  the RDRA meaning in text rather than in shapes. `--kind rdra` and `--kind state` follow
-  the encoding contract below; `er` and `event-flow` adopt it in later releases.
+  the RDRA meaning in text rather than in shapes. `--kind rdra`, `--kind state`, and
+  `--kind event` follow the encoding contract below; `er` adopts it in a later release.
 - Graph filters are intentionally review-oriented. They hide nodes and any edges whose
   endpoints are hidden; they do not change the model or diagnostics. The header's
   `omitted:` line names the node kinds and relation kinds a filter hid.
 - `--show-description` and `--view-preset` were removed. Descriptions are always
   written as `%% desc` comment lines; narrow a diagram with `--node-kind` and
   `--edge-kind`.
-- For `--kind event-flow`, the tool runs event-integrity diagnostics and emits `warning:`
+- For `--kind event`, the tool runs event-integrity diagnostics and emits `warning:`
   lines for events that are never raised, raised but consume nothing, or trigger a use
   case belonging to no BUC. `outbox(Event)` suppresses the raised-but-unconsumed warning
   for events intentionally published outside the local model. Event targets may be either
-  BUCs or use cases. Mermaid node IDs are prefixed (`ev__`, `uc__`, `buc__`, `st__`) to
-  avoid collisions when model elements share the same DSL identifier.
+  BUCs, use cases, or external systems. Node ids follow the encoding contract
+  (`event__`, `usecase__`, `buc__`, `extsystem__`, `timer__`), so they do not collide
+  when model elements of different kinds share a DSL identifier. The diagram draws no
+  states; `%% omitted: state transitions` says a drawn use case drives one, which
+  `--kind state` shows.
 - For `--kind rdra`, model objects are placed into the four RDRA layers:
   システム価値 (`actor`, `extsystem`, `requirement`, `adr`, `nfr`), システム外部環境
   (`quality`, `constraint`, `business`, `buc`, `flow`, `step`, `timer`, `medium`,

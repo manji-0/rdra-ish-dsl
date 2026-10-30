@@ -32,7 +32,7 @@ same way, and every kind in the language names the check or output that reviews 
 | Command | Reviews |
 |---|---|
 | `check`, `lint` | Type errors, unresolved references, and gaps between layers |
-| `diagram` | RDRA layers, ER, state, and event-flow views (Mermaid) |
+| `diagram` | RDRA layers, ER, state, and event views (Mermaid) |
 | `csv`, `list` | CRUD matrix, permission audit, and element metadata |
 | `states` | Reachable entity states and state rule violations |
 | `export`, `verify` | OpenAPI, DBML, JSON Schema, AsyncAPI, and TLA+ with TLC |
@@ -63,7 +63,7 @@ rdra-ish check samples/ec-site
 
 # 2) Generate diagrams for review
 rdra-ish diagram samples/ec-site --kind rdra --format mermaid --buc BucOrder
-rdra-ish diagram samples/clinic-ops --kind event-flow --format mermaid --buc BucAppointmentScheduling
+rdra-ish diagram samples/clinic-ops --kind event --format mermaid --buc BucAppointmentScheduling
 
 # 3) Export coverage/access views
 rdra-ish csv samples/clinic-ops --kind matrix
@@ -83,7 +83,7 @@ rdra-ish verify samples/formal-verification/order.rdra --backend tlc -o /tmp/rdr
 - **Coverage**: actor/use-case/API/entity links and CRUD matrix gaps.
 - **Access design**: required permissions/media and actor-permission mismatches.
 - **State design**: unreachable variants, missing creation paths, state rule violations.
-- **Boundary design**: API/system/event-flow inconsistencies and orphaned nodes.
+- **Boundary design**: API/system/event inconsistencies and orphaned nodes.
 
 ## Learning Path
 

@@ -101,7 +101,7 @@ applies_to(CardPayment, CapturePayment)
 rdra-ish check src/
 rdra-ish states src/ --entity Order
 rdra-ish diagram src/ --kind state --format mermaid --buc BucOrder
-rdra-ish diagram src/ --kind event-flow --format mermaid
+rdra-ish diagram src/ --kind event --format mermaid
 rdra-ish export src/ --kind asyncapi --out out/asyncapi.json
 ```
 

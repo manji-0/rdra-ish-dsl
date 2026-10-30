@@ -23,9 +23,9 @@ the selected view.
 | Screen/API/system boundary review | `rdra --buc <BucId>`, `check`, plus access CSVs | `references/access-and-apis.md` |
 | API contract or payload handoff | `export --kind openapi` plus API/DTO graph filter | `references/formats-and-output.md` |
 | Data contract handoff | `export --kind dbml` or `json-schema` plus ER | `references/formats-and-output.md` |
-| Event contract handoff | `export --kind asyncapi` plus `event-flow` | `references/lifecycle-and-events.md` |
+| Event contract handoff | `export --kind asyncapi` plus `event` | `references/lifecycle-and-events.md` |
 | Diagram size or review focus | view presets or node/edge filters | `references/formats-and-output.md` |
-| Lifecycle and event causality | `state --buc <BucId>` plus `event-flow` | `references/lifecycle-and-events.md` |
+| Lifecycle and event causality | `state --buc <BucId>` plus `event` | `references/lifecycle-and-events.md` |
 | Business rules or state constraints | `check` (rule counterexamples, unreached and stuck states), then `states` | `references/lifecycle-and-events.md` |
 | Temporal `property` and rules that need two instances | Prefer skill `rdra-ish-verify` (`verify`) | `references/lifecycle-and-events.md` |
 | Output format/rendering choice | Mermaid text only; render images from the `.mmd` outside rdra-ish | `references/formats-and-output.md` |
@@ -51,7 +51,7 @@ the selected view.
   path happens, and where are the transaction boundaries?"
 - Use `state` when the question is "what lifecycle states exist, and which use case
   moves each one?"
-- Use `event-flow` when the question is "what events, timers, and external systems
+- Use `event` when the question is "what events, timers, and external systems
   start other work?"
 - Use `states` when the question is "which abstract patterns are reachable?"
 - Use `verify` (skill `rdra-ish-verify`) when the question is "do temporal or
@@ -65,6 +65,6 @@ the selected view.
 - `references/rdra-graph.md` — RDRA layered graph and early-stage model inspection.
 - `references/er.md` — ER diagram commands and relationship reading.
 - `references/access-and-apis.md` — API boundaries plus access/media CSV views.
-- `references/lifecycle-and-events.md` — state diagrams, event-flow diagrams,
+- `references/lifecycle-and-events.md` — state diagrams, event diagrams,
   `states`, and TLA+ export.
 - `references/formats-and-output.md` — Mermaid output and contract exports.

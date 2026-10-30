@@ -77,7 +77,7 @@ rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla
 - `rdra-ish-buc-analyze` — BFS state-pattern review and broader BUC analysis
 - `rdra-ish-write` — author lifecycle / rules that feed verification
 - `rdra-ish-review` — checklist review including verification when claimed
-- `rdra-ish-diagram` — state / event-flow views before model checking
+- `rdra-ish-diagram` — state / event views before model checking
 
 ### Reference Files
 

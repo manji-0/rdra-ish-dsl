@@ -129,7 +129,7 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
       audit/logging, retention, and privacy
 
 12. **Check events and state transitions**
-    - Run `rdra-ish diagram <src-dir> --kind event-flow --format mermaid` and review the
+    - Run `rdra-ish diagram <src-dir> --kind event --format mermaid` and review the
       warnings printed to stderr before looking at the diagram itself:
       - `EventNeverRaised`: the event has no `raises` predicate — add one or remove the event
       - `EventNeverConsumed`: the event is raised but `triggers` nothing and is not an

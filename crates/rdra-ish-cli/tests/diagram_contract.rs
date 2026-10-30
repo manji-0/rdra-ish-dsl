@@ -1,6 +1,7 @@
-//! The diagram encoding contract, checked on every sample: each `.mmd` opens with the `%%`
-//! header, names each node `<kind>__<DSL id>`, tags it `:::<kind>`, draws edges only between
-//! declared nodes, and lists in `kinds:` exactly the kinds its body draws.
+//! The diagram encoding contract, checked on every sample for `rdra`, `state`, and `event`:
+//! each `.mmd` opens with the `%%` header, names each node `<kind>__<DSL id>` (the same id in
+//! every kind), tags a flowchart node `:::<kind>`, draws edges only between declared nodes,
+//! and lists in `kinds:` exactly the kinds its body draws.
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
@@ -440,6 +441,51 @@ fn a_state_and_its_use_cases_have_the_ids_the_rdra_diagram_gives_them() {
             .chain(state.transitions.iter().map(|(_, _, _, usecase)| usecase));
         for id in ids {
             assert!(rdra.nodes.contains_key(id), "{root}: {id} not in rdra");
+        }
+    }
+}
+
+#[test]
+fn every_event_diagram_of_every_sample_keeps_the_contract() {
+    let dir = scratch("diagram_contract_event");
+    let mut drawn = 0;
+    for root in roots() {
+        let scopes: Vec<Option<String>> = std::iter::once(None)
+            .chain(buc_ids(&root).into_iter().map(Some))
+            .collect();
+        for buc in scopes {
+            let text = diagram(&root, "event", buc.as_deref(), &dir.join("out"));
+            let chart = parse_flowchart("event", &text)
+                .and_then(|chart| check_flowchart(&chart).map(|()| chart))
+                .unwrap_or_else(|error| panic!("{root} {buc:?}: {error}\n{text}"));
+            for (from, label, to) in &chart.edges {
+                assert!(
+                    label == "raises" || label == "triggers",
+                    "{root} {buc:?}: {from} -{label}-> {to}"
+                );
+            }
+            assert!(
+                !chart.nodes.values().any(|kind| kind == "state"),
+                "{root} {buc:?}: a state node\n{text}"
+            );
+            drawn += usize::from(!chart.edges.is_empty());
+        }
+    }
+    assert!(drawn > 10, "only {drawn} event diagrams draw an edge");
+}
+
+#[test]
+fn an_event_diagram_node_has_the_id_the_rdra_diagram_gives_it() {
+    let dir = scratch("diagram_contract_event_ids");
+    for root in roots() {
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
+        let event =
+            parse_flowchart("event", &diagram(&root, "event", None, &dir.join("e"))).unwrap();
+        for (id, kind) in &event.nodes {
+            assert_eq!(rdra.nodes.get(id), Some(kind), "{root}: {id}");
+        }
+        for edge in &event.edges {
+            assert!(rdra.edges.contains(edge), "{root}: {edge:?} not in rdra");
         }
     }
 }

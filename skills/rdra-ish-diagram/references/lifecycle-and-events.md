@@ -12,8 +12,8 @@ rdra-ish diagram src/ --kind state --format mermaid
 # State diagram — scoped to a BUC
 rdra-ish diagram src/ --kind state --buc <BucId> --format mermaid
 
-# Event-flow diagram — event causality across BUCs/use cases/states
-rdra-ish diagram src/ --kind event-flow --format mermaid
+# Event diagram — event causality across BUCs, use cases, and external systems
+rdra-ish diagram src/ --kind event --format mermaid
 
 # Event contract export
 rdra-ish export src/ --kind asyncapi --out out/asyncapi.json
@@ -47,14 +47,18 @@ rdra-ish verify src/ --backend tlc -o out/
 - The diagram draws the transitions, not reachability: run `check` to learn whether
   each state is reached (`Witness_*`) and left (`Deadlock_*`).
 
-## Reading Event Flow
+## Reading the Event Diagram
 
+- The header comes first (`%% rdra-ish diagram=event scope=... model=...`,
+  `%% kinds:`, `%% omitted:`). Node ids are `<kind>__<DSL id>` (`event__EvPaymentAuthorized`,
+  `usecase__Capture`, `extsystem__PaymentGW`, `buc__...`, `timer__...`), the same ids as in
+  `--kind rdra`, and each node carries `:::<kind>`.
 - Use-case-to-event and external-system-to-event edges come from `raises`.
-- Event-to-use-case and event-to-BUC edges come from `triggers`; an event delivered to
-  an external system draws a `delivers` edge.
+- Event-to-use-case, event-to-BUC, and event-to-external-system edges come from
+  `triggers`.
 - A timer draws its `triggers` edges to use cases and BUCs.
-- State-to-state edges, labelled with the event, are the
-  `transitions(Entity.col, UseCase, from -> to)` of the use cases the event triggers.
+- The diagram draws no states: `%% omitted: state transitions` says a drawn use case
+  drives a transition, which `--kind state` shows.
 - AsyncAPI export is useful when event payload/contract review is needed alongside
   event causality.
 - Warnings such as an event never being raised or consumed are part of the review

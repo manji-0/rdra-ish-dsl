@@ -27,7 +27,7 @@ The terms BUC, business flow, and UC are used in the RDRA-ish sense described in
 [RDRA-ish Interpretation](./rdra-ish-interpretation.md): BUCs are business-value
 review containers, business flow is the concrete realization of a BUC through UCs and
 events, and UCs are effect-bearing interactions. The flow is reviewed through prose
-plus generated sequence, event-flow, CRUD, ER, and state views.
+plus generated sequence, event, CRUD, ER, and state views.
 
 The model can stay intentionally incomplete while it is being explored:
 
@@ -139,7 +139,7 @@ import shared.lifecycle.order
 | 2 | Biz object touchpoints | Data touchpoints | Which data objects does each use case touch? | coarse `entity`, CRUD predicates | CRUD matrix, ER diagram |
 | 3 | Tech interaction boundary | Interaction boundary | What UI/API boundary mediates the work, and with which authority/media constraints? | `screen`, `displays`, `shows`, optional `api`/`invokes`, `permission`, `medium`, `has_permission`, `requires_*` | RDRA graph, screen-constraints CSV, actor-permission audit |
 | 4 | Tech data design | Entity structure | What structure and ownership does the data need? | columns, `@pk`, `relate`, cardinality | ER diagram, sequence TX warnings |
-| 5 | Tech lifecycle design | Lifecycle | Which states and event-triggered BUC entries are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `transitions`, `raises`, `triggers`, `sets` | `check`, `states`, state diagram, event-flow |
+| 5 | Tech lifecycle design | Lifecycle | Which states and event-triggered BUC entries are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `transitions`, `raises`, `triggers`, `sets` | `check`, `states`, state diagram, event diagram |
 | 6A | Tech-enforced rules | Local guardrails | Which simple states or facts must never co-occur? | `forbidden`, `exclusive` over Enum / Bool / nullable axes | `states` diagnostics |
 | 6B | Tech-enforced rules | Local obligations | Which reachable states imply or require other facts? | `invariant`, narrow `required` | `states` diagnostics |
 | 6C | Tech-enforced rules | Advanced rules | Which comparison or cross-entity facts are reviewable from the abstract state space? | comparison propositions, multi-entity `forbidden` / `invariant` | `states` diagnostics |
@@ -421,7 +421,7 @@ Validation:
 ```sh
 rdra-ish states src/ --entity Order
 rdra-ish diagram src/ --kind state --format mermaid --buc BucOrder
-rdra-ish diagram src/ --kind event-flow --format mermaid
+rdra-ish diagram src/ --kind event --format mermaid
 rdra-ish check src/
 ```
 

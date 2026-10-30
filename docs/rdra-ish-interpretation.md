@@ -81,7 +81,7 @@ APIs, events, and entities to describe concrete interaction and implementation e
   entity interactions;
 - flow predicates make UC order, alternatives, exceptions, and loops explicit in the
   model rather than only in diagram layout;
-- when a BUC hands off to another BUC, event-flow diagrams show
+- when a BUC hands off to another BUC, event diagrams show
   `UC -> Event -> BUC/UC` and event-to-state chains;
 - state derivation shows which entity states are reachable through declared BUC/UC
   patterns.
@@ -210,7 +210,7 @@ The practical reading is:
 1. Use BUCs to choose the business-value slice under review.
 2. Treat business flow as the concrete realization of that BUC.
 3. Use UCs to name the concrete interactions inside that flow.
-4. Use `flow`/`step` predicates, event-flow, CRUD, ER, and state diagrams to
+4. Use `flow`/`step` predicates, event, CRUD, ER, and state diagrams to
    review the flow from both business and design angles.
 
 This leads to a deliberate asymmetry:
@@ -220,7 +220,7 @@ This leads to a deliberate asymmetry:
 | What value or responsibility are we reviewing? | BUC |
 | How is that BUC concretely carried out? | Business flow through UCs and events |
 | What action happens inside that flow? | UC |
-| What order or causality connects actions? | `flow`/`step`, `precedes`, `branches`, `excepts`, `repeats`, event-flow, and prose |
+| What order or causality connects actions? | `flow`/`step`, `precedes`, `branches`, `excepts`, `repeats`, the event diagram, and prose |
 | What data or lifecycle effect does an action have? | CRUD, API, `sets`, `raises`, `transitions` |
 | What technical boundary carries the action? | Screen/API/System relationships |
 | What authority or medium constrains the action? | `has_permission`, `requires_permission`, `requires_medium`, screen-constraints CSV, and actor-permission audit |

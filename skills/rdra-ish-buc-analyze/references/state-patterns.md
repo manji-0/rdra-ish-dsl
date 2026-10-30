@@ -34,7 +34,7 @@ rdra-ish states src/ --entity <EntityId>
 rdra-ish states src/ --format csv
 rdra-ish states src/ --format json --entity <EntityId>
 rdra-ish diagram src/ --kind state --format mermaid --buc <BucId>
-rdra-ish diagram src/ --kind event-flow --format mermaid
+rdra-ish diagram src/ --kind event --format mermaid
 ```
 
 `--entity` derives only the named entity's view and the rules that read it, each on

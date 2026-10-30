@@ -61,6 +61,17 @@
   (`usecase__Capture`, was `✅ Capture Payment`), and `<state> --> [*]` marks each end
   state, one with no transition to another state. `--buc` now draws each state model one
   of the BUC's use cases moves; it drew an empty diagram before.
+- `diagram --kind event-flow` is renamed `--kind event` and fails with a message that
+  names it. The diagram writes the encoding contract: the `%%` header, node ids
+  `event__`, `usecase__`, `buc__`, `extsystem__`, and `timer__` (were `ev__`, `uc__`,
+  `buc__`, `xs__`, and `tm__`), DSL labels without emoji, every node `["..."]` tagged
+  `:::<kind>`, and one `classDef` per kind. An event delivered to an external system is
+  labelled `triggers`, its DSL predicate (was `delivers`). The state nodes and the
+  state-to-state edges labelled with the event are gone; `--kind state` draws the
+  transitions, and `%% omitted: state transitions` says a drawn use case drives one. An
+  event's raiser outside a `--buc` scope is no longer declared as a node without an edge.
+  `rdra_ish_emit::mermaid::EventFlowMermaidEmitter` is now `EventMermaidEmitter`. The
+  artifact keeps its name, `samples/clinic-ops/out/event_flow.mmd`.
 - `verify` checks each temporal property in its own TLC run, because TLC does not name the
   property a temporal counterexample violates. The runs use the module
   `<whole>_<Property>` (`RdraSpec_NeverShipped`), the same module text and fairness as the

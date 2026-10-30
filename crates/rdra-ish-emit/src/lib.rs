@@ -441,10 +441,6 @@ pub(crate) fn node_description<'a>(model: &'a SemanticModel, node: &NodeRef) -> 
     }
 }
 
-pub(crate) fn prefixed_label(emoji: &str, label: &str) -> String {
-    format!("{} {}", emoji, label)
-}
-
 pub(crate) fn collect_object_graph_nodes(
     model: &SemanticModel,
     is_visible: &impl Fn(&NodeRef) -> bool,

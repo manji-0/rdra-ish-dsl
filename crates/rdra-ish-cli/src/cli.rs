@@ -76,6 +76,10 @@ const REMOVED_DIAGRAM_KINDS: &[(&str, &str)] = &[
         "run `check`, which prints the transaction, API, and system-boundary warnings this diagram printed; `csv --kind api-matrix` lists the entities each API writes",
     ),
     (
+        "event-flow",
+        "use `--kind event`, which draws the same raises and triggers links; the transitions a triggered use case drives are in `--kind state`",
+    ),
+    (
         "diff",
         "write `--kind rdra` for both models and compare the two `.mmd` files with `diff` or `git diff`",
     ),
@@ -143,7 +147,7 @@ pub(crate) enum Commands {
     Diagram {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Diagram kind: rdra, er, state, or event-flow
+        /// Diagram kind: rdra, er, state, or event
         #[arg(long, default_value = "rdra", value_parser = WithRemoved::<DiagramKind>::new(REMOVED_DIAGRAM_KINDS))]
         kind: DiagramKind,
         /// Output format: mermaid, the only one (writes <out>.mmd)
@@ -286,8 +290,9 @@ pub(crate) enum DiagramKind {
     Rdra,
     Er,
     State,
-    /// Event-flow diagram: UC --raises--> Event --triggers--> UC / --transitions--> State
-    EventFlow,
+    /// System-to-system event links: UC / ExtSystem --raises--> Event --triggers--> UC / BUC /
+    /// ExtSystem, and Timer --triggers--> UC / BUC
+    Event,
 }
 
 impl DiagramKind {
@@ -727,6 +732,7 @@ mod tests {
             ("technical-area", "`csv --kind api-matrix`"),
             ("sequence", "`check`"),
             ("diff", "`git diff`"),
+            ("event-flow", "`--kind event`"),
         ] {
             let message = parse_error(&["rdra-ish", "diagram", "m.rdra", "--kind", kind]);
             assert!(
