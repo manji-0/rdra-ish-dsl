@@ -6,7 +6,7 @@
 
 use std::fmt::Write as _;
 
-use super::{spec, stages, StageId};
+use super::{spec, stages, Requirement, StageId, Weight};
 
 /// Placeholders the docs fill the review templates with.
 const DOC_SRC: &str = "src/";
@@ -82,15 +82,28 @@ pub(crate) fn render(block: Block) -> String {
             out.push_str("```\n");
         }
         Block::Gates => {
-            out.push_str("| Stage | The gate passes when |\n|---|---|\n");
+            out.push_str("| Stage | The gate passes when | Review notes |\n|---|---|---|\n");
             for id in stages() {
                 let s = spec(id);
+                let clauses = |weight: Weight| {
+                    s.passes_when()
+                        .into_iter()
+                        .filter(|(w, _)| *w == weight)
+                        .map(|(_, clause)| clause.trim_start_matches("review: "))
+                        .collect::<Vec<_>>()
+                        .join("; and ")
+                };
+                let optional = match s.requirement {
+                    Requirement::Required => "",
+                    Requirement::Optional => " (optional)",
+                };
                 let _ = writeln!(
                     out,
-                    "| {} {} | {} |",
+                    "| {} {}{optional} | {} | {} |",
                     id.number(),
                     s.name,
-                    s.passes_when().join("; and ")
+                    clauses(Weight::Blocking),
+                    clauses(Weight::Advisory)
                 );
             }
         }

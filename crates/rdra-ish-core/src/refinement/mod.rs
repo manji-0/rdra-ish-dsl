@@ -77,10 +77,13 @@ pub struct StageSpec {
 }
 
 impl StageSpec {
-    /// The clauses of the gate, as the gate table of `docs/cli-reference.md#next` prints
-    /// them.
-    pub fn passes_when(&self) -> Vec<&'static str> {
-        self.checks.iter().map(|check| check.passes_when).collect()
+    /// The clauses of the gate with their weight, as the gate table of
+    /// `docs/cli-reference.md#next` prints them.
+    pub fn passes_when(&self) -> Vec<(Weight, &'static str)> {
+        self.checks
+            .iter()
+            .map(|check| (check.weight, check.passes_when))
+            .collect()
     }
 
     /// `review` with the placeholders filled: one command per template, and one per entity
@@ -116,10 +119,20 @@ pub enum Requirement {
 pub(crate) struct Check {
     /// The clause as the gate table of `docs/cli-reference.md#next` prints it.
     pub passes_when: &'static str,
+    pub weight: Weight,
     /// `Ok` when the clause passes; `Err` names the elements that fail it. A clause over an
     /// empty set (no use case yet, no touched entity yet) fails with no element to name, so
     /// a stage is not ticked on the strength of nothing to check.
     pub eval: fn(&BucFacts) -> Result<(), Vec<Gap>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Weight {
+    /// A failure is a `Gap`: the stage reads `Open`.
+    Blocking,
+    /// A failure is a note under the stage: a review prompt that never blocks, so a model
+    /// that is incomplete on purpose is not held back.
+    Advisory,
 }
 
 /// The stage's text and checks. An exhaustive match: a new stage does not compile until it
@@ -174,16 +187,18 @@ impl SubjectKind {
 pub struct StageView {
     pub id: StageId,
     pub evidence: String,
-    /// Elements that fail a check.
+    /// Elements that fail a blocking check.
     pub gaps: Vec<Gap>,
+    /// Elements that fail an advisory check: review prompts that never block.
+    pub notes: Vec<Gap>,
     open: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Verdict {
-    /// Every check passes.
+    /// Every blocking check passes.
     Met,
-    /// A check fails: `gaps` says what to add.
+    /// A blocking check fails: `gaps` says what to add.
     Open,
 }
 
@@ -191,17 +206,24 @@ impl StageView {
     fn evaluate(id: StageId, facts: &BucFacts) -> Self {
         let spec = spec(id);
         let mut gaps = Vec::new();
+        let mut notes = Vec::new();
         let mut open = false;
         for check in spec.checks {
             if let Err(failing) = (check.eval)(facts) {
-                open = true;
-                gaps.extend(failing);
+                match check.weight {
+                    Weight::Blocking => {
+                        open = true;
+                        gaps.extend(failing);
+                    }
+                    Weight::Advisory => notes.extend(failing),
+                }
             }
         }
         StageView {
             id,
             evidence: (spec.evidence)(facts),
             gaps,
+            notes,
             open,
         }
     }
@@ -235,7 +257,8 @@ pub struct BucStanding {
 pub enum Next<'a> {
     /// A required stage is not met: ask its questions and close its gaps.
     Required(&'a StageView),
-    /// Every required stage is met. The optional stages are offered, never demanded.
+    /// Every required stage is met: the BUC is complete. The optional stages are offered,
+    /// never demanded.
     Optional(Vec<&'a StageView>),
 }
 
@@ -253,6 +276,11 @@ impl BucStanding {
             .take_while(|view| view.verdict() == Verdict::Met)
             .last()
             .map(|view| view.id)
+    }
+
+    /// Every required stage is met.
+    pub fn required_complete(&self) -> bool {
+        self.required().all(|view| view.verdict() == Verdict::Met)
     }
 
     pub fn next(&self) -> Next<'_> {
@@ -292,9 +320,9 @@ pub fn assess(model: &SemanticModel) -> Assessment {
                     id: buc.id.clone(),
                     label: buc.label.clone(),
                     moved: facts
-                        .moved
-                        .iter()
-                        .map(|&entity| facts.entity_id(entity).to_string())
+                        .moved_entities()
+                        .into_iter()
+                        .map(|entity| facts.entity_id(entity).to_string())
                         .collect(),
                     stages: stages().map(|id| StageView::evaluate(id, &facts)).collect(),
                 }
@@ -394,8 +422,12 @@ covers(Checkout, PlaceOrder)
         let p = &standing(src)[0];
         assert_eq!(p.reached(), Some(StageId::Skeleton));
         assert_eq!(
+            p.view(StageId::Skeleton).evidence,
+            "1 use case, 1 `performs` / `triggers` starting them"
+        );
+        assert_eq!(
             p.view(StageId::DataTouchpoints).gaps[0].subject_id,
-            "PlaceOrder"
+            "BucOrder"
         );
     }
 
@@ -447,7 +479,7 @@ relate(Order, Customer2, N:1)
     }
 
     #[test]
-    fn rules_count_only_on_entities_the_buc_moves() {
+    fn rules_are_optional_and_count_only_through_columns_the_buc_moves() {
         let src = format!(
             "{SKELETON}
 screen Checkout \"Checkout\"
@@ -469,9 +501,13 @@ forbidden(Other, open == false)
         );
         let p = &standing(&src)[0];
         assert_eq!(p.reached(), Some(StageId::Lifecycle));
-        let guardrails = next_required(p);
-        assert_eq!(guardrails.id, StageId::LocalGuardrails);
-        assert_eq!(guardrails.gaps[0].subject_id, "Order");
+        assert!(p.required_complete());
+        let Next::Optional(offered) = p.next() else {
+            panic!("a required stage is open");
+        };
+        assert_eq!(offered[0].id, StageId::LocalGuardrails);
+        assert_eq!(offered[0].verdict(), Verdict::Open);
+        assert_eq!(offered[0].gaps[0].subject_id, "Order");
     }
 
     #[test]

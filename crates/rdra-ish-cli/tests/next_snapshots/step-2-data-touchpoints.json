@@ -5,65 +5,92 @@
         {
           "evidence": "belongs to StoreOperations",
           "gaps": 0,
+          "notes": 0,
           "passed": true,
+          "slug": "scope",
           "stage": "0",
-          "stage_name": "Scope sketch"
+          "stage_name": "Scope sketch",
+          "verdict": "met"
         },
         {
           "evidence": "2 use cases, 1 `performs` / `triggers` starting them",
           "gaps": 0,
+          "notes": 0,
           "passed": true,
+          "slug": "skeleton",
           "stage": "1",
-          "stage_name": "BUC skeleton"
+          "stage_name": "BUC skeleton",
+          "verdict": "met"
         },
         {
           "evidence": "2/2 use cases touch an entity",
           "gaps": 0,
+          "notes": 0,
           "passed": true,
+          "slug": "data-touchpoints",
           "stage": "2",
-          "stage_name": "Data touchpoints"
+          "stage_name": "Data touchpoints",
+          "verdict": "met"
         },
         {
           "evidence": "0/2 use cases display a screen, invoke an API, or run on a trigger",
           "gaps": 2,
+          "notes": 0,
           "passed": false,
+          "slug": "interaction-boundary",
           "stage": "3",
-          "stage_name": "Interaction boundary"
+          "stage_name": "Interaction boundary",
+          "verdict": "open"
         },
         {
           "evidence": "0/2 entities have a column beyond their keys",
           "gaps": 2,
+          "notes": 2,
           "passed": false,
+          "slug": "entity-structure",
           "stage": "4",
-          "stage_name": "Entity structure"
+          "stage_name": "Entity structure",
+          "verdict": "open"
         },
         {
-          "evidence": "no use case moves an entity state",
+          "evidence": "no use case moves an entity column",
           "gaps": 1,
+          "notes": 0,
           "passed": false,
+          "slug": "lifecycle",
           "stage": "5",
-          "stage_name": "Lifecycle"
+          "stage_name": "Lifecycle",
+          "verdict": "open"
         },
         {
-          "evidence": "no `forbidden` / `exclusive` on an entity this BUC moves",
+          "evidence": "no `forbidden` / `exclusive` reads a column this BUC moves",
           "gaps": 0,
+          "notes": 0,
           "passed": false,
+          "slug": "local-guardrails",
           "stage": "6A",
-          "stage_name": "Local guardrails"
+          "stage_name": "Local guardrails",
+          "verdict": "open"
         },
         {
-          "evidence": "no `invariant` / `required` on an entity this BUC moves",
+          "evidence": "no `invariant` / `required` reads a column this BUC moves",
           "gaps": 0,
+          "notes": 0,
           "passed": false,
+          "slug": "local-obligations",
           "stage": "6B",
-          "stage_name": "Local obligations"
+          "stage_name": "Local obligations",
+          "verdict": "open"
         },
         {
-          "evidence": "no comparison or cross-entity rule on an entity this BUC moves",
+          "evidence": "no comparison or cross-entity rule reads a column this BUC moves",
           "gaps": 0,
+          "notes": 0,
           "passed": false,
+          "slug": "advanced-rules",
           "stage": "6C",
-          "stage_name": "Advanced rules"
+          "stage_name": "Advanced rules",
+          "verdict": "open"
         }
       ],
       "id": "BucStoreRestock",
@@ -88,7 +115,10 @@
             "message": "add `displays(ChangeStoreParentOrganization, Screen)` or `invokes(ChangeStoreParentOrganization, Api)` for the boundary it works through"
           }
         ],
+        "kind": "required",
+        "notes": [],
         "question": "What UI/API boundary mediates the work, and with which authority/media constraints?",
+        "slug": "interaction-boundary",
         "stage": "3",
         "stage_name": "Interaction boundary",
         "validate": [
@@ -98,8 +128,11 @@
           "rdra-ish csv samples/incremental-order/step-2-data-touchpoints/src --kind api-matrix",
           "rdra-ish csv samples/incremental-order/step-2-data-touchpoints/src --kind screen-constraints",
           "rdra-ish csv samples/incremental-order/step-2-data-touchpoints/src --kind actor-permission-audit"
-        ]
+        ],
+        "verdict": "open"
       },
+      "required_complete": false,
+      "slug": "data-touchpoints",
       "stage": "2",
       "stage_name": "Data touchpoints"
     }

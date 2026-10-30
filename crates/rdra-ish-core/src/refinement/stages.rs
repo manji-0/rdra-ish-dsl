@@ -3,8 +3,12 @@
 
 use std::collections::BTreeSet;
 
-use super::{BucFacts, Check, Gap, Requirement, StageId, StageSpec, SubjectKind};
-use crate::model::{ColumnType, EntityKey, SemanticModel};
+use super::facts::Axis;
+use super::{BucFacts, Check, Gap, Requirement, StageId, StageSpec, SubjectKind, Weight};
+use crate::model::{
+    CmpRhs, ColumnType, ComparisonProp, CrossCmpRhs, CrossEntityCondition, EffectValue, EntityKey,
+    SemanticModel,
+};
 
 fn gap(subject_kind: SubjectKind, subject_id: &str, message: String) -> Gap {
     Gap {
@@ -39,13 +43,6 @@ fn count(n: usize, noun: &str) -> String {
     }
 }
 
-fn ids(model: &SemanticModel, entities: &[EntityKey]) -> Vec<String> {
-    entities
-        .iter()
-        .map(|&entity| model.entities[entity].id.clone())
-        .collect()
-}
-
 pub(super) const SCOPE: StageSpec = StageSpec {
     id: StageId::Scope,
     name: "Scope sketch",
@@ -65,6 +62,7 @@ pub(super) const SCOPE: StageSpec = StageSpec {
     requirement: Requirement::Required,
     checks: &[Check {
         passes_when: "the BUC `belongs` to a business",
+        weight: Weight::Blocking,
         eval: |f| {
             if f.businesses.is_empty() {
                 let id = f.buc_id();
@@ -106,6 +104,7 @@ pub(super) const SKELETON: StageSpec = StageSpec {
     checks: &[
         Check {
             passes_when: "an actor `performs` it or one of its use cases, or an event or timer `triggers` one",
+            weight: Weight::Blocking,
             eval: |f| {
                 if f.starters == 0 {
                     let id = f.buc_id();
@@ -122,15 +121,16 @@ pub(super) const SKELETON: StageSpec = StageSpec {
             },
         },
         Check {
-            passes_when: "it holds a use case (by `contains`, or through a flow's steps and `covers`)",
+            passes_when: "it holds a use case (by `contains`, or through a flow's steps and `covers`), or an event or timer `triggers` the BUC itself",
+            weight: Weight::Blocking,
             eval: |f| {
-                if f.use_cases.is_empty() {
+                if f.use_cases.is_empty() && f.buc_triggers.is_empty() {
                     let id = f.buc_id();
                     Err(vec![gap(
                         SubjectKind::Buc,
                         id,
                         format!(
-                            "add a `usecase` and `contains({id}, UseCase)` for each user-visible action"
+                            "add a `usecase` and `contains({id}, UseCase)` for each user-visible action, or `triggers(Event, {id})` when an event starts it and its entry use case is not known yet"
                         ),
                     )])
                 } else {
@@ -165,27 +165,67 @@ pub(super) const DATA_TOUCHPOINTS: StageSpec = StageSpec {
         "rdra-ish diagram {src} --kind er --format mermaid --buc {buc}",
     ],
     requirement: Requirement::Required,
-    checks: &[Check {
-        passes_when: "every use case creates, reads, updates, or deletes an entity, directly or through an API it `invokes`",
-        eval: |f| {
-            let gaps = f
-                .use_cases
-                .iter()
-                .filter(|&&uc| !f.touches(uc))
-                .map(|&uc| {
-                    let id = f.use_case_id(uc);
-                    gap(
-                        SubjectKind::UseCase,
-                        id,
-                        format!(
-                            "add `creates` / `reads` / `updates` / `deletes({id}, Entity)` for the data it touches"
-                        ),
+    checks: &[
+        Check {
+            passes_when: "the BUC holds a use case",
+            weight: Weight::Blocking,
+            eval: |f| {
+                if !f.use_cases.is_empty() {
+                    return Ok(());
+                }
+                let id = f.buc_id();
+                let message = if f.buc_triggers.is_empty() {
+                    format!("add a `usecase` and `contains({id}, UseCase)` for each user-visible action")
+                } else {
+                    format!(
+                        "name the use case that {} starts: add a `usecase` and `contains({id}, UseCase)`",
+                        f.buc_triggers.join(" / ")
                     )
-                })
-                .collect();
-            all_of(f.use_cases.len(), gaps)
+                };
+                Err(vec![gap(SubjectKind::Buc, id, message)])
+            },
         },
-    }],
+        Check {
+            passes_when: "a use case creates, reads, updates, or deletes an entity, directly or through an API it `invokes`",
+            weight: Weight::Blocking,
+            eval: |f| {
+                if f.use_cases.is_empty() || f.use_cases.iter().any(|&uc| f.touches(uc)) {
+                    return Ok(());
+                }
+                let id = f.buc_id();
+                Err(vec![gap(
+                    SubjectKind::Buc,
+                    id,
+                    "add `creates` / `reads` / `updates` / `deletes(UseCase, Entity)` for the data its use cases touch".to_string(),
+                )])
+            },
+        },
+        Check {
+            passes_when: "review: once a use case touches data, each use case with no touchpoint is data-free on purpose",
+            weight: Weight::Advisory,
+            eval: |f| {
+                if !f.use_cases.iter().any(|&uc| f.touches(uc)) {
+                    return Ok(());
+                }
+                failing(
+                    f.use_cases
+                        .iter()
+                        .filter(|&&uc| !f.touches(uc))
+                        .map(|&uc| {
+                            let id = f.use_case_id(uc);
+                            gap(
+                                SubjectKind::UseCase,
+                                id,
+                                format!(
+                                    "is {id} data-free on purpose? otherwise add `creates` / `reads` / `updates` / `deletes({id}, Entity)`"
+                                ),
+                            )
+                        })
+                        .collect(),
+                )
+            },
+        },
+    ],
     evidence: |f| {
         let total = f.use_cases.len();
         let touching = f.use_cases.iter().filter(|&&uc| f.touches(uc)).count();
@@ -214,27 +254,55 @@ pub(super) const INTERACTION_BOUNDARY: StageSpec = StageSpec {
         "rdra-ish csv {src} --kind actor-permission-audit",
     ],
     requirement: Requirement::Required,
-    checks: &[Check {
-        passes_when: "every use case `displays` a screen or `invokes` an API, or an event or timer `triggers` it",
-        eval: |f| {
-            let gaps = f
-                .use_cases
-                .iter()
-                .filter(|&&uc| !f.has_boundary(uc))
-                .map(|&uc| {
-                    let id = f.use_case_id(uc);
-                    gap(
-                        SubjectKind::UseCase,
-                        id,
-                        format!(
-                            "add `displays({id}, Screen)` or `invokes({id}, Api)` for the boundary it works through"
-                        ),
-                    )
-                })
-                .collect();
-            all_of(f.use_cases.len(), gaps)
+    checks: &[
+        Check {
+            passes_when: "every use case `displays` a screen or `invokes` an API, or an event or timer `triggers` it",
+            weight: Weight::Blocking,
+            eval: |f| {
+                let gaps = f
+                    .use_cases
+                    .iter()
+                    .filter(|&&uc| !f.has_boundary(uc))
+                    .map(|&uc| {
+                        let id = f.use_case_id(uc);
+                        gap(
+                            SubjectKind::UseCase,
+                            id,
+                            format!(
+                                "add `displays({id}, Screen)` or `invokes({id}, Api)` for the boundary it works through"
+                            ),
+                        )
+                    })
+                    .collect();
+                all_of(f.use_cases.len(), gaps)
+            },
         },
-    }],
+        Check {
+            passes_when: "review: when the model declares a `permission` or `medium`, each use case with no `requires_permission` / `requires_medium` on it or its APIs is open to every actor and device on purpose",
+            weight: Weight::Advisory,
+            eval: |f| {
+                if !f.has_access_vocabulary() {
+                    return Ok(());
+                }
+                failing(
+                    f.use_cases
+                        .iter()
+                        .filter(|&&uc| !f.requires_access(uc))
+                        .map(|&uc| {
+                            let id = f.use_case_id(uc);
+                            gap(
+                                SubjectKind::UseCase,
+                                id,
+                                format!(
+                                    "{id} and its APIs require no permission or medium: open to every actor and device, or add `requires_permission` / `requires_medium`?"
+                                ),
+                            )
+                        })
+                        .collect(),
+                )
+            },
+        },
+    ],
     evidence: |f| {
         let total = f.use_cases.len();
         let bounded = f.use_cases.iter().filter(|&&uc| f.has_boundary(uc)).count();
@@ -259,28 +327,53 @@ pub(super) const ENTITY_STRUCTURE: StageSpec = StageSpec {
         "rdra-ish diagram {src} --kind er --format mermaid --buc {buc}",
     ],
     requirement: Requirement::Required,
-    checks: &[Check {
-        passes_when:
-            "every entity of stage 2 has a column that is neither a primary key nor a foreign key",
-        eval: |f| {
-            let gaps = f
-                .entities
-                .iter()
-                .filter(|&&entity| !f.has_attribute(entity))
-                .map(|&entity| {
-                    let id = f.entity_id(entity);
-                    gap(
-                        SubjectKind::Entity,
-                        id,
-                        format!(
-                            "add the columns that identify and describe {id}, and `relate` it to its parent"
-                        ),
-                    )
-                })
-                .collect();
-            all_of(f.entities.len(), gaps)
+    checks: &[
+        Check {
+            passes_when: "every touched entity has a column that is neither a primary key nor a foreign key",
+            weight: Weight::Blocking,
+            eval: |f| {
+                let gaps = f
+                    .entities
+                    .iter()
+                    .filter(|&&entity| !f.has_attribute(entity))
+                    .map(|&entity| {
+                        let id = f.entity_id(entity);
+                        gap(
+                            SubjectKind::Entity,
+                            id,
+                            format!("add the columns that identify and describe {id}"),
+                        )
+                    })
+                    .collect();
+                all_of(f.entities.len(), gaps)
+            },
         },
-    }],
+        Check {
+            passes_when: "review: when the BUC touches two or more entities, each touched entity with no `relate` to another touched entity stands alone on purpose",
+            weight: Weight::Advisory,
+            eval: |f| {
+                if f.entities.len() < 2 {
+                    return Ok(());
+                }
+                failing(
+                    f.entities
+                        .iter()
+                        .filter(|&&entity| !f.related_to_touched(entity))
+                        .map(|&entity| {
+                            let id = f.entity_id(entity);
+                            gap(
+                                SubjectKind::Entity,
+                                id,
+                                format!(
+                                    "{id} has no `relate` to another entity this BUC touches: standalone, or owned by one of them?"
+                                ),
+                            )
+                        })
+                        .collect(),
+                )
+            },
+        },
+    ],
     evidence: |f| {
         let total = f.entities.len();
         let described = f
@@ -312,65 +405,219 @@ pub(super) const LIFECYCLE: StageSpec = StageSpec {
         "rdra-ish diagram {src} --kind event --format mermaid",
     ],
     requirement: Requirement::Required,
-    checks: &[Check {
-        passes_when: "a use case moves an entity with `transitions` or `sets`",
-        eval: |f| {
-            if !f.moved.is_empty() {
-                return Ok(());
-            }
-            let mut gaps = Vec::new();
-            for &entity in &f.entities {
-                let decl = &f.model.entities[entity];
-                let axes: Vec<&str> = decl
-                    .columns
-                    .iter()
-                    .filter(|col| matches!(col.col_type, ColumnType::Enum(_) | ColumnType::Bool))
-                    .map(|col| col.name.as_str())
-                    .collect();
-                if !axes.is_empty() {
+    checks: &[
+        Check {
+            passes_when: "a use case moves an Enum or Bool column, with `transitions` or with `sets` on it",
+            weight: Weight::Blocking,
+            eval: |f| {
+                if f.moved.iter().any(|m| m.axis == Axis::State) {
+                    return Ok(());
+                }
+                let mut gaps = Vec::new();
+                for &entity in &f.entities {
+                    let decl = &f.model.entities[entity];
+                    let axes: Vec<&str> = decl
+                        .columns
+                        .iter()
+                        .filter(|col| matches!(col.col_type, ColumnType::Enum(_) | ColumnType::Bool))
+                        .map(|col| col.name.as_str())
+                        .collect();
+                    if !axes.is_empty() {
+                        gaps.push(gap(
+                            SubjectKind::Entity,
+                            &decl.id,
+                            format!(
+                                "add `transitions({}.<column>, UseCase, from -> to)` or `sets(UseCase, {}, ...)` for a use case that moves {}",
+                                decl.id,
+                                decl.id,
+                                axes.join(" / ")
+                            ),
+                        ));
+                    }
+                }
+                if gaps.is_empty() {
+                    let id = f.buc_id();
                     gaps.push(gap(
-                        SubjectKind::Entity,
-                        &decl.id,
+                        SubjectKind::Buc,
+                        id,
                         format!(
-                            "add `transitions({}.<column>, UseCase, from -> to)` or `sets(UseCase, {}, ...)` for a use case that moves {}",
-                            decl.id,
-                            decl.id,
-                            axes.join(" / ")
+                            "add a lifecycle `Enum` column to the entity whose state {id} changes, and `transitions` for the use case that moves it"
                         ),
                     ));
                 }
-            }
-            if gaps.is_empty() {
-                let id = f.buc_id();
-                gaps.push(gap(
-                    SubjectKind::Buc,
-                    id,
-                    format!(
-                        "add a lifecycle `Enum` column to the entity whose state {id} changes, and `transitions` for the use case that moves it"
-                    ),
-                ));
-            }
-            Err(gaps)
+                Err(gaps)
+            },
         },
-    }],
+        Check {
+            passes_when: "review: a `sets` that only marks presence, an Int, or a comparison follows a lifecycle Enum or Bool",
+            weight: Weight::Advisory,
+            eval: |f| {
+                if f.moved.iter().any(|m| m.axis == Axis::State) {
+                    return Ok(());
+                }
+                failing(
+                    f.moved
+                        .iter()
+                        .map(|m| {
+                            let column = f.column_label(m.entity, &m.column);
+                            gap(
+                                SubjectKind::Entity,
+                                f.entity_id(m.entity),
+                                format!(
+                                    "`sets` moves {column}, which is not an Enum or Bool: which lifecycle state does it follow?"
+                                ),
+                            )
+                        })
+                        .collect(),
+                )
+            },
+        },
+    ],
     evidence: |f| {
-        if f.moved.is_empty() {
-            "no use case moves an entity state".to_string()
+        let columns: Vec<String> = f
+            .moved
+            .iter()
+            .map(|m| f.column_label(m.entity, &m.column))
+            .collect();
+        if columns.is_empty() {
+            "no use case moves an entity column".to_string()
+        } else if f.moved.iter().any(|m| m.axis == Axis::State) {
+            format!("use cases move {}", columns.join(", "))
         } else {
-            format!("use cases move {}", ids(f.model, &f.moved).join(", "))
+            format!(
+                "no use case moves an Enum or Bool column; `sets` moves {}",
+                columns.join(", ")
+            )
         }
     },
 };
 
-/// Which state rules a rules stage counts.
-#[derive(Clone, Copy)]
+/// Which state rules a rules stage counts. Every rule belongs to exactly one tier, so a
+/// comparison `forbidden` is Advanced and never also a guardrail.
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum RuleTier {
     /// `forbidden` / `exclusive` over plain facts.
     Guardrail,
-    /// `invariant` / `required`.
+    /// `invariant` / `required` over plain facts.
     Obligation,
     /// A comparison proposition in any rule, or a rule over more than one entity.
     Advanced,
+}
+
+/// One state rule of the model.
+enum Rule<'m> {
+    Forbidden(&'m crate::model::ForbiddenConstraint),
+    Exclusive(&'m crate::model::ExclusiveConstraint),
+    Invariant(&'m crate::model::EntityInvariant),
+    Required(&'m crate::model::RequiredConstraint),
+    CrossForbidden(&'m crate::model::CrossForbiddenConstraint),
+    CrossInvariant(&'m crate::model::CrossEntityInvariant),
+}
+
+impl<'m> Rule<'m> {
+    fn all(model: &'m SemanticModel) -> Vec<Rule<'m>> {
+        let mut rules = Vec::new();
+        rules.extend(model.forbidden_constraints.iter().map(Rule::Forbidden));
+        rules.extend(model.exclusive_constraints.iter().map(Rule::Exclusive));
+        rules.extend(model.entity_invariants.iter().map(Rule::Invariant));
+        rules.extend(model.required_constraints.iter().map(Rule::Required));
+        rules.extend(
+            model
+                .cross_forbidden_constraints
+                .iter()
+                .map(Rule::CrossForbidden),
+        );
+        rules.extend(
+            model
+                .cross_entity_invariants
+                .iter()
+                .map(Rule::CrossInvariant),
+        );
+        rules
+    }
+
+    fn tier(&self) -> RuleTier {
+        let has_comparison = match self {
+            Rule::Forbidden(c) => !c.comparisons.is_empty(),
+            Rule::Exclusive(c) => !c.comparisons.is_empty(),
+            Rule::Invariant(c) => {
+                !c.guard_comparisons.is_empty() || !c.required_comparisons.is_empty()
+            }
+            Rule::Required(c) => !c.comparisons.is_empty(),
+            Rule::CrossForbidden(_) | Rule::CrossInvariant(_) => return RuleTier::Advanced,
+        };
+        match self {
+            _ if has_comparison => RuleTier::Advanced,
+            Rule::Forbidden(_) | Rule::Exclusive(_) => RuleTier::Guardrail,
+            Rule::Invariant(_) | Rule::Required(_) => RuleTier::Obligation,
+            Rule::CrossForbidden(_) | Rule::CrossInvariant(_) => RuleTier::Advanced,
+        }
+    }
+
+    /// `(entity, column)` of every column the rule reads: its conditions, guards, requireds,
+    /// and both operands of each comparison.
+    fn columns(&self) -> BTreeSet<(EntityKey, String)> {
+        let mut columns = BTreeSet::new();
+        match self {
+            Rule::Forbidden(c) => {
+                local_columns(&mut columns, c.entity, &c.conditions, &c.comparisons)
+            }
+            Rule::Exclusive(c) => {
+                local_columns(&mut columns, c.entity, &c.conditions, &c.comparisons)
+            }
+            Rule::Required(c) => {
+                local_columns(&mut columns, c.entity, &c.conditions, &c.comparisons)
+            }
+            Rule::Invariant(c) => {
+                local_columns(&mut columns, c.entity, &c.guards, &c.guard_comparisons);
+                local_columns(
+                    &mut columns,
+                    c.entity,
+                    &c.requireds,
+                    &c.required_comparisons,
+                );
+            }
+            Rule::CrossForbidden(c) => cross_columns(&mut columns, &c.conditions),
+            Rule::CrossInvariant(c) => {
+                cross_columns(&mut columns, &c.guards);
+                cross_columns(&mut columns, &c.requireds);
+            }
+        }
+        columns
+    }
+}
+
+fn local_columns(
+    columns: &mut BTreeSet<(EntityKey, String)>,
+    entity: EntityKey,
+    conditions: &[(String, EffectValue)],
+    comparisons: &[ComparisonProp],
+) {
+    for (column, _) in conditions {
+        columns.insert((entity, column.clone()));
+    }
+    for cmp in comparisons {
+        columns.insert((entity, cmp.lhs_column.clone()));
+        if let CmpRhs::Column(rhs) = &cmp.rhs {
+            columns.insert((entity, rhs.clone()));
+        }
+    }
+}
+
+fn cross_columns(columns: &mut BTreeSet<(EntityKey, String)>, conditions: &[CrossEntityCondition]) {
+    for condition in conditions {
+        match condition {
+            CrossEntityCondition::Equals { column, .. } => {
+                columns.insert((column.entity, column.column.clone()));
+            }
+            CrossEntityCondition::Comparison(cmp) => {
+                columns.insert((cmp.lhs.entity, cmp.lhs.column.clone()));
+                if let CrossCmpRhs::Column(rhs) = &cmp.rhs {
+                    columns.insert((rhs.entity, rhs.column.clone()));
+                }
+            }
+        }
+    }
 }
 
 impl RuleTier {
@@ -396,77 +643,26 @@ impl RuleTier {
         }
     }
 
-    /// Entities some rule of the tier names.
-    fn entities(self, model: &SemanticModel) -> Vec<EntityKey> {
-        let mut entities = Vec::new();
-        match self {
-            RuleTier::Guardrail => {
-                entities.extend(model.forbidden_constraints.iter().map(|c| c.entity));
-                entities.extend(model.exclusive_constraints.iter().map(|c| c.entity));
-            }
-            RuleTier::Obligation => {
-                entities.extend(model.entity_invariants.iter().map(|c| c.entity));
-                entities.extend(model.required_constraints.iter().map(|c| c.entity));
-            }
-            RuleTier::Advanced => {
-                entities.extend(
-                    model
-                        .forbidden_constraints
-                        .iter()
-                        .filter(|c| !c.comparisons.is_empty())
-                        .map(|c| c.entity),
-                );
-                entities.extend(
-                    model
-                        .exclusive_constraints
-                        .iter()
-                        .filter(|c| !c.comparisons.is_empty())
-                        .map(|c| c.entity),
-                );
-                entities.extend(
-                    model
-                        .entity_invariants
-                        .iter()
-                        .filter(|c| {
-                            !c.guard_comparisons.is_empty() || !c.required_comparisons.is_empty()
-                        })
-                        .map(|c| c.entity),
-                );
-                entities.extend(
-                    model
-                        .required_constraints
-                        .iter()
-                        .filter(|c| !c.comparisons.is_empty())
-                        .map(|c| c.entity),
-                );
-                for c in &model.cross_forbidden_constraints {
-                    entities.extend(c.scope.iter().copied());
-                }
-                for c in &model.cross_entity_invariants {
-                    entities.extend(c.scope.iter().copied());
-                }
-            }
-        }
-        entities
-    }
-
-    /// Ids of the entities this BUC moves that a rule of the tier names.
-    fn ruled(self, f: &BucFacts) -> BTreeSet<String> {
-        self.entities(f.model)
-            .into_iter()
-            .filter(|entity| f.moved.contains(entity))
-            .map(|entity| f.entity_id(entity).to_string())
+    /// The columns this BUC moves that a rule of the tier reads, as `Order.status`.
+    fn credited(self, f: &BucFacts) -> BTreeSet<String> {
+        let moved = f.moved_columns();
+        Rule::all(f.model)
+            .iter()
+            .filter(|rule| rule.tier() == self)
+            .flat_map(|rule| rule.columns())
+            .filter(|column| moved.contains(column))
+            .map(|(entity, column)| f.column_label(entity, &column))
             .collect()
     }
 
     fn check(self, f: &BucFacts) -> Result<(), Vec<Gap>> {
-        if !self.ruled(f).is_empty() {
+        if !self.credited(f).is_empty() {
             return Ok(());
         }
         Err(f
-            .moved
-            .iter()
-            .map(|&entity| {
+            .moved_entities()
+            .into_iter()
+            .map(|entity| {
                 let id = f.entity_id(entity);
                 gap(SubjectKind::Entity, id, self.gap(id))
             })
@@ -474,14 +670,14 @@ impl RuleTier {
     }
 
     fn evidence(self, f: &BucFacts) -> String {
-        let ruled = self.ruled(f);
-        if ruled.is_empty() {
-            format!("no {} on an entity this BUC moves", self.kinds())
+        let credited = self.credited(f);
+        if credited.is_empty() {
+            format!("no {} reads a column this BUC moves", self.kinds())
         } else {
             format!(
-                "{} on {}",
+                "{} reads {}",
                 self.kinds(),
-                ruled.into_iter().collect::<Vec<_>>().join(", ")
+                credited.into_iter().collect::<Vec<_>>().join(", ")
             )
         }
     }
@@ -504,9 +700,11 @@ pub(super) const LOCAL_GUARDRAILS: StageSpec = StageSpec {
         "Are these facts already represented as Enum, Bool, or nullable state axes?",
     ],
     review: RULES_REVIEW,
-    requirement: Requirement::Required,
+    requirement: Requirement::Optional,
     checks: &[Check {
-        passes_when: "a `forbidden` or `exclusive` names an entity of stage 5",
+        passes_when:
+            "a `forbidden` or `exclusive` with no comparison reads a column this BUC moves",
+        weight: Weight::Blocking,
         eval: |f| RuleTier::Guardrail.check(f),
     }],
     evidence: |f| RuleTier::Guardrail.evidence(f),
@@ -524,9 +722,11 @@ pub(super) const LOCAL_OBLIGATIONS: StageSpec = StageSpec {
         "Is the rule too broad, or should it be an `invariant` with a guard instead of `required`?",
     ],
     review: RULES_REVIEW,
-    requirement: Requirement::Required,
+    requirement: Requirement::Optional,
     checks: &[Check {
-        passes_when: "an `invariant` or `required` names an entity of stage 5",
+        passes_when:
+            "an `invariant` or `required` with no comparison reads a column this BUC moves",
+        weight: Weight::Blocking,
         eval: |f| RuleTier::Obligation.check(f),
     }],
     evidence: |f| RuleTier::Obligation.evidence(f),
@@ -544,9 +744,10 @@ pub(super) const ADVANCED_RULES: StageSpec = StageSpec {
         "Is a cross-entity rule a global cross-product rule, or only intended along a declared relation path?",
     ],
     review: RULES_REVIEW,
-    requirement: Requirement::Required,
+    requirement: Requirement::Optional,
     checks: &[Check {
-        passes_when: "a rule on an entity of stage 5 holds a comparison or names more than one entity",
+        passes_when: "a rule that holds a comparison or names more than one entity reads a column this BUC moves",
+        weight: Weight::Blocking,
         eval: |f| RuleTier::Advanced.check(f),
     }],
     evidence: |f| RuleTier::Advanced.evidence(f),
