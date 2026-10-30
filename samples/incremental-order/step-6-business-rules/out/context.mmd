@@ -1,0 +1,18 @@
+%% rdra-ish diagram=context scope=whole model=samples/incremental-order/step-6-business-rules/src
+%% layers: value=システム価値 system=システム
+%% kinds: actor system
+%% omitted: buc permission
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__OpsStaff["Operations Staff"]:::actor
+  end
+  subgraph layer_system["システム"]
+    system__OrganizationSystem["Organization System"]:::system
+    system__StoreAdminSystem["Store Admin System"]:::system
+  end
+  actor__OpsStaff -.->|performs| system__OrganizationSystem
+  %% derived actor__OpsStaff -> system__OrganizationSystem via buc__BucStoreRestock
+  actor__OpsStaff -.->|performs| system__StoreAdminSystem
+  %% derived actor__OpsStaff -> system__StoreAdminSystem via buc__BucStoreRestock
+  classDef actor stroke:#333;
+  classDef system stroke:#333;

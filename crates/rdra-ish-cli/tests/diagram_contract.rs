@@ -1057,3 +1057,120 @@ fn a_flow_diagram_draws_what_the_rdra_diagram_declares() {
         assert!(flow.derived.is_empty(), "{root}: a derived edge");
     }
 }
+
+#[test]
+fn every_context_diagram_of_every_sample_keeps_the_contract() {
+    let dir = scratch("diagram_contract_context");
+    let mut edges = 0;
+    for root in roots() {
+        for scope in scopes(&root) {
+            let args: Vec<&str> = scope.iter().map(String::as_str).collect();
+            let text = diagram_with(&root, "context", &args, &dir.join("out"));
+            let chart = checked("context", &text, &format!("{root} {scope:?}"));
+            for kind in chart.nodes.values() {
+                assert!(
+                    ["actor", "extsystem", "system"].contains(&kind.as_str()),
+                    "{root} {scope:?}: a {kind} node\n{text}"
+                );
+            }
+            for edge @ (from, label, to) in &chart.edges {
+                let fits = match label.split_once(' ') {
+                    None => label == "performs" && from.starts_with("actor__"),
+                    Some(("raises", _)) => from.starts_with("extsystem__"),
+                    Some(("triggers", _)) => to.starts_with("extsystem__"),
+                    _ => false,
+                };
+                let system_end = from.starts_with("system__") || to.starts_with("system__");
+                assert!(
+                    fits && system_end && chart.derived.contains(edge),
+                    "{root} {scope:?}: {from} -{label}-> {to}\n{text}"
+                );
+            }
+            edges += chart.edges.len();
+        }
+    }
+    assert!(edges > 50, "only {edges} context edges");
+}
+
+#[test]
+fn a_context_diagram_node_has_the_id_the_rdra_diagram_gives_it() {
+    let dir = scratch("diagram_contract_context_ids");
+    for root in roots() {
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
+        let text = diagram(&root, "context", None, &dir.join("c"));
+        let context = parse_flowchart("context", &text).unwrap();
+        for (id, kind) in &context.nodes {
+            if id == "system__Model" {
+                assert!(
+                    text.contains("    %% synthesized system__Model: "),
+                    "{root}: system__Model without its reason"
+                );
+                continue;
+            }
+            assert_eq!(rdra.nodes.get(id), Some(kind), "{root}: {id}");
+        }
+        for line in text
+            .lines()
+            .filter_map(|l| l.trim().strip_prefix("%% derived "))
+        {
+            let (_, vias) = line.split_once(" via ").unwrap();
+            for via in vias.split(',') {
+                assert!(
+                    rdra.nodes.contains_key(via),
+                    "{root}: via {via} not in rdra"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn every_requirement_diagram_of_every_sample_keeps_the_contract() {
+    let dir = scratch("diagram_contract_requirement");
+    let mut edges = BTreeSet::new();
+    for root in roots() {
+        for scope in scopes(&root) {
+            let args: Vec<&str> = scope.iter().map(String::as_str).collect();
+            let text = diagram_with(&root, "requirement", &args, &dir.join("out"));
+            let chart = checked("requirement", &text, &format!("{root} {scope:?}"));
+            for (from, label, to) in &chart.edges {
+                let source = from.split_once("__").map_or("", |(kind, _)| kind);
+                let fits = match label.as_str() {
+                    "motivates" => source == "requirement" && to.starts_with("buc__"),
+                    "applies_to" => source == "nfr",
+                    "constrains" => source == "constraint",
+                    "qualifies" => {
+                        ["nfr", "constraint"].contains(&source) && to.starts_with("quality__")
+                    }
+                    _ => false,
+                };
+                assert!(fits, "{root} {scope:?}: {from} -{label}-> {to}");
+                edges.insert(label.clone());
+            }
+            assert!(chart.derived.is_empty(), "{root} {scope:?}: a derived edge");
+        }
+    }
+    assert_eq!(
+        edges,
+        BTreeSet::from(["applies_to", "constrains", "motivates", "qualifies"].map(String::from))
+    );
+}
+
+#[test]
+fn a_requirement_diagram_draws_what_the_rdra_diagram_declares() {
+    let dir = scratch("diagram_contract_requirement_ids");
+    for root in roots() {
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
+        let requirement = parse_flowchart(
+            "requirement",
+            &diagram(&root, "requirement", None, &dir.join("q")),
+        )
+        .unwrap();
+        for (id, kind) in &requirement.nodes {
+            assert_eq!(rdra.nodes.get(id), Some(kind), "{root}: {id}");
+        }
+        for edge in &requirement.edges {
+            assert!(rdra.edges.contains(edge), "{root}: {edge:?} not in rdra");
+        }
+    }
+}

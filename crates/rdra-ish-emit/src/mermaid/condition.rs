@@ -2,7 +2,7 @@
 //! variations and state models it combines and what it applies to, and each variation with
 //! its values.
 
-use super::{buc_members, declare, omitted_linked_kinds, render_edges, GraphEdge};
+use super::{buc_scope, declare, omitted_linked_kinds, render_edges, GraphEdge};
 use crate::diagram_common::{class_defs, contract_id, desc_line, quote, Header};
 use crate::{collect_object_graph_nodes, node_kind_filter_name, EmitError, Emitter, Scope, View};
 use rdra_ish_core::analysis::{condition_body_display, condition_edges, ConditionEdge};
@@ -21,26 +21,6 @@ fn state_model(model: &SemanticModel, edge: &ConditionEdge) -> Option<(String, S
         format!("statemodel__{entity}_{column}"),
         format!("{entity}.{column}"),
     ))
-}
-
-/// What a condition of the BUCs `ids` applies to: the use cases the BUCs contain, directly or
-/// through a step of one of their flows, and the APIs those use cases invoke.
-fn buc_targets(model: &SemanticModel, ids: &[String]) -> HashSet<NodeRef> {
-    let bucs: Vec<NodeRef> = model
-        .bucs
-        .iter()
-        .filter(|(_, buc)| ids.contains(&buc.id))
-        .map(|(key, _)| NodeRef::Buc(key))
-        .collect();
-    let mut targets: HashSet<NodeRef> = buc_members(model, &bucs).0.into_iter().collect();
-    let apis: Vec<NodeRef> = model
-        .relations
-        .iter()
-        .filter(|rel| rel.kind == RelKind::Invokes && targets.contains(&rel.from))
-        .map(|rel| rel.to.clone())
-        .collect();
-    targets.extend(apis);
-    targets
 }
 
 /// The variation `id` as a subgraph holding one `:::value` node per value.
@@ -68,7 +48,7 @@ fn render_variation(out: &mut String, model: &SemanticModel, key: VariationKey, 
 impl Emitter for ConditionMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         let targets_in_scope = match &view.scope {
-            Scope::Bucs(ids) => Some(buc_targets(model, ids)),
+            Scope::Bucs(ids) => Some(buc_scope(model, ids)),
             Scope::Whole | Scope::UseCases(_) => None,
         };
         let visible = |nr: &NodeRef| targets_in_scope.as_ref().is_none_or(|set| set.contains(nr));

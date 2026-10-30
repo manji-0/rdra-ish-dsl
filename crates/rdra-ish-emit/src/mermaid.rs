@@ -1,15 +1,19 @@
-//! Mermaid emitters: RDRA全体図、ビジネスコンテキスト、UC複合図、情報モデル、バリエーション・条件、業務フロー、ER図、状態遷移図、イベント図。
+//! Mermaid emitters: RDRA全体図、システムコンテキスト、要求モデル、ビジネスコンテキスト、UC複合図、情報モデル、バリエーション・条件、業務フロー、ER図、状態遷移図、イベント図。
 
 mod business;
 mod condition;
+mod context;
 mod flow;
 mod information;
+mod requirement;
 mod usecase;
 
 pub use business::BusinessMermaidEmitter;
 pub use condition::ConditionMermaidEmitter;
+pub use context::ContextMermaidEmitter;
 pub use flow::FlowMermaidEmitter;
 pub use information::InformationMermaidEmitter;
+pub use requirement::RequirementMermaidEmitter;
 pub use usecase::UsecaseMermaidEmitter;
 
 use crate::diagram_common::{
@@ -165,6 +169,28 @@ fn buc_members(model: &SemanticModel, bucs: &[NodeRef]) -> (Vec<NodeRef>, Vec<No
         .filter(|node| matches!(node, NodeRef::UseCase(_)))
         .collect();
     (usecases, steps)
+}
+
+/// What `--buc` scopes the context, condition, and requirement diagrams to: the BUCs `ids`
+/// names, the use cases and steps they contain (as `buc_members` finds them), and the APIs
+/// those use cases invoke.
+fn buc_scope(model: &SemanticModel, ids: &[String]) -> HashSet<NodeRef> {
+    let bucs: Vec<NodeRef> = model
+        .bucs
+        .iter()
+        .filter(|(_, buc)| ids.contains(&buc.id))
+        .map(|(key, _)| NodeRef::Buc(key))
+        .collect();
+    let (usecases, steps) = buc_members(model, &bucs);
+    let mut scope: HashSet<NodeRef> = bucs.into_iter().chain(usecases).chain(steps).collect();
+    let apis: Vec<NodeRef> = model
+        .relations
+        .iter()
+        .filter(|rel| rel.kind == RelKind::Invokes && scope.contains(&rel.from))
+        .map(|rel| rel.to.clone())
+        .collect();
+    scope.extend(apis);
+    scope
 }
 
 /// The kinds of the nodes linked to an `anchor` node that the diagram does not draw and whose

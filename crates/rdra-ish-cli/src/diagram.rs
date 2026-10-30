@@ -6,9 +6,9 @@ use anyhow::{Context, Result};
 use rdra_ish_core::SemanticModel;
 use rdra_ish_emit::{
     mermaid::{
-        BusinessMermaidEmitter, ConditionMermaidEmitter, ErMermaidEmitter, EventMermaidEmitter,
-        FlowMermaidEmitter, InformationMermaidEmitter, RdraMermaidEmitter, StateMermaidEmitter,
-        UsecaseMermaidEmitter,
+        BusinessMermaidEmitter, ConditionMermaidEmitter, ContextMermaidEmitter, ErMermaidEmitter,
+        EventMermaidEmitter, FlowMermaidEmitter, InformationMermaidEmitter, RdraMermaidEmitter,
+        RequirementMermaidEmitter, StateMermaidEmitter, UsecaseMermaidEmitter,
     },
     unknown_diagram_filter_kinds, Emitter, Filter, Scope, View,
 };
@@ -101,6 +101,8 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
         filter: match kind {
             DiagramKind::Er => Filter::Er,
             DiagramKind::Rdra
+            | DiagramKind::Context
+            | DiagramKind::Requirement
             | DiagramKind::Business
             | DiagramKind::Usecase
             | DiagramKind::Information
@@ -133,6 +135,8 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
 fn emit_diagram(model: &SemanticModel, kind: &DiagramKind, view: &View) -> Result<String> {
     match kind {
         DiagramKind::Rdra => Ok(RdraMermaidEmitter.emit(model, view)?),
+        DiagramKind::Context => Ok(ContextMermaidEmitter.emit(model, view)?),
+        DiagramKind::Requirement => Ok(RequirementMermaidEmitter.emit(model, view)?),
         DiagramKind::Business => Ok(BusinessMermaidEmitter.emit(model, view)?),
         DiagramKind::Usecase => Ok(UsecaseMermaidEmitter.emit(model, view)?),
         DiagramKind::Information => Ok(InformationMermaidEmitter.emit(model, view)?),

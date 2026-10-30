@@ -33,7 +33,7 @@ trap 'rm -rf "$work"' EXIT
 
 strip=()
 [[ -n "${STRIP_COMMENTS:-}" ]] && strip=(-e '/^%%/d')
-read -r -a kinds <<<"${KINDS:-rdra business usecase flow information condition er state event}"
+read -r -a kinds <<<"${KINDS:-rdra context requirement business usecase flow information condition er state event}"
 has_kind() { [[ " ${kinds[*]} " == *" $1 "* ]]; }
 only_kinds() { # kind...: those of the arguments that KINDS keeps
   local kind

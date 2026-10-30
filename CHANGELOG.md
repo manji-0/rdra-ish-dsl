@@ -333,6 +333,19 @@
 
 ### Added
 
+- `diagram --kind context` draws the RDRA system context under the encoding contract:
+  the system with each actor that performs one of its BUCs, use cases, or steps, and
+  each external system that raises an event one of its use cases consumes or receives
+  one they raise. Every edge is derived (`%% derived ... via`). With several systems an
+  edge ends at the system containing an API the use cases behind it invoke; with none,
+  or none traceable, at a synthesized `system__Model`. ec-site, clinic-ops, and
+  incremental-order step 6 (two systems) gain `out/context.mmd`.
+
+- `diagram --kind requirement` draws the RDRA requirement model under the encoding
+  contract: requirements with the BUCs they `motivate`, NFRs with what they `apply_to`,
+  constraints with what they `constrain`, and the qualities both `qualify` for.
+  clinic-ops gains `out/requirement.mmd`.
+
 - `diagram --kind flow` draws the RDRA business flow under the encoding contract, as
   `flowchart TD`: each flow as `subgraph flow__<id>` holding its steps, the declared
   `precedes`, `branches`, `excepts`, and `repeats` edges between steps, and `covers`

@@ -1,0 +1,49 @@
+%% rdra-ish diagram=requirement scope=whole model=samples/clinic-ops
+%% layers: value=システム価値 environment=システム外部環境 system=システム
+%% kinds: requirement nfr quality constraint buc system entity
+%% omitted: (none)
+flowchart LR
+  subgraph layer_value["システム価値"]
+    requirement__ReqEligibilityEveryVisit["受付のたびに保険資格を確認する"]:::requirement
+    requirement__ReqPayAfterConsultation["会計は診察の後に一度で行う"]:::requirement
+    requirement__ReqSwiftCheckIn["Patients are checked in and roomed without repeated data entry"]:::requirement
+    nfr__ScheduleLookupLatency["Schedule lookup latency"]:::nfr
+  end
+  subgraph layer_environment["システム外部環境"]
+    quality__Auditability["Auditability"]:::quality
+    quality__Performance["Performance"]:::quality
+    quality__Privacy["Privacy"]:::quality
+    constraint__BillingAuditTrail["Billing audit trail"]:::constraint
+    constraint__NoPharmacySteering["特定の保険薬局において調剤を受けるべき旨の指示等を行わない"]:::constraint
+    constraint__PatientDataPrivacy["Patient data privacy"]:::constraint
+    buc__BucVisitCheckIn["受付（初診・再診）"]:::buc
+    %% desc buc__BucVisitCheckIn: 到着確認、資格確認、紹介状の受付、診察室への案内。会計は診察の後に行う。
+    buc__BucVisitPayment["計算・会計"]:::buc
+    %% desc buc__BucVisitPayment: 診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。
+  end
+  subgraph layer_system["システム"]
+    system__ClinicOpsSystem["Clinic Operations System"]:::system
+    entity__InsurancePolicy["保険資格"]:::entity
+    entity__PatientProfile["Patient Profile"]:::entity
+    entity__PaymentTransaction["Payment Transaction"]:::entity
+    entity__Prescription["処方箋"]:::entity
+  end
+  constraint__BillingAuditTrail -.->|constrains| entity__PaymentTransaction
+  constraint__BillingAuditTrail -.->|constrains| system__ClinicOpsSystem
+  constraint__BillingAuditTrail -.->|qualifies| quality__Auditability
+  constraint__NoPharmacySteering -.->|constrains| entity__Prescription
+  constraint__PatientDataPrivacy -.->|constrains| entity__InsurancePolicy
+  constraint__PatientDataPrivacy -.->|constrains| entity__PatientProfile
+  constraint__PatientDataPrivacy -.->|qualifies| quality__Privacy
+  nfr__ScheduleLookupLatency -.->|applies_to| system__ClinicOpsSystem
+  nfr__ScheduleLookupLatency -.->|qualifies| quality__Performance
+  requirement__ReqEligibilityEveryVisit -.->|motivates| buc__BucVisitCheckIn
+  requirement__ReqPayAfterConsultation -.->|motivates| buc__BucVisitPayment
+  requirement__ReqSwiftCheckIn -.->|motivates| buc__BucVisitCheckIn
+  classDef requirement stroke:#333;
+  classDef nfr stroke:#333;
+  classDef quality stroke:#333;
+  classDef constraint stroke:#333;
+  classDef buc stroke:#333;
+  classDef system stroke:#333;
+  classDef entity stroke:#333;

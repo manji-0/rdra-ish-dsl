@@ -147,7 +147,8 @@ pub(crate) enum Commands {
     Diagram {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Diagram kind: rdra, business, usecase, flow, information, condition, er, state, or event
+        /// Diagram kind: rdra, context, requirement, business, usecase, flow, information,
+        /// condition, er, state, or event
         #[arg(long, default_value = "rdra", value_parser = WithRemoved::<DiagramKind>::new(REMOVED_DIAGRAM_KINDS))]
         kind: DiagramKind,
         /// Output format: mermaid, the only one (writes <out>.mmd)
@@ -292,6 +293,12 @@ pub(crate) enum VerifyBackend {
 pub(crate) enum DiagramKind {
     /// RDRA layered graph mapped onto the original RDRA-style structure
     Rdra,
+    /// システムコンテキスト: the system with the actors who use it and the external
+    /// systems it exchanges events with
+    Context,
+    /// 要求モデル: the requirements with the BUCs they motivate, and the NFRs and
+    /// constraints with what they apply to or constrain and their qualities
+    Requirement,
     /// ビジネスコンテキスト / BUC: each business with its BUCs, and the actors and external
     /// systems each BUC involves
     Business,

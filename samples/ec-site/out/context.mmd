@@ -1,0 +1,25 @@
+%% rdra-ish diagram=context scope=whole model=samples/ec-site
+%% layers: value=システム価値 system=システム
+%% kinds: actor extsystem system
+%% omitted: buc usecase event
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__Admin["Administrator"]:::actor
+    actor__Customer["Customer"]:::actor
+    extsystem__PaymentGW["Payment Gateway"]:::extsystem
+    extsystem__ShippingSvc["Shipping Service"]:::extsystem
+  end
+  subgraph layer_system["システム"]
+    system__CommerceSystem["Commerce System"]:::system
+  end
+  actor__Admin -.->|performs| system__CommerceSystem
+  %% derived actor__Admin -> system__CommerceSystem via usecase__DeliverOrder,usecase__ShipOrder
+  actor__Customer -.->|performs| system__CommerceSystem
+  %% derived actor__Customer -> system__CommerceSystem via buc__BucCart,buc__BucOrder,buc__BucPayment
+  extsystem__PaymentGW -.->|raises EvPaymentAuthorized| system__CommerceSystem
+  %% derived extsystem__PaymentGW -> system__CommerceSystem via event__EvPaymentAuthorized
+  system__CommerceSystem -.->|triggers EvOrderShipped| extsystem__ShippingSvc
+  %% derived system__CommerceSystem -> extsystem__ShippingSvc via event__EvOrderShipped
+  classDef actor stroke:#333;
+  classDef extsystem stroke:#333;
+  classDef system stroke:#333;

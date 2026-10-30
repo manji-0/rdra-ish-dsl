@@ -19,10 +19,12 @@ samples/clinic-ops/out/buc/usecase_visit_check_in.mmd	diagram samples/clinic-ops
 samples/clinic-ops/out/buc/usecase_visit_payment.mmd	diagram samples/clinic-ops --kind usecase --format mermaid --buc BucVisitPayment
 samples/clinic-ops/out/business.mmd	diagram samples/clinic-ops --kind business --format mermaid
 samples/clinic-ops/out/condition.mmd	diagram samples/clinic-ops --kind condition --format mermaid
+samples/clinic-ops/out/context.mmd	diagram samples/clinic-ops --kind context --format mermaid
 samples/clinic-ops/out/er_care_to_billing.mmd	diagram samples/clinic-ops --kind er --format mermaid --buc BucFollowupCare --buc BucBillingClaims
 samples/clinic-ops/out/event_flow.mmd	diagram samples/clinic-ops --kind event --format mermaid
 samples/clinic-ops/out/information.mmd	diagram samples/clinic-ops --kind information --format mermaid
 samples/clinic-ops/out/rdra_buc_clinical_encounter.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucClinicalEncounter
+samples/clinic-ops/out/requirement.mmd	diagram samples/clinic-ops --kind requirement --format mermaid
 samples/clinic-ops/out/screen_constraints.csv	csv samples/clinic-ops --kind screen-constraints
 samples/clinic-ops/out/state_whole.mmd	diagram samples/clinic-ops --kind state --format mermaid
 samples/clinic-ops/out/states_appointment.txt	states samples/clinic-ops --format table --entity Appointment
@@ -31,6 +33,7 @@ samples/ec-site/out/actors.actor.csv	csv samples/ec-site --kind actor
 samples/ec-site/out/api_matrix.csv	csv samples/ec-site --kind api-matrix
 samples/ec-site/out/business.mmd	diagram samples/ec-site --kind business --format mermaid
 samples/ec-site/out/condition.mmd	diagram samples/ec-site --kind condition --format mermaid
+samples/ec-site/out/context.mmd	diagram samples/ec-site --kind context --format mermaid
 samples/ec-site/out/entities.entity.csv	csv samples/ec-site --kind entity
 samples/ec-site/out/er.mmd	diagram samples/ec-site --kind er --format mermaid
 samples/ec-site/out/information.mmd	diagram samples/ec-site --kind information --format mermaid
@@ -85,6 +88,7 @@ samples/incremental-order/step-6-business-rules/out/actor_permission_audit.csv	c
 samples/incremental-order/step-6-business-rules/out/api_matrix.csv	csv samples/incremental-order/step-6-business-rules/src --kind api-matrix
 samples/incremental-order/step-6-business-rules/out/asyncapi.json	export samples/incremental-order/step-6-business-rules/src --kind asyncapi
 samples/incremental-order/step-6-business-rules/out/business.mmd	diagram samples/incremental-order/step-6-business-rules/src --kind business --format mermaid
+samples/incremental-order/step-6-business-rules/out/context.mmd	diagram samples/incremental-order/step-6-business-rules/src --kind context --format mermaid
 samples/incremental-order/step-6-business-rules/out/er.mmd	diagram samples/incremental-order/step-6-business-rules/src --kind er --format mermaid
 samples/incremental-order/step-6-business-rules/out/information.mmd	diagram samples/incremental-order/step-6-business-rules/src --kind information --format mermaid
 samples/incremental-order/step-6-business-rules/out/json-schema.json	export samples/incremental-order/step-6-business-rules/src --kind json-schema
