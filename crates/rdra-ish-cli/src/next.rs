@@ -13,8 +13,7 @@ use serde_json::{json, Value};
 use crate::cli::NextFormat;
 use crate::load::{load_model, reject_model_errors};
 
-/// Gaps and notes printed per stage in text output; `--format json` lists every one.
-const TEXT_GAP_LIMIT: usize = 8;
+const TEXT_ITEM_LIMIT: usize = 8;
 
 pub(crate) fn run_next(inputs: &[PathBuf], bucs: &[String], format: NextFormat) -> Result<()> {
     let (program, model, diags) = load_model(inputs)?;
@@ -128,7 +127,7 @@ fn render_text(standings: &[BucStanding], unowned: &[FindingRef], src: &str) -> 
                 view.id.number(),
                 view.spec().name,
                 view.evidence,
-                aside(view)
+                count_suffix(view)
             );
         }
         out.push('\n');
@@ -161,7 +160,6 @@ fn render_text(standings: &[BucStanding], unowned: &[FindingRef], src: &str) -> 
     out
 }
 
-/// The summary column: the next required stage, or the optional stages still open.
 fn next_label(p: &BucStanding) -> String {
     match p.next() {
         Next::Required(view) => stage_label(Some(view.id)),
@@ -180,8 +178,7 @@ fn next_label(p: &BucStanding) -> String {
     }
 }
 
-/// The counts a stage line ends with: notes, and findings of `check` the stage owns.
-fn aside(view: &StageView) -> String {
+fn count_suffix(view: &StageView) -> String {
     let mut parts = Vec::new();
     let plural = |n: usize, one: &str, many: &str| match n {
         0 => None,
@@ -221,8 +218,6 @@ fn finding_label(finding: &FindingRef) -> String {
     format!("{word}[{}]", finding.name)
 }
 
-/// A stage to work on: its question, its gaps, notes and findings, the questions to ask, and
-/// the commands that review the stage.
 fn write_stage(
     out: &mut String,
     word: &str,
@@ -276,7 +271,7 @@ fn write_list(out: &mut String, title: &str, items: &[Gap]) {
         return;
     }
     let _ = writeln!(out, "  {title}:");
-    for gap in items.iter().take(TEXT_GAP_LIMIT) {
+    for gap in items.iter().take(TEXT_ITEM_LIMIT) {
         let _ = writeln!(
             out,
             "    - {} {}: {}",
@@ -285,11 +280,11 @@ fn write_list(out: &mut String, title: &str, items: &[Gap]) {
             gap.message
         );
     }
-    if items.len() > TEXT_GAP_LIMIT {
+    if items.len() > TEXT_ITEM_LIMIT {
         let _ = writeln!(
             out,
             "    ... and {} more (`--format json` lists every one)",
-            items.len() - TEXT_GAP_LIMIT
+            items.len() - TEXT_ITEM_LIMIT
         );
     }
 }

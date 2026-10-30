@@ -1,4 +1,4 @@
-//! Lifecycle findings, as `check` names them, attributed to the BUCs and stages they block.
+//! Lifecycle findings, attributed to the BUCs and stages they block.
 
 use std::collections::HashMap;
 
@@ -8,8 +8,6 @@ use super::{FindingRef, StageId};
 use crate::lifecycle::{derive_states, ActionOrigin, Caps, ModelRef, Scope, StateDiag};
 use crate::model::{EntityKey, SemanticModel};
 
-/// Which stage owns a finding. An exhaustive match: a new `StateDiag` does not compile until
-/// someone decides which stage it blocks.
 pub(super) fn owning_stage(model: &SemanticModel, diag: &StateDiag) -> StageId {
     match diag {
         StateDiag::ConstraintViolated { site, .. } => {
@@ -43,8 +41,6 @@ pub(super) fn owning_stage(model: &SemanticModel, diag: &StateDiag) -> StageId {
     }
 }
 
-/// The rule stage of the constraint a site names, if it names one. A `@check`, a `relate`
-/// key, or a column is not a rule.
 fn rule_stage(model: &SemanticModel, fact: &ModelRef) -> Option<StageId> {
     let rule = match *fact {
         ModelRef::Forbidden(i) => Rule::Forbidden(model.forbidden_constraints.get(i)?),
@@ -54,13 +50,21 @@ fn rule_stage(model: &SemanticModel, fact: &ModelRef) -> Option<StageId> {
         ModelRef::CrossForbidden(_) | ModelRef::CrossInvariant(_) | ModelRef::Quantifier(_) => {
             return Some(StageId::AdvancedRules)
         }
-        _ => return None,
+        ModelRef::Transition(_)
+        | ModelRef::ColumnEffect(_)
+        | ModelRef::PropositionEffect(_)
+        | ModelRef::TemporalAssertion(_)
+        | ModelRef::TemporalProperty(_)
+        | ModelRef::Relation(_)
+        | ModelRef::Column { .. }
+        | ModelRef::Entity(_)
+        | ModelRef::UseCase(_)
+        | ModelRef::Condition(_)
+        | ModelRef::Synthesized => return None,
     };
     Some(rule.tier().stage())
 }
 
-/// Every finding of a whole-model run (`check`'s scope), keyed by BUC index and stage, and
-/// the findings no BUC owns.
 pub(super) struct Attributed {
     pub owned: HashMap<(usize, StageId), Vec<FindingRef>>,
     pub unowned: Vec<FindingRef>,
@@ -118,8 +122,6 @@ pub(super) fn attribute(model: &SemanticModel, facts: &[BucFacts]) -> Attributed
     attributed
 }
 
-/// The BUCs that touch one of the finding's entities, or whose use case is the action that
-/// never runs.
 fn owning_bucs(entities: &[EntityKey], diag: &StateDiag, facts: &[BucFacts]) -> Vec<usize> {
     facts
         .iter()

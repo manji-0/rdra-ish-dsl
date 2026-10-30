@@ -1,5 +1,4 @@
-//! `next` places each step of the incremental-order sample on the stage it is named after,
-//! and the gates read small models the way the modeling guide says.
+//! `next` places each step of the incremental-order sample on its stage, and reads small models as the modeling guide says.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -44,8 +43,6 @@ fn each_incremental_order_step_is_at_its_own_stage() {
     }
 }
 
-/// Step 5 passes every required stage; the rule stages are offered, not demanded. Step 6
-/// adds a `forbidden` and an `invariant`, which meet 6A and 6B.
 #[test]
 fn a_buc_with_a_lifecycle_is_complete_and_the_rule_stages_are_optional() {
     let out = json(&["samples/incremental-order/step-5-lifecycle/src"]);
@@ -140,8 +137,6 @@ fn buc_filter_keeps_the_named_bucs_and_rejects_unknown_ids() {
     assert!(String::from_utf8_lossy(&output.stderr).contains("unknown BUC `BucNope`"));
 }
 
-/// `--format json` on each step, compared with `tests/next_snapshots/<step>.json`.
-/// `RDRA_ISH_BLESS=1` rewrites the snapshots.
 #[test]
 fn json_output_matches_the_snapshots() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/next_snapshots");
@@ -168,7 +163,6 @@ fn json_output_matches_the_snapshots() {
     );
 }
 
-/// A model written under the target tmp dir, for the gate tests.
 fn model(name: &str, src: &str) -> String {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("next_cli");
     std::fs::create_dir_all(&dir).unwrap();
@@ -189,7 +183,6 @@ contains(BucOrder, PlaceOrder)
 displays(PlaceOrder, Checkout)
 "#;
 
-/// `ORDER_SKELETON` with a second use case to drive the lifecycle, so `check` passes.
 const PAID_ORDER: &str = r#"
 business Commerce "Commerce"
 buc BucOrder "Process Order"
@@ -462,7 +455,6 @@ forbidden(Order, qty > stock)
     );
 }
 
-/// Problem 10 of the design: `check` rejects the lifecycle while `next` ticked stage 5.
 #[test]
 fn a_lifecycle_check_rejects_blocks_the_stage() {
     let src = model(
@@ -521,7 +513,6 @@ transitions(Order.status, PlaceOrder, pending -> paid)
     );
 }
 
-/// Problem 1 of the design: `buc-empty` warned on a correct stage-0 model.
 #[test]
 fn lint_calls_buc_empty_info_before_the_skeleton_stage() {
     let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))

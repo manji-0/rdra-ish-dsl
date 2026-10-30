@@ -78,8 +78,7 @@ impl LintSeverity {
 }
 
 /// Collect review findings that are not already emitted as semantic/consistency diagnostics.
-/// `Info` findings are left out: `Diagnostic` has no info level, and a premature finding is
-/// not a warning.
+/// `Info` findings are left out.
 pub fn lint_review_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
     collect_findings(model)
         .into_iter()
@@ -88,12 +87,8 @@ pub fn lint_review_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
         .collect()
 }
 
-/// Lint rules that are review signals of one stage: a finding on a BUC that has not passed
-/// the stage is expected, not a warning.
 const STAGED_RULES: &[(&str, StageId)] = &[("buc-empty", StageId::Skeleton)];
 
-/// Turns a staged finding on a BUC that has not passed the rule's stage into `Info`, with the
-/// stage named in its hint. Other findings are untouched.
 fn demote_premature(issues: &mut [LintIssue], assessment: &Assessment) {
     for issue in issues {
         let Some((_, stage)) = STAGED_RULES.iter().find(|(rule, _)| *rule == issue.rule) else {
