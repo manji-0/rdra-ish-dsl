@@ -83,18 +83,6 @@ pub(crate) fn list_elements(
         ListKind::PermissionCallables => format_permission_callables(model, format),
         ListKind::ActorPermissionAudit => format_actor_permission_audit(model, format),
         ListKind::BusinessInputs => format_business_inputs(model, format),
-        ListKind::Surface => Ok(surface_text(model, format)),
+        ListKind::Surface => Ok(rdra_ish_core::Surface::of(model).text()),
     }
-}
-
-/// `--kind surface` has one format, the canonical text a consumer's lock stores. Any other
-/// `--format` is a usage error.
-fn surface_text(model: &rdra_ish_core::SemanticModel, format: &ListFormat) -> String {
-    if !matches!(format, ListFormat::Table) {
-        eprintln!(
-            "error: `list --kind surface` prints canonical text only; drop `--format` (the default, table, prints the text)"
-        );
-        std::process::exit(2);
-    }
-    rdra_ish_core::Surface::of(model).text()
 }
