@@ -261,17 +261,17 @@ stage has a gate, and a BUC is at the highest stage whose gate it passes togethe
 every earlier gate:
 
 <!-- stage-spec: gates -->
-| Stage | The gate passes when |
-|---|---|
-| 0 Scope sketch | the BUC `belongs` to a business |
-| 1 BUC skeleton | an actor `performs` it or one of its use cases, or an event or timer `triggers` one; and it holds a use case (by `contains`, or through a flow's steps and `covers`) |
-| 2 Data touchpoints | every use case creates, reads, updates, or deletes an entity, directly or through an API it `invokes` |
-| 3 Interaction boundary | every use case `displays` a screen or `invokes` an API, or an event or timer `triggers` it |
-| 4 Entity structure | every entity of stage 2 has a column that is neither a primary key nor a foreign key |
-| 5 Lifecycle | a use case moves an entity with `transitions` or `sets` |
-| 6A Local guardrails | a `forbidden` or `exclusive` names an entity of stage 5 |
-| 6B Local obligations | an `invariant` or `required` names an entity of stage 5 |
-| 6C Advanced rules | a rule on an entity of stage 5 holds a comparison or names more than one entity |
+| Stage | The gate passes when | Review notes |
+|---|---|---|
+| 0 Scope sketch | the BUC `belongs` to a business |  |
+| 1 BUC skeleton | an actor `performs` it or one of its use cases, or an event or timer `triggers` one; and it holds a use case (by `contains`, or through a flow's steps and `covers`), or an event or timer `triggers` the BUC itself |  |
+| 2 Data touchpoints | the BUC holds a use case; and a use case creates, reads, updates, or deletes an entity, directly or through an API it `invokes` | once a use case touches data, each use case with no touchpoint is data-free on purpose |
+| 3 Interaction boundary | every use case `displays` a screen or `invokes` an API, or an event or timer `triggers` it | when the model declares a `permission` or `medium`, each use case with no `requires_permission` / `requires_medium` on it or its APIs is open to every actor and device on purpose |
+| 4 Entity structure | every touched entity has a column that is neither a primary key nor a foreign key | when the BUC touches two or more entities, each touched entity with no `relate` to another touched entity stands alone on purpose |
+| 5 Lifecycle | a use case moves an Enum or Bool column, with `transitions` or with `sets` on it | a `sets` that only marks presence, an Int, or a comparison follows a lifecycle Enum or Bool |
+| 6A Local guardrails (optional) | a `forbidden` or `exclusive` with no comparison reads a column this BUC moves |  |
+| 6B Local obligations (optional) | an `invariant` or `required` with no comparison reads a column this BUC moves |  |
+| 6C Advanced rules (optional) | a rule that holds a comparison or names more than one entity reads a column this BUC moves |  |
 <!-- /stage-spec -->
 
 A gate passing is evidence, not a verdict. The stage sections of

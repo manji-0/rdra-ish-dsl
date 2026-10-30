@@ -748,7 +748,9 @@ fn stage_readiness_issue(model: &SemanticModel) -> LintIssue {
                     Next::Required(view) => {
                         format!("{} stage {stage} (next {})", p.id, view.id.number())
                     }
-                    Next::Optional(_) => format!("{} stage {stage} (every gate passes)", p.id),
+                    Next::Optional(_) => {
+                        format!("{} stage {stage} (required stages complete)", p.id)
+                    }
                 }
             })
             .collect::<Vec<_>>()

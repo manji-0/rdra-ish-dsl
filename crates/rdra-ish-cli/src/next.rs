@@ -4,13 +4,13 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use anyhow::{bail, Result};
-use rdra_ish_core::refinement::{assess, BucStanding, Next, StageId, StageView, Verdict};
+use rdra_ish_core::refinement::{assess, BucStanding, Gap, Next, StageId, StageView, Verdict};
 use serde_json::{json, Value};
 
 use crate::cli::NextFormat;
 use crate::load::{load_model, reject_model_errors};
 
-/// Gaps printed per stage in text output; `--format json` lists every gap.
+/// Gaps and notes printed per stage in text output; `--format json` lists every one.
 const TEXT_GAP_LIMIT: usize = 8;
 
 pub(crate) fn run_next(inputs: &[PathBuf], bucs: &[String], format: NextFormat) -> Result<()> {
@@ -48,7 +48,7 @@ fn render_text(standings: &[BucStanding], src: &str) -> String {
     let mut out = String::new();
     if standings.is_empty() {
         let _ = writeln!(out, "No BUC yet: the model is before stage 0.\n");
-        write_stage(&mut out, StageId::Scope, src, "<Buc>", &[], |out| {
+        write_stage(&mut out, "Next", StageId::Scope, src, "<Buc>", &[], |out| {
             let _ = writeln!(
                 out,
                 "  Gaps:\n    - add a `business` and a `buc`, and `belongs(Buc, Business)`"
@@ -61,16 +61,12 @@ fn render_text(standings: &[BucStanding], src: &str) -> String {
         let width = standings.iter().map(|p| p.id.len()).max().unwrap_or(0);
         let _ = writeln!(out, "{:width$}  {:24}  Next", "BUC", "Stage");
         for p in standings {
-            let next = match p.next() {
-                Next::Required(view) => stage_label(Some(view.id)),
-                Next::Optional(_) => "done".to_string(),
-            };
             let _ = writeln!(
                 out,
                 "{:width$}  {:24}  {}",
                 p.id,
                 stage_label(p.reached()),
-                next
+                next_label(p)
             );
         }
         out.push('\n');
@@ -80,9 +76,14 @@ fn render_text(standings: &[BucStanding], src: &str) -> String {
         if i > 0 {
             out.push('\n');
         }
+        let complete = if p.required_complete() {
+            ", required stages complete"
+        } else {
+            ""
+        };
         let _ = writeln!(
             out,
-            "{} \"{}\": stage {}",
+            "{} \"{}\": stage {}{complete}",
             p.id,
             p.label,
             stage_label(p.reached())
@@ -92,53 +93,93 @@ fn render_text(standings: &[BucStanding], src: &str) -> String {
                 Verdict::Met => "x",
                 Verdict::Open => " ",
             };
+            let notes = match view.notes.len() {
+                0 => String::new(),
+                1 => " (1 note)".to_string(),
+                n => format!(" ({n} notes)"),
+            };
             let _ = writeln!(
                 out,
-                "  [{mark}] {:2} {:21} {}",
+                "  [{mark}] {:2} {:21} {}{notes}",
                 view.id.number(),
                 view.spec().name,
                 view.evidence
             );
         }
         out.push('\n');
+        let moved: Vec<&str> = p.moved.iter().map(String::as_str).collect();
         match p.next() {
             Next::Required(view) => {
-                let moved: Vec<&str> = p.moved.iter().map(String::as_str).collect();
-                write_stage(&mut out, view.id, src, &p.id, &moved, |out| {
-                    write_gaps(out, view)
+                write_stage(&mut out, "Next", view.id, src, &p.id, &moved, |out| {
+                    write_list(out, "Gaps", &view.gaps);
+                    write_list(out, "Notes", &view.notes);
                 });
             }
-            Next::Optional(_) => {
+            Next::Optional(views) => {
                 let _ = writeln!(
                     out,
-                    "Every stage gate passes. Review `rdra-ish states {src} --buc {}` diagnostics, and refine any stage whose review is not settled yet.",
-                    p.id
+                    "Every required stage is met. Rules are optional; add one when the business has it:"
                 );
+                for view in views {
+                    if view.verdict() == Verdict::Met {
+                        let _ = writeln!(
+                            out,
+                            "  [x] {} {}: {}",
+                            view.id.number(),
+                            view.spec().name,
+                            view.evidence
+                        );
+                        continue;
+                    }
+                    write_stage(&mut out, "Optional", view.id, src, &p.id, &moved, |out| {
+                        write_list(out, "Gaps", &view.gaps);
+                    });
+                }
             }
         }
     }
     out
 }
 
-/// The next stage: its question, then what `gaps` writes, the questions to ask, and the
-/// commands that review the stage.
+/// The summary column: the next required stage, or the optional stages still open.
+fn next_label(p: &BucStanding) -> String {
+    match p.next() {
+        Next::Required(view) => stage_label(Some(view.id)),
+        Next::Optional(views) => {
+            let open: Vec<String> = views
+                .iter()
+                .filter(|view| view.verdict() != Verdict::Met)
+                .map(|view| view.id.number())
+                .collect();
+            if open.is_empty() {
+                "complete".to_string()
+            } else {
+                format!("optional: {}", open.join(" "))
+            }
+        }
+    }
+}
+
+/// A stage to work on: its question, then what `lists` writes, the questions to ask, and
+/// the commands that review the stage.
 fn write_stage(
     out: &mut String,
+    word: &str,
     stage: StageId,
     src: &str,
     buc: &str,
     entities: &[&str],
-    gaps: impl FnOnce(&mut String),
+    lists: impl FnOnce(&mut String),
 ) {
     let spec = stage.spec();
     let _ = writeln!(
         out,
-        "Next: stage {} {}\n  {}",
+        "{word}: stage {} {}\n  {}",
         stage.number(),
         spec.name,
         spec.question,
     );
-    gaps(out);
+    lists(out);
     let _ = writeln!(out, "  Ask:");
     for ask in spec.asks {
         let _ = writeln!(out, "    - {ask}");
@@ -154,12 +195,12 @@ fn write_stage(
     );
 }
 
-fn write_gaps(out: &mut String, view: &StageView) {
-    if view.gaps.is_empty() {
+fn write_list(out: &mut String, title: &str, items: &[Gap]) {
+    if items.is_empty() {
         return;
     }
-    let _ = writeln!(out, "  Gaps:");
-    for gap in view.gaps.iter().take(TEXT_GAP_LIMIT) {
+    let _ = writeln!(out, "  {title}:");
+    for gap in items.iter().take(TEXT_GAP_LIMIT) {
         let _ = writeln!(
             out,
             "    - {} {}: {}",
@@ -168,11 +209,11 @@ fn write_gaps(out: &mut String, view: &StageView) {
             gap.message
         );
     }
-    if view.gaps.len() > TEXT_GAP_LIMIT {
+    if items.len() > TEXT_GAP_LIMIT {
         let _ = writeln!(
             out,
-            "    ... and {} more (`--format json` lists every gap)",
-            view.gaps.len() - TEXT_GAP_LIMIT
+            "    ... and {} more (`--format json` lists every one)",
+            items.len() - TEXT_GAP_LIMIT
         );
     }
 }
@@ -183,30 +224,39 @@ fn render_json(standings: &[BucStanding], src: &str) -> Value {
         .map(|p| {
             let reached = p.reached();
             let moved: Vec<&str> = p.moved.iter().map(String::as_str).collect();
+            let stage_json = |view: &StageView| {
+                let spec = view.spec();
+                json!({
+                    "stage": view.id.number(),
+                    "stage_name": spec.name,
+                    "slug": view.id.slug(),
+                    "verdict": verdict_json(view.verdict()),
+                    "question": spec.question,
+                    "doc": format!("docs/incremental-modeling.md#{}", view.id.doc_anchor()),
+                    "asks": spec.asks,
+                    "validate": spec.review_commands(src, &p.id, &moved),
+                    "gaps": view.gaps.iter().map(gap_json).collect::<Vec<_>>(),
+                    "notes": view.notes.iter().map(gap_json).collect::<Vec<_>>(),
+                })
+            };
             let next = match p.next() {
                 Next::Required(view) => {
-                    let spec = view.spec();
-                    json!({
-                        "stage": view.id.number(),
-                        "stage_name": spec.name,
-                        "question": spec.question,
-                        "doc": format!("docs/incremental-modeling.md#{}", view.id.doc_anchor()),
-                        "asks": spec.asks,
-                        "validate": spec.review_commands(src, &p.id, &moved),
-                        "gaps": view.gaps.iter().map(|gap| json!({
-                            "kind": gap.subject_kind.as_str(),
-                            "id": gap.subject_id,
-                            "message": gap.message,
-                        })).collect::<Vec<_>>(),
-                    })
+                    let mut next = stage_json(view);
+                    next["kind"] = json!("required");
+                    next
                 }
-                Next::Optional(_) => Value::Null,
+                Next::Optional(views) => json!({
+                    "kind": "optional",
+                    "stages": views.iter().map(|view| stage_json(view)).collect::<Vec<_>>(),
+                }),
             };
             json!({
                 "id": p.id,
                 "label": p.label,
                 "stage": reached.map(StageId::number),
                 "stage_name": reached.map(|id| id.spec().name),
+                "slug": reached.map(StageId::slug),
+                "required_complete": p.required_complete(),
                 "gates": p.stages.iter().map(gate_json).collect::<Vec<_>>(),
                 "next": next,
             })
@@ -219,10 +269,28 @@ fn gate_json(view: &StageView) -> Value {
     json!({
         "stage": view.id.number(),
         "stage_name": view.spec().name,
+        "slug": view.id.slug(),
         "passed": view.verdict() == Verdict::Met,
+        "verdict": verdict_json(view.verdict()),
         "evidence": view.evidence,
         "gaps": view.gaps.len(),
+        "notes": view.notes.len(),
     })
+}
+
+fn gap_json(gap: &Gap) -> Value {
+    json!({
+        "kind": gap.subject_kind.as_str(),
+        "id": gap.subject_id,
+        "message": gap.message,
+    })
+}
+
+fn verdict_json(verdict: Verdict) -> &'static str {
+    match verdict {
+        Verdict::Met => "met",
+        Verdict::Open => "open",
+    }
 }
 
 fn stage_label(stage: Option<StageId>) -> String {

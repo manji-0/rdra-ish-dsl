@@ -5,91 +5,178 @@
         {
           "evidence": "belongs to StoreOperations",
           "gaps": 0,
+          "notes": 0,
           "passed": true,
+          "slug": "scope",
           "stage": "0",
-          "stage_name": "Scope sketch"
+          "stage_name": "Scope sketch",
+          "verdict": "met"
         },
         {
           "evidence": "3 use cases, 1 `performs` / `triggers` starting them",
           "gaps": 0,
+          "notes": 0,
           "passed": true,
+          "slug": "skeleton",
           "stage": "1",
-          "stage_name": "BUC skeleton"
+          "stage_name": "BUC skeleton",
+          "verdict": "met"
         },
         {
           "evidence": "3/3 use cases touch an entity",
           "gaps": 0,
+          "notes": 0,
           "passed": true,
+          "slug": "data-touchpoints",
           "stage": "2",
-          "stage_name": "Data touchpoints"
+          "stage_name": "Data touchpoints",
+          "verdict": "met"
         },
         {
           "evidence": "3/3 use cases display a screen, invoke an API, or run on a trigger",
           "gaps": 0,
+          "notes": 0,
           "passed": true,
+          "slug": "interaction-boundary",
           "stage": "3",
-          "stage_name": "Interaction boundary"
+          "stage_name": "Interaction boundary",
+          "verdict": "met"
         },
         {
           "evidence": "2/2 entities have a column beyond their keys",
           "gaps": 0,
+          "notes": 0,
           "passed": true,
+          "slug": "entity-structure",
           "stage": "4",
-          "stage_name": "Entity structure"
+          "stage_name": "Entity structure",
+          "verdict": "met"
         },
         {
-          "evidence": "use cases move Store",
+          "evidence": "use cases move Store.restock_status, Store.next_restock_date",
           "gaps": 0,
+          "notes": 0,
           "passed": true,
+          "slug": "lifecycle",
           "stage": "5",
-          "stage_name": "Lifecycle"
+          "stage_name": "Lifecycle",
+          "verdict": "met"
         },
         {
-          "evidence": "no `forbidden` / `exclusive` on an entity this BUC moves",
+          "evidence": "no `forbidden` / `exclusive` reads a column this BUC moves",
           "gaps": 1,
+          "notes": 0,
           "passed": false,
+          "slug": "local-guardrails",
           "stage": "6A",
-          "stage_name": "Local guardrails"
+          "stage_name": "Local guardrails",
+          "verdict": "open"
         },
         {
-          "evidence": "no `invariant` / `required` on an entity this BUC moves",
+          "evidence": "no `invariant` / `required` reads a column this BUC moves",
           "gaps": 1,
+          "notes": 0,
           "passed": false,
+          "slug": "local-obligations",
           "stage": "6B",
-          "stage_name": "Local obligations"
+          "stage_name": "Local obligations",
+          "verdict": "open"
         },
         {
-          "evidence": "no comparison or cross-entity rule on an entity this BUC moves",
+          "evidence": "no comparison or cross-entity rule reads a column this BUC moves",
           "gaps": 1,
+          "notes": 0,
           "passed": false,
+          "slug": "advanced-rules",
           "stage": "6C",
-          "stage_name": "Advanced rules"
+          "stage_name": "Advanced rules",
+          "verdict": "open"
         }
       ],
       "id": "BucStoreRestock",
       "label": "Maintain Store Restock",
       "next": {
-        "asks": [
-          "Which combinations must never be reachable?",
-          "Which facts must be mutually exclusive?",
-          "Are these facts already represented as Enum, Bool, or nullable state axes?"
-        ],
-        "doc": "docs/incremental-modeling.md#stage-6a-local-guardrails",
-        "gaps": [
+        "kind": "optional",
+        "stages": [
           {
-            "id": "Store",
-            "kind": "entity",
-            "message": "add `forbidden(Store, ...)` or `exclusive(Store, ...)` for a combination of Store facts that must never be reachable"
+            "asks": [
+              "Which combinations must never be reachable?",
+              "Which facts must be mutually exclusive?",
+              "Are these facts already represented as Enum, Bool, or nullable state axes?"
+            ],
+            "doc": "docs/incremental-modeling.md#stage-6a-local-guardrails",
+            "gaps": [
+              {
+                "id": "Store",
+                "kind": "entity",
+                "message": "add `forbidden(Store, ...)` or `exclusive(Store, ...)` for a combination of Store facts that must never be reachable"
+              }
+            ],
+            "notes": [],
+            "question": "Which simple states or facts must never co-occur?",
+            "slug": "local-guardrails",
+            "stage": "6A",
+            "stage_name": "Local guardrails",
+            "validate": [
+              "rdra-ish check samples/incremental-order/step-5-lifecycle/src",
+              "rdra-ish states samples/incremental-order/step-5-lifecycle/src --entity Store"
+            ],
+            "verdict": "open"
+          },
+          {
+            "asks": [
+              "Which values must co-occur once a condition is true?",
+              "Which facts must be true in every reachable state?",
+              "Is the rule too broad, or should it be an `invariant` with a guard instead of `required`?"
+            ],
+            "doc": "docs/incremental-modeling.md#stage-6b-local-obligations",
+            "gaps": [
+              {
+                "id": "Store",
+                "kind": "entity",
+                "message": "add `invariant(Store).when(...).then(...)` for facts that must co-occur, or a narrow `required(Store, ...)`"
+              }
+            ],
+            "notes": [],
+            "question": "Which reachable states imply or require other facts?",
+            "slug": "local-obligations",
+            "stage": "6B",
+            "stage_name": "Local obligations",
+            "validate": [
+              "rdra-ish check samples/incremental-order/step-5-lifecycle/src",
+              "rdra-ish states samples/incremental-order/step-5-lifecycle/src --entity Store"
+            ],
+            "verdict": "open"
+          },
+          {
+            "asks": [
+              "Which comparisons matter, and which use cases move the numeric or date values they read?",
+              "Which rules really mention more than one entity?",
+              "Is a cross-entity rule a global cross-product rule, or only intended along a declared relation path?"
+            ],
+            "doc": "docs/incremental-modeling.md#stage-6c-advanced-rules",
+            "gaps": [
+              {
+                "id": "Store",
+                "kind": "entity",
+                "message": "add a comparison such as `forbidden(Store, a < b)` driven by `sets`, or a rule over Store and another entity"
+              }
+            ],
+            "notes": [],
+            "question": "Which comparison or cross-entity facts are reviewable from the abstract state space?",
+            "slug": "advanced-rules",
+            "stage": "6C",
+            "stage_name": "Advanced rules",
+            "validate": [
+              "rdra-ish check samples/incremental-order/step-5-lifecycle/src",
+              "rdra-ish states samples/incremental-order/step-5-lifecycle/src --entity Store"
+            ],
+            "verdict": "open"
           }
-        ],
-        "question": "Which simple states or facts must never co-occur?",
-        "stage": "6A",
-        "stage_name": "Local guardrails",
-        "validate": [
-          "rdra-ish check samples/incremental-order/step-5-lifecycle/src",
-          "rdra-ish states samples/incremental-order/step-5-lifecycle/src --entity Store"
         ]
       },
+      "required_complete": true,
+      "slug": "lifecycle",
       "stage": "5",
       "stage_name": "Lifecycle"
     }
