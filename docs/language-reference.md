@@ -71,9 +71,12 @@ import shared.actors.{Staff as S} // selective import with a local alias
   scope. Sibling files without imports keep open-world (legacy) resolution of bare names.
 - Reusing the same `as` alias for two modules is an error (`DuplicateAlias`).
 
-When the CLI loads a directory, it merges all `.rdra` files reachable from the entry
-files into a single semantic model, resolving imports against the include paths derived
-from the input layout.
+When the CLI or the LSP loads a directory, it merges all `.rdra` files reachable from the
+entry files into a single semantic model, resolving imports against the include paths
+derived from the input layout. The include paths are the parent and the grandparent of each
+entry file, after symlinks are resolved, so the CLI and the LSP resolve an import the same
+way. An `rdra.toml` above the inputs is discovered and parsed, and has no effect on
+resolution yet (see [Project manifest](./cli-reference.md#project-manifest)).
 
 ---
 

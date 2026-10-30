@@ -4,6 +4,11 @@
 
 ### Added
 
+- One project loader in `rdra-ish-core` (`load_project`) now serves the CLI, the LSP, and the
+  tests. It looks for an `rdra.toml` manifest above the inputs and parses it, but nothing
+  reads it yet, so a model without a manifest loads and prints exactly as before. A
+  malformed manifest, or one without `[model] name`, fails the load and names the file and
+  line. The search is documented under "Project manifest" in the CLI reference.
 - `rdra-ish next` places each BUC on the incremental modeling stage map and prints the
   next stage: its main question, the elements that fail its gate (such as a use case with
   no CRUD or an entity with only its key), the review notes, the `check` findings the

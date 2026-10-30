@@ -359,6 +359,39 @@ prints (see [Sample expectations](./formal-verification.md#sample-expectations))
 |---|---|---|
 | `<INPUTS...>` | paths (required) | Files and/or directories to list. |
 
+`files` and `fmt` read no manifest, so a malformed `rdra.toml` does not stop them.
+
+---
+
+## Project manifest
+
+A model may carry an `rdra.toml` at its root:
+
+```toml
+[model]
+name = "shop"
+
+[dependencies]
+auth = { path = "../auth-model" }
+```
+
+`[model] name` is required. The `[dependencies]` table is parsed and not used yet, so a
+manifest changes no output. A malformed manifest, or one without `[model] name`, makes every
+loading command exit `1` with a message that names `rdra.toml` and the line.
+
+A loading command finds the manifest like this:
+
+1. Take each input as given, made absolute without resolving symlinks. A `..` component is
+   collapsed before the walk.
+2. Start in the input's directory, or in the directory of a file input, and look for
+   `rdra.toml` there, then in each parent.
+3. Stop after the first directory that holds `.git`, which is searched too, or at the
+   filesystem root. A stray `rdra.toml` above a repository never applies.
+4. With several inputs, the first input that has a manifest decides.
+
+The LSP loads a workspace the same way. It lists every `.rdra` file under the workspace roots,
+adds the open buffers, and derives the include paths from those files exactly as the CLI does.
+
 ---
 
 ## `fmt`
