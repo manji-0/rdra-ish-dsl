@@ -299,7 +299,7 @@ rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]...
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `rdra` \| `usecase` \| `er` \| `state` \| `event` | `rdra` | The diagram kind. `rdra` = RDRA layered graph mapped onto the original four-layer structure; `usecase` = the UC複合図: each use case with the actors who perform it, its screens and what they show, the entities it reads and writes (an invoked API's CRUD folded into it), its events with their external systems, its timers, the conditions that apply to it, and its transitions; `er` = entity-relationship diagram; `state` = one composite state per state model (lifecycle column), transitions labelled with use-case ids, start and end states; `event` = system-to-system event links: UC or ExtSystem `raises` Event, Event `triggers` UC/BUC/ExtSystem, and Timer `triggers` UC/BUC. `boundaryless-graph`, `business-area`, `technical-area`, `sequence`, `diff`, and `event-flow` were removed and fail with a message that names the replacement: `rdra` (narrowed with `--node-kind` / `--edge-kind`), `csv --kind business-inputs`, `csv --kind api-matrix`, `check` (which prints the transaction, API, and system warnings `sequence` printed), a text diff of two `rdra` `.mmd` files, and `--kind event`. |
+| `--kind` | `rdra` \| `business` \| `usecase` \| `er` \| `state` \| `event` | `rdra` | The diagram kind. `rdra` = RDRA layered graph mapped onto the original four-layer structure; `business` = the business context and business use cases: each business with its BUCs, and the actors and external systems each BUC involves; `usecase` = the UC複合図: each use case with the actors who perform it, its screens and what they show, the entities it reads and writes (an invoked API's CRUD folded into it), its events with their external systems, its timers, the conditions that apply to it, and its transitions; `er` = entity-relationship diagram; `state` = one composite state per state model (lifecycle column), transitions labelled with use-case ids, start and end states; `event` = system-to-system event links: UC or ExtSystem `raises` Event, Event `triggers` UC/BUC/ExtSystem, and Timer `triggers` UC/BUC. `boundaryless-graph`, `business-area`, `technical-area`, `sequence`, `diff`, and `event-flow` were removed and fail with a message that names the replacement: `rdra` (narrowed with `--node-kind` / `--edge-kind`), `csv --kind business-inputs`, `csv --kind api-matrix`, `check` (which prints the transaction, API, and system warnings `sequence` printed), a text diff of two `rdra` `.mmd` files, and `--kind event`. |
 | `--format` | `mermaid` | `mermaid` | Output format. Mermaid text (`.mmd`) is the only one. `puml`, `svg`, and `png` were removed and fail with a message that names `--format mermaid`; to get an image, render the `.mmd` with `mmdc` or any Mermaid-aware tool. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Filter to one or more BUCs by id. With multiple ids, the **union** of reachable nodes across the named BUCs is shown. Applies to all diagram kinds. For `usecase`, the use cases each BUC contains, directly or through a step of one of its flows. |
 | `--usecase <id>` | string (repeatable) | — (whole model) | Draw only the named use cases. Applies to `usecase` only, and not together with `--buc`; an unknown id is an error. |
@@ -330,6 +330,15 @@ Notes:
   when model elements of different kinds share a DSL identifier. The diagram draws no
   states; `%% omitted: state transitions` says a drawn use case drives one, which
   `--kind state` shows.
+- For `--kind business`, actors and external systems sit in システム価値, and each
+  business is `subgraph business__<id>["<label>"]` inside システム外部環境, holding its
+  BUCs. A BUC of no business, or of several, sits beside them, the latter with its
+  `belongs` edges. Only `performs(Actor, Buc)` is declared; every other edge is derived
+  and followed by its `%% derived` line: an actor performing one of the BUC's use cases
+  or steps (`via usecase__<Uc>` or `via step__<Step>`), an external system raising an
+  event that triggers the BUC or one of its use cases (labelled `raises <Event>`), and
+  the BUC triggering an external system through an event one of its use cases raises
+  (labelled `triggers <Event>`). `--buc` draws the named BUCs and their businesses.
 - For `--kind usecase`, the use cases and what they touch sit in the `rdra` layers with
   the `rdra` ids, so a node matches its `rdra` node. An edge `rdra` does not draw is
   derived and followed by its `%% derived` line: an API's CRUD drawn from the use case
@@ -382,7 +391,7 @@ flowchart LR
 - A fact drawn more than once in the model is drawn once.
 - An edge rdra-ish derived rather than read from a declaration is followed by
   `%% derived <from> -> <to> <source>`: in `rdra`, a condition's `combines` link derived
-  from its `holds` body (`from holds`); in `usecase`, the links `via` an API, BUC, or step.
+  from its `holds` body (`from holds`); in `usecase` and `business`, the links `via` the node they go through.
 - A node's `description` follows its declaration as `%% desc <id>: <text>`, its lines
   joined by a space.
 

@@ -333,6 +333,17 @@
 
 ### Added
 
+- `diagram --kind business` draws the RDRA business context and business use cases
+  under the encoding contract: each business as `subgraph business__<id>` in the
+  システム外部環境 layer holding its BUCs, and the actors and external systems of the
+  システム価値 layer each BUC involves. `performs(Actor, Buc)` is drawn as declared;
+  an actor performing one of the BUC's use cases or steps, an external system raising an
+  event that starts the BUC or one of its use cases (`raises <Event>`), and an event a
+  use case of the BUC raises to an external system (`triggers <Event>`) are derived,
+  each followed by `%% derived ... via <node>`. `--buc` narrows it to the RDRA BUC
+  diagram. ec-site, clinic-ops, personal-info, and incremental-order step 6 gain
+  `out/business.mmd`.
+
 - `diagram --kind usecase` draws the RDRA UC複合図 under the encoding contract: each use
   case with the actors who perform it, the screens it displays and the entities they show,
   the entities it reads and writes, the events it raises or that trigger it with their

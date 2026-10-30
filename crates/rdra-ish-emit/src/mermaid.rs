@@ -1,7 +1,9 @@
 //! Mermaid emitters: RDRA全体図、UC複合図、ER図、状態遷移図、イベント図。
 
+mod business;
 mod usecase;
 
+pub use business::BusinessMermaidEmitter;
 pub use usecase::UsecaseMermaidEmitter;
 
 use crate::diagram_common::{
@@ -16,7 +18,7 @@ use crate::{
 use rdra_ish_core::model::{
     ColumnType, EntityKey, NodeRef, RelKind, SemanticModel, StateKey, StateTransition,
 };
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 // ── RDRA グラフ図エミッタ (Mermaid) ─────────────────────────────────────────
 
@@ -69,6 +71,109 @@ fn render_layered_nodes(
         out.push_str("  end\n");
     }
     layers
+}
+
+type EdgeKey = (String, String, String);
+
+/// The edges of a flowchart keyed by `(from, label, to)`, each drawn once. A declared edge
+/// wins over a derived one, and a derived edge names every node it goes through.
+#[derive(Default)]
+struct EdgeSet {
+    /// `(from, label, to)` to the arrow and, for a derived edge, the ids it goes through.
+    edges: BTreeMap<EdgeKey, (&'static str, Option<BTreeSet<String>>)>,
+    /// The ends of every edge added.
+    nodes: HashSet<NodeRef>,
+}
+
+impl EdgeSet {
+    /// Add the edge `from -label-> to` of relation `kind`, derived through `via` when given.
+    fn add(
+        &mut self,
+        model: &SemanticModel,
+        (from, kind, label, to): (&NodeRef, &RelKind, String, &NodeRef),
+        via: Option<&NodeRef>,
+    ) {
+        let (Some(from_id), Some(to_id)) = (contract_id(model, from), contract_id(model, to))
+        else {
+            return;
+        };
+        let entry = self
+            .edges
+            .entry((from_id, label, to_id))
+            .or_insert_with(|| (rdra_arrow(kind), Some(BTreeSet::new())));
+        match (via, &mut entry.1) {
+            (None, vias) => *vias = None,
+            (Some(via), Some(vias)) => vias.extend(contract_id(model, via)),
+            (Some(_), None) => {}
+        }
+        self.nodes.insert(from.clone());
+        self.nodes.insert(to.clone());
+    }
+
+    fn into_graph_edges(self) -> Vec<GraphEdge> {
+        self.edges
+            .into_iter()
+            .map(|((from, label, to), (arrow, vias))| GraphEdge {
+                from,
+                label,
+                to,
+                arrow,
+                derived: vias
+                    .map(|vias| format!("via {}", vias.into_iter().collect::<Vec<_>>().join(","))),
+            })
+            .collect()
+    }
+}
+
+/// The use cases and steps that `bucs` contain: a use case directly or through a step of one
+/// of their flows, and each step of their flows.
+fn buc_members(model: &SemanticModel, bucs: &[NodeRef]) -> (Vec<NodeRef>, Vec<NodeRef>) {
+    let contained = |parents: &[NodeRef], link: RelKind| -> Vec<NodeRef> {
+        model
+            .relations
+            .iter()
+            .filter(|rel| rel.kind == link && parents.contains(&rel.from))
+            .map(|rel| rel.to.clone())
+            .collect()
+    };
+    let direct = contained(bucs, RelKind::Contains);
+    let steps: Vec<NodeRef> = contained(&direct, RelKind::Contains)
+        .into_iter()
+        .filter(|node| matches!(node, NodeRef::Step(_)))
+        .collect();
+    let usecases = direct
+        .into_iter()
+        .chain(contained(&steps, RelKind::Covers))
+        .filter(|node| matches!(node, NodeRef::UseCase(_)))
+        .collect();
+    (usecases, steps)
+}
+
+/// The kinds of the nodes linked to an `anchor` node that the diagram does not draw and whose
+/// kind it does not draw, in layer order: the header's `omitted:` line.
+fn omitted_linked_kinds(
+    model: &SemanticModel,
+    anchor: impl Fn(&NodeRef) -> bool,
+    drawn: &HashSet<NodeRef>,
+    kinds: &[&str],
+) -> Vec<String> {
+    let linked: HashSet<NodeRef> = model
+        .relations
+        .iter()
+        .flat_map(|rel| {
+            let out = anchor(&rel.from).then(|| rel.to.clone());
+            let back = anchor(&rel.to).then(|| rel.from.clone());
+            out.into_iter().chain(back)
+        })
+        .filter(|nr| !drawn.contains(nr))
+        .collect();
+    kinds_by_layer(&collect_object_graph_nodes(model, &|nr| {
+        linked.contains(nr)
+    }))
+    .into_iter()
+    .filter(|kind| !kinds.contains(kind))
+    .map(str::to_string)
+    .collect()
 }
 
 /// Sort `edges`, draw each once, and follow a derived one with its `%% derived` line.

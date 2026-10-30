@@ -13,6 +13,7 @@ samples/clinic-ops/out/buc/usecase_prescription_fulfillment.mmd	diagram samples/
 samples/clinic-ops/out/buc/usecase_staff_administration.mmd	diagram samples/clinic-ops --kind usecase --format mermaid --buc BucStaffAdministration
 samples/clinic-ops/out/buc/usecase_visit_check_in.mmd	diagram samples/clinic-ops --kind usecase --format mermaid --buc BucVisitCheckIn
 samples/clinic-ops/out/buc/usecase_visit_payment.mmd	diagram samples/clinic-ops --kind usecase --format mermaid --buc BucVisitPayment
+samples/clinic-ops/out/business.mmd	diagram samples/clinic-ops --kind business --format mermaid
 samples/clinic-ops/out/er_care_to_billing.mmd	diagram samples/clinic-ops --kind er --format mermaid --buc BucFollowupCare --buc BucBillingClaims
 samples/clinic-ops/out/event_flow.mmd	diagram samples/clinic-ops --kind event --format mermaid
 samples/clinic-ops/out/rdra_buc_clinical_encounter.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucClinicalEncounter
@@ -22,6 +23,7 @@ samples/clinic-ops/out/states_appointment.txt	states samples/clinic-ops --format
 samples/clinic-ops/out/states_claim_statement.txt	states samples/clinic-ops --format table --entity ClaimStatement
 samples/ec-site/out/actors.actor.csv	csv samples/ec-site --kind actor
 samples/ec-site/out/api_matrix.csv	csv samples/ec-site --kind api-matrix
+samples/ec-site/out/business.mmd	diagram samples/ec-site --kind business --format mermaid
 samples/ec-site/out/entities.entity.csv	csv samples/ec-site --kind entity
 samples/ec-site/out/er.mmd	diagram samples/ec-site --kind er --format mermaid
 samples/ec-site/out/matrix.matrix.csv	csv samples/ec-site --kind matrix
@@ -74,6 +76,7 @@ samples/incremental-order/step-5-lifecycle/out/usecase_matrix.csv	csv samples/in
 samples/incremental-order/step-6-business-rules/out/actor_permission_audit.csv	csv samples/incremental-order/step-6-business-rules/src --kind actor-permission-audit
 samples/incremental-order/step-6-business-rules/out/api_matrix.csv	csv samples/incremental-order/step-6-business-rules/src --kind api-matrix
 samples/incremental-order/step-6-business-rules/out/asyncapi.json	export samples/incremental-order/step-6-business-rules/src --kind asyncapi
+samples/incremental-order/step-6-business-rules/out/business.mmd	diagram samples/incremental-order/step-6-business-rules/src --kind business --format mermaid
 samples/incremental-order/step-6-business-rules/out/er.mmd	diagram samples/incremental-order/step-6-business-rules/src --kind er --format mermaid
 samples/incremental-order/step-6-business-rules/out/json-schema.json	export samples/incremental-order/step-6-business-rules/src --kind json-schema
 samples/incremental-order/step-6-business-rules/out/object_graph_buc_store_restock.mmd	diagram samples/incremental-order/step-6-business-rules/src --kind rdra --format mermaid --buc BucStoreRestock
@@ -84,6 +87,7 @@ samples/incremental-order/step-6-business-rules/out/states_store.txt	states samp
 samples/incremental-order/step-6-business-rules/out/usecase_matrix.csv	csv samples/incremental-order/step-6-business-rules/src --kind matrix
 samples/personal-info/out/actors.actor.csv	csv samples/personal-info --kind actor
 samples/personal-info/out/api_matrix.csv	csv samples/personal-info --kind api-matrix
+samples/personal-info/out/business.mmd	diagram samples/personal-info --kind business --format mermaid
 samples/personal-info/out/entities.entity.csv	csv samples/personal-info --kind entity
 samples/personal-info/out/er.mmd	diagram samples/personal-info --kind er --format mermaid
 samples/personal-info/out/matrix.matrix.csv	csv samples/personal-info --kind matrix

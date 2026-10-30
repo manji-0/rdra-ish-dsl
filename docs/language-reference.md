@@ -133,8 +133,8 @@ a `%% desc <id>: <text>` comment line after the node.
 | `nfr` | A non-functional requirement with measurable or reviewable quality metadata such as latency, SLO, availability, resilience, audit, retention, or privacy classification. | `lint` `nfr-unscoped`; RDRA diagram |
 | `quality` | A quality attribute category such as performance, availability, resilience, auditability, observability, or privacy. | RDRA diagram (`qualifies`) |
 | `constraint` | A non-functional guardrail or compliance constraint, commonly used for audit, logging, retention, privacy, or operational restrictions. | `lint` `constraint-unscoped`; RDRA diagram |
-| `business` | A business (a coarse-grained area of activity) that BUCs belong to. | RDRA diagram |
-| `buc` | A business use case: a unit of business value composed of use cases. | `lint` `buc-empty`; RDRA, usecase, ER, state, and event diagrams (`--buc` filter) |
+| `business` | A business (a coarse-grained area of activity) that BUCs belong to. | RDRA and business diagrams |
+| `buc` | A business use case: a unit of business value composed of use cases. | `lint` `buc-empty`; RDRA, business, usecase, ER, state, and event diagrams (`--buc` filter) |
 | `flow` | A business flow: an ordered business narrative inside a BUC. A flow is composed of steps and can make UC and event ordering explicit without turning the diagram into the only source of truth. | `lint` `flow-empty`, `flow-cycle`; RDRA diagram |
 | `step` | A business flow step. A step is a business-language action that can cover a use case, API, or event while remaining distinct from implementation boundaries. | `lint` `step-no-cover`; RDRA diagram |
 | `timer` | An RDRA タイマー: a schedule that starts a use case, such as a nightly sweep. See [Timers](#timers). | `triggers(Timer, UseCase)`; RDRA diagram (external-environment layer) and event diagram; `lint` `orphan-node` |

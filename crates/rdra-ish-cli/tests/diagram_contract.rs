@@ -151,6 +151,16 @@ fn parse_flowchart(diagram: &str, text: &str) -> Result<Flowchart, String> {
         } else if trimmed == "end"
             || (trimmed.starts_with("subgraph layer_") && trimmed.ends_with("\"]"))
         {
+        } else if let Some(rest) = trimmed.strip_prefix("subgraph ") {
+            // A subgraph that is an element itself, such as a business holding its BUCs.
+            let (id, _) = rest
+                .split_once("[\"")
+                .filter(|_| rest.ends_with("\"]"))
+                .ok_or_else(|| format!("unparsed subgraph: {line}"))?;
+            let (kind, _) = id
+                .split_once("__")
+                .ok_or_else(|| format!("subgraph id without `<kind>__`: {line}"))?;
+            chart.nodes.insert(id.to_string(), kind.to_string());
         } else if let Some(kind) = trimmed
             .strip_prefix("classDef ")
             .and_then(|rest| rest.strip_suffix(" stroke:#333;"))
@@ -604,4 +614,78 @@ fn the_contract_check_rejects_a_misplaced_derived_line() {
         "%% derived usecase__U -> actor__A",
     );
     assert!(parse_flowchart("usecase", &broken).is_err(), "{broken}");
+}
+
+#[test]
+fn every_business_diagram_of_every_sample_keeps_the_contract() {
+    let dir = scratch("diagram_contract_business");
+    let mut drawn = 0;
+    for root in roots() {
+        for scope in scopes(&root) {
+            let args: Vec<&str> = scope.iter().map(String::as_str).collect();
+            let text = diagram_with(&root, "business", &args, &dir.join("out"));
+            let chart = checked("business", &text, &format!("{root} {scope:?}"));
+            for kind in chart.nodes.values() {
+                assert!(
+                    ["actor", "extsystem", "business", "buc"].contains(&kind.as_str()),
+                    "{root} {scope:?}: a {kind} node\n{text}"
+                );
+            }
+            for (from, label, to) in &chart.edges {
+                assert!(
+                    from.starts_with("buc__") || to.starts_with("buc__"),
+                    "{root} {scope:?}: {from} -{label}-> {to}"
+                );
+            }
+            drawn += usize::from(!chart.edges.is_empty());
+        }
+    }
+    assert!(drawn > 10, "only {drawn} business diagrams draw an edge");
+}
+
+#[test]
+fn a_business_diagram_draws_what_the_rdra_diagram_declares() {
+    let dir = scratch("diagram_contract_business_ids");
+    for root in roots() {
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
+        let business = parse_flowchart(
+            "business",
+            &diagram(&root, "business", None, &dir.join("b")),
+        )
+        .unwrap();
+        for (id, kind) in &business.nodes {
+            assert_eq!(rdra.nodes.get(id), Some(kind), "{root}: {id}");
+        }
+        for edge in &business.edges {
+            if !business.derived.contains(edge) {
+                assert!(rdra.edges.contains(edge), "{root}: {edge:?} not in rdra");
+            }
+        }
+    }
+}
+
+#[test]
+fn an_element_subgraph_is_a_node_of_its_kind() {
+    let good = "%% rdra-ish diagram=business scope=whole\n%% kinds: business buc\nflowchart LR\n  subgraph layer_environment[\"E\"]\n    subgraph business__B[\"B\"]\n      buc__U[\"U\"]:::buc\n    end\n  end\n  classDef business stroke:#333;\n  classDef buc stroke:#333;\n";
+    let chart = parse_flowchart("business", good).unwrap();
+    assert!(check_flowchart(&chart).is_ok());
+    assert_eq!(
+        chart.nodes.get("business__B").map(String::as_str),
+        Some("business")
+    );
+    for (broken, from, to) in [
+        ("no kind", "subgraph business__B[", "subgraph B["),
+        (
+            "unterminated",
+            "business__B[\"B\"]\n",
+            "business__B[\"B\"\n",
+        ),
+    ] {
+        let text = good.replace(from, to);
+        assert_ne!(text, good, "{broken}");
+        assert!(
+            parse_flowchart("business", &text).is_err(),
+            "{broken} passed:\n{text}"
+        );
+    }
 }

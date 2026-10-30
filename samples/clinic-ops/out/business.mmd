@@ -1,0 +1,127 @@
+%% rdra-ish diagram=business scope=whole model=samples/clinic-ops
+%% layers: value=システム価値 environment=システム外部環境
+%% kinds: actor extsystem business buc
+%% omitted: requirement flow step timer medium permission usecase screen event api entity condition
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__AccountsClerk["医事課 会計担当"]:::actor
+    %% desc actor__AccountsClerk: 会計計算入力、患者の呼出、窓口精算、領収証・明細書の交付を行う事務職員。
+    actor__CareCoordinator["Care Coordinator"]:::actor
+    actor__ClaimsClerk["医事課 レセプト担当"]:::actor
+    %% desc actor__ClaimsClerk: レセプトの作成・院内点検・請求と、返戻・査定への対応を行う事務職員。
+    actor__ClinicAdmin["Clinic Administrator"]:::actor
+    actor__Clinician["医師"]:::actor
+    actor__MedicalClerk["医師事務作業補助者"]:::actor
+    %% desc actor__MedicalClerk: 医師の指示で電子カルテへ代行入力する。確定は医師が行う。
+    actor__Nurse["看護師"]:::actor
+    %% desc actor__Nurse: 医師の指示の下で診療の補助を行う。
+    actor__Patient["Patient"]:::actor
+    %% desc actor__Patient: A person receiving care through the clinic.
+    actor__Pharmacist["薬剤師"]:::actor
+    actor__ReceptionClerk["医事課 受付担当"]:::actor
+    %% desc actor__ReceptionClerk: 初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。
+    extsystem__ClaimsReviewOrganization["審査支払機関（支払基金・国保連）"]:::extsystem
+    extsystem__EPrescriptionService["電子処方箋管理サービス"]:::extsystem
+    extsystem__InsurancePharmacy["保険薬局"]:::extsystem
+    extsystem__MessagingGateway["Messaging Gateway"]:::extsystem
+    extsystem__OnlineEligibilitySystem["オンライン資格確認等システム"]:::extsystem
+    extsystem__OutsourcedLabSystem["外注検査システム"]:::extsystem
+    extsystem__PaymentGateway["自動精算機・クレジット決済"]:::extsystem
+  end
+  subgraph layer_environment["システム外部環境"]
+    subgraph business__CareDelivery["Care Delivery"]
+      buc__BucClinicalEncounter["Conduct Clinical Encounter"]:::buc
+      buc__BucOrdersResults["Manage Orders and Results"]:::buc
+      buc__BucPrescriptionFulfillment["処方"]:::buc
+      %% desc buc__BucPrescriptionFulfillment: 処方オーダ、院外処方箋の発行と電子処方箋管理サービスへの登録、院内処方の調剤・監査・服薬指導・交付、疑義照会。
+    end
+    subgraph business__ClinicAdministration["Clinic Administration"]
+      buc__BucStaffAdministration["Administer Clinic Operations"]:::buc
+    end
+    subgraph business__PatientAccess["Patient Access"]
+      %% desc business__PatientAccess: Patient-facing access workflows from onboarding through appointments.
+      buc__BucAppointmentScheduling["Schedule Appointments"]:::buc
+      %% desc buc__BucAppointmentScheduling: Find, reserve, book, change, and notify appointment slots.
+      buc__BucFollowupCare["Coordinate Follow-Up Care"]:::buc
+      buc__BucPatientOnboarding["Onboard and Maintain Patient"]:::buc
+      buc__BucVisitCheckIn["受付（初診・再診）"]:::buc
+      %% desc buc__BucVisitCheckIn: 到着確認、資格確認、紹介状の受付、診察室への案内。会計は診察の後に行う。
+    end
+    subgraph business__RevenueCycle["Revenue Cycle"]
+      buc__BucBillingClaims["レセプト作成・請求"]:::buc
+      %% desc buc__BucBillingClaims: 月ごとのレセプトの作成・院内点検・請求と、審査支払機関からの受付不能・返戻・査定・支払への対応。
+      buc__BucVisitPayment["計算・会計"]:::buc
+      %% desc buc__BucVisitPayment: 診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。
+    end
+  end
+  actor__AccountsClerk -.->|performs| buc__BucVisitPayment
+  actor__CareCoordinator -.->|performs| buc__BucFollowupCare
+  actor__ClaimsClerk -.->|performs| buc__BucBillingClaims
+  actor__ClinicAdmin -.->|performs| buc__BucStaffAdministration
+  actor__Clinician -.->|performs| buc__BucClinicalEncounter
+  %% derived actor__Clinician -> buc__BucClinicalEncounter via usecase__AmendEncounter,usecase__CompleteConsultation,usecase__DocumentAssessment,usecase__IssueReferralLetter,usecase__SignEncounter
+  actor__Clinician -.->|performs| buc__BucOrdersResults
+  %% derived actor__Clinician -> buc__BucOrdersResults via usecase__CancelClinicalOrder,usecase__ConfirmProxyOrder,usecase__NotifyCriticalResult,usecase__PlaceLabOrder,usecase__ReviewLabResult
+  actor__Clinician -.->|performs| buc__BucPrescriptionFulfillment
+  %% derived actor__Clinician -> buc__BucPrescriptionFulfillment via usecase__AnswerPharmacyInquiry,usecase__AnswerPrescriptionInquiry,usecase__CancelPrescription,usecase__DraftPrescription,usecase__IssueInhouseVoucher,usecase__IssueOutsidePrescription,usecase__IssueRefillPrescription,usecase__SearchMedication
+  actor__MedicalClerk -.->|performs| buc__BucOrdersResults
+  %% derived actor__MedicalClerk -> buc__BucOrdersResults via usecase__EnterProxyOrder
+  actor__Nurse -.->|performs| buc__BucClinicalEncounter
+  %% derived actor__Nurse -> buc__BucClinicalEncounter via usecase__OpenEncounter,usecase__RecordVitals
+  actor__Nurse -.->|performs| buc__BucOrdersResults
+  %% derived actor__Nurse -> buc__BucOrdersResults via usecase__CollectSpecimen,usecase__EnterProxyOrder,usecase__PrintSpecimenLabel,usecase__ReceiveLabResult,usecase__RegisterPerformedProcedure
+  actor__Nurse -.->|performs| buc__BucVisitCheckIn
+  %% derived actor__Nurse -> buc__BucVisitCheckIn via usecase__AssignRoom,usecase__PrepareEncounter
+  actor__Patient -.->|performs| buc__BucAppointmentScheduling
+  %% derived actor__Patient -> buc__BucAppointmentScheduling via usecase__SearchAvailability
+  actor__Patient -.->|performs| buc__BucPatientOnboarding
+  %% derived actor__Patient -> buc__BucPatientOnboarding via usecase__CaptureConsent,usecase__CompleteIntakeForms
+  actor__Pharmacist -.->|performs| buc__BucPrescriptionFulfillment
+  %% derived actor__Pharmacist -> buc__BucPrescriptionFulfillment via usecase__CounselMedication,usecase__DispenseAndAudit,usecase__HandOverMedication,usecase__RaisePrescriptionInquiry
+  actor__ReceptionClerk -.->|performs| buc__BucAppointmentScheduling
+  actor__ReceptionClerk -.->|performs| buc__BucPatientOnboarding
+  %% derived actor__ReceptionClerk -> buc__BucPatientOnboarding via usecase__ArchivePatient,usecase__ExpireIntakeForms,usecase__MergeDuplicatePatient,usecase__RegisterPatient,usecase__SearchPatient,usecase__SendIntakeForms,usecase__UpdateDemographics,usecase__VerifyInsurance
+  actor__ReceptionClerk -.->|performs| buc__BucVisitCheckIn
+  %% derived actor__ReceptionClerk -> buc__BucVisitCheckIn via usecase__BatchVerifyEligibility,usecase__CheckInPatient,usecase__ConfirmEligibilityInOutageMode,usecase__ReceiveReferralLetter,usecase__RecheckEligibility,usecase__RecordEligibilityDeclaration,usecase__VerifyArrival
+  buc__BucAppointmentScheduling -.->|triggers EvAppointmentCancelled| extsystem__MessagingGateway
+  %% derived buc__BucAppointmentScheduling -> extsystem__MessagingGateway via usecase__CancelAppointment
+  buc__BucAppointmentScheduling -.->|triggers EvAppointmentRescheduled| extsystem__MessagingGateway
+  %% derived buc__BucAppointmentScheduling -> extsystem__MessagingGateway via usecase__RescheduleAppointment
+  buc__BucAppointmentScheduling -.->|triggers EvAppointmentScheduled| extsystem__MessagingGateway
+  %% derived buc__BucAppointmentScheduling -> extsystem__MessagingGateway via usecase__BookAppointment
+  buc__BucBillingClaims -.->|triggers EvClaimStatementsSubmitted| extsystem__ClaimsReviewOrganization
+  %% derived buc__BucBillingClaims -> extsystem__ClaimsReviewOrganization via usecase__SubmitClaimStatements
+  buc__BucFollowupCare -.->|triggers EvAppointmentScheduled| extsystem__MessagingGateway
+  %% derived buc__BucFollowupCare -> extsystem__MessagingGateway via usecase__ScheduleFollowUpVisit
+  buc__BucPrescriptionFulfillment -.->|triggers EvPrescriptionIssued| extsystem__EPrescriptionService
+  %% derived buc__BucPrescriptionFulfillment -> extsystem__EPrescriptionService via usecase__IssueOutsidePrescription
+  buc__BucVisitCheckIn -.->|triggers EvAppointmentCheckedIn| extsystem__OnlineEligibilitySystem
+  %% derived buc__BucVisitCheckIn -> extsystem__OnlineEligibilitySystem via usecase__CheckInPatient
+  buc__BucVisitPayment -.->|triggers EvBillCalculated| extsystem__PaymentGateway
+  %% derived buc__BucVisitPayment -> extsystem__PaymentGateway via usecase__CalculateVisitBill
+  extsystem__ClaimsReviewOrganization -.->|raises EvClaimAccepted| buc__BucBillingClaims
+  %% derived extsystem__ClaimsReviewOrganization -> buc__BucBillingClaims via usecase__ReceiveClaimAccepted
+  extsystem__ClaimsReviewOrganization -.->|raises EvClaimAssessed| buc__BucBillingClaims
+  %% derived extsystem__ClaimsReviewOrganization -> buc__BucBillingClaims via usecase__RecordClaimAssessment
+  extsystem__ClaimsReviewOrganization -.->|raises EvClaimReceiptError| buc__BucBillingClaims
+  %% derived extsystem__ClaimsReviewOrganization -> buc__BucBillingClaims via usecase__RecordReceiptError
+  extsystem__ClaimsReviewOrganization -.->|raises EvClaimReturned| buc__BucBillingClaims
+  %% derived extsystem__ClaimsReviewOrganization -> buc__BucBillingClaims via usecase__RecordClaimReturn
+  extsystem__ClaimsReviewOrganization -.->|raises EvClaimTransferred| buc__BucBillingClaims
+  %% derived extsystem__ClaimsReviewOrganization -> buc__BucBillingClaims via usecase__ReviewClaimTransfer
+  extsystem__ClaimsReviewOrganization -.->|raises EvRemittance| buc__BucBillingClaims
+  %% derived extsystem__ClaimsReviewOrganization -> buc__BucBillingClaims via usecase__PostPayment
+  extsystem__EPrescriptionService -.->|raises EvPrescriptionDispensed| buc__BucPrescriptionFulfillment
+  %% derived extsystem__EPrescriptionService -> buc__BucPrescriptionFulfillment via usecase__ConfirmDispense
+  extsystem__InsurancePharmacy -.->|raises EvPharmacyInquiry| buc__BucPrescriptionFulfillment
+  %% derived extsystem__InsurancePharmacy -> buc__BucPrescriptionFulfillment via usecase__AnswerPharmacyInquiry
+  extsystem__OnlineEligibilitySystem -.->|raises EvEligibilityChecked| buc__BucVisitCheckIn
+  %% derived extsystem__OnlineEligibilitySystem -> buc__BucVisitCheckIn via usecase__ReceiveEligibilityInvalid,usecase__ReceiveEligibilityNoInfo,usecase__ReceiveEligibilityValid
+  extsystem__OutsourcedLabSystem -.->|raises EvLabResultReceived| buc__BucOrdersResults
+  %% derived extsystem__OutsourcedLabSystem -> buc__BucOrdersResults via usecase__ReceiveLabResult
+  extsystem__PaymentGateway -.->|raises EvPaymentSettled| buc__BucVisitPayment
+  %% derived extsystem__PaymentGateway -> buc__BucVisitPayment via usecase__SettleAtKiosk
+  classDef actor stroke:#333;
+  classDef extsystem stroke:#333;
+  classDef business stroke:#333;
+  classDef buc stroke:#333;

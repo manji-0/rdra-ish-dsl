@@ -15,6 +15,7 @@ the selected view.
 | Situation | Use first | Load |
 |---|---|---|
 | Scope or BUC skeleton review | `rdra --buc <BucId>` | `references/rdra-graph.md` |
+| Businesses, BUCs, and who takes part | `business`, optionally `--buc <BucId>` | `references/rdra-graph.md` |
 | Dense relationship inspection | `rdra` with `--node-kind` / `--edge-kind` | `references/rdra-graph.md` |
 | Business object/data touchpoint review | `rdra --buc <BucId>` plus CRUD matrix | `references/rdra-graph.md` |
 | Use case inputs and outputs (UC複合図) | `usecase --buc <BucId>` or `usecase --usecase <UcId>` | `references/rdra-graph.md` |
@@ -43,6 +44,8 @@ the selected view.
 ### Quick Choices
 
 - Use `rdra` when the question is "what business value/use cases are covered?"
+- Use `business` when the question is "which BUCs make up each business, and which
+  actors and external systems take part in each?"
 - Use `usecase` when the question is "what does each use case show, read, write, raise,
   and move, and who performs it?"
 - Use `er` when the question is "what entities, columns, and relationships exist?"
@@ -65,8 +68,8 @@ the selected view.
 
 ### Reference Files
 
-- `references/rdra-graph.md` — RDRA layered graph, the UC複合図, and early-stage model
-  inspection.
+- `references/rdra-graph.md` — RDRA layered graph, the business and BUC diagram, the
+  UC複合図, and early-stage model inspection.
 - `references/er.md` — ER diagram commands and relationship reading.
 - `references/access-and-apis.md` — API boundaries plus access/media CSV views.
 - `references/lifecycle-and-events.md` — state diagrams, event diagrams,

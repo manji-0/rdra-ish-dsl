@@ -1,0 +1,19 @@
+%% rdra-ish diagram=business scope=whole model=samples/incremental-order/step-6-business-rules/src
+%% layers: value=システム価値 environment=システム外部環境
+%% kinds: actor business buc
+%% omitted: medium permission usecase screen api entity
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__OpsStaff["Operations Staff"]:::actor
+  end
+  subgraph layer_environment["システム外部環境"]
+    subgraph business__StoreOperations["Store Operations"]
+      %% desc business__StoreOperations: Store operations owns restock planning and store master maintenance.
+      buc__BucStoreRestock["Maintain Store Restock"]:::buc
+      %% desc buc__BucStoreRestock: Keep restock dates and store organization assignments operationally correct.
+    end
+  end
+  actor__OpsStaff -.->|performs| buc__BucStoreRestock
+  classDef actor stroke:#333;
+  classDef business stroke:#333;
+  classDef buc stroke:#333;

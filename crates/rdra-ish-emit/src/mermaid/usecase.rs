@@ -2,11 +2,14 @@
 //! it displays and what they show, the information it reads and writes, the events, external
 //! systems, and timers around it, the conditions that apply to it, and the states it moves.
 
-use super::{kinds_by_layer, rdra_arrow, render_edges, render_layered_nodes, state_key, GraphEdge};
-use crate::diagram_common::{class_defs, contract_id, node_id, Header};
+use super::{
+    buc_members, kinds_by_layer, omitted_linked_kinds, render_edges, render_layered_nodes,
+    state_key, EdgeSet,
+};
+use crate::diagram_common::{class_defs, node_id, Header};
 use crate::{collect_object_graph_nodes, object_graph_rel_label, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{NodeRef, RelKind, Relation, SemanticModel, UseCaseKey};
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::HashSet;
 
 pub struct UsecaseMermaidEmitter;
 
@@ -44,14 +47,6 @@ fn scoped_use_cases(model: &SemanticModel, scope: &Scope) -> Vec<UseCaseKey> {
     let named = |ids: &[String], node: &NodeRef| {
         node_id(model, node).is_some_and(|id| ids.iter().any(|wanted| wanted == id))
     };
-    let contained = |parents: &[NodeRef], link: RelKind| -> Vec<NodeRef> {
-        model
-            .relations
-            .iter()
-            .filter(|rel| rel.kind == link && parents.contains(&rel.from))
-            .map(|rel| rel.to.clone())
-            .collect()
-    };
     let selected: Vec<NodeRef> = match scope {
         Scope::Whole => model.use_cases.keys().map(NodeRef::UseCase).collect(),
         Scope::UseCases(ids) => model
@@ -67,10 +62,7 @@ fn scoped_use_cases(model: &SemanticModel, scope: &Scope) -> Vec<UseCaseKey> {
                 .map(NodeRef::Buc)
                 .filter(|node| named(ids, node))
                 .collect();
-            let direct = contained(&bucs, RelKind::Contains);
-            let steps = contained(&direct, RelKind::Contains);
-            let covered = contained(&steps, RelKind::Covers);
-            direct.into_iter().chain(covered).collect()
+            buc_members(model, &bucs).0
         }
     };
     let mut keys: Vec<UseCaseKey> = selected
@@ -199,45 +191,22 @@ impl Emitter for UsecaseMermaidEmitter {
             .collect();
         let (facts, left) = facts(model, &usecases);
 
+        let mut edges = EdgeSet::default();
+        for fact in facts {
+            edges.add(
+                model,
+                (&fact.from, &fact.kind, fact.label, &fact.to),
+                fact.via.as_ref(),
+            );
+        }
         let mut drawn: HashSet<NodeRef> = usecases.clone();
         drawn.extend(left);
-        // Each edge once: declared (`None`) wins over derived, and a derived edge names
-        // every node it goes through.
-        type Vias = Option<BTreeSet<String>>;
-        let mut edges: BTreeMap<(String, String, String), (&'static str, Vias)> = BTreeMap::new();
-        for fact in facts {
-            let (Some(from), Some(to)) =
-                (contract_id(model, &fact.from), contract_id(model, &fact.to))
-            else {
-                continue;
-            };
-            let entry = edges
-                .entry((from, fact.label, to))
-                .or_insert_with(|| (rdra_arrow(&fact.kind), Some(BTreeSet::new())));
-            match (fact.via, &mut entry.1) {
-                (None, vias) => *vias = None,
-                (Some(via), Some(vias)) => vias.extend(contract_id(model, &via)),
-                (Some(_), None) => {}
-            }
-            drawn.insert(fact.from);
-            drawn.insert(fact.to);
-        }
+        drawn.extend(edges.nodes.iter().cloned());
         let nodes = collect_object_graph_nodes(model, &|nr| drawn.contains(nr));
 
         let mut body = String::new();
         let layers = render_layered_nodes(&mut body, model, &nodes);
-        let edges = edges
-            .into_iter()
-            .map(|((from, label, to), (arrow, vias))| GraphEdge {
-                from,
-                label,
-                to,
-                arrow,
-                derived: vias
-                    .map(|vias| format!("via {}", vias.into_iter().collect::<Vec<_>>().join(","))),
-            })
-            .collect();
-        render_edges(&mut body, edges);
+        render_edges(&mut body, edges.into_graph_edges());
 
         let kinds = kinds_by_layer(&nodes);
         body.push_str(&class_defs(&kinds));
@@ -245,35 +214,16 @@ impl Emitter for UsecaseMermaidEmitter {
             diagram: "usecase",
             view,
             layers: Some(layers),
-            omitted: omitted_kinds(model, &drawn, &kinds),
+            omitted: omitted_linked_kinds(
+                model,
+                |nr| matches!(nr, NodeRef::UseCase(_) | NodeRef::Screen(_)) && drawn.contains(nr),
+                &drawn,
+                &kinds,
+            ),
             kinds,
         };
         Ok(format!("{}flowchart LR\n{body}", header.render()))
     }
-}
-
-/// The kinds of the nodes linked to a drawn use case or screen that the diagram leaves out,
-/// in layer order.
-fn omitted_kinds(model: &SemanticModel, drawn: &HashSet<NodeRef>, kinds: &[&str]) -> Vec<String> {
-    let anchor =
-        |nr: &NodeRef| matches!(nr, NodeRef::UseCase(_) | NodeRef::Screen(_)) && drawn.contains(nr);
-    let linked: HashSet<NodeRef> = model
-        .relations
-        .iter()
-        .flat_map(|rel| {
-            let out = anchor(&rel.from).then(|| rel.to.clone());
-            let back = anchor(&rel.to).then(|| rel.from.clone());
-            out.into_iter().chain(back)
-        })
-        .filter(|nr| !drawn.contains(nr))
-        .collect();
-    kinds_by_layer(&collect_object_graph_nodes(model, &|nr| {
-        linked.contains(nr)
-    }))
-    .into_iter()
-    .filter(|kind| !kinds.contains(kind))
-    .map(str::to_string)
-    .collect()
 }
 
 #[cfg(test)]

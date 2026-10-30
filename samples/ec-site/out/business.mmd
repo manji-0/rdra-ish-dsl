@@ -1,0 +1,31 @@
+%% rdra-ish diagram=business scope=whole model=samples/ec-site
+%% layers: value=システム価値 environment=システム外部環境
+%% kinds: actor extsystem business buc
+%% omitted: usecase screen event api entity
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__Admin["Administrator"]:::actor
+    actor__Customer["Customer"]:::actor
+    extsystem__PaymentGW["Payment Gateway"]:::extsystem
+    extsystem__ShippingSvc["Shipping Service"]:::extsystem
+  end
+  subgraph layer_environment["システム外部環境"]
+    subgraph business__EcShopping["EC Shopping Business"]
+      buc__BucCart["Add Products to Cart"]:::buc
+      buc__BucOrder["Process Order"]:::buc
+      buc__BucPayment["Make Payment"]:::buc
+    end
+  end
+  actor__Admin -.->|performs| buc__BucOrder
+  %% derived actor__Admin -> buc__BucOrder via usecase__DeliverOrder,usecase__ShipOrder
+  actor__Customer -.->|performs| buc__BucCart
+  actor__Customer -.->|performs| buc__BucOrder
+  actor__Customer -.->|performs| buc__BucPayment
+  buc__BucOrder -.->|triggers EvOrderShipped| extsystem__ShippingSvc
+  %% derived buc__BucOrder -> extsystem__ShippingSvc via usecase__ShipOrder
+  extsystem__PaymentGW -.->|raises EvPaymentAuthorized| buc__BucPayment
+  %% derived extsystem__PaymentGW -> buc__BucPayment via usecase__Capture
+  classDef actor stroke:#333;
+  classDef extsystem stroke:#333;
+  classDef business stroke:#333;
+  classDef buc stroke:#333;

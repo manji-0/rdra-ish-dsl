@@ -19,6 +19,10 @@ rdra-ish diagram src/ --kind rdra --buc <BucA> --buc <BucB> --format mermaid
 rdra-ish diagram src/ --kind rdra --format mermaid --node-kind actor --node-kind buc --node-kind usecase
 rdra-ish diagram src/ --kind rdra --format mermaid --node-kind flow --node-kind step --edge-kind covers
 
+# Businesses and their BUCs, with the actors and external systems of each BUC
+rdra-ish diagram src/ --kind business --format mermaid
+rdra-ish diagram src/ --kind business --buc <BucId> --format mermaid
+
 # UC複合図 — the use cases of one BUC, or the named use cases
 rdra-ish diagram src/ --kind usecase --buc <BucId> --format mermaid
 rdra-ish diagram src/ --kind usecase --usecase <UcId> --format mermaid
@@ -50,6 +54,16 @@ rdra-ish diagram src/ --kind usecase --usecase <UcId> --format mermaid
 - `%% desc <id>: <text>` follows a node that has a description, and
   `%% derived ...` follows an edge derived from another fact (a condition's
   `combines` derived from its `holds`).
+
+## Reading the Business Diagram
+
+- `--kind business` draws each business as `subgraph business__<id>` holding its BUCs,
+  with actors and external systems in the system value layer. A BUC of no business or
+  of several sits beside the businesses, the latter with `belongs` edges.
+- Only `performs(Actor, Buc)` is declared. An actor of one of the BUC's use cases or
+  steps, an external system whose event (`raises <Event>`) starts the BUC or one of its
+  use cases, and an external system a use case's event reaches (`triggers <Event>`) are
+  derived, each followed by `%% derived ... via <node>`.
 
 ## Reading the UC複合図
 
