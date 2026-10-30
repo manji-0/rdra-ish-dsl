@@ -14,9 +14,11 @@ pub mod location;
 pub mod model;
 pub mod predicate;
 pub mod project;
+pub mod publication;
 pub mod rdra_rules;
 pub mod refinement;
 pub mod resolver;
+pub mod surface;
 pub mod system;
 pub mod tx;
 pub mod typed_predicate;
@@ -56,14 +58,17 @@ pub use model::{
     TemporalExpr, TemporalFormula, TemporalProperty, TemporalRhs, Timer, TimerKey, TriggerSource,
     TriggerTarget, TypedPredicate,
 };
+pub use model::{CallerKind, Exposed, Exposure, Publication, PublishMode, Share};
 pub use predicate::{predicate_signature, KNOWN_PREDICATES};
 pub use project::{
     collect_rdra_files, discover, load_project, root_include_paths, Manifest, ModelSection,
     Project, ProjectError,
 };
+pub use publication::publication_diagnostics;
 pub use resolver::{
     build_merged_model, reachable_from_bucs, resolve, resolve_overlaid, ResolvedProgram,
 };
+pub use surface::Surface;
 pub use system::{derive_system_boundaries, system_diagnostics, SystemBoundary};
 pub use tx::{
     infer_usecase_transactions, tx_diagnostics, TxGroup, TxKind, UcWrite, UsecaseTx, WriteKind,

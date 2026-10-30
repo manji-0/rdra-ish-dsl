@@ -187,6 +187,13 @@ fn is_consistency_diag(err: &RdraError) -> bool {
             | RdraError::CrossSystemEntityRelation { .. }
             | RdraError::CoordinationNotCrossSystem { .. }
             | RdraError::CoordinationMissingApi { .. }
+            | RdraError::PublishedEntityMutated { .. }
+            | RdraError::PublishedEntityReadByOwner { .. }
+            | RdraError::PublishedEntityKeysInternal { .. }
+            | RdraError::PublishedNotInSourceTx { .. }
+            | RdraError::InternalEntityExposed { .. }
+            | RdraError::PublishedEntityNeverWritten { .. }
+            | RdraError::SharedInternalEntity { .. }
     )
 }
 

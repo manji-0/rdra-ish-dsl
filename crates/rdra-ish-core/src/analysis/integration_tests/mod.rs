@@ -10,4 +10,5 @@ mod instance;
 mod keys;
 mod nodes;
 mod predicate;
+mod publication;
 mod variation;

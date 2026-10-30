@@ -70,6 +70,7 @@ pub fn build_model_items_with_scopes(
     resolve_foreign_keys(&mut model, &mut diags);
     resolve_along_links(&mut model, &mut diags);
     diags.extend(crate::event_flow::api_route_diagnostics(&model));
+    diags.extend(crate::publication::publication_diagnostics(&model));
 
     (model, diags)
 }

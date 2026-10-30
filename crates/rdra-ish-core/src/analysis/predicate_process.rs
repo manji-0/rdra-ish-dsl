@@ -459,6 +459,56 @@ fn ensure_entity_variant_state(
     })
 }
 
+fn process_exposes_predicate(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    resolved: &[Option<NodeRef>],
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) {
+    let (Some(Some(NodeRef::System(system))), Some(Some(target))) =
+        (resolved.first(), resolved.get(1))
+    else {
+        return;
+    };
+    match crate::publication::exposed_item(target, &pred.chain) {
+        Some(Ok(item)) => model.publication.exposures.push(Exposure {
+            system: *system,
+            item,
+            site: Some(ctx.locate(pred.span.clone())),
+        }),
+        Some(Err(misuse)) => push_error(
+            ctx,
+            diags,
+            pred.span.clone(),
+            RdraError::ExposesChainInvalid {
+                chain: misuse.chain,
+                kind: node_kind_tag_str(target).to_string(),
+                id: predicate_arg_display(&pred.args[1]),
+                hint: misuse.hint,
+            },
+        ),
+        None => {}
+    }
+}
+
+fn process_shares_predicate(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    resolved: &[Option<NodeRef>],
+    ctx: DiagCtxt,
+) {
+    if let (Some(Some(NodeRef::System(system))), Some(Some(NodeRef::Entity(entity)))) =
+        (resolved.first(), resolved.get(1))
+    {
+        model.publication.shares.push(Share {
+            system: *system,
+            entity: *entity,
+            site: Some(ctx.locate(pred.span.clone())),
+        });
+    }
+}
+
 fn process_outbox_predicate(model: &mut SemanticModel, resolved: &[Option<NodeRef>]) {
     if let Some(Some(NodeRef::Event(event))) = resolved.first() {
         model.outbox_events.insert(*event);
@@ -1277,6 +1327,8 @@ pub(crate) fn process_predicate(
         "coordinates" => process_coordinates_predicate(model, &resolved),
         "transitions" => process_transitions_predicate(model, pred, &resolved, ctx, diags),
         "outbox" => process_outbox_predicate(model, &resolved),
+        "exposes" => process_exposes_predicate(model, pred, &resolved, ctx, diags),
+        "shares" => process_shares_predicate(model, pred, &resolved, ctx),
         "after" => process_after_predicate(model, pred, &resolved, ctx, diags),
         "sets" => process_sets_predicate(model, pred, &resolved, ctx, diags),
         "combines" => {

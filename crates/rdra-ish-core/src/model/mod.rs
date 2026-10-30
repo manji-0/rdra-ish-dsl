@@ -41,6 +41,112 @@ impl SemanticModel {
     }
 }
 
+/// How other models may write a published entity: `.append()` adds rows, `.upsert()` also
+/// replaces them. Neither allows `deletes` or `transitions`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PublishMode {
+    Append,
+    Upsert,
+}
+
+impl PublishMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PublishMode::Append => "append",
+            PublishMode::Upsert => "upsert",
+        }
+    }
+}
+
+/// Who may call an exposed use case from another model.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum CallerKind {
+    #[default]
+    Actor,
+    System,
+    Any,
+}
+
+impl CallerKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            CallerKind::Actor => "actor",
+            CallerKind::System => "system",
+            CallerKind::Any => "any",
+        }
+    }
+}
+
+/// The element one `exposes` line publishes. An entity without a mode is `InternalEntityExposed`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Exposed {
+    UseCase {
+        usecase: UseCaseKey,
+        caller: CallerKind,
+    },
+    Event(EventKey),
+    Entity {
+        entity: EntityKey,
+        mode: Option<PublishMode>,
+    },
+}
+
+/// One `exposes(System, X)` line.
+#[derive(Debug, Clone)]
+pub struct Exposure {
+    pub system: SystemKey,
+    pub item: Exposed,
+    pub site: Option<crate::location::LocatedSpan>,
+}
+
+/// One `shares(System, Entity)` line: the owner lets other models name an internal entity.
+#[derive(Debug, Clone)]
+pub struct Share {
+    pub system: SystemKey,
+    pub entity: EntityKey,
+    pub site: Option<crate::location::LocatedSpan>,
+}
+
+/// The published surface of a model, in declaration order.
+#[derive(Debug, Default)]
+pub struct Publication {
+    pub exposures: Vec<Exposure>,
+    pub shares: Vec<Share>,
+}
+
+impl Publication {
+    pub fn is_empty(&self) -> bool {
+        self.exposures.is_empty() && self.shares.is_empty()
+    }
+
+    /// The publish mode of an entity, or `None` for an internal one.
+    pub fn mode_of(&self, entity: EntityKey) -> Option<PublishMode> {
+        self.exposures.iter().find_map(|x| match x.item {
+            Exposed::Entity {
+                entity: e,
+                mode: Some(mode),
+            } if e == entity => Some(mode),
+            _ => None,
+        })
+    }
+
+    pub fn is_published(&self, entity: EntityKey) -> bool {
+        self.mode_of(entity).is_some()
+    }
+
+    /// The caller kind of an exposed use case, or `None` for an internal one.
+    pub fn caller_of(&self, usecase: UseCaseKey) -> Option<CallerKind> {
+        self.exposures.iter().find_map(|x| match x.item {
+            Exposed::UseCase { usecase: u, caller } if u == usecase => Some(caller),
+            _ => None,
+        })
+    }
+
+    pub fn is_shared(&self, entity: EntityKey) -> bool {
+        self.shares.iter().any(|s| s.entity == entity)
+    }
+}
+
 /// One `combines` declaration. Condition links are read through `condition_edges`, which
 /// prefers the `holds` body over these.
 #[derive(Debug, Clone)]
@@ -115,6 +221,8 @@ pub struct SemanticModel {
     pub quantifier_constraints: Vec<QuantifierConstraint>,
     /// `property Id "..." leads_to/always/eventually(...)` 時相プロパティ
     pub temporal_properties: Vec<TemporalProperty>,
+    /// What `exposes` and `shares` publish to other models.
+    pub publication: Publication,
     pub symbols: SymbolTable,
     /// Per-file import / module visibility used when resolving references.
     pub import_scopes: crate::import_scope::ImportScopes,
