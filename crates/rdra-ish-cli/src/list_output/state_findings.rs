@@ -506,7 +506,7 @@ pub(crate) fn note_state_errors(program: &ResolvedProgram, model: &SemanticModel
         .count();
     if errors > 0 {
         eprintln!(
-            "note: the lifecycle has {errors} error(s) (see `rdra-ish check`); the data layer does not depend on them"
+            "note: the lifecycle has {errors} error(s) (see `rdra-ish check`); this output does not read the lifecycle"
         );
     }
 }

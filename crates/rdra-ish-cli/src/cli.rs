@@ -296,10 +296,10 @@ pub(crate) enum DiagramKind {
 }
 
 impl DiagramKind {
-    /// Whether a lifecycle error makes the diagram wrong. ER draws only the data layer, as
-    /// `export --kind mermaid-er` does; the other kinds keep the gate.
+    /// Whether a lifecycle error makes the diagram wrong. Only `state` reads the lifecycle, for
+    /// each state model's start states; the other kinds draw declared facts only.
     pub(crate) fn reads_lifecycle(&self) -> bool {
-        !matches!(self, DiagramKind::Er)
+        matches!(self, DiagramKind::State)
     }
 }
 

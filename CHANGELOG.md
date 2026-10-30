@@ -555,6 +555,12 @@
 
 ### Changed
 
+- `diagram --kind rdra` and `--kind event` draw a model whose lifecycle has errors, with
+  one stderr note, as `--kind er` already did; before, they refused to write. They draw
+  declared facts only. `--kind state` reads each state model's start states from the
+  lifecycle and still refuses. The note now ends `this output does not read the
+  lifecycle` (was `the data layer does not depend on them`) for every output that prints
+  it.
 - CI checks and verifies every `samples.txt` root, clinic-ops included, in one
   `formal-verify` step that runs `scripts/verify-samples.sh` on the release binary
   (`timeout-minutes: 5`, job `timeout-minutes: 15`). It replaces the `check` job's sample

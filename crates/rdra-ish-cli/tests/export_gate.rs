@@ -1,5 +1,5 @@
-//! Lifecycle errors block only the exports that print the lifecycle. The data layer still
-//! exports, with one note on stderr.
+//! Lifecycle errors block only the exports and diagrams that print the lifecycle. The data
+//! layer and the diagrams of declared facts still write, with one note on stderr.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -54,19 +54,21 @@ fn data_layer_exports_despite_lifecycle_errors() {
     }
 }
 
+/// Every diagram kind but `state` draws declared facts only, so a lifecycle error does not
+/// stop it.
 #[test]
-fn er_diagram_draws_despite_lifecycle_errors() {
-    let dir = scratch("export_gate_er_diagram");
-    let output = rdra_ish(
-        &["diagram", FAILING, "--kind", "er", "--format", "mermaid"],
-        &dir.join("er"),
-    );
-    assert!(output.status.success(), "{output:?}");
-    assert!(
-        dir.join("er.mmd").is_file(),
-        "diagram --kind er wrote nothing"
-    );
-    assert_eq!(note_count(&output), 1, "{output:?}");
+fn diagrams_of_declared_facts_draw_despite_lifecycle_errors() {
+    let dir = scratch("export_gate_fact_diagrams");
+    for kind in ["rdra", "er", "event"] {
+        let out = dir.join(kind);
+        let output = rdra_ish(&["diagram", FAILING, "--kind", kind], &out);
+        assert!(output.status.success(), "{kind}: {output:?}");
+        assert!(
+            out.with_extension("mmd").is_file(),
+            "diagram --kind {kind} wrote nothing"
+        );
+        assert_eq!(note_count(&output), 1, "{kind}: {output:?}");
+    }
 }
 
 #[test]

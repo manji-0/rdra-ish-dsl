@@ -18,11 +18,11 @@ machine-readable exports.
 `puml`, `svg`, and `png` formats were removed. For an image, render the `.mmd` with
 Mermaid CLI (`mmdc`) or hand the text to a tool that draws it.
 
-Outputs that print the lifecycle (`diagram` of every kind but `er`, `csv` of every kind
-but `entity`, `export --kind typescript-states`) refuse to write while `check` reports
-a lifecycle error. The data outputs (`diagram --kind er`, `csv --kind entity`, and the
-`dbml`, `json-schema`, `openapi`, `asyncapi`, and ER exports) still write and print one
-note.
+Outputs that print the lifecycle (`diagram --kind state`, `csv` of every kind but
+`entity`, `export --kind typescript-states`) refuse to write while `check` reports a
+lifecycle error. The outputs of declared facts and the data layer (`diagram` of every
+other kind, `csv --kind entity`, and the `dbml`, `json-schema`, `openapi`, `asyncapi`,
+and ER exports) still write and print one note.
 
 ## Commands
 

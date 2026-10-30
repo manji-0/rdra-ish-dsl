@@ -18,15 +18,22 @@ fn scratch(test: &str) -> PathBuf {
     dir
 }
 
-/// Every samples.txt root outside the formal-verification fixtures, several of which
-/// violate their lifecycle on purpose and so are refused by the kinds that read it.
+/// Every samples.txt root.
 fn roots() -> Vec<String> {
     std::fs::read_to_string(repo().join("samples.txt"))
         .unwrap()
         .lines()
         .filter(|line| !line.is_empty() && !line.starts_with('#'))
-        .filter(|line| !line.starts_with("samples/formal-verification"))
         .map(str::to_string)
+        .collect()
+}
+
+/// The roots outside the formal-verification fixtures, several of which violate their
+/// lifecycle on purpose and so are refused by `state`, the one kind that reads it.
+fn lifecycle_roots() -> Vec<String> {
+    roots()
+        .into_iter()
+        .filter(|root| !root.starts_with("samples/formal-verification"))
         .collect()
 }
 
@@ -388,7 +395,7 @@ fn check_state(chart: &StateChart) -> Result<(), String> {
 fn every_state_diagram_of_every_sample_keeps_the_contract() {
     let dir = scratch("diagram_contract_state");
     let mut drawn = 0;
-    for root in roots() {
+    for root in lifecycle_roots() {
         let scopes: Vec<Option<String>> = std::iter::once(None)
             .chain(buc_ids(&root).into_iter().map(Some))
             .collect();
@@ -432,7 +439,7 @@ fn the_state_contract_check_rejects_a_broken_diagram() {
 #[test]
 fn a_state_and_its_use_cases_have_the_ids_the_rdra_diagram_gives_them() {
     let dir = scratch("diagram_contract_state_ids");
-    for root in roots() {
+    for root in lifecycle_roots() {
         let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
         let state = parse_state(&diagram(&root, "state", None, &dir.join("s"))).unwrap();
         let ids = state

@@ -22,12 +22,12 @@ Diagnostics are written to stderr. A load or consistency diagnostic is `error: .
 - `check` and `lint` exit non-zero when semantic errors (or lint errors) are present.
 - Every generator subcommand refuses to emit when the model has parse or resolve errors.
   Whether Error-severity state diagnostics also stop it depends on whether the output
-  prints the lifecycle. An output that prints it (`states`, `list`, `diagram` of every kind
-  except `er`, `csv` of every kind except `entity`, `export --kind typescript-states`)
-  is **fail-closed** and refuses. An output that reads only the data layer (`diagram
-  --kind er`, `csv --kind entity`, and `export` of `dbml`, `json-schema`, `openapi`,
-  `asyncapi`, and `mermaid-er`) is written, and the command prints one
-  stderr note that gives the error count and points to `rdra-ish check`.
+  prints the lifecycle. An output that prints it (`states`, `list`, `diagram --kind state`,
+  `csv` of every kind except `entity`, `export --kind typescript-states`) is
+  **fail-closed** and refuses. An output that reads only the data layer or the declared
+  facts (`diagram` of every kind except `state`, `csv --kind entity`, and `export` of
+  `dbml`, `json-schema`, `openapi`, `asyncapi`, and `mermaid-er`) is written, and the
+  command prints one stderr note that gives the error count and points to `rdra-ish check`.
   `export --kind tla` and `verify` gate on parse errors plus the Error
   diagnostics of the lifecycle transition system they print (built at `--instance-count`
   / `--int-range-max`). The code decides this per kind in `ExportKind::reads_lifecycle()`
