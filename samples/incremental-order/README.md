@@ -15,9 +15,10 @@ self-contained: run commands against that step's `src/` directory.
 | `step-5-lifecycle` | events, states, transitions, and effects | `rdra-ish states ... --entity Store` |
 | `step-6-business-rules` | forbidden and invariant state combinations | `rdra-ish states ... --entity Store` |
 
-Run `rdra-ish next samples/incremental-order/<step>/src` on any step: it reports the
-step's own stage (step 6, which adds a `forbidden` and an `invariant`, reports `6B`) and
-lists what the next step adds as gaps.
+Run `rdra-ish next samples/incremental-order/<step>/src` on any step: steps 0 to 4
+report their own stage and list what the next step adds as gaps. Step 5 reports
+`stage 5 Lifecycle, required stages complete` and offers the optional rule stages; step 6,
+which adds a `forbidden` and an `invariant`, meets 6A and 6B and is offered 6C.
 
 ## Reading Order
 

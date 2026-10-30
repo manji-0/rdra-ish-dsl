@@ -215,7 +215,8 @@ It also emits two `info` rows:
   element (`scope`, `business-flow`, `data`, `interaction`, `system-boundary`, `rules`)
   subtracts 8 (floor 0).
 - `stage-readiness` gives the stage of each BUC and the stage after it, as
-  [`next`](#next) decides them: `BucOrder stage 2 (next 3); BucPayment stage 5 (next 6A)`.
+  [`next`](#next) decides them: `BucOrder stage 2 (next 3); BucPayment stage 5 (required
+  stages complete)`.
 
 These rules are `warning` rows:
 
@@ -257,8 +258,15 @@ rdra-ish next <INPUTS...> [--buc <ID>]... [--format <FORMAT>]
 | `--format <FORMAT>` | `text` | `text` or `json` |
 
 `next` places each BUC on the [stage map](./incremental-modeling.md#stage-map). Every
-stage has a gate, and a BUC is at the highest stage whose gate it passes together with
-every earlier gate:
+stage has a gate of one or more clauses. A blocking clause that fails is a gap, and the
+stage is **open**; an advisory clause that fails is a review note, which never holds a BUC
+back. A stage whose clauses pass but which owns an error of [`check`](#check) (a
+`Witness_`, `Deadlock_`, or violated rule on an entity the BUC touches) is **blocked**: the
+elements exist, but the model has to be fixed before the next stage's detail is added.
+Otherwise the stage is **met**. A BUC is at the last stage of the met prefix of the
+required stages, 0 to 5; the rule stages 6A to 6C are optional, so a BUC with a
+lifecycle and no rule is complete, and `next` offers the rule stages instead of
+demanding them:
 
 <!-- stage-spec: gates -->
 | Stage | The gate passes when | Review notes |
@@ -280,10 +288,12 @@ to move on; `next` shows where the model stands, so you only need to ask the nex
 questions.
 
 The text output prints one block per BUC, after a summary table when there is more than
-one: the gate of each stage with what it counted, then the first failed gate as the next
-stage, with its main question, the elements that fail the gate (`Gaps:`, at most 8;
-`--format json` lists every gap), the questions to ask, the commands that review the
-stage once it is added, and its section in the modeling guide:
+one: each stage with what its gate counted (`[x]` met, `[ ]` open, `[!]` blocked, and the
+count of notes and `check` findings), then the first required stage that is not met, with
+its main question, the elements that fail the gate (`Gaps:`, at most 8; `--format json`
+lists every one), the review notes (`Notes:`), the `check` findings the stage owns
+(`Findings:`, by name; `check` prints the traces), the questions to ask, the commands that
+review the stage once it is added, and its section in the modeling guide:
 
 ```text
 BucStoreRestock "Maintain Store Restock": stage 2 Data touchpoints
@@ -303,19 +313,31 @@ Next: stage 3 Interaction boundary
     ...
   Then review with:
     rdra-ish check src
-    rdra-ish diagram src --kind rdra --buc BucStoreRestock
+    rdra-ish diagram src --kind rdra --format mermaid --buc BucStoreRestock
     ...
   See docs/incremental-modeling.md#stage-3-interaction-boundary
 ```
 
-`--format json` writes `{"bucs": [...]}`. Each BUC has `id`, `label`, `stage` (`"2"`,
-`"6A"`, or `null` before stage 0), `stage_name`, `gates` (`stage`, `stage_name`,
-`passed`, `evidence`, and the gap count `gaps`), and `next`: `null` once every gate
-passes, otherwise `stage`, `stage_name`, `question`, `doc`, `asks`, `validate`, and
-`gaps` (`kind`, `id`, `message`).
+Once every required stage is met the block reads `stage 5 Lifecycle, required stages
+complete`, and `Every required stage is met.` is followed by the met rule stages and an
+`Optional: stage 6C Advanced rules` block for each open one. A blocked stage reads
+`Next: stage 5 Lifecycle is blocked: the elements exist, but check rejects them`. Findings
+of `check` that no BUC owns are printed before the BUC blocks.
+
+`--format json` writes `{"bucs": [...], "unowned_findings": [...]}`. Each BUC has `id`,
+`label`, `stage` (`"2"`, `"6A"`, or `null` before stage 0), `stage_name`, `slug` (a
+stable id such as `data-touchpoints`, which a reorder of the stages does not change),
+`required_complete`, `gates` (`stage`, `stage_name`, `slug`, `passed`, `verdict` as
+`met`, `open`, or `blocked`, `evidence`, the counts `gaps` and `notes`, and `findings`),
+and `next`. `next.kind` is `required` while a required stage is not met, with that stage's
+`stage`, `stage_name`, `slug`, `verdict`, `question`, `doc`, `asks`, `validate`, `gaps`
+and `notes` (`kind`, `id`, `message`), and `findings` (`name`, `severity`); once every
+required stage is met it is `optional`, with the same fields for each rule stage under
+`stages`. Skills key on `slug`, and read `next.asks` and `next.gaps` for what to ask.
 
 `next` refuses a model with parse or model errors, as the generators do; run `check`
-first. It exits 0 at every stage.
+first. It derives the states as `check` does, so it takes as long. It exits 0 at every
+stage and verdict.
 
 ---
 
