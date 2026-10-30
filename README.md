@@ -66,14 +66,14 @@ rdra-ish diagram samples/ec-site --kind context --format mermaid
 rdra-ish diagram samples/ec-site --kind usecase --format mermaid --buc BucOrder
 rdra-ish diagram samples/clinic-ops --kind flow --format mermaid --buc BucVisitCheckIn
 
-# 3) Export coverage/access views
+# 3) Export coverage/access views (-o out writes out.matrix.csv, out.actor-permission-audit.csv)
 rdra-ish csv samples/clinic-ops --kind matrix
 rdra-ish csv samples/clinic-ops --kind actor-permission-audit
 
 # 4) Derive reachable states
 rdra-ish states samples/clinic-ops --entity Appointment
 
-# 5) Formal verification (requires `tlc` on PATH)
+# 5) Formal verification (requires `tlc` or `tlc2` on PATH)
 rdra-ish export samples/formal-verification/order.rdra --kind tla -o /tmp/rdra-tla
 rdra-ish verify samples/formal-verification/order.rdra --backend tlc -o /tmp/rdra-tla
 ```

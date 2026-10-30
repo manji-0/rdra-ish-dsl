@@ -52,7 +52,7 @@ run prints `OK: no errors within <bounds>` (for example `OK: no errors within 1 
 `check` prints a trailing `note:` that those were not model-checked (use
 `verify --backend tlc`).
 
-A violated constraint or `after` assertion prints once, with a shortest counterexample:
+A violated constraint or `after` assertion prints once, with a shortest counterexample. Sites (`file:line:col`) print as the resolved absolute path; the examples in this page show them shortened.
 
 ```
 error[CrossForbidden_Order_0]: invariant CrossForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order(status=cancelled); Payment(status=captured)
@@ -215,6 +215,9 @@ It also emits two `info` rows:
   stages subtract 8 each (floor 0). Use together with `stage-readiness`.
 - `stage-readiness` reports which refinement stages are present: `scope`,
   `business-flow`, `data`, `interaction`, `system-boundary`, and `rules`.
+
+These rules are `warning` rows:
+
 - `flow-cycle` warns when `precedes` / `branches` edges form a cycle among steps.
 - `enum-attribute` warns on an inline `Enum` column that no `transitions` and no `sets`
   moves. Its value is chosen by an actor, so the hint is to type the column by a
@@ -314,7 +317,7 @@ relation, from which the RDRAGraph views can be derived.
 | `context` | システムコンテキスト | The system, the actors who use it, and the external systems it exchanges events with; every edge derived | BUCs, use cases, and events, which `%% derived` and the edge labels name | The actors and external systems with an edge through the BUCs, and the systems they reach |
 | `requirement` | 要求モデル | Requirements and the BUCs they `motivate`; NFRs and constraints with what they `apply_to` or `constrain`, and the qualities they belong to | ADRs; a requirement-to-actor link, which the DSL does not have | What links to the BUCs, their use cases and APIs, the entities those read and write, and the systems that contain those APIs |
 | `business` | ビジネスコンテキスト, ビジネスユースケース | Each business holding its BUCs, and the actors and external systems each BUC involves | Use cases, steps, and events, which `%% derived` names | The named BUCs and their businesses (the RDRA BUC diagram) |
-| `usecase` | UC複合図 | Each use case with its actors, screens and what they show, the entities it reads and writes, its events, external systems, and timers, the conditions on it, and its transitions | APIs (their CRUD is folded into the use case), DTOs, permissions, media, fields, and BUCs | The use cases the BUCs contain, directly or through a step; `--usecase` names use cases instead |
+| `usecase` | UC複合図 | Each use case with its actors, screens and what they show, the entities it reads and writes, its events, external systems, and timers, the conditions on it, and its transitions | BUCs, steps, media, permissions, fields, APIs (their CRUD is folded into the use case), and DTOs | The use cases the BUCs contain, directly or through a step; `--usecase` names use cases instead |
 | `flow` | 業務フロー | Each flow with its steps, their `precedes`, `branches`, `excepts`, and `repeats` edges, what each step `covers`, and a lane per actor | Actors without `performs(Actor, Step)`; screens and entities | The flows the BUCs contain |
 | `information` | 情報モデル | Entities with their `relate` links, state models, and the variations their columns take | Columns (`er`) and use cases | The entities `er` draws for the BUCs |
 | `condition` | バリエーション・条件 | Each condition with the variations and state models it combines and what it applies to; each variation with its values | Entities (a state model stands for its column) | The conditions on the BUCs' use cases and their APIs, and what those combine |
@@ -335,7 +338,7 @@ with one stderr note.
 | `--usecase <id>` | string (repeatable) | — (whole model) | Draw only the named use cases. Applies to `usecase` only, and not together with `--buc`; an unknown id is an error. |
 | `--node-kind <kind>` | string (repeatable) | — (all nodes) | Draw only these node kinds. Applies to `rdra`. Examples: `actor`, `buc`, `flow`, `step`, `usecase`, `api`, `entity`, `field`. Alias: `--kind-filter`. |
 | `--edge-kind <kind>` | string (repeatable) | — (all edges) | Draw only these relation kinds. Applies to `rdra`. Examples: `contains`, `invokes`, `reads`, `writes`, `creates`, `maps-field`, `owns`, `relate`. Alias: `--edge-filter`. |
-| `-o`, `--out` | path | `out` | Output file path. The `.mmd` extension is added automatically. |
+| `-o`, `--out` | path | `out` | Output file path. The extension is always `.mmd`: a path without one gets it added (`-o out` writes `out.mmd`), and an existing one is replaced (`-o x.foo` writes `x.mmd`; `x.mmd` stays; `-o d.tar.gz` writes `d.tar.mmd`). |
 
 Notes:
 
@@ -574,7 +577,7 @@ rdra-ish csv <INPUTS...> [--kind <KIND>] [-o <OUT>]
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--kind` | `actor` \| `entity` \| `matrix` \| `api` \| `api-matrix` \| `screen-constraints` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` | `entity` | CSV kind. `actor` = actor list; `entity` = entity/column list; `matrix` = use-case × entity CRUD matrix; `api` = API contract list including method/path/idempotency/mode/auth; `api-matrix` = API × entity CRUD matrix; `screen-constraints` = screen × UC/API permission/medium paths; `permission-callables` = permission × callable UC/API list derived from `requires_permission`, including `UseCase->Api` paths for API-level requirements; `actor-permission-audit` = actor × permission assignment audit inferred from UC/API requirements; `business-inputs` = Actor x inferred input field x UseCase rows derived from C/U/W paths. |
-| `-o`, `--out` | path | `out` | Output file path. If no extension is given, a default is appended (`actor.csv` / `entity.csv` / `matrix.csv` / etc.). |
+| `-o`, `--out` | path | `out` | Output file path. A path with an extension is used as is (`-o x.dat` writes `x.dat`). Otherwise `.<kind>.csv` is appended to the path: `-o out` (the default) writes `out.matrix.csv` for `--kind matrix` and `out.entity.csv` for `--kind entity`, and `-o foo` writes `foo.matrix.csv`. |
 
 The command writes the CSV to the output path and prints `wrote <path>`.
 
@@ -592,7 +595,7 @@ rdra-ish export <INPUTS...> [--kind <KIND>] [-o <OUT>] [--instance-count <N>] [-
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--kind` | `openapi` \| `asyncapi` \| `dbml` \| `json-schema` \| `typescript-states` \| `mermaid-er` \| `tla` | `openapi` | Export kind. `openapi` emits an OpenAPI 3.0 JSON document from API `method`/`path` metadata and DTO `request` / `response` / `error_response` relations. `asyncapi` emits an AsyncAPI 3.1 event catalog from `event`, `raises`, `triggers`, `transitions`, and `outbox`. `dbml` emits a DBML schema from logical `entity` declarations, indexes, unique constraints, generated FK columns, and `relate` options. `json-schema` emits JSON Schema Draft 2020-12 definitions for DTO and Entity structures. `mermaid-er` emits a textual ER review artifact from the same logical data model projection used by `diagram --kind er`. `tla` emits a TLA+ module plus TLC config from entity lifecycles and state constraints (see [formal-verification.md](./formal-verification.md)). |
-| `-o`, `--out` | path | `out` | Output file path. If no extension is given, `openapi.json`, `asyncapi.json`, `schema.dbml`, `json-schema.json`, `er.mmd`, or `RdraSpec.tla` (with sibling `.cfg`) is used. For `--kind tla`, a path ending in `.tla` uses that file stem as the TLA+ module name (sibling `.cfg`). |
+| `-o`, `--out` | path | `out` | Output file path. For every kind except `tla`, a path with an extension is used as is. Otherwise the kind's suffix is appended to the path: `-o out` (the default) writes `out.openapi.json`, `out.asyncapi.json`, `out.schema.dbml`, `out.json-schema.json`, `out.entity-states.ts` (`typescript-states`), or `out.er.mmd`, and `-o foo` writes `foo.openapi.json`. For `--kind tla`, a path ending in `.tla` is the TLA+ file, uses its file stem as the module name, and gets a sibling `.cfg` (`-o m.tla` writes `m.tla` and `m.cfg`). Any other path is a directory (created if missing) that receives `RdraSpec.tla` and `RdraSpec.cfg`: `-o out` (the default) writes `out/RdraSpec.tla`. A path with a non-`.tla` extension writes them into its parent directory. |
 | `--instance-count` | unsigned integer | `2` | TLA+ only: multi-instance `InstanceCount` (`1..=255`). Value `1` is accepted with a warning (singleton ids cannot distinguish multi-entity instances). |
 | `--int-range-max` | unsigned integer | `5` | TLA+ only: upper bound for `IntRange == 0..N` (`1..=255`; `0` is rejected). |
 
