@@ -299,6 +299,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "dunce"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
+
+[[package]]
 name = "encode_unicode"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -875,6 +881,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
+ "dunce",
  "miette",
  "rdra-ish-core",
  "rdra-ish-emit",
@@ -887,6 +894,7 @@ dependencies = [
 name = "rdra-ish-core"
 version = "0.2.0"
 dependencies = [
+ "dunce",
  "insta",
  "miette",
  "petgraph",
@@ -915,6 +923,7 @@ dependencies = [
 name = "rdra-ish-lsp"
 version = "0.2.0"
 dependencies = [
+ "dunce",
  "rdra-ish-core",
  "rdra-ish-syntax",
  "serde_json",

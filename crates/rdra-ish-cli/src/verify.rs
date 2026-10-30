@@ -107,8 +107,8 @@ fn out_dir(out: Option<PathBuf>) -> Result<(PathBuf, String, bool)> {
     };
     fs::create_dir_all(&dir).with_context(|| format!("failed to create {}", dir.display()))?;
     // TLC runs inside `dir`, so the metadir and java tmpdir paths must not be relative.
-    let dir =
-        fs::canonicalize(&dir).with_context(|| format!("failed to resolve {}", dir.display()))?;
+    let dir = dunce::canonicalize(&dir)
+        .with_context(|| format!("failed to resolve {}", dir.display()))?;
     Ok((dir, whole, keep))
 }
 

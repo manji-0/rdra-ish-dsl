@@ -51,7 +51,7 @@ fn load(sample: &str) -> SemanticModel {
     rdra_files(&repo().join(sample), &mut files);
     let mut includes: Vec<PathBuf> = Vec::new();
     for f in &files {
-        let canon = std::fs::canonicalize(f).unwrap_or_else(|_| f.clone());
+        let canon = dunce::canonicalize(f).unwrap_or_else(|_| f.clone());
         if let Some(parent) = canon.parent() {
             for a in [parent, parent.parent().unwrap_or(parent)] {
                 if !includes.iter().any(|p| p == a) {
@@ -76,7 +76,7 @@ fn load(sample: &str) -> SemanticModel {
 fn export(sample: &str, args: &[&str], file: &str) -> String {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
         .join("key_facts")
-        .join(sample.replace('/', "__"));
+        .join(sample.replace(['/', '\\', ':'], "__"));
     std::fs::create_dir_all(&dir).unwrap();
     let out = dir.join(file);
     let _ = std::fs::remove_file(&out);

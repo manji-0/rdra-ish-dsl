@@ -6,7 +6,6 @@ use rdra_ish_core::{
     SemanticModel,
 };
 use std::collections::HashSet;
-use std::fs;
 use std::path::PathBuf;
 
 pub(crate) fn collect_rdra_files(inputs: &[PathBuf]) -> Result<Vec<PathBuf>> {
@@ -43,7 +42,7 @@ fn root_include_paths(files: &[PathBuf]) -> Vec<PathBuf> {
     let mut paths = vec![];
     for f in files {
         // Canonicalize so relative paths work.
-        let canon = fs::canonicalize(f).unwrap_or_else(|_| f.clone());
+        let canon = dunce::canonicalize(f).unwrap_or_else(|_| f.clone());
         // For a file like /root/buc/buc_purchase.rdra we want /root as include path.
         // Walk up from the file's parent until we can't go further.
         if let Some(parent) = canon.parent() {

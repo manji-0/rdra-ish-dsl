@@ -46,13 +46,13 @@ pub fn resolve_overlaid(
     let mut queue: VecDeque<PathBuf> = entry_paths.iter().cloned().collect();
     let mut queued: HashSet<PathBuf> = HashSet::new();
     for p in entry_paths {
-        if let Ok(c) = std::fs::canonicalize(p) {
+        if let Ok(c) = dunce::canonicalize(p) {
             queued.insert(c);
         }
     }
 
     while let Some(path) = queue.pop_front() {
-        let canon = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+        let canon = dunce::canonicalize(&path).unwrap_or_else(|_| path.clone());
 
         if path_to_id.contains_key(&canon) {
             continue;
@@ -104,7 +104,7 @@ pub fn resolve_overlaid(
         // Enqueue unvisited dependencies.
         for imp in &imports {
             if let Some(dep_path) = resolve_import_path(&imp.path, include_paths) {
-                let dep_canon = std::fs::canonicalize(&dep_path).unwrap_or(dep_path.clone());
+                let dep_canon = dunce::canonicalize(&dep_path).unwrap_or(dep_path.clone());
                 if !queued.contains(&dep_canon) {
                     queued.insert(dep_canon);
                     queue.push_back(dep_path);
@@ -145,7 +145,7 @@ pub fn resolve_overlaid(
         let from_ni = node_indices[from_id];
         for dotted in imports {
             if let Some(dep_path) = resolve_import_path(dotted, include_paths) {
-                if let Ok(dep_canon) = std::fs::canonicalize(&dep_path) {
+                if let Ok(dep_canon) = dunce::canonicalize(&dep_path) {
                     if let Some(&to_id) = path_to_id.get(&dep_canon) {
                         let to_ni = node_indices[to_id];
                         graph.add_edge(from_ni, to_ni, ());
@@ -220,15 +220,15 @@ fn read_source(
         if let Some(text) = overlays.get(path) {
             return Ok(text.clone());
         }
-        if let Ok(canon) = std::fs::canonicalize(path) {
+        if let Ok(canon) = dunce::canonicalize(path) {
             if let Some(text) = overlays.get(&canon) {
                 return Ok(text.clone());
             }
         }
         for (key, text) in overlays {
-            let same = std::fs::canonicalize(key)
+            let same = dunce::canonicalize(key)
                 .ok()
-                .zip(std::fs::canonicalize(path).ok())
+                .zip(dunce::canonicalize(path).ok())
                 .is_some_and(|(a, b)| a == b)
                 || key == path;
             if same {

@@ -39,6 +39,7 @@ tokio        = { version = "1", features = ["macros", "rt-multi-thread", "io-std
 url          = "2"
 # file
 walkdir      = "2"
+dunce        = "1"
 # test
 insta        = { version = "1", features = ["toml"] }
 tempfile     = "3"

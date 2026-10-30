@@ -1,6 +1,8 @@
 //! `files` prints what a root loads in load order, which `scripts/verify-samples.sh` reads
 //! the `// expect` header from.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -19,8 +21,7 @@ fn files_lists_a_root_in_load_order_whatever_the_creation_order() {
         .output()
         .expect("rdra-ish runs");
     assert!(output.status.success());
-    let root = format!("{}/", dir.display());
-    let stdout = String::from_utf8_lossy(&output.stdout).replace(&root, "");
+    let stdout = common::relative_to(&String::from_utf8_lossy(&output.stdout), &dir);
     assert_eq!(stdout, "a.rdra\nb/c.rdra\nb/y.rdra\nz.rdra\n");
 }
 

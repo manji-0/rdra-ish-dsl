@@ -23,7 +23,7 @@ pub(super) fn load(rel: &str) -> SemanticModel {
     files.sort();
     let mut includes: Vec<PathBuf> = Vec::new();
     for f in &files {
-        let c = std::fs::canonicalize(f).unwrap();
+        let c = dunce::canonicalize(f).unwrap();
         let parent = c.parent().unwrap();
         for a in [parent, parent.parent().unwrap_or(parent)] {
             if !includes.iter().any(|x| x == a) {

@@ -36,7 +36,7 @@ fn rdra_files(root: &Path, out: &mut Vec<PathBuf>) {
 fn include_paths(files: &[PathBuf]) -> Vec<PathBuf> {
     let mut paths: Vec<PathBuf> = Vec::new();
     for f in files {
-        let canon = std::fs::canonicalize(f).unwrap_or_else(|_| f.clone());
+        let canon = dunce::canonicalize(f).unwrap_or_else(|_| f.clone());
         if let Some(parent) = canon.parent() {
             for a in [parent, parent.parent().unwrap_or(parent)] {
                 if !paths.iter().any(|p| p == a) {

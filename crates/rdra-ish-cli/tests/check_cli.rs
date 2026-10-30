@@ -1,14 +1,13 @@
 //! What `check` prints for a violated rule: one verdict, its rule site, and a shortest
 //! counterexample in model terms.
 
+mod common;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn repo() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .canonicalize()
-        .expect("repo root")
+    dunce::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).expect("repo root")
 }
 
 #[test]
@@ -22,8 +21,7 @@ fn check_prints_one_verdict_with_its_counterexample() {
         .output()
         .expect("rdra-ish runs");
     assert_eq!(output.status.code(), Some(1));
-    let root = format!("{}/", repo().display());
-    let stderr = String::from_utf8_lossy(&output.stderr).replace(&root, "");
+    let stderr = common::relative_to(&String::from_utf8_lossy(&output.stderr), &repo());
     let file = "skills/rdra-ish-verify/samples/cross_order_payment_split.rdra";
     let expected = format!(
         "\
@@ -87,7 +85,7 @@ fn check_and_states_print_the_bounds_line() {
 fn check_lists_only_the_guards_that_never_hold() {
     let dir = std::env::temp_dir().join(format!("rdra-never-runs-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let dir = std::fs::canonicalize(&dir).unwrap();
+    let dir = dunce::canonicalize(&dir).unwrap();
     let file = dir.join("never_runs.rdra");
     std::fs::write(
         &file,
@@ -132,11 +130,12 @@ applies_to(Settled, Pay)
         .collect();
     assert_eq!(blocks.len(), 2, "{stderr}");
     let squash = |b: &str| {
-        b.lines()
+        let squashed = b
+            .lines()
             .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
             .collect::<Vec<_>>()
-            .join("\n")
-            .replace(&format!("{}/", dir.display()), "")
+            .join("\n");
+        common::relative_to(&squashed, &dir)
     };
     assert_eq!(
         squash(blocks[0]),
@@ -168,8 +167,7 @@ fn check_reports_a_state_no_use_case_reaches() {
     let sample = "samples/formal-verification/unwitnessed_state.rdra";
     let output = run(&["check", sample]);
     assert_eq!(output.status.code(), Some(1));
-    let root = format!("{}/", repo().display());
-    let stderr = String::from_utf8_lossy(&output.stderr).replace(&root, "");
+    let stderr = common::relative_to(&String::from_utf8_lossy(&output.stderr), &repo());
     let file = "skills/rdra-ish-verify/samples/unwitnessed_state.rdra";
     assert_eq!(
         stderr,
@@ -234,8 +232,7 @@ fn check_reports_an_instance_that_never_leaves_its_state() {
     let sample = "samples/formal-verification/deadlock.rdra";
     let output = run(&["check", sample]);
     assert_eq!(output.status.code(), Some(1));
-    let root = format!("{}/", repo().display());
-    let stderr = String::from_utf8_lossy(&output.stderr).replace(&root, "");
+    let stderr = common::relative_to(&String::from_utf8_lossy(&output.stderr), &repo());
     let file = "skills/rdra-ish-verify/samples/deadlock.rdra";
     assert_eq!(
         stderr,

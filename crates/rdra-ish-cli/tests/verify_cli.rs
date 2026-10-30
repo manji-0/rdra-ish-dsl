@@ -8,10 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 fn repo() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .canonicalize()
-        .expect("repo root")
+    dunce::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).expect("repo root")
 }
 
 fn scratch(test: &str) -> PathBuf {

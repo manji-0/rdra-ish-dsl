@@ -19,3 +19,4 @@ tower-lsp       = { workspace = true }
 tokio           = { workspace = true }
 url             = { workspace = true }
 walkdir         = { workspace = true }
+dunce           = { workspace = true }

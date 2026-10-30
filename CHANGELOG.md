@@ -589,6 +589,12 @@ entries below are that redesign; the new kinds are under Added.
 
 ### Fixed
 
+- On Windows, every diagnostic site, `check` counterexample step, and import cycle named
+  the file by its verbatim path (`\\?\C:\...\order.rdra`), because the canonical path came
+  from `std::fs::canonicalize`. Paths are now resolved with `dunce`, so Windows users see
+  `C:\...\order.rdra`; Linux and macOS output is unchanged. A clippy `disallowed-methods`
+  rule keeps `std::fs::canonicalize` out of the workspace, and
+  `cargo test --workspace` passes on Windows.
 - `fmt` deleted every `//` and `/* */` comment, and `fmt --write` wrote the file back
   without them, because the lexer skipped comments before the formatter saw the source.
   The lexer now keeps each comment with its span, and `fmt` prints it where it was: a
