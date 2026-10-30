@@ -271,7 +271,7 @@ updates(CancelOrder, Order)
 Ask the user:
 
 - Which business objects are created, read, updated, or deleted by each use case?
-- Are any entities only conceptual at this stage?
+- Which nouns are logical data structures, and which are only business vocabulary?
 - Which entities should be shared across multiple BUCs?
 
 Validation:

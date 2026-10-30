@@ -11,14 +11,19 @@ assignment.
 
 ## Ask For
 
-- Which screen or external interface exposes each use case?
-- Which fields are actor-entered, readonly, required, or system-derived?
+<!-- stage-spec: asks interaction-boundary -->
+- Which screen or external interface does each use case expose?
 - Does the use case write data directly, or through an API boundary?
-- Which APIs are reusable consistency boundaries rather than one-off screen actions?
+- Is the API a reusable boundary or local to this BUC?
+- Which actor permission and physical/device medium are required for the use case or API?
+<!-- /stage-spec -->
+
+Also ask:
+
+- Which fields are actor-entered, readonly, required, or system-derived?
 - Which HTTP method/path, idempotency, sync/async mode, auth scheme, and DTO payloads
   are part of the contract?
 - Which internal system owns each stable API?
-- Which permission and operation medium are required by the UC and invoked APIs?
 - Which actors should hold those permissions?
 
 ## Procedure
@@ -76,16 +81,23 @@ has_permission(Customer, OrderWrite)
 
 ## Validation
 
+<!-- stage-spec: review interaction-boundary -->
 ```sh
 rdra-ish check src/
-rdra-ish check src/ --strict   # permission gaps become errors
 rdra-ish diagram src/ --kind rdra --format mermaid --buc BucOrder
 rdra-ish list src/ --kind api --format table
-rdra-ish list src/ --kind field --format table
 rdra-ish csv src/ --kind api-matrix
 rdra-ish csv src/ --kind screen-constraints
-rdra-ish csv src/ --kind permission-callables
 rdra-ish csv src/ --kind actor-permission-audit
+```
+<!-- /stage-spec -->
+
+Also run:
+
+```sh
+rdra-ish check src/ --strict   # permission gaps become errors
+rdra-ish list src/ --kind field --format table
+rdra-ish csv src/ --kind permission-callables
 rdra-ish csv src/ --kind business-inputs
 rdra-ish export src/ --kind openapi --out out/openapi.json
 ```

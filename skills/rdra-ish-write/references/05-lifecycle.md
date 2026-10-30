@@ -13,11 +13,19 @@ or between a use case and an external system; a timer starts a use case on a sch
 
 ## Ask For
 
+<!-- stage-spec: asks lifecycle -->
+- Which Enum column and variants represent lifecycle state?
+- Which use case causes each state change?
+- Does any event start another BUC, and is the concrete entry use case known yet?
+- Which nullable or boolean fields change together with the lifecycle?
+- Are the Enum variants the states you want to see? Diagrams derive one state per variant.
+<!-- /stage-spec -->
+
+Also ask:
+
 - Which entity values represent lifecycle state, and which ones does an actor merely
   choose?
-- Which use case moves each state, from which state to which?
 - Which use case raises each domain event, and what consumes it?
-- Does any event start another BUC before the entry use case is fixed?
 - Does a schedule start any use case?
 - Does a business rule (an RDRA 条件) decide when a use case may run?
 - Which nullable, enum, boolean, Int, or comparison values change with each use case?
@@ -97,11 +105,18 @@ applies_to(CardPayment, CapturePayment)
 
 ## Validation
 
+<!-- stage-spec: review lifecycle -->
 ```sh
 rdra-ish check src/
 rdra-ish states src/ --entity Order
 rdra-ish diagram src/ --kind state --format mermaid --buc BucOrder
 rdra-ish diagram src/ --kind event --format mermaid
+```
+<!-- /stage-spec -->
+
+Also run:
+
+```sh
 rdra-ish export src/ --kind asyncapi --out out/asyncapi.json
 ```
 

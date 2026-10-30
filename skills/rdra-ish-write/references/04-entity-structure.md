@@ -10,7 +10,15 @@ boundaries established in Step 3.
 
 ## Ask For
 
-- Which fields identify each entity?
+<!-- stage-spec: asks entity-structure -->
+- What fields identify each entity?
+- Which fields are business state, and which are ordinary data?
+- What parent/child relationships should own or group records?
+- Does a use case need one transaction across related entities?
+<!-- /stage-spec -->
+
+Also ask:
+
 - Which fields are required, nullable, unique, or label-like?
 - Which indexes, composite unique constraints, checks, soft-delete/history/tenant
   markers, or derived columns are review-relevant?
@@ -94,10 +102,17 @@ owns(OrderSystem, Order)
 
 ## Validation
 
+<!-- stage-spec: review entity-structure -->
 ```sh
 rdra-ish check src/
-rdra-ish lint src/
 rdra-ish diagram src/ --kind er --format mermaid --buc BucOrder
+```
+<!-- /stage-spec -->
+
+Also run:
+
+```sh
+rdra-ish lint src/
 rdra-ish csv src/ --kind api-matrix
 rdra-ish csv src/ --kind business-inputs
 rdra-ish csv src/ --kind actor-permission-audit

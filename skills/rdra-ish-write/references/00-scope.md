@@ -10,11 +10,16 @@ This step protects business intent before implementation detail enters the model
 
 ## Ask For
 
-- What business area, value stream, or operating domain is in scope?
-- What candidate BUC names should be reviewed?
+<!-- stage-spec: asks scope -->
+- Which business area or value stream is in scope?
+- What are the candidate BUC names?
+- Which BUC should be modeled first?
+<!-- /stage-spec -->
+
+Also ask:
+
 - Which requirement, source, stakeholder, owner, priority, or acceptance criteria
   should be preserved now?
-- Which BUC should be refined first?
 
 ## Procedure
 
@@ -57,12 +62,19 @@ motivates(ReqOrder, BucOrder)
 
 ## Validation
 
+<!-- stage-spec: review scope -->
 ```sh
 rdra-ish check src/
-rdra-ish lint src/ --format table
 rdra-ish list src/ --kind buc --format table
-rdra-ish list src/ --kind requirement --format table
 rdra-ish diagram src/ --kind rdra --format mermaid --buc BucOrder
+```
+<!-- /stage-spec -->
+
+Also run:
+
+```sh
+rdra-ish lint src/ --format table
+rdra-ish list src/ --kind requirement --format table
 ```
 
 ## Achievement Conditions
