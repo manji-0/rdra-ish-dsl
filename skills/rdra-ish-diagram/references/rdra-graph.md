@@ -18,6 +18,10 @@ rdra-ish diagram src/ --kind rdra --buc <BucA> --buc <BucB> --format mermaid
 # Focus a large graph
 rdra-ish diagram src/ --kind rdra --format mermaid --node-kind actor --node-kind buc --node-kind usecase
 rdra-ish diagram src/ --kind rdra --format mermaid --node-kind flow --node-kind step --edge-kind covers
+
+# UC複合図 — the use cases of one BUC, or the named use cases
+rdra-ish diagram src/ --kind usecase --buc <BucId> --format mermaid
+rdra-ish diagram src/ --kind usecase --usecase <UcId> --format mermaid
 ```
 
 ## Reading RDRA Layered Output
@@ -47,9 +51,28 @@ rdra-ish diagram src/ --kind rdra --format mermaid --node-kind flow --node-kind 
   `%% derived ...` follows an edge derived from another fact (a condition's
   `combines` derived from its `holds`).
 
+## Reading the UC複合図
+
+- `--kind usecase` draws each use case in scope with the actors who perform it, the
+  screens it displays and the entities they show, the entities it reads and writes,
+  the events it raises or that trigger it with their external systems, the timers that
+  trigger it, the conditions that apply to it, and the states it moves. The layers, ids,
+  and edge labels are those of `rdra`.
+- APIs are folded into the use case that invokes them: an API's CRUD is drawn from the
+  use case, followed by `%% derived <uc> -> <entity> via api__<Api>`. An actor who
+  performs the use case's BUC or step is drawn performing the use case, followed by
+  `%% derived ... via buc__<Buc>` (or `step__<Step>`). A declared edge is never marked
+  derived.
+- `%% omitted:` names the kinds linked to a drawn use case or screen that the diagram
+  leaves out, such as `buc`, `api`, `permission`, and `medium`.
+- `--buc` keeps the use cases the BUC contains, directly or through a step of its flows;
+  `--usecase` (repeatable, not with `--buc`) keeps the named ones.
+
 ## When To Use
 
 - Use `rdra --buc <BucId>` for scope, BUC skeleton, and data-touchpoint reviews.
+- Use `usecase --buc <BucId>` to review what each use case of a BUC touches, without the
+  API and permission detail.
 - Narrow `rdra` with `--node-kind` and `--edge-kind` when the whole graph is too dense
   to read.
 - Add `rdra-ish csv src/ --kind matrix` when the question is CRUD coverage rather than

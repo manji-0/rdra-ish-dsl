@@ -1,0 +1,69 @@
+%% rdra-ish diagram=usecase scope=buc:BucCart model=samples/ec-site
+%% layers: value=システム価値 boundary=システム境界 system=システム
+%% kinds: actor usecase screen entity
+%% omitted: buc api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__Customer["Customer"]:::actor
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__AddToCart["Add to Cart"]:::usecase
+    usecase__RemoveCartItem["Remove from Cart"]:::usecase
+    usecase__SearchProducts["Search Products"]:::usecase
+    usecase__UpdateCartItem["Change Cart Item Quantity"]:::usecase
+    usecase__ViewCart["View Cart"]:::usecase
+    usecase__ViewProduct["View Product Details"]:::usecase
+    screen__CartScreen["Cart Screen"]:::screen
+    screen__ProductDetailScreen["Product Detail Screen"]:::screen
+    screen__ProductSearchScreen["Product Search Screen"]:::screen
+  end
+  subgraph layer_system["システム"]
+    entity__Cart["Cart"]:::entity
+    entity__CartItem["Cart Item"]:::entity
+    entity__Category["Category"]:::entity
+    entity__Product["Product"]:::entity
+  end
+  actor__Customer -.->|performs| usecase__AddToCart
+  %% derived actor__Customer -> usecase__AddToCart via buc__BucCart
+  actor__Customer -.->|performs| usecase__RemoveCartItem
+  %% derived actor__Customer -> usecase__RemoveCartItem via buc__BucCart
+  actor__Customer -.->|performs| usecase__SearchProducts
+  %% derived actor__Customer -> usecase__SearchProducts via buc__BucCart
+  actor__Customer -.->|performs| usecase__UpdateCartItem
+  %% derived actor__Customer -> usecase__UpdateCartItem via buc__BucCart
+  actor__Customer -.->|performs| usecase__ViewCart
+  %% derived actor__Customer -> usecase__ViewCart via buc__BucCart
+  actor__Customer -.->|performs| usecase__ViewProduct
+  %% derived actor__Customer -> usecase__ViewProduct via buc__BucCart
+  usecase__AddToCart -.->|creates| entity__CartItem
+  %% derived usecase__AddToCart -> entity__CartItem via api__AddToCartApi
+  usecase__AddToCart -.->|displays| screen__CartScreen
+  usecase__AddToCart -.->|reads| entity__Product
+  %% derived usecase__AddToCart -> entity__Product via api__AddToCartApi
+  usecase__AddToCart -.->|updates| entity__Cart
+  %% derived usecase__AddToCart -> entity__Cart via api__AddToCartApi
+  usecase__RemoveCartItem -.->|deletes| entity__CartItem
+  %% derived usecase__RemoveCartItem -> entity__CartItem via api__RemoveCartItemApi
+  usecase__RemoveCartItem -.->|displays| screen__CartScreen
+  usecase__SearchProducts -.->|displays| screen__ProductSearchScreen
+  usecase__SearchProducts -.->|reads| entity__Category
+  %% derived usecase__SearchProducts -> entity__Category via api__ProductSearchApi
+  usecase__SearchProducts -.->|reads| entity__Product
+  %% derived usecase__SearchProducts -> entity__Product via api__ProductSearchApi
+  usecase__UpdateCartItem -.->|displays| screen__CartScreen
+  usecase__UpdateCartItem -.->|updates| entity__CartItem
+  %% derived usecase__UpdateCartItem -> entity__CartItem via api__UpdateCartItemApi
+  usecase__ViewCart -.->|displays| screen__CartScreen
+  usecase__ViewCart -.->|reads| entity__Cart
+  %% derived usecase__ViewCart -> entity__Cart via api__ViewCartApi
+  usecase__ViewCart -.->|reads| entity__CartItem
+  %% derived usecase__ViewCart -> entity__CartItem via api__ViewCartApi
+  usecase__ViewCart -.->|reads| entity__Product
+  %% derived usecase__ViewCart -> entity__Product via api__ViewCartApi
+  usecase__ViewProduct -.->|displays| screen__ProductDetailScreen
+  usecase__ViewProduct -.->|reads| entity__Product
+  %% derived usecase__ViewProduct -> entity__Product via api__ProductDetailApi
+  classDef actor stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef entity stroke:#333;

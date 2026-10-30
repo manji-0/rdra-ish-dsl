@@ -12,7 +12,8 @@
 #   kind     every `diagram --kind` in KINDS. Set KINDS to a space-separated subset to compare only those kinds, e.g. while a unit of work
 #            removes the others: KINDS="rdra er" scripts/diagram-diff.sh BASE HEAD
 #   format   mermaid only, passed explicitly
-#   scope    no scope, each --buc, the first two --buc together
+#   scope    no scope, each --buc, the first two --buc together, and for usecase the first two
+#            --usecase alone and together
 #   options  --node-kind and --edge-kind on the kinds that take them
 #   errors   every option the CLI rejects, per root, and the removed --format, --kind, and
 #            option values once
@@ -32,7 +33,7 @@ trap 'rm -rf "$work"' EXIT
 
 strip=()
 [[ -n "${STRIP_COMMENTS:-}" ]] && strip=(-e '/^%%/d')
-read -r -a kinds <<<"${KINDS:-rdra er state event}"
+read -r -a kinds <<<"${KINDS:-rdra usecase er state event}"
 has_kind() { [[ " ${kinds[*]} " == *" $1 "* ]]; }
 only_kinds() { # kind...: those of the arguments that KINDS keeps
   local kind
@@ -94,6 +95,16 @@ dump() { # label bin: one file per cell under $work/LABEL, numbered in run order
           --buc "${bucs[0]}" --buc "${bucs[1]}"
       fi
     done
+    if has_kind usecase; then
+      local ucs=()
+      while IFS= read -r line; do [[ -n "$line" ]] && ucs+=("$line"); done < <(ids "$root" usecase)
+      if [[ ${#ucs[@]} -ge 2 ]]; then
+        cell "$root usecase $fmt usecase=${ucs[0]}" "$root" --kind usecase --format "$fmt" \
+          --usecase "${ucs[0]}"
+        cell "$root usecase $fmt usecase=${ucs[0]},${ucs[1]}" "$root" --kind usecase \
+          --format "$fmt" --usecase "${ucs[0]}" --usecase "${ucs[1]}"
+      fi
+    fi
     for kind in ${graph_kinds[@]+"${graph_kinds[@]}"}; do
       cell "$root $kind $fmt node-kind" "$root" --kind "$kind" --format "$fmt" \
         --node-kind usecase --node-kind entity
@@ -119,6 +130,9 @@ dump() { # label bin: one file per cell under $work/LABEL, numbered in run order
     cell "samples/ec-site error kind=$removed" samples/ec-site --kind "$removed"
   done
   cell "samples/ec-site error option=--usecase" samples/ec-site --usecase Capture
+  cell "samples/ec-site error unknown-usecase" samples/ec-site --kind usecase --usecase NoSuchUc
+  cell "samples/ec-site error usecase+buc" samples/ec-site --kind usecase --usecase Capture \
+    --buc BucPayment
   cell "samples/ec-site error option=--diff-base" samples/ec-site --diff-base samples/ec-site
   cell "samples/ec-site error option=--show-description" samples/ec-site --show-description
   cell "samples/ec-site error option=--view-preset" samples/ec-site --view-preset api

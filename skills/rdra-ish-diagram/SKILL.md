@@ -17,6 +17,7 @@ the selected view.
 | Scope or BUC skeleton review | `rdra --buc <BucId>` | `references/rdra-graph.md` |
 | Dense relationship inspection | `rdra` with `--node-kind` / `--edge-kind` | `references/rdra-graph.md` |
 | Business object/data touchpoint review | `rdra --buc <BucId>` plus CRUD matrix | `references/rdra-graph.md` |
+| Use case inputs and outputs (UC複合図) | `usecase --buc <BucId>` or `usecase --usecase <UcId>` | `references/rdra-graph.md` |
 | Entity structure and relationships | `er`, optionally `--buc <BucId>` | `references/er.md` |
 | Actor-entered field review | `csv --kind business-inputs` | `references/access-and-apis.md` |
 | System API/entity ownership review | `csv --kind api-matrix` | `references/access-and-apis.md` |
@@ -24,7 +25,7 @@ the selected view.
 | API contract or payload handoff | `export --kind openapi` plus API/DTO graph filter | `references/formats-and-output.md` |
 | Data contract handoff | `export --kind dbml` or `json-schema` plus ER | `references/formats-and-output.md` |
 | Event contract handoff | `export --kind asyncapi` plus `event` | `references/lifecycle-and-events.md` |
-| Diagram size or review focus | view presets or node/edge filters | `references/formats-and-output.md` |
+| Diagram size or review focus | `--buc` scope, or `--node-kind` / `--edge-kind` on `rdra` | `references/formats-and-output.md` |
 | Lifecycle and event causality | `state --buc <BucId>` plus `event` | `references/lifecycle-and-events.md` |
 | Business rules or state constraints | `check` (rule counterexamples, unreached and stuck states), then `states` | `references/lifecycle-and-events.md` |
 | Temporal `property` and rules that need two instances | Prefer skill `rdra-ish-verify` (`verify`) | `references/lifecycle-and-events.md` |
@@ -42,6 +43,8 @@ the selected view.
 ### Quick Choices
 
 - Use `rdra` when the question is "what business value/use cases are covered?"
+- Use `usecase` when the question is "what does each use case show, read, write, raise,
+  and move, and who performs it?"
 - Use `er` when the question is "what entities, columns, and relationships exist?"
 - Use `csv --kind business-inputs` when the question is "which actor inputs which fields
   for which use cases?"
@@ -62,7 +65,8 @@ the selected view.
 
 ### Reference Files
 
-- `references/rdra-graph.md` — RDRA layered graph and early-stage model inspection.
+- `references/rdra-graph.md` — RDRA layered graph, the UC複合図, and early-stage model
+  inspection.
 - `references/er.md` — ER diagram commands and relationship reading.
 - `references/access-and-apis.md` — API boundaries plus access/media CSV views.
 - `references/lifecycle-and-events.md` — state diagrams, event diagrams,

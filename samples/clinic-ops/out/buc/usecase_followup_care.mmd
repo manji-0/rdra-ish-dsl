@@ -1,0 +1,77 @@
+%% rdra-ish diagram=usecase scope=buc:BucFollowupCare model=samples/clinic-ops
+%% layers: value=システム価値 boundary=システム境界 system=システム
+%% kinds: actor extsystem usecase screen event entity state
+%% omitted: buc medium permission api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__CareCoordinator["Care Coordinator"]:::actor
+    extsystem__MessagingGateway["Messaging Gateway"]:::extsystem
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__CloseCarePlan["Close Care Plan"]:::usecase
+    usecase__CreateCarePlan["Create Care Plan"]:::usecase
+    usecase__NotifyPatientResult["Notify Patient Result"]:::usecase
+    usecase__ReviewPatientResponse["Review Patient Response"]:::usecase
+    usecase__ScheduleFollowUpVisit["Schedule Follow-Up Visit"]:::usecase
+    usecase__SendFollowUpMessage["Send Follow-Up Message"]:::usecase
+    screen__CarePlanScreen["Care Plan Screen"]:::screen
+    screen__FollowUpScheduleScreen["Follow-Up Schedule Screen"]:::screen
+    screen__PatientMessageScreen["Patient Message Screen"]:::screen
+    event__EvAppointmentScheduled["Appointment Scheduled"]:::event
+    event__EvClinicalOrderReviewed["Clinical Result Reviewed"]:::event
+    event__EvEncounterSigned["Encounter Signed"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__Appointment["Appointment"]:::entity
+    entity__CarePlan["Care Plan"]:::entity
+    entity__Encounter["Encounter"]:::entity
+    entity__Notification["Notification"]:::entity
+    entity__PatientMessage["Patient Message"]:::entity
+    entity__ProviderSchedule["Provider Schedule"]:::entity
+    state__Appointment_apptrequested["apptrequested"]:::state
+    state__Appointment_apptscheduled["apptscheduled"]:::state
+    state__CarePlan_careclosed["careclosed"]:::state
+    state__CarePlan_caremonitoring["caremonitoring"]:::state
+    state__CarePlan_careopen["careopen"]:::state
+  end
+  actor__CareCoordinator -.->|performs| usecase__CloseCarePlan
+  actor__CareCoordinator -.->|performs| usecase__CreateCarePlan
+  actor__CareCoordinator -.->|performs| usecase__NotifyPatientResult
+  actor__CareCoordinator -.->|performs| usecase__ReviewPatientResponse
+  actor__CareCoordinator -.->|performs| usecase__ScheduleFollowUpVisit
+  actor__CareCoordinator -.->|performs| usecase__SendFollowUpMessage
+  event__EvAppointmentScheduled -.->|triggers| extsystem__MessagingGateway
+  event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyPatientResult
+  event__EvEncounterSigned -.->|triggers| usecase__CreateCarePlan
+  usecase__CloseCarePlan -.->|displays| screen__CarePlanScreen
+  usecase__CloseCarePlan -.->|transitions CarePlan.status caremonitoring->careclosed| state__CarePlan_careclosed
+  usecase__CloseCarePlan -.->|updates| entity__CarePlan
+  usecase__CreateCarePlan -.->|creates| entity__CarePlan
+  %% derived usecase__CreateCarePlan -> entity__CarePlan via api__CreateCarePlanApi
+  usecase__CreateCarePlan -.->|displays| screen__CarePlanScreen
+  usecase__CreateCarePlan -.->|reads| entity__Encounter
+  %% derived usecase__CreateCarePlan -> entity__Encounter via api__CreateCarePlanApi
+  usecase__NotifyPatientResult -.->|creates| entity__Notification
+  %% derived usecase__NotifyPatientResult -> entity__Notification via api__NotifyPatientResultApi
+  usecase__NotifyPatientResult -.->|displays| screen__PatientMessageScreen
+  usecase__ReviewPatientResponse -.->|displays| screen__CarePlanScreen
+  usecase__ReviewPatientResponse -.->|transitions CarePlan.status careopen->caremonitoring| state__CarePlan_caremonitoring
+  usecase__ReviewPatientResponse -.->|updates| entity__CarePlan
+  usecase__ReviewPatientResponse -.->|updates| entity__PatientMessage
+  usecase__ScheduleFollowUpVisit -.->|creates| entity__Appointment
+  %% derived usecase__ScheduleFollowUpVisit -> entity__Appointment via api__FollowUpScheduleApi
+  usecase__ScheduleFollowUpVisit -.->|displays| screen__FollowUpScheduleScreen
+  usecase__ScheduleFollowUpVisit -.->|raises| event__EvAppointmentScheduled
+  usecase__ScheduleFollowUpVisit -.->|transitions Appointment.status apptrequested->apptscheduled| state__Appointment_apptscheduled
+  usecase__ScheduleFollowUpVisit -.->|updates| entity__ProviderSchedule
+  %% derived usecase__ScheduleFollowUpVisit -> entity__ProviderSchedule via api__FollowUpScheduleApi
+  usecase__SendFollowUpMessage -.->|creates| entity__PatientMessage
+  %% derived usecase__SendFollowUpMessage -> entity__PatientMessage via api__SendFollowUpMessageApi
+  usecase__SendFollowUpMessage -.->|displays| screen__PatientMessageScreen
+  classDef actor stroke:#333;
+  classDef extsystem stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef event stroke:#333;
+  classDef entity stroke:#333;
+  classDef state stroke:#333;

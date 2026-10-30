@@ -1,0 +1,107 @@
+%% rdra-ish diagram=usecase scope=buc:BucAppointmentScheduling model=samples/clinic-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor extsystem timer usecase screen event entity state
+%% omitted: buc medium permission api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__Patient["Patient"]:::actor
+    %% desc actor__Patient: A person receiving care through the clinic.
+    actor__ReceptionClerk["医事課 受付担当"]:::actor
+    %% desc actor__ReceptionClerk: 初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。
+    extsystem__MessagingGateway["Messaging Gateway"]:::extsystem
+  end
+  subgraph layer_environment["システム外部環境"]
+    timer__NoShowSweep["Nightly no-show sweep"]:::timer
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__BookAppointment["Book Appointment"]:::usecase
+    usecase__CancelAppointment["Cancel Appointment"]:::usecase
+    usecase__MarkNoShow["Mark No Show"]:::usecase
+    usecase__RescheduleAppointment["Reschedule Appointment"]:::usecase
+    usecase__ReserveAppointment["Reserve Appointment"]:::usecase
+    usecase__SearchAvailability["Search Availability"]:::usecase
+    usecase__SendAppointmentNotice["Send Appointment Notice"]:::usecase
+    screen__AppointmentNoticeScreen["Appointment Notice Screen"]:::screen
+    screen__AppointmentScreen["Appointment Screen"]:::screen
+    screen__ScheduleSearchScreen["Schedule Search Screen"]:::screen
+    event__EvAppointmentCancelled["Appointment Cancelled"]:::event
+    event__EvAppointmentRescheduled["Appointment Rescheduled"]:::event
+    event__EvAppointmentScheduled["Appointment Scheduled"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__Appointment["Appointment"]:::entity
+    entity__ClinicLocation["Clinic Location"]:::entity
+    entity__Notification["Notification"]:::entity
+    entity__PatientMessage["Patient Message"]:::entity
+    entity__Provider["Provider"]:::entity
+    entity__ProviderSchedule["Provider Schedule"]:::entity
+    state__Appointment_apptcancelled["apptcancelled"]:::state
+    state__Appointment_apptnoshow["apptnoshow"]:::state
+    state__Appointment_apptrequested["apptrequested"]:::state
+    state__Appointment_apptscheduled["apptscheduled"]:::state
+  end
+  actor__Patient -.->|performs| usecase__SearchAvailability
+  actor__ReceptionClerk -.->|performs| usecase__BookAppointment
+  actor__ReceptionClerk -.->|performs| usecase__CancelAppointment
+  actor__ReceptionClerk -.->|performs| usecase__MarkNoShow
+  actor__ReceptionClerk -.->|performs| usecase__RescheduleAppointment
+  actor__ReceptionClerk -.->|performs| usecase__ReserveAppointment
+  actor__ReceptionClerk -.->|performs| usecase__SearchAvailability
+  actor__ReceptionClerk -.->|performs| usecase__SendAppointmentNotice
+  event__EvAppointmentCancelled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentCancelled -.->|triggers| usecase__SendAppointmentNotice
+  event__EvAppointmentRescheduled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentRescheduled -.->|triggers| usecase__SendAppointmentNotice
+  event__EvAppointmentScheduled -.->|triggers| extsystem__MessagingGateway
+  event__EvAppointmentScheduled -.->|triggers| usecase__SendAppointmentNotice
+  screen__ScheduleSearchScreen -.->|shows| entity__ProviderSchedule
+  timer__NoShowSweep -.->|triggers| usecase__MarkNoShow
+  usecase__BookAppointment -.->|displays| screen__AppointmentScreen
+  usecase__BookAppointment -.->|raises| event__EvAppointmentScheduled
+  usecase__BookAppointment -.->|transitions Appointment.status apptrequested->apptscheduled| state__Appointment_apptscheduled
+  usecase__BookAppointment -.->|updates| entity__Appointment
+  %% derived usecase__BookAppointment -> entity__Appointment via api__BookAppointmentApi
+  usecase__BookAppointment -.->|updates| entity__ProviderSchedule
+  %% derived usecase__BookAppointment -> entity__ProviderSchedule via api__BookAppointmentApi
+  usecase__CancelAppointment -.->|displays| screen__AppointmentScreen
+  usecase__CancelAppointment -.->|raises| event__EvAppointmentCancelled
+  usecase__CancelAppointment -.->|transitions Appointment.status apptscheduled->apptcancelled| state__Appointment_apptcancelled
+  usecase__CancelAppointment -.->|updates| entity__Appointment
+  %% derived usecase__CancelAppointment -> entity__Appointment via api__CancelAppointmentApi
+  usecase__CancelAppointment -.->|updates| entity__ProviderSchedule
+  %% derived usecase__CancelAppointment -> entity__ProviderSchedule via api__CancelAppointmentApi
+  usecase__MarkNoShow -.->|displays| screen__AppointmentScreen
+  usecase__MarkNoShow -.->|transitions Appointment.status apptscheduled->apptnoshow| state__Appointment_apptnoshow
+  usecase__MarkNoShow -.->|updates| entity__Appointment
+  usecase__RescheduleAppointment -.->|displays| screen__AppointmentScreen
+  usecase__RescheduleAppointment -.->|raises| event__EvAppointmentRescheduled
+  usecase__RescheduleAppointment -.->|transitions Appointment.status apptscheduled->apptscheduled| state__Appointment_apptscheduled
+  usecase__RescheduleAppointment -.->|updates| entity__Appointment
+  %% derived usecase__RescheduleAppointment -> entity__Appointment via api__RescheduleAppointmentApi
+  usecase__RescheduleAppointment -.->|updates| entity__ProviderSchedule
+  %% derived usecase__RescheduleAppointment -> entity__ProviderSchedule via api__RescheduleAppointmentApi
+  usecase__ReserveAppointment -.->|creates| entity__Appointment
+  %% derived usecase__ReserveAppointment -> entity__Appointment via api__ReserveAppointmentApi
+  usecase__ReserveAppointment -.->|displays| screen__AppointmentScreen
+  usecase__ReserveAppointment -.->|updates| entity__ProviderSchedule
+  %% derived usecase__ReserveAppointment -> entity__ProviderSchedule via api__ReserveAppointmentApi
+  usecase__SearchAvailability -.->|displays| screen__ScheduleSearchScreen
+  usecase__SearchAvailability -.->|reads| entity__ClinicLocation
+  %% derived usecase__SearchAvailability -> entity__ClinicLocation via api__SearchAvailabilityApi
+  usecase__SearchAvailability -.->|reads| entity__Provider
+  %% derived usecase__SearchAvailability -> entity__Provider via api__SearchAvailabilityApi
+  usecase__SearchAvailability -.->|reads| entity__ProviderSchedule
+  %% derived usecase__SearchAvailability -> entity__ProviderSchedule via api__SearchAvailabilityApi
+  usecase__SendAppointmentNotice -.->|creates| entity__Notification
+  %% derived usecase__SendAppointmentNotice -> entity__Notification via api__AppointmentNoticeApi
+  usecase__SendAppointmentNotice -.->|creates| entity__PatientMessage
+  %% derived usecase__SendAppointmentNotice -> entity__PatientMessage via api__AppointmentNoticeApi
+  usecase__SendAppointmentNotice -.->|displays| screen__AppointmentNoticeScreen
+  classDef actor stroke:#333;
+  classDef extsystem stroke:#333;
+  classDef timer stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef event stroke:#333;
+  classDef entity stroke:#333;
+  classDef state stroke:#333;

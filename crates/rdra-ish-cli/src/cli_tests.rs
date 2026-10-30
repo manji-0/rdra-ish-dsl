@@ -824,3 +824,36 @@ fn clinic_ops_conditions_list_their_body_and_derived_links() {
         .collect();
     assert!(condition_findings.is_empty(), "{condition_findings:?}");
 }
+
+#[test]
+fn usecase_scope_errors_say_what_to_pass() {
+    use crate::cli::DiagramKind;
+    use crate::diagram::{run_diagram, DiagramRequest};
+    let out = std::env::temp_dir().join("rdra_ish_usecase_scope_errors");
+    let request = |kind: DiagramKind, buc: &[&str], usecase: &[&str]| DiagramRequest {
+        inputs: vec![errors_fixture("samples/ec-site")],
+        kind,
+        buc: buc.iter().map(|id| id.to_string()).collect(),
+        usecase: usecase.iter().map(|id| id.to_string()).collect(),
+        node_kind: Vec::new(),
+        edge_kind: Vec::new(),
+        out: out.clone(),
+    };
+    for (request, message) in [
+        (
+            request(DiagramKind::Rdra, &[], &["Capture"]),
+            "--usecase applies only to --kind usecase",
+        ),
+        (
+            request(DiagramKind::Usecase, &["BucPayment"], &["Capture"]),
+            "--usecase and --buc cannot be combined; pass one of them",
+        ),
+        (
+            request(DiagramKind::Usecase, &[], &["NoSuchUc"]),
+            "unknown usecase `NoSuchUc`",
+        ),
+    ] {
+        let error = run_diagram(request).unwrap_err();
+        assert_eq!(error.to_string(), message);
+    }
+}

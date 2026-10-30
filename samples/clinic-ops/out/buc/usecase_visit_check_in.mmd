@@ -1,0 +1,140 @@
+%% rdra-ish diagram=usecase scope=buc:BucVisitCheckIn model=samples/clinic-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor extsystem timer usecase screen event entity state condition
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__Nurse["看護師"]:::actor
+    %% desc actor__Nurse: 医師の指示の下で診療の補助を行う。
+    actor__ReceptionClerk["医事課 受付担当"]:::actor
+    %% desc actor__ReceptionClerk: 初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。
+    extsystem__OnlineEligibilitySystem["オンライン資格確認等システム"]:::extsystem
+  end
+  subgraph layer_environment["システム外部環境"]
+    timer__EligibilityBatchInquiry["予約患者の資格の一括照会（来院前）"]:::timer
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__AssignRoom["Assign Room"]:::usecase
+    usecase__BatchVerifyEligibility["資格の一括照会"]:::usecase
+    usecase__CheckInPatient["受付（初診・再診）"]:::usecase
+    usecase__ConfirmEligibilityInOutageMode["システム障害時モードでの資格確認"]:::usecase
+    usecase__PrepareEncounter["Prepare Encounter"]:::usecase
+    usecase__ReceiveEligibilityInvalid["資格確認結果（無効）の取込"]:::usecase
+    usecase__ReceiveEligibilityNoInfo["資格確認結果（該当資格なし）の取込"]:::usecase
+    usecase__ReceiveEligibilityValid["資格確認結果（有効）の取込"]:::usecase
+    usecase__ReceiveReferralLetter["紹介状受付処理"]:::usecase
+    usecase__RecheckEligibility["資格の再確認"]:::usecase
+    usecase__RecordEligibilityDeclaration["被保険者資格申立書の受領"]:::usecase
+    usecase__VerifyArrival["予約票・診察券の確認"]:::usecase
+    screen__CheckInScreen["受付画面"]:::screen
+    screen__EligibilityScreen["資格確認画面"]:::screen
+    screen__ReferralScreen["紹介状受付画面"]:::screen
+    screen__RoomBoardScreen["Room Board Screen"]:::screen
+    event__EvAppointmentCheckedIn["Appointment Checked In"]:::event
+    event__EvEligibilityChecked["資格確認結果"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__Appointment["Appointment"]:::entity
+    entity__EligibilityCheck["資格確認"]:::entity
+    entity__InsurancePolicy["保険資格"]:::entity
+    entity__PatientAccount["Patient Account"]:::entity
+    entity__PatientProfile["Patient Profile"]:::entity
+    entity__ReferralLetter["紹介状・診療情報提供書"]:::entity
+    entity__Room["Room"]:::entity
+    state__Appointment_apptcheckedin["apptcheckedin"]:::state
+    state__Appointment_apptscheduled["apptscheduled"]:::state
+    state__EligibilityCheck_eligdeclared["eligdeclared"]:::state
+    state__EligibilityCheck_eliginvalid["eliginvalid"]:::state
+    state__EligibilityCheck_elignoinfo["elignoinfo"]:::state
+    state__EligibilityCheck_eligpending["eligpending"]:::state
+    state__EligibilityCheck_eligvalid["eligvalid"]:::state
+    condition__BookedPatient["予約済みの患者"]:::condition
+  end
+  actor__Nurse -.->|performs| usecase__AssignRoom
+  actor__Nurse -.->|performs| usecase__PrepareEncounter
+  actor__ReceptionClerk -.->|performs| usecase__BatchVerifyEligibility
+  actor__ReceptionClerk -.->|performs| usecase__CheckInPatient
+  actor__ReceptionClerk -.->|performs| usecase__ConfirmEligibilityInOutageMode
+  actor__ReceptionClerk -.->|performs| usecase__ReceiveReferralLetter
+  actor__ReceptionClerk -.->|performs| usecase__RecheckEligibility
+  actor__ReceptionClerk -.->|performs| usecase__RecordEligibilityDeclaration
+  actor__ReceptionClerk -.->|performs| usecase__VerifyArrival
+  condition__BookedPatient -.->|applies_to| usecase__BatchVerifyEligibility
+  event__EvAppointmentCheckedIn -.->|triggers| extsystem__OnlineEligibilitySystem
+  event__EvAppointmentCheckedIn -.->|triggers| usecase__PrepareEncounter
+  event__EvEligibilityChecked -.->|triggers| usecase__ReceiveEligibilityInvalid
+  event__EvEligibilityChecked -.->|triggers| usecase__ReceiveEligibilityNoInfo
+  event__EvEligibilityChecked -.->|triggers| usecase__ReceiveEligibilityValid
+  extsystem__OnlineEligibilitySystem -.->|raises| event__EvEligibilityChecked
+  screen__CheckInScreen -.->|shows| entity__Appointment
+  timer__EligibilityBatchInquiry -.->|triggers| usecase__BatchVerifyEligibility
+  usecase__AssignRoom -.->|displays| screen__RoomBoardScreen
+  usecase__AssignRoom -.->|updates| entity__Appointment
+  %% derived usecase__AssignRoom -> entity__Appointment via api__AssignRoomApi
+  usecase__AssignRoom -.->|updates| entity__Room
+  %% derived usecase__AssignRoom -> entity__Room via api__AssignRoomApi
+  usecase__BatchVerifyEligibility -.->|creates| entity__EligibilityCheck
+  %% derived usecase__BatchVerifyEligibility -> entity__EligibilityCheck via api__OnlineEligibilityApi
+  usecase__BatchVerifyEligibility -.->|displays| screen__EligibilityScreen
+  usecase__BatchVerifyEligibility -.->|reads| entity__InsurancePolicy
+  %% derived usecase__BatchVerifyEligibility -> entity__InsurancePolicy via api__OnlineEligibilityApi
+  usecase__CheckInPatient -.->|creates| entity__EligibilityCheck
+  %% derived usecase__CheckInPatient -> entity__EligibilityCheck via api__OnlineEligibilityApi
+  usecase__CheckInPatient -.->|displays| screen__CheckInScreen
+  usecase__CheckInPatient -.->|raises| event__EvAppointmentCheckedIn
+  usecase__CheckInPatient -.->|reads| entity__InsurancePolicy
+  %% derived usecase__CheckInPatient -> entity__InsurancePolicy via api__OnlineEligibilityApi
+  usecase__CheckInPatient -.->|transitions Appointment.status apptscheduled->apptcheckedin| state__Appointment_apptcheckedin
+  usecase__CheckInPatient -.->|updates| entity__Appointment
+  %% derived usecase__CheckInPatient -> entity__Appointment via api__CheckInPatientApi
+  usecase__CheckInPatient -.->|updates| entity__PatientAccount
+  %% derived usecase__CheckInPatient -> entity__PatientAccount via api__CheckInPatientApi
+  usecase__ConfirmEligibilityInOutageMode -.->|displays| screen__EligibilityScreen
+  usecase__ConfirmEligibilityInOutageMode -.->|transitions EligibilityCheck.result eligpending->eligvalid| state__EligibilityCheck_eligvalid
+  usecase__ConfirmEligibilityInOutageMode -.->|updates| entity__EligibilityCheck
+  %% derived usecase__ConfirmEligibilityInOutageMode -> entity__EligibilityCheck via api__EligibilityResultApi
+  usecase__PrepareEncounter -.->|displays| screen__CheckInScreen
+  usecase__PrepareEncounter -.->|reads| entity__Appointment
+  %% derived usecase__PrepareEncounter -> entity__Appointment via api__PrepareEncounterApi
+  usecase__PrepareEncounter -.->|reads| entity__PatientProfile
+  %% derived usecase__PrepareEncounter -> entity__PatientProfile via api__PrepareEncounterApi
+  usecase__ReceiveEligibilityInvalid -.->|displays| screen__EligibilityScreen
+  usecase__ReceiveEligibilityInvalid -.->|transitions EligibilityCheck.result eligpending->eliginvalid| state__EligibilityCheck_eliginvalid
+  usecase__ReceiveEligibilityInvalid -.->|updates| entity__EligibilityCheck
+  %% derived usecase__ReceiveEligibilityInvalid -> entity__EligibilityCheck via api__EligibilityResultApi
+  usecase__ReceiveEligibilityNoInfo -.->|displays| screen__EligibilityScreen
+  usecase__ReceiveEligibilityNoInfo -.->|transitions EligibilityCheck.result eligpending->elignoinfo| state__EligibilityCheck_elignoinfo
+  usecase__ReceiveEligibilityNoInfo -.->|updates| entity__EligibilityCheck
+  %% derived usecase__ReceiveEligibilityNoInfo -> entity__EligibilityCheck via api__EligibilityResultApi
+  usecase__ReceiveEligibilityValid -.->|displays| screen__EligibilityScreen
+  usecase__ReceiveEligibilityValid -.->|transitions EligibilityCheck.result eligpending->eligvalid| state__EligibilityCheck_eligvalid
+  usecase__ReceiveEligibilityValid -.->|updates| entity__EligibilityCheck
+  %% derived usecase__ReceiveEligibilityValid -> entity__EligibilityCheck via api__EligibilityResultApi
+  usecase__ReceiveReferralLetter -.->|creates| entity__ReferralLetter
+  %% derived usecase__ReceiveReferralLetter -> entity__ReferralLetter via api__ReferralLetterApi
+  usecase__ReceiveReferralLetter -.->|displays| screen__ReferralScreen
+  usecase__RecheckEligibility -.->|displays| screen__EligibilityScreen
+  usecase__RecheckEligibility -.->|transitions EligibilityCheck.result eliginvalid->eligpending| state__EligibilityCheck_eligpending
+  usecase__RecheckEligibility -.->|transitions EligibilityCheck.result elignoinfo->eligpending| state__EligibilityCheck_eligpending
+  usecase__RecheckEligibility -.->|updates| entity__EligibilityCheck
+  %% derived usecase__RecheckEligibility -> entity__EligibilityCheck via api__EligibilityResultApi
+  usecase__RecordEligibilityDeclaration -.->|displays| screen__EligibilityScreen
+  usecase__RecordEligibilityDeclaration -.->|transitions EligibilityCheck.result eligpending->eligdeclared| state__EligibilityCheck_eligdeclared
+  usecase__RecordEligibilityDeclaration -.->|updates| entity__EligibilityCheck
+  %% derived usecase__RecordEligibilityDeclaration -> entity__EligibilityCheck via api__EligibilityResultApi
+  usecase__VerifyArrival -.->|displays| screen__CheckInScreen
+  usecase__VerifyArrival -.->|reads| entity__Appointment
+  %% derived usecase__VerifyArrival -> entity__Appointment via api__VerifyArrivalApi
+  usecase__VerifyArrival -.->|reads| entity__InsurancePolicy
+  %% derived usecase__VerifyArrival -> entity__InsurancePolicy via api__VerifyArrivalApi
+  usecase__VerifyArrival -.->|reads| entity__PatientAccount
+  %% derived usecase__VerifyArrival -> entity__PatientAccount via api__VerifyArrivalApi
+  classDef actor stroke:#333;
+  classDef extsystem stroke:#333;
+  classDef timer stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef event stroke:#333;
+  classDef entity stroke:#333;
+  classDef state stroke:#333;
+  classDef condition stroke:#333;

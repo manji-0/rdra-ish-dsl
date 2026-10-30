@@ -1,0 +1,62 @@
+%% rdra-ish diagram=usecase scope=buc:BucPayment model=samples/ec-site
+%% layers: value=システム価値 boundary=システム境界 system=システム
+%% kinds: actor extsystem usecase screen event entity state
+%% omitted: buc api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__Customer["Customer"]:::actor
+    extsystem__PaymentGW["Payment Gateway"]:::extsystem
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__AuthorizePayment["Authorize Payment"]:::usecase
+    usecase__Capture["Capture Payment"]:::usecase
+    usecase__InputPaymentInfo["Enter Payment Information"]:::usecase
+    usecase__RefundPayment["Refund Payment"]:::usecase
+    screen__PaymentInputScreen["Payment Information Screen"]:::screen
+    screen__PaymentResultScreen["Payment Result Screen"]:::screen
+    event__EvPaymentAuthorized["Payment Authorized"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__Order["Order"]:::entity
+    entity__Payment["Payment"]:::entity
+    state__Order_awaiting_capture["awaiting_capture"]:::state
+    state__Order_paid["paid"]:::state
+    state__Order_pending["pending"]:::state
+  end
+  actor__Customer -.->|performs| usecase__AuthorizePayment
+  %% derived actor__Customer -> usecase__AuthorizePayment via buc__BucPayment
+  actor__Customer -.->|performs| usecase__Capture
+  %% derived actor__Customer -> usecase__Capture via buc__BucPayment
+  actor__Customer -.->|performs| usecase__InputPaymentInfo
+  %% derived actor__Customer -> usecase__InputPaymentInfo via buc__BucPayment
+  actor__Customer -.->|performs| usecase__RefundPayment
+  %% derived actor__Customer -> usecase__RefundPayment via buc__BucPayment
+  event__EvPaymentAuthorized -.->|triggers| usecase__Capture
+  extsystem__PaymentGW -.->|raises| event__EvPaymentAuthorized
+  usecase__AuthorizePayment -.->|displays| screen__PaymentResultScreen
+  usecase__AuthorizePayment -.->|updates| entity__Payment
+  %% derived usecase__AuthorizePayment -> entity__Payment via api__PaymentAuthorizationApi
+  usecase__Capture -.->|displays| screen__PaymentResultScreen
+  usecase__Capture -.->|transitions Order.status awaiting_capture->paid| state__Order_paid
+  usecase__Capture -.->|updates| entity__Order
+  %% derived usecase__Capture -> entity__Order via api__PaymentCaptureApi
+  usecase__Capture -.->|updates| entity__Payment
+  %% derived usecase__Capture -> entity__Payment via api__PaymentCaptureApi
+  usecase__InputPaymentInfo -.->|creates| entity__Payment
+  %% derived usecase__InputPaymentInfo -> entity__Payment via api__PaymentInputApi
+  usecase__InputPaymentInfo -.->|displays| screen__PaymentInputScreen
+  usecase__InputPaymentInfo -.->|transitions Order.status pending->awaiting_capture| state__Order_awaiting_capture
+  usecase__InputPaymentInfo -.->|updates| entity__Order
+  %% derived usecase__InputPaymentInfo -> entity__Order via api__PaymentInputApi
+  usecase__RefundPayment -.->|displays| screen__PaymentResultScreen
+  usecase__RefundPayment -.->|updates| entity__Order
+  %% derived usecase__RefundPayment -> entity__Order via api__PaymentRefundApi
+  usecase__RefundPayment -.->|updates| entity__Payment
+  %% derived usecase__RefundPayment -> entity__Payment via api__PaymentRefundApi
+  classDef actor stroke:#333;
+  classDef extsystem stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef event stroke:#333;
+  classDef entity stroke:#333;
+  classDef state stroke:#333;

@@ -1,4 +1,8 @@
-//! Mermaid emitters: RDRA全体図、ER図、状態遷移図、イベント図。
+//! Mermaid emitters: RDRA全体図、UC複合図、ER図、状態遷移図、イベント図。
+
+mod usecase;
+
+pub use usecase::UsecaseMermaidEmitter;
 
 use crate::diagram_common::{
     class_defs, col_type_str, contract_id, desc_line, lifecycle_start_states, node_id, node_label,
@@ -6,7 +10,8 @@ use crate::diagram_common::{
 };
 use crate::{
     collect_object_graph_nodes, node_kind_filter_name, object_graph_layer, object_graph_rel_label,
-    view_node_visible, view_relation_visible, EmitError, Emitter, Scope, View, OBJECT_GRAPH_LAYERS,
+    view_node_visible, view_relation_visible, EmitError, Emitter, ObjectGraphLayer, Scope, View,
+    OBJECT_GRAPH_LAYERS,
 };
 use rdra_ish_core::model::{
     ColumnType, EntityKey, NodeRef, RelKind, SemanticModel, StateKey, StateTransition,
@@ -17,7 +22,7 @@ use std::collections::{BTreeMap, HashSet};
 
 pub struct RdraMermaidEmitter;
 
-/// One edge of the RDRA graph before it is written.
+/// One edge of a flowchart before it is written.
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 struct GraphEdge {
     from: String,
@@ -25,7 +30,63 @@ struct GraphEdge {
     to: String,
     arrow: &'static str,
     /// What the edge was derived from, written as a `%% derived` line after it.
-    derived: Option<&'static str>,
+    derived: Option<String>,
+}
+
+/// The nodes of a layered flowchart: one `subgraph layer_<token>` per layer that holds one,
+/// each node with its `:::<kind>` and its `%% desc` line. Returns the layers drawn.
+fn render_layered_nodes(
+    out: &mut String,
+    model: &SemanticModel,
+    nodes: &[NodeRef],
+) -> Vec<ObjectGraphLayer> {
+    let mut layers = Vec::new();
+    for layer in OBJECT_GRAPH_LAYERS {
+        let nodes: Vec<(&NodeRef, String, &str)> = nodes
+            .iter()
+            .filter(|nr| object_graph_layer(nr) == layer)
+            .filter_map(|nr| Some((nr, contract_id(model, nr)?, node_label(model, nr)?)))
+            .collect();
+        if nodes.is_empty() {
+            continue;
+        }
+        layers.push(layer);
+        out.push_str(&format!(
+            "  subgraph layer_{}[\"{}\"]\n",
+            layer.token(),
+            layer.label()
+        ));
+        for (nr, id, label) in nodes {
+            out.push_str(&format!(
+                "    {id}[\"{}\"]:::{}\n",
+                quote(label),
+                node_kind_filter_name(nr)
+            ));
+            if let Some(desc) = desc_line(model, nr, &id) {
+                out.push_str(&format!("    {desc}\n"));
+            }
+        }
+        out.push_str("  end\n");
+    }
+    layers
+}
+
+/// Sort `edges`, draw each once, and follow a derived one with its `%% derived` line.
+fn render_edges(out: &mut String, mut edges: Vec<GraphEdge>) {
+    edges.sort();
+    edges.dedup();
+    for edge in &edges {
+        out.push_str(&format!(
+            "  {} {}|{}| {}\n",
+            edge.from, edge.arrow, edge.label, edge.to
+        ));
+        if let Some(derived) = &edge.derived {
+            out.push_str(&format!(
+                "  %% derived {} -> {} {derived}\n",
+                edge.from, edge.to
+            ));
+        }
+    }
 }
 
 /// The line style of the RDRAGraph relation kind: hierarchy and flow order `-->`,
@@ -91,7 +152,7 @@ fn graph_edges(model: &SemanticModel, visible: &HashSet<NodeRef>) -> Vec<(RelKin
                         .get(condition)
                         .is_some_and(|c| c.body.is_some()) =>
             {
-                Some("from holds")
+                Some("from holds".to_string())
             }
             _ => None,
         };
@@ -178,34 +239,7 @@ impl Emitter for RdraMermaidEmitter {
         let visible_set: HashSet<NodeRef> = visible_nodes.iter().cloned().collect();
 
         let mut body = String::new();
-        let mut layers = Vec::new();
-        for layer in OBJECT_GRAPH_LAYERS {
-            let nodes: Vec<(&NodeRef, String, &str)> = visible_nodes
-                .iter()
-                .filter(|nr| object_graph_layer(nr) == layer)
-                .filter_map(|nr| Some((nr, contract_id(model, nr)?, node_label(model, nr)?)))
-                .collect();
-            if nodes.is_empty() {
-                continue;
-            }
-            layers.push(layer);
-            body.push_str(&format!(
-                "  subgraph layer_{}[\"{}\"]\n",
-                layer.token(),
-                layer.label()
-            ));
-            for (nr, id, label) in nodes {
-                body.push_str(&format!(
-                    "    {id}[\"{}\"]:::{}\n",
-                    quote(label),
-                    node_kind_filter_name(nr)
-                ));
-                if let Some(desc) = desc_line(model, nr, &id) {
-                    body.push_str(&format!("    {desc}\n"));
-                }
-            }
-            body.push_str("  end\n");
-        }
+        let layers = render_layered_nodes(&mut body, model, &visible_nodes);
 
         let mut omitted_edges: Vec<&'static str> = Vec::new();
         let mut edges: Vec<GraphEdge> = Vec::new();
@@ -216,20 +250,7 @@ impl Emitter for RdraMermaidEmitter {
                 omitted_edges.push(edge_kind_token(&kind));
             }
         }
-        edges.sort();
-        edges.dedup();
-        for edge in &edges {
-            body.push_str(&format!(
-                "  {} {}|{}| {}\n",
-                edge.from, edge.arrow, edge.label, edge.to
-            ));
-            if let Some(derived) = edge.derived {
-                body.push_str(&format!(
-                    "  %% derived {} -> {} {derived}\n",
-                    edge.from, edge.to
-                ));
-            }
-        }
+        render_edges(&mut body, edges);
 
         let kinds = kinds_by_layer(&visible_nodes);
         omitted_edges.sort();

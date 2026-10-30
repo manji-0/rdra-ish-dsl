@@ -1,0 +1,67 @@
+%% rdra-ish diagram=usecase scope=buc:BucStaffAdministration model=samples/clinic-ops
+%% layers: value=システム価値 boundary=システム境界 system=システム
+%% kinds: actor usecase screen entity
+%% omitted: buc medium permission api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__ClinicAdmin["Clinic Administrator"]:::actor
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__BlockScheduleSlot["Block Schedule Slot"]:::usecase
+    usecase__ConfigureRoom["Configure Room"]:::usecase
+    usecase__ManageProviderSchedule["Manage Provider Schedule"]:::usecase
+    usecase__ReleaseRoom["Release Room"]:::usecase
+    usecase__ResolveAuditFinding["Resolve Audit Finding"]:::usecase
+    usecase__ReviewAuditEvents["Review Audit Events"]:::usecase
+    screen__AuditReviewScreen["Audit Review Screen"]:::screen
+    screen__RoomAdminScreen["Room Admin Screen"]:::screen
+    screen__ScheduleAdminScreen["Schedule Admin Screen"]:::screen
+  end
+  subgraph layer_system["システム"]
+    entity__AuditEvent["Audit Event"]:::entity
+    entity__PatientAccount["Patient Account"]:::entity
+    entity__Provider["Provider"]:::entity
+    entity__ProviderSchedule["Provider Schedule"]:::entity
+    entity__Room["Room"]:::entity
+  end
+  actor__ClinicAdmin -.->|performs| usecase__BlockScheduleSlot
+  %% derived actor__ClinicAdmin -> usecase__BlockScheduleSlot via buc__BucStaffAdministration
+  actor__ClinicAdmin -.->|performs| usecase__ConfigureRoom
+  %% derived actor__ClinicAdmin -> usecase__ConfigureRoom via buc__BucStaffAdministration
+  actor__ClinicAdmin -.->|performs| usecase__ManageProviderSchedule
+  %% derived actor__ClinicAdmin -> usecase__ManageProviderSchedule via buc__BucStaffAdministration
+  actor__ClinicAdmin -.->|performs| usecase__ReleaseRoom
+  %% derived actor__ClinicAdmin -> usecase__ReleaseRoom via buc__BucStaffAdministration
+  actor__ClinicAdmin -.->|performs| usecase__ResolveAuditFinding
+  %% derived actor__ClinicAdmin -> usecase__ResolveAuditFinding via buc__BucStaffAdministration
+  actor__ClinicAdmin -.->|performs| usecase__ReviewAuditEvents
+  %% derived actor__ClinicAdmin -> usecase__ReviewAuditEvents via buc__BucStaffAdministration
+  screen__AuditReviewScreen -.->|shows| entity__AuditEvent
+  usecase__BlockScheduleSlot -.->|displays| screen__ScheduleAdminScreen
+  usecase__BlockScheduleSlot -.->|updates| entity__ProviderSchedule
+  %% derived usecase__BlockScheduleSlot -> entity__ProviderSchedule via api__BlockScheduleSlotApi
+  usecase__ConfigureRoom -.->|creates| entity__Room
+  %% derived usecase__ConfigureRoom -> entity__Room via api__RoomAdminApi
+  usecase__ConfigureRoom -.->|displays| screen__RoomAdminScreen
+  usecase__ConfigureRoom -.->|updates| entity__Room
+  %% derived usecase__ConfigureRoom -> entity__Room via api__RoomAdminApi
+  usecase__ManageProviderSchedule -.->|creates| entity__ProviderSchedule
+  %% derived usecase__ManageProviderSchedule -> entity__ProviderSchedule via api__ManageProviderScheduleApi
+  usecase__ManageProviderSchedule -.->|displays| screen__ScheduleAdminScreen
+  usecase__ManageProviderSchedule -.->|updates| entity__Provider
+  %% derived usecase__ManageProviderSchedule -> entity__Provider via api__ManageProviderScheduleApi
+  usecase__ManageProviderSchedule -.->|updates| entity__ProviderSchedule
+  %% derived usecase__ManageProviderSchedule -> entity__ProviderSchedule via api__ManageProviderScheduleApi
+  usecase__ReleaseRoom -.->|displays| screen__RoomAdminScreen
+  usecase__ReleaseRoom -.->|updates| entity__Room
+  usecase__ResolveAuditFinding -.->|displays| screen__AuditReviewScreen
+  usecase__ResolveAuditFinding -.->|updates| entity__AuditEvent
+  usecase__ReviewAuditEvents -.->|displays| screen__AuditReviewScreen
+  usecase__ReviewAuditEvents -.->|reads| entity__AuditEvent
+  %% derived usecase__ReviewAuditEvents -> entity__AuditEvent via api__AuditApi
+  usecase__ReviewAuditEvents -.->|reads| entity__PatientAccount
+  %% derived usecase__ReviewAuditEvents -> entity__PatientAccount via api__AuditApi
+  classDef actor stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef entity stroke:#333;

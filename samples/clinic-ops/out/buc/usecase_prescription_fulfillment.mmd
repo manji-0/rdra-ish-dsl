@@ -1,0 +1,135 @@
+%% rdra-ish diagram=usecase scope=buc:BucPrescriptionFulfillment model=samples/clinic-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor extsystem timer usecase screen event entity state
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__Clinician["医師"]:::actor
+    actor__Pharmacist["薬剤師"]:::actor
+    extsystem__EPrescriptionService["電子処方箋管理サービス"]:::extsystem
+    extsystem__InsurancePharmacy["保険薬局"]:::extsystem
+  end
+  subgraph layer_environment["システム外部環境"]
+    timer__PrescriptionUsePeriodCheck["処方箋の使用期間切れ確認"]:::timer
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__AnswerPharmacyInquiry["保険薬局からの疑義照会への回答"]:::usecase
+    usecase__AnswerPrescriptionInquiry["疑義照会への回答"]:::usecase
+    usecase__CancelPrescription["処方の取消"]:::usecase
+    usecase__ConfirmDispense["保険薬局での調剤結果の受信"]:::usecase
+    usecase__CounselMedication["服薬指導"]:::usecase
+    usecase__DispenseAndAudit["調剤・監査"]:::usecase
+    usecase__DraftPrescription["処方オーダの登録"]:::usecase
+    usecase__ExpirePrescription["処方箋の使用期間切れ"]:::usecase
+    usecase__HandOverMedication["薬剤交付"]:::usecase
+    usecase__IssueInhouseVoucher["院内処方用引換券の交付"]:::usecase
+    usecase__IssueOutsidePrescription["院外処方箋の発行"]:::usecase
+    usecase__IssueRefillPrescription["リフィル処方箋の処方オーダ"]:::usecase
+    usecase__RaisePrescriptionInquiry["疑義照会"]:::usecase
+    usecase__SearchMedication["Search Medication"]:::usecase
+    screen__DispensingScreen["調剤・監査画面"]:::screen
+    screen__MedicationSearchScreen["Medication Search Screen"]:::screen
+    screen__PharmacyStatusScreen["電子処方箋の状況画面"]:::screen
+    screen__PrescriptionScreen["処方画面"]:::screen
+    event__EvPharmacyInquiry["保険薬局からの疑義照会"]:::event
+    event__EvPrescriptionDispensed["Prescription Dispensed"]:::event
+    event__EvPrescriptionIssued["電子処方箋の登録"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__Encounter["Encounter"]:::entity
+    entity__Medication["Medication"]:::entity
+    entity__Prescription["処方箋"]:::entity
+    state__Prescription_rxaudited["rxaudited"]:::state
+    state__Prescription_rxcancelled["rxcancelled"]:::state
+    state__Prescription_rxcounseled["rxcounseled"]:::state
+    state__Prescription_rxdispensed["rxdispensed"]:::state
+    state__Prescription_rxdrafted["rxdrafted"]:::state
+    state__Prescription_rxexpired["rxexpired"]:::state
+    state__Prescription_rxinquiry["rxinquiry"]:::state
+    state__Prescription_rxissued["rxissued"]:::state
+    state__Prescription_rxvoucher["rxvoucher"]:::state
+  end
+  actor__Clinician -.->|performs| usecase__AnswerPharmacyInquiry
+  actor__Clinician -.->|performs| usecase__AnswerPrescriptionInquiry
+  actor__Clinician -.->|performs| usecase__CancelPrescription
+  actor__Clinician -.->|performs| usecase__DraftPrescription
+  actor__Clinician -.->|performs| usecase__IssueInhouseVoucher
+  actor__Clinician -.->|performs| usecase__IssueOutsidePrescription
+  actor__Clinician -.->|performs| usecase__IssueRefillPrescription
+  actor__Clinician -.->|performs| usecase__SearchMedication
+  actor__Pharmacist -.->|performs| usecase__CounselMedication
+  actor__Pharmacist -.->|performs| usecase__DispenseAndAudit
+  actor__Pharmacist -.->|performs| usecase__HandOverMedication
+  actor__Pharmacist -.->|performs| usecase__RaisePrescriptionInquiry
+  event__EvPharmacyInquiry -.->|triggers| usecase__AnswerPharmacyInquiry
+  event__EvPrescriptionDispensed -.->|triggers| usecase__ConfirmDispense
+  event__EvPrescriptionIssued -.->|triggers| extsystem__EPrescriptionService
+  extsystem__EPrescriptionService -.->|raises| event__EvPrescriptionDispensed
+  extsystem__InsurancePharmacy -.->|raises| event__EvPharmacyInquiry
+  screen__MedicationSearchScreen -.->|shows| entity__Medication
+  timer__PrescriptionUsePeriodCheck -.->|triggers| usecase__ExpirePrescription
+  usecase__AnswerPharmacyInquiry -.->|displays| screen__PrescriptionScreen
+  usecase__AnswerPharmacyInquiry -.->|transitions Prescription.status rxissued->rxissued| state__Prescription_rxissued
+  usecase__AnswerPharmacyInquiry -.->|updates| entity__Prescription
+  %% derived usecase__AnswerPharmacyInquiry -> entity__Prescription via api__PrescriptionInquiryApi
+  usecase__AnswerPrescriptionInquiry -.->|displays| screen__PrescriptionScreen
+  usecase__AnswerPrescriptionInquiry -.->|transitions Prescription.status rxinquiry->rxvoucher| state__Prescription_rxvoucher
+  usecase__AnswerPrescriptionInquiry -.->|updates| entity__Prescription
+  %% derived usecase__AnswerPrescriptionInquiry -> entity__Prescription via api__PrescriptionInquiryApi
+  usecase__CancelPrescription -.->|displays| screen__PrescriptionScreen
+  usecase__CancelPrescription -.->|transitions Prescription.status rxdrafted->rxcancelled| state__Prescription_rxcancelled
+  usecase__CancelPrescription -.->|updates| entity__Prescription
+  usecase__ConfirmDispense -.->|displays| screen__PharmacyStatusScreen
+  usecase__ConfirmDispense -.->|transitions Prescription.status rxissued->rxdispensed| state__Prescription_rxdispensed
+  usecase__ConfirmDispense -.->|updates| entity__Prescription
+  %% derived usecase__ConfirmDispense -> entity__Prescription via api__ConfirmDispenseApi
+  usecase__CounselMedication -.->|displays| screen__DispensingScreen
+  usecase__CounselMedication -.->|transitions Prescription.status rxaudited->rxcounseled| state__Prescription_rxcounseled
+  usecase__CounselMedication -.->|updates| entity__Prescription
+  %% derived usecase__CounselMedication -> entity__Prescription via api__DispensingApi
+  usecase__DispenseAndAudit -.->|displays| screen__DispensingScreen
+  usecase__DispenseAndAudit -.->|transitions Prescription.status rxvoucher->rxaudited| state__Prescription_rxaudited
+  usecase__DispenseAndAudit -.->|updates| entity__Prescription
+  %% derived usecase__DispenseAndAudit -> entity__Prescription via api__DispensingApi
+  usecase__DraftPrescription -.->|creates| entity__Prescription
+  %% derived usecase__DraftPrescription -> entity__Prescription via api__DraftPrescriptionApi
+  usecase__DraftPrescription -.->|displays| screen__PrescriptionScreen
+  usecase__DraftPrescription -.->|reads| entity__Encounter
+  %% derived usecase__DraftPrescription -> entity__Encounter via api__DraftPrescriptionApi
+  usecase__ExpirePrescription -.->|displays| screen__PharmacyStatusScreen
+  usecase__ExpirePrescription -.->|transitions Prescription.status rxissued->rxexpired| state__Prescription_rxexpired
+  usecase__ExpirePrescription -.->|updates| entity__Prescription
+  %% derived usecase__ExpirePrescription -> entity__Prescription via api__ConfirmDispenseApi
+  usecase__HandOverMedication -.->|displays| screen__DispensingScreen
+  usecase__HandOverMedication -.->|transitions Prescription.status rxcounseled->rxdispensed| state__Prescription_rxdispensed
+  usecase__HandOverMedication -.->|updates| entity__Prescription
+  %% derived usecase__HandOverMedication -> entity__Prescription via api__DispensingApi
+  usecase__IssueInhouseVoucher -.->|displays| screen__PrescriptionScreen
+  usecase__IssueInhouseVoucher -.->|transitions Prescription.status rxdrafted->rxvoucher| state__Prescription_rxvoucher
+  usecase__IssueInhouseVoucher -.->|updates| entity__Prescription
+  %% derived usecase__IssueInhouseVoucher -> entity__Prescription via api__IssuePrescriptionApi
+  usecase__IssueOutsidePrescription -.->|displays| screen__PrescriptionScreen
+  usecase__IssueOutsidePrescription -.->|raises| event__EvPrescriptionIssued
+  usecase__IssueOutsidePrescription -.->|transitions Prescription.status rxdrafted->rxissued| state__Prescription_rxissued
+  usecase__IssueOutsidePrescription -.->|updates| entity__Prescription
+  %% derived usecase__IssueOutsidePrescription -> entity__Prescription via api__IssuePrescriptionApi
+  usecase__IssueRefillPrescription -.->|creates| entity__Prescription
+  %% derived usecase__IssueRefillPrescription -> entity__Prescription via api__DraftPrescriptionApi
+  usecase__IssueRefillPrescription -.->|displays| screen__PrescriptionScreen
+  usecase__IssueRefillPrescription -.->|reads| entity__Encounter
+  %% derived usecase__IssueRefillPrescription -> entity__Encounter via api__DraftPrescriptionApi
+  usecase__RaisePrescriptionInquiry -.->|displays| screen__DispensingScreen
+  usecase__RaisePrescriptionInquiry -.->|transitions Prescription.status rxvoucher->rxinquiry| state__Prescription_rxinquiry
+  usecase__RaisePrescriptionInquiry -.->|updates| entity__Prescription
+  %% derived usecase__RaisePrescriptionInquiry -> entity__Prescription via api__DispensingApi
+  usecase__SearchMedication -.->|displays| screen__MedicationSearchScreen
+  usecase__SearchMedication -.->|reads| entity__Medication
+  %% derived usecase__SearchMedication -> entity__Medication via api__MedicationCatalogApi
+  classDef actor stroke:#333;
+  classDef extsystem stroke:#333;
+  classDef timer stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef event stroke:#333;
+  classDef entity stroke:#333;
+  classDef state stroke:#333;

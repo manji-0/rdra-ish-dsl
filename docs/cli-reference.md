@@ -293,15 +293,16 @@ input files, each output block is prefixed by a `// <path>` marker.
 Generate a diagram as Mermaid text (`.mmd`).
 
 ```
-rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]... [--node-kind <KIND>]... [--edge-kind <KIND>]... [-o <OUT>]
+rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]... [--usecase <ID>]... [--node-kind <KIND>]... [--edge-kind <KIND>]... [-o <OUT>]
 ```
 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `rdra` \| `er` \| `state` \| `event` | `rdra` | The diagram kind. `rdra` = RDRA layered graph mapped onto the original four-layer structure; `er` = entity-relationship diagram; `state` = one composite state per state model (lifecycle column), transitions labelled with use-case ids, start and end states; `event` = system-to-system event links: UC or ExtSystem `raises` Event, Event `triggers` UC/BUC/ExtSystem, and Timer `triggers` UC/BUC. `boundaryless-graph`, `business-area`, `technical-area`, `sequence`, `diff`, and `event-flow` were removed and fail with a message that names the replacement: `rdra` (narrowed with `--node-kind` / `--edge-kind`), `csv --kind business-inputs`, `csv --kind api-matrix`, `check` (which prints the transaction, API, and system warnings `sequence` printed), a text diff of two `rdra` `.mmd` files, and `--kind event`. |
+| `--kind` | `rdra` \| `usecase` \| `er` \| `state` \| `event` | `rdra` | The diagram kind. `rdra` = RDRA layered graph mapped onto the original four-layer structure; `usecase` = the UC複合図: each use case with the actors who perform it, its screens and what they show, the entities it reads and writes (an invoked API's CRUD folded into it), its events with their external systems, its timers, the conditions that apply to it, and its transitions; `er` = entity-relationship diagram; `state` = one composite state per state model (lifecycle column), transitions labelled with use-case ids, start and end states; `event` = system-to-system event links: UC or ExtSystem `raises` Event, Event `triggers` UC/BUC/ExtSystem, and Timer `triggers` UC/BUC. `boundaryless-graph`, `business-area`, `technical-area`, `sequence`, `diff`, and `event-flow` were removed and fail with a message that names the replacement: `rdra` (narrowed with `--node-kind` / `--edge-kind`), `csv --kind business-inputs`, `csv --kind api-matrix`, `check` (which prints the transaction, API, and system warnings `sequence` printed), a text diff of two `rdra` `.mmd` files, and `--kind event`. |
 | `--format` | `mermaid` | `mermaid` | Output format. Mermaid text (`.mmd`) is the only one. `puml`, `svg`, and `png` were removed and fail with a message that names `--format mermaid`; to get an image, render the `.mmd` with `mmdc` or any Mermaid-aware tool. |
-| `--buc <id>` | string (repeatable) | — (whole model) | Filter to one or more BUCs by id. With multiple ids, the **union** of reachable nodes across the named BUCs is shown. Applies to all diagram kinds. |
+| `--buc <id>` | string (repeatable) | — (whole model) | Filter to one or more BUCs by id. With multiple ids, the **union** of reachable nodes across the named BUCs is shown. Applies to all diagram kinds. For `usecase`, the use cases each BUC contains, directly or through a step of one of its flows. |
+| `--usecase <id>` | string (repeatable) | — (whole model) | Draw only the named use cases. Applies to `usecase` only, and not together with `--buc`; an unknown id is an error. |
 | `--node-kind <kind>` | string (repeatable) | — (all nodes) | Filter graph diagrams to specific node kinds. Applies to `rdra`. Examples: `actor`, `buc`, `flow`, `step`, `usecase`, `api`, `entity`, `field`. Alias: `--kind-filter`. |
 | `--edge-kind <kind>` | string (repeatable) | — (all edges) | Filter graph diagrams to specific relation kinds. Applies to `rdra`. Examples: `contains`, `invokes`, `reads`, `writes`, `creates`, `maps-field`, `owns`, `relate`. Alias: `--edge-filter`. |
 | `-o`, `--out` | path | `out` | Output file path. The `.mmd` extension is added automatically. |
@@ -329,6 +330,13 @@ Notes:
   when model elements of different kinds share a DSL identifier. The diagram draws no
   states; `%% omitted: state transitions` says a drawn use case drives one, which
   `--kind state` shows.
+- For `--kind usecase`, the use cases and what they touch sit in the `rdra` layers with
+  the `rdra` ids, so a node matches its `rdra` node. An edge `rdra` does not draw is
+  derived and followed by its `%% derived` line: an API's CRUD drawn from the use case
+  that invokes it (`via api__<Api>`), and an actor drawn performing the use cases of the
+  BUC or step it performs (`via buc__<Buc>` or `via step__<Step>`). A declared edge wins
+  over a derived one. APIs, DTOs, permissions, media, fields, and BUCs are not drawn;
+  `omitted:` names the ones linked to a drawn use case or screen.
 - For `--kind rdra`, model objects are placed into the four RDRA layers:
   システム価値 (`actor`, `extsystem`, `requirement`, `adr`, `nfr`), システム外部環境
   (`quality`, `constraint`, `business`, `buc`, `flow`, `step`, `timer`, `medium`,
@@ -356,7 +364,7 @@ flowchart LR
   classDef actor stroke:#333;
 ```
 
-- The header comes first. `scope` is `whole` or `buc:<id>[,<id>]`; `model` is the input
+- The header comes first. `scope` is `whole`, `buc:<id>[,<id>]`, or `usecase:<id>[,<id>]`; `model` is the input
   paths as given. `layers:` and `kinds:` list only what the body draws. `omitted:`
   names what a `--node-kind` or `--edge-kind` filter hid, or `(none)`.
 - Each node id is `<kind>__<DSL id>`, with the kind tokens of `--node-kind`. A state is
@@ -373,8 +381,8 @@ flowchart LR
   `relate`, and `-.->` for every other association.
 - A fact drawn more than once in the model is drawn once.
 - An edge rdra-ish derived rather than read from a declaration is followed by
-  `%% derived <from> -> <to> <source>`. Today that is a condition's `combines` link
-  derived from its `holds` body.
+  `%% derived <from> -> <to> <source>`: in `rdra`, a condition's `combines` link derived
+  from its `holds` body (`from holds`); in `usecase`, the links `via` an API, BUC, or step.
 - A node's `description` follows its declaration as `%% desc <id>: <text>`, its lines
   joined by a space.
 

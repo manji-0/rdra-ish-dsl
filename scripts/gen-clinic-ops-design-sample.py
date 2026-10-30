@@ -260,7 +260,7 @@ parts.append('''# Clinic Ops 設計書サンプル
 
 | 種別 | 生成先 | 用途 |
 |---|---|---|
-| BUC 別 RDRA Layered Graph 図 | `out/buc/object_graph_*.mmd` | 各 BUC の actor/usecase/entity/screen/event を確認する |
+| BUC 別 UC複合図 | `out/buc/usecase_*.mmd` | 各 BUC の UC と、その actor・画面・情報・イベント・外部システム・タイマー・条件・状態遷移を確認する |
 | API マトリクス | `out/api_matrix.csv` | API と Entity CRUD の棚卸し |
 | Screen 制約パターン | `out/screen_constraints.csv` | Screen に到達する UC/API ごとの権限・媒体制約を確認する |
 | Actor 権限割当監査 | `out/actor_permission_audit.csv` | Actor 側の権限付与が UC/API 要求と合っているかを確認する |
@@ -272,7 +272,7 @@ parts.append('''# Clinic Ops 設計書サンプル
 生成コマンド例:
 
 ```sh
-rdra-ish diagram samples/clinic-ops --kind rdra --format mermaid --buc BucClinicalEncounter --out samples/clinic-ops/out/buc/object_graph_clinical_encounter
+rdra-ish diagram samples/clinic-ops --kind usecase --format mermaid --buc BucClinicalEncounter --out samples/clinic-ops/out/buc/usecase_clinical_encounter
 rdra-ish csv samples/clinic-ops --kind api-matrix --out samples/clinic-ops/out/api_matrix.csv
 rdra-ish csv samples/clinic-ops --kind screen-constraints --out samples/clinic-ops/out/screen_constraints.csv
 rdra-ish csv samples/clinic-ops --kind actor-permission-audit --out samples/clinic-ops/out/actor_permission_audit.csv
@@ -333,13 +333,13 @@ for i, b in enumerate(BUCS, 1):
     parts.append(f"| BUC | `{b['id']}` |\n| Business | `{b['business']}` |\n| 主な actor | {b['actors']} |\n")
     parts.append(f"| 必要権限 | {code_list(buc_perms(b['id']))} |\n| 主なデータ | {code_list(b['data'])} |\n\n")
     parts.append(b['prose'] + '\n\nレビュー観点:\n\n' + ''.join(f'- {p}\n' for p in b['points']) + '\n')
-    parts.append(f"#### {b['title']} RDRA Layered Graph 図\n\n")
-    parts.append(gen_cmd(f"diagram samples/clinic-ops --kind rdra --format mermaid --buc {b['id']} --out samples/clinic-ops/out/buc/object_graph_{b['stem']}") + '\n')
-    parts.append(mermaid(f"buc/object_graph_{b['stem']}.mmd") + '\n')
+    parts.append(f"#### {b['title']} UC複合図\n\n")
+    parts.append(gen_cmd(f"diagram samples/clinic-ops --kind usecase --format mermaid --buc {b['id']} --out samples/clinic-ops/out/buc/usecase_{b['stem']}") + '\n')
+    parts.append(mermaid(f"buc/usecase_{b['stem']}.mmd") + '\n')
 
 parts.append('''## 4. UC 単位のレビュー
 
-UC ごとの必要権限と確認点を表にまとめます。各 UC の画面、API、Entity 操作は BUC 別 RDRA Layered Graph 図と API マトリクスで確認します。
+UC ごとの必要権限と確認点を表にまとめます。各 UC の画面、Entity 操作、イベントは BUC 別 UC複合図で、API は API マトリクスで確認します。
 
 ''')
 for i, b in enumerate(BUCS, 1):

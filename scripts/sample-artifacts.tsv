@@ -3,16 +3,16 @@
 samples/api-contract/out/openapi.json	export samples/api-contract/src --kind openapi
 samples/clinic-ops/out/actor_permission_audit.csv	csv samples/clinic-ops --kind actor-permission-audit
 samples/clinic-ops/out/api_matrix.csv	csv samples/clinic-ops --kind api-matrix
-samples/clinic-ops/out/buc/object_graph_appointment_scheduling.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucAppointmentScheduling
-samples/clinic-ops/out/buc/object_graph_billing_claims.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucBillingClaims
-samples/clinic-ops/out/buc/object_graph_clinical_encounter.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucClinicalEncounter
-samples/clinic-ops/out/buc/object_graph_followup_care.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucFollowupCare
-samples/clinic-ops/out/buc/object_graph_orders_results.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucOrdersResults
-samples/clinic-ops/out/buc/object_graph_patient_onboarding.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucPatientOnboarding
-samples/clinic-ops/out/buc/object_graph_prescription_fulfillment.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucPrescriptionFulfillment
-samples/clinic-ops/out/buc/object_graph_staff_administration.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucStaffAdministration
-samples/clinic-ops/out/buc/object_graph_visit_check_in.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucVisitCheckIn
-samples/clinic-ops/out/buc/object_graph_visit_payment.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucVisitPayment
+samples/clinic-ops/out/buc/usecase_appointment_scheduling.mmd	diagram samples/clinic-ops --kind usecase --format mermaid --buc BucAppointmentScheduling
+samples/clinic-ops/out/buc/usecase_billing_claims.mmd	diagram samples/clinic-ops --kind usecase --format mermaid --buc BucBillingClaims
+samples/clinic-ops/out/buc/usecase_clinical_encounter.mmd	diagram samples/clinic-ops --kind usecase --format mermaid --buc BucClinicalEncounter
+samples/clinic-ops/out/buc/usecase_followup_care.mmd	diagram samples/clinic-ops --kind usecase --format mermaid --buc BucFollowupCare
+samples/clinic-ops/out/buc/usecase_orders_results.mmd	diagram samples/clinic-ops --kind usecase --format mermaid --buc BucOrdersResults
+samples/clinic-ops/out/buc/usecase_patient_onboarding.mmd	diagram samples/clinic-ops --kind usecase --format mermaid --buc BucPatientOnboarding
+samples/clinic-ops/out/buc/usecase_prescription_fulfillment.mmd	diagram samples/clinic-ops --kind usecase --format mermaid --buc BucPrescriptionFulfillment
+samples/clinic-ops/out/buc/usecase_staff_administration.mmd	diagram samples/clinic-ops --kind usecase --format mermaid --buc BucStaffAdministration
+samples/clinic-ops/out/buc/usecase_visit_check_in.mmd	diagram samples/clinic-ops --kind usecase --format mermaid --buc BucVisitCheckIn
+samples/clinic-ops/out/buc/usecase_visit_payment.mmd	diagram samples/clinic-ops --kind usecase --format mermaid --buc BucVisitPayment
 samples/clinic-ops/out/er_care_to_billing.mmd	diagram samples/clinic-ops --kind er --format mermaid --buc BucFollowupCare --buc BucBillingClaims
 samples/clinic-ops/out/event_flow.mmd	diagram samples/clinic-ops --kind event --format mermaid
 samples/clinic-ops/out/rdra_buc_clinical_encounter.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucClinicalEncounter
@@ -31,6 +31,10 @@ samples/ec-site/out/rdra_buc_bucpayment.mmd	diagram samples/ec-site --kind rdra 
 samples/ec-site/out/rdra_whole.mmd	diagram samples/ec-site --kind rdra --format mermaid
 samples/ec-site/out/state.mmd	diagram samples/ec-site --kind state --format mermaid
 samples/ec-site/out/states.csv	states samples/ec-site --format csv
+samples/ec-site/out/usecase_buc_buccart.mmd	diagram samples/ec-site --kind usecase --format mermaid --buc BucCart
+samples/ec-site/out/usecase_buc_bucorder.mmd	diagram samples/ec-site --kind usecase --format mermaid --buc BucOrder
+samples/ec-site/out/usecase_buc_bucpayment.mmd	diagram samples/ec-site --kind usecase --format mermaid --buc BucPayment
+samples/ec-site/out/usecase_capture.mmd	diagram samples/ec-site --kind usecase --format mermaid --usecase Capture
 samples/incremental-order/step-0-scope/out/api_matrix.csv	csv samples/incremental-order/step-0-scope/src --kind api-matrix
 samples/incremental-order/step-0-scope/out/object_graph_buc_store_restock.mmd	diagram samples/incremental-order/step-0-scope/src --kind rdra --format mermaid --buc BucStoreRestock
 samples/incremental-order/step-0-scope/out/screen_constraints.csv	csv samples/incremental-order/step-0-scope/src --kind screen-constraints

@@ -1,0 +1,118 @@
+%% rdra-ish diagram=usecase scope=buc:BucOrdersResults model=samples/clinic-ops
+%% layers: value=システム価値 boundary=システム境界 system=システム
+%% kinds: actor extsystem usecase screen event entity state condition
+%% omitted: buc medium permission api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__Clinician["医師"]:::actor
+    actor__MedicalClerk["医師事務作業補助者"]:::actor
+    %% desc actor__MedicalClerk: 医師の指示で電子カルテへ代行入力する。確定は医師が行う。
+    actor__Nurse["看護師"]:::actor
+    %% desc actor__Nurse: 医師の指示の下で診療の補助を行う。
+    extsystem__OutsourcedLabSystem["外注検査システム"]:::extsystem
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__CancelClinicalOrder["Cancel Clinical Order"]:::usecase
+    usecase__CollectSpecimen["Collect Specimen"]:::usecase
+    usecase__ConfirmProxyOrder["代行入力オーダの確定"]:::usecase
+    usecase__EnterProxyOrder["検体検査オーダの代行入力"]:::usecase
+    usecase__NotifyCriticalResult["Notify Critical Result"]:::usecase
+    usecase__PlaceLabOrder["Place Lab Order"]:::usecase
+    usecase__PrintSpecimenLabel["採血管ラベル発行・貼付"]:::usecase
+    usecase__ReceiveLabResult["Receive Lab Result"]:::usecase
+    usecase__RegisterPerformedProcedure["実施内容（コスト）の登録"]:::usecase
+    usecase__ReviewLabResult["Review Lab Result"]:::usecase
+    screen__CriticalNoticeScreen["Critical Result Notice Screen"]:::screen
+    screen__OrderEntryScreen["Order Entry Screen"]:::screen
+    screen__ResultReviewScreen["Result Review Screen"]:::screen
+    screen__SpecimenScreen["Specimen Collection Screen"]:::screen
+    event__EvClinicalOrderReviewed["Clinical Result Reviewed"]:::event
+    event__EvEncounterSigned["Encounter Signed"]:::event
+    event__EvLabResultReceived["Lab Result Received"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__Charge["Charge"]:::entity
+    entity__ClinicalOrder["Clinical Order"]:::entity
+    entity__Encounter["Encounter"]:::entity
+    entity__LabResult["Lab Result"]:::entity
+    entity__Notification["Notification"]:::entity
+    entity__PatientMessage["Patient Message"]:::entity
+    state__ClinicalOrder_clcancelled["clcancelled"]:::state
+    state__ClinicalOrder_clcollected["clcollected"]:::state
+    state__ClinicalOrder_clordered["clordered"]:::state
+    state__ClinicalOrder_clresulted["clresulted"]:::state
+    state__ClinicalOrder_clreviewed["clreviewed"]:::state
+    condition__OrderConfirmedByPhysician["医師が確定したオーダ"]:::condition
+  end
+  actor__Clinician -.->|performs| usecase__CancelClinicalOrder
+  actor__Clinician -.->|performs| usecase__ConfirmProxyOrder
+  actor__Clinician -.->|performs| usecase__NotifyCriticalResult
+  actor__Clinician -.->|performs| usecase__PlaceLabOrder
+  actor__Clinician -.->|performs| usecase__ReviewLabResult
+  actor__MedicalClerk -.->|performs| usecase__EnterProxyOrder
+  actor__Nurse -.->|performs| usecase__CollectSpecimen
+  actor__Nurse -.->|performs| usecase__EnterProxyOrder
+  actor__Nurse -.->|performs| usecase__PrintSpecimenLabel
+  actor__Nurse -.->|performs| usecase__ReceiveLabResult
+  actor__Nurse -.->|performs| usecase__RegisterPerformedProcedure
+  condition__OrderConfirmedByPhysician -.->|applies_to| usecase__CollectSpecimen
+  event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyCriticalResult
+  event__EvEncounterSigned -.->|triggers| usecase__PlaceLabOrder
+  event__EvLabResultReceived -.->|triggers| usecase__ReceiveLabResult
+  extsystem__OutsourcedLabSystem -.->|raises| event__EvLabResultReceived
+  usecase__CancelClinicalOrder -.->|displays| screen__OrderEntryScreen
+  usecase__CancelClinicalOrder -.->|transitions ClinicalOrder.status clordered->clcancelled| state__ClinicalOrder_clcancelled
+  usecase__CancelClinicalOrder -.->|updates| entity__ClinicalOrder
+  usecase__CollectSpecimen -.->|displays| screen__SpecimenScreen
+  usecase__CollectSpecimen -.->|transitions ClinicalOrder.status clordered->clcollected| state__ClinicalOrder_clcollected
+  usecase__CollectSpecimen -.->|updates| entity__ClinicalOrder
+  %% derived usecase__CollectSpecimen -> entity__ClinicalOrder via api__CollectSpecimenApi
+  usecase__ConfirmProxyOrder -.->|displays| screen__OrderEntryScreen
+  usecase__ConfirmProxyOrder -.->|transitions ClinicalOrder.status clordered->clordered| state__ClinicalOrder_clordered
+  usecase__ConfirmProxyOrder -.->|updates| entity__ClinicalOrder
+  %% derived usecase__ConfirmProxyOrder -> entity__ClinicalOrder via api__ConfirmOrderApi
+  usecase__EnterProxyOrder -.->|creates| entity__ClinicalOrder
+  %% derived usecase__EnterProxyOrder -> entity__ClinicalOrder via api__ProxyOrderApi
+  usecase__EnterProxyOrder -.->|displays| screen__OrderEntryScreen
+  usecase__EnterProxyOrder -.->|reads| entity__Encounter
+  %% derived usecase__EnterProxyOrder -> entity__Encounter via api__ProxyOrderApi
+  usecase__NotifyCriticalResult -.->|creates| entity__Notification
+  %% derived usecase__NotifyCriticalResult -> entity__Notification via api__CriticalNoticeApi
+  usecase__NotifyCriticalResult -.->|creates| entity__PatientMessage
+  %% derived usecase__NotifyCriticalResult -> entity__PatientMessage via api__CriticalNoticeApi
+  usecase__NotifyCriticalResult -.->|displays| screen__CriticalNoticeScreen
+  usecase__PlaceLabOrder -.->|creates| entity__ClinicalOrder
+  %% derived usecase__PlaceLabOrder -> entity__ClinicalOrder via api__OrderEntryApi
+  usecase__PlaceLabOrder -.->|displays| screen__OrderEntryScreen
+  usecase__PlaceLabOrder -.->|reads| entity__Encounter
+  %% derived usecase__PlaceLabOrder -> entity__Encounter via api__OrderEntryApi
+  usecase__PrintSpecimenLabel -.->|displays| screen__SpecimenScreen
+  usecase__PrintSpecimenLabel -.->|reads| entity__ClinicalOrder
+  usecase__ReceiveLabResult -.->|creates| entity__LabResult
+  %% derived usecase__ReceiveLabResult -> entity__LabResult via api__ReceiveLabResultApi
+  usecase__ReceiveLabResult -.->|displays| screen__ResultReviewScreen
+  usecase__ReceiveLabResult -.->|transitions ClinicalOrder.status clcollected->clresulted| state__ClinicalOrder_clresulted
+  usecase__ReceiveLabResult -.->|updates| entity__ClinicalOrder
+  %% derived usecase__ReceiveLabResult -> entity__ClinicalOrder via api__ReceiveLabResultApi
+  usecase__RegisterPerformedProcedure -.->|creates| entity__Charge
+  %% derived usecase__RegisterPerformedProcedure -> entity__Charge via api__PerformedProcedureApi
+  usecase__RegisterPerformedProcedure -.->|displays| screen__SpecimenScreen
+  usecase__RegisterPerformedProcedure -.->|reads| entity__ClinicalOrder
+  %% derived usecase__RegisterPerformedProcedure -> entity__ClinicalOrder via api__PerformedProcedureApi
+  usecase__RegisterPerformedProcedure -.->|reads| entity__Encounter
+  %% derived usecase__RegisterPerformedProcedure -> entity__Encounter via api__PerformedProcedureApi
+  usecase__ReviewLabResult -.->|displays| screen__ResultReviewScreen
+  usecase__ReviewLabResult -.->|raises| event__EvClinicalOrderReviewed
+  usecase__ReviewLabResult -.->|transitions ClinicalOrder.status clresulted->clreviewed| state__ClinicalOrder_clreviewed
+  usecase__ReviewLabResult -.->|updates| entity__ClinicalOrder
+  %% derived usecase__ReviewLabResult -> entity__ClinicalOrder via api__ResultReviewApi
+  usecase__ReviewLabResult -.->|updates| entity__LabResult
+  %% derived usecase__ReviewLabResult -> entity__LabResult via api__ResultReviewApi
+  classDef actor stroke:#333;
+  classDef extsystem stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef event stroke:#333;
+  classDef entity stroke:#333;
+  classDef state stroke:#333;
+  classDef condition stroke:#333;

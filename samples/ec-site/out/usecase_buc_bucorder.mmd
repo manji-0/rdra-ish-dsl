@@ -1,0 +1,96 @@
+%% rdra-ish diagram=usecase scope=buc:BucOrder model=samples/ec-site
+%% layers: value=システム価値 boundary=システム境界 system=システム
+%% kinds: actor extsystem usecase screen event entity state
+%% omitted: buc api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__Admin["Administrator"]:::actor
+    actor__Customer["Customer"]:::actor
+    extsystem__ShippingSvc["Shipping Service"]:::extsystem
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__Cancel["Cancel Order"]:::usecase
+    usecase__ConfirmOrder["Confirm Order Details"]:::usecase
+    usecase__DeliverOrder["Confirm Delivery"]:::usecase
+    usecase__PlaceOrder["Place Order"]:::usecase
+    usecase__SelectAddress["Select Shipping Address"]:::usecase
+    usecase__ShipOrder["Ship Order"]:::usecase
+    usecase__ViewOrderHistory["View Order History"]:::usecase
+    screen__AddressSelectScreen["Address Selection Screen"]:::screen
+    screen__OrderCompleteScreen["Order Complete Screen"]:::screen
+    screen__OrderConfirmScreen["Order Confirmation Screen"]:::screen
+    screen__OrderHistoryScreen["Order History Screen"]:::screen
+    event__EvOrderShipped["Order Shipped"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__Cart["Cart"]:::entity
+    entity__CartItem["Cart Item"]:::entity
+    entity__CustomerAccount["Customer Account"]:::entity
+    entity__Order["Order"]:::entity
+    entity__OrderLine["Order Line"]:::entity
+    entity__ShippingAddress["Shipping Address"]:::entity
+    state__Order_awaiting_capture["awaiting_capture"]:::state
+    state__Order_cancelled["cancelled"]:::state
+    state__Order_delivered["delivered"]:::state
+    state__Order_paid["paid"]:::state
+    state__Order_pending["pending"]:::state
+    state__Order_shipped["shipped"]:::state
+  end
+  actor__Admin -.->|performs| usecase__DeliverOrder
+  actor__Admin -.->|performs| usecase__ShipOrder
+  actor__Customer -.->|performs| usecase__Cancel
+  %% derived actor__Customer -> usecase__Cancel via buc__BucOrder
+  actor__Customer -.->|performs| usecase__ConfirmOrder
+  %% derived actor__Customer -> usecase__ConfirmOrder via buc__BucOrder
+  actor__Customer -.->|performs| usecase__DeliverOrder
+  %% derived actor__Customer -> usecase__DeliverOrder via buc__BucOrder
+  actor__Customer -.->|performs| usecase__PlaceOrder
+  %% derived actor__Customer -> usecase__PlaceOrder via buc__BucOrder
+  actor__Customer -.->|performs| usecase__SelectAddress
+  %% derived actor__Customer -> usecase__SelectAddress via buc__BucOrder
+  actor__Customer -.->|performs| usecase__ShipOrder
+  %% derived actor__Customer -> usecase__ShipOrder via buc__BucOrder
+  actor__Customer -.->|performs| usecase__ViewOrderHistory
+  %% derived actor__Customer -> usecase__ViewOrderHistory via buc__BucOrder
+  event__EvOrderShipped -.->|triggers| extsystem__ShippingSvc
+  usecase__Cancel -.->|displays| screen__OrderHistoryScreen
+  usecase__Cancel -.->|transitions Order.status awaiting_capture->cancelled| state__Order_cancelled
+  usecase__Cancel -.->|transitions Order.status pending->cancelled| state__Order_cancelled
+  usecase__Cancel -.->|updates| entity__Order
+  %% derived usecase__Cancel -> entity__Order via api__CancelOrderApi
+  usecase__ConfirmOrder -.->|displays| screen__OrderConfirmScreen
+  usecase__ConfirmOrder -.->|reads| entity__Cart
+  %% derived usecase__ConfirmOrder -> entity__Cart via api__ConfirmOrderApi
+  usecase__ConfirmOrder -.->|reads| entity__CartItem
+  %% derived usecase__ConfirmOrder -> entity__CartItem via api__ConfirmOrderApi
+  usecase__ConfirmOrder -.->|reads| entity__ShippingAddress
+  %% derived usecase__ConfirmOrder -> entity__ShippingAddress via api__ConfirmOrderApi
+  usecase__DeliverOrder -.->|transitions Order.status shipped->delivered| state__Order_delivered
+  usecase__DeliverOrder -.->|updates| entity__Order
+  usecase__PlaceOrder -.->|creates| entity__Order
+  %% derived usecase__PlaceOrder -> entity__Order via api__PlaceOrderApi
+  usecase__PlaceOrder -.->|creates| entity__OrderLine
+  %% derived usecase__PlaceOrder -> entity__OrderLine via api__PlaceOrderApi
+  usecase__PlaceOrder -.->|displays| screen__OrderCompleteScreen
+  usecase__PlaceOrder -.->|reads| entity__CustomerAccount
+  %% derived usecase__PlaceOrder -> entity__CustomerAccount via api__PlaceOrderApi
+  usecase__PlaceOrder -.->|updates| entity__Cart
+  %% derived usecase__PlaceOrder -> entity__Cart via api__PlaceOrderApi
+  usecase__SelectAddress -.->|displays| screen__AddressSelectScreen
+  usecase__SelectAddress -.->|reads| entity__ShippingAddress
+  %% derived usecase__SelectAddress -> entity__ShippingAddress via api__SelectAddressApi
+  usecase__ShipOrder -.->|raises| event__EvOrderShipped
+  usecase__ShipOrder -.->|transitions Order.status paid->shipped| state__Order_shipped
+  usecase__ShipOrder -.->|updates| entity__Order
+  usecase__ViewOrderHistory -.->|displays| screen__OrderHistoryScreen
+  usecase__ViewOrderHistory -.->|reads| entity__Order
+  %% derived usecase__ViewOrderHistory -> entity__Order via api__OrderHistoryApi
+  usecase__ViewOrderHistory -.->|reads| entity__OrderLine
+  %% derived usecase__ViewOrderHistory -> entity__OrderLine via api__OrderHistoryApi
+  classDef actor stroke:#333;
+  classDef extsystem stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef event stroke:#333;
+  classDef entity stroke:#333;
+  classDef state stroke:#333;

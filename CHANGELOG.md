@@ -27,8 +27,9 @@
   that `sequence` printed are `check`'s, which still prints them; `csv --kind
   api-matrix` lists the entities each API writes. For a model diff, write `--kind rdra`
   for both models and compare the two `.mmd` files with `diff` or `git diff`. The
-  `--diff-base` and `--usecase` options go with them (clap now rejects them as unknown
-  arguments), and `--node-kind` and `--edge-kind` apply to `rdra` only.
+  `--diff-base` option goes with them (clap now rejects it as an unknown argument),
+  `--usecase` applies to `--kind usecase` only, and `--node-kind` and `--edge-kind` apply
+  to `rdra` only.
   The 109 sequence artifacts (`samples/clinic-ops/out/uc/`, the `sequence_*.mmd` files
   under `samples/*/out/`) and the sequence sections of
   `samples/clinic-ops/design-sample.md` are gone, as are `rdra_ish_emit::diff` and
@@ -331,6 +332,20 @@
   guards a use case.
 
 ### Added
+
+- `diagram --kind usecase` draws the RDRA UC複合図 under the encoding contract: each use
+  case with the actors who perform it, the screens it displays and the entities they show,
+  the entities it reads and writes, the events it raises or that trigger it with their
+  external systems, the timers that trigger it, the conditions that apply to it, and the
+  states it moves, in the `rdra` layers and with the `rdra` ids. An invoked API's CRUD is
+  drawn from the use case and an actor of the use case's BUC or step performs it, each
+  followed by `%% derived ... via <node>`. `--buc` keeps the use cases a BUC contains
+  (directly or through a flow's steps), and `--usecase <id>` (repeatable, not with
+  `--buc`) keeps the named ones; `--usecase` on another kind and an unknown id are
+  errors. The BUC sections of `samples/clinic-ops/design-sample.md` embed it:
+  `samples/clinic-ops/out/buc/usecase_*.mmd` replace the `rdra --buc` artifacts
+  `out/buc/object_graph_*.mmd`, and ec-site gains `out/usecase_buc_*.mmd` and
+  `out/usecase_capture.mmd`.
 
 - Traceable verification (phase 6). Every constraint is its own named invariant, a state
   of a state model with no reachability witness and an instance that can never leave its

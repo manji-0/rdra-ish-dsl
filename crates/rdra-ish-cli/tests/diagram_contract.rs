@@ -1,4 +1,4 @@
-//! The diagram encoding contract, checked on every sample for `rdra`, `state`, and `event`:
+//! The diagram encoding contract, checked on every sample for each kind:
 //! each `.mmd` opens with the `%%` header, names each node `<kind>__<DSL id>` (the same id in
 //! every kind), tags a flowchart node `:::<kind>`, draws edges only between declared nodes,
 //! and lists in `kinds:` exactly the kinds its body draws.
@@ -38,9 +38,14 @@ fn lifecycle_roots() -> Vec<String> {
 }
 
 fn buc_ids(root: &str) -> Vec<String> {
+    ids(root, "buc")
+}
+
+/// The ids `list --kind <kind>` prints for `root`.
+fn ids(root: &str, kind: &str) -> Vec<String> {
     let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
         .current_dir(repo())
-        .args(["list", root, "--kind", "buc", "--format", "csv"])
+        .args(["list", root, "--kind", kind, "--format", "csv"])
         .output()
         .unwrap();
     String::from_utf8(output.stdout)
@@ -55,22 +60,46 @@ fn buc_ids(root: &str) -> Vec<String> {
 
 /// `rdra-ish diagram <root> --kind <kind> [--buc <id>]`, the written `.mmd`.
 fn diagram(root: &str, kind: &str, buc: Option<&str>, out: &Path) -> String {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_rdra-ish"));
-    command
+    match buc {
+        Some(buc) => diagram_with(root, kind, &["--buc", buc], out),
+        None => diagram_with(root, kind, &[], out),
+    }
+}
+
+/// `rdra-ish diagram <root> --kind <kind> <args>`, the written `.mmd`.
+fn diagram_with(root: &str, kind: &str, args: &[&str], out: &Path) -> String {
+    let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
         .current_dir(repo())
         .args(["diagram", root, "--kind", kind])
+        .args(args)
         .arg("--out")
-        .arg(out);
-    if let Some(buc) = buc {
-        command.args(["--buc", buc]);
-    }
-    let output = command.output().unwrap();
+        .arg(out)
+        .output()
+        .unwrap();
     assert!(
         output.status.success(),
-        "{root} {kind} {buc:?}: {}",
+        "{root} {kind} {args:?}: {}",
         String::from_utf8_lossy(&output.stderr)
     );
     std::fs::read_to_string(out.with_extension("mmd")).unwrap()
+}
+
+/// The scopes each flowchart kind is checked in: the whole model, then each BUC.
+fn scopes(root: &str) -> Vec<Vec<String>> {
+    std::iter::once(Vec::new())
+        .chain(
+            buc_ids(root)
+                .into_iter()
+                .map(|buc| vec!["--buc".to_string(), buc]),
+        )
+        .collect()
+}
+
+/// Parse and check `text` as a `kind` flowchart, panicking with the diagram on a breach.
+fn checked(kind: &str, text: &str, scope: &str) -> Flowchart {
+    parse_flowchart(kind, text)
+        .and_then(|chart| check_flowchart(&chart).map(|()| chart))
+        .unwrap_or_else(|error| panic!("{scope}: {error}\n{text}"))
 }
 
 /// What a flowchart under the contract says, read line by line. Any line the contract
@@ -81,6 +110,8 @@ struct Flowchart {
     /// Node id to its `:::` class.
     nodes: HashMap<String, String>,
     edges: Vec<(String, String, String)>,
+    /// The edges a `%% derived` line follows: rdra-ish derived them from other facts.
+    derived: BTreeSet<(String, String, String)>,
     class_defs: BTreeSet<String>,
 }
 
@@ -103,6 +134,17 @@ fn parse_flowchart(diagram: &str, text: &str) -> Result<Flowchart, String> {
                 .filter(|kind| *kind != "(none)")
                 .map(str::to_string)
                 .collect();
+        } else if let Some(rest) = trimmed.strip_prefix("%% derived ") {
+            let last = chart.edges.last().cloned();
+            let follows = last
+                .as_ref()
+                .is_some_and(|(from, _, to)| rest.starts_with(&format!("{from} -> {to} ")));
+            match (follows, last) {
+                (true, Some(edge)) => {
+                    chart.derived.insert(edge);
+                }
+                _ => return Err(format!("`%% derived` after another edge: {line}")),
+            }
         } else if trimmed.starts_with("%% ") {
         } else if trimmed == "flowchart LR" {
             seen_type = true;
@@ -495,4 +537,71 @@ fn an_event_diagram_node_has_the_id_the_rdra_diagram_gives_it() {
             assert!(rdra.edges.contains(edge), "{root}: {edge:?} not in rdra");
         }
     }
+}
+
+#[test]
+fn every_usecase_diagram_of_every_sample_keeps_the_contract() {
+    let dir = scratch("diagram_contract_usecase");
+    let mut derived = 0;
+    for root in roots() {
+        let mut scopes = scopes(&root);
+        scopes.extend(
+            ids(&root, "usecase")
+                .into_iter()
+                .take(3)
+                .map(|usecase| vec!["--usecase".to_string(), usecase]),
+        );
+        for scope in scopes {
+            let args: Vec<&str> = scope.iter().map(String::as_str).collect();
+            let text = diagram_with(&root, "usecase", &args, &dir.join("out"));
+            let chart = checked("usecase", &text, &format!("{root} {scope:?}"));
+            for (from, label, to) in &chart.edges {
+                let usecase_end = from.starts_with("usecase__") || to.starts_with("usecase__");
+                let screen_shows = label == "shows" && from.starts_with("screen__");
+                let event_link = from.starts_with("event__") || to.starts_with("event__");
+                assert!(
+                    usecase_end || screen_shows || event_link,
+                    "{root} {scope:?}: {from} -{label}-> {to}"
+                );
+            }
+            for kind in ["api", "dto", "permission", "medium", "field", "buc"] {
+                assert!(
+                    !chart.nodes.values().any(|k| k == kind),
+                    "{root} {scope:?}: a {kind} node\n{text}"
+                );
+            }
+            derived += chart.derived.len();
+        }
+    }
+    assert!(derived > 20, "only {derived} derived edges");
+}
+
+#[test]
+fn a_usecase_diagram_draws_what_the_rdra_diagram_declares() {
+    let dir = scratch("diagram_contract_usecase_ids");
+    for root in roots() {
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
+        let usecase =
+            parse_flowchart("usecase", &diagram(&root, "usecase", None, &dir.join("u"))).unwrap();
+        for (id, kind) in &usecase.nodes {
+            assert_eq!(rdra.nodes.get(id), Some(kind), "{root}: {id}");
+        }
+        for edge in &usecase.edges {
+            if !usecase.derived.contains(edge) {
+                assert!(rdra.edges.contains(edge), "{root}: {edge:?} not in rdra");
+            }
+        }
+    }
+}
+
+#[test]
+fn the_contract_check_rejects_a_misplaced_derived_line() {
+    let good = "%% rdra-ish diagram=usecase scope=whole\n%% kinds: actor usecase\nflowchart LR\n  actor__A[\"A\"]:::actor\n  usecase__U[\"U\"]:::usecase\n  actor__A -.->|performs| usecase__U\n  %% derived actor__A -> usecase__U via buc__B\n  classDef actor stroke:#333;\n  classDef usecase stroke:#333;\n";
+    let chart = parse_flowchart("usecase", good).unwrap();
+    assert_eq!(chart.derived.len(), 1);
+    let broken = good.replace(
+        "%% derived actor__A -> usecase__U",
+        "%% derived usecase__U -> actor__A",
+    );
+    assert!(parse_flowchart("usecase", &broken).is_err(), "{broken}");
 }

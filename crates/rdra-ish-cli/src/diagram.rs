@@ -5,7 +5,10 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use rdra_ish_core::SemanticModel;
 use rdra_ish_emit::{
-    mermaid::{ErMermaidEmitter, EventMermaidEmitter, RdraMermaidEmitter, StateMermaidEmitter},
+    mermaid::{
+        ErMermaidEmitter, EventMermaidEmitter, RdraMermaidEmitter, StateMermaidEmitter,
+        UsecaseMermaidEmitter,
+    },
     unknown_diagram_filter_kinds, Emitter, Filter, Scope, View,
 };
 use std::fs;
@@ -18,6 +21,7 @@ pub struct DiagramRequest {
     pub inputs: Vec<PathBuf>,
     pub kind: DiagramKind,
     pub buc: Vec<String>,
+    pub usecase: Vec<String>,
     pub node_kind: Vec<String>,
     pub edge_kind: Vec<String>,
     pub out: PathBuf,
@@ -28,6 +32,7 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
         inputs,
         kind,
         buc,
+        usecase,
         node_kind,
         edge_kind,
         out,
@@ -44,6 +49,20 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
     for buc_id in &buc {
         if !model.bucs.values().any(|b| b.id == *buc_id) {
             anyhow::bail!("unknown buc `{buc_id}`");
+        }
+    }
+
+    if !usecase.is_empty() {
+        if !matches!(kind, DiagramKind::Usecase) {
+            anyhow::bail!("--usecase applies only to --kind usecase");
+        }
+        if !buc.is_empty() {
+            anyhow::bail!("--usecase and --buc cannot be combined; pass one of them");
+        }
+    }
+    for usecase_id in &usecase {
+        if !model.use_cases.values().any(|u| u.id == *usecase_id) {
+            anyhow::bail!("unknown usecase `{usecase_id}`");
         }
     }
 
@@ -64,10 +83,12 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
         }
     }
 
-    let scope = if buc.is_empty() {
-        Scope::Whole
-    } else {
+    let scope = if !usecase.is_empty() {
+        Scope::UseCases(usecase)
+    } else if !buc.is_empty() {
         Scope::Bucs(buc)
+    } else {
+        Scope::Whole
     };
     let model_path = inputs
         .iter()
@@ -78,7 +99,9 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
         scope,
         filter: match kind {
             DiagramKind::Er => Filter::Er,
-            DiagramKind::Rdra | DiagramKind::State | DiagramKind::Event => Filter::None,
+            DiagramKind::Rdra | DiagramKind::Usecase | DiagramKind::State | DiagramKind::Event => {
+                Filter::None
+            }
         },
         model_path: Some(model_path),
         node_kinds: Vec::new(),
@@ -104,6 +127,7 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
 fn emit_diagram(model: &SemanticModel, kind: &DiagramKind, view: &View) -> Result<String> {
     match kind {
         DiagramKind::Rdra => Ok(RdraMermaidEmitter.emit(model, view)?),
+        DiagramKind::Usecase => Ok(UsecaseMermaidEmitter.emit(model, view)?),
         DiagramKind::Er => Ok(ErMermaidEmitter.emit(model, view)?),
         DiagramKind::State => Ok(StateMermaidEmitter.emit(model, view)?),
         DiagramKind::Event => Ok(EventMermaidEmitter.emit(model, view)?),

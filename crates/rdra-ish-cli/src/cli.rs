@@ -147,7 +147,7 @@ pub(crate) enum Commands {
     Diagram {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Diagram kind: rdra, er, state, or event
+        /// Diagram kind: rdra, usecase, er, state, or event
         #[arg(long, default_value = "rdra", value_parser = WithRemoved::<DiagramKind>::new(REMOVED_DIAGRAM_KINDS))]
         kind: DiagramKind,
         /// Output format: mermaid, the only one (writes <out>.mmd)
@@ -158,6 +158,10 @@ pub(crate) enum Commands {
         /// Applies to all diagram kinds.
         #[arg(long)]
         buc: Vec<String>,
+        /// Draw only these use cases (by id); repeatable. Applies to --kind usecase, and not
+        /// together with --buc.
+        #[arg(long)]
+        usecase: Vec<String>,
         /// Filter graph diagrams to one or more node kinds; repeatable.
         /// Applies to --kind rdra.
         #[arg(long = "node-kind", alias = "kind-filter")]
@@ -288,6 +292,9 @@ pub(crate) enum VerifyBackend {
 pub(crate) enum DiagramKind {
     /// RDRA layered graph mapped onto the original RDRA-style structure
     Rdra,
+    /// UC複合図: each use case with its actors, screens, information, events, external
+    /// systems, timers, conditions, and state transitions
+    Usecase,
     Er,
     State,
     /// System-to-system event links: UC / ExtSystem --raises--> Event --triggers--> UC / BUC /
@@ -390,11 +397,13 @@ mod tests {
                 kind,
                 format,
                 buc,
+                usecase,
                 node_kind,
                 edge_kind,
                 out,
             } => {
                 assert_eq!(inputs, vec![PathBuf::from("sample.rdra")]);
+                assert!(usecase.is_empty());
                 assert!(matches!(kind, DiagramKind::Rdra));
                 assert!(matches!(format, OutputFormat::Mermaid));
                 assert_eq!(buc, vec!["BucScheduling"]);
