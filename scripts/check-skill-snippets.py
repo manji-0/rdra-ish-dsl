@@ -39,7 +39,7 @@ import subprocess
 import sys
 import tempfile
 
-SUBCOMMANDS = ["check", "lint", "files", "fmt", "diagram", "csv", "export", "verify", "list", "states"]
+SUBCOMMANDS = ["check", "lint", "files", "fmt", "diagram", "csv", "export", "verify", "list", "states", "next"]
 TOLERATED = re.compile(r"undefined symbol|unknown module|module file not found")
 DSL_FIRST_LINE = re.compile(r'^(module |import |[a-z_]+ [A-Z]\w* "|[a-z_]+\()')
 EXPECT_ERROR = re.compile(r"^<!--\s*expect-error(?::\s*(.*?))?\s*-->$")

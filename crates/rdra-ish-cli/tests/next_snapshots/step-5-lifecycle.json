@@ -1,0 +1,96 @@
+{
+  "bucs": [
+    {
+      "gates": [
+        {
+          "evidence": "belongs to StoreOperations",
+          "gaps": 0,
+          "passed": true,
+          "stage": "0",
+          "stage_name": "Scope sketch"
+        },
+        {
+          "evidence": "3 use cases, 1 `performs` / `triggers` starting them",
+          "gaps": 0,
+          "passed": true,
+          "stage": "1",
+          "stage_name": "BUC skeleton"
+        },
+        {
+          "evidence": "3/3 use cases touch an entity",
+          "gaps": 0,
+          "passed": true,
+          "stage": "2",
+          "stage_name": "Data touchpoints"
+        },
+        {
+          "evidence": "3/3 use cases display a screen, invoke an API, or run on a trigger",
+          "gaps": 0,
+          "passed": true,
+          "stage": "3",
+          "stage_name": "Interaction boundary"
+        },
+        {
+          "evidence": "2/2 entities have a column beyond their keys",
+          "gaps": 0,
+          "passed": true,
+          "stage": "4",
+          "stage_name": "Entity structure"
+        },
+        {
+          "evidence": "use cases move Store",
+          "gaps": 0,
+          "passed": true,
+          "stage": "5",
+          "stage_name": "Lifecycle"
+        },
+        {
+          "evidence": "no `forbidden` / `exclusive` on an entity this BUC moves",
+          "gaps": 1,
+          "passed": false,
+          "stage": "6A",
+          "stage_name": "Local guardrails"
+        },
+        {
+          "evidence": "no `invariant` / `required` on an entity this BUC moves",
+          "gaps": 1,
+          "passed": false,
+          "stage": "6B",
+          "stage_name": "Local obligations"
+        },
+        {
+          "evidence": "no comparison or cross-entity rule on an entity this BUC moves",
+          "gaps": 1,
+          "passed": false,
+          "stage": "6C",
+          "stage_name": "Advanced rules"
+        }
+      ],
+      "id": "BucStoreRestock",
+      "label": "Maintain Store Restock",
+      "next": {
+        "asks": [
+          "Which combinations must never be reachable?",
+          "Which facts must be mutually exclusive?",
+          "Are these facts already represented as Enum, Bool, or nullable state axes?"
+        ],
+        "doc": "docs/incremental-modeling.md#stage-6a-local-guardrails",
+        "gaps": [
+          {
+            "id": "Store",
+            "kind": "entity",
+            "message": "add `forbidden(Store, ...)` or `exclusive(Store, ...)` for a combination of Store facts that must never be reachable"
+          }
+        ],
+        "question": "Which simple states or facts must never co-occur?",
+        "stage": "6A",
+        "stage_name": "Local guardrails",
+        "validate": [
+          "rdra-ish states samples/incremental-order/step-5-lifecycle/src --buc BucStoreRestock"
+        ]
+      },
+      "stage": "5",
+      "stage_name": "Lifecycle"
+    }
+  ]
+}
