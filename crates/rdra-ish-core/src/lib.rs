@@ -14,6 +14,7 @@ pub mod location;
 pub mod model;
 pub mod predicate;
 pub mod rdra_rules;
+pub mod refinement;
 pub mod resolver;
 pub mod system;
 pub mod tx;

@@ -17,7 +17,12 @@ Do not force columns, APIs, states, or rules just because later stages exist.
 
 ## Commands
 
+Start with `next`: it classifies each BUC by the stage gates and lists the elements that
+block the next stage. Use the other commands for the evidence a gate does not count.
+
 ```sh
+rdra-ish next src/
+rdra-ish next src/ --buc BucOrder --format json
 rdra-ish check src/
 rdra-ish list src/ --kind buc --format table
 rdra-ish list src/ --kind usecase --format table

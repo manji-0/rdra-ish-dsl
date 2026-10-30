@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `rdra-ish next` places each BUC on the incremental modeling stage map (0 to 6C) and
+  prints the next stage: its main question, the elements that fail its gate (such as a
+  use case with no CRUD or an entity with only its key), the questions to ask, and the
+  commands that review it. `--buc` narrows it to some BUCs, and `--format json` lists
+  every gap. Each step of `samples/incremental-order` reports its own stage.
+
+### Changed
+
+- The `lint` `stage-readiness` row gives the stage of each BUC and the stage after it,
+  from the same gates as `next` (`BucOrder stage 2 (next 3)`), instead of which of six
+  layers have any element. `coverage-score` calls those six layers and still subtracts 8
+  for each one with no element; its message says `missing layers` (was `missing stages`).
+
 ## v0.3.0 - 2026-10-30
 
 ### Breaking

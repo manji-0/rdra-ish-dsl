@@ -30,7 +30,8 @@ validation, then advance one level.
 
 ### Core Workflow
 
-1. Locate the existing model root and current abstraction level.
+1. Locate the existing model root and current abstraction level. `rdra-ish next src/`
+   prints the stage of each BUC and the gaps that block the next one.
 2. Load the matching step file from `references/`.
 3. Ask only for information required by that step, unless the codebase already answers it.
 4. Edit the smallest set of `.rdra` files needed for the step.

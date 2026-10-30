@@ -144,6 +144,27 @@ import shared.lifecycle.order
 | 6B | Tech-enforced rules | Local obligations | Which reachable states imply or require other facts? | `invariant`, narrow `required` | `states` diagnostics |
 | 6C | Tech-enforced rules | Advanced rules | Which comparison or cross-entity facts are reviewable from the abstract state space? | comparison propositions, multi-entity `forbidden` / `invariant` | `states` diagnostics |
 
+## Finding the Current Stage
+
+`rdra-ish next` places each BUC on this map and prints what the next stage asks for:
+
+```sh
+rdra-ish next src/
+rdra-ish next src/ --buc BucOrder
+```
+
+Each stage has a gate that names the elements that block it, such as a use case with no
+CRUD or an entity with only its key. A BUC is at the highest stage whose gate it passes
+together with every earlier gate. For the first failed gate, `next` prints the stage's
+main question, those gaps, the questions to ask the user, and the validation commands of
+the stage section below. The gates are listed in the
+[CLI Reference](./cli-reference.md#next).
+
+Different BUCs can be at different stages. Refine one BUC at a time, and run `next`
+again after each stage to see what is left and what the next question is. A passed gate
+means the elements exist; whether the stage is stable enough to move on is still a
+review decision, as each stage's "Move on when" says.
+
 ## Stage 0: Scope Sketch
 
 Create only enough to name the business area and candidate BUCs.
@@ -529,7 +550,8 @@ Move on when advanced diagnostics either disappear or are accepted as known mode
 
 ## Choosing the Next Question
 
-Use the current abstraction level to decide what to ask next:
+`rdra-ish next` answers this per BUC from the stage gates. Use the current abstraction
+level to decide what to ask next:
 
 | If the model has... | Ask next for... |
 |---|---|
