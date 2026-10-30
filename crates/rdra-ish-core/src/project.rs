@@ -60,7 +60,6 @@ impl fmt::Display for ProjectError {
 
 impl std::error::Error for ProjectError {}
 
-/// Everything one load produces.
 #[derive(Debug)]
 pub struct Project {
     pub entry_files: Vec<PathBuf>,
