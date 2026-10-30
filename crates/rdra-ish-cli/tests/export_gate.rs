@@ -59,7 +59,18 @@ fn data_layer_exports_despite_lifecycle_errors() {
 #[test]
 fn diagrams_of_declared_facts_draw_despite_lifecycle_errors() {
     let dir = scratch("export_gate_fact_diagrams");
-    for kind in ["rdra", "business", "usecase", "information", "er", "event"] {
+    for kind in [
+        "rdra",
+        "context",
+        "requirement",
+        "business",
+        "usecase",
+        "flow",
+        "information",
+        "condition",
+        "er",
+        "event",
+    ] {
         let out = dir.join(kind);
         let output = rdra_ish(&["diagram", FAILING, "--kind", kind], &out);
         assert!(output.status.success(), "{kind}: {output:?}");
