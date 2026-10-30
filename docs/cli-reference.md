@@ -898,13 +898,37 @@ rdra-ish list <INPUTS...> [--kind <KIND>] [--format <FORMAT>]
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `actor` \| `entity` \| `requirement` \| `adr` \| `adr-impact` \| `nfr` \| `quality` \| `constraint` \| `buc` \| `flow` \| `step` \| `usecase` \| `field` \| `system` \| `api` \| `dto` \| `variation` \| `condition` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` | `actor` | The element kind to list. `actor` / `quality` / `buc` / `flow` / `step` / `system` / `variation` list id+label; `usecase` lists UC preconditions, guards, postconditions, alternatives, errors, and description; `requirement` lists requirement metadata; `adr` lists decision metadata plus impacted targets from `decides`; `adr-impact` lists one row per ADR-target pair; `nfr` and `constraint` list non-functional metadata; `field` lists screen-field metadata plus Entity.column mappings; `api` lists API contract metadata; `dto` lists DTO fields; `condition` lists the `holds` body, the variations and state models it combines (derived from the body, or from `combines` when there is none), and the targets of `applies_to`; `entity` lists each column with type, PK/unique/index/FK flags, FK optionality/actions, check constraints, soft-delete/history/tenant markers, and derived expressions; `permission-callables` lists each permission with callable use case/API ids and API-level `UseCase->Api` paths derived from `requires_permission`; `actor-permission-audit` lists inferred actor-side assignment gaps; `business-inputs` lists inferred actor-entered fields. |
-| `--format` | `table` \| `json` \| `csv` | `table` | Output format. |
+| `--kind` | `actor` \| `entity` \| `requirement` \| `adr` \| `adr-impact` \| `nfr` \| `quality` \| `constraint` \| `buc` \| `flow` \| `step` \| `usecase` \| `field` \| `system` \| `api` \| `dto` \| `variation` \| `condition` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` \| `surface` | `actor` | The element kind to list. `actor` / `quality` / `buc` / `flow` / `step` / `system` / `variation` list id+label; `usecase` lists UC preconditions, guards, postconditions, alternatives, errors, and description; `requirement` lists requirement metadata; `adr` lists decision metadata plus impacted targets from `decides`; `adr-impact` lists one row per ADR-target pair; `nfr` and `constraint` list non-functional metadata; `field` lists screen-field metadata plus Entity.column mappings; `api` lists API contract metadata; `dto` lists DTO fields; `condition` lists the `holds` body, the variations and state models it combines (derived from the body, or from `combines` when there is none), and the targets of `applies_to`; `entity` lists each column with type, PK/unique/index/FK flags, FK optionality/actions, check constraints, soft-delete/history/tenant markers, and derived expressions; `permission-callables` lists each permission with callable use case/API ids and API-level `UseCase->Api` paths derived from `requires_permission`; `actor-permission-audit` lists inferred actor-side assignment gaps; `business-inputs` lists inferred actor-entered fields; `surface` prints the published surface (`exposes` and `shares`) as canonical text. |
+| `--format` | `table` \| `json` \| `csv` | `table` | Output format. `--kind surface` has the canonical text only, and any other `--format` exits `2`. |
 
 Output is written to stdout.
 
 For `--format table`, an empty result is explicit rather than silent, for example
 `No APIs found.`. CSV still prints only the header row and JSON prints `[]`.
+
+### Surface text
+
+`--kind surface` prints one line per published element, sorted by kind and then id, so
+declaration order cannot change the text. A model that publishes nothing prints nothing.
+The format is frozen: a consumer's lock records this text.
+
+```text
+usecase Login "Log in" caller(actor) requires(CanLogin) raises(EvLoggedIn)
+entity SessionView "Session (published)" upsert { session_id: Int @pk  account_id: Int  status: Enum(active, ended) }
+writer SessionView Login: status == active
+writer SessionView (unexposed): status == ended
+```
+
+- `usecase <Id> "<label>" caller(<kind>)`, then `requires(<permissions>)` and
+  `raises(<events>)` when the use case has them, each list sorted.
+- `event <Id> "<label>"` per exposed event.
+- `entity <Id> "<label>" <append | upsert> { <columns> }`. Each column is
+  `name: Type`, then `@pk`, `@unique`, and `@null` flags; two spaces separate columns.
+- `writer <Entity> <UseCase>: <col == val, ...>` per exposed use case that writes the
+  entity, with its `sets` effects sorted. The writers that are not exposed collapse into
+  one `writer <Entity> (unexposed)` line that holds the union of their effects, so
+  internal use case names never leak. A writer with no `sets` has no colon.
+- `shared <Id> "<label>" { <columns> }` per `shares` line.
 
 ---
 

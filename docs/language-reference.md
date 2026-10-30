@@ -189,6 +189,8 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `outbox` | `(Event)` | Marks a raised event as intentionally published outside the local model, suppressing the raised-but-unconsumed warning. |
 | `contains` | `(Buc, UseCase \| Flow)`, `Flow == Step`, `Screen == Field`, or `System == Api` | The use case or flow composes the BUC, the step composes the flow, the field belongs to the screen, or the API belongs to the system boundary. |
 | `owns` | `System == Entity` | Optionally declares that a system is responsible for an entity even before API operations are fully modeled. API CRUD still records concrete access; `owns` records intended ownership. |
+| `exposes` | `(System, UseCase \| Event \| Entity)` | Publishes the element to other models. A use case takes `.caller(actor \| system \| any)`, default `actor`. An entity takes `.append()` or `.upsert()` and becomes a published entity; without a mode it is `InternalEntityExposed`. See [Publishing to other models](#publishing-to-other-models). |
+| `shares` | `System == Entity` | Lets other models name an internal entity directly. The owner's `check` reports `SharedInternalEntity` (warning) for as long as the line stays. |
 | `precedes` | `Step == Step` | The first business step normally occurs before the second. |
 | `branches` | `Step == Step` | The first step may branch to the second as an alternate path. |
 | `excepts` | `Step == Step` | The first step may route to the second as an exception path. |
@@ -233,6 +235,7 @@ only the methods below, and any other name is an `unknown chain method` error
 | `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)`, `.by(...)` |
 | `when` | `.has(...)`, `.none(...)` |
 | `after` | `.assert(...)` |
+| `exposes` | `.append()`, `.upsert()` (an entity), `.caller(actor \| system \| any)` (a use case) |
 | every other predicate (including `combines` and `holds`) | none |
 
 ---
@@ -577,6 +580,79 @@ event in a BUC reaches.
 APIs are the operation boundary between a use case and the data it changes. Systems
 group APIs, DTOs give them payload contracts, and permissions and media say who may
 reach them from where.
+
+### Publishing to other models
+
+A model owned by one team publishes what another team's model may reference. Everything
+else stays internal: no other model can name it.
+
+```rdra
+system AuthSystem "Authentication System"
+usecase Login "Log in"
+usecase Revoke "Revoke a session"            // internal
+api SessionApi "Session API" method POST path "/sessions"
+contains(AuthSystem, SessionApi)
+invokes(Login, SessionApi)
+
+entity Session "Session" {                   // internal
+  id: Int @pk
+  status: Enum(active, revoked) @default(active)
+}
+creates(SessionApi, Session)
+transitions(Session.status, Revoke, active -> revoked)
+
+// Published information: a projection of Session that auth writes and never reads.
+entity SessionView "Session (published)" {
+  session_id: Int @pk
+  status: Enum(active, ended)
+}
+writes(SessionApi, SessionView)
+sets(Login, SessionView, status == active)
+writes(Revoke, SessionView)
+sets(Revoke, SessionView, status == ended)
+
+exposes(AuthSystem, Login)                   // callable on behalf of an actor
+exposes(AuthSystem, SessionView).upsert()
+```
+
+`exposes(System, UseCase)` publishes a use case. `.caller(actor)`, the default, means
+another model calls it on behalf of a human actor; `.caller(system)` means only a service
+identity may call it; `.caller(any)` allows both. A use case exposed with `.caller(system)`
+or `.caller(any)` is not reported as having no actor (`UseCasePermissionNoActor`), because
+its caller is the other model's service.
+
+`exposes(System, Event)` publishes an event another model may react to.
+
+`exposes(System, Entity).append()` or `.upsert()` publishes an entity. A published entity
+is a projection the owner writes and never reads, such as an append-only log or a silver
+table. `.append()` allows `creates` and `sets`; `.upsert()` also allows `updates` and
+`writes`. `deletes` and `transitions` are never allowed. The owner's `check` enforces
+these rules:
+
+| Diagnostic | When |
+|---|---|
+| `PublishedEntityMutated` | an `append` entity gets `updates` or `writes`, or any published entity gets `deletes` or `transitions` |
+| `PublishedEntityReadByOwner` | the owner reads a published entity: `reads`, `shows`, `maps_field`, a `holds` body, `combines`, or a constraint (`forbidden`, `invariant`, `required`, `exclusive`, `when`, `after`) |
+| `PublishedEntityKeysInternal` | a `relate` joins a published entity to an internal one, in either direction |
+| `PublishedNotInSourceTx` | a use case writes a published entity but makes no internal change, or makes several internal transactions, so the published row has no one transaction to join |
+| `InternalEntityExposed` | `exposes(System, Entity)` without `.append()` or `.upsert()`; publish a projection instead |
+| `PublishedEntityNeverWritten` (warning) | no use case writes the published entity |
+| `ExposesChainInvalid` | a chain method on the wrong kind, such as `.append()` on a use case or `.caller(...)` on an entity |
+
+A published row is written in the transaction of the internal change it reports. A write
+to a published entity therefore joins the writing use case's one internal transaction
+group, whether or not a key links them, and `SeparateTxInferred` never fires for it. In
+the example, `Revoke` moves `Session` and writes `SessionView` in one action, where two
+unrelated writes would otherwise be `Revoke_1` and `Revoke_2`. The owner's lifecycle
+(`states`, `check`, `export --kind tla`) skips published entities: they hold no state of
+their own, only what the owner wrote.
+
+`shares(System, Entity)` lets other models name an internal entity directly, at the cost
+of a `SharedInternalEntity` warning on every `check` for as long as the line stays.
+
+`rdra-ish list <model> --kind surface` prints the published surface as canonical text,
+one line per exposed use case, exposed event, published entity, writer of a published
+entity, and shared entity, sorted by kind and id. See [`list`](./cli-reference.md#list).
 
 ### `api` and the API layer
 
