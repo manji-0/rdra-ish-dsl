@@ -14,9 +14,9 @@ machine-readable exports.
 | `json-schema` | JSON Schema | DTOs and entities under `$defs` |
 | `tla` | TLA+ `.tla` + `.cfg` | the lifecycle transition system, for reading or a TLC run by hand |
 
-`diagram` writes Mermaid text only, and `mermaid` is the default `--format`. The
-`puml`, `svg`, and `png` formats were removed. For an image, render the `.mmd` with
-Mermaid CLI (`mmdc`) or hand the text to a tool that draws it.
+`diagram` writes Mermaid text only, and `mermaid` is the default `--format`. The text
+is meant to be redrawn: render the `.mmd` with Mermaid CLI (`mmdc`), or hand it to a tool
+that draws SVG from it. `references/reading-diagrams.md` says what a redrawing must keep.
 
 Outputs that print the lifecycle (`diagram --kind state`, `csv` of every kind but
 `entity`, `export --kind typescript-states`) refuse to write while `check` reports a
@@ -47,9 +47,10 @@ bash scripts/check-sample-artifacts.sh
 ## Notes
 
 - `diagram` appends `.mmd` to `--out`.
-- Prefer filtered diagrams (`--buc`) before rendering images.
-- `rdra` writes each description as a `%% desc <id>: <text>` comment line; there is no
-  flag for it.
-- Use `--node-kind` and `--edge-kind` before accepting a too-large diagram.
+- Prefer scoped diagrams (`--buc`) before rendering images.
+- Every flowchart kind writes each description as a `%% desc <id>: <text>` comment
+  line; there is no flag for it.
+- Use `--buc`, and on `rdra` `--node-kind` and `--edge-kind`, before accepting a
+  too-large diagram.
 - Use export output for downstream contract review rather than hand-copying diagram
   labels.

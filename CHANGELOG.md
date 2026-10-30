@@ -4,6 +4,13 @@
 
 ### Breaking
 
+The `diagram` command was redesigned around the RDRA 3.0 diagrams. It writes Mermaid
+text only, for a reader (a person, or a tool that draws SVG) that redraws it, so each
+diagram carries the RDRA meaning in text: a `%%` header, `<kind>__<DSL id>` node ids
+shared by every kind, `:::<kind>` tags, Japanese RDRA layer names, DSL predicate
+names as edge labels, and `%% derived` / `%% desc` comment lines. The first eight
+entries below are that redesign; the new kinds are under Added.
+
 - `diagram` writes Mermaid text (`.mmd`) only, and `--format` defaults to `mermaid` (was
   `puml`). `--format puml`, `--format svg`, and `--format png` are removed and fail with
   a message that names `--format mermaid`; a `diagram` command without `--format` now
@@ -13,27 +20,6 @@
   crate, the `rdra_ish_emit::plantuml` module, `DiffPlantUmlEmitter`, the
   `plantuml.jar` lookup, and `PLANTUML_JAR` are gone, as are the 15 `samples/*/out/*.puml`
   artifacts. The dev shell no longer provides PlantUML or OpenSSL.
-- `diagram --kind boundaryless-graph`, `--kind business-area`, and `--kind technical-area`
-  are removed, and each fails with a message that names its replacement.
-  `boundaryless-graph` drew the `rdra` graph without its layers and API nodes; use
-  `--kind rdra`, narrowed with `--node-kind` / `--edge-kind`. `business-area` drew the
-  rows of `csv --kind business-inputs`, and `technical-area` the API x entity CRUD of
-  `csv --kind api-matrix`; use those tables. In `rdra_ish_emit::mermaid`,
-  `RdraMermaidEmitter` is now the `rdra` emitter (it was `ObjectGraphMermaidEmitter`);
-  the old boundaryless `RdraMermaidEmitter`, `BusinessAreaMermaidEmitter`, and
-  `TechnicalAreaMermaidEmitter` are gone.
-- `diagram --kind sequence` and `diagram --kind diff` are removed, and each fails with a
-  message that names its replacement. The transaction, API, and system-boundary warnings
-  that `sequence` printed are `check`'s, which still prints them; `csv --kind
-  api-matrix` lists the entities each API writes. For a model diff, write `--kind rdra`
-  for both models and compare the two `.mmd` files with `diff` or `git diff`. The
-  `--diff-base` option goes with them (clap now rejects it as an unknown argument),
-  `--usecase` applies to `--kind usecase` only, and `--node-kind` and `--edge-kind` apply
-  to `rdra` only.
-  The 109 sequence artifacts (`samples/clinic-ops/out/uc/`, the `sequence_*.mmd` files
-  under `samples/*/out/`) and the sequence sections of
-  `samples/clinic-ops/design-sample.md` are gone, as are `rdra_ish_emit::diff` and
-  `SequenceMermaidEmitter`.
 - `diagram --kind rdra` writes the diagram encoding contract (`docs/cli-reference.md`,
   "Encoding contract"), so anything that parsed the old `.mmd` breaks. The file opens with
   `%%` header lines (`rdra-ish diagram=rdra scope=... model=...`, `layers:`, `kinds:`,
@@ -47,12 +33,6 @@
   Use cases now draw `transitions <Entity>.<column> <from>-><to>` edges to the state they
   enter, and a `--buc` scope holds those states. A `combines` edge derived from a
   condition's `holds` is followed by a `%% derived` line.
-- `diagram --show-description` and `--view-preset` are removed (clap rejects them as
-  unexpected arguments). `rdra` always writes each description as a
-  `%% desc <id>: <text>` line after its node, instead of a linked note node; narrow a
-  diagram with `--node-kind` and `--edge-kind`. `View::with_descriptions` and
-  `View::show_descriptions` are replaced by `View::with_model_path` and
-  `View::model_path`, the input paths the header prints.
 - `diagram --kind state` writes the encoding contract. It opens with the `%%` header
   (`omitted:` names the `Enum` columns no `transitions` drive), and draws one composite
   state per state model, `state "Order.status" as statemodel__Order_status { ... }`,
@@ -77,6 +57,33 @@
   `%%` header (`%% rdra-ish diagram=er scope=... model=...`, `%% kinds: entity`,
   `%% omitted: (none)`; the export's header has no `model=`). The `erDiagram` body is
   unchanged, entity names included.
+- `diagram --kind boundaryless-graph`, `--kind business-area`, and `--kind technical-area`
+  are removed, and each fails with a message that names its replacement.
+  `boundaryless-graph` drew the `rdra` graph without its layers and API nodes; use
+  `--kind rdra`, narrowed with `--node-kind` / `--edge-kind`. `business-area` drew the
+  rows of `csv --kind business-inputs`, and `technical-area` the API x entity CRUD of
+  `csv --kind api-matrix`; use those tables. In `rdra_ish_emit::mermaid`,
+  `RdraMermaidEmitter` is now the `rdra` emitter (it was `ObjectGraphMermaidEmitter`);
+  the old boundaryless `RdraMermaidEmitter`, `BusinessAreaMermaidEmitter`, and
+  `TechnicalAreaMermaidEmitter` are gone.
+- `diagram --kind sequence` and `diagram --kind diff` are removed, and each fails with a
+  message that names its replacement. The transaction, API, and system-boundary warnings
+  that `sequence` printed are `check`'s, which still prints them; `csv --kind
+  api-matrix` lists the entities each API writes. For a model diff, write `--kind rdra`
+  for both models and compare the two `.mmd` files with `diff` or `git diff`. The
+  `--diff-base` option goes with them (clap now rejects it as an unknown argument),
+  `--usecase` applies to `--kind usecase` only, and `--node-kind` and `--edge-kind` apply
+  to `rdra` only.
+  The 109 sequence artifacts (`samples/clinic-ops/out/uc/`, the `sequence_*.mmd` files
+  under `samples/*/out/`) and the sequence sections of
+  `samples/clinic-ops/design-sample.md` are gone, as are `rdra_ish_emit::diff` and
+  `SequenceMermaidEmitter`.
+- `diagram --show-description` and `--view-preset` are removed (clap rejects them as
+  unexpected arguments). `rdra` always writes each description as a
+  `%% desc <id>: <text>` line after its node, instead of a linked note node; narrow a
+  diagram with `--node-kind` and `--edge-kind`. `View::with_descriptions` and
+  `View::show_descriptions` are replaced by `View::with_model_path` and
+  `View::model_path`, the input paths the header prints.
 - `verify` checks each temporal property in its own TLC run, because TLC does not name the
   property a temporal counterexample violates. The runs use the module
   `<whole>_<Property>` (`RdraSpec_NeverShipped`), the same module text and fairness as the
@@ -346,31 +353,6 @@
   constraints with what they `constrain`, and the qualities both `qualify` for.
   clinic-ops gains `out/requirement.mmd`.
 
-- `diagram --kind flow` draws the RDRA business flow under the encoding contract, as
-  `flowchart TD`: each flow as `subgraph flow__<id>` holding its steps, the declared
-  `precedes`, `branches`, `excepts`, and `repeats` edges between steps, and `covers`
-  edges from a step to the use cases, APIs, events, and timers it covers. A step one
-  actor performs sits in a `subgraph lane__<Flow>__<Actor>` swimlane; a step several
-  actors perform has a `performs` edge from each. clinic-ops gains
-  `out/buc/flow_<buc>.mmd` for its four BUCs with a flow.
-
-- `diagram --kind condition` draws the RDRA variations and conditions under the
-  encoding contract: each condition with an `-.->|combines|` edge to each variation and
-  state model (`statemodel__<Entity>_<column>`) it combines, a `%% holds` line for its
-  body, and `%% derived ... from holds` after a link read from that body; its
-  `applies_to` edges to use cases, APIs, and systems; and each variation as
-  `subgraph variation__<id>` holding its values as `variation__<Variation>__<value>`
-  nodes tagged `:::value`. The whole model draws every variation. clinic-ops and
-  ec-site gain `out/condition.mmd`.
-
-- `diagram --kind information` draws the RDRA information model under the encoding
-  contract: every entity of the scope, each `relate` as `---|<card>|` from its left
-  end (the relates `--kind er` draws), each state model (a column that `transitions`
-  drive) as `statemodel__<Entity>_<column>` linked `-.->|statemodel|`, and each
-  variation a column takes linked `-.->|variation <column>|`. Columns are left to `er`.
-  ec-site, clinic-ops, personal-info, and incremental-order step 6 gain
-  `out/information.mmd`.
-
 - `diagram --kind business` draws the RDRA business context and business use cases
   under the encoding contract: each business as `subgraph business__<id>` in the
   システム外部環境 layer holding its BUCs, and the actors and external systems of the
@@ -381,6 +363,14 @@
   each followed by `%% derived ... via <node>`. `--buc` narrows it to the RDRA BUC
   diagram. ec-site, clinic-ops, personal-info, and incremental-order step 6 gain
   `out/business.mmd`.
+
+- `diagram --kind flow` draws the RDRA business flow under the encoding contract, as
+  `flowchart TD`: each flow as `subgraph flow__<id>` holding its steps, the declared
+  `precedes`, `branches`, `excepts`, and `repeats` edges between steps, and `covers`
+  edges from a step to the use cases, APIs, events, and timers it covers. A step one
+  actor performs sits in a `subgraph lane__<Flow>__<Actor>` swimlane; a step several
+  actors perform has a `performs` edge from each. clinic-ops gains
+  `out/buc/flow_<buc>.mmd` for its four BUCs with a flow.
 
 - `diagram --kind usecase` draws the RDRA UC複合図 under the encoding contract: each use
   case with the actors who perform it, the screens it displays and the entities they show,
@@ -396,6 +386,23 @@
   `out/buc/object_graph_*.mmd`, and ec-site gains `out/usecase_buc_*.mmd` and
   `out/usecase_capture.mmd`. The error for the removed `--kind sequence` now names
   `--kind usecase` first.
+
+- `diagram --kind information` draws the RDRA information model under the encoding
+  contract: every entity of the scope, each `relate` as `---|<card>|` from its left
+  end (the relates `--kind er` draws), each state model (a column that `transitions`
+  drive) as `statemodel__<Entity>_<column>` linked `-.->|statemodel|`, and each
+  variation a column takes linked `-.->|variation <column>|`. Columns are left to `er`.
+  ec-site, clinic-ops, personal-info, and incremental-order step 6 gain
+  `out/information.mmd`.
+
+- `diagram --kind condition` draws the RDRA variations and conditions under the
+  encoding contract: each condition with an `-.->|combines|` edge to each variation and
+  state model (`statemodel__<Entity>_<column>`) it combines, a `%% holds` line for its
+  body, and `%% derived ... from holds` after a link read from that body; its
+  `applies_to` edges to use cases, APIs, and systems; and each variation as
+  `subgraph variation__<id>` holding its values as `variation__<Variation>__<value>`
+  nodes tagged `:::value`. The whole model draws every variation. clinic-ops and
+  ec-site gain `out/condition.mmd`.
 
 - Traceable verification (phase 6). Every constraint is its own named invariant, a state
   of a state model with no reachability witness and an instance that can never leave its
@@ -505,7 +512,7 @@
   cases (a `--buc` view includes the conditions applied to its use cases). A body
   guards the use cases it applies to (see the lifecycle layer below). The
   clinic-ops sample gains `CopayDue` (traceability only) and `InsuredVisit` (with a body).
-- The RDRA object-graph diagram now lists `variation` nodes, which it already placed in
+- The `rdra` diagram now lists `variation` nodes, which it already placed in
   the system layer but never drew.
 - `variation Id "Label" { value "Label"? ... }` declares the values an actor chooses
   from (RDRA バリエーション). A column typed by its id (`method: PaymentMethod`) is an
@@ -548,8 +555,6 @@
   sample models including `samples/ec-site`.
 - Date / DateTime column-vs-column comparisons are Int arithmetic in `states` and in
   the TLA+ export.
-- Sequence emitters (PlantUML / Mermaid) use `actors_for_usecase` (BUC ∪ direct
-  performers) so a direct `performs` no longer hides BUC-level actors.
 - `check --strict` promotes permission/access gaps to errors; `check` always
   notes outstanding temporal properties.
 - OpenAPI emits `oneOf` (+ `x-rdra-ish-ambiguous-status`) for multiple
@@ -624,9 +629,9 @@
 
 ### Changed
 
-- `diagram --kind rdra` and `--kind event` draw a model whose lifecycle has errors, with
-  one stderr note, as `--kind er` already did; before, they refused to write. They draw
-  declared facts only. `--kind state` reads each state model's start states from the
+- `diagram` of every kind but `state` draws a model whose lifecycle has errors, with one
+  stderr note, as `--kind er` already did; before, `rdra` and `event` refused to write.
+  Those kinds draw declared facts only. `--kind state` reads each state model's start states from the
   lifecycle and still refuses. The note now ends `this output does not read the
   lifecycle` (was `the data layer does not depend on them`) for every output that prints
   it.

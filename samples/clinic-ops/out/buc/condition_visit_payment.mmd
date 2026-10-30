@@ -1,0 +1,42 @@
+%% rdra-ish diagram=condition scope=buc:BucVisitPayment model=samples/clinic-ops
+%% kinds: condition statemodel variation value usecase
+%% omitted: (none)
+flowchart LR
+  condition__CopayCappedAtLimit["窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"]:::condition
+  condition__UnreferredFirstVisit["紹介状なしの初診で、除外に当たらない"]:::condition
+  %% holds condition__UnreferredFirstVisit: Charge.kind == selectedtreatment, Appointment.referral == unreferred
+  statemodel__Appointment_status["Appointment.status"]:::statemodel
+  subgraph variation__BurdenRatio["負担割合"]
+    variation__BurdenRatio__thirty["3割"]:::value
+    variation__BurdenRatio__twenty["2割"]:::value
+  end
+  subgraph variation__ChargeKind["診療費の種類"]
+    variation__ChargeKind__insured["保険診療"]:::value
+    variation__ChargeKind__selectedtreatment["選定療養（自費）"]:::value
+  end
+  subgraph variation__LimitCategory["限度額適用区分"]
+    variation__LimitCategory__notobtained["限度額情報なし"]:::value
+    variation__LimitCategory__obtained["適用区分を取得済"]:::value
+  end
+  subgraph variation__ReferralCategory["紹介の有無"]
+    variation__ReferralCategory__revisit["再診"]:::value
+    variation__ReferralCategory__referred["紹介状あり初診"]:::value
+    variation__ReferralCategory__unreferred["紹介状なし初診"]:::value
+    variation__ReferralCategory__exempt["紹介状なし初診（救急搬送等の除外）"]:::value
+  end
+  usecase__ApplySelectedTreatmentFee["選定療養費の算定"]:::usecase
+  usecase__CalculateVisitBill["会計計算入力"]:::usecase
+  condition__CopayCappedAtLimit -.->|applies_to| usecase__CalculateVisitBill
+  condition__CopayCappedAtLimit -.->|combines| statemodel__Appointment_status
+  condition__CopayCappedAtLimit -.->|combines| variation__BurdenRatio
+  condition__CopayCappedAtLimit -.->|combines| variation__LimitCategory
+  condition__UnreferredFirstVisit -.->|applies_to| usecase__ApplySelectedTreatmentFee
+  condition__UnreferredFirstVisit -.->|combines| variation__ChargeKind
+  %% derived condition__UnreferredFirstVisit -> variation__ChargeKind from holds
+  condition__UnreferredFirstVisit -.->|combines| variation__ReferralCategory
+  %% derived condition__UnreferredFirstVisit -> variation__ReferralCategory from holds
+  classDef condition stroke:#333;
+  classDef statemodel stroke:#333;
+  classDef variation stroke:#333;
+  classDef value stroke:#333;
+  classDef usecase stroke:#333;

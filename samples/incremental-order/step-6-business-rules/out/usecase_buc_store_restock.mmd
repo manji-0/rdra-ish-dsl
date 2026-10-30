@@ -1,0 +1,45 @@
+%% rdra-ish diagram=usecase scope=buc:BucStoreRestock model=samples/incremental-order/step-6-business-rules/src
+%% layers: value=システム価値 boundary=システム境界 system=システム
+%% kinds: actor usecase screen entity state
+%% omitted: buc medium permission api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__OpsStaff["Operations Staff"]:::actor
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__BlockScheduledRestock["Block Scheduled Restock"]:::usecase
+    usecase__ChangeNextRestockDate["Change Next Restock Date"]:::usecase
+    usecase__ChangeStoreParentOrganization["Change Store Parent Organization"]:::usecase
+    screen__StoreMaintenanceScreen["Store Maintenance"]:::screen
+  end
+  subgraph layer_system["システム"]
+    entity__Organization["Organization"]:::entity
+    entity__Store["Store"]:::entity
+    state__Store_blocked["blocked"]:::state
+    state__Store_normal["normal"]:::state
+    state__Store_scheduled["scheduled"]:::state
+  end
+  actor__OpsStaff -.->|performs| usecase__BlockScheduledRestock
+  %% derived actor__OpsStaff -> usecase__BlockScheduledRestock via buc__BucStoreRestock
+  actor__OpsStaff -.->|performs| usecase__ChangeNextRestockDate
+  %% derived actor__OpsStaff -> usecase__ChangeNextRestockDate via buc__BucStoreRestock
+  actor__OpsStaff -.->|performs| usecase__ChangeStoreParentOrganization
+  %% derived actor__OpsStaff -> usecase__ChangeStoreParentOrganization via buc__BucStoreRestock
+  screen__StoreMaintenanceScreen -.->|shows| entity__Organization
+  screen__StoreMaintenanceScreen -.->|shows| entity__Store
+  usecase__BlockScheduledRestock -.->|displays| screen__StoreMaintenanceScreen
+  usecase__BlockScheduledRestock -.->|transitions Store.restock_status scheduled->blocked| state__Store_blocked
+  usecase__BlockScheduledRestock -.->|updates| entity__Store
+  usecase__ChangeNextRestockDate -.->|displays| screen__StoreMaintenanceScreen
+  usecase__ChangeNextRestockDate -.->|transitions Store.restock_status normal->scheduled| state__Store_scheduled
+  usecase__ChangeNextRestockDate -.->|updates| entity__Store
+  usecase__ChangeStoreParentOrganization -.->|displays| screen__StoreMaintenanceScreen
+  usecase__ChangeStoreParentOrganization -.->|reads| entity__Organization
+  %% derived usecase__ChangeStoreParentOrganization -> entity__Organization via api__OrganizationLookupApi
+  usecase__ChangeStoreParentOrganization -.->|updates| entity__Store
+  %% derived usecase__ChangeStoreParentOrganization -> entity__Store via api__StoreAdminApi
+  classDef actor stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef entity stroke:#333;
+  classDef state stroke:#333;

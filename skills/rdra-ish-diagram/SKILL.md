@@ -1,85 +1,93 @@
 ---
 name: rdra-ish-diagram
-description: Choose the right RDRA-ish diagram, CSV review, or export view for the modeling situation, then load focused references for commands and interpretation
+description: Choose the RDRA 3.0 diagram (or CSV or export view) that answers a review question about an RDRA-ish model, generate it as Mermaid, and read or redraw it from its header, ids, and comment lines
 license: MIT
 ---
 
-## Choose RDRA-ish Views
+## Choose an RDRA-ish View
 
-Choose the smallest view that answers the current review question. Keep this
-top-level skill as the routing layer, then load only the reference file needed for
-the selected view.
+`rdra-ish diagram` draws the RDRA 3.0 diagrams of a model as Mermaid text (`.mmd`). The
+text is written for a reader that redraws it: you, a person with Mermaid CLI, or another
+tool that draws SVG. It carries the RDRA meaning in text, so a redrawing may change every
+shape, colour, and direction, and must keep the nodes, their kinds and layers, and the
+edges with their labels.
+
+Pick the one kind that answers the question, then load only its reference.
 
 ### Routing Guide
 
-| Situation | Use first | Load |
+| The question | Kind | Load |
 |---|---|---|
-| Scope or BUC skeleton review | `rdra --buc <BucId>` | `references/rdra-graph.md` |
-| Businesses, BUCs, and who takes part | `business`, optionally `--buc <BucId>` | `references/rdra-graph.md` |
-| Dense relationship inspection | `rdra` with `--node-kind` / `--edge-kind` | `references/rdra-graph.md` |
-| Business object/data touchpoint review | `rdra --buc <BucId>` plus CRUD matrix | `references/rdra-graph.md` |
-| Use case inputs and outputs (UC複合図) | `usecase --buc <BucId>` or `usecase --usecase <UcId>` | `references/rdra-graph.md` |
-| Who uses the system, and which external systems it exchanges events with | `context` | `references/rdra-graph.md` |
-| Requirements, NFRs, constraints, and what they bind | `requirement` | `references/rdra-graph.md` |
-| Business flow: step order, branches, and what each step covers | `flow --buc <BucId>` | `references/rdra-graph.md` |
-| Information, state models, and variations | `information`, optionally `--buc <BucId>` | `references/er.md` |
-| Variations with their values, and conditions | `condition`, optionally `--buc <BucId>` | `references/er.md` |
-| Entity structure and relationships | `er`, optionally `--buc <BucId>` | `references/er.md` |
-| Actor-entered field review | `csv --kind business-inputs` | `references/access-and-apis.md` |
-| System API/entity ownership review | `csv --kind api-matrix` | `references/access-and-apis.md` |
-| Screen/API/system boundary review | `rdra --buc <BucId>`, `check`, plus access CSVs | `references/access-and-apis.md` |
-| API contract or payload handoff | `export --kind openapi` plus API/DTO graph filter | `references/formats-and-output.md` |
-| Data contract handoff | `export --kind dbml` or `json-schema` plus ER | `references/formats-and-output.md` |
-| Event contract handoff | `export --kind asyncapi` plus `event` | `references/lifecycle-and-events.md` |
-| Diagram size or review focus | `--buc` scope, or `--node-kind` / `--edge-kind` on `rdra` | `references/formats-and-output.md` |
-| Lifecycle and event causality | `state --buc <BucId>` plus `event` | `references/lifecycle-and-events.md` |
-| Business rules or state constraints | `check` (rule counterexamples, unreached and stuck states), then `states` | `references/lifecycle-and-events.md` |
-| Temporal `property` and rules that need two instances | Prefer skill `rdra-ish-verify` (`verify`) | `references/lifecycle-and-events.md` |
-| Output format/rendering choice | Mermaid text only; render images from the `.mmd` outside rdra-ish | `references/formats-and-output.md` |
+| Who uses the system, and which external systems does it exchange events with? | `context` | `references/context-requirement-business.md` |
+| Which requirements, NFRs, and constraints exist, and what do they bind? | `requirement` | `references/context-requirement-business.md` |
+| Which BUCs make up each business, and which actors and external systems take part? | `business`, or `business --buc <BucId>` for one BUC | `references/context-requirement-business.md` |
+| What does each use case show, read, write, raise, and move, and who performs it? | `usecase --buc <BucId>` or `usecase --usecase <UcId>` | `references/usecase-and-flow.md` |
+| In what order are a BUC's steps carried out, and which use cases carry each? | `flow --buc <BucId>` | `references/usecase-and-flow.md` |
+| How do the entities relate, and which hold a state model or a variation? | `information` | `references/information-and-data.md` |
+| Which conditions select business rules, and what values do the variations take? | `condition` | `references/information-and-data.md` |
+| What columns, keys, and cardinalities does the data have? | `er` | `references/information-and-data.md` |
+| What states exist, and which use case moves each? | `state` | `references/lifecycle-and-events.md` |
+| Which events, timers, and external systems start other work? | `event` | `references/lifecycle-and-events.md` |
+| Everything at once, or a relation no other kind draws (permissions, media, DTOs, API paths) | `rdra`, narrowed with `--node-kind` / `--edge-kind` | `references/rdra-graph.md` |
+| How do I read a header, an id, or a `%%` line, or redraw a diagram? | any | `references/reading-diagrams.md` |
+| Which actor inputs which fields, or which APIs sit in each system? | `csv --kind business-inputs` or `csv --kind api-matrix` | `references/access-and-apis.md` |
+| Where are the transaction and API-boundary problems? | `check` | `references/access-and-apis.md` |
+| Are rules broken, or states unreached or stuck? | `check`, then `states` | `references/lifecycle-and-events.md` |
+| Do temporal or two-instance rules hold? | `verify` (skill `rdra-ish-verify`) | `references/lifecycle-and-events.md` |
+| What contract can reviewers or other tools consume? | `export --kind openapi`, `asyncapi`, `dbml`, or `json-schema` | `references/formats-and-output.md` |
+
+Every kind takes `--buc <BucId>` (repeatable) to draw the part of the model those BUCs
+reach. Prefer it before a whole-model diagram.
+
+### What Each Kind Carries
+
+| Kind | RDRA diagram | Carries | Leaves out |
+|---|---|---|---|
+| `context` | システムコンテキスト | The system, its actors, and its external systems; every edge derived | BUCs, use cases, events (named in edge labels and `%% derived`) |
+| `requirement` | 要求モデル | `motivates`, NFR `applies_to`, `constrains`, `qualifies` | ADRs; a requirement-to-actor link (not in the DSL) |
+| `business` | ビジネスコンテキスト / BUC | Businesses holding BUCs, and each BUC's actors and external systems | Use cases, steps, events (named in `%% derived`) |
+| `usecase` | UC複合図 | Use cases with actors, screens, entities, events, external systems, timers, conditions, and transitions | APIs (CRUD folded into the use case), DTOs, permissions, media, fields, BUCs |
+| `flow` | 業務フロー | Flows, steps, `precedes` / `branches` / `excepts` / `repeats`, `covers`, actor lanes | Screens and entities |
+| `information` | 情報モデル | Entities, `relate`, state models, variations | Columns (`er`) |
+| `condition` | バリエーション・条件 | Conditions with what they combine and apply to; variations with their values | Entities (a state model stands for its column) |
+| `state` | 状態モデル | One composite state per state model, start and end states, the use case of each transition | `Enum` columns without `transitions` (named in `omitted:`) |
+| `event` | システム間連携 | `raises` and `triggers` among use cases, BUCs, external systems, events, and timers | States and transitions |
+| `er` | (logical data model) | Entities, columns, keys, cardinality | Variation values, state models |
+| `rdra` | RDRAGraph | Every element in its layer and every relation | ADRs |
+
+`state` is the only kind that refuses to write while `check` reports a lifecycle error.
+The others draw declared facts and print one note.
+
+### Reading Any Diagram
+
+- The `%%` header comes first: `%% rdra-ish diagram=<kind> scope=<scope> model=<paths>`,
+  then `%% layers:` (layered kinds), `%% kinds:` (node kinds the body draws), and
+  `%% omitted:` (linked kinds the diagram leaves out). Check `omitted:` before you
+  conclude that something is missing from the model.
+- A node id is `<kind>__<DSL id>`, the same in every kind, and each flowchart node
+  carries `:::<kind>`. Match nodes across diagrams by id, never by label.
+- An edge label is the DSL predicate. An edge followed by `%% derived <from> -> <to> ...`
+  was derived by rdra-ish; any other edge is declared and is also in `rdra`.
+- `%% desc`, `%% holds`, `%% lane`, and `%% synthesized` lines carry what shapes cannot.
+  `references/reading-diagrams.md` lists them all.
 
 ### Default Workflow
 
-1. Identify the current modeling stage and the question being asked.
-2. Pick one primary view from the routing guide.
-3. Load the matching reference file for commands, filters, and reading notes.
-4. Prefer `--buc` filters before generating whole-model diagrams.
-5. Use CSV views for access and matrix checks instead of trying to read those details
-   from diagrams alone.
-
-### Quick Choices
-
-- Use `rdra` when the question is "what business value/use cases are covered?"
-- Use `business` when the question is "which BUCs make up each business, and which
-  actors and external systems take part in each?"
-- Use `usecase` when the question is "what does each use case show, read, write, raise,
-  and move, and who performs it?"
-- Use `information` when the question is "how do the entities relate, and which hold a
-  state model or a variation?"
-- Use `er` when the question is "what entities, columns, and relationships exist?"
-- Use `csv --kind business-inputs` when the question is "which actor inputs which fields
-  for which use cases?"
-- Use `csv --kind api-matrix` when the question is "which APIs and entities sit inside
-  each system?"
-- Use `rdra --buc <BucId>` and `check` when the question is "what actor/screen/API/entity
-  path happens, and where are the transaction boundaries?"
-- Use `state` when the question is "what lifecycle states exist, and which use case
-  moves each one?"
-- Use `event` when the question is "what events, timers, and external systems
-  start other work?"
-- Use `states` when the question is "which abstract patterns are reachable?"
-- Use `verify` (skill `rdra-ish-verify`) when the question is "do temporal or
-  two-instance rules hold under TLC?"
-- Use exports when the question is "what contract artifact can reviewers consume?"
-- Use `screen-constraints`, `permission-callables`, and `actor-permission-audit` when
-  the question is about authority, medium, or actor grant coverage.
+1. Name the review question, then pick its kind from the routing guide.
+2. Run `rdra-ish check src/` first; fix model errors before reading diagrams.
+3. Generate the diagram with `--buc <BucId>` when the question is about one BUC.
+4. Read the header, then the body; load the kind's reference for its edges.
+5. Use CSV views for matrices and audits instead of reading them off a diagram.
 
 ### Reference Files
 
-- `references/rdra-graph.md` — RDRA layered graph, the business and BUC diagram, the
-  UC複合図, and early-stage model inspection.
-- `references/er.md` — information model and ER diagram commands and relationship
-  reading.
-- `references/access-and-apis.md` — API boundaries plus access/media CSV views.
-- `references/lifecycle-and-events.md` — state diagrams, event diagrams,
-  `states`, and TLA+ export.
-- `references/formats-and-output.md` — Mermaid output and contract exports.
+- `references/reading-diagrams.md` — the encoding contract: header, ids, edges, `%%`
+  lines, and how to redraw a diagram.
+- `references/context-requirement-business.md` — `context`, `requirement`, `business`.
+- `references/usecase-and-flow.md` — `usecase` (UC複合図) and `flow`.
+- `references/information-and-data.md` — `information`, `condition`, `er`, and the data
+  exports.
+- `references/lifecycle-and-events.md` — `state`, `event`, `states`, `check`, and TLA+.
+- `references/rdra-graph.md` — `rdra`, the whole graph, and its filters.
+- `references/access-and-apis.md` — API boundaries and the access CSV views.
+- `references/formats-and-output.md` — Mermaid output, rendering, and contract exports.

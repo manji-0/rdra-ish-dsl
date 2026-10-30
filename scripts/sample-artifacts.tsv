@@ -1,8 +1,11 @@
 # Committed sample artifacts: output path, then the rdra-ish command that writes it.
 # scripts/check-sample-artifacts.sh regenerates every row and fails on a diff.
+samples/api-contract/out/business.mmd	diagram samples/api-contract/src --kind business --format mermaid
+samples/api-contract/out/information.mmd	diagram samples/api-contract/src --kind information --format mermaid
 samples/api-contract/out/openapi.json	export samples/api-contract/src --kind openapi
 samples/clinic-ops/out/actor_permission_audit.csv	csv samples/clinic-ops --kind actor-permission-audit
 samples/clinic-ops/out/api_matrix.csv	csv samples/clinic-ops --kind api-matrix
+samples/clinic-ops/out/buc/condition_visit_payment.mmd	diagram samples/clinic-ops --kind condition --format mermaid --buc BucVisitPayment
 samples/clinic-ops/out/buc/flow_billing_claims.mmd	diagram samples/clinic-ops --kind flow --format mermaid --buc BucBillingClaims
 samples/clinic-ops/out/buc/flow_prescription_fulfillment.mmd	diagram samples/clinic-ops --kind flow --format mermaid --buc BucPrescriptionFulfillment
 samples/clinic-ops/out/buc/flow_visit_check_in.mmd	diagram samples/clinic-ops --kind flow --format mermaid --buc BucVisitCheckIn
@@ -36,6 +39,7 @@ samples/ec-site/out/condition.mmd	diagram samples/ec-site --kind condition --for
 samples/ec-site/out/context.mmd	diagram samples/ec-site --kind context --format mermaid
 samples/ec-site/out/entities.entity.csv	csv samples/ec-site --kind entity
 samples/ec-site/out/er.mmd	diagram samples/ec-site --kind er --format mermaid
+samples/ec-site/out/event.mmd	diagram samples/ec-site --kind event --format mermaid
 samples/ec-site/out/information.mmd	diagram samples/ec-site --kind information --format mermaid
 samples/ec-site/out/matrix.matrix.csv	csv samples/ec-site --kind matrix
 samples/ec-site/out/object_graph_buc_bucorder.mmd	diagram samples/ec-site --kind rdra --format mermaid --buc BucOrder
@@ -97,6 +101,7 @@ samples/incremental-order/step-6-business-rules/out/schema.dbml	export samples/i
 samples/incremental-order/step-6-business-rules/out/screen_constraints.csv	csv samples/incremental-order/step-6-business-rules/src --kind screen-constraints
 samples/incremental-order/step-6-business-rules/out/state.mmd	diagram samples/incremental-order/step-6-business-rules/src --kind state --format mermaid
 samples/incremental-order/step-6-business-rules/out/states_store.txt	states samples/incremental-order/step-6-business-rules/src --format table --entity Store
+samples/incremental-order/step-6-business-rules/out/usecase_buc_store_restock.mmd	diagram samples/incremental-order/step-6-business-rules/src --kind usecase --format mermaid --buc BucStoreRestock
 samples/incremental-order/step-6-business-rules/out/usecase_matrix.csv	csv samples/incremental-order/step-6-business-rules/src --kind matrix
 samples/personal-info/out/actors.actor.csv	csv samples/personal-info --kind actor
 samples/personal-info/out/api_matrix.csv	csv samples/personal-info --kind api-matrix
