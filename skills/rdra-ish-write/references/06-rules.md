@@ -15,13 +15,24 @@ linked by a declared `relate` path; each adjacent pair needs a `relate`, else th
 
 ## Ask For
 
-- Which reachable state combinations are invalid?
-- Which facts must not co-occur?
-- Which value must be present when another state or comparison holds?
-- Which value must be present in every reachable state?
-- Does the rule mention one entity or multiple entities?
-- For cross-entity rules, is the intended scope global or linked through a declared
-  relation path?
+<!-- stage-spec: asks local-guardrails -->
+- Which combinations must never be reachable?
+- Which facts must be mutually exclusive?
+- Are these facts already represented as Enum, Bool, or nullable state axes?
+<!-- /stage-spec -->
+<!-- stage-spec: asks local-obligations -->
+- Which values must co-occur once a condition is true?
+- Which facts must be true in every reachable state?
+- Is the rule too broad, or should it be an `invariant` with a guard instead of `required`?
+<!-- /stage-spec -->
+<!-- stage-spec: asks advanced-rules -->
+- Which comparisons matter, and which use cases move the numeric or date values they read?
+- Which rules really mention more than one entity?
+- Is a cross-entity rule a global cross-product rule, or only intended along a declared relation path?
+<!-- /stage-spec -->
+
+Also ask:
+
 - Are the rules hard invariants or review warnings for future refinement?
 - Does an apparent violation mean the rule is wrong, or a missing `sets`/transition
   effect exists upstream?
@@ -113,8 +124,16 @@ property PaidLeadsToCaptured
 
 ## Validation
 
+<!-- stage-spec: review local-guardrails -->
 ```sh
 rdra-ish check src/
+rdra-ish states src/ --entity Order
+```
+<!-- /stage-spec -->
+
+Also run:
+
+```sh
 rdra-ish check src/ --entity Order   # only Order's view and the rules that read it
 rdra-ish lint src/ --format table
 rdra-ish states src/ --format json --entity Order

@@ -13,6 +13,8 @@ pub(crate) enum Block {
     Map,
     Heading(StageId),
     Ask(StageId),
+    Asks(StageId),
+    Review(StageId),
     Gates,
     SkillTable,
 }
@@ -26,6 +28,8 @@ impl Block {
             None if label == "skill-table" => Some(Block::SkillTable),
             Some(("heading", slug)) => stage(slug).map(Block::Heading),
             Some(("ask", slug)) => stage(slug).map(Block::Ask),
+            Some(("asks", slug)) => stage(slug).map(Block::Asks),
+            Some(("review", slug)) => stage(slug).map(Block::Review),
             _ => None,
         }
     }
@@ -59,13 +63,19 @@ pub(crate) fn render(block: Block) -> String {
             let _ = writeln!(out, "## Stage {}: {}", id.number(), spec(id).name);
         }
         Block::Ask(id) => {
-            let s = spec(id);
             out.push_str("Ask the user:\n\n");
-            for ask in s.asks {
+            out.push_str(&render(Block::Asks(id)));
+            out.push_str("\nValidation:\n\n");
+            out.push_str(&render(Block::Review(id)));
+        }
+        Block::Asks(id) => {
+            for ask in spec(id).asks {
                 let _ = writeln!(out, "- {ask}");
             }
-            out.push_str("\nValidation:\n\n```sh\n");
-            for command in s.review_commands(DOC_SRC, DOC_BUC, &[DOC_ENTITY]) {
+        }
+        Block::Review(id) => {
+            out.push_str("```sh\n");
+            for command in spec(id).review_commands(DOC_SRC, DOC_BUC, &[DOC_ENTITY]) {
                 let _ = writeln!(out, "{command}");
             }
             out.push_str("```\n");
@@ -226,6 +236,25 @@ mod tests {
                     ));
                 }
             }
+            if let Some(file) = where_
+                .strip_prefix("skills/rdra-ish-write/references/")
+                .filter(|file| file.starts_with(|c: char| c.is_ascii_digit()))
+            {
+                let digit = file.chars().nth(1).unwrap();
+                let group: Vec<StageId> = stages()
+                    .filter(|id| id.number().starts_with(digit))
+                    .collect();
+                let expected: Vec<Block> = group
+                    .iter()
+                    .map(|&id| Block::Asks(id))
+                    .chain(group.first().map(|&id| Block::Review(id)))
+                    .collect();
+                if blocks != expected {
+                    failures.push(format!(
+                        "{where_}: expected an asks block per stage in ORDER, then the review block of the first stage; found {blocks:?}"
+                    ));
+                }
+            }
             if where_.starts_with("skills/") {
                 let mut inside = false;
                 for (n, line) in text.lines().enumerate() {
@@ -267,6 +296,22 @@ mod tests {
             "{}\nrun `RDRA_ISH_BLESS=1 cargo test -p rdra-ish-core stage_docs` to rewrite the blocks",
             failures.join("\n")
         );
+    }
+
+    #[test]
+    fn stages_of_one_group_share_their_review() {
+        for id in stages() {
+            let first = stages()
+                .find(|other| other.number().chars().next() == id.number().chars().next())
+                .unwrap();
+            assert_eq!(
+                spec(id).review,
+                spec(first).review,
+                "{} and {} share a reference file, which shows only the first review",
+                id.slug(),
+                first.slug()
+            );
+        }
     }
 
     #[test]

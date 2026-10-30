@@ -10,9 +10,14 @@ without forcing final columns, APIs, or persistence design.
 
 ## Ask For
 
+<!-- stage-spec: asks data-touchpoints -->
 - Which business objects are created, read, updated, or deleted by each use case?
 - Which nouns are logical data structures, and which are only business vocabulary?
-- Which entities are shared across BUCs?
+- Which entities should be shared across multiple BUCs?
+<!-- /stage-spec -->
+
+Also ask:
+
 - Which operations are likely to require an API or transaction boundary later?
 
 ## Procedure
@@ -47,12 +52,19 @@ updates(CancelOrder, Order)
 
 ## Validation
 
+<!-- stage-spec: review data-touchpoints -->
 ```sh
 rdra-ish check src/
-rdra-ish lint src/ --format table
-rdra-ish list src/ --kind entity --format table
 rdra-ish csv src/ --kind matrix
 rdra-ish diagram src/ --kind er --format mermaid --buc BucOrder
+```
+<!-- /stage-spec -->
+
+Also run:
+
+```sh
+rdra-ish lint src/ --format table
+rdra-ish list src/ --kind entity --format table
 ```
 
 ## Achievement Conditions

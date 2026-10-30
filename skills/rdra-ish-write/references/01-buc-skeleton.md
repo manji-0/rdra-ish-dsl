@@ -10,10 +10,15 @@ APIs, or lifecycle internals.
 
 ## Ask For
 
-- Who initiates, performs, supports, or receives value from this BUC?
+<!-- stage-spec: asks skeleton -->
+- Who initiates or receives value from this BUC?
 - What user-visible actions compose the BUC?
+- Are any use cases triggered by a system event rather than a human actor?
+<!-- /stage-spec -->
+
+Also ask:
+
 - Does the business order, branch, exception, or loop need to be reviewed explicitly?
-- Are any actions triggered by a system event rather than a human actor?
 - Are there known preconditions, guards, postconditions, business errors,
   alternative flows, or compensations for a use case?
 - Which actions are intentionally out of scope for this BUC?
@@ -63,12 +68,19 @@ covers(SubmitOrder, PlaceOrder)
 
 ## Validation
 
+<!-- stage-spec: review skeleton -->
 ```sh
 rdra-ish check src/
+rdra-ish diagram src/ --kind rdra --format mermaid --buc BucOrder
+```
+<!-- /stage-spec -->
+
+Also run:
+
+```sh
 rdra-ish lint src/ --format table
 rdra-ish list src/ --kind flow --format table
 rdra-ish list src/ --kind step --format table
-rdra-ish diagram src/ --kind rdra --format mermaid --buc BucOrder
 ```
 
 ## Achievement Conditions
