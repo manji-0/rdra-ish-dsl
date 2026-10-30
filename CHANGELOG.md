@@ -364,7 +364,8 @@
   errors. The BUC sections of `samples/clinic-ops/design-sample.md` embed it:
   `samples/clinic-ops/out/buc/usecase_*.mmd` replace the `rdra --buc` artifacts
   `out/buc/object_graph_*.mmd`, and ec-site gains `out/usecase_buc_*.mmd` and
-  `out/usecase_capture.mmd`.
+  `out/usecase_capture.mmd`. The error for the removed `--kind sequence` now names
+  `--kind usecase` first.
 
 - Traceable verification (phase 6). Every constraint is its own named invariant, a state
   of a state model with no reachability witness and an instance that can never leave its

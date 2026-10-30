@@ -73,7 +73,7 @@ const REMOVED_DIAGRAM_KINDS: &[(&str, &str)] = &[
     ),
     (
         "sequence",
-        "run `check`, which prints the transaction, API, and system-boundary warnings this diagram printed; `csv --kind api-matrix` lists the entities each API writes",
+        "use `--kind usecase` for each use case's actors, screens, and the entities it reads and writes; run `check`, which prints the transaction, API, and system-boundary warnings this diagram printed; `csv --kind api-matrix` lists the entities each API writes",
     ),
     (
         "event-flow",
@@ -745,6 +745,7 @@ mod tests {
             ("boundaryless-graph", "`--kind rdra`"),
             ("business-area", "`csv --kind business-inputs`"),
             ("technical-area", "`csv --kind api-matrix`"),
+            ("sequence", "`--kind usecase`"),
             ("sequence", "`check`"),
             ("diff", "`git diff`"),
             ("event-flow", "`--kind event`"),
