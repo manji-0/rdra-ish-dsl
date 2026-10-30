@@ -86,7 +86,8 @@
         "stage": "6A",
         "stage_name": "Local guardrails",
         "validate": [
-          "rdra-ish states samples/incremental-order/step-5-lifecycle/src --buc BucStoreRestock"
+          "rdra-ish check samples/incremental-order/step-5-lifecycle/src",
+          "rdra-ish states samples/incremental-order/step-5-lifecycle/src --entity Store"
         ]
       },
       "stage": "5",

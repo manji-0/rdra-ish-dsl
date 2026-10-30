@@ -51,6 +51,7 @@ pub(super) const SCOPE: StageSpec = StageSpec {
     name: "Scope sketch",
     concern: "Biz intent",
     question: "What business area are we modeling?",
+    adds: "`business`, rough `buc`, `belongs`, candidate `actor`, optional `requirement` and `motivates`",
     asks: &[
         "Which business area or value stream is in scope?",
         "What are the candidate BUC names?",
@@ -59,10 +60,11 @@ pub(super) const SCOPE: StageSpec = StageSpec {
     review: &[
         "rdra-ish check {src}",
         "rdra-ish list {src} --kind buc --format table",
-        "rdra-ish diagram {src} --kind rdra --buc {buc}",
+        "rdra-ish diagram {src} --kind rdra --format mermaid --buc {buc}",
     ],
     requirement: Requirement::Required,
     checks: &[Check {
+        passes_when: "the BUC `belongs` to a business",
         eval: |f| {
             if f.businesses.is_empty() {
                 let id = f.buc_id();
@@ -90,6 +92,7 @@ pub(super) const SKELETON: StageSpec = StageSpec {
     name: "BUC skeleton",
     concern: "Biz value",
     question: "Who gets value from each BUC?",
+    adds: "`performs`, `contains`, rough `usecase`, `flow` / `step` when order matters",
     asks: &[
         "Who initiates or receives value from this BUC?",
         "What user-visible actions compose the BUC?",
@@ -97,11 +100,12 @@ pub(super) const SKELETON: StageSpec = StageSpec {
     ],
     review: &[
         "rdra-ish check {src}",
-        "rdra-ish diagram {src} --kind rdra --buc {buc}",
+        "rdra-ish diagram {src} --kind rdra --format mermaid --buc {buc}",
     ],
     requirement: Requirement::Required,
     checks: &[
         Check {
+            passes_when: "an actor `performs` it or one of its use cases, or an event or timer `triggers` one",
             eval: |f| {
                 if f.starters == 0 {
                     let id = f.buc_id();
@@ -118,6 +122,7 @@ pub(super) const SKELETON: StageSpec = StageSpec {
             },
         },
         Check {
+            passes_when: "it holds a use case (by `contains`, or through a flow's steps and `covers`)",
             eval: |f| {
                 if f.use_cases.is_empty() {
                     let id = f.buc_id();
@@ -148,6 +153,7 @@ pub(super) const DATA_TOUCHPOINTS: StageSpec = StageSpec {
     name: "Data touchpoints",
     concern: "Biz object touchpoints",
     question: "Which data objects does each use case touch?",
+    adds: "coarse `entity`, CRUD predicates (`creates`, `reads`, `updates`, `deletes`)",
     asks: &[
         "Which business objects are created, read, updated, or deleted by each use case?",
         "Are any entities only conceptual at this stage?",
@@ -156,10 +162,11 @@ pub(super) const DATA_TOUCHPOINTS: StageSpec = StageSpec {
     review: &[
         "rdra-ish check {src}",
         "rdra-ish csv {src} --kind matrix",
-        "rdra-ish diagram {src} --kind er --buc {buc}",
+        "rdra-ish diagram {src} --kind er --format mermaid --buc {buc}",
     ],
     requirement: Requirement::Required,
     checks: &[Check {
+        passes_when: "every use case creates, reads, updates, or deletes an entity, directly or through an API it `invokes`",
         eval: |f| {
             let gaps = f
                 .use_cases
@@ -191,6 +198,7 @@ pub(super) const INTERACTION_BOUNDARY: StageSpec = StageSpec {
     name: "Interaction boundary",
     concern: "Tech interaction boundary",
     question: "What UI/API boundary mediates the work, and with which authority/media constraints?",
+    adds: "`screen`, `displays`, `shows`, `field`, optional `api` / `invokes`, `dto`, `system`, `permission`, `medium`, `has_permission`, `requires_*`",
     asks: &[
         "Which screen or external interface does each use case expose?",
         "Does the use case write data directly, or through an API boundary?",
@@ -199,13 +207,15 @@ pub(super) const INTERACTION_BOUNDARY: StageSpec = StageSpec {
     ],
     review: &[
         "rdra-ish check {src}",
-        "rdra-ish diagram {src} --kind rdra --buc {buc}",
+        "rdra-ish diagram {src} --kind rdra --format mermaid --buc {buc}",
+        "rdra-ish list {src} --kind api --format table",
         "rdra-ish csv {src} --kind api-matrix",
         "rdra-ish csv {src} --kind screen-constraints",
         "rdra-ish csv {src} --kind actor-permission-audit",
     ],
     requirement: Requirement::Required,
     checks: &[Check {
+        passes_when: "every use case `displays` a screen or `invokes` an API, or an event or timer `triggers` it",
         eval: |f| {
             let gaps = f
                 .use_cases
@@ -237,6 +247,7 @@ pub(super) const ENTITY_STRUCTURE: StageSpec = StageSpec {
     name: "Entity structure",
     concern: "Tech data design",
     question: "What structure and ownership does the data need?",
+    adds: "columns, `@pk`, `variation`, `relate`, cardinality, optional `owns` / `coordinates`",
     asks: &[
         "What fields identify each entity?",
         "Which fields are business state, and which are ordinary data?",
@@ -245,10 +256,12 @@ pub(super) const ENTITY_STRUCTURE: StageSpec = StageSpec {
     ],
     review: &[
         "rdra-ish check {src}",
-        "rdra-ish diagram {src} --kind er --buc {buc}",
+        "rdra-ish diagram {src} --kind er --format mermaid --buc {buc}",
     ],
     requirement: Requirement::Required,
     checks: &[Check {
+        passes_when:
+            "every entity of stage 2 has a column that is neither a primary key nor a foreign key",
         eval: |f| {
             let gaps = f
                 .entities
@@ -284,20 +297,23 @@ pub(super) const LIFECYCLE: StageSpec = StageSpec {
     name: "Lifecycle",
     concern: "Tech lifecycle design",
     question: "Which states and event-triggered BUC entries are reachable through the BUCs?",
+    adds: "`Enum`, `Bool`, `@null`, `event`, `transitions`, `raises`, `triggers`, `timer`, `sets`, `condition`",
     asks: &[
         "Which Enum column and variants represent lifecycle state?",
         "Which use case causes each state change?",
         "Does any event start another BUC, and is the concrete entry use case known yet?",
         "Which nullable or boolean fields change together with the lifecycle?",
+        "Are the Enum variants the states you want to see? Diagrams derive one state per variant.",
     ],
     review: &[
         "rdra-ish check {src}",
-        "rdra-ish states {src} --buc {buc}",
-        "rdra-ish diagram {src} --kind state --buc {buc}",
-        "rdra-ish diagram {src} --kind event",
+        "rdra-ish states {src} --entity {entity}",
+        "rdra-ish diagram {src} --kind state --format mermaid --buc {buc}",
+        "rdra-ish diagram {src} --kind event --format mermaid",
     ],
     requirement: Requirement::Required,
     checks: &[Check {
+        passes_when: "a use case moves an entity with `transitions` or `sets`",
         eval: |f| {
             if !f.moved.is_empty() {
                 return Ok(());
@@ -471,13 +487,17 @@ impl RuleTier {
     }
 }
 
-const RULES_REVIEW: &[&str] = &["rdra-ish states {src} --buc {buc}"];
+const RULES_REVIEW: &[&str] = &[
+    "rdra-ish check {src}",
+    "rdra-ish states {src} --entity {entity}",
+];
 
 pub(super) const LOCAL_GUARDRAILS: StageSpec = StageSpec {
     id: StageId::LocalGuardrails,
     name: "Local guardrails",
     concern: "Tech-enforced rules",
     question: "Which simple states or facts must never co-occur?",
+    adds: "`forbidden`, `exclusive` over Enum / Bool / nullable axes",
     asks: &[
         "Which combinations must never be reachable?",
         "Which facts must be mutually exclusive?",
@@ -486,6 +506,7 @@ pub(super) const LOCAL_GUARDRAILS: StageSpec = StageSpec {
     review: RULES_REVIEW,
     requirement: Requirement::Required,
     checks: &[Check {
+        passes_when: "a `forbidden` or `exclusive` names an entity of stage 5",
         eval: |f| RuleTier::Guardrail.check(f),
     }],
     evidence: |f| RuleTier::Guardrail.evidence(f),
@@ -496,6 +517,7 @@ pub(super) const LOCAL_OBLIGATIONS: StageSpec = StageSpec {
     name: "Local obligations",
     concern: "Tech-enforced rules",
     question: "Which reachable states imply or require other facts?",
+    adds: "`invariant`, narrow `required`",
     asks: &[
         "Which values must co-occur once a condition is true?",
         "Which facts must be true in every reachable state?",
@@ -504,6 +526,7 @@ pub(super) const LOCAL_OBLIGATIONS: StageSpec = StageSpec {
     review: RULES_REVIEW,
     requirement: Requirement::Required,
     checks: &[Check {
+        passes_when: "an `invariant` or `required` names an entity of stage 5",
         eval: |f| RuleTier::Obligation.check(f),
     }],
     evidence: |f| RuleTier::Obligation.evidence(f),
@@ -514,6 +537,7 @@ pub(super) const ADVANCED_RULES: StageSpec = StageSpec {
     name: "Advanced rules",
     concern: "Tech-enforced rules",
     question: "Which comparison or cross-entity facts are reviewable from the abstract state space?",
+    adds: "comparison propositions, multi-entity `forbidden` / `invariant`",
     asks: &[
         "Which comparisons matter, and which use cases move the numeric or date values they read?",
         "Which rules really mention more than one entity?",
@@ -522,6 +546,7 @@ pub(super) const ADVANCED_RULES: StageSpec = StageSpec {
     review: RULES_REVIEW,
     requirement: Requirement::Required,
     checks: &[Check {
+        passes_when: "a rule on an entity of stage 5 holds a comparison or names more than one entity",
         eval: |f| RuleTier::Advanced.check(f),
     }],
     evidence: |f| RuleTier::Advanced.evidence(f),

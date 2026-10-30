@@ -19,18 +19,24 @@ stage files of skill `rdra-ish-write` (`../rdra-ish-write/references/00-scope.md
 
 ### Stage gate
 
-Before writing, classify the available information:
+Before writing, classify the available information. When the BUC file already exists,
+run `rdra-ish next src/ --buc <BucId> --format json` and work from its `next.asks` and
+`next.gaps`. Otherwise classify the requirement by the main question it answers, create
+the Add column of that stage, and ask for the next stage's before adding it:
 
-| If the user provided... | Concern | Create now | Ask before adding... |
-|-------------------------|---------|------------|----------------------|
-| BUC name, business goal, source requirement | Biz intent | `buc`, `belongs`, optional `requirement` metadata and `motivates` | actors and use cases |
-| actors, actions, and order | Biz value | `usecase`, `contains`, `performs`; add `flow`/`step` when order matters | entities and CRUD |
-| touched business objects | Biz object touchpoints | coarse `entity`, CRUD predicates | screens and APIs |
-| screens/API boundaries | Tech interaction boundary | `screen`, `field`, `api`, `dto`, `system`, `medium`, `permission`, `displays`, `shows`, `maps_field`, `invokes`, API contracts, access constraints | columns, relationships, cross-system coordination |
-| fields and relationships | Tech data design | columns, `variation`s, indexes/checks, `relate`, optional `owns` | lifecycle |
-| which use case moves which state, events between use cases, schedules | Tech lifecycle design | `transitions`, `sets`, `event`, `raises`, `triggers`, `timer`, `condition` | local guardrails first |
-| invalid or mutually exclusive states | Tech-enforced rules | `forbidden`, `exclusive` | obligations and cross-entity rules |
-| conditional/global/cross-entity rules, NFRs, decisions | Tech-enforced rules | `invariant`, narrow `required`, multi-entity `forbidden` / `invariant`, optional `when`/`property`/`after.assert`, `nfr`, `constraint`, `adr` links | none; validate with `check`, and `verify` when needed |
+<!-- stage-spec: skill-table -->
+| Stage | Concern | Main question | Add |
+|---|---|---|---|
+| 0 Scope sketch | Biz intent | What business area are we modeling? | `business`, rough `buc`, `belongs`, candidate `actor`, optional `requirement` and `motivates` |
+| 1 BUC skeleton | Biz value | Who gets value from each BUC? | `performs`, `contains`, rough `usecase`, `flow` / `step` when order matters |
+| 2 Data touchpoints | Biz object touchpoints | Which data objects does each use case touch? | coarse `entity`, CRUD predicates (`creates`, `reads`, `updates`, `deletes`) |
+| 3 Interaction boundary | Tech interaction boundary | What UI/API boundary mediates the work, and with which authority/media constraints? | `screen`, `displays`, `shows`, `field`, optional `api` / `invokes`, `dto`, `system`, `permission`, `medium`, `has_permission`, `requires_*` |
+| 4 Entity structure | Tech data design | What structure and ownership does the data need? | columns, `@pk`, `variation`, `relate`, cardinality, optional `owns` / `coordinates` |
+| 5 Lifecycle | Tech lifecycle design | Which states and event-triggered BUC entries are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `transitions`, `raises`, `triggers`, `timer`, `sets`, `condition` |
+| 6A Local guardrails | Tech-enforced rules | Which simple states or facts must never co-occur? | `forbidden`, `exclusive` over Enum / Bool / nullable axes |
+| 6B Local obligations | Tech-enforced rules | Which reachable states imply or require other facts? | `invariant`, narrow `required` |
+| 6C Advanced rules | Tech-enforced rules | Which comparison or cross-entity facts are reviewable from the abstract state space? | comparison propositions, multi-entity `forbidden` / `invariant` |
+<!-- /stage-spec -->
 
 Ask only the questions needed to advance one row.
 

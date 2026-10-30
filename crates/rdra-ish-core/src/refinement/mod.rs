@@ -5,6 +5,8 @@
 //! is the only place the stage order lives; numbers and doc anchors derive from it. A verdict
 //! is derived from the checks and never stored, so nothing can disagree with the gaps.
 
+#[cfg(test)]
+mod docs;
 mod facts;
 mod order;
 mod stages;
@@ -60,10 +62,13 @@ pub struct StageSpec {
     pub concern: &'static str,
     /// The main question of the stage, as the Stage Map words it.
     pub question: &'static str,
+    /// The Stage Map's Add column: the DSL the stage adds.
+    pub adds: &'static str,
     /// The questions to ask the user before adding the stage.
     pub asks: &'static [&'static str],
     /// The commands that review the stage once it is added. `{src}` stands for the model
-    /// inputs and `{buc}` for the BUC id.
+    /// inputs, `{buc}` for the BUC id, and `{entity}` for one entity the BUC moves: a
+    /// template with `{entity}` is repeated per entity.
     pub review: &'static [&'static str],
     pub requirement: Requirement,
     pub(crate) checks: &'static [Check],
@@ -72,11 +77,28 @@ pub struct StageSpec {
 }
 
 impl StageSpec {
-    /// `review` with the placeholders filled.
-    pub fn review_commands(&self, src: &str, buc: &str) -> Vec<String> {
+    /// The clauses of the gate, as the gate table of `docs/cli-reference.md#next` prints
+    /// them.
+    pub fn passes_when(&self) -> Vec<&'static str> {
+        self.checks.iter().map(|check| check.passes_when).collect()
+    }
+
+    /// `review` with the placeholders filled: one command per template, and one per entity
+    /// for a template with `{entity}`.
+    pub fn review_commands(&self, src: &str, buc: &str, entities: &[&str]) -> Vec<String> {
         self.review
             .iter()
-            .map(|command| command.replace("{src}", src).replace("{buc}", buc))
+            .flat_map(|template| {
+                let filled = template.replace("{src}", src).replace("{buc}", buc);
+                if template.contains("{entity}") {
+                    entities
+                        .iter()
+                        .map(|entity| filled.replace("{entity}", entity))
+                        .collect()
+                } else {
+                    vec![filled]
+                }
+            })
             .collect()
     }
 }
@@ -92,6 +114,8 @@ pub enum Requirement {
 /// One clause of a gate. A check reads only `BucFacts`, never another stage's verdict, so
 /// a gate means the same thing in any order.
 pub(crate) struct Check {
+    /// The clause as the gate table of `docs/cli-reference.md#next` prints it.
+    pub passes_when: &'static str,
     /// `Ok` when the clause passes; `Err` names the elements that fail it. A clause over an
     /// empty set (no use case yet, no touched entity yet) fails with no element to name, so
     /// a stage is not ticked on the strength of nothing to check.
@@ -202,6 +226,8 @@ impl StageView {
 pub struct BucStanding {
     pub id: String,
     pub label: String,
+    /// Ids of the entities some use case of the BUC moves, for the `{entity}` review commands.
+    pub moved: Vec<String>,
     pub stages: Vec<StageView>,
 }
 
@@ -265,6 +291,11 @@ pub fn assess(model: &SemanticModel) -> Assessment {
                 BucStanding {
                     id: buc.id.clone(),
                     label: buc.label.clone(),
+                    moved: facts
+                        .moved
+                        .iter()
+                        .map(|&entity| facts.entity_id(entity).to_string())
+                        .collect(),
                     stages: stages().map(|id| StageView::evaluate(id, &facts)).collect(),
                 }
             })

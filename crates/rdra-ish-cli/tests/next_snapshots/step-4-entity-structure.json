@@ -73,7 +73,8 @@
           "Which Enum column and variants represent lifecycle state?",
           "Which use case causes each state change?",
           "Does any event start another BUC, and is the concrete entry use case known yet?",
-          "Which nullable or boolean fields change together with the lifecycle?"
+          "Which nullable or boolean fields change together with the lifecycle?",
+          "Are the Enum variants the states you want to see? Diagrams derive one state per variant."
         ],
         "doc": "docs/incremental-modeling.md#stage-5-lifecycle",
         "gaps": [
@@ -88,9 +89,8 @@
         "stage_name": "Lifecycle",
         "validate": [
           "rdra-ish check samples/incremental-order/step-4-entity-structure/src",
-          "rdra-ish states samples/incremental-order/step-4-entity-structure/src --buc BucStoreRestock",
-          "rdra-ish diagram samples/incremental-order/step-4-entity-structure/src --kind state --buc BucStoreRestock",
-          "rdra-ish diagram samples/incremental-order/step-4-entity-structure/src --kind event"
+          "rdra-ish diagram samples/incremental-order/step-4-entity-structure/src --kind state --format mermaid --buc BucStoreRestock",
+          "rdra-ish diagram samples/incremental-order/step-4-entity-structure/src --kind event --format mermaid"
         ]
       },
       "stage": "4",

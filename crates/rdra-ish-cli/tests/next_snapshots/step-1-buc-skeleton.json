@@ -93,7 +93,7 @@
         "validate": [
           "rdra-ish check samples/incremental-order/step-1-buc-skeleton/src",
           "rdra-ish csv samples/incremental-order/step-1-buc-skeleton/src --kind matrix",
-          "rdra-ish diagram samples/incremental-order/step-1-buc-skeleton/src --kind er --buc BucStoreRestock"
+          "rdra-ish diagram samples/incremental-order/step-1-buc-skeleton/src --kind er --format mermaid --buc BucStoreRestock"
         ]
       },
       "stage": "1",

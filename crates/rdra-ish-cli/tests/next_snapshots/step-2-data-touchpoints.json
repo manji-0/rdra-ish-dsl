@@ -93,7 +93,8 @@
         "stage_name": "Interaction boundary",
         "validate": [
           "rdra-ish check samples/incremental-order/step-2-data-touchpoints/src",
-          "rdra-ish diagram samples/incremental-order/step-2-data-touchpoints/src --kind rdra --buc BucStoreRestock",
+          "rdra-ish diagram samples/incremental-order/step-2-data-touchpoints/src --kind rdra --format mermaid --buc BucStoreRestock",
+          "rdra-ish list samples/incremental-order/step-2-data-touchpoints/src --kind api --format table",
           "rdra-ish csv samples/incremental-order/step-2-data-touchpoints/src --kind api-matrix",
           "rdra-ish csv samples/incremental-order/step-2-data-touchpoints/src --kind screen-constraints",
           "rdra-ish csv samples/incremental-order/step-2-data-touchpoints/src --kind actor-permission-audit"

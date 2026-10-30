@@ -48,7 +48,7 @@ fn render_text(standings: &[BucStanding], src: &str) -> String {
     let mut out = String::new();
     if standings.is_empty() {
         let _ = writeln!(out, "No BUC yet: the model is before stage 0.\n");
-        write_stage(&mut out, StageId::Scope, src, "<Buc>", |out| {
+        write_stage(&mut out, StageId::Scope, src, "<Buc>", &[], |out| {
             let _ = writeln!(
                 out,
                 "  Gaps:\n    - add a `business` and a `buc`, and `belongs(Buc, Business)`"
@@ -103,7 +103,10 @@ fn render_text(standings: &[BucStanding], src: &str) -> String {
         out.push('\n');
         match p.next() {
             Next::Required(view) => {
-                write_stage(&mut out, view.id, src, &p.id, |out| write_gaps(out, view));
+                let moved: Vec<&str> = p.moved.iter().map(String::as_str).collect();
+                write_stage(&mut out, view.id, src, &p.id, &moved, |out| {
+                    write_gaps(out, view)
+                });
             }
             Next::Optional(_) => {
                 let _ = writeln!(
@@ -124,6 +127,7 @@ fn write_stage(
     stage: StageId,
     src: &str,
     buc: &str,
+    entities: &[&str],
     gaps: impl FnOnce(&mut String),
 ) {
     let spec = stage.spec();
@@ -140,7 +144,7 @@ fn write_stage(
         let _ = writeln!(out, "    - {ask}");
     }
     let _ = writeln!(out, "  Then review with:");
-    for command in spec.review_commands(src, buc) {
+    for command in spec.review_commands(src, buc, entities) {
         let _ = writeln!(out, "    {command}");
     }
     let _ = writeln!(
@@ -178,6 +182,7 @@ fn render_json(standings: &[BucStanding], src: &str) -> Value {
         .iter()
         .map(|p| {
             let reached = p.reached();
+            let moved: Vec<&str> = p.moved.iter().map(String::as_str).collect();
             let next = match p.next() {
                 Next::Required(view) => {
                     let spec = view.spec();
@@ -187,7 +192,7 @@ fn render_json(standings: &[BucStanding], src: &str) -> Value {
                         "question": spec.question,
                         "doc": format!("docs/incremental-modeling.md#{}", view.id.doc_anchor()),
                         "asks": spec.asks,
-                        "validate": spec.review_commands(src, &p.id),
+                        "validate": spec.review_commands(src, &p.id, &moved),
                         "gaps": view.gaps.iter().map(|gap| json!({
                             "kind": gap.subject_kind.as_str(),
                             "id": gap.subject_id,

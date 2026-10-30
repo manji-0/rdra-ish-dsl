@@ -857,3 +857,18 @@ fn usecase_scope_errors_say_what_to_pass() {
         assert_eq!(error.to_string(), message);
     }
 }
+
+#[test]
+fn every_stage_review_command_parses() {
+    use crate::cli::Cli;
+    use clap::Parser;
+    use rdra_ish_core::refinement::{spec, stages};
+
+    for id in stages() {
+        for command in spec(id).review_commands("src", "BucOrder", &["Order"]) {
+            let argv: Vec<&str> = command.split(' ').collect();
+            Cli::try_parse_from(&argv)
+                .unwrap_or_else(|e| panic!("{}: `{command}`: {e}", id.slug()));
+        }
+    }
+}

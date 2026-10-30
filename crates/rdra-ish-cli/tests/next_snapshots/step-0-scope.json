@@ -92,7 +92,7 @@
         "stage_name": "BUC skeleton",
         "validate": [
           "rdra-ish check samples/incremental-order/step-0-scope/src",
-          "rdra-ish diagram samples/incremental-order/step-0-scope/src --kind rdra --buc BucStoreRestock"
+          "rdra-ish diagram samples/incremental-order/step-0-scope/src --kind rdra --format mermaid --buc BucStoreRestock"
         ]
       },
       "stage": "0",
