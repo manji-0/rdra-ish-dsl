@@ -1,14 +1,13 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use rdra_ish_core::{analyze_workspace, Diagnostic, WorkspaceAnalysis};
+use rdra_ish_core::{analyze_project, load_project, Diagnostic, ProjectError, WorkspaceAnalysis};
 use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
 use url::Url;
-use walkdir::WalkDir;
 
 use crate::code_actions::code_actions;
 use crate::code_lens::code_lenses;
@@ -47,24 +46,33 @@ impl Backend {
 
     async fn refresh_analysis(&self) {
         let state = self.state.read().await;
-        let mut entry_paths: HashSet<PathBuf> = discover_rdra_files(&state.workspace_roots)
-            .into_iter()
+        let mut inputs: Vec<PathBuf> = state
+            .workspace_roots
+            .iter()
+            .filter(|root| root.is_dir() || (root.is_file() && has_rdra_extension(root)))
+            .cloned()
+            .chain(
+                state
+                    .documents
+                    .keys()
+                    .filter(|path| has_rdra_extension(path))
+                    .cloned(),
+            )
             .collect();
-        for path in state.documents.keys() {
-            if path.extension().is_some_and(|ext| ext == "rdra") {
-                entry_paths.insert(path.clone());
-            }
-        }
-        if entry_paths.is_empty() {
-            return;
-        }
-
-        let include_paths = include_paths_for(&state.documents, &state.workspace_roots);
+        inputs.sort();
+        inputs.dedup();
         let overlays = state.documents.clone();
-        let entry_paths: Vec<PathBuf> = entry_paths.into_iter().collect();
         drop(state);
 
-        let analysis = analyze_workspace(&entry_paths, &include_paths, &overlays);
+        let project = match load_project(&inputs, Some(&overlays)) {
+            Ok(project) => project,
+            Err(ProjectError::NoRdraFiles) => return,
+            Err(err) => {
+                self.client.log_message(MessageType::ERROR, err).await;
+                return;
+            }
+        };
+        let analysis = analyze_project(project);
         self.publish_diagnostics(&analysis).await;
 
         let mut state = self.state.write().await;
@@ -640,33 +648,8 @@ fn to_lsp_diagnostic(diag: &Diagnostic, source: &str) -> tower_lsp::lsp_types::D
     }
 }
 
-fn discover_rdra_files(roots: &[PathBuf]) -> Vec<PathBuf> {
-    let mut files = Vec::new();
-    for root in roots {
-        if root.is_file() {
-            if root.extension().is_some_and(|ext| ext == "rdra") {
-                files.push(root.clone());
-            }
-            continue;
-        }
-        if !root.is_dir() {
-            continue;
-        }
-        for entry in WalkDir::new(root)
-            .sort_by_file_name()
-            .into_iter()
-            .filter_map(|entry| entry.ok())
-        {
-            if entry.file_type().is_file()
-                && entry.path().extension().is_some_and(|ext| ext == "rdra")
-            {
-                files.push(entry.path().to_path_buf());
-            }
-        }
-    }
-    files.sort();
-    files.dedup();
-    files
+fn has_rdra_extension(path: &std::path::Path) -> bool {
+    path.extension().is_some_and(|ext| ext == "rdra")
 }
 
 fn workspace_roots(params: &InitializeParams) -> Vec<PathBuf> {
@@ -683,32 +666,6 @@ fn workspace_roots(params: &InitializeParams) -> Vec<PathBuf> {
                 .and_then(|uri| uri_to_path(uri).ok()),
         )
         .collect()
-}
-
-fn include_paths_for(documents: &HashMap<PathBuf, String>, roots: &[PathBuf]) -> Vec<PathBuf> {
-    let mut seen = HashSet::new();
-    let mut paths = Vec::new();
-
-    for root in roots {
-        if seen.insert(root.clone()) {
-            paths.push(root.clone());
-        }
-    }
-
-    for path in documents.keys() {
-        if let Some(parent) = path.parent() {
-            if seen.insert(parent.to_path_buf()) {
-                paths.push(parent.to_path_buf());
-            }
-            if let Some(grandparent) = parent.parent() {
-                if seen.insert(grandparent.to_path_buf()) {
-                    paths.push(grandparent.to_path_buf());
-                }
-            }
-        }
-    }
-
-    paths
 }
 
 fn uri_to_path(uri: &Url) -> std::io::Result<PathBuf> {
