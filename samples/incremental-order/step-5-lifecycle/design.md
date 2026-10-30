@@ -48,53 +48,74 @@ rdra-ish diagram samples/incremental-order/step-5-lifecycle/src --kind rdra --fo
 ```
 
 ```mermaid
+%% rdra-ish diagram=rdra scope=buc:BucStoreRestock model=samples/incremental-order/step-5-lifecycle/src
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor business buc medium permission usecase screen api entity state
+%% omitted: (none)
 flowchart LR
-  subgraph layer_value[System Value]
-    direction TB
-    OpsStaff(["👤 Operations Staff"])
+  subgraph layer_value["システム価値"]
+    actor__OpsStaff["Operations Staff"]:::actor
   end
-  subgraph layer_environment[External Environment]
-    direction TB
-    StoreOperations["💼 Store Operations"]
-    BucStoreRestock["📦 Maintain Store Restock"]
+  subgraph layer_environment["システム外部環境"]
+    business__StoreOperations["Store Operations"]:::business
+    %% desc business__StoreOperations: Store operations owns restock planning and store master maintenance.
+    buc__BucStoreRestock["Maintain Store Restock"]:::buc
+    %% desc buc__BucStoreRestock: Keep restock dates and store organization assignments operationally correct.
+    medium__OpsConsole["Operations Console"]:::medium
+    permission__StoreMaintenanceWrite["Store Maintenance Write"]:::permission
   end
-  subgraph layer_boundary[System Boundary]
-    direction TB
-    BlockScheduledRestock(["✅ Block Scheduled Restock"])
-    ChangeNextRestockDate(["✅ Change Next Restock Date"])
-    ChangeStoreParentOrganization(["✅ Change Store Parent Organization"])
-    StoreMaintenanceScreen[["🖥️ Store Maintenance"]]
-    RestockBlocked{"⚡ Restock Blocked"}
-    RestockScheduled{"⚡ Restock Scheduled"}
+  subgraph layer_boundary["システム境界"]
+    usecase__BlockScheduledRestock["Block Scheduled Restock"]:::usecase
+    usecase__ChangeNextRestockDate["Change Next Restock Date"]:::usecase
+    usecase__ChangeStoreParentOrganization["Change Store Parent Organization"]:::usecase
+    screen__StoreMaintenanceScreen["Store Maintenance"]:::screen
   end
-  subgraph layer_system[System]
-    direction TB
-    OrganizationLookupApi["🔌 Organization Lookup API"]
-    StoreAdminApi["🔌 Store Admin API"]
-    Organization[("🗄️ Organization")]
-    Store[("🗄️ Store")]
+  subgraph layer_system["システム"]
+    api__OrganizationLookupApi["Organization Lookup API"]:::api
+    api__StoreAdminApi["Store Admin API"]:::api
+    entity__Organization["Organization"]:::entity
+    entity__Store["Store"]:::entity
+    state__Store_blocked["blocked"]:::state
+    state__Store_normal["normal"]:::state
+    state__Store_scheduled["scheduled"]:::state
   end
-  OpsStaff -->|performs| BucStoreRestock
-  StoreAdminApi -.->|updates| Store
-  OrganizationLookupApi -.->|reads| Organization
-  BucStoreRestock -.->|belongs| StoreOperations
-  BucStoreRestock -->|contains| ChangeNextRestockDate
-  BucStoreRestock -->|contains| ChangeStoreParentOrganization
-  BucStoreRestock -->|contains| BlockScheduledRestock
-  Store ---|N:1| Organization
-  StoreMaintenanceScreen -.->|shows| Store
-  StoreMaintenanceScreen -.->|shows| Store
-  StoreMaintenanceScreen -.->|shows| Store
-  StoreMaintenanceScreen -.->|shows| Organization
-  ChangeNextRestockDate -.->|displays| StoreMaintenanceScreen
-  ChangeNextRestockDate -.->|raises| RestockScheduled
-  ChangeNextRestockDate -.->|updates| Store
-  ChangeStoreParentOrganization -.->|displays| StoreMaintenanceScreen
-  ChangeStoreParentOrganization -.->|invokes| StoreAdminApi
-  ChangeStoreParentOrganization -.->|invokes| OrganizationLookupApi
-  BlockScheduledRestock -.->|displays| StoreMaintenanceScreen
-  BlockScheduledRestock -.->|raises| RestockBlocked
-  BlockScheduledRestock -.->|updates| Store
+  actor__OpsStaff -.->|has_permission| permission__StoreMaintenanceWrite
+  actor__OpsStaff -.->|performs| buc__BucStoreRestock
+  api__OrganizationLookupApi -.->|reads| entity__Organization
+  api__StoreAdminApi -.->|requires_permission| permission__StoreMaintenanceWrite
+  api__StoreAdminApi -.->|updates| entity__Store
+  buc__BucStoreRestock -->|belongs| business__StoreOperations
+  buc__BucStoreRestock -->|contains| usecase__BlockScheduledRestock
+  buc__BucStoreRestock -->|contains| usecase__ChangeNextRestockDate
+  buc__BucStoreRestock -->|contains| usecase__ChangeStoreParentOrganization
+  entity__Store ---|N:1| entity__Organization
+  screen__StoreMaintenanceScreen -.->|shows| entity__Organization
+  screen__StoreMaintenanceScreen -.->|shows| entity__Store
+  usecase__BlockScheduledRestock -.->|displays| screen__StoreMaintenanceScreen
+  usecase__BlockScheduledRestock -.->|requires_medium| medium__OpsConsole
+  usecase__BlockScheduledRestock -.->|requires_permission| permission__StoreMaintenanceWrite
+  usecase__BlockScheduledRestock -.->|transitions Store.restock_status scheduled->blocked| state__Store_blocked
+  usecase__BlockScheduledRestock -.->|updates| entity__Store
+  usecase__ChangeNextRestockDate -.->|displays| screen__StoreMaintenanceScreen
+  usecase__ChangeNextRestockDate -.->|requires_medium| medium__OpsConsole
+  usecase__ChangeNextRestockDate -.->|requires_permission| permission__StoreMaintenanceWrite
+  usecase__ChangeNextRestockDate -.->|transitions Store.restock_status normal->scheduled| state__Store_scheduled
+  usecase__ChangeNextRestockDate -.->|updates| entity__Store
+  usecase__ChangeStoreParentOrganization -.->|displays| screen__StoreMaintenanceScreen
+  usecase__ChangeStoreParentOrganization -.->|invokes| api__OrganizationLookupApi
+  usecase__ChangeStoreParentOrganization -.->|invokes| api__StoreAdminApi
+  usecase__ChangeStoreParentOrganization -.->|requires_medium| medium__OpsConsole
+  usecase__ChangeStoreParentOrganization -.->|requires_permission| permission__StoreMaintenanceWrite
+  classDef actor stroke:#333;
+  classDef business stroke:#333;
+  classDef buc stroke:#333;
+  classDef medium stroke:#333;
+  classDef permission stroke:#333;
+  classDef usecase stroke:#333;
+  classDef screen stroke:#333;
+  classDef api stroke:#333;
+  classDef entity stroke:#333;
+  classDef state stroke:#333;
 ```
 
 ### 4.2 Sequence 図
@@ -181,13 +202,19 @@ rdra-ish diagram samples/incremental-order/step-5-lifecycle/src --kind state --f
 ```
 
 ```mermaid
+%% rdra-ish diagram=state scope=whole model=samples/incremental-order/step-5-lifecycle/src
+%% kinds: statemodel state usecase
+%% omitted: (none)
 stateDiagram-v2
-  [*] --> Normal
-  state "🔄 Normal" as Normal
-  state "🔄 Scheduled" as Scheduled
-  state "🔄 Blocked" as Blocked
-  Normal --> Scheduled : ⚡ Restock Scheduled
-  Scheduled --> Blocked : ⚡ Restock Blocked
+  state "Store.restock_status" as statemodel__Store_restock_status {
+    [*] --> state__Store_normal
+    state "normal" as state__Store_normal
+    state "scheduled" as state__Store_scheduled
+    state "blocked" as state__Store_blocked
+    state__Store_normal --> state__Store_scheduled : usecase__ChangeNextRestockDate
+    state__Store_scheduled --> state__Store_blocked : usecase__BlockScheduledRestock
+    state__Store_blocked --> [*]
+  }
 ```
 
 ### 4.5 Usecase CRUD matrix

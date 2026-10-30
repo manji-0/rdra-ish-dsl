@@ -44,22 +44,20 @@ rdra-ish diagram samples/incremental-order/step-0-scope/src --kind rdra --format
 ```
 
 ```mermaid
+%% rdra-ish diagram=rdra scope=buc:BucStoreRestock model=samples/incremental-order/step-0-scope/src
+%% layers: environment=システム外部環境
+%% kinds: business buc
+%% omitted: (none)
 flowchart LR
-  subgraph layer_value[System Value]
-    direction TB
+  subgraph layer_environment["システム外部環境"]
+    business__StoreOperations["Store Operations"]:::business
+    %% desc business__StoreOperations: Store operations owns restock planning and store master maintenance.
+    buc__BucStoreRestock["Maintain Store Restock"]:::buc
+    %% desc buc__BucStoreRestock: Keep restock dates and store organization assignments operationally correct.
   end
-  subgraph layer_environment[External Environment]
-    direction TB
-    StoreOperations["💼 Store Operations"]
-    BucStoreRestock["📦 Maintain Store Restock"]
-  end
-  subgraph layer_boundary[System Boundary]
-    direction TB
-  end
-  subgraph layer_system[System]
-    direction TB
-  end
-  BucStoreRestock -.->|belongs| StoreOperations
+  buc__BucStoreRestock -->|belongs| business__StoreOperations
+  classDef business stroke:#333;
+  classDef buc stroke:#333;
 ```
 
 ## 5. レビュー観点
