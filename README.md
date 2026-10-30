@@ -126,6 +126,11 @@ nix build            # builds the rdra-ish CLI into ./result
 
 CI runs every step inside the same `nix develop` shell.
 
+The files in `samples/formal-verification/` are symlinks into
+`skills/rdra-ish-verify/samples/`. On Windows, clone with
+`git clone -c core.symlinks=true` (Developer Mode or an elevated shell), or Git writes
+each one as a text file that holds the link target.
+
 ## Publish (maintainers)
 
 ```sh
