@@ -493,7 +493,7 @@ pub enum RdraError {
         ext: String,
     },
 
-    #[error("UnknownForeignName: '{qualifier}' publishes no '{name}'\n  hint: the closest published names are {closest}")]
+    #[error("UnknownForeignName: '{qualifier}' publishes no '{name}'\n  hint: closest published names: {closest}")]
     UnknownForeignName {
         qualifier: String,
         name: String,

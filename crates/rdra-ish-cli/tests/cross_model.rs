@@ -231,7 +231,7 @@ fn check_on_the_product_mistakes_names_each_mistake_at_its_line() {
     assert_eq!(output.status.code(), Some(1));
     let expected = [
         ("error", "mistakes.rdra:4:1: ForeignImport: module 'auth.session' belongs to dependency 'auth'", "extsystem X \"...\" from auth.<System>"),
-        ("error", "mistakes.rdra:26:27: UnknownForeignName: 'Auth' publishes no 'Logon'", "closest published names are `Login`"),
+        ("error", "mistakes.rdra:26:27: UnknownForeignName: 'Auth' publishes no 'Logon'", "closest published names: `Login`"),
         ("error", "mistakes.rdra:28:19: NotExposed: 'Auth.Session' is auth's internal entity 'Session'", "read `Auth.SessionView`"),
         ("error", "mistakes.rdra:29:21: ForeignWrite: `updates` on 'Auth.SessionView' writes another model's data", "`invokes(<UseCase>, Auth.Login)`"),
         ("error", "mistakes.rdra:30:23: ForeignContained: 'Auth.Login' is a use case of external system 'Auth'", "invokes(<UseCase>, Auth.Login)"),
@@ -352,7 +352,7 @@ fn a_second_binding_of_one_system_and_a_binding_of_a_transitive_dependency_are_r
         "{stderr}"
     );
     assert!(
-        stderr.contains("closest published names are `PaymentSystem`"),
+        stderr.contains("closest published names: `PaymentSystem`"),
         "{stderr}"
     );
     assert!(stderr.contains("UnknownDependency: 'idp' is not a [dependencies] entry of the manifest (auth, payments)"), "{stderr}");

@@ -516,7 +516,7 @@ fn closest<'a>(name: &str, candidates: impl Iterator<Item = &'a str>) -> String 
         .map(|(_, c)| format!("`{c}`"))
         .collect();
     if names.is_empty() {
-        "nothing is published".to_string()
+        "none".to_string()
     } else {
         names.join(", ")
     }
@@ -734,6 +734,6 @@ mod tests {
             ),
             "`Login`, `CanLogin`, `Revoke`"
         );
-        assert_eq!(closest("X", std::iter::empty()), "nothing is published");
+        assert_eq!(closest("X", std::iter::empty()), "none");
     }
 }
