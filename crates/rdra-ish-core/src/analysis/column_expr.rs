@@ -10,6 +10,7 @@ use super::comparison::{resolve_comparison, type_category};
 
 /// Fills `check_constraints` and `derived_expr` once every column of `inst` exists.
 pub(super) fn resolve_column_exprs(
+    model: &SemanticModel,
     inst: &InstanceDecl,
     columns: &mut [ModelColumn],
     ctx: DiagCtxt,
@@ -45,7 +46,8 @@ pub(super) fn resolve_column_exprs(
             }
             match ann {
                 Annotation::Check(ColumnExpr::Logical(expr)) => {
-                    if let Some(expr) = resolve_logical(columns, &inst.id, expr, ctx, diags) {
+                    if let Some(expr) = resolve_logical(model, columns, &inst.id, expr, ctx, diags)
+                    {
                         checks.push(ColumnCheck {
                             expr,
                             site: Some(ctx.locate(col.span.clone())),
@@ -63,7 +65,7 @@ pub(super) fn resolve_column_exprs(
                 ),
                 Annotation::Derived(expr) => {
                     derived_expr =
-                        resolve_derived(columns, inst, col, &columns[i], expr, ctx, diags);
+                        resolve_derived(model, columns, inst, col, &columns[i], expr, ctx, diags);
                 }
                 _ => {}
             }
@@ -74,15 +76,18 @@ pub(super) fn resolve_column_exprs(
 }
 
 fn resolve_logical(
+    model: &SemanticModel,
     columns: &[ModelColumn],
     entity: &str,
     expr: &Expr,
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<CheckExpr> {
-    let mut go = |e: &Expr| resolve_logical(columns, entity, e, ctx, diags);
+    let mut go = |e: &Expr| resolve_logical(model, columns, entity, e, ctx, diags);
     Some(match expr {
-        Expr::Cmp(cmp) => CheckExpr::Cmp(resolve_comparison(columns, entity, cmp, ctx, diags)?),
+        Expr::Cmp(cmp) => {
+            CheckExpr::Cmp(resolve_comparison(model, columns, entity, cmp, ctx, diags)?)
+        }
         Expr::Not(inner) => CheckExpr::Not(Box::new(go(inner)?)),
         Expr::And(a, b) => {
             let (a, b) = (go(a), go(b));
@@ -95,7 +100,9 @@ fn resolve_logical(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn resolve_derived(
+    model: &SemanticModel,
     columns: &[ModelColumn],
     inst: &InstanceDecl,
     col: &Column,
@@ -124,7 +131,7 @@ fn resolve_derived(
     }
     match expr {
         ColumnExpr::Logical(e) => {
-            resolve_logical(columns, &inst.id, e, ctx, diags).map(DerivedExpr::Logical)
+            resolve_logical(model, columns, &inst.id, e, ctx, diags).map(DerivedExpr::Logical)
         }
         ColumnExpr::Arith(arith) => {
             let mut operand = |o: &Operand| match o {

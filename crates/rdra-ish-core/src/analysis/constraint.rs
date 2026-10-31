@@ -1,6 +1,7 @@
 //! Entity and cross-entity constraint predicate helpers.
 
 use crate::analysis_diag::*;
+use crate::binding::Foreign;
 use crate::diagnostics::*;
 use crate::location::DiagCtxt;
 use crate::model::*;
@@ -49,7 +50,7 @@ pub(crate) fn resolve_entity_equals_from_comparison(
     let col_str = match &cmp.lhs {
         Operand::Column(name) => name.clone(),
         Operand::QualifiedColumn(qcol) => {
-            let Some(q_entity) = super::qref_util::qref_id(&qcol.entity) else {
+            let Some(q_entity) = qcol.entity.parts.last().cloned() else {
                 return Ok(None);
             };
             if q_entity != entity_id {
@@ -93,6 +94,7 @@ pub(crate) fn resolve_entity_equals_from_comparison(
 }
 
 pub(crate) fn collect_entity_conditions(
+    model: &SemanticModel,
     variations: &SlotMap<VariationKey, Variation>,
     entity_cols: &[ModelColumn],
     entity_id: &str,
@@ -103,6 +105,17 @@ pub(crate) fn collect_entity_conditions(
     let mut conditions = EntityConditions::default();
     for arg in args {
         if let PredicateArg::Expr(Expr::Cmp(cmp)) = arg {
+            let dotted = [&cmp.lhs, &cmp.rhs]
+                .into_iter()
+                .any(|operand| match operand {
+                    Operand::QualifiedColumn(qcol) => {
+                        crate::binding::foreign_column_operand(model, qcol, ctx, diags)
+                    }
+                    _ => false,
+                });
+            if dotted {
+                continue;
+            }
             match resolve_entity_equals_from_comparison(
                 variations,
                 entity_cols,
@@ -113,7 +126,8 @@ pub(crate) fn collect_entity_conditions(
             ) {
                 Ok(Some(condition)) => conditions.equals.push(condition),
                 Ok(None) => {
-                    if let Some(prop) = resolve_comparison(entity_cols, entity_id, cmp, ctx, diags)
+                    if let Some(prop) =
+                        resolve_comparison(model, entity_cols, entity_id, cmp, ctx, diags)
                     {
                         conditions.comparisons.push(prop);
                     }
@@ -193,41 +207,66 @@ fn condition_entities(cond: &CrossEntityCondition, out: &mut Vec<EntityKey>) {
     }
 }
 
+/// Resolve an entity reference. `position` is the argument index when the reference is an
+/// argument of `pred`, and `None` when it qualifies a column inside an expression.
 fn resolve_entity_qref(
     model: &SemanticModel,
     pred: &str,
     qref: &QRef,
+    position: Option<usize>,
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<EntityKey> {
     let id = qref.parts.last()?.clone();
-    if let Some(found) = crate::binding::resolve_foreign_kind(model, qref, Kind::Entity, ctx, diags)
-    {
-        let NodeRef::Entity(entity) = found? else {
-            return None;
-        };
-        let node = NodeRef::Entity(entity);
-        if pred == "holds" {
-            push_error_qref(
-                ctx,
-                diags,
-                qref,
-                RdraError::ForeignStateNeedsEnvironment {
-                    id: model.entities[entity].id.clone(),
-                },
-            );
+    match crate::binding::resolve_foreign_kind(model, qref, Kind::Entity, ctx, diags) {
+        Foreign::NotBound => {}
+        Foreign::Unresolved => return None,
+        Foreign::Node(node) => {
+            let NodeRef::Entity(entity) = node else {
+                return None;
+            };
+            match position {
+                Some(position) => {
+                    crate::binding::check_foreign_operand(
+                        model,
+                        pred,
+                        position,
+                        &node,
+                        qref.span.clone(),
+                        ctx,
+                        diags,
+                    );
+                }
+                None => push_error_qref(
+                    ctx,
+                    diags,
+                    qref,
+                    RdraError::ForeignStateNeedsEnvironment {
+                        id: model.entities[entity].id.clone(),
+                    },
+                ),
+            }
             return None;
         }
-        return crate::binding::check_foreign_operand(
-            model,
-            pred,
-            1,
-            &node,
-            qref.span.clone(),
-            ctx,
-            diags,
-        )
-        .then_some(entity);
+    }
+    if qref.parts.len() > 1 && qref.kind_qualifier.is_none() {
+        return match resolve_arg(model, &PredicateArg::Ref(qref.clone()), ctx, diags)? {
+            NodeRef::Entity(entity) => Some(entity),
+            other => {
+                push_error_qref(
+                    ctx,
+                    diags,
+                    qref,
+                    RdraError::TypeMismatch {
+                        pred: pred.to_string(),
+                        id: qref_display(qref),
+                        actual: node_kind_tag_str(&other).to_string(),
+                        expected: "entity".to_string(),
+                    },
+                );
+                None
+            }
+        };
     }
     if let Some(kind) = &qref.kind_qualifier {
         if kind != &Kind::Entity {
@@ -302,11 +341,14 @@ fn resolve_entity_scope_arg(
     model: &SemanticModel,
     pred: &str,
     arg: &PredicateArg,
+    position: usize,
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<EntityKey> {
     match arg {
-        PredicateArg::Ref(qref) => resolve_entity_qref(model, pred, qref, ctx, diags),
+        PredicateArg::Ref(qref) => {
+            resolve_entity_qref(model, pred, qref, Some(position), ctx, diags)
+        }
         PredicateArg::Lit(s) => {
             push_error(
                 ctx,
@@ -431,7 +473,7 @@ fn resolve_cross_operand_column(
             None
         }
         Operand::QualifiedColumn(qcol) => {
-            let entity = resolve_entity_qref(model, pred, &qcol.entity, ctx, diags)?;
+            let entity = resolve_entity_qref(model, pred, &qcol.entity, None, ctx, diags)?;
             let model_col =
                 find_entity_column(model, entity, &qcol.column, qcol.span.clone(), ctx, diags)?;
             Some((
@@ -465,7 +507,9 @@ fn resolve_cross_comparison(
     ) {
         Some(v) => v,
         None => {
-            push_error_cmp(ctx, diags, cmp, RdraError::ComparisonLhsMustBeColumn);
+            if matches!(cmp.lhs, Operand::IntLit(_) | Operand::Now) {
+                push_error_cmp(ctx, diags, cmp, RdraError::ComparisonLhsMustBeColumn);
+            }
             return None;
         }
     };
@@ -601,7 +645,9 @@ fn collect_cross_scope_prefix(
         }
         match arg {
             PredicateArg::Ref(_) => {
-                if let Some(entity) = resolve_entity_scope_arg(model, &pred.name, arg, ctx, diags) {
+                if let Some(entity) =
+                    resolve_entity_scope_arg(model, &pred.name, arg, idx, ctx, diags)
+                {
                     push_unique_entity(&mut scope, entity);
                 }
             }
@@ -648,8 +694,8 @@ fn collect_cross_along_path(
 ) -> Option<Vec<EntityKey>> {
     let along = pred.chain.iter().find(|cc| cc.name == "along")?;
     let mut path = Vec::new();
-    for arg in &along.args {
-        if let Some(entity) = resolve_entity_scope_arg(model, &pred.name, arg, ctx, diags) {
+    for (idx, arg) in along.args.iter().enumerate() {
+        if let Some(entity) = resolve_entity_scope_arg(model, "along", arg, idx, ctx, diags) {
             path.push(entity);
         }
     }
@@ -692,12 +738,12 @@ pub(crate) fn process_forbidden(
         }
     }
 
+    let scope_semantics = cross_scope_semantics_from_chain(model, pred, ctx, diags);
     if conditions.is_empty() {
         return;
     }
 
     add_condition_entities_to_scope(&mut scope, &conditions);
-    let scope_semantics = cross_scope_semantics_from_chain(model, pred, ctx, diags);
     model
         .cross_forbidden_constraints
         .push(CrossForbiddenConstraint {
@@ -718,8 +764,8 @@ pub(crate) fn process_invariant(
     diags: &mut Vec<Diagnostic>,
 ) {
     let mut scope = Vec::new();
-    for arg in &pred.args {
-        if let Some(entity) = resolve_entity_scope_arg(model, &pred.name, arg, ctx, diags) {
+    for (idx, arg) in pred.args.iter().enumerate() {
+        if let Some(entity) = resolve_entity_scope_arg(model, &pred.name, arg, idx, ctx, diags) {
             push_unique_entity(&mut scope, entity);
         }
     }
@@ -831,7 +877,8 @@ pub(crate) fn resolve_related_quantifier(
     // Legacy-compatible: `.none(Assign.status == active)` if first arg is an entity Ref.
     let (related, related_args) = match cc.args.first() {
         Some(PredicateArg::Ref(_)) => {
-            let related = resolve_entity_scope_arg(model, &cc.name, &cc.args[0], ctx, diags)?;
+            let related =
+                resolve_entity_scope_arg(model, &cc.name, &cc.args[0], 0, ctx, diags)?;
             (related, &cc.args[1..])
         }
         _ => {
@@ -900,7 +947,8 @@ fn temporal_equals_from_comparison(
             )
         }
         Operand::QualifiedColumn(qcol) => {
-            let entity = resolve_entity_qref(model, pred, &qcol.entity, ctx, diags).ok_or(())?;
+            let entity =
+                resolve_entity_qref(model, pred, &qcol.entity, None, ctx, diags).ok_or(())?;
             let model_col =
                 find_entity_column(model, entity, &qcol.column, qcol.span.clone(), ctx, diags)
                     .ok_or(())?;

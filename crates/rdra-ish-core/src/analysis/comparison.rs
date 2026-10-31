@@ -6,7 +6,7 @@ use crate::location::DiagCtxt;
 use crate::model::*;
 use rdra_ish_syntax::ast::*;
 
-use super::qref_util::{qref_id, qualified_column_display};
+use super::qref_util::qualified_column_display;
 
 // ── 比較式の型整合チェック・モデル変換 ────────────────────────────────────────
 
@@ -48,6 +48,7 @@ pub(crate) fn to_model_op(op: &CmpOp) -> CmpOpModel {
 /// - 演算子と右辺の型整合を検査する。
 /// - 型不整合があれば `diags` にエラーを push し `None` を返す。
 pub(crate) fn resolve_comparison(
+    model: &SemanticModel,
     entity_cols: &[ModelColumn],
     entity_id: &str,
     cmp: &Comparison,
@@ -58,10 +59,10 @@ pub(crate) fn resolve_comparison(
     let lhs_col_name = match &cmp.lhs {
         Operand::Column(name) => name.clone(),
         Operand::QualifiedColumn(qcol) => {
-            let Some(q_entity) = qref_id(&qcol.entity) else {
-                push_error_cmp(ctx, diags, cmp, RdraError::ComparisonLhsMustBeColumn);
+            if crate::binding::foreign_column_operand(model, qcol, ctx, diags) {
                 return None;
-            };
+            }
+            let q_entity = qcol.entity.parts.last().cloned().unwrap_or_default();
             if q_entity != entity_id {
                 push_error_cmp(
                     ctx,
@@ -154,18 +155,10 @@ pub(crate) fn resolve_comparison(
             CmpRhs::Column(rhs_name.clone())
         }
         Operand::QualifiedColumn(qcol) => {
-            let Some(q_entity) = qref_id(&qcol.entity) else {
-                push_error_cmp(
-                    ctx,
-                    diags,
-                    cmp,
-                    RdraError::ComparisonRhsColumnUnknown {
-                        entity: entity_id.to_string(),
-                        col: qualified_column_display(qcol),
-                    },
-                );
+            if crate::binding::foreign_column_operand(model, qcol, ctx, diags) {
                 return None;
-            };
+            }
+            let q_entity = qcol.entity.parts.last().cloned().unwrap_or_default();
             if q_entity != entity_id {
                 push_error_cmp(
                     ctx,

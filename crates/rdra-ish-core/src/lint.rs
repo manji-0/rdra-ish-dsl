@@ -839,10 +839,9 @@ fn relation_degree(model: &SemanticModel) -> HashMap<NodeRef, usize> {
     for rel in &model.relations {
         touch(rel.from.clone());
         touch(rel.to.clone());
-        // A reference to a stub connects the external system it is bound through.
         for end in [&rel.from, &rel.to] {
-            if let Some(origin) = model.origin(end) {
-                touch(NodeRef::ExtSystem(origin.ext));
+            if let Some(ext) = model.bound_through(end) {
+                touch(NodeRef::ExtSystem(ext));
             }
         }
     }

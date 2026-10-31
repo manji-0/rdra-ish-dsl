@@ -1,11 +1,8 @@
-//! The consumer side of a cross-model reference: what a dependency publishes, and how a
-//! product binds it through `extsystem Auth "..." from auth.AuthSystem`.
-
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use rdra_ish_syntax::ast::{BindingDecl, Kind, QRef};
+use rdra_ish_syntax::ast::{BindingDecl, Kind, QRef, QualifiedColumnRef};
 
 use crate::analysis_diag::{push_error, push_warning};
 use crate::diagnostics::{Diagnostic, RdraError};
@@ -17,8 +14,7 @@ use crate::model::{
 use crate::project::Project;
 use crate::surface::{Surface, SurfaceColumn};
 
-/// A loaded dependency as the product's analysis sees it: its published surface, plus the
-/// names it keeps internal (for `NotExposed`) and its modules and files (for `ForeignImport`).
+/// A loaded dependency as the product's analysis sees it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DependencySurface {
     /// The `[dependencies]` key of the product's manifest.
@@ -59,31 +55,45 @@ impl DependencySurface {
         }
     }
 
-    /// The first error of a dependency's own `check`, as the product reports it.
-    pub fn first_error(project: &Project) -> Option<String> {
-        project.diags.iter().find(|d| !d.is_warning).map(|d| {
-            format_diagnostic_message(
-                Some(&project.program),
-                false,
-                d.location.as_ref(),
-                &d.error.to_string(),
-            )
-        })
+    /// Every error a dependency's own `check` reports: the semantic errors, else the
+    /// lifecycle findings of error severity, as `check` prints them.
+    pub fn errors(project: &Project) -> Vec<String> {
+        let semantic: Vec<String> = project
+            .diags
+            .iter()
+            .filter(|d| !d.is_warning)
+            .map(|d| {
+                format_diagnostic_message(
+                    Some(&project.program),
+                    false,
+                    d.location.as_ref(),
+                    &d.error.to_string(),
+                )
+            })
+            .collect();
+        if !semantic.is_empty() {
+            return semantic;
+        }
+        crate::lifecycle::error_findings(&project.model)
     }
 }
 
-/// Which dependency a module path or a source file belongs to, read where the product
-/// resolves its imports.
+/// Which dependency a module path or a source file belongs to.
 #[derive(Debug, Default)]
 pub struct ForeignModules {
     modules: BTreeMap<String, String>,
     files: Vec<(PathBuf, String)>,
+    /// The dependencies that declare no `system`, whose modules cannot be bound yet.
+    without_system: Vec<String>,
 }
 
 impl ForeignModules {
     pub fn of(deps: &[Arc<DependencySurface>]) -> ForeignModules {
         let mut foreign = ForeignModules::default();
         for dep in deps {
+            if dep.systems.is_empty() {
+                foreign.without_system.push(dep.name.clone());
+            }
             for module in &dep.modules {
                 foreign
                     .modules
@@ -101,6 +111,15 @@ impl ForeignModules {
         self.modules.get(module).map(String::as_str)
     }
 
+    /// The hint of `ForeignImport` for `dep`: bind its system, or have its owners declare one.
+    pub fn import_hint(&self, dep: &str) -> String {
+        if self.without_system.iter().any(|d| d == dep) {
+            format!("'{dep}' declares no `system` yet; its owners must declare one and `exposes` through it, then bind it with `extsystem X \"...\" from {dep}.<System>`")
+        } else {
+            format!("bind the system it publishes with `extsystem X \"...\" from {dep}.<System>` and reference its elements as `X.<Name>`")
+        }
+    }
+
     pub fn dep_of_file(&self, path: &Path) -> Option<&str> {
         let canon = dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
         self.files
@@ -110,7 +129,6 @@ impl ForeignModules {
     }
 }
 
-/// What a product does with a foreign element at one predicate position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ForeignUse {
     Call,
@@ -130,8 +148,6 @@ impl ForeignUse {
     }
 }
 
-/// One predicate position that accepts a foreign operand: the predicate, the argument index,
-/// the kind the stub must have, and what the product does with it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ForeignOperand {
     pub predicate: &'static str,
@@ -154,10 +170,8 @@ const fn operand(
     }
 }
 
-/// The one table of every predicate position that accepts a foreign operand. The kind check
-/// reads it for a foreign operand in place of the predicate's signature, and the language
-/// reference lists it. A guard (`holds` on `Ext.Entity.column`) joins it with the
-/// environment; until then it is `ForeignStateNeedsEnvironment`.
+/// Every predicate position that accepts a foreign operand. The kind check reads it for a
+/// foreign operand in place of the predicate's signature.
 pub const FOREIGN_OPERANDS: &[ForeignOperand] = &[
     operand("invokes", 1, "usecase", ForeignUse::Call),
     operand("triggers", 0, "event", ForeignUse::React),
@@ -166,8 +180,7 @@ pub const FOREIGN_OPERANDS: &[ForeignOperand] = &[
     operand("shows", 1, "entity", ForeignUse::Read),
 ];
 
-/// Predicates that write their entity operand: a foreign one is `ForeignWrite`.
-const WRITES: &[&str] = &[
+const WRITING_PREDICATES: &[&str] = &[
     "writes",
     "creates",
     "updates",
@@ -183,7 +196,6 @@ fn allowed(predicate: &str, position: usize, kind: &str) -> bool {
         .any(|o| o.predicate == predicate && o.position == position && o.kind == kind)
 }
 
-/// The uses the table allows for stubs of `kind`, for a hint.
 fn uses_of(kind: &str) -> String {
     let mut uses: Vec<String> = FOREIGN_OPERANDS
         .iter()
@@ -194,8 +206,7 @@ fn uses_of(kind: &str) -> String {
     uses.join(", ")
 }
 
-/// The bound external system `alias` names, if any.
-pub(crate) fn bound_ext(model: &SemanticModel, alias: &str) -> Option<ExtSystemKey> {
+pub fn bound_ext(model: &SemanticModel, alias: &str) -> Option<ExtSystemKey> {
     model
         .ext_systems
         .iter()
@@ -240,6 +251,11 @@ pub(crate) fn bind(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
+    model.ext_systems[ext].binding = Some(Binding {
+        dep: decl.dep.clone(),
+        system: decl.system.clone(),
+        resolved: false,
+    });
     let Some(dep) = model
         .dependencies
         .iter()
@@ -248,22 +264,44 @@ pub(crate) fn bind(
     else {
         let mut known: Vec<&str> = model.dependencies.iter().map(|d| d.name.as_str()).collect();
         known.sort();
+        let add = format!(
+            "add `{} = {{ path = \"...\" }}` under [dependencies]; a dependency of a dependency cannot be bound",
+            decl.dep
+        );
+        let (known, hint) = if !model.has_manifest {
+            (
+                "there is no rdra.toml".to_string(),
+                format!(
+                    "create rdra.toml next to the model with `[model]` `name = \"...\"` and `[dependencies]` `{} = {{ path = \"...\" }}`",
+                    decl.dep
+                ),
+            )
+        } else if known.is_empty() {
+            ("the manifest has no [dependencies]".to_string(), add)
+        } else {
+            (known.join(", "), add)
+        };
         push_error(
             ctx,
             diags,
             decl.span.clone(),
             RdraError::UnknownDependency {
                 dep: decl.dep.clone(),
-                known: if known.is_empty() {
-                    "the manifest has no [dependencies]".to_string()
-                } else {
-                    known.join(", ")
-                },
+                known,
+                hint,
             },
         );
         return;
     };
     if !dep.systems.contains(&decl.system) {
+        let closest = if dep.systems.is_empty() {
+            format!(
+                "none; '{}' declares no `system`, so its owners must declare one and `exposes` through it",
+                decl.dep
+            )
+        } else {
+            closest(&decl.system, dep.systems.iter().map(String::as_str))
+        };
         push_error(
             ctx,
             diags,
@@ -271,7 +309,7 @@ pub(crate) fn bind(
             RdraError::UnknownForeignName {
                 qualifier: decl.dep.clone(),
                 name: decl.system.clone(),
-                closest: closest(&decl.system, dep.systems.iter().map(String::as_str)),
+                closest,
             },
         );
         return;
@@ -279,6 +317,7 @@ pub(crate) fn bind(
     let binding = Binding {
         dep: decl.dep.clone(),
         system: decl.system.clone(),
+        resolved: true,
     };
     if let Some((_, other)) = model
         .ext_systems
@@ -387,18 +426,36 @@ pub(crate) fn bind(
     }
 }
 
-/// Resolve `Ext.Name` against the stubs of a bound external system. `None` when `ext` is
-/// not bound; otherwise the stub, or `None` after reporting why there is none.
+/// What `Ext.Name` resolves to.
+pub(crate) enum Foreign {
+    /// `Ext` is not an external system bound with `from`: resolve it as a local reference.
+    NotBound,
+    /// The stub.
+    Node(NodeRef),
+    /// There is no such stub; the reason is reported here, or was at the binding.
+    Unresolved,
+}
+
+/// Resolve `Ext.Name` against the stubs of a bound external system.
 pub(crate) fn resolve_foreign(
     model: &SemanticModel,
     qref: &QRef,
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
-) -> Option<Option<NodeRef>> {
+) -> Foreign {
     let [alias, name] = qref.parts.as_slice() else {
-        return None;
+        return Foreign::NotBound;
     };
-    let ext = bound_ext(model, alias)?;
+    let Some(ext) = bound_ext(model, alias) else {
+        return Foreign::NotBound;
+    };
+    if !model.ext_systems[ext]
+        .binding
+        .as_ref()
+        .is_some_and(|b| b.resolved)
+    {
+        return Foreign::Unresolved;
+    }
     let qualified = format!("{alias}.{name}");
     let found = match model.symbols.lookup(&qualified) {
         LookupResult::Found(node) => Some(node.clone()),
@@ -413,7 +470,7 @@ pub(crate) fn resolve_foreign(
                         kinds: kinds.join(", "),
                     },
                 );
-                return Some(None);
+                return Foreign::Unresolved;
             };
             model.symbols.lookup_qualified(kind, &qualified).cloned()
         }
@@ -434,13 +491,13 @@ pub(crate) fn resolve_foreign(
                         expected: kind.name().to_string(),
                     },
                 );
-                return Some(None);
+                return Foreign::Unresolved;
             }
         }
-        return Some(Some(node));
+        return Foreign::Node(node);
     }
     let Some(dep) = dependency(model, ext) else {
-        return Some(None);
+        return Foreign::Unresolved;
     };
     let system = &model.ext_systems[ext]
         .binding
@@ -449,34 +506,61 @@ pub(crate) fn resolve_foreign(
         .system;
     match dep.declared.get(name.as_str()) {
         Some(kind) => {
-            let published: Vec<String> = dep
-                .surface
-                .entities
-                .iter()
-                .filter(|e| e.system == *system)
-                .map(|e| format!("read `{alias}.{}`", e.id))
-                .chain(
-                    dep.surface
-                        .events
+            let hint = match kind.as_str() {
+                "entity" => {
+                    let published: Vec<String> = dep
+                        .surface
+                        .entities
                         .iter()
                         .filter(|e| e.system == *system)
-                        .map(|e| format!("react to `{alias}.{}`", e.id)),
+                        .map(|e| format!("read `{alias}.{}`", e.id))
+                        .chain(
+                            dep.surface
+                                .events
+                                .iter()
+                                .filter(|e| e.system == *system)
+                                .map(|e| format!("react to `{alias}.{}`", e.id)),
+                        )
+                        .collect();
+                    if published.is_empty() {
+                        format!("{} publishes nothing a product can read or react to; ask its owners to expose what you need", dep.name)
+                    } else {
+                        published.join(" or ")
+                    }
+                }
+                "usecase" | "event" => format!(
+                    "ask {}'s owners to publish it with `exposes({system}, {name})`",
+                    dep.name
+                ),
+                "permission" => format!(
+                    "a permission is published through the exposed use case that requires it; ask {}'s owners to expose that use case",
+                    dep.name
+                ),
+                "system" => format!(
+                    "a system is bound, not referenced: `extsystem X \"...\" from {}.{name}`",
+                    dep.name
+                ),
+                _ => format!(
+                    "a {kind} is never published; reference what {} exposes instead",
+                    dep.name
+                ),
+            };
+            let what = if kind == "system" {
+                format!("{}'s system '{name}'", dep.name)
+            } else {
+                format!(
+                    "{}'s internal {kind} '{name}', which it does not publish",
+                    dep.name
                 )
-                .collect();
+            };
             push_error(
                 ctx,
                 diags,
                 qref.span.clone(),
                 RdraError::NotExposed {
                     qualified,
-                    dep: dep.name.clone(),
-                    kind: kind.clone(),
-                    name: name.clone(),
-                    hint: if published.is_empty() {
-                        format!("{} publishes nothing a product can read or react to; ask its owners to expose what you need", dep.name)
-                    } else {
-                        published.join(" or ")
-                    },
+                    what,
+                    hint,
                 },
             );
         }
@@ -502,10 +586,63 @@ pub(crate) fn resolve_foreign(
             );
         }
     }
-    Some(None)
+    Foreign::Unresolved
 }
 
-/// Up to three published names nearest to `name`, nearest first.
+/// A column operand whose entity is a dotted path: a comparison on another model's state is
+/// `ForeignStateNeedsEnvironment`, and a path that names no entity is reported as the
+/// reference resolver sees it. `false` when the entity is local, which the caller resolves
+/// by its last segment.
+pub(crate) fn foreign_column_operand(
+    model: &SemanticModel,
+    qcol: &QualifiedColumnRef,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> bool {
+    if qcol.entity.parts.len() < 2 {
+        return false;
+    }
+    match resolve_foreign_kind(model, &qcol.entity, Kind::Entity, ctx, diags) {
+        Foreign::NotBound => {
+            let local = crate::analysis::resolve_arg(
+                model,
+                &rdra_ish_syntax::ast::PredicateArg::Ref(qcol.entity.clone()),
+                ctx,
+                diags,
+            );
+            return !matches!(local, Some(NodeRef::Entity(_)));
+        }
+        Foreign::Node(NodeRef::Entity(entity)) => {
+            let known = model.entities[entity]
+                .columns
+                .iter()
+                .any(|c| c.name == qcol.column);
+            if known {
+                push_error(
+                    ctx,
+                    diags,
+                    qcol.entity.span.clone(),
+                    RdraError::ForeignStateNeedsEnvironment {
+                        id: model.entities[entity].id.clone(),
+                    },
+                );
+            } else {
+                push_error(
+                    ctx,
+                    diags,
+                    qcol.span.clone(),
+                    RdraError::UnknownColumn {
+                        entity: model.entities[entity].id.clone(),
+                        col: qcol.column.clone(),
+                    },
+                );
+            }
+        }
+        Foreign::Node(_) | Foreign::Unresolved => {}
+    }
+    true
+}
+
 fn closest<'a>(name: &str, candidates: impl Iterator<Item = &'a str>) -> String {
     let mut scored: Vec<(usize, &str)> = candidates.map(|c| (edit_distance(name, c), c)).collect();
     scored.sort();
@@ -569,7 +706,7 @@ pub(crate) fn check_foreign_operand(
         }
         return true;
     }
-    let err = if WRITES.contains(&predicate) {
+    let err = if WRITING_PREDICATES.contains(&predicate) && kind == "entity" {
         RdraError::ForeignWrite {
             id: id.clone(),
             dep: origin.dep.clone(),
@@ -594,13 +731,13 @@ pub(crate) fn check_foreign_operand(
     false
 }
 
-/// The exposed use cases of the owner that write a published entity, for `ForeignWrite`.
 fn write_hint(model: &SemanticModel, origin: &Origin, ext: &str) -> String {
     let writers: Vec<String> = dependency(model, origin.ext)
         .map(|dep| {
             dep.surface
                 .writers
                 .iter()
+                .chain(&dep.surface.shared_writers)
                 .filter(|w| w.entity == origin.foreign_id)
                 .filter_map(|w| w.usecase.as_deref())
                 .map(|uc| format!("`invokes(<UseCase>, {ext}.{uc})`"))
@@ -621,16 +758,47 @@ fn write_hint(model: &SemanticModel, origin: &Origin, ext: &str) -> String {
     }
 }
 
-/// `IdShadowsForeignSlug`: a local id equal to the generated name of a stub.
+/// `ForeignSlugClash` between two stubs, and `IdShadowsForeignSlug` for a local id equal to
+/// a stub's generated name.
 pub(crate) fn shadow_diagnostics(model: &SemanticModel, diags: &mut Vec<Diagnostic>) {
-    let stubs = model
+    let stubs: Vec<(&str, &Origin)> = model
         .use_cases
         .foreign()
-        .map(|(_, u, _)| u.id.as_str())
-        .chain(model.events.foreign().map(|(_, e, _)| e.id.as_str()))
-        .chain(model.entities.foreign().map(|(_, e, _)| e.id.as_str()))
-        .chain(model.permissions.foreign().map(|(_, p, _)| p.id.as_str()));
-    for id in stubs {
+        .map(|(_, u, o)| (u.id.as_str(), o))
+        .chain(model.events.foreign().map(|(_, e, o)| (e.id.as_str(), o)))
+        .chain(model.entities.foreign().map(|(_, e, o)| (e.id.as_str(), o)))
+        .chain(
+            model
+                .permissions
+                .foreign()
+                .map(|(_, p, o)| (p.id.as_str(), o)),
+        )
+        .collect();
+    let mut by_slug: BTreeMap<String, &str> = BTreeMap::new();
+    for (id, origin) in &stubs {
+        let slug = slug(id);
+        match by_slug.get(slug.as_str()) {
+            Some(first) if *first != *id => {
+                crate::location::push_model_decl_diagnostic(
+                    model,
+                    diags,
+                    "extsystem",
+                    &model.ext_systems[origin.ext].id,
+                    RdraError::ForeignSlugClash {
+                        first: first.to_string(),
+                        second: id.to_string(),
+                        slug: slug.clone(),
+                    },
+                    false,
+                );
+            }
+            Some(_) => {}
+            None => {
+                by_slug.insert(slug, id);
+            }
+        }
+    }
+    for (id, _) in stubs {
         let slug = slug(id);
         let kinds: Vec<&str> = match model.symbols.lookup(&slug) {
             LookupResult::Found(node) => vec![crate::model::node_ref_kind(node)],
@@ -653,19 +821,15 @@ pub(crate) fn shadow_diagnostics(model: &SemanticModel, diags: &mut Vec<Diagnost
     }
 }
 
-/// `Ext.Name` as a `kind` reference, for the constraint resolvers that take an entity.
 pub(crate) fn resolve_foreign_kind(
     model: &SemanticModel,
     qref: &QRef,
     kind: Kind,
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
-) -> Option<Option<NodeRef>> {
-    let node = resolve_foreign(model, qref, ctx, diags)?;
-    Some(node.filter(|n| {
-        if crate::model::node_ref_kind(n) == kind.name() {
-            true
-        } else {
+) -> Foreign {
+    match resolve_foreign(model, qref, ctx, diags) {
+        Foreign::Node(n) if crate::model::node_ref_kind(&n) != kind.name() => {
             push_error(
                 ctx,
                 diags,
@@ -673,13 +837,14 @@ pub(crate) fn resolve_foreign_kind(
                 RdraError::TypeMismatch {
                     pred: "reference".to_string(),
                     id: qref.parts.join("."),
-                    actual: crate::model::node_ref_kind(n).to_string(),
+                    actual: crate::model::node_ref_kind(&n).to_string(),
                     expected: kind.name().to_string(),
                 },
             );
-            false
+            Foreign::Unresolved
         }
-    }))
+        other => other,
+    }
 }
 
 #[cfg(test)]
@@ -696,6 +861,7 @@ mod tests {
         "ForeignOperand",
         "ForeignImport",
         "ForeignStateNeedsEnvironment",
+        "ForeignSlugClash",
         "IdShadowsForeignSlug",
         "DirectEntityReference",
         "BindingOnNonExtSystem",

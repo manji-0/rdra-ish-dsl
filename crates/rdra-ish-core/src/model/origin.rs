@@ -1,13 +1,9 @@
-//! Where an element comes from: the product's own files, or a dependency's published
-//! surface bound through an `extsystem ... from` line.
-
 use slotmap::{Key, SecondaryMap, SlotMap};
 use std::ops::{Index, IndexMut};
 
 use super::keys::ExtSystemKey;
 use super::PublishMode;
 
-/// What a foreign stub stands for in the dependency.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ForeignWhat {
     UseCase,
@@ -29,7 +25,6 @@ impl ForeignWhat {
     }
 }
 
-/// The origin of a foreign stub. A local element has none.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Origin {
     /// The bound external system whose qualifier the stub's id starts with.
@@ -41,7 +36,6 @@ pub struct Origin {
     pub what: ForeignWhat,
 }
 
-/// `Auth.SessionView` as a generated identifier: `Auth__SessionView`.
 pub fn slug(qualified: &str) -> String {
     qualified.replace('.', "__")
 }

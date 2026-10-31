@@ -403,7 +403,7 @@ fn model_columns(
         .iter()
         .map(|col| ast_column_to_model(model, inst, col, ctx, diags))
         .collect();
-    resolve_column_exprs(inst, &mut columns, ctx, diags);
+    resolve_column_exprs(model, inst, &mut columns, ctx, diags);
     columns
 }
 

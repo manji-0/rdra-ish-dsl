@@ -38,6 +38,7 @@ fn resolve_comparison_accepts_same_entity_qualified_columns_and_literals() {
     let mut diags = Vec::new();
 
     let col_prop = resolve_comparison(
+        &SemanticModel::default(),
         &cols,
         "Stock",
         &Comparison {
@@ -51,6 +52,7 @@ fn resolve_comparison_accepts_same_entity_qualified_columns_and_literals() {
     )
     .unwrap();
     let int_prop = resolve_comparison(
+        &SemanticModel::default(),
         &cols,
         "Stock",
         &Comparison {
@@ -64,6 +66,7 @@ fn resolve_comparison_accepts_same_entity_qualified_columns_and_literals() {
     )
     .unwrap();
     let now_prop = resolve_comparison(
+        &SemanticModel::default(),
         &cols,
         "Stock",
         &Comparison {
@@ -93,6 +96,7 @@ fn resolve_comparison_rejects_cross_entity_and_invalid_type_comparisons() {
     let mut diags = Vec::new();
 
     assert!(resolve_comparison(
+        &SemanticModel::default(),
         &cols,
         "Stock",
         &Comparison {
@@ -106,6 +110,7 @@ fn resolve_comparison_rejects_cross_entity_and_invalid_type_comparisons() {
     )
     .is_none());
     assert!(resolve_comparison(
+        &SemanticModel::default(),
         &cols,
         "Stock",
         &Comparison {
@@ -119,6 +124,7 @@ fn resolve_comparison_rejects_cross_entity_and_invalid_type_comparisons() {
     )
     .is_none());
     assert!(resolve_comparison(
+        &SemanticModel::default(),
         &cols,
         "Stock",
         &Comparison {

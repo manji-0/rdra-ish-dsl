@@ -113,9 +113,9 @@ pub fn collect_event_flows(model: &SemanticModel) -> Vec<EventFlow> {
     // through; one it never names stays out.
     for rel in &model.relations {
         if let (RelKind::Triggers, NodeRef::Event(ek)) = (&rel.kind, &rel.from) {
-            if let Some(origin) = model.events.origin(*ek) {
+            if let Some(ext) = model.bound_through(&rel.from) {
                 map.entry(*ek)
-                    .or_insert_with(|| flow(*ek, vec![Raiser::ExtSystem(origin.ext)]));
+                    .or_insert_with(|| flow(*ek, vec![Raiser::ExtSystem(ext)]));
             }
         }
     }

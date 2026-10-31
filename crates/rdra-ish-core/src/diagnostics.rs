@@ -483,8 +483,12 @@ pub enum RdraError {
     #[error("BindingOnNonExtSystem: `from` binds only an `extsystem`; {kind} '{id}' cannot take it\n  hint: delete the `from` clause, or declare `extsystem {id} \"...\" from <dep>.<System>`")]
     BindingOnNonExtSystem { kind: String, id: String },
 
-    #[error("UnknownDependency: '{dep}' is not a [dependencies] entry of the manifest ({known})\n  hint: add `{dep} = {{ path = \"...\" }}` under [dependencies]; a dependency of a dependency cannot be bound")]
-    UnknownDependency { dep: String, known: String },
+    #[error("UnknownDependency: '{dep}' is not a [dependencies] entry of the manifest ({known})\n  hint: {hint}")]
+    UnknownDependency {
+        dep: String,
+        known: String,
+        hint: String,
+    },
 
     #[error("DuplicateBinding: {dep}.{system} is already bound as extsystem '{ext}'\n  hint: reference its elements as `{ext}.<Name>` and delete this declaration")]
     DuplicateBinding {
@@ -500,12 +504,10 @@ pub enum RdraError {
         closest: String,
     },
 
-    #[error("NotExposed: '{qualified}' is {dep}'s internal {kind} '{name}', which it does not publish\n  hint: {hint}")]
+    #[error("NotExposed: '{qualified}' is {what}\n  hint: {hint}")]
     NotExposed {
         qualified: String,
-        dep: String,
-        kind: String,
-        name: String,
+        what: String,
         hint: String,
     },
 
@@ -529,8 +531,15 @@ pub enum RdraError {
         uses: String,
     },
 
-    #[error("ForeignStateNeedsEnvironment: a guard on '{id}' reads another model's state, which this release cannot model\n  hint: react to an event the owner exposes, or read '{id}' in the use case with `reads`; guards on published data arrive with the environment")]
+    #[error("ForeignStateNeedsEnvironment: a comparison on '{id}' reads another model's state, which this release cannot model\n  hint: react to an event the owner exposes, or read '{id}' in the use case with `reads`; guards and rules on published data arrive with the environment")]
     ForeignStateNeedsEnvironment { id: String },
+
+    #[error("ForeignSlugClash: '{first}' and '{second}' both generate the identifier '{slug}'\n  hint: generated identifiers join the qualifier and the name with `__`; rename one external system so the two differ")]
+    ForeignSlugClash {
+        first: String,
+        second: String,
+        slug: String,
+    },
 
     #[error("IdShadowsForeignSlug: '{id}' is the generated name of '{qualified}'\n  hint: rename '{id}'; generated identifiers of foreign elements join the qualifier with `__`")]
     IdShadowsForeignSlug { id: String, qualified: String },
@@ -542,8 +551,12 @@ pub enum RdraError {
         predicate: String,
     },
 
-    #[error("ForeignImport: module '{module}' belongs to dependency '{dep}', so it cannot be imported\n  hint: bind the system it publishes with `extsystem X \"...\" from {dep}.<System>` and reference its elements as `X.<Name>`")]
-    ForeignImport { module: String, dep: String },
+    #[error("ForeignImport: module '{module}' belongs to dependency '{dep}', so it cannot be imported\n  hint: {hint}")]
+    ForeignImport {
+        module: String,
+        dep: String,
+        hint: String,
+    },
 
     #[error("{message}\n  hint: {hint}")]
     LintFinding {

@@ -13,8 +13,7 @@ pub struct SystemBoundary {
     pub entities: Vec<EntityKey>,
 }
 
-/// How many local system boundaries an entity falls in. A foreign stub and an entity no API
-/// operates are `None`, so the cross-boundary checks never see them.
+/// How many local system boundaries an entity falls in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SystemMembership {
     None,

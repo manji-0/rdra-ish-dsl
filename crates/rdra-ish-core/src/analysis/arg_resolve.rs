@@ -283,7 +283,10 @@ fn resolve_qref(
             .resolve_namespaced(ctx.source_id, alias, name)
         {
             _ if crate::binding::bound_ext(model, alias).is_some() => {
-                return crate::binding::resolve_foreign(model, qref, ctx, diags).flatten();
+                return match crate::binding::resolve_foreign(model, qref, ctx, diags) {
+                    crate::binding::Foreign::Node(node) => Some(node),
+                    crate::binding::Foreign::NotBound | crate::binding::Foreign::Unresolved => None,
+                };
             }
             Ok(b) => {
                 if b.is_empty() {

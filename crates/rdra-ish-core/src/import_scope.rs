@@ -69,7 +69,6 @@ impl ImportScopes {
         self.source_modules.get(&source_id).map(String::as_str)
     }
 
-    /// Every module path declared by a source.
     pub fn modules(&self) -> impl Iterator<Item = &str> + '_ {
         self.module_sources.keys().map(String::as_str)
     }
@@ -318,7 +317,6 @@ pub fn build_import_scopes(
         for imp in imports {
             let module_path = imp.path.0.join(".");
             let Some(&mod_source) = scopes.module_sources.get(&module_path) else {
-                // The resolver reports an import of a dependency's module as `ForeignImport`.
                 if foreign.dep_of_module(&module_path).is_some() {
                     continue;
                 }

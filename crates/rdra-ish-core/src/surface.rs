@@ -8,7 +8,6 @@ use crate::model::{
 };
 use crate::tx::infer_usecase_transactions;
 
-/// One exposed use case: `usecase Login "Log in" caller(actor) requires(CanLogin) raises(EvLoggedIn)`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SurfaceUseCase {
     pub system: String,
@@ -19,7 +18,6 @@ pub struct SurfaceUseCase {
     pub raises: Vec<String>,
 }
 
-/// One exposed event: `event EvSessionEnded "Session ended"`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SurfaceEvent {
     pub system: String,
@@ -27,8 +25,6 @@ pub struct SurfaceEvent {
     pub label: String,
 }
 
-/// A published entity (`mode` set) or a shared internal entity (`mode` unset), with the
-/// columns a consumer may name.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SurfaceEntity {
     pub system: String,
@@ -41,15 +37,12 @@ pub struct SurfaceEntity {
 #[derive(Debug, Clone, PartialEq)]
 pub struct SurfaceColumn {
     pub name: String,
-    /// Never `Variation`: a variation-typed column publishes its values as an `Enum`.
     pub col_type: ColumnType,
     pub is_pk: bool,
     pub is_unique: bool,
     pub is_nullable: bool,
 }
 
-/// One writer of a published entity: an exposed use case by id, or `(unexposed)` for every
-/// hidden one, with the effects it sets.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SurfaceWriter {
     pub entity: String,
@@ -66,6 +59,9 @@ pub struct Surface {
     pub entities: Vec<SurfaceEntity>,
     pub writers: Vec<SurfaceWriter>,
     pub shared: Vec<SurfaceEntity>,
+    /// The exposed writers of each shared entity, for the consumer's `ForeignWrite` hint. The
+    /// canonical text does not carry them.
+    pub shared_writers: Vec<SurfaceWriter>,
 }
 
 impl Surface {
@@ -155,8 +151,20 @@ impl Surface {
         }
 
         let mut shared: BTreeMap<String, SurfaceEntity> = BTreeMap::new();
+        let mut shared_writers = Vec::new();
         for s in &publication.shares {
             let e = &model.entities[s.entity];
+            for utx in &txs {
+                if utx.writes().any(|w| w.entity == s.entity)
+                    && publication.caller_of(utx.usecase).is_some()
+                {
+                    shared_writers.push(writer(
+                        &e.id,
+                        Some(model.use_cases[utx.usecase].id.clone()),
+                        Vec::new(),
+                    ));
+                }
+            }
             shared.insert(
                 e.id.clone(),
                 SurfaceEntity {
@@ -175,10 +183,10 @@ impl Surface {
             entities: entities.into_values().map(|(_, e)| e).collect(),
             writers,
             shared: shared.into_values().collect(),
+            shared_writers,
         }
     }
 
-    /// The canonical lines, one element each.
     pub fn lines(&self) -> Vec<String> {
         let use_cases = self.use_cases.iter().map(|uc| {
             let mut line = format!(

@@ -269,7 +269,7 @@ fn use_case_entities(model: &SemanticModel, uc: UseCaseKey) -> Vec<EntityKey> {
             continue;
         }
         if let NodeRef::Entity(entity) = rel.to {
-            if !entities.contains(&entity) {
+            if !entities.contains(&entity) && !model.is_foreign(&rel.to) {
                 entities.push(entity);
             }
         }
