@@ -1242,6 +1242,15 @@ fn a_flow_diagram_draws_what_the_rdra_diagram_declares() {
     }
 }
 
+/// The ids the `%% derived <from> -> <to> via ...` line of `text` names.
+fn derived_vias(text: &str, from: &str, to: &str) -> Vec<String> {
+    let prefix = format!("%% derived {from} -> {to} via ");
+    text.lines()
+        .find_map(|line| line.trim().strip_prefix(&prefix))
+        .map(|vias| vias.split(',').map(str::to_string).collect())
+        .unwrap_or_default()
+}
+
 #[test]
 fn every_context_diagram_of_every_sample_keeps_the_contract() {
     let dir = scratch("diagram_contract_context");
@@ -1257,16 +1266,37 @@ fn every_context_diagram_of_every_sample_keeps_the_contract() {
                     "{root} {scope:?}: a {kind} node\n{text}"
                 );
             }
+            assert!(
+                !text.contains("subgraph"),
+                "{root} {scope:?}: a subgraph\n{text}"
+            );
+            assert!(
+                !text.contains("%% layers:"),
+                "{root} {scope:?}: a layers line\n{text}"
+            );
+            let mut pairs = BTreeSet::new();
             for edge @ (from, label, to) in &chart.edges {
-                let fits = match label.split_once(' ') {
-                    None => label == "performs" && from.starts_with("actor__"),
-                    Some(("raises", _)) => from.starts_with("extsystem__"),
-                    Some(("triggers", _)) => to.starts_with("extsystem__"),
-                    _ => false,
+                // One edge per outside node, system, and direction; its label names what it
+                // was derived through.
+                let via_kinds: &[&str] = if from.starts_with("actor__") {
+                    &["buc__", "usecase__", "step__"]
+                } else if from.starts_with("extsystem__") || to.starts_with("extsystem__") {
+                    &["event__"]
+                } else {
+                    &[]
                 };
                 let system_end = from.starts_with("system__") || to.starts_with("system__");
+                let vias = derived_vias(&text, from, to);
                 assert!(
-                    fits && system_end && chart.derived.contains(edge),
+                    !via_kinds.is_empty()
+                        && system_end
+                        && !label.is_empty()
+                        && chart.derived.contains(edge)
+                        && !vias.is_empty()
+                        && vias
+                            .iter()
+                            .all(|via| via_kinds.iter().any(|kind| via.starts_with(kind)))
+                        && pairs.insert((from.clone(), to.clone())),
                     "{root} {scope:?}: {from} -{label}-> {to}\n{text}"
                 );
             }
@@ -1286,7 +1316,7 @@ fn a_context_diagram_node_has_the_id_the_rdra_diagram_gives_it() {
         for (id, kind) in &context.nodes {
             if id == "system__Model" {
                 assert!(
-                    text.contains("    %% synthesized system__Model: "),
+                    text.contains("  %% synthesized system__Model: "),
                     "{root}: system__Model without its reason"
                 );
                 continue;

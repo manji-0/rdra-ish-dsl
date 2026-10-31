@@ -106,6 +106,13 @@
 
 ### Changed
 
+- `diagram --kind context` draws the system boundary and nothing else. An actor has one
+  edge to the system, labelled with the labels of the BUCs it performs (`、`-joined), where
+  it had a `performs` edge. An external system has one edge per direction, labelled with the
+  labels of the events exchanged, where it had one edge per event labelled `raises <Id>` or
+  `triggers <Id>`. The RDRA layer subgraphs and the `%% layers:` header line are gone. Node
+  ids, `%% kinds:`, `%% omitted:`, `%% derived` (now `via` the BUC or event ids behind the
+  label), and the synthesized `system__Model` stay. clinic-ops: 28 edges become 21.
 - `diagram --kind state` labels each transition with the use case's label, then `[...]`
   with the label of each condition whose `holds` body guards it: `採血 [医師が確定したオーダ]`
   (was `usecase__CollectSpecimen`). The use case's id moves to a `%% transition <id>` line

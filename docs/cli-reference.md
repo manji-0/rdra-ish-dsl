@@ -460,7 +460,7 @@ relation, from which the RDRAGraph views can be derived.
 | Kind | RDRA diagram | Draws | Leaves out | With `--buc` |
 |---|---|---|---|---|
 | `rdra` (default) | RDRAGraph, the whole graph | Every element in its layer and every relation; `--node-kind` / `--edge-kind` narrow it | ADRs; columns (`er`), variation values and condition bodies (`condition`) | Everything reachable from the BUCs, and the states their use cases move between |
-| `context` | システムコンテキスト | The system, the actors who use it, and the external systems it exchanges events with; every edge derived | BUCs, use cases, and events, which `%% derived` and the edge labels name | The actors and external systems with an edge through the BUCs, and the systems they reach |
+| `context` | システムコンテキスト | The system boundary: one edge per actor, labelled with the BUCs it performs, and one edge per external system and direction, labelled with the events exchanged; every edge derived, no RDRA layer subgraphs | BUCs, use cases, and events as nodes; `%% derived` names the BUCs and events behind each label | The actors and external systems with an edge through the BUCs, and the systems they reach |
 | `requirement` | 要求モデル | Requirements and the BUCs they `motivate`; NFRs and constraints with what they `apply_to` or `constrain`, and the qualities they belong to | ADRs; a requirement-to-actor link, which the DSL does not have | What links to the BUCs, their use cases and APIs, the entities those read and write, and the systems that contain those APIs |
 | `business` | ビジネスコンテキスト, ビジネスユースケース | Each business holding its BUCs, and the actors and external systems each BUC involves | Use cases, steps, and events, which `%% derived` names | The named BUCs and their businesses (the RDRA BUC diagram) |
 | `usecase` | UC複合図 | Each use case with its actors, screens and what they show, the entities it reads and writes, its events, external systems, and timers, the conditions on it, and its transitions | BUCs, steps, media, permissions, fields, APIs (their CRUD is folded into the use case), and DTOs | The use cases the BUCs contain, directly or through a step; `--usecase` names use cases instead |
@@ -511,18 +511,23 @@ The notes below say how each kind reads, in the order of the table.
   `permission`), システム境界 (`usecase`, `screen`, `field`, `event`), and システム
   (`system`, `api`, `dto`, `entity`, `state`, `variation`, `condition`). An `adr` is not
   drawn. A `--buc` scope also holds the states its use cases move between.
-- For `--kind context`, actors and external systems sit in システム価値 and the system in
-  システム. Every edge is derived and followed by its `%% derived ... via <ids>` line: an
-  actor `-.->|performs|` the system through each BUC, use case, or step it performs; an
-  external system `-.->|raises <Event>|` the system when the event triggers one of its use
-  cases or BUCs; and the system `-.->|triggers <Event>|` an external system when one of
-  its use cases raises the event. With one declared system every edge ends there. With
+- For `--kind context`, the nodes sit in no layer subgraph, and the header has no
+  `layers:` line. Every edge is derived and followed by its `%% derived ... via <ids>`
+  line. An actor has one `-.->` edge to the system, labelled with the labels of the BUCs
+  it performs, joined by `、`: a `performs` to a BUC counts that BUC, and a `performs` to
+  a use case or step counts each BUC that contains it (the node itself when none does).
+  An external system has one edge per direction, labelled with the labels of the events
+  exchanged, joined by `、`: toward the system for each event it raises that triggers one
+  of the system's use cases or BUCs, and from the system for each event one of its use
+  cases raises that triggers the external system. `via` names the BUC or event ids behind
+  the label. With one declared system every edge ends there. With
   several, an edge ends at each system that contains an API the use cases behind it
   invoke. When no system is declared, or several are and none can be traced, the edge
   ends at `system__Model["システム"]`, followed by
   `%% synthesized system__Model: <reason>`; it is the one node no other kind draws.
   The whole model draws every actor, external system, and system; `--buc` draws those
-  with an edge through the BUC's use cases, steps, and APIs.
+  with an edge through the BUC's use cases, steps, and APIs, and labels an edge with the
+  scoped BUCs only.
 - For `--kind requirement`, the nodes sit in the `rdra` layers. The edges are the
   declared `motivates` (requirement to BUC), `achieves` (requirement to goal), `applies_to` (NFR to use case, API, or
   system), `constrains` (constraint to use case, API, system, entity, or DTO), and

@@ -20,14 +20,16 @@ rdra-ish diagram src/ --kind business --buc <BucId> --format mermaid
 
 ## Reading the System Context
 
-- Actors and external systems sit in システム価値, systems in システム. The whole model
-  draws every actor, external system, and system, linked or not.
+- The diagram has no layer subgraphs and no `layers:` header line. The whole model draws
+  every actor, external system, and system, linked or not.
 - Every edge is derived and followed by `%% derived ... via <ids>`:
-  - `actor__A -.->|performs| system__S` through each BUC, use case, or step A performs.
-  - `extsystem__X -.->|raises <Event>| system__S` when the event triggers one of the
-    system's use cases or BUCs.
-  - `system__S -.->|triggers <Event>| extsystem__X` when one of its use cases raises the
-    event.
+  - `actor__A -.->|<BUC labels>| system__S`: one edge per actor, labelled with the labels
+    of the BUCs it performs (`、`-joined), directly or through a use case or step.
+  - `extsystem__X -.->|<event labels>| system__S`: one edge, labelled with the events X
+    raises that trigger one of the system's use cases or BUCs.
+  - `system__S -.->|<event labels>| extsystem__X`: one edge, labelled with the events one
+    of its use cases raises to X.
+  - `via` lists the BUC or event ids the label names, so read it to find the element.
 - With one declared system, every edge ends there. With several, an edge ends at each
   system that contains an API the use cases behind it invoke. When no system is declared,
   or none can be traced, it ends at `system__Model["システム"]`, with a

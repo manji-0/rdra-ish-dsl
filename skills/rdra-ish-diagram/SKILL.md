@@ -45,7 +45,7 @@ reach. Prefer it before a whole-model diagram.
 
 | Kind | RDRA diagram | Carries | Leaves out |
 |---|---|---|---|
-| `context` | システムコンテキスト | The system, its actors, and its external systems; every edge derived | BUCs, use cases, events (named in edge labels and `%% derived`) |
+| `context` | システムコンテキスト | The system boundary: one edge per actor labelled with its BUCs, one per external system and direction labelled with the events exchanged; every edge derived, no layer subgraphs | BUCs, use cases, events as nodes (named in edge labels and `%% derived`) |
 | `requirement` | 要求モデル | `motivates`, `achieves`, NFR `applies_to`, `constrains`, `qualifies` | ADRs; a requirement-to-actor link (not in the DSL) |
 | `business` | ビジネスコンテキスト / BUC | Businesses holding BUCs, and each BUC's actors and external systems | Use cases, steps, events (named in `%% derived`) |
 | `usecase` | UC複合図 | Use cases with actors, screens, entities, events, external systems, timers, conditions, and transitions | APIs (CRUD folded into the use case), DTOs, permissions, media, fields, BUCs |

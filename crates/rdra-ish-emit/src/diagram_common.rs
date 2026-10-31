@@ -138,6 +138,11 @@ pub(crate) fn quote(label: &str) -> String {
     label.replace('"', "#quot;")
 }
 
+/// `label` safe between the `|` marks of an edge label.
+pub(crate) fn edge_label(label: &str) -> String {
+    quote(label).replace('|', "#124;")
+}
+
 /// The node id of the encoding contract, `<kind token>__<DSL id>`, the same in every kind.
 pub(crate) fn contract_id(model: &SemanticModel, node: &NodeRef) -> Option<String> {
     Some(format!(

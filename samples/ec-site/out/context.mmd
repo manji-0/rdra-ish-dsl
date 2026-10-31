@@ -1,24 +1,19 @@
 %% rdra-ish diagram=context scope=whole model=samples/ec-site
-%% layers: value=システム価値 system=システム
 %% kinds: actor extsystem system
 %% omitted: buc usecase event
 flowchart LR
-  subgraph layer_value["システム価値"]
-    actor__Admin["Administrator"]:::actor
-    actor__Customer["Customer"]:::actor
-    extsystem__PaymentGW["Payment Gateway"]:::extsystem
-    extsystem__ShippingSvc["Shipping Service"]:::extsystem
-  end
-  subgraph layer_system["システム"]
-    system__CommerceSystem["Commerce System"]:::system
-  end
-  actor__Admin -.->|performs| system__CommerceSystem
-  %% derived actor__Admin -> system__CommerceSystem via usecase__DeliverOrder,usecase__ShipOrder
-  actor__Customer -.->|performs| system__CommerceSystem
+  actor__Admin["Administrator"]:::actor
+  actor__Customer["Customer"]:::actor
+  extsystem__PaymentGW["Payment Gateway"]:::extsystem
+  extsystem__ShippingSvc["Shipping Service"]:::extsystem
+  system__CommerceSystem["Commerce System"]:::system
+  actor__Admin -.->|Process Order| system__CommerceSystem
+  %% derived actor__Admin -> system__CommerceSystem via buc__BucOrder
+  actor__Customer -.->|Add Products to Cart、Process Order、Make Payment| system__CommerceSystem
   %% derived actor__Customer -> system__CommerceSystem via buc__BucCart,buc__BucOrder,buc__BucPayment
-  extsystem__PaymentGW -.->|raises EvPaymentAuthorized| system__CommerceSystem
+  extsystem__PaymentGW -.->|Payment Authorized| system__CommerceSystem
   %% derived extsystem__PaymentGW -> system__CommerceSystem via event__EvPaymentAuthorized
-  system__CommerceSystem -.->|triggers EvOrderShipped| extsystem__ShippingSvc
+  system__CommerceSystem -.->|Order Shipped| extsystem__ShippingSvc
   %% derived system__CommerceSystem -> extsystem__ShippingSvc via event__EvOrderShipped
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
