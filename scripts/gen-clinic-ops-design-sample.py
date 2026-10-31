@@ -254,17 +254,23 @@ parts.append('''# Clinic Ops 設計書サンプル
 
 この文書は `samples/clinic-ops/` を題材に、要求整理、BUC 分解、UC 分解、System/API 境界、データモデリング、状態検証をレビューできる粒度でまとめる設計書サンプルです。題材は日本の病院の外来業務（受付、資格確認、診察、検査、処方、計算・会計、レセプト請求）で、業務規則は `.rdra` の `//` コメントに一次資料の出典（ファイル名:行）を付けています。入院は対象外です。
 
-図は外部リンクではなく本文に埋め込みます。レビューでは対象章だけを開き、BUC 単位、UC 単位、System/API 単位、データモデル単位の順に確認します。
+図は外部リンクではなく本文に埋め込みます。章の順は RDRA の 4 層の順です。システム価値（システムコンテキスト図、要求モデル図）とシステム外部環境（ビジネスコンテキスト図、業務フロー図）で「誰のための、何の業務か」を確かめてから、システム境界（UC複合図、API）とシステム（情報モデル、状態、条件）を確認します。
 
 ## 1. 成果物一覧
 
 | 種別 | 生成先 | 用途 |
 |---|---|---|
+| システムコンテキスト図 | `out/context.mmd` | actor・外部システムとシステムの関係を確認する |
+| 要求モデル図 | `out/requirement.mmd` | 要求・制約がどの BUC と情報を動機付けるかを確認する |
+| ビジネスコンテキスト図 | `out/business.mmd` | 業務と BUC の構成、担当 actor を確認する |
+| BUC 別 業務フロー図 | `out/buc/flow_*.mmd` | BUC の業務手順と、各手順を担う UC を確認する |
 | BUC 別 UC複合図 | `out/buc/usecase_*.mmd` | 各 BUC の UC と、その actor・画面・情報・イベント・外部システム・タイマー・条件・状態遷移を確認する |
 | API マトリクス | `out/api_matrix.csv` | API と Entity CRUD の棚卸し |
 | Screen 制約パターン | `out/screen_constraints.csv` | Screen に到達する UC/API ごとの権限・媒体制約を確認する |
 | Actor 権限割当監査 | `out/actor_permission_audit.csv` | Actor 側の権限付与が UC/API 要求と合っているかを確認する |
 | Event flow | `out/event_flow.mmd` | BUC 間イベント連鎖を確認する |
+| 情報モデル図 | `out/information.mmd` | 情報と、その状態モデル・バリエーションを確認する |
+| バリエーション・条件図 | `out/condition.mmd` | 条件がどのバリエーションと状態から作られ、どの UC に効くかを確認する |
 | ER 図 | `out/er_care_to_billing.mmd` | 診療から請求までのデータ関係を確認する |
 | State 図 | `out/state_whole.mmd` | 主要状態遷移の全体像を確認する |
 | 状態到達表 | `out/states_appointment.txt`, `out/states_claim_statement.txt` | lifecycle の到達可能性を確認する |
@@ -272,6 +278,8 @@ parts.append('''# Clinic Ops 設計書サンプル
 生成コマンド例:
 
 ```sh
+rdra-ish diagram samples/clinic-ops --kind context --format mermaid --out samples/clinic-ops/out/context
+rdra-ish diagram samples/clinic-ops --kind flow --format mermaid --buc BucVisitPayment --out samples/clinic-ops/out/buc/flow_visit_payment
 rdra-ish diagram samples/clinic-ops --kind usecase --format mermaid --buc BucClinicalEncounter --out samples/clinic-ops/out/buc/usecase_clinical_encounter
 rdra-ish csv samples/clinic-ops --kind api-matrix --out samples/clinic-ops/out/api_matrix.csv
 rdra-ish csv samples/clinic-ops --kind screen-constraints --out samples/clinic-ops/out/screen_constraints.csv
@@ -301,7 +309,22 @@ parts.append('''
 
 レビューでは、まず BUC の責務境界を確認し、次に UC 単位で API/Entity 操作を確認します。最後に System/API マトリクスと ER/状態検証で横断的な整合性を見ます。
 
-### 2.1 Context / Access 制約
+### 2.1 システムコンテキスト図
+
+システムを使う actor と、イベントでつながる外部システムを示す。actor からシステムへの線は、actor が担う BUC の UC が呼ぶ API から導出される。
+
+@@CONTEXT@@
+### 2.2 要求モデル図
+
+要求、非機能要求、制約と、それぞれが動機付ける BUC、制約する情報を示す。
+
+@@REQUIREMENT@@
+### 2.3 ビジネスコンテキスト図
+
+業務ごとの BUC と、BUC を担う actor・イベントでつながる外部システムを示す。
+
+@@BUSINESS@@
+### 2.4 Context / Access 制約
 
 権限語彙と媒体語彙は `shared/biz.rdra`、actor への権限割当は
 `shared/access.rdra` に分けている。各 BUC ファイルでは、UC/API 側の要求を
@@ -333,6 +356,11 @@ for i, b in enumerate(BUCS, 1):
     parts.append(f"| BUC | `{b['id']}` |\n| Business | `{b['business']}` |\n| 主な actor | {b['actors']} |\n")
     parts.append(f"| 必要権限 | {code_list(buc_perms(b['id']))} |\n| 主なデータ | {code_list(b['data'])} |\n\n")
     parts.append(b['prose'] + '\n\nレビュー観点:\n\n' + ''.join(f'- {p}\n' for p in b['points']) + '\n')
+    flow = OUT / f"buc/flow_{b['stem']}.mmd"
+    if flow.exists():
+        parts.append(f"#### {b['title']} 業務フロー図\n\n")
+        parts.append(gen_cmd(f"diagram samples/clinic-ops --kind flow --format mermaid --buc {b['id']} --out samples/clinic-ops/out/buc/flow_{b['stem']}") + '\n')
+        parts.append(mermaid(f"buc/flow_{b['stem']}.mmd") + '\n')
     parts.append(f"#### {b['title']} UC複合図\n\n")
     parts.append(gen_cmd(f"diagram samples/clinic-ops --kind usecase --format mermaid --buc {b['id']} --out samples/clinic-ops/out/buc/usecase_{b['stem']}") + '\n')
     parts.append(mermaid(f"buc/usecase_{b['stem']}.mmd") + '\n')
@@ -433,6 +461,9 @@ parts.append('''主要イベントと起動先:
 | 請求 | `ClaimStatement` |
 | フォロー・通知・監査 | `CarePlan`, `PatientMessage`, `Notification`, `AuditEvent` |
 
+情報モデル図は、情報（Entity）と、それぞれの状態モデル（ライフサイクル列）とバリエーション型の列を示す。
+
+@@INFORMATION@@
 variation（actor や保険者が決め、use case が動かさない値）:
 
 | Variation | 型を付ける列 | 値 |
@@ -445,15 +476,20 @@ variation（actor や保険者が決め、use case が動かさない値）:
 | `PayerChange` | `ClaimStatement.payer_change` | 資格変更なし, 負担割合が同じ資格への変更, 負担割合が異なる資格への変更, 公費が関わる変更 |
 | `PaymentMethod` | `PaymentTransaction.method` | 現金, クレジットカード, 還付・追加徴収 |
 
-### 6.2 ER 図
+### 6.2 バリエーション・条件図
+
+条件は、バリエーションの値と状態モデルの状態の組合せで業務規則を選ぶ。図は条件ごとに、組み合わせるバリエーションと状態、効く UC を示す。
 
 ''')
+parts.append(gen_cmd('diagram samples/clinic-ops --kind condition --format mermaid --out samples/clinic-ops/out/condition') + '\n')
+parts.append(mermaid('condition.mmd') + '\n')
+parts.append('### 6.3 ER 図\n\n')
 parts.append(gen_cmd('diagram samples/clinic-ops --kind er --format mermaid --buc BucFollowupCare --buc BucBillingClaims --out samples/clinic-ops/out/er_care_to_billing') + '\n')
 parts.append(mermaid('er_care_to_billing.mmd') + '\n')
-parts.append('### 6.3 State 図\n\n')
+parts.append('### 6.4 State 図\n\n')
 parts.append(gen_cmd('diagram samples/clinic-ops --kind state --format mermaid --out samples/clinic-ops/out/state_whole') + '\n')
 parts.append(mermaid('state_whole.mmd') + '\n')
-parts.append('### 6.4 状態到達表\n\nAppointment:\n\n```text\n' + (OUT / 'states_appointment.txt').read_text().rstrip('\n') + '\n```\n\n')
+parts.append('### 6.5 状態到達表\n\nAppointment:\n\n```text\n' + (OUT / 'states_appointment.txt').read_text().rstrip('\n') + '\n```\n\n')
 parts.append('ClaimStatement（レセプト）:\n\n```text\n' + (OUT / 'states_claim_statement.txt').read_text().rstrip('\n') + '\n```\n\n')
 parts.append('''状態検証では、初期状態から想定する終端状態へ到達できるか、到達してはいけない状態組み合わせがないか、nullable column や Bool column の `sets` が不足していないかを確認します。`rdra-ish check samples/clinic-ops` と `rdra-ish verify samples/clinic-ops` は、各状態の到達証拠（NoWitness なし）、抜け出せない状態（Deadlock なし）、実行されない use case（NeverRuns なし）、invariant・forbidden・1:1 の一意性を検証する。
 
@@ -574,15 +610,17 @@ actor が実行する UC/API パスに必要な権限と媒体が説明できる
 
 ## 8. レビュー手順
 
-1. BUC 単位の RDRA Layered Graph 図でスコープと actor/usecase を確認する。
-2. 論点のある UC は UC 単位のレビュー表で確認点を確認する。
-3. Event flow で BUC 間連鎖とタイマーを確認する。
-4. API matrix で API/Entity CRUD の責務を横断確認する。
-5. Screen 制約パターンで権限と媒体を横断確認する。
-6. Actor 権限割当監査で不足/過剰な actor 側権限を確認する。
-7. ER 図で最終データ構造を確認する。
-8. State 図と状態到達表で lifecycle と rule の不足を確認する。
-9. `.rdra` のコメントの出典で、各業務規則が一次資料に基づくことを確認する。
+1. システムコンテキスト図と要求モデル図で、システムを使う actor・外部システムと、各 BUC の要求を確認する。
+2. ビジネスコンテキスト図で業務と BUC の構成を確認する。
+3. BUC ごとに業務フロー図で手順を確認し、UC複合図でスコープと actor/usecase を確認する。
+4. 論点のある UC は UC 単位のレビュー表で確認点を確認する。
+5. Event flow で BUC 間連鎖とタイマーを確認する。
+6. API matrix で API/Entity CRUD の責務を横断確認する。
+7. Screen 制約パターンで権限と媒体を横断確認する。
+8. Actor 権限割当監査で不足/過剰な actor 側権限を確認する。
+9. 情報モデル図、バリエーション・条件図、ER 図で最終データ構造を確認する。
+10. State 図と状態到達表で lifecycle と rule の不足を確認する。
+11. `.rdra` のコメントの出典で、各業務規則が一次資料に基づくことを確認する。
 
 ## 9. 承認条件
 
@@ -611,4 +649,8 @@ missing = [uc for uc in uc_label if uc not in POINTS]
 assert not missing, missing
 covered = {uc for b in BUCS for uc in buc_ucs(b['id'])}
 assert covered == set(uc_label), set(uc_label) - covered
-(SAMPLE / 'design-sample.md').write_text('\n'.join(l.rstrip() for l in ''.join(parts).split('\n')))
+doc = ''.join(parts)
+for key, kind in [('CONTEXT', 'context'), ('REQUIREMENT', 'requirement'), ('BUSINESS', 'business'), ('INFORMATION', 'information')]:
+    doc = doc.replace(f'@@{key}@@\n', gen_cmd(f'diagram samples/clinic-ops --kind {kind} --format mermaid --out samples/clinic-ops/out/{kind}') + '\n' + mermaid(f'{kind}.mmd') + '\n')
+assert '@@' not in doc
+(SAMPLE / 'design-sample.md').write_text('\n'.join(l.rstrip() for l in doc.split('\n')))
