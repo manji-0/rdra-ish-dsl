@@ -209,6 +209,27 @@ fn diag_message(d: &StateDiag, entity: &str) -> String {
     format!("[{label}][{}] {body}", d.name(&[entity]))
 }
 
+/// `status[paid=支払済|...]` for each inline `Enum` axis whose values carry labels.
+fn value_labels(model: &SemanticModel, r: &EntityStateResult) -> Vec<String> {
+    let Some(entity) = model.entities.values().find(|e| e.id == r.entity_id) else {
+        return Vec::new();
+    };
+    r.axes
+        .iter()
+        .filter_map(|ax| {
+            let AxisKind::Enum(values) = &ax.kind else {
+                return None;
+            };
+            let column = entity.columns.iter().find(|c| c.name == ax.column)?;
+            let labeled: Vec<String> = values
+                .iter()
+                .filter_map(|v| column.value_label(v).map(|label| format!("{v}={label}")))
+                .collect();
+            (!labeled.is_empty()).then(|| format!("{}[{}]", ax.column, labeled.join("|")))
+        })
+        .collect()
+}
+
 // ── Table エミッタ ────────────────────────────────────────────────────────────
 
 pub struct StatePatternTableEmitter {
@@ -225,12 +246,13 @@ impl Default for StatePatternTableEmitter {
 
 impl Emitter for StatePatternTableEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
-        Ok(render_table(&derive_views(model, view, self.cap)))
+        Ok(render_table(&derive_views(model, view, self.cap), model))
     }
 }
 
-/// One block per entity: its axes, a row per pattern, the reachable count, and diagnostics.
-pub fn render_table(results: &[EntityStateResult]) -> String {
+/// One block per entity: its axes, the labels of their values, a row per pattern, the
+/// reachable count, and diagnostics.
+pub fn render_table(results: &[EntityStateResult], model: &SemanticModel) -> String {
     let mut out = String::new();
 
     for r in results {
@@ -254,7 +276,12 @@ pub fn render_table(results: &[EntityStateResult]) -> String {
                 kind => format!("{}[{}]", ax.column, axis_domain(kind).join("|")),
             })
             .collect();
-        out.push_str(&format!("  axes: {}\n\n", axis_header.join(", ")));
+        out.push_str(&format!("  axes: {}\n", axis_header.join(", ")));
+        let labels = value_labels(model, r);
+        if !labels.is_empty() {
+            out.push_str(&format!("  labels: {}\n", labels.join(", ")));
+        }
+        out.push('\n');
 
         // ── テーブル ────────────────────────────────────────────────
         // カラム幅の計算

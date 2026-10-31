@@ -36,6 +36,7 @@ pub(super) fn model_column(name: &str, col_type: ColumnType) -> ModelColumn {
         is_history: false,
         is_tenant_scope: false,
         derived_expr: None,
+        value_labels: Vec::new(),
     }
 }
 
@@ -87,7 +88,14 @@ pub(super) fn simple_entity_model(ids: &[&str]) -> SemanticModel {
                 },
                 Column {
                     name: "status".to_string(),
-                    col_type: ColType::Enum(vec!["open".to_string(), "closed".to_string()]),
+                    col_type: ColType::Enum(
+                        ["open", "closed"]
+                            .map(|value| EnumValue {
+                                value: value.to_string(),
+                                label: None,
+                            })
+                            .to_vec(),
+                    ),
                     annotations: Vec::new(),
                     span: 0..0,
                 },

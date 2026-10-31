@@ -36,11 +36,11 @@ flowchart LR
     entity__LabResult["Lab Result"]:::entity
     entity__Notification["Notification"]:::entity
     entity__PatientMessage["Patient Message"]:::entity
-    state__ClinicalOrder_clcancelled["clcancelled"]:::state
-    state__ClinicalOrder_clcollected["clcollected"]:::state
-    state__ClinicalOrder_clordered["clordered"]:::state
-    state__ClinicalOrder_clresulted["clresulted"]:::state
-    state__ClinicalOrder_clreviewed["clreviewed"]:::state
+    state__ClinicalOrder_clcancelled["取消"]:::state
+    state__ClinicalOrder_clcollected["採取済"]:::state
+    state__ClinicalOrder_clordered["オーダ済"]:::state
+    state__ClinicalOrder_clresulted["結果受信"]:::state
+    state__ClinicalOrder_clreviewed["結果確認済"]:::state
     condition__OrderConfirmedByPhysician["医師が確定したオーダ"]:::condition
   end
   actor__Clinician -.->|performs| usecase__CancelClinicalOrder

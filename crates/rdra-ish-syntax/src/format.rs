@@ -464,7 +464,17 @@ fn format_col_type(col_type: &ColType) -> String {
         ColType::Date => "Date".to_string(),
         ColType::Bool => "Bool".to_string(),
         ColType::Decimal => "Decimal".to_string(),
-        ColType::Enum(values) => format!("Enum({})", values.join(", ")),
+        ColType::Enum(values) => format!(
+            "Enum({})",
+            values
+                .iter()
+                .map(|value| match &value.label {
+                    Some(label) => format!("{} {}", value.value, quote_string(label)),
+                    None => value.value.clone(),
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
         ColType::Named(name) => name.clone(),
     }
 }
@@ -750,6 +760,16 @@ mod tests {
         );
         let (_ast, errors) = parse(&formatted);
         assert!(errors.is_empty(), "{errors:?}");
+    }
+
+    #[test]
+    fn keeps_the_labels_of_enum_values() {
+        let formatted =
+            format_source("entity E \"E\" {status:Enum(open \"受付中\",closed)}\n").unwrap();
+        assert_eq!(
+            formatted,
+            "entity E \"E\" {\n  status: Enum(open \"受付中\", closed)\n}\n"
+        );
     }
 
     #[test]

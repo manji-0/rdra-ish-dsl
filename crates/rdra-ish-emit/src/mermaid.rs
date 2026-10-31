@@ -558,9 +558,11 @@ impl Emitter for StateMermaidEmitter {
                 }
             }
             for variant in &drawn {
-                if let Some(id) = state_id(variant) {
+                let key = state_key(model, sm.entity, variant);
+                if let (Some(key), Some(id)) = (key, state_id(variant)) {
                     add_kind("state");
-                    body.push_str(&format!("    state \"{}\" as {id}\n", quote(variant)));
+                    let label = &model.states[key].label;
+                    body.push_str(&format!("    state \"{}\" as {id}\n", quote(label)));
                 }
             }
             for (from, to, usecase) in &arms {
@@ -1007,6 +1009,29 @@ transitions(Doc.status, Publish, draft -> published)
                  state__Doc_draft --> state__Doc_published : usecase__Publish\n    \
                  state__Doc_published --> [*]\n  \
                }\n"
+        );
+    }
+
+    #[test]
+    fn test_state_mermaid_draws_the_label_of_a_value() {
+        let src = r#"
+entity Doc "文書" {
+  id: Int @pk
+  status: Enum(draft "下書き", published) @default(draft)
+}
+usecase Publish "公開する"
+transitions(Doc.status, Publish, draft -> published)
+"#;
+        let result = StateMermaidEmitter
+            .emit(&model_from(src), &View::whole())
+            .unwrap();
+        assert!(
+            result.contains("    state \"下書き\" as state__Doc_draft\n"),
+            "{result}"
+        );
+        assert!(
+            result.contains("    state \"published\" as state__Doc_published\n"),
+            "{result}"
         );
     }
 

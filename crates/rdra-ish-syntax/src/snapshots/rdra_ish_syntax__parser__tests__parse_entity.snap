@@ -134,8 +134,14 @@ Ast {
                         name: "status",
                         col_type: Enum(
                             [
-                                "active",
-                                "discontinued",
+                                EnumValue {
+                                    value: "active",
+                                    label: None,
+                                },
+                                EnumValue {
+                                    value: "discontinued",
+                                    label: None,
+                                },
                             ],
                         ),
                         annotations: [

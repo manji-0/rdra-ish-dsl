@@ -407,7 +407,7 @@ fn ast_column_to_model(
         ColType::Date => ColumnType::Date,
         ColType::Bool => ColumnType::Bool,
         ColType::Decimal => ColumnType::Decimal,
-        ColType::Enum(vs) => ColumnType::Enum(vs.clone()),
+        ColType::Enum(vs) => ColumnType::Enum(vs.iter().map(|v| v.value.clone()).collect()),
         ColType::Named(name) => match resolve_variation(model, name, ctx) {
             Some(key) => ColumnType::Variation(key),
             None => {
@@ -440,6 +440,10 @@ fn ast_column_to_model(
         is_history: false,
         is_tenant_scope: false,
         derived_expr: None,
+        value_labels: match &col.col_type {
+            ColType::Enum(vs) => vs.iter().map(|v| v.label.clone()).collect(),
+            _ => Vec::new(),
+        },
     };
     for ann in &col.annotations {
         match ann {

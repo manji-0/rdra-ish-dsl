@@ -960,8 +960,10 @@ rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns 
 | `--max-patterns` | unsigned integer | `256` | Cap on each entity's distinct patterns within one target cone (an entity view, invariant, or after-assert is explored on the variables it reads). The cone also stops after 16 joint states per allowed pattern (4096 at the default). Only entities the target reads are bounded to one instance: a use case that also creates an entity outside the cone (an audit row, say) never runs out of slots for it. When a cap is hit, the result is marked `truncated` and a fail-closed `PatternCapReached` or `StateCapReached` **error** is recorded (exit non-zero for all formats). |
 | `--entity <id>` | string (repeatable) | — (all entities) | Derive only the named entities' views, and the invariants and after-asserts that read them, each on its own cone. Every output format holds only those views. Exit severity considers the selected targets and the build errors their cones read; a build error outside them is deferred and listed under `not checked:`. See [Partial runs](#partial-runs). |
 
-Output is written to stdout. Exit is based on structured severity (all formats), not
-string-scanning `[error]`. stderr starts with a `bounds:` line: one instance per entity,
+Output is written to stdout. In the table, each entity opens with an `axes:` line, the
+value domain of each state axis, and a `labels:` line when an inline `Enum` axis has
+labeled values (`status[pending=受付前|paid=支払済]`). Exit is based on structured severity
+(all formats), not string-scanning `[error]`. stderr starts with a `bounds:` line: one instance per entity,
 the Int range, the state cap per target cone, and that entities a check does not read are unbounded.
 `check` prints the same line, and `verify` prints it on stdout with the TLA+ constants. Diagnostics that name no entity are printed
 on stderr too, and so is the `not checked:` block, which lists each state of a state model,

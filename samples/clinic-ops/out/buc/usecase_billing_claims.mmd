@@ -53,16 +53,16 @@ flowchart LR
     entity__Encounter["Encounter"]:::entity
     entity__InsurancePolicy["保険資格"]:::entity
     entity__PaymentTransaction["Payment Transaction"]:::entity
-    state__ClaimStatement_stmtassessed["stmtassessed"]:::state
-    state__ClaimStatement_stmtdrafting["stmtdrafting"]:::state
-    state__ClaimStatement_stmtinspecting["stmtinspecting"]:::state
-    state__ClaimStatement_stmtonhold["stmtonhold"]:::state
-    state__ClaimStatement_stmtpaid["stmtpaid"]:::state
-    state__ClaimStatement_stmtreceipterror["stmtreceipterror"]:::state
-    state__ClaimStatement_stmtrereview["stmtrereview"]:::state
-    state__ClaimStatement_stmtreturned["stmtreturned"]:::state
-    state__ClaimStatement_stmtsubmitted["stmtsubmitted"]:::state
-    state__ClaimStatement_stmtunderreview["stmtunderreview"]:::state
+    state__ClaimStatement_stmtassessed["査定"]:::state
+    state__ClaimStatement_stmtdrafting["作成中"]:::state
+    state__ClaimStatement_stmtinspecting["院内点検中"]:::state
+    state__ClaimStatement_stmtonhold["保留"]:::state
+    state__ClaimStatement_stmtpaid["支払済"]:::state
+    state__ClaimStatement_stmtreceipterror["受付不能・要確認"]:::state
+    state__ClaimStatement_stmtrereview["再審査請求中"]:::state
+    state__ClaimStatement_stmtreturned["返戻"]:::state
+    state__ClaimStatement_stmtsubmitted["請求済"]:::state
+    state__ClaimStatement_stmtunderreview["審査中"]:::state
     condition__TransferNotPossible["振替・分割の対象外（負担割合の相違・公費）"]:::condition
   end
   actor__ClaimsClerk -.->|performs| usecase__CorrectReturnedStatement

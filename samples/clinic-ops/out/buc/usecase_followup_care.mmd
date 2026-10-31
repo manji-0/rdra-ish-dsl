@@ -28,11 +28,11 @@ flowchart LR
     entity__Notification["Notification"]:::entity
     entity__PatientMessage["Patient Message"]:::entity
     entity__ProviderSchedule["Provider Schedule"]:::entity
-    state__Appointment_apptrequested["apptrequested"]:::state
-    state__Appointment_apptscheduled["apptscheduled"]:::state
-    state__CarePlan_careclosed["careclosed"]:::state
-    state__CarePlan_caremonitoring["caremonitoring"]:::state
-    state__CarePlan_careopen["careopen"]:::state
+    state__Appointment_apptrequested["仮押さえ"]:::state
+    state__Appointment_apptscheduled["予約済"]:::state
+    state__CarePlan_careclosed["終了"]:::state
+    state__CarePlan_caremonitoring["経過観察中"]:::state
+    state__CarePlan_careopen["作成済"]:::state
   end
   actor__CareCoordinator -.->|performs| usecase__CloseCarePlan
   actor__CareCoordinator -.->|performs| usecase__CreateCarePlan

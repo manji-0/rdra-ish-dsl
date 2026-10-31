@@ -587,12 +587,12 @@ flowchart LR
     entity__PatientAccount["Patient Account"]:::entity
     entity__PatientMessage["Patient Message"]:::entity
     entity__PatientProfile["Patient Profile"]:::entity
-    state__IntakePacket_intakecompleted["intakecompleted"]:::state
-    state__IntakePacket_intakeexpired["intakeexpired"]:::state
-    state__IntakePacket_intakesent["intakesent"]:::state
-    state__PatientAccount_patientactive["patientactive"]:::state
-    state__PatientAccount_patientinactive["patientinactive"]:::state
-    state__PatientAccount_patientmerged["patientmerged"]:::state
+    state__IntakePacket_intakecompleted["回答済"]:::state
+    state__IntakePacket_intakeexpired["期限切れ"]:::state
+    state__IntakePacket_intakesent["送付済"]:::state
+    state__PatientAccount_patientactive["有効"]:::state
+    state__PatientAccount_patientinactive["アーカイブ済"]:::state
+    state__PatientAccount_patientmerged["統合済"]:::state
   end
   actor__Patient -.->|performs| usecase__CaptureConsent
   actor__Patient -.->|performs| usecase__CompleteIntakeForms
@@ -788,10 +788,10 @@ flowchart LR
     entity__PatientMessage["Patient Message"]:::entity
     entity__Provider["Provider"]:::entity
     entity__ProviderSchedule["Provider Schedule"]:::entity
-    state__Appointment_apptcancelled["apptcancelled"]:::state
-    state__Appointment_apptnoshow["apptnoshow"]:::state
-    state__Appointment_apptrequested["apptrequested"]:::state
-    state__Appointment_apptscheduled["apptscheduled"]:::state
+    state__Appointment_apptcancelled["取消"]:::state
+    state__Appointment_apptnoshow["未来院"]:::state
+    state__Appointment_apptrequested["仮押さえ"]:::state
+    state__Appointment_apptscheduled["予約済"]:::state
   end
   actor__Patient -.->|performs| usecase__SearchAvailability
   actor__ReceptionClerk -.->|performs| usecase__BookAppointment
@@ -988,13 +988,13 @@ flowchart LR
     entity__PatientProfile["Patient Profile"]:::entity
     entity__ReferralLetter["紹介状・診療情報提供書"]:::entity
     entity__Room["Room"]:::entity
-    state__Appointment_apptcheckedin["apptcheckedin"]:::state
-    state__Appointment_apptscheduled["apptscheduled"]:::state
-    state__EligibilityCheck_eligdeclared["eligdeclared"]:::state
-    state__EligibilityCheck_eliginvalid["eliginvalid"]:::state
-    state__EligibilityCheck_elignoinfo["elignoinfo"]:::state
-    state__EligibilityCheck_eligpending["eligpending"]:::state
-    state__EligibilityCheck_eligvalid["eligvalid"]:::state
+    state__Appointment_apptcheckedin["受付済"]:::state
+    state__Appointment_apptscheduled["予約済"]:::state
+    state__EligibilityCheck_eligdeclared["申立書で確認"]:::state
+    state__EligibilityCheck_eliginvalid["無効"]:::state
+    state__EligibilityCheck_elignoinfo["該当資格なし"]:::state
+    state__EligibilityCheck_eligpending["照会中"]:::state
+    state__EligibilityCheck_eligvalid["有効"]:::state
     condition__BookedPatient["予約済みの患者"]:::condition
   end
   actor__Nurse -.->|performs| usecase__AssignRoom
@@ -1203,13 +1203,13 @@ flowchart LR
     entity__ReferralLetter["紹介状・診療情報提供書"]:::entity
     entity__Room["Room"]:::entity
     entity__VitalSign["Vital Sign"]:::entity
-    state__Appointment_apptawaitingcalc["apptawaitingcalc"]:::state
-    state__Appointment_apptcheckedin["apptcheckedin"]:::state
-    state__Appointment_apptinconsult["apptinconsult"]:::state
-    state__Encounter_encamended["encamended"]:::state
-    state__Encounter_encdocumented["encdocumented"]:::state
-    state__Encounter_encopen["encopen"]:::state
-    state__Encounter_encsigned["encsigned"]:::state
+    state__Appointment_apptawaitingcalc["計算待ち"]:::state
+    state__Appointment_apptcheckedin["受付済"]:::state
+    state__Appointment_apptinconsult["診察中"]:::state
+    state__Encounter_encamended["修正済"]:::state
+    state__Encounter_encdocumented["記載済"]:::state
+    state__Encounter_encopen["記録中"]:::state
+    state__Encounter_encsigned["署名済"]:::state
   end
   actor__Clinician -.->|performs| usecase__AmendEncounter
   actor__Clinician -.->|performs| usecase__CompleteConsultation
@@ -1409,11 +1409,11 @@ flowchart LR
     entity__LabResult["Lab Result"]:::entity
     entity__Notification["Notification"]:::entity
     entity__PatientMessage["Patient Message"]:::entity
-    state__ClinicalOrder_clcancelled["clcancelled"]:::state
-    state__ClinicalOrder_clcollected["clcollected"]:::state
-    state__ClinicalOrder_clordered["clordered"]:::state
-    state__ClinicalOrder_clresulted["clresulted"]:::state
-    state__ClinicalOrder_clreviewed["clreviewed"]:::state
+    state__ClinicalOrder_clcancelled["取消"]:::state
+    state__ClinicalOrder_clcollected["採取済"]:::state
+    state__ClinicalOrder_clordered["オーダ済"]:::state
+    state__ClinicalOrder_clresulted["結果受信"]:::state
+    state__ClinicalOrder_clreviewed["結果確認済"]:::state
     condition__OrderConfirmedByPhysician["医師が確定したオーダ"]:::condition
   end
   actor__Clinician -.->|performs| usecase__CancelClinicalOrder
@@ -1625,15 +1625,15 @@ flowchart LR
     entity__Encounter["Encounter"]:::entity
     entity__Medication["Medication"]:::entity
     entity__Prescription["処方箋"]:::entity
-    state__Prescription_rxaudited["rxaudited"]:::state
-    state__Prescription_rxcancelled["rxcancelled"]:::state
-    state__Prescription_rxcounseled["rxcounseled"]:::state
-    state__Prescription_rxdispensed["rxdispensed"]:::state
-    state__Prescription_rxdrafted["rxdrafted"]:::state
-    state__Prescription_rxexpired["rxexpired"]:::state
-    state__Prescription_rxinquiry["rxinquiry"]:::state
-    state__Prescription_rxissued["rxissued"]:::state
-    state__Prescription_rxvoucher["rxvoucher"]:::state
+    state__Prescription_rxaudited["調剤・監査済"]:::state
+    state__Prescription_rxcancelled["取消"]:::state
+    state__Prescription_rxcounseled["服薬指導済"]:::state
+    state__Prescription_rxdispensed["交付済"]:::state
+    state__Prescription_rxdrafted["処方入力中"]:::state
+    state__Prescription_rxexpired["使用期間切れ"]:::state
+    state__Prescription_rxinquiry["疑義照会中"]:::state
+    state__Prescription_rxissued["院外処方箋発行済"]:::state
+    state__Prescription_rxvoucher["引換券交付済"]:::state
   end
   actor__Clinician -.->|performs| usecase__AnswerPharmacyInquiry
   actor__Clinician -.->|performs| usecase__AnswerPrescriptionInquiry
@@ -1835,10 +1835,10 @@ flowchart LR
     entity__InsurancePolicy["保険資格"]:::entity
     entity__PaymentTransaction["Payment Transaction"]:::entity
     entity__SelectedTreatmentFeeSetting["選定療養費の設定"]:::entity
-    state__Appointment_apptawaitingcalc["apptawaitingcalc"]:::state
-    state__Appointment_apptawaitingpay["apptawaitingpay"]:::state
-    state__Appointment_apptcompleted["apptcompleted"]:::state
-    state__Appointment_apptsettled["apptsettled"]:::state
+    state__Appointment_apptawaitingcalc["計算待ち"]:::state
+    state__Appointment_apptawaitingpay["会計待ち"]:::state
+    state__Appointment_apptcompleted["完了"]:::state
+    state__Appointment_apptsettled["精算済"]:::state
     condition__CopayCappedAtLimit["窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"]:::condition
     condition__UnreferredFirstVisit["紹介状なしの初診で、除外に当たらない"]:::condition
   end
@@ -2067,16 +2067,16 @@ flowchart LR
     entity__Encounter["Encounter"]:::entity
     entity__InsurancePolicy["保険資格"]:::entity
     entity__PaymentTransaction["Payment Transaction"]:::entity
-    state__ClaimStatement_stmtassessed["stmtassessed"]:::state
-    state__ClaimStatement_stmtdrafting["stmtdrafting"]:::state
-    state__ClaimStatement_stmtinspecting["stmtinspecting"]:::state
-    state__ClaimStatement_stmtonhold["stmtonhold"]:::state
-    state__ClaimStatement_stmtpaid["stmtpaid"]:::state
-    state__ClaimStatement_stmtreceipterror["stmtreceipterror"]:::state
-    state__ClaimStatement_stmtrereview["stmtrereview"]:::state
-    state__ClaimStatement_stmtreturned["stmtreturned"]:::state
-    state__ClaimStatement_stmtsubmitted["stmtsubmitted"]:::state
-    state__ClaimStatement_stmtunderreview["stmtunderreview"]:::state
+    state__ClaimStatement_stmtassessed["査定"]:::state
+    state__ClaimStatement_stmtdrafting["作成中"]:::state
+    state__ClaimStatement_stmtinspecting["院内点検中"]:::state
+    state__ClaimStatement_stmtonhold["保留"]:::state
+    state__ClaimStatement_stmtpaid["支払済"]:::state
+    state__ClaimStatement_stmtreceipterror["受付不能・要確認"]:::state
+    state__ClaimStatement_stmtrereview["再審査請求中"]:::state
+    state__ClaimStatement_stmtreturned["返戻"]:::state
+    state__ClaimStatement_stmtsubmitted["請求済"]:::state
+    state__ClaimStatement_stmtunderreview["審査中"]:::state
     condition__TransferNotPossible["振替・分割の対象外（負担割合の相違・公費）"]:::condition
   end
   actor__ClaimsClerk -.->|performs| usecase__CorrectReturnedStatement
@@ -2293,11 +2293,11 @@ flowchart LR
     entity__Notification["Notification"]:::entity
     entity__PatientMessage["Patient Message"]:::entity
     entity__ProviderSchedule["Provider Schedule"]:::entity
-    state__Appointment_apptrequested["apptrequested"]:::state
-    state__Appointment_apptscheduled["apptscheduled"]:::state
-    state__CarePlan_careclosed["careclosed"]:::state
-    state__CarePlan_caremonitoring["caremonitoring"]:::state
-    state__CarePlan_careopen["careopen"]:::state
+    state__Appointment_apptrequested["仮押さえ"]:::state
+    state__Appointment_apptscheduled["予約済"]:::state
+    state__CarePlan_careclosed["終了"]:::state
+    state__CarePlan_caremonitoring["経過観察中"]:::state
+    state__CarePlan_careopen["作成済"]:::state
   end
   actor__CareCoordinator -.->|performs| usecase__CloseCarePlan
   actor__CareCoordinator -.->|performs| usecase__CreateCarePlan
@@ -3282,16 +3282,16 @@ stateDiagram-v2
   state "Appointment.status" as statemodel__Appointment_status {
     [*] --> state__Appointment_apptrequested
     [*] --> state__Appointment_apptscheduled
-    state "apptrequested" as state__Appointment_apptrequested
-    state "apptscheduled" as state__Appointment_apptscheduled
-    state "apptcheckedin" as state__Appointment_apptcheckedin
-    state "apptinconsult" as state__Appointment_apptinconsult
-    state "apptawaitingcalc" as state__Appointment_apptawaitingcalc
-    state "apptawaitingpay" as state__Appointment_apptawaitingpay
-    state "apptsettled" as state__Appointment_apptsettled
-    state "apptcompleted" as state__Appointment_apptcompleted
-    state "apptcancelled" as state__Appointment_apptcancelled
-    state "apptnoshow" as state__Appointment_apptnoshow
+    state "仮押さえ" as state__Appointment_apptrequested
+    state "予約済" as state__Appointment_apptscheduled
+    state "受付済" as state__Appointment_apptcheckedin
+    state "診察中" as state__Appointment_apptinconsult
+    state "計算待ち" as state__Appointment_apptawaitingcalc
+    state "会計待ち" as state__Appointment_apptawaitingpay
+    state "精算済" as state__Appointment_apptsettled
+    state "完了" as state__Appointment_apptcompleted
+    state "取消" as state__Appointment_apptcancelled
+    state "未来院" as state__Appointment_apptnoshow
     state__Appointment_apptrequested --> state__Appointment_apptscheduled : usecase__BookAppointment
     state__Appointment_apptrequested --> state__Appointment_apptscheduled : usecase__ScheduleFollowUpVisit
     state__Appointment_apptscheduled --> state__Appointment_apptscheduled : usecase__RescheduleAppointment
@@ -3310,25 +3310,25 @@ stateDiagram-v2
   }
   state "CarePlan.status" as statemodel__CarePlan_status {
     [*] --> state__CarePlan_careopen
-    state "careopen" as state__CarePlan_careopen
-    state "caremonitoring" as state__CarePlan_caremonitoring
-    state "careclosed" as state__CarePlan_careclosed
+    state "作成済" as state__CarePlan_careopen
+    state "経過観察中" as state__CarePlan_caremonitoring
+    state "終了" as state__CarePlan_careclosed
     state__CarePlan_careopen --> state__CarePlan_caremonitoring : usecase__ReviewPatientResponse
     state__CarePlan_caremonitoring --> state__CarePlan_careclosed : usecase__CloseCarePlan
     state__CarePlan_careclosed --> [*]
   }
   state "ClaimStatement.status" as statemodel__ClaimStatement_status {
     [*] --> state__ClaimStatement_stmtdrafting
-    state "stmtdrafting" as state__ClaimStatement_stmtdrafting
-    state "stmtinspecting" as state__ClaimStatement_stmtinspecting
-    state "stmtonhold" as state__ClaimStatement_stmtonhold
-    state "stmtsubmitted" as state__ClaimStatement_stmtsubmitted
-    state "stmtreceipterror" as state__ClaimStatement_stmtreceipterror
-    state "stmtunderreview" as state__ClaimStatement_stmtunderreview
-    state "stmtpaid" as state__ClaimStatement_stmtpaid
-    state "stmtreturned" as state__ClaimStatement_stmtreturned
-    state "stmtassessed" as state__ClaimStatement_stmtassessed
-    state "stmtrereview" as state__ClaimStatement_stmtrereview
+    state "作成中" as state__ClaimStatement_stmtdrafting
+    state "院内点検中" as state__ClaimStatement_stmtinspecting
+    state "保留" as state__ClaimStatement_stmtonhold
+    state "請求済" as state__ClaimStatement_stmtsubmitted
+    state "受付不能・要確認" as state__ClaimStatement_stmtreceipterror
+    state "審査中" as state__ClaimStatement_stmtunderreview
+    state "支払済" as state__ClaimStatement_stmtpaid
+    state "返戻" as state__ClaimStatement_stmtreturned
+    state "査定" as state__ClaimStatement_stmtassessed
+    state "再審査請求中" as state__ClaimStatement_stmtrereview
     state__ClaimStatement_stmtdrafting --> state__ClaimStatement_stmtinspecting : usecase__InspectClaimStatement
     state__ClaimStatement_stmtinspecting --> state__ClaimStatement_stmtonhold : usecase__HoldClaimStatement
     state__ClaimStatement_stmtinspecting --> state__ClaimStatement_stmtsubmitted : usecase__SubmitClaimStatements
@@ -3347,11 +3347,11 @@ stateDiagram-v2
   }
   state "ClinicalOrder.status" as statemodel__ClinicalOrder_status {
     [*] --> state__ClinicalOrder_clordered
-    state "clordered" as state__ClinicalOrder_clordered
-    state "clcollected" as state__ClinicalOrder_clcollected
-    state "clresulted" as state__ClinicalOrder_clresulted
-    state "clreviewed" as state__ClinicalOrder_clreviewed
-    state "clcancelled" as state__ClinicalOrder_clcancelled
+    state "オーダ済" as state__ClinicalOrder_clordered
+    state "採取済" as state__ClinicalOrder_clcollected
+    state "結果受信" as state__ClinicalOrder_clresulted
+    state "結果確認済" as state__ClinicalOrder_clreviewed
+    state "取消" as state__ClinicalOrder_clcancelled
     state__ClinicalOrder_clordered --> state__ClinicalOrder_clordered : usecase__ConfirmProxyOrder
     state__ClinicalOrder_clordered --> state__ClinicalOrder_clcollected : usecase__CollectSpecimen
     state__ClinicalOrder_clordered --> state__ClinicalOrder_clcancelled : usecase__CancelClinicalOrder
@@ -3363,11 +3363,11 @@ stateDiagram-v2
   state "EligibilityCheck.result" as statemodel__EligibilityCheck_result {
     [*] --> state__EligibilityCheck_eligpending
     [*] --> state__EligibilityCheck_eligvalid
-    state "eligpending" as state__EligibilityCheck_eligpending
-    state "eligvalid" as state__EligibilityCheck_eligvalid
-    state "eliginvalid" as state__EligibilityCheck_eliginvalid
-    state "elignoinfo" as state__EligibilityCheck_elignoinfo
-    state "eligdeclared" as state__EligibilityCheck_eligdeclared
+    state "照会中" as state__EligibilityCheck_eligpending
+    state "有効" as state__EligibilityCheck_eligvalid
+    state "無効" as state__EligibilityCheck_eliginvalid
+    state "該当資格なし" as state__EligibilityCheck_elignoinfo
+    state "申立書で確認" as state__EligibilityCheck_eligdeclared
     state__EligibilityCheck_eligpending --> state__EligibilityCheck_eligvalid : usecase__ConfirmEligibilityInOutageMode
     state__EligibilityCheck_eligpending --> state__EligibilityCheck_eligvalid : usecase__ReceiveEligibilityValid
     state__EligibilityCheck_eligpending --> state__EligibilityCheck_eliginvalid : usecase__ReceiveEligibilityInvalid
@@ -3380,10 +3380,10 @@ stateDiagram-v2
   }
   state "Encounter.status" as statemodel__Encounter_status {
     [*] --> state__Encounter_encopen
-    state "encopen" as state__Encounter_encopen
-    state "encdocumented" as state__Encounter_encdocumented
-    state "encsigned" as state__Encounter_encsigned
-    state "encamended" as state__Encounter_encamended
+    state "記録中" as state__Encounter_encopen
+    state "記載済" as state__Encounter_encdocumented
+    state "署名済" as state__Encounter_encsigned
+    state "修正済" as state__Encounter_encamended
     state__Encounter_encopen --> state__Encounter_encdocumented : usecase__DocumentAssessment
     state__Encounter_encdocumented --> state__Encounter_encsigned : usecase__SignEncounter
     state__Encounter_encsigned --> state__Encounter_encamended : usecase__AmendEncounter
@@ -3391,9 +3391,9 @@ stateDiagram-v2
   }
   state "IntakePacket.status" as statemodel__IntakePacket_status {
     [*] --> state__IntakePacket_intakesent
-    state "intakesent" as state__IntakePacket_intakesent
-    state "intakecompleted" as state__IntakePacket_intakecompleted
-    state "intakeexpired" as state__IntakePacket_intakeexpired
+    state "送付済" as state__IntakePacket_intakesent
+    state "回答済" as state__IntakePacket_intakecompleted
+    state "期限切れ" as state__IntakePacket_intakeexpired
     state__IntakePacket_intakesent --> state__IntakePacket_intakecompleted : usecase__CompleteIntakeForms
     state__IntakePacket_intakesent --> state__IntakePacket_intakeexpired : usecase__ExpireIntakeForms
     state__IntakePacket_intakecompleted --> [*]
@@ -3401,9 +3401,9 @@ stateDiagram-v2
   }
   state "PatientAccount.status" as statemodel__PatientAccount_status {
     [*] --> state__PatientAccount_patientactive
-    state "patientactive" as state__PatientAccount_patientactive
-    state "patientinactive" as state__PatientAccount_patientinactive
-    state "patientmerged" as state__PatientAccount_patientmerged
+    state "有効" as state__PatientAccount_patientactive
+    state "アーカイブ済" as state__PatientAccount_patientinactive
+    state "統合済" as state__PatientAccount_patientmerged
     state__PatientAccount_patientactive --> state__PatientAccount_patientinactive : usecase__ArchivePatient
     state__PatientAccount_patientactive --> state__PatientAccount_patientmerged : usecase__MergeDuplicatePatient
     state__PatientAccount_patientinactive --> [*]
@@ -3411,15 +3411,15 @@ stateDiagram-v2
   }
   state "Prescription.status" as statemodel__Prescription_status {
     [*] --> state__Prescription_rxdrafted
-    state "rxdrafted" as state__Prescription_rxdrafted
-    state "rxissued" as state__Prescription_rxissued
-    state "rxvoucher" as state__Prescription_rxvoucher
-    state "rxinquiry" as state__Prescription_rxinquiry
-    state "rxaudited" as state__Prescription_rxaudited
-    state "rxcounseled" as state__Prescription_rxcounseled
-    state "rxdispensed" as state__Prescription_rxdispensed
-    state "rxexpired" as state__Prescription_rxexpired
-    state "rxcancelled" as state__Prescription_rxcancelled
+    state "処方入力中" as state__Prescription_rxdrafted
+    state "院外処方箋発行済" as state__Prescription_rxissued
+    state "引換券交付済" as state__Prescription_rxvoucher
+    state "疑義照会中" as state__Prescription_rxinquiry
+    state "調剤・監査済" as state__Prescription_rxaudited
+    state "服薬指導済" as state__Prescription_rxcounseled
+    state "交付済" as state__Prescription_rxdispensed
+    state "使用期間切れ" as state__Prescription_rxexpired
+    state "取消" as state__Prescription_rxcancelled
     state__Prescription_rxdrafted --> state__Prescription_rxissued : usecase__IssueOutsidePrescription
     state__Prescription_rxdrafted --> state__Prescription_rxvoucher : usecase__IssueInhouseVoucher
     state__Prescription_rxdrafted --> state__Prescription_rxcancelled : usecase__CancelPrescription
@@ -3444,6 +3444,7 @@ Appointment:
 ```text
 Entity: Appointment (Appointment)
   axes: referral[revisit|referred|unreferred|exempt], status[apptrequested|apptscheduled|apptcheckedin|apptinconsult|apptawaitingcalc|apptawaitingpay|apptsettled|apptcompleted|apptcancelled|apptnoshow], checked_in_at[null|present], completed_at[null|present], cancel_reason[null|present]
+  labels: status[apptrequested=仮押さえ|apptscheduled=予約済|apptcheckedin=受付済|apptinconsult=診察中|apptawaitingcalc=計算待ち|apptawaitingpay=会計待ち|apptsettled=精算済|apptcompleted=完了|apptcancelled=取消|apptnoshow=未来院]
 
   REFERRAL    STATUS            CHECKED_IN_AT  COMPLETED_AT  CANCEL_REASON  INITIAL  TERMINAL  VIA
   ──────────  ────────────────  ─────────────  ────────────  ─────────────  ───────  ────────  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -3496,6 +3497,7 @@ ClaimStatement（レセプト）:
 ```text
 Entity: ClaimStatement (レセプト)
   axes: status[stmtdrafting|stmtinspecting|stmtonhold|stmtsubmitted|stmtreceipterror|stmtunderreview|stmtpaid|stmtreturned|stmtassessed|stmtrereview], submitted_at[null|present], paid_at[null|present], return_reason[null|present]
+  labels: status[stmtdrafting=作成中|stmtinspecting=院内点検中|stmtonhold=保留|stmtsubmitted=請求済|stmtreceipterror=受付不能・要確認|stmtunderreview=審査中|stmtpaid=支払済|stmtreturned=返戻|stmtassessed=査定|stmtrereview=再審査請求中]
 
   STATUS            SUBMITTED_AT  PAID_AT  RETURN_REASON  INITIAL  TERMINAL  VIA
   ────────────────  ────────────  ───────  ─────────────  ───────  ────────  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

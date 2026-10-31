@@ -35,10 +35,10 @@ flowchart LR
     entity__PatientMessage["Patient Message"]:::entity
     entity__Provider["Provider"]:::entity
     entity__ProviderSchedule["Provider Schedule"]:::entity
-    state__Appointment_apptcancelled["apptcancelled"]:::state
-    state__Appointment_apptnoshow["apptnoshow"]:::state
-    state__Appointment_apptrequested["apptrequested"]:::state
-    state__Appointment_apptscheduled["apptscheduled"]:::state
+    state__Appointment_apptcancelled["取消"]:::state
+    state__Appointment_apptnoshow["未来院"]:::state
+    state__Appointment_apptrequested["仮押さえ"]:::state
+    state__Appointment_apptscheduled["予約済"]:::state
   end
   actor__Patient -.->|performs| usecase__SearchAvailability
   actor__ReceptionClerk -.->|performs| usecase__BookAppointment

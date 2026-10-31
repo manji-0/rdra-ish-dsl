@@ -32,13 +32,13 @@ flowchart LR
     entity__ReferralLetter["紹介状・診療情報提供書"]:::entity
     entity__Room["Room"]:::entity
     entity__VitalSign["Vital Sign"]:::entity
-    state__Appointment_apptawaitingcalc["apptawaitingcalc"]:::state
-    state__Appointment_apptcheckedin["apptcheckedin"]:::state
-    state__Appointment_apptinconsult["apptinconsult"]:::state
-    state__Encounter_encamended["encamended"]:::state
-    state__Encounter_encdocumented["encdocumented"]:::state
-    state__Encounter_encopen["encopen"]:::state
-    state__Encounter_encsigned["encsigned"]:::state
+    state__Appointment_apptawaitingcalc["計算待ち"]:::state
+    state__Appointment_apptcheckedin["受付済"]:::state
+    state__Appointment_apptinconsult["診察中"]:::state
+    state__Encounter_encamended["修正済"]:::state
+    state__Encounter_encdocumented["記載済"]:::state
+    state__Encounter_encopen["記録中"]:::state
+    state__Encounter_encsigned["署名済"]:::state
   end
   actor__Clinician -.->|performs| usecase__AmendEncounter
   actor__Clinician -.->|performs| usecase__CompleteConsultation

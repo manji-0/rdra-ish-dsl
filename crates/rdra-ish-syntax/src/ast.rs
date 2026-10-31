@@ -108,10 +108,18 @@ pub enum ColType {
     Date,
     Bool,
     Decimal,
-    /// `Enum(active, discontinued)`: an inline value set. With `transitions` it is a state axis.
-    Enum(Vec<std::string::String>),
+    /// `Enum(active "販売中", discontinued)`: an inline value set, each value with an optional
+    /// label. With `transitions` it is a state axis.
+    Enum(Vec<EnumValue>),
     /// `PaymentMethod`: a variation id in type position. Resolved at model build.
     Named(std::string::String),
+}
+
+/// One value of an inline `Enum`: `paid "支払済"` or `paid`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnumValue {
+    pub value: std::string::String,
+    pub label: Option<std::string::String>,
 }
 
 /// One value of a `variation` declaration: `cash "Cash"`.

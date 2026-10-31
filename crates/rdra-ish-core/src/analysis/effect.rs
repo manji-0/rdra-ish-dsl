@@ -146,6 +146,7 @@ mod tests {
             is_history: false,
             is_tenant_scope: false,
             derived_expr: None,
+            value_labels: Vec::new(),
         }
     }
 

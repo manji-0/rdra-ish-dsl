@@ -41,13 +41,13 @@ flowchart LR
     entity__PatientProfile["Patient Profile"]:::entity
     entity__ReferralLetter["紹介状・診療情報提供書"]:::entity
     entity__Room["Room"]:::entity
-    state__Appointment_apptcheckedin["apptcheckedin"]:::state
-    state__Appointment_apptscheduled["apptscheduled"]:::state
-    state__EligibilityCheck_eligdeclared["eligdeclared"]:::state
-    state__EligibilityCheck_eliginvalid["eliginvalid"]:::state
-    state__EligibilityCheck_elignoinfo["elignoinfo"]:::state
-    state__EligibilityCheck_eligpending["eligpending"]:::state
-    state__EligibilityCheck_eligvalid["eligvalid"]:::state
+    state__Appointment_apptcheckedin["受付済"]:::state
+    state__Appointment_apptscheduled["予約済"]:::state
+    state__EligibilityCheck_eligdeclared["申立書で確認"]:::state
+    state__EligibilityCheck_eliginvalid["無効"]:::state
+    state__EligibilityCheck_elignoinfo["該当資格なし"]:::state
+    state__EligibilityCheck_eligpending["照会中"]:::state
+    state__EligibilityCheck_eligvalid["有効"]:::state
     condition__BookedPatient["予約済みの患者"]:::condition
   end
   actor__Nurse -.->|performs| usecase__AssignRoom

@@ -46,7 +46,7 @@ pub fn run_states(
     }
 
     let output = match format {
-        StatesFormat::Table => render_table(&report.views),
+        StatesFormat::Table => render_table(&report.views, &model),
         StatesFormat::Csv => render_csv(&report.views)?,
         StatesFormat::Json => render_json(&report.views, &model, &|site: &Site| {
             format_location(&program, site.span.as_ref()?)

@@ -442,9 +442,20 @@ pub struct ModelColumn {
     pub is_history: bool,
     pub is_tenant_scope: bool,
     pub derived_expr: Option<DerivedExpr>,
+    /// For an inline `Enum`, `value_labels[i]` is the optional label of its `i`-th value.
+    pub value_labels: Vec<Option<std::string::String>>,
 }
 
 impl ModelColumn {
+    /// The label an inline `Enum` gives `value`, if any.
+    pub fn value_label(&self, value: &str) -> Option<&str> {
+        let ColumnType::Enum(values) = &self.col_type else {
+            return None;
+        };
+        let index = values.iter().position(|v| v == value)?;
+        self.value_labels.get(index)?.as_deref()
+    }
+
     /// The `@check` expressions in canonical text, `|`-joined (CSV cells).
     pub fn checks_display(&self) -> std::string::String {
         self.check_constraints

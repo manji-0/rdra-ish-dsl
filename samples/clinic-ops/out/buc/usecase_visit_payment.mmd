@@ -29,10 +29,10 @@ flowchart LR
     entity__InsurancePolicy["保険資格"]:::entity
     entity__PaymentTransaction["Payment Transaction"]:::entity
     entity__SelectedTreatmentFeeSetting["選定療養費の設定"]:::entity
-    state__Appointment_apptawaitingcalc["apptawaitingcalc"]:::state
-    state__Appointment_apptawaitingpay["apptawaitingpay"]:::state
-    state__Appointment_apptcompleted["apptcompleted"]:::state
-    state__Appointment_apptsettled["apptsettled"]:::state
+    state__Appointment_apptawaitingcalc["計算待ち"]:::state
+    state__Appointment_apptawaitingpay["会計待ち"]:::state
+    state__Appointment_apptcompleted["完了"]:::state
+    state__Appointment_apptsettled["精算済"]:::state
     condition__CopayCappedAtLimit["窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"]:::condition
     condition__UnreferredFirstVisit["紹介状なしの初診で、除外に当たらない"]:::condition
   end

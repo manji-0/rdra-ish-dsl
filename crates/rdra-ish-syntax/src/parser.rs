@@ -301,12 +301,15 @@ fn col_type() -> impl Parser<Token, ColType, Error = Simple<Token>> + Clone {
         Token::TDecimal  => ColType::Decimal,
     };
 
-    // Enum(active, discontinued) — at least one variant required
+    // Enum(active "販売中", discontinued) — at least one variant required, labels optional
+    let enum_value = ident()
+        .then(string_lit().or_not())
+        .map(|(value, label)| EnumValue { value, label });
     let enum_ty = just(Token::TEnum)
         .ignore_then(just(Token::LParen))
-        .ignore_then(ident().separated_by(just(Token::Comma)).allow_trailing())
+        .ignore_then(enum_value.separated_by(just(Token::Comma)).allow_trailing())
         .then_ignore(just(Token::RParen))
-        .try_map(|variants: Vec<String>, span| {
+        .try_map(|variants: Vec<EnumValue>, span| {
             if variants.is_empty() {
                 Err(Simple::custom(span, "Enum() requires at least one variant"))
             } else {
@@ -2199,6 +2202,28 @@ performs(actor::Add, usecase::Add)
         assert!(
             msg.contains("Enum()") || msg.contains("variant"),
             "unexpected errors: {msg}"
+        );
+    }
+
+    #[test]
+    fn enum_values_take_optional_labels() {
+        let (ast, errors) = parse("entity E \"e\" { status: Enum(open \"受付中\", closed) }");
+        assert!(errors.is_empty(), "{errors:?}");
+        let Item::Instance(inst) = &ast.items[0] else {
+            panic!("expected instance");
+        };
+        assert_eq!(
+            inst.columns[0].col_type,
+            ColType::Enum(vec![
+                EnumValue {
+                    value: "open".to_string(),
+                    label: Some("受付中".to_string()),
+                },
+                EnumValue {
+                    value: "closed".to_string(),
+                    label: None,
+                },
+            ])
         );
     }
 

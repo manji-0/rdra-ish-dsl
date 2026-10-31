@@ -4,6 +4,11 @@
 
 ### Added
 
+- An inline `Enum` value may carry a label, as a variation value does:
+  `status: Enum(pending "受付前", paid "支払済")`. The UC複合図, the state diagram, and the
+  RDRA diagram draw a state by its label, `states --format table` adds a `labels:` line
+  under `axes:`, and `fmt` keeps the labels. clinic-ops labels every lifecycle value in
+  Japanese.
 - An owner model publishes what other models may reference. `exposes(System, UseCase)`
   with `.caller(actor | system | any)`, `exposes(System, Event)`, and
   `exposes(System, Entity).append() | .upsert()` publish a use case, an event, and a

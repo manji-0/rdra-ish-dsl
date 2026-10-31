@@ -39,15 +39,15 @@ flowchart LR
     entity__Encounter["Encounter"]:::entity
     entity__Medication["Medication"]:::entity
     entity__Prescription["処方箋"]:::entity
-    state__Prescription_rxaudited["rxaudited"]:::state
-    state__Prescription_rxcancelled["rxcancelled"]:::state
-    state__Prescription_rxcounseled["rxcounseled"]:::state
-    state__Prescription_rxdispensed["rxdispensed"]:::state
-    state__Prescription_rxdrafted["rxdrafted"]:::state
-    state__Prescription_rxexpired["rxexpired"]:::state
-    state__Prescription_rxinquiry["rxinquiry"]:::state
-    state__Prescription_rxissued["rxissued"]:::state
-    state__Prescription_rxvoucher["rxvoucher"]:::state
+    state__Prescription_rxaudited["調剤・監査済"]:::state
+    state__Prescription_rxcancelled["取消"]:::state
+    state__Prescription_rxcounseled["服薬指導済"]:::state
+    state__Prescription_rxdispensed["交付済"]:::state
+    state__Prescription_rxdrafted["処方入力中"]:::state
+    state__Prescription_rxexpired["使用期間切れ"]:::state
+    state__Prescription_rxinquiry["疑義照会中"]:::state
+    state__Prescription_rxissued["院外処方箋発行済"]:::state
+    state__Prescription_rxvoucher["引換券交付済"]:::state
   end
   actor__Clinician -.->|performs| usecase__AnswerPharmacyInquiry
   actor__Clinician -.->|performs| usecase__AnswerPrescriptionInquiry

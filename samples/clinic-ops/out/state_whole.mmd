@@ -5,16 +5,16 @@ stateDiagram-v2
   state "Appointment.status" as statemodel__Appointment_status {
     [*] --> state__Appointment_apptrequested
     [*] --> state__Appointment_apptscheduled
-    state "apptrequested" as state__Appointment_apptrequested
-    state "apptscheduled" as state__Appointment_apptscheduled
-    state "apptcheckedin" as state__Appointment_apptcheckedin
-    state "apptinconsult" as state__Appointment_apptinconsult
-    state "apptawaitingcalc" as state__Appointment_apptawaitingcalc
-    state "apptawaitingpay" as state__Appointment_apptawaitingpay
-    state "apptsettled" as state__Appointment_apptsettled
-    state "apptcompleted" as state__Appointment_apptcompleted
-    state "apptcancelled" as state__Appointment_apptcancelled
-    state "apptnoshow" as state__Appointment_apptnoshow
+    state "仮押さえ" as state__Appointment_apptrequested
+    state "予約済" as state__Appointment_apptscheduled
+    state "受付済" as state__Appointment_apptcheckedin
+    state "診察中" as state__Appointment_apptinconsult
+    state "計算待ち" as state__Appointment_apptawaitingcalc
+    state "会計待ち" as state__Appointment_apptawaitingpay
+    state "精算済" as state__Appointment_apptsettled
+    state "完了" as state__Appointment_apptcompleted
+    state "取消" as state__Appointment_apptcancelled
+    state "未来院" as state__Appointment_apptnoshow
     state__Appointment_apptrequested --> state__Appointment_apptscheduled : usecase__BookAppointment
     state__Appointment_apptrequested --> state__Appointment_apptscheduled : usecase__ScheduleFollowUpVisit
     state__Appointment_apptscheduled --> state__Appointment_apptscheduled : usecase__RescheduleAppointment
@@ -33,25 +33,25 @@ stateDiagram-v2
   }
   state "CarePlan.status" as statemodel__CarePlan_status {
     [*] --> state__CarePlan_careopen
-    state "careopen" as state__CarePlan_careopen
-    state "caremonitoring" as state__CarePlan_caremonitoring
-    state "careclosed" as state__CarePlan_careclosed
+    state "作成済" as state__CarePlan_careopen
+    state "経過観察中" as state__CarePlan_caremonitoring
+    state "終了" as state__CarePlan_careclosed
     state__CarePlan_careopen --> state__CarePlan_caremonitoring : usecase__ReviewPatientResponse
     state__CarePlan_caremonitoring --> state__CarePlan_careclosed : usecase__CloseCarePlan
     state__CarePlan_careclosed --> [*]
   }
   state "ClaimStatement.status" as statemodel__ClaimStatement_status {
     [*] --> state__ClaimStatement_stmtdrafting
-    state "stmtdrafting" as state__ClaimStatement_stmtdrafting
-    state "stmtinspecting" as state__ClaimStatement_stmtinspecting
-    state "stmtonhold" as state__ClaimStatement_stmtonhold
-    state "stmtsubmitted" as state__ClaimStatement_stmtsubmitted
-    state "stmtreceipterror" as state__ClaimStatement_stmtreceipterror
-    state "stmtunderreview" as state__ClaimStatement_stmtunderreview
-    state "stmtpaid" as state__ClaimStatement_stmtpaid
-    state "stmtreturned" as state__ClaimStatement_stmtreturned
-    state "stmtassessed" as state__ClaimStatement_stmtassessed
-    state "stmtrereview" as state__ClaimStatement_stmtrereview
+    state "作成中" as state__ClaimStatement_stmtdrafting
+    state "院内点検中" as state__ClaimStatement_stmtinspecting
+    state "保留" as state__ClaimStatement_stmtonhold
+    state "請求済" as state__ClaimStatement_stmtsubmitted
+    state "受付不能・要確認" as state__ClaimStatement_stmtreceipterror
+    state "審査中" as state__ClaimStatement_stmtunderreview
+    state "支払済" as state__ClaimStatement_stmtpaid
+    state "返戻" as state__ClaimStatement_stmtreturned
+    state "査定" as state__ClaimStatement_stmtassessed
+    state "再審査請求中" as state__ClaimStatement_stmtrereview
     state__ClaimStatement_stmtdrafting --> state__ClaimStatement_stmtinspecting : usecase__InspectClaimStatement
     state__ClaimStatement_stmtinspecting --> state__ClaimStatement_stmtonhold : usecase__HoldClaimStatement
     state__ClaimStatement_stmtinspecting --> state__ClaimStatement_stmtsubmitted : usecase__SubmitClaimStatements
@@ -70,11 +70,11 @@ stateDiagram-v2
   }
   state "ClinicalOrder.status" as statemodel__ClinicalOrder_status {
     [*] --> state__ClinicalOrder_clordered
-    state "clordered" as state__ClinicalOrder_clordered
-    state "clcollected" as state__ClinicalOrder_clcollected
-    state "clresulted" as state__ClinicalOrder_clresulted
-    state "clreviewed" as state__ClinicalOrder_clreviewed
-    state "clcancelled" as state__ClinicalOrder_clcancelled
+    state "オーダ済" as state__ClinicalOrder_clordered
+    state "採取済" as state__ClinicalOrder_clcollected
+    state "結果受信" as state__ClinicalOrder_clresulted
+    state "結果確認済" as state__ClinicalOrder_clreviewed
+    state "取消" as state__ClinicalOrder_clcancelled
     state__ClinicalOrder_clordered --> state__ClinicalOrder_clordered : usecase__ConfirmProxyOrder
     state__ClinicalOrder_clordered --> state__ClinicalOrder_clcollected : usecase__CollectSpecimen
     state__ClinicalOrder_clordered --> state__ClinicalOrder_clcancelled : usecase__CancelClinicalOrder
@@ -86,11 +86,11 @@ stateDiagram-v2
   state "EligibilityCheck.result" as statemodel__EligibilityCheck_result {
     [*] --> state__EligibilityCheck_eligpending
     [*] --> state__EligibilityCheck_eligvalid
-    state "eligpending" as state__EligibilityCheck_eligpending
-    state "eligvalid" as state__EligibilityCheck_eligvalid
-    state "eliginvalid" as state__EligibilityCheck_eliginvalid
-    state "elignoinfo" as state__EligibilityCheck_elignoinfo
-    state "eligdeclared" as state__EligibilityCheck_eligdeclared
+    state "照会中" as state__EligibilityCheck_eligpending
+    state "有効" as state__EligibilityCheck_eligvalid
+    state "無効" as state__EligibilityCheck_eliginvalid
+    state "該当資格なし" as state__EligibilityCheck_elignoinfo
+    state "申立書で確認" as state__EligibilityCheck_eligdeclared
     state__EligibilityCheck_eligpending --> state__EligibilityCheck_eligvalid : usecase__ConfirmEligibilityInOutageMode
     state__EligibilityCheck_eligpending --> state__EligibilityCheck_eligvalid : usecase__ReceiveEligibilityValid
     state__EligibilityCheck_eligpending --> state__EligibilityCheck_eliginvalid : usecase__ReceiveEligibilityInvalid
@@ -103,10 +103,10 @@ stateDiagram-v2
   }
   state "Encounter.status" as statemodel__Encounter_status {
     [*] --> state__Encounter_encopen
-    state "encopen" as state__Encounter_encopen
-    state "encdocumented" as state__Encounter_encdocumented
-    state "encsigned" as state__Encounter_encsigned
-    state "encamended" as state__Encounter_encamended
+    state "記録中" as state__Encounter_encopen
+    state "記載済" as state__Encounter_encdocumented
+    state "署名済" as state__Encounter_encsigned
+    state "修正済" as state__Encounter_encamended
     state__Encounter_encopen --> state__Encounter_encdocumented : usecase__DocumentAssessment
     state__Encounter_encdocumented --> state__Encounter_encsigned : usecase__SignEncounter
     state__Encounter_encsigned --> state__Encounter_encamended : usecase__AmendEncounter
@@ -114,9 +114,9 @@ stateDiagram-v2
   }
   state "IntakePacket.status" as statemodel__IntakePacket_status {
     [*] --> state__IntakePacket_intakesent
-    state "intakesent" as state__IntakePacket_intakesent
-    state "intakecompleted" as state__IntakePacket_intakecompleted
-    state "intakeexpired" as state__IntakePacket_intakeexpired
+    state "送付済" as state__IntakePacket_intakesent
+    state "回答済" as state__IntakePacket_intakecompleted
+    state "期限切れ" as state__IntakePacket_intakeexpired
     state__IntakePacket_intakesent --> state__IntakePacket_intakecompleted : usecase__CompleteIntakeForms
     state__IntakePacket_intakesent --> state__IntakePacket_intakeexpired : usecase__ExpireIntakeForms
     state__IntakePacket_intakecompleted --> [*]
@@ -124,9 +124,9 @@ stateDiagram-v2
   }
   state "PatientAccount.status" as statemodel__PatientAccount_status {
     [*] --> state__PatientAccount_patientactive
-    state "patientactive" as state__PatientAccount_patientactive
-    state "patientinactive" as state__PatientAccount_patientinactive
-    state "patientmerged" as state__PatientAccount_patientmerged
+    state "有効" as state__PatientAccount_patientactive
+    state "アーカイブ済" as state__PatientAccount_patientinactive
+    state "統合済" as state__PatientAccount_patientmerged
     state__PatientAccount_patientactive --> state__PatientAccount_patientinactive : usecase__ArchivePatient
     state__PatientAccount_patientactive --> state__PatientAccount_patientmerged : usecase__MergeDuplicatePatient
     state__PatientAccount_patientinactive --> [*]
@@ -134,15 +134,15 @@ stateDiagram-v2
   }
   state "Prescription.status" as statemodel__Prescription_status {
     [*] --> state__Prescription_rxdrafted
-    state "rxdrafted" as state__Prescription_rxdrafted
-    state "rxissued" as state__Prescription_rxissued
-    state "rxvoucher" as state__Prescription_rxvoucher
-    state "rxinquiry" as state__Prescription_rxinquiry
-    state "rxaudited" as state__Prescription_rxaudited
-    state "rxcounseled" as state__Prescription_rxcounseled
-    state "rxdispensed" as state__Prescription_rxdispensed
-    state "rxexpired" as state__Prescription_rxexpired
-    state "rxcancelled" as state__Prescription_rxcancelled
+    state "処方入力中" as state__Prescription_rxdrafted
+    state "院外処方箋発行済" as state__Prescription_rxissued
+    state "引換券交付済" as state__Prescription_rxvoucher
+    state "疑義照会中" as state__Prescription_rxinquiry
+    state "調剤・監査済" as state__Prescription_rxaudited
+    state "服薬指導済" as state__Prescription_rxcounseled
+    state "交付済" as state__Prescription_rxdispensed
+    state "使用期間切れ" as state__Prescription_rxexpired
+    state "取消" as state__Prescription_rxcancelled
     state__Prescription_rxdrafted --> state__Prescription_rxissued : usecase__IssueOutsidePrescription
     state__Prescription_rxdrafted --> state__Prescription_rxvoucher : usecase__IssueInhouseVoucher
     state__Prescription_rxdrafted --> state__Prescription_rxcancelled : usecase__CancelPrescription
