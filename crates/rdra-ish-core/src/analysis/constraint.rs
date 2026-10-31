@@ -881,8 +881,7 @@ pub(crate) fn resolve_related_quantifier(
     // Legacy-compatible: `.none(Assign.status == active)` if first arg is an entity Ref.
     let (related, related_args) = match cc.args.first() {
         Some(PredicateArg::Ref(_)) => {
-            let related =
-                resolve_entity_scope_arg(model, &cc.name, &cc.args[0], 0, ctx, diags)?;
+            let related = resolve_entity_scope_arg(model, &cc.name, &cc.args[0], 0, ctx, diags)?;
             (related, &cc.args[1..])
         }
         _ => {
