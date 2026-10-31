@@ -765,7 +765,9 @@ an exposed use case requires; the audit of local permissions ignores it. `reads`
 | `contains(BucCheckout, Auth.Login)` | `ForeignContained` |
 | any other position, such as `performs(Shopper, Auth.Login)` or `relate(Order, Auth.SessionView, N:1)` | `ForeignOperand`, with the positions the table allows for that kind |
 | `import auth.session` of a dependency's module | `ForeignImport`, with the hint to bind it with `extsystem ... from` |
-| `holds(SignedIn, Auth.SessionView.status == active)` | `ForeignStateNeedsEnvironment`; a guard on published data needs the environment, which a later release adds |
+| `holds(SignedIn, Auth.SessionView.status == active)`, or `Auth.SessionView.status` in any comparison: a constraint, a `property`, `combines`, a `sets` value, or `.along` | `ForeignStateNeedsEnvironment`; a comparison on published data needs the environment, which a later release adds. A column the entity lacks is an unknown column, and a dotted path that is no binding, such as `Nope.Zz.yy`, is an undefined symbol |
+| `creates(Auth.Login, Order)` or any foreign element outside the entity position of a write | `ForeignOperand` with the argument position |
+| `extsystem A ... from own.Sys1` and `extsystem A__B ... from own.Sys2` where `A.B__C` and `A__B.C` both generate `A__B__C` | `ForeignSlugClash` |
 | `reads(X, Auth.Session)` after the owner wrote `shares(AuthSystem, Session)` | `DirectEntityReference` (warning) |
 | a local `entity Auth__SessionView` | `IdShadowsForeignSlug` |
 | a second `extsystem ... from auth.AuthSystem` | `DuplicateBinding` |
@@ -779,11 +781,15 @@ with an edge per call, read, and reaction (`invokes Auth.Login`, `reads Auth.Ses
 foreign element as a dashed `:::foreign` stub labelled by its qualified id. AsyncAPI
 lists a foreign event the product reacts to as receive-only, with `x-rdra-ish-external`
 naming the dependency. `check` prints the environment once, and
-`list --kind dependency` prints one row per foreign reference; see
+`list --kind dependency` prints one row per foreign reference, sorted by file and line; see
 [`check`](./cli-reference.md#check) and [`list`](./cli-reference.md#list). A bound
 external system counts as connected for `lint` when any of its stubs is referenced, and
 a BUC closure that reaches a stub holds the external system too. `next` treats a call to
-a foreign use case as a satisfied boundary.
+a foreign use case as a satisfied boundary and counts the product's own entities only.
+In the editor, renaming a bound external system rewrites the qualifier of every
+`Ext.Name` reference, a reference's `Name` has no definition or rename of its own, hover
+names the element's model and system, and a generated name such as `Auth__Login` is
+refused as a new name.
 
 ### `api` and the API layer
 

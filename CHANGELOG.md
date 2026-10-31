@@ -22,7 +22,11 @@
   `list --kind dependency` lists each foreign reference with its site. The context,
   event, usecase, and rdra diagrams draw referenced foreign elements as dashed stubs, and
   AsyncAPI lists a foreign event as receive-only with `x-rdra-ish-external`; every other
-  output excludes them. A model without `[dependencies]` keeps every output unchanged.
+  output excludes them. A model without `[dependencies]` keeps every output unchanged. One
+  run loads one model: a nested directory with its own `rdra.toml` is not part of its
+  parent, inputs of two models are `ManifestConflict`, and the LSP analyses each open
+  document under its own manifest. A dependency path must be relative
+  (`DependencyPathAbsolute`), and a dependency's lifecycle errors fail the load too.
 - A condition guard may say that no related row, or some related row, matches:
   `holds(NoActiveAssignment, ClientCertificate.status == active).none(TerminalCertAssignment.status == active)`
   allows `Revoke` only while no linked assignment is active, and `.has(...)` requires one.

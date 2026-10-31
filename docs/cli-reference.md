@@ -379,16 +379,26 @@ auth = { path = "../auth-model" }
 ```
 
 `[model] name` is required. Each `[dependencies]` entry is `name = { path = "<dir>" }`,
-with the path relative to the manifest's directory. A loading command loads the
-dependency as its own model first and fails closed: a path that is not a directory or has
-no `rdra.toml` is `DependencyNotFound`, a dependency that leads back to a model being
-loaded is `DependencyCycle`, and one whose own `check` reports an error is
-`DependencyHasErrors`, with the count and the first error at its site. Each message names
-`rdra.toml`, the dependency, and its path. A dependency's own dependencies are checked the
-same way and cannot be bound. A `git` dependency is refused for now. A manifest without
-`[dependencies]` changes no output. A malformed manifest, or one without `[model] name`,
-makes every loading command exit `1` with a message that names `rdra.toml` and the line.
-What a model binds and references is in
+with the path relative to the manifest's directory; an absolute path is
+`DependencyPathAbsolute`, an entry without `path` is `DependencyNeedsPath`, and a `git`
+entry is `DependencyGitUnsupported` for now. A loading command loads the dependency as its
+own model first and fails closed: a path that is not a directory or has no `rdra.toml` is
+`DependencyNotFound`, a dependency that leads back to a model being loaded is
+`DependencyCycle`, and one whose own `check` reports an error, a semantic error or a
+lifecycle finding of error severity, is `DependencyHasErrors`, with the count and the first
+error as `check` prints it. Each message names `rdra.toml`, the dependency, and its path. A
+dependency's own dependencies are checked the same way and cannot be bound. One directory
+may be a dependency under several keys, in one manifest or across a diamond; each consumer
+binds it under its own key. A manifest without `[dependencies]` changes no output. A
+malformed manifest, or one without `[model] name`, makes every loading command exit `1`
+with a message that names `rdra.toml` and the line.
+
+One run loads one model. A directory input contributes its `.rdra` files except those
+under a nested directory with its own `rdra.toml`, which belong to that model. Inputs that
+belong to two models, or to a model and to none, are `ManifestConflict`, which names both
+manifests; run each model on its own. The LSP does the same per open document: a
+dependency's file opened under the product's root is analysed as its own model and never
+merged into the product. What a model binds and references is in
 [Referencing another model](./language-reference.md#referencing-another-model).
 
 A loading command finds the manifest like this:
@@ -400,8 +410,8 @@ A loading command finds the manifest like this:
 3. Stop after the first directory that holds `.git`, which is searched too, or at the
    filesystem root. A stray `rdra.toml` above a repository never applies.
 4. With several inputs, every input's manifest is read, so a malformed one fails the command
-   whatever the input order. When all are valid, the first input's manifest is the project's.
-   A later change will tighten how inputs from different models combine.
+   whatever the input order. When all are valid and the inputs belong to one model, that
+   manifest is the project's; see `ManifestConflict` above for inputs of two models.
 
 The LSP loads a workspace the same way. It lists every `.rdra` file under the workspace roots,
 adds the open buffers, and derives the include paths from those files exactly as the CLI does.
