@@ -29,9 +29,10 @@ pub(crate) fn format_requirements(
         "risk",
         "rationale",
         "goals",
+        "bucs",
         "description",
     ];
-    let rows: Vec<[String; 12]> = requirements
+    let rows: Vec<[String; 13]> = requirements
         .into_iter()
         .map(|(key, requirement)| {
             [
@@ -46,6 +47,12 @@ pub(crate) fn format_requirements(
                 optional_cell(&requirement.risk),
                 optional_cell(&requirement.rationale),
                 repeated_cell(achieved.get(&key).map_or(&[][..], Vec::as_slice)),
+                repeated_cell(&targets(
+                    model,
+                    RelKind::Motivates,
+                    &NodeRef::Requirement(key),
+                    "buc",
+                )),
                 optional_cell(&requirement.description),
             ]
         })
@@ -231,10 +238,14 @@ pub(crate) fn format_usecases(
         "alternatives",
         "errors",
         "description",
+        "bucs",
+        "screens",
+        "apis",
     ];
-    let rows: Vec<[String; 8]> = usecases
+    let rows: Vec<[String; 11]> = usecases
         .into_iter()
-        .map(|(_, usecase)| {
+        .map(|(key, usecase)| {
+            let node = NodeRef::UseCase(key);
             [
                 usecase.id.clone(),
                 usecase.label.clone(),
@@ -244,6 +255,9 @@ pub(crate) fn format_usecases(
                 repeated_cell(&usecase.alternatives),
                 repeated_cell(&usecase.errors),
                 optional_cell(&usecase.description),
+                repeated_cell(&sources(model, RelKind::Contains, &node, "buc")),
+                repeated_cell(&targets(model, RelKind::Displays, &node, "screen")),
+                repeated_cell(&targets(model, RelKind::Invokes, &node, "api")),
             ]
         })
         .collect();
@@ -661,4 +675,74 @@ pub(crate) fn format_rules(
         .collect();
 
     format_rows(&headers, &rows, format, "rules")
+}
+
+/// The ids of the `kind` nodes `from` reaches by `rel` relations, in relation order.
+fn targets(model: &SemanticModel, rel: RelKind, from: &NodeRef, kind: &str) -> Vec<String> {
+    linked(model, rel, kind, |r| (&r.from == from).then_some(&r.to))
+}
+
+/// The ids of the `kind` nodes that reach `to` by `rel` relations, in relation order.
+fn sources(model: &SemanticModel, rel: RelKind, to: &NodeRef, kind: &str) -> Vec<String> {
+    linked(model, rel, kind, |r| (&r.to == to).then_some(&r.from))
+}
+
+fn linked<'a>(
+    model: &'a SemanticModel,
+    rel: RelKind,
+    kind: &str,
+    other_end: impl Fn(&'a rdra_ish_core::model::Relation) -> Option<&'a NodeRef>,
+) -> Vec<String> {
+    let mut ids: Vec<String> = Vec::new();
+    for node in model
+        .relations
+        .iter()
+        .filter(|r| r.kind == rel)
+        .filter_map(other_end)
+        .filter(|node| node_kind_name(node) == kind)
+    {
+        if let Some(id) = node_id(model, node) {
+            if !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+    }
+    ids
+}
+
+pub(crate) fn format_actors(model: &SemanticModel, format: &ListFormat) -> Result<String> {
+    let mut actors: Vec<_> = model.actors.values().collect();
+    actors.sort_by_key(|actor| actor.id.as_str());
+    let headers = ["id", "label", "description"];
+    let rows: Vec<[String; 3]> = actors
+        .into_iter()
+        .map(|actor| {
+            [
+                actor.id.clone(),
+                actor.label.clone(),
+                optional_cell(&actor.description),
+            ]
+        })
+        .collect();
+    format_rows(&headers, &rows, format, "actors")
+}
+
+pub(crate) fn format_bucs(model: &SemanticModel, format: &ListFormat) -> Result<String> {
+    let mut bucs: Vec<_> = model.bucs.iter().collect();
+    bucs.sort_by_key(|(_, buc)| buc.id.as_str());
+    let headers = ["id", "label", "business", "usecases", "description"];
+    let rows: Vec<[String; 5]> = bucs
+        .into_iter()
+        .map(|(key, buc)| {
+            let node = NodeRef::Buc(key);
+            [
+                buc.id.clone(),
+                buc.label.clone(),
+                repeated_cell(&targets(model, RelKind::Belongs, &node, "business")),
+                repeated_cell(&targets(model, RelKind::Contains, &node, "usecase")),
+                optional_cell(&buc.description),
+            ]
+        })
+        .collect();
+    format_rows(&headers, &rows, format, "BUCs")
 }

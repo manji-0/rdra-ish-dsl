@@ -238,10 +238,10 @@ achieves(ReqCheckout, Reliable)
 
     let csv = list_elements(&model, &ListKind::Requirement, &ListFormat::Csv).unwrap();
     assert!(csv.contains(
-        "id,label,priority,sources,stakeholders,owner,acceptance_criteria,status,risk,rationale,goals,description"
+        "id,label,priority,sources,stakeholders,owner,acceptance_criteria,status,risk,rationale,goals,bucs,description"
     ));
     assert!(csv.contains(
-        "ReqCheckout,Checkout must be reliable,must,Customer interview|Support tickets,Store Operations,Product Owner,A payment timeout leaves the cart recoverable.,proposed,high,Checkout failures directly block revenue.,Reliable,The checkout flow must preserve customer intent."
+        "ReqCheckout,Checkout must be reliable,must,Customer interview|Support tickets,Store Operations,Product Owner,A payment timeout leaves the cart recoverable.,proposed,high,Checkout failures directly block revenue.,Reliable,,The checkout flow must preserve customer intent."
     ));
 }
 
@@ -351,6 +351,44 @@ usecase CapturePayment "Capture payment"
     assert!(csv.contains(
         "CapturePayment,Capture payment,Order is authorized.,Provider is available.,Payment is captured.,Customer changes payment method.,Authorization expires.,Captures authorized payment."
     ));
+}
+
+#[test]
+fn lists_carry_the_links_a_design_document_reads() {
+    use rdra_ish_core::build_model;
+    use rdra_ish_syntax::parse;
+
+    let src = r#"
+actor Clerk "Clerk" description "Takes payments."
+business Revenue "Revenue"
+buc BucPay "Payment" description "Settles a visit."
+usecase Settle "Settle" description "Settles at the window."
+screen PayScreen "Pay screen"
+api SettleApi "Settle API"
+requirement ReqPay "Pay after the visit"
+belongs(BucPay, Revenue)
+contains(BucPay, Settle)
+displays(Settle, PayScreen)
+invokes(Settle, SettleApi)
+motivates(ReqPay, BucPay)
+"#;
+    let (ast, parse_errors) = parse(src);
+    assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+    let (model, _) = build_model(&ast);
+
+    let csv = |kind| list_elements(&model, &kind, &ListFormat::Csv).unwrap();
+    assert_eq!(
+        csv(ListKind::Actor),
+        "id,label,description\nClerk,Clerk,Takes payments.\n"
+    );
+    assert_eq!(
+        csv(ListKind::Buc),
+        "id,label,business,usecases,description\nBucPay,Payment,Revenue,Settle,Settles a visit.\n"
+    );
+    assert!(
+        csv(ListKind::Usecase).ends_with(",Settles at the window.,BucPay,PayScreen,SettleApi\n")
+    );
+    assert!(csv(ListKind::Requirement).contains(",BucPay,"));
 }
 
 #[test]

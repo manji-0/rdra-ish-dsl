@@ -14,9 +14,9 @@ mod state_findings;
 use access::{format_actor_permission_audit, format_business_inputs, format_permission_callables};
 use buc_roles::format_buc_roles;
 pub(crate) use elements::{
-    format_adr_impacts, format_adrs, format_apis, format_conditions, format_constraints,
-    format_dtos, format_entities, format_fields, format_goals, format_nfrs, format_requirements,
-    format_rules, format_usecases,
+    format_actors, format_adr_impacts, format_adrs, format_apis, format_bucs, format_conditions,
+    format_constraints, format_dtos, format_entities, format_fields, format_goals, format_nfrs,
+    format_requirements, format_rules, format_usecases,
 };
 use render::{format_rows, format_sorted_id_labels};
 #[cfg(test)]
@@ -65,8 +65,8 @@ pub(crate) fn list_elements(
     format: &ListFormat,
 ) -> Result<String> {
     match kind {
-        ListKind::Actor => list_id_label!(model, actors, format, "actors"),
-        ListKind::Buc => list_id_label!(model, bucs, format, "BUCs"),
+        ListKind::Actor => format_actors(model, format),
+        ListKind::Buc => format_bucs(model, format),
         ListKind::Flow => list_id_label!(model, flows, format, "flows"),
         ListKind::Step => list_id_label!(model, steps, format, "steps"),
         ListKind::Usecase => format_usecases(model, format),

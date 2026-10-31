@@ -20,6 +20,11 @@
   `statedeadlock` (a state an instance cannot leave although it has a way out), and
   `stateend` (no transition out), with a `%% legend:` comment. `diagram --kind state` no
   longer refuses a model whose only errors are deadlocks; it colours them.
+- `list --kind actor` and `list --kind buc` write each element's description, `buc` also
+  the business it belongs to and the use cases it contains (`id,label,business,usecases,description`).
+  `list --kind usecase` ends with `bucs,screens,apis`, and `list --kind requirement` gains a
+  `bucs` column with the BUCs the requirement motivates, so a document generator reads the
+  model through the CLI instead of parsing `.rdra`.
 - A `goal` element holds the outcome the requirements serve: its description states the
   problem, and `metric`, `baseline`, `target`, and `window` say how it is measured.
   `achieves(Requirement, Goal)` links a requirement to a goal; a non-goal is a requirement
