@@ -17,8 +17,8 @@ mod predicate_process;
 mod property;
 mod qref_util;
 
-pub(crate) use condition::body_condition_display;
 pub use condition::{applied_bodies, condition_body_display, condition_edges, ConditionEdge};
+pub(crate) use condition::{body_condition_display, effect_value_display};
 use fk::{resolve_along_links, resolve_foreign_keys};
 use instance::register_instance;
 use predicate_process::process_predicate;

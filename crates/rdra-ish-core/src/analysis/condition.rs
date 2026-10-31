@@ -92,9 +92,15 @@ pub fn condition_edges(model: &SemanticModel, ck: ConditionKey) -> Vec<Condition
     edges
 }
 
-fn effect_value_display(value: &EffectValue) -> std::string::String {
+/// `value` of `column` as a human reads it: an `Enum` or variation value by its label.
+pub(crate) fn effect_value_display(
+    model: &SemanticModel,
+    entity: EntityKey,
+    column: &str,
+    value: &EffectValue,
+) -> std::string::String {
     match value {
-        EffectValue::EnumVariant(v) => v.clone(),
+        EffectValue::EnumVariant(v) => model.value_display(entity, column, v).to_string(),
         EffectValue::Bool(b) => b.to_string(),
         EffectValue::Int(n) => n.to_string(),
         EffectValue::Present | EffectValue::TypedPresent(_) => "present".to_string(),
@@ -115,7 +121,7 @@ pub(crate) fn body_condition_display(
             format!(
                 "{} == {}",
                 column_display(model, column),
-                effect_value_display(value)
+                effect_value_display(model, column.entity, &column.column, value)
             )
         }
         CrossEntityCondition::Comparison(prop) => {

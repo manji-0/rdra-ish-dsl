@@ -79,7 +79,7 @@ fn holds_stores_the_body_and_derives_the_same_edges() {
     assert_eq!(cond.body.as_ref().map(|b| b.conds.len()), Some(2));
     assert_eq!(
         condition_body_display(&model, ck).as_deref(),
-        Some("Payment.method == insurance, Appointment.status == checkedin")
+        Some("Payment.method == Insurance, Appointment.status == checkedin")
     );
     let edges = condition_edges(&model, ck);
     assert!(matches!(edges[0], ConditionEdge::Variation(_)));
@@ -159,7 +159,7 @@ fn a_second_holds_is_rejected() {
     );
     assert_eq!(
         condition_body_display(&model, model.conditions.keys().next().unwrap()).as_deref(),
-        Some("Payment.method == cash")
+        Some("Payment.method == Cash")
     );
 }
 

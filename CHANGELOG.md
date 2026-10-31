@@ -152,6 +152,12 @@
   holding one note, `<n> 状態 / <m> 遷移 (--entity <Entity>)`, with no states or transitions
   and so no `usecase` kind in the header. Read a model with `--entity`, or `--buc`, which
   still draws full models.
+- A rule or a condition body shows an `Enum` or variation value by its label when it has
+  one: `ClinicalOrder.status == オーダ済` (was `== clordered`). This holds for the `rule`
+  column of `list --kind rule`, the `body` column of `list --kind condition`, the guards of
+  `diagram --kind sequence`, and the `%% holds` lines of `diagram --kind condition`. A
+  sequence diagram's state guard now names the entity by id (`Appointment.status == 会計待ち`,
+  was `予約・受診.status == 会計待ち`), as the other guards do.
 - `diagram --kind state` labels each transition with the use case's label, then `[...]`
   with the label of each condition whose `holds` body guards it: `採血 [医師が確定したオーダ]`
   (was `usecase__CollectSpecimen`). The use case's id moves to a `%% transition <id>` line

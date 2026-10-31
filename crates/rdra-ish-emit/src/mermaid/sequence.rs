@@ -5,9 +5,9 @@
 //!
 //! A Mermaid file holds one diagram, so the scope names exactly one use case.
 
+use super::omitted_linked_kinds;
 use super::robustness::controls_of;
 use super::usecase::scoped_use_cases;
-use super::{omitted_linked_kinds, state_key};
 use crate::diagram_common::{contract_id, node_label, Header};
 use crate::{node_kind_filter_name, EmitError, Emitter, Scope, View};
 use rdra_ish_core::analysis::{applied_bodies, condition_body_display};
@@ -38,13 +38,6 @@ fn effect_value(value: &EffectValue) -> String {
     }
 }
 
-/// A lifecycle state's label, or the raw variant when the entity declares no such state.
-fn state_label(model: &SemanticModel, entity: EntityKey, variant: &str) -> String {
-    state_key(model, entity, variant)
-        .and_then(|key| model.states.get(key))
-        .map_or_else(|| variant.to_string(), |state| state.label.clone())
-}
-
 /// What the use case does to `entity` on a write: the operation, the lifecycle moves, and
 /// the other columns it sets.
 fn write_label(
@@ -64,8 +57,8 @@ fn write_label(
             format!(
                 "{} {} -> {}",
                 t.column,
-                state_label(model, entity, &t.from),
-                state_label(model, entity, &t.to)
+                model.value_display(entity, &t.column, &t.from),
+                model.value_display(entity, &t.column, &t.to)
             )
         })
         .collect();
@@ -103,18 +96,15 @@ fn guards(model: &SemanticModel, usecase: UseCaseKey) -> Vec<String> {
         .state_transitions
         .iter()
         .filter(|t| t.usecase == usecase)
-        .filter(|t| {
-            let said = format!("{}.{} == {}", model.entities[t.entity].id, t.column, t.from);
-            !conditions.iter().any(|condition| condition.contains(&said))
-        })
         .map(|t| {
             format!(
                 "{}.{} == {}",
-                model.entities[t.entity].label,
+                model.entities[t.entity].id,
                 t.column,
-                state_label(model, t.entity, &t.from)
+                model.value_display(t.entity, &t.column, &t.from)
             )
-        });
+        })
+        .filter(|said| !conditions.iter().any(|condition| condition.contains(said)));
     conditions
         .iter()
         .cloned()

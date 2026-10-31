@@ -2,7 +2,7 @@
 //!
 //! `list --kind rule` prints it and `lint` reads it for rules that carry no label.
 
-use crate::analysis::{body_condition_display, condition_body_display};
+use crate::analysis::{body_condition_display, condition_body_display, effect_value_display};
 use crate::lint::node_id;
 use crate::location::LocatedSpan;
 use crate::model::{
@@ -33,16 +33,6 @@ impl BusinessRule {
     }
 }
 
-fn value_text(value: &EffectValue) -> String {
-    match value {
-        EffectValue::EnumVariant(v) => v.clone(),
-        EffectValue::Bool(b) => b.to_string(),
-        EffectValue::Int(n) => n.to_string(),
-        EffectValue::Present | EffectValue::TypedPresent(_) => "present".to_string(),
-        EffectValue::Null => "null".to_string(),
-    }
-}
-
 /// The conditions of a single-entity rule, each qualified by the entity.
 fn local_parts(
     model: &SemanticModel,
@@ -53,7 +43,10 @@ fn local_parts(
     let id = &model.entities[entity].id;
     equals
         .iter()
-        .map(|(column, value)| format!("{id}.{column} == {}", value_text(value)))
+        .map(|(column, value)| {
+            let value = effect_value_display(model, entity, column, value);
+            format!("{id}.{column} == {value}")
+        })
         .chain(
             comparisons
                 .iter()

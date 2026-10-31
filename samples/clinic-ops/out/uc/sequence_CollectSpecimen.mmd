@@ -8,7 +8,7 @@ sequenceDiagram
   participant entity__ClinicalOrder as 検査オーダ
   actor__Nurse ->> screen__SpecimenScreen: 採血
   screen__SpecimenScreen ->> api__CollectSpecimenApi: 採血 API
-  alt 医師が確定したオーダ: ClinicalOrder.physician_confirmed == true, ClinicalOrder.status == clordered
+  alt 医師が確定したオーダ: ClinicalOrder.physician_confirmed == true, ClinicalOrder.status == オーダ済
     api__CollectSpecimenApi ->> entity__ClinicalOrder: update status オーダ済 -> 採取済, collected_at=set
     api__CollectSpecimenApi -->> screen__SpecimenScreen: done
   else guard fails

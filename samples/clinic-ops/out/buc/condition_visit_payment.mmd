@@ -4,7 +4,7 @@
 flowchart LR
   condition__CopayCappedAtLimit["窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"]:::condition
   condition__UnreferredFirstVisit["紹介状なしの初診で、除外に当たらない"]:::condition
-  %% holds condition__UnreferredFirstVisit: Charge.kind == selectedtreatment, Appointment.referral == unreferred
+  %% holds condition__UnreferredFirstVisit: Charge.kind == 選定療養（自費）, Appointment.referral == 紹介状なし初診
   statemodel__Appointment_status["Appointment.status"]:::statemodel
   subgraph variation__BurdenRatio["負担割合"]
     variation__BurdenRatio__thirty["3割"]:::value

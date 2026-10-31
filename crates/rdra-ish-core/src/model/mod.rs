@@ -33,6 +33,26 @@ impl SemanticModel {
         }
     }
 
+    /// How a human-facing display writes `value` of `entity.column`: the label the column's
+    /// inline `Enum` or variation gives that value, or the value as written when it has none.
+    pub fn value_display<'a>(&'a self, entity: EntityKey, column: &str, value: &'a str) -> &'a str {
+        let Some(col) = self
+            .entities
+            .get(entity)
+            .and_then(|e| e.columns.iter().find(|c| c.name == column))
+        else {
+            return value;
+        };
+        let label = match &col.col_type {
+            ColumnType::Variation(key) => self.variations.get(*key).and_then(|variation| {
+                let index = variation.values.iter().position(|v| v == value)?;
+                variation.labels.get(index)?.as_deref()
+            }),
+            _ => col.value_label(value),
+        };
+        label.unwrap_or(value)
+    }
+
     /// `transitions` names this column of this entity, so it is a state axis.
     pub fn is_lifecycle_column(&self, entity: EntityKey, column: &str) -> bool {
         self.state_transitions

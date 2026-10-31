@@ -10,7 +10,7 @@ sequenceDiagram
   participant api__CreateCarePlanApi as ケアプラン作成 API
   actor__Clinician ->> screen__EncounterWorkspaceScreen: 診療記録の署名
   screen__EncounterWorkspaceScreen ->> api__SignEncounterApi: 署名 API
-  alt 診療記録.status == 記載済
+  alt Encounter.status == 記載済
     api__SignEncounterApi ->> entity__Encounter: update status 記載済 -> 署名済, signed_at=set
     api__SignEncounterApi -) api__CreateChargeApi: 診療記録の署名
     api__SignEncounterApi -) api__CreateCarePlanApi: 診療記録の署名
