@@ -1,4 +1,5 @@
-//! The requirement model (`--kind requirement`): the requirements with the BUCs they motivate,
+//! The requirement model (`--kind requirement`): the requirements with the BUCs they motivate
+//! and the goals they achieve,
 //! and the non-functional requirements and constraints with what they apply to or constrain
 //! and the quality each belongs to.
 
@@ -12,13 +13,15 @@ use std::collections::HashSet;
 
 pub struct RequirementMermaidEmitter;
 
-/// Whether `rel` is an edge of the requirement model: a requirement's `motivates`, an NFR's
-/// `applies_to`, a constraint's `constrains`, or a `qualifies`.
+/// Whether `rel` is an edge of the requirement model: a requirement's `motivates` or
+/// `achieves`, an NFR's `applies_to`, a constraint's `constrains`, or a `qualifies`.
 fn is_requirement_edge(rel: &rdra_ish_core::model::Relation) -> bool {
     matches!(
         (&rel.kind, &rel.from),
-        (RelKind::Motivates, NodeRef::Requirement(_))
-            | (RelKind::AppliesTo, NodeRef::Nfr(_))
+        (
+            RelKind::Motivates | RelKind::Achieves,
+            NodeRef::Requirement(_)
+        ) | (RelKind::AppliesTo, NodeRef::Nfr(_))
             | (RelKind::Constrains, NodeRef::Constraint(_))
             | (RelKind::Qualifies, NodeRef::Nfr(_) | NodeRef::Constraint(_))
     )
@@ -65,18 +68,18 @@ impl Emitter for RequirementMermaidEmitter {
             .iter()
             .filter(|rel| is_requirement_edge(rel))
         {
-            if rel.kind != RelKind::Qualifies && in_scope(&rel.to) {
+            if !matches!(rel.kind, RelKind::Qualifies | RelKind::Achieves) && in_scope(&rel.to) {
                 let label = object_graph_rel_label(&rel.kind).to_string();
                 edges.add(model, (&rel.from, &rel.kind, label, &rel.to), None);
             }
         }
-        // Each quality of a drawn NFR or constraint; in the whole model every requirement
-        // element, linked or not.
+        // Each quality of a drawn NFR or constraint and each goal of a drawn requirement; in the
+        // whole model every requirement element, linked or not.
         let sources: HashSet<NodeRef> = edges.nodes.iter().cloned().collect();
         for rel in model
             .relations
             .iter()
-            .filter(|rel| rel.kind == RelKind::Qualifies)
+            .filter(|rel| matches!(rel.kind, RelKind::Qualifies | RelKind::Achieves))
         {
             if scope.is_none() || sources.contains(&rel.from) {
                 let label = object_graph_rel_label(&rel.kind).to_string();
@@ -89,6 +92,7 @@ impl Emitter for RequirementMermaidEmitter {
                 matches!(
                     nr,
                     NodeRef::Requirement(_)
+                        | NodeRef::Goal(_)
                         | NodeRef::Nfr(_)
                         | NodeRef::Quality(_)
                         | NodeRef::Constraint(_)
@@ -112,6 +116,7 @@ impl Emitter for RequirementMermaidEmitter {
                     matches!(
                         nr,
                         NodeRef::Requirement(_)
+                            | NodeRef::Goal(_)
                             | NodeRef::Nfr(_)
                             | NodeRef::Quality(_)
                             | NodeRef::Constraint(_)
@@ -192,6 +197,32 @@ decides(AdrOne, ReqFast)
             ),
             "{result}"
         );
+    }
+
+    #[test]
+    fn a_goal_is_drawn_with_the_requirements_that_achieve_it() {
+        let src = format!(
+            "{SHOP}goal ShortWait \"Short wait\"\ngoal Unserved \"Unserved\"\nachieves(ReqFast, ShortWait)\n"
+        );
+        let whole = RequirementMermaidEmitter
+            .emit(&model_from(&src), &View::whole())
+            .unwrap();
+        for present in [
+            "  requirement__ReqFast -.->|achieves| goal__ShortWait\n",
+            "    goal__ShortWait[\"Short wait\"]:::goal\n",
+            "    goal__Unserved[\"Unserved\"]:::goal\n",
+        ] {
+            assert!(whole.contains(present), "{present}: {whole}");
+        }
+
+        let pay = RequirementMermaidEmitter
+            .emit(&model_from(&src), &View::bucs(vec!["BucPay".to_string()]))
+            .unwrap();
+        assert!(
+            pay.contains("  requirement__ReqFast -.->|achieves| goal__ShortWait\n"),
+            "{pay}"
+        );
+        assert!(!pay.contains("goal__Unserved"), "{pay}");
     }
 
     #[test]

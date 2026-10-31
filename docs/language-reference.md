@@ -20,7 +20,7 @@ same order:
 
 | Layer | Kinds | Review question | Section |
 |---|---|---|---|
-| Requirements and traceability | `requirement`, `adr`, `nfr`, `quality`, `constraint` | Why does this exist, and which quality bar applies? | [Requirements and Traceability](#requirements-and-traceability) |
+| Requirements and traceability | `goal`, `requirement`, `adr`, `nfr`, `quality`, `constraint` | Why does this exist, and which quality bar applies? | [Requirements and Traceability](#requirements-and-traceability) |
 | Business | `business`, `buc`, `flow`, `step`, `timer`, `medium` | Which business value does it serve, in what order? | [Business Layer](#business-layer) |
 | Interaction | `actor`, `usecase`, `screen`, `field`, `event` | Who does what, on which screen, and what does it cause? | [Interaction Layer](#interaction-layer) |
 | System boundary | `system`, `extsystem`, `api`, `dto`, `permission` | Which boundary owns the operation, and who may call it? | [System Boundary](#system-boundary) |
@@ -131,7 +131,8 @@ a `%% desc <id>: <text>` comment line after the node.
 
 | kind | Description | Reviewed by |
 |---|---|---|
-| `requirement` | A requirement that motivates business use cases. | `lint` `requirement-untraced`; RDRA and requirement diagrams; `list --kind requirement` |
+| `goal` | An outcome the requirements serve, with the metric that measures it, its baseline and target, and the window it is read over. Its description states the problem it solves. | `lint` `goal-unmeasured`; RDRA and requirement diagrams (`achieves`); `list --kind goal` |
+| `requirement` | A requirement that motivates business use cases and achieves goals. | `lint` `requirement-untraced`, `requirement-no-goal`; RDRA and requirement diagrams; `list --kind requirement` |
 | `adr` | An architecture decision record. It captures context, selected and rejected options, reasons, and consequences, then links the decision to impacted model elements with `decides`. | no diagram draws it, and the `omitted:` line of a diagram that draws what it decides names `adr`; `list --kind adr`, `list --kind adr-impact` |
 | `nfr` | A non-functional requirement with measurable or reviewable quality metadata such as latency, SLO, availability, resilience, audit, retention, or privacy classification. | `lint` `nfr-unscoped`; RDRA and requirement diagrams |
 | `quality` | A quality attribute category such as performance, availability, resilience, auditability, observability, or privacy. | RDRA and requirement diagrams (`qualifies`) |
@@ -203,6 +204,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `requires_permission` | `(UseCase \| Api, Permission)` | The use case or API requires the permission type. |
 | `requires_medium` | `(UseCase \| Api, Medium)` | The use case or API requires the operation medium. |
 | `motivates` | `Requirement == Buc` | The requirement motivates the BUC. |
+| `achieves` | `Requirement == Goal` | The requirement serves the goal. A requirement may achieve several goals. |
 | `decides` | `(Adr, Buc \| UseCase \| Api \| System \| Entity \| Requirement \| Nfr \| Constraint \| Dto)` | The ADR records a design decision that affects the target element. Use this for impact review and design traceability without making the target depend on a document file path. |
 | `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `1:1`, `1:N`, `N:1`, `N:M` (unquoted). The child side, the `N` of `N:1` / `1:N` or the left of `1:1`, may be a range `lo..hi` with `lo` 0 or 1 and `hi` 1 or `*`: `relate(OrderLine, Order, 1..*:1)` says every `Order` has at least one `OrderLine`, and the lifecycle checks it as the invariant `MinCard_<Child>_<role>`. A range on the parent side is an error; write `.optional()` for a parent that may be absent. For `N:M`, require `.via(JunctionEntity)` where the junction is distinct from both ends: the model keeps the logical N:M edge **and synthesizes** two `N:1` edges `Junction→A` / `Junction→B` (FK columns, composite unique on the FK pair when missing, TLA owner links, ER crowfoot, `.along` paths). Equivalent manual form: two explicit `N:1` relates from the junction. For `1:1` the left end is the child: it holds the key column, marked unique. FK options can be chained with `.optional()`, `.on_delete(action)`, and `.on_update(action)` (for `N:M`, options apply to both generated FKs). An `.optional()` relate lets the child exist unlinked in `states` and in the TLA+ export; a mandatory relate does not. |
 | `transitions` | `(Entity.column, UseCase, from -> to)` | A lifecycle edge on an Enum column: the use case moves the entity from the first variant to the second. |
@@ -244,10 +246,46 @@ only the methods below, and any other name is an `unknown chain method` error
 
 ## Requirements and Traceability
 
-These kinds record why the rest of the model exists. `motivates(Requirement, Buc)`
+These kinds record why the rest of the model exists. `achieves(Requirement, Goal)`
+ties a requirement to the outcome it serves, `motivates(Requirement, Buc)`
 ties a requirement to business value, `decides(Adr, ...)` ties a design decision to the
 elements it shapes, and `applies_to` / `constrains` scope quality objectives and
 guardrails to use cases, APIs, systems, and data.
+
+### Goals and non-goals
+
+<!-- derived-from #relationship-predicates -->
+
+A PRD opens with the problem, the goals and how each is measured, and the non-goals.
+A `goal` holds the first two. Its description states the problem the goal solves, and
+`metric`, `baseline`, `target`, and `window` say how the outcome is measured. All four
+are optional; `lint` reports a goal that has no `metric` or no `target` as
+`goal-unmeasured`.
+
+```
+goal ShortWait "受付から診察までの待ち時間を短くする"
+  description "受付後に診察室へ案内されるまでの待ちが長いと、患者が帰ってしまう。"
+  metric "受付から診察開始までの中央値"
+  baseline "45分"
+  target "30分"
+  window "月次"
+
+achieves(ReqSwiftCheckIn, ShortWait)
+```
+
+`achieves(Requirement, Goal)` links a requirement to each goal it serves. `lint` reports
+a requirement that achieves no goal as `requirement-no-goal`. Use
+`rdra-ish list --kind goal` for the goals with the requirements that achieve each.
+
+A non-goal is a requirement that the model rules out. It has no element of its own: write
+a `requirement` with `status "out-of-scope"` and a `rationale` that says why. `lint` does
+not ask an out-of-scope requirement for a goal.
+
+```
+requirement ReqNoOnlineConsultation "オンライン診療は対象外とする"
+  status "out-of-scope"
+  rationale "診察は来院して受ける前提で業務を分けているため、ビデオ通話による受付・診察・会計は扱わない。"
+```
 
 ### Requirements
 

@@ -3,6 +3,7 @@ module buc.visit_checkin
 import shared.actors
 import shared.entities
 import shared.biz
+import shared.goals
 
 // Sources cited as file:line are under ~/research/japan-hospital-operations/sources/.
 
@@ -208,7 +209,9 @@ requirement ReqEligibilityEveryVisit "受付のたびに保険資格を確認す
   status "accepted"
 
 motivates(ReqSwiftCheckIn, BucVisitCheckIn)
+achieves(ReqSwiftCheckIn, ShortWait)
 motivates(ReqEligibilityEveryVisit, BucVisitCheckIn)
+achieves(ReqEligibilityEveryVisit, ShortWait)
 
 // Business flow
 flow VisitCheckInFlow "受付の流れ"

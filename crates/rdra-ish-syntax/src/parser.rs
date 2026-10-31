@@ -69,6 +69,7 @@ fn path_ident() -> impl Parser<Token, String, Error = Simple<Token>> + Clone {
         Token::System => "system".to_string(),
         Token::Requirement => "requirement".to_string(),
         Token::Adr => "adr".to_string(),
+        Token::Goal => "goal".to_string(),
         Token::Nfr => "nfr".to_string(),
         Token::Quality => "quality".to_string(),
         Token::Constraint => "constraint".to_string(),
@@ -274,7 +275,7 @@ fn expr_annotation(
 /// `operand (+|-|*) operand` over a column or an integer, or a logical expression.
 fn column_expr() -> impl Parser<Token, ColumnExpr, Error = Simple<Token>> + Clone {
     let arith_operand =
-        select! { Token::IntLit(s) => Operand::IntLit(s) }.or(ident().map(Operand::Column));
+        select! { Token::IntLit(s) => Operand::IntLit(s) }.or(column_name().map(Operand::Column));
     let arith_op = select! {
         Token::Plus => ArithOp::Add,
         Token::Minus => ArithOp::Sub,
@@ -330,6 +331,7 @@ fn column_name() -> impl Parser<Token, String, Error = Simple<Token>> + Clone {
         Token::Ident(s) => s,
         Token::Variation => "variation".to_string(),
         Token::Condition => "condition".to_string(),
+        Token::Goal => "goal".to_string(),
     }
 }
 
@@ -363,6 +365,7 @@ fn kind_token() -> impl Parser<Token, Kind, Error = Simple<Token>> + Clone {
         Token::System      => Kind::System,
         Token::Requirement => Kind::Requirement,
         Token::Adr         => Kind::Adr,
+        Token::Goal        => Kind::Goal,
         Token::Nfr         => Kind::Nfr,
         Token::Quality     => Kind::Quality,
         Token::Constraint  => Kind::Constraint,
@@ -451,6 +454,7 @@ fn instance_decl() -> impl Parser<Token, InstanceDecl, Error = Simple<Token>> + 
                         "a `variation` lists values (`cash \"Cash\"`), not columns",
                     ));
                 }
+                check_goal_metadata(&kind, &nfr, &span)?;
                 Ok(InstanceDecl {
                     kind,
                     id,
@@ -468,6 +472,37 @@ fn instance_decl() -> impl Parser<Token, InstanceDecl, Error = Simple<Token>> + 
                 })
             },
         )
+}
+
+fn check_goal_metadata(
+    kind: &Kind,
+    nfr: &Option<NfrMetadata>,
+    span: &Span,
+) -> Result<(), Simple<Token>> {
+    let Some(meta) = nfr else {
+        return Ok(());
+    };
+    if *kind == Kind::Goal {
+        let extra = meta.slo.is_some()
+            || meta.availability.is_some()
+            || meta.resilience.is_some()
+            || meta.audit.is_some()
+            || meta.logging.is_some()
+            || meta.retention.is_some()
+            || meta.privacy.is_some();
+        if extra {
+            return Err(Simple::custom(
+                span.clone(),
+                "a `goal` takes only `metric`, `baseline`, `target` and `window`",
+            ));
+        }
+    } else if meta.baseline.is_some() {
+        return Err(Simple::custom(
+            span.clone(),
+            format!("`baseline` is only for `goal`, not `{}`", kind.name()),
+        ));
+    }
+    Ok(())
 }
 
 fn check_variation_values(
@@ -707,6 +742,7 @@ fn api_metadata() -> impl Parser<Token, ApiMetadata, Error = Simple<Token>> + Cl
 #[derive(Debug, Clone, PartialEq)]
 enum NfrMetadataEntry {
     Metric(String),
+    Baseline(String),
     Target(String),
     Window(String),
     Slo(String),
@@ -722,6 +758,9 @@ fn nfr_metadata_entry() -> impl Parser<Token, NfrMetadataEntry, Error = Simple<T
     let metric = just(Token::Ident("metric".to_string()))
         .ignore_then(metadata_value())
         .map(NfrMetadataEntry::Metric);
+    let baseline = just(Token::Ident("baseline".to_string()))
+        .ignore_then(string_lit())
+        .map(NfrMetadataEntry::Baseline);
     let target = just(Token::Ident("target".to_string()))
         .ignore_then(string_lit())
         .map(NfrMetadataEntry::Target);
@@ -754,6 +793,7 @@ fn nfr_metadata_entry() -> impl Parser<Token, NfrMetadataEntry, Error = Simple<T
         .map(NfrMetadataEntry::Privacy);
 
     metric
+        .or(baseline)
         .or(target)
         .or(window)
         .or(slo)
@@ -772,6 +812,7 @@ fn nfr_metadata() -> impl Parser<Token, NfrMetadata, Error = Simple<Token>> + Cl
         for entry in entries {
             match entry {
                 NfrMetadataEntry::Metric(value) => metadata.metric = Some(value),
+                NfrMetadataEntry::Baseline(value) => metadata.baseline = Some(value),
                 NfrMetadataEntry::Target(value) => metadata.target = Some(value),
                 NfrMetadataEntry::Window(value) => metadata.window = Some(value),
                 NfrMetadataEntry::Slo(value) => metadata.slo = Some(value),
@@ -994,7 +1035,7 @@ fn operand() -> impl Parser<Token, Operand, Error = Simple<Token>> + Clone {
             )
         })
         .then_ignore(just(Token::Dot))
-        .then(ident())
+        .then(column_name())
         .map_with_span(|((_entity_name, entity), column), span| {
             Operand::QualifiedColumn(QualifiedColumnRef {
                 entity,
@@ -1002,7 +1043,7 @@ fn operand() -> impl Parser<Token, Operand, Error = Simple<Token>> + Clone {
                 span,
             })
         });
-    let col = ident().map(Operand::Column);
+    let col = column_name().map(Operand::Column);
     // `now` must come before generic ident because logos lexes it as Token::Now
     now.or(int_lit).or(qualified_col).or(col)
 }
@@ -1430,6 +1471,63 @@ error_response(CreateOrder, ErrorResponse)
         };
         assert_eq!(dto.kind, Kind::Dto);
         assert_eq!(dto.columns.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_goal_with_its_measure() {
+        let ast = parse_ok(
+            r#"
+goal ShortWait "受付から診察までの待ち時間を短くする"
+  description "待ちが長いと患者が帰ってしまう。"
+  metric "中央値"
+  baseline "45分"
+  target "30分"
+  window "月次"
+goal Bare "Bare"
+"#,
+        );
+        let Item::Instance(goal) = &ast.items[0] else {
+            panic!("expected goal instance");
+        };
+        assert_eq!(goal.kind, Kind::Goal);
+        assert_eq!(
+            goal.description.as_deref(),
+            Some("待ちが長いと患者が帰ってしまう。")
+        );
+        assert_eq!(goal.nfr.metric.as_deref(), Some("中央値"));
+        assert_eq!(goal.nfr.baseline.as_deref(), Some("45分"));
+        assert_eq!(goal.nfr.target.as_deref(), Some("30分"));
+        assert_eq!(goal.nfr.window.as_deref(), Some("月次"));
+        let Item::Instance(bare) = &ast.items[1] else {
+            panic!("expected goal instance");
+        };
+        assert_eq!(bare.nfr, NfrMetadata::default());
+    }
+
+    #[test]
+    fn a_goal_takes_no_slo_and_only_a_goal_takes_a_baseline() {
+        let (_, errors) = parse("goal G \"g\"\n  slo \"99%\"\n");
+        assert!(!errors.is_empty(), "a goal with slo must not parse");
+        let (_, errors) = parse("nfr N \"n\"\n  baseline \"1\"\n");
+        assert!(!errors.is_empty(), "an nfr with baseline must not parse");
+    }
+
+    #[test]
+    fn a_column_may_be_named_goal() {
+        let ast = parse_ok("entity CarePlan \"c\" {\n  id: Int @pk\n  goal: String\n}\n");
+        let Item::Instance(entity) = &ast.items[0] else {
+            panic!("expected entity");
+        };
+        assert_eq!(entity.columns[1].name, "goal");
+    }
+
+    #[test]
+    fn a_keyword_named_column_reads_in_an_expression() {
+        for word in ["goal", "condition", "variation"] {
+            parse_ok(&format!(
+                "forbidden(E, {word} == present)\nforbidden(E, E.{word} == present)\n"
+            ));
+        }
     }
 
     #[test]

@@ -3,6 +3,7 @@ module buc.clinical_encounter
 import shared.actors
 import shared.entities
 import shared.biz
+import shared.goals
 
 buc BucClinicalEncounter "診察"
 
@@ -188,3 +189,13 @@ requirement ReqHandOffAfterConsultation "診察終了で受診を会計計算へ
   status "accepted"
 
 motivates(ReqHandOffAfterConsultation, BucClinicalEncounter)
+achieves(ReqHandOffAfterConsultation, TimelyClaims)
+
+// A non-goal: a requirement the model rules out, with the reason.
+requirement ReqNoOnlineConsultation "オンライン診療は対象外とする"
+  source "モデルの想定（一次資料なし）"
+  stakeholder "医師"
+  status "out-of-scope"
+  rationale "診察は来院して受ける前提で業務を分けているため、ビデオ通話による受付・診察・会計は扱わない。"
+
+motivates(ReqNoOnlineConsultation, BucClinicalEncounter)

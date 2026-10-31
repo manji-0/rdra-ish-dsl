@@ -35,6 +35,7 @@ pub(crate) fn api_metadata_is_empty(metadata: &ApiMetadata) -> bool {
 
 pub(crate) fn nfr_metadata_is_empty(metadata: &NfrMetadata) -> bool {
     metadata.metric.is_none()
+        && metadata.baseline.is_none()
         && metadata.target.is_none()
         && metadata.window.is_none()
         && metadata.slo.is_none()

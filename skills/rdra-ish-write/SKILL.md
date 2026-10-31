@@ -127,7 +127,7 @@ Kinds commonly used by this skill:
 | Kind | Use |
 |---|---|
 | `actor` / `extsystem` | people and outside systems |
-| `requirement` / `adr` / `nfr` / `quality` / `constraint` | traceability, decisions, and non-functional intent |
+| `goal` / `requirement` / `adr` / `nfr` / `quality` / `constraint` | outcomes with their metric, traceability, decisions, and non-functional intent |
 | `business` / `buc` / `flow` / `step` / `usecase` | business value, flow order, and action boundaries |
 | `screen` / `field` / `api` / `dto` / `system` | UI items, payloads, interaction, and implementation boundaries |
 | `entity` | logical data modeling |
@@ -181,7 +181,7 @@ kinds fail to parse, with a hint naming the replacement.
 | `qualifies` / `constrains` | `(Nfr\|Constraint, Quality)` / `(Constraint, UseCase\|Api\|System\|Entity\|Dto)` | quality category and guardrail scope |
 | `combines` | `(Condition, Variation\|Entity.column)` | traceability link to a variation or a lifecycle column |
 | `holds` | `(Condition, Entity.col == value, ...)` | condition body (implicit AND); links are then derived, so no `combines` |
-| `motivates` / `decides` | `Requirement == Buc` / `Adr == target` | requirement and decision traceability |
+| `motivates` / `achieves` / `decides` | `Requirement == Buc` / `Requirement == Goal` / `Adr == target` | requirement, goal, and decision traceability; a non-goal is a requirement with `status "out-of-scope"` and a `rationale` |
 
 `relate(Child, Parent, N:1)` generates the key column `{role}_{parent key column}` on the
 child (`order_id`); `1:N` puts it on the right entity, and `1:1` on the left, marked

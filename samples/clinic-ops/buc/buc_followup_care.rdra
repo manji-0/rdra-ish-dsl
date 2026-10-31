@@ -3,6 +3,7 @@ module buc.followup_care
 import shared.actors
 import shared.entities
 import shared.biz
+import shared.goals
 
 buc BucFollowupCare "フォローアップ"
 
@@ -149,3 +150,4 @@ requirement ReqFollowUpAfterVisit "診察後の連絡と再診予約をケアプ
   status "accepted"
 
 motivates(ReqFollowUpAfterVisit, BucFollowupCare)
+achieves(ReqFollowUpAfterVisit, SafeCare)

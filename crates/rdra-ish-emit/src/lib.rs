@@ -171,6 +171,7 @@ pub(crate) fn object_graph_layer(node: &NodeRef) -> ObjectGraphLayer {
         | NodeRef::ExtSystem(_)
         | NodeRef::Requirement(_)
         | NodeRef::Adr(_)
+        | NodeRef::Goal(_)
         | NodeRef::Nfr(_) => ObjectGraphLayer::SystemValue,
         NodeRef::Quality(_)
         | NodeRef::Constraint(_)
@@ -212,6 +213,7 @@ pub(crate) fn object_graph_rel_label(kind: &RelKind) -> &'static str {
         RelKind::RequiresPermission => "requires_permission",
         RelKind::RequiresMedium => "requires_medium",
         RelKind::Motivates => "motivates",
+        RelKind::Achieves => "achieves",
         RelKind::Decides => "decides",
         RelKind::Transitions => "transitions",
         RelKind::Invokes => "invokes",
@@ -266,6 +268,7 @@ pub const KNOWN_DIAGRAM_NODE_KINDS: &[&str] = &[
     "system",
     "requirement",
     "adr",
+    "goal",
     "nfr",
     "quality",
     "constraint",
@@ -307,6 +310,7 @@ pub const KNOWN_DIAGRAM_EDGE_KINDS: &[&str] = &[
     "requires-permission",
     "requires-medium",
     "motivates",
+    "achieves",
     "decides",
     "transitions",
     "invokes",
@@ -357,6 +361,7 @@ pub(crate) fn node_kind_filter_name(node: &NodeRef) -> &'static str {
         NodeRef::System(_) => "system",
         NodeRef::Requirement(_) => "requirement",
         NodeRef::Adr(_) => "adr",
+        NodeRef::Goal(_) => "goal",
         NodeRef::Nfr(_) => "nfr",
         NodeRef::Quality(_) => "quality",
         NodeRef::Constraint(_) => "constraint",
@@ -419,6 +424,7 @@ pub(crate) fn node_description<'a>(model: &'a SemanticModel, node: &NodeRef) -> 
         NodeRef::System(key) => model.systems.get(*key)?.description.as_deref(),
         NodeRef::Requirement(key) => model.requirements.get(*key)?.description.as_deref(),
         NodeRef::Adr(key) => model.adrs.get(*key)?.description.as_deref(),
+        NodeRef::Goal(key) => model.goals.get(*key)?.description.as_deref(),
         NodeRef::Nfr(key) => model.nfrs.get(*key)?.description.as_deref(),
         NodeRef::Quality(key) => model.qualities.get(*key)?.description.as_deref(),
         NodeRef::Constraint(key) => model.constraints.get(*key)?.description.as_deref(),
@@ -463,6 +469,15 @@ pub(crate) fn collect_object_graph_nodes(
         requirements
             .into_iter()
             .map(|(k, _)| NodeRef::Requirement(k))
+            .filter(|nr| is_visible(nr)),
+    );
+
+    let mut goals: Vec<_> = model.goals.iter().collect();
+    goals.sort_by_key(|(_, g)| &g.id);
+    nodes.extend(
+        goals
+            .into_iter()
+            .map(|(k, _)| NodeRef::Goal(k))
             .filter(|nr| is_visible(nr)),
     );
 
@@ -694,6 +709,7 @@ mod tests {
             NodeRef::Actor(k) => model.actors[*k].id.clone(),
             NodeRef::Requirement(k) => model.requirements[*k].id.clone(),
             NodeRef::Adr(k) => model.adrs[*k].id.clone(),
+            NodeRef::Goal(k) => model.goals[*k].id.clone(),
             NodeRef::Nfr(k) => model.nfrs[*k].id.clone(),
             NodeRef::Quality(k) => model.qualities[*k].id.clone(),
             NodeRef::Constraint(k) => model.constraints[*k].id.clone(),

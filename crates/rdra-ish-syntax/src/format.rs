@@ -382,6 +382,9 @@ fn format_nfr_metadata(instance: &InstanceDecl) -> Vec<String> {
     if let Some(value) = &instance.nfr.metric {
         lines.push(format!("  metric {}", format_metadata_value(value)));
     }
+    if let Some(value) = &instance.nfr.baseline {
+        lines.push(format!("  baseline {}", quote_string(value)));
+    }
     if let Some(value) = &instance.nfr.target {
         lines.push(format!("  target {}", quote_string(value)));
     }
@@ -625,6 +628,14 @@ mod tests {
             format_source(&formatted).unwrap(),
             formatted,
             "not idempotent"
+        );
+    }
+
+    #[test]
+    fn formats_a_goal_and_keeps_its_measure_in_order() {
+        assert_formats_to(
+            "goal   ShortWait \"待ちを短く\"\n  description \"患者が帰る。\"\n  window   monthly\n  target \"30分\"\n  baseline \"45分\"\n  metric \"中央値\"\n",
+            "goal ShortWait \"待ちを短く\"\n  description \"患者が帰る。\"\n  metric \"中央値\"\n  baseline \"45分\"\n  target \"30分\"\n  window monthly\n",
         );
     }
 

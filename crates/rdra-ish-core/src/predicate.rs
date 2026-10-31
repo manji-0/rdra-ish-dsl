@@ -67,6 +67,7 @@ pub fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
         "requires_permission" => Some(vec![vec!["usecase", "api"], vec!["permission"]]),
         "requires_medium" => Some(vec![vec!["usecase", "api"], vec!["medium"]]),
         "motivates" => Some(vec![vec!["requirement"], vec!["buc"]]),
+        "achieves" => Some(vec![vec!["requirement"], vec!["goal"]]),
         "decides" => Some(vec![
             vec!["adr"],
             vec![
@@ -167,6 +168,7 @@ pub const KNOWN_PREDICATES: &[&str] = &[
     "requires_permission",
     "requires_medium",
     "motivates",
+    "achieves",
     "decides",
     "transitions",
     "after",

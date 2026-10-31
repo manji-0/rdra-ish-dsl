@@ -3,6 +3,7 @@ module buc.patient_onboarding
 import shared.actors
 import shared.entities
 import shared.biz
+import shared.goals
 
 buc BucPatientOnboarding "新患登録・患者情報管理"
 
@@ -235,3 +236,4 @@ requirement ReqRegisterWithEligibility "新患登録で保険情報と限度額�
   status "accepted"
 
 motivates(ReqRegisterWithEligibility, BucPatientOnboarding)
+achieves(ReqRegisterWithEligibility, ShortWait)

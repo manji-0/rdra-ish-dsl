@@ -3,6 +3,7 @@ module buc.appointment_scheduling
 import shared.actors
 import shared.entities
 import shared.biz
+import shared.goals
 
 buc BucAppointmentScheduling "予約" description "空き枠の検索、仮押さえ、予約の確定・変更・取消と通知。"
 
@@ -183,3 +184,4 @@ requirement ReqChangeAppointmentAtDesk "予約の変更・取消を電話と窓�
   status "accepted"
 
 motivates(ReqChangeAppointmentAtDesk, BucAppointmentScheduling)
+achieves(ReqChangeAppointmentAtDesk, ShortWait)

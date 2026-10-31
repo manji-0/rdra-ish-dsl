@@ -1,0 +1,28 @@
+module shared.goals
+
+// The goals state why the requirements exist. The metrics, baselines, and targets are
+// assumed by the model; no primary source gives them.
+
+// モデルの想定（一次資料なし）
+goal ShortWait "受付から診察までの待ち時間を短くする"
+  description "受付後に診察室へ案内されるまでの待ちが長いと、患者が帰ってしまう。"
+  metric "受付から診察開始までの中央値"
+  baseline "45分"
+  target "30分"
+  window "月次"
+
+// モデルの想定（一次資料なし）
+goal TimelyClaims "会計から請求までの遅れと返戻を減らす"
+  description "診察後の会計や請求に漏れや遅れがあると、収入が遅れ、返戻の訂正に事務の手間がかかる。"
+  metric "請求したレセプトのうち返戻になった割合"
+  baseline "3%"
+  target "1%"
+  window "月次"
+
+// モデルの想定（一次資料なし）
+goal SafeCare "診療の抜けと誤りを実施前に止める"
+  description "処方やオーダの確認漏れ、診察後の連絡漏れは、患者の安全と継続した治療を損なう。"
+  metric "処方・オーダの確認漏れと診察後の連絡漏れの件数"
+  baseline "月20件"
+  target "月5件以下"
+  window "月次"

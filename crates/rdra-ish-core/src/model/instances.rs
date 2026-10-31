@@ -52,6 +52,17 @@ pub struct Adr {
 }
 
 #[derive(Debug, Clone)]
+pub struct Goal {
+    pub id: std::string::String,
+    pub label: std::string::String,
+    pub description: Option<std::string::String>,
+    pub metric: Option<std::string::String>,
+    pub baseline: Option<std::string::String>,
+    pub target: Option<std::string::String>,
+    pub window: Option<std::string::String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Nfr {
     pub id: std::string::String,
     pub label: std::string::String,

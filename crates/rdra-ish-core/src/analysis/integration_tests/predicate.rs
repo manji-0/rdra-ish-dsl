@@ -296,3 +296,59 @@ fn known_chain_methods_are_accepted() {
     let errs = unknown_chain_errors(&format!("{BELONGS_BASE}belongs(U, B).by(\"y\")\n"));
     assert!(errs.is_empty(), "{errs:?}");
 }
+
+#[test]
+fn achieves_links_a_requirement_to_a_goal() {
+    let src = r#"
+goal ShortWait "Short wait"
+  metric "median wait"
+  baseline "45 min"
+  target "30 min"
+  window monthly
+requirement ReqFast "Fast check-in"
+achieves(ReqFast, ShortWait)
+"#;
+    let (ast, parse_errors) = parse(src);
+    assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
+    let (model, diags) = build_model(&ast);
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let goal = model.goals.values().next().unwrap();
+    assert_eq!(goal.metric.as_deref(), Some("median wait"));
+    assert_eq!(goal.baseline.as_deref(), Some("45 min"));
+    assert_eq!(goal.target.as_deref(), Some("30 min"));
+    assert_eq!(goal.window.as_deref(), Some("monthly"));
+    assert!(model
+        .relations
+        .iter()
+        .any(|rel| rel.kind == RelKind::Achieves
+            && matches!(rel.from, NodeRef::Requirement(_))
+            && matches!(rel.to, NodeRef::Goal(_))));
+}
+
+#[test]
+fn achieves_rejects_arguments_of_the_wrong_kind() {
+    let src = r#"
+goal ShortWait "Short wait"
+requirement ReqFast "Fast check-in"
+buc BucPay "Pay"
+achieves(ShortWait, ReqFast)
+achieves(ReqFast, BucPay)
+"#;
+    let (ast, parse_errors) = parse(src);
+    assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
+    let (_, diags) = build_model(&ast);
+    let messages: Vec<String> = diags.iter().map(|d| d.error.to_string()).collect();
+    assert!(
+        messages
+            .iter()
+            .any(|m| m.contains("'ShortWait' has kind goal, expected requirement")),
+        "{messages:?}"
+    );
+    assert!(
+        messages
+            .iter()
+            .any(|m| m.contains("'BucPay' has kind buc, expected goal")),
+        "{messages:?}"
+    );
+}

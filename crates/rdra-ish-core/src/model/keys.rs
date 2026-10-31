@@ -7,6 +7,7 @@ new_key_type! {
     pub struct SystemKey;
     pub struct RequirementKey;
     pub struct AdrKey;
+    pub struct GoalKey;
     pub struct NfrKey;
     pub struct QualityKey;
     pub struct ConstraintKey;

@@ -3,6 +3,7 @@ module buc.orders_results
 import shared.actors
 import shared.entities
 import shared.biz
+import shared.goals
 
 // Sources cited as file:line are under ~/research/japan-hospital-operations/sources/.
 
@@ -258,3 +259,4 @@ requirement ReqProxyOrderNeedsPhysician "代行入力されたオーダは医師
   status "accepted"
 
 motivates(ReqProxyOrderNeedsPhysician, BucOrdersResults)
+achieves(ReqProxyOrderNeedsPhysician, SafeCare)

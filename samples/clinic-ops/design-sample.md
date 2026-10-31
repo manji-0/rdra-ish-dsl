@@ -188,7 +188,7 @@ rdra-ish diagram samples/clinic-ops --kind requirement --format mermaid --out sa
 ```mermaid
 %% rdra-ish diagram=requirement scope=whole model=samples/clinic-ops
 %% layers: value=システム価値 environment=システム外部環境 system=システム
-%% kinds: requirement nfr quality constraint buc system entity
+%% kinds: requirement goal nfr quality constraint buc system entity
 %% omitted: (none)
 flowchart LR
   subgraph layer_value["システム価値"]
@@ -198,6 +198,7 @@ flowchart LR
     requirement__ReqHandOffAfterConsultation["診察終了で受診を会計計算へ引き渡す"]:::requirement
     requirement__ReqInquiryBeforeDispense["疑わしい処方は医師への照会が済むまで調剤しない"]:::requirement
     requirement__ReqMonthlyClaimByTenth["前月分のレセプトを翌月10日までに請求する"]:::requirement
+    requirement__ReqNoOnlineConsultation["オンライン診療は対象外とする"]:::requirement
     requirement__ReqPayAfterConsultation["会計は診察の後に一度で行う"]:::requirement
     requirement__ReqProxyOrderNeedsPhysician["代行入力されたオーダは医師が確定するまで実施しない"]:::requirement
     requirement__ReqRegisterEPrescription["院外処方箋を電子処方箋管理サービスへ登録し、保険薬局を指定しない"]:::requirement
@@ -205,6 +206,12 @@ flowchart LR
     requirement__ReqResolveAuditFindings["監査で見つかった問題を管理者が解決するまで追う"]:::requirement
     requirement__ReqResubmitReturned["返戻レセプトを訂正して再請求する"]:::requirement
     requirement__ReqSwiftCheckIn["再来患者は情報を入力し直さずに受付・案内される"]:::requirement
+    goal__SafeCare["診療の抜けと誤りを実施前に止める"]:::goal
+    %% desc goal__SafeCare: 処方やオーダの確認漏れ、診察後の連絡漏れは、患者の安全と継続した治療を損なう。
+    goal__ShortWait["受付から診察までの待ち時間を短くする"]:::goal
+    %% desc goal__ShortWait: 受付後に診察室へ案内されるまでの待ちが長いと、患者が帰ってしまう。
+    goal__TimelyClaims["会計から請求までの遅れと返戻を減らす"]:::goal
+    %% desc goal__TimelyClaims: 診察後の会計や請求に漏れや遅れがあると、収入が遅れ、返戻の訂正に事務の手間がかかる。
     nfr__ScheduleLookupLatency["予約枠検索の応答時間"]:::nfr
   end
   subgraph layer_environment["システム外部環境"]
@@ -246,20 +253,35 @@ flowchart LR
   constraint__PatientDataPrivacy -.->|qualifies| quality__Privacy
   nfr__ScheduleLookupLatency -.->|applies_to| system__ClinicOpsSystem
   nfr__ScheduleLookupLatency -.->|qualifies| quality__Performance
+  requirement__ReqChangeAppointmentAtDesk -.->|achieves| goal__ShortWait
   requirement__ReqChangeAppointmentAtDesk -.->|motivates| buc__BucAppointmentScheduling
+  requirement__ReqEligibilityEveryVisit -.->|achieves| goal__ShortWait
   requirement__ReqEligibilityEveryVisit -.->|motivates| buc__BucVisitCheckIn
+  requirement__ReqFollowUpAfterVisit -.->|achieves| goal__SafeCare
   requirement__ReqFollowUpAfterVisit -.->|motivates| buc__BucFollowupCare
+  requirement__ReqHandOffAfterConsultation -.->|achieves| goal__TimelyClaims
   requirement__ReqHandOffAfterConsultation -.->|motivates| buc__BucClinicalEncounter
+  requirement__ReqInquiryBeforeDispense -.->|achieves| goal__SafeCare
   requirement__ReqInquiryBeforeDispense -.->|motivates| buc__BucPrescriptionFulfillment
+  requirement__ReqMonthlyClaimByTenth -.->|achieves| goal__TimelyClaims
   requirement__ReqMonthlyClaimByTenth -.->|motivates| buc__BucBillingClaims
+  requirement__ReqNoOnlineConsultation -.->|motivates| buc__BucClinicalEncounter
+  requirement__ReqPayAfterConsultation -.->|achieves| goal__TimelyClaims
   requirement__ReqPayAfterConsultation -.->|motivates| buc__BucVisitPayment
+  requirement__ReqProxyOrderNeedsPhysician -.->|achieves| goal__SafeCare
   requirement__ReqProxyOrderNeedsPhysician -.->|motivates| buc__BucOrdersResults
+  requirement__ReqRegisterEPrescription -.->|achieves| goal__SafeCare
   requirement__ReqRegisterEPrescription -.->|motivates| buc__BucPrescriptionFulfillment
+  requirement__ReqRegisterWithEligibility -.->|achieves| goal__ShortWait
   requirement__ReqRegisterWithEligibility -.->|motivates| buc__BucPatientOnboarding
+  requirement__ReqResolveAuditFindings -.->|achieves| goal__TimelyClaims
   requirement__ReqResolveAuditFindings -.->|motivates| buc__BucStaffAdministration
+  requirement__ReqResubmitReturned -.->|achieves| goal__TimelyClaims
   requirement__ReqResubmitReturned -.->|motivates| buc__BucBillingClaims
+  requirement__ReqSwiftCheckIn -.->|achieves| goal__ShortWait
   requirement__ReqSwiftCheckIn -.->|motivates| buc__BucVisitCheckIn
   classDef requirement fill:#fff3bf,stroke:#e67700,color:#000;
+  classDef goal fill:#fff3bf,stroke:#e67700,color:#000;
   classDef nfr fill:#fff3bf,stroke:#e67700,color:#000;
   classDef quality fill:#fff3bf,stroke:#e67700,color:#000;
   classDef constraint fill:#fff3bf,stroke:#e67700,color:#000;

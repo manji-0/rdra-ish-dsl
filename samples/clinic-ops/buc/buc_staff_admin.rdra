@@ -3,6 +3,7 @@ module buc.staff_admin
 import shared.actors
 import shared.entities
 import shared.biz
+import shared.goals
 
 buc BucStaffAdministration "病院管理"
 
@@ -103,3 +104,4 @@ requirement ReqResolveAuditFindings "監査で見つかった問題を管理者�
   status "accepted"
 
 motivates(ReqResolveAuditFindings, BucStaffAdministration)
+achieves(ReqResolveAuditFindings, TimelyClaims)

@@ -28,6 +28,8 @@ pub enum Token {
     Requirement,
     #[token("adr")]
     Adr,
+    #[token("goal")]
+    Goal,
     #[token("nfr")]
     Nfr,
     #[token("quality")]

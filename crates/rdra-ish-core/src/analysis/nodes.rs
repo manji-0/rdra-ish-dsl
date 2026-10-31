@@ -9,6 +9,7 @@ pub(crate) fn node_kind_tag_str(node: &NodeRef) -> &'static str {
         NodeRef::System(_) => "system",
         NodeRef::Requirement(_) => "requirement",
         NodeRef::Adr(_) => "adr",
+        NodeRef::Goal(_) => "goal",
         NodeRef::Nfr(_) => "nfr",
         NodeRef::Quality(_) => "quality",
         NodeRef::Constraint(_) => "constraint",

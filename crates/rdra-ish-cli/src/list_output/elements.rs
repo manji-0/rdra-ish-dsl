@@ -1,7 +1,8 @@
 //! Structured element list formatters (requirements, APIs, entities, etc.).
 
 use anyhow::Result;
-use rdra_ish_core::model::RefAction;
+use rdra_ish_core::model::{NodeRef, RefAction, RelKind, RequirementKey, SemanticModel};
+use std::collections::HashMap;
 
 use crate::cli::ListFormat;
 
@@ -14,6 +15,7 @@ pub(crate) fn format_requirements(
 ) -> Result<String> {
     let mut requirements: Vec<_> = model.requirements.iter().collect();
     requirements.sort_by_key(|(_, requirement)| requirement.id.as_str());
+    let achieved = achieved_goals(model);
 
     let headers = [
         "id",
@@ -26,11 +28,12 @@ pub(crate) fn format_requirements(
         "status",
         "risk",
         "rationale",
+        "goals",
         "description",
     ];
-    let rows: Vec<[String; 11]> = requirements
+    let rows: Vec<[String; 12]> = requirements
         .into_iter()
-        .map(|(_, requirement)| {
+        .map(|(key, requirement)| {
             [
                 requirement.id.clone(),
                 requirement.label.clone(),
@@ -42,12 +45,82 @@ pub(crate) fn format_requirements(
                 optional_cell(&requirement.status),
                 optional_cell(&requirement.risk),
                 optional_cell(&requirement.rationale),
+                repeated_cell(achieved.get(&key).map_or(&[][..], Vec::as_slice)),
                 optional_cell(&requirement.description),
             ]
         })
         .collect();
 
     format_rows(&headers, &rows, format, "requirements")
+}
+
+/// The ids of the goals each requirement achieves, sorted.
+fn achieved_goals(model: &SemanticModel) -> HashMap<RequirementKey, Vec<String>> {
+    let mut by_requirement: HashMap<RequirementKey, Vec<String>> = HashMap::new();
+    for rel in &model.relations {
+        if let (RelKind::Achieves, NodeRef::Requirement(req), NodeRef::Goal(goal)) =
+            (&rel.kind, &rel.from, &rel.to)
+        {
+            if let Some(goal) = model.goals.get(*goal) {
+                by_requirement
+                    .entry(*req)
+                    .or_default()
+                    .push(goal.id.clone());
+            }
+        }
+    }
+    for ids in by_requirement.values_mut() {
+        ids.sort();
+        ids.dedup();
+    }
+    by_requirement
+}
+
+pub(crate) fn format_goals(model: &SemanticModel, format: &ListFormat) -> Result<String> {
+    let mut goals: Vec<_> = model.goals.iter().collect();
+    goals.sort_by_key(|(_, goal)| goal.id.as_str());
+
+    let headers = [
+        "id",
+        "label",
+        "metric",
+        "baseline",
+        "target",
+        "window",
+        "description",
+        "requirements",
+    ];
+    let rows: Vec<[String; 8]> = goals
+        .into_iter()
+        .map(|(key, goal)| {
+            let mut requirements: Vec<String> = model
+                .relations
+                .iter()
+                .filter_map(|rel| match (&rel.kind, &rel.from, &rel.to) {
+                    (RelKind::Achieves, NodeRef::Requirement(req), NodeRef::Goal(g))
+                        if *g == key =>
+                    {
+                        model.requirements.get(*req).map(|r| r.id.clone())
+                    }
+                    _ => None,
+                })
+                .collect();
+            requirements.sort();
+            requirements.dedup();
+            [
+                goal.id.clone(),
+                goal.label.clone(),
+                optional_cell(&goal.metric),
+                optional_cell(&goal.baseline),
+                optional_cell(&goal.target),
+                optional_cell(&goal.window),
+                optional_cell(&goal.description),
+                repeated_cell(&requirements),
+            ]
+        })
+        .collect();
+
+    format_rows(&headers, &rows, format, "goals")
 }
 
 pub(crate) fn format_adrs(

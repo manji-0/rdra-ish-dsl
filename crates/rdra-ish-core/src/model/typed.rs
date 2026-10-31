@@ -135,6 +135,10 @@ pub enum TypedPredicate {
         requirement: RequirementKey,
         buc: BucKey,
     },
+    Achieves {
+        requirement: RequirementKey,
+        goal: GoalKey,
+    },
     Decides {
         adr: AdrKey,
         target: DecidesTarget,

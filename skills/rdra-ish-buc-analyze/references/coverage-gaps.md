@@ -49,6 +49,8 @@ rdra-ish diagram src/ --kind rdra --format mermaid --buc <BucId>
 | Field has no containing screen | UI field is orphaned | Add `contains(Screen, Field)` or remove the field |
 | Actor-entered field has no `maps_field` | Input/output mapping is missing or external | Add `maps_field` or justify the external field |
 | Requirement has no `motivates` target | Traceability is disconnected | Link it to a BUC or keep it out of the model until scoped |
+| Requirement has no `achieves` goal (`requirement-no-goal`) | Nobody can say what outcome it serves | Link it to a `goal`, or mark a non-goal `status "out-of-scope"` with a `rationale` |
+| Goal has no `metric` or `target` (`goal-unmeasured`) | The outcome cannot be measured | Add `metric` and `target`, and `baseline` and `window` when known |
 | NFR/quality/constraint has no target | Non-functional scope is unclear | Add `applies_to`, `qualifies`, or `constrains` |
 | API has method/path but no DTO links | Contract is incomplete | Add request/response/error DTOs or defer export |
 | Use case has no CRUD predicate | Data touchpoint is missing or stage is still skeleton | Ask which entity the action touches |

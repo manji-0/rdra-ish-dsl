@@ -13,8 +13,8 @@ mod state_findings;
 use access::{format_actor_permission_audit, format_business_inputs, format_permission_callables};
 pub(crate) use elements::{
     format_adr_impacts, format_adrs, format_apis, format_conditions, format_constraints,
-    format_dtos, format_entities, format_fields, format_nfrs, format_requirements, format_rules,
-    format_usecases,
+    format_dtos, format_entities, format_fields, format_goals, format_nfrs, format_requirements,
+    format_rules, format_usecases,
 };
 use render::{format_rows, format_sorted_id_labels};
 #[cfg(test)]
@@ -73,6 +73,7 @@ pub(crate) fn list_elements(
         ListKind::Requirement => format_requirements(model, format),
         ListKind::Adr => format_adrs(model, format),
         ListKind::AdrImpact => format_adr_impacts(model, format),
+        ListKind::Goal => format_goals(model, format),
         ListKind::Nfr => format_nfrs(model, format),
         ListKind::Quality => list_id_label!(model, qualities, format, "qualities"),
         ListKind::Constraint => format_constraints(model, format),

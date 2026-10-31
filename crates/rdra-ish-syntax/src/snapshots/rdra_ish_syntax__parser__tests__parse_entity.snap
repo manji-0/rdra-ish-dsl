@@ -38,6 +38,7 @@ Ast {
                 },
                 nfr: NfrMetadata {
                     metric: None,
+                    baseline: None,
                     target: None,
                     window: None,
                     slo: None,

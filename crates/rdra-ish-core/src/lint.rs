@@ -244,6 +244,7 @@ fn collect_findings(model: &SemanticModel) -> Vec<LintIssue> {
     lint_enum_attributes(model, &mut findings);
     lint_condition_anchors(model, &mut findings);
     lint_rule_labels(model, &mut findings);
+    lint_goals(model, &mut findings);
     findings.extend(rdra_findings(model));
     demote_premature(&mut findings, &assess(model, Depth::Structure));
     findings
@@ -688,6 +689,60 @@ fn lint_condition_anchors(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
     }
 }
 
+fn push_element_info(
+    model: &SemanticModel,
+    issues: &mut Vec<LintIssue>,
+    kind: &str,
+    id: &str,
+    rule: &'static str,
+    message: &str,
+    hint: &str,
+) {
+    let mut issue = LintIssue::new(LintSeverity::Info, rule, kind, id, message, hint);
+    if let Some(loc) = model.decl_sites.located(kind, id) {
+        issue = issue.with_location(loc);
+    }
+    issues.push(issue);
+}
+
+/// A requirement states what to build; a goal states why. A requirement that serves no goal,
+/// and a goal with no `metric` or `target`, leave the outcome unmeasurable. A requirement
+/// marked `status "out-of-scope"` is a non-goal and needs no goal.
+fn lint_goals(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
+    for (key, requirement) in &model.requirements {
+        let achieves = model
+            .relations
+            .iter()
+            .any(|rel| rel.kind == RelKind::Achieves && rel.from == NodeRef::Requirement(key));
+        if achieves || requirement.status.as_deref() == Some("out-of-scope") {
+            continue;
+        }
+        push_element_info(
+            model,
+            issues,
+            "requirement",
+            &requirement.id,
+            "requirement-no-goal",
+            "requirement achieves no goal",
+            "add achieves(Requirement, Goal), or mark it `status \"out-of-scope\"` with a `rationale` if it is a non-goal",
+        );
+    }
+    for goal in model.goals.values() {
+        if goal.metric.is_some() && goal.target.is_some() {
+            continue;
+        }
+        push_element_info(
+            model,
+            issues,
+            "goal",
+            &goal.id,
+            "goal-unmeasured",
+            "goal has no metric or no target, so its success cannot be measured",
+            "add `metric` and `target` (and a `baseline` and `window` when known)",
+        );
+    }
+}
+
 /// A constraint predicate without `.label("...")` has its meaning only in a comment, so the
 /// business-rule table lists it with an empty label.
 fn lint_rule_labels(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
@@ -836,6 +891,7 @@ fn model_element_count(model: &SemanticModel) -> usize {
         + model.ext_systems.len()
         + model.systems.len()
         + model.requirements.len()
+        + model.goals.len()
         + model.nfrs.len()
         + model.qualities.len()
         + model.constraints.len()
@@ -971,6 +1027,7 @@ fn lint_node_refs(model: &SemanticModel) -> Vec<NodeRef> {
             .map(|(key, _)| NodeRef::Requirement(key)),
     );
     nodes.extend(model.adrs.iter().map(|(key, _)| NodeRef::Adr(key)));
+    nodes.extend(model.goals.iter().map(|(key, _)| NodeRef::Goal(key)));
     nodes.extend(model.nfrs.iter().map(|(key, _)| NodeRef::Nfr(key)));
     nodes.extend(model.qualities.iter().map(|(key, _)| NodeRef::Quality(key)));
     nodes.extend(
@@ -1026,6 +1083,7 @@ pub(crate) fn node_kind_display(node: &NodeRef) -> String {
         NodeRef::System(_) => "system".to_string(),
         NodeRef::Requirement(_) => "requirement".to_string(),
         NodeRef::Adr(_) => "adr".to_string(),
+        NodeRef::Goal(_) => "goal".to_string(),
         NodeRef::Nfr(_) => "nfr".to_string(),
         NodeRef::Quality(_) => "quality".to_string(),
         NodeRef::Constraint(_) => "constraint".to_string(),
@@ -1056,6 +1114,7 @@ pub(crate) fn node_id(model: &SemanticModel, node: &NodeRef) -> Option<String> {
         NodeRef::System(key) => model.systems.get(*key)?.id.clone(),
         NodeRef::Requirement(key) => model.requirements.get(*key)?.id.clone(),
         NodeRef::Adr(key) => model.adrs.get(*key)?.id.clone(),
+        NodeRef::Goal(key) => model.goals.get(*key)?.id.clone(),
         NodeRef::Nfr(key) => model.nfrs.get(*key)?.id.clone(),
         NodeRef::Quality(key) => model.qualities.get(*key)?.id.clone(),
         NodeRef::Constraint(key) => model.constraints.get(*key)?.id.clone(),
@@ -1144,6 +1203,52 @@ belongs(BucOrder, Commerce)
             published.iter().all(|m| !m.contains("buc-empty")),
             "{published:?}"
         );
+    }
+
+    fn info_rules(model: &SemanticModel, rule: &str) -> Vec<String> {
+        collect_findings(model)
+            .into_iter()
+            .filter(|issue| issue.rule == rule)
+            .inspect(|issue| assert_eq!(issue.severity, LintSeverity::Info))
+            .map(|issue| issue.subject_id)
+            .collect()
+    }
+
+    #[test]
+    fn a_requirement_that_achieves_no_goal_is_info_unless_it_is_out_of_scope() {
+        let model = model_from(
+            r#"
+goal ShortWait "Short wait"
+  metric "median wait"
+  target "30 min"
+requirement ReqLinked "Linked"
+requirement ReqLoose "Loose"
+requirement ReqNonGoal "Online consultation"
+  status "out-of-scope"
+  rationale "Visits are in person."
+achieves(ReqLinked, ShortWait)
+"#,
+        );
+        assert_eq!(info_rules(&model, "requirement-no-goal"), ["ReqLoose"]);
+    }
+
+    #[test]
+    fn a_goal_without_a_metric_or_a_target_is_unmeasured() {
+        let model = model_from(
+            r#"
+goal Measured "Measured"
+  metric "median wait"
+  target "30 min"
+goal NoTarget "No target"
+  metric "median wait"
+goal NoMetric "No metric"
+  target "30 min"
+goal Bare "Bare"
+"#,
+        );
+        let mut unmeasured = info_rules(&model, "goal-unmeasured");
+        unmeasured.sort();
+        assert_eq!(unmeasured, ["Bare", "NoMetric", "NoTarget"]);
     }
 
     #[test]

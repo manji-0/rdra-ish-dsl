@@ -68,6 +68,9 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    - Stable requirement metadata should include priority/source/stakeholder/owner
      when the source material provides it
    - BUCs motivated by explicit requirements should use `motivates(Requirement, Buc)`
+   - Requirements should serve a `goal` through `achieves(Requirement, Goal)`, and each
+     goal should carry a `metric` and a `target`; `lint` lists the gaps as
+     `requirement-no-goal` and `goal-unmeasured`
    - Ordered, branching, exceptional, or repeated business behavior should use
      `flow`, `step`, `precedes`, `branches`, `excepts`, `repeats`, and `covers`
    - ADRs should be linked with `decides(Adr, Target)` only when a real design
@@ -248,6 +251,7 @@ yourself is marked `(review)`. Never present a `(review)` item as something `che
 | `owns` | System | Entity | — |
 | `belongs` | Buc | Business | — (chain `.by(Medium)`) |
 | `motivates` | Requirement | Buc | — |
+| `achieves` | Requirement | Goal | — |
 | `request` / `response` / `error_response` | Api | Dto | — |
 | `maps_field` | Field | Entity | column string |
 | `precedes` / `branches` / `excepts` / `repeats` | Step | Step | — |

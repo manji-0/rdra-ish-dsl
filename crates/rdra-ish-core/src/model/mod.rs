@@ -176,6 +176,7 @@ pub struct SemanticModel {
     pub systems: SlotMap<SystemKey, System>,
     pub requirements: SlotMap<RequirementKey, Requirement>,
     pub adrs: SlotMap<AdrKey, Adr>,
+    pub goals: SlotMap<GoalKey, Goal>,
     pub nfrs: SlotMap<NfrKey, Nfr>,
     pub qualities: SlotMap<QualityKey, Quality>,
     pub constraints: SlotMap<ConstraintKey, Constraint>,

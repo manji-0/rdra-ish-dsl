@@ -10,6 +10,7 @@ pub enum NodeRef {
     System(SystemKey),
     Requirement(RequirementKey),
     Adr(AdrKey),
+    Goal(GoalKey),
     Nfr(NfrKey),
     Quality(QualityKey),
     Constraint(ConstraintKey),
@@ -51,6 +52,7 @@ pub enum RelKind {
     RequiresPermission,
     RequiresMedium,
     Motivates,
+    Achieves,
     Decides,
     Transitions,
     Invokes, // usecase → api

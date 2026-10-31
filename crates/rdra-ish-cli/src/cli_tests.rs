@@ -228,6 +228,8 @@ requirement ReqCheckout "Checkout must be reliable"
   status "proposed"
   risk "high"
   rationale "Checkout failures directly block revenue."
+goal Reliable "Fewer failed checkouts"
+achieves(ReqCheckout, Reliable)
 "#;
     let (ast, parse_errors) = parse(src);
     assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
@@ -236,11 +238,49 @@ requirement ReqCheckout "Checkout must be reliable"
 
     let csv = list_elements(&model, &ListKind::Requirement, &ListFormat::Csv).unwrap();
     assert!(csv.contains(
-        "id,label,priority,sources,stakeholders,owner,acceptance_criteria,status,risk,rationale,description"
+        "id,label,priority,sources,stakeholders,owner,acceptance_criteria,status,risk,rationale,goals,description"
     ));
     assert!(csv.contains(
-        "ReqCheckout,Checkout must be reliable,must,Customer interview|Support tickets,Store Operations,Product Owner,A payment timeout leaves the cart recoverable.,proposed,high,Checkout failures directly block revenue.,The checkout flow must preserve customer intent."
+        "ReqCheckout,Checkout must be reliable,must,Customer interview|Support tickets,Store Operations,Product Owner,A payment timeout leaves the cart recoverable.,proposed,high,Checkout failures directly block revenue.,Reliable,The checkout flow must preserve customer intent."
     ));
+}
+
+#[test]
+fn list_goal_outputs_measures_and_the_requirements_that_achieve_it() {
+    use rdra_ish_core::build_model;
+    use rdra_ish_syntax::parse;
+
+    let src = r#"
+goal ShortWait "Short wait"
+  description "Patients leave when the wait is long."
+  metric "median wait"
+  baseline "45 min"
+  target "30 min"
+  window monthly
+goal Bare "Bare goal"
+requirement ReqB "B"
+requirement ReqA "A"
+achieves(ReqB, ShortWait)
+achieves(ReqA, ShortWait)
+"#;
+    let (ast, parse_errors) = parse(src);
+    assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
+    let (model, diags) = build_model(&ast);
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let csv = list_elements(&model, &ListKind::Goal, &ListFormat::Csv).unwrap();
+    assert_eq!(
+        csv,
+        "id,label,metric,baseline,target,window,description,requirements\n\
+         Bare,Bare goal,,,,,,\n\
+         ShortWait,Short wait,median wait,45 min,30 min,monthly,Patients leave when the wait is long.,ReqA|ReqB\n"
+    );
+
+    let markdown = list_elements(&model, &ListKind::Goal, &ListFormat::Markdown).unwrap();
+    assert!(
+        markdown.contains("| ShortWait | Short wait | median wait | 45 min | 30 min | monthly |"),
+        "{markdown}"
+    );
 }
 
 #[test]

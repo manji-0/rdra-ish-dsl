@@ -51,7 +51,9 @@ pub(crate) fn register_instance(
             },
         );
     }
-    if !matches!(inst.kind, Kind::Nfr | Kind::Constraint) && !nfr_metadata_is_empty(&inst.nfr) {
+    if !matches!(inst.kind, Kind::Goal | Kind::Nfr | Kind::Constraint)
+        && !nfr_metadata_is_empty(&inst.nfr)
+    {
         push_error(
             ctx,
             diags,
@@ -137,6 +139,18 @@ pub(crate) fn register_instance(
                 reasons: inst.adr.reasons.clone(),
             });
             NodeRef::Adr(k)
+        }
+        Kind::Goal => {
+            let k = model.goals.insert(Goal {
+                id: inst.id.clone(),
+                label: inst.label.clone(),
+                description: inst.description.clone(),
+                metric: inst.nfr.metric.clone(),
+                baseline: inst.nfr.baseline.clone(),
+                target: inst.nfr.target.clone(),
+                window: inst.nfr.window.clone(),
+            });
+            NodeRef::Goal(k)
         }
         Kind::Nfr => {
             let k = model.nfrs.insert(Nfr {

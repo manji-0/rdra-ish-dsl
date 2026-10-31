@@ -16,6 +16,7 @@ impl fmt::Display for Token {
             Token::System => "system",
             Token::Requirement => "requirement",
             Token::Adr => "adr",
+            Token::Goal => "goal",
             Token::Nfr => "nfr",
             Token::Quality => "quality",
             Token::Constraint => "constraint",

@@ -3,6 +3,7 @@ module buc.billing_claims
 import shared.actors
 import shared.entities
 import shared.biz
+import shared.goals
 
 // Sources cited as file:line are under ~/research/japan-hospital-operations/sources/.
 
@@ -363,4 +364,6 @@ requirement ReqResubmitReturned "返戻レセプトを訂正して再請求す�
   status "accepted"
 
 motivates(ReqMonthlyClaimByTenth, BucBillingClaims)
+achieves(ReqMonthlyClaimByTenth, TimelyClaims)
 motivates(ReqResubmitReturned, BucBillingClaims)
+achieves(ReqResubmitReturned, TimelyClaims)

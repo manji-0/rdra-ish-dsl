@@ -1321,6 +1321,7 @@ fn every_requirement_diagram_of_every_sample_keeps_the_contract() {
                 let source = from.split_once("__").map_or("", |(kind, _)| kind);
                 let fits = match label.as_str() {
                     "motivates" => source == "requirement" && to.starts_with("buc__"),
+                    "achieves" => source == "requirement" && to.starts_with("goal__"),
                     "applies_to" => source == "nfr",
                     "constrains" => source == "constraint",
                     "qualifies" => {
@@ -1336,7 +1337,16 @@ fn every_requirement_diagram_of_every_sample_keeps_the_contract() {
     }
     assert_eq!(
         edges,
-        BTreeSet::from(["applies_to", "constrains", "motivates", "qualifies"].map(String::from))
+        BTreeSet::from(
+            [
+                "achieves",
+                "applies_to",
+                "constrains",
+                "motivates",
+                "qualifies"
+            ]
+            .map(String::from)
+        )
     );
 }
 

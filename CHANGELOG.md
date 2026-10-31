@@ -4,6 +4,17 @@
 
 ### Added
 
+- A `goal` element holds the outcome the requirements serve: its description states the
+  problem, and `metric`, `baseline`, `target`, and `window` say how it is measured.
+  `achieves(Requirement, Goal)` links a requirement to a goal; a non-goal is a requirement
+  with `status "out-of-scope"` and a `rationale`. `list --kind goal` writes the goals with
+  the requirements that achieve each, `list --kind requirement` gains a `goals` column, and
+  `diagram --kind requirement` draws goals with their `achieves` edges. `lint` adds the
+  `info` rules `requirement-no-goal` and `goal-unmeasured`. clinic-ops has three goals,
+  with numbers the model assumes. `goal` is now a keyword, so it no longer names an element;
+  a column may still be named `goal`, and so may one named `condition` or `variation`, and
+  a comparison now reads such a column (`goal == present`, `CarePlan.goal == present`),
+  which was a syntax error for `condition` and `variation` before.
 - `diagram --kind sequence --usecase <id>` writes a Mermaid `sequenceDiagram` of one use case,
   the second step of the design reading after the robustness diagram: the starter, the screen, each control, the guards as an `alt` with a `rejected` branch, each
   transaction's reads and writes with the `sets` values and the lifecycle move, and the

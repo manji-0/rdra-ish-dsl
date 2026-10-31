@@ -91,6 +91,7 @@ pub(crate) enum ListKind {
     Requirement,
     Adr,
     AdrImpact,
+    Goal,
     Nfr,
     Quality,
     Constraint,
@@ -205,7 +206,7 @@ pub(crate) enum Commands {
     List {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Element kind to list: actor, entity, requirement, adr, adr-impact, nfr, quality, constraint, buc, flow, step, usecase, field, system, api, dto, variation, condition, permission-callables, actor-permission-audit, business-inputs, or surface
+        /// Element kind to list: actor, entity, requirement, adr, adr-impact, goal, nfr, quality, constraint, buc, flow, step, usecase, field, system, api, dto, variation, condition, permission-callables, actor-permission-audit, business-inputs, or surface
         #[arg(long, default_value = "actor")]
         kind: ListKind,
         /// Output format: table, json, csv

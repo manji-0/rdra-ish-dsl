@@ -17,6 +17,7 @@ fn node_kind_tag(node: &NodeRef) -> &'static str {
         NodeRef::System(_) => "system",
         NodeRef::Requirement(_) => "requirement",
         NodeRef::Adr(_) => "adr",
+        NodeRef::Goal(_) => "goal",
         NodeRef::Nfr(_) => "nfr",
         NodeRef::Quality(_) => "quality",
         NodeRef::Constraint(_) => "constraint",
@@ -48,6 +49,7 @@ fn node_ref_matches_kind(node: &NodeRef, kind: &Kind) -> bool {
             | (NodeRef::System(_), Kind::System)
             | (NodeRef::Requirement(_), Kind::Requirement)
             | (NodeRef::Adr(_), Kind::Adr)
+            | (NodeRef::Goal(_), Kind::Goal)
             | (NodeRef::Nfr(_), Kind::Nfr)
             | (NodeRef::Quality(_), Kind::Quality)
             | (NodeRef::Constraint(_), Kind::Constraint)

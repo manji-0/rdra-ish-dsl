@@ -11,6 +11,7 @@ const KIND_KEYWORDS: &[&str] = &[
     "system",
     "requirement",
     "adr",
+    "goal",
     "nfr",
     "quality",
     "constraint",

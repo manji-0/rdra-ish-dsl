@@ -45,6 +45,7 @@ pub enum Kind {
     System,
     Requirement,
     Adr,
+    Goal,
     Nfr,
     Quality,
     Constraint,
@@ -74,6 +75,7 @@ impl Kind {
             Kind::System => "system",
             Kind::Requirement => "requirement",
             Kind::Adr => "adr",
+            Kind::Goal => "goal",
             Kind::Nfr => "nfr",
             Kind::Quality => "quality",
             Kind::Constraint => "constraint",
@@ -211,6 +213,8 @@ pub struct ApiMetadata {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct NfrMetadata {
     pub metric: Option<std::string::String>,
+    /// `goal` only.
+    pub baseline: Option<std::string::String>,
     pub target: Option<std::string::String>,
     pub window: Option<std::string::String>,
     pub slo: Option<std::string::String>,
@@ -250,7 +254,7 @@ pub struct InstanceDecl {
     pub adr: AdrMetadata,
     /// Non-empty only for `api` declarations.
     pub api: ApiMetadata,
-    /// Non-empty only for `nfr` and `constraint` declarations.
+    /// Non-empty only for `goal`, `nfr` and `constraint` declarations.
     pub nfr: NfrMetadata,
     /// Non-empty only for `field` declarations.
     pub field: FieldMetadata,

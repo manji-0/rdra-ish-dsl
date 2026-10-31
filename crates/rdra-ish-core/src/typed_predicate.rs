@@ -3,9 +3,9 @@
 use crate::model::{
     ActorKey, AdrKey, ApiKey, AppliesSource, AppliesToTarget, BucKey, BusinessKey,
     ConstrainsTarget, ConstraintKey, ContainedRef, ContainerRef, CoversTarget, DecidesTarget,
-    DtoKey, EntityKey, EntityTouchpoint, EventKey, FieldKey, MediumKey, NfrOrConstraint, NodeRef,
-    PerformTarget, PermissionKey, QualityKey, Raiser, RequirementKey, ScreenKey, SemanticModel,
-    StepKey, SystemKey, TriggerSource, TriggerTarget, TypedPredicate, UseCaseKey,
+    DtoKey, EntityKey, EntityTouchpoint, EventKey, FieldKey, GoalKey, MediumKey, NfrOrConstraint,
+    NodeRef, PerformTarget, PermissionKey, QualityKey, Raiser, RequirementKey, ScreenKey,
+    SemanticModel, StepKey, SystemKey, TriggerSource, TriggerTarget, TypedPredicate, UseCaseKey,
 };
 use rdra_ish_syntax::ast::{PredicateArg, PredicateCall};
 
@@ -154,6 +154,10 @@ pub fn build_typed_predicate(
                     origin: EntityTouchpoint::from_node_ref(from)?,
                     medium: as_medium(to)?,
                 }),
+                "achieves" => Some(TypedPredicate::Achieves {
+                    requirement: as_requirement(from)?,
+                    goal: as_goal(to)?,
+                }),
                 "motivates" => Some(TypedPredicate::Motivates {
                     requirement: as_requirement(from)?,
                     buc: as_buc(to)?,
@@ -216,6 +220,7 @@ pub fn typed_predicate_name(pred: &TypedPredicate) -> &'static str {
         TypedPredicate::RequiresPermission { .. } => "requires_permission",
         TypedPredicate::RequiresMedium { .. } => "requires_medium",
         TypedPredicate::Motivates { .. } => "motivates",
+        TypedPredicate::Achieves { .. } => "achieves",
         TypedPredicate::Decides { .. } => "decides",
         TypedPredicate::Exposes { .. } => "exposes",
         TypedPredicate::Shares { .. } => "shares",
@@ -279,6 +284,7 @@ node_extractor!(as_permission, Permission, PermissionKey);
 node_extractor!(as_medium, Medium, MediumKey);
 node_extractor!(as_requirement, Requirement, RequirementKey);
 node_extractor!(as_adr, Adr, AdrKey);
+node_extractor!(as_goal, Goal, GoalKey);
 node_extractor!(as_quality, Quality, QualityKey);
 node_extractor!(as_constraint, Constraint, ConstraintKey);
 node_extractor!(as_system, System, SystemKey);

@@ -36,9 +36,10 @@ rdra-ish diagram src/ --kind business --buc <BucId> --format mermaid
 
 ## Reading the Requirement Model
 
-- Requirements and NFRs sit in システム価値; qualities, constraints, and BUCs in
+- Requirements, goals, and NFRs sit in システム価値; qualities, constraints, and BUCs in
   システム外部環境; use cases in システム境界; APIs, systems, entities, and DTOs in システム.
-- The edges are declared: `motivates` (requirement to BUC), `applies_to` (NFR to use
+- The edges are declared: `motivates` (requirement to BUC), `achieves` (requirement to
+  goal), `applies_to` (NFR to use
   case, API, or system), `constrains` (constraint to use case, API, system, entity, or
   DTO), and `qualifies` (NFR or constraint to quality).
 - The DSL has no requirement-to-actor link, so the diagram draws none; ADRs are left out

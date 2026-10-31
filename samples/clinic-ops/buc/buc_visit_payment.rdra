@@ -3,6 +3,7 @@ module buc.visit_payment
 import shared.actors
 import shared.entities
 import shared.biz
+import shared.goals
 
 // Sources cited as file:line are under ~/research/japan-hospital-operations/sources/.
 // 会計 follows the consultation: 計算受付 (本日内容の実施済み確認, 会計計算入力), then 会計受付
@@ -161,6 +162,7 @@ requirement ReqPayAfterConsultation "会計は診察の後に一度で行う"
   status "accepted"
 
 motivates(ReqPayAfterConsultation, BucVisitPayment)
+achieves(ReqPayAfterConsultation, TimelyClaims)
 
 // Business flow
 flow VisitPaymentFlow "計算・会計の流れ"

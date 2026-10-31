@@ -42,6 +42,7 @@ pub(crate) fn node_id<'a>(model: &'a SemanticModel, node: &NodeRef) -> Option<&'
         NodeRef::System(k) => model.systems.get(*k).map(|s| s.id.as_str()),
         NodeRef::Requirement(k) => model.requirements.get(*k).map(|r| r.id.as_str()),
         NodeRef::Adr(k) => model.adrs.get(*k).map(|a| a.id.as_str()),
+        NodeRef::Goal(k) => model.goals.get(*k).map(|g| g.id.as_str()),
         NodeRef::Nfr(k) => model.nfrs.get(*k).map(|n| n.id.as_str()),
         NodeRef::Quality(k) => model.qualities.get(*k).map(|q| q.id.as_str()),
         NodeRef::Constraint(k) => model.constraints.get(*k).map(|c| c.id.as_str()),
@@ -72,6 +73,7 @@ pub(crate) fn node_label<'a>(model: &'a SemanticModel, node: &NodeRef) -> Option
         NodeRef::System(k) => model.systems.get(*k).map(|s| s.label.as_str()),
         NodeRef::Requirement(k) => model.requirements.get(*k).map(|r| r.label.as_str()),
         NodeRef::Adr(k) => model.adrs.get(*k).map(|a| a.label.as_str()),
+        NodeRef::Goal(k) => model.goals.get(*k).map(|g| g.label.as_str()),
         NodeRef::Nfr(k) => model.nfrs.get(*k).map(|n| n.label.as_str()),
         NodeRef::Quality(k) => model.qualities.get(*k).map(|q| q.label.as_str()),
         NodeRef::Constraint(k) => model.constraints.get(*k).map(|c| c.label.as_str()),
@@ -217,7 +219,7 @@ fn kind_style(kind: &str) -> &'static str {
     match kind {
         "actor" => "fill:#ffe3e3,stroke:#c92a2a,color:#000",
         "extsystem" => "fill:#e9ecef,stroke:#495057,color:#000",
-        "requirement" | "nfr" | "quality" | "constraint" | "adr" => {
+        "requirement" | "goal" | "nfr" | "quality" | "constraint" | "adr" => {
             "fill:#fff3bf,stroke:#e67700,color:#000"
         }
         "business" | "buc" | "flow" | "step" | "lane" => "fill:#d3f9d8,stroke:#2b8a3e,color:#000",

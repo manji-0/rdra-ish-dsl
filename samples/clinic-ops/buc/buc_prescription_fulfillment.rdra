@@ -3,6 +3,7 @@ module buc.prescription_fulfillment
 import shared.actors
 import shared.entities
 import shared.biz
+import shared.goals
 
 // Sources cited as file:line are under ~/research/japan-hospital-operations/sources/.
 
@@ -283,4 +284,6 @@ requirement ReqInquiryBeforeDispense "疑わしい処方は医師への照会が
   status "accepted"
 
 motivates(ReqRegisterEPrescription, BucPrescriptionFulfillment)
+achieves(ReqRegisterEPrescription, SafeCare)
 motivates(ReqInquiryBeforeDispense, BucPrescriptionFulfillment)
+achieves(ReqInquiryBeforeDispense, SafeCare)

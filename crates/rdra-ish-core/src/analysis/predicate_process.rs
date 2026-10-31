@@ -914,6 +914,7 @@ fn relation_kind_for_predicate(pred_name: &str) -> Option<RelKind> {
         "requires_permission" => RelKind::RequiresPermission,
         "requires_medium" => RelKind::RequiresMedium,
         "motivates" => RelKind::Motivates,
+        "achieves" => RelKind::Achieves,
         "decides" => RelKind::Decides,
         "invokes" => RelKind::Invokes,
         "precedes" => RelKind::Precedes,
