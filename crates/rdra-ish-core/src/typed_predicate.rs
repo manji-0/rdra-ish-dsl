@@ -205,6 +205,7 @@ pub fn typed_predicate_name(pred: &TypedPredicate) -> &'static str {
         TypedPredicate::Owns { .. } => "owns",
         TypedPredicate::Displays { .. } => "displays",
         TypedPredicate::Shows { .. } => "shows",
+        TypedPredicate::Navigates { .. } => "navigates",
         TypedPredicate::Raises { .. } => "raises",
         TypedPredicate::Triggers { .. } => "triggers",
         TypedPredicate::Contains { .. } => "contains",

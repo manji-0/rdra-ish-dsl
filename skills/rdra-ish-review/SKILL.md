@@ -242,6 +242,7 @@ yourself is marked `(review)`. Never present a `(review)` item as something `che
 | `reads/writes/creates/updates/deletes` | UseCase / Api | Entity | — |
 | `displays` | UseCase | Screen | — |
 | `shows` | Screen | Entity | — |
+| `navigates` | Screen | Screen (`.via(UseCase)` optional) | — |
 | `raises` | UseCase / ExtSystem | Event | — |
 | `triggers` | Event / Timer | UseCase / Buc / ExtSystem (not from a Timer) | — |
 | `outbox` | Event | — | — |

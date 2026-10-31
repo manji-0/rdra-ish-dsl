@@ -70,6 +70,11 @@ pub enum TypedPredicate {
         usecase: UseCaseKey,
         screen: ScreenKey,
     },
+    Navigates {
+        from: ScreenKey,
+        to: ScreenKey,
+        via: Option<UseCaseKey>,
+    },
     Shows {
         screen: ScreenKey,
         entity: EntityKey,

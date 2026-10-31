@@ -50,6 +50,7 @@ pub fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
         "shares" => Some(vec![vec!["system"], vec!["entity"]]),
         "displays" => Some(vec![vec!["usecase"], vec!["screen"]]),
         "shows" => Some(vec![vec!["screen"], vec!["entity"]]),
+        "navigates" => Some(vec![vec!["screen"], vec!["screen"]]),
         "maps_field" => Some(vec![vec!["field"], vec!["entity"], vec!["_col"]]),
         "raises" => Some(vec![RAISE_SOURCES.to_vec(), vec!["event"]]),
         "triggers" => Some(vec![trigger_kinds(0), trigger_kinds(1)]),
@@ -105,6 +106,7 @@ pub fn predicate_chain_methods(pred: &str) -> &'static [&'static str] {
         "holds" => &["has", "none"],
         "after" => &["assert", "label"],
         "exposes" => &["append", "upsert", "caller"],
+        "navigates" => &["via"],
         _ => &[],
     }
 }
@@ -151,6 +153,7 @@ pub const KNOWN_PREDICATES: &[&str] = &[
     "shares",
     "displays",
     "shows",
+    "navigates",
     "maps_field",
     "raises",
     "triggers",

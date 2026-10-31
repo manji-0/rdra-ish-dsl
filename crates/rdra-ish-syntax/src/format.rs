@@ -768,6 +768,14 @@ mod tests {
     }
 
     #[test]
+    fn formats_a_screen_transition_as_written() {
+        let src =
+            "navigates(CheckInScreen, EligibilityScreen).via(CheckInPatient)\n\nnavigates(A, B)\n";
+        let formatted = format_source(src).unwrap();
+        assert_eq!(formatted, src);
+    }
+
+    #[test]
     fn formats_a_cardinality_range_as_written() {
         let formatted =
             format_source("relate(Line, Order, 1 .. *:1)\nrelate(Note, Order, 0..1:1)\n").unwrap();

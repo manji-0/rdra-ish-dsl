@@ -76,7 +76,7 @@ needs. Ask only for that stage's Add column:
 | 0 Scope sketch | Biz intent | What business area are we modeling? | `business`, rough `buc`, `belongs`, candidate `actor`, optional `requirement` and `motivates` |
 | 1 BUC skeleton | Biz value | Who gets value from each BUC? | `performs`, `contains`, rough `usecase`, `flow` / `step` when order matters |
 | 2 Data touchpoints | Biz object touchpoints | Which data objects does each use case touch? | coarse `entity`, CRUD predicates (`creates`, `reads`, `updates`, `deletes`) |
-| 3 Interaction boundary | Tech interaction boundary | What UI/API boundary mediates the work, and with which authority/media constraints? | `screen`, `displays`, `shows`, `field`, optional `api` / `invokes`, `dto`, `system`, `permission`, `medium`, `has_permission`, `requires_*` |
+| 3 Interaction boundary | Tech interaction boundary | What UI/API boundary mediates the work, and with which authority/media constraints? | `screen`, `displays`, `shows`, `navigates`, `field`, optional `api` / `invokes`, `dto`, `system`, `permission`, `medium`, `has_permission`, `requires_*` |
 | 4 Entity structure | Tech data design | What structure and ownership does the data need? | columns, `@pk`, `variation`, `relate`, cardinality, optional `owns` / `coordinates` |
 | 5 Lifecycle | Tech lifecycle design | Which states and event-triggered BUC entries are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `transitions`, `raises`, `triggers`, `timer`, `sets`, `condition` |
 | 6A Local guardrails | Tech-enforced rules | Which simple states or facts must never co-occur? | `forbidden`, `exclusive` over Enum / Bool / nullable axes |

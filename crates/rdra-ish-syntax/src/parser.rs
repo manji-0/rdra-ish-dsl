@@ -1697,6 +1697,22 @@ entity Product "商品" {
     }
 
     #[test]
+    fn test_parse_navigates_via() {
+        let ast = parse_ok("navigates(CheckInScreen, EligibilityScreen).via(CheckInPatient)");
+        let Item::Predicate(pred) = &ast.items[0] else {
+            panic!("expected predicate");
+        };
+        assert_eq!(pred.name, "navigates");
+        assert_eq!(pred.args.len(), 2);
+        assert_eq!(pred.chain.len(), 1);
+        assert_eq!(pred.chain[0].name, "via");
+        assert!(matches!(
+            pred.chain[0].args.first(),
+            Some(PredicateArg::Ref(q)) if q.parts == ["CheckInPatient"]
+        ));
+    }
+
+    #[test]
     fn test_parse_relate_nm_via() {
         let ast = parse_ok(r#"relate(Order, Product, N:M).via(OrderProduct)"#);
         let Item::Predicate(pred) = &ast.items[0] else {

@@ -352,3 +352,118 @@ achieves(ReqFast, BucPay)
         "{messages:?}"
     );
 }
+
+const SCREENS: &str = r#"
+usecase PlaceOrder "注文する"
+usecase Browse "商品を見る"
+screen CatalogScreen "商品一覧画面"
+screen CheckoutScreen "注文画面"
+"#;
+
+fn errors_of(src: &str) -> Vec<String> {
+    let (ast, parse_errors) = parse(src);
+    assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
+    let (_, diags) = build_model(&ast);
+    diags
+        .iter()
+        .filter(|d| !d.is_warning)
+        .map(|d| d.error.to_string())
+        .collect()
+}
+
+#[test]
+fn navigates_records_a_screen_transition_and_the_use_case_that_causes_it() {
+    let src = format!(
+        "{SCREENS}navigates(CatalogScreen, CheckoutScreen).via(PlaceOrder)\nnavigates(CheckoutScreen, CatalogScreen)\n"
+    );
+    let (ast, parse_errors) = parse(&src);
+    assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
+    let (model, diags) = build_model(&ast);
+    let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+    assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+
+    let id = |node: &NodeRef| match node {
+        NodeRef::Screen(key) => model.screens[*key].id.clone(),
+        NodeRef::UseCase(key) => model.use_cases[*key].id.clone(),
+        other => panic!("unexpected {other:?}"),
+    };
+    let navigates: Vec<(String, String, Option<String>)> = model
+        .relations
+        .iter()
+        .filter(|rel| rel.kind == RelKind::Navigates)
+        .map(|rel| (id(&rel.from), id(&rel.to), rel.via.as_ref().map(id)))
+        .collect();
+    assert_eq!(
+        navigates,
+        [
+            (
+                "CatalogScreen".to_string(),
+                "CheckoutScreen".to_string(),
+                Some("PlaceOrder".to_string())
+            ),
+            (
+                "CheckoutScreen".to_string(),
+                "CatalogScreen".to_string(),
+                None
+            ),
+        ]
+    );
+    let typed = model
+        .typed_predicates
+        .iter()
+        .filter(|p| matches!(p, TypedPredicate::Navigates { .. }))
+        .count();
+    assert_eq!(typed, 2);
+    assert!(model.typed_predicates.iter().any(|p| matches!(
+        p,
+        TypedPredicate::Navigates { via: Some(uc), .. } if model.use_cases[*uc].id == "PlaceOrder"
+    )));
+}
+
+#[test]
+fn navigates_takes_two_screens() {
+    let errors = errors_of(&format!("{SCREENS}navigates(PlaceOrder, CheckoutScreen)\n"));
+    assert!(
+        errors
+            .iter()
+            .any(|m| m.contains("'PlaceOrder' has kind usecase, expected screen")),
+        "{errors:?}"
+    );
+}
+
+#[test]
+fn navigates_via_names_one_use_case() {
+    for via in [
+        ".via(CheckoutScreen)",
+        ".via(PlaceOrder, Browse)",
+        ".via(\"checkout\")",
+        ".via(PlaceOrder).via(Browse)",
+    ] {
+        let src = format!("{SCREENS}navigates(CatalogScreen, CheckoutScreen){via}\n");
+        let (ast, _) = parse(&src);
+        let (_, diags) = build_model(&ast);
+        assert!(
+            diags
+                .iter()
+                .any(|d| matches!(d.error, RdraError::NavigatesViaRequiresUseCase)),
+            "{via}: {:?}",
+            diags
+                .iter()
+                .map(|d| d.error.to_string())
+                .collect::<Vec<_>>()
+        );
+    }
+}
+
+#[test]
+fn navigates_accepts_no_other_chain_method() {
+    let errors = errors_of(&format!(
+        "{SCREENS}navigates(CatalogScreen, CheckoutScreen).label(\"注文へ\")\n"
+    ));
+    assert!(
+        errors
+            .iter()
+            .any(|m| m.contains("`navigates` accepts `.via(...)`")),
+        "{errors:?}"
+    );
+}

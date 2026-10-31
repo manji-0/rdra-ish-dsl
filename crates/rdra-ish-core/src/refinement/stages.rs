@@ -236,7 +236,7 @@ pub(super) const INTERACTION_BOUNDARY: StageSpec = StageSpec {
     name: "Interaction boundary",
     concern: "Tech interaction boundary",
     question: "What UI/API boundary mediates the work, and with which authority/media constraints?",
-    adds: "`screen`, `displays`, `shows`, `field`, optional `api` / `invokes`, `dto`, `system`, `permission`, `medium`, `has_permission`, `requires_*`",
+    adds: "`screen`, `displays`, `shows`, `navigates`, `field`, optional `api` / `invokes`, `dto`, `system`, `permission`, `medium`, `has_permission`, `requires_*`",
     asks: &[
         "Which screen or external interface does each use case expose?",
         "Does the use case write data directly, or through an API boundary?",

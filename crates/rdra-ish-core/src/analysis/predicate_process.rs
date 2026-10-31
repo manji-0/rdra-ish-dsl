@@ -906,6 +906,7 @@ fn relation_kind_for_predicate(pred_name: &str) -> Option<RelKind> {
         "deletes" => RelKind::Deletes,
         "displays" => RelKind::Displays,
         "shows" => RelKind::Shows,
+        "navigates" => RelKind::Navigates,
         "raises" => RelKind::Raises,
         "triggers" => RelKind::Triggers,
         "contains" => RelKind::Contains,
@@ -991,6 +992,50 @@ fn process_relation_predicate(
             process_belongs_context(model, pred, from, to, ctx, diags);
         }
     }
+}
+
+/// `navigates(Screen, Screen)` with at most one `.via(UseCase)`: the use case whose operation
+/// moves the user from the first screen to the second.
+fn process_navigates_predicate(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    resolved: &[Option<NodeRef>],
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) {
+    let mut via = None;
+    for (index, cc) in pred.chain.iter().filter(|cc| cc.name == "via").enumerate() {
+        let span = cc.span.clone();
+        if index > 0 || cc.args.len() != 1 {
+            push_error(ctx, diags, span, RdraError::NavigatesViaRequiresUseCase);
+            continue;
+        }
+        match resolve_arg(model, &cc.args[0], ctx, diags) {
+            Some(NodeRef::UseCase(usecase)) => via = Some(usecase),
+            Some(_) => push_error(ctx, diags, span, RdraError::NavigatesViaRequiresUseCase),
+            // resolve_arg already reported an undefined or ambiguous reference.
+            None if matches!(cc.args.first(), Some(PredicateArg::Ref(_))) => {}
+            None => push_error(ctx, diags, span, RdraError::NavigatesViaRequiresUseCase),
+        }
+    }
+    let (Some(Some(NodeRef::Screen(from))), Some(Some(NodeRef::Screen(to)))) =
+        (resolved.first(), resolved.get(1))
+    else {
+        return;
+    };
+    model.relations.push(Relation {
+        site: Some(ctx.locate(pred.span.clone())),
+        from: NodeRef::Screen(*from),
+        to: NodeRef::Screen(*to),
+        kind: RelKind::Navigates,
+        options: RelationOptions::default(),
+        via: via.map(NodeRef::UseCase),
+    });
+    model.typed_predicates.push(TypedPredicate::Navigates {
+        from: *from,
+        to: *to,
+        via,
+    });
 }
 
 /// Resolve `.via(Entity)` from the relate chain. Returns `(via, had_via_call)`.
@@ -1371,6 +1416,7 @@ pub(crate) fn process_predicate(
         "exclusive" => process_exclusive_predicate(model, pred, &resolved, ctx, diags),
         "maps_field" => process_maps_field_predicate(model, pred, &resolved, ctx, diags),
         "relate" => process_relate_predicate(model, pred, &resolved, ctx, diags),
+        "navigates" => process_navigates_predicate(model, pred, &resolved, ctx, diags),
         _ => process_relation_predicate(model, pred, &resolved, ctx, diags),
     }
 

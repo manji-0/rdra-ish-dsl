@@ -245,6 +245,7 @@ fn collect_findings(model: &SemanticModel) -> Vec<LintIssue> {
     lint_condition_anchors(model, &mut findings);
     lint_rule_labels(model, &mut findings);
     lint_goals(model, &mut findings);
+    lint_screen_transitions(model, &mut findings);
     findings.extend(rdra_findings(model));
     demote_premature(&mut findings, &assess(model, Depth::Structure));
     findings
@@ -743,6 +744,32 @@ fn lint_goals(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
     }
 }
 
+/// A screen no `navigates` enters or leaves, and no business flow passes through in order,
+/// stands alone in `diagram --kind screen`: nothing says how the user gets there.
+fn lint_screen_transitions(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
+    let mut linked = std::collections::HashSet::new();
+    for navigation in crate::screen_flow::screen_navigations(model) {
+        linked.extend([navigation.from, navigation.to]);
+    }
+    for order in crate::screen_flow::business_order(model) {
+        linked.extend([order.from, order.to]);
+    }
+    for (key, screen) in &model.screens {
+        if linked.contains(&key) {
+            continue;
+        }
+        push_element_info(
+            model,
+            issues,
+            "screen",
+            &screen.id,
+            "screen-no-transition",
+            "no navigates enters or leaves the screen, and no business flow reaches it in order",
+            "add navigates(FromScreen, ToScreen).via(UseCase) for the move into or out of it",
+        );
+    }
+}
+
 /// A constraint predicate without `.label("...")` has its meaning only in a comment, so the
 /// business-rule table lists it with an empty label.
 fn lint_rule_labels(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
@@ -1230,6 +1257,40 @@ achieves(ReqLinked, ShortWait)
 "#,
         );
         assert_eq!(info_rules(&model, "requirement-no-goal"), ["ReqLoose"]);
+    }
+
+    #[test]
+    fn a_screen_no_transition_and_no_business_order_reaches_is_info() {
+        let model = model_from(
+            r#"
+actor Clerk "Clerk"
+usecase Find "Find"
+usecase Pick "Pick"
+usecase Report "Report"
+usecase Print "Print"
+screen SearchScreen "Search"
+screen PickScreen "Pick"
+screen ReportScreen "Report"
+screen PrintScreen "Print"
+screen KioskScreen "Kiosk"
+displays(Find, SearchScreen)
+displays(Pick, PickScreen)
+displays(Report, ReportScreen)
+displays(Print, PrintScreen)
+navigates(ReportScreen, PrintScreen).via(Print)
+flow PickFlow "Pick"
+step FindStep "Find"
+step PickStep "Pick"
+contains(PickFlow, FindStep)
+contains(PickFlow, PickStep)
+covers(FindStep, Find)
+covers(PickStep, Pick)
+precedes(FindStep, PickStep)
+performs(Clerk, FindStep)
+performs(Clerk, PickStep)
+"#,
+        );
+        assert_eq!(info_rules(&model, "screen-no-transition"), ["KioskScreen"]);
     }
 
     #[test]

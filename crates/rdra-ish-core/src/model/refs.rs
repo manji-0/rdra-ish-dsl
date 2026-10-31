@@ -44,6 +44,8 @@ pub enum RelKind {
     Deletes,
     Displays,
     Shows,
+    /// screen → screen; `via` holds the use case that causes the move.
+    Navigates,
     Raises,
     Triggers,
     Contains,
@@ -87,7 +89,8 @@ pub struct Relation {
     pub kind: RelKind,
     /// Read by `analysis::fk` only; consumers read the resulting `ForeignKey`.
     pub(crate) options: RelationOptions,
-    /// Junction entity for `relate(A, B, N:M).via(Junction)`.
+    /// Junction entity for `relate(A, B, N:M).via(Junction)`, or the use case of
+    /// `navigates(Screen, Screen).via(UseCase)`.
     pub via: Option<NodeRef>,
 
     /// Source site of the predicate/declaration that produced this fact.
