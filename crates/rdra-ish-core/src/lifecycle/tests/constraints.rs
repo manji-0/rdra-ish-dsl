@@ -386,6 +386,33 @@ after(ExecuteCertIssue).assert(CertificateOrder.status == executed)
 }
 
 #[test]
+fn after_assert_is_checked_on_a_step_that_writes_only_what_it_does_not_read() {
+    // IssueCert writes only the certificate and the assert reads only the order.
+    let d = derive_src(
+        r#"
+entity CertificateOrder "依頼" { id: Int @pk  status: Enum(requested, executed) @default(requested) }
+entity ClientCertificate "証明書" { id: Int @pk }
+usecase RequestCert "依頼"
+usecase ExecuteCertIssue "発行実行"
+usecase IssueCert "証明書作成"
+creates(RequestCert, CertificateOrder)
+transitions(CertificateOrder.status, ExecuteCertIssue, requested -> executed)
+creates(IssueCert, ClientCertificate)
+relate(ClientCertificate, CertificateOrder, N:1)
+after(IssueCert).assert(CertificateOrder.status == executed)
+"#,
+    );
+    assert!(
+        d.has("CertificateOrder", |x| matches!(
+            x,
+            StateDiag::AfterAssertViolated { actual, .. } if actual.contains("CertificateOrder(status=requested)")
+        )),
+        "IssueCert can run before ExecuteCertIssue: {:?}",
+        d.entity("CertificateOrder").diagnostics
+    );
+}
+
+#[test]
 fn after_assert_on_a_use_case_without_effects_is_an_error() {
     let d = derive_src(
         r#"

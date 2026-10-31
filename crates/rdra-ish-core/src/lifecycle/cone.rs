@@ -174,6 +174,9 @@ impl TransitionSystem {
                         seed.insert(self.entity(*e).exists);
                     }
                     self.pred_reads(&step.post, &mut seed);
+                    // A step is checked only when it changes the state, so the cone keeps
+                    // everything the step writes: without it a real step would stutter.
+                    seed.extend(self.action_writes(&self.actions[step.act.index()]));
                     keep.insert(step.act);
                 }
             }

@@ -4,6 +4,7 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
+use super::cone::VarSet;
 use super::diag::{Diag, StateDiag};
 use super::expr::{Env, State};
 use super::restrict::Component;
@@ -707,10 +708,13 @@ impl TransitionSystem {
             .filter(|step| step.act == act)
             .find_map(|step| {
                 let binding = self.find_violation(&step.binders, &step.post, s2, params)?;
+                let mut reads = VarSet::new();
+                self.pred_reads(&step.post, &mut reads);
+                let read: Vec<EntId> = reads.iter().filter_map(|v| self.var_entity(*v)).collect();
                 let mut parts: Vec<String> = Vec::new();
                 let mut entities = Vec::new();
                 for (p, param) in action.params.iter().enumerate() {
-                    if param.role == ParamRole::Parent {
+                    if param.role == ParamRole::Parent && !read.contains(&param.entity) {
                         continue;
                     }
                     parts.push(describe_slot(

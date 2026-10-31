@@ -36,7 +36,7 @@ impl Footprint {
 }
 
 impl TransitionSystem {
-    fn var_entity(&self, var: VarId) -> Option<EntId> {
+    pub(crate) fn var_entity(&self, var: VarId) -> Option<EntId> {
         match self.var(var).kind {
             VarKind::Exists(e) => Some(e),
             VarKind::Column { entity, .. } | VarKind::Prop { entity, .. } => Some(entity),

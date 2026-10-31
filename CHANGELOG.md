@@ -103,6 +103,16 @@
   skeleton stage, with `expected before stage 1 BUC skeleton` in its hint; the LSP no
   longer publishes it, so a correct stage-0 model has no editor warning.
 
+### Fixed
+
+- `check` and `verify` evaluate `after(UC).assert(...)` on a step that writes only entities
+  the assertion does not read. The assertion's cone kept the use case but dropped what it
+  writes, so in the cone the step changed nothing, and neither the BFS nor TLC's
+  `[][A]_vars` checks a step that changes nothing: the assertion passed without being
+  read. The TLA+ cone also named a param the cone had removed (`p1'`), so TLC stopped with
+  a semantic error. Such a model can now fail where it passed. A violation now also shows
+  a parent the assertion reads.
+
 ## v0.3.0 - 2026-10-30
 
 ### Breaking
