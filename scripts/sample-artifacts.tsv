@@ -156,6 +156,7 @@ samples/clinic-ops/out/states_claim_statement.txt	states samples/clinic-ops --fo
 samples/clinic-ops/out/asyncapi.json	export samples/clinic-ops --kind asyncapi
 samples/clinic-ops/out/er.mmd	diagram samples/clinic-ops --kind er --format mermaid
 samples/clinic-ops/out/states_prescription.txt	states samples/clinic-ops --format table --entity Prescription
+samples/clinic-ops/out/transitions.md	list samples/clinic-ops --kind transition --format markdown
 samples/ec-site/out/actors.actor.csv	csv samples/ec-site --kind actor
 samples/ec-site/out/api_matrix.csv	csv samples/ec-site --kind api-matrix
 samples/ec-site/out/business.mmd	diagram samples/ec-site --kind business --format mermaid

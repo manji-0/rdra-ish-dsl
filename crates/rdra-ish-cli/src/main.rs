@@ -19,8 +19,8 @@ use diagram::{run_diagram, DiagramRequest};
 use export::export_artifact;
 use fmt_cmd::run_fmt;
 use list_output::{
-    format_lint_issues, format_rules, list_elements, note_state_errors, reject_state_errors,
-    state_findings,
+    format_lint_issues, format_rules, format_transitions, list_elements, note_state_errors,
+    reject_state_errors, state_findings,
 };
 use load::{eprint_diagnostic, reject_model_errors};
 use rdra_ish_core::lifecycle::{Scope, Severity};
@@ -163,6 +163,7 @@ fn main() -> Result<()> {
 
             let output = match kind {
                 ListKind::Rule => format_rules(&model, Some(&program), &format)?,
+                ListKind::Transition => format_transitions(&model, Some(&program), &format)?,
                 _ => list_elements(&model, &kind, &format)?,
             };
             print!("{}", output);

@@ -4,6 +4,15 @@
 
 ### Added
 
+- `list --kind transition` writes the state-transition table behind `diagram --kind
+  state`: one row per transition with `entity, column, from, to, usecase, guards, actors,
+  site`. `from` and `to` read `label (value)` and `usecase` reads `label (id)`. `guards` are
+  the labels of the conditions whose `holds` body guards the use case (what the diagram
+  writes in `[...]`), and `actors` are the use case's performers, where an event- or
+  timer-started use case takes only its explicit `performs`. `site` is the `transitions`
+  line as `file:line`. Every `--format` works. `rdra_ish_core::state_models`,
+  `state_label`, and `rdra_ish_core::analysis::guard_labels` give the derivation the diagram
+  and the table share (#42).
 - `list --kind buc-roles` writes who takes part in which BUC: a row per actor, then per
   external system, and a column per BUC, ordered by business. A cell says `担当` (an actor
   performs the BUC, a use case in it, or a step in it), `イベント送信` (an external system

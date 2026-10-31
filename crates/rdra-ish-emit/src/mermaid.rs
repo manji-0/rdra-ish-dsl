@@ -29,11 +29,9 @@ use crate::{
     view_node_visible, view_relation_visible, EmitError, Emitter, ObjectGraphLayer, Scope, View,
     OBJECT_GRAPH_LAYERS,
 };
-use rdra_ish_core::analysis::applied_bodies;
-use rdra_ish_core::buc_members;
-use rdra_ish_core::model::{
-    ColumnType, EntityKey, NodeRef, RelKind, SemanticModel, StateKey, StateTransition, UseCaseKey,
-};
+use rdra_ish_core::analysis::guard_labels;
+use rdra_ish_core::model::{ColumnType, NodeRef, RelKind, SemanticModel, UseCaseKey};
+use rdra_ish_core::{buc_members, state_key, state_models, StateModel};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 // ── RDRA グラフ図エミッタ (Mermaid) ─────────────────────────────────────────
@@ -338,16 +336,6 @@ fn graph_edges(model: &SemanticModel, visible: &HashSet<NodeRef>) -> Vec<(RelKin
     edges
 }
 
-/// The state node of `variant` on `entity`'s lifecycle column.
-fn state_key(model: &SemanticModel, entity: EntityKey, variant: &str) -> Option<StateKey> {
-    let id = format!("{}_{variant}", model.entities.get(entity)?.id);
-    model
-        .states
-        .iter()
-        .find(|(_, state)| state.id == id)
-        .map(|(key, _)| key)
-}
-
 impl Emitter for RdraMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         // A BUC scope also holds the states its use cases move between.
@@ -414,56 +402,18 @@ impl Emitter for RdraMermaidEmitter {
 
 pub struct StateMermaidEmitter;
 
-/// One state model: the transitions of one lifecycle column, its states in `Enum` order.
-struct StateModel<'a> {
-    entity: EntityKey,
-    entity_id: &'a str,
-    column: &'a str,
-    variants: Vec<&'a str>,
-    transitions: Vec<&'a StateTransition>,
-}
-
-impl StateModel<'_> {
-    fn position(&self, variant: &str) -> usize {
-        self.variants
-            .iter()
-            .position(|v| *v == variant)
-            .unwrap_or(usize::MAX)
-    }
-}
-
 /// Every state model with a transition in scope, sorted by entity and column.
-fn state_models<'a>(model: &'a SemanticModel, in_scope: &HashSet<NodeRef>) -> Vec<StateModel<'a>> {
-    let mut groups: BTreeMap<(&str, &str), StateModel<'a>> = BTreeMap::new();
-    for transition in &model.state_transitions {
-        let Some(entity) = model.entities.get(transition.entity) else {
-            continue;
-        };
-        let group = groups
-            .entry((entity.id.as_str(), transition.column.as_str()))
-            .or_insert_with(|| StateModel {
-                entity: transition.entity,
-                entity_id: &entity.id,
-                column: &transition.column,
-                variants: entity
-                    .columns
-                    .iter()
-                    .find(|c| c.name == transition.column)
-                    .and_then(|c| model.column_values(c))
-                    .map(|values| values.iter().map(String::as_str).collect())
-                    .unwrap_or_default(),
-                transitions: Vec::new(),
-            });
-        group.transitions.push(transition);
-    }
-    groups
-        .into_values()
-        .filter(|sm| {
-            sm.transitions
-                .iter()
-                .any(|t| in_scope.contains(&NodeRef::UseCase(t.usecase)))
-        })
-        .collect()
+fn state_models_in_scope<'a>(
+    model: &'a SemanticModel,
+    in_scope: &HashSet<NodeRef>,
+) -> Vec<StateModel<'a>> {
+    let mut models = state_models(model);
+    models.retain(|sm| {
+        sm.transitions
+            .iter()
+            .any(|t| in_scope.contains(&NodeRef::UseCase(t.usecase)))
+    });
+    models
 }
 
 impl Emitter for StateMermaidEmitter {
@@ -478,7 +428,7 @@ impl Emitter for StateMermaidEmitter {
                 .chain(model.entities.keys().map(NodeRef::Entity))
                 .collect(),
         };
-        let mut models = state_models(model, &in_scope);
+        let mut models = state_models_in_scope(model, &in_scope);
         let entities = &view.state.entities;
         if !entities.is_empty() {
             models.retain(|sm| entities.iter().any(|id| id == sm.entity_id));
@@ -681,11 +631,7 @@ impl Emitter for StateMermaidEmitter {
 /// A transition's label: the use case's label, then `[...]` with the label of each condition
 /// that guards it (UML guard notation).
 fn transition_label(model: &SemanticModel, uc: UseCaseKey) -> String {
-    let guards: Vec<&str> = applied_bodies(model)
-        .into_iter()
-        .filter(|(_, u, _)| *u == uc)
-        .map(|(ck, ..)| model.conditions[ck].label.as_str())
-        .collect();
+    let guards = guard_labels(model, uc);
     let label = quote(&model.use_cases[uc].label);
     if guards.is_empty() {
         label

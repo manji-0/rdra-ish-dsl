@@ -10,6 +10,7 @@ mod elements;
 mod node_ref;
 mod render;
 mod state_findings;
+mod transitions;
 
 use access::{format_actor_permission_audit, format_business_inputs, format_permission_callables};
 use buc_roles::format_buc_roles;
@@ -25,6 +26,7 @@ pub(crate) use state_findings::{
     note_state_errors, reject_state_errors, reject_state_errors_except_deadlock, render_violation,
     state_diag_message, state_findings, Finding, TraceSource,
 };
+pub(crate) use transitions::format_transitions;
 
 macro_rules! list_id_label {
     ($model:expr, $field:ident, $format:expr, $label:expr) => {
@@ -89,6 +91,7 @@ pub(crate) fn list_elements(
         ListKind::ActorPermissionAudit => format_actor_permission_audit(model, format),
         ListKind::BusinessInputs => format_business_inputs(model, format),
         ListKind::BucRoles => format_buc_roles(model, format),
+        ListKind::Transition => format_transitions(model, None, format),
         ListKind::Surface => Ok(rdra_ish_core::Surface::of(model).text()),
     }
 }

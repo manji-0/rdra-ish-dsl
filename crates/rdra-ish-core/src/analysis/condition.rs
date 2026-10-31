@@ -205,6 +205,15 @@ pub fn applied_bodies(model: &SemanticModel) -> Vec<(ConditionKey, UseCaseKey, &
     out
 }
 
+/// The labels of the conditions whose `holds` body guards `uc`, in `applied_bodies` order.
+pub fn guard_labels(model: &SemanticModel, uc: UseCaseKey) -> Vec<&str> {
+    applied_bodies(model)
+        .into_iter()
+        .filter(|(_, u, _)| *u == uc)
+        .map(|(ck, ..)| model.conditions[ck].label.as_str())
+        .collect()
+}
+
 /// Second argument of `combines`: a variation, or `Entity.column`.
 ///
 /// A one-part reference is a variation. A two-part reference is a variation through the import

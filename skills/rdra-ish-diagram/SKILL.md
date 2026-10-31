@@ -28,7 +28,7 @@ Pick the one kind that answers the question, then load only its reference.
 | How do the entities relate, and which hold a state model or a variation? | `information` | `references/information-and-data.md` |
 | Which conditions select business rules, and what values do the variations take? | `condition` | `references/information-and-data.md` |
 | What columns, keys, and cardinalities does the data have? | `er` | `references/information-and-data.md` |
-| What states exist, and which use case moves each? | `state --entity <EntityId>` (the unscoped one is an index) | `references/lifecycle-and-events.md` |
+| What states exist, and which use case moves each? | `state --entity <EntityId>` (the unscoped one is an index); `list --kind transition --format markdown` (the table, with guards and actors) | `references/lifecycle-and-events.md` |
 | Which events, timers, and external systems start other work? | `event` | `references/lifecycle-and-events.md` |
 | Everything at once, or a relation no other kind draws (permissions, media, DTOs, API paths) | `rdra`, narrowed with `--node-kind` / `--edge-kind` | `references/rdra-graph.md` |
 | How do I read a header, an id, or a `%%` line, or redraw a diagram? | any | `references/reading-diagrams.md` |

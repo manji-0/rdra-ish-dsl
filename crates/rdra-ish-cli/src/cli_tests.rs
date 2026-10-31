@@ -1196,3 +1196,103 @@ fn list_buc_roles_writes_every_format() {
     assert!(table.starts_with("ROLE"), "{table}");
     assert_eq!(table.lines().count(), 6, "{table}");
 }
+
+const TRANSITION_MODEL: &str = r#"
+actor Clerk "受付係"
+actor Nurse "看護師"
+buc BucVisit "来院"
+usecase CheckIn "受付する"
+usecase Cancel "取り消す"
+usecase Expire "期限切れにする"
+timer Nightly "夜間バッチ"
+entity Appointment "予約" {
+  id: Int @pk
+  status: Enum(booked "予約済", checkedin "受付済", cancelled) @default(booked)
+  paid: Bool @default(false)
+}
+contains(BucVisit, CheckIn)
+contains(BucVisit, Expire)
+performs(Clerk, BucVisit)
+performs(Nurse, Cancel)
+triggers(Nightly, Expire)
+transitions(Appointment.status, Cancel, booked -> cancelled)
+transitions(Appointment.status, CheckIn, booked -> checkedin)
+transitions(Appointment.status, Expire, booked -> cancelled)
+condition Paid "支払済み"
+holds(Paid, Appointment.paid == true)
+applies_to(Paid, CheckIn)
+condition Traced "追跡のみ"
+applies_to(Traced, CheckIn)
+"#;
+
+fn transition_model() -> SemanticModel {
+    let (ast, parse_errors) = rdra_ish_syntax::parse(TRANSITION_MODEL);
+    assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
+    let (model, diags) = rdra_ish_core::build_model(&ast);
+    assert!(diags.iter().all(|d| d.is_warning), "{diags:?}");
+    model
+}
+
+#[test]
+fn list_transition_markdown_has_a_row_per_transition_with_guards_and_actors() {
+    let md = list_elements(
+        &transition_model(),
+        &ListKind::Transition,
+        &ListFormat::Markdown,
+    )
+    .unwrap();
+    // Rows follow the Enum order of `to`, then the use case id. CheckIn takes the BUC's
+    // performer; the timer-started Expire takes no BUC performer; a condition without a
+    // `holds` body guards nothing, as in the state diagram.
+    assert_eq!(
+        md,
+        "\
+| entity | column | from | to | usecase | guards | actors | site |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Appointment | status | 予約済 (booked) | 受付済 (checkedin) | 受付する (CheckIn) | 支払済み | 受付係 |  |
+| Appointment | status | 予約済 (booked) | cancelled (cancelled) | 取り消す (Cancel) |  | 看護師 |  |
+| Appointment | status | 予約済 (booked) | cancelled (cancelled) | 期限切れにする (Expire) |  |  |  |
+"
+    );
+}
+
+#[test]
+fn list_transition_writes_every_format() {
+    let model = transition_model();
+    let csv = list_elements(&model, &ListKind::Transition, &ListFormat::Csv).unwrap();
+    assert_eq!(
+        csv.lines().next(),
+        Some("entity,column,from,to,usecase,guards,actors,site")
+    );
+    assert_eq!(csv.lines().count(), 4, "{csv}");
+    let json = list_elements(&model, &ListKind::Transition, &ListFormat::Json).unwrap();
+    assert!(
+        json.contains("{\"entity\":\"Appointment\",\"column\":\"status\",\"from\":\"予約済 (booked)\",\"to\":\"受付済 (checkedin)\",\"usecase\":\"受付する (CheckIn)\",\"guards\":\"支払済み\",\"actors\":\"受付係\",\"site\":\"\"}"),
+        "{json}"
+    );
+    let table = list_elements(&model, &ListKind::Transition, &ListFormat::Table).unwrap();
+    assert!(table.starts_with("ENTITY"), "{table}");
+    assert_eq!(table.lines().count(), 5, "{table}");
+}
+
+#[test]
+fn list_transition_site_is_file_and_line_from_a_loaded_project() {
+    let inputs = vec![errors_fixture("samples/clinic-ops")];
+    let Project { program, model, .. } = load_project(&inputs, None).expect("load clinic-ops");
+    let csv =
+        crate::list_output::format_transitions(&model, Some(&program), &ListFormat::Csv).unwrap();
+    let rows: Vec<&str> = csv.lines().skip(1).collect();
+    assert!(
+        rows.iter()
+            .any(|row| row.starts_with("Appointment,status,")),
+        "{csv}"
+    );
+    for row in rows {
+        let site = row.rsplit(',').next().unwrap();
+        let (file, line) = site
+            .rsplit_once(':')
+            .unwrap_or_else(|| panic!("no site: {row}"));
+        assert!(file.ends_with(".rdra"), "{row}");
+        assert!(line.parse::<u32>().is_ok(), "{row}");
+    }
+}

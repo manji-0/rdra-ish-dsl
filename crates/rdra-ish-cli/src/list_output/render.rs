@@ -185,6 +185,27 @@ pub(crate) fn optional_cell(value: &Option<String>) -> String {
 pub(crate) fn repeated_cell(values: &[String]) -> String {
     values.join("|")
 }
+
+/// `file:line` of a source site, the path relative to the working directory when it lies
+/// under it. Empty without `program` (an in-memory model) or a site.
+pub(crate) fn site_cell(
+    program: Option<&rdra_ish_core::ResolvedProgram>,
+    site: Option<&rdra_ish_core::LocatedSpan>,
+) -> String {
+    let cwd = std::env::current_dir().ok();
+    program
+        .zip(site)
+        .and_then(|(program, site)| {
+            let path = site.path(program)?;
+            let line = site.start_position(program)?.line;
+            let shown = cwd
+                .as_deref()
+                .and_then(|cwd| path.strip_prefix(cwd).ok())
+                .unwrap_or(path);
+            Some(format!("{}:{line}", shown.display()))
+        })
+        .unwrap_or_default()
+}
 pub(crate) fn csv_field(s: &str) -> String {
     if s.contains(',') || s.contains('"') || s.contains('\n') {
         format!("\"{}\"", s.replace('"', "\"\""))

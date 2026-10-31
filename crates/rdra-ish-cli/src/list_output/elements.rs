@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use crate::cli::ListFormat;
 
 use super::node_ref::{adr_targets, node_id, node_kind_name, node_label};
-use super::render::{bool_cell, format_rows, optional_cell, repeated_cell};
+use super::render::{bool_cell, format_rows, optional_cell, repeated_cell, site_cell};
 
 pub(crate) fn format_requirements(
     model: &rdra_ish_core::SemanticModel,
@@ -647,22 +647,10 @@ pub(crate) fn format_rules(
     format: &ListFormat,
 ) -> Result<String> {
     let headers = ["kind", "label", "entities", "rule", "applies_to", "site"];
-    let cwd = std::env::current_dir().ok();
     let rows: Vec<[String; 6]> = rdra_ish_core::business_rules(model)
         .into_iter()
         .map(|rule| {
-            let site = program
-                .zip(rule.site.as_ref())
-                .and_then(|(program, site)| {
-                    let path = site.path(program)?;
-                    let line = site.start_position(program)?.line;
-                    let shown = cwd
-                        .as_deref()
-                        .and_then(|cwd| path.strip_prefix(cwd).ok())
-                        .unwrap_or(path);
-                    Some(format!("{}:{line}", shown.display()))
-                })
-                .unwrap_or_default();
+            let site = site_cell(program, rule.site.as_ref());
             [
                 rule.kind.to_string(),
                 optional_cell(&rule.label),

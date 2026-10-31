@@ -15,6 +15,9 @@ rdra-ish diagram src/ --kind state --entity <EntityId> --format mermaid
 # State diagram — scoped to a BUC
 rdra-ish diagram src/ --kind state --buc <BucId> --format mermaid
 
+# State-transition table — one row per arrow, with guards and actors
+rdra-ish list src/ --kind transition --format markdown
+
 # Event diagram — event causality across BUCs, use cases, and external systems
 rdra-ish diagram src/ --kind event --format mermaid
 
@@ -63,6 +66,12 @@ rdra-ish verify src/ --backend tlc -o out/
   it, although it has a way out; the finding is `Deadlock_<Entity>_<column>_<value>`),
   `stateend` (no transition out). The `%% legend:` line says so. A deadlock still draws
   the diagram; `check` reports it as an error.
+- `list --kind transition` is the table behind the arrows: one row per transition with
+  `entity, column, from, to, usecase, guards, actors, site`. `from` and `to` read
+  `label (value)`, `usecase` reads `label (id)`, `guards` are the condition labels the
+  arrow shows in `[...]`, and `actors` perform the use case (an event- or timer-started use
+  case lists only its explicit `performs`). `site` is the `transitions` line, `file:line`.
+  Several values in a cell are joined with `|`.
 
 ## Reading the Event Diagram
 

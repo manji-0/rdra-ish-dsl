@@ -36,7 +36,9 @@ pub use access::{
 pub use analysis::{build_model, build_model_items, build_model_items_with_scopes};
 pub use business_flow::{buc_handoffs, buc_members, buc_participants, Handoff, Involvement};
 pub use diagnostics::{Diagnostic, RdraError};
-pub use entity_lifecycle::link_entity_status_states;
+pub use entity_lifecycle::{
+    link_entity_status_states, state_key, state_label, state_models, StateModel,
+};
 pub use entity_state_variant::{
     collect_entity_state_variants, entity_state_variants, EntityStateVariant, EntityStateVariants,
     StateFieldValue,

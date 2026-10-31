@@ -18,8 +18,8 @@ while IFS=$'\t' read -r out cmd; do
   mkdir -p "$(dirname "$out")"
   read -r -a args <<<"$cmd"
   case "${args[0]}" in
-    # `states` prints to stdout.
-    states) "$bin" "${args[@]}" >"$out" ;;
+    # `states` and `list` print to stdout.
+    states | list) "$bin" "${args[@]}" >"$out" ;;
     # `diagram` appends the extension of its format to --out.
     diagram) "$bin" "${args[@]}" --out "${out%.*}" ;;
     *) "$bin" "${args[@]}" --out "$out" ;;

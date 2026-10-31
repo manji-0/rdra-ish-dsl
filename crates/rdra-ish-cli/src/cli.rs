@@ -116,6 +116,8 @@ pub(crate) enum ListKind {
     BusinessInputs,
     /// Actors and external systems by BUC (ordered by business): how each takes part, as a table
     BucRoles,
+    /// State transitions: entity, column, from, to, use case, guards, actors and site, one per row
+    Transition,
     /// The published surface (`exposes` and `shares`) as canonical text; takes no `--format`
     Surface,
 }
