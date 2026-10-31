@@ -1,6 +1,6 @@
 %% rdra-ish diagram=state scope=whole model=samples/clinic-ops
 %% kinds: statemodel state usecase
-%% omitted: Charge.status InsurancePolicy.verification_status Notification.status PatientMessage.status Room.occupancy_status (Enum without transitions)
+%% omitted: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum without transitions)
 stateDiagram-v2
   state "Appointment.status" as statemodel__Appointment_status {
     [*] --> state__Appointment_apptrequested

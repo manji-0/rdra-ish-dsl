@@ -112,6 +112,7 @@ entity PatientProfile "患者基本情報" {
   emergency_contact: String @null
 }
 
+// 資格確認 that fails (無効, 該当資格なし) is the result of an EligibilityCheck, not a state of the policy.
 entity InsurancePolicy "保険資格" {
   id:                  Int    @pk
   payer_name:          String
@@ -119,7 +120,7 @@ entity InsurancePolicy "保険資格" {
   member_no:           String
   burden_ratio:        BurdenRatio   @default(thirty)
   limit_category:      LimitCategory @default(notobtained)
-  verification_status: Enum(unverified "未確認", verified "確認済", rejected "確認不可") @default(unverified)
+  verification_status: Enum(unverified "未確認", verified "確認済") @default(unverified)
   verified_at:         DateTime @null
   active:              Bool
 }
@@ -268,7 +269,7 @@ entity Prescription "処方箋" {
 // Revenue cycle
 // One 診療行為 with its cost: 指導・管理料 and comments the physician enters
 // (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:104), 実施内容(コスト) a test or treatment room enters
-// (:152), and 選定療養費.
+// (:152), and 選定療養費. A charge exists once it is registered; there is no pending stage.
 entity Charge "コスト（診療行為）" {
   id:        Int      @pk
   code:      String
@@ -276,7 +277,7 @@ entity Charge "コスト（診療行為）" {
   origin:    ChargeOrigin @default(chart)
   amount:    Money
   posted_at: DateTime @null
-  status:    Enum(chargepending "未確定", chargeposted "登録済", chargevoided "取消") @default(chargepending)
+  status:    Enum(chargeposted "登録済", chargevoided "取消") @default(chargeposted)
 }
 
 // レセプト: one patient, one 診療月, one payer. 作成 and 院内点検 (koseikan-2024-iji-shiyousyo.txt:222-227),
@@ -296,11 +297,12 @@ entity ClaimStatement "レセプト" {
   return_reason: String   @null
 }
 
+// One 収納 or its 還付. What the patient has not paid yet is the AccountBalance.
 entity PaymentTransaction "精算" {
   id:           Int      @pk
   amount:       Money
   method:       PaymentMethod @default(card)
-  status:       Enum(paypending "未精算", payposted "収納済", payrefunded "還付済") @default(paypending)
+  status:       Enum(payposted "収納済", payrefunded "還付済") @default(payposted)
   processed_at: DateTime @null
   gateway_ref:  String   @null
 }
@@ -338,18 +340,19 @@ entity CarePlan "ケアプラン" {
   closed_at: DateTime @null
 }
 
+// Drafts and send failures are not modelled (no primary source).
 entity PatientMessage "患者連絡" {
   id:      Int      @pk
   channel: MessageChannel @default(portal)
-  status:  Enum(msgdraft "下書き", msgsent "送信済", msgread "既読", msgfailed "送信失敗") @default(msgdraft)
+  status:  Enum(msgsent "送信済", msgread "既読") @default(msgsent)
   sent_at: DateTime @null
   read_at: DateTime @null
 }
 
+// Delivered when delivered_at is set; queueing and failure are not modelled (no primary source).
 entity Notification "通知" {
   id:           Int      @pk
   topic:        String
-  status:       Enum(notifqueued "送信待ち", notifdelivered "配信済", notiffailed "配信失敗") @default(notifqueued)
   delivered_at: DateTime @null
 }
 

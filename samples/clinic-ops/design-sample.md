@@ -3222,7 +3222,6 @@ erDiagram
   Notification {
     Int id PK
     String topic
-    Enum status
     DateTime delivered_at
     Int patientaccount_id FK
   }
@@ -3301,7 +3300,7 @@ rdra-ish diagram samples/clinic-ops --kind state --format mermaid --out samples/
 ```mermaid
 %% rdra-ish diagram=state scope=whole model=samples/clinic-ops
 %% kinds: statemodel state usecase
-%% omitted: Charge.status InsurancePolicy.verification_status Notification.status PatientMessage.status Room.occupancy_status (Enum without transitions)
+%% omitted: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum without transitions)
 stateDiagram-v2
   state "Appointment.status" as statemodel__Appointment_status {
     [*] --> state__Appointment_apptrequested
