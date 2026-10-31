@@ -3,36 +3,15 @@
 //! and the same verdict. A cone that frees an unread entity's slots reaches a superset.
 
 use std::collections::BTreeSet;
-use std::path::PathBuf;
 
 use super::*;
 use crate::lifecycle::{EntityStateResult, Exploration, State, Target};
-use crate::{build_merged_model, resolve};
+use crate::load_project;
 
 pub(super) fn load(rel: &str) -> SemanticModel {
-    let root = repo_root().join(rel);
-    let mut files: Vec<PathBuf> = Vec::new();
-    let mut stack = vec![root];
-    while let Some(p) = stack.pop() {
-        if p.is_dir() {
-            stack.extend(std::fs::read_dir(&p).unwrap().flatten().map(|e| e.path()));
-        } else if p.extension().is_some_and(|e| e == "rdra") {
-            files.push(p);
-        }
-    }
-    files.sort();
-    let mut includes: Vec<PathBuf> = Vec::new();
-    for f in &files {
-        let c = dunce::canonicalize(f).unwrap();
-        let parent = c.parent().unwrap();
-        for a in [parent, parent.parent().unwrap_or(parent)] {
-            if !includes.iter().any(|x| x == a) {
-                includes.push(a.to_path_buf());
-            }
-        }
-    }
-    let (program, _) = resolve(&files, &includes);
-    build_merged_model(&program, &includes).0
+    load_project(&[repo_root().join(rel)], None)
+        .unwrap_or_else(|e| panic!("{rel}: {e}"))
+        .model
 }
 
 /// A view as an order-free value: per pattern its row, flags, and VIA.

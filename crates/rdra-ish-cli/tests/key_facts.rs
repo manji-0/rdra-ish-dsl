@@ -9,7 +9,7 @@ use std::process::Command;
 
 use rdra_ish_core::lifecycle::{Bounds, InvKind, Scope, TransitionSystem, VarKind};
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
-use rdra_ish_core::{build_merged_model, resolve, tx};
+use rdra_ish_core::{load_project, tx};
 
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -25,51 +25,17 @@ fn samples() -> Vec<String> {
         .collect()
 }
 
-fn rdra_files(root: &Path, out: &mut Vec<PathBuf>) {
-    if root.is_file() {
-        out.push(root.to_path_buf());
-        return;
-    }
-    let mut entries: Vec<PathBuf> = std::fs::read_dir(root)
-        .expect("readable sample dir")
-        .flatten()
-        .map(|e| e.path())
-        .collect();
-    entries.sort();
-    for path in entries {
-        if path.is_dir() {
-            rdra_files(&path, out);
-        } else if path.extension().is_some_and(|e| e == "rdra") {
-            out.push(path);
-        }
-    }
-}
-
-/// The CLI's include rule: each file's parent and grandparent.
 fn load(sample: &str) -> SemanticModel {
-    let mut files = Vec::new();
-    rdra_files(&repo().join(sample), &mut files);
-    let mut includes: Vec<PathBuf> = Vec::new();
-    for f in &files {
-        let canon = dunce::canonicalize(f).unwrap_or_else(|_| f.clone());
-        if let Some(parent) = canon.parent() {
-            for a in [parent, parent.parent().unwrap_or(parent)] {
-                if !includes.iter().any(|p| p == a) {
-                    includes.push(a.to_path_buf());
-                }
-            }
-        }
-    }
-    let (program, resolve_diags) = resolve(&files, &includes);
-    let (model, diags) = build_merged_model(&program, &includes);
-    let errors: Vec<String> = resolve_diags
+    let project =
+        load_project(&[repo().join(sample)], None).unwrap_or_else(|e| panic!("{sample}: {e}"));
+    let errors: Vec<String> = project
+        .diags
         .iter()
-        .chain(&diags)
         .filter(|d| !d.is_warning)
         .map(|d| d.error.to_string())
         .collect();
     assert!(errors.is_empty(), "{sample}: model errors {errors:?}");
-    model
+    project.model
 }
 
 /// Runs the CLI with `--out` in a scratch dir and returns what it wrote.

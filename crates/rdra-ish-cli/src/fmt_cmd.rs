@@ -6,14 +6,14 @@ use anyhow::{Context, Result};
 use rdra_ish_syntax::format_source;
 use std::fs;
 
-use crate::load::collect_rdra_files;
+use rdra_ish_core::collect_rdra_files;
 
 pub fn run_fmt(inputs: &[PathBuf], write: bool, check: bool) -> Result<()> {
     if write && check {
         anyhow::bail!("--write and --check cannot be combined");
     }
 
-    let mut files = collect_rdra_files(inputs)?;
+    let mut files = collect_rdra_files(inputs, None)?;
     files.sort();
     if files.is_empty() {
         anyhow::bail!("no .rdra files found in the given inputs");

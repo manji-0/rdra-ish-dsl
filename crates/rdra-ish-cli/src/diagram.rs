@@ -16,7 +16,8 @@ use std::fs;
 
 use crate::cli::DiagramKind;
 use crate::list_output::{note_state_errors, reject_state_errors};
-use crate::load::{load_model, reject_model_errors};
+use crate::load::reject_model_errors;
+use rdra_ish_core::{load_project, Project};
 
 pub struct DiagramRequest {
     pub inputs: Vec<PathBuf>,
@@ -39,7 +40,12 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
         out,
     } = request;
     let inputs = inputs.as_slice();
-    let (program, model, diags) = load_model(inputs)?;
+    let Project {
+        program,
+        model,
+        diags,
+        ..
+    } = load_project(inputs, None)?;
     reject_model_errors(&program, &diags)?;
     if kind.reads_lifecycle() {
         reject_state_errors(&program, &model)?;

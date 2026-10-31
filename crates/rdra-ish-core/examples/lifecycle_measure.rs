@@ -6,47 +6,11 @@
 //! Run: `cargo run --release -p rdra-ish-core --example lifecycle_measure [-- STATE_CAP [verify [SAMPLE]]]`
 
 use std::collections::{BTreeSet, HashMap};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Instant;
 
 use rdra_ish_core::lifecycle::{Bounds, Caps, Cone, Scope, Target, TransitionSystem, VarKind};
-use rdra_ish_core::{build_merged_model, resolve};
-
-fn rdra_files(root: &Path, out: &mut Vec<PathBuf>) {
-    if root.is_file() {
-        out.push(root.to_path_buf());
-        return;
-    }
-    let mut entries: Vec<PathBuf> = std::fs::read_dir(root)
-        .expect("readable sample dir")
-        .flatten()
-        .map(|e| e.path())
-        .collect();
-    entries.sort();
-    for path in entries {
-        if path.is_dir() {
-            rdra_files(&path, out);
-        } else if path.extension().is_some_and(|e| e == "rdra") {
-            out.push(path);
-        }
-    }
-}
-
-/// The CLI's include rule: each file's parent and grandparent.
-fn include_paths(files: &[PathBuf]) -> Vec<PathBuf> {
-    let mut paths: Vec<PathBuf> = Vec::new();
-    for f in files {
-        let canon = dunce::canonicalize(f).unwrap_or_else(|_| f.clone());
-        if let Some(parent) = canon.parent() {
-            for a in [parent, parent.parent().unwrap_or(parent)] {
-                if !paths.iter().any(|p| p == a) {
-                    paths.push(a.to_path_buf());
-                }
-            }
-        }
-    }
-    paths
-}
+use rdra_ish_core::project::load_project;
 
 fn target_name(ts: &TransitionSystem, t: Target) -> String {
     match t {
@@ -76,11 +40,9 @@ fn main() {
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
         .filter(|l| only.as_deref().is_none_or(|o| o == *l))
     {
-        let mut files = Vec::new();
-        rdra_files(&repo.join(sample), &mut files);
-        let includes = include_paths(&files);
-        let (program, _) = resolve(&files, &includes);
-        let (model, _) = build_merged_model(&program, &includes);
+        let model = load_project(&[repo.join(sample)], None)
+            .expect("sample loads")
+            .model;
         let built = TransitionSystem::build(&model, bounds, &Scope::ALL);
         let ts = &built.ts;
         println!("\n{sample}");

@@ -1,0 +1,55 @@
+module buc.purchase
+
+import shared.actors
+
+import shared.entities
+
+buc Purchase "商品を購入する"
+
+usecase Browse "商品を探す"
+
+usecase AddToCart "カートに入れる"
+
+usecase Checkout "注文を確定する"
+
+usecase ConfirmPayment "入金を確認する"
+
+usecase ShipOrder "出荷する"
+
+screen ProductList "商品一覧"
+
+screen CartView "カート"
+
+screen CheckoutForm "注文確認"
+
+performs(Customer, Purchase)
+
+contains(Purchase, Browse)
+
+contains(Purchase, AddToCart)
+
+contains(Purchase, Checkout)
+
+contains(Purchase, ConfirmPayment)
+
+contains(Purchase, ShipOrder)
+
+displays(Browse, ProductList)
+
+reads(Browse, Product)
+
+displays(AddToCart, CartView)
+
+writes(AddToCart, OrderLine)
+
+displays(Checkout, CheckoutForm)
+
+creates(Checkout, Order)
+
+updates(ConfirmPayment, Order)
+
+transitions(Order.status, ConfirmPayment, draft -> paid)
+
+updates(ShipOrder, Order)
+
+transitions(Order.status, ShipOrder, paid -> shipped)

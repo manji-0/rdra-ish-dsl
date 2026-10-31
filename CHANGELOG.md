@@ -4,6 +4,12 @@
 
 ### Added
 
+- One project loader in `rdra-ish-core` (`load_project`) now serves the CLI, the LSP, and the
+  tests. It looks for an `rdra.toml` manifest above the inputs and parses it, but nothing
+  reads it yet. The CLI loads and prints a model without a manifest as before. A malformed
+  manifest, or one without `[model] name`, fails the load and names the file and line,
+  whatever the order of the inputs. The search is documented under "Project manifest" in the
+  CLI reference.
 - `rdra-ish next` places each BUC on the incremental modeling stage map and prints the
   next stage: its main question, the elements that fail its gate (such as a use case with
   no CRUD or an entity with only its key), the review notes, the `check` findings the
@@ -33,6 +39,13 @@
 
 ### Changed
 
+- The LSP loads a workspace through the CLI's rules, so the editor now agrees with `check`.
+  It no longer adds the workspace roots as include paths, so a deep import such as
+  `import m.a.shared` from `m/a/b/c.rdra` reports "module file not found in include paths"
+  where it reported nothing before. It now also loads `.rdra` files reached through
+  symlinks, so opening `samples/formal-verification` as a workspace shows the
+  duplicate-definition errors the CLI already shows. A malformed `rdra.toml` clears the
+  workspace's diagnostics and shows an error that names the file and line.
 - The `lint` `stage-readiness` row gives the stage of each BUC and the stage after it,
   from the same gates as `next` (`BucOrder stage 2 (next 3)`; `required stages complete`
   once stage 5 is met), instead of which of six layers have any element. `coverage-score`

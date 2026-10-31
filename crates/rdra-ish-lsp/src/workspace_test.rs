@@ -3,7 +3,7 @@ mod tests {
     use std::collections::HashMap;
     use std::fs;
 
-    use rdra_ish_core::{analyze_workspace, RdraError};
+    use rdra_ish_core::{analyze_project, analyze_workspace, load_project, RdraError};
 
     fn write_file(path: &std::path::Path, content: &str) {
         if let Some(parent) = path.parent() {
@@ -88,5 +88,41 @@ reads(Customer, Order)
             .any(|(_, uc)| uc.id == "NewName"));
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_manifest_above_the_workspace_does_not_change_its_diagnostics() {
+        let messages = |with_manifest: bool| {
+            let root = std::env::temp_dir().join(format!(
+                "rdra_lsp_manifest_{with_manifest}_{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+            write_file(&root.join(".git/HEAD"), "");
+            if with_manifest {
+                write_file(&root.join("rdra.toml"), "[model]\nname = \"lsp\"\n");
+            }
+            write_file(
+                &root.join("src/bad.rdra"),
+                "actor Customer \"Customer\"\nentity Order \"Order\" { id: Int @pk }\nreads(Customer, Order)\n",
+            );
+
+            let project = load_project(&[root.join("src")], None).unwrap();
+            assert_eq!(project.manifest.is_some(), with_manifest);
+            let messages: Vec<String> = analyze_project(project)
+                .diagnostics
+                .iter()
+                .map(|diag| diag.error.to_string().replace(root.to_str().unwrap(), ""))
+                .collect();
+
+            let _ = fs::remove_dir_all(root);
+            messages
+        };
+
+        let without = messages(false);
+        assert!(!without.is_empty());
+        assert_eq!(without, messages(true));
     }
 }

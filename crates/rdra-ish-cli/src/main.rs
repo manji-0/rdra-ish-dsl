@@ -21,8 +21,9 @@ use fmt_cmd::run_fmt;
 use list_output::{
     format_lint_issues, list_elements, note_state_errors, reject_state_errors, state_findings,
 };
-use load::{collect_rdra_files, eprint_diagnostic, load_model, reject_model_errors};
+use load::{eprint_diagnostic, reject_model_errors};
 use rdra_ish_core::lifecycle::{Scope, Severity};
+use rdra_ish_core::{collect_rdra_files, load_project, Project};
 use rdra_ish_core::{lint_issues, LintSeverity, RdraError};
 use rdra_ish_emit::View;
 use states::run_states;
@@ -51,7 +52,12 @@ fn main() -> Result<()> {
             strict,
             scope,
         } => {
-            let (program, model, diags) = load_model(&inputs)?;
+            let Project {
+                program,
+                model,
+                diags,
+                ..
+            } = load_project(&inputs, None)?;
 
             let mut has_error = false;
             for diag in &diags {
@@ -129,7 +135,12 @@ fn main() -> Result<()> {
             kind,
             format,
         } => {
-            let (program, model, diags) = load_model(&inputs)?;
+            let Project {
+                program,
+                model,
+                diags,
+                ..
+            } = load_project(&inputs, None)?;
             reject_model_errors(&program, &diags)?;
             reject_state_errors(&program, &model)?;
 
@@ -138,7 +149,7 @@ fn main() -> Result<()> {
         }
 
         Commands::Lint { inputs, format } => {
-            let (_program, model, diags) = load_model(&inputs)?;
+            let Project { model, diags, .. } = load_project(&inputs, None)?;
 
             let issues = lint_issues(&model, &diags);
             let has_error = issues
@@ -159,7 +170,7 @@ fn main() -> Result<()> {
         } => next::run_next(&inputs, &buc, format)?,
 
         Commands::Files { inputs } => {
-            let files = collect_rdra_files(&inputs)?;
+            let files = collect_rdra_files(&inputs, None)?;
             if files.is_empty() {
                 anyhow::bail!("no .rdra files found in the given inputs");
             }
@@ -181,7 +192,12 @@ fn main() -> Result<()> {
             instance_count,
             int_range_max,
         } => {
-            let (program, model, diags) = load_model(&inputs)?;
+            let Project {
+                program,
+                model,
+                diags,
+                ..
+            } = load_project(&inputs, None)?;
             reject_model_errors(&program, &diags)?;
             if kind.reads_lifecycle() {
                 reject_state_errors(&program, &model)?;
@@ -262,7 +278,12 @@ fn main() -> Result<()> {
             int_range_max,
             scope,
         } => {
-            let (program, model, diags) = load_model(&inputs)?;
+            let Project {
+                program,
+                model,
+                diags,
+                ..
+            } = load_project(&inputs, None)?;
             reject_model_errors(&program, &diags)?;
             let scope = Scope::parse(&model, &scope.buc, &scope.entity)?;
             run_verify(

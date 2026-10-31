@@ -13,6 +13,7 @@ pub mod lint;
 pub mod location;
 pub mod model;
 pub mod predicate;
+pub mod project;
 pub mod rdra_rules;
 pub mod refinement;
 pub mod resolver;
@@ -56,6 +57,10 @@ pub use model::{
     TriggerTarget, TypedPredicate,
 };
 pub use predicate::{predicate_signature, KNOWN_PREDICATES};
+pub use project::{
+    collect_rdra_files, discover, load_project, root_include_paths, Manifest, ModelSection,
+    Project, ProjectError,
+};
 pub use resolver::{
     build_merged_model, reachable_from_bucs, resolve, resolve_overlaid, ResolvedProgram,
 };
@@ -64,4 +69,6 @@ pub use tx::{
     infer_usecase_transactions, tx_diagnostics, TxGroup, TxKind, UcWrite, UsecaseTx, WriteKind,
 };
 pub use typed_predicate::{build_typed_predicate, collect_typed_predicates, typed_predicate_name};
-pub use workspace::{analyze_workspace, consistency_diagnostics, WorkspaceAnalysis};
+pub use workspace::{
+    analyze_project, analyze_workspace, consistency_diagnostics, WorkspaceAnalysis,
+};

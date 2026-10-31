@@ -37,3 +37,36 @@ fn files_fails_on_a_root_without_rdra_files() {
         .expect("rdra-ish runs");
     assert_eq!(output.status.code(), Some(1));
 }
+
+#[test]
+fn files_ignores_a_manifest_above_the_inputs() {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("files_cli_manifest");
+    let _ = std::fs::remove_dir_all(&dir);
+    for rel in [
+        ".git/HEAD",
+        "rdra.toml",
+        "src/z.rdra",
+        "src/b/c.rdra",
+        "src/a.rdra",
+    ] {
+        let path = dir.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            if rel == "rdra.toml" {
+                "[model]\nname = \"m\"\n"
+            } else {
+                ""
+            },
+        )
+        .unwrap();
+    }
+    let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .arg("files")
+        .arg(dir.join("src"))
+        .output()
+        .expect("rdra-ish runs");
+    assert!(output.status.success());
+    let stdout = common::relative_to(&String::from_utf8_lossy(&output.stdout), &dir);
+    assert_eq!(stdout, "src/a.rdra\nsrc/b/c.rdra\nsrc/z.rdra\n");
+}
