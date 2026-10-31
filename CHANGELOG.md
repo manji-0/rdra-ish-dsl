@@ -112,6 +112,12 @@
   read. The TLA+ cone also named a param the cone had removed (`p1'`), so TLC stopped with
   a semantic error. Such a model can now fail where it passed. A violation now also shows
   a parent the assertion reads.
+- A multi-entity `forbidden` or `invariant` whose `.along(...)` path passes through entities
+  the rule does not name, as in `forbidden(AccessSession, ClientCertificate, ...)
+  .along(AccessSession, Terminal, TerminalCertAssignment, ClientCertificate)`, is checked
+  over the pairs that some middle instances connect. It was `UnbindableScope` ("names an
+  entity outside the scope"), although the language reference already allowed a junction
+  entity there.
 
 ## v0.3.0 - 2026-10-30
 

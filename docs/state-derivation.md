@@ -438,7 +438,9 @@ use case with no action is `AssertOnInertUseCase`.
 `forbidden(A, B, ...)` and `invariant(A, B)` evaluate over every combination of present
 slots of `A` and `B`. With `.along(A, B)`, only the combinations that a `relate`
 links count. Both forms get a real verdict, not a warning. `.along` needs a
-`relate` that binds each adjacent pair, else the rule is `UnbindableScope`.
+`relate` that binds each adjacent pair, else the rule is `UnbindableScope`. A path entity
+outside the scope is bound under the link, so a pair counts when some instances of the
+middle entities connect it.
 
 `when(E, ...).none(R, ...)` and `.has(R, ...)` evaluate over the present slots. At one
 instance per entity, `states` sees one `E` and one `R`. Use `verify` with

@@ -99,6 +99,75 @@ fn an_unlinked_optional_owner_is_not_linked_for_along() {
     );
 }
 
+/// A revoked certificate is never assigned, so no session reaches it through a terminal.
+fn session_path(along: &str) -> String {
+    format!(
+        r#"
+entity AccessSession "セッション" {{ id: Int @pk  status: Enum(open, closed) @default(open) }}
+entity Terminal "端末" {{ id: Int @pk }}
+entity TerminalCertAssignment "割当" {{ id: Int @pk  status: Enum(live) @default(live) }}
+entity ClientCertificate "証明書" {{ id: Int @pk  status: Enum(active, revoked) @default(active) }}
+usecase AddTerminal "端末登録"
+usecase IssueCert "発行"
+usecase AssignCert "割当"
+usecase OpenSession "接続"
+usecase Revoke "失効"
+creates(AddTerminal, Terminal)
+creates(IssueCert, ClientCertificate)
+creates(AssignCert, TerminalCertAssignment)
+creates(OpenSession, AccessSession)
+relate(AccessSession, Terminal, N:1)
+relate(TerminalCertAssignment, Terminal, N:1)
+relate(TerminalCertAssignment, ClientCertificate, N:1)
+transitions(ClientCertificate.status, Revoke, active -> revoked)
+condition CertActive "有効な証明書だけ割り当てる"
+holds(CertActive, ClientCertificate.status == active)
+applies_to(CertActive, AssignCert)
+condition Unassigned "割り当てのない証明書だけ失効できる"
+holds(Unassigned, ClientCertificate.status == active).none(TerminalCertAssignment.status == live)
+applies_to(Unassigned, Revoke)
+forbidden(AccessSession, ClientCertificate, AccessSession.status == open, ClientCertificate.status == revoked){along}
+"#
+    )
+}
+
+fn cross_forbidden_violated(d: &Derived) -> bool {
+    d.has("AccessSession", |x| {
+        matches!(
+            x,
+            StateDiag::ConstraintViolated {
+                kind: InvKind::CrossForbidden,
+                ..
+            }
+        )
+    })
+}
+
+#[test]
+fn along_binds_the_path_entities_the_scope_leaves_out() {
+    let along = ".along(AccessSession, Terminal, TerminalCertAssignment, ClientCertificate)";
+    let d = derive(&model_from(&session_path(along)));
+    assert!(
+        !d.has("AccessSession", |x| matches!(
+            x,
+            StateDiag::UnbindableScope { .. }
+        )),
+        "{:?}",
+        d.entity("AccessSession").diagnostics
+    );
+    assert!(
+        !cross_forbidden_violated(&d),
+        "no session reaches a revoked certificate: {:?}",
+        d.entity("AccessSession").diagnostics
+    );
+    let global = derive(&model_from(&session_path("")));
+    assert!(
+        cross_forbidden_violated(&global),
+        "without .along an unassigned revoked certificate counts: {:?}",
+        global.entity("AccessSession").diagnostics
+    );
+}
+
 #[test]
 fn quantifier_ignores_unlinked_related_rows() {
     let src = r#"

@@ -1431,7 +1431,11 @@ Without `.along`, the rule holds for every pair of instances, linked or not. Add
 `relate` path. Paths may include junction entities from `relate(A, B, N:M).via(J)` — e.g.
 `.along(A, J, B)` — because via synthesizes the `J→A` / `J→B` edges. Each adjacent pair
 of the path needs a `relate` that binds it (N:1, 1:N, or 1:1), and the path must cover
-every entity of the scope. Otherwise the rule is `UnbindableScope`, an error. An unlinked
+every entity of the scope. Otherwise the rule is `UnbindableScope`, an error. A path entity
+that the scope does not name, such as `J` or the middle of
+`.along(AccessSession, Terminal, TerminalCertAssignment, ClientCertificate)`, only links the
+ends: the rule counts a pair of scope instances when some instances of the middle entities
+connect them. An unlinked
 owner (an `.optional()` relate not yet linked) is not linked for `.along`.
 
 `after(UseCase).assert(Entity.column == value, ...)` checks an assertion at a specific

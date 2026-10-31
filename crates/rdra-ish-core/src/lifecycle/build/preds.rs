@@ -680,15 +680,18 @@ impl<'m> Builder<'m> {
             let id = self.model.entities[*out].id.clone();
             return fail(self, format!("along(..) does not cover {id}"));
         }
+        // A path entity the conditions do not read joins the binders. The conditions do not
+        // depend on it, so binding it universally under the link is binding it existentially.
+        for &ek in path {
+            if at_of(&binding, ek).is_none() {
+                binding.push((ek, At::Bound(binding.len() as u8)));
+            }
+        }
         let mut links = Vec::new();
         for (i, pair) in path.windows(2).enumerate() {
             let key = keys.get(i).copied().flatten();
-            let (Some(a), Some(b)) = (at_of(&binding, pair[0]), at_of(&binding, pair[1])) else {
-                return fail(
-                    self,
-                    "along(..) names an entity outside the scope".to_string(),
-                );
-            };
+            let bound = |ek| at_of(&binding, ek).expect("every path entity is bound");
+            let (a, b) = (bound(pair[0]), bound(pair[1]));
             match key.and_then(|fk| self.key_link(fk, (pair[0], a), (pair[1], b))) {
                 Some(link) => links.push(link),
                 None => {
