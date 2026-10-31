@@ -480,6 +480,9 @@ pub enum RdraError {
     #[error("SharedInternalEntity: '{system}' shares internal entity '{entity}' with other models\n  hint: every use of '{entity}' in another model is a `DirectEntityReference` warning there; publish a projection with `exposes({system}, ...).upsert()` when you can, then delete this line")]
     SharedInternalEntity { system: String, entity: String },
 
+    #[error("ForeignImport: module '{module}' belongs to dependency '{dep}', so it cannot be imported\n  hint: bind the system it publishes with `extsystem X \"...\" from {dep}.<System>` and reference its elements as `X.<Name>`")]
+    ForeignImport { module: String, dep: String },
+
     #[error("{message}\n  hint: {hint}")]
     LintFinding {
         rule: &'static str,

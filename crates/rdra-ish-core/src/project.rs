@@ -3,9 +3,11 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::path::{Component, Path, PathBuf};
+use std::sync::Arc;
 
 use serde::Deserialize;
 
+use crate::binding::{DependencySurface, ForeignModules};
 use crate::{build_merged_model, resolve_overlaid, Diagnostic, ResolvedProgram, SemanticModel};
 
 pub const MANIFEST_FILE: &str = "rdra.toml";
@@ -33,6 +35,31 @@ pub enum ProjectError {
         line: Option<usize>,
         message: String,
     },
+    /// A `[dependencies]` entry of `manifest` cannot be loaded as its own model.
+    Dependency {
+        manifest: PathBuf,
+        name: String,
+        path: String,
+        kind: DependencyErrorKind,
+        detail: String,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DependencyErrorKind {
+    NotFound,
+    Cycle,
+    HasErrors,
+}
+
+impl DependencyErrorKind {
+    pub fn name(self) -> &'static str {
+        match self {
+            DependencyErrorKind::NotFound => "DependencyNotFound",
+            DependencyErrorKind::Cycle => "DependencyCycle",
+            DependencyErrorKind::HasErrors => "DependencyHasErrors",
+        }
+    }
 }
 
 impl fmt::Display for ProjectError {
@@ -50,6 +77,18 @@ impl fmt::Display for ProjectError {
                 line: None,
                 message,
             } => write!(f, "{}: {message}", path.display()),
+            Self::Dependency {
+                manifest,
+                name,
+                path,
+                kind,
+                detail,
+            } => write!(
+                f,
+                "{}: {}: dependency '{name}' (path {path}) {detail}",
+                manifest.display(),
+                kind.name()
+            ),
         }
     }
 }
@@ -64,6 +103,49 @@ pub struct Project {
     pub model: SemanticModel,
     pub diags: Vec<Diagnostic>,
     pub manifest: Option<Manifest>,
+    /// The direct dependencies of the manifest, each checked as its own model.
+    pub dependencies: Vec<Dependency>,
+}
+
+/// One `[dependencies]` entry, loaded.
+#[derive(Debug)]
+pub struct Dependency {
+    pub name: String,
+    /// The `path` value as written in the manifest.
+    pub path: String,
+    pub surface: Arc<DependencySurface>,
+}
+
+/// Where a `[dependencies]` entry points.
+enum DependencySource {
+    Path(String),
+}
+
+impl Manifest {
+    fn dependency_sources(&self) -> Result<Vec<(String, DependencySource)>, ProjectError> {
+        let mut sources = Vec::new();
+        for (name, value) in &self.dependencies {
+            let fail = |message: String| ProjectError::Manifest {
+                path: self.path.clone(),
+                line: None,
+                message,
+            };
+            let table = value
+                .as_table()
+                .ok_or_else(|| fail(format!("dependency '{name}' needs `{{ path = \"...\" }}`")))?;
+            if table.contains_key("git") {
+                return Err(fail(format!(
+                    "dependency '{name}' uses `git`, which a later release adds; use `path` for now"
+                )));
+            }
+            let path = table
+                .get("path")
+                .and_then(toml::Value::as_str)
+                .ok_or_else(|| fail(format!("dependency '{name}' needs `path = \"...\"`")))?;
+            sources.push((name.clone(), DependencySource::Path(path.to_string())));
+        }
+        Ok(sources)
+    }
 }
 
 /// Expand `inputs` into `.rdra` entry files. A directory contributes its `.rdra` files in
@@ -123,10 +205,14 @@ pub fn root_include_paths(files: &[PathBuf]) -> Vec<PathBuf> {
 /// malformed one fails whatever the input order. The first input's manifest is the project's.
 pub fn discover(inputs: &[PathBuf]) -> Result<Option<Manifest>, ProjectError> {
     let mut found = None;
+    let mut parsed: HashSet<PathBuf> = HashSet::new();
     for input in inputs {
         let Some(path) = manifest_path_above(input) else {
             continue;
         };
+        if !parsed.insert(path.clone()) {
+            continue;
+        }
         let manifest = parse_manifest(&path)?;
         found.get_or_insert(manifest);
     }
@@ -192,9 +278,17 @@ pub(crate) fn build_project(
     include_paths: Vec<PathBuf>,
     overlays: Option<&HashMap<PathBuf, String>>,
     manifest: Option<Manifest>,
+    dependencies: Vec<Dependency>,
 ) -> Project {
-    let (program, mut diags) = resolve_overlaid(&entry_files, &include_paths, overlays);
-    let (model, model_diags) = build_merged_model(&program, &include_paths);
+    let surfaces: Vec<Arc<DependencySurface>> =
+        dependencies.iter().map(|d| d.surface.clone()).collect();
+    let (program, mut diags) = resolve_overlaid(
+        &entry_files,
+        &include_paths,
+        overlays,
+        &ForeignModules::of(&surfaces),
+    );
+    let (model, model_diags) = build_merged_model(&program, &include_paths, &surfaces);
     diags.extend(model_diags);
     Project {
         entry_files,
@@ -203,26 +297,124 @@ pub(crate) fn build_project(
         model,
         diags,
         manifest,
+        dependencies,
     }
 }
 
-/// Load the project for `inputs`. `overlays` carries unsaved editor text.
+/// Load the project for `inputs`. `overlays` carries unsaved editor text. Each `[dependencies]`
+/// entry of the manifest is loaded the same way, as its own model, and a dependency with an
+/// error, a missing path, or a cycle back to a model being loaded fails the whole load.
 pub fn load_project(
     inputs: &[PathBuf],
     overlays: Option<&HashMap<PathBuf, String>>,
 ) -> Result<Project, ProjectError> {
-    let entry_files = collect_rdra_files(inputs, overlays)?;
-    if entry_files.is_empty() {
-        return Err(ProjectError::NoRdraFiles);
-    }
-    let manifest = discover(inputs)?;
-    let include_paths = root_include_paths(&entry_files);
-    Ok(build_project(
-        entry_files,
-        include_paths,
+    let mut loader = Loader {
         overlays,
-        manifest,
-    ))
+        loading: Vec::new(),
+        loaded: HashMap::new(),
+    };
+    loader.load(inputs)
+}
+
+struct Loader<'o> {
+    overlays: Option<&'o HashMap<PathBuf, String>>,
+    /// Manifest directories on the current load path, for cycle detection.
+    loading: Vec<PathBuf>,
+    /// Dependencies already loaded, by manifest directory, so a diamond loads once.
+    loaded: HashMap<PathBuf, Arc<DependencySurface>>,
+}
+
+impl Loader<'_> {
+    fn load(&mut self, inputs: &[PathBuf]) -> Result<Project, ProjectError> {
+        let entry_files = collect_rdra_files(inputs, self.overlays)?;
+        if entry_files.is_empty() {
+            return Err(ProjectError::NoRdraFiles);
+        }
+        let manifest = discover(inputs)?;
+        let dependencies = match &manifest {
+            Some(manifest) => self.load_dependencies(manifest)?,
+            None => Vec::new(),
+        };
+        let include_paths = root_include_paths(&entry_files);
+        Ok(build_project(
+            entry_files,
+            include_paths,
+            self.overlays,
+            manifest,
+            dependencies,
+        ))
+    }
+
+    fn load_dependencies(&mut self, manifest: &Manifest) -> Result<Vec<Dependency>, ProjectError> {
+        let manifest_dir = manifest.path.parent().unwrap_or(Path::new("."));
+        let own_dir =
+            dunce::canonicalize(manifest_dir).unwrap_or_else(|_| manifest_dir.to_path_buf());
+        self.loading.push(own_dir);
+        let mut dependencies = Vec::new();
+        for (name, source) in manifest.dependency_sources()? {
+            let DependencySource::Path(path) = source;
+            let fail = |kind, detail: String| ProjectError::Dependency {
+                manifest: manifest.path.clone(),
+                name: name.clone(),
+                path: path.clone(),
+                kind,
+                detail,
+            };
+            let dir = manifest_dir.join(&path);
+            if !dir.is_dir() {
+                return Err(fail(
+                    DependencyErrorKind::NotFound,
+                    format!("is not a directory: {}", dir.display()),
+                ));
+            }
+            let canon = dunce::canonicalize(&dir).unwrap_or(dir.clone());
+            if self.loading.contains(&canon) {
+                let chain: Vec<String> = self
+                    .loading
+                    .iter()
+                    .map(|d| d.display().to_string())
+                    .collect();
+                return Err(fail(
+                    DependencyErrorKind::Cycle,
+                    format!(
+                        "depends back on a model being loaded: {}",
+                        chain.join(" -> ")
+                    ),
+                ));
+            }
+            let surface = match self.loaded.get(&canon) {
+                Some(surface) => surface.clone(),
+                None => {
+                    if !canon.join(MANIFEST_FILE).is_file() {
+                        return Err(fail(
+                            DependencyErrorKind::NotFound,
+                            format!("has no {MANIFEST_FILE}: {}", dir.display()),
+                        ));
+                    }
+                    let project = self
+                        .load(std::slice::from_ref(&dir))
+                        .map_err(|e| fail(DependencyErrorKind::HasErrors, e.to_string()))?;
+                    if let Some(first) = DependencySurface::first_error(&project) {
+                        let count = project.diags.iter().filter(|d| !d.is_warning).count();
+                        return Err(fail(
+                            DependencyErrorKind::HasErrors,
+                            format!("has {count} error(s); the first is {first}"),
+                        ));
+                    }
+                    let surface = Arc::new(DependencySurface::of(&name, &project));
+                    self.loaded.insert(canon, surface.clone());
+                    surface
+                }
+            };
+            dependencies.push(Dependency {
+                name,
+                path,
+                surface,
+            });
+        }
+        self.loading.pop();
+        Ok(dependencies)
+    }
 }
 
 #[cfg(test)]
@@ -232,7 +424,7 @@ mod tests {
     use std::fs;
 
     const MANIFEST: &str =
-        "[model]\nname = \"shop\"\n\n[dependencies]\nauth = { path = \"../auth\" }\n";
+        "[model]\nname = \"shop\"\n\n[dependencies]\nauth = { path = \"auth\" }\n";
 
     fn write(path: &Path, text: &str) {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -243,6 +435,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::create_dir(dir.path().join(".git")).unwrap();
         dir
+    }
+
+    /// The `auth` model `MANIFEST` depends on, next to `root`.
+    fn with_auth(root: &Path) {
+        write(&root.join("auth/rdra.toml"), "[model]\nname = \"auth\"\n");
+        write(&root.join("auth/auth/session.rdra"), AUTH);
     }
 
     fn layout(root: &Path) -> PathBuf {
@@ -261,6 +459,7 @@ mod tests {
     fn finds_a_manifest_above_the_inputs() {
         let dir = repo();
         write(&dir.path().join("rdra.toml"), MANIFEST);
+        with_auth(dir.path());
         let src = layout(dir.path());
 
         let project = load_project(&[src], None).unwrap();
@@ -275,6 +474,7 @@ mod tests {
     fn finds_a_manifest_above_a_file_input() {
         let dir = repo();
         write(&dir.path().join("rdra.toml"), MANIFEST);
+        with_auth(dir.path());
         layout(dir.path());
 
         let project = load_project(&[dir.path().join("src/buc/buy.rdra")], None).unwrap();
@@ -407,11 +607,152 @@ mod tests {
         assert!(project.model.use_cases.values().any(|u| u.id == "Draft"));
     }
 
+    const AUTH: &str = "module auth.session\nsystem AuthSystem \"Auth\"\nusecase Login \"Log in\"\nactor User \"User\"\nperforms(User, Login)\nexposes(AuthSystem, Login)\n";
+
+    /// `shop` depends on `auth`, which `auth_manifest` describes.
+    fn shop_and_auth(auth_manifest: &str, auth_src: &str) -> (tempfile::TempDir, PathBuf) {
+        let dir = repo();
+        write(
+            &dir.path().join("shop/rdra.toml"),
+            "[model]\nname = \"shop\"\n[dependencies]\nauth = { path = \"../auth\" }\n",
+        );
+        write(
+            &dir.path().join("shop/shop/checkout.rdra"),
+            "module shop.checkout\nusecase Checkout \"Checkout\"\n",
+        );
+        write(&dir.path().join("auth/rdra.toml"), auth_manifest);
+        write(&dir.path().join("auth/auth/session.rdra"), auth_src);
+        let shop = dir.path().join("shop");
+        (dir, shop)
+    }
+
+    #[test]
+    fn a_path_dependency_is_loaded_as_its_own_model() {
+        let (_dir, shop) = shop_and_auth("[model]\nname = \"auth\"\n", AUTH);
+
+        let project = load_project(&[shop], None).unwrap();
+
+        assert!(project.diags.is_empty(), "{:?}", project.diags);
+        let [dep] = project.dependencies.as_slice() else {
+            panic!("one dependency, got {:?}", project.dependencies);
+        };
+        assert_eq!((dep.name.as_str(), dep.path.as_str()), ("auth", "../auth"));
+        assert_eq!(dep.surface.systems, ["AuthSystem"]);
+        assert_eq!(dep.surface.surface.use_cases[0].id, "Login");
+        assert_eq!(dep.surface.modules, ["auth.session"]);
+        assert_eq!(
+            dep.surface.declared.get("User").map(String::as_str),
+            Some("actor")
+        );
+        assert!(project.model.use_cases.values().all(|u| u.id == "Checkout"));
+    }
+
+    #[test]
+    fn a_missing_dependency_path_names_the_dependency_and_the_cause() {
+        let dir = repo();
+        write(
+            &dir.path().join("rdra.toml"),
+            "[model]\nname = \"shop\"\n[dependencies]\nauth = { path = \"../nope\" }\n",
+        );
+        let src = layout(dir.path());
+
+        let err = load_project(&[src], None).unwrap_err().to_string();
+
+        assert!(
+            err.contains("DependencyNotFound: dependency 'auth' (path ../nope) is not a directory"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn a_dependency_with_errors_fails_the_load() {
+        let (_dir, shop) = shop_and_auth(
+            "[model]\nname = \"auth\"\n",
+            "module auth.session\nperforms(Nobody, Login)\n",
+        );
+
+        let err = load_project(&[shop], None).unwrap_err().to_string();
+
+        assert!(
+            err.contains("DependencyHasErrors: dependency 'auth' (path ../auth) has 2 error(s); the first is error: "),
+            "{err}"
+        );
+        assert!(err.contains("session.rdra:2:"), "{err}");
+        assert!(err.contains("undefined symbol: Nobody"), "{err}");
+    }
+
+    #[test]
+    fn a_dependency_cycle_is_reported() {
+        let (_dir, shop) = shop_and_auth(
+            "[model]\nname = \"auth\"\n[dependencies]\nshop = { path = \"../shop\" }\n",
+            AUTH,
+        );
+
+        let err = load_project(&[shop], None).unwrap_err().to_string();
+
+        assert!(err.contains("DependencyCycle: dependency 'shop' (path ../shop) depends back on a model being loaded"), "{err}");
+    }
+
+    #[test]
+    fn a_transitive_dependency_is_checked_but_not_a_direct_dependency() {
+        let (dir, shop) = shop_and_auth(
+            "[model]\nname = \"auth\"\n[dependencies]\nidp = { path = \"../idp\" }\n",
+            AUTH,
+        );
+        write(
+            &dir.path().join("idp/rdra.toml"),
+            "[model]\nname = \"idp\"\n",
+        );
+        write(
+            &dir.path().join("idp/idp/core.rdra"),
+            "module idp.core\nreads(Nobody, Nothing)\n",
+        );
+
+        let err = load_project(std::slice::from_ref(&shop), None)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("DependencyHasErrors: dependency 'auth' (path ../auth)"),
+            "{err}"
+        );
+        assert!(
+            err.contains("DependencyHasErrors: dependency 'idp' (path ../idp)"),
+            "{err}"
+        );
+
+        write(
+            &dir.path().join("idp/idp/core.rdra"),
+            "module idp.core\nusecase Verify \"Verify\"\n",
+        );
+        let project = load_project(&[shop], None).unwrap();
+        let names: Vec<&str> = project
+            .dependencies
+            .iter()
+            .map(|d| d.name.as_str())
+            .collect();
+        assert_eq!(names, ["auth"]);
+    }
+
+    #[test]
+    fn a_git_dependency_is_refused_for_now() {
+        let dir = repo();
+        write(
+            &dir.path().join("rdra.toml"),
+            "[model]\nname = \"shop\"\n[dependencies]\npay = { git = \"https://x/y.git\", rev = \"v1\" }\n",
+        );
+        let src = layout(dir.path());
+
+        let err = load_project(&[src], None).unwrap_err().to_string();
+
+        assert!(err.contains("dependency 'pay' uses `git`"), "{err}");
+    }
+
     #[test]
     fn a_manifest_changes_neither_include_paths_nor_diagnostics() {
         let plain = repo();
         let with = repo();
         write(&with.path().join("rdra.toml"), MANIFEST);
+        with_auth(with.path());
         let plain_src = layout(plain.path());
         let with_src = layout(with.path());
 

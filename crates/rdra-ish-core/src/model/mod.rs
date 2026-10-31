@@ -255,6 +255,8 @@ pub struct SemanticModel {
     pub symbols: SymbolTable,
     /// Per-file import / module visibility used when resolving references.
     pub import_scopes: crate::import_scope::ImportScopes,
+    /// The published surface of each direct dependency, bound through `extsystem ... from`.
+    pub dependencies: Vec<std::sync::Arc<crate::binding::DependencySurface>>,
     /// Declaration sites for `kind:id` lookups (LSP go-to-definition).
     pub decl_sites: crate::location::DeclIndex,
 }

@@ -25,19 +25,29 @@ use property::register_property;
 
 pub fn build_model(ast: &Ast) -> (SemanticModel, Vec<Diagnostic>) {
     let items: Vec<(SourceId, Item)> = ast.items.iter().cloned().map(|item| (0, item)).collect();
-    build_model_items_with_scopes(&items, crate::import_scope::ImportScopes::unrestricted(0))
+    build_model_items_with_scopes(
+        &items,
+        crate::import_scope::ImportScopes::unrestricted(0),
+        Vec::new(),
+    )
 }
 
 pub fn build_model_items(items: &[(SourceId, Item)]) -> (SemanticModel, Vec<Diagnostic>) {
-    build_model_items_with_scopes(items, crate::import_scope::ImportScopes::unrestricted(0))
+    build_model_items_with_scopes(
+        items,
+        crate::import_scope::ImportScopes::unrestricted(0),
+        Vec::new(),
+    )
 }
 
 pub fn build_model_items_with_scopes(
     items: &[(SourceId, Item)],
     import_scopes: crate::import_scope::ImportScopes,
+    dependencies: Vec<std::sync::Arc<crate::binding::DependencySurface>>,
 ) -> (SemanticModel, Vec<Diagnostic>) {
     let mut model = SemanticModel {
         import_scopes,
+        dependencies,
         ..SemanticModel::default()
     };
     let mut diags: Vec<Diagnostic> = vec![];
