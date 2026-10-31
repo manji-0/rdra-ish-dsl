@@ -3,11 +3,11 @@ module shared.governance
 import shared.biz
 import shared.entities
 
-quality Auditability "Auditability"
-quality Performance  "Performance"
-quality Privacy      "Privacy"
+quality Auditability "監査可能性"
+quality Performance  "性能"
+quality Privacy      "プライバシー"
 
-nfr ScheduleLookupLatency "Schedule lookup latency"
+nfr ScheduleLookupLatency "予約枠検索の応答時間"
   metric p95_latency_ms
   target "<=500"
   window "5m"
@@ -15,12 +15,12 @@ nfr ScheduleLookupLatency "Schedule lookup latency"
   availability multi_az
   resilience retryable
 
-constraint PatientDataPrivacy "Patient data privacy"
+constraint PatientDataPrivacy "患者情報の保護"
   privacy restricted
   logging structured
   retention "10y"
 
-constraint BillingAuditTrail "Billing audit trail"
+constraint BillingAuditTrail "会計の監査証跡"
   audit enabled
   retention "7y"
 

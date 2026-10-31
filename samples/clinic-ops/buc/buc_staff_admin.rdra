@@ -93,3 +93,13 @@ requires_medium(ResolveAuditFinding, AdminConsole)
 // No business flow. The schedule, room, and audit work here is master maintenance an
 // administrator does whenever it is needed, in no fixed order, so a flow would only restate the
 // list of use cases.
+
+// Requirement traceability
+requirement ReqResolveAuditFindings "監査で見つかった問題を管理者が解決するまで追う"
+  priority "must"
+  source "モデルの想定（一次資料なし）"
+  stakeholder "病院管理者"
+  acceptance criteria "監査指摘は管理端末から解決されるまで未解決として残る。"
+  status "accepted"
+
+motivates(ReqResolveAuditFindings, BucStaffAdministration)

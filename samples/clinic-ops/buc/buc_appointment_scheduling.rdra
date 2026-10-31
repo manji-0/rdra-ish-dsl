@@ -173,3 +173,14 @@ performs(ReceptionClerk, BookStep)
 performs(ReceptionClerk, NoticeStep)
 performs(ReceptionClerk, RescheduleStep)
 performs(ReceptionClerk, CancelStep)
+
+// Requirement traceability
+requirement ReqChangeAppointmentAtDesk "予約の変更・取消を電話と窓口で受け付ける"
+  priority "must"
+  source "sapporo-city-hosp-yoyaku.md:102, :118"
+  source "yokohama-cu-urahp-c16010-shiyousyo.txt:196-197"
+  stakeholder "医事課 受付担当"
+  acceptance criteria "受付担当が予約の変更・取消を入力すると、患者に通知が届く。"
+  status "accepted"
+
+motivates(ReqChangeAppointmentAtDesk, BucAppointmentScheduling)

@@ -334,3 +334,22 @@ performs(ClaimsClerk, ReviewStep)
 performs(ClaimsClerk, ReturnStep)
 performs(ClaimsClerk, AssessStep)
 performs(ClaimsClerk, PaidStep)
+
+// Requirement traceability
+requirement ReqMonthlyClaimByTenth "前月分のレセプトを翌月10日までに請求する"
+  priority "must"
+  source "各月分について翌月十日まで (egov-seikyu-meirei-351M50000100036.txt:55)"
+  source "請求可能期間 5日～10日 (ssk-online-seikyu-sousa-tejunsho.txt:748)"
+  stakeholder "医事課 レセプト担当"
+  acceptance criteria "前月分のレセプトは院内点検の後、毎月5日から10日の間に審査支払機関へ請求される。"
+  status "accepted"
+
+requirement ReqResubmitReturned "返戻レセプトを訂正して再請求する"
+  priority "must"
+  source "返戻ファイルを修正し、当月請求のレセプトと併せて再請求 (mhlw-online-henrei-saiseikyu.txt:105-111, :119)"
+  stakeholder "医事課 レセプト担当"
+  acceptance criteria "返戻は3か月以内に取り込まれ、訂正して当月分と併せて再請求される。査定は再請求せず再審査請求で争う。"
+  status "accepted"
+
+motivates(ReqMonthlyClaimByTenth, BucBillingClaims)
+motivates(ReqResubmitReturned, BucBillingClaims)

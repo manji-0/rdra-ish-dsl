@@ -247,3 +247,14 @@ performs(Nurse, LabResultStep)
 performs(Clinician, ResultReviewStep)
 performs(Clinician, CriticalStep)
 performs(Clinician, OrderCancelStep)
+
+// Requirement traceability
+requirement ReqProxyOrderNeedsPhysician "代行入力されたオーダは医師が確定するまで実施しない"
+  priority "must"
+  source "代行入力（代行オーダー） (mhlw-2020-dairi-nyuuryoku.txt:71-79, :15)"
+  source "主治の医師又は歯科医師の指示 (egov-hokanhou-323AC0000000203.txt:311)"
+  stakeholder "看護師"
+  acceptance criteria "医師が確定していない代行入力オーダの検体は採取されない。"
+  status "accepted"
+
+motivates(ReqProxyOrderNeedsPhysician, BucOrdersResults)

@@ -265,3 +265,22 @@ performs(Pharmacist, DispenseStep)
 performs(Pharmacist, InquiryStep)
 performs(Clinician, InquiryStep)
 performs(Pharmacist, CounselStep)
+
+// Requirement traceability
+requirement ReqRegisterEPrescription "院外処方箋を電子処方箋管理サービスへ登録し、保険薬局を指定しない"
+  priority "must"
+  source "電子処方箋管理サービス (mhlw-denshi-shohousen-unyou.txt:28-30)"
+  source "特定の保険薬局において調剤を受けるべき旨の指示等を行つてはならない (egov-ryotan-kisoku-332M50000100015.txt:49)"
+  stakeholder "医師"
+  acceptance criteria "院外処方箋は紙を印刷する場合も電子処方箋管理サービスへ登録され、処方箋は薬局を持たない。"
+  status "accepted"
+
+requirement ReqInquiryBeforeDispense "疑わしい処方は医師への照会が済むまで調剤しない"
+  priority "must"
+  source "確かめた後でなければ調剤してはならない (egov-yakuzaishihou-335AC0000000146.txt:202)"
+  stakeholder "薬剤師"
+  acceptance criteria "疑義照会中の処方箋は、医師が回答するまで調剤・監査に進まない。"
+  status "accepted"
+
+motivates(ReqRegisterEPrescription, BucPrescriptionFulfillment)
+motivates(ReqInquiryBeforeDispense, BucPrescriptionFulfillment)

@@ -224,3 +224,14 @@ performs(ReceptionClerk, MaintainSearchStep)
 performs(ReceptionClerk, DemographicsStep)
 performs(ReceptionClerk, MergeStep)
 performs(ReceptionClerk, ArchiveStep)
+
+// Requirement traceability
+requirement ReqRegisterWithEligibility "新患登録で保険情報と限度額情報をオンライン資格確認から取り込む"
+  priority "must"
+  source "新患登録 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:46, :51)"
+  source "新患登録 (koseikan-2024-iji-shiyousyo.txt:92)"
+  stakeholder "医事課 受付担当"
+  acceptance criteria "保険情報は手入力せずオンライン資格確認の結果を登録し、限度額情報は患者が同意した場合だけ取得する。"
+  status "accepted"
+
+motivates(ReqRegisterWithEligibility, BucPatientOnboarding)

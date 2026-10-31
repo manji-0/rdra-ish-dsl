@@ -191,11 +191,11 @@ requires_medium(PrepareEncounter, NurseStation)
 requires_permission(PrepareEncounterApi, EncounterOpen)
 
 // Requirement traceability
-requirement ReqSwiftCheckIn "Patients are checked in and roomed without repeated data entry"
+requirement ReqSwiftCheckIn "再来患者は情報を入力し直さずに受付・案内される"
   priority "must"
-  source "Front desk interviews"
+  source "モデルの想定（一次資料なし）"
   stakeholder "医事課 受付担当"
-  acceptance criteria "A returning patient is checked in with a single confirmation step."
+  acceptance criteria "再来患者は 1 回の確認操作で受付され、診察室へ案内される。"
   status "accepted"
 
 requirement ReqEligibilityEveryVisit "受付のたびに保険資格を確認する"

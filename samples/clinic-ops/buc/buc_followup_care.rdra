@@ -140,3 +140,13 @@ performs(CareCoordinator, FollowUpMsgStep)
 performs(CareCoordinator, ResponseStep)
 performs(CareCoordinator, RevisitStep)
 performs(CareCoordinator, PlanCloseStep)
+
+// Requirement traceability
+requirement ReqFollowUpAfterVisit "診察後の連絡と再診予約をケアプランで追う"
+  priority "must"
+  source "モデルの想定（一次資料なし）"
+  stakeholder "ケアコーディネーター"
+  acceptance criteria "署名された受診ごとにケアプランが作られ、患者の応答と再診予約を経て終了する。"
+  status "accepted"
+
+motivates(ReqFollowUpAfterVisit, BucFollowupCare)

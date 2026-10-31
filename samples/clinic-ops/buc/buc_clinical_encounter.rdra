@@ -175,3 +175,14 @@ performs(Clinician, ReferralOutStep)
 performs(Clinician, SignStep)
 performs(Clinician, CompleteStep)
 performs(Clinician, AmendStep)
+
+// Requirement traceability
+requirement ReqHandOffAfterConsultation "診察終了で受診を会計計算へ引き渡す"
+  priority "must"
+  source "診察終了後 (sendai-iji-gairai-shiyousyo.txt:176)"
+  source "計算受付 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:141)"
+  stakeholder "医師"
+  acceptance criteria "診察終了の後、予約は計算待ちになり、会計計算入力より前に完了しない。"
+  status "accepted"
+
+motivates(ReqHandOffAfterConsultation, BucClinicalEncounter)
