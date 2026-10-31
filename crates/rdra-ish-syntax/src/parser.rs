@@ -398,6 +398,13 @@ fn instance_decl() -> impl Parser<Token, InstanceDecl, Error = Simple<Token>> + 
                 .then_ignore(just(Token::RBrace))),
     );
 
+    let binding = just(Token::Ident("from".to_string()))
+        .ignore_then(ident())
+        .then_ignore(just(Token::Dot))
+        .then(ident())
+        .map_with_span(|(dep, system), span| BindingDecl { dep, system, span })
+        .or_not();
+
     let description = just(Token::Ident("description".to_string()))
         .ignore_then(string_lit())
         .or_not();
@@ -412,6 +419,7 @@ fn instance_decl() -> impl Parser<Token, InstanceDecl, Error = Simple<Token>> + 
     kind_token()
         .then(ident())
         .then(string_lit())
+        .then(binding)
         .then(description)
         .then(requirement_metadata)
         .then(adr_metadata)
@@ -423,7 +431,16 @@ fn instance_decl() -> impl Parser<Token, InstanceDecl, Error = Simple<Token>> + 
         .try_map(
             |(
                 (
-                    ((((((((kind, id), label), description), requirement), adr), api), nfr), field),
+                    (
+                        (
+                            (
+                                ((((((kind, id), label), binding), description), requirement), adr),
+                                api,
+                            ),
+                            nfr,
+                        ),
+                        field,
+                    ),
                     usecase,
                 ),
                 body,
@@ -464,6 +481,7 @@ fn instance_decl() -> impl Parser<Token, InstanceDecl, Error = Simple<Token>> + 
                     usecase: usecase.unwrap_or_default(),
                     columns,
                     variation_values,
+                    binding,
                     span,
                 })
             },
@@ -915,14 +933,20 @@ fn usecase_metadata() -> impl Parser<Token, UseCaseMetadata, Error = Simple<Toke
 ///                             the same identifier is used for multiple kinds)
 ///   `Foo` or `a.Foo`        — plain or namespace-qualified (existing syntax)
 fn qref() -> impl Parser<Token, QRef, Error = Simple<Token>> + Clone {
-    // Typed form: `<kind_keyword> :: <ident>`
+    // Typed form: `<kind_keyword> :: <ident>`, or `<kind_keyword> :: Ext.<ident>` for an
+    // element of a bound external system.
     let typed = kind_token()
         .then_ignore(just(Token::ColonColon))
         .then(ident())
-        .map_with_span(|(kind, name), span| QRef {
-            kind_qualifier: Some(kind),
-            parts: vec![name],
-            span,
+        .then(just(Token::Dot).ignore_then(ident()).repeated())
+        .map_with_span(|((kind, head), tail), span| {
+            let mut parts = vec![head];
+            parts.extend(tail);
+            QRef {
+                kind_qualifier: Some(kind),
+                parts,
+                span,
+            }
         });
 
     // Plain form: `ident ("." ident)*`
@@ -982,22 +1006,23 @@ fn transition_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> +
 fn operand() -> impl Parser<Token, Operand, Error = Simple<Token>> + Clone {
     let now = just(Token::Now).map(|_| Operand::Now);
     let int_lit = select! { Token::IntLit(s) => Operand::IntLit(s) };
-    let qualified_col = ident()
-        .map_with_span(|entity, span| {
-            (
-                entity.clone(),
-                QRef {
-                    kind_qualifier: None,
-                    parts: vec![entity],
-                    span,
-                },
-            )
-        })
-        .then_ignore(just(Token::Dot))
-        .then(ident())
-        .map_with_span(|((_entity_name, entity), column), span| {
+    // `Entity.column`, or `Ext.Entity.column` on a bound external system: every part but
+    // the last names the entity.
+    let part = ident().map_with_span(|name, span: Span| (name, span));
+    let qualified_col = part
+        .clone()
+        .then(just(Token::Dot).ignore_then(part).repeated().at_least(1))
+        .map_with_span(|(head, mut tail), span| {
+            let (column, _) = tail.pop().expect("at least one dotted part");
+            let entity_end = tail.last().map_or(head.1.end, |(_, s)| s.end);
+            let mut parts = vec![head.0];
+            parts.extend(tail.into_iter().map(|(name, _)| name));
             Operand::QualifiedColumn(QualifiedColumnRef {
-                entity,
+                entity: QRef {
+                    kind_qualifier: None,
+                    parts,
+                    span: head.1.start..entity_end,
+                },
                 column,
                 span,
             })
@@ -1661,6 +1686,17 @@ entity  Order "注文" {
 
 performs(Customer, Browse)
 relate(Order, Customer, N:1)
+"#;
+        let ast = parse_ok(src);
+        insta::assert_debug_snapshot!(ast);
+    }
+
+    #[test]
+    fn parse_cross_model_forms() {
+        let src = r#"
+extsystem Auth "Authentication" from auth.AuthSystem
+invokes(SignIn, usecase::Auth.Login)
+holds(SignedIn, Auth.SessionView.status == active)
 "#;
         let ast = parse_ok(src);
         insta::assert_debug_snapshot!(ast);

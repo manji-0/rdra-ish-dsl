@@ -261,6 +261,17 @@ pub struct InstanceDecl {
     pub columns: Vec<Column>,
     /// Non-empty only for `variation` declarations.
     pub variation_values: Vec<VariationValue>,
+    /// `from dep.System` on an `extsystem`: the dependency and the system it binds.
+    pub binding: Option<BindingDecl>,
+    pub span: Span,
+}
+
+/// `extsystem Auth "..." from auth.AuthSystem`: `dep` is a `[dependencies]` key of the
+/// manifest and `system` a `system` of that model.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BindingDecl {
+    pub dep: std::string::String,
+    pub system: std::string::String,
     pub span: Span,
 }
 
