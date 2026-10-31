@@ -4,10 +4,25 @@ use crate::analysis_diag::push_error;
 use crate::diagnostics::*;
 use crate::location::DiagCtxt;
 use crate::model::{
-    CmpOpModel, EffectValue, TemporalAtom, TemporalExpr, TemporalFormula, TemporalProperty,
-    TemporalRhs,
+    CmpOpModel, EffectValue, SemanticModel, TemporalAtom, TemporalExpr, TemporalFormula,
+    TemporalProperty, TemporalRhs,
 };
 use rdra_ish_syntax::ast::{AstTemporalFormula, CmpOp, Comparison, Expr, Operand, PropertyDecl};
+
+use super::comparison::{resolve_bare_rhs, BareRhs};
+
+/// Why an atom does not lower: a message for `InvalidTemporalProperty`, or a comparison error
+/// reported as itself.
+enum LowerError {
+    Message(String),
+    Comparison(RdraError),
+}
+
+impl From<String> for LowerError {
+    fn from(message: String) -> Self {
+        LowerError::Message(message)
+    }
+}
 
 pub(crate) fn register_property(
     model: &mut crate::model::SemanticModel,
@@ -27,7 +42,7 @@ pub(crate) fn register_property(
         return;
     }
 
-    match lower_formula(&decl.formula) {
+    match lower_formula(model, &decl.formula) {
         Ok(formula) => {
             model.temporal_properties.push(TemporalProperty {
                 site: Some(ctx.locate(decl.span.clone())),
@@ -36,7 +51,8 @@ pub(crate) fn register_property(
                 formula,
             });
         }
-        Err(message) => {
+        Err(LowerError::Comparison(err)) => push_error(ctx, diags, decl.span.clone(), err),
+        Err(LowerError::Message(message)) => {
             push_error(
                 ctx,
                 diags,
@@ -50,36 +66,67 @@ pub(crate) fn register_property(
     }
 }
 
-fn lower_formula(formula: &AstTemporalFormula) -> Result<TemporalFormula, String> {
+fn lower_formula(
+    model: &SemanticModel,
+    formula: &AstTemporalFormula,
+) -> Result<TemporalFormula, LowerError> {
     match formula {
-        AstTemporalFormula::Always(e) => Ok(TemporalFormula::Always(lower_expr(e)?)),
-        AstTemporalFormula::Eventually(e) => Ok(TemporalFormula::Eventually(lower_expr(e)?)),
+        AstTemporalFormula::Always(e) => Ok(TemporalFormula::Always(lower_expr(model, e)?)),
+        AstTemporalFormula::Eventually(e) => Ok(TemporalFormula::Eventually(lower_expr(model, e)?)),
         AstTemporalFormula::LeadsTo {
             antecedent,
             consequent,
         } => Ok(TemporalFormula::LeadsTo {
-            antecedent: lower_expr(antecedent)?,
-            consequent: lower_expr(consequent)?,
+            antecedent: lower_expr(model, antecedent)?,
+            consequent: lower_expr(model, consequent)?,
         }),
     }
 }
 
-fn lower_expr(expr: &Expr) -> Result<TemporalExpr, String> {
+fn lower_expr(model: &SemanticModel, expr: &Expr) -> Result<TemporalExpr, LowerError> {
+    let go = |e: &Expr| lower_expr(model, e).map(Box::new);
     match expr {
-        Expr::Cmp(cmp) => Ok(TemporalExpr::Atom(lower_atom(cmp)?)),
-        Expr::Not(inner) => Ok(TemporalExpr::Not(Box::new(lower_expr(inner)?))),
-        Expr::And(a, b) => Ok(TemporalExpr::And(
-            Box::new(lower_expr(a)?),
-            Box::new(lower_expr(b)?),
-        )),
-        Expr::Or(a, b) => Ok(TemporalExpr::Or(
-            Box::new(lower_expr(a)?),
-            Box::new(lower_expr(b)?),
-        )),
+        Expr::Cmp(cmp) => Ok(TemporalExpr::Atom(lower_atom(model, cmp)?)),
+        Expr::Not(inner) => Ok(TemporalExpr::Not(go(inner)?)),
+        Expr::And(a, b) => Ok(TemporalExpr::And(go(a)?, go(b)?)),
+        Expr::Or(a, b) => Ok(TemporalExpr::Or(go(a)?, go(b)?)),
     }
 }
 
-fn lower_atom(cmp: &Comparison) -> Result<TemporalAtom, String> {
+/// A bare right-hand side of `==` / `!=` read by the left-hand column's type, when the atom's
+/// entity and column resolve; `None` leaves the atom to the lifecycle, which reports it.
+fn typed_bare_rhs(
+    model: &SemanticModel,
+    entity: Option<&str>,
+    column: &str,
+    op: &CmpOp,
+    name: &str,
+) -> Option<Result<TemporalRhs, LowerError>> {
+    if !matches!(op, CmpOp::Eq | CmpOp::Ne) {
+        return None;
+    }
+    let ek = model.property_entity(entity, column)?;
+    let ent = &model.entities[ek];
+    let lhs = ent.columns.iter().find(|c| c.name == column)?;
+    let qualified = |n: &str| {
+        ent.columns
+            .iter()
+            .any(|c| c.name == n)
+            .then(|| format!("{}.{n}", ent.id))
+    };
+    Some(
+        match resolve_bare_rhs(&model.variations, lhs, op, name, qualified) {
+            Ok(BareRhs::Value(value)) => Ok(TemporalRhs::Value(value)),
+            Ok(BareRhs::Column) => Ok(TemporalRhs::Column {
+                entity: None,
+                column: name.to_string(),
+            }),
+            Err(err) => Err(LowerError::Comparison(err)),
+        },
+    )
+}
+
+fn lower_atom(model: &SemanticModel, cmp: &Comparison) -> Result<TemporalAtom, LowerError> {
     let op = match cmp.op {
         CmpOp::Eq => CmpOpModel::Eq,
         CmpOp::Ne => CmpOpModel::Ne,
@@ -100,7 +147,9 @@ fn lower_atom(cmp: &Comparison) -> Result<TemporalAtom, String> {
             (Some(entity), q.column.clone())
         }
         Operand::Column(c) => (None, c.clone()),
-        other => return Err(format!("temporal atom lhs must be a column, got {other:?}")),
+        other => {
+            return Err(format!("temporal atom lhs must be a column, got {other:?}").into());
+        }
     };
 
     let rhs = match &cmp.rhs {
@@ -118,30 +167,35 @@ fn lower_atom(cmp: &Comparison) -> Result<TemporalAtom, String> {
             }
         }
         Operand::Column(name) => {
-            // Bare idents that look like enum/bool/null literals stay as Value;
-            // otherwise treat as same-entity column reference for arithmetic.
-            match name.as_str() {
-                "true" | "false" | "null" | "present" => {
-                    TemporalRhs::Value(parse_effect_literal(name))
-                }
-                other if other.chars().all(|c| c.is_ascii_digit() || c == '-') => {
-                    let parsed = other
-                        .parse::<i64>()
-                        .map_err(|_| format!("invalid integer literal `{other}`"))?;
-                    TemporalRhs::IntLit(parsed)
-                }
-                other if matches!(op, CmpOpModel::Eq | CmpOpModel::Ne) => {
-                    // Heuristic: ==/!= with bare ident → enum/bool literal.
-                    TemporalRhs::Value(parse_effect_literal(other))
-                }
-                other => TemporalRhs::Column {
-                    entity: None,
-                    column: other.to_string(),
+            match typed_bare_rhs(model, entity.as_deref(), &column, &cmp.op, name) {
+                Some(rhs) => rhs?,
+                // An order comparison, or an atom whose column does not resolve (the lifecycle
+                // reports it): literals by their spelling, any other name a column.
+                None => match name.as_str() {
+                    "true" | "false" | "null" | "present" => {
+                        TemporalRhs::Value(parse_effect_literal(name))
+                    }
+                    other if other.chars().all(|c| c.is_ascii_digit() || c == '-') => {
+                        let parsed = other
+                            .parse::<i64>()
+                            .map_err(|_| format!("invalid integer literal `{other}`"))?;
+                        TemporalRhs::IntLit(parsed)
+                    }
+                    other if matches!(op, CmpOpModel::Eq | CmpOpModel::Ne) => {
+                        // Heuristic: ==/!= with bare ident → enum/bool literal.
+                        TemporalRhs::Value(parse_effect_literal(other))
+                    }
+                    other => TemporalRhs::Column {
+                        entity: None,
+                        column: other.to_string(),
+                    },
                 },
             }
         }
         Operand::Now => {
-            return Err("`now` is not supported in temporal property atoms".into());
+            return Err(LowerError::Message(
+                "`now` is not supported in temporal property atoms".into(),
+            ));
         }
     };
 
@@ -150,7 +204,8 @@ fn lower_atom(cmp: &Comparison) -> Result<TemporalAtom, String> {
         return Err(format!(
             "temporal comparison `{}` requires an Int literal or column on the rhs",
             op.as_str()
-        ));
+        )
+        .into());
     }
 
     Ok(TemporalAtom {

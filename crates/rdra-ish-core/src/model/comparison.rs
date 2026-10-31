@@ -1,3 +1,4 @@
+use super::effects::EffectValue;
 use super::keys::{EntityKey, UseCaseKey};
 
 // ── 比較命題 ─────────────────────────────────────────────────────────────────
@@ -35,6 +36,8 @@ pub enum CmpRhs {
     IntLit(i64),
     /// 組み込み時間参照 `now`。
     Now,
+    /// A value of the left-hand column's type (`status != open`, `@check(status == open)`).
+    Value(EffectValue),
 }
 
 impl CmpRhs {
@@ -44,6 +47,7 @@ impl CmpRhs {
             CmpRhs::Column(c) => c.clone(),
             CmpRhs::IntLit(n) => n.to_string(),
             CmpRhs::Now => "now".to_string(),
+            CmpRhs::Value(v) => v.literal(),
         }
     }
 }

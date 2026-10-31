@@ -51,6 +51,17 @@ impl EffectValue {
             EffectValue::Present | EffectValue::Null | EffectValue::TypedPresent(_)
         )
     }
+
+    /// The value as the DSL writes it: `paid`, `true`, `3`, `present`, `null`.
+    pub fn literal(&self) -> std::string::String {
+        match self.normalize() {
+            EffectValue::EnumVariant(v) => v.clone(),
+            EffectValue::Bool(b) => b.to_string(),
+            EffectValue::Int(n) => n.to_string(),
+            EffectValue::Null => "null".to_string(),
+            EffectValue::Present | EffectValue::TypedPresent(_) => "present".to_string(),
+        }
+    }
 }
 
 /// `sets(...)` 述語由来のカラム効果（解析後）

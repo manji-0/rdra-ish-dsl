@@ -38,6 +38,17 @@
   `acceptance_criteria "..."`; the old spelling fails to parse with a message that gives
   the rewrite, and `rdra-ish fmt` writes `acceptance_criteria` (#48).
 
+- The left-hand column's type decides what a bare right-hand side of `col == x` or
+  `col != x` is. On an Enum, variation, or Bool column, `x` is a value of the column, also
+  when the entity has a column named `x`; before, such an `x` was the column. A rule that
+  compared two of these columns bare now reads the value when `x` is one, and otherwise
+  fails to load with `ComparisonRhsNotAValue`, whose hint gives the qualified spelling:
+  ``'previous' is not a value of column 'status' (pending, paid, cancelled), and a bare
+  right-hand side of 'status' is a value`` / ``hint: write `Order.previous` to compare
+  columns``. Write the column as `Entity.column`. On a single-entity rule the bare form
+  already failed `check` and `states` with `UnsupportedComparison`; on a cross-entity rule
+  over two columns with one set of values it compared the columns (#46).
+
 ### Added
 
 - `navigates(Screen, Screen)` declares a screen transition, with an optional
@@ -185,6 +196,17 @@
 
 ### Changed
 
+- Every construct that takes a comparison reads its bare right-hand side by one rule:
+  `forbidden`, `required`, `exclusive`, `invariant` (`.when`, `.then`, `.has`, `.none`),
+  `holds`, `after(...).assert(...)`, `sets`, `property`, `@check`, and `@derived`. A
+  value of an Enum, variation, or Bool column, and `null` or `present` of a `@null`
+  column, is a value; any other bare name is a column. So `forbidden(E, status == paid,
+  paid == false)` reads the value `paid`, where `check` failed with ``status == paid:
+  status is not an Int-typed column``, and Enum values need no prefix to keep apart from
+  column names. `!=` takes a value too (`forbidden(Order, status != paid)`, `holds(C,
+  Order.status != cancelled)`), and two Enum, variation, or Bool columns of one entity
+  compare with `==` / `!=` as `status != Order.previous` (#46).
+
 - The flowchart encoding contract changes: a node is no longer always `id["label"]`, and an
   edge no longer always `|label|`. Every flowchart kind (`rdra`, `context`, `requirement`,
   `business`, `usecase`, `robustness`, `event`, `flow`, `information`, `condition`,
@@ -310,6 +332,12 @@
   longer publishes it, so a correct stage-0 model has no editor warning.
 
 ### Fixed
+
+- `@check` and `@derived` take an Enum value: `@check(status == open or closed_at ==
+  present)` loads, where `open` was read as a column and failed with `right-hand side
+  column 'open' not found`. A `property` atom `Entity.qty == limit` over two Int columns
+  compares the columns; before, `==` read any bare name as a value, and the atom compared
+  `qty` with no value at all and was false in every state (#46).
 
 - `check` and `verify` evaluate `after(UC).assert(...)` on a step that writes only entities
   the assertion does not read. The assertion's cone kept the use case but dropped what it

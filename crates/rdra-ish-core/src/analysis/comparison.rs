@@ -6,7 +6,83 @@ use crate::location::DiagCtxt;
 use crate::model::*;
 use rdra_ish_syntax::ast::*;
 
+use slotmap::SlotMap;
+
+use super::effect::parse_effect_value;
 use super::qref_util::{qref_id, qualified_column_display};
+
+// ── The bare right-hand side ─────────────────────────────────────────────────
+
+/// How a bare identifier on the right of a comparison reads.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum BareRhs {
+    /// A value of the left-hand column's type.
+    Value(EffectValue),
+    /// A column; the caller resolves it.
+    Column,
+}
+
+/// The one reading of `x` in `col == x` / `col != x`, which every construct that takes a
+/// comparison shares (rules, `holds`, `after`, `sets`, `@check`, `@derived`, `property`).
+///
+/// The type of `col` decides. An Enum, variation, or Bool column has a closed set of values,
+/// and a bare `x` is one of them: `status == paid` is the value even when the entity has a
+/// column `paid`. A bare `x` that is no such value is an error, and when it names a column the
+/// error says to write `Entity.x`, the only spelling of a comparison between two such
+/// columns. On any other column, `null` and `present` are values of a nullable column and any
+/// other name is a column, as `qty == limit` is. An order comparison takes no value.
+///
+/// `qualified(x)` is `Entity.x` when `x` is a column the comparison could mean.
+pub(crate) fn resolve_bare_rhs(
+    variations: &SlotMap<VariationKey, Variation>,
+    lhs: &ModelColumn,
+    op: &CmpOp,
+    name: &str,
+    qualified: impl Fn(&str) -> Option<std::string::String>,
+) -> Result<BareRhs, RdraError> {
+    if is_order_op(op) {
+        return Ok(BareRhs::Column);
+    }
+    let closed = matches!(
+        lhs.col_type,
+        ColumnType::Enum(_) | ColumnType::Variation(_) | ColumnType::Bool
+    );
+    if !closed && !matches!(name, "null" | "present") {
+        return Ok(BareRhs::Column);
+    }
+    match parse_effect_value(variations, lhs, name) {
+        Ok(value) => Ok(BareRhs::Value(value)),
+        Err(err) => match qualified(name) {
+            Some(qualified) if closed => Err(RdraError::ComparisonRhsNotAValue {
+                col: lhs.name.clone(),
+                rhs: name.to_string(),
+                allowed: column_values(variations, lhs).join(", "),
+                qualified,
+            }),
+            _ => Err(err),
+        },
+    }
+}
+
+/// The values a bare right-hand side of `col` may name.
+fn column_values(
+    variations: &SlotMap<VariationKey, Variation>,
+    col: &ModelColumn,
+) -> Vec<std::string::String> {
+    let mut values: Vec<std::string::String> = match &col.col_type {
+        ColumnType::Enum(variants) => variants.clone(),
+        ColumnType::Variation(key) => variations
+            .get(*key)
+            .map(|v| v.values.clone())
+            .unwrap_or_default(),
+        ColumnType::Bool => vec!["true".to_string(), "false".to_string()],
+        _ => Vec::new(),
+    };
+    if col.is_nullable {
+        values.extend(["null".to_string(), "present".to_string()]);
+    }
+    values
+}
 
 // ── 比較式の型整合チェック・モデル変換 ────────────────────────────────────────
 
@@ -48,6 +124,7 @@ pub(crate) fn to_model_op(op: &CmpOp) -> CmpOpModel {
 /// - 演算子と右辺の型整合を検査する。
 /// - 型不整合があれば `diags` にエラーを push し `None` を返す。
 pub(crate) fn resolve_comparison(
+    variations: &SlotMap<VariationKey, Variation>,
     entity_cols: &[ModelColumn],
     entity_id: &str,
     cmp: &Comparison,
@@ -121,6 +198,26 @@ pub(crate) fn resolve_comparison(
     // ── 右辺の解決と型整合チェック ────────────────────────────────────────────
     let rhs = match &cmp.rhs {
         Operand::Column(rhs_name) => {
+            let qualified = |name: &str| {
+                entity_cols
+                    .iter()
+                    .any(|c| c.name == name)
+                    .then(|| format!("{entity_id}.{name}"))
+            };
+            match resolve_bare_rhs(variations, lhs_col, &cmp.op, rhs_name, qualified) {
+                Ok(BareRhs::Value(value)) => {
+                    return Some(ComparisonProp {
+                        lhs_column: lhs_col_name,
+                        op: to_model_op(&cmp.op),
+                        rhs: CmpRhs::Value(value),
+                    });
+                }
+                Ok(BareRhs::Column) => {}
+                Err(err) => {
+                    push_error_cmp(ctx, diags, cmp, err);
+                    return None;
+                }
+            }
             let rhs_col = match entity_cols.iter().find(|c| &c.name == rhs_name) {
                 Some(c) => c,
                 None => {

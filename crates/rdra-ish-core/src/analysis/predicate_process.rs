@@ -636,9 +636,14 @@ fn process_sets_predicate(
                     return;
                 }
                 Ok(None) => {
-                    if let Some(prop) =
-                        resolve_comparison(&entity_cols, &entity_id, cmp, ctx, diags)
-                    {
+                    if let Some(prop) = resolve_comparison(
+                        &model.variations,
+                        &entity_cols,
+                        &entity_id,
+                        cmp,
+                        ctx,
+                        diags,
+                    ) {
                         model.proposition_effects.push(PropositionEffect {
                             site: Some(ctx.locate(pred.span.clone())),
                             origin,
@@ -871,9 +876,14 @@ fn process_invariant_predicate(
                             }
                         }
                         Ok(None) => {
-                            if let Some(prop) =
-                                resolve_comparison(&entity_cols, &entity_id, cmp, ctx, diags)
-                            {
+                            if let Some(prop) = resolve_comparison(
+                                &model.variations,
+                                &entity_cols,
+                                &entity_id,
+                                cmp,
+                                ctx,
+                                diags,
+                            ) {
                                 if is_guard {
                                     guard_comparisons.push(prop);
                                 } else {

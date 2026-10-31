@@ -46,6 +46,10 @@ Also ask:
 4. Add `required(Entity, ...)` only for facts that truly apply to every reachable state.
 5. Use comparison propositions when rules depend on expressions such as
    `stock < selling`, and add matching `sets(..., expr, true/false)` effects.
+   On an Enum, variation, or Bool column, a bare right-hand side is a value
+   (`status == paid`, `status != cancelled`) even when a column has the same name, so
+   name values as plain words without a prefix. Compare two such columns with a
+   qualified right-hand side: `status != Order.previous`.
 6. Add `forbidden(...)` or `invariant(...)` when a rule mentions columns
    from more than one entity; qualify columns as `Entity.column`.
 7. Add `.along(...)` when the intended semantics is relation-scoped rather than global

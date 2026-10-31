@@ -180,10 +180,13 @@ impl Named {
     }
 
     fn comparison(&mut self, ek: EntityKey, prop: &ComparisonProp) {
+        if let CmpRhs::Value(v) = &prop.rhs {
+            return self.value(ek, &prop.lhs_column, v);
+        }
         self.number(ek, &prop.lhs_column);
         match &prop.rhs {
             CmpRhs::Column(c) => self.number(ek, c),
-            CmpRhs::IntLit(_) => {}
+            CmpRhs::IntLit(_) | CmpRhs::Value(_) => {}
             CmpRhs::Now => self.reads_now = true,
         }
     }
@@ -208,6 +211,7 @@ impl Named {
                         self.name(c.entity, &c.column);
                     }
                     CrossCmpRhs::IntLit(_) => self.number(prop.lhs.entity, &prop.lhs.column),
+                    CrossCmpRhs::Value(v) => self.value(prop.lhs.entity, &prop.lhs.column, v),
                     CrossCmpRhs::Now => {
                         self.number(prop.lhs.entity, &prop.lhs.column);
                         self.reads_now = true;
@@ -265,22 +269,7 @@ pub(super) fn property_entity(
     entity: Option<&str>,
     column: &str,
 ) -> Option<EntityKey> {
-    match entity {
-        Some(id) => model
-            .entities
-            .iter()
-            .find(|(_, e)| e.id == id)
-            .map(|(k, _)| k),
-        None => {
-            let mut owners = model
-                .entities
-                .iter()
-                .filter(|(_, e)| e.columns.iter().any(|c| c.name == column))
-                .map(|(k, _)| k);
-            let first = owners.next()?;
-            owners.next().is_none().then_some(first)
-        }
-    }
+    model.property_entity(entity, column)
 }
 
 /// `sets(UC, E, cmp, bool)` drives this comparison, so it reads a proposition var.

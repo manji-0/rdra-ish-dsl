@@ -93,6 +93,8 @@ pub enum CrossCmpRhs {
     IntLit(i64),
     /// Built-in temporal reference `now`.
     Now,
+    /// A value of the left-hand column's type (`Order.status != paid`).
+    Value(EffectValue),
 }
 
 /// A comparison proposition that may reference columns on multiple entities.

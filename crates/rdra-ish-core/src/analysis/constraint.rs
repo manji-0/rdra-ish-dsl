@@ -9,7 +9,9 @@ use rdra_ish_syntax::ast::*;
 use slotmap::SlotMap;
 
 use super::arg_resolve::resolve_arg;
-use super::comparison::{is_order_op, resolve_comparison, to_model_op, type_category};
+use super::comparison::{
+    is_order_op, resolve_bare_rhs, resolve_comparison, to_model_op, type_category, BareRhs,
+};
 use super::effect::parse_effect_value;
 use super::nodes::node_kind_tag_str;
 use super::qref_util::qref_display;
@@ -86,18 +88,6 @@ pub(crate) fn resolve_entity_equals_from_comparison(
         }
         _ => return Ok(None),
     };
-    let value_lit = match &cmp.rhs {
-        Operand::Column(value) => {
-            // Prefer column-column comparison when the RHS names an existing column.
-            if entity_cols.iter().any(|c| c.name == *value) {
-                return Ok(None);
-            }
-            value.clone()
-        }
-        Operand::IntLit(value) => value.clone(),
-        Operand::Now => "now".to_string(),
-        Operand::QualifiedColumn(_) => return Ok(None),
-    };
     let Some(col) = entity_cols.iter().find(|c| c.name == col_str).cloned() else {
         push_error(
             ctx,
@@ -109,6 +99,27 @@ pub(crate) fn resolve_entity_equals_from_comparison(
             },
         );
         return Err(());
+    };
+    let value_lit = match &cmp.rhs {
+        Operand::Column(name) => {
+            let qualified = |name: &str| {
+                entity_cols
+                    .iter()
+                    .any(|c| c.name == name)
+                    .then(|| format!("{entity_id}.{name}"))
+            };
+            return match resolve_bare_rhs(variations, &col, &cmp.op, name, qualified) {
+                Ok(BareRhs::Value(value)) => Ok(Some((col_str, value))),
+                Ok(BareRhs::Column) => Ok(None),
+                Err(e) => {
+                    push_error_cmp(ctx, diags, cmp, e);
+                    Err(())
+                }
+            };
+        }
+        Operand::IntLit(value) => value.clone(),
+        Operand::Now => "now".to_string(),
+        Operand::QualifiedColumn(_) => return Ok(None),
     };
     match parse_effect_value(variations, &col, &value_lit) {
         Ok(value) => Ok(Some((col_str, value))),
@@ -140,7 +151,8 @@ pub(crate) fn collect_entity_conditions(
             ) {
                 Ok(Some(condition)) => conditions.equals.push(condition),
                 Ok(None) => {
-                    if let Some(prop) = resolve_comparison(entity_cols, entity_id, cmp, ctx, diags)
+                    if let Some(prop) =
+                        resolve_comparison(variations, entity_cols, entity_id, cmp, ctx, diags)
                     {
                         conditions.comparisons.push(prop);
                     }
@@ -482,6 +494,24 @@ fn resolve_cross_comparison(
             },
         );
         return None;
+    }
+
+    if let Operand::Column(name) = &cmp.rhs {
+        let qualified = |name: &str| cross_column_named(model, lhs.entity, scope, name);
+        match resolve_bare_rhs(&model.variations, &lhs_col, &cmp.op, name, qualified) {
+            Ok(BareRhs::Value(value)) => {
+                return Some(CrossComparisonProp {
+                    lhs,
+                    op: to_model_op(&cmp.op),
+                    rhs: CrossCmpRhs::Value(value),
+                });
+            }
+            Ok(BareRhs::Column) => {}
+            Err(e) => {
+                push_error_cmp(ctx, diags, cmp, e);
+                return None;
+            }
+        }
     }
 
     let rhs = match &cmp.rhs {
@@ -929,25 +959,18 @@ fn temporal_equals_from_comparison(
     };
 
     let value_lit = match &cmp.rhs {
-        Operand::Column(value) => {
-            // Prefer column-column comparison when RHS names a column in scope.
-            if scope.len() == 1 {
-                let entity = scope[0];
-                if model.entities[entity]
-                    .columns
-                    .iter()
-                    .any(|c| c.name == *value)
-                {
-                    return Ok(None);
+        Operand::Column(name) => {
+            let qualified = |name: &str| cross_column_named(model, column.entity, scope, name);
+            return match resolve_bare_rhs(&model.variations, &model_col, &cmp.op, name, qualified) {
+                Ok(BareRhs::Value(value)) => {
+                    Ok(Some(CrossEntityCondition::Equals { column, value }))
                 }
-            } else if scope
-                .iter()
-                .any(|ek| model.entities[*ek].columns.iter().any(|c| c.name == *value))
-            {
-                // Multi-entity bare column RHS is ambiguous for equals; leave to comparison.
-                return Ok(None);
-            }
-            value.clone()
+                Ok(BareRhs::Column) => Ok(None),
+                Err(e) => {
+                    push_error_cmp(ctx, diags, cmp, e);
+                    Err(())
+                }
+            };
         }
         Operand::IntLit(value) => value.clone(),
         Operand::Now => "now".to_string(),
@@ -960,6 +983,20 @@ fn temporal_equals_from_comparison(
             Err(())
         }
     }
+}
+
+/// `Entity.name` for the column `name` a bare right-hand side could mean: one of the
+/// left-hand entity's, else one of an entity in scope.
+fn cross_column_named(
+    model: &SemanticModel,
+    lhs_entity: EntityKey,
+    scope: &[EntityKey],
+    name: &str,
+) -> Option<String> {
+    std::iter::once(lhs_entity)
+        .chain(scope.iter().copied())
+        .find(|ek| model.entities[*ek].columns.iter().any(|c| c.name == name))
+        .map(|ek| format!("{}.{name}", model.entities[ek].id))
 }
 
 fn collect_temporal_assert_conditions(

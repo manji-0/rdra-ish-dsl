@@ -616,7 +616,7 @@ impl<'m> Builder<'m> {
                 Some((n, i)) => (n, Some(i)),
                 None => return,
             },
-            CmpRhs::Now => return,
+            CmpRhs::Now | CmpRhs::Value(_) => return,
         };
         let holds = match pe.prop.op {
             CmpOpModel::Lt => lhs < rhs,

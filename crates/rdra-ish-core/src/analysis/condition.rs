@@ -129,6 +129,9 @@ pub(crate) fn body_condition_display(
                 CrossCmpRhs::Column(column) => column_display(model, column),
                 CrossCmpRhs::IntLit(n) => n.to_string(),
                 CrossCmpRhs::Now => "now".to_string(),
+                CrossCmpRhs::Value(v) => {
+                    effect_value_display(model, prop.lhs.entity, &prop.lhs.column, v)
+                }
             };
             format!(
                 "{} {} {}",

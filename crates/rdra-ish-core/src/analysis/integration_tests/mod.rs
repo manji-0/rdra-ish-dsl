@@ -1,5 +1,6 @@
 mod support;
 
+mod bare_value;
 mod build_model;
 mod column_expr;
 mod comparison;

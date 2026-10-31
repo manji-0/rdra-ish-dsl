@@ -318,6 +318,14 @@ pub enum RdraError {
     #[error("right-hand side column '{col}' not found in entity '{entity}'\n  hint: check the column name in the entity definition")]
     ComparisonRhsColumnUnknown { entity: String, col: String },
 
+    #[error("'{rhs}' is not a value of column '{col}' ({allowed}), and a bare right-hand side of '{col}' is a value\n  hint: write `{qualified}` to compare columns")]
+    ComparisonRhsNotAValue {
+        col: String,
+        rhs: String,
+        allowed: String,
+        qualified: String,
+    },
+
     #[error(
         "comparison with `now` requires a Date or DateTime column, but '{col}' has type {col_type}"
     )]

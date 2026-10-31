@@ -1,5 +1,6 @@
 //! Lifecycle behaviour tests: a model in, views and diagnostics out.
 
+mod bare_values;
 mod conditions;
 mod cone;
 mod constraints;

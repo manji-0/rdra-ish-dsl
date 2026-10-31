@@ -155,10 +155,12 @@ impl<'m> Builder<'m> {
             return Pred::Cmp(Term::Slot { var, at }, CmpOp::Eq, Term::Lit(Value::TRUE));
         }
         let what = prop.display();
-        let Some(lhs) = self.numeric_term(ek, &prop.lhs_column, at, site, &what) else {
-            return Pred::False;
-        };
+        let op = cmp_op(prop.op);
         let rhs = match &prop.rhs {
+            CmpRhs::Value(v) => return self.value_atom(ek, at, &prop.lhs_column, op, v, site),
+            CmpRhs::Column(c) if matches!(op, CmpOp::Eq | CmpOp::Ne) => {
+                return self.columns_eq(ek, at, &prop.lhs_column, op, c, site, what);
+            }
             CmpRhs::Column(c) => match self.numeric_term(ek, c, at, site, &what) {
                 Some(t) => t,
                 None => return Pred::False,
@@ -166,7 +168,63 @@ impl<'m> Builder<'m> {
             CmpRhs::IntLit(n) => self.int_term(*n, ek, site),
             CmpRhs::Now => Term::Now,
         };
-        Pred::Cmp(lhs, cmp_op(prop.op), rhs)
+        match self.numeric_term(ek, &prop.lhs_column, at, site, &what) {
+            Some(lhs) => Pred::Cmp(lhs, op, rhs),
+            None => Pred::False,
+        }
+    }
+
+    /// `lhs == rhs` / `lhs != rhs` over two columns of one entity: both Int-typed, or of one
+    /// domain, as two Enum columns with the same values are.
+    #[allow(clippy::too_many_arguments)]
+    fn columns_eq(
+        &mut self,
+        ek: EntityKey,
+        at: At,
+        lhs: &str,
+        op: CmpOp,
+        rhs: &str,
+        site: &Site,
+        what: String,
+    ) -> Pred {
+        let l = self.read_slot(ek, lhs, at, site);
+        let r = self.read_slot(ek, rhs, at, site);
+        match (l, r) {
+            (Some((lt, ld)), Some((rt, rd)))
+                if ld == rd || (ld.is_numeric() && rd.is_numeric()) =>
+            {
+                Pred::Cmp(lt, op, rt)
+            }
+            _ => {
+                self.diag(
+                    vec![ek],
+                    StateDiag::UnsupportedComparison {
+                        comparison: what,
+                        reason: "operands are not both Int-typed or of one domain".to_string(),
+                        site: site.clone(),
+                    },
+                );
+                Pred::False
+            }
+        }
+    }
+
+    /// `column == value`, or its negation for `!=`.
+    fn value_atom(
+        &mut self,
+        ek: EntityKey,
+        at: At,
+        column: &str,
+        op: CmpOp,
+        value: &EffectValue,
+        site: &Site,
+    ) -> Pred {
+        let eq = self.eq_atom(ek, at, column, value, site);
+        if op == CmpOp::Ne {
+            Pred::Not(Box::new(eq))
+        } else {
+            eq
+        }
     }
 
     fn cross_atom(&mut self, cond: &CrossEntityCondition, binding: &Binding, site: &Site) -> Pred {
@@ -191,6 +249,9 @@ impl<'m> Builder<'m> {
                 let op = cmp_op(prop.op);
                 let ordered = !matches!(op, CmpOp::Eq | CmpOp::Ne);
                 match &prop.rhs {
+                    CrossCmpRhs::Value(v) => {
+                        self.value_atom(prop.lhs.entity, lat, &prop.lhs.column, op, v, site)
+                    }
                     CrossCmpRhs::Column(rc) => {
                         let Some(rat) = at_of(binding, rc.entity) else {
                             return Pred::False;
@@ -341,6 +402,8 @@ impl<'m> Builder<'m> {
         let rhs = match &prop.rhs {
             CmpRhs::Column(c) => Some(c.as_str()),
             CmpRhs::IntLit(_) | CmpRhs::Now => None,
+            // `n == null` / `n == present` ask about null itself, so null is no unknown.
+            CmpRhs::Value(_) => return Vec::new(),
         };
         std::iter::once(prop.lhs_column.as_str())
             .chain(rhs)
@@ -1097,12 +1160,7 @@ impl<'m> Builder<'m> {
                 let what = format!("property {property}: {}", atom.column);
                 match &atom.rhs {
                     TemporalRhs::Value(v) if matches!(op, CmpOp::Eq | CmpOp::Ne) => {
-                        let eq = self.eq_atom(ek, at, &atom.column, v, site);
-                        if op == CmpOp::Ne {
-                            Pred::Not(Box::new(eq))
-                        } else {
-                            eq
-                        }
+                        self.value_atom(ek, at, &atom.column, op, v, site)
                     }
                     TemporalRhs::Value(EffectValue::Int(n)) | TemporalRhs::IntLit(n) => {
                         match self.numeric_term(ek, &atom.column, at, site, &what) {
@@ -1264,6 +1322,7 @@ fn cross_rhs_display(model: &crate::model::SemanticModel, rhs: &CrossCmpRhs) -> 
         CrossCmpRhs::Column(c) => format!("{}.{}", model.entities[c.entity].id, c.column),
         CrossCmpRhs::IntLit(n) => n.to_string(),
         CrossCmpRhs::Now => "now".to_string(),
+        CrossCmpRhs::Value(v) => v.literal(),
     }
 }
 

@@ -59,6 +59,26 @@ impl SemanticModel {
             .iter()
             .any(|t| t.entity == entity && t.column == column)
     }
+
+    /// A `property` atom's entity: the one named by id, or else the only entity with `column`.
+    pub fn property_entity(&self, entity: Option<&str>, column: &str) -> Option<EntityKey> {
+        match entity {
+            Some(id) => self
+                .entities
+                .iter()
+                .find(|(_, e)| e.id == id)
+                .map(|(k, _)| k),
+            None => {
+                let mut owners = self
+                    .entities
+                    .iter()
+                    .filter(|(_, e)| e.columns.iter().any(|c| c.name == column))
+                    .map(|(k, _)| k);
+                let first = owners.next()?;
+                owners.next().is_none().then_some(first)
+            }
+        }
+    }
 }
 
 /// How other models may write a published entity: `.append()` adds rows, `.upsert()` also

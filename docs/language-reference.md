@@ -1009,9 +1009,9 @@ Composite `@pk(...)`, `@unique(...)`, and `@index(...)` annotations are written 
 one column line for locality, but semantically they belong to the entity as a whole.
 `@check(...)` and `@derived(...)` take an unquoted expression. The quoted form of earlier
 versions (`@check("qty >= 1")`) is a parse error whose message is the unquoted rewrite.
-A comparison in `@check` has a column, an integer, or `now` on each side. An Enum value
-such as `status == open` reads `open` as a column name and fails with `right-hand side
-column 'open' not found`. DBML notes, JSON Schema `x-rdra-ish-check-constraints` /
+A comparison in `@check` and `@derived` reads its right-hand side as every comparison does
+(see [Bare identifiers](#bare-identifiers)): `@check(status == open or closed_at == present)`
+compares `status` with its value `open` and `closed_at` with `present`. DBML notes, JSON Schema `x-rdra-ish-check-constraints` /
 `x-rdra-ish-derived`, and the entity CSVs print the expression with bare column names:
 `rdra-ish fmt` keeps a written `Order.qty` qualifier, and the emitters print `qty`.
 `rdra-ish export --kind dbml` projects logical `entity` declarations to DBML tables,
@@ -1665,10 +1665,15 @@ Where:
   cross-entity constraint.
 - `op` is one of: `<`, `>`, `<=`, `>=`, `==`, `!=`.
 - `rhs` is one of:
+  - A value of the left-hand column's type, with `==` or `!=`: `status == paid`,
+    `status != cancelled`, `active == false`, `paid_at == null`
   - A bare column name or `Entity.column` reference: `stock >= selling`,
     `Payment.amount >= Order.total`
   - An integer literal: `quantity >= 0`
   - The built-in keyword `now`: `expired_at < now`
+
+The type of the left-hand column decides what a bare right-hand side is; see
+[Bare identifiers](#bare-identifiers).
 
 #### Type rules
 
@@ -1678,8 +1683,10 @@ Where:
 | `==`, `!=` | All column types |
 
 When `rhs` is a column reference, the left-hand and right-hand columns must belong to
-the same type category (numeric with numeric, temporal with temporal). When `rhs` is
-`now`, the left-hand column must be of type `Date` or `DateTime`.
+the same type category (numeric with numeric, temporal with temporal). Two Enum,
+variation, or Bool columns compare with `==` / `!=` when they have one set of values,
+written `status != Order.previous`. When `rhs` is `now`, the left-hand column must be of
+type `Date` or `DateTime`.
 
 #### Semantics and interaction with `sets`
 
@@ -1707,7 +1714,31 @@ below `selling`, and `required` and `exclusive` read the values the same way. `s
 Column names and values inside `forbidden(...)`, `required(...)`, and `exclusive(...)`
 arguments, plus `.when()` / `.then()` clauses, are **bare identifiers** (or comparison
 expressions). They use the same value vocabulary as `sets`: Enum variant names,
-`true` / `false`, and `present` / `null`.
+variation values, `true` / `false`, and `present` / `null`.
+
+The left-hand column's type decides what a bare right-hand side `x` of `col == x` or
+`col != x` is. Every construct that takes a comparison reads it the same way: `forbidden`,
+`required`, `exclusive`, `invariant` with its `.when()`, `.then()`, `.has()`, and
+`.none()`, `holds`, `after(...).assert(...)`, `sets`, `property`, `@check`, and `@derived`.
+
+| Left-hand column | A bare `x` is |
+|---|---|
+| Enum, variation, or Bool | a value of the column. `x` that is no value is an error, also when a column is named `x`. |
+| any other `@null` column | the value `null` or `present`; any other `x` is a column. |
+| any other column | a column. |
+
+So `status == paid` is the value `paid` even when the entity also has a column `paid`, and
+an Enum value needs no prefix to stay apart from the column names; values only need to be
+unique within their column. A comparison of two Enum, variation, or Bool columns qualifies
+the right-hand side: `status != Order.previous`. Writing it bare fails with
+`ComparisonRhsNotAValue`, whose hint gives the qualified spelling:
+
+```
+'previous' is not a value of column 'status' (pending, paid, cancelled), and a bare right-hand side of 'status' is a value
+  hint: write `Order.previous` to compare columns
+```
+
+`transitions(UseCase, Entity.col, from -> to)` and `@default(v)` take values only.
 
 In **comparison expressions** (e.g. `stock < selling`, `expired_at < now`), column names
 on both sides are also bare identifiers. The right-hand side may additionally be an
