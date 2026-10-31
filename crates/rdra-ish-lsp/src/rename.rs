@@ -5,7 +5,7 @@ use std::path::Path;
 
 use crate::convert::span_to_range;
 use crate::refs::{
-    id_span_in_qref, instance_id_span, reference_at_offset, symbol_target, SymbolTarget,
+    id_span_in_qref, instance_id_span, reference_at_offset, symbol_target_at, SymbolTarget,
 };
 use crate::uri::{path_to_uri, paths_equal};
 use rdra_ish_core::WorkspaceAnalysis;
@@ -39,7 +39,7 @@ pub fn prepare_rename_range(
         .iter()
         .find(|(source_path, _, _)| paths_equal(source_path, path))?;
     let reference = reference_at_offset(ast, offset)?;
-    let target = symbol_target(&analysis.model, reference)?;
+    let target = symbol_target_at(&analysis.model, reference, text, offset)?;
     let span = rename_span_at_offset(ast, text, &target, offset)?;
     Some(span_to_range(text, span))
 }
@@ -61,7 +61,8 @@ pub fn workspace_rename(
         .find(|(source_path, _, _)| paths_equal(source_path, path))
         .ok_or(RenameError::NoSymbol)?;
     let reference = reference_at_offset(ast, offset).ok_or(RenameError::NoSymbol)?;
-    let target = symbol_target(&analysis.model, reference).ok_or(RenameError::NoSymbol)?;
+    let target =
+        symbol_target_at(&analysis.model, reference, text, offset).ok_or(RenameError::NoSymbol)?;
 
     if analysis
         .model
@@ -349,6 +350,33 @@ performs(Staff, Book)
                 std::fs::copy(entry.path(), target).unwrap();
             }
         }
+    }
+
+    #[test]
+    fn the_qualifier_of_a_reference_renames_the_bound_external_system() {
+        let root =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/xsys/shop-model");
+        let file = root.join("shop/checkout.rdra");
+        let src = std::fs::read_to_string(&file).unwrap();
+        let project = rdra_ish_core::load_project(std::slice::from_ref(&root), None).unwrap();
+        let analysis = rdra_ish_core::analyze_project(project);
+
+        let offset = src.find("Auth.CanLogin").unwrap() + 1;
+        let range = prepare_rename_range(&analysis, &file, offset).expect("renamable");
+        assert_eq!(
+            range.end.character - range.start.character,
+            "Auth".len() as u32
+        );
+        let edit = workspace_rename(&analysis, &file, offset, "Authn").unwrap();
+        let edits = edit
+            .changes
+            .expect("changes")
+            .remove(&path_to_uri(&file).unwrap())
+            .expect("file edits");
+        assert_eq!(edits.len(), 4, "{edits:?}");
+
+        let offset = src.find("Auth.CanLogin").unwrap() + "Auth.".len() + 1;
+        assert!(prepare_rename_range(&analysis, &file, offset).is_none());
     }
 
     #[test]

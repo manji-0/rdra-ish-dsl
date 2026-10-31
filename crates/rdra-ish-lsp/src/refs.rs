@@ -65,6 +65,31 @@ pub fn resolve_decl_site(model: &SemanticModel, reference: ReferenceAt<'_>) -> O
     }
 }
 
+/// The symbol at `offset`: on the qualifier of `Ext.Name` it is the bound external system
+/// `Ext`; elsewhere it is what `symbol_target` says.
+pub fn symbol_target_at(
+    model: &SemanticModel,
+    reference: ReferenceAt<'_>,
+    source: &str,
+    offset: usize,
+) -> Option<SymbolTarget> {
+    if let ReferenceAt::Symbol(qref) = &reference {
+        if is_bound_reference(model, qref) {
+            let alias = &qref.parts[0];
+            let slice = source.get(qref.span.clone())?;
+            let start = qref.span.start + slice.find(alias.as_str())?;
+            if (start..start + alias.len()).contains(&offset) {
+                return Some(SymbolTarget {
+                    kind: "extsystem".to_string(),
+                    id: alias.clone(),
+                    bound_systems: bound_systems(model),
+                });
+            }
+        }
+    }
+    symbol_target(model, reference)
+}
+
 pub fn symbol_target(model: &SemanticModel, reference: ReferenceAt<'_>) -> Option<SymbolTarget> {
     match reference {
         ReferenceAt::Declaration { kind, id } => Some(SymbolTarget {
