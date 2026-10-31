@@ -4,7 +4,7 @@ use super::*;
 use crate::lifecycle::{GuardWhy, InvKind, Pred};
 
 /// A payment under a visit, and a room no relate reaches. `{body}` and `{extra}` complete it.
-fn clinic(body: &str, extra: &str) -> String {
+pub(super) fn clinic(body: &str, extra: &str) -> String {
     format!(
         r#"
 entity Visit "来院" {{ id: Int @pk  status: Enum(booked, arrived) }}
@@ -46,7 +46,7 @@ fn pay_guards(model: &SemanticModel) -> Vec<Pred> {
         .collect()
 }
 
-fn reaches_paid(d: &Derived) -> bool {
+pub(super) fn reaches_paid(d: &Derived) -> bool {
     d.rows("Payment").iter().any(|r| r.contains("status=paid"))
 }
 

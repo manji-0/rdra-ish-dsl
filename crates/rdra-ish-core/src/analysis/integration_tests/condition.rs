@@ -87,6 +87,29 @@ fn holds_stores_the_body_and_derives_the_same_edges() {
 }
 
 #[test]
+fn holds_takes_has_and_none_chains_over_related_rows() {
+    let (model, diags) = with(
+        "condition Quiet \"Quiet\"\nholds(Quiet, Payment.amount > 100).none(Appointment.status == checkedin).has(Appointment.status == booked)\napplies_to(Quiet, Collect)\n",
+    );
+    assert!(errors(&diags).is_empty(), "{diags:?}");
+    let (ck, cond) = model.conditions.iter().next().unwrap();
+    let body = cond.body.as_ref().unwrap();
+    assert_eq!(body.conds.len(), 1);
+    assert_eq!(body.quantifiers.len(), 2);
+    assert_eq!(body.read_conditions().count(), 3);
+    assert_eq!(
+        condition_body_display(&model, ck).as_deref(),
+        Some("(Payment.amount > 100).none(Appointment.status == checkedin).has(Appointment.status == booked)")
+    );
+    let edges = condition_edges(&model, ck);
+    assert!(
+        matches!(edges.as_slice(), [ConditionEdge::StateModel { column, .. }] if column == "status"),
+        "the related lifecycle column is a state-model link: {edges:?}"
+    );
+    assert!(model.quantifier_constraints.is_empty());
+}
+
+#[test]
 fn a_body_keeps_non_rdra_operands_without_edges() {
     let (model, diags) = with("condition Big \"Big\"\nholds(Big, Payment.amount > 100)\n");
     assert!(errors(&diags).is_empty(), "{diags:?}");

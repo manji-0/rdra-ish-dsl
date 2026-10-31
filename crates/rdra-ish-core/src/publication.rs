@@ -184,7 +184,7 @@ fn entity_uses(model: &SemanticModel) -> Vec<EntityUse> {
     }
     for cond in model.conditions.values() {
         if let Some(body) = &cond.body {
-            for entity in body.conds.iter().flat_map(cond_entities) {
+            for entity in body.read_conditions().flat_map(cond_entities) {
                 push(entity, Use::Read("holds"), &body.site);
             }
         }
@@ -222,8 +222,8 @@ fn entity_uses(model: &SemanticModel) -> Vec<EntityUse> {
         }
     }
     for q in &model.quantifier_constraints {
-        push(q.anchor, Use::Read("when"), &q.site);
-        push(q.related, Use::Read("when"), &q.site);
+        push(q.anchor, Use::Read("when"), &q.quantifier.site);
+        push(q.quantifier.related, Use::Read("when"), &q.quantifier.site);
     }
     for (_, fk) in model.foreign_keys() {
         push(fk.child, Use::Key(fk.parent), &fk.site);

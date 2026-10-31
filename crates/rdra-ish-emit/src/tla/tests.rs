@@ -151,6 +151,58 @@ fn a_child_side_minimum_is_an_invariant_over_a_parent_and_a_witness_child() {
 }
 
 #[test]
+fn a_none_guard_on_a_condition_is_a_universal_over_the_related_ids() {
+    let tla = print(
+        &system(&sample("quantifier_guard.rdra")),
+        PrintMode::Check,
+        "M",
+    )
+    .tla;
+    let revoke = tla
+        .split("\nRevoke(p0) ==\n")
+        .nth(1)
+        .and_then(|rest| rest.split("\n\n").next())
+        .unwrap_or_else(|| panic!("no Revoke action in {tla}"));
+    assert!(
+        revoke.contains("\\A b0 \\in TerminalCertAssignment_Ids :"),
+        "{revoke}"
+    );
+    assert!(
+        revoke.contains("TerminalCertAssignment_owner_ClientCertificate[b0] = p0)"),
+        "{revoke}"
+    );
+}
+
+#[test]
+fn a_none_guard_without_a_relate_ranges_over_every_row() {
+    let src = r#"
+entity Payment "P" { id: Int @pk  status: Enum(open, paid) }
+entity Room "R" { id: Int @pk  state: Enum(free, busy) }
+usecase Open "O"
+usecase Pay "Pay"
+usecase Occupy "Occ"
+usecase Prepare "Prep"
+creates(Open, Payment)
+transitions(Payment.status, Pay, open -> paid)
+creates(Prepare, Room)
+transitions(Room.state, Occupy, free -> busy)
+condition Quiet "Q"
+holds(Quiet, Payment.status == open).none(Room.state == busy)
+applies_to(Quiet, Pay)
+"#;
+    let tla = print(&system(src), PrintMode::Check, "M").tla;
+    let pay = tla
+        .split("\nPay(p0) ==\n")
+        .nth(1)
+        .and_then(|rest| rest.split("\n\n").next())
+        .unwrap_or_else(|| panic!("no Pay action in {tla}"));
+    assert!(
+        pay.contains("\\A b0 \\in Room_Ids : (Room_exists[b0] = \"present\") => (~(Room_state[b0] = \"busy\"))"),
+        "{pay}"
+    );
+}
+
+#[test]
 fn a_column_check_is_an_invariant_that_passes_on_null() {
     let bundle = print(&system(&sample("check_unmet.rdra")), PrintMode::Check, "M");
     assert!(bundle.tla.contains(

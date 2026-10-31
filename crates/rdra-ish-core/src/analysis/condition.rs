@@ -11,7 +11,9 @@ use crate::model::*;
 use rdra_ish_syntax::ast::*;
 
 use super::arg_resolve::{resolve_arg, resolve_entity_name, resolve_namespaced_variation};
-use super::constraint::resolve_cross_condition;
+use super::constraint::{
+    add_condition_entities_to_scope, resolve_cross_condition, resolve_related_quantifier,
+};
 use super::nodes::node_kind_tag_str;
 use super::predicate_process::predicate_arg_display;
 use super::qref_util::qref_display;
@@ -57,7 +59,7 @@ pub fn condition_edges(model: &SemanticModel, ck: ConditionKey) -> Vec<Condition
     };
     match &condition.body {
         Some(body) => {
-            for operand in body.conds.iter().flat_map(body_columns) {
+            for operand in body.read_conditions().flat_map(body_columns) {
                 let Some(entity) = model.entities.get(operand.entity) else {
                     continue;
                 };
@@ -138,13 +140,25 @@ pub fn condition_body_display(
     ck: ConditionKey,
 ) -> Option<std::string::String> {
     let body = model.conditions.get(ck)?.body.as_ref()?;
-    Some(
-        body.conds
+    let comparisons = |conds: &[CrossEntityCondition]| {
+        conds
             .iter()
             .map(|c| body_condition_display(model, c))
             .collect::<Vec<_>>()
-            .join(", "),
-    )
+            .join(", ")
+    };
+    let mut text = comparisons(&body.conds);
+    if !body.quantifiers.is_empty() {
+        text = format!("({text})");
+    }
+    for q in &body.quantifiers {
+        let method = match q.kind {
+            QuantifierKind::Has => "has",
+            QuantifierKind::None => "none",
+        };
+        text.push_str(&format!(".{method}({})", comparisons(&q.conditions)));
+    }
+    Some(text)
 }
 
 /// Second argument of `combines`: a variation, or `Entity.column`.
@@ -355,8 +369,20 @@ pub(crate) fn process_holds_predicate(
     if body.is_empty() {
         return;
     }
+    let mut anchors = Vec::new();
+    add_condition_entities_to_scope(&mut anchors, &body);
+    let mut quantifiers = Vec::new();
+    for cc in &pred.chain {
+        if matches!(cc.name.as_str(), "has" | "none") {
+            let Some(anchor) = anchors.first().copied() else {
+                break;
+            };
+            quantifiers.extend(resolve_related_quantifier(model, anchor, cc, ctx, diags));
+        }
+    }
     model.conditions[condition].body = Some(HoldsBody {
         conds: body,
+        quantifiers,
         site: Some(ctx.locate(pred.span.clone())),
     });
     model

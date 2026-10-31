@@ -206,11 +206,22 @@ pub struct Condition {
     pub body: Option<HoldsBody>,
 }
 
-/// The comparisons of one `holds` predicate, an implicit conjunction, and where it was written.
+/// The comparisons of one `holds` predicate, an implicit conjunction, the `.has/.none`
+/// quantifiers chained on it, and where it was written.
 #[derive(Debug, Clone)]
 pub struct HoldsBody {
     pub conds: Vec<crate::model::CrossEntityCondition>,
+    pub quantifiers: Vec<crate::model::RelatedQuantifier>,
     pub site: Option<crate::location::LocatedSpan>,
+}
+
+impl HoldsBody {
+    /// Every condition the body reads: its comparisons, then those inside each quantifier.
+    pub fn read_conditions(&self) -> impl Iterator<Item = &crate::model::CrossEntityCondition> {
+        self.conds
+            .iter()
+            .chain(self.quantifiers.iter().flat_map(|q| q.conditions.iter()))
+    }
 }
 
 #[derive(Debug, Clone)]

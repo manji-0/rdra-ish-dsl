@@ -106,7 +106,7 @@ impl Named {
                 model
                     .quantifier_constraints
                     .iter()
-                    .flat_map(|c| c.guards.iter().chain(c.related_conditions.iter())),
+                    .flat_map(|c| c.guards.iter().chain(c.quantifier.conditions.iter())),
             )
             .chain(
                 model
@@ -117,7 +117,7 @@ impl Named {
             .chain(
                 applied_bodies(model)
                     .into_iter()
-                    .flat_map(|(_, _, body)| body.conds.iter()),
+                    .flat_map(|(_, _, body)| body.read_conditions()),
             );
         for cond in cross {
             n.cross(cond);

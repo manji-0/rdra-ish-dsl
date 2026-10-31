@@ -1,0 +1,45 @@
+// A condition guard with .none(): Revoke runs only while no linked assignment is active.
+// Without the guard on Revoke, the when(...).none(...) below fails (see quantifier_none).
+// expect check: ok
+// expect verify: tlc=ok
+entity ClientCertificate "証明書" {
+  id: Int @pk
+  status: Enum(active, revoked) @default(active)
+}
+
+entity TerminalCertAssignment "端末割当" {
+  id: Int @pk
+  status: Enum(active, ended) @default(active)
+}
+
+usecase Issue "発行"
+
+usecase Assign "割当"
+
+usecase End "割当終了"
+
+usecase Revoke "失効"
+
+creates(Issue, ClientCertificate)
+
+creates(Assign, TerminalCertAssignment)
+
+transitions(TerminalCertAssignment.status, End, active -> ended)
+
+transitions(ClientCertificate.status, Revoke, active -> revoked)
+
+relate(TerminalCertAssignment, ClientCertificate, N:1)
+
+condition CertActive "有効な証明書にだけ割り当てる"
+
+holds(CertActive, ClientCertificate.status == active)
+
+applies_to(CertActive, Assign)
+
+condition NoActiveAssignment "有効な割当がない証明書だけ失効できる"
+
+holds(NoActiveAssignment, ClientCertificate.status == active).none(TerminalCertAssignment.status == active)
+
+applies_to(NoActiveAssignment, Revoke)
+
+when(ClientCertificate, status == revoked).none(TerminalCertAssignment.status == active)

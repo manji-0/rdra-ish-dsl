@@ -87,6 +87,7 @@ expectations"). The table repeats each header; "ok" means the command passes.
 | `samples/cross_order_payment.rdra` | ok | `tlc=ok` | Multi-instance + `.along` (Pay is one atomic action; Cancel deletes the pending Payment) |
 | `samples/cross_order_payment_split.rdra` | fail `CrossForbidden_Order_0` | `tlc=counterexample` | Pay through two APIs is two actions, so Cancel runs between them |
 | `samples/quantifier_none.rdra` | fail `Quantifier_Cert_0` | `tlc=counterexample` | `when(...).none` (Revoke while an Assign stays active) |
+| `samples/quantifier_guard.rdra` | ok | `tlc=ok` | `holds(..).none(..)` guard on Revoke; the `when(...).none` rule holds |
 | `samples/untriggered_sets.rdra` | fail `Forbidden_Order_0` | `tlc=counterexample` | `sets` from a use case that drives no transition, next to `transitions` |
 | `samples/after_assert_unmet.rdra` | fail `AfterAssert_DeliverOrder_0` | `tlc=counterexample` | `after(UC).assert` whose postcondition the use case does not set |
 | `samples/temporal_unmet.rdra` | ok | `tlc=counterexample`, `NeverShipped` and `PendingLeadsToDelivered` | An `always` and a `leads_to` property that both fail; Reopen lets an Order be cancelled and reopened forever, so the `leads_to` lasso loops back |

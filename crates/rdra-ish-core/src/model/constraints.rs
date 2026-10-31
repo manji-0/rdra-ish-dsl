@@ -160,18 +160,25 @@ pub enum QuantifierKind {
     None,
 }
 
+/// One `.has(...)` / `.none(...)` chain call: whether some, or no, row of `related` matches
+/// `conditions`. The rows are the ones linked to the entity the chain hangs off.
+#[derive(Debug, Clone)]
+pub struct RelatedQuantifier {
+    pub kind: QuantifierKind,
+    pub related: EntityKey,
+    pub conditions: Vec<CrossEntityCondition>,
+
+    /// Source site of the chain call.
+    pub site: Option<crate::location::LocatedSpan>,
+}
+
 /// `when(...).has/none(...)` または
 /// `invariant(...).when(...).has/none(...)` で宣言される集計制約。
 #[derive(Debug, Clone)]
 pub struct QuantifierConstraint {
     pub anchor: EntityKey,
     pub guards: Vec<CrossEntityCondition>,
-    pub kind: QuantifierKind,
-    pub related: EntityKey,
-    pub related_conditions: Vec<CrossEntityCondition>,
-
-    /// Source site of the predicate/declaration that produced this fact.
-    pub site: Option<crate::location::LocatedSpan>,
+    pub quantifier: RelatedQuantifier,
 }
 
 // ── Temporal properties (TLA+ / TLC) ──────────────────────────────────────────

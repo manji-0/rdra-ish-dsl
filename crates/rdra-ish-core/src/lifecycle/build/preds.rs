@@ -14,7 +14,7 @@ use crate::lifecycle::EntId;
 use crate::model::{
     CheckExpr, CmpOpModel, CmpRhs, ComparisonProp, CrossCmpRhs, CrossConstraintScope,
     CrossEntityCondition, DerivedExpr, EffectValue, EntityKey, FkId, HoldsBody, Min,
-    QuantifierKind, TemporalExpr, TemporalFormula, TemporalRhs, UseCaseKey,
+    QuantifierKind, RelatedQuantifier, TemporalExpr, TemporalFormula, TemporalRhs, UseCaseKey,
 };
 
 /// Binds each entity of a predicate to a slot reference.
@@ -763,45 +763,63 @@ impl<'m> Builder<'m> {
         }
     }
 
+    /// `Has` is a witness among the related rows, `None` a universal over them. The related
+    /// instance is `At::Bound(depth)`, linked to every entity of `binding` it has an owner var
+    /// with; with no such relate the related rows are quantified independently.
+    fn quantified(
+        &mut self,
+        q: &RelatedQuantifier,
+        binding: &Binding,
+        depth: u8,
+        site: &Site,
+    ) -> Pred {
+        let mut inner = binding.clone();
+        inner.push((q.related, At::Bound(depth)));
+        let conds = self.cross_all(&q.conditions, &inner, site);
+        let links: Vec<Pred> = binding
+            .iter()
+            .filter_map(|&owner| self.owner_link(owner, (q.related, At::Bound(depth))))
+            .collect();
+        let link = if links.is_empty() {
+            Pred::True
+        } else {
+            Pred::And(links)
+        };
+        let entity = self.ent_of[&q.related];
+        match q.kind {
+            QuantifierKind::Has => Pred::Exists {
+                entity,
+                body: Box::new(Pred::And(vec![link, conds])),
+            },
+            QuantifierKind::None => Pred::Forall {
+                entity,
+                body: Box::new(implies(link, Pred::Not(Box::new(conds)))),
+            },
+        }
+    }
+
     fn quantifiers(&mut self) {
         let model = self.model;
-        for (i, q) in model.quantifier_constraints.iter().enumerate() {
+        for (i, c) in model.quantifier_constraints.iter().enumerate() {
+            let q = &c.quantifier;
             let site = Site::new(ModelRef::Quantifier(i), &q.site);
-            let anchor: Binding = vec![(q.anchor, At::Bound(0))];
-            let both: Binding = vec![(q.anchor, At::Bound(0)), (q.related, At::Bound(1))];
-            let guards = self.cross_all(&q.guards, &anchor, &site);
-            let related = self.cross_all(&q.related_conditions, &both, &site);
-            // Without a relate the related rows are quantified independently.
-            let link = self
-                .owner_link((q.anchor, At::Bound(0)), (q.related, At::Bound(1)))
-                .unwrap_or(Pred::True);
-            let r = self.ent_of[&q.related];
-            let (kind, inner) = match q.kind {
-                QuantifierKind::Has => (
-                    "has",
-                    Pred::Exists {
-                        entity: r,
-                        body: Box::new(Pred::And(vec![link, related])),
-                    },
-                ),
-                QuantifierKind::None => (
-                    "none",
-                    Pred::Forall {
-                        entity: r,
-                        body: Box::new(implies(link, Pred::Not(Box::new(related)))),
-                    },
-                ),
+            let anchor: Binding = vec![(c.anchor, At::Bound(0))];
+            let guards = self.cross_all(&c.guards, &anchor, &site);
+            let inner = self.quantified(q, &anchor, 1, &site);
+            let kind = match q.kind {
+                QuantifierKind::Has => "has",
+                QuantifierKind::None => "none",
             };
             let constraint = format!(
                 "{} when ({}) {} {} where ({})",
-                model.entities[q.anchor].id,
-                cross_display(model, &q.guards),
+                model.entities[c.anchor].id,
+                cross_display(model, &c.guards),
                 kind,
                 model.entities[q.related].id,
-                cross_display(model, &q.related_conditions)
+                cross_display(model, &q.conditions)
             );
             let text = InvText::Quantifier {
-                anchor: model.entities[q.anchor].id.clone(),
+                anchor: model.entities[c.anchor].id.clone(),
                 related: model.entities[q.related].id.clone(),
                 constraint,
             };
@@ -872,6 +890,9 @@ impl<'m> Builder<'m> {
                     .iter()
                     .map(|c| self.cross_atom(c, &binding, &site)),
             );
+            for q in &body.quantifiers {
+                parts.push(self.quantified(q, &binding, witnesses.len() as u8, &site));
+            }
             let pred = witnesses
                 .into_iter()
                 .rev()

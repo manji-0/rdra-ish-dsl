@@ -778,15 +778,32 @@ fn process_quantifier_chain(
     let Some(anchor) = anchor_scope.first().copied() else {
         return;
     };
+    let Some(quantifier) = resolve_related_quantifier(model, anchor, cc, ctx, diags) else {
+        return;
+    };
+    model
+        .quantifier_constraints
+        .push(crate::model::QuantifierConstraint {
+            anchor,
+            guards: guards.to_vec(),
+            quantifier,
+        });
+}
 
+/// The related entity, conditions and kind of one `.has(...)` / `.none(...)` chain call. The
+/// related entity is the first one the conditions name other than `anchor`.
+pub(crate) fn resolve_related_quantifier(
+    model: &SemanticModel,
+    anchor: EntityKey,
+    cc: &ChainCall,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<crate::model::RelatedQuantifier> {
     // New form: `.none(Assign.status == active)` — infer related entity from conditions.
     // Legacy-compatible: `.none(Assign.status == active)` if first arg is an entity Ref.
     let (related, related_args) = match cc.args.first() {
         Some(PredicateArg::Ref(_)) => {
-            let Some(related) = resolve_entity_scope_arg(model, &cc.name, &cc.args[0], ctx, diags)
-            else {
-                return;
-            };
+            let related = resolve_entity_scope_arg(model, &cc.name, &cc.args[0], ctx, diags)?;
             (related, &cc.args[1..])
         }
         _ => {
@@ -800,14 +817,11 @@ fn process_quantifier_chain(
                 diags,
             );
             add_condition_entities_to_scope(&mut related_scope, &preview);
-            let Some(related) = related_scope
+            let related = related_scope
                 .iter()
                 .copied()
                 .find(|e| *e != anchor)
-                .or_else(|| related_scope.first().copied())
-            else {
-                return;
-            };
+                .or_else(|| related_scope.first().copied())?;
             (related, cc.args.as_slice())
         }
     };
@@ -816,24 +830,20 @@ fn process_quantifier_chain(
     let related_conditions =
         collect_cross_chain_conditions(model, &related_scope, &cc.name, related_args, ctx, diags);
     if related_conditions.is_empty() {
-        return;
+        return None;
     }
 
     let kind = match cc.name.as_str() {
         "has" => crate::model::QuantifierKind::Has,
         "none" => crate::model::QuantifierKind::None,
-        _ => return,
+        _ => return None,
     };
-    model
-        .quantifier_constraints
-        .push(crate::model::QuantifierConstraint {
-            site: Some(ctx.locate(cc.span.clone())),
-            anchor,
-            guards: guards.to_vec(),
-            kind,
-            related,
-            related_conditions,
-        });
+    Some(crate::model::RelatedQuantifier {
+        kind,
+        related,
+        conditions: related_conditions,
+        site: Some(ctx.locate(cc.span.clone())),
+    })
 }
 
 fn temporal_equals_from_comparison(

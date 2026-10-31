@@ -334,6 +334,7 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `cross_order_payment.rdra` | pass, pass | Multi-instance + `.along` (Pay is one atomic action, so Cancel cannot interleave; Cancel deletes the pending Payment) |
 | `cross_order_payment_split.rdra` | fail, fail | The same model with Pay through two APIs: two transaction groups, so Cancel interleaves between `Pay_1` and `Pay_2`; Cancel does not delete the Payment here |
 | `quantifier_none.rdra` | fail, fail | `when(...).none` (Revoke while Assign stays active) |
+| `quantifier_guard.rdra` | pass, pass | `holds(..).none(..)` on Revoke makes the `when(...).none` rule of `quantifier_none` hold |
 | `untriggered_sets.rdra` | fail, fail | `sets` from a use case that drives no transition (Flag then Ship reaches the forbidden state) |
 | `after_assert_unmet.rdra` | fail, fail | `after(DeliverOrder).assert` without the `sets` that makes it true |
 | `temporal_unmet.rdra` | pass, fail | `always(Order.status != shipped)` fails once an Order ships, and `leads_to(pending, delivered)` fails because ReopenOrder lets an Order be cancelled and reopened forever, so its lasso loops back. `check` does not model-check properties; each prints its lasso in model terms |

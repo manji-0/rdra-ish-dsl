@@ -4,6 +4,13 @@
 
 ### Added
 
+- A condition guard may say that no related row, or some related row, matches:
+  `holds(NoActiveAssignment, ClientCertificate.status == active).none(TerminalCertAssignment.status == active)`
+  allows `Revoke` only while no linked assignment is active, and `.has(...)` requires one.
+  The rows are the ones a `relate` links to the guarded instance; without a relate the
+  guard ranges over every row. `states`, `check`, and the TLA+ export read it as a universal
+  or existential over the related ids, `fmt` keeps the chain, and a lifecycle column named
+  in it links the condition to the state model. See `quantifier_guard.rdra`.
 - An inline `Enum` value may carry a label, as a variation value does:
   `status: Enum(pending "受付前", paid "支払済")`. The UC複合図, the state diagram, and the
   RDRA diagram draw a state by its label, `states --format table` adds a `labels:` line

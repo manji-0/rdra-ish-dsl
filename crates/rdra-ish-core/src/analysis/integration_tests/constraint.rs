@@ -154,7 +154,7 @@ when(Cert, status == revoked).none(Assign.status == active)
     assert_eq!(model.quantifier_constraints.len(), 1);
     let constraint = &model.quantifier_constraints[0];
     assert_eq!(model.entities[constraint.anchor].id, "Cert");
-    assert_eq!(model.entities[constraint.related].id, "Assign");
+    assert_eq!(model.entities[constraint.quantifier.related].id, "Assign");
 }
 
 #[test]
@@ -182,11 +182,11 @@ when(ClientCertificate.status == revoked)
     let constraint = &model.quantifier_constraints[0];
     assert_eq!(model.entities[constraint.anchor].id, "ClientCertificate");
     assert_eq!(
-        model.entities[constraint.related].id,
+        model.entities[constraint.quantifier.related].id,
         "TerminalCertAssignment"
     );
     assert_eq!(constraint.guards.len(), 1);
-    assert_eq!(constraint.related_conditions.len(), 1);
+    assert_eq!(constraint.quantifier.conditions.len(), 1);
 }
 
 #[test]

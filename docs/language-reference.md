@@ -234,9 +234,10 @@ only the methods below, and any other name is an `unknown chain method` error
 | `forbidden` | `.along(...)`, `.by(...)` |
 | `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)`, `.by(...)` |
 | `when` | `.has(...)`, `.none(...)` |
+| `holds` | `.has(...)`, `.none(...)` |
 | `after` | `.assert(...)` |
 | `exposes` | `.append()`, `.upsert()` (an entity), `.caller(actor \| system \| any)` (a use case) |
-| every other predicate (including `combines` and `holds`) | none |
+| every other predicate (including `combines`) | none |
 
 ---
 
@@ -991,6 +992,24 @@ the column, and the value (`InvalidVariationValue` or `InvalidEnumVariant`). Dis
 negation are not available yet. A second `holds` on one condition is `ConditionSecondBody`, and
 `combines` together with `holds` is `ConditionCombinesWithBody`, in either order.
 
+A body may end in `.has(Related.col == v)` or `.none(Related.col == v)` calls. The guard then
+also needs some row (`has`), or no row (`none`), of the related entity to match. The rows are
+the ones the relate links to the instance the use case runs on, and every row when no relate
+joins the two entities. Like `when(...).none(...)`, it ranges over the present rows.
+
+```rdra
+// Revoke only while no assignment of the certificate is active.
+condition NoActiveAssignment "有効な割当がない証明書だけ失効できる"
+holds(NoActiveAssignment, ClientCertificate.status == active).none(TerminalCertAssignment.status == active)
+applies_to(NoActiveAssignment, Revoke)
+when(ClientCertificate, status == revoked).none(TerminalCertAssignment.status == active)
+```
+
+Without the guard on Revoke, the `when(...).none(...)` rule fails: Revoke can run while an
+assignment is active (`samples/formal-verification/quantifier_guard.rdra`). A column named in
+a `.has` or `.none` is part of the body for `condition_edges`, so a lifecycle column there links
+the state model.
+
 One function, `condition_edges`, gives a condition's links. With a body, an operand on a
 variation-typed column links the variation and an operand on a lifecycle column links the state
 model. Without a body, the `combines` declarations are the links. `list --kind condition`,
@@ -1471,7 +1490,8 @@ rule. It ranges over the present instances: `none` fails in a reachable state wh
 anchor condition holds and some related instance satisfies the related condition. A
 `relate` between the two entities links the related instance through its owner; without
 one, the related side is independent. `states` runs one instance per entity, so use
-`verify --instance-count 2` for rules that need two related instances.
+`verify --instance-count 2` for rules that need two related instances. To make a use case
+respect such a rule, put the same `.none(...)` on a `holds` guard (see Conditions).
 
 ### Comparison Expressions in Constraints
 

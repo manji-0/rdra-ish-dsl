@@ -5,6 +5,7 @@ mod cone;
 mod constraints;
 mod deadlock;
 mod effects;
+mod guard_quantifiers;
 mod lasso;
 mod names;
 mod never_runs;

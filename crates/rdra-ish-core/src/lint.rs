@@ -908,7 +908,7 @@ fn relation_degree(model: &SemanticModel) -> HashMap<NodeRef, usize> {
     }
     for constraint in &model.quantifier_constraints {
         touch(NodeRef::Entity(constraint.anchor));
-        touch(NodeRef::Entity(constraint.related));
+        touch(NodeRef::Entity(constraint.quantifier.related));
     }
     for event in &model.outbox_events {
         touch(NodeRef::Event(*event));

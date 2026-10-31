@@ -741,6 +741,13 @@ mod tests {
     }
 
     #[test]
+    fn formats_a_holds_quantifier_chain() {
+        let src = "holds(C, A.status == active).none(B.status == active).has(B.status == ended)\n";
+        let formatted = format_source(src).unwrap();
+        assert_eq!(formatted, src);
+    }
+
+    #[test]
     fn formats_a_cardinality_range_as_written() {
         let formatted =
             format_source("relate(Line, Order, 1 .. *:1)\nrelate(Note, Order, 0..1:1)\n").unwrap();
