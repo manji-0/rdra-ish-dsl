@@ -79,6 +79,7 @@ rdra-ish verify src/ --backend tlc -o out/
   `%% kinds:`, `%% omitted:`). Node ids are `<kind>__<DSL id>` (`event__EvPaymentAuthorized`,
   `usecase__Capture`, `extsystem__PaymentGW`, `buc__...`, `timer__...`), the same ids as in
   `--kind rdra`, and each node carries `:::<kind>`.
+- Every edge is unlabelled: its two end kinds name the relation.
 - Use-case-to-event and external-system-to-event edges come from `raises`.
 - Event-to-use-case, event-to-BUC, and event-to-external-system edges come from
   `triggers`.

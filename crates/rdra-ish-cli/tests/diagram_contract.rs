@@ -1,8 +1,9 @@
 //! The diagram encoding contract, checked on every sample for each kind:
 //! each `.mmd` opens with the `%%` header, names each node `<kind>__<DSL id>` (the same id in
 //! every kind; a variation's value is `variation__<Variation>__<value>`), tags a flowchart
-//! node `:::<kind>`, draws edges only between declared nodes,
-//! and lists in `kinds:` exactly the kinds its body draws.
+//! node `:::<kind>` in its kind's shape (`rdra_ish_emit::node_shape`), draws edges only
+//! between declared nodes, leaves an edge unlabelled exactly when its ends imply the relation
+//! (`rdra_ish_emit::implied_relation`), and lists in `kinds:` exactly the kinds its body draws.
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
@@ -110,10 +111,64 @@ struct Flowchart {
     header_kinds: BTreeSet<String>,
     /// Node id to its `:::` class.
     nodes: HashMap<String, String>,
+    /// `(from, relation, to)`: the label, or for an unlabelled edge the relation its ends
+    /// imply.
     edges: Vec<(String, String, String)>,
+    /// The edges written without a label.
+    unlabelled: BTreeSet<(String, String, String)>,
+    /// Each edge's arrow: `-->`, `-.->`, or `---`.
+    arrows: HashMap<(String, String, String), String>,
     /// The edges a `%% derived` line follows: rdra-ish derived them from other facts.
     derived: BTreeSet<(String, String, String)>,
     class_defs: BTreeSet<String>,
+}
+
+/// A node line, `<id><open>"<label>"<close>:::<kind>`, as `(id, kind)`: `None` when the line
+/// is no node, an error when it is one in a shape other than its kind's.
+fn parse_node(line: &str) -> Option<Result<(String, String), String>> {
+    let end = line.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))?;
+    let (id, rest) = line.split_at(end);
+    if id.is_empty() || !rest.starts_with(['[', '(', '{', '>']) {
+        return None;
+    }
+    let Some((body, kind)) = rest.rsplit_once(":::") else {
+        return Some(Err(format!("node without `:::<kind>`: {line}")));
+    };
+    let Some((open, close)) = rdra_ish_emit::node_shape(kind) else {
+        return Some(Err(format!("no shape for kind `{kind}`: {line}")));
+    };
+    let quoted = body
+        .strip_prefix(open)
+        .and_then(|b| b.strip_suffix(close))
+        .filter(|b| b.len() >= 2 && b.starts_with('"') && b.ends_with('"'));
+    Some(match quoted {
+        Some(_) => Ok((id.to_string(), kind.to_string())),
+        None => Err(format!("a {kind} is drawn `{open}\"..\"{close}`: {line}")),
+    })
+}
+
+/// An edge line as `(from, arrow, label, to)`: `from arrow|label| to`, or `from arrow to`
+/// without a label.
+fn parse_edge(line: &str) -> Result<(String, String, Option<String>, String), String> {
+    let unparsed = || format!("unparsed line: {line}");
+    let (from, rest) = line.split_once(' ').ok_or_else(unparsed)?;
+    let (arrow, label, to) = match rest.split_once('|') {
+        Some((arrow, rest)) => {
+            let (label, to) = rest.rsplit_once("| ").ok_or_else(unparsed)?;
+            (arrow, Some(label.to_string()), to)
+        }
+        None => {
+            let (arrow, to) = rest.split_once(' ').ok_or_else(unparsed)?;
+            (arrow, None, to)
+        }
+    };
+    if !["-->", "-.->", "---"].contains(&arrow) {
+        return Err(format!("unknown arrow `{arrow}`: {line}"));
+    }
+    if to.contains(' ') {
+        return Err(unparsed());
+    }
+    Ok((from.to_string(), arrow.to_string(), label, to.to_string()))
 }
 
 fn parse_flowchart(diagram: &str, text: &str) -> Result<Flowchart, String> {
@@ -124,6 +179,10 @@ fn parse_flowchart(diagram: &str, text: &str) -> Result<Flowchart, String> {
     }
     let mut chart = Flowchart::default();
     let mut seen_type = false;
+    // `(from, arrow, label, to)` until every node is known, and the edge each `%% derived`
+    // line follows.
+    let mut raw: Vec<(String, String, Option<String>, String)> = Vec::new();
+    let mut derived: Vec<usize> = Vec::new();
     for line in lines {
         let trimmed = line.trim();
         if let Some(kinds) = trimmed.strip_prefix("%% kinds: ") {
@@ -136,16 +195,13 @@ fn parse_flowchart(diagram: &str, text: &str) -> Result<Flowchart, String> {
                 .map(str::to_string)
                 .collect();
         } else if let Some(rest) = trimmed.strip_prefix("%% derived ") {
-            let last = chart.edges.last().cloned();
-            let follows = last
-                .as_ref()
-                .is_some_and(|(from, _, to)| rest.starts_with(&format!("{from} -> {to} ")));
-            match (follows, last) {
-                (true, Some(edge)) => {
-                    chart.derived.insert(edge);
-                }
-                _ => return Err(format!("`%% derived` after another edge: {line}")),
+            let follows = raw
+                .last()
+                .is_some_and(|(from, _, _, to)| rest.starts_with(&format!("{from} -> {to} ")));
+            if !follows {
+                return Err(format!("`%% derived` after another edge: {line}"));
             }
+            derived.push(raw.len() - 1);
         } else if trimmed.starts_with("%% ") {
         } else if trimmed == "flowchart LR" || trimmed == "flowchart TD" {
             seen_type = true;
@@ -169,31 +225,56 @@ fn parse_flowchart(diagram: &str, text: &str) -> Result<Flowchart, String> {
             .and_then(|rest| rest.split_once(' '))
         {
             chart.class_defs.insert(kind.to_string());
-        } else if let Some((id, rest)) = trimmed.split_once("[\"") {
-            let (_, class) = rest
-                .rsplit_once("\"]:::")
-                .ok_or_else(|| format!("node without `:::<kind>`: {line}"))?;
-            chart.nodes.insert(id.to_string(), class.to_string());
+        } else if let Some(node) = parse_node(trimmed) {
+            let (id, class) = node?;
+            chart.nodes.insert(id, class);
         } else {
-            let (from, rest) = trimmed
-                .split_once(' ')
-                .ok_or_else(|| format!("unparsed line: {line}"))?;
-            let (arrow, rest) = rest
-                .split_once('|')
-                .ok_or_else(|| format!("unparsed line: {line}"))?;
-            let (label, to) = rest
-                .rsplit_once("| ")
-                .ok_or_else(|| format!("unparsed line: {line}"))?;
-            if !["-->", "-.->", "---"].contains(&arrow) {
-                return Err(format!("unknown arrow `{arrow}`: {line}"));
-            }
-            chart
-                .edges
-                .push((from.to_string(), label.to_string(), to.to_string()));
+            raw.push(parse_edge(trimmed)?);
         }
     }
     if !seen_type {
         return Err("no `flowchart LR` or `flowchart TD` line".to_string());
+    }
+    // An unlabelled edge stands for the one relation its ends imply; a labelled one names a
+    // relation the diagram draws between its ends and that they do not imply. An end that is
+    // not declared is left to `check_flowchart`.
+    for (n, (from, arrow, label, to)) in raw.into_iter().enumerate() {
+        let kinds = chart.nodes.get(&from).zip(chart.nodes.get(&to));
+        let implied = kinds.and_then(|(f, t)| rdra_ish_emit::implied_relation(diagram, f, t));
+        let relation = match (label, kinds) {
+            (None, None) => String::new(),
+            (None, Some((f, t))) => {
+                let relation = implied.ok_or_else(|| {
+                    format!("{from} {arrow} {to}: no label, and a {f} to a {t} is not one relation")
+                })?;
+                chart
+                    .unlabelled
+                    .insert((from.clone(), relation.to_string(), to.clone()));
+                relation.to_string()
+            }
+            (Some(label), None) => label,
+            (Some(label), Some((f, t))) => {
+                if let Some(implied) = implied {
+                    return Err(format!(
+                        "{from} -{label}-> {to}: a {f} to a {t} is `{implied}`, drawn without a label"
+                    ));
+                }
+                let listed = rdra_ish_emit::edge_relations(diagram, f, t)
+                    .any(|r| r.label == rdra_ish_emit::EdgeLabel::Data || r.relation == label);
+                if !listed {
+                    return Err(format!(
+                        "{from} -{label}-> {to}: {diagram} draws no such relation from a {f} to a {t}"
+                    ));
+                }
+                label
+            }
+        };
+        let edge = (from, relation, to);
+        if derived.contains(&n) {
+            chart.derived.insert(edge.clone());
+        }
+        chart.arrows.insert(edge.clone(), arrow);
+        chart.edges.push(edge);
     }
     Ok(chart)
 }
@@ -268,23 +349,123 @@ fn every_rdra_diagram_of_every_sample_keeps_the_contract() {
 
 #[test]
 fn the_contract_check_rejects_a_broken_diagram() {
-    let good = "%% rdra-ish diagram=rdra scope=whole\n%% kinds: actor usecase\nflowchart LR\n  actor__A[\"A\"]:::actor\n  usecase__U[\"U\"]:::usecase\n  actor__A -.->|performs| usecase__U\n  classDef actor stroke:#333;\n  classDef usecase stroke:#333;\n";
+    let good = "%% rdra-ish diagram=rdra scope=whole\n%% kinds: actor usecase\nflowchart LR\n  actor__A([\"A\"]):::actor\n  usecase__U(\"U\"):::usecase\n  actor__A -.-> usecase__U\n  classDef actor stroke:#333;\n  classDef usecase stroke:#333;\n";
     assert!(check_flowchart(&parse_flowchart("rdra", good).unwrap()).is_ok());
     for (broken, from, to) in [
-        ("untagged", "\"]:::usecase\n", "\"]\n"),
+        ("untagged", "\"):::usecase\n", "\")\n"),
         (
             "undeclared end",
             "usecase__U\n  classDef",
             "usecase__X\n  classDef",
         ),
         ("header kinds", "%% kinds: actor usecase", "%% kinds: actor"),
-        ("wrong class", "\"]:::actor", "\"]:::usecase"),
+        ("wrong class", "\"]):::actor", "\"]):::usecase"),
+        ("wrong shape", "actor__A([\"A\"])", "actor__A[\"A\"]"),
+        ("no shape", "actor__A([", "actor__A\""),
+        (
+            "implied label",
+            "actor__A -.-> usecase__U",
+            "actor__A -.->|performs| usecase__U",
+        ),
+        (
+            "unlisted label",
+            "actor__A -.-> usecase__U",
+            "actor__A -.->|reads| usecase__U",
+        ),
+        (
+            "no relation between the ends",
+            "actor__A -.-> usecase__U",
+            "actor__A -.-> actor__A",
+        ),
         ("emoji-era id", "  actor__A -.->", "  A -.->"),
     ] {
         let text = good.replace(from, to);
         assert_ne!(text, good, "{broken}");
         let result = parse_flowchart("rdra", &text).and_then(|chart| check_flowchart(&chart));
         assert!(result.is_err(), "{broken} passed:\n{text}");
+    }
+}
+
+/// The flowchart kinds of `diagram`, `screen` aside.
+const FLOWCHARTS: [&str; 10] = [
+    "rdra",
+    "context",
+    "requirement",
+    "business",
+    "usecase",
+    "robustness",
+    "event",
+    "flow",
+    "information",
+    "condition",
+];
+
+#[test]
+fn every_drawn_kind_has_a_shape_and_every_unlabelled_edge_one_relation() {
+    let dir = scratch("diagram_contract_shapes");
+    let mut kinds: BTreeSet<String> = BTreeSet::new();
+    let mut unlabelled: BTreeSet<(String, String)> = BTreeSet::new();
+    for root in roots() {
+        for diagram in FLOWCHARTS.into_iter().chain(["screen"]) {
+            let text = diagram_with(&root, diagram, &[], &dir.join("out"));
+            let chart = checked(diagram, &text, &format!("{root} {diagram}"));
+            for (id, kind) in &chart.nodes {
+                // A subgraph line names an element too; any other line is in its kind's shape.
+                let subgraph = text.contains(&format!("subgraph {id}[\""));
+                assert!(
+                    subgraph || rdra_ish_emit::node_shape(kind).is_some(),
+                    "{root} {diagram}: {id} is a {kind}, which has no shape"
+                );
+                kinds.insert(kind.clone());
+            }
+            for edge @ (from, relation, to) in &chart.unlabelled {
+                let (f, t) = (&chart.nodes[from], &chart.nodes[to]);
+                let relations: Vec<_> = rdra_ish_emit::edge_relations(diagram, f, t).collect();
+                assert!(
+                    matches!(relations.as_slice(), [only] if only.relation == relation
+                        && only.label == rdra_ish_emit::EdgeLabel::Name),
+                    "{root} {diagram}: {edge:?} is unlabelled, but a {f} to a {t} is {} relations",
+                    relations.len()
+                );
+                unlabelled.insert((diagram.to_string(), relation.clone()));
+            }
+        }
+    }
+    for kind in [
+        "actor",
+        "usecase",
+        "screen",
+        "api",
+        "entity",
+        "extsystem",
+        "event",
+        "timer",
+        "condition",
+        "goal",
+        "requirement",
+        "buc",
+        "state",
+        "statemodel",
+        "value",
+        "step",
+        "system",
+    ] {
+        assert!(kinds.contains(kind), "no sample draws a {kind}");
+    }
+    for (diagram, relation) in [
+        ("rdra", "performs"),
+        ("requirement", "achieved_by"),
+        ("usecase", "displays"),
+        ("robustness", "uses"),
+        ("event", "raises"),
+        ("flow", "covers"),
+        ("information", "statemodel"),
+        ("condition", "applies_to"),
+    ] {
+        assert!(
+            unlabelled.contains(&(diagram.to_string(), relation.to_string())),
+            "no unlabelled {relation} in any {diagram} diagram"
+        );
     }
 }
 
@@ -985,7 +1166,7 @@ fn a_sequence_diagram_needs_exactly_one_use_case() {
 
 #[test]
 fn the_contract_check_rejects_a_misplaced_derived_line() {
-    let good = "%% rdra-ish diagram=usecase scope=whole\n%% kinds: actor usecase\nflowchart LR\n  actor__A[\"A\"]:::actor\n  usecase__U[\"U\"]:::usecase\n  actor__A -.->|performs| usecase__U\n  %% derived actor__A -> usecase__U via buc__B\n  classDef actor stroke:#333;\n  classDef usecase stroke:#333;\n";
+    let good = "%% rdra-ish diagram=usecase scope=whole\n%% kinds: actor usecase\nflowchart LR\n  actor__A([\"A\"]):::actor\n  usecase__U(\"U\"):::usecase\n  actor__A -.-> usecase__U\n  %% derived actor__A -> usecase__U via buc__B\n  classDef actor stroke:#333;\n  classDef usecase stroke:#333;\n";
     let chart = parse_flowchart("usecase", good).unwrap();
     assert_eq!(chart.derived.len(), 1);
     let broken = good.replace(
@@ -1524,8 +1705,9 @@ fn every_context_diagram_of_every_sample_keeps_the_contract() {
             );
             let mut pairs = BTreeSet::new();
             for edge @ (from, label, to) in &chart.edges {
-                // One edge per outside node, system, and direction; its label names what it
-                // was derived through.
+                // One edge per outside node, system, and direction, labelled with what it
+                // was derived through: an actor's BUCs (a `performs`), an external
+                // system's events.
                 let via_kinds: &[&str] = if from.starts_with("actor__") {
                     &["buc__", "usecase__", "step__"]
                 } else if from.starts_with("extsystem__") || to.starts_with("extsystem__") {
@@ -1539,6 +1721,7 @@ fn every_context_diagram_of_every_sample_keeps_the_contract() {
                     !via_kinds.is_empty()
                         && system_end
                         && !label.is_empty()
+                        && !chart.unlabelled.contains(edge)
                         && chart.derived.contains(edge)
                         && !vias.is_empty()
                         && vias
@@ -1596,27 +1779,12 @@ fn apart_requirements(text: &str) -> BTreeSet<String> {
         } else if line == "end" {
             inside = false;
         } else if inside {
-            if let Some((id, _)) = line.split_once("[\"") {
-                apart.insert(id.to_string());
+            if let Some(Ok((id, _))) = parse_node(line) {
+                apart.insert(id);
             }
         }
     }
     apart
-}
-
-/// The `-->` and `-.->` edges of `text` as `(arrow, from, label, to)`.
-fn arrows(text: &str) -> Vec<(String, String, String)> {
-    text.lines()
-        .map(str::trim)
-        .filter_map(|line| {
-            let (from, rest) = line.split_once(' ')?;
-            let (arrow, rest) = rest.split_once('|')?;
-            let (label, to) = rest.rsplit_once("| ")?;
-            ["-->", "-.->"]
-                .contains(&arrow)
-                .then(|| (arrow.to_string(), format!("{from} {label}"), to.to_string()))
-        })
-        .collect()
 }
 
 #[test]
@@ -1664,15 +1832,14 @@ fn every_requirement_diagram_of_every_sample_keeps_the_contract() {
             }
             // A requirement apart has only dashed edges, and any other only solid ones.
             let apart = apart_requirements(&text);
-            for (arrow, from_label, _) in arrows(&text) {
-                let from = from_label.split(' ').next().unwrap();
+            for (edge @ (from, ..), arrow) in &chart.arrows {
                 if from.starts_with("goal__") {
                     continue;
                 }
                 assert_eq!(
                     arrow == "-.->",
                     apart.contains(from),
-                    "{root} {scope:?}: {from_label}\n{text}"
+                    "{root} {scope:?}: {edge:?}\n{text}"
                 );
             }
             for id in &apart {
@@ -1727,14 +1894,12 @@ fn a_requirement_diagram_draws_what_the_rdra_diagram_declares() {
     }
 }
 
-/// The arrow `text` draws for `edge`.
-fn arrow_of(text: &str, (from, label, to): &(String, String, String)) -> String {
-    let wanted = (format!("{from} {label}"), to.clone());
-    arrows(text)
-        .into_iter()
-        .find(|(_, from_label, end)| (from_label, end) == (&wanted.0, &wanted.1))
-        .map(|(arrow, _, _)| arrow)
-        .unwrap_or_else(|| panic!("no arrow for {from} -{label}-> {to}\n{text}"))
+/// The arrow `chart` draws for `edge`.
+fn arrow_of<'a>(chart: &'a Flowchart, edge: &(String, String, String)) -> &'a str {
+    chart
+        .arrows
+        .get(edge)
+        .unwrap_or_else(|| panic!("no arrow for {edge:?}"))
 }
 
 #[test]
@@ -1753,7 +1918,7 @@ fn every_screen_diagram_of_every_sample_keeps_the_contract() {
             for edge in &chart.edges {
                 // A dashed edge is the business order, derived; a solid one is a navigates.
                 let derived = chart.derived.contains(edge);
-                if arrow_of(&text, edge) == "-.->" {
+                if arrow_of(&chart, edge) == "-.->" {
                     assert!(
                         derived && edge.1 == "業務上の順番",
                         "{root} {scope:?}: {edge:?}"
@@ -1866,7 +2031,7 @@ fn clinic_ops_screen_transitions_cover_check_in_encounter_and_payment() {
             format!("screen__{to}"),
         );
         assert!(chart.edges.contains(&edge), "{edge:?}\n{text}");
-        assert_eq!(arrow_of(&text, &edge), "-->", "{edge:?}");
+        assert_eq!(arrow_of(&chart, &edge), "-->", "{edge:?}");
     }
     assert!(!chart.derived.is_empty(), "{text}");
 }

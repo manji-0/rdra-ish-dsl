@@ -39,9 +39,11 @@ Every kind follows the [encoding contract](./cli-reference.md#encoding-contract)
   and `%% omitted:` (the linked kinds the diagram leaves out).
 - Each node id is `<kind>__<DSL id>`, the same in every kind, so
   `usecase__ChangeNextRestockDate` in one diagram is that use case in all of them. Each
-  node carries `:::<kind>`.
-- Each edge label is the DSL predicate name. `-->` is hierarchy or flow order, `---` is a
-  `relate`, and `-.->` is every other association.
+  node carries `:::<kind>` and is drawn in its kind's shape (actor `([..])`, use case
+  `(..)`, API `{{..}}`, entity `[(..)]`, event `>..]`, ...).
+- An edge label is the DSL predicate name, left off when the two end kinds have only one
+  relation in that kind (an actor to a use case is `performs`). `-->` is hierarchy or flow
+  order, `---` is a `relate`, and `-.->` is every other association.
 - An edge followed by `%% derived <from> -> <to> via <ids>` was derived through the nodes
   named; any other edge is declared. `%% desc <id>: <text>` carries a description.
 
@@ -64,7 +66,7 @@ rdra-ish diagram samples/incremental-order/step-6-business-rules/src \
 %% kinds: actor system
 %% omitted: buc permission
 flowchart LR
-  actor__OpsStaff["Operations Staff"]:::actor
+  actor__OpsStaff(["Operations Staff"]):::actor
   system__OrganizationSystem["Organization System"]:::system
   system__StoreAdminSystem["Store Admin System"]:::system
   actor__OpsStaff -.->|Maintain Store Restock| system__OrganizationSystem
@@ -109,24 +111,24 @@ rdra-ish diagram samples/clinic-ops \
 %% kinds: requirement goal buc
 %% omitted: actor nfr quality constraint business flow usecase event system entity
 flowchart LR
-  requirement__ReqChangeAppointmentAtDesk["予約の変更・取消を電話と窓口で受け付ける"]:::requirement
-  requirement__ReqEligibilityEveryVisit["受付のたびに保険資格を確認する"]:::requirement
-  requirement__ReqFollowUpAfterVisit["診察後の連絡と再診予約をケアプランで追う"]:::requirement
-  requirement__ReqHandOffAfterConsultation["診察終了で受診を会計計算へ引き渡す"]:::requirement
-  requirement__ReqInquiryBeforeDispense["疑わしい処方は医師への照会が済むまで調剤しない"]:::requirement
-  requirement__ReqMonthlyClaimByTenth["前月分のレセプトを翌月10日までに請求する"]:::requirement
-  requirement__ReqPayAfterConsultation["会計は診察の後に一度で行う"]:::requirement
-  requirement__ReqProxyOrderNeedsPhysician["代行入力されたオーダは医師が確定するまで実施しない"]:::requirement
-  requirement__ReqRegisterEPrescription["院外処方箋を電子処方箋管理サービスへ登録し、保険薬局を指定しない"]:::requirement
-  requirement__ReqRegisterWithEligibility["新患登録で保険情報と限度額情報をオンライン資格確認から取り込む"]:::requirement
-  requirement__ReqResolveAuditFindings["監査で見つかった問題を管理者が解決するまで追う"]:::requirement
-  requirement__ReqResubmitReturned["返戻レセプトを訂正して再請求する"]:::requirement
-  requirement__ReqSwiftCheckIn["再来患者は情報を入力し直さずに受付・案内される"]:::requirement
-  goal__SafeCare["診療の抜けと誤りを実施前に止める<br/>処方・オーダの確認漏れと診察後の連絡漏れの件数: 月20件 → 月5件以下"]:::goal
+  requirement__ReqChangeAppointmentAtDesk[/"予約の変更・取消を電話と窓口で受け付ける"\]:::requirement
+  requirement__ReqEligibilityEveryVisit[/"受付のたびに保険資格を確認する"\]:::requirement
+  requirement__ReqFollowUpAfterVisit[/"診察後の連絡と再診予約をケアプランで追う"\]:::requirement
+  requirement__ReqHandOffAfterConsultation[/"診察終了で受診を会計計算へ引き渡す"\]:::requirement
+  requirement__ReqInquiryBeforeDispense[/"疑わしい処方は医師への照会が済むまで調剤しない"\]:::requirement
+  requirement__ReqMonthlyClaimByTenth[/"前月分のレセプトを翌月10日までに請求する"\]:::requirement
+  requirement__ReqPayAfterConsultation[/"会計は診察の後に一度で行う"\]:::requirement
+  requirement__ReqProxyOrderNeedsPhysician[/"代行入力されたオーダは医師が確定するまで実施しない"\]:::requirement
+  requirement__ReqRegisterEPrescription[/"院外処方箋を電子処方箋管理サービスへ登録し、保険薬局を指定しない"\]:::requirement
+  requirement__ReqRegisterWithEligibility[/"新患登録で保険情報と限度額情報をオンライン資格確認から取り込む"\]:::requirement
+  requirement__ReqResolveAuditFindings[/"監査で見つかった問題を管理者が解決するまで追う"\]:::requirement
+  requirement__ReqResubmitReturned[/"返戻レセプトを訂正して再請求する"\]:::requirement
+  requirement__ReqSwiftCheckIn[/"再来患者は情報を入力し直さずに受付・案内される"\]:::requirement
+  goal__SafeCare[/"診療の抜けと誤りを実施前に止める<br/>処方・オーダの確認漏れと診察後の連絡漏れの件数: 月20件 → 月5件以下"/]:::goal
   %% desc goal__SafeCare: 処方やオーダの確認漏れ、診察後の連絡漏れは、患者の安全と継続した治療を損なう。
-  goal__ShortWait["受付から診察までの待ち時間を短くする<br/>受付から診察開始までの中央値: 45分 → 30分"]:::goal
+  goal__ShortWait[/"受付から診察までの待ち時間を短くする<br/>受付から診察開始までの中央値: 45分 → 30分"/]:::goal
   %% desc goal__ShortWait: 受付後に診察室へ案内されるまでの待ちが長いと、患者が帰ってしまう。
-  goal__TimelyClaims["会計から請求までの遅れと返戻を減らす<br/>請求したレセプトのうち返戻になった割合: 3% → 1%"]:::goal
+  goal__TimelyClaims[/"会計から請求までの遅れと返戻を減らす<br/>請求したレセプトのうち返戻になった割合: 3% → 1%"/]:::goal
   %% desc goal__TimelyClaims: 診察後の会計や請求に漏れや遅れがあると、収入が遅れ、返戻の訂正に事務の手間がかかる。
   buc__BucAppointmentScheduling["予約"]:::buc
   %% desc buc__BucAppointmentScheduling: 予約検索、仮押さえ、予約確定、変更、取消、通知を扱う。予約枠と予約レコードを同時に更新する UC は専用 API を持ち、予約通知は AppointmentNoticeApi に分ける。予約済みの患者は、来院前に `BucVisitCheckIn` の一括照会の対象になる。
@@ -149,48 +151,48 @@ flowchart LR
   buc__BucVisitPayment["計算・会計"]:::buc
   %% desc buc__BucVisitPayment: 診察の後の会計計算入力、患者の呼出、会計窓口または自動精算機での精算、領収証・明細書の交付を扱う。一部負担金は負担割合で計算し、限度額情報があれば窓口での支払は自己負担限度額までになる（`CopayCappedAtLimit`）。紹介状なしの初診で除外に当たらない場合は選定療養費を自費の Charge として算定する（`UnreferredFirstVisit`）。金額は病院の設定 `SelectedTreatmentFeeSetting` に置き、モデルは数値を持たない。
   subgraph group_out_of_scope["やらないこと"]
-    requirement__ReqNoOnlineConsultation["オンライン診療は対象外とする"]:::requirement
+    requirement__ReqNoOnlineConsultation[/"オンライン診療は対象外とする"\]:::requirement
   end
-  goal__SafeCare -->|achieved_by| requirement__ReqFollowUpAfterVisit
+  goal__SafeCare --> requirement__ReqFollowUpAfterVisit
   %% derived goal__SafeCare -> requirement__ReqFollowUpAfterVisit via requirement__ReqFollowUpAfterVisit
-  goal__SafeCare -->|achieved_by| requirement__ReqInquiryBeforeDispense
+  goal__SafeCare --> requirement__ReqInquiryBeforeDispense
   %% derived goal__SafeCare -> requirement__ReqInquiryBeforeDispense via requirement__ReqInquiryBeforeDispense
-  goal__SafeCare -->|achieved_by| requirement__ReqProxyOrderNeedsPhysician
+  goal__SafeCare --> requirement__ReqProxyOrderNeedsPhysician
   %% derived goal__SafeCare -> requirement__ReqProxyOrderNeedsPhysician via requirement__ReqProxyOrderNeedsPhysician
-  goal__SafeCare -->|achieved_by| requirement__ReqRegisterEPrescription
+  goal__SafeCare --> requirement__ReqRegisterEPrescription
   %% derived goal__SafeCare -> requirement__ReqRegisterEPrescription via requirement__ReqRegisterEPrescription
-  goal__ShortWait -->|achieved_by| requirement__ReqChangeAppointmentAtDesk
+  goal__ShortWait --> requirement__ReqChangeAppointmentAtDesk
   %% derived goal__ShortWait -> requirement__ReqChangeAppointmentAtDesk via requirement__ReqChangeAppointmentAtDesk
-  goal__ShortWait -->|achieved_by| requirement__ReqEligibilityEveryVisit
+  goal__ShortWait --> requirement__ReqEligibilityEveryVisit
   %% derived goal__ShortWait -> requirement__ReqEligibilityEveryVisit via requirement__ReqEligibilityEveryVisit
-  goal__ShortWait -->|achieved_by| requirement__ReqRegisterWithEligibility
+  goal__ShortWait --> requirement__ReqRegisterWithEligibility
   %% derived goal__ShortWait -> requirement__ReqRegisterWithEligibility via requirement__ReqRegisterWithEligibility
-  goal__ShortWait -->|achieved_by| requirement__ReqSwiftCheckIn
+  goal__ShortWait --> requirement__ReqSwiftCheckIn
   %% derived goal__ShortWait -> requirement__ReqSwiftCheckIn via requirement__ReqSwiftCheckIn
-  goal__TimelyClaims -->|achieved_by| requirement__ReqHandOffAfterConsultation
+  goal__TimelyClaims --> requirement__ReqHandOffAfterConsultation
   %% derived goal__TimelyClaims -> requirement__ReqHandOffAfterConsultation via requirement__ReqHandOffAfterConsultation
-  goal__TimelyClaims -->|achieved_by| requirement__ReqMonthlyClaimByTenth
+  goal__TimelyClaims --> requirement__ReqMonthlyClaimByTenth
   %% derived goal__TimelyClaims -> requirement__ReqMonthlyClaimByTenth via requirement__ReqMonthlyClaimByTenth
-  goal__TimelyClaims -->|achieved_by| requirement__ReqPayAfterConsultation
+  goal__TimelyClaims --> requirement__ReqPayAfterConsultation
   %% derived goal__TimelyClaims -> requirement__ReqPayAfterConsultation via requirement__ReqPayAfterConsultation
-  goal__TimelyClaims -->|achieved_by| requirement__ReqResolveAuditFindings
+  goal__TimelyClaims --> requirement__ReqResolveAuditFindings
   %% derived goal__TimelyClaims -> requirement__ReqResolveAuditFindings via requirement__ReqResolveAuditFindings
-  goal__TimelyClaims -->|achieved_by| requirement__ReqResubmitReturned
+  goal__TimelyClaims --> requirement__ReqResubmitReturned
   %% derived goal__TimelyClaims -> requirement__ReqResubmitReturned via requirement__ReqResubmitReturned
-  requirement__ReqChangeAppointmentAtDesk -->|motivates| buc__BucAppointmentScheduling
-  requirement__ReqEligibilityEveryVisit -->|motivates| buc__BucVisitCheckIn
-  requirement__ReqFollowUpAfterVisit -->|motivates| buc__BucFollowupCare
-  requirement__ReqHandOffAfterConsultation -->|motivates| buc__BucClinicalEncounter
-  requirement__ReqInquiryBeforeDispense -->|motivates| buc__BucPrescriptionFulfillment
-  requirement__ReqMonthlyClaimByTenth -->|motivates| buc__BucBillingClaims
-  requirement__ReqNoOnlineConsultation -.->|motivates| buc__BucClinicalEncounter
-  requirement__ReqPayAfterConsultation -->|motivates| buc__BucVisitPayment
-  requirement__ReqProxyOrderNeedsPhysician -->|motivates| buc__BucOrdersResults
-  requirement__ReqRegisterEPrescription -->|motivates| buc__BucPrescriptionFulfillment
-  requirement__ReqRegisterWithEligibility -->|motivates| buc__BucPatientOnboarding
-  requirement__ReqResolveAuditFindings -->|motivates| buc__BucStaffAdministration
-  requirement__ReqResubmitReturned -->|motivates| buc__BucBillingClaims
-  requirement__ReqSwiftCheckIn -->|motivates| buc__BucVisitCheckIn
+  requirement__ReqChangeAppointmentAtDesk --> buc__BucAppointmentScheduling
+  requirement__ReqEligibilityEveryVisit --> buc__BucVisitCheckIn
+  requirement__ReqFollowUpAfterVisit --> buc__BucFollowupCare
+  requirement__ReqHandOffAfterConsultation --> buc__BucClinicalEncounter
+  requirement__ReqInquiryBeforeDispense --> buc__BucPrescriptionFulfillment
+  requirement__ReqMonthlyClaimByTenth --> buc__BucBillingClaims
+  requirement__ReqNoOnlineConsultation -.-> buc__BucClinicalEncounter
+  requirement__ReqPayAfterConsultation --> buc__BucVisitPayment
+  requirement__ReqProxyOrderNeedsPhysician --> buc__BucOrdersResults
+  requirement__ReqRegisterEPrescription --> buc__BucPrescriptionFulfillment
+  requirement__ReqRegisterWithEligibility --> buc__BucPatientOnboarding
+  requirement__ReqResolveAuditFindings --> buc__BucStaffAdministration
+  requirement__ReqResubmitReturned --> buc__BucBillingClaims
+  requirement__ReqSwiftCheckIn --> buc__BucVisitCheckIn
   classDef requirement fill:#fff3bf,stroke:#e67700,color:#000;
   classDef goal fill:#fff3bf,stroke:#e67700,color:#000;
   classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;
@@ -272,36 +274,36 @@ rdra-ish diagram samples/incremental-order/step-6-business-rules/src \
 %% omitted: buc medium permission api
 flowchart LR
   subgraph layer_value["システム価値"]
-    actor__OpsStaff["Operations Staff"]:::actor
+    actor__OpsStaff(["Operations Staff"]):::actor
   end
   subgraph layer_boundary["システム境界"]
-    usecase__BlockScheduledRestock["Block Scheduled Restock"]:::usecase
-    usecase__ChangeNextRestockDate["Change Next Restock Date"]:::usecase
-    usecase__ChangeStoreParentOrganization["Change Store Parent Organization"]:::usecase
+    usecase__BlockScheduledRestock("Block Scheduled Restock"):::usecase
+    usecase__ChangeNextRestockDate("Change Next Restock Date"):::usecase
+    usecase__ChangeStoreParentOrganization("Change Store Parent Organization"):::usecase
     screen__StoreMaintenanceScreen["Store Maintenance"]:::screen
   end
   subgraph layer_system["システム"]
-    entity__Organization["Organization"]:::entity
-    entity__Store["Store"]:::entity
-    state__Store_blocked["blocked"]:::state
-    state__Store_normal["normal"]:::state
-    state__Store_scheduled["scheduled"]:::state
+    entity__Organization[("Organization")]:::entity
+    entity__Store[("Store")]:::entity
+    state__Store_blocked((("blocked"))):::state
+    state__Store_normal((("normal"))):::state
+    state__Store_scheduled((("scheduled"))):::state
   end
-  actor__OpsStaff -.->|performs| usecase__BlockScheduledRestock
+  actor__OpsStaff -.-> usecase__BlockScheduledRestock
   %% derived actor__OpsStaff -> usecase__BlockScheduledRestock via buc__BucStoreRestock
-  actor__OpsStaff -.->|performs| usecase__ChangeNextRestockDate
+  actor__OpsStaff -.-> usecase__ChangeNextRestockDate
   %% derived actor__OpsStaff -> usecase__ChangeNextRestockDate via buc__BucStoreRestock
-  actor__OpsStaff -.->|performs| usecase__ChangeStoreParentOrganization
+  actor__OpsStaff -.-> usecase__ChangeStoreParentOrganization
   %% derived actor__OpsStaff -> usecase__ChangeStoreParentOrganization via buc__BucStoreRestock
-  screen__StoreMaintenanceScreen -.->|shows| entity__Organization
-  screen__StoreMaintenanceScreen -.->|shows| entity__Store
-  usecase__BlockScheduledRestock -.->|displays| screen__StoreMaintenanceScreen
+  screen__StoreMaintenanceScreen -.-> entity__Organization
+  screen__StoreMaintenanceScreen -.-> entity__Store
+  usecase__BlockScheduledRestock -.-> screen__StoreMaintenanceScreen
   usecase__BlockScheduledRestock -.->|transitions Store.restock_status scheduled->blocked| state__Store_blocked
   usecase__BlockScheduledRestock -.->|updates| entity__Store
-  usecase__ChangeNextRestockDate -.->|displays| screen__StoreMaintenanceScreen
+  usecase__ChangeNextRestockDate -.-> screen__StoreMaintenanceScreen
   usecase__ChangeNextRestockDate -.->|transitions Store.restock_status normal->scheduled| state__Store_scheduled
   usecase__ChangeNextRestockDate -.->|updates| entity__Store
-  usecase__ChangeStoreParentOrganization -.->|displays| screen__StoreMaintenanceScreen
+  usecase__ChangeStoreParentOrganization -.-> screen__StoreMaintenanceScreen
   usecase__ChangeStoreParentOrganization -.->|reads| entity__Organization
   %% derived usecase__ChangeStoreParentOrganization -> entity__Organization via api__OrganizationLookupApi
   usecase__ChangeStoreParentOrganization -.->|updates| entity__Store
@@ -363,42 +365,42 @@ flowchart TD
       step__ReferralStep["紹介状あり（初診）"]:::step
     end
   end
-  usecase__AssignRoom["診察室への案内"]:::usecase
+  usecase__AssignRoom("診察室への案内"):::usecase
   %% desc usecase__AssignRoom: 受付済の受診だけを診察室へ案内する。予約の状態は変わらない。
-  usecase__CheckInPatient["受付（初診・再診）"]:::usecase
+  usecase__CheckInPatient("受付（初診・再診）"):::usecase
   %% desc usecase__CheckInPatient: 受付で予約を受付済にし、同時にオンライン資格確認を作る。
-  usecase__ConfirmEligibilityInOutageMode["システム障害時モードでの資格確認"]:::usecase
+  usecase__ConfirmEligibilityInOutageMode("システム障害時モードでの資格確認"):::usecase
   %% desc usecase__ConfirmEligibilityInOutageMode: システム障害時モードによる確認。
-  usecase__ReceiveEligibilityInvalid["資格確認結果（無効）の取込"]:::usecase
+  usecase__ReceiveEligibilityInvalid("資格確認結果（無効）の取込"):::usecase
   %% desc usecase__ReceiveEligibilityInvalid: 資格確認結果「無効」の取込。
-  usecase__ReceiveEligibilityNoInfo["資格確認結果（該当資格なし）の取込"]:::usecase
+  usecase__ReceiveEligibilityNoInfo("資格確認結果（該当資格なし）の取込"):::usecase
   %% desc usecase__ReceiveEligibilityNoInfo: 資格確認結果「該当資格なし」の取込。
-  usecase__ReceiveEligibilityValid["資格確認結果（有効）の取込"]:::usecase
+  usecase__ReceiveEligibilityValid("資格確認結果（有効）の取込"):::usecase
   %% desc usecase__ReceiveEligibilityValid: 資格確認結果「有効」の取込。
-  usecase__ReceiveReferralLetter["紹介状受付処理"]:::usecase
+  usecase__ReceiveReferralLetter("紹介状受付処理"):::usecase
   %% desc usecase__ReceiveReferralLetter: 紹介状の受領と受付処理。
-  usecase__RecheckEligibility["資格の再確認"]:::usecase
+  usecase__RecheckEligibility("資格の再確認"):::usecase
   %% desc usecase__RecheckEligibility: 無効・該当資格なしからの再確認。
-  usecase__RecordEligibilityDeclaration["被保険者資格申立書の受領"]:::usecase
+  usecase__RecordEligibilityDeclaration("被保険者資格申立書の受領"):::usecase
   %% desc usecase__RecordEligibilityDeclaration: 被保険者資格申立書による確認。
-  usecase__VerifyArrival["予約票・診察券の確認"]:::usecase
+  usecase__VerifyArrival("予約票・診察券の確認"):::usecase
   %% desc usecase__VerifyArrival: 予約票・診察券を確認する（参照のみ）。
-  step__ArrivalStep -.->|covers| usecase__VerifyArrival
+  step__ArrivalStep -.-> usecase__VerifyArrival
   step__ArrivalStep -->|precedes| step__EligibilityStep
-  step__DeclarationStep -.->|covers| usecase__ConfirmEligibilityInOutageMode
-  step__DeclarationStep -.->|covers| usecase__RecordEligibilityDeclaration
+  step__DeclarationStep -.-> usecase__ConfirmEligibilityInOutageMode
+  step__DeclarationStep -.-> usecase__RecordEligibilityDeclaration
   step__DeclarationStep -->|precedes| step__RoomingStep
   step__EligibilityStep -->|branches| step__ReferralStep
-  step__EligibilityStep -.->|covers| usecase__CheckInPatient
-  step__EligibilityStep -.->|covers| usecase__ReceiveEligibilityInvalid
-  step__EligibilityStep -.->|covers| usecase__ReceiveEligibilityNoInfo
-  step__EligibilityStep -.->|covers| usecase__ReceiveEligibilityValid
-  step__EligibilityStep -.->|covers| usecase__RecheckEligibility
+  step__EligibilityStep -.-> usecase__CheckInPatient
+  step__EligibilityStep -.-> usecase__ReceiveEligibilityInvalid
+  step__EligibilityStep -.-> usecase__ReceiveEligibilityNoInfo
+  step__EligibilityStep -.-> usecase__ReceiveEligibilityValid
+  step__EligibilityStep -.-> usecase__RecheckEligibility
   step__EligibilityStep -.->|excepts| step__DeclarationStep
   step__EligibilityStep -->|precedes| step__RoomingStep
-  step__ReferralStep -.->|covers| usecase__ReceiveReferralLetter
+  step__ReferralStep -.-> usecase__ReceiveReferralLetter
   step__ReferralStep -->|precedes| step__RoomingStep
-  step__RoomingStep -.->|covers| usecase__AssignRoom
+  step__RoomingStep -.-> usecase__AssignRoom
   classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
@@ -440,11 +442,11 @@ rdra-ish diagram samples/incremental-order/step-6-business-rules/src \
 %% kinds: entity statemodel
 %% omitted: columns usecase screen api
 flowchart LR
-  entity__Organization["Organization"]:::entity
-  entity__Store["Store"]:::entity
-  statemodel__Store_restock_status["Store.restock_status"]:::statemodel
+  entity__Organization[("Organization")]:::entity
+  entity__Store[("Store")]:::entity
+  statemodel__Store_restock_status[["Store.restock_status"]]:::statemodel
   entity__Store ---|N:1| entity__Organization
-  entity__Store -.->|statemodel| statemodel__Store_restock_status
+  entity__Store -.-> statemodel__Store_restock_status
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
   classDef statemodel fill:#fff9db,stroke:#5c940d,color:#000;
 ```
@@ -483,10 +485,10 @@ rdra-ish diagram samples/clinic-ops \
 %% kinds: condition statemodel variation value usecase
 %% omitted: (none)
 flowchart LR
-  condition__CopayCappedAtLimit["窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"]:::condition
-  condition__UnreferredFirstVisit["紹介状なしの初診で、除外に当たらない"]:::condition
+  condition__CopayCappedAtLimit{"窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"}:::condition
+  condition__UnreferredFirstVisit{"紹介状なしの初診で、除外に当たらない"}:::condition
   %% holds condition__UnreferredFirstVisit: Charge.kind == 選定療養（自費）, Appointment.referral == 紹介状なし初診
-  statemodel__Appointment_status["Appointment.status"]:::statemodel
+  statemodel__Appointment_status[["Appointment.status"]]:::statemodel
   subgraph variation__BurdenRatio["負担割合"]
     variation__BurdenRatio__thirty["3割"]:::value
     variation__BurdenRatio__twenty["2割"]:::value
@@ -505,18 +507,18 @@ flowchart LR
     variation__ReferralCategory__unreferred["紹介状なし初診"]:::value
     variation__ReferralCategory__exempt["紹介状なし初診（救急搬送等の除外）"]:::value
   end
-  usecase__ApplySelectedTreatmentFee["選定療養費の算定"]:::usecase
+  usecase__ApplySelectedTreatmentFee("選定療養費の算定"):::usecase
   %% desc usecase__ApplySelectedTreatmentFee: 紹介状なし初診だけに選定療養費の Charge を作る。
-  usecase__CalculateVisitBill["会計計算入力"]:::usecase
+  usecase__CalculateVisitBill("会計計算入力"):::usecase
   %% desc usecase__CalculateVisitBill: 会計計算入力で予約を会計待ちにする。
-  condition__CopayCappedAtLimit -.->|applies_to| usecase__CalculateVisitBill
-  condition__CopayCappedAtLimit -.->|combines| statemodel__Appointment_status
-  condition__CopayCappedAtLimit -.->|combines| variation__BurdenRatio
-  condition__CopayCappedAtLimit -.->|combines| variation__LimitCategory
-  condition__UnreferredFirstVisit -.->|applies_to| usecase__ApplySelectedTreatmentFee
-  condition__UnreferredFirstVisit -.->|combines| variation__ChargeKind
+  condition__CopayCappedAtLimit -.-> usecase__CalculateVisitBill
+  condition__CopayCappedAtLimit -.-> statemodel__Appointment_status
+  condition__CopayCappedAtLimit -.-> variation__BurdenRatio
+  condition__CopayCappedAtLimit -.-> variation__LimitCategory
+  condition__UnreferredFirstVisit -.-> usecase__ApplySelectedTreatmentFee
+  condition__UnreferredFirstVisit -.-> variation__ChargeKind
   %% derived condition__UnreferredFirstVisit -> variation__ChargeKind from holds
-  condition__UnreferredFirstVisit -.->|combines| variation__ReferralCategory
+  condition__UnreferredFirstVisit -.-> variation__ReferralCategory
   %% derived condition__UnreferredFirstVisit -> variation__ReferralCategory from holds
   classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;
   classDef statemodel fill:#fff9db,stroke:#5c940d,color:#000;
@@ -603,16 +605,16 @@ rdra-ish diagram samples/ec-site \
 %% kinds: event usecase extsystem
 %% omitted: state transitions
 flowchart LR
-  event__EvOrderShipped["Order Shipped"]:::event
-  usecase__ShipOrder["Ship Order"]:::usecase
-  usecase__ShipOrder -.->|raises| event__EvOrderShipped
-  extsystem__ShippingSvc["Shipping Service"]:::extsystem
-  event__EvOrderShipped -.->|triggers| extsystem__ShippingSvc
-  event__EvPaymentAuthorized["Payment Authorized"]:::event
-  extsystem__PaymentGW["Payment Gateway"]:::extsystem
-  extsystem__PaymentGW -.->|raises| event__EvPaymentAuthorized
-  usecase__Capture["Capture Payment"]:::usecase
-  event__EvPaymentAuthorized -.->|triggers| usecase__Capture
+  event__EvOrderShipped>"Order Shipped"]:::event
+  usecase__ShipOrder("Ship Order"):::usecase
+  usecase__ShipOrder -.-> event__EvOrderShipped
+  extsystem__ShippingSvc[["Shipping Service"]]:::extsystem
+  event__EvOrderShipped -.-> extsystem__ShippingSvc
+  event__EvPaymentAuthorized>"Payment Authorized"]:::event
+  extsystem__PaymentGW[["Payment Gateway"]]:::extsystem
+  extsystem__PaymentGW -.-> event__EvPaymentAuthorized
+  usecase__Capture("Capture Payment"):::usecase
+  event__EvPaymentAuthorized -.-> usecase__Capture
   classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
   classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
@@ -702,10 +704,10 @@ rdra-ish diagram samples/incremental-order/step-6-business-rules/src \
 %% omitted: (none)
 flowchart LR
   subgraph layer_value["システム価値"]
-    actor__OpsStaff["Operations Staff"]:::actor
+    actor__OpsStaff(["Operations Staff"]):::actor
   end
   subgraph layer_environment["システム外部環境"]
-    business__StoreOperations["Store Operations"]:::business
+    business__StoreOperations[\"Store Operations"/]:::business
     %% desc business__StoreOperations: Store operations owns restock planning and store master maintenance.
     buc__BucStoreRestock["Maintain Store Restock"]:::buc
     %% desc buc__BucStoreRestock: Keep restock dates and store organization assignments operationally correct.
@@ -713,47 +715,47 @@ flowchart LR
     permission__StoreMaintenanceWrite["Store Maintenance Write"]:::permission
   end
   subgraph layer_boundary["システム境界"]
-    usecase__BlockScheduledRestock["Block Scheduled Restock"]:::usecase
-    usecase__ChangeNextRestockDate["Change Next Restock Date"]:::usecase
-    usecase__ChangeStoreParentOrganization["Change Store Parent Organization"]:::usecase
+    usecase__BlockScheduledRestock("Block Scheduled Restock"):::usecase
+    usecase__ChangeNextRestockDate("Change Next Restock Date"):::usecase
+    usecase__ChangeStoreParentOrganization("Change Store Parent Organization"):::usecase
     screen__StoreMaintenanceScreen["Store Maintenance"]:::screen
   end
   subgraph layer_system["システム"]
-    api__OrganizationLookupApi["Organization Lookup API"]:::api
-    api__StoreAdminApi["Store Admin API"]:::api
-    entity__Organization["Organization"]:::entity
-    entity__Store["Store"]:::entity
-    state__Store_blocked["blocked"]:::state
-    state__Store_normal["normal"]:::state
-    state__Store_scheduled["scheduled"]:::state
+    api__OrganizationLookupApi{{"Organization Lookup API"}}:::api
+    api__StoreAdminApi{{"Store Admin API"}}:::api
+    entity__Organization[("Organization")]:::entity
+    entity__Store[("Store")]:::entity
+    state__Store_blocked((("blocked"))):::state
+    state__Store_normal((("normal"))):::state
+    state__Store_scheduled((("scheduled"))):::state
   end
-  actor__OpsStaff -.->|has_permission| permission__StoreMaintenanceWrite
-  actor__OpsStaff -.->|performs| buc__BucStoreRestock
+  actor__OpsStaff -.-> permission__StoreMaintenanceWrite
+  actor__OpsStaff -.-> buc__BucStoreRestock
   api__OrganizationLookupApi -.->|reads| entity__Organization
-  api__StoreAdminApi -.->|requires_permission| permission__StoreMaintenanceWrite
+  api__StoreAdminApi -.-> permission__StoreMaintenanceWrite
   api__StoreAdminApi -.->|updates| entity__Store
-  buc__BucStoreRestock -->|belongs| business__StoreOperations
-  buc__BucStoreRestock -->|contains| usecase__BlockScheduledRestock
-  buc__BucStoreRestock -->|contains| usecase__ChangeNextRestockDate
-  buc__BucStoreRestock -->|contains| usecase__ChangeStoreParentOrganization
+  buc__BucStoreRestock --> business__StoreOperations
+  buc__BucStoreRestock --> usecase__BlockScheduledRestock
+  buc__BucStoreRestock --> usecase__ChangeNextRestockDate
+  buc__BucStoreRestock --> usecase__ChangeStoreParentOrganization
   entity__Store ---|N:1| entity__Organization
-  screen__StoreMaintenanceScreen -.->|shows| entity__Organization
-  screen__StoreMaintenanceScreen -.->|shows| entity__Store
-  usecase__BlockScheduledRestock -.->|displays| screen__StoreMaintenanceScreen
-  usecase__BlockScheduledRestock -.->|requires_medium| medium__OpsConsole
-  usecase__BlockScheduledRestock -.->|requires_permission| permission__StoreMaintenanceWrite
+  screen__StoreMaintenanceScreen -.-> entity__Organization
+  screen__StoreMaintenanceScreen -.-> entity__Store
+  usecase__BlockScheduledRestock -.-> screen__StoreMaintenanceScreen
+  usecase__BlockScheduledRestock -.-> medium__OpsConsole
+  usecase__BlockScheduledRestock -.-> permission__StoreMaintenanceWrite
   usecase__BlockScheduledRestock -.->|transitions Store.restock_status scheduled->blocked| state__Store_blocked
   usecase__BlockScheduledRestock -.->|updates| entity__Store
-  usecase__ChangeNextRestockDate -.->|displays| screen__StoreMaintenanceScreen
-  usecase__ChangeNextRestockDate -.->|requires_medium| medium__OpsConsole
-  usecase__ChangeNextRestockDate -.->|requires_permission| permission__StoreMaintenanceWrite
+  usecase__ChangeNextRestockDate -.-> screen__StoreMaintenanceScreen
+  usecase__ChangeNextRestockDate -.-> medium__OpsConsole
+  usecase__ChangeNextRestockDate -.-> permission__StoreMaintenanceWrite
   usecase__ChangeNextRestockDate -.->|transitions Store.restock_status normal->scheduled| state__Store_scheduled
   usecase__ChangeNextRestockDate -.->|updates| entity__Store
-  usecase__ChangeStoreParentOrganization -.->|displays| screen__StoreMaintenanceScreen
-  usecase__ChangeStoreParentOrganization -.->|invokes| api__OrganizationLookupApi
-  usecase__ChangeStoreParentOrganization -.->|invokes| api__StoreAdminApi
-  usecase__ChangeStoreParentOrganization -.->|requires_medium| medium__OpsConsole
-  usecase__ChangeStoreParentOrganization -.->|requires_permission| permission__StoreMaintenanceWrite
+  usecase__ChangeStoreParentOrganization -.-> screen__StoreMaintenanceScreen
+  usecase__ChangeStoreParentOrganization -.-> api__OrganizationLookupApi
+  usecase__ChangeStoreParentOrganization -.-> api__StoreAdminApi
+  usecase__ChangeStoreParentOrganization -.-> medium__OpsConsole
+  usecase__ChangeStoreParentOrganization -.-> permission__StoreMaintenanceWrite
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef business fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;

@@ -4,36 +4,36 @@
 %% omitted: (none)
 flowchart LR
   subgraph layer_value["システム価値"]
-    actor__Customer["Customer"]:::actor
+    actor__Customer(["Customer"]):::actor
   end
   subgraph layer_environment["システム外部環境"]
-    business__EcShopping["EC Shopping Business"]:::business
+    business__EcShopping[\"EC Shopping Business"/]:::business
     buc__BucCart["Add Products to Cart"]:::buc
   end
   subgraph layer_boundary["システム境界"]
-    usecase__AddToCart["Add to Cart"]:::usecase
-    usecase__RemoveCartItem["Remove from Cart"]:::usecase
-    usecase__SearchProducts["Search Products"]:::usecase
-    usecase__UpdateCartItem["Change Cart Item Quantity"]:::usecase
-    usecase__ViewCart["View Cart"]:::usecase
-    usecase__ViewProduct["View Product Details"]:::usecase
+    usecase__AddToCart("Add to Cart"):::usecase
+    usecase__RemoveCartItem("Remove from Cart"):::usecase
+    usecase__SearchProducts("Search Products"):::usecase
+    usecase__UpdateCartItem("Change Cart Item Quantity"):::usecase
+    usecase__ViewCart("View Cart"):::usecase
+    usecase__ViewProduct("View Product Details"):::usecase
     screen__CartScreen["Cart Screen"]:::screen
     screen__ProductDetailScreen["Product Detail Screen"]:::screen
     screen__ProductSearchScreen["Product Search Screen"]:::screen
   end
   subgraph layer_system["システム"]
-    api__AddToCartApi["Add To Cart API"]:::api
-    api__ProductDetailApi["Product Detail API"]:::api
-    api__ProductSearchApi["Product Search API"]:::api
-    api__RemoveCartItemApi["Remove Cart Item API"]:::api
-    api__UpdateCartItemApi["Update Cart Item API"]:::api
-    api__ViewCartApi["View Cart API"]:::api
-    entity__Cart["Cart"]:::entity
-    entity__CartItem["Cart Item"]:::entity
-    entity__Category["Category"]:::entity
-    entity__Product["Product"]:::entity
+    api__AddToCartApi{{"Add To Cart API"}}:::api
+    api__ProductDetailApi{{"Product Detail API"}}:::api
+    api__ProductSearchApi{{"Product Search API"}}:::api
+    api__RemoveCartItemApi{{"Remove Cart Item API"}}:::api
+    api__UpdateCartItemApi{{"Update Cart Item API"}}:::api
+    api__ViewCartApi{{"View Cart API"}}:::api
+    entity__Cart[("Cart")]:::entity
+    entity__CartItem[("Cart Item")]:::entity
+    entity__Category[("Category")]:::entity
+    entity__Product[("Product")]:::entity
   end
-  actor__Customer -.->|performs| buc__BucCart
+  actor__Customer -.-> buc__BucCart
   api__AddToCartApi -.->|creates| entity__CartItem
   api__AddToCartApi -.->|reads| entity__Product
   api__AddToCartApi -.->|updates| entity__Cart
@@ -45,28 +45,28 @@ flowchart LR
   api__ViewCartApi -.->|reads| entity__Cart
   api__ViewCartApi -.->|reads| entity__CartItem
   api__ViewCartApi -.->|reads| entity__Product
-  buc__BucCart -->|belongs| business__EcShopping
-  buc__BucCart -->|contains| usecase__AddToCart
-  buc__BucCart -->|contains| usecase__RemoveCartItem
-  buc__BucCart -->|contains| usecase__SearchProducts
-  buc__BucCart -->|contains| usecase__UpdateCartItem
-  buc__BucCart -->|contains| usecase__ViewCart
-  buc__BucCart -->|contains| usecase__ViewProduct
+  buc__BucCart --> business__EcShopping
+  buc__BucCart --> usecase__AddToCart
+  buc__BucCart --> usecase__RemoveCartItem
+  buc__BucCart --> usecase__SearchProducts
+  buc__BucCart --> usecase__UpdateCartItem
+  buc__BucCart --> usecase__ViewCart
+  buc__BucCart --> usecase__ViewProduct
   entity__CartItem ---|N:1| entity__Cart
   entity__CartItem ---|N:1| entity__Product
   entity__Product ---|N:1| entity__Category
-  usecase__AddToCart -.->|displays| screen__CartScreen
-  usecase__AddToCart -.->|invokes| api__AddToCartApi
-  usecase__RemoveCartItem -.->|displays| screen__CartScreen
-  usecase__RemoveCartItem -.->|invokes| api__RemoveCartItemApi
-  usecase__SearchProducts -.->|displays| screen__ProductSearchScreen
-  usecase__SearchProducts -.->|invokes| api__ProductSearchApi
-  usecase__UpdateCartItem -.->|displays| screen__CartScreen
-  usecase__UpdateCartItem -.->|invokes| api__UpdateCartItemApi
-  usecase__ViewCart -.->|displays| screen__CartScreen
-  usecase__ViewCart -.->|invokes| api__ViewCartApi
-  usecase__ViewProduct -.->|displays| screen__ProductDetailScreen
-  usecase__ViewProduct -.->|invokes| api__ProductDetailApi
+  usecase__AddToCart -.-> screen__CartScreen
+  usecase__AddToCart -.-> api__AddToCartApi
+  usecase__RemoveCartItem -.-> screen__CartScreen
+  usecase__RemoveCartItem -.-> api__RemoveCartItemApi
+  usecase__SearchProducts -.-> screen__ProductSearchScreen
+  usecase__SearchProducts -.-> api__ProductSearchApi
+  usecase__UpdateCartItem -.-> screen__CartScreen
+  usecase__UpdateCartItem -.-> api__UpdateCartItemApi
+  usecase__ViewCart -.-> screen__CartScreen
+  usecase__ViewCart -.-> api__ViewCartApi
+  usecase__ViewProduct -.-> screen__ProductDetailScreen
+  usecase__ViewProduct -.-> api__ProductDetailApi
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef business fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;

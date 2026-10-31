@@ -81,33 +81,33 @@
 %% kinds: actor extsystem system
 %% omitted: buc step permission usecase event
 flowchart LR
-  actor__AccountsClerk["医事課 会計担当"]:::actor
+  actor__AccountsClerk(["医事課 会計担当"]):::actor
   %% desc actor__AccountsClerk: 会計計算入力、患者の呼出、窓口精算、領収証・明細書の交付を行う事務職員。
-  actor__CareCoordinator["患者支援・地域連携担当"]:::actor
+  actor__CareCoordinator(["患者支援・地域連携担当"]):::actor
   %% desc actor__CareCoordinator: 診療後のケアプランを作り、患者への連絡と再診予約を追う。
-  actor__ClaimsClerk["医事課 レセプト担当"]:::actor
+  actor__ClaimsClerk(["医事課 レセプト担当"]):::actor
   %% desc actor__ClaimsClerk: レセプトの作成・院内点検・請求と、返戻・査定への対応を行う事務職員。
-  actor__ClinicAdmin["病院管理者"]:::actor
+  actor__ClinicAdmin(["病院管理者"]):::actor
   %% desc actor__ClinicAdmin: 診療枠と診察室のマスタを管理し、監査の指摘を解決する。
-  actor__Clinician["医師"]:::actor
+  actor__Clinician(["医師"]):::actor
   %% desc actor__Clinician: 診察し、診断・オーダ・処方を出し、診療記録に署名する。
-  actor__MedicalClerk["医師事務作業補助者"]:::actor
+  actor__MedicalClerk(["医師事務作業補助者"]):::actor
   %% desc actor__MedicalClerk: 医師の指示で電子カルテへ代行入力する。確定は医師が行う。
-  actor__Nurse["看護師"]:::actor
+  actor__Nurse(["看護師"]):::actor
   %% desc actor__Nurse: 医師の指示の下で診療の補助を行う。
-  actor__Patient["患者"]:::actor
+  actor__Patient(["患者"]):::actor
   %% desc actor__Patient: 病院で診療を受ける人。
-  actor__Pharmacist["薬剤師"]:::actor
+  actor__Pharmacist(["薬剤師"]):::actor
   %% desc actor__Pharmacist: 院内処方を調剤・監査し、服薬指導と交付を行う。疑わしい処方は医師に照会する。
-  actor__ReceptionClerk["医事課 受付担当"]:::actor
+  actor__ReceptionClerk(["医事課 受付担当"]):::actor
   %% desc actor__ReceptionClerk: 初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。
-  extsystem__ClaimsReviewOrganization["審査支払機関（支払基金・国保連）"]:::extsystem
-  extsystem__EPrescriptionService["電子処方箋管理サービス"]:::extsystem
-  extsystem__InsurancePharmacy["保険薬局"]:::extsystem
-  extsystem__MessagingGateway["患者通知サービス"]:::extsystem
-  extsystem__OnlineEligibilitySystem["オンライン資格確認等システム"]:::extsystem
-  extsystem__OutsourcedLabSystem["外注検査システム"]:::extsystem
-  extsystem__PaymentGateway["自動精算機・クレジット決済"]:::extsystem
+  extsystem__ClaimsReviewOrganization[["審査支払機関（支払基金・国保連）"]]:::extsystem
+  extsystem__EPrescriptionService[["電子処方箋管理サービス"]]:::extsystem
+  extsystem__InsurancePharmacy[["保険薬局"]]:::extsystem
+  extsystem__MessagingGateway[["患者通知サービス"]]:::extsystem
+  extsystem__OnlineEligibilitySystem[["オンライン資格確認等システム"]]:::extsystem
+  extsystem__OutsourcedLabSystem[["外注検査システム"]]:::extsystem
+  extsystem__PaymentGateway[["自動精算機・クレジット決済"]]:::extsystem
   system__ClinicOpsSystem["外来業務システム"]:::system
   actor__AccountsClerk -.->|計算・会計| system__ClinicOpsSystem
   %% derived actor__AccountsClerk -> system__ClinicOpsSystem via buc__BucVisitPayment
@@ -165,24 +165,24 @@ flowchart LR
 %% kinds: requirement goal buc
 %% omitted: actor nfr quality constraint business flow usecase event system entity
 flowchart LR
-  requirement__ReqChangeAppointmentAtDesk["予約の変更・取消を電話と窓口で受け付ける"]:::requirement
-  requirement__ReqEligibilityEveryVisit["受付のたびに保険資格を確認する"]:::requirement
-  requirement__ReqFollowUpAfterVisit["診察後の連絡と再診予約をケアプランで追う"]:::requirement
-  requirement__ReqHandOffAfterConsultation["診察終了で受診を会計計算へ引き渡す"]:::requirement
-  requirement__ReqInquiryBeforeDispense["疑わしい処方は医師への照会が済むまで調剤しない"]:::requirement
-  requirement__ReqMonthlyClaimByTenth["前月分のレセプトを翌月10日までに請求する"]:::requirement
-  requirement__ReqPayAfterConsultation["会計は診察の後に一度で行う"]:::requirement
-  requirement__ReqProxyOrderNeedsPhysician["代行入力されたオーダは医師が確定するまで実施しない"]:::requirement
-  requirement__ReqRegisterEPrescription["院外処方箋を電子処方箋管理サービスへ登録し、保険薬局を指定しない"]:::requirement
-  requirement__ReqRegisterWithEligibility["新患登録で保険情報と限度額情報をオンライン資格確認から取り込む"]:::requirement
-  requirement__ReqResolveAuditFindings["監査で見つかった問題を管理者が解決するまで追う"]:::requirement
-  requirement__ReqResubmitReturned["返戻レセプトを訂正して再請求する"]:::requirement
-  requirement__ReqSwiftCheckIn["再来患者は情報を入力し直さずに受付・案内される"]:::requirement
-  goal__SafeCare["診療の抜けと誤りを実施前に止める<br/>処方・オーダの確認漏れと診察後の連絡漏れの件数: 月20件 → 月5件以下"]:::goal
+  requirement__ReqChangeAppointmentAtDesk[/"予約の変更・取消を電話と窓口で受け付ける"\]:::requirement
+  requirement__ReqEligibilityEveryVisit[/"受付のたびに保険資格を確認する"\]:::requirement
+  requirement__ReqFollowUpAfterVisit[/"診察後の連絡と再診予約をケアプランで追う"\]:::requirement
+  requirement__ReqHandOffAfterConsultation[/"診察終了で受診を会計計算へ引き渡す"\]:::requirement
+  requirement__ReqInquiryBeforeDispense[/"疑わしい処方は医師への照会が済むまで調剤しない"\]:::requirement
+  requirement__ReqMonthlyClaimByTenth[/"前月分のレセプトを翌月10日までに請求する"\]:::requirement
+  requirement__ReqPayAfterConsultation[/"会計は診察の後に一度で行う"\]:::requirement
+  requirement__ReqProxyOrderNeedsPhysician[/"代行入力されたオーダは医師が確定するまで実施しない"\]:::requirement
+  requirement__ReqRegisterEPrescription[/"院外処方箋を電子処方箋管理サービスへ登録し、保険薬局を指定しない"\]:::requirement
+  requirement__ReqRegisterWithEligibility[/"新患登録で保険情報と限度額情報をオンライン資格確認から取り込む"\]:::requirement
+  requirement__ReqResolveAuditFindings[/"監査で見つかった問題を管理者が解決するまで追う"\]:::requirement
+  requirement__ReqResubmitReturned[/"返戻レセプトを訂正して再請求する"\]:::requirement
+  requirement__ReqSwiftCheckIn[/"再来患者は情報を入力し直さずに受付・案内される"\]:::requirement
+  goal__SafeCare[/"診療の抜けと誤りを実施前に止める<br/>処方・オーダの確認漏れと診察後の連絡漏れの件数: 月20件 → 月5件以下"/]:::goal
   %% desc goal__SafeCare: 処方やオーダの確認漏れ、診察後の連絡漏れは、患者の安全と継続した治療を損なう。
-  goal__ShortWait["受付から診察までの待ち時間を短くする<br/>受付から診察開始までの中央値: 45分 → 30分"]:::goal
+  goal__ShortWait[/"受付から診察までの待ち時間を短くする<br/>受付から診察開始までの中央値: 45分 → 30分"/]:::goal
   %% desc goal__ShortWait: 受付後に診察室へ案内されるまでの待ちが長いと、患者が帰ってしまう。
-  goal__TimelyClaims["会計から請求までの遅れと返戻を減らす<br/>請求したレセプトのうち返戻になった割合: 3% → 1%"]:::goal
+  goal__TimelyClaims[/"会計から請求までの遅れと返戻を減らす<br/>請求したレセプトのうち返戻になった割合: 3% → 1%"/]:::goal
   %% desc goal__TimelyClaims: 診察後の会計や請求に漏れや遅れがあると、収入が遅れ、返戻の訂正に事務の手間がかかる。
   buc__BucAppointmentScheduling["予約"]:::buc
   %% desc buc__BucAppointmentScheduling: 予約検索、仮押さえ、予約確定、変更、取消、通知を扱う。予約枠と予約レコードを同時に更新する UC は専用 API を持ち、予約通知は AppointmentNoticeApi に分ける。予約済みの患者は、来院前に `BucVisitCheckIn` の一括照会の対象になる。
@@ -205,48 +205,48 @@ flowchart LR
   buc__BucVisitPayment["計算・会計"]:::buc
   %% desc buc__BucVisitPayment: 診察の後の会計計算入力、患者の呼出、会計窓口または自動精算機での精算、領収証・明細書の交付を扱う。一部負担金は負担割合で計算し、限度額情報があれば窓口での支払は自己負担限度額までになる（`CopayCappedAtLimit`）。紹介状なしの初診で除外に当たらない場合は選定療養費を自費の Charge として算定する（`UnreferredFirstVisit`）。金額は病院の設定 `SelectedTreatmentFeeSetting` に置き、モデルは数値を持たない。
   subgraph group_out_of_scope["やらないこと"]
-    requirement__ReqNoOnlineConsultation["オンライン診療は対象外とする"]:::requirement
+    requirement__ReqNoOnlineConsultation[/"オンライン診療は対象外とする"\]:::requirement
   end
-  goal__SafeCare -->|achieved_by| requirement__ReqFollowUpAfterVisit
+  goal__SafeCare --> requirement__ReqFollowUpAfterVisit
   %% derived goal__SafeCare -> requirement__ReqFollowUpAfterVisit via requirement__ReqFollowUpAfterVisit
-  goal__SafeCare -->|achieved_by| requirement__ReqInquiryBeforeDispense
+  goal__SafeCare --> requirement__ReqInquiryBeforeDispense
   %% derived goal__SafeCare -> requirement__ReqInquiryBeforeDispense via requirement__ReqInquiryBeforeDispense
-  goal__SafeCare -->|achieved_by| requirement__ReqProxyOrderNeedsPhysician
+  goal__SafeCare --> requirement__ReqProxyOrderNeedsPhysician
   %% derived goal__SafeCare -> requirement__ReqProxyOrderNeedsPhysician via requirement__ReqProxyOrderNeedsPhysician
-  goal__SafeCare -->|achieved_by| requirement__ReqRegisterEPrescription
+  goal__SafeCare --> requirement__ReqRegisterEPrescription
   %% derived goal__SafeCare -> requirement__ReqRegisterEPrescription via requirement__ReqRegisterEPrescription
-  goal__ShortWait -->|achieved_by| requirement__ReqChangeAppointmentAtDesk
+  goal__ShortWait --> requirement__ReqChangeAppointmentAtDesk
   %% derived goal__ShortWait -> requirement__ReqChangeAppointmentAtDesk via requirement__ReqChangeAppointmentAtDesk
-  goal__ShortWait -->|achieved_by| requirement__ReqEligibilityEveryVisit
+  goal__ShortWait --> requirement__ReqEligibilityEveryVisit
   %% derived goal__ShortWait -> requirement__ReqEligibilityEveryVisit via requirement__ReqEligibilityEveryVisit
-  goal__ShortWait -->|achieved_by| requirement__ReqRegisterWithEligibility
+  goal__ShortWait --> requirement__ReqRegisterWithEligibility
   %% derived goal__ShortWait -> requirement__ReqRegisterWithEligibility via requirement__ReqRegisterWithEligibility
-  goal__ShortWait -->|achieved_by| requirement__ReqSwiftCheckIn
+  goal__ShortWait --> requirement__ReqSwiftCheckIn
   %% derived goal__ShortWait -> requirement__ReqSwiftCheckIn via requirement__ReqSwiftCheckIn
-  goal__TimelyClaims -->|achieved_by| requirement__ReqHandOffAfterConsultation
+  goal__TimelyClaims --> requirement__ReqHandOffAfterConsultation
   %% derived goal__TimelyClaims -> requirement__ReqHandOffAfterConsultation via requirement__ReqHandOffAfterConsultation
-  goal__TimelyClaims -->|achieved_by| requirement__ReqMonthlyClaimByTenth
+  goal__TimelyClaims --> requirement__ReqMonthlyClaimByTenth
   %% derived goal__TimelyClaims -> requirement__ReqMonthlyClaimByTenth via requirement__ReqMonthlyClaimByTenth
-  goal__TimelyClaims -->|achieved_by| requirement__ReqPayAfterConsultation
+  goal__TimelyClaims --> requirement__ReqPayAfterConsultation
   %% derived goal__TimelyClaims -> requirement__ReqPayAfterConsultation via requirement__ReqPayAfterConsultation
-  goal__TimelyClaims -->|achieved_by| requirement__ReqResolveAuditFindings
+  goal__TimelyClaims --> requirement__ReqResolveAuditFindings
   %% derived goal__TimelyClaims -> requirement__ReqResolveAuditFindings via requirement__ReqResolveAuditFindings
-  goal__TimelyClaims -->|achieved_by| requirement__ReqResubmitReturned
+  goal__TimelyClaims --> requirement__ReqResubmitReturned
   %% derived goal__TimelyClaims -> requirement__ReqResubmitReturned via requirement__ReqResubmitReturned
-  requirement__ReqChangeAppointmentAtDesk -->|motivates| buc__BucAppointmentScheduling
-  requirement__ReqEligibilityEveryVisit -->|motivates| buc__BucVisitCheckIn
-  requirement__ReqFollowUpAfterVisit -->|motivates| buc__BucFollowupCare
-  requirement__ReqHandOffAfterConsultation -->|motivates| buc__BucClinicalEncounter
-  requirement__ReqInquiryBeforeDispense -->|motivates| buc__BucPrescriptionFulfillment
-  requirement__ReqMonthlyClaimByTenth -->|motivates| buc__BucBillingClaims
-  requirement__ReqNoOnlineConsultation -.->|motivates| buc__BucClinicalEncounter
-  requirement__ReqPayAfterConsultation -->|motivates| buc__BucVisitPayment
-  requirement__ReqProxyOrderNeedsPhysician -->|motivates| buc__BucOrdersResults
-  requirement__ReqRegisterEPrescription -->|motivates| buc__BucPrescriptionFulfillment
-  requirement__ReqRegisterWithEligibility -->|motivates| buc__BucPatientOnboarding
-  requirement__ReqResolveAuditFindings -->|motivates| buc__BucStaffAdministration
-  requirement__ReqResubmitReturned -->|motivates| buc__BucBillingClaims
-  requirement__ReqSwiftCheckIn -->|motivates| buc__BucVisitCheckIn
+  requirement__ReqChangeAppointmentAtDesk --> buc__BucAppointmentScheduling
+  requirement__ReqEligibilityEveryVisit --> buc__BucVisitCheckIn
+  requirement__ReqFollowUpAfterVisit --> buc__BucFollowupCare
+  requirement__ReqHandOffAfterConsultation --> buc__BucClinicalEncounter
+  requirement__ReqInquiryBeforeDispense --> buc__BucPrescriptionFulfillment
+  requirement__ReqMonthlyClaimByTenth --> buc__BucBillingClaims
+  requirement__ReqNoOnlineConsultation -.-> buc__BucClinicalEncounter
+  requirement__ReqPayAfterConsultation --> buc__BucVisitPayment
+  requirement__ReqProxyOrderNeedsPhysician --> buc__BucOrdersResults
+  requirement__ReqRegisterEPrescription --> buc__BucPrescriptionFulfillment
+  requirement__ReqRegisterWithEligibility --> buc__BucPatientOnboarding
+  requirement__ReqResolveAuditFindings --> buc__BucStaffAdministration
+  requirement__ReqResubmitReturned --> buc__BucBillingClaims
+  requirement__ReqSwiftCheckIn --> buc__BucVisitCheckIn
   classDef requirement fill:#fff3bf,stroke:#e67700,color:#000;
   classDef goal fill:#fff3bf,stroke:#e67700,color:#000;
   classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;
@@ -377,49 +377,49 @@ flowchart TD
       step__MergeStep["重複患者の統合"]:::step
     end
   end
-  timer__IntakeExpiryCheck["問診票の期限切れ確認（毎晩）"]:::timer
-  usecase__ArchivePatient["患者のアーカイブ"]:::usecase
+  timer__IntakeExpiryCheck(("問診票の期限切れ確認（毎晩）")):::timer
+  usecase__ArchivePatient("患者のアーカイブ"):::usecase
   %% desc usecase__ArchivePatient: 患者アーカイブ状態。
-  usecase__CaptureConsent["同意の取得"]:::usecase
+  usecase__CaptureConsent("同意の取得"):::usecase
   %% desc usecase__CaptureConsent: 同意記録を作る。同意の有無は Bool、未回答は null で持つ。
-  usecase__CompleteIntakeForms["問診票の回答"]:::usecase
+  usecase__CompleteIntakeForms("問診票の回答"):::usecase
   %% desc usecase__CompleteIntakeForms: 問診完了イベント。
-  usecase__ExpireIntakeForms["問診票の期限切れ"]:::usecase
+  usecase__ExpireIntakeForms("問診票の期限切れ"):::usecase
   %% desc usecase__ExpireIntakeForms: 問診期限切れイベント。
-  usecase__MergeDuplicatePatient["重複患者の統合"]:::usecase
+  usecase__MergeDuplicatePatient("重複患者の統合"):::usecase
   %% desc usecase__MergeDuplicatePatient: 患者統合状態。
-  usecase__RegisterPatient["新患登録"]:::usecase
+  usecase__RegisterPatient("新患登録"):::usecase
   %% desc usecase__RegisterPatient: 新患の PatientAccount と PatientProfile を 1 つの API で同時に作る。
-  usecase__SearchPatient["患者の検索"]:::usecase
+  usecase__SearchPatient("患者の検索"):::usecase
   %% desc usecase__SearchPatient: 患者を検索する。参照だけの API で、患者の作成とは分ける。
-  usecase__SendIntakeForms["問診票の送付"]:::usecase
+  usecase__SendIntakeForms("問診票の送付"):::usecase
   %% desc usecase__SendIntakeForms: 問診パケットとメッセージ作成。
-  usecase__UpdateDemographics["患者属性の変更"]:::usecase
+  usecase__UpdateDemographics("患者属性の変更"):::usecase
   %% desc usecase__UpdateDemographics: 患者の属性を API で更新する。
-  usecase__VerifyInsurance["保険資格・限度額情報の登録（新患登録）"]:::usecase
+  usecase__VerifyInsurance("保険資格・限度額情報の登録（新患登録）"):::usecase
   %% desc usecase__VerifyInsurance: 保険資格の登録と限度額情報（適用区分）の取得。
-  event__EvAppointmentScheduled["予約確定"]:::event
-  step__ArchiveStep -.->|covers| usecase__ArchivePatient
-  step__ConsentStep -.->|covers| usecase__CaptureConsent
+  event__EvAppointmentScheduled>"予約確定"]:::event
+  step__ArchiveStep -.-> usecase__ArchivePatient
+  step__ConsentStep -.-> usecase__CaptureConsent
   step__ConsentStep -->|precedes| step__IntakeSendStep
-  step__DemographicsStep -.->|covers| usecase__UpdateDemographics
-  step__InsuranceStep -.->|covers| usecase__VerifyInsurance
+  step__DemographicsStep -.-> usecase__UpdateDemographics
+  step__InsuranceStep -.-> usecase__VerifyInsurance
   step__InsuranceStep -->|precedes| step__ConsentStep
-  step__IntakeAnswerStep -.->|covers| usecase__CompleteIntakeForms
+  step__IntakeAnswerStep -.-> usecase__CompleteIntakeForms
   step__IntakeAnswerStep -.->|excepts| step__IntakeExpireStep
-  step__IntakeExpireStep -.->|covers| timer__IntakeExpiryCheck
-  step__IntakeExpireStep -.->|covers| usecase__ExpireIntakeForms
-  step__IntakeSendStep -.->|covers| event__EvAppointmentScheduled
-  step__IntakeSendStep -.->|covers| usecase__SendIntakeForms
+  step__IntakeExpireStep -.-> timer__IntakeExpiryCheck
+  step__IntakeExpireStep -.-> usecase__ExpireIntakeForms
+  step__IntakeSendStep -.-> event__EvAppointmentScheduled
+  step__IntakeSendStep -.-> usecase__SendIntakeForms
   step__IntakeSendStep -->|precedes| step__IntakeAnswerStep
   step__MaintainSearchStep -->|branches| step__ArchiveStep
   step__MaintainSearchStep -->|branches| step__MergeStep
-  step__MaintainSearchStep -.->|covers| usecase__SearchPatient
+  step__MaintainSearchStep -.-> usecase__SearchPatient
   step__MaintainSearchStep -->|precedes| step__DemographicsStep
-  step__MergeStep -.->|covers| usecase__MergeDuplicatePatient
-  step__NewPatientSearchStep -.->|covers| usecase__SearchPatient
+  step__MergeStep -.-> usecase__MergeDuplicatePatient
+  step__NewPatientSearchStep -.-> usecase__SearchPatient
   step__NewPatientSearchStep -->|precedes| step__RegisterStep
-  step__RegisterStep -.->|covers| usecase__RegisterPatient
+  step__RegisterStep -.-> usecase__RegisterPatient
   step__RegisterStep -->|precedes| step__InsuranceStep
   classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
@@ -448,43 +448,43 @@ flowchart TD
       step__ReserveStep["仮押さえ"]:::step
     end
   end
-  actor__Patient["患者"]:::actor
+  actor__Patient(["患者"]):::actor
   %% desc actor__Patient: 病院で診療を受ける人。
-  actor__ReceptionClerk["医事課 受付担当"]:::actor
+  actor__ReceptionClerk(["医事課 受付担当"]):::actor
   %% desc actor__ReceptionClerk: 初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。
-  timer__NoShowSweep["未来院の確認（毎晩）"]:::timer
-  usecase__BookAppointment["予約の確定"]:::usecase
+  timer__NoShowSweep(("未来院の確認（毎晩）")):::timer
+  usecase__BookAppointment("予約の確定"):::usecase
   %% desc usecase__BookAppointment: 予約確定と予約枠更新。
-  usecase__CancelAppointment["予約の取消"]:::usecase
+  usecase__CancelAppointment("予約の取消"):::usecase
   %% desc usecase__CancelAppointment: 取消理由と予約枠更新。
-  usecase__MarkNoShow["未来院の処理"]:::usecase
+  usecase__MarkNoShow("未来院の処理"):::usecase
   %% desc usecase__MarkNoShow: タイマー起動の未来院処理。
-  usecase__RescheduleAppointment["予約の変更"]:::usecase
+  usecase__RescheduleAppointment("予約の変更"):::usecase
   %% desc usecase__RescheduleAppointment: 予約を変更する。予約の状態は変わらない。
-  usecase__ReserveAppointment["予約の仮押さえ"]:::usecase
+  usecase__ReserveAppointment("予約の仮押さえ"):::usecase
   %% desc usecase__ReserveAppointment: 仮押さえで Appointment を作る。
-  usecase__SearchAvailability["空き枠の検索"]:::usecase
+  usecase__SearchAvailability("空き枠の検索"):::usecase
   %% desc usecase__SearchAvailability: 予約枠を検索する。参照だけの API。
-  usecase__SendAppointmentNotice["予約の通知"]:::usecase
+  usecase__SendAppointmentNotice("予約の通知"):::usecase
   %% desc usecase__SendAppointmentNotice: 予約イベントからの通知作成。
-  event__EvAppointmentCancelled["予約取消"]:::event
-  actor__Patient -.->|performs| step__AvailabilityStep
-  actor__ReceptionClerk -.->|performs| step__AvailabilityStep
-  step__AvailabilityStep -.->|covers| usecase__SearchAvailability
+  event__EvAppointmentCancelled>"予約取消"]:::event
+  actor__Patient -.-> step__AvailabilityStep
+  actor__ReceptionClerk -.-> step__AvailabilityStep
+  step__AvailabilityStep -.-> usecase__SearchAvailability
   step__AvailabilityStep -->|precedes| step__ReserveStep
-  step__BookStep -.->|covers| usecase__BookAppointment
+  step__BookStep -.-> usecase__BookAppointment
   step__BookStep -->|precedes| step__NoticeStep
-  step__CancelStep -.->|covers| event__EvAppointmentCancelled
-  step__CancelStep -.->|covers| usecase__CancelAppointment
-  step__NoShowStep -.->|covers| timer__NoShowSweep
-  step__NoShowStep -.->|covers| usecase__MarkNoShow
+  step__CancelStep -.-> event__EvAppointmentCancelled
+  step__CancelStep -.-> usecase__CancelAppointment
+  step__NoShowStep -.-> timer__NoShowSweep
+  step__NoShowStep -.-> usecase__MarkNoShow
   step__NoticeStep -->|branches| step__CancelStep
   step__NoticeStep -->|branches| step__RescheduleStep
-  step__NoticeStep -.->|covers| usecase__SendAppointmentNotice
+  step__NoticeStep -.-> usecase__SendAppointmentNotice
   step__NoticeStep -.->|excepts| step__NoShowStep
-  step__RescheduleStep -.->|covers| usecase__RescheduleAppointment
+  step__RescheduleStep -.-> usecase__RescheduleAppointment
   step__RescheduleStep -->|repeats| step__NoticeStep
-  step__ReserveStep -.->|covers| usecase__ReserveAppointment
+  step__ReserveStep -.-> usecase__ReserveAppointment
   step__ReserveStep -->|precedes| step__BookStep
   classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
@@ -515,42 +515,42 @@ flowchart TD
       step__ReferralStep["紹介状あり（初診）"]:::step
     end
   end
-  usecase__AssignRoom["診察室への案内"]:::usecase
+  usecase__AssignRoom("診察室への案内"):::usecase
   %% desc usecase__AssignRoom: 受付済の受診だけを診察室へ案内する。予約の状態は変わらない。
-  usecase__CheckInPatient["受付（初診・再診）"]:::usecase
+  usecase__CheckInPatient("受付（初診・再診）"):::usecase
   %% desc usecase__CheckInPatient: 受付で予約を受付済にし、同時にオンライン資格確認を作る。
-  usecase__ConfirmEligibilityInOutageMode["システム障害時モードでの資格確認"]:::usecase
+  usecase__ConfirmEligibilityInOutageMode("システム障害時モードでの資格確認"):::usecase
   %% desc usecase__ConfirmEligibilityInOutageMode: システム障害時モードによる確認。
-  usecase__ReceiveEligibilityInvalid["資格確認結果（無効）の取込"]:::usecase
+  usecase__ReceiveEligibilityInvalid("資格確認結果（無効）の取込"):::usecase
   %% desc usecase__ReceiveEligibilityInvalid: 資格確認結果「無効」の取込。
-  usecase__ReceiveEligibilityNoInfo["資格確認結果（該当資格なし）の取込"]:::usecase
+  usecase__ReceiveEligibilityNoInfo("資格確認結果（該当資格なし）の取込"):::usecase
   %% desc usecase__ReceiveEligibilityNoInfo: 資格確認結果「該当資格なし」の取込。
-  usecase__ReceiveEligibilityValid["資格確認結果（有効）の取込"]:::usecase
+  usecase__ReceiveEligibilityValid("資格確認結果（有効）の取込"):::usecase
   %% desc usecase__ReceiveEligibilityValid: 資格確認結果「有効」の取込。
-  usecase__ReceiveReferralLetter["紹介状受付処理"]:::usecase
+  usecase__ReceiveReferralLetter("紹介状受付処理"):::usecase
   %% desc usecase__ReceiveReferralLetter: 紹介状の受領と受付処理。
-  usecase__RecheckEligibility["資格の再確認"]:::usecase
+  usecase__RecheckEligibility("資格の再確認"):::usecase
   %% desc usecase__RecheckEligibility: 無効・該当資格なしからの再確認。
-  usecase__RecordEligibilityDeclaration["被保険者資格申立書の受領"]:::usecase
+  usecase__RecordEligibilityDeclaration("被保険者資格申立書の受領"):::usecase
   %% desc usecase__RecordEligibilityDeclaration: 被保険者資格申立書による確認。
-  usecase__VerifyArrival["予約票・診察券の確認"]:::usecase
+  usecase__VerifyArrival("予約票・診察券の確認"):::usecase
   %% desc usecase__VerifyArrival: 予約票・診察券を確認する（参照のみ）。
-  step__ArrivalStep -.->|covers| usecase__VerifyArrival
+  step__ArrivalStep -.-> usecase__VerifyArrival
   step__ArrivalStep -->|precedes| step__EligibilityStep
-  step__DeclarationStep -.->|covers| usecase__ConfirmEligibilityInOutageMode
-  step__DeclarationStep -.->|covers| usecase__RecordEligibilityDeclaration
+  step__DeclarationStep -.-> usecase__ConfirmEligibilityInOutageMode
+  step__DeclarationStep -.-> usecase__RecordEligibilityDeclaration
   step__DeclarationStep -->|precedes| step__RoomingStep
   step__EligibilityStep -->|branches| step__ReferralStep
-  step__EligibilityStep -.->|covers| usecase__CheckInPatient
-  step__EligibilityStep -.->|covers| usecase__ReceiveEligibilityInvalid
-  step__EligibilityStep -.->|covers| usecase__ReceiveEligibilityNoInfo
-  step__EligibilityStep -.->|covers| usecase__ReceiveEligibilityValid
-  step__EligibilityStep -.->|covers| usecase__RecheckEligibility
+  step__EligibilityStep -.-> usecase__CheckInPatient
+  step__EligibilityStep -.-> usecase__ReceiveEligibilityInvalid
+  step__EligibilityStep -.-> usecase__ReceiveEligibilityNoInfo
+  step__EligibilityStep -.-> usecase__ReceiveEligibilityValid
+  step__EligibilityStep -.-> usecase__RecheckEligibility
   step__EligibilityStep -.->|excepts| step__DeclarationStep
   step__EligibilityStep -->|precedes| step__RoomingStep
-  step__ReferralStep -.->|covers| usecase__ReceiveReferralLetter
+  step__ReferralStep -.-> usecase__ReceiveReferralLetter
   step__ReferralStep -->|precedes| step__RoomingStep
-  step__RoomingStep -.->|covers| usecase__AssignRoom
+  step__RoomingStep -.-> usecase__AssignRoom
   classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
@@ -579,33 +579,33 @@ flowchart TD
       step__VitalsStep["バイタル測定"]:::step
     end
   end
-  usecase__AmendEncounter["署名済み記録の修正"]:::usecase
+  usecase__AmendEncounter("署名済み記録の修正"):::usecase
   %% desc usecase__AmendEncounter: 署名済み記録の修正。
-  usecase__CompleteConsultation["診察終了"]:::usecase
+  usecase__CompleteConsultation("診察終了"):::usecase
   %% desc usecase__CompleteConsultation: 診察終了で予約を計算待ちにし、部屋を清掃中にし、会計を起動する。
-  usecase__DocumentAssessment["診察・診断の記録"]:::usecase
+  usecase__DocumentAssessment("診察・診断の記録"):::usecase
   %% desc usecase__DocumentAssessment: 診断記録と記録状態。
-  usecase__IssueReferralLetter["診療情報提供書の作成・送信"]:::usecase
+  usecase__IssueReferralLetter("診療情報提供書の作成・送信"):::usecase
   %% desc usecase__IssueReferralLetter: 診療情報提供書の作成・送信。
-  usecase__OpenEncounter["診療記録を開く"]:::usecase
+  usecase__OpenEncounter("診療記録を開く"):::usecase
   %% desc usecase__OpenEncounter: 受付済の予約から診療記録を開く。
-  usecase__RecordVitals["バイタルの記録"]:::usecase
+  usecase__RecordVitals("バイタルの記録"):::usecase
   %% desc usecase__RecordVitals: バイタル記録。
-  usecase__SignEncounter["診療記録の署名"]:::usecase
+  usecase__SignEncounter("診療記録の署名"):::usecase
   %% desc usecase__SignEncounter: 署名でコスト情報登録とケアプラン作成を起動する。
-  step__AmendStep -.->|covers| usecase__AmendEncounter
+  step__AmendStep -.-> usecase__AmendEncounter
   step__AssessmentStep -->|branches| step__ReferralOutStep
-  step__AssessmentStep -.->|covers| usecase__DocumentAssessment
+  step__AssessmentStep -.-> usecase__DocumentAssessment
   step__AssessmentStep -->|precedes| step__SignStep
-  step__CompleteStep -.->|covers| usecase__CompleteConsultation
-  step__OpenStep -.->|covers| usecase__OpenEncounter
+  step__CompleteStep -.-> usecase__CompleteConsultation
+  step__OpenStep -.-> usecase__OpenEncounter
   step__OpenStep -->|precedes| step__VitalsStep
-  step__ReferralOutStep -.->|covers| usecase__IssueReferralLetter
+  step__ReferralOutStep -.-> usecase__IssueReferralLetter
   step__ReferralOutStep -->|precedes| step__SignStep
-  step__SignStep -.->|covers| usecase__SignEncounter
+  step__SignStep -.-> usecase__SignEncounter
   step__SignStep -.->|excepts| step__AmendStep
   step__SignStep -->|precedes| step__CompleteStep
-  step__VitalsStep -.->|covers| usecase__RecordVitals
+  step__VitalsStep -.-> usecase__RecordVitals
   step__VitalsStep -->|precedes| step__AssessmentStep
   classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
@@ -638,54 +638,54 @@ flowchart TD
       step__LabelStep["採血管ラベルの発行"]:::step
     end
   end
-  actor__MedicalClerk["医師事務作業補助者"]:::actor
+  actor__MedicalClerk(["医師事務作業補助者"]):::actor
   %% desc actor__MedicalClerk: 医師の指示で電子カルテへ代行入力する。確定は医師が行う。
-  actor__Nurse["看護師"]:::actor
+  actor__Nurse(["看護師"]):::actor
   %% desc actor__Nurse: 医師の指示の下で診療の補助を行う。
-  usecase__CancelClinicalOrder["オーダの取消"]:::usecase
+  usecase__CancelClinicalOrder("オーダの取消"):::usecase
   %% desc usecase__CancelClinicalOrder: オーダ取消。
-  usecase__CollectSpecimen["採血"]:::usecase
+  usecase__CollectSpecimen("採血"):::usecase
   %% desc usecase__CollectSpecimen: 医師が確定したオーダだけを採取する。
-  usecase__ConfirmProxyOrder["代行入力オーダの確定"]:::usecase
+  usecase__ConfirmProxyOrder("代行入力オーダの確定"):::usecase
   %% desc usecase__ConfirmProxyOrder: 医師による代行入力オーダの確定。
-  usecase__EnterProxyOrder["検体検査オーダの代行入力"]:::usecase
+  usecase__EnterProxyOrder("検体検査オーダの代行入力"):::usecase
   %% desc usecase__EnterProxyOrder: 代行入力オーダは未確定で作られる。
-  usecase__NotifyCriticalResult["重要結果（パニック値）の通知"]:::usecase
+  usecase__NotifyCriticalResult("重要結果（パニック値）の通知"):::usecase
   %% desc usecase__NotifyCriticalResult: 重要結果の患者通知。
-  usecase__PlaceLabOrder["検体検査オーダの登録"]:::usecase
+  usecase__PlaceLabOrder("検体検査オーダの登録"):::usecase
   %% desc usecase__PlaceLabOrder: 医師が登録したオーダは確定済み。
-  usecase__PrintSpecimenLabel["採血管ラベル発行・貼付"]:::usecase
+  usecase__PrintSpecimenLabel("採血管ラベル発行・貼付"):::usecase
   %% desc usecase__PrintSpecimenLabel: 採血管ラベルの発行（参照のみ）。
-  usecase__ReceiveLabResult["検査結果の受信"]:::usecase
+  usecase__ReceiveLabResult("検査結果の受信"):::usecase
   %% desc usecase__ReceiveLabResult: 外注検査システムからの結果受信。
-  usecase__RegisterPerformedProcedure["実施内容（コスト）の登録"]:::usecase
+  usecase__RegisterPerformedProcedure("実施内容（コスト）の登録"):::usecase
   %% desc usecase__RegisterPerformedProcedure: 実施内容（コスト）の登録。
-  usecase__ReviewLabResult["検査結果の確認"]:::usecase
+  usecase__ReviewLabResult("検査結果の確認"):::usecase
   %% desc usecase__ReviewLabResult: 結果確認と後続通知の起点。
-  event__EvLabResultReceived["検査結果の受信"]:::event
-  actor__MedicalClerk -.->|performs| step__ProxyOrderStep
-  actor__Nurse -.->|performs| step__ProxyOrderStep
-  step__CollectStep -.->|covers| usecase__CollectSpecimen
+  event__EvLabResultReceived>"検査結果の受信"]:::event
+  actor__MedicalClerk -.-> step__ProxyOrderStep
+  actor__Nurse -.-> step__ProxyOrderStep
+  step__CollectStep -.-> usecase__CollectSpecimen
   step__CollectStep -->|precedes| step__CostStep
-  step__ConfirmOrderStep -.->|covers| usecase__ConfirmProxyOrder
+  step__ConfirmOrderStep -.-> usecase__ConfirmProxyOrder
   step__ConfirmOrderStep -->|precedes| step__LabelStep
-  step__CostStep -.->|covers| usecase__RegisterPerformedProcedure
+  step__CostStep -.-> usecase__RegisterPerformedProcedure
   step__CostStep -->|precedes| step__LabResultStep
-  step__CriticalStep -.->|covers| usecase__NotifyCriticalResult
+  step__CriticalStep -.-> usecase__NotifyCriticalResult
   step__LabOrderStep -->|branches| step__ProxyOrderStep
-  step__LabOrderStep -.->|covers| usecase__PlaceLabOrder
+  step__LabOrderStep -.-> usecase__PlaceLabOrder
   step__LabOrderStep -.->|excepts| step__OrderCancelStep
   step__LabOrderStep -->|precedes| step__LabelStep
-  step__LabResultStep -.->|covers| event__EvLabResultReceived
-  step__LabResultStep -.->|covers| usecase__ReceiveLabResult
+  step__LabResultStep -.-> event__EvLabResultReceived
+  step__LabResultStep -.-> usecase__ReceiveLabResult
   step__LabResultStep -->|precedes| step__ResultReviewStep
-  step__LabelStep -.->|covers| usecase__PrintSpecimenLabel
+  step__LabelStep -.-> usecase__PrintSpecimenLabel
   step__LabelStep -->|precedes| step__CollectStep
-  step__OrderCancelStep -.->|covers| usecase__CancelClinicalOrder
-  step__ProxyOrderStep -.->|covers| usecase__EnterProxyOrder
+  step__OrderCancelStep -.-> usecase__CancelClinicalOrder
+  step__ProxyOrderStep -.-> usecase__EnterProxyOrder
   step__ProxyOrderStep -->|precedes| step__ConfirmOrderStep
   step__ResultReviewStep -->|branches| step__CriticalStep
-  step__ResultReviewStep -.->|covers| usecase__ReviewLabResult
+  step__ResultReviewStep -.-> usecase__ReviewLabResult
   classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
@@ -716,52 +716,52 @@ flowchart TD
       step__DispenseStep["調剤・監査"]:::step
     end
   end
-  actor__Clinician["医師"]:::actor
+  actor__Clinician(["医師"]):::actor
   %% desc actor__Clinician: 診察し、診断・オーダ・処方を出し、診療記録に署名する。
-  actor__Pharmacist["薬剤師"]:::actor
+  actor__Pharmacist(["薬剤師"]):::actor
   %% desc actor__Pharmacist: 院内処方を調剤・監査し、服薬指導と交付を行う。疑わしい処方は医師に照会する。
-  usecase__AnswerPharmacyInquiry["保険薬局からの疑義照会への回答"]:::usecase
+  usecase__AnswerPharmacyInquiry("保険薬局からの疑義照会への回答"):::usecase
   %% desc usecase__AnswerPharmacyInquiry: 保険薬局からの疑義照会への回答。
-  usecase__AnswerPrescriptionInquiry["疑義照会への回答"]:::usecase
+  usecase__AnswerPrescriptionInquiry("疑義照会への回答"):::usecase
   %% desc usecase__AnswerPrescriptionInquiry: 医師の回答で引換券へ戻す。
-  usecase__ConfirmDispense["保険薬局での調剤結果の受信"]:::usecase
+  usecase__ConfirmDispense("保険薬局での調剤結果の受信"):::usecase
   %% desc usecase__ConfirmDispense: 保険薬局での調剤結果の受信。
-  usecase__CounselMedication["服薬指導"]:::usecase
+  usecase__CounselMedication("服薬指導"):::usecase
   %% desc usecase__CounselMedication: 服薬指導。
-  usecase__DispenseAndAudit["調剤・監査"]:::usecase
+  usecase__DispenseAndAudit("調剤・監査"):::usecase
   %% desc usecase__DispenseAndAudit: 薬剤師による調剤・監査。
-  usecase__DraftPrescription["処方オーダの登録"]:::usecase
+  usecase__DraftPrescription("処方オーダの登録"):::usecase
   %% desc usecase__DraftPrescription: 処方オーダの作成。
-  usecase__HandOverMedication["薬剤交付"]:::usecase
+  usecase__HandOverMedication("薬剤交付"):::usecase
   %% desc usecase__HandOverMedication: 薬剤交付。
-  usecase__IssueInhouseVoucher["院内処方用引換券の交付"]:::usecase
+  usecase__IssueInhouseVoucher("院内処方用引換券の交付"):::usecase
   %% desc usecase__IssueInhouseVoucher: 院内処方用引換券の交付。
-  usecase__IssueOutsidePrescription["院外処方箋の発行"]:::usecase
+  usecase__IssueOutsidePrescription("院外処方箋の発行"):::usecase
   %% desc usecase__IssueOutsidePrescription: 院外処方箋の発行と電子処方箋管理サービスへの登録。
-  usecase__IssueRefillPrescription["リフィル処方箋の処方オーダ"]:::usecase
+  usecase__IssueRefillPrescription("リフィル処方箋の処方オーダ"):::usecase
   %% desc usecase__IssueRefillPrescription: リフィル処方箋の処方オーダ（使用回数の上限を記載）。
-  usecase__RaisePrescriptionInquiry["疑義照会"]:::usecase
+  usecase__RaisePrescriptionInquiry("疑義照会"):::usecase
   %% desc usecase__RaisePrescriptionInquiry: 薬剤師による疑義照会。
-  actor__Clinician -.->|performs| step__InquiryStep
-  actor__Pharmacist -.->|performs| step__InquiryStep
-  step__CounselStep -.->|covers| usecase__CounselMedication
-  step__CounselStep -.->|covers| usecase__HandOverMedication
-  step__DispenseStep -.->|covers| usecase__DispenseAndAudit
+  actor__Clinician -.-> step__InquiryStep
+  actor__Pharmacist -.-> step__InquiryStep
+  step__CounselStep -.-> usecase__CounselMedication
+  step__CounselStep -.-> usecase__HandOverMedication
+  step__DispenseStep -.-> usecase__DispenseAndAudit
   step__DispenseStep -.->|excepts| step__InquiryStep
   step__DispenseStep -->|precedes| step__CounselStep
-  step__InhouseStep -.->|covers| usecase__IssueInhouseVoucher
+  step__InhouseStep -.-> usecase__IssueInhouseVoucher
   step__InhouseStep -->|precedes| step__DispenseStep
-  step__InquiryStep -.->|covers| usecase__AnswerPrescriptionInquiry
-  step__InquiryStep -.->|covers| usecase__RaisePrescriptionInquiry
+  step__InquiryStep -.-> usecase__AnswerPrescriptionInquiry
+  step__InquiryStep -.-> usecase__RaisePrescriptionInquiry
   step__InquiryStep -->|repeats| step__DispenseStep
   step__OrderStep -->|branches| step__InhouseStep
-  step__OrderStep -.->|covers| usecase__DraftPrescription
-  step__OrderStep -.->|covers| usecase__IssueRefillPrescription
+  step__OrderStep -.-> usecase__DraftPrescription
+  step__OrderStep -.-> usecase__IssueRefillPrescription
   step__OrderStep -->|precedes| step__OutsideStep
-  step__OutsideStep -.->|covers| usecase__IssueOutsidePrescription
+  step__OutsideStep -.-> usecase__IssueOutsidePrescription
   step__OutsideStep -->|precedes| step__PharmacyStep
-  step__PharmacyStep -.->|covers| usecase__AnswerPharmacyInquiry
-  step__PharmacyStep -.->|covers| usecase__ConfirmDispense
+  step__PharmacyStep -.-> usecase__AnswerPharmacyInquiry
+  step__PharmacyStep -.-> usecase__ConfirmDispense
   classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
@@ -790,34 +790,34 @@ flowchart TD
       step__KioskStep["自動精算機で精算"]:::step
     end
   end
-  usecase__ApplySelectedTreatmentFee["選定療養費の算定"]:::usecase
+  usecase__ApplySelectedTreatmentFee("選定療養費の算定"):::usecase
   %% desc usecase__ApplySelectedTreatmentFee: 紹介状なし初診だけに選定療養費の Charge を作る。
-  usecase__CalculateVisitBill["会計計算入力"]:::usecase
+  usecase__CalculateVisitBill("会計計算入力"):::usecase
   %% desc usecase__CalculateVisitBill: 会計計算入力で予約を会計待ちにする。
-  usecase__CallPatientForPayment["会計の呼出"]:::usecase
+  usecase__CallPatientForPayment("会計の呼出"):::usecase
   %% desc usecase__CallPatientForPayment: 会計の呼出（参照のみ）。
-  usecase__IssueReceipt["領収証・明細書の交付"]:::usecase
+  usecase__IssueReceipt("領収証・明細書の交付"):::usecase
   %% desc usecase__IssueReceipt: 領収証・明細書の交付で予約を完了にする。
-  usecase__RefundPayment["還付・追加徴収"]:::usecase
+  usecase__RefundPayment("還付・追加徴収"):::usecase
   %% desc usecase__RefundPayment: 保険の変更や計算誤りによる還付・追加徴収で精算を還付済にする。
-  usecase__SettleAtKiosk["自動精算機での精算"]:::usecase
+  usecase__SettleAtKiosk("自動精算機での精算"):::usecase
   %% desc usecase__SettleAtKiosk: 自動精算機での精算。
-  usecase__SettleAtWindow["会計窓口での精算"]:::usecase
+  usecase__SettleAtWindow("会計窓口での精算"):::usecase
   %% desc usecase__SettleAtWindow: 会計窓口での精算。
-  event__EvPaymentSettled["自動精算機での精算完了"]:::event
-  step__CalculationStep -.->|covers| usecase__ApplySelectedTreatmentFee
-  step__CalculationStep -.->|covers| usecase__CalculateVisitBill
+  event__EvPaymentSettled>"自動精算機での精算完了"]:::event
+  step__CalculationStep -.-> usecase__ApplySelectedTreatmentFee
+  step__CalculationStep -.-> usecase__CalculateVisitBill
   step__CalculationStep -->|precedes| step__CallStep
   step__CallStep -->|branches| step__KioskStep
-  step__CallStep -.->|covers| usecase__CallPatientForPayment
+  step__CallStep -.-> usecase__CallPatientForPayment
   step__CallStep -->|precedes| step__WindowStep
-  step__KioskStep -.->|covers| event__EvPaymentSettled
-  step__KioskStep -.->|covers| usecase__SettleAtKiosk
+  step__KioskStep -.-> event__EvPaymentSettled
+  step__KioskStep -.-> usecase__SettleAtKiosk
   step__KioskStep -->|precedes| step__ReceiptStep
-  step__ReceiptStep -.->|covers| usecase__IssueReceipt
+  step__ReceiptStep -.-> usecase__IssueReceipt
   step__ReceiptStep -.->|excepts| step__RefundStep
-  step__RefundStep -.->|covers| usecase__RefundPayment
-  step__WindowStep -.->|covers| usecase__SettleAtWindow
+  step__RefundStep -.-> usecase__RefundPayment
+  step__WindowStep -.-> usecase__SettleAtWindow
   step__WindowStep -->|precedes| step__ReceiptStep
   classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
@@ -847,64 +847,64 @@ flowchart TD
       step__SubmitStep["請求（5日～10日）"]:::step
     end
   end
-  timer__ErrorResendWindow["エラー分レセプトの再送（毎月11日・12日）"]:::timer
-  timer__MonthlyClaimCreation["前月分レセプトの作成（月初）"]:::timer
-  timer__MonthlyClaimDeadline["前月分レセプトの請求（毎月5日～10日）"]:::timer
-  usecase__CorrectReturnedStatement["返戻レセプトの訂正（再請求）"]:::usecase
+  timer__ErrorResendWindow(("エラー分レセプトの再送（毎月11日・12日）")):::timer
+  timer__MonthlyClaimCreation(("前月分レセプトの作成（月初）")):::timer
+  timer__MonthlyClaimDeadline(("前月分レセプトの請求（毎月5日～10日）")):::timer
+  usecase__CorrectReturnedStatement("返戻レセプトの訂正（再請求）"):::usecase
   %% desc usecase__CorrectReturnedStatement: 返戻の訂正と再請求。
-  usecase__GenerateClaimStatement["レセプト作成"]:::usecase
+  usecase__GenerateClaimStatement("レセプト作成"):::usecase
   %% desc usecase__GenerateClaimStatement: 月初のレセプト作成。
-  usecase__HoldClaimStatement["レセプトの保留（月遅れ）"]:::usecase
+  usecase__HoldClaimStatement("レセプトの保留（月遅れ）"):::usecase
   %% desc usecase__HoldClaimStatement: 保留（月遅れ）。
-  usecase__InspectClaimStatement["レセプトの院内点検"]:::usecase
+  usecase__InspectClaimStatement("レセプトの院内点検"):::usecase
   %% desc usecase__InspectClaimStatement: 院内点検。
-  usecase__PostPayment["診療報酬の入金"]:::usecase
+  usecase__PostPayment("診療報酬の入金"):::usecase
   %% desc usecase__PostPayment: 診療翌々月の入金。
-  usecase__ReceiveClaimAccepted["レセプト受付（審査へ）"]:::usecase
+  usecase__ReceiveClaimAccepted("レセプト受付（審査へ）"):::usecase
   %% desc usecase__ReceiveClaimAccepted: 審査支払機関の受付で審査中になる。
-  usecase__RecordClaimAssessment["査定の取込"]:::usecase
+  usecase__RecordClaimAssessment("査定の取込"):::usecase
   %% desc usecase__RecordClaimAssessment: 査定の取込。
-  usecase__RecordClaimReturn["返戻レセプトの取込"]:::usecase
+  usecase__RecordClaimReturn("返戻レセプトの取込"):::usecase
   %% desc usecase__RecordClaimReturn: 返戻レセプトの取込（3か月以内）。
-  usecase__RecordReceiptError["受付不能・要確認の確認"]:::usecase
+  usecase__RecordReceiptError("受付不能・要確認の確認"):::usecase
   %% desc usecase__RecordReceiptError: 受付不能・要確認の確認。
-  usecase__ReleaseHeldStatement["保留レセプトの再提出準備"]:::usecase
+  usecase__ReleaseHeldStatement("保留レセプトの再提出準備"):::usecase
   %% desc usecase__ReleaseHeldStatement: 保留レセプトの再提出準備。
-  usecase__RequestReexamination["再審査請求"]:::usecase
+  usecase__RequestReexamination("再審査請求"):::usecase
   %% desc usecase__RequestReexamination: 再審査請求。
-  usecase__ResendErroredStatement["エラー分レセプトの再送"]:::usecase
+  usecase__ResendErroredStatement("エラー分レセプトの再送"):::usecase
   %% desc usecase__ResendErroredStatement: 11日・12日のエラー分再送。
-  usecase__ReviewClaimTransfer["資格の振替・分割の確認"]:::usecase
+  usecase__ReviewClaimTransfer("資格の振替・分割の確認"):::usecase
   %% desc usecase__ReviewClaimTransfer: 資格の振替・分割の確認（参照のみ）。
-  usecase__SubmitClaimStatements["レセプト請求"]:::usecase
+  usecase__SubmitClaimStatements("レセプト請求"):::usecase
   %% desc usecase__SubmitClaimStatements: 毎月10日までの請求。
-  step__AssessStep -.->|covers| usecase__RecordClaimAssessment
-  step__AssessStep -.->|covers| usecase__RequestReexamination
+  step__AssessStep -.-> usecase__RecordClaimAssessment
+  step__AssessStep -.-> usecase__RequestReexamination
   step__AssessStep -->|precedes| step__PaidStep
-  step__CreateStatementStep -.->|covers| timer__MonthlyClaimCreation
-  step__CreateStatementStep -.->|covers| usecase__GenerateClaimStatement
+  step__CreateStatementStep -.-> timer__MonthlyClaimCreation
+  step__CreateStatementStep -.-> usecase__GenerateClaimStatement
   step__CreateStatementStep -->|precedes| step__InspectStep
-  step__HoldStep -.->|covers| usecase__HoldClaimStatement
-  step__HoldStep -.->|covers| usecase__ReleaseHeldStatement
+  step__HoldStep -.-> usecase__HoldClaimStatement
+  step__HoldStep -.-> usecase__ReleaseHeldStatement
   step__HoldStep -->|repeats| step__InspectStep
   step__InspectStep -->|branches| step__HoldStep
-  step__InspectStep -.->|covers| usecase__InspectClaimStatement
+  step__InspectStep -.-> usecase__InspectClaimStatement
   step__InspectStep -->|precedes| step__SubmitStep
-  step__PaidStep -.->|covers| usecase__PostPayment
-  step__ReceiptErrorStep -.->|covers| timer__ErrorResendWindow
-  step__ReceiptErrorStep -.->|covers| usecase__RecordReceiptError
-  step__ReceiptErrorStep -.->|covers| usecase__ResendErroredStatement
+  step__PaidStep -.-> usecase__PostPayment
+  step__ReceiptErrorStep -.-> timer__ErrorResendWindow
+  step__ReceiptErrorStep -.-> usecase__RecordReceiptError
+  step__ReceiptErrorStep -.-> usecase__ResendErroredStatement
   step__ReceiptErrorStep -->|repeats| step__SubmitStep
-  step__ReturnStep -.->|covers| usecase__CorrectReturnedStatement
-  step__ReturnStep -.->|covers| usecase__RecordClaimReturn
+  step__ReturnStep -.-> usecase__CorrectReturnedStatement
+  step__ReturnStep -.-> usecase__RecordClaimReturn
   step__ReturnStep -->|repeats| step__InspectStep
   step__ReviewStep -->|branches| step__AssessStep
-  step__ReviewStep -.->|covers| usecase__ReceiveClaimAccepted
-  step__ReviewStep -.->|covers| usecase__ReviewClaimTransfer
+  step__ReviewStep -.-> usecase__ReceiveClaimAccepted
+  step__ReviewStep -.-> usecase__ReviewClaimTransfer
   step__ReviewStep -.->|excepts| step__ReturnStep
   step__ReviewStep -->|precedes| step__PaidStep
-  step__SubmitStep -.->|covers| timer__MonthlyClaimDeadline
-  step__SubmitStep -.->|covers| usecase__SubmitClaimStatements
+  step__SubmitStep -.-> timer__MonthlyClaimDeadline
+  step__SubmitStep -.-> usecase__SubmitClaimStatements
   step__SubmitStep -.->|excepts| step__ReceiptErrorStep
   step__SubmitStep -->|precedes| step__ReviewStep
   classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
@@ -932,29 +932,29 @@ flowchart TD
       step__RevisitStep["再診の予約"]:::step
     end
   end
-  usecase__CloseCarePlan["ケアプランの終了"]:::usecase
+  usecase__CloseCarePlan("ケアプランの終了"):::usecase
   %% desc usecase__CloseCarePlan: ケアプラン終了。
-  usecase__CreateCarePlan["ケアプランの作成"]:::usecase
+  usecase__CreateCarePlan("ケアプランの作成"):::usecase
   %% desc usecase__CreateCarePlan: 署名イベントからのケアプラン作成。
-  usecase__NotifyPatientResult["検査結果の患者通知"]:::usecase
+  usecase__NotifyPatientResult("検査結果の患者通知"):::usecase
   %% desc usecase__NotifyPatientResult: 結果の患者通知。
-  usecase__ReviewPatientResponse["患者応答の確認"]:::usecase
+  usecase__ReviewPatientResponse("患者応答の確認"):::usecase
   %% desc usecase__ReviewPatientResponse: 患者応答の確認。
-  usecase__ScheduleFollowUpVisit["再診の予約"]:::usecase
+  usecase__ScheduleFollowUpVisit("再診の予約"):::usecase
   %% desc usecase__ScheduleFollowUpVisit: 再診予約。
-  usecase__SendFollowUpMessage["患者への連絡"]:::usecase
+  usecase__SendFollowUpMessage("患者への連絡"):::usecase
   %% desc usecase__SendFollowUpMessage: 患者連絡。
   step__CarePlanStep -->|branches| step__ResultNoticeStep
-  step__CarePlanStep -.->|covers| usecase__CreateCarePlan
+  step__CarePlanStep -.-> usecase__CreateCarePlan
   step__CarePlanStep -->|precedes| step__FollowUpMsgStep
-  step__FollowUpMsgStep -.->|covers| usecase__SendFollowUpMessage
+  step__FollowUpMsgStep -.-> usecase__SendFollowUpMessage
   step__FollowUpMsgStep -->|precedes| step__ResponseStep
-  step__PlanCloseStep -.->|covers| usecase__CloseCarePlan
-  step__ResponseStep -.->|covers| usecase__ReviewPatientResponse
+  step__PlanCloseStep -.-> usecase__CloseCarePlan
+  step__ResponseStep -.-> usecase__ReviewPatientResponse
   step__ResponseStep -->|precedes| step__RevisitStep
-  step__ResultNoticeStep -.->|covers| usecase__NotifyPatientResult
+  step__ResultNoticeStep -.-> usecase__NotifyPatientResult
   step__ResultNoticeStep -->|precedes| step__ResponseStep
-  step__RevisitStep -.->|covers| usecase__ScheduleFollowUpVisit
+  step__RevisitStep -.-> usecase__ScheduleFollowUpVisit
   step__RevisitStep -->|precedes| step__PlanCloseStep
   classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;

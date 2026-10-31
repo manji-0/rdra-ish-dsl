@@ -23,8 +23,8 @@ pub use sequence::SequenceMermaidEmitter;
 pub use usecase::UsecaseMermaidEmitter;
 
 use crate::diagram_common::{
-    class_defs, col_type_str, contract_id, desc_line, lifecycle_start_states, node_id, node_label,
-    quote, render_event_flows, Header,
+    class_defs, col_type_str, contract_id, desc_line, edge_line, lifecycle_start_states, node_id,
+    node_label, node_line, quote, render_event_flows, Header,
 };
 use crate::{
     collect_object_graph_nodes, node_kind_filter_name, object_graph_layer, object_graph_rel_label,
@@ -75,10 +75,11 @@ fn render_layered_nodes(
             layer.label()
         ));
         for (nr, id, label) in nodes {
-            out.push_str(&format!(
-                "    {id}[\"{}\"]:::{}\n",
-                quote(label),
-                node_kind_filter_name(nr)
+            out.push_str(&node_line(
+                "    ",
+                &id,
+                &quote(label),
+                node_kind_filter_name(nr),
             ));
             if let Some(desc) = desc_line(model, nr, &id) {
                 out.push_str(&format!("    {desc}\n"));
@@ -95,7 +96,7 @@ fn declare(out: &mut String, model: &SemanticModel, node: &NodeRef, indent: &str
         return;
     };
     let kind = node_kind_filter_name(node);
-    out.push_str(&format!("{indent}{id}[\"{}\"]:::{kind}\n", quote(label)));
+    out.push_str(&node_line(indent, &id, &quote(label), kind));
     if let Some(desc) = desc_line(model, node, &id) {
         out.push_str(&format!("{indent}{desc}\n"));
     }
@@ -209,14 +210,18 @@ fn omitted_linked_kinds(
         .collect()
 }
 
-/// Sort `edges`, draw each once, and follow a derived one with its `%% derived` line.
-fn render_edges(out: &mut String, mut edges: Vec<GraphEdge>) {
+/// Sort `edges`, draw each once, and follow a derived one with its `%% derived` line. An
+/// edge whose label `diagram` reads back from its ends goes without one.
+fn render_edges(out: &mut String, diagram: &str, mut edges: Vec<GraphEdge>) {
     edges.sort();
     edges.dedup();
     for edge in &edges {
-        out.push_str(&format!(
-            "  {} {}|{}| {}\n",
-            edge.from, edge.arrow, edge.label, edge.to
+        out.push_str(&edge_line(
+            diagram,
+            &edge.from,
+            edge.arrow,
+            &edge.label,
+            &edge.to,
         ));
         if let Some(derived) = &edge.derived {
             out.push_str(&format!(
@@ -378,7 +383,7 @@ impl Emitter for RdraMermaidEmitter {
                 omitted_edges.push(edge_kind_token(&kind));
             }
         }
-        render_edges(&mut body, edges);
+        render_edges(&mut body, "rdra", edges);
 
         let kinds = kinds_by_layer(&visible_nodes);
         omitted_edges.sort();
@@ -819,22 +824,22 @@ creates(OrderApi, Order)
             .find("  subgraph layer_system[\"システム\"]\n")
             .unwrap();
         let actor_pos = result
-            .find("    actor__Customer[\"顧客\"]:::actor\n")
+            .find("    actor__Customer([\"顧客\"]):::actor\n")
             .unwrap();
         let screen_pos = result
             .find("    screen__OrderScreen[\"注文画面\"]:::screen\n")
             .unwrap();
         let api_pos = result
-            .find("    api__OrderApi[\"注文API\"]:::api\n")
+            .find("    api__OrderApi{{\"注文API\"}}:::api\n")
             .unwrap();
         assert!(value_pos < actor_pos && actor_pos < boundary_pos);
         assert!(boundary_pos < screen_pos && screen_pos < system_pos);
         assert!(system_pos < api_pos);
         assert!(result.contains("    buc__BucOrder[\"注文業務\"]:::buc\n"));
-        assert!(result.contains("    entity__Order[\"注文\"]:::entity\n"));
-        assert!(result.contains("  actor__Customer -.->|performs| buc__BucOrder\n"));
-        assert!(result.contains("  buc__BucOrder -->|contains| usecase__PlaceOrder\n"));
-        assert!(result.contains("  usecase__PlaceOrder -.->|invokes| api__OrderApi\n"));
+        assert!(result.contains("    entity__Order[(\"注文\")]:::entity\n"));
+        assert!(result.contains("  actor__Customer -.-> buc__BucOrder\n"));
+        assert!(result.contains("  buc__BucOrder --> usecase__PlaceOrder\n"));
+        assert!(result.contains("  usecase__PlaceOrder -.-> api__OrderApi\n"));
         assert!(result.contains("  api__OrderApi -.->|creates| entity__Order\n"));
         assert!(result.ends_with("  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;\n  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;\n"));
         assert!(!result.contains("direction TB"), "{result}");
@@ -864,9 +869,9 @@ displays(PlaceOrder, Order)
 
         let result = RdraMermaidEmitter.emit(&model, &view).unwrap();
 
-        assert!(result.contains("usecase__PlaceOrder[\"Place order\"]:::usecase"));
-        assert!(result.contains("api__OrderApi[\"Order API\"]:::api"));
-        assert!(result.contains("usecase__PlaceOrder -.->|invokes| api__OrderApi"));
+        assert!(result.contains("usecase__PlaceOrder(\"Place order\"):::usecase"));
+        assert!(result.contains("api__OrderApi{{\"Order API\"}}:::api"));
+        assert!(result.contains("usecase__PlaceOrder -.-> api__OrderApi"));
         assert!(!result.contains("actor__Customer"), "{result}");
         assert!(!result.contains("performs"), "{result}");
         assert!(
@@ -890,11 +895,11 @@ shows(StoreScreen, Store)
         let result = RdraMermaidEmitter.emit(&model, &View::whole()).unwrap();
         let shows = result
             .lines()
-            .filter(|line| line.contains("|shows|"))
+            .filter(|line| line.contains("screen__StoreScreen -.-> entity__Store"))
             .collect::<Vec<_>>();
         assert_eq!(
             shows,
-            vec!["  screen__StoreScreen -.->|shows| entity__Store"],
+            vec!["  screen__StoreScreen -.-> entity__Store"],
             "{result}"
         );
     }
@@ -920,7 +925,7 @@ transitions(Order.status, Capture, awaiting -> paid)
                 ),
                 "{result}"
             );
-            assert!(result.contains("    state__Order_awaiting[\"awaiting\"]:::state\n"));
+            assert!(result.contains("    state__Order_awaiting(((\"awaiting\"))):::state\n"));
         }
         let view = View::whole().with_graph_filters(Vec::new(), vec!["contains".to_string()]);
         let result = RdraMermaidEmitter.emit(&model, &view).unwrap();
@@ -940,7 +945,7 @@ performs(Customer, Browse)
 
         assert!(
             result.contains(
-                "    actor__Customer[\"Customer\"]:::actor\n    %% desc actor__Customer: Places orders\n"
+                "    actor__Customer([\"Customer\"]):::actor\n    %% desc actor__Customer: Places orders\n"
             ),
             "{result}"
         );
@@ -1241,29 +1246,29 @@ applies_to(Insured, Collect)
         let model = model_from(src);
         let result = RdraMermaidEmitter.emit(&model, &View::whole()).unwrap();
         assert!(
-            result.contains("condition__Insured[\"Insured\"]:::condition"),
+            result.contains("condition__Insured{\"Insured\"}:::condition"),
             "{result}"
         );
         assert!(
-            result.contains("variation__Method[\"Method\"]:::variation"),
+            result.contains("variation__Method[\\\"Method\"\\]:::variation"),
             "{result}"
         );
         assert!(
             result.contains(
-                "  condition__Insured -.->|combines| variation__Method\n  \
+                "  condition__Insured -.-> variation__Method\n  \
                  %% derived condition__Insured -> variation__Method from holds\n"
             ),
             "{result}"
         );
         assert!(
             result.contains(
-                "  condition__Insured -.->|combines| entity__Pay\n  \
+                "  condition__Insured -.-> entity__Pay\n  \
                  %% derived condition__Insured -> entity__Pay from holds\n"
             ),
             "{result}"
         );
         assert!(
-            result.contains("condition__Insured -.->|applies_to| usecase__Collect"),
+            result.contains("condition__Insured -.-> usecase__Collect"),
             "{result}"
         );
     }
@@ -1281,7 +1286,7 @@ combines(ByMethod, Method)
         let model = model_from(src);
         let result = RdraMermaidEmitter.emit(&model, &View::whole()).unwrap();
         assert!(
-            result.contains("condition__ByMethod -.->|combines| variation__Method"),
+            result.contains("condition__ByMethod -.-> variation__Method"),
             "{result}"
         );
         assert!(!result.contains("%% derived"), "{result}");
@@ -1318,19 +1323,19 @@ triggers(Nightly, Sweep)
             "{result}"
         );
         assert!(
-            result.contains("  extsystem__Lab -.->|raises| event__EvResult\n"),
+            result.contains("  extsystem__Lab -.-> event__EvResult\n"),
             "{result}"
         );
         // An event delivered to an external system is the DSL's `triggers`.
         assert!(
-            result.contains("  event__EvBooked -.->|triggers| extsystem__Gateway\n"),
+            result.contains("  event__EvBooked -.-> extsystem__Gateway\n"),
             "{result}"
         );
         assert!(
-            result.contains("  timer__Nightly -.->|triggers| usecase__Sweep\n"),
+            result.contains("  timer__Nightly -.-> usecase__Sweep\n"),
             "{result}"
         );
-        assert!(result.contains("  timer__Nightly[\"Nightly\"]:::timer\n"));
+        assert!(result.contains("  timer__Nightly((\"Nightly\")):::timer\n"));
         assert!(
             result.ends_with("  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;\n"),
             "{result}"
@@ -1350,7 +1355,7 @@ triggers(EncounterSigned, BucBillingClaims)
         let result = EventMermaidEmitter.emit(&model, &View::whole()).unwrap();
 
         assert!(
-            result.contains("event__EncounterSigned -.->|triggers| buc__BucBillingClaims"),
+            result.contains("event__EncounterSigned -.-> buc__BucBillingClaims"),
             "{result}"
         );
         assert!(result.contains("  buc__BucBillingClaims[\"Billing Claims\"]:::buc\n"));
@@ -1386,15 +1391,15 @@ transitions(Claim.status, ReviewClaim, open -> reviewed)
         render_event_flow(&mut out, &mut declared, &model, &None, &flow);
 
         assert_eq!(
-            out.matches("  event__EncounterSigned[\"Encounter Signed\"]:::event\n")
+            out.matches("  event__EncounterSigned>\"Encounter Signed\"]:::event\n")
                 .count(),
             1,
             "{out}"
         );
         assert!(out.contains("  %% desc event__EncounterSigned: The doctor signed the record\n"));
-        assert!(out.contains("usecase__SignEncounter -.->|raises| event__EncounterSigned"));
-        assert!(out.contains("event__EncounterSigned -.->|triggers| usecase__ReviewClaim"));
-        assert!(out.contains("event__EncounterSigned -.->|triggers| buc__BucBillingClaims"));
+        assert!(out.contains("usecase__SignEncounter -.-> event__EncounterSigned"));
+        assert!(out.contains("event__EncounterSigned -.-> usecase__ReviewClaim"));
+        assert!(out.contains("event__EncounterSigned -.-> buc__BucBillingClaims"));
         assert!(!out.contains("state"), "{out}");
         assert_eq!(declared.kinds, vec!["event", "usecase", "buc"]);
 

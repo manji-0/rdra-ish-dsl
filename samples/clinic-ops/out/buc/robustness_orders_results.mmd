@@ -2,37 +2,37 @@
 %% kinds: actor extsystem screen api usecase entity
 %% omitted: buc step medium permission event condition
 flowchart LR
-  actor__Clinician["医師"]:::actor
-  actor__MedicalClerk["医師事務作業補助者"]:::actor
-  actor__Nurse["看護師"]:::actor
-  extsystem__OutsourcedLabSystem["外注検査システム"]:::extsystem
+  actor__Clinician(["医師"]):::actor
+  actor__MedicalClerk(["医師事務作業補助者"]):::actor
+  actor__Nurse(["看護師"]):::actor
+  extsystem__OutsourcedLabSystem[["外注検査システム"]]:::extsystem
   screen__CriticalNoticeScreen["重要結果通知画面"]:::screen
   screen__OrderEntryScreen["オーダ入力画面"]:::screen
   screen__ResultReviewScreen["検査結果確認画面"]:::screen
   screen__SpecimenScreen["採血画面"]:::screen
-  api__CollectSpecimenApi["採血 API"]:::api
-  api__ConfirmOrderApi["オーダ確定 API"]:::api
-  api__CriticalNoticeApi["重要結果通知 API"]:::api
-  api__OrderEntryApi["オーダ登録 API"]:::api
-  api__PerformedProcedureApi["実施登録 API"]:::api
-  api__ProxyOrderApi["代行入力 API"]:::api
-  api__ReceiveLabResultApi["検査結果受信 API"]:::api
-  api__ResultReviewApi["検査結果確認 API"]:::api
-  usecase__CancelClinicalOrder["オーダの取消"]:::usecase
-  usecase__PrintSpecimenLabel["採血管ラベル発行・貼付"]:::usecase
-  entity__Charge["コスト（診療行為）"]:::entity
-  entity__ClinicalOrder["検査オーダ"]:::entity
-  entity__Encounter["診療記録"]:::entity
-  entity__LabResult["検査結果"]:::entity
-  entity__Notification["通知"]:::entity
-  entity__PatientMessage["患者連絡"]:::entity
-  actor__Clinician -->|uses| screen__CriticalNoticeScreen
-  actor__Clinician -->|uses| screen__OrderEntryScreen
-  actor__Clinician -->|uses| screen__ResultReviewScreen
-  actor__MedicalClerk -->|uses| screen__OrderEntryScreen
-  actor__Nurse -->|uses| screen__OrderEntryScreen
-  actor__Nurse -->|uses| screen__ResultReviewScreen
-  actor__Nurse -->|uses| screen__SpecimenScreen
+  api__CollectSpecimenApi{{"採血 API"}}:::api
+  api__ConfirmOrderApi{{"オーダ確定 API"}}:::api
+  api__CriticalNoticeApi{{"重要結果通知 API"}}:::api
+  api__OrderEntryApi{{"オーダ登録 API"}}:::api
+  api__PerformedProcedureApi{{"実施登録 API"}}:::api
+  api__ProxyOrderApi{{"代行入力 API"}}:::api
+  api__ReceiveLabResultApi{{"検査結果受信 API"}}:::api
+  api__ResultReviewApi{{"検査結果確認 API"}}:::api
+  usecase__CancelClinicalOrder("オーダの取消"):::usecase
+  usecase__PrintSpecimenLabel("採血管ラベル発行・貼付"):::usecase
+  entity__Charge[("コスト（診療行為）")]:::entity
+  entity__ClinicalOrder[("検査オーダ")]:::entity
+  entity__Encounter[("診療記録")]:::entity
+  entity__LabResult[("検査結果")]:::entity
+  entity__Notification[("通知")]:::entity
+  entity__PatientMessage[("患者連絡")]:::entity
+  actor__Clinician --> screen__CriticalNoticeScreen
+  actor__Clinician --> screen__OrderEntryScreen
+  actor__Clinician --> screen__ResultReviewScreen
+  actor__MedicalClerk --> screen__OrderEntryScreen
+  actor__Nurse --> screen__OrderEntryScreen
+  actor__Nurse --> screen__ResultReviewScreen
+  actor__Nurse --> screen__SpecimenScreen
   api__CollectSpecimenApi -->|U| entity__ClinicalOrder
   api__ConfirmOrderApi -->|U| entity__ClinicalOrder
   api__CriticalNoticeApi -->|C| entity__Notification

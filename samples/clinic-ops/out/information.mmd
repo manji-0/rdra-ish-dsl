@@ -2,105 +2,105 @@
 %% kinds: entity statemodel variation
 %% omitted: columns adr constraint usecase screen field api condition
 flowchart LR
-  entity__AccountBalance["未収金残高"]:::entity
-  entity__Appointment["予約・受診"]:::entity
-  entity__AuditEvent["監査ログ"]:::entity
-  entity__CarePlan["ケアプラン"]:::entity
-  entity__Charge["コスト（診療行為）"]:::entity
-  entity__ClaimStatement["レセプト"]:::entity
-  entity__ClinicLocation["施設"]:::entity
-  entity__ClinicalOrder["検査オーダ"]:::entity
-  entity__ConsentRecord["同意記録"]:::entity
-  entity__Diagnosis["診断"]:::entity
-  entity__EligibilityCheck["資格確認"]:::entity
-  entity__Encounter["診療記録"]:::entity
-  entity__InsurancePolicy["保険資格"]:::entity
-  entity__IntakePacket["問診票"]:::entity
-  entity__LabResult["検査結果"]:::entity
-  entity__Medication["薬剤"]:::entity
-  entity__Notification["通知"]:::entity
-  entity__PatientAccount["患者登録"]:::entity
-  entity__PatientMessage["患者連絡"]:::entity
-  entity__PatientProfile["患者基本情報"]:::entity
-  entity__PaymentTransaction["精算"]:::entity
-  entity__Prescription["処方箋"]:::entity
-  entity__Provider["医師マスタ"]:::entity
-  entity__ProviderSchedule["診療枠"]:::entity
-  entity__ReferralLetter["紹介状・診療情報提供書"]:::entity
-  entity__Room["診察室"]:::entity
-  entity__SelectedTreatmentFeeSetting["選定療養費の設定"]:::entity
-  entity__VitalSign["バイタル"]:::entity
-  statemodel__Appointment_status["Appointment.status"]:::statemodel
-  statemodel__CarePlan_status["CarePlan.status"]:::statemodel
-  statemodel__ClaimStatement_status["ClaimStatement.status"]:::statemodel
-  statemodel__ClinicalOrder_status["ClinicalOrder.status"]:::statemodel
-  statemodel__EligibilityCheck_result["EligibilityCheck.result"]:::statemodel
-  statemodel__Encounter_status["Encounter.status"]:::statemodel
-  statemodel__IntakePacket_status["IntakePacket.status"]:::statemodel
-  statemodel__PatientAccount_status["PatientAccount.status"]:::statemodel
-  statemodel__PaymentTransaction_status["PaymentTransaction.status"]:::statemodel
-  statemodel__Prescription_status["Prescription.status"]:::statemodel
-  variation__AuditSeverity["監査指摘の重大度"]:::variation
-  variation__BurdenRatio["負担割合"]:::variation
-  variation__ChargeKind["診療費の種類"]:::variation
-  variation__ChargeOrigin["コストの発生元"]:::variation
-  variation__ConsentType["同意の種類"]:::variation
-  variation__LimitCategory["限度額適用区分"]:::variation
-  variation__MessageChannel["連絡手段"]:::variation
-  variation__OrderType["オーダの種類"]:::variation
-  variation__PayerChange["資格変更の種類"]:::variation
-  variation__PaymentMethod["支払方法"]:::variation
-  variation__ReferralCategory["紹介の有無"]:::variation
-  variation__ReferralDirection["紹介の向き"]:::variation
+  entity__AccountBalance[("未収金残高")]:::entity
+  entity__Appointment[("予約・受診")]:::entity
+  entity__AuditEvent[("監査ログ")]:::entity
+  entity__CarePlan[("ケアプラン")]:::entity
+  entity__Charge[("コスト（診療行為）")]:::entity
+  entity__ClaimStatement[("レセプト")]:::entity
+  entity__ClinicLocation[("施設")]:::entity
+  entity__ClinicalOrder[("検査オーダ")]:::entity
+  entity__ConsentRecord[("同意記録")]:::entity
+  entity__Diagnosis[("診断")]:::entity
+  entity__EligibilityCheck[("資格確認")]:::entity
+  entity__Encounter[("診療記録")]:::entity
+  entity__InsurancePolicy[("保険資格")]:::entity
+  entity__IntakePacket[("問診票")]:::entity
+  entity__LabResult[("検査結果")]:::entity
+  entity__Medication[("薬剤")]:::entity
+  entity__Notification[("通知")]:::entity
+  entity__PatientAccount[("患者登録")]:::entity
+  entity__PatientMessage[("患者連絡")]:::entity
+  entity__PatientProfile[("患者基本情報")]:::entity
+  entity__PaymentTransaction[("精算")]:::entity
+  entity__Prescription[("処方箋")]:::entity
+  entity__Provider[("医師マスタ")]:::entity
+  entity__ProviderSchedule[("診療枠")]:::entity
+  entity__ReferralLetter[("紹介状・診療情報提供書")]:::entity
+  entity__Room[("診察室")]:::entity
+  entity__SelectedTreatmentFeeSetting[("選定療養費の設定")]:::entity
+  entity__VitalSign[("バイタル")]:::entity
+  statemodel__Appointment_status[["Appointment.status"]]:::statemodel
+  statemodel__CarePlan_status[["CarePlan.status"]]:::statemodel
+  statemodel__ClaimStatement_status[["ClaimStatement.status"]]:::statemodel
+  statemodel__ClinicalOrder_status[["ClinicalOrder.status"]]:::statemodel
+  statemodel__EligibilityCheck_result[["EligibilityCheck.result"]]:::statemodel
+  statemodel__Encounter_status[["Encounter.status"]]:::statemodel
+  statemodel__IntakePacket_status[["IntakePacket.status"]]:::statemodel
+  statemodel__PatientAccount_status[["PatientAccount.status"]]:::statemodel
+  statemodel__PaymentTransaction_status[["PaymentTransaction.status"]]:::statemodel
+  statemodel__Prescription_status[["Prescription.status"]]:::statemodel
+  variation__AuditSeverity[\"監査指摘の重大度"\]:::variation
+  variation__BurdenRatio[\"負担割合"\]:::variation
+  variation__ChargeKind[\"診療費の種類"\]:::variation
+  variation__ChargeOrigin[\"コストの発生元"\]:::variation
+  variation__ConsentType[\"同意の種類"\]:::variation
+  variation__LimitCategory[\"限度額適用区分"\]:::variation
+  variation__MessageChannel[\"連絡手段"\]:::variation
+  variation__OrderType[\"オーダの種類"\]:::variation
+  variation__PayerChange[\"資格変更の種類"\]:::variation
+  variation__PaymentMethod[\"支払方法"\]:::variation
+  variation__ReferralCategory[\"紹介の有無"\]:::variation
+  variation__ReferralDirection[\"紹介の向き"\]:::variation
   entity__AccountBalance ---|1:1| entity__PatientAccount
   entity__Appointment ---|N:1| entity__ClinicLocation
   entity__Appointment ---|N:1| entity__PatientAccount
   entity__Appointment ---|N:1| entity__Provider
   entity__Appointment ---|N:1| entity__Room
-  entity__Appointment -.->|statemodel| statemodel__Appointment_status
+  entity__Appointment -.-> statemodel__Appointment_status
   entity__Appointment -.->|variation referral| variation__ReferralCategory
   entity__AuditEvent ---|N:1| entity__PatientAccount
   entity__AuditEvent -.->|variation severity| variation__AuditSeverity
   entity__CarePlan ---|N:1| entity__Encounter
   entity__CarePlan ---|N:1| entity__PatientAccount
-  entity__CarePlan -.->|statemodel| statemodel__CarePlan_status
+  entity__CarePlan -.-> statemodel__CarePlan_status
   entity__Charge ---|N:1| entity__ClaimStatement
   entity__Charge ---|N:1| entity__Encounter
   entity__Charge -.->|variation kind| variation__ChargeKind
   entity__Charge -.->|variation origin| variation__ChargeOrigin
   entity__ClaimStatement ---|N:1| entity__InsurancePolicy
   entity__ClaimStatement ---|N:1| entity__PatientAccount
-  entity__ClaimStatement -.->|statemodel| statemodel__ClaimStatement_status
+  entity__ClaimStatement -.-> statemodel__ClaimStatement_status
   entity__ClaimStatement -.->|variation payer_change| variation__PayerChange
   entity__ClinicalOrder ---|N:1| entity__Encounter
-  entity__ClinicalOrder -.->|statemodel| statemodel__ClinicalOrder_status
+  entity__ClinicalOrder -.-> statemodel__ClinicalOrder_status
   entity__ClinicalOrder -.->|variation order_type| variation__OrderType
   entity__ConsentRecord ---|N:1| entity__PatientAccount
   entity__ConsentRecord -.->|variation consent_type| variation__ConsentType
   entity__Diagnosis ---|N:1| entity__Encounter
   entity__EligibilityCheck ---|N:1| entity__InsurancePolicy
-  entity__EligibilityCheck -.->|statemodel| statemodel__EligibilityCheck_result
+  entity__EligibilityCheck -.-> statemodel__EligibilityCheck_result
   entity__Encounter ---|1:1| entity__Appointment
   entity__Encounter ---|N:1| entity__PatientAccount
   entity__Encounter ---|N:1| entity__Provider
-  entity__Encounter -.->|statemodel| statemodel__Encounter_status
+  entity__Encounter -.-> statemodel__Encounter_status
   entity__InsurancePolicy ---|N:1| entity__PatientAccount
   entity__InsurancePolicy -.->|variation burden_ratio| variation__BurdenRatio
   entity__InsurancePolicy -.->|variation limit_category| variation__LimitCategory
   entity__IntakePacket ---|N:1| entity__PatientAccount
-  entity__IntakePacket -.->|statemodel| statemodel__IntakePacket_status
+  entity__IntakePacket -.-> statemodel__IntakePacket_status
   entity__LabResult ---|1:1| entity__ClinicalOrder
   entity__Notification ---|N:1| entity__PatientAccount
-  entity__PatientAccount -.->|statemodel| statemodel__PatientAccount_status
+  entity__PatientAccount -.-> statemodel__PatientAccount_status
   entity__PatientMessage ---|N:1| entity__PatientAccount
   entity__PatientMessage -.->|variation channel| variation__MessageChannel
   entity__PatientProfile ---|1:1| entity__PatientAccount
   entity__PaymentTransaction ---|N:1| entity__Appointment
-  entity__PaymentTransaction -.->|statemodel| statemodel__PaymentTransaction_status
+  entity__PaymentTransaction -.-> statemodel__PaymentTransaction_status
   entity__PaymentTransaction -.->|variation method| variation__PaymentMethod
   entity__Prescription ---|N:1| entity__Encounter
   entity__Prescription ---|N:1| entity__Medication
-  entity__Prescription -.->|statemodel| statemodel__Prescription_status
+  entity__Prescription -.-> statemodel__Prescription_status
   entity__ProviderSchedule ---|N:1| entity__ClinicLocation
   entity__ProviderSchedule ---|N:1| entity__Provider
   entity__ReferralLetter ---|N:1| entity__PatientAccount

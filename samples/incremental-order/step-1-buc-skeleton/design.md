@@ -51,22 +51,22 @@ rdra-ish diagram samples/incremental-order/step-1-buc-skeleton/src --kind rdra -
 %% omitted: (none)
 flowchart LR
   subgraph layer_value["システム価値"]
-    actor__OpsStaff["Operations Staff"]:::actor
+    actor__OpsStaff(["Operations Staff"]):::actor
   end
   subgraph layer_environment["システム外部環境"]
-    business__StoreOperations["Store Operations"]:::business
+    business__StoreOperations[\"Store Operations"/]:::business
     %% desc business__StoreOperations: Store operations owns restock planning and store master maintenance.
     buc__BucStoreRestock["Maintain Store Restock"]:::buc
     %% desc buc__BucStoreRestock: Keep restock dates and store organization assignments operationally correct.
   end
   subgraph layer_boundary["システム境界"]
-    usecase__ChangeNextRestockDate["Change Next Restock Date"]:::usecase
-    usecase__ChangeStoreParentOrganization["Change Store Parent Organization"]:::usecase
+    usecase__ChangeNextRestockDate("Change Next Restock Date"):::usecase
+    usecase__ChangeStoreParentOrganization("Change Store Parent Organization"):::usecase
   end
-  actor__OpsStaff -.->|performs| buc__BucStoreRestock
-  buc__BucStoreRestock -->|belongs| business__StoreOperations
-  buc__BucStoreRestock -->|contains| usecase__ChangeNextRestockDate
-  buc__BucStoreRestock -->|contains| usecase__ChangeStoreParentOrganization
+  actor__OpsStaff -.-> buc__BucStoreRestock
+  buc__BucStoreRestock --> business__StoreOperations
+  buc__BucStoreRestock --> usecase__ChangeNextRestockDate
+  buc__BucStoreRestock --> usecase__ChangeStoreParentOrganization
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef business fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;

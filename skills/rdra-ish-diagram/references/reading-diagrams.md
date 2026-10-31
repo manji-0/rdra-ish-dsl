@@ -25,8 +25,31 @@ flowchart LR
 
 ## Nodes
 
-- A node is `<kind>__<DSL id>["<DSL label>"]:::<kind>`. The id is the same in every kind,
-  so `usecase__Capture` in a UC複合図 is `usecase__Capture` in `rdra`, `flow`, and `state`.
+- A node is `<kind>__<DSL id><open>"<DSL label>"<close>:::<kind>`, the brackets being the
+  Mermaid shape of its kind. The id is the same in every kind, so `usecase__Capture` in a
+  UC複合図 is `usecase__Capture` in `rdra`, `flow`, and `state`. Read the kind from the
+  `:::<kind>` tag; the shape says the same thing to a reader of the picture.
+
+  | Shape | Brackets | Kinds |
+  |---|---|---|
+  | stadium | `([".."])` | actor |
+  | rounded | `("..")` | usecase |
+  | rectangle | `[".."]` | screen, buc, step, system, value, field, dto, flow, medium, permission, quality, adr |
+  | hexagon | `{{".."}}` | api |
+  | cylinder | `[("..")]` | entity |
+  | subroutine | `[[".."]]` | extsystem, statemodel |
+  | asymmetric | `>".."]` | event |
+  | circle | `((".."))` | timer |
+  | double circle | `((("..")))` | state |
+  | rhombus | `{".."}` | condition |
+  | parallelogram | `[/".."/]` | goal |
+  | trapezoid | `[/".."\]` | requirement |
+  | parallelogram, leaning left | `[\".."\]` | nfr, constraint, variation |
+  | trapezoid, upside down | `[\".."/]` | business |
+
+  Kinds a focused diagram draws together never share a shape, except a `value`, which
+  sits inside its variation's subgraph and is a rectangle like `system` in `condition`; in `rdra` a shape repeats
+  across layers, so tell those apart by the tag and the layer subgraph.
 - A subgraph with an element id is that element holding its parts:
   `business__<id>` (BUCs), `flow__<id>` (steps), `variation__<id>` (values).
 - Ids that are not DSL elements of their own:
@@ -42,14 +65,22 @@ flowchart LR
 
 ## Edges
 
-- The label is the DSL predicate (`performs`, `contains`, `covers`, `applies_to`, ...).
-  The edge runs from the predicate's first argument to its second.
+- An edge is `<from> <arrow>|<label>| <to>` or, without a label, `<from> <arrow> <to>`.
+  A label is the DSL predicate (`reads`, `updates`, `precedes`, ...) or what the
+  relation carries (an event, a use case, CRUD letters, a transition). The edge runs from
+  the predicate's first argument to its second.
+- An unlabelled edge is the one relation that kind draws between those two kinds:
+  `actor -> usecase` is `performs`, `buc -> usecase` is `contains`, `event -> usecase`
+  is `triggers`, a robustness `actor -> screen` is `uses`.
+  `rdra_ish_emit::implied_relation` gives the table. A pair with several relations keeps its label: a use case or API to an
+  entity (the CRUD verb), step to step, entity to entity (the cardinality), API to DTO.
 - `-->` is hierarchy (`contains`, `belongs`, `owns`) and flow order (`precedes`,
   `branches`, `repeats`); `---|N:1|` is a `relate` with its cardinality; `-.->` is every
   other association.
 - A transition is `usecase__X -.->|transitions <Entity>.<column> <from>-><to>| state__...`.
-- `context` and `business` label an event link with its event: `raises <Event>`,
-  `triggers <Event>`.
+- `context` labels an actor's edge (a `performs`) with the BUCs it performs and an
+  external system's with the events exchanged; `business` labels a hand-off with its
+  event.
 
 ## Comment Lines
 
@@ -64,7 +95,8 @@ flowchart LR
 | `%% via <from> -> <to> usecase__<id>` | In `screen`, the use case of the `navigates` edge between those screens |
 
 An edge without a `%% derived` line is declared in the model and is the same edge in
-`rdra` (a `screen` edge is the `rdra` edge `-.->|navigates|`, relabelled with its use case).
+`rdra` (a `screen` edge is the unlabelled `rdra` edge `screen__A -.-> screen__B`, a
+`navigates`, labelled with its use case).
 
 ## Redrawing a Diagram
 
@@ -72,7 +104,8 @@ When you turn a `.mmd` into SVG or another notation:
 
 - Keep every node with its kind, label, and layer or parent subgraph; draw the RDRA icon
   or shape of its kind if you have one.
-- Keep every edge with its direction and label. A derived edge may be drawn differently
+- Keep every edge with its direction and label; write the implied relation on an
+  unlabelled edge if the target notation has no shape or line for it. A derived edge may be drawn differently
   (for example dashed or grey), since `%% derived` says it was not declared.
 - Show `%% desc` text as a tooltip or note if the target allows it.
 - Do not add elements the header does not list. If the reader needs an omitted kind,

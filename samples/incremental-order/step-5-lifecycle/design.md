@@ -54,10 +54,10 @@ rdra-ish diagram samples/incremental-order/step-5-lifecycle/src --kind rdra --fo
 %% omitted: (none)
 flowchart LR
   subgraph layer_value["システム価値"]
-    actor__OpsStaff["Operations Staff"]:::actor
+    actor__OpsStaff(["Operations Staff"]):::actor
   end
   subgraph layer_environment["システム外部環境"]
-    business__StoreOperations["Store Operations"]:::business
+    business__StoreOperations[\"Store Operations"/]:::business
     %% desc business__StoreOperations: Store operations owns restock planning and store master maintenance.
     buc__BucStoreRestock["Maintain Store Restock"]:::buc
     %% desc buc__BucStoreRestock: Keep restock dates and store organization assignments operationally correct.
@@ -65,47 +65,47 @@ flowchart LR
     permission__StoreMaintenanceWrite["Store Maintenance Write"]:::permission
   end
   subgraph layer_boundary["システム境界"]
-    usecase__BlockScheduledRestock["Block Scheduled Restock"]:::usecase
-    usecase__ChangeNextRestockDate["Change Next Restock Date"]:::usecase
-    usecase__ChangeStoreParentOrganization["Change Store Parent Organization"]:::usecase
+    usecase__BlockScheduledRestock("Block Scheduled Restock"):::usecase
+    usecase__ChangeNextRestockDate("Change Next Restock Date"):::usecase
+    usecase__ChangeStoreParentOrganization("Change Store Parent Organization"):::usecase
     screen__StoreMaintenanceScreen["Store Maintenance"]:::screen
   end
   subgraph layer_system["システム"]
-    api__OrganizationLookupApi["Organization Lookup API"]:::api
-    api__StoreAdminApi["Store Admin API"]:::api
-    entity__Organization["Organization"]:::entity
-    entity__Store["Store"]:::entity
-    state__Store_blocked["blocked"]:::state
-    state__Store_normal["normal"]:::state
-    state__Store_scheduled["scheduled"]:::state
+    api__OrganizationLookupApi{{"Organization Lookup API"}}:::api
+    api__StoreAdminApi{{"Store Admin API"}}:::api
+    entity__Organization[("Organization")]:::entity
+    entity__Store[("Store")]:::entity
+    state__Store_blocked((("blocked"))):::state
+    state__Store_normal((("normal"))):::state
+    state__Store_scheduled((("scheduled"))):::state
   end
-  actor__OpsStaff -.->|has_permission| permission__StoreMaintenanceWrite
-  actor__OpsStaff -.->|performs| buc__BucStoreRestock
+  actor__OpsStaff -.-> permission__StoreMaintenanceWrite
+  actor__OpsStaff -.-> buc__BucStoreRestock
   api__OrganizationLookupApi -.->|reads| entity__Organization
-  api__StoreAdminApi -.->|requires_permission| permission__StoreMaintenanceWrite
+  api__StoreAdminApi -.-> permission__StoreMaintenanceWrite
   api__StoreAdminApi -.->|updates| entity__Store
-  buc__BucStoreRestock -->|belongs| business__StoreOperations
-  buc__BucStoreRestock -->|contains| usecase__BlockScheduledRestock
-  buc__BucStoreRestock -->|contains| usecase__ChangeNextRestockDate
-  buc__BucStoreRestock -->|contains| usecase__ChangeStoreParentOrganization
+  buc__BucStoreRestock --> business__StoreOperations
+  buc__BucStoreRestock --> usecase__BlockScheduledRestock
+  buc__BucStoreRestock --> usecase__ChangeNextRestockDate
+  buc__BucStoreRestock --> usecase__ChangeStoreParentOrganization
   entity__Store ---|N:1| entity__Organization
-  screen__StoreMaintenanceScreen -.->|shows| entity__Organization
-  screen__StoreMaintenanceScreen -.->|shows| entity__Store
-  usecase__BlockScheduledRestock -.->|displays| screen__StoreMaintenanceScreen
-  usecase__BlockScheduledRestock -.->|requires_medium| medium__OpsConsole
-  usecase__BlockScheduledRestock -.->|requires_permission| permission__StoreMaintenanceWrite
+  screen__StoreMaintenanceScreen -.-> entity__Organization
+  screen__StoreMaintenanceScreen -.-> entity__Store
+  usecase__BlockScheduledRestock -.-> screen__StoreMaintenanceScreen
+  usecase__BlockScheduledRestock -.-> medium__OpsConsole
+  usecase__BlockScheduledRestock -.-> permission__StoreMaintenanceWrite
   usecase__BlockScheduledRestock -.->|transitions Store.restock_status scheduled->blocked| state__Store_blocked
   usecase__BlockScheduledRestock -.->|updates| entity__Store
-  usecase__ChangeNextRestockDate -.->|displays| screen__StoreMaintenanceScreen
-  usecase__ChangeNextRestockDate -.->|requires_medium| medium__OpsConsole
-  usecase__ChangeNextRestockDate -.->|requires_permission| permission__StoreMaintenanceWrite
+  usecase__ChangeNextRestockDate -.-> screen__StoreMaintenanceScreen
+  usecase__ChangeNextRestockDate -.-> medium__OpsConsole
+  usecase__ChangeNextRestockDate -.-> permission__StoreMaintenanceWrite
   usecase__ChangeNextRestockDate -.->|transitions Store.restock_status normal->scheduled| state__Store_scheduled
   usecase__ChangeNextRestockDate -.->|updates| entity__Store
-  usecase__ChangeStoreParentOrganization -.->|displays| screen__StoreMaintenanceScreen
-  usecase__ChangeStoreParentOrganization -.->|invokes| api__OrganizationLookupApi
-  usecase__ChangeStoreParentOrganization -.->|invokes| api__StoreAdminApi
-  usecase__ChangeStoreParentOrganization -.->|requires_medium| medium__OpsConsole
-  usecase__ChangeStoreParentOrganization -.->|requires_permission| permission__StoreMaintenanceWrite
+  usecase__ChangeStoreParentOrganization -.-> screen__StoreMaintenanceScreen
+  usecase__ChangeStoreParentOrganization -.-> api__OrganizationLookupApi
+  usecase__ChangeStoreParentOrganization -.-> api__StoreAdminApi
+  usecase__ChangeStoreParentOrganization -.-> medium__OpsConsole
+  usecase__ChangeStoreParentOrganization -.-> permission__StoreMaintenanceWrite
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef business fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;

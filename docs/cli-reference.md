@@ -451,9 +451,10 @@ rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]...
 The `.mmd` is written for a reader that redraws it, a person or a tool such as an AI that
 draws SVG. It carries the RDRA meaning in text, under the [encoding
 contract](#encoding-contract): a `%%` header, node ids `<kind>__<DSL id>` that are the same
-in every kind, a `:::<kind>` tag on each node, the RDRA layer names, and the DSL predicate
-names as edge labels. Shapes, colours, and direction carry no meaning, so a renderer is
-free to replace them.
+in every kind, a `:::<kind>` tag and a shape per kind on each node, the RDRA layer names,
+and the DSL predicate names as edge labels where the ends do not already say the relation.
+Colours and direction carry no meaning beyond the `:::<kind>` tag, so a renderer is free to
+replace them.
 
 ### Kinds
 
@@ -536,8 +537,8 @@ The notes below say how each kind reads, in the order of the table.
 - For `--kind requirement`, the nodes sit in no layer subgraph, and the header has no
   `layers:` line. The tree reads goal, requirement, BUC. A goal's label adds a second
   line (`<br/>`) with its `metric` and `baseline → target`, whichever of them it has. The
-  edges are the declared `motivates` (requirement to BUC) and `achieves`, drawn from the
-  goal as `-->|achieved_by|` to the requirement and followed by
+  edges are the declared `motivates` (requirement to BUC, unlabelled) and `achieves`, drawn from the
+  goal as an unlabelled `-->` (`achieved_by`) to the requirement and followed by
   `%% derived <goal> -> <requirement> via <requirement>`. A requirement with
   `status "out-of-scope"` sits in `subgraph group_out_of_scope["やらないこと"]`, and its
   edges are dashed (`-.->`); every other edge is `-->`. The whole model draws every goal
@@ -548,7 +549,7 @@ The notes below say how each kind reads, in the order of the table.
 - For `--kind business`, the nodes sit in no layer subgraph, and the header has no
   `layers:` line. Each business is `subgraph business__<id>["<label>"]` holding its BUCs.
   A BUC that belongs to several businesses sits in the first by id, with a
-  `-->|belongs|` edge to each other; a BUC of no business sits outside every subgraph. An
+  unlabelled `-->` (`belongs`) edge to each other; a BUC of no business sits outside every subgraph. An
   edge `buc__A -->|<event label>| buc__B` is a hand-off: a use case contained in A (directly
   or through a step) raises the event, and the event triggers a use case contained in B, or
   B itself (`triggers(Event, Buc)`). It is drawn once per `(A, B, event)` and followed by
@@ -568,13 +569,13 @@ The notes below say how each kind reads, in the order of the table.
 - For `--kind flow`, the type line is `flowchart TD` and there are no layers. Each flow is
   `subgraph flow__<id>["<label>"]` holding its steps; the whole model also draws a step
   of no flow, outside any. The edges are the declared ones: `-->|precedes|`,
-  `-->|branches|`, `-.->|excepts|`, and `-->|repeats|` between steps, and `-.->|covers|`
-  from a step to the use cases, APIs, events, and timers it covers, drawn outside the
+  `-->|branches|`, `-.->|excepts|`, and `-->|repeats|` between steps, and an unlabelled `-.->`
+  (`covers`) from a step to the use cases, APIs, events, and timers it covers, drawn outside the
   flows. A step of a flow that exactly one actor performs sits in that actor's lane,
   `subgraph lane__<Flow>__<Actor>["<actor label>"]` inside the flow, whose first line is
   `%% lane lane__<Flow>__<Actor>: actor__<Actor>`. A lane is not an element, so its id
   is unique per flow; the `lane` kind appears in `kinds:`. A step several actors perform
-  has a `-.->|performs|` edge from each. Without `performs(Actor, Step)` there are no
+  has an unlabelled `-.->` (`performs`) edge from each. Without `performs(Actor, Step)` there are no
   lanes. `--buc` draws the flows the BUCs contain; a BUC without a flow draws an empty
   diagram, its header only.
 - For `--kind screen`, the type line is `flowchart LR` and there are no layers. Each
@@ -594,15 +595,15 @@ The notes below say how each kind reads, in the order of the table.
   `entity__<Child> ---|<card>| entity__<Parent>` with the DSL cardinality (the same
   relates as `er`, without a child-side minimum), each state model, a column that
   `transitions` drive, as `statemodel__<Entity>_<column>` (the composite state id of
-  `--kind state`) with an `-.->|statemodel|` edge, and each variation a column takes
+  `--kind state`) with an unlabelled `-.->` edge (`statemodel`), and each variation a column takes
   with an `-.->|variation <column>|` edge. An `Enum` column no `transitions` drive is no
   state model. `omitted:` starts with `columns`, which `er` draws.
 - For `--kind condition`, there are no layers. Each condition is drawn with a
   `%% holds <id>: <body>` line under it when it has a `holds` body, and an
-  `-.->|combines|` edge to each variation and state model it combines
+  unlabelled `-.->` (`combines`) edge to each variation and state model it combines
   (`statemodel__<Entity>_<column>`, the composite state id of `--kind state`). A link
   read from the `holds` body rather than a `combines` declaration is followed by
-  `%% derived <from> -> <to> from holds`, as in `rdra`. `-.->|applies_to|` edges go to
+  `%% derived <from> -> <to> from holds`, as in `rdra`. Unlabelled `-.->` (`applies_to`) edges go to
   the use cases, APIs, and systems it applies to. Each variation is
   `subgraph variation__<id>["<label>"]` holding one
   `variation__<Variation>__<value>["<value label>"]:::value` node per value, its label
@@ -664,7 +665,7 @@ be read back from the text. The `rdra` diagram shows each part:
     draws both.
   - Entity: each entity a control `reads`, `creates`, `updates`, `deletes`, or `writes`.
   - Edges, labelled so a reader finds the use case without a use case node:
-    `actor -->|uses| screen` (the actor performs a use case that displays the screen;
+    `actor --> screen` (`uses`, the one relation from an actor, so unlabelled) (the actor performs a use case that displays the screen;
     one an event or a timer starts takes only its declared performer, as in `usecase`);
     `screen -->|<use case label>| control` (the use case displays the screen and the
     control is its API, or it); `control -->|CRUD letters| entity` (the union of the
@@ -683,11 +684,12 @@ be read back from the text. The `rdra` diagram shows each part:
 %% omitted: (none)
 flowchart LR
   subgraph layer_value["システム価値"]
-    actor__Customer["Customer"]:::actor
+    actor__Customer(["Customer"]):::actor
   end
   ...
-  actor__Customer -.->|performs| buc__BucPayment
-  buc__BucPayment -->|contains| usecase__Capture
+  actor__Customer -.-> buc__BucPayment
+  buc__BucPayment --> usecase__Capture
+  usecase__Capture -.->|updates| entity__Order
   usecase__Capture -.->|transitions Order.status awaiting_capture->paid| state__Order_paid
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
 ```
@@ -710,6 +712,31 @@ flowchart LR
   | `lane__<Flow>__<Actor>` | `lane` (a subgraph) | `flow` | The swimlane of one actor in one flow |
   | `system__Model` | `system` | `context` | The system when no declared system can stand for it |
 
+- Each node is `<id><open>"<label>"<close>:::<kind>`, in the Mermaid shape of its kind
+  (`rdra_ish_emit::NODE_SHAPES`), so kinds tell apart in black and white too. The label
+  is always quoted, with `"` written `#quot;`. The kinds one focused diagram draws together
+  have different shapes (except a `value`, which sits inside its variation's subgraph
+  and is a rectangle like `system` in `condition`); the `rdra` diagram has more kinds than Mermaid has shapes, so
+  there a shape repeats across layers.
+
+  | Shape | Mermaid | Kinds |
+  |---|---|---|
+  | stadium | `([..])` | `actor` |
+  | rounded | `(..)` | `usecase` |
+  | rectangle | `[..]` | `screen`, `buc`, `step`, `system`, `value`, `field`, `dto`, `flow`, `medium`, `permission`, `quality`, `adr` |
+  | hexagon | `{{..}}` | `api` |
+  | cylinder | `[(..)]` | `entity` |
+  | subroutine | `[[..]]` | `extsystem`, `statemodel` |
+  | asymmetric | `>..]` | `event` |
+  | circle | `((..))` | `timer` |
+  | double circle | `(((..)))` | `state` |
+  | rhombus | `{..}` | `condition` |
+  | parallelogram | `[/../]` | `goal` |
+  | trapezoid | `[/..\]` | `requirement` |
+  | parallelogram, leaning left | `[\..\]` | `nfr`, `constraint`, `variation` |
+  | trapezoid, upside down | `[\../]` | `business` |
+
+  A subgraph keeps `subgraph <id>["<label>"]` whatever its kind.
 - Each node carries `:::<kind>`, and one `classDef <kind>` per kind closes the diagram.
   Each RDRA element family has its own light fill (actors red, BUCs and flows green, use
   cases blue, screens violet, events pink, information yellow, variations and conditions
@@ -717,10 +744,24 @@ flowchart LR
   the `:::<kind>` tag, and a renderer is free to replace it.
 - Each layer is `subgraph layer_<token>["<RDRA name>"]`. A subgraph with an element id
   (`business__<id>`, `flow__<id>`, `variation__<id>`) is that element, holding its parts.
-- Each edge label is the DSL predicate name; a relate edge is labelled with its
-  cardinality (`N:1`). A transition is drawn from the use case to the state it enters,
-  labelled `transitions <Entity>.<column> <from>-><to>`. The direction is from the
-  predicate's first argument to its second.
+- An edge is `<from> <arrow>|<label>| <to>`, or `<from> <arrow> <to>` without a label. A
+  label is left off when, in that kind, the kinds of the two ends have exactly one
+  relation and the label would only name it: the relation is then read back from the ends
+  (`rdra_ish_emit::implied_relation`, from the table `rdra_ish_emit::EDGE_RELATIONS`).
+  So `performs`, `invokes`, `displays`, `shows`, `raises`, `triggers`, `contains`,
+  `covers`, `belongs`, `motivates`, `achieves` / `achieved_by`, `applies_to`,
+  `combines`, and the other single-relation pairs go unlabelled, as do the robustness
+  diagram's actor-to-screen `uses` and the information diagram's `statemodel`. A label stays
+  where it says something the ends do not: the CRUD verb (`reads`, `writes`, `creates`,
+  `updates`, `deletes`) and the API's `request` / `response` / `error_response`, a
+  step order (`precedes`, `branches`, `excepts`, `repeats`), a relate's cardinality
+  (`N:1`), a transition, the robustness diagram's use case, CRUD letters, and events, the
+  BUCs on a context actor edge (a `performs`) and the events on a context external-system
+  or business edge, an information diagram's `variation <column>`,
+  and every screen-diagram edge (its `.via` use case, `navigates`, or `業務上の順番`). A
+  transition is drawn from the use case to the state it enters, labelled `transitions
+  <Entity>.<column> <from>-><to>`. The direction is from the predicate's first argument to
+  its second.
 - The line style is the RDRAGraph relation kind: `-->` for hierarchy (`contains`,
   `belongs`, `owns`) and flow order (`precedes`, `branches`, `repeats`), `---` for
   `relate`, and `-.->` for every other association.

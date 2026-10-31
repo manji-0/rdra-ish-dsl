@@ -12,6 +12,13 @@ pub mod state_pattern;
 pub mod tla;
 pub mod typescript;
 
+/// The flowchart encoding a reader of the `.mmd` needs: each kind's node shape, and the
+/// relation an unlabelled edge stands for.
+pub use diagram_common::{
+    edge_relations, implied_relation, node_shape, EdgeLabel, EdgeRelation, EDGE_RELATIONS,
+    NODE_SHAPES,
+};
+
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
 use thiserror::Error;
 

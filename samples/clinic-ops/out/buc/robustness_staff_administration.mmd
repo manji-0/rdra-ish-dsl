@@ -2,24 +2,24 @@
 %% kinds: actor screen api usecase entity
 %% omitted: buc medium permission
 flowchart LR
-  actor__ClinicAdmin["病院管理者"]:::actor
+  actor__ClinicAdmin(["病院管理者"]):::actor
   screen__AuditReviewScreen["監査ログ画面"]:::screen
   screen__RoomAdminScreen["診察室管理画面"]:::screen
   screen__ScheduleAdminScreen["診療枠管理画面"]:::screen
-  api__AuditApi["監査 API"]:::api
-  api__BlockScheduleSlotApi["診療枠停止 API"]:::api
-  api__ManageProviderScheduleApi["診療枠管理 API"]:::api
-  api__RoomAdminApi["診察室管理 API"]:::api
-  usecase__ReleaseRoom["診察室の解放"]:::usecase
-  usecase__ResolveAuditFinding["監査指摘の解決"]:::usecase
-  entity__AuditEvent["監査ログ"]:::entity
-  entity__PatientAccount["患者登録"]:::entity
-  entity__Provider["医師マスタ"]:::entity
-  entity__ProviderSchedule["診療枠"]:::entity
-  entity__Room["診察室"]:::entity
-  actor__ClinicAdmin -->|uses| screen__AuditReviewScreen
-  actor__ClinicAdmin -->|uses| screen__RoomAdminScreen
-  actor__ClinicAdmin -->|uses| screen__ScheduleAdminScreen
+  api__AuditApi{{"監査 API"}}:::api
+  api__BlockScheduleSlotApi{{"診療枠停止 API"}}:::api
+  api__ManageProviderScheduleApi{{"診療枠管理 API"}}:::api
+  api__RoomAdminApi{{"診察室管理 API"}}:::api
+  usecase__ReleaseRoom("診察室の解放"):::usecase
+  usecase__ResolveAuditFinding("監査指摘の解決"):::usecase
+  entity__AuditEvent[("監査ログ")]:::entity
+  entity__PatientAccount[("患者登録")]:::entity
+  entity__Provider[("医師マスタ")]:::entity
+  entity__ProviderSchedule[("診療枠")]:::entity
+  entity__Room[("診察室")]:::entity
+  actor__ClinicAdmin --> screen__AuditReviewScreen
+  actor__ClinicAdmin --> screen__RoomAdminScreen
+  actor__ClinicAdmin --> screen__ScheduleAdminScreen
   api__AuditApi -->|R| entity__AuditEvent
   api__AuditApi -->|R| entity__PatientAccount
   api__BlockScheduleSlotApi -->|U| entity__ProviderSchedule

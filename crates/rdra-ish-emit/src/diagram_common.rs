@@ -143,6 +143,430 @@ pub(crate) fn edge_label(label: &str) -> String {
     quote(label).replace('|', "#124;")
 }
 
+/// The Mermaid flowchart shape of each element kind, as the brackets around the quoted
+/// label: `<id><open>"<label>"<close>:::<kind>`. Every flowchart draws its nodes with
+/// these, so kinds tell apart by shape as well as by colour. Shapes repeat across layers
+/// (the rdra diagram has more kinds than Mermaid has shapes) but not among the kinds one
+/// focused diagram draws together, except a variation's `value`, a rectangle like
+/// `system` in the condition diagram, which always sits in its variation's subgraph.
+/// `business`, `flow`, and `variation` are also drawn as
+/// subgraphs, which keep `subgraph <id>["<label>"]`; a `lane` is only ever a subgraph.
+pub const NODE_SHAPES: &[(&str, &str, &str)] = &[
+    ("actor", "([", "])"),
+    ("extsystem", "[[", "]]"),
+    ("system", "[", "]"),
+    ("requirement", "[/", "\\]"),
+    ("goal", "[/", "/]"),
+    ("nfr", "[\\", "\\]"),
+    ("adr", "[", "]"),
+    ("quality", "[", "]"),
+    ("constraint", "[\\", "\\]"),
+    ("business", "[\\", "/]"),
+    ("buc", "[", "]"),
+    ("flow", "[", "]"),
+    ("step", "[", "]"),
+    ("timer", "((", "))"),
+    ("medium", "[", "]"),
+    ("permission", "[", "]"),
+    ("usecase", "(", ")"),
+    ("screen", "[", "]"),
+    ("field", "[", "]"),
+    ("event", ">", "]"),
+    ("api", "{{", "}}"),
+    ("dto", "[", "]"),
+    ("entity", "[(", ")]"),
+    ("state", "(((", ")))"),
+    ("statemodel", "[[", "]]"),
+    ("variation", "[\\", "\\]"),
+    ("value", "[", "]"),
+    ("condition", "{", "}"),
+];
+
+/// The opening and closing brackets of `kind`'s shape, or `None` for a kind no flowchart
+/// draws as a node.
+pub fn node_shape(kind: &str) -> Option<(&'static str, &'static str)> {
+    NODE_SHAPES
+        .iter()
+        .find(|(k, _, _)| *k == kind)
+        .map(|(_, open, close)| (*open, *close))
+}
+
+/// One node line: `id` in `kind`'s shape around the quoted `text` (escaped already), tagged
+/// `:::<kind>`, at `indent`, newline included.
+pub(crate) fn node_line(indent: &str, id: &str, text: &str, kind: &str) -> String {
+    let (open, close) = node_shape(kind).unwrap_or(("[", "]"));
+    format!("{indent}{id}{open}\"{text}\"{close}:::{kind}\n")
+}
+
+/// What the label of an edge says.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EdgeLabel {
+    /// The relation's name and nothing more, such as `performs`. Left off the edge when the
+    /// relation is the only one the diagram draws between the two kinds.
+    Name,
+    /// Something the endpoints do not give: the operations, an event, a use case, a column.
+    /// Always written.
+    Data,
+}
+
+/// One relation a flowchart draws: from a node of a `from` kind to one of a `to` kind.
+pub struct EdgeRelation {
+    pub diagram: &'static str,
+    pub from: &'static [&'static str],
+    pub to: &'static [&'static str],
+    /// The relation's name; for a [`EdgeLabel::Name`] edge also its label.
+    pub relation: &'static str,
+    pub label: EdgeLabel,
+}
+
+const fn rel(
+    diagram: &'static str,
+    from: &'static [&'static str],
+    to: &'static [&'static str],
+    relation: &'static str,
+    label: EdgeLabel,
+) -> EdgeRelation {
+    EdgeRelation {
+        diagram,
+        from,
+        to,
+        relation,
+        label,
+    }
+}
+
+use EdgeLabel::{Data, Name};
+
+const CRUD: [&str; 5] = ["reads", "writes", "creates", "updates", "deletes"];
+const STEP_ORDER: [&str; 4] = ["precedes", "branches", "excepts", "repeats"];
+const CARDINALITIES: [&str; 4] = ["1:1", "1:N", "N:1", "N:M"];
+
+/// Every relation each flowchart kind draws, by the kinds of its ends. An edge goes without
+/// a label when its pair of kinds has exactly one relation in its diagram and that relation
+/// is a [`EdgeLabel::Name`]: the relation is then read back from the endpoints
+/// ([`implied_relation`]). The `rdra` rows follow the predicate signatures of
+/// `rdra_ish_core::predicate`.
+pub const EDGE_RELATIONS: &[EdgeRelation] = &[
+    // rdra: every declared relation.
+    rel(
+        "rdra",
+        &["actor"],
+        &["usecase", "buc", "step"],
+        "performs",
+        Name,
+    ),
+    rel("rdra", &["usecase", "api"], &["entity"], CRUD[0], Name),
+    rel("rdra", &["usecase", "api"], &["entity"], CRUD[1], Name),
+    rel("rdra", &["usecase", "api"], &["entity"], CRUD[2], Name),
+    rel("rdra", &["usecase", "api"], &["entity"], CRUD[3], Name),
+    rel("rdra", &["usecase", "api"], &["entity"], CRUD[4], Name),
+    rel("rdra", &["usecase"], &["api"], "invokes", Name),
+    rel("rdra", &["api"], &["dto"], "request", Name),
+    rel("rdra", &["api"], &["dto"], "response", Name),
+    rel("rdra", &["api"], &["dto"], "error_response", Name),
+    rel(
+        "rdra",
+        &["nfr", "condition"],
+        &["usecase", "api", "system"],
+        "applies_to",
+        Name,
+    ),
+    rel(
+        "rdra",
+        &["condition"],
+        &["variation", "entity"],
+        "combines",
+        Name,
+    ),
+    rel(
+        "rdra",
+        &["nfr", "constraint"],
+        &["quality"],
+        "qualifies",
+        Name,
+    ),
+    rel(
+        "rdra",
+        &["constraint"],
+        &["usecase", "api", "system", "entity", "dto"],
+        "constrains",
+        Name,
+    ),
+    rel("rdra", &["system"], &["entity"], "owns", Name),
+    rel("rdra", &["usecase"], &["screen"], "displays", Name),
+    rel("rdra", &["screen"], &["entity"], "shows", Name),
+    rel("rdra", &["screen"], &["screen"], "navigates", Name),
+    rel("rdra", &["field"], &["entity"], "maps_field", Name),
+    rel(
+        "rdra",
+        &["usecase", "extsystem"],
+        &["event"],
+        "raises",
+        Name,
+    ),
+    rel(
+        "rdra",
+        &["event"],
+        &["usecase", "buc", "extsystem"],
+        "triggers",
+        Name,
+    ),
+    rel("rdra", &["timer"], &["usecase", "buc"], "triggers", Name),
+    rel(
+        "rdra",
+        &["buc", "system", "flow", "screen"],
+        &["usecase", "api", "flow", "step", "field"],
+        "contains",
+        Name,
+    ),
+    rel("rdra", &["step"], &["step"], STEP_ORDER[0], Name),
+    rel("rdra", &["step"], &["step"], STEP_ORDER[1], Name),
+    rel("rdra", &["step"], &["step"], STEP_ORDER[2], Name),
+    rel("rdra", &["step"], &["step"], STEP_ORDER[3], Name),
+    rel(
+        "rdra",
+        &["step"],
+        &["usecase", "api", "event", "timer"],
+        "covers",
+        Name,
+    ),
+    rel("rdra", &["usecase"], &["usecase"], "compensates", Name),
+    rel("rdra", &["buc"], &["business"], "belongs", Name),
+    rel("rdra", &["actor"], &["permission"], "has_permission", Name),
+    rel(
+        "rdra",
+        &["usecase", "api"],
+        &["permission"],
+        "requires_permission",
+        Name,
+    ),
+    rel(
+        "rdra",
+        &["usecase", "api"],
+        &["medium"],
+        "requires_medium",
+        Name,
+    ),
+    rel("rdra", &["requirement"], &["buc"], "motivates", Name),
+    rel("rdra", &["requirement"], &["goal"], "achieves", Name),
+    rel(
+        "rdra",
+        &["adr"],
+        &[
+            "buc",
+            "usecase",
+            "api",
+            "system",
+            "entity",
+            "requirement",
+            "nfr",
+            "constraint",
+            "dto",
+        ],
+        "decides",
+        Name,
+    ),
+    // `transitions <Entity>.<column> <from>-><to>`.
+    rel("rdra", &["usecase"], &["state"], "transitions", Data),
+    rel("rdra", &["entity"], &["entity"], CARDINALITIES[0], Name),
+    rel("rdra", &["entity"], &["entity"], CARDINALITIES[1], Name),
+    rel("rdra", &["entity"], &["entity"], CARDINALITIES[2], Name),
+    rel("rdra", &["entity"], &["entity"], CARDINALITIES[3], Name),
+    // context: an actor uses the system through the labelled BUCs; an external system
+    // exchanges the labelled events.
+    // An actor's edge is labelled with the BUCs it performs (`、`-joined).
+    rel("context", &["actor"], &["system"], "performs", Data),
+    rel("context", &["extsystem"], &["system"], "raises", Data),
+    rel("context", &["system"], &["extsystem"], "triggers", Data),
+    // requirement: the value tree.
+    rel("requirement", &["requirement"], &["buc"], "motivates", Name),
+    rel(
+        "requirement",
+        &["goal"],
+        &["requirement"],
+        "achieved_by",
+        Name,
+    ),
+    // business: a hand-off is labelled with its event.
+    rel("business", &["buc"], &["buc"], "handoff", Data),
+    rel("business", &["buc"], &["business"], "belongs", Name),
+    // usecase: the UC複合図.
+    rel("usecase", &["actor"], &["usecase"], "performs", Name),
+    rel(
+        "usecase",
+        &["event", "timer"],
+        &["usecase"],
+        "triggers",
+        Name,
+    ),
+    rel("usecase", &["event"], &["extsystem"], "triggers", Name),
+    rel("usecase", &["condition"], &["usecase"], "applies_to", Name),
+    rel("usecase", &["usecase"], &["screen"], "displays", Name),
+    rel(
+        "usecase",
+        &["usecase", "extsystem"],
+        &["event"],
+        "raises",
+        Name,
+    ),
+    rel("usecase", &["usecase"], &["entity"], CRUD[0], Name),
+    rel("usecase", &["usecase"], &["entity"], CRUD[1], Name),
+    rel("usecase", &["usecase"], &["entity"], CRUD[2], Name),
+    rel("usecase", &["usecase"], &["entity"], CRUD[3], Name),
+    rel("usecase", &["usecase"], &["entity"], CRUD[4], Name),
+    rel("usecase", &["screen"], &["entity"], "shows", Name),
+    rel("usecase", &["usecase"], &["state"], "transitions", Data),
+    // robustness: actor -> boundary -> control -> entity, and the events between them.
+    rel("robustness", &["actor"], &["screen"], "uses", Name),
+    // Labelled with the use case that joins them.
+    rel(
+        "robustness",
+        &["screen"],
+        &["api", "usecase"],
+        "calls",
+        Data,
+    ),
+    // Labelled with the CRUD letters of the control's operations.
+    rel("robustness", &["api", "usecase"], &["entity"], "crud", Data),
+    // Labelled with the event or timer.
+    rel(
+        "robustness",
+        &["api", "usecase", "extsystem", "timer"],
+        &["api", "usecase", "extsystem"],
+        "event",
+        Data,
+    ),
+    // event: what raises each event and what it triggers.
+    rel(
+        "event",
+        &["usecase", "extsystem"],
+        &["event"],
+        "raises",
+        Name,
+    ),
+    rel(
+        "event",
+        &["event"],
+        &["usecase", "buc", "extsystem"],
+        "triggers",
+        Name,
+    ),
+    rel("event", &["timer"], &["usecase", "buc"], "triggers", Name),
+    // flow: steps in order, what each covers, and who performs one outside a lane.
+    rel("flow", &["step"], &["step"], STEP_ORDER[0], Name),
+    rel("flow", &["step"], &["step"], STEP_ORDER[1], Name),
+    rel("flow", &["step"], &["step"], STEP_ORDER[2], Name),
+    rel("flow", &["step"], &["step"], STEP_ORDER[3], Name),
+    rel(
+        "flow",
+        &["step"],
+        &["usecase", "api", "event", "timer"],
+        "covers",
+        Name,
+    ),
+    rel("flow", &["actor"], &["step"], "performs", Name),
+    // information: relates, state models, and the variation a column takes.
+    rel(
+        "information",
+        &["entity"],
+        &["entity"],
+        CARDINALITIES[0],
+        Name,
+    ),
+    rel(
+        "information",
+        &["entity"],
+        &["entity"],
+        CARDINALITIES[1],
+        Name,
+    ),
+    rel(
+        "information",
+        &["entity"],
+        &["entity"],
+        CARDINALITIES[2],
+        Name,
+    ),
+    rel(
+        "information",
+        &["entity"],
+        &["entity"],
+        CARDINALITIES[3],
+        Name,
+    ),
+    rel(
+        "information",
+        &["entity"],
+        &["statemodel"],
+        "statemodel",
+        Name,
+    ),
+    // `variation <column>`.
+    rel(
+        "information",
+        &["entity"],
+        &["variation"],
+        "variation",
+        Data,
+    ),
+    // condition: what a condition combines and applies to.
+    rel(
+        "condition",
+        &["condition"],
+        &["variation", "statemodel"],
+        "combines",
+        Name,
+    ),
+    rel(
+        "condition",
+        &["condition"],
+        &["usecase", "api", "system"],
+        "applies_to",
+        Name,
+    ),
+    // screen: a navigates is labelled with its `.via` use case, else `navigates`; a dashed
+    // edge is 業務上の順番.
+    rel("screen", &["screen"], &["screen"], "navigates", Name),
+    rel("screen", &["screen"], &["screen"], "via", Data),
+    rel("screen", &["screen"], &["screen"], "業務上の順番", Name),
+];
+
+/// The relations `diagram` draws from a `from` node to a `to` node.
+pub fn edge_relations<'a>(
+    diagram: &'a str,
+    from: &'a str,
+    to: &'a str,
+) -> impl Iterator<Item = &'static EdgeRelation> + 'a {
+    EDGE_RELATIONS
+        .iter()
+        .filter(move |r| r.diagram == diagram && r.from.contains(&from) && r.to.contains(&to))
+}
+
+/// The relation an unlabelled `diagram` edge from a `from` node to a `to` node stands for:
+/// the one relation the diagram draws between the two kinds, when its label is its name.
+pub fn implied_relation(diagram: &str, from: &str, to: &str) -> Option<&'static str> {
+    let mut relations = edge_relations(diagram, from, to);
+    match (relations.next(), relations.next()) {
+        (Some(only), None) if only.label == EdgeLabel::Name => Some(only.relation),
+        _ => None,
+    }
+}
+
+/// The kind of a contract id, `<kind>__<DSL id>`.
+fn id_kind(id: &str) -> &str {
+    id.split_once("__").map_or(id, |(kind, _)| kind)
+}
+
+/// One edge line at two spaces, newline included: `from arrow|label| to`, or `from arrow
+/// to` when the label is the relation [`implied_relation`] reads back from the ends.
+pub(crate) fn edge_line(diagram: &str, from: &str, arrow: &str, label: &str, to: &str) -> String {
+    if implied_relation(diagram, id_kind(from), id_kind(to)) == Some(label) {
+        format!("  {from} {arrow} {to}\n")
+    } else {
+        format!("  {from} {arrow}|{label}| {to}\n")
+    }
+}
+
 /// The node id of the encoding contract, `<kind token>__<DSL id>`, the same in every kind.
 pub(crate) fn contract_id(model: &SemanticModel, node: &NodeRef) -> Option<String> {
     Some(format!(
@@ -285,7 +709,7 @@ pub(crate) fn declare_flow_node(
     let label = node_label(model, &node_ref)?;
     if declared.ids.insert(id.clone()) {
         let kind = node_kind_filter_name(&node_ref);
-        out.push_str(&format!("  {id}[\"{}\"]:::{kind}\n", quote(label)));
+        out.push_str(&node_line("  ", &id, &quote(label), kind));
         if let Some(desc) = desc_line(model, &node_ref, &id) {
             out.push_str(&format!("  {desc}\n"));
         }
@@ -296,9 +720,9 @@ pub(crate) fn declare_flow_node(
     Some(id)
 }
 
-/// One association edge, labelled with its DSL predicate, newline included.
+/// One association edge of the event diagram, newline included.
 fn association(from: &str, predicate: &str, to: &str) -> String {
-    format!("  {from} -.->|{predicate}| {to}\n")
+    edge_line("event", from, "-.->", predicate, to)
 }
 
 /// Every event flow and timer flow the scope shows.
@@ -420,4 +844,109 @@ pub(crate) fn model_from(src: &str) -> SemanticModel {
     let (ast, _) = rdra_ish_syntax::parse(src);
     let (model, _) = rdra_ish_core::build_model(&ast);
     model
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    /// The relation label the rdra diagram writes for a predicate, when it draws one.
+    fn drawn_labels(predicate: &'static str) -> Vec<&'static str> {
+        match predicate {
+            "relate" => CARDINALITIES.to_vec(),
+            // Not an edge: a rule, an entity property, or no relation of the model.
+            "holds" | "exposes" | "shares" | "outbox" | "coordinates" | "after" | "sets"
+            | "forbidden" | "invariant" | "required" | "exclusive" | "when" => Vec::new(),
+            // Drawn from the use case to the state it enters, labelled with the move.
+            "transitions" => Vec::new(),
+            _ => vec![predicate],
+        }
+    }
+
+    #[test]
+    fn the_rdra_rows_cover_every_pair_a_predicate_signature_allows() {
+        for predicate in rdra_ish_core::KNOWN_PREDICATES {
+            let Some(signature) = rdra_ish_core::predicate_signature(predicate) else {
+                continue;
+            };
+            let [from, to, ..] = signature.as_slice() else {
+                continue;
+            };
+            // `triggers` takes only the listed pairs of its kinds.
+            let pairs: Vec<(&str, &str)> = if *predicate == "triggers" {
+                rdra_ish_core::predicate::TRIGGER_PAIRS.to_vec()
+            } else {
+                from.iter()
+                    .flat_map(|f| to.iter().map(move |t| (*f, *t)))
+                    .collect()
+            };
+            for label in drawn_labels(predicate) {
+                for (f, t) in &pairs {
+                    // `combines(Condition, Entity.column)` is drawn to the entity.
+                    let t = if *t == "_col" { "entity" } else { *t };
+                    assert!(
+                        edge_relations("rdra", f, t).any(|r| r.relation == label),
+                        "{predicate}({f}, {t}) has no `{label}` row"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_focused_diagram_draws_each_of_its_kinds_in_its_own_shape() {
+        let diagrams: BTreeSet<&str> = EDGE_RELATIONS.iter().map(|r| r.diagram).collect();
+        for diagram in diagrams.into_iter().filter(|d| *d != "rdra") {
+            let kinds: BTreeSet<&str> = EDGE_RELATIONS
+                .iter()
+                .filter(|r| r.diagram == diagram)
+                .flat_map(|r| r.from.iter().chain(r.to))
+                .copied()
+                // A variation's values have no edge but are drawn in `condition`.
+                .chain((diagram == "condition").then_some("value"))
+                .collect();
+            let mut shapes: Vec<(&str, &str, &str)> = Vec::new();
+            for kind in kinds {
+                let (open, close) =
+                    node_shape(kind).unwrap_or_else(|| panic!("{diagram}: {kind} has no shape"));
+                if let Some((other, ..)) = shapes.iter().find(|(_, o, c)| (*o, *c) == (open, close))
+                {
+                    // A value sits inside its variation's subgraph, apart from the systems.
+                    let apart = matches!((*other, kind), ("system", "value") | ("value", "system"));
+                    assert!(apart, "{diagram}: {kind} and {other} share {open}..{close}");
+                }
+                shapes.push((kind, open, close));
+            }
+        }
+    }
+
+    #[test]
+    fn an_edge_goes_unlabelled_only_when_its_ends_name_one_relation() {
+        assert_eq!(
+            implied_relation("rdra", "actor", "usecase"),
+            Some("performs")
+        );
+        assert_eq!(implied_relation("rdra", "usecase", "entity"), None);
+        assert_eq!(implied_relation("robustness", "screen", "api"), None);
+        assert_eq!(implied_relation("screen", "screen", "screen"), None);
+        // A context actor edge is a `performs` whose label carries its BUCs.
+        assert_eq!(implied_relation("context", "actor", "system"), None);
+        let relations: Vec<_> = edge_relations("context", "actor", "system")
+            .map(|r| (r.relation, r.label))
+            .collect();
+        assert_eq!(relations, [("performs", EdgeLabel::Data)]);
+        assert_eq!(
+            implied_relation("rdra", "screen", "screen"),
+            Some("navigates")
+        );
+        assert_eq!(
+            edge_line("rdra", "actor__A", "-.->", "performs", "usecase__U"),
+            "  actor__A -.-> usecase__U\n"
+        );
+        assert_eq!(
+            edge_line("rdra", "usecase__U", "-.->", "reads", "entity__E"),
+            "  usecase__U -.->|reads| entity__E\n"
+        );
+    }
 }

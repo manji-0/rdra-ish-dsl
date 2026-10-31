@@ -141,7 +141,7 @@ impl Emitter for BusinessMermaidEmitter {
                 });
             }
         }
-        render_edges(&mut body, edges);
+        render_edges(&mut body, "business", edges);
 
         let kinds = kinds_by_layer(&nodes);
         body.push_str(&class_defs(&kinds));
@@ -257,7 +257,7 @@ triggers(Wrapped, BucWrap)
             ),
             "{result}"
         );
-        assert!(result.contains("  buc__BucShip -->|belongs| business__Shop\n"));
+        assert!(result.contains("  buc__BucShip --> business__Shop\n"));
         assert!(result.contains("  buc__BucLoose[\"Loose\"]:::buc\n"));
         assert!(!result.contains("subgraph layer_"), "{result}");
         assert!(

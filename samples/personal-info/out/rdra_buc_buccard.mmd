@@ -4,29 +4,29 @@
 %% omitted: (none)
 flowchart LR
   subgraph layer_value["システム価値"]
-    actor__User["User"]:::actor
+    actor__User(["User"]):::actor
   end
   subgraph layer_environment["システム外部環境"]
-    business__PersonalDataMgmt["Personal Data Management Business"]:::business
+    business__PersonalDataMgmt[\"Personal Data Management Business"/]:::business
     buc__BucCard["Manage Credit Cards"]:::buc
   end
   subgraph layer_boundary["システム境界"]
-    usecase__DeleteCard["Delete Card"]:::usecase
-    usecase__ListCards["List Cards"]:::usecase
-    usecase__RegisterCard["Register Card"]:::usecase
-    usecase__SetPrimaryCard["Set Primary Card"]:::usecase
+    usecase__DeleteCard("Delete Card"):::usecase
+    usecase__ListCards("List Cards"):::usecase
+    usecase__RegisterCard("Register Card"):::usecase
+    usecase__SetPrimaryCard("Set Primary Card"):::usecase
     screen__CardAddScreen["Card Registration Screen"]:::screen
     screen__CardListScreen["Card List Screen"]:::screen
   end
   subgraph layer_system["システム"]
-    api__DeleteCardApi["Delete Card API"]:::api
-    api__ListCardsApi["List Cards API"]:::api
-    api__RegisterCardApi["Register Card API"]:::api
-    api__SetPrimaryCardApi["Set Primary Card API"]:::api
-    entity__AuditLog["Audit Log"]:::entity
-    entity__CreditCard["Credit Card"]:::entity
+    api__DeleteCardApi{{"Delete Card API"}}:::api
+    api__ListCardsApi{{"List Cards API"}}:::api
+    api__RegisterCardApi{{"Register Card API"}}:::api
+    api__SetPrimaryCardApi{{"Set Primary Card API"}}:::api
+    entity__AuditLog[("Audit Log")]:::entity
+    entity__CreditCard[("Credit Card")]:::entity
   end
-  actor__User -.->|performs| buc__BucCard
+  actor__User -.-> buc__BucCard
   api__DeleteCardApi -.->|creates| entity__AuditLog
   api__DeleteCardApi -.->|deletes| entity__CreditCard
   api__ListCardsApi -.->|reads| entity__CreditCard
@@ -35,19 +35,19 @@ flowchart LR
   api__SetPrimaryCardApi -.->|creates| entity__AuditLog
   api__SetPrimaryCardApi -.->|reads| entity__CreditCard
   api__SetPrimaryCardApi -.->|updates| entity__CreditCard
-  buc__BucCard -->|belongs| business__PersonalDataMgmt
-  buc__BucCard -->|contains| usecase__DeleteCard
-  buc__BucCard -->|contains| usecase__ListCards
-  buc__BucCard -->|contains| usecase__RegisterCard
-  buc__BucCard -->|contains| usecase__SetPrimaryCard
-  usecase__DeleteCard -.->|displays| screen__CardListScreen
-  usecase__DeleteCard -.->|invokes| api__DeleteCardApi
-  usecase__ListCards -.->|displays| screen__CardListScreen
-  usecase__ListCards -.->|invokes| api__ListCardsApi
-  usecase__RegisterCard -.->|displays| screen__CardAddScreen
-  usecase__RegisterCard -.->|invokes| api__RegisterCardApi
-  usecase__SetPrimaryCard -.->|displays| screen__CardListScreen
-  usecase__SetPrimaryCard -.->|invokes| api__SetPrimaryCardApi
+  buc__BucCard --> business__PersonalDataMgmt
+  buc__BucCard --> usecase__DeleteCard
+  buc__BucCard --> usecase__ListCards
+  buc__BucCard --> usecase__RegisterCard
+  buc__BucCard --> usecase__SetPrimaryCard
+  usecase__DeleteCard -.-> screen__CardListScreen
+  usecase__DeleteCard -.-> api__DeleteCardApi
+  usecase__ListCards -.-> screen__CardListScreen
+  usecase__ListCards -.-> api__ListCardsApi
+  usecase__RegisterCard -.-> screen__CardAddScreen
+  usecase__RegisterCard -.-> api__RegisterCardApi
+  usecase__SetPrimaryCard -.-> screen__CardListScreen
+  usecase__SetPrimaryCard -.-> api__SetPrimaryCardApi
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef business fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;

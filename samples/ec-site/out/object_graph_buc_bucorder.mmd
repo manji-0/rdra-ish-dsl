@@ -4,47 +4,47 @@
 %% omitted: (none)
 flowchart LR
   subgraph layer_value["システム価値"]
-    actor__Customer["Customer"]:::actor
-    extsystem__ShippingSvc["Shipping Service"]:::extsystem
+    actor__Customer(["Customer"]):::actor
+    extsystem__ShippingSvc[["Shipping Service"]]:::extsystem
   end
   subgraph layer_environment["システム外部環境"]
-    business__EcShopping["EC Shopping Business"]:::business
+    business__EcShopping[\"EC Shopping Business"/]:::business
     buc__BucOrder["Process Order"]:::buc
   end
   subgraph layer_boundary["システム境界"]
-    usecase__Cancel["Cancel Order"]:::usecase
-    usecase__ConfirmOrder["Confirm Order Details"]:::usecase
-    usecase__DeliverOrder["Confirm Delivery"]:::usecase
-    usecase__PlaceOrder["Place Order"]:::usecase
-    usecase__SelectAddress["Select Shipping Address"]:::usecase
-    usecase__ShipOrder["Ship Order"]:::usecase
-    usecase__ViewOrderHistory["View Order History"]:::usecase
+    usecase__Cancel("Cancel Order"):::usecase
+    usecase__ConfirmOrder("Confirm Order Details"):::usecase
+    usecase__DeliverOrder("Confirm Delivery"):::usecase
+    usecase__PlaceOrder("Place Order"):::usecase
+    usecase__SelectAddress("Select Shipping Address"):::usecase
+    usecase__ShipOrder("Ship Order"):::usecase
+    usecase__ViewOrderHistory("View Order History"):::usecase
     screen__AddressSelectScreen["Address Selection Screen"]:::screen
     screen__OrderCompleteScreen["Order Complete Screen"]:::screen
     screen__OrderConfirmScreen["Order Confirmation Screen"]:::screen
     screen__OrderHistoryScreen["Order History Screen"]:::screen
-    event__EvOrderShipped["Order Shipped"]:::event
+    event__EvOrderShipped>"Order Shipped"]:::event
   end
   subgraph layer_system["システム"]
-    api__CancelOrderApi["Cancel Order API"]:::api
-    api__ConfirmOrderApi["Confirm Order API"]:::api
-    api__OrderHistoryApi["Order History API"]:::api
-    api__PlaceOrderApi["Place Order API"]:::api
-    api__SelectAddressApi["Select Address API"]:::api
-    entity__Cart["Cart"]:::entity
-    entity__CartItem["Cart Item"]:::entity
-    entity__CustomerAccount["Customer Account"]:::entity
-    entity__Order["Order"]:::entity
-    entity__OrderLine["Order Line"]:::entity
-    entity__ShippingAddress["Shipping Address"]:::entity
-    state__Order_awaiting_capture["awaiting_capture"]:::state
-    state__Order_cancelled["cancelled"]:::state
-    state__Order_delivered["delivered"]:::state
-    state__Order_paid["paid"]:::state
-    state__Order_pending["pending"]:::state
-    state__Order_shipped["shipped"]:::state
+    api__CancelOrderApi{{"Cancel Order API"}}:::api
+    api__ConfirmOrderApi{{"Confirm Order API"}}:::api
+    api__OrderHistoryApi{{"Order History API"}}:::api
+    api__PlaceOrderApi{{"Place Order API"}}:::api
+    api__SelectAddressApi{{"Select Address API"}}:::api
+    entity__Cart[("Cart")]:::entity
+    entity__CartItem[("Cart Item")]:::entity
+    entity__CustomerAccount[("Customer Account")]:::entity
+    entity__Order[("Order")]:::entity
+    entity__OrderLine[("Order Line")]:::entity
+    entity__ShippingAddress[("Shipping Address")]:::entity
+    state__Order_awaiting_capture((("awaiting_capture"))):::state
+    state__Order_cancelled((("cancelled"))):::state
+    state__Order_delivered((("delivered"))):::state
+    state__Order_paid((("paid"))):::state
+    state__Order_pending((("pending"))):::state
+    state__Order_shipped((("shipped"))):::state
   end
-  actor__Customer -.->|performs| buc__BucOrder
+  actor__Customer -.-> buc__BucOrder
   api__CancelOrderApi -.->|updates| entity__Order
   api__ConfirmOrderApi -.->|reads| entity__Cart
   api__ConfirmOrderApi -.->|reads| entity__CartItem
@@ -56,38 +56,38 @@ flowchart LR
   api__PlaceOrderApi -.->|reads| entity__CustomerAccount
   api__PlaceOrderApi -.->|updates| entity__Cart
   api__SelectAddressApi -.->|reads| entity__ShippingAddress
-  buc__BucOrder -->|belongs| business__EcShopping
-  buc__BucOrder -->|contains| usecase__Cancel
-  buc__BucOrder -->|contains| usecase__ConfirmOrder
-  buc__BucOrder -->|contains| usecase__DeliverOrder
-  buc__BucOrder -->|contains| usecase__PlaceOrder
-  buc__BucOrder -->|contains| usecase__SelectAddress
-  buc__BucOrder -->|contains| usecase__ShipOrder
-  buc__BucOrder -->|contains| usecase__ViewOrderHistory
+  buc__BucOrder --> business__EcShopping
+  buc__BucOrder --> usecase__Cancel
+  buc__BucOrder --> usecase__ConfirmOrder
+  buc__BucOrder --> usecase__DeliverOrder
+  buc__BucOrder --> usecase__PlaceOrder
+  buc__BucOrder --> usecase__SelectAddress
+  buc__BucOrder --> usecase__ShipOrder
+  buc__BucOrder --> usecase__ViewOrderHistory
   entity__Cart ---|N:1| entity__CustomerAccount
   entity__CartItem ---|N:1| entity__Cart
   entity__Order ---|N:1| entity__CustomerAccount
   entity__Order ---|N:1| entity__ShippingAddress
   entity__OrderLine ---|N:1| entity__Order
   entity__ShippingAddress ---|N:1| entity__CustomerAccount
-  event__EvOrderShipped -.->|triggers| extsystem__ShippingSvc
-  usecase__Cancel -.->|displays| screen__OrderHistoryScreen
-  usecase__Cancel -.->|invokes| api__CancelOrderApi
+  event__EvOrderShipped -.-> extsystem__ShippingSvc
+  usecase__Cancel -.-> screen__OrderHistoryScreen
+  usecase__Cancel -.-> api__CancelOrderApi
   usecase__Cancel -.->|transitions Order.status awaiting_capture->cancelled| state__Order_cancelled
   usecase__Cancel -.->|transitions Order.status pending->cancelled| state__Order_cancelled
-  usecase__ConfirmOrder -.->|displays| screen__OrderConfirmScreen
-  usecase__ConfirmOrder -.->|invokes| api__ConfirmOrderApi
+  usecase__ConfirmOrder -.-> screen__OrderConfirmScreen
+  usecase__ConfirmOrder -.-> api__ConfirmOrderApi
   usecase__DeliverOrder -.->|transitions Order.status shipped->delivered| state__Order_delivered
   usecase__DeliverOrder -.->|updates| entity__Order
-  usecase__PlaceOrder -.->|displays| screen__OrderCompleteScreen
-  usecase__PlaceOrder -.->|invokes| api__PlaceOrderApi
-  usecase__SelectAddress -.->|displays| screen__AddressSelectScreen
-  usecase__SelectAddress -.->|invokes| api__SelectAddressApi
-  usecase__ShipOrder -.->|raises| event__EvOrderShipped
+  usecase__PlaceOrder -.-> screen__OrderCompleteScreen
+  usecase__PlaceOrder -.-> api__PlaceOrderApi
+  usecase__SelectAddress -.-> screen__AddressSelectScreen
+  usecase__SelectAddress -.-> api__SelectAddressApi
+  usecase__ShipOrder -.-> event__EvOrderShipped
   usecase__ShipOrder -.->|transitions Order.status paid->shipped| state__Order_shipped
   usecase__ShipOrder -.->|updates| entity__Order
-  usecase__ViewOrderHistory -.->|displays| screen__OrderHistoryScreen
-  usecase__ViewOrderHistory -.->|invokes| api__OrderHistoryApi
+  usecase__ViewOrderHistory -.-> screen__OrderHistoryScreen
+  usecase__ViewOrderHistory -.-> api__OrderHistoryApi
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
   classDef business fill:#d3f9d8,stroke:#2b8a3e,color:#000;

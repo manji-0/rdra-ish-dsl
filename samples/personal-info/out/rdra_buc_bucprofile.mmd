@@ -4,42 +4,42 @@
 %% omitted: (none)
 flowchart LR
   subgraph layer_value["システム価値"]
-    actor__User["User"]:::actor
+    actor__User(["User"]):::actor
   end
   subgraph layer_environment["システム外部環境"]
-    business__PersonalDataMgmt["Personal Data Management Business"]:::business
+    business__PersonalDataMgmt[\"Personal Data Management Business"/]:::business
     buc__BucProfile["Manage Personal Information"]:::buc
   end
   subgraph layer_boundary["システム境界"]
-    usecase__DeleteAccount["Delete Account"]:::usecase
-    usecase__DeleteAddress["Delete Address"]:::usecase
-    usecase__RegisterAddress["Register Address"]:::usecase
-    usecase__RestoreAccount["Restore Account"]:::usecase
-    usecase__SetPrimaryAddress["Set Primary Address"]:::usecase
-    usecase__SuspendAccount["Suspend Account"]:::usecase
-    usecase__UpdateAddress["Update Address"]:::usecase
-    usecase__UpdateProfile["Update Personal Information"]:::usecase
-    usecase__ViewProfile["View Personal Information"]:::usecase
+    usecase__DeleteAccount("Delete Account"):::usecase
+    usecase__DeleteAddress("Delete Address"):::usecase
+    usecase__RegisterAddress("Register Address"):::usecase
+    usecase__RestoreAccount("Restore Account"):::usecase
+    usecase__SetPrimaryAddress("Set Primary Address"):::usecase
+    usecase__SuspendAccount("Suspend Account"):::usecase
+    usecase__UpdateAddress("Update Address"):::usecase
+    usecase__UpdateProfile("Update Personal Information"):::usecase
+    usecase__ViewProfile("View Personal Information"):::usecase
     screen__AddressEditScreen["Address Edit Screen"]:::screen
     screen__AddressListScreen["Address List Screen"]:::screen
     screen__ProfileScreen["Personal Information Screen"]:::screen
   end
   subgraph layer_system["システム"]
-    api__DeleteAddressApi["Delete Address API"]:::api
-    api__RegisterAddressApi["Register Address API"]:::api
-    api__SetPrimaryAddressApi["Set Primary Address API"]:::api
-    api__UpdateAddressApi["Update Address API"]:::api
-    api__UpdateProfileApi["Update Profile API"]:::api
-    api__ViewProfileApi["View Profile API"]:::api
-    entity__AuditLog["Audit Log"]:::entity
-    entity__PersonalInfo["Personal Information"]:::entity
-    entity__PostalAddress["Postal Address"]:::entity
-    entity__UserAccount["User Account"]:::entity
-    state__UserAccount_active["active"]:::state
-    state__UserAccount_deleted["deleted"]:::state
-    state__UserAccount_suspended["suspended"]:::state
+    api__DeleteAddressApi{{"Delete Address API"}}:::api
+    api__RegisterAddressApi{{"Register Address API"}}:::api
+    api__SetPrimaryAddressApi{{"Set Primary Address API"}}:::api
+    api__UpdateAddressApi{{"Update Address API"}}:::api
+    api__UpdateProfileApi{{"Update Profile API"}}:::api
+    api__ViewProfileApi{{"View Profile API"}}:::api
+    entity__AuditLog[("Audit Log")]:::entity
+    entity__PersonalInfo[("Personal Information")]:::entity
+    entity__PostalAddress[("Postal Address")]:::entity
+    entity__UserAccount[("User Account")]:::entity
+    state__UserAccount_active((("active"))):::state
+    state__UserAccount_deleted((("deleted"))):::state
+    state__UserAccount_suspended((("suspended"))):::state
   end
-  actor__User -.->|performs| buc__BucProfile
+  actor__User -.-> buc__BucProfile
   api__DeleteAddressApi -.->|creates| entity__AuditLog
   api__DeleteAddressApi -.->|deletes| entity__PostalAddress
   api__RegisterAddressApi -.->|creates| entity__AuditLog
@@ -55,37 +55,37 @@ flowchart LR
   api__UpdateProfileApi -.->|updates| entity__PersonalInfo
   api__ViewProfileApi -.->|reads| entity__PersonalInfo
   api__ViewProfileApi -.->|reads| entity__UserAccount
-  buc__BucProfile -->|belongs| business__PersonalDataMgmt
-  buc__BucProfile -->|contains| usecase__DeleteAccount
-  buc__BucProfile -->|contains| usecase__DeleteAddress
-  buc__BucProfile -->|contains| usecase__RegisterAddress
-  buc__BucProfile -->|contains| usecase__RestoreAccount
-  buc__BucProfile -->|contains| usecase__SetPrimaryAddress
-  buc__BucProfile -->|contains| usecase__SuspendAccount
-  buc__BucProfile -->|contains| usecase__UpdateAddress
-  buc__BucProfile -->|contains| usecase__UpdateProfile
-  buc__BucProfile -->|contains| usecase__ViewProfile
+  buc__BucProfile --> business__PersonalDataMgmt
+  buc__BucProfile --> usecase__DeleteAccount
+  buc__BucProfile --> usecase__DeleteAddress
+  buc__BucProfile --> usecase__RegisterAddress
+  buc__BucProfile --> usecase__RestoreAccount
+  buc__BucProfile --> usecase__SetPrimaryAddress
+  buc__BucProfile --> usecase__SuspendAccount
+  buc__BucProfile --> usecase__UpdateAddress
+  buc__BucProfile --> usecase__UpdateProfile
+  buc__BucProfile --> usecase__ViewProfile
   entity__AuditLog ---|N:1| entity__UserAccount
   entity__PersonalInfo ---|1:1| entity__UserAccount
   entity__PostalAddress ---|N:1| entity__UserAccount
   usecase__DeleteAccount -.->|transitions UserAccount.status active->deleted| state__UserAccount_deleted
   usecase__DeleteAccount -.->|updates| entity__UserAccount
-  usecase__DeleteAddress -.->|displays| screen__AddressListScreen
-  usecase__DeleteAddress -.->|invokes| api__DeleteAddressApi
-  usecase__RegisterAddress -.->|displays| screen__AddressEditScreen
-  usecase__RegisterAddress -.->|invokes| api__RegisterAddressApi
+  usecase__DeleteAddress -.-> screen__AddressListScreen
+  usecase__DeleteAddress -.-> api__DeleteAddressApi
+  usecase__RegisterAddress -.-> screen__AddressEditScreen
+  usecase__RegisterAddress -.-> api__RegisterAddressApi
   usecase__RestoreAccount -.->|transitions UserAccount.status suspended->active| state__UserAccount_active
   usecase__RestoreAccount -.->|updates| entity__UserAccount
-  usecase__SetPrimaryAddress -.->|displays| screen__AddressListScreen
-  usecase__SetPrimaryAddress -.->|invokes| api__SetPrimaryAddressApi
+  usecase__SetPrimaryAddress -.-> screen__AddressListScreen
+  usecase__SetPrimaryAddress -.-> api__SetPrimaryAddressApi
   usecase__SuspendAccount -.->|transitions UserAccount.status active->suspended| state__UserAccount_suspended
   usecase__SuspendAccount -.->|updates| entity__UserAccount
-  usecase__UpdateAddress -.->|displays| screen__AddressEditScreen
-  usecase__UpdateAddress -.->|invokes| api__UpdateAddressApi
-  usecase__UpdateProfile -.->|displays| screen__ProfileScreen
-  usecase__UpdateProfile -.->|invokes| api__UpdateProfileApi
-  usecase__ViewProfile -.->|displays| screen__ProfileScreen
-  usecase__ViewProfile -.->|invokes| api__ViewProfileApi
+  usecase__UpdateAddress -.-> screen__AddressEditScreen
+  usecase__UpdateAddress -.-> api__UpdateAddressApi
+  usecase__UpdateProfile -.-> screen__ProfileScreen
+  usecase__UpdateProfile -.-> api__UpdateProfileApi
+  usecase__ViewProfile -.-> screen__ProfileScreen
+  usecase__ViewProfile -.-> api__ViewProfileApi
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef business fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;

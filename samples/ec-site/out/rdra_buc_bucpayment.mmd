@@ -4,34 +4,34 @@
 %% omitted: (none)
 flowchart LR
   subgraph layer_value["システム価値"]
-    actor__Customer["Customer"]:::actor
-    extsystem__PaymentGW["Payment Gateway"]:::extsystem
+    actor__Customer(["Customer"]):::actor
+    extsystem__PaymentGW[["Payment Gateway"]]:::extsystem
   end
   subgraph layer_environment["システム外部環境"]
-    business__EcShopping["EC Shopping Business"]:::business
+    business__EcShopping[\"EC Shopping Business"/]:::business
     buc__BucPayment["Make Payment"]:::buc
   end
   subgraph layer_boundary["システム境界"]
-    usecase__AuthorizePayment["Authorize Payment"]:::usecase
-    usecase__Capture["Capture Payment"]:::usecase
-    usecase__InputPaymentInfo["Enter Payment Information"]:::usecase
-    usecase__RefundPayment["Refund Payment"]:::usecase
+    usecase__AuthorizePayment("Authorize Payment"):::usecase
+    usecase__Capture("Capture Payment"):::usecase
+    usecase__InputPaymentInfo("Enter Payment Information"):::usecase
+    usecase__RefundPayment("Refund Payment"):::usecase
     screen__PaymentInputScreen["Payment Information Screen"]:::screen
     screen__PaymentResultScreen["Payment Result Screen"]:::screen
-    event__EvPaymentAuthorized["Payment Authorized"]:::event
+    event__EvPaymentAuthorized>"Payment Authorized"]:::event
   end
   subgraph layer_system["システム"]
-    api__PaymentAuthorizationApi["Payment Authorization API"]:::api
-    api__PaymentCaptureApi["Payment Capture API"]:::api
-    api__PaymentInputApi["Payment Input API"]:::api
-    api__PaymentRefundApi["Payment Refund API"]:::api
-    entity__Order["Order"]:::entity
-    entity__Payment["Payment"]:::entity
-    state__Order_awaiting_capture["awaiting_capture"]:::state
-    state__Order_paid["paid"]:::state
-    state__Order_pending["pending"]:::state
+    api__PaymentAuthorizationApi{{"Payment Authorization API"}}:::api
+    api__PaymentCaptureApi{{"Payment Capture API"}}:::api
+    api__PaymentInputApi{{"Payment Input API"}}:::api
+    api__PaymentRefundApi{{"Payment Refund API"}}:::api
+    entity__Order[("Order")]:::entity
+    entity__Payment[("Payment")]:::entity
+    state__Order_awaiting_capture((("awaiting_capture"))):::state
+    state__Order_paid((("paid"))):::state
+    state__Order_pending((("pending"))):::state
   end
-  actor__Customer -.->|performs| buc__BucPayment
+  actor__Customer -.-> buc__BucPayment
   api__PaymentAuthorizationApi -.->|updates| entity__Payment
   api__PaymentCaptureApi -.->|updates| entity__Order
   api__PaymentCaptureApi -.->|updates| entity__Payment
@@ -39,24 +39,24 @@ flowchart LR
   api__PaymentInputApi -.->|updates| entity__Order
   api__PaymentRefundApi -.->|updates| entity__Order
   api__PaymentRefundApi -.->|updates| entity__Payment
-  buc__BucPayment -->|belongs| business__EcShopping
-  buc__BucPayment -->|contains| usecase__AuthorizePayment
-  buc__BucPayment -->|contains| usecase__Capture
-  buc__BucPayment -->|contains| usecase__InputPaymentInfo
-  buc__BucPayment -->|contains| usecase__RefundPayment
+  buc__BucPayment --> business__EcShopping
+  buc__BucPayment --> usecase__AuthorizePayment
+  buc__BucPayment --> usecase__Capture
+  buc__BucPayment --> usecase__InputPaymentInfo
+  buc__BucPayment --> usecase__RefundPayment
   entity__Payment ---|1:1| entity__Order
-  event__EvPaymentAuthorized -.->|triggers| usecase__Capture
-  extsystem__PaymentGW -.->|raises| event__EvPaymentAuthorized
-  usecase__AuthorizePayment -.->|displays| screen__PaymentResultScreen
-  usecase__AuthorizePayment -.->|invokes| api__PaymentAuthorizationApi
-  usecase__Capture -.->|displays| screen__PaymentResultScreen
-  usecase__Capture -.->|invokes| api__PaymentCaptureApi
+  event__EvPaymentAuthorized -.-> usecase__Capture
+  extsystem__PaymentGW -.-> event__EvPaymentAuthorized
+  usecase__AuthorizePayment -.-> screen__PaymentResultScreen
+  usecase__AuthorizePayment -.-> api__PaymentAuthorizationApi
+  usecase__Capture -.-> screen__PaymentResultScreen
+  usecase__Capture -.-> api__PaymentCaptureApi
   usecase__Capture -.->|transitions Order.status awaiting_capture->paid| state__Order_paid
-  usecase__InputPaymentInfo -.->|displays| screen__PaymentInputScreen
-  usecase__InputPaymentInfo -.->|invokes| api__PaymentInputApi
+  usecase__InputPaymentInfo -.-> screen__PaymentInputScreen
+  usecase__InputPaymentInfo -.-> api__PaymentInputApi
   usecase__InputPaymentInfo -.->|transitions Order.status pending->awaiting_capture| state__Order_awaiting_capture
-  usecase__RefundPayment -.->|displays| screen__PaymentResultScreen
-  usecase__RefundPayment -.->|invokes| api__PaymentRefundApi
+  usecase__RefundPayment -.-> screen__PaymentResultScreen
+  usecase__RefundPayment -.-> api__PaymentRefundApi
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
   classDef business fill:#d3f9d8,stroke:#2b8a3e,color:#000;

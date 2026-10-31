@@ -71,8 +71,9 @@ The others draw declared facts and print one note.
   `%% omitted:` (linked kinds the diagram leaves out). Check `omitted:` before you
   conclude that something is missing from the model.
 - A node id is `<kind>__<DSL id>`, the same in every kind, and each flowchart node
-  carries `:::<kind>`. Match nodes across diagrams by id, never by label.
-- An edge label is the DSL predicate (in `screen`, the label of a `navigates` edge is its `.via` use case). An edge followed by `%% derived <from> -> <to> ...`
+  carries `:::<kind>` and its kind's shape (actor `([..])`, usecase `(..)`, api `{{..}}`,
+  entity `[(..)]`, ...). Match nodes across diagrams by id, never by label.
+- An edge label is the DSL predicate (in `screen`, the label of a `navigates` edge is its `.via` use case). An edge without a label is the one relation the kind draws between its two end kinds (`actor --> screen` is `uses` in `robustness`); `references/reading-diagrams.md` has the shapes and the rule. An edge followed by `%% derived <from> -> <to> ...`
   was derived by rdra-ish; any other edge is declared and is also in `rdra`.
 - `%% desc`, `%% holds`, `%% lane`, and `%% synthesized` lines carry what shapes cannot.
   `references/reading-diagrams.md` lists them all.

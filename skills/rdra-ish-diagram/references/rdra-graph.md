@@ -31,6 +31,9 @@ rdra-ish diagram src/ --kind rdra --format mermaid --node-kind api --node-kind d
   `layer_boundary["システム境界"]` (use cases, screens, fields, events), and
   `layer_system["システム"]` (systems, APIs, DTOs, entities, states, variations,
   conditions). ADRs are not drawn.
+- An edge between two kinds that only one predicate joins is unlabelled (`actor -.-> usecase`
+  is `performs`, `buc --> usecase` is `contains`); a label stays where the kinds allow
+  several (the CRUD verb, `request` / `response`, a step order, a cardinality).
 - A transition runs from the use case to the state it enters, labelled
   `transitions <Entity>.<column> <from>-><to>`. A `--buc` scope also holds the states its
   use cases move between.

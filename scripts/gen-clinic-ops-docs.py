@@ -12,6 +12,7 @@ document differs from what is committed:
     python3 -I scripts/gen-clinic-ops-docs.py target/debug/rdra-ish
 """
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -148,7 +149,8 @@ for n, buc in enumerate(CHAPTERS, 1):
     d.append(f"### 2.{n} {b['label']}\n\n{b['description']}\n\n")
     d.append(mermaid(f'buc/robustness_{stem(buc)}.mmd') + '\n')
     screen = f'buc/screen_{stem(buc)}.mmd'
-    if '-->|' in (OUT / screen).read_text() or '-.->|' in (OUT / screen).read_text():
+    # An edge line, labelled (`-->|...|`) or not (`--> `).
+    if re.search(r' (-->|-\.->)[| ]', (OUT / screen).read_text()):
         d.append('#### 画面遷移図\n\n' + mermaid(screen) + '\n')
     d.append('| UC | 説明 | 画面 | 制御 | ガード |\n|---|---|---|---|---|\n')
     for uc in ids(b['usecases']):

@@ -2,36 +2,36 @@
 %% kinds: actor extsystem screen timer api usecase entity
 %% omitted: buc step medium permission event condition
 flowchart LR
-  actor__ClaimsClerk["医事課 レセプト担当"]:::actor
-  extsystem__ClaimsReviewOrganization["審査支払機関（支払基金・国保連）"]:::extsystem
+  actor__ClaimsClerk(["医事課 レセプト担当"]):::actor
+  extsystem__ClaimsReviewOrganization[["審査支払機関（支払基金・国保連）"]]:::extsystem
   screen__BalanceScreen["未収金画面"]:::screen
   screen__ChargeWorklistScreen["コスト一覧画面"]:::screen
   screen__ClaimScreen["レセプト画面"]:::screen
   screen__PaymentPostingScreen["入金画面"]:::screen
-  timer__ErrorResendWindow["エラー分レセプトの再送（毎月11日・12日）"]:::timer
-  timer__MonthlyClaimCreation["前月分レセプトの作成（月初）"]:::timer
-  timer__MonthlyClaimDeadline["前月分レセプトの請求（毎月5日～10日）"]:::timer
-  timer__ReceivablesMonthlyReview["未収金管理台帳の作成（毎月）"]:::timer
-  timer__ReturnDownloadCheck["返戻レセプトの取得（3か月以内）"]:::timer
-  api__BalanceApi["未収金 API"]:::api
-  api__ClaimEditApi["レセプト点検・訂正 API"]:::api
-  api__ClaimResultApi["審査結果 API"]:::api
-  api__CreateChargeApi["コスト登録 API"]:::api
-  api__GenerateClaimApi["レセプト作成 API"]:::api
-  api__PaymentPostApi["入金 API"]:::api
-  api__SubmitClaimApi["オンライン請求 API"]:::api
-  usecase__ReviewClaimTransfer["資格の振替・分割の確認"]:::usecase
-  usecase__VoidCharge["コストの取消"]:::usecase
-  entity__AccountBalance["未収金残高"]:::entity
-  entity__Charge["コスト（診療行為）"]:::entity
-  entity__ClaimStatement["レセプト"]:::entity
-  entity__Encounter["診療記録"]:::entity
-  entity__InsurancePolicy["保険資格"]:::entity
-  entity__PaymentTransaction["精算"]:::entity
-  actor__ClaimsClerk -->|uses| screen__BalanceScreen
-  actor__ClaimsClerk -->|uses| screen__ChargeWorklistScreen
-  actor__ClaimsClerk -->|uses| screen__ClaimScreen
-  actor__ClaimsClerk -->|uses| screen__PaymentPostingScreen
+  timer__ErrorResendWindow(("エラー分レセプトの再送（毎月11日・12日）")):::timer
+  timer__MonthlyClaimCreation(("前月分レセプトの作成（月初）")):::timer
+  timer__MonthlyClaimDeadline(("前月分レセプトの請求（毎月5日～10日）")):::timer
+  timer__ReceivablesMonthlyReview(("未収金管理台帳の作成（毎月）")):::timer
+  timer__ReturnDownloadCheck(("返戻レセプトの取得（3か月以内）")):::timer
+  api__BalanceApi{{"未収金 API"}}:::api
+  api__ClaimEditApi{{"レセプト点検・訂正 API"}}:::api
+  api__ClaimResultApi{{"審査結果 API"}}:::api
+  api__CreateChargeApi{{"コスト登録 API"}}:::api
+  api__GenerateClaimApi{{"レセプト作成 API"}}:::api
+  api__PaymentPostApi{{"入金 API"}}:::api
+  api__SubmitClaimApi{{"オンライン請求 API"}}:::api
+  usecase__ReviewClaimTransfer("資格の振替・分割の確認"):::usecase
+  usecase__VoidCharge("コストの取消"):::usecase
+  entity__AccountBalance[("未収金残高")]:::entity
+  entity__Charge[("コスト（診療行為）")]:::entity
+  entity__ClaimStatement[("レセプト")]:::entity
+  entity__Encounter[("診療記録")]:::entity
+  entity__InsurancePolicy[("保険資格")]:::entity
+  entity__PaymentTransaction[("精算")]:::entity
+  actor__ClaimsClerk --> screen__BalanceScreen
+  actor__ClaimsClerk --> screen__ChargeWorklistScreen
+  actor__ClaimsClerk --> screen__ClaimScreen
+  actor__ClaimsClerk --> screen__PaymentPostingScreen
   api__BalanceApi -->|R| entity__PaymentTransaction
   api__BalanceApi -->|U| entity__AccountBalance
   api__ClaimEditApi -->|U| entity__ClaimStatement

@@ -4,190 +4,190 @@
 %% omitted: buc step medium permission api
 flowchart LR
   subgraph layer_value["システム価値"]
-    actor__ClaimsClerk["医事課 レセプト担当"]:::actor
+    actor__ClaimsClerk(["医事課 レセプト担当"]):::actor
     %% desc actor__ClaimsClerk: レセプトの作成・院内点検・請求と、返戻・査定への対応を行う事務職員。
-    extsystem__ClaimsReviewOrganization["審査支払機関（支払基金・国保連）"]:::extsystem
+    extsystem__ClaimsReviewOrganization[["審査支払機関（支払基金・国保連）"]]:::extsystem
   end
   subgraph layer_environment["システム外部環境"]
-    timer__ErrorResendWindow["エラー分レセプトの再送（毎月11日・12日）"]:::timer
-    timer__MonthlyClaimCreation["前月分レセプトの作成（月初）"]:::timer
-    timer__MonthlyClaimDeadline["前月分レセプトの請求（毎月5日～10日）"]:::timer
-    timer__ReceivablesMonthlyReview["未収金管理台帳の作成（毎月）"]:::timer
-    timer__ReturnDownloadCheck["返戻レセプトの取得（3か月以内）"]:::timer
+    timer__ErrorResendWindow(("エラー分レセプトの再送（毎月11日・12日）")):::timer
+    timer__MonthlyClaimCreation(("前月分レセプトの作成（月初）")):::timer
+    timer__MonthlyClaimDeadline(("前月分レセプトの請求（毎月5日～10日）")):::timer
+    timer__ReceivablesMonthlyReview(("未収金管理台帳の作成（毎月）")):::timer
+    timer__ReturnDownloadCheck(("返戻レセプトの取得（3か月以内）")):::timer
   end
   subgraph layer_boundary["システム境界"]
-    usecase__CorrectReturnedStatement["返戻レセプトの訂正（再請求）"]:::usecase
+    usecase__CorrectReturnedStatement("返戻レセプトの訂正（再請求）"):::usecase
     %% desc usecase__CorrectReturnedStatement: 返戻の訂正と再請求。
-    usecase__CreateCharge["コスト情報の登録"]:::usecase
+    usecase__CreateCharge("コスト情報の登録"):::usecase
     %% desc usecase__CreateCharge: 署名時のカルテ由来コスト情報の登録（システム起動）。
-    usecase__GenerateClaimStatement["レセプト作成"]:::usecase
+    usecase__GenerateClaimStatement("レセプト作成"):::usecase
     %% desc usecase__GenerateClaimStatement: 月初のレセプト作成。
-    usecase__HoldClaimStatement["レセプトの保留（月遅れ）"]:::usecase
+    usecase__HoldClaimStatement("レセプトの保留（月遅れ）"):::usecase
     %% desc usecase__HoldClaimStatement: 保留（月遅れ）。
-    usecase__InspectClaimStatement["レセプトの院内点検"]:::usecase
+    usecase__InspectClaimStatement("レセプトの院内点検"):::usecase
     %% desc usecase__InspectClaimStatement: 院内点検。
-    usecase__PostPayment["診療報酬の入金"]:::usecase
+    usecase__PostPayment("診療報酬の入金"):::usecase
     %% desc usecase__PostPayment: 診療翌々月の入金。
-    usecase__ReceiveClaimAccepted["レセプト受付（審査へ）"]:::usecase
+    usecase__ReceiveClaimAccepted("レセプト受付（審査へ）"):::usecase
     %% desc usecase__ReceiveClaimAccepted: 審査支払機関の受付で審査中になる。
-    usecase__ReconcileBalance["未収金管理台帳の作成"]:::usecase
+    usecase__ReconcileBalance("未収金管理台帳の作成"):::usecase
     %% desc usecase__ReconcileBalance: 未収金管理台帳の作成。
-    usecase__RecordClaimAssessment["査定の取込"]:::usecase
+    usecase__RecordClaimAssessment("査定の取込"):::usecase
     %% desc usecase__RecordClaimAssessment: 査定の取込。
-    usecase__RecordClaimReturn["返戻レセプトの取込"]:::usecase
+    usecase__RecordClaimReturn("返戻レセプトの取込"):::usecase
     %% desc usecase__RecordClaimReturn: 返戻レセプトの取込（3か月以内）。
-    usecase__RecordReceiptError["受付不能・要確認の確認"]:::usecase
+    usecase__RecordReceiptError("受付不能・要確認の確認"):::usecase
     %% desc usecase__RecordReceiptError: 受付不能・要確認の確認。
-    usecase__ReleaseHeldStatement["保留レセプトの再提出準備"]:::usecase
+    usecase__ReleaseHeldStatement("保留レセプトの再提出準備"):::usecase
     %% desc usecase__ReleaseHeldStatement: 保留レセプトの再提出準備。
-    usecase__RequestReexamination["再審査請求"]:::usecase
+    usecase__RequestReexamination("再審査請求"):::usecase
     %% desc usecase__RequestReexamination: 再審査請求。
-    usecase__ResendErroredStatement["エラー分レセプトの再送"]:::usecase
+    usecase__ResendErroredStatement("エラー分レセプトの再送"):::usecase
     %% desc usecase__ResendErroredStatement: 11日・12日のエラー分再送。
-    usecase__ReviewClaimTransfer["資格の振替・分割の確認"]:::usecase
+    usecase__ReviewClaimTransfer("資格の振替・分割の確認"):::usecase
     %% desc usecase__ReviewClaimTransfer: 資格の振替・分割の確認（参照のみ）。
-    usecase__SubmitClaimStatements["レセプト請求"]:::usecase
+    usecase__SubmitClaimStatements("レセプト請求"):::usecase
     %% desc usecase__SubmitClaimStatements: 毎月10日までの請求。
-    usecase__VoidCharge["コストの取消"]:::usecase
+    usecase__VoidCharge("コストの取消"):::usecase
     %% desc usecase__VoidCharge: コストの取消。
     screen__BalanceScreen["未収金画面"]:::screen
     screen__ChargeWorklistScreen["コスト一覧画面"]:::screen
     screen__ClaimScreen["レセプト画面"]:::screen
     screen__PaymentPostingScreen["入金画面"]:::screen
-    event__EvClaimAccepted["レセプト受付"]:::event
-    event__EvClaimAssessed["査定"]:::event
-    event__EvClaimReceiptError["受付不能・要確認"]:::event
-    event__EvClaimReturned["返戻"]:::event
-    event__EvClaimStatementsSubmitted["レセプト請求"]:::event
-    event__EvClaimTransferred["資格の振替・分割"]:::event
-    event__EvEncounterSigned["診療記録の署名"]:::event
-    event__EvRemittance["診療報酬の支払"]:::event
+    event__EvClaimAccepted>"レセプト受付"]:::event
+    event__EvClaimAssessed>"査定"]:::event
+    event__EvClaimReceiptError>"受付不能・要確認"]:::event
+    event__EvClaimReturned>"返戻"]:::event
+    event__EvClaimStatementsSubmitted>"レセプト請求"]:::event
+    event__EvClaimTransferred>"資格の振替・分割"]:::event
+    event__EvEncounterSigned>"診療記録の署名"]:::event
+    event__EvRemittance>"診療報酬の支払"]:::event
   end
   subgraph layer_system["システム"]
-    entity__AccountBalance["未収金残高"]:::entity
-    entity__Charge["コスト（診療行為）"]:::entity
-    entity__ClaimStatement["レセプト"]:::entity
-    entity__Encounter["診療記録"]:::entity
-    entity__InsurancePolicy["保険資格"]:::entity
-    entity__PaymentTransaction["精算"]:::entity
-    state__ClaimStatement_stmtassessed["査定"]:::state
-    state__ClaimStatement_stmtdrafting["作成中"]:::state
-    state__ClaimStatement_stmtinspecting["院内点検中"]:::state
-    state__ClaimStatement_stmtonhold["保留"]:::state
-    state__ClaimStatement_stmtpaid["支払済"]:::state
-    state__ClaimStatement_stmtreceipterror["受付不能・要確認"]:::state
-    state__ClaimStatement_stmtrereview["再審査請求中"]:::state
-    state__ClaimStatement_stmtreturned["返戻"]:::state
-    state__ClaimStatement_stmtsubmitted["請求済"]:::state
-    state__ClaimStatement_stmtunderreview["審査中"]:::state
-    condition__TransferNotPossible["振替・分割の対象外（負担割合の相違・公費）"]:::condition
+    entity__AccountBalance[("未収金残高")]:::entity
+    entity__Charge[("コスト（診療行為）")]:::entity
+    entity__ClaimStatement[("レセプト")]:::entity
+    entity__Encounter[("診療記録")]:::entity
+    entity__InsurancePolicy[("保険資格")]:::entity
+    entity__PaymentTransaction[("精算")]:::entity
+    state__ClaimStatement_stmtassessed((("査定"))):::state
+    state__ClaimStatement_stmtdrafting((("作成中"))):::state
+    state__ClaimStatement_stmtinspecting((("院内点検中"))):::state
+    state__ClaimStatement_stmtonhold((("保留"))):::state
+    state__ClaimStatement_stmtpaid((("支払済"))):::state
+    state__ClaimStatement_stmtreceipterror((("受付不能・要確認"))):::state
+    state__ClaimStatement_stmtrereview((("再審査請求中"))):::state
+    state__ClaimStatement_stmtreturned((("返戻"))):::state
+    state__ClaimStatement_stmtsubmitted((("請求済"))):::state
+    state__ClaimStatement_stmtunderreview((("審査中"))):::state
+    condition__TransferNotPossible{"振替・分割の対象外（負担割合の相違・公費）"}:::condition
   end
-  actor__ClaimsClerk -.->|performs| usecase__CorrectReturnedStatement
-  actor__ClaimsClerk -.->|performs| usecase__GenerateClaimStatement
-  actor__ClaimsClerk -.->|performs| usecase__HoldClaimStatement
-  actor__ClaimsClerk -.->|performs| usecase__InspectClaimStatement
-  actor__ClaimsClerk -.->|performs| usecase__PostPayment
-  actor__ClaimsClerk -.->|performs| usecase__ReconcileBalance
-  actor__ClaimsClerk -.->|performs| usecase__RecordClaimAssessment
-  actor__ClaimsClerk -.->|performs| usecase__RecordClaimReturn
-  actor__ClaimsClerk -.->|performs| usecase__RecordReceiptError
-  actor__ClaimsClerk -.->|performs| usecase__ReleaseHeldStatement
-  actor__ClaimsClerk -.->|performs| usecase__RequestReexamination
-  actor__ClaimsClerk -.->|performs| usecase__ResendErroredStatement
-  actor__ClaimsClerk -.->|performs| usecase__ReviewClaimTransfer
-  actor__ClaimsClerk -.->|performs| usecase__SubmitClaimStatements
-  actor__ClaimsClerk -.->|performs| usecase__VoidCharge
-  condition__TransferNotPossible -.->|applies_to| usecase__RecordClaimReturn
-  event__EvClaimAccepted -.->|triggers| usecase__ReceiveClaimAccepted
-  event__EvClaimAssessed -.->|triggers| usecase__RecordClaimAssessment
-  event__EvClaimReceiptError -.->|triggers| usecase__RecordReceiptError
-  event__EvClaimReturned -.->|triggers| usecase__RecordClaimReturn
-  event__EvClaimStatementsSubmitted -.->|triggers| extsystem__ClaimsReviewOrganization
-  event__EvClaimTransferred -.->|triggers| usecase__ReviewClaimTransfer
-  event__EvEncounterSigned -.->|triggers| usecase__CreateCharge
-  event__EvRemittance -.->|triggers| usecase__PostPayment
-  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimAccepted
-  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimAssessed
-  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimReceiptError
-  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimReturned
-  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimTransferred
-  extsystem__ClaimsReviewOrganization -.->|raises| event__EvRemittance
-  timer__ErrorResendWindow -.->|triggers| usecase__ResendErroredStatement
-  timer__MonthlyClaimCreation -.->|triggers| usecase__GenerateClaimStatement
-  timer__MonthlyClaimDeadline -.->|triggers| usecase__SubmitClaimStatements
-  timer__ReceivablesMonthlyReview -.->|triggers| usecase__ReconcileBalance
-  timer__ReturnDownloadCheck -.->|triggers| usecase__RecordClaimReturn
-  usecase__CorrectReturnedStatement -.->|displays| screen__ClaimScreen
+  actor__ClaimsClerk -.-> usecase__CorrectReturnedStatement
+  actor__ClaimsClerk -.-> usecase__GenerateClaimStatement
+  actor__ClaimsClerk -.-> usecase__HoldClaimStatement
+  actor__ClaimsClerk -.-> usecase__InspectClaimStatement
+  actor__ClaimsClerk -.-> usecase__PostPayment
+  actor__ClaimsClerk -.-> usecase__ReconcileBalance
+  actor__ClaimsClerk -.-> usecase__RecordClaimAssessment
+  actor__ClaimsClerk -.-> usecase__RecordClaimReturn
+  actor__ClaimsClerk -.-> usecase__RecordReceiptError
+  actor__ClaimsClerk -.-> usecase__ReleaseHeldStatement
+  actor__ClaimsClerk -.-> usecase__RequestReexamination
+  actor__ClaimsClerk -.-> usecase__ResendErroredStatement
+  actor__ClaimsClerk -.-> usecase__ReviewClaimTransfer
+  actor__ClaimsClerk -.-> usecase__SubmitClaimStatements
+  actor__ClaimsClerk -.-> usecase__VoidCharge
+  condition__TransferNotPossible -.-> usecase__RecordClaimReturn
+  event__EvClaimAccepted -.-> usecase__ReceiveClaimAccepted
+  event__EvClaimAssessed -.-> usecase__RecordClaimAssessment
+  event__EvClaimReceiptError -.-> usecase__RecordReceiptError
+  event__EvClaimReturned -.-> usecase__RecordClaimReturn
+  event__EvClaimStatementsSubmitted -.-> extsystem__ClaimsReviewOrganization
+  event__EvClaimTransferred -.-> usecase__ReviewClaimTransfer
+  event__EvEncounterSigned -.-> usecase__CreateCharge
+  event__EvRemittance -.-> usecase__PostPayment
+  extsystem__ClaimsReviewOrganization -.-> event__EvClaimAccepted
+  extsystem__ClaimsReviewOrganization -.-> event__EvClaimAssessed
+  extsystem__ClaimsReviewOrganization -.-> event__EvClaimReceiptError
+  extsystem__ClaimsReviewOrganization -.-> event__EvClaimReturned
+  extsystem__ClaimsReviewOrganization -.-> event__EvClaimTransferred
+  extsystem__ClaimsReviewOrganization -.-> event__EvRemittance
+  timer__ErrorResendWindow -.-> usecase__ResendErroredStatement
+  timer__MonthlyClaimCreation -.-> usecase__GenerateClaimStatement
+  timer__MonthlyClaimDeadline -.-> usecase__SubmitClaimStatements
+  timer__ReceivablesMonthlyReview -.-> usecase__ReconcileBalance
+  timer__ReturnDownloadCheck -.-> usecase__RecordClaimReturn
+  usecase__CorrectReturnedStatement -.-> screen__ClaimScreen
   usecase__CorrectReturnedStatement -.->|transitions ClaimStatement.status stmtreturned->stmtinspecting| state__ClaimStatement_stmtinspecting
   usecase__CorrectReturnedStatement -.->|updates| entity__ClaimStatement
   %% derived usecase__CorrectReturnedStatement -> entity__ClaimStatement via api__ClaimEditApi
   usecase__CreateCharge -.->|creates| entity__Charge
   %% derived usecase__CreateCharge -> entity__Charge via api__CreateChargeApi
-  usecase__CreateCharge -.->|displays| screen__ChargeWorklistScreen
+  usecase__CreateCharge -.-> screen__ChargeWorklistScreen
   usecase__CreateCharge -.->|reads| entity__Encounter
   %% derived usecase__CreateCharge -> entity__Encounter via api__CreateChargeApi
   usecase__GenerateClaimStatement -.->|creates| entity__ClaimStatement
   %% derived usecase__GenerateClaimStatement -> entity__ClaimStatement via api__GenerateClaimApi
-  usecase__GenerateClaimStatement -.->|displays| screen__ClaimScreen
+  usecase__GenerateClaimStatement -.-> screen__ClaimScreen
   usecase__GenerateClaimStatement -.->|reads| entity__Charge
   %% derived usecase__GenerateClaimStatement -> entity__Charge via api__GenerateClaimApi
   usecase__GenerateClaimStatement -.->|reads| entity__InsurancePolicy
   %% derived usecase__GenerateClaimStatement -> entity__InsurancePolicy via api__GenerateClaimApi
-  usecase__HoldClaimStatement -.->|displays| screen__ClaimScreen
+  usecase__HoldClaimStatement -.-> screen__ClaimScreen
   usecase__HoldClaimStatement -.->|transitions ClaimStatement.status stmtinspecting->stmtonhold| state__ClaimStatement_stmtonhold
   usecase__HoldClaimStatement -.->|updates| entity__ClaimStatement
   %% derived usecase__HoldClaimStatement -> entity__ClaimStatement via api__ClaimEditApi
-  usecase__InspectClaimStatement -.->|displays| screen__ClaimScreen
+  usecase__InspectClaimStatement -.-> screen__ClaimScreen
   usecase__InspectClaimStatement -.->|transitions ClaimStatement.status stmtdrafting->stmtinspecting| state__ClaimStatement_stmtinspecting
   usecase__InspectClaimStatement -.->|updates| entity__ClaimStatement
   %% derived usecase__InspectClaimStatement -> entity__ClaimStatement via api__ClaimEditApi
-  usecase__PostPayment -.->|displays| screen__PaymentPostingScreen
+  usecase__PostPayment -.-> screen__PaymentPostingScreen
   usecase__PostPayment -.->|transitions ClaimStatement.status stmtassessed->stmtpaid| state__ClaimStatement_stmtpaid
   usecase__PostPayment -.->|transitions ClaimStatement.status stmtrereview->stmtpaid| state__ClaimStatement_stmtpaid
   usecase__PostPayment -.->|transitions ClaimStatement.status stmtunderreview->stmtpaid| state__ClaimStatement_stmtpaid
   usecase__PostPayment -.->|updates| entity__ClaimStatement
   %% derived usecase__PostPayment -> entity__ClaimStatement via api__PaymentPostApi
-  usecase__ReceiveClaimAccepted -.->|displays| screen__ClaimScreen
+  usecase__ReceiveClaimAccepted -.-> screen__ClaimScreen
   usecase__ReceiveClaimAccepted -.->|transitions ClaimStatement.status stmtsubmitted->stmtunderreview| state__ClaimStatement_stmtunderreview
   usecase__ReceiveClaimAccepted -.->|updates| entity__ClaimStatement
   %% derived usecase__ReceiveClaimAccepted -> entity__ClaimStatement via api__ClaimResultApi
-  usecase__ReconcileBalance -.->|displays| screen__BalanceScreen
+  usecase__ReconcileBalance -.-> screen__BalanceScreen
   usecase__ReconcileBalance -.->|reads| entity__PaymentTransaction
   %% derived usecase__ReconcileBalance -> entity__PaymentTransaction via api__BalanceApi
   usecase__ReconcileBalance -.->|updates| entity__AccountBalance
   %% derived usecase__ReconcileBalance -> entity__AccountBalance via api__BalanceApi
-  usecase__RecordClaimAssessment -.->|displays| screen__ClaimScreen
+  usecase__RecordClaimAssessment -.-> screen__ClaimScreen
   usecase__RecordClaimAssessment -.->|transitions ClaimStatement.status stmtunderreview->stmtassessed| state__ClaimStatement_stmtassessed
   usecase__RecordClaimAssessment -.->|updates| entity__ClaimStatement
   %% derived usecase__RecordClaimAssessment -> entity__ClaimStatement via api__ClaimResultApi
-  usecase__RecordClaimReturn -.->|displays| screen__ClaimScreen
+  usecase__RecordClaimReturn -.-> screen__ClaimScreen
   usecase__RecordClaimReturn -.->|transitions ClaimStatement.status stmtunderreview->stmtreturned| state__ClaimStatement_stmtreturned
   usecase__RecordClaimReturn -.->|updates| entity__ClaimStatement
   %% derived usecase__RecordClaimReturn -> entity__ClaimStatement via api__ClaimResultApi
-  usecase__RecordReceiptError -.->|displays| screen__ClaimScreen
+  usecase__RecordReceiptError -.-> screen__ClaimScreen
   usecase__RecordReceiptError -.->|transitions ClaimStatement.status stmtsubmitted->stmtreceipterror| state__ClaimStatement_stmtreceipterror
   usecase__RecordReceiptError -.->|updates| entity__ClaimStatement
   %% derived usecase__RecordReceiptError -> entity__ClaimStatement via api__ClaimResultApi
-  usecase__ReleaseHeldStatement -.->|displays| screen__ClaimScreen
+  usecase__ReleaseHeldStatement -.-> screen__ClaimScreen
   usecase__ReleaseHeldStatement -.->|transitions ClaimStatement.status stmtonhold->stmtinspecting| state__ClaimStatement_stmtinspecting
   usecase__ReleaseHeldStatement -.->|updates| entity__ClaimStatement
   %% derived usecase__ReleaseHeldStatement -> entity__ClaimStatement via api__ClaimEditApi
-  usecase__RequestReexamination -.->|displays| screen__ClaimScreen
+  usecase__RequestReexamination -.-> screen__ClaimScreen
   usecase__RequestReexamination -.->|transitions ClaimStatement.status stmtassessed->stmtrereview| state__ClaimStatement_stmtrereview
   usecase__RequestReexamination -.->|updates| entity__ClaimStatement
   %% derived usecase__RequestReexamination -> entity__ClaimStatement via api__SubmitClaimApi
-  usecase__ResendErroredStatement -.->|displays| screen__ClaimScreen
+  usecase__ResendErroredStatement -.-> screen__ClaimScreen
   usecase__ResendErroredStatement -.->|transitions ClaimStatement.status stmtreceipterror->stmtsubmitted| state__ClaimStatement_stmtsubmitted
   usecase__ResendErroredStatement -.->|updates| entity__ClaimStatement
   %% derived usecase__ResendErroredStatement -> entity__ClaimStatement via api__SubmitClaimApi
-  usecase__ReviewClaimTransfer -.->|displays| screen__ClaimScreen
+  usecase__ReviewClaimTransfer -.-> screen__ClaimScreen
   usecase__ReviewClaimTransfer -.->|reads| entity__ClaimStatement
-  usecase__SubmitClaimStatements -.->|displays| screen__ClaimScreen
-  usecase__SubmitClaimStatements -.->|raises| event__EvClaimStatementsSubmitted
+  usecase__SubmitClaimStatements -.-> screen__ClaimScreen
+  usecase__SubmitClaimStatements -.-> event__EvClaimStatementsSubmitted
   usecase__SubmitClaimStatements -.->|transitions ClaimStatement.status stmtinspecting->stmtsubmitted| state__ClaimStatement_stmtsubmitted
   usecase__SubmitClaimStatements -.->|updates| entity__ClaimStatement
   %% derived usecase__SubmitClaimStatements -> entity__ClaimStatement via api__SubmitClaimApi
-  usecase__VoidCharge -.->|displays| screen__ChargeWorklistScreen
+  usecase__VoidCharge -.-> screen__ChargeWorklistScreen
   usecase__VoidCharge -.->|updates| entity__Charge
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;

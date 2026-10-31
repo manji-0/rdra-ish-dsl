@@ -3,7 +3,7 @@
 //! its values.
 
 use super::{buc_scope, declare, omitted_linked_kinds, render_edges, GraphEdge};
-use crate::diagram_common::{class_defs, contract_id, desc_line, quote, Header};
+use crate::diagram_common::{class_defs, contract_id, desc_line, node_line, quote, Header};
 use crate::{collect_object_graph_nodes, node_kind_filter_name, EmitError, Emitter, Scope, View};
 use rdra_ish_core::analysis::{condition_body_display, condition_edges, ConditionEdge};
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel, VariationKey};
@@ -37,9 +37,11 @@ fn render_variation(out: &mut String, model: &SemanticModel, key: VariationKey, 
     }
     for (value, label) in variation.values.iter().zip(&variation.labels) {
         let label = label.as_deref().unwrap_or(value);
-        out.push_str(&format!(
-            "    {id}__{value}[\"{}\"]:::value\n",
-            quote(label)
+        out.push_str(&node_line(
+            "    ",
+            &format!("{id}__{value}"),
+            &quote(label),
+            "value",
         ));
     }
     out.push_str("  end\n");
@@ -132,7 +134,7 @@ impl Emitter for ConditionMermaidEmitter {
             kinds.push("condition");
         }
         for (id, label) in &state_models {
-            body.push_str(&format!("  {id}[\"{}\"]:::statemodel\n", quote(label)));
+            body.push_str(&node_line("  ", id, &quote(label), "statemodel"));
         }
         if !state_models.is_empty() {
             kinds.push("statemodel");
@@ -163,7 +165,7 @@ impl Emitter for ConditionMermaidEmitter {
                 kinds.push(kind);
             }
         }
-        render_edges(&mut body, edges);
+        render_edges(&mut body, "condition", edges);
         body.push_str(&class_defs(&kinds));
 
         // A state model stands for its entity, which the diagram does not draw itself.
@@ -244,19 +246,19 @@ applies_to(Booked, CheckIn)
         let result = emit(View::whole());
         assert!(
             result.contains(
-                "  condition__Booked -.->|combines| statemodel__Appointment_status\n  %% derived condition__Booked -> statemodel__Appointment_status from holds\n"
+                "  condition__Booked -.-> statemodel__Appointment_status\n  %% derived condition__Booked -> statemodel__Appointment_status from holds\n"
             ),
             "{result}"
         );
         assert!(
             result.contains(
-                "  condition__Capped -.->|combines| statemodel__Appointment_status\n  condition__Capped -.->|combines| variation__Ratio\n  classDef"
+                "  condition__Capped -.-> statemodel__Appointment_status\n  condition__Capped -.-> variation__Ratio\n  classDef"
             ),
             "{result}"
         );
         assert!(result.contains("  %% holds condition__Booked: Appointment.status == booked\n"));
         assert!(result
-            .contains("  statemodel__Appointment_status[\"Appointment.status\"]:::statemodel\n"));
+            .contains("  statemodel__Appointment_status[[\"Appointment.status\"]]:::statemodel\n"));
     }
 
     #[test]
@@ -282,13 +284,13 @@ applies_to(Booked, CheckIn)
     fn a_condition_applies_to_use_cases_and_apis() {
         let result = emit(View::whole());
         for edge in [
-            "  condition__Booked -.->|applies_to| usecase__CheckIn\n",
-            "  condition__Capped -.->|applies_to| usecase__Bill\n",
-            "  condition__Capped -.->|applies_to| api__BillApi\n",
+            "  condition__Booked -.-> usecase__CheckIn\n",
+            "  condition__Capped -.-> usecase__Bill\n",
+            "  condition__Capped -.-> api__BillApi\n",
         ] {
             assert!(result.contains(edge), "{edge}: {result}");
         }
-        assert!(result.contains("  api__BillApi[\"Bill API\"]:::api\n"));
+        assert!(result.contains("  api__BillApi{{\"Bill API\"}}:::api\n"));
     }
 
     #[test]
@@ -296,7 +298,7 @@ applies_to(Booked, CheckIn)
         let pay = emit(View::bucs(vec!["BucPay".to_string()]));
         assert!(pay.starts_with("%% rdra-ish diagram=condition scope=buc:BucPay\n"));
         assert!(pay.contains("subgraph variation__Ratio["), "{pay}");
-        assert!(pay.contains("condition__Booked[") && pay.contains("condition__Capped["));
+        assert!(pay.contains("condition__Booked{") && pay.contains("condition__Capped{"));
         assert!(!pay.contains("api__BillApi"), "{pay}");
         for absent in ["variation__Channel", "variation__Unused"] {
             assert!(!pay.contains(absent), "{absent}: {pay}");

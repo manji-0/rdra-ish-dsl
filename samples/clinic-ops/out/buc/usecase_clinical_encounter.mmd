@@ -4,65 +4,65 @@
 %% omitted: buc step medium permission field api
 flowchart LR
   subgraph layer_value["システム価値"]
-    actor__Clinician["医師"]:::actor
+    actor__Clinician(["医師"]):::actor
     %% desc actor__Clinician: 診察し、診断・オーダ・処方を出し、診療記録に署名する。
-    actor__Nurse["看護師"]:::actor
+    actor__Nurse(["看護師"]):::actor
     %% desc actor__Nurse: 医師の指示の下で診療の補助を行う。
-    extsystem__OnlineEligibilitySystem["オンライン資格確認等システム"]:::extsystem
+    extsystem__OnlineEligibilitySystem[["オンライン資格確認等システム"]]:::extsystem
   end
   subgraph layer_boundary["システム境界"]
-    usecase__AmendEncounter["署名済み記録の修正"]:::usecase
+    usecase__AmendEncounter("署名済み記録の修正"):::usecase
     %% desc usecase__AmendEncounter: 署名済み記録の修正。
-    usecase__CompleteConsultation["診察終了"]:::usecase
+    usecase__CompleteConsultation("診察終了"):::usecase
     %% desc usecase__CompleteConsultation: 診察終了で予約を計算待ちにし、部屋を清掃中にし、会計を起動する。
-    usecase__DocumentAssessment["診察・診断の記録"]:::usecase
+    usecase__DocumentAssessment("診察・診断の記録"):::usecase
     %% desc usecase__DocumentAssessment: 診断記録と記録状態。
-    usecase__IssueReferralLetter["診療情報提供書の作成・送信"]:::usecase
+    usecase__IssueReferralLetter("診療情報提供書の作成・送信"):::usecase
     %% desc usecase__IssueReferralLetter: 診療情報提供書の作成・送信。
-    usecase__OpenEncounter["診療記録を開く"]:::usecase
+    usecase__OpenEncounter("診療記録を開く"):::usecase
     %% desc usecase__OpenEncounter: 受付済の予約から診療記録を開く。
-    usecase__RecordVitals["バイタルの記録"]:::usecase
+    usecase__RecordVitals("バイタルの記録"):::usecase
     %% desc usecase__RecordVitals: バイタル記録。
-    usecase__SignEncounter["診療記録の署名"]:::usecase
+    usecase__SignEncounter("診療記録の署名"):::usecase
     %% desc usecase__SignEncounter: 署名でコスト情報登録とケアプラン作成を起動する。
     screen__DiagnosisScreen["診断入力画面"]:::screen
     screen__EncounterWorkspaceScreen["診療記録画面"]:::screen
     screen__ReferralLetterScreen["診療情報提供書画面"]:::screen
     screen__VitalsScreen["バイタル入力画面"]:::screen
-    event__EvAppointmentCheckedIn["受付完了"]:::event
-    event__EvConsultationCompleted["診察終了"]:::event
-    event__EvEncounterSigned["診療記録の署名"]:::event
+    event__EvAppointmentCheckedIn>"受付完了"]:::event
+    event__EvConsultationCompleted>"診察終了"]:::event
+    event__EvEncounterSigned>"診療記録の署名"]:::event
   end
   subgraph layer_system["システム"]
-    entity__Appointment["予約・受診"]:::entity
-    entity__Diagnosis["診断"]:::entity
-    entity__Encounter["診療記録"]:::entity
-    entity__ReferralLetter["紹介状・診療情報提供書"]:::entity
-    entity__Room["診察室"]:::entity
-    entity__VitalSign["バイタル"]:::entity
-    state__Appointment_apptawaitingcalc["計算待ち"]:::state
-    state__Appointment_apptcheckedin["受付済"]:::state
-    state__Appointment_apptinconsult["診察中"]:::state
-    state__Encounter_encamended["修正済"]:::state
-    state__Encounter_encdocumented["記載済"]:::state
-    state__Encounter_encopen["記録中"]:::state
-    state__Encounter_encsigned["署名済"]:::state
+    entity__Appointment[("予約・受診")]:::entity
+    entity__Diagnosis[("診断")]:::entity
+    entity__Encounter[("診療記録")]:::entity
+    entity__ReferralLetter[("紹介状・診療情報提供書")]:::entity
+    entity__Room[("診察室")]:::entity
+    entity__VitalSign[("バイタル")]:::entity
+    state__Appointment_apptawaitingcalc((("計算待ち"))):::state
+    state__Appointment_apptcheckedin((("受付済"))):::state
+    state__Appointment_apptinconsult((("診察中"))):::state
+    state__Encounter_encamended((("修正済"))):::state
+    state__Encounter_encdocumented((("記載済"))):::state
+    state__Encounter_encopen((("記録中"))):::state
+    state__Encounter_encsigned((("署名済"))):::state
   end
-  actor__Clinician -.->|performs| usecase__AmendEncounter
-  actor__Clinician -.->|performs| usecase__CompleteConsultation
-  actor__Clinician -.->|performs| usecase__DocumentAssessment
-  actor__Clinician -.->|performs| usecase__IssueReferralLetter
-  actor__Clinician -.->|performs| usecase__SignEncounter
-  actor__Nurse -.->|performs| usecase__OpenEncounter
-  actor__Nurse -.->|performs| usecase__RecordVitals
-  event__EvAppointmentCheckedIn -.->|triggers| extsystem__OnlineEligibilitySystem
-  event__EvAppointmentCheckedIn -.->|triggers| usecase__OpenEncounter
-  usecase__AmendEncounter -.->|displays| screen__EncounterWorkspaceScreen
+  actor__Clinician -.-> usecase__AmendEncounter
+  actor__Clinician -.-> usecase__CompleteConsultation
+  actor__Clinician -.-> usecase__DocumentAssessment
+  actor__Clinician -.-> usecase__IssueReferralLetter
+  actor__Clinician -.-> usecase__SignEncounter
+  actor__Nurse -.-> usecase__OpenEncounter
+  actor__Nurse -.-> usecase__RecordVitals
+  event__EvAppointmentCheckedIn -.-> extsystem__OnlineEligibilitySystem
+  event__EvAppointmentCheckedIn -.-> usecase__OpenEncounter
+  usecase__AmendEncounter -.-> screen__EncounterWorkspaceScreen
   usecase__AmendEncounter -.->|transitions Encounter.status encsigned->encamended| state__Encounter_encamended
   usecase__AmendEncounter -.->|updates| entity__Encounter
   %% derived usecase__AmendEncounter -> entity__Encounter via api__AmendEncounterApi
-  usecase__CompleteConsultation -.->|displays| screen__EncounterWorkspaceScreen
-  usecase__CompleteConsultation -.->|raises| event__EvConsultationCompleted
+  usecase__CompleteConsultation -.-> screen__EncounterWorkspaceScreen
+  usecase__CompleteConsultation -.-> event__EvConsultationCompleted
   usecase__CompleteConsultation -.->|transitions Appointment.status apptinconsult->apptawaitingcalc| state__Appointment_apptawaitingcalc
   usecase__CompleteConsultation -.->|updates| entity__Appointment
   %% derived usecase__CompleteConsultation -> entity__Appointment via api__CompleteConsultationApi
@@ -70,28 +70,28 @@ flowchart LR
   %% derived usecase__CompleteConsultation -> entity__Room via api__CompleteConsultationApi
   usecase__DocumentAssessment -.->|creates| entity__Diagnosis
   %% derived usecase__DocumentAssessment -> entity__Diagnosis via api__DocumentAssessmentApi
-  usecase__DocumentAssessment -.->|displays| screen__DiagnosisScreen
+  usecase__DocumentAssessment -.-> screen__DiagnosisScreen
   usecase__DocumentAssessment -.->|transitions Encounter.status encopen->encdocumented| state__Encounter_encdocumented
   usecase__DocumentAssessment -.->|updates| entity__Encounter
   %% derived usecase__DocumentAssessment -> entity__Encounter via api__DocumentAssessmentApi
   usecase__IssueReferralLetter -.->|creates| entity__ReferralLetter
   %% derived usecase__IssueReferralLetter -> entity__ReferralLetter via api__IssueReferralLetterApi
-  usecase__IssueReferralLetter -.->|displays| screen__ReferralLetterScreen
+  usecase__IssueReferralLetter -.-> screen__ReferralLetterScreen
   usecase__IssueReferralLetter -.->|reads| entity__Encounter
   %% derived usecase__IssueReferralLetter -> entity__Encounter via api__IssueReferralLetterApi
   usecase__OpenEncounter -.->|creates| entity__Encounter
   %% derived usecase__OpenEncounter -> entity__Encounter via api__OpenEncounterApi
-  usecase__OpenEncounter -.->|displays| screen__EncounterWorkspaceScreen
+  usecase__OpenEncounter -.-> screen__EncounterWorkspaceScreen
   usecase__OpenEncounter -.->|transitions Appointment.status apptcheckedin->apptinconsult| state__Appointment_apptinconsult
   usecase__OpenEncounter -.->|updates| entity__Appointment
   %% derived usecase__OpenEncounter -> entity__Appointment via api__OpenEncounterApi
   usecase__RecordVitals -.->|creates| entity__VitalSign
   %% derived usecase__RecordVitals -> entity__VitalSign via api__RecordVitalsApi
-  usecase__RecordVitals -.->|displays| screen__VitalsScreen
+  usecase__RecordVitals -.-> screen__VitalsScreen
   usecase__RecordVitals -.->|updates| entity__Encounter
   %% derived usecase__RecordVitals -> entity__Encounter via api__RecordVitalsApi
-  usecase__SignEncounter -.->|displays| screen__EncounterWorkspaceScreen
-  usecase__SignEncounter -.->|raises| event__EvEncounterSigned
+  usecase__SignEncounter -.-> screen__EncounterWorkspaceScreen
+  usecase__SignEncounter -.-> event__EvEncounterSigned
   usecase__SignEncounter -.->|transitions Encounter.status encdocumented->encsigned| state__Encounter_encsigned
   usecase__SignEncounter -.->|updates| entity__Encounter
   %% derived usecase__SignEncounter -> entity__Encounter via api__SignEncounterApi

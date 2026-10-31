@@ -149,6 +149,34 @@
 
 ### Changed
 
+- The flowchart encoding contract changes: a node is no longer always `id["label"]`, and an
+  edge no longer always `|label|`. Every flowchart kind (`rdra`, `context`, `requirement`,
+  `business`, `usecase`, `robustness`, `event`, `flow`, `information`, `condition`,
+  `screen`) draws a node as `<kind>__<Id><open>"<label>"<close>:::<kind>` in its kind's
+  Mermaid shape, so kinds tell apart in black and white and without colour vision:
+  `actor` `([..])`, `usecase` `(..)`, `api` `{{..}}`, `entity` `[(..)]`, `extsystem` and
+  `statemodel` `[[..]]`, `event` `>..]`, `timer` `((..))`, `state` `(((..)))`,
+  `condition` `{..}`, `goal` `[/../]`, `requirement` `[/..\]`, `nfr`, `constraint`, and
+  `variation` `[\..\]`, `business` `[\../]`, and every other kind (`screen`, `buc`,
+  `step`, `system`, `value`, ...) `[..]` as before. Ids, `:::<kind>` tags, quoting, and
+  `classDef` colours are unchanged, and a subgraph keeps `subgraph <id>["<label>"]`. An
+  edge is written `<from> <arrow> <to>`, without a label, when in that kind the two end
+  kinds have exactly one relation and the label would only name it; the relation is read
+  back from the ends. Gone are `performs`, `invokes`, `displays`, `shows`, `navigates`
+  (in `rdra`), `raises`, `triggers`, `contains`, `covers`, `belongs`, `compensates`,
+  `motivates`, `achieves`, `applies_to`, `combines`, `owns`, `qualifies`, `constrains`,
+  `maps_field`, `has_permission`, `requires_permission`, `requires_medium`, and `decides`
+  in `rdra` and wherever else they are drawn; `achieved_by` in `requirement`; `uses`
+  (actor to screen) in `robustness`; every label of `event` and `condition`; `statemodel`
+  in `information`. Labels that say more than the ends stay: the CRUD verb, `request` / `response` / `error_response`, a step order, a
+  relate's cardinality, a transition, the robustness use case, CRUD letters, and events,
+  the BUCs of a `context` actor edge (a `performs`, its relation still read from the
+  ends), the events of a `context` external-system edge and a `business` hand-off,
+  `variation <column>`, and every `screen` edge. `rdra_ish_emit::NODE_SHAPES` /
+  `node_shape` and `EDGE_RELATIONS` / `implied_relation` are the tables, and the contract
+  test reads both. clinic-ops: the `rdra` diagram of `BucClinicalEncounter` keeps 159 of
+  its 584 labels, the robustness diagram 19 of 24, the context diagram all 21, and the
+  UC複合図 of the BUC 17 of 35 (#43).
 - `diagram --kind business` is a business flow. Each business is a subgraph holding its BUCs,
   and an edge `BUC -->|<event label>| BUC` is a hand-off: a use case contained in the first
   BUC raises an event that triggers a use case contained in the second, or

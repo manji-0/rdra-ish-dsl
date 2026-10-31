@@ -37,33 +37,33 @@
 %% kinds: actor extsystem system
 %% omitted: buc step permission usecase event
 flowchart LR
-  actor__AccountsClerk["医事課 会計担当"]:::actor
+  actor__AccountsClerk(["医事課 会計担当"]):::actor
   %% desc actor__AccountsClerk: 会計計算入力、患者の呼出、窓口精算、領収証・明細書の交付を行う事務職員。
-  actor__CareCoordinator["患者支援・地域連携担当"]:::actor
+  actor__CareCoordinator(["患者支援・地域連携担当"]):::actor
   %% desc actor__CareCoordinator: 診療後のケアプランを作り、患者への連絡と再診予約を追う。
-  actor__ClaimsClerk["医事課 レセプト担当"]:::actor
+  actor__ClaimsClerk(["医事課 レセプト担当"]):::actor
   %% desc actor__ClaimsClerk: レセプトの作成・院内点検・請求と、返戻・査定への対応を行う事務職員。
-  actor__ClinicAdmin["病院管理者"]:::actor
+  actor__ClinicAdmin(["病院管理者"]):::actor
   %% desc actor__ClinicAdmin: 診療枠と診察室のマスタを管理し、監査の指摘を解決する。
-  actor__Clinician["医師"]:::actor
+  actor__Clinician(["医師"]):::actor
   %% desc actor__Clinician: 診察し、診断・オーダ・処方を出し、診療記録に署名する。
-  actor__MedicalClerk["医師事務作業補助者"]:::actor
+  actor__MedicalClerk(["医師事務作業補助者"]):::actor
   %% desc actor__MedicalClerk: 医師の指示で電子カルテへ代行入力する。確定は医師が行う。
-  actor__Nurse["看護師"]:::actor
+  actor__Nurse(["看護師"]):::actor
   %% desc actor__Nurse: 医師の指示の下で診療の補助を行う。
-  actor__Patient["患者"]:::actor
+  actor__Patient(["患者"]):::actor
   %% desc actor__Patient: 病院で診療を受ける人。
-  actor__Pharmacist["薬剤師"]:::actor
+  actor__Pharmacist(["薬剤師"]):::actor
   %% desc actor__Pharmacist: 院内処方を調剤・監査し、服薬指導と交付を行う。疑わしい処方は医師に照会する。
-  actor__ReceptionClerk["医事課 受付担当"]:::actor
+  actor__ReceptionClerk(["医事課 受付担当"]):::actor
   %% desc actor__ReceptionClerk: 初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。
-  extsystem__ClaimsReviewOrganization["審査支払機関（支払基金・国保連）"]:::extsystem
-  extsystem__EPrescriptionService["電子処方箋管理サービス"]:::extsystem
-  extsystem__InsurancePharmacy["保険薬局"]:::extsystem
-  extsystem__MessagingGateway["患者通知サービス"]:::extsystem
-  extsystem__OnlineEligibilitySystem["オンライン資格確認等システム"]:::extsystem
-  extsystem__OutsourcedLabSystem["外注検査システム"]:::extsystem
-  extsystem__PaymentGateway["自動精算機・クレジット決済"]:::extsystem
+  extsystem__ClaimsReviewOrganization[["審査支払機関（支払基金・国保連）"]]:::extsystem
+  extsystem__EPrescriptionService[["電子処方箋管理サービス"]]:::extsystem
+  extsystem__InsurancePharmacy[["保険薬局"]]:::extsystem
+  extsystem__MessagingGateway[["患者通知サービス"]]:::extsystem
+  extsystem__OnlineEligibilitySystem[["オンライン資格確認等システム"]]:::extsystem
+  extsystem__OutsourcedLabSystem[["外注検査システム"]]:::extsystem
+  extsystem__PaymentGateway[["自動精算機・クレジット決済"]]:::extsystem
   system__ClinicOpsSystem["外来業務システム"]:::system
   actor__AccountsClerk -.->|計算・会計| system__ClinicOpsSystem
   %% derived actor__AccountsClerk -> system__ClinicOpsSystem via buc__BucVisitPayment
@@ -125,37 +125,37 @@ flowchart LR
 %% kinds: actor screen timer api usecase entity
 %% omitted: buc step medium permission event
 flowchart LR
-  actor__Patient["患者"]:::actor
-  actor__ReceptionClerk["医事課 受付担当"]:::actor
+  actor__Patient(["患者"]):::actor
+  actor__ReceptionClerk(["医事課 受付担当"]):::actor
   screen__ConsentScreen["同意取得画面"]:::screen
   screen__InsuranceScreen["保険資格登録画面"]:::screen
   screen__IntakePortalScreen["問診票ポータル画面"]:::screen
   screen__PatientProfileScreen["患者基本情報画面"]:::screen
   screen__PatientSearchScreen["患者検索画面"]:::screen
-  timer__IntakeExpiryCheck["問診票の期限切れ確認（毎晩）"]:::timer
-  api__ConsentApi["同意 API"]:::api
-  api__EligibilityApi["保険資格登録 API"]:::api
-  api__IntakeMessagingApi["問診票送付 API"]:::api
-  api__RegisterPatientApi["新患登録 API"]:::api
-  api__SearchPatientApi["患者検索 API"]:::api
-  api__UpdateDemographicsApi["患者属性変更 API"]:::api
-  usecase__ArchivePatient["患者のアーカイブ"]:::usecase
-  usecase__CompleteIntakeForms["問診票の回答"]:::usecase
-  usecase__ExpireIntakeForms["問診票の期限切れ"]:::usecase
-  usecase__MergeDuplicatePatient["重複患者の統合"]:::usecase
-  entity__ConsentRecord["同意記録"]:::entity
-  entity__EligibilityCheck["資格確認"]:::entity
-  entity__InsurancePolicy["保険資格"]:::entity
-  entity__IntakePacket["問診票"]:::entity
-  entity__PatientAccount["患者登録"]:::entity
-  entity__PatientMessage["患者連絡"]:::entity
-  entity__PatientProfile["患者基本情報"]:::entity
-  actor__Patient -->|uses| screen__ConsentScreen
-  actor__Patient -->|uses| screen__IntakePortalScreen
-  actor__ReceptionClerk -->|uses| screen__InsuranceScreen
-  actor__ReceptionClerk -->|uses| screen__IntakePortalScreen
-  actor__ReceptionClerk -->|uses| screen__PatientProfileScreen
-  actor__ReceptionClerk -->|uses| screen__PatientSearchScreen
+  timer__IntakeExpiryCheck(("問診票の期限切れ確認（毎晩）")):::timer
+  api__ConsentApi{{"同意 API"}}:::api
+  api__EligibilityApi{{"保険資格登録 API"}}:::api
+  api__IntakeMessagingApi{{"問診票送付 API"}}:::api
+  api__RegisterPatientApi{{"新患登録 API"}}:::api
+  api__SearchPatientApi{{"患者検索 API"}}:::api
+  api__UpdateDemographicsApi{{"患者属性変更 API"}}:::api
+  usecase__ArchivePatient("患者のアーカイブ"):::usecase
+  usecase__CompleteIntakeForms("問診票の回答"):::usecase
+  usecase__ExpireIntakeForms("問診票の期限切れ"):::usecase
+  usecase__MergeDuplicatePatient("重複患者の統合"):::usecase
+  entity__ConsentRecord[("同意記録")]:::entity
+  entity__EligibilityCheck[("資格確認")]:::entity
+  entity__InsurancePolicy[("保険資格")]:::entity
+  entity__IntakePacket[("問診票")]:::entity
+  entity__PatientAccount[("患者登録")]:::entity
+  entity__PatientMessage[("患者連絡")]:::entity
+  entity__PatientProfile[("患者基本情報")]:::entity
+  actor__Patient --> screen__ConsentScreen
+  actor__Patient --> screen__IntakePortalScreen
+  actor__ReceptionClerk --> screen__InsuranceScreen
+  actor__ReceptionClerk --> screen__IntakePortalScreen
+  actor__ReceptionClerk --> screen__PatientProfileScreen
+  actor__ReceptionClerk --> screen__PatientSearchScreen
   api__ConsentApi -->|C| entity__ConsentRecord
   api__EligibilityApi -->|C| entity__EligibilityCheck
   api__EligibilityApi -->|RU| entity__InsurancePolicy
@@ -454,30 +454,30 @@ sequenceDiagram
 %% kinds: actor extsystem screen timer api usecase entity
 %% omitted: buc step medium permission event
 flowchart LR
-  actor__Patient["患者"]:::actor
-  actor__ReceptionClerk["医事課 受付担当"]:::actor
-  extsystem__MessagingGateway["患者通知サービス"]:::extsystem
+  actor__Patient(["患者"]):::actor
+  actor__ReceptionClerk(["医事課 受付担当"]):::actor
+  extsystem__MessagingGateway[["患者通知サービス"]]:::extsystem
   screen__AppointmentNoticeScreen["予約通知画面"]:::screen
   screen__AppointmentScreen["予約画面"]:::screen
   screen__ScheduleSearchScreen["空き枠検索画面"]:::screen
-  timer__NoShowSweep["未来院の確認（毎晩）"]:::timer
-  api__AppointmentNoticeApi["予約通知 API"]:::api
-  api__BookAppointmentApi["予約確定 API"]:::api
-  api__CancelAppointmentApi["予約取消 API"]:::api
-  api__RescheduleAppointmentApi["予約変更 API"]:::api
-  api__ReserveAppointmentApi["予約仮押さえ API"]:::api
-  api__SearchAvailabilityApi["空き枠検索 API"]:::api
-  usecase__MarkNoShow["未来院の処理"]:::usecase
-  entity__Appointment["予約・受診"]:::entity
-  entity__ClinicLocation["施設"]:::entity
-  entity__Notification["通知"]:::entity
-  entity__PatientMessage["患者連絡"]:::entity
-  entity__Provider["医師マスタ"]:::entity
-  entity__ProviderSchedule["診療枠"]:::entity
-  actor__Patient -->|uses| screen__ScheduleSearchScreen
-  actor__ReceptionClerk -->|uses| screen__AppointmentNoticeScreen
-  actor__ReceptionClerk -->|uses| screen__AppointmentScreen
-  actor__ReceptionClerk -->|uses| screen__ScheduleSearchScreen
+  timer__NoShowSweep(("未来院の確認（毎晩）")):::timer
+  api__AppointmentNoticeApi{{"予約通知 API"}}:::api
+  api__BookAppointmentApi{{"予約確定 API"}}:::api
+  api__CancelAppointmentApi{{"予約取消 API"}}:::api
+  api__RescheduleAppointmentApi{{"予約変更 API"}}:::api
+  api__ReserveAppointmentApi{{"予約仮押さえ API"}}:::api
+  api__SearchAvailabilityApi{{"空き枠検索 API"}}:::api
+  usecase__MarkNoShow("未来院の処理"):::usecase
+  entity__Appointment[("予約・受診")]:::entity
+  entity__ClinicLocation[("施設")]:::entity
+  entity__Notification[("通知")]:::entity
+  entity__PatientMessage[("患者連絡")]:::entity
+  entity__Provider[("医師マスタ")]:::entity
+  entity__ProviderSchedule[("診療枠")]:::entity
+  actor__Patient --> screen__ScheduleSearchScreen
+  actor__ReceptionClerk --> screen__AppointmentNoticeScreen
+  actor__ReceptionClerk --> screen__AppointmentScreen
+  actor__ReceptionClerk --> screen__ScheduleSearchScreen
   api__AppointmentNoticeApi -->|C| entity__Notification
   api__AppointmentNoticeApi -->|C| entity__PatientMessage
   api__BookAppointmentApi -->|U| entity__Appointment
@@ -745,33 +745,33 @@ sequenceDiagram
 %% kinds: actor extsystem screen timer api entity
 %% omitted: buc step medium permission event condition
 flowchart LR
-  actor__Nurse["看護師"]:::actor
-  actor__ReceptionClerk["医事課 受付担当"]:::actor
-  extsystem__OnlineEligibilitySystem["オンライン資格確認等システム"]:::extsystem
+  actor__Nurse(["看護師"]):::actor
+  actor__ReceptionClerk(["医事課 受付担当"]):::actor
+  extsystem__OnlineEligibilitySystem[["オンライン資格確認等システム"]]:::extsystem
   screen__CheckInScreen["受付画面"]:::screen
   screen__EligibilityScreen["資格確認画面"]:::screen
   screen__ReferralScreen["紹介状受付画面"]:::screen
   screen__RoomBoardScreen["診察室ボード画面"]:::screen
-  timer__EligibilityBatchInquiry["予約患者の資格の一括照会（来院前）"]:::timer
-  api__AssignRoomApi["診察室案内 API"]:::api
-  api__CheckInPatientApi["受付 API"]:::api
-  api__EligibilityResultApi["資格確認結果 API"]:::api
-  api__OnlineEligibilityApi["オンライン資格確認 API"]:::api
-  api__PrepareEncounterApi["診療準備 API"]:::api
-  api__ReferralLetterApi["紹介状 API"]:::api
-  api__VerifyArrivalApi["到着確認 API"]:::api
-  entity__Appointment["予約・受診"]:::entity
-  entity__EligibilityCheck["資格確認"]:::entity
-  entity__InsurancePolicy["保険資格"]:::entity
-  entity__PatientAccount["患者登録"]:::entity
-  entity__PatientProfile["患者基本情報"]:::entity
-  entity__ReferralLetter["紹介状・診療情報提供書"]:::entity
-  entity__Room["診察室"]:::entity
-  actor__Nurse -->|uses| screen__CheckInScreen
-  actor__Nurse -->|uses| screen__RoomBoardScreen
-  actor__ReceptionClerk -->|uses| screen__CheckInScreen
-  actor__ReceptionClerk -->|uses| screen__EligibilityScreen
-  actor__ReceptionClerk -->|uses| screen__ReferralScreen
+  timer__EligibilityBatchInquiry(("予約患者の資格の一括照会（来院前）")):::timer
+  api__AssignRoomApi{{"診察室案内 API"}}:::api
+  api__CheckInPatientApi{{"受付 API"}}:::api
+  api__EligibilityResultApi{{"資格確認結果 API"}}:::api
+  api__OnlineEligibilityApi{{"オンライン資格確認 API"}}:::api
+  api__PrepareEncounterApi{{"診療準備 API"}}:::api
+  api__ReferralLetterApi{{"紹介状 API"}}:::api
+  api__VerifyArrivalApi{{"到着確認 API"}}:::api
+  entity__Appointment[("予約・受診")]:::entity
+  entity__EligibilityCheck[("資格確認")]:::entity
+  entity__InsurancePolicy[("保険資格")]:::entity
+  entity__PatientAccount[("患者登録")]:::entity
+  entity__PatientProfile[("患者基本情報")]:::entity
+  entity__ReferralLetter[("紹介状・診療情報提供書")]:::entity
+  entity__Room[("診察室")]:::entity
+  actor__Nurse --> screen__CheckInScreen
+  actor__Nurse --> screen__RoomBoardScreen
+  actor__ReceptionClerk --> screen__CheckInScreen
+  actor__ReceptionClerk --> screen__EligibilityScreen
+  actor__ReceptionClerk --> screen__ReferralScreen
   api__AssignRoomApi -->|U| entity__Appointment
   api__AssignRoomApi -->|U| entity__Room
   api__CheckInPatientApi -->|U| entity__Appointment
@@ -1152,30 +1152,30 @@ sequenceDiagram
 %% kinds: actor screen api entity
 %% omitted: buc step medium permission event
 flowchart LR
-  actor__Clinician["医師"]:::actor
-  actor__Nurse["看護師"]:::actor
+  actor__Clinician(["医師"]):::actor
+  actor__Nurse(["看護師"]):::actor
   screen__DiagnosisScreen["診断入力画面"]:::screen
   screen__EncounterWorkspaceScreen["診療記録画面"]:::screen
   screen__ReferralLetterScreen["診療情報提供書画面"]:::screen
   screen__VitalsScreen["バイタル入力画面"]:::screen
-  api__AmendEncounterApi["記録修正 API"]:::api
-  api__CompleteConsultationApi["診察終了 API"]:::api
-  api__DocumentAssessmentApi["診察記録 API"]:::api
-  api__IssueReferralLetterApi["診療情報提供書 API"]:::api
-  api__OpenEncounterApi["診療記録作成 API"]:::api
-  api__RecordVitalsApi["バイタル記録 API"]:::api
-  api__SignEncounterApi["署名 API"]:::api
-  entity__Appointment["予約・受診"]:::entity
-  entity__Diagnosis["診断"]:::entity
-  entity__Encounter["診療記録"]:::entity
-  entity__ReferralLetter["紹介状・診療情報提供書"]:::entity
-  entity__Room["診察室"]:::entity
-  entity__VitalSign["バイタル"]:::entity
-  actor__Clinician -->|uses| screen__DiagnosisScreen
-  actor__Clinician -->|uses| screen__EncounterWorkspaceScreen
-  actor__Clinician -->|uses| screen__ReferralLetterScreen
-  actor__Nurse -->|uses| screen__EncounterWorkspaceScreen
-  actor__Nurse -->|uses| screen__VitalsScreen
+  api__AmendEncounterApi{{"記録修正 API"}}:::api
+  api__CompleteConsultationApi{{"診察終了 API"}}:::api
+  api__DocumentAssessmentApi{{"診察記録 API"}}:::api
+  api__IssueReferralLetterApi{{"診療情報提供書 API"}}:::api
+  api__OpenEncounterApi{{"診療記録作成 API"}}:::api
+  api__RecordVitalsApi{{"バイタル記録 API"}}:::api
+  api__SignEncounterApi{{"署名 API"}}:::api
+  entity__Appointment[("予約・受診")]:::entity
+  entity__Diagnosis[("診断")]:::entity
+  entity__Encounter[("診療記録")]:::entity
+  entity__ReferralLetter[("紹介状・診療情報提供書")]:::entity
+  entity__Room[("診察室")]:::entity
+  entity__VitalSign[("バイタル")]:::entity
+  actor__Clinician --> screen__DiagnosisScreen
+  actor__Clinician --> screen__EncounterWorkspaceScreen
+  actor__Clinician --> screen__ReferralLetterScreen
+  actor__Nurse --> screen__EncounterWorkspaceScreen
+  actor__Nurse --> screen__VitalsScreen
   api__AmendEncounterApi -->|U| entity__Encounter
   api__CompleteConsultationApi -->|U| entity__Appointment
   api__CompleteConsultationApi -->|U| entity__Room
@@ -1418,37 +1418,37 @@ sequenceDiagram
 %% kinds: actor extsystem screen api usecase entity
 %% omitted: buc step medium permission event condition
 flowchart LR
-  actor__Clinician["医師"]:::actor
-  actor__MedicalClerk["医師事務作業補助者"]:::actor
-  actor__Nurse["看護師"]:::actor
-  extsystem__OutsourcedLabSystem["外注検査システム"]:::extsystem
+  actor__Clinician(["医師"]):::actor
+  actor__MedicalClerk(["医師事務作業補助者"]):::actor
+  actor__Nurse(["看護師"]):::actor
+  extsystem__OutsourcedLabSystem[["外注検査システム"]]:::extsystem
   screen__CriticalNoticeScreen["重要結果通知画面"]:::screen
   screen__OrderEntryScreen["オーダ入力画面"]:::screen
   screen__ResultReviewScreen["検査結果確認画面"]:::screen
   screen__SpecimenScreen["採血画面"]:::screen
-  api__CollectSpecimenApi["採血 API"]:::api
-  api__ConfirmOrderApi["オーダ確定 API"]:::api
-  api__CriticalNoticeApi["重要結果通知 API"]:::api
-  api__OrderEntryApi["オーダ登録 API"]:::api
-  api__PerformedProcedureApi["実施登録 API"]:::api
-  api__ProxyOrderApi["代行入力 API"]:::api
-  api__ReceiveLabResultApi["検査結果受信 API"]:::api
-  api__ResultReviewApi["検査結果確認 API"]:::api
-  usecase__CancelClinicalOrder["オーダの取消"]:::usecase
-  usecase__PrintSpecimenLabel["採血管ラベル発行・貼付"]:::usecase
-  entity__Charge["コスト（診療行為）"]:::entity
-  entity__ClinicalOrder["検査オーダ"]:::entity
-  entity__Encounter["診療記録"]:::entity
-  entity__LabResult["検査結果"]:::entity
-  entity__Notification["通知"]:::entity
-  entity__PatientMessage["患者連絡"]:::entity
-  actor__Clinician -->|uses| screen__CriticalNoticeScreen
-  actor__Clinician -->|uses| screen__OrderEntryScreen
-  actor__Clinician -->|uses| screen__ResultReviewScreen
-  actor__MedicalClerk -->|uses| screen__OrderEntryScreen
-  actor__Nurse -->|uses| screen__OrderEntryScreen
-  actor__Nurse -->|uses| screen__ResultReviewScreen
-  actor__Nurse -->|uses| screen__SpecimenScreen
+  api__CollectSpecimenApi{{"採血 API"}}:::api
+  api__ConfirmOrderApi{{"オーダ確定 API"}}:::api
+  api__CriticalNoticeApi{{"重要結果通知 API"}}:::api
+  api__OrderEntryApi{{"オーダ登録 API"}}:::api
+  api__PerformedProcedureApi{{"実施登録 API"}}:::api
+  api__ProxyOrderApi{{"代行入力 API"}}:::api
+  api__ReceiveLabResultApi{{"検査結果受信 API"}}:::api
+  api__ResultReviewApi{{"検査結果確認 API"}}:::api
+  usecase__CancelClinicalOrder("オーダの取消"):::usecase
+  usecase__PrintSpecimenLabel("採血管ラベル発行・貼付"):::usecase
+  entity__Charge[("コスト（診療行為）")]:::entity
+  entity__ClinicalOrder[("検査オーダ")]:::entity
+  entity__Encounter[("診療記録")]:::entity
+  entity__LabResult[("検査結果")]:::entity
+  entity__Notification[("通知")]:::entity
+  entity__PatientMessage[("患者連絡")]:::entity
+  actor__Clinician --> screen__CriticalNoticeScreen
+  actor__Clinician --> screen__OrderEntryScreen
+  actor__Clinician --> screen__ResultReviewScreen
+  actor__MedicalClerk --> screen__OrderEntryScreen
+  actor__Nurse --> screen__OrderEntryScreen
+  actor__Nurse --> screen__ResultReviewScreen
+  actor__Nurse --> screen__SpecimenScreen
   api__CollectSpecimenApi -->|U| entity__ClinicalOrder
   api__ConfirmOrderApi -->|U| entity__ClinicalOrder
   api__CriticalNoticeApi -->|C| entity__Notification
@@ -1763,28 +1763,28 @@ sequenceDiagram
 %% kinds: actor extsystem screen timer api usecase entity
 %% omitted: buc step medium permission event
 flowchart LR
-  actor__Clinician["医師"]:::actor
-  actor__Pharmacist["薬剤師"]:::actor
-  extsystem__EPrescriptionService["電子処方箋管理サービス"]:::extsystem
-  extsystem__InsurancePharmacy["保険薬局"]:::extsystem
+  actor__Clinician(["医師"]):::actor
+  actor__Pharmacist(["薬剤師"]):::actor
+  extsystem__EPrescriptionService[["電子処方箋管理サービス"]]:::extsystem
+  extsystem__InsurancePharmacy[["保険薬局"]]:::extsystem
   screen__DispensingScreen["調剤・監査画面"]:::screen
   screen__MedicationSearchScreen["薬剤検索画面"]:::screen
   screen__PharmacyStatusScreen["電子処方箋の状況画面"]:::screen
   screen__PrescriptionScreen["処方画面"]:::screen
-  timer__PrescriptionUsePeriodCheck["処方箋の使用期間切れ確認"]:::timer
-  api__ConfirmDispenseApi["調剤結果 API"]:::api
-  api__DispensingApi["院内調剤 API"]:::api
-  api__DraftPrescriptionApi["処方オーダ API"]:::api
-  api__IssuePrescriptionApi["処方箋発行 API"]:::api
-  api__MedicationCatalogApi["薬剤マスタ API"]:::api
-  api__PrescriptionInquiryApi["疑義照会 API"]:::api
-  usecase__CancelPrescription["処方の取消"]:::usecase
-  entity__Encounter["診療記録"]:::entity
-  entity__Medication["薬剤"]:::entity
-  entity__Prescription["処方箋"]:::entity
-  actor__Clinician -->|uses| screen__MedicationSearchScreen
-  actor__Clinician -->|uses| screen__PrescriptionScreen
-  actor__Pharmacist -->|uses| screen__DispensingScreen
+  timer__PrescriptionUsePeriodCheck(("処方箋の使用期間切れ確認")):::timer
+  api__ConfirmDispenseApi{{"調剤結果 API"}}:::api
+  api__DispensingApi{{"院内調剤 API"}}:::api
+  api__DraftPrescriptionApi{{"処方オーダ API"}}:::api
+  api__IssuePrescriptionApi{{"処方箋発行 API"}}:::api
+  api__MedicationCatalogApi{{"薬剤マスタ API"}}:::api
+  api__PrescriptionInquiryApi{{"疑義照会 API"}}:::api
+  usecase__CancelPrescription("処方の取消"):::usecase
+  entity__Encounter[("診療記録")]:::entity
+  entity__Medication[("薬剤")]:::entity
+  entity__Prescription[("処方箋")]:::entity
+  actor__Clinician --> screen__MedicationSearchScreen
+  actor__Clinician --> screen__PrescriptionScreen
+  actor__Pharmacist --> screen__DispensingScreen
   api__ConfirmDispenseApi -->|U| entity__Prescription
   api__DispensingApi -->|U| entity__Prescription
   api__DraftPrescriptionApi -->|C| entity__Prescription
@@ -2164,26 +2164,26 @@ sequenceDiagram
 %% kinds: actor extsystem screen api usecase entity
 %% omitted: buc step medium permission event condition
 flowchart LR
-  actor__AccountsClerk["医事課 会計担当"]:::actor
-  extsystem__PaymentGateway["自動精算機・クレジット決済"]:::extsystem
+  actor__AccountsClerk(["医事課 会計担当"]):::actor
+  extsystem__PaymentGateway[["自動精算機・クレジット決済"]]:::extsystem
   screen__BillCalculationScreen["会計計算画面"]:::screen
   screen__KioskScreen["自動精算機画面"]:::screen
   screen__PaymentWindowScreen["会計窓口画面"]:::screen
-  api__CalculateVisitBillApi["会計計算 API"]:::api
-  api__ReceiptApi["領収証 API"]:::api
-  api__SelectedFeeApi["選定療養費 API"]:::api
-  api__SettlementApi["精算 API"]:::api
-  usecase__CallPatientForPayment["会計の呼出"]:::usecase
-  usecase__RefundPayment["還付・追加徴収"]:::usecase
-  entity__AccountBalance["未収金残高"]:::entity
-  entity__Appointment["予約・受診"]:::entity
-  entity__Charge["コスト（診療行為）"]:::entity
-  entity__Encounter["診療記録"]:::entity
-  entity__InsurancePolicy["保険資格"]:::entity
-  entity__PaymentTransaction["精算"]:::entity
-  entity__SelectedTreatmentFeeSetting["選定療養費の設定"]:::entity
-  actor__AccountsClerk -->|uses| screen__BillCalculationScreen
-  actor__AccountsClerk -->|uses| screen__PaymentWindowScreen
+  api__CalculateVisitBillApi{{"会計計算 API"}}:::api
+  api__ReceiptApi{{"領収証 API"}}:::api
+  api__SelectedFeeApi{{"選定療養費 API"}}:::api
+  api__SettlementApi{{"精算 API"}}:::api
+  usecase__CallPatientForPayment("会計の呼出"):::usecase
+  usecase__RefundPayment("還付・追加徴収"):::usecase
+  entity__AccountBalance[("未収金残高")]:::entity
+  entity__Appointment[("予約・受診")]:::entity
+  entity__Charge[("コスト（診療行為）")]:::entity
+  entity__Encounter[("診療記録")]:::entity
+  entity__InsurancePolicy[("保険資格")]:::entity
+  entity__PaymentTransaction[("精算")]:::entity
+  entity__SelectedTreatmentFeeSetting[("選定療養費の設定")]:::entity
+  actor__AccountsClerk --> screen__BillCalculationScreen
+  actor__AccountsClerk --> screen__PaymentWindowScreen
   api__CalculateVisitBillApi -->|R| entity__Charge
   api__CalculateVisitBillApi -->|R| entity__InsurancePolicy
   api__CalculateVisitBillApi -->|U| entity__Appointment
@@ -2439,36 +2439,36 @@ sequenceDiagram
 %% kinds: actor extsystem screen timer api usecase entity
 %% omitted: buc step medium permission event condition
 flowchart LR
-  actor__ClaimsClerk["医事課 レセプト担当"]:::actor
-  extsystem__ClaimsReviewOrganization["審査支払機関（支払基金・国保連）"]:::extsystem
+  actor__ClaimsClerk(["医事課 レセプト担当"]):::actor
+  extsystem__ClaimsReviewOrganization[["審査支払機関（支払基金・国保連）"]]:::extsystem
   screen__BalanceScreen["未収金画面"]:::screen
   screen__ChargeWorklistScreen["コスト一覧画面"]:::screen
   screen__ClaimScreen["レセプト画面"]:::screen
   screen__PaymentPostingScreen["入金画面"]:::screen
-  timer__ErrorResendWindow["エラー分レセプトの再送（毎月11日・12日）"]:::timer
-  timer__MonthlyClaimCreation["前月分レセプトの作成（月初）"]:::timer
-  timer__MonthlyClaimDeadline["前月分レセプトの請求（毎月5日～10日）"]:::timer
-  timer__ReceivablesMonthlyReview["未収金管理台帳の作成（毎月）"]:::timer
-  timer__ReturnDownloadCheck["返戻レセプトの取得（3か月以内）"]:::timer
-  api__BalanceApi["未収金 API"]:::api
-  api__ClaimEditApi["レセプト点検・訂正 API"]:::api
-  api__ClaimResultApi["審査結果 API"]:::api
-  api__CreateChargeApi["コスト登録 API"]:::api
-  api__GenerateClaimApi["レセプト作成 API"]:::api
-  api__PaymentPostApi["入金 API"]:::api
-  api__SubmitClaimApi["オンライン請求 API"]:::api
-  usecase__ReviewClaimTransfer["資格の振替・分割の確認"]:::usecase
-  usecase__VoidCharge["コストの取消"]:::usecase
-  entity__AccountBalance["未収金残高"]:::entity
-  entity__Charge["コスト（診療行為）"]:::entity
-  entity__ClaimStatement["レセプト"]:::entity
-  entity__Encounter["診療記録"]:::entity
-  entity__InsurancePolicy["保険資格"]:::entity
-  entity__PaymentTransaction["精算"]:::entity
-  actor__ClaimsClerk -->|uses| screen__BalanceScreen
-  actor__ClaimsClerk -->|uses| screen__ChargeWorklistScreen
-  actor__ClaimsClerk -->|uses| screen__ClaimScreen
-  actor__ClaimsClerk -->|uses| screen__PaymentPostingScreen
+  timer__ErrorResendWindow(("エラー分レセプトの再送（毎月11日・12日）")):::timer
+  timer__MonthlyClaimCreation(("前月分レセプトの作成（月初）")):::timer
+  timer__MonthlyClaimDeadline(("前月分レセプトの請求（毎月5日～10日）")):::timer
+  timer__ReceivablesMonthlyReview(("未収金管理台帳の作成（毎月）")):::timer
+  timer__ReturnDownloadCheck(("返戻レセプトの取得（3か月以内）")):::timer
+  api__BalanceApi{{"未収金 API"}}:::api
+  api__ClaimEditApi{{"レセプト点検・訂正 API"}}:::api
+  api__ClaimResultApi{{"審査結果 API"}}:::api
+  api__CreateChargeApi{{"コスト登録 API"}}:::api
+  api__GenerateClaimApi{{"レセプト作成 API"}}:::api
+  api__PaymentPostApi{{"入金 API"}}:::api
+  api__SubmitClaimApi{{"オンライン請求 API"}}:::api
+  usecase__ReviewClaimTransfer("資格の振替・分割の確認"):::usecase
+  usecase__VoidCharge("コストの取消"):::usecase
+  entity__AccountBalance[("未収金残高")]:::entity
+  entity__Charge[("コスト（診療行為）")]:::entity
+  entity__ClaimStatement[("レセプト")]:::entity
+  entity__Encounter[("診療記録")]:::entity
+  entity__InsurancePolicy[("保険資格")]:::entity
+  entity__PaymentTransaction[("精算")]:::entity
+  actor__ClaimsClerk --> screen__BalanceScreen
+  actor__ClaimsClerk --> screen__ChargeWorklistScreen
+  actor__ClaimsClerk --> screen__ClaimScreen
+  actor__ClaimsClerk --> screen__PaymentPostingScreen
   api__BalanceApi -->|R| entity__PaymentTransaction
   api__BalanceApi -->|U| entity__AccountBalance
   api__ClaimEditApi -->|U| entity__ClaimStatement
@@ -2966,26 +2966,26 @@ sequenceDiagram
 %% kinds: actor extsystem screen api usecase entity
 %% omitted: buc step medium permission event
 flowchart LR
-  actor__CareCoordinator["患者支援・地域連携担当"]:::actor
-  extsystem__MessagingGateway["患者通知サービス"]:::extsystem
+  actor__CareCoordinator(["患者支援・地域連携担当"]):::actor
+  extsystem__MessagingGateway[["患者通知サービス"]]:::extsystem
   screen__CarePlanScreen["ケアプラン画面"]:::screen
   screen__FollowUpScheduleScreen["再診予約画面"]:::screen
   screen__PatientMessageScreen["患者連絡画面"]:::screen
-  api__CreateCarePlanApi["ケアプラン作成 API"]:::api
-  api__FollowUpScheduleApi["再診予約 API"]:::api
-  api__NotifyPatientResultApi["検査結果通知 API"]:::api
-  api__SendFollowUpMessageApi["患者連絡 API"]:::api
-  usecase__CloseCarePlan["ケアプランの終了"]:::usecase
-  usecase__ReviewPatientResponse["患者応答の確認"]:::usecase
-  entity__Appointment["予約・受診"]:::entity
-  entity__CarePlan["ケアプラン"]:::entity
-  entity__Encounter["診療記録"]:::entity
-  entity__Notification["通知"]:::entity
-  entity__PatientMessage["患者連絡"]:::entity
-  entity__ProviderSchedule["診療枠"]:::entity
-  actor__CareCoordinator -->|uses| screen__CarePlanScreen
-  actor__CareCoordinator -->|uses| screen__FollowUpScheduleScreen
-  actor__CareCoordinator -->|uses| screen__PatientMessageScreen
+  api__CreateCarePlanApi{{"ケアプラン作成 API"}}:::api
+  api__FollowUpScheduleApi{{"再診予約 API"}}:::api
+  api__NotifyPatientResultApi{{"検査結果通知 API"}}:::api
+  api__SendFollowUpMessageApi{{"患者連絡 API"}}:::api
+  usecase__CloseCarePlan("ケアプランの終了"):::usecase
+  usecase__ReviewPatientResponse("患者応答の確認"):::usecase
+  entity__Appointment[("予約・受診")]:::entity
+  entity__CarePlan[("ケアプラン")]:::entity
+  entity__Encounter[("診療記録")]:::entity
+  entity__Notification[("通知")]:::entity
+  entity__PatientMessage[("患者連絡")]:::entity
+  entity__ProviderSchedule[("診療枠")]:::entity
+  actor__CareCoordinator --> screen__CarePlanScreen
+  actor__CareCoordinator --> screen__FollowUpScheduleScreen
+  actor__CareCoordinator --> screen__PatientMessageScreen
   api__CreateCarePlanApi -->|C| entity__CarePlan
   api__CreateCarePlanApi -->|R| entity__Encounter
   api__FollowUpScheduleApi -->|C| entity__Appointment
@@ -3193,24 +3193,24 @@ sequenceDiagram
 %% kinds: actor screen api usecase entity
 %% omitted: buc medium permission
 flowchart LR
-  actor__ClinicAdmin["病院管理者"]:::actor
+  actor__ClinicAdmin(["病院管理者"]):::actor
   screen__AuditReviewScreen["監査ログ画面"]:::screen
   screen__RoomAdminScreen["診察室管理画面"]:::screen
   screen__ScheduleAdminScreen["診療枠管理画面"]:::screen
-  api__AuditApi["監査 API"]:::api
-  api__BlockScheduleSlotApi["診療枠停止 API"]:::api
-  api__ManageProviderScheduleApi["診療枠管理 API"]:::api
-  api__RoomAdminApi["診察室管理 API"]:::api
-  usecase__ReleaseRoom["診察室の解放"]:::usecase
-  usecase__ResolveAuditFinding["監査指摘の解決"]:::usecase
-  entity__AuditEvent["監査ログ"]:::entity
-  entity__PatientAccount["患者登録"]:::entity
-  entity__Provider["医師マスタ"]:::entity
-  entity__ProviderSchedule["診療枠"]:::entity
-  entity__Room["診察室"]:::entity
-  actor__ClinicAdmin -->|uses| screen__AuditReviewScreen
-  actor__ClinicAdmin -->|uses| screen__RoomAdminScreen
-  actor__ClinicAdmin -->|uses| screen__ScheduleAdminScreen
+  api__AuditApi{{"監査 API"}}:::api
+  api__BlockScheduleSlotApi{{"診療枠停止 API"}}:::api
+  api__ManageProviderScheduleApi{{"診療枠管理 API"}}:::api
+  api__RoomAdminApi{{"診察室管理 API"}}:::api
+  usecase__ReleaseRoom("診察室の解放"):::usecase
+  usecase__ResolveAuditFinding("監査指摘の解決"):::usecase
+  entity__AuditEvent[("監査ログ")]:::entity
+  entity__PatientAccount[("患者登録")]:::entity
+  entity__Provider[("医師マスタ")]:::entity
+  entity__ProviderSchedule[("診療枠")]:::entity
+  entity__Room[("診察室")]:::entity
+  actor__ClinicAdmin --> screen__AuditReviewScreen
+  actor__ClinicAdmin --> screen__RoomAdminScreen
+  actor__ClinicAdmin --> screen__ScheduleAdminScreen
   api__AuditApi -->|R| entity__AuditEvent
   api__AuditApi -->|R| entity__PatientAccount
   api__BlockScheduleSlotApi -->|U| entity__ProviderSchedule
@@ -4450,201 +4450,201 @@ UC と外部システムが出すイベントと、それが起動する UC・BU
 %% kinds: event usecase extsystem buc timer
 %% omitted: state transitions
 flowchart LR
-  event__EvAppointmentCancelled["予約取消"]:::event
-  usecase__CancelAppointment["予約の取消"]:::usecase
+  event__EvAppointmentCancelled>"予約取消"]:::event
+  usecase__CancelAppointment("予約の取消"):::usecase
   %% desc usecase__CancelAppointment: 取消理由と予約枠更新。
-  usecase__CancelAppointment -.->|raises| event__EvAppointmentCancelled
-  usecase__SendAppointmentNotice["予約の通知"]:::usecase
+  usecase__CancelAppointment -.-> event__EvAppointmentCancelled
+  usecase__SendAppointmentNotice("予約の通知"):::usecase
   %% desc usecase__SendAppointmentNotice: 予約イベントからの通知作成。
-  event__EvAppointmentCancelled -.->|triggers| usecase__SendAppointmentNotice
-  extsystem__MessagingGateway["患者通知サービス"]:::extsystem
-  event__EvAppointmentCancelled -.->|triggers| extsystem__MessagingGateway
-  event__EvAppointmentCheckedIn["受付完了"]:::event
-  usecase__CheckInPatient["受付（初診・再診）"]:::usecase
+  event__EvAppointmentCancelled -.-> usecase__SendAppointmentNotice
+  extsystem__MessagingGateway[["患者通知サービス"]]:::extsystem
+  event__EvAppointmentCancelled -.-> extsystem__MessagingGateway
+  event__EvAppointmentCheckedIn>"受付完了"]:::event
+  usecase__CheckInPatient("受付（初診・再診）"):::usecase
   %% desc usecase__CheckInPatient: 受付で予約を受付済にし、同時にオンライン資格確認を作る。
-  usecase__CheckInPatient -.->|raises| event__EvAppointmentCheckedIn
-  usecase__OpenEncounter["診療記録を開く"]:::usecase
+  usecase__CheckInPatient -.-> event__EvAppointmentCheckedIn
+  usecase__OpenEncounter("診療記録を開く"):::usecase
   %% desc usecase__OpenEncounter: 受付済の予約から診療記録を開く。
-  event__EvAppointmentCheckedIn -.->|triggers| usecase__OpenEncounter
-  usecase__PrepareEncounter["診療の準備"]:::usecase
+  event__EvAppointmentCheckedIn -.-> usecase__OpenEncounter
+  usecase__PrepareEncounter("診療の準備"):::usecase
   %% desc usecase__PrepareEncounter: 診療準備の参照情報。
-  event__EvAppointmentCheckedIn -.->|triggers| usecase__PrepareEncounter
+  event__EvAppointmentCheckedIn -.-> usecase__PrepareEncounter
   buc__BucClinicalEncounter["診察"]:::buc
   %% desc buc__BucClinicalEncounter: 診療記録を開き、バイタル、診断、署名、診察終了までを扱う。診察終了 `CompleteConsultation` で予約は「計算待ち」になり、会計は計算受付へ移る。他院紹介では医師が診療情報提供書を作成・送信する。検査オーダは診察中に医師が出し、署名の後に診察終了とする。署名イベント `EvEncounterSigned` はカルテのコスト情報の登録とケアプラン作成を、診察終了イベント `EvConsultationCompleted` は計算・会計を起動する。
-  event__EvAppointmentCheckedIn -.->|triggers| buc__BucClinicalEncounter
-  extsystem__OnlineEligibilitySystem["オンライン資格確認等システム"]:::extsystem
-  event__EvAppointmentCheckedIn -.->|triggers| extsystem__OnlineEligibilitySystem
-  event__EvAppointmentRescheduled["予約変更"]:::event
-  usecase__RescheduleAppointment["予約の変更"]:::usecase
+  event__EvAppointmentCheckedIn -.-> buc__BucClinicalEncounter
+  extsystem__OnlineEligibilitySystem[["オンライン資格確認等システム"]]:::extsystem
+  event__EvAppointmentCheckedIn -.-> extsystem__OnlineEligibilitySystem
+  event__EvAppointmentRescheduled>"予約変更"]:::event
+  usecase__RescheduleAppointment("予約の変更"):::usecase
   %% desc usecase__RescheduleAppointment: 予約を変更する。予約の状態は変わらない。
-  usecase__RescheduleAppointment -.->|raises| event__EvAppointmentRescheduled
-  event__EvAppointmentRescheduled -.->|triggers| usecase__SendAppointmentNotice
-  event__EvAppointmentRescheduled -.->|triggers| extsystem__MessagingGateway
-  event__EvAppointmentScheduled["予約確定"]:::event
-  usecase__BookAppointment["予約の確定"]:::usecase
+  usecase__RescheduleAppointment -.-> event__EvAppointmentRescheduled
+  event__EvAppointmentRescheduled -.-> usecase__SendAppointmentNotice
+  event__EvAppointmentRescheduled -.-> extsystem__MessagingGateway
+  event__EvAppointmentScheduled>"予約確定"]:::event
+  usecase__BookAppointment("予約の確定"):::usecase
   %% desc usecase__BookAppointment: 予約確定と予約枠更新。
-  usecase__BookAppointment -.->|raises| event__EvAppointmentScheduled
-  usecase__ScheduleFollowUpVisit["再診の予約"]:::usecase
+  usecase__BookAppointment -.-> event__EvAppointmentScheduled
+  usecase__ScheduleFollowUpVisit("再診の予約"):::usecase
   %% desc usecase__ScheduleFollowUpVisit: 再診予約。
-  usecase__ScheduleFollowUpVisit -.->|raises| event__EvAppointmentScheduled
-  event__EvAppointmentScheduled -.->|triggers| usecase__SendAppointmentNotice
-  usecase__SendIntakeForms["問診票の送付"]:::usecase
+  usecase__ScheduleFollowUpVisit -.-> event__EvAppointmentScheduled
+  event__EvAppointmentScheduled -.-> usecase__SendAppointmentNotice
+  usecase__SendIntakeForms("問診票の送付"):::usecase
   %% desc usecase__SendIntakeForms: 問診パケットとメッセージ作成。
-  event__EvAppointmentScheduled -.->|triggers| usecase__SendIntakeForms
+  event__EvAppointmentScheduled -.-> usecase__SendIntakeForms
   buc__BucPatientOnboarding["新患登録・患者情報管理"]:::buc
   %% desc buc__BucPatientOnboarding: 新患登録から問診送付までを扱う。新患登録では、オンライン資格確認で得た保険情報と、患者が同意した場合の限度額情報（適用区分）を `InsurancePolicy` に登録する。負担割合 `burden_ratio` と限度額適用区分 `limit_category` は actor が選ぶ値ではなく保険者が決める値なので、variation 型の属性として持つ。
-  event__EvAppointmentScheduled -.->|triggers| buc__BucPatientOnboarding
-  event__EvAppointmentScheduled -.->|triggers| extsystem__MessagingGateway
-  event__EvBillCalculated["会計計算完了"]:::event
-  usecase__CalculateVisitBill["会計計算入力"]:::usecase
+  event__EvAppointmentScheduled -.-> buc__BucPatientOnboarding
+  event__EvAppointmentScheduled -.-> extsystem__MessagingGateway
+  event__EvBillCalculated>"会計計算完了"]:::event
+  usecase__CalculateVisitBill("会計計算入力"):::usecase
   %% desc usecase__CalculateVisitBill: 会計計算入力で予約を会計待ちにする。
-  usecase__CalculateVisitBill -.->|raises| event__EvBillCalculated
-  usecase__CallPatientForPayment["会計の呼出"]:::usecase
+  usecase__CalculateVisitBill -.-> event__EvBillCalculated
+  usecase__CallPatientForPayment("会計の呼出"):::usecase
   %% desc usecase__CallPatientForPayment: 会計の呼出（参照のみ）。
-  event__EvBillCalculated -.->|triggers| usecase__CallPatientForPayment
-  extsystem__PaymentGateway["自動精算機・クレジット決済"]:::extsystem
-  event__EvBillCalculated -.->|triggers| extsystem__PaymentGateway
-  event__EvClaimAccepted["レセプト受付"]:::event
-  extsystem__ClaimsReviewOrganization["審査支払機関（支払基金・国保連）"]:::extsystem
-  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimAccepted
-  usecase__ReceiveClaimAccepted["レセプト受付（審査へ）"]:::usecase
+  event__EvBillCalculated -.-> usecase__CallPatientForPayment
+  extsystem__PaymentGateway[["自動精算機・クレジット決済"]]:::extsystem
+  event__EvBillCalculated -.-> extsystem__PaymentGateway
+  event__EvClaimAccepted>"レセプト受付"]:::event
+  extsystem__ClaimsReviewOrganization[["審査支払機関（支払基金・国保連）"]]:::extsystem
+  extsystem__ClaimsReviewOrganization -.-> event__EvClaimAccepted
+  usecase__ReceiveClaimAccepted("レセプト受付（審査へ）"):::usecase
   %% desc usecase__ReceiveClaimAccepted: 審査支払機関の受付で審査中になる。
-  event__EvClaimAccepted -.->|triggers| usecase__ReceiveClaimAccepted
-  event__EvClaimAssessed["査定"]:::event
-  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimAssessed
-  usecase__RecordClaimAssessment["査定の取込"]:::usecase
+  event__EvClaimAccepted -.-> usecase__ReceiveClaimAccepted
+  event__EvClaimAssessed>"査定"]:::event
+  extsystem__ClaimsReviewOrganization -.-> event__EvClaimAssessed
+  usecase__RecordClaimAssessment("査定の取込"):::usecase
   %% desc usecase__RecordClaimAssessment: 査定の取込。
-  event__EvClaimAssessed -.->|triggers| usecase__RecordClaimAssessment
-  event__EvClaimReceiptError["受付不能・要確認"]:::event
-  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimReceiptError
-  usecase__RecordReceiptError["受付不能・要確認の確認"]:::usecase
+  event__EvClaimAssessed -.-> usecase__RecordClaimAssessment
+  event__EvClaimReceiptError>"受付不能・要確認"]:::event
+  extsystem__ClaimsReviewOrganization -.-> event__EvClaimReceiptError
+  usecase__RecordReceiptError("受付不能・要確認の確認"):::usecase
   %% desc usecase__RecordReceiptError: 受付不能・要確認の確認。
-  event__EvClaimReceiptError -.->|triggers| usecase__RecordReceiptError
-  event__EvClaimReturned["返戻"]:::event
-  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimReturned
-  usecase__RecordClaimReturn["返戻レセプトの取込"]:::usecase
+  event__EvClaimReceiptError -.-> usecase__RecordReceiptError
+  event__EvClaimReturned>"返戻"]:::event
+  extsystem__ClaimsReviewOrganization -.-> event__EvClaimReturned
+  usecase__RecordClaimReturn("返戻レセプトの取込"):::usecase
   %% desc usecase__RecordClaimReturn: 返戻レセプトの取込（3か月以内）。
-  event__EvClaimReturned -.->|triggers| usecase__RecordClaimReturn
-  event__EvClaimStatementsSubmitted["レセプト請求"]:::event
-  usecase__SubmitClaimStatements["レセプト請求"]:::usecase
+  event__EvClaimReturned -.-> usecase__RecordClaimReturn
+  event__EvClaimStatementsSubmitted>"レセプト請求"]:::event
+  usecase__SubmitClaimStatements("レセプト請求"):::usecase
   %% desc usecase__SubmitClaimStatements: 毎月10日までの請求。
-  usecase__SubmitClaimStatements -.->|raises| event__EvClaimStatementsSubmitted
-  event__EvClaimStatementsSubmitted -.->|triggers| extsystem__ClaimsReviewOrganization
-  event__EvClaimTransferred["資格の振替・分割"]:::event
-  extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimTransferred
-  usecase__ReviewClaimTransfer["資格の振替・分割の確認"]:::usecase
+  usecase__SubmitClaimStatements -.-> event__EvClaimStatementsSubmitted
+  event__EvClaimStatementsSubmitted -.-> extsystem__ClaimsReviewOrganization
+  event__EvClaimTransferred>"資格の振替・分割"]:::event
+  extsystem__ClaimsReviewOrganization -.-> event__EvClaimTransferred
+  usecase__ReviewClaimTransfer("資格の振替・分割の確認"):::usecase
   %% desc usecase__ReviewClaimTransfer: 資格の振替・分割の確認（参照のみ）。
-  event__EvClaimTransferred -.->|triggers| usecase__ReviewClaimTransfer
-  event__EvClinicalOrderReviewed["検査結果の確認"]:::event
-  usecase__ReviewLabResult["検査結果の確認"]:::usecase
+  event__EvClaimTransferred -.-> usecase__ReviewClaimTransfer
+  event__EvClinicalOrderReviewed>"検査結果の確認"]:::event
+  usecase__ReviewLabResult("検査結果の確認"):::usecase
   %% desc usecase__ReviewLabResult: 結果確認と後続通知の起点。
-  usecase__ReviewLabResult -.->|raises| event__EvClinicalOrderReviewed
-  usecase__NotifyCriticalResult["重要結果（パニック値）の通知"]:::usecase
+  usecase__ReviewLabResult -.-> event__EvClinicalOrderReviewed
+  usecase__NotifyCriticalResult("重要結果（パニック値）の通知"):::usecase
   %% desc usecase__NotifyCriticalResult: 重要結果の患者通知。
-  event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyCriticalResult
-  usecase__NotifyPatientResult["検査結果の患者通知"]:::usecase
+  event__EvClinicalOrderReviewed -.-> usecase__NotifyCriticalResult
+  usecase__NotifyPatientResult("検査結果の患者通知"):::usecase
   %% desc usecase__NotifyPatientResult: 結果の患者通知。
-  event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyPatientResult
+  event__EvClinicalOrderReviewed -.-> usecase__NotifyPatientResult
   buc__BucFollowupCare["フォローアップ"]:::buc
   %% desc buc__BucFollowupCare: 診療後のケアプラン作成、患者連絡、患者応答確認、再診予約、ケアプラン終了を扱う。
-  event__EvClinicalOrderReviewed -.->|triggers| buc__BucFollowupCare
-  event__EvConsultationCompleted["診察終了"]:::event
-  usecase__CompleteConsultation["診察終了"]:::usecase
+  event__EvClinicalOrderReviewed -.-> buc__BucFollowupCare
+  event__EvConsultationCompleted>"診察終了"]:::event
+  usecase__CompleteConsultation("診察終了"):::usecase
   %% desc usecase__CompleteConsultation: 診察終了で予約を計算待ちにし、部屋を清掃中にし、会計を起動する。
-  usecase__CompleteConsultation -.->|raises| event__EvConsultationCompleted
+  usecase__CompleteConsultation -.-> event__EvConsultationCompleted
   buc__BucVisitPayment["計算・会計"]:::buc
   %% desc buc__BucVisitPayment: 診察の後の会計計算入力、患者の呼出、会計窓口または自動精算機での精算、領収証・明細書の交付を扱う。一部負担金は負担割合で計算し、限度額情報があれば窓口での支払は自己負担限度額までになる（`CopayCappedAtLimit`）。紹介状なしの初診で除外に当たらない場合は選定療養費を自費の Charge として算定する（`UnreferredFirstVisit`）。金額は病院の設定 `SelectedTreatmentFeeSetting` に置き、モデルは数値を持たない。
-  event__EvConsultationCompleted -.->|triggers| buc__BucVisitPayment
-  event__EvEligibilityChecked["資格確認結果"]:::event
-  extsystem__OnlineEligibilitySystem -.->|raises| event__EvEligibilityChecked
-  usecase__ReceiveEligibilityInvalid["資格確認結果（無効）の取込"]:::usecase
+  event__EvConsultationCompleted -.-> buc__BucVisitPayment
+  event__EvEligibilityChecked>"資格確認結果"]:::event
+  extsystem__OnlineEligibilitySystem -.-> event__EvEligibilityChecked
+  usecase__ReceiveEligibilityInvalid("資格確認結果（無効）の取込"):::usecase
   %% desc usecase__ReceiveEligibilityInvalid: 資格確認結果「無効」の取込。
-  event__EvEligibilityChecked -.->|triggers| usecase__ReceiveEligibilityInvalid
-  usecase__ReceiveEligibilityNoInfo["資格確認結果（該当資格なし）の取込"]:::usecase
+  event__EvEligibilityChecked -.-> usecase__ReceiveEligibilityInvalid
+  usecase__ReceiveEligibilityNoInfo("資格確認結果（該当資格なし）の取込"):::usecase
   %% desc usecase__ReceiveEligibilityNoInfo: 資格確認結果「該当資格なし」の取込。
-  event__EvEligibilityChecked -.->|triggers| usecase__ReceiveEligibilityNoInfo
-  usecase__ReceiveEligibilityValid["資格確認結果（有効）の取込"]:::usecase
+  event__EvEligibilityChecked -.-> usecase__ReceiveEligibilityNoInfo
+  usecase__ReceiveEligibilityValid("資格確認結果（有効）の取込"):::usecase
   %% desc usecase__ReceiveEligibilityValid: 資格確認結果「有効」の取込。
-  event__EvEligibilityChecked -.->|triggers| usecase__ReceiveEligibilityValid
-  event__EvEncounterSigned["診療記録の署名"]:::event
-  usecase__SignEncounter["診療記録の署名"]:::usecase
+  event__EvEligibilityChecked -.-> usecase__ReceiveEligibilityValid
+  event__EvEncounterSigned>"診療記録の署名"]:::event
+  usecase__SignEncounter("診療記録の署名"):::usecase
   %% desc usecase__SignEncounter: 署名でコスト情報登録とケアプラン作成を起動する。
-  usecase__SignEncounter -.->|raises| event__EvEncounterSigned
-  usecase__CreateCarePlan["ケアプランの作成"]:::usecase
+  usecase__SignEncounter -.-> event__EvEncounterSigned
+  usecase__CreateCarePlan("ケアプランの作成"):::usecase
   %% desc usecase__CreateCarePlan: 署名イベントからのケアプラン作成。
-  event__EvEncounterSigned -.->|triggers| usecase__CreateCarePlan
-  usecase__CreateCharge["コスト情報の登録"]:::usecase
+  event__EvEncounterSigned -.-> usecase__CreateCarePlan
+  usecase__CreateCharge("コスト情報の登録"):::usecase
   %% desc usecase__CreateCharge: 署名時のカルテ由来コスト情報の登録（システム起動）。
-  event__EvEncounterSigned -.->|triggers| usecase__CreateCharge
+  event__EvEncounterSigned -.-> usecase__CreateCharge
   buc__BucBillingClaims["レセプト作成・請求"]:::buc
   %% desc buc__BucBillingClaims: レセプト（患者 × 診療月 × 保険者）の作成・院内点検・請求と、審査支払機関（支払基金・国保連）からの受付不能・返戻・査定・支払への対応を扱う。前月分は翌月10日までに請求し、受付不能・要確認は11日・12日に再送する。返戻は訂正して当月分と併せて再請求できるが、査定は再請求できず再審査請求で争う。資格が変わったレセプトは審査支払機関が振替・分割するので返戻にならないが、負担割合が異なる変更や公費の分割はできず返戻になる。支払は診療の翌々月。期間のうち DSL で表せないもの（10日、11・12日、5日〜月末、3か月、翌々月）はタイマーとコメントで示す。
-  event__EvEncounterSigned -.->|triggers| buc__BucBillingClaims
-  event__EvEncounterSigned -.->|triggers| buc__BucFollowupCare
-  event__EvLabResultReceived["検査結果の受信"]:::event
-  extsystem__OutsourcedLabSystem["外注検査システム"]:::extsystem
-  extsystem__OutsourcedLabSystem -.->|raises| event__EvLabResultReceived
-  usecase__ReceiveLabResult["検査結果の受信"]:::usecase
+  event__EvEncounterSigned -.-> buc__BucBillingClaims
+  event__EvEncounterSigned -.-> buc__BucFollowupCare
+  event__EvLabResultReceived>"検査結果の受信"]:::event
+  extsystem__OutsourcedLabSystem[["外注検査システム"]]:::extsystem
+  extsystem__OutsourcedLabSystem -.-> event__EvLabResultReceived
+  usecase__ReceiveLabResult("検査結果の受信"):::usecase
   %% desc usecase__ReceiveLabResult: 外注検査システムからの結果受信。
-  event__EvLabResultReceived -.->|triggers| usecase__ReceiveLabResult
-  event__EvPaymentSettled["自動精算機での精算完了"]:::event
-  extsystem__PaymentGateway -.->|raises| event__EvPaymentSettled
-  usecase__SettleAtKiosk["自動精算機での精算"]:::usecase
+  event__EvLabResultReceived -.-> usecase__ReceiveLabResult
+  event__EvPaymentSettled>"自動精算機での精算完了"]:::event
+  extsystem__PaymentGateway -.-> event__EvPaymentSettled
+  usecase__SettleAtKiosk("自動精算機での精算"):::usecase
   %% desc usecase__SettleAtKiosk: 自動精算機での精算。
-  event__EvPaymentSettled -.->|triggers| usecase__SettleAtKiosk
-  event__EvPharmacyInquiry["保険薬局からの疑義照会"]:::event
-  extsystem__InsurancePharmacy["保険薬局"]:::extsystem
-  extsystem__InsurancePharmacy -.->|raises| event__EvPharmacyInquiry
-  usecase__AnswerPharmacyInquiry["保険薬局からの疑義照会への回答"]:::usecase
+  event__EvPaymentSettled -.-> usecase__SettleAtKiosk
+  event__EvPharmacyInquiry>"保険薬局からの疑義照会"]:::event
+  extsystem__InsurancePharmacy[["保険薬局"]]:::extsystem
+  extsystem__InsurancePharmacy -.-> event__EvPharmacyInquiry
+  usecase__AnswerPharmacyInquiry("保険薬局からの疑義照会への回答"):::usecase
   %% desc usecase__AnswerPharmacyInquiry: 保険薬局からの疑義照会への回答。
-  event__EvPharmacyInquiry -.->|triggers| usecase__AnswerPharmacyInquiry
-  event__EvPrescriptionDispensed["保険薬局での調剤完了"]:::event
-  extsystem__EPrescriptionService["電子処方箋管理サービス"]:::extsystem
-  extsystem__EPrescriptionService -.->|raises| event__EvPrescriptionDispensed
-  usecase__ConfirmDispense["保険薬局での調剤結果の受信"]:::usecase
+  event__EvPharmacyInquiry -.-> usecase__AnswerPharmacyInquiry
+  event__EvPrescriptionDispensed>"保険薬局での調剤完了"]:::event
+  extsystem__EPrescriptionService[["電子処方箋管理サービス"]]:::extsystem
+  extsystem__EPrescriptionService -.-> event__EvPrescriptionDispensed
+  usecase__ConfirmDispense("保険薬局での調剤結果の受信"):::usecase
   %% desc usecase__ConfirmDispense: 保険薬局での調剤結果の受信。
-  event__EvPrescriptionDispensed -.->|triggers| usecase__ConfirmDispense
-  event__EvPrescriptionIssued["電子処方箋の登録"]:::event
-  usecase__IssueOutsidePrescription["院外処方箋の発行"]:::usecase
+  event__EvPrescriptionDispensed -.-> usecase__ConfirmDispense
+  event__EvPrescriptionIssued>"電子処方箋の登録"]:::event
+  usecase__IssueOutsidePrescription("院外処方箋の発行"):::usecase
   %% desc usecase__IssueOutsidePrescription: 院外処方箋の発行と電子処方箋管理サービスへの登録。
-  usecase__IssueOutsidePrescription -.->|raises| event__EvPrescriptionIssued
-  event__EvPrescriptionIssued -.->|triggers| extsystem__EPrescriptionService
-  event__EvRemittance["診療報酬の支払"]:::event
-  extsystem__ClaimsReviewOrganization -.->|raises| event__EvRemittance
-  usecase__PostPayment["診療報酬の入金"]:::usecase
+  usecase__IssueOutsidePrescription -.-> event__EvPrescriptionIssued
+  event__EvPrescriptionIssued -.-> extsystem__EPrescriptionService
+  event__EvRemittance>"診療報酬の支払"]:::event
+  extsystem__ClaimsReviewOrganization -.-> event__EvRemittance
+  usecase__PostPayment("診療報酬の入金"):::usecase
   %% desc usecase__PostPayment: 診療翌々月の入金。
-  event__EvRemittance -.->|triggers| usecase__PostPayment
-  timer__EligibilityBatchInquiry["予約患者の資格の一括照会（来院前）"]:::timer
-  usecase__BatchVerifyEligibility["資格の一括照会"]:::usecase
+  event__EvRemittance -.-> usecase__PostPayment
+  timer__EligibilityBatchInquiry(("予約患者の資格の一括照会（来院前）")):::timer
+  usecase__BatchVerifyEligibility("資格の一括照会"):::usecase
   %% desc usecase__BatchVerifyEligibility: 予約済み患者（BookedPatient 条件）だけを一括照会する。
-  timer__EligibilityBatchInquiry -.->|triggers| usecase__BatchVerifyEligibility
-  timer__ErrorResendWindow["エラー分レセプトの再送（毎月11日・12日）"]:::timer
-  usecase__ResendErroredStatement["エラー分レセプトの再送"]:::usecase
+  timer__EligibilityBatchInquiry -.-> usecase__BatchVerifyEligibility
+  timer__ErrorResendWindow(("エラー分レセプトの再送（毎月11日・12日）")):::timer
+  usecase__ResendErroredStatement("エラー分レセプトの再送"):::usecase
   %% desc usecase__ResendErroredStatement: 11日・12日のエラー分再送。
-  timer__ErrorResendWindow -.->|triggers| usecase__ResendErroredStatement
-  timer__IntakeExpiryCheck["問診票の期限切れ確認（毎晩）"]:::timer
-  usecase__ExpireIntakeForms["問診票の期限切れ"]:::usecase
+  timer__ErrorResendWindow -.-> usecase__ResendErroredStatement
+  timer__IntakeExpiryCheck(("問診票の期限切れ確認（毎晩）")):::timer
+  usecase__ExpireIntakeForms("問診票の期限切れ"):::usecase
   %% desc usecase__ExpireIntakeForms: 問診期限切れイベント。
-  timer__IntakeExpiryCheck -.->|triggers| usecase__ExpireIntakeForms
-  timer__MonthlyClaimCreation["前月分レセプトの作成（月初）"]:::timer
-  usecase__GenerateClaimStatement["レセプト作成"]:::usecase
+  timer__IntakeExpiryCheck -.-> usecase__ExpireIntakeForms
+  timer__MonthlyClaimCreation(("前月分レセプトの作成（月初）")):::timer
+  usecase__GenerateClaimStatement("レセプト作成"):::usecase
   %% desc usecase__GenerateClaimStatement: 月初のレセプト作成。
-  timer__MonthlyClaimCreation -.->|triggers| usecase__GenerateClaimStatement
-  timer__MonthlyClaimDeadline["前月分レセプトの請求（毎月5日～10日）"]:::timer
-  timer__MonthlyClaimDeadline -.->|triggers| usecase__SubmitClaimStatements
-  timer__NoShowSweep["未来院の確認（毎晩）"]:::timer
-  usecase__MarkNoShow["未来院の処理"]:::usecase
+  timer__MonthlyClaimCreation -.-> usecase__GenerateClaimStatement
+  timer__MonthlyClaimDeadline(("前月分レセプトの請求（毎月5日～10日）")):::timer
+  timer__MonthlyClaimDeadline -.-> usecase__SubmitClaimStatements
+  timer__NoShowSweep(("未来院の確認（毎晩）")):::timer
+  usecase__MarkNoShow("未来院の処理"):::usecase
   %% desc usecase__MarkNoShow: タイマー起動の未来院処理。
-  timer__NoShowSweep -.->|triggers| usecase__MarkNoShow
-  timer__PrescriptionUsePeriodCheck["処方箋の使用期間切れ確認"]:::timer
-  usecase__ExpirePrescription["処方箋の使用期間切れ"]:::usecase
+  timer__NoShowSweep -.-> usecase__MarkNoShow
+  timer__PrescriptionUsePeriodCheck(("処方箋の使用期間切れ確認")):::timer
+  usecase__ExpirePrescription("処方箋の使用期間切れ"):::usecase
   %% desc usecase__ExpirePrescription: 使用期間切れのタイマー処理。
-  timer__PrescriptionUsePeriodCheck -.->|triggers| usecase__ExpirePrescription
-  timer__ReceivablesMonthlyReview["未収金管理台帳の作成（毎月）"]:::timer
-  usecase__ReconcileBalance["未収金管理台帳の作成"]:::usecase
+  timer__PrescriptionUsePeriodCheck -.-> usecase__ExpirePrescription
+  timer__ReceivablesMonthlyReview(("未収金管理台帳の作成（毎月）")):::timer
+  usecase__ReconcileBalance("未収金管理台帳の作成"):::usecase
   %% desc usecase__ReconcileBalance: 未収金管理台帳の作成。
-  timer__ReceivablesMonthlyReview -.->|triggers| usecase__ReconcileBalance
-  timer__ReturnDownloadCheck["返戻レセプトの取得（3か月以内）"]:::timer
-  timer__ReturnDownloadCheck -.->|triggers| usecase__RecordClaimReturn
+  timer__ReceivablesMonthlyReview -.-> usecase__ReconcileBalance
+  timer__ReturnDownloadCheck(("返戻レセプトの取得（3か月以内）")):::timer
+  timer__ReturnDownloadCheck -.-> usecase__RecordClaimReturn
   classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
   classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;

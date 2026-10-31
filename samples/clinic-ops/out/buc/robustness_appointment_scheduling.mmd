@@ -2,30 +2,30 @@
 %% kinds: actor extsystem screen timer api usecase entity
 %% omitted: buc step medium permission event
 flowchart LR
-  actor__Patient["患者"]:::actor
-  actor__ReceptionClerk["医事課 受付担当"]:::actor
-  extsystem__MessagingGateway["患者通知サービス"]:::extsystem
+  actor__Patient(["患者"]):::actor
+  actor__ReceptionClerk(["医事課 受付担当"]):::actor
+  extsystem__MessagingGateway[["患者通知サービス"]]:::extsystem
   screen__AppointmentNoticeScreen["予約通知画面"]:::screen
   screen__AppointmentScreen["予約画面"]:::screen
   screen__ScheduleSearchScreen["空き枠検索画面"]:::screen
-  timer__NoShowSweep["未来院の確認（毎晩）"]:::timer
-  api__AppointmentNoticeApi["予約通知 API"]:::api
-  api__BookAppointmentApi["予約確定 API"]:::api
-  api__CancelAppointmentApi["予約取消 API"]:::api
-  api__RescheduleAppointmentApi["予約変更 API"]:::api
-  api__ReserveAppointmentApi["予約仮押さえ API"]:::api
-  api__SearchAvailabilityApi["空き枠検索 API"]:::api
-  usecase__MarkNoShow["未来院の処理"]:::usecase
-  entity__Appointment["予約・受診"]:::entity
-  entity__ClinicLocation["施設"]:::entity
-  entity__Notification["通知"]:::entity
-  entity__PatientMessage["患者連絡"]:::entity
-  entity__Provider["医師マスタ"]:::entity
-  entity__ProviderSchedule["診療枠"]:::entity
-  actor__Patient -->|uses| screen__ScheduleSearchScreen
-  actor__ReceptionClerk -->|uses| screen__AppointmentNoticeScreen
-  actor__ReceptionClerk -->|uses| screen__AppointmentScreen
-  actor__ReceptionClerk -->|uses| screen__ScheduleSearchScreen
+  timer__NoShowSweep(("未来院の確認（毎晩）")):::timer
+  api__AppointmentNoticeApi{{"予約通知 API"}}:::api
+  api__BookAppointmentApi{{"予約確定 API"}}:::api
+  api__CancelAppointmentApi{{"予約取消 API"}}:::api
+  api__RescheduleAppointmentApi{{"予約変更 API"}}:::api
+  api__ReserveAppointmentApi{{"予約仮押さえ API"}}:::api
+  api__SearchAvailabilityApi{{"空き枠検索 API"}}:::api
+  usecase__MarkNoShow("未来院の処理"):::usecase
+  entity__Appointment[("予約・受診")]:::entity
+  entity__ClinicLocation[("施設")]:::entity
+  entity__Notification[("通知")]:::entity
+  entity__PatientMessage[("患者連絡")]:::entity
+  entity__Provider[("医師マスタ")]:::entity
+  entity__ProviderSchedule[("診療枠")]:::entity
+  actor__Patient --> screen__ScheduleSearchScreen
+  actor__ReceptionClerk --> screen__AppointmentNoticeScreen
+  actor__ReceptionClerk --> screen__AppointmentScreen
+  actor__ReceptionClerk --> screen__ScheduleSearchScreen
   api__AppointmentNoticeApi -->|C| entity__Notification
   api__AppointmentNoticeApi -->|C| entity__PatientMessage
   api__BookAppointmentApi -->|U| entity__Appointment

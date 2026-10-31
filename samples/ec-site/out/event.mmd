@@ -2,16 +2,16 @@
 %% kinds: event usecase extsystem
 %% omitted: state transitions
 flowchart LR
-  event__EvOrderShipped["Order Shipped"]:::event
-  usecase__ShipOrder["Ship Order"]:::usecase
-  usecase__ShipOrder -.->|raises| event__EvOrderShipped
-  extsystem__ShippingSvc["Shipping Service"]:::extsystem
-  event__EvOrderShipped -.->|triggers| extsystem__ShippingSvc
-  event__EvPaymentAuthorized["Payment Authorized"]:::event
-  extsystem__PaymentGW["Payment Gateway"]:::extsystem
-  extsystem__PaymentGW -.->|raises| event__EvPaymentAuthorized
-  usecase__Capture["Capture Payment"]:::usecase
-  event__EvPaymentAuthorized -.->|triggers| usecase__Capture
+  event__EvOrderShipped>"Order Shipped"]:::event
+  usecase__ShipOrder("Ship Order"):::usecase
+  usecase__ShipOrder -.-> event__EvOrderShipped
+  extsystem__ShippingSvc[["Shipping Service"]]:::extsystem
+  event__EvOrderShipped -.-> extsystem__ShippingSvc
+  event__EvPaymentAuthorized>"Payment Authorized"]:::event
+  extsystem__PaymentGW[["Payment Gateway"]]:::extsystem
+  extsystem__PaymentGW -.-> event__EvPaymentAuthorized
+  usecase__Capture("Capture Payment"):::usecase
+  event__EvPaymentAuthorized -.-> usecase__Capture
   classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
   classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;

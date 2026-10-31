@@ -2,7 +2,9 @@
 //! diagram, each entity's state models, and the variations its columns take, without columns.
 
 use super::{omitted_linked_kinds, render_edges, GraphEdge};
-use crate::diagram_common::{class_defs, contract_id, desc_line, node_label, quote, Header};
+use crate::diagram_common::{
+    class_defs, contract_id, desc_line, node_label, node_line, quote, Header,
+};
 use crate::{object_graph_rel_label, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{ColumnType, NodeRef, RelKind, SemanticModel};
 use std::collections::{BTreeSet, HashSet};
@@ -37,7 +39,7 @@ impl Emitter for InformationMermaidEmitter {
         let mut body = String::new();
         let mut kinds: Vec<&'static str> = Vec::new();
         let mut declare = |body: &mut String, id: &str, label: &str, kind: &'static str| {
-            body.push_str(&format!("  {id}[\"{}\"]:::{kind}\n", quote(label)));
+            body.push_str(&node_line("  ", id, &quote(label), kind));
             if !kinds.contains(&kind) {
                 kinds.push(kind);
             }
@@ -111,7 +113,7 @@ impl Emitter for InformationMermaidEmitter {
                 });
             }
         }
-        render_edges(&mut body, edges);
+        render_edges(&mut body, "information", edges);
         body.push_str(&class_defs(&kinds));
 
         let drawn: HashSet<NodeRef> = entities
@@ -179,10 +181,10 @@ transitions(Order.status, Capture, pending -> paid)
     fn only_a_column_with_transitions_is_a_state_model() {
         let result = emit(View::whole());
         assert!(
-            result.contains("  entity__Order -.->|statemodel| statemodel__Order_status\n"),
+            result.contains("  entity__Order -.-> statemodel__Order_status\n"),
             "{result}"
         );
-        assert!(result.contains("  statemodel__Order_status[\"Order.status\"]:::statemodel\n"));
+        assert!(result.contains("  statemodel__Order_status[[\"Order.status\"]]:::statemodel\n"));
         assert!(!result.contains("Order_channel"), "{result}");
     }
 
@@ -193,7 +195,7 @@ transitions(Order.status, Capture, pending -> paid)
             result.contains("  entity__Payment -.->|variation method| variation__Method\n"),
             "{result}"
         );
-        assert!(result.contains("  variation__Method[\"Method\"]:::variation\n"));
+        assert!(result.contains("  variation__Method[\\\"Method\"\\]:::variation\n"));
     }
 
     #[test]
@@ -216,7 +218,7 @@ transitions(Order.status, Capture, pending -> paid)
     #[test]
     fn a_buc_scope_draws_the_entities_its_use_cases_reach() {
         let result = emit(View::bucs(vec!["BucPay".to_string()]));
-        assert!(result.contains("entity__Payment["), "{result}");
+        assert!(result.contains("entity__Payment[("), "{result}");
         assert!(!result.contains("entity__Audit"), "{result}");
     }
 

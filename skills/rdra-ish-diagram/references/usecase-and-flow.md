@@ -26,7 +26,7 @@ rdra-ish diagram src/ --kind flow --buc <BucId> --format mermaid
 - Nodes: actors; boundaries (`screen`, `extsystem`, `timer`); controls (`api`, or
   `usecase` when the use case has no API or reads and writes entities itself); `entity`.
   A node's class says which; the ids are those of `rdra`.
-- Edges follow one grammar: `actor -->|uses| screen`, then
+- Edges follow one grammar: `actor --> screen` (`uses`, unlabelled), then
   `screen -->|<use case label>| control`, then `control -->|CRUD| entity`. The use case
   label on the screen edge is how to find the use case. `CRUD` is the letters of the
   control's operations on the entity, `writes` shown as `U`.
@@ -74,12 +74,12 @@ rdra-ish diagram src/ --kind flow --buc <BucId> --format mermaid
 
 - The type line is `flowchart TD`. Each flow is `subgraph flow__<id>` holding its steps.
 - `-->|precedes|`, `-->|branches|`, `-.->|excepts|`, and `-->|repeats|` run between steps;
-  `-.->|covers|` runs from a step to the use cases, APIs, events, and timers it covers,
+  an unlabelled `-.->` (`covers`) runs from a step to the use cases, APIs, events, and timers it covers,
   which sit outside the flows.
 - A step of a flow that exactly one actor performs (`performs(Actor, Step)`) sits in
   `subgraph lane__<Flow>__<Actor>`, whose first line is
   `%% lane lane__<Flow>__<Actor>: actor__<Actor>`. A step several actors perform has a
-  `-.->|performs|` edge from each. Without `performs(Actor, Step)` there are no lanes.
+  unlabelled `-.->` (`performs`) edge from each. Without `performs(Actor, Step)` there are no lanes.
 - `--buc` draws the flows the BUC contains. A BUC without a flow gives an empty diagram
   (`%% kinds: (none)`).
 

@@ -4,22 +4,22 @@
 %% omitted: buc api
 flowchart LR
   subgraph layer_value["システム価値"]
-    extsystem__PaymentGW["Payment Gateway"]:::extsystem
+    extsystem__PaymentGW[["Payment Gateway"]]:::extsystem
   end
   subgraph layer_boundary["システム境界"]
-    usecase__Capture["Capture Payment"]:::usecase
+    usecase__Capture("Capture Payment"):::usecase
     screen__PaymentResultScreen["Payment Result Screen"]:::screen
-    event__EvPaymentAuthorized["Payment Authorized"]:::event
+    event__EvPaymentAuthorized>"Payment Authorized"]:::event
   end
   subgraph layer_system["システム"]
-    entity__Order["Order"]:::entity
-    entity__Payment["Payment"]:::entity
-    state__Order_awaiting_capture["awaiting_capture"]:::state
-    state__Order_paid["paid"]:::state
+    entity__Order[("Order")]:::entity
+    entity__Payment[("Payment")]:::entity
+    state__Order_awaiting_capture((("awaiting_capture"))):::state
+    state__Order_paid((("paid"))):::state
   end
-  event__EvPaymentAuthorized -.->|triggers| usecase__Capture
-  extsystem__PaymentGW -.->|raises| event__EvPaymentAuthorized
-  usecase__Capture -.->|displays| screen__PaymentResultScreen
+  event__EvPaymentAuthorized -.-> usecase__Capture
+  extsystem__PaymentGW -.-> event__EvPaymentAuthorized
+  usecase__Capture -.-> screen__PaymentResultScreen
   usecase__Capture -.->|transitions Order.status awaiting_capture->paid| state__Order_paid
   usecase__Capture -.->|updates| entity__Order
   %% derived usecase__Capture -> entity__Order via api__PaymentCaptureApi

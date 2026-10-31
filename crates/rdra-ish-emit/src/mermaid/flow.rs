@@ -202,7 +202,7 @@ impl Emitter for FlowMermaidEmitter {
             declare(&mut body, model, node, "  ");
             add_kind(node_kind_filter_name(node));
         }
-        render_edges(&mut body, edges);
+        render_edges(&mut body, "flow", edges);
         body.push_str(&class_defs(&kinds));
 
         let mut drawn: HashSet<NodeRef> = flows.iter().cloned().collect();
@@ -292,15 +292,15 @@ performs(Manager, Handover)
     fn a_step_covers_use_cases_apis_events_and_timers() {
         let result = emit(View::whole());
         for edge in [
-            "  step__Pick -.->|covers| usecase__PickItems\n",
-            "  step__Pack -.->|covers| api__LabelApi\n",
-            "  step__Handover -.->|covers| event__Shipped\n",
-            "  step__Pick -.->|covers| timer__Cutoff\n",
+            "  step__Pick -.-> usecase__PickItems\n",
+            "  step__Pack -.-> api__LabelApi\n",
+            "  step__Handover -.-> event__Shipped\n",
+            "  step__Pick -.-> timer__Cutoff\n",
         ] {
             assert!(result.contains(edge), "{edge}: {result}");
         }
         assert!(
-            result.contains("  timer__Cutoff[\"Cutoff\"]:::timer\n"),
+            result.contains("  timer__Cutoff((\"Cutoff\")):::timer\n"),
             "{result}"
         );
         assert!(
@@ -319,8 +319,8 @@ performs(Manager, Handover)
             "{result}"
         );
         // Performed by two actors: in the flow, with an edge from each.
-        assert!(result.contains("  actor__Courier -.->|performs| step__Handover\n"));
-        assert!(result.contains("  actor__Manager -.->|performs| step__Handover\n"));
+        assert!(result.contains("  actor__Courier -.-> step__Handover\n"));
+        assert!(result.contains("  actor__Manager -.-> step__Handover\n"));
         assert!(!result.contains("actor__Clerk -.->"), "{result}");
     }
 

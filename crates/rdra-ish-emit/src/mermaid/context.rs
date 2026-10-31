@@ -4,7 +4,7 @@
 use super::{
     buc_members, buc_scope, declare, kinds_by_layer, omitted_linked_kinds, render_edges, GraphEdge,
 };
-use crate::diagram_common::{class_defs, contract_id, edge_label, node_label, Header};
+use crate::diagram_common::{class_defs, contract_id, edge_label, node_label, node_line, Header};
 use crate::{
     collect_object_graph_nodes, object_graph_layer, EmitError, Emitter, ObjectGraphLayer, Scope,
     View,
@@ -235,12 +235,12 @@ impl Emitter for ContextMermaidEmitter {
             } else {
                 "no declared system contains an API the use cases behind its edges invoke"
             };
-            body.push_str(&format!(
-                "  {SYNTHESIZED}[\"システム\"]:::system\n  %% synthesized {SYNTHESIZED}: {reason}\n"
-            ));
+            body.push_str(&node_line("  ", SYNTHESIZED, "システム", "system"));
+            body.push_str(&format!("  %% synthesized {SYNTHESIZED}: {reason}\n"));
         }
         render_edges(
             &mut body,
+            "context",
             exchanges
                 .0
                 .into_iter()
@@ -357,7 +357,7 @@ invokes(Dispatch, DispatchApi)
             assert!(result.contains(edge), "{edge}: {result}");
         }
         assert!(
-            result.contains("  actor__Idle[\"Idle\"]:::actor\n"),
+            result.contains("  actor__Idle([\"Idle\"]):::actor\n"),
             "{result}"
         );
         assert!(
@@ -409,9 +409,9 @@ invokes(Dispatch, DispatchApi)
         );
         assert!(result.starts_with("%% rdra-ish diagram=context scope=buc:BucPay\n"));
         for present in [
-            "actor__Customer[",
-            "actor__Clerk[",
-            "extsystem__Gateway[",
+            "actor__Customer([",
+            "actor__Clerk([",
+            "extsystem__Gateway[[",
             "system__Payments[",
         ] {
             assert!(result.contains(present), "{present}: {result}");

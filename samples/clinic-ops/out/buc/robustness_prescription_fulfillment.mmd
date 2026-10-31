@@ -2,28 +2,28 @@
 %% kinds: actor extsystem screen timer api usecase entity
 %% omitted: buc step medium permission event
 flowchart LR
-  actor__Clinician["医師"]:::actor
-  actor__Pharmacist["薬剤師"]:::actor
-  extsystem__EPrescriptionService["電子処方箋管理サービス"]:::extsystem
-  extsystem__InsurancePharmacy["保険薬局"]:::extsystem
+  actor__Clinician(["医師"]):::actor
+  actor__Pharmacist(["薬剤師"]):::actor
+  extsystem__EPrescriptionService[["電子処方箋管理サービス"]]:::extsystem
+  extsystem__InsurancePharmacy[["保険薬局"]]:::extsystem
   screen__DispensingScreen["調剤・監査画面"]:::screen
   screen__MedicationSearchScreen["薬剤検索画面"]:::screen
   screen__PharmacyStatusScreen["電子処方箋の状況画面"]:::screen
   screen__PrescriptionScreen["処方画面"]:::screen
-  timer__PrescriptionUsePeriodCheck["処方箋の使用期間切れ確認"]:::timer
-  api__ConfirmDispenseApi["調剤結果 API"]:::api
-  api__DispensingApi["院内調剤 API"]:::api
-  api__DraftPrescriptionApi["処方オーダ API"]:::api
-  api__IssuePrescriptionApi["処方箋発行 API"]:::api
-  api__MedicationCatalogApi["薬剤マスタ API"]:::api
-  api__PrescriptionInquiryApi["疑義照会 API"]:::api
-  usecase__CancelPrescription["処方の取消"]:::usecase
-  entity__Encounter["診療記録"]:::entity
-  entity__Medication["薬剤"]:::entity
-  entity__Prescription["処方箋"]:::entity
-  actor__Clinician -->|uses| screen__MedicationSearchScreen
-  actor__Clinician -->|uses| screen__PrescriptionScreen
-  actor__Pharmacist -->|uses| screen__DispensingScreen
+  timer__PrescriptionUsePeriodCheck(("処方箋の使用期間切れ確認")):::timer
+  api__ConfirmDispenseApi{{"調剤結果 API"}}:::api
+  api__DispensingApi{{"院内調剤 API"}}:::api
+  api__DraftPrescriptionApi{{"処方オーダ API"}}:::api
+  api__IssuePrescriptionApi{{"処方箋発行 API"}}:::api
+  api__MedicationCatalogApi{{"薬剤マスタ API"}}:::api
+  api__PrescriptionInquiryApi{{"疑義照会 API"}}:::api
+  usecase__CancelPrescription("処方の取消"):::usecase
+  entity__Encounter[("診療記録")]:::entity
+  entity__Medication[("薬剤")]:::entity
+  entity__Prescription[("処方箋")]:::entity
+  actor__Clinician --> screen__MedicationSearchScreen
+  actor__Clinician --> screen__PrescriptionScreen
+  actor__Pharmacist --> screen__DispensingScreen
   api__ConfirmDispenseApi -->|U| entity__Prescription
   api__DispensingApi -->|U| entity__Prescription
   api__DraftPrescriptionApi -->|C| entity__Prescription

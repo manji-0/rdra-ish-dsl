@@ -2,24 +2,24 @@
 %% kinds: requirement goal buc
 %% omitted: actor nfr quality constraint business flow usecase event system entity
 flowchart LR
-  requirement__ReqChangeAppointmentAtDesk["予約の変更・取消を電話と窓口で受け付ける"]:::requirement
-  requirement__ReqEligibilityEveryVisit["受付のたびに保険資格を確認する"]:::requirement
-  requirement__ReqFollowUpAfterVisit["診察後の連絡と再診予約をケアプランで追う"]:::requirement
-  requirement__ReqHandOffAfterConsultation["診察終了で受診を会計計算へ引き渡す"]:::requirement
-  requirement__ReqInquiryBeforeDispense["疑わしい処方は医師への照会が済むまで調剤しない"]:::requirement
-  requirement__ReqMonthlyClaimByTenth["前月分のレセプトを翌月10日までに請求する"]:::requirement
-  requirement__ReqPayAfterConsultation["会計は診察の後に一度で行う"]:::requirement
-  requirement__ReqProxyOrderNeedsPhysician["代行入力されたオーダは医師が確定するまで実施しない"]:::requirement
-  requirement__ReqRegisterEPrescription["院外処方箋を電子処方箋管理サービスへ登録し、保険薬局を指定しない"]:::requirement
-  requirement__ReqRegisterWithEligibility["新患登録で保険情報と限度額情報をオンライン資格確認から取り込む"]:::requirement
-  requirement__ReqResolveAuditFindings["監査で見つかった問題を管理者が解決するまで追う"]:::requirement
-  requirement__ReqResubmitReturned["返戻レセプトを訂正して再請求する"]:::requirement
-  requirement__ReqSwiftCheckIn["再来患者は情報を入力し直さずに受付・案内される"]:::requirement
-  goal__SafeCare["診療の抜けと誤りを実施前に止める<br/>処方・オーダの確認漏れと診察後の連絡漏れの件数: 月20件 → 月5件以下"]:::goal
+  requirement__ReqChangeAppointmentAtDesk[/"予約の変更・取消を電話と窓口で受け付ける"\]:::requirement
+  requirement__ReqEligibilityEveryVisit[/"受付のたびに保険資格を確認する"\]:::requirement
+  requirement__ReqFollowUpAfterVisit[/"診察後の連絡と再診予約をケアプランで追う"\]:::requirement
+  requirement__ReqHandOffAfterConsultation[/"診察終了で受診を会計計算へ引き渡す"\]:::requirement
+  requirement__ReqInquiryBeforeDispense[/"疑わしい処方は医師への照会が済むまで調剤しない"\]:::requirement
+  requirement__ReqMonthlyClaimByTenth[/"前月分のレセプトを翌月10日までに請求する"\]:::requirement
+  requirement__ReqPayAfterConsultation[/"会計は診察の後に一度で行う"\]:::requirement
+  requirement__ReqProxyOrderNeedsPhysician[/"代行入力されたオーダは医師が確定するまで実施しない"\]:::requirement
+  requirement__ReqRegisterEPrescription[/"院外処方箋を電子処方箋管理サービスへ登録し、保険薬局を指定しない"\]:::requirement
+  requirement__ReqRegisterWithEligibility[/"新患登録で保険情報と限度額情報をオンライン資格確認から取り込む"\]:::requirement
+  requirement__ReqResolveAuditFindings[/"監査で見つかった問題を管理者が解決するまで追う"\]:::requirement
+  requirement__ReqResubmitReturned[/"返戻レセプトを訂正して再請求する"\]:::requirement
+  requirement__ReqSwiftCheckIn[/"再来患者は情報を入力し直さずに受付・案内される"\]:::requirement
+  goal__SafeCare[/"診療の抜けと誤りを実施前に止める<br/>処方・オーダの確認漏れと診察後の連絡漏れの件数: 月20件 → 月5件以下"/]:::goal
   %% desc goal__SafeCare: 処方やオーダの確認漏れ、診察後の連絡漏れは、患者の安全と継続した治療を損なう。
-  goal__ShortWait["受付から診察までの待ち時間を短くする<br/>受付から診察開始までの中央値: 45分 → 30分"]:::goal
+  goal__ShortWait[/"受付から診察までの待ち時間を短くする<br/>受付から診察開始までの中央値: 45分 → 30分"/]:::goal
   %% desc goal__ShortWait: 受付後に診察室へ案内されるまでの待ちが長いと、患者が帰ってしまう。
-  goal__TimelyClaims["会計から請求までの遅れと返戻を減らす<br/>請求したレセプトのうち返戻になった割合: 3% → 1%"]:::goal
+  goal__TimelyClaims[/"会計から請求までの遅れと返戻を減らす<br/>請求したレセプトのうち返戻になった割合: 3% → 1%"/]:::goal
   %% desc goal__TimelyClaims: 診察後の会計や請求に漏れや遅れがあると、収入が遅れ、返戻の訂正に事務の手間がかかる。
   buc__BucAppointmentScheduling["予約"]:::buc
   %% desc buc__BucAppointmentScheduling: 予約検索、仮押さえ、予約確定、変更、取消、通知を扱う。予約枠と予約レコードを同時に更新する UC は専用 API を持ち、予約通知は AppointmentNoticeApi に分ける。予約済みの患者は、来院前に `BucVisitCheckIn` の一括照会の対象になる。
@@ -42,48 +42,48 @@ flowchart LR
   buc__BucVisitPayment["計算・会計"]:::buc
   %% desc buc__BucVisitPayment: 診察の後の会計計算入力、患者の呼出、会計窓口または自動精算機での精算、領収証・明細書の交付を扱う。一部負担金は負担割合で計算し、限度額情報があれば窓口での支払は自己負担限度額までになる（`CopayCappedAtLimit`）。紹介状なしの初診で除外に当たらない場合は選定療養費を自費の Charge として算定する（`UnreferredFirstVisit`）。金額は病院の設定 `SelectedTreatmentFeeSetting` に置き、モデルは数値を持たない。
   subgraph group_out_of_scope["やらないこと"]
-    requirement__ReqNoOnlineConsultation["オンライン診療は対象外とする"]:::requirement
+    requirement__ReqNoOnlineConsultation[/"オンライン診療は対象外とする"\]:::requirement
   end
-  goal__SafeCare -->|achieved_by| requirement__ReqFollowUpAfterVisit
+  goal__SafeCare --> requirement__ReqFollowUpAfterVisit
   %% derived goal__SafeCare -> requirement__ReqFollowUpAfterVisit via requirement__ReqFollowUpAfterVisit
-  goal__SafeCare -->|achieved_by| requirement__ReqInquiryBeforeDispense
+  goal__SafeCare --> requirement__ReqInquiryBeforeDispense
   %% derived goal__SafeCare -> requirement__ReqInquiryBeforeDispense via requirement__ReqInquiryBeforeDispense
-  goal__SafeCare -->|achieved_by| requirement__ReqProxyOrderNeedsPhysician
+  goal__SafeCare --> requirement__ReqProxyOrderNeedsPhysician
   %% derived goal__SafeCare -> requirement__ReqProxyOrderNeedsPhysician via requirement__ReqProxyOrderNeedsPhysician
-  goal__SafeCare -->|achieved_by| requirement__ReqRegisterEPrescription
+  goal__SafeCare --> requirement__ReqRegisterEPrescription
   %% derived goal__SafeCare -> requirement__ReqRegisterEPrescription via requirement__ReqRegisterEPrescription
-  goal__ShortWait -->|achieved_by| requirement__ReqChangeAppointmentAtDesk
+  goal__ShortWait --> requirement__ReqChangeAppointmentAtDesk
   %% derived goal__ShortWait -> requirement__ReqChangeAppointmentAtDesk via requirement__ReqChangeAppointmentAtDesk
-  goal__ShortWait -->|achieved_by| requirement__ReqEligibilityEveryVisit
+  goal__ShortWait --> requirement__ReqEligibilityEveryVisit
   %% derived goal__ShortWait -> requirement__ReqEligibilityEveryVisit via requirement__ReqEligibilityEveryVisit
-  goal__ShortWait -->|achieved_by| requirement__ReqRegisterWithEligibility
+  goal__ShortWait --> requirement__ReqRegisterWithEligibility
   %% derived goal__ShortWait -> requirement__ReqRegisterWithEligibility via requirement__ReqRegisterWithEligibility
-  goal__ShortWait -->|achieved_by| requirement__ReqSwiftCheckIn
+  goal__ShortWait --> requirement__ReqSwiftCheckIn
   %% derived goal__ShortWait -> requirement__ReqSwiftCheckIn via requirement__ReqSwiftCheckIn
-  goal__TimelyClaims -->|achieved_by| requirement__ReqHandOffAfterConsultation
+  goal__TimelyClaims --> requirement__ReqHandOffAfterConsultation
   %% derived goal__TimelyClaims -> requirement__ReqHandOffAfterConsultation via requirement__ReqHandOffAfterConsultation
-  goal__TimelyClaims -->|achieved_by| requirement__ReqMonthlyClaimByTenth
+  goal__TimelyClaims --> requirement__ReqMonthlyClaimByTenth
   %% derived goal__TimelyClaims -> requirement__ReqMonthlyClaimByTenth via requirement__ReqMonthlyClaimByTenth
-  goal__TimelyClaims -->|achieved_by| requirement__ReqPayAfterConsultation
+  goal__TimelyClaims --> requirement__ReqPayAfterConsultation
   %% derived goal__TimelyClaims -> requirement__ReqPayAfterConsultation via requirement__ReqPayAfterConsultation
-  goal__TimelyClaims -->|achieved_by| requirement__ReqResolveAuditFindings
+  goal__TimelyClaims --> requirement__ReqResolveAuditFindings
   %% derived goal__TimelyClaims -> requirement__ReqResolveAuditFindings via requirement__ReqResolveAuditFindings
-  goal__TimelyClaims -->|achieved_by| requirement__ReqResubmitReturned
+  goal__TimelyClaims --> requirement__ReqResubmitReturned
   %% derived goal__TimelyClaims -> requirement__ReqResubmitReturned via requirement__ReqResubmitReturned
-  requirement__ReqChangeAppointmentAtDesk -->|motivates| buc__BucAppointmentScheduling
-  requirement__ReqEligibilityEveryVisit -->|motivates| buc__BucVisitCheckIn
-  requirement__ReqFollowUpAfterVisit -->|motivates| buc__BucFollowupCare
-  requirement__ReqHandOffAfterConsultation -->|motivates| buc__BucClinicalEncounter
-  requirement__ReqInquiryBeforeDispense -->|motivates| buc__BucPrescriptionFulfillment
-  requirement__ReqMonthlyClaimByTenth -->|motivates| buc__BucBillingClaims
-  requirement__ReqNoOnlineConsultation -.->|motivates| buc__BucClinicalEncounter
-  requirement__ReqPayAfterConsultation -->|motivates| buc__BucVisitPayment
-  requirement__ReqProxyOrderNeedsPhysician -->|motivates| buc__BucOrdersResults
-  requirement__ReqRegisterEPrescription -->|motivates| buc__BucPrescriptionFulfillment
-  requirement__ReqRegisterWithEligibility -->|motivates| buc__BucPatientOnboarding
-  requirement__ReqResolveAuditFindings -->|motivates| buc__BucStaffAdministration
-  requirement__ReqResubmitReturned -->|motivates| buc__BucBillingClaims
-  requirement__ReqSwiftCheckIn -->|motivates| buc__BucVisitCheckIn
+  requirement__ReqChangeAppointmentAtDesk --> buc__BucAppointmentScheduling
+  requirement__ReqEligibilityEveryVisit --> buc__BucVisitCheckIn
+  requirement__ReqFollowUpAfterVisit --> buc__BucFollowupCare
+  requirement__ReqHandOffAfterConsultation --> buc__BucClinicalEncounter
+  requirement__ReqInquiryBeforeDispense --> buc__BucPrescriptionFulfillment
+  requirement__ReqMonthlyClaimByTenth --> buc__BucBillingClaims
+  requirement__ReqNoOnlineConsultation -.-> buc__BucClinicalEncounter
+  requirement__ReqPayAfterConsultation --> buc__BucVisitPayment
+  requirement__ReqProxyOrderNeedsPhysician --> buc__BucOrdersResults
+  requirement__ReqRegisterEPrescription --> buc__BucPrescriptionFulfillment
+  requirement__ReqRegisterWithEligibility --> buc__BucPatientOnboarding
+  requirement__ReqResolveAuditFindings --> buc__BucStaffAdministration
+  requirement__ReqResubmitReturned --> buc__BucBillingClaims
+  requirement__ReqSwiftCheckIn --> buc__BucVisitCheckIn
   classDef requirement fill:#fff3bf,stroke:#e67700,color:#000;
   classDef goal fill:#fff3bf,stroke:#e67700,color:#000;
   classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;

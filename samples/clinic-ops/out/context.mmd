@@ -2,33 +2,33 @@
 %% kinds: actor extsystem system
 %% omitted: buc step permission usecase event
 flowchart LR
-  actor__AccountsClerk["医事課 会計担当"]:::actor
+  actor__AccountsClerk(["医事課 会計担当"]):::actor
   %% desc actor__AccountsClerk: 会計計算入力、患者の呼出、窓口精算、領収証・明細書の交付を行う事務職員。
-  actor__CareCoordinator["患者支援・地域連携担当"]:::actor
+  actor__CareCoordinator(["患者支援・地域連携担当"]):::actor
   %% desc actor__CareCoordinator: 診療後のケアプランを作り、患者への連絡と再診予約を追う。
-  actor__ClaimsClerk["医事課 レセプト担当"]:::actor
+  actor__ClaimsClerk(["医事課 レセプト担当"]):::actor
   %% desc actor__ClaimsClerk: レセプトの作成・院内点検・請求と、返戻・査定への対応を行う事務職員。
-  actor__ClinicAdmin["病院管理者"]:::actor
+  actor__ClinicAdmin(["病院管理者"]):::actor
   %% desc actor__ClinicAdmin: 診療枠と診察室のマスタを管理し、監査の指摘を解決する。
-  actor__Clinician["医師"]:::actor
+  actor__Clinician(["医師"]):::actor
   %% desc actor__Clinician: 診察し、診断・オーダ・処方を出し、診療記録に署名する。
-  actor__MedicalClerk["医師事務作業補助者"]:::actor
+  actor__MedicalClerk(["医師事務作業補助者"]):::actor
   %% desc actor__MedicalClerk: 医師の指示で電子カルテへ代行入力する。確定は医師が行う。
-  actor__Nurse["看護師"]:::actor
+  actor__Nurse(["看護師"]):::actor
   %% desc actor__Nurse: 医師の指示の下で診療の補助を行う。
-  actor__Patient["患者"]:::actor
+  actor__Patient(["患者"]):::actor
   %% desc actor__Patient: 病院で診療を受ける人。
-  actor__Pharmacist["薬剤師"]:::actor
+  actor__Pharmacist(["薬剤師"]):::actor
   %% desc actor__Pharmacist: 院内処方を調剤・監査し、服薬指導と交付を行う。疑わしい処方は医師に照会する。
-  actor__ReceptionClerk["医事課 受付担当"]:::actor
+  actor__ReceptionClerk(["医事課 受付担当"]):::actor
   %% desc actor__ReceptionClerk: 初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。
-  extsystem__ClaimsReviewOrganization["審査支払機関（支払基金・国保連）"]:::extsystem
-  extsystem__EPrescriptionService["電子処方箋管理サービス"]:::extsystem
-  extsystem__InsurancePharmacy["保険薬局"]:::extsystem
-  extsystem__MessagingGateway["患者通知サービス"]:::extsystem
-  extsystem__OnlineEligibilitySystem["オンライン資格確認等システム"]:::extsystem
-  extsystem__OutsourcedLabSystem["外注検査システム"]:::extsystem
-  extsystem__PaymentGateway["自動精算機・クレジット決済"]:::extsystem
+  extsystem__ClaimsReviewOrganization[["審査支払機関（支払基金・国保連）"]]:::extsystem
+  extsystem__EPrescriptionService[["電子処方箋管理サービス"]]:::extsystem
+  extsystem__InsurancePharmacy[["保険薬局"]]:::extsystem
+  extsystem__MessagingGateway[["患者通知サービス"]]:::extsystem
+  extsystem__OnlineEligibilitySystem[["オンライン資格確認等システム"]]:::extsystem
+  extsystem__OutsourcedLabSystem[["外注検査システム"]]:::extsystem
+  extsystem__PaymentGateway[["自動精算機・クレジット決済"]]:::extsystem
   system__ClinicOpsSystem["外来業務システム"]:::system
   actor__AccountsClerk -.->|計算・会計| system__ClinicOpsSystem
   %% derived actor__AccountsClerk -> system__ClinicOpsSystem via buc__BucVisitPayment

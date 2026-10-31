@@ -10,7 +10,7 @@
 
 use super::usecase::{is_crud, scoped_use_cases};
 use super::{kinds_by_layer, omitted_linked_kinds, render_edges, GraphEdge};
-use crate::diagram_common::{class_defs, contract_id, node_label, quote, Header};
+use crate::diagram_common::{class_defs, contract_id, node_label, node_line, quote, Header};
 use crate::{node_kind_filter_name, EmitError, Emitter, View};
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
 use std::collections::{BTreeMap, HashSet};
@@ -196,13 +196,14 @@ impl Emitter for RobustnessMermaidEmitter {
 
         let mut body = String::new();
         for (_, node_id, node) in &drawn {
-            body.push_str(&format!(
-                "  {node_id}[\"{}\"]:::{}\n",
-                quote(node_label(model, node).unwrap_or_default()),
-                node_kind_filter_name(node)
+            body.push_str(&node_line(
+                "  ",
+                node_id,
+                &quote(node_label(model, node).unwrap_or_default()),
+                node_kind_filter_name(node),
             ));
         }
-        render_edges(&mut body, edges);
+        render_edges(&mut body, "robustness", edges);
 
         let nodes: Vec<NodeRef> = drawn.into_iter().map(|(_, _, node)| node).collect();
         let mut kinds = kinds_by_layer(&nodes);
@@ -281,21 +282,21 @@ triggers(Nightly, Remind)
             "{result}"
         );
         for line in [
-            "  actor__Patient -->|uses| screen__PayScreen\n",
+            "  actor__Patient --> screen__PayScreen\n",
             "  screen__PayScreen -->|Pay bill| api__PayApi\n",
             "  api__PayApi -->|RU| entity__Bill\n",
             "  api__PayApi -->|C| entity__Receipt\n",
         ] {
             assert!(result.contains(line), "{line}{result}");
         }
-        assert!(!result.contains("usecase__Pay["), "{result}");
+        assert!(!result.contains("usecase__Pay("), "{result}");
     }
 
     #[test]
     fn a_use_case_without_an_api_is_its_own_control() {
         let result = emit(View::whole());
         assert!(
-            result.contains("  usecase__Archive[\"Archive bill\"]:::usecase\n"),
+            result.contains("  usecase__Archive(\"Archive bill\"):::usecase\n"),
             "{result}"
         );
         assert!(
@@ -303,7 +304,7 @@ triggers(Nightly, Remind)
             "{result}"
         );
         // Reconcile has neither an API nor CRUD: a control of its own, with no entity edge.
-        assert!(result.contains("  usecase__Reconcile["), "{result}");
+        assert!(result.contains("  usecase__Reconcile("), "{result}");
         assert!(!result.contains("usecase__Reconcile -->"), "{result}");
     }
 
@@ -327,7 +328,7 @@ triggers(Nightly, Remind)
         assert!(!result.contains("actor__Clerk"), "{result}");
         for line in result.lines().filter(|l| l.trim().starts_with("actor__")) {
             if line.contains("-->") {
-                assert!(line.contains("| screen__"), "{line}");
+                assert!(line.contains("--> screen__"), "{line}");
             }
         }
     }

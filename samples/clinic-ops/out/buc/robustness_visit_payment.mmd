@@ -2,26 +2,26 @@
 %% kinds: actor extsystem screen api usecase entity
 %% omitted: buc step medium permission event condition
 flowchart LR
-  actor__AccountsClerk["医事課 会計担当"]:::actor
-  extsystem__PaymentGateway["自動精算機・クレジット決済"]:::extsystem
+  actor__AccountsClerk(["医事課 会計担当"]):::actor
+  extsystem__PaymentGateway[["自動精算機・クレジット決済"]]:::extsystem
   screen__BillCalculationScreen["会計計算画面"]:::screen
   screen__KioskScreen["自動精算機画面"]:::screen
   screen__PaymentWindowScreen["会計窓口画面"]:::screen
-  api__CalculateVisitBillApi["会計計算 API"]:::api
-  api__ReceiptApi["領収証 API"]:::api
-  api__SelectedFeeApi["選定療養費 API"]:::api
-  api__SettlementApi["精算 API"]:::api
-  usecase__CallPatientForPayment["会計の呼出"]:::usecase
-  usecase__RefundPayment["還付・追加徴収"]:::usecase
-  entity__AccountBalance["未収金残高"]:::entity
-  entity__Appointment["予約・受診"]:::entity
-  entity__Charge["コスト（診療行為）"]:::entity
-  entity__Encounter["診療記録"]:::entity
-  entity__InsurancePolicy["保険資格"]:::entity
-  entity__PaymentTransaction["精算"]:::entity
-  entity__SelectedTreatmentFeeSetting["選定療養費の設定"]:::entity
-  actor__AccountsClerk -->|uses| screen__BillCalculationScreen
-  actor__AccountsClerk -->|uses| screen__PaymentWindowScreen
+  api__CalculateVisitBillApi{{"会計計算 API"}}:::api
+  api__ReceiptApi{{"領収証 API"}}:::api
+  api__SelectedFeeApi{{"選定療養費 API"}}:::api
+  api__SettlementApi{{"精算 API"}}:::api
+  usecase__CallPatientForPayment("会計の呼出"):::usecase
+  usecase__RefundPayment("還付・追加徴収"):::usecase
+  entity__AccountBalance[("未収金残高")]:::entity
+  entity__Appointment[("予約・受診")]:::entity
+  entity__Charge[("コスト（診療行為）")]:::entity
+  entity__Encounter[("診療記録")]:::entity
+  entity__InsurancePolicy[("保険資格")]:::entity
+  entity__PaymentTransaction[("精算")]:::entity
+  entity__SelectedTreatmentFeeSetting[("選定療養費の設定")]:::entity
+  actor__AccountsClerk --> screen__BillCalculationScreen
+  actor__AccountsClerk --> screen__PaymentWindowScreen
   api__CalculateVisitBillApi -->|R| entity__Charge
   api__CalculateVisitBillApi -->|R| entity__InsurancePolicy
   api__CalculateVisitBillApi -->|U| entity__Appointment

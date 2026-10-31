@@ -2,33 +2,33 @@
 %% kinds: actor extsystem screen timer api entity
 %% omitted: buc step medium permission event condition
 flowchart LR
-  actor__Nurse["看護師"]:::actor
-  actor__ReceptionClerk["医事課 受付担当"]:::actor
-  extsystem__OnlineEligibilitySystem["オンライン資格確認等システム"]:::extsystem
+  actor__Nurse(["看護師"]):::actor
+  actor__ReceptionClerk(["医事課 受付担当"]):::actor
+  extsystem__OnlineEligibilitySystem[["オンライン資格確認等システム"]]:::extsystem
   screen__CheckInScreen["受付画面"]:::screen
   screen__EligibilityScreen["資格確認画面"]:::screen
   screen__ReferralScreen["紹介状受付画面"]:::screen
   screen__RoomBoardScreen["診察室ボード画面"]:::screen
-  timer__EligibilityBatchInquiry["予約患者の資格の一括照会（来院前）"]:::timer
-  api__AssignRoomApi["診察室案内 API"]:::api
-  api__CheckInPatientApi["受付 API"]:::api
-  api__EligibilityResultApi["資格確認結果 API"]:::api
-  api__OnlineEligibilityApi["オンライン資格確認 API"]:::api
-  api__PrepareEncounterApi["診療準備 API"]:::api
-  api__ReferralLetterApi["紹介状 API"]:::api
-  api__VerifyArrivalApi["到着確認 API"]:::api
-  entity__Appointment["予約・受診"]:::entity
-  entity__EligibilityCheck["資格確認"]:::entity
-  entity__InsurancePolicy["保険資格"]:::entity
-  entity__PatientAccount["患者登録"]:::entity
-  entity__PatientProfile["患者基本情報"]:::entity
-  entity__ReferralLetter["紹介状・診療情報提供書"]:::entity
-  entity__Room["診察室"]:::entity
-  actor__Nurse -->|uses| screen__CheckInScreen
-  actor__Nurse -->|uses| screen__RoomBoardScreen
-  actor__ReceptionClerk -->|uses| screen__CheckInScreen
-  actor__ReceptionClerk -->|uses| screen__EligibilityScreen
-  actor__ReceptionClerk -->|uses| screen__ReferralScreen
+  timer__EligibilityBatchInquiry(("予約患者の資格の一括照会（来院前）")):::timer
+  api__AssignRoomApi{{"診察室案内 API"}}:::api
+  api__CheckInPatientApi{{"受付 API"}}:::api
+  api__EligibilityResultApi{{"資格確認結果 API"}}:::api
+  api__OnlineEligibilityApi{{"オンライン資格確認 API"}}:::api
+  api__PrepareEncounterApi{{"診療準備 API"}}:::api
+  api__ReferralLetterApi{{"紹介状 API"}}:::api
+  api__VerifyArrivalApi{{"到着確認 API"}}:::api
+  entity__Appointment[("予約・受診")]:::entity
+  entity__EligibilityCheck[("資格確認")]:::entity
+  entity__InsurancePolicy[("保険資格")]:::entity
+  entity__PatientAccount[("患者登録")]:::entity
+  entity__PatientProfile[("患者基本情報")]:::entity
+  entity__ReferralLetter[("紹介状・診療情報提供書")]:::entity
+  entity__Room[("診察室")]:::entity
+  actor__Nurse --> screen__CheckInScreen
+  actor__Nurse --> screen__RoomBoardScreen
+  actor__ReceptionClerk --> screen__CheckInScreen
+  actor__ReceptionClerk --> screen__EligibilityScreen
+  actor__ReceptionClerk --> screen__ReferralScreen
   api__AssignRoomApi -->|U| entity__Appointment
   api__AssignRoomApi -->|U| entity__Room
   api__CheckInPatientApi -->|U| entity__Appointment

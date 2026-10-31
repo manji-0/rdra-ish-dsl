@@ -2,10 +2,10 @@
 %% kinds: actor extsystem system
 %% omitted: buc usecase event
 flowchart LR
-  actor__Admin["Administrator"]:::actor
-  actor__Customer["Customer"]:::actor
-  extsystem__PaymentGW["Payment Gateway"]:::extsystem
-  extsystem__ShippingSvc["Shipping Service"]:::extsystem
+  actor__Admin(["Administrator"]):::actor
+  actor__Customer(["Customer"]):::actor
+  extsystem__PaymentGW[["Payment Gateway"]]:::extsystem
+  extsystem__ShippingSvc[["Shipping Service"]]:::extsystem
   system__CommerceSystem["Commerce System"]:::system
   actor__Admin -.->|Process Order| system__CommerceSystem
   %% derived actor__Admin -> system__CommerceSystem via buc__BucOrder

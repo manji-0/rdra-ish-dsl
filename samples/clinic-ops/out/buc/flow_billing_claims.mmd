@@ -16,64 +16,64 @@ flowchart TD
       step__SubmitStep["請求（5日～10日）"]:::step
     end
   end
-  timer__ErrorResendWindow["エラー分レセプトの再送（毎月11日・12日）"]:::timer
-  timer__MonthlyClaimCreation["前月分レセプトの作成（月初）"]:::timer
-  timer__MonthlyClaimDeadline["前月分レセプトの請求（毎月5日～10日）"]:::timer
-  usecase__CorrectReturnedStatement["返戻レセプトの訂正（再請求）"]:::usecase
+  timer__ErrorResendWindow(("エラー分レセプトの再送（毎月11日・12日）")):::timer
+  timer__MonthlyClaimCreation(("前月分レセプトの作成（月初）")):::timer
+  timer__MonthlyClaimDeadline(("前月分レセプトの請求（毎月5日～10日）")):::timer
+  usecase__CorrectReturnedStatement("返戻レセプトの訂正（再請求）"):::usecase
   %% desc usecase__CorrectReturnedStatement: 返戻の訂正と再請求。
-  usecase__GenerateClaimStatement["レセプト作成"]:::usecase
+  usecase__GenerateClaimStatement("レセプト作成"):::usecase
   %% desc usecase__GenerateClaimStatement: 月初のレセプト作成。
-  usecase__HoldClaimStatement["レセプトの保留（月遅れ）"]:::usecase
+  usecase__HoldClaimStatement("レセプトの保留（月遅れ）"):::usecase
   %% desc usecase__HoldClaimStatement: 保留（月遅れ）。
-  usecase__InspectClaimStatement["レセプトの院内点検"]:::usecase
+  usecase__InspectClaimStatement("レセプトの院内点検"):::usecase
   %% desc usecase__InspectClaimStatement: 院内点検。
-  usecase__PostPayment["診療報酬の入金"]:::usecase
+  usecase__PostPayment("診療報酬の入金"):::usecase
   %% desc usecase__PostPayment: 診療翌々月の入金。
-  usecase__ReceiveClaimAccepted["レセプト受付（審査へ）"]:::usecase
+  usecase__ReceiveClaimAccepted("レセプト受付（審査へ）"):::usecase
   %% desc usecase__ReceiveClaimAccepted: 審査支払機関の受付で審査中になる。
-  usecase__RecordClaimAssessment["査定の取込"]:::usecase
+  usecase__RecordClaimAssessment("査定の取込"):::usecase
   %% desc usecase__RecordClaimAssessment: 査定の取込。
-  usecase__RecordClaimReturn["返戻レセプトの取込"]:::usecase
+  usecase__RecordClaimReturn("返戻レセプトの取込"):::usecase
   %% desc usecase__RecordClaimReturn: 返戻レセプトの取込（3か月以内）。
-  usecase__RecordReceiptError["受付不能・要確認の確認"]:::usecase
+  usecase__RecordReceiptError("受付不能・要確認の確認"):::usecase
   %% desc usecase__RecordReceiptError: 受付不能・要確認の確認。
-  usecase__ReleaseHeldStatement["保留レセプトの再提出準備"]:::usecase
+  usecase__ReleaseHeldStatement("保留レセプトの再提出準備"):::usecase
   %% desc usecase__ReleaseHeldStatement: 保留レセプトの再提出準備。
-  usecase__RequestReexamination["再審査請求"]:::usecase
+  usecase__RequestReexamination("再審査請求"):::usecase
   %% desc usecase__RequestReexamination: 再審査請求。
-  usecase__ResendErroredStatement["エラー分レセプトの再送"]:::usecase
+  usecase__ResendErroredStatement("エラー分レセプトの再送"):::usecase
   %% desc usecase__ResendErroredStatement: 11日・12日のエラー分再送。
-  usecase__ReviewClaimTransfer["資格の振替・分割の確認"]:::usecase
+  usecase__ReviewClaimTransfer("資格の振替・分割の確認"):::usecase
   %% desc usecase__ReviewClaimTransfer: 資格の振替・分割の確認（参照のみ）。
-  usecase__SubmitClaimStatements["レセプト請求"]:::usecase
+  usecase__SubmitClaimStatements("レセプト請求"):::usecase
   %% desc usecase__SubmitClaimStatements: 毎月10日までの請求。
-  step__AssessStep -.->|covers| usecase__RecordClaimAssessment
-  step__AssessStep -.->|covers| usecase__RequestReexamination
+  step__AssessStep -.-> usecase__RecordClaimAssessment
+  step__AssessStep -.-> usecase__RequestReexamination
   step__AssessStep -->|precedes| step__PaidStep
-  step__CreateStatementStep -.->|covers| timer__MonthlyClaimCreation
-  step__CreateStatementStep -.->|covers| usecase__GenerateClaimStatement
+  step__CreateStatementStep -.-> timer__MonthlyClaimCreation
+  step__CreateStatementStep -.-> usecase__GenerateClaimStatement
   step__CreateStatementStep -->|precedes| step__InspectStep
-  step__HoldStep -.->|covers| usecase__HoldClaimStatement
-  step__HoldStep -.->|covers| usecase__ReleaseHeldStatement
+  step__HoldStep -.-> usecase__HoldClaimStatement
+  step__HoldStep -.-> usecase__ReleaseHeldStatement
   step__HoldStep -->|repeats| step__InspectStep
   step__InspectStep -->|branches| step__HoldStep
-  step__InspectStep -.->|covers| usecase__InspectClaimStatement
+  step__InspectStep -.-> usecase__InspectClaimStatement
   step__InspectStep -->|precedes| step__SubmitStep
-  step__PaidStep -.->|covers| usecase__PostPayment
-  step__ReceiptErrorStep -.->|covers| timer__ErrorResendWindow
-  step__ReceiptErrorStep -.->|covers| usecase__RecordReceiptError
-  step__ReceiptErrorStep -.->|covers| usecase__ResendErroredStatement
+  step__PaidStep -.-> usecase__PostPayment
+  step__ReceiptErrorStep -.-> timer__ErrorResendWindow
+  step__ReceiptErrorStep -.-> usecase__RecordReceiptError
+  step__ReceiptErrorStep -.-> usecase__ResendErroredStatement
   step__ReceiptErrorStep -->|repeats| step__SubmitStep
-  step__ReturnStep -.->|covers| usecase__CorrectReturnedStatement
-  step__ReturnStep -.->|covers| usecase__RecordClaimReturn
+  step__ReturnStep -.-> usecase__CorrectReturnedStatement
+  step__ReturnStep -.-> usecase__RecordClaimReturn
   step__ReturnStep -->|repeats| step__InspectStep
   step__ReviewStep -->|branches| step__AssessStep
-  step__ReviewStep -.->|covers| usecase__ReceiveClaimAccepted
-  step__ReviewStep -.->|covers| usecase__ReviewClaimTransfer
+  step__ReviewStep -.-> usecase__ReceiveClaimAccepted
+  step__ReviewStep -.-> usecase__ReviewClaimTransfer
   step__ReviewStep -.->|excepts| step__ReturnStep
   step__ReviewStep -->|precedes| step__PaidStep
-  step__SubmitStep -.->|covers| timer__MonthlyClaimDeadline
-  step__SubmitStep -.->|covers| usecase__SubmitClaimStatements
+  step__SubmitStep -.-> timer__MonthlyClaimDeadline
+  step__SubmitStep -.-> usecase__SubmitClaimStatements
   step__SubmitStep -.->|excepts| step__ReceiptErrorStep
   step__SubmitStep -->|precedes| step__ReviewStep
   classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;

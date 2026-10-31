@@ -215,7 +215,7 @@ impl Emitter for UsecaseMermaidEmitter {
 
         let mut body = String::new();
         let layers = render_layered_nodes(&mut body, model, &nodes);
-        render_edges(&mut body, edges.into_graph_edges());
+        render_edges(&mut body, "usecase", edges.into_graph_edges());
 
         let kinds = kinds_by_layer(&nodes);
         body.push_str(&class_defs(&kinds));
@@ -292,13 +292,13 @@ transitions(Order.status, Capture, awaiting -> paid)
         let result = emit(View::whole());
         assert!(
             result.contains(
-                "  actor__Customer -.->|performs| usecase__Capture\n  %% derived actor__Customer -> usecase__Capture via buc__BucPay\n"
+                "  actor__Customer -.-> usecase__Capture\n  %% derived actor__Customer -> usecase__Capture via buc__BucPay\n"
             ),
             "{result}"
         );
         // Declared and derived through the step: the declaration wins.
         assert!(
-            result.contains("  actor__Clerk -.->|performs| usecase__Refund\n  actor__Clerk"),
+            result.contains("  actor__Clerk -.-> usecase__Refund\n  actor__Clerk"),
             "{result}"
         );
         assert!(!result.contains("via step__Settle"), "{result}");
@@ -314,11 +314,11 @@ transitions(Order.status, Capture, awaiting -> paid)
         );
         // A declared performer of a timer-started use case stays, and the BUC adds no other.
         assert!(
-            result.contains("  actor__Clerk -.->|performs| usecase__Remind\n"),
+            result.contains("  actor__Clerk -.-> usecase__Remind\n"),
             "{result}"
         );
         assert!(
-            !result.contains("actor__Customer -.->|performs| usecase__Remind"),
+            !result.contains("actor__Customer -.-> usecase__Remind"),
             "{result}"
         );
     }
@@ -337,7 +337,7 @@ transitions(Order.status, Capture, awaiting -> paid)
             result.contains("  usecase__Capture -.->|updates| entity__Order\n  usecase__Capture"),
             "{result}"
         );
-        assert!(!result.contains("api__CaptureApi["), "{result}");
+        assert!(!result.contains("api__CaptureApi{{"), "{result}");
         assert!(result.contains("%% omitted: buc step api\n"), "{result}");
     }
 
@@ -350,16 +350,16 @@ transitions(Order.status, Capture, awaiting -> paid)
             ),
             "{result}"
         );
-        assert!(result.contains("    state__Order_awaiting[\"awaiting\"]:::state\n"));
-        assert!(result.contains("  usecase__Capture -.->|displays| screen__ResultScreen\n"));
-        assert!(result.contains("  screen__ResultScreen -.->|shows| entity__Payment\n"));
+        assert!(result.contains("    state__Order_awaiting(((\"awaiting\"))):::state\n"));
+        assert!(result.contains("  usecase__Capture -.-> screen__ResultScreen\n"));
+        assert!(result.contains("  screen__ResultScreen -.-> entity__Payment\n"));
     }
 
     #[test]
     fn a_scope_draws_the_use_cases_it_names() {
         let buc = emit(View::bucs(vec!["BucPay".to_string()]));
         assert!(buc.starts_with("%% rdra-ish diagram=usecase scope=buc:BucPay\n"));
-        assert!(buc.contains("usecase__Capture[") && buc.contains("usecase__Refund["));
+        assert!(buc.contains("usecase__Capture(") && buc.contains("usecase__Refund("));
         assert!(!buc.contains("usecase__Browse"), "{buc}");
 
         let one = emit(View::usecases(vec!["Refund".to_string()]));

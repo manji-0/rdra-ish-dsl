@@ -30,14 +30,14 @@ rdra-ish export src/ --kind json-schema --out out/json-schema.json
   `variation__<Id>`. `omitted:` starts with `columns`, which `er` draws.
 - `entity__<Child> ---|N:1| entity__<Parent>` is a `relate` with its DSL cardinality, the
   same relates `er` draws.
-- `-.->|statemodel|` links an entity to each column that `transitions` drive (the
+- An unlabelled `-.->` (`statemodel`) links an entity to each column that `transitions` drive (the
   composite state of `--kind state`); an `Enum` column without `transitions` is none.
 - `-.->|variation <column>|` links an entity to the variation that column takes.
 
 ## Reading the Condition Diagram
 
-- There are no layers. Each condition links `-.->|combines|` to each variation and
-  state model (`statemodel__<Entity>_<column>`) it combines, and `-.->|applies_to|` to the
+- There are no layers. Each condition links an unlabelled `-.->` (`combines`) to each variation
+  and state model (`statemodel__<Entity>_<column>`) it combines, and one (`applies_to`) to the
   use cases, APIs, and systems it applies to.
 - A condition with a `holds` body has a `%% holds <id>: <body>` line, and each link read
   from that body is followed by `%% derived <from> -> <to> from holds`. A link without it

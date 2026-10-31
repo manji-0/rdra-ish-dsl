@@ -4,94 +4,94 @@
 %% omitted: buc step medium permission api
 flowchart LR
   subgraph layer_value["システム価値"]
-    actor__Patient["患者"]:::actor
+    actor__Patient(["患者"]):::actor
     %% desc actor__Patient: 病院で診療を受ける人。
-    actor__ReceptionClerk["医事課 受付担当"]:::actor
+    actor__ReceptionClerk(["医事課 受付担当"]):::actor
     %% desc actor__ReceptionClerk: 初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。
-    extsystem__MessagingGateway["患者通知サービス"]:::extsystem
+    extsystem__MessagingGateway[["患者通知サービス"]]:::extsystem
   end
   subgraph layer_environment["システム外部環境"]
-    timer__IntakeExpiryCheck["問診票の期限切れ確認（毎晩）"]:::timer
+    timer__IntakeExpiryCheck(("問診票の期限切れ確認（毎晩）")):::timer
   end
   subgraph layer_boundary["システム境界"]
-    usecase__ArchivePatient["患者のアーカイブ"]:::usecase
+    usecase__ArchivePatient("患者のアーカイブ"):::usecase
     %% desc usecase__ArchivePatient: 患者アーカイブ状態。
-    usecase__CaptureConsent["同意の取得"]:::usecase
+    usecase__CaptureConsent("同意の取得"):::usecase
     %% desc usecase__CaptureConsent: 同意記録を作る。同意の有無は Bool、未回答は null で持つ。
-    usecase__CompleteIntakeForms["問診票の回答"]:::usecase
+    usecase__CompleteIntakeForms("問診票の回答"):::usecase
     %% desc usecase__CompleteIntakeForms: 問診完了イベント。
-    usecase__ExpireIntakeForms["問診票の期限切れ"]:::usecase
+    usecase__ExpireIntakeForms("問診票の期限切れ"):::usecase
     %% desc usecase__ExpireIntakeForms: 問診期限切れイベント。
-    usecase__MergeDuplicatePatient["重複患者の統合"]:::usecase
+    usecase__MergeDuplicatePatient("重複患者の統合"):::usecase
     %% desc usecase__MergeDuplicatePatient: 患者統合状態。
-    usecase__RegisterPatient["新患登録"]:::usecase
+    usecase__RegisterPatient("新患登録"):::usecase
     %% desc usecase__RegisterPatient: 新患の PatientAccount と PatientProfile を 1 つの API で同時に作る。
-    usecase__SearchPatient["患者の検索"]:::usecase
+    usecase__SearchPatient("患者の検索"):::usecase
     %% desc usecase__SearchPatient: 患者を検索する。参照だけの API で、患者の作成とは分ける。
-    usecase__SendIntakeForms["問診票の送付"]:::usecase
+    usecase__SendIntakeForms("問診票の送付"):::usecase
     %% desc usecase__SendIntakeForms: 問診パケットとメッセージ作成。
-    usecase__UpdateDemographics["患者属性の変更"]:::usecase
+    usecase__UpdateDemographics("患者属性の変更"):::usecase
     %% desc usecase__UpdateDemographics: 患者の属性を API で更新する。
-    usecase__VerifyInsurance["保険資格・限度額情報の登録（新患登録）"]:::usecase
+    usecase__VerifyInsurance("保険資格・限度額情報の登録（新患登録）"):::usecase
     %% desc usecase__VerifyInsurance: 保険資格の登録と限度額情報（適用区分）の取得。
     screen__ConsentScreen["同意取得画面"]:::screen
     screen__InsuranceScreen["保険資格登録画面"]:::screen
     screen__IntakePortalScreen["問診票ポータル画面"]:::screen
     screen__PatientProfileScreen["患者基本情報画面"]:::screen
     screen__PatientSearchScreen["患者検索画面"]:::screen
-    event__EvAppointmentScheduled["予約確定"]:::event
+    event__EvAppointmentScheduled>"予約確定"]:::event
   end
   subgraph layer_system["システム"]
-    entity__ConsentRecord["同意記録"]:::entity
-    entity__EligibilityCheck["資格確認"]:::entity
-    entity__InsurancePolicy["保険資格"]:::entity
-    entity__IntakePacket["問診票"]:::entity
-    entity__PatientAccount["患者登録"]:::entity
-    entity__PatientMessage["患者連絡"]:::entity
-    entity__PatientProfile["患者基本情報"]:::entity
-    state__IntakePacket_intakecompleted["回答済"]:::state
-    state__IntakePacket_intakeexpired["期限切れ"]:::state
-    state__IntakePacket_intakesent["送付済"]:::state
-    state__PatientAccount_patientactive["有効"]:::state
-    state__PatientAccount_patientinactive["アーカイブ済"]:::state
-    state__PatientAccount_patientmerged["統合済"]:::state
+    entity__ConsentRecord[("同意記録")]:::entity
+    entity__EligibilityCheck[("資格確認")]:::entity
+    entity__InsurancePolicy[("保険資格")]:::entity
+    entity__IntakePacket[("問診票")]:::entity
+    entity__PatientAccount[("患者登録")]:::entity
+    entity__PatientMessage[("患者連絡")]:::entity
+    entity__PatientProfile[("患者基本情報")]:::entity
+    state__IntakePacket_intakecompleted((("回答済"))):::state
+    state__IntakePacket_intakeexpired((("期限切れ"))):::state
+    state__IntakePacket_intakesent((("送付済"))):::state
+    state__PatientAccount_patientactive((("有効"))):::state
+    state__PatientAccount_patientinactive((("アーカイブ済"))):::state
+    state__PatientAccount_patientmerged((("統合済"))):::state
   end
-  actor__Patient -.->|performs| usecase__CaptureConsent
-  actor__Patient -.->|performs| usecase__CompleteIntakeForms
-  actor__ReceptionClerk -.->|performs| usecase__ArchivePatient
-  actor__ReceptionClerk -.->|performs| usecase__ExpireIntakeForms
-  actor__ReceptionClerk -.->|performs| usecase__MergeDuplicatePatient
-  actor__ReceptionClerk -.->|performs| usecase__RegisterPatient
-  actor__ReceptionClerk -.->|performs| usecase__SearchPatient
-  actor__ReceptionClerk -.->|performs| usecase__SendIntakeForms
-  actor__ReceptionClerk -.->|performs| usecase__UpdateDemographics
-  actor__ReceptionClerk -.->|performs| usecase__VerifyInsurance
-  event__EvAppointmentScheduled -.->|triggers| extsystem__MessagingGateway
-  event__EvAppointmentScheduled -.->|triggers| usecase__SendIntakeForms
-  screen__PatientProfileScreen -.->|shows| entity__PatientProfile
-  screen__PatientSearchScreen -.->|shows| entity__PatientAccount
-  timer__IntakeExpiryCheck -.->|triggers| usecase__ExpireIntakeForms
-  usecase__ArchivePatient -.->|displays| screen__PatientProfileScreen
+  actor__Patient -.-> usecase__CaptureConsent
+  actor__Patient -.-> usecase__CompleteIntakeForms
+  actor__ReceptionClerk -.-> usecase__ArchivePatient
+  actor__ReceptionClerk -.-> usecase__ExpireIntakeForms
+  actor__ReceptionClerk -.-> usecase__MergeDuplicatePatient
+  actor__ReceptionClerk -.-> usecase__RegisterPatient
+  actor__ReceptionClerk -.-> usecase__SearchPatient
+  actor__ReceptionClerk -.-> usecase__SendIntakeForms
+  actor__ReceptionClerk -.-> usecase__UpdateDemographics
+  actor__ReceptionClerk -.-> usecase__VerifyInsurance
+  event__EvAppointmentScheduled -.-> extsystem__MessagingGateway
+  event__EvAppointmentScheduled -.-> usecase__SendIntakeForms
+  screen__PatientProfileScreen -.-> entity__PatientProfile
+  screen__PatientSearchScreen -.-> entity__PatientAccount
+  timer__IntakeExpiryCheck -.-> usecase__ExpireIntakeForms
+  usecase__ArchivePatient -.-> screen__PatientProfileScreen
   usecase__ArchivePatient -.->|transitions PatientAccount.status patientactive->patientinactive| state__PatientAccount_patientinactive
   usecase__ArchivePatient -.->|updates| entity__PatientAccount
   usecase__CaptureConsent -.->|creates| entity__ConsentRecord
   %% derived usecase__CaptureConsent -> entity__ConsentRecord via api__ConsentApi
-  usecase__CaptureConsent -.->|displays| screen__ConsentScreen
-  usecase__CompleteIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__CaptureConsent -.-> screen__ConsentScreen
+  usecase__CompleteIntakeForms -.-> screen__IntakePortalScreen
   usecase__CompleteIntakeForms -.->|transitions IntakePacket.status intakesent->intakecompleted| state__IntakePacket_intakecompleted
   usecase__CompleteIntakeForms -.->|updates| entity__IntakePacket
-  usecase__ExpireIntakeForms -.->|displays| screen__IntakePortalScreen
+  usecase__ExpireIntakeForms -.-> screen__IntakePortalScreen
   usecase__ExpireIntakeForms -.->|transitions IntakePacket.status intakesent->intakeexpired| state__IntakePacket_intakeexpired
   usecase__ExpireIntakeForms -.->|updates| entity__IntakePacket
-  usecase__MergeDuplicatePatient -.->|displays| screen__PatientProfileScreen
+  usecase__MergeDuplicatePatient -.-> screen__PatientProfileScreen
   usecase__MergeDuplicatePatient -.->|transitions PatientAccount.status patientactive->patientmerged| state__PatientAccount_patientmerged
   usecase__MergeDuplicatePatient -.->|updates| entity__PatientAccount
   usecase__RegisterPatient -.->|creates| entity__PatientAccount
   %% derived usecase__RegisterPatient -> entity__PatientAccount via api__RegisterPatientApi
   usecase__RegisterPatient -.->|creates| entity__PatientProfile
   %% derived usecase__RegisterPatient -> entity__PatientProfile via api__RegisterPatientApi
-  usecase__RegisterPatient -.->|displays| screen__PatientProfileScreen
-  usecase__SearchPatient -.->|displays| screen__PatientSearchScreen
+  usecase__RegisterPatient -.-> screen__PatientProfileScreen
+  usecase__SearchPatient -.-> screen__PatientSearchScreen
   usecase__SearchPatient -.->|reads| entity__PatientAccount
   %% derived usecase__SearchPatient -> entity__PatientAccount via api__SearchPatientApi
   usecase__SearchPatient -.->|reads| entity__PatientProfile
@@ -100,13 +100,13 @@ flowchart LR
   %% derived usecase__SendIntakeForms -> entity__IntakePacket via api__IntakeMessagingApi
   usecase__SendIntakeForms -.->|creates| entity__PatientMessage
   %% derived usecase__SendIntakeForms -> entity__PatientMessage via api__IntakeMessagingApi
-  usecase__SendIntakeForms -.->|displays| screen__IntakePortalScreen
-  usecase__UpdateDemographics -.->|displays| screen__PatientProfileScreen
+  usecase__SendIntakeForms -.-> screen__IntakePortalScreen
+  usecase__UpdateDemographics -.-> screen__PatientProfileScreen
   usecase__UpdateDemographics -.->|updates| entity__PatientProfile
   %% derived usecase__UpdateDemographics -> entity__PatientProfile via api__UpdateDemographicsApi
   usecase__VerifyInsurance -.->|creates| entity__EligibilityCheck
   %% derived usecase__VerifyInsurance -> entity__EligibilityCheck via api__EligibilityApi
-  usecase__VerifyInsurance -.->|displays| screen__InsuranceScreen
+  usecase__VerifyInsurance -.-> screen__InsuranceScreen
   usecase__VerifyInsurance -.->|reads| entity__InsurancePolicy
   %% derived usecase__VerifyInsurance -> entity__InsurancePolicy via api__EligibilityApi
   usecase__VerifyInsurance -.->|updates| entity__InsurancePolicy

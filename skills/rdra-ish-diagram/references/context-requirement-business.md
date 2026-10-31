@@ -26,8 +26,9 @@ rdra-ish list src/ --kind buc-roles --format markdown
 - The diagram has no layer subgraphs and no `layers:` header line. The whole model draws
   every actor, external system, and system, linked or not.
 - Every edge is derived and followed by `%% derived ... via <ids>`:
-  - `actor__A -.->|<BUC labels>| system__S`: one edge per actor, labelled with the labels
-    of the BUCs it performs (`、`-joined), directly or through a use case or step.
+  - `actor__A -.->|<BUC labels>| system__S`: one edge per actor (a `performs`), labelled
+    with the labels of the BUCs it performs (`、`-joined), directly or through a use case or
+    step.
   - `extsystem__X -.->|<event labels>| system__S`: one edge, labelled with the events X
     raises that trigger one of the system's use cases or BUCs.
   - `system__S -.->|<event labels>| extsystem__X`: one edge, labelled with the events one
@@ -35,7 +36,7 @@ rdra-ish list src/ --kind buc-roles --format markdown
   - `via` lists the BUC or event ids the label names, so read it to find the element.
 - With one declared system, every edge ends there. With several, an edge ends at each
   system that contains an API the use cases behind it invoke. When no system is declared,
-  or none can be traced, it ends at `system__Model["システム"]`, with a
+  or none can be traced, it ends at `system__Model["システム"]:::system`, with a
   `%% synthesized system__Model: <reason>` line. A traced model has no `system__Model`.
 - An actor or external system without an edge takes part in nothing yet.
 
@@ -44,8 +45,9 @@ rdra-ish list src/ --kind buc-roles --format markdown
 - Read it left to right: goal, requirement, BUC. There are no layer subgraphs. A goal
   node adds its metric and `baseline → target` on a second line, so a goal without them is
   unmeasured.
-- `requirement -->|motivates| buc` is declared. `goal -->|achieved_by| requirement` is the
-  declared `achieves` read from the goal, with a `%% derived` line.
+- `requirement --> buc` is the declared `motivates`. `goal --> requirement` is
+  `achieved_by`, the declared `achieves` read from the goal, with a `%% derived` line.
+  Both go unlabelled, since each pair of kinds has one relation.
 - A requirement with `status "out-of-scope"` is in `subgraph group_out_of_scope`
   (`やらないこと`) with dashed edges: a non-goal, kept visible.
 - NFRs, constraints, qualities, entities, and systems are not drawn; `omitted:` names
@@ -57,7 +59,7 @@ rdra-ish list src/ --kind buc-roles --format markdown
 ## Reading the Business Flow
 
 - Each business is `subgraph business__<id>` holding its BUCs. A BUC of several businesses
-  sits in the first by id with `-->|belongs|` edges to the others; a BUC of no business
+  sits in the first by id with unlabelled `-->` (`belongs`) edges to the others; a BUC of no business
   sits outside every subgraph.
 - `buc__A -->|<event label>| buc__B` is a hand-off: a use case of A raises the event, and
   it starts a use case of B (or B itself). `%% derived ... via event__<Id>` names the

@@ -4,77 +4,77 @@
 %% omitted: buc step medium permission api
 flowchart LR
   subgraph layer_value["システム価値"]
-    actor__CareCoordinator["患者支援・地域連携担当"]:::actor
+    actor__CareCoordinator(["患者支援・地域連携担当"]):::actor
     %% desc actor__CareCoordinator: 診療後のケアプランを作り、患者への連絡と再診予約を追う。
-    extsystem__MessagingGateway["患者通知サービス"]:::extsystem
+    extsystem__MessagingGateway[["患者通知サービス"]]:::extsystem
   end
   subgraph layer_boundary["システム境界"]
-    usecase__CloseCarePlan["ケアプランの終了"]:::usecase
+    usecase__CloseCarePlan("ケアプランの終了"):::usecase
     %% desc usecase__CloseCarePlan: ケアプラン終了。
-    usecase__CreateCarePlan["ケアプランの作成"]:::usecase
+    usecase__CreateCarePlan("ケアプランの作成"):::usecase
     %% desc usecase__CreateCarePlan: 署名イベントからのケアプラン作成。
-    usecase__NotifyPatientResult["検査結果の患者通知"]:::usecase
+    usecase__NotifyPatientResult("検査結果の患者通知"):::usecase
     %% desc usecase__NotifyPatientResult: 結果の患者通知。
-    usecase__ReviewPatientResponse["患者応答の確認"]:::usecase
+    usecase__ReviewPatientResponse("患者応答の確認"):::usecase
     %% desc usecase__ReviewPatientResponse: 患者応答の確認。
-    usecase__ScheduleFollowUpVisit["再診の予約"]:::usecase
+    usecase__ScheduleFollowUpVisit("再診の予約"):::usecase
     %% desc usecase__ScheduleFollowUpVisit: 再診予約。
-    usecase__SendFollowUpMessage["患者への連絡"]:::usecase
+    usecase__SendFollowUpMessage("患者への連絡"):::usecase
     %% desc usecase__SendFollowUpMessage: 患者連絡。
     screen__CarePlanScreen["ケアプラン画面"]:::screen
     screen__FollowUpScheduleScreen["再診予約画面"]:::screen
     screen__PatientMessageScreen["患者連絡画面"]:::screen
-    event__EvAppointmentScheduled["予約確定"]:::event
-    event__EvClinicalOrderReviewed["検査結果の確認"]:::event
-    event__EvEncounterSigned["診療記録の署名"]:::event
+    event__EvAppointmentScheduled>"予約確定"]:::event
+    event__EvClinicalOrderReviewed>"検査結果の確認"]:::event
+    event__EvEncounterSigned>"診療記録の署名"]:::event
   end
   subgraph layer_system["システム"]
-    entity__Appointment["予約・受診"]:::entity
-    entity__CarePlan["ケアプラン"]:::entity
-    entity__Encounter["診療記録"]:::entity
-    entity__Notification["通知"]:::entity
-    entity__PatientMessage["患者連絡"]:::entity
-    entity__ProviderSchedule["診療枠"]:::entity
-    state__Appointment_apptrequested["仮押さえ"]:::state
-    state__Appointment_apptscheduled["予約済"]:::state
-    state__CarePlan_careclosed["終了"]:::state
-    state__CarePlan_caremonitoring["経過観察中"]:::state
-    state__CarePlan_careopen["作成済"]:::state
+    entity__Appointment[("予約・受診")]:::entity
+    entity__CarePlan[("ケアプラン")]:::entity
+    entity__Encounter[("診療記録")]:::entity
+    entity__Notification[("通知")]:::entity
+    entity__PatientMessage[("患者連絡")]:::entity
+    entity__ProviderSchedule[("診療枠")]:::entity
+    state__Appointment_apptrequested((("仮押さえ"))):::state
+    state__Appointment_apptscheduled((("予約済"))):::state
+    state__CarePlan_careclosed((("終了"))):::state
+    state__CarePlan_caremonitoring((("経過観察中"))):::state
+    state__CarePlan_careopen((("作成済"))):::state
   end
-  actor__CareCoordinator -.->|performs| usecase__CloseCarePlan
-  actor__CareCoordinator -.->|performs| usecase__CreateCarePlan
-  actor__CareCoordinator -.->|performs| usecase__NotifyPatientResult
-  actor__CareCoordinator -.->|performs| usecase__ReviewPatientResponse
-  actor__CareCoordinator -.->|performs| usecase__ScheduleFollowUpVisit
-  actor__CareCoordinator -.->|performs| usecase__SendFollowUpMessage
-  event__EvAppointmentScheduled -.->|triggers| extsystem__MessagingGateway
-  event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyPatientResult
-  event__EvEncounterSigned -.->|triggers| usecase__CreateCarePlan
-  usecase__CloseCarePlan -.->|displays| screen__CarePlanScreen
+  actor__CareCoordinator -.-> usecase__CloseCarePlan
+  actor__CareCoordinator -.-> usecase__CreateCarePlan
+  actor__CareCoordinator -.-> usecase__NotifyPatientResult
+  actor__CareCoordinator -.-> usecase__ReviewPatientResponse
+  actor__CareCoordinator -.-> usecase__ScheduleFollowUpVisit
+  actor__CareCoordinator -.-> usecase__SendFollowUpMessage
+  event__EvAppointmentScheduled -.-> extsystem__MessagingGateway
+  event__EvClinicalOrderReviewed -.-> usecase__NotifyPatientResult
+  event__EvEncounterSigned -.-> usecase__CreateCarePlan
+  usecase__CloseCarePlan -.-> screen__CarePlanScreen
   usecase__CloseCarePlan -.->|transitions CarePlan.status caremonitoring->careclosed| state__CarePlan_careclosed
   usecase__CloseCarePlan -.->|updates| entity__CarePlan
   usecase__CreateCarePlan -.->|creates| entity__CarePlan
   %% derived usecase__CreateCarePlan -> entity__CarePlan via api__CreateCarePlanApi
-  usecase__CreateCarePlan -.->|displays| screen__CarePlanScreen
+  usecase__CreateCarePlan -.-> screen__CarePlanScreen
   usecase__CreateCarePlan -.->|reads| entity__Encounter
   %% derived usecase__CreateCarePlan -> entity__Encounter via api__CreateCarePlanApi
   usecase__NotifyPatientResult -.->|creates| entity__Notification
   %% derived usecase__NotifyPatientResult -> entity__Notification via api__NotifyPatientResultApi
-  usecase__NotifyPatientResult -.->|displays| screen__PatientMessageScreen
-  usecase__ReviewPatientResponse -.->|displays| screen__CarePlanScreen
+  usecase__NotifyPatientResult -.-> screen__PatientMessageScreen
+  usecase__ReviewPatientResponse -.-> screen__CarePlanScreen
   usecase__ReviewPatientResponse -.->|transitions CarePlan.status careopen->caremonitoring| state__CarePlan_caremonitoring
   usecase__ReviewPatientResponse -.->|updates| entity__CarePlan
   usecase__ReviewPatientResponse -.->|updates| entity__PatientMessage
   usecase__ScheduleFollowUpVisit -.->|creates| entity__Appointment
   %% derived usecase__ScheduleFollowUpVisit -> entity__Appointment via api__FollowUpScheduleApi
-  usecase__ScheduleFollowUpVisit -.->|displays| screen__FollowUpScheduleScreen
-  usecase__ScheduleFollowUpVisit -.->|raises| event__EvAppointmentScheduled
+  usecase__ScheduleFollowUpVisit -.-> screen__FollowUpScheduleScreen
+  usecase__ScheduleFollowUpVisit -.-> event__EvAppointmentScheduled
   usecase__ScheduleFollowUpVisit -.->|transitions Appointment.status apptrequested->apptscheduled| state__Appointment_apptscheduled
   usecase__ScheduleFollowUpVisit -.->|updates| entity__ProviderSchedule
   %% derived usecase__ScheduleFollowUpVisit -> entity__ProviderSchedule via api__FollowUpScheduleApi
   usecase__SendFollowUpMessage -.->|creates| entity__PatientMessage
   %% derived usecase__SendFollowUpMessage -> entity__PatientMessage via api__SendFollowUpMessageApi
-  usecase__SendFollowUpMessage -.->|displays| screen__PatientMessageScreen
+  usecase__SendFollowUpMessage -.-> screen__PatientMessageScreen
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
   classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;

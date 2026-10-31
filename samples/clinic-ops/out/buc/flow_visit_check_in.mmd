@@ -15,42 +15,42 @@ flowchart TD
       step__ReferralStep["紹介状あり（初診）"]:::step
     end
   end
-  usecase__AssignRoom["診察室への案内"]:::usecase
+  usecase__AssignRoom("診察室への案内"):::usecase
   %% desc usecase__AssignRoom: 受付済の受診だけを診察室へ案内する。予約の状態は変わらない。
-  usecase__CheckInPatient["受付（初診・再診）"]:::usecase
+  usecase__CheckInPatient("受付（初診・再診）"):::usecase
   %% desc usecase__CheckInPatient: 受付で予約を受付済にし、同時にオンライン資格確認を作る。
-  usecase__ConfirmEligibilityInOutageMode["システム障害時モードでの資格確認"]:::usecase
+  usecase__ConfirmEligibilityInOutageMode("システム障害時モードでの資格確認"):::usecase
   %% desc usecase__ConfirmEligibilityInOutageMode: システム障害時モードによる確認。
-  usecase__ReceiveEligibilityInvalid["資格確認結果（無効）の取込"]:::usecase
+  usecase__ReceiveEligibilityInvalid("資格確認結果（無効）の取込"):::usecase
   %% desc usecase__ReceiveEligibilityInvalid: 資格確認結果「無効」の取込。
-  usecase__ReceiveEligibilityNoInfo["資格確認結果（該当資格なし）の取込"]:::usecase
+  usecase__ReceiveEligibilityNoInfo("資格確認結果（該当資格なし）の取込"):::usecase
   %% desc usecase__ReceiveEligibilityNoInfo: 資格確認結果「該当資格なし」の取込。
-  usecase__ReceiveEligibilityValid["資格確認結果（有効）の取込"]:::usecase
+  usecase__ReceiveEligibilityValid("資格確認結果（有効）の取込"):::usecase
   %% desc usecase__ReceiveEligibilityValid: 資格確認結果「有効」の取込。
-  usecase__ReceiveReferralLetter["紹介状受付処理"]:::usecase
+  usecase__ReceiveReferralLetter("紹介状受付処理"):::usecase
   %% desc usecase__ReceiveReferralLetter: 紹介状の受領と受付処理。
-  usecase__RecheckEligibility["資格の再確認"]:::usecase
+  usecase__RecheckEligibility("資格の再確認"):::usecase
   %% desc usecase__RecheckEligibility: 無効・該当資格なしからの再確認。
-  usecase__RecordEligibilityDeclaration["被保険者資格申立書の受領"]:::usecase
+  usecase__RecordEligibilityDeclaration("被保険者資格申立書の受領"):::usecase
   %% desc usecase__RecordEligibilityDeclaration: 被保険者資格申立書による確認。
-  usecase__VerifyArrival["予約票・診察券の確認"]:::usecase
+  usecase__VerifyArrival("予約票・診察券の確認"):::usecase
   %% desc usecase__VerifyArrival: 予約票・診察券を確認する（参照のみ）。
-  step__ArrivalStep -.->|covers| usecase__VerifyArrival
+  step__ArrivalStep -.-> usecase__VerifyArrival
   step__ArrivalStep -->|precedes| step__EligibilityStep
-  step__DeclarationStep -.->|covers| usecase__ConfirmEligibilityInOutageMode
-  step__DeclarationStep -.->|covers| usecase__RecordEligibilityDeclaration
+  step__DeclarationStep -.-> usecase__ConfirmEligibilityInOutageMode
+  step__DeclarationStep -.-> usecase__RecordEligibilityDeclaration
   step__DeclarationStep -->|precedes| step__RoomingStep
   step__EligibilityStep -->|branches| step__ReferralStep
-  step__EligibilityStep -.->|covers| usecase__CheckInPatient
-  step__EligibilityStep -.->|covers| usecase__ReceiveEligibilityInvalid
-  step__EligibilityStep -.->|covers| usecase__ReceiveEligibilityNoInfo
-  step__EligibilityStep -.->|covers| usecase__ReceiveEligibilityValid
-  step__EligibilityStep -.->|covers| usecase__RecheckEligibility
+  step__EligibilityStep -.-> usecase__CheckInPatient
+  step__EligibilityStep -.-> usecase__ReceiveEligibilityInvalid
+  step__EligibilityStep -.-> usecase__ReceiveEligibilityNoInfo
+  step__EligibilityStep -.-> usecase__ReceiveEligibilityValid
+  step__EligibilityStep -.-> usecase__RecheckEligibility
   step__EligibilityStep -.->|excepts| step__DeclarationStep
   step__EligibilityStep -->|precedes| step__RoomingStep
-  step__ReferralStep -.->|covers| usecase__ReceiveReferralLetter
+  step__ReferralStep -.-> usecase__ReceiveReferralLetter
   step__ReferralStep -->|precedes| step__RoomingStep
-  step__RoomingStep -.->|covers| usecase__AssignRoom
+  step__RoomingStep -.-> usecase__AssignRoom
   classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;

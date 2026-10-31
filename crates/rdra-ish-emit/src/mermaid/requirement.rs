@@ -5,7 +5,9 @@
 //! `omitted:` line names them.
 
 use super::{buc_scope, kinds_by_layer, omitted_linked_kinds, render_edges, GraphEdge};
-use crate::diagram_common::{class_defs, contract_id, desc_line, node_label, quote, Header};
+use crate::diagram_common::{
+    class_defs, contract_id, desc_line, node_label, node_line, quote, Header,
+};
 use crate::{collect_object_graph_nodes, node_kind_filter_name, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{Goal, NodeRef, RelKind, SemanticModel};
 use std::collections::HashSet;
@@ -53,7 +55,7 @@ fn declare_node(out: &mut String, model: &SemanticModel, node: &NodeRef, indent:
         }
     }
     let kind = node_kind_filter_name(node);
-    out.push_str(&format!("{indent}{id}[\"{text}\"]:::{kind}\n"));
+    out.push_str(&node_line(indent, &id, &text, kind));
     if let Some(desc) = desc_line(model, node, &id) {
         out.push_str(&format!("{indent}{desc}\n"));
     }
@@ -149,7 +151,7 @@ impl Emitter for RequirementMermaidEmitter {
                 });
             }
         }
-        render_edges(&mut body, edges);
+        render_edges(&mut body, "requirement", edges);
 
         let kinds = kinds_by_layer(&nodes);
         body.push_str(&class_defs(&kinds));
@@ -249,16 +251,16 @@ decides(AdrOne, ReqFast)
     fn the_tree_runs_from_a_goal_through_a_requirement_to_a_buc() {
         let result = emit(View::whole());
         for edge in [
-            "  goal__ShortWait -->|achieved_by| requirement__ReqFast\n  %% derived goal__ShortWait -> requirement__ReqFast via requirement__ReqFast\n",
-            "  requirement__ReqFast -->|motivates| buc__BucPay\n",
-            "  requirement__ReqFast -->|motivates| buc__BucShip\n",
+            "  goal__ShortWait --> requirement__ReqFast\n  %% derived goal__ShortWait -> requirement__ReqFast via requirement__ReqFast\n",
+            "  requirement__ReqFast --> buc__BucPay\n",
+            "  requirement__ReqFast --> buc__BucShip\n",
         ] {
             assert!(result.contains(edge), "{edge}: {result}");
         }
         for present in [
-            "  requirement__ReqFast[\"Pay fast\"]:::requirement\n",
-            "  requirement__ReqLoose[\"Nothing yet\"]:::requirement\n",
-            "  goal__Unserved[\"Unserved\"]:::goal\n",
+            "  requirement__ReqFast[/\"Pay fast\"\\]:::requirement\n",
+            "  requirement__ReqLoose[/\"Nothing yet\"\\]:::requirement\n",
+            "  goal__Unserved[/\"Unserved\"/]:::goal\n",
         ] {
             assert!(result.contains(present), "{present}: {result}");
         }
@@ -270,9 +272,9 @@ decides(AdrOne, ReqFast)
     fn a_goal_adds_its_metric_and_baseline_to_target_under_its_label() {
         let result = emit(View::whole());
         for present in [
-            "  goal__ShortWait[\"Short wait<br/>Median wait: 45 min → 30 min\"]:::goal\n",
-            "  goal__Bare[\"Bare<br/>Complaints\"]:::goal\n",
-            "  goal__Below[\"Below<br/>Rate: → #lt;5%\"]:::goal\n",
+            "  goal__ShortWait[/\"Short wait<br/>Median wait: 45 min → 30 min\"/]:::goal\n",
+            "  goal__Bare[/\"Bare<br/>Complaints\"/]:::goal\n",
+            "  goal__Below[/\"Below<br/>Rate: → #lt;5%\"/]:::goal\n",
         ] {
             assert!(result.contains(present), "{present}: {result}");
         }
@@ -283,12 +285,12 @@ decides(AdrOne, ReqFast)
         let result = emit(View::whole());
         assert!(
             result.contains(
-                "  subgraph group_out_of_scope[\"やらないこと\"]\n    requirement__ReqVideo[\"No video payment\"]:::requirement\n  end\n"
+                "  subgraph group_out_of_scope[\"やらないこと\"]\n    requirement__ReqVideo[/\"No video payment\"\\]:::requirement\n  end\n"
             ),
             "{result}"
         );
         assert!(
-            result.contains("  requirement__ReqVideo -.->|motivates| buc__BucPay\n"),
+            result.contains("  requirement__ReqVideo -.-> buc__BucPay\n"),
             "{result}"
         );
         assert!(!result.contains("やらないこと\"]\n    requirement__ReqFast"));
@@ -330,8 +332,8 @@ decides(AdrOne, ReqFast)
             "{ship}"
         );
         for present in [
-            "  requirement__ReqFast -->|motivates| buc__BucShip\n",
-            "  goal__ShortWait -->|achieved_by| requirement__ReqFast\n",
+            "  requirement__ReqFast --> buc__BucShip\n",
+            "  goal__ShortWait --> requirement__ReqFast\n",
         ] {
             assert!(ship.contains(present), "{present}: {ship}");
         }

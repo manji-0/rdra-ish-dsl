@@ -26,49 +26,49 @@ flowchart TD
       step__MergeStep["重複患者の統合"]:::step
     end
   end
-  timer__IntakeExpiryCheck["問診票の期限切れ確認（毎晩）"]:::timer
-  usecase__ArchivePatient["患者のアーカイブ"]:::usecase
+  timer__IntakeExpiryCheck(("問診票の期限切れ確認（毎晩）")):::timer
+  usecase__ArchivePatient("患者のアーカイブ"):::usecase
   %% desc usecase__ArchivePatient: 患者アーカイブ状態。
-  usecase__CaptureConsent["同意の取得"]:::usecase
+  usecase__CaptureConsent("同意の取得"):::usecase
   %% desc usecase__CaptureConsent: 同意記録を作る。同意の有無は Bool、未回答は null で持つ。
-  usecase__CompleteIntakeForms["問診票の回答"]:::usecase
+  usecase__CompleteIntakeForms("問診票の回答"):::usecase
   %% desc usecase__CompleteIntakeForms: 問診完了イベント。
-  usecase__ExpireIntakeForms["問診票の期限切れ"]:::usecase
+  usecase__ExpireIntakeForms("問診票の期限切れ"):::usecase
   %% desc usecase__ExpireIntakeForms: 問診期限切れイベント。
-  usecase__MergeDuplicatePatient["重複患者の統合"]:::usecase
+  usecase__MergeDuplicatePatient("重複患者の統合"):::usecase
   %% desc usecase__MergeDuplicatePatient: 患者統合状態。
-  usecase__RegisterPatient["新患登録"]:::usecase
+  usecase__RegisterPatient("新患登録"):::usecase
   %% desc usecase__RegisterPatient: 新患の PatientAccount と PatientProfile を 1 つの API で同時に作る。
-  usecase__SearchPatient["患者の検索"]:::usecase
+  usecase__SearchPatient("患者の検索"):::usecase
   %% desc usecase__SearchPatient: 患者を検索する。参照だけの API で、患者の作成とは分ける。
-  usecase__SendIntakeForms["問診票の送付"]:::usecase
+  usecase__SendIntakeForms("問診票の送付"):::usecase
   %% desc usecase__SendIntakeForms: 問診パケットとメッセージ作成。
-  usecase__UpdateDemographics["患者属性の変更"]:::usecase
+  usecase__UpdateDemographics("患者属性の変更"):::usecase
   %% desc usecase__UpdateDemographics: 患者の属性を API で更新する。
-  usecase__VerifyInsurance["保険資格・限度額情報の登録（新患登録）"]:::usecase
+  usecase__VerifyInsurance("保険資格・限度額情報の登録（新患登録）"):::usecase
   %% desc usecase__VerifyInsurance: 保険資格の登録と限度額情報（適用区分）の取得。
-  event__EvAppointmentScheduled["予約確定"]:::event
-  step__ArchiveStep -.->|covers| usecase__ArchivePatient
-  step__ConsentStep -.->|covers| usecase__CaptureConsent
+  event__EvAppointmentScheduled>"予約確定"]:::event
+  step__ArchiveStep -.-> usecase__ArchivePatient
+  step__ConsentStep -.-> usecase__CaptureConsent
   step__ConsentStep -->|precedes| step__IntakeSendStep
-  step__DemographicsStep -.->|covers| usecase__UpdateDemographics
-  step__InsuranceStep -.->|covers| usecase__VerifyInsurance
+  step__DemographicsStep -.-> usecase__UpdateDemographics
+  step__InsuranceStep -.-> usecase__VerifyInsurance
   step__InsuranceStep -->|precedes| step__ConsentStep
-  step__IntakeAnswerStep -.->|covers| usecase__CompleteIntakeForms
+  step__IntakeAnswerStep -.-> usecase__CompleteIntakeForms
   step__IntakeAnswerStep -.->|excepts| step__IntakeExpireStep
-  step__IntakeExpireStep -.->|covers| timer__IntakeExpiryCheck
-  step__IntakeExpireStep -.->|covers| usecase__ExpireIntakeForms
-  step__IntakeSendStep -.->|covers| event__EvAppointmentScheduled
-  step__IntakeSendStep -.->|covers| usecase__SendIntakeForms
+  step__IntakeExpireStep -.-> timer__IntakeExpiryCheck
+  step__IntakeExpireStep -.-> usecase__ExpireIntakeForms
+  step__IntakeSendStep -.-> event__EvAppointmentScheduled
+  step__IntakeSendStep -.-> usecase__SendIntakeForms
   step__IntakeSendStep -->|precedes| step__IntakeAnswerStep
   step__MaintainSearchStep -->|branches| step__ArchiveStep
   step__MaintainSearchStep -->|branches| step__MergeStep
-  step__MaintainSearchStep -.->|covers| usecase__SearchPatient
+  step__MaintainSearchStep -.-> usecase__SearchPatient
   step__MaintainSearchStep -->|precedes| step__DemographicsStep
-  step__MergeStep -.->|covers| usecase__MergeDuplicatePatient
-  step__NewPatientSearchStep -.->|covers| usecase__SearchPatient
+  step__MergeStep -.-> usecase__MergeDuplicatePatient
+  step__NewPatientSearchStep -.-> usecase__SearchPatient
   step__NewPatientSearchStep -->|precedes| step__RegisterStep
-  step__RegisterStep -.->|covers| usecase__RegisterPatient
+  step__RegisterStep -.-> usecase__RegisterPatient
   step__RegisterStep -->|precedes| step__InsuranceStep
   classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
