@@ -4,46 +4,46 @@
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "ClaimStatement.status" as statemodel__ClaimStatement_status {
-    [*] --> state__ClaimStatement_stmtdrafting
-    state "作成中" as state__ClaimStatement_stmtdrafting
-    state "院内点検中" as state__ClaimStatement_stmtinspecting
-    state "保留" as state__ClaimStatement_stmtonhold
-    state "請求済" as state__ClaimStatement_stmtsubmitted
-    state "受付不能・要確認" as state__ClaimStatement_stmtreceipterror
-    state "審査中" as state__ClaimStatement_stmtunderreview
-    state "支払済" as state__ClaimStatement_stmtpaid
-    state "返戻" as state__ClaimStatement_stmtreturned
-    state "査定" as state__ClaimStatement_stmtassessed
-    state "再審査請求中" as state__ClaimStatement_stmtrereview
+    [*] --> state__ClaimStatement_drafting
+    state "作成中" as state__ClaimStatement_drafting
+    state "院内点検中" as state__ClaimStatement_inspecting
+    state "保留" as state__ClaimStatement_on_hold
+    state "請求済" as state__ClaimStatement_submitted
+    state "受付不能・要確認" as state__ClaimStatement_receipt_error
+    state "審査中" as state__ClaimStatement_under_review
+    state "支払済" as state__ClaimStatement_paid
+    state "返戻" as state__ClaimStatement_returned
+    state "査定" as state__ClaimStatement_assessed
+    state "再審査請求中" as state__ClaimStatement_rereview
     %% transition usecase__InspectClaimStatement
-    state__ClaimStatement_stmtdrafting --> state__ClaimStatement_stmtinspecting : レセプトの院内点検
+    state__ClaimStatement_drafting --> state__ClaimStatement_inspecting : レセプトの院内点検
     %% transition usecase__HoldClaimStatement
-    state__ClaimStatement_stmtinspecting --> state__ClaimStatement_stmtonhold : レセプトの保留（月遅れ）
+    state__ClaimStatement_inspecting --> state__ClaimStatement_on_hold : レセプトの保留（月遅れ）
     %% transition usecase__SubmitClaimStatements
-    state__ClaimStatement_stmtinspecting --> state__ClaimStatement_stmtsubmitted : レセプト請求
+    state__ClaimStatement_inspecting --> state__ClaimStatement_submitted : レセプト請求
     %% transition usecase__ReleaseHeldStatement
-    state__ClaimStatement_stmtonhold --> state__ClaimStatement_stmtinspecting : 保留レセプトの再提出準備
+    state__ClaimStatement_on_hold --> state__ClaimStatement_inspecting : 保留レセプトの再提出準備
     %% transition usecase__RecordReceiptError
-    state__ClaimStatement_stmtsubmitted --> state__ClaimStatement_stmtreceipterror : 受付不能・要確認の確認
+    state__ClaimStatement_submitted --> state__ClaimStatement_receipt_error : 受付不能・要確認の確認
     %% transition usecase__ReceiveClaimAccepted
-    state__ClaimStatement_stmtsubmitted --> state__ClaimStatement_stmtunderreview : レセプト受付（審査へ）
+    state__ClaimStatement_submitted --> state__ClaimStatement_under_review : レセプト受付（審査へ）
     %% transition usecase__ResendErroredStatement
-    state__ClaimStatement_stmtreceipterror --> state__ClaimStatement_stmtsubmitted : エラー分レセプトの再送
+    state__ClaimStatement_receipt_error --> state__ClaimStatement_submitted : エラー分レセプトの再送
     %% transition usecase__PostPayment
-    state__ClaimStatement_stmtunderreview --> state__ClaimStatement_stmtpaid : 診療報酬の入金
+    state__ClaimStatement_under_review --> state__ClaimStatement_paid : 診療報酬の入金
     %% transition usecase__RecordClaimReturn
-    state__ClaimStatement_stmtunderreview --> state__ClaimStatement_stmtreturned : 返戻レセプトの取込
+    state__ClaimStatement_under_review --> state__ClaimStatement_returned : 返戻レセプトの取込
     %% transition usecase__RecordClaimAssessment
-    state__ClaimStatement_stmtunderreview --> state__ClaimStatement_stmtassessed : 査定の取込
+    state__ClaimStatement_under_review --> state__ClaimStatement_assessed : 査定の取込
     %% transition usecase__CorrectReturnedStatement
-    state__ClaimStatement_stmtreturned --> state__ClaimStatement_stmtinspecting : 返戻レセプトの訂正（再請求）
+    state__ClaimStatement_returned --> state__ClaimStatement_inspecting : 返戻レセプトの訂正（再請求）
     %% transition usecase__PostPayment
-    state__ClaimStatement_stmtassessed --> state__ClaimStatement_stmtpaid : 診療報酬の入金
+    state__ClaimStatement_assessed --> state__ClaimStatement_paid : 診療報酬の入金
     %% transition usecase__RequestReexamination
-    state__ClaimStatement_stmtassessed --> state__ClaimStatement_stmtrereview : 再審査請求
+    state__ClaimStatement_assessed --> state__ClaimStatement_rereview : 再審査請求
     %% transition usecase__PostPayment
-    state__ClaimStatement_stmtrereview --> state__ClaimStatement_stmtpaid : 診療報酬の入金
-    state__ClaimStatement_stmtpaid --> [*]
+    state__ClaimStatement_rereview --> state__ClaimStatement_paid : 診療報酬の入金
+    state__ClaimStatement_paid --> [*]
   }
   classDef stateend fill:#dfd,stroke:#383,color:#141
-  class state__ClaimStatement_stmtpaid stateend
+  class state__ClaimStatement_paid stateend

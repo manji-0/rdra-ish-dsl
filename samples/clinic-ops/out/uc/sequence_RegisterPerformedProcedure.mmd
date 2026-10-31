@@ -12,5 +12,5 @@ sequenceDiagram
   screen__SpecimenScreen ->> api__PerformedProcedureApi: 実施登録 API
   api__PerformedProcedureApi ->> entity__ClinicalOrder: read
   api__PerformedProcedureApi ->> entity__Encounter: read
-  api__PerformedProcedureApi ->> entity__Charge: create status=chargeposted, posted_at=set, kind=insured, origin=performed
+  api__PerformedProcedureApi ->> entity__Charge: create status=posted, posted_at=set, kind=insured, origin=performed
   api__PerformedProcedureApi -->> screen__SpecimenScreen: done

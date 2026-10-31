@@ -53,13 +53,13 @@ flowchart LR
     entity__PatientProfile[("患者基本情報")]:::entity
     entity__ReferralLetter[("紹介状・診療情報提供書")]:::entity
     entity__Room[("診察室")]:::entity
-    state__Appointment_apptcheckedin((("受付済"))):::state
-    state__Appointment_apptscheduled((("予約済"))):::state
-    state__EligibilityCheck_eligdeclared((("申立書で確認"))):::state
-    state__EligibilityCheck_eliginvalid((("無効"))):::state
-    state__EligibilityCheck_elignoinfo((("該当資格なし"))):::state
-    state__EligibilityCheck_eligpending((("照会中"))):::state
-    state__EligibilityCheck_eligvalid((("有効"))):::state
+    state__Appointment_checked_in((("受付済"))):::state
+    state__Appointment_scheduled((("予約済"))):::state
+    state__EligibilityCheck_declared((("申立書で確認"))):::state
+    state__EligibilityCheck_invalid((("無効"))):::state
+    state__EligibilityCheck_no_info((("該当資格なし"))):::state
+    state__EligibilityCheck_pending((("照会中"))):::state
+    state__EligibilityCheck_valid((("有効"))):::state
     condition__BookedPatient{"予約済みの患者"}:::condition
   end
   actor__Nurse -.-> usecase__AssignRoom
@@ -81,7 +81,7 @@ flowchart LR
   screen__CheckInScreen -.-> entity__Appointment
   timer__EligibilityBatchInquiry -.-> usecase__BatchVerifyEligibility
   usecase__AssignRoom -.-> screen__RoomBoardScreen
-  usecase__AssignRoom -.->|transitions Appointment.status apptcheckedin->apptcheckedin| state__Appointment_apptcheckedin
+  usecase__AssignRoom -.->|transitions Appointment.status checked_in->checked_in| state__Appointment_checked_in
   usecase__AssignRoom -.->|updates| entity__Appointment
   %% derived usecase__AssignRoom -> entity__Appointment via api__AssignRoomApi
   usecase__AssignRoom -.->|updates| entity__Room
@@ -97,13 +97,13 @@ flowchart LR
   usecase__CheckInPatient -.-> event__EvAppointmentCheckedIn
   usecase__CheckInPatient -.->|reads| entity__InsurancePolicy
   %% derived usecase__CheckInPatient -> entity__InsurancePolicy via api__OnlineEligibilityApi
-  usecase__CheckInPatient -.->|transitions Appointment.status apptscheduled->apptcheckedin| state__Appointment_apptcheckedin
+  usecase__CheckInPatient -.->|transitions Appointment.status scheduled->checked_in| state__Appointment_checked_in
   usecase__CheckInPatient -.->|updates| entity__Appointment
   %% derived usecase__CheckInPatient -> entity__Appointment via api__CheckInPatientApi
   usecase__CheckInPatient -.->|updates| entity__PatientAccount
   %% derived usecase__CheckInPatient -> entity__PatientAccount via api__CheckInPatientApi
   usecase__ConfirmEligibilityInOutageMode -.-> screen__EligibilityScreen
-  usecase__ConfirmEligibilityInOutageMode -.->|transitions EligibilityCheck.result eligpending->eligvalid| state__EligibilityCheck_eligvalid
+  usecase__ConfirmEligibilityInOutageMode -.->|transitions EligibilityCheck.result pending->valid| state__EligibilityCheck_valid
   usecase__ConfirmEligibilityInOutageMode -.->|updates| entity__EligibilityCheck
   %% derived usecase__ConfirmEligibilityInOutageMode -> entity__EligibilityCheck via api__EligibilityResultApi
   usecase__PrepareEncounter -.-> screen__CheckInScreen
@@ -112,27 +112,27 @@ flowchart LR
   usecase__PrepareEncounter -.->|reads| entity__PatientProfile
   %% derived usecase__PrepareEncounter -> entity__PatientProfile via api__PrepareEncounterApi
   usecase__ReceiveEligibilityInvalid -.-> screen__EligibilityScreen
-  usecase__ReceiveEligibilityInvalid -.->|transitions EligibilityCheck.result eligpending->eliginvalid| state__EligibilityCheck_eliginvalid
+  usecase__ReceiveEligibilityInvalid -.->|transitions EligibilityCheck.result pending->invalid| state__EligibilityCheck_invalid
   usecase__ReceiveEligibilityInvalid -.->|updates| entity__EligibilityCheck
   %% derived usecase__ReceiveEligibilityInvalid -> entity__EligibilityCheck via api__EligibilityResultApi
   usecase__ReceiveEligibilityNoInfo -.-> screen__EligibilityScreen
-  usecase__ReceiveEligibilityNoInfo -.->|transitions EligibilityCheck.result eligpending->elignoinfo| state__EligibilityCheck_elignoinfo
+  usecase__ReceiveEligibilityNoInfo -.->|transitions EligibilityCheck.result pending->no_info| state__EligibilityCheck_no_info
   usecase__ReceiveEligibilityNoInfo -.->|updates| entity__EligibilityCheck
   %% derived usecase__ReceiveEligibilityNoInfo -> entity__EligibilityCheck via api__EligibilityResultApi
   usecase__ReceiveEligibilityValid -.-> screen__EligibilityScreen
-  usecase__ReceiveEligibilityValid -.->|transitions EligibilityCheck.result eligpending->eligvalid| state__EligibilityCheck_eligvalid
+  usecase__ReceiveEligibilityValid -.->|transitions EligibilityCheck.result pending->valid| state__EligibilityCheck_valid
   usecase__ReceiveEligibilityValid -.->|updates| entity__EligibilityCheck
   %% derived usecase__ReceiveEligibilityValid -> entity__EligibilityCheck via api__EligibilityResultApi
   usecase__ReceiveReferralLetter -.->|creates| entity__ReferralLetter
   %% derived usecase__ReceiveReferralLetter -> entity__ReferralLetter via api__ReferralLetterApi
   usecase__ReceiveReferralLetter -.-> screen__ReferralScreen
   usecase__RecheckEligibility -.-> screen__EligibilityScreen
-  usecase__RecheckEligibility -.->|transitions EligibilityCheck.result eliginvalid->eligpending| state__EligibilityCheck_eligpending
-  usecase__RecheckEligibility -.->|transitions EligibilityCheck.result elignoinfo->eligpending| state__EligibilityCheck_eligpending
+  usecase__RecheckEligibility -.->|transitions EligibilityCheck.result invalid->pending| state__EligibilityCheck_pending
+  usecase__RecheckEligibility -.->|transitions EligibilityCheck.result no_info->pending| state__EligibilityCheck_pending
   usecase__RecheckEligibility -.->|updates| entity__EligibilityCheck
   %% derived usecase__RecheckEligibility -> entity__EligibilityCheck via api__EligibilityResultApi
   usecase__RecordEligibilityDeclaration -.-> screen__EligibilityScreen
-  usecase__RecordEligibilityDeclaration -.->|transitions EligibilityCheck.result eligpending->eligdeclared| state__EligibilityCheck_eligdeclared
+  usecase__RecordEligibilityDeclaration -.->|transitions EligibilityCheck.result pending->declared| state__EligibilityCheck_declared
   usecase__RecordEligibilityDeclaration -.->|updates| entity__EligibilityCheck
   %% derived usecase__RecordEligibilityDeclaration -> entity__EligibilityCheck via api__EligibilityResultApi
   usecase__VerifyArrival -.-> screen__CheckInScreen

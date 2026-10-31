@@ -52,11 +52,11 @@ displays(ConfigureRoom, RoomAdminScreen)
 invokes(ConfigureRoom, RoomAdminApi)
 creates(RoomAdminApi, Room)
 updates(RoomAdminApi, Room)
-sets(ConfigureRoom, Room, occupancy_status == roomavailable)
+sets(ConfigureRoom, Room, occupancy_status == available)
 
 displays(ReleaseRoom, RoomAdminScreen)
 updates(ReleaseRoom, Room)
-sets(ReleaseRoom, Room, occupancy_status == roomavailable)
+sets(ReleaseRoom, Room, occupancy_status == available)
 
 displays(ReviewAuditEvents, AuditReviewScreen)
 invokes(ReviewAuditEvents, AuditApi)

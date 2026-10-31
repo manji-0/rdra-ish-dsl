@@ -4,17 +4,17 @@
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "IntakePacket.status" as statemodel__IntakePacket_status {
-    [*] --> state__IntakePacket_intakesent
-    state "送付済" as state__IntakePacket_intakesent
-    state "回答済" as state__IntakePacket_intakecompleted
-    state "期限切れ" as state__IntakePacket_intakeexpired
+    [*] --> state__IntakePacket_sent
+    state "送付済" as state__IntakePacket_sent
+    state "回答済" as state__IntakePacket_completed
+    state "期限切れ" as state__IntakePacket_expired
     %% transition usecase__CompleteIntakeForms
-    state__IntakePacket_intakesent --> state__IntakePacket_intakecompleted : 問診票の回答
+    state__IntakePacket_sent --> state__IntakePacket_completed : 問診票の回答
     %% transition usecase__ExpireIntakeForms
-    state__IntakePacket_intakesent --> state__IntakePacket_intakeexpired : 問診票の期限切れ
-    state__IntakePacket_intakecompleted --> [*]
-    state__IntakePacket_intakeexpired --> [*]
+    state__IntakePacket_sent --> state__IntakePacket_expired : 問診票の期限切れ
+    state__IntakePacket_completed --> [*]
+    state__IntakePacket_expired --> [*]
   }
   classDef stateend fill:#dfd,stroke:#383,color:#141
-  class state__IntakePacket_intakecompleted stateend
-  class state__IntakePacket_intakeexpired stateend
+  class state__IntakePacket_completed stateend
+  class state__IntakePacket_expired stateend

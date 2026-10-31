@@ -47,11 +47,11 @@ flowchart LR
     entity__LabResult[("検査結果")]:::entity
     entity__Notification[("通知")]:::entity
     entity__PatientMessage[("患者連絡")]:::entity
-    state__ClinicalOrder_clcancelled((("取消"))):::state
-    state__ClinicalOrder_clcollected((("採取済"))):::state
-    state__ClinicalOrder_clordered((("オーダ済"))):::state
-    state__ClinicalOrder_clresulted((("結果受信"))):::state
-    state__ClinicalOrder_clreviewed((("結果確認済"))):::state
+    state__ClinicalOrder_cancelled((("取消"))):::state
+    state__ClinicalOrder_collected((("採取済"))):::state
+    state__ClinicalOrder_ordered((("オーダ済"))):::state
+    state__ClinicalOrder_resulted((("結果受信"))):::state
+    state__ClinicalOrder_reviewed((("結果確認済"))):::state
     condition__OrderConfirmedByPhysician{"医師が確定したオーダ"}:::condition
   end
   actor__Clinician -.-> usecase__CancelClinicalOrder
@@ -70,14 +70,14 @@ flowchart LR
   event__EvLabResultReceived -.-> usecase__ReceiveLabResult
   extsystem__OutsourcedLabSystem -.-> event__EvLabResultReceived
   usecase__CancelClinicalOrder -.-> screen__OrderEntryScreen
-  usecase__CancelClinicalOrder -.->|transitions ClinicalOrder.status clordered->clcancelled| state__ClinicalOrder_clcancelled
+  usecase__CancelClinicalOrder -.->|transitions ClinicalOrder.status ordered->cancelled| state__ClinicalOrder_cancelled
   usecase__CancelClinicalOrder -.->|updates| entity__ClinicalOrder
   usecase__CollectSpecimen -.-> screen__SpecimenScreen
-  usecase__CollectSpecimen -.->|transitions ClinicalOrder.status clordered->clcollected| state__ClinicalOrder_clcollected
+  usecase__CollectSpecimen -.->|transitions ClinicalOrder.status ordered->collected| state__ClinicalOrder_collected
   usecase__CollectSpecimen -.->|updates| entity__ClinicalOrder
   %% derived usecase__CollectSpecimen -> entity__ClinicalOrder via api__CollectSpecimenApi
   usecase__ConfirmProxyOrder -.-> screen__OrderEntryScreen
-  usecase__ConfirmProxyOrder -.->|transitions ClinicalOrder.status clordered->clordered| state__ClinicalOrder_clordered
+  usecase__ConfirmProxyOrder -.->|transitions ClinicalOrder.status ordered->ordered| state__ClinicalOrder_ordered
   usecase__ConfirmProxyOrder -.->|updates| entity__ClinicalOrder
   %% derived usecase__ConfirmProxyOrder -> entity__ClinicalOrder via api__ConfirmOrderApi
   usecase__EnterProxyOrder -.->|creates| entity__ClinicalOrder
@@ -100,7 +100,7 @@ flowchart LR
   usecase__ReceiveLabResult -.->|creates| entity__LabResult
   %% derived usecase__ReceiveLabResult -> entity__LabResult via api__ReceiveLabResultApi
   usecase__ReceiveLabResult -.-> screen__ResultReviewScreen
-  usecase__ReceiveLabResult -.->|transitions ClinicalOrder.status clcollected->clresulted| state__ClinicalOrder_clresulted
+  usecase__ReceiveLabResult -.->|transitions ClinicalOrder.status collected->resulted| state__ClinicalOrder_resulted
   usecase__ReceiveLabResult -.->|updates| entity__ClinicalOrder
   %% derived usecase__ReceiveLabResult -> entity__ClinicalOrder via api__ReceiveLabResultApi
   usecase__RegisterPerformedProcedure -.->|creates| entity__Charge
@@ -112,7 +112,7 @@ flowchart LR
   %% derived usecase__RegisterPerformedProcedure -> entity__Encounter via api__PerformedProcedureApi
   usecase__ReviewLabResult -.-> screen__ResultReviewScreen
   usecase__ReviewLabResult -.-> event__EvClinicalOrderReviewed
-  usecase__ReviewLabResult -.->|transitions ClinicalOrder.status clresulted->clreviewed| state__ClinicalOrder_clreviewed
+  usecase__ReviewLabResult -.->|transitions ClinicalOrder.status resulted->reviewed| state__ClinicalOrder_reviewed
   usecase__ReviewLabResult -.->|updates| entity__ClinicalOrder
   %% derived usecase__ReviewLabResult -> entity__ClinicalOrder via api__ResultReviewApi
   usecase__ReviewLabResult -.->|updates| entity__LabResult

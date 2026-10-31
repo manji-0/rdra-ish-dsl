@@ -11,7 +11,7 @@ sequenceDiagram
   screen__EncounterWorkspaceScreen ->> api__CompleteConsultationApi: 診察終了 API
   alt Appointment.status == 診察中
     Note over api__CompleteConsultationApi: transaction (API atomic boundary)
-    api__CompleteConsultationApi ->> entity__Room: update occupancy_status=roomcleaning
+    api__CompleteConsultationApi ->> entity__Room: update occupancy_status=cleaning
     api__CompleteConsultationApi ->> entity__Appointment: update status 診察中 -> 計算待ち
     Note over api__CompleteConsultationApi: raises 診察終了
     api__CompleteConsultationApi -->> screen__EncounterWorkspaceScreen: done

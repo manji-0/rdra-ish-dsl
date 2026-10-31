@@ -97,7 +97,7 @@ variation AuditSeverity "監査指摘の重大度" {
 entity PatientAccount "患者登録" {
   id:                Int      @pk
   medical_record_no: String   @unique
-  status:            Enum(patientactive "有効", patientinactive "アーカイブ済", patientmerged "統合済") @default(patientactive)
+  status:            Enum(active "有効", inactive "アーカイブ済", merged "統合済") @default(active)
   created_at:        DateTime
   archived_at:       DateTime @null
 }
@@ -132,7 +132,7 @@ entity InsurancePolicy "保険資格" {
 entity EligibilityCheck "資格確認" {
   id:           Int      @pk
   checked_at:   DateTime
-  result:       Enum(eligpending "照会中", eligvalid "有効", eliginvalid "無効", elignoinfo "該当資格なし", eligdeclared "申立書で確認") @default(eligpending)
+  result:       Enum(pending "照会中", valid "有効", invalid "無効", no_info "該当資格なし", declared "申立書で確認") @default(pending)
   reference_no: String   @null
 }
 
@@ -146,7 +146,7 @@ entity ConsentRecord "同意記録" {
 
 entity IntakePacket "問診票" {
   id:           Int      @pk
-  status:       Enum(intakesent "送付済", intakecompleted "回答済", intakeexpired "期限切れ") @default(intakesent)
+  status:       Enum(sent "送付済", completed "回答済", expired "期限切れ") @default(sent)
   sent_at:      DateTime @null
   completed_at: DateTime @null
 }
@@ -170,7 +170,7 @@ entity ClinicLocation "施設" {
 entity Room "診察室" {
   id:               Int    @pk
   name:             String
-  occupancy_status: Enum(roomavailable "空き", roomoccupied "使用中", roomcleaning "清掃中") @default(roomavailable)
+  occupancy_status: Enum(available "空き", occupied "使用中", cleaning "清掃中") @default(available)
 }
 
 entity ProviderSchedule "診療枠" {
@@ -184,13 +184,13 @@ entity ProviderSchedule "診療枠" {
 
 // Visit lifecycle
 // 会計 comes after the consultation: 計算受付, then 会計受付 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:141-144,
-// :2488). A visit waits for the calculation (apptawaitingcalc) and for payment (apptawaitingpay),
-// is paid (apptsettled), and completes when the 領収証 is handed over.
+// :2488). A visit waits for the calculation (awaiting_calc) and for payment (awaiting_pay),
+// is paid (settled), and completes when the 領収証 is handed over.
 entity Appointment "予約・受診" {
   id:             Int      @pk
   reason:         String
   referral:       ReferralCategory @default(revisit)
-  status:         Enum(apptrequested "仮押さえ", apptscheduled "予約済", apptcheckedin "受付済", apptinconsult "診察中", apptawaitingcalc "計算待ち", apptawaitingpay "会計待ち", apptsettled "精算済", apptcompleted "完了", apptcancelled "取消", apptnoshow "未来院") @default(apptrequested)
+  status:         Enum(requested "仮押さえ", scheduled "予約済", checked_in "受付済", in_consult "診察中", awaiting_calc "計算待ち", awaiting_pay "会計待ち", settled "精算済", completed "完了", cancelled "取消", no_show "未来院") @default(requested)
   scheduled_at:   DateTime
   checked_in_at:  DateTime @null
   completed_at:   DateTime @null
@@ -200,7 +200,7 @@ entity Appointment "予約・受診" {
 entity Encounter "診療記録" {
   id:              Int      @pk
   chief_complaint: String
-  status:          Enum(encopen "記録中", encdocumented "記載済", encsigned "署名済", encamended "修正済") @default(encopen)
+  status:          Enum(open "記録中", documented "記載済", signed "署名済", amended "修正済") @default(open)
   opened_at:       DateTime
   signed_at:       DateTime @null
 }
@@ -225,7 +225,7 @@ entity Diagnosis "診断" {
 entity ClinicalOrder "検査オーダ" {
   id:           Int      @pk
   order_type:   OrderType @default(lab)
-  status:       Enum(clordered "オーダ済", clcollected "採取済", clresulted "結果受信", clreviewed "結果確認済", clcancelled "取消") @default(clordered)
+  status:       Enum(ordered "オーダ済", collected "採取済", resulted "結果受信", reviewed "結果確認済", cancelled "取消") @default(ordered)
   // false while an order a 医師事務作業補助者 entered awaits the physician's confirmation.
   physician_confirmed: Bool
   ordered_at:   DateTime
@@ -256,7 +256,7 @@ entity Medication "薬剤" {
 entity Prescription "処方箋" {
   id:              Int      @pk
   directions:      String
-  status:          Enum(rxdrafted "処方入力中", rxissued "院外処方箋発行済", rxvoucher "引換券交付済", rxinquiry "疑義照会中", rxaudited "調剤・監査済", rxcounseled "服薬指導済", rxdispensed "交付済", rxexpired "使用期間切れ", rxcancelled "取消") @default(rxdrafted)
+  status:          Enum(drafted "処方入力中", issued "院外処方箋発行済", voucher_issued "引換券交付済", in_inquiry "疑義照会中", audited "調剤・監査済", counseled "服薬指導済", dispensed "交付済", expired "使用期間切れ", cancelled "取消") @default(drafted)
   issued_on:       Date
   // 交付の日を含めて四日以内, unless 長期の旅行等特殊の事情 (egov-ryotan-kisoku-332M50000100015.txt:311-312).
   use_period_days: Int @default(4)
@@ -277,7 +277,7 @@ entity Charge "コスト（診療行為）" {
   origin:    ChargeOrigin @default(chart)
   amount:    Money
   posted_at: DateTime @null
-  status:    Enum(chargeposted "登録済", chargevoided "取消") @default(chargeposted)
+  status:    Enum(posted "登録済", voided "取消") @default(posted)
 }
 
 // レセプト: one patient, one 診療月, one payer. 作成 and 院内点検 (koseikan-2024-iji-shiyousyo.txt:222-227),
@@ -290,7 +290,7 @@ entity Charge "コスト（診療行為）" {
 entity ClaimStatement "レセプト" {
   id:            Int      @pk
   service_month: Date
-  status:        Enum(stmtdrafting "作成中", stmtinspecting "院内点検中", stmtonhold "保留", stmtsubmitted "請求済", stmtreceipterror "受付不能・要確認", stmtunderreview "審査中", stmtpaid "支払済", stmtreturned "返戻", stmtassessed "査定", stmtrereview "再審査請求中") @default(stmtdrafting)
+  status:        Enum(drafting "作成中", inspecting "院内点検中", on_hold "保留", submitted "請求済", receipt_error "受付不能・要確認", under_review "審査中", paid "支払済", returned "返戻", assessed "査定", rereview "再審査請求中") @default(drafting)
   payer_change:  PayerChange @default(nochange)
   submitted_at:  DateTime @null
   paid_at:       DateTime @null
@@ -302,7 +302,7 @@ entity PaymentTransaction "精算" {
   id:           Int      @pk
   amount:       Money
   method:       PaymentMethod @default(card)
-  status:       Enum(payposted "収納済", payrefunded "還付済") @default(payposted)
+  status:       Enum(posted "収納済", refunded "還付済") @default(posted)
   processed_at: DateTime @null
   gateway_ref:  String   @null
 }
@@ -335,7 +335,7 @@ entity SelectedTreatmentFeeSetting "選定療養費の設定" {
 entity CarePlan "ケアプラン" {
   id:        Int      @pk
   goal:      String
-  status:    Enum(careopen "作成済", caremonitoring "経過観察中", careclosed "終了") @default(careopen)
+  status:    Enum(open "作成済", monitoring "経過観察中", closed "終了") @default(open)
   opened_at: DateTime
   closed_at: DateTime @null
 }
@@ -344,7 +344,7 @@ entity CarePlan "ケアプラン" {
 entity PatientMessage "患者連絡" {
   id:      Int      @pk
   channel: MessageChannel @default(portal)
-  status:  Enum(msgsent "送信済", msgread "既読") @default(msgsent)
+  status:  Enum(sent "送信済", read "既読") @default(sent)
   sent_at: DateTime @null
   read_at: DateTime @null
 }
@@ -428,38 +428,38 @@ event EvPrescriptionIssued "電子処方箋の登録"
 
 // State constraints
 invariant(Appointment)
-  .when(status == apptcheckedin)
+  .when(status == checked_in)
   .then(checked_in_at == present)
   .label("受付済の予約には受付時刻が記録されている")
 
 invariant(Appointment)
-  .when(status == apptcompleted)
+  .when(status == completed)
   .then(completed_at == present)
   .label("完了した予約には完了時刻が記録されている")
 
 invariant(Encounter)
-  .when(status == encsigned)
+  .when(status == signed)
   .then(signed_at == present)
   .label("署名済の診療記録には署名時刻が記録されている")
 
 invariant(ClinicalOrder)
-  .when(status == clresulted)
+  .when(status == resulted)
   .then(resulted_at == present)
   .label("結果が出たオーダには結果日時が記録されている")
 
 invariant(Prescription)
-  .when(status == rxissued)
+  .when(status == issued)
   .then(sent_at == present)
   .label("発行済の処方箋には送信日時が記録されている")
 
 invariant(ClaimStatement)
-  .when(status == stmtpaid)
+  .when(status == paid)
   .then(paid_at == present)
   .label("支払済のレセプトには支払日時が記録されている")
 
-forbidden(ClaimStatement, status == stmtpaid, return_reason == present)
+forbidden(ClaimStatement, status == paid, return_reason == present)
   .label("訂正した返戻は、再請求の前に返戻理由を消す")
 
 // 看護師 collects a specimen only on the physician's instruction (egov-hokanhou-323AC0000000203.txt:311).
-forbidden(ClinicalOrder, status == clcollected, physician_confirmed == false)
+forbidden(ClinicalOrder, status == collected, physician_confirmed == false)
   .label("医師事務作業補助者が入力したオーダは、医師が確定してから検体を採取する")

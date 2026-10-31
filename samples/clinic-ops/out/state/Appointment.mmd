@@ -4,49 +4,49 @@
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "Appointment.status" as statemodel__Appointment_status {
-    [*] --> state__Appointment_apptrequested
-    [*] --> state__Appointment_apptscheduled
-    state "仮押さえ" as state__Appointment_apptrequested
-    state "予約済" as state__Appointment_apptscheduled
-    state "受付済" as state__Appointment_apptcheckedin
-    state "診察中" as state__Appointment_apptinconsult
-    state "計算待ち" as state__Appointment_apptawaitingcalc
-    state "会計待ち" as state__Appointment_apptawaitingpay
-    state "精算済" as state__Appointment_apptsettled
-    state "完了" as state__Appointment_apptcompleted
-    state "取消" as state__Appointment_apptcancelled
-    state "未来院" as state__Appointment_apptnoshow
+    [*] --> state__Appointment_requested
+    [*] --> state__Appointment_scheduled
+    state "仮押さえ" as state__Appointment_requested
+    state "予約済" as state__Appointment_scheduled
+    state "受付済" as state__Appointment_checked_in
+    state "診察中" as state__Appointment_in_consult
+    state "計算待ち" as state__Appointment_awaiting_calc
+    state "会計待ち" as state__Appointment_awaiting_pay
+    state "精算済" as state__Appointment_settled
+    state "完了" as state__Appointment_completed
+    state "取消" as state__Appointment_cancelled
+    state "未来院" as state__Appointment_no_show
     %% transition usecase__BookAppointment
-    state__Appointment_apptrequested --> state__Appointment_apptscheduled : 予約の確定
+    state__Appointment_requested --> state__Appointment_scheduled : 予約の確定
     %% transition usecase__ScheduleFollowUpVisit
-    state__Appointment_apptrequested --> state__Appointment_apptscheduled : 再診の予約
+    state__Appointment_requested --> state__Appointment_scheduled : 再診の予約
     %% transition usecase__RescheduleAppointment
-    state__Appointment_apptscheduled --> state__Appointment_apptscheduled : 予約の変更
+    state__Appointment_scheduled --> state__Appointment_scheduled : 予約の変更
     %% transition usecase__CheckInPatient
-    state__Appointment_apptscheduled --> state__Appointment_apptcheckedin : 受付（初診・再診）
+    state__Appointment_scheduled --> state__Appointment_checked_in : 受付（初診・再診）
     %% transition usecase__CancelAppointment
-    state__Appointment_apptscheduled --> state__Appointment_apptcancelled : 予約の取消
+    state__Appointment_scheduled --> state__Appointment_cancelled : 予約の取消
     %% transition usecase__MarkNoShow
-    state__Appointment_apptscheduled --> state__Appointment_apptnoshow : 未来院の処理
+    state__Appointment_scheduled --> state__Appointment_no_show : 未来院の処理
     %% transition usecase__AssignRoom
-    state__Appointment_apptcheckedin --> state__Appointment_apptcheckedin : 診察室への案内
+    state__Appointment_checked_in --> state__Appointment_checked_in : 診察室への案内
     %% transition usecase__OpenEncounter
-    state__Appointment_apptcheckedin --> state__Appointment_apptinconsult : 診療記録を開く
+    state__Appointment_checked_in --> state__Appointment_in_consult : 診療記録を開く
     %% transition usecase__CompleteConsultation
-    state__Appointment_apptinconsult --> state__Appointment_apptawaitingcalc : 診察終了
+    state__Appointment_in_consult --> state__Appointment_awaiting_calc : 診察終了
     %% transition usecase__CalculateVisitBill
-    state__Appointment_apptawaitingcalc --> state__Appointment_apptawaitingpay : 会計計算入力
+    state__Appointment_awaiting_calc --> state__Appointment_awaiting_pay : 会計計算入力
     %% transition usecase__SettleAtKiosk
-    state__Appointment_apptawaitingpay --> state__Appointment_apptsettled : 自動精算機での精算
+    state__Appointment_awaiting_pay --> state__Appointment_settled : 自動精算機での精算
     %% transition usecase__SettleAtWindow
-    state__Appointment_apptawaitingpay --> state__Appointment_apptsettled : 会計窓口での精算
+    state__Appointment_awaiting_pay --> state__Appointment_settled : 会計窓口での精算
     %% transition usecase__IssueReceipt
-    state__Appointment_apptsettled --> state__Appointment_apptcompleted : 領収証・明細書の交付
-    state__Appointment_apptcompleted --> [*]
-    state__Appointment_apptcancelled --> [*]
-    state__Appointment_apptnoshow --> [*]
+    state__Appointment_settled --> state__Appointment_completed : 領収証・明細書の交付
+    state__Appointment_completed --> [*]
+    state__Appointment_cancelled --> [*]
+    state__Appointment_no_show --> [*]
   }
   classDef stateend fill:#dfd,stroke:#383,color:#141
-  class state__Appointment_apptcompleted stateend
-  class state__Appointment_apptcancelled stateend
-  class state__Appointment_apptnoshow stateend
+  class state__Appointment_completed stateend
+  class state__Appointment_cancelled stateend
+  class state__Appointment_no_show stateend

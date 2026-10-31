@@ -13,5 +13,5 @@ sequenceDiagram
   screen__CriticalNoticeScreen ->> api__CriticalNoticeApi: 重要結果通知 API
   Note over api__CriticalNoticeApi: transaction (API atomic boundary)
   api__CriticalNoticeApi ->> entity__Notification: create delivered_at=set
-  api__CriticalNoticeApi ->> entity__PatientMessage: create status=msgsent, sent_at=set
+  api__CriticalNoticeApi ->> entity__PatientMessage: create status=sent, sent_at=set
   api__CriticalNoticeApi -->> screen__CriticalNoticeScreen: done

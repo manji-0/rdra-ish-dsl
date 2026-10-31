@@ -8,5 +8,5 @@ sequenceDiagram
   participant entity__Room as 診察室
   actor__ClinicAdmin ->> screen__RoomAdminScreen: 診察室の解放
   screen__RoomAdminScreen ->> usecase__ReleaseRoom: 診察室の解放
-  usecase__ReleaseRoom ->> entity__Room: update occupancy_status=roomavailable
+  usecase__ReleaseRoom ->> entity__Room: update occupancy_status=available
   usecase__ReleaseRoom -->> screen__RoomAdminScreen: done

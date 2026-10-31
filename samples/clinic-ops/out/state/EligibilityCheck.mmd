@@ -4,30 +4,30 @@
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "EligibilityCheck.result" as statemodel__EligibilityCheck_result {
-    [*] --> state__EligibilityCheck_eligpending
-    [*] --> state__EligibilityCheck_eligvalid
-    state "照会中" as state__EligibilityCheck_eligpending
-    state "有効" as state__EligibilityCheck_eligvalid
-    state "無効" as state__EligibilityCheck_eliginvalid
-    state "該当資格なし" as state__EligibilityCheck_elignoinfo
-    state "申立書で確認" as state__EligibilityCheck_eligdeclared
+    [*] --> state__EligibilityCheck_pending
+    [*] --> state__EligibilityCheck_valid
+    state "照会中" as state__EligibilityCheck_pending
+    state "有効" as state__EligibilityCheck_valid
+    state "無効" as state__EligibilityCheck_invalid
+    state "該当資格なし" as state__EligibilityCheck_no_info
+    state "申立書で確認" as state__EligibilityCheck_declared
     %% transition usecase__ConfirmEligibilityInOutageMode
-    state__EligibilityCheck_eligpending --> state__EligibilityCheck_eligvalid : システム障害時モードでの資格確認
+    state__EligibilityCheck_pending --> state__EligibilityCheck_valid : システム障害時モードでの資格確認
     %% transition usecase__ReceiveEligibilityValid
-    state__EligibilityCheck_eligpending --> state__EligibilityCheck_eligvalid : 資格確認結果（有効）の取込
+    state__EligibilityCheck_pending --> state__EligibilityCheck_valid : 資格確認結果（有効）の取込
     %% transition usecase__ReceiveEligibilityInvalid
-    state__EligibilityCheck_eligpending --> state__EligibilityCheck_eliginvalid : 資格確認結果（無効）の取込
+    state__EligibilityCheck_pending --> state__EligibilityCheck_invalid : 資格確認結果（無効）の取込
     %% transition usecase__ReceiveEligibilityNoInfo
-    state__EligibilityCheck_eligpending --> state__EligibilityCheck_elignoinfo : 資格確認結果（該当資格なし）の取込
+    state__EligibilityCheck_pending --> state__EligibilityCheck_no_info : 資格確認結果（該当資格なし）の取込
     %% transition usecase__RecordEligibilityDeclaration
-    state__EligibilityCheck_eligpending --> state__EligibilityCheck_eligdeclared : 被保険者資格申立書の受領
+    state__EligibilityCheck_pending --> state__EligibilityCheck_declared : 被保険者資格申立書の受領
     %% transition usecase__RecheckEligibility
-    state__EligibilityCheck_eliginvalid --> state__EligibilityCheck_eligpending : 資格の再確認
+    state__EligibilityCheck_invalid --> state__EligibilityCheck_pending : 資格の再確認
     %% transition usecase__RecheckEligibility
-    state__EligibilityCheck_elignoinfo --> state__EligibilityCheck_eligpending : 資格の再確認
-    state__EligibilityCheck_eligvalid --> [*]
-    state__EligibilityCheck_eligdeclared --> [*]
+    state__EligibilityCheck_no_info --> state__EligibilityCheck_pending : 資格の再確認
+    state__EligibilityCheck_valid --> [*]
+    state__EligibilityCheck_declared --> [*]
   }
   classDef stateend fill:#dfd,stroke:#383,color:#141
-  class state__EligibilityCheck_eligvalid stateend
-  class state__EligibilityCheck_eligdeclared stateend
+  class state__EligibilityCheck_valid stateend
+  class state__EligibilityCheck_declared stateend

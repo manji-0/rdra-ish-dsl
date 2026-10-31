@@ -12,5 +12,5 @@ sequenceDiagram
   api__EligibilityApi ->> entity__InsurancePolicy: read
   Note over api__EligibilityApi: transaction (API atomic boundary)
   api__EligibilityApi ->> entity__InsurancePolicy: update verification_status=verified, verified_at=set, limit_category=obtained
-  api__EligibilityApi ->> entity__EligibilityCheck: create result=eligvalid, reference_no=set
+  api__EligibilityApi ->> entity__EligibilityCheck: create result=valid, reference_no=set
   api__EligibilityApi -->> screen__InsuranceScreen: done

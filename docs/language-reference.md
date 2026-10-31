@@ -1047,7 +1047,7 @@ variation PaymentMethod "Payment Method" {
 entity PaymentTransaction "Payment Transaction" {
   id:     Int           @pk
   method: PaymentMethod @default(card)
-  status: Enum(paypending, payposted) @default(paypending)
+  status: Enum(pending, posted) @default(pending)
 }
 ```
 

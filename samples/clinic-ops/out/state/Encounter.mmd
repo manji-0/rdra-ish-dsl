@@ -4,18 +4,18 @@
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "Encounter.status" as statemodel__Encounter_status {
-    [*] --> state__Encounter_encopen
-    state "記録中" as state__Encounter_encopen
-    state "記載済" as state__Encounter_encdocumented
-    state "署名済" as state__Encounter_encsigned
-    state "修正済" as state__Encounter_encamended
+    [*] --> state__Encounter_open
+    state "記録中" as state__Encounter_open
+    state "記載済" as state__Encounter_documented
+    state "署名済" as state__Encounter_signed
+    state "修正済" as state__Encounter_amended
     %% transition usecase__DocumentAssessment
-    state__Encounter_encopen --> state__Encounter_encdocumented : 診察・診断の記録
+    state__Encounter_open --> state__Encounter_documented : 診察・診断の記録
     %% transition usecase__SignEncounter
-    state__Encounter_encdocumented --> state__Encounter_encsigned : 診療記録の署名
+    state__Encounter_documented --> state__Encounter_signed : 診療記録の署名
     %% transition usecase__AmendEncounter
-    state__Encounter_encsigned --> state__Encounter_encamended : 署名済み記録の修正
-    state__Encounter_encamended --> [*]
+    state__Encounter_signed --> state__Encounter_amended : 署名済み記録の修正
+    state__Encounter_amended --> [*]
   }
   classDef stateend fill:#dfd,stroke:#383,color:#141
-  class state__Encounter_encamended stateend
+  class state__Encounter_amended stateend

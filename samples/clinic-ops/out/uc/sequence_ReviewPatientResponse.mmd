@@ -12,7 +12,7 @@ sequenceDiagram
   alt CarePlan.status == 作成済
     Note over usecase__ReviewPatientResponse: transaction (inferred from FK)
     usecase__ReviewPatientResponse ->> entity__CarePlan: update status 作成済 -> 経過観察中
-    usecase__ReviewPatientResponse ->> entity__PatientMessage: update status=msgread, read_at=set
+    usecase__ReviewPatientResponse ->> entity__PatientMessage: update status=read, read_at=set
     usecase__ReviewPatientResponse -->> screen__CarePlanScreen: done
   else guard fails
     usecase__ReviewPatientResponse -->> screen__CarePlanScreen: rejected

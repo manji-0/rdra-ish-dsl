@@ -8,5 +8,5 @@ sequenceDiagram
   participant entity__Room as 診察室
   actor__ClinicAdmin ->> screen__RoomAdminScreen: 診察室の設定
   screen__RoomAdminScreen ->> api__RoomAdminApi: 診察室管理 API
-  api__RoomAdminApi ->> entity__Room: create occupancy_status=roomavailable
+  api__RoomAdminApi ->> entity__Room: create occupancy_status=available
   api__RoomAdminApi -->> screen__RoomAdminScreen: done

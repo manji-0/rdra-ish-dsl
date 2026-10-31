@@ -8,5 +8,5 @@ sequenceDiagram
   participant entity__Charge as コスト（診療行為）
   actor__ClaimsClerk ->> screen__ChargeWorklistScreen: コストの取消
   screen__ChargeWorklistScreen ->> usecase__VoidCharge: コストの取消
-  usecase__VoidCharge ->> entity__Charge: update status=chargevoided
+  usecase__VoidCharge ->> entity__Charge: update status=voided
   usecase__VoidCharge -->> screen__ChargeWorklistScreen: done

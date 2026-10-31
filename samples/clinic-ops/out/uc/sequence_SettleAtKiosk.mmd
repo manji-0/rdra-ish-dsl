@@ -14,7 +14,7 @@ sequenceDiagram
     Note over api__SettlementApi: transaction (API atomic boundary)
     api__SettlementApi ->> entity__AccountBalance: update
     api__SettlementApi ->> entity__Appointment: update status 会計待ち -> 精算済
-    api__SettlementApi ->> entity__PaymentTransaction: create status=payposted, processed_at=set, gateway_ref=set
+    api__SettlementApi ->> entity__PaymentTransaction: create status=posted, processed_at=set, gateway_ref=set
     api__SettlementApi -->> screen__KioskScreen: done
   else guard fails
     api__SettlementApi -->> screen__KioskScreen: rejected

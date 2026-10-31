@@ -206,6 +206,12 @@
   column names. `!=` takes a value too (`forbidden(Order, status != paid)`, `holds(C,
   Order.status != cancelled)`), and two Enum, variation, or Bool columns of one entity
   compare with `==` / `!=` as `status != Order.previous` (#46).
+- The clinic-ops sample names its Enum values without the per-column prefix they needed to
+  stay apart from column names: `apptawaitingcalc` is `awaiting_calc`, `stmtpaid` is
+  `paid`, and `payposted` and `chargeposted` are both `posted`, a value being unique only
+  within its column. The 61 values of 13 columns keep their labels, so `check` and
+  `states` print the same, and the diagrams, `design-doc.md`, and `prd.md` change only
+  where they print a value id (#46).
 
 - The flowchart encoding contract changes: a node is no longer always `id["label"]`, and an
   edge no longer always `|label|`. Every flowchart kind (`rdra`, `context`, `requirement`,

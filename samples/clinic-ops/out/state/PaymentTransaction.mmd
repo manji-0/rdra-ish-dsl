@@ -4,12 +4,12 @@
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "PaymentTransaction.status" as statemodel__PaymentTransaction_status {
-    [*] --> state__PaymentTransaction_payposted
-    state "収納済" as state__PaymentTransaction_payposted
-    state "還付済" as state__PaymentTransaction_payrefunded
+    [*] --> state__PaymentTransaction_posted
+    state "収納済" as state__PaymentTransaction_posted
+    state "還付済" as state__PaymentTransaction_refunded
     %% transition usecase__RefundPayment
-    state__PaymentTransaction_payposted --> state__PaymentTransaction_payrefunded : 還付・追加徴収
-    state__PaymentTransaction_payrefunded --> [*]
+    state__PaymentTransaction_posted --> state__PaymentTransaction_refunded : 還付・追加徴収
+    state__PaymentTransaction_refunded --> [*]
   }
   classDef stateend fill:#dfd,stroke:#383,color:#141
-  class state__PaymentTransaction_payrefunded stateend
+  class state__PaymentTransaction_refunded stateend

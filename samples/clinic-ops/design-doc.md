@@ -300,7 +300,7 @@ sequenceDiagram
   api__EligibilityApi ->> entity__InsurancePolicy: read
   Note over api__EligibilityApi: transaction (API atomic boundary)
   api__EligibilityApi ->> entity__InsurancePolicy: update verification_status=verified, verified_at=set, limit_category=obtained
-  api__EligibilityApi ->> entity__EligibilityCheck: create result=eligvalid, reference_no=set
+  api__EligibilityApi ->> entity__EligibilityCheck: create result=valid, reference_no=set
   api__EligibilityApi -->> screen__InsuranceScreen: done
 ```
 
@@ -345,7 +345,7 @@ sequenceDiagram
   screen__IntakePortalScreen ->> api__IntakeMessagingApi: 問診票送付 API
   Note over api__IntakeMessagingApi: transaction (API atomic boundary)
   api__IntakeMessagingApi ->> entity__IntakePacket: create sent_at=set
-  api__IntakeMessagingApi ->> entity__PatientMessage: create status=msgsent, sent_at=set
+  api__IntakeMessagingApi ->> entity__PatientMessage: create status=sent, sent_at=set
   api__IntakeMessagingApi -->> screen__IntakePortalScreen: done
 ```
 
@@ -730,7 +730,7 @@ sequenceDiagram
   screen__AppointmentNoticeScreen ->> api__AppointmentNoticeApi: 予約通知 API
   Note over api__AppointmentNoticeApi: transaction (API atomic boundary)
   api__AppointmentNoticeApi ->> entity__Notification: create delivered_at=set
-  api__AppointmentNoticeApi ->> entity__PatientMessage: create status=msgsent, sent_at=set
+  api__AppointmentNoticeApi ->> entity__PatientMessage: create status=sent, sent_at=set
   api__AppointmentNoticeApi -->> screen__AppointmentNoticeScreen: done
 ```
 
@@ -1110,7 +1110,7 @@ sequenceDiagram
   screen__RoomBoardScreen ->> api__AssignRoomApi: 診察室案内 API
   alt Appointment.status == 受付済
     Note over api__AssignRoomApi: transaction (API atomic boundary)
-    api__AssignRoomApi ->> entity__Room: update occupancy_status=roomoccupied
+    api__AssignRoomApi ->> entity__Room: update occupancy_status=occupied
     api__AssignRoomApi ->> entity__Appointment: update status 受付済 -> 受付済
     api__AssignRoomApi -->> screen__RoomBoardScreen: done
   else guard fails
@@ -1398,7 +1398,7 @@ sequenceDiagram
   screen__EncounterWorkspaceScreen ->> api__CompleteConsultationApi: 診察終了 API
   alt Appointment.status == 診察中
     Note over api__CompleteConsultationApi: transaction (API atomic boundary)
-    api__CompleteConsultationApi ->> entity__Room: update occupancy_status=roomcleaning
+    api__CompleteConsultationApi ->> entity__Room: update occupancy_status=cleaning
     api__CompleteConsultationApi ->> entity__Appointment: update status 診察中 -> 計算待ち
     Note over api__CompleteConsultationApi: raises 診察終了
     api__CompleteConsultationApi -->> screen__EncounterWorkspaceScreen: done
@@ -1411,7 +1411,7 @@ sequenceDiagram
 
 ### 2.5 検体検査
 
-検査オーダーから結果確認、重要結果通知までを扱う。医師事務作業補助者や看護師がオーダを代行入力した場合、医師が確定するまで看護師は採血しない（保助看法 第37条）。この規則は `OrderConfirmedByPhysician` 条件と `forbidden(ClinicalOrder, status == clcollected, physician_confirmed == false)` で検証する。外注検査の結果は外注検査システムから届く。採血管ラベルの発行と実施内容（コスト）の登録が会計計算の入力になる。実施入力のコストは `Charge.origin` が `performed` で、カルテ由来（`chart`）や選定療養費（`selectedfee`）のコストと発生元で区別される。
+検査オーダーから結果確認、重要結果通知までを扱う。医師事務作業補助者や看護師がオーダを代行入力した場合、医師が確定するまで看護師は採血しない（保助看法 第37条）。この規則は `OrderConfirmedByPhysician` 条件と `forbidden(ClinicalOrder, status == collected, physician_confirmed == false)` で検証する。外注検査の結果は外注検査システムから届く。採血管ラベルの発行と実施内容（コスト）の登録が会計計算の入力になる。実施入力のコストは `Charge.origin` が `performed` で、カルテ由来（`chart`）や選定療養費（`selectedfee`）のコストと発生元で区別される。
 
 ```mermaid
 %% rdra-ish diagram=robustness scope=buc:BucOrdersResults model=samples/clinic-ops
@@ -1643,7 +1643,7 @@ sequenceDiagram
   screen__SpecimenScreen ->> api__PerformedProcedureApi: 実施登録 API
   api__PerformedProcedureApi ->> entity__ClinicalOrder: read
   api__PerformedProcedureApi ->> entity__Encounter: read
-  api__PerformedProcedureApi ->> entity__Charge: create status=chargeposted, posted_at=set, kind=insured, origin=performed
+  api__PerformedProcedureApi ->> entity__Charge: create status=posted, posted_at=set, kind=insured, origin=performed
   api__PerformedProcedureApi -->> screen__SpecimenScreen: done
 ```
 
@@ -1725,7 +1725,7 @@ sequenceDiagram
   screen__CriticalNoticeScreen ->> api__CriticalNoticeApi: 重要結果通知 API
   Note over api__CriticalNoticeApi: transaction (API atomic boundary)
   api__CriticalNoticeApi ->> entity__Notification: create delivered_at=set
-  api__CriticalNoticeApi ->> entity__PatientMessage: create status=msgsent, sent_at=set
+  api__CriticalNoticeApi ->> entity__PatientMessage: create status=sent, sent_at=set
   api__CriticalNoticeApi -->> screen__CriticalNoticeScreen: done
 ```
 
@@ -2291,7 +2291,7 @@ sequenceDiagram
   alt 紹介状なしの初診で、除外に当たらない: Charge.kind == 選定療養（自費）, Appointment.referral == 紹介状なし初診
     api__SelectedFeeApi ->> entity__SelectedTreatmentFeeSetting: read
     api__SelectedFeeApi ->> entity__Encounter: read
-    api__SelectedFeeApi ->> entity__Charge: create status=chargeposted, posted_at=set, origin=selectedfee
+    api__SelectedFeeApi ->> entity__Charge: create status=posted, posted_at=set, origin=selectedfee
     api__SelectedFeeApi -->> screen__BillCalculationScreen: done
   else guard fails
     api__SelectedFeeApi -->> screen__BillCalculationScreen: rejected
@@ -2340,7 +2340,7 @@ sequenceDiagram
     Note over api__SettlementApi: transaction (API atomic boundary)
     api__SettlementApi ->> entity__AccountBalance: update
     api__SettlementApi ->> entity__Appointment: update status 会計待ち -> 精算済
-    api__SettlementApi ->> entity__PaymentTransaction: create status=payposted, processed_at=set
+    api__SettlementApi ->> entity__PaymentTransaction: create status=posted, processed_at=set
     api__SettlementApi -->> screen__PaymentWindowScreen: done
   else guard fails
     api__SettlementApi -->> screen__PaymentWindowScreen: rejected
@@ -2368,7 +2368,7 @@ sequenceDiagram
     Note over api__SettlementApi: transaction (API atomic boundary)
     api__SettlementApi ->> entity__AccountBalance: update
     api__SettlementApi ->> entity__Appointment: update status 会計待ち -> 精算済
-    api__SettlementApi ->> entity__PaymentTransaction: create status=payposted, processed_at=set, gateway_ref=set
+    api__SettlementApi ->> entity__PaymentTransaction: create status=posted, processed_at=set, gateway_ref=set
     api__SettlementApi -->> screen__KioskScreen: done
   else guard fails
     api__SettlementApi -->> screen__KioskScreen: rejected
@@ -2571,7 +2571,7 @@ sequenceDiagram
   usecase__SignEncounter ->> api__CreateChargeApi: 診療記録の署名
   screen__ChargeWorklistScreen ->> api__CreateChargeApi: コスト登録 API
   api__CreateChargeApi ->> entity__Encounter: read
-  api__CreateChargeApi ->> entity__Charge: create status=chargeposted, posted_at=set, kind=insured, origin=chart
+  api__CreateChargeApi ->> entity__Charge: create status=posted, posted_at=set, kind=insured, origin=chart
   api__CreateChargeApi -->> screen__ChargeWorklistScreen: done
 ```
 
@@ -2951,7 +2951,7 @@ sequenceDiagram
   participant entity__Charge as コスト（診療行為）
   actor__ClaimsClerk ->> screen__ChargeWorklistScreen: コストの取消
   screen__ChargeWorklistScreen ->> usecase__VoidCharge: コストの取消
-  usecase__VoidCharge ->> entity__Charge: update status=chargevoided
+  usecase__VoidCharge ->> entity__Charge: update status=voided
   usecase__VoidCharge -->> screen__ChargeWorklistScreen: done
 ```
 
@@ -3076,7 +3076,7 @@ sequenceDiagram
   participant entity__PatientMessage as 患者連絡
   actor__CareCoordinator ->> screen__PatientMessageScreen: 患者への連絡
   screen__PatientMessageScreen ->> api__SendFollowUpMessageApi: 患者連絡 API
-  api__SendFollowUpMessageApi ->> entity__PatientMessage: create status=msgsent, sent_at=set
+  api__SendFollowUpMessageApi ->> entity__PatientMessage: create status=sent, sent_at=set
   api__SendFollowUpMessageApi -->> screen__PatientMessageScreen: done
 ```
 
@@ -3099,7 +3099,7 @@ sequenceDiagram
   alt CarePlan.status == 作成済
     Note over usecase__ReviewPatientResponse: transaction (inferred from FK)
     usecase__ReviewPatientResponse ->> entity__CarePlan: update status 作成済 -> 経過観察中
-    usecase__ReviewPatientResponse ->> entity__PatientMessage: update status=msgread, read_at=set
+    usecase__ReviewPatientResponse ->> entity__PatientMessage: update status=read, read_at=set
     usecase__ReviewPatientResponse -->> screen__CarePlanScreen: done
   else guard fails
     usecase__ReviewPatientResponse -->> screen__CarePlanScreen: rejected
@@ -3295,7 +3295,7 @@ sequenceDiagram
   participant entity__Room as 診察室
   actor__ClinicAdmin ->> screen__RoomAdminScreen: 診察室の設定
   screen__RoomAdminScreen ->> api__RoomAdminApi: 診察室管理 API
-  api__RoomAdminApi ->> entity__Room: create occupancy_status=roomavailable
+  api__RoomAdminApi ->> entity__Room: create occupancy_status=available
   api__RoomAdminApi -->> screen__RoomAdminScreen: done
 ```
 
@@ -3314,7 +3314,7 @@ sequenceDiagram
   participant entity__Room as 診察室
   actor__ClinicAdmin ->> screen__RoomAdminScreen: 診察室の解放
   screen__RoomAdminScreen ->> usecase__ReleaseRoom: 診察室の解放
-  usecase__ReleaseRoom ->> entity__Room: update occupancy_status=roomavailable
+  usecase__ReleaseRoom ->> entity__Room: update occupancy_status=available
   usecase__ReleaseRoom -->> screen__RoomAdminScreen: done
 ```
 
@@ -3373,103 +3373,103 @@ sequenceDiagram
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "Appointment.status" as statemodel__Appointment_status {
-    [*] --> state__Appointment_apptrequested
-    [*] --> state__Appointment_apptscheduled
-    state "仮押さえ" as state__Appointment_apptrequested
-    state "予約済" as state__Appointment_apptscheduled
-    state "受付済" as state__Appointment_apptcheckedin
-    state "診察中" as state__Appointment_apptinconsult
-    state "計算待ち" as state__Appointment_apptawaitingcalc
-    state "会計待ち" as state__Appointment_apptawaitingpay
-    state "精算済" as state__Appointment_apptsettled
-    state "完了" as state__Appointment_apptcompleted
-    state "取消" as state__Appointment_apptcancelled
-    state "未来院" as state__Appointment_apptnoshow
+    [*] --> state__Appointment_requested
+    [*] --> state__Appointment_scheduled
+    state "仮押さえ" as state__Appointment_requested
+    state "予約済" as state__Appointment_scheduled
+    state "受付済" as state__Appointment_checked_in
+    state "診察中" as state__Appointment_in_consult
+    state "計算待ち" as state__Appointment_awaiting_calc
+    state "会計待ち" as state__Appointment_awaiting_pay
+    state "精算済" as state__Appointment_settled
+    state "完了" as state__Appointment_completed
+    state "取消" as state__Appointment_cancelled
+    state "未来院" as state__Appointment_no_show
     %% transition usecase__BookAppointment
-    state__Appointment_apptrequested --> state__Appointment_apptscheduled : 予約の確定
+    state__Appointment_requested --> state__Appointment_scheduled : 予約の確定
     %% transition usecase__ScheduleFollowUpVisit
-    state__Appointment_apptrequested --> state__Appointment_apptscheduled : 再診の予約
+    state__Appointment_requested --> state__Appointment_scheduled : 再診の予約
     %% transition usecase__RescheduleAppointment
-    state__Appointment_apptscheduled --> state__Appointment_apptscheduled : 予約の変更
+    state__Appointment_scheduled --> state__Appointment_scheduled : 予約の変更
     %% transition usecase__CheckInPatient
-    state__Appointment_apptscheduled --> state__Appointment_apptcheckedin : 受付（初診・再診）
+    state__Appointment_scheduled --> state__Appointment_checked_in : 受付（初診・再診）
     %% transition usecase__CancelAppointment
-    state__Appointment_apptscheduled --> state__Appointment_apptcancelled : 予約の取消
+    state__Appointment_scheduled --> state__Appointment_cancelled : 予約の取消
     %% transition usecase__MarkNoShow
-    state__Appointment_apptscheduled --> state__Appointment_apptnoshow : 未来院の処理
+    state__Appointment_scheduled --> state__Appointment_no_show : 未来院の処理
     %% transition usecase__AssignRoom
-    state__Appointment_apptcheckedin --> state__Appointment_apptcheckedin : 診察室への案内
+    state__Appointment_checked_in --> state__Appointment_checked_in : 診察室への案内
     %% transition usecase__OpenEncounter
-    state__Appointment_apptcheckedin --> state__Appointment_apptinconsult : 診療記録を開く
+    state__Appointment_checked_in --> state__Appointment_in_consult : 診療記録を開く
     %% transition usecase__CompleteConsultation
-    state__Appointment_apptinconsult --> state__Appointment_apptawaitingcalc : 診察終了
+    state__Appointment_in_consult --> state__Appointment_awaiting_calc : 診察終了
     %% transition usecase__CalculateVisitBill
-    state__Appointment_apptawaitingcalc --> state__Appointment_apptawaitingpay : 会計計算入力
+    state__Appointment_awaiting_calc --> state__Appointment_awaiting_pay : 会計計算入力
     %% transition usecase__SettleAtKiosk
-    state__Appointment_apptawaitingpay --> state__Appointment_apptsettled : 自動精算機での精算
+    state__Appointment_awaiting_pay --> state__Appointment_settled : 自動精算機での精算
     %% transition usecase__SettleAtWindow
-    state__Appointment_apptawaitingpay --> state__Appointment_apptsettled : 会計窓口での精算
+    state__Appointment_awaiting_pay --> state__Appointment_settled : 会計窓口での精算
     %% transition usecase__IssueReceipt
-    state__Appointment_apptsettled --> state__Appointment_apptcompleted : 領収証・明細書の交付
-    state__Appointment_apptcompleted --> [*]
-    state__Appointment_apptcancelled --> [*]
-    state__Appointment_apptnoshow --> [*]
+    state__Appointment_settled --> state__Appointment_completed : 領収証・明細書の交付
+    state__Appointment_completed --> [*]
+    state__Appointment_cancelled --> [*]
+    state__Appointment_no_show --> [*]
   }
   classDef stateend fill:#dfd,stroke:#383,color:#141
-  class state__Appointment_apptcompleted stateend
-  class state__Appointment_apptcancelled stateend
-  class state__Appointment_apptnoshow stateend
+  class state__Appointment_completed stateend
+  class state__Appointment_cancelled stateend
+  class state__Appointment_no_show stateend
 ```
 
 <details><summary>到達可能な状態の表</summary>
 
 ```text
 Entity: Appointment (予約・受診)
-  axes: referral[revisit|referred|unreferred|exempt], status[apptrequested|apptscheduled|apptcheckedin|apptinconsult|apptawaitingcalc|apptawaitingpay|apptsettled|apptcompleted|apptcancelled|apptnoshow], checked_in_at[null|present], completed_at[null|present], cancel_reason[null|present]
-  labels: status[apptrequested=仮押さえ|apptscheduled=予約済|apptcheckedin=受付済|apptinconsult=診察中|apptawaitingcalc=計算待ち|apptawaitingpay=会計待ち|apptsettled=精算済|apptcompleted=完了|apptcancelled=取消|apptnoshow=未来院]
+  axes: referral[revisit|referred|unreferred|exempt], status[requested|scheduled|checked_in|in_consult|awaiting_calc|awaiting_pay|settled|completed|cancelled|no_show], checked_in_at[null|present], completed_at[null|present], cancel_reason[null|present]
+  labels: status[requested=仮押さえ|scheduled=予約済|checked_in=受付済|in_consult=診察中|awaiting_calc=計算待ち|awaiting_pay=会計待ち|settled=精算済|completed=完了|cancelled=取消|no_show=未来院]
 
-  REFERRAL    STATUS            CHECKED_IN_AT  COMPLETED_AT  CANCEL_REASON  INITIAL  TERMINAL  VIA
-  ──────────  ────────────────  ─────────────  ────────────  ─────────────  ───────  ────────  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  revisit     apptscheduled     null           null          null           yes      no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
-  referred    apptscheduled     null           null          null           yes      no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
-  unreferred  apptscheduled     null           null          null           yes      no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
-  exempt      apptscheduled     null           null          null           yes      no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
-  revisit     apptrequested     null           null          null           yes      no        BucAppointmentScheduling/ReserveAppointment
-  referred    apptrequested     null           null          null           yes      no        BucAppointmentScheduling/ReserveAppointment
-  unreferred  apptrequested     null           null          null           yes      no        BucAppointmentScheduling/ReserveAppointment
-  exempt      apptrequested     null           null          null           yes      no        BucAppointmentScheduling/ReserveAppointment
-  revisit     apptcancelled     null           null          present        no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/CancelAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
-  revisit     apptnoshow        null           null          null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/MarkNoShow, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
-  revisit     apptcheckedin     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
-  referred    apptcancelled     null           null          present        no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/CancelAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
-  referred    apptnoshow        null           null          null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/MarkNoShow, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
-  referred    apptcheckedin     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
-  unreferred  apptcancelled     null           null          present        no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/CancelAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
-  unreferred  apptnoshow        null           null          null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/MarkNoShow, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
-  unreferred  apptcheckedin     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
-  exempt      apptcancelled     null           null          present        no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/CancelAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
-  exempt      apptnoshow        null           null          null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/MarkNoShow, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
-  exempt      apptcheckedin     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
-  revisit     apptinconsult     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
-  referred    apptinconsult     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
-  unreferred  apptinconsult     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
-  exempt      apptinconsult     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
-  revisit     apptawaitingcalc  present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
-  referred    apptawaitingcalc  present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
-  unreferred  apptawaitingcalc  present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
-  exempt      apptawaitingcalc  present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
-  revisit     apptawaitingpay   present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill
-  referred    apptawaitingpay   present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill
-  unreferred  apptawaitingpay   present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill
-  exempt      apptawaitingpay   present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill
-  revisit     apptsettled       present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
-  referred    apptsettled       present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
-  unreferred  apptsettled       present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
-  exempt      apptsettled       present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
-  revisit     apptcompleted     present        present       null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/IssueReceipt, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
-  referred    apptcompleted     present        present       null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/IssueReceipt, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
-  unreferred  apptcompleted     present        present       null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/IssueReceipt, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
-  exempt      apptcompleted     present        present       null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/IssueReceipt, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
+  REFERRAL    STATUS         CHECKED_IN_AT  COMPLETED_AT  CANCEL_REASON  INITIAL  TERMINAL  VIA
+  ──────────  ─────────────  ─────────────  ────────────  ─────────────  ───────  ────────  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  revisit     scheduled      null           null          null           yes      no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  referred    scheduled      null           null          null           yes      no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  unreferred  scheduled      null           null          null           yes      no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  exempt      scheduled      null           null          null           yes      no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  revisit     requested      null           null          null           yes      no        BucAppointmentScheduling/ReserveAppointment
+  referred    requested      null           null          null           yes      no        BucAppointmentScheduling/ReserveAppointment
+  unreferred  requested      null           null          null           yes      no        BucAppointmentScheduling/ReserveAppointment
+  exempt      requested      null           null          null           yes      no        BucAppointmentScheduling/ReserveAppointment
+  revisit     cancelled      null           null          present        no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/CancelAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  revisit     no_show        null           null          null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/MarkNoShow, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  revisit     checked_in     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  referred    cancelled      null           null          present        no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/CancelAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  referred    no_show        null           null          null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/MarkNoShow, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  referred    checked_in     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  unreferred  cancelled      null           null          present        no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/CancelAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  unreferred  no_show        null           null          null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/MarkNoShow, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  unreferred  checked_in     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  exempt      cancelled      null           null          present        no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/CancelAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  exempt      no_show        null           null          null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/MarkNoShow, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  exempt      checked_in     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  revisit     in_consult     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  referred    in_consult     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  unreferred  in_consult     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  exempt      in_consult     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  revisit     awaiting_calc  present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  referred    awaiting_calc  present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  unreferred  awaiting_calc  present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  exempt      awaiting_calc  present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  revisit     awaiting_pay   present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill
+  referred    awaiting_pay   present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill
+  unreferred  awaiting_pay   present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill
+  exempt      awaiting_pay   present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill
+  revisit     settled        present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
+  referred    settled        present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
+  unreferred  settled        present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
+  exempt      settled        present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
+  revisit     completed      present        present       null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/IssueReceipt, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
+  referred    completed      present        present       null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/IssueReceipt, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
+  unreferred  completed      present        present       null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/IssueReceipt, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
+  exempt      completed      present        present       null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/IssueReceipt, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
 
   reachable: 40 / bound: 320
 ```
@@ -3485,18 +3485,18 @@ Entity: Appointment (予約・受診)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "CarePlan.status" as statemodel__CarePlan_status {
-    [*] --> state__CarePlan_careopen
-    state "作成済" as state__CarePlan_careopen
-    state "経過観察中" as state__CarePlan_caremonitoring
-    state "終了" as state__CarePlan_careclosed
+    [*] --> state__CarePlan_open
+    state "作成済" as state__CarePlan_open
+    state "経過観察中" as state__CarePlan_monitoring
+    state "終了" as state__CarePlan_closed
     %% transition usecase__ReviewPatientResponse
-    state__CarePlan_careopen --> state__CarePlan_caremonitoring : 患者応答の確認
+    state__CarePlan_open --> state__CarePlan_monitoring : 患者応答の確認
     %% transition usecase__CloseCarePlan
-    state__CarePlan_caremonitoring --> state__CarePlan_careclosed : ケアプランの終了
-    state__CarePlan_careclosed --> [*]
+    state__CarePlan_monitoring --> state__CarePlan_closed : ケアプランの終了
+    state__CarePlan_closed --> [*]
   }
   classDef stateend fill:#dfd,stroke:#383,color:#141
-  class state__CarePlan_careclosed stateend
+  class state__CarePlan_closed stateend
 ```
 
 ### レセプト（ClaimStatement）
@@ -3508,72 +3508,72 @@ stateDiagram-v2
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "ClaimStatement.status" as statemodel__ClaimStatement_status {
-    [*] --> state__ClaimStatement_stmtdrafting
-    state "作成中" as state__ClaimStatement_stmtdrafting
-    state "院内点検中" as state__ClaimStatement_stmtinspecting
-    state "保留" as state__ClaimStatement_stmtonhold
-    state "請求済" as state__ClaimStatement_stmtsubmitted
-    state "受付不能・要確認" as state__ClaimStatement_stmtreceipterror
-    state "審査中" as state__ClaimStatement_stmtunderreview
-    state "支払済" as state__ClaimStatement_stmtpaid
-    state "返戻" as state__ClaimStatement_stmtreturned
-    state "査定" as state__ClaimStatement_stmtassessed
-    state "再審査請求中" as state__ClaimStatement_stmtrereview
+    [*] --> state__ClaimStatement_drafting
+    state "作成中" as state__ClaimStatement_drafting
+    state "院内点検中" as state__ClaimStatement_inspecting
+    state "保留" as state__ClaimStatement_on_hold
+    state "請求済" as state__ClaimStatement_submitted
+    state "受付不能・要確認" as state__ClaimStatement_receipt_error
+    state "審査中" as state__ClaimStatement_under_review
+    state "支払済" as state__ClaimStatement_paid
+    state "返戻" as state__ClaimStatement_returned
+    state "査定" as state__ClaimStatement_assessed
+    state "再審査請求中" as state__ClaimStatement_rereview
     %% transition usecase__InspectClaimStatement
-    state__ClaimStatement_stmtdrafting --> state__ClaimStatement_stmtinspecting : レセプトの院内点検
+    state__ClaimStatement_drafting --> state__ClaimStatement_inspecting : レセプトの院内点検
     %% transition usecase__HoldClaimStatement
-    state__ClaimStatement_stmtinspecting --> state__ClaimStatement_stmtonhold : レセプトの保留（月遅れ）
+    state__ClaimStatement_inspecting --> state__ClaimStatement_on_hold : レセプトの保留（月遅れ）
     %% transition usecase__SubmitClaimStatements
-    state__ClaimStatement_stmtinspecting --> state__ClaimStatement_stmtsubmitted : レセプト請求
+    state__ClaimStatement_inspecting --> state__ClaimStatement_submitted : レセプト請求
     %% transition usecase__ReleaseHeldStatement
-    state__ClaimStatement_stmtonhold --> state__ClaimStatement_stmtinspecting : 保留レセプトの再提出準備
+    state__ClaimStatement_on_hold --> state__ClaimStatement_inspecting : 保留レセプトの再提出準備
     %% transition usecase__RecordReceiptError
-    state__ClaimStatement_stmtsubmitted --> state__ClaimStatement_stmtreceipterror : 受付不能・要確認の確認
+    state__ClaimStatement_submitted --> state__ClaimStatement_receipt_error : 受付不能・要確認の確認
     %% transition usecase__ReceiveClaimAccepted
-    state__ClaimStatement_stmtsubmitted --> state__ClaimStatement_stmtunderreview : レセプト受付（審査へ）
+    state__ClaimStatement_submitted --> state__ClaimStatement_under_review : レセプト受付（審査へ）
     %% transition usecase__ResendErroredStatement
-    state__ClaimStatement_stmtreceipterror --> state__ClaimStatement_stmtsubmitted : エラー分レセプトの再送
+    state__ClaimStatement_receipt_error --> state__ClaimStatement_submitted : エラー分レセプトの再送
     %% transition usecase__PostPayment
-    state__ClaimStatement_stmtunderreview --> state__ClaimStatement_stmtpaid : 診療報酬の入金
+    state__ClaimStatement_under_review --> state__ClaimStatement_paid : 診療報酬の入金
     %% transition usecase__RecordClaimReturn
-    state__ClaimStatement_stmtunderreview --> state__ClaimStatement_stmtreturned : 返戻レセプトの取込
+    state__ClaimStatement_under_review --> state__ClaimStatement_returned : 返戻レセプトの取込
     %% transition usecase__RecordClaimAssessment
-    state__ClaimStatement_stmtunderreview --> state__ClaimStatement_stmtassessed : 査定の取込
+    state__ClaimStatement_under_review --> state__ClaimStatement_assessed : 査定の取込
     %% transition usecase__CorrectReturnedStatement
-    state__ClaimStatement_stmtreturned --> state__ClaimStatement_stmtinspecting : 返戻レセプトの訂正（再請求）
+    state__ClaimStatement_returned --> state__ClaimStatement_inspecting : 返戻レセプトの訂正（再請求）
     %% transition usecase__PostPayment
-    state__ClaimStatement_stmtassessed --> state__ClaimStatement_stmtpaid : 診療報酬の入金
+    state__ClaimStatement_assessed --> state__ClaimStatement_paid : 診療報酬の入金
     %% transition usecase__RequestReexamination
-    state__ClaimStatement_stmtassessed --> state__ClaimStatement_stmtrereview : 再審査請求
+    state__ClaimStatement_assessed --> state__ClaimStatement_rereview : 再審査請求
     %% transition usecase__PostPayment
-    state__ClaimStatement_stmtrereview --> state__ClaimStatement_stmtpaid : 診療報酬の入金
-    state__ClaimStatement_stmtpaid --> [*]
+    state__ClaimStatement_rereview --> state__ClaimStatement_paid : 診療報酬の入金
+    state__ClaimStatement_paid --> [*]
   }
   classDef stateend fill:#dfd,stroke:#383,color:#141
-  class state__ClaimStatement_stmtpaid stateend
+  class state__ClaimStatement_paid stateend
 ```
 
 <details><summary>到達可能な状態の表</summary>
 
 ```text
 Entity: ClaimStatement (レセプト)
-  axes: status[stmtdrafting|stmtinspecting|stmtonhold|stmtsubmitted|stmtreceipterror|stmtunderreview|stmtpaid|stmtreturned|stmtassessed|stmtrereview], submitted_at[null|present], paid_at[null|present], return_reason[null|present]
-  labels: status[stmtdrafting=作成中|stmtinspecting=院内点検中|stmtonhold=保留|stmtsubmitted=請求済|stmtreceipterror=受付不能・要確認|stmtunderreview=審査中|stmtpaid=支払済|stmtreturned=返戻|stmtassessed=査定|stmtrereview=再審査請求中]
+  axes: status[drafting|inspecting|on_hold|submitted|receipt_error|under_review|paid|returned|assessed|rereview], submitted_at[null|present], paid_at[null|present], return_reason[null|present]
+  labels: status[drafting=作成中|inspecting=院内点検中|on_hold=保留|submitted=請求済|receipt_error=受付不能・要確認|under_review=審査中|paid=支払済|returned=返戻|assessed=査定|rereview=再審査請求中]
 
-  STATUS            SUBMITTED_AT  PAID_AT  RETURN_REASON  INITIAL  TERMINAL  VIA
-  ────────────────  ────────────  ───────  ─────────────  ───────  ────────  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  stmtdrafting      null          null     null           yes      no        BucBillingClaims/GenerateClaimStatement
-  stmtinspecting    null          null     null           no       no        BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReleaseHeldStatement
-  stmtonhold        null          null     null           no       no        BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReleaseHeldStatement
-  stmtsubmitted     present       null     null           no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
-  stmtreceipterror  present       null     null           no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
-  stmtunderreview   present       null     null           no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
-  stmtreturned      present       null     present        no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
-  stmtassessed      present       null     null           no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimAssessment, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
-  stmtpaid          present       present  null           no       yes       BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/PostPayment, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimAssessment, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/RequestReexamination, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
-  stmtinspecting    present       null     null           no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
-  stmtrereview      present       null     null           no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimAssessment, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/RequestReexamination, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
-  stmtonhold        present       null     null           no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
+  STATUS         SUBMITTED_AT  PAID_AT  RETURN_REASON  INITIAL  TERMINAL  VIA
+  ─────────────  ────────────  ───────  ─────────────  ───────  ────────  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  drafting       null          null     null           yes      no        BucBillingClaims/GenerateClaimStatement
+  inspecting     null          null     null           no       no        BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReleaseHeldStatement
+  on_hold        null          null     null           no       no        BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReleaseHeldStatement
+  submitted      present       null     null           no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
+  receipt_error  present       null     null           no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
+  under_review   present       null     null           no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
+  returned       present       null     present        no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
+  assessed       present       null     null           no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimAssessment, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
+  paid           present       present  null           no       yes       BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/PostPayment, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimAssessment, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/RequestReexamination, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
+  inspecting     present       null     null           no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
+  rereview       present       null     null           no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimAssessment, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/RequestReexamination, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
+  on_hold        present       null     null           no       no        BucBillingClaims/CorrectReturnedStatement, BucBillingClaims/GenerateClaimStatement, BucBillingClaims/HoldClaimStatement, BucBillingClaims/InspectClaimStatement, BucBillingClaims/ReceiveClaimAccepted, BucBillingClaims/RecordClaimReturn, BucBillingClaims/RecordReceiptError, BucBillingClaims/ReleaseHeldStatement, BucBillingClaims/ResendErroredStatement, BucBillingClaims/SubmitClaimStatements
 
   reachable: 12 / bound: 80
 ```
@@ -3589,28 +3589,28 @@ Entity: ClaimStatement (レセプト)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "ClinicalOrder.status" as statemodel__ClinicalOrder_status {
-    [*] --> state__ClinicalOrder_clordered
-    state "オーダ済" as state__ClinicalOrder_clordered
-    state "採取済" as state__ClinicalOrder_clcollected
-    state "結果受信" as state__ClinicalOrder_clresulted
-    state "結果確認済" as state__ClinicalOrder_clreviewed
-    state "取消" as state__ClinicalOrder_clcancelled
+    [*] --> state__ClinicalOrder_ordered
+    state "オーダ済" as state__ClinicalOrder_ordered
+    state "採取済" as state__ClinicalOrder_collected
+    state "結果受信" as state__ClinicalOrder_resulted
+    state "結果確認済" as state__ClinicalOrder_reviewed
+    state "取消" as state__ClinicalOrder_cancelled
     %% transition usecase__ConfirmProxyOrder
-    state__ClinicalOrder_clordered --> state__ClinicalOrder_clordered : 代行入力オーダの確定
+    state__ClinicalOrder_ordered --> state__ClinicalOrder_ordered : 代行入力オーダの確定
     %% transition usecase__CollectSpecimen
-    state__ClinicalOrder_clordered --> state__ClinicalOrder_clcollected : 採血 [医師が確定したオーダ]
+    state__ClinicalOrder_ordered --> state__ClinicalOrder_collected : 採血 [医師が確定したオーダ]
     %% transition usecase__CancelClinicalOrder
-    state__ClinicalOrder_clordered --> state__ClinicalOrder_clcancelled : オーダの取消
+    state__ClinicalOrder_ordered --> state__ClinicalOrder_cancelled : オーダの取消
     %% transition usecase__ReceiveLabResult
-    state__ClinicalOrder_clcollected --> state__ClinicalOrder_clresulted : 検査結果の受信
+    state__ClinicalOrder_collected --> state__ClinicalOrder_resulted : 検査結果の受信
     %% transition usecase__ReviewLabResult
-    state__ClinicalOrder_clresulted --> state__ClinicalOrder_clreviewed : 検査結果の確認
-    state__ClinicalOrder_clreviewed --> [*]
-    state__ClinicalOrder_clcancelled --> [*]
+    state__ClinicalOrder_resulted --> state__ClinicalOrder_reviewed : 検査結果の確認
+    state__ClinicalOrder_reviewed --> [*]
+    state__ClinicalOrder_cancelled --> [*]
   }
   classDef stateend fill:#dfd,stroke:#383,color:#141
-  class state__ClinicalOrder_clreviewed stateend
-  class state__ClinicalOrder_clcancelled stateend
+  class state__ClinicalOrder_reviewed stateend
+  class state__ClinicalOrder_cancelled stateend
 ```
 
 ### 資格確認（EligibilityCheck）
@@ -3622,33 +3622,33 @@ stateDiagram-v2
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "EligibilityCheck.result" as statemodel__EligibilityCheck_result {
-    [*] --> state__EligibilityCheck_eligpending
-    [*] --> state__EligibilityCheck_eligvalid
-    state "照会中" as state__EligibilityCheck_eligpending
-    state "有効" as state__EligibilityCheck_eligvalid
-    state "無効" as state__EligibilityCheck_eliginvalid
-    state "該当資格なし" as state__EligibilityCheck_elignoinfo
-    state "申立書で確認" as state__EligibilityCheck_eligdeclared
+    [*] --> state__EligibilityCheck_pending
+    [*] --> state__EligibilityCheck_valid
+    state "照会中" as state__EligibilityCheck_pending
+    state "有効" as state__EligibilityCheck_valid
+    state "無効" as state__EligibilityCheck_invalid
+    state "該当資格なし" as state__EligibilityCheck_no_info
+    state "申立書で確認" as state__EligibilityCheck_declared
     %% transition usecase__ConfirmEligibilityInOutageMode
-    state__EligibilityCheck_eligpending --> state__EligibilityCheck_eligvalid : システム障害時モードでの資格確認
+    state__EligibilityCheck_pending --> state__EligibilityCheck_valid : システム障害時モードでの資格確認
     %% transition usecase__ReceiveEligibilityValid
-    state__EligibilityCheck_eligpending --> state__EligibilityCheck_eligvalid : 資格確認結果（有効）の取込
+    state__EligibilityCheck_pending --> state__EligibilityCheck_valid : 資格確認結果（有効）の取込
     %% transition usecase__ReceiveEligibilityInvalid
-    state__EligibilityCheck_eligpending --> state__EligibilityCheck_eliginvalid : 資格確認結果（無効）の取込
+    state__EligibilityCheck_pending --> state__EligibilityCheck_invalid : 資格確認結果（無効）の取込
     %% transition usecase__ReceiveEligibilityNoInfo
-    state__EligibilityCheck_eligpending --> state__EligibilityCheck_elignoinfo : 資格確認結果（該当資格なし）の取込
+    state__EligibilityCheck_pending --> state__EligibilityCheck_no_info : 資格確認結果（該当資格なし）の取込
     %% transition usecase__RecordEligibilityDeclaration
-    state__EligibilityCheck_eligpending --> state__EligibilityCheck_eligdeclared : 被保険者資格申立書の受領
+    state__EligibilityCheck_pending --> state__EligibilityCheck_declared : 被保険者資格申立書の受領
     %% transition usecase__RecheckEligibility
-    state__EligibilityCheck_eliginvalid --> state__EligibilityCheck_eligpending : 資格の再確認
+    state__EligibilityCheck_invalid --> state__EligibilityCheck_pending : 資格の再確認
     %% transition usecase__RecheckEligibility
-    state__EligibilityCheck_elignoinfo --> state__EligibilityCheck_eligpending : 資格の再確認
-    state__EligibilityCheck_eligvalid --> [*]
-    state__EligibilityCheck_eligdeclared --> [*]
+    state__EligibilityCheck_no_info --> state__EligibilityCheck_pending : 資格の再確認
+    state__EligibilityCheck_valid --> [*]
+    state__EligibilityCheck_declared --> [*]
   }
   classDef stateend fill:#dfd,stroke:#383,color:#141
-  class state__EligibilityCheck_eligvalid stateend
-  class state__EligibilityCheck_eligdeclared stateend
+  class state__EligibilityCheck_valid stateend
+  class state__EligibilityCheck_declared stateend
 ```
 
 ### 診療記録（Encounter）
@@ -3660,21 +3660,21 @@ stateDiagram-v2
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "Encounter.status" as statemodel__Encounter_status {
-    [*] --> state__Encounter_encopen
-    state "記録中" as state__Encounter_encopen
-    state "記載済" as state__Encounter_encdocumented
-    state "署名済" as state__Encounter_encsigned
-    state "修正済" as state__Encounter_encamended
+    [*] --> state__Encounter_open
+    state "記録中" as state__Encounter_open
+    state "記載済" as state__Encounter_documented
+    state "署名済" as state__Encounter_signed
+    state "修正済" as state__Encounter_amended
     %% transition usecase__DocumentAssessment
-    state__Encounter_encopen --> state__Encounter_encdocumented : 診察・診断の記録
+    state__Encounter_open --> state__Encounter_documented : 診察・診断の記録
     %% transition usecase__SignEncounter
-    state__Encounter_encdocumented --> state__Encounter_encsigned : 診療記録の署名
+    state__Encounter_documented --> state__Encounter_signed : 診療記録の署名
     %% transition usecase__AmendEncounter
-    state__Encounter_encsigned --> state__Encounter_encamended : 署名済み記録の修正
-    state__Encounter_encamended --> [*]
+    state__Encounter_signed --> state__Encounter_amended : 署名済み記録の修正
+    state__Encounter_amended --> [*]
   }
   classDef stateend fill:#dfd,stroke:#383,color:#141
-  class state__Encounter_encamended stateend
+  class state__Encounter_amended stateend
 ```
 
 ### 問診票（IntakePacket）
@@ -3686,20 +3686,20 @@ stateDiagram-v2
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "IntakePacket.status" as statemodel__IntakePacket_status {
-    [*] --> state__IntakePacket_intakesent
-    state "送付済" as state__IntakePacket_intakesent
-    state "回答済" as state__IntakePacket_intakecompleted
-    state "期限切れ" as state__IntakePacket_intakeexpired
+    [*] --> state__IntakePacket_sent
+    state "送付済" as state__IntakePacket_sent
+    state "回答済" as state__IntakePacket_completed
+    state "期限切れ" as state__IntakePacket_expired
     %% transition usecase__CompleteIntakeForms
-    state__IntakePacket_intakesent --> state__IntakePacket_intakecompleted : 問診票の回答
+    state__IntakePacket_sent --> state__IntakePacket_completed : 問診票の回答
     %% transition usecase__ExpireIntakeForms
-    state__IntakePacket_intakesent --> state__IntakePacket_intakeexpired : 問診票の期限切れ
-    state__IntakePacket_intakecompleted --> [*]
-    state__IntakePacket_intakeexpired --> [*]
+    state__IntakePacket_sent --> state__IntakePacket_expired : 問診票の期限切れ
+    state__IntakePacket_completed --> [*]
+    state__IntakePacket_expired --> [*]
   }
   classDef stateend fill:#dfd,stroke:#383,color:#141
-  class state__IntakePacket_intakecompleted stateend
-  class state__IntakePacket_intakeexpired stateend
+  class state__IntakePacket_completed stateend
+  class state__IntakePacket_expired stateend
 ```
 
 ### 患者登録（PatientAccount）
@@ -3711,20 +3711,20 @@ stateDiagram-v2
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "PatientAccount.status" as statemodel__PatientAccount_status {
-    [*] --> state__PatientAccount_patientactive
-    state "有効" as state__PatientAccount_patientactive
-    state "アーカイブ済" as state__PatientAccount_patientinactive
-    state "統合済" as state__PatientAccount_patientmerged
+    [*] --> state__PatientAccount_active
+    state "有効" as state__PatientAccount_active
+    state "アーカイブ済" as state__PatientAccount_inactive
+    state "統合済" as state__PatientAccount_merged
     %% transition usecase__ArchivePatient
-    state__PatientAccount_patientactive --> state__PatientAccount_patientinactive : 患者のアーカイブ
+    state__PatientAccount_active --> state__PatientAccount_inactive : 患者のアーカイブ
     %% transition usecase__MergeDuplicatePatient
-    state__PatientAccount_patientactive --> state__PatientAccount_patientmerged : 重複患者の統合
-    state__PatientAccount_patientinactive --> [*]
-    state__PatientAccount_patientmerged --> [*]
+    state__PatientAccount_active --> state__PatientAccount_merged : 重複患者の統合
+    state__PatientAccount_inactive --> [*]
+    state__PatientAccount_merged --> [*]
   }
   classDef stateend fill:#dfd,stroke:#383,color:#141
-  class state__PatientAccount_patientinactive stateend
-  class state__PatientAccount_patientmerged stateend
+  class state__PatientAccount_inactive stateend
+  class state__PatientAccount_merged stateend
 ```
 
 ### 精算（PaymentTransaction）
@@ -3736,15 +3736,15 @@ stateDiagram-v2
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "PaymentTransaction.status" as statemodel__PaymentTransaction_status {
-    [*] --> state__PaymentTransaction_payposted
-    state "収納済" as state__PaymentTransaction_payposted
-    state "還付済" as state__PaymentTransaction_payrefunded
+    [*] --> state__PaymentTransaction_posted
+    state "収納済" as state__PaymentTransaction_posted
+    state "還付済" as state__PaymentTransaction_refunded
     %% transition usecase__RefundPayment
-    state__PaymentTransaction_payposted --> state__PaymentTransaction_payrefunded : 還付・追加徴収
-    state__PaymentTransaction_payrefunded --> [*]
+    state__PaymentTransaction_posted --> state__PaymentTransaction_refunded : 還付・追加徴収
+    state__PaymentTransaction_refunded --> [*]
   }
   classDef stateend fill:#dfd,stroke:#383,color:#141
-  class state__PaymentTransaction_payrefunded stateend
+  class state__PaymentTransaction_refunded stateend
 ```
 
 ### 処方箋（Prescription）
@@ -3756,67 +3756,67 @@ stateDiagram-v2
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "Prescription.status" as statemodel__Prescription_status {
-    [*] --> state__Prescription_rxdrafted
-    state "処方入力中" as state__Prescription_rxdrafted
-    state "院外処方箋発行済" as state__Prescription_rxissued
-    state "引換券交付済" as state__Prescription_rxvoucher
-    state "疑義照会中" as state__Prescription_rxinquiry
-    state "調剤・監査済" as state__Prescription_rxaudited
-    state "服薬指導済" as state__Prescription_rxcounseled
-    state "交付済" as state__Prescription_rxdispensed
-    state "使用期間切れ" as state__Prescription_rxexpired
-    state "取消" as state__Prescription_rxcancelled
+    [*] --> state__Prescription_drafted
+    state "処方入力中" as state__Prescription_drafted
+    state "院外処方箋発行済" as state__Prescription_issued
+    state "引換券交付済" as state__Prescription_voucher_issued
+    state "疑義照会中" as state__Prescription_in_inquiry
+    state "調剤・監査済" as state__Prescription_audited
+    state "服薬指導済" as state__Prescription_counseled
+    state "交付済" as state__Prescription_dispensed
+    state "使用期間切れ" as state__Prescription_expired
+    state "取消" as state__Prescription_cancelled
     %% transition usecase__IssueOutsidePrescription
-    state__Prescription_rxdrafted --> state__Prescription_rxissued : 院外処方箋の発行
+    state__Prescription_drafted --> state__Prescription_issued : 院外処方箋の発行
     %% transition usecase__IssueInhouseVoucher
-    state__Prescription_rxdrafted --> state__Prescription_rxvoucher : 院内処方用引換券の交付
+    state__Prescription_drafted --> state__Prescription_voucher_issued : 院内処方用引換券の交付
     %% transition usecase__CancelPrescription
-    state__Prescription_rxdrafted --> state__Prescription_rxcancelled : 処方の取消
+    state__Prescription_drafted --> state__Prescription_cancelled : 処方の取消
     %% transition usecase__AnswerPharmacyInquiry
-    state__Prescription_rxissued --> state__Prescription_rxissued : 保険薬局からの疑義照会への回答
+    state__Prescription_issued --> state__Prescription_issued : 保険薬局からの疑義照会への回答
     %% transition usecase__ConfirmDispense
-    state__Prescription_rxissued --> state__Prescription_rxdispensed : 保険薬局での調剤結果の受信
+    state__Prescription_issued --> state__Prescription_dispensed : 保険薬局での調剤結果の受信
     %% transition usecase__ExpirePrescription
-    state__Prescription_rxissued --> state__Prescription_rxexpired : 処方箋の使用期間切れ
+    state__Prescription_issued --> state__Prescription_expired : 処方箋の使用期間切れ
     %% transition usecase__RaisePrescriptionInquiry
-    state__Prescription_rxvoucher --> state__Prescription_rxinquiry : 疑義照会
+    state__Prescription_voucher_issued --> state__Prescription_in_inquiry : 疑義照会
     %% transition usecase__DispenseAndAudit
-    state__Prescription_rxvoucher --> state__Prescription_rxaudited : 調剤・監査
+    state__Prescription_voucher_issued --> state__Prescription_audited : 調剤・監査
     %% transition usecase__AnswerPrescriptionInquiry
-    state__Prescription_rxinquiry --> state__Prescription_rxvoucher : 疑義照会への回答
+    state__Prescription_in_inquiry --> state__Prescription_voucher_issued : 疑義照会への回答
     %% transition usecase__CounselMedication
-    state__Prescription_rxaudited --> state__Prescription_rxcounseled : 服薬指導
+    state__Prescription_audited --> state__Prescription_counseled : 服薬指導
     %% transition usecase__HandOverMedication
-    state__Prescription_rxcounseled --> state__Prescription_rxdispensed : 薬剤交付
-    state__Prescription_rxdispensed --> [*]
-    state__Prescription_rxexpired --> [*]
-    state__Prescription_rxcancelled --> [*]
+    state__Prescription_counseled --> state__Prescription_dispensed : 薬剤交付
+    state__Prescription_dispensed --> [*]
+    state__Prescription_expired --> [*]
+    state__Prescription_cancelled --> [*]
   }
   classDef stateend fill:#dfd,stroke:#383,color:#141
-  class state__Prescription_rxdispensed stateend
-  class state__Prescription_rxexpired stateend
-  class state__Prescription_rxcancelled stateend
+  class state__Prescription_dispensed stateend
+  class state__Prescription_expired stateend
+  class state__Prescription_cancelled stateend
 ```
 
 <details><summary>到達可能な状態の表</summary>
 
 ```text
 Entity: Prescription (処方箋)
-  axes: status[rxdrafted|rxissued|rxvoucher|rxinquiry|rxaudited|rxcounseled|rxdispensed|rxexpired|rxcancelled], refill_limit[null|present], sent_at[null|present], dispensed_at[null|present]
-  labels: status[rxdrafted=処方入力中|rxissued=院外処方箋発行済|rxvoucher=引換券交付済|rxinquiry=疑義照会中|rxaudited=調剤・監査済|rxcounseled=服薬指導済|rxdispensed=交付済|rxexpired=使用期間切れ|rxcancelled=取消]
+  axes: status[drafted|issued|voucher_issued|in_inquiry|audited|counseled|dispensed|expired|cancelled], refill_limit[null|present], sent_at[null|present], dispensed_at[null|present]
+  labels: status[drafted=処方入力中|issued=院外処方箋発行済|voucher_issued=引換券交付済|in_inquiry=疑義照会中|audited=調剤・監査済|counseled=服薬指導済|dispensed=交付済|expired=使用期間切れ|cancelled=取消]
 
-  STATUS       REFILL_LIMIT  SENT_AT  DISPENSED_AT  INITIAL  TERMINAL  VIA
-  ───────────  ────────────  ───────  ────────────  ───────  ────────  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  rxdrafted    null          null     null          yes      no        BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueRefillPrescription
-  rxissued     null          present  null          no       no        BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueOutsidePrescription, BucPrescriptionFulfillment/IssueRefillPrescription
-  rxvoucher    null          null     null          no       no        BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/IssueRefillPrescription, BucPrescriptionFulfillment/RaisePrescriptionInquiry
-  rxcancelled  null          null     null          no       yes       BucPrescriptionFulfillment/CancelPrescription, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueRefillPrescription
-  rxdispensed  null          present  present       no       yes       BucPrescriptionFulfillment/ConfirmDispense, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueOutsidePrescription, BucPrescriptionFulfillment/IssueRefillPrescription
-  rxexpired    null          present  null          no       yes       BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/ExpirePrescription, BucPrescriptionFulfillment/IssueOutsidePrescription, BucPrescriptionFulfillment/IssueRefillPrescription
-  rxaudited    null          null     null          no       no        BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/DispenseAndAudit, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/IssueRefillPrescription, BucPrescriptionFulfillment/RaisePrescriptionInquiry
-  rxinquiry    null          null     null          no       no        BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/IssueRefillPrescription, BucPrescriptionFulfillment/RaisePrescriptionInquiry
-  rxcounseled  null          null     null          no       no        BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/CounselMedication, BucPrescriptionFulfillment/DispenseAndAudit, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/IssueRefillPrescription, BucPrescriptionFulfillment/RaisePrescriptionInquiry
-  rxdispensed  null          null     present       no       yes       BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/CounselMedication, BucPrescriptionFulfillment/DispenseAndAudit, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/HandOverMedication, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/IssueRefillPrescription, BucPrescriptionFulfillment/RaisePrescriptionInquiry
+  STATUS          REFILL_LIMIT  SENT_AT  DISPENSED_AT  INITIAL  TERMINAL  VIA
+  ──────────────  ────────────  ───────  ────────────  ───────  ────────  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  drafted         null          null     null          yes      no        BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueRefillPrescription
+  issued          null          present  null          no       no        BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueOutsidePrescription, BucPrescriptionFulfillment/IssueRefillPrescription
+  voucher_issued  null          null     null          no       no        BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/IssueRefillPrescription, BucPrescriptionFulfillment/RaisePrescriptionInquiry
+  cancelled       null          null     null          no       yes       BucPrescriptionFulfillment/CancelPrescription, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueRefillPrescription
+  dispensed       null          present  present       no       yes       BucPrescriptionFulfillment/ConfirmDispense, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueOutsidePrescription, BucPrescriptionFulfillment/IssueRefillPrescription
+  expired         null          present  null          no       yes       BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/ExpirePrescription, BucPrescriptionFulfillment/IssueOutsidePrescription, BucPrescriptionFulfillment/IssueRefillPrescription
+  audited         null          null     null          no       no        BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/DispenseAndAudit, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/IssueRefillPrescription, BucPrescriptionFulfillment/RaisePrescriptionInquiry
+  in_inquiry      null          null     null          no       no        BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/IssueRefillPrescription, BucPrescriptionFulfillment/RaisePrescriptionInquiry
+  counseled       null          null     null          no       no        BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/CounselMedication, BucPrescriptionFulfillment/DispenseAndAudit, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/IssueRefillPrescription, BucPrescriptionFulfillment/RaisePrescriptionInquiry
+  dispensed       null          null     present       no       yes       BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/CounselMedication, BucPrescriptionFulfillment/DispenseAndAudit, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/HandOverMedication, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/IssueRefillPrescription, BucPrescriptionFulfillment/RaisePrescriptionInquiry
 
   reachable: 10 / bound: 72
 ```
@@ -4116,7 +4116,7 @@ erDiagram
 | Appointment | 予約・受診 | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | Appointment | 予約・受診 | reason | String | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | Appointment | 予約・受診 | referral | ReferralCategory | false | false | false | false |  | false |  |  | false | revisit |  | false | false | false |  |
-| Appointment | 予約・受診 | status | Enum | false | false | false | false |  | false |  |  | false | apptrequested |  | false | false | false |  |
+| Appointment | 予約・受診 | status | Enum | false | false | false | false |  | false |  |  | false | requested |  | false | false | false |  |
 | Appointment | 予約・受診 | scheduled_at | DateTime | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | Appointment | 予約・受診 | checked_in_at | DateTime | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
 | Appointment | 予約・受診 | completed_at | DateTime | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
@@ -4134,7 +4134,7 @@ erDiagram
 | AuditEvent | 監査ログ | patientaccount_id | Int | false | false | false | true | PatientAccount | false |  |  | false |  |  | false | false | false |  |
 | CarePlan | ケアプラン | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | CarePlan | ケアプラン | goal | String | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
-| CarePlan | ケアプラン | status | Enum | false | false | false | false |  | false |  |  | false | careopen |  | false | false | false |  |
+| CarePlan | ケアプラン | status | Enum | false | false | false | false |  | false |  |  | false | open |  | false | false | false |  |
 | CarePlan | ケアプラン | opened_at | DateTime | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | CarePlan | ケアプラン | closed_at | DateTime | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
 | CarePlan | ケアプラン | patientaccount_id | Int | false | false | false | true | PatientAccount | false |  |  | false |  |  | false | false | false |  |
@@ -4145,12 +4145,12 @@ erDiagram
 | Charge | コスト（診療行為） | origin | ChargeOrigin | false | false | false | false |  | false |  |  | false | chart |  | false | false | false |  |
 | Charge | コスト（診療行為） | amount | Money | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | Charge | コスト（診療行為） | posted_at | DateTime | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
-| Charge | コスト（診療行為） | status | Enum | false | false | false | false |  | false |  |  | false | chargeposted |  | false | false | false |  |
+| Charge | コスト（診療行為） | status | Enum | false | false | false | false |  | false |  |  | false | posted |  | false | false | false |  |
 | Charge | コスト（診療行為） | encounter_id | Int | false | false | false | true | Encounter | false |  |  | false |  |  | false | false | false |  |
 | Charge | コスト（診療行為） | claimstatement_id | Int | false | false | false | true | ClaimStatement | true |  |  | true |  |  | false | false | false |  |
 | ClaimStatement | レセプト | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | ClaimStatement | レセプト | service_month | Date | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
-| ClaimStatement | レセプト | status | Enum | false | false | false | false |  | false |  |  | false | stmtdrafting |  | false | false | false |  |
+| ClaimStatement | レセプト | status | Enum | false | false | false | false |  | false |  |  | false | drafting |  | false | false | false |  |
 | ClaimStatement | レセプト | payer_change | PayerChange | false | false | false | false |  | false |  |  | false | nochange |  | false | false | false |  |
 | ClaimStatement | レセプト | submitted_at | DateTime | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
 | ClaimStatement | レセプト | paid_at | DateTime | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
@@ -4163,7 +4163,7 @@ erDiagram
 | ClinicLocation | 施設 | phone | String | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | ClinicalOrder | 検査オーダ | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | ClinicalOrder | 検査オーダ | order_type | OrderType | false | false | false | false |  | false |  |  | false | lab |  | false | false | false |  |
-| ClinicalOrder | 検査オーダ | status | Enum | false | false | false | false |  | false |  |  | false | clordered |  | false | false | false |  |
+| ClinicalOrder | 検査オーダ | status | Enum | false | false | false | false |  | false |  |  | false | ordered |  | false | false | false |  |
 | ClinicalOrder | 検査オーダ | physician_confirmed | Bool | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | ClinicalOrder | 検査オーダ | ordered_at | DateTime | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | ClinicalOrder | 検査オーダ | collected_at | DateTime | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
@@ -4182,12 +4182,12 @@ erDiagram
 | Diagnosis | 診断 | encounter_id | Int | false | false | false | true | Encounter | false |  |  | false |  |  | false | false | false |  |
 | EligibilityCheck | 資格確認 | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | EligibilityCheck | 資格確認 | checked_at | DateTime | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
-| EligibilityCheck | 資格確認 | result | Enum | false | false | false | false |  | false |  |  | false | eligpending |  | false | false | false |  |
+| EligibilityCheck | 資格確認 | result | Enum | false | false | false | false |  | false |  |  | false | pending |  | false | false | false |  |
 | EligibilityCheck | 資格確認 | reference_no | String | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
 | EligibilityCheck | 資格確認 | insurancepolicy_id | Int | false | false | false | true | InsurancePolicy | false |  |  | false |  |  | false | false | false |  |
 | Encounter | 診療記録 | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | Encounter | 診療記録 | chief_complaint | String | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
-| Encounter | 診療記録 | status | Enum | false | false | false | false |  | false |  |  | false | encopen |  | false | false | false |  |
+| Encounter | 診療記録 | status | Enum | false | false | false | false |  | false |  |  | false | open |  | false | false | false |  |
 | Encounter | 診療記録 | opened_at | DateTime | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | Encounter | 診療記録 | signed_at | DateTime | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
 | Encounter | 診療記録 | appointment_id | Int | false | true | false | true | Appointment | false |  |  | false |  |  | false | false | false |  |
@@ -4204,7 +4204,7 @@ erDiagram
 | InsurancePolicy | 保険資格 | active | Bool | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | InsurancePolicy | 保険資格 | patientaccount_id | Int | false | false | false | true | PatientAccount | false |  |  | false |  |  | false | false | false |  |
 | IntakePacket | 問診票 | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
-| IntakePacket | 問診票 | status | Enum | false | false | false | false |  | false |  |  | false | intakesent |  | false | false | false |  |
+| IntakePacket | 問診票 | status | Enum | false | false | false | false |  | false |  |  | false | sent |  | false | false | false |  |
 | IntakePacket | 問診票 | sent_at | DateTime | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
 | IntakePacket | 問診票 | completed_at | DateTime | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
 | IntakePacket | 問診票 | patientaccount_id | Int | false | false | false | true | PatientAccount | false |  |  | false |  |  | false | false | false |  |
@@ -4224,12 +4224,12 @@ erDiagram
 | Notification | 通知 | patientaccount_id | Int | false | false | false | true | PatientAccount | false |  |  | false |  |  | false | false | false |  |
 | PatientAccount | 患者登録 | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | PatientAccount | 患者登録 | medical_record_no | String | false | true | false | false |  | false |  |  | false |  |  | false | false | false |  |
-| PatientAccount | 患者登録 | status | Enum | false | false | false | false |  | false |  |  | false | patientactive |  | false | false | false |  |
+| PatientAccount | 患者登録 | status | Enum | false | false | false | false |  | false |  |  | false | active |  | false | false | false |  |
 | PatientAccount | 患者登録 | created_at | DateTime | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | PatientAccount | 患者登録 | archived_at | DateTime | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
 | PatientMessage | 患者連絡 | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | PatientMessage | 患者連絡 | channel | MessageChannel | false | false | false | false |  | false |  |  | false | portal |  | false | false | false |  |
-| PatientMessage | 患者連絡 | status | Enum | false | false | false | false |  | false |  |  | false | msgsent |  | false | false | false |  |
+| PatientMessage | 患者連絡 | status | Enum | false | false | false | false |  | false |  |  | false | sent |  | false | false | false |  |
 | PatientMessage | 患者連絡 | sent_at | DateTime | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
 | PatientMessage | 患者連絡 | read_at | DateTime | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
 | PatientMessage | 患者連絡 | patientaccount_id | Int | false | false | false | true | PatientAccount | false |  |  | false |  |  | false | false | false |  |
@@ -4244,13 +4244,13 @@ erDiagram
 | PaymentTransaction | 精算 | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | PaymentTransaction | 精算 | amount | Money | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | PaymentTransaction | 精算 | method | PaymentMethod | false | false | false | false |  | false |  |  | false | card |  | false | false | false |  |
-| PaymentTransaction | 精算 | status | Enum | false | false | false | false |  | false |  |  | false | payposted |  | false | false | false |  |
+| PaymentTransaction | 精算 | status | Enum | false | false | false | false |  | false |  |  | false | posted |  | false | false | false |  |
 | PaymentTransaction | 精算 | processed_at | DateTime | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
 | PaymentTransaction | 精算 | gateway_ref | String | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
 | PaymentTransaction | 精算 | appointment_id | Int | false | false | false | true | Appointment | false |  |  | false |  |  | false | false | false |  |
 | Prescription | 処方箋 | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | Prescription | 処方箋 | directions | String | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
-| Prescription | 処方箋 | status | Enum | false | false | false | false |  | false |  |  | false | rxdrafted |  | false | false | false |  |
+| Prescription | 処方箋 | status | Enum | false | false | false | false |  | false |  |  | false | drafted |  | false | false | false |  |
 | Prescription | 処方箋 | issued_on | Date | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | Prescription | 処方箋 | use_period_days | Int | false | false | false | false |  | false |  |  | false | 4 |  | false | false | false |  |
 | Prescription | 処方箋 | refill_limit | Int | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
@@ -4277,7 +4277,7 @@ erDiagram
 | ReferralLetter | 紹介状・診療情報提供書 | patientaccount_id | Int | false | false | false | true | PatientAccount | false |  |  | false |  |  | false | false | false |  |
 | Room | 診察室 | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | Room | 診察室 | name | String | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
-| Room | 診察室 | occupancy_status | Enum | false | false | false | false |  | false |  |  | false | roomavailable |  | false | false | false |  |
+| Room | 診察室 | occupancy_status | Enum | false | false | false | false |  | false |  |  | false | available |  | false | false | false |  |
 | Room | 診察室 | cliniclocation_id | Int | false | false | false | true | ClinicLocation | false |  |  | false |  |  | false | false | false |  |
 | SelectedTreatmentFeeSetting | 選定療養費の設定 | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | SelectedTreatmentFeeSetting | 選定療養費の設定 | first_visit_fee | Money | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
@@ -4670,7 +4670,7 @@ flowchart LR
     buc__BucClinicalEncounter["診察"]:::buc
     %% desc buc__BucClinicalEncounter: 診療記録を開き、バイタル、診断、署名、診察終了までを扱う。診察終了 `CompleteConsultation` で予約は「計算待ち」になり、会計は計算受付へ移る。他院紹介では医師が診療情報提供書を作成・送信する。検査オーダは診察中に医師が出し、署名の後に診察終了とする。署名イベント `EvEncounterSigned` はカルテのコスト情報の登録とケアプラン作成を、診察終了イベント `EvConsultationCompleted` は計算・会計を起動する。
     buc__BucOrdersResults["検体検査"]:::buc
-    %% desc buc__BucOrdersResults: 検査オーダーから結果確認、重要結果通知までを扱う。医師事務作業補助者や看護師がオーダを代行入力した場合、医師が確定するまで看護師は採血しない（保助看法 第37条）。この規則は `OrderConfirmedByPhysician` 条件と `forbidden(ClinicalOrder, status == clcollected, physician_confirmed == false)` で検証する。外注検査の結果は外注検査システムから届く。採血管ラベルの発行と実施内容（コスト）の登録が会計計算の入力になる。実施入力のコストは `Charge.origin` が `performed` で、カルテ由来（`chart`）や選定療養費（`selectedfee`）のコストと発生元で区別される。
+    %% desc buc__BucOrdersResults: 検査オーダーから結果確認、重要結果通知までを扱う。医師事務作業補助者や看護師がオーダを代行入力した場合、医師が確定するまで看護師は採血しない（保助看法 第37条）。この規則は `OrderConfirmedByPhysician` 条件と `forbidden(ClinicalOrder, status == collected, physician_confirmed == false)` で検証する。外注検査の結果は外注検査システムから届く。採血管ラベルの発行と実施内容（コスト）の登録が会計計算の入力になる。実施入力のコストは `Charge.origin` が `performed` で、カルテ由来（`chart`）や選定療養費（`selectedfee`）のコストと発生元で区別される。
     buc__BucPrescriptionFulfillment["処方"]:::buc
     %% desc buc__BucPrescriptionFulfillment: 処方オーダから院外処方箋の発行、院内処方の調剤・監査・服薬指導・交付、疑義照会までを扱う。院外処方箋は電子処方箋管理サービスへ登録し、患者が選ぶ保険薬局で調剤される。病院は特定の保険薬局を指示しない（療担規則 第2条の5）ので、`Prescription` は薬局を持たない。使用期間は交付日を含めて4日以内で、日数は DSL で数えられないためタイマーで期限切れにする。薬剤師は疑わしい点があれば医師に問い合わせ、回答までは調剤しない。
   end

@@ -10,5 +10,5 @@ sequenceDiagram
   usecase__SignEncounter ->> api__CreateChargeApi: 診療記録の署名
   screen__ChargeWorklistScreen ->> api__CreateChargeApi: コスト登録 API
   api__CreateChargeApi ->> entity__Encounter: read
-  api__CreateChargeApi ->> entity__Charge: create status=chargeposted, posted_at=set, kind=insured, origin=chart
+  api__CreateChargeApi ->> entity__Charge: create status=posted, posted_at=set, kind=insured, origin=chart
   api__CreateChargeApi -->> screen__ChargeWorklistScreen: done

@@ -291,39 +291,39 @@ flowchart LR
     entity__Room[("診察室")]:::entity
     entity__SelectedTreatmentFeeSetting[("選定療養費の設定")]:::entity
     entity__VitalSign[("バイタル")]:::entity
-    state__Appointment_apptawaitingcalc((("計算待ち"))):::state
-    state__Appointment_apptawaitingpay((("会計待ち"))):::state
-    state__Appointment_apptcheckedin((("受付済"))):::state
-    state__Appointment_apptcompleted((("完了"))):::state
-    state__Appointment_apptinconsult((("診察中"))):::state
-    state__Appointment_apptrequested((("仮押さえ"))):::state
-    state__Appointment_apptscheduled((("予約済"))):::state
-    state__Appointment_apptsettled((("精算済"))):::state
-    state__CarePlan_careclosed((("終了"))):::state
-    state__CarePlan_caremonitoring((("経過観察中"))):::state
-    state__CarePlan_careopen((("作成済"))):::state
-    state__ClaimStatement_stmtassessed((("査定"))):::state
-    state__ClaimStatement_stmtdrafting((("作成中"))):::state
-    state__ClaimStatement_stmtinspecting((("院内点検中"))):::state
-    state__ClaimStatement_stmtonhold((("保留"))):::state
-    state__ClaimStatement_stmtpaid((("支払済"))):::state
-    state__ClaimStatement_stmtreceipterror((("受付不能・要確認"))):::state
-    state__ClaimStatement_stmtrereview((("再審査請求中"))):::state
-    state__ClaimStatement_stmtreturned((("返戻"))):::state
-    state__ClaimStatement_stmtsubmitted((("請求済"))):::state
-    state__ClaimStatement_stmtunderreview((("審査中"))):::state
-    state__Encounter_encamended((("修正済"))):::state
-    state__Encounter_encdocumented((("記載済"))):::state
-    state__Encounter_encopen((("記録中"))):::state
-    state__Encounter_encsigned((("署名済"))):::state
-    state__IntakePacket_intakecompleted((("回答済"))):::state
-    state__IntakePacket_intakeexpired((("期限切れ"))):::state
-    state__IntakePacket_intakesent((("送付済"))):::state
-    state__PatientAccount_patientactive((("有効"))):::state
-    state__PatientAccount_patientinactive((("アーカイブ済"))):::state
-    state__PatientAccount_patientmerged((("統合済"))):::state
-    state__PaymentTransaction_payposted((("収納済"))):::state
-    state__PaymentTransaction_payrefunded((("還付済"))):::state
+    state__Appointment_awaiting_calc((("計算待ち"))):::state
+    state__Appointment_awaiting_pay((("会計待ち"))):::state
+    state__Appointment_checked_in((("受付済"))):::state
+    state__Appointment_completed((("完了"))):::state
+    state__Appointment_in_consult((("診察中"))):::state
+    state__Appointment_requested((("仮押さえ"))):::state
+    state__Appointment_scheduled((("予約済"))):::state
+    state__Appointment_settled((("精算済"))):::state
+    state__CarePlan_closed((("終了"))):::state
+    state__CarePlan_monitoring((("経過観察中"))):::state
+    state__CarePlan_open((("作成済"))):::state
+    state__ClaimStatement_assessed((("査定"))):::state
+    state__ClaimStatement_drafting((("作成中"))):::state
+    state__ClaimStatement_inspecting((("院内点検中"))):::state
+    state__ClaimStatement_on_hold((("保留"))):::state
+    state__ClaimStatement_paid((("支払済"))):::state
+    state__ClaimStatement_receipt_error((("受付不能・要確認"))):::state
+    state__ClaimStatement_rereview((("再審査請求中"))):::state
+    state__ClaimStatement_returned((("返戻"))):::state
+    state__ClaimStatement_submitted((("請求済"))):::state
+    state__ClaimStatement_under_review((("審査中"))):::state
+    state__Encounter_amended((("修正済"))):::state
+    state__Encounter_documented((("記載済"))):::state
+    state__Encounter_open((("記録中"))):::state
+    state__Encounter_signed((("署名済"))):::state
+    state__IntakePacket_completed((("回答済"))):::state
+    state__IntakePacket_expired((("期限切れ"))):::state
+    state__IntakePacket_sent((("送付済"))):::state
+    state__PatientAccount_active((("有効"))):::state
+    state__PatientAccount_inactive((("アーカイブ済"))):::state
+    state__PatientAccount_merged((("統合済"))):::state
+    state__PaymentTransaction_posted((("収納済"))):::state
+    state__PaymentTransaction_refunded((("還付済"))):::state
     variation__BurdenRatio[\"負担割合"\]:::variation
     variation__ChargeKind[\"診療費の種類"\]:::variation
     variation__LimitCategory[\"限度額適用区分"\]:::variation
@@ -695,7 +695,7 @@ flowchart LR
   usecase__AmendEncounter -.-> api__AmendEncounterApi
   usecase__AmendEncounter -.-> medium__ClinicalWorkstation
   usecase__AmendEncounter -.-> permission__EncounterSign
-  usecase__AmendEncounter -.->|transitions Encounter.status encsigned->encamended| state__Encounter_encamended
+  usecase__AmendEncounter -.->|transitions Encounter.status signed->amended| state__Encounter_amended
   usecase__ApplySelectedTreatmentFee -.-> screen__BillCalculationScreen
   usecase__ApplySelectedTreatmentFee -.-> api__SelectedFeeApi
   usecase__ApplySelectedTreatmentFee -.-> medium__BillingWorkstation
@@ -703,14 +703,14 @@ flowchart LR
   usecase__ArchivePatient -.-> screen__PatientProfileScreen
   usecase__ArchivePatient -.-> medium__FrontDeskTerminal
   usecase__ArchivePatient -.-> permission__PatientProfileWrite
-  usecase__ArchivePatient -.->|transitions PatientAccount.status patientactive->patientinactive| state__PatientAccount_patientinactive
+  usecase__ArchivePatient -.->|transitions PatientAccount.status active->inactive| state__PatientAccount_inactive
   usecase__ArchivePatient -.->|updates| entity__PatientAccount
   usecase__CalculateVisitBill -.-> screen__BillCalculationScreen
   usecase__CalculateVisitBill -.-> api__CalculateVisitBillApi
   usecase__CalculateVisitBill -.-> event__EvBillCalculated
   usecase__CalculateVisitBill -.-> medium__BillingWorkstation
   usecase__CalculateVisitBill -.-> permission__BillCalculate
-  usecase__CalculateVisitBill -.->|transitions Appointment.status apptawaitingcalc->apptawaitingpay| state__Appointment_apptawaitingpay
+  usecase__CalculateVisitBill -.->|transitions Appointment.status awaiting_calc->awaiting_pay| state__Appointment_awaiting_pay
   usecase__CallPatientForPayment -.-> screen__PaymentWindowScreen
   usecase__CallPatientForPayment -.->|reads| entity__Appointment
   usecase__CallPatientForPayment -.-> medium__AccountsWindow
@@ -721,24 +721,24 @@ flowchart LR
   usecase__CloseCarePlan -.-> screen__CarePlanScreen
   usecase__CloseCarePlan -.-> medium__CareCoordinationConsole
   usecase__CloseCarePlan -.-> permission__FollowUpManage
-  usecase__CloseCarePlan -.->|transitions CarePlan.status caremonitoring->careclosed| state__CarePlan_careclosed
+  usecase__CloseCarePlan -.->|transitions CarePlan.status monitoring->closed| state__CarePlan_closed
   usecase__CloseCarePlan -.->|updates| entity__CarePlan
   usecase__CompleteConsultation -.-> screen__EncounterWorkspaceScreen
   usecase__CompleteConsultation -.-> api__CompleteConsultationApi
   usecase__CompleteConsultation -.-> event__EvConsultationCompleted
   usecase__CompleteConsultation -.-> medium__NurseStation
   usecase__CompleteConsultation -.-> permission__EncounterOpen
-  usecase__CompleteConsultation -.->|transitions Appointment.status apptinconsult->apptawaitingcalc| state__Appointment_apptawaitingcalc
+  usecase__CompleteConsultation -.->|transitions Appointment.status in_consult->awaiting_calc| state__Appointment_awaiting_calc
   usecase__CompleteIntakeForms -.-> screen__IntakePortalScreen
   usecase__CompleteIntakeForms -.-> medium__PatientMobile
   usecase__CompleteIntakeForms -.-> permission__ConsentCapture
-  usecase__CompleteIntakeForms -.->|transitions IntakePacket.status intakesent->intakecompleted| state__IntakePacket_intakecompleted
+  usecase__CompleteIntakeForms -.->|transitions IntakePacket.status sent->completed| state__IntakePacket_completed
   usecase__CompleteIntakeForms -.->|updates| entity__IntakePacket
   usecase__CorrectReturnedStatement -.-> screen__ClaimScreen
   usecase__CorrectReturnedStatement -.-> api__ClaimEditApi
   usecase__CorrectReturnedStatement -.-> medium__BillingWorkstation
   usecase__CorrectReturnedStatement -.-> permission__BillingClaimWrite
-  usecase__CorrectReturnedStatement -.->|transitions ClaimStatement.status stmtreturned->stmtinspecting| state__ClaimStatement_stmtinspecting
+  usecase__CorrectReturnedStatement -.->|transitions ClaimStatement.status returned->inspecting| state__ClaimStatement_inspecting
   usecase__CreateCarePlan -.-> screen__CarePlanScreen
   usecase__CreateCarePlan -.-> api__CreateCarePlanApi
   usecase__CreateCarePlan -.-> medium__CareCoordinationConsole
@@ -750,11 +750,11 @@ flowchart LR
   usecase__DocumentAssessment -.-> api__DocumentAssessmentApi
   usecase__DocumentAssessment -.-> medium__ClinicalWorkstation
   usecase__DocumentAssessment -.-> permission__ClinicalDocument
-  usecase__DocumentAssessment -.->|transitions Encounter.status encopen->encdocumented| state__Encounter_encdocumented
+  usecase__DocumentAssessment -.->|transitions Encounter.status open->documented| state__Encounter_documented
   usecase__ExpireIntakeForms -.-> screen__IntakePortalScreen
   usecase__ExpireIntakeForms -.-> medium__FrontDeskTerminal
   usecase__ExpireIntakeForms -.-> permission__IntakeManage
-  usecase__ExpireIntakeForms -.->|transitions IntakePacket.status intakesent->intakeexpired| state__IntakePacket_intakeexpired
+  usecase__ExpireIntakeForms -.->|transitions IntakePacket.status sent->expired| state__IntakePacket_expired
   usecase__ExpireIntakeForms -.->|updates| entity__IntakePacket
   usecase__GenerateClaimStatement -.-> screen__ClaimScreen
   usecase__GenerateClaimStatement -.-> api__GenerateClaimApi
@@ -764,17 +764,17 @@ flowchart LR
   usecase__HoldClaimStatement -.-> api__ClaimEditApi
   usecase__HoldClaimStatement -.-> medium__BillingWorkstation
   usecase__HoldClaimStatement -.-> permission__BillingClaimWrite
-  usecase__HoldClaimStatement -.->|transitions ClaimStatement.status stmtinspecting->stmtonhold| state__ClaimStatement_stmtonhold
+  usecase__HoldClaimStatement -.->|transitions ClaimStatement.status inspecting->on_hold| state__ClaimStatement_on_hold
   usecase__InspectClaimStatement -.-> screen__ClaimScreen
   usecase__InspectClaimStatement -.-> api__ClaimEditApi
   usecase__InspectClaimStatement -.-> medium__BillingWorkstation
   usecase__InspectClaimStatement -.-> permission__BillingClaimWrite
-  usecase__InspectClaimStatement -.->|transitions ClaimStatement.status stmtdrafting->stmtinspecting| state__ClaimStatement_stmtinspecting
+  usecase__InspectClaimStatement -.->|transitions ClaimStatement.status drafting->inspecting| state__ClaimStatement_inspecting
   usecase__IssueReceipt -.-> screen__PaymentWindowScreen
   usecase__IssueReceipt -.-> api__ReceiptApi
   usecase__IssueReceipt -.-> medium__AccountsWindow
   usecase__IssueReceipt -.-> permission__PaymentCollect
-  usecase__IssueReceipt -.->|transitions Appointment.status apptsettled->apptcompleted| state__Appointment_apptcompleted
+  usecase__IssueReceipt -.->|transitions Appointment.status settled->completed| state__Appointment_completed
   usecase__IssueReferralLetter -.-> screen__ReferralLetterScreen
   usecase__IssueReferralLetter -.-> api__IssueReferralLetterApi
   usecase__IssueReferralLetter -.-> medium__ClinicalWorkstation
@@ -782,7 +782,7 @@ flowchart LR
   usecase__MergeDuplicatePatient -.-> screen__PatientProfileScreen
   usecase__MergeDuplicatePatient -.-> medium__FrontDeskTerminal
   usecase__MergeDuplicatePatient -.-> permission__PatientProfileWrite
-  usecase__MergeDuplicatePatient -.->|transitions PatientAccount.status patientactive->patientmerged| state__PatientAccount_patientmerged
+  usecase__MergeDuplicatePatient -.->|transitions PatientAccount.status active->merged| state__PatientAccount_merged
   usecase__MergeDuplicatePatient -.->|updates| entity__PatientAccount
   usecase__NotifyPatientResult -.-> screen__PatientMessageScreen
   usecase__NotifyPatientResult -.-> api__NotifyPatientResultApi
@@ -792,19 +792,19 @@ flowchart LR
   usecase__OpenEncounter -.-> api__OpenEncounterApi
   usecase__OpenEncounter -.-> medium__NurseStation
   usecase__OpenEncounter -.-> permission__EncounterOpen
-  usecase__OpenEncounter -.->|transitions Appointment.status apptcheckedin->apptinconsult| state__Appointment_apptinconsult
+  usecase__OpenEncounter -.->|transitions Appointment.status checked_in->in_consult| state__Appointment_in_consult
   usecase__PostPayment -.-> screen__PaymentPostingScreen
   usecase__PostPayment -.-> api__PaymentPostApi
   usecase__PostPayment -.-> medium__BillingWorkstation
   usecase__PostPayment -.-> permission__PaymentPost
-  usecase__PostPayment -.->|transitions ClaimStatement.status stmtassessed->stmtpaid| state__ClaimStatement_stmtpaid
-  usecase__PostPayment -.->|transitions ClaimStatement.status stmtrereview->stmtpaid| state__ClaimStatement_stmtpaid
-  usecase__PostPayment -.->|transitions ClaimStatement.status stmtunderreview->stmtpaid| state__ClaimStatement_stmtpaid
+  usecase__PostPayment -.->|transitions ClaimStatement.status assessed->paid| state__ClaimStatement_paid
+  usecase__PostPayment -.->|transitions ClaimStatement.status rereview->paid| state__ClaimStatement_paid
+  usecase__PostPayment -.->|transitions ClaimStatement.status under_review->paid| state__ClaimStatement_paid
   usecase__ReceiveClaimAccepted -.-> screen__ClaimScreen
   usecase__ReceiveClaimAccepted -.-> api__ClaimResultApi
   usecase__ReceiveClaimAccepted -.-> medium__OnlineClaimTerminal
   usecase__ReceiveClaimAccepted -.-> permission__BillingClaimWrite
-  usecase__ReceiveClaimAccepted -.->|transitions ClaimStatement.status stmtsubmitted->stmtunderreview| state__ClaimStatement_stmtunderreview
+  usecase__ReceiveClaimAccepted -.->|transitions ClaimStatement.status submitted->under_review| state__ClaimStatement_under_review
   usecase__ReconcileBalance -.-> screen__BalanceScreen
   usecase__ReconcileBalance -.-> api__BalanceApi
   usecase__ReconcileBalance -.-> medium__BillingWorkstation
@@ -813,17 +813,17 @@ flowchart LR
   usecase__RecordClaimAssessment -.-> api__ClaimResultApi
   usecase__RecordClaimAssessment -.-> medium__OnlineClaimTerminal
   usecase__RecordClaimAssessment -.-> permission__BillingClaimWrite
-  usecase__RecordClaimAssessment -.->|transitions ClaimStatement.status stmtunderreview->stmtassessed| state__ClaimStatement_stmtassessed
+  usecase__RecordClaimAssessment -.->|transitions ClaimStatement.status under_review->assessed| state__ClaimStatement_assessed
   usecase__RecordClaimReturn -.-> screen__ClaimScreen
   usecase__RecordClaimReturn -.-> api__ClaimResultApi
   usecase__RecordClaimReturn -.-> medium__OnlineClaimTerminal
   usecase__RecordClaimReturn -.-> permission__BillingClaimWrite
-  usecase__RecordClaimReturn -.->|transitions ClaimStatement.status stmtunderreview->stmtreturned| state__ClaimStatement_stmtreturned
+  usecase__RecordClaimReturn -.->|transitions ClaimStatement.status under_review->returned| state__ClaimStatement_returned
   usecase__RecordReceiptError -.-> screen__ClaimScreen
   usecase__RecordReceiptError -.-> api__ClaimResultApi
   usecase__RecordReceiptError -.-> medium__OnlineClaimTerminal
   usecase__RecordReceiptError -.-> permission__BillingClaimWrite
-  usecase__RecordReceiptError -.->|transitions ClaimStatement.status stmtsubmitted->stmtreceipterror| state__ClaimStatement_stmtreceipterror
+  usecase__RecordReceiptError -.->|transitions ClaimStatement.status submitted->receipt_error| state__ClaimStatement_receipt_error
   usecase__RecordVitals -.-> screen__VitalsScreen
   usecase__RecordVitals -.-> api__RecordVitalsApi
   usecase__RecordVitals -.-> medium__NurseStation
@@ -831,7 +831,7 @@ flowchart LR
   usecase__RefundPayment -.-> screen__PaymentWindowScreen
   usecase__RefundPayment -.-> medium__AccountsWindow
   usecase__RefundPayment -.-> permission__PaymentCollect
-  usecase__RefundPayment -.->|transitions PaymentTransaction.status payposted->payrefunded| state__PaymentTransaction_payrefunded
+  usecase__RefundPayment -.->|transitions PaymentTransaction.status posted->refunded| state__PaymentTransaction_refunded
   usecase__RefundPayment -.->|updates| entity__AccountBalance
   usecase__RefundPayment -.->|updates| entity__PaymentTransaction
   usecase__RegisterPatient -.-> screen__PatientProfileScreen
@@ -842,17 +842,17 @@ flowchart LR
   usecase__ReleaseHeldStatement -.-> api__ClaimEditApi
   usecase__ReleaseHeldStatement -.-> medium__BillingWorkstation
   usecase__ReleaseHeldStatement -.-> permission__BillingClaimWrite
-  usecase__ReleaseHeldStatement -.->|transitions ClaimStatement.status stmtonhold->stmtinspecting| state__ClaimStatement_stmtinspecting
+  usecase__ReleaseHeldStatement -.->|transitions ClaimStatement.status on_hold->inspecting| state__ClaimStatement_inspecting
   usecase__RequestReexamination -.-> screen__ClaimScreen
   usecase__RequestReexamination -.-> api__SubmitClaimApi
   usecase__RequestReexamination -.-> medium__OnlineClaimTerminal
   usecase__RequestReexamination -.-> permission__BillingClaimWrite
-  usecase__RequestReexamination -.->|transitions ClaimStatement.status stmtassessed->stmtrereview| state__ClaimStatement_stmtrereview
+  usecase__RequestReexamination -.->|transitions ClaimStatement.status assessed->rereview| state__ClaimStatement_rereview
   usecase__ResendErroredStatement -.-> screen__ClaimScreen
   usecase__ResendErroredStatement -.-> api__SubmitClaimApi
   usecase__ResendErroredStatement -.-> medium__OnlineClaimTerminal
   usecase__ResendErroredStatement -.-> permission__BillingClaimWrite
-  usecase__ResendErroredStatement -.->|transitions ClaimStatement.status stmtreceipterror->stmtsubmitted| state__ClaimStatement_stmtsubmitted
+  usecase__ResendErroredStatement -.->|transitions ClaimStatement.status receipt_error->submitted| state__ClaimStatement_submitted
   usecase__ReviewClaimTransfer -.-> screen__ClaimScreen
   usecase__ReviewClaimTransfer -.->|reads| entity__ClaimStatement
   usecase__ReviewClaimTransfer -.-> medium__OnlineClaimTerminal
@@ -860,7 +860,7 @@ flowchart LR
   usecase__ReviewPatientResponse -.-> screen__CarePlanScreen
   usecase__ReviewPatientResponse -.-> medium__CareCoordinationConsole
   usecase__ReviewPatientResponse -.-> permission__FollowUpManage
-  usecase__ReviewPatientResponse -.->|transitions CarePlan.status careopen->caremonitoring| state__CarePlan_caremonitoring
+  usecase__ReviewPatientResponse -.->|transitions CarePlan.status open->monitoring| state__CarePlan_monitoring
   usecase__ReviewPatientResponse -.->|updates| entity__CarePlan
   usecase__ReviewPatientResponse -.->|updates| entity__PatientMessage
   usecase__ScheduleFollowUpVisit -.-> screen__FollowUpScheduleScreen
@@ -869,7 +869,7 @@ flowchart LR
   usecase__ScheduleFollowUpVisit -.-> medium__CareCoordinationConsole
   usecase__ScheduleFollowUpVisit -.-> permission__FollowUpManage
   usecase__ScheduleFollowUpVisit -.-> permission__ScheduleWrite
-  usecase__ScheduleFollowUpVisit -.->|transitions Appointment.status apptrequested->apptscheduled| state__Appointment_apptscheduled
+  usecase__ScheduleFollowUpVisit -.->|transitions Appointment.status requested->scheduled| state__Appointment_scheduled
   usecase__SearchPatient -.-> screen__PatientSearchScreen
   usecase__SearchPatient -.-> api__SearchPatientApi
   usecase__SearchPatient -.-> medium__FrontDeskTerminal
@@ -889,24 +889,24 @@ flowchart LR
   usecase__SettleAtKiosk -.-> screen__KioskScreen
   usecase__SettleAtKiosk -.-> api__SettlementApi
   usecase__SettleAtKiosk -.-> medium__PaymentKiosk
-  usecase__SettleAtKiosk -.->|transitions Appointment.status apptawaitingpay->apptsettled| state__Appointment_apptsettled
+  usecase__SettleAtKiosk -.->|transitions Appointment.status awaiting_pay->settled| state__Appointment_settled
   usecase__SettleAtWindow -.-> screen__PaymentWindowScreen
   usecase__SettleAtWindow -.-> api__SettlementApi
   usecase__SettleAtWindow -.-> medium__AccountsWindow
   usecase__SettleAtWindow -.-> permission__PaymentCollect
-  usecase__SettleAtWindow -.->|transitions Appointment.status apptawaitingpay->apptsettled| state__Appointment_apptsettled
+  usecase__SettleAtWindow -.->|transitions Appointment.status awaiting_pay->settled| state__Appointment_settled
   usecase__SignEncounter -.-> screen__EncounterWorkspaceScreen
   usecase__SignEncounter -.-> api__SignEncounterApi
   usecase__SignEncounter -.-> event__EvEncounterSigned
   usecase__SignEncounter -.-> medium__ClinicalWorkstation
   usecase__SignEncounter -.-> permission__EncounterSign
-  usecase__SignEncounter -.->|transitions Encounter.status encdocumented->encsigned| state__Encounter_encsigned
+  usecase__SignEncounter -.->|transitions Encounter.status documented->signed| state__Encounter_signed
   usecase__SubmitClaimStatements -.-> screen__ClaimScreen
   usecase__SubmitClaimStatements -.-> api__SubmitClaimApi
   usecase__SubmitClaimStatements -.-> event__EvClaimStatementsSubmitted
   usecase__SubmitClaimStatements -.-> medium__OnlineClaimTerminal
   usecase__SubmitClaimStatements -.-> permission__BillingClaimWrite
-  usecase__SubmitClaimStatements -.->|transitions ClaimStatement.status stmtinspecting->stmtsubmitted| state__ClaimStatement_stmtsubmitted
+  usecase__SubmitClaimStatements -.->|transitions ClaimStatement.status inspecting->submitted| state__ClaimStatement_submitted
   usecase__UpdateDemographics -.-> screen__PatientProfileScreen
   usecase__UpdateDemographics -.-> api__UpdateDemographicsApi
   usecase__UpdateDemographics -.-> medium__FrontDeskTerminal

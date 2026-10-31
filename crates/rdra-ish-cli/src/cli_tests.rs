@@ -1067,16 +1067,16 @@ fn every_stage_review_command_parses() {
 const RULE_MODEL: &str = r#"
 entity Appointment "予約" {
   id: Int @pk
-  status: Enum(apptscheduled, apptcheckedin)
+  status: Enum(scheduled, checked_in)
   checked_in_at: DateTime @null
 }
 usecase CheckIn "受付"
-transitions(CheckIn, Appointment.status, apptscheduled -> apptcheckedin)
+transitions(CheckIn, Appointment.status, scheduled -> checked_in)
 condition BookedPatient "予約済みの患者"
-holds(BookedPatient, Appointment.status == apptscheduled)
+holds(BookedPatient, Appointment.status == scheduled)
 applies_to(BookedPatient, CheckIn)
-invariant(Appointment).when(status == apptcheckedin).then(checked_in_at == present).label("受付済の予約には受付時刻がある")
-forbidden(Appointment, status == apptscheduled, checked_in_at == present)
+invariant(Appointment).when(status == checked_in).then(checked_in_at == present).label("受付済の予約には受付時刻がある")
+forbidden(Appointment, status == scheduled, checked_in_at == present)
 "#;
 
 fn rule_model() -> SemanticModel {
@@ -1097,11 +1097,11 @@ fn list_rule_markdown_lists_a_labelled_invariant_and_a_condition() {
         "{md}"
     );
     assert!(
-        md.contains("| invariant | 受付済の予約には受付時刻がある | Appointment | when Appointment.status == apptcheckedin then Appointment.checked_in_at == present |"),
+        md.contains("| invariant | 受付済の予約には受付時刻がある | Appointment | when Appointment.status == checked_in then Appointment.checked_in_at == present |"),
         "{md}"
     );
     assert!(
-        md.contains("| condition | 予約済みの患者 | Appointment | Appointment.status == apptscheduled | CheckIn |"),
+        md.contains("| condition | 予約済みの患者 | Appointment | Appointment.status == scheduled | CheckIn |"),
         "{md}"
     );
     assert!(md.contains("| forbidden |  | Appointment |"), "{md}");

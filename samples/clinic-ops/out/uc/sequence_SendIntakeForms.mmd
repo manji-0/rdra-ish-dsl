@@ -15,5 +15,5 @@ sequenceDiagram
   screen__IntakePortalScreen ->> api__IntakeMessagingApi: 問診票送付 API
   Note over api__IntakeMessagingApi: transaction (API atomic boundary)
   api__IntakeMessagingApi ->> entity__IntakePacket: create sent_at=set
-  api__IntakeMessagingApi ->> entity__PatientMessage: create status=msgsent, sent_at=set
+  api__IntakeMessagingApi ->> entity__PatientMessage: create status=sent, sent_at=set
   api__IntakeMessagingApi -->> screen__IntakePortalScreen: done

@@ -49,12 +49,12 @@ flowchart LR
     entity__PatientAccount[("患者登録")]:::entity
     entity__PatientMessage[("患者連絡")]:::entity
     entity__PatientProfile[("患者基本情報")]:::entity
-    state__IntakePacket_intakecompleted((("回答済"))):::state
-    state__IntakePacket_intakeexpired((("期限切れ"))):::state
-    state__IntakePacket_intakesent((("送付済"))):::state
-    state__PatientAccount_patientactive((("有効"))):::state
-    state__PatientAccount_patientinactive((("アーカイブ済"))):::state
-    state__PatientAccount_patientmerged((("統合済"))):::state
+    state__IntakePacket_completed((("回答済"))):::state
+    state__IntakePacket_expired((("期限切れ"))):::state
+    state__IntakePacket_sent((("送付済"))):::state
+    state__PatientAccount_active((("有効"))):::state
+    state__PatientAccount_inactive((("アーカイブ済"))):::state
+    state__PatientAccount_merged((("統合済"))):::state
   end
   actor__Patient -.-> usecase__CaptureConsent
   actor__Patient -.-> usecase__CompleteIntakeForms
@@ -72,19 +72,19 @@ flowchart LR
   screen__PatientSearchScreen -.-> entity__PatientAccount
   timer__IntakeExpiryCheck -.-> usecase__ExpireIntakeForms
   usecase__ArchivePatient -.-> screen__PatientProfileScreen
-  usecase__ArchivePatient -.->|transitions PatientAccount.status patientactive->patientinactive| state__PatientAccount_patientinactive
+  usecase__ArchivePatient -.->|transitions PatientAccount.status active->inactive| state__PatientAccount_inactive
   usecase__ArchivePatient -.->|updates| entity__PatientAccount
   usecase__CaptureConsent -.->|creates| entity__ConsentRecord
   %% derived usecase__CaptureConsent -> entity__ConsentRecord via api__ConsentApi
   usecase__CaptureConsent -.-> screen__ConsentScreen
   usecase__CompleteIntakeForms -.-> screen__IntakePortalScreen
-  usecase__CompleteIntakeForms -.->|transitions IntakePacket.status intakesent->intakecompleted| state__IntakePacket_intakecompleted
+  usecase__CompleteIntakeForms -.->|transitions IntakePacket.status sent->completed| state__IntakePacket_completed
   usecase__CompleteIntakeForms -.->|updates| entity__IntakePacket
   usecase__ExpireIntakeForms -.-> screen__IntakePortalScreen
-  usecase__ExpireIntakeForms -.->|transitions IntakePacket.status intakesent->intakeexpired| state__IntakePacket_intakeexpired
+  usecase__ExpireIntakeForms -.->|transitions IntakePacket.status sent->expired| state__IntakePacket_expired
   usecase__ExpireIntakeForms -.->|updates| entity__IntakePacket
   usecase__MergeDuplicatePatient -.-> screen__PatientProfileScreen
-  usecase__MergeDuplicatePatient -.->|transitions PatientAccount.status patientactive->patientmerged| state__PatientAccount_patientmerged
+  usecase__MergeDuplicatePatient -.->|transitions PatientAccount.status active->merged| state__PatientAccount_merged
   usecase__MergeDuplicatePatient -.->|updates| entity__PatientAccount
   usecase__RegisterPatient -.->|creates| entity__PatientAccount
   %% derived usecase__RegisterPatient -> entity__PatientAccount via api__RegisterPatientApi

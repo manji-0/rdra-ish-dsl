@@ -70,16 +70,16 @@ flowchart LR
     entity__Encounter[("診療記録")]:::entity
     entity__InsurancePolicy[("保険資格")]:::entity
     entity__PaymentTransaction[("精算")]:::entity
-    state__ClaimStatement_stmtassessed((("査定"))):::state
-    state__ClaimStatement_stmtdrafting((("作成中"))):::state
-    state__ClaimStatement_stmtinspecting((("院内点検中"))):::state
-    state__ClaimStatement_stmtonhold((("保留"))):::state
-    state__ClaimStatement_stmtpaid((("支払済"))):::state
-    state__ClaimStatement_stmtreceipterror((("受付不能・要確認"))):::state
-    state__ClaimStatement_stmtrereview((("再審査請求中"))):::state
-    state__ClaimStatement_stmtreturned((("返戻"))):::state
-    state__ClaimStatement_stmtsubmitted((("請求済"))):::state
-    state__ClaimStatement_stmtunderreview((("審査中"))):::state
+    state__ClaimStatement_assessed((("査定"))):::state
+    state__ClaimStatement_drafting((("作成中"))):::state
+    state__ClaimStatement_inspecting((("院内点検中"))):::state
+    state__ClaimStatement_on_hold((("保留"))):::state
+    state__ClaimStatement_paid((("支払済"))):::state
+    state__ClaimStatement_receipt_error((("受付不能・要確認"))):::state
+    state__ClaimStatement_rereview((("再審査請求中"))):::state
+    state__ClaimStatement_returned((("返戻"))):::state
+    state__ClaimStatement_submitted((("請求済"))):::state
+    state__ClaimStatement_under_review((("審査中"))):::state
     condition__TransferNotPossible{"振替・分割の対象外（負担割合の相違・公費）"}:::condition
   end
   actor__ClaimsClerk -.-> usecase__CorrectReturnedStatement
@@ -118,7 +118,7 @@ flowchart LR
   timer__ReceivablesMonthlyReview -.-> usecase__ReconcileBalance
   timer__ReturnDownloadCheck -.-> usecase__RecordClaimReturn
   usecase__CorrectReturnedStatement -.-> screen__ClaimScreen
-  usecase__CorrectReturnedStatement -.->|transitions ClaimStatement.status stmtreturned->stmtinspecting| state__ClaimStatement_stmtinspecting
+  usecase__CorrectReturnedStatement -.->|transitions ClaimStatement.status returned->inspecting| state__ClaimStatement_inspecting
   usecase__CorrectReturnedStatement -.->|updates| entity__ClaimStatement
   %% derived usecase__CorrectReturnedStatement -> entity__ClaimStatement via api__ClaimEditApi
   usecase__CreateCharge -.->|creates| entity__Charge
@@ -134,21 +134,21 @@ flowchart LR
   usecase__GenerateClaimStatement -.->|reads| entity__InsurancePolicy
   %% derived usecase__GenerateClaimStatement -> entity__InsurancePolicy via api__GenerateClaimApi
   usecase__HoldClaimStatement -.-> screen__ClaimScreen
-  usecase__HoldClaimStatement -.->|transitions ClaimStatement.status stmtinspecting->stmtonhold| state__ClaimStatement_stmtonhold
+  usecase__HoldClaimStatement -.->|transitions ClaimStatement.status inspecting->on_hold| state__ClaimStatement_on_hold
   usecase__HoldClaimStatement -.->|updates| entity__ClaimStatement
   %% derived usecase__HoldClaimStatement -> entity__ClaimStatement via api__ClaimEditApi
   usecase__InspectClaimStatement -.-> screen__ClaimScreen
-  usecase__InspectClaimStatement -.->|transitions ClaimStatement.status stmtdrafting->stmtinspecting| state__ClaimStatement_stmtinspecting
+  usecase__InspectClaimStatement -.->|transitions ClaimStatement.status drafting->inspecting| state__ClaimStatement_inspecting
   usecase__InspectClaimStatement -.->|updates| entity__ClaimStatement
   %% derived usecase__InspectClaimStatement -> entity__ClaimStatement via api__ClaimEditApi
   usecase__PostPayment -.-> screen__PaymentPostingScreen
-  usecase__PostPayment -.->|transitions ClaimStatement.status stmtassessed->stmtpaid| state__ClaimStatement_stmtpaid
-  usecase__PostPayment -.->|transitions ClaimStatement.status stmtrereview->stmtpaid| state__ClaimStatement_stmtpaid
-  usecase__PostPayment -.->|transitions ClaimStatement.status stmtunderreview->stmtpaid| state__ClaimStatement_stmtpaid
+  usecase__PostPayment -.->|transitions ClaimStatement.status assessed->paid| state__ClaimStatement_paid
+  usecase__PostPayment -.->|transitions ClaimStatement.status rereview->paid| state__ClaimStatement_paid
+  usecase__PostPayment -.->|transitions ClaimStatement.status under_review->paid| state__ClaimStatement_paid
   usecase__PostPayment -.->|updates| entity__ClaimStatement
   %% derived usecase__PostPayment -> entity__ClaimStatement via api__PaymentPostApi
   usecase__ReceiveClaimAccepted -.-> screen__ClaimScreen
-  usecase__ReceiveClaimAccepted -.->|transitions ClaimStatement.status stmtsubmitted->stmtunderreview| state__ClaimStatement_stmtunderreview
+  usecase__ReceiveClaimAccepted -.->|transitions ClaimStatement.status submitted->under_review| state__ClaimStatement_under_review
   usecase__ReceiveClaimAccepted -.->|updates| entity__ClaimStatement
   %% derived usecase__ReceiveClaimAccepted -> entity__ClaimStatement via api__ClaimResultApi
   usecase__ReconcileBalance -.-> screen__BalanceScreen
@@ -157,34 +157,34 @@ flowchart LR
   usecase__ReconcileBalance -.->|updates| entity__AccountBalance
   %% derived usecase__ReconcileBalance -> entity__AccountBalance via api__BalanceApi
   usecase__RecordClaimAssessment -.-> screen__ClaimScreen
-  usecase__RecordClaimAssessment -.->|transitions ClaimStatement.status stmtunderreview->stmtassessed| state__ClaimStatement_stmtassessed
+  usecase__RecordClaimAssessment -.->|transitions ClaimStatement.status under_review->assessed| state__ClaimStatement_assessed
   usecase__RecordClaimAssessment -.->|updates| entity__ClaimStatement
   %% derived usecase__RecordClaimAssessment -> entity__ClaimStatement via api__ClaimResultApi
   usecase__RecordClaimReturn -.-> screen__ClaimScreen
-  usecase__RecordClaimReturn -.->|transitions ClaimStatement.status stmtunderreview->stmtreturned| state__ClaimStatement_stmtreturned
+  usecase__RecordClaimReturn -.->|transitions ClaimStatement.status under_review->returned| state__ClaimStatement_returned
   usecase__RecordClaimReturn -.->|updates| entity__ClaimStatement
   %% derived usecase__RecordClaimReturn -> entity__ClaimStatement via api__ClaimResultApi
   usecase__RecordReceiptError -.-> screen__ClaimScreen
-  usecase__RecordReceiptError -.->|transitions ClaimStatement.status stmtsubmitted->stmtreceipterror| state__ClaimStatement_stmtreceipterror
+  usecase__RecordReceiptError -.->|transitions ClaimStatement.status submitted->receipt_error| state__ClaimStatement_receipt_error
   usecase__RecordReceiptError -.->|updates| entity__ClaimStatement
   %% derived usecase__RecordReceiptError -> entity__ClaimStatement via api__ClaimResultApi
   usecase__ReleaseHeldStatement -.-> screen__ClaimScreen
-  usecase__ReleaseHeldStatement -.->|transitions ClaimStatement.status stmtonhold->stmtinspecting| state__ClaimStatement_stmtinspecting
+  usecase__ReleaseHeldStatement -.->|transitions ClaimStatement.status on_hold->inspecting| state__ClaimStatement_inspecting
   usecase__ReleaseHeldStatement -.->|updates| entity__ClaimStatement
   %% derived usecase__ReleaseHeldStatement -> entity__ClaimStatement via api__ClaimEditApi
   usecase__RequestReexamination -.-> screen__ClaimScreen
-  usecase__RequestReexamination -.->|transitions ClaimStatement.status stmtassessed->stmtrereview| state__ClaimStatement_stmtrereview
+  usecase__RequestReexamination -.->|transitions ClaimStatement.status assessed->rereview| state__ClaimStatement_rereview
   usecase__RequestReexamination -.->|updates| entity__ClaimStatement
   %% derived usecase__RequestReexamination -> entity__ClaimStatement via api__SubmitClaimApi
   usecase__ResendErroredStatement -.-> screen__ClaimScreen
-  usecase__ResendErroredStatement -.->|transitions ClaimStatement.status stmtreceipterror->stmtsubmitted| state__ClaimStatement_stmtsubmitted
+  usecase__ResendErroredStatement -.->|transitions ClaimStatement.status receipt_error->submitted| state__ClaimStatement_submitted
   usecase__ResendErroredStatement -.->|updates| entity__ClaimStatement
   %% derived usecase__ResendErroredStatement -> entity__ClaimStatement via api__SubmitClaimApi
   usecase__ReviewClaimTransfer -.-> screen__ClaimScreen
   usecase__ReviewClaimTransfer -.->|reads| entity__ClaimStatement
   usecase__SubmitClaimStatements -.-> screen__ClaimScreen
   usecase__SubmitClaimStatements -.-> event__EvClaimStatementsSubmitted
-  usecase__SubmitClaimStatements -.->|transitions ClaimStatement.status stmtinspecting->stmtsubmitted| state__ClaimStatement_stmtsubmitted
+  usecase__SubmitClaimStatements -.->|transitions ClaimStatement.status inspecting->submitted| state__ClaimStatement_submitted
   usecase__SubmitClaimStatements -.->|updates| entity__ClaimStatement
   %% derived usecase__SubmitClaimStatements -> entity__ClaimStatement via api__SubmitClaimApi
   usecase__VoidCharge -.-> screen__ChargeWorklistScreen

@@ -1084,7 +1084,7 @@ PRD or a design document, and the other formats take the BUC labels as column na
 per transition the diagram draws, with the columns `entity,column,from,to,usecase,guards,actors,site`.
 The rows run by state model (entity id, then column), then by the Enum order of `from` and
 `to`, then by use case id. `from` and `to` are `label (value)`, such as `予約済
-(apptscheduled)`; a value with no label shows the value twice. `usecase` is `label (id)`.
+(scheduled)`; a value with no label shows the value twice. `usecase` is `label (id)`.
 `guards` holds the labels of the conditions whose `holds` body guards the use case, the
 same labels the diagram writes in `[...]`; a condition without a `holds` body guards
 nothing. `actors` holds the labels of the actors that perform the use case: a direct

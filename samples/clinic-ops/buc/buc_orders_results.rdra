@@ -7,7 +7,7 @@ import shared.goals
 
 // Sources cited as file:line are under ~/research/japan-hospital-operations/sources/.
 
-buc BucOrdersResults "検体検査" description "検査オーダーから結果確認、重要結果通知までを扱う。医師事務作業補助者や看護師がオーダを代行入力した場合、医師が確定するまで看護師は採血しない（保助看法 第37条）。この規則は `OrderConfirmedByPhysician` 条件と `forbidden(ClinicalOrder, status == clcollected, physician_confirmed == false)` で検証する。外注検査の結果は外注検査システムから届く。採血管ラベルの発行と実施内容（コスト）の登録が会計計算の入力になる。実施入力のコストは `Charge.origin` が `performed` で、カルテ由来（`chart`）や選定療養費（`selectedfee`）のコストと発生元で区別される。"
+buc BucOrdersResults "検体検査" description "検査オーダーから結果確認、重要結果通知までを扱う。医師事務作業補助者や看護師がオーダを代行入力した場合、医師が確定するまで看護師は採血しない（保助看法 第37条）。この規則は `OrderConfirmedByPhysician` 条件と `forbidden(ClinicalOrder, status == collected, physician_confirmed == false)` で検証する。外注検査の結果は外注検査システムから届く。採血管ラベルの発行と実施内容（コスト）の登録が会計計算の入力になる。実施入力のコストは `Charge.origin` が `performed` で、カルテ由来（`chart`）や選定療養費（`selectedfee`）のコストと発生元で区別される。"
 
 // 検体検査オーダの登録 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:108).
 usecase PlaceLabOrder       "検体検査オーダの登録" description "医師が登録したオーダは確定済み。"
@@ -92,7 +92,7 @@ sets(EnterProxyOrder, ClinicalOrder, physician_confirmed == false)
 displays(ConfirmProxyOrder, OrderEntryScreen)
 invokes(ConfirmProxyOrder, ConfirmOrderApi)
 updates(ConfirmOrderApi, ClinicalOrder)
-transitions(ConfirmProxyOrder, ClinicalOrder.status, clordered -> clordered)
+transitions(ConfirmProxyOrder, ClinicalOrder.status, ordered -> ordered)
 sets(ConfirmProxyOrder, ClinicalOrder, physician_confirmed == true)
 
 displays(PrintSpecimenLabel, SpecimenScreen)
@@ -101,13 +101,13 @@ reads(PrintSpecimenLabel, ClinicalOrder)
 displays(CollectSpecimen, SpecimenScreen)
 invokes(CollectSpecimen, CollectSpecimenApi)
 updates(CollectSpecimenApi, ClinicalOrder)
-transitions(CollectSpecimen, ClinicalOrder.status, clordered -> clcollected)
+transitions(CollectSpecimen, ClinicalOrder.status, ordered -> collected)
 sets(CollectSpecimen, ClinicalOrder, collected_at == present)
 
 // 看護師 acts on the physician's instruction (egov-hokanhou-323AC0000000203.txt:311): the order is the
 // instruction, and a proxy-entered one counts only after the physician confirms it.
 condition OrderConfirmedByPhysician "医師が確定したオーダ"
-holds(OrderConfirmedByPhysician, ClinicalOrder.physician_confirmed == true, ClinicalOrder.status == clordered)
+holds(OrderConfirmedByPhysician, ClinicalOrder.physician_confirmed == true, ClinicalOrder.status == ordered)
 applies_to(OrderConfirmedByPhysician, CollectSpecimen)
 
 displays(RegisterPerformedProcedure, SpecimenScreen)
@@ -115,7 +115,7 @@ invokes(RegisterPerformedProcedure, PerformedProcedureApi)
 creates(PerformedProcedureApi, Charge)
 reads(PerformedProcedureApi, ClinicalOrder)
 reads(PerformedProcedureApi, Encounter)
-sets(RegisterPerformedProcedure, Charge, status == chargeposted)
+sets(RegisterPerformedProcedure, Charge, status == posted)
 sets(RegisterPerformedProcedure, Charge, posted_at == present)
 sets(RegisterPerformedProcedure, Charge, kind == insured)
 sets(RegisterPerformedProcedure, Charge, origin == performed)
@@ -124,7 +124,7 @@ displays(ReceiveLabResult, ResultReviewScreen)
 invokes(ReceiveLabResult, ReceiveLabResultApi)
 creates(ReceiveLabResultApi, LabResult)
 updates(ReceiveLabResultApi, ClinicalOrder)
-transitions(ReceiveLabResult, ClinicalOrder.status, clcollected -> clresulted)
+transitions(ReceiveLabResult, ClinicalOrder.status, collected -> resulted)
 sets(ReceiveLabResult, ClinicalOrder, resulted_at == present)
 sets(ReceiveLabResult, LabResult, received_at == present)
 // 検査結果(外注検査等)の確認 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:110); 外注検査システム (:1319).
@@ -136,7 +136,7 @@ invokes(ReviewLabResult, ResultReviewApi)
 updates(ResultReviewApi, ClinicalOrder)
 updates(ResultReviewApi, LabResult)
 raises(ReviewLabResult, EvClinicalOrderReviewed)
-transitions(ReviewLabResult, ClinicalOrder.status, clresulted -> clreviewed)
+transitions(ReviewLabResult, ClinicalOrder.status, resulted -> reviewed)
 sets(ReviewLabResult, LabResult, reviewed_at == present)
 
 displays(NotifyCriticalResult, CriticalNoticeScreen)
@@ -144,13 +144,13 @@ invokes(NotifyCriticalResult, CriticalNoticeApi)
 creates(CriticalNoticeApi, Notification)
 creates(CriticalNoticeApi, PatientMessage)
 sets(NotifyCriticalResult, Notification, delivered_at == present)
-sets(NotifyCriticalResult, PatientMessage, status == msgsent)
+sets(NotifyCriticalResult, PatientMessage, status == sent)
 sets(NotifyCriticalResult, PatientMessage, sent_at == present)
 triggers(EvClinicalOrderReviewed, NotifyCriticalResult)
 
 displays(CancelClinicalOrder, OrderEntryScreen)
 updates(CancelClinicalOrder, ClinicalOrder)
-transitions(CancelClinicalOrder, ClinicalOrder.status, clordered -> clcancelled)
+transitions(CancelClinicalOrder, ClinicalOrder.status, ordered -> cancelled)
 
 // Access constraints
 requires_permission(PlaceLabOrder, ClinicalOrderWrite)

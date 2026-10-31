@@ -93,7 +93,7 @@ updates(CheckInPatientApi, PatientAccount)
 creates(OnlineEligibilityApi, EligibilityCheck)
 reads(OnlineEligibilityApi, InsurancePolicy)
 raises(CheckInPatient, EvAppointmentCheckedIn)
-transitions(CheckInPatient, Appointment.status, apptscheduled -> apptcheckedin)
+transitions(CheckInPatient, Appointment.status, scheduled -> checked_in)
 sets(CheckInPatient, Appointment, checked_in_at == present)
 triggers(EvAppointmentCheckedIn, OnlineEligibilitySystem)
 
@@ -102,7 +102,7 @@ displays(BatchVerifyEligibility, EligibilityScreen)
 invokes(BatchVerifyEligibility, OnlineEligibilityApi)
 triggers(EligibilityBatchInquiry, BatchVerifyEligibility)
 condition BookedPatient "予約済みの患者"
-holds(BookedPatient, Appointment.status == apptscheduled)
+holds(BookedPatient, Appointment.status == scheduled)
 applies_to(BookedPatient, BatchVerifyEligibility)
 
 // The result is one of 有効, 無効, 該当資格なし (mhlw-2023-online-shikaku-tebiki-001085572.txt:383-401).
@@ -112,35 +112,35 @@ updates(EligibilityResultApi, EligibilityCheck)
 displays(ReceiveEligibilityValid, EligibilityScreen)
 invokes(ReceiveEligibilityValid, EligibilityResultApi)
 triggers(EvEligibilityChecked, ReceiveEligibilityValid)
-transitions(ReceiveEligibilityValid, EligibilityCheck.result, eligpending -> eligvalid)
+transitions(ReceiveEligibilityValid, EligibilityCheck.result, pending -> valid)
 sets(ReceiveEligibilityValid, EligibilityCheck, reference_no == present)
 
 displays(ReceiveEligibilityInvalid, EligibilityScreen)
 invokes(ReceiveEligibilityInvalid, EligibilityResultApi)
 triggers(EvEligibilityChecked, ReceiveEligibilityInvalid)
-transitions(ReceiveEligibilityInvalid, EligibilityCheck.result, eligpending -> eliginvalid)
+transitions(ReceiveEligibilityInvalid, EligibilityCheck.result, pending -> invalid)
 
 displays(ReceiveEligibilityNoInfo, EligibilityScreen)
 invokes(ReceiveEligibilityNoInfo, EligibilityResultApi)
 triggers(EvEligibilityChecked, ReceiveEligibilityNoInfo)
-transitions(ReceiveEligibilityNoInfo, EligibilityCheck.result, eligpending -> elignoinfo)
+transitions(ReceiveEligibilityNoInfo, EligibilityCheck.result, pending -> no_info)
 
 // 無効 or 該当資格なし: the patient shows the current 資格 and the clerk queries again.
 displays(RecheckEligibility, EligibilityScreen)
 invokes(RecheckEligibility, EligibilityResultApi)
-transitions(RecheckEligibility, EligibilityCheck.result, eliginvalid -> eligpending)
-transitions(RecheckEligibility, EligibilityCheck.result, elignoinfo -> eligpending)
+transitions(RecheckEligibility, EligibilityCheck.result, invalid -> pending)
+transitions(RecheckEligibility, EligibilityCheck.result, no_info -> pending)
 
 // The system cannot answer: the patient fills in a 被保険者資格申立書
 // (mhlw-2023-online-shikaku-dekinai-baai.txt:36-37) and pays the usual share, 3割等 (:50).
 displays(RecordEligibilityDeclaration, EligibilityScreen)
 invokes(RecordEligibilityDeclaration, EligibilityResultApi)
-transitions(RecordEligibilityDeclaration, EligibilityCheck.result, eligpending -> eligdeclared)
+transitions(RecordEligibilityDeclaration, EligibilityCheck.result, pending -> declared)
 
 // システム障害時モード, on the spot or afterwards (mhlw-2023-online-shikaku-dekinai-baai.txt:80).
 displays(ConfirmEligibilityInOutageMode, EligibilityScreen)
 invokes(ConfirmEligibilityInOutageMode, EligibilityResultApi)
-transitions(ConfirmEligibilityInOutageMode, EligibilityCheck.result, eligpending -> eligvalid)
+transitions(ConfirmEligibilityInOutageMode, EligibilityCheck.result, pending -> valid)
 
 displays(ReceiveReferralLetter, ReferralScreen)
 invokes(ReceiveReferralLetter, ReferralLetterApi)
@@ -153,8 +153,8 @@ invokes(AssignRoom, AssignRoomApi)
 updates(AssignRoomApi, Room)
 updates(AssignRoomApi, Appointment)
 // Only a checked-in visit is roomed. The self-transition is the guard; the status stays.
-transitions(AssignRoom, Appointment.status, apptcheckedin -> apptcheckedin)
-sets(AssignRoom, Room, occupancy_status == roomoccupied)
+transitions(AssignRoom, Appointment.status, checked_in -> checked_in)
+sets(AssignRoom, Room, occupancy_status == occupied)
 
 displays(PrepareEncounter, CheckInScreen)
 invokes(PrepareEncounter, PrepareEncounterApi)

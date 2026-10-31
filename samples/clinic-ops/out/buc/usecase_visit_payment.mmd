@@ -37,12 +37,12 @@ flowchart LR
     entity__InsurancePolicy[("保険資格")]:::entity
     entity__PaymentTransaction[("精算")]:::entity
     entity__SelectedTreatmentFeeSetting[("選定療養費の設定")]:::entity
-    state__Appointment_apptawaitingcalc((("計算待ち"))):::state
-    state__Appointment_apptawaitingpay((("会計待ち"))):::state
-    state__Appointment_apptcompleted((("完了"))):::state
-    state__Appointment_apptsettled((("精算済"))):::state
-    state__PaymentTransaction_payposted((("収納済"))):::state
-    state__PaymentTransaction_payrefunded((("還付済"))):::state
+    state__Appointment_awaiting_calc((("計算待ち"))):::state
+    state__Appointment_awaiting_pay((("会計待ち"))):::state
+    state__Appointment_completed((("完了"))):::state
+    state__Appointment_settled((("精算済"))):::state
+    state__PaymentTransaction_posted((("収納済"))):::state
+    state__PaymentTransaction_refunded((("還付済"))):::state
     condition__CopayCappedAtLimit{"窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"}:::condition
     condition__UnreferredFirstVisit{"紹介状なしの初診で、除外に当たらない"}:::condition
   end
@@ -71,7 +71,7 @@ flowchart LR
   %% derived usecase__CalculateVisitBill -> entity__Charge via api__CalculateVisitBillApi
   usecase__CalculateVisitBill -.->|reads| entity__InsurancePolicy
   %% derived usecase__CalculateVisitBill -> entity__InsurancePolicy via api__CalculateVisitBillApi
-  usecase__CalculateVisitBill -.->|transitions Appointment.status apptawaitingcalc->apptawaitingpay| state__Appointment_apptawaitingpay
+  usecase__CalculateVisitBill -.->|transitions Appointment.status awaiting_calc->awaiting_pay| state__Appointment_awaiting_pay
   usecase__CalculateVisitBill -.->|updates| entity__Appointment
   %% derived usecase__CalculateVisitBill -> entity__Appointment via api__CalculateVisitBillApi
   usecase__CallPatientForPayment -.-> screen__PaymentWindowScreen
@@ -81,17 +81,17 @@ flowchart LR
   %% derived usecase__IssueReceipt -> entity__Charge via api__ReceiptApi
   usecase__IssueReceipt -.->|reads| entity__PaymentTransaction
   %% derived usecase__IssueReceipt -> entity__PaymentTransaction via api__ReceiptApi
-  usecase__IssueReceipt -.->|transitions Appointment.status apptsettled->apptcompleted| state__Appointment_apptcompleted
+  usecase__IssueReceipt -.->|transitions Appointment.status settled->completed| state__Appointment_completed
   usecase__IssueReceipt -.->|updates| entity__Appointment
   %% derived usecase__IssueReceipt -> entity__Appointment via api__ReceiptApi
   usecase__RefundPayment -.-> screen__PaymentWindowScreen
-  usecase__RefundPayment -.->|transitions PaymentTransaction.status payposted->payrefunded| state__PaymentTransaction_payrefunded
+  usecase__RefundPayment -.->|transitions PaymentTransaction.status posted->refunded| state__PaymentTransaction_refunded
   usecase__RefundPayment -.->|updates| entity__AccountBalance
   usecase__RefundPayment -.->|updates| entity__PaymentTransaction
   usecase__SettleAtKiosk -.->|creates| entity__PaymentTransaction
   %% derived usecase__SettleAtKiosk -> entity__PaymentTransaction via api__SettlementApi
   usecase__SettleAtKiosk -.-> screen__KioskScreen
-  usecase__SettleAtKiosk -.->|transitions Appointment.status apptawaitingpay->apptsettled| state__Appointment_apptsettled
+  usecase__SettleAtKiosk -.->|transitions Appointment.status awaiting_pay->settled| state__Appointment_settled
   usecase__SettleAtKiosk -.->|updates| entity__AccountBalance
   %% derived usecase__SettleAtKiosk -> entity__AccountBalance via api__SettlementApi
   usecase__SettleAtKiosk -.->|updates| entity__Appointment
@@ -99,7 +99,7 @@ flowchart LR
   usecase__SettleAtWindow -.->|creates| entity__PaymentTransaction
   %% derived usecase__SettleAtWindow -> entity__PaymentTransaction via api__SettlementApi
   usecase__SettleAtWindow -.-> screen__PaymentWindowScreen
-  usecase__SettleAtWindow -.->|transitions Appointment.status apptawaitingpay->apptsettled| state__Appointment_apptsettled
+  usecase__SettleAtWindow -.->|transitions Appointment.status awaiting_pay->settled| state__Appointment_settled
   usecase__SettleAtWindow -.->|updates| entity__AccountBalance
   %% derived usecase__SettleAtWindow -> entity__AccountBalance via api__SettlementApi
   usecase__SettleAtWindow -.->|updates| entity__Appointment

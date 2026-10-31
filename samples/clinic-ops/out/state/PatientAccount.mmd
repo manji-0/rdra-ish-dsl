@@ -4,17 +4,17 @@
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "PatientAccount.status" as statemodel__PatientAccount_status {
-    [*] --> state__PatientAccount_patientactive
-    state "有効" as state__PatientAccount_patientactive
-    state "アーカイブ済" as state__PatientAccount_patientinactive
-    state "統合済" as state__PatientAccount_patientmerged
+    [*] --> state__PatientAccount_active
+    state "有効" as state__PatientAccount_active
+    state "アーカイブ済" as state__PatientAccount_inactive
+    state "統合済" as state__PatientAccount_merged
     %% transition usecase__ArchivePatient
-    state__PatientAccount_patientactive --> state__PatientAccount_patientinactive : 患者のアーカイブ
+    state__PatientAccount_active --> state__PatientAccount_inactive : 患者のアーカイブ
     %% transition usecase__MergeDuplicatePatient
-    state__PatientAccount_patientactive --> state__PatientAccount_patientmerged : 重複患者の統合
-    state__PatientAccount_patientinactive --> [*]
-    state__PatientAccount_patientmerged --> [*]
+    state__PatientAccount_active --> state__PatientAccount_merged : 重複患者の統合
+    state__PatientAccount_inactive --> [*]
+    state__PatientAccount_merged --> [*]
   }
   classDef stateend fill:#dfd,stroke:#383,color:#141
-  class state__PatientAccount_patientinactive stateend
-  class state__PatientAccount_patientmerged stateend
+  class state__PatientAccount_inactive stateend
+  class state__PatientAccount_merged stateend

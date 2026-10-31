@@ -55,15 +55,15 @@ flowchart LR
     entity__Encounter[("診療記録")]:::entity
     entity__Medication[("薬剤")]:::entity
     entity__Prescription[("処方箋")]:::entity
-    state__Prescription_rxaudited((("調剤・監査済"))):::state
-    state__Prescription_rxcancelled((("取消"))):::state
-    state__Prescription_rxcounseled((("服薬指導済"))):::state
-    state__Prescription_rxdispensed((("交付済"))):::state
-    state__Prescription_rxdrafted((("処方入力中"))):::state
-    state__Prescription_rxexpired((("使用期間切れ"))):::state
-    state__Prescription_rxinquiry((("疑義照会中"))):::state
-    state__Prescription_rxissued((("院外処方箋発行済"))):::state
-    state__Prescription_rxvoucher((("引換券交付済"))):::state
+    state__Prescription_audited((("調剤・監査済"))):::state
+    state__Prescription_cancelled((("取消"))):::state
+    state__Prescription_counseled((("服薬指導済"))):::state
+    state__Prescription_dispensed((("交付済"))):::state
+    state__Prescription_drafted((("処方入力中"))):::state
+    state__Prescription_expired((("使用期間切れ"))):::state
+    state__Prescription_in_inquiry((("疑義照会中"))):::state
+    state__Prescription_issued((("院外処方箋発行済"))):::state
+    state__Prescription_voucher_issued((("引換券交付済"))):::state
   end
   actor__Clinician -.-> usecase__AnswerPharmacyInquiry
   actor__Clinician -.-> usecase__AnswerPrescriptionInquiry
@@ -89,26 +89,26 @@ flowchart LR
   screen__MedicationSearchScreen -.-> entity__Medication
   timer__PrescriptionUsePeriodCheck -.-> usecase__ExpirePrescription
   usecase__AnswerPharmacyInquiry -.-> screen__PrescriptionScreen
-  usecase__AnswerPharmacyInquiry -.->|transitions Prescription.status rxissued->rxissued| state__Prescription_rxissued
+  usecase__AnswerPharmacyInquiry -.->|transitions Prescription.status issued->issued| state__Prescription_issued
   usecase__AnswerPharmacyInquiry -.->|updates| entity__Prescription
   %% derived usecase__AnswerPharmacyInquiry -> entity__Prescription via api__PrescriptionInquiryApi
   usecase__AnswerPrescriptionInquiry -.-> screen__PrescriptionScreen
-  usecase__AnswerPrescriptionInquiry -.->|transitions Prescription.status rxinquiry->rxvoucher| state__Prescription_rxvoucher
+  usecase__AnswerPrescriptionInquiry -.->|transitions Prescription.status in_inquiry->voucher_issued| state__Prescription_voucher_issued
   usecase__AnswerPrescriptionInquiry -.->|updates| entity__Prescription
   %% derived usecase__AnswerPrescriptionInquiry -> entity__Prescription via api__PrescriptionInquiryApi
   usecase__CancelPrescription -.-> screen__PrescriptionScreen
-  usecase__CancelPrescription -.->|transitions Prescription.status rxdrafted->rxcancelled| state__Prescription_rxcancelled
+  usecase__CancelPrescription -.->|transitions Prescription.status drafted->cancelled| state__Prescription_cancelled
   usecase__CancelPrescription -.->|updates| entity__Prescription
   usecase__ConfirmDispense -.-> screen__PharmacyStatusScreen
-  usecase__ConfirmDispense -.->|transitions Prescription.status rxissued->rxdispensed| state__Prescription_rxdispensed
+  usecase__ConfirmDispense -.->|transitions Prescription.status issued->dispensed| state__Prescription_dispensed
   usecase__ConfirmDispense -.->|updates| entity__Prescription
   %% derived usecase__ConfirmDispense -> entity__Prescription via api__ConfirmDispenseApi
   usecase__CounselMedication -.-> screen__DispensingScreen
-  usecase__CounselMedication -.->|transitions Prescription.status rxaudited->rxcounseled| state__Prescription_rxcounseled
+  usecase__CounselMedication -.->|transitions Prescription.status audited->counseled| state__Prescription_counseled
   usecase__CounselMedication -.->|updates| entity__Prescription
   %% derived usecase__CounselMedication -> entity__Prescription via api__DispensingApi
   usecase__DispenseAndAudit -.-> screen__DispensingScreen
-  usecase__DispenseAndAudit -.->|transitions Prescription.status rxvoucher->rxaudited| state__Prescription_rxaudited
+  usecase__DispenseAndAudit -.->|transitions Prescription.status voucher_issued->audited| state__Prescription_audited
   usecase__DispenseAndAudit -.->|updates| entity__Prescription
   %% derived usecase__DispenseAndAudit -> entity__Prescription via api__DispensingApi
   usecase__DraftPrescription -.->|creates| entity__Prescription
@@ -117,20 +117,20 @@ flowchart LR
   usecase__DraftPrescription -.->|reads| entity__Encounter
   %% derived usecase__DraftPrescription -> entity__Encounter via api__DraftPrescriptionApi
   usecase__ExpirePrescription -.-> screen__PharmacyStatusScreen
-  usecase__ExpirePrescription -.->|transitions Prescription.status rxissued->rxexpired| state__Prescription_rxexpired
+  usecase__ExpirePrescription -.->|transitions Prescription.status issued->expired| state__Prescription_expired
   usecase__ExpirePrescription -.->|updates| entity__Prescription
   %% derived usecase__ExpirePrescription -> entity__Prescription via api__ConfirmDispenseApi
   usecase__HandOverMedication -.-> screen__DispensingScreen
-  usecase__HandOverMedication -.->|transitions Prescription.status rxcounseled->rxdispensed| state__Prescription_rxdispensed
+  usecase__HandOverMedication -.->|transitions Prescription.status counseled->dispensed| state__Prescription_dispensed
   usecase__HandOverMedication -.->|updates| entity__Prescription
   %% derived usecase__HandOverMedication -> entity__Prescription via api__DispensingApi
   usecase__IssueInhouseVoucher -.-> screen__PrescriptionScreen
-  usecase__IssueInhouseVoucher -.->|transitions Prescription.status rxdrafted->rxvoucher| state__Prescription_rxvoucher
+  usecase__IssueInhouseVoucher -.->|transitions Prescription.status drafted->voucher_issued| state__Prescription_voucher_issued
   usecase__IssueInhouseVoucher -.->|updates| entity__Prescription
   %% derived usecase__IssueInhouseVoucher -> entity__Prescription via api__IssuePrescriptionApi
   usecase__IssueOutsidePrescription -.-> screen__PrescriptionScreen
   usecase__IssueOutsidePrescription -.-> event__EvPrescriptionIssued
-  usecase__IssueOutsidePrescription -.->|transitions Prescription.status rxdrafted->rxissued| state__Prescription_rxissued
+  usecase__IssueOutsidePrescription -.->|transitions Prescription.status drafted->issued| state__Prescription_issued
   usecase__IssueOutsidePrescription -.->|updates| entity__Prescription
   %% derived usecase__IssueOutsidePrescription -> entity__Prescription via api__IssuePrescriptionApi
   usecase__IssueRefillPrescription -.->|creates| entity__Prescription
@@ -139,7 +139,7 @@ flowchart LR
   usecase__IssueRefillPrescription -.->|reads| entity__Encounter
   %% derived usecase__IssueRefillPrescription -> entity__Encounter via api__DraftPrescriptionApi
   usecase__RaisePrescriptionInquiry -.-> screen__DispensingScreen
-  usecase__RaisePrescriptionInquiry -.->|transitions Prescription.status rxvoucher->rxinquiry| state__Prescription_rxinquiry
+  usecase__RaisePrescriptionInquiry -.->|transitions Prescription.status voucher_issued->in_inquiry| state__Prescription_in_inquiry
   usecase__RaisePrescriptionInquiry -.->|updates| entity__Prescription
   %% derived usecase__RaisePrescriptionInquiry -> entity__Prescription via api__DispensingApi
   usecase__SearchMedication -.-> screen__MedicationSearchScreen

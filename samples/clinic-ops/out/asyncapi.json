@@ -258,8 +258,8 @@
         ],
         "x-rdra-ish-transitions": [
           {
-            "from": "apptcheckedin",
-            "to": "apptinconsult"
+            "from": "checked_in",
+            "to": "in_consult"
           }
         ],
         "x-rdra-ish-triggers-bucs": [
@@ -340,8 +340,8 @@
         "x-rdra-ish-raised-by-usecases": [],
         "x-rdra-ish-transitions": [
           {
-            "from": "stmtsubmitted",
-            "to": "stmtunderreview"
+            "from": "submitted",
+            "to": "under_review"
           }
         ],
         "x-rdra-ish-triggers-bucs": [],
@@ -361,8 +361,8 @@
         "x-rdra-ish-raised-by-usecases": [],
         "x-rdra-ish-transitions": [
           {
-            "from": "stmtunderreview",
-            "to": "stmtassessed"
+            "from": "under_review",
+            "to": "assessed"
           }
         ],
         "x-rdra-ish-triggers-bucs": [],
@@ -382,8 +382,8 @@
         "x-rdra-ish-raised-by-usecases": [],
         "x-rdra-ish-transitions": [
           {
-            "from": "stmtsubmitted",
-            "to": "stmtreceipterror"
+            "from": "submitted",
+            "to": "receipt_error"
           }
         ],
         "x-rdra-ish-triggers-bucs": [],
@@ -403,8 +403,8 @@
         "x-rdra-ish-raised-by-usecases": [],
         "x-rdra-ish-transitions": [
           {
-            "from": "stmtunderreview",
-            "to": "stmtreturned"
+            "from": "under_review",
+            "to": "returned"
           }
         ],
         "x-rdra-ish-triggers-bucs": [],
@@ -495,16 +495,16 @@
         "x-rdra-ish-raised-by-usecases": [],
         "x-rdra-ish-transitions": [
           {
-            "from": "eligpending",
-            "to": "eliginvalid"
+            "from": "pending",
+            "to": "invalid"
           },
           {
-            "from": "eligpending",
-            "to": "elignoinfo"
+            "from": "pending",
+            "to": "no_info"
           },
           {
-            "from": "eligpending",
-            "to": "eligvalid"
+            "from": "pending",
+            "to": "valid"
           }
         ],
         "x-rdra-ish-triggers-bucs": [],
@@ -548,8 +548,8 @@
         "x-rdra-ish-raised-by-usecases": [],
         "x-rdra-ish-transitions": [
           {
-            "from": "clcollected",
-            "to": "clresulted"
+            "from": "collected",
+            "to": "resulted"
           }
         ],
         "x-rdra-ish-triggers-bucs": [],
@@ -569,8 +569,8 @@
         "x-rdra-ish-raised-by-usecases": [],
         "x-rdra-ish-transitions": [
           {
-            "from": "apptawaitingpay",
-            "to": "apptsettled"
+            "from": "awaiting_pay",
+            "to": "settled"
           }
         ],
         "x-rdra-ish-triggers-bucs": [],
@@ -590,8 +590,8 @@
         "x-rdra-ish-raised-by-usecases": [],
         "x-rdra-ish-transitions": [
           {
-            "from": "rxissued",
-            "to": "rxissued"
+            "from": "issued",
+            "to": "issued"
           }
         ],
         "x-rdra-ish-triggers-bucs": [],
@@ -611,8 +611,8 @@
         "x-rdra-ish-raised-by-usecases": [],
         "x-rdra-ish-transitions": [
           {
-            "from": "rxissued",
-            "to": "rxdispensed"
+            "from": "issued",
+            "to": "dispensed"
           }
         ],
         "x-rdra-ish-triggers-bucs": [],
@@ -648,16 +648,16 @@
         "x-rdra-ish-raised-by-usecases": [],
         "x-rdra-ish-transitions": [
           {
-            "from": "stmtassessed",
-            "to": "stmtpaid"
+            "from": "assessed",
+            "to": "paid"
           },
           {
-            "from": "stmtrereview",
-            "to": "stmtpaid"
+            "from": "rereview",
+            "to": "paid"
           },
           {
-            "from": "stmtunderreview",
-            "to": "stmtpaid"
+            "from": "under_review",
+            "to": "paid"
           }
         ],
         "x-rdra-ish-triggers-bucs": [],
@@ -700,8 +700,8 @@
       ],
       "x-rdra-ish-transitions": [
         {
-          "from": "apptcheckedin",
-          "to": "apptinconsult"
+          "from": "checked_in",
+          "to": "in_consult"
         }
       ],
       "x-rdra-ish-triggers-bucs": [
@@ -775,8 +775,8 @@
       ],
       "x-rdra-ish-transitions": [
         {
-          "from": "stmtsubmitted",
-          "to": "stmtunderreview"
+          "from": "submitted",
+          "to": "under_review"
         }
       ],
       "x-rdra-ish-triggers-bucs": [],
@@ -796,8 +796,8 @@
       ],
       "x-rdra-ish-transitions": [
         {
-          "from": "stmtunderreview",
-          "to": "stmtassessed"
+          "from": "under_review",
+          "to": "assessed"
         }
       ],
       "x-rdra-ish-triggers-bucs": [],
@@ -817,8 +817,8 @@
       ],
       "x-rdra-ish-transitions": [
         {
-          "from": "stmtsubmitted",
-          "to": "stmtreceipterror"
+          "from": "submitted",
+          "to": "receipt_error"
         }
       ],
       "x-rdra-ish-triggers-bucs": [],
@@ -838,8 +838,8 @@
       ],
       "x-rdra-ish-transitions": [
         {
-          "from": "stmtunderreview",
-          "to": "stmtreturned"
+          "from": "under_review",
+          "to": "returned"
         }
       ],
       "x-rdra-ish-triggers-bucs": [],
@@ -910,16 +910,16 @@
       ],
       "x-rdra-ish-transitions": [
         {
-          "from": "eligpending",
-          "to": "eliginvalid"
+          "from": "pending",
+          "to": "invalid"
         },
         {
-          "from": "eligpending",
-          "to": "elignoinfo"
+          "from": "pending",
+          "to": "no_info"
         },
         {
-          "from": "eligpending",
-          "to": "eligvalid"
+          "from": "pending",
+          "to": "valid"
         }
       ],
       "x-rdra-ish-triggers-bucs": [],
@@ -961,8 +961,8 @@
       ],
       "x-rdra-ish-transitions": [
         {
-          "from": "clcollected",
-          "to": "clresulted"
+          "from": "collected",
+          "to": "resulted"
         }
       ],
       "x-rdra-ish-triggers-bucs": [],
@@ -982,8 +982,8 @@
       ],
       "x-rdra-ish-transitions": [
         {
-          "from": "apptawaitingpay",
-          "to": "apptsettled"
+          "from": "awaiting_pay",
+          "to": "settled"
         }
       ],
       "x-rdra-ish-triggers-bucs": [],
@@ -1003,8 +1003,8 @@
       ],
       "x-rdra-ish-transitions": [
         {
-          "from": "rxissued",
-          "to": "rxissued"
+          "from": "issued",
+          "to": "issued"
         }
       ],
       "x-rdra-ish-triggers-bucs": [],
@@ -1024,8 +1024,8 @@
       ],
       "x-rdra-ish-transitions": [
         {
-          "from": "rxissued",
-          "to": "rxdispensed"
+          "from": "issued",
+          "to": "dispensed"
         }
       ],
       "x-rdra-ish-triggers-bucs": [],
@@ -1045,16 +1045,16 @@
       ],
       "x-rdra-ish-transitions": [
         {
-          "from": "stmtassessed",
-          "to": "stmtpaid"
+          "from": "assessed",
+          "to": "paid"
         },
         {
-          "from": "stmtrereview",
-          "to": "stmtpaid"
+          "from": "rereview",
+          "to": "paid"
         },
         {
-          "from": "stmtunderreview",
-          "to": "stmtpaid"
+          "from": "under_review",
+          "to": "paid"
         }
       ],
       "x-rdra-ish-triggers-bucs": [],

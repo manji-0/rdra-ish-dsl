@@ -40,13 +40,13 @@ flowchart LR
     entity__ReferralLetter[("紹介状・診療情報提供書")]:::entity
     entity__Room[("診察室")]:::entity
     entity__VitalSign[("バイタル")]:::entity
-    state__Appointment_apptawaitingcalc((("計算待ち"))):::state
-    state__Appointment_apptcheckedin((("受付済"))):::state
-    state__Appointment_apptinconsult((("診察中"))):::state
-    state__Encounter_encamended((("修正済"))):::state
-    state__Encounter_encdocumented((("記載済"))):::state
-    state__Encounter_encopen((("記録中"))):::state
-    state__Encounter_encsigned((("署名済"))):::state
+    state__Appointment_awaiting_calc((("計算待ち"))):::state
+    state__Appointment_checked_in((("受付済"))):::state
+    state__Appointment_in_consult((("診察中"))):::state
+    state__Encounter_amended((("修正済"))):::state
+    state__Encounter_documented((("記載済"))):::state
+    state__Encounter_open((("記録中"))):::state
+    state__Encounter_signed((("署名済"))):::state
   end
   actor__Clinician -.-> usecase__AmendEncounter
   actor__Clinician -.-> usecase__CompleteConsultation
@@ -58,12 +58,12 @@ flowchart LR
   event__EvAppointmentCheckedIn -.-> extsystem__OnlineEligibilitySystem
   event__EvAppointmentCheckedIn -.-> usecase__OpenEncounter
   usecase__AmendEncounter -.-> screen__EncounterWorkspaceScreen
-  usecase__AmendEncounter -.->|transitions Encounter.status encsigned->encamended| state__Encounter_encamended
+  usecase__AmendEncounter -.->|transitions Encounter.status signed->amended| state__Encounter_amended
   usecase__AmendEncounter -.->|updates| entity__Encounter
   %% derived usecase__AmendEncounter -> entity__Encounter via api__AmendEncounterApi
   usecase__CompleteConsultation -.-> screen__EncounterWorkspaceScreen
   usecase__CompleteConsultation -.-> event__EvConsultationCompleted
-  usecase__CompleteConsultation -.->|transitions Appointment.status apptinconsult->apptawaitingcalc| state__Appointment_apptawaitingcalc
+  usecase__CompleteConsultation -.->|transitions Appointment.status in_consult->awaiting_calc| state__Appointment_awaiting_calc
   usecase__CompleteConsultation -.->|updates| entity__Appointment
   %% derived usecase__CompleteConsultation -> entity__Appointment via api__CompleteConsultationApi
   usecase__CompleteConsultation -.->|updates| entity__Room
@@ -71,7 +71,7 @@ flowchart LR
   usecase__DocumentAssessment -.->|creates| entity__Diagnosis
   %% derived usecase__DocumentAssessment -> entity__Diagnosis via api__DocumentAssessmentApi
   usecase__DocumentAssessment -.-> screen__DiagnosisScreen
-  usecase__DocumentAssessment -.->|transitions Encounter.status encopen->encdocumented| state__Encounter_encdocumented
+  usecase__DocumentAssessment -.->|transitions Encounter.status open->documented| state__Encounter_documented
   usecase__DocumentAssessment -.->|updates| entity__Encounter
   %% derived usecase__DocumentAssessment -> entity__Encounter via api__DocumentAssessmentApi
   usecase__IssueReferralLetter -.->|creates| entity__ReferralLetter
@@ -82,7 +82,7 @@ flowchart LR
   usecase__OpenEncounter -.->|creates| entity__Encounter
   %% derived usecase__OpenEncounter -> entity__Encounter via api__OpenEncounterApi
   usecase__OpenEncounter -.-> screen__EncounterWorkspaceScreen
-  usecase__OpenEncounter -.->|transitions Appointment.status apptcheckedin->apptinconsult| state__Appointment_apptinconsult
+  usecase__OpenEncounter -.->|transitions Appointment.status checked_in->in_consult| state__Appointment_in_consult
   usecase__OpenEncounter -.->|updates| entity__Appointment
   %% derived usecase__OpenEncounter -> entity__Appointment via api__OpenEncounterApi
   usecase__RecordVitals -.->|creates| entity__VitalSign
@@ -92,7 +92,7 @@ flowchart LR
   %% derived usecase__RecordVitals -> entity__Encounter via api__RecordVitalsApi
   usecase__SignEncounter -.-> screen__EncounterWorkspaceScreen
   usecase__SignEncounter -.-> event__EvEncounterSigned
-  usecase__SignEncounter -.->|transitions Encounter.status encdocumented->encsigned| state__Encounter_encsigned
+  usecase__SignEncounter -.->|transitions Encounter.status documented->signed| state__Encounter_signed
   usecase__SignEncounter -.->|updates| entity__Encounter
   %% derived usecase__SignEncounter -> entity__Encounter via api__SignEncounterApi
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;

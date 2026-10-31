@@ -13,7 +13,7 @@ sequenceDiagram
   alt 紹介状なしの初診で、除外に当たらない: Charge.kind == 選定療養（自費）, Appointment.referral == 紹介状なし初診
     api__SelectedFeeApi ->> entity__SelectedTreatmentFeeSetting: read
     api__SelectedFeeApi ->> entity__Encounter: read
-    api__SelectedFeeApi ->> entity__Charge: create status=chargeposted, posted_at=set, origin=selectedfee
+    api__SelectedFeeApi ->> entity__Charge: create status=posted, posted_at=set, origin=selectedfee
     api__SelectedFeeApi -->> screen__BillCalculationScreen: done
   else guard fails
     api__SelectedFeeApi -->> screen__BillCalculationScreen: rejected
