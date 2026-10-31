@@ -108,6 +108,8 @@ observable effects:
   starts the UC. Such a UC is the system's work, and only a `performs(Actor, UC)` says that
   a person does it.
 - `displays` and `shows` connect the UC to UI surfaces and visible information.
+- `navigates` connects one screen to the next, `.via` the use case whose operation moves
+  the user; the flows' order of screens fills the gaps as a derived 業務上の順番.
 - `invokes` connects the UC to API boundaries.
 - CRUD predicates connect the UC or invoked API to entities.
 - `transitions` and `sets` state the UC's lifecycle effects; `raises` and `triggers`
@@ -239,7 +241,7 @@ A document follows its reader, and the outputs split between two readers.
 | Reader | Question | Outputs |
 |---|---|---|
 | Product manager | Why build it, for whom, and what counts as done? | `list --kind goal`, `list --kind actor`, `list --kind buc-roles`, `list --kind requirement` (with its `goals` and `bucs`), `diagram --kind requirement` (the goal, requirement, and BUC tree with the out-of-scope requirements), `diagram --kind context`, `diagram --kind business`, `diagram --kind flow --buc`, `list --kind rule`, `list --kind nfr` |
-| Engineer | What does each use case touch, in what order, under which rules? | `diagram --kind robustness --buc`, `diagram --kind sequence --usecase`, `diagram --kind state --entity` and `states`, `diagram --kind er`, `list --kind entity`, `list --kind rule`, `csv --kind api-matrix`, `list --kind actor-permission-audit`, `diagram --kind event`, `export --kind asyncapi` |
+| Engineer | What does each use case touch, in what order, under which rules? | `diagram --kind robustness --buc`, `diagram --kind screen --buc`, `diagram --kind sequence --usecase`, `diagram --kind state --entity` and `states`, `diagram --kind er`, `list --kind entity`, `list --kind rule`, `csv --kind api-matrix`, `list --kind actor-permission-audit`, `diagram --kind event`, `export --kind asyncapi` |
 
 An engineer reads in three steps:
 

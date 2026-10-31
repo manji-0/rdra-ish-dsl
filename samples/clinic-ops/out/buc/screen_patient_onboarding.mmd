@@ -1,0 +1,14 @@
+%% rdra-ish diagram=screen scope=buc:BucPatientOnboarding model=samples/clinic-ops
+%% kinds: screen
+%% omitted: usecase entity
+flowchart LR
+  screen__ConsentScreen["同意取得画面"]:::screen
+  screen__InsuranceScreen["保険資格登録画面"]:::screen
+  screen__IntakePortalScreen["問診票ポータル画面"]:::screen
+  screen__PatientProfileScreen["患者基本情報画面"]:::screen
+  screen__PatientSearchScreen["患者検索画面"]:::screen
+  screen__PatientProfileScreen -.->|業務上の順番| screen__InsuranceScreen
+  %% derived screen__PatientProfileScreen -> screen__InsuranceScreen via flow__OnboardingFlow,step__InsuranceStep,step__RegisterStep
+  screen__PatientSearchScreen -.->|業務上の順番| screen__PatientProfileScreen
+  %% derived screen__PatientSearchScreen -> screen__PatientProfileScreen via flow__OnboardingFlow,flow__PatientMaintenanceFlow,step__ArchiveStep,step__DemographicsStep,step__MaintainSearchStep,step__MergeStep,step__NewPatientSearchStep,step__RegisterStep
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

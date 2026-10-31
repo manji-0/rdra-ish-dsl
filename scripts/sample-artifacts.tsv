@@ -35,6 +35,16 @@ samples/clinic-ops/out/buc/robustness_prescription_fulfillment.mmd	diagram sampl
 samples/clinic-ops/out/buc/robustness_staff_administration.mmd	diagram samples/clinic-ops --kind robustness --format mermaid --buc BucStaffAdministration
 samples/clinic-ops/out/buc/robustness_visit_check_in.mmd	diagram samples/clinic-ops --kind robustness --format mermaid --buc BucVisitCheckIn
 samples/clinic-ops/out/buc/robustness_visit_payment.mmd	diagram samples/clinic-ops --kind robustness --format mermaid --buc BucVisitPayment
+samples/clinic-ops/out/buc/screen_appointment_scheduling.mmd	diagram samples/clinic-ops --kind screen --format mermaid --buc BucAppointmentScheduling
+samples/clinic-ops/out/buc/screen_billing_claims.mmd	diagram samples/clinic-ops --kind screen --format mermaid --buc BucBillingClaims
+samples/clinic-ops/out/buc/screen_clinical_encounter.mmd	diagram samples/clinic-ops --kind screen --format mermaid --buc BucClinicalEncounter
+samples/clinic-ops/out/buc/screen_followup_care.mmd	diagram samples/clinic-ops --kind screen --format mermaid --buc BucFollowupCare
+samples/clinic-ops/out/buc/screen_orders_results.mmd	diagram samples/clinic-ops --kind screen --format mermaid --buc BucOrdersResults
+samples/clinic-ops/out/buc/screen_patient_onboarding.mmd	diagram samples/clinic-ops --kind screen --format mermaid --buc BucPatientOnboarding
+samples/clinic-ops/out/buc/screen_prescription_fulfillment.mmd	diagram samples/clinic-ops --kind screen --format mermaid --buc BucPrescriptionFulfillment
+samples/clinic-ops/out/buc/screen_staff_administration.mmd	diagram samples/clinic-ops --kind screen --format mermaid --buc BucStaffAdministration
+samples/clinic-ops/out/buc/screen_visit_check_in.mmd	diagram samples/clinic-ops --kind screen --format mermaid --buc BucVisitCheckIn
+samples/clinic-ops/out/buc/screen_visit_payment.mmd	diagram samples/clinic-ops --kind screen --format mermaid --buc BucVisitPayment
 samples/clinic-ops/out/uc/sequence_AmendEncounter.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase AmendEncounter
 samples/clinic-ops/out/uc/sequence_AnswerPharmacyInquiry.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase AnswerPharmacyInquiry
 samples/clinic-ops/out/uc/sequence_AnswerPrescriptionInquiry.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase AnswerPrescriptionInquiry
@@ -139,6 +149,7 @@ samples/clinic-ops/out/event_flow.mmd	diagram samples/clinic-ops --kind event --
 samples/clinic-ops/out/information.mmd	diagram samples/clinic-ops --kind information --format mermaid
 samples/clinic-ops/out/rdra_buc_clinical_encounter.mmd	diagram samples/clinic-ops --kind rdra --format mermaid --buc BucClinicalEncounter
 samples/clinic-ops/out/requirement.mmd	diagram samples/clinic-ops --kind requirement --format mermaid
+samples/clinic-ops/out/screen.mmd	diagram samples/clinic-ops --kind screen --format mermaid
 samples/clinic-ops/out/screen_constraints.csv	csv samples/clinic-ops --kind screen-constraints
 samples/clinic-ops/out/state_whole.mmd	diagram samples/clinic-ops --kind state --format mermaid
 samples/clinic-ops/out/state/Appointment.mmd	diagram samples/clinic-ops --kind state --format mermaid --entity Appointment

@@ -1,0 +1,12 @@
+%% rdra-ish diagram=screen scope=buc:BucAppointmentScheduling model=samples/clinic-ops
+%% kinds: screen
+%% omitted: usecase entity
+flowchart LR
+  screen__AppointmentNoticeScreen["予約通知画面"]:::screen
+  screen__AppointmentScreen["予約画面"]:::screen
+  screen__ScheduleSearchScreen["空き枠検索画面"]:::screen
+  screen__AppointmentNoticeScreen -.->|業務上の順番| screen__AppointmentScreen
+  %% derived screen__AppointmentNoticeScreen -> screen__AppointmentScreen via flow__AppointmentFlow,step__CancelStep,step__NoticeStep,step__RescheduleStep
+  screen__AppointmentScreen -.->|業務上の順番| screen__AppointmentNoticeScreen
+  %% derived screen__AppointmentScreen -> screen__AppointmentNoticeScreen via flow__AppointmentFlow,step__BookStep,step__NoticeStep
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

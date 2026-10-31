@@ -1,0 +1,10 @@
+%% rdra-ish diagram=screen scope=buc:BucVisitPayment model=samples/clinic-ops
+%% kinds: screen
+%% omitted: usecase field
+flowchart LR
+  screen__BillCalculationScreen["会計計算画面"]:::screen
+  screen__KioskScreen["自動精算機画面"]:::screen
+  screen__PaymentWindowScreen["会計窓口画面"]:::screen
+  screen__BillCalculationScreen -->|会計の呼出| screen__PaymentWindowScreen
+  %% via screen__BillCalculationScreen -> screen__PaymentWindowScreen usecase__CallPatientForPayment
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

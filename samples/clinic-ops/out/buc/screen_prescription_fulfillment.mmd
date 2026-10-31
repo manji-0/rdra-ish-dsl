@@ -1,0 +1,9 @@
+%% rdra-ish diagram=screen scope=buc:BucPrescriptionFulfillment model=samples/clinic-ops
+%% kinds: screen
+%% omitted: usecase field entity
+flowchart LR
+  screen__DispensingScreen["調剤・監査画面"]:::screen
+  screen__MedicationSearchScreen["薬剤検索画面"]:::screen
+  screen__PharmacyStatusScreen["電子処方箋の状況画面"]:::screen
+  screen__PrescriptionScreen["処方画面"]:::screen
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

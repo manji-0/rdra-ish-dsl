@@ -213,6 +213,16 @@ achieves(ReqSwiftCheckIn, ShortWait)
 motivates(ReqEligibilityEveryVisit, BucVisitCheckIn)
 achieves(ReqEligibilityEveryVisit, ShortWait)
 
+// Screen transitions: the model's assumption of how the front desk moves between screens (no
+// source describes the screens). A transition between steps of one lane that is not written
+// here is drawn from the business flow as 業務上の順番 in `diagram --kind screen`.
+// 受付 queries the オンライン資格確認 at once, so the clerk goes on to its result.
+navigates(CheckInScreen, EligibilityScreen).via(CheckInPatient)
+// A 初診 with a 紹介状 is taken in once the 資格 is confirmed.
+navigates(EligibilityScreen, ReferralScreen).via(ReceiveReferralLetter)
+// The nurse picks a checked-in patient and sends them to a room.
+navigates(CheckInScreen, RoomBoardScreen).via(AssignRoom)
+
 // Business flow
 flow VisitCheckInFlow "受付の流れ"
 step ArrivalStep        "到着・予約票の確認"

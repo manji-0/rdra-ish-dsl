@@ -584,6 +584,11 @@ flowchart LR
   flow__VisitPaymentFlow -->|contains| step__RefundStep
   flow__VisitPaymentFlow -->|contains| step__WindowStep
   screen__BillCalculationScreen -->|contains| field__ChargeCodeField
+  screen__BillCalculationScreen -.->|navigates| screen__PaymentWindowScreen
+  screen__DiagnosisScreen -.->|navigates| screen__EncounterWorkspaceScreen
+  screen__DiagnosisScreen -.->|navigates| screen__ReferralLetterScreen
+  screen__EncounterWorkspaceScreen -.->|navigates| screen__DiagnosisScreen
+  screen__EncounterWorkspaceScreen -.->|navigates| screen__VitalsScreen
   screen__KioskScreen -->|contains| field__KioskReferenceField
   screen__PatientProfileScreen -.->|shows| entity__PatientProfile
   screen__PatientSearchScreen -.->|shows| entity__PatientAccount

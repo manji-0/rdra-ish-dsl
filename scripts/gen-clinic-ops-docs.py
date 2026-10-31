@@ -140,13 +140,16 @@ d = ['# Clinic Ops 設計書\n\n', HEAD, '''
 ''', mermaid('context.mmd'), '''
 ## 2. BUC ごとの構造と処理
 
-各節は BUC の説明、ロバストネス図、UC の表、UC ごとのシーケンス図の順に並ぶ。ロバストネス図では actor が画面を使い、画面が制御（UC が呼ぶ API、API がなければ UC 自身）を呼び、制御がエンティティを読み書きする。表の「ガード」は UC に効く条件で、式は [5. 規則](#5-規則) にある。
+各節は BUC の説明、ロバストネス図、画面遷移図、UC の表、UC ごとのシーケンス図の順に並ぶ。ロバストネス図では actor が画面を使い、画面が制御（UC が呼ぶ API、API がなければ UC 自身）を呼び、制御がエンティティを読み書きする。画面遷移図（`diagram --kind screen --buc <Buc>`）の実線は `navigates` で宣言した遷移で、ラベルは遷移を起こす UC である。点線の「業務上の順番」は宣言がない所を業務フローから補ったもので、同じ担当者のレーンで続く手順が表示する画面の順を示し、実際の画面遷移ではない。遷移も業務上の順番もない BUC では画面遷移図を省く。表の「ガード」は UC に効く条件で、式は [5. 規則](#5-規則) にある。
 
 ''']
 for n, buc in enumerate(CHAPTERS, 1):
     b = bucs[buc]
     d.append(f"### 2.{n} {b['label']}\n\n{b['description']}\n\n")
     d.append(mermaid(f'buc/robustness_{stem(buc)}.mmd') + '\n')
+    screen = f'buc/screen_{stem(buc)}.mmd'
+    if '-->|' in (OUT / screen).read_text() or '-.->|' in (OUT / screen).read_text():
+        d.append('#### 画面遷移図\n\n' + mermaid(screen) + '\n')
     d.append('| UC | 説明 | 画面 | 制御 | ガード |\n|---|---|---|---|---|\n')
     for uc in ids(b['usecases']):
         u = usecases[uc]
@@ -219,6 +222,7 @@ RDRA の層ごとの図である。設計の読み順には入れていない。
 
 ''')
 d.append(folded('業務の流れ図（ビジネスコンテキスト）', mermaid('business.mmd')))
+d.append('\n' + folded('全画面の画面遷移図', mermaid('screen.mmd')))
 
 # ── prd.md ─────────────────────────────────────────────────────────────────────
 

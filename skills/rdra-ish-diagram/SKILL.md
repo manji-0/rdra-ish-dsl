@@ -25,6 +25,7 @@ Pick the one kind that answers the question, then load only its reference.
 | Which screen reaches which API or use case, and which entities does each touch (the main structural view)? | `robustness --buc <BucId>` or `robustness --usecase <UcId>` | `references/usecase-and-flow.md` |
 | In what order does one use case run: guards, writes, events? | `sequence --usecase <UcId>` (exactly one) | `references/usecase-and-flow.md` |
 | In what order are a BUC's steps carried out, and which use cases carry each? | `flow --buc <BucId>` | `references/usecase-and-flow.md` |
+| Which screen leads to which, by which operation, and where is no transition written yet? | `screen` or `screen --buc <BucId>`; `lint` (`screen-no-transition`) | `references/usecase-and-flow.md` |
 | How do the entities relate, and which hold a state model or a variation? | `information` | `references/information-and-data.md` |
 | Which conditions select business rules, and what values do the variations take? | `condition` | `references/information-and-data.md` |
 | What columns, keys, and cardinalities does the data have? | `er` | `references/information-and-data.md` |
@@ -52,6 +53,7 @@ reach. Prefer it before a whole-model diagram.
 | `robustness` | ロバストネス図 | Actors, boundaries (screens, external systems, timers), controls (APIs, or the use case), entities; edges only actor to screen to control to entity | Events and conditions (named in edge labels), states, DTOs, permissions, media, fields, BUCs |
 | `sequence` | シーケンス図 | One use case: starter, screen, controls, entities, external systems; guards as `alt`; writes with `sets` and the lifecycle move; raised events | Other use cases (a triggered one is one message), BUCs, DTOs, permissions |
 | `flow` | 業務フロー | Flows, steps, `precedes` / `branches` / `excepts` / `repeats`, `covers`, actor lanes | Screens and entities |
+| `screen` | 画面遷移図 | Screens; a solid edge per `navigates`, labelled with its `.via` use case; a dashed derived `業務上の順番` edge where a flow's steps in one actor's lane use the screens in order | Use cases, fields, entities as nodes |
 | `information` | 情報モデル | Entities, `relate`, state models, variations | Columns (`er`) |
 | `condition` | バリエーション・条件 | Conditions with what they combine and apply to; variations with their values | Entities (a state model stands for its column) |
 | `state` | 状態モデル | One composite state per state model, start and end states, the use case of each transition | `Enum` columns without `transitions` (named in `omitted:`) |
@@ -70,7 +72,7 @@ The others draw declared facts and print one note.
   conclude that something is missing from the model.
 - A node id is `<kind>__<DSL id>`, the same in every kind, and each flowchart node
   carries `:::<kind>`. Match nodes across diagrams by id, never by label.
-- An edge label is the DSL predicate. An edge followed by `%% derived <from> -> <to> ...`
+- An edge label is the DSL predicate (in `screen`, the label of a `navigates` edge is its `.via` use case). An edge followed by `%% derived <from> -> <to> ...`
   was derived by rdra-ish; any other edge is declared and is also in `rdra`.
 - `%% desc`, `%% holds`, `%% lane`, and `%% synthesized` lines carry what shapes cannot.
   `references/reading-diagrams.md` lists them all.

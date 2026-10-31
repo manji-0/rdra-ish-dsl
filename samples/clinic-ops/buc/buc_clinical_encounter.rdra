@@ -138,6 +138,13 @@ requires_permission(CompleteConsultation, EncounterOpen)
 requires_medium(CompleteConsultation, NurseStation)
 requires_permission(CompleteConsultationApi, EncounterOpen)
 
+// Screen transitions: the model's assumption (no source describes the screens). The record
+// is the hub; vitals and the assessment open from it, and signing returns to it.
+navigates(EncounterWorkspaceScreen, VitalsScreen).via(RecordVitals)
+navigates(EncounterWorkspaceScreen, DiagnosisScreen).via(DocumentAssessment)
+navigates(DiagnosisScreen, ReferralLetterScreen).via(IssueReferralLetter)
+navigates(DiagnosisScreen, EncounterWorkspaceScreen).via(SignEncounter)
+
 // Business flow. The nurse opens the record and takes vitals, the physician examines, writes the
 // diagnosis, and signs; 診察終了 then hands the visit to 計算・会計. A signed record is amended,
 // not edited.

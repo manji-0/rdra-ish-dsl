@@ -32,19 +32,22 @@ Also ask:
    vocabulary as needed.
 2. Connect use cases with `displays(UseCase, Screen)` and screens with
    `shows(Screen, Entity)` when data exposure matters.
-3. Add `contains(Screen, Field)` and `maps_field(Field, Entity, "column")` when
+3. Add `navigates(FromScreen, ToScreen).via(UseCase)` for each move between screens the
+   UI offers, naming the use case whose operation causes it. `diagram --kind screen`
+   draws them, and fills the gaps with dashed `業務上の順番` edges from the flows.
+4. Add `contains(Screen, Field)` and `maps_field(Field, Entity, "column")` when
    screen item mapping matters.
-4. Introduce `api` plus `invokes(UseCase, Api)` when backend mediation or atomic
+5. Introduce `api` plus `invokes(UseCase, Api)` when backend mediation or atomic
    consistency matters.
-5. Put method/path/idempotency/sync-async/auth metadata on the `api`, and connect
+6. Put method/path/idempotency/sync-async/auth metadata on the `api`, and connect
    payloads with `request`, `response`, and `error_response`.
-6. Move CRUD from the use case to the API when the API owns the entity operation.
-7. Use `contains(System, Api)` to group APIs into internal system boundaries.
-8. Add `requires_permission` and `requires_medium` to UC/API nodes.
-9. Add actor-side `has_permission` where the grant is expected. Every actor of a use
+7. Move CRUD from the use case to the API when the API owns the entity operation.
+8. Use `contains(System, Api)` to group APIs into internal system boundaries.
+9. Add `requires_permission` and `requires_medium` to UC/API nodes.
+10. Add actor-side `has_permission` where the grant is expected. Every actor of a use
    case needs it: the direct performers and the performers of each BUC that contains
    the use case.
-10. Use `coordinates(UseCase, Entity, Entity)` only when a relation crosses derived
+11. Use `coordinates(UseCase, Entity, Entity)` only when a relation crosses derived
    system entity sets and the use case coordinates both sides.
 
 ## Minimal Pattern

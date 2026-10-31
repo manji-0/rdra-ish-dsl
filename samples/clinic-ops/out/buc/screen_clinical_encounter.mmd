@@ -1,0 +1,19 @@
+%% rdra-ish diagram=screen scope=buc:BucClinicalEncounter model=samples/clinic-ops
+%% kinds: screen
+%% omitted: usecase field
+flowchart LR
+  screen__DiagnosisScreen["診断入力画面"]:::screen
+  screen__EncounterWorkspaceScreen["診療記録画面"]:::screen
+  screen__ReferralLetterScreen["診療情報提供書画面"]:::screen
+  screen__VitalsScreen["バイタル入力画面"]:::screen
+  screen__DiagnosisScreen -->|診療情報提供書の作成・送信| screen__ReferralLetterScreen
+  screen__DiagnosisScreen -->|診療記録の署名| screen__EncounterWorkspaceScreen
+  screen__EncounterWorkspaceScreen -->|バイタルの記録| screen__VitalsScreen
+  screen__EncounterWorkspaceScreen -->|診察・診断の記録| screen__DiagnosisScreen
+  screen__ReferralLetterScreen -.->|業務上の順番| screen__EncounterWorkspaceScreen
+  %% derived screen__ReferralLetterScreen -> screen__EncounterWorkspaceScreen via flow__EncounterFlow,step__ReferralOutStep,step__SignStep
+  %% via screen__DiagnosisScreen -> screen__EncounterWorkspaceScreen usecase__SignEncounter
+  %% via screen__DiagnosisScreen -> screen__ReferralLetterScreen usecase__IssueReferralLetter
+  %% via screen__EncounterWorkspaceScreen -> screen__DiagnosisScreen usecase__DocumentAssessment
+  %% via screen__EncounterWorkspaceScreen -> screen__VitalsScreen usecase__RecordVitals
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

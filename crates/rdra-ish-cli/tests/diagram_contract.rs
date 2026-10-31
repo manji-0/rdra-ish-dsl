@@ -1726,3 +1726,147 @@ fn a_requirement_diagram_draws_what_the_rdra_diagram_declares() {
         }
     }
 }
+
+/// The arrow `text` draws for `edge`.
+fn arrow_of(text: &str, (from, label, to): &(String, String, String)) -> String {
+    let wanted = (format!("{from} {label}"), to.clone());
+    arrows(text)
+        .into_iter()
+        .find(|(_, from_label, end)| (from_label, end) == (&wanted.0, &wanted.1))
+        .map(|(arrow, _, _)| arrow)
+        .unwrap_or_else(|| panic!("no arrow for {from} -{label}-> {to}\n{text}"))
+}
+
+#[test]
+fn every_screen_diagram_of_every_sample_keeps_the_contract() {
+    let dir = scratch("diagram_contract_screen");
+    let (mut solid, mut dashed) = (0, 0);
+    for root in roots() {
+        for scope in scopes(&root) {
+            let args: Vec<&str> = scope.iter().map(String::as_str).collect();
+            let text = diagram_with(&root, "screen", &args, &dir.join("out"));
+            let chart = checked("screen", &text, &format!("{root} {scope:?}"));
+            assert!(
+                chart.nodes.values().all(|kind| kind == "screen"),
+                "{root} {scope:?}\n{text}"
+            );
+            for edge in &chart.edges {
+                // A dashed edge is the business order, derived; a solid one is a navigates.
+                let derived = chart.derived.contains(edge);
+                if arrow_of(&text, edge) == "-.->" {
+                    assert!(
+                        derived && edge.1 == "業務上の順番",
+                        "{root} {scope:?}: {edge:?}"
+                    );
+                    dashed += 1;
+                } else {
+                    assert!(!derived, "{root} {scope:?}: {edge:?}");
+                    solid += 1;
+                }
+            }
+        }
+    }
+    assert!(
+        solid > 5 && dashed > 5,
+        "{solid} solid, {dashed} dashed edges"
+    );
+}
+
+#[test]
+fn a_screen_diagram_draws_the_screens_and_navigates_of_the_rdra_diagram() {
+    let dir = scratch("diagram_contract_screen_ids");
+    for root in roots() {
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
+        let screen =
+            parse_flowchart("screen", &diagram(&root, "screen", None, &dir.join("s"))).unwrap();
+        let rdra_screens: BTreeSet<&String> = rdra
+            .nodes
+            .iter()
+            .filter(|(_, kind)| *kind == "screen")
+            .map(|(id, _)| id)
+            .collect();
+        assert_eq!(
+            screen.nodes.keys().collect::<BTreeSet<_>>(),
+            rdra_screens,
+            "{root}"
+        );
+        for edge @ (from, _, to) in &screen.edges {
+            if !screen.derived.contains(edge) {
+                let navigates = (from.clone(), "navigates".to_string(), to.clone());
+                assert!(
+                    rdra.edges.contains(&navigates),
+                    "{root}: {edge:?} not in rdra"
+                );
+            }
+        }
+    }
+}
+
+/// The ids `lint <root>` reports under `rule`.
+fn lint_subjects(root: &str, rule: &str) -> BTreeSet<String> {
+    let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .current_dir(repo())
+        .args(["lint", root, "--format", "json"])
+        .output()
+        .unwrap();
+    let issues: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .unwrap_or_else(|error| panic!("{root}: {error}: {output:?}"));
+    issues
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|issue| issue["rule"] == rule)
+        .inspect(|issue| assert_eq!(issue["severity"], "info", "{issue}"))
+        .map(|issue| issue["subject_id"].as_str().unwrap().to_string())
+        .collect()
+}
+
+#[test]
+fn lint_reports_each_screen_the_screen_diagram_leaves_unconnected() {
+    let dir = scratch("diagram_contract_screen_lint");
+    let mut reported = 0;
+    for root in roots() {
+        let chart =
+            parse_flowchart("screen", &diagram(&root, "screen", None, &dir.join("s"))).unwrap();
+        let unconnected: BTreeSet<String> = chart
+            .nodes
+            .keys()
+            .filter(|id| {
+                !chart
+                    .edges
+                    .iter()
+                    .any(|(from, _, to)| from == *id || to == *id)
+            })
+            .map(|id| id.trim_start_matches("screen__").to_string())
+            .collect();
+        let linted = lint_subjects(&root, "screen-no-transition");
+        assert_eq!(linted, unconnected, "{root}");
+        reported += linted.len();
+    }
+    assert!(reported > 0, "no sample has an unconnected screen");
+}
+
+#[test]
+fn clinic_ops_screen_transitions_cover_check_in_encounter_and_payment() {
+    let dir = scratch("diagram_contract_screen_clinic_ops");
+    let text = diagram("samples/clinic-ops", "screen", None, &dir.join("s"));
+    let chart = parse_flowchart("screen", &text).unwrap();
+    for (from, label, to) in [
+        ("CheckInScreen", "受付（初診・再診）", "EligibilityScreen"),
+        (
+            "EncounterWorkspaceScreen",
+            "診察・診断の記録",
+            "DiagnosisScreen",
+        ),
+        ("BillCalculationScreen", "会計の呼出", "PaymentWindowScreen"),
+    ] {
+        let edge = (
+            format!("screen__{from}"),
+            label.to_string(),
+            format!("screen__{to}"),
+        );
+        assert!(chart.edges.contains(&edge), "{edge:?}\n{text}");
+        assert_eq!(arrow_of(&text, &edge), "-->", "{edge:?}");
+    }
+    assert!(!chart.derived.is_empty(), "{text}");
+}

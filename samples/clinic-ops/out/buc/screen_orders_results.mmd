@@ -1,0 +1,13 @@
+%% rdra-ish diagram=screen scope=buc:BucOrdersResults model=samples/clinic-ops
+%% kinds: screen
+%% omitted: usecase
+flowchart LR
+  screen__CriticalNoticeScreen["重要結果通知画面"]:::screen
+  screen__OrderEntryScreen["オーダ入力画面"]:::screen
+  screen__ResultReviewScreen["検査結果確認画面"]:::screen
+  screen__SpecimenScreen["採血画面"]:::screen
+  screen__ResultReviewScreen -.->|業務上の順番| screen__CriticalNoticeScreen
+  %% derived screen__ResultReviewScreen -> screen__CriticalNoticeScreen via flow__LabOrderFlow,step__CriticalStep,step__ResultReviewStep
+  screen__SpecimenScreen -.->|業務上の順番| screen__ResultReviewScreen
+  %% derived screen__SpecimenScreen -> screen__ResultReviewScreen via flow__LabOrderFlow,step__CostStep,step__LabResultStep
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

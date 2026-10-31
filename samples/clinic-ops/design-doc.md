@@ -114,7 +114,7 @@ flowchart LR
 
 ## 2. BUC ごとの構造と処理
 
-各節は BUC の説明、ロバストネス図、UC の表、UC ごとのシーケンス図の順に並ぶ。ロバストネス図では actor が画面を使い、画面が制御（UC が呼ぶ API、API がなければ UC 自身）を呼び、制御がエンティティを読み書きする。表の「ガード」は UC に効く条件で、式は [5. 規則](#5-規則) にある。
+各節は BUC の説明、ロバストネス図、画面遷移図、UC の表、UC ごとのシーケンス図の順に並ぶ。ロバストネス図では actor が画面を使い、画面が制御（UC が呼ぶ API、API がなければ UC 自身）を呼び、制御がエンティティを読み書きする。画面遷移図（`diagram --kind screen --buc <Buc>`）の実線は `navigates` で宣言した遷移で、ラベルは遷移を起こす UC である。点線の「業務上の順番」は宣言がない所を業務フローから補ったもので、同じ担当者のレーンで続く手順が表示する画面の順を示し、実際の画面遷移ではない。遷移も業務上の順番もない BUC では画面遷移図を省く。表の「ガード」は UC に効く条件で、式は [5. 規則](#5-規則) にある。
 
 ### 2.1 新患登録・患者情報管理
 
@@ -187,6 +187,25 @@ flowchart LR
   classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
   classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+```
+
+#### 画面遷移図
+
+```mermaid
+%% rdra-ish diagram=screen scope=buc:BucPatientOnboarding model=samples/clinic-ops
+%% kinds: screen
+%% omitted: usecase entity
+flowchart LR
+  screen__ConsentScreen["同意取得画面"]:::screen
+  screen__InsuranceScreen["保険資格登録画面"]:::screen
+  screen__IntakePortalScreen["問診票ポータル画面"]:::screen
+  screen__PatientProfileScreen["患者基本情報画面"]:::screen
+  screen__PatientSearchScreen["患者検索画面"]:::screen
+  screen__PatientProfileScreen -.->|業務上の順番| screen__InsuranceScreen
+  %% derived screen__PatientProfileScreen -> screen__InsuranceScreen via flow__OnboardingFlow,step__InsuranceStep,step__RegisterStep
+  screen__PatientSearchScreen -.->|業務上の順番| screen__PatientProfileScreen
+  %% derived screen__PatientSearchScreen -> screen__PatientProfileScreen via flow__OnboardingFlow,flow__PatientMaintenanceFlow,step__ArchiveStep,step__DemographicsStep,step__MaintainSearchStep,step__MergeStep,step__NewPatientSearchStep,step__RegisterStep
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -496,6 +515,23 @@ flowchart LR
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
 ```
 
+#### 画面遷移図
+
+```mermaid
+%% rdra-ish diagram=screen scope=buc:BucAppointmentScheduling model=samples/clinic-ops
+%% kinds: screen
+%% omitted: usecase entity
+flowchart LR
+  screen__AppointmentNoticeScreen["予約通知画面"]:::screen
+  screen__AppointmentScreen["予約画面"]:::screen
+  screen__ScheduleSearchScreen["空き枠検索画面"]:::screen
+  screen__AppointmentNoticeScreen -.->|業務上の順番| screen__AppointmentScreen
+  %% derived screen__AppointmentNoticeScreen -> screen__AppointmentScreen via flow__AppointmentFlow,step__CancelStep,step__NoticeStep,step__RescheduleStep
+  screen__AppointmentScreen -.->|業務上の順番| screen__AppointmentNoticeScreen
+  %% derived screen__AppointmentScreen -> screen__AppointmentNoticeScreen via flow__AppointmentFlow,step__BookStep,step__NoticeStep
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+```
+
 | UC | 説明 | 画面 | 制御 | ガード |
 |---|---|---|---|---|
 | 空き枠の検索<br>`SearchAvailability` | 予約枠を検索する。参照だけの API。 | `ScheduleSearchScreen` | `SearchAvailabilityApi` | （なし） |
@@ -774,6 +810,28 @@ flowchart LR
   classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
   classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+```
+
+#### 画面遷移図
+
+```mermaid
+%% rdra-ish diagram=screen scope=buc:BucVisitCheckIn model=samples/clinic-ops
+%% kinds: screen
+%% omitted: usecase field entity
+flowchart LR
+  screen__CheckInScreen["受付画面"]:::screen
+  screen__EligibilityScreen["資格確認画面"]:::screen
+  screen__ReferralScreen["紹介状受付画面"]:::screen
+  screen__RoomBoardScreen["診察室ボード画面"]:::screen
+  screen__CheckInScreen -->|受付（初診・再診）| screen__EligibilityScreen
+  screen__CheckInScreen -.->|業務上の順番| screen__ReferralScreen
+  %% derived screen__CheckInScreen -> screen__ReferralScreen via flow__VisitCheckInFlow,step__EligibilityStep,step__ReferralStep
+  screen__CheckInScreen -->|診察室への案内| screen__RoomBoardScreen
+  screen__EligibilityScreen -->|紹介状受付処理| screen__ReferralScreen
+  %% via screen__CheckInScreen -> screen__EligibilityScreen usecase__CheckInPatient
+  %% via screen__CheckInScreen -> screen__RoomBoardScreen usecase__AssignRoom
+  %% via screen__EligibilityScreen -> screen__ReferralScreen usecase__ReceiveReferralLetter
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -1143,6 +1201,30 @@ flowchart LR
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
 ```
 
+#### 画面遷移図
+
+```mermaid
+%% rdra-ish diagram=screen scope=buc:BucClinicalEncounter model=samples/clinic-ops
+%% kinds: screen
+%% omitted: usecase field
+flowchart LR
+  screen__DiagnosisScreen["診断入力画面"]:::screen
+  screen__EncounterWorkspaceScreen["診療記録画面"]:::screen
+  screen__ReferralLetterScreen["診療情報提供書画面"]:::screen
+  screen__VitalsScreen["バイタル入力画面"]:::screen
+  screen__DiagnosisScreen -->|診療情報提供書の作成・送信| screen__ReferralLetterScreen
+  screen__DiagnosisScreen -->|診療記録の署名| screen__EncounterWorkspaceScreen
+  screen__EncounterWorkspaceScreen -->|バイタルの記録| screen__VitalsScreen
+  screen__EncounterWorkspaceScreen -->|診察・診断の記録| screen__DiagnosisScreen
+  screen__ReferralLetterScreen -.->|業務上の順番| screen__EncounterWorkspaceScreen
+  %% derived screen__ReferralLetterScreen -> screen__EncounterWorkspaceScreen via flow__EncounterFlow,step__ReferralOutStep,step__SignStep
+  %% via screen__DiagnosisScreen -> screen__EncounterWorkspaceScreen usecase__SignEncounter
+  %% via screen__DiagnosisScreen -> screen__ReferralLetterScreen usecase__IssueReferralLetter
+  %% via screen__EncounterWorkspaceScreen -> screen__DiagnosisScreen usecase__DocumentAssessment
+  %% via screen__EncounterWorkspaceScreen -> screen__VitalsScreen usecase__RecordVitals
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+```
+
 | UC | 説明 | 画面 | 制御 | ガード |
 |---|---|---|---|---|
 | 診療記録を開く<br>`OpenEncounter` | 受付済の予約から診療記録を開く。 | `EncounterWorkspaceScreen` | `OpenEncounterApi` | （なし） |
@@ -1402,6 +1484,24 @@ flowchart LR
   classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
   classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+```
+
+#### 画面遷移図
+
+```mermaid
+%% rdra-ish diagram=screen scope=buc:BucOrdersResults model=samples/clinic-ops
+%% kinds: screen
+%% omitted: usecase
+flowchart LR
+  screen__CriticalNoticeScreen["重要結果通知画面"]:::screen
+  screen__OrderEntryScreen["オーダ入力画面"]:::screen
+  screen__ResultReviewScreen["検査結果確認画面"]:::screen
+  screen__SpecimenScreen["採血画面"]:::screen
+  screen__ResultReviewScreen -.->|業務上の順番| screen__CriticalNoticeScreen
+  %% derived screen__ResultReviewScreen -> screen__CriticalNoticeScreen via flow__LabOrderFlow,step__CriticalStep,step__ResultReviewStep
+  screen__SpecimenScreen -.->|業務上の順番| screen__ResultReviewScreen
+  %% derived screen__SpecimenScreen -> screen__ResultReviewScreen via flow__LabOrderFlow,step__CostStep,step__LabResultStep
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -2117,6 +2217,21 @@ flowchart LR
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
 ```
 
+#### 画面遷移図
+
+```mermaid
+%% rdra-ish diagram=screen scope=buc:BucVisitPayment model=samples/clinic-ops
+%% kinds: screen
+%% omitted: usecase field
+flowchart LR
+  screen__BillCalculationScreen["会計計算画面"]:::screen
+  screen__KioskScreen["自動精算機画面"]:::screen
+  screen__PaymentWindowScreen["会計窓口画面"]:::screen
+  screen__BillCalculationScreen -->|会計の呼出| screen__PaymentWindowScreen
+  %% via screen__BillCalculationScreen -> screen__PaymentWindowScreen usecase__CallPatientForPayment
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+```
+
 | UC | 説明 | 画面 | 制御 | ガード |
 |---|---|---|---|---|
 | 会計計算入力<br>`CalculateVisitBill` | 会計計算入力で予約を会計待ちにする。 | `BillCalculationScreen` | `CalculateVisitBillApi` | 窓口負担は負担割合で計算し、限度額情報があれば限度額までとする |
@@ -2403,6 +2518,22 @@ flowchart LR
   classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
   classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+```
+
+#### 画面遷移図
+
+```mermaid
+%% rdra-ish diagram=screen scope=buc:BucBillingClaims model=samples/clinic-ops
+%% kinds: screen
+%% omitted: usecase
+flowchart LR
+  screen__BalanceScreen["未収金画面"]:::screen
+  screen__ChargeWorklistScreen["コスト一覧画面"]:::screen
+  screen__ClaimScreen["レセプト画面"]:::screen
+  screen__PaymentPostingScreen["入金画面"]:::screen
+  screen__ClaimScreen -.->|業務上の順番| screen__PaymentPostingScreen
+  %% derived screen__ClaimScreen -> screen__PaymentPostingScreen via flow__ClaimCycleFlow,step__AssessStep,step__PaidStep,step__ReviewStep
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -2877,6 +3008,27 @@ flowchart LR
   classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
   classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+```
+
+#### 画面遷移図
+
+```mermaid
+%% rdra-ish diagram=screen scope=buc:BucFollowupCare model=samples/clinic-ops
+%% kinds: screen
+%% omitted: usecase
+flowchart LR
+  screen__CarePlanScreen["ケアプラン画面"]:::screen
+  screen__FollowUpScheduleScreen["再診予約画面"]:::screen
+  screen__PatientMessageScreen["患者連絡画面"]:::screen
+  screen__CarePlanScreen -.->|業務上の順番| screen__FollowUpScheduleScreen
+  %% derived screen__CarePlanScreen -> screen__FollowUpScheduleScreen via flow__FollowupFlow,step__ResponseStep,step__RevisitStep
+  screen__CarePlanScreen -.->|業務上の順番| screen__PatientMessageScreen
+  %% derived screen__CarePlanScreen -> screen__PatientMessageScreen via flow__FollowupFlow,step__CarePlanStep,step__FollowUpMsgStep,step__ResultNoticeStep
+  screen__FollowUpScheduleScreen -.->|業務上の順番| screen__CarePlanScreen
+  %% derived screen__FollowUpScheduleScreen -> screen__CarePlanScreen via flow__FollowupFlow,step__PlanCloseStep,step__RevisitStep
+  screen__PatientMessageScreen -.->|業務上の順番| screen__CarePlanScreen
+  %% derived screen__PatientMessageScreen -> screen__CarePlanScreen via flow__FollowupFlow,step__FollowUpMsgStep,step__ResponseStep,step__ResultNoticeStep
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -4561,6 +4713,97 @@ flowchart LR
   %% derived buc__BucVisitCheckIn -> buc__BucClinicalEncounter via event__EvAppointmentCheckedIn
   classDef business fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+```
+
+</details>
+
+<details><summary>全画面の画面遷移図</summary>
+
+```mermaid
+%% rdra-ish diagram=screen scope=whole model=samples/clinic-ops
+%% kinds: screen
+%% omitted: usecase field entity
+flowchart LR
+  screen__AppointmentNoticeScreen["予約通知画面"]:::screen
+  screen__AppointmentScreen["予約画面"]:::screen
+  screen__AuditReviewScreen["監査ログ画面"]:::screen
+  screen__BalanceScreen["未収金画面"]:::screen
+  screen__BillCalculationScreen["会計計算画面"]:::screen
+  screen__CarePlanScreen["ケアプラン画面"]:::screen
+  screen__ChargeWorklistScreen["コスト一覧画面"]:::screen
+  screen__CheckInScreen["受付画面"]:::screen
+  screen__ClaimScreen["レセプト画面"]:::screen
+  screen__ConsentScreen["同意取得画面"]:::screen
+  screen__CriticalNoticeScreen["重要結果通知画面"]:::screen
+  screen__DiagnosisScreen["診断入力画面"]:::screen
+  screen__DispensingScreen["調剤・監査画面"]:::screen
+  screen__EligibilityScreen["資格確認画面"]:::screen
+  screen__EncounterWorkspaceScreen["診療記録画面"]:::screen
+  screen__FollowUpScheduleScreen["再診予約画面"]:::screen
+  screen__InsuranceScreen["保険資格登録画面"]:::screen
+  screen__IntakePortalScreen["問診票ポータル画面"]:::screen
+  screen__KioskScreen["自動精算機画面"]:::screen
+  screen__MedicationSearchScreen["薬剤検索画面"]:::screen
+  screen__OrderEntryScreen["オーダ入力画面"]:::screen
+  screen__PatientMessageScreen["患者連絡画面"]:::screen
+  screen__PatientProfileScreen["患者基本情報画面"]:::screen
+  screen__PatientSearchScreen["患者検索画面"]:::screen
+  screen__PaymentPostingScreen["入金画面"]:::screen
+  screen__PaymentWindowScreen["会計窓口画面"]:::screen
+  screen__PharmacyStatusScreen["電子処方箋の状況画面"]:::screen
+  screen__PrescriptionScreen["処方画面"]:::screen
+  screen__ReferralLetterScreen["診療情報提供書画面"]:::screen
+  screen__ReferralScreen["紹介状受付画面"]:::screen
+  screen__ResultReviewScreen["検査結果確認画面"]:::screen
+  screen__RoomAdminScreen["診察室管理画面"]:::screen
+  screen__RoomBoardScreen["診察室ボード画面"]:::screen
+  screen__ScheduleAdminScreen["診療枠管理画面"]:::screen
+  screen__ScheduleSearchScreen["空き枠検索画面"]:::screen
+  screen__SpecimenScreen["採血画面"]:::screen
+  screen__VitalsScreen["バイタル入力画面"]:::screen
+  screen__AppointmentNoticeScreen -.->|業務上の順番| screen__AppointmentScreen
+  %% derived screen__AppointmentNoticeScreen -> screen__AppointmentScreen via flow__AppointmentFlow,step__CancelStep,step__NoticeStep,step__RescheduleStep
+  screen__AppointmentScreen -.->|業務上の順番| screen__AppointmentNoticeScreen
+  %% derived screen__AppointmentScreen -> screen__AppointmentNoticeScreen via flow__AppointmentFlow,step__BookStep,step__NoticeStep
+  screen__BillCalculationScreen -->|会計の呼出| screen__PaymentWindowScreen
+  screen__CarePlanScreen -.->|業務上の順番| screen__FollowUpScheduleScreen
+  %% derived screen__CarePlanScreen -> screen__FollowUpScheduleScreen via flow__FollowupFlow,step__ResponseStep,step__RevisitStep
+  screen__CarePlanScreen -.->|業務上の順番| screen__PatientMessageScreen
+  %% derived screen__CarePlanScreen -> screen__PatientMessageScreen via flow__FollowupFlow,step__CarePlanStep,step__FollowUpMsgStep,step__ResultNoticeStep
+  screen__CheckInScreen -->|受付（初診・再診）| screen__EligibilityScreen
+  screen__CheckInScreen -.->|業務上の順番| screen__ReferralScreen
+  %% derived screen__CheckInScreen -> screen__ReferralScreen via flow__VisitCheckInFlow,step__EligibilityStep,step__ReferralStep
+  screen__CheckInScreen -->|診察室への案内| screen__RoomBoardScreen
+  screen__ClaimScreen -.->|業務上の順番| screen__PaymentPostingScreen
+  %% derived screen__ClaimScreen -> screen__PaymentPostingScreen via flow__ClaimCycleFlow,step__AssessStep,step__PaidStep,step__ReviewStep
+  screen__DiagnosisScreen -->|診療情報提供書の作成・送信| screen__ReferralLetterScreen
+  screen__DiagnosisScreen -->|診療記録の署名| screen__EncounterWorkspaceScreen
+  screen__EligibilityScreen -->|紹介状受付処理| screen__ReferralScreen
+  screen__EncounterWorkspaceScreen -->|バイタルの記録| screen__VitalsScreen
+  screen__EncounterWorkspaceScreen -->|診察・診断の記録| screen__DiagnosisScreen
+  screen__FollowUpScheduleScreen -.->|業務上の順番| screen__CarePlanScreen
+  %% derived screen__FollowUpScheduleScreen -> screen__CarePlanScreen via flow__FollowupFlow,step__PlanCloseStep,step__RevisitStep
+  screen__PatientMessageScreen -.->|業務上の順番| screen__CarePlanScreen
+  %% derived screen__PatientMessageScreen -> screen__CarePlanScreen via flow__FollowupFlow,step__FollowUpMsgStep,step__ResponseStep,step__ResultNoticeStep
+  screen__PatientProfileScreen -.->|業務上の順番| screen__InsuranceScreen
+  %% derived screen__PatientProfileScreen -> screen__InsuranceScreen via flow__OnboardingFlow,step__InsuranceStep,step__RegisterStep
+  screen__PatientSearchScreen -.->|業務上の順番| screen__PatientProfileScreen
+  %% derived screen__PatientSearchScreen -> screen__PatientProfileScreen via flow__OnboardingFlow,flow__PatientMaintenanceFlow,step__ArchiveStep,step__DemographicsStep,step__MaintainSearchStep,step__MergeStep,step__NewPatientSearchStep,step__RegisterStep
+  screen__ReferralLetterScreen -.->|業務上の順番| screen__EncounterWorkspaceScreen
+  %% derived screen__ReferralLetterScreen -> screen__EncounterWorkspaceScreen via flow__EncounterFlow,step__ReferralOutStep,step__SignStep
+  screen__ResultReviewScreen -.->|業務上の順番| screen__CriticalNoticeScreen
+  %% derived screen__ResultReviewScreen -> screen__CriticalNoticeScreen via flow__LabOrderFlow,step__CriticalStep,step__ResultReviewStep
+  screen__SpecimenScreen -.->|業務上の順番| screen__ResultReviewScreen
+  %% derived screen__SpecimenScreen -> screen__ResultReviewScreen via flow__LabOrderFlow,step__CostStep,step__LabResultStep
+  %% via screen__BillCalculationScreen -> screen__PaymentWindowScreen usecase__CallPatientForPayment
+  %% via screen__CheckInScreen -> screen__EligibilityScreen usecase__CheckInPatient
+  %% via screen__CheckInScreen -> screen__RoomBoardScreen usecase__AssignRoom
+  %% via screen__DiagnosisScreen -> screen__EncounterWorkspaceScreen usecase__SignEncounter
+  %% via screen__DiagnosisScreen -> screen__ReferralLetterScreen usecase__IssueReferralLetter
+  %% via screen__EligibilityScreen -> screen__ReferralScreen usecase__ReceiveReferralLetter
+  %% via screen__EncounterWorkspaceScreen -> screen__DiagnosisScreen usecase__DocumentAssessment
+  %% via screen__EncounterWorkspaceScreen -> screen__VitalsScreen usecase__RecordVitals
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
 ```
 
 </details>

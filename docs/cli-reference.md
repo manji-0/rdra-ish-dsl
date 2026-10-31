@@ -221,6 +221,9 @@ It also emits these `info` rows:
   `out-of-scope`. The hint is to add `achieves(Requirement, Goal)`, or to mark a non-goal
   `status "out-of-scope"` with a `rationale`.
 - `goal-unmeasured` marks a `goal` with no `metric` or no `target`.
+- `screen-no-transition` marks a `screen` that no `navigates` enters or leaves and that no
+  business flow reaches in order, so it stands alone in `diagram --kind screen`. The hint is
+  to add `navigates(FromScreen, ToScreen).via(UseCase)`.
 - `rule-unlabeled` marks a `forbidden`, `invariant`, `required`, `exclusive`,
   `when(...).none/has(...)`, or `after(...).assert(...)` with no
   [`.label("...")`](./language-reference.md#labelling-a-rule), so `list --kind rule` shows it
@@ -467,6 +470,7 @@ relation, from which the RDRAGraph views can be derived.
 | `robustness` | ロバストネス図 | The use cases as an ICONIX robustness diagram: actors, boundaries (screens, external systems, timers), controls (APIs, or the use case itself), and the entities each control reads and writes | BUCs, steps, events (named in edge labels), conditions, states, media, permissions, fields, and DTOs | The use cases the BUCs contain, directly or through a step; `--usecase` names use cases instead |
 | `sequence` | シーケンス図 | One use case in order: the actors, screen, controls (APIs, or the use case itself), entities, and external systems that take part, the guards, each control's reads and writes with the `sets` values and the lifecycle move, and the events it raises | BUCs, steps, other use cases (a triggered one is one message to its control), permissions, media, fields, and DTOs | Exactly one use case, named by one `--usecase`; `--buc` is refused |
 | `flow` | 業務フロー | Each flow with its steps, their `precedes`, `branches`, `excepts`, and `repeats` edges, what each step `covers`, and a lane per actor | Actors without `performs(Actor, Step)`; screens and entities | The flows the BUCs contain |
+| `screen` | 画面遷移図 | Each screen; a solid edge per `navigates`, labelled with its `.via` use case; where none is declared, a dashed `業務上の順番` edge between the screens of consecutive steps in one actor's lane | Use cases, fields, and entities as nodes | The screens the BUCs' use cases display, and the business order of the BUCs' flows |
 | `information` | 情報モデル | Entities with their `relate` links, state models, and the variations their columns take | Columns (`er`) and use cases | The entities `er` draws for the BUCs |
 | `condition` | バリエーション・条件 | Each condition with the variations and state models it combines and what it applies to; each variation with its values | Entities (a state model stands for its column) | The conditions on the BUCs' use cases and their APIs, and what those combine |
 | `state` | 状態モデル | Without a scope, an index: one composite state per state model holding one note, `<n> 状態 / <m> 遷移 (--entity <Entity>)`. With `--entity` or `--buc`, each state model whole: its states, the use case of each transition, start and end states, coloured by what the lifecycle check found | `Enum` columns that no `transitions` drive, named in `omitted:` | Each state model one of the BUCs' use cases moves, whole |
@@ -573,6 +577,18 @@ The notes below say how each kind reads, in the order of the table.
   has a `-.->|performs|` edge from each. Without `performs(Actor, Step)` there are no
   lanes. `--buc` draws the flows the BUCs contain; a BUC without a flow draws an empty
   diagram, its header only.
+- For `--kind screen`, the type line is `flowchart LR` and there are no layers. Each
+  screen of the scope is drawn, connected or not. Each `navigates(A, B)` is
+  `screen__A -->|<use case label>| screen__B`, labelled with the use case of its `.via`,
+  or `-->|navigates|` without one, and a `.via` adds `%% via screen__A -> screen__B
+  usecase__<id>` after the edges. Where no `navigates` goes from A to B, two consecutive
+  steps of one flow (`precedes`, `branches`, or `excepts`) that the same single actor
+  performs give `screen__A -.->|業務上の順番| screen__B` for each screen A the first
+  step's use cases display and each screen B the second step's display (A and B
+  different), followed by `%% derived screen__A -> screen__B via <flow and step ids>`.
+  A dashed edge is the order the work visits the screens, not a transition the UI offers.
+  `--buc` keeps the screens the BUCs' use cases display, and the business order of the
+  steps of their flows.
 - For `--kind information`, there are no layers. Each entity of the scope is drawn (the
   entities `--kind er` draws), each `relate` between two of them as
   `entity__<Child> ---|<card>| entity__<Parent>` with the DSL cardinality (the same

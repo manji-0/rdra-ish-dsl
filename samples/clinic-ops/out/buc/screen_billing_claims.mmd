@@ -1,0 +1,11 @@
+%% rdra-ish diagram=screen scope=buc:BucBillingClaims model=samples/clinic-ops
+%% kinds: screen
+%% omitted: usecase
+flowchart LR
+  screen__BalanceScreen["未収金画面"]:::screen
+  screen__ChargeWorklistScreen["コスト一覧画面"]:::screen
+  screen__ClaimScreen["レセプト画面"]:::screen
+  screen__PaymentPostingScreen["入金画面"]:::screen
+  screen__ClaimScreen -.->|業務上の順番| screen__PaymentPostingScreen
+  %% derived screen__ClaimScreen -> screen__PaymentPostingScreen via flow__ClaimCycleFlow,step__AssessStep,step__PaidStep,step__ReviewStep
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

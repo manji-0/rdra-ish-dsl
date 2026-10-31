@@ -164,6 +164,11 @@ requirement ReqPayAfterConsultation "会計は診察の後に一度で行う"
 motivates(ReqPayAfterConsultation, BucVisitPayment)
 achieves(ReqPayAfterConsultation, TimelyClaims)
 
+// Screen transitions: the model's assumption (no source describes the screens). Once the bill
+// is entered the clerk calls the patient to the window. The 自動精算機 is the patient's own
+// device, so no staff screen moves to it.
+navigates(BillCalculationScreen, PaymentWindowScreen).via(CallPatientForPayment)
+
 // Business flow
 flow VisitPaymentFlow "計算・会計の流れ"
 step CalculationStep "計算受付・会計計算入力"

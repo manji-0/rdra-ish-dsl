@@ -351,6 +351,10 @@ pub(crate) enum DiagramKind {
     /// 業務フロー: each flow with its steps in order, their branches, exceptions, and
     /// repeats, what each step covers, and a lane per actor when steps are performed
     Flow,
+    /// 画面遷移図: each screen, a solid edge for each `navigates` labelled with its `.via`
+    /// use case, and a dashed 業務上の順番 edge for the order a business flow uses the
+    /// screens in, one actor's lane at a time, where no `navigates` is declared
+    Screen,
     /// 情報モデル: the entities with their relate links, state models, and variations,
     /// without columns
     Information,

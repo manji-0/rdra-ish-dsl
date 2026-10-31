@@ -83,11 +83,30 @@ rdra-ish diagram src/ --kind flow --buc <BucId> --format mermaid
 - `--buc` draws the flows the BUC contains. A BUC without a flow gives an empty diagram
   (`%% kinds: (none)`).
 
+## Reading the Screen Transitions
+
+- The type line is `flowchart LR`, with one `screen__<id>` node per screen of the scope,
+  connected or not.
+- `screen__A -->|<use case label>| screen__B` is a declared
+  `navigates(A, B).via(UseCase)`; `-->|navigates|` has no `.via`. The use case id is on a
+  `%% via screen__A -> screen__B usecase__<id>` line after the edges, so match by that,
+  not by the label.
+- `screen__A -.->|業務上の順番| screen__B`, followed by
+  `%% derived screen__A -> screen__B via <flow and step ids>`, is not a transition: two
+  consecutive steps of a flow in one actor's lane (`precedes`, `branches`, `excepts`)
+  display A, then B, and no `navigates` goes from A to B. Treat it as a candidate for a
+  `navigates`, not as one.
+- A screen with no edge is what `lint` reports as `screen-no-transition` (info).
+- `--buc` keeps the screens the BUC's use cases display and the business order of its
+  flows; a `navigates` to a screen of another BUC is drawn only without `--buc`.
+
 ## When To Use
 
 - Use `usecase --buc <BucId>` to review what each use case of a BUC shows and touches,
   without the API and permission detail.
 - Use `flow --buc <BucId>` when the order of the work matters: every step should cover a
   use case, and every exception should rejoin the flow.
+- Use `screen --buc <BucId>` when designing the UI or the front end: write `navigates` for
+  each dashed edge that is a real transition, and for each lone screen.
 - Add `rdra-ish csv src/ --kind matrix` when the question is CRUD coverage rather than
   connectivity.

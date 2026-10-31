@@ -4,6 +4,19 @@
 
 ### Added
 
+- `navigates(Screen, Screen)` declares a screen transition, with an optional
+  `.via(UseCase)` naming the use case whose operation causes it. A `.via` that names
+  anything but one use case, or a second `.via`, is `NavigatesViaRequiresUseCase`.
+  `diagram --kind screen` draws the 画面遷移図: every screen, a solid edge per `navigates`
+  labelled with its use case (`%% via` gives the use case id), and where no `navigates` is
+  declared a dashed `業務上の順番` edge, derived from two consecutive steps of a flow
+  (`precedes`, `branches`, `excepts`) in one actor's lane whose use cases display the two
+  screens, with a `%% derived ... via <flow and step ids>` line. `--buc` keeps the screens
+  the BUC's use cases display. `lint` adds the `info` rule `screen-no-transition` for a
+  screen neither kind of edge reaches. `rdra_ish_core::screen_navigations` and
+  `business_order` give the derivation. clinic-ops declares the transitions of 受付, 診察,
+  and 会計, ships `out/screen.mmd` and one per BUC under `out/buc/`, and the design document
+  shows each BUC's screen transitions (#44).
 - `list --kind transition` writes the state-transition table behind `diagram --kind
   state`: one row per transition with `entity, column, from, to, usecase, guards, actors,
   site`. `from` and `to` read `label (value)` and `usecase` reads `label (id)`. `guards` are

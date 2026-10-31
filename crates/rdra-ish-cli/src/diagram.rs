@@ -9,8 +9,8 @@ use rdra_ish_emit::{
     mermaid::{
         BusinessMermaidEmitter, ConditionMermaidEmitter, ContextMermaidEmitter, ErMermaidEmitter,
         EventMermaidEmitter, FlowMermaidEmitter, InformationMermaidEmitter, RdraMermaidEmitter,
-        RequirementMermaidEmitter, RobustnessMermaidEmitter, SequenceMermaidEmitter,
-        StateMermaidEmitter, UsecaseMermaidEmitter,
+        RequirementMermaidEmitter, RobustnessMermaidEmitter, ScreenMermaidEmitter,
+        SequenceMermaidEmitter, StateMermaidEmitter, UsecaseMermaidEmitter,
     },
     unknown_diagram_filter_kinds, Emitter, Filter, Scope, StateMarks, StateView, View,
 };
@@ -159,6 +159,7 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
             | DiagramKind::Information
             | DiagramKind::Condition
             | DiagramKind::Flow
+            | DiagramKind::Screen
             | DiagramKind::State
             | DiagramKind::Event => Filter::None,
         },
@@ -195,6 +196,7 @@ fn emit_diagram(model: &SemanticModel, kind: &DiagramKind, view: &View) -> Resul
         DiagramKind::Information => Ok(InformationMermaidEmitter.emit(model, view)?),
         DiagramKind::Condition => Ok(ConditionMermaidEmitter.emit(model, view)?),
         DiagramKind::Flow => Ok(FlowMermaidEmitter.emit(model, view)?),
+        DiagramKind::Screen => Ok(ScreenMermaidEmitter.emit(model, view)?),
         DiagramKind::Er => Ok(ErMermaidEmitter.emit(model, view)?),
         DiagramKind::State => Ok(StateMermaidEmitter.emit(model, view)?),
         DiagramKind::Event => Ok(EventMermaidEmitter.emit(model, view)?),

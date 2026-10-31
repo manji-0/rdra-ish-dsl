@@ -145,7 +145,7 @@ a `%% desc <id>: <text>` comment line after the node.
 | `medium` | A physical medium, device, terminal, or operation medium for Business-BUC context. | `requires_medium` in `csv --kind screen-constraints`; RDRA diagram node. `belongs(...).by(...)` records it, but no output reads that context yet. |
 | `actor` | A human actor who performs use cases. | `check` permission paths; RDRA, context, and usecase diagrams; `list --kind buc-roles`; `csv --kind actor-permission-audit` |
 | `usecase` | A use case: a concrete interaction that reads and writes entities and displays screens. | `check`; `states`; RDRA, usecase (UC複合図), flow, condition, state (transition labels), and event diagrams; `csv --kind matrix` |
-| `screen` | A screen (UI surface) displayed by use cases. | `lint` `screen-no-fields`; RDRA and usecase diagrams; `csv --kind screen-constraints` |
+| `screen` | A screen (UI surface) displayed by use cases. | `lint` `screen-no-fields`, `screen-no-transition`; RDRA, usecase, and screen (画面遷移図) diagrams; `csv --kind screen-constraints` |
 | `field` | A screen field: a first-class UI input or output item. It can carry editability, requiredness, and actor or system source metadata, and can map to an entity column without becoming one. | `lint` `field-unmapped`, `field-unplaced`; `csv --kind business-inputs` |
 | `event` | A domain event, the interface between use cases and between use cases and external systems, and a `raises` and `triggers` endpoint. | `check` raised-but-unconsumed; `states`; RDRA, usecase, flow, and event diagrams, and the context and business edge labels; `export --kind asyncapi`, `tla` |
 | `system` | An internal system boundary. It groups APIs; its entity set is derived from those APIs' CRUD targets. | `lint` `stage-readiness` (its `system-boundary` stage needs a `system` and an `api`); `check` boundary diagnostics; RDRA and context diagrams (a context edge goes to the system containing an API its use cases invoke); `csv --kind api-matrix` |
@@ -184,6 +184,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `deletes` | `(UseCase \| Api, Entity)` | The use case or API deletes the entity. Marks the source pattern terminal. |
 | `displays` | `UseCase == Screen` | The use case displays the screen. |
 | `shows` | `Screen == Entity` | The screen shows information from the entity. |
+| `navigates` | `Screen == Screen` | The user moves from the first screen to the second. `.via(UseCase)` names the use case whose operation causes the move. `diagram --kind screen` draws it. See [Screen transitions](#screen-transitions). |
 | `maps_field` | `(Field, Entity, "column")` | Maps a screen field to a specific Entity column. Use with `contains(Screen, Field)` when screen-item level input/output mapping matters. |
 | `raises` | `(UseCase \| ExtSystem, Event)` | The use case or external system raises the event, which `triggers` hands to downstream use cases or BUCs. An external system raising an event is the inbound direction. |
 | `triggers` | `(Event \| Timer, UseCase \| Buc \| ExtSystem)` | The event or timer triggers a concrete use case or starts a BUC boundary. An event triggering an external system delivers the event to it (outbound). A timer cannot trigger an external system: the legal pairs are `Event` to any of the three and `Timer` to `UseCase` or `Buc`. |
@@ -232,6 +233,7 @@ only the methods below, and any other name is an `unknown chain method` error
 | Predicate | Chain methods |
 |---|---|
 | `belongs` | `.by(...)` |
+| `navigates` | `.via(UseCase)`, at most once |
 | `relate` | `.via(...)`, `.optional()`, `.on_delete(...)`, `.on_update(...)`, `.role(...)`, `.key(...)` |
 | `forbidden` | `.along(...)`, `.by(...)`, `.label("...")` |
 | `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)`, `.by(...)`, `.label("...")` |
@@ -570,6 +572,33 @@ Supported field clauses are:
 `shows(Screen, Entity)` remains a coarse screen-to-entity information link.
 `maps_field(Field, Entity, "column")` is the fine-grained mapping when a concrete
 screen item corresponds to a logical data column.
+
+### Screen transitions
+
+`navigates(FromScreen, ToScreen)` declares that the user moves from one screen to
+another. `.via(UseCase)` names the use case whose operation causes the move, such as the
+button that submits the check-in. The use case is optional, and a pair of screens may have
+several `navigates`, one per operation.
+
+```rdra
+screen CheckInScreen "受付画面"
+screen EligibilityScreen "資格確認画面"
+usecase CheckInPatient "受付（初診・再診）"
+displays(CheckInPatient, CheckInScreen)
+
+navigates(CheckInScreen, EligibilityScreen).via(CheckInPatient)
+```
+
+Both arguments must be screens. `.via(...)` must name exactly one use case, once; anything
+else is `NavigatesViaRequiresUseCase`.
+
+`diagram --kind screen` draws each `navigates` as a solid edge labelled with the use case.
+Where no `navigates` is declared, it adds a dashed 業務上の順番 edge from the business
+flows: for two consecutive steps of one flow (`precedes`, `branches`, or `excepts`) that the
+same single actor performs, each screen the first step's use cases display is followed by
+each screen the second step's use cases display. That edge is the order the work visits the
+screens, not a transition the UI offers. `lint` reports a screen that neither kind of edge
+reaches as the info `screen-no-transition`.
 
 ### `triggers` and event-driven BUC chaining
 

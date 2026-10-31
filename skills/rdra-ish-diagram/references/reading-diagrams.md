@@ -61,9 +61,10 @@ flowchart LR
 | `%% holds <id>: <body>` | The condition's body, comparisons joined by `, ` |
 | `%% lane <lane>: actor__<id>` | The actor who performs every step in the lane |
 | `%% synthesized system__Model: <reason>` | Why `context` drew a system node of its own |
+| `%% via <from> -> <to> usecase__<id>` | In `screen`, the use case of the `navigates` edge between those screens |
 
 An edge without a `%% derived` line is declared in the model and is the same edge in
-`rdra`.
+`rdra` (a `screen` edge is the `rdra` edge `-.->|navigates|`, relabelled with its use case).
 
 ## Redrawing a Diagram
 

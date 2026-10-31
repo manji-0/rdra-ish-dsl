@@ -1,0 +1,17 @@
+%% rdra-ish diagram=screen scope=buc:BucVisitCheckIn model=samples/clinic-ops
+%% kinds: screen
+%% omitted: usecase field entity
+flowchart LR
+  screen__CheckInScreen["受付画面"]:::screen
+  screen__EligibilityScreen["資格確認画面"]:::screen
+  screen__ReferralScreen["紹介状受付画面"]:::screen
+  screen__RoomBoardScreen["診察室ボード画面"]:::screen
+  screen__CheckInScreen -->|受付（初診・再診）| screen__EligibilityScreen
+  screen__CheckInScreen -.->|業務上の順番| screen__ReferralScreen
+  %% derived screen__CheckInScreen -> screen__ReferralScreen via flow__VisitCheckInFlow,step__EligibilityStep,step__ReferralStep
+  screen__CheckInScreen -->|診察室への案内| screen__RoomBoardScreen
+  screen__EligibilityScreen -->|紹介状受付処理| screen__ReferralScreen
+  %% via screen__CheckInScreen -> screen__EligibilityScreen usecase__CheckInPatient
+  %% via screen__CheckInScreen -> screen__RoomBoardScreen usecase__AssignRoom
+  %% via screen__EligibilityScreen -> screen__ReferralScreen usecase__ReceiveReferralLetter
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

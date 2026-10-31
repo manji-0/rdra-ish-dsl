@@ -1,0 +1,84 @@
+%% rdra-ish diagram=screen scope=whole model=samples/clinic-ops
+%% kinds: screen
+%% omitted: usecase field entity
+flowchart LR
+  screen__AppointmentNoticeScreen["予約通知画面"]:::screen
+  screen__AppointmentScreen["予約画面"]:::screen
+  screen__AuditReviewScreen["監査ログ画面"]:::screen
+  screen__BalanceScreen["未収金画面"]:::screen
+  screen__BillCalculationScreen["会計計算画面"]:::screen
+  screen__CarePlanScreen["ケアプラン画面"]:::screen
+  screen__ChargeWorklistScreen["コスト一覧画面"]:::screen
+  screen__CheckInScreen["受付画面"]:::screen
+  screen__ClaimScreen["レセプト画面"]:::screen
+  screen__ConsentScreen["同意取得画面"]:::screen
+  screen__CriticalNoticeScreen["重要結果通知画面"]:::screen
+  screen__DiagnosisScreen["診断入力画面"]:::screen
+  screen__DispensingScreen["調剤・監査画面"]:::screen
+  screen__EligibilityScreen["資格確認画面"]:::screen
+  screen__EncounterWorkspaceScreen["診療記録画面"]:::screen
+  screen__FollowUpScheduleScreen["再診予約画面"]:::screen
+  screen__InsuranceScreen["保険資格登録画面"]:::screen
+  screen__IntakePortalScreen["問診票ポータル画面"]:::screen
+  screen__KioskScreen["自動精算機画面"]:::screen
+  screen__MedicationSearchScreen["薬剤検索画面"]:::screen
+  screen__OrderEntryScreen["オーダ入力画面"]:::screen
+  screen__PatientMessageScreen["患者連絡画面"]:::screen
+  screen__PatientProfileScreen["患者基本情報画面"]:::screen
+  screen__PatientSearchScreen["患者検索画面"]:::screen
+  screen__PaymentPostingScreen["入金画面"]:::screen
+  screen__PaymentWindowScreen["会計窓口画面"]:::screen
+  screen__PharmacyStatusScreen["電子処方箋の状況画面"]:::screen
+  screen__PrescriptionScreen["処方画面"]:::screen
+  screen__ReferralLetterScreen["診療情報提供書画面"]:::screen
+  screen__ReferralScreen["紹介状受付画面"]:::screen
+  screen__ResultReviewScreen["検査結果確認画面"]:::screen
+  screen__RoomAdminScreen["診察室管理画面"]:::screen
+  screen__RoomBoardScreen["診察室ボード画面"]:::screen
+  screen__ScheduleAdminScreen["診療枠管理画面"]:::screen
+  screen__ScheduleSearchScreen["空き枠検索画面"]:::screen
+  screen__SpecimenScreen["採血画面"]:::screen
+  screen__VitalsScreen["バイタル入力画面"]:::screen
+  screen__AppointmentNoticeScreen -.->|業務上の順番| screen__AppointmentScreen
+  %% derived screen__AppointmentNoticeScreen -> screen__AppointmentScreen via flow__AppointmentFlow,step__CancelStep,step__NoticeStep,step__RescheduleStep
+  screen__AppointmentScreen -.->|業務上の順番| screen__AppointmentNoticeScreen
+  %% derived screen__AppointmentScreen -> screen__AppointmentNoticeScreen via flow__AppointmentFlow,step__BookStep,step__NoticeStep
+  screen__BillCalculationScreen -->|会計の呼出| screen__PaymentWindowScreen
+  screen__CarePlanScreen -.->|業務上の順番| screen__FollowUpScheduleScreen
+  %% derived screen__CarePlanScreen -> screen__FollowUpScheduleScreen via flow__FollowupFlow,step__ResponseStep,step__RevisitStep
+  screen__CarePlanScreen -.->|業務上の順番| screen__PatientMessageScreen
+  %% derived screen__CarePlanScreen -> screen__PatientMessageScreen via flow__FollowupFlow,step__CarePlanStep,step__FollowUpMsgStep,step__ResultNoticeStep
+  screen__CheckInScreen -->|受付（初診・再診）| screen__EligibilityScreen
+  screen__CheckInScreen -.->|業務上の順番| screen__ReferralScreen
+  %% derived screen__CheckInScreen -> screen__ReferralScreen via flow__VisitCheckInFlow,step__EligibilityStep,step__ReferralStep
+  screen__CheckInScreen -->|診察室への案内| screen__RoomBoardScreen
+  screen__ClaimScreen -.->|業務上の順番| screen__PaymentPostingScreen
+  %% derived screen__ClaimScreen -> screen__PaymentPostingScreen via flow__ClaimCycleFlow,step__AssessStep,step__PaidStep,step__ReviewStep
+  screen__DiagnosisScreen -->|診療情報提供書の作成・送信| screen__ReferralLetterScreen
+  screen__DiagnosisScreen -->|診療記録の署名| screen__EncounterWorkspaceScreen
+  screen__EligibilityScreen -->|紹介状受付処理| screen__ReferralScreen
+  screen__EncounterWorkspaceScreen -->|バイタルの記録| screen__VitalsScreen
+  screen__EncounterWorkspaceScreen -->|診察・診断の記録| screen__DiagnosisScreen
+  screen__FollowUpScheduleScreen -.->|業務上の順番| screen__CarePlanScreen
+  %% derived screen__FollowUpScheduleScreen -> screen__CarePlanScreen via flow__FollowupFlow,step__PlanCloseStep,step__RevisitStep
+  screen__PatientMessageScreen -.->|業務上の順番| screen__CarePlanScreen
+  %% derived screen__PatientMessageScreen -> screen__CarePlanScreen via flow__FollowupFlow,step__FollowUpMsgStep,step__ResponseStep,step__ResultNoticeStep
+  screen__PatientProfileScreen -.->|業務上の順番| screen__InsuranceScreen
+  %% derived screen__PatientProfileScreen -> screen__InsuranceScreen via flow__OnboardingFlow,step__InsuranceStep,step__RegisterStep
+  screen__PatientSearchScreen -.->|業務上の順番| screen__PatientProfileScreen
+  %% derived screen__PatientSearchScreen -> screen__PatientProfileScreen via flow__OnboardingFlow,flow__PatientMaintenanceFlow,step__ArchiveStep,step__DemographicsStep,step__MaintainSearchStep,step__MergeStep,step__NewPatientSearchStep,step__RegisterStep
+  screen__ReferralLetterScreen -.->|業務上の順番| screen__EncounterWorkspaceScreen
+  %% derived screen__ReferralLetterScreen -> screen__EncounterWorkspaceScreen via flow__EncounterFlow,step__ReferralOutStep,step__SignStep
+  screen__ResultReviewScreen -.->|業務上の順番| screen__CriticalNoticeScreen
+  %% derived screen__ResultReviewScreen -> screen__CriticalNoticeScreen via flow__LabOrderFlow,step__CriticalStep,step__ResultReviewStep
+  screen__SpecimenScreen -.->|業務上の順番| screen__ResultReviewScreen
+  %% derived screen__SpecimenScreen -> screen__ResultReviewScreen via flow__LabOrderFlow,step__CostStep,step__LabResultStep
+  %% via screen__BillCalculationScreen -> screen__PaymentWindowScreen usecase__CallPatientForPayment
+  %% via screen__CheckInScreen -> screen__EligibilityScreen usecase__CheckInPatient
+  %% via screen__CheckInScreen -> screen__RoomBoardScreen usecase__AssignRoom
+  %% via screen__DiagnosisScreen -> screen__EncounterWorkspaceScreen usecase__SignEncounter
+  %% via screen__DiagnosisScreen -> screen__ReferralLetterScreen usecase__IssueReferralLetter
+  %% via screen__EligibilityScreen -> screen__ReferralScreen usecase__ReceiveReferralLetter
+  %% via screen__EncounterWorkspaceScreen -> screen__DiagnosisScreen usecase__DocumentAssessment
+  %% via screen__EncounterWorkspaceScreen -> screen__VitalsScreen usecase__RecordVitals
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

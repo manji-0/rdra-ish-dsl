@@ -1,0 +1,16 @@
+%% rdra-ish diagram=screen scope=buc:BucFollowupCare model=samples/clinic-ops
+%% kinds: screen
+%% omitted: usecase
+flowchart LR
+  screen__CarePlanScreen["ケアプラン画面"]:::screen
+  screen__FollowUpScheduleScreen["再診予約画面"]:::screen
+  screen__PatientMessageScreen["患者連絡画面"]:::screen
+  screen__CarePlanScreen -.->|業務上の順番| screen__FollowUpScheduleScreen
+  %% derived screen__CarePlanScreen -> screen__FollowUpScheduleScreen via flow__FollowupFlow,step__ResponseStep,step__RevisitStep
+  screen__CarePlanScreen -.->|業務上の順番| screen__PatientMessageScreen
+  %% derived screen__CarePlanScreen -> screen__PatientMessageScreen via flow__FollowupFlow,step__CarePlanStep,step__FollowUpMsgStep,step__ResultNoticeStep
+  screen__FollowUpScheduleScreen -.->|業務上の順番| screen__CarePlanScreen
+  %% derived screen__FollowUpScheduleScreen -> screen__CarePlanScreen via flow__FollowupFlow,step__PlanCloseStep,step__RevisitStep
+  screen__PatientMessageScreen -.->|業務上の順番| screen__CarePlanScreen
+  %% derived screen__PatientMessageScreen -> screen__CarePlanScreen via flow__FollowupFlow,step__FollowUpMsgStep,step__ResponseStep,step__ResultNoticeStep
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
