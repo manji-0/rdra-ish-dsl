@@ -1103,11 +1103,11 @@ flowchart LR
 | 必要権限 | `EncounterOpen`, `VitalsRecord`, `ClinicalDocument`, `EncounterSign`, `ReferralManage` |
 | 主なデータ | `Encounter`, `Appointment`, `VitalSign`, `Diagnosis`, `Room`, `ReferralLetter` |
 
-診療記録を開き、バイタル、診断、署名、診察終了までを扱う。診察終了 `CompleteConsultation` で予約は「計算待ち」になり、会計は計算受付へ移る。他院紹介では医師が診療情報提供書を作成・送信する。EvEncounterSigned は検査、コスト登録、会計、ケアプラン作成を起動する。
+診療記録を開き、バイタル、診断、署名、診察終了までを扱う。診察終了 `CompleteConsultation` で予約は「計算待ち」になり、会計は計算受付へ移る。他院紹介では医師が診療情報提供書を作成・送信する。検査オーダは診察中に医師が出し、署名の後に診察終了とする。署名イベント `EvEncounterSigned` はカルテのコスト情報の登録とケアプラン作成を、診察終了イベント `EvConsultationCompleted` は計算・会計を起動する。
 
 レビュー観点:
 
-- SignEncounter を後続 BUC の起点イベントとして扱ってよいか。
+- 署名（コスト情報・ケアプランの起点）と診察終了（会計の起点）を別のイベントに分けた境界が業務と合うか。
 - CompleteConsultation が予約を完了にせず「計算待ち」に置くことで、会計前に予約が閉じないか。
 - IssueReferralLetter（診療情報提供書）と受付の紹介状受付（ReceiveReferralLetter）が同じ `ReferralLetter` を向きで区別できるか。
 
@@ -1199,6 +1199,7 @@ flowchart LR
     screen__ReferralLetterScreen["診療情報提供書画面"]:::screen
     screen__VitalsScreen["Vitals Screen"]:::screen
     event__EvAppointmentCheckedIn["Appointment Checked In"]:::event
+    event__EvConsultationCompleted["診察終了"]:::event
     event__EvEncounterSigned["Encounter Signed"]:::event
   end
   subgraph layer_system["システム"]
@@ -1225,12 +1226,12 @@ flowchart LR
   actor__Nurse -.->|performs| usecase__RecordVitals
   event__EvAppointmentCheckedIn -.->|triggers| extsystem__OnlineEligibilitySystem
   event__EvAppointmentCheckedIn -.->|triggers| usecase__OpenEncounter
-  event__EvEncounterSigned -.->|triggers| usecase__CompleteConsultation
   usecase__AmendEncounter -.->|displays| screen__EncounterWorkspaceScreen
   usecase__AmendEncounter -.->|transitions Encounter.status encsigned->encamended| state__Encounter_encamended
   usecase__AmendEncounter -.->|updates| entity__Encounter
   %% derived usecase__AmendEncounter -> entity__Encounter via api__AmendEncounterApi
   usecase__CompleteConsultation -.->|displays| screen__EncounterWorkspaceScreen
+  usecase__CompleteConsultation -.->|raises| event__EvConsultationCompleted
   usecase__CompleteConsultation -.->|transitions Appointment.status apptinconsult->apptawaitingcalc| state__Appointment_apptawaitingcalc
   usecase__CompleteConsultation -.->|updates| entity__Appointment
   %% derived usecase__CompleteConsultation -> entity__Appointment via api__CompleteConsultationApi
@@ -1282,7 +1283,7 @@ flowchart LR
 | 必要権限 | `ClinicalOrderWrite`, `ProxyOrderEntry`, `LabResultManage`, `PatientMessageSend` |
 | 主なデータ | `ClinicalOrder`, `LabResult`, `Charge`, `Notification`, `PatientMessage` |
 
-検査オーダーから結果確認、重要結果通知までを扱う。医師事務作業補助者や看護師がオーダを代行入力した場合、医師が確定するまで看護師は採血しない（保助看法 第37条）。この規則は `OrderConfirmedByPhysician` 条件と `forbidden(ClinicalOrder, status == clcollected, physician_confirmed == false)` で検証する。外注検査の結果は外注検査システムから届く。採血管ラベルの発行と実施内容（コスト）の登録が会計計算の入力になる。
+検査オーダーから結果確認、重要結果通知までを扱う。医師事務作業補助者や看護師がオーダを代行入力した場合、医師が確定するまで看護師は採血しない（保助看法 第37条）。この規則は `OrderConfirmedByPhysician` 条件と `forbidden(ClinicalOrder, status == clcollected, physician_confirmed == false)` で検証する。外注検査の結果は外注検査システムから届く。採血管ラベルの発行と実施内容（コスト）の登録が会計計算の入力になる。実施入力のコストは `Charge.origin` が `performed` で、カルテ由来（`chart`）や選定療養費（`selectedfee`）のコストと発生元で区別される。
 
 レビュー観点:
 
@@ -1405,7 +1406,6 @@ flowchart LR
     screen__ResultReviewScreen["Result Review Screen"]:::screen
     screen__SpecimenScreen["Specimen Collection Screen"]:::screen
     event__EvClinicalOrderReviewed["Clinical Result Reviewed"]:::event
-    event__EvEncounterSigned["Encounter Signed"]:::event
     event__EvLabResultReceived["Lab Result Received"]:::event
   end
   subgraph layer_system["システム"]
@@ -1435,7 +1435,6 @@ flowchart LR
   actor__Nurse -.->|performs| usecase__RegisterPerformedProcedure
   condition__OrderConfirmedByPhysician -.->|applies_to| usecase__CollectSpecimen
   event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyCriticalResult
-  event__EvEncounterSigned -.->|triggers| usecase__PlaceLabOrder
   event__EvLabResultReceived -.->|triggers| usecase__ReceiveLabResult
   extsystem__OutsourcedLabSystem -.->|raises| event__EvLabResultReceived
   usecase__CancelClinicalOrder -.->|displays| screen__OrderEntryScreen
@@ -2525,10 +2524,10 @@ UC ごとの必要権限と確認点を表にまとめます。各 UC の画面�
 | `OpenEncounter` | `EncounterOpen` | 受付済の予約から診療記録を開く |
 | `RecordVitals` | `VitalsRecord` | バイタル記録 |
 | `DocumentAssessment` | `ClinicalDocument` | 診断記録と記録状態 |
-| `SignEncounter` | `EncounterSign` | 署名と後続 BUC の起点イベント |
+| `SignEncounter` | `EncounterSign` | 署名でコスト情報登録とケアプラン作成を起動する |
 | `AmendEncounter` | `EncounterSign` | 署名済み記録の修正 |
 | `IssueReferralLetter` | `ReferralManage` | 診療情報提供書の作成・送信 |
-| `CompleteConsultation` | `EncounterOpen` | 診察終了で予約を計算待ちにし、部屋を清掃中にする |
+| `CompleteConsultation` | `EncounterOpen` | 診察終了で予約を計算待ちにし、部屋を清掃中にし、会計を起動する |
 
 ### 4.5 Orders and Results UC
 
@@ -2579,7 +2578,7 @@ UC ごとの必要権限と確認点を表にまとめます。各 UC の画面�
 
 | UC | 必要権限 | 主な確認点 |
 |---|---|---|
-| `CreateCharge` | （なし） | 署名時のコスト情報登録（システム起動） |
+| `CreateCharge` | （なし） | 署名時のカルテ由来コスト情報の登録（システム起動） |
 | `GenerateClaimStatement` | `BillingClaimWrite` | 月初のレセプト作成 |
 | `InspectClaimStatement` | `BillingClaimWrite` | 院内点検 |
 | `HoldClaimStatement` | `BillingClaimWrite` | 保留（月遅れ） |
@@ -2739,6 +2738,12 @@ flowchart LR
   event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyPatientResult
   buc__BucFollowupCare["Coordinate Follow-Up Care"]:::buc
   event__EvClinicalOrderReviewed -.->|triggers| buc__BucFollowupCare
+  event__EvConsultationCompleted["診察終了"]:::event
+  usecase__CompleteConsultation["診察終了"]:::usecase
+  usecase__CompleteConsultation -.->|raises| event__EvConsultationCompleted
+  buc__BucVisitPayment["計算・会計"]:::buc
+  %% desc buc__BucVisitPayment: 診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。
+  event__EvConsultationCompleted -.->|triggers| buc__BucVisitPayment
   event__EvEligibilityChecked["資格確認結果"]:::event
   extsystem__OnlineEligibilitySystem -.->|raises| event__EvEligibilityChecked
   usecase__ReceiveEligibilityInvalid["資格確認結果（無効）の取込"]:::usecase
@@ -2750,23 +2755,14 @@ flowchart LR
   event__EvEncounterSigned["Encounter Signed"]:::event
   usecase__SignEncounter["Sign Encounter"]:::usecase
   usecase__SignEncounter -.->|raises| event__EvEncounterSigned
-  usecase__CompleteConsultation["診察終了"]:::usecase
-  event__EvEncounterSigned -.->|triggers| usecase__CompleteConsultation
   usecase__CreateCarePlan["Create Care Plan"]:::usecase
   event__EvEncounterSigned -.->|triggers| usecase__CreateCarePlan
   usecase__CreateCharge["コスト情報の登録"]:::usecase
   event__EvEncounterSigned -.->|triggers| usecase__CreateCharge
-  usecase__PlaceLabOrder["Place Lab Order"]:::usecase
-  event__EvEncounterSigned -.->|triggers| usecase__PlaceLabOrder
   buc__BucBillingClaims["レセプト作成・請求"]:::buc
   %% desc buc__BucBillingClaims: 月ごとのレセプトの作成・院内点検・請求と、審査支払機関からの受付不能・返戻・査定・支払への対応。
   event__EvEncounterSigned -.->|triggers| buc__BucBillingClaims
   event__EvEncounterSigned -.->|triggers| buc__BucFollowupCare
-  buc__BucOrdersResults["Manage Orders and Results"]:::buc
-  event__EvEncounterSigned -.->|triggers| buc__BucOrdersResults
-  buc__BucVisitPayment["計算・会計"]:::buc
-  %% desc buc__BucVisitPayment: 診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。
-  event__EvEncounterSigned -.->|triggers| buc__BucVisitPayment
   event__EvLabResultReceived["Lab Result Received"]:::event
   extsystem__OutsourcedLabSystem["外注検査システム"]:::extsystem
   extsystem__OutsourcedLabSystem -.->|raises| event__EvLabResultReceived
@@ -2832,7 +2828,8 @@ flowchart LR
 |---|---|---|
 | `EvAppointmentCheckedIn` | `CheckInPatient` | `OnlineEligibilitySystem`, `BucClinicalEncounter`, `OpenEncounter`, `PrepareEncounter` |
 | `EvEligibilityChecked` | `OnlineEligibilitySystem` | `ReceiveEligibilityValid`, `ReceiveEligibilityInvalid`, `ReceiveEligibilityNoInfo` |
-| `EvEncounterSigned` | `SignEncounter` | `BucBillingClaims`, `BucVisitPayment`, `BucFollowupCare`, `BucOrdersResults`, `CompleteConsultation`, `PlaceLabOrder`, `CreateCharge`, `CreateCarePlan` |
+| `EvEncounterSigned` | `SignEncounter` | `BucBillingClaims`, `BucFollowupCare`, `CreateCharge`, `CreateCarePlan` |
+| `EvConsultationCompleted` | `CompleteConsultation` | `BucVisitPayment` |
 | `EvBillCalculated` | `CalculateVisitBill` | `CallPatientForPayment`, `PaymentGateway` |
 | `EvPaymentSettled` | `PaymentGateway` | `SettleAtKiosk` |
 | `EvClaimStatementsSubmitted` | `SubmitClaimStatements` | `ClaimsReviewOrganization` |
@@ -2926,6 +2923,7 @@ flowchart LR
   variation__AuditSeverity["Audit Severity"]:::variation
   variation__BurdenRatio["負担割合"]:::variation
   variation__ChargeKind["診療費の種類"]:::variation
+  variation__ChargeOrigin["コストの発生元"]:::variation
   variation__ConsentType["Consent Type"]:::variation
   variation__LimitCategory["限度額適用区分"]:::variation
   variation__MessageChannel["Message Channel"]:::variation
@@ -2949,6 +2947,7 @@ flowchart LR
   entity__Charge ---|N:1| entity__ClaimStatement
   entity__Charge ---|N:1| entity__Encounter
   entity__Charge -.->|variation kind| variation__ChargeKind
+  entity__Charge -.->|variation origin| variation__ChargeOrigin
   entity__ClaimStatement ---|N:1| entity__InsurancePolicy
   entity__ClaimStatement ---|N:1| entity__PatientAccount
   entity__ClaimStatement -.->|statemodel| statemodel__ClaimStatement_status
@@ -3000,6 +2999,7 @@ variation（actor や保険者が決め、use case が動かさない値）:
 | `LimitCategory` | `InsurancePolicy.limit_category` | 限度額情報なし, 適用区分を取得済 |
 | `ReferralCategory` | `Appointment.referral` | 再診, 紹介状あり初診, 紹介状なし初診, 紹介状なし初診（救急搬送等の除外） |
 | `ChargeKind` | `Charge.kind` | 保険診療, 選定療養（自費） |
+| `ChargeOrigin` | `Charge.origin` | カルテ（指導・管理料・コメント）, 実施入力（検査・処置）, 選定療養費 |
 | `ReferralDirection` | `ReferralLetter.direction` | 紹介元から受領, 紹介先へ送付 |
 | `PayerChange` | `ClaimStatement.payer_change` | 資格変更なし, 負担割合が同じ資格への変更, 負担割合が異なる資格への変更, 公費が関わる変更 |
 | `PaymentMethod` | `PaymentTransaction.method` | 現金, クレジットカード, 還付・追加徴収 |
@@ -3042,6 +3042,11 @@ flowchart LR
   subgraph variation__ChargeKind["診療費の種類"]
     variation__ChargeKind__insured["保険診療"]:::value
     variation__ChargeKind__selectedtreatment["選定療養（自費）"]:::value
+  end
+  subgraph variation__ChargeOrigin["コストの発生元"]
+    variation__ChargeOrigin__chart["カルテ（指導・管理料・コメント）"]:::value
+    variation__ChargeOrigin__performed["実施入力（検査・処置）"]:::value
+    variation__ChargeOrigin__selectedfee["選定療養費"]:::value
   end
   subgraph variation__ConsentType["Consent Type"]
     variation__ConsentType__treatment["Treatment"]:::value
@@ -3160,6 +3165,7 @@ erDiagram
     Int id PK
     String code
     ChargeKind kind
+    ChargeOrigin origin
     Money amount
     DateTime posted_at
     Enum status

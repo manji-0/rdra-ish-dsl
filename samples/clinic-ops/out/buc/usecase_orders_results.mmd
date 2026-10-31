@@ -27,7 +27,6 @@ flowchart LR
     screen__ResultReviewScreen["Result Review Screen"]:::screen
     screen__SpecimenScreen["Specimen Collection Screen"]:::screen
     event__EvClinicalOrderReviewed["Clinical Result Reviewed"]:::event
-    event__EvEncounterSigned["Encounter Signed"]:::event
     event__EvLabResultReceived["Lab Result Received"]:::event
   end
   subgraph layer_system["システム"]
@@ -57,7 +56,6 @@ flowchart LR
   actor__Nurse -.->|performs| usecase__RegisterPerformedProcedure
   condition__OrderConfirmedByPhysician -.->|applies_to| usecase__CollectSpecimen
   event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyCriticalResult
-  event__EvEncounterSigned -.->|triggers| usecase__PlaceLabOrder
   event__EvLabResultReceived -.->|triggers| usecase__ReceiveLabResult
   extsystem__OutsourcedLabSystem -.->|raises| event__EvLabResultReceived
   usecase__CancelClinicalOrder -.->|displays| screen__OrderEntryScreen

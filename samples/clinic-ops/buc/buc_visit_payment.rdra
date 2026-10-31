@@ -59,7 +59,7 @@ reads(CalculateVisitBillApi, Charge)
 reads(CalculateVisitBillApi, InsurancePolicy)
 raises(CalculateVisitBill, EvBillCalculated)
 transitions(Appointment.status, CalculateVisitBill, apptawaitingcalc -> apptawaitingpay)
-triggers(EvEncounterSigned, BucVisitPayment)
+triggers(EvConsultationCompleted, BucVisitPayment)
 
 // 一部負担金 is the amount times the 負担割合 (egov-kenkou-hokenhou-211AC0000000070.txt:1204). With the
 // 限度額情報, the patient pays no more than the 自己負担限度額 at the window
@@ -82,6 +82,7 @@ reads(SelectedFeeApi, SelectedTreatmentFeeSetting)
 reads(SelectedFeeApi, Encounter)
 sets(ApplySelectedTreatmentFee, Charge, status == chargeposted)
 sets(ApplySelectedTreatmentFee, Charge, posted_at == present)
+sets(ApplySelectedTreatmentFee, Charge, origin == selectedfee)
 
 condition UnreferredFirstVisit "紹介状なしの初診で、除外に当たらない"
 holds(UnreferredFirstVisit, Charge.kind == selectedtreatment, Appointment.referral == unreferred)

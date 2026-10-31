@@ -86,6 +86,7 @@ reads(CreateChargeApi, Encounter)
 sets(CreateCharge, Charge, status == chargeposted)
 sets(CreateCharge, Charge, posted_at == present)
 sets(CreateCharge, Charge, kind == insured)
+sets(CreateCharge, Charge, origin == chart)
 triggers(EvEncounterSigned, BucBillingClaims)
 triggers(EvEncounterSigned, CreateCharge)
 

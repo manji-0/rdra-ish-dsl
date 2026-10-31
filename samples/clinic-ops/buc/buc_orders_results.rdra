@@ -74,13 +74,13 @@ contains(ClinicOpsSystem, ReceiveLabResultApi)
 contains(ClinicOpsSystem, ResultReviewApi)
 contains(ClinicOpsSystem, CriticalNoticeApi)
 
+// The physician orders the test during the consultation, before the record is signed, so no
+// event starts it.
 displays(PlaceLabOrder, OrderEntryScreen)
 invokes(PlaceLabOrder, OrderEntryApi)
 creates(OrderEntryApi, ClinicalOrder)
 reads(OrderEntryApi, Encounter)
 sets(PlaceLabOrder, ClinicalOrder, physician_confirmed == true)
-triggers(EvEncounterSigned, BucOrdersResults)
-triggers(EvEncounterSigned, PlaceLabOrder)
 
 displays(EnterProxyOrder, OrderEntryScreen)
 invokes(EnterProxyOrder, ProxyOrderApi)
@@ -117,6 +117,7 @@ reads(PerformedProcedureApi, Encounter)
 sets(RegisterPerformedProcedure, Charge, status == chargeposted)
 sets(RegisterPerformedProcedure, Charge, posted_at == present)
 sets(RegisterPerformedProcedure, Charge, kind == insured)
+sets(RegisterPerformedProcedure, Charge, origin == performed)
 
 displays(ReceiveLabResult, ResultReviewScreen)
 invokes(ReceiveLabResult, ReceiveLabResultApi)

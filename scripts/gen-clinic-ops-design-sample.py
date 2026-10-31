@@ -89,13 +89,13 @@ BUCS = [
                  '被保険者資格申立書とシステム障害時モードが、資格確認結果の状態として区別されているか。']),
     dict(id='BucClinicalEncounter', stem='clinical_encounter', title='Clinical Encounter', business='CareDelivery',
          actors='Nurse（看護師）, Clinician（医師）', data=['Encounter', 'Appointment', 'VitalSign', 'Diagnosis', 'Room', 'ReferralLetter'],
-         prose='診療記録を開き、バイタル、診断、署名、診察終了までを扱う。診察終了 `CompleteConsultation` で予約は「計算待ち」になり、会計は計算受付へ移る。他院紹介では医師が診療情報提供書を作成・送信する。EvEncounterSigned は検査、コスト登録、会計、ケアプラン作成を起動する。',
-         points=['SignEncounter を後続 BUC の起点イベントとして扱ってよいか。',
+         prose='診療記録を開き、バイタル、診断、署名、診察終了までを扱う。診察終了 `CompleteConsultation` で予約は「計算待ち」になり、会計は計算受付へ移る。他院紹介では医師が診療情報提供書を作成・送信する。検査オーダは診察中に医師が出し、署名の後に診察終了とする。署名イベント `EvEncounterSigned` はカルテのコスト情報の登録とケアプラン作成を、診察終了イベント `EvConsultationCompleted` は計算・会計を起動する。',
+         points=['署名（コスト情報・ケアプランの起点）と診察終了（会計の起点）を別のイベントに分けた境界が業務と合うか。',
                  'CompleteConsultation が予約を完了にせず「計算待ち」に置くことで、会計前に予約が閉じないか。',
                  'IssueReferralLetter（診療情報提供書）と受付の紹介状受付（ReceiveReferralLetter）が同じ `ReferralLetter` を向きで区別できるか。']),
     dict(id='BucOrdersResults', stem='orders_results', title='Orders and Results', business='CareDelivery',
          actors='Clinician, Nurse, MedicalClerk（医師事務作業補助者）', data=['ClinicalOrder', 'LabResult', 'Charge', 'Notification', 'PatientMessage'],
-         prose='検査オーダーから結果確認、重要結果通知までを扱う。医師事務作業補助者や看護師がオーダを代行入力した場合、医師が確定するまで看護師は採血しない（保助看法 第37条）。この規則は `OrderConfirmedByPhysician` 条件と `forbidden(ClinicalOrder, status == clcollected, physician_confirmed == false)` で検証する。外注検査の結果は外注検査システムから届く。採血管ラベルの発行と実施内容（コスト）の登録が会計計算の入力になる。',
+         prose='検査オーダーから結果確認、重要結果通知までを扱う。医師事務作業補助者や看護師がオーダを代行入力した場合、医師が確定するまで看護師は採血しない（保助看法 第37条）。この規則は `OrderConfirmedByPhysician` 条件と `forbidden(ClinicalOrder, status == clcollected, physician_confirmed == false)` で検証する。外注検査の結果は外注検査システムから届く。採血管ラベルの発行と実施内容（コスト）の登録が会計計算の入力になる。実施入力のコストは `Charge.origin` が `performed` で、カルテ由来（`chart`）や選定療養費（`selectedfee`）のコストと発生元で区別される。',
          points=['代行入力オーダが医師の確定前に採血へ進まないことが、状態検証で示されているか。',
                  'RegisterPerformedProcedure が作る Charge を、会計計算入力が読めるか。',
                  'NotifyCriticalResult は結果確認イベントから起動されるため、手動 UC と自動 UC の違いをレビューできるか。']),
@@ -162,10 +162,10 @@ POINTS = {
     'OpenEncounter': '受付済の予約から診療記録を開く',
     'RecordVitals': 'バイタル記録',
     'DocumentAssessment': '診断記録と記録状態',
-    'SignEncounter': '署名と後続 BUC の起点イベント',
+    'SignEncounter': '署名でコスト情報登録とケアプラン作成を起動する',
     'AmendEncounter': '署名済み記録の修正',
     'IssueReferralLetter': '診療情報提供書の作成・送信',
-    'CompleteConsultation': '診察終了で予約を計算待ちにし、部屋を清掃中にする',
+    'CompleteConsultation': '診察終了で予約を計算待ちにし、部屋を清掃中にし、会計を起動する',
     'PlaceLabOrder': '医師が登録したオーダは確定済み',
     'EnterProxyOrder': '代行入力オーダは未確定で作られる',
     'ConfirmProxyOrder': '医師による代行入力オーダの確定',
@@ -196,7 +196,7 @@ POINTS = {
     'SettleAtWindow': '会計窓口での精算',
     'SettleAtKiosk': '自動精算機での精算',
     'IssueReceipt': '領収証・明細書の交付で予約を完了にする',
-    'CreateCharge': '署名時のコスト情報登録（システム起動）',
+    'CreateCharge': '署名時のカルテ由来コスト情報の登録（システム起動）',
     'GenerateClaimStatement': '月初のレセプト作成',
     'InspectClaimStatement': '院内点検',
     'HoldClaimStatement': '保留（月遅れ）',
@@ -420,7 +420,8 @@ parts.append('''主要イベントと起動先:
 |---|---|---|
 | `EvAppointmentCheckedIn` | `CheckInPatient` | `OnlineEligibilitySystem`, `BucClinicalEncounter`, `OpenEncounter`, `PrepareEncounter` |
 | `EvEligibilityChecked` | `OnlineEligibilitySystem` | `ReceiveEligibilityValid`, `ReceiveEligibilityInvalid`, `ReceiveEligibilityNoInfo` |
-| `EvEncounterSigned` | `SignEncounter` | `BucBillingClaims`, `BucVisitPayment`, `BucFollowupCare`, `BucOrdersResults`, `CompleteConsultation`, `PlaceLabOrder`, `CreateCharge`, `CreateCarePlan` |
+| `EvEncounterSigned` | `SignEncounter` | `BucBillingClaims`, `BucFollowupCare`, `CreateCharge`, `CreateCarePlan` |
+| `EvConsultationCompleted` | `CompleteConsultation` | `BucVisitPayment` |
 | `EvBillCalculated` | `CalculateVisitBill` | `CallPatientForPayment`, `PaymentGateway` |
 | `EvPaymentSettled` | `PaymentGateway` | `SettleAtKiosk` |
 | `EvClaimStatementsSubmitted` | `SubmitClaimStatements` | `ClaimsReviewOrganization` |
@@ -472,6 +473,7 @@ variation（actor や保険者が決め、use case が動かさない値）:
 | `LimitCategory` | `InsurancePolicy.limit_category` | 限度額情報なし, 適用区分を取得済 |
 | `ReferralCategory` | `Appointment.referral` | 再診, 紹介状あり初診, 紹介状なし初診, 紹介状なし初診（救急搬送等の除外） |
 | `ChargeKind` | `Charge.kind` | 保険診療, 選定療養（自費） |
+| `ChargeOrigin` | `Charge.origin` | カルテ（指導・管理料・コメント）, 実施入力（検査・処置）, 選定療養費 |
 | `ReferralDirection` | `ReferralLetter.direction` | 紹介元から受領, 紹介先へ送付 |
 | `PayerChange` | `ClaimStatement.payer_change` | 資格変更なし, 負担割合が同じ資格への変更, 負担割合が異なる資格への変更, 公費が関わる変更 |
 | `PaymentMethod` | `PaymentTransaction.method` | 現金, クレジットカード, 還付・追加徴収 |

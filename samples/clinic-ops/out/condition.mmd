@@ -26,6 +26,11 @@ flowchart LR
     variation__ChargeKind__insured["保険診療"]:::value
     variation__ChargeKind__selectedtreatment["選定療養（自費）"]:::value
   end
+  subgraph variation__ChargeOrigin["コストの発生元"]
+    variation__ChargeOrigin__chart["カルテ（指導・管理料・コメント）"]:::value
+    variation__ChargeOrigin__performed["実施入力（検査・処置）"]:::value
+    variation__ChargeOrigin__selectedfee["選定療養費"]:::value
+  end
   subgraph variation__ConsentType["Consent Type"]
     variation__ConsentType__treatment["Treatment"]:::value
     variation__ConsentType__privacy["Privacy"]:::value

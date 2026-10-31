@@ -6,7 +6,6 @@ flowchart LR
   subgraph layer_value["システム価値"]
     extsystem__ClaimsReviewOrganization["審査支払機関（支払基金・国保連）"]:::extsystem
     extsystem__MessagingGateway["Messaging Gateway"]:::extsystem
-    extsystem__OutsourcedLabSystem["外注検査システム"]:::extsystem
     extsystem__PaymentGateway["自動精算機・クレジット決済"]:::extsystem
   end
   subgraph layer_environment["システム外部環境"]
@@ -18,14 +17,12 @@ flowchart LR
     %% desc buc__BucBillingClaims: 月ごとのレセプトの作成・院内点検・請求と、審査支払機関からの受付不能・返戻・査定・支払への対応。
     buc__BucClinicalEncounter["Conduct Clinical Encounter"]:::buc
     buc__BucFollowupCare["Coordinate Follow-Up Care"]:::buc
-    buc__BucOrdersResults["Manage Orders and Results"]:::buc
     buc__BucPatientOnboarding["Onboard and Maintain Patient"]:::buc
     buc__BucVisitPayment["計算・会計"]:::buc
     %% desc buc__BucVisitPayment: 診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。
     flow__ClaimCycleFlow["レセプトの月次サイクル"]:::flow
     flow__EncounterFlow["診察の流れ"]:::flow
     flow__FollowupFlow["フォローアップの流れ"]:::flow
-    flow__LabOrderFlow["検体検査の流れ"]:::flow
     flow__OnboardingFlow["新患登録の流れ"]:::flow
     flow__PatientMaintenanceFlow["患者情報の保守"]:::flow
     flow__VisitPaymentFlow["計算・会計の流れ"]:::flow
@@ -36,13 +33,9 @@ flowchart LR
     step__CalculationStep["計算受付・会計計算入力"]:::step
     step__CallStep["会計の呼出"]:::step
     step__CarePlanStep["ケアプランの作成"]:::step
-    step__CollectStep["採血"]:::step
     step__CompleteStep["診察終了"]:::step
-    step__ConfirmOrderStep["代行入力オーダの確定"]:::step
     step__ConsentStep["同意の取得"]:::step
-    step__CostStep["実施内容（コスト）の登録"]:::step
     step__CreateStatementStep["レセプト作成（月初）"]:::step
-    step__CriticalStep["重要結果の通知"]:::step
     step__DemographicsStep["患者属性の変更"]:::step
     step__FollowUpMsgStep["患者への連絡"]:::step
     step__HoldStep["保留（月遅れ）"]:::step
@@ -52,24 +45,18 @@ flowchart LR
     step__IntakeExpireStep["問診票の期限切れ"]:::step
     step__IntakeSendStep["問診票の送付"]:::step
     step__KioskStep["自動精算機で精算"]:::step
-    step__LabOrderStep["検査オーダ"]:::step
-    step__LabResultStep["検査結果の受信"]:::step
-    step__LabelStep["採血管ラベルの発行"]:::step
     step__MaintainSearchStep["登録済み患者の検索"]:::step
     step__MergeStep["重複患者の統合"]:::step
     step__NewPatientSearchStep["既存患者の検索"]:::step
     step__OpenStep["診療記録を開く"]:::step
-    step__OrderCancelStep["オーダの取消"]:::step
     step__PaidStep["支払（診療翌々月）"]:::step
     step__PlanCloseStep["ケアプランの終了"]:::step
-    step__ProxyOrderStep["オーダの代行入力"]:::step
     step__ReceiptErrorStep["受付不能・要確認の再送（11日・12日）"]:::step
     step__ReceiptStep["領収証・明細書の交付"]:::step
     step__ReferralOutStep["診療情報提供書の作成・送信"]:::step
     step__RegisterStep["新患登録"]:::step
     step__ResponseStep["患者応答の確認"]:::step
     step__ResultNoticeStep["検査結果の患者通知"]:::step
-    step__ResultReviewStep["検査結果の確認"]:::step
     step__ReturnStep["返戻と再請求"]:::step
     step__ReviewStep["審査"]:::step
     step__RevisitStep["再診の予約"]:::step
@@ -95,20 +82,17 @@ flowchart LR
     permission__BillCalculate["会計計算"]:::permission
     permission__BillingClaimWrite["レセプト業務"]:::permission
     permission__ClinicalDocument["Clinical Document"]:::permission
-    permission__ClinicalOrderWrite["Clinical Order Write"]:::permission
     permission__ConsentCapture["Consent Capture"]:::permission
     permission__EncounterOpen["Encounter Open"]:::permission
     permission__EncounterSign["Encounter Sign"]:::permission
     permission__FollowUpManage["Follow-Up Manage"]:::permission
     permission__InsuranceVerify["Insurance Verify"]:::permission
     permission__IntakeManage["Intake Manage"]:::permission
-    permission__LabResultManage["Lab Result Manage"]:::permission
     permission__PatientMessageSend["Patient Message Send"]:::permission
     permission__PatientProfileRead["Patient Profile Read"]:::permission
     permission__PatientProfileWrite["Patient Profile Write"]:::permission
     permission__PaymentCollect["窓口収納"]:::permission
     permission__PaymentPost["Payment Post"]:::permission
-    permission__ProxyOrderEntry["代行入力"]:::permission
     permission__ReferralManage["紹介状管理"]:::permission
     permission__ScheduleRead["Schedule Read"]:::permission
     permission__ScheduleWrite["Schedule Write"]:::permission
@@ -120,18 +104,14 @@ flowchart LR
     usecase__ArchivePatient["Archive Patient"]:::usecase
     usecase__CalculateVisitBill["会計計算入力"]:::usecase
     usecase__CallPatientForPayment["会計の呼出"]:::usecase
-    usecase__CancelClinicalOrder["Cancel Clinical Order"]:::usecase
     usecase__CaptureConsent["Capture Consent"]:::usecase
     usecase__CloseCarePlan["Close Care Plan"]:::usecase
-    usecase__CollectSpecimen["Collect Specimen"]:::usecase
     usecase__CompleteConsultation["診察終了"]:::usecase
     usecase__CompleteIntakeForms["Complete Intake Forms"]:::usecase
-    usecase__ConfirmProxyOrder["代行入力オーダの確定"]:::usecase
     usecase__CorrectReturnedStatement["返戻レセプトの訂正（再請求）"]:::usecase
     usecase__CreateCarePlan["Create Care Plan"]:::usecase
     usecase__CreateCharge["コスト情報の登録"]:::usecase
     usecase__DocumentAssessment["Document Assessment"]:::usecase
-    usecase__EnterProxyOrder["検体検査オーダの代行入力"]:::usecase
     usecase__ExpireIntakeForms["Expire Intake Forms"]:::usecase
     usecase__GenerateClaimStatement["レセプト作成"]:::usecase
     usecase__HoldClaimStatement["レセプトの保留（月遅れ）"]:::usecase
@@ -139,26 +119,20 @@ flowchart LR
     usecase__IssueReceipt["領収証・明細書の交付"]:::usecase
     usecase__IssueReferralLetter["診療情報提供書の作成・送信"]:::usecase
     usecase__MergeDuplicatePatient["Merge Duplicate Patient"]:::usecase
-    usecase__NotifyCriticalResult["Notify Critical Result"]:::usecase
     usecase__NotifyPatientResult["Notify Patient Result"]:::usecase
     usecase__OpenEncounter["Open Encounter"]:::usecase
-    usecase__PlaceLabOrder["Place Lab Order"]:::usecase
     usecase__PostPayment["診療報酬の入金"]:::usecase
-    usecase__PrintSpecimenLabel["採血管ラベル発行・貼付"]:::usecase
     usecase__ReceiveClaimAccepted["レセプト受付（審査へ）"]:::usecase
-    usecase__ReceiveLabResult["Receive Lab Result"]:::usecase
     usecase__ReconcileBalance["未収金管理台帳の作成"]:::usecase
     usecase__RecordClaimAssessment["査定の取込"]:::usecase
     usecase__RecordClaimReturn["返戻レセプトの取込"]:::usecase
     usecase__RecordReceiptError["受付不能・要確認の確認"]:::usecase
     usecase__RecordVitals["Record Vitals"]:::usecase
     usecase__RegisterPatient["Register Patient"]:::usecase
-    usecase__RegisterPerformedProcedure["実施内容（コスト）の登録"]:::usecase
     usecase__ReleaseHeldStatement["保留レセプトの再提出準備"]:::usecase
     usecase__RequestReexamination["再審査請求"]:::usecase
     usecase__ResendErroredStatement["エラー分レセプトの再送"]:::usecase
     usecase__ReviewClaimTransfer["資格の振替・分割の確認"]:::usecase
-    usecase__ReviewLabResult["Review Lab Result"]:::usecase
     usecase__ReviewPatientResponse["Review Patient Response"]:::usecase
     usecase__ScheduleFollowUpVisit["Schedule Follow-Up Visit"]:::usecase
     usecase__SearchPatient["Search Patient"]:::usecase
@@ -179,22 +153,18 @@ flowchart LR
     screen__ChargeWorklistScreen["Charge Worklist Screen"]:::screen
     screen__ClaimScreen["レセプト画面"]:::screen
     screen__ConsentScreen["Consent Capture Screen"]:::screen
-    screen__CriticalNoticeScreen["Critical Result Notice Screen"]:::screen
     screen__DiagnosisScreen["Diagnosis Screen"]:::screen
     screen__EncounterWorkspaceScreen["Encounter Workspace"]:::screen
     screen__FollowUpScheduleScreen["Follow-Up Schedule Screen"]:::screen
     screen__InsuranceScreen["Insurance Verification Screen"]:::screen
     screen__IntakePortalScreen["Intake Portal Screen"]:::screen
     screen__KioskScreen["自動精算機画面"]:::screen
-    screen__OrderEntryScreen["Order Entry Screen"]:::screen
     screen__PatientMessageScreen["Patient Message Screen"]:::screen
     screen__PatientProfileScreen["Patient Profile Screen"]:::screen
     screen__PatientSearchScreen["Patient Search Screen"]:::screen
     screen__PaymentPostingScreen["入金画面"]:::screen
     screen__PaymentWindowScreen["会計窓口画面"]:::screen
     screen__ReferralLetterScreen["診療情報提供書画面"]:::screen
-    screen__ResultReviewScreen["Result Review Screen"]:::screen
-    screen__SpecimenScreen["Specimen Collection Screen"]:::screen
     screen__VitalsScreen["Vitals Screen"]:::screen
     field__ChargeCodeField["診療行為"]:::field
     field__KioskReferenceField["精算機の取引番号"]:::field
@@ -212,8 +182,8 @@ flowchart LR
     event__EvClaimStatementsSubmitted["レセプト請求"]:::event
     event__EvClaimTransferred["資格の振替・分割"]:::event
     event__EvClinicalOrderReviewed["Clinical Result Reviewed"]:::event
+    event__EvConsultationCompleted["診察終了"]:::event
     event__EvEncounterSigned["Encounter Signed"]:::event
-    event__EvLabResultReceived["Lab Result Received"]:::event
     event__EvPaymentSettled["自動精算機での精算完了"]:::event
     event__EvRemittance["診療報酬の支払"]:::event
   end
@@ -224,13 +194,10 @@ flowchart LR
     api__CalculateVisitBillApi["会計計算 API"]:::api
     api__ClaimEditApi["レセプト点検・訂正 API"]:::api
     api__ClaimResultApi["審査結果 API"]:::api
-    api__CollectSpecimenApi["Collect Specimen API"]:::api
     api__CompleteConsultationApi["診察終了 API"]:::api
-    api__ConfirmOrderApi["オーダ確定 API"]:::api
     api__ConsentApi["Consent API"]:::api
     api__CreateCarePlanApi["Create Care Plan API"]:::api
     api__CreateChargeApi["Create Charge API"]:::api
-    api__CriticalNoticeApi["Critical Notice API"]:::api
     api__DocumentAssessmentApi["Document Assessment API"]:::api
     api__EligibilityApi["Eligibility API"]:::api
     api__FollowUpScheduleApi["Follow-Up Schedule API"]:::api
@@ -239,15 +206,10 @@ flowchart LR
     api__IssueReferralLetterApi["診療情報提供書 API"]:::api
     api__NotifyPatientResultApi["Notify Patient Result API"]:::api
     api__OpenEncounterApi["Open Encounter API"]:::api
-    api__OrderEntryApi["Order Entry API"]:::api
     api__PaymentPostApi["入金 API"]:::api
-    api__PerformedProcedureApi["実施登録 API"]:::api
-    api__ProxyOrderApi["代行入力 API"]:::api
     api__ReceiptApi["領収証 API"]:::api
-    api__ReceiveLabResultApi["Receive Lab Result API"]:::api
     api__RecordVitalsApi["Record Vitals API"]:::api
     api__RegisterPatientApi["Register Patient API"]:::api
-    api__ResultReviewApi["Result Review API"]:::api
     api__SearchPatientApi["Search Patient API"]:::api
     api__SelectedFeeApi["選定療養費 API"]:::api
     api__SendFollowUpMessageApi["Send Follow-Up Message API"]:::api
@@ -260,14 +222,12 @@ flowchart LR
     entity__CarePlan["Care Plan"]:::entity
     entity__Charge["Charge"]:::entity
     entity__ClaimStatement["レセプト"]:::entity
-    entity__ClinicalOrder["Clinical Order"]:::entity
     entity__ConsentRecord["Consent Record"]:::entity
     entity__Diagnosis["Diagnosis"]:::entity
     entity__EligibilityCheck["資格確認"]:::entity
     entity__Encounter["Encounter"]:::entity
     entity__InsurancePolicy["保険資格"]:::entity
     entity__IntakePacket["Intake Packet"]:::entity
-    entity__LabResult["Lab Result"]:::entity
     entity__Notification["Notification"]:::entity
     entity__PatientAccount["Patient Account"]:::entity
     entity__PatientMessage["Patient Message"]:::entity
@@ -299,11 +259,6 @@ flowchart LR
     state__ClaimStatement_stmtreturned["stmtreturned"]:::state
     state__ClaimStatement_stmtsubmitted["stmtsubmitted"]:::state
     state__ClaimStatement_stmtunderreview["stmtunderreview"]:::state
-    state__ClinicalOrder_clcancelled["clcancelled"]:::state
-    state__ClinicalOrder_clcollected["clcollected"]:::state
-    state__ClinicalOrder_clordered["clordered"]:::state
-    state__ClinicalOrder_clresulted["clresulted"]:::state
-    state__ClinicalOrder_clreviewed["clreviewed"]:::state
     state__Encounter_encamended["encamended"]:::state
     state__Encounter_encdocumented["encdocumented"]:::state
     state__Encounter_encopen["encopen"]:::state
@@ -320,7 +275,6 @@ flowchart LR
     variation__PayerChange["資格変更の種類"]:::variation
     variation__ReferralCategory["紹介の有無"]:::variation
     condition__CopayCappedAtLimit["窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"]:::condition
-    condition__OrderConfirmedByPhysician["医師が確定したオーダ"]:::condition
     condition__TransferNotPossible["振替・分割の対象外（負担割合の相違・公費）"]:::condition
     condition__UnreferredFirstVisit["紹介状なしの初診で、除外に当たらない"]:::condition
   end
@@ -339,13 +293,9 @@ flowchart LR
   api__ClaimEditApi -.->|updates| entity__ClaimStatement
   api__ClaimResultApi -.->|requires_permission| permission__BillingClaimWrite
   api__ClaimResultApi -.->|updates| entity__ClaimStatement
-  api__CollectSpecimenApi -.->|requires_permission| permission__ClinicalOrderWrite
-  api__CollectSpecimenApi -.->|updates| entity__ClinicalOrder
   api__CompleteConsultationApi -.->|requires_permission| permission__EncounterOpen
   api__CompleteConsultationApi -.->|updates| entity__Appointment
   api__CompleteConsultationApi -.->|updates| entity__Room
-  api__ConfirmOrderApi -.->|requires_permission| permission__ClinicalOrderWrite
-  api__ConfirmOrderApi -.->|updates| entity__ClinicalOrder
   api__ConsentApi -.->|creates| entity__ConsentRecord
   api__ConsentApi -.->|requires_permission| permission__ConsentCapture
   api__CreateCarePlanApi -.->|creates| entity__CarePlan
@@ -353,9 +303,6 @@ flowchart LR
   api__CreateCarePlanApi -.->|requires_permission| permission__FollowUpManage
   api__CreateChargeApi -.->|creates| entity__Charge
   api__CreateChargeApi -.->|reads| entity__Encounter
-  api__CriticalNoticeApi -.->|creates| entity__Notification
-  api__CriticalNoticeApi -.->|creates| entity__PatientMessage
-  api__CriticalNoticeApi -.->|requires_permission| permission__PatientMessageSend
   api__DocumentAssessmentApi -.->|creates| entity__Diagnosis
   api__DocumentAssessmentApi -.->|requires_permission| permission__ClinicalDocument
   api__DocumentAssessmentApi -.->|updates| entity__Encounter
@@ -381,34 +328,18 @@ flowchart LR
   api__OpenEncounterApi -.->|creates| entity__Encounter
   api__OpenEncounterApi -.->|requires_permission| permission__EncounterOpen
   api__OpenEncounterApi -.->|updates| entity__Appointment
-  api__OrderEntryApi -.->|creates| entity__ClinicalOrder
-  api__OrderEntryApi -.->|reads| entity__Encounter
-  api__OrderEntryApi -.->|requires_permission| permission__ClinicalOrderWrite
   api__PaymentPostApi -.->|requires_permission| permission__PaymentPost
   api__PaymentPostApi -.->|updates| entity__ClaimStatement
-  api__PerformedProcedureApi -.->|creates| entity__Charge
-  api__PerformedProcedureApi -.->|reads| entity__ClinicalOrder
-  api__PerformedProcedureApi -.->|reads| entity__Encounter
-  api__PerformedProcedureApi -.->|requires_permission| permission__ClinicalOrderWrite
-  api__ProxyOrderApi -.->|creates| entity__ClinicalOrder
-  api__ProxyOrderApi -.->|reads| entity__Encounter
-  api__ProxyOrderApi -.->|requires_permission| permission__ProxyOrderEntry
   api__ReceiptApi -.->|reads| entity__Charge
   api__ReceiptApi -.->|reads| entity__PaymentTransaction
   api__ReceiptApi -.->|requires_permission| permission__PaymentCollect
   api__ReceiptApi -.->|updates| entity__Appointment
-  api__ReceiveLabResultApi -.->|creates| entity__LabResult
-  api__ReceiveLabResultApi -.->|requires_permission| permission__LabResultManage
-  api__ReceiveLabResultApi -.->|updates| entity__ClinicalOrder
   api__RecordVitalsApi -.->|creates| entity__VitalSign
   api__RecordVitalsApi -.->|requires_permission| permission__VitalsRecord
   api__RecordVitalsApi -.->|updates| entity__Encounter
   api__RegisterPatientApi -.->|creates| entity__PatientAccount
   api__RegisterPatientApi -.->|creates| entity__PatientProfile
   api__RegisterPatientApi -.->|requires_permission| permission__PatientProfileWrite
-  api__ResultReviewApi -.->|requires_permission| permission__LabResultManage
-  api__ResultReviewApi -.->|updates| entity__ClinicalOrder
-  api__ResultReviewApi -.->|updates| entity__LabResult
   api__SearchPatientApi -.->|reads| entity__PatientAccount
   api__SearchPatientApi -.->|reads| entity__PatientProfile
   api__SearchPatientApi -.->|requires_permission| permission__PatientProfileRead
@@ -464,18 +395,6 @@ flowchart LR
   buc__BucFollowupCare -->|contains| usecase__ReviewPatientResponse
   buc__BucFollowupCare -->|contains| usecase__ScheduleFollowUpVisit
   buc__BucFollowupCare -->|contains| usecase__SendFollowUpMessage
-  buc__BucOrdersResults -->|belongs| business__CareDelivery
-  buc__BucOrdersResults -->|contains| flow__LabOrderFlow
-  buc__BucOrdersResults -->|contains| usecase__CancelClinicalOrder
-  buc__BucOrdersResults -->|contains| usecase__CollectSpecimen
-  buc__BucOrdersResults -->|contains| usecase__ConfirmProxyOrder
-  buc__BucOrdersResults -->|contains| usecase__EnterProxyOrder
-  buc__BucOrdersResults -->|contains| usecase__NotifyCriticalResult
-  buc__BucOrdersResults -->|contains| usecase__PlaceLabOrder
-  buc__BucOrdersResults -->|contains| usecase__PrintSpecimenLabel
-  buc__BucOrdersResults -->|contains| usecase__ReceiveLabResult
-  buc__BucOrdersResults -->|contains| usecase__RegisterPerformedProcedure
-  buc__BucOrdersResults -->|contains| usecase__ReviewLabResult
   buc__BucPatientOnboarding -->|belongs| business__PatientAccess
   buc__BucPatientOnboarding -->|contains| flow__OnboardingFlow
   buc__BucPatientOnboarding -->|contains| flow__PatientMaintenanceFlow
@@ -501,9 +420,6 @@ flowchart LR
   condition__CopayCappedAtLimit -.->|combines| entity__Appointment
   condition__CopayCappedAtLimit -.->|combines| variation__BurdenRatio
   condition__CopayCappedAtLimit -.->|combines| variation__LimitCategory
-  condition__OrderConfirmedByPhysician -.->|applies_to| usecase__CollectSpecimen
-  condition__OrderConfirmedByPhysician -.->|combines| entity__ClinicalOrder
-  %% derived condition__OrderConfirmedByPhysician -> entity__ClinicalOrder from holds
   condition__TransferNotPossible -.->|applies_to| usecase__RecordClaimReturn
   condition__TransferNotPossible -.->|combines| entity__ClaimStatement
   condition__TransferNotPossible -.->|combines| variation__PayerChange
@@ -521,7 +437,6 @@ flowchart LR
   entity__Charge ---|N:1| entity__Encounter
   entity__ClaimStatement ---|N:1| entity__InsurancePolicy
   entity__ClaimStatement ---|N:1| entity__PatientAccount
-  entity__ClinicalOrder ---|N:1| entity__Encounter
   entity__ConsentRecord ---|N:1| entity__PatientAccount
   entity__Diagnosis ---|N:1| entity__Encounter
   entity__EligibilityCheck ---|N:1| entity__InsurancePolicy
@@ -529,7 +444,6 @@ flowchart LR
   entity__Encounter ---|N:1| entity__PatientAccount
   entity__InsurancePolicy ---|N:1| entity__PatientAccount
   entity__IntakePacket ---|N:1| entity__PatientAccount
-  entity__LabResult ---|1:1| entity__ClinicalOrder
   entity__Notification ---|N:1| entity__PatientAccount
   entity__PatientMessage ---|N:1| entity__PatientAccount
   entity__PatientProfile ---|1:1| entity__PatientAccount
@@ -555,17 +469,12 @@ flowchart LR
   event__EvClaimStatementsSubmitted -.->|triggers| extsystem__ClaimsReviewOrganization
   event__EvClaimTransferred -.->|triggers| usecase__ReviewClaimTransfer
   event__EvClinicalOrderReviewed -.->|triggers| buc__BucFollowupCare
-  event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyCriticalResult
   event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyPatientResult
+  event__EvConsultationCompleted -.->|triggers| buc__BucVisitPayment
   event__EvEncounterSigned -.->|triggers| buc__BucBillingClaims
   event__EvEncounterSigned -.->|triggers| buc__BucFollowupCare
-  event__EvEncounterSigned -.->|triggers| buc__BucOrdersResults
-  event__EvEncounterSigned -.->|triggers| buc__BucVisitPayment
-  event__EvEncounterSigned -.->|triggers| usecase__CompleteConsultation
   event__EvEncounterSigned -.->|triggers| usecase__CreateCarePlan
   event__EvEncounterSigned -.->|triggers| usecase__CreateCharge
-  event__EvEncounterSigned -.->|triggers| usecase__PlaceLabOrder
-  event__EvLabResultReceived -.->|triggers| usecase__ReceiveLabResult
   event__EvPaymentSettled -.->|triggers| usecase__SettleAtKiosk
   event__EvRemittance -.->|triggers| usecase__PostPayment
   extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimAccepted
@@ -574,7 +483,6 @@ flowchart LR
   extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimReturned
   extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimTransferred
   extsystem__ClaimsReviewOrganization -.->|raises| event__EvRemittance
-  extsystem__OutsourcedLabSystem -.->|raises| event__EvLabResultReceived
   extsystem__PaymentGateway -.->|raises| event__EvPaymentSettled
   field__ChargeCodeField -.->|maps_field| entity__Charge
   field__KioskReferenceField -.->|maps_field| entity__PaymentTransaction
@@ -602,16 +510,6 @@ flowchart LR
   flow__FollowupFlow -->|contains| step__ResponseStep
   flow__FollowupFlow -->|contains| step__ResultNoticeStep
   flow__FollowupFlow -->|contains| step__RevisitStep
-  flow__LabOrderFlow -->|contains| step__CollectStep
-  flow__LabOrderFlow -->|contains| step__ConfirmOrderStep
-  flow__LabOrderFlow -->|contains| step__CostStep
-  flow__LabOrderFlow -->|contains| step__CriticalStep
-  flow__LabOrderFlow -->|contains| step__LabOrderStep
-  flow__LabOrderFlow -->|contains| step__LabResultStep
-  flow__LabOrderFlow -->|contains| step__LabelStep
-  flow__LabOrderFlow -->|contains| step__OrderCancelStep
-  flow__LabOrderFlow -->|contains| step__ProxyOrderStep
-  flow__LabOrderFlow -->|contains| step__ResultReviewStep
   flow__OnboardingFlow -->|contains| step__ConsentStep
   flow__OnboardingFlow -->|contains| step__InsuranceStep
   flow__OnboardingFlow -->|contains| step__IntakeAnswerStep
@@ -651,19 +549,12 @@ flowchart LR
   step__CarePlanStep -->|branches| step__ResultNoticeStep
   step__CarePlanStep -.->|covers| usecase__CreateCarePlan
   step__CarePlanStep -->|precedes| step__FollowUpMsgStep
-  step__CollectStep -.->|covers| usecase__CollectSpecimen
-  step__CollectStep -->|precedes| step__CostStep
   step__CompleteStep -.->|covers| usecase__CompleteConsultation
-  step__ConfirmOrderStep -.->|covers| usecase__ConfirmProxyOrder
-  step__ConfirmOrderStep -->|precedes| step__LabelStep
   step__ConsentStep -.->|covers| usecase__CaptureConsent
   step__ConsentStep -->|precedes| step__IntakeSendStep
-  step__CostStep -.->|covers| usecase__RegisterPerformedProcedure
-  step__CostStep -->|precedes| step__LabResultStep
   step__CreateStatementStep -.->|covers| timer__MonthlyClaimCreation
   step__CreateStatementStep -.->|covers| usecase__GenerateClaimStatement
   step__CreateStatementStep -->|precedes| step__InspectStep
-  step__CriticalStep -.->|covers| usecase__NotifyCriticalResult
   step__DemographicsStep -.->|covers| usecase__UpdateDemographics
   step__FollowUpMsgStep -.->|covers| usecase__SendFollowUpMessage
   step__FollowUpMsgStep -->|precedes| step__ResponseStep
@@ -685,15 +576,6 @@ flowchart LR
   step__KioskStep -.->|covers| event__EvPaymentSettled
   step__KioskStep -.->|covers| usecase__SettleAtKiosk
   step__KioskStep -->|precedes| step__ReceiptStep
-  step__LabOrderStep -->|branches| step__ProxyOrderStep
-  step__LabOrderStep -.->|covers| usecase__PlaceLabOrder
-  step__LabOrderStep -.->|excepts| step__OrderCancelStep
-  step__LabOrderStep -->|precedes| step__LabelStep
-  step__LabResultStep -.->|covers| event__EvLabResultReceived
-  step__LabResultStep -.->|covers| usecase__ReceiveLabResult
-  step__LabResultStep -->|precedes| step__ResultReviewStep
-  step__LabelStep -.->|covers| usecase__PrintSpecimenLabel
-  step__LabelStep -->|precedes| step__CollectStep
   step__MaintainSearchStep -->|branches| step__ArchiveStep
   step__MaintainSearchStep -->|branches| step__MergeStep
   step__MaintainSearchStep -.->|covers| usecase__SearchPatient
@@ -703,11 +585,8 @@ flowchart LR
   step__NewPatientSearchStep -->|precedes| step__RegisterStep
   step__OpenStep -.->|covers| usecase__OpenEncounter
   step__OpenStep -->|precedes| step__VitalsStep
-  step__OrderCancelStep -.->|covers| usecase__CancelClinicalOrder
   step__PaidStep -.->|covers| usecase__PostPayment
   step__PlanCloseStep -.->|covers| usecase__CloseCarePlan
-  step__ProxyOrderStep -.->|covers| usecase__EnterProxyOrder
-  step__ProxyOrderStep -->|precedes| step__ConfirmOrderStep
   step__ReceiptErrorStep -.->|covers| timer__ErrorResendWindow
   step__ReceiptErrorStep -.->|covers| usecase__RecordReceiptError
   step__ReceiptErrorStep -.->|covers| usecase__ResendErroredStatement
@@ -721,8 +600,6 @@ flowchart LR
   step__ResponseStep -->|precedes| step__RevisitStep
   step__ResultNoticeStep -.->|covers| usecase__NotifyPatientResult
   step__ResultNoticeStep -->|precedes| step__ResponseStep
-  step__ResultReviewStep -->|branches| step__CriticalStep
-  step__ResultReviewStep -.->|covers| usecase__ReviewLabResult
   step__ReturnStep -.->|covers| usecase__CorrectReturnedStatement
   step__ReturnStep -.->|covers| usecase__RecordClaimReturn
   step__ReturnStep -->|repeats| step__InspectStep
@@ -773,11 +650,6 @@ flowchart LR
   usecase__CallPatientForPayment -.->|displays| screen__PaymentWindowScreen
   usecase__CallPatientForPayment -.->|reads| entity__Appointment
   usecase__CallPatientForPayment -.->|requires_medium| medium__AccountsWindow
-  usecase__CancelClinicalOrder -.->|displays| screen__OrderEntryScreen
-  usecase__CancelClinicalOrder -.->|requires_medium| medium__ClinicalWorkstation
-  usecase__CancelClinicalOrder -.->|requires_permission| permission__ClinicalOrderWrite
-  usecase__CancelClinicalOrder -.->|transitions ClinicalOrder.status clordered->clcancelled| state__ClinicalOrder_clcancelled
-  usecase__CancelClinicalOrder -.->|updates| entity__ClinicalOrder
   usecase__CaptureConsent -.->|displays| screen__ConsentScreen
   usecase__CaptureConsent -.->|invokes| api__ConsentApi
   usecase__CaptureConsent -.->|requires_medium| medium__PatientMobile
@@ -787,13 +659,9 @@ flowchart LR
   usecase__CloseCarePlan -.->|requires_permission| permission__FollowUpManage
   usecase__CloseCarePlan -.->|transitions CarePlan.status caremonitoring->careclosed| state__CarePlan_careclosed
   usecase__CloseCarePlan -.->|updates| entity__CarePlan
-  usecase__CollectSpecimen -.->|displays| screen__SpecimenScreen
-  usecase__CollectSpecimen -.->|invokes| api__CollectSpecimenApi
-  usecase__CollectSpecimen -.->|requires_medium| medium__NurseStation
-  usecase__CollectSpecimen -.->|requires_permission| permission__ClinicalOrderWrite
-  usecase__CollectSpecimen -.->|transitions ClinicalOrder.status clordered->clcollected| state__ClinicalOrder_clcollected
   usecase__CompleteConsultation -.->|displays| screen__EncounterWorkspaceScreen
   usecase__CompleteConsultation -.->|invokes| api__CompleteConsultationApi
+  usecase__CompleteConsultation -.->|raises| event__EvConsultationCompleted
   usecase__CompleteConsultation -.->|requires_medium| medium__NurseStation
   usecase__CompleteConsultation -.->|requires_permission| permission__EncounterOpen
   usecase__CompleteConsultation -.->|transitions Appointment.status apptinconsult->apptawaitingcalc| state__Appointment_apptawaitingcalc
@@ -802,11 +670,6 @@ flowchart LR
   usecase__CompleteIntakeForms -.->|requires_permission| permission__ConsentCapture
   usecase__CompleteIntakeForms -.->|transitions IntakePacket.status intakesent->intakecompleted| state__IntakePacket_intakecompleted
   usecase__CompleteIntakeForms -.->|updates| entity__IntakePacket
-  usecase__ConfirmProxyOrder -.->|displays| screen__OrderEntryScreen
-  usecase__ConfirmProxyOrder -.->|invokes| api__ConfirmOrderApi
-  usecase__ConfirmProxyOrder -.->|requires_medium| medium__ClinicalWorkstation
-  usecase__ConfirmProxyOrder -.->|requires_permission| permission__ClinicalOrderWrite
-  usecase__ConfirmProxyOrder -.->|transitions ClinicalOrder.status clordered->clordered| state__ClinicalOrder_clordered
   usecase__CorrectReturnedStatement -.->|displays| screen__ClaimScreen
   usecase__CorrectReturnedStatement -.->|invokes| api__ClaimEditApi
   usecase__CorrectReturnedStatement -.->|requires_medium| medium__BillingWorkstation
@@ -824,10 +687,6 @@ flowchart LR
   usecase__DocumentAssessment -.->|requires_medium| medium__ClinicalWorkstation
   usecase__DocumentAssessment -.->|requires_permission| permission__ClinicalDocument
   usecase__DocumentAssessment -.->|transitions Encounter.status encopen->encdocumented| state__Encounter_encdocumented
-  usecase__EnterProxyOrder -.->|displays| screen__OrderEntryScreen
-  usecase__EnterProxyOrder -.->|invokes| api__ProxyOrderApi
-  usecase__EnterProxyOrder -.->|requires_medium| medium__ClinicalWorkstation
-  usecase__EnterProxyOrder -.->|requires_permission| permission__ProxyOrderEntry
   usecase__ExpireIntakeForms -.->|displays| screen__IntakePortalScreen
   usecase__ExpireIntakeForms -.->|requires_medium| medium__FrontDeskTerminal
   usecase__ExpireIntakeForms -.->|requires_permission| permission__IntakeManage
@@ -861,11 +720,6 @@ flowchart LR
   usecase__MergeDuplicatePatient -.->|requires_permission| permission__PatientProfileWrite
   usecase__MergeDuplicatePatient -.->|transitions PatientAccount.status patientactive->patientmerged| state__PatientAccount_patientmerged
   usecase__MergeDuplicatePatient -.->|updates| entity__PatientAccount
-  usecase__NotifyCriticalResult -.->|displays| screen__CriticalNoticeScreen
-  usecase__NotifyCriticalResult -.->|invokes| api__CriticalNoticeApi
-  usecase__NotifyCriticalResult -.->|requires_medium| medium__ClinicalWorkstation
-  usecase__NotifyCriticalResult -.->|requires_permission| permission__LabResultManage
-  usecase__NotifyCriticalResult -.->|requires_permission| permission__PatientMessageSend
   usecase__NotifyPatientResult -.->|displays| screen__PatientMessageScreen
   usecase__NotifyPatientResult -.->|invokes| api__NotifyPatientResultApi
   usecase__NotifyPatientResult -.->|requires_medium| medium__CareCoordinationConsole
@@ -875,10 +729,6 @@ flowchart LR
   usecase__OpenEncounter -.->|requires_medium| medium__NurseStation
   usecase__OpenEncounter -.->|requires_permission| permission__EncounterOpen
   usecase__OpenEncounter -.->|transitions Appointment.status apptcheckedin->apptinconsult| state__Appointment_apptinconsult
-  usecase__PlaceLabOrder -.->|displays| screen__OrderEntryScreen
-  usecase__PlaceLabOrder -.->|invokes| api__OrderEntryApi
-  usecase__PlaceLabOrder -.->|requires_medium| medium__ClinicalWorkstation
-  usecase__PlaceLabOrder -.->|requires_permission| permission__ClinicalOrderWrite
   usecase__PostPayment -.->|displays| screen__PaymentPostingScreen
   usecase__PostPayment -.->|invokes| api__PaymentPostApi
   usecase__PostPayment -.->|requires_medium| medium__BillingWorkstation
@@ -886,20 +736,11 @@ flowchart LR
   usecase__PostPayment -.->|transitions ClaimStatement.status stmtassessed->stmtpaid| state__ClaimStatement_stmtpaid
   usecase__PostPayment -.->|transitions ClaimStatement.status stmtrereview->stmtpaid| state__ClaimStatement_stmtpaid
   usecase__PostPayment -.->|transitions ClaimStatement.status stmtunderreview->stmtpaid| state__ClaimStatement_stmtpaid
-  usecase__PrintSpecimenLabel -.->|displays| screen__SpecimenScreen
-  usecase__PrintSpecimenLabel -.->|reads| entity__ClinicalOrder
-  usecase__PrintSpecimenLabel -.->|requires_medium| medium__NurseStation
-  usecase__PrintSpecimenLabel -.->|requires_permission| permission__ClinicalOrderWrite
   usecase__ReceiveClaimAccepted -.->|displays| screen__ClaimScreen
   usecase__ReceiveClaimAccepted -.->|invokes| api__ClaimResultApi
   usecase__ReceiveClaimAccepted -.->|requires_medium| medium__OnlineClaimTerminal
   usecase__ReceiveClaimAccepted -.->|requires_permission| permission__BillingClaimWrite
   usecase__ReceiveClaimAccepted -.->|transitions ClaimStatement.status stmtsubmitted->stmtunderreview| state__ClaimStatement_stmtunderreview
-  usecase__ReceiveLabResult -.->|displays| screen__ResultReviewScreen
-  usecase__ReceiveLabResult -.->|invokes| api__ReceiveLabResultApi
-  usecase__ReceiveLabResult -.->|requires_medium| medium__NurseStation
-  usecase__ReceiveLabResult -.->|requires_permission| permission__LabResultManage
-  usecase__ReceiveLabResult -.->|transitions ClinicalOrder.status clcollected->clresulted| state__ClinicalOrder_clresulted
   usecase__ReconcileBalance -.->|displays| screen__BalanceScreen
   usecase__ReconcileBalance -.->|invokes| api__BalanceApi
   usecase__ReconcileBalance -.->|requires_medium| medium__BillingWorkstation
@@ -927,10 +768,6 @@ flowchart LR
   usecase__RegisterPatient -.->|invokes| api__RegisterPatientApi
   usecase__RegisterPatient -.->|requires_medium| medium__FrontDeskTerminal
   usecase__RegisterPatient -.->|requires_permission| permission__PatientProfileWrite
-  usecase__RegisterPerformedProcedure -.->|displays| screen__SpecimenScreen
-  usecase__RegisterPerformedProcedure -.->|invokes| api__PerformedProcedureApi
-  usecase__RegisterPerformedProcedure -.->|requires_medium| medium__NurseStation
-  usecase__RegisterPerformedProcedure -.->|requires_permission| permission__ClinicalOrderWrite
   usecase__ReleaseHeldStatement -.->|displays| screen__ClaimScreen
   usecase__ReleaseHeldStatement -.->|invokes| api__ClaimEditApi
   usecase__ReleaseHeldStatement -.->|requires_medium| medium__BillingWorkstation
@@ -950,12 +787,6 @@ flowchart LR
   usecase__ReviewClaimTransfer -.->|reads| entity__ClaimStatement
   usecase__ReviewClaimTransfer -.->|requires_medium| medium__OnlineClaimTerminal
   usecase__ReviewClaimTransfer -.->|requires_permission| permission__BillingClaimWrite
-  usecase__ReviewLabResult -.->|displays| screen__ResultReviewScreen
-  usecase__ReviewLabResult -.->|invokes| api__ResultReviewApi
-  usecase__ReviewLabResult -.->|raises| event__EvClinicalOrderReviewed
-  usecase__ReviewLabResult -.->|requires_medium| medium__ClinicalWorkstation
-  usecase__ReviewLabResult -.->|requires_permission| permission__LabResultManage
-  usecase__ReviewLabResult -.->|transitions ClinicalOrder.status clresulted->clreviewed| state__ClinicalOrder_clreviewed
   usecase__ReviewPatientResponse -.->|displays| screen__CarePlanScreen
   usecase__ReviewPatientResponse -.->|requires_medium| medium__CareCoordinationConsole
   usecase__ReviewPatientResponse -.->|requires_permission| permission__FollowUpManage

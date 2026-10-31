@@ -93,13 +93,15 @@ creates(IssueReferralLetterApi, ReferralLetter)
 reads(IssueReferralLetterApi, Encounter)
 sets(IssueReferralLetter, ReferralLetter, direction == outbound)
 
+// 診察終了 is the physician's own step after signing, and its event, not the signature, starts
+// 計算・会計: the visit waits for 会計計算 only once the consultation is over.
 displays(CompleteConsultation, EncounterWorkspaceScreen)
 invokes(CompleteConsultation, CompleteConsultationApi)
 updates(CompleteConsultationApi, Appointment)
 updates(CompleteConsultationApi, Room)
 transitions(Appointment.status, CompleteConsultation, apptinconsult -> apptawaitingcalc)
 sets(CompleteConsultation, Room, occupancy_status == roomcleaning)
-triggers(EvEncounterSigned, CompleteConsultation)
+raises(CompleteConsultation, EvConsultationCompleted)
 
 // Screen fields
 field ReferralDirectionField "紹介の向き" access readonly required true source system

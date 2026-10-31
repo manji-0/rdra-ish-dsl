@@ -22,6 +22,7 @@ flowchart LR
     screen__ReferralLetterScreen["診療情報提供書画面"]:::screen
     screen__VitalsScreen["Vitals Screen"]:::screen
     event__EvAppointmentCheckedIn["Appointment Checked In"]:::event
+    event__EvConsultationCompleted["診察終了"]:::event
     event__EvEncounterSigned["Encounter Signed"]:::event
   end
   subgraph layer_system["システム"]
@@ -48,12 +49,12 @@ flowchart LR
   actor__Nurse -.->|performs| usecase__RecordVitals
   event__EvAppointmentCheckedIn -.->|triggers| extsystem__OnlineEligibilitySystem
   event__EvAppointmentCheckedIn -.->|triggers| usecase__OpenEncounter
-  event__EvEncounterSigned -.->|triggers| usecase__CompleteConsultation
   usecase__AmendEncounter -.->|displays| screen__EncounterWorkspaceScreen
   usecase__AmendEncounter -.->|transitions Encounter.status encsigned->encamended| state__Encounter_encamended
   usecase__AmendEncounter -.->|updates| entity__Encounter
   %% derived usecase__AmendEncounter -> entity__Encounter via api__AmendEncounterApi
   usecase__CompleteConsultation -.->|displays| screen__EncounterWorkspaceScreen
+  usecase__CompleteConsultation -.->|raises| event__EvConsultationCompleted
   usecase__CompleteConsultation -.->|transitions Appointment.status apptinconsult->apptawaitingcalc| state__Appointment_apptawaitingcalc
   usecase__CompleteConsultation -.->|updates| entity__Appointment
   %% derived usecase__CompleteConsultation -> entity__Appointment via api__CompleteConsultationApi

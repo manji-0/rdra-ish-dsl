@@ -42,6 +42,7 @@ flowchart LR
   variation__AuditSeverity["Audit Severity"]:::variation
   variation__BurdenRatio["負担割合"]:::variation
   variation__ChargeKind["診療費の種類"]:::variation
+  variation__ChargeOrigin["コストの発生元"]:::variation
   variation__ConsentType["Consent Type"]:::variation
   variation__LimitCategory["限度額適用区分"]:::variation
   variation__MessageChannel["Message Channel"]:::variation
@@ -65,6 +66,7 @@ flowchart LR
   entity__Charge ---|N:1| entity__ClaimStatement
   entity__Charge ---|N:1| entity__Encounter
   entity__Charge -.->|variation kind| variation__ChargeKind
+  entity__Charge -.->|variation origin| variation__ChargeOrigin
   entity__ClaimStatement ---|N:1| entity__InsurancePolicy
   entity__ClaimStatement ---|N:1| entity__PatientAccount
   entity__ClaimStatement -.->|statemodel| statemodel__ClaimStatement_status

@@ -77,6 +77,12 @@ flowchart LR
   event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyPatientResult
   buc__BucFollowupCare["Coordinate Follow-Up Care"]:::buc
   event__EvClinicalOrderReviewed -.->|triggers| buc__BucFollowupCare
+  event__EvConsultationCompleted["診察終了"]:::event
+  usecase__CompleteConsultation["診察終了"]:::usecase
+  usecase__CompleteConsultation -.->|raises| event__EvConsultationCompleted
+  buc__BucVisitPayment["計算・会計"]:::buc
+  %% desc buc__BucVisitPayment: 診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。
+  event__EvConsultationCompleted -.->|triggers| buc__BucVisitPayment
   event__EvEligibilityChecked["資格確認結果"]:::event
   extsystem__OnlineEligibilitySystem -.->|raises| event__EvEligibilityChecked
   usecase__ReceiveEligibilityInvalid["資格確認結果（無効）の取込"]:::usecase
@@ -88,23 +94,14 @@ flowchart LR
   event__EvEncounterSigned["Encounter Signed"]:::event
   usecase__SignEncounter["Sign Encounter"]:::usecase
   usecase__SignEncounter -.->|raises| event__EvEncounterSigned
-  usecase__CompleteConsultation["診察終了"]:::usecase
-  event__EvEncounterSigned -.->|triggers| usecase__CompleteConsultation
   usecase__CreateCarePlan["Create Care Plan"]:::usecase
   event__EvEncounterSigned -.->|triggers| usecase__CreateCarePlan
   usecase__CreateCharge["コスト情報の登録"]:::usecase
   event__EvEncounterSigned -.->|triggers| usecase__CreateCharge
-  usecase__PlaceLabOrder["Place Lab Order"]:::usecase
-  event__EvEncounterSigned -.->|triggers| usecase__PlaceLabOrder
   buc__BucBillingClaims["レセプト作成・請求"]:::buc
   %% desc buc__BucBillingClaims: 月ごとのレセプトの作成・院内点検・請求と、審査支払機関からの受付不能・返戻・査定・支払への対応。
   event__EvEncounterSigned -.->|triggers| buc__BucBillingClaims
   event__EvEncounterSigned -.->|triggers| buc__BucFollowupCare
-  buc__BucOrdersResults["Manage Orders and Results"]:::buc
-  event__EvEncounterSigned -.->|triggers| buc__BucOrdersResults
-  buc__BucVisitPayment["計算・会計"]:::buc
-  %% desc buc__BucVisitPayment: 診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。
-  event__EvEncounterSigned -.->|triggers| buc__BucVisitPayment
   event__EvLabResultReceived["Lab Result Received"]:::event
   extsystem__OutsourcedLabSystem["外注検査システム"]:::extsystem
   extsystem__OutsourcedLabSystem -.->|raises| event__EvLabResultReceived

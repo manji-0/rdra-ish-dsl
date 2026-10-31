@@ -49,6 +49,14 @@ variation ReferralCategory "紹介の有無" {
   exempt     "紹介状なし初診（救急搬送等の除外）"
 }
 
+// Where a Charge comes from. Each 診療行為 is entered once, at its own source, so the three
+// origins never register the same cost twice.
+variation ChargeOrigin "コストの発生元" {
+  chart       "カルテ（指導・管理料・コメント）"
+  performed   "実施入力（検査・処置）"
+  selectedfee "選定療養費"
+}
+
 variation ChargeKind "診療費の種類" {
   insured           "保険診療"
   // 選定療養: a set amount the patient pays in full (egov-ryotan-kisoku-332M50000100015.txt:114).
@@ -265,6 +273,7 @@ entity Charge "Charge" {
   id:        Int      @pk
   code:      String
   kind:      ChargeKind @default(insured)
+  origin:    ChargeOrigin @default(chart)
   amount:    Money
   posted_at: DateTime @null
   status:    Enum(chargepending, chargeposted, chargevoided) @default(chargepending)
@@ -397,6 +406,7 @@ event EvAppointmentRescheduled "Appointment Rescheduled"
 event EvAppointmentCheckedIn   "Appointment Checked In"
 event EvAppointmentCancelled   "Appointment Cancelled"
 event EvEncounterSigned     "Encounter Signed"
+event EvConsultationCompleted "診察終了"
 event EvClinicalOrderReviewed  "Clinical Result Reviewed"
 event EvPrescriptionDispensed "Prescription Dispensed"
 event EvLabResultReceived "Lab Result Received"
