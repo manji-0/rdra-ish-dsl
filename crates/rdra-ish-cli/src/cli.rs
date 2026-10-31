@@ -115,6 +115,8 @@ pub(crate) enum ListKind {
     /// Business-side input candidates inferred from BUC/use-case CRUD and API paths
     #[value(alias = "actor-inputs")]
     BusinessInputs,
+    /// The published surface (`exposes` and `shares`) as canonical text; takes no `--format`
+    Surface,
 }
 
 #[derive(ValueEnum, Clone, Copy)]
@@ -194,7 +196,7 @@ pub(crate) enum Commands {
     List {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Element kind to list: actor, entity, requirement, adr, adr-impact, nfr, quality, constraint, buc, flow, step, usecase, field, system, api, dto, variation, condition, permission-callables, actor-permission-audit, or business-inputs
+        /// Element kind to list: actor, entity, requirement, adr, adr-impact, nfr, quality, constraint, buc, flow, step, usecase, field, system, api, dto, variation, condition, permission-callables, actor-permission-audit, business-inputs, or surface
         #[arg(long, default_value = "actor")]
         kind: ListKind,
         /// Output format: table, json, csv

@@ -65,6 +65,91 @@ fn a_use_case_spanning_two_groups_is_one_action_per_group_in_tx_order() {
     }
 }
 
+const PUBLISHED_WRITE: &str = r#"
+system Auth "Auth"
+entity Session "Session" { id: Int @pk  status: Enum(active, ended) @default(active) }
+entity SessionView "Session (published)" { id: Int @pk  status: Enum(active, ended) }
+usecase Open "Open"
+usecase Logout "Logout"
+creates(Open, Session)
+creates(Open, SessionView)
+transitions(Session.status, Logout, active -> ended)
+writes(Logout, SessionView)
+sets(Logout, SessionView, status == ended)
+exposes(Auth, SessionView).upsert()
+"#;
+
+#[test]
+fn a_published_write_joins_the_use_cases_one_internal_group_and_leaves_the_lifecycle() {
+    let model = model_from(PUBLISHED_WRITE);
+    let txs = crate::tx::infer_usecase_transactions(&model);
+    let logout = txs
+        .iter()
+        .find(|t| model.use_cases[t.usecase].id == "Logout")
+        .unwrap();
+    let groups: Vec<Vec<String>> = logout
+        .groups()
+        .map(|g| {
+            g.ordered_writes
+                .iter()
+                .map(|w| model.entities[w.entity].id.clone())
+                .collect()
+        })
+        .collect();
+    assert_eq!(groups, vec![vec!["Session", "SessionView"]]);
+    assert!(crate::tx::tx_diagnostics(&model, &txs).is_empty());
+
+    let ts = built(PUBLISHED_WRITE);
+    assert_eq!(action_names(&ts), vec!["Logout", "Open"]);
+    assert_eq!(bound(&ts, "Logout"), vec!["Session"]);
+    let entities: Vec<&str> = ts.entities.iter().map(|e| e.id.as_str()).collect();
+    assert_eq!(entities, vec!["Session"]);
+}
+
+#[test]
+fn a_published_write_through_its_own_api_is_that_apis_group() {
+    let (ast, _) = rdra_ish_syntax::parse(
+        r#"
+system Auth "Auth"
+entity Session "Session" { id: Int @pk }
+entity SessionView "Session (published)" { id: Int @pk }
+usecase Login "Login"
+api SessionApi "Session API" method POST path "/sessions"
+api ViewApi "View API" method PUT path "/session-views"
+contains(Auth, SessionApi)
+contains(Auth, ViewApi)
+invokes(Login, SessionApi)
+invokes(Login, ViewApi)
+creates(SessionApi, Session)
+creates(ViewApi, SessionView)
+exposes(Auth, SessionView).upsert()
+"#,
+    );
+    let (model, diags) = crate::analysis::build_model(&ast);
+    let errors: Vec<String> = diags
+        .iter()
+        .filter(|d| !d.is_warning)
+        .map(|d| d.error.to_string())
+        .collect();
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(
+        errors[0].starts_with("PublishedNotInSourceTx:"),
+        "{}",
+        errors[0]
+    );
+    let txs = crate::tx::infer_usecase_transactions(&model);
+    let groups: Vec<Vec<String>> = txs[0]
+        .groups()
+        .map(|g| {
+            g.ordered_writes
+                .iter()
+                .map(|w| model.entities[w.entity].id.clone())
+                .collect()
+        })
+        .collect();
+    assert_eq!(groups, vec![vec!["Session"], vec!["SessionView"]]);
+}
+
 #[test]
 fn provenance_names_the_use_case_not_the_group_step() {
     let d = derive_src(&split_pay(""));

@@ -87,6 +87,14 @@ actions interleave: in each step the tool picks any enabled action and applies i
   every other action.
   [`cross_order_payment_split`](../samples/formal-verification/cross_order_payment_split.rdra)
   routes `Pay` through two APIs, so `Cancel` runs between `Pay_1` and `Pay_2`.
+- **A published entity is not in the lifecycle, and its write joins the internal
+  change.** An entity published with `exposes(System, E).append()` or `.upsert()` gets no
+  variables and no view. A use case's direct write to it joins the use case's one
+  internal transaction group whether or not a key links them, so `Login` that creates
+  `Session` and the published `LoginRecord` is one action, where two unrelated writes
+  would be `Login_1` and `Login_2`. A write through an API stays in that API's group.
+  With no or several internal groups, or a published write through an API of its own,
+  the owner's `check` reports `PublishedNotInSourceTx` instead.
 - **A use case with no write has no action.**
 
 An action takes one parameter per entity it writes. A `creates` takes the lowest

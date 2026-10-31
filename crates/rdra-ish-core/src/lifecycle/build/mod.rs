@@ -146,7 +146,11 @@ impl<'m> Builder<'m> {
             .filter(|w| w.kind == WriteKind::Creates)
             .map(|w| w.entity)
             .collect();
-        let mut keys: Vec<EntityKey> = model.entities.keys().collect();
+        let mut keys: Vec<EntityKey> = model
+            .entities
+            .keys()
+            .filter(|ek| !model.publication.is_published(*ek))
+            .collect();
         keys.sort_by(|a, b| model.entities[*a].id.cmp(&model.entities[*b].id));
         for (i, &ek) in keys.iter().enumerate() {
             self.ent_of.insert(ek, EntId::at(i));
@@ -431,18 +435,29 @@ impl<'m> Builder<'m> {
             {
                 continue;
             }
-            let entities: Vec<Vec<EntityKey>> = utx
+            let groups: Vec<Vec<UcWrite>> = utx
                 .groups()
-                .map(|g| g.ordered_writes.iter().map(|w| w.entity).collect())
+                .map(|g| {
+                    g.ordered_writes
+                        .iter()
+                        .filter(|w| self.ent_of.contains_key(&w.entity))
+                        .cloned()
+                        .collect()
+                })
+                .filter(|writes: &Vec<UcWrite>| !writes.is_empty())
+                .collect();
+            let entities: Vec<Vec<EntityKey>> = groups
+                .iter()
+                .map(|writes| writes.iter().map(|w| w.entity).collect())
                 .collect();
             let id = &model.use_cases[uc].id;
-            for (g, group) in utx.groups().enumerate() {
+            for (g, writes) in groups.iter().enumerate() {
                 let name = match entities.len() {
                     1 => id.clone(),
                     _ => format!("{id}_{}", g + 1),
                 };
-                self.acting = group.ordered_writes.iter().map(|w| w.entity).collect();
-                let action = self.usecase_action(uc, name, &group.ordered_writes, &entities, g);
+                self.acting = entities[g].clone();
+                let action = self.usecase_action(uc, name, writes, &entities, g);
                 self.acting.clear();
                 self.uc_actions
                     .entry(uc)
@@ -515,7 +530,9 @@ impl<'m> Builder<'m> {
             if ce.origin != uc {
                 continue;
             }
-            let e = self.ent_of[&ce.entity];
+            let Some(&e) = self.ent_of.get(&ce.entity) else {
+                continue;
+            };
             let Some(p) = a.param_of(e) else { continue };
             let Some(&var) = self.col_var.get(&(e, ce.column.clone())) else {
                 continue;
@@ -560,7 +577,9 @@ impl<'m> Builder<'m> {
             if pe.origin != uc {
                 continue;
             }
-            let e = self.ent_of[&pe.entity];
+            let Some(&e) = self.ent_of.get(&pe.entity) else {
+                continue;
+            };
             let (Some(p), Some(&var)) =
                 (a.param_of(e), self.prop_var.get(&(e, pe.prop.axis_key())))
             else {

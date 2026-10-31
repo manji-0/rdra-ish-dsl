@@ -1,0 +1,56 @@
+// The owner side of a cross-model reference: the auth team's model. Another model may
+// reference only what the `exposes` lines at the bottom publish.
+module auth.session
+
+system AuthSystem "Authentication System"
+actor User "User"
+actor Operator "Security operator"
+permission CanLogin "Can log in"
+permission CanRevoke "Can revoke sessions"
+has_permission(User, CanLogin)
+has_permission(Operator, CanRevoke)
+
+buc BucSignIn "Sign in"
+usecase Login "Log in"
+usecase Revoke "Revoke a session"
+contains(BucSignIn, Login)
+contains(BucSignIn, Revoke)
+performs(User, Login)
+performs(Operator, Revoke)
+requires_permission(Login, CanLogin)
+requires_permission(Revoke, CanRevoke)
+
+api SessionApi "Session API" method POST path "/sessions"
+contains(AuthSystem, SessionApi)
+invokes(Login, SessionApi)
+
+// Internal information: no other model can name it.
+entity Session "Session" {
+  id: Int @pk
+  account_id: Int
+  status: Enum(active, revoked) @default(active)
+}
+creates(SessionApi, Session)
+transitions(Session.status, Revoke, active -> revoked)
+
+// Published information: a projection of Session that auth writes in the same transaction
+// as Session and never reads.
+entity SessionView "Session (published)" {
+  session_id: Int @pk
+  account_id: Int
+  status: Enum(active, ended)
+}
+writes(SessionApi, SessionView)
+sets(Login, SessionView, status == active)
+writes(Revoke, SessionView)
+sets(Revoke, SessionView, status == ended)
+
+event EvLoggedIn "Logged in"
+event EvSessionEnded "Session ended"
+raises(Login, EvLoggedIn)
+raises(Revoke, EvSessionEnded)
+outbox(EvLoggedIn)
+outbox(EvSessionEnded)
+
+exposes(AuthSystem, Login)
+exposes(AuthSystem, SessionView).upsert()

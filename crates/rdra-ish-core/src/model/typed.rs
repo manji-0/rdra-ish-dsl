@@ -5,6 +5,7 @@ use super::refs::{
     CoversTarget, DecidesTarget, EntityTouchpoint, NfrOrConstraint, PerformTarget, Raiser,
     TriggerSource, TriggerTarget,
 };
+use super::Exposed;
 
 /// 解析済み述語の型付き表現（discriminated union）。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -137,6 +138,14 @@ pub enum TypedPredicate {
     Decides {
         adr: AdrKey,
         target: DecidesTarget,
+    },
+    Exposes {
+        system: SystemKey,
+        item: Exposed,
+    },
+    Shares {
+        system: SystemKey,
+        entity: EntityKey,
     },
     Transitions {
         entity: EntityKey,

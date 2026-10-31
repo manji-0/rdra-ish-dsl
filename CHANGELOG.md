@@ -4,6 +4,24 @@
 
 ### Added
 
+- An owner model publishes what other models may reference. `exposes(System, UseCase)`
+  with `.caller(actor | system | any)`, `exposes(System, Event)`, and
+  `exposes(System, Entity).append() | .upsert()` publish a use case, an event, and a
+  projection entity; `shares(System, Entity)` lets other models name an internal entity at
+  the cost of a `SharedInternalEntity` warning. `check` enforces the published-entity
+  rules (`PublishedEntityMutated`, `PublishedEntityReadByOwner`,
+  `PublishedEntityKeysInternal`, `PublishedNotInSourceTx`, `InternalEntityExposed`,
+  `PublishedEntityNeverWritten`, `DuplicateExposure`, `SharedEntityAlsoExposed`,
+  `ExposesChainInvalid`, `ExposesCallerInvalid`). A direct write to a published entity
+  joins the use case's one internal transaction, so the lifecycle and the TLA+ export run
+  it in the same action as the internal change (one `Login`, not `Login_1` and `Login_2`),
+  and `SeparateTxInferred` never fires for it; a write through an API stays in that API's
+  transaction. Published entities leave the owner's
+  lifecycle, and a use case exposed with `.caller(system)` or `.caller(any)` is not
+  reported as having no actor. `rdra-ish list <model> --kind surface` prints the
+  published surface as canonical text, sorted by kind and id. A model without `exposes`
+  keeps every output unchanged; the one grammar change is that `.caller(actor)` and
+  `.caller(system)` parse, where `actor` and `system` were keywords only.
 - One project loader in `rdra-ish-core` (`load_project`) now serves the CLI, the LSP, and the
   tests. It looks for an `rdra.toml` manifest above the inputs and parses it, but nothing
   reads it yet. The CLI loads and prints a model without a manifest as before. A malformed

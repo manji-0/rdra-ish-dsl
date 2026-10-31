@@ -187,6 +187,14 @@ fn is_consistency_diag(err: &RdraError) -> bool {
             | RdraError::CrossSystemEntityRelation { .. }
             | RdraError::CoordinationNotCrossSystem { .. }
             | RdraError::CoordinationMissingApi { .. }
+            | RdraError::PublishedEntityMutated { .. }
+            | RdraError::PublishedEntityReadByOwner { .. }
+            | RdraError::PublishedEntityKeysInternal { .. }
+            | RdraError::PublishedNotInSourceTx { .. }
+            | RdraError::InternalEntityExposed { .. }
+            | RdraError::PublishedEntityNeverWritten { .. }
+            | RdraError::SharedInternalEntity { .. }
+            | RdraError::SharedEntityAlsoExposed { .. }
     )
 }
 
@@ -905,6 +913,14 @@ fn relation_degree(model: &SemanticModel) -> HashMap<NodeRef, usize> {
     for event in &model.outbox_events {
         touch(NodeRef::Event(*event));
     }
+    for exposure in &model.publication.exposures {
+        touch(NodeRef::System(exposure.system));
+        touch(exposure.item.target());
+    }
+    for share in &model.publication.shares {
+        touch(NodeRef::System(share.system));
+        touch(NodeRef::Entity(share.entity));
+    }
 
     degree
 }
@@ -1271,6 +1287,29 @@ sets(Place, Order, priority == high)
             .unwrap();
         assert_eq!(issue.severity, LintSeverity::Warning);
         assert!(issue.hint.contains("variation"), "{}", issue.hint);
+    }
+
+    #[test]
+    fn exposes_and_shares_connect_the_system_and_the_element() {
+        let model = model_from(
+            r#"
+system S "S"
+usecase U "U"
+entity Beat "Beat" { id: Int @pk }
+entity Log "Log" { id: Int @pk }
+entity Note "Note" { id: Int @pk }
+creates(U, Beat)
+creates(U, Log)
+exposes(S, Log).append()
+shares(S, Note)
+"#,
+        );
+        let orphans: Vec<String> = collect_findings(&model)
+            .into_iter()
+            .filter(|i| i.rule == "orphan-node")
+            .map(|i| i.subject_id)
+            .collect();
+        assert!(orphans.is_empty(), "{orphans:?}");
     }
 
     #[test]

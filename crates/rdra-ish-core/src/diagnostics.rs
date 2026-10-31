@@ -428,6 +428,58 @@ pub enum RdraError {
         hint: String,
     },
 
+    // ── exposes / shares: the published surface of an owner model ───────────
+    #[error("ExposesChainInvalid: `.{chain}` does not apply to {kind} '{id}'\n  hint: {hint}")]
+    ExposesChainInvalid {
+        chain: String,
+        kind: String,
+        id: String,
+        hint: String,
+    },
+
+    #[error("ExposesCallerInvalid: `.caller({args})` on use case '{usecase}' names no caller kind\n  hint: write `.caller(actor)`, `.caller(system)`, or `.caller(any)`")]
+    ExposesCallerInvalid { usecase: String, args: String },
+
+    #[error("DuplicateExposure: {kind} '{id}' is already exposed\n  hint: one `exposes` line per element; put its chain methods on the first line and delete this one")]
+    DuplicateExposure { kind: String, id: String },
+
+    #[error("PublishedEntityMutated: '{entity}' is published {mode}, so `{predicate}` is not allowed on it\n  hint: {hint}")]
+    PublishedEntityMutated {
+        entity: String,
+        mode: String,
+        predicate: String,
+        hint: String,
+    },
+
+    #[error("PublishedEntityReadByOwner: the owner reads published entity '{entity}' through `{predicate}`; it only writes what it publishes\n  hint: read the internal entity it projects, and write '{entity}' from the use case that changes it")]
+    PublishedEntityReadByOwner { entity: String, predicate: String },
+
+    #[error("PublishedEntityKeysInternal: `relate` joins published entity '{entity}' to internal entity '{other}'\n  hint: a published entity keys only to another published entity; publish '{other}' as well, or drop the relate")]
+    PublishedEntityKeysInternal { entity: String, other: String },
+
+    #[error("PublishedNotInSourceTx: '{usecase}' writes published entity '{entity}' outside the transaction of an internal change\n  hint: a published row is written in the transaction of the internal change it reports; {hint}")]
+    PublishedNotInSourceTx {
+        usecase: String,
+        entity: String,
+        hint: String,
+    },
+
+    #[error("InternalEntityExposed: entity '{entity}' is exposed without a publish mode\n  hint: an internal entity is never exposed; publish a projection instead: `entity {entity}View \"...\" {{ ... }}` written by the owner, then `exposes({system}, {entity}View).upsert()` or `.append()`")]
+    InternalEntityExposed { system: String, entity: String },
+
+    #[error("PublishedEntityNeverWritten: no use case writes published entity '{entity}'\n  hint: add `creates`, `writes`, or `sets` on '{entity}' from the use case whose internal change it reports")]
+    PublishedEntityNeverWritten { entity: String },
+
+    #[error("SharedEntityAlsoExposed: '{system}' shares entity '{entity}', which is already published {mode}\n  hint: an entity has one role; other models reference '{entity}' through its `exposes` line, so delete this `shares` line")]
+    SharedEntityAlsoExposed {
+        system: String,
+        entity: String,
+        mode: String,
+    },
+
+    #[error("SharedInternalEntity: '{system}' shares internal entity '{entity}' with other models\n  hint: every use of '{entity}' in another model is a `DirectEntityReference` warning there; publish a projection with `exposes({system}, ...).upsert()` when you can, then delete this line")]
+    SharedInternalEntity { system: String, entity: String },
+
     #[error("{message}\n  hint: {hint}")]
     LintFinding {
         rule: &'static str,
