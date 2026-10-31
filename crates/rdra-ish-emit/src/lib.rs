@@ -5,6 +5,7 @@ pub mod csv;
 pub mod dbml;
 mod diagram_common;
 pub mod json_schema;
+pub mod markdown;
 pub mod mermaid;
 pub mod openapi;
 pub mod state_pattern;

@@ -77,6 +77,35 @@ fn structured_empty_lists_stay_machine_readable() {
 }
 
 #[test]
+fn a_markdown_list_is_a_table_even_when_empty() {
+    let model = SemanticModel::default();
+
+    let md = list_elements(&model, &ListKind::Api, &ListFormat::Markdown).unwrap();
+
+    assert_eq!(
+        md,
+        "| api_id | api_label | method | path | idempotency | mode | auth_scheme |\n| --- | --- | --- | --- | --- | --- | --- |\n"
+    );
+}
+
+#[test]
+fn a_markdown_list_has_one_row_per_element() {
+    let (ast, parse_errors) = rdra_ish_syntax::parse(
+        r#"
+requirement ReqA "A | B"
+  priority "must"
+"#,
+    );
+    assert!(parse_errors.is_empty(), "{parse_errors:?}");
+    let (model, _) = rdra_ish_core::build_model(&ast);
+
+    let md = list_elements(&model, &ListKind::Requirement, &ListFormat::Markdown).unwrap();
+
+    assert!(md.starts_with("| id | label | priority |"), "{md}");
+    assert!(md.contains("| ReqA | A \\| B | must |"), "{md}");
+}
+
+#[test]
 fn list_api_includes_contract_metadata() {
     use rdra_ish_core::build_model;
     use rdra_ish_syntax::parse;

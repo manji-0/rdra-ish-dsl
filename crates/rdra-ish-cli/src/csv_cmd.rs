@@ -13,12 +13,12 @@ use rdra_ish_emit::{
 };
 use std::fs;
 
-use crate::cli::CsvKind;
+use crate::cli::{CsvFormat, CsvKind};
 use crate::list_output::{note_state_errors, reject_state_errors};
 use crate::load::reject_model_errors;
 use rdra_ish_core::{load_project, Project};
 
-pub fn run_csv(inputs: &[PathBuf], kind: CsvKind, out: PathBuf) -> Result<()> {
+pub fn run_csv(inputs: &[PathBuf], kind: CsvKind, format: CsvFormat, out: PathBuf) -> Result<()> {
     let Project {
         program,
         model,
@@ -59,6 +59,14 @@ pub fn run_csv(inputs: &[PathBuf], kind: CsvKind, out: PathBuf) -> Result<()> {
         CsvKind::BusinessInputs => (
             BusinessInputCsvEmitter.emit(&model, &view)?,
             "business-inputs.csv",
+        ),
+    };
+
+    let (csv_content, ext) = match format {
+        CsvFormat::Csv => (csv_content, ext.to_string()),
+        CsvFormat::Markdown => (
+            rdra_ish_emit::markdown::from_csv(&csv_content)?,
+            ext.replace(".csv", ".md"),
         ),
     };
 

@@ -128,7 +128,12 @@ fn main() -> Result<()> {
             out,
         })?,
 
-        Commands::Csv { inputs, kind, out } => run_csv(&inputs, kind, out)?,
+        Commands::Csv {
+            inputs,
+            kind,
+            format,
+            out,
+        } => run_csv(&inputs, kind, format, out)?,
 
         Commands::List {
             inputs,

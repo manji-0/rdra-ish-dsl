@@ -54,6 +54,10 @@ pub(crate) fn format_rows<const N: usize>(
             }
             Ok(out)
         }
+        ListFormat::Markdown => {
+            let rows: Vec<Vec<String>> = rows.iter().map(|row| row.to_vec()).collect();
+            Ok(rdra_ish_emit::markdown::table(headers, &rows))
+        }
         ListFormat::Csv => {
             let mut out = format!("{}\n", headers.join(","));
             for row in rows {
@@ -130,6 +134,13 @@ pub(crate) fn format_id_label(
                 out.push_str(&format!("{:<width$}  {}\n", id, label, width = id_w));
             }
             Ok(out)
+        }
+        ListFormat::Markdown => {
+            let rows: Vec<Vec<String>> = items
+                .iter()
+                .map(|(id, label)| vec![id.to_string(), label.to_string()])
+                .collect();
+            Ok(rdra_ish_emit::markdown::table(&["id", "label"], &rows))
         }
         ListFormat::Csv => {
             let mut out = String::from("id,label\n");

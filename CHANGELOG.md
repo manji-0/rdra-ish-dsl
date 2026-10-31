@@ -4,6 +4,10 @@
 
 ### Added
 
+- `list --format markdown`, `lint --format markdown`, and `csv --format markdown` write a
+  Markdown table with the CSV columns, so a requirement list, a CRUD matrix, or a permission
+  audit pastes into a design doc or a PRD as it is. `rdra_ish_emit::markdown` renders the
+  table for every command.
 - A condition guard may say that no related row, or some related row, matches:
   `holds(NoActiveAssignment, ClientCertificate.status == active).none(TerminalCertAssignment.status == active)`
   allows `Revoke` only while no linked assignment is active, and `.has(...)` requires one.

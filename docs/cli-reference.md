@@ -240,7 +240,7 @@ Lint warnings do not fail the command. Existing parse/model errors are emitted a
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--format` | `table` \| `json` \| `csv` | `table` | Output format. |
+| `--format` | `table` \| `json` \| `csv` \| `markdown` | `table` | Output format. `markdown` is a Markdown table with the CSV columns. |
 
 ---
 
@@ -716,16 +716,17 @@ The header grammar is in
 Generate CSV output.
 
 ```
-rdra-ish csv <INPUTS...> [--kind <KIND>] [-o <OUT>]
+rdra-ish csv <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [-o <OUT>]
 ```
 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--kind` | `actor` \| `entity` \| `matrix` \| `api` \| `api-matrix` \| `screen-constraints` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` | `entity` | CSV kind. `actor` = actor list; `entity` = entity/column list; `matrix` = use-case × entity CRUD matrix; `api` = API contract list including method/path/idempotency/mode/auth; `api-matrix` = API × entity CRUD matrix; `screen-constraints` = screen × UC/API permission/medium paths; `permission-callables` = permission × callable UC/API list derived from `requires_permission`, including `UseCase->Api` paths for API-level requirements; `actor-permission-audit` = actor × permission assignment audit inferred from UC/API requirements; `business-inputs` = Actor x inferred input field x UseCase rows derived from C/U/W paths. |
+| `--format` | `csv` \| `markdown` | `csv` | `markdown` writes the same rows as a Markdown table, to paste into a design doc or a PRD, with the extension `.<kind>.md`. A `\|` in a cell is escaped and a line break becomes `<br>`. |
 | `-o`, `--out` | path | `out` | Output file path. A path with an extension is used as is (`-o x.dat` writes `x.dat`). Otherwise `.<kind>.csv` is appended to the path: `-o out` (the default) writes `out.matrix.csv` for `--kind matrix` and `out.entity.csv` for `--kind entity`, and `-o foo` writes `foo.matrix.csv`. |
 
-The command writes the CSV to the output path and prints `wrote <path>`.
+The command writes the CSV, or the Markdown table, to the output path and prints `wrote <path>`.
 
 ---
 
@@ -907,13 +908,13 @@ rdra-ish list <INPUTS...> [--kind <KIND>] [--format <FORMAT>]
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--kind` | `actor` \| `entity` \| `requirement` \| `adr` \| `adr-impact` \| `nfr` \| `quality` \| `constraint` \| `buc` \| `flow` \| `step` \| `usecase` \| `field` \| `system` \| `api` \| `dto` \| `variation` \| `condition` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` \| `surface` | `actor` | The element kind to list. `actor` / `quality` / `buc` / `flow` / `step` / `system` / `variation` list id+label; `usecase` lists UC preconditions, guards, postconditions, alternatives, errors, and description; `requirement` lists requirement metadata; `adr` lists decision metadata plus impacted targets from `decides`; `adr-impact` lists one row per ADR-target pair; `nfr` and `constraint` list non-functional metadata; `field` lists screen-field metadata plus Entity.column mappings; `api` lists API contract metadata; `dto` lists DTO fields; `condition` lists the `holds` body, the variations and state models it combines (derived from the body, or from `combines` when there is none), and the targets of `applies_to`; `entity` lists each column with type, PK/unique/index/FK flags, FK optionality/actions, check constraints, soft-delete/history/tenant markers, and derived expressions; `permission-callables` lists each permission with callable use case/API ids and API-level `UseCase->Api` paths derived from `requires_permission`; `actor-permission-audit` lists inferred actor-side assignment gaps; `business-inputs` lists inferred actor-entered fields; `surface` prints the published surface (`exposes` and `shares`) as canonical text. |
-| `--format` | `table` \| `json` \| `csv` | `table` | Output format. `--kind surface` has the canonical text only, and any other `--format` exits `2`. |
+| `--format` | `table` \| `json` \| `csv` \| `markdown` | `table` | Output format. `markdown` is a Markdown table with the CSV columns, to paste into a design doc or a PRD. `--kind surface` has the canonical text only, and any other `--format` exits `2`. |
 
 Output is written to stdout.
 
 For `--format table`, an empty result is explicit rather than silent, for example
 `No APIs found.`, except for `--kind surface` (see below). CSV still prints only the
-header row and JSON prints `[]`.
+header row, Markdown prints the header row and its separator, and JSON prints `[]`.
 
 ### Surface text
 

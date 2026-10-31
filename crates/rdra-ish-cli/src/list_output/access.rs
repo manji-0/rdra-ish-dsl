@@ -8,7 +8,7 @@ use rdra_ish_core::{
 
 use crate::cli::ListFormat;
 
-use super::render::{bool_cell, csv_field, format_rows};
+use super::render::{bool_cell, format_rows};
 
 pub(crate) fn format_business_inputs(
     model: &rdra_ish_core::SemanticModel,
@@ -86,64 +86,7 @@ pub(crate) fn format_permission_callables(
         })
         .collect();
 
-    match format {
-        ListFormat::Table => {
-            if rows.is_empty() {
-                return Ok(String::from("No permissions found.\n"));
-            }
-            let mut col_widths: Vec<usize> = headers.iter().map(|h| h.len()).collect();
-            for row in &rows {
-                for (i, cell) in row.iter().enumerate() {
-                    col_widths[i] = col_widths[i].max(cell.chars().count());
-                }
-            }
-            let mut out = String::new();
-            let header_line: Vec<String> = headers
-                .iter()
-                .enumerate()
-                .map(|(i, h)| format!("{:<width$}", h.to_uppercase(), width = col_widths[i]))
-                .collect();
-            out.push_str(&header_line.join("  "));
-            out.push('\n');
-            let sep_line: Vec<String> = col_widths.iter().map(|&w| "\u{2500}".repeat(w)).collect();
-            out.push_str(&sep_line.join("  "));
-            out.push('\n');
-            for row in &rows {
-                let row_line: Vec<String> = row
-                    .iter()
-                    .enumerate()
-                    .map(|(i, cell)| format!("{:<width$}", cell, width = col_widths[i]))
-                    .collect();
-                out.push_str(&row_line.join("  "));
-                out.push('\n');
-            }
-            Ok(out)
-        }
-        ListFormat::Csv => {
-            let mut out = format!("{}\n", headers.join(","));
-            for row in &rows {
-                let cells: Vec<String> = row.iter().map(|c| csv_field(c)).collect();
-                out.push_str(&format!("{}\n", cells.join(",")));
-            }
-            Ok(out)
-        }
-        ListFormat::Json => {
-            let entries: Vec<String> = rows
-                .iter()
-                .map(|row| {
-                    format!(
-                        "{{\"permission_id\":{},\"permission_label\":{},\"usecase_ids\":{},\"api_ids\":{},\"usecase_api_paths\":{}}}",
-                        serde_json::to_string(&row[0]).unwrap(),
-                        serde_json::to_string(&row[1]).unwrap(),
-                        serde_json::to_string(&row[2]).unwrap(),
-                        serde_json::to_string(&row[3]).unwrap(),
-                        serde_json::to_string(&row[4]).unwrap(),
-                    )
-                })
-                .collect();
-            Ok(format!("[{}]\n", entries.join(",")))
-        }
-    }
+    format_rows(&headers, &rows, format, "permissions")
 }
 
 pub(crate) fn format_actor_permission_audit(
@@ -181,68 +124,7 @@ pub(crate) fn format_actor_permission_audit(
         })
         .collect();
 
-    match format {
-        ListFormat::Table => {
-            if rows.is_empty() {
-                return Ok(String::from("No actor permission audit rows found.\n"));
-            }
-            let mut col_widths: Vec<usize> = headers.iter().map(|h| h.len()).collect();
-            for row in &rows {
-                for (i, cell) in row.iter().enumerate() {
-                    col_widths[i] = col_widths[i].max(cell.chars().count());
-                }
-            }
-            let mut out = String::new();
-            let header_line: Vec<String> = headers
-                .iter()
-                .enumerate()
-                .map(|(i, h)| format!("{:<width$}", h.to_uppercase(), width = col_widths[i]))
-                .collect();
-            out.push_str(&header_line.join("  "));
-            out.push('\n');
-            let sep_line: Vec<String> = col_widths.iter().map(|&w| "\u{2500}".repeat(w)).collect();
-            out.push_str(&sep_line.join("  "));
-            out.push('\n');
-            for row in &rows {
-                let row_line: Vec<String> = row
-                    .iter()
-                    .enumerate()
-                    .map(|(i, cell)| format!("{:<width$}", cell, width = col_widths[i]))
-                    .collect();
-                out.push_str(&row_line.join("  "));
-                out.push('\n');
-            }
-            Ok(out)
-        }
-        ListFormat::Csv => {
-            let mut out = format!("{}\n", headers.join(","));
-            for row in &rows {
-                let cells: Vec<String> = row.iter().map(|c| csv_field(c)).collect();
-                out.push_str(&format!("{}\n", cells.join(",")));
-            }
-            Ok(out)
-        }
-        ListFormat::Json => {
-            let entries: Vec<String> = rows
-                .iter()
-                .map(|row| {
-                    format!(
-                        "{{\"actor_id\":{},\"actor_label\":{},\"permission_id\":{},\"permission_label\":{},\"assigned\":{},\"required\":{},\"status\":{},\"required_usecase_ids\":{},\"required_api_paths\":{}}}",
-                        serde_json::to_string(&row[0]).unwrap(),
-                        serde_json::to_string(&row[1]).unwrap(),
-                        serde_json::to_string(&row[2]).unwrap(),
-                        serde_json::to_string(&row[3]).unwrap(),
-                        row[4],
-                        row[5],
-                        serde_json::to_string(&row[6]).unwrap(),
-                        serde_json::to_string(&row[7]).unwrap(),
-                        serde_json::to_string(&row[8]).unwrap(),
-                    )
-                })
-                .collect();
-            Ok(format!("[{}]\n", entries.join(",")))
-        }
-    }
+    format_rows(&headers, &rows, format, "actor permission audit rows")
 }
 
 fn required_usecase_ids(

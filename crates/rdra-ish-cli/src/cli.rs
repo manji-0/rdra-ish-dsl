@@ -125,11 +125,19 @@ pub(crate) enum NextFormat {
     Json,
 }
 
+#[derive(ValueEnum, Clone, Copy)]
+pub(crate) enum CsvFormat {
+    Csv,
+    Markdown,
+}
+
 #[derive(ValueEnum, Clone)]
 pub(crate) enum ListFormat {
     Table,
     Json,
     Csv,
+    /// A Markdown table, to paste into a design doc or a PRD.
+    Markdown,
 }
 
 #[derive(Parser)]
@@ -189,6 +197,9 @@ pub(crate) enum Commands {
         /// CSV kind: actor, entity, matrix, api, api-matrix, screen-constraints, permission-callables, actor-permission-audit, or business-inputs
         #[arg(long, default_value = "entity")]
         kind: CsvKind,
+        /// Output format: csv, or markdown for a table to paste into a document (writes <out>.md)
+        #[arg(long, default_value = "csv")]
+        format: CsvFormat,
         #[arg(short, long, default_value = "out")]
         out: PathBuf,
     },
@@ -562,7 +573,9 @@ mod tests {
         .unwrap();
 
         match cli.command {
-            Commands::Csv { inputs, kind, out } => {
+            Commands::Csv {
+                inputs, kind, out, ..
+            } => {
                 assert_eq!(inputs, vec![PathBuf::from("sample.rdra")]);
                 assert!(matches!(kind, CsvKind::BusinessInputs));
                 assert_eq!(out, PathBuf::from("inputs.csv"));
