@@ -462,7 +462,7 @@ relation, from which the RDRAGraph views can be derived.
 | `rdra` (default) | RDRAGraph, the whole graph | Every element in its layer and every relation; `--node-kind` / `--edge-kind` narrow it | ADRs; columns (`er`), variation values and condition bodies (`condition`) | Everything reachable from the BUCs, and the states their use cases move between |
 | `context` | システムコンテキスト | The system boundary: one edge per actor, labelled with the BUCs it performs, and one edge per external system and direction, labelled with the events exchanged; every edge derived, no RDRA layer subgraphs | BUCs, use cases, and events as nodes; `%% derived` names the BUCs and events behind each label | The actors and external systems with an edge through the BUCs, and the systems they reach |
 | `requirement` | 要求モデル | A value tree, left to right: goals (with metric and `baseline → target`), the requirements that achieve them, and the BUCs those requirements `motivate`; a requirement with `status "out-of-scope"` is drawn apart in `やらないこと` with dashed edges | NFRs, constraints, qualities, entities, and systems (`list --kind nfr`, `list --kind constraint`), ADRs, and BUCs no requirement motivates; named in `omitted:` | The BUCs and the requirements that motivate them, with those requirements' goals |
-| `business` | ビジネスコンテキスト, ビジネスユースケース | Each business holding its BUCs, and the actors and external systems each BUC involves | Use cases, steps, and events, which `%% derived` names | The named BUCs and their businesses (the RDRA BUC diagram) |
+| `business` | 業務の流れ図 (ビジネスコンテキスト, ビジネスユースケース) | The business flow: each business holding its BUCs, and an edge from a BUC to the BUC it hands off to, labelled with the event that passes it | Actors and external systems (`list --kind buc-roles`); use cases, steps, and events as nodes; a hand-off no event carries | The named BUCs and the BUCs they hand off to or from, with their businesses |
 | `usecase` | UC複合図 | Each use case with its actors, screens and what they show, the entities it reads and writes, its events, external systems, and timers, the conditions on it, and its transitions | BUCs, steps, media, permissions, fields, APIs (their CRUD is folded into the use case), and DTOs | The use cases the BUCs contain, directly or through a step; `--usecase` names use cases instead |
 | `robustness` | ロバストネス図 | The use cases as an ICONIX robustness diagram: actors, boundaries (screens, external systems, timers), controls (APIs, or the use case itself), and the entities each control reads and writes | BUCs, steps, events (named in edge labels), conditions, states, media, permissions, fields, and DTOs | The use cases the BUCs contain, directly or through a step; `--usecase` names use cases instead |
 | `sequence` | シーケンス図 | One use case in order: the actors, screen, controls (APIs, or the use case itself), entities, and external systems that take part, the guards, each control's reads and writes with the `sets` values and the lifecycle move, and the events it raises | BUCs, steps, other use cases (a triggered one is one message to its control), permissions, media, fields, and DTOs | Exactly one use case, named by one `--usecase`; `--buc` is refused |
@@ -540,15 +540,18 @@ The notes below say how each kind reads, in the order of the table.
   named BUCs, the requirements that motivate them, and those requirements' goals. NFRs,
   constraints, qualities, entities, and systems are not drawn: the `omitted:` line names
   them, and `list --kind nfr` and `list --kind constraint` write them as tables.
-- For `--kind business`, actors and external systems sit in システム価値, and each
-  business is `subgraph business__<id>["<label>"]` inside システム外部環境, holding its
-  BUCs. A BUC of no business, or of several, sits beside them, the latter with its
-  `belongs` edges. Only `performs(Actor, Buc)` is declared; every other edge is derived
-  and followed by its `%% derived` line: an actor performing one of the BUC's use cases
-  or steps (`via usecase__<Uc>` or `via step__<Step>`), an external system raising an
-  event that triggers the BUC or one of its use cases (labelled `raises <Event>`), and
-  the BUC triggering an external system through an event one of its use cases raises
-  (labelled `triggers <Event>`). `--buc` draws the named BUCs and their businesses.
+- For `--kind business`, the nodes sit in no layer subgraph, and the header has no
+  `layers:` line. Each business is `subgraph business__<id>["<label>"]` holding its BUCs.
+  A BUC that belongs to several businesses sits in the first by id, with a
+  `-->|belongs|` edge to each other; a BUC of no business sits outside every subgraph. An
+  edge `buc__A -->|<event label>| buc__B` is a hand-off: a use case contained in A (directly
+  or through a step) raises the event, and the event triggers a use case contained in B, or
+  B itself (`triggers(Event, Buc)`). It is drawn once per `(A, B, event)` and followed by
+  `%% derived <A> -> <B> via event__<Id>`. A hand-off with no event on it, such as one
+  BUC feeding the next through data only, has no edge, so a BUC left unconnected is a gap
+  to look at in the model. No actor or external-system node is drawn: `list --kind
+  buc-roles` is the table of who takes part. `--buc` draws the named BUCs, the BUCs they
+  hand off to or from, and their businesses.
 - For `--kind usecase`, the use cases and what they touch sit in the `rdra` layers with
   the `rdra` ids, so a node matches its `rdra` node. An edge `rdra` does not draw is
   derived and followed by its `%% derived` line: an API's CRUD drawn from the use case
@@ -674,7 +677,7 @@ flowchart LR
 
 - The header comes first. `scope` is `whole`, `buc:<id>[,<id>]`, or
   `usecase:<id>[,<id>]`; `model` is the input paths as given. `layers:` (in the kinds
-  with RDRA layers: `rdra`, `business`, `usecase`) and `kinds:`
+  with RDRA layers: `rdra` and `usecase`) and `kinds:`
   list only what the body draws. `omitted:` names the node kinds linked to a drawn node
   that the kind leaves out, and in `rdra` the node and relation kinds a filter hid; it
   says `(none)` when there are none.
@@ -975,7 +978,7 @@ rdra-ish list <INPUTS...> [--kind <KIND>] [--format <FORMAT>]
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `actor` \| `entity` \| `requirement` \| `adr` \| `adr-impact` \| `goal` \| `nfr` \| `quality` \| `constraint` \| `buc` \| `flow` \| `step` \| `usecase` \| `field` \| `system` \| `api` \| `dto` \| `variation` \| `condition` \| `rule` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` \| `surface` | `actor` | The element kind to list. `actor` / `quality` / `buc` / `flow` / `step` / `system` / `variation` list id+label; `usecase` lists UC preconditions, guards, postconditions, alternatives, errors, and description; `requirement` lists requirement metadata; `adr` lists decision metadata plus impacted targets from `decides`; `adr-impact` lists one row per ADR-target pair; `nfr` and `constraint` list non-functional metadata; `field` lists screen-field metadata plus Entity.column mappings; `api` lists API contract metadata; `dto` lists DTO fields; `condition` lists the `holds` body, the variations and state models it combines (derived from the body, or from `combines` when there is none), and the targets of `applies_to`; `rule` lists the business rules as one table with the columns `kind,label,entities,rule,applies_to,site`: every `forbidden`, `invariant`, `required`, `exclusive`, `when(...).none/has(...)` (`quantifier`) and `after(...).assert(...)` with its `.label("...")` (empty when it has none), plus every condition with its label, `rule` is the formula, `applies_to` is the use case an `after` follows or the use cases and APIs a condition guards, and `site` is `file:line`; `entity` lists each column with type, PK/unique/index/FK flags, FK optionality/actions, check constraints, soft-delete/history/tenant markers, and derived expressions; `permission-callables` lists each permission with callable use case/API ids and API-level `UseCase->Api` paths derived from `requires_permission`; `actor-permission-audit` lists inferred actor-side assignment gaps; `business-inputs` lists inferred actor-entered fields; `surface` prints the published surface (`exposes` and `shares`) as canonical text. |
+| `--kind` | `actor` \| `entity` \| `requirement` \| `adr` \| `adr-impact` \| `goal` \| `nfr` \| `quality` \| `constraint` \| `buc` \| `flow` \| `step` \| `usecase` \| `field` \| `system` \| `api` \| `dto` \| `variation` \| `condition` \| `rule` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` \| `buc-roles` \| `surface` | `actor` | The element kind to list. `actor` / `quality` / `buc` / `flow` / `step` / `system` / `variation` list id+label; `usecase` lists UC preconditions, guards, postconditions, alternatives, errors, and description; `requirement` lists requirement metadata; `adr` lists decision metadata plus impacted targets from `decides`; `adr-impact` lists one row per ADR-target pair; `nfr` and `constraint` list non-functional metadata; `field` lists screen-field metadata plus Entity.column mappings; `api` lists API contract metadata; `dto` lists DTO fields; `condition` lists the `holds` body, the variations and state models it combines (derived from the body, or from `combines` when there is none), and the targets of `applies_to`; `rule` lists the business rules as one table with the columns `kind,label,entities,rule,applies_to,site`: every `forbidden`, `invariant`, `required`, `exclusive`, `when(...).none/has(...)` (`quantifier`) and `after(...).assert(...)` with its `.label("...")` (empty when it has none), plus every condition with its label, `rule` is the formula, `applies_to` is the use case an `after` follows or the use cases and APIs a condition guards, and `site` is `file:line`; `entity` lists each column with type, PK/unique/index/FK flags, FK optionality/actions, check constraints, soft-delete/history/tenant markers, and derived expressions; `permission-callables` lists each permission with callable use case/API ids and API-level `UseCase->Api` paths derived from `requires_permission`; `actor-permission-audit` lists inferred actor-side assignment gaps; `business-inputs` lists inferred actor-entered fields; `surface` prints the published surface (`exposes` and `shares`) as canonical text. |
 | `--format` | `table` \| `json` \| `csv` \| `markdown` | `table` | Output format. `markdown` is a Markdown table with the CSV columns, to paste into a design doc or a PRD. `--kind surface` has the canonical text only, and any other `--format` exits `2`. |
 
 Output is written to stdout.
@@ -984,6 +987,17 @@ Output is written to stdout.
 `requirements` holds the ids of the requirements that achieve the goal, joined with `|`.
 `--kind requirement` ends with the columns `rationale,goals,description`; `goals` holds the
 ids of the goals the requirement achieves, joined with `|`.
+
+`--kind buc-roles` is a matrix. The rows are the actors, then the external systems, each
+sorted by id; the columns are `role` (the label), `kind` (`actor` or `extsystem`), and one
+column per BUC, headed by its label. The BUCs run business by business (businesses sorted by
+id, each BUC under the first business it belongs to, BUCs of no business last). A cell says
+how the row takes part in the BUC, and is empty when it does not: `担当` for an actor that
+`performs` the BUC, a use case in it, or a step in it; `イベント送信` for an external system
+that raises an event starting one of the BUC's use cases or the BUC; `イベント受信` for an
+external system that an event raised by one of its use cases reaches. An external system
+that does both has both, joined with `、`. Every `--format` works; `markdown` pastes into a
+PRD or a design document, and the other formats take the BUC labels as column names.
 
 For `--format table`, an empty result is explicit rather than silent, for example
 `No APIs found.`, except for `--kind surface` (see below). CSV still prints only the

@@ -13,9 +13,12 @@ rdra-ish diagram src/ --kind context --buc <BucId> --format mermaid
 # 要求モデル — the value tree: goals, requirements, BUCs
 rdra-ish diagram src/ --kind requirement --format mermaid
 
-# ビジネスコンテキスト / BUC — businesses, their BUCs, and who takes part in each
+# 業務の流れ図 — businesses, their BUCs, and the hand-offs between BUCs
 rdra-ish diagram src/ --kind business --format mermaid
 rdra-ish diagram src/ --kind business --buc <BucId> --format mermaid
+
+# 担当表 — who takes part in each BUC, as a table to paste into a PRD
+rdra-ish list src/ --kind buc-roles --format markdown
 ```
 
 ## Reading the System Context
@@ -51,21 +54,33 @@ rdra-ish diagram src/ --kind business --buc <BucId> --format mermaid
 - A requirement with no goal edge, or a goal with no requirement, is a gap in the tree.
 - `--buc` draws the BUCs, the requirements that motivate them, and their goals.
 
-## Reading the Business Diagram
+## Reading the Business Flow
 
-- Each business is `subgraph business__<id>` holding its BUCs in システム外部環境; actors
-  and external systems sit in システム価値. A BUC of no business, or of several, sits
-  beside them, the latter with its `belongs` edges.
-- Only `performs(Actor, Buc)` is declared. An actor of one of the BUC's use cases or
-  steps, an external system whose event (`raises <Event>`) starts the BUC or one of its
-  use cases, and an external system a use case's event reaches (`triggers <Event>`) are
-  derived, each followed by `%% derived ... via <node>`.
-- `--buc` draws the named BUCs and their businesses: the RDRA BUC diagram.
+- Each business is `subgraph business__<id>` holding its BUCs. A BUC of several businesses
+  sits in the first by id with `-->|belongs|` edges to the others; a BUC of no business
+  sits outside every subgraph.
+- `buc__A -->|<event label>| buc__B` is a hand-off: a use case of A raises the event, and
+  it starts a use case of B (or B itself). `%% derived ... via event__<Id>` names the
+  event. One edge per event.
+- No actor or external-system node is drawn. A hand-off with no event (a BUC feeding the
+  next through data only) has no edge; a BUC with no edge at all is a gap in the model to
+  review, not a layout accident.
+- `--buc` draws the named BUCs, the BUCs they hand off to or from, and their businesses.
+
+## Reading the Role Table
+
+`list --kind buc-roles` has a row per actor, then per external system, and a column per
+BUC, ordered by business. A cell says how the row takes part: `担当` (an actor performs the
+BUC, a use case in it, or a step in it), `イベント送信` (an external system raises an event
+that starts the BUC's use cases), `イベント受信` (an event a use case raises reaches the
+external system). An empty row is an actor or external system that takes part in nothing; an
+empty column is a BUC nobody performs.
 
 ## When To Use
 
 - Start a review with `context` to see the boundary, and `requirement` to see why the
   BUCs exist.
-- Use `business` to check that every BUC belongs to a business and has its actors.
+- Use `business` to check that every BUC belongs to a business and connects to the BUCs
+  around it, and `list --kind buc-roles` to check that every BUC has its actors.
 - Go down to `usecase --buc <BucId>` (`references/usecase-and-flow.md`) for what happens
   inside a BUC.

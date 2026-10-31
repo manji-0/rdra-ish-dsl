@@ -5,12 +5,14 @@ use rdra_ish_core::LintIssue;
 
 use crate::cli::{ListFormat, ListKind};
 mod access;
+mod buc_roles;
 mod elements;
 mod node_ref;
 mod render;
 mod state_findings;
 
 use access::{format_actor_permission_audit, format_business_inputs, format_permission_callables};
+use buc_roles::format_buc_roles;
 pub(crate) use elements::{
     format_adr_impacts, format_adrs, format_apis, format_conditions, format_constraints,
     format_dtos, format_entities, format_fields, format_goals, format_nfrs, format_requirements,
@@ -86,6 +88,7 @@ pub(crate) fn list_elements(
         ListKind::PermissionCallables => format_permission_callables(model, format),
         ListKind::ActorPermissionAudit => format_actor_permission_audit(model, format),
         ListKind::BusinessInputs => format_business_inputs(model, format),
+        ListKind::BucRoles => format_buc_roles(model, format),
         ListKind::Surface => Ok(rdra_ish_core::Surface::of(model).text()),
     }
 }

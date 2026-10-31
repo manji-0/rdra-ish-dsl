@@ -1,13 +1,15 @@
-//! The business context and business use case diagram (`--kind business`): each business with
-//! its BUCs, and the actors and external systems each BUC involves.
+//! The business flow (`--kind business`): each business with its BUCs, and an edge for each
+//! hand-off, a BUC whose use case raises an event that starts another BUC. Who takes part in
+//! each BUC is a table (`list --kind buc-roles`), not part of the diagram.
 
-use super::{buc_members, declare, kinds_by_layer, omitted_linked_kinds, render_edges, EdgeSet};
+use super::{declare, kinds_by_layer, omitted_linked_kinds, render_edges, GraphEdge};
 use crate::diagram_common::{
-    class_defs, contract_id, desc_line, node_id, node_label, quote, Header,
+    class_defs, contract_id, desc_line, edge_label, node_id, node_label, quote, Header,
 };
-use crate::{collect_object_graph_nodes, EmitError, Emitter, ObjectGraphLayer, Scope, View};
+use crate::{collect_object_graph_nodes, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
-use std::collections::HashSet;
+use rdra_ish_core::{buc_handoffs, buc_members};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 pub struct BusinessMermaidEmitter;
 
@@ -24,60 +26,6 @@ fn scoped_bucs(model: &SemanticModel, scope: &Scope) -> Vec<NodeRef> {
     })
 }
 
-/// The edges between `buc` and its actors and external systems: `performs(Actor, Buc)` as
-/// declared, and the rest derived through the BUC's use cases, steps, and events.
-fn buc_edges(model: &SemanticModel, buc: &NodeRef, edges: &mut EdgeSet) {
-    let (usecases, steps) = buc_members(model, std::slice::from_ref(buc));
-    let triggers = |event: &NodeRef, target: &NodeRef| {
-        model
-            .relations
-            .iter()
-            .any(|rel| rel.kind == RelKind::Triggers && rel.from == *event && rel.to == *target)
-    };
-    let event_id = |event: &NodeRef| node_id(model, event).unwrap_or_default().to_string();
-    for rel in &model.relations {
-        match (&rel.kind, &rel.from, &rel.to) {
-            (RelKind::Performs, actor @ NodeRef::Actor(_), target) => {
-                let via = (target != buc).then_some(target);
-                if target == buc || usecases.contains(target) || steps.contains(target) {
-                    edges.add(model, (actor, &rel.kind, "performs".into(), buc), via);
-                }
-            }
-            // An external system raises an event that starts the BUC or one of its use cases.
-            (RelKind::Raises, extsystem @ NodeRef::ExtSystem(_), event) => {
-                let label = format!("raises {}", event_id(event));
-                if triggers(event, buc) {
-                    edges.add(
-                        model,
-                        (extsystem, &rel.kind, label.clone(), buc),
-                        Some(event),
-                    );
-                }
-                for usecase in usecases.iter().filter(|uc| triggers(event, uc)) {
-                    edges.add(
-                        model,
-                        (extsystem, &rel.kind, label.clone(), buc),
-                        Some(usecase),
-                    );
-                }
-            }
-            // A use case of the BUC raises an event delivered to an external system.
-            (RelKind::Raises, usecase, event) if usecases.contains(usecase) => {
-                for target in &model.relations {
-                    if target.kind == RelKind::Triggers
-                        && target.from == *event
-                        && matches!(target.to, NodeRef::ExtSystem(_))
-                    {
-                        let label = format!("triggers {}", event_id(event));
-                        edges.add(model, (buc, &target.kind, label, &target.to), Some(usecase));
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
 /// The businesses a BUC belongs to.
 fn businesses_of(model: &SemanticModel, buc: &NodeRef) -> Vec<NodeRef> {
     model
@@ -90,81 +38,110 @@ fn businesses_of(model: &SemanticModel, buc: &NodeRef) -> Vec<NodeRef> {
 
 impl Emitter for BusinessMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
-        let bucs = scoped_bucs(model, &view.scope);
-        let mut edges = EdgeSet::default();
-        // A BUC that belongs to one business is drawn inside it; one that belongs to several
-        // is drawn beside them with its `belongs` edges.
+        let named = scoped_bucs(model, &view.scope);
+        let handoffs: Vec<_> = buc_handoffs(model)
+            .into_iter()
+            .filter(|h| {
+                matches!(view.scope, Scope::Whole | Scope::UseCases(_))
+                    || named.contains(&NodeRef::Buc(h.from))
+                    || named.contains(&NodeRef::Buc(h.to))
+            })
+            .collect();
+        // A scope draws the named BUCs and the BUCs they hand off to or from.
+        let neighbours: Vec<NodeRef> = handoffs
+            .iter()
+            .flat_map(|h| [NodeRef::Buc(h.from), NodeRef::Buc(h.to)])
+            .collect();
+        let bucs: Vec<NodeRef> = collect_object_graph_nodes(model, &|nr| {
+            named.contains(nr) || (matches!(view.scope, Scope::Bucs(_)) && neighbours.contains(nr))
+        });
+
+        // A BUC sits in the first business (by id) it belongs to; each other one is a
+        // `belongs` edge to that business.
         let mut nested: Vec<(NodeRef, NodeRef)> = Vec::new();
+        let mut belongs: Vec<(NodeRef, NodeRef)> = Vec::new();
         for buc in &bucs {
-            buc_edges(model, buc, &mut edges);
-            match businesses_of(model, buc).as_slice() {
-                [business] => nested.push((business.clone(), buc.clone())),
-                businesses => {
-                    for business in businesses {
-                        edges.add(
-                            model,
-                            (buc, &RelKind::Belongs, "belongs".into(), business),
-                            None,
-                        );
-                    }
-                }
+            let mut businesses = businesses_of(model, buc);
+            businesses.sort_by_key(|b| node_id(model, b).unwrap_or_default().to_string());
+            let mut businesses = businesses.into_iter();
+            if let Some(first) = businesses.next() {
+                nested.push((first, buc.clone()));
             }
+            belongs.extend(businesses.map(|business| (buc.clone(), business)));
         }
         let mut drawn: HashSet<NodeRef> = bucs.iter().cloned().collect();
         drawn.extend(nested.iter().map(|(business, _)| business.clone()));
-        drawn.extend(edges.nodes.iter().cloned());
+        drawn.extend(belongs.iter().map(|(_, business)| business.clone()));
         let nodes = collect_object_graph_nodes(model, &|nr| drawn.contains(nr));
 
         let mut body = String::new();
-        let mut layers = Vec::new();
-        let value: Vec<&NodeRef> = nodes
-            .iter()
-            .filter(|nr| matches!(nr, NodeRef::Actor(_) | NodeRef::ExtSystem(_)))
-            .collect();
-        if !value.is_empty() {
-            layers.push(ObjectGraphLayer::SystemValue);
-            body.push_str(&format!(
-                "  subgraph layer_{}[\"{}\"]\n",
-                ObjectGraphLayer::SystemValue.token(),
-                ObjectGraphLayer::SystemValue.label()
-            ));
-            for node in value {
-                declare(&mut body, model, node, "    ");
+        for business in nodes.iter().filter(|nr| matches!(nr, NodeRef::Business(_))) {
+            let (Some(id), Some(label)) =
+                (contract_id(model, business), node_label(model, business))
+            else {
+                continue;
+            };
+            body.push_str(&format!("  subgraph {id}[\"{}\"]\n", quote(label)));
+            if let Some(desc) = desc_line(model, business, &id) {
+                body.push_str(&format!("    {desc}\n"));
             }
-            body.push_str("  end\n");
-        }
-        if !bucs.is_empty() {
-            let environment = ObjectGraphLayer::ExternalEnvironment;
-            layers.push(environment);
-            body.push_str(&format!(
-                "  subgraph layer_{}[\"{}\"]\n",
-                environment.token(),
-                environment.label()
-            ));
-            for business in nodes.iter().filter(|nr| matches!(nr, NodeRef::Business(_))) {
-                let (Some(id), Some(label)) =
-                    (contract_id(model, business), node_label(model, business))
-                else {
-                    continue;
-                };
-                body.push_str(&format!("    subgraph {id}[\"{}\"]\n", quote(label)));
-                if let Some(desc) = desc_line(model, business, &id) {
-                    body.push_str(&format!("      {desc}\n"));
-                }
-                for (_, buc) in nested.iter().filter(|(b, _)| b == business) {
-                    declare(&mut body, model, buc, "      ");
-                }
-                body.push_str("    end\n");
-            }
-            for buc in bucs
-                .iter()
-                .filter(|buc| !nested.iter().any(|(_, b)| b == *buc))
-            {
+            for (_, buc) in nested.iter().filter(|(b, _)| b == business) {
                 declare(&mut body, model, buc, "    ");
             }
             body.push_str("  end\n");
         }
-        render_edges(&mut body, edges.into_graph_edges());
+        for buc in bucs
+            .iter()
+            .filter(|buc| !nested.iter().any(|(_, b)| b == *buc))
+        {
+            declare(&mut body, model, buc, "  ");
+        }
+
+        // `(from, label, to)` to the events the hand-off passes.
+        let mut flow: BTreeMap<(String, String, String), BTreeSet<String>> = BTreeMap::new();
+        for h in &handoffs {
+            let (from, to, event) = (
+                NodeRef::Buc(h.from),
+                NodeRef::Buc(h.to),
+                NodeRef::Event(h.event),
+            );
+            if let (Some(from), Some(to), Some(via), Some(label)) = (
+                contract_id(model, &from),
+                contract_id(model, &to),
+                contract_id(model, &event),
+                node_label(model, &event),
+            ) {
+                flow.entry((from, edge_label(label), to))
+                    .or_default()
+                    .insert(via);
+            }
+        }
+        let mut edges: Vec<GraphEdge> = flow
+            .into_iter()
+            .map(|((from, label, to), vias)| GraphEdge {
+                from,
+                label,
+                to,
+                arrow: "-->",
+                derived: Some(format!(
+                    "via {}",
+                    vias.into_iter().collect::<Vec<_>>().join(",")
+                )),
+            })
+            .collect();
+        for (buc, business) in &belongs {
+            if let (Some(from), Some(to)) = (contract_id(model, buc), contract_id(model, business))
+            {
+                edges.push(GraphEdge {
+                    from,
+                    label: "belongs".to_string(),
+                    to,
+                    arrow: "-->",
+                    derived: None,
+                });
+            }
+        }
+        render_edges(&mut body, edges);
 
         let kinds = kinds_by_layer(&nodes);
         body.push_str(&class_defs(&kinds));
@@ -178,7 +155,7 @@ impl Emitter for BusinessMermaidEmitter {
         let header = Header {
             diagram: "business",
             view,
-            layers: Some(layers),
+            layers: None,
             omitted: omitted_linked_kinds(model, |nr| anchors.contains(nr), &drawn, &kinds),
             kinds,
         };
@@ -194,35 +171,41 @@ mod tests {
     const SHOP: &str = r#"
 actor Customer "Customer"
 actor Clerk "Clerk"
-actor Courier "Courier"
 extsystem Gateway "Gateway"
 extsystem Carrier "Carrier"
 business Shop "Shop"
 business Logistics "Logistics"
 buc BucPay "Pay"
 buc BucShip "Ship"
+buc BucWrap "Wrap"
 buc BucLoose "Loose"
-flow ShipFlow "Ship flow"
-step Handover "Handover"
+buc BucBook "Book"
 usecase Capture "Capture"
+usecase Refund "Refund"
 usecase Dispatch "Dispatch"
+usecase Reserve "Reserve"
 event Authorized "Authorized"
+event Paid "Paid | settled"
 event Shipped "Shipped"
+event Wrapped "Wrapped"
 belongs(BucPay, Shop)
 belongs(BucShip, Shop)
 belongs(BucShip, Logistics)
+belongs(BucWrap, Logistics)
 performs(Customer, BucPay)
-performs(Clerk, Capture)
-performs(Courier, Handover)
 contains(BucPay, Capture)
+contains(BucPay, Refund)
 contains(BucShip, Dispatch)
-contains(BucShip, ShipFlow)
-contains(ShipFlow, Handover)
-covers(Handover, Dispatch)
+contains(BucBook, Reserve)
 raises(Gateway, Authorized)
 triggers(Authorized, Capture)
+raises(Capture, Paid)
+raises(Refund, Paid)
+triggers(Paid, Dispatch)
 raises(Dispatch, Shipped)
 triggers(Shipped, Carrier)
+raises(Dispatch, Wrapped)
+triggers(Wrapped, BucWrap)
 "#;
 
     fn emit(view: View) -> String {
@@ -232,70 +215,70 @@ triggers(Shipped, Carrier)
     }
 
     #[test]
-    fn an_actor_reaches_a_buc_directly_through_a_use_case_or_through_a_step() {
+    fn a_hand_off_is_an_edge_labelled_with_the_event_and_drawn_once() {
         let result = emit(View::whole());
         assert!(
-            result.contains("  actor__Customer -.->|performs| buc__BucPay\n  buc__BucShip"),
-            "{result}"
-        );
-        assert!(
             result.contains(
-                "  actor__Clerk -.->|performs| buc__BucPay\n  %% derived actor__Clerk -> buc__BucPay via usecase__Capture\n"
+                "  buc__BucPay -->|Paid #124; settled| buc__BucShip\n  %% derived buc__BucPay -> buc__BucShip via event__Paid\n"
             ),
             "{result}"
         );
+        // Raised by two use cases of Pay, still one edge.
+        assert_eq!(result.matches("-->|Paid").count(), 1, "{result}");
+        // An event that triggers the BUC itself is a hand-off too.
         assert!(
-            result.contains(
-                "  actor__Courier -.->|performs| buc__BucShip\n  %% derived actor__Courier -> buc__BucShip via step__Handover\n"
-            ),
+            result.contains("  buc__BucShip -->|Wrapped| buc__BucWrap\n"),
             "{result}"
         );
     }
 
     #[test]
-    fn external_systems_meet_a_buc_through_its_use_cases_events() {
+    fn an_event_to_an_external_system_and_a_handoff_without_an_event_draw_no_edge() {
         let result = emit(View::whole());
-        assert!(
-            result.contains(
-                "  extsystem__Gateway -.->|raises Authorized| buc__BucPay\n  %% derived extsystem__Gateway -> buc__BucPay via usecase__Capture\n"
-            ),
-            "{result}"
-        );
-        assert!(
-            result.contains(
-                "  buc__BucShip -.->|triggers Shipped| extsystem__Carrier\n  %% derived buc__BucShip -> extsystem__Carrier via usecase__Dispatch\n"
-            ),
-            "{result}"
-        );
-    }
-
-    #[test]
-    fn a_buc_sits_in_its_one_business_and_beside_several() {
-        let result = emit(View::whole());
-        assert!(
-            result.contains(
-                "    subgraph business__Shop[\"Shop\"]\n      buc__BucPay[\"Pay\"]:::buc\n    end\n"
-            ),
-            "{result}"
-        );
-        assert!(result.contains("    subgraph business__Logistics[\"Logistics\"]\n    end\n"));
-        assert!(result.contains("    buc__BucLoose[\"Loose\"]:::buc\n"));
-        assert!(result.contains("  buc__BucShip -->|belongs| business__Logistics\n"));
-        assert!(result.contains("  buc__BucShip -->|belongs| business__Shop\n"));
-        assert!(
-            result.contains("%% kinds: actor extsystem business buc\n"),
-            "{result}"
-        );
-    }
-
-    #[test]
-    fn a_buc_scope_draws_the_named_bucs_and_their_businesses() {
-        let result = emit(View::bucs(vec!["BucPay".to_string()]));
-        assert!(result.starts_with("%% rdra-ish diagram=business scope=buc:BucPay\n"));
-        assert!(result.contains("subgraph business__Shop["), "{result}");
-        for absent in ["buc__BucShip", "business__Logistics", "actor__Courier"] {
+        for absent in ["extsystem__", "actor__", "Shipped", "Authorized"] {
             assert!(!result.contains(absent), "{absent}: {result}");
         }
-        assert!(result.contains("%% omitted: usecase event\n"), "{result}");
+        assert!(!result.contains("buc__BucBook -->"), "{result}");
+        assert!(!result.contains("--> buc__BucBook"), "{result}");
+    }
+
+    #[test]
+    fn a_buc_sits_in_its_first_business_by_id_and_has_a_belongs_edge_to_the_others() {
+        let result = emit(View::whole());
+        assert!(
+            result.contains(
+                "  subgraph business__Logistics[\"Logistics\"]\n    buc__BucShip[\"Ship\"]:::buc\n    buc__BucWrap[\"Wrap\"]:::buc\n  end\n"
+            ),
+            "{result}"
+        );
+        assert!(
+            result.contains(
+                "  subgraph business__Shop[\"Shop\"]\n    buc__BucPay[\"Pay\"]:::buc\n  end\n"
+            ),
+            "{result}"
+        );
+        assert!(result.contains("  buc__BucShip -->|belongs| business__Shop\n"));
+        assert!(result.contains("  buc__BucLoose[\"Loose\"]:::buc\n"));
+        assert!(!result.contains("subgraph layer_"), "{result}");
+        assert!(
+            result.starts_with(
+                "%% rdra-ish diagram=business scope=whole\n%% kinds: business buc\n%% omitted: actor usecase event\n"
+            ),
+            "{result}"
+        );
+    }
+
+    #[test]
+    fn a_buc_scope_draws_the_named_bucs_and_the_bucs_they_hand_off_with() {
+        let result = emit(View::bucs(vec!["BucPay".to_string()]));
+        assert!(result.starts_with("%% rdra-ish diagram=business scope=buc:BucPay\n"));
+        assert!(
+            result.contains("  buc__BucPay -->|Paid #124; settled| buc__BucShip\n"),
+            "{result}"
+        );
+        assert!(result.contains("subgraph business__Shop["), "{result}");
+        for absent in ["buc__BucWrap", "buc__BucLoose", "-->|Wrapped|"] {
+            assert!(!result.contains(absent), "{absent}: {result}");
+        }
     }
 }

@@ -114,6 +114,8 @@ pub(crate) enum ListKind {
     /// Business-side input candidates inferred from BUC/use-case CRUD and API paths
     #[value(alias = "actor-inputs")]
     BusinessInputs,
+    /// Actors and external systems by BUC (ordered by business): how each takes part, as a table
+    BucRoles,
     /// The published surface (`exposes` and `shares`) as canonical text; takes no `--format`
     Surface,
 }

@@ -818,22 +818,48 @@ fn every_business_diagram_of_every_sample_keeps_the_contract() {
             let args: Vec<&str> = scope.iter().map(String::as_str).collect();
             let text = diagram_with(&root, "business", &args, &dir.join("out"));
             let chart = checked("business", &text, &format!("{root} {scope:?}"));
+            // A business flow: businesses holding BUCs, and no actor, external system, or
+            // layer.
             for kind in chart.nodes.values() {
                 assert!(
-                    ["actor", "extsystem", "business", "buc"].contains(&kind.as_str()),
+                    ["business", "buc"].contains(&kind.as_str()),
                     "{root} {scope:?}: a {kind} node\n{text}"
                 );
             }
-            for (from, label, to) in &chart.edges {
+            assert!(
+                !text.contains("subgraph layer_") && !text.contains("%% layers:"),
+                "{root} {scope:?}: a layer\n{text}"
+            );
+            let mut handoffs = BTreeSet::new();
+            for edge @ (from, label, to) in &chart.edges {
+                if label == "belongs" {
+                    // A BUC of several businesses sits in one and belongs to the others.
+                    assert!(
+                        from.starts_with("buc__")
+                            && to.starts_with("business__")
+                            && !chart.derived.contains(edge),
+                        "{root} {scope:?}: {from} -{label}-> {to}\n{text}"
+                    );
+                    continue;
+                }
+                // A hand-off: BUC to another BUC, named by the event label, derived through
+                // the event ids.
+                let vias = derived_vias(&text, from, to);
                 assert!(
-                    from.starts_with("buc__") || to.starts_with("buc__"),
-                    "{root} {scope:?}: {from} -{label}-> {to}"
+                    from.starts_with("buc__")
+                        && to.starts_with("buc__")
+                        && from != to
+                        && chart.derived.contains(edge)
+                        && !vias.is_empty()
+                        && vias.iter().all(|via| via.starts_with("event__"))
+                        && handoffs.insert((from.clone(), label.clone(), to.clone())),
+                    "{root} {scope:?}: {from} -{label}-> {to}\n{text}"
                 );
             }
-            drawn += usize::from(!chart.edges.is_empty());
+            drawn += handoffs.len();
         }
     }
-    assert!(drawn > 10, "only {drawn} business diagrams draw an edge");
+    assert!(drawn > 10, "only {drawn} hand-offs drawn");
 }
 
 #[test]
@@ -841,16 +867,30 @@ fn a_business_diagram_draws_what_the_rdra_diagram_declares() {
     let dir = scratch("diagram_contract_business_ids");
     for root in roots() {
         let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
-        let business = parse_flowchart(
-            "business",
-            &diagram(&root, "business", None, &dir.join("b")),
-        )
-        .unwrap();
+        let text = diagram(&root, "business", None, &dir.join("b"));
+        let business = parse_flowchart("business", &text).unwrap();
         for (id, kind) in &business.nodes {
             assert_eq!(rdra.nodes.get(id), Some(kind), "{root}: {id}");
         }
-        for edge in &business.edges {
-            if !business.derived.contains(edge) {
+        for edge @ (from, _, to) in &business.edges {
+            if business.derived.contains(edge) {
+                // A hand-off: a use case of `from` raises each event and it triggers a use
+                // case of `to` or `to` itself, which the rdra diagram draws.
+                for event in derived_vias(&text, from, to) {
+                    let raised = rdra
+                        .edges
+                        .iter()
+                        .any(|(_, label, target)| label == "raises" && *target == event);
+                    let triggers = rdra
+                        .edges
+                        .iter()
+                        .any(|(source, label, _)| label == "triggers" && *source == event);
+                    assert!(
+                        raised && triggers,
+                        "{root}: {event} of {edge:?} is not raised and triggered in rdra"
+                    );
+                }
+            } else {
                 assert!(rdra.edges.contains(edge), "{root}: {edge:?} not in rdra");
             }
         }
@@ -858,8 +898,29 @@ fn a_business_diagram_draws_what_the_rdra_diagram_declares() {
 }
 
 #[test]
+fn clinic_ops_business_flow_has_its_eight_hand_offs() {
+    let dir = scratch("diagram_contract_business_clinic_ops");
+    let text = diagram("samples/clinic-ops", "business", None, &dir.join("b"));
+    let chart = parse_flowchart("business", &text).unwrap();
+    let handoffs = chart
+        .edges
+        .iter()
+        .filter(|(_, label, _)| label != "belongs")
+        .count();
+    assert_eq!(handoffs, 8, "{text}");
+    assert!(
+        chart.edges.contains(&(
+            "buc__BucVisitCheckIn".to_string(),
+            "受付完了".to_string(),
+            "buc__BucClinicalEncounter".to_string()
+        )),
+        "{text}"
+    );
+}
+
+#[test]
 fn an_element_subgraph_is_a_node_of_its_kind() {
-    let good = "%% rdra-ish diagram=business scope=whole\n%% kinds: business buc\nflowchart LR\n  subgraph layer_environment[\"E\"]\n    subgraph business__B[\"B\"]\n      buc__U[\"U\"]:::buc\n    end\n  end\n  classDef business stroke:#333;\n  classDef buc stroke:#333;\n";
+    let good = "%% rdra-ish diagram=business scope=whole\n%% kinds: business buc\nflowchart LR\n  subgraph business__B[\"B\"]\n    buc__U[\"U\"]:::buc\n  end\n  classDef business stroke:#333;\n  classDef buc stroke:#333;\n";
     let chart = parse_flowchart("business", good).unwrap();
     assert!(check_flowchart(&chart).is_ok());
     assert_eq!(

@@ -21,12 +21,25 @@ pub(crate) fn format_rows<const N: usize>(
     format: &ListFormat,
     empty_label: &str,
 ) -> Result<String> {
+    let headers: Vec<String> = headers.iter().map(|h| h.to_string()).collect();
+    let rows: Vec<Vec<String>> = rows.iter().map(|row| row.to_vec()).collect();
+    format_table(&headers, &rows, format, empty_label)
+}
+
+/// `format_rows` for a table whose columns are known only at run time, such as one column
+/// per BUC.
+pub(crate) fn format_table(
+    headers: &[String],
+    rows: &[Vec<String>],
+    format: &ListFormat,
+    empty_label: &str,
+) -> Result<String> {
     match format {
         ListFormat::Table => {
             if rows.is_empty() {
                 return Ok(format!("No {} found.\n", empty_label));
             }
-            let mut col_widths: Vec<usize> = headers.iter().map(|h| h.len()).collect();
+            let mut col_widths: Vec<usize> = headers.iter().map(|h| h.chars().count()).collect();
             for row in rows {
                 for (i, cell) in row.iter().enumerate() {
                     col_widths[i] = col_widths[i].max(cell.chars().count());
@@ -54,10 +67,7 @@ pub(crate) fn format_rows<const N: usize>(
             }
             Ok(out)
         }
-        ListFormat::Markdown => {
-            let rows: Vec<Vec<String>> = rows.iter().map(|row| row.to_vec()).collect();
-            Ok(rdra_ish_emit::markdown::table(headers, &rows))
-        }
+        ListFormat::Markdown => Ok(rdra_ish_emit::markdown::table(headers, rows)),
         ListFormat::Csv => {
             let mut out = format!("{}\n", headers.join(","));
             for row in rows {

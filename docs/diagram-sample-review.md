@@ -221,22 +221,14 @@ rdra-ish diagram samples/incremental-order/step-6-business-rules/src \
 <!-- embed: ../samples/incremental-order/step-6-business-rules/out/business.mmd -->
 ```mermaid
 %% rdra-ish diagram=business scope=whole model=samples/incremental-order/step-6-business-rules/src
-%% layers: value=システム価値 environment=システム外部環境
-%% kinds: actor business buc
-%% omitted: medium permission usecase screen api entity
+%% kinds: business buc
+%% omitted: actor medium permission usecase screen api entity
 flowchart LR
-  subgraph layer_value["システム価値"]
-    actor__OpsStaff["Operations Staff"]:::actor
+  subgraph business__StoreOperations["Store Operations"]
+    %% desc business__StoreOperations: Store operations owns restock planning and store master maintenance.
+    buc__BucStoreRestock["Maintain Store Restock"]:::buc
+    %% desc buc__BucStoreRestock: Keep restock dates and store organization assignments operationally correct.
   end
-  subgraph layer_environment["システム外部環境"]
-    subgraph business__StoreOperations["Store Operations"]
-      %% desc business__StoreOperations: Store operations owns restock planning and store master maintenance.
-      buc__BucStoreRestock["Maintain Store Restock"]:::buc
-      %% desc buc__BucStoreRestock: Keep restock dates and store organization assignments operationally correct.
-    end
-  end
-  actor__OpsStaff -.->|performs| buc__BucStoreRestock
-  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef business fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;
 ```

@@ -3,6 +3,7 @@
 pub mod access;
 pub mod analysis;
 pub(crate) mod analysis_diag;
+pub mod business_flow;
 pub mod diagnostics;
 pub mod entity_lifecycle;
 pub mod entity_state_variant;
@@ -33,6 +34,7 @@ pub use access::{
     PermissionApiPath, PermissionCallable, ScreenConstraintPattern,
 };
 pub use analysis::{build_model, build_model_items, build_model_items_with_scopes};
+pub use business_flow::{buc_handoffs, buc_members, buc_participants, Handoff, Involvement};
 pub use diagnostics::{Diagnostic, RdraError};
 pub use entity_lifecycle::link_entity_status_states;
 pub use entity_state_variant::{

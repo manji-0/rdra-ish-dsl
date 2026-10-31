@@ -4,6 +4,14 @@
 
 ### Added
 
+- `list --kind buc-roles` writes who takes part in which BUC: a row per actor, then per
+  external system, and a column per BUC, ordered by business. A cell says `担当` (an actor
+  performs the BUC, a use case in it, or a step in it), `イベント送信` (an external system
+  raises an event that starts the BUC's use cases), or `イベント受信` (an event a use case in
+  the BUC raises reaches the external system), joined with `、` when both. Every `--format`
+  works, so `--format markdown` pastes into a PRD or a design document. The columns are
+  the BUC labels, so the table has as many columns as the model has BUCs.
+  `rdra_ish_core::buc_handoffs` and `buc_participants` give the derivation.
 - A `goal` element holds the outcome the requirements serve: its description states the
   problem, and `metric`, `baseline`, `target`, and `window` say how it is measured.
   `achieves(Requirement, Goal)` links a requirement to a goal; a non-goal is a requirement
@@ -106,6 +114,16 @@
 
 ### Changed
 
+- `diagram --kind business` is a business flow. Each business is a subgraph holding its BUCs,
+  and an edge `BUC -->|<event label>| BUC` is a hand-off: a use case contained in the first
+  BUC raises an event that triggers a use case contained in the second, or
+  `triggers(Event, Buc)`. It is drawn once per `(from, to, event)` with a `%% derived ... via
+  event__<Id>` line, and a hand-off with no event has no edge. The actor and external-system
+  nodes and the `performs`, `raises`, and `triggers` edges are gone (see `list --kind
+  buc-roles`), as are the layer subgraphs and the `%% layers:` header line. A BUC of several
+  businesses sits in the first by id with `belongs` edges to the others. `--buc` draws the
+  named BUCs, the BUCs they hand off to or from, and their businesses. clinic-ops: 31 nodes (with the businesses) and
+  37 edges become 14 nodes and 8 hand-offs.
 - `diagram --kind requirement` is a value tree, left to right: goals, the requirements that
   achieve them, and the BUCs those requirements motivate. A goal's label adds a second line
   with its metric and `baseline → target`. A requirement with `status "out-of-scope"` sits in

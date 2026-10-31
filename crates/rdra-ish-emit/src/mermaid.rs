@@ -30,6 +30,7 @@ use crate::{
     OBJECT_GRAPH_LAYERS,
 };
 use rdra_ish_core::analysis::applied_bodies;
+use rdra_ish_core::buc_members;
 use rdra_ish_core::model::{
     ColumnType, EntityKey, NodeRef, RelKind, SemanticModel, StateKey, StateTransition, UseCaseKey,
 };
@@ -150,30 +151,6 @@ impl EdgeSet {
             })
             .collect()
     }
-}
-
-/// The use cases and steps that `bucs` contain: a use case directly or through a step of one
-/// of their flows, and each step of their flows.
-fn buc_members(model: &SemanticModel, bucs: &[NodeRef]) -> (Vec<NodeRef>, Vec<NodeRef>) {
-    let contained = |parents: &[NodeRef], link: RelKind| -> Vec<NodeRef> {
-        model
-            .relations
-            .iter()
-            .filter(|rel| rel.kind == link && parents.contains(&rel.from))
-            .map(|rel| rel.to.clone())
-            .collect()
-    };
-    let direct = contained(bucs, RelKind::Contains);
-    let steps: Vec<NodeRef> = contained(&direct, RelKind::Contains)
-        .into_iter()
-        .filter(|node| matches!(node, NodeRef::Step(_)))
-        .collect();
-    let usecases = direct
-        .into_iter()
-        .chain(contained(&steps, RelKind::Covers))
-        .filter(|node| matches!(node, NodeRef::UseCase(_)))
-        .collect();
-    (usecases, steps)
 }
 
 /// What `--buc` scopes the context, condition, and requirement diagrams to: the BUCs `ids`

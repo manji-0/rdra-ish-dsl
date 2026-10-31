@@ -1033,3 +1033,66 @@ fn list_rule_site_is_file_and_line_from_a_loaded_project() {
         assert!(row.parse::<u32>().is_ok(), "{line}");
     }
 }
+
+const ROLES_MODEL: &str = r#"
+actor Clerk "事務"
+actor Idle "待機"
+extsystem Gateway "決済"
+extsystem Carrier "配送"
+business Shop "販売"
+business Logistics "物流"
+buc BucPay "支払"
+buc BucShip "出荷"
+buc BucLoose "未分類"
+usecase Capture "入金"
+usecase Dispatch "発送"
+event Authorized "承認"
+event Shipped "出荷済"
+belongs(BucPay, Shop)
+belongs(BucShip, Logistics)
+belongs(BucShip, Shop)
+contains(BucPay, Capture)
+contains(BucShip, Dispatch)
+performs(Clerk, BucPay)
+performs(Clerk, Dispatch)
+raises(Gateway, Authorized)
+triggers(Authorized, Capture)
+raises(Dispatch, Shipped)
+triggers(Shipped, Carrier)
+triggers(Shipped, Gateway)
+"#;
+
+#[test]
+fn list_buc_roles_markdown_has_a_column_per_buc_in_business_order() {
+    let (ast, _) = rdra_ish_syntax::parse(ROLES_MODEL);
+    let (model, _) = rdra_ish_core::build_model(&ast);
+    let md = list_elements(&model, &ListKind::BucRoles, &ListFormat::Markdown).unwrap();
+    assert_eq!(
+        md,
+        "\
+| role | kind | 出荷 | 支払 | 未分類 |
+| --- | --- | --- | --- | --- |
+| 事務 | actor | 担当 | 担当 |  |
+| 待機 | actor |  |  |  |
+| 配送 | extsystem | イベント受信 |  |  |
+| 決済 | extsystem | イベント受信 | イベント送信 |  |
+"
+    );
+}
+
+#[test]
+fn list_buc_roles_writes_every_format() {
+    let (ast, _) = rdra_ish_syntax::parse(ROLES_MODEL);
+    let (model, _) = rdra_ish_core::build_model(&ast);
+    let csv = list_elements(&model, &ListKind::BucRoles, &ListFormat::Csv).unwrap();
+    assert_eq!(csv.lines().next(), Some("role,kind,出荷,支払,未分類"));
+    assert_eq!(csv.lines().count(), 5, "{csv}");
+    let json = list_elements(&model, &ListKind::BucRoles, &ListFormat::Json).unwrap();
+    assert!(
+        json.contains("{\"role\":\"決済\",\"kind\":\"extsystem\",\"出荷\":\"イベント受信\",\"支払\":\"イベント送信\",\"未分類\":\"\"}"),
+        "{json}"
+    );
+    let table = list_elements(&model, &ListKind::BucRoles, &ListFormat::Table).unwrap();
+    assert!(table.starts_with("ROLE"), "{table}");
+    assert_eq!(table.lines().count(), 6, "{table}");
+}
