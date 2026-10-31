@@ -473,6 +473,9 @@ fn resolve_cross_operand_column(
             None
         }
         Operand::QualifiedColumn(qcol) => {
+            if crate::binding::foreign_column_operand(model, qcol, ctx, diags) {
+                return None;
+            }
             let entity = resolve_entity_qref(model, pred, &qcol.entity, None, ctx, diags)?;
             let model_col =
                 find_entity_column(model, entity, &qcol.column, qcol.span.clone(), ctx, diags)?;
@@ -507,8 +510,7 @@ fn resolve_cross_comparison(
     ) {
         Some(v) => v,
         None => {
-            let dotted =
-                matches!(&cmp.lhs, Operand::QualifiedColumn(q) if q.entity.parts.len() > 1);
+            let dotted = matches!(&cmp.lhs, Operand::QualifiedColumn(q) if crate::binding::is_foreign_path(model, q));
             if !dotted {
                 push_error_cmp(ctx, diags, cmp, RdraError::ComparisonLhsMustBeColumn);
             }
@@ -949,6 +951,9 @@ fn temporal_equals_from_comparison(
             )
         }
         Operand::QualifiedColumn(qcol) => {
+            if crate::binding::foreign_column_operand(model, qcol, ctx, diags) {
+                return Err(());
+            }
             let entity =
                 resolve_entity_qref(model, pred, &qcol.entity, None, ctx, diags).ok_or(())?;
             let model_col =

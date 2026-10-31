@@ -190,6 +190,26 @@ const WRITING_PREDICATES: &[&str] = &[
     "owns",
 ];
 
+/// The argument a writing predicate writes: the entity of `writes`, `creates`, `updates`,
+/// `deletes`, `sets`, and `owns`, and the column of `transitions`.
+fn written_position(predicate: &str) -> Option<usize> {
+    match predicate {
+        "transitions" => Some(0),
+        p if WRITING_PREDICATES.contains(&p) => Some(1),
+        _ => None,
+    }
+}
+
+/// A column operand whose entity path belongs to another model, or whose qualifier is one.
+pub(crate) fn is_foreign_path(model: &SemanticModel, qcol: &QualifiedColumnRef) -> bool {
+    qcol.entity.parts.len() > 1
+        || qcol
+            .entity
+            .parts
+            .first()
+            .is_some_and(|alias| bound_ext(model, alias).is_some())
+}
+
 fn allowed(predicate: &str, position: usize, kind: &str) -> bool {
     FOREIGN_OPERANDS
         .iter()
@@ -295,22 +315,25 @@ pub(crate) fn bind(
         return;
     };
     if !dep.systems.contains(&decl.system) {
-        let closest = if dep.systems.is_empty() {
+        let hint = if dep.systems.is_empty() {
             format!(
-                "none; '{}' declares no `system`, so its owners must declare one and `exposes` through it",
+                "'{}' declares no `system`; its owners must declare one and `exposes` through it",
                 decl.dep
             )
         } else {
-            closest(&decl.system, dep.systems.iter().map(String::as_str))
+            format!(
+                "its systems: {}",
+                closest(&decl.system, dep.systems.iter().map(String::as_str))
+            )
         };
         push_error(
             ctx,
             diags,
             decl.span.clone(),
-            RdraError::UnknownForeignName {
-                qualifier: decl.dep.clone(),
-                name: decl.system.clone(),
-                closest,
+            RdraError::UnknownForeignSystem {
+                dep: decl.dep.clone(),
+                system: decl.system.clone(),
+                hint,
             },
         );
         return;
@@ -549,6 +572,11 @@ pub(crate) fn resolve_foreign(
             let what = if kind == "system" {
                 format!("{}'s system '{name}'", dep.name)
             } else {
+                let kind = if kind == "usecase" {
+                    "use case"
+                } else {
+                    kind.as_str()
+                };
                 format!(
                     "{}'s internal {kind} '{name}', which it does not publish",
                     dep.name
@@ -600,11 +628,45 @@ pub(crate) fn foreign_column_operand(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> bool {
-    if qcol.entity.parts.len() < 2 {
-        return false;
+    if let [alias] = qcol.entity.parts.as_slice() {
+        if bound_ext(model, alias).is_none() {
+            return false;
+        }
+        // `Auth.SessionView` where a column is expected: the path names a foreign element.
+        let element = QRef {
+            kind_qualifier: None,
+            parts: vec![alias.clone(), qcol.column.clone()],
+            span: qcol.span.clone(),
+        };
+        match resolve_foreign(model, &element, ctx, diags) {
+            Foreign::Node(node) => push_error(
+                ctx,
+                diags,
+                qcol.span.clone(),
+                RdraError::ForeignColumnMissing {
+                    id: crate::lint::node_id(model, &node).unwrap_or_default(),
+                    kind: crate::model::node_ref_kind(&node).to_string(),
+                },
+            ),
+            Foreign::NotBound | Foreign::Unresolved => {}
+        }
+        return true;
     }
     match resolve_foreign_kind(model, &qcol.entity, Kind::Entity, ctx, diags) {
         Foreign::NotBound => {
+            let (name, prefix) = qcol.entity.parts.split_last().expect("two or more parts");
+            let prefix = prefix.join(".");
+            if !model.import_scopes.modules().any(|m| m == prefix) {
+                push_error(
+                    ctx,
+                    diags,
+                    qcol.entity.span.clone(),
+                    RdraError::UndefinedSymbol {
+                        id: format!("{prefix}.{name}"),
+                    },
+                );
+                return true;
+            }
             let local = crate::analysis::resolve_arg(
                 model,
                 &rdra_ish_syntax::ast::PredicateArg::Ref(qcol.entity.clone()),
@@ -707,7 +769,7 @@ pub(crate) fn check_foreign_operand(
         }
         return true;
     }
-    let err = if WRITING_PREDICATES.contains(&predicate) && kind == "entity" {
+    let err = if kind == "entity" && written_position(predicate) == Some(position) {
         RdraError::ForeignWrite {
             id: id.clone(),
             dep: origin.dep.clone(),
@@ -856,6 +918,8 @@ mod tests {
         "UnknownDependency",
         "DuplicateBinding",
         "UnknownForeignName",
+        "UnknownForeignSystem",
+        "ForeignColumnMissing",
         "NotExposed",
         "ForeignWrite",
         "ForeignContained",

@@ -504,6 +504,18 @@ pub enum RdraError {
         closest: String,
     },
 
+    #[error(
+        "UnknownForeignSystem: dependency '{dep}' defines no system '{system}'\n  hint: {hint}"
+    )]
+    UnknownForeignSystem {
+        dep: String,
+        system: String,
+        hint: String,
+    },
+
+    #[error("ForeignColumnMissing: '{id}' names a foreign {kind}, not a column\n  hint: a comparison needs a column: write `{id}.<column>`")]
+    ForeignColumnMissing { id: String, kind: String },
+
     #[error("NotExposed: '{qualified}' is {what}\n  hint: {hint}")]
     NotExposed {
         qualified: String,
