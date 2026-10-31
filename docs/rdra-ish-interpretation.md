@@ -147,6 +147,15 @@ An `extsystem` meets the model through events, as the RDRA rule 「外部シス�
 as consumed. There is no `uses(actor, extsystem)`, because the actor reaches the outside
 world through a use case, and the use case reaches it through an event.
 
+One rdra-ish extension departs from that rule. An `extsystem` bound to another model with
+`from` (`extsystem Auth "..." from auth.AuthSystem`) stands for a system whose model
+publishes use cases, and `invokes(UseCase, Auth.Login)` lets a use case call one of them
+directly. The call is a product step with no write of the product's own; the reply, if
+any, still travels as an event the other system exposes and `triggers(Auth.Event, UseCase)`
+consumes. The extension applies only to a bound external system and only to a use case
+its owner exposes. An `extsystem` without `from` keeps the event-only rule. See
+[Referencing another model](./language-reference.md#referencing-another-model).
+
 Layer placement follows the decision in [vision.md](./vision.md#decisions). `extsystem`
 moves to the system-value layer of the RDRA diagram. `timer` stays in the
 external-environment layer with `business`, `buc`, `flow`, `step`, `medium`, and

@@ -103,6 +103,10 @@ merged; the compiler reports an ambiguity error otherwise.
 
 ---
 
+A kind-qualified reference to a bound external system's element keeps the qualifier:
+`usecase::Auth.Login`. See [Referencing another model](#referencing-another-model).
+
+
 ## Instance Declarations
 
 An instance declaration introduces a named element:
@@ -692,6 +696,94 @@ second `shares` of the same entity adds nothing and no second warning.
 `rdra-ish list <model> --kind surface` prints the published surface as canonical text,
 one line per exposed use case, exposed event, published entity, writer of a published
 entity, and shared entity, sorted by kind and id. See [`list`](./cli-reference.md#list).
+
+### Referencing another model
+
+A product model references what another model publishes through a `path` dependency in
+its manifest (see [Project manifest](./cli-reference.md#project-manifest)) and an
+`extsystem` bound with `from`:
+
+```toml
+# shop-model/rdra.toml
+[model]
+name = "shop"
+
+[dependencies]
+auth = { path = "../auth-model" }
+```
+
+```rdra
+extsystem Auth "Authentication" from auth.AuthSystem
+
+has_permission(Shopper, Auth.CanLogin)
+invokes(SignInAtCheckout, usecase::Auth.Login)
+reads(PlaceOrder, Auth.SessionView)
+triggers(Auth.EvSessionEnded, EndCheckout)
+```
+
+`from auth.AuthSystem` names a `[dependencies]` key and a `system` of that model. Their
+`system` is this model's external system: a bound `extsystem` keeps everything an
+`extsystem` has (`raises`, `triggers`, the context and event diagrams, AsyncAPI) and
+gains what the system publishes. Every element the system exposes or shares becomes a
+stub named `Auth.<Name>`, so no local id can equal it; generated identifiers (Mermaid
+node ids, TLA+) join the two with `__`, as `Auth__Login`. A reference takes one of three
+forms: `Auth.Login`, the kind-qualified `usecase::Auth.Login`, and the column
+`Auth.SessionView.status` inside a comparison.
+
+The dependency is loaded and checked as its own model first. A missing path
+(`DependencyNotFound`), a dependency that depends back on a model being loaded
+(`DependencyCycle`), or one whose own `check` has an error (`DependencyHasErrors`) fails
+the load and names the dependency and the cause. A dependency of a dependency is checked
+too, but only a direct `[dependencies]` entry can be bound; `from idp.IdpSystem` with
+`idp` elsewhere is `UnknownDependency`. A `git` dependency is refused for now.
+
+One table says where a foreign element may appear. Any other position is an error.
+
+| Predicate | Argument | Foreign kind | Use |
+|---|---|---|---|
+| `invokes` | 2 | usecase | call |
+| `triggers` | 1 | event | react |
+| `has_permission` | 2 | permission | grant |
+| `reads` | 2 | entity | read |
+| `shows` | 2 | entity | read |
+
+`invokes(UseCase, Auth.Login)` calls a use case the other system exposes. This widens
+`invokes`, which otherwise takes an API, and is an rdra-ish extension of RDRA's rule that
+an external system meets use cases through events; see
+[rdra-ish-interpretation.md](./rdra-ish-interpretation.md#timers-and-external-systems).
+The call is a product step with no write of its own, so it joins no transaction group.
+`triggers(Auth.Event, UseCase)` reacts to an event the other system exposes; the bound
+external system raises it. `has_permission(Actor, Auth.Permission)` grants a permission
+an exposed use case requires; the audit of local permissions ignores it. `reads` and
+`shows` read a published entity.
+
+| Written | Diagnostic |
+|---|---|
+| `Auth.Logon` | `UnknownForeignName`, with the closest published names |
+| `Auth.Session`, an internal entity | `NotExposed`, with the published entities to read and the exposed events to react to |
+| `updates(PlaceOrder, Auth.SessionView)`, or any `writes`, `creates`, `deletes`, `sets`, `transitions`, or `owns` on a foreign entity | `ForeignWrite`, with the exposed use case that makes the move |
+| `contains(BucCheckout, Auth.Login)` | `ForeignContained` |
+| any other position, such as `performs(Shopper, Auth.Login)` or `relate(Order, Auth.SessionView, N:1)` | `ForeignOperand`, with the positions the table allows for that kind |
+| `import auth.session` of a dependency's module | `ForeignImport`, with the hint to bind it with `extsystem ... from` |
+| `holds(SignedIn, Auth.SessionView.status == active)` | `ForeignStateNeedsEnvironment`; a guard on published data needs the environment, which a later release adds |
+| `reads(X, Auth.Session)` after the owner wrote `shares(AuthSystem, Session)` | `DirectEntityReference` (warning) |
+| a local `entity Auth__SessionView` | `IdShadowsForeignSlug` |
+| a second `extsystem ... from auth.AuthSystem` | `DuplicateBinding` |
+| `from` on an `actor` or any kind but `extsystem` | `BindingOnNonExtSystem` |
+
+Every output excludes stubs by default: `list`, `csv`, DBML, OpenAPI, JSON Schema, the
+ER, state, and information diagrams, lint, and the lifecycle see the product's own
+elements only. Four outputs opt in. The context diagram draws the bound external system
+with an edge per call, read, and reaction (`invokes Auth.Login`, `reads Auth.SessionView`,
+`raises Auth.EvSessionEnded`). The event, usecase, and rdra diagrams draw a referenced
+foreign element as a dashed `:::foreign` stub labelled by its qualified id. AsyncAPI
+lists a foreign event the product reacts to as receive-only, with `x-rdra-ish-external`
+naming the dependency. `check` prints the environment once, and
+`list --kind dependency` prints one row per foreign reference; see
+[`check`](./cli-reference.md#check) and [`list`](./cli-reference.md#list). A bound
+external system counts as connected for `lint` when any of its stubs is referenced, and
+a BUC closure that reaches a stub holds the external system too. `next` treats a call to
+a foreign use case as a satisfied boundary.
 
 ### `api` and the API layer
 
