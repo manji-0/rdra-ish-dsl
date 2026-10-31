@@ -7,6 +7,7 @@ mod flow;
 mod information;
 mod requirement;
 mod robustness;
+mod sequence;
 mod usecase;
 
 pub use business::BusinessMermaidEmitter;
@@ -16,6 +17,7 @@ pub use flow::FlowMermaidEmitter;
 pub use information::InformationMermaidEmitter;
 pub use requirement::RequirementMermaidEmitter;
 pub use robustness::RobustnessMermaidEmitter;
+pub use sequence::SequenceMermaidEmitter;
 pub use usecase::UsecaseMermaidEmitter;
 
 use crate::diagram_common::{

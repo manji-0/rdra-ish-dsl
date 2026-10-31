@@ -72,10 +72,6 @@ const REMOVED_DIAGRAM_KINDS: &[(&str, &str)] = &[
         "use `csv --kind api-matrix` for the API x entity CRUD, or `--kind rdra --node-kind system --node-kind api --node-kind entity`",
     ),
     (
-        "sequence",
-        "use `--kind usecase` for each use case's actors, screens, and the entities it reads and writes; run `check`, which prints the transaction, API, and system-boundary warnings this diagram printed; `csv --kind api-matrix` lists the entities each API writes",
-    ),
-    (
         "event-flow",
         "use `--kind event`, which draws the same raises and triggers links; the transitions a triggered use case drives are in `--kind state`",
     ),
@@ -165,7 +161,7 @@ pub(crate) enum Commands {
     Diagram {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Diagram kind: rdra, context, requirement, business, usecase, robustness, flow, information,
+        /// Diagram kind: rdra, context, requirement, business, usecase, robustness, sequence, flow, information,
         /// condition, er, state, or event
         #[arg(long, default_value = "rdra", value_parser = WithRemoved::<DiagramKind>::new(REMOVED_DIAGRAM_KINDS))]
         kind: DiagramKind,
@@ -177,7 +173,7 @@ pub(crate) enum Commands {
         /// Applies to all diagram kinds.
         #[arg(long)]
         buc: Vec<String>,
-        /// Draw only these use cases (by id); repeatable. Applies to --kind usecase and robustness, and not
+        /// Draw only these use cases (by id); repeatable. Applies to --kind usecase, robustness, and sequence (which needs exactly one), and not
         /// together with --buc.
         #[arg(long)]
         usecase: Vec<String>,
@@ -340,6 +336,9 @@ pub(crate) enum DiagramKind {
     /// ロバストネス図: ICONIX boundary / control / entity of each use case, drawn actor ->
     /// boundary -> control -> entity
     Robustness,
+    /// シーケンス図: one use case in order, from the starter through the guards, the entity
+    /// writes, and the events it raises; needs exactly one --usecase
+    Sequence,
     /// 業務フロー: each flow with its steps in order, their branches, exceptions, and
     /// repeats, what each step covers, and a lane per actor when steps are performed
     Flow,
@@ -795,8 +794,6 @@ mod tests {
             ("boundaryless-graph", "`--kind rdra`"),
             ("business-area", "`csv --kind business-inputs`"),
             ("technical-area", "`csv --kind api-matrix`"),
-            ("sequence", "`--kind usecase`"),
-            ("sequence", "`check`"),
             ("diff", "`git diff`"),
             ("event-flow", "`--kind event`"),
         ] {

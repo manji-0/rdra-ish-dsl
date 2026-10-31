@@ -885,11 +885,19 @@ fn usecase_scope_errors_say_what_to_pass() {
     for (request, message) in [
         (
             request(DiagramKind::Rdra, &[], &["Capture"]),
-            "--usecase applies only to --kind usecase or robustness",
+            "--usecase applies only to --kind usecase, robustness, or sequence",
         ),
         (
             request(DiagramKind::Usecase, &["BucPayment"], &["Capture"]),
             "--usecase and --buc cannot be combined; pass one of them",
+        ),
+        (
+            request(DiagramKind::Sequence, &[], &[]),
+            "--kind sequence needs exactly one --usecase <id>",
+        ),
+        (
+            request(DiagramKind::Sequence, &[], &["Capture", "Refund"]),
+            "--kind sequence needs exactly one --usecase <id>",
         ),
         (
             request(DiagramKind::Usecase, &[], &["NoSuchUc"]),

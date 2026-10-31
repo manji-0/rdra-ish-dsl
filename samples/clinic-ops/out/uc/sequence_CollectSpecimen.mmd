@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:CollectSpecimen model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__Nurse as 看護師
+  participant screen__SpecimenScreen as 採血画面
+  participant api__CollectSpecimenApi as 採血 API
+  participant entity__ClinicalOrder as 検査オーダ
+  actor__Nurse ->> screen__SpecimenScreen: 採血
+  screen__SpecimenScreen ->> api__CollectSpecimenApi: 採血 API
+  alt 医師が確定したオーダ: ClinicalOrder.physician_confirmed == true, ClinicalOrder.status == clordered
+    api__CollectSpecimenApi ->> entity__ClinicalOrder: update status オーダ済 -> 採取済, collected_at=set
+    api__CollectSpecimenApi -->> screen__SpecimenScreen: done
+  else guard fails
+    api__CollectSpecimenApi -->> screen__SpecimenScreen: rejected
+  end

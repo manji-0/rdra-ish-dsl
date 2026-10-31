@@ -1,0 +1,20 @@
+%% rdra-ish diagram=sequence scope=usecase:SignEncounter model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__Clinician as 医師
+  participant screen__EncounterWorkspaceScreen as 診療記録画面
+  participant api__SignEncounterApi as 署名 API
+  participant entity__Encounter as 診療記録
+  participant api__CreateChargeApi as コスト登録 API
+  participant api__CreateCarePlanApi as ケアプラン作成 API
+  actor__Clinician ->> screen__EncounterWorkspaceScreen: 診療記録の署名
+  screen__EncounterWorkspaceScreen ->> api__SignEncounterApi: 署名 API
+  alt 診療記録.status == 記載済
+    api__SignEncounterApi ->> entity__Encounter: update status 記載済 -> 署名済, signed_at=set
+    api__SignEncounterApi -) api__CreateChargeApi: 診療記録の署名
+    api__SignEncounterApi -) api__CreateCarePlanApi: 診療記録の署名
+    api__SignEncounterApi -->> screen__EncounterWorkspaceScreen: done
+  else guard fails
+    api__SignEncounterApi -->> screen__EncounterWorkspaceScreen: rejected
+  end

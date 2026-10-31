@@ -35,6 +35,9 @@ samples/clinic-ops/out/buc/robustness_prescription_fulfillment.mmd	diagram sampl
 samples/clinic-ops/out/buc/robustness_staff_administration.mmd	diagram samples/clinic-ops --kind robustness --format mermaid --buc BucStaffAdministration
 samples/clinic-ops/out/buc/robustness_visit_check_in.mmd	diagram samples/clinic-ops --kind robustness --format mermaid --buc BucVisitCheckIn
 samples/clinic-ops/out/buc/robustness_visit_payment.mmd	diagram samples/clinic-ops --kind robustness --format mermaid --buc BucVisitPayment
+samples/clinic-ops/out/uc/sequence_CollectSpecimen.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase CollectSpecimen
+samples/clinic-ops/out/uc/sequence_SettleAtKiosk.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase SettleAtKiosk
+samples/clinic-ops/out/uc/sequence_SignEncounter.mmd	diagram samples/clinic-ops --kind sequence --format mermaid --usecase SignEncounter
 samples/clinic-ops/out/business.mmd	diagram samples/clinic-ops --kind business --format mermaid
 samples/clinic-ops/out/condition.mmd	diagram samples/clinic-ops --kind condition --format mermaid
 samples/clinic-ops/out/context.mmd	diagram samples/clinic-ops --kind context --format mermaid

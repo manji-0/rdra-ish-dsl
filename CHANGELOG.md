@@ -4,6 +4,11 @@
 
 ### Added
 
+- `diagram --kind sequence --usecase <id>` writes a Mermaid `sequenceDiagram` of one use case,
+  the second step of the design reading after the robustness diagram: the starter, the screen, each control, the guards as an `alt` with a `rejected` branch, each
+  transaction's reads and writes with the `sets` values and the lifecycle move, and the
+  events it raises. It needs exactly one `--usecase`. The kind is no longer in the removed
+  list; clinic-ops ships three under `out/uc/`.
 - `diagram --kind robustness` draws the use cases as an ICONIX robustness diagram:
   actors reach the screens they use, a screen reaches the API its use case invokes (or the
   use case itself when it has no API or writes entities directly), and a control reaches

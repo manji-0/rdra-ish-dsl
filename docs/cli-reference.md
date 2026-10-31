@@ -461,6 +461,7 @@ relation, from which the RDRAGraph views can be derived.
 | `business` | ビジネスコンテキスト, ビジネスユースケース | Each business holding its BUCs, and the actors and external systems each BUC involves | Use cases, steps, and events, which `%% derived` names | The named BUCs and their businesses (the RDRA BUC diagram) |
 | `usecase` | UC複合図 | Each use case with its actors, screens and what they show, the entities it reads and writes, its events, external systems, and timers, the conditions on it, and its transitions | BUCs, steps, media, permissions, fields, APIs (their CRUD is folded into the use case), and DTOs | The use cases the BUCs contain, directly or through a step; `--usecase` names use cases instead |
 | `robustness` | ロバストネス図 | The use cases as an ICONIX robustness diagram: actors, boundaries (screens, external systems, timers), controls (APIs, or the use case itself), and the entities each control reads and writes | BUCs, steps, events (named in edge labels), conditions, states, media, permissions, fields, and DTOs | The use cases the BUCs contain, directly or through a step; `--usecase` names use cases instead |
+| `sequence` | シーケンス図 | One use case in order: the actors, screen, controls (APIs, or the use case itself), entities, and external systems that take part, the guards, each control's reads and writes with the `sets` values and the lifecycle move, and the events it raises | BUCs, steps, other use cases (a triggered one is one message to its control), permissions, media, fields, and DTOs | Exactly one use case, named by one `--usecase`; `--buc` is refused |
 | `flow` | 業務フロー | Each flow with its steps, their `precedes`, `branches`, `excepts`, and `repeats` edges, what each step `covers`, and a lane per actor | Actors without `performs(Actor, Step)`; screens and entities | The flows the BUCs contain |
 | `information` | 情報モデル | Entities with their `relate` links, state models, and the variations their columns take | Columns (`er`) and use cases | The entities `er` draws for the BUCs |
 | `condition` | バリエーション・条件 | Each condition with the variations and state models it combines and what it applies to; each variation with its values | Entities (a state model stands for its column) | The conditions on the BUCs' use cases and their APIs, and what those combine |
@@ -478,7 +479,7 @@ with one stderr note.
 | `--kind` | one of the [kinds](#kinds) | `rdra` | The diagram kind. |
 | `--format` | `mermaid` | `mermaid` | Output format. Mermaid text (`.mmd`) is the only one; to get an image, render the `.mmd` with `mmdc` or any Mermaid-aware tool, or hand it to a tool that redraws it. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Draw the part of the model the named BUCs reach, the union over every id. Applies to every kind; the [kinds](#kinds) table says what each one keeps. An unknown id is an error. |
-| `--usecase <id>` | string (repeatable) | — (whole model) | Draw only the named use cases. Applies to `usecase` and `robustness`, and not together with `--buc`; an unknown id is an error. |
+| `--usecase <id>` | string (repeatable) | — (whole model) | Draw only the named use cases. Applies to `usecase`, `robustness`, and `sequence`, and not together with `--buc`; an unknown id is an error. `sequence` needs exactly one. |
 | `--node-kind <kind>` | string (repeatable) | — (all nodes) | Draw only these node kinds. Applies to `rdra`. Examples: `actor`, `buc`, `flow`, `step`, `usecase`, `api`, `entity`, `field`. Alias: `--kind-filter`. |
 | `--edge-kind <kind>` | string (repeatable) | — (all edges) | Draw only these relation kinds. Applies to `rdra`. Examples: `contains`, `invokes`, `reads`, `writes`, `creates`, `maps-field`, `owns`, `relate`. Alias: `--edge-filter`. |
 | `-o`, `--out` | path | `out` | Output file path. The extension is always `.mmd`: a path without one gets it added (`-o out` writes `out.mmd`), and an existing one is replaced (`-o x.foo` writes `x.mmd`; `x.mmd` stays; `-o d.tar.gz` writes `d.tar.mmd`). |
@@ -486,7 +487,7 @@ with one stderr note.
 Notes:
 
 - Removed names fail with a message that names the replacement: `--kind
-  boundaryless-graph`, `business-area`, `technical-area`, `sequence`, `diff`, and
+  boundaryless-graph`, `business-area`, `technical-area`, `diff`, and
   `event-flow`, and `--format puml`, `svg`, and `png`. `--show-description`,
   `--view-preset`, and `--diff-base` are rejected as unknown arguments; descriptions are
   always written as `%% desc` lines. The CHANGELOG lists each replacement.
@@ -593,6 +594,31 @@ The notes below say how each kind reads, in the order of the table.
 Every kind but `state` and `er` is a `flowchart`, written so that every fact it draws can
 be read back from the text. The `rdra` diagram shows each part:
 
+- For `--kind sequence`, the file is a Mermaid `sequenceDiagram` of one use case, so
+  `--usecase` must name exactly one. The header, `%% kinds:` line, and ids (`<kind>__<DSL id>`,
+  as `participant actor__Clerk as Clerk`) are those of the other kinds, and every
+  participant id is a node of `rdra`. Participants appear in this order, only those that
+  take part: the actors that perform the use case (an event- or timer-triggered one has only
+  its explicit `performs`) or the external system, timer, or raising use case that starts it;
+  the screen it `displays`; each control, as in `robustness`; each entity the controls read
+  and write; and the controls and external systems an event it raises reaches. Messages
+  follow in order:
+  1. The actor calls the screen with the use case label, or the starter sends its event
+     to the control.
+  2. The screen calls the control with the use case or API label.
+  3. When the use case has guards, `alt <guards>` opens: each condition with a `holds` body
+     that applies to it (the condition label, then its body), and `Entity.column == <from>`
+     for each `transitions` it makes, unless a condition already says it. `else guard fails`
+     ends with the control replying `rejected` to the screen.
+  4. Each control `->>` its entities: `read`, then one transaction at a time in the
+     order of the transaction inference, each write labelled `create`, `update`, or `delete`
+     with the lifecycle move (`status <from label> -> <to label>`) and the other columns
+     `sets` fixes (`paid_at=set`). A transaction with more than one write, or inferred from
+     foreign keys, opens with a `Note over <control>: transaction (...)`.
+  5. For each event the use case `raises`, the control sends `-)` to the control of each use
+     case it `triggers` (one message, never expanded) and to each external system it
+     `triggers`; an event that triggers nothing is a `Note`.
+  6. The control replies `done` to the screen, or to the starter when no screen is drawn.
 - For `--kind robustness`, nodes sit in one flat list in the order actor, boundary, control,
   entity, each sorted by id, and the edge grammar is the whole point: an actor reaches a
   screen, a screen reaches a control, a control reaches an entity, and nothing skips a

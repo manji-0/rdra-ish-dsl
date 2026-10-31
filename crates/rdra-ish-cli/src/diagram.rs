@@ -8,8 +8,8 @@ use rdra_ish_emit::{
     mermaid::{
         BusinessMermaidEmitter, ConditionMermaidEmitter, ContextMermaidEmitter, ErMermaidEmitter,
         EventMermaidEmitter, FlowMermaidEmitter, InformationMermaidEmitter, RdraMermaidEmitter,
-        RequirementMermaidEmitter, RobustnessMermaidEmitter, StateMermaidEmitter,
-        UsecaseMermaidEmitter,
+        RequirementMermaidEmitter, RobustnessMermaidEmitter, SequenceMermaidEmitter,
+        StateMermaidEmitter, UsecaseMermaidEmitter,
     },
     unknown_diagram_filter_kinds, Emitter, Filter, Scope, View,
 };
@@ -60,9 +60,21 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
         }
     }
 
+    if matches!(kind, DiagramKind::Sequence) {
+        if !buc.is_empty() {
+            anyhow::bail!("--kind sequence draws one use case; pass --usecase, not --buc");
+        }
+        if usecase.len() != 1 {
+            anyhow::bail!("--kind sequence needs exactly one --usecase <id>");
+        }
+    }
+
     if !usecase.is_empty() {
-        if !matches!(kind, DiagramKind::Usecase | DiagramKind::Robustness) {
-            anyhow::bail!("--usecase applies only to --kind usecase or robustness");
+        if !matches!(
+            kind,
+            DiagramKind::Usecase | DiagramKind::Robustness | DiagramKind::Sequence
+        ) {
+            anyhow::bail!("--usecase applies only to --kind usecase, robustness, or sequence");
         }
         if !buc.is_empty() {
             anyhow::bail!("--usecase and --buc cannot be combined; pass one of them");
@@ -113,6 +125,7 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
             | DiagramKind::Business
             | DiagramKind::Usecase
             | DiagramKind::Robustness
+            | DiagramKind::Sequence
             | DiagramKind::Information
             | DiagramKind::Condition
             | DiagramKind::Flow
@@ -148,6 +161,7 @@ fn emit_diagram(model: &SemanticModel, kind: &DiagramKind, view: &View) -> Resul
         DiagramKind::Business => Ok(BusinessMermaidEmitter.emit(model, view)?),
         DiagramKind::Usecase => Ok(UsecaseMermaidEmitter.emit(model, view)?),
         DiagramKind::Robustness => Ok(RobustnessMermaidEmitter.emit(model, view)?),
+        DiagramKind::Sequence => Ok(SequenceMermaidEmitter.emit(model, view)?),
         DiagramKind::Information => Ok(InformationMermaidEmitter.emit(model, view)?),
         DiagramKind::Condition => Ok(ConditionMermaidEmitter.emit(model, view)?),
         DiagramKind::Flow => Ok(FlowMermaidEmitter.emit(model, view)?),

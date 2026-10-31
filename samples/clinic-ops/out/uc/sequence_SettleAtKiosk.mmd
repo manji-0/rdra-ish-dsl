@@ -1,0 +1,21 @@
+%% rdra-ish diagram=sequence scope=usecase:SettleAtKiosk model=samples/clinic-ops
+%% kinds: extsystem screen api entity
+%% omitted: buc step medium event
+sequenceDiagram
+  participant extsystem__PaymentGateway as 自動精算機・クレジット決済
+  participant screen__KioskScreen as 自動精算機画面
+  participant api__SettlementApi as 精算 API
+  participant entity__AccountBalance as 未収金残高
+  participant entity__Appointment as 予約・受診
+  participant entity__PaymentTransaction as 精算
+  extsystem__PaymentGateway ->> api__SettlementApi: 自動精算機での精算完了
+  screen__KioskScreen ->> api__SettlementApi: 精算 API
+  alt 予約・受診.status == 会計待ち
+    Note over api__SettlementApi: transaction (API atomic boundary)
+    api__SettlementApi ->> entity__AccountBalance: update
+    api__SettlementApi ->> entity__Appointment: update status 会計待ち -> 精算済
+    api__SettlementApi ->> entity__PaymentTransaction: create status=payposted, processed_at=set, gateway_ref=set
+    api__SettlementApi -->> screen__KioskScreen: done
+  else guard fails
+    api__SettlementApi -->> screen__KioskScreen: rejected
+  end

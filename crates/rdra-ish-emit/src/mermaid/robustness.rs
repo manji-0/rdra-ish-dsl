@@ -38,7 +38,10 @@ fn edge_label(model: &SemanticModel, node: &NodeRef) -> String {
 
 /// The controls of each use case in scope: its APIs, and itself when it reads or writes
 /// entities directly or has no API.
-fn controls_of(model: &SemanticModel, usecases: &[NodeRef]) -> Vec<(NodeRef, Vec<NodeRef>)> {
+pub(super) fn controls_of(
+    model: &SemanticModel,
+    usecases: &[NodeRef],
+) -> Vec<(NodeRef, Vec<NodeRef>)> {
     usecases
         .iter()
         .map(|usecase| {

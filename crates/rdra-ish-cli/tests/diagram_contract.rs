@@ -682,6 +682,120 @@ fn every_robustness_diagram_of_every_sample_keeps_the_contract_and_the_grammar()
     assert!(edges > 100, "only {edges} edges");
 }
 
+/// The participant ids and the message endpoints of a `sequence` diagram, after checking its
+/// header and that every message joins two declared participants.
+fn parse_sequence(text: &str, scope: &str) -> Result<Vec<String>, String> {
+    let mut lines = text.lines();
+    let header = lines.next().ok_or("empty")?;
+    let want = format!("%% rdra-ish diagram=sequence scope=usecase:{scope} model=");
+    if !header.starts_with(&want) {
+        return Err(format!("header: {header}"));
+    }
+    let kinds = lines
+        .next()
+        .and_then(|l| l.strip_prefix("%% kinds: "))
+        .ok_or("no kinds line")?;
+    if !lines.next().is_some_and(|l| l.starts_with("%% omitted: ")) {
+        return Err("no omitted line".to_string());
+    }
+    if lines.next() != Some("sequenceDiagram") {
+        return Err("no sequenceDiagram".to_string());
+    }
+    let mut participants: Vec<String> = Vec::new();
+    let mut drawn_kinds: BTreeSet<String> = BTreeSet::new();
+    let mut messages = 0;
+    for line in lines {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed
+            .strip_prefix("participant ")
+            .or_else(|| trimmed.strip_prefix("actor "))
+        {
+            let (id, _) = rest.split_once(" as ").ok_or(format!("alias: {line}"))?;
+            let (kind, _) = id.split_once("__").ok_or(format!("id: {line}"))?;
+            drawn_kinds.insert(kind.to_string());
+            participants.push(id.to_string());
+        } else if trimmed.starts_with("alt ") || trimmed == "else guard fails" || trimmed == "end" {
+        } else if let Some(rest) = trimmed.strip_prefix("Note over ") {
+            let (id, _) = rest.split_once(": ").ok_or(format!("note: {line}"))?;
+            if !participants.iter().any(|p| p == id) {
+                return Err(format!("note over an undeclared {id}"));
+            }
+        } else {
+            let (ends, _) = trimmed.split_once(": ").ok_or(format!("message: {line}"))?;
+            let (from, to) = ends
+                .split_once(" ->> ")
+                .or_else(|| ends.split_once(" -->> "))
+                .or_else(|| ends.split_once(" -) "))
+                .ok_or(format!("arrow: {line}"))?;
+            for id in [from, to] {
+                if !participants.iter().any(|p| p == id) {
+                    return Err(format!("{id} is not a participant: {line}"));
+                }
+            }
+            messages += 1;
+        }
+    }
+    let listed: BTreeSet<String> = kinds.split(' ').map(str::to_string).collect();
+    if listed != drawn_kinds {
+        return Err(format!("kinds {listed:?} but drawn {drawn_kinds:?}"));
+    }
+    let unique: BTreeSet<&String> = participants.iter().collect();
+    if unique.len() != participants.len() || messages == 0 && participants.len() > 1 {
+        return Err("duplicate participant or no message".to_string());
+    }
+    Ok(participants)
+}
+
+#[test]
+fn every_sequence_diagram_of_every_sample_keeps_the_contract() {
+    let dir = scratch("diagram_contract_sequence");
+    let mut drawn = 0;
+    for root in roots() {
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
+        for usecase in ids(&root, "usecase").into_iter().take(4) {
+            let text = diagram_with(
+                &root,
+                "sequence",
+                &["--usecase", &usecase],
+                &dir.join("out"),
+            );
+            let participants = parse_sequence(&text, &usecase)
+                .unwrap_or_else(|why| panic!("{root} {usecase}: {why}\n{text}"));
+            for id in &participants {
+                assert!(
+                    rdra.nodes.contains_key(id),
+                    "{root} {usecase}: {id} not in rdra"
+                );
+            }
+            drawn += participants.len();
+        }
+    }
+    assert!(drawn > 20, "only {drawn} participants");
+}
+
+#[test]
+fn a_sequence_diagram_needs_exactly_one_use_case() {
+    let root = &roots()[0];
+    let usecases = ids(root, "usecase");
+    let run = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+            .current_dir(repo())
+            .args(["diagram", root, "--kind", "sequence"])
+            .args(args)
+            .arg("--out")
+            .arg(scratch("diagram_contract_sequence_args").join("out"))
+            .output()
+            .unwrap()
+    };
+    let none = run(&[]);
+    assert!(!none.status.success());
+    assert!(String::from_utf8_lossy(&none.stderr).contains("exactly one --usecase"));
+    let two = run(&["--usecase", &usecases[0], "--usecase", &usecases[1]]);
+    assert!(!two.status.success());
+    let buc = run(&["--buc", &buc_ids(root)[0]]);
+    assert!(!buc.status.success());
+}
+
 #[test]
 fn the_contract_check_rejects_a_misplaced_derived_line() {
     let good = "%% rdra-ish diagram=usecase scope=whole\n%% kinds: actor usecase\nflowchart LR\n  actor__A[\"A\"]:::actor\n  usecase__U[\"U\"]:::usecase\n  actor__A -.->|performs| usecase__U\n  %% derived actor__A -> usecase__U via buc__B\n  classDef actor stroke:#333;\n  classDef usecase stroke:#333;\n";
