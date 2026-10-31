@@ -32,7 +32,7 @@ flowchart LR
     system__ClinicOpsSystem["外来業務システム"]:::system
   end
   actor__AccountsClerk -.->|performs| system__ClinicOpsSystem
-  %% derived actor__AccountsClerk -> system__ClinicOpsSystem via buc__BucVisitPayment,step__CalculationStep,step__CallStep,step__ReceiptStep,step__WindowStep,usecase__ApplySelectedTreatmentFee,usecase__CalculateVisitBill,usecase__CallPatientForPayment,usecase__IssueReceipt,usecase__SettleAtWindow
+  %% derived actor__AccountsClerk -> system__ClinicOpsSystem via buc__BucVisitPayment,step__CalculationStep,step__CallStep,step__ReceiptStep,step__RefundStep,step__WindowStep,usecase__ApplySelectedTreatmentFee,usecase__CalculateVisitBill,usecase__CallPatientForPayment,usecase__IssueReceipt,usecase__RefundPayment,usecase__SettleAtWindow
   actor__CareCoordinator -.->|performs| system__ClinicOpsSystem
   %% derived actor__CareCoordinator -> system__ClinicOpsSystem via buc__BucFollowupCare,step__CarePlanStep,step__FollowUpMsgStep,step__PlanCloseStep,step__ResponseStep,step__ResultNoticeStep,step__RevisitStep,usecase__CloseCarePlan,usecase__CreateCarePlan,usecase__NotifyPatientResult,usecase__ReviewPatientResponse,usecase__ScheduleFollowUpVisit,usecase__SendFollowUpMessage
   actor__ClaimsClerk -.->|performs| system__ClinicOpsSystem

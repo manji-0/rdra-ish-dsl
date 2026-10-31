@@ -21,6 +21,8 @@ usecase SettleAtKiosk            "自動精算機での精算"
 // 個別の費用ごとに区分して記載した領収証を無償で交付 (egov-ryotan-kisoku-332M50000100015.txt:117);
 // 会計のお知らせ、診療明細書 (sendai-iji-gairai-shiyousyo.txt:189).
 usecase IssueReceipt             "領収証・明細書の交付"
+// 還付・追加徴収 after an insurance change or a calculation error (sendai-iji-gairai-shiyousyo.txt:196).
+usecase RefundPayment            "還付・追加徴収"
 
 screen BillCalculationScreen "会計計算画面"
 screen PaymentWindowScreen   "会計窓口画面"
@@ -37,6 +39,7 @@ performs(AccountsClerk, ApplySelectedTreatmentFee)
 performs(AccountsClerk, CallPatientForPayment)
 performs(AccountsClerk, SettleAtWindow)
 performs(AccountsClerk, IssueReceipt)
+performs(AccountsClerk, RefundPayment)
 belongs(BucVisitPayment, RevenueCycle)
   .by(AccountsWindow)
   .by(PaymentKiosk)
@@ -47,6 +50,7 @@ contains(BucVisitPayment, CallPatientForPayment)
 contains(BucVisitPayment, SettleAtWindow)
 contains(BucVisitPayment, SettleAtKiosk)
 contains(BucVisitPayment, IssueReceipt)
+contains(BucVisitPayment, RefundPayment)
 contains(ClinicOpsSystem, CalculateVisitBillApi)
 contains(ClinicOpsSystem, SelectedFeeApi)
 contains(ClinicOpsSystem, SettlementApi)
@@ -119,6 +123,11 @@ reads(ReceiptApi, Charge)
 transitions(Appointment.status, IssueReceipt, apptsettled -> apptcompleted)
 sets(IssueReceipt, Appointment, completed_at == present)
 
+displays(RefundPayment, PaymentWindowScreen)
+updates(RefundPayment, PaymentTransaction)
+updates(RefundPayment, AccountBalance)
+transitions(PaymentTransaction.status, RefundPayment, payposted -> payrefunded)
+
 // Access constraints
 requires_permission(CalculateVisitBill, BillCalculate)
 requires_medium(CalculateVisitBill, BillingWorkstation)
@@ -138,6 +147,9 @@ requires_medium(SettleAtKiosk, PaymentKiosk)
 
 requires_permission(IssueReceipt, PaymentCollect)
 requires_medium(IssueReceipt, AccountsWindow)
+
+requires_permission(RefundPayment, PaymentCollect)
+requires_medium(RefundPayment, AccountsWindow)
 requires_permission(ReceiptApi, PaymentCollect)
 
 // Requirement traceability
@@ -157,6 +169,7 @@ step CallStep        "会計の呼出"
 step WindowStep      "会計窓口で精算"
 step KioskStep       "自動精算機で精算"
 step ReceiptStep     "領収証・明細書の交付"
+step RefundStep      "還付・追加徴収"
 
 contains(BucVisitPayment, VisitPaymentFlow)
 contains(VisitPaymentFlow, CalculationStep)
@@ -164,12 +177,14 @@ contains(VisitPaymentFlow, CallStep)
 contains(VisitPaymentFlow, WindowStep)
 contains(VisitPaymentFlow, KioskStep)
 contains(VisitPaymentFlow, ReceiptStep)
+contains(VisitPaymentFlow, RefundStep)
 
 precedes(CalculationStep, CallStep)
 precedes(CallStep, WindowStep)
 branches(CallStep, KioskStep)
 precedes(WindowStep, ReceiptStep)
 precedes(KioskStep, ReceiptStep)
+excepts(ReceiptStep, RefundStep)
 
 covers(CalculationStep, CalculateVisitBill)
 covers(CalculationStep, ApplySelectedTreatmentFee)
@@ -178,6 +193,7 @@ covers(WindowStep, SettleAtWindow)
 covers(KioskStep, SettleAtKiosk)
 covers(KioskStep, EvPaymentSettled)
 covers(ReceiptStep, IssueReceipt)
+covers(RefundStep, RefundPayment)
 
 // The patient pays at the 自動精算機 alone, so KioskStep is in the patient's lane.
 performs(AccountsClerk, CalculationStep)
@@ -185,6 +201,7 @@ performs(AccountsClerk, CallStep)
 performs(AccountsClerk, WindowStep)
 performs(Patient, KioskStep)
 performs(AccountsClerk, ReceiptStep)
+performs(AccountsClerk, RefundStep)
 
 // Screen fields
 field PaymentAmountField "お支払額" access readonly required true source system

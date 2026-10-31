@@ -115,7 +115,7 @@ flowchart LR
     system__ClinicOpsSystem["外来業務システム"]:::system
   end
   actor__AccountsClerk -.->|performs| system__ClinicOpsSystem
-  %% derived actor__AccountsClerk -> system__ClinicOpsSystem via buc__BucVisitPayment,step__CalculationStep,step__CallStep,step__ReceiptStep,step__WindowStep,usecase__ApplySelectedTreatmentFee,usecase__CalculateVisitBill,usecase__CallPatientForPayment,usecase__IssueReceipt,usecase__SettleAtWindow
+  %% derived actor__AccountsClerk -> system__ClinicOpsSystem via buc__BucVisitPayment,step__CalculationStep,step__CallStep,step__ReceiptStep,step__RefundStep,step__WindowStep,usecase__ApplySelectedTreatmentFee,usecase__CalculateVisitBill,usecase__CallPatientForPayment,usecase__IssueReceipt,usecase__RefundPayment,usecase__SettleAtWindow
   actor__CareCoordinator -.->|performs| system__ClinicOpsSystem
   %% derived actor__CareCoordinator -> system__ClinicOpsSystem via buc__BucFollowupCare,step__CarePlanStep,step__FollowUpMsgStep,step__PlanCloseStep,step__ResponseStep,step__ResultNoticeStep,step__RevisitStep,usecase__CloseCarePlan,usecase__CreateCarePlan,usecase__NotifyPatientResult,usecase__ReviewPatientResponse,usecase__ScheduleFollowUpVisit,usecase__SendFollowUpMessage
   actor__ClaimsClerk -.->|performs| system__ClinicOpsSystem
@@ -1016,6 +1016,7 @@ flowchart LR
   screen__CheckInScreen -.->|shows| entity__Appointment
   timer__EligibilityBatchInquiry -.->|triggers| usecase__BatchVerifyEligibility
   usecase__AssignRoom -.->|displays| screen__RoomBoardScreen
+  usecase__AssignRoom -.->|transitions Appointment.status apptcheckedin->apptcheckedin| state__Appointment_apptcheckedin
   usecase__AssignRoom -.->|updates| entity__Appointment
   %% derived usecase__AssignRoom -> entity__Appointment via api__AssignRoomApi
   usecase__AssignRoom -.->|updates| entity__Room
@@ -1762,6 +1763,7 @@ flowchart TD
       step__CalculationStep["計算受付・会計計算入力"]:::step
       step__CallStep["会計の呼出"]:::step
       step__ReceiptStep["領収証・明細書の交付"]:::step
+      step__RefundStep["還付・追加徴収"]:::step
       step__WindowStep["会計窓口で精算"]:::step
     end
     subgraph lane__VisitPaymentFlow__Patient["患者"]
@@ -1773,6 +1775,7 @@ flowchart TD
   usecase__CalculateVisitBill["会計計算入力"]:::usecase
   usecase__CallPatientForPayment["会計の呼出"]:::usecase
   usecase__IssueReceipt["領収証・明細書の交付"]:::usecase
+  usecase__RefundPayment["還付・追加徴収"]:::usecase
   usecase__SettleAtKiosk["自動精算機での精算"]:::usecase
   usecase__SettleAtWindow["会計窓口での精算"]:::usecase
   event__EvPaymentSettled["自動精算機での精算完了"]:::event
@@ -1786,6 +1789,8 @@ flowchart TD
   step__KioskStep -.->|covers| usecase__SettleAtKiosk
   step__KioskStep -->|precedes| step__ReceiptStep
   step__ReceiptStep -.->|covers| usecase__IssueReceipt
+  step__ReceiptStep -.->|excepts| step__RefundStep
+  step__RefundStep -.->|covers| usecase__RefundPayment
   step__WindowStep -.->|covers| usecase__SettleAtWindow
   step__WindowStep -->|precedes| step__ReceiptStep
   classDef flow stroke:#333;
@@ -1819,6 +1824,7 @@ flowchart LR
     usecase__CalculateVisitBill["会計計算入力"]:::usecase
     usecase__CallPatientForPayment["会計の呼出"]:::usecase
     usecase__IssueReceipt["領収証・明細書の交付"]:::usecase
+    usecase__RefundPayment["還付・追加徴収"]:::usecase
     usecase__SettleAtKiosk["自動精算機での精算"]:::usecase
     usecase__SettleAtWindow["会計窓口での精算"]:::usecase
     screen__BillCalculationScreen["会計計算画面"]:::screen
@@ -1839,6 +1845,8 @@ flowchart LR
     state__Appointment_apptawaitingpay["会計待ち"]:::state
     state__Appointment_apptcompleted["完了"]:::state
     state__Appointment_apptsettled["精算済"]:::state
+    state__PaymentTransaction_payposted["精算済"]:::state
+    state__PaymentTransaction_payrefunded["還付済"]:::state
     condition__CopayCappedAtLimit["窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"]:::condition
     condition__UnreferredFirstVisit["紹介状なしの初診で、除外に当たらない"]:::condition
   end
@@ -1846,6 +1854,7 @@ flowchart LR
   actor__AccountsClerk -.->|performs| usecase__CalculateVisitBill
   actor__AccountsClerk -.->|performs| usecase__CallPatientForPayment
   actor__AccountsClerk -.->|performs| usecase__IssueReceipt
+  actor__AccountsClerk -.->|performs| usecase__RefundPayment
   actor__AccountsClerk -.->|performs| usecase__SettleAtWindow
   condition__CopayCappedAtLimit -.->|applies_to| usecase__CalculateVisitBill
   condition__UnreferredFirstVisit -.->|applies_to| usecase__ApplySelectedTreatmentFee
@@ -1879,6 +1888,10 @@ flowchart LR
   usecase__IssueReceipt -.->|transitions Appointment.status apptsettled->apptcompleted| state__Appointment_apptcompleted
   usecase__IssueReceipt -.->|updates| entity__Appointment
   %% derived usecase__IssueReceipt -> entity__Appointment via api__ReceiptApi
+  usecase__RefundPayment -.->|displays| screen__PaymentWindowScreen
+  usecase__RefundPayment -.->|transitions PaymentTransaction.status payposted->payrefunded| state__PaymentTransaction_payrefunded
+  usecase__RefundPayment -.->|updates| entity__AccountBalance
+  usecase__RefundPayment -.->|updates| entity__PaymentTransaction
   usecase__SettleAtKiosk -.->|creates| entity__PaymentTransaction
   %% derived usecase__SettleAtKiosk -> entity__PaymentTransaction via api__SettlementApi
   usecase__SettleAtKiosk -.->|displays| screen__KioskScreen
@@ -2482,7 +2495,7 @@ UC ごとの必要権限と確認点を表にまとめます。各 UC の画面�
 | `RecordEligibilityDeclaration` | `InsuranceVerify` | 被保険者資格申立書による確認 |
 | `ConfirmEligibilityInOutageMode` | `InsuranceVerify` | システム障害時モードによる確認 |
 | `ReceiveReferralLetter` | `ReferralManage` | 紹介状の受領と受付処理 |
-| `AssignRoom` | `RoomAssign` | 部屋と予約の同期更新 |
+| `AssignRoom` | `RoomAssign` | 受付済の受診だけを診察室へ案内する（自己遷移のガード） |
 | `PrepareEncounter` | `EncounterOpen` | 診療準備の参照情報 |
 
 ### 4.4 診察 UC
@@ -2541,6 +2554,7 @@ UC ごとの必要権限と確認点を表にまとめます。各 UC の画面�
 | `SettleAtWindow` | `PaymentCollect` | 会計窓口での精算 |
 | `SettleAtKiosk` | `PaymentCollect` | 自動精算機での精算 |
 | `IssueReceipt` | `PaymentCollect` | 領収証・明細書の交付で予約を完了にする |
+| `RefundPayment` | `PaymentCollect` | 保険の変更や計算誤りによる還付・追加徴収で精算を還付済にする |
 
 ### 4.8 レセプト作成・請求 UC
 
@@ -2887,6 +2901,7 @@ flowchart LR
   statemodel__Encounter_status["Encounter.status"]:::statemodel
   statemodel__IntakePacket_status["IntakePacket.status"]:::statemodel
   statemodel__PatientAccount_status["PatientAccount.status"]:::statemodel
+  statemodel__PaymentTransaction_status["PaymentTransaction.status"]:::statemodel
   statemodel__Prescription_status["Prescription.status"]:::statemodel
   variation__AuditSeverity["監査指摘の重大度"]:::variation
   variation__BurdenRatio["負担割合"]:::variation
@@ -2944,6 +2959,7 @@ flowchart LR
   entity__PatientMessage -.->|variation channel| variation__MessageChannel
   entity__PatientProfile ---|1:1| entity__PatientAccount
   entity__PaymentTransaction ---|N:1| entity__Appointment
+  entity__PaymentTransaction -.->|statemodel| statemodel__PaymentTransaction_status
   entity__PaymentTransaction -.->|variation method| variation__PaymentMethod
   entity__Prescription ---|N:1| entity__Encounter
   entity__Prescription ---|N:1| entity__Medication
@@ -3277,7 +3293,7 @@ rdra-ish diagram samples/clinic-ops --kind state --format mermaid --out samples/
 ```mermaid
 %% rdra-ish diagram=state scope=whole model=samples/clinic-ops
 %% kinds: statemodel state usecase
-%% omitted: Charge.status InsurancePolicy.verification_status Notification.status PatientMessage.status PaymentTransaction.status Room.occupancy_status (Enum without transitions)
+%% omitted: Charge.status InsurancePolicy.verification_status Notification.status PatientMessage.status Room.occupancy_status (Enum without transitions)
 stateDiagram-v2
   state "Appointment.status" as statemodel__Appointment_status {
     [*] --> state__Appointment_apptrequested
@@ -3298,6 +3314,7 @@ stateDiagram-v2
     state__Appointment_apptscheduled --> state__Appointment_apptcheckedin : usecase__CheckInPatient
     state__Appointment_apptscheduled --> state__Appointment_apptcancelled : usecase__CancelAppointment
     state__Appointment_apptscheduled --> state__Appointment_apptnoshow : usecase__MarkNoShow
+    state__Appointment_apptcheckedin --> state__Appointment_apptcheckedin : usecase__AssignRoom
     state__Appointment_apptcheckedin --> state__Appointment_apptinconsult : usecase__OpenEncounter
     state__Appointment_apptinconsult --> state__Appointment_apptawaitingcalc : usecase__CompleteConsultation
     state__Appointment_apptawaitingcalc --> state__Appointment_apptawaitingpay : usecase__CalculateVisitBill
@@ -3409,6 +3426,13 @@ stateDiagram-v2
     state__PatientAccount_patientinactive --> [*]
     state__PatientAccount_patientmerged --> [*]
   }
+  state "PaymentTransaction.status" as statemodel__PaymentTransaction_status {
+    [*] --> state__PaymentTransaction_payposted
+    state "精算済" as state__PaymentTransaction_payposted
+    state "還付済" as state__PaymentTransaction_payrefunded
+    state__PaymentTransaction_payposted --> state__PaymentTransaction_payrefunded : usecase__RefundPayment
+    state__PaymentTransaction_payrefunded --> [*]
+  }
   state "Prescription.status" as statemodel__Prescription_status {
     [*] --> state__Prescription_rxdrafted
     state "処方入力中" as state__Prescription_rxdrafted
@@ -3447,47 +3471,47 @@ Entity: Appointment (予約・受診)
   labels: status[apptrequested=仮押さえ|apptscheduled=予約済|apptcheckedin=受付済|apptinconsult=診察中|apptawaitingcalc=計算待ち|apptawaitingpay=会計待ち|apptsettled=精算済|apptcompleted=完了|apptcancelled=取消|apptnoshow=未来院]
 
   REFERRAL    STATUS            CHECKED_IN_AT  COMPLETED_AT  CANCEL_REASON  INITIAL  TERMINAL  VIA
-  ──────────  ────────────────  ─────────────  ────────────  ─────────────  ───────  ────────  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  revisit     apptscheduled     null           null          null           yes      no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
-  referred    apptscheduled     null           null          null           yes      no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
-  unreferred  apptscheduled     null           null          null           yes      no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
-  exempt      apptscheduled     null           null          null           yes      no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
-  revisit     apptrequested     null           null          null           yes      no        BucAppointmentScheduling/ReserveAppointment, BucVisitCheckIn/AssignRoom
-  referred    apptrequested     null           null          null           yes      no        BucAppointmentScheduling/ReserveAppointment, BucVisitCheckIn/AssignRoom
-  unreferred  apptrequested     null           null          null           yes      no        BucAppointmentScheduling/ReserveAppointment, BucVisitCheckIn/AssignRoom
-  exempt      apptrequested     null           null          null           yes      no        BucAppointmentScheduling/ReserveAppointment, BucVisitCheckIn/AssignRoom
-  revisit     apptcancelled     null           null          present        no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/CancelAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
-  revisit     apptnoshow        null           null          null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/MarkNoShow, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
-  revisit     apptcheckedin     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
-  referred    apptcancelled     null           null          present        no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/CancelAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
-  referred    apptnoshow        null           null          null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/MarkNoShow, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
-  referred    apptcheckedin     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
-  unreferred  apptcancelled     null           null          present        no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/CancelAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
-  unreferred  apptnoshow        null           null          null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/MarkNoShow, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
-  unreferred  apptcheckedin     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
-  exempt      apptcancelled     null           null          present        no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/CancelAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
-  exempt      apptnoshow        null           null          null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/MarkNoShow, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom
-  exempt      apptcheckedin     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
-  revisit     apptinconsult     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
-  referred    apptinconsult     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
-  unreferred  apptinconsult     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
-  exempt      apptinconsult     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
-  revisit     apptawaitingcalc  present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
-  referred    apptawaitingcalc  present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
-  unreferred  apptawaitingcalc  present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
-  exempt      apptawaitingcalc  present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient
-  revisit     apptawaitingpay   present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill
-  referred    apptawaitingpay   present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill
-  unreferred  apptawaitingpay   present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill
-  exempt      apptawaitingpay   present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill
-  revisit     apptsettled       present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
-  referred    apptsettled       present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
-  unreferred  apptsettled       present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
-  exempt      apptsettled       present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
-  revisit     apptcompleted     present        present       null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/IssueReceipt, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
-  referred    apptcompleted     present        present       null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/IssueReceipt, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
-  unreferred  apptcompleted     present        present       null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/IssueReceipt, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
-  exempt      apptcompleted     present        present       null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/AssignRoom, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/IssueReceipt, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
+  ──────────  ────────────────  ─────────────  ────────────  ─────────────  ───────  ────────  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  revisit     apptscheduled     null           null          null           yes      no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  referred    apptscheduled     null           null          null           yes      no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  unreferred  apptscheduled     null           null          null           yes      no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  exempt      apptscheduled     null           null          null           yes      no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  revisit     apptrequested     null           null          null           yes      no        BucAppointmentScheduling/ReserveAppointment
+  referred    apptrequested     null           null          null           yes      no        BucAppointmentScheduling/ReserveAppointment
+  unreferred  apptrequested     null           null          null           yes      no        BucAppointmentScheduling/ReserveAppointment
+  exempt      apptrequested     null           null          null           yes      no        BucAppointmentScheduling/ReserveAppointment
+  revisit     apptcancelled     null           null          present        no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/CancelAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  revisit     apptnoshow        null           null          null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/MarkNoShow, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  revisit     apptcheckedin     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  referred    apptcancelled     null           null          present        no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/CancelAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  referred    apptnoshow        null           null          null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/MarkNoShow, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  referred    apptcheckedin     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  unreferred  apptcancelled     null           null          present        no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/CancelAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  unreferred  apptnoshow        null           null          null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/MarkNoShow, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  unreferred  apptcheckedin     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  exempt      apptcancelled     null           null          present        no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/CancelAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  exempt      apptnoshow        null           null          null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/MarkNoShow, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit
+  exempt      apptcheckedin     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  revisit     apptinconsult     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  referred    apptinconsult     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  unreferred  apptinconsult     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  exempt      apptinconsult     present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  revisit     apptawaitingcalc  present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  referred    apptawaitingcalc  present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  unreferred  apptawaitingcalc  present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  exempt      apptawaitingcalc  present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient
+  revisit     apptawaitingpay   present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill
+  referred    apptawaitingpay   present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill
+  unreferred  apptawaitingpay   present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill
+  exempt      apptawaitingpay   present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill
+  revisit     apptsettled       present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
+  referred    apptsettled       present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
+  unreferred  apptsettled       present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
+  exempt      apptsettled       present        null          null           no       no        BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
+  revisit     apptcompleted     present        present       null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/IssueReceipt, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
+  referred    apptcompleted     present        present       null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/IssueReceipt, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
+  unreferred  apptcompleted     present        present       null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/IssueReceipt, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
+  exempt      apptcompleted     present        present       null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/IssueReceipt, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
 
   reachable: 40 / bound: 320
 ```

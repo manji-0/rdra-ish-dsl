@@ -54,6 +54,7 @@ flowchart LR
     step__ReceiptErrorStep["受付不能・要確認の再送（11日・12日）"]:::step
     step__ReceiptStep["領収証・明細書の交付"]:::step
     step__ReferralOutStep["診療情報提供書の作成・送信"]:::step
+    step__RefundStep["還付・追加徴収"]:::step
     step__RegisterStep["新患登録"]:::step
     step__ResponseStep["患者応答の確認"]:::step
     step__ResultNoticeStep["検査結果の患者通知"]:::step
@@ -128,6 +129,7 @@ flowchart LR
     usecase__RecordClaimReturn["返戻レセプトの取込"]:::usecase
     usecase__RecordReceiptError["受付不能・要確認の確認"]:::usecase
     usecase__RecordVitals["バイタルの記録"]:::usecase
+    usecase__RefundPayment["還付・追加徴収"]:::usecase
     usecase__RegisterPatient["新患登録"]:::usecase
     usecase__ReleaseHeldStatement["保留レセプトの再提出準備"]:::usecase
     usecase__RequestReexamination["再審査請求"]:::usecase
@@ -269,6 +271,8 @@ flowchart LR
     state__PatientAccount_patientactive["有効"]:::state
     state__PatientAccount_patientinactive["アーカイブ済"]:::state
     state__PatientAccount_patientmerged["統合済"]:::state
+    state__PaymentTransaction_payposted["精算済"]:::state
+    state__PaymentTransaction_payrefunded["還付済"]:::state
     variation__BurdenRatio["負担割合"]:::variation
     variation__ChargeKind["診療費の種類"]:::variation
     variation__LimitCategory["限度額適用区分"]:::variation
@@ -414,6 +418,7 @@ flowchart LR
   buc__BucVisitPayment -->|contains| usecase__CalculateVisitBill
   buc__BucVisitPayment -->|contains| usecase__CallPatientForPayment
   buc__BucVisitPayment -->|contains| usecase__IssueReceipt
+  buc__BucVisitPayment -->|contains| usecase__RefundPayment
   buc__BucVisitPayment -->|contains| usecase__SettleAtKiosk
   buc__BucVisitPayment -->|contains| usecase__SettleAtWindow
   condition__CopayCappedAtLimit -.->|applies_to| usecase__CalculateVisitBill
@@ -525,6 +530,7 @@ flowchart LR
   flow__VisitPaymentFlow -->|contains| step__CallStep
   flow__VisitPaymentFlow -->|contains| step__KioskStep
   flow__VisitPaymentFlow -->|contains| step__ReceiptStep
+  flow__VisitPaymentFlow -->|contains| step__RefundStep
   flow__VisitPaymentFlow -->|contains| step__WindowStep
   screen__BillCalculationScreen -->|contains| field__ChargeCodeField
   screen__KioskScreen -->|contains| field__KioskReferenceField
@@ -592,8 +598,10 @@ flowchart LR
   step__ReceiptErrorStep -.->|covers| usecase__ResendErroredStatement
   step__ReceiptErrorStep -->|repeats| step__SubmitStep
   step__ReceiptStep -.->|covers| usecase__IssueReceipt
+  step__ReceiptStep -.->|excepts| step__RefundStep
   step__ReferralOutStep -.->|covers| usecase__IssueReferralLetter
   step__ReferralOutStep -->|precedes| step__SignStep
+  step__RefundStep -.->|covers| usecase__RefundPayment
   step__RegisterStep -.->|covers| usecase__RegisterPatient
   step__RegisterStep -->|precedes| step__InsuranceStep
   step__ResponseStep -.->|covers| usecase__ReviewPatientResponse
@@ -764,6 +772,12 @@ flowchart LR
   usecase__RecordVitals -.->|invokes| api__RecordVitalsApi
   usecase__RecordVitals -.->|requires_medium| medium__NurseStation
   usecase__RecordVitals -.->|requires_permission| permission__VitalsRecord
+  usecase__RefundPayment -.->|displays| screen__PaymentWindowScreen
+  usecase__RefundPayment -.->|requires_medium| medium__AccountsWindow
+  usecase__RefundPayment -.->|requires_permission| permission__PaymentCollect
+  usecase__RefundPayment -.->|transitions PaymentTransaction.status payposted->payrefunded| state__PaymentTransaction_payrefunded
+  usecase__RefundPayment -.->|updates| entity__AccountBalance
+  usecase__RefundPayment -.->|updates| entity__PaymentTransaction
   usecase__RegisterPatient -.->|displays| screen__PatientProfileScreen
   usecase__RegisterPatient -.->|invokes| api__RegisterPatientApi
   usecase__RegisterPatient -.->|requires_medium| medium__FrontDeskTerminal

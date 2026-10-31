@@ -38,6 +38,7 @@ flowchart LR
   statemodel__Encounter_status["Encounter.status"]:::statemodel
   statemodel__IntakePacket_status["IntakePacket.status"]:::statemodel
   statemodel__PatientAccount_status["PatientAccount.status"]:::statemodel
+  statemodel__PaymentTransaction_status["PaymentTransaction.status"]:::statemodel
   statemodel__Prescription_status["Prescription.status"]:::statemodel
   variation__AuditSeverity["監査指摘の重大度"]:::variation
   variation__BurdenRatio["負担割合"]:::variation
@@ -95,6 +96,7 @@ flowchart LR
   entity__PatientMessage -.->|variation channel| variation__MessageChannel
   entity__PatientProfile ---|1:1| entity__PatientAccount
   entity__PaymentTransaction ---|N:1| entity__Appointment
+  entity__PaymentTransaction -.->|statemodel| statemodel__PaymentTransaction_status
   entity__PaymentTransaction -.->|variation method| variation__PaymentMethod
   entity__Prescription ---|N:1| entity__Encounter
   entity__Prescription ---|N:1| entity__Medication

@@ -151,6 +151,8 @@ displays(AssignRoom, RoomBoardScreen)
 invokes(AssignRoom, AssignRoomApi)
 updates(AssignRoomApi, Room)
 updates(AssignRoomApi, Appointment)
+// Only a checked-in visit is roomed. The self-transition is the guard; the status stays.
+transitions(Appointment.status, AssignRoom, apptcheckedin -> apptcheckedin)
 sets(AssignRoom, Room, occupancy_status == roomoccupied)
 
 displays(PrepareEncounter, CheckInScreen)

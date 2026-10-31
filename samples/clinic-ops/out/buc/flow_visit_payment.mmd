@@ -8,6 +8,7 @@ flowchart TD
       step__CalculationStep["計算受付・会計計算入力"]:::step
       step__CallStep["会計の呼出"]:::step
       step__ReceiptStep["領収証・明細書の交付"]:::step
+      step__RefundStep["還付・追加徴収"]:::step
       step__WindowStep["会計窓口で精算"]:::step
     end
     subgraph lane__VisitPaymentFlow__Patient["患者"]
@@ -19,6 +20,7 @@ flowchart TD
   usecase__CalculateVisitBill["会計計算入力"]:::usecase
   usecase__CallPatientForPayment["会計の呼出"]:::usecase
   usecase__IssueReceipt["領収証・明細書の交付"]:::usecase
+  usecase__RefundPayment["還付・追加徴収"]:::usecase
   usecase__SettleAtKiosk["自動精算機での精算"]:::usecase
   usecase__SettleAtWindow["会計窓口での精算"]:::usecase
   event__EvPaymentSettled["自動精算機での精算完了"]:::event
@@ -32,6 +34,8 @@ flowchart TD
   step__KioskStep -.->|covers| usecase__SettleAtKiosk
   step__KioskStep -->|precedes| step__ReceiptStep
   step__ReceiptStep -.->|covers| usecase__IssueReceipt
+  step__ReceiptStep -.->|excepts| step__RefundStep
+  step__RefundStep -.->|covers| usecase__RefundPayment
   step__WindowStep -.->|covers| usecase__SettleAtWindow
   step__WindowStep -->|precedes| step__ReceiptStep
   classDef flow stroke:#333;

@@ -69,6 +69,7 @@ flowchart LR
   screen__CheckInScreen -.->|shows| entity__Appointment
   timer__EligibilityBatchInquiry -.->|triggers| usecase__BatchVerifyEligibility
   usecase__AssignRoom -.->|displays| screen__RoomBoardScreen
+  usecase__AssignRoom -.->|transitions Appointment.status apptcheckedin->apptcheckedin| state__Appointment_apptcheckedin
   usecase__AssignRoom -.->|updates| entity__Appointment
   %% derived usecase__AssignRoom -> entity__Appointment via api__AssignRoomApi
   usecase__AssignRoom -.->|updates| entity__Room

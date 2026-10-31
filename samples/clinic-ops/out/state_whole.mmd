@@ -1,6 +1,6 @@
 %% rdra-ish diagram=state scope=whole model=samples/clinic-ops
 %% kinds: statemodel state usecase
-%% omitted: Charge.status InsurancePolicy.verification_status Notification.status PatientMessage.status PaymentTransaction.status Room.occupancy_status (Enum without transitions)
+%% omitted: Charge.status InsurancePolicy.verification_status Notification.status PatientMessage.status Room.occupancy_status (Enum without transitions)
 stateDiagram-v2
   state "Appointment.status" as statemodel__Appointment_status {
     [*] --> state__Appointment_apptrequested
@@ -21,6 +21,7 @@ stateDiagram-v2
     state__Appointment_apptscheduled --> state__Appointment_apptcheckedin : usecase__CheckInPatient
     state__Appointment_apptscheduled --> state__Appointment_apptcancelled : usecase__CancelAppointment
     state__Appointment_apptscheduled --> state__Appointment_apptnoshow : usecase__MarkNoShow
+    state__Appointment_apptcheckedin --> state__Appointment_apptcheckedin : usecase__AssignRoom
     state__Appointment_apptcheckedin --> state__Appointment_apptinconsult : usecase__OpenEncounter
     state__Appointment_apptinconsult --> state__Appointment_apptawaitingcalc : usecase__CompleteConsultation
     state__Appointment_apptawaitingcalc --> state__Appointment_apptawaitingpay : usecase__CalculateVisitBill
@@ -131,6 +132,13 @@ stateDiagram-v2
     state__PatientAccount_patientactive --> state__PatientAccount_patientmerged : usecase__MergeDuplicatePatient
     state__PatientAccount_patientinactive --> [*]
     state__PatientAccount_patientmerged --> [*]
+  }
+  state "PaymentTransaction.status" as statemodel__PaymentTransaction_status {
+    [*] --> state__PaymentTransaction_payposted
+    state "精算済" as state__PaymentTransaction_payposted
+    state "還付済" as state__PaymentTransaction_payrefunded
+    state__PaymentTransaction_payposted --> state__PaymentTransaction_payrefunded : usecase__RefundPayment
+    state__PaymentTransaction_payrefunded --> [*]
   }
   state "Prescription.status" as statemodel__Prescription_status {
     [*] --> state__Prescription_rxdrafted
