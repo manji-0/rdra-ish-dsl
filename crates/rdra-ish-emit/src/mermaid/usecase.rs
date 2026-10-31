@@ -78,25 +78,13 @@ fn scoped_use_cases(model: &SemanticModel, scope: &Scope) -> Vec<UseCaseKey> {
     keys
 }
 
-/// The use cases an event or a timer starts. Only a `performs(Actor, UseCase)` names who
-/// performs one, never an actor of its BUC or step.
-fn triggered_use_cases(model: &SemanticModel) -> HashSet<&NodeRef> {
-    model
-        .relations
-        .iter()
-        .filter(|rel| {
-            rel.kind == RelKind::Triggers
-                && matches!(rel.from, NodeRef::Event(_) | NodeRef::Timer(_))
-                && matches!(rel.to, NodeRef::UseCase(_))
-        })
-        .map(|rel| &rel.to)
-        .collect()
-}
-
 /// The edges drawn for `usecases`, and the nodes drawn without an edge of their own (the
 /// state a transition leaves).
 fn facts(model: &SemanticModel, usecases: &HashSet<NodeRef>) -> (Vec<Fact>, Vec<NodeRef>) {
-    let triggered = triggered_use_cases(model);
+    let triggered: HashSet<NodeRef> = rdra_ish_core::triggered_use_cases(model)
+        .into_iter()
+        .map(NodeRef::UseCase)
+        .collect();
     let mut facts = Vec::new();
     let mut screens = HashSet::new();
     let mut events = HashSet::new();

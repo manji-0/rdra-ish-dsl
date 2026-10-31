@@ -671,8 +671,24 @@ fn is_column_set_by_path(
     })
 }
 
+/// The use cases an event or a timer starts. Only a `performs(Actor, UseCase)` names who
+/// performs one, never an actor of its BUC or step: it is the system's work.
+pub fn triggered_use_cases(model: &SemanticModel) -> HashSet<UseCaseKey> {
+    model
+        .relations
+        .iter()
+        .filter_map(|rel| match (&rel.kind, &rel.from, &rel.to) {
+            (RelKind::Triggers, NodeRef::Event(_) | NodeRef::Timer(_), NodeRef::UseCase(uc)) => {
+                Some(*uc)
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 /// Actors that perform a use case: direct `performs(Actor, UC)` unioned with
-/// `performs(Actor, BUC)` for every BUC that contains the use case.
+/// `performs(Actor, BUC)` for every BUC that contains the use case, unless an event or a
+/// timer starts it.
 pub fn actors_for_usecase(model: &SemanticModel, usecase: UseCaseKey) -> Vec<ActorKey> {
     let mut actors: Vec<ActorKey> = model
         .relations
@@ -687,6 +703,10 @@ pub fn actors_for_usecase(model: &SemanticModel, usecase: UseCaseKey) -> Vec<Act
         })
         .collect();
 
+    if triggered_use_cases(model).contains(&usecase) {
+        sort_dedup_actors(model, &mut actors);
+        return actors;
+    }
     let bucs = bucs_containing_usecase(model, usecase);
     for rel in &model.relations {
         if rel.kind == RelKind::Performs {
@@ -1027,6 +1047,40 @@ requires_permission(GenerateClaim, BillingClaimWrite)
             })
             .expect("BillingBot/BillingClaimWrite should be listed");
         assert_eq!(bot_billing.status, ActorPermissionAuditStatus::Ok);
+    }
+
+    #[test]
+    fn a_buc_actor_does_not_perform_a_use_case_an_event_or_timer_starts() {
+        let model = model_from(
+            r#"
+actor Clerk "Clerk"
+actor Patient "Patient"
+buc BucPay "Pay"
+usecase SettleAtWindow "Settle at window"
+usecase SettleAtKiosk "Settle at kiosk"
+usecase Remind "Remind"
+event Settled "Settled"
+timer Nightly "Nightly"
+performs(Clerk, BucPay)
+performs(Patient, Remind)
+contains(BucPay, SettleAtWindow)
+contains(BucPay, SettleAtKiosk)
+contains(BucPay, Remind)
+triggers(Settled, SettleAtKiosk)
+triggers(Nightly, Remind)
+"#,
+        );
+        let actors = |id: &str| -> Vec<String> {
+            let (key, _) = model.use_cases.iter().find(|(_, u)| u.id == id).unwrap();
+            actors_for_usecase(&model, key)
+                .into_iter()
+                .map(|a| model.actors[a].id.clone())
+                .collect()
+        };
+
+        assert_eq!(actors("SettleAtWindow"), ["Clerk"]);
+        assert!(actors("SettleAtKiosk").is_empty());
+        assert_eq!(actors("Remind"), ["Patient"]);
     }
 
     #[test]

@@ -66,11 +66,19 @@ flowchart LR
     condition__TransferNotPossible["振替・分割の対象外（負担割合の相違・公費）"]:::condition
   end
   actor__ClaimsClerk -.->|performs| usecase__CorrectReturnedStatement
+  actor__ClaimsClerk -.->|performs| usecase__GenerateClaimStatement
   actor__ClaimsClerk -.->|performs| usecase__HoldClaimStatement
   actor__ClaimsClerk -.->|performs| usecase__InspectClaimStatement
+  actor__ClaimsClerk -.->|performs| usecase__PostPayment
   actor__ClaimsClerk -.->|performs| usecase__ReconcileBalance
+  actor__ClaimsClerk -.->|performs| usecase__RecordClaimAssessment
+  actor__ClaimsClerk -.->|performs| usecase__RecordClaimReturn
+  actor__ClaimsClerk -.->|performs| usecase__RecordReceiptError
   actor__ClaimsClerk -.->|performs| usecase__ReleaseHeldStatement
   actor__ClaimsClerk -.->|performs| usecase__RequestReexamination
+  actor__ClaimsClerk -.->|performs| usecase__ResendErroredStatement
+  actor__ClaimsClerk -.->|performs| usecase__ReviewClaimTransfer
+  actor__ClaimsClerk -.->|performs| usecase__SubmitClaimStatements
   actor__ClaimsClerk -.->|performs| usecase__VoidCharge
   condition__TransferNotPossible -.->|applies_to| usecase__RecordClaimReturn
   event__EvClaimAccepted -.->|triggers| usecase__ReceiveClaimAccepted

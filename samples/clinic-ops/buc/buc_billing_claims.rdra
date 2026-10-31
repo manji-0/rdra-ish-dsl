@@ -40,6 +40,16 @@ api PaymentPostApi       "入金 API"
 api BalanceApi           "未収金 API"
 
 performs(ClaimsClerk, BucBillingClaims)
+// A timer or the 審査支払機関's result starts these, but the レセプト担当 does the work, so the
+// model names the performer. CreateCharge and ReceiveClaimAccepted are the system's alone.
+performs(ClaimsClerk, GenerateClaimStatement)
+performs(ClaimsClerk, SubmitClaimStatements)
+performs(ClaimsClerk, RecordReceiptError)
+performs(ClaimsClerk, ResendErroredStatement)
+performs(ClaimsClerk, ReviewClaimTransfer)
+performs(ClaimsClerk, RecordClaimReturn)
+performs(ClaimsClerk, RecordClaimAssessment)
+performs(ClaimsClerk, PostPayment)
 performs(ClaimsClerk, InspectClaimStatement)
 performs(ClaimsClerk, HoldClaimStatement)
 performs(ClaimsClerk, ReleaseHeldStatement)

@@ -74,6 +74,12 @@
   the receptionist of their step, and the kiosk settlement, which the payment gateway's
   event records, keeps the patient only in its flow lane. In ec-site, `Capture` loses the
   customer of its BUC.
+- `csv --kind actor-permission-audit`, `csv --kind screen-constraints`, and the permission
+  diagnostics follow the same rule: a use case an event or a timer starts is performed only
+  by the actors `performs(Actor, UseCase)` names, not by every actor of its BUC. The rule
+  lives in `rdra_ish_core::triggered_use_cases`, which the UC複合図 also reads. A model in
+  which a person does the work of such a use case declares that performer; clinic-ops now
+  names the レセプト担当 on the monthly claim, resend, and result use cases.
 - The LSP loads a workspace through the CLI's rules, so the editor now agrees with `check`.
   It no longer adds the workspace roots as include paths, so a deep import such as
   `import m.a.shared` from `m/a/b/c.rdra` reports "module file not found in include paths"

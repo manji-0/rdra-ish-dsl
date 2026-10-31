@@ -27,9 +27,9 @@ pub mod workspace;
 pub use access::{
     actors_for_usecase, derive_actor_input_inferences, derive_actor_permission_audit,
     derive_permission_callables, derive_screen_constraint_patterns, permission_diagnostics,
-    ActorInputInference, ActorInputOperation, ActorInputSource, ActorPermissionAudit,
-    ActorPermissionAuditStatus, ActorPermissionRequirementSource, PermissionApiPath,
-    PermissionCallable, ScreenConstraintPattern,
+    triggered_use_cases, ActorInputInference, ActorInputOperation, ActorInputSource,
+    ActorPermissionAudit, ActorPermissionAuditStatus, ActorPermissionRequirementSource,
+    PermissionApiPath, PermissionCallable, ScreenConstraintPattern,
 };
 pub use analysis::{build_model, build_model_items, build_model_items_with_scopes};
 pub use diagnostics::{Diagnostic, RdraError};

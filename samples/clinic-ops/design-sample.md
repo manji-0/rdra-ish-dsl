@@ -119,7 +119,7 @@ flowchart LR
   actor__CareCoordinator -.->|performs| system__ClinicOpsSystem
   %% derived actor__CareCoordinator -> system__ClinicOpsSystem via buc__BucFollowupCare,step__CarePlanStep,step__FollowUpMsgStep,step__PlanCloseStep,step__ResponseStep,step__ResultNoticeStep,step__RevisitStep,usecase__CloseCarePlan,usecase__CreateCarePlan,usecase__NotifyPatientResult,usecase__ReviewPatientResponse,usecase__ScheduleFollowUpVisit,usecase__SendFollowUpMessage
   actor__ClaimsClerk -.->|performs| system__ClinicOpsSystem
-  %% derived actor__ClaimsClerk -> system__ClinicOpsSystem via buc__BucBillingClaims,step__AssessStep,step__CreateStatementStep,step__HoldStep,step__InspectStep,step__PaidStep,step__ReceiptErrorStep,step__ReturnStep,step__ReviewStep,step__SubmitStep,usecase__CorrectReturnedStatement,usecase__HoldClaimStatement,usecase__InspectClaimStatement,usecase__ReconcileBalance,usecase__ReleaseHeldStatement,usecase__RequestReexamination,usecase__VoidCharge
+  %% derived actor__ClaimsClerk -> system__ClinicOpsSystem via buc__BucBillingClaims,step__AssessStep,step__CreateStatementStep,step__HoldStep,step__InspectStep,step__PaidStep,step__ReceiptErrorStep,step__ReturnStep,step__ReviewStep,step__SubmitStep,usecase__CorrectReturnedStatement,usecase__GenerateClaimStatement,usecase__HoldClaimStatement,usecase__InspectClaimStatement,usecase__PostPayment,usecase__ReconcileBalance,usecase__RecordClaimAssessment,usecase__RecordClaimReturn,usecase__RecordReceiptError,usecase__ReleaseHeldStatement,usecase__RequestReexamination,usecase__ResendErroredStatement,usecase__ReviewClaimTransfer,usecase__SubmitClaimStatements,usecase__VoidCharge
   actor__ClinicAdmin -.->|performs| system__ClinicOpsSystem
   %% derived actor__ClinicAdmin -> system__ClinicOpsSystem via buc__BucStaffAdministration
   actor__Clinician -.->|performs| system__ClinicOpsSystem
@@ -2093,11 +2093,19 @@ flowchart LR
     condition__TransferNotPossible["振替・分割の対象外（負担割合の相違・公費）"]:::condition
   end
   actor__ClaimsClerk -.->|performs| usecase__CorrectReturnedStatement
+  actor__ClaimsClerk -.->|performs| usecase__GenerateClaimStatement
   actor__ClaimsClerk -.->|performs| usecase__HoldClaimStatement
   actor__ClaimsClerk -.->|performs| usecase__InspectClaimStatement
+  actor__ClaimsClerk -.->|performs| usecase__PostPayment
   actor__ClaimsClerk -.->|performs| usecase__ReconcileBalance
+  actor__ClaimsClerk -.->|performs| usecase__RecordClaimAssessment
+  actor__ClaimsClerk -.->|performs| usecase__RecordClaimReturn
+  actor__ClaimsClerk -.->|performs| usecase__RecordReceiptError
   actor__ClaimsClerk -.->|performs| usecase__ReleaseHeldStatement
   actor__ClaimsClerk -.->|performs| usecase__RequestReexamination
+  actor__ClaimsClerk -.->|performs| usecase__ResendErroredStatement
+  actor__ClaimsClerk -.->|performs| usecase__ReviewClaimTransfer
+  actor__ClaimsClerk -.->|performs| usecase__SubmitClaimStatements
   actor__ClaimsClerk -.->|performs| usecase__VoidCharge
   condition__TransferNotPossible -.->|applies_to| usecase__RecordClaimReturn
   event__EvClaimAccepted -.->|triggers| usecase__ReceiveClaimAccepted
@@ -3649,7 +3657,7 @@ actor_id,actor_label,permission_id,permission_label,assigned,required,status,req
 Clinician,医師,PatientMessageSend,患者への連絡,true,true,ok,NotifyCriticalResult,NotifyCriticalResult->CriticalNoticeApi
 ReceptionClerk,医事課 受付担当,PatientMessageSend,患者への連絡,true,true,ok,,SendIntakeForms->IntakeMessagingApi
 MedicalClerk,医師事務作業補助者,ProxyOrderEntry,代行入力,true,true,ok,EnterProxyOrder,EnterProxyOrder->ProxyOrderApi
-ClaimsClerk,医事課 レセプト担当,BillingClaimWrite,レセプト業務,true,true,ok,CorrectReturnedStatement|GenerateClaimStatement|HoldClaimStatement|InspectClaimStatement|ReceiveClaimAccepted|RecordClaimAssessment|RecordClaimReturn|RecordReceiptError|ReleaseHeldStatement|RequestReexamination|ResendErroredStatement|ReviewClaimTransfer|SubmitClaimStatements|VoidCharge,CorrectReturnedStatement->ClaimEditApi|GenerateClaimStatement->GenerateClaimApi|HoldClaimStatement->ClaimEditApi|InspectClaimStatement->ClaimEditApi|ReceiveClaimAccepted->ClaimResultApi|RecordClaimAssessment->ClaimResultApi|RecordClaimReturn->ClaimResultApi|RecordReceiptError->ClaimResultApi|ReleaseHeldStatement->ClaimEditApi|RequestReexamination->SubmitClaimApi|ResendErroredStatement->SubmitClaimApi|SubmitClaimStatements->SubmitClaimApi
+ClaimsClerk,医事課 レセプト担当,BillingClaimWrite,レセプト業務,true,true,ok,CorrectReturnedStatement|GenerateClaimStatement|HoldClaimStatement|InspectClaimStatement|RecordClaimAssessment|RecordClaimReturn|RecordReceiptError|ReleaseHeldStatement|RequestReexamination|ResendErroredStatement|ReviewClaimTransfer|SubmitClaimStatements|VoidCharge,CorrectReturnedStatement->ClaimEditApi|GenerateClaimStatement->GenerateClaimApi|HoldClaimStatement->ClaimEditApi|InspectClaimStatement->ClaimEditApi|RecordClaimAssessment->ClaimResultApi|RecordClaimReturn->ClaimResultApi|RecordReceiptError->ClaimResultApi|ReleaseHeldStatement->ClaimEditApi|RequestReexamination->SubmitClaimApi|ResendErroredStatement->SubmitClaimApi|SubmitClaimStatements->SubmitClaimApi
 ```
 
 読み方:
